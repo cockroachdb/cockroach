@@ -309,10 +309,10 @@ memo (optimized, ~8KB)
  ├── G1: (select G2 G3) (scan a@s_idx,cols=(2-4),constrained) (index-join G4 a,cols=(2-4))
  │    ├── "[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)]"
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1.56
+ │    │    └── cost: 11.46
  │    └── ""
  │         ├── best: (scan a@s_idx,cols=(2-4),constrained)
- │         └── cost: 1.53
+ │         └── cost: 10.70
  ├── G2: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4))
  │    ├── ""
  │    │    ├── best: (scan a@s_idx,cols=(2-4))
@@ -324,10 +324,10 @@ memo (optimized, ~8KB)
  ├── G4: (scan a@si_idx,cols=(1,2,4),constrained)
  │    ├── ""
  │    │    ├── best: (scan a@si_idx,cols=(1,2,4),constrained)
- │    │    └── cost: 1.53
+ │    │    └── cost: 10.70
  │    └── "[ordering: +2 opt(4)]"
  │         ├── best: (scan a@si_idx,rev,cols=(1,2,4),constrained)
- │         └── cost: 1.54
+ │         └── cost: 11.03
  ├── G5: (eq G6 G7)
  ├── G6: (variable s)
  └── G7: (const 'foo')
@@ -403,11 +403,11 @@ memo (optimized, ~8KB)
  ├── G1: (project G2 G3)
  │    └── "[presentation: j:5]"
  │         ├── best: (project G2 G3)
- │         └── cost: 1.53
+ │         └── cost: 10.70
  ├── G2: (select G4 G5) (index-join G6 a,cols=(4,5)) (scan a@si_idx,cols=(4,5),constrained)
  │    └── ""
  │         ├── best: (scan a@si_idx,cols=(4,5),constrained)
- │         └── cost: 1.51
+ │         └── cost: 10.60
  ├── G3: (projections j)
  ├── G4: (scan a,cols=(4,5)) (scan a@si_idx,cols=(4,5))
  │    └── ""
@@ -417,7 +417,7 @@ memo (optimized, ~8KB)
  ├── G6: (scan a@s_idx,cols=(1,4),constrained)
  │    └── ""
  │         ├── best: (scan a@s_idx,cols=(1,4),constrained)
- │         └── cost: 1.51
+ │         └── cost: 10.60
  ├── G7: (eq G8 G9)
  ├── G8: (variable s)
  └── G9: (const 'foo')

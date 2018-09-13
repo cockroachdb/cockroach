@@ -424,12 +424,12 @@ select
  │    ├── fd: (1)-->(2,3), (1)==(6), (6)==(1)
  │    └── select
  │         ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int) rowid:8(int!null)
- │         ├── stats: [rows=1000, distinct(1)=700, distinct(2)=432.339125, distinct(6)=700]
+ │         ├── stats: [rows=1000, distinct(1)=100, distinct(2)=432.339125, distinct(6)=100]
  │         ├── key: (8)
  │         ├── fd: (1)-->(2,3), (8)-->(4-7), (1)==(6), (6)==(1)
  │         ├── inner-join
  │         │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
- │         │    ├── stats: [rows=10000000, distinct(1)=10000, distinct(2)=500, distinct(6)=700]
+ │         │    ├── stats: [rows=10000000, distinct(1)=10000, distinct(2)=500, distinct(6)=100]
  │         │    ├── key: (1,8)
  │         │    ├── fd: (1)-->(2,3), (8)-->(4-7)
  │         │    ├── scan customers
@@ -439,7 +439,7 @@ select
  │         │    │    └── fd: (1)-->(2,3)
  │         │    ├── scan order_history
  │         │    │    ├── columns: order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
- │         │    │    ├── stats: [rows=1000, distinct(6)=700]
+ │         │    │    ├── stats: [rows=1000, distinct(6)=100]
  │         │    │    ├── key: (8)
  │         │    │    └── fd: (8)-->(4-7)
  │         │    └── true [type=bool]
@@ -464,20 +464,20 @@ WHERE id = 1 AND name='andy'
 ----
 select
  ├── columns: id:1(int!null) name:2(string!null) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int)
- ├── stats: [rows=1.42857143, distinct(1)=1, distinct(2)=1]
+ ├── stats: [rows=10, distinct(1)=1, distinct(2)=1]
  ├── fd: ()-->(1-3,6), (1)==(6), (6)==(1)
  ├── project
  │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int)
- │    ├── stats: [rows=1000, distinct(1)=700, distinct(2)=432.339125]
+ │    ├── stats: [rows=1000, distinct(1)=100, distinct(2)=432.339125]
  │    ├── fd: (1)-->(2,3), (1)==(6), (6)==(1)
  │    └── select
  │         ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int!null) year:7(int) rowid:8(int!null)
- │         ├── stats: [rows=1000, distinct(1)=700, distinct(2)=432.339125, distinct(6)=700]
+ │         ├── stats: [rows=1000, distinct(1)=100, distinct(2)=432.339125, distinct(6)=100]
  │         ├── key: (8)
  │         ├── fd: (1)-->(2,3), (8)-->(4-7), (1)==(6), (6)==(1)
  │         ├── inner-join
  │         │    ├── columns: id:1(int!null) name:2(string) state:3(string) order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
- │         │    ├── stats: [rows=10000000, distinct(1)=10000, distinct(2)=500, distinct(6)=700]
+ │         │    ├── stats: [rows=10000000, distinct(1)=10000, distinct(2)=500, distinct(6)=100]
  │         │    ├── key: (1,8)
  │         │    ├── fd: (1)-->(2,3), (8)-->(4-7)
  │         │    ├── scan customers
@@ -487,7 +487,7 @@ select
  │         │    │    └── fd: (1)-->(2,3)
  │         │    ├── scan order_history
  │         │    │    ├── columns: order_id:4(int) item_id:5(int) customer_id:6(int) year:7(int) rowid:8(int!null)
- │         │    │    ├── stats: [rows=1000, distinct(6)=700]
+ │         │    │    ├── stats: [rows=1000, distinct(6)=100]
  │         │    │    ├── key: (8)
  │         │    │    └── fd: (8)-->(4-7)
  │         │    └── true [type=bool]
@@ -506,7 +506,7 @@ select
  ├── fd: ()-->(1-3), (1)==(2,3), (2)==(1,3), (3)==(1,2)
  ├── scan order_history
  │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
- │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700, distinct(3)=700]
+ │    └── stats: [rows=1000, distinct(1)=100, distinct(2)=100, distinct(3)=100]
  └── filters [type=bool, outer=(1-3), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: [/5 - /5]), fd=()-->(1-3), (1)==(2,3), (2)==(1,3), (3)==(1,2)]
       ├── item_id = order_id [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
       ├── item_id = customer_id [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
@@ -518,11 +518,11 @@ SELECT * FROM order_history WHERE item_id = order_id AND item_id < 5 AND item_id
 ----
 select
  ├── columns: order_id:1(int!null) item_id:2(int!null) customer_id:3(int) year:4(int)
- ├── stats: [rows=0.158730159, distinct(1)=0.158730159, distinct(2)=0.158730159]
+ ├── stats: [rows=1.11111111, distinct(1)=1.11111111, distinct(2)=1.11111111]
  ├── fd: (1)==(2), (2)==(1)
  ├── scan order_history
  │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
- │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
+ │    └── stats: [rows=1000, distinct(1)=100, distinct(2)=100]
  └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: [/1 - /4]), fd=(1)==(2), (2)==(1)]
       ├── item_id = order_id [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
       ├── item_id < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
@@ -534,11 +534,11 @@ SELECT * FROM order_history WHERE item_id = order_id AND customer_id < 5 AND cus
 ----
 select
  ├── columns: order_id:1(int!null) item_id:2(int!null) customer_id:3(int!null) year:4(int)
- ├── stats: [rows=0.158730159, distinct(1)=0.158730159, distinct(2)=0.158730159]
+ ├── stats: [rows=1.11111111, distinct(1)=1.11111111, distinct(2)=1.11111111]
  ├── fd: (1)==(2), (2)==(1)
  ├── scan order_history
  │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
- │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
+ │    └── stats: [rows=1000, distinct(1)=100, distinct(2)=100]
  └── filters [type=bool, outer=(1-3), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: [/1 - /4]), fd=(1)==(2), (2)==(1)]
       ├── item_id = order_id [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
       ├── customer_id < 5 [type=bool, outer=(3), constraints=(/3: (/NULL - /4]; tight)]
@@ -550,11 +550,11 @@ SELECT * FROM order_history WHERE item_id = order_id AND customer_id % 2 = 0
 ----
 select
  ├── columns: order_id:1(int!null) item_id:2(int!null) customer_id:3(int) year:4(int)
- ├── stats: [rows=0.476190476, distinct(1)=0.476190476, distinct(2)=0.476190476]
+ ├── stats: [rows=3.33333333, distinct(1)=3.33333333, distinct(2)=3.33333333]
  ├── fd: (1)==(2), (2)==(1)
  ├── scan order_history
  │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
- │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
+ │    └── stats: [rows=1000, distinct(1)=100, distinct(2)=100]
  └── filters [type=bool, outer=(1-3), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
       ├── item_id = order_id [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
       └── (customer_id % 2) = 0 [type=bool, outer=(3)]
@@ -611,7 +611,7 @@ select
  ├── fd: ()-->(1,2), (1)==(2), (2)==(1)
  ├── scan uvw
  │    ├── columns: u:1(int) v:2(int) w:3(int)
- │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
+ │    └── stats: [rows=1000, distinct(1)=100, distinct(2)=100]
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/10 - /10]; /2: (/NULL - ]), fd=()-->(1,2), (1)==(2), (2)==(1)]
       ├── u = v [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
       └── u = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight)]
@@ -621,15 +621,15 @@ SELECT * FROM (SELECT * FROM uvw WHERE u=10) WHERE u=v
 ----
 select
  ├── columns: u:1(int!null) v:2(int!null) w:3(int)
- ├── stats: [rows=1.0003063, distinct(1)=1, distinct(2)=1]
+ ├── stats: [rows=1.04582901, distinct(1)=1, distinct(2)=1]
  ├── fd: ()-->(1,2), (1)==(2), (2)==(1)
  ├── select
  │    ├── columns: u:1(int!null) v:2(int) w:3(int)
- │    ├── stats: [rows=1.42857143, distinct(1)=1, distinct(2)=1.42813399]
+ │    ├── stats: [rows=10, distinct(1)=1, distinct(2)=9.5617925]
  │    ├── fd: ()-->(1)
  │    ├── scan uvw
  │    │    ├── columns: u:1(int) v:2(int) w:3(int)
- │    │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
+ │    │    └── stats: [rows=1000, distinct(1)=100, distinct(2)=100]
  │    └── filters [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
  │         └── u = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight)]
  └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
@@ -644,11 +644,11 @@ select
  ├── fd: ()-->(1,2), (1)==(2), (2)==(1)
  ├── select
  │    ├── columns: u:1(int!null) v:2(int!null) w:3(int)
- │    ├── stats: [rows=1.42857143, distinct(1)=1.42857143, distinct(2)=1.42857143]
+ │    ├── stats: [rows=10, distinct(1)=10, distinct(2)=10]
  │    ├── fd: (1)==(2), (2)==(1)
  │    ├── scan uvw
  │    │    ├── columns: u:1(int) v:2(int) w:3(int)
- │    │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
+ │    │    └── stats: [rows=1000, distinct(1)=100, distinct(2)=100]
  │    └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
  │         └── u = v [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
  └── filters [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]

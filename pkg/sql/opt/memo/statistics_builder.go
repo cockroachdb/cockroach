@@ -1328,7 +1328,7 @@ const (
 	// This is the ratio of distinct column values to number of rows, which is
 	// used in the absence of any real statistics for non-key columns.
 	// TODO(rytaft): See if there is an industry standard value for this.
-	unknownDistinctCountRatio = 0.7
+	unknownDistinctCountRatio = 0.1
 )
 
 // applyFilter uses constraints to update the distinct counts for the
