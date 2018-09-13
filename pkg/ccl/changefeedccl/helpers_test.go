@@ -118,6 +118,7 @@ func createBenchmarkChangefeed(
 		},
 	}
 	initialHighWater := hlc.Timestamp{}
+	encoder := makeJSONEncoder(details.Opts)
 	sink := makeBenchSink()
 
 	buf := makeBuffer()
@@ -132,7 +133,7 @@ func createBenchmarkChangefeed(
 		m:        th,
 	}
 	rowsFn := kvsToRows(s.LeaseManager().(*sql.LeaseManager), th, details, buf.Get)
-	tickFn := emitEntries(details, sink, rowsFn, TestingKnobs{})
+	tickFn := emitEntries(details, encoder, sink, rowsFn, TestingKnobs{})
 
 	ctx, cancel := context.WithCancel(ctx)
 	go func() { _ = poller.Run(ctx) }()
@@ -156,7 +157,9 @@ func createBenchmarkChangefeed(
 				// of overhead here.
 				for _, rs := range resolvedSpans {
 					if sf.Forward(rs.Span, rs.Timestamp) {
-						if err := emitResolvedTimestamp(ctx, details, sink, nil, sf); err != nil {
+						if err := emitResolvedTimestamp(
+							ctx, details, encoder, sink, nil, sf,
+						); err != nil {
 							return err
 						}
 					}
