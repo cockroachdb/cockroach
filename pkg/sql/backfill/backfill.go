@@ -275,7 +275,9 @@ func ConvertBackfillError(
 			// of mutations if they have the mutation ID we're looking for.
 			break
 		}
-		desc.MakeMutationComplete(mutation)
+		if err := desc.MakeMutationComplete(mutation); err != nil {
+			return errors.Wrap(err, "backfill error")
+		}
 	}
 	return sqlbase.ConvertBatchError(ctx, desc, b)
 }
