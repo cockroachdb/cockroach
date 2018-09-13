@@ -39,19 +39,19 @@ project
  ├── columns: x:1(int!null)
  └── inner-join
       ├── columns: x:1(int!null) onecolumn.x:2(int) onecolumn.rowid:3(int!null) onecolumn.x:4(int) onecolumn.rowid:5(int!null)
+      ├── project
+      │    ├── columns: x:1(int!null)
+      │    ├── values
+      │    │    └── tuple [type=tuple]
+      │    └── projections
+      │         └── const: 1 [type=int]
       ├── inner-join
-      │    ├── columns: x:1(int!null) onecolumn.x:2(int) onecolumn.rowid:3(int!null)
-      │    ├── project
-      │    │    ├── columns: x:1(int!null)
-      │    │    ├── values
-      │    │    │    └── tuple [type=tuple]
-      │    │    └── projections
-      │    │         └── const: 1 [type=int]
+      │    ├── columns: onecolumn.x:2(int) onecolumn.rowid:3(int!null) onecolumn.x:4(int) onecolumn.rowid:5(int!null)
       │    ├── scan onecolumn
       │    │    └── columns: onecolumn.x:2(int) onecolumn.rowid:3(int!null)
+      │    ├── scan onecolumn
+      │    │    └── columns: onecolumn.x:4(int) onecolumn.rowid:5(int!null)
       │    └── true [type=bool]
-      ├── scan onecolumn
-      │    └── columns: onecolumn.x:4(int) onecolumn.rowid:5(int!null)
       └── true [type=bool]
 
 build
