@@ -1328,11 +1328,11 @@ CREATE TABLE t3 (k INT PRIMARY KEY, v INT, w INT, INDEX v(v))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT w FROM t3 WHERE v > 0 AND v < 100 ORDER BY v
 ----
-render           ·         ·           (w)     ·
- │               render 0  w           ·       ·
- └── index-join  ·         ·           (v, w)  +v
-      ├── scan   ·         ·           (k, v)  +v
-      │          table     t3@v        ·       ·
-      │          spans     /1-/100     ·       ·
-      └── scan   ·         ·           (v, w)  ·
-·                table     t3@primary  ·       ·
+render          ·         ·                      (w)     ·
+ │              render 0  w                      ·       ·
+ └── sort       ·         ·                      (v, w)  +v
+      │         order     +v                     ·       ·
+      └── scan  ·         ·                      (v, w)  ·
+·               table     t3@primary             ·       ·
+·               spans     ALL                    ·       ·
+·               filter    (v > 0) AND (v < 100)  ·       ·
