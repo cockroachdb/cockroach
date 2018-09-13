@@ -9,9 +9,7 @@
 package changefeedccl
 
 import (
-	"bytes"
 	"context"
-	gojson "encoding/json"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -19,11 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -43,7 +39,7 @@ const (
 
 type emitRow struct {
 	// datums is the new value of a changed table row.
-	datums tree.Datums
+	datums sqlbase.EncDatumRow
 	// timestamp is the mvcc timestamp corresponding to the latest update in
 	// `row`.
 	timestamp hlc.Timestamp
@@ -107,14 +103,14 @@ func kvsToRows(
 
 		for {
 			var r emitEntry
-			r.row.datums, r.row.tableDesc, _, err = rf.NextRowDecoded(ctx)
+			r.row.datums, r.row.tableDesc, _, err = rf.NextRow(ctx)
 			if err != nil {
 				return nil, err
 			}
 			if r.row.datums == nil {
 				break
 			}
-			r.row.datums = append(tree.Datums(nil), r.row.datums...)
+			r.row.datums = append(sqlbase.EncDatumRow(nil), r.row.datums...)
 
 			r.row.deleted = rf.RowIsDeleted()
 			r.row.timestamp = kv.Value.Timestamp
@@ -157,51 +153,30 @@ func kvsToRows(
 // updates. The returned closure is not threadsafe.
 func emitEntries(
 	details jobspb.ChangefeedDetails,
+	encoder Encoder,
 	sink Sink,
 	inputFn func(context.Context) ([]emitEntry, error),
 	knobs TestingKnobs,
 ) func(context.Context) ([]jobspb.ResolvedSpan, error) {
 	var scratch bufalloc.ByteAllocator
-	var key, value bytes.Buffer
 	emitRowFn := func(ctx context.Context, row emitRow) error {
-		key.Reset()
-		value.Reset()
+		var keyCopy, valueCopy []byte
 
-		keyColumns := row.tableDesc.PrimaryIndex.ColumnNames
-		jsonKeyRaw := make([]interface{}, len(keyColumns))
-		jsonValueRaw := make(map[string]interface{}, len(row.datums))
-		if _, ok := details.Opts[optUpdatedTimestamps]; ok {
-			jsonValueRaw[jsonMetaSentinel] = map[string]interface{}{
-				`updated`: tree.TimestampToDecimal(row.timestamp).Decimal.String(),
-			}
-		}
-		for i := range row.datums {
-			var err error
-			jsonValueRaw[row.tableDesc.Columns[i].Name], err = tree.AsJSON(row.datums[i])
-			if err != nil {
-				return err
-			}
-		}
-		for i, columnName := range keyColumns {
-			jsonKeyRaw[i] = jsonValueRaw[columnName]
-		}
-
-		jsonKey, err := json.MakeJSON(jsonKeyRaw)
+		encodedKey, err := encoder.EncodeKey(row.tableDesc, row.datums)
 		if err != nil {
 			return err
 		}
-		jsonKey.Format(&key)
+		scratch, keyCopy = scratch.Copy(encodedKey, 0 /* extraCap */)
+
 		if !row.deleted && envelopeType(details.Opts[optEnvelope]) == optEnvelopeRow {
-			jsonValue, err := json.MakeJSON(jsonValueRaw)
+			var encodedValue []byte
+			encodedValue, err = encoder.EncodeValue(row.tableDesc, row.datums, row.timestamp)
 			if err != nil {
 				return err
 			}
-			jsonValue.Format(&value)
+			scratch, valueCopy = scratch.Copy(encodedValue, 0 /* extraCap */)
 		}
 
-		var keyCopy, valueCopy []byte
-		scratch, keyCopy = scratch.Copy(key.Bytes(), 0 /* extraCap */)
-		scratch, valueCopy = scratch.Copy(value.Bytes(), 0 /* extraCap */)
 		if knobs.BeforeEmitRow != nil {
 			if err := knobs.BeforeEmitRow(); err != nil {
 				return err
@@ -258,6 +233,7 @@ func emitEntries(
 func emitResolvedTimestamp(
 	ctx context.Context,
 	details jobspb.ChangefeedDetails,
+	encoder Encoder,
 	sink Sink,
 	jobProgressedFn func(context.Context, jobs.HighWaterProgressedFn) error,
 	sf *spanFrontier,
@@ -287,19 +263,15 @@ func emitResolvedTimestamp(
 	}
 
 	if _, ok := details.Opts[optResolvedTimestamps]; ok {
-		resolvedMetaRaw := map[string]interface{}{
-			jsonMetaSentinel: map[string]interface{}{
-				`resolved`: tree.TimestampToDecimal(resolved).Decimal.String(),
-			},
-		}
-		resolvedMeta, err := gojson.Marshal(resolvedMetaRaw)
+		payload, err := encoder.EncodeResolvedTimestamp(resolved)
 		if err != nil {
 			return err
 		}
-
+		// TODO(dan): Plumb a bufalloc.ByteAllocator to use here.
+		payload = append([]byte(nil), payload...)
 		// TODO(dan): Emit more fine-grained (table level) resolved
 		// timestamps.
-		if err := sink.EmitResolvedTimestamp(ctx, resolvedMeta); err != nil {
+		if err := sink.EmitResolvedTimestamp(ctx, payload); err != nil {
 			return err
 		}
 	}
