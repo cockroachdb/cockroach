@@ -186,7 +186,7 @@ memo (optimized, ~12KB)
  ├── G1: (project G2 G3)
  │    └── "[presentation: a:3,b:4,c:5,d:6]"
  │         ├── best: (project G2 G3)
- │         └── cost: 1050.02
+ │         └── cost: 1050.17
  ├── G2: (select G4 G5)
  │    └── ""
  │         ├── best: (select G4 G5)
@@ -325,11 +325,11 @@ memo (optimized, ~4KB)
  ├── G1: (project G2 G3)
  │    └── "[presentation: array_agg:3]"
  │         ├── best: (project G2 G3)
- │         └── cost: 1074.00
+ │         └── cost: 1062.00
  ├── G2: (group-by G4 G5 cols=(2))
  │    └── ""
  │         ├── best: (group-by G4 G5 cols=(2))
- │         └── cost: 1067.00
+ │         └── cost: 1061.00
  ├── G3: (projections array_agg)
  ├── G4: (scan a)
  │    └── ""
