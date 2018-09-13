@@ -54,12 +54,7 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 		return nil, err
 	}
 
-	var tableDesc *TableDescriptor
-	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		tableDesc, err = ResolveExistingObject(ctx, p, tn, !n.IfExists, requireTableDesc)
-	})
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, tn, !n.IfExists, requireTableDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -134,12 +129,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// If the new column has a DEFAULT expression that uses a sequence, add references between
 			// its descriptor and this column descriptor.
 			if d.HasDefaultExpr() {
-				var changedSeqDescs []*TableDescriptor
-				// DDL statements use uncached descriptors, and can view newly added things.
-				// TODO(vivek): check if the cache can be used.
-				params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
-					changedSeqDescs, err = maybeAddSequenceDependencies(params.p, n.tableDesc, col, expr, params.EvalContext())
-				})
+				changedSeqDescs, err := maybeAddSequenceDependencies(params.p, n.tableDesc, col, expr, params.EvalContext())
 				if err != nil {
 					return err
 				}
@@ -270,7 +260,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 				descriptorChanged = true
 				for _, updated := range affected {
-					if err := params.p.saveNonmutationAndNotify(params.ctx, updated); err != nil {
+					if err := params.p.writeSchemaChange(params.ctx, updated, sqlbase.InvalidMutationID); err != nil {
 						return err
 					}
 				}
@@ -747,13 +737,7 @@ func applyColumnMutation(
 			col.DefaultExpr = &s
 
 			// Add references to the sequence descriptors this column is now using.
-
-			// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-			// TODO(vivek): check if the cache can be used.
-			var changedSeqDescs []*TableDescriptor
-			params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
-				changedSeqDescs, err = maybeAddSequenceDependencies(params.p, tableDesc, col, expr, params.EvalContext())
-			})
+			changedSeqDescs, err := maybeAddSequenceDependencies(params.p, tableDesc, col, expr, params.EvalContext())
 			if err != nil {
 				return err
 			}

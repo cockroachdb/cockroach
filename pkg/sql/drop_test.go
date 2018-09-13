@@ -712,7 +712,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	sqlutils.CreateTable(t, sqlDB.DB, "t", "a INT", numRows, sqlutils.ToRowFn(sqlutils.RowIdxFn))
 
 	// Set TTL so the data is deleted immediately.
-	sqlDB.Exec(t, `ALTER TABLE test.t EXPERIMENTAL CONFIGURE ZONE '{gc: {ttlseconds: 1}}'`)
+	sqlDB.Exec(t, `ALTER TABLE test.t CONFIGURE ZONE USING gc.ttlseconds = 1`)
 
 	// Give the table an old format version.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")

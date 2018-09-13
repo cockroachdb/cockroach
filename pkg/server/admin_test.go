@@ -1399,13 +1399,13 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	})
 
 	// Add a zone config.
-	sqlDB.Exec(t, `ALTER TABLE roachblog.posts EXPERIMENTAL CONFIGURE ZONE 'num_replicas: 1'`)
+	sqlDB.Exec(t, `ALTER TABLE roachblog.posts CONFIGURE ZONE USING num_replicas = 1`)
 
 	expectedNewZoneConfigID := int64(51)
 	sqlDB.CheckQueryResults(
 		t,
 		`SELECT zone_id
-		FROM [EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS]
+		FROM [SHOW ALL ZONE CONFIGURATIONS]
 		WHERE cli_specifier = 'roachblog.posts'`,
 		[][]string{
 			{fmt.Sprintf("%d", expectedNewZoneConfigID)},

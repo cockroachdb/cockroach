@@ -157,7 +157,7 @@ func (t *partitioningTest) parse() error {
 			subzone.IndexID = uint32(idxDesc.ID)
 			if len(constraints) > 0 {
 				fmt.Fprintf(&zoneConfigStmts,
-					`ALTER INDEX %s@%s EXPERIMENTAL CONFIGURE ZONE 'constraints: [%s]';`,
+					`ALTER INDEX %s@%s CONFIGURE ZONE USING constraints = '[%s]';`,
 					t.parsed.tableName, idxDesc.Name, constraints,
 				)
 			}
@@ -170,7 +170,7 @@ func (t *partitioningTest) parse() error {
 			subzone.IndexID = uint32(index.ID)
 			if len(constraints) > 0 {
 				fmt.Fprintf(&zoneConfigStmts,
-					`ALTER PARTITION %s OF TABLE %s EXPERIMENTAL CONFIGURE ZONE 'constraints: [%s]';`,
+					`ALTER PARTITION %s OF TABLE %s CONFIGURE ZONE USING constraints = '[%s]';`,
 					subzone.PartitionName, t.parsed.tableName, constraints,
 				)
 			}
@@ -1303,7 +1303,7 @@ func TestRepartitioning(t *testing.T) {
 				for _, name := range test.new.parsed.tableDesc.PartitionNames() {
 					newPartitionNames[name] = struct{}{}
 				}
-				rows := sqlDB.QueryStr(t, "SELECT cli_specifier FROM [EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS] WHERE cli_specifier IS NOT NULL")
+				rows := sqlDB.QueryStr(t, "SELECT cli_specifier FROM [SHOW ALL ZONE CONFIGURATIONS] WHERE cli_specifier IS NOT NULL")
 				for _, row := range rows {
 					zs, err := config.ParseCLIZoneSpecifier(row[0])
 					if err != nil {
@@ -1358,10 +1358,10 @@ func TestRemovePartitioningExpiredLicense(t *testing.T) {
 	sqlDB.Exec(t, `CREATE INDEX i ON t (a) PARTITION BY RANGE (a) (
 		PARTITION p34 VALUES FROM (3) TO (4)
 	)`)
-	sqlDB.Exec(t, `ALTER PARTITION p1 OF TABLE t EXPERIMENTAL CONFIGURE ZONE ''`)
-	sqlDB.Exec(t, `ALTER PARTITION p34 OF TABLE t EXPERIMENTAL CONFIGURE ZONE ''`)
-	sqlDB.Exec(t, `ALTER INDEX t@primary EXPERIMENTAL CONFIGURE ZONE ''`)
-	sqlDB.Exec(t, `ALTER INDEX t@i EXPERIMENTAL CONFIGURE ZONE ''`)
+	sqlDB.Exec(t, `ALTER PARTITION p1 OF TABLE t CONFIGURE ZONE USING DEFAULT`)
+	sqlDB.Exec(t, `ALTER PARTITION p34 OF TABLE t CONFIGURE ZONE USING DEFAULT`)
+	sqlDB.Exec(t, `ALTER INDEX t@primary CONFIGURE ZONE USING DEFAULT`)
+	sqlDB.Exec(t, `ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`)
 
 	// Remove the enterprise license.
 	defer utilccl.TestingDisableEnterprise()()
@@ -1377,20 +1377,20 @@ func TestRemovePartitioningExpiredLicense(t *testing.T) {
 	// Partitions and zone configs cannot be modified without a valid license.
 	expectLicenseErr(`ALTER TABLE t PARTITION BY LIST (a) (PARTITION p2 VALUES IN (2))`)
 	expectLicenseErr(`ALTER INDEX t@i PARTITION BY RANGE (a) (PARTITION p45 VALUES FROM (4) TO (5))`)
-	expectLicenseErr(`ALTER PARTITION p1 OF TABLE t EXPERIMENTAL CONFIGURE ZONE ''`)
-	expectLicenseErr(`ALTER PARTITION p34 OF TABLE t EXPERIMENTAL CONFIGURE ZONE ''`)
-	expectLicenseErr(`ALTER INDEX t@primary EXPERIMENTAL CONFIGURE ZONE ''`)
-	expectLicenseErr(`ALTER INDEX t@i EXPERIMENTAL CONFIGURE ZONE ''`)
+	expectLicenseErr(`ALTER PARTITION p1 OF TABLE t CONFIGURE ZONE USING DEFAULT`)
+	expectLicenseErr(`ALTER PARTITION p34 OF TABLE t CONFIGURE ZONE USING DEFAULT`)
+	expectLicenseErr(`ALTER INDEX t@primary CONFIGURE ZONE USING DEFAULT`)
+	expectLicenseErr(`ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`)
 
 	// But they can be removed.
 	sqlDB.Exec(t, `ALTER TABLE t PARTITION BY NOTHING`)
 	sqlDB.Exec(t, `ALTER INDEX t@i PARTITION BY NOTHING`)
-	sqlDB.Exec(t, `ALTER INDEX t@primary EXPERIMENTAL CONFIGURE ZONE NULL`)
-	sqlDB.Exec(t, `ALTER INDEX t@i EXPERIMENTAL CONFIGURE ZONE NULL`)
+	sqlDB.Exec(t, `ALTER INDEX t@primary CONFIGURE ZONE DISCARD`)
+	sqlDB.Exec(t, `ALTER INDEX t@i CONFIGURE ZONE DISCARD`)
 
 	// Once removed, they cannot be added back.
 	expectLicenseErr(`ALTER TABLE t PARTITION BY LIST (a) (PARTITION p2 VALUES IN (2))`)
 	expectLicenseErr(`ALTER INDEX t@i PARTITION BY RANGE (a) (PARTITION p45 VALUES FROM (4) TO (5))`)
-	expectLicenseErr(`ALTER INDEX t@primary EXPERIMENTAL CONFIGURE ZONE ''`)
-	expectLicenseErr(`ALTER INDEX t@i EXPERIMENTAL CONFIGURE ZONE ''`)
+	expectLicenseErr(`ALTER INDEX t@primary CONFIGURE ZONE USING DEFAULT`)
+	expectLicenseErr(`ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`)
 }

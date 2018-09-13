@@ -171,7 +171,7 @@ func (n *scrubNode) Close(ctx context.Context) {
 func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tree.Name) error {
 	// Check that the database exists.
 	database := string(*name)
-	dbDesc, err := ResolveDatabase(ctx, p, database, true /*required*/)
+	dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, database, true /*required*/)
 	if err != nil {
 		return err
 	}

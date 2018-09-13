@@ -21,6 +21,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -36,10 +37,19 @@ func configureZone(db *gosql.DB, table, partition string, constraint int, zones 
 		constraints = fmt.Sprintf("[+rack=%d]", constraint)
 	}
 
-	sql := fmt.Sprintf(
-		`ALTER PARTITION %s OF TABLE %s EXPERIMENTAL CONFIGURE ZONE 'constraints: %s'`,
+	// We are removing the EXPERIMENTAL keyword in 2.1. For compatibility
+	// with 2.0 clusters we still need to try with it if the
+	// syntax without EXPERIMENTAL fails.
+	// TODO(knz): Remove this in 2.2.
+	sql := fmt.Sprintf(`ALTER PARTITION %s OF TABLE %s CONFIGURE ZONE USING constraints = '%s'`,
 		partition, table, constraints)
-	if _, err := db.Exec(sql); err != nil {
+	_, err := db.Exec(sql)
+	if err != nil && strings.Contains(err.Error(), "syntax error") {
+		sql = fmt.Sprintf(`ALTER PARTITION %s OF TABLE %s EXPERIMENTAL CONFIGURE ZONE 'constraints: %s'`,
+			partition, table, constraints)
+		_, err = db.Exec(sql)
+	}
+	if err != nil {
 		panic(fmt.Sprintf("Couldn't exec %s: %s\n", sql, err))
 	}
 }
