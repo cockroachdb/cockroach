@@ -1824,7 +1824,10 @@ opt_with_options:
   {
     $$.val = $4.kvOptions()
   }
-| /* EMPTY */ {}
+| /* EMPTY */
+  {
+    $$.val = nil
+  }
 
 copy_from_stmt:
   COPY table_name opt_column_list FROM STDIN
@@ -5255,7 +5258,10 @@ opt_with_clause:
   {
     $$.val = $1.with()
   }
-| /* EMPTY */ {}
+| /* EMPTY */
+  {
+    $$.val = nil
+  }
 
 opt_table:
   TABLE {}

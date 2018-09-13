@@ -121,9 +121,11 @@ var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	"default distributed SQL execution mode",
 	"auto",
 	map[int64]string{
-		int64(sessiondata.DistSQLOff):  "off",
-		int64(sessiondata.DistSQLAuto): "auto",
-		int64(sessiondata.DistSQLOn):   "on",
+		int64(sessiondata.DistSQLOff):       "off",
+		int64(sessiondata.DistSQLAuto):      "auto",
+		int64(sessiondata.DistSQLOn):        "on",
+		int64(sessiondata.DistSQL2Dot0Auto): "2.0-auto",
+		int64(sessiondata.DistSQL2Dot0Off):  "2.0-off",
 	},
 )
 
@@ -478,13 +480,29 @@ func countRowsAffected(params runParams, p planNode) (int, error) {
 	return count, err
 }
 
+// shouldUseDistSQL returns true if the combination of mode and distribution
+// requirement given by shouldDistributeGivenRecAndMode requires that the
+// distSQL engine should be used.
+// This is always true unless the mode is set to 2.0-auto or 2.0-off.
+// 2.0-auto causes the distribution recommendation to control whether distsql is
+// used at all, and 2.0-off causes distsql to never be used regardless of the
+// recommendation.
+func shouldUseDistSQL(distributePlan bool, mode sessiondata.DistSQLExecMode) bool {
+	if mode == sessiondata.DistSQL2Dot0Off {
+		return false
+	} else if mode == sessiondata.DistSQL2Dot0Auto {
+		return distributePlan
+	}
+	return true
+}
+
 func shouldDistributeGivenRecAndMode(
 	rec distRecommendation, mode sessiondata.DistSQLExecMode,
 ) bool {
 	switch mode {
-	case sessiondata.DistSQLOff:
+	case sessiondata.DistSQLOff, sessiondata.DistSQL2Dot0Off:
 		return false
-	case sessiondata.DistSQLAuto:
+	case sessiondata.DistSQLAuto, sessiondata.DistSQL2Dot0Auto:
 		return rec == shouldDistribute
 	case sessiondata.DistSQLOn, sessiondata.DistSQLAlways:
 		return rec != cannotDistribute

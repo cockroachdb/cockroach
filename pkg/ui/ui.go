@@ -21,27 +21,22 @@
 package ui
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"html/template"
+	"net/http"
 	"os"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	assetfs "github.com/elazarl/go-bindata-assetfs"
+	"github.com/pkg/errors"
 )
-
-var indexHTML = []byte(fmt.Sprintf(`<!DOCTYPE html>
-<title>CockroachDB</title>
-Binary built without web UI.
-<hr>
-<em>%s</em>`, build.GetInfo().Short()))
 
 // Asset loads and returns the asset for the given name. It returns an error if
 // the asset could not be found or could not be loaded.
-var Asset = func(name string) ([]byte, error) {
-	if name == "index.html" {
-		return indexHTML, nil
-	}
-	return nil, os.ErrNotExist
-}
+var Asset func(name string) ([]byte, error)
 
 // AssetDir returns the file names below a certain directory in the embedded
 // filesystem.
@@ -58,33 +53,22 @@ var Asset = func(name string) ([]byte, error) {
 // AssetDir("data") returns []string{"foo.txt", "img"}
 // AssetDir("data/img") returns []string{"a.png", "b.png"}
 // AssetDir("foo.txt") and AssetDir("notexist") return errors
-var AssetDir = func(name string) ([]string, error) {
-	if name == "" {
-		return []string{"index.html"}, nil
-	}
-	return nil, os.ErrNotExist
-}
+var AssetDir func(name string) ([]string, error)
 
 // AssetInfo loads and returns metadata for the asset with the given name. It
 // returns an error if the asset could not be found or could not be loaded.
 var AssetInfo func(name string) (os.FileInfo, error)
 
-// IndexHTMLTemplate takes arguments about the current session and returns HTML which
-// includes the UI JavaScript bundles, plus a script tag which sets the currently logged in user
-// so that the UI JavaScript can decide whether to show a login page.
-var IndexHTMLTemplate *template.Template
-
-// IndexHTMLArgs are the arguments to IndexHTMLTemplate.
-type IndexHTMLArgs struct {
-	ExperimentalUseLogin bool
-	LoginEnabled         bool
-	LoggedInUser         *string
-	Tag                  string
-	Version              string
+// haveUI returns whether the admin UI has been linked into the binary.
+func haveUI() bool {
+	return Asset != nil && AssetDir != nil && AssetInfo != nil
 }
 
-func init() {
-	t, err := template.New("index").Parse(`<!DOCTYPE html>
+// indexTemplate takes arguments about the current session and returns HTML
+// which includes the UI JavaScript bundles, plus a script tag which sets the
+// currently logged in user so that the UI JavaScript can decide whether to show
+// a login page.
+var indexHTMLTemplate = template.Must(template.New("index").Parse(`<!DOCTYPE html>
 <html>
 	<head>
 		<title>Cockroach Console</title>
@@ -95,7 +79,7 @@ func init() {
 		<div id="react-layout"></div>
 
 		<script>
-			window.dataFromServer = {{ .DataFromServer }};
+			window.dataFromServer = {{.}};
 		</script>
 
 		<script src="protos.dll.js" type="text/javascript"></script>
@@ -103,9 +87,61 @@ func init() {
 		<script src="bundle.js" type="text/javascript"></script>
 	</body>
 </html>
-`)
-	if err != nil {
-		panic(fmt.Sprintf("can't parse template: %s", err))
-	}
-	IndexHTMLTemplate = t
+`))
+
+type indexHTMLArgs struct {
+	ExperimentalUseLogin bool
+	LoginEnabled         bool
+	LoggedInUser         *string
+	Tag                  string
+	Version              string
+}
+
+// bareIndexHTML is used in place of indexHTMLTemplate when the binary is built
+// without the web UI.
+var bareIndexHTML = []byte(fmt.Sprintf(`<!DOCTYPE html>
+<title>CockroachDB</title>
+Binary built without web UI.
+<hr>
+<em>%s</em>`, build.GetInfo().Short()))
+
+// Config contains the configuration parameters for Handler.
+type Config struct {
+	ExperimentalUseLogin bool
+	LoginEnabled         bool
+	GetUser              func(ctx context.Context) *string
+}
+
+// Handler returns an http.Handler that serves the UI.
+func Handler(cfg Config) http.Handler {
+	fileServer := http.FileServer(&assetfs.AssetFS{
+		Asset:     Asset,
+		AssetDir:  AssetDir,
+		AssetInfo: AssetInfo,
+	})
+	buildInfo := build.GetInfo()
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !haveUI() {
+			http.ServeContent(w, r, "index.html", buildInfo.GoTime(), bytes.NewReader(bareIndexHTML))
+			return
+		}
+
+		if r.URL.Path != "/" {
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		if err := indexHTMLTemplate.Execute(w, indexHTMLArgs{
+			ExperimentalUseLogin: cfg.ExperimentalUseLogin,
+			LoginEnabled:         cfg.LoginEnabled,
+			LoggedInUser:         cfg.GetUser(r.Context()),
+			Tag:                  buildInfo.Tag,
+			Version:              build.VersionPrefix(),
+		}); err != nil {
+			err = errors.Wrap(err, "templating index.html")
+			http.Error(w, err.Error(), 500)
+			log.Error(r.Context(), err)
+		}
+	})
 }

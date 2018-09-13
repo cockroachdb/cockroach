@@ -395,9 +395,9 @@ type testClusterConfig struct {
 // If no configs are indicated, the default one is used (unless overridden
 // via -config).
 var logicTestConfigs = []testClusterConfig{
-	{name: "local", numNodes: 1, overrideDistSQLMode: "off", overrideOptimizerMode: "off"},
+	{name: "local", numNodes: 1, overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "off"},
 	{name: "local-v1.1@v1.0-noupgrade", numNodes: 1,
-		overrideDistSQLMode: "off", overrideOptimizerMode: "off",
+		overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "off",
 		bootstrapVersion: &cluster.ClusterVersion{
 			UseVersion:     cluster.VersionByKey(cluster.VersionBase),
 			MinimumVersion: cluster.VersionByKey(cluster.VersionBase),
@@ -405,15 +405,15 @@ var logicTestConfigs = []testClusterConfig{
 		serverVersion:  &roachpb.Version{Major: 1, Minor: 1},
 		disableUpgrade: 1,
 	},
-	{name: "local-opt", numNodes: 1, overrideDistSQLMode: "off", overrideOptimizerMode: "on"},
-	{name: "local-parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "off", overrideOptimizerMode: "off"},
+	{name: "local-opt", numNodes: 1, overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "on"},
+	{name: "local-parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "off"},
 	{name: "fakedist", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off"},
 	{name: "fakedist-opt", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "on"},
 	{name: "fakedist-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off",
 		distSQLMetadataTestEnabled: true, skipShort: true},
 	{name: "fakedist-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off",
 		distSQLUseDisk: true, skipShort: true},
-	{name: "5node-local", numNodes: 5, overrideDistSQLMode: "off", overrideOptimizerMode: "off"},
+	{name: "5node-local", numNodes: 5, overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "off"},
 	{name: "5node-dist", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "off"},
 	{name: "5node-dist-opt", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "on"},
 	{name: "5node-dist-metadata", numNodes: 5, overrideDistSQLMode: "on", distSQLMetadataTestEnabled: true,

@@ -92,6 +92,15 @@ func (b Info) Short() string {
 		b.Distribution, b.Tag, plat, b.Time, b.GoVersion)
 }
 
+// GoTime parses the utcTime string and returns a time.Time.
+func (b Info) GoTime() time.Time {
+	val, err := time.Parse(TimeFormat, b.Time)
+	if err != nil {
+		return time.Time{}
+	}
+	return val
+}
+
 // Timestamp parses the utcTime string and returns the number of seconds since epoch.
 func (b Info) Timestamp() (int64, error) {
 	val, err := time.Parse(TimeFormat, b.Time)
