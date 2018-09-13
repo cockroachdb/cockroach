@@ -1171,7 +1171,7 @@ ORDER BY ol_w_id, ol_d_id
 sort
  ├── columns: count:11(int)
  ├── stats: [rows=100, distinct(2,3)=100]
- ├── cost: 1100021.93
+ ├── cost: 1100015.95
  ├── key: (2,3)
  ├── fd: (2,3)-->(11)
  ├── ordering: +3,+2
