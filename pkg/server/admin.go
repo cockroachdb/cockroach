@@ -1539,8 +1539,14 @@ func (s *adminServer) DataDistribution(
 	for _, row := range rows2 {
 		zcID := int64(tree.MustBeDInt(row[0]))
 		zcCliSpecifier := string(tree.MustBeDString(row[1]))
-		zcYaml := tree.MustBeDBytes(row[2])
-		zcBytes := tree.MustBeDBytes(row[3])
+		zcYaml, ok := tree.AsDBytes(row[2])
+		if !ok {
+			return nil, s.serverError(errors.Errorf("unable to parse non-string zone config: '%s'", row[2]))
+		}
+		zcBytes, ok := tree.AsDBytes(row[4])
+		if !ok {
+			return nil, s.serverError(errors.Errorf("unable to parse non-string zone config: '%s'", row[4]))
+		}
 		var zcProto config.ZoneConfig
 		if err := protoutil.Unmarshal([]byte(zcBytes), &zcProto); err != nil {
 			return nil, s.serverError(err)
