@@ -1748,8 +1748,16 @@ func (s *Store) startClosedTimestampRangefeedSubscriber(ctx context.Context) {
 			select {
 			case <-ch:
 				// Drain all notifications from the channel.
-				for len(ch) > 0 {
-					<-ch
+			loop:
+				for {
+					select {
+					case _, ok := <-ch:
+						if !ok {
+							break loop
+						}
+					default:
+						break loop
+					}
 				}
 
 				// Gather replicas to notify under lock.
