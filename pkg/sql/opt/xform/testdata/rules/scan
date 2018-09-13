@@ -297,7 +297,7 @@ memo (optimized, ~2KB)
  └── G1: (scan a,cols=(2-4)) (scan a@s_idx,cols=(2-4))
       ├── "[presentation: s:4,i:2,f:3] [ordering: -4,+2]"
       │    ├── best: (sort G1)
-      │    └── cost: 1378.97
+      │    └── cost: 1289.28
       └── ""
            ├── best: (scan a@s_idx,cols=(2-4))
            └── cost: 1070.00
@@ -485,7 +485,7 @@ memo (optimized, ~2KB)
  └── G1: (scan a,cols=(1,2,4)) (scan a@s_idx,cols=(1,2,4)) (scan a@si_idx,cols=(1,2,4))
       ├── "[presentation: i:2,k:1] [ordering: -4,+2,+1]"
       │    ├── best: (sort G1)
-      │    └── cost: 1478.63
+      │    └── cost: 1290.28
       └── ""
            ├── best: (scan a@s_idx,cols=(1,2,4))
            └── cost: 1070.00
