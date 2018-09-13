@@ -2170,15 +2170,15 @@ project
  │         ├── columns: column9:9(bool) bools.b:3(bool)
  │         ├── inner-join
  │         │    ├── columns: bools.b:1(bool) bools.rowid:2(int!null) bools.b:3(bool) bools.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
+ │         │    ├── scan bools
+ │         │    │    └── columns: bools.b:1(bool) bools.rowid:2(int!null)
  │         │    ├── inner-join
- │         │    │    ├── columns: bools.b:1(bool) bools.rowid:2(int!null) bools.b:3(bool) bools.rowid:4(int!null)
- │         │    │    ├── scan bools
- │         │    │    │    └── columns: bools.b:1(bool) bools.rowid:2(int!null)
+ │         │    │    ├── columns: bools.b:3(bool) bools.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    ├── scan bools
  │         │    │    │    └── columns: bools.b:3(bool) bools.rowid:4(int!null)
+ │         │    │    ├── scan abc
+ │         │    │    │    └── columns: a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    └── true [type=bool]
- │         │    ├── scan abc
- │         │    │    └── columns: a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    └── true [type=bool]
  │         └── projections
  │              └── and [type=bool]
@@ -2206,15 +2206,15 @@ project
  │         ├── columns: column9:9(bool) bools.b:3(bool)
  │         ├── inner-join
  │         │    ├── columns: bools.b:1(bool) bools.rowid:2(int!null) bools.b:3(bool) bools.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
+ │         │    ├── scan bools
+ │         │    │    └── columns: bools.b:1(bool) bools.rowid:2(int!null)
  │         │    ├── inner-join
- │         │    │    ├── columns: bools.b:1(bool) bools.rowid:2(int!null) bools.b:3(bool) bools.rowid:4(int!null)
- │         │    │    ├── scan bools
- │         │    │    │    └── columns: bools.b:1(bool) bools.rowid:2(int!null)
+ │         │    │    ├── columns: bools.b:3(bool) bools.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    ├── scan bools
  │         │    │    │    └── columns: bools.b:3(bool) bools.rowid:4(int!null)
+ │         │    │    ├── scan abc
+ │         │    │    │    └── columns: a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    └── true [type=bool]
- │         │    ├── scan abc
- │         │    │    └── columns: a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    └── true [type=bool]
  │         └── projections
  │              └── or [type=bool]
