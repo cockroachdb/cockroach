@@ -770,6 +770,11 @@ func TestChangefeedRetryableSinkError(t *testing.T) {
 		return nil
 	}
 	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// This test causes a lot of pgwire connection attempts which, in secure
+		// mode, results in many rounds of bcrypt hashing. This is excruciatingly
+		// slow with the race detector on. Just use insecure mode, which avoids
+		// bcrypt.
+		Insecure: true,
 		Knobs: base.TestingKnobs{
 			DistSQL: &distsqlrun.TestingKnobs{
 				Changefeed: &TestingKnobs{
@@ -785,11 +790,11 @@ func TestChangefeedRetryableSinkError(t *testing.T) {
 	// Create original data table.
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-	sqlDB.Exec(t, `CREATE USER sinkuser WITH PASSWORD sink`)
+	sqlDB.Exec(t, `CREATE USER sinkuser`)
 	sqlDB.Exec(t, `GRANT ALL ON DATABASE d TO sinkuser`)
 
 	// Create changefeed into SQL Sink.
-	row := sqlDB.QueryRow(t, fmt.Sprintf(`CREATE CHANGEFEED FOR foo INTO 'experimental-sql://sinkuser:sink@%s/d'`, s.ServingAddr()))
+	row := sqlDB.QueryRow(t, fmt.Sprintf(`CREATE CHANGEFEED FOR foo INTO 'experimental-sql://sinkuser@%s/d?sslmode=disable'`, s.ServingAddr()))
 	var jobID string
 	row.Scan(&jobID)
 
