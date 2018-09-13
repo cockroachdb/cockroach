@@ -207,10 +207,25 @@ func (c *coster) computeVirtualScanCost(
 // rowSortCost is the CPU cost to sort one row, which depends on the number of
 // columns in the sort key.
 func (c *coster) rowSortCost(numKeyCols int) memo.Cost {
+	// Sorting involves comparisons on the key columns, but the cost isn't
+	// directly proportional: we only compare the second column if the rows are
+	// equal on the first column; and so on. We also account for a fixed
+	// "non-comparison" cost related to processing the
+	// row. The formula is:
+	//
+	//   cpuCostFactor * [ 1 + Sum eqProb^(i-1) with i=1 to numKeyCols ]
+	//
+	const eqProb = 0.1
+	cost := cpuCostFactor
+	for i, c := 0, cpuCostFactor; i < numKeyCols; i, c = i+1, c*eqProb {
+		// c is cpuCostFactor * eqProb^i.
+		cost += c
+	}
+
 	// There is a fixed "non-comparison" cost and a comparison cost proportional
 	// to the key columns. Note that the cost has to be high enough so that a
 	// sort is almost always more expensive than a reverse scan or an index scan.
-	return (1 + memo.Cost(numKeyCols)) * cpuCostFactor
+	return memo.Cost(cost)
 }
 
 // rowScanCost is the CPU cost to scan one row, which depends on the number of
