@@ -171,6 +171,25 @@ func (f *Factory) AssignPlaceholders() {
 // so that any custom manual pattern matching/replacement code can be run.
 func (f *Factory) onConstruct(e memo.Expr) memo.GroupID {
 	ev := f.mem.MemoizeNormExpr(f.evalCtx, e)
+
+	// [SimplifyZeroCardinalityGroup]
+	// SimplifyZeroCardinalityGroup replaces a group with [0 - 0] cardinality
+	// with an empty values expression. It is placed here because it depends on
+	// the logical properties of the group in question.
+	// We exclude LimitOp from this rule because limits with negative values
+	// should error.
+	if ev.IsRelational() && e.Operator() != opt.ValuesOp && e.Operator() != opt.LimitOp {
+		if ev.Logical().Relational.Cardinality.IsZero() {
+			if f.matchedRule == nil || f.matchedRule(opt.SimplifyZeroCardinalityGroup) {
+				g := f.funcs.ConstructEmptyValues(f.funcs.OutputCols(ev.Group()))
+				if f.appliedRule != nil {
+					f.appliedRule(opt.SimplifyZeroCardinalityGroup, g, 0, 0)
+				}
+				return g
+			}
+		}
+	}
+
 	return ev.Group()
 }
 

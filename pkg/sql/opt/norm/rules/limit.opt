@@ -43,3 +43,16 @@ $input
     (Offset $input $offset (PruneOrdering $input $ordering))
     $projections
 )
+
+# SimplifyLimitZero replaces a LIMIT 0 with an empty values clause.
+# This rule exists rather than relying on SimplifyZeroCardinalityGroup because
+# LIMIT operations with a negative constant should not be equivalent to empty
+# groups: they should error at execution time.
+[SimplifyLimitZero, Normalize]
+(Limit
+    $input:*
+    $limit:(Const 0)
+    $ordering:*
+)
+=>
+(ConstructEmptyValues (OutputCols $input))
