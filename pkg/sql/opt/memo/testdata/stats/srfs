@@ -37,16 +37,16 @@ distinct-on
  ├── columns: a:1(string) b:2(int)
  ├── grouping columns: upper:1(string) generate_series:2(int)
  ├── side-effects
- ├── stats: [rows=700, distinct(1,2)=700]
+ ├── stats: [rows=100, distinct(1,2)=100]
  ├── key: (1,2)
  └── inner-join
       ├── columns: upper:1(string) generate_series:2(int)
       ├── side-effects
-      ├── stats: [rows=1000, distinct(1,2)=700]
+      ├── stats: [rows=1000, distinct(1,2)=100]
       ├── zip
       │    ├── columns: generate_series:2(int)
       │    ├── side-effects
-      │    ├── stats: [rows=1000, distinct(2)=700]
+      │    ├── stats: [rows=1000, distinct(2)=100]
       │    └── generate_series(1, 2) [type=int, side-effects]
       ├── zip
       │    ├── columns: upper:1(string)
