@@ -47,6 +47,8 @@ type changeAggregator struct {
 	// tableHistUpdaterDoneCh is closed when the tableHistUpdater exits.
 	tableHistUpdaterDoneCh chan struct{}
 
+	// encoder is the Encoder to use for key and value serialization.
+	encoder Encoder
 	// sink is the Sink to write rows to. Resolved timestamps are never written
 	// by changeAggregator.
 	sink Sink
@@ -94,6 +96,11 @@ func newChangeAggregatorProcessor(
 			},
 		},
 	); err != nil {
+		return nil, err
+	}
+
+	var err error
+	if ca.encoder, err = getEncoder(ca.spec.Feed.Opts); err != nil {
 		return nil, err
 	}
 
@@ -185,7 +192,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
 		knobs = *cfKnobs
 	}
-	ca.tickFn = emitEntries(ca.spec.Feed, ca.sink, rowsFn, knobs)
+	ca.tickFn = emitEntries(ca.spec.Feed, ca.encoder, ca.sink, rowsFn, knobs)
 
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.
@@ -316,6 +323,8 @@ type changeFrontier struct {
 	// sf contains the current resolved timestamp high-water for the tracked
 	// span set.
 	sf *spanFrontier
+	// encoder is the Encoder to use for resolved timestamp serialization.
+	encoder Encoder
 	// sink is the Sink to write resolved timestamps to. Rows are never written
 	// by changeFrontier.
 	sink Sink
@@ -371,6 +380,11 @@ func newChangeFrontierProcessor(
 			InputsToDrain: []distsqlrun.RowSource{cf.input},
 		},
 	); err != nil {
+		return nil, err
+	}
+
+	var err error
+	if cf.encoder, err = getEncoder(spec.Feed.Opts); err != nil {
 		return nil, err
 	}
 
@@ -516,7 +530,7 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 		}
 		cf.metrics.mu.Unlock()
 		if err := emitResolvedTimestamp(
-			cf.Ctx, cf.spec.Feed, cf.sink, cf.jobProgressedFn, cf.sf,
+			cf.Ctx, cf.spec.Feed, cf.encoder, cf.sink, cf.jobProgressedFn, cf.sf,
 		); err != nil {
 			return err
 		}
