@@ -1593,7 +1593,8 @@ scan a
 # --------------------------------------------------
 # EliminateAntiJoin
 # --------------------------------------------------
-opt expect=EliminateAntiJoin
+# TODO(justin): figure out if there's a good way to make this still apply.
+opt disable=SimplifyZeroCardinalityGroup expect=EliminateAntiJoin
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM (VALUES (k)) OFFSET 1)
 ----
 scan a

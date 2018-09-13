@@ -840,7 +840,9 @@ func (b *logicalPropsBuilder) buildLimitProps(ev ExprView) props.Logical {
 	limitProps := limit.Logical().Scalar
 
 	constLimit := int64(math.MaxUint32)
+	haveConstLimit := false
 	if limit.Operator() == opt.ConstOp {
+		haveConstLimit = true
 		constLimit = int64(*limit.Private().(*tree.DInt))
 	}
 
@@ -888,6 +890,12 @@ func (b *logicalPropsBuilder) buildLimitProps(ev ExprView) props.Logical {
 	// ----------
 	b.sb.init(b.evalCtx, ev.Metadata())
 	b.sb.buildLimit(ev, relational)
+
+	// Side Effects
+	// ------------
+	if constLimit < 0 || !haveConstLimit {
+		relational.CanHaveSideEffects = true
+	}
 
 	return logical
 }
