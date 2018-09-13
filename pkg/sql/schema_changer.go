@@ -856,7 +856,9 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) 
 				break
 			}
 			isRollback = mutation.Rollback
-			desc.MakeMutationComplete(mutation)
+			if err := desc.MakeMutationComplete(mutation); err != nil {
+				return err
+			}
 			i++
 		}
 		if i == 0 {
@@ -991,7 +993,11 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 		// Delete all mutations that reference any of the reversed columns
 		// by running a graph traversal of the mutations.
 		if len(columns) > 0 {
-			droppedMutations = sc.deleteIndexMutationsWithReversedColumns(ctx, desc, columns)
+			var err error
+			droppedMutations, err = sc.deleteIndexMutationsWithReversedColumns(ctx, desc, columns)
+			if err != nil {
+				return err
+			}
 		}
 
 		// Publish() will increment the version.
@@ -1135,7 +1141,7 @@ func (sc *SchemaChanger) createRollbackJob(
 // first search graph traversal.
 func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 	ctx context.Context, desc *sqlbase.TableDescriptor, columns map[string]struct{},
-) map[sqlbase.MutationID]struct{} {
+) (map[sqlbase.MutationID]struct{}, error) {
 	dropMutations := make(map[sqlbase.MutationID]struct{})
 	// Run breadth first search traversal that reverses mutations
 	for {
@@ -1176,7 +1182,9 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 				// a rollback because it was not started.
 				mutation, columns = reverseMutation(mutation, true /*notStarted*/, columns)
 				// Mark as complete because this mutation needs no backfill.
-				desc.MakeMutationComplete(mutation)
+				if err := desc.MakeMutationComplete(mutation); err != nil {
+					return nil, err
+				}
 			} else {
 				newMutations = append(newMutations, mutation)
 			}
@@ -1184,7 +1192,7 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 		// Reset mutations.
 		desc.Mutations = newMutations
 	}
-	return dropMutations
+	return dropMutations, nil
 }
 
 // Reverse a mutation. Returns the updated mutation and updated columns.

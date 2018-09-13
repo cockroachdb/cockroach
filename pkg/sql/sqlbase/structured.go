@@ -1984,7 +1984,7 @@ func (desc *TableDescriptor) IsInterleaved() bool {
 }
 
 // MakeMutationComplete updates the descriptor upon completion of a mutation.
-func (desc *TableDescriptor) MakeMutationComplete(m DescriptorMutation) {
+func (desc *TableDescriptor) MakeMutationComplete(m DescriptorMutation) error {
 	switch m.Direction {
 	case DescriptorMutation_ADD:
 		switch t := m.Descriptor_.(type) {
@@ -1993,7 +1993,7 @@ func (desc *TableDescriptor) MakeMutationComplete(m DescriptorMutation) {
 
 		case *DescriptorMutation_Index:
 			if err := desc.AddIndex(*t.Index, false); err != nil {
-				panic(err)
+				return err
 			}
 		}
 
@@ -2005,6 +2005,7 @@ func (desc *TableDescriptor) MakeMutationComplete(m DescriptorMutation) {
 		// Nothing else to be done. The column/index was already removed from the
 		// set of column/index descriptors at mutation creation time.
 	}
+	return nil
 }
 
 // AddColumnMutation adds a column mutation to desc.Mutations.
