@@ -3,7 +3,6 @@
 define VALID_VARS
   .DEFAULT_GOAL
   ACCEPTANCETIMEOUT
-  AES_FLAGS
   ARCHIVE
   ARCHIVE_BASE
   ARCHIVE_EXTRAS
@@ -149,6 +148,7 @@ define VALID_VARS
   XCXX
   XGOARCH
   XGOOS
+  aes
   bindir
   bins
   build-mode

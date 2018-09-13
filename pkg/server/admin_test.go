@@ -1323,8 +1323,6 @@ func TestAdminAPIFullRangeLog(t *testing.T) {
 func TestAdminAPIDataDistribution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("#24802")
-
 	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
@@ -1381,7 +1379,7 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	// Wait for the new tables' ranges to be created and replicated.
 	testutils.SucceedsSoon(t, func() error {
 		var resp serverpb.DataDistributionResponse
-		if err := getAdminJSONProto(firstServer, "replica_matrix", &resp); err != nil {
+		if err := getAdminJSONProto(firstServer, "data_distribution", &resp); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1393,50 +1391,6 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 		// Don't test anything about the zone configs for now; just verify that something is there.
 		if len(resp.ZoneConfigs) == 0 {
 			return fmt.Errorf("no zone configs returned")
-		}
-
-		return nil
-	})
-
-	// Add a zone config.
-	sqlDB.Exec(t, `ALTER TABLE roachblog.posts CONFIGURE ZONE USING num_replicas = 1`)
-
-	expectedNewZoneConfigID := int64(51)
-	sqlDB.CheckQueryResults(
-		t,
-		`SELECT zone_id
-		FROM [SHOW ALL ZONE CONFIGURATIONS]
-		WHERE cli_specifier = 'roachblog.posts'`,
-		[][]string{
-			{fmt.Sprintf("%d", expectedNewZoneConfigID)},
-		},
-	)
-
-	// Verify that we see the zone config and its effects.
-	testutils.SucceedsSoon(t, func() error {
-		var resp serverpb.DataDistributionResponse
-		if err := getAdminJSONProto(firstServer, "replica_matrix", &resp); err != nil {
-			t.Fatal(err)
-		}
-
-		postsTableInfo := resp.DatabaseInfo["roachblog"].TableInfo["posts"]
-
-		// Verify that the TableInfo for roachblog.posts points at the new zone config.
-		if postsTableInfo.ZoneConfigId != expectedNewZoneConfigID {
-			t.Fatalf(
-				"expected roachblog.posts to have zone config id %d; had %d",
-				expectedNewZoneConfigID, postsTableInfo.ZoneConfigId,
-			)
-		}
-
-		// Verify that the num_replicas setting has taken effect.
-		numPostsReplicas := int64(0)
-		for _, count := range postsTableInfo.ReplicaCountByNodeId {
-			numPostsReplicas += count
-		}
-
-		if numPostsReplicas != 1 {
-			return fmt.Errorf("expected 1 replica; got %d", numPostsReplicas)
 		}
 
 		return nil

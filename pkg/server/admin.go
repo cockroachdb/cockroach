@@ -1539,8 +1539,8 @@ func (s *adminServer) DataDistribution(
 	for _, row := range rows2 {
 		zcID := int64(tree.MustBeDInt(row[0]))
 		zcCliSpecifier := string(tree.MustBeDString(row[1]))
-		zcYaml := tree.MustBeDBytes(row[2])
-		zcBytes := tree.MustBeDBytes(row[3])
+		zcYaml := tree.MustBeDString(row[2])
+		zcBytes := tree.MustBeDBytes(row[4])
 		var zcProto config.ZoneConfig
 		if err := protoutil.Unmarshal([]byte(zcBytes), &zcProto); err != nil {
 			return nil, s.serverError(err)
