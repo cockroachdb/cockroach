@@ -399,7 +399,7 @@ type ComparisonExpr struct {
 	Left, Right Expr
 
 	typeAnnotation
-	fn CmpOp
+	fn *CmpOp
 }
 
 func (*ComparisonExpr) operatorExpr() {}
