@@ -1335,18 +1335,6 @@ func (s *Server) Start(ctx context.Context) error {
 		return errors.Wrap(err, "inspecting engines")
 	}
 
-	// Signal readiness. At this point we have bound our listening port
-	// but the server is not yet running, so any connection attempts
-	// will be queued up in the kernel. We turn on servers below, first
-	// HTTP and later pgwire. If we're in initializing mode, we don't
-	// start the pgwire server until after initialization completes, so
-	// connections to that port will continue to block until we're
-	// initialized.
-	if s.cfg.ReadyFn != nil {
-		waitForInit := len(bootstrappedEngines) > 0 || len(s.cfg.GossipBootstrapResolvers) > 0
-		s.cfg.ReadyFn(waitForInit)
-	}
-
 	// Filter the gossip bootstrap resolvers based on the listen and
 	// advertise addresses.
 	listenAddrU := util.NewUnresolvedAddr("tcp", s.cfg.Addr)
@@ -1361,6 +1349,11 @@ func (s *Server) Start(ctx context.Context) error {
 
 	var hlcUpperBoundExists bool
 	if len(bootstrappedEngines) > 0 {
+		// The cluster was already initialized.
+		if s.cfg.ReadyFn != nil {
+			s.cfg.ReadyFn(false /*waitForInit*/)
+		}
+
 		hlcUpperBound, err := storage.ReadMaxHLCUpperBound(ctx, bootstrappedEngines)
 		if err != nil {
 			log.Fatal(ctx, err)
@@ -1383,6 +1376,15 @@ func (s *Server) Start(ctx context.Context) error {
 		// empty, then this node can bootstrap a new cluster. We disallow
 		// this if this node is being started with itself specified as a
 		// --join host, because that's too likely to be operator error.
+		//
+		if s.cfg.ReadyFn != nil {
+			// TODO(knz): when CockroachDB stops auto-initializing when --join
+			// is not specified, this needs to be adjusted as well. See issue
+			// #24118 and #28495 for details.
+			//
+			s.cfg.ReadyFn(false /*waitForInit*/)
+		}
+
 		bootstrapVersion := s.cfg.Settings.Version.BootstrapVersion()
 		if s.cfg.TestingKnobs.Store != nil {
 			if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.BootstrapVersion != nil {
@@ -1394,6 +1396,9 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 		log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
 	} else {
+		if s.cfg.ReadyFn != nil {
+			s.cfg.ReadyFn(true /*waitForInit*/)
+		}
 		log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting init command.")
 
 		// Note that when we created the init server, we acquired its semaphore
