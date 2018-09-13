@@ -17,11 +17,10 @@ package kv
 import (
 	"context"
 
-	"github.com/google/btree"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/btree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
