@@ -1,0 +1,60 @@
+exec-ddl
+CREATE TABLE b (k INT PRIMARY KEY, i INT, f FLOAT, s STRING NOT NULL, j JSON)
+----
+TABLE b
+ ├── k int not null
+ ├── i int
+ ├── f float
+ ├── s string not null
+ ├── j jsonb
+ └── INDEX primary
+      └── k int not null
+
+# --------------------------------------------------
+# SimplifyZeroCardinalityGroup
+# --------------------------------------------------
+
+opt expect=SimplifyZeroCardinalityGroup
+SELECT k FROM b WHERE false
+----
+values
+ ├── columns: k:1(int)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+opt expect=SimplifyZeroCardinalityGroup
+SELECT k FROM b WHERE i > 2 AND i < 1
+----
+values
+ ├── columns: k:1(int)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+opt expect=SimplifyZeroCardinalityGroup
+SELECT * FROM (VALUES (1) OFFSET 1)
+----
+values
+ ├── columns: column1:1(int)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+opt expect=SimplifyZeroCardinalityGroup
+SELECT * FROM (SELECT * FROM b WHERE i=1) WHERE False
+----
+values
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+opt expect=SimplifyZeroCardinalityGroup
+SELECT * FROM (SELECT * FROM b WHERE False) WHERE s='foo'
+----
+values
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-5)

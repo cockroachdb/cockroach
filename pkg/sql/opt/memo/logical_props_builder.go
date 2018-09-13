@@ -875,6 +875,12 @@ func (b *logicalPropsBuilder) buildLimitProps(ev ExprView) props.Logical {
 	b.sb.init(b.evalCtx, ev.Metadata())
 	b.sb.buildLimit(ev, relational)
 
+	// Side Effects
+	// ------------
+	if constLimit < 0 {
+		relational.CanHaveSideEffects = true
+	}
+
 	return logical
 }
 
