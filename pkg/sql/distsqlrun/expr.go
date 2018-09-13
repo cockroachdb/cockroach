@@ -54,7 +54,10 @@ func (*ivarBinder) VisitPost(expr tree.Expr) tree.Expr { return expr }
 // processExpression parses the string expression inside an Expression,
 // and associates ordinal references (@1, @2, etc) with the given helper.
 func processExpression(
-	exprSpec Expression, semaCtx *tree.SemaContext, h *tree.IndexedVarHelper,
+	exprSpec Expression,
+	evalCtx *tree.EvalContext,
+	semaCtx *tree.SemaContext,
+	h *tree.IndexedVarHelper,
 ) (tree.TypedExpr, error) {
 	if exprSpec.Expr == "" {
 		return nil, nil
@@ -76,6 +79,13 @@ func processExpression(
 	typedExpr, err := tree.TypeCheck(expr, semaCtx, types.Any)
 	if err != nil {
 		return nil, errors.Wrap(err, expr.String())
+	}
+
+	// Normalize. This evaluates constant values so they don't need to be
+	// repeatedly re-evaluated, for example in the case of filter application.
+	typedExpr, err = evalCtx.NormalizeExpr(typedExpr)
+	if err != nil {
+		return nil, err
 	}
 
 	return typedExpr, nil
@@ -139,7 +149,7 @@ func (eh *exprHelper) init(
 	eh.vars = tree.MakeIndexedVarHelper(eh, len(types))
 	var err error
 	semaContext := tree.MakeSemaContext(evalCtx.SessionData.User == security.RootUser)
-	eh.expr, err = processExpression(expr, &semaContext, &eh.vars)
+	eh.expr, err = processExpression(expr, evalCtx, &semaContext, &eh.vars)
 	if err != nil {
 		return err
 	}
