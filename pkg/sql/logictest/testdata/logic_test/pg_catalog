@@ -1333,7 +1333,7 @@ database                           test          NULL      NULL        NULL     
 datestyle                          ISO           NULL      NULL        NULL        string
 default_transaction_isolation      serializable  NULL      NULL        NULL        string
 default_transaction_read_only      off           NULL      NULL        NULL        string
-distsql                            off           NULL      NULL        NULL        string
+distsql                            2.0-off       NULL      NULL        NULL        string
 experimental_force_lookup_join     off           NULL      NULL        NULL        string
 experimental_force_split_at        off           NULL      NULL        NULL        string
 experimental_force_zigzag_join     off           NULL      NULL        NULL        string
@@ -1375,7 +1375,7 @@ database                           test          NULL  user     NULL      test  
 datestyle                          ISO           NULL  user     NULL      ISO           ISO
 default_transaction_isolation      serializable  NULL  user     NULL      serializable  serializable
 default_transaction_read_only      off           NULL  user     NULL      off           off
-distsql                            off           NULL  user     NULL      off           off
+distsql                            2.0-off       NULL  user     NULL      2.0-off       2.0-off
 experimental_force_lookup_join     off           NULL  user     NULL      off           off
 experimental_force_split_at        off           NULL  user     NULL      off           off
 experimental_force_zigzag_join     off           NULL  user     NULL      off           off

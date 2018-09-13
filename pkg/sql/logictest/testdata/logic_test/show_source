@@ -32,7 +32,7 @@ database                           test
 datestyle                          ISO
 default_transaction_isolation      serializable
 default_transaction_read_only      off
-distsql                            off
+distsql                            2.0-off
 experimental_force_lookup_join     off
 experimental_force_split_at        off
 experimental_force_zigzag_join     off
@@ -61,7 +61,7 @@ query I colnames
 SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]
 ----
 sql.defaults.distsql
-0
+3
 
 query TTTT colnames
 SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE variable LIKE '%organization'

@@ -940,9 +940,11 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	}
 	s.replRankings = newReplicaRankings()
 	s.intentResolver = newIntentResolver(s, cfg.IntentResolverTaskLimit)
-	s.raftEntryCache = newRaftEntryCache(cfg.RaftEntryCacheSize)
 	s.draining.Store(false)
 	s.scheduler = newRaftScheduler(s.metrics, s, storeSchedulerConcurrency)
+
+	s.raftEntryCache = newRaftEntryCache(cfg.RaftEntryCacheSize)
+	s.metrics.registry.AddMetricStruct(s.raftEntryCache.Metrics())
 
 	s.coalescedMu.Lock()
 	s.coalescedMu.heartbeats = map[roachpb.StoreIdent][]RaftHeartbeat{}
