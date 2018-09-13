@@ -6758,13 +6758,13 @@ func (r *Replica) clearPendingSnapshotIndex() {
 	r.mu.Unlock()
 }
 
-func (r *Replica) endKey() roachpb.RKey {
-	return r.Desc().EndKey
+func (r *Replica) startKey() roachpb.RKey {
+	return r.Desc().StartKey
 }
 
 // Less implements the btree.Item interface.
 func (r *Replica) Less(i btree.Item) bool {
-	return r.endKey().Less(i.(rangeKeyItem).endKey())
+	return r.startKey().Less(i.(rangeKeyItem).startKey())
 }
 
 // ReplicaMetrics contains details on the current status of the replica.
