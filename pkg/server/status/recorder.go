@@ -430,7 +430,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *NodeStatus {
 	lastNodeMetricCount := atomic.LoadInt64(&mr.lastNodeMetricCount)
 	lastStoreMetricCount := atomic.LoadInt64(&mr.lastStoreMetricCount)
 
-	systemMemory, err := GetTotalMemory(ctx)
+	systemMemory, _, err := GetTotalMemoryWithoutLogging()
 	if err != nil {
 		log.Error(ctx, "could not get total system memory:", err)
 	}
@@ -603,6 +603,19 @@ func (rr registryRecorder) record(dest *[]tspb.TimeSeriesData) {
 // GetTotalMemory returns either the total system memory or if possible the
 // cgroups available memory.
 func GetTotalMemory(ctx context.Context) (int64, error) {
+	memory, warning, err := GetTotalMemoryWithoutLogging()
+	if err != nil {
+		return 0, err
+	}
+	if warning != "" {
+		log.Infof(ctx, warning)
+	}
+	return memory, nil
+}
+
+// GetTotalMemoryWithoutLogging is the same as GetTotalMemory, but returns any warning
+// as a string instead of logging it.
+func GetTotalMemoryWithoutLogging() (int64, string, error) {
 	totalMem, err := func() (int64, error) {
 		mem := gosigar.Mem{}
 		if err := mem.Get(); err != nil {
@@ -615,44 +628,44 @@ func GetTotalMemory(ctx context.Context) (int64, error) {
 		return int64(mem.Total), nil
 	}()
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
-	checkTotal := func(x int64) (int64, error) {
+	checkTotal := func(x int64, warning string) (int64, string, error) {
 		if x <= 0 {
 			// https://github.com/elastic/gosigar/issues/72
-			return 0, fmt.Errorf("inferred memory size %d is suspicious, considering invalid", x)
+			return 0, warning, fmt.Errorf("inferred memory size %d is suspicious, considering invalid", x)
 		}
-		return x, nil
+		return x, warning, nil
 	}
 	if runtime.GOOS != "linux" {
-		return checkTotal(totalMem)
+		return checkTotal(totalMem, "")
 	}
 
 	var buf []byte
 	if buf, err = ioutil.ReadFile(defaultCGroupMemPath); err != nil {
-		log.Infof(ctx, "can't read available memory from cgroups (%s), using system memory %s instead", err,
-			humanizeutil.IBytes(totalMem))
-		return checkTotal(totalMem)
+		warning := fmt.Sprintf("can't read available memory from cgroups (%s), using system memory %s instead",
+			err, humanizeutil.IBytes(totalMem))
+		return checkTotal(totalMem, warning)
 	}
 
 	cgAvlMem, err := strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64)
 	if err != nil {
-		log.Infof(ctx, "can't parse available memory from cgroups (%s), using system memory %s instead", err,
-			humanizeutil.IBytes(totalMem))
-		return checkTotal(totalMem)
+		warning := fmt.Sprintf("can't parse available memory from cgroups (%s), using system memory %s instead",
+			err, humanizeutil.IBytes(totalMem))
+		return checkTotal(totalMem, warning)
 	}
 
 	if cgAvlMem == 0 || cgAvlMem > math.MaxInt64 {
-		log.Infof(ctx, "available memory from cgroups (%s) is unsupported, using system memory %s instead",
+		warning := fmt.Sprintf("available memory from cgroups (%s) is unsupported, using system memory %s instead",
 			humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
-		return checkTotal(totalMem)
+		return checkTotal(totalMem, warning)
 	}
 
 	if totalMem > 0 && int64(cgAvlMem) > totalMem {
-		log.Infof(ctx, "available memory from cgroups (%s) exceeds system memory %s, using system memory",
+		warning := fmt.Sprintf("available memory from cgroups (%s) exceeds system memory %s, using system memory",
 			humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
-		return checkTotal(totalMem)
+		return checkTotal(totalMem, warning)
 	}
 
-	return checkTotal(int64(cgAvlMem))
+	return checkTotal(int64(cgAvlMem), "")
 }
