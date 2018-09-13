@@ -583,9 +583,9 @@ scan  ·       ·                                                               
 query TTTTT
 EXPLAIN (TYPES) SELECT abs(2-3) AS a
 ----
-render         ·         ·                      (a int)  ·
- │             render 0  (abs((-1)[int]))[int]  ·        ·
- └── emptyrow  ·         ·                      ()       ·
+render         ·         ·         (a int)  ·
+ │             render 0  (1)[int]  ·        ·
+ └── emptyrow  ·         ·         ()       ·
 
 # Check array subscripts (#13811)
 query TTTTT

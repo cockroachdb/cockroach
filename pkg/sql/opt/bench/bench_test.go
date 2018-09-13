@@ -574,7 +574,7 @@ func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType) {
 	}
 
 	execFactory := stubFactory{}
-	if _, err = execbuilder.New(&execFactory, ev).Build(); err != nil {
+	if _, err = execbuilder.New(&execFactory, ev, &h.evalCtx).Build(); err != nil {
 		tb.Fatalf("%v", err)
 	}
 }

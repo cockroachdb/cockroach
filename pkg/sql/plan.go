@@ -471,7 +471,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 
 	// Build the plan tree and store it in planner.curPlan.
 	execFactory := makeExecFactory(p)
-	plan, err := execbuilder.New(&execFactory, ev).Build()
+	plan, err := execbuilder.New(&execFactory, ev, p.EvalContext()).Build()
 	if err != nil {
 		return err
 	}

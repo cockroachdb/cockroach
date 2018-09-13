@@ -24,8 +24,10 @@ import (
 // Builder constructs a tree of execution nodes (exec.Node) from an optimized
 // expression tree (memo.ExprView).
 type Builder struct {
-	factory exec.Factory
-	ev      memo.ExprView
+	factory            exec.Factory
+	ev                 memo.ExprView
+	evalCtx            *tree.EvalContext
+	fastIsConstVisitor fastIsConstVisitor
 
 	// subqueries accumulates information about subqueries that are part of scalar
 	// expressions we built. Each entry is associated with a tree.Subquery
@@ -36,8 +38,8 @@ type Builder struct {
 // New constructs an instance of the execution node builder using the
 // given factory to construct nodes. The Build method will build the execution
 // node tree from the given optimized expression tree.
-func New(factory exec.Factory, ev memo.ExprView) *Builder {
-	return &Builder{factory: factory, ev: ev}
+func New(factory exec.Factory, ev memo.ExprView, evalCtx *tree.EvalContext) *Builder {
+	return &Builder{factory: factory, ev: ev, evalCtx: evalCtx}
 }
 
 // Build constructs the execution node tree and returns its root node if no
