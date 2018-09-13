@@ -304,16 +304,6 @@
      )
 )
 
-# DetectSelectContradiction replaces a Select with an empty Values if
-# it detects a contradiction in the filter.
-[DetectSelectContradiction, Normalize]
-(Select
-    $input:*
-    $filters:(Filters | False) & (IsContradiction $filters)
-)
-=>
-(ConstructEmptyValues (OutputCols $input))
-
 # EliminateUnionAllLeft replaces a union all with a right side having a
 # cardinality of zero, with just the left side operand.
 [EliminateUnionAllLeft, Normalize]
@@ -327,7 +317,6 @@
     $left
     (ProjectColMapLeft $colmap)
 )
-
 
 # EliminateUnionAllRight replaces a union all with a left side having a
 # cardinality of zero, with just the right side operand.

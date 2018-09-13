@@ -105,6 +105,7 @@ SELECT s FROM a LIMIT (SELECT k FROM a LIMIT 1)
 ----
 limit
  ├── columns: s:4(string)
+ ├── side-effects
  ├── scan a@s_idx
  │    └── columns: a.s:4(string)
  └── subquery [type=int]

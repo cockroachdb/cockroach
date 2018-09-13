@@ -30,6 +30,7 @@ const (
 	SimplifyProjectOrdering
 	SimplifyRootOrdering
 	PruneRootCols
+	SimplifyZeroCardinalityGroup
 
 	// NumManualRules tracks the number of manually-defined rules.
 	NumManualRuleNames
