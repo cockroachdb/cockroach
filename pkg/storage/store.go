@@ -2452,7 +2452,7 @@ func (s *Store) SplitRange(
 		s.unlinkReplicaByRangeIDLocked(rightDesc.RangeID)
 	}
 
-	leftRepl.setDescWithoutProcessUpdate(ctx, &newLeftDesc)
+	leftRepl.setDesc(ctx, &newLeftDesc)
 
 	// Clear the LHS txn wait queue, to redirect to the RHS if
 	// appropriate. We do this after setDescWithoutProcessUpdate
@@ -2479,10 +2479,9 @@ func (s *Store) SplitRange(
 		return errors.Errorf("couldn't insert range %v in replicasByKey btree: %s", rightRepl, err)
 	}
 
-	// Update the max bytes and other information of the new range.
-	// This may not happen if the system config has not yet been loaded.
-	// Since this is done under the store lock, system config update will
-	// properly set these fields.
+	// Update the replica's cached byte thresholds. This is a no-op if the system
+	// config is not available, in which case we rely on the next gossip update
+	// to perform the update.
 	if err := rightRepl.updateRangeInfo(rightRepl.Desc()); err != nil {
 		return err
 	}
@@ -2490,8 +2489,7 @@ func (s *Store) SplitRange(
 	// Add the range to metrics and maybe gossip on capacity change.
 	s.metrics.ReplicaCount.Inc(1)
 	s.maybeGossipOnCapacityChange(ctx, rangeAddEvent)
-
-	return s.processRangeDescriptorUpdateLocked(ctx, leftRepl)
+	return nil
 }
 
 // MergeRange expands the left-hand replica, leftRepl, to absorb the right-hand
@@ -2584,7 +2582,8 @@ func (s *Store) MergeRange(
 	}
 
 	// Update the subsuming range's descriptor.
-	return leftRepl.setDesc(ctx, &newLeftDesc)
+	leftRepl.setDesc(ctx, &newLeftDesc)
+	return nil
 }
 
 // addReplicaInternalLocked adds the replica to the replicas map and the
@@ -2654,6 +2653,9 @@ func (s *Store) removePlaceholderLocked(ctx context.Context, rngID roachpb.Range
 	switch exRng := s.mu.replicasByKey.Delete(placeholder).(type) {
 	case *ReplicaPlaceholder:
 		delete(s.mu.replicaPlaceholders, rngID)
+		if exRng2 := s.getOverlappingKeyRangeLocked(&exRng.rangeDesc); exRng2 != nil {
+			log.Fatalf(ctx, "corrupted replicasByKey map: %s and %s overlapped", exRng, exRng2)
+		}
 		return true
 	case nil:
 		log.Fatalf(ctx, "r%d: placeholder not found", rngID)
@@ -2780,6 +2782,9 @@ func (s *Store) removeReplicaImpl(
 		// above. Nothing should have been able to change that.
 		log.Fatalf(ctx, "replica %+v unexpectedly overlapped by %+v", rep, placeholder)
 	}
+	if rep2 := s.getOverlappingKeyRangeLocked(desc); rep2 != nil {
+		log.Fatalf(ctx, "corrupted replicasByKey map: %s and %s overlapped", rep, rep2)
+	}
 	delete(s.mu.replicaPlaceholders, rep.RangeID)
 	// TODO(peter): Could release s.mu.Lock() here.
 	s.maybeGossipOnCapacityChange(ctx, rangeRemoveEvent)
@@ -2803,20 +2808,11 @@ func (s *Store) unlinkReplicaByRangeIDLocked(rangeID roachpb.RangeID) {
 	s.mu.replicas.Delete(int64(rangeID))
 }
 
-// processRangeDescriptorUpdate should be called whenever a replica's range
-// descriptor is updated, to update the store's maps of its ranges to match
-// the updated descriptor. Since the latter update requires acquiring the store
-// lock (which cannot always safely be done by replicas), this function call
-// should be deferred until it is safe to acquire the store lock.
-func (s *Store) processRangeDescriptorUpdate(ctx context.Context, repl *Replica) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.processRangeDescriptorUpdateLocked(ctx, repl)
-}
-
-// processRangeDescriptorUpdateLocked requires that Store.mu and Replica.raftMu
+// maybeMarkReplicaInitializedLocked should be called whenever a previously
+// unintialized replica has become initialized so that the store can update its
+// internal bookkeeping. It requires that Store.mu and Replica.raftMu
 // are locked.
-func (s *Store) processRangeDescriptorUpdateLocked(ctx context.Context, repl *Replica) error {
+func (s *Store) maybeMarkReplicaInitializedLocked(ctx context.Context, repl *Replica) error {
 	if !repl.IsInitialized() {
 		return errors.Errorf("attempted to process uninitialized range %s", repl)
 	}
@@ -2830,7 +2826,8 @@ func (s *Store) processRangeDescriptorUpdateLocked(ctx context.Context, repl *Re
 	delete(s.mu.uninitReplicas, rangeID)
 
 	if exRange := s.getOverlappingKeyRangeLocked(repl.Desc()); exRange != nil {
-		return errors.Errorf("%s: cannot processRangeDescriptorUpdate; range %s has overlapping range %s", s, repl, exRange.Desc())
+		return errors.Errorf("%s: cannot initialize replica; range %s has overlapping range %s",
+			s, repl, exRange.Desc())
 	}
 	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(repl); exRngItem != nil {
 		return errors.Errorf("range for key %v already exists in replicasByKey btree",
@@ -3617,33 +3614,6 @@ func (s *Store) processRaftSnapshotRequest(
 		}
 
 		if snapHeader.IsPreemptive() {
-			defer func() {
-				s.mu.Lock()
-				defer s.mu.Unlock()
-
-				// We need to remove the placeholder regardless of whether the snapshot
-				// applied successfully or not.
-				if addedPlaceholder {
-					// Clear the replica placeholder; we are about to swap it with a real replica.
-					if !s.removePlaceholderLocked(ctx, snapHeader.RaftMessageRequest.RangeID) {
-						log.Fatalf(ctx, "could not remove placeholder after preemptive snapshot")
-					}
-					if pErr == nil {
-						atomic.AddInt32(&s.counts.filledPlaceholders, 1)
-					} else {
-						atomic.AddInt32(&s.counts.removedPlaceholders, 1)
-					}
-					removePlaceholder = false
-				}
-
-				if pErr == nil {
-					// If the snapshot succeeded, process the range descriptor update.
-					if err := s.processRangeDescriptorUpdateLocked(ctx, r); err != nil {
-						pErr = roachpb.NewError(err)
-					}
-				}
-			}()
-
 			// Requiring that the Term is set in a message makes sure that we
 			// get all of Raft's internal safety checks (it confuses messages
 			// at term zero for internal messages). The sending side uses the
@@ -3750,14 +3720,13 @@ func (s *Store) processRaftSnapshotRequest(
 			); err != nil {
 				return roachpb.NewError(err)
 			}
+			// applySnapshot has already removed the placeholder.
+			removePlaceholder = false
 
 			// At this point, the Replica has data but no ReplicaID. We hope
 			// that it turns into a "real" Replica by means of receiving Raft
 			// messages addressed to it with a ReplicaID, but if that doesn't
 			// happen, at some point the Replica GC queue will have to grab it.
-			//
-			// NB: See the defer at the start of this block for the removal of the
-			// placeholder and processing of the range descriptor update.
 			return nil
 		}
 

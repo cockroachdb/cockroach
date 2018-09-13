@@ -1690,17 +1690,9 @@ func (r *Replica) GetTxnSpanGCThreshold() hlc.Timestamp {
 	return *r.mu.state.TxnSpanGCThreshold
 }
 
-// setDesc atomically sets the range's descriptor. This method calls
-// processRangeDescriptorUpdate() to make the Store handle the descriptor
-// update. Requires raftMu to be locked.
-func (r *Replica) setDesc(ctx context.Context, desc *roachpb.RangeDescriptor) error {
-	r.setDescWithoutProcessUpdate(ctx, desc)
-	return r.store.processRangeDescriptorUpdate(ctx, r)
-}
-
-// setDescWithoutProcessUpdate updates the range descriptor without calling
-// processRangeDescriptorUpdate. Requires raftMu to be locked.
-func (r *Replica) setDescWithoutProcessUpdate(ctx context.Context, desc *roachpb.RangeDescriptor) {
+// setDesc atomically sets the replica's descriptor. It requires raftMu to be
+// locked.
+func (r *Replica) setDesc(ctx context.Context, desc *roachpb.RangeDescriptor) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -1713,7 +1705,8 @@ func (r *Replica) setDescWithoutProcessUpdate(ctx context.Context, desc *roachpb
 		log.Fatalf(ctx, "cannot replace initialized descriptor with uninitialized one: %+v -> %+v",
 			r.mu.state.Desc, desc)
 	}
-	if r.mu.state.Desc != nil && !r.mu.state.Desc.StartKey.Equal(desc.StartKey) {
+	if r.mu.state.Desc != nil && r.mu.state.Desc.IsInitialized() &&
+		!r.mu.state.Desc.StartKey.Equal(desc.StartKey) {
 		log.Fatalf(ctx, "attempted to change replica's start key from %s to %s",
 			r.mu.state.Desc.StartKey, desc.StartKey)
 	}
@@ -4093,19 +4086,6 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 		if err := r.applySnapshot(ctx, inSnap, rd.Snapshot, rd.HardState, subsumedRepls); err != nil {
 			const expl = "while applying snapshot"
-			return stats, expl, errors.Wrap(err, expl)
-		}
-
-		if err := func() error {
-			r.store.mu.Lock()
-			defer r.store.mu.Unlock()
-
-			if r.store.removePlaceholderLocked(ctx, r.RangeID) {
-				atomic.AddInt32(&r.store.counts.filledPlaceholders, 1)
-			}
-			return r.store.processRangeDescriptorUpdateLocked(ctx, r)
-		}(); err != nil {
-			const expl = "could not processRangeDescriptorUpdate after applySnapshot"
 			return stats, expl, errors.Wrap(err, expl)
 		}
 

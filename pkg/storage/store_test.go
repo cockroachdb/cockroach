@@ -718,9 +718,7 @@ func TestStoreRemoveReplicaOldDescriptor(t *testing.T) {
 		}
 	}
 
-	if err := rep.setDesc(ctx, newDesc); err != nil {
-		t.Fatal(err)
-	}
+	rep.setDesc(ctx, newDesc)
 	expectedErr := "replica descriptor's ID has changed"
 	if err := store.RemoveReplica(ctx, rep, origDesc.NextReplicaID, RemoveOptions{
 		DestroyData: true,
@@ -962,7 +960,7 @@ func TestLookupPrecedingReplica(t *testing.T) {
 	}
 }
 
-func TestProcessRangeDescriptorUpdate(t *testing.T) {
+func TestMaybeMarkReplicaInitialized(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
@@ -1004,10 +1002,13 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	store.mu.Lock()
+	defer store.mu.Unlock()
+
 	expectedResult := "attempted to process uninitialized range.*"
 	ctx := r.AnnotateCtx(context.TODO())
-	if err := store.processRangeDescriptorUpdate(ctx, r); !testutils.IsError(err, expectedResult) {
-		t.Errorf("expected processRangeDescriptorUpdate with uninitialized replica to fail, got %v", err)
+	if err := store.maybeMarkReplicaInitializedLocked(ctx, r); !testutils.IsError(err, expectedResult) {
+		t.Errorf("expected maybeMarkReplicaInitializedLocked with uninitialized replica to fail, got %v", err)
 	}
 
 	// Initialize the range with start and end keys.
@@ -1016,17 +1017,15 @@ func TestProcessRangeDescriptorUpdate(t *testing.T) {
 	r.mu.state.Desc.EndKey = roachpb.RKey("d")
 	r.mu.Unlock()
 
-	if err := store.processRangeDescriptorUpdateLocked(ctx, r); err != nil {
-		t.Errorf("expected processRangeDescriptorUpdate on a replica that's not in the uninit map to silently succeed, got %v", err)
+	if err := store.maybeMarkReplicaInitializedLocked(ctx, r); err != nil {
+		t.Errorf("expected maybeMarkReplicaInitializedLocked on a replica that's not in the uninit map to silently succeed, got %v", err)
 	}
 
-	store.mu.Lock()
 	store.mu.uninitReplicas[newRangeID] = r
-	store.mu.Unlock()
 
-	expectedResult = ".*cannot processRangeDescriptorUpdate.*"
-	if err := store.processRangeDescriptorUpdate(ctx, r); !testutils.IsError(err, expectedResult) {
-		t.Errorf("expected processRangeDescriptorUpdate with overlapping keys to fail, got %v", err)
+	expectedResult = ".*cannot initialize replica.*"
+	if err := store.maybeMarkReplicaInitializedLocked(ctx, r); !testutils.IsError(err, expectedResult) {
+		t.Errorf("expected maybeMarkReplicaInitializedLocked with overlapping keys to fail, got %v", err)
 	}
 }
 
