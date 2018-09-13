@@ -1257,11 +1257,11 @@ func NewDBytes(d DBytes) *DBytes {
 
 // MustBeDBytes attempts to convert an Expr into a DBytes, panicking if unsuccessful.
 func MustBeDBytes(e Expr) DBytes {
-	i, ok := AsDBytes(e)
+	i, ok := e.(*DBytes)
 	if !ok {
 		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "expected *DBytes, found %T", e))
 	}
-	return i
+	return *i
 }
 
 // AsDBytes attempts to convert an Expr into a DBytes, returning a flag indicating
@@ -1270,6 +1270,8 @@ func AsDBytes(e Expr) (DBytes, bool) {
 	switch t := e.(type) {
 	case *DBytes:
 		return *t, true
+	case *DString:
+		return DBytes(*t), true
 	}
 	return "", false
 }
