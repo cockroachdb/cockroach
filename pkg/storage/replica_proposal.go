@@ -665,15 +665,7 @@ func (r *Replica) handleReplicatedEvalResult(
 
 	if rResult.State != nil {
 		if newDesc := rResult.State.Desc; newDesc != nil {
-			if err := r.setDesc(ctx, newDesc); err != nil {
-				// Log the error. There's not much we can do because the commit may
-				// have already occurred at this point.
-				log.Fatalf(
-					ctx,
-					"failed to update range descriptor to %+v: %s",
-					newDesc, err,
-				)
-			}
+			r.setDesc(ctx, newDesc)
 			rResult.State.Desc = nil
 		}
 

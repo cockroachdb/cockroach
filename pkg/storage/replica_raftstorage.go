@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -945,10 +946,11 @@ func (r *Replica) applySnapshot(
 	// Update the range and store stats.
 	r.store.metrics.subtractMVCCStats(*r.mu.state.Stats)
 	r.store.metrics.addMVCCStats(*s.Stats)
-	// TODO(benesch): the next line updates r.mu.state.Desc, but that's supposed
-	// to be handled by the call to setDescWithoutProcessUpdate below. This is not
-	// a correctness issue right now, but it's liable to become one.
+	// N.B. updates to r.mu.state.Desc must go through r.setDesc, which is called
+	// below.
+	oldDesc := r.mu.state.Desc
 	r.mu.state = s
+	r.mu.state.Desc = oldDesc
 	r.assertStateLocked(ctx, r.store.Engine())
 	r.mu.Unlock()
 
@@ -969,7 +971,13 @@ func (r *Replica) applySnapshot(
 		panic(err)
 	}
 
-	r.setDescWithoutProcessUpdate(ctx, s.Desc)
+	r.store.mu.Lock()
+	if r.store.removePlaceholderLocked(ctx, r.RangeID) {
+		atomic.AddInt32(&r.store.counts.filledPlaceholders, 1)
+	}
+	r.setDesc(ctx, s.Desc)
+	r.store.maybeMarkReplicaInitializedLocked(ctx, r)
+	r.store.mu.Unlock()
 	return nil
 }
 

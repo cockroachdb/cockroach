@@ -139,9 +139,9 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	}
 	st := cluster.MakeTestingClusterSettings()
 	sc := StoreConfig{
-		Settings:   st,
-		AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
-		Clock:      clock,
+		Settings:                    st,
+		AmbientCtx:                  log.AmbientContext{Tracer: st.Tracer},
+		Clock:                       clock,
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
 		RaftHeartbeatIntervalTicks:  1,
 		ScanInterval:                10 * time.Minute,
@@ -2442,13 +2442,7 @@ func (s *Store) SplitRange(
 		s.unlinkReplicaByRangeIDLocked(rightDesc.RangeID)
 	}
 
-	// Replace the end key of the original range with the start key of
-	// the new range. Reinsert the range since the btree is keyed by range end keys.
-	if kr := s.mu.replicasByKey.Delete(leftRepl); kr != leftRepl {
-		return errors.Errorf("replicasByKey unexpectedly contains %v instead of replica %s", kr, leftRepl)
-	}
-
-	leftRepl.setDescWithoutProcessUpdate(ctx, &newLeftDesc)
+	leftRepl.setDesc(ctx, &newLeftDesc)
 
 	// Clear the LHS txn wait queue, to redirect to the RHS if
 	// appropriate. We do this after setDescWithoutProcessUpdate
@@ -2471,10 +2465,6 @@ func (s *Store) SplitRange(
 	leftRepl.leaseholderStats.resetRequestCounts()
 	leftRepl.writeStats.splitRequestCounts(rightRepl.writeStats)
 
-	if kr := s.mu.replicasByKey.ReplaceOrInsert(leftRepl); kr != nil {
-		return errors.Errorf("replicasByKey unexpectedly contains %s when inserting replica %s", kr, leftRepl)
-	}
-
 	if err := s.addReplicaInternalLocked(rightRepl); err != nil {
 		return errors.Errorf("couldn't insert range %v in replicasByKey btree: %s", rightRepl, err)
 	}
@@ -2490,8 +2480,7 @@ func (s *Store) SplitRange(
 	// Add the range to metrics and maybe gossip on capacity change.
 	s.metrics.ReplicaCount.Inc(1)
 	s.maybeGossipOnCapacityChange(ctx, rangeAddEvent)
-
-	return s.processRangeDescriptorUpdateLocked(ctx, leftRepl)
+	return nil
 }
 
 // MergeRange expands the left-hand replica, leftRepl, to absorb the right-hand
@@ -2584,7 +2573,8 @@ func (s *Store) MergeRange(
 	}
 
 	// Update the subsuming range's descriptor.
-	return leftRepl.setDesc(ctx, &newLeftDesc)
+	leftRepl.setDesc(ctx, &newLeftDesc)
+	return nil
 }
 
 // addReplicaInternalLocked adds the replica to the replicas map and the
@@ -2803,20 +2793,11 @@ func (s *Store) unlinkReplicaByRangeIDLocked(rangeID roachpb.RangeID) {
 	s.mu.replicas.Delete(int64(rangeID))
 }
 
-// processRangeDescriptorUpdate should be called whenever a replica's range
-// descriptor is updated, to update the store's maps of its ranges to match
-// the updated descriptor. Since the latter update requires acquiring the store
-// lock (which cannot always safely be done by replicas), this function call
-// should be deferred until it is safe to acquire the store lock.
-func (s *Store) processRangeDescriptorUpdate(ctx context.Context, repl *Replica) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.processRangeDescriptorUpdateLocked(ctx, repl)
-}
-
-// processRangeDescriptorUpdateLocked requires that Store.mu and Replica.raftMu
+// maybeMarkReplicaInitializedLocked should be called whenever a previously
+// unintialized replica has become initialized so that the store can update its
+// internal bookkeeping. It requires that Store.mu and Replica.raftMu
 // are locked.
-func (s *Store) processRangeDescriptorUpdateLocked(ctx context.Context, repl *Replica) error {
+func (s *Store) maybeMarkReplicaInitializedLocked(ctx context.Context, repl *Replica) error {
 	if !repl.IsInitialized() {
 		return errors.Errorf("attempted to process uninitialized range %s", repl)
 	}
@@ -3617,33 +3598,6 @@ func (s *Store) processRaftSnapshotRequest(
 		}
 
 		if snapHeader.IsPreemptive() {
-			defer func() {
-				s.mu.Lock()
-				defer s.mu.Unlock()
-
-				// We need to remove the placeholder regardless of whether the snapshot
-				// applied successfully or not.
-				if addedPlaceholder {
-					// Clear the replica placeholder; we are about to swap it with a real replica.
-					if !s.removePlaceholderLocked(ctx, snapHeader.RaftMessageRequest.RangeID) {
-						log.Fatalf(ctx, "could not remove placeholder after preemptive snapshot")
-					}
-					if pErr == nil {
-						atomic.AddInt32(&s.counts.filledPlaceholders, 1)
-					} else {
-						atomic.AddInt32(&s.counts.removedPlaceholders, 1)
-					}
-					removePlaceholder = false
-				}
-
-				if pErr == nil {
-					// If the snapshot succeeded, process the range descriptor update.
-					if err := s.processRangeDescriptorUpdateLocked(ctx, r); err != nil {
-						pErr = roachpb.NewError(err)
-					}
-				}
-			}()
-
 			// Requiring that the Term is set in a message makes sure that we
 			// get all of Raft's internal safety checks (it confuses messages
 			// at term zero for internal messages). The sending side uses the
@@ -3750,14 +3704,13 @@ func (s *Store) processRaftSnapshotRequest(
 			); err != nil {
 				return roachpb.NewError(err)
 			}
+			// applySnapshot has already removed the placeholder.
+			removePlaceholder = false
 
 			// At this point, the Replica has data but no ReplicaID. We hope
 			// that it turns into a "real" Replica by means of receiving Raft
 			// messages addressed to it with a ReplicaID, but if that doesn't
 			// happen, at some point the Replica GC queue will have to grab it.
-			//
-			// NB: See the defer at the start of this block for the removal of the
-			// placeholder and processing of the range descriptor update.
 			return nil
 		}
 
