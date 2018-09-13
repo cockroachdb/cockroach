@@ -1695,10 +1695,6 @@ func (r *Replica) GetTxnSpanGCThreshold() hlc.Timestamp {
 // update. Requires raftMu to be locked.
 func (r *Replica) setDesc(ctx context.Context, desc *roachpb.RangeDescriptor) error {
 	r.setDescWithoutProcessUpdate(ctx, desc)
-	if r.store == nil {
-		// r.rm is null in some tests.
-		return nil
-	}
 	return r.store.processRangeDescriptorUpdate(ctx, r)
 }
 

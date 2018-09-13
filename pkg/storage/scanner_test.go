@@ -65,10 +65,7 @@ func newTestRangeSet(count int, t *testing.T) *testRangeSet {
 			KeyCount:  1,
 			LiveCount: 1,
 		}
-
-		if err := repl.setDesc(context.TODO(), desc); err != nil {
-			t.Fatal(err)
-		}
+		repl.mu.state.Desc = desc
 		if exRngItem := rs.replicasByKey.ReplaceOrInsert(repl); exRngItem != nil {
 			t.Fatalf("failed to insert range %s", repl)
 		}
