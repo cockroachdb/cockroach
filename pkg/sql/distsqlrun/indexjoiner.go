@@ -185,11 +185,6 @@ func (ij *indexJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	return nil, ij.DrainHelper()
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (ij *indexJoiner) ConsumerDone() {
-	ij.MoveToDraining(nil /* err */)
-}
-
 // ConsumerClosed is part of the RowSource interface.
 func (ij *indexJoiner) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.

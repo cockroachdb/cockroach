@@ -632,11 +632,6 @@ func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	return nil, s.DrainHelper()
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (s *sortChunksProcessor) ConsumerDone() {
-	s.MoveToDraining(nil /* err */)
-}
-
 // ConsumerClosed is part of the RowSource interface.
 func (s *sortChunksProcessor) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
