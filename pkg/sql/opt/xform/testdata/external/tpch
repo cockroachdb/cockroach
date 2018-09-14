@@ -380,146 +380,158 @@ project
  ├── fd: (1)-->(3)
  ├── ordering: -15,+23,+11,+1
  └── limit
-      ├── columns: p_partkey:1(int) p_mfgr:3(string) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_nationkey:13(int!null) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) nation.n_nationkey:22(int!null) nation.n_name:23(string) nation.n_regionkey:24(int!null) region.r_regionkey:26(int!null) region.r_name:27(string!null)
-      ├── internal-ordering: -15,+23,+11,+1 opt(27)
+      ├── columns: p_partkey:1(int) p_mfgr:3(string) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_partkey:17(int!null) partsupp.ps_suppkey:18(int!null) partsupp.ps_supplycost:20(float!null) nation.n_name:23(string) min:48(float!null)
+      ├── internal-ordering: -15,+23,+11,+(1|17)
       ├── cardinality: [0 - 100]
-      ├── fd: ()-->(27), (1)-->(3), (22)-->(23,24), (13)==(22), (22)==(13), (24)==(26), (26)==(24)
-      ├── ordering: -15,+23,+11,+1 opt(27)
+      ├── key: (17,18)
+      ├── fd: (1)-->(3), (17,18)-->(1,3,11,12,14-16,20,23,48), (1)==(17), (17)==(1), (18)-->(11,12,14-16,23), (20)==(48), (48)==(20)
+      ├── ordering: -15,+23,+11,+(1|17)
       ├── sort
-      │    ├── columns: p_partkey:1(int) p_mfgr:3(string) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_nationkey:13(int!null) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) nation.n_nationkey:22(int!null) nation.n_name:23(string) nation.n_regionkey:24(int!null) region.r_regionkey:26(int!null) region.r_name:27(string!null)
-      │    ├── fd: ()-->(27), (1)-->(3), (22)-->(23,24), (13)==(22), (22)==(13), (24)==(26), (26)==(24)
-      │    ├── ordering: -15,+23,+11,+1 opt(27)
-      │    └── inner-join (lookup region)
-      │         ├── columns: p_partkey:1(int) p_mfgr:3(string) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_nationkey:13(int!null) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) nation.n_nationkey:22(int!null) nation.n_name:23(string) nation.n_regionkey:24(int!null) region.r_regionkey:26(int!null) region.r_name:27(string!null)
-      │         ├── key columns: [24] = [26]
-      │         ├── fd: ()-->(27), (1)-->(3), (22)-->(23,24), (13)==(22), (22)==(13), (24)==(26), (26)==(24)
-      │         ├── inner-join (lookup nation)
-      │         │    ├── columns: p_partkey:1(int) p_mfgr:3(string) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_nationkey:13(int!null) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) nation.n_nationkey:22(int!null) nation.n_name:23(string) nation.n_regionkey:24(int!null)
-      │         │    ├── key columns: [13] = [22]
-      │         │    ├── fd: (1)-->(3), (22)-->(23,24), (13)==(22), (22)==(13)
-      │         │    ├── project
-      │         │    │    ├── columns: p_partkey:1(int) p_mfgr:3(string) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_nationkey:13(int) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string)
-      │         │    │    ├── fd: (1)-->(3)
-      │         │    │    └── select
-      │         │    │         ├── columns: p_partkey:1(int) p_mfgr:3(string) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_nationkey:13(int) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_partkey:17(int!null) partsupp.ps_suppkey:18(int!null) partsupp.ps_supplycost:20(float!null) min:48(float!null)
-      │         │    │         ├── key: (17,18)
-      │         │    │         ├── fd: (1)-->(3), (17,18)-->(1,3,11-16,20,48), (1)==(17), (17)==(1), (18)-->(11-16), (20)==(48), (48)==(20)
-      │         │    │         ├── group-by
-      │         │    │         │    ├── columns: p_partkey:1(int) p_mfgr:3(string) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_nationkey:13(int) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_partkey:17(int!null) partsupp.ps_suppkey:18(int!null) partsupp.ps_supplycost:20(float) min:48(float)
-      │         │    │         │    ├── grouping columns: partsupp.ps_partkey:17(int!null) partsupp.ps_suppkey:18(int!null)
-      │         │    │         │    ├── key: (17,18)
-      │         │    │         │    ├── fd: (1)-->(3), (17,18)-->(1,3,11-16,20,48), (1)==(17), (17)==(1), (18)-->(11-16)
-      │         │    │         │    ├── inner-join
-      │         │    │         │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(string) p_type:5(string) p_size:6(int!null) supplier.s_suppkey:10(int!null) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_nationkey:13(int!null) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_partkey:17(int!null) partsupp.ps_suppkey:18(int!null) partsupp.ps_supplycost:20(float) partsupp.ps_partkey:29(int!null) partsupp.ps_suppkey:30(int!null) partsupp.ps_supplycost:32(float!null) supplier.s_suppkey:34(int!null) supplier.s_nationkey:37(int!null) nation.n_nationkey:41(int!null) nation.n_regionkey:43(int!null) region.r_regionkey:45(int!null) region.r_name:46(string!null)
-      │         │    │         │    │    ├── key: (18,29,34)
-      │         │    │         │    │    ├── fd: ()-->(6,46), (1)-->(3,5), (10)-->(11-16), (17,18)-->(20), (1)==(17,29), (17)==(1,29), (10)==(18), (18)==(10), (29,30)-->(32), (34)-->(37), (30)==(34), (34)==(30), (41)-->(43), (37)==(41), (41)==(37), (43)==(45), (45)==(43), (29)==(1,17)
-      │         │    │         │    │    ├── inner-join
-      │         │    │         │    │    │    ├── columns: partsupp.ps_partkey:29(int!null) partsupp.ps_suppkey:30(int!null) partsupp.ps_supplycost:32(float!null) supplier.s_suppkey:34(int!null) supplier.s_nationkey:37(int!null) nation.n_nationkey:41(int!null) nation.n_regionkey:43(int!null) region.r_regionkey:45(int!null) region.r_name:46(string!null)
-      │         │    │         │    │    │    ├── key: (29,34)
-      │         │    │         │    │    │    ├── fd: ()-->(46), (29,30)-->(32), (34)-->(37), (30)==(34), (34)==(30), (41)-->(43), (37)==(41), (41)==(37), (43)==(45), (45)==(43)
-      │         │    │         │    │    │    ├── inner-join
-      │         │    │         │    │    │    │    ├── columns: partsupp.ps_partkey:29(int!null) partsupp.ps_suppkey:30(int!null) partsupp.ps_supplycost:32(float!null) supplier.s_suppkey:34(int!null) supplier.s_nationkey:37(int!null) nation.n_nationkey:41(int!null) nation.n_regionkey:43(int!null)
-      │         │    │         │    │    │    │    ├── key: (29,34)
-      │         │    │         │    │    │    │    ├── fd: (29,30)-->(32), (34)-->(37), (30)==(34), (34)==(30), (41)-->(43), (37)==(41), (41)==(37)
-      │         │    │         │    │    │    │    ├── scan nation@nation_auto_index_nation_fkey_region
-      │         │    │         │    │    │    │    │    ├── columns: nation.n_nationkey:41(int!null) nation.n_regionkey:43(int!null)
-      │         │    │         │    │    │    │    │    ├── key: (41)
-      │         │    │         │    │    │    │    │    └── fd: (41)-->(43)
-      │         │    │         │    │    │    │    ├── inner-join
-      │         │    │         │    │    │    │    │    ├── columns: partsupp.ps_partkey:29(int!null) partsupp.ps_suppkey:30(int!null) partsupp.ps_supplycost:32(float!null) supplier.s_suppkey:34(int!null) supplier.s_nationkey:37(int!null)
-      │         │    │         │    │    │    │    │    ├── key: (29,34)
-      │         │    │         │    │    │    │    │    ├── fd: (29,30)-->(32), (34)-->(37), (30)==(34), (34)==(30)
-      │         │    │         │    │    │    │    │    ├── scan supplier@supplier_auto_index_supplier_fkey_nation
-      │         │    │         │    │    │    │    │    │    ├── columns: supplier.s_suppkey:34(int!null) supplier.s_nationkey:37(int!null)
-      │         │    │         │    │    │    │    │    │    ├── key: (34)
-      │         │    │         │    │    │    │    │    │    └── fd: (34)-->(37)
-      │         │    │         │    │    │    │    │    ├── select
-      │         │    │         │    │    │    │    │    │    ├── columns: partsupp.ps_partkey:29(int!null) partsupp.ps_suppkey:30(int!null) partsupp.ps_supplycost:32(float!null)
-      │         │    │         │    │    │    │    │    │    ├── key: (29,30)
-      │         │    │         │    │    │    │    │    │    ├── fd: (29,30)-->(32)
-      │         │    │         │    │    │    │    │    │    ├── scan partsupp
-      │         │    │         │    │    │    │    │    │    │    ├── columns: partsupp.ps_partkey:29(int!null) partsupp.ps_suppkey:30(int!null) partsupp.ps_supplycost:32(float)
-      │         │    │         │    │    │    │    │    │    │    ├── key: (29,30)
-      │         │    │         │    │    │    │    │    │    │    └── fd: (29,30)-->(32)
-      │         │    │         │    │    │    │    │    │    └── filters [type=bool, outer=(32), constraints=(/32: (/NULL - ]; tight)]
-      │         │    │         │    │    │    │    │    │         └── partsupp.ps_supplycost IS NOT NULL [type=bool, outer=(32), constraints=(/32: (/NULL - ]; tight)]
-      │         │    │         │    │    │    │    │    └── filters [type=bool, outer=(30,34), constraints=(/30: (/NULL - ]; /34: (/NULL - ]), fd=(30)==(34), (34)==(30)]
-      │         │    │         │    │    │    │    │         └── supplier.s_suppkey = partsupp.ps_suppkey [type=bool, outer=(30,34), constraints=(/30: (/NULL - ]; /34: (/NULL - ])]
-      │         │    │         │    │    │    │    └── filters [type=bool, outer=(37,41), constraints=(/37: (/NULL - ]; /41: (/NULL - ]), fd=(37)==(41), (41)==(37)]
-      │         │    │         │    │    │    │         └── supplier.s_nationkey = nation.n_nationkey [type=bool, outer=(37,41), constraints=(/37: (/NULL - ]; /41: (/NULL - ])]
-      │         │    │         │    │    │    ├── select
-      │         │    │         │    │    │    │    ├── columns: region.r_regionkey:45(int!null) region.r_name:46(string!null)
-      │         │    │         │    │    │    │    ├── key: (45)
-      │         │    │         │    │    │    │    ├── fd: ()-->(46)
-      │         │    │         │    │    │    │    ├── scan region
-      │         │    │         │    │    │    │    │    ├── columns: region.r_regionkey:45(int!null) region.r_name:46(string)
-      │         │    │         │    │    │    │    │    ├── key: (45)
-      │         │    │         │    │    │    │    │    └── fd: (45)-->(46)
-      │         │    │         │    │    │    │    └── filters [type=bool, outer=(46), constraints=(/46: [/'EUROPE' - /'EUROPE']; tight), fd=()-->(46)]
-      │         │    │         │    │    │    │         └── region.r_name = 'EUROPE' [type=bool, outer=(46), constraints=(/46: [/'EUROPE' - /'EUROPE']; tight)]
-      │         │    │         │    │    │    └── filters [type=bool, outer=(43,45), constraints=(/43: (/NULL - ]; /45: (/NULL - ]), fd=(43)==(45), (45)==(43)]
-      │         │    │         │    │    │         └── nation.n_regionkey = region.r_regionkey [type=bool, outer=(43,45), constraints=(/43: (/NULL - ]; /45: (/NULL - ])]
-      │         │    │         │    │    ├── inner-join
-      │         │    │         │    │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(string) p_type:5(string) p_size:6(int!null) supplier.s_suppkey:10(int!null) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_nationkey:13(int!null) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_partkey:17(int!null) partsupp.ps_suppkey:18(int!null) partsupp.ps_supplycost:20(float)
-      │         │    │         │    │    │    ├── key: (17,18)
-      │         │    │         │    │    │    ├── fd: ()-->(6), (1)-->(3,5), (10)-->(11-16), (17,18)-->(20), (1)==(17), (17)==(1), (10)==(18), (18)==(10)
-      │         │    │         │    │    │    ├── scan partsupp
-      │         │    │         │    │    │    │    ├── columns: partsupp.ps_partkey:17(int!null) partsupp.ps_suppkey:18(int!null) partsupp.ps_supplycost:20(float)
-      │         │    │         │    │    │    │    ├── key: (17,18)
-      │         │    │         │    │    │    │    └── fd: (17,18)-->(20)
-      │         │    │         │    │    │    ├── inner-join
-      │         │    │         │    │    │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(string) p_type:5(string) p_size:6(int!null) supplier.s_suppkey:10(int!null) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_nationkey:13(int!null) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string)
-      │         │    │         │    │    │    │    ├── key: (1,10)
-      │         │    │         │    │    │    │    ├── fd: ()-->(6), (1)-->(3,5), (10)-->(11-16)
-      │         │    │         │    │    │    │    ├── scan supplier
-      │         │    │         │    │    │    │    │    ├── columns: supplier.s_suppkey:10(int!null) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_nationkey:13(int!null) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string)
-      │         │    │         │    │    │    │    │    ├── key: (10)
-      │         │    │         │    │    │    │    │    └── fd: (10)-->(11-16)
-      │         │    │         │    │    │    │    ├── select
-      │         │    │         │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(string) p_type:5(string) p_size:6(int!null)
-      │         │    │         │    │    │    │    │    ├── key: (1)
-      │         │    │         │    │    │    │    │    ├── fd: ()-->(6), (1)-->(3,5)
-      │         │    │         │    │    │    │    │    ├── scan part
-      │         │    │         │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(string) p_type:5(string) p_size:6(int)
-      │         │    │         │    │    │    │    │    │    ├── key: (1)
-      │         │    │         │    │    │    │    │    │    └── fd: (1)-->(3,5,6)
-      │         │    │         │    │    │    │    │    └── filters [type=bool, outer=(5,6), constraints=(/6: [/15 - /15]), fd=()-->(6)]
-      │         │    │         │    │    │    │    │         ├── p_size = 15 [type=bool, outer=(6), constraints=(/6: [/15 - /15]; tight)]
-      │         │    │         │    │    │    │    │         └── p_type LIKE '%BRASS' [type=bool, outer=(5)]
-      │         │    │         │    │    │    │    └── true [type=bool]
-      │         │    │         │    │    │    └── filters [type=bool, outer=(1,10,17,18), constraints=(/1: (/NULL - ]; /10: (/NULL - ]; /17: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(17), (17)==(1), (10)==(18), (18)==(10)]
-      │         │    │         │    │    │         ├── p_partkey = partsupp.ps_partkey [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ])]
-      │         │    │         │    │    │         └── supplier.s_suppkey = partsupp.ps_suppkey [type=bool, outer=(10,18), constraints=(/10: (/NULL - ]; /18: (/NULL - ])]
-      │         │    │         │    │    └── filters [type=bool, outer=(1,29), constraints=(/1: (/NULL - ]; /29: (/NULL - ]), fd=(1)==(29), (29)==(1)]
-      │         │    │         │    │         └── p_partkey = partsupp.ps_partkey [type=bool, outer=(1,29), constraints=(/1: (/NULL - ]; /29: (/NULL - ])]
-      │         │    │         │    └── aggregations [outer=(1,3,11-16,20,32)]
-      │         │    │         │         ├── min [type=float, outer=(32)]
-      │         │    │         │         │    └── variable: partsupp.ps_supplycost [type=float, outer=(32)]
-      │         │    │         │         ├── const-agg [type=float, outer=(20)]
-      │         │    │         │         │    └── variable: partsupp.ps_supplycost [type=float, outer=(20)]
-      │         │    │         │         ├── const-agg [type=string, outer=(3)]
-      │         │    │         │         │    └── variable: p_mfgr [type=string, outer=(3)]
-      │         │    │         │         ├── const-agg [type=string, outer=(11)]
-      │         │    │         │         │    └── variable: supplier.s_name [type=string, outer=(11)]
-      │         │    │         │         ├── const-agg [type=string, outer=(12)]
-      │         │    │         │         │    └── variable: supplier.s_address [type=string, outer=(12)]
-      │         │    │         │         ├── const-agg [type=int, outer=(13)]
-      │         │    │         │         │    └── variable: supplier.s_nationkey [type=int, outer=(13)]
-      │         │    │         │         ├── const-agg [type=string, outer=(14)]
-      │         │    │         │         │    └── variable: supplier.s_phone [type=string, outer=(14)]
-      │         │    │         │         ├── const-agg [type=float, outer=(15)]
-      │         │    │         │         │    └── variable: supplier.s_acctbal [type=float, outer=(15)]
-      │         │    │         │         ├── const-agg [type=string, outer=(16)]
-      │         │    │         │         │    └── variable: supplier.s_comment [type=string, outer=(16)]
-      │         │    │         │         └── const-agg [type=int, outer=(1)]
-      │         │    │         │              └── variable: p_partkey [type=int, outer=(1)]
-      │         │    │         └── filters [type=bool, outer=(20,48), constraints=(/20: (/NULL - ]; /48: (/NULL - ]), fd=(20)==(48), (48)==(20)]
-      │         │    │              └── partsupp.ps_supplycost = min [type=bool, outer=(20,48), constraints=(/20: (/NULL - ]; /48: (/NULL - ])]
-      │         │    └── filters [type=bool, outer=(13,22), constraints=(/13: (/NULL - ]; /22: (/NULL - ]), fd=(13)==(22), (22)==(13)]
-      │         │         └── supplier.s_nationkey = nation.n_nationkey [type=bool, outer=(13,22), constraints=(/13: (/NULL - ]; /22: (/NULL - ])]
-      │         └── filters [type=bool, outer=(24,26,27), constraints=(/24: (/NULL - ]; /26: (/NULL - ]; /27: [/'EUROPE' - /'EUROPE']), fd=()-->(27), (24)==(26), (26)==(24)]
-      │              ├── nation.n_regionkey = region.r_regionkey [type=bool, outer=(24,26), constraints=(/24: (/NULL - ]; /26: (/NULL - ])]
-      │              └── region.r_name = 'EUROPE' [type=bool, outer=(27), constraints=(/27: [/'EUROPE' - /'EUROPE']; tight)]
+      │    ├── columns: p_partkey:1(int) p_mfgr:3(string) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_partkey:17(int!null) partsupp.ps_suppkey:18(int!null) partsupp.ps_supplycost:20(float!null) nation.n_name:23(string) min:48(float!null)
+      │    ├── key: (17,18)
+      │    ├── fd: (1)-->(3), (17,18)-->(1,3,11,12,14-16,20,23,48), (1)==(17), (17)==(1), (18)-->(11,12,14-16,23), (20)==(48), (48)==(20)
+      │    ├── ordering: -15,+23,+11,+(1|17)
+      │    └── select
+      │         ├── columns: p_partkey:1(int) p_mfgr:3(string) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_partkey:17(int!null) partsupp.ps_suppkey:18(int!null) partsupp.ps_supplycost:20(float!null) nation.n_name:23(string) min:48(float!null)
+      │         ├── key: (17,18)
+      │         ├── fd: (1)-->(3), (17,18)-->(1,3,11,12,14-16,20,23,48), (1)==(17), (17)==(1), (18)-->(11,12,14-16,23), (20)==(48), (48)==(20)
+      │         ├── group-by
+      │         │    ├── columns: p_partkey:1(int) p_mfgr:3(string) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_partkey:17(int!null) partsupp.ps_suppkey:18(int!null) partsupp.ps_supplycost:20(float) nation.n_name:23(string) min:48(float)
+      │         │    ├── grouping columns: partsupp.ps_partkey:17(int!null) partsupp.ps_suppkey:18(int!null)
+      │         │    ├── key: (17,18)
+      │         │    ├── fd: (1)-->(3), (17,18)-->(1,3,11,12,14-16,20,23,48), (1)==(17), (17)==(1), (18)-->(11,12,14-16,23)
+      │         │    ├── inner-join
+      │         │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(string) p_type:5(string) p_size:6(int!null) supplier.s_suppkey:10(int!null) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_nationkey:13(int!null) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_partkey:17(int!null) partsupp.ps_suppkey:18(int!null) partsupp.ps_supplycost:20(float) nation.n_nationkey:22(int!null) nation.n_name:23(string) nation.n_regionkey:24(int!null) region.r_regionkey:26(int!null) region.r_name:27(string!null) partsupp.ps_partkey:29(int!null) partsupp.ps_suppkey:30(int!null) partsupp.ps_supplycost:32(float!null) supplier.s_suppkey:34(int!null) supplier.s_nationkey:37(int!null) nation.n_nationkey:41(int!null) nation.n_regionkey:43(int!null) region.r_regionkey:45(int!null) region.r_name:46(string!null)
+      │         │    │    ├── key: (18,29,34)
+      │         │    │    ├── fd: ()-->(6,27,46), (1)-->(3,5), (10)-->(11-16), (17,18)-->(20), (22)-->(23,24), (24)==(26), (26)==(24), (10)==(18), (18)==(10), (13)==(22), (22)==(13), (1)==(17,29), (17)==(1,29), (29,30)-->(32), (34)-->(37), (41)-->(43), (43)==(45), (45)==(43), (37)==(41), (41)==(37), (30)==(34), (34)==(30), (29)==(1,17)
+      │         │    │    ├── inner-join
+      │         │    │    │    ├── columns: partsupp.ps_partkey:29(int!null) partsupp.ps_suppkey:30(int!null) partsupp.ps_supplycost:32(float!null) supplier.s_suppkey:34(int!null) supplier.s_nationkey:37(int!null) nation.n_nationkey:41(int!null) nation.n_regionkey:43(int!null) region.r_regionkey:45(int!null) region.r_name:46(string!null)
+      │         │    │    │    ├── key: (29,34)
+      │         │    │    │    ├── fd: ()-->(46), (29,30)-->(32), (34)-->(37), (41)-->(43), (43)==(45), (45)==(43), (37)==(41), (41)==(37), (30)==(34), (34)==(30)
+      │         │    │    │    ├── inner-join
+      │         │    │    │    │    ├── columns: supplier.s_suppkey:34(int!null) supplier.s_nationkey:37(int!null) nation.n_nationkey:41(int!null) nation.n_regionkey:43(int!null) region.r_regionkey:45(int!null) region.r_name:46(string!null)
+      │         │    │    │    │    ├── key: (34)
+      │         │    │    │    │    ├── fd: ()-->(46), (34)-->(37), (41)-->(43), (43)==(45), (45)==(43), (37)==(41), (41)==(37)
+      │         │    │    │    │    ├── scan supplier@supplier_auto_index_supplier_fkey_nation
+      │         │    │    │    │    │    ├── columns: supplier.s_suppkey:34(int!null) supplier.s_nationkey:37(int!null)
+      │         │    │    │    │    │    ├── key: (34)
+      │         │    │    │    │    │    └── fd: (34)-->(37)
+      │         │    │    │    │    ├── inner-join (lookup nation@nation_auto_index_nation_fkey_region)
+      │         │    │    │    │    │    ├── columns: nation.n_nationkey:41(int!null) nation.n_regionkey:43(int!null) region.r_regionkey:45(int!null) region.r_name:46(string!null)
+      │         │    │    │    │    │    ├── key columns: [45] = [43]
+      │         │    │    │    │    │    ├── key: (41)
+      │         │    │    │    │    │    ├── fd: ()-->(46), (41)-->(43), (43)==(45), (45)==(43)
+      │         │    │    │    │    │    ├── select
+      │         │    │    │    │    │    │    ├── columns: region.r_regionkey:45(int!null) region.r_name:46(string!null)
+      │         │    │    │    │    │    │    ├── key: (45)
+      │         │    │    │    │    │    │    ├── fd: ()-->(46)
+      │         │    │    │    │    │    │    ├── scan region
+      │         │    │    │    │    │    │    │    ├── columns: region.r_regionkey:45(int!null) region.r_name:46(string)
+      │         │    │    │    │    │    │    │    ├── key: (45)
+      │         │    │    │    │    │    │    │    └── fd: (45)-->(46)
+      │         │    │    │    │    │    │    └── filters [type=bool, outer=(46), constraints=(/46: [/'EUROPE' - /'EUROPE']; tight), fd=()-->(46)]
+      │         │    │    │    │    │    │         └── region.r_name = 'EUROPE' [type=bool, outer=(46), constraints=(/46: [/'EUROPE' - /'EUROPE']; tight)]
+      │         │    │    │    │    │    └── filters [type=bool, outer=(43,45), constraints=(/43: (/NULL - ]; /45: (/NULL - ]), fd=(43)==(45), (45)==(43)]
+      │         │    │    │    │    │         └── nation.n_regionkey = region.r_regionkey [type=bool, outer=(43,45), constraints=(/43: (/NULL - ]; /45: (/NULL - ])]
+      │         │    │    │    │    └── filters [type=bool, outer=(37,41), constraints=(/37: (/NULL - ]; /41: (/NULL - ]), fd=(37)==(41), (41)==(37)]
+      │         │    │    │    │         └── supplier.s_nationkey = nation.n_nationkey [type=bool, outer=(37,41), constraints=(/37: (/NULL - ]; /41: (/NULL - ])]
+      │         │    │    │    ├── select
+      │         │    │    │    │    ├── columns: partsupp.ps_partkey:29(int!null) partsupp.ps_suppkey:30(int!null) partsupp.ps_supplycost:32(float!null)
+      │         │    │    │    │    ├── key: (29,30)
+      │         │    │    │    │    ├── fd: (29,30)-->(32)
+      │         │    │    │    │    ├── scan partsupp
+      │         │    │    │    │    │    ├── columns: partsupp.ps_partkey:29(int!null) partsupp.ps_suppkey:30(int!null) partsupp.ps_supplycost:32(float)
+      │         │    │    │    │    │    ├── key: (29,30)
+      │         │    │    │    │    │    └── fd: (29,30)-->(32)
+      │         │    │    │    │    └── filters [type=bool, outer=(32), constraints=(/32: (/NULL - ]; tight)]
+      │         │    │    │    │         └── partsupp.ps_supplycost IS NOT NULL [type=bool, outer=(32), constraints=(/32: (/NULL - ]; tight)]
+      │         │    │    │    └── filters [type=bool, outer=(30,34), constraints=(/30: (/NULL - ]; /34: (/NULL - ]), fd=(30)==(34), (34)==(30)]
+      │         │    │    │         └── supplier.s_suppkey = partsupp.ps_suppkey [type=bool, outer=(30,34), constraints=(/30: (/NULL - ]; /34: (/NULL - ])]
+      │         │    │    ├── inner-join
+      │         │    │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(string) p_type:5(string) p_size:6(int!null) supplier.s_suppkey:10(int!null) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_nationkey:13(int!null) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_partkey:17(int!null) partsupp.ps_suppkey:18(int!null) partsupp.ps_supplycost:20(float) nation.n_nationkey:22(int!null) nation.n_name:23(string) nation.n_regionkey:24(int!null) region.r_regionkey:26(int!null) region.r_name:27(string!null)
+      │         │    │    │    ├── key: (17,18)
+      │         │    │    │    ├── fd: ()-->(6,27), (1)-->(3,5), (10)-->(11-16), (17,18)-->(20), (22)-->(23,24), (24)==(26), (26)==(24), (10)==(18), (18)==(10), (13)==(22), (22)==(13), (1)==(17), (17)==(1)
+      │         │    │    │    ├── inner-join
+      │         │    │    │    │    ├── columns: supplier.s_suppkey:10(int!null) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_nationkey:13(int!null) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string) partsupp.ps_partkey:17(int!null) partsupp.ps_suppkey:18(int!null) partsupp.ps_supplycost:20(float) nation.n_nationkey:22(int!null) nation.n_name:23(string) nation.n_regionkey:24(int!null) region.r_regionkey:26(int!null) region.r_name:27(string!null)
+      │         │    │    │    │    ├── key: (17,18)
+      │         │    │    │    │    ├── fd: ()-->(27), (10)-->(11-16), (17,18)-->(20), (22)-->(23,24), (24)==(26), (26)==(24), (10)==(18), (18)==(10), (13)==(22), (22)==(13)
+      │         │    │    │    │    ├── inner-join
+      │         │    │    │    │    │    ├── columns: partsupp.ps_partkey:17(int!null) partsupp.ps_suppkey:18(int!null) partsupp.ps_supplycost:20(float) nation.n_nationkey:22(int!null) nation.n_name:23(string) nation.n_regionkey:24(int!null) region.r_regionkey:26(int!null) region.r_name:27(string!null)
+      │         │    │    │    │    │    ├── key: (17,18,22)
+      │         │    │    │    │    │    ├── fd: ()-->(27), (17,18)-->(20), (22)-->(23,24), (24)==(26), (26)==(24)
+      │         │    │    │    │    │    ├── scan partsupp
+      │         │    │    │    │    │    │    ├── columns: partsupp.ps_partkey:17(int!null) partsupp.ps_suppkey:18(int!null) partsupp.ps_supplycost:20(float)
+      │         │    │    │    │    │    │    ├── key: (17,18)
+      │         │    │    │    │    │    │    └── fd: (17,18)-->(20)
+      │         │    │    │    │    │    ├── inner-join (lookup nation)
+      │         │    │    │    │    │    │    ├── columns: nation.n_nationkey:22(int!null) nation.n_name:23(string) nation.n_regionkey:24(int!null) region.r_regionkey:26(int!null) region.r_name:27(string!null)
+      │         │    │    │    │    │    │    ├── key columns: [22] = [22]
+      │         │    │    │    │    │    │    ├── key: (22)
+      │         │    │    │    │    │    │    ├── fd: ()-->(27), (22)-->(23,24), (24)==(26), (26)==(24)
+      │         │    │    │    │    │    │    ├── inner-join (lookup nation@nation_auto_index_nation_fkey_region)
+      │         │    │    │    │    │    │    │    ├── columns: nation.n_nationkey:22(int!null) nation.n_regionkey:24(int!null) region.r_regionkey:26(int!null) region.r_name:27(string!null)
+      │         │    │    │    │    │    │    │    ├── key columns: [26] = [24]
+      │         │    │    │    │    │    │    │    ├── key: (22)
+      │         │    │    │    │    │    │    │    ├── fd: ()-->(27), (22)-->(24), (24)==(26), (26)==(24)
+      │         │    │    │    │    │    │    │    ├── select
+      │         │    │    │    │    │    │    │    │    ├── columns: region.r_regionkey:26(int!null) region.r_name:27(string!null)
+      │         │    │    │    │    │    │    │    │    ├── key: (26)
+      │         │    │    │    │    │    │    │    │    ├── fd: ()-->(27)
+      │         │    │    │    │    │    │    │    │    ├── scan region
+      │         │    │    │    │    │    │    │    │    │    ├── columns: region.r_regionkey:26(int!null) region.r_name:27(string)
+      │         │    │    │    │    │    │    │    │    │    ├── key: (26)
+      │         │    │    │    │    │    │    │    │    │    └── fd: (26)-->(27)
+      │         │    │    │    │    │    │    │    │    └── filters [type=bool, outer=(27), constraints=(/27: [/'EUROPE' - /'EUROPE']; tight), fd=()-->(27)]
+      │         │    │    │    │    │    │    │    │         └── region.r_name = 'EUROPE' [type=bool, outer=(27), constraints=(/27: [/'EUROPE' - /'EUROPE']; tight)]
+      │         │    │    │    │    │    │    │    └── filters [type=bool, outer=(24,26), constraints=(/24: (/NULL - ]; /26: (/NULL - ]), fd=(24)==(26), (26)==(24)]
+      │         │    │    │    │    │    │    │         └── nation.n_regionkey = region.r_regionkey [type=bool, outer=(24,26), constraints=(/24: (/NULL - ]; /26: (/NULL - ])]
+      │         │    │    │    │    │    │    └── true [type=bool]
+      │         │    │    │    │    │    └── true [type=bool]
+      │         │    │    │    │    ├── scan supplier
+      │         │    │    │    │    │    ├── columns: supplier.s_suppkey:10(int!null) supplier.s_name:11(string) supplier.s_address:12(string) supplier.s_nationkey:13(int!null) supplier.s_phone:14(string) supplier.s_acctbal:15(float) supplier.s_comment:16(string)
+      │         │    │    │    │    │    ├── key: (10)
+      │         │    │    │    │    │    └── fd: (10)-->(11-16)
+      │         │    │    │    │    └── filters [type=bool, outer=(10,13,18,22), constraints=(/10: (/NULL - ]; /13: (/NULL - ]; /18: (/NULL - ]; /22: (/NULL - ]), fd=(10)==(18), (18)==(10), (13)==(22), (22)==(13)]
+      │         │    │    │    │         ├── supplier.s_suppkey = partsupp.ps_suppkey [type=bool, outer=(10,18), constraints=(/10: (/NULL - ]; /18: (/NULL - ])]
+      │         │    │    │    │         └── supplier.s_nationkey = nation.n_nationkey [type=bool, outer=(13,22), constraints=(/13: (/NULL - ]; /22: (/NULL - ])]
+      │         │    │    │    ├── select
+      │         │    │    │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(string) p_type:5(string) p_size:6(int!null)
+      │         │    │    │    │    ├── key: (1)
+      │         │    │    │    │    ├── fd: ()-->(6), (1)-->(3,5)
+      │         │    │    │    │    ├── scan part
+      │         │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_mfgr:3(string) p_type:5(string) p_size:6(int)
+      │         │    │    │    │    │    ├── key: (1)
+      │         │    │    │    │    │    └── fd: (1)-->(3,5,6)
+      │         │    │    │    │    └── filters [type=bool, outer=(5,6), constraints=(/6: [/15 - /15]), fd=()-->(6)]
+      │         │    │    │    │         ├── p_size = 15 [type=bool, outer=(6), constraints=(/6: [/15 - /15]; tight)]
+      │         │    │    │    │         └── p_type LIKE '%BRASS' [type=bool, outer=(5)]
+      │         │    │    │    └── filters [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ]), fd=(1)==(17), (17)==(1)]
+      │         │    │    │         └── p_partkey = partsupp.ps_partkey [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ])]
+      │         │    │    └── filters [type=bool, outer=(1,29), constraints=(/1: (/NULL - ]; /29: (/NULL - ]), fd=(1)==(29), (29)==(1)]
+      │         │    │         └── p_partkey = partsupp.ps_partkey [type=bool, outer=(1,29), constraints=(/1: (/NULL - ]; /29: (/NULL - ])]
+      │         │    └── aggregations [outer=(1,3,11,12,14-16,20,23,32)]
+      │         │         ├── min [type=float, outer=(32)]
+      │         │         │    └── variable: partsupp.ps_supplycost [type=float, outer=(32)]
+      │         │         ├── const-agg [type=string, outer=(11)]
+      │         │         │    └── variable: supplier.s_name [type=string, outer=(11)]
+      │         │         ├── const-agg [type=string, outer=(12)]
+      │         │         │    └── variable: supplier.s_address [type=string, outer=(12)]
+      │         │         ├── const-agg [type=string, outer=(14)]
+      │         │         │    └── variable: supplier.s_phone [type=string, outer=(14)]
+      │         │         ├── const-agg [type=float, outer=(15)]
+      │         │         │    └── variable: supplier.s_acctbal [type=float, outer=(15)]
+      │         │         ├── const-agg [type=string, outer=(16)]
+      │         │         │    └── variable: supplier.s_comment [type=string, outer=(16)]
+      │         │         ├── const-agg [type=float, outer=(20)]
+      │         │         │    └── variable: partsupp.ps_supplycost [type=float, outer=(20)]
+      │         │         ├── const-agg [type=string, outer=(23)]
+      │         │         │    └── variable: nation.n_name [type=string, outer=(23)]
+      │         │         ├── const-agg [type=string, outer=(3)]
+      │         │         │    └── variable: p_mfgr [type=string, outer=(3)]
+      │         │         └── const-agg [type=int, outer=(1)]
+      │         │              └── variable: p_partkey [type=int, outer=(1)]
+      │         └── filters [type=bool, outer=(20,48), constraints=(/20: (/NULL - ]; /48: (/NULL - ]), fd=(20)==(48), (48)==(20)]
+      │              └── partsupp.ps_supplycost = min [type=bool, outer=(20,48), constraints=(/20: (/NULL - ]; /48: (/NULL - ])]
       └── const: 100 [type=int]
 
 # --------------------------------------------------
@@ -578,37 +590,49 @@ limit
  │         ├── project
  │         │    ├── columns: column34:34(float) o_orderdate:13(date!null) o_shippriority:16(int) l_orderkey:18(int!null)
  │         │    ├── fd: (18)-->(13,16)
- │         │    ├── inner-join (lookup lineitem)
+ │         │    ├── inner-join
  │         │    │    ├── columns: c_custkey:1(int!null) c_mktsegment:7(string!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) o_shippriority:16(int) l_orderkey:18(int!null) l_extendedprice:23(float) l_discount:24(float) l_shipdate:28(date!null)
- │         │    │    ├── key columns: [9] = [18]
- │         │    │    ├── fd: ()-->(7), (9)-->(10,13,16), (1)==(10), (10)==(1), (9)==(18), (18)==(9)
- │         │    │    ├── inner-join (lookup orders)
- │         │    │    │    ├── columns: c_custkey:1(int!null) c_mktsegment:7(string!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) o_shippriority:16(int)
- │         │    │    │    ├── key columns: [9] = [9]
- │         │    │    │    ├── key: (9)
- │         │    │    │    ├── fd: ()-->(7), (9)-->(10,13,16), (1)==(10), (10)==(1)
- │         │    │    │    ├── inner-join (lookup orders@orders_auto_index_orders_fkey_customer)
- │         │    │    │    │    ├── columns: c_custkey:1(int!null) c_mktsegment:7(string!null) o_orderkey:9(int!null) o_custkey:10(int!null)
- │         │    │    │    │    ├── key columns: [1] = [10]
+ │         │    │    ├── fd: ()-->(7), (9)-->(10,13,16), (9)==(18), (18)==(9), (1)==(10), (10)==(1)
+ │         │    │    ├── inner-join (merge)
+ │         │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) o_shippriority:16(int) l_orderkey:18(int!null) l_extendedprice:23(float) l_discount:24(float) l_shipdate:28(date!null)
+ │         │    │    │    ├── fd: (9)-->(10,13,16), (9)==(18), (18)==(9)
+ │         │    │    │    ├── select
+ │         │    │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) o_shippriority:16(int)
  │         │    │    │    │    ├── key: (9)
- │         │    │    │    │    ├── fd: ()-->(7), (9)-->(10), (1)==(10), (10)==(1)
- │         │    │    │    │    ├── select
- │         │    │    │    │    │    ├── columns: c_custkey:1(int!null) c_mktsegment:7(string!null)
- │         │    │    │    │    │    ├── key: (1)
- │         │    │    │    │    │    ├── fd: ()-->(7)
- │         │    │    │    │    │    ├── scan customer
- │         │    │    │    │    │    │    ├── columns: c_custkey:1(int!null) c_mktsegment:7(string)
- │         │    │    │    │    │    │    ├── key: (1)
- │         │    │    │    │    │    │    └── fd: (1)-->(7)
- │         │    │    │    │    │    └── filters [type=bool, outer=(7), constraints=(/7: [/'BUILDING' - /'BUILDING']; tight), fd=()-->(7)]
- │         │    │    │    │    │         └── c_mktsegment = 'BUILDING' [type=bool, outer=(7), constraints=(/7: [/'BUILDING' - /'BUILDING']; tight)]
- │         │    │    │    │    └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
- │         │    │    │    │         └── c_custkey = o_custkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
- │         │    │    │    └── filters [type=bool, outer=(13), constraints=(/13: (/NULL - /'1995-03-14']; tight)]
- │         │    │    │         └── o_orderdate < '1995-03-15' [type=bool, outer=(13), constraints=(/13: (/NULL - /'1995-03-14']; tight)]
- │         │    │    └── filters [type=bool, outer=(9,18,28), constraints=(/9: (/NULL - ]; /18: (/NULL - ]; /28: [/'1995-03-16' - ]), fd=(9)==(18), (18)==(9)]
- │         │    │         ├── l_orderkey = o_orderkey [type=bool, outer=(9,18), constraints=(/9: (/NULL - ]; /18: (/NULL - ])]
- │         │    │         └── l_shipdate > '1995-03-15' [type=bool, outer=(28), constraints=(/28: [/'1995-03-16' - ]; tight)]
+ │         │    │    │    │    ├── fd: (9)-->(10,13,16)
+ │         │    │    │    │    ├── ordering: +9
+ │         │    │    │    │    ├── scan orders
+ │         │    │    │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date) o_shippriority:16(int)
+ │         │    │    │    │    │    ├── key: (9)
+ │         │    │    │    │    │    ├── fd: (9)-->(10,13,16)
+ │         │    │    │    │    │    └── ordering: +9
+ │         │    │    │    │    └── filters [type=bool, outer=(13), constraints=(/13: (/NULL - /'1995-03-14']; tight)]
+ │         │    │    │    │         └── o_orderdate < '1995-03-15' [type=bool, outer=(13), constraints=(/13: (/NULL - /'1995-03-14']; tight)]
+ │         │    │    │    ├── select
+ │         │    │    │    │    ├── columns: l_orderkey:18(int!null) l_extendedprice:23(float) l_discount:24(float) l_shipdate:28(date!null)
+ │         │    │    │    │    ├── ordering: +18
+ │         │    │    │    │    ├── scan lineitem
+ │         │    │    │    │    │    ├── columns: l_orderkey:18(int!null) l_extendedprice:23(float) l_discount:24(float) l_shipdate:28(date)
+ │         │    │    │    │    │    └── ordering: +18
+ │         │    │    │    │    └── filters [type=bool, outer=(28), constraints=(/28: [/'1995-03-16' - ]; tight)]
+ │         │    │    │    │         └── l_shipdate > '1995-03-15' [type=bool, outer=(28), constraints=(/28: [/'1995-03-16' - ]; tight)]
+ │         │    │    │    └── merge-on
+ │         │    │    │         ├── left ordering: +9
+ │         │    │    │         ├── right ordering: +18
+ │         │    │    │         └── filters [type=bool, outer=(9,18), constraints=(/9: (/NULL - ]; /18: (/NULL - ]), fd=(9)==(18), (18)==(9)]
+ │         │    │    │              └── l_orderkey = o_orderkey [type=bool, outer=(9,18), constraints=(/9: (/NULL - ]; /18: (/NULL - ])]
+ │         │    │    ├── select
+ │         │    │    │    ├── columns: c_custkey:1(int!null) c_mktsegment:7(string!null)
+ │         │    │    │    ├── key: (1)
+ │         │    │    │    ├── fd: ()-->(7)
+ │         │    │    │    ├── scan customer
+ │         │    │    │    │    ├── columns: c_custkey:1(int!null) c_mktsegment:7(string)
+ │         │    │    │    │    ├── key: (1)
+ │         │    │    │    │    └── fd: (1)-->(7)
+ │         │    │    │    └── filters [type=bool, outer=(7), constraints=(/7: [/'BUILDING' - /'BUILDING']; tight), fd=()-->(7)]
+ │         │    │    │         └── c_mktsegment = 'BUILDING' [type=bool, outer=(7), constraints=(/7: [/'BUILDING' - /'BUILDING']; tight)]
+ │         │    │    └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+ │         │    │         └── c_custkey = o_custkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
  │         │    └── projections [outer=(13,16,18,23,24)]
  │         │         └── l_extendedprice * (1.0 - l_discount) [type=float, outer=(23,24)]
  │         └── aggregations [outer=(13,16,34)]
@@ -752,50 +776,72 @@ sort
       ├── fd: (42)-->(49)
       ├── project
       │    ├── columns: column48:48(float) n_name:42(string)
-      │    ├── inner-join (lookup region)
+      │    ├── inner-join
       │    │    ├── columns: c_custkey:1(int!null) c_nationkey:4(int!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_suppkey:20(int!null) l_extendedprice:23(float) l_discount:24(float) s_suppkey:34(int!null) s_nationkey:37(int!null) n_nationkey:41(int!null) n_name:42(string) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(string!null)
-      │    │    ├── key columns: [43] = [45]
-      │    │    ├── fd: ()-->(46), (1)-->(4), (9)-->(10,13), (1)==(10), (10)==(1), (9)==(18), (18)==(9), (34)-->(37), (20)==(34), (34)==(20), (4)==(37,41), (37)==(4,41), (41)-->(42,43), (41)==(4,37), (43)==(45), (45)==(43)
-      │    │    ├── inner-join (lookup nation)
-      │    │    │    ├── columns: c_custkey:1(int!null) c_nationkey:4(int!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_suppkey:20(int!null) l_extendedprice:23(float) l_discount:24(float) s_suppkey:34(int!null) s_nationkey:37(int!null) n_nationkey:41(int!null) n_name:42(string) n_regionkey:43(int!null)
-      │    │    │    ├── key columns: [37] = [41]
-      │    │    │    ├── fd: (1)-->(4), (9)-->(10,13), (1)==(10), (10)==(1), (9)==(18), (18)==(9), (34)-->(37), (20)==(34), (34)==(20), (4)==(37,41), (37)==(4,41), (41)-->(42,43), (41)==(4,37)
-      │    │    │    ├── inner-join (lookup supplier@supplier_auto_index_supplier_fkey_nation)
-      │    │    │    │    ├── columns: c_custkey:1(int!null) c_nationkey:4(int!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_suppkey:20(int!null) l_extendedprice:23(float) l_discount:24(float) s_suppkey:34(int!null) s_nationkey:37(int!null)
-      │    │    │    │    ├── key columns: [4 20] = [37 34]
-      │    │    │    │    ├── fd: (1)-->(4), (9)-->(10,13), (1)==(10), (10)==(1), (9)==(18), (18)==(9), (34)-->(37), (20)==(34), (34)==(20), (4)==(37), (37)==(4)
-      │    │    │    │    ├── inner-join (lookup lineitem)
-      │    │    │    │    │    ├── columns: c_custkey:1(int!null) c_nationkey:4(int!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_suppkey:20(int!null) l_extendedprice:23(float) l_discount:24(float)
-      │    │    │    │    │    ├── key columns: [9] = [18]
-      │    │    │    │    │    ├── fd: (1)-->(4), (9)-->(10,13), (1)==(10), (10)==(1), (9)==(18), (18)==(9)
-      │    │    │    │    │    ├── inner-join (lookup customer)
-      │    │    │    │    │    │    ├── columns: c_custkey:1(int!null) c_nationkey:4(int!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null)
-      │    │    │    │    │    │    ├── key columns: [10] = [1]
-      │    │    │    │    │    │    ├── key: (9)
-      │    │    │    │    │    │    ├── fd: (1)-->(4), (9)-->(10,13), (1)==(10), (10)==(1)
-      │    │    │    │    │    │    ├── select
-      │    │    │    │    │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null)
-      │    │    │    │    │    │    │    ├── key: (9)
-      │    │    │    │    │    │    │    ├── fd: (9)-->(10,13)
-      │    │    │    │    │    │    │    ├── scan orders
-      │    │    │    │    │    │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date)
-      │    │    │    │    │    │    │    │    ├── key: (9)
-      │    │    │    │    │    │    │    │    └── fd: (9)-->(10,13)
-      │    │    │    │    │    │    │    └── filters [type=bool, outer=(13), constraints=(/13: [/'1994-01-01' - ])]
-      │    │    │    │    │    │    │         ├── o_orderdate >= '1994-01-01' [type=bool, outer=(13), constraints=(/13: [/'1994-01-01' - ]; tight)]
-      │    │    │    │    │    │    │         └── o_orderdate < '1995-01-01 00:00:00+00:00' [type=bool, outer=(13)]
-      │    │    │    │    │    │    └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
-      │    │    │    │    │    │         └── c_custkey = o_custkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
-      │    │    │    │    │    └── filters [type=bool, outer=(9,18), constraints=(/9: (/NULL - ]; /18: (/NULL - ]), fd=(9)==(18), (18)==(9)]
-      │    │    │    │    │         └── l_orderkey = o_orderkey [type=bool, outer=(9,18), constraints=(/9: (/NULL - ]; /18: (/NULL - ])]
-      │    │    │    │    └── filters [type=bool, outer=(4,20,34,37), constraints=(/4: (/NULL - ]; /20: (/NULL - ]; /34: (/NULL - ]; /37: (/NULL - ]), fd=(20)==(34), (34)==(20), (4)==(37), (37)==(4)]
-      │    │    │    │         ├── l_suppkey = s_suppkey [type=bool, outer=(20,34), constraints=(/20: (/NULL - ]; /34: (/NULL - ])]
-      │    │    │    │         └── c_nationkey = s_nationkey [type=bool, outer=(4,37), constraints=(/4: (/NULL - ]; /37: (/NULL - ])]
-      │    │    │    └── filters [type=bool, outer=(37,41), constraints=(/37: (/NULL - ]; /41: (/NULL - ]), fd=(37)==(41), (41)==(37)]
-      │    │    │         └── s_nationkey = n_nationkey [type=bool, outer=(37,41), constraints=(/37: (/NULL - ]; /41: (/NULL - ])]
-      │    │    └── filters [type=bool, outer=(43,45,46), constraints=(/43: (/NULL - ]; /45: (/NULL - ]; /46: [/'ASIA' - /'ASIA']), fd=()-->(46), (43)==(45), (45)==(43)]
-      │    │         ├── n_regionkey = r_regionkey [type=bool, outer=(43,45), constraints=(/43: (/NULL - ]; /45: (/NULL - ])]
-      │    │         └── r_name = 'ASIA' [type=bool, outer=(46), constraints=(/46: [/'ASIA' - /'ASIA']; tight)]
+      │    │    ├── fd: ()-->(46), (1)-->(4), (9)-->(10,13), (34)-->(37), (41)-->(42,43), (43)==(45), (45)==(43), (37)==(4,41), (41)==(4,37), (20)==(34), (34)==(20), (9)==(18), (18)==(9), (1)==(10), (10)==(1), (4)==(37,41)
+      │    │    ├── inner-join
+      │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_suppkey:20(int!null) l_extendedprice:23(float) l_discount:24(float) s_suppkey:34(int!null) s_nationkey:37(int!null) n_nationkey:41(int!null) n_name:42(string) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(string!null)
+      │    │    │    ├── fd: ()-->(46), (9)-->(10,13), (34)-->(37), (41)-->(42,43), (43)==(45), (45)==(43), (37)==(41), (41)==(37), (20)==(34), (34)==(20), (9)==(18), (18)==(9)
+      │    │    │    ├── inner-join
+      │    │    │    │    ├── columns: l_orderkey:18(int!null) l_suppkey:20(int!null) l_extendedprice:23(float) l_discount:24(float) s_suppkey:34(int!null) s_nationkey:37(int!null) n_nationkey:41(int!null) n_name:42(string) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(string!null)
+      │    │    │    │    ├── fd: ()-->(46), (34)-->(37), (41)-->(42,43), (43)==(45), (45)==(43), (37)==(41), (41)==(37), (20)==(34), (34)==(20)
+      │    │    │    │    ├── scan lineitem
+      │    │    │    │    │    └── columns: l_orderkey:18(int!null) l_suppkey:20(int!null) l_extendedprice:23(float) l_discount:24(float)
+      │    │    │    │    ├── inner-join
+      │    │    │    │    │    ├── columns: s_suppkey:34(int!null) s_nationkey:37(int!null) n_nationkey:41(int!null) n_name:42(string) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(string!null)
+      │    │    │    │    │    ├── key: (34)
+      │    │    │    │    │    ├── fd: ()-->(46), (34)-->(37), (41)-->(42,43), (43)==(45), (45)==(43), (37)==(41), (41)==(37)
+      │    │    │    │    │    ├── scan supplier@supplier_auto_index_supplier_fkey_nation
+      │    │    │    │    │    │    ├── columns: s_suppkey:34(int!null) s_nationkey:37(int!null)
+      │    │    │    │    │    │    ├── key: (34)
+      │    │    │    │    │    │    └── fd: (34)-->(37)
+      │    │    │    │    │    ├── inner-join (lookup nation)
+      │    │    │    │    │    │    ├── columns: n_nationkey:41(int!null) n_name:42(string) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(string!null)
+      │    │    │    │    │    │    ├── key columns: [41] = [41]
+      │    │    │    │    │    │    ├── key: (41)
+      │    │    │    │    │    │    ├── fd: ()-->(46), (41)-->(42,43), (43)==(45), (45)==(43)
+      │    │    │    │    │    │    ├── inner-join (lookup nation@nation_auto_index_nation_fkey_region)
+      │    │    │    │    │    │    │    ├── columns: n_nationkey:41(int!null) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(string!null)
+      │    │    │    │    │    │    │    ├── key columns: [45] = [43]
+      │    │    │    │    │    │    │    ├── key: (41)
+      │    │    │    │    │    │    │    ├── fd: ()-->(46), (41)-->(43), (43)==(45), (45)==(43)
+      │    │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    │    ├── columns: r_regionkey:45(int!null) r_name:46(string!null)
+      │    │    │    │    │    │    │    │    ├── key: (45)
+      │    │    │    │    │    │    │    │    ├── fd: ()-->(46)
+      │    │    │    │    │    │    │    │    ├── scan region
+      │    │    │    │    │    │    │    │    │    ├── columns: r_regionkey:45(int!null) r_name:46(string)
+      │    │    │    │    │    │    │    │    │    ├── key: (45)
+      │    │    │    │    │    │    │    │    │    └── fd: (45)-->(46)
+      │    │    │    │    │    │    │    │    └── filters [type=bool, outer=(46), constraints=(/46: [/'ASIA' - /'ASIA']; tight), fd=()-->(46)]
+      │    │    │    │    │    │    │    │         └── r_name = 'ASIA' [type=bool, outer=(46), constraints=(/46: [/'ASIA' - /'ASIA']; tight)]
+      │    │    │    │    │    │    │    └── filters [type=bool, outer=(43,45), constraints=(/43: (/NULL - ]; /45: (/NULL - ]), fd=(43)==(45), (45)==(43)]
+      │    │    │    │    │    │    │         └── n_regionkey = r_regionkey [type=bool, outer=(43,45), constraints=(/43: (/NULL - ]; /45: (/NULL - ])]
+      │    │    │    │    │    │    └── true [type=bool]
+      │    │    │    │    │    └── filters [type=bool, outer=(37,41), constraints=(/37: (/NULL - ]; /41: (/NULL - ]), fd=(37)==(41), (41)==(37)]
+      │    │    │    │    │         └── s_nationkey = n_nationkey [type=bool, outer=(37,41), constraints=(/37: (/NULL - ]; /41: (/NULL - ])]
+      │    │    │    │    └── filters [type=bool, outer=(20,34), constraints=(/20: (/NULL - ]; /34: (/NULL - ]), fd=(20)==(34), (34)==(20)]
+      │    │    │    │         └── l_suppkey = s_suppkey [type=bool, outer=(20,34), constraints=(/20: (/NULL - ]; /34: (/NULL - ])]
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null)
+      │    │    │    │    ├── key: (9)
+      │    │    │    │    ├── fd: (9)-->(10,13)
+      │    │    │    │    ├── scan orders
+      │    │    │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date)
+      │    │    │    │    │    ├── key: (9)
+      │    │    │    │    │    └── fd: (9)-->(10,13)
+      │    │    │    │    └── filters [type=bool, outer=(13), constraints=(/13: [/'1994-01-01' - ])]
+      │    │    │    │         ├── o_orderdate >= '1994-01-01' [type=bool, outer=(13), constraints=(/13: [/'1994-01-01' - ]; tight)]
+      │    │    │    │         └── o_orderdate < '1995-01-01 00:00:00+00:00' [type=bool, outer=(13)]
+      │    │    │    └── filters [type=bool, outer=(9,18), constraints=(/9: (/NULL - ]; /18: (/NULL - ]), fd=(9)==(18), (18)==(9)]
+      │    │    │         └── l_orderkey = o_orderkey [type=bool, outer=(9,18), constraints=(/9: (/NULL - ]; /18: (/NULL - ])]
+      │    │    ├── scan customer@customer_auto_index_customer_fkey_nation
+      │    │    │    ├── columns: c_custkey:1(int!null) c_nationkey:4(int!null)
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(4)
+      │    │    └── filters [type=bool, outer=(1,4,10,37), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /10: (/NULL - ]; /37: (/NULL - ]), fd=(1)==(10), (10)==(1), (4)==(37), (37)==(4)]
+      │    │         ├── c_custkey = o_custkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
+      │    │         └── c_nationkey = s_nationkey [type=bool, outer=(4,37), constraints=(/4: (/NULL - ]; /37: (/NULL - ])]
       │    └── projections [outer=(23,24,42)]
       │         └── l_extendedprice * (1.0 - l_discount) [type=float, outer=(23,24)]
       └── aggregations [outer=(48)]
@@ -920,57 +966,60 @@ sort
       │    ├── columns: l_year:49(int) volume:50(float) nation.n_name:42(string) nation.n_name:46(string)
       │    ├── inner-join
       │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:8(int!null) l_suppkey:10(int!null) l_extendedprice:13(float) l_discount:14(float) l_shipdate:18(date!null) o_orderkey:24(int!null) o_custkey:25(int!null) c_custkey:33(int!null) c_nationkey:36(int!null) nation.n_nationkey:41(int!null) nation.n_name:42(string) nation.n_nationkey:45(int!null) nation.n_name:46(string)
-      │    │    ├── fd: (1)-->(4), (1)==(10), (10)==(1), (24)-->(25), (8)==(24), (24)==(8), (33)-->(36), (25)==(33), (33)==(25), (41)-->(42), (4)==(41), (41)==(4), (45)-->(46), (36)==(45), (45)==(36)
-      │    │    ├── scan nation
-      │    │    │    ├── columns: nation.n_nationkey:45(int!null) nation.n_name:46(string)
-      │    │    │    ├── key: (45)
-      │    │    │    └── fd: (45)-->(46)
+      │    │    ├── fd: (1)-->(4), (24)-->(25), (33)-->(36), (41)-->(42), (45)-->(46), (36)==(45), (45)==(36), (25)==(33), (33)==(25), (8)==(24), (24)==(8), (1)==(10), (10)==(1), (4)==(41), (41)==(4)
       │    │    ├── inner-join
-      │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:8(int!null) l_suppkey:10(int!null) l_extendedprice:13(float) l_discount:14(float) l_shipdate:18(date!null) o_orderkey:24(int!null) o_custkey:25(int!null) c_custkey:33(int!null) c_nationkey:36(int!null) nation.n_nationkey:41(int!null) nation.n_name:42(string)
-      │    │    │    ├── fd: (1)-->(4), (1)==(10), (10)==(1), (24)-->(25), (8)==(24), (24)==(8), (33)-->(36), (25)==(33), (33)==(25), (41)-->(42), (4)==(41), (41)==(4)
-      │    │    │    ├── scan nation
-      │    │    │    │    ├── columns: nation.n_nationkey:41(int!null) nation.n_name:42(string)
-      │    │    │    │    ├── key: (41)
-      │    │    │    │    └── fd: (41)-->(42)
+      │    │    │    ├── columns: l_orderkey:8(int!null) l_suppkey:10(int!null) l_extendedprice:13(float) l_discount:14(float) l_shipdate:18(date!null) o_orderkey:24(int!null) o_custkey:25(int!null) c_custkey:33(int!null) c_nationkey:36(int!null) nation.n_nationkey:41(int!null) nation.n_name:42(string) nation.n_nationkey:45(int!null) nation.n_name:46(string)
+      │    │    │    ├── fd: (24)-->(25), (33)-->(36), (41)-->(42), (45)-->(46), (36)==(45), (45)==(36), (25)==(33), (33)==(25), (8)==(24), (24)==(8)
       │    │    │    ├── inner-join
-      │    │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:8(int!null) l_suppkey:10(int!null) l_extendedprice:13(float) l_discount:14(float) l_shipdate:18(date!null) o_orderkey:24(int!null) o_custkey:25(int!null) c_custkey:33(int!null) c_nationkey:36(int!null)
-      │    │    │    │    ├── fd: (1)-->(4), (1)==(10), (10)==(1), (24)-->(25), (8)==(24), (24)==(8), (33)-->(36), (25)==(33), (33)==(25)
-      │    │    │    │    ├── scan customer@customer_auto_index_customer_fkey_nation
-      │    │    │    │    │    ├── columns: c_custkey:33(int!null) c_nationkey:36(int!null)
-      │    │    │    │    │    ├── key: (33)
-      │    │    │    │    │    └── fd: (33)-->(36)
+      │    │    │    │    ├── columns: o_orderkey:24(int!null) o_custkey:25(int!null) c_custkey:33(int!null) c_nationkey:36(int!null) nation.n_nationkey:41(int!null) nation.n_name:42(string) nation.n_nationkey:45(int!null) nation.n_name:46(string)
+      │    │    │    │    ├── key: (24,41)
+      │    │    │    │    ├── fd: (24)-->(25), (33)-->(36), (41)-->(42), (45)-->(46), (36)==(45), (45)==(36), (25)==(33), (33)==(25)
       │    │    │    │    ├── inner-join
-      │    │    │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:8(int!null) l_suppkey:10(int!null) l_extendedprice:13(float) l_discount:14(float) l_shipdate:18(date!null) o_orderkey:24(int!null) o_custkey:25(int!null)
-      │    │    │    │    │    ├── fd: (1)-->(4), (1)==(10), (10)==(1), (24)-->(25), (8)==(24), (24)==(8)
-      │    │    │    │    │    ├── scan orders@orders_auto_index_orders_fkey_customer
-      │    │    │    │    │    │    ├── columns: o_orderkey:24(int!null) o_custkey:25(int!null)
-      │    │    │    │    │    │    ├── key: (24)
-      │    │    │    │    │    │    └── fd: (24)-->(25)
+      │    │    │    │    │    ├── columns: c_custkey:33(int!null) c_nationkey:36(int!null) nation.n_nationkey:41(int!null) nation.n_name:42(string) nation.n_nationkey:45(int!null) nation.n_name:46(string)
+      │    │    │    │    │    ├── key: (33,41)
+      │    │    │    │    │    ├── fd: (33)-->(36), (41)-->(42), (45)-->(46), (36)==(45), (45)==(36)
       │    │    │    │    │    ├── inner-join
-      │    │    │    │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null) l_orderkey:8(int!null) l_suppkey:10(int!null) l_extendedprice:13(float) l_discount:14(float) l_shipdate:18(date!null)
-      │    │    │    │    │    │    ├── fd: (1)-->(4), (1)==(10), (10)==(1)
-      │    │    │    │    │    │    ├── scan supplier@supplier_auto_index_supplier_fkey_nation
-      │    │    │    │    │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null)
-      │    │    │    │    │    │    │    ├── key: (1)
-      │    │    │    │    │    │    │    └── fd: (1)-->(4)
-      │    │    │    │    │    │    ├── select
-      │    │    │    │    │    │    │    ├── columns: l_orderkey:8(int!null) l_suppkey:10(int!null) l_extendedprice:13(float) l_discount:14(float) l_shipdate:18(date!null)
-      │    │    │    │    │    │    │    ├── scan lineitem
-      │    │    │    │    │    │    │    │    └── columns: l_orderkey:8(int!null) l_suppkey:10(int!null) l_extendedprice:13(float) l_discount:14(float) l_shipdate:18(date)
-      │    │    │    │    │    │    │    └── filters [type=bool, outer=(18), constraints=(/18: [/'1995-01-01' - /'1996-12-31']; tight)]
-      │    │    │    │    │    │    │         ├── l_shipdate >= '1995-01-01' [type=bool, outer=(18), constraints=(/18: [/'1995-01-01' - ]; tight)]
-      │    │    │    │    │    │    │         └── l_shipdate <= '1996-12-31' [type=bool, outer=(18), constraints=(/18: (/NULL - /'1996-12-31']; tight)]
-      │    │    │    │    │    │    └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
-      │    │    │    │    │    │         └── s_suppkey = l_suppkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
-      │    │    │    │    │    └── filters [type=bool, outer=(8,24), constraints=(/8: (/NULL - ]; /24: (/NULL - ]), fd=(8)==(24), (24)==(8)]
-      │    │    │    │    │         └── o_orderkey = l_orderkey [type=bool, outer=(8,24), constraints=(/8: (/NULL - ]; /24: (/NULL - ])]
+      │    │    │    │    │    │    ├── columns: nation.n_nationkey:41(int!null) nation.n_name:42(string) nation.n_nationkey:45(int!null) nation.n_name:46(string)
+      │    │    │    │    │    │    ├── key: (41,45)
+      │    │    │    │    │    │    ├── fd: (41)-->(42), (45)-->(46)
+      │    │    │    │    │    │    ├── scan nation
+      │    │    │    │    │    │    │    ├── columns: nation.n_nationkey:41(int!null) nation.n_name:42(string)
+      │    │    │    │    │    │    │    ├── key: (41)
+      │    │    │    │    │    │    │    └── fd: (41)-->(42)
+      │    │    │    │    │    │    ├── scan nation
+      │    │    │    │    │    │    │    ├── columns: nation.n_nationkey:45(int!null) nation.n_name:46(string)
+      │    │    │    │    │    │    │    ├── key: (45)
+      │    │    │    │    │    │    │    └── fd: (45)-->(46)
+      │    │    │    │    │    │    └── filters [type=bool, outer=(42,46)]
+      │    │    │    │    │    │         └── ((nation.n_name = 'FRANCE') AND (nation.n_name = 'GERMANY')) OR ((nation.n_name = 'GERMANY') AND (nation.n_name = 'FRANACE')) [type=bool, outer=(42,46)]
+      │    │    │    │    │    ├── scan customer@customer_auto_index_customer_fkey_nation
+      │    │    │    │    │    │    ├── columns: c_custkey:33(int!null) c_nationkey:36(int!null)
+      │    │    │    │    │    │    ├── key: (33)
+      │    │    │    │    │    │    └── fd: (33)-->(36)
+      │    │    │    │    │    └── filters [type=bool, outer=(36,45), constraints=(/36: (/NULL - ]; /45: (/NULL - ]), fd=(36)==(45), (45)==(36)]
+      │    │    │    │    │         └── c_nationkey = nation.n_nationkey [type=bool, outer=(36,45), constraints=(/36: (/NULL - ]; /45: (/NULL - ])]
+      │    │    │    │    ├── scan orders@orders_auto_index_orders_fkey_customer
+      │    │    │    │    │    ├── columns: o_orderkey:24(int!null) o_custkey:25(int!null)
+      │    │    │    │    │    ├── key: (24)
+      │    │    │    │    │    └── fd: (24)-->(25)
       │    │    │    │    └── filters [type=bool, outer=(25,33), constraints=(/25: (/NULL - ]; /33: (/NULL - ]), fd=(25)==(33), (33)==(25)]
       │    │    │    │         └── c_custkey = o_custkey [type=bool, outer=(25,33), constraints=(/25: (/NULL - ]; /33: (/NULL - ])]
-      │    │    │    └── filters [type=bool, outer=(4,41), constraints=(/4: (/NULL - ]; /41: (/NULL - ]), fd=(4)==(41), (41)==(4)]
-      │    │    │         └── s_nationkey = nation.n_nationkey [type=bool, outer=(4,41), constraints=(/4: (/NULL - ]; /41: (/NULL - ])]
-      │    │    └── filters [type=bool, outer=(36,42,45,46), constraints=(/36: (/NULL - ]; /45: (/NULL - ]), fd=(36)==(45), (45)==(36)]
-      │    │         ├── c_nationkey = nation.n_nationkey [type=bool, outer=(36,45), constraints=(/36: (/NULL - ]; /45: (/NULL - ])]
-      │    │         └── ((nation.n_name = 'FRANCE') AND (nation.n_name = 'GERMANY')) OR ((nation.n_name = 'GERMANY') AND (nation.n_name = 'FRANACE')) [type=bool, outer=(42,46)]
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: l_orderkey:8(int!null) l_suppkey:10(int!null) l_extendedprice:13(float) l_discount:14(float) l_shipdate:18(date!null)
+      │    │    │    │    ├── scan lineitem
+      │    │    │    │    │    └── columns: l_orderkey:8(int!null) l_suppkey:10(int!null) l_extendedprice:13(float) l_discount:14(float) l_shipdate:18(date)
+      │    │    │    │    └── filters [type=bool, outer=(18), constraints=(/18: [/'1995-01-01' - /'1996-12-31']; tight)]
+      │    │    │    │         ├── l_shipdate >= '1995-01-01' [type=bool, outer=(18), constraints=(/18: [/'1995-01-01' - ]; tight)]
+      │    │    │    │         └── l_shipdate <= '1996-12-31' [type=bool, outer=(18), constraints=(/18: (/NULL - /'1996-12-31']; tight)]
+      │    │    │    └── filters [type=bool, outer=(8,24), constraints=(/8: (/NULL - ]; /24: (/NULL - ]), fd=(8)==(24), (24)==(8)]
+      │    │    │         └── o_orderkey = l_orderkey [type=bool, outer=(8,24), constraints=(/8: (/NULL - ]; /24: (/NULL - ])]
+      │    │    ├── scan supplier@supplier_auto_index_supplier_fkey_nation
+      │    │    │    ├── columns: s_suppkey:1(int!null) s_nationkey:4(int!null)
+      │    │    │    ├── key: (1)
+      │    │    │    └── fd: (1)-->(4)
+      │    │    └── filters [type=bool, outer=(1,4,10,41), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /10: (/NULL - ]; /41: (/NULL - ]), fd=(1)==(10), (10)==(1), (4)==(41), (41)==(4)]
+      │    │         ├── s_suppkey = l_suppkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
+      │    │         └── s_nationkey = nation.n_nationkey [type=bool, outer=(4,41), constraints=(/4: (/NULL - ]; /41: (/NULL - ])]
       │    └── projections [outer=(13,14,18,42,46)]
       │         ├── extract('year', l_shipdate) [type=int, outer=(18)]
       │         └── l_extendedprice * (1.0 - l_discount) [type=float, outer=(13,14)]
@@ -1053,66 +1102,86 @@ sort
       │    │    ├── columns: column63:63(float) o_year:61(int) volume:62(float)
       │    │    ├── project
       │    │    │    ├── columns: o_year:61(int) volume:62(float) nation.n_name:55(string)
-      │    │    │    ├── inner-join (lookup region)
+      │    │    │    ├── inner-join (lookup part)
       │    │    │    │    ├── columns: p_partkey:1(int!null) p_type:5(string!null) s_suppkey:10(int!null) s_nationkey:13(int!null) l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_extendedprice:22(float) l_discount:23(float) o_orderkey:33(int!null) o_custkey:34(int!null) o_orderdate:37(date!null) c_custkey:42(int!null) c_nationkey:45(int!null) nation.n_nationkey:50(int!null) nation.n_regionkey:52(int!null) nation.n_nationkey:54(int!null) nation.n_name:55(string) r_regionkey:58(int!null) r_name:59(string!null)
-      │    │    │    │    ├── key columns: [52] = [58]
-      │    │    │    │    ├── fd: ()-->(5,59), (10)-->(13), (1)==(18), (18)==(1), (10)==(19), (19)==(10), (33)-->(34,37), (17)==(33), (33)==(17), (42)-->(45), (34)==(42), (42)==(34), (50)-->(52), (45)==(50), (50)==(45), (54)-->(55), (13)==(54), (54)==(13), (52)==(58), (58)==(52)
-      │    │    │    │    ├── inner-join (lookup nation)
-      │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_type:5(string!null) s_suppkey:10(int!null) s_nationkey:13(int!null) l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_extendedprice:22(float) l_discount:23(float) o_orderkey:33(int!null) o_custkey:34(int!null) o_orderdate:37(date!null) c_custkey:42(int!null) c_nationkey:45(int!null) nation.n_nationkey:50(int!null) nation.n_regionkey:52(int!null) nation.n_nationkey:54(int!null) nation.n_name:55(string)
-      │    │    │    │    │    ├── key columns: [13] = [54]
-      │    │    │    │    │    ├── fd: ()-->(5), (10)-->(13), (1)==(18), (18)==(1), (10)==(19), (19)==(10), (33)-->(34,37), (17)==(33), (33)==(17), (42)-->(45), (34)==(42), (42)==(34), (50)-->(52), (45)==(50), (50)==(45), (54)-->(55), (13)==(54), (54)==(13)
-      │    │    │    │    │    ├── inner-join (lookup nation)
-      │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_type:5(string!null) s_suppkey:10(int!null) s_nationkey:13(int!null) l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_extendedprice:22(float) l_discount:23(float) o_orderkey:33(int!null) o_custkey:34(int!null) o_orderdate:37(date!null) c_custkey:42(int!null) c_nationkey:45(int!null) nation.n_nationkey:50(int!null) nation.n_regionkey:52(int!null)
-      │    │    │    │    │    │    ├── key columns: [45] = [50]
-      │    │    │    │    │    │    ├── fd: ()-->(5), (10)-->(13), (1)==(18), (18)==(1), (10)==(19), (19)==(10), (33)-->(34,37), (17)==(33), (33)==(17), (42)-->(45), (34)==(42), (42)==(34), (50)-->(52), (45)==(50), (50)==(45)
-      │    │    │    │    │    │    ├── inner-join (lookup customer)
-      │    │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_type:5(string!null) s_suppkey:10(int!null) s_nationkey:13(int!null) l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_extendedprice:22(float) l_discount:23(float) o_orderkey:33(int!null) o_custkey:34(int!null) o_orderdate:37(date!null) c_custkey:42(int!null) c_nationkey:45(int!null)
-      │    │    │    │    │    │    │    ├── key columns: [34] = [42]
-      │    │    │    │    │    │    │    ├── fd: ()-->(5), (10)-->(13), (1)==(18), (18)==(1), (10)==(19), (19)==(10), (33)-->(34,37), (17)==(33), (33)==(17), (42)-->(45), (34)==(42), (42)==(34)
-      │    │    │    │    │    │    │    ├── inner-join (lookup orders)
-      │    │    │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_type:5(string!null) s_suppkey:10(int!null) s_nationkey:13(int!null) l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_extendedprice:22(float) l_discount:23(float) o_orderkey:33(int!null) o_custkey:34(int!null) o_orderdate:37(date!null)
-      │    │    │    │    │    │    │    │    ├── key columns: [17] = [33]
-      │    │    │    │    │    │    │    │    ├── fd: ()-->(5), (10)-->(13), (1)==(18), (18)==(1), (10)==(19), (19)==(10), (33)-->(34,37), (17)==(33), (33)==(17)
+      │    │    │    │    ├── key columns: [18] = [1]
+      │    │    │    │    ├── fd: ()-->(5,59), (10)-->(13), (33)-->(34,37), (42)-->(45), (50)-->(52), (54)-->(55), (52)==(58), (58)==(52), (45)==(50), (50)==(45), (34)==(42), (42)==(34), (17)==(33), (33)==(17), (10)==(19), (19)==(10), (13)==(54), (54)==(13), (1)==(18), (18)==(1)
+      │    │    │    │    ├── inner-join
+      │    │    │    │    │    ├── columns: s_suppkey:10(int!null) s_nationkey:13(int!null) l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_extendedprice:22(float) l_discount:23(float) o_orderkey:33(int!null) o_custkey:34(int!null) o_orderdate:37(date!null) c_custkey:42(int!null) c_nationkey:45(int!null) nation.n_nationkey:50(int!null) nation.n_regionkey:52(int!null) nation.n_nationkey:54(int!null) nation.n_name:55(string) r_regionkey:58(int!null) r_name:59(string!null)
+      │    │    │    │    │    ├── fd: ()-->(59), (10)-->(13), (33)-->(34,37), (42)-->(45), (50)-->(52), (54)-->(55), (52)==(58), (58)==(52), (45)==(50), (50)==(45), (34)==(42), (42)==(34), (17)==(33), (33)==(17), (10)==(19), (19)==(10), (13)==(54), (54)==(13)
+      │    │    │    │    │    ├── inner-join
+      │    │    │    │    │    │    ├── columns: l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_extendedprice:22(float) l_discount:23(float) o_orderkey:33(int!null) o_custkey:34(int!null) o_orderdate:37(date!null) c_custkey:42(int!null) c_nationkey:45(int!null) nation.n_nationkey:50(int!null) nation.n_regionkey:52(int!null) nation.n_nationkey:54(int!null) nation.n_name:55(string) r_regionkey:58(int!null) r_name:59(string!null)
+      │    │    │    │    │    │    ├── fd: ()-->(59), (33)-->(34,37), (42)-->(45), (50)-->(52), (54)-->(55), (52)==(58), (58)==(52), (45)==(50), (50)==(45), (34)==(42), (42)==(34), (17)==(33), (33)==(17)
+      │    │    │    │    │    │    ├── inner-join
+      │    │    │    │    │    │    │    ├── columns: o_orderkey:33(int!null) o_custkey:34(int!null) o_orderdate:37(date!null) c_custkey:42(int!null) c_nationkey:45(int!null) nation.n_nationkey:50(int!null) nation.n_regionkey:52(int!null) nation.n_nationkey:54(int!null) nation.n_name:55(string) r_regionkey:58(int!null) r_name:59(string!null)
+      │    │    │    │    │    │    │    ├── key: (33,54)
+      │    │    │    │    │    │    │    ├── fd: ()-->(59), (33)-->(34,37), (42)-->(45), (50)-->(52), (54)-->(55), (52)==(58), (58)==(52), (45)==(50), (50)==(45), (34)==(42), (42)==(34)
+      │    │    │    │    │    │    │    ├── inner-join
+      │    │    │    │    │    │    │    │    ├── columns: c_custkey:42(int!null) c_nationkey:45(int!null) nation.n_nationkey:50(int!null) nation.n_regionkey:52(int!null) nation.n_nationkey:54(int!null) nation.n_name:55(string) r_regionkey:58(int!null) r_name:59(string!null)
+      │    │    │    │    │    │    │    │    ├── key: (42,54)
+      │    │    │    │    │    │    │    │    ├── fd: ()-->(59), (42)-->(45), (50)-->(52), (54)-->(55), (52)==(58), (58)==(52), (45)==(50), (50)==(45)
       │    │    │    │    │    │    │    │    ├── inner-join
-      │    │    │    │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_type:5(string!null) s_suppkey:10(int!null) s_nationkey:13(int!null) l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_extendedprice:22(float) l_discount:23(float)
-      │    │    │    │    │    │    │    │    │    ├── fd: ()-->(5), (10)-->(13), (1)==(18), (18)==(1), (10)==(19), (19)==(10)
+      │    │    │    │    │    │    │    │    │    ├── columns: nation.n_nationkey:50(int!null) nation.n_regionkey:52(int!null) nation.n_nationkey:54(int!null) nation.n_name:55(string) r_regionkey:58(int!null) r_name:59(string!null)
+      │    │    │    │    │    │    │    │    │    ├── key: (50,54)
+      │    │    │    │    │    │    │    │    │    ├── fd: ()-->(59), (50)-->(52), (54)-->(55), (52)==(58), (58)==(52)
       │    │    │    │    │    │    │    │    │    ├── inner-join
-      │    │    │    │    │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_type:5(string!null) s_suppkey:10(int!null) s_nationkey:13(int!null)
-      │    │    │    │    │    │    │    │    │    │    ├── key: (1,10)
-      │    │    │    │    │    │    │    │    │    │    ├── fd: ()-->(5), (10)-->(13)
-      │    │    │    │    │    │    │    │    │    │    ├── scan supplier@supplier_auto_index_supplier_fkey_nation
-      │    │    │    │    │    │    │    │    │    │    │    ├── columns: s_suppkey:10(int!null) s_nationkey:13(int!null)
-      │    │    │    │    │    │    │    │    │    │    │    ├── key: (10)
-      │    │    │    │    │    │    │    │    │    │    │    └── fd: (10)-->(13)
+      │    │    │    │    │    │    │    │    │    │    ├── columns: nation.n_nationkey:54(int!null) nation.n_name:55(string) r_regionkey:58(int!null) r_name:59(string!null)
+      │    │    │    │    │    │    │    │    │    │    ├── key: (54,58)
+      │    │    │    │    │    │    │    │    │    │    ├── fd: ()-->(59), (54)-->(55)
+      │    │    │    │    │    │    │    │    │    │    ├── scan nation
+      │    │    │    │    │    │    │    │    │    │    │    ├── columns: nation.n_nationkey:54(int!null) nation.n_name:55(string)
+      │    │    │    │    │    │    │    │    │    │    │    ├── key: (54)
+      │    │    │    │    │    │    │    │    │    │    │    └── fd: (54)-->(55)
       │    │    │    │    │    │    │    │    │    │    ├── select
-      │    │    │    │    │    │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_type:5(string!null)
-      │    │    │    │    │    │    │    │    │    │    │    ├── key: (1)
-      │    │    │    │    │    │    │    │    │    │    │    ├── fd: ()-->(5)
-      │    │    │    │    │    │    │    │    │    │    │    ├── scan part
-      │    │    │    │    │    │    │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_type:5(string)
-      │    │    │    │    │    │    │    │    │    │    │    │    ├── key: (1)
-      │    │    │    │    │    │    │    │    │    │    │    │    └── fd: (1)-->(5)
-      │    │    │    │    │    │    │    │    │    │    │    └── filters [type=bool, outer=(5), constraints=(/5: [/'ECONOMY ANODIZED STEEL' - /'ECONOMY ANODIZED STEEL']; tight), fd=()-->(5)]
-      │    │    │    │    │    │    │    │    │    │    │         └── p_type = 'ECONOMY ANODIZED STEEL' [type=bool, outer=(5), constraints=(/5: [/'ECONOMY ANODIZED STEEL' - /'ECONOMY ANODIZED STEEL']; tight)]
+      │    │    │    │    │    │    │    │    │    │    │    ├── columns: r_regionkey:58(int!null) r_name:59(string!null)
+      │    │    │    │    │    │    │    │    │    │    │    ├── key: (58)
+      │    │    │    │    │    │    │    │    │    │    │    ├── fd: ()-->(59)
+      │    │    │    │    │    │    │    │    │    │    │    ├── scan region
+      │    │    │    │    │    │    │    │    │    │    │    │    ├── columns: r_regionkey:58(int!null) r_name:59(string)
+      │    │    │    │    │    │    │    │    │    │    │    │    ├── key: (58)
+      │    │    │    │    │    │    │    │    │    │    │    │    └── fd: (58)-->(59)
+      │    │    │    │    │    │    │    │    │    │    │    └── filters [type=bool, outer=(59), constraints=(/59: [/'AMERICA' - /'AMERICA']; tight), fd=()-->(59)]
+      │    │    │    │    │    │    │    │    │    │    │         └── r_name = 'AMERICA' [type=bool, outer=(59), constraints=(/59: [/'AMERICA' - /'AMERICA']; tight)]
       │    │    │    │    │    │    │    │    │    │    └── true [type=bool]
-      │    │    │    │    │    │    │    │    │    ├── scan lineitem
-      │    │    │    │    │    │    │    │    │    │    └── columns: l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_extendedprice:22(float) l_discount:23(float)
-      │    │    │    │    │    │    │    │    │    └── filters [type=bool, outer=(1,10,18,19), constraints=(/1: (/NULL - ]; /10: (/NULL - ]; /18: (/NULL - ]; /19: (/NULL - ]), fd=(1)==(18), (18)==(1), (10)==(19), (19)==(10)]
-      │    │    │    │    │    │    │    │    │         ├── p_partkey = l_partkey [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
-      │    │    │    │    │    │    │    │    │         └── s_suppkey = l_suppkey [type=bool, outer=(10,19), constraints=(/10: (/NULL - ]; /19: (/NULL - ])]
-      │    │    │    │    │    │    │    │    └── filters [type=bool, outer=(17,33,37), constraints=(/17: (/NULL - ]; /33: (/NULL - ]; /37: [/'1995-01-01' - /'1996-12-31']), fd=(17)==(33), (33)==(17)]
-      │    │    │    │    │    │    │    │         ├── l_orderkey = o_orderkey [type=bool, outer=(17,33), constraints=(/17: (/NULL - ]; /33: (/NULL - ])]
+      │    │    │    │    │    │    │    │    │    ├── scan nation@nation_auto_index_nation_fkey_region
+      │    │    │    │    │    │    │    │    │    │    ├── columns: nation.n_nationkey:50(int!null) nation.n_regionkey:52(int!null)
+      │    │    │    │    │    │    │    │    │    │    ├── key: (50)
+      │    │    │    │    │    │    │    │    │    │    └── fd: (50)-->(52)
+      │    │    │    │    │    │    │    │    │    └── filters [type=bool, outer=(52,58), constraints=(/52: (/NULL - ]; /58: (/NULL - ]), fd=(52)==(58), (58)==(52)]
+      │    │    │    │    │    │    │    │    │         └── nation.n_regionkey = r_regionkey [type=bool, outer=(52,58), constraints=(/52: (/NULL - ]; /58: (/NULL - ])]
+      │    │    │    │    │    │    │    │    ├── scan customer@customer_auto_index_customer_fkey_nation
+      │    │    │    │    │    │    │    │    │    ├── columns: c_custkey:42(int!null) c_nationkey:45(int!null)
+      │    │    │    │    │    │    │    │    │    ├── key: (42)
+      │    │    │    │    │    │    │    │    │    └── fd: (42)-->(45)
+      │    │    │    │    │    │    │    │    └── filters [type=bool, outer=(45,50), constraints=(/45: (/NULL - ]; /50: (/NULL - ]), fd=(45)==(50), (50)==(45)]
+      │    │    │    │    │    │    │    │         └── c_nationkey = nation.n_nationkey [type=bool, outer=(45,50), constraints=(/45: (/NULL - ]; /50: (/NULL - ])]
+      │    │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    │    ├── columns: o_orderkey:33(int!null) o_custkey:34(int!null) o_orderdate:37(date!null)
+      │    │    │    │    │    │    │    │    ├── key: (33)
+      │    │    │    │    │    │    │    │    ├── fd: (33)-->(34,37)
+      │    │    │    │    │    │    │    │    ├── scan orders
+      │    │    │    │    │    │    │    │    │    ├── columns: o_orderkey:33(int!null) o_custkey:34(int!null) o_orderdate:37(date)
+      │    │    │    │    │    │    │    │    │    ├── key: (33)
+      │    │    │    │    │    │    │    │    │    └── fd: (33)-->(34,37)
+      │    │    │    │    │    │    │    │    └── filters [type=bool, outer=(37), constraints=(/37: [/'1995-01-01' - /'1996-12-31']; tight)]
       │    │    │    │    │    │    │    │         ├── o_orderdate >= '1995-01-01' [type=bool, outer=(37), constraints=(/37: [/'1995-01-01' - ]; tight)]
       │    │    │    │    │    │    │    │         └── o_orderdate <= '1996-12-31' [type=bool, outer=(37), constraints=(/37: (/NULL - /'1996-12-31']; tight)]
       │    │    │    │    │    │    │    └── filters [type=bool, outer=(34,42), constraints=(/34: (/NULL - ]; /42: (/NULL - ]), fd=(34)==(42), (42)==(34)]
       │    │    │    │    │    │    │         └── o_custkey = c_custkey [type=bool, outer=(34,42), constraints=(/34: (/NULL - ]; /42: (/NULL - ])]
-      │    │    │    │    │    │    └── filters [type=bool, outer=(45,50), constraints=(/45: (/NULL - ]; /50: (/NULL - ]), fd=(45)==(50), (50)==(45)]
-      │    │    │    │    │    │         └── c_nationkey = nation.n_nationkey [type=bool, outer=(45,50), constraints=(/45: (/NULL - ]; /50: (/NULL - ])]
-      │    │    │    │    │    └── filters [type=bool, outer=(13,54), constraints=(/13: (/NULL - ]; /54: (/NULL - ]), fd=(13)==(54), (54)==(13)]
+      │    │    │    │    │    │    ├── scan lineitem
+      │    │    │    │    │    │    │    └── columns: l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_extendedprice:22(float) l_discount:23(float)
+      │    │    │    │    │    │    └── filters [type=bool, outer=(17,33), constraints=(/17: (/NULL - ]; /33: (/NULL - ]), fd=(17)==(33), (33)==(17)]
+      │    │    │    │    │    │         └── l_orderkey = o_orderkey [type=bool, outer=(17,33), constraints=(/17: (/NULL - ]; /33: (/NULL - ])]
+      │    │    │    │    │    ├── scan supplier@supplier_auto_index_supplier_fkey_nation
+      │    │    │    │    │    │    ├── columns: s_suppkey:10(int!null) s_nationkey:13(int!null)
+      │    │    │    │    │    │    ├── key: (10)
+      │    │    │    │    │    │    └── fd: (10)-->(13)
+      │    │    │    │    │    └── filters [type=bool, outer=(10,13,19,54), constraints=(/10: (/NULL - ]; /13: (/NULL - ]; /19: (/NULL - ]; /54: (/NULL - ]), fd=(10)==(19), (19)==(10), (13)==(54), (54)==(13)]
+      │    │    │    │    │         ├── s_suppkey = l_suppkey [type=bool, outer=(10,19), constraints=(/10: (/NULL - ]; /19: (/NULL - ])]
       │    │    │    │    │         └── s_nationkey = nation.n_nationkey [type=bool, outer=(13,54), constraints=(/13: (/NULL - ]; /54: (/NULL - ])]
-      │    │    │    │    └── filters [type=bool, outer=(52,58,59), constraints=(/52: (/NULL - ]; /58: (/NULL - ]; /59: [/'AMERICA' - /'AMERICA']), fd=()-->(59), (52)==(58), (58)==(52)]
-      │    │    │    │         ├── nation.n_regionkey = r_regionkey [type=bool, outer=(52,58), constraints=(/52: (/NULL - ]; /58: (/NULL - ])]
-      │    │    │    │         └── r_name = 'AMERICA' [type=bool, outer=(59), constraints=(/59: [/'AMERICA' - /'AMERICA']; tight)]
+      │    │    │    │    └── filters [type=bool, outer=(1,5,18), constraints=(/1: (/NULL - ]; /5: [/'ECONOMY ANODIZED STEEL' - /'ECONOMY ANODIZED STEEL']; /18: (/NULL - ]), fd=()-->(5), (1)==(18), (18)==(1)]
+      │    │    │    │         ├── p_partkey = l_partkey [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
+      │    │    │    │         └── p_type = 'ECONOMY ANODIZED STEEL' [type=bool, outer=(5), constraints=(/5: [/'ECONOMY ANODIZED STEEL' - /'ECONOMY ANODIZED STEEL']; tight)]
       │    │    │    └── projections [outer=(22,23,37,55)]
       │    │    │         ├── extract('year', o_orderdate) [type=int, outer=(37)]
       │    │    │         └── l_extendedprice * (1.0 - l_discount) [type=float, outer=(22,23)]
@@ -1191,55 +1260,54 @@ sort
       ├── fd: (48,51)-->(53)
       ├── project
       │    ├── columns: o_year:51(int) amount:52(float) n_name:48(string)
-      │    ├── inner-join (lookup nation)
+      │    ├── inner-join (lookup part)
       │    │    ├── columns: p_partkey:1(int!null) p_name:2(string) s_suppkey:10(int!null) s_nationkey:13(int!null) l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_quantity:21(float) l_extendedprice:22(float) l_discount:23(float) ps_partkey:33(int!null) ps_suppkey:34(int!null) ps_supplycost:36(float) o_orderkey:38(int!null) o_orderdate:42(date) n_nationkey:47(int!null) n_name:48(string)
-      │    │    ├── key columns: [13] = [47]
-      │    │    ├── fd: (1)-->(2), (10)-->(13), (10)==(19,34), (19)==(10,34), (1)==(18,33), (18)==(1,33), (33,34)-->(36), (34)==(10,19), (33)==(1,18), (38)-->(42), (17)==(38), (38)==(17), (47)-->(48), (13)==(47), (47)==(13)
-      │    │    ├── inner-join (lookup orders)
-      │    │    │    ├── columns: p_partkey:1(int!null) p_name:2(string) s_suppkey:10(int!null) s_nationkey:13(int!null) l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_quantity:21(float) l_extendedprice:22(float) l_discount:23(float) ps_partkey:33(int!null) ps_suppkey:34(int!null) ps_supplycost:36(float) o_orderkey:38(int!null) o_orderdate:42(date)
-      │    │    │    ├── key columns: [17] = [38]
-      │    │    │    ├── fd: (1)-->(2), (10)-->(13), (10)==(19,34), (19)==(10,34), (1)==(18,33), (18)==(1,33), (33,34)-->(36), (34)==(10,19), (33)==(1,18), (38)-->(42), (17)==(38), (38)==(17)
+      │    │    ├── key columns: [18] = [1]
+      │    │    ├── fd: (1)-->(2), (10)-->(13), (33,34)-->(36), (38)-->(42), (47)-->(48), (19)==(10,34), (34)==(10,19), (18)==(1,33), (33)==(1,18), (17)==(38), (38)==(17), (10)==(19,34), (13)==(47), (47)==(13), (1)==(18,33)
+      │    │    ├── inner-join
+      │    │    │    ├── columns: s_suppkey:10(int!null) s_nationkey:13(int!null) l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_quantity:21(float) l_extendedprice:22(float) l_discount:23(float) ps_partkey:33(int!null) ps_suppkey:34(int!null) ps_supplycost:36(float) o_orderkey:38(int!null) o_orderdate:42(date) n_nationkey:47(int!null) n_name:48(string)
+      │    │    │    ├── fd: (10)-->(13), (33,34)-->(36), (38)-->(42), (47)-->(48), (19)==(10,34), (34)==(10,19), (18)==(33), (33)==(18), (17)==(38), (38)==(17), (10)==(19,34), (13)==(47), (47)==(13)
       │    │    │    ├── inner-join
-      │    │    │    │    ├── columns: p_partkey:1(int!null) p_name:2(string) s_suppkey:10(int!null) s_nationkey:13(int!null) l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_quantity:21(float) l_extendedprice:22(float) l_discount:23(float) ps_partkey:33(int!null) ps_suppkey:34(int!null) ps_supplycost:36(float)
-      │    │    │    │    ├── fd: (1)-->(2), (10)-->(13), (10)==(19,34), (19)==(10,34), (1)==(18,33), (18)==(1,33), (33,34)-->(36), (34)==(10,19), (33)==(1,18)
-      │    │    │    │    ├── scan partsupp
-      │    │    │    │    │    ├── columns: ps_partkey:33(int!null) ps_suppkey:34(int!null) ps_supplycost:36(float)
-      │    │    │    │    │    ├── key: (33,34)
-      │    │    │    │    │    └── fd: (33,34)-->(36)
+      │    │    │    │    ├── columns: l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_quantity:21(float) l_extendedprice:22(float) l_discount:23(float) ps_partkey:33(int!null) ps_suppkey:34(int!null) ps_supplycost:36(float) o_orderkey:38(int!null) o_orderdate:42(date) n_nationkey:47(int!null) n_name:48(string)
+      │    │    │    │    ├── fd: (33,34)-->(36), (38)-->(42), (47)-->(48), (19)==(34), (34)==(19), (18)==(33), (33)==(18), (17)==(38), (38)==(17)
       │    │    │    │    ├── inner-join
-      │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_name:2(string) s_suppkey:10(int!null) s_nationkey:13(int!null) l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_quantity:21(float) l_extendedprice:22(float) l_discount:23(float)
-      │    │    │    │    │    ├── fd: (1)-->(2), (10)-->(13), (10)==(19), (19)==(10), (1)==(18), (18)==(1)
+      │    │    │    │    │    ├── columns: ps_partkey:33(int!null) ps_suppkey:34(int!null) ps_supplycost:36(float) o_orderkey:38(int!null) o_orderdate:42(date) n_nationkey:47(int!null) n_name:48(string)
+      │    │    │    │    │    ├── key: (33,34,38,47)
+      │    │    │    │    │    ├── fd: (33,34)-->(36), (38)-->(42), (47)-->(48)
       │    │    │    │    │    ├── inner-join
-      │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_name:2(string) s_suppkey:10(int!null) s_nationkey:13(int!null)
-      │    │    │    │    │    │    ├── key: (1,10)
-      │    │    │    │    │    │    ├── fd: (1)-->(2), (10)-->(13)
-      │    │    │    │    │    │    ├── scan supplier@supplier_auto_index_supplier_fkey_nation
-      │    │    │    │    │    │    │    ├── columns: s_suppkey:10(int!null) s_nationkey:13(int!null)
-      │    │    │    │    │    │    │    ├── key: (10)
-      │    │    │    │    │    │    │    └── fd: (10)-->(13)
-      │    │    │    │    │    │    ├── select
-      │    │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_name:2(string)
-      │    │    │    │    │    │    │    ├── key: (1)
-      │    │    │    │    │    │    │    ├── fd: (1)-->(2)
-      │    │    │    │    │    │    │    ├── scan part
-      │    │    │    │    │    │    │    │    ├── columns: p_partkey:1(int!null) p_name:2(string)
-      │    │    │    │    │    │    │    │    ├── key: (1)
-      │    │    │    │    │    │    │    │    └── fd: (1)-->(2)
-      │    │    │    │    │    │    │    └── filters [type=bool, outer=(2)]
-      │    │    │    │    │    │    │         └── p_name LIKE '%green%' [type=bool, outer=(2)]
+      │    │    │    │    │    │    ├── columns: o_orderkey:38(int!null) o_orderdate:42(date) n_nationkey:47(int!null) n_name:48(string)
+      │    │    │    │    │    │    ├── key: (38,47)
+      │    │    │    │    │    │    ├── fd: (38)-->(42), (47)-->(48)
+      │    │    │    │    │    │    ├── scan orders
+      │    │    │    │    │    │    │    ├── columns: o_orderkey:38(int!null) o_orderdate:42(date)
+      │    │    │    │    │    │    │    ├── key: (38)
+      │    │    │    │    │    │    │    └── fd: (38)-->(42)
+      │    │    │    │    │    │    ├── scan nation
+      │    │    │    │    │    │    │    ├── columns: n_nationkey:47(int!null) n_name:48(string)
+      │    │    │    │    │    │    │    ├── key: (47)
+      │    │    │    │    │    │    │    └── fd: (47)-->(48)
       │    │    │    │    │    │    └── true [type=bool]
-      │    │    │    │    │    ├── scan lineitem
-      │    │    │    │    │    │    └── columns: l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_quantity:21(float) l_extendedprice:22(float) l_discount:23(float)
-      │    │    │    │    │    └── filters [type=bool, outer=(1,10,18,19), constraints=(/1: (/NULL - ]; /10: (/NULL - ]; /18: (/NULL - ]; /19: (/NULL - ]), fd=(10)==(19), (19)==(10), (1)==(18), (18)==(1)]
-      │    │    │    │    │         ├── s_suppkey = l_suppkey [type=bool, outer=(10,19), constraints=(/10: (/NULL - ]; /19: (/NULL - ])]
-      │    │    │    │    │         └── p_partkey = l_partkey [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
-      │    │    │    │    └── filters [type=bool, outer=(18,19,33,34), constraints=(/18: (/NULL - ]; /19: (/NULL - ]; /33: (/NULL - ]; /34: (/NULL - ]), fd=(19)==(34), (34)==(19), (18)==(33), (33)==(18)]
+      │    │    │    │    │    ├── scan partsupp
+      │    │    │    │    │    │    ├── columns: ps_partkey:33(int!null) ps_suppkey:34(int!null) ps_supplycost:36(float)
+      │    │    │    │    │    │    ├── key: (33,34)
+      │    │    │    │    │    │    └── fd: (33,34)-->(36)
+      │    │    │    │    │    └── true [type=bool]
+      │    │    │    │    ├── scan lineitem
+      │    │    │    │    │    └── columns: l_orderkey:17(int!null) l_partkey:18(int!null) l_suppkey:19(int!null) l_quantity:21(float) l_extendedprice:22(float) l_discount:23(float)
+      │    │    │    │    └── filters [type=bool, outer=(17-19,33,34,38), constraints=(/17: (/NULL - ]; /18: (/NULL - ]; /19: (/NULL - ]; /33: (/NULL - ]; /34: (/NULL - ]; /38: (/NULL - ]), fd=(19)==(34), (34)==(19), (18)==(33), (33)==(18), (17)==(38), (38)==(17)]
       │    │    │    │         ├── ps_suppkey = l_suppkey [type=bool, outer=(19,34), constraints=(/19: (/NULL - ]; /34: (/NULL - ])]
-      │    │    │    │         └── ps_partkey = l_partkey [type=bool, outer=(18,33), constraints=(/18: (/NULL - ]; /33: (/NULL - ])]
-      │    │    │    └── filters [type=bool, outer=(17,38), constraints=(/17: (/NULL - ]; /38: (/NULL - ]), fd=(17)==(38), (38)==(17)]
-      │    │    │         └── o_orderkey = l_orderkey [type=bool, outer=(17,38), constraints=(/17: (/NULL - ]; /38: (/NULL - ])]
-      │    │    └── filters [type=bool, outer=(13,47), constraints=(/13: (/NULL - ]; /47: (/NULL - ]), fd=(13)==(47), (47)==(13)]
-      │    │         └── s_nationkey = n_nationkey [type=bool, outer=(13,47), constraints=(/13: (/NULL - ]; /47: (/NULL - ])]
+      │    │    │    │         ├── ps_partkey = l_partkey [type=bool, outer=(18,33), constraints=(/18: (/NULL - ]; /33: (/NULL - ])]
+      │    │    │    │         └── o_orderkey = l_orderkey [type=bool, outer=(17,38), constraints=(/17: (/NULL - ]; /38: (/NULL - ])]
+      │    │    │    ├── scan supplier@supplier_auto_index_supplier_fkey_nation
+      │    │    │    │    ├── columns: s_suppkey:10(int!null) s_nationkey:13(int!null)
+      │    │    │    │    ├── key: (10)
+      │    │    │    │    └── fd: (10)-->(13)
+      │    │    │    └── filters [type=bool, outer=(10,13,19,47), constraints=(/10: (/NULL - ]; /13: (/NULL - ]; /19: (/NULL - ]; /47: (/NULL - ]), fd=(10)==(19), (19)==(10), (13)==(47), (47)==(13)]
+      │    │    │         ├── s_suppkey = l_suppkey [type=bool, outer=(10,19), constraints=(/10: (/NULL - ]; /19: (/NULL - ])]
+      │    │    │         └── s_nationkey = n_nationkey [type=bool, outer=(13,47), constraints=(/13: (/NULL - ]; /47: (/NULL - ])]
+      │    │    └── filters [type=bool, outer=(1,2,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
+      │    │         ├── p_partkey = l_partkey [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
+      │    │         └── p_name LIKE '%green%' [type=bool, outer=(2)]
       │    └── projections [outer=(21-23,36,42,48)]
       │         ├── extract('year', o_orderdate) [type=int, outer=(42)]
       │         └── (l_extendedprice * (1.0 - l_discount)) - (ps_supplycost * l_quantity) [type=float, outer=(21-23,36)]
@@ -1315,36 +1383,46 @@ limit
  │         ├── project
  │         │    ├── columns: column38:38(float) c_custkey:1(int!null) c_name:2(string) c_address:3(string) c_phone:5(string) c_acctbal:6(float) c_comment:8(string) n_name:35(string)
  │         │    ├── fd: (1)-->(2,3,5,6,8,35)
- │         │    ├── inner-join (lookup nation)
+ │         │    ├── inner-join
  │         │    │    ├── columns: c_custkey:1(int!null) c_name:2(string) c_address:3(string) c_nationkey:4(int!null) c_phone:5(string) c_acctbal:6(float) c_comment:8(string) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_extendedprice:23(float) l_discount:24(float) l_returnflag:26(string!null) n_nationkey:34(int!null) n_name:35(string)
- │         │    │    ├── key columns: [4] = [34]
- │         │    │    ├── fd: ()-->(26), (1)-->(2-6,8), (9)-->(10,13), (1)==(10), (10)==(1), (9)==(18), (18)==(9), (34)-->(35), (4)==(34), (34)==(4)
- │         │    │    ├── inner-join (lookup lineitem)
- │         │    │    │    ├── columns: c_custkey:1(int!null) c_name:2(string) c_address:3(string) c_nationkey:4(int!null) c_phone:5(string) c_acctbal:6(float) c_comment:8(string) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_extendedprice:23(float) l_discount:24(float) l_returnflag:26(string!null)
- │         │    │    │    ├── key columns: [9] = [18]
- │         │    │    │    ├── fd: ()-->(26), (1)-->(2-6,8), (9)-->(10,13), (1)==(10), (10)==(1), (9)==(18), (18)==(9)
- │         │    │    │    ├── inner-join (lookup customer)
- │         │    │    │    │    ├── columns: c_custkey:1(int!null) c_name:2(string) c_address:3(string) c_nationkey:4(int!null) c_phone:5(string) c_acctbal:6(float) c_comment:8(string) o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null)
- │         │    │    │    │    ├── key columns: [10] = [1]
- │         │    │    │    │    ├── key: (9)
- │         │    │    │    │    ├── fd: (1)-->(2-6,8), (9)-->(10,13), (1)==(10), (10)==(1)
+ │         │    │    ├── fd: ()-->(26), (1)-->(2-6,8), (9)-->(10,13), (34)-->(35), (9)==(18), (18)==(9), (1)==(10), (10)==(1), (4)==(34), (34)==(4)
+ │         │    │    ├── inner-join
+ │         │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null) l_orderkey:18(int!null) l_extendedprice:23(float) l_discount:24(float) l_returnflag:26(string!null) n_nationkey:34(int!null) n_name:35(string)
+ │         │    │    │    ├── fd: ()-->(26), (9)-->(10,13), (34)-->(35), (9)==(18), (18)==(9)
+ │         │    │    │    ├── inner-join
+ │         │    │    │    │    ├── columns: l_orderkey:18(int!null) l_extendedprice:23(float) l_discount:24(float) l_returnflag:26(string!null) n_nationkey:34(int!null) n_name:35(string)
+ │         │    │    │    │    ├── fd: ()-->(26), (34)-->(35)
+ │         │    │    │    │    ├── scan nation
+ │         │    │    │    │    │    ├── columns: n_nationkey:34(int!null) n_name:35(string)
+ │         │    │    │    │    │    ├── key: (34)
+ │         │    │    │    │    │    └── fd: (34)-->(35)
  │         │    │    │    │    ├── select
- │         │    │    │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null)
+ │         │    │    │    │    │    ├── columns: l_orderkey:18(int!null) l_extendedprice:23(float) l_discount:24(float) l_returnflag:26(string!null)
+ │         │    │    │    │    │    ├── fd: ()-->(26)
+ │         │    │    │    │    │    ├── scan lineitem
+ │         │    │    │    │    │    │    └── columns: l_orderkey:18(int!null) l_extendedprice:23(float) l_discount:24(float) l_returnflag:26(string)
+ │         │    │    │    │    │    └── filters [type=bool, outer=(26), constraints=(/26: [/'R' - /'R']; tight), fd=()-->(26)]
+ │         │    │    │    │    │         └── l_returnflag = 'R' [type=bool, outer=(26), constraints=(/26: [/'R' - /'R']; tight)]
+ │         │    │    │    │    └── true [type=bool]
+ │         │    │    │    ├── select
+ │         │    │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date!null)
+ │         │    │    │    │    ├── key: (9)
+ │         │    │    │    │    ├── fd: (9)-->(10,13)
+ │         │    │    │    │    ├── scan orders
+ │         │    │    │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date)
  │         │    │    │    │    │    ├── key: (9)
- │         │    │    │    │    │    ├── fd: (9)-->(10,13)
- │         │    │    │    │    │    ├── scan orders
- │         │    │    │    │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_orderdate:13(date)
- │         │    │    │    │    │    │    ├── key: (9)
- │         │    │    │    │    │    │    └── fd: (9)-->(10,13)
- │         │    │    │    │    │    └── filters [type=bool, outer=(13), constraints=(/13: [/'1993-10-01' - ])]
- │         │    │    │    │    │         ├── o_orderdate >= '1993-10-01' [type=bool, outer=(13), constraints=(/13: [/'1993-10-01' - ]; tight)]
- │         │    │    │    │    │         └── o_orderdate < '1994-01-01 00:00:00+00:00' [type=bool, outer=(13)]
- │         │    │    │    │    └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
- │         │    │    │    │         └── c_custkey = o_custkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
- │         │    │    │    └── filters [type=bool, outer=(9,18,26), constraints=(/9: (/NULL - ]; /18: (/NULL - ]; /26: [/'R' - /'R']), fd=()-->(26), (9)==(18), (18)==(9)]
- │         │    │    │         ├── l_orderkey = o_orderkey [type=bool, outer=(9,18), constraints=(/9: (/NULL - ]; /18: (/NULL - ])]
- │         │    │    │         └── l_returnflag = 'R' [type=bool, outer=(26), constraints=(/26: [/'R' - /'R']; tight)]
- │         │    │    └── filters [type=bool, outer=(4,34), constraints=(/4: (/NULL - ]; /34: (/NULL - ]), fd=(4)==(34), (34)==(4)]
+ │         │    │    │    │    │    └── fd: (9)-->(10,13)
+ │         │    │    │    │    └── filters [type=bool, outer=(13), constraints=(/13: [/'1993-10-01' - ])]
+ │         │    │    │    │         ├── o_orderdate >= '1993-10-01' [type=bool, outer=(13), constraints=(/13: [/'1993-10-01' - ]; tight)]
+ │         │    │    │    │         └── o_orderdate < '1994-01-01 00:00:00+00:00' [type=bool, outer=(13)]
+ │         │    │    │    └── filters [type=bool, outer=(9,18), constraints=(/9: (/NULL - ]; /18: (/NULL - ]), fd=(9)==(18), (18)==(9)]
+ │         │    │    │         └── l_orderkey = o_orderkey [type=bool, outer=(9,18), constraints=(/9: (/NULL - ]; /18: (/NULL - ])]
+ │         │    │    ├── scan customer
+ │         │    │    │    ├── columns: c_custkey:1(int!null) c_name:2(string) c_address:3(string) c_nationkey:4(int!null) c_phone:5(string) c_acctbal:6(float) c_comment:8(string)
+ │         │    │    │    ├── key: (1)
+ │         │    │    │    └── fd: (1)-->(2-6,8)
+ │         │    │    └── filters [type=bool, outer=(1,4,10,34), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /10: (/NULL - ]; /34: (/NULL - ]), fd=(1)==(10), (10)==(1), (4)==(34), (34)==(4)]
+ │         │    │         ├── c_custkey = o_custkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
  │         │    │         └── c_nationkey = n_nationkey [type=bool, outer=(4,34), constraints=(/4: (/NULL - ]; /34: (/NULL - ])]
  │         │    └── projections [outer=(1-3,5,6,8,23,24,35)]
  │         │         └── l_extendedprice * (1.0 - l_discount) [type=float, outer=(23,24)]
@@ -1423,33 +1501,30 @@ sort
       │    │    ├── inner-join
       │    │    │    ├── columns: partsupp.ps_partkey:1(int!null) partsupp.ps_suppkey:2(int!null) partsupp.ps_availqty:3(int) partsupp.ps_supplycost:4(float) supplier.s_suppkey:6(int!null) supplier.s_nationkey:9(int!null) nation.n_nationkey:13(int!null) nation.n_name:14(string!null)
       │    │    │    ├── key: (1,6)
-      │    │    │    ├── fd: ()-->(14), (1,2)-->(3,4), (6)-->(9), (2)==(6), (6)==(2), (9)==(13), (13)==(9)
-      │    │    │    ├── inner-join
-      │    │    │    │    ├── columns: partsupp.ps_partkey:1(int!null) partsupp.ps_suppkey:2(int!null) partsupp.ps_availqty:3(int) partsupp.ps_supplycost:4(float) supplier.s_suppkey:6(int!null) supplier.s_nationkey:9(int!null)
-      │    │    │    │    ├── key: (1,6)
-      │    │    │    │    ├── fd: (1,2)-->(3,4), (6)-->(9), (2)==(6), (6)==(2)
-      │    │    │    │    ├── scan partsupp
-      │    │    │    │    │    ├── columns: partsupp.ps_partkey:1(int!null) partsupp.ps_suppkey:2(int!null) partsupp.ps_availqty:3(int) partsupp.ps_supplycost:4(float)
-      │    │    │    │    │    ├── key: (1,2)
-      │    │    │    │    │    └── fd: (1,2)-->(3,4)
-      │    │    │    │    ├── scan supplier@supplier_auto_index_supplier_fkey_nation
-      │    │    │    │    │    ├── columns: supplier.s_suppkey:6(int!null) supplier.s_nationkey:9(int!null)
-      │    │    │    │    │    ├── key: (6)
-      │    │    │    │    │    └── fd: (6)-->(9)
-      │    │    │    │    └── filters [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
-      │    │    │    │         └── partsupp.ps_suppkey = supplier.s_suppkey [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
-      │    │    │    ├── select
-      │    │    │    │    ├── columns: nation.n_nationkey:13(int!null) nation.n_name:14(string!null)
-      │    │    │    │    ├── key: (13)
-      │    │    │    │    ├── fd: ()-->(14)
-      │    │    │    │    ├── scan nation
-      │    │    │    │    │    ├── columns: nation.n_nationkey:13(int!null) nation.n_name:14(string)
+      │    │    │    ├── fd: ()-->(14), (1,2)-->(3,4), (6)-->(9), (9)==(13), (13)==(9), (2)==(6), (6)==(2)
+      │    │    │    ├── scan partsupp
+      │    │    │    │    ├── columns: partsupp.ps_partkey:1(int!null) partsupp.ps_suppkey:2(int!null) partsupp.ps_availqty:3(int) partsupp.ps_supplycost:4(float)
+      │    │    │    │    ├── key: (1,2)
+      │    │    │    │    └── fd: (1,2)-->(3,4)
+      │    │    │    ├── inner-join (lookup supplier@supplier_auto_index_supplier_fkey_nation)
+      │    │    │    │    ├── columns: supplier.s_suppkey:6(int!null) supplier.s_nationkey:9(int!null) nation.n_nationkey:13(int!null) nation.n_name:14(string!null)
+      │    │    │    │    ├── key columns: [13] = [9]
+      │    │    │    │    ├── key: (6)
+      │    │    │    │    ├── fd: ()-->(14), (6)-->(9), (9)==(13), (13)==(9)
+      │    │    │    │    ├── select
+      │    │    │    │    │    ├── columns: nation.n_nationkey:13(int!null) nation.n_name:14(string!null)
       │    │    │    │    │    ├── key: (13)
-      │    │    │    │    │    └── fd: (13)-->(14)
-      │    │    │    │    └── filters [type=bool, outer=(14), constraints=(/14: [/'GERMANY' - /'GERMANY']; tight), fd=()-->(14)]
-      │    │    │    │         └── nation.n_name = 'GERMANY' [type=bool, outer=(14), constraints=(/14: [/'GERMANY' - /'GERMANY']; tight)]
-      │    │    │    └── filters [type=bool, outer=(9,13), constraints=(/9: (/NULL - ]; /13: (/NULL - ]), fd=(9)==(13), (13)==(9)]
-      │    │    │         └── supplier.s_nationkey = nation.n_nationkey [type=bool, outer=(9,13), constraints=(/9: (/NULL - ]; /13: (/NULL - ])]
+      │    │    │    │    │    ├── fd: ()-->(14)
+      │    │    │    │    │    ├── scan nation
+      │    │    │    │    │    │    ├── columns: nation.n_nationkey:13(int!null) nation.n_name:14(string)
+      │    │    │    │    │    │    ├── key: (13)
+      │    │    │    │    │    │    └── fd: (13)-->(14)
+      │    │    │    │    │    └── filters [type=bool, outer=(14), constraints=(/14: [/'GERMANY' - /'GERMANY']; tight), fd=()-->(14)]
+      │    │    │    │    │         └── nation.n_name = 'GERMANY' [type=bool, outer=(14), constraints=(/14: [/'GERMANY' - /'GERMANY']; tight)]
+      │    │    │    │    └── filters [type=bool, outer=(9,13), constraints=(/9: (/NULL - ]; /13: (/NULL - ]), fd=(9)==(13), (13)==(9)]
+      │    │    │    │         └── supplier.s_nationkey = nation.n_nationkey [type=bool, outer=(9,13), constraints=(/9: (/NULL - ]; /13: (/NULL - ])]
+      │    │    │    └── filters [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+      │    │    │         └── partsupp.ps_suppkey = supplier.s_suppkey [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
       │    │    └── projections [outer=(1,3,4)]
       │    │         └── partsupp.ps_supplycost * partsupp.ps_availqty::FLOAT8 [type=float, outer=(3,4)]
       │    └── aggregations [outer=(17)]
@@ -1473,30 +1548,28 @@ sort
                           │    │    ├── columns: column35:35(float)
                           │    │    ├── inner-join
                           │    │    │    ├── columns: partsupp.ps_suppkey:20(int!null) partsupp.ps_availqty:21(int) partsupp.ps_supplycost:22(float) supplier.s_suppkey:24(int!null) supplier.s_nationkey:27(int!null) nation.n_nationkey:31(int!null) nation.n_name:32(string!null)
-                          │    │    │    ├── fd: ()-->(32), (24)-->(27), (20)==(24), (24)==(20), (27)==(31), (31)==(27)
-                          │    │    │    ├── inner-join
-                          │    │    │    │    ├── columns: partsupp.ps_suppkey:20(int!null) partsupp.ps_availqty:21(int) partsupp.ps_supplycost:22(float) supplier.s_suppkey:24(int!null) supplier.s_nationkey:27(int!null)
-                          │    │    │    │    ├── fd: (24)-->(27), (20)==(24), (24)==(20)
-                          │    │    │    │    ├── scan partsupp
-                          │    │    │    │    │    └── columns: partsupp.ps_suppkey:20(int!null) partsupp.ps_availqty:21(int) partsupp.ps_supplycost:22(float)
-                          │    │    │    │    ├── scan supplier@supplier_auto_index_supplier_fkey_nation
-                          │    │    │    │    │    ├── columns: supplier.s_suppkey:24(int!null) supplier.s_nationkey:27(int!null)
-                          │    │    │    │    │    ├── key: (24)
-                          │    │    │    │    │    └── fd: (24)-->(27)
-                          │    │    │    │    └── filters [type=bool, outer=(20,24), constraints=(/20: (/NULL - ]; /24: (/NULL - ]), fd=(20)==(24), (24)==(20)]
-                          │    │    │    │         └── partsupp.ps_suppkey = supplier.s_suppkey [type=bool, outer=(20,24), constraints=(/20: (/NULL - ]; /24: (/NULL - ])]
-                          │    │    │    ├── select
-                          │    │    │    │    ├── columns: nation.n_nationkey:31(int!null) nation.n_name:32(string!null)
-                          │    │    │    │    ├── key: (31)
-                          │    │    │    │    ├── fd: ()-->(32)
-                          │    │    │    │    ├── scan nation
-                          │    │    │    │    │    ├── columns: nation.n_nationkey:31(int!null) nation.n_name:32(string)
+                          │    │    │    ├── fd: ()-->(32), (24)-->(27), (27)==(31), (31)==(27), (20)==(24), (24)==(20)
+                          │    │    │    ├── scan partsupp
+                          │    │    │    │    └── columns: partsupp.ps_suppkey:20(int!null) partsupp.ps_availqty:21(int) partsupp.ps_supplycost:22(float)
+                          │    │    │    ├── inner-join (lookup supplier@supplier_auto_index_supplier_fkey_nation)
+                          │    │    │    │    ├── columns: supplier.s_suppkey:24(int!null) supplier.s_nationkey:27(int!null) nation.n_nationkey:31(int!null) nation.n_name:32(string!null)
+                          │    │    │    │    ├── key columns: [31] = [27]
+                          │    │    │    │    ├── key: (24)
+                          │    │    │    │    ├── fd: ()-->(32), (24)-->(27), (27)==(31), (31)==(27)
+                          │    │    │    │    ├── select
+                          │    │    │    │    │    ├── columns: nation.n_nationkey:31(int!null) nation.n_name:32(string!null)
                           │    │    │    │    │    ├── key: (31)
-                          │    │    │    │    │    └── fd: (31)-->(32)
-                          │    │    │    │    └── filters [type=bool, outer=(32), constraints=(/32: [/'GERMANY' - /'GERMANY']; tight), fd=()-->(32)]
-                          │    │    │    │         └── nation.n_name = 'GERMANY' [type=bool, outer=(32), constraints=(/32: [/'GERMANY' - /'GERMANY']; tight)]
-                          │    │    │    └── filters [type=bool, outer=(27,31), constraints=(/27: (/NULL - ]; /31: (/NULL - ]), fd=(27)==(31), (31)==(27)]
-                          │    │    │         └── supplier.s_nationkey = nation.n_nationkey [type=bool, outer=(27,31), constraints=(/27: (/NULL - ]; /31: (/NULL - ])]
+                          │    │    │    │    │    ├── fd: ()-->(32)
+                          │    │    │    │    │    ├── scan nation
+                          │    │    │    │    │    │    ├── columns: nation.n_nationkey:31(int!null) nation.n_name:32(string)
+                          │    │    │    │    │    │    ├── key: (31)
+                          │    │    │    │    │    │    └── fd: (31)-->(32)
+                          │    │    │    │    │    └── filters [type=bool, outer=(32), constraints=(/32: [/'GERMANY' - /'GERMANY']; tight), fd=()-->(32)]
+                          │    │    │    │    │         └── nation.n_name = 'GERMANY' [type=bool, outer=(32), constraints=(/32: [/'GERMANY' - /'GERMANY']; tight)]
+                          │    │    │    │    └── filters [type=bool, outer=(27,31), constraints=(/27: (/NULL - ]; /31: (/NULL - ]), fd=(27)==(31), (31)==(27)]
+                          │    │    │    │         └── supplier.s_nationkey = nation.n_nationkey [type=bool, outer=(27,31), constraints=(/27: (/NULL - ]; /31: (/NULL - ])]
+                          │    │    │    └── filters [type=bool, outer=(20,24), constraints=(/20: (/NULL - ]; /24: (/NULL - ]), fd=(20)==(24), (24)==(20)]
+                          │    │    │         └── partsupp.ps_suppkey = supplier.s_suppkey [type=bool, outer=(20,24), constraints=(/20: (/NULL - ]; /24: (/NULL - ])]
                           │    │    └── projections [outer=(21,22)]
                           │    │         └── partsupp.ps_supplycost * partsupp.ps_availqty::FLOAT8 [type=float, outer=(21,22)]
                           │    └── aggregations [outer=(35)]
@@ -2104,19 +2177,19 @@ limit
  │         ├── fd: (1)-->(2), (9)-->(1,2,12,13,51)
  │         ├── inner-join
  │         │    ├── columns: c_custkey:1(int!null) c_name:2(string) o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float) o_orderdate:13(date) lineitem.l_orderkey:18(int!null) lineitem.l_quantity:22(float)
- │         │    ├── fd: (1)-->(2), (9)-->(10,12,13), (1)==(10), (10)==(1), (9)==(18), (18)==(9)
- │         │    ├── inner-join
- │         │    │    ├── columns: c_custkey:1(int!null) c_name:2(string) o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float) o_orderdate:13(date)
- │         │    │    ├── key: (9)
- │         │    │    ├── fd: (1)-->(2), (9)-->(10,12,13), (1)==(10), (10)==(1)
- │         │    │    ├── scan customer
- │         │    │    │    ├── columns: c_custkey:1(int!null) c_name:2(string)
- │         │    │    │    ├── key: (1)
- │         │    │    │    └── fd: (1)-->(2)
+ │         │    ├── fd: (1)-->(2), (9)-->(10,12,13), (9)==(18), (18)==(9), (1)==(10), (10)==(1)
+ │         │    ├── scan customer
+ │         │    │    ├── columns: c_custkey:1(int!null) c_name:2(string)
+ │         │    │    ├── key: (1)
+ │         │    │    └── fd: (1)-->(2)
+ │         │    ├── inner-join (merge)
+ │         │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float) o_orderdate:13(date) lineitem.l_orderkey:18(int!null) lineitem.l_quantity:22(float)
+ │         │    │    ├── fd: (9)-->(10,12,13), (9)==(18), (18)==(9)
  │         │    │    ├── semi-join (merge)
  │         │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float) o_orderdate:13(date)
  │         │    │    │    ├── key: (9)
  │         │    │    │    ├── fd: (9)-->(10,12,13)
+ │         │    │    │    ├── ordering: +9
  │         │    │    │    ├── scan orders
  │         │    │    │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float) o_orderdate:13(date)
  │         │    │    │    │    ├── key: (9)
@@ -2146,12 +2219,16 @@ limit
  │         │    │    │         ├── right ordering: +34
  │         │    │    │         └── filters [type=bool, outer=(9,34), constraints=(/9: (/NULL - ]; /34: (/NULL - ]), fd=(9)==(34), (34)==(9)]
  │         │    │    │              └── o_orderkey = lineitem.l_orderkey [type=bool, outer=(9,34), constraints=(/9: (/NULL - ]; /34: (/NULL - ])]
- │         │    │    └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
- │         │    │         └── c_custkey = o_custkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
- │         │    ├── scan lineitem
- │         │    │    └── columns: lineitem.l_orderkey:18(int!null) lineitem.l_quantity:22(float)
- │         │    └── filters [type=bool, outer=(9,18), constraints=(/9: (/NULL - ]; /18: (/NULL - ]), fd=(9)==(18), (18)==(9)]
- │         │         └── o_orderkey = lineitem.l_orderkey [type=bool, outer=(9,18), constraints=(/9: (/NULL - ]; /18: (/NULL - ])]
+ │         │    │    ├── scan lineitem
+ │         │    │    │    ├── columns: lineitem.l_orderkey:18(int!null) lineitem.l_quantity:22(float)
+ │         │    │    │    └── ordering: +18
+ │         │    │    └── merge-on
+ │         │    │         ├── left ordering: +9
+ │         │    │         ├── right ordering: +18
+ │         │    │         └── filters [type=bool, outer=(9,18), constraints=(/9: (/NULL - ]; /18: (/NULL - ]), fd=(9)==(18), (18)==(9)]
+ │         │    │              └── o_orderkey = lineitem.l_orderkey [type=bool, outer=(9,18), constraints=(/9: (/NULL - ]; /18: (/NULL - ])]
+ │         │    └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
+ │         │         └── c_custkey = o_custkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
  │         └── aggregations [outer=(1,2,12,13,22)]
  │              ├── sum [type=float, outer=(22)]
  │              │    └── variable: lineitem.l_quantity [type=float, outer=(22)]
@@ -2448,68 +2525,85 @@ limit
  │         ├── grouping columns: s_name:2(string)
  │         ├── key: (2)
  │         ├── fd: (2)-->(69)
- │         ├── inner-join (lookup nation)
+ │         ├── inner-join (lookup supplier)
  │         │    ├── columns: s_suppkey:1(int!null) s_name:2(string) s_nationkey:4(int!null) lineitem.l_orderkey:8(int!null) lineitem.l_suppkey:10(int!null) lineitem.l_commitdate:19(date!null) lineitem.l_receiptdate:20(date!null) o_orderkey:24(int!null) o_orderstatus:26(string!null) n_nationkey:33(int!null) n_name:34(string!null)
- │         │    ├── key columns: [4] = [33]
- │         │    ├── fd: ()-->(26,34), (1)-->(2,4), (1)==(10), (10)==(1), (8)==(24), (24)==(8), (4)==(33), (33)==(4)
- │         │    ├── inner-join (lookup orders)
- │         │    │    ├── columns: s_suppkey:1(int!null) s_name:2(string) s_nationkey:4(int!null) lineitem.l_orderkey:8(int!null) lineitem.l_suppkey:10(int!null) lineitem.l_commitdate:19(date!null) lineitem.l_receiptdate:20(date!null) o_orderkey:24(int!null) o_orderstatus:26(string!null)
- │         │    │    ├── key columns: [8] = [24]
- │         │    │    ├── fd: ()-->(26), (1)-->(2,4), (1)==(10), (10)==(1), (8)==(24), (24)==(8)
- │         │    │    ├── inner-join (lookup supplier)
- │         │    │    │    ├── columns: s_suppkey:1(int!null) s_name:2(string) s_nationkey:4(int!null) lineitem.l_orderkey:8(int!null) lineitem.l_suppkey:10(int!null) lineitem.l_commitdate:19(date!null) lineitem.l_receiptdate:20(date!null)
- │         │    │    │    ├── key columns: [10] = [1]
- │         │    │    │    ├── fd: (1)-->(2,4), (1)==(10), (10)==(1)
- │         │    │    │    ├── semi-join (merge)
+ │         │    ├── key columns: [10] = [1]
+ │         │    ├── fd: ()-->(26,34), (1)-->(2,4), (8)==(24), (24)==(8), (1)==(10), (10)==(1), (4)==(33), (33)==(4)
+ │         │    ├── inner-join
+ │         │    │    ├── columns: lineitem.l_orderkey:8(int!null) lineitem.l_suppkey:10(int!null) lineitem.l_commitdate:19(date!null) lineitem.l_receiptdate:20(date!null) o_orderkey:24(int!null) o_orderstatus:26(string!null) n_nationkey:33(int!null) n_name:34(string!null)
+ │         │    │    ├── fd: ()-->(26,34), (8)==(24), (24)==(8)
+ │         │    │    ├── semi-join (merge)
+ │         │    │    │    ├── columns: lineitem.l_orderkey:8(int!null) lineitem.l_suppkey:10(int!null) lineitem.l_commitdate:19(date!null) lineitem.l_receiptdate:20(date!null)
+ │         │    │    │    ├── anti-join (merge)
  │         │    │    │    │    ├── columns: lineitem.l_orderkey:8(int!null) lineitem.l_suppkey:10(int!null) lineitem.l_commitdate:19(date!null) lineitem.l_receiptdate:20(date!null)
- │         │    │    │    │    ├── anti-join (merge)
+ │         │    │    │    │    ├── ordering: +8
+ │         │    │    │    │    ├── select
  │         │    │    │    │    │    ├── columns: lineitem.l_orderkey:8(int!null) lineitem.l_suppkey:10(int!null) lineitem.l_commitdate:19(date!null) lineitem.l_receiptdate:20(date!null)
  │         │    │    │    │    │    ├── ordering: +8
- │         │    │    │    │    │    ├── select
- │         │    │    │    │    │    │    ├── columns: lineitem.l_orderkey:8(int!null) lineitem.l_suppkey:10(int!null) lineitem.l_commitdate:19(date!null) lineitem.l_receiptdate:20(date!null)
- │         │    │    │    │    │    │    ├── ordering: +8
- │         │    │    │    │    │    │    ├── scan lineitem
- │         │    │    │    │    │    │    │    ├── columns: lineitem.l_orderkey:8(int!null) lineitem.l_suppkey:10(int!null) lineitem.l_commitdate:19(date) lineitem.l_receiptdate:20(date)
- │         │    │    │    │    │    │    │    └── ordering: +8
- │         │    │    │    │    │    │    └── filters [type=bool, outer=(19,20), constraints=(/19: (/NULL - ]; /20: (/NULL - ])]
- │         │    │    │    │    │    │         └── lineitem.l_receiptdate > lineitem.l_commitdate [type=bool, outer=(19,20), constraints=(/19: (/NULL - ]; /20: (/NULL - ])]
- │         │    │    │    │    │    ├── select
- │         │    │    │    │    │    │    ├── columns: lineitem.l_orderkey:53(int!null) lineitem.l_partkey:54(int!null) lineitem.l_suppkey:55(int!null) lineitem.l_linenumber:56(int!null) lineitem.l_quantity:57(float) lineitem.l_extendedprice:58(float) lineitem.l_discount:59(float) lineitem.l_tax:60(float) lineitem.l_returnflag:61(string) lineitem.l_linestatus:62(string) lineitem.l_shipdate:63(date) lineitem.l_commitdate:64(date!null) lineitem.l_receiptdate:65(date!null) lineitem.l_shipinstruct:66(string) lineitem.l_shipmode:67(string) lineitem.l_comment:68(string)
+ │         │    │    │    │    │    ├── scan lineitem
+ │         │    │    │    │    │    │    ├── columns: lineitem.l_orderkey:8(int!null) lineitem.l_suppkey:10(int!null) lineitem.l_commitdate:19(date) lineitem.l_receiptdate:20(date)
+ │         │    │    │    │    │    │    └── ordering: +8
+ │         │    │    │    │    │    └── filters [type=bool, outer=(19,20), constraints=(/19: (/NULL - ]; /20: (/NULL - ])]
+ │         │    │    │    │    │         └── lineitem.l_receiptdate > lineitem.l_commitdate [type=bool, outer=(19,20), constraints=(/19: (/NULL - ]; /20: (/NULL - ])]
+ │         │    │    │    │    ├── select
+ │         │    │    │    │    │    ├── columns: lineitem.l_orderkey:53(int!null) lineitem.l_partkey:54(int!null) lineitem.l_suppkey:55(int!null) lineitem.l_linenumber:56(int!null) lineitem.l_quantity:57(float) lineitem.l_extendedprice:58(float) lineitem.l_discount:59(float) lineitem.l_tax:60(float) lineitem.l_returnflag:61(string) lineitem.l_linestatus:62(string) lineitem.l_shipdate:63(date) lineitem.l_commitdate:64(date!null) lineitem.l_receiptdate:65(date!null) lineitem.l_shipinstruct:66(string) lineitem.l_shipmode:67(string) lineitem.l_comment:68(string)
+ │         │    │    │    │    │    ├── key: (53,56)
+ │         │    │    │    │    │    ├── fd: (53,56)-->(54,55,57-68)
+ │         │    │    │    │    │    ├── ordering: +53
+ │         │    │    │    │    │    ├── scan lineitem
+ │         │    │    │    │    │    │    ├── columns: lineitem.l_orderkey:53(int!null) lineitem.l_partkey:54(int!null) lineitem.l_suppkey:55(int!null) lineitem.l_linenumber:56(int!null) lineitem.l_quantity:57(float) lineitem.l_extendedprice:58(float) lineitem.l_discount:59(float) lineitem.l_tax:60(float) lineitem.l_returnflag:61(string) lineitem.l_linestatus:62(string) lineitem.l_shipdate:63(date) lineitem.l_commitdate:64(date) lineitem.l_receiptdate:65(date) lineitem.l_shipinstruct:66(string) lineitem.l_shipmode:67(string) lineitem.l_comment:68(string)
  │         │    │    │    │    │    │    ├── key: (53,56)
  │         │    │    │    │    │    │    ├── fd: (53,56)-->(54,55,57-68)
- │         │    │    │    │    │    │    ├── ordering: +53
- │         │    │    │    │    │    │    ├── scan lineitem
- │         │    │    │    │    │    │    │    ├── columns: lineitem.l_orderkey:53(int!null) lineitem.l_partkey:54(int!null) lineitem.l_suppkey:55(int!null) lineitem.l_linenumber:56(int!null) lineitem.l_quantity:57(float) lineitem.l_extendedprice:58(float) lineitem.l_discount:59(float) lineitem.l_tax:60(float) lineitem.l_returnflag:61(string) lineitem.l_linestatus:62(string) lineitem.l_shipdate:63(date) lineitem.l_commitdate:64(date) lineitem.l_receiptdate:65(date) lineitem.l_shipinstruct:66(string) lineitem.l_shipmode:67(string) lineitem.l_comment:68(string)
- │         │    │    │    │    │    │    │    ├── key: (53,56)
- │         │    │    │    │    │    │    │    ├── fd: (53,56)-->(54,55,57-68)
- │         │    │    │    │    │    │    │    └── ordering: +53
- │         │    │    │    │    │    │    └── filters [type=bool, outer=(64,65), constraints=(/64: (/NULL - ]; /65: (/NULL - ])]
- │         │    │    │    │    │    │         └── lineitem.l_receiptdate > lineitem.l_commitdate [type=bool, outer=(64,65), constraints=(/64: (/NULL - ]; /65: (/NULL - ])]
- │         │    │    │    │    │    └── merge-on
- │         │    │    │    │    │         ├── left ordering: +8
- │         │    │    │    │    │         ├── right ordering: +53
- │         │    │    │    │    │         └── filters [type=bool, outer=(8,10,53,55), constraints=(/8: (/NULL - ]; /10: (/NULL - ]; /53: (/NULL - ]; /55: (/NULL - ]), fd=(8)==(53), (53)==(8)]
- │         │    │    │    │    │              ├── lineitem.l_orderkey = lineitem.l_orderkey [type=bool, outer=(8,53), constraints=(/8: (/NULL - ]; /53: (/NULL - ])]
- │         │    │    │    │    │              └── lineitem.l_suppkey != lineitem.l_suppkey [type=bool, outer=(10,55), constraints=(/10: (/NULL - ]; /55: (/NULL - ])]
- │         │    │    │    │    ├── scan lineitem
- │         │    │    │    │    │    ├── columns: lineitem.l_orderkey:37(int!null) lineitem.l_partkey:38(int!null) lineitem.l_suppkey:39(int!null) lineitem.l_linenumber:40(int!null) lineitem.l_quantity:41(float) lineitem.l_extendedprice:42(float) lineitem.l_discount:43(float) lineitem.l_tax:44(float) lineitem.l_returnflag:45(string) lineitem.l_linestatus:46(string) lineitem.l_shipdate:47(date) lineitem.l_commitdate:48(date) lineitem.l_receiptdate:49(date) lineitem.l_shipinstruct:50(string) lineitem.l_shipmode:51(string) lineitem.l_comment:52(string)
- │         │    │    │    │    │    ├── key: (37,40)
- │         │    │    │    │    │    ├── fd: (37,40)-->(38,39,41-52)
- │         │    │    │    │    │    └── ordering: +37
+ │         │    │    │    │    │    │    └── ordering: +53
+ │         │    │    │    │    │    └── filters [type=bool, outer=(64,65), constraints=(/64: (/NULL - ]; /65: (/NULL - ])]
+ │         │    │    │    │    │         └── lineitem.l_receiptdate > lineitem.l_commitdate [type=bool, outer=(64,65), constraints=(/64: (/NULL - ]; /65: (/NULL - ])]
  │         │    │    │    │    └── merge-on
  │         │    │    │    │         ├── left ordering: +8
- │         │    │    │    │         ├── right ordering: +37
- │         │    │    │    │         └── filters [type=bool, outer=(8,10,37,39), constraints=(/8: (/NULL - ]; /10: (/NULL - ]; /37: (/NULL - ]; /39: (/NULL - ]), fd=(8)==(37), (37)==(8)]
- │         │    │    │    │              ├── lineitem.l_orderkey = lineitem.l_orderkey [type=bool, outer=(8,37), constraints=(/8: (/NULL - ]; /37: (/NULL - ])]
- │         │    │    │    │              └── lineitem.l_suppkey != lineitem.l_suppkey [type=bool, outer=(10,39), constraints=(/10: (/NULL - ]; /39: (/NULL - ])]
- │         │    │    │    └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
- │         │    │    │         └── s_suppkey = lineitem.l_suppkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
- │         │    │    └── filters [type=bool, outer=(8,24,26), constraints=(/8: (/NULL - ]; /24: (/NULL - ]; /26: [/'F' - /'F']), fd=()-->(26), (8)==(24), (24)==(8)]
- │         │    │         ├── o_orderkey = lineitem.l_orderkey [type=bool, outer=(8,24), constraints=(/8: (/NULL - ]; /24: (/NULL - ])]
- │         │    │         └── o_orderstatus = 'F' [type=bool, outer=(26), constraints=(/26: [/'F' - /'F']; tight)]
- │         │    └── filters [type=bool, outer=(4,33,34), constraints=(/4: (/NULL - ]; /33: (/NULL - ]; /34: [/'SAUDI ARABIA' - /'SAUDI ARABIA']), fd=()-->(34), (4)==(33), (33)==(4)]
- │         │         ├── s_nationkey = n_nationkey [type=bool, outer=(4,33), constraints=(/4: (/NULL - ]; /33: (/NULL - ])]
- │         │         └── n_name = 'SAUDI ARABIA' [type=bool, outer=(34), constraints=(/34: [/'SAUDI ARABIA' - /'SAUDI ARABIA']; tight)]
+ │         │    │    │    │         ├── right ordering: +53
+ │         │    │    │    │         └── filters [type=bool, outer=(8,10,53,55), constraints=(/8: (/NULL - ]; /10: (/NULL - ]; /53: (/NULL - ]; /55: (/NULL - ]), fd=(8)==(53), (53)==(8)]
+ │         │    │    │    │              ├── lineitem.l_orderkey = lineitem.l_orderkey [type=bool, outer=(8,53), constraints=(/8: (/NULL - ]; /53: (/NULL - ])]
+ │         │    │    │    │              └── lineitem.l_suppkey != lineitem.l_suppkey [type=bool, outer=(10,55), constraints=(/10: (/NULL - ]; /55: (/NULL - ])]
+ │         │    │    │    ├── scan lineitem
+ │         │    │    │    │    ├── columns: lineitem.l_orderkey:37(int!null) lineitem.l_partkey:38(int!null) lineitem.l_suppkey:39(int!null) lineitem.l_linenumber:40(int!null) lineitem.l_quantity:41(float) lineitem.l_extendedprice:42(float) lineitem.l_discount:43(float) lineitem.l_tax:44(float) lineitem.l_returnflag:45(string) lineitem.l_linestatus:46(string) lineitem.l_shipdate:47(date) lineitem.l_commitdate:48(date) lineitem.l_receiptdate:49(date) lineitem.l_shipinstruct:50(string) lineitem.l_shipmode:51(string) lineitem.l_comment:52(string)
+ │         │    │    │    │    ├── key: (37,40)
+ │         │    │    │    │    ├── fd: (37,40)-->(38,39,41-52)
+ │         │    │    │    │    └── ordering: +37
+ │         │    │    │    └── merge-on
+ │         │    │    │         ├── left ordering: +8
+ │         │    │    │         ├── right ordering: +37
+ │         │    │    │         └── filters [type=bool, outer=(8,10,37,39), constraints=(/8: (/NULL - ]; /10: (/NULL - ]; /37: (/NULL - ]; /39: (/NULL - ]), fd=(8)==(37), (37)==(8)]
+ │         │    │    │              ├── lineitem.l_orderkey = lineitem.l_orderkey [type=bool, outer=(8,37), constraints=(/8: (/NULL - ]; /37: (/NULL - ])]
+ │         │    │    │              └── lineitem.l_suppkey != lineitem.l_suppkey [type=bool, outer=(10,39), constraints=(/10: (/NULL - ]; /39: (/NULL - ])]
+ │         │    │    ├── inner-join
+ │         │    │    │    ├── columns: o_orderkey:24(int!null) o_orderstatus:26(string!null) n_nationkey:33(int!null) n_name:34(string!null)
+ │         │    │    │    ├── key: (24,33)
+ │         │    │    │    ├── fd: ()-->(26,34)
+ │         │    │    │    ├── select
+ │         │    │    │    │    ├── columns: o_orderkey:24(int!null) o_orderstatus:26(string!null)
+ │         │    │    │    │    ├── key: (24)
+ │         │    │    │    │    ├── fd: ()-->(26)
+ │         │    │    │    │    ├── scan orders
+ │         │    │    │    │    │    ├── columns: o_orderkey:24(int!null) o_orderstatus:26(string)
+ │         │    │    │    │    │    ├── key: (24)
+ │         │    │    │    │    │    └── fd: (24)-->(26)
+ │         │    │    │    │    └── filters [type=bool, outer=(26), constraints=(/26: [/'F' - /'F']; tight), fd=()-->(26)]
+ │         │    │    │    │         └── o_orderstatus = 'F' [type=bool, outer=(26), constraints=(/26: [/'F' - /'F']; tight)]
+ │         │    │    │    ├── select
+ │         │    │    │    │    ├── columns: n_nationkey:33(int!null) n_name:34(string!null)
+ │         │    │    │    │    ├── key: (33)
+ │         │    │    │    │    ├── fd: ()-->(34)
+ │         │    │    │    │    ├── scan nation
+ │         │    │    │    │    │    ├── columns: n_nationkey:33(int!null) n_name:34(string)
+ │         │    │    │    │    │    ├── key: (33)
+ │         │    │    │    │    │    └── fd: (33)-->(34)
+ │         │    │    │    │    └── filters [type=bool, outer=(34), constraints=(/34: [/'SAUDI ARABIA' - /'SAUDI ARABIA']; tight), fd=()-->(34)]
+ │         │    │    │    │         └── n_name = 'SAUDI ARABIA' [type=bool, outer=(34), constraints=(/34: [/'SAUDI ARABIA' - /'SAUDI ARABIA']; tight)]
+ │         │    │    │    └── true [type=bool]
+ │         │    │    └── filters [type=bool, outer=(8,24), constraints=(/8: (/NULL - ]; /24: (/NULL - ]), fd=(8)==(24), (24)==(8)]
+ │         │    │         └── o_orderkey = lineitem.l_orderkey [type=bool, outer=(8,24), constraints=(/8: (/NULL - ]; /24: (/NULL - ])]
+ │         │    └── filters [type=bool, outer=(1,4,10,33), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /10: (/NULL - ]; /33: (/NULL - ]), fd=(1)==(10), (10)==(1), (4)==(33), (33)==(4)]
+ │         │         ├── s_suppkey = lineitem.l_suppkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
+ │         │         └── s_nationkey = n_nationkey [type=bool, outer=(4,33), constraints=(/4: (/NULL - ]; /33: (/NULL - ])]
  │         └── aggregations
  │              └── count-rows [type=int]
  └── const: 100 [type=int]

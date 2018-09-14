@@ -485,24 +485,9 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 		b.validateAsOf(from.AsOf)
 	}
 
-	for _, table := range from.Tables {
-		tableScope := b.buildDataSource(table, nil /* indexFlags */, inScope)
-
-		if outScope == nil {
-			outScope = tableScope
-			continue
-		}
-
-		// Check that the same table name is not used multiple times.
-		b.validateJoinTableNames(outScope, tableScope)
-
-		outScope.appendColumnsFromScope(tableScope)
-		outScope.group = b.factory.ConstructInnerJoin(
-			outScope.group, tableScope.group, b.factory.ConstructTrue(),
-		)
-	}
-
-	if outScope == nil {
+	if len(from.Tables) > 0 {
+		outScope = b.buildFromTables(from.Tables, inScope)
+	} else {
 		rows := []memo.GroupID{b.factory.ConstructTuple(
 			b.factory.InternList(nil), b.factory.InternType(memo.EmptyTupleType),
 		)}
@@ -530,6 +515,39 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 		outScope.group = b.factory.ConstructSelect(outScope.group, filter)
 	}
 
+	return outScope
+}
+
+// buildFromTables recursively builds a series of InnerJoin expressions that
+// join together the given FROM tables. The tables are joined in the reverse
+// order that they appear in the list, with the innermost join involving the
+// tables at the end of the list. For example:
+//
+//   SELECT * FROM a,b,c
+//
+// is joined like:
+//
+//   SELECT * FROM a JOIN (b JOIN c ON true) ON true
+//
+// See Builder.buildStmt for a description of the remaining input and
+// return values.
+func (b *Builder) buildFromTables(tables tree.TableExprs, inScope *scope) (outScope *scope) {
+	outScope = b.buildDataSource(tables[0], nil /* indexFlags */, inScope)
+
+	// Recursively build table join.
+	tables = tables[1:]
+	if len(tables) == 0 {
+		return outScope
+	}
+	tableScope := b.buildFromTables(tables, inScope)
+
+	// Check that the same table name is not used multiple times.
+	b.validateJoinTableNames(outScope, tableScope)
+
+	outScope.appendColumnsFromScope(tableScope)
+	outScope.group = b.factory.ConstructInnerJoin(
+		outScope.group, tableScope.group, b.factory.ConstructTrue(),
+	)
 	return outScope
 }
 

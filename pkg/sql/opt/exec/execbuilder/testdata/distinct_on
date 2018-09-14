@@ -165,17 +165,18 @@ distinct   ·            ·            (pk1, pk2)  weak-key(pk1)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a) a, c FROM abc ORDER BY a, c DESC, b
 ----
-distinct             ·            ·            (a, c)     weak-key(a)
- │                   distinct on  a            ·          ·
- │                   order key    a            ·          ·
- └── render          ·            ·            (a, c)     ·
-      │              render 0     a            ·          ·
-      │              render 1     c            ·          ·
-      └── sort       ·            ·            (a, b, c)  +a,-c,+b
-           │         order        +a,-c,+b     ·          ·
-           └── scan  ·            ·            (a, b, c)  ·
-·                    table        abc@primary  ·          ·
-·                    spans        ALL          ·          ·
+sort                      ·            ·            (a, c)     weak-key(a); +a
+ │                        order        +a           ·          ·
+ └── distinct             ·            ·            (a, c)     weak-key(a)
+      │                   distinct on  a            ·          ·
+      └── render          ·            ·            (a, c)     ·
+           │              render 0     a            ·          ·
+           │              render 1     c            ·          ·
+           └── sort       ·            ·            (a, b, c)  -c,+b
+                │         order        -c,+b        ·          ·
+                └── scan  ·            ·            (a, b, c)  ·
+·                         table        abc@primary  ·          ·
+·                         spans        ALL          ·          ·
 
 #################
 # With ORDER BY #
@@ -210,18 +211,19 @@ render               ·            ·            (y, z, x)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (x) y, z, x FROM xyz ORDER BY x ASC, z DESC, y DESC
 ----
-render               ·            ·            (y, z, x)  ·
- │                   render 0     y            ·          ·
- │                   render 1     z            ·          ·
- │                   render 2     x            ·          ·
- └── distinct        ·            ·            (x, y, z)  weak-key(x); +x,-z,-y
-      │              distinct on  x            ·          ·
-      │              order key    x            ·          ·
-      └── sort       ·            ·            (x, y, z)  +x,-z,-y
-           │         order        +x,-z,-y     ·          ·
-           └── scan  ·            ·            (x, y, z)  ·
-·                    table        xyz@primary  ·          ·
-·                    spans        ALL          ·          ·
+render                    ·            ·            (y, z, x)  ·
+ │                        render 0     y            ·          ·
+ │                        render 1     z            ·          ·
+ │                        render 2     x            ·          ·
+ └── sort                 ·            ·            (x, y, z)  weak-key(x); +x
+      │                   order        +x           ·          ·
+      └── distinct        ·            ·            (x, y, z)  weak-key(x); -z,-y
+           │              distinct on  x            ·          ·
+           └── sort       ·            ·            (x, y, z)  -z,-y
+                │         order        -z,-y        ·          ·
+                └── scan  ·            ·            (x, y, z)  ·
+·                         table        xyz@primary  ·          ·
+·                         spans        ALL          ·          ·
 
 #####################
 # With aggregations #
