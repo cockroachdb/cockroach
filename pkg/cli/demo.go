@@ -74,7 +74,7 @@ func setupTransientServer(
 	cleanup = func() {}
 	ctx := context.Background()
 
-	df := cmd.Flags().Lookup(logflags.LogDirName)
+	df := startCtx.logDirFlag
 	sf := cmd.Flags().Lookup(logflags.LogToStderrName)
 	if !df.Changed && !sf.Changed {
 		// User did not request logging flags; shut down logging under

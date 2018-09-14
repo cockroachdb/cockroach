@@ -271,6 +271,10 @@ var startCtx struct {
 	// pidFile indicates the file to which the server writes its PID
 	// when it is ready.
 	pidFile string
+
+	// logging settings specific to file logging.
+	logDir     log.DirName
+	logDirFlag *pflag.Flag
 }
 
 // quitCtx captures the command-line parameters of the `quit` command.
