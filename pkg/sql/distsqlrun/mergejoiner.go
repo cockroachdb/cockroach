@@ -240,11 +240,6 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (m *mergeJoiner) ConsumerDone() {
-	m.MoveToDraining(nil /* err */)
-}
-
 func (m *mergeJoiner) close() {
 	if m.InternalClose() {
 		ctx := m.evalCtx.Ctx()

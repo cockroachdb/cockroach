@@ -130,11 +130,6 @@ func (v *valuesProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (v *valuesProcessor) ConsumerDone() {
-	v.MoveToDraining(nil /* err */)
-}
-
 // ConsumerClosed is part of the RowSource interface.
 func (v *valuesProcessor) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.

@@ -843,6 +843,11 @@ func (pb *ProcessorBase) InternalClose() bool {
 	return closing
 }
 
+// ConsumerDone is part of the RowSource interface.
+func (pb *ProcessorBase) ConsumerDone() {
+	pb.MoveToDraining(nil /* err */)
+}
+
 // NewMonitor is a utility function used by processors to create a new
 // memory monitor with the given name and start it. The returned monitor must
 // be closed.

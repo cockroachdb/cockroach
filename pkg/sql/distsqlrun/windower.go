@@ -279,11 +279,6 @@ func (w *windower) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	return nil, w.DrainHelper()
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (w *windower) ConsumerDone() {
-	w.MoveToDraining(nil /* err */)
-}
-
 // ConsumerClosed is part of the RowSource interface.
 func (w *windower) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.

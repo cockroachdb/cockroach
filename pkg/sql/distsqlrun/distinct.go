@@ -313,11 +313,6 @@ func (d *SortedDistinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	return nil, d.DrainHelper()
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (d *Distinct) ConsumerDone() {
-	d.input.ConsumerDone()
-}
-
 // ConsumerClosed is part of the RowSource interface.
 func (d *Distinct) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.

@@ -651,11 +651,6 @@ func (jr *joinReader) Start(ctx context.Context) context.Context {
 	return jr.StartInternal(ctx, joinReaderProcName)
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (jr *joinReader) ConsumerDone() {
-	jr.MoveToDraining(nil /* err */)
-}
-
 // ConsumerClosed is part of the RowSource interface.
 func (jr *joinReader) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.

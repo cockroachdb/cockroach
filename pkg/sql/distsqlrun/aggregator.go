@@ -721,11 +721,6 @@ func (ag *orderedAggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	return nil, ag.DrainHelper()
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (ag *aggregatorBase) ConsumerDone() {
-	ag.MoveToDraining(nil /* err */)
-}
-
 // ConsumerClosed is part of the RowSource interface.
 func (ag *hashAggregator) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
