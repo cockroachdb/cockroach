@@ -4521,7 +4521,7 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 		// Log this metric infrequently.
 		if tick%60 == 0 /* every 10m */ {
 			log.Infof(ctx, "sstables (read amplification = %d):\n%s", readAmp, sstables)
-			log.Infof(ctx, "%s\nestimated_pending_compaction_bytes: %s",
+			log.Infof(ctx, "%sestimated_pending_compaction_bytes: %s",
 				rocksdb.GetCompactionStats(), humanizeutil.IBytes(stats.PendingCompactionBytesEstimate))
 		}
 	}
