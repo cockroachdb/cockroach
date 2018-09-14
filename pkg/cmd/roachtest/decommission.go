@@ -336,7 +336,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 			"Please verify cluster health before removing the nodes.",
 	}
 	statusHeader := []string{
-		"id", "address", "build", "started_at", "updated_at", "is_live",
+		"id", "address", "build", "started_at", "updated_at", "is_available", "is_live",
 	}
 	waitLiveDeprecated := "--wait=live is deprecated and is treated as --wait=all"
 
@@ -392,10 +392,10 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		}
 		exp := [][]string{
 			statusHeader,
-			{`1`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`2`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`3`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`4`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`1`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`2`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`3`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`4`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
 		}
 		if err := matchCSV(o, exp); err != nil {
 			t.Fatal(err)
@@ -586,9 +586,9 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 
 		exp := [][]string{
 			statusHeader,
-			{`2`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`3`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`4`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`2`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`3`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`4`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
 		}
 		if err := matchCSV(o, exp); err != nil {
 			time.Sleep(time.Second)

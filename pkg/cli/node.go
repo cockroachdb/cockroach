@@ -82,6 +82,7 @@ var baseNodeColumnHeaders = []string{
 	"build",
 	"started_at",
 	"updated_at",
+	"is_available",
 	"is_live",
 }
 
@@ -162,9 +163,11 @@ FROM crdb_internal.gossip_liveness JOIN crdb_internal.gossip_nodes USING (node_i
                 CASE WHEN split_part(expiration,',',1)::decimal > now()::decimal
                      THEN true
                      ELSE false
-                     END AS is_live
+                     END AS is_available
          FROM crdb_internal.gossip_liveness`,
 			),
+			`SELECT node_id AS id, is_live
+         FROM crdb_internal.gossip_nodes`,
 		},
 	)
 
