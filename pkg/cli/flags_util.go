@@ -15,6 +15,7 @@
 package cli
 
 import (
+	"context"
 	gohex "encoding/hex"
 	"fmt"
 	"math"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
@@ -386,6 +388,7 @@ type percentResolverFunc func(percent int) (int64, error)
 // memoryPercentResolver turns a percent into the respective fraction of the
 // system's internal memory.
 func memoryPercentResolver(percent int) (int64, error) {
+	log.Infof(context.TODO(), "hello! this is a log message")
 	sizeBytes, _, err := status.GetTotalMemoryWithoutLogging()
 	if err != nil {
 		return 0, err

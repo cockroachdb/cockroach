@@ -948,7 +948,7 @@ func maybeWarnMemorySizes(ctx context.Context) {
 }
 
 func logOutputDirectory() string {
-	return cockroachCmd.PersistentFlags().Lookup(logflags.LogDirName).Value.String()
+	return startCtx.logDir.String()
 }
 
 // setupAndInitializeLoggingAndProfiling does what it says on the label.
@@ -961,9 +961,7 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 	// non-memory store. If more than one non-memory stores is detected,
 	// print a warning.
 	ambiguousLogDirs := false
-	pf := cockroachCmd.PersistentFlags()
-	f := pf.Lookup(logflags.LogDirName)
-	if !log.DirSet() && !f.Changed {
+	if !startCtx.logDir.IsSet() && !startCtx.logDirFlag.Changed {
 		// We only override the log directory if the user has not explicitly
 		// disabled file logging using --log-dir="".
 		newDir := ""
@@ -977,14 +975,13 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 			}
 			newDir = filepath.Join(spec.Path, "logs")
 		}
-		if err := f.Value.Set(newDir); err != nil {
+		if err := startCtx.logDir.Set(newDir); err != nil {
 			return nil, err
 		}
 	}
 
-	if logDir := f.Value.String(); logDir != "" {
-
-		ls := pf.Lookup(logflags.LogToStderrName)
+	if logDir := startCtx.logDir.String(); logDir != "" {
+		ls := cockroachCmd.PersistentFlags().Lookup(logflags.LogToStderrName)
 		if !ls.Changed {
 			// Unless the settings were overridden by the user, silence
 			// logging to stderr because the messages will go to a log file.
@@ -998,6 +995,14 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 			return nil, err
 		}
 		log.Eventf(ctx, "created log directory %s", logDir)
+
+		// Note that we configured the --log-dir flag to set
+		// startContext.logDir. This is the point at which we set log-dir for the
+		// util/log package. We don't want to set it earlier to avoid spuriously
+		// creating a file in an incorrect log directory or if something is
+		// accidentally logging after flag parsing but before the --background
+		// dispatch has occurred.
+		flag.Lookup(logflags.LogDirName).Value.Set(logDir)
 
 		// Start the log file GC daemon to remove files that make the log
 		// directory too large.
