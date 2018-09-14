@@ -143,6 +143,8 @@ export default function Debug() {
           <DebugTableLink name="Profile (raw)" url="/debug/pprof/profile?debug=1" />
           <DebugTableLink name="Block (UI)" url="/debug/pprof/ui/block/" />
           <DebugTableLink name="Block (raw)" url="/debug/pprof/block?debug=1" />
+          <DebugTableLink name="Mutex (UI)" url="/debug/pprof/ui/mutex/" />
+          <DebugTableLink name="Mutex (raw)" url="/debug/pprof/mutex?debug=1" />
           <DebugTableLink name="Thread Create (UI)" url="/debug/pprof/ui/threadcreate/" />
           <DebugTableLink name="Thread Create (raw)" url="/debug/pprof/threadcreate?debug=1" />
           <DebugTableLink name="Goroutines (UI)" url="/debug/pprof/ui/goroutine/" />
