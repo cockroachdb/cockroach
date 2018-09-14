@@ -300,6 +300,38 @@ message StacksRequest {
   string node_id = 1;
 }
 
+// Represents the type of file.
+// TODO(ridwanmsharif): Add support for log files. They're currently served
+// by an endpoint that parses the log messages, which is not what the 
+// debug zip client wants.
+enum FileType { HEAP = 0; }
+
+message File {
+  string name = 1;
+  int64 file_size = 2;
+  // Contents may not be populated if only a list of Files are requested.
+  bytes contents = 3;
+}
+
+message GetFilesRequest {
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+  // If list_only is true then the contents of the files will not be populated
+  // in the response. Only filenames and sizes will be returned.
+  bool list_only = 2;
+  FileType type = 5;
+  // Each pattern given is matched with Files of the above type in the node
+  // using filepath.Glob(). The patterns only match to filenames and so path
+  // separators cannot be used.
+  // Example: * will match all files of requested type.
+  repeated string patterns = 6;
+}
+
+message GetFilesResponse {
+  repeated File files = 1;
+}
+
 message ProfileRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
@@ -741,6 +773,11 @@ service Status {
   rpc Metrics(MetricsRequest) returns (JSONResponse) {
     option (google.api.http) = {
       get : "/_status/metrics/{node_id}"
+    };
+  }
+  rpc GetFiles(GetFilesRequest) returns (GetFilesResponse) {
+    option (google.api.http) = {
+      get : "/_status/files/{node_id}"
     };
   }
   rpc LogFilesList(LogFilesListRequest) returns (LogFilesListResponse) {
