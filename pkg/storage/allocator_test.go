@@ -546,6 +546,114 @@ func TestAllocatorExistingReplica(t *testing.T) {
 	}
 }
 
+func TestAllocatorMultipleStoresPerNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stores := []*roachpb.StoreDescriptor{
+		{
+			StoreID:  1,
+			Node:     roachpb.NodeDescriptor{NodeID: 1},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 600},
+		},
+		{
+			StoreID:  2,
+			Node:     roachpb.NodeDescriptor{NodeID: 1},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 500},
+		},
+		{
+			StoreID:  3,
+			Node:     roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 400},
+		},
+		{
+			StoreID:  4,
+			Node:     roachpb.NodeDescriptor{NodeID: 2},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 300},
+		},
+		{
+			StoreID:  5,
+			Node:     roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 200},
+		},
+		{
+			StoreID:  6,
+			Node:     roachpb.NodeDescriptor{NodeID: 3},
+			Capacity: roachpb.StoreCapacity{Capacity: 200, Available: 100, RangeCount: 100},
+		},
+	}
+
+	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
+	defer stopper.Stop(context.Background())
+	gossiputil.NewStoreGossiper(g).GossipStores(stores, t)
+
+	testCases := []struct {
+		existing     []roachpb.ReplicaDescriptor
+		expectTarget bool
+	}{
+		{
+			existing: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+			},
+			expectTarget: true,
+		},
+		{
+			existing: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 2},
+				{NodeID: 2, StoreID: 3},
+			},
+			expectTarget: true,
+		},
+		{
+			existing: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 2},
+				{NodeID: 3, StoreID: 6},
+			},
+			expectTarget: true,
+		},
+		{
+			existing: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 1},
+				{NodeID: 2, StoreID: 3},
+				{NodeID: 3, StoreID: 5},
+			},
+			expectTarget: false,
+		},
+		{
+			existing: []roachpb.ReplicaDescriptor{
+				{NodeID: 1, StoreID: 2},
+				{NodeID: 2, StoreID: 4},
+				{NodeID: 3, StoreID: 6},
+			},
+			expectTarget: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		result, _, err := a.AllocateTarget(
+			context.Background(),
+			config.ZoneConfig{},
+			tc.existing,
+			firstRangeInfo,
+		)
+		if e, a := tc.expectTarget, result != nil; e != a {
+			t.Errorf("AllocateTarget(%v) got target %v, err %v; expectTarget=%v",
+				tc.existing, result, err, tc.expectTarget)
+		}
+
+		result, details := a.RebalanceTarget(
+			context.Background(),
+			config.ZoneConfig{},
+			nil, /* raftStatus */
+			testRangeInfo(tc.existing, firstRange),
+			storeFilterThrottled,
+		)
+		if e, a := tc.expectTarget, result != nil; e != a {
+			t.Errorf("RebalanceTarget(%v) got target %v, details %v; expectTarget=%v",
+				tc.existing, result, details, tc.expectTarget)
+		}
+	}
+}
+
 // TestAllocatorRebalance verifies that rebalance targets are chosen
 // randomly from amongst stores under the maxFractionUsedThreshold.
 func TestAllocatorRebalance(t *testing.T) {
