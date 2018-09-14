@@ -461,7 +461,7 @@ func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) ExprView {
 // normalized expression, but is an alternate form that may have a lower cost.
 // The group must already exist, since the normalized version of the expression
 // should have triggered its creation earlier.
-func (m *Memo) MemoizeDenormExpr(group GroupID, denorm Expr) {
+func (m *Memo) MemoizeDenormExpr(evalCtx *tree.EvalContext, group GroupID, denorm Expr) {
 	existing := m.exprMap[denorm.Fingerprint()]
 	if existing != 0 {
 		// Expression has already been entered into the memo.
@@ -487,6 +487,21 @@ func (m *Memo) MemoizeDenormExpr(group GroupID, denorm Expr) {
 			Group: group,
 			Expr:  ExprOrdinal(m.group(group).exprCount() - 1),
 		})
+
+		// Create logical properties for this expression and cross-check them
+		// against the group properties. To do this without modifying a lot of code,
+		// we put this expression in a temporary group. We skip this check if the
+		// operator is known to not have code for building logical props.
+		if denorm.Operator() != opt.MergeJoinOp {
+			tmpGroupID := GroupID(len(m.groups))
+			m.groups = append(m.groups, makeMemoGroup(tmpGroupID, denorm))
+			ev := MakeNormExprView(m, tmpGroupID)
+			logical := m.logPropsBuilder.buildProps(evalCtx, ev)
+			logical.VerifyAgainst(&m.group(group).logical)
+
+			// Clean up the temporary group.
+			m.groups = m.groups[:len(m.groups)-1]
+		}
 	}
 }
 
