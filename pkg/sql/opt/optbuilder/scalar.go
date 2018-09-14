@@ -173,6 +173,11 @@ func (b *Builder) buildScalar(
 		out = b.factory.ConstructArray(elements, b.factory.InternType(arrayType))
 
 	case *tree.ArrayFlatten:
+		if b.AllowUnsupportedExpr {
+			out = b.factory.ConstructUnsupportedExpr(b.factory.InternTypedExpr(scalar))
+			break
+		}
+
 		// We build
 		//
 		//  ARRAY(<subquery>)
