@@ -2208,7 +2208,7 @@ FROM
 GROUP BY t2.b;
 ----
 project
- ├── columns: array:15(tuple{int}[]) array:17(tuple{int}[])
+ ├── columns: array:15(int[]) array:17(int[])
  ├── group-by
  │    ├── columns: t2.b:2(int) max:12(int)
  │    ├── grouping columns: t2.b:2(int)
@@ -2264,7 +2264,7 @@ FROM
 GROUP BY t2.a, t2.b;
 ----
 project
- ├── columns: array:23(tuple{int}[]) array:25(tuple{int}[]) array:27(tuple{int}[])
+ ├── columns: array:23(int[]) array:25(int[]) array:27(int[])
  ├── group-by
  │    ├── columns: t2.a:1(int) t2.b:2(int) max:13(int)
  │    ├── grouping columns: t2.a:1(int) t2.b:2(int)
@@ -2418,3 +2418,51 @@ project
                                │         │         └── variable: max [type=int]
                                │         └── variable: t2.a [type=int]
                                └── variable: max [type=int]
+
+exec-ddl
+CREATE TABLE v (x INT)
+----
+TABLE v
+ ├── x int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE w (y INT[])
+----
+TABLE w
+ ├── y int[]
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+# Regression test for #30191. Ensure ArrayFlatten returns correct type.
+build
+SELECT * FROM w WHERE y = ARRAY(SELECT x FROM v ORDER BY x)
+----
+project
+ ├── columns: y:1(int[]!null)
+ └── select
+      ├── columns: y:1(int[]!null) w.rowid:2(int!null)
+      ├── scan w
+      │    └── columns: y:1(int[]) w.rowid:2(int!null)
+      └── filters [type=bool]
+           └── eq [type=bool]
+                ├── variable: y [type=int[]]
+                └── coalesce [type=int[]]
+                     ├── subquery [type=int[]]
+                     │    └── scalar-group-by
+                     │         ├── columns: array_agg:5(int[])
+                     │         ├── internal-ordering: +3
+                     │         ├── sort
+                     │         │    ├── columns: x:3(int)
+                     │         │    ├── ordering: +3
+                     │         │    └── project
+                     │         │         ├── columns: x:3(int)
+                     │         │         └── scan v
+                     │         │              └── columns: x:3(int) v.rowid:4(int!null)
+                     │         └── aggregations
+                     │              └── array-agg [type=int[]]
+                     │                   └── variable: x [type=int]
+                     └── array: [type=int[]]
