@@ -202,6 +202,11 @@ func emitEntries(
 		var keyCopy, valueCopy []byte
 		scratch, keyCopy = scratch.Copy(key.Bytes(), 0 /* extraCap */)
 		scratch, valueCopy = scratch.Copy(value.Bytes(), 0 /* extraCap */)
+		if knobs.BeforeEmitRow != nil {
+			if err := knobs.BeforeEmitRow(); err != nil {
+				return err
+			}
+		}
 		if err := sink.EmitRow(ctx, row.tableDesc.Name, keyCopy, valueCopy); err != nil {
 			return err
 		}

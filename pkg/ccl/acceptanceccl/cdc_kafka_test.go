@@ -10,15 +10,10 @@ package acceptanceccl
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"net"
-	"reflect"
-	"sort"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -28,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -91,80 +85,8 @@ func TestCDC(t *testing.T) {
 			log.Infof(ctx, "KAFKA DOCKER CONTAINER LOGS:\n%s", string(logsBytes))
 		}()
 
-		t.Run(`Description`, func(t *testing.T) { testDescription(ctx, t, c, k) })
-		t.Run(`PauseUnpause`, func(t *testing.T) { testPauseUnpause(ctx, t, c, k) })
 		t.Run(`Bank`, func(t *testing.T) { testBank(ctx, t, c, k) })
 		t.Run(`Errors`, func(t *testing.T) { testErrors(ctx, t, k) })
-	})
-}
-
-func testDescription(ctx context.Context, t *testing.T, c *cluster.DockerCluster, k *dockerKafka) {
-	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
-	defer s.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
-
-	sqlDB.Exec(t, `CREATE DATABASE d`)
-	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
-	sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
-
-	into := `kafka://localhost:` + k.kafkaPort + `?topic_prefix=Description_`
-	var jobID int
-	sqlDB.QueryRow(t,
-		`CREATE CHANGEFEED FOR foo INTO $1 WITH updated, envelope=$2`, into, `row`,
-	).Scan(&jobID)
-	var description string
-	sqlDB.QueryRow(t,
-		`SELECT description FROM [SHOW JOBS] WHERE job_id = $1`, jobID,
-	).Scan(&description)
-	expected := `CREATE CHANGEFEED FOR TABLE foo INTO '` + into + `' WITH envelope = 'row', updated`
-	if description != expected {
-		t.Errorf(`got "%s" expected "%s"`, description, expected)
-	}
-}
-
-func testPauseUnpause(ctx context.Context, t *testing.T, c *cluster.DockerCluster, k *dockerKafka) {
-	defer func(prev time.Duration) { jobs.DefaultAdoptInterval = prev }(jobs.DefaultAdoptInterval)
-	jobs.DefaultAdoptInterval = 10 * time.Millisecond
-
-	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: "d"})
-	defer s.Stopper().Stop(ctx)
-	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
-
-	sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
-	sqlDB.Exec(t, `CREATE DATABASE d`)
-	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
-	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a'), (2, 'b'), (4, 'c'), (7, 'd'), (8, 'e')`)
-
-	into := `kafka://localhost:` + k.kafkaPort + `?topic_prefix=PauseUnpause_`
-	var jobID int
-	sqlDB.QueryRow(t, `CREATE CHANGEFEED FOR foo INTO $1 WITH resolved`, into).Scan(&jobID)
-
-	tc, err := makeTopicsConsumer(k.consumer, `PauseUnpause_foo`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer tc.Close()
-
-	tc.assertPayloads(t, []string{
-		`PauseUnpause_foo: [1]->{"a":1,"b":"a"}`,
-		`PauseUnpause_foo: [2]->{"a":2,"b":"b"}`,
-		`PauseUnpause_foo: [4]->{"a":4,"b":"c"}`,
-		`PauseUnpause_foo: [7]->{"a":7,"b":"d"}`,
-		`PauseUnpause_foo: [8]->{"a":8,"b":"e"}`,
-	})
-
-	// Wait for the high-water mark on the job to be updated after the initial
-	// scan, to make sure we don't get the initial scan data again.
-	m := tc.nextMessage(t)
-	if len(m.Key) != 0 {
-		t.Fatalf(`expected a resolved timestamp got %s: %s->%s`, m.Topic, m.Key, m.Value)
-	}
-
-	sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
-	sqlDB.Exec(t, `INSERT INTO foo VALUES (16, 'f')`)
-	sqlDB.Exec(t, `RESUME JOB $1`, jobID)
-	tc.assertPayloads(t, []string{
-		`PauseUnpause_foo: [16]->{"a":16,"b":"f"}`,
 	})
 }
 
@@ -512,37 +434,4 @@ func (c *topicsConsumer) nextMessage(t testing.TB) *sarama.ConsumerMessage {
 	for ; m == nil; m = c.tryNextMessage(t) {
 	}
 	return m
-}
-
-func (c *topicsConsumer) assertPayloads(t testing.TB, expected []string) {
-	var actual []string
-	for len(actual) < len(expected) {
-		m := c.nextMessage(t)
-
-		// Skip resolved timestamps messages.
-		if len(m.Key) == 0 {
-			continue
-		}
-
-		// Strip out the updated timestamp in the value.
-		var valueRaw map[string]interface{}
-		if err := json.Unmarshal(m.Value, &valueRaw); err != nil {
-			t.Fatal(err)
-		}
-		delete(valueRaw, `__crdb__`)
-		value, err := json.Marshal(valueRaw)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		actual = append(actual, fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, value))
-	}
-	// The tests that use this aren't concerned with order, just that these are
-	// the next len(expected) messages.
-	sort.Strings(expected)
-	sort.Strings(actual)
-	if !reflect.DeepEqual(expected, actual) {
-		t.Fatalf("expected\n  %s\ngot\n  %s",
-			strings.Join(expected, "\n  "), strings.Join(actual, "\n  "))
-	}
 }

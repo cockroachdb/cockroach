@@ -87,11 +87,11 @@ func getSink(sinkURI string, targets jobspb.ChangefeedTargets) (Sink, error) {
 		if err != nil {
 			return nil, err
 		}
-		// Mark all query parameters as consumed; since the connection succeeded,
-		// we assume they were valid SQL connection parameters.
-		for k := range q {
-			q.Del(k)
-		}
+		// Remove parameters we know about for the unknown parameter check.
+		q.Del(`sslcert`)
+		q.Del(`sslkey`)
+		q.Del(`sslmode`)
+		q.Del(`sslrootcert`)
 	default:
 		return nil, errors.Errorf(`unsupported sink: %s`, u.Scheme)
 	}
