@@ -942,9 +942,13 @@ func (r *subqueryHoister) constructGroupByAny(
 			r.f.ConstructProject(
 				r.f.ConstructSelect(
 					input,
-					r.f.ConstructIsNot(
-						r.f.funcs.ConstructBinary(cmp, scalar, inputVar),
-						r.f.ConstructFalse(),
+					r.f.ConstructFilters(
+						r.f.InternList([]memo.GroupID{
+							r.f.ConstructIsNot(
+								r.f.funcs.ConstructBinary(cmp, scalar, inputVar),
+								r.f.ConstructFalse(),
+							),
+						}),
 					),
 				),
 				r.f.ConstructProjections(

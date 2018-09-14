@@ -25,6 +25,7 @@ import (
 // checkExpr does sanity checking on an Expr. This code is called from
 // onConstruct in testrace builds (which gives us test/CI coverage but elides
 // this code in regular builds).
+// This function does not assume that the expression has been fully normalized.
 func (f *Factory) checkExpr(ev memo.ExprView) {
 	// Check logical properties.
 	ev.Logical().Verify()
@@ -101,7 +102,7 @@ func (f *Factory) checkExpr(ev memo.ExprView) {
 	case opt.SelectOp:
 		filter := ev.Child(1)
 		switch filter.Operator() {
-		case opt.FiltersOp:
+		case opt.FiltersOp, opt.TrueOp, opt.FalseOp:
 		default:
 			panic(fmt.Sprintf("select contains %s", filter.Operator()))
 		}

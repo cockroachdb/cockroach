@@ -9,21 +9,6 @@
 [EliminateSelect, Normalize]
 (Select $input:* (True)) => $input
 
-# EnsureSelectFilters adds a Filters operator to a Select's filter condition
-# if it does not already exist. This allows other rules to rely upon the
-# presence of the Filters when matching. See comment at top of bool.opt for
-# more details.
-[EnsureSelectFilters, Normalize]
-(Select
-    $input:*
-    $filter:^(Filters | And | True | False)
-)
-=>
-(Select
-    $input
-    (Filters [ $filter ])
-)
-
 # MergeSelects combines two nested Select operators into a single Select that
 # ANDs the filter conditions of the two Selects.
 [MergeSelects, Normalize]
