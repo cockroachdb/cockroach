@@ -155,6 +155,108 @@ type RowSource interface {
 	ConsumerClosed()
 }
 
+// SimpleRowSource is a RowSource extended with a SimpleNext method that doesn't
+// know about ProducerMetadata. A Processor can be implemented more simply by
+// embedding ProcessorBase and implementing SimpleNext, and leaving the actual
+// Next() implementation up to ProcessorBase.
+//
+// If a Processor implements the SimpleRowSource interface, its implementation
+// is expected to look something like this:
+//
+//   // concatProcessor concatenates rows from two sources (first returns rows
+//   // from the left, then from the right).
+//   type concatProcessor struct {
+//     ProcessorBase
+//     l, r RowSource
+//
+//     // leftConsumed is set once we've exhausted the left input; once set, we start
+//     // consuming the right input.
+//     leftConsumed bool
+//   }
+//
+//   func newConcatProcessor(
+//     flowCtx *FlowCtx, l RowSource, r RowSource, post *PostProcessSpec, output RowReceiver,
+//   ) (*concatProcessor, error) {
+//     p := &concatProcessor{}
+//     p.l = MakeRowSourceInput(l, &p.ProcessorBase)
+//     p.r = MakeRowSourceInput(r, &p.ProcessorBase)
+//     if err := p.init(
+//       post, l.OutputTypes(), flowCtx, output,
+//       // We pass the inputs to the helper, to be consumed by DrainHelper() later.
+//       ProcStateOpts{
+//         InputsToDrain: []RowSource{l, r},
+//         // If the proc needed to return any metadata at the end other than the
+//         // tracing info, or if it needed to cleanup any resources other than those
+//         // handled by InternalClose() (say, close some memory account), it'd pass
+//         // a TrailingMetaCallback here.
+//       },
+//     ); err != nil {
+//       return nil, err
+//     }
+//     return p, nil
+//   }
+//
+//   // Start is part of the RowSource interface.
+//   func (p *concatProcessor) Start(ctx context.Context) context.Context {
+//     p.l.Start(ctx)
+//     p.r.Start(ctx)
+//     return p.StartInternal(ctx, concatProcName)
+//   }
+//
+//   // Next is part of the SimpleRowSource interface.
+//   func (p *concatProcessor) SimpleNext() (sqlbase.EncDatumRow, err) {
+//     for {
+//       var row sqlbase.EncDatumRow
+//       if !p.leftConsumed {
+//         row, err = p.l.SimpleNext()
+//       } else {
+//         row, err = p.r.SimpleNext()
+//       }
+//
+//       if err != nil {
+//         return nil, err
+//       }
+//       if row == nil {
+//         if !p.leftConsumed {
+//           p.leftConsumed = true
+//         } else {
+//           // In this case we know that both inputs are consumed, so we could
+//           // transition directly to stateTrailingMeta, but implementations are
+//           // encouraged to just use MoveToDraining() for uniformity; DrainHelper()
+//           // will transition to stateTrailingMeta() quickly.
+//           p.MoveToDraining(nil /* err */)
+//           break
+//         }
+//         continue
+//       }
+//
+//       return outRow, nil
+//     }
+//   }
+//
+//   // ConsumerClosed is part of the RowSource interface.
+//   func (p *concatProcessor) ConsumerClosed() {
+//     // The consumer is done, Next() will not be called again.
+//     p.InternalClose()
+//   }
+//
+type SimpleRowSource interface {
+	RowSource
+	SimpleNext() (sqlbase.EncDatumRow, error)
+}
+
+// RowSourceInput is an interface that presents a simplified Next method,
+// NextFromInput, which returns a row or nil and never errors. This interface
+// shouldn't be implemented by Processor code - it's designed to be used by
+// Processors that implement the SimpleRowSource interface with help from
+// ProcessorBase. The inputs to SimpleRowSource implementors should be wrapped
+// by one of these, so that Processor implementations don't have to worry about
+// errors or metadata from upstream.
+type RowSourceInput interface {
+	RowSource
+	NextFromInput() sqlbase.EncDatumRow
+}
+
 // RowSourcedProcessor is the union of RowSource and Processor.
 type RowSourcedProcessor interface {
 	RowSource

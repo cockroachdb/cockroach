@@ -26,18 +26,19 @@ import (
 // need the synchronizer to join streams.
 type noopProcessor struct {
 	ProcessorBase
-	input RowSource
+	input RowSourceInput
 }
 
 var _ Processor = &noopProcessor{}
-var _ RowSource = &noopProcessor{}
+var _ SimpleRowSource = &noopProcessor{}
 
 const noopProcName = "noop"
 
 func newNoopProcessor(
 	flowCtx *FlowCtx, processorID int32, input RowSource, post *PostProcessSpec, output RowReceiver,
 ) (*noopProcessor, error) {
-	n := &noopProcessor{input: input}
+	n := &noopProcessor{}
+	n.input = MakeRowSourceInput(input, &n.ProcessorBase)
 	if err := n.Init(
 		n,
 		post,
@@ -59,27 +60,10 @@ func (n *noopProcessor) Start(ctx context.Context) context.Context {
 	return n.StartInternal(ctx, noopProcName)
 }
 
-// Next is part of the RowSource interface.
-func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	for n.State == StateRunning {
-		row, meta := n.input.Next()
-
-		if meta != nil {
-			if meta.Err != nil {
-				n.MoveToDraining(nil /* err */)
-			}
-			return nil, meta
-		}
-		if row == nil {
-			n.MoveToDraining(nil /* err */)
-			break
-		}
-
-		if outRow := n.ProcessRowHelper(row); outRow != nil {
-			return outRow, nil
-		}
-	}
-	return nil, n.DrainHelper()
+// SimpleNext is part of the SimpleRowSource interface.
+func (n *noopProcessor) SimpleNext() (sqlbase.EncDatumRow, error) {
+	// noop - just pass row through.
+	return n.input.NextFromInput(), nil
 }
 
 // ConsumerClosed is part of the RowSource interface.
