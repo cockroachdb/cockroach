@@ -277,6 +277,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, ev ExprView) *props.Colu
 		opt.LookupJoinOp:
 		return sb.colStatJoin(colSet, ev)
 
+	case opt.IndexJoinOp:
+		return sb.colStatIndexJoin(colSet, ev)
+
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
 		return sb.colStatSetOp(colSet, ev)
@@ -838,6 +841,18 @@ func (sb *statisticsBuilder) buildIndexJoin(ev ExprView, relProps *props.Relatio
 
 	s.RowCount = inputStats.RowCount
 	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatIndexJoin(
+	colSet opt.ColSet, ev ExprView,
+) *props.ColumnStatistic {
+	relProps := ev.Logical().Relational
+	s := &relProps.Stats
+
+	// TODO(#30288): implement this.
+	colStat, _ := s.ColStats.Add(colSet)
+	colStat.DistinctCount = 1
+	return colStat
 }
 
 // +----------+
