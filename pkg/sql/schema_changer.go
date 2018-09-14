@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
@@ -149,6 +150,11 @@ func isPermanentSchemaChangeError(err error) bool {
 		return false
 	}
 	err = errors.Cause(err)
+
+	if grpcutil.IsClosedConnection(err) {
+		return false
+	}
+
 	switch err {
 	case
 		context.Canceled,
@@ -175,6 +181,7 @@ func isPermanentSchemaChangeError(err error) bool {
 
 		}
 	}
+
 	return true
 }
 
@@ -1211,6 +1218,10 @@ type SchemaChangerTestingKnobs struct {
 	// transaction is unable to commit because it is violating the two
 	// version lease invariant.
 	TwoVersionLeaseViolation func()
+
+	// OnError is called with all the errors seen by the
+	// synchronous code path.
+	OnError func(err error)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
