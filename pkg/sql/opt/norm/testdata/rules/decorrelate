@@ -1713,7 +1713,7 @@ norm expect=TryDecorrelateScalarGroupBy
 SELECT k, ARRAY(SELECT y FROM xy WHERE xy.y = a.i OR xy.y IS NULL) FROM a
 ----
 project
- ├── columns: k:1(int!null) array:9(tuple{int}[])
+ ├── columns: k:1(int!null) array:9(int[])
  ├── key: (1)
  ├── fd: (1)-->(9)
  ├── group-by
@@ -1750,7 +1750,7 @@ norm expect=TryDecorrelateScalarGroupBy
 SELECT i, ARRAY(SELECT y FROM xy WHERE xy.y = a.k OR xy.y = NULL ORDER BY y) FROM a
 ----
 project
- ├── columns: i:2(int) array:9(tuple{int}[])
+ ├── columns: i:2(int) array:9(int[])
  ├── group-by
  │    ├── columns: k:1(int!null) i:2(int) canary:10(bool) array_agg:11(int[])
  │    ├── grouping columns: k:1(int!null)

@@ -173,6 +173,11 @@ func (b *Builder) buildScalar(
 		out = b.factory.ConstructArray(elements, b.factory.InternType(arrayType))
 
 	case *tree.ArrayFlatten:
+		if b.AllowUnsupportedExpr {
+			out = b.factory.ConstructUnsupportedExpr(b.factory.InternTypedExpr(scalar))
+			break
+		}
+
 		// We build
 		//
 		//  ARRAY(<subquery>)
@@ -231,7 +236,7 @@ func (b *Builder) buildScalar(
 						Ordering: oc,
 					}),
 				),
-				b.factory.InternSubqueryDef(&memo.SubqueryDef{OriginalExpr: s.expr}),
+				b.factory.InternSubqueryDef(&memo.SubqueryDef{OriginalExpr: s.Subquery}),
 			),
 			b.factory.ConstructArray(memo.EmptyList, typID),
 		}))
@@ -325,7 +330,7 @@ func (b *Builder) buildScalar(
 		)
 
 	case *tree.ComparisonExpr:
-		if sub, ok := t.Right.(*subquery); ok && sub.multiRow {
+		if sub, ok := t.Right.(*subquery); ok && sub.wrapInTuple {
 			out, _ = b.buildMultiRowSubquery(t, inScope, colRefs)
 			// Perform correctness checks on the outer cols, update colRefs and
 			// b.subquery.outerCols.
