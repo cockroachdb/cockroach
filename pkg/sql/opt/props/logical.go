@@ -492,3 +492,39 @@ func (p *Logical) Verify() {
 		}
 	}
 }
+
+// VerifyAgainst checks that the two properties don't contradict each other.
+// Used for testing (e.g. to cross-check derived properties from expressions in
+// the same group).
+func (p *Logical) VerifyAgainst(other *Logical) {
+	if r1, r2 := p.Relational, other.Relational; r1 != nil || r2 != nil {
+		if !r1.OutputCols.Equals(r2.OutputCols) {
+			panic(fmt.Sprintf("output cols mismatch: %s vs %s", r1.OutputCols, r2.OutputCols))
+		}
+
+		// NotNullCols, FuncDeps are best effort, so they might differ.
+
+		if r1.Cardinality.Max < r2.Cardinality.Min ||
+			r1.Cardinality.Min > r2.Cardinality.Max {
+			panic(fmt.Sprintf("cardinality mismatch: %s vs %s", r1.Cardinality, r2.Cardinality))
+		}
+
+		// TODO(radu): these checks might be overzealous - conceivably a
+		// subexpression with outer columns/side-effects/placeholders could be
+		// elided.
+		if !r1.OuterCols.Equals(r2.OuterCols) {
+			panic(fmt.Sprintf("outer cols mismatch: %s vs %s", r1.OuterCols, r2.OuterCols))
+		}
+		if r1.CanHaveSideEffects != r2.CanHaveSideEffects {
+			panic(fmt.Sprintf("can-have-side-effects mismatch"))
+		}
+		if r1.HasPlaceholder != r2.HasPlaceholder {
+			panic(fmt.Sprintf("has-placeholder mismatch"))
+		}
+	}
+	if s1, s2 := p.Scalar, other.Scalar; s1 != nil || s2 != nil {
+		// TODO(radu): implement this if necessary. Currently we won't ever have
+		// multiple expressions in a scalar group.
+		panic("unimplemented")
+	}
+}
