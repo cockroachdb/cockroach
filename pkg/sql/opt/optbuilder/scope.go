@@ -760,7 +760,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		if sub, ok := t.Subquery.(*tree.Subquery); ok {
 			// Copy the ArrayFlatten expression so that the tree isn't mutated.
 			copy := *t
-			copy.Subquery = s.replaceSubquery(sub, true /* multi-row */, 1 /* desired-columns */)
+			copy.Subquery = s.replaceSubquery(sub, false /* wrapInTuple */, 1 /* desiredColumns */)
 			expr = &copy
 		}
 
@@ -775,7 +775,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 			if sub, ok := t.Right.(*tree.Subquery); ok {
 				// Copy the Comparison expression so that the tree isn't mutated.
 				copy := *t
-				copy.Right = s.replaceSubquery(sub, true /* multi-row */, -1 /* desired-columns */)
+				copy.Right = s.replaceSubquery(sub, true /* wrapInTuple */, -1 /* desiredColumns */)
 				expr = &copy
 			}
 		}
@@ -787,9 +787,9 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		}
 
 		if t.Exists {
-			expr = s.replaceSubquery(t, true /* multi-row */, -1 /* desired-columns */)
+			expr = s.replaceSubquery(t, true /* wrapInTuple */, -1 /* desiredColumns */)
 		} else {
-			expr = s.replaceSubquery(t, false /* multi-row */, s.columns /* desired-columns */)
+			expr = s.replaceSubquery(t, false /* wrapInTuple */, s.columns /* desiredColumns */)
 		}
 	}
 
@@ -943,13 +943,17 @@ func (s *scope) replaceCount(
 	return f, def
 }
 
-// Replace a raw subquery node with a typed subquery. multiRow specifies
-// whether the subquery is occurring in a single-row or multi-row
-// context. desiredColumns specifies the desired number of columns for the
+// Replace a raw subquery node with a typed subquery. wrapInTuple specifies
+// whether the return type of the subquery should be wrapped in a tuple.
+// wrapInTuple is true for subqueries that may return multiple rows in
+// comparison expressions (e.g., IN, ANY, ALL) and EXISTS expressions.
+// desiredColumns specifies the desired number of columns for the
 // subquery. Specifying -1 for desiredColumns allows the subquery to return any
 // number of columns and is used when the normal type checking machinery will
 // verify that the correct number of columns is returned.
-func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumns int) *subquery {
+func (s *scope) replaceSubquery(
+	sub *tree.Subquery, wrapInTuple bool, desiredColumns int,
+) *subquery {
 	if s.replaceSRFs {
 		// We need to save and restore the previous value of the replaceSRFs field in
 		// case we are recursively called within a subquery context.
@@ -958,8 +962,8 @@ func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumn
 	}
 
 	subq := subquery{
-		multiRow: multiRow,
-		expr:     sub,
+		Subquery:    sub,
+		wrapInTuple: wrapInTuple,
 	}
 
 	// Save and restore the previous value of s.builder.subquery in case we are
