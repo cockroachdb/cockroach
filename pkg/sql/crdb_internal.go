@@ -1741,6 +1741,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
   server_version  STRING NOT NULL,
   build_tag       STRING NOT NULL,
   started_at      TIMESTAMP NOT NULL,
+  is_live          BOOL NOT NULL,
   ranges          INT NOT NULL,
   leases          INT NOT NULL
 )
@@ -1752,6 +1753,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
 
 		g := p.ExecCfg().Gossip
 		var descriptors []roachpb.NodeDescriptor
+		alive := make(map[roachpb.NodeID]tree.DBool)
 		if err := g.IterateInfos(gossip.KeyNodeIDPrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()
 			if err != nil {
@@ -1763,6 +1765,10 @@ CREATE TABLE crdb_internal.gossip_nodes (
 				return errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
 			descriptors = append(descriptors, d)
+
+			if _, err := g.GetInfo(gossip.MakeGossipClientsKey(d.NodeID)); err == nil {
+				alive[d.NodeID] = true
+			}
 			return nil
 		}); err != nil {
 			return err
@@ -1818,6 +1824,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
 				tree.NewDString(d.ServerVersion.String()),
 				tree.NewDString(d.BuildTag),
 				tree.MakeDTimestamp(timeutil.Unix(0, d.StartedAt), time.Microsecond),
+				tree.MakeDBool(alive[d.NodeID]),
 				tree.NewDInt(tree.DInt(stats[d.NodeID].ranges)),
 				tree.NewDInt(tree.DInt(stats[d.NodeID].leases)),
 			); err != nil {
