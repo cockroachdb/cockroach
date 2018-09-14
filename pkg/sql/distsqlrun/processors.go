@@ -383,7 +383,7 @@ func (h *ProcOutputHelper) consumerClosed() {
 // ProcOutputHelper) and for implementing the RowSource interface (draining,
 // trailing metadata).
 //
-// If a Processor implements the RowSource interface, it's implementation is
+// If a Processor implements the RowSource interface, its implementation is
 // expected to look something like this:
 //
 //   // concatProcessor concatenates rows from two sources (first returns rows
@@ -466,11 +466,6 @@ func (h *ProcOutputHelper) consumerClosed() {
 //     return nil, p.DrainHelper()
 //   }
 //
-//   // ConsumerDone is part of the RowSource interface.
-//   func (p *concatProcessor) ConsumerDone() {
-//     p.MoveToDraining(nil /* err */)
-//   }
-//
 //   // ConsumerClosed is part of the RowSource interface.
 //   func (p *concatProcessor) ConsumerClosed() {
 //     // The consumer is done, Next() will not be called again.
@@ -479,6 +474,10 @@ func (h *ProcOutputHelper) consumerClosed() {
 //
 type ProcessorBase struct {
 	self RowSource
+	// simpleSelf is non-nil if the ProcessorBase was initialized with a
+	// SimpleRowSource. It points to the same object as `consumer`, and exists to
+	// avoid having to re-cast `consumer` at run-ime.
+	simpleSelf SimpleRowSource
 
 	processorID int32
 
@@ -776,6 +775,9 @@ func (pb *ProcessorBase) InitWithEvalCtx(
 	opts ProcStateOpts,
 ) error {
 	pb.self = self
+	if simpleSelf, ok := self.(SimpleRowSource); ok {
+		pb.simpleSelf = simpleSelf
+	}
 	pb.flowCtx = flowCtx
 	pb.evalCtx = evalCtx
 	pb.processorID = processorID
@@ -809,6 +811,40 @@ func (pb *ProcessorBase) StartInternal(ctx context.Context, name string) context
 	}
 	pb.evalCtx.Context = pb.Ctx
 	return pb.Ctx
+}
+
+// Next implements the RowSource interface. This default implementation can be
+// overridden by processors that wish to explicitly handle metadata. Otherwise,
+// processors can implement SimpleNext from SimpleRowSource and not have to deal
+// with reading incoming ProducerMetadata at all.
+func (pb *ProcessorBase) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	for pb.State == StateRunning {
+		if len(pb.trailingMeta) > 0 {
+			meta := &pb.trailingMeta[0]
+			pb.trailingMeta = pb.trailingMeta[1:]
+			return nil, meta
+		}
+		var row sqlbase.EncDatumRow
+		var err error
+		// N.B.: If your code is panicking here, it's because your Processor
+		// that embeds ProcessorBase doesn't implement Next() and also doesn't
+		// implement SimpleNext.
+		row, err = pb.simpleSelf.SimpleNext()
+		if err != nil {
+			pb.MoveToDraining(err)
+			return nil, pb.DrainHelper()
+		}
+		if row == nil {
+			// No more rows - let's drain now.
+			pb.MoveToDraining(nil /* err */)
+			break
+		}
+
+		if nextRow := pb.ProcessRowHelper(row); nextRow != nil {
+			return nextRow, nil
+		}
+	}
+	return nil, pb.DrainHelper()
 }
 
 // InternalClose helps processors implement the RowSource interface, performing
@@ -846,6 +882,42 @@ func (pb *ProcessorBase) InternalClose() bool {
 // ConsumerDone is part of the RowSource interface.
 func (pb *ProcessorBase) ConsumerDone() {
 	pb.MoveToDraining(nil /* err */)
+}
+
+// rowSourceWrapper is a SimpleInput that wraps a RowSource,
+// presenting the SimpleInput interface to a downstream ProcessorBase
+// that expects input from it. Calling Next on this wrapper will return
+// the next available row from the wrapped RowSource, or nil if there are no
+// more rows, forwarding all metadata to the `consumer` ProcessorBase.
+type rowSourceWrapper struct {
+	RowSource
+
+	consumer *ProcessorBase
+}
+
+var _ SimpleInput = rowSourceWrapper{}
+
+// MakeRowSourceInput creates a SimpleInput that wraps an inputRowSource
+// and presents an error-handling-free input source for consumption by
+// implementations of SimpleRowSource. It takes a consumer argument, which is
+// a pointer to the ProcessorBase that will be consuming this input.
+func MakeRowSourceInput(source RowSource, consumer *ProcessorBase) SimpleInput {
+	return rowSourceWrapper{RowSource: source, consumer: consumer}
+}
+
+// NextFromInput implements the SimpleInput interface.
+func (n rowSourceWrapper) NextFromInput() sqlbase.EncDatumRow {
+	for {
+		row, meta := n.RowSource.Next()
+		if meta != nil {
+			n.consumer.AppendTrailingMeta(*meta)
+			if meta.Err != nil {
+				n.consumer.MoveToDraining(nil /* err */)
+			}
+			continue
+		}
+		return row
+	}
 }
 
 // NewMonitor is a utility function used by processors to create a new

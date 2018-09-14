@@ -34,7 +34,8 @@ import (
 type Distinct struct {
 	ProcessorBase
 
-	input            RowSource
+	input            SimpleInput
+	statCollector    *InputStatCollector
 	types            []sqlbase.ColumnType
 	haveLastGroupKey bool
 	lastGroupKey     sqlbase.EncDatumRow
@@ -54,7 +55,7 @@ type SortedDistinct struct {
 }
 
 var _ Processor = &Distinct{}
-var _ RowSource = &Distinct{}
+var _ SimpleRowSource = &Distinct{}
 
 const distinctProcName = "distinct"
 
@@ -95,7 +96,6 @@ func NewDistinct(
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := NewMonitor(ctx, flowCtx.EvalCtx.Mon, "distinct-mem")
 	d := &Distinct{
-		input:        input,
 		orderedCols:  spec.OrderedColumns,
 		distinctCols: distinctCols,
 		memAcc:       memMonitor.MakeBoundAccount(),
@@ -118,7 +118,7 @@ func NewDistinct(
 	if err := d.Init(
 		d, post, d.types, flowCtx, processorID, output, memMonitor, /* memMonitor */
 		ProcStateOpts{
-			InputsToDrain: []RowSource{d.input},
+			InputsToDrain: []RowSource{input},
 			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
 				d.close()
 				return nil
@@ -130,9 +130,11 @@ func NewDistinct(
 	d.haveLastGroupKey = false
 
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
-		d.input = NewInputStatCollector(d.input)
+		d.statCollector = NewInputStatCollector(input)
+		input = d.statCollector
 		d.finishTrace = d.outputStatsToTrace
 	}
+	d.input = MakeRowSourceInput(input, &d.ProcessorBase)
 
 	return returnProcessor, nil
 }
@@ -210,19 +212,12 @@ func (d *Distinct) close() {
 	d.MemMonitor.Stop(d.Ctx)
 }
 
-// Next is part of the RowSource interface.
-func (d *Distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	for d.State == StateRunning {
-		row, meta := d.input.Next()
-		if meta != nil {
-			if meta.Err != nil {
-				d.MoveToDraining(nil /* err */)
-			}
-			return nil, meta
-		}
+// SimpleNext is part of the SimpleRowSource interface.
+func (d *Distinct) SimpleNext() (sqlbase.EncDatumRow, error) {
+	for {
+		row := d.input.NextFromInput()
 		if row == nil {
-			d.MoveToDraining(nil /* err */)
-			break
+			return row, nil
 		}
 
 		// If we are processing DISTINCT(x, y) and the input stream is ordered
@@ -231,8 +226,7 @@ func (d *Distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		// the row is the key we use in our 'seen' set.
 		encoding, err := d.encode(d.scratch, row)
 		if err != nil {
-			d.MoveToDraining(err)
-			break
+			return nil, err
 		}
 		d.scratch = encoding[:0]
 
@@ -240,8 +234,7 @@ func (d *Distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		// group key thus avoiding the need to store encodings of all rows.
 		matched, err := d.matchLastGroupKey(row)
 		if err != nil {
-			d.MoveToDraining(err)
-			break
+			return nil, err
 		}
 
 		if !matched {
@@ -252,8 +245,7 @@ func (d *Distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			copy(d.lastGroupKey, row)
 			d.haveLastGroupKey = true
 			if err := d.arena.UnsafeReset(d.Ctx); err != nil {
-				d.MoveToDraining(err)
-				break
+				return nil, err
 			}
 			d.seen = make(map[string]struct{})
 		}
@@ -264,40 +256,28 @@ func (d *Distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			}
 			s, err := d.arena.AllocBytes(d.Ctx, encoding)
 			if err != nil {
-				d.MoveToDraining(err)
-				break
+				return nil, err
 			}
 			d.seen[s] = struct{}{}
 		}
 
-		if outRow := d.ProcessRowHelper(row); outRow != nil {
-			return outRow, nil
-		}
+		return row, nil
 	}
-	return nil, d.DrainHelper()
 }
 
-// Next is part of the RowSource interface.
+// SimpleNext is part of the SimpleRowSource interface.
 //
 // sortedDistinct is simpler than distinct. All it has to do is keep track
 // of the last row it saw, emitting if the new row is different.
-func (d *SortedDistinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	for d.State == StateRunning {
-		row, meta := d.input.Next()
-		if meta != nil {
-			if meta.Err != nil {
-				d.MoveToDraining(nil /* err */)
-			}
-			return nil, meta
-		}
+func (d *SortedDistinct) SimpleNext() (sqlbase.EncDatumRow, error) {
+	for {
+		row := d.input.NextFromInput()
 		if row == nil {
-			d.MoveToDraining(nil /* err */)
-			break
+			return row, nil
 		}
 		matched, err := d.matchLastGroupKey(row)
 		if err != nil {
-			d.MoveToDraining(err)
-			break
+			return nil, err
 		}
 		if matched {
 			continue
@@ -306,11 +286,8 @@ func (d *SortedDistinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		d.haveLastGroupKey = true
 		copy(d.lastGroupKey, row)
 
-		if outRow := d.ProcessRowHelper(row); outRow != nil {
-			return outRow, nil
-		}
+		return row, nil
 	}
-	return nil, d.DrainHelper()
 }
 
 // ConsumerClosed is part of the RowSource interface.
@@ -341,7 +318,7 @@ func (ds *DistinctStats) StatsForQueryPlan() []string {
 // outputStatsToTrace outputs the collected distinct stats to the trace. Will
 // fail silently if the Distinct processor is not collecting stats.
 func (d *Distinct) outputStatsToTrace() {
-	is, ok := getInputStats(d.flowCtx, d.input)
+	is, ok := getInputStats(d.flowCtx, d.statCollector)
 	if !ok {
 		return
 	}
