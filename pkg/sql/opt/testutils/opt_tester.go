@@ -255,7 +255,6 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			d.Fatalf(tb, "%v", err)
 		}
 		if err := ot.postProcess(ev); err != nil {
-			tb.Fatal(ot.sql)
 			tb.Fatal(err)
 		}
 		return ev.FormatString(ot.Flags.ExprFormat)

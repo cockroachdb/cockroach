@@ -69,6 +69,40 @@ func (c *CustomFuncs) ConstructNonRightJoin(
 	panic(fmt.Sprintf("unexpected join operator: %v", joinOp))
 }
 
+// SimplifyNotNullEquality simplifies an expression of the following form:
+//
+//   (Is | IsNot (Eq) (True | False | Null))
+//
+// in the case where the Eq expression is guaranteed to never result in null.
+// The testOp argument must be IsOp or IsNotOp, and the constOp argument must be
+// TrueOp, FalseOp, or NullOp.
+func (c *CustomFuncs) SimplifyNotNullEquality(
+	eq memo.GroupID, testOp, constOp opt.Operator,
+) memo.GroupID {
+	switch testOp {
+	case opt.IsOp:
+		switch constOp {
+		case opt.TrueOp:
+			return eq
+		case opt.FalseOp:
+			return c.f.ConstructNot(eq)
+		case opt.NullOp:
+			return c.f.ConstructFalse()
+		}
+
+	case opt.IsNotOp:
+		switch constOp {
+		case opt.TrueOp:
+			return c.f.ConstructNot(eq)
+		case opt.FalseOp:
+			return eq
+		case opt.NullOp:
+			return c.f.ConstructTrue()
+		}
+	}
+	panic(fmt.Sprintf("invalid ops: %v, %v", testOp, constOp))
+}
+
 // CanMap returns true if it is possible to map a boolean expression src, which
 // is a conjunct in the given filters expression, to use the output columns of
 // the relational expression dst.
