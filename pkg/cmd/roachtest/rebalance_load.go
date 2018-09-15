@@ -114,7 +114,7 @@ func registerRebalanceLoad(r *registry) {
 	r.Add(testSpec{
 		Name:   `rebalance-leases-by-load`,
 		Nodes:  nodes(4), // the last node is just used to generate load
-		Stable: false,    // TODO(a-robinson): Promote to stable
+		Stable: true,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if local {
 				concurrency = 32
