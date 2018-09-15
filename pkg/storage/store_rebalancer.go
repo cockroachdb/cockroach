@@ -596,7 +596,7 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 		newLeaseIdx := 0
 		newLeaseQPS := math.MaxFloat64
 		for i := 0; i < len(targets); i++ {
-			storeDesc, ok := storeMap[desc.Replicas[i].StoreID]
+			storeDesc, ok := storeMap[targets[i].StoreID]
 			if ok && storeDesc.Capacity.QueriesPerSecond < newLeaseQPS {
 				newLeaseIdx = i
 				newLeaseQPS = storeDesc.Capacity.QueriesPerSecond
