@@ -50,6 +50,7 @@ type kv struct {
 	writeSeq, seed                       int64
 	sequential                           bool
 	splits                               int
+	splitEvenly                          bool
 	useOpt                               bool
 }
 
@@ -77,6 +78,7 @@ var kvMeta = workload.Meta{
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.BoolVar(&g.sequential, `sequential`, false, `Pick keys sequentially instead of randomly.`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
+		g.flags.BoolVar(&g.splitEvenly, `split-evenly`, false, `Split the key space evenly instead of randomly`)
 		g.flags.BoolVar(&g.useOpt, `use-opt`, true, `Use cost-based optimizer`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
@@ -114,6 +116,11 @@ func (w *kv) Tables() []workload.Table {
 		Splits: workload.Tuples(
 			w.splits,
 			func(splitIdx int) []interface{} {
+				if w.splitEvenly {
+					stride := (float64(math.MaxInt64) - float64(math.MinInt64)) / float64(w.splits+1)
+					splitPoint := int(math.MinInt64 + float64(splitIdx+1)*stride)
+					return []interface{}{splitPoint}
+				}
 				rng := rand.New(rand.NewSource(w.seed + int64(splitIdx)))
 				g := newHashGenerator(&sequence{config: w, val: w.writeSeq})
 				return []interface{}{
