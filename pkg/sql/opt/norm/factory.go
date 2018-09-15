@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // MatchedRuleFunc defines the callback function for the NotifyOnMatchedRule
@@ -172,12 +171,6 @@ func (f *Factory) AssignPlaceholders() {
 // so that any custom manual pattern matching/replacement code can be run.
 func (f *Factory) onConstruct(e memo.Expr) memo.GroupID {
 	ev := f.mem.MemoizeNormExpr(f.evalCtx, e)
-
-	// RaceEnabled ensures that checks are run on every PR (as part of make
-	// testrace) while keeping the check code out of non-test builds.
-	if util.RaceEnabled {
-		f.checkExpr(ev)
-	}
 	return ev.Group()
 }
 
