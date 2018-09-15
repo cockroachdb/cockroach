@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // PhysicalPropsID identifies a set of physical properties that has been
@@ -445,6 +446,13 @@ func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) ExprView {
 	mgrp := m.newGroup(norm)
 	ev := MakeNormExprView(m, mgrp.id)
 	mgrp.logical = m.logPropsBuilder.buildProps(evalCtx, ev)
+
+	// RaceEnabled ensures that checks are run on every PR (as part of make
+	// testrace) while keeping the check code out of non-test builds.
+	if util.RaceEnabled {
+		CheckExpr(ev)
+	}
+
 	return ev
 }
 
