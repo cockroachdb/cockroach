@@ -158,11 +158,20 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		// select below.
 		ready := s.mu.ready
 		delta := s.mu.is.delta(args.HighWaterStamps)
+		if args.HighWaterStamps == nil {
+			args.HighWaterStamps = make(map[roachpb.NodeID]int64)
+		}
 
 		if infoCount := len(delta); infoCount > 0 {
 			if log.V(1) {
 				log.Infof(ctx, "returning %d info(s) to node %d: %s",
 					infoCount, args.NodeID, extractKeys(delta))
+			}
+			// Ensure that the high water stamps for the remote client are kept up to
+			// date so that we avoid resending the same gossip infos as infos are
+			// updated locally.
+			for _, i := range delta {
+				ratchetHighWaterStamp(args.HighWaterStamps, i.NodeID, i.OrigStamp)
 			}
 
 			*reply = Response{
@@ -331,6 +340,7 @@ func (s *server) gossipReceiver(
 		// receive a new non-nil request. We avoid assigning to *argsPtr directly
 		// because the gossip sender above has closed over *argsPtr and will NPE if
 		// *argsPtr were set to nil.
+		mergeHighWaterStamps(&recvArgs.HighWaterStamps, (*argsPtr).HighWaterStamps)
 		*argsPtr = recvArgs
 	}
 }

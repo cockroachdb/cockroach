@@ -175,6 +175,13 @@ func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
 func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient) error {
 	g.mu.Lock()
 	if delta := g.mu.is.delta(c.remoteHighWaterStamps); len(delta) > 0 {
+		// Ensure that the high water stamps for the remote server are kept up to
+		// date so that we avoid resending the same gossip infos as infos are
+		// updated locally.
+		for _, i := range delta {
+			ratchetHighWaterStamp(c.remoteHighWaterStamps, i.NodeID, i.OrigStamp)
+		}
+
 		args := Request{
 			NodeID:          g.NodeID.Get(),
 			Addr:            g.mu.is.NodeAddr,
@@ -233,7 +240,7 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 		g.maybeTightenLocked()
 	}
 	c.peerID = reply.NodeID
-	c.remoteHighWaterStamps = reply.HighWaterStamps
+	mergeHighWaterStamps(&c.remoteHighWaterStamps, reply.HighWaterStamps)
 
 	// If we haven't yet recorded which node ID we're connected to in the outgoing
 	// nodeSet, do so now. Note that we only want to do this if the peer has a
