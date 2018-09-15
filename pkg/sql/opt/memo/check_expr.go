@@ -24,29 +24,33 @@ import (
 // CheckExpr does sanity checking on an Expr. This code is called in testrace
 // builds (which gives us test/CI coverage but elides this code in regular
 // builds).
-// This function does not assume that the expression has been fully normalized.
-func CheckExpr(ev ExprView) {
-	// Check logical properties.
-	ev.Logical().Verify()
+// This method does not assume that the expression has been fully normalized.
+func (m *Memo) CheckExpr(eid ExprID) {
+	expr := m.Expr(eid)
 
-	switch ev.Operator() {
+	// Check logical properties.
+	logical := m.GroupProperties(eid.Group)
+	logical.Verify()
+
+	switch expr.Operator() {
 	case opt.ScanOp:
-		def := ev.Private().(*ScanOpDef)
+		def := expr.Private(m).(*ScanOpDef)
 		if def.Flags.NoIndexJoin && def.Flags.ForceIndex {
 			panic("NoIndexJoin and ForceIndex set")
 		}
 
 	case opt.ProjectionsOp:
 		// Check that we aren't passing through columns in projection expressions.
-		n := ev.ChildCount()
-		def := ev.Private().(*ProjectionsOpDef)
+		n := expr.ChildCount()
+		def := expr.Private(m).(*ProjectionsOpDef)
 		colList := def.SynthesizedCols
 		if len(colList) != n {
 			panic(fmt.Sprintf("%d projections but %d columns", n, len(colList)))
 		}
 		for i := 0; i < n; i++ {
-			if child := ev.Child(i); child.Operator() == opt.VariableOp {
-				if child.Private().(opt.ColumnID) == colList[i] {
+			child := m.NormExpr(expr.ChildGroup(m, i))
+			if child.Operator() == opt.VariableOp {
+				if child.Private(m).(opt.ColumnID) == colList[i] {
 					panic(fmt.Sprintf("projection passes through column %d", colList[i]))
 				}
 			}
@@ -54,43 +58,46 @@ func CheckExpr(ev ExprView) {
 
 	case opt.AggregationsOp:
 		// Check that we don't have any bare variables as aggregations.
-		n := ev.ChildCount()
-		colList := ev.Private().(opt.ColList)
+		n := expr.ChildCount()
+		colList := expr.Private(m).(opt.ColList)
 		if len(colList) != n {
 			panic(fmt.Sprintf("%d aggregations but %d columns", n, len(colList)))
 		}
 		for i := 0; i < n; i++ {
-			if child := ev.Child(i); child.Operator() == opt.VariableOp {
+			child := m.NormExpr(expr.ChildGroup(m, i))
+			if child.Operator() == opt.VariableOp {
 				panic("aggregation contains bare variable")
 			}
 		}
 
 	case opt.DistinctOnOp:
 		// Aggregates can be only FirstAgg or ConstAgg.
-		agg := ev.Child(1)
+		agg := m.NormExpr(expr.ChildGroup(m, 1))
 		for i, n := 0, agg.ChildCount(); i < n; i++ {
-			if childOp := agg.Child(i).Operator(); childOp != opt.FirstAggOp && childOp != opt.ConstAggOp {
+			childOp := m.NormExpr(agg.ChildGroup(m, i)).Operator()
+			if childOp != opt.FirstAggOp && childOp != opt.ConstAggOp {
 				panic(fmt.Sprintf("distinct-on contains %s", childOp))
 			}
 		}
 
 	case opt.GroupByOp, opt.ScalarGroupByOp:
 		// Aggregates cannot be FirstAgg.
-		agg := ev.Child(1)
+		agg := m.NormExpr(expr.ChildGroup(m, 1))
 		for i, n := 0, agg.ChildCount(); i < n; i++ {
-			if childOp := agg.Child(i).Operator(); childOp == opt.FirstAggOp {
+			childOp := m.NormExpr(agg.ChildGroup(m, i)).Operator()
+			if childOp == opt.FirstAggOp {
 				panic(fmt.Sprintf("group-by contains %s", childOp))
 			}
 		}
 
 	case opt.IndexJoinOp:
-		def := ev.Private().(*IndexJoinDef)
+		def := expr.Private(m).(*IndexJoinDef)
 		if def.Cols.Empty() {
 			panic(fmt.Sprintf("index join with no columns"))
 		}
 
 	case opt.LookupJoinOp:
-		def := ev.Private().(*LookupJoinDef)
+		def := expr.Private(m).(*LookupJoinDef)
 		if len(def.KeyCols) == 0 {
 			panic(fmt.Sprintf("lookup join with no key columns"))
 		}
@@ -99,7 +106,7 @@ func CheckExpr(ev ExprView) {
 		}
 
 	case opt.SelectOp:
-		filter := ev.Child(1)
+		filter := m.NormExpr(expr.AsSelect().Filter())
 		switch filter.Operator() {
 		case opt.FiltersOp, opt.TrueOp, opt.FalseOp:
 		default:
@@ -107,8 +114,8 @@ func CheckExpr(ev ExprView) {
 		}
 
 	default:
-		if ev.IsJoin() {
-			on := ev.Child(2)
+		if expr.IsJoin() {
+			on := m.NormExpr(expr.ChildGroup(m, 2))
 			switch on.Operator() {
 			case opt.FiltersOp, opt.TrueOp, opt.FalseOp:
 			default:
@@ -117,25 +124,28 @@ func CheckExpr(ev ExprView) {
 		}
 	}
 
-	checkExprOrdering(ev)
+	m.checkExprOrdering(expr)
 }
 
 // checkExprOrdering runs checks on orderings stored inside operators.
-func checkExprOrdering(ev ExprView) {
+func (m *Memo) checkExprOrdering(expr *Expr) {
 	// Verify that orderings stored in operators only refer to columns produced by
 	// their input.
 	var ordering *props.OrderingChoice
-	switch ev.Operator() {
+	switch expr.Operator() {
 	case opt.LimitOp, opt.OffsetOp:
-		ordering = ev.Private().(*props.OrderingChoice)
+		ordering = expr.Private(m).(*props.OrderingChoice)
 	case opt.RowNumberOp:
-		ordering = &ev.Private().(*RowNumberDef).Ordering
+		ordering = &expr.Private(m).(*RowNumberDef).Ordering
 	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp:
-		ordering = &ev.Private().(*GroupByDef).Ordering
+		ordering = &expr.Private(m).(*GroupByDef).Ordering
 	default:
 		return
 	}
-	if outCols := ev.Child(0).Logical().Relational.OutputCols; !ordering.SubsetOfCols(outCols) {
-		panic(fmt.Sprintf("invalid ordering %v (op: %s, outcols: %v)", ordering, ev.Operator(), outCols))
+	outCols := m.GroupProperties(expr.ChildGroup(m, 0)).Relational.OutputCols
+	if !ordering.SubsetOfCols(outCols) {
+		panic(fmt.Sprintf(
+			"invalid ordering %v (op: %s, outcols: %v)", ordering, expr.Operator(), outCols,
+		))
 	}
 }
