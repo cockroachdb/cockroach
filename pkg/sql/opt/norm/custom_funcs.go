@@ -282,9 +282,18 @@ func (c *CustomFuncs) CandidateKey(group memo.GroupID) (key opt.ColSet, ok bool)
 	return c.LookupLogical(group).Relational.FuncDeps.Key()
 }
 
-// IsColNotNull returns true if the given column has the NotNull property.
+// IsColNotNull returns true if the given column is part of the input group's
+// set of not-null columns.
 func (c *CustomFuncs) IsColNotNull(col memo.PrivateID, input memo.GroupID) bool {
 	return c.LookupLogical(input).Relational.NotNullCols.Contains(int(c.ExtractColID(col)))
+}
+
+// IsColNotNull2 returns true if the given column is part of the left or right
+// groups' set of not-null columns.
+func (c *CustomFuncs) IsColNotNull2(col memo.PrivateID, left, right memo.GroupID) bool {
+	colID := int(c.ExtractColID(col))
+	return c.LookupLogical(left).Relational.NotNullCols.Contains(colID) ||
+		c.LookupLogical(right).Relational.NotNullCols.Contains(colID)
 }
 
 // HasOuterCols returns true if the given group has at least one outer column,
