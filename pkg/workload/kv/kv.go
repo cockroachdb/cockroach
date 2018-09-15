@@ -114,11 +114,9 @@ func (w *kv) Tables() []workload.Table {
 		Splits: workload.Tuples(
 			w.splits,
 			func(splitIdx int) []interface{} {
-				rng := rand.New(rand.NewSource(w.seed + int64(splitIdx)))
-				g := newHashGenerator(&sequence{config: w, val: w.writeSeq})
-				return []interface{}{
-					int(g.hash(rng.Int63())),
-				}
+				stride := (float64(math.MaxInt64) - float64(math.MinInt64)) / float64(w.splits+1)
+				splitPoint := int(math.MinInt64 + float64(splitIdx+1)*stride)
+				return []interface{}{splitPoint}
 			},
 		),
 	}
