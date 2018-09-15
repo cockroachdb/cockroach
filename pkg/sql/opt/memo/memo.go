@@ -450,7 +450,7 @@ func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) ExprView {
 	// RaceEnabled ensures that checks are run on every PR (as part of make
 	// testrace) while keeping the check code out of non-test builds.
 	if util.RaceEnabled {
-		CheckExpr(ev)
+		m.CheckExpr(MakeNormExprID(mgrp.id))
 	}
 
 	return ev
@@ -468,15 +468,25 @@ func (m *Memo) MemoizeDenormExpr(group GroupID, denorm Expr) {
 		if existing != group {
 			panic("denormalized expression's group doesn't match fingerprint group")
 		}
-	} else {
-		// Use rough memory usage estimate of size of expr * 4 to account for size
-		// of expr struct + fingerprint + expr map overhead.
-		const exprSize = int64(unsafe.Sizeof(Expr{}))
-		m.memEstimate += exprSize * 4
+		return
+	}
 
-		// Add the denormalized expression to the memo.
-		m.group(group).addExpr(denorm)
-		m.exprMap[denorm.Fingerprint()] = group
+	// Use rough memory usage estimate of size of expr * 4 to account for size
+	// of expr struct + fingerprint + expr map overhead.
+	const exprSize = int64(unsafe.Sizeof(Expr{}))
+	m.memEstimate += exprSize * 4
+
+	// Add the denormalized expression to the memo.
+	m.group(group).addExpr(denorm)
+	m.exprMap[denorm.Fingerprint()] = group
+
+	// RaceEnabled ensures that checks are run on every PR (as part of make
+	// testrace) while keeping the check code out of non-test builds.
+	if util.RaceEnabled {
+		m.CheckExpr(ExprID{
+			Group: group,
+			Expr:  ExprOrdinal(m.group(group).exprCount() - 1),
+		})
 	}
 }
 
