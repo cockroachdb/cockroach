@@ -72,8 +72,8 @@ func registerRebalanceLoad(r *registry) {
 			splits := len(roachNodes) - 1 // n-1 splits => n ranges => 1 lease per node
 			return c.RunL(ctx, quietL, appNode, fmt.Sprintf(
 				"./workload run kv --read-percent=95 --splits=%d --tolerate-errors --concurrency=%d "+
-					"--duration=%s {pgurl:1-3}",
-				splits, concurrency, duration.String()))
+					"--duration=%s {pgurl:1-%d}",
+				splits, concurrency, duration.String(), len(roachNodes)))
 		})
 
 		m.Go(func() error {
