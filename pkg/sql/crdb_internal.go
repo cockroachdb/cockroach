@@ -1753,7 +1753,6 @@ CREATE TABLE crdb_internal.gossip_nodes (
 
 		g := p.ExecCfg().Gossip
 		var descriptors []roachpb.NodeDescriptor
-		alive := make(map[roachpb.NodeID]tree.DBool)
 		if err := g.IterateInfos(gossip.KeyNodeIDPrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()
 			if err != nil {
@@ -1765,13 +1764,16 @@ CREATE TABLE crdb_internal.gossip_nodes (
 				return errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
 			descriptors = append(descriptors, d)
-
-			if _, err := g.GetInfo(gossip.MakeGossipClientsKey(d.NodeID)); err == nil {
-				alive[d.NodeID] = true
-			}
 			return nil
 		}); err != nil {
 			return err
+		}
+
+		alive := make(map[roachpb.NodeID]tree.DBool)
+		for _, d := range descriptors {
+			if _, err := g.GetInfo(gossip.MakeGossipClientsKey(d.NodeID)); err == nil {
+				alive[d.NodeID] = true
+			}
 		}
 
 		sort.Slice(descriptors, func(i, j int) bool {
