@@ -245,7 +245,7 @@ func verifyKeys(start, end roachpb.Key, checkEndKey bool) error {
 
 // rangeKeyItem is a common interface for roachpb.Key and Range.
 type rangeKeyItem interface {
-	endKey() roachpb.RKey
+	startKey() roachpb.RKey
 }
 
 // rangeBTreeKey is a type alias of roachpb.RKey that implements the
@@ -254,14 +254,14 @@ type rangeBTreeKey roachpb.RKey
 
 var _ rangeKeyItem = rangeBTreeKey{}
 
-func (k rangeBTreeKey) endKey() roachpb.RKey {
+func (k rangeBTreeKey) startKey() roachpb.RKey {
 	return (roachpb.RKey)(k)
 }
 
 var _ btree.Item = rangeBTreeKey{}
 
 func (k rangeBTreeKey) Less(i btree.Item) bool {
-	return k.endKey().Less(i.(rangeKeyItem).endKey())
+	return k.startKey().Less(i.(rangeKeyItem).startKey())
 }
 
 // A NotBootstrappedError indicates that an engine has not yet been
@@ -535,9 +535,9 @@ type Store struct {
 		// Map of replicas by Range ID (map[roachpb.RangeID]*Replica). This
 		// includes `uninitReplicas`. May be read without holding Store.mu.
 		replicas syncutil.IntMap
-		// A btree key containing objects of type *Replica or
-		// *ReplicaPlaceholder (both of which have an associated key range, on
-		// the EndKey of which the btree is keyed)
+		// A btree key containing objects of type *Replica or *ReplicaPlaceholder.
+		// Both types have an associated key range; the btree is keyed on their
+		// start keys.
 		replicasByKey  *btree.BTree
 		uninitReplicas map[roachpb.RangeID]*Replica // Map of uninitialized replicas by Range ID
 		// replicaPlaceholders is a map to access all placeholders, so they can
@@ -2135,9 +2135,7 @@ func (s *Store) LookupReplica(key roachpb.RKey) *Replica {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	var repl *Replica
-	// Simulate AscendGreater by calling key.Next. We want to skip the replica
-	// whose end key equals key, as end keys are exclusive.
-	s.mu.replicasByKey.AscendGreaterOrEqual(rangeBTreeKey(key.Next()), func(item btree.Item) bool {
+	s.mu.replicasByKey.DescendLessOrEqual(rangeBTreeKey(key), func(item btree.Item) bool {
 		repl, _ = item.(*Replica)
 		// Stop iterating immediately. The first item we see is the only one that
 		// can possibly contain key.
@@ -2161,9 +2159,11 @@ func (s *Store) lookupPrecedingReplica(key roachpb.RKey) *Replica {
 	defer s.mu.RUnlock()
 	var repl *Replica
 	s.mu.replicasByKey.DescendLessOrEqual(rangeBTreeKey(key), func(item btree.Item) bool {
-		var ok bool
-		repl, ok = item.(*Replica)
-		return !ok // keep iterating if not a *Replica
+		if r, ok := item.(*Replica); ok && !r.ContainsKey(key.AsRawKey()) {
+			repl = r
+			return false // stop iterating
+		}
+		return true // keep iterating
 	})
 	return repl
 }
@@ -2172,17 +2172,17 @@ func (s *Store) lookupPrecedingReplica(key roachpb.RKey) *Replica {
 // descriptor (or nil if no such KeyRange exists).
 func (s *Store) getOverlappingKeyRangeLocked(rngDesc *roachpb.RangeDescriptor) KeyRange {
 	var kr KeyRange
-
-	s.mu.replicasByKey.AscendGreaterOrEqual(rangeBTreeKey(rngDesc.StartKey.Next()),
+	s.mu.replicasByKey.DescendLessOrEqual(rangeBTreeKey(rngDesc.EndKey),
 		func(item btree.Item) bool {
-			kr = item.(KeyRange)
-			return false
+			if kr0 := item.(KeyRange); kr0.startKey().Less(rngDesc.EndKey) {
+				kr = kr0
+				return false // stop iterating
+			}
+			return true // keep iterating
 		})
-
-	if kr != nil && kr.Desc().StartKey.Less(rngDesc.EndKey) {
+	if kr != nil && rngDesc.StartKey.Less(kr.Desc().EndKey) {
 		return kr
 	}
-
 	return nil
 }
 
@@ -2452,12 +2452,6 @@ func (s *Store) SplitRange(
 		s.unlinkReplicaByRangeIDLocked(rightDesc.RangeID)
 	}
 
-	// Replace the end key of the original range with the start key of
-	// the new range. Reinsert the range since the btree is keyed by range end keys.
-	if kr := s.mu.replicasByKey.Delete(leftRepl); kr != leftRepl {
-		return errors.Errorf("replicasByKey unexpectedly contains %v instead of replica %s", kr, leftRepl)
-	}
-
 	leftRepl.setDescWithoutProcessUpdate(ctx, &newLeftDesc)
 
 	// Clear the LHS txn wait queue, to redirect to the RHS if
@@ -2480,10 +2474,6 @@ func (s *Store) SplitRange(
 	// spans that are now owned by the new range.
 	leftRepl.leaseholderStats.resetRequestCounts()
 	leftRepl.writeStats.splitRequestCounts(rightRepl.writeStats)
-
-	if kr := s.mu.replicasByKey.ReplaceOrInsert(leftRepl); kr != nil {
-		return errors.Errorf("replicasByKey unexpectedly contains %s when inserting replica %s", kr, leftRepl)
-	}
 
 	if err := s.addReplicaInternalLocked(rightRepl); err != nil {
 		return errors.Errorf("couldn't insert range %v in replicasByKey btree: %s", rightRepl, err)
@@ -2616,7 +2606,7 @@ func (s *Store) addReplicaInternalLocked(repl *Replica) error {
 
 	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(repl); exRngItem != nil {
 		return errors.Errorf("%s: cannot addReplicaInternalLocked; range for key %v already exists in replicasByKey btree", s,
-			exRngItem.(KeyRange).endKey())
+			exRngItem.(KeyRange).startKey())
 	}
 
 	return nil
@@ -2844,7 +2834,7 @@ func (s *Store) processRangeDescriptorUpdateLocked(ctx context.Context, repl *Re
 	}
 	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(repl); exRngItem != nil {
 		return errors.Errorf("range for key %v already exists in replicasByKey btree",
-			(exRngItem.(*Replica)).endKey())
+			(exRngItem.(*Replica)).startKey())
 	}
 
 	// Add the range to metrics and maybe gossip on capacity change.
