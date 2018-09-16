@@ -43,7 +43,7 @@ func registerSchemaChange(r *registry) {
 			m := newMonitor(ctx, c, c.All())
 			m.Go(func(ctx context.Context) error {
 				t.Status("loading fixture")
-				if _, err := db.Exec(`RESTORE DATABASE workload FROM $1`, fixturePath); err != nil {
+				if _, err := db.Exec(`RESTORE DATABASE tpch FROM $1`, fixturePath); err != nil {
 					t.Fatal(err)
 				}
 				return nil
@@ -81,10 +81,10 @@ func waitForSchemaChanges(ctx context.Context, l *logger, db *gosql.DB) error {
 
 	// These schema changes are over a table that is not actively
 	// being updated.
-	l.Printf("running schema changes over workload.customer\n")
+	l.Printf("running schema changes over tpch.customer\n")
 	schemaChanges := []string{
-		"ALTER TABLE workload.customer ADD COLUMN newcol INT DEFAULT 23456",
-		"CREATE INDEX foo ON workload.customer (c_name)",
+		"ALTER TABLE tpch.customer ADD COLUMN newcol INT DEFAULT 23456",
+		"CREATE INDEX foo ON tpch.customer (c_name)",
 	}
 	if err := runSchemaChanges(ctx, l, db, schemaChanges); err != nil {
 		return err
@@ -97,9 +97,9 @@ func waitForSchemaChanges(ctx context.Context, l *logger, db *gosql.DB) error {
 
 	// All these return the same result.
 	validationQueries := []string{
-		"SELECT count(*) FROM workload.customer AS OF SYSTEM TIME %s",
-		"SELECT count(newcol) FROM workload.customer AS OF SYSTEM TIME %s",
-		"SELECT count(c_name) FROM workload.customer@foo AS OF SYSTEM TIME %s",
+		"SELECT count(*) FROM tpch.customer AS OF SYSTEM TIME %s",
+		"SELECT count(newcol) FROM tpch.customer AS OF SYSTEM TIME %s",
+		"SELECT count(c_name) FROM tpch.customer@foo AS OF SYSTEM TIME %s",
 	}
 	if err := runValidationQueries(ctx, l, db, start, validationQueries, nil); err != nil {
 		return err
