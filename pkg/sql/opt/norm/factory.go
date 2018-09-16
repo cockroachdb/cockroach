@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // MatchedRuleFunc defines the callback function for the NotifyOnMatchedRule
@@ -99,11 +98,6 @@ type Factory struct {
 	// temporary results that are accumulated before constructing a new
 	// Projections operator.
 	scratchColList opt.ColList
-
-	// skipSanityChecks disables the checks performed by checkExpr. This is
-	// needed in cases where we might construct not-fully-normalized expressions,
-	// such as in optsteps.
-	skipSanityChecks bool
 }
 
 // Init initializes a Factory structure with a new, blank memo structure inside.
@@ -122,12 +116,6 @@ func (f *Factory) Init(evalCtx *tree.EvalContext) {
 // are applied).
 func (f *Factory) DisableOptimizations() {
 	f.NotifyOnMatchedRule(func(opt.RuleName) bool { return false })
-}
-
-// SkipSanityChecks disables the checkExpr validation checks on expressions
-// produced by this factory.
-func (f *Factory) SkipSanityChecks() {
-	f.skipSanityChecks = true
 }
 
 // NotifyOnMatchedRule sets a callback function which is invoked each time a
@@ -183,12 +171,6 @@ func (f *Factory) AssignPlaceholders() {
 // so that any custom manual pattern matching/replacement code can be run.
 func (f *Factory) onConstruct(e memo.Expr) memo.GroupID {
 	ev := f.mem.MemoizeNormExpr(f.evalCtx, e)
-
-	// RaceEnabled ensures that checks are run on every change (as part of make
-	// testrace) while keeping the check code out of non-test builds.
-	if util.RaceEnabled && !f.skipSanityChecks {
-		f.checkExpr(ev)
-	}
 	return ev.Group()
 }
 

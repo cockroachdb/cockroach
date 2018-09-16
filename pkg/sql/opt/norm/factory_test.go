@@ -99,7 +99,7 @@ func TestFactoryProjectColsFromBoth(t *testing.T) {
 
 	for _, tc := range testCases {
 		combined := f.funcs.ProjectColsFromBoth(tc.left, tc.right)
-		f.checkExpr(memo.MakeNormExprView(f.Memo(), combined))
+		f.Memo().CheckExpr(memo.MakeNormExprID(combined))
 		actual := f.funcs.OutputCols(combined).String()
 		if actual != tc.expected {
 			t.Errorf("expected: %s, actual: %s", tc.expected, actual)
