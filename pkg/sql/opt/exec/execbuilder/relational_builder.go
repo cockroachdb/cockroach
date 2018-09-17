@@ -352,6 +352,22 @@ func (b *Builder) buildSelect(ev memo.ExprView) (execPlan, error) {
 	}, nil
 }
 
+// applySimpleProject adds a simple projection on top of an existing plan.
+func (b *Builder) applySimpleProject(input execPlan, cols opt.ColSet) (execPlan, error) {
+	// We have only pass-through columns.
+	colList := make([]exec.ColumnOrdinal, 0, cols.Len())
+	var outputCols opt.ColMap
+	cols.ForEach(func(i int) {
+		outputCols.Set(i, len(colList))
+		colList = append(colList, input.getColumnOrdinal(opt.ColumnID(i)))
+	})
+	node, err := b.factory.ConstructSimpleProject(input.root, colList, nil /* colNames */)
+	if err != nil {
+		return execPlan{}, err
+	}
+	return execPlan{root: node, outputCols: outputCols}, nil
+}
+
 func (b *Builder) buildProject(ev memo.ExprView) (execPlan, error) {
 	input, err := b.buildRelational(ev.Child(0))
 	if err != nil {
@@ -362,16 +378,7 @@ func (b *Builder) buildProject(ev memo.ExprView) (execPlan, error) {
 	def := projections.Private().(*memo.ProjectionsOpDef)
 	if len(def.SynthesizedCols) == 0 {
 		// We have only pass-through columns.
-		cols := make([]exec.ColumnOrdinal, 0, def.PassthroughCols.Len())
-		def.PassthroughCols.ForEach(func(i int) {
-			outputCols.Set(i, len(cols))
-			cols = append(cols, input.getColumnOrdinal(opt.ColumnID(i)))
-		})
-		node, err := b.factory.ConstructSimpleProject(input.root, cols, nil /* colNames */)
-		if err != nil {
-			return execPlan{}, err
-		}
-		return execPlan{root: node, outputCols: outputCols}, nil
+		return b.applySimpleProject(input, def.PassthroughCols)
 	}
 
 	exprs := make(tree.TypedExprs, 0, len(def.SynthesizedCols)+def.PassthroughCols.Len())
@@ -861,7 +868,10 @@ func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
 		keyCols[i] = input.getColumnOrdinal(c)
 	}
 
-	lookupCols, lookupColMap := b.getColumns(md, def.LookupCols, def.Table)
+	inputProps := ev.Child(0).Logical().Relational
+	lookupCols := def.Cols.Difference(inputProps.OutputCols)
+
+	lookupOrdinals, lookupColMap := b.getColumns(md, lookupCols, def.Table)
 	allCols := joinOutputMap(input.outputCols, lookupColMap)
 
 	res := execPlan{outputCols: allCols}
@@ -887,12 +897,17 @@ func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
 		tab,
 		tab.Index(def.Index),
 		keyCols,
-		lookupCols,
+		lookupOrdinals,
 		onExpr,
 		exec.OutputOrdering(reqOrdering),
 	)
 	if err != nil {
 		return execPlan{}, err
+	}
+
+	// Apply a post-projection if necessary.
+	if !def.Cols.Equals(inputProps.OutputCols.Union(lookupCols)) {
+		return b.applySimpleProject(res, def.Cols)
 	}
 	return res, nil
 }

@@ -87,7 +87,7 @@ memo
 SELECT * FROM abc JOIN xyz ON a=z
 ----
 memo (optimized, ~9KB)
- ├── G1: (inner-join G2 G4 G5) (inner-join G4 G2 G5) (merge-join G2 G4 G3) (lookup-join G4 G5 abc@ab,keyCols=[7],lookupCols=(1-3))
+ ├── G1: (inner-join G2 G4 G5) (inner-join G4 G2 G5) (merge-join G2 G4 G3) (lookup-join G4 G5 abc@ab,keyCols=[7],outCols=(1-3,5-7))
  │    └── "[presentation: a:1,b:2,c:3,x:5,y:6,z:7]"
  │         ├── best: (inner-join G2 G4 G5)
  │         └── cost: 2270.00
@@ -229,7 +229,7 @@ memo
 SELECT * FROM abc RIGHT OUTER JOIN xyz ON a=z
 ----
 memo (optimized, ~9KB)
- ├── G1: (right-join G2 G4 G5) (left-join G4 G2 G5) (merge-join G2 G4 G3) (lookup-join G4 G5 abc@ab,keyCols=[7],lookupCols=(1-3))
+ ├── G1: (right-join G2 G4 G5) (left-join G4 G2 G5) (merge-join G2 G4 G3) (lookup-join G4 G5 abc@ab,keyCols=[7],outCols=(1-3,5-7))
  │    └── "[presentation: a:1,b:2,c:3,x:5,y:6,z:7]"
  │         ├── best: (right-join G2 G4 G5)
  │         └── cost: 2270.00
@@ -294,7 +294,7 @@ memo
 SELECT * FROM abc JOIN xyz ON a=x
 ----
 memo (optimized, ~10KB)
- ├── G1: (inner-join G3 G5 G6) (inner-join G5 G3 G6) (merge-join G3 G5 G2) (lookup-join G3 G6 xyz@xy,keyCols=[1],lookupCols=(5-7)) (merge-join G5 G3 G4) (lookup-join G5 G6 abc@ab,keyCols=[5],lookupCols=(1-3))
+ ├── G1: (inner-join G3 G5 G6) (inner-join G5 G3 G6) (merge-join G3 G5 G2) (lookup-join G3 G6 xyz@xy,keyCols=[1],outCols=(1-3,5-7)) (merge-join G5 G3 G4) (lookup-join G5 G6 abc@ab,keyCols=[5],outCols=(1-3,5-7))
  │    └── "[presentation: a:1,b:2,c:3,x:5,y:6,z:7]"
  │         ├── best: (merge-join G3="[ordering: +1]" G5="[ordering: +5]" G2)
  │         └── cost: 2260.00
@@ -382,7 +382,7 @@ memo
 SELECT * FROM stu AS l JOIN stu AS r ON (l.s, l.t, l.u) = (r.s, r.t, r.u)
 ----
 memo (optimized, ~15KB)
- ├── G1: (inner-join G5 G7 G8) (inner-join G7 G5 G8) (merge-join G5 G7 G2) (merge-join G5 G7 G3) (lookup-join G5 G8 stu,keyCols=[1 2 3],lookupCols=(4-6)) (lookup-join G5 G8 stu@uts,keyCols=[3 2 1],lookupCols=(4-6)) (merge-join G7 G5 G4) (merge-join G7 G5 G6) (lookup-join G7 G8 stu,keyCols=[4 5 6],lookupCols=(1-3)) (lookup-join G7 G8 stu@uts,keyCols=[6 5 4],lookupCols=(1-3))
+ ├── G1: (inner-join G5 G7 G8) (inner-join G7 G5 G8) (merge-join G5 G7 G2) (merge-join G5 G7 G3) (lookup-join G5 G8 stu,keyCols=[1 2 3],outCols=(1-6)) (lookup-join G5 G8 stu@uts,keyCols=[3 2 1],outCols=(1-6)) (merge-join G7 G5 G4) (merge-join G7 G5 G6) (lookup-join G7 G8 stu,keyCols=[4 5 6],outCols=(1-6)) (lookup-join G7 G8 stu@uts,keyCols=[6 5 4],outCols=(1-6))
  │    └── "[presentation: s:1,t:2,u:3,s:4,t:5,u:6]"
  │         ├── best: (merge-join G5="[ordering: +1,+2,+3]" G7="[ordering: +4,+5,+6]" G2)
  │         └── cost: 2140.01

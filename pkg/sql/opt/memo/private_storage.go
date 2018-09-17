@@ -362,7 +362,7 @@ func (ps *privateStorage) internLookupJoinDef(def *LookupJoinDef) PrivateID {
 	// Add a separator between the list and the set. Note that the column IDs
 	// cannot be 0.
 	ps.keyBuf.writeUvarint(0)
-	ps.keyBuf.writeColSet(def.LookupCols)
+	ps.keyBuf.writeColSet(def.Cols)
 	typ := (*LookupJoinDef)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
 		return id
