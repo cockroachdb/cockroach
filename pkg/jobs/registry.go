@@ -86,6 +86,7 @@ type NodeLiveness interface {
 // nodes will see time-based nodes delay the act of stealing a job.
 type Registry struct {
 	ac       log.AmbientContext
+	stopper  *stop.Stopper
 	db       *client.DB
 	ex       sqlutil.InternalExecutor
 	clock    *hlc.Clock
@@ -131,6 +132,7 @@ type planHookMaker func(opName, user string) (interface{}, func())
 // coerced into that in the Resumer functions.
 func MakeRegistry(
 	ac log.AmbientContext,
+	stopper *stop.Stopper,
 	clock *hlc.Clock,
 	db *client.DB,
 	ex sqlutil.InternalExecutor,
@@ -140,6 +142,7 @@ func MakeRegistry(
 ) *Registry {
 	r := &Registry{
 		ac:       ac,
+		stopper:  stopper,
 		clock:    clock,
 		db:       db,
 		ex:       ex,
@@ -457,7 +460,8 @@ func (r *Registry) resume(
 	ctx context.Context, resumer Resumer, resultsCh chan<- tree.Datums, job *Job,
 ) <-chan error {
 	errCh := make(chan error, 1)
-	go func() {
+	taskName := fmt.Sprintf(`job-%d`, *job.ID())
+	if err := r.stopper.RunAsyncTask(ctx, taskName, func(ctx context.Context) {
 		payload := job.Payload()
 		phs, cleanup := r.planFn("resume-job", payload.Username)
 		defer cleanup()
@@ -513,7 +517,10 @@ func (r *Registry) resume(
 			resumer.OnTerminal(ctx, job, status, resultsCh)
 		}
 		errCh <- resumeErr
-	}()
+	}); err != nil {
+		errCh <- err
+		return errCh
+	}
 	return errCh
 }
 
