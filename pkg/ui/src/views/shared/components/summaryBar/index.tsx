@@ -167,7 +167,7 @@ export class SummaryHeadlineStat extends React.Component<SummaryHeadlineStatProp
       <div className="summary-headline__title">
         {this.props.title}
         <div className="section-heading__tooltip">
-          <ToolTipWrapper text={this.props.tooltip}>
+          <ToolTipWrapper text={this.props.tooltip} placement="left">
             <div className="section-heading__tooltip-hover-area">
               <div className="section-heading__info-icon">i</div>
             </div>

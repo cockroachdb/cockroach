@@ -42,7 +42,7 @@ export default class extends React.Component<VisualizationProps, {}> {
     if (tooltip) {
       tooltipNode = (
         <div className="visualization__tooltip">
-          <ToolTipWrapper text={tooltip}>
+          <ToolTipWrapper text={tooltip} placement="right">
             <div className="visualization__tooltip-hover-area">
               <div className="visualization__info-icon">i</div>
             </div>

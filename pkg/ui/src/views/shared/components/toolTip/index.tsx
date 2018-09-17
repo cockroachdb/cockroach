@@ -6,6 +6,7 @@ import "./tooltip.styl";
 interface ToolTipWrapperProps {
   text: React.ReactNode;
   short?: boolean;
+  placement?: "top" | "right" | "bottom" | "left";
 }
 
 interface ToolTipWrapperState {
@@ -22,6 +23,10 @@ interface ToolTipWrapperState {
  * contents.
  */
 export class ToolTipWrapper extends React.Component<ToolTipWrapperProps, ToolTipWrapperState> {
+  static defaultProps = {
+    placement: "bottom",
+  };
+
   constructor(props?: ToolTipWrapperProps, context?: any) {
     super(props, context);
     this.state = {
@@ -38,7 +43,7 @@ export class ToolTipWrapper extends React.Component<ToolTipWrapperProps, ToolTip
   }
 
   render() {
-    const { text, short } = this.props;
+    const { text, short, placement } = this.props;
     const { hovered } = this.state;
     const tooltipClassNames = classNames({
       "hover-tooltip": true,
@@ -52,7 +57,7 @@ export class ToolTipWrapper extends React.Component<ToolTipWrapperProps, ToolTip
         onMouseEnter={this.onMouseEnter}
         onMouseLeave={this.onMouseLeave}
       >
-        <div className="hover-tooltip__text">
+        <div className={"hover-tooltip__text " + placement}>
           { text }
         </div>
         <div className="hover-tooltip__content">

@@ -37,8 +37,6 @@
     visibility hidden
     z-index $z-index-tooltip
     position absolute
-    top -10px
-    left 100%
     width 400px
     padding 10px
     border-radius 5px
@@ -48,6 +46,20 @@
     font-family Lato-Regular
     text-align left
     color $body-color
+
+    &.top
+      bottom: calc(100% + 5px)
+
+    &.right
+      top: -10px
+      left: 100%
+
+    &.bottom
+      top: calc(100% + 5px)
+
+    &.left
+      top: -10px
+      right: 100%
 
   &--short &__text
     width unset
