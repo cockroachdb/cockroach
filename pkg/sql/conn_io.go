@@ -616,7 +616,6 @@ type CommandResult interface {
 
 // CommandResultErrBase is the subset of CommandResult dealing with setting a
 // query execution error.
-//lint:ignore U1000 false positive from unused checker
 type CommandResultErrBase interface {
 	// SetError accumulates an execution error that needs to be reported to the
 	// client. No further calls other than OverwriteError(), Close() and Discard()
@@ -643,7 +642,6 @@ type ResultBase interface {
 
 // CommandResultClose is a subset of CommandResult dealing with the closing of
 // the result.
-//lint:ignore U1000 false positive from unused checker
 type CommandResultClose interface {
 	// Close marks a result as complete. No further uses of the CommandResult are
 	// allowed after this call. All results must be eventually closed through

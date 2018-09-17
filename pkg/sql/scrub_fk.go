@@ -289,16 +289,16 @@ func createFKCheckQuery(
 
 	return fmt.Sprintf(checkIndexQuery,
 		tableColumnsProjection("p", columnNames), // 1
-		database,                                 // 2
-		tableDesc.Name,                           // 3
-		constraint.ReferencedTable.Name,          // 4
-		constraint.ReferencedIndex.ID,            // 5
+		database,                                                                                           // 2
+		tableDesc.Name,                                                                                     // 3
+		constraint.ReferencedTable.Name,                                                                    // 4
+		constraint.ReferencedIndex.ID,                                                                      // 5
 		tableColumnsEQ("p", "c", constraint.Columns, constraint.ReferencedIndex.ColumnNames),               // 6
 		tableColumnsIsNullPredicate("p", constraint.Columns, "OR", false /* isNull */),                     // 7
 		tableColumnsIsNullPredicate("c", constraint.ReferencedIndex.ColumnNames, "AND", true /* isNull */), // 8
-		strings.Join(columnNames, ","),                            // 9
-		strings.Join(constraint.Columns, ","),                     // 10
-		strings.Join(constraint.ReferencedIndex.ColumnNames, ","), // 11
+		strings.Join(columnNames, ","),                                                                     // 9
+		strings.Join(constraint.Columns, ","),                                                              // 10
+		strings.Join(constraint.ReferencedIndex.ColumnNames, ","),                                          // 11
 		asOfClauseStr, //12
 	), nil
 }

@@ -107,7 +107,7 @@ func TestReplicaStats(t *testing.T) {
 				"region=us-east1,zone=us-east1-a": 1,
 				"region=us-east1,zone=us-east1-b": 1,
 				"region=us-west1,zone=us-west1-a": 1,
-				"":                                3,
+				"": 3,
 			},
 		},
 		{

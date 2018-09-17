@@ -165,8 +165,8 @@ func NewSpanResolver(
 	case BinPackingLeaseHolderChoice:
 		oracle = &binPackingOracle{
 			maxPreferredRangesPerLeaseHolder: maxPreferredRangesPerLeaseHolder,
-			gossip:                           gossip,
-			nodeDesc:                         nodeDesc,
+			gossip:   gossip,
+			nodeDesc: nodeDesc,
 		}
 	}
 	return &spanResolver{

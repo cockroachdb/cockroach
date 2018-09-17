@@ -705,10 +705,10 @@ func TestRouterDiskSpill(t *testing.T) {
 		"test-monitor",
 		mon.MemoryResource,
 		(numRows-routerRowBufSize)/2, /* limit */
-		nil,                          /* curCount */
-		nil,                          /* maxHist */
-		1,                            /* increment */
-		math.MaxInt64,                /* noteworthy */
+		nil,           /* curCount */
+		nil,           /* maxHist */
+		1,             /* increment */
+		math.MaxInt64, /* noteworthy */
 		st,
 	)
 	evalCtx := tree.MakeTestingEvalContextWithMon(st, &monitor)

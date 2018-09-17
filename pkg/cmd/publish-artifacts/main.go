@@ -440,9 +440,9 @@ func putNonRelease(svc s3putter, o opts) {
 	}
 	latestKey := fmt.Sprintf("%s/%s.%s", repoName, remoteName, latestSuffix)
 	if _, err := svc.PutObject(&s3.PutObjectInput{
-		Bucket:                  &o.BucketName,
-		CacheControl:            &noCache,
-		Key:                     &latestKey,
+		Bucket:       &o.BucketName,
+		CacheControl: &noCache,
+		Key:          &latestKey,
 		WebsiteRedirectLocation: &versionKey,
 	}); err != nil {
 		log.Fatalf("s3 redirect to %s: %s", versionKey, err)
