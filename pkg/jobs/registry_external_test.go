@@ -90,7 +90,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 		nodeID := &base.NodeIDContainer{}
 		nodeID.Reset(id)
 		r := jobs.MakeRegistry(
-			ac, clock, db, s.InternalExecutor().(sqlutil.InternalExecutor),
+			ac, s.Stopper(), clock, db, s.InternalExecutor().(sqlutil.InternalExecutor),
 			nodeID, s.ClusterSettings(), jobs.FakePHS,
 		)
 		if err := r.Start(ctx, s.Stopper(), nodeLiveness, cancelInterval, adoptInterval); err != nil {
