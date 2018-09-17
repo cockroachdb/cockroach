@@ -24,3 +24,28 @@ scan  ·       ·          (u, v)  ·
 ·     table   b@b_v_idx  ·       ·
 ·     spans   /1-/2      ·       ·
 ·     filter  u = 1      ·       ·
+
+# Verify that injecting different statistics changes the plan.
+statement ok
+ALTER TABLE b INJECT STATISTICS '[
+  {
+    "columns": ["u"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["v"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100,
+    "distinct_count": 10
+  }
+]'
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM b WHERE u = 1 AND v = 1
+----
+scan  ·       ·          (u, v)  ·
+·     table   b@b_u_idx  ·       ·
+·     spans   /1-/2      ·       ·
+·     filter  v = 1      ·       ·
