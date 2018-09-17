@@ -18,7 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/google/btree"
+	"github.com/cockroachdb/cockroach/pkg/util/btree"
 )
 
 // ReplicaPlaceholder is created by a Store in anticipation of replacing it at
