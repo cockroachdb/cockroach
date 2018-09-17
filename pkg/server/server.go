@@ -484,6 +484,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.sessionRegistry = sql.MakeSessionRegistry()
 	s.jobRegistry = jobs.MakeRegistry(
 		s.cfg.AmbientCtx,
+		s.stopper,
 		s.clock,
 		s.db,
 		internalExecutor,
