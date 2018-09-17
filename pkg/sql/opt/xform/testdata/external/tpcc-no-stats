@@ -700,15 +700,15 @@ scalar-group-by
  ├── columns: count:28(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 0.193466667
+ ├── cost: 0.185073982
  ├── key: ()
  ├── fd: ()-->(28)
  ├── prune: (28)
  ├── inner-join (lookup stock)
  │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) s_i_id:11(int!null) s_w_id:12(int!null) s_quantity:13(int!null)
  │    ├── key columns: [3 5] = [12 11]
- │    ├── stats: [rows=0.0666666667, distinct(3)=0.02, distinct(5)=0.0199982001, distinct(11)=0.0199982001, distinct(12)=0.02]
- │    ├── cost: 0.1828
+ │    ├── stats: [rows=0.059730564, distinct(3)=0.02, distinct(5)=0.0199982001, distinct(11)=0.0199982001, distinct(12)=0.02]
+ │    ├── cost: 0.174476677
  │    ├── fd: ()-->(2,3,12), (11)-->(13), (5)==(11), (11)==(5), (3)==(12), (12)==(3)
  │    ├── interesting orderings: (+3,+2,-1)
  │    ├── scan order_line
@@ -759,15 +759,15 @@ scalar-group-by
  ├── columns: count:22(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 1563.45444
+ ├── cost: 1588.34333
  ├── key: ()
  ├── fd: ()-->(22)
  ├── prune: (22)
  ├── inner-join (lookup warehouse)
  │    ├── columns: w_id:1(int!null) w_ytd:9(decimal!null) d_w_id:11(int!null) sum:21(decimal!null)
  │    ├── key columns: [11] = [1]
- │    ├── stats: [rows=11.1111111, distinct(1)=11.1111111, distinct(11)=11.1111111]
- │    ├── cost: 1563.33333
+ │    ├── stats: [rows=33.3333333, distinct(1)=33.3333333, distinct(11)=33.3333333]
+ │    ├── cost: 1588
  │    ├── key: (11)
  │    ├── fd: (1)-->(9), (11)-->(21), (1)==(11), (11)==(1)
  │    ├── interesting orderings: (+11)

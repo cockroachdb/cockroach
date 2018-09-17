@@ -963,22 +963,19 @@ join       ·               ·                    (x, y, u, x, y, v)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyu JOIN xyv USING(x, y) WHERE (x, y, u) > (1, 2, 3)
 ----
-render          ·               ·                    (x, y, u, v)        ·
- │              render 0        x                    ·                   ·
- │              render 1        y                    ·                   ·
- │              render 2        u                    ·                   ·
- │              render 3        v                    ·                   ·
- └── join       ·               ·                    (x, y, u, x, y, v)  ·
-      │         type            inner                ·                   ·
-      │         equality        (x, y) = (x, y)      ·                   ·
-      │         mergeJoinOrder  +"(x=x)",+"(y=y)"    ·                   ·
-      │         pred            (x = x) AND (y = y)  ·                   ·
-      ├── scan  ·               ·                    (x, y, u)           +x,+y
-      │         table           xyu@primary          ·                   ·
-      │         spans           /1/2/4-              ·                   ·
-      └── scan  ·               ·                    (x, y, v)           +x,+y
-·               table           xyv@primary          ·                   ·
-·               spans           ALL                  ·                   ·
+render            ·         ·                        (x, y, u, v)        ·
+ │                render 0  x                        ·                   ·
+ │                render 1  y                        ·                   ·
+ │                render 2  u                        ·                   ·
+ │                render 3  v                        ·                   ·
+ └── lookup-join  ·         ·                        (x, y, u, x, y, v)  ·
+      │           type      inner                    ·                   ·
+      │           pred      (@1 = @4) AND (@2 = @5)  ·                   ·
+      ├── scan    ·         ·                        (x, y, u)           ·
+      │           table     xyu@primary              ·                   ·
+      │           spans     /1/2/4-                  ·                   ·
+      └── scan    ·         ·                        (x, y, v)           ·
+·                 table     xyv@primary              ·                   ·
 
 
 # Regression test for #20765/27431.
