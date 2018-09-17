@@ -262,11 +262,6 @@ func (ps *projectSetProcessor) toEncDatum(d tree.Datum, colIdx int) sqlbase.EncD
 	return sqlbase.DatumToEncDatum(ctyp, d)
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (ps *projectSetProcessor) ConsumerDone() {
-	ps.MoveToDraining(nil /* err */)
-}
-
 // ConsumerClosed is part of the RowSource interface.
 func (ps *projectSetProcessor) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.

@@ -259,11 +259,6 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	return nil, tr.DrainHelper()
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (tr *tableReader) ConsumerDone() {
-	tr.MoveToDraining(nil /* err */)
-}
-
 // ConsumerClosed is part of the RowSource interface.
 func (tr *tableReader) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
