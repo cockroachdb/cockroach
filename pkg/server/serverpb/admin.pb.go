@@ -93,6 +93,9 @@
 		LogFilesListResponse
 		LogFileRequest
 		StacksRequest
+		File
+		GetFilesRequest
+		GetFilesResponse
 		ProfileRequest
 		MetricsRequest
 		RaftRangeNode
