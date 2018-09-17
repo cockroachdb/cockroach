@@ -313,7 +313,7 @@ INSERT INTO upsert_returning VALUES (1, 1, NULL)
 query IIII rowsort
 INSERT INTO upsert_returning (a, c) VALUES (1, 1), (2, 2) ON CONFLICT (a) DO UPDATE SET c = excluded.c RETURNING *
 ----
-1 1 1 -1
+1 1    1 -1
 2 NULL 2 -1
 
 # Handle INSERT ... ON CONFLICT DO NOTHING ... RETURNING
@@ -326,7 +326,7 @@ INSERT INTO upsert_returning (a, c) VALUES (1, 1), (3, 3) ON CONFLICT (a) DO NOT
 query IIII rowsort
 UPSERT INTO upsert_returning (a, c) VALUES (1, 10), (3, 30) RETURNING *
 ----
-1 1 10 -1
+1 1    10 -1
 3 NULL 30 -1
 
 # Ensure returned values are inserted values after conflict resolution
@@ -521,7 +521,7 @@ subtest check
 
 statement ok
 CREATE TABLE ab(
-    a INT PRIMARY KEY, 
+    a INT PRIMARY KEY,
     b INT, CHECK (b < 1)
 )
 
@@ -534,11 +534,11 @@ INSERT INTO ab(a, b) VALUES (1, 0) ON CONFLICT(a) DO UPDATE SET b=12312313;
 statement count 1
 INSERT INTO ab(a, b) VALUES (1, 0) ON CONFLICT(a) DO UPDATE SET b=-1;
 
-statement ok 
+statement ok
 CREATE TABLE abc_check(
-    a INT PRIMARY KEY, 
-    b INT, 
-    c INT, 
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
     CHECK (b < 1),
     CHECK (c > 1)
 )
@@ -575,3 +575,19 @@ INSERT INTO abc_check(c, a) VALUES (3, 2) ON CONFLICT(a) DO UPDATE SET b=1231231
 
 statement error pq: failed to satisfy CHECK constraint \(b < 1\)
 INSERT INTO abc_check(c, a) VALUES (3, 2) ON CONFLICT(a) DO UPDATE SET b=123123123;
+
+subtest 29495
+
+statement ok
+CREATE TABLE IF NOT EXISTS example (
+  id SERIAL PRIMARY KEY
+ ,value string NOT NULL
+);
+
+query B
+UPSERT INTO example (value) VALUES ('foo') RETURNING id > 0
+----
+true
+
+statement ok
+DROP TABLE example
