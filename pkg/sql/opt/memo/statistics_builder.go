@@ -719,13 +719,16 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, ev ExprView) *props.
 	relProps := ev.Logical().Relational
 	s := &relProps.Stats
 	leftStats := &ev.childGroup(0).logical.Relational.Stats
-	rightStats := &ev.childGroup(1).logical.Relational.Stats
 
 	var lookupJoinDef *LookupJoinDef
+	var rightStats *props.Statistics
 	joinType := ev.Operator()
 	if joinType == opt.LookupJoinOp {
 		lookupJoinDef = ev.Private().(*LookupJoinDef)
 		joinType = lookupJoinDef.JoinType
+		rightStats = sb.makeTableStatistics(lookupJoinDef.Table)
+	} else {
+		rightStats = &ev.childGroup(1).logical.Relational.Stats
 	}
 
 	switch joinType {
