@@ -25,6 +25,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -601,6 +602,17 @@ COPY t (a, b, c) FROM stdin;
 			query: map[string][][]string{
 				`SHOW TABLES`: {{"t"}},
 			},
+		},
+		{
+			name: "many tables",
+			typ:  "PGDUMP",
+			data: func() string {
+				var sb strings.Builder
+				for i := 1; i <= 100; i++ {
+					fmt.Fprintf(&sb, "CREATE TABLE t%d ();\n", i)
+				}
+				return sb.String()
+			}(),
 		},
 
 		// Error
@@ -1789,8 +1801,6 @@ func TestImportLivenessWithRestart(t *testing.T) {
 		t.Fatalf("not all rows were present.  Expecting %d, had %d", rows, rowCount)
 	}
 
-	rescheduled := jobutils.GetJobPayload(t, sqlDB, jobID).Details.(*jobspb.Payload_Import).Import
-
 	// Verify that all write progress coalesced into a single span
 	// encompassing the entire table.
 	spans := rescheduledProgress.Details.(*jobspb.Progress_Import).Import.SpanProgress
@@ -1799,7 +1809,10 @@ func TestImportLivenessWithRestart(t *testing.T) {
 	}
 
 	// Ensure that an entire table range is marked as complete
-	tableSpan := rescheduled.Tables[0].Desc.TableSpan()
+	tableSpan := roachpb.Span{
+		Key:    keys.MinKey,
+		EndKey: keys.MaxKey,
+	}
 	if !tableSpan.EqualValue(spans[0]) {
 		t.Fatalf("expected entire table to be marked complete, had %s", spans[0])
 	}
