@@ -464,9 +464,9 @@ var specs = []stmtSpec{
 		replace: map[string]string{
 			"table_option":                 "table_name",
 			"'INTO' string_or_placeholder": "'INTO' sink",
-			"name":                      "option",
-			"'SCONST'":                  "option",
-			"'=' string_or_placeholder": "'=' value"},
+			"name":                         "option",
+			"'SCONST'":                     "option",
+			"'=' string_or_placeholder":    "'=' value"},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile("'OPTIONS'")},
 		unlink: []string{"table_name", "sink", "option", "value"},
@@ -692,8 +692,8 @@ var specs = []stmtSpec{
 		inline: []string{"privileges", "privilege_list", "privilege", "table_pattern_list", "name_list"},
 		replace: map[string]string{
 			"( name | 'CREATE' | 'GRANT' | 'SELECT' )": "( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' )",
-			"table_pattern":                            "table_name",
-			"'TO' ( ( name ) ( ( ',' name ) )*":        "'TO' ( ( user_name ) ( ( ',' user_name ) )*",
+			"table_pattern":                     "table_name",
+			"'TO' ( ( name ) ( ( ',' name ) )*": "'TO' ( ( user_name ) ( ( ',' user_name ) )*",
 			"| 'GRANT' ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) 'TO' ( ( user_name ) ( ( ',' user_name ) )* )": "",
 			"'WITH' 'ADMIN' 'OPTION'": "",
 			"targets":                 "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
@@ -812,8 +812,8 @@ var specs = []stmtSpec{
 		stmt:   "restore_stmt",
 		inline: []string{"as_of_clause", "opt_with_options"},
 		replace: map[string]string{
-			"a_expr":                                  "timestamp",
-			"string_or_placeholder_list":              "full_backup_location ( | incremental_backup_location ( ',' incremental_backup_location )*)",
+			"a_expr":                     "timestamp",
+			"string_or_placeholder_list": "full_backup_location ( | incremental_backup_location ( ',' incremental_backup_location )*)",
 			"'WITH' 'OPTIONS' '(' kv_option_list ')'": "",
 			"targets": "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
 		},
@@ -825,7 +825,7 @@ var specs = []stmtSpec{
 		inline: []string{"privileges", "privilege_list", "privilege", "name_list"},
 		replace: map[string]string{
 			"( name | 'CREATE' | 'GRANT' | 'SELECT' )": "( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' )",
-			"targets": "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"targets":                             "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
 			"'FROM' ( ( name ) ( ( ',' name ) )*": "'FROM' ( ( user_name ) ( ( ',' user_name ) )*",
 			"| 'REVOKE' ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) 'FROM' ( ( user_name ) ( ( ',' user_name ) )* )":  "",
 			"| 'REVOKE'  ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) 'FROM' ( ( user_name ) ( ( ',' user_name ) )* )": "",

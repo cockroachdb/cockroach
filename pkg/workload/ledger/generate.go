@@ -41,16 +41,16 @@ func (w *ledger) ledgerCustomerInitialRow(rowIdx int) []interface{} {
 	defer w.rngPool.Put(rng)
 
 	return []interface{}{
-		rowIdx,               // id
-		strconv.Itoa(rowIdx), // identifier
-		nil,                  // name
+		rowIdx,                // id
+		strconv.Itoa(rowIdx),  // identifier
+		nil,                   // name
 		randCurrencyCode(rng), // currency_code
-		true,               // is_system_customer
-		true,               // is_active
-		randTimestamp(rng), // created
-		0,                  // balance
-		nil,                // credit_limit
-		-1,                 // sequence
+		true,                  // is_system_customer
+		true,                  // is_active
+		randTimestamp(rng),    // created
+		0,                     // balance
+		nil,                   // credit_limit
+		-1,                    // sequence
 	}
 }
 
@@ -70,14 +70,14 @@ func (w *ledger) ledgerTransactionInitialRow(rowIdx int) []interface{} {
 
 	return []interface{}{
 		w.ledgerStablePaymentID(rowIdx), // external_id
-		nil,                // tcomment
-		randContext(rng),   // context
-		txnTypeReference,   // transaction_type_reference
-		randUsername(rng),  // username
-		randTimestamp(rng), // created_ts
-		randTimestamp(rng), // systimestamp
-		nil,                // reversed_by
-		randResponse(rng),  // response
+		nil,                             // tcomment
+		randContext(rng),                // context
+		txnTypeReference,                // transaction_type_reference
+		randUsername(rng),               // username
+		randTimestamp(rng),              // created_ts
+		randTimestamp(rng),              // systimestamp
+		nil,                             // reversed_by
+		randResponse(rng),               // response
 	}
 }
 

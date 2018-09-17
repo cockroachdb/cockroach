@@ -525,7 +525,7 @@ func (s *bufferSink) EmitRow(_ context.Context, topic string, key, value []byte)
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
 	s.buf.Push(sqlbase.EncDatumRow{
-		{Datum: tree.DNull},                              // resolved span
+		{Datum: tree.DNull}, // resolved span
 		{Datum: s.alloc.NewDString(tree.DString(topic))}, // topic
 		{Datum: s.alloc.NewDBytes(tree.DBytes(key))},     // key
 		{Datum: s.alloc.NewDBytes(tree.DBytes(value))},   //value
@@ -539,9 +539,9 @@ func (s *bufferSink) EmitResolvedTimestamp(_ context.Context, payload []byte) er
 		return errors.New(`cannot EmitRow on a closed sink`)
 	}
 	s.buf.Push(sqlbase.EncDatumRow{
-		{Datum: tree.DNull},                              // resolved span
-		{Datum: tree.DNull},                              // topic
-		{Datum: tree.DNull},                              // key
+		{Datum: tree.DNull}, // resolved span
+		{Datum: tree.DNull}, // topic
+		{Datum: tree.DNull}, // key
 		{Datum: s.alloc.NewDBytes(tree.DBytes(payload))}, // value
 	})
 	return nil

@@ -561,10 +561,8 @@ func (g *Gossip) LogStatus() {
 	g.mu.RUnlock()
 
 	ctx := g.AnnotateCtx(context.TODO())
-	log.Infof(
-		ctx, "gossip status (%s, %d node%s)\n%s%s%s", status, n, util.Pluralize(int64(n)),
-		g.clientStatus(), g.server.status(), g.Connectivity(),
-	)
+	log.Infof(ctx, "gossip status (%s, %d node%s)\n%s%s",
+		status, n, util.Pluralize(int64(n)), g.clientStatus(), g.server.status())
 }
 
 func (g *Gossip) clientStatus() ClientStatus {
