@@ -1099,44 +1099,45 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │    │    ├── has-placeholder
  │    │         │    │    │    ├── key: (1)
  │    │         │    │    │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)-->(1,3-12,14-16)
- │    │         │    │    │    ├── left-join
+ │    │         │    │    │    ├── left-join (merge)
  │    │         │    │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string!null) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool!null) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_projects.instance_type_id:18(int) true:25(bool)
  │    │         │    │    │    │    ├── has-placeholder
  │    │         │    │    │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)-->(1,3-12,14-16), ()~~>(25)
- │    │         │    │    │    │    ├── index-join instance_types
+ │    │         │    │    │    │    ├── select
  │    │         │    │    │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string!null) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool!null) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
  │    │         │    │    │    │    │    ├── has-placeholder
  │    │         │    │    │    │    │    ├── key: (1)
  │    │         │    │    │    │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)-->(1,3-12,14-16)
- │    │         │    │    │    │    │    └── select
- │    │         │    │    │    │    │         ├── columns: instance_types.id:1(int!null) name:2(string!null) instance_types.deleted:13(bool!null)
- │    │         │    │    │    │    │         ├── has-placeholder
- │    │         │    │    │    │    │         ├── key: (1)
- │    │         │    │    │    │    │         ├── fd: (1)-->(2,13), (2,13)-->(1)
- │    │         │    │    │    │    │         ├── scan instance_types@secondary
- │    │         │    │    │    │    │         │    ├── columns: instance_types.id:1(int!null) name:2(string!null) instance_types.deleted:13(bool)
- │    │         │    │    │    │    │         │    ├── constraint: /2/13: (/NULL - ]
- │    │         │    │    │    │    │         │    ├── key: (1)
- │    │         │    │    │    │    │         │    └── fd: (1)-->(2,13), (2,13)~~>(1)
- │    │         │    │    │    │    │         └── filters [type=bool, outer=(2,13), constraints=(/2: (/NULL - ]; /13: (/NULL - ])]
- │    │         │    │    │    │    │              ├── instance_types.deleted = $1 [type=bool, outer=(13), constraints=(/13: (/NULL - ])]
- │    │         │    │    │    │    │              └── name = $4 [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+ │    │         │    │    │    │    │    ├── ordering: +1
+ │    │         │    │    │    │    │    ├── scan instance_types
+ │    │         │    │    │    │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
+ │    │         │    │    │    │    │    │    ├── key: (1)
+ │    │         │    │    │    │    │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
+ │    │         │    │    │    │    │    │    └── ordering: +1
+ │    │         │    │    │    │    │    └── filters [type=bool, outer=(2,13), constraints=(/2: (/NULL - ]; /13: (/NULL - ])]
+ │    │         │    │    │    │    │         ├── instance_types.deleted = $1 [type=bool, outer=(13), constraints=(/13: (/NULL - ])]
+ │    │         │    │    │    │    │         └── name = $4 [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
  │    │         │    │    │    │    ├── project
  │    │         │    │    │    │    │    ├── columns: true:25(bool!null) instance_type_projects.instance_type_id:18(int!null)
  │    │         │    │    │    │    │    ├── has-placeholder
  │    │         │    │    │    │    │    ├── fd: ()-->(25)
+ │    │         │    │    │    │    │    ├── ordering: +18 opt(25)
  │    │         │    │    │    │    │    ├── select
  │    │         │    │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
  │    │         │    │    │    │    │    │    ├── has-placeholder
+ │    │         │    │    │    │    │    │    ├── ordering: +18
  │    │         │    │    │    │    │    │    ├── scan instance_type_projects@secondary
- │    │         │    │    │    │    │    │    │    └── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string) instance_type_projects.deleted:20(bool)
+ │    │         │    │    │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string) instance_type_projects.deleted:20(bool)
+ │    │         │    │    │    │    │    │    │    └── ordering: +18
  │    │         │    │    │    │    │    │    └── filters [type=bool, outer=(19,20), constraints=(/19: (/NULL - ]; /20: (/NULL - ])]
  │    │         │    │    │    │    │    │         ├── instance_type_projects.deleted = $2 [type=bool, outer=(20), constraints=(/20: (/NULL - ])]
  │    │         │    │    │    │    │    │         └── project_id = $3 [type=bool, outer=(19), constraints=(/19: (/NULL - ])]
  │    │         │    │    │    │    │    └── projections [outer=(18)]
  │    │         │    │    │    │    │         └── true [type=bool]
- │    │         │    │    │    │    └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
- │    │         │    │    │    │         └── instance_type_projects.instance_type_id = instance_types.id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
+ │    │         │    │    │    │    └── merge-on
+ │    │         │    │    │    │         ├── left ordering: +1
+ │    │         │    │    │    │         ├── right ordering: +18
+ │    │         │    │    │    │         └── true [type=bool]
  │    │         │    │    │    └── aggregations [outer=(2-16,25)]
  │    │         │    │    │         ├── const-not-null-agg [type=bool, outer=(25)]
  │    │         │    │    │         │    └── variable: true [type=bool, outer=(25)]
@@ -2158,44 +2159,45 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │    │    ├── has-placeholder
  │    │         │    │    │    ├── key: (1)
  │    │         │    │    │    ├── fd: (1)-->(2-16,26), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
- │    │         │    │    │    ├── left-join
+ │    │         │    │    │    ├── left-join (merge)
  │    │         │    │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string!null) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool!null) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_projects.instance_type_id:18(int) true:25(bool)
  │    │         │    │    │    │    ├── has-placeholder
  │    │         │    │    │    │    ├── fd: (1)-->(2-16), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), ()~~>(25)
- │    │         │    │    │    │    ├── index-join instance_types
+ │    │         │    │    │    │    ├── select
  │    │         │    │    │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string!null) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool!null) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
  │    │         │    │    │    │    │    ├── has-placeholder
  │    │         │    │    │    │    │    ├── key: (1)
  │    │         │    │    │    │    │    ├── fd: (1)-->(2-16), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
- │    │         │    │    │    │    │    └── select
- │    │         │    │    │    │    │         ├── columns: instance_types.id:1(int!null) flavorid:7(string!null) instance_types.deleted:13(bool!null)
- │    │         │    │    │    │    │         ├── has-placeholder
- │    │         │    │    │    │    │         ├── key: (1)
- │    │         │    │    │    │    │         ├── fd: (1)-->(7,13), (7,13)-->(1)
- │    │         │    │    │    │    │         ├── scan instance_types@secondary
- │    │         │    │    │    │    │         │    ├── columns: instance_types.id:1(int!null) flavorid:7(string!null) instance_types.deleted:13(bool)
- │    │         │    │    │    │    │         │    ├── constraint: /7/13: (/NULL - ]
- │    │         │    │    │    │    │         │    ├── key: (1)
- │    │         │    │    │    │    │         │    └── fd: (1)-->(7,13), (7,13)~~>(1)
- │    │         │    │    │    │    │         └── filters [type=bool, outer=(7,13), constraints=(/7: (/NULL - ]; /13: (/NULL - ])]
- │    │         │    │    │    │    │              ├── instance_types.deleted = $1 [type=bool, outer=(13), constraints=(/13: (/NULL - ])]
- │    │         │    │    │    │    │              └── flavorid = $4 [type=bool, outer=(7), constraints=(/7: (/NULL - ])]
+ │    │         │    │    │    │    │    ├── ordering: +1
+ │    │         │    │    │    │    │    ├── scan instance_types
+ │    │         │    │    │    │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
+ │    │         │    │    │    │    │    │    ├── key: (1)
+ │    │         │    │    │    │    │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
+ │    │         │    │    │    │    │    │    └── ordering: +1
+ │    │         │    │    │    │    │    └── filters [type=bool, outer=(7,13), constraints=(/7: (/NULL - ]; /13: (/NULL - ])]
+ │    │         │    │    │    │    │         ├── instance_types.deleted = $1 [type=bool, outer=(13), constraints=(/13: (/NULL - ])]
+ │    │         │    │    │    │    │         └── flavorid = $4 [type=bool, outer=(7), constraints=(/7: (/NULL - ])]
  │    │         │    │    │    │    ├── project
  │    │         │    │    │    │    │    ├── columns: true:25(bool!null) instance_type_projects.instance_type_id:18(int!null)
  │    │         │    │    │    │    │    ├── has-placeholder
  │    │         │    │    │    │    │    ├── fd: ()-->(25)
+ │    │         │    │    │    │    │    ├── ordering: +18 opt(25)
  │    │         │    │    │    │    │    ├── select
  │    │         │    │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
  │    │         │    │    │    │    │    │    ├── has-placeholder
+ │    │         │    │    │    │    │    │    ├── ordering: +18
  │    │         │    │    │    │    │    │    ├── scan instance_type_projects@secondary
- │    │         │    │    │    │    │    │    │    └── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string) instance_type_projects.deleted:20(bool)
+ │    │         │    │    │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string) instance_type_projects.deleted:20(bool)
+ │    │         │    │    │    │    │    │    │    └── ordering: +18
  │    │         │    │    │    │    │    │    └── filters [type=bool, outer=(19,20), constraints=(/19: (/NULL - ]; /20: (/NULL - ])]
  │    │         │    │    │    │    │    │         ├── instance_type_projects.deleted = $2 [type=bool, outer=(20), constraints=(/20: (/NULL - ])]
  │    │         │    │    │    │    │    │         └── project_id = $3 [type=bool, outer=(19), constraints=(/19: (/NULL - ])]
  │    │         │    │    │    │    │    └── projections [outer=(18)]
  │    │         │    │    │    │    │         └── true [type=bool]
- │    │         │    │    │    │    └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
- │    │         │    │    │    │         └── instance_type_projects.instance_type_id = instance_types.id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
+ │    │         │    │    │    │    └── merge-on
+ │    │         │    │    │    │         ├── left ordering: +1
+ │    │         │    │    │    │         ├── right ordering: +18
+ │    │         │    │    │    │         └── true [type=bool]
  │    │         │    │    │    └── aggregations [outer=(2-16,25)]
  │    │         │    │    │         ├── const-not-null-agg [type=bool, outer=(25)]
  │    │         │    │    │         │    └── variable: true [type=bool, outer=(25)]
@@ -2481,44 +2483,45 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         │    ├── has-placeholder
  │    │         │    │         │    ├── key: (1)
  │    │         │    │         │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
- │    │         │    │         │    ├── left-join
+ │    │         │    │         │    ├── left-join (merge)
  │    │         │    │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool!null) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_projects.instance_type_id:18(int) true:25(bool)
  │    │         │    │         │    │    ├── has-placeholder
  │    │         │    │         │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), ()~~>(25)
- │    │         │    │         │    │    ├── index-join instance_types
+ │    │         │    │         │    │    ├── select
  │    │         │    │         │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool!null) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
  │    │         │    │         │    │    │    ├── has-placeholder
  │    │         │    │         │    │    │    ├── key: (1)
  │    │         │    │         │    │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
- │    │         │    │         │    │    │    └── select
- │    │         │    │         │    │    │         ├── columns: instance_types.id:1(int!null) flavorid:7(string!null) instance_types.deleted:13(bool!null)
- │    │         │    │         │    │    │         ├── has-placeholder
- │    │         │    │         │    │    │         ├── key: (1)
- │    │         │    │         │    │    │         ├── fd: (1)-->(7,13), (7,13)-->(1)
- │    │         │    │         │    │    │         ├── scan instance_types@secondary
- │    │         │    │         │    │    │         │    ├── columns: instance_types.id:1(int!null) flavorid:7(string!null) instance_types.deleted:13(bool)
- │    │         │    │         │    │    │         │    ├── constraint: /7/13: (/NULL - ]
- │    │         │    │         │    │    │         │    ├── key: (1)
- │    │         │    │         │    │    │         │    └── fd: (1)-->(7,13), (7,13)~~>(1)
- │    │         │    │         │    │    │         └── filters [type=bool, outer=(1,7,13), constraints=(/13: (/NULL - ])]
- │    │         │    │         │    │    │              ├── instance_types.deleted = $1 [type=bool, outer=(13), constraints=(/13: (/NULL - ])]
- │    │         │    │         │    │    │              └── (flavorid > $4) OR ((flavorid = $5) AND (instance_types.id > $6)) [type=bool, outer=(1,7)]
+ │    │         │    │         │    │    │    ├── ordering: +1
+ │    │         │    │         │    │    │    ├── scan instance_types
+ │    │         │    │         │    │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
+ │    │         │    │         │    │    │    │    ├── key: (1)
+ │    │         │    │         │    │    │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
+ │    │         │    │         │    │    │    │    └── ordering: +1
+ │    │         │    │         │    │    │    └── filters [type=bool, outer=(1,7,13), constraints=(/13: (/NULL - ])]
+ │    │         │    │         │    │    │         ├── instance_types.deleted = $1 [type=bool, outer=(13), constraints=(/13: (/NULL - ])]
+ │    │         │    │         │    │    │         └── (flavorid > $4) OR ((flavorid = $5) AND (instance_types.id > $6)) [type=bool, outer=(1,7)]
  │    │         │    │         │    │    ├── project
  │    │         │    │         │    │    │    ├── columns: true:25(bool!null) instance_type_projects.instance_type_id:18(int!null)
  │    │         │    │         │    │    │    ├── has-placeholder
  │    │         │    │         │    │    │    ├── fd: ()-->(25)
+ │    │         │    │         │    │    │    ├── ordering: +18 opt(25)
  │    │         │    │         │    │    │    ├── select
  │    │         │    │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
  │    │         │    │         │    │    │    │    ├── has-placeholder
+ │    │         │    │         │    │    │    │    ├── ordering: +18
  │    │         │    │         │    │    │    │    ├── scan instance_type_projects@secondary
- │    │         │    │         │    │    │    │    │    └── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string) instance_type_projects.deleted:20(bool)
+ │    │         │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string) instance_type_projects.deleted:20(bool)
+ │    │         │    │         │    │    │    │    │    └── ordering: +18
  │    │         │    │         │    │    │    │    └── filters [type=bool, outer=(19,20), constraints=(/19: (/NULL - ]; /20: (/NULL - ])]
  │    │         │    │         │    │    │    │         ├── instance_type_projects.deleted = $2 [type=bool, outer=(20), constraints=(/20: (/NULL - ])]
  │    │         │    │         │    │    │    │         └── project_id = $3 [type=bool, outer=(19), constraints=(/19: (/NULL - ])]
  │    │         │    │         │    │    │    └── projections [outer=(18)]
  │    │         │    │         │    │    │         └── true [type=bool]
- │    │         │    │         │    │    └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
- │    │         │    │         │    │         └── instance_type_projects.instance_type_id = instance_types.id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
+ │    │         │    │         │    │    └── merge-on
+ │    │         │    │         │    │         ├── left ordering: +1
+ │    │         │    │         │    │         ├── right ordering: +18
+ │    │         │    │         │    │         └── true [type=bool]
  │    │         │    │         │    └── aggregations [outer=(2-16,25)]
  │    │         │    │         │         ├── const-not-null-agg [type=bool, outer=(25)]
  │    │         │    │         │         │    └── variable: true [type=bool, outer=(25)]
@@ -3119,44 +3122,45 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         │    ├── has-placeholder
  │    │         │    │         │    ├── key: (1)
  │    │         │    │         │    ├── fd: (1)-->(2-16,26), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
- │    │         │    │         │    ├── left-join
+ │    │         │    │         │    ├── left-join (merge)
  │    │         │    │         │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string!null) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool!null) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) instance_type_projects.instance_type_id:18(int) true:25(bool)
  │    │         │    │         │    │    ├── has-placeholder
  │    │         │    │         │    │    ├── fd: (1)-->(2-16), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), ()~~>(25)
- │    │         │    │         │    │    ├── index-join instance_types
+ │    │         │    │         │    │    ├── select
  │    │         │    │         │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string!null) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool!null) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
  │    │         │    │         │    │    │    ├── has-placeholder
  │    │         │    │         │    │    │    ├── key: (1)
  │    │         │    │         │    │    │    ├── fd: (1)-->(2-16), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
- │    │         │    │         │    │    │    └── select
- │    │         │    │         │    │    │         ├── columns: instance_types.id:1(int!null) flavorid:7(string!null) instance_types.deleted:13(bool!null)
- │    │         │    │         │    │    │         ├── has-placeholder
- │    │         │    │         │    │    │         ├── key: (1)
- │    │         │    │         │    │    │         ├── fd: (1)-->(7,13), (7,13)-->(1)
- │    │         │    │         │    │    │         ├── scan instance_types@secondary
- │    │         │    │         │    │    │         │    ├── columns: instance_types.id:1(int!null) flavorid:7(string!null) instance_types.deleted:13(bool)
- │    │         │    │         │    │    │         │    ├── constraint: /7/13: (/NULL - ]
- │    │         │    │         │    │    │         │    ├── key: (1)
- │    │         │    │         │    │    │         │    └── fd: (1)-->(7,13), (7,13)~~>(1)
- │    │         │    │         │    │    │         └── filters [type=bool, outer=(7,13), constraints=(/7: (/NULL - ]; /13: (/NULL - ])]
- │    │         │    │         │    │    │              ├── instance_types.deleted = $1 [type=bool, outer=(13), constraints=(/13: (/NULL - ])]
- │    │         │    │         │    │    │              └── flavorid = $4 [type=bool, outer=(7), constraints=(/7: (/NULL - ])]
+ │    │         │    │         │    │    │    ├── ordering: +1
+ │    │         │    │         │    │    │    ├── scan instance_types
+ │    │         │    │         │    │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
+ │    │         │    │         │    │    │    │    ├── key: (1)
+ │    │         │    │         │    │    │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
+ │    │         │    │         │    │    │    │    └── ordering: +1
+ │    │         │    │         │    │    │    └── filters [type=bool, outer=(7,13), constraints=(/7: (/NULL - ]; /13: (/NULL - ])]
+ │    │         │    │         │    │    │         ├── instance_types.deleted = $1 [type=bool, outer=(13), constraints=(/13: (/NULL - ])]
+ │    │         │    │         │    │    │         └── flavorid = $4 [type=bool, outer=(7), constraints=(/7: (/NULL - ])]
  │    │         │    │         │    │    ├── project
  │    │         │    │         │    │    │    ├── columns: true:25(bool!null) instance_type_projects.instance_type_id:18(int!null)
  │    │         │    │         │    │    │    ├── has-placeholder
  │    │         │    │         │    │    │    ├── fd: ()-->(25)
+ │    │         │    │         │    │    │    ├── ordering: +18 opt(25)
  │    │         │    │         │    │    │    ├── select
  │    │         │    │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
  │    │         │    │         │    │    │    │    ├── has-placeholder
+ │    │         │    │         │    │    │    │    ├── ordering: +18
  │    │         │    │         │    │    │    │    ├── scan instance_type_projects@secondary
- │    │         │    │         │    │    │    │    │    └── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string) instance_type_projects.deleted:20(bool)
+ │    │         │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string) instance_type_projects.deleted:20(bool)
+ │    │         │    │         │    │    │    │    │    └── ordering: +18
  │    │         │    │         │    │    │    │    └── filters [type=bool, outer=(19,20), constraints=(/19: (/NULL - ]; /20: (/NULL - ])]
  │    │         │    │         │    │    │    │         ├── instance_type_projects.deleted = $2 [type=bool, outer=(20), constraints=(/20: (/NULL - ])]
  │    │         │    │         │    │    │    │         └── project_id = $3 [type=bool, outer=(19), constraints=(/19: (/NULL - ])]
  │    │         │    │         │    │    │    └── projections [outer=(18)]
  │    │         │    │         │    │    │         └── true [type=bool]
- │    │         │    │         │    │    └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
- │    │         │    │         │    │         └── instance_type_projects.instance_type_id = instance_types.id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
+ │    │         │    │         │    │    └── merge-on
+ │    │         │    │         │    │         ├── left ordering: +1
+ │    │         │    │         │    │         ├── right ordering: +18
+ │    │         │    │         │    │         └── true [type=bool]
  │    │         │    │         │    └── aggregations [outer=(2-16,25)]
  │    │         │    │         │         ├── const-not-null-agg [type=bool, outer=(25)]
  │    │         │    │         │         │    └── variable: true [type=bool, outer=(25)]
