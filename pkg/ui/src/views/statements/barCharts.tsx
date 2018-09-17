@@ -16,6 +16,8 @@ type StatementStatistics = protos.cockroach.server.serverpb.StatementsResponse.I
 const longToInt = (d: number | Long) => Long.fromValue(FixLong(d)).toInt();
 const clamp = (i: number) => i < 0 ? 0 : i;
 
+const formatTwoPlaces = d3.format(".2f");
+
 const countBars = [
   bar("count-first-try", (d: StatementStatistics) => longToInt(d.stats.first_attempt_count)),
 ];
@@ -69,7 +71,12 @@ function makeBarChart(
   accessors: { name: string, value: (d: StatementStatistics) => number }[],
   formatter: (d: number) => string = (x) => `${x}`,
   stdDevAccessor?: { name: string, value: (d: StatementStatistics) => number },
+  legendFormatter?: (d: number) => string,
 ) {
+  if (!legendFormatter) {
+    legendFormatter = formatter;
+  }
+
   return function barChart(rows: StatementStatistics[] = []) {
     function getTotal(d: StatementStatistics) {
       return _.sum(_.map(accessors, ({ value }) => value(d)));
@@ -125,7 +132,7 @@ function makeBarChart(
 
       if (stdDevAccessor) {
         const sd = stdDevAccessor.value(d);
-        const titleText = renderNumericStatLegend(rows.length, sum, sd, formatter);
+        const titleText = renderNumericStatLegend(rows.length, sum, sd, legendFormatter);
 
         return (
           <div className={ "bar-chart" + (rows.length === 0 ? " bar-chart--singleton" : "") }>
@@ -167,7 +174,7 @@ export function approximify(value: number) {
 
 export const countBarChart = makeBarChart(countBars, approximify);
 export const retryBarChart = makeBarChart(retryBars, approximify);
-export const rowsBarChart = makeBarChart(rowsBars, approximify, rowsStdDev);
+export const rowsBarChart = makeBarChart(rowsBars, approximify, rowsStdDev, formatTwoPlaces);
 export const latencyBarChart = makeBarChart(latencyBars, v => Duration(v * 1e9), latencyStdDev);
 
 export function countBreakdown(s: StatementStatistics) {
@@ -235,8 +242,6 @@ export function rowsBreakdown(s: StatementStatistics) {
   const mean = s.stats.num_rows.mean;
   const sd = stdDevLong(s.stats.num_rows, s.stats.count);
 
-  const format = (v: number) => "" + (Math.round(v * 100) / 100);
-
   const scale = d3.scale.linear()
       .domain([0, mean + sd])
       .range([0, 100]);
@@ -246,11 +251,11 @@ export function rowsBreakdown(s: StatementStatistics) {
       const width = scale(clamp(mean - sd));
       const right = scale(mean);
       const spread = scale(sd + (sd > mean ? mean : sd));
-      const title = renderNumericStatLegend(s.stats.count, mean, sd, format);
+      const title = renderNumericStatLegend(s.stats.count, mean, sd, formatTwoPlaces);
       return (
         <div className="bar-chart bar-chart--breakdown">
           <ToolTipWrapper text={ title } short>
-            <div className="label">{ Math.round(mean * 100) / 100 }</div>
+            <div className="label">{ formatTwoPlaces(mean) }</div>
             <div
               className="rows bar-chart__bar"
               style={{ width: right + "%", position: "absolute", left: 0 }}
