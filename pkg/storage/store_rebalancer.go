@@ -407,25 +407,9 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			if candidate.StoreID == localDesc.StoreID {
 				continue
 			}
-			storeDesc, ok := storeMap[candidate.StoreID]
-			if !ok {
-				log.VEventf(ctx, 3, "missing store descriptor for s%d", candidate.StoreID)
-				continue
-			}
 
-			newCandidateQPS := storeDesc.Capacity.QueriesPerSecond + replWithStats.qps
-			if storeDesc.Capacity.QueriesPerSecond < minQPS {
-				if newCandidateQPS > maxQPS {
-					log.VEventf(ctx, 3,
-						"r%d's %.2f qps would push s%d over the max threshold (%.2f) with %.2f qps afterwards",
-						desc.RangeID, replWithStats.qps, candidate.StoreID, maxQPS, newCandidateQPS)
-					continue
-				}
-			} else if newCandidateQPS > storeList.candidateQueriesPerSecond.mean {
-				log.VEventf(ctx, 3,
-					"r%d's %.2f qps would push s%d over the mean (%.2f) with %.2f qps afterwards",
-					desc.RangeID, replWithStats.qps, candidate.StoreID,
-					storeList.candidateQueriesPerSecond.mean, newCandidateQPS)
+			meanQPS := storeList.candidateQueriesPerSecond.mean
+			if shouldNotMoveTo(ctx, storeMap, replWithStats, candidate.StoreID, meanQPS, minQPS, maxQPS) {
 				continue
 			}
 
@@ -545,13 +529,13 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 		}
 
 		// Then pick out which new stores to add the remaining replicas to.
+		rangeInfo := rangeInfoForRepl(replWithStats.repl, desc)
+		options := sr.rq.allocator.scorerOptions()
+		options.qpsRebalanceThreshold = qpsRebalanceThreshold.Get(&sr.st.SV)
 		for len(targets) < desiredReplicas {
 			// Use the preexisting AllocateTarget logic to ensure that considerations
 			// such as zone constraints, locality diversity, and full disk come
 			// into play.
-			rangeInfo := rangeInfoForRepl(replWithStats.repl, desc)
-			options := sr.rq.allocator.scorerOptions()
-			options.qpsRebalanceThreshold = qpsRebalanceThreshold.Get(&sr.st.SV)
 			target, _ := sr.rq.allocator.allocateTargetFromList(
 				ctx,
 				storeList,
@@ -563,6 +547,11 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 			if target == nil {
 				log.VEventf(ctx, 3, "no rebalance targets found to replace the current store for r%d",
 					desc.RangeID)
+				break
+			}
+
+			meanQPS := storeList.candidateQueriesPerSecond.mean
+			if shouldNotMoveTo(ctx, storeMap, replWithStats, target.StoreID, meanQPS, minQPS, maxQPS) {
 				break
 			}
 
@@ -628,6 +617,39 @@ func shouldNotMoveAway(
 			replWithStats.repl.RangeID, replWithStats.qps, localDesc.StoreID, minQPS)
 		return true
 	}
+	return false
+}
+
+func shouldNotMoveTo(
+	ctx context.Context,
+	storeMap map[roachpb.StoreID]*roachpb.StoreDescriptor,
+	replWithStats replicaWithStats,
+	candidateStore roachpb.StoreID,
+	meanQPS float64,
+	minQPS float64,
+	maxQPS float64,
+) bool {
+	storeDesc, ok := storeMap[candidateStore]
+	if !ok {
+		log.VEventf(ctx, 3, "missing store descriptor for s%d", candidateStore)
+		return true
+	}
+
+	newCandidateQPS := storeDesc.Capacity.QueriesPerSecond + replWithStats.qps
+	if storeDesc.Capacity.QueriesPerSecond < minQPS {
+		if newCandidateQPS > maxQPS {
+			log.VEventf(ctx, 3,
+				"r%d's %.2f qps would push s%d over the max threshold (%.2f) with %.2f qps afterwards",
+				replWithStats.repl.RangeID, replWithStats.qps, candidateStore, maxQPS, newCandidateQPS)
+			return true
+		}
+	} else if newCandidateQPS > meanQPS {
+		log.VEventf(ctx, 3,
+			"r%d's %.2f qps would push s%d over the mean (%.2f) with %.2f qps afterwards",
+			replWithStats.repl.RangeID, replWithStats.qps, candidateStore, meanQPS, newCandidateQPS)
+		return true
+	}
+
 	return false
 }
 
