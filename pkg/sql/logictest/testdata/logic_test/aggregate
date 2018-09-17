@@ -1724,3 +1724,9 @@ query T
 SELECT string_agg('foo', CAST ((SELECT NULL) AS BYTES)) OVER ();
 ----
 foo
+
+# Regression test for #30166.
+query T
+SELECT array_agg(generate_series(1, 2))
+----
+{1,2}
