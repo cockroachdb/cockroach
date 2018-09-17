@@ -861,7 +861,11 @@ func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
 		keyCols[i] = input.getColumnOrdinal(c)
 	}
 
-	lookupCols, lookupColMap := b.getColumns(md, def.LookupCols, def.Table)
+	inputProps := ev.Child(0).Logical().Relational
+
+	lookupCols, lookupColMap := b.getColumns(
+		md, def.Cols.Difference(inputProps.OutputCols), def.Table,
+	)
 	allCols := joinOutputMap(input.outputCols, lookupColMap)
 
 	res := execPlan{outputCols: allCols}
