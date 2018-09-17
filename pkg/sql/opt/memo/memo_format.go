@@ -121,7 +121,7 @@ func (m *Memo) formatPrivate(f *memoFmtCtx, private interface{}, physProps *prop
 		fmt.Fprintf(f.buf, ",cols=%s", t.Cols)
 
 	case *LookupJoinDef:
-		fmt.Fprintf(f.buf, ",keyCols=%v,lookupCols=%s", t.KeyCols, t.LookupCols)
+		fmt.Fprintf(f.buf, ",keyCols=%v,outCols=%s", t.KeyCols, t.Cols)
 
 	case *ExplainOpDef:
 		propsStr := t.Props.String()
