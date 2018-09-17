@@ -396,7 +396,7 @@ func allocateCandidates(
 ) candidateList {
 	var candidates candidateList
 	for _, s := range sl.stores {
-		if storeHasReplica(s.StoreID, existing) {
+		if nodeHasReplica(s.Node.NodeID, existing) {
 			continue
 		}
 		constraintsOK, necessary := allocateConstraintsCheck(s, constraints)
@@ -590,6 +590,15 @@ func rebalanceCandidates(
 		}
 		var comparableCands candidateList
 		for _, store := range allStores.stores {
+			// Nodes that already have a replica on one of their stores aren't valid
+			// rebalance targets. We do include stores that currently have a replica
+			// because we want them to be considered as valid stores in the
+			// ConvergesOnMean calculations below. This is subtle but important.
+			if nodeHasReplica(store.Node.NodeID, rangeInfo.Desc.Replicas) &&
+				!storeHasReplica(store.StoreID, rangeInfo.Desc.Replicas) {
+				log.Infof(ctx, "nodeHasReplica(n%d, %v)=true", store.Node.NodeID, rangeInfo.Desc.Replicas)
+				continue
+			}
 			constraintsOK, necessary := rebalanceFromConstraintsCheck(
 				store, existing.cand.store.StoreID, constraints)
 			maxCapacityOK := maxCapacityCheck(store)
@@ -841,7 +850,18 @@ func shouldRebalance(
 	return false
 }
 
-// storeHasReplica returns true if the provided NodeID contains an entry in
+// nodeHasReplica returns true if the provided NodeID contains an entry in
+// the provided list of existing replicas.
+func nodeHasReplica(nodeID roachpb.NodeID, existing []roachpb.ReplicaDescriptor) bool {
+	for _, r := range existing {
+		if r.NodeID == nodeID {
+			return true
+		}
+	}
+	return false
+}
+
+// storeHasReplica returns true if the provided StoreID contains an entry in
 // the provided list of existing replicas.
 func storeHasReplica(storeID roachpb.StoreID, existing []roachpb.ReplicaDescriptor) bool {
 	for _, r := range existing {
