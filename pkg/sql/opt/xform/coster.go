@@ -315,7 +315,8 @@ func (c *coster) computeIndexJoinCost(candidate *memo.BestExpr, logical *props.L
 }
 
 func (c *coster) computeLookupJoinCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
-	leftRowCount := c.mem.BestExprLogical(candidate.Child(0)).Relational.Stats.RowCount
+	leftProps := c.mem.BestExprLogical(candidate.Child(0)).Relational
+	leftRowCount := leftProps.Stats.RowCount
 	def := candidate.Private(c.mem).(*memo.LookupJoinDef)
 
 	cost := c.mem.BestExprCost(candidate.Child(0))
@@ -329,7 +330,8 @@ func (c *coster) computeLookupJoinCost(candidate *memo.BestExpr, logical *props.
 	// Each lookup might retrieve many rows; add the IO cost of retrieving the
 	// rows (relevant when we expect many resulting rows per lookup) and the CPU
 	// cost of emitting the rows.
-	perRowCost := seqIOCostFactor + c.rowScanCost(def.Table, def.Index, def.LookupCols.Len())
+	numLookupCols := def.Cols.Difference(leftProps.OutputCols).Len()
+	perRowCost := seqIOCostFactor + c.rowScanCost(def.Table, def.Index, numLookupCols)
 	cost += memo.Cost(logical.Relational.Stats.RowCount) * perRowCost
 	return cost
 }

@@ -742,7 +742,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 		if iter.isCovering() {
 			// Case 1 (see function comment).
-			lookupJoinDef.LookupCols = scanDef.Cols
+			lookupJoinDef.Cols = scanDef.Cols.Union(inputProps.OutputCols)
 			lookupJoin := memo.MakeLookupJoinExpr(
 				input,
 				lookupJoinOn,
@@ -768,10 +768,11 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		// The lower LookupJoin must return all PK columns (they are needed as key
 		// columns for the index join).
 		indexCols := iter.indexCols()
-		lookupJoinDef.LookupCols = scanDef.Cols.Intersection(indexCols)
+		lookupJoinDef.Cols = scanDef.Cols.Intersection(indexCols)
 		for i := range pkCols {
-			lookupJoinDef.LookupCols.Add(int(pkCols[i]))
+			lookupJoinDef.Cols.Add(int(pkCols[i]))
 		}
+		lookupJoinDef.Cols.UnionWith(inputProps.OutputCols)
 
 		var indexJoinOn memo.GroupID
 
@@ -809,11 +810,11 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		}
 
 		indexJoinDef := memo.LookupJoinDef{
-			JoinType:   joinType,
-			Table:      scanDef.Table,
-			Index:      opt.PrimaryIndex,
-			KeyCols:    pkCols,
-			LookupCols: scanDef.Cols.Difference(indexCols),
+			JoinType: joinType,
+			Table:    scanDef.Table,
+			Index:    opt.PrimaryIndex,
+			KeyCols:  pkCols,
+			Cols:     scanDef.Cols.Union(inputProps.OutputCols),
 		}
 
 		// Create the LookupJoin for the index join in the same group.

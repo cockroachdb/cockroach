@@ -308,11 +308,16 @@ type LookupJoinDef struct {
 	// index columns (or a prefix of them).
 	KeyCols opt.ColList
 
-	// LookupCols is the set of columns retrieved from the index. The LookupJoin
-	// operator produces the columns in its input plus these columns. This set may
-	// or may not contain the columns from the index we are using for the lookups
-	// (which correspond to KeyCols).
-	LookupCols opt.ColSet
+	// Cols is the set of columns produced by the lookup join. This set can
+	// contain columns from the input and columns from the index. Any columns not
+	// in the input are retrieved from the index.
+	//
+	// TODO(radu): this effectively allows an arbitrary projection; it should be
+	// just a LookupCols set indicating which columns we should add from the
+	// index. However, this requires extra Project operators in the lookup join
+	// exploration transforms which currently leads to problems related to lookup
+	// join statistics.
+	Cols opt.ColSet
 }
 
 // ExplainOpDef defines the value of the Def private field of the Explain operator.

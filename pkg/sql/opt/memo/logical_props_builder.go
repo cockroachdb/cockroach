@@ -524,6 +524,20 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 		relational.FuncDeps.ProjectCols(relational.OutputCols)
 	}
 
+	if h.lookupJoinDef != nil && !h.lookupJoinDef.Cols.Equals(relational.OutputCols) {
+		// The LookupJoin op supports projecting away some columns; apply the
+		// projection as needed.
+		if !h.lookupJoinDef.Cols.SubsetOf(relational.OutputCols) {
+			panic(fmt.Sprintf(
+				"lookup join columns %v not a subset of %v", h.lookupJoinDef.Cols, relational.OutputCols,
+			))
+		}
+		// Lookup join effectively applies a post-projection.
+		relational.OutputCols = h.lookupJoinDef.Cols
+		relational.FuncDeps.ProjectCols(relational.OutputCols)
+		relational.NotNullCols.IntersectionWith(relational.OutputCols)
+	}
+
 	// Cardinality
 	// -----------
 	// Calculate cardinality, depending on join type.
@@ -1389,9 +1403,10 @@ func (h *joinPropsHelper) init(ev ExprView, evalCtx *tree.EvalContext) {
 	h.joinType = def.JoinType
 	h.lookupJoinDef = def
 
-	h.rightOutputCols = def.LookupCols
+	inputProps := ev.childGroup(0).logical.Relational
+	h.rightOutputCols = def.Cols.Difference(inputProps.OutputCols)
 	h.rightNotNullCols = tableNotNullCols(md, def.Table)
-	h.rightNotNullCols.IntersectionWith(def.LookupCols)
+	h.rightNotNullCols.IntersectionWith(h.rightOutputCols)
 	h.rightCardinality = props.AnyCardinality
 	h.rightFD.CopyFrom(makeTableFuncDep(md, def.Table))
 	h.rightFD.MakeNotNull(h.rightNotNullCols)

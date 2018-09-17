@@ -234,46 +234,46 @@ func TestLookupJoinDef(t *testing.T) {
 	}
 
 	def1 := &LookupJoinDef{
-		JoinType:   opt.InnerJoinOp,
-		Table:      0,
-		Index:      0,
-		KeyCols:    opt.ColList{10, 11},
-		LookupCols: util.MakeFastIntSet(1, 2),
+		JoinType: opt.InnerJoinOp,
+		Table:    0,
+		Index:    0,
+		KeyCols:  opt.ColList{10, 11},
+		Cols:     util.MakeFastIntSet(1, 2),
 	}
 	def2 := &LookupJoinDef{
-		JoinType:   opt.LeftJoinOp,
-		Table:      0,
-		Index:      0,
-		KeyCols:    opt.ColList{10, 11},
-		LookupCols: util.MakeFastIntSet(1, 2),
+		JoinType: opt.LeftJoinOp,
+		Table:    0,
+		Index:    0,
+		KeyCols:  opt.ColList{10, 11},
+		Cols:     util.MakeFastIntSet(1, 2),
 	}
 	def3 := &LookupJoinDef{
-		JoinType:   opt.InnerJoinOp,
-		Table:      1,
-		Index:      0,
-		KeyCols:    opt.ColList{10, 11},
-		LookupCols: util.MakeFastIntSet(1, 2),
+		JoinType: opt.InnerJoinOp,
+		Table:    1,
+		Index:    0,
+		KeyCols:  opt.ColList{10, 11},
+		Cols:     util.MakeFastIntSet(1, 2),
 	}
 	def4 := &LookupJoinDef{
-		JoinType:   opt.InnerJoinOp,
-		Table:      0,
-		Index:      1,
-		KeyCols:    opt.ColList{10, 11},
-		LookupCols: util.MakeFastIntSet(1, 2),
+		JoinType: opt.InnerJoinOp,
+		Table:    0,
+		Index:    1,
+		KeyCols:  opt.ColList{10, 11},
+		Cols:     util.MakeFastIntSet(1, 2),
 	}
 	def5 := &LookupJoinDef{
-		JoinType:   opt.InnerJoinOp,
-		Table:      0,
-		Index:      0,
-		KeyCols:    opt.ColList{10},
-		LookupCols: util.MakeFastIntSet(1, 2),
+		JoinType: opt.InnerJoinOp,
+		Table:    0,
+		Index:    0,
+		KeyCols:  opt.ColList{10},
+		Cols:     util.MakeFastIntSet(1, 2),
 	}
 	def6 := &LookupJoinDef{
-		JoinType:   opt.InnerJoinOp,
-		Table:      0,
-		Index:      0,
-		KeyCols:    opt.ColList{10, 11},
-		LookupCols: util.MakeFastIntSet(1, 2, 3),
+		JoinType: opt.InnerJoinOp,
+		Table:    0,
+		Index:    0,
+		KeyCols:  opt.ColList{10, 11},
+		Cols:     util.MakeFastIntSet(1, 2, 3),
 	}
 	testEQ(def1, def1)
 	testNE(def1, def2)
@@ -915,7 +915,7 @@ func TestPrivateStorageAllocations(t *testing.T) {
 		RightOrdering: props.ParseOrderingChoice("+4,+5,+6"),
 	}
 	indexJoinDef := &IndexJoinDef{Table: 1, Cols: colSet}
-	lookupJoinDef := &LookupJoinDef{Table: 1, Index: 2, KeyCols: colList, LookupCols: colSet}
+	lookupJoinDef := &LookupJoinDef{Table: 1, Index: 2, KeyCols: colList, Cols: colSet}
 	subqueryDef := &SubqueryDef{OriginalExpr: &tree.Subquery{}, Cmp: opt.LtOp}
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
@@ -977,7 +977,7 @@ func BenchmarkPrivateStorage(b *testing.B) {
 		RightOrdering: props.ParseOrderingChoice("+4,+5,+6"),
 	}
 	indexJoinDef := &IndexJoinDef{Table: 1, Cols: colSet}
-	lookupJoinDef := &LookupJoinDef{Table: 1, Index: 2, KeyCols: colList, LookupCols: colSet}
+	lookupJoinDef := &LookupJoinDef{Table: 1, Index: 2, KeyCols: colList, Cols: colSet}
 	subqueryDef := &SubqueryDef{OriginalExpr: &tree.Subquery{}, Cmp: opt.LtOp}
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
