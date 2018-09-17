@@ -309,7 +309,8 @@
   revision = "5895607e5ea790fcbb640260129a12d277b34e46"
 
 [[projects]]
-  digest = "1:cd936a7edd1897083994b6d397f9c975a5a8dc58e845f0cf3d1e5cf4717b918b"
+  branch = "master"
+  digest = "1:8e61a301e4c18b3fc0f3612b78fc0f3aed960bfa8d211e459e87062f9d1f6ce0"
   name = "github.com/cockroachdb/gostdlib"
   packages = [
     "cmd/gofmt",
@@ -320,8 +321,7 @@
     "x/tools/internal/fastwalk",
   ]
   pruneopts = "UT"
-  revision = "5ba2d4bf557f3a3d4518deb271dcf93244b39363"
-  version = "v1.11.0"
+  revision = "2ba3d6f3048c93f59bfdb444b285875a8753d567"
 
 [[projects]]
   branch = "master"

@@ -764,8 +764,8 @@ func TestMaliciousInputs(t *testing.T) {
 			_ /* err */ = conn.serveImpl(
 				ctx,
 				func() bool { return false }, /* draining */
-				nil,                          /* sqlServer */
-				mon.BoundAccount{},           /* reserved */
+				nil,                /* sqlServer */
+				mon.BoundAccount{}, /* reserved */
 				stopper,
 			)
 			if err := <-errChan; err != nil {
