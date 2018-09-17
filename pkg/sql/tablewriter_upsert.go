@@ -46,6 +46,9 @@ type tableUpserterBase struct {
 	// resultCount is the number of upserts. Mirrors rowsUpserted.Len() if
 	// collectRows is set, counted separately otherwise.
 	resultCount int
+	// This is true if the results rows have a different order than the input
+	// rows.
+	reorderRequired bool
 
 	// Contains all the rows to be inserted.
 	insertRows sqlbase.RowContainer
@@ -99,6 +102,14 @@ func (tu *tableUpserterBase) init(txn *client.Txn, evalCtx *tree.EvalContext) er
 			retID = dontReturnCol
 		}
 		tu.rowIdxToRetIdx[i] = retID
+	}
+
+	// Check to see if any reordering or replacing of the input rows is required.
+	for i, retIndex := range tu.rowIdxToRetIdx {
+		if i != retIndex {
+			tu.reorderRequired = true
+			break
+		}
 	}
 
 	tu.insertRows.Init(
@@ -164,8 +175,9 @@ func (tu *tableUpserterBase) finalize(
 func (tu *tableUpserterBase) makeResultFromInsertRow(
 	insertRow tree.Datums, cols []sqlbase.ColumnDescriptor,
 ) tree.Datums {
-	if len(insertRow) == len(cols) {
-		// The row we inserted was already the right shape.
+	// If there are no missing columns and no reordering needed, this can just be
+	// a passthrough.
+	if !tu.reorderRequired && len(insertRow) == len(cols) {
 		return insertRow
 	}
 	resultRow := make(tree.Datums, len(cols))
@@ -453,8 +465,6 @@ func (tu *tableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
 
 		// Do we need to remember a result for RETURNING?
 		if tu.collectRows {
-			// Yes, collect it.
-			resultRow = tu.makeResultFromInsertRow(resultRow, tableDesc.Columns)
 			_, err = tu.rowsUpserted.AddRow(ctx, resultRow)
 			if err != nil {
 				return err
