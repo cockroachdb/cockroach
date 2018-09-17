@@ -496,7 +496,7 @@ memo (optimized, ~10KB)
  ├── G3: (limit G6 G7 ordering=+2)
  │    └── ""
  │         ├── best: (limit G6="[ordering: +2]" G7 ordering=+2)
- │         └── cost: 1119.22
+ │         └── cost: 1244.71
  ├── G4: (aggregations G8)
  ├── G5: (min G12)
  ├── G6: (select G9 G10)
@@ -505,7 +505,7 @@ memo (optimized, ~10KB)
  │    │    └── cost: 1060.00
  │    └── "[ordering: +2]"
  │         ├── best: (sort G6)
- │         └── cost: 1119.21
+ │         └── cost: 1244.70
  ├── G7: (const 1)
  ├── G8: (const-agg G12)
  ├── G9: (scan abc,cols=(2))
@@ -558,7 +558,7 @@ memo (optimized, ~10KB)
  ├── G3: (limit G6 G7 ordering=-2)
  │    └── ""
  │         ├── best: (limit G6="[ordering: -2]" G7 ordering=-2)
- │         └── cost: 1119.22
+ │         └── cost: 1244.71
  ├── G4: (aggregations G8)
  ├── G5: (max G12)
  ├── G6: (select G9 G10)
@@ -567,7 +567,7 @@ memo (optimized, ~10KB)
  │    │    └── cost: 1060.00
  │    └── "[ordering: -2]"
  │         ├── best: (sort G6)
- │         └── cost: 1119.21
+ │         └── cost: 1244.70
  ├── G7: (const 1)
  ├── G8: (const-agg G12)
  ├── G9: (scan abc,cols=(2))
@@ -647,7 +647,7 @@ memo (optimized, ~10KB)
  ├── G3: (limit G6 G7 ordering=-2)
  │    └── ""
  │         ├── best: (limit G6="[ordering: -2]" G7 ordering=-2)
- │         └── cost: 1119.22
+ │         └── cost: 1244.71
  ├── G4: (aggregations G8)
  ├── G5: (max G12)
  ├── G6: (select G9 G10)
@@ -656,7 +656,7 @@ memo (optimized, ~10KB)
  │    │    └── cost: 1060.00
  │    └── "[ordering: -2]"
  │         ├── best: (sort G6)
- │         └── cost: 1119.21
+ │         └── cost: 1244.70
  ├── G7: (const 1)
  ├── G8: (const-agg G12)
  ├── G9: (scan abc,cols=(2))
