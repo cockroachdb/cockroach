@@ -5,7 +5,7 @@
 import moment from "moment";
 
 import {
-  VersionList, VersionCheckRequest, RegistrationRequest, UnregistrationRequest,
+  VersionList, VersionCheckRequest,
 } from "src/interfaces/cockroachlabs";
 import { withTimeout } from "./api";
 
@@ -42,12 +42,4 @@ function timeoutFetch<T extends BodyInit, R>(url: string, req?: T, config: Fetch
 
 export function versionCheck(request: VersionCheckRequest, timeout?: moment.Duration): Promise<VersionList> {
   return timeoutFetch(`${COCKROACHLABS_ADDR}/api/clusters/updates?uuid=${request.clusterID}&version=${request.buildtag}`, null, { timeout });
-}
-
-export function registerCluster(request: RegistrationRequest, timeout?: moment.Duration): Promise<{}> {
-  return timeoutFetch(`${COCKROACHLABS_ADDR}/api/clusters/register?uuid=${request.clusterID}`, JSON.stringify(request), { timeout });
-}
-
-export function unregisterCluster(request: UnregistrationRequest, timeout?: moment.Duration): Promise<{}> {
-  return timeoutFetch(`${COCKROACHLABS_ADDR}/api/clusters/unregister?uuid=${request.clusterID}`, null, { method: "DELETE", timeout });
 }
