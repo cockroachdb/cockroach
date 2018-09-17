@@ -20,6 +20,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -71,12 +72,12 @@ func registerRebalanceLoad(r *registry) {
 			splits := len(roachNodes) - 1 // n-1 splits => n ranges => 1 lease per node
 			return c.RunL(ctx, quietL, appNode, fmt.Sprintf(
 				"./workload run kv --read-percent=95 --splits=%d --tolerate-errors --concurrency=%d "+
-					"--duration=%s {pgurl:1-3}",
-				splits, concurrency, duration.String()))
+					"--duration=%s {pgurl:1-%d}",
+				splits, concurrency, duration.String(), len(roachNodes)))
 		})
 
 		m.Go(func() error {
-			t.Status(fmt.Sprintf("starting checks for lease balance"))
+			t.Status("checking for lease balance")
 
 			db := c.Conn(ctx, 1)
 			defer db.Close()
@@ -91,7 +92,7 @@ func registerRebalanceLoad(r *registry) {
 				if done, err := isLoadEvenlyDistributed(c.l, db, len(roachNodes)); err != nil {
 					return err
 				} else if done {
-					c.l.Printf("successfully achieved lease balance\n")
+					t.Status("successfully achieved lease balance; waiting for kv to finish running")
 					return nil
 				}
 
@@ -156,10 +157,9 @@ func isLoadEvenlyDistributed(l *logger, db *gosql.DB, numNodes int) (bool, error
 		leaseCounts[storeID] = leaseCount
 		rangeCount += leaseCount
 	}
-	l.Printf("numbers of test.kv leases on each store: %v\n", leaseCounts)
 
 	if len(leaseCounts) < numNodes {
-		l.Printf("not all nodes have a lease yet: %v\n", leaseCounts)
+		l.Printf("not all nodes have a lease yet: %v\n", formatLeaseCounts(leaseCounts))
 		return false, nil
 	}
 
@@ -168,10 +168,11 @@ func isLoadEvenlyDistributed(l *logger, db *gosql.DB, numNodes int) (bool, error
 	if rangeCount == numNodes {
 		for _, leaseCount := range leaseCounts {
 			if leaseCount != 1 {
-				l.Printf("uneven lease distribution: %v\n", leaseCounts)
+				l.Printf("uneven lease distribution: %s\n", formatLeaseCounts(leaseCounts))
 				return false, nil
 			}
 		}
+		l.Printf("leases successfully distributed: %s\n", formatLeaseCounts(leaseCounts))
 		return true, nil
 	}
 
@@ -183,9 +184,23 @@ func isLoadEvenlyDistributed(l *logger, db *gosql.DB, numNodes int) (bool, error
 	}
 	sort.Ints(leases)
 	if leases[0]+1 < leases[len(leases)-1] {
-		l.Printf("leases per store differ by more than one: %v\n", leaseCounts)
+		l.Printf("leases per store differ by more than one: %s\n", formatLeaseCounts(leaseCounts))
 		return false, nil
 	}
 
+	l.Printf("leases successfully distributed: %s\n", formatLeaseCounts(leaseCounts))
 	return true, nil
+}
+
+func formatLeaseCounts(counts map[int]int) string {
+	storeIDs := make([]int, 0, len(counts))
+	for storeID := range counts {
+		storeIDs = append(storeIDs, storeID)
+	}
+	sort.Ints(storeIDs)
+	strs := make([]string, 0, len(counts))
+	for _, storeID := range storeIDs {
+		strs = append(strs, fmt.Sprintf("s%d: %d", storeID, counts[storeID]))
+	}
+	return fmt.Sprintf("[%s]", strings.Join(strs, ", "))
 }

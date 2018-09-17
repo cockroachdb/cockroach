@@ -20,6 +20,6 @@ fi
 version_major=$(cut -f1 -d. <<< "$version")
 version_minor=$(cut -f2 -d. <<< "$version")
 if (( version_major != 1 )) || (( version_minor < 11 )); then
-  echo "go1.10+ required (detected go$version)" >&2
+  echo "go1.11+ required (detected go$version)" >&2
   exit 1
 fi
