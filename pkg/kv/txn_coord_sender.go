@@ -56,10 +56,10 @@ var maxTxnIntentsBytes = settings.RegisterIntSetting(
 	256*1000,
 )
 
-// maxTxnRefreshSpansBytes is a threshold in bytes for refresh spans stored
+// MaxTxnRefreshSpansBytes is a threshold in bytes for refresh spans stored
 // on the coordinator during the lifetime of a transaction. Refresh spans
 // are used for SERIALIZABLE transactions to avoid client restarts.
-var maxTxnRefreshSpansBytes = settings.RegisterIntSetting(
+var MaxTxnRefreshSpansBytes = settings.RegisterIntSetting(
 	"kv.transaction.max_refresh_spans_bytes",
 	"maximum number of bytes used to track refresh spans in serializable transactions",
 	256*1000,
@@ -1152,35 +1152,37 @@ func (tc *TxnCoordSender) updateState(
 	// qualified by possible resume spans in the responses, if the txn
 	// has serializable isolation and we haven't yet exceeded the max
 	// read key bytes.
-	tc.mu.Lock()
-	if pErr == nil && ba.Txn.IsSerializable() {
-		if tc.mu.meta.RefreshValid {
-			if !tc.appendRefreshSpansLocked(ctx, ba, br) {
-				// The refresh spans are out of date, return a generic client-side retry error.
-				pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE), br.Txn)
+	if pErr == nil && br.Txn != nil && br.Txn.Status == roachpb.PENDING {
+		tc.mu.Lock()
+		if ba.Txn.IsSerializable() {
+			if tc.mu.meta.RefreshValid {
+				if !tc.appendRefreshSpansLocked(ctx, ba, br) {
+					// The refresh spans are out of date, return a generic client-side retry error.
+					pErr = roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE), br.Txn)
+				}
+			}
+			// Verify and enforce the size in bytes of all read-only spans
+			// doesn't exceed the max threshold.
+			if tc.mu.refreshSpansBytes > MaxTxnRefreshSpansBytes.Get(&tc.st.SV) {
+				log.VEventf(ctx, 2, "refresh spans max size exceeded; clearing")
+				tc.mu.meta.RefreshReads = nil
+				tc.mu.meta.RefreshWrites = nil
+				tc.mu.meta.RefreshValid = false
+				tc.mu.refreshSpansBytes = 0
 			}
 		}
-		// Verify and enforce the size in bytes of all read-only spans
-		// doesn't exceed the max threshold.
-		if tc.mu.refreshSpansBytes > maxTxnRefreshSpansBytes.Get(&tc.st.SV) {
-			log.VEventf(ctx, 2, "refresh spans max size exceeded; clearing")
-			tc.mu.meta.RefreshReads = nil
-			tc.mu.meta.RefreshWrites = nil
-			tc.mu.meta.RefreshValid = false
-			tc.mu.refreshSpansBytes = 0
+		// If the transaction will retry and the refresh spans are
+		// exhausted, return a non-retryable error indicating that the
+		// transaction is too large and should potentially be split.
+		// We do this to avoid endlessly retrying a txn likely refail.
+		if pErr == nil && !tc.mu.meta.RefreshValid &&
+			(br.Txn.WriteTooOld || br.Txn.OrigTimestamp != br.Txn.Timestamp) {
+			pErr = roachpb.NewErrorWithTxn(
+				errors.New("transaction is too large to complete; try splitting into pieces"), br.Txn,
+			)
 		}
+		tc.mu.Unlock()
 	}
-	// If the transaction will retry and the refresh spans are
-	// exhausted, return a non-retryable error indicating that the
-	// transaction is too large and should potentially be split.
-	// We do this to avoid endlessly retrying a txn likely refail.
-	if pErr == nil && !tc.mu.meta.RefreshValid &&
-		(br.Txn.WriteTooOld || br.Txn.OrigTimestamp != br.Txn.Timestamp) {
-		pErr = roachpb.NewErrorWithTxn(
-			errors.New("transaction is too large to complete; try splitting into pieces"), br.Txn,
-		)
-	}
-	tc.mu.Unlock()
 
 	txnID := ba.Txn.ID
 	var newTxn roachpb.Transaction
