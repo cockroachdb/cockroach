@@ -86,6 +86,7 @@ type NodeLiveness interface {
 // nodes will see time-based nodes delay the act of stealing a job.
 type Registry struct {
 	ac       log.AmbientContext
+	stopper  *stop.Stopper
 	db       *client.DB
 	ex       sqlutil.InternalExecutor
 	clock    *hlc.Clock
@@ -131,6 +132,7 @@ type planHookMaker func(opName, user string) (interface{}, func())
 // coerced into that in the Resumer functions.
 func MakeRegistry(
 	ac log.AmbientContext,
+	stopper *stop.Stopper,
 	clock *hlc.Clock,
 	db *client.DB,
 	ex sqlutil.InternalExecutor,
@@ -140,6 +142,7 @@ func MakeRegistry(
 ) *Registry {
 	r := &Registry{
 		ac:       ac,
+		stopper:  stopper,
 		clock:    clock,
 		db:       db,
 		ex:       ex,
@@ -212,7 +215,10 @@ func (r *Registry) StartJob(
 		r.unregister(id)
 		return nil, nil, err
 	}
-	errCh := r.resume(resumeCtx, resumer, resultsCh, j)
+	errCh, err := r.resume(resumeCtx, resumer, resultsCh, j)
+	if err != nil {
+		return nil, nil, err
+	}
 	return j, errCh, nil
 }
 
@@ -455,9 +461,10 @@ func (r retryJobError) Error() string {
 // a value. errCh returns an error if the job was not completed with success.
 func (r *Registry) resume(
 	ctx context.Context, resumer Resumer, resultsCh chan<- tree.Datums, job *Job,
-) <-chan error {
+) (<-chan error, error) {
 	errCh := make(chan error, 1)
-	go func() {
+	taskName := fmt.Sprintf(`job-%d`, *job.ID())
+	if err := r.stopper.RunAsyncTask(ctx, taskName, func(ctx context.Context) {
 		payload := job.Payload()
 		phs, cleanup := r.planFn("resume-job", payload.Username)
 		defer cleanup()
@@ -513,8 +520,10 @@ func (r *Registry) resume(
 			resumer.OnTerminal(ctx, job, status, resultsCh)
 		}
 		errCh <- resumeErr
-	}()
-	return errCh
+	}); err != nil {
+		return nil, err
+	}
+	return errCh, nil
 }
 
 // AddResumeHook adds a resume hook.
@@ -664,7 +673,10 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 		if err != nil {
 			return err
 		}
-		errCh := r.resume(resumeCtx, resumer, resultsCh, &job)
+		errCh, err := r.resume(resumeCtx, resumer, resultsCh, &job)
+		if err != nil {
+			return err
+		}
 		go func() {
 			// Drain and ignore results.
 			for range resultsCh {
