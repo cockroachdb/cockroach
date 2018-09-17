@@ -332,7 +332,7 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 		return roachpb.ReplicaDescriptor{}, err
 	}
 
-	tc.repl.setDescWithoutProcessUpdate(ctx, &newDesc)
+	tc.repl.setDesc(ctx, &newDesc)
 	tc.repl.raftMu.Lock()
 	tc.repl.mu.Lock()
 	tc.repl.assertStateLocked(ctx, tc.engine)
@@ -7069,9 +7069,7 @@ func TestReplicaDestroy(t *testing.T) {
 		}
 	}
 
-	if err := repl.setDesc(ctx, newDesc); err != nil {
-		t.Fatal(err)
-	}
+	repl.setDesc(ctx, newDesc)
 	expectedErr := "replica descriptor's ID has changed"
 	if err := tc.store.removeReplicaImpl(ctx, tc.repl, origDesc.NextReplicaID, RemoveOptions{
 		DestroyData: true,
