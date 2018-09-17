@@ -164,10 +164,6 @@ func (tu *tableUpserterBase) finalize(
 func (tu *tableUpserterBase) makeResultFromInsertRow(
 	insertRow tree.Datums, cols []sqlbase.ColumnDescriptor,
 ) tree.Datums {
-	if len(insertRow) == len(cols) {
-		// The row we inserted was already the right shape.
-		return insertRow
-	}
 	resultRow := make(tree.Datums, len(cols))
 	if len(insertRow) < len(cols) {
 		// The row we inserted didn't have all columns filled out. Fill the columns
@@ -177,6 +173,8 @@ func (tu *tableUpserterBase) makeResultFromInsertRow(
 		}
 	}
 	// Now, fill the other values from insertRow.
+	// TODO(bram): If there is no re-ordering, we can just return the insertRow,
+	// but this needs to be checked beforehand.
 	for i, val := range insertRow {
 		retIdx := tu.rowIdxToRetIdx[i]
 		if retIdx != dontReturnCol {
@@ -453,8 +451,6 @@ func (tu *tableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
 
 		// Do we need to remember a result for RETURNING?
 		if tu.collectRows {
-			// Yes, collect it.
-			resultRow = tu.makeResultFromInsertRow(resultRow, tableDesc.Columns)
 			_, err = tu.rowsUpserted.AddRow(ctx, resultRow)
 			if err != nil {
 				return err
