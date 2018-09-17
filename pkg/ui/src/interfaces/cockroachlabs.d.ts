@@ -32,16 +32,3 @@ export interface VersionCheckRequest {
   clusterID: string;
   buildtag: string;
 }
-
-export interface RegistrationRequest {
-  first_name: string;
-  last_name: string;
-  company: string;
-  email: string;
-  clusterID: string;
-  product_updates: boolean;
-}
-
-export interface UnregistrationRequest {
-  clusterID: string;
-}
