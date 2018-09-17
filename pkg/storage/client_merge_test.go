@@ -1084,7 +1084,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	// read the meat of the test.
 
 	// Install a hook to control when the merge transaction commits.
-	mergeEndTxnReceived := make(chan struct{})
+	mergeEndTxnReceived := make(chan struct{}, 10) // headroom in case the merge transaction retries
 	finishMerge := make(chan struct{})
 	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
 		for _, r := range ba.Requests {
@@ -1206,7 +1206,7 @@ func TestStoreRangeMergeRHSLeaseExpiration(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Finally, allow the merge to complete. It should complete successfully.
-	finishMerge <- struct{}{}
+	close(finishMerge)
 	if err := <-mergeErr; err != nil {
 		t.Fatal(err)
 	}
