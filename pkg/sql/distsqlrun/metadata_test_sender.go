@@ -117,11 +117,6 @@ func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	return nil, mts.DrainHelper()
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (mts *metadataTestSender) ConsumerDone() {
-	mts.MoveToDraining(nil /* err */)
-}
-
 // ConsumerClosed is part of the RowSource interface.
 func (mts *metadataTestSender) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.

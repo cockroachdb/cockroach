@@ -266,11 +266,6 @@ func (h *hashJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	return nil, h.DrainHelper()
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (h *hashJoiner) ConsumerDone() {
-	h.MoveToDraining(nil /* err */)
-}
-
 // ConsumerClosed is part of the RowSource interface.
 func (h *hashJoiner) ConsumerClosed() {
 	h.close()

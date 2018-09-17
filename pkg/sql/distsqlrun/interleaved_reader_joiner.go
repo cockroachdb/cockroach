@@ -259,10 +259,6 @@ func (irj *interleavedReaderJoiner) nextRow() (irjState, sqlbase.EncDatumRow, *P
 	return newState, unmatchedAncestor, nil
 }
 
-func (irj *interleavedReaderJoiner) ConsumerDone() {
-	irj.MoveToDraining(nil /* err */)
-}
-
 func (irj *interleavedReaderJoiner) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	irj.InternalClose()

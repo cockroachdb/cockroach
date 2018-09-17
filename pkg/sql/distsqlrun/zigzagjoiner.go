@@ -877,10 +877,6 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	return nil, z.DrainHelper()
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (z *zigzagJoiner) ConsumerDone() {
-}
-
 // ConsumerClosed is part of the RowSource interface.
 func (z *zigzagJoiner) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
