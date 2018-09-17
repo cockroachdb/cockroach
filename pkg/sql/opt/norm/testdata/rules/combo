@@ -794,7 +794,7 @@ DecorrelateJoin
     │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
     └── filters [type=bool]
 ================================================================================
-EliminateEmptyAnd
+EliminateEmptyFilters
   Cost: 2190.00
 ================================================================================
    select
@@ -1366,7 +1366,7 @@ MergeSelects
     └── projections [outer=(11)]
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
-EliminateEmptyAnd
+EliminateEmptyFilters
   Cost: 2152.56
 ================================================================================
    project
