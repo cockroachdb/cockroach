@@ -868,7 +868,7 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 	defer s.builder.semaCtx.Properties.Restore(s.builder.semaCtx.Properties)
 
 	s.builder.semaCtx.Properties.Require(s.context,
-		tree.RejectNestedAggregates|tree.RejectWindowApplications|tree.RejectGenerators)
+		tree.RejectNestedAggregates|tree.RejectWindowApplications)
 
 	expr := f.Walk(s)
 	typedFunc, err := tree.TypeCheck(expr, s.builder.semaCtx, types.Any)

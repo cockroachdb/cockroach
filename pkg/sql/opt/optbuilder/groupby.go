@@ -232,6 +232,9 @@ func (b *Builder) buildAggregation(
 	b.buildProjectionList(fromScope, projectionsScope)
 	b.buildOrderBy(fromScope, projectionsScope, orderByScope)
 	b.buildDistinctOnArgs(fromScope, projectionsScope, distinctOnScope)
+	if len(fromScope.srfs) > 0 {
+		fromScope.group = b.constructProjectSet(fromScope.group, fromScope.srfs)
+	}
 
 	aggInfos := aggOutScope.groupby.aggs
 

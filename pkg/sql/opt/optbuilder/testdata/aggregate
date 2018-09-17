@@ -2853,3 +2853,23 @@ scalar-group-by
  └── aggregations
       └── array-agg [type=int[]]
            └── variable: y [type=int]
+
+# Regression test for #30166.
+build
+SELECT array_agg(generate_series(1, 2))
+----
+scalar-group-by
+ ├── columns: array_agg:2(int[])
+ ├── inner-join-apply
+ │    ├── columns: generate_series:1(int)
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    ├── zip
+ │    │    ├── columns: generate_series:1(int)
+ │    │    └── function: generate_series [type=int]
+ │    │         ├── const: 1 [type=int]
+ │    │         └── const: 2 [type=int]
+ │    └── true [type=bool]
+ └── aggregations
+      └── array-agg [type=int[]]
+           └── variable: generate_series [type=int]
