@@ -753,15 +753,15 @@ scalar-group-by
  ├── columns: count:22(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 1563.45444
+ ├── cost: 1588.34333
  ├── key: ()
  ├── fd: ()-->(22)
  ├── prune: (22)
  ├── inner-join (lookup warehouse)
  │    ├── columns: w_id:1(int!null) w_ytd:9(decimal!null) d_w_id:11(int!null) sum:21(decimal!null)
  │    ├── key columns: [11] = [1]
- │    ├── stats: [rows=11.1111111, distinct(1)=11.1111111, distinct(11)=11.1111111]
- │    ├── cost: 1563.33333
+ │    ├── stats: [rows=33.3333333, distinct(1)=33.3333333, distinct(11)=33.3333333]
+ │    ├── cost: 1588
  │    ├── key: (11)
  │    ├── fd: (1)-->(9), (11)-->(21), (1)==(11), (11)==(1)
  │    ├── interesting orderings: (+11)
