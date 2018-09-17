@@ -69,7 +69,12 @@ function makeBarChart(
   accessors: { name: string, value: (d: StatementStatistics) => number }[],
   formatter: (d: number) => string = (x) => `${x}`,
   stdDevAccessor?: { name: string, value: (d: StatementStatistics) => number },
+  legendFormatter?: (d: number) => string,
 ) {
+  if (!legendFormatter) {
+    legendFormatter = formatter;
+  }
+
   return function barChart(rows: StatementStatistics[] = []) {
     function getTotal(d: StatementStatistics) {
       return _.sum(_.map(accessors, ({ value }) => value(d)));
@@ -125,7 +130,7 @@ function makeBarChart(
 
       if (stdDevAccessor) {
         const sd = stdDevAccessor.value(d);
-        const titleText = renderNumericStatLegend(rows.length, sum, sd, formatter);
+        const titleText = renderNumericStatLegend(rows.length, sum, sd, legendFormatter);
 
         return (
           <div className={ "bar-chart" + (rows.length === 0 ? " bar-chart--singleton" : "") }>
@@ -167,7 +172,7 @@ export function approximify(value: number) {
 
 export const countBarChart = makeBarChart(countBars, approximify);
 export const retryBarChart = makeBarChart(retryBars, approximify);
-export const rowsBarChart = makeBarChart(rowsBars, approximify, rowsStdDev);
+export const rowsBarChart = makeBarChart(rowsBars, approximify, rowsStdDev, v => "" + (Math.round(v * 100) / 100));
 export const latencyBarChart = makeBarChart(latencyBars, v => Duration(v * 1e9), latencyStdDev);
 
 export function countBreakdown(s: StatementStatistics) {
