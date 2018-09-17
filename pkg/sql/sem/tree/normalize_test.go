@@ -96,6 +96,8 @@ func TestNormalizeExpr(t *testing.T) {
 		{`1 IN (3, 2, 1)`, `true`},
 		{`a IN (3, 2, 1)`, `a IN (1, 2, 3)`},
 		{`1 IN (1, 2, a)`, `1 IN (1, 2, a)`},
+		{`NULL IN ()`, `false`},
+		{`NULL NOT IN ()`, `true`},
 		{`NULL IN (1, 2, 3)`, `NULL`},
 		{`a IN (NULL)`, `NULL`},
 		{`a IN (NULL, NULL)`, `NULL`},
