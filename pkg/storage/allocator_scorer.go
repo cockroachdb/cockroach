@@ -414,8 +414,10 @@ func allocateCandidates(
 				convergesScore = 1
 			} else if s.Capacity.QueriesPerSecond < sl.candidateQueriesPerSecond.mean {
 				convergesScore = 0
-			} else {
+			} else if s.Capacity.QueriesPerSecond < overfullThreshold(sl.candidateQueriesPerSecond.mean, options.qpsRebalanceThreshold) {
 				convergesScore = -1
+			} else {
+				convergesScore = -2
 			}
 		}
 		candidates = append(candidates, candidate{
