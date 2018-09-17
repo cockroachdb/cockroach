@@ -30,19 +30,22 @@ import (
 type tableUpserterBase struct {
 	tableWriterBase
 
-	ri          sqlbase.RowInserter
-	alloc       *sqlbase.DatumAlloc
+	ri    sqlbase.RowInserter
+	alloc *sqlbase.DatumAlloc
+
+	// Should we collect the rows for a RETRUNING clause?
 	collectRows bool
 
 	// Rows returned if collectRows is true.
 	rowsUpserted *sqlbase.RowContainer
-	// rowTemplate is used to prepare rows to add to rowsUpserted.
-	rowTemplate tree.Datums
-	// rowIdxToRetIdx maps the indices in the inserted rows
-	// back to indices in rowTemplate. Contains dontReturnCol (-1) for indices
-	// in the inserted rows that are mutation columns which shouldn't be returned
-	// to the user.
-	rowIdxToRetIdx []int
+
+	// A mapping of column IDs to the return index used to shape the resulting
+	// rows to those required by the returning clause.
+	colIDToReturnIndex map[sqlbase.ColumnID]int
+
+	// Do the results rows have a different order than insert rows.
+	insertReorderingRequired bool
+
 	// resultCount is the number of upserts. Mirrors rowsUpserted.Len() if
 	// collectRows is set, counted separately otherwise.
 	resultCount int
@@ -53,10 +56,6 @@ type tableUpserterBase struct {
 	// For allocation avoidance.
 	indexKeyPrefix []byte
 }
-
-// dontReturnCol is stored in rowIdxToRetIdx to indicate indices in the inserted
-// rows that are mutation columns which shouldn't be returned to the user.
-const dontReturnCol = -1
 
 func (tu *tableUpserterBase) init(txn *client.Txn, evalCtx *tree.EvalContext) error {
 	tu.tableWriterBase.init(txn)
@@ -73,32 +72,27 @@ func (tu *tableUpserterBase) init(txn *client.Txn, evalCtx *tree.EvalContext) er
 			sqlbase.ColTypeInfoFromColDescs(tableDesc.Columns),
 			tu.insertRows.Len(),
 		)
-
-		// In some cases (e.g. `INSERT INTO t (a) ...`) rowVals does not contain
-		// all the table columns. We need to pass values for all table columns
-		// to rh, in the correct order; we will use rowTemplate for this. We
-		// also need a table that maps row indices to rowTemplate indices to
-		// fill in the row values; any absent values will be NULLs.
-		tu.rowTemplate = make(tree.Datums, len(tableDesc.Columns))
 	}
 
-	// Create the map from insert rows to returning rows.
+	// Create the map from colIds to the expected columns.
 	// Note that this map will *not* contain any mutation columns - that's because
 	// even though we might insert values into mutation columns, we never return
 	// them back to the user.
-	colIDToRetIndex := map[sqlbase.ColumnID]int{}
+	tu.colIDToReturnIndex = map[sqlbase.ColumnID]int{}
 	for i, col := range tableDesc.Columns {
-		colIDToRetIndex[col.ID] = i
+		tu.colIDToReturnIndex[col.ID] = i
 	}
-	tu.rowIdxToRetIdx = make([]int, len(tu.ri.InsertCols))
-	for i, col := range tu.ri.InsertCols {
-		retID, ok := colIDToRetIndex[col.ID]
-		if !ok {
-			// If the column is missing, it means it's a mutation column. Put -1 in
-			// the map to signal that we don't want it in the returning row.
-			retID = dontReturnCol
+
+	if len(tu.ri.InsertColIDtoRowIndex) == len(tu.colIDToReturnIndex) {
+		for colID, insertIndex := range tu.ri.InsertColIDtoRowIndex {
+			resultIndex, ok := tu.colIDToReturnIndex[colID]
+			if !ok || resultIndex != insertIndex {
+				tu.insertReorderingRequired = true
+				break
+			}
 		}
-		tu.rowIdxToRetIdx[i] = retID
+	} else {
+		tu.insertReorderingRequired = true
 	}
 
 	tu.insertRows.Init(
@@ -156,33 +150,19 @@ func (tu *tableUpserterBase) finalize(
 	return nil, tu.tableWriterBase.finalize(ctx, autoCommit, tu.tableDesc())
 }
 
-// makeResultFromInsertRow reshapes a row that was inserted by the
-// data source (in tu.insertRow) to a row suitable for storing for a
-// later RETURNING clause, shaped by the target table's descriptor.
-// For example, the inserted row may not contain values for nullable
-// columns.
-func (tu *tableUpserterBase) makeResultFromInsertRow(
-	insertRow tree.Datums, cols []sqlbase.ColumnDescriptor,
+// makeResultFromRow reshapes a row that was inserted or updated to a row
+// suitable for storing for a RETURNING clause, shaped by the target table's
+// descriptor.
+func (tu *tableUpserterBase) makeResultFromRow(
+	row tree.Datums, colIDToRowIndex map[sqlbase.ColumnID]int,
 ) tree.Datums {
-	if len(insertRow) == len(cols) {
-		// The row we inserted was already the right shape.
-		return insertRow
-	}
-	resultRow := make(tree.Datums, len(cols))
-	if len(insertRow) < len(cols) {
-		// The row we inserted didn't have all columns filled out. Fill the columns
-		// that weren't included with NULLs.
-		for i := range resultRow {
-			resultRow[i] = tree.DNull
-		}
-	}
-	// Now, fill the other values from insertRow.
-	for i, val := range insertRow {
-		retIdx := tu.rowIdxToRetIdx[i]
-		if retIdx != dontReturnCol {
-			// We don't want to return values we wrote into non-public columns.
-			// These values have retIdx = dontReturnCol. Skip them.
-			resultRow[retIdx] = val
+	resultRow := make(tree.Datums, len(tu.colIDToReturnIndex))
+	for colID, returnIndex := range tu.colIDToReturnIndex {
+		rowIndex, ok := colIDToRowIndex[colID]
+		if ok {
+			resultRow[returnIndex] = row[rowIndex]
+		} else {
+			resultRow[returnIndex] = tree.DNull
 		}
 	}
 	return resultRow
@@ -453,8 +433,6 @@ func (tu *tableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
 
 		// Do we need to remember a result for RETURNING?
 		if tu.collectRows {
-			// Yes, collect it.
-			resultRow = tu.makeResultFromInsertRow(resultRow, tableDesc.Columns)
 			_, err = tu.rowsUpserted.AddRow(ctx, resultRow)
 			if err != nil {
 				return err
@@ -609,8 +587,10 @@ func (tu *tableUpserter) updateConflictingRow(
 		delete(pkToRowIdx, string(conflictingRowPK))
 	}
 
-	// We're done!
-	return updatedRow, existingRows, nil
+	// We now need a row that has the shape of the result row.
+	resultRow = tu.makeResultFromRow(updatedRow, tu.evaler.ccIvarContainer.Mapping)
+
+	return resultRow, existingRows, nil
 }
 
 // insertNonConflictingRow inserts the source row insertRow
@@ -655,7 +635,11 @@ func (tu *tableUpserter) insertNonConflictingRow(
 	}
 
 	// We now need a row that has the shape of the result row.
-	resultRow = tu.makeResultFromInsertRow(insertRow, tableDesc.Columns)
+	if tu.insertReorderingRequired {
+		resultRow = tu.makeResultFromRow(insertRow, tu.ri.InsertColIDtoRowIndex)
+	} else {
+		resultRow = insertRow
+	}
 	// Then remember it for further upserts.
 	existingRows = appendKnownConflictingRow(resultRow, conflictingRowPK, existingRows, pkToRowIdx)
 
