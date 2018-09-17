@@ -263,6 +263,19 @@ func initBlockProfile() {
 	runtime.SetBlockProfileRate(int(d))
 }
 
+func initMutexProfile() {
+	// Enable the mutex profile for a fraction of mutex contention events.
+	// Smaller values provide more accurate profiles but are more expensive. 0
+	// and 1 are special: 0 disables the mutex profile and 1 captures 100% of
+	// mutex contention events. For other values, the profiler will sample on
+	// average 1/X events.
+	//
+	// The mutex profile can be viewed with `pprof http://HOST:PORT/debug/pprof/mutex`
+	d := envutil.EnvOrDefaultInt("COCKROACH_MUTEX_PROFILE_RATE",
+		1000 /* 1 sample per 1000 mutex contention events */)
+	runtime.SetMutexProfileFraction(d)
+}
+
 var cacheSizeValue = newBytesOrPercentageValue(&serverCfg.CacheSize, memoryPercentResolver)
 var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.SQLMemoryPoolSize, memoryPercentResolver)
 var diskTempStorageSizeValue = newBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
@@ -1051,6 +1064,7 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 	initMemProfile(ctx, outputDirectory)
 	initCPUProfile(ctx, outputDirectory)
 	initBlockProfile()
+	initMutexProfile()
 
 	// Disable Stopper task tracking as performing that call site tracking is
 	// moderately expensive (certainly outweighing the infrequent benefit it

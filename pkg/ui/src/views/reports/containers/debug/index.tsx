@@ -123,7 +123,7 @@ export default function Debug() {
           <DebugTableLink name="Raft for all ranges" url="#/raft/ranges" />
         </DebugTableRow>
       </DebugTable>
-      <DebugTable heading="Tracing Endpoints (local node only)">
+      <DebugTable heading="Tracing and Profiling Endpoints (local node only)">
         <DebugTableRow title="Tracing">
           <DebugTableLink name="Requests" url="/debug/requests" />
           <DebugTableLink name="Events" url="/debug/events" />
@@ -136,19 +136,23 @@ export default function Debug() {
         <DebugTableRow title="Stopper">
           <DebugTableLink name="Active Tasks" url="/debug/stopper" />
         </DebugTableRow>
-        <DebugTableRow title="pprof">
-          <DebugTableLink name="Heap (UI)" url="/debug/pprof/ui/heap/" />
-          <DebugTableLink name="Heap (raw)" url="/debug/pprof/heap?debug=1" />
-          <DebugTableLink name="Profile (UI)" url="/debug/pprof/ui/profile/" />
-          <DebugTableLink name="Profile (raw)" url="/debug/pprof/profile?debug=1" />
-          <DebugTableLink name="Block (UI)" url="/debug/pprof/ui/block/" />
-          <DebugTableLink name="Block (raw)" url="/debug/pprof/block?debug=1" />
-          <DebugTableLink name="Thread Create (UI)" url="/debug/pprof/ui/threadcreate/" />
-          <DebugTableLink name="Thread Create (raw)" url="/debug/pprof/threadcreate?debug=1" />
-          <DebugTableLink name="Goroutines (UI)" url="/debug/pprof/ui/goroutine/" />
-          <DebugTableLink name="Goroutines (raw)" url="/debug/pprof/goroutine?debug=1" />
-          <DebugTableLink name="All Goroutines (raw)" url="/debug/pprof/goroutine?debug=2" />
-          <DebugTableLink name="Trace (raw)" url="/debug/pprof/trace?debug=1" />
+        <DebugTableRow title="Profiling UI">
+          <DebugTableLink name="Heap" url="/debug/pprof/ui/heap/" />
+          <DebugTableLink name="Profile" url="/debug/pprof/ui/profile/" />
+          <DebugTableLink name="Block" url="/debug/pprof/ui/block/" />
+          <DebugTableLink name="Mutex" url="/debug/pprof/ui/mutex/" />
+          <DebugTableLink name="Thread Create" url="/debug/pprof/ui/threadcreate/" />
+          <DebugTableLink name="Goroutines" url="/debug/pprof/ui/goroutine/" />
+        </DebugTableRow>
+        <DebugTableRow title="Profiling Raw">
+          <DebugTableLink name="Heap" url="/debug/pprof/heap?debug=1" />
+          <DebugTableLink name="Profile" url="/debug/pprof/profile?debug=1" />
+          <DebugTableLink name="Block" url="/debug/pprof/block?debug=1" />
+          <DebugTableLink name="Mutex" url="/debug/pprof/mutex?debug=1" />
+          <DebugTableLink name="Thread Create" url="/debug/pprof/threadcreate?debug=1" />
+          <DebugTableLink name="Goroutines" url="/debug/pprof/goroutine?debug=1" />
+          <DebugTableLink name="All Goroutines" url="/debug/pprof/goroutine?debug=2" />
+          <DebugTableLink name="Trace" url="/debug/pprof/trace?debug=1" />
         </DebugTableRow>
       </DebugTable>
       <DebugTable heading="Raw Status Endpoints (JSON)">
