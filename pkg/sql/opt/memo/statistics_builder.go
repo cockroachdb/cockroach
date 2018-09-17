@@ -210,10 +210,11 @@ func (sb *statisticsBuilder) colStatFromInput(
 	}
 
 	if lookupJoinDef != nil || ev.IsJoin() {
-		intersectsLeft := ev.Child(0).Logical().Relational.OutputCols.Intersects(colSet)
+		leftProps := ev.Child(0).Logical().Relational
+		intersectsLeft := leftProps.OutputCols.Intersects(colSet)
 		var intersectsRight bool
 		if lookupJoinDef != nil {
-			intersectsRight = lookupJoinDef.LookupCols.Intersects(colSet)
+			intersectsRight = lookupJoinDef.Cols.Difference(leftProps.OutputCols).Intersects(colSet)
 		} else {
 			intersectsRight = ev.Child(1).Logical().Relational.OutputCols.Intersects(colSet)
 		}
@@ -747,11 +748,11 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, ev ExprView) *props.
 		leftCols.IntersectionWith(colSet)
 		var rightCols opt.ColSet
 		if lookupJoinDef == nil {
-			rightCols = ev.Child(1).Logical().Relational.OutputCols.Copy()
+			rightCols = ev.Child(1).Logical().Relational.OutputCols.Intersection(colSet)
 		} else {
-			rightCols = lookupJoinDef.LookupCols.Copy()
+			rightCols = lookupJoinDef.Cols.Intersection(colSet)
+			rightCols.DifferenceWith(leftCols)
 		}
-		rightCols.IntersectionWith(colSet)
 
 		// Join selectivity affects the distinct counts for different columns
 		// in different ways depending on the type of join.
