@@ -174,21 +174,17 @@ row-number
       ├── key: (1)
       ├── fd: (1)-->(2-5), (2,3)-->(1,4,5)
       ├── ordering: +3,+4,+2
-      └── index-join abcde
+      └── select
            ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) e:5(int)
            ├── key: (1)
            ├── fd: (1)-->(2-5), (2,3)-->(1,4,5)
-           └── select
-                ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-                ├── key: (1)
-                ├── fd: (1)-->(2,3), (2,3)-->(1)
-                ├── scan abcde@bc
-                │    ├── columns: a:1(int!null) b:2(int!null) c:3(int)
-                │    ├── constraint: /2/3: (/NULL - ]
-                │    ├── key: (1)
-                │    └── fd: (1)-->(2,3), (2,3)~~>(1)
-                └── filters [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
-                     └── c IS NOT NULL [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+           ├── scan abcde
+           │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int)
+           │    ├── key: (1)
+           │    └── fd: (1)-->(2-5), (2,3)~~>(1,4,5)
+           └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]; tight)]
+                ├── b IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+                └── c IS NOT NULL [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
 
 # --------------------------------------------------
 # SimplifyExplainOrdering

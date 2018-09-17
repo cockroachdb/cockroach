@@ -127,12 +127,12 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		s.Init(relProps)
 
 		// Calculate distinct counts.
-		numUnappliedConstraints := sb.applyConstraintSet(cs, ev, relProps)
+		numUnappliedConjuncts := sb.applyConstraintSet(cs, ev, relProps)
 
 		// Calculate row count and selectivity.
 		s.RowCount = mem.GroupProperties(scanGroup).Relational.Stats.RowCount
 		s.ApplySelectivity(sb.selectivityFromDistinctCounts(cols, ev, s))
-		s.ApplySelectivity(sb.selectivityFromUnappliedConstraints(numUnappliedConstraints))
+		s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 
 		// Check if the statistics match the expected value.
 		testStats(t, s, expectedStats, expectedSelectivity)
