@@ -748,6 +748,7 @@ if len(notified_authors) > 0:
         for person in notified_authors:
             print("-", person, end='')
             if person in firsttime_contributors:
+                annot = ""
                 if person in crdb_folk:
                     annot = ", CockroachDB team member"
                 print(" (first-time contributor%s)" % annot, end='')
