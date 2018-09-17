@@ -193,8 +193,10 @@ func Example_cclzone() {
 	// .default
 	// .liveness
 	// .meta
+	// .system
 	// db.t.p1
 	// db.t@primary
+	// system
 	// system.jobs
 	// zone rm db.t@primary
 	// zone get db.t.p0
@@ -219,7 +221,9 @@ func Example_cclzone() {
 	// .default
 	// .liveness
 	// .meta
+	// .system
 	// db.t.p1
+	// system
 	// system.jobs
 	// zone rm db.t.p0
 	// zone rm db.t.p1
@@ -227,6 +231,8 @@ func Example_cclzone() {
 	// .default
 	// .liveness
 	// .meta
+	// .system
+	// system
 	// system.jobs
 	// zone set db.t@primary --file=./../../cli/testdata/zone_attrs_advanced.yaml
 	// range_min_bytes: 1048576

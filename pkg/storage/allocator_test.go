@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -4796,6 +4797,114 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 			continue
 		}
 	}
+}
+
+func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		storeList       []roachpb.StoreID
+		expectedAction  AllocatorAction
+		live            []roachpb.StoreID
+		dead            []roachpb.StoreID
+		decommissioning []roachpb.StoreID
+		decommissioned  []roachpb.StoreID
+	}{
+		{
+			storeList:       []roachpb.StoreID{1, 2, 3, 4},
+			expectedAction:  AllocatorRemoveDecommissioning,
+			live:            []roachpb.StoreID{4},
+			dead:            nil,
+			decommissioning: []roachpb.StoreID{1, 2, 3},
+		},
+		{
+			storeList:       []roachpb.StoreID{1, 2, 3},
+			expectedAction:  AllocatorAdd,
+			live:            []roachpb.StoreID{4, 5},
+			dead:            nil,
+			decommissioning: []roachpb.StoreID{1, 2, 3},
+		},
+		{
+			storeList:       []roachpb.StoreID{1, 2, 3, 4},
+			expectedAction:  AllocatorRemoveDead,
+			live:            []roachpb.StoreID{1, 2, 3, 5},
+			dead:            []roachpb.StoreID{4},
+			decommissioning: nil,
+		},
+		{
+			storeList:       []roachpb.StoreID{1, 4},
+			expectedAction:  AllocatorAdd,
+			live:            []roachpb.StoreID{1, 2, 3, 5},
+			dead:            []roachpb.StoreID{4},
+			decommissioning: nil,
+		},
+		{
+			storeList:       []roachpb.StoreID{1, 2, 3},
+			expectedAction:  AllocatorConsiderRebalance,
+			live:            []roachpb.StoreID{1, 2, 3, 4},
+			dead:            nil,
+			decommissioning: nil,
+		},
+		{
+			storeList:       []roachpb.StoreID{1, 2},
+			expectedAction:  AllocatorAdd,
+			live:            []roachpb.StoreID{1, 2},
+			dead:            nil,
+			decommissioning: nil,
+		},
+		{
+			storeList:       []roachpb.StoreID{1, 2, 3},
+			expectedAction:  AllocatorConsiderRebalance,
+			live:            []roachpb.StoreID{1, 2, 3},
+			dead:            nil,
+			decommissioning: nil,
+		},
+		{
+			storeList:       []roachpb.StoreID{1, 2, 3, 4},
+			expectedAction:  AllocatorRemove,
+			live:            []roachpb.StoreID{1, 2, 3, 4},
+			dead:            nil,
+			decommissioning: nil,
+		},
+	}
+
+	stopper, _, sp, a, _ := createTestAllocator( /* deterministic */ false)
+	ctx := context.Background()
+	defer stopper.Stop(ctx)
+	zone := config.ZoneConfig{
+		NumReplicas: 5,
+	}
+
+	for _, prefixKey := range []roachpb.RKey{roachpb.RKey(keys.NodeLivenessPrefix), roachpb.RKey(keys.SystemPrefix)} {
+		for i, tcase := range testCases {
+			mockStorePool(sp, tcase.live, tcase.dead, tcase.decommissioning, tcase.decommissioned, nil)
+			desc := makeDescriptor(tcase.storeList)
+			desc.EndKey = prefixKey
+			action, _ := a.ComputeAction(ctx, zone, RangeInfo{Desc: &desc})
+			if tcase.expectedAction != action {
+				t.Errorf("Test case %d expected action %d, got action %d", i, tcase.expectedAction, action)
+				continue
+			}
+		}
+	}
+}
+
+func makeDescriptor(storeList []roachpb.StoreID) roachpb.RangeDescriptor {
+	desc := roachpb.RangeDescriptor{
+		EndKey: roachpb.RKey(keys.SystemPrefix),
+	}
+
+	desc.Replicas = make([]roachpb.ReplicaDescriptor, len(storeList))
+
+	for i, node := range storeList {
+		desc.Replicas[i] = roachpb.ReplicaDescriptor{
+			StoreID:   node,
+			NodeID:    roachpb.NodeID(node),
+			ReplicaID: roachpb.ReplicaID(node),
+		}
+	}
+
+	return desc
 }
 
 // TestAllocatorComputeActionNoStorePool verifies that

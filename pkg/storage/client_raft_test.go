@@ -1367,7 +1367,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const numReplicas = 3
+	const numReplicas = 5
 	const extraStores = 3
 
 	ctx := context.Background()
@@ -2801,7 +2801,7 @@ func TestStoreRangeMoveDecommissioning(t *testing.T) {
 	sc.TestingKnobs.DisableReplicaRebalancing = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
-	mtc.Start(t, 4)
+	mtc.Start(t, 6)
 	mtc.initGossipNetwork()
 
 	// Replicate the range to 2 more stores. Note that there are 4 stores in the
@@ -2828,8 +2828,8 @@ func TestStoreRangeMoveDecommissioning(t *testing.T) {
 		// Wait for a replacement replica for the decommissioning node to be added
 		// and the replica on the decommissioning node to be removed.
 		curReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
-		if len(curReplicas) != 3 {
-			return errors.Errorf("expected 3 replicas, got %v", curReplicas)
+		if len(curReplicas) != 5 {
+			return errors.Errorf("expected 5 replicas, got %v", curReplicas)
 		}
 		if reflect.DeepEqual(origReplicas, curReplicas) {
 			return errors.Errorf("expected replica to be moved, but found them to be same as original %v", origReplicas)
@@ -2853,7 +2853,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.timeUntilStoreDead = storage.TestTimeUntilStoreDead
 	defer mtc.Stop()
-	mtc.Start(t, 4)
+	mtc.Start(t, 5)
 
 	// Replicate the range to 2 more stores. Note that there are 4 stores in the
 	// cluster leaving an extra store available as a replication target once the

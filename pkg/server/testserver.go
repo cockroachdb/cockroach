@@ -376,6 +376,14 @@ func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
 	return ExpectedInitialRangeCount(ts.DB())
 }
 
+// ExpectedInitialUserRangeCount returns the expected number of ranges that should
+// be on the server after initial (asynchronous) splits have been completed,
+// assuming no additional information is added outside of the normal bootstrap
+// process.
+func (ts *TestServer) ExpectedInitialUserRangeCount() (int, error) {
+	return ExpectedInitialUserRangeCount(ts.DB())
+}
+
 // ExpectedInitialRangeCount returns the expected number of ranges that should
 // be on the server after initial (asynchronous) splits have been completed,
 // assuming no additional information is added outside of the normal bootstrap
@@ -411,6 +419,24 @@ func ExpectedInitialRangeCount(db *client.DB) (int, error) {
 
 	// `n` splits create `n+1` ranges.
 	return len(config.StaticSplits()) + systemTableSplits + userTableSplits + 1, nil
+}
+
+// ExpectedInitialUserRangeCount returns the expected number of user ranges that should
+// be on the server after initial (asynchronous) splits have been completed,
+// assuming no additional information is added outside of the normal bootstrap
+// process.
+func ExpectedInitialUserRangeCount(db *client.DB) (int, error) {
+	descriptorIDs, err := sqlmigrations.ExpectedDescriptorIDs(context.Background(), db)
+	if err != nil {
+		return 0, err
+	}
+
+	maxUserDescriptorID := descriptorIDs[len(descriptorIDs)-1]
+	userTableSplits := 0
+	if maxUserDescriptorID >= keys.MaxReservedDescID {
+		userTableSplits = int(maxUserDescriptorID - keys.MaxReservedDescID)
+	}
+	return userTableSplits + 1, nil
 }
 
 // WaitForInitialSplits waits for the server to complete its expected initial

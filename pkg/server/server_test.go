@@ -76,7 +76,14 @@ func TestSelfBootstrap(t *testing.T) {
 // TestHealthCheck runs a basic sanity check on the health checker.
 func TestHealthCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	cfg := config.DefaultZoneConfig()
+	cfg.NumReplicas = 1
+	fnSys := config.TestingSetDefaultSystemZoneConfig(cfg)
+	defer fnSys()
+
 	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
+
 	if err != nil {
 		t.Fatal(err)
 	}
