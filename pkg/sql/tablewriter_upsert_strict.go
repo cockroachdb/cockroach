@@ -50,8 +50,6 @@ func (tu *strictTableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) 
 
 // atBatchEnd is part of the extendedTableWriter interface.
 func (tu *strictTableUpserter) atBatchEnd(ctx context.Context, traceKV bool) error {
-	tableDesc := tu.tableDesc()
-
 	conflictingRows, err := tu.getConflictingRows(ctx, false)
 	if err != nil {
 		return err
@@ -68,11 +66,16 @@ func (tu *strictTableUpserter) atBatchEnd(ctx context.Context, traceKV bool) err
 			return err
 		}
 
-		// for ... RETURNING clause
-		resultRow := tu.makeResultFromInsertRow(insertRow, tableDesc.Columns)
 		tu.resultCount++
 
+		// for ... RETURNING clause
 		if tu.collectRows {
+			var resultRow tree.Datums
+			if tu.insertReorderingRequired {
+				resultRow = tu.makeResultFromRow(insertRow, tu.ri.InsertColIDtoRowIndex)
+			} else {
+				resultRow = insertRow
+			}
 			_, err = tu.rowsUpserted.AddRow(ctx, resultRow)
 			if err != nil {
 				return err
