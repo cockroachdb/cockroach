@@ -327,6 +327,12 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 		params.Stopper.AddCloser(stop.CloserFn(fn))
 	}
 
+	// TODO(peter): Remove once #29144 is understood / fixed.
+	if ts.Cfg.TestingKnobs.Store == nil {
+		ts.Cfg.TestingKnobs.Store = &storage.StoreTestingKnobs{}
+	}
+	ts.Cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs).VerboseSplitQueue = true
+
 	// Needs to be called before NewServer to ensure resolvers are initialized.
 	if err := ts.Cfg.InitNode(); err != nil {
 		return err
