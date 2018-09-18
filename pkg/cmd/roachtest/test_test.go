@@ -202,6 +202,31 @@ func TestRegistryRunTimeout(t *testing.T) {
 	}
 }
 
+func TestRegistryRunSubTestFailed(t *testing.T) {
+	var buf syncedBuffer
+	failedRE := regexp.MustCompile(`(?m)^.*--- FAIL: parent \(.*$`)
+
+	r := newRegistry()
+	r.out = &buf
+	r.Add(testSpec{
+		Name:   "parent",
+		Stable: true,
+		SubTests: []testSpec{{
+			Name:   "child",
+			Stable: true,
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				t.Fatal("failed")
+			},
+		}},
+	})
+
+	r.Run([]string{"."})
+	out := buf.String()
+	if !failedRE.MatchString(out) {
+		t.Fatalf("unable to find \"FAIL: parent\" message:\n%s", out)
+	}
+}
+
 func TestRegistryRunClusterExpired(t *testing.T) {
 	defer func(l, v bool, n string) {
 		local, testingSkipValidation, clusterName = l, v, n

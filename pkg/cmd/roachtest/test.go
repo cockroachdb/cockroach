@@ -275,7 +275,7 @@ func (r *registry) Run(filter []string) int {
 		for j := 0; j < count; j++ {
 			for i := range tests {
 				sem <- struct{}{}
-				r.run(ctx, tests[i], filterRE, nil, func() {
+				r.run(ctx, tests[i], filterRE, nil, func(failed bool) {
 					wg.Done()
 					<-sem
 				})
@@ -596,7 +596,7 @@ func (t *test) IsBuildVersion(minVersion string) bool {
 }
 
 func (r *registry) run(
-	ctx context.Context, spec *testSpec, filter *regexp.Regexp, c *cluster, done func(),
+	ctx context.Context, spec *testSpec, filter *regexp.Regexp, c *cluster, done func(failed bool),
 ) {
 	t := &test{
 		spec:     spec,
@@ -719,7 +719,7 @@ func (r *registry) run(
 			}
 			r.status.Unlock()
 
-			done()
+			done(t.Failed())
 		}()
 
 		t.start = timeutil.Now()
@@ -795,7 +795,20 @@ func (r *registry) run(
 				if t.spec.SubTests[i].matchRegex(filter) {
 					var wg sync.WaitGroup
 					wg.Add(1)
-					r.run(ctx, &t.spec.SubTests[i], filter, c, func() {
+					r.run(ctx, &t.spec.SubTests[i], filter, c, func(failed bool) {
+						if failed {
+							// Mark the parent test as failed since one of the subtests
+							// failed.
+							t.mu.Lock()
+							t.mu.failed = true
+							t.mu.Unlock()
+						}
+						if failed && debugEnabled {
+							// The test failed and debugging is enabled. Don't try to stumble
+							// forward running another test or subtest, just exit
+							// immediately.
+							os.Exit(1)
+						}
 						wg.Done()
 					})
 					wg.Wait()
