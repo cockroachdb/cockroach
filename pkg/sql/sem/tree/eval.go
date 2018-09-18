@@ -2321,7 +2321,6 @@ func (e *MultipleResultsError) Error() string {
 
 // EvalDatabase consists of functions that reference the session database
 // and is to be used from EvalContext.
-//lint:ignore U1000 false positive from unused checker
 type EvalDatabase interface {
 	// ParseQualifiedTableName parses a SQL string of the form
 	// `[ database_name . ] [ schema_name . ] table_name`.

@@ -126,8 +126,8 @@ func (b *bank) Tables() []workload.Table {
 				// Minus 2 for the single quotes
 				bytes = bytes[:b.payloadBytes-len(initialPrefix)-2]
 				return []interface{}{
-					rowIdx,                // id
-					0,                     // balance
+					rowIdx, // id
+					0,      // balance
 					initialPrefix + bytes, // payload
 				}
 			},

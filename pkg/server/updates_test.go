@@ -521,8 +521,8 @@ func TestReportUsage(t *testing.T) {
 		pgerror.CodeSyntaxError:              10,
 		pgerror.CodeFeatureNotSupportedError: 30,
 		pgerror.CodeDivisionByZeroError:      20,
-		"blah":                               10,
-		"builtins.go":                        10,
+		"blah":        10,
+		"builtins.go": 10,
 	} {
 		if actual := r.last.ErrorCounts[code]; expected != actual {
 			t.Fatalf(

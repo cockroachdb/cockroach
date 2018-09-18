@@ -438,9 +438,9 @@ func TestFoldNumericConstants(t *testing.T) {
 		{`1.3 ^ 3.9`, `1.3 ^ 3.9`},
 		// Shift ops (int only).
 		{`1 << 2`, `4`},
-		{`1 << -2`, `1 << -2`}, // Should be caught during evaluation.
+		{`1 << -2`, `1 << -2`},                                                     // Should be caught during evaluation.
 		{`1 << 9999999999999999999999999999`, `1 << 9999999999999999999999999999`}, // Will be caught during type checking.
-		{`1.2 << 2.4`, `1.2 << 2.4`}, // Will be caught during type checking.
+		{`1.2 << 2.4`, `1.2 << 2.4`},                                               // Will be caught during type checking.
 		{`4 >> 2`, `1`},
 		{`4.1 >> 2.9`, `4.1 >> 2.9`}, // Will be caught during type checking.
 		// Comparison ops.
