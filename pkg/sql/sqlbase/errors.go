@@ -255,19 +255,12 @@ type singleKVFetcher struct {
 // nextBatch implements the kvFetcher interface.
 func (f *singleKVFetcher) nextBatch(
 	_ context.Context,
-) (
-	ok bool,
-	kvs []roachpb.KeyValue,
-	batchResponse []byte,
-	numKvs int64,
-	maybeNewSpan bool,
-	err error,
-) {
+) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, numKvs int64, err error) {
 	if f.done {
-		return false, nil, nil, 0, true, nil
+		return false, nil, nil, 0, nil
 	}
 	f.done = true
-	return true, f.kvs[:], nil, 0, true, nil
+	return true, f.kvs[:], nil, 0, nil
 }
 
 // getRangesInfo implements the kvFetcher interface.
