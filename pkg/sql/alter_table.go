@@ -786,8 +786,8 @@ func injectTableStats(
 		return fmt.Errorf("statistics cannot be NULL")
 	}
 	jsonStr := val.(*tree.DJSON).JSON.String()
-	var stats []stats.JSONStatistic
-	if err := gojson.Unmarshal([]byte(jsonStr), &stats); err != nil {
+	var jsonStats []stats.JSONStatistic
+	if err := gojson.Unmarshal([]byte(jsonStr), &jsonStats); err != nil {
 		return err
 	}
 
@@ -802,8 +802,8 @@ func injectTableStats(
 	}
 
 	// Insert each statistic.
-	for i := range stats {
-		s := &stats[i]
+	for i := range jsonStats {
+		s := &jsonStats[i]
 		h, err := s.GetHistogram(params.EvalContext())
 		if err != nil {
 			return err
@@ -858,5 +858,11 @@ func injectTableStats(
 			return errors.Wrapf(err, "failed to insert stats")
 		}
 	}
-	return nil
+
+	// Invalidate the local cache synchronously; this guarantees that the next
+	// statement in the same session won't use a stale cache (whereas the gossip
+	// update is handled asynchronously).
+	params.extendedEvalCtx.ExecCfg.TableStatsCache.InvalidateTableStats(params.ctx, desc.ID)
+
+	return stats.GossipTableStatAdded(params.extendedEvalCtx.ExecCfg.Gossip, desc.ID)
 }
