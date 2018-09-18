@@ -1590,7 +1590,7 @@ func (s *adminServer) EnqueueRange(
 	// only it, since we choose which nodes to send the request to based on
 	// what's in isLiveMap.
 	if req.NodeID > 0 {
-		isLiveMap = map[roachpb.NodeID]bool{req.NodeID: isLiveMap[req.NodeID]}
+		isLiveMap = storage.IsLiveMap{req.NodeID: isLiveMap[req.NodeID]}
 	}
 
 	response := &serverpb.EnqueueRangeResponse{}
