@@ -391,9 +391,11 @@ example [::1]:8080 or [fe80::f6f2:::]:8080.`,
 		Description: `
 List of ports to advertise to other CockroachDB nodes for intra-cluster
 communication for some locality. This should be specified as a commma
-separated list of locality@address. For example:
+separated list of locality@address. Addresses can also include ports.
+For example:
 <PRE>
 "region=us-west@127.0.0.1,datacenter=us-west-1b@127.0.0.1"
+"region=us-west@127.0.0.1:26257,datacenter=us-west-1b@127.0.0.1:26258"
 </PRE>
 `,
 	}
