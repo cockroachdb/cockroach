@@ -82,8 +82,8 @@ describe("<EventRow>", function () {
 
       const provider = makeEvent(e);
       assert.lengthOf(provider.first().children(), 2);
-      const text = provider.first().childAt(0).text();
-      assert(_.includes(text, "created database"));
+      const tooltip = provider.first().childAt(0).childAt(0).childAt(0).childAt(0).childAt(0);
+      assert(_.includes(tooltip.text(), "created database"));
     });
 
     it("correctly renders an unknown event", function () {
@@ -94,8 +94,8 @@ describe("<EventRow>", function () {
 
       const provider = makeEvent(e);
       assert.lengthOf(provider.first().children(), 2);
-      const text = provider.first().childAt(0).text();
-      assert(_.includes(text, "Unknown Event Type"));
+      const tooltip = provider.first().childAt(0).childAt(0).childAt(0).childAt(0).childAt(0);
+      assert(_.includes(tooltip.text(), "Unknown Event Type"));
     });
   });
 });
