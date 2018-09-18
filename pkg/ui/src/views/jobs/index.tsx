@@ -31,7 +31,11 @@ import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconf
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import { trustIcon } from "src/util/trust";
 import "./index.styl";
+
+import succeededIcon from "!!raw-loader!assets/jobStatusIcons/checkMark.svg";
+import failedIcon from "!!raw-loader!assets/jobStatusIcons/exclamationPoint.svg";
 
 type Job = protos.cockroach.server.serverpb.JobsResponse.Job;
 
@@ -82,14 +86,36 @@ const formatDuration = (d: moment.Duration) =>
     .map(c => ("0" + c).slice(-2))
     .join(":");
 
+const JOB_STATUS_SUCCEEDED = "succeeded";
+const JOB_STATUS_FAILED = "failed";
+const JOB_STATUS_CANCELED = "canceled";
+const JOB_STATUS_PENDING = "pending";
+const JOB_STATUS_PAUSED = "paused";
+const JOB_STATUS_RUNNING = "running";
+
+const STATUS_ICONS: { [state: string]: string } = {
+  [JOB_STATUS_SUCCEEDED]: succeededIcon,
+  [JOB_STATUS_FAILED]: failedIcon,
+};
+
 class JobStatusCell extends React.Component<{ job: Job }, {}> {
   is(...statuses: string[]) {
     return statuses.indexOf(this.props.job.status) !== -1;
   }
 
   renderProgress() {
-    if (this.is("succeeded", "failed", "canceled")) {
-      return <div className="jobs-table__status">{this.props.job.status}</div>;
+    if (this.is(JOB_STATUS_SUCCEEDED, JOB_STATUS_FAILED, JOB_STATUS_CANCELED)) {
+      return (
+        <div className="jobs-table__status">
+          {this.props.job.status in STATUS_ICONS
+            ? <div
+                className="jobs-table__status-icon"
+                dangerouslySetInnerHTML={trustIcon(STATUS_ICONS[this.props.job.status])}
+              />
+            : null}
+          {this.props.job.status}
+        </div>
+      );
     }
     const percent = this.props.job.fraction_completed * 100;
     return <div>
@@ -102,16 +128,16 @@ class JobStatusCell extends React.Component<{ job: Job }, {}> {
     const started = TimestampToMoment(this.props.job.started);
     const finished = TimestampToMoment(this.props.job.finished);
     const modified = TimestampToMoment(this.props.job.modified);
-    if (this.is("pending", "paused")) {
+    if (this.is(JOB_STATUS_PENDING, JOB_STATUS_PAUSED)) {
       return _.capitalize(this.props.job.status);
-    } else if (this.is("running")) {
+    } else if (this.is(JOB_STATUS_RUNNING)) {
       const fractionCompleted = this.props.job.fraction_completed;
       if (fractionCompleted > 0) {
         const duration = modified.diff(started);
         const remaining = duration / fractionCompleted - duration;
         return formatDuration(moment.duration(remaining)) + " remaining";
       }
-    } else if (this.is("succeeded")) {
+    } else if (this.is(JOB_STATUS_SUCCEEDED)) {
       return "Duration: " + formatDuration(moment.duration(finished.diff(started)));
     }
   }
@@ -160,7 +186,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
   },
   {
     title: "Description",
-    cell: job => (<div className="jobs-table__cell--description">{job.description}</div>),
+    cell: job => <div className="jobs-table__cell--description">{job.description}</div>,
     sort: job => job.description,
   },
   {
