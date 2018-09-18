@@ -90,28 +90,6 @@ func TestIndexJoiner(t *testing.T) {
 			},
 		},
 		{
-			description: "Test duplicate rows in input stream on index join",
-			post: PostProcessSpec{
-				Projection:    true,
-				OutputColumns: []uint32{0, 1, 2},
-			},
-			input: sqlbase.EncDatumRows{
-				{v[0], v[2]},
-				{v[0], v[2]},
-				{v[0], v[5]},
-				{v[0], v[5]},
-				{v[0], v[2]},
-			},
-			outputTypes: threeIntCols,
-			expected: sqlbase.EncDatumRows{
-				{v[0], v[2], v[2]},
-				{v[0], v[2], v[2]},
-				{v[0], v[5], v[5]},
-				{v[0], v[5], v[5]},
-				{v[0], v[2], v[2]},
-			},
-		},
-		{
 			description: "Test a filter in the post process spec and using a secondary index",
 			post: PostProcessSpec{
 				Filter:        Expression{Expr: "@3 <= 5"}, // sum <= 5

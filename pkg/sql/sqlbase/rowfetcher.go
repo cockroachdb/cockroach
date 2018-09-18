@@ -42,10 +42,9 @@ type kvFetcher interface {
 	// nextBatch returns the next batch of rows. Returns false in the first
 	// parameter if there are no more keys in the scan. May return either a slice
 	// of KeyValues or a batchResponse, numKvs pair, depending on the server
-	// version - both must be handled by calling code. maybeNewSpan is true if
-	// if it was possible that the kv pairs returned were from a new span.
+	// version - both must be handled by calling code.
 	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue,
-		batchResponse []byte, numKvs int64, maybeNewSpan bool, err error)
+		batchResponse []byte, numKvs int64, err error)
 	getRangesInfo() []roachpb.RangeInfo
 }
 
@@ -192,9 +191,6 @@ type RowFetcher struct {
 	// RowFetcher is configured for. The index key prefix is the table id, index
 	// id pair at the start of the key.
 	knownPrefixLength int
-
-	// Used to save whether or not the next batch is from a new span in `nextKV`.
-	maybeNewSpan bool
 
 	// returnRangeInfo, if set, causes the underlying kvFetcher to return
 	// information about the ranges descriptors/leases uses in servicing the
@@ -454,47 +450,40 @@ func (rf *RowFetcher) StartScanFrom(ctx context.Context, f kvFetcher) error {
 // Pops off the first kv stored in rf.kvs. If none are found attempts to fetch
 // the next batch until there are no more kvs to fetch.
 // Returns whether or not there are more kvs to fetch, the kv that was fetched,
-// whether or not the kv was from a maybeNewSpan, and any errors that may have
-// occurred.
-func (rf *RowFetcher) nextKV(
-	ctx context.Context,
-) (ok bool, kv roachpb.KeyValue, newSpan bool, err error) {
+// and any errors that may have occurred.
+func (rf *RowFetcher) nextKV(ctx context.Context) (ok bool, kv roachpb.KeyValue, err error) {
 	if len(rf.kvs) != 0 {
 		kv = rf.kvs[0]
 		rf.kvs = rf.kvs[1:]
-		newSpan = rf.maybeNewSpan
-		rf.maybeNewSpan = false
-		return true, kv, newSpan, nil
+		return true, kv, nil
 	}
 	if rf.batchNumKvs > 0 {
 		rf.batchNumKvs--
 		var key []byte
 		var rawBytes []byte
 		var err error
-		newSpan = rf.maybeNewSpan
-		rf.maybeNewSpan = false
 		key, _, rawBytes, rf.batchResponse, err = enginepb.ScanDecodeKeyValue(rf.batchResponse)
 		if err != nil {
-			return false, kv, false, err
+			return false, kv, err
 		}
 		return true, roachpb.KeyValue{
 			Key: key,
 			Value: roachpb.Value{
 				RawBytes: rawBytes,
 			},
-		}, newSpan, nil
+		}, nil
 	}
 
 	var numKeys int64
-	ok, rf.kvs, rf.batchResponse, numKeys, rf.maybeNewSpan, err = rf.kvFetcher.nextBatch(ctx)
+	ok, rf.kvs, rf.batchResponse, numKeys, err = rf.kvFetcher.nextBatch(ctx)
 	if rf.batchResponse != nil {
 		rf.batchNumKvs = numKeys
 	}
 	if err != nil {
-		return ok, kv, false, err
+		return ok, kv, err
 	}
 	if !ok {
-		return false, kv, false, nil
+		return false, kv, nil
 	}
 	return rf.nextKV(ctx)
 }
@@ -505,8 +494,7 @@ func (rf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	var ok bool
 
 	for {
-		var maybeNewSpan bool
-		ok, rf.kv, maybeNewSpan, err = rf.nextKV(ctx)
+		ok, rf.kv, err = rf.nextKV(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -569,10 +557,6 @@ func (rf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 		case rf.rowReadyTable != rf.currentTable:
 			// For rowFetchers with more than one table, if the table changes the row
 			// is done.
-			rowDone = true
-		case maybeNewSpan:
-			// If the kvFetcher reports that a maybeNewSpan was fetched, then the last
-			// span should be finished so that row is complete.
 			rowDone = true
 		default:
 			rowDone = false

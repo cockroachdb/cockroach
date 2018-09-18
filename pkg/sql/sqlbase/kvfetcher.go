@@ -158,10 +158,6 @@ type txnKVFetcher struct {
 	batchIdx  int
 	responses []roachpb.ResponseUnion
 
-	// Keep track if the previous batch was limited. Used to calculate if
-	// the currentSpan is a new span.
-	lastBatchLimited bool
-
 	// As the kvFetcher fetches batches of kvs, it accumulates information on the
 	// replicas where the batches came from. This info can be retrieved through
 	// getRangeInfo(), to be used for updating caches.
@@ -357,48 +353,27 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	return nil
 }
 
-func (f *txnKVFetcher) batchIsLimited(batchSize int64) bool {
-	if f.useBatchLimit {
-		// f.batchIdx - 1 refers to the most recent fetch.
-		return batchSize == f.getBatchSizeForIdx(f.batchIdx-1)
-	}
-	return false
-}
-
 // nextBatch returns the next batch of key/value pairs. If there are none
 // available, a fetch is initiated. When there are no more keys, returns false.
 // ok returns whether or not there are more kv pairs to be fetched.
-// maybeNewSpan returns true if it was possible that the kv pairs returned were
-// from a new span.
 func (f *txnKVFetcher) nextBatch(
 	ctx context.Context,
-) (
-	ok bool,
-	kvs []roachpb.KeyValue,
-	batchResponse []byte,
-	numKvs int64,
-	maybeNewSpan bool,
-	err error,
-) {
+) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, numKvs int64, err error) {
 	if len(f.responses) > 0 {
 		reply := f.responses[0].GetInner()
 		f.responses = f.responses[1:]
-		// Assume a new span is started as long as the last one wasn't limited.
-		maybeNewSpan = !f.lastBatchLimited
 		switch t := reply.(type) {
 		case *roachpb.ScanResponse:
-			f.lastBatchLimited = f.batchIsLimited(t.NumKeys)
-			return true, t.Rows, t.BatchResponse, t.NumKeys, maybeNewSpan, nil
+			return true, t.Rows, t.BatchResponse, t.NumKeys, nil
 		case *roachpb.ReverseScanResponse:
-			f.lastBatchLimited = f.batchIsLimited(t.NumKeys)
-			return true, t.Rows, t.BatchResponse, t.NumKeys, maybeNewSpan, nil
+			return true, t.Rows, t.BatchResponse, t.NumKeys, nil
 		}
 	}
 	if f.fetchEnd {
-		return false, nil, nil, 0, false, nil
+		return false, nil, nil, 0, nil
 	}
 	if err := f.fetch(ctx); err != nil {
-		return false, nil, nil, 0, false, err
+		return false, nil, nil, 0, err
 	}
 	return f.nextBatch(ctx)
 }
