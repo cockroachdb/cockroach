@@ -462,7 +462,11 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 	verifyLiveness(t, mtc)
 	pauseNodeLivenessHeartbeats(mtc, true)
 	lMap := mtc.nodeLivenesses[0].GetIsLiveMap()
-	expectedLMap := map[roachpb.NodeID]bool{1: true, 2: true, 3: true}
+	expectedLMap := storage.IsLiveMap{
+		1: {IsLive: true, Epoch: 1},
+		2: {IsLive: true, Epoch: 1},
+		3: {IsLive: true, Epoch: 1},
+	}
 	if !reflect.DeepEqual(expectedLMap, lMap) {
 		t.Errorf("expected liveness map %+v; got %+v", expectedLMap, lMap)
 	}
@@ -483,7 +487,11 @@ func TestNodeLivenessGetIsLiveMap(t *testing.T) {
 
 	// Now verify only node 0 is live.
 	lMap = mtc.nodeLivenesses[0].GetIsLiveMap()
-	expectedLMap = map[roachpb.NodeID]bool{1: true, 2: false, 3: false}
+	expectedLMap = storage.IsLiveMap{
+		1: {IsLive: true, Epoch: 1},
+		2: {IsLive: false, Epoch: 1},
+		3: {IsLive: false, Epoch: 1},
+	}
 	if !reflect.DeepEqual(expectedLMap, lMap) {
 		t.Errorf("expected liveness map %+v; got %+v", expectedLMap, lMap)
 	}
