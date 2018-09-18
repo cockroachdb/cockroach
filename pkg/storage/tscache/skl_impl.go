@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -77,6 +78,7 @@ func (tc *sklImpl) getSkl(readCache bool) *intervalSkl {
 // Add implements the Cache interface.
 func (tc *sklImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID, readCache bool) {
 	start, end = tc.boundKeyLengths(start, end)
+	timeStart := timeutil.Now()
 
 	skl := tc.getSkl(readCache)
 	val := cacheValue{ts: ts, txnID: txnID}
@@ -85,6 +87,8 @@ func (tc *sklImpl) Add(start, end roachpb.Key, ts hlc.Timestamp, txnID uuid.UUID
 	} else {
 		skl.AddRange(nonNil(start), end, excludeTo, val)
 	}
+	elapsed := timeutil.Since(timeStart)
+	tc.metrics.Skl.Write.Latency.RecordValue(elapsed.Nanoseconds())
 }
 
 // SetLowWater implements the Cache interface.
@@ -110,13 +114,15 @@ func (tc *sklImpl) GetMaxWrite(start, end roachpb.Key) (hlc.Timestamp, uuid.UUID
 
 func (tc *sklImpl) getMax(start, end roachpb.Key, readCache bool) (hlc.Timestamp, uuid.UUID) {
 	skl := tc.getSkl(readCache)
-
+	timeStart := timeutil.Now()
 	var val cacheValue
 	if len(end) == 0 {
 		val = skl.LookupTimestamp(nonNil(start))
 	} else {
 		val = skl.LookupTimestampRange(nonNil(start), end, excludeTo)
 	}
+	elapsed := timeutil.Since(timeStart)
+	tc.metrics.Skl.Read.Latency.RecordValue(elapsed.Nanoseconds())
 	return val.ts, val.txnID
 }
 

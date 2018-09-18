@@ -14,7 +14,9 @@
 
 package tscache
 
-import "github.com/cockroachdb/cockroach/pkg/util/metric"
+import (
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+)
 
 // Metrics holds all metrics relating to a Cache.
 type Metrics struct {
@@ -30,6 +32,7 @@ type sklImplMetrics struct {
 type sklMetrics struct {
 	Pages         *metric.Gauge
 	PageRotations *metric.Counter
+	Latency       *metric.Histogram
 }
 
 // MetricStruct implements the metrics.Struct interface.
@@ -52,6 +55,12 @@ var (
 		Measurement: "Page Rotations",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaSklReadLatency = metric.Metadata{
+		Name:        "tscache.skl.read.latency",
+		Help:        "Latency reading from the read timestamp cache",
+		Measurement: "Page Rotations",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaSklWritePages = metric.Metadata{
 		Name:        "tscache.skl.write.pages",
 		Help:        "Number of pages in the write timestamp cache",
@@ -64,6 +73,12 @@ var (
 		Measurement: "Page Rotations",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaSklWriteLatency = metric.Metadata{
+		Name:        "tscache.skl.write.latency",
+		Help:        "Latency writing to timestamp cache",
+		Measurement: "Page Rotations",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 func makeMetrics() Metrics {
@@ -72,10 +87,12 @@ func makeMetrics() Metrics {
 			Read: sklMetrics{
 				Pages:         metric.NewGauge(metaSklReadPages),
 				PageRotations: metric.NewCounter(metaSklReadRotations),
+				Latency:       metric.NewLatency(metaSklReadLatency, metric.TestSampleInterval),
 			},
 			Write: sklMetrics{
 				Pages:         metric.NewGauge(metaSklWritePages),
 				PageRotations: metric.NewCounter(metaSklWriteRotations),
+				Latency:       metric.NewLatency(metaSklWriteLatency, metric.TestSampleInterval),
 			},
 		},
 	}
