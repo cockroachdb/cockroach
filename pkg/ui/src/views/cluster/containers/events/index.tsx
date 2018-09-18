@@ -17,6 +17,7 @@ import { TimestampToMoment } from "src/util/convert";
 import { getEventDescription } from "src/util/events";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
+import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
 type Event$Properties = protos.cockroach.server.serverpb.EventsResponse.IEvent;
 
@@ -55,7 +56,11 @@ export class EventRow extends React.Component<EventRowProps, {}> {
     const { event } = this.props;
     const e = getEventInfo(event);
     return <tr>
-      <td><div className="events__message">{e.content}</div></td>
+      <td>
+        <ToolTipWrapper text={ e.content }>
+          <div className="events__message">{e.content}</div>
+        </ToolTipWrapper>
+      </td>
       <td><div className="events__timestamp">{e.fromNowString}</div></td>
     </tr>;
   }
