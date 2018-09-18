@@ -521,6 +521,9 @@ func extraServerFlagInit() {
 		serverHTTPAddr = startCtx.serverListenAddr
 	}
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPAddr, serverHTTPPort)
+	for i, addr := range localityAdvertiseHosts {
+		localityAdvertiseHosts[i].Address.AddressField = net.JoinHostPort(addr.Address.AddressField, serverAdvertisePort)
+	}
 	serverCfg.LocalityIPAddresses = localityAdvertiseHosts
 }
 

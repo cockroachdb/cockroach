@@ -403,3 +403,43 @@ SELECT count(replicas)
 
 	g.checkConnectedAndFunctional(ctx, t, c)
 }
+
+func runCheckLocalityIpAddress(ctx context.Context, t *test, c *cluster) {
+	c.Put(ctx, cockroach, "./cockroach")
+
+	externalIp := c.ExternalIP(ctx, c.Range(1, c.nodes))
+
+	for i := 1; i <= c.nodes; i++ {
+		if local {
+			externalIp[i-1] = "localhost"
+		}
+		extAddr := externalIp[i-1]
+
+		c.Start(ctx, c.Node(i), startArgs("--racks=1", fmt.Sprintf("--args=--locality-advertise-addr=rack=0@%s", extAddr)))
+	}
+
+	db := c.Conn(ctx, 1)
+	defer db.Close()
+
+	rows, err := db.Query(
+		`SELECT node_id, connect_address FROM crdb_internal.gossip_nodes`,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var nodeID int
+		var connectAddress string
+		if err := rows.Scan(&nodeID, &connectAddress); err != nil {
+			t.Fatal(err)
+		}
+
+		if local {
+			if !strings.Contains(connectAddress, "localhost") {
+				t.Fatal("Expected connect address to contain localhost")
+			}
+		} else if c.ExternalAddr(ctx, c.Node(nodeID))[0] != connectAddress {
+			t.Fatal(fmt.Sprintf("Connection address is %s but expected %s", connectAddress, c.ExternalAddr(ctx, c.Node(nodeID))[0]))
+		}
+	}
+}
