@@ -780,4 +780,33 @@ in the history of the cluster.`,
 		Name:        "align",
 		Description: `Align the output.`,
 	}
+
+	LogDir = FlagInfo{
+		Name: "log-dir",
+		Description: `
+If non-empty, write log files in this directory. If empty, write log files to
+<store-dir>/logs where <store-dir> is the directory of the first on disk store.
+`,
+	}
+
+	LogDirMaxSize = FlagInfo{
+		Name: "log-dir-max-size",
+		Description: `
+Maximum combined size of all log files.
+`,
+	}
+
+	LogFileMaxSize = FlagInfo{
+		Name: "log-file-max-size",
+		Description: `
+Maximum size of each log file.
+`,
+	}
+
+	LogFileVerbosity = FlagInfo{
+		Name: "log-file-verbosity",
+		Description: `
+Minimum verbosity of messages written to the log file.
+`,
+	}
 )
