@@ -50,13 +50,18 @@ func TestDecommission(t *testing.T) {
 }
 
 func decommission(
-	ctx context.Context, c cluster.Cluster, runNode int, targetNode roachpb.NodeID, verbs ...string,
-) (string, error) {
-	for {
-		args := append([]string{"node", verbs[0], strconv.Itoa(int(targetNode))}, verbs[1:]...)
-		o, _, err := c.ExecCLI(ctx, runNode, args)
-		return o, err
+	ctx context.Context,
+	c cluster.Cluster,
+	runNode int,
+	targetNodes []roachpb.NodeID,
+	verbs ...string,
+) (string, string, error) {
+	args := append([]string{"node"}, verbs...)
+	for _, target := range targetNodes {
+		args = append(args, strconv.Itoa(int(target)))
 	}
+	o, e, err := c.ExecCLI(ctx, runNode, args)
+	return o, e, err
 }
 
 func matchCSV(csvStr string, matchColRow [][]string) (err error) {
@@ -148,15 +153,15 @@ func testDecommissionInner(
 		MaxRetries:     20,
 	}
 	for r := retry.Start(retryOpts); r.Next(); {
-		o, err := decommission(ctx, c, 1, idMap[0], "decommission", "--wait", "none", "--format", "csv")
+		o, _, err := decommission(ctx, c, 1, []roachpb.NodeID{idMap[0]}, "decommission", "--wait", "none", "--format", "csv")
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		exp := [][]string{
 			decommissionHeader,
-			{strconv.Itoa(int(idMap[0])), "true", "0", "true", "true"},
-			decommissionFooterLive,
+			{strconv.Itoa(int(idMap[0])), "true", "0", "true", "false"},
+			decommissionFooter,
 		}
 		log.Infof(ctx, o)
 
@@ -204,22 +209,17 @@ func testDecommissionInner(
 
 	log.Info(ctx, "recommissioning first node (from third node)")
 	{
-		o, err := decommission(ctx, c, 2, idMap[0], "recommission")
+		o, _, err := decommission(ctx, c, 2, []roachpb.NodeID{idMap[0]}, "recommission")
 		if err != nil {
 			t.Fatal(err)
 		}
 		log.Infof(ctx, o)
 	}
 
-	log.Info(ctx, "restarting first node so that it can accept replicas again")
-	if err := c.Restart(ctx, 0); err != nil {
-		t.Fatal(err)
-	}
-
 	log.Info(ctx, "decommissioning second node from third, using --wait=all")
 	{
 		target := idMap[1]
-		o, err := decommission(ctx, c, 2, target, "decommission", "--wait", "all", "--format", "csv")
+		o, _, err := decommission(ctx, c, 2, []roachpb.NodeID{target}, "decommission", "--wait", "all", "--format", "csv")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -227,7 +227,7 @@ func testDecommissionInner(
 
 		exp := [][]string{
 			decommissionHeader,
-			{strconv.Itoa(int(target)), "true", "0", "true", "true"},
+			{strconv.Itoa(int(target)), "true", "0", "true", "false"},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
@@ -235,16 +235,13 @@ func testDecommissionInner(
 		}
 	}
 
-	log.Info(ctx, "recommissioning second node from itself and restarting")
+	log.Info(ctx, "recommissioning second node from itself")
 	{
-		o, err := decommission(ctx, c, 1, idMap[1], "recommission")
+		o, _, err := decommission(ctx, c, 1, []roachpb.NodeID{idMap[1]}, "recommission")
 		if err != nil {
 			t.Fatalf("could no recommission: %s\n%s", err, o)
 		}
 		log.Infof(ctx, o)
-		if err := c.Restart(ctx, 1); err != nil {
-			t.Fatal(err)
-		}
 	}
 
 	log.Info(ctx, "decommissioning third node via `quit --decommission`")
@@ -276,7 +273,7 @@ func testDecommissionInner(
 	log.Info(ctx, "checking that other nodes see node three as successfully decommissioned")
 	{
 		target := idMap[2]
-		o, err := decommission(ctx, c, 1, target, "decommission", "--format", "csv") // wait=all is implied
+		o, _, err := decommission(ctx, c, 1, []roachpb.NodeID{target}, "decommission", "--format", "csv") // wait=all is implied
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -284,6 +281,8 @@ func testDecommissionInner(
 
 		exp := [][]string{
 			decommissionHeader,
+			// Expect the same as usual, except this time the node should be draining
+			// because it shut down cleanly (thanks to `quit --decommission`).
 			{strconv.Itoa(int(target)), "true", "0", "true", "true"},
 			decommissionFooter,
 		}
@@ -291,15 +290,17 @@ func testDecommissionInner(
 			t.Fatal(err)
 		}
 
+		// Bring the node back up. It's still decommissioned, so it won't be of much use.
+		if err := c.Restart(ctx, 2); err != nil {
+			t.Fatal(err)
+		}
+
 		// Recommission. Welcome back!
-		o, err = decommission(ctx, c, 1, target, "recommission")
+		o, _, err = decommission(ctx, c, 1, []roachpb.NodeID{target}, "recommission")
 		if err != nil {
 			t.Fatal(err)
 		}
 		log.Infof(ctx, o)
-		if err := c.Restart(ctx, 2); err != nil {
-			t.Fatal(err)
-		}
 	}
 
 	// Kill the first node and verify that we can decommission it while it's down,
@@ -311,7 +312,7 @@ func testDecommissionInner(
 	log.Info(ctx, "decommission first node, starting with it down but restarting it for verification")
 	{
 		target := idMap[0]
-		o, err := decommission(ctx, c, 2, target, "decommission", "--wait", "live")
+		o, _, err := decommission(ctx, c, 2, []roachpb.NodeID{target}, "decommission", "--wait", "live")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -322,7 +323,7 @@ func testDecommissionInner(
 		// Run a second time to wait until the replicas have all been GC'ed.
 		// Note that we specify "all" because even though the first node is
 		// now running, it may not be live by the time the command runs.
-		o, err = decommission(ctx, c, 2, target, "decommission", "--wait", "all", "--format", "csv")
+		o, _, err = decommission(ctx, c, 2, []roachpb.NodeID{target}, "decommission", "--wait", "all", "--format", "csv")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -331,7 +332,7 @@ func testDecommissionInner(
 
 		exp := [][]string{
 			decommissionHeader,
-			{strconv.Itoa(int(target)), "true", "0", "true", "true|false"},
+			{strconv.Itoa(int(target)), "true|false", "0", "true", "false"},
 			decommissionFooter,
 		}
 		if err := matchCSV(o, exp); err != nil {
@@ -356,23 +357,22 @@ func testDecommissionInner(
 	log.Info(ctx, "decommission first node in absentia using --wait=live")
 	{
 		target := idMap[0]
-		o, err := decommission(ctx, c, 2, target, "decommission", "--wait", "live", "--format", "csv")
+		o, _, err := decommission(ctx, c, 2, []roachpb.NodeID{target}, "decommission", "--wait", "live", "--format", "csv")
 		if err != nil {
 			t.Fatal(err)
 		}
 
 		log.Infof(ctx, o)
 
-		// Note we don't check precisely zero replicas or that draining=true
-		// (which the node would write itself, but it's dead). We do check that
-		// the node isn't live, though, which is essentially what `--wait=live`
-		// waits for.
+		// Note we don't check precisely zero replicas (which the node would write
+		// itself, but it's dead). We do check that the node isn't live, though, which
+		// is essentially what `--wait=live` waits for.
 		// Note that the target node may still be "live" when it's marked as
 		// decommissioned, as its replica count may drop to zero faster than
 		// liveness times out.
 		exp := [][]string{
 			decommissionHeader,
-			{strconv.Itoa(int(target)), `true|false`, `\d+`, `true`, `true|false`},
+			{strconv.Itoa(int(target)), `true|false`, "0", `true`, `false`},
 			decommissionFooterLive,
 		}
 		if err := matchCSV(o, exp); err != nil {
@@ -476,5 +476,48 @@ func testDecommissionInner(
 
 	if !reflect.DeepEqual(matrix, expMatrix) {
 		t.Fatalf("unexpected diff(matrix, expMatrix):\n%s", pretty.Diff(matrix, expMatrix))
+	}
+
+	// Last, verify that the operator can't shoot themselves in the foot by
+	// accidentally decommissioning all nodes.
+	var allNodeIDs []roachpb.NodeID
+	for _, nodeID := range idMap {
+		allNodeIDs = append(allNodeIDs, nodeID)
+	}
+
+	// Specify wait=none because the command would block forever (the replicas have
+	// nowhere to go).
+	if _, _, err := decommission(
+		ctx, c, 1, allNodeIDs, "decommission", "--wait", "none",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check that we can still do stuff. Creating a database should be good enough.
+	time.Sleep(6 * time.Second)
+	db, err := gosql.Open("postgres", c.PGUrl(ctx, 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if _, err := db.Exec(`CREATE DATABASE still_working;`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Recommission all nodes.
+	if _, _, err := decommission(
+		ctx, c, 1, allNodeIDs, "recommission",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// To verify that all nodes are actually accepting replicas again, decommission
+	// the first nodes (blocking until it's done). This proves that the other nodes
+	// absorb the first one's replicas.
+	if _, _, err := decommission(
+		ctx, c, 1, []roachpb.NodeID{idMap[0]}, "decommission",
+	); err != nil {
+		t.Fatal(err)
 	}
 }

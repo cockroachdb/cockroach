@@ -594,52 +594,6 @@ func TestListenerFileCreation(t *testing.T) {
 	}
 }
 
-func TestHeartbeatCallbackForDecommissioning(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
-	ts := s.(*TestServer)
-	nodeLiveness := ts.nodeLiveness
-
-	for {
-		// Morally this loop only runs once. However, early in the boot
-		// sequence, the own liveness record may not yet exist. This
-		// has not been observed in this test, but was the root cause
-		// of #16656, so consider this part of its documentation.
-		liveness, err := nodeLiveness.Self()
-		if err != nil {
-			if errors.Cause(err) == storage.ErrNoLivenessRecord {
-				continue
-			}
-			t.Fatal(err)
-		}
-		if liveness.Decommissioning {
-			t.Fatal("Decommissioning set already")
-		}
-		if liveness.Draining {
-			t.Fatal("Draining set already")
-		}
-		break
-	}
-	if _, err := nodeLiveness.SetDecommissioning(context.Background(), ts.nodeIDContainer.Get(), true); err != nil {
-		t.Fatal(err)
-	}
-
-	// Node should realize it is decommissioning after next heartbeat update.
-	testutils.SucceedsSoon(t, func() error {
-		nodeLiveness.PauseHeartbeat(false) // trigger immediate heartbeat
-		if liveness, err := nodeLiveness.Self(); err != nil {
-			// Record must exist at this point, so any error is fatal now.
-			t.Fatal(err)
-		} else if !liveness.Decommissioning {
-			return errors.Errorf("not decommissioning")
-		} else if !liveness.Draining {
-			return errors.Errorf("not draining")
-		}
-		return nil
-	})
-}
-
 func TestClusterIDMismatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
