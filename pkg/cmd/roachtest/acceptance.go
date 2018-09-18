@@ -44,6 +44,7 @@ func registerAcceptance(r *registry) {
 		{"gossip/peerings", runGossipPeerings},
 		{"gossip/restart", runGossipRestart},
 		{"gossip/restart-node-one", runGossipRestartNodeOne},
+		{"gossip/locality-address", runCheckLocalityIPAddress},
 		{"rapid-restart", runRapidRestart},
 		{"status-server", runStatusServer},
 		{"version-upgrade", runVersionUpgrade},
