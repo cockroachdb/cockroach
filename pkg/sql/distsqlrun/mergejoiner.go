@@ -184,7 +184,7 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 				m.rightIdx++
 				renderedRow, err := m.render(lrow, m.rightRows[ridx])
 				if err != nil {
-					return nil, &ProducerMetadata{Err: err}
+					return nil, m.producerMeta(err)
 				}
 				if renderedRow != nil {
 					m.matchedRightCount++
@@ -206,7 +206,7 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			// Perform the cancellation check. We don't perform this on every row,
 			// but once for every iteration through the right-side batch.
 			if err := m.cancelChecker.Check(); err != nil {
-				return nil, &ProducerMetadata{Err: err}
+				return nil, m.producerMeta(err)
 			}
 
 			// We've exhausted the right-side batch. Adjust the indexes for the next
