@@ -429,15 +429,11 @@ func Example_logging() {
 	defer c.cleanup()
 
 	c.RunWithArgs([]string{`sql`, `--logtostderr=false`, `-e`, `select 1 as "1"`})
-	c.RunWithArgs([]string{`sql`, `--log-dir=`, `-e`, `select 1 as "1"`})
 	c.RunWithArgs([]string{`sql`, `--logtostderr=true`, `-e`, `select 1 as "1"`})
 	c.RunWithArgs([]string{`sql`, `--vmodule=foo=1`, `-e`, `select 1 as "1"`})
 
 	// Output:
 	// sql --logtostderr=false -e select 1 as "1"
-	// 1
-	// 1
-	// sql --log-dir= -e select 1 as "1"
 	// 1
 	// 1
 	// sql --logtostderr=true -e select 1 as "1"
@@ -1826,10 +1822,6 @@ Available Commands:
 
 Flags:
   -h, --help                             help for cockroach
-      --log-dir string                   if non-empty, write log files in this directory
-      --log-dir-max-size bytes           maximum combined size of all log files (default 100 MiB)
-      --log-file-max-size bytes          maximum size of each log file (default 10 MiB)
-      --log-file-verbosity Severity      minimum verbosity of messages written to the log file (default INFO)
       --logtostderr Severity[=DEFAULT]   logs at or above this threshold go to stderr (default NONE)
       --no-color                         disable standard error log colorization
 
