@@ -37,9 +37,9 @@ echo '. ~/.bashrc_bootstrap' >> ~/.bashrc
 
 # Install Go.
 trap 'rm -f /tmp/go.tgz' EXIT
-curl https://dl.google.com/go/go1.11.linux-amd64.tar.gz > /tmp/go.tgz
-sha256sum -c - <<EOF
-b3fcf280ff86558e0559e185b601c9eade0fd24c900b4c63cd14d1d38613e499  /tmp/go.tgz
+curl https://dl.google.com/go/go1.10.3.linux-amd64.tar.gz > /tmp/go.tgz
+sha256sum - <<EOF
+fa1b0e45d3b647c252f51f5e1204aba049cde4af177ef9f2181f43004f901035  /tmp/go.tgz
 EOF
 sudo tar -C /usr/local -zxf /tmp/go.tgz
 

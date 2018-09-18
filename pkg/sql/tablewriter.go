@@ -23,7 +23,6 @@ import (
 )
 
 // expressionCarrier handles visiting sub-expressions.
-//lint:ignore U1000 false positive from unused checker
 type expressionCarrier interface {
 	// walkExprs explores all sub-expressions held by this object, if
 	// any.

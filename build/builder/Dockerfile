@@ -160,8 +160,8 @@ ENV PATH $PATH:/x-tools/x86_64-apple-darwin13/bin
 # releases of Go will no longer be run in CI once it is changed. Consider
 # bumping the minimum allowed version of Go in /build/go-version-chech.sh.
 RUN apt-get install -y --no-install-recommends golang \
- && curl -fsSL https://storage.googleapis.com/golang/go1.11.src.tar.gz -o golang.tar.gz \
- && echo 'afc1e12f5fe49a471e3aae7d906c73e9d5b1fdd36d52d72652dde8f6250152fb golang.tar.gz' | sha256sum -c - \
+ && curl -fsSL https://storage.googleapis.com/golang/go1.10.3.src.tar.gz -o golang.tar.gz \
+ && echo '567b1cc66c9704d1c019c50bef946272e911ec6baf244310f87f4e678be155f2 golang.tar.gz' | sha256sum -c - \
  && tar -C /usr/local -xzf golang.tar.gz \
  && rm golang.tar.gz \
  && cd /usr/local/go/src \
