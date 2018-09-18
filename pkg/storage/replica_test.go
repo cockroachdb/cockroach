@@ -8966,10 +8966,10 @@ func TestReplicaMetrics(t *testing.T) {
 		}
 		return d
 	}
-	live := func(ids ...roachpb.NodeID) map[roachpb.NodeID]bool {
-		m := make(map[roachpb.NodeID]bool)
+	live := func(ids ...roachpb.NodeID) IsLiveMap {
+		m := IsLiveMap{}
 		for _, id := range ids {
-			m[id] = true
+			m[id] = IsLiveMapEntry{IsLive: true}
 		}
 		return m
 	}
@@ -8985,7 +8985,7 @@ func TestReplicaMetrics(t *testing.T) {
 		storeID     roachpb.StoreID
 		desc        roachpb.RangeDescriptor
 		raftStatus  *raft.Status
-		liveness    map[roachpb.NodeID]bool
+		liveness    IsLiveMap
 		raftLogSize int64
 		expected    ReplicaMetrics
 	}{
@@ -9709,7 +9709,7 @@ type testQuiescer struct {
 	lastIndex      uint64
 	raftReady      bool
 	ownsValidLease bool
-	livenessMap    map[roachpb.NodeID]bool
+	livenessMap    IsLiveMap
 }
 
 func (q *testQuiescer) descRLocked() *roachpb.RangeDescriptor {
@@ -9776,10 +9776,10 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 				lastIndex:      logIndex,
 				raftReady:      false,
 				ownsValidLease: true,
-				livenessMap: map[roachpb.NodeID]bool{
-					1: true,
-					2: true,
-					3: true,
+				livenessMap: IsLiveMap{
+					1: {IsLive: true},
+					2: {IsLive: true},
+					3: {IsLive: true},
 				},
 			}
 			q = transform(q)
@@ -9860,7 +9860,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	// the replica is on a non-live node.
 	for _, i := range []uint64{1, 2, 3} {
 		test(true, func(q *testQuiescer) *testQuiescer {
-			q.livenessMap[roachpb.NodeID(i)] = false
+			q.livenessMap[roachpb.NodeID(i)] = IsLiveMapEntry{IsLive: false}
 			q.status.Progress[i] = raft.Progress{Match: invalidIndex}
 			return q
 		})

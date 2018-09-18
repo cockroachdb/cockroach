@@ -3942,7 +3942,7 @@ func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
 	if !ok {
 		return false
 	}
-	livenessMap, _ := s.livenessMap.Load().(map[roachpb.NodeID]bool)
+	livenessMap, _ := s.livenessMap.Load().(IsLiveMap)
 
 	start := timeutil.Now()
 	r := (*Replica)(value)
@@ -4006,8 +4006,8 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 			// Update the liveness map.
 			if s.cfg.NodeLiveness != nil {
 				nextMap := s.cfg.NodeLiveness.GetIsLiveMap()
-				for nodeID, isLive := range nextMap {
-					if isLive {
+				for nodeID, entry := range nextMap {
+					if entry.IsLive {
 						// Make sure we ask all live nodes for closed timestamp updates.
 						s.cfg.ClosedTimestamp.Clients.EnsureClient(nodeID)
 						continue
@@ -4022,7 +4022,8 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 					// Raft transport, so ConnHealth should usually indicate a real problem if
 					// it gives us an error back. The check can also have false positives if the
 					// node goes down after populating the map, but that matters even less.
-					nextMap[nodeID] = (s.cfg.NodeDialer.ConnHealth(nodeID) == nil)
+					entry.IsLive = (s.cfg.NodeDialer.ConnHealth(nodeID) == nil)
+					nextMap[nodeID] = entry
 				}
 				s.livenessMap.Store(nextMap)
 			}
@@ -4318,7 +4319,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	)
 
 	timestamp := s.cfg.Clock.Now()
-	var livenessMap map[roachpb.NodeID]bool
+	var livenessMap IsLiveMap
 	if s.cfg.NodeLiveness != nil {
 		livenessMap = s.cfg.NodeLiveness.GetIsLiveMap()
 	}

@@ -4391,7 +4391,7 @@ func fatalOnRaftReadyErr(ctx context.Context, expl string, err error) {
 
 // tick the Raft group, returning true if the raft group exists and is
 // unquiesced; false otherwise.
-func (r *Replica) tick(livenessMap map[roachpb.NodeID]bool) (bool, error) {
+func (r *Replica) tick(livenessMap IsLiveMap) (bool, error) {
 	r.unreachablesMu.Lock()
 	remotes := r.unreachablesMu.remotes
 	r.unreachablesMu.remotes = nil
@@ -4503,7 +4503,7 @@ func (r *Replica) tick(livenessMap map[roachpb.NodeID]bool) (bool, error) {
 // would quiesce. The fallout from this situation are undesirable raft
 // elections which will cause throughput hiccups to the range, but not
 // correctness issues.
-func (r *Replica) maybeQuiesceLocked(livenessMap map[roachpb.NodeID]bool) bool {
+func (r *Replica) maybeQuiesceLocked(livenessMap IsLiveMap) bool {
 	ctx := r.AnnotateCtx(context.TODO())
 	status, ok := shouldReplicaQuiesce(ctx, r, r.store.Clock().Now(), len(r.mu.localProposals), livenessMap)
 	if !ok {
@@ -4548,11 +4548,7 @@ func (r *Replica) maybeTransferRaftLeader(
 // facilitate testing. Returns the raft.Status and true on success, and (nil,
 // false) on failure.
 func shouldReplicaQuiesce(
-	ctx context.Context,
-	q quiescer,
-	now hlc.Timestamp,
-	numProposals int,
-	livenessMap map[roachpb.NodeID]bool,
+	ctx context.Context, q quiescer, now hlc.Timestamp, numProposals int, livenessMap IsLiveMap,
 ) (*raft.Status, bool) {
 	if numProposals != 0 {
 		if log.V(4) {
@@ -4631,7 +4627,7 @@ func shouldReplicaQuiesce(
 			return nil, false
 		} else if progress.Match != status.Applied {
 			// Skip any node in the descriptor which is not live.
-			if livenessMap != nil && !livenessMap[rep.NodeID] {
+			if livenessMap != nil && !livenessMap[rep.NodeID].IsLive {
 				if log.V(4) {
 					log.Infof(ctx, "skipping node %d because not live. Progress=%+v",
 						rep.NodeID, progress)
@@ -6774,10 +6770,7 @@ type ReplicaMetrics struct {
 
 // Metrics returns the current metrics for the replica.
 func (r *Replica) Metrics(
-	ctx context.Context,
-	now hlc.Timestamp,
-	cfg config.SystemConfig,
-	livenessMap map[roachpb.NodeID]bool,
+	ctx context.Context, now hlc.Timestamp, cfg config.SystemConfig, livenessMap IsLiveMap,
 ) ReplicaMetrics {
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
@@ -6826,7 +6819,7 @@ func calcReplicaMetrics(
 	ctx context.Context,
 	now hlc.Timestamp,
 	cfg config.SystemConfig,
-	livenessMap map[roachpb.NodeID]bool,
+	livenessMap IsLiveMap,
 	desc *roachpb.RangeDescriptor,
 	raftStatus *raft.Status,
 	leaseStatus LeaseStatus,
@@ -6863,7 +6856,7 @@ func calcReplicaMetrics(
 	// scenario seems rare as it requires the partitioned node to be alive enough
 	// to be performing liveness heartbeats.
 	for _, rd := range desc.Replicas {
-		if livenessMap[rd.NodeID] {
+		if livenessMap[rd.NodeID].IsLive {
 			m.RangeCounter = rd.StoreID == storeID
 			break
 		}
@@ -6904,10 +6897,10 @@ func calcReplicaMetrics(
 
 // calcLiveReplicas returns a count of the live replicas; a live replica is
 // determined by checking its node in the provided liveness map.
-func calcLiveReplicas(desc *roachpb.RangeDescriptor, livenessMap map[roachpb.NodeID]bool) int {
+func calcLiveReplicas(desc *roachpb.RangeDescriptor, livenessMap IsLiveMap) int {
 	var goodReplicas int
 	for _, rd := range desc.Replicas {
-		if livenessMap[rd.NodeID] {
+		if livenessMap[rd.NodeID].IsLive {
 			goodReplicas++
 		}
 	}
@@ -6917,7 +6910,7 @@ func calcLiveReplicas(desc *roachpb.RangeDescriptor, livenessMap map[roachpb.Nod
 // calcBehindCount returns a total count of log entries that follower replicas
 // are behind. This can only be computed on the raft leader.
 func calcBehindCount(
-	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap map[roachpb.NodeID]bool,
+	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap IsLiveMap,
 ) int64 {
 	var behindCount int64
 	for _, rd := range desc.Replicas {

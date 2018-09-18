@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 )
 
 func (s *statusServer) ProblemRanges(
@@ -44,8 +45,8 @@ func (s *statusServer) ProblemRanges(
 		if err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, err.Error())
 		}
-		isLiveMap = map[roachpb.NodeID]bool{
-			requestedNodeID: true,
+		isLiveMap = storage.IsLiveMap{
+			requestedNodeID: storage.IsLiveMapEntry{IsLive: true},
 		}
 	}
 
