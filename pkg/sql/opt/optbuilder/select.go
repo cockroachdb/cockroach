@@ -450,11 +450,10 @@ func (b *Builder) buildSelectClause(
 		b.buildProjectionList(fromScope, projectionsScope)
 		b.buildOrderBy(fromScope, projectionsScope, orderByScope)
 		b.buildDistinctOnArgs(fromScope, projectionsScope, distinctOnScope)
+		if len(fromScope.srfs) > 0 {
+			fromScope.group = b.constructProjectSet(fromScope.group, fromScope.srfs)
+		}
 		outScope = fromScope
-	}
-
-	if len(fromScope.srfs) > 0 {
-		outScope.group = b.constructProjectSet(outScope.group, fromScope.srfs)
 	}
 
 	// Construct the projection.
