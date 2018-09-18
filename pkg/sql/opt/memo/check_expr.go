@@ -98,10 +98,11 @@ func (m *Memo) CheckExpr(eid ExprID) {
 
 	case opt.LookupJoinOp:
 		def := expr.Private(m).(*LookupJoinDef)
+		inputProps := m.GroupProperties(expr.AsLookupJoin().Input()).Relational
 		if len(def.KeyCols) == 0 {
 			panic(fmt.Sprintf("lookup join with no key columns"))
 		}
-		if def.LookupCols.Empty() {
+		if def.Cols.SubsetOf(inputProps.OutputCols) {
 			panic(fmt.Sprintf("lookup join with no lookup columns"))
 		}
 
