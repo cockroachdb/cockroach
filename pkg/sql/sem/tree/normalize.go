@@ -471,7 +471,10 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 			}
 			if len(tupleCopy.D) == 0 {
 				// NULL IN <empty-tuple> is false.
-				return DBoolFalse
+				if expr.Operator == In {
+					return DBoolFalse
+				}
+				return DBoolTrue
 			}
 			if expr.TypedLeft() == DNull {
 				// NULL IN <non-empty-tuple> is NULL.
