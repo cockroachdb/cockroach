@@ -530,7 +530,13 @@ func (sb *statisticsBuilder) colStatSelect(colSet opt.ColSet, ev ExprView) *prop
 	s := &relProps.Stats
 	inputStats := &ev.childGroup(0).logical.Relational.Stats
 	colStat := sb.copyColStatFromChild(colSet, ev, s)
-	colStat.ApplySelectivity(s.Selectivity, inputStats.RowCount)
+
+	// It's not safe to use s.Selectivity, because it's possible that some of the
+	// filter conditions were pushed down into the input after s.Selectivity
+	// was calculated. For example, an index scan or index join created during
+	// exploration could absorb some of the filter conditions.
+	selectivity := s.RowCount / inputStats.RowCount
+	colStat.ApplySelectivity(selectivity, inputStats.RowCount)
 	return colStat
 }
 
@@ -850,9 +856,44 @@ func (sb *statisticsBuilder) colStatIndexJoin(
 	relProps := ev.Logical().Relational
 	s := &relProps.Stats
 
-	// TODO(#30288): implement this.
+	def := ev.Private().(*IndexJoinDef)
+	inputProps := ev.Child(0).Logical().Relational
+	inputCols := inputProps.OutputCols
+
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
+
+	// Some of the requested columns may be from the input index.
+	reqInputCols := colSet.Intersection(inputCols)
+	if !reqInputCols.Empty() {
+		inputColStat := sb.colStatFromChild(reqInputCols, ev, 0 /* childIdx */)
+		colStat.DistinctCount = inputColStat.DistinctCount
+	}
+
+	// Other requested columns may be from the primary index.
+	reqLookupCols := colSet.Difference(inputCols).Intersection(def.Cols)
+	if !reqLookupCols.Empty() {
+		// Make a copy of the lookup column stats so we don't modify the originals.
+		lookupColStat := *sb.colStatTable(def.Table, reqLookupCols)
+
+		// Calculate the distinct count of the lookup columns given the selectivity
+		// of any filters on the input.
+		inputStats := &inputProps.Stats
+		tableStats := sb.makeTableStatistics(def.Table)
+		selectivity := inputStats.RowCount / tableStats.RowCount
+		lookupColStat.ApplySelectivity(selectivity, tableStats.RowCount)
+
+		// Multiply the distinct counts in case colStat.DistinctCount is
+		// already populated with a statistic from the subset of columns
+		// provided by the input index. Multiplying the counts gives a worst-case
+		// estimate of the joint distinct count.
+		colStat.DistinctCount *= lookupColStat.DistinctCount
+	}
+
+	// The distinct count should be no larger than the row count.
+	if colStat.DistinctCount > s.RowCount {
+		colStat.DistinctCount = s.RowCount
+	}
 	return colStat
 }
 
