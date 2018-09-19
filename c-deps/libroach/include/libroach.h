@@ -371,6 +371,15 @@ typedef struct {
 // table.
 DBSSTable* DBGetSSTables(DBEngine* db, int* n);
 
+typedef struct {
+  uint64_t log_number;
+  uint64_t size;
+} DBWALFile;
+
+// Retrieve information about all of the write-ahead log files in order from
+// oldest to newest. The files array must be freed.
+DBStatus DBGetSortedWALFiles(DBEngine* db, DBWALFile** files, int* n);
+
 // DBGetUserProperties fetches the user properties stored in each sstable's
 // metadata. These are returned as a serialized SSTUserPropertiesCollection
 // proto.
