@@ -914,13 +914,7 @@ scalar-group-by
  │    │    ├── fd: ()-->(2,3)
  │    │    ├── prune: (5)
  │    │    └── interesting orderings: (+3,+2,-1)
- │    └── filters [type=bool, outer=(3,5,11-13), constraints=(/3: (/NULL - ]; /5: (/NULL - ]; /11: (/NULL - ]; /12: [/10 - /10]; /13: (/NULL - /14]), fd=()-->(3,12), (5)==(11), (11)==(5), (3)==(12), (12)==(3)]
- │         ├── eq [type=bool, outer=(5,11), constraints=(/5: (/NULL - ]; /11: (/NULL - ])]
- │         │    ├── variable: s_i_id [type=int, outer=(11)]
- │         │    └── variable: ol_i_id [type=int, outer=(5)]
- │         ├── eq [type=bool, outer=(3,12), constraints=(/3: (/NULL - ]; /12: (/NULL - ])]
- │         │    ├── variable: s_w_id [type=int, outer=(12)]
- │         │    └── variable: ol_w_id [type=int, outer=(3)]
+ │    └── filters [type=bool, outer=(12,13), constraints=(/12: [/10 - /10]; /13: (/NULL - /14]; tight), fd=()-->(12)]
  │         ├── eq [type=bool, outer=(12), constraints=(/12: [/10 - /10]; tight)]
  │         │    ├── variable: s_w_id [type=int, outer=(12)]
  │         │    └── const: 10 [type=int]
@@ -996,10 +990,7 @@ scalar-group-by
  │    └── merge-on
  │         ├── left ordering: +1
  │         ├── right ordering: +11
- │         └── filters [type=bool, outer=(1,9,11,21), constraints=(/1: (/NULL - ]; /9: (/NULL - ]; /11: (/NULL - ]; /21: (/NULL - ]), fd=(1)==(11), (11)==(1)]
- │              ├── eq [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ])]
- │              │    ├── variable: w_id [type=int, outer=(1)]
- │              │    └── variable: d_w_id [type=int, outer=(11)]
+ │         └── filters [type=bool, outer=(9,21), constraints=(/9: (/NULL - ]; /21: (/NULL - ])]
  │              └── ne [type=bool, outer=(9,21), constraints=(/9: (/NULL - ]; /21: (/NULL - ])]
  │                   ├── variable: w_ytd [type=decimal, outer=(9)]
  │                   └── variable: sum [type=decimal, outer=(21)]

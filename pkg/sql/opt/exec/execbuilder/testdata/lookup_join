@@ -34,7 +34,6 @@ EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b
 tree         field  description  columns             ordering
 lookup-join  ·      ·            (a, b, c, d, e, f)  ·
  │           type   inner        ·                   ·
- │           pred   @6 = @2      ·                   ·
  ├── scan    ·      ·            (a, b, c)           ·
  │           table  abc@primary  ·                   ·
  │           spans  ALL          ·                   ·
@@ -44,54 +43,54 @@ lookup-join  ·      ·            (a, b, c, d, e, f)  ·
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a > 1 AND e > 1
 ----
-tree         field  description             columns             ordering
-lookup-join  ·      ·                       (a, b, c, d, e, f)  ·
- │           type   inner                   ·                   ·
- │           pred   (@6 = @2) AND (@5 > 1)  ·                   ·
- ├── scan    ·      ·                       (a, b, c)           ·
- │           table  abc@primary             ·                   ·
- │           spans  /2-                     ·                   ·
- └── scan    ·      ·                       (d, e, f)           ·
-·            table  def@primary             ·                   ·
+tree         field  description  columns             ordering
+lookup-join  ·      ·            (a, b, c, d, e, f)  ·
+ │           type   inner        ·                   ·
+ │           pred   @5 > 1       ·                   ·
+ ├── scan    ·      ·            (a, b, c)           ·
+ │           table  abc@primary  ·                   ·
+ │           spans  /2-          ·                   ·
+ └── scan    ·      ·            (d, e, f)           ·
+·            table  def@primary  ·                   ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = a WHERE f > 1
 ----
-tree         field  description             columns             ordering
-lookup-join  ·      ·                       (a, b, c, d, e, f)  ·
- │           type   inner                   ·                   ·
- │           pred   (@6 = @1) AND (@6 > 1)  ·                   ·
- ├── scan    ·      ·                       (a, b, c)           ·
- │           table  abc@primary             ·                   ·
- │           spans  /2-                     ·                   ·
- └── scan    ·      ·                       (d, e, f)           ·
-·            table  def@primary             ·                   ·
+tree         field  description  columns             ordering
+lookup-join  ·      ·            (a, b, c, d, e, f)  ·
+ │           type   inner        ·                   ·
+ │           pred   @6 > 1       ·                   ·
+ ├── scan    ·      ·            (a, b, c)           ·
+ │           table  abc@primary  ·                   ·
+ │           spans  /2-          ·                   ·
+ └── scan    ·      ·            (d, e, f)           ·
+·            table  def@primary  ·                   ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b WHERE a >= e
 ----
-tree         field  description               columns             ordering
-lookup-join  ·      ·                         (a, b, c, d, e, f)  ·
- │           type   inner                     ·                   ·
- │           pred   (@6 = @2) AND (@1 >= @5)  ·                   ·
- ├── scan    ·      ·                         (a, b, c)           ·
- │           table  abc@primary               ·                   ·
- │           spans  ALL                       ·                   ·
- └── scan    ·      ·                         (d, e, f)           ·
-·            table  def@primary               ·                   ·
+tree         field  description  columns             ordering
+lookup-join  ·      ·            (a, b, c, d, e, f)  ·
+ │           type   inner        ·                   ·
+ │           pred   @1 >= @5     ·                   ·
+ ├── scan    ·      ·            (a, b, c)           ·
+ │           table  abc@primary  ·                   ·
+ │           spans  ALL          ·                   ·
+ └── scan    ·      ·            (d, e, f)           ·
+·            table  def@primary  ·                   ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND a >= e
 ----
-tree         field  description               columns             ordering
-lookup-join  ·      ·                         (a, b, c, d, e, f)  ·
- │           type   inner                     ·                   ·
- │           pred   (@6 = @2) AND (@1 >= @5)  ·                   ·
- ├── scan    ·      ·                         (a, b, c)           ·
- │           table  abc@primary               ·                   ·
- │           spans  ALL                       ·                   ·
- └── scan    ·      ·                         (d, e, f)           ·
-·            table  def@primary               ·                   ·
+tree         field  description  columns             ordering
+lookup-join  ·      ·            (a, b, c, d, e, f)  ·
+ │           type   inner        ·                   ·
+ │           pred   @1 >= @5     ·                   ·
+ ├── scan    ·      ·            (a, b, c)           ·
+ │           table  abc@primary  ·                   ·
+ │           spans  ALL          ·                   ·
+ └── scan    ·      ·            (d, e, f)           ·
+·            table  def@primary  ·                   ·
 
 # Verify a distsql plan.
 statement ok
@@ -113,25 +112,24 @@ ALTER TABLE data EXPERIMENTAL_RELOCATE
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT * FROM data WHERE c = 1) AS l NATURAL JOIN data AS r
 ----
-render            ·         ·                                                        (a, b, c, d)              ·
- │                render 0  a                                                        ·                         ·
- │                render 1  b                                                        ·                         ·
- │                render 2  c                                                        ·                         ·
- │                render 3  d                                                        ·                         ·
- └── lookup-join  ·         ·                                                        (a, b, c, d, a, b, c, d)  ·
-      │           type      inner                                                    ·                         ·
-      │           pred      (((@1 = @5) AND (@2 = @6)) AND (@3 = @7)) AND (@4 = @8)  ·                         ·
-      ├── scan    ·         ·                                                        (a, b, c, d)              ·
-      │           table     data@primary                                             ·                         ·
-      │           spans     ALL                                                      ·                         ·
-      │           filter    c = 1                                                    ·                         ·
-      └── scan    ·         ·                                                        (a, b, c, d)              ·
-·                 table     data@primary                                             ·                         ·
+render            ·         ·             (a, b, c, d)              ·
+ │                render 0  a             ·                         ·
+ │                render 1  b             ·                         ·
+ │                render 2  c             ·                         ·
+ │                render 3  d             ·                         ·
+ └── lookup-join  ·         ·             (a, b, c, d, a, b, c, d)  ·
+      │           type      inner         ·                         ·
+      ├── scan    ·         ·             (a, b, c, d)              ·
+      │           table     data@primary  ·                         ·
+      │           spans     ALL           ·                         ·
+      │           filter    c = 1         ·                         ·
+      └── scan    ·         ·             (a, b, c, d)              ·
+·                 table     data@primary  ·                         ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM (SELECT * FROM data WHERE c = 1) AS l NATURAL JOIN data AS r]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzUlU-L2zAQxe_9FGJOCaisZTt_VrCgQimkFG9Z9lZ8cKNhcZvVGEmGliXfvShuu07YyIaQg49j6em9-Y2wXsCQxqJ6RgfyGwjgkAKHDDjkwGEBJYfG0hadIxu2dIKN_gUy4VCbpvXhc8lhSxZBvoCv_Q5BwmP1fYcPWGm0Nwlw0OirenewaWz9XNnfSle-Ag6f6p1HK5nK2B0TUspN8QjlngO1_vV856snBCn2fHyGz1SbvxEW0QhfiH62DftBtWFkJFOCq5SrjKuA4b5gs9lMCXbH1GLOPhQf2UyloVrO_5Uhu1r9L_NQrudB3Prj8851lp7t7LWh1pDVaFEfdVPu3-i9oPfU3IjkZOfb3tmRtxg_WXGtyQ5k6E12ObHJpuPppteiO5ChR3c1MbrZeLrZtegOZOjRXU-Mbj6ebn4tugMZenRvJ0Z34DV7QNeQcTjqj56ENwH1E3YPiKPWbvGrpe3BpivvD7rDB43Od6uiKzamWwoB-2IRFadHYnEqTuPOA9ZZVJ3HxfkluRdR8TLuvLzEeRUVr-PO60ucb-OzSgauSfySnXqX-3d_AgAA___iTT6a
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzElFGrmzAUx9_3KeQ8Z1yjtrc3MPBp0DF6R-nb8CEzh-JmcySJsFH87kMdVEsbhWL3aPTv_8fvhHMGTQp38oQWxHfgwCACBjEwSIDBCjIGlaEcrSXTftIHtuo3iJBBoavatccZg5wMgjiDK1yJIOAgf5S4R6nQvITAQKGTRdnVVKY4SfMnVdJJYPC5KB0aEaRx8CngQojt7gBZw4Bqd_m_dfKIIHjD5jN8oUL_Q1h5Eb4S_aqr4CcVOiAtgpSzNGJpzNJWw3vtxkf34KK7cBemWpNRaFCNgLLmBv6OPlL1wsOrL293x6NuPn84fKnhTDAMhrN-_nCi-YKipQRNMAwEvT5fUDxfULyUoAmGgaDN8wUl8wUlSwmaYBgIevu_--8G3B5tRdrirO0WtvsR1RH7ZWqpNjl-M5R3Nf3je5frDhRa17_l_cNW969awGGYe8PRKMyvw5G_eaI69qYTfzh5hHvlDa_9zetHml-94Y2_efNI85t_VuHENfFfsuvurPnwNwAA__8ZfQMm
 
 statement ok
 CREATE TABLE books (title STRING, edition INT, shelf INT, PRIMARY KEY (title, edition))
@@ -162,19 +160,19 @@ ALTER TABLE books2 INJECT STATISTICS '[
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT DISTINCT b1.title FROM books as b1 JOIN books2 as b2 ON b1.title = b2.title WHERE b1.shelf <> b2.shelf
 ----
-tree                   field        description               columns                       ordering
-distinct               ·            ·                         (title)                       weak-key(title)
- │                     distinct on  title                     ·                             ·
- └── render            ·            ·                         (title)                       ·
-      │                render 0     title                     ·                             ·
-      └── lookup-join  ·            ·                         (title, shelf, title, shelf)  ·
-           │           type         inner                     ·                             ·
-           │           pred         (@1 = @3) AND (@2 != @4)  ·                             ·
-           ├── scan    ·            ·                         (title, shelf)                ·
-           │           table        books@primary             ·                             ·
-           │           spans        ALL                       ·                             ·
-           └── scan    ·            ·                         (title, shelf)                ·
-·                      table        books2@primary            ·                             ·
+tree                   field        description     columns                       ordering
+distinct               ·            ·               (title)                       weak-key(title)
+ │                     distinct on  title           ·                             ·
+ └── render            ·            ·               (title)                       ·
+      │                render 0     title           ·                             ·
+      └── lookup-join  ·            ·               (title, shelf, title, shelf)  ·
+           │           type         inner           ·                             ·
+           │           pred         @2 != @4        ·                             ·
+           ├── scan    ·            ·               (title, shelf)                ·
+           │           table        books@primary   ·                             ·
+           │           spans        ALL             ·                             ·
+           └── scan    ·            ·               (title, shelf)                ·
+·                      table        books2@primary  ·                             ·
 
 statement ok
 CREATE TABLE authors (name STRING PRIMARY KEY, book STRING)
@@ -226,7 +224,6 @@ render            ·         ·                (name)               ·
  │                render 0  name             ·                    ·
  └── lookup-join  ·         ·                (name, book, title)  ·
       │           type      inner            ·                    ·
-      │           pred      @2 = @3          ·                    ·
       ├── scan    ·         ·                (name, book)         +name
       │           table     authors@primary  ·                    ·
       │           spans     ALL              ·                    ·
@@ -258,7 +255,7 @@ render          ·         ·               (title, edition, shelf, title, editi
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM authors INNER JOIN books2 ON books2.edition = 1 WHERE books2.title = authors.book]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkcFLwzAUxu_-FeGdNoisabdLYBDBy0Q6GbtJD1n7mHVdXklSUEb_d0kjuImresz33u99X_hOYKjCXB_RgXwGARwWUHBoLZXoHNkgx6VV9QYy4VCbtvNBLjiUZBHkCXztGwQJOd1SO0uBQ4Ve182w1nOgzn9Bzus9gsx6fnZYjB_e6l2DG9QV2llycR5aWx-1fVe68y8h7zU_8R-_B6rNp5342W5HdHDhp49Eh65lr1QbRkYyFcR1ziYqY0um0im7y-_ZRM3Zkgkp5SrfTsNG5yVTgquUq4yrOVeLq9HTi-i_dLBB15Jx-KcSkr7ggNUeY8-OOlvik6VysInP9cANQoXOx2kWHysTRyHgOSxG4XQcTkfh5Btc9DcfAQAA__9BRuUo
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkU9r8zAMxu_vpzA666Vx2l4MA187RjpKbyMHNxFd1tYK_gMbJd99OB6sHWu2HfVIPz2P5TNYbqkyJ_KgnkACwhJqhN5xQ96zS3IeWrWvoAqEzvYxJLlGaNgRqDOELhwJFFT8n_tZCQgtBdMdx7EBgWP4hHwwewI1H_BisZxevDW7I23ItORmxdV66F13Mu5NmxieU95bfvIvfvfc2Q87-b3djvng00sfmA-xFy_cWcFWCZ3EdSX0QtwJqZRaVdukxKCElqhL1HPUC9TLm1HLq6g_3HxDvmfr6VdHL4Yagdo95X_1HF1Dj46b0SaX65EbhZZ8yN15LlY2t1LAS1hOwuU0XE7CxRe4Hv69BwAA___eYeIR
 
 ####################################
 #  LOOKUP JOIN ON SECONDARY INDEX  #
@@ -299,7 +296,6 @@ render            ·         ·              (a, c)     ·
  │                render 1  c              ·          ·
  └── lookup-join  ·         ·              (a, b, c)  ·
       │           type      inner          ·          ·
-      │           pred      @1 = @2        ·          ·
       ├── scan    ·         ·              (a)        ·
       │           table     small@primary  ·          ·
       │           spans     ALL            ·          ·
@@ -317,7 +313,6 @@ render                 ·         ·              (a, d)        ·
       │                type      inner          ·             ·
       ├── lookup-join  ·         ·              (a, a, b)     ·
       │    │           type      inner          ·             ·
-      │    │           pred      @1 = @3        ·             ·
       │    ├── scan    ·         ·              (a)           ·
       │    │           table     small@primary  ·             ·
       │    │           spans     ALL            ·             ·
@@ -336,7 +331,6 @@ EXPLAIN (VERBOSE) SELECT small.b, large.a FROM small LEFT JOIN large ON small.b 
 ----
 lookup-join  ·      ·              (b, a)  ·
  │           type   left outer     ·       ·
- │           pred   @1 = @2        ·       ·
  ├── scan    ·      ·              (b)     ·
  │           table  small@primary  ·       ·
  │           spans  ALL            ·       ·
@@ -352,7 +346,6 @@ render            ·         ·              (c, c)     ·
  │                render 1  c              ·          ·
  └── lookup-join  ·         ·              (c, b, c)  ·
       │           type      left outer     ·          ·
-      │           pred      @1 = @2        ·          ·
       ├── scan    ·         ·              (c)        ·
       │           table     small@primary  ·          ·
       │           spans     ALL            ·          ·
@@ -370,7 +363,6 @@ render                 ·         ·              (c, d)        ·
       │                type      left outer     ·             ·
       ├── lookup-join  ·         ·              (c, a, b)     ·
       │    │           type      left outer     ·             ·
-      │    │           pred      @1 = @3        ·             ·
       │    ├── scan    ·         ·              (c)           ·
       │    │           table     small@primary  ·             ·
       │    │           spans     ALL            ·             ·
@@ -383,17 +375,17 @@ render                 ·         ·              (c, d)        ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT small.c, large.c FROM small LEFT JOIN large ON small.c = large.b AND large.c < 20
 ----
-render            ·         ·                        (c, c)     ·
- │                render 0  c                        ·          ·
- │                render 1  c                        ·          ·
- └── lookup-join  ·         ·                        (c, b, c)  ·
-      │           type      left outer               ·          ·
-      │           pred      (@1 = @2) AND (@3 < 20)  ·          ·
-      ├── scan    ·         ·                        (c)        ·
-      │           table     small@primary            ·          ·
-      │           spans     ALL                      ·          ·
-      └── scan    ·         ·                        (b, c)     ·
-·                 table     large@bc                 ·          ·
+render            ·         ·              (c, c)     ·
+ │                render 0  c              ·          ·
+ │                render 1  c              ·          ·
+ └── lookup-join  ·         ·              (c, b, c)  ·
+      │           type      left outer     ·          ·
+      │           pred      @3 < 20        ·          ·
+      ├── scan    ·         ·              (c)        ·
+      │           table     small@primary  ·          ·
+      │           spans     ALL            ·          ·
+      └── scan    ·         ·              (b, c)     ·
+·                 table     large@bc       ·          ·
 
 # Left join with ON filter on non-covering index
 # TODO(radu): this doesn't use lookup join yet, the current rules don't cover
