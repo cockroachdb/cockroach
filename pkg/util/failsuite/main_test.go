@@ -42,14 +42,14 @@ func TestThatFails(t *testing.T) {
 	t.Fatal("then the test fatals")
 }
 
-func TestParallelOne(t *testing.T) {
-	testParallelImpl(t)
+func TestParallelOneWithDataRaceWithoutFailures(t *testing.T) {
+	testParallelImpl(t, false)
 }
-func TestParallelTwo(t *testing.T) {
-	testParallelImpl(t)
+func TestParallelWithDataRaceAndFailures(t *testing.T) {
+	testParallelImpl(t, true)
 }
 
-func testParallelImpl(t *testing.T) {
+func testParallelImpl(t *testing.T, withFailures bool) {
 	var dataracingGlobal bool
 	sleep := func() {
 		time.Sleep(time.Duration(rand.Intn(1E9)))
@@ -61,10 +61,10 @@ func testParallelImpl(t *testing.T) {
 	t.Parallel()
 	for i := 0; i < 10; i++ {
 		i := i
-		fails := (i % 3) == 0
+		fails := withFailures && (i%3) == 0
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			t.Parallel()
-			// Why not add a data race while we're here?
+			// Add a data race. Go pretty much catches this every time.
 			dataracingGlobal = !dataracingGlobal
 			sleep()
 			// NB: access to stdout isn't actually handled properly with parallel tests.
