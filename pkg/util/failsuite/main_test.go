@@ -42,6 +42,11 @@ func TestThatFails(t *testing.T) {
 	t.Fatal("then the test fatals")
 }
 
+func TestThatGetsSkipped(t *testing.T) {
+	t.Log("logging something")
+	t.Skip("skipped")
+}
+
 func TestParallelOneWithDataRaceWithoutFailures(t *testing.T) {
 	testParallelImpl(t, false)
 }
