@@ -96,7 +96,7 @@ func isRenamed(
 	tableID sqlbase.ID,
 	expectedName string,
 	expectedVersion sqlbase.DescriptorVersion,
-	cfg config.SystemConfig,
+	cfg *config.SystemConfig,
 ) bool {
 	descKey := sqlbase.MakeDescMetadataKey(tableID)
 	val := cfg.GetValue(descKey)
@@ -145,7 +145,7 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 	// version is ignored by the leasing refresh mechanism).
 	renamed := make(chan interface{})
 	lmKnobs.TestingLeasesRefreshedEvent =
-		func(cfg config.SystemConfig) {
+		func(cfg *config.SystemConfig) {
 			mu.Lock()
 			defer mu.Unlock()
 			if waitTableID != 0 {

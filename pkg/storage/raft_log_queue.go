@@ -115,8 +115,8 @@ func getTruncatableIndexes(ctx context.Context, r *Replica) (uint64, uint64, int
 	// larger than the replica size, we're better off recovering the replica
 	// using a snapshot.
 	targetSize := r.mu.state.Stats.Total()
-	if targetSize > r.mu.maxBytes {
-		targetSize = r.mu.maxBytes
+	if targetSize > r.mu.zone.RangeMaxBytes {
+		targetSize = r.mu.zone.RangeMaxBytes
 	}
 	if targetSize > raftLogMaxSize {
 		targetSize = raftLogMaxSize
@@ -229,7 +229,7 @@ func getQuorumIndex(raftStatus *raft.Status, pendingSnapshotIndex uint64) uint64
 // is true only if the replica is the raft leader and if the total number of
 // the range's raft log's stale entries exceeds RaftLogQueueStaleThreshold.
 func (rlq *raftLogQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, r *Replica, _ config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, r *Replica, _ *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	truncatableIndexes, _, raftLogSize, err := getTruncatableIndexes(ctx, r)
 	if err != nil {
@@ -243,7 +243,7 @@ func (rlq *raftLogQueue) shouldQueue(
 // process truncates the raft log of the range if the replica is the raft
 // leader and if the total number of the range's raft log's stale entries
 // exceeds RaftLogQueueStaleThreshold.
-func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ config.SystemConfig) error {
+func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ *config.SystemConfig) error {
 	truncatableIndexes, oldestIndex, raftLogSize, err := getTruncatableIndexes(ctx, r)
 	if err != nil {
 		return err

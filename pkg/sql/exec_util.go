@@ -435,7 +435,7 @@ var _ dbCacheSubscriber = &databaseCacheHolder{}
 
 // updateSystemConfig is called whenever a new system config gossip entry is
 // received.
-func (dc *databaseCacheHolder) updateSystemConfig(cfg config.SystemConfig) {
+func (dc *databaseCacheHolder) updateSystemConfig(cfg *config.SystemConfig) {
 	dc.mu.Lock()
 	dc.mu.c = newDatabaseCache(cfg)
 	dc.mu.cv.Broadcast()

@@ -988,7 +988,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	config.TestingSetZoneConfig(descID, config.ZoneConfig{RangeMaxBytes: maxBytes})
 
 	// Trigger gossip callback.
-	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
+	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfigEntries{}, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1048,7 +1048,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	config.TestingSetZoneConfig(descID, config.ZoneConfig{RangeMaxBytes: maxBytes})
 
 	// Trigger gossip callback.
-	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
+	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfigEntries{}, 0); err != nil {
 		t.Fatal(err)
 	}
 

@@ -111,7 +111,7 @@ func (s *Server) refreshSettings() {
 		for {
 			select {
 			case <-gossipUpdateC:
-				cfg, _ := s.gossip.GetSystemConfig()
+				cfg := s.gossip.GetSystemConfig()
 				u := s.st.MakeUpdater()
 				ok := true
 				for _, kv := range cfg.Values {

@@ -88,7 +88,7 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 }
 
 func shouldSplitRange(
-	desc *roachpb.RangeDescriptor, ms enginepb.MVCCStats, maxBytes int64, sysCfg config.SystemConfig,
+	desc *roachpb.RangeDescriptor, ms enginepb.MVCCStats, maxBytes int64, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	if sysCfg.NeedsSplit(desc.StartKey, desc.EndKey) {
 		// Set priority to 1 in the event the range is split by zone configs.
@@ -109,7 +109,7 @@ func shouldSplitRange(
 // splitting. This is true if the range is intersected by a zone config
 // prefix or if the range's size in bytes exceeds the limit for the zone.
 func (sq *splitQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	shouldQ, priority = shouldSplitRange(repl.Desc(), repl.GetMVCCStats(), repl.GetMaxBytes(), sysCfg)
 	if sq.verbose {
@@ -128,7 +128,7 @@ func (unsplittableRangeError) purgatoryErrorMarker() {}
 var _ purgatoryError = unsplittableRangeError{}
 
 // process synchronously invokes admin split for each proposed split key.
-func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg config.SystemConfig) error {
+func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg *config.SystemConfig) error {
 	err := sq.processAttempt(ctx, r, sysCfg)
 	switch errors.Cause(err).(type) {
 	case nil:
@@ -146,7 +146,7 @@ func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg config.Sys
 }
 
 func (sq *splitQueue) processAttempt(
-	ctx context.Context, r *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, r *Replica, sysCfg *config.SystemConfig,
 ) error {
 	// First handle case of splitting due to zone config maps.
 	desc := r.Desc()

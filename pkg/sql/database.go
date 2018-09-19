@@ -63,10 +63,10 @@ type databaseCache struct {
 
 	// systemConfig holds a copy of the latest system config since the last
 	// call to resetForBatch.
-	systemConfig config.SystemConfig
+	systemConfig *config.SystemConfig
 }
 
-func newDatabaseCache(cfg config.SystemConfig) *databaseCache {
+func newDatabaseCache(cfg *config.SystemConfig) *databaseCache {
 	return &databaseCache{
 		systemConfig: cfg,
 	}

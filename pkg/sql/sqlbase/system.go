@@ -795,9 +795,9 @@ var (
 )
 
 // Create a kv pair for the zone config for the given key and config value.
-func createZoneConfigKV(keyID int, zoneConfig config.ZoneConfig) roachpb.KeyValue {
+func createZoneConfigKV(keyID int, zoneConfig *config.ZoneConfig) roachpb.KeyValue {
 	value := roachpb.Value{}
-	if err := value.SetProto(&zoneConfig); err != nil {
+	if err := value.SetProto(zoneConfig); err != nil {
 		panic(fmt.Sprintf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
 	}
 	return roachpb.KeyValue{
@@ -844,7 +844,7 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 
 	// Default zone config entry.
 	zoneConf := config.DefaultZoneConfig()
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.RootNamespaceID, zoneConf))
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.RootNamespaceID, &zoneConf))
 
 	systemZoneConf := config.DefaultSystemZoneConfig()
 	metaRangeZoneConf := config.DefaultSystemZoneConfig()
@@ -853,17 +853,17 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 
 	// .meta zone config entry with a shorter GC time.
 	metaRangeZoneConf.GC.TTLSeconds = 60 * 60 // 1h
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.MetaRangesID, metaRangeZoneConf))
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.MetaRangesID, &metaRangeZoneConf))
 
 	// Jobs zone config entry with a shorter GC time.
 	jobsZoneConf.GC.TTLSeconds = 10 * 60 // 10m
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.JobsTableID, jobsZoneConf))
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.JobsTableID, &jobsZoneConf))
 
 	// Liveness zone config entry with a shorter GC time.
 	livenessZoneConf.GC.TTLSeconds = 10 * 60 // 10m
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.LivenessRangesID, livenessZoneConf))
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.SystemRangesID, systemZoneConf))
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.SystemDatabaseID, systemZoneConf))
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.LivenessRangesID, &livenessZoneConf))
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.SystemRangesID, &systemZoneConf))
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.SystemDatabaseID, &systemZoneConf))
 }
 
 // IsSystemConfigID returns whether this ID is for a system config object.

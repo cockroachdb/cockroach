@@ -80,6 +80,7 @@ func loadRanges(rr *replicaRankings, s *Store, ranges []testRange) {
 	for _, r := range ranges {
 		repl := &Replica{store: s}
 		repl.mu.state.Desc = &roachpb.RangeDescriptor{}
+		repl.mu.zone = config.DefaultZoneConfigRef()
 		for _, storeID := range r.storeIDs {
 			repl.mu.state.Desc.Replicas = append(repl.mu.state.Desc.Replicas, roachpb.ReplicaDescriptor{
 				NodeID:    roachpb.NodeID(storeID),
@@ -156,7 +157,7 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 		loadRanges(rr, s, []testRange{{storeIDs: tc.storeIDs, qps: tc.qps}})
 		hottestRanges := rr.topQPS()
 		_, target, _ := sr.chooseLeaseToTransfer(
-			ctx, config.SystemConfig{}, &hottestRanges, &localDesc, storeList, storeMap, minQPS, maxQPS)
+			ctx, config.NewSystemConfig(), &hottestRanges, &localDesc, storeList, storeMap, minQPS, maxQPS)
 		if target.StoreID != tc.expectTarget {
 			t.Errorf("got target store %d for range with replicas %v and %f qps; want %d",
 				target.StoreID, tc.storeIDs, tc.qps, tc.expectTarget)
