@@ -796,11 +796,6 @@ func TestChangefeedErrors(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 
 		if _, err := sqlDB.DB.Exec(
-			`CREATE CHANGEFEED FOR foo WITH format=avro`,
-		); !testutils.IsError(err, `format=avro is not yet supported`) {
-			t.Errorf(`expected 'format=avro is not yet supported' error got: %+v`, err)
-		}
-		if _, err := sqlDB.DB.Exec(
 			`CREATE CHANGEFEED FOR foo WITH format=nope`,
 		); !testutils.IsError(err, `unknown format: nope`) {
 			t.Errorf(`expected 'unknown format: nope' error got: %+v`, err)
@@ -865,6 +860,27 @@ func TestChangefeedErrors(t *testing.T) {
 			`CREATE CHANGEFEED FOR information_schema.tables`,
 		); !testutils.IsError(err, `"information_schema.tables" does not exist`) {
 			t.Errorf(`expected '"information_schema.tables" does not exist' error got: %+v`, err)
+		}
+
+		// Check that confluent_schema_registry is only accepted if format is
+		// avro (even excluding avro=json).
+		s := f.Server()
+		sink, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+		defer cleanup()
+		sink.Scheme = sinkSchemeExperimentalSQL
+		sink.Path = `d`
+		q := sink.Query()
+		q.Set(sinkParamConfluentSchemaRegistry, `foo`)
+		sink.RawQuery = q.Encode()
+		if _, err := sqlDB.DB.Exec(
+			`CREATE CHANGEFEED FOR foo INTO $1`, sink.String(),
+		); !testutils.IsError(err, `unknown sink query parameter: confluent_schema_registry`) {
+			t.Errorf(`expected "unknown sink query parameter: confluent_schema_registry" error got: %v`, err)
+		}
+		if _, err := sqlDB.DB.Exec(
+			`CREATE CHANGEFEED FOR foo INTO $1 WITH format=$2`, sink.String(), optFormatAvroJSON,
+		); !testutils.IsError(err, `unknown sink query parameter: confluent_schema_registry`) {
+			t.Errorf(`expected "unknown sink query parameter: confluent_schema_registry" error got: %v`, err)
 		}
 	}
 
