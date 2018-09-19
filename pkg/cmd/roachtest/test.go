@@ -682,8 +682,8 @@ func (r *registry) run(
 						}
 						if err := issues.Post(
 							context.Background(),
-							fmt.Sprintf("roachtest: %s failed on %s", t.Name(), branch),
-							"roachtest", t.Name(), string(output), authorEmail,
+							fmt.Sprintf("roachtest: %s failed", t.Name()),
+							"roachtest", t.Name(), "The test failed on "+branch+":\n"+string(output), authorEmail,
 						); err != nil {
 							fmt.Fprintf(r.out, "failed to post issue: %s\n", err)
 						}
