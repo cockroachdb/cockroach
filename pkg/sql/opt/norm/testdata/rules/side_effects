@@ -126,8 +126,7 @@ inner-join (merge)
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── true [type=bool]
 
 # Decorrelate CASE WHEN branch if there are no side effects.
 opt

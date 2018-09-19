@@ -89,7 +89,6 @@ project
  │    └── merge-on
  │         ├── left ordering: +1
  │         ├── right ordering: +5
- │         └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
- │              └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ │         └── true [type=bool]
  └── projections [outer=(2)]
       └── y + 1 [type=int, outer=(2)]
