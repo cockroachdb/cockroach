@@ -2728,7 +2728,7 @@ func MVCCFindSplitKey(
 	} else if !ok {
 		return nil, nil
 	}
-	minSplitKey := key
+	var minSplitKey roachpb.Key
 	if _, _, err := keys.DecodeTablePrefix(it.UnsafeKey().Key); err == nil {
 		// The first key in this range represents a row in a SQL table. Advance the
 		// minSplitKey past this row to avoid the problems described above.
@@ -2736,13 +2736,17 @@ func MVCCFindSplitKey(
 		if err != nil {
 			return nil, err
 		}
-		minSplitKey = roachpb.RKey(firstRowKey.PrefixEnd())
+		minSplitKey = firstRowKey.PrefixEnd()
+	} else {
+		// The first key in the range does not represent a row in a SQL table.
+		// Allow a split at any key that sorts after it.
+		minSplitKey = it.Key().Key
 	}
 
 	splitKey, err := it.FindSplitKey(
 		MakeMVCCMetadataKey(key.AsRawKey()),
 		MakeMVCCMetadataKey(endKey.AsRawKey()),
-		MakeMVCCMetadataKey(minSplitKey.AsRawKey()),
+		MakeMVCCMetadataKey(minSplitKey),
 		targetSize)
 	if err != nil {
 		return nil, err
