@@ -50,11 +50,12 @@ var (
 	stacktraceRE = regexp.MustCompile(`(?m:^goroutine\s\d+)`)
 )
 
-// Based on the following observed API response:
+// Based on the following observed API response the maximum here is 1<<16-1
+// (but we stay way below that as nobody likes to scroll for pages and pages).
 //
 // 422 Validation Failed [{Resource:Issue Field:body Code:custom Message:body
 // is too long (maximum is 65536 characters)}]
-const githubIssueBodyMaximumLength = 1<<16 - 1
+const githubIssueBodyMaximumLength = 5000
 
 // trimIssueRequestBody trims message such that the total size of an issue body
 // is less than githubIssueBodyMaximumLength. usedCharacters specifies the
