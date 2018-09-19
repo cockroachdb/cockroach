@@ -270,9 +270,6 @@ func (r *Replica) adminSplitWithDescriptor(
 	// If the range starts at the splitKey, we treat the AdminSplit
 	// as a no-op and return success instead of throwing an error.
 	if desc.StartKey.Equal(splitKey) {
-		if len(args.SplitKey) == 0 {
-			log.Fatal(ctx, "MVCCFindSplitKey returned start key of range")
-		}
 		log.Event(ctx, "range already split")
 		return reply, nil
 	}
