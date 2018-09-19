@@ -36,20 +36,19 @@ NULL       /1       1         {1}       1
 query TTTTT
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data) NATURAL JOIN (SELECT a,b FROM data AS data2))
 ----
-render          ·               ·                    (a, b)        ·
- │              render 0        a                    ·             ·
- │              render 1        b                    ·             ·
- └── join       ·               ·                    (a, b, a, b)  ·
-      │         type            inner                ·             ·
-      │         equality        (a, b) = (a, b)      ·             ·
-      │         mergeJoinOrder  +"(a=a)",+"(b=b)"    ·             ·
-      │         pred            (a = a) AND (b = b)  ·             ·
-      ├── scan  ·               ·                    (a, b)        +a,+b
-      │         table           data@primary         ·             ·
-      │         spans           ALL                  ·             ·
-      └── scan  ·               ·                    (a, b)        +a,+b
-·               table           data@primary         ·             ·
-·               spans           ALL                  ·             ·
+render          ·               ·                  (a, b)        ·
+ │              render 0        a                  ·             ·
+ │              render 1        b                  ·             ·
+ └── join       ·               ·                  (a, b, a, b)  ·
+      │         type            inner              ·             ·
+      │         equality        (a, b) = (a, b)    ·             ·
+      │         mergeJoinOrder  +"(a=a)",+"(b=b)"  ·             ·
+      ├── scan  ·               ·                  (a, b)        +a,+b
+      │         table           data@primary       ·             ·
+      │         spans           ALL                ·             ·
+      └── scan  ·               ·                  (a, b)        +a,+b
+·               table           data@primary       ·             ·
+·               spans           ALL                ·             ·
 
 # TODO(radu): enable these tests when joins pass through orderings on equality
 # columns.

@@ -134,8 +134,7 @@ inner-join (merge)
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +5
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           └── x = k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      └── true [type=bool]
 
 # Right-join operator.
 opt expect=RejectNullsRightJoin
@@ -370,8 +369,7 @@ project
       │    │    └── merge-on
       │    │         ├── left ordering: +1
       │    │         ├── right ordering: +5
-      │    │         └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │    │              └── x = k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    │         └── true [type=bool]
       │    └── aggregations [outer=(2-5)]
       │         ├── sum [type=decimal, outer=(5)]
       │         │    └── variable: x [type=int, outer=(5)]

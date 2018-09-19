@@ -468,9 +468,12 @@ func (b *Builder) initJoinBuild(
 		ivh:     tree.MakeIndexedVarHelper(nil /* container */, allCols.Len()),
 		ivarMap: allCols,
 	}
-	onExpr, err = b.buildScalar(&ctx, onCond)
-	if err != nil {
-		return execPlan{}, execPlan{}, nil, opt.ColMap{}, err
+
+	if onCond.Operator() != opt.UnknownOp {
+		onExpr, err = b.buildScalar(&ctx, onCond)
+		if err != nil {
+			return execPlan{}, execPlan{}, nil, opt.ColMap{}, err
+		}
 	}
 
 	if joinType == sqlbase.LeftSemiJoin || joinType == sqlbase.LeftAntiJoin {
