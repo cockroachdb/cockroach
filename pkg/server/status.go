@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/semaphore"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -1420,7 +1421,7 @@ func (s *statusServer) iterateNodes(
 	}
 
 	// Issue the requests concurrently.
-	sem := make(chan struct{}, maxConcurrentRequests)
+	sem := semaphore.NewWeighted(maxConcurrentRequests)
 	for nodeID := range nodeStatuses {
 		nodeID := nodeID // needed to ensure the closure below captures a copy.
 		if err := s.stopper.RunLimitedAsyncTask(

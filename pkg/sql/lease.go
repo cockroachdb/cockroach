@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/semaphore"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -1734,7 +1735,7 @@ func (m *LeaseManager) refreshSomeLeases(ctx context.Context) {
 	}
 	m.mu.Unlock()
 	// Limit the number of concurrent lease refreshes.
-	sem := make(chan struct{}, 5)
+	sem := semaphore.NewWeighted(5)
 	var wg sync.WaitGroup
 	for i := range ids {
 		id := ids[i]

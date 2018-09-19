@@ -18,19 +18,19 @@ import (
 	"context"
 	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/semaphore"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 )
 
@@ -98,7 +98,7 @@ type Server struct {
 	queryWorkerMax   int
 	workerMemMonitor mon.BytesMonitor
 	resultMemMonitor mon.BytesMonitor
-	workerSem        chan struct{}
+	workerSem        semaphore.Weighted
 }
 
 // MakeServer instantiates a new Server which services requests with data from
@@ -149,7 +149,7 @@ func MakeServer(
 		),
 		queryMemoryMax: queryMemoryMax,
 		queryWorkerMax: queryWorkerMax,
-		workerSem:      make(chan struct{}, queryWorkerMax),
+		workerSem:      semaphore.MakeWeighted(int64(queryWorkerMax)),
 	}
 }
 
@@ -239,7 +239,7 @@ func (s *Server) Query(
 			if err := s.stopper.RunLimitedAsyncTask(
 				ctx,
 				"ts.Server: query",
-				s.workerSem,
+				&s.workerSem,
 				true, /* wait */
 				func(ctx context.Context) {
 					// Estimated source count is either the count of requested sources

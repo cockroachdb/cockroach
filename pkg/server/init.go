@@ -23,37 +23,22 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil/semaphore"
 )
-
-type semaphore chan struct{}
-
-func newSemaphore() semaphore {
-	ch := make(semaphore, 1)
-	ch <- struct{}{}
-	return ch
-}
-
-func (s semaphore) acquire() {
-	<-s
-}
-
-func (s semaphore) release() {
-	s <- struct{}{}
-}
 
 // initServer manages the temporary init server used during
 // bootstrapping.
 type initServer struct {
 	server       *Server
 	bootstrapped chan struct{}
-	semaphore
+	sem          semaphore.Weighted
 }
 
 func newInitServer(s *Server) *initServer {
 	return &initServer{
 		server:       s,
-		semaphore:    newSemaphore(),
 		bootstrapped: make(chan struct{}),
+		sem:          semaphore.MakeWeighted(1),
 	}
 }
 
@@ -71,8 +56,10 @@ func (s *initServer) awaitBootstrap() error {
 func (s *initServer) Bootstrap(
 	ctx context.Context, request *serverpb.BootstrapRequest,
 ) (response *serverpb.BootstrapResponse, err error) {
-	s.semaphore.acquire()
-	defer s.semaphore.release()
+	if err := s.sem.Acquire(ctx); err != nil {
+		return nil, err
+	}
+	defer s.sem.Release()
 
 	if err := s.server.node.bootstrap(ctx, s.server.engines, s.server.cfg.Settings.Version.BootstrapVersion()); err != nil {
 		if _, ok := err.(*duplicateBootstrapError); ok {
