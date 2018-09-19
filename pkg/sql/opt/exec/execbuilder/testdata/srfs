@@ -163,25 +163,25 @@ render               ·               ·                                        
 query TTTTT
 EXPLAIN (VERBOSE) SELECT generate_series((SELECT unnest(ARRAY[x, y]) FROM xy), z) FROM xz
 ----
-root                        ·          ·                         (generate_series)     ·
- ├── render                 ·          ·                         (generate_series)     ·
- │    │                     render 0   generate_series           ·                     ·
- │    └── project set       ·          ·                         (z, generate_series)  ·
- │         │                render 0   generate_series(@S1, @1)  ·                     ·
- │         └── scan         ·          ·                         (z)                   ·
- │                          table      xz@primary                ·                     ·
- │                          spans      ALL                       ·                     ·
- └── subquery               ·          ·                         (generate_series)     ·
-      │                     id         @S1                       ·                     ·
-      │                     sql        <unknown>                 ·                     ·
-      │                     exec mode  one row                   ·                     ·
-      └── render            ·          ·                         (unnest)              ·
-           │                render 0   unnest                    ·                     ·
-           └── project set  ·          ·                         (x, y, unnest)        ·
-                │           render 0   unnest(ARRAY[@1, @2])     ·                     ·
-                └── scan    ·          ·                         (x, y)                ·
-·                           table      xy@primary                ·                     ·
-·                           spans      ALL                       ·                     ·
+root                        ·             ·                                     (generate_series)     ·
+ ├── render                 ·             ·                                     (generate_series)     ·
+ │    │                     render 0      generate_series                       ·                     ·
+ │    └── project set       ·             ·                                     (z, generate_series)  ·
+ │         │                render 0      generate_series(@S1, @1)              ·                     ·
+ │         └── scan         ·             ·                                     (z)                   ·
+ │                          table         xz@primary                            ·                     ·
+ │                          spans         ALL                                   ·                     ·
+ └── subquery               ·             ·                                     (generate_series)     ·
+      │                     id            @S1                                   ·                     ·
+      │                     original sql  (SELECT unnest(ARRAY[x, y]) FROM xy)  ·                     ·
+      │                     exec mode     one row                               ·                     ·
+      └── render            ·             ·                                     (unnest)              ·
+           │                render 0      unnest                                ·                     ·
+           └── project set  ·             ·                                     (x, y, unnest)        ·
+                │           render 0      unnest(ARRAY[@1, @2])                 ·                     ·
+                └── scan    ·             ·                                     (x, y)                ·
+·                           table         xy@primary                            ·                     ·
+·                           spans         ALL                                   ·                     ·
 
 # Regression test for #24676.
 statement ok

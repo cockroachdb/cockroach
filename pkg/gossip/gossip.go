@@ -78,6 +78,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -255,8 +256,7 @@ type Gossip struct {
 	// here and its own set of callbacks.
 	// We do not use the infostore to avoid unmarshalling under the
 	// main gossip lock.
-	systemConfig         config.SystemConfig
-	systemConfigSet      bool
+	systemConfig         *config.SystemConfig
 	systemConfigMu       syncutil.RWMutex
 	systemConfigChannels []chan<- struct{}
 
@@ -560,10 +560,8 @@ func (g *Gossip) LogStatus() {
 	g.mu.RUnlock()
 
 	ctx := g.AnnotateCtx(context.TODO())
-	log.Infof(
-		ctx, "gossip status (%s, %d node%s)\n%s%s%s", status, n, util.Pluralize(int64(n)),
-		g.clientStatus(), g.server.status(), g.Connectivity(),
-	)
+	log.Infof(ctx, "gossip status (%s, %d node%s)\n%s%s",
+		status, n, util.Pluralize(int64(n)), g.clientStatus(), g.server.status())
 }
 
 func (g *Gossip) clientStatus() ClientStatus {
@@ -1000,13 +998,13 @@ func (g *Gossip) getNodeIDAddressLocked(nodeID roachpb.NodeID) (*util.Unresolved
 	if err != nil {
 		return nil, err
 	}
-	address := &nd.Address
-	for _, locality := range nd.LocalityAddress {
+	for i := range nd.LocalityAddress {
+		locality := &nd.LocalityAddress[i]
 		if _, ok := g.localityTierMap[locality.LocalityTier.String()]; ok {
 			return &locality.Address, nil
 		}
 	}
-	return address, nil
+	return &nd.Address, nil
 }
 
 // AddInfo adds or updates an info object. Returns an error if info
@@ -1152,11 +1150,11 @@ func (g *Gossip) RegisterCallback(pattern string, method Callback, opts ...Callb
 }
 
 // GetSystemConfig returns the local unmarshaled version of the system config.
-// The second return value indicates whether the system config has been set yet.
-func (g *Gossip) GetSystemConfig() (config.SystemConfig, bool) {
+// Returns nil if the system config hasn't been set yet.
+func (g *Gossip) GetSystemConfig() *config.SystemConfig {
 	g.systemConfigMu.RLock()
 	defer g.systemConfigMu.RUnlock()
-	return g.systemConfig, g.systemConfigSet
+	return g.systemConfig
 }
 
 // RegisterSystemConfigChannel registers a channel to signify updates for the
@@ -1172,23 +1170,23 @@ func (g *Gossip) RegisterSystemConfigChannel() <-chan struct{} {
 	g.systemConfigChannels = append(g.systemConfigChannels, c)
 
 	// Notify the channel right away if we have a config.
-	if g.systemConfigSet {
+	if g.systemConfig != nil {
 		c <- struct{}{}
 	}
 
 	return c
 }
 
-// updateSystemConfig is the raw gossip info callback.
-// Unmarshal the system config, and if successfully, update out
-// copy and run the callbacks.
+// updateSystemConfig is the raw gossip info callback. Unmarshal the
+// system config, and if successful, send on each system config
+// channel.
 func (g *Gossip) updateSystemConfig(key string, content roachpb.Value) {
 	ctx := g.AnnotateCtx(context.TODO())
 	if key != KeySystemConfig {
 		log.Fatalf(ctx, "wrong key received on SystemConfig callback: %s", key)
 	}
-	cfg := config.SystemConfig{}
-	if err := content.GetProto(&cfg); err != nil {
+	cfg := config.NewSystemConfig()
+	if err := content.GetProto(&cfg.SystemConfigEntries); err != nil {
 		log.Errorf(ctx, "could not unmarshal system config on callback: %s", err)
 		return
 	}
@@ -1196,7 +1194,6 @@ func (g *Gossip) updateSystemConfig(key string, content roachpb.Value) {
 	g.systemConfigMu.Lock()
 	defer g.systemConfigMu.Unlock()
 	g.systemConfig = cfg
-	g.systemConfigSet = true
 	for _, c := range g.systemConfigChannels {
 		select {
 		case c <- struct{}{}:
@@ -1319,7 +1316,7 @@ func (g *Gossip) getNextBootstrapAddressLocked() net.Addr {
 func (g *Gossip) bootstrap() {
 	ctx := g.AnnotateCtx(context.Background())
 	g.server.stopper.RunWorker(ctx, func(ctx context.Context) {
-		ctx = log.WithLogTag(ctx, "bootstrap", nil)
+		ctx = logtags.AddTag(ctx, "bootstrap", nil)
 		var bootstrapTimer timeutil.Timer
 		defer bootstrapTimer.Stop()
 		for {

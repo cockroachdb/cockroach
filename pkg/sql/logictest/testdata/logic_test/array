@@ -85,7 +85,7 @@ SELECT ARRAY['one', 'two', 'fünf']
 query T
 SELECT ARRAY[e'\n', e'g\x10h']
 ----
-{"\x0a","g\x10h"}
+{"\012","g\020h"}
 
 query T
 SELECT ARRAY['foo', 'bar']
@@ -161,6 +161,27 @@ SELECT '{hello}'::VARCHAR(2)[]
 {"he"}
 
 # array casting
+
+query T
+SELECT ARRAY['foo']::STRING
+----
+{"foo"}
+
+query T
+SELECT ARRAY[e'foo\nbar']::STRING
+----
+{"foo\012bar"}
+
+query TTTTTT
+SELECT
+  ARRAY[e'foo\000bar']::STRING,
+  ARRAY[e'foo\001bar']::STRING,
+  ARRAY[e'foo\002bar']::STRING,
+  ARRAY[e'foo\030bar']::STRING,
+  ARRAY[e'foo\034bar']::STRING,
+  ARRAY[e'foo\100bar']::STRING
+----
+{"foo\000bar"}  {"foo\001bar"}  {"foo\002bar"}  {"foo\030bar"}  {"foo\034bar"}  {"foo@bar"}
 
 query T
 SELECT ARRAY[1,2,3]::INT[]
@@ -1155,3 +1176,21 @@ FROM documents
 WHERE '3ae3560e-d771-4b63-affb-47e8d7853680'::UUID = ANY (documents.shared_users);
 ----
 {3ae3560e-d771-4b63-affb-47e8d7853680,6cc1b5c1-fe4f-417d-96bd-afd1feeec34f}
+
+statement ok
+CREATE TABLE u (x INT)
+
+statement ok
+INSERT INTO u VALUES (1), (2)
+
+statement ok
+CREATE TABLE v (y INT[])
+
+statement ok
+INSERT INTO v VALUES (ARRAY[1, 2])
+
+# Regression test for #30191. Ensure ArrayFlatten returns correct type.
+query T
+SELECT * FROM v WHERE y = ARRAY(SELECT x FROM u ORDER BY x);
+----
+{1,2}

@@ -215,21 +215,40 @@ func (cfg *Config) GetCACertPath() (string, error) {
 // already contained SSL config options.
 func (cfg *Config) LoadSecurityOptions(options url.Values, username string) error {
 	if cfg.Insecure {
-		options.Add("sslmode", "disable")
+		options.Set("sslmode", "disable")
+		options.Del("sslrootcert")
+		options.Del("sslcert")
+		options.Del("sslkey")
 	} else {
-		// Fetch CA cert. This is required.
-		caCertPath, err := cfg.GetCACertPath()
-		if err != nil {
-			return wrapError(err)
+		sslMode := options.Get("sslmode")
+		if sslMode == "" || sslMode == "disable" {
+			options.Set("sslmode", "verify-full")
 		}
-		options.Add("sslmode", "verify-full")
-		options.Add("sslrootcert", caCertPath)
+
+		if sslMode != "require" {
+			// verify-ca and verify-full need a CA certificate.
+			if options.Get("sslrootcert") == "" {
+				// Fetch CA cert. This is required.
+				caCertPath, err := cfg.GetCACertPath()
+				if err != nil {
+					return wrapError(err)
+				}
+				options.Set("sslrootcert", caCertPath)
+			}
+		} else {
+			// require does not check the CA.
+			options.Del("sslrootcert")
+		}
 
 		// Fetch certs, but don't fail, we may be using a password.
 		certPath, keyPath, err := cfg.GetClientCertPaths(username)
 		if err == nil {
-			options.Add("sslcert", certPath)
-			options.Add("sslkey", keyPath)
+			if options.Get("sslcert") == "" {
+				options.Set("sslcert", certPath)
+			}
+			if options.Get("sslkey") == "" {
+				options.Set("sslkey", keyPath)
+			}
 		}
 	}
 	return nil

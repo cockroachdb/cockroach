@@ -1,6 +1,8 @@
 required = [
  "github.com/client9/misspell/cmd/misspell",
  "github.com/cockroachdb/crlfmt",
+ "github.com/cockroachdb/gostdlib/cmd/gofmt",
+ "github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
  "github.com/cockroachdb/stress",
  "github.com/golang/dep/cmd/dep",
  "github.com/golang/lint/golint",
@@ -11,7 +13,6 @@ required = [
  "github.com/mibk/dupl",
  "github.com/wadey/gocovmerge",
  "golang.org/x/perf/cmd/benchstat",
- "golang.org/x/tools/cmd/goimports",
  "golang.org/x/tools/cmd/goyacc",
  "golang.org/x/tools/cmd/stringer",
 ]
@@ -26,11 +27,8 @@ ignored = [
   name = "golang.org/x/text"
   revision = "470f45bf29f4147d6fbd7dfd0a02a848e49f5bf4"
 
-# https://github.com/coreos/etcd/commit/f03ed33
-#
-# https://github.com/coreos/etcd/commit/ce0ad377
 [[constraint]]
-  name = "github.com/coreos/etcd"
+  name = "go.etcd.io/etcd"
   branch = "master"
 
 # Used for the API client; we want the latest.
@@ -88,6 +86,15 @@ ignored = [
   name = "gopkg.in/yaml.v2"
   source = "https://github.com/cockroachdb/yaml"
   branch = "v2-encoding-style"
+
+[[constraint]]
+  name = "github.com/abourget/teamcity"
+  source = "https://github.com/cockroachdb/teamcity"
+
+# https://github.com/golang/dep/pull/2003
+[[constraint]]
+  name = "github.com/golang/dep"
+  branch = "master"
 
 # github.com/docker/docker depends on a few functions not included in the
 # latest release: reference.{FamiliarName,ParseNormalizedNamed,TagNameOnly}.

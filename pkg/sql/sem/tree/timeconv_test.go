@@ -58,6 +58,7 @@ func TestClusterTimestampConversion(t *testing.T) {
 		ts := hlc.Timestamp{WallTime: d.walltime, Logical: d.logical}
 		ctx := tree.EvalContext{
 			Txn: client.NewTxnWithProto(
+				context.Background(),
 				db,
 				1, /* gatewayNodeID */
 				client.RootTxn,

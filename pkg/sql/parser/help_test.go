@@ -70,6 +70,9 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER USER IF ??`, `ALTER USER`},
 		{`ALTER USER foo WITH PASSWORD ??`, `ALTER USER`},
 
+		{`ALTER RANGE foo CONFIGURE ??`, `ALTER RANGE`},
+		{`ALTER RANGE ??`, `ALTER RANGE`},
+
 		{`CANCEL ??`, `CANCEL`},
 		{`CANCEL JOB ??`, `CANCEL JOBS`},
 		{`CANCEL JOBS ??`, `CANCEL JOBS`},

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 )
 
 func TestTrace(t *testing.T) {
@@ -70,8 +71,10 @@ func TestTrace(t *testing.T) {
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
+				"flow",
 				"session recording",
 				"sql txn",
+				"table reader",
 				"consuming rows",
 				"txn coordinator send",
 				"dist sender send",
@@ -156,8 +159,10 @@ func TestTrace(t *testing.T) {
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
+				"flow",
 				"session recording",
 				"sql txn",
+				"table reader",
 				"consuming rows",
 				"txn coordinator send",
 				"dist sender send",
@@ -376,7 +381,7 @@ func TestTraceFieldDecomposition(t *testing.T) {
 					if strings.Contains(stmt, query) {
 						// We need to check a tag containing brackets (e.g. an
 						// IPv6 address).  See #18558.
-						taggedCtx := log.WithLogTag(ctx, "hello", "[::666]")
+						taggedCtx := logtags.AddTag(ctx, "hello", "[::666]")
 						// We use log.Infof here (instead of log.Event) to ensure
 						// the trace message contains also a file name prefix. See
 						// #19453/#20085.
@@ -523,8 +528,6 @@ func TestKVTraceDistSQL(t *testing.T) {
 	r.Exec(t, "CREATE DATABASE test")
 	r.Exec(t, "CREATE TABLE test.a (a INT PRIMARY KEY, b INT)")
 	r.Exec(t, "INSERT INTO test.a VALUES (1,1), (2,2)")
-	// Prevent the merge queue from immediately discarding our splits.
-	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
 	r.Exec(t, "ALTER TABLE a SPLIT AT VALUES(1)")
 	r.Exec(t, "SET tracing = on,kv; SELECT count(*) FROM test.a; SET tracing = off")
 

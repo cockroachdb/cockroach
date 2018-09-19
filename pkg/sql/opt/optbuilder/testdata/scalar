@@ -779,7 +779,7 @@ build
 SELECT ARRAY(SELECT 1)
 ----
 project
- ├── columns: array:3(tuple{int}[])
+ ├── columns: array:3(int[])
  ├── values
  │    └── tuple [type=tuple]
  └── projections
@@ -818,7 +818,7 @@ build
 SELECT b, ARRAY(SELECT a FROM x WHERE x.a = y.b) FROM y
 ----
 project
- ├── columns: b:1(int!null) array:4(tuple{int}[])
+ ├── columns: b:1(int!null) array:4(int[])
  ├── scan y
  │    └── columns: b:1(int!null)
  └── projections
@@ -843,7 +843,7 @@ build
 SELECT b, ARRAY(SELECT a FROM x ORDER BY a) FROM y
 ----
 project
- ├── columns: b:1(int!null) array:4(tuple{int}[])
+ ├── columns: b:1(int!null) array:4(int[])
  ├── scan y
  │    └── columns: b:1(int!null)
  └── projections
@@ -864,7 +864,7 @@ build
 SELECT ARRAY(VALUES ('foo'), ('bar'), ('baz'))
 ----
 project
- ├── columns: array:3(tuple{string}[])
+ ├── columns: array:3(string[])
  ├── values
  │    └── tuple [type=tuple]
  └── projections
@@ -914,7 +914,7 @@ build
 SELECT ARRAY(SELECT generate_series(1,100) ORDER BY 1 DESC)
 ----
 project
- ├── columns: array:3(tuple{int}[])
+ ├── columns: array:3(int[])
  ├── values
  │    └── tuple [type=tuple]
  └── projections

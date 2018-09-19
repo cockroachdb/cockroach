@@ -392,46 +392,24 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 	type pair struct {
 		lo, hi int
 	}
-	partCh := make(chan pair, len(splitPoints)/2+1)
-	partCh <- pair{0, len(splitPoints)}
-	splitCh := make(chan string)
+	splitCh := make(chan pair, len(splitPoints)/2+1)
+	splitCh <- pair{0, len(splitPoints)}
+	doneCh := make(chan struct{})
 
 	log.Infof(ctx, `starting %d splits`, len(splitPoints))
 	g := ctxgroup.WithContext(ctx)
-	g.GoCtx(func(ctx context.Context) error {
-		defer close(splitCh)
-		for count := 1; len(partCh) > 0; count++ {
-			p := <-partCh
-			m := (p.lo + p.hi) / 2
-			split := strings.Join(StringTuple(splitPoints[m]), `,`)
-
-			select {
-			case splitCh <- split:
-				if count%1000 == 0 {
-					log.Infof(ctx, "performing split %d of %d", count, len(splitPoints))
-				}
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-
-			if p.lo < m {
-				partCh <- pair{p.lo, m}
-			}
-			if m+1 < p.hi {
-				partCh <- pair{m + 1, p.hi}
-			}
-		}
-		return nil
-	})
 	for i := 0; i < concurrency; i++ {
 		g.GoCtx(func(ctx context.Context) error {
 			var buf bytes.Buffer
 			for {
 				select {
-				case split, ok := <-splitCh:
+				case p, ok := <-splitCh:
 					if !ok {
 						return nil
 					}
+
+					m := (p.lo + p.hi) / 2
+					split := strings.Join(StringTuple(splitPoints[m]), `,`)
 
 					buf.Reset()
 					fmt.Fprintf(&buf, `ALTER TABLE %s SPLIT AT VALUES (%s)`, table.Name, split)
@@ -448,6 +426,19 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 						// error.
 						log.Warningf(ctx, `%s: %s`, buf.String(), err)
 					}
+
+					select {
+					case doneCh <- struct{}{}:
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+
+					if p.lo < m {
+						splitCh <- pair{p.lo, m}
+					}
+					if m+1 < p.hi {
+						splitCh <- pair{m + 1, p.hi}
+					}
 				case <-ctx.Done():
 					return ctx.Err()
 				}
@@ -455,6 +446,22 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 			}
 		})
 	}
+	g.GoCtx(func(ctx context.Context) error {
+		finished := 0
+		for finished < len(splitPoints) {
+			select {
+			case <-doneCh:
+				finished++
+				if finished%1000 == 0 {
+					log.Infof(ctx, "finished %d of %d splits", finished, len(splitPoints))
+				}
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		close(splitCh)
+		return nil
+	})
 	return g.Wait()
 }
 

@@ -584,7 +584,7 @@ func (g *ruleGen) genDynamicMatch(
 			if isPrivateType(string(prototype.Fields[index].Type)) {
 				context = fmt.Sprintf("%s.PrivateID()", exprName)
 			} else {
-				context = fmt.Sprintf("%s.ChildGroup(%s.mem, %d)", exprName, g.thisVar, index)
+				context = fmt.Sprintf("%s.ChildGroup(%s.Memo(), %d)", exprName, g.thisVar, index)
 			}
 			g.genMatch(matchArg, context, false /* noMatch */)
 		}
@@ -694,7 +694,7 @@ func (g *ruleGen) genExploreReplace(define *lang.DefineExpr, rule *lang.RuleExpr
 		}
 		g.w.unnest(")\n")
 		g.w.writeIndent("_before := _e.mem.ExprCount(_root.Group)\n")
-		g.w.writeIndent("_e.mem.MemoizeDenormExpr(_root.Group, memo.Expr(_expr))\n")
+		g.w.writeIndent("_e.mem.MemoizeDenormExpr(_e.evalCtx, _root.Group, memo.Expr(_expr))\n")
 
 	case *lang.CustomFuncExpr:
 		// Top-level custom function returns a memo.Expr slice, so iterate
@@ -705,7 +705,7 @@ func (g *ruleGen) genExploreReplace(define *lang.DefineExpr, rule *lang.RuleExpr
 		g.w.newline()
 		g.w.writeIndent("_before := _e.mem.ExprCount(_root.Group)\n")
 		g.w.nestIndent("for i := range _exprs {\n")
-		g.w.writeIndent("_e.mem.MemoizeDenormExpr(_root.Group, _exprs[i])\n")
+		g.w.writeIndent("_e.mem.MemoizeDenormExpr(_e.evalCtx, _root.Group, _exprs[i])\n")
 		g.w.unnest("}\n")
 
 	default:

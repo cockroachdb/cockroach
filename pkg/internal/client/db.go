@@ -570,7 +570,7 @@ func (db *DB) Txn(ctx context.Context, retryable func(context.Context, *Txn) err
 	// TODO(radu): we should open a tracing Span here (we need to figure out how
 	// to use the correct tracer).
 
-	txn := NewTxn(db, db.ctx.NodeID.Get(), RootTxn)
+	txn := NewTxn(ctx, db, db.ctx.NodeID.Get(), RootTxn)
 	txn.SetDebugName("unnamed")
 	err := txn.exec(ctx, func(ctx context.Context, txn *Txn) error {
 		return retryable(ctx, txn)

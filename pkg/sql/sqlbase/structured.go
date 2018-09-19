@@ -2075,6 +2075,31 @@ func (desc *TableDescriptor) FinalizeMutation() (MutationID, error) {
 	return mutationID, nil
 }
 
+// ColumnNeedsBackfill returns true if adding the given column requires a
+// backfill (dropping a column always requires a backfill).
+func ColumnNeedsBackfill(desc *ColumnDescriptor) bool {
+	return desc.DefaultExpr != nil || !desc.Nullable || desc.IsComputed()
+}
+
+// HasColumnBackfillMutation returns whether the table has any queued column
+// mutations that require a backfill.
+func (desc *TableDescriptor) HasColumnBackfillMutation() bool {
+	for _, m := range desc.Mutations {
+		col := m.GetColumn()
+		if col == nil {
+			// Index backfills don't affect changefeeds.
+			continue
+		}
+		// It's unfortunate that there's no one method we can call to check if a
+		// mutation will be a backfill or not, but this logic was extracted from
+		// backfill.go.
+		if m.Direction == DescriptorMutation_DROP || ColumnNeedsBackfill(col) {
+			return true
+		}
+	}
+	return false
+}
+
 // Dropped returns true if the table is being dropped.
 func (desc *TableDescriptor) Dropped() bool {
 	return desc.State == TableDescriptor_DROP

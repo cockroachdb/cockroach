@@ -404,6 +404,11 @@ type Transaction struct {
 	// encountered during the course of the txn. If set, this take precedence
 	// over orig_timestamp and is the timestamp at which the transaction both
 	// reads and writes going forward.
+	// We need to keep track of both refresh_timestamp and orig_timestamp (instead
+	// of simply overwriting the orig_timestamp after refreshes) because the
+	// orig_timestamp needs to be used as a lower bound timestamp for the
+	// time-bound iterator used to resolve intents - i.e. there can be intents to
+	// resolve up to the timestamp that the txn started with.
 	RefreshedTimestamp cockroach_util_hlc.Timestamp `protobuf:"bytes,15,opt,name=refreshed_timestamp,json=refreshedTimestamp" json:"refreshed_timestamp"`
 	// A list of <NodeID, timestamp> pairs. The list maps NodeIDs to timestamps
 	// as observed from their local clock during this transaction. The purpose of
@@ -455,7 +460,8 @@ type Transaction struct {
 	Writing bool `protobuf:"varint,9,opt,name=writing,proto3" json:"writing,omitempty"`
 	// If this is true, the transaction must retry. Relevant only for
 	// SNAPSHOT transactions: a SERIALIZABLE transaction would have to
-	// retry anyway due to its commit timestamp having moved forward.
+	// retry anyway due to its commit timestamp having moved forward (whenever
+	// write_too_old is set, meta.Timestamp has been pushed above orig_timestamp).
 	// This bool is set instead of immediately returning a txn retry
 	// error so that intents can continue to be laid down, minimizing
 	// work required on txn restart.

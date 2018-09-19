@@ -30,10 +30,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -489,7 +491,9 @@ func (tcf *TxnCoordSenderFactory) Metrics() TxnMetrics {
 }
 
 // GetMeta is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) GetMeta() roachpb.TxnCoordMeta {
+func (tc *TxnCoordSender) GetMeta(
+	ctx context.Context, opt client.TxnStatusOpt,
+) (roachpb.TxnCoordMeta, error) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 	// Copy mutable state so access is safe for the caller.
@@ -498,7 +502,14 @@ func (tc *TxnCoordSender) GetMeta() roachpb.TxnCoordMeta {
 	for _, reqInt := range tc.interceptorStack {
 		reqInt.populateMetaLocked(&meta)
 	}
-	return meta
+	if opt == client.OnlyPending && meta.Txn.Status != roachpb.PENDING {
+		rejectErr := tc.maybeRejectClientLocked(ctx, nil /* ba */)
+		if rejectErr == nil {
+			log.Fatal(ctx, "expected non-nil rejectErr")
+		}
+		return roachpb.TxnCoordMeta{}, rejectErr.GoError()
+	}
+	return meta, nil
 }
 
 // AugmentMeta is part of the client.TxnSender interface.
@@ -571,10 +582,12 @@ func (tc *TxnCoordSender) Send(
 	if tc.mu.txn.ID == (uuid.UUID{}) {
 		log.Fatalf(ctx, "cannot send transactional request through unbound TxnCoordSender")
 	}
-	sp.SetBaggageItem("txnID", tc.mu.txn.ID.String())
-	ctx = log.WithLogTag(ctx, "txn", uuid.ShortStringer(tc.mu.txn.ID))
+	if !tracing.IsBlackHoleSpan(sp) {
+		sp.SetBaggageItem("txnID", tc.mu.txn.ID.String())
+	}
+	ctx = logtags.AddTag(ctx, "txn", uuid.ShortStringer(tc.mu.txn.ID))
 	if log.V(2) {
-		ctx = log.WithLogTag(ctx, "ts", tc.mu.txn.Timestamp)
+		ctx = logtags.AddTag(ctx, "ts", tc.mu.txn.Timestamp)
 	}
 
 	// It doesn't make sense to use inconsistent reads in a transaction. However,
@@ -691,6 +704,9 @@ func (tc *TxnCoordSender) maybeSleepForLinearizable(
 // maybeRejectClientLocked checks whether the transaction is in a state that
 // prevents it from continuing, such as the heartbeat having detected the
 // transaction to have been aborted.
+//
+// ba is the batch that the client is trying to send. It's inspected because
+// rollbacks are always allowed. Can be nil.
 func (tc *TxnCoordSender) maybeRejectClientLocked(
 	ctx context.Context, ba *roachpb.BatchRequest,
 ) *roachpb.Error {
@@ -716,6 +732,11 @@ func (tc *TxnCoordSender) maybeRejectClientLocked(
 	if tc.mu.txn.Status == roachpb.ABORTED {
 		abortedErr := roachpb.NewErrorWithTxn(
 			roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_CLIENT_REJECT), &tc.mu.txn)
+		if tc.typ == client.LeafTxn {
+			// Leaf txns return raw retriable errors (which get handled by the
+			// root) rather than HandledRetryableTxnError.
+			return abortedErr
+		}
 		newTxn := roachpb.PrepareTransactionForRetry(
 			ctx, abortedErr,
 			// priority is not used for aborted errors
@@ -1019,10 +1040,12 @@ func (tc *TxnCoordSender) IsSerializablePushAndRefreshNotPossible() bool {
 	origTimestamp := tc.mu.txn.OrigTimestamp
 	origTimestamp.Forward(tc.mu.txn.RefreshedTimestamp)
 	isTxnPushed := tc.mu.txn.Timestamp != origTimestamp
+	refreshAttemptNotPossible := tc.interceptorAlloc.txnSpanRefresher.refreshInvalid ||
+		tc.mu.txn.OrigTimestampWasObserved
 	// We check OrigTimestampWasObserved here because, if that's set, refreshing
 	// of reads is not performed.
 	return tc.mu.txn.Isolation == enginepb.SERIALIZABLE &&
-		isTxnPushed && tc.mu.txn.OrigTimestampWasObserved
+		isTxnPushed && refreshAttemptNotPossible
 }
 
 // Epoch is part of the client.TxnSender interface.

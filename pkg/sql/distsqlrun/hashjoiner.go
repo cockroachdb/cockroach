@@ -169,7 +169,7 @@ func newHashJoiner(
 		output,
 		ProcStateOpts{
 			InputsToDrain: []RowSource{h.leftSource, h.rightSource},
-			TrailingMetaCallback: func() []ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
 				h.close()
 				return nil
 			},
@@ -264,11 +264,6 @@ func (h *hashJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 	}
 	return nil, h.DrainHelper()
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (h *hashJoiner) ConsumerDone() {
-	h.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.

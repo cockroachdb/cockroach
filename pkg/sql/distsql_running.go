@@ -41,6 +41,8 @@ import (
 // multiple queries.
 const numRunners = 16
 
+const clientRejectedMsg string = "client rejected when attempting to run DistSQL plan"
+
 // runnerRequest is the request that is sent (via a channel) to a worker.
 type runnerRequest struct {
 	ctx        context.Context
@@ -135,7 +137,13 @@ func (dsp *DistSQLPlanner) Run(
 	} else if txn != nil {
 		// If the plan is not local, we will have to set up leaf txns using the
 		// txnCoordMeta.
-		meta := txn.GetStrippedTxnCoordMeta()
+		meta, err := txn.GetTxnCoordMetaOrRejectClient(ctx)
+		if err != nil {
+			log.Infof(ctx, "%s: %s", clientRejectedMsg, err)
+			recv.SetError(err)
+			return
+		}
+		meta.StripRootToLeaf()
 		txnCoordMeta = &meta
 	}
 
@@ -668,8 +676,9 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 			subqueryPlans[planIdx].result = tree.MakeDBool(tree.DBool(hasRows))
 		case distsqlrun.SubqueryExecModeAllRows, distsqlrun.SubqueryExecModeAllRowsNormalized:
 			var result tree.DTuple
-			for i := 0; i < rows.Len(); i++ {
-				row := rows.At(i)
+			for rows.Len() > 0 {
+				row := rows.At(0)
+				rows.PopFirst()
 				if row.Len() == 1 {
 					// This seems hokey, but if we don't do this then the subquery expands
 					// to a tuple of tuples instead of a tuple of values and an expression

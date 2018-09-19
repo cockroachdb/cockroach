@@ -9,6 +9,7 @@ start_server $argv
 
 system "$argv sql -e 'create database test'"
 system "$argv user set test"
+set certs_dir "/certs"
 
 start_test "Check that the SSL settings come from flags is URL does not set them already."
 # Use default, sslmode is secure
@@ -27,37 +28,33 @@ end_test
 
 
 
-start_test "Check that the insecure flag does not override the sslmode if URL is already set."
+start_test "Check that the insecure flag overrides the sslmode if URL is already set."
 # Use default, sslmode is secure
 set ::env(COCKROACH_INSECURE) "false"
 
-spawn $argv sql --url "postgresql://test@localhost:26257?sslmode=verify-full" -e "select 1"
+spawn $argv sql --url "postgresql://test@localhost:26257?sslmode=verify-full" --certs-dir=$certs_dir -e "select 1"
 eexpect "password:"
 send "\r"
 eexpect "SSL is not enabled on the server"
 eexpect eof
 
-spawn $argv sql --url "postgresql://test@localhost:26257?sslmode=verify-full" --insecure -e "select 1"
-eexpect "parameter --insecure ignored, using --url"
-eexpect "password:"
-send "\r"
-eexpect "SSL is not enabled on the server"
+spawn $argv sql --url "postgresql://test@localhost:26257?sslmode=verify-full" --certs-dir=$certs_dir --insecure -e "select 1"
+eexpect "1 row"
 eexpect eof
 
 set ::env(COCKROACH_INSECURE) "true"
 end_test
 
 
-start_test "Check that the database flag does not override the db if URL is already set."
+start_test "Check that the database flag overrides the db if URL is already set."
 spawn $argv sql --url "postgresql://root@localhost:26257/system?sslmode=disable"  -e "select length(@1) as l, @1 as db from \[show database\]" --format=csv
 eexpect "l,db"
 eexpect "6,system"
 eexpect eof
 
 spawn $argv sql --url "postgresql://root@localhost:26257/system?sslmode=disable" --database test -e "select length(@1) as l, @1 as db from \[show database\]" --format=csv
-eexpect "parameter --database ignored, using --url"
 eexpect "l,db"
-eexpect "6,system"
+eexpect "4,test"
 eexpect eof
 end_test
 
@@ -75,27 +72,24 @@ eexpect eof
 
 end_test
 
-start_test "Check that the user flag does not override the user if URL is already set."
+start_test "Check that the user flag  override the user if URL is already set."
 spawn $argv sql --url "postgresql://test@localhost:26257?sslmode=disable" -e "select length(@1) as l, @1 as u from \[show session_user\]" --format=csv
 eexpect "l,u"
 eexpect "4,test"
 eexpect eof
 
 spawn $argv sql --url "postgresql://root@localhost:26257?sslmode=disable" --user test -e "select length(@1) as l, @1 as u from \[show session_user\]" --format=csv
-eexpect "parameter --user ignored, using --url"
 eexpect "l,u"
-eexpect "4,root"
+eexpect "4,test"
 eexpect eof
 end_test
 
-start_test "Check that the host flag does not override the host if URL is already set."
+start_test "Check that the host flag overrides the host if URL is already set."
 spawn $argv sql --url "postgresql://root@localhost:26257?sslmode=disable" --host nonexistent -e "select 1"
-expect "parameter --host ignored, using --url"
-eexpect "1 row"
+eexpect "cannot dial server"
+eexpect "nonexistent"
 eexpect eof
 end_test
-
-
 
 stop_server $argv
 

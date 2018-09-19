@@ -63,10 +63,10 @@ type databaseCache struct {
 
 	// systemConfig holds a copy of the latest system config since the last
 	// call to resetForBatch.
-	systemConfig config.SystemConfig
+	systemConfig *config.SystemConfig
 }
 
-func newDatabaseCache(cfg config.SystemConfig) *databaseCache {
+func newDatabaseCache(cfg *config.SystemConfig) *databaseCache {
 	return &databaseCache{
 		systemConfig: cfg,
 	}
@@ -250,6 +250,24 @@ func (dc *databaseCache) getDatabaseID(
 	}
 
 	dc.setID(name, desc.ID)
+	return desc.ID, nil
+}
+
+// getCachedDatabaseID returns the ID of a database given its name
+// from the cache. This method never goes to the store to resolve
+// the name to id mapping. Returns 0 if the name to id mapping or
+// the database descriptor are not in the cache.
+func (dc *databaseCache) getCachedDatabaseID(ctx context.Context, name string) (sqlbase.ID, error) {
+	if id := dc.getID(name); id != 0 {
+		return id, nil
+	}
+
+	desc, err := dc.getCachedDatabaseDesc(name, false /*required*/)
+	if err != nil || desc == nil {
+		// desc can be nil if required == false and the database was not found.
+		return 0, err
+	}
+
 	return desc.ID, nil
 }
 

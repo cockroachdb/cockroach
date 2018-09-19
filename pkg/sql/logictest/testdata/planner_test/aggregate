@@ -34,6 +34,7 @@ render               ·            ·                 (count, r)                
       │              aggregate 1  k                 ·                               ·
       │              aggregate 2  v                 ·                               ·
       │              group by     @1-@2             ·                               ·
+      │              ordered      @1                ·                               ·
       └── render     ·            ·                 (k, v)                          k!=NULL; key(k); +k
            │         render 0     test.public.kv.k  ·                               ·
            │         render 1     test.public.kv.v  ·                               ·
@@ -606,6 +607,7 @@ render          ·         ·
  │              render 0  1
  └── group      ·         ·
       │         group by  @1-@4
+      │         ordered   @1
       └── scan  ·         ·
 ·               table     kv@primary
 ·               spans     ALL
@@ -689,6 +691,7 @@ EXPLAIN (VERBOSE) SELECT min(v) FROM opt_test GROUP BY k
 group      ·            ·                 (min)   ·
  │         aggregate 0  min(v)            ·       ·
  │         group by     @1                ·       ·
+ │         ordered      @1                ·       ·
  └── scan  ·            ·                 (k, v)  k!=NULL; key(k)
 ·          table        opt_test@primary  ·       ·
 ·          spans        ALL               ·       ·
@@ -704,6 +707,7 @@ render               ·            ·
       │              aggregate 0  b
       │              aggregate 1  a
       │              group by     @1-@2
+      │              ordered      @2
       └── render     ·            ·
            │         render 0     test.public.ab.b
            │         render 1     test.public.ab.a
@@ -761,6 +765,7 @@ group           ·            ·                        (x, max)            x!=N
  │              aggregate 0  x                        ·                   ·
  │              aggregate 1  max(y)                   ·                   ·
  │              group by     @1                       ·                   ·
+ │              ordered      @1                       ·                   ·
  └── render     ·            ·                        (x, y)              x!=NULL; key(x); +x
       │         render 0     test.public.group_ord.x  ·                   ·
       │         render 1     test.public.group_ord.y  ·                   ·
@@ -777,6 +782,7 @@ group           ·            ·                        (x, max)            x!=N
  │              aggregate 0  x                        ·                   ·
  │              aggregate 1  max(y)                   ·                   ·
  │              group by     @1                       ·                   ·
+ │              ordered      @1                       ·                   ·
  └── render     ·            ·                        (x, y)              x!=NULL; key(x); +x
       │         render 0     test.public.group_ord.x  ·                   ·
       │         render 1     test.public.group_ord.y  ·                   ·
@@ -794,6 +800,7 @@ group           ·            ·                        (z, x, max)  x!=NULL; ke
  │              aggregate 1  x                        ·            ·
  │              aggregate 2  max(y)                   ·            ·
  │              group by     @1-@2                    ·            ·
+ │              ordered      @1                       ·            ·
  └── render     ·            ·                        (x, z, y)    x!=NULL; key(x); +x
       │         render 0     test.public.group_ord.x  ·            ·
       │         render 1     test.public.group_ord.z  ·            ·
@@ -812,6 +819,7 @@ group           ·            ·                        (z, x, max)  x!=NULL; ke
  │              aggregate 1  x                        ·            ·
  │              aggregate 2  max(y)                   ·            ·
  │              group by     @1-@2                    ·            ·
+ │              ordered      @1                       ·            ·
  └── render     ·            ·                        (x, z, y)    x!=NULL; key(x); +x
       │         render 0     test.public.group_ord.x  ·            ·
       │         render 1     test.public.group_ord.z  ·            ·
@@ -829,6 +837,7 @@ group                 ·            ·                        (z, max)          
  │                    aggregate 0  z                        ·                            ·
  │                    aggregate 1  max(y)                   ·                            ·
  │                    group by     @1                       ·                            ·
+ │                    ordered      @1                       ·                            ·
  └── render           ·            ·                        (z, y)                       +z
       │               render 0     test.public.group_ord.z  ·                            ·
       │               render 1     test.public.group_ord.y  ·                            ·
@@ -853,6 +862,7 @@ join                       ·               ·                        (x, max, z
  │    │                    aggregate 0     x                        ·                            ·
  │    │                    aggregate 1     max(y)                   ·                            ·
  │    │                    group by        @1                       ·                            ·
+ │    │                    ordered         @1                       ·                            ·
  │    └── render           ·               ·                        (x, y)                       x!=NULL; key(x); +x
  │         │               render 0        test.public.group_ord.x  ·                            ·
  │         │               render 1        test.public.group_ord.y  ·                            ·
@@ -863,6 +873,7 @@ join                       ·               ·                        (x, max, z
       │                    aggregate 0     z                        ·                            ·
       │                    aggregate 1     min(y)                   ·                            ·
       │                    group by        @1                       ·                            ·
+      │                    ordered         @1                       ·                            ·
       └── render           ·               ·                        (z, y)                       +z
            │               render 0        test.public.group_ord.z  ·                            ·
            │               render 1        test.public.group_ord.y  ·                            ·

@@ -99,6 +99,10 @@ type Relational struct {
 	// comment for Logical.CanHaveSideEffects.
 	CanHaveSideEffects bool
 
+	// HasPlaceholder is true if the subtree rooted at this expression contains
+	// at least one Placeholder operator.
+	HasPlaceholder bool
+
 	// FuncDepSet is a set of functional dependencies (FDs) that encode useful
 	// relationships between columns in a base or derived relation. Given two sets
 	// of columns A and B, a functional dependency A-->B holds if A uniquely
@@ -261,6 +265,10 @@ type Scalar struct {
 	// return the same output given the same input. For more details, see the
 	// comment for Logical.CanHaveSideEffects.
 	CanHaveSideEffects bool
+
+	// HasPlaceholder is true if the subtree rooted at this expression contains
+	// at least one Placeholder operator.
+	HasPlaceholder bool
 
 	// HasCorrelatedSubquery is true if the scalar expression tree contains a
 	// subquery having one or more outer columns. The subquery can be a Subquery,
@@ -437,6 +445,15 @@ func (p *Logical) CanHaveSideEffects() bool {
 	return p.Relational.CanHaveSideEffects
 }
 
+// HasPlaceholder is true if the subtree rooted at this expression contains
+// at least one Placeholder operator.
+func (p *Logical) HasPlaceholder() bool {
+	if p.Scalar != nil {
+		return p.Scalar.HasPlaceholder
+	}
+	return p.Relational.HasPlaceholder
+}
+
 // Verify runs consistency checks against the logical properties, in order to
 // ensure that they conform to several invariants:
 //
@@ -473,5 +490,41 @@ func (p *Logical) Verify() {
 			panic(fmt.Sprintf(
 				"max cardinality must be <= 1 if FDs have max 1 row: %s", relational.Cardinality))
 		}
+	}
+}
+
+// VerifyAgainst checks that the two properties don't contradict each other.
+// Used for testing (e.g. to cross-check derived properties from expressions in
+// the same group).
+func (p *Logical) VerifyAgainst(other *Logical) {
+	if r1, r2 := p.Relational, other.Relational; r1 != nil || r2 != nil {
+		if !r1.OutputCols.Equals(r2.OutputCols) {
+			panic(fmt.Sprintf("output cols mismatch: %s vs %s", r1.OutputCols, r2.OutputCols))
+		}
+
+		// NotNullCols, FuncDeps are best effort, so they might differ.
+
+		if r1.Cardinality.Max < r2.Cardinality.Min ||
+			r1.Cardinality.Min > r2.Cardinality.Max {
+			panic(fmt.Sprintf("cardinality mismatch: %s vs %s", r1.Cardinality, r2.Cardinality))
+		}
+
+		// TODO(radu): these checks might be overzealous - conceivably a
+		// subexpression with outer columns/side-effects/placeholders could be
+		// elided.
+		if !r1.OuterCols.Equals(r2.OuterCols) {
+			panic(fmt.Sprintf("outer cols mismatch: %s vs %s", r1.OuterCols, r2.OuterCols))
+		}
+		if r1.CanHaveSideEffects != r2.CanHaveSideEffects {
+			panic(fmt.Sprintf("can-have-side-effects mismatch"))
+		}
+		if r1.HasPlaceholder != r2.HasPlaceholder {
+			panic(fmt.Sprintf("has-placeholder mismatch"))
+		}
+	}
+	if s1, s2 := p.Scalar, other.Scalar; s1 != nil || s2 != nil {
+		// TODO(radu): implement this if necessary. Currently we won't ever have
+		// multiple expressions in a scalar group.
+		panic("unimplemented")
 	}
 }

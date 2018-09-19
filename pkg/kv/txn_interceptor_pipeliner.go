@@ -163,8 +163,11 @@ func (tp *txnPipeliner) SendLocked(
 		return nil, tp.adjustError(ctx, ba, pErr)
 	}
 
-	// WIP: I think it's possible for this response to be from an earlier
-	// epoch. Fix that.
+	// TODO(nvanbenschoten): It's currently possible for this response to be
+	// from an earlier epoch when txns are used concurrently. That's ok for now
+	// because we always manually restart transactions once all concurrent
+	// operations synchronize. Once we move away from that model to a txnAttempt
+	// model, we'll need to reconsider how this works. It ~should~ just work.
 
 	// Prove any outstanding writes that we proved to exist.
 	br = tp.updateOutstandingWrites(ctx, ba, br)

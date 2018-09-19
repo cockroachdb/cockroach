@@ -234,6 +234,8 @@ message TransactionStatusError {
     REASON_UNKNOWN = 0;
     // The request was sent to a transaction record that does not exist.
     REASON_TXN_NOT_FOUND = 1;
+    // A committed transaction record was found.
+    REASON_TXN_COMMITTED = 2;
   }
   optional Reason reason = 2 [(gogoproto.nullable) = false];
 }

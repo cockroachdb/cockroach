@@ -263,6 +263,19 @@ func initBlockProfile() {
 	runtime.SetBlockProfileRate(int(d))
 }
 
+func initMutexProfile() {
+	// Enable the mutex profile for a fraction of mutex contention events.
+	// Smaller values provide more accurate profiles but are more expensive. 0
+	// and 1 are special: 0 disables the mutex profile and 1 captures 100% of
+	// mutex contention events. For other values, the profiler will sample on
+	// average 1/X events.
+	//
+	// The mutex profile can be viewed with `pprof http://HOST:PORT/debug/pprof/mutex`
+	d := envutil.EnvOrDefaultInt("COCKROACH_MUTEX_PROFILE_RATE",
+		1000 /* 1 sample per 1000 mutex contention events */)
+	runtime.SetMutexProfileFraction(d)
+}
+
 var cacheSizeValue = newBytesOrPercentageValue(&serverCfg.CacheSize, memoryPercentResolver)
 var sqlSizeValue = newBytesOrPercentageValue(&serverCfg.SQLMemoryPoolSize, memoryPercentResolver)
 var diskTempStorageSizeValue = newBytesOrPercentageValue(nil /* v */, nil /* percentResolver */)
@@ -881,7 +894,7 @@ func hintServerCmdFlags(ctx context.Context, cmd *cobra.Command) {
 }
 
 func clientFlags() string {
-	flags := []string{os.Args[0]}
+	flags := []string{os.Args[0], "<client cmd>"}
 	host, port, err := net.SplitHostPort(serverCfg.AdvertiseAddr)
 	if err == nil {
 		flags = append(flags, "--host="+host+":"+port)
@@ -948,7 +961,7 @@ func maybeWarnMemorySizes(ctx context.Context) {
 }
 
 func logOutputDirectory() string {
-	return cockroachCmd.PersistentFlags().Lookup(logflags.LogDirName).Value.String()
+	return startCtx.logDir.String()
 }
 
 // setupAndInitializeLoggingAndProfiling does what it says on the label.
@@ -961,9 +974,7 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 	// non-memory store. If more than one non-memory stores is detected,
 	// print a warning.
 	ambiguousLogDirs := false
-	pf := cockroachCmd.PersistentFlags()
-	f := pf.Lookup(logflags.LogDirName)
-	if !log.DirSet() && !f.Changed {
+	if !startCtx.logDir.IsSet() && !startCtx.logDirFlag.Changed {
 		// We only override the log directory if the user has not explicitly
 		// disabled file logging using --log-dir="".
 		newDir := ""
@@ -977,20 +988,29 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 			}
 			newDir = filepath.Join(spec.Path, "logs")
 		}
-		if err := f.Value.Set(newDir); err != nil {
+		if err := startCtx.logDir.Set(newDir); err != nil {
 			return nil, err
 		}
 	}
 
-	if logDir := f.Value.String(); logDir != "" {
-
-		ls := pf.Lookup(logflags.LogToStderrName)
+	if logDir := startCtx.logDir.String(); logDir != "" {
+		ls := cockroachCmd.PersistentFlags().Lookup(logflags.LogToStderrName)
 		if !ls.Changed {
 			// Unless the settings were overridden by the user, silence
 			// logging to stderr because the messages will go to a log file.
 			if err := ls.Value.Set(log.Severity_NONE.String()); err != nil {
 				return nil, err
 			}
+		}
+
+		// Note that we configured the --log-dir flag to set
+		// startContext.logDir. This is the point at which we set log-dir for the
+		// util/log package. We don't want to set it earlier to avoid spuriously
+		// creating a file in an incorrect log directory or if something is
+		// accidentally logging after flag parsing but before the --background
+		// dispatch has occurred.
+		if err := flag.Lookup(logflags.LogDirName).Value.Set(logDir); err != nil {
+			return nil, err
 		}
 
 		// Make sure the path exists.
@@ -1051,6 +1071,7 @@ func setupAndInitializeLoggingAndProfiling(ctx context.Context) (*stop.Stopper, 
 	initMemProfile(ctx, outputDirectory)
 	initCPUProfile(ctx, outputDirectory)
 	initBlockProfile()
+	initMutexProfile()
 
 	// Disable Stopper task tracking as performing that call site tracking is
 	// moderately expensive (certainly outweighing the infrequent benefit it

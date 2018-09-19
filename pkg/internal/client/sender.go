@@ -102,10 +102,12 @@ type TxnSender interface {
 	// transaction.
 	SetSystemConfigTrigger() error
 
-	// GetMeta retrieves a copy of the TxnCoordMeta, which can be sent
-	// upstream in situations where there are multiple, leaf TxnSenders,
-	// to be combined via AugmentMeta().
-	GetMeta() roachpb.TxnCoordMeta
+	// GetMeta retrieves a copy of the TxnCoordMeta, which can be sent from root
+	// to leaf transactions or the other way around. Can be combined via
+	// AugmentMeta().
+	//
+	// If AnyTxnStatus is passed, then this function never returns errors.
+	GetMeta(context.Context, TxnStatusOpt) (roachpb.TxnCoordMeta, error)
 
 	// AugmentMeta combines the TxnCoordMeta from another distributed
 	// TxnSender which is part of the same transaction.
@@ -195,6 +197,20 @@ type TxnSender interface {
 	SerializeTxn() *roachpb.Transaction
 }
 
+// TxnStatusOpt represents options for TxnSender.GetMeta().
+type TxnStatusOpt int
+
+const (
+	// AnyTxnStatus means GetMeta() will return the info without checking the
+	// txn's status.
+	AnyTxnStatus TxnStatusOpt = iota
+	// OnlyPending means GetMeta() will return an error if the transaction is not
+	// in the pending state.
+	// This is used when sending the txn from root to leaves so that we don't
+	// create leaves that start up in an aborted state - which is not allowed.
+	OnlyPending
+)
+
 // TxnSenderFactory is the interface used to create new instances
 // of TxnSender.
 type TxnSenderFactory interface {
@@ -248,7 +264,11 @@ func (m *MockTransactionalSender) Send(
 }
 
 // GetMeta is part of the TxnSender interface.
-func (m *MockTransactionalSender) GetMeta() roachpb.TxnCoordMeta { panic("unimplemented") }
+func (m *MockTransactionalSender) GetMeta(
+	context.Context, TxnStatusOpt,
+) (roachpb.TxnCoordMeta, error) {
+	panic("unimplemented")
+}
 
 // AugmentMeta is part of the TxnSender interface.
 func (m *MockTransactionalSender) AugmentMeta(context.Context, roachpb.TxnCoordMeta) {

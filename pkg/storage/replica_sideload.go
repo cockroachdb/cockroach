@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 var errSideloadedFileNotFound = errors.New("sideloaded file not found")
@@ -185,7 +185,7 @@ func maybeInlineSideloadedRaftCommand(
 	// We could unmarshal this yet again, but if it's committed we
 	// are very likely to have appended it recently, in which case
 	// we can save work.
-	cachedSingleton, _, _ := entryCache.getEntries(
+	cachedSingleton, _, _, _ := entryCache.getEntries(
 		nil, rangeID, ent.Index, ent.Index+1, 1<<20,
 	)
 

@@ -33,9 +33,10 @@ import (
 
 func TestFakeSpanResolver(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	tc := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(ctx)
 
 	sqlutils.CreateTable(
 		t, tc.ServerConn(0), "t",
@@ -53,7 +54,7 @@ func TestFakeSpanResolver(t *testing.T) {
 
 	db := tc.Server(0).DB()
 
-	txn := client.NewTxn(db, tc.Server(0).NodeID(), client.RootTxn)
+	txn := client.NewTxn(ctx, db, tc.Server(0).NodeID(), client.RootTxn)
 	it := resolver.NewSpanResolverIterator(txn)
 
 	tableDesc := sqlbase.GetTableDescriptor(db, "test", "t")
@@ -65,14 +66,14 @@ func TestFakeSpanResolver(t *testing.T) {
 	// randomness) but it should happen most of the time.
 	for attempt := 0; attempt < 10; attempt++ {
 		nodesSeen := make(map[roachpb.NodeID]struct{})
-		it.Seek(context.TODO(), span, kv.Ascending)
+		it.Seek(ctx, span, kv.Ascending)
 		lastKey := span.Key
 		for {
 			if !it.Valid() {
 				t.Fatal(it.Error())
 			}
 			desc := it.Desc()
-			rinfo, err := it.ReplicaInfo(context.TODO())
+			rinfo, err := it.ReplicaInfo(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -93,7 +94,7 @@ func TestFakeSpanResolver(t *testing.T) {
 			if !it.NeedAnother() {
 				break
 			}
-			it.Next(context.TODO())
+			it.Next(ctx)
 		}
 
 		if !lastKey.Equal(span.EndKey) {

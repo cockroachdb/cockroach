@@ -86,6 +86,12 @@ func newQuotaPool(q int64) *quotaPool {
 // Safe for concurrent use.
 func (qp *quotaPool) add(v int64) {
 	qp.Lock()
+	qp.addLocked(v)
+	qp.Unlock()
+}
+
+// addLocked is like add, but it requires that qp.Lock is held.
+func (qp *quotaPool) addLocked(v int64) {
 	select {
 	case q := <-qp.quota:
 		v += q
@@ -95,7 +101,6 @@ func (qp *quotaPool) add(v int64) {
 		v = qp.max
 	}
 	qp.quota <- v
-	qp.Unlock()
 }
 
 func logSlowQuota(ctx context.Context, v int64, start time.Time) func() {
@@ -184,11 +189,10 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 			slowTimer.Read = true
 			defer logSlowQuota(ctx, v, start)()
 		case <-ctx.Done():
-			if acquired > 0 {
-				qp.add(acquired)
-			}
-
 			qp.Lock()
+			if acquired > 0 {
+				qp.addLocked(acquired)
+			}
 			qp.notifyNextLocked()
 			qp.Unlock()
 			return ctx.Err()
@@ -200,11 +204,12 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 			acquired += q
 		}
 	}
-	if acquired > v {
-		qp.add(acquired - v)
-	}
+	extra := acquired - v
 
 	qp.Lock()
+	if extra > 0 {
+		qp.addLocked(extra)
+	}
 	qp.notifyNextLocked()
 	qp.Unlock()
 	return nil

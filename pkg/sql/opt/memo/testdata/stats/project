@@ -142,13 +142,13 @@ SELECT * FROM (SELECT y + 3 AS v FROM a) WHERE v >= 1 AND v <= 100
 ----
 select
  ├── columns: v:5(int!null)
- ├── stats: [rows=142.857143, distinct(5)=100]
+ ├── stats: [rows=1000, distinct(5)=100]
  ├── project
  │    ├── columns: v:5(int)
- │    ├── stats: [rows=2000, distinct(5)=1400]
+ │    ├── stats: [rows=2000, distinct(5)=200]
  │    ├── scan a
  │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    │    ├── stats: [rows=2000, distinct(2)=1400]
+ │    │    ├── stats: [rows=2000, distinct(2)=200]
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── projections [outer=(2)]

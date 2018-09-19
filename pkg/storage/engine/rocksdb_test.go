@@ -1581,3 +1581,51 @@ func TestSstFileWriterTimeBound(t *testing.T) {
 		t.Errorf(`expected 2 sstables got %d`, s.TimeBoundNumSSTs)
 	}
 }
+
+// TestRocksDBWALFileEmptyBatch verifies that committing an empty batch does
+// not write an entry to RocksDB's write-ahead log.
+func TestRocksDBWALFileEmptyBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	defer e.Close()
+
+	// Commit a batch with one key.
+	b := e.NewBatch()
+	defer b.Close()
+	if err := b.Put(mvccKey("foo"), []byte{'b', 'a', 'r'}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Commit(true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that RocksDB has created a non-empty WAL.
+	walsBefore, err := e.GetSortedWALFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(walsBefore) != 1 {
+		t.Fatalf("expected exactly one WAL file, but got %d", len(walsBefore))
+	}
+	if walsBefore[0].Size == 0 {
+		t.Fatalf("expected non-empty WAL file")
+	}
+
+	// Commit an empty batch.
+	b = e.NewBatch()
+	defer b.Close()
+	if err := b.Commit(true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the WAL has not changed in size.
+	walsAfter, err := e.GetSortedWALFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(walsBefore, walsAfter) {
+		t.Fatalf("expected wal files %#v after committing empty batch, but got %#v",
+			walsBefore, walsAfter)
+	}
+}

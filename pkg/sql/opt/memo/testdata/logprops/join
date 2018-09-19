@@ -1026,13 +1026,13 @@ full-join
  └── filters [type=bool]
       └── true [type=bool]
 
-# Calculate full-join cardinality with filter.
+# Calculate full-join cardinality with false filter.
 build
 SELECT * FROM (VALUES (NULL), (NULL)) a FULL JOIN (VALUES (NULL), (NULL)) b ON a.column1=b.column1
 ----
 full-join
  ├── columns: column1:1(unknown) column1:2(unknown)
- ├── cardinality: [2 - 4]
+ ├── cardinality: [4 - 4]
  ├── prune: (1,2)
  ├── reject-nulls: (1,2)
  ├── values

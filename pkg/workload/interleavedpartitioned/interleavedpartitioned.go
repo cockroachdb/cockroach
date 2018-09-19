@@ -589,12 +589,12 @@ func (w *interleavedPartitioned) Hooks() workload.Hooks {
 				return err
 			}
 			if _, err := db.Exec(
-				fmt.Sprintf("ALTER PARTITION west OF TABLE sessions EXPERIMENTAL CONFIGURE ZONE 'experimental_lease_preferences: [[+zone=%s]]'", w.westZoneName),
+				fmt.Sprintf("ALTER PARTITION west OF TABLE sessions CONFIGURE ZONE USING lease_preferences = '[[+zone=%s]]'", w.westZoneName),
 			); err != nil {
 				return errors.Wrapf(err, "could not set zone for partition west")
 			}
 			if _, err := db.Exec(
-				fmt.Sprintf("ALTER PARTITION east OF TABLE sessions EXPERIMENTAL CONFIGURE ZONE 'experimental_lease_preferences: [[+zone=%s]]'", w.eastZoneName),
+				fmt.Sprintf("ALTER PARTITION east OF TABLE sessions CONFIGURE ZONE USING lease_preferences = '[[+zone=%s]]'", w.eastZoneName),
 			); err != nil {
 				return errors.Wrapf(err, "could not set zone for partition east")
 			}

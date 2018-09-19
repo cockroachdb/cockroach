@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -43,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -74,7 +76,14 @@ func TestSelfBootstrap(t *testing.T) {
 // TestHealthCheck runs a basic sanity check on the health checker.
 func TestHealthCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	cfg := config.DefaultZoneConfig()
+	cfg.NumReplicas = 1
+	fnSys := config.TestingSetDefaultSystemZoneConfig(cfg)
+	defer fnSys()
+
 	s, err := serverutils.StartServerRaw(base.TestServerArgs{})
+
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -302,6 +311,8 @@ func TestAcceptEncoding(t *testing.T) {
 // ranges are carried out properly.
 func TestMultiRangeScanDeleteRange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &storage.StoreTestingKnobs{
@@ -310,11 +321,11 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(ctx)
 	ts := s.(*TestServer)
 	tds := db.NonTransactionalSender()
 
-	if err := ts.node.storeCfg.DB.AdminSplit(context.TODO(), "m", "m"); err != nil {
+	if err := ts.node.storeCfg.DB.AdminSplit(ctx, "m", "m"); err != nil {
 		t.Fatal(err)
 	}
 	writes := []roachpb.Key{roachpb.Key("a"), roachpb.Key("z")}
@@ -322,17 +333,17 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		RequestHeader: roachpb.RequestHeader{Key: writes[0]},
 	}
 	get.EndKey = writes[len(writes)-1]
-	if _, err := client.SendWrapped(context.Background(), tds, get); err == nil {
+	if _, err := client.SendWrapped(ctx, tds, get); err == nil {
 		t.Errorf("able to call Get with a key range: %v", get)
 	}
 	var delTS hlc.Timestamp
 	for i, k := range writes {
 		put := roachpb.NewPut(k, roachpb.MakeValueFromBytes(k))
-		if _, err := client.SendWrapped(context.Background(), tds, put); err != nil {
+		if _, err := client.SendWrapped(ctx, tds, put); err != nil {
 			t.Fatal(err)
 		}
 		scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())
-		reply, err := client.SendWrapped(context.Background(), tds, scan)
+		reply, err := client.SendWrapped(ctx, tds, scan)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -354,7 +365,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 		},
 		ReturnKeys: true,
 	}
-	reply, err := client.SendWrappedWith(context.Background(), tds, roachpb.Header{Timestamp: delTS}, del)
+	reply, err := client.SendWrappedWith(ctx, tds, roachpb.Header{Timestamp: delTS}, del)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -367,13 +378,13 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 	}
 
 	txnProto := roachpb.MakeTransaction("MyTxn", nil, 0, 0, s.Clock().Now(), 0)
-	txn := client.NewTxnWithProto(db, s.NodeID(), client.RootTxn, txnProto)
+	txn := client.NewTxnWithProto(ctx, db, s.NodeID(), client.RootTxn, txnProto)
 
 	scan := roachpb.NewScan(writes[0], writes[len(writes)-1].Next())
 	ba := roachpb.BatchRequest{}
 	ba.Header = roachpb.Header{Txn: &txnProto}
 	ba.Add(scan)
-	br, pErr := txn.Send(context.Background(), ba)
+	br, pErr := txn.Send(ctx, ba)
 	if pErr != nil {
 		t.Fatal(err)
 	}
@@ -493,10 +504,10 @@ func TestSystemConfigGossip(t *testing.T) {
 	// wrote.
 	testutils.SucceedsSoon(t, func() error {
 		// New system config received.
-		var systemConfig config.SystemConfig
+		var systemConfig *config.SystemConfig
 		select {
 		case <-resultChan:
-			systemConfig, _ = ts.gossip.GetSystemConfig()
+			systemConfig = ts.gossip.GetSystemConfig()
 
 		case <-time.After(500 * time.Millisecond):
 			return errors.Errorf("did not receive gossip message")
@@ -856,6 +867,17 @@ func TestServeIndexHTML(t *testing.T) {
 </html>
 `
 
+	linkInFakeUI := func() {
+		ui.Asset = func(string) (_ []byte, _ error) { return }
+		ui.AssetDir = func(name string) (_ []string, _ error) { return }
+		ui.AssetInfo = func(name string) (_ os.FileInfo, _ error) { return }
+	}
+	unlinkFakeUI := func() {
+		ui.Asset = nil
+		ui.AssetDir = nil
+		ui.AssetInfo = nil
+	}
+
 	t.Run("Insecure mode", func(t *testing.T) {
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 			Insecure: true,
@@ -872,32 +894,62 @@ func TestServeIndexHTML(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		resp, err := client.Get(s.AdminURL())
-		if err != nil {
-			t.Fatal(err)
-		}
-		if resp.StatusCode != 200 {
-			t.Fatalf("expected status code 200; got %d", resp.StatusCode)
-		}
-		respBytes, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		respString := string(respBytes)
-		expected := fmt.Sprintf(
-			htmlTemplate,
-			fmt.Sprintf(
-				`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s"}`,
-				build.GetInfo().Tag,
-				build.VersionPrefix(),
-			),
-		)
-		if respString != expected {
-			t.Fatalf("expected %s; got %s", expected, respString)
-		}
+		t.Run("short build", func(t *testing.T) {
+			resp, err := client.Get(s.AdminURL())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != 200 {
+				t.Fatalf("expected status code 200; got %d", resp.StatusCode)
+			}
+			respBytes, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			respString := string(respBytes)
+			expected := fmt.Sprintf(`<!DOCTYPE html>
+<title>CockroachDB</title>
+Binary built without web UI.
+<hr>
+<em>%s</em>`,
+				build.GetInfo().Short())
+			if respString != expected {
+				t.Fatalf("expected %s; got %s", expected, respString)
+			}
+		})
+
+		t.Run("non-short build", func(t *testing.T) {
+			linkInFakeUI()
+			defer unlinkFakeUI()
+			resp, err := client.Get(s.AdminURL())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if resp.StatusCode != 200 {
+				t.Fatalf("expected status code 200; got %d", resp.StatusCode)
+			}
+			respBytes, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			respString := string(respBytes)
+			expected := fmt.Sprintf(
+				htmlTemplate,
+				fmt.Sprintf(
+					`{"ExperimentalUseLogin":false,"LoginEnabled":false,"LoggedInUser":null,"Tag":"%s","Version":"%s"}`,
+					build.GetInfo().Tag,
+					build.VersionPrefix(),
+				),
+			)
+			if respString != expected {
+				t.Fatalf("expected %s; got %s", expected, respString)
+			}
+		})
 	})
 
 	t.Run("Secure mode", func(t *testing.T) {
+		linkInFakeUI()
+		defer unlinkFakeUI()
 		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		defer s.Stopper().Stop(context.TODO())
 		tsrv := s.(*TestServer)

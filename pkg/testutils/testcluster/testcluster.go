@@ -244,6 +244,7 @@ func (tc *TestCluster) doAddServer(t testing.TB, serverArgs base.TestServerArgs)
 			stkCopy = *stk.(*storage.StoreTestingKnobs)
 		}
 		stkCopy.DisableSplitQueue = true
+		stkCopy.DisableMergeQueue = true
 		stkCopy.DisableReplicateQueue = true
 		serverArgs.Knobs.Store = &stkCopy
 	}
@@ -574,6 +575,11 @@ func (tc *TestCluster) WaitForNodeStatuses(t testing.TB) {
 		}
 		return nil
 	})
+}
+
+// ReplicationMode implements TestClusterInterface.
+func (tc *TestCluster) ReplicationMode() base.TestClusterReplicationMode {
+	return tc.replicationMode
 }
 
 type testClusterFactoryImpl struct{}

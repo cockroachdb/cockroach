@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -42,16 +43,18 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 
 	switch cond := join.Cond.(type) {
 	case tree.NaturalJoinCond, *tree.UsingJoinCond:
-		var usingColNames tree.NameList
+		outScope = inScope.push()
+
+		var jb usingJoinBuilder
+		jb.init(b, joinType, leftScope, rightScope, outScope)
 
 		switch t := cond.(type) {
 		case tree.NaturalJoinCond:
-			usingColNames = commonColumns(leftScope, rightScope)
+			jb.buildNaturalJoin(t)
 		case *tree.UsingJoinCond:
-			usingColNames = t.Cols
+			jb.buildUsingJoin(t)
 		}
-
-		return b.buildUsingJoin(joinType, usingColNames, leftScope, rightScope, inScope)
+		return outScope
 
 	case *tree.OnJoinCond, nil:
 		// Append columns added by the children, as they are visible to the filter.
@@ -67,6 +70,7 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 			filter = b.buildScalar(
 				outScope.resolveAndRequireType(on.Expr, types.Bool), outScope, nil, nil, nil,
 			)
+			filter = b.factory.ConstructFilters(b.factory.InternList([]memo.GroupID{filter}))
 		} else {
 			filter = b.factory.ConstructTrue()
 		}
@@ -85,29 +89,9 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 // scopeColumns (and corresponding table names) from the right side of the
 // join.
 func (b *Builder) validateJoinTableNames(leftScope, rightScope *scope) {
-	// skipDups creates a FastIntSet containing the ordinal of each column that
-	// has a different table name than the previous column. Only these non-
-	// duplicate names need to be validated.
-	skipDups := func(scope *scope) util.FastIntSet {
-		var ords util.FastIntSet
-		for i := range scope.cols {
-			// Allow joins of sources that define columns with no
-			// associated table name. At worst, the USING/NATURAL
-			// detection code or expression analysis for ON will detect an
-			// ambiguity later.
-			if scope.cols[i].table.TableName == "" {
-				continue
-			}
-
-			if i == 0 || scope.cols[i].table != scope.cols[i-1].table {
-				ords.Add(i)
-			}
-		}
-		return ords
-	}
-
-	leftOrds := skipDups(leftScope)
-	rightOrds := skipDups(rightScope)
+	// Try to derive smaller subset of columns which need to be validated.
+	leftOrds := b.findJoinColsToValidate(leftScope)
+	rightOrds := b.findJoinColsToValidate(rightScope)
 
 	// Look for table name in left scope that exists in right scope.
 	for left, ok := leftOrds.Next(0); ok; left, ok = leftOrds.Next(left + 1) {
@@ -132,76 +116,51 @@ func (b *Builder) validateJoinTableNames(leftScope, rightScope *scope) {
 	}
 }
 
-// commonColumns returns the names of columns common on the
-// left and right sides, for use by NATURAL JOIN.
-func commonColumns(leftScope, rightScope *scope) (common tree.NameList) {
-	for i := range leftScope.cols {
-		leftCol := &leftScope.cols[i]
-		if leftCol.hidden {
+// findJoinColsToValidate creates a FastIntSet containing the ordinal of each
+// column that has a different table name than the previous column. This is a
+// fast way of reducing the set of columns that need to checked for duplicate
+// names by validateJoinTableNames.
+func (b *Builder) findJoinColsToValidate(scope *scope) util.FastIntSet {
+	var ords util.FastIntSet
+	for i := range scope.cols {
+		// Allow joins of sources that define columns with no
+		// associated table name. At worst, the USING/NATURAL
+		// detection code or expression analysis for ON will detect an
+		// ambiguity later.
+		if scope.cols[i].table.TableName == "" {
 			continue
 		}
-		for j := range rightScope.cols {
-			rightCol := &rightScope.cols[j]
-			if rightCol.hidden {
-				continue
-			}
 
-			if leftCol.name == rightCol.name {
-				common = append(common, leftCol.name)
-				break
-			}
+		if i == 0 || scope.cols[i].table != scope.cols[i-1].table {
+			ords.Add(i)
 		}
 	}
-
-	return common
+	return ords
 }
 
-// buildUsingJoin builds a set of memo groups that represent the given join
-// table expression with the given `USING` column names. It is used for both
-// USING and NATURAL joins.
-//
-// joinType    The join type (inner, left, right or outer)
-// names       The list of `USING` column names
-// leftScope   The outScope from the left table
-// rightScope  The outScope from the right table
-//
-// See Builder.buildStmt for a description of the remaining input and
-// return values.
-func (b *Builder) buildUsingJoin(
-	joinType sqlbase.JoinType, names tree.NameList, leftScope, rightScope, inScope *scope,
-) (outScope *scope) {
-	// Build the join predicate.
-	mergedCols, filter, outScope := b.buildUsingJoinPredicate(
-		joinType, leftScope.cols, rightScope.cols, names, inScope,
-	)
-
-	outScope.group = b.constructJoin(joinType, leftScope.group, rightScope.group, filter)
-
-	if len(mergedCols) > 0 {
-		// Wrap in a projection to include the merged columns and ensure that all
-		// remaining columns are passed through unchanged.
-		for i := range outScope.cols {
-			col := &outScope.cols[i]
-			if mergedCol, ok := mergedCols[col.id]; ok {
-				col.group = mergedCol
-			} else {
-				// Mark column as passthrough.
-				col.group = 0
-			}
-		}
-
-		outScope.group = b.constructProject(outScope.group, outScope.cols)
+func (b *Builder) constructJoin(
+	joinType sqlbase.JoinType, left, right, filter memo.GroupID,
+) memo.GroupID {
+	switch joinType {
+	case sqlbase.InnerJoin:
+		return b.factory.ConstructInnerJoin(left, right, filter)
+	case sqlbase.LeftOuterJoin:
+		return b.factory.ConstructLeftJoin(left, right, filter)
+	case sqlbase.RightOuterJoin:
+		return b.factory.ConstructRightJoin(left, right, filter)
+	case sqlbase.FullOuterJoin:
+		return b.factory.ConstructFullJoin(left, right, filter)
+	default:
+		panic(fmt.Errorf("unsupported JOIN type %d", joinType))
 	}
-
-	return outScope
 }
 
-// buildUsingJoinPredicate builds a set of memo groups that represent the join
-// conditions for a USING join or natural join. It finds the columns in the
-// left and right relations that match the columns provided in the names
-// parameter, and creates equality predicate(s) with those columns. It also
-// ensures that there is a single output column for each name in `names`
-// (other columns with the same name are hidden).
+// usingJoinBuilder helps to build a USING join or natural join. It finds the
+// columns in the left and right relations that match the columns provided in
+// the names parameter (or names common to both sides in case of natural join),
+// and creates equality predicate(s) with those columns. It also ensures that
+// there is a single output column for each match name (other columns with the
+// same name are hidden).
 //
 // -- Merged columns --
 //
@@ -257,152 +216,218 @@ func (b *Builder) buildUsingJoin(
 //    7: right.b (hidden)    @5
 //    8: right.y             @6
 //
-// If new merged columns are created (as in the FULL OUTER JOIN example above),
-// the return value mergedCols contains a mapping from the column id to the
-// memo group ID of the IFNULL expression. out contains the top-level memo
-// group ID of the join predicate.
-//
-// See Builder.buildStmt for a description of the remaining input and
-// return values.
-func (b *Builder) buildUsingJoinPredicate(
-	joinType sqlbase.JoinType,
-	leftCols []scopeColumn,
-	rightCols []scopeColumn,
-	names tree.NameList,
-	inScope *scope,
-) (mergedCols map[opt.ColumnID]memo.GroupID, out memo.GroupID, outScope *scope) {
-	joined := make(map[tree.Name]*scopeColumn, len(names))
-	conditions := make([]memo.GroupID, 0, len(names))
-	mergedCols = make(map[opt.ColumnID]memo.GroupID)
-	outScope = inScope.push()
+type usingJoinBuilder struct {
+	b          *Builder
+	lb         norm.ListBuilder
+	joinType   sqlbase.JoinType
+	leftScope  *scope
+	rightScope *scope
+	outScope   *scope
 
-	for i, name := range names {
-		if _, ok := joined[name]; ok {
+	// hideCols contains the ids of join columns which are hidden in the result
+	// expression.
+	hideCols opt.ColSet
+
+	// showCols contains the ids of join columns which are not hidden in the
+	// resultexpression.
+	showCols opt.ColSet
+
+	// ifNullCols contains the ids of each synthesized column which performs the
+	// IFNULL check for a pair of join columns.
+	ifNullCols opt.ColSet
+}
+
+func (jb *usingJoinBuilder) init(
+	b *Builder, joinType sqlbase.JoinType, leftScope, rightScope, outScope *scope,
+) {
+	jb.b = b
+	jb.lb = norm.MakeListBuilder(b.factory.CustomFuncs())
+	jb.joinType = joinType
+	jb.leftScope = leftScope
+	jb.rightScope = rightScope
+	jb.outScope = outScope
+}
+
+// buildUsingJoin constructs a Join operator with join columns matching the
+// the names in the given join condition.
+func (jb *usingJoinBuilder) buildUsingJoin(using *tree.UsingJoinCond) {
+	var seenCols opt.ColSet
+	for _, name := range using.Cols {
+		// Find left and right USING columns in the scopes.
+		leftCol := jb.findUsingColumn(jb.leftScope.cols, name)
+		if leftCol == nil {
+			jb.raiseUndefinedColError(name, "left")
+		}
+		if seenCols.Contains(int(leftCol.id)) {
+			// Same name exists more than once in USING column name list.
 			panic(builderError{pgerror.NewErrorf(pgerror.CodeDuplicateColumnError,
-				"column %q appears more than once in USING clause", tree.ErrString(&names[i]))})
+				"column %q appears more than once in USING clause", tree.ErrString(&name))})
+		}
+		seenCols.Add(int(leftCol.id))
+
+		rightCol := jb.findUsingColumn(jb.rightScope.cols, name)
+		if rightCol == nil {
+			jb.raiseUndefinedColError(name, "right")
 		}
 
-		// For every adjacent pair of tables, add an equality predicate.
-		leftCol := findUsingColumn(leftCols, name, "left")
-		rightCol := findUsingColumn(rightCols, name, "right")
+		jb.addEqualityCondition(leftCol, rightCol)
+	}
 
-		if !leftCol.typ.Equivalent(rightCol.typ) {
-			// First, check if the comparison would even be valid.
-			if _, found := tree.FindEqualComparisonFunction(leftCol.typ, rightCol.typ); !found {
-				panic(builderError{pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
-					"JOIN/USING types %s for left and %s for right cannot be matched for column %q",
-					leftCol.typ, rightCol.typ, tree.ErrString(&leftCol.name))})
-			}
+	jb.finishBuild()
+}
+
+// buildNaturalJoin constructs a Join operator with join columns derived from
+// matching names in the left and right inputs.
+func (jb *usingJoinBuilder) buildNaturalJoin(natural tree.NaturalJoinCond) {
+	// Only add equality conditions for non-hidden columns with matching name in
+	// both the left and right inputs.
+	var seenCols opt.ColSet
+	for i := range jb.leftScope.cols {
+		leftCol := &jb.leftScope.cols[i]
+		if leftCol.hidden {
+			continue
 		}
+		if seenCols.Contains(int(leftCol.id)) {
+			jb.raiseDuplicateColError(leftCol.name)
+		}
+		seenCols.Add(int(leftCol.id))
 
-		// Construct the predicate.
-		leftVar := b.factory.ConstructVariable(b.factory.InternColumnID(leftCol.id))
-		rightVar := b.factory.ConstructVariable(b.factory.InternColumnID(rightCol.id))
-		eq := b.factory.ConstructEq(leftVar, rightVar)
-		conditions = append(conditions, eq)
-
-		// Add the merged column to the scope, constructing a new column if needed.
-		if joinType == sqlbase.InnerJoin || joinType == sqlbase.LeftOuterJoin {
-			// The merged column is the same as the corresponding column from the
-			// left side.
-			outScope.cols = append(outScope.cols, *leftCol)
-			joined[name] = leftCol
-		} else if joinType == sqlbase.RightOuterJoin &&
-			!sqlbase.DatumTypeHasCompositeKeyEncoding(leftCol.typ) {
-			// The merged column is the same as the corresponding column from the
-			// right side.
-			outScope.cols = append(outScope.cols, *rightCol)
-			joined[name] = rightCol
-		} else {
-			// Construct a new merged column to represent IFNULL(left, right).
-			var typ types.T
-			if leftCol.typ != types.Unknown {
-				typ = leftCol.typ
-			} else {
-				typ = rightCol.typ
-			}
-			texpr := tree.NewTypedCoalesceExpr(tree.TypedExprs{leftCol, rightCol}, typ)
-			merged := b.factory.ConstructCoalesce(b.factory.InternList([]memo.GroupID{leftVar, rightVar}))
-			col := b.synthesizeColumn(outScope, string(leftCol.name), typ, texpr, merged)
-			mergedCols[col.id] = merged
-			joined[name] = nil
+		rightCol := jb.findUsingColumn(jb.rightScope.cols, leftCol.name)
+		if rightCol != nil {
+			jb.addEqualityCondition(leftCol, rightCol)
 		}
 	}
 
-	// Hide other columns that have the same name as the merged columns.
-	hideMatchingColumns(leftCols, joined, outScope)
-	hideMatchingColumns(rightCols, joined, outScope)
-
-	return mergedCols, b.constructFilter(conditions), outScope
+	jb.finishBuild()
 }
 
-// hideMatchingColumns iterates through each of the columns in cols and
-// performs one of the following actions:
-// (1) If the column is equal to one of the columns in `joined`, it is skipped
-//     since it was one of the merged columns already added to the scope.
-// (2) If the column has the same name as one of the columns in `joined` but is
-//     not equal, it is marked as hidden and added to the scope.
+// finishBuild adds any non-join columns to the output scope and then constructs
+// the Join operator. If at least one "if null" column exists, the join must be
+// wrapped in a Project operator that performs the required IFNULL checks.
+func (jb *usingJoinBuilder) finishBuild() {
+	jb.addRemainingCols(jb.leftScope.cols)
+	jb.addRemainingCols(jb.rightScope.cols)
+
+	jb.outScope.group = jb.b.constructJoin(
+		jb.joinType,
+		jb.leftScope.group,
+		jb.rightScope.group,
+		jb.b.factory.ConstructFilters(jb.lb.BuildList()),
+	)
+
+	if !jb.ifNullCols.Empty() {
+		// Wrap in a projection to include the merged columns and ensure that all
+		// remaining columns are passed through unchanged.
+		for i := range jb.outScope.cols {
+			col := &jb.outScope.cols[i]
+			if !jb.ifNullCols.Contains(int(col.id)) {
+				// Mark column as passthrough.
+				col.group = 0
+			}
+		}
+
+		jb.outScope.group = jb.b.constructProject(jb.outScope.group, jb.outScope.cols)
+	}
+}
+
+// addRemainingCols iterates through each of the columns in cols and performs
+// one of the following actions:
+// (1) If the column is part of the hideCols set, then it is a join column that
+//     needs to be added to output scope, with the hidden attribute set to true.
+// (2) If the column is part of the showCols set, then it is a join column that
+//     has already been added to the output scope by addEqualityCondition, so
+//     skip it now.
 // (3) All other columns are added to the scope without modification.
-func hideMatchingColumns(cols []scopeColumn, joined map[tree.Name]*scopeColumn, scope *scope) {
+func (jb *usingJoinBuilder) addRemainingCols(cols []scopeColumn) {
 	for i := range cols {
 		col := &cols[i]
-		if foundCol, ok := joined[col.name]; ok {
-			// Hide other columns with the same name.
-			if col == foundCol {
-				continue
-			}
-			col.hidden = true
+		switch {
+		case jb.hideCols.Contains(int(col.id)):
+			jb.outScope.cols = append(jb.outScope.cols, *col)
+			jb.outScope.cols[len(jb.outScope.cols)-1].hidden = true
+
+		case !jb.showCols.Contains(int(col.id)):
+			jb.outScope.cols = append(jb.outScope.cols, *col)
 		}
-		scope.cols = append(scope.cols, *col)
 	}
 }
 
-// constructFilter builds a set of memo groups that represent the given
-// list of filter conditions. It returns the top-level memo group ID for the
-// filter.
-func (b *Builder) constructFilter(conditions []memo.GroupID) memo.GroupID {
-	switch len(conditions) {
-	case 0:
-		return b.factory.ConstructTrue()
-	case 1:
-		return conditions[0]
-	default:
-		return b.factory.ConstructAnd(b.factory.InternList(conditions))
-	}
-}
-
-func (b *Builder) constructJoin(
-	joinType sqlbase.JoinType, left, right, filter memo.GroupID,
-) memo.GroupID {
-	// Wrap the ON condition in a FiltersOp.
-	filter = b.factory.ConstructFilters(b.factory.InternList([]memo.GroupID{filter}))
-	switch joinType {
-	case sqlbase.InnerJoin:
-		return b.factory.ConstructInnerJoin(left, right, filter)
-	case sqlbase.LeftOuterJoin:
-		return b.factory.ConstructLeftJoin(left, right, filter)
-	case sqlbase.RightOuterJoin:
-		return b.factory.ConstructRightJoin(left, right, filter)
-	case sqlbase.FullOuterJoin:
-		return b.factory.ConstructFullJoin(left, right, filter)
-	default:
-		panic(fmt.Errorf("unsupported JOIN type %d", joinType))
-	}
-}
-
-// findUsingColumn finds the column in cols that has the given name. If the
-// column exists it is returned. Otherwise, an error is thrown.
-//
-// context is a string ("left" or "right") used to indicate in the error
-// message whether the name is missing from the left or right side of the join.
-func findUsingColumn(cols []scopeColumn, name tree.Name, context string) *scopeColumn {
+// findUsingColumn finds the column in cols that has the given name. If no such
+// column exists, findUsingColumn returns nil. If multiple columns with the name
+// exist, then findUsingColumn raises an error.
+func (jb *usingJoinBuilder) findUsingColumn(cols []scopeColumn, name tree.Name) *scopeColumn {
+	var foundCol *scopeColumn
 	for i := range cols {
 		col := &cols[i]
 		if !col.hidden && col.name == name {
-			return col
+			if foundCol != nil {
+				jb.raiseDuplicateColError(name)
+			}
+			foundCol = col
+		}
+	}
+	return foundCol
+}
+
+// addEqualityCondition constructs a new Eq expression comparing the given left
+// and right columns. In addition, it adds a new column to the output scope that
+// represents the "merged" value of the left and right columns. This could be
+// either the left or right column value, or, in the case of a FULL JOIN, an
+// IFNULL(left, right) expression.
+func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn) {
+	// First, check if the comparison would even be valid.
+	if !leftCol.typ.Equivalent(rightCol.typ) {
+		if _, found := tree.FindEqualComparisonFunction(leftCol.typ, rightCol.typ); !found {
+			panic(builderError{pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+				"JOIN/USING types %s for left and %s for right cannot be matched for column %q",
+				leftCol.typ, rightCol.typ, tree.ErrString(&leftCol.name))})
 		}
 	}
 
+	// Construct the predicate.
+	leftVar := jb.b.factory.ConstructVariable(jb.b.factory.InternColumnID(leftCol.id))
+	rightVar := jb.b.factory.ConstructVariable(jb.b.factory.InternColumnID(rightCol.id))
+	eq := jb.b.factory.ConstructEq(leftVar, rightVar)
+	jb.lb.AddItem(eq)
+
+	// Add the merged column to the scope, constructing a new column if needed.
+	if jb.joinType == sqlbase.InnerJoin || jb.joinType == sqlbase.LeftOuterJoin {
+		// The merged column is the same as the corresponding column from the
+		// left side.
+		jb.outScope.cols = append(jb.outScope.cols, *leftCol)
+		jb.showCols.Add(int(leftCol.id))
+		jb.hideCols.Add(int(rightCol.id))
+	} else if jb.joinType == sqlbase.RightOuterJoin &&
+		!sqlbase.DatumTypeHasCompositeKeyEncoding(leftCol.typ) {
+		// The merged column is the same as the corresponding column from the
+		// right side.
+		jb.outScope.cols = append(jb.outScope.cols, *rightCol)
+		jb.showCols.Add(int(rightCol.id))
+		jb.hideCols.Add(int(leftCol.id))
+	} else {
+		// Construct a new merged column to represent IFNULL(left, right).
+		var typ types.T
+		if leftCol.typ != types.Unknown {
+			typ = leftCol.typ
+		} else {
+			typ = rightCol.typ
+		}
+		texpr := tree.NewTypedCoalesceExpr(tree.TypedExprs{leftCol, rightCol}, typ)
+		args := jb.b.factory.InternList([]memo.GroupID{leftVar, rightVar})
+		merged := jb.b.factory.ConstructCoalesce(args)
+		col := jb.b.synthesizeColumn(jb.outScope, string(leftCol.name), typ, texpr, merged)
+		jb.ifNullCols.Add(int(col.id))
+		jb.hideCols.Add(int(leftCol.id))
+		jb.hideCols.Add(int(rightCol.id))
+	}
+}
+
+func (jb *usingJoinBuilder) raiseDuplicateColError(name tree.Name) {
+	panic(builderError{pgerror.NewErrorf(pgerror.CodeDuplicateColumnError,
+		"duplicate column name: %q", tree.ErrString(&name))})
+}
+
+func (jb *usingJoinBuilder) raiseUndefinedColError(name tree.Name, context string) {
 	panic(builderError{pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
 		"column \"%s\" specified in USING clause does not exist in %s table", name, context)})
 }

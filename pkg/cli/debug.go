@@ -54,11 +54,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 var debugKeysCmd = &cobra.Command{
@@ -284,8 +284,13 @@ func loadRangeDescriptor(
 			// doesn't parse as a range descriptor just skip it.
 			return false, nil
 		}
+		if len(kv.Value) == 0 {
+			// RangeDescriptor was deleted (range merged away).
+			return false, nil
+		}
 		if err := (roachpb.Value{RawBytes: kv.Value}).GetProto(&desc); err != nil {
-			return false, err
+			log.Warningf(context.Background(), "ignoring range descriptor due to error %s: %+v", err, kv)
+			return false, nil
 		}
 		return desc.RangeID == rangeID, nil
 	}
@@ -341,7 +346,7 @@ Decode a hexadecimal-encoded key and pretty-print it. For example:
 			if err != nil {
 				return err
 			}
-			k, err := engine.DecodeKey(b)
+			k, err := engine.DecodeMVCCKey(b)
 			if err != nil {
 				return err
 			}
@@ -371,7 +376,7 @@ Decode and print a hexadecimal-encoded key-value pair.
 			bs = append(bs, b)
 		}
 
-		k, err := engine.DecodeKey(bs[0])
+		k, err := engine.DecodeMVCCKey(bs[0])
 		if err != nil {
 			// Older versions of the consistency checker give you diffs with a raw_key that
 			// is already a roachpb.Key, so make a half-assed attempt to support both.
@@ -892,7 +897,7 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 			output = append(output, fmt.Sprintf("%q: %v", key, clusterID))
 		} else if key == gossip.KeySystemConfig {
 			if debugCtx.printSystemConfig {
-				var config config.SystemConfig
+				var config config.SystemConfigEntries
 				if err := protoutil.Unmarshal(bytes, &config); err != nil {
 					return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 				}

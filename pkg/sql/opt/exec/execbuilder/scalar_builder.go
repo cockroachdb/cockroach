@@ -84,7 +84,32 @@ func init() {
 // according to ctx.
 func (b *Builder) buildScalar(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
 	if fn := scalarBuildFuncMap[ev.Operator()]; fn != nil {
-		return fn(b, ctx, ev)
+		texpr, err := fn(b, ctx, ev)
+		if err != nil {
+			return nil, err
+		}
+		if b.evalCtx != nil && b.isConst(texpr) {
+			value, err := texpr.Eval(b.evalCtx)
+			if err != nil {
+				// Ignore any errors here (e.g. division by zero), so they can happen
+				// during execution where they are correctly handled. Note that in some
+				// cases we might not even get an error (if this particular expression
+				// does not get evaluated when the query runs, e.g. it's inside a CASE).
+				return texpr, nil
+			}
+			if value == tree.DNull {
+				// We don't want to return an expression that has a different type; cast
+				// the NULL if necessary.
+				var newExpr tree.TypedExpr
+				newExpr, err = tree.ReType(tree.DNull, texpr.ResolvedType())
+				if err != nil {
+					return texpr, nil
+				}
+				return newExpr, nil
+			}
+			return value, nil
+		}
+		return texpr, nil
 	}
 	return nil, errors.Errorf("unsupported op %s", ev.Operator())
 }
@@ -360,7 +385,8 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExp
 		types.Types[val] = ev.Metadata().ColumnType(opt.ColumnID(key))
 	})
 
-	subqueryExpr := b.addSubquery(exec.SubqueryAnyRows, types, plan.root)
+	def := ev.Private().(*memo.SubqueryDef)
+	subqueryExpr := b.addSubquery(exec.SubqueryAnyRows, types, plan.root, def.OriginalExpr)
 
 	// Build the scalar value that is compared against each row.
 	scalar, err := b.buildScalar(ctx, ev.Child(1))
@@ -368,7 +394,7 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExp
 		return nil, err
 	}
 
-	cmp := opt.ComparisonOpReverseMap[ev.Private().(opt.Operator)]
+	cmp := opt.ComparisonOpReverseMap[def.Cmp]
 	return tree.NewTypedComparisonExprWithSubOp(tree.Any, cmp, scalar, subqueryExpr), nil
 }
 
@@ -388,7 +414,8 @@ func (b *Builder) buildExistsSubquery(
 		return nil, err
 	}
 
-	return b.addSubquery(exec.SubqueryExists, types.Bool, root), nil
+	def := ev.Private().(*memo.SubqueryDef)
+	return b.addSubquery(exec.SubqueryExists, types.Bool, root, def.OriginalExpr), nil
 }
 
 func (b *Builder) buildSubquery(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
@@ -417,13 +444,19 @@ func (b *Builder) buildSubquery(ctx *buildScalarCtx, ev memo.ExprView) (tree.Typ
 		return nil, err
 	}
 
-	return b.addSubquery(exec.SubqueryOneRow, ev.Logical().Scalar.Type, root), nil
+	def := ev.Private().(*memo.SubqueryDef)
+	return b.addSubquery(exec.SubqueryOneRow, ev.Logical().Scalar.Type, root, def.OriginalExpr), nil
 }
 
 // addSubquery adds an entry to b.subqueries and creates a tree.Subquery
 // expression node associated with it.
-func (b *Builder) addSubquery(mode exec.SubqueryMode, typ types.T, root exec.Node) *tree.Subquery {
-	exprNode := &tree.Subquery{Exists: mode == exec.SubqueryExists}
+func (b *Builder) addSubquery(
+	mode exec.SubqueryMode, typ types.T, root exec.Node, originalExpr *tree.Subquery,
+) *tree.Subquery {
+	exprNode := &tree.Subquery{
+		Select: originalExpr.Select,
+		Exists: mode == exec.SubqueryExists,
+	}
 	exprNode.SetType(typ)
 	b.subqueries = append(b.subqueries, exec.Subquery{
 		ExprNode: exprNode,
@@ -434,4 +467,85 @@ func (b *Builder) addSubquery(mode exec.SubqueryMode, typ types.T, root exec.Nod
 	// by index (1-based).
 	exprNode.Idx = len(b.subqueries)
 	return exprNode
+}
+
+func (b *Builder) isConst(expr tree.Expr) bool {
+	return b.fastIsConstVisitor.run(expr)
+}
+
+// fastIsConstVisitor determines if an expression is constant by visiting
+// at most two levels of the tree (with one exception, see below).
+// In essence, it determines whether an expression is constant by checking
+// whether its children are const Datums.
+//
+// This can be used by the execbuilder since constants are evaluated
+// bottom-up. If a child is *not* a const Datum, that means it was already
+// determined to be non-constant, and therefore was not evaluated.
+type fastIsConstVisitor struct {
+	isConst bool
+
+	// visited indicates whether we have already visited one level of the tree.
+	// fastIsConstVisitor only visits at most two levels of the tree, with one
+	// exception: If the second level has a Cast expression, fastIsConstVisitor
+	// may visit three levels.
+	visited bool
+}
+
+var _ tree.Visitor = &fastIsConstVisitor{}
+
+func (v *fastIsConstVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	if v.visited {
+		if _, ok := expr.(*tree.CastExpr); ok {
+			// We recurse one more time for cast expressions, since the
+			// execbuilder may have wrapped a NULL.
+			return true, expr
+		}
+		if _, ok := expr.(tree.Datum); !ok || isVar(expr) {
+			// If the child expression is not a const Datum, the parent expression is
+			// not constant. Note that all constant literals have already been
+			// normalized to Datum in TypeCheck.
+			v.isConst = false
+		}
+		return false, expr
+	}
+	v.visited = true
+
+	// If the parent expression is a variable or impure function, we know that it
+	// is not constant.
+
+	if isVar(expr) {
+		v.isConst = false
+		return false, expr
+	}
+
+	switch t := expr.(type) {
+	case *tree.FuncExpr:
+		if t.IsImpure() {
+			v.isConst = false
+			return false, expr
+		}
+	}
+
+	return true, expr
+}
+
+func (*fastIsConstVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
+
+func (v *fastIsConstVisitor) run(expr tree.Expr) bool {
+	v.isConst = true
+	v.visited = false
+	tree.WalkExprConst(v, expr)
+	return v.isConst
+}
+
+// isVar returns true if the expression's value can vary during plan
+// execution.
+func isVar(expr tree.Expr) bool {
+	switch expr.(type) {
+	case tree.VariableExpr:
+		return true
+	case *tree.Placeholder:
+		panic("placeholder should have been replaced")
+	}
+	return false
 }

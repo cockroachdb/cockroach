@@ -161,7 +161,7 @@ func TestRemoveDeadReplicas(t *testing.T) {
 		s := sqlutils.MakeSQLRunner(tc.Conns[0])
 		s.Exec(t, "set cluster setting cluster.organization='remove dead replicas test'")
 
-		txn := client.NewTxn(tc.Servers[0].DB(), 1, client.RootTxn)
+		txn := client.NewTxn(ctx, tc.Servers[0].DB(), 1, client.RootTxn)
 		var desc roachpb.RangeDescriptor
 		// Pick one of the predefined split points.
 		rdKey := keys.RangeDescriptorKey(roachpb.RKey(keys.TimeseriesPrefix))

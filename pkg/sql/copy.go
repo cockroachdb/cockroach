@@ -283,7 +283,7 @@ func (c *copyMachine) preparePlanner(ctx context.Context) func(context.Context, 
 	stmtTs := c.txnOpt.stmtTimestamp
 	autoCommit := false
 	if txn == nil {
-		txn = client.NewTxn(c.p.execCfg.DB, c.p.execCfg.NodeID.Get(), client.RootTxn)
+		txn = client.NewTxn(ctx, c.p.execCfg.DB, c.p.execCfg.NodeID.Get(), client.RootTxn)
 		txnTs = c.p.execCfg.Clock.PhysicalTime()
 		stmtTs = txnTs
 		autoCommit = true

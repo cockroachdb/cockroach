@@ -36,7 +36,7 @@ func (m *Memo) format(f *memoFmtCtx) string {
 	// If requested, we topological sort the memo with respect to its root group.
 	// Otherwise, we simply print out all the groups in the order and with the
 	// names they're referred to physically.
-	if f.flags.HasFlags(FmtRaw) || !m.isOptimized() {
+	if f.flags.HasFlags(FmtRaw) {
 		// In this case we renumber with the identity mapping, so the groups have
 		// the same numbers as they're represented with internally.
 		f.ordering = make([]GroupID, len(m.groups)-1)
@@ -44,7 +44,7 @@ func (m *Memo) format(f *memoFmtCtx) string {
 			f.ordering[i] = GroupID(i + 1)
 		}
 	} else {
-		f.ordering = m.sortGroups(m.root.group)
+		f.ordering = m.sortGroups(m.RootGroup())
 	}
 
 	// We renumber the groups so that they're still printed in order from 1..N.
@@ -57,9 +57,9 @@ func (m *Memo) format(f *memoFmtCtx) string {
 
 	var root treeprinter.Node
 	if m.isOptimized() {
-		root = tp.Child("memo (optimized)")
+		root = tp.Childf("memo (optimized, ~%dKB)", m.MemoryEstimate()/1024)
 	} else {
-		root = tp.Child("memo (not optimized)")
+		root = tp.Childf("memo (not optimized, ~%dKB)", m.MemoryEstimate()/1024)
 	}
 
 	for i := range f.ordering {
@@ -78,9 +78,9 @@ func (m *Memo) format(f *memoFmtCtx) string {
 
 	// If showing raw memo, then add header text to point to root expression if
 	// it's available.
-	if f.flags.HasFlags(FmtRaw) && m.isOptimized() {
-		ev := m.Root()
-		return fmt.Sprintf("root: G%d, %s\n%s", f.numbering[ev.Group()], ev.Physical(), tp.String())
+	if f.flags.HasFlags(FmtRaw) {
+		rootProps := m.LookupPhysicalProps(m.RootProps())
+		return fmt.Sprintf("root: G%d, %s\n%s", f.numbering[m.RootGroup()], rootProps, tp.String())
 	}
 	return tp.String()
 }
@@ -121,7 +121,7 @@ func (m *Memo) formatPrivate(f *memoFmtCtx, private interface{}, physProps *prop
 		fmt.Fprintf(f.buf, ",cols=%s", t.Cols)
 
 	case *LookupJoinDef:
-		fmt.Fprintf(f.buf, ",keyCols=%v,lookupCols=%s", t.KeyCols, t.LookupCols)
+		fmt.Fprintf(f.buf, ",keyCols=%v,outCols=%s", t.KeyCols, t.Cols)
 
 	case *ExplainOpDef:
 		propsStr := t.Props.String()
@@ -168,7 +168,7 @@ func (m *Memo) formatBestExprSet(f *memoFmtCtx, tp treeprinter.Node, mgrp *group
 
 	sort.Slice(beSort, func(i, j int) bool {
 		// Always order the root required properties first.
-		if mgrp.id == m.root.group {
+		if mgrp.id == m.RootGroup() {
 			if beSort[i].required == beSort[i].best.required {
 				return true
 			}

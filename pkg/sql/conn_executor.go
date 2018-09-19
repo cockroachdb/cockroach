@@ -284,7 +284,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		},
 		StatementCounters: makeStatementCounters(),
 		// dbCache will be updated on Start().
-		dbCache:  newDatabaseCacheHolder(newDatabaseCache(config.SystemConfig{})),
+		dbCache:  newDatabaseCacheHolder(newDatabaseCache(config.NewSystemConfig())),
 		pool:     pool,
 		sqlStats: sqlStats{st: cfg.Settings, apps: make(map[string]*appStats)},
 		reCache:  tree.NewRegexpCache(512),
@@ -298,7 +298,7 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 		for {
 			select {
 			case <-gossipUpdateC:
-				sysCfg, _ := s.cfg.Gossip.GetSystemConfig()
+				sysCfg := s.cfg.Gossip.GetSystemConfig()
 				s.dbCache.updateSystemConfig(sysCfg)
 			case <-stopper.ShouldStop():
 				return
@@ -1128,6 +1128,7 @@ func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) erro
 			res = stmtRes
 			curStmt := Statement{
 				AST:           portal.Stmt.Statement,
+				Prepared:      ex.tryReusePreparedState(portal.Stmt),
 				ExpectedTypes: portal.Stmt.Columns,
 				AnonymizedStr: portal.Stmt.AnonymizedStr,
 			}
@@ -1379,6 +1380,18 @@ func (ex *connExecutor) setTxnRewindPos(ctx context.Context, pos CmdPos) {
 func (ex *connExecutor) stmtDoesntNeedRetry(stmt tree.Statement) bool {
 	wrap := Statement{AST: stmt}
 	return isSavepoint(wrap) || isSetTransaction(wrap)
+}
+
+// tryReusePreparedState checks whether it's possible to reuse information that
+// was previously prepared. If the current transaction has uncommitted DDL
+// statements, then assume they may have changed schema on which the prepared
+// state depends, and don't reuse it. If the prepared state can be reused, then
+// tryReusePreparedState returns it, else returns nil.
+func (ex *connExecutor) tryReusePreparedState(prepStmt *PreparedStatement) *PreparedStatement {
+	if ex.extraTxnState.tables.hasUncommittedTables() {
+		return nil
+	}
+	return prepStmt
 }
 
 func stateToTxnStatusIndicator(s fsm.State) TransactionStatusIndicator {

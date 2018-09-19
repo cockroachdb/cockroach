@@ -48,17 +48,31 @@ type Sink interface {
 	Close() error
 }
 
-func getSink(sinkURI string, targets jobspb.ChangefeedTargets) (Sink, error) {
+func getSink(
+	sinkURI string, opts map[string]string, targets jobspb.ChangefeedTargets,
+) (Sink, error) {
 	u, err := url.Parse(sinkURI)
 	if err != nil {
 		return nil, err
 	}
+	q := u.Query()
+
+	var s Sink
 	switch u.Scheme {
 	case sinkSchemeBuffer:
-		return &bufferSink{}, nil
+		s = &bufferSink{}
 	case sinkSchemeKafka:
-		kafkaTopicPrefix := u.Query().Get(sinkParamTopicPrefix)
-		return getKafkaSink(kafkaTopicPrefix, u.Host, targets)
+		kafkaTopicPrefix := q.Get(sinkParamTopicPrefix)
+		q.Del(sinkParamTopicPrefix)
+		schemaTopic := q.Get(sinkParamSchemaTopic)
+		q.Del(sinkParamSchemaTopic)
+		if schemaTopic != `` {
+			return nil, errors.Errorf(`%s is not yet supported`, sinkParamSchemaTopic)
+		}
+		s, err = getKafkaSink(kafkaTopicPrefix, u.Host, targets)
+		if err != nil {
+			return nil, err
+		}
 	case sinkSchemeExperimentalSQL:
 		// Swap the changefeed prefix for the sql connection one that sqlSink
 		// expects.
@@ -66,10 +80,33 @@ func getSink(sinkURI string, targets jobspb.ChangefeedTargets) (Sink, error) {
 		// TODO(dan): Make tableName configurable or based on the job ID or
 		// something.
 		tableName := `sqlsink`
-		return makeSQLSink(u.String(), tableName, targets)
+		s, err = makeSQLSink(u.String(), tableName, targets)
+		if err != nil {
+			return nil, err
+		}
+		// Remove parameters we know about for the unknown parameter check.
+		q.Del(`sslcert`)
+		q.Del(`sslkey`)
+		q.Del(`sslmode`)
+		q.Del(`sslrootcert`)
 	default:
 		return nil, errors.Errorf(`unsupported sink: %s`, u.Scheme)
 	}
+
+	// Skip sink params used only by other parts of the system.
+	switch formatType(opts[optFormat]) {
+	case optFormatAvro:
+		q.Del(sinkParamConfluentSchemaRegistry)
+	default:
+		// No-op.
+	}
+
+	for k := range q {
+		_ = s.Close()
+		return nil, errors.Errorf(`unknown sink query parameter: %s`, k)
+	}
+
+	return s, nil
 }
 
 // kafkaSink emits to Kafka asynchronously. It is not concurrency-safe; all
@@ -248,6 +285,9 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 		flushErr := s.mu.flushErr
 		s.mu.flushErr = nil
 		s.mu.Unlock()
+		if _, ok := flushErr.(*sarama.ProducerError); ok {
+			flushErr = &retryableSinkError{cause: flushErr}
+		}
 		return flushErr
 	}
 }
@@ -366,6 +406,7 @@ func makeSQLSink(uri, tableName string, targets jobspb.ChangefeedTargets) (*sqlS
 		return nil, err
 	}
 	if _, err := db.Exec(fmt.Sprintf(sqlSinkCreateTableStmt, tableName)); err != nil {
+		db.Close()
 		return nil, err
 	}
 
@@ -521,4 +562,34 @@ func (s *bufferSink) Flush(_ context.Context) error {
 func (s *bufferSink) Close() error {
 	s.closed = true
 	return nil
+}
+
+// causer matches the (unexported) interface used by Go to allow errors to wrap
+// their parent cause.
+type causer interface {
+	Cause() error
+}
+
+// retryableSinkError should be used by sinks to wrap any error which may
+// be retried.
+type retryableSinkError struct {
+	cause error
+}
+
+func (e retryableSinkError) Error() string { return e.cause.Error() }
+func (e retryableSinkError) Cause() error  { return e.cause }
+
+// isRetryableSinkError returns true if the supplied error, or any of its parent
+// causes, is a retryableSinkError.
+func isRetryableSinkError(err error) bool {
+	for {
+		if _, ok := err.(retryableSinkError); ok {
+			return true
+		}
+		if e, ok := err.(causer); ok {
+			err = e.Cause()
+			continue
+		}
+		return false
+	}
 }

@@ -39,7 +39,7 @@ var configDescKey = sqlbase.MakeDescMetadataKey(keys.MaxReservedDescID)
 // forceNewConfig forces a system config update by writing a bogus descriptor with an
 // incremented value inside. It then repeatedly fetches the gossip config until the
 // just-written descriptor is found.
-func forceNewConfig(t testing.TB, s *server.TestServer) config.SystemConfig {
+func forceNewConfig(t testing.TB, s *server.TestServer) *config.SystemConfig {
 	configID++
 	configDesc := &sqlbase.Descriptor{
 		Union: &sqlbase.Descriptor_Database{
@@ -63,12 +63,11 @@ func forceNewConfig(t testing.TB, s *server.TestServer) config.SystemConfig {
 	return waitForConfigChange(t, s)
 }
 
-func waitForConfigChange(t testing.TB, s *server.TestServer) config.SystemConfig {
+func waitForConfigChange(t testing.TB, s *server.TestServer) *config.SystemConfig {
 	var foundDesc sqlbase.Descriptor
-	var cfg config.SystemConfig
+	var cfg *config.SystemConfig
 	testutils.SucceedsSoon(t, func() error {
-		var ok bool
-		if cfg, ok = s.Gossip().GetSystemConfig(); ok {
+		if cfg = s.Gossip().GetSystemConfig(); cfg != nil {
 			if val := cfg.GetValue(configDescKey); val != nil {
 				if err := val.GetProto(&foundDesc); err != nil {
 					t.Fatal(err)
@@ -88,6 +87,15 @@ func waitForConfigChange(t testing.TB, s *server.TestServer) config.SystemConfig
 func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
+	cfg := config.DefaultSystemZoneConfig()
+	cfg.NumReplicas = 1
+	cfg.RangeMinBytes = 1 << 20
+	cfg.RangeMaxBytes = 1 << 20
+	cfg.GC.TTLSeconds = 60
+
+	fnSys := config.TestingSetDefaultSystemZoneConfig(cfg)
+	defer fnSys()
+
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.TODO())
 	s := srv.(*server.TestServer)
@@ -128,11 +136,11 @@ func TestGetZoneConfig(t *testing.T) {
 			// Verify sql.GetZoneConfigInTxn.
 			if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
 				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(ctx, txn,
-					tc.objectID, &sqlbase.IndexDescriptor{}, tc.partitionName)
+					tc.objectID, &sqlbase.IndexDescriptor{}, tc.partitionName, false)
 				if err != nil {
 					return err
 				} else if subzone != nil {
-					zoneCfg = subzone.Config
+					zoneCfg = &subzone.Config
 				}
 				if !tc.zoneCfg.Equal(zoneCfg) {
 					t.Errorf("#%d: bad zone config.\nexpected: %+v\ngot: %+v", tcNum, tc.zoneCfg, zoneCfg)
@@ -267,6 +275,7 @@ func TestGetZoneConfig(t *testing.T) {
 			{SubzoneIndex: 0, Key: []byte{1}, EndKey: []byte{255}},
 		},
 	}
+
 	for objID, objZone := range map[uint32]config.ZoneConfig{
 		db1:  db1Cfg,
 		tb11: tb11Cfg,

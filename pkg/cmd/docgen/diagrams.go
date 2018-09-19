@@ -378,6 +378,21 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
+		name:   "alter_type",
+		stmt:   "alter_onetable_stmt",
+		inline: []string{"alter_table_cmds", "alter_table_cmd", "opt_column", "opt_set_data"},
+		match:  []*regexp.Regexp{regexp.MustCompile(`'ALTER' ('COLUMN')? column_name ('SET' 'DATA')? 'TYPE'`)},
+		regreplace: map[string]string{
+			regList:                   "",
+			" opt_collate":            "",
+			" opt_alter_column_using": "",
+		},
+		replace: map[string]string{
+			"relation_expr": "table_name",
+		},
+		unlink: []string{"table_name", "column_name"},
+	},
+	{
 		name:    "alter_view",
 		stmt:    "alter_rename_view_stmt",
 		inline:  []string{"opt_transaction"},
@@ -443,6 +458,19 @@ var specs = []stmtSpec{
 	{name: "cancel_query", stmt: "cancel_queries_stmt", replace: map[string]string{"a_expr": "query_id"}, unlink: []string{"query_id"}},
 	{name: "cancel_session", stmt: "cancel_sessions_stmt", replace: map[string]string{"a_expr": "session_id"}, unlink: []string{"session_id"}},
 	{name: "create_database_stmt", inline: []string{"opt_encoding_clause"}, replace: map[string]string{"'SCONST'": "encoding"}, unlink: []string{"name", "encoding"}},
+	{
+		name:   "create_changefeed_stmt",
+		inline: []string{"changefeed_targets", "single_table_pattern_list", "opt_changefeed_sink", "opt_with_options", "kv_option_list", "kv_option"},
+		replace: map[string]string{
+			"table_option":                 "table_name",
+			"'INTO' string_or_placeholder": "'INTO' sink",
+			"name":                      "option",
+			"'SCONST'":                  "option",
+			"'=' string_or_placeholder": "'=' value"},
+		exclude: []*regexp.Regexp{
+			regexp.MustCompile("'OPTIONS'")},
+		unlink: []string{"table_name", "sink", "option", "value"},
+	},
 	{
 		name:    "create_index_stmt",
 		inline:  []string{"opt_unique", "opt_storing", "storing", "opt_name", "index_params", "index_elem", "opt_asc_desc"},
@@ -888,24 +916,24 @@ var specs = []stmtSpec{
 		name:   "table_ref",
 		inline: []string{"opt_ordinality", "opt_alias_clause", "opt_expr_list", "opt_column_list", "name_list", "alias_clause"},
 		replace: map[string]string{
-			"select_with_parens":                 "'(' select_stmt ')'",
-			"opt_index_hints":                    "( '@' scan_parameters | )",
-			"relation_expr":                      "table_name",
-			"func_name '(' ( expr_list |  ) ')'": "func_application",
+			"select_with_parens": "'(' select_stmt ')'",
+			"opt_index_flags":    "( '@' scan_parameters | )",
+			"relation_expr":      "table_name",
+			"func_table":         "func_application",
 			//			"| func_name '(' ( expr_list |  ) ')' ( 'WITH' 'ORDINALITY' |  ) ( ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) ) |  )": "",
 			"| special_function ( 'WITH' 'ORDINALITY' |  ) ( ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) ) |  )": "",
 			"| '(' joined_table ')' ( 'WITH' 'ORDINALITY' |  ) ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) )":    "| '(' joined_table ')' ( 'WITH' 'ORDINALITY' |  ) ( ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) ) |  )",
 		},
 		unlink: []string{"index_name"},
 		relink: map[string]string{
-			"scan_parameters": "opt_index_hints",
+			"scan_parameters": "opt_index_flags",
 		},
 		nosplit: true,
 	},
 	{
 		name:   "set_var",
 		stmt:   "set_stmt",
-		inline: []string{"set_session_stmt", "set_rest_more", "generic_set", "var_list"},
+		inline: []string{"set_session_stmt", "set_rest_more", "generic_set", "var_list", "to_or_eq"},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile(`'SET' . 'TRANSACTION'`),
 			regexp.MustCompile(`'SET' 'TRANSACTION'`),
@@ -922,7 +950,7 @@ var specs = []stmtSpec{
 	{
 		name:   "set_cluster_setting",
 		stmt:   "set_stmt",
-		inline: []string{"set_csetting_stmt", "generic_set", "var_list"},
+		inline: []string{"set_csetting_stmt", "generic_set", "var_list", "to_or_eq"},
 		match: []*regexp.Regexp{
 			regexp.MustCompile("'SET' 'CLUSTER'"),
 		},

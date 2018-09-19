@@ -173,11 +173,6 @@ func (dsp *DistSQLPlanner) SetSpanResolver(spanResolver distsqlplan.SpanResolver
 	dsp.spanResolver = spanResolver
 }
 
-// SpanResolver returns the planner's SpanResolver.
-func (dsp *DistSQLPlanner) SpanResolver() distsqlplan.SpanResolver {
-	return dsp.spanResolver
-}
-
 // distSQLExprCheckVisitor is a tree.Visitor that checks if expressions
 // contain things not supported by distSQL (like subqueries).
 type distSQLExprCheckVisitor struct {
@@ -291,6 +286,7 @@ func (dsp *DistSQLPlanner) mustWrapNode(node planNode) bool {
 	case *distinctNode:
 	case *unionNode:
 	case *valuesNode:
+	case *virtualTableNode:
 	case *createStatsNode:
 	case *projectSetNode:
 	case *unaryNode:
@@ -440,7 +436,6 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 			}
 		}
 		return canDistribute, nil
-
 	case *createStatsNode:
 		return shouldDistribute, nil
 
@@ -585,11 +580,11 @@ func identityMapInPlace(slice []int) []int {
 	return slice
 }
 
-// spanPartition is the intersection between a set of spans for a certain
+// SpanPartition is the intersection between a set of spans for a certain
 // operation (e.g table scan) and the set of ranges owned by a given node.
-type spanPartition struct {
-	node  roachpb.NodeID
-	spans roachpb.Spans
+type SpanPartition struct {
+	Node  roachpb.NodeID
+	Spans roachpb.Spans
 }
 
 func (dsp *DistSQLPlanner) checkNodeHealth(
@@ -680,23 +675,23 @@ func checkNodeHealth(
 	return nil
 }
 
-// partitionSpans finds out which nodes are owners for ranges touching the
+// PartitionSpans finds out which nodes are owners for ranges touching the
 // given spans, and splits the spans according to owning nodes. The result is a
-// set of spanPartitions (guaranteed one for each relevant node), which form a
+// set of SpanPartitions (guaranteed one for each relevant node), which form a
 // partitioning of the spans (i.e. they are non-overlapping and their union is
 // exactly the original set of spans).
 //
-// partitionSpans does its best to not assign ranges on nodes that are known to
+// PartitionSpans does its best to not assign ranges on nodes that are known to
 // either be unhealthy or running an incompatible version. The ranges owned by
 // such nodes are assigned to the gateway.
-func (dsp *DistSQLPlanner) partitionSpans(
+func (dsp *DistSQLPlanner) PartitionSpans(
 	planCtx *PlanningCtx, spans roachpb.Spans,
-) ([]spanPartition, error) {
+) ([]SpanPartition, error) {
 	if len(spans) == 0 {
 		panic("no spans")
 	}
 	ctx := planCtx.ctx
-	partitions := make([]spanPartition, 0, 1)
+	partitions := make([]SpanPartition, 0, 1)
 	// nodeMap maps a nodeID to an index inside the partitions array.
 	nodeMap := make(map[roachpb.NodeID]int)
 	// nodeVerCompatMap maintains info about which nodes advertise DistSQL
@@ -787,7 +782,7 @@ func (dsp *DistSQLPlanner) partitionSpans(
 
 				if !inNodeMap {
 					partitionIdx = len(partitions)
-					partitions = append(partitions, spanPartition{node: nodeID})
+					partitions = append(partitions, SpanPartition{Node: nodeID})
 					nodeMap[nodeID] = partitionIdx
 				}
 			}
@@ -795,9 +790,9 @@ func (dsp *DistSQLPlanner) partitionSpans(
 
 			if lastNodeID == nodeID {
 				// Two consecutive ranges on the same node, merge the spans.
-				partition.spans[len(partition.spans)-1].EndKey = endKey.AsRawKey()
+				partition.Spans[len(partition.Spans)-1].EndKey = endKey.AsRawKey()
 			} else {
-				partition.spans = append(partition.spans, roachpb.Span{
+				partition.Spans = append(partition.Spans, roachpb.Span{
 					Key:    lastKey.AsRawKey(),
 					EndKey: endKey.AsRawKey(),
 				})
@@ -1051,12 +1046,12 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		return PhysicalPlan{}, err
 	}
 
-	var spanPartitions []spanPartition
+	var spanPartitions []SpanPartition
 	if planCtx.isLocal {
-		spanPartitions = []spanPartition{{dsp.nodeDesc.NodeID, n.spans}}
+		spanPartitions = []SpanPartition{{dsp.nodeDesc.NodeID, n.spans}}
 	} else if n.hardLimit == 0 && n.softLimit == 0 {
 		// No limit - plan all table readers where their data live.
-		spanPartitions, err = dsp.partitionSpans(planCtx, n.spans)
+		spanPartitions, err = dsp.PartitionSpans(planCtx, n.spans)
 		if err != nil {
 			return PhysicalPlan{}, err
 		}
@@ -1070,7 +1065,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		if err != nil {
 			return PhysicalPlan{}, err
 		}
-		spanPartitions = []spanPartition{{nodeID, n.spans}}
+		spanPartitions = []SpanPartition{{nodeID, n.spans}}
 	}
 
 	var p PhysicalPlan
@@ -1083,10 +1078,10 @@ func (dsp *DistSQLPlanner) createTableReaders(
 	for i, sp := range spanPartitions {
 		tr := &distsqlrun.TableReaderSpec{}
 		*tr = spec
-		tr.Spans = makeTableReaderSpans(sp.spans)
+		tr.Spans = makeTableReaderSpans(sp.Spans)
 
 		proc := distsqlplan.Processor{
-			Node: sp.node,
+			Node: sp.Node,
 			Spec: distsqlrun.ProcessorSpec{
 				Core:    distsqlrun.ProcessorCoreUnion{TableReader: tr},
 				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
@@ -1308,7 +1303,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 	var orderedGroupColSet util.FastIntSet
 	for i, idx := range n.orderedGroupCols {
 		orderedGroupCols[i] = uint32(p.PlanToStreamColMap[idx])
-		orderedGroupColSet.Add(i)
+		orderedGroupColSet.Add(idx)
 	}
 
 	// We either have a local stage on each stream followed by a final stage, or
@@ -1578,6 +1573,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		// be part of the output of the local stage for the final stage to know
 		// about them.
 		finalGroupCols := make([]uint32, len(groupCols))
+		finalOrderedGroupCols := make([]uint32, 0, len(orderedGroupCols))
 		for i, groupColIdx := range groupCols {
 			agg := distsqlrun.AggregatorSpec_Aggregation{
 				Func:   distsqlrun.AggregatorSpec_ANY_NOT_NULL,
@@ -1599,33 +1595,22 @@ func (dsp *DistSQLPlanner) addAggregators(
 				intermediateTypes = append(intermediateTypes, inputTypes[groupColIdx])
 			}
 			finalGroupCols[i] = uint32(idx)
-		}
-
-		finalOrderedGroupCols := make([]uint32, len(orderedGroupCols))
-		for i, c := range orderedGroupCols {
-			finalOrderedGroupCols[i] = finalGroupCols[c]
+			if orderedGroupColSet.Contains(n.groupCols[i]) {
+				finalOrderedGroupCols = append(finalOrderedGroupCols, uint32(idx))
+			}
 		}
 
 		// Create the merge ordering for the local stage.
 		groupColProps := planPhysicalProps(n.plan)
 		groupColProps = groupColProps.project(n.groupCols)
-		ordCols := make([]distsqlrun.Ordering_Column, 0, len(groupColProps.ordering))
-	OrderingLoop:
-		for _, o := range groupColProps.ordering {
-			for i, c := range finalGroupCols {
-				if o.ColIdx == n.groupCols[i] {
-					dir := distsqlrun.Ordering_Column_ASC
-					if o.Direction == encoding.Descending {
-						dir = distsqlrun.Ordering_Column_DESC
-					}
-					ordCols = append(ordCols, distsqlrun.Ordering_Column{
-						ColIdx:    c,
-						Direction: dir,
-					})
-					continue OrderingLoop
-				}
+		ordCols := make([]distsqlrun.Ordering_Column, len(groupColProps.ordering))
+		for i, o := range groupColProps.ordering {
+			ordCols[i].ColIdx = finalGroupCols[o.ColIdx]
+			if o.Direction == encoding.Descending {
+				ordCols[i].Direction = distsqlrun.Ordering_Column_DESC
+			} else {
+				ordCols[i].Direction = distsqlrun.Ordering_Column_ASC
 			}
-			panic("missing IDENT from local aggregations")
 		}
 
 		localAggsSpec := distsqlrun.AggregatorSpec{
@@ -2379,7 +2364,6 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		} else {
 			plan, err = dsp.createPlanForValues(planCtx, n)
 		}
-
 	case *createStatsNode:
 		plan, err = dsp.createPlanForCreateStats(planCtx, n)
 

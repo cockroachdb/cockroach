@@ -55,17 +55,17 @@ eexpect ":/# "
 end_test
 
 start_test {Check that the "failed running SUBCOMMAND" message does not consider a flag the subcommand}
-send "$argv --verbosity 2 start --garbage\r"
+send "$argv --vmodule=*=2 start --garbage\r"
 eexpect {Failed running "start"}
 end_test
 
 start_test {Check that the "failed running SUBCOMMAND" message handles nested subcommands}
-send "$argv --verbosity 2 debug zip --garbage\r"
+send "$argv --vmodule=*=2 debug zip --garbage\r"
 eexpect {Failed running "debug zip"}
 end_test
 
 start_test {Check that the "failed running SUBCOMMAND" message handles missing subcommands}
-send "$argv --verbosity 2 --garbage\r"
+send "$argv --vmodule=*=2 --garbage\r"
 eexpect {Failed running "cockroach"}
 end_test
 

@@ -66,13 +66,12 @@ func SplitTable(
 	targetNodeIdx int,
 	vals ...interface{},
 ) {
-	pik, err := sqlbase.TestingMakePrimaryIndexKey(desc, vals...)
-	if err != nil {
-		t.Fatal(err)
+	if tc.ReplicationMode() != base.ReplicationManual {
+		t.Fatal("SplitTable called on a test cluster that was not in manual replication mode")
 	}
 
-	// Prevent the merge queue from immediately discarding our split.
-	if _, err := tc.ServerConn(0).Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false"); err != nil {
+	pik, err := sqlbase.TestingMakePrimaryIndexKey(desc, vals...)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -328,8 +327,6 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 
 	// We're going to split one of the tables, but node 4 is unaware of this.
 	_, err = db0.Exec(fmt.Sprintf(`
-	-- Prevent the merge queue from immediately discarding our splits.
-	SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
 	ALTER TABLE "right" SPLIT AT VALUES (1), (2), (3);
 	ALTER TABLE "right" EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 1), (ARRAY[%d], 2), (ARRAY[%d], 3);
 	`,
@@ -410,9 +407,6 @@ func TestDistSQLDeadHosts(t *testing.T) {
 	r.Exec(t, "CREATE DATABASE test")
 
 	r.Exec(t, "CREATE TABLE t (x INT PRIMARY KEY, xsquared INT)")
-
-	// Prevent the merge queue from immediately discarding our splits.
-	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
 
 	for i := 0; i < numNodes; i++ {
 		r.Exec(t, fmt.Sprintf("ALTER TABLE t SPLIT AT VALUES (%d)", n*i/5))
@@ -500,9 +494,6 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 
 	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	r.DB.SetMaxOpenConns(1)
-
-	// Prevent the merge queue from immediately discarding our splits.
-	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
 
 	r.Exec(t, "SET DISTSQL = ON")
 	// Force the query to be distributed.
@@ -650,7 +641,7 @@ func TestPartitionSpans(t *testing.T) {
 
 		gatewayNode int
 
-		// spans to be passed to partitionSpans
+		// spans to be passed to PartitionSpans
 		spans [][2]string
 
 		// expected result: a map of node to list of spans.
@@ -801,21 +792,21 @@ func TestPartitionSpans(t *testing.T) {
 				spans = append(spans, roachpb.Span{Key: roachpb.Key(s[0]), EndKey: roachpb.Key(s[1])})
 			}
 
-			partitions, err := dsp.partitionSpans(&planCtx, spans)
+			partitions, err := dsp.PartitionSpans(&planCtx, spans)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			resMap := make(map[int][][2]string)
 			for _, p := range partitions {
-				if _, ok := resMap[int(p.node)]; ok {
+				if _, ok := resMap[int(p.Node)]; ok {
 					t.Fatalf("node %d shows up in multiple partitions", p)
 				}
 				var spans [][2]string
-				for _, s := range p.spans {
+				for _, s := range p.Spans {
 					spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
 				}
-				resMap[int(p.node)] = spans
+				resMap[int(p.Node)] = spans
 			}
 
 			if !reflect.DeepEqual(resMap, tc.partitions) {
@@ -972,21 +963,21 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 			}
 
 			planCtx := dsp.NewPlanningCtx(context.Background(), nil /* evalCtx */, nil /* txn */)
-			partitions, err := dsp.partitionSpans(&planCtx, roachpb.Spans{span})
+			partitions, err := dsp.PartitionSpans(&planCtx, roachpb.Spans{span})
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			resMap := make(map[roachpb.NodeID][][2]string)
 			for _, p := range partitions {
-				if _, ok := resMap[p.node]; ok {
+				if _, ok := resMap[p.Node]; ok {
 					t.Fatalf("node %d shows up in multiple partitions", p)
 				}
 				var spans [][2]string
-				for _, s := range p.spans {
+				for _, s := range p.Spans {
 					spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
 				}
-				resMap[p.node] = spans
+				resMap[p.Node] = spans
 			}
 
 			if !reflect.DeepEqual(resMap, tc.partitions) {
@@ -1063,21 +1054,21 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 	}
 
 	planCtx := dsp.NewPlanningCtx(context.Background(), nil /* evalCtx */, nil /* txn */)
-	partitions, err := dsp.partitionSpans(&planCtx, roachpb.Spans{span})
+	partitions, err := dsp.PartitionSpans(&planCtx, roachpb.Spans{span})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	resMap := make(map[roachpb.NodeID][][2]string)
 	for _, p := range partitions {
-		if _, ok := resMap[p.node]; ok {
+		if _, ok := resMap[p.Node]; ok {
 			t.Fatalf("node %d shows up in multiple partitions", p)
 		}
 		var spans [][2]string
-		for _, s := range p.spans {
+		for _, s := range p.Spans {
 			spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
 		}
-		resMap[p.node] = spans
+		resMap[p.Node] = spans
 	}
 
 	expectedPartitions :=

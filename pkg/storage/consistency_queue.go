@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -32,6 +33,8 @@ var consistencyCheckInterval = settings.RegisterNonNegativeDurationSetting(
 	"the time between range consistency checks; set to 0 to disable consistency checking",
 	24*time.Hour,
 )
+
+var testingAggressiveConsistencyChecks = envutil.EnvOrDefaultBool("COCKROACH_CONSISTENCY_AGGRESSIVE", false)
 
 type consistencyQueue struct {
 	*baseQueue
@@ -64,7 +67,7 @@ func newConsistencyQueue(store *Store, gossip *gossip.Gossip) *consistencyQueue 
 }
 
 func (q *consistencyQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, _ config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, _ *config.SystemConfig,
 ) (bool, float64) {
 	interval := q.interval()
 	if interval <= 0 {
@@ -97,7 +100,7 @@ func (q *consistencyQueue) shouldQueue(
 
 // process() is called on every range for which this node is a lease holder.
 func (q *consistencyQueue) process(
-	ctx context.Context, repl *Replica, _ config.SystemConfig,
+	ctx context.Context, repl *Replica, _ *config.SystemConfig,
 ) error {
 	if q.interval() <= 0 {
 		return nil

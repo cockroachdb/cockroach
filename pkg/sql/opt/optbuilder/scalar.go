@@ -173,6 +173,11 @@ func (b *Builder) buildScalar(
 		out = b.factory.ConstructArray(elements, b.factory.InternType(arrayType))
 
 	case *tree.ArrayFlatten:
+		if b.AllowUnsupportedExpr {
+			out = b.factory.ConstructUnsupportedExpr(b.factory.InternTypedExpr(scalar))
+			break
+		}
+
 		// We build
 		//
 		//  ARRAY(<subquery>)
@@ -231,6 +236,7 @@ func (b *Builder) buildScalar(
 						Ordering: oc,
 					}),
 				),
+				b.factory.InternSubqueryDef(&memo.SubqueryDef{OriginalExpr: s.Subquery}),
 			),
 			b.factory.ConstructArray(memo.EmptyList, typID),
 		}))
@@ -282,7 +288,7 @@ func (b *Builder) buildScalar(
 			elseExpr := b.buildScalar(texpr, inScope, nil, nil, colRefs)
 			whens = append(whens, elseExpr)
 		} else {
-			whens = append(whens, b.buildDatum(tree.DNull))
+			whens = append(whens, b.factory.ConstructConstVal(tree.DNull))
 		}
 		out = b.factory.ConstructCase(input, b.factory.InternList(whens))
 
@@ -300,7 +306,7 @@ func (b *Builder) buildScalar(
 		e1 := b.buildScalar(t.Expr1.(tree.TypedExpr), inScope, nil, nil, colRefs)
 		e2 := b.buildScalar(t.Expr2.(tree.TypedExpr), inScope, nil, nil, colRefs)
 		whens := []memo.GroupID{
-			b.factory.ConstructWhen(e2, b.buildDatum(tree.DNull)),
+			b.factory.ConstructWhen(e2, b.factory.ConstructConstVal(tree.DNull)),
 			e1,
 		}
 		out = b.factory.ConstructCase(e1, b.factory.InternList(whens))
@@ -324,7 +330,7 @@ func (b *Builder) buildScalar(
 		)
 
 	case *tree.ComparisonExpr:
-		if sub, ok := t.Right.(*subquery); ok && sub.multiRow {
+		if sub, ok := t.Right.(*subquery); ok && sub.wrapInTuple {
 			out, _ = b.buildMultiRowSubquery(t, inScope, colRefs)
 			// Perform correctness checks on the outer cols, update colRefs and
 			// b.subquery.outerCols.
@@ -382,13 +388,13 @@ func (b *Builder) buildScalar(
 		return b.buildScalar(t.TypedInnerExpr(), inScope, outScope, outCol, colRefs)
 
 	case *tree.Placeholder:
-		if b.evalCtx.HasPlaceholders() {
+		if !b.KeepPlaceholders && b.evalCtx.HasPlaceholders() {
 			// Replace placeholders with their value.
 			d, err := t.Eval(b.evalCtx)
 			if err != nil {
 				panic(builderError{err})
 			}
-			out = b.buildDatum(d)
+			out = b.factory.ConstructConstVal(d)
 		} else {
 			out = b.factory.ConstructPlaceholder(b.factory.InternTypedExpr(t))
 		}
@@ -430,7 +436,7 @@ func (b *Builder) buildScalar(
 	// tree.Datum case needs to occur after *tree.Placeholder which implements
 	// Datum.
 	case tree.Datum:
-		out = b.buildDatum(t)
+		out = b.factory.ConstructConstVal(t)
 
 	default:
 		if b.AllowUnsupportedExpr {
@@ -469,21 +475,6 @@ func (b *Builder) buildAnyScalar(
 		out = b.factory.ConstructNot(out)
 	}
 	return out
-}
-
-// buildDatum maps certain datums to separate operators, for easier matching.
-func (b *Builder) buildDatum(d tree.Datum) memo.GroupID {
-	if d == tree.DNull {
-		return b.factory.ConstructNull(b.factory.InternType(types.Unknown))
-	}
-	if boolVal, ok := d.(*tree.DBool); ok {
-		// Map True/False datums to True/False operator.
-		if *boolVal {
-			return b.factory.ConstructTrue()
-		}
-		return b.factory.ConstructFalse()
-	}
-	return b.factory.ConstructConst(b.factory.InternDatum(d))
 }
 
 // buildFunction builds a set of memo groups that represent a function
@@ -667,7 +658,7 @@ func NewScalar(
 
 // Build a memo structure from a TypedExpr: the root group represents a scalar
 // expression equivalent to expr.
-func (sb *ScalarBuilder) Build(expr tree.TypedExpr) (root memo.GroupID, err error) {
+func (sb *ScalarBuilder) Build(expr tree.TypedExpr) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate builder errors without adding
@@ -682,5 +673,7 @@ func (sb *ScalarBuilder) Build(expr tree.TypedExpr) (root memo.GroupID, err erro
 		}
 	}()
 
-	return sb.buildScalar(expr, &sb.scope, nil, nil, nil), nil
+	group := sb.buildScalar(expr, &sb.scope, nil, nil, nil)
+	sb.factory.Memo().SetRoot(group, memo.MinPhysPropsID)
+	return nil
 }

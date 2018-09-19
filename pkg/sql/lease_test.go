@@ -561,7 +561,7 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 }
 
-func isDeleted(tableID sqlbase.ID, cfg config.SystemConfig) bool {
+func isDeleted(tableID sqlbase.ID, cfg *config.SystemConfig) bool {
 	descKey := sqlbase.MakeDescMetadataKey(tableID)
 	val := cfg.GetValue(descKey)
 	if val == nil {
@@ -596,7 +596,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
-			TestingLeasesRefreshedEvent: func(cfg config.SystemConfig) {
+			TestingLeasesRefreshedEvent: func(cfg *config.SystemConfig) {
 				mu.Lock()
 				defer mu.Unlock()
 				if waitTableID != 0 {
@@ -1533,7 +1533,7 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 			// the transaction commit time (and that the txn commit time wasn't
 			// bumped past it).
 			log.Infof(ctx, "checking version %d", table.Version)
-			txn := client.NewTxn(t.kvDB, roachpb.NodeID(0), client.RootTxn)
+			txn := client.NewTxn(ctx, t.kvDB, roachpb.NodeID(0), client.RootTxn)
 			// Make the txn look back at the known modification timestamp.
 			txn.SetFixedTimestamp(ctx, table.ModificationTime)
 
@@ -1591,7 +1591,7 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 					atomic.AddInt32(&testAcquisitionBlockCount, 1)
 				},
 			},
-			GossipUpdateEvent: func(cfg config.SystemConfig) error {
+			GossipUpdateEvent: func(cfg *config.SystemConfig) error {
 				return errors.Errorf("ignore gossip update")
 			},
 		},

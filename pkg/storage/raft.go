@@ -22,8 +22,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/coreos/etcd/raft"
-	"github.com/coreos/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 // init installs an adapter to use clog for log messages from raft which
@@ -132,7 +132,7 @@ func logRaftReady(ctx context.Context, ready raft.Ready) {
 			fmt.Fprintf(&buf, "  Outgoing Message[%d]: %.200s\n",
 				i, raftDescribeMessage(m, raftEntryFormatter))
 		}
-		log.Infof(ctx, "raft ready\n%s", buf.String())
+		log.Infof(ctx, "raft ready (must-sync=%t)\n%s", ready.MustSync, buf.String())
 	}
 }
 

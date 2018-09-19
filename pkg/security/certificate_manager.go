@@ -194,8 +194,11 @@ func (cm *CertificateManager) RegisterSignalHandler(stopper *stop.Stopper) {
 
 // CACertPath returns the expected file path for the CA certificate.
 func (cm *CertificateManager) CACertPath() string {
-	return filepath.Join(cm.certsDir, "ca"+certExtension)
+	return filepath.Join(cm.certsDir, CACertFilename())
 }
+
+// CACertFilename returns the expected file name for the CA certificate.
+func CACertFilename() string { return "ca" + certExtension }
 
 // ClientCACertPath returns the expected file path for the CA certificate
 // used to verify client certificates.
@@ -231,13 +234,19 @@ func (cm *CertificateManager) UIKeyPath() string {
 
 // ClientCertPath returns the expected file path for the user's certificate.
 func (cm *CertificateManager) ClientCertPath(user string) string {
-	return filepath.Join(cm.certsDir, "client."+user+certExtension)
+	return filepath.Join(cm.certsDir, ClientCertFilename(user))
 }
+
+// ClientCertFilename returns the expected file name for the user's certificate.
+func ClientCertFilename(user string) string { return "client." + user + certExtension }
 
 // ClientKeyPath returns the expected file path for the user's key.
 func (cm *CertificateManager) ClientKeyPath(user string) string {
-	return filepath.Join(cm.certsDir, "client."+user+keyExtension)
+	return filepath.Join(cm.certsDir, ClientKeyFilename(user))
 }
+
+// ClientKeyFilename returns the expected file name for the user's key.
+func ClientKeyFilename(user string) string { return "client." + user + keyExtension }
 
 // CACert returns the CA cert. May be nil.
 // Callers should check for an internal Error field.

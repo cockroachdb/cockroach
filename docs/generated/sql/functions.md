@@ -419,6 +419,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
+<tr><td><code>array_to_json(array: anyelement[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the array as JSON or JSONB.</p>
+</span></td></tr>
+<tr><td><code>array_to_json(array: anyelement[], pretty_bool: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the array as JSON or JSONB.</p>
+</span></td></tr>
 <tr><td><code>json_array_length(json: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of elements in the outermost JSON or JSONB array.</p>
 </span></td></tr>
 <tr><td><code>json_build_array(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
@@ -448,6 +452,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><code>jsonb_build_object(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
 </span></td></tr>
 <tr><td><code>jsonb_extract_path(jsonb, <a href="string.html">string</a>...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
+</span></td></tr>
+<tr><td><code>jsonb_insert(target: jsonb, path: <a href="string.html">string</a>[], new_val: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments. <code>new_val</code> will be inserted before path target.</p>
+</span></td></tr>
+<tr><td><code>jsonb_insert(target: jsonb, path: <a href="string.html">string</a>[], new_val: jsonb, insert_after: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments. If <code>insert_after</code> is true (default is false), <code>new_val</code> will be inserted after path target.</p>
 </span></td></tr>
 <tr><td><code>jsonb_object(keys: <a href="string.html">string</a>[], values: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>This form of json_object takes keys and values pairwise from two separate arrays. In all other respects it is identical to the one-argument form.</p>
 </span></td></tr>

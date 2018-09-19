@@ -86,7 +86,7 @@ func newMergeJoiner(
 		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, 0, post, output,
 		ProcStateOpts{
 			InputsToDrain: []RowSource{leftSource, rightSource},
-			TrailingMetaCallback: func() []ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
 				m.close()
 				return nil
 			},
@@ -238,11 +238,6 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		m.emitUnmatchedRight = shouldEmitUnmatchedRow(rightSide, m.joinType)
 		m.leftIdx, m.rightIdx = 0, 0
 	}
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (m *mergeJoiner) ConsumerDone() {
-	m.MoveToDraining(nil /* err */)
 }
 
 func (m *mergeJoiner) close() {

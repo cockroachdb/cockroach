@@ -41,10 +41,19 @@ func (c *CustomFuncs) HasHoistableSubquery(group memo.GroupID) bool {
 	}
 	scalar.SetAvailable(props.HasHoistableSubquery)
 
-	ev := memo.MakeNormExprView(c.f.mem, group)
+	ev := memo.MakeNormExprView(c.mem, group)
 	switch ev.Operator() {
-	case opt.SubqueryOp, opt.ExistsOp, opt.AnyOp:
+	case opt.SubqueryOp, opt.ExistsOp:
 		scalar.Rule.HasHoistableSubquery = !scalar.OuterCols.Empty()
+		return scalar.Rule.HasHoistableSubquery
+
+	case opt.AnyOp:
+		// Don't hoist Any when only its Scalar operand is correlated, because it
+		// executes much slower. It's better to cache the results of the constant
+		// subquery in this case. Note that if an Any is at the top-level of a
+		// WHERE clause, it will be transformed to an Exists operator, so this case
+		// only occurs when the Any is nested, in a projection, etc.
+		scalar.Rule.HasHoistableSubquery = !ev.Child(0).Logical().OuterCols().Empty()
 		return scalar.Rule.HasHoistableSubquery
 	}
 
@@ -528,7 +537,7 @@ func (c *CustomFuncs) EnsureAggsCanIgnoreNulls(in, aggs memo.GroupID) memo.Group
 		switch expr.Operator() {
 		case opt.ConstAggOp:
 			// Translate ConstAgg(...) to ConstNotNullAgg(...).
-			newElem = c.f.ConstructConstNotNullAgg(expr.ChildGroup(c.f.mem, 0))
+			newElem = c.f.ConstructConstNotNullAgg(expr.ChildGroup(c.mem, 0))
 
 		case opt.CountRowsOp:
 			// Translate CountRows() to Count(notNullCol).
@@ -611,10 +620,11 @@ func (c *CustomFuncs) AddColsToGroupByDef(
 // expression with the first (and only) column of the input rowset, using the
 // given comparison operator.
 func (c *CustomFuncs) ConstructAnyCondition(
-	input, scalar memo.GroupID, cmp memo.PrivateID,
+	input, scalar memo.GroupID, subqueryDef memo.PrivateID,
 ) memo.GroupID {
 	inputVar := c.referenceSingleColumn(input)
-	return c.ConstructBinary(c.f.mem.LookupPrivate(cmp).(opt.Operator), scalar, inputVar)
+	def := c.f.mem.LookupPrivate(subqueryDef).(*memo.SubqueryDef)
+	return c.ConstructBinary(def.Cmp, scalar, inputVar)
 }
 
 // ConstructBinary builds a dynamic binary expression, given the binary
@@ -663,7 +673,7 @@ type subqueryHoister struct {
 func (r *subqueryHoister) init(c *CustomFuncs, input memo.GroupID) {
 	r.c = c
 	r.f = c.f
-	r.mem = c.f.mem
+	r.mem = c.mem
 	r.hoisted = input
 }
 
@@ -731,7 +741,7 @@ func (r *subqueryHoister) hoistAll(root memo.GroupID) memo.GroupID {
 		case opt.AnyOp:
 			input := ev.ChildGroup(0)
 			scalar := ev.ChildGroup(1)
-			cmp := ev.Private().(opt.Operator)
+			cmp := ev.Private().(*memo.SubqueryDef).Cmp
 			subquery = r.constructGroupByAny(scalar, cmp, input)
 		}
 
@@ -932,9 +942,13 @@ func (r *subqueryHoister) constructGroupByAny(
 			r.f.ConstructProject(
 				r.f.ConstructSelect(
 					input,
-					r.f.ConstructIsNot(
-						r.f.funcs.ConstructBinary(cmp, scalar, inputVar),
-						r.f.ConstructFalse(),
+					r.f.ConstructFilters(
+						r.f.InternList([]memo.GroupID{
+							r.f.ConstructIsNot(
+								r.f.funcs.ConstructBinary(cmp, scalar, inputVar),
+								r.f.ConstructFalse(),
+							),
+						}),
 					),
 				),
 				r.f.ConstructProjections(

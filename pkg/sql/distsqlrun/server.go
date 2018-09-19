@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -137,7 +137,7 @@ type ServerConfig struct {
 
 	// TempStorage is used by some DistSQL processors to store rows when the
 	// working set is larger than can be stored in memory.
-	TempStorage engine.Engine
+	TempStorage diskmap.Factory
 	// DiskMonitor is used to monitor temporary storage disk usage. Actual disk
 	// space used will be a small multiple (~1.1) of this because of RocksDB
 	// space amplification.
@@ -297,10 +297,14 @@ func (ds *ServerImpl) setupFlow(
 	const opName = "flow"
 	var sp opentracing.Span
 	if parentSpan == nil {
-		sp = ds.Tracer.StartSpan(opName)
+		sp = ds.Tracer.StartSpan(opName, tracing.LogTagsFromCtx(ctx))
 	} else {
 		// We use FollowsFrom because the flow's span outlives the SetupFlow request.
-		sp = ds.Tracer.StartSpan(opName, opentracing.FollowsFrom(parentSpan.Context()))
+		sp = ds.Tracer.StartSpan(
+			opName,
+			opentracing.FollowsFrom(parentSpan.Context()),
+			tracing.LogTagsFromCtx(ctx),
+		)
 	}
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 
@@ -327,9 +331,13 @@ func (ds *ServerImpl) setupFlow(
 	}
 	if meta := req.TxnCoordMeta; meta != nil {
 		if !localState.IsLocal {
-			// The flow will run in a Txn that specifies child=true because we
-			// do not want each distributed Txn to heartbeat the transaction.
-			txn = client.NewTxnWithCoordMeta(ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *meta)
+			if meta.Txn.Status != roachpb.PENDING {
+				return nil, nil, errors.Errorf("cannot create flow in non-PENDING txn: %s",
+					meta.Txn)
+			}
+			// The flow will run in a LeafTxn because we do not want each distributed
+			// Txn to heartbeat the transaction.
+			txn = client.NewTxnWithCoordMeta(ctx, ds.FlowDB, req.Flow.Gateway, client.LeafTxn, *meta)
 		}
 	}
 
@@ -435,7 +443,7 @@ func (ds *ServerImpl) setupFlow(
 		return ctx, nil, err
 	}
 	if !f.isLocal() {
-		flowCtx.AddLogTagStr("f", f.id.Short())
+		flowCtx.AddLogTag("f", f.id.Short())
 		flowCtx.AnnotateCtx(ctx)
 	}
 	return ctx, f, nil
@@ -609,6 +617,9 @@ type TestingKnobs struct {
 	// DeterministicStats overrides stats which don't have reliable values, like
 	// stall time and bytes sent. It replaces them with a zero value.
 	DeterministicStats bool
+
+	// Changefeed contains testing knobs specific to the changefeed system.
+	Changefeed base.ModuleTestingKnobs
 }
 
 // MetadataTestLevel represents the types of queries where metadata test

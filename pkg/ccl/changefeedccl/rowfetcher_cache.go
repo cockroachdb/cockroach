@@ -25,41 +25,42 @@ import (
 // StartScanFrom can be used to turn that key (or all the keys making up the
 // column families of one row) into a row.
 type rowFetcherCache struct {
-	leaseMgr *sql.LeaseManager
-	fetchers map[*sqlbase.TableDescriptor]*sqlbase.RowFetcher
+	leaseMgr  *sql.LeaseManager
+	tableHist *tableHistory
+	fetchers  map[*sqlbase.TableDescriptor]*sqlbase.RowFetcher
 
 	a sqlbase.DatumAlloc
 }
 
-func newRowFetcherCache(leaseMgr *sql.LeaseManager) *rowFetcherCache {
+func newRowFetcherCache(leaseMgr *sql.LeaseManager, tableHist *tableHistory) *rowFetcherCache {
 	return &rowFetcherCache{
-		leaseMgr: leaseMgr,
-		fetchers: make(map[*sqlbase.TableDescriptor]*sqlbase.RowFetcher),
+		leaseMgr:  leaseMgr,
+		tableHist: tableHist,
+		fetchers:  make(map[*sqlbase.TableDescriptor]*sqlbase.RowFetcher),
 	}
 }
 
 func (c *rowFetcherCache) TableDescForKey(
 	ctx context.Context, key roachpb.Key, ts hlc.Timestamp,
 ) (*sqlbase.TableDescriptor, error) {
-	var skippedCols int
-	for {
+	var tableDesc *sqlbase.TableDescriptor
+	for skippedCols := 0; ; {
 		remaining, tableID, _, err := sqlbase.DecodeTableIDIndexID(key)
 		if err != nil {
 			return nil, err
 		}
-		// TODO(dan): We don't really need a lease, this is just a convenient way to
-		// get the right descriptor for a timestamp, so release it immediately after
-		// we acquire it. Avoid the lease entirely.
-		tableDesc, _, err := c.leaseMgr.Acquire(ctx, ts, tableID)
+		// No caching of these are attempted, since the lease manager does its
+		// own caching.
+		tableDesc, _, err = c.leaseMgr.Acquire(ctx, ts, tableID)
 		if err != nil {
 			return nil, err
 		}
+		// Immediately release the lease, since we only need it for the exact
+		// timestamp requested.
 		if err := c.leaseMgr.Release(tableDesc); err != nil {
 			return nil, err
 		}
-		if err := validateChangefeedTable(tableDesc); err != nil {
-			return nil, err
-		}
+
 		// Skip over the column data.
 		for ; skippedCols < len(tableDesc.PrimaryIndex.ColumnIDs); skippedCols++ {
 			l, err := encoding.PeekLength(remaining)
@@ -71,10 +72,19 @@ func (c *rowFetcherCache) TableDescForKey(
 		var interleaved bool
 		remaining, interleaved = encoding.DecodeIfInterleavedSentinel(remaining)
 		if !interleaved {
-			return tableDesc, nil
+			break
 		}
 		key = remaining
 	}
+
+	// Leasing invariant: each new `tableDesc.Version` of a descriptor is
+	// initially written with an mvcc timestamp equal to its modification time.
+	// It might be updated later with backfill progress, but (critically) the
+	// `validateFn` we passed to `tableHist` doesn't care about this.
+	if err := c.tableHist.WaitForTS(ctx, tableDesc.ModificationTime); err != nil {
+		return nil, err
+	}
+	return tableDesc, nil
 }
 
 func (c *rowFetcherCache) RowFetcherForTableDesc(

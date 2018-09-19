@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/coreos/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 // PrintKeyValue attempts to pretty-print the specified MVCCKeyValue to

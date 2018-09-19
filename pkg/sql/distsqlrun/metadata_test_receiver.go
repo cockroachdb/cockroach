@@ -70,7 +70,7 @@ func newMetadataTestReceiver(
 		nil, /* memMonitor */
 		ProcStateOpts{
 			InputsToDrain: []RowSource{input},
-			TrailingMetaCallback: func() []ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
 				var trailingMeta []ProducerMetadata
 				if mtr.rowCounts != nil {
 					if meta := mtr.checkRowNumMetadata(); meta != nil {

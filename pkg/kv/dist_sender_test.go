@@ -269,9 +269,9 @@ func TestSendRPCOrder(t *testing.T) {
 		{
 			args:  &roachpb.PutRequest{},
 			tiers: append(nodeTiers[5], roachpb.Tier{Key: "irrelevant", Value: ""}),
-			// Compare only the first resulting addresses as we have a lease holder
+			// Compare only the first resulting address as we have a lease holder
 			// and that means we're only trying to send there.
-			expReplica:  []roachpb.NodeID{2, 5, 4, 0, 0},
+			expReplica:  []roachpb.NodeID{2, 0, 0, 0, 0},
 			leaseHolder: 2,
 		},
 		// Inconsistent Get without matching attributes but lease holder (node 3). Should just
@@ -335,6 +335,7 @@ func TestSendRPCOrder(t *testing.T) {
 	ds := NewDistSender(cfg, g)
 
 	for n, tc := range testCases {
+		log.Infof(context.TODO(), "testcase %d", n)
 		verifyCall = makeVerifier(tc.expReplica)
 
 		{

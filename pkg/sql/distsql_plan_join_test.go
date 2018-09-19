@@ -445,11 +445,11 @@ type testPartition struct {
 	spans [][2]string
 }
 
-func makeSpanPartitions(kvDB *client.DB, testParts []testPartition) ([]spanPartition, error) {
-	spanParts := make([]spanPartition, len(testParts))
+func makeSpanPartitions(kvDB *client.DB, testParts []testPartition) ([]SpanPartition, error) {
+	spanParts := make([]SpanPartition, len(testParts))
 
 	for i, testPart := range testParts {
-		spanParts[i].node = testPart.node
+		spanParts[i].Node = testPart.node
 		for _, span := range testPart.spans {
 			start, err := encodeTestKey(kvDB, shortToLongKey(span[0]))
 			if err != nil {
@@ -461,8 +461,8 @@ func makeSpanPartitions(kvDB *client.DB, testParts []testPartition) ([]spanParti
 				return nil, err
 			}
 
-			spanParts[i].spans = append(
-				spanParts[i].spans,
+			spanParts[i].Spans = append(
+				spanParts[i].Spans,
 				roachpb.Span{Key: start, EndKey: end},
 			)
 		}

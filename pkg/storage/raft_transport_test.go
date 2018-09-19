@@ -21,9 +21,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft/raftpb"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

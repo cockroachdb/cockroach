@@ -481,11 +481,10 @@ func backupJobDescription(
 // clusterNodeCount returns the approximate number of nodes in the cluster.
 func clusterNodeCount(g *gossip.Gossip) int {
 	var nodes int
-	for k := range g.GetInfoStatus().Infos {
-		if gossip.IsNodeIDKey(k) {
-			nodes++
-		}
-	}
+	_ = g.IterateInfos(gossip.KeyNodeIDPrefix, func(_ string, _ gossip.Info) error {
+		nodes++
+		return nil
+	})
 	return nodes
 }
 
@@ -1209,6 +1208,7 @@ func getAllRevisions(
 		StartTime:     startTime,
 		MVCCFilter:    roachpb.MVCCFilter_All,
 		ReturnSST:     true,
+		OmitChecksum:  true,
 	}
 	resp, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 	if pErr != nil {

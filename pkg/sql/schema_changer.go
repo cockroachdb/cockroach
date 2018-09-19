@@ -38,8 +38,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -148,6 +150,11 @@ func isPermanentSchemaChangeError(err error) bool {
 		return false
 	}
 	err = errors.Cause(err)
+
+	if grpcutil.IsClosedConnection(err) {
+		return false
+	}
+
 	switch err {
 	case
 		context.Canceled,
@@ -174,6 +181,7 @@ func isPermanentSchemaChangeError(err error) bool {
 
 		}
 	}
+
 	return true
 }
 
@@ -446,9 +454,8 @@ func (sc *SchemaChanger) maybeAddDrop(
 			var timeRemaining time.Duration
 			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 				timeRemaining = 0
-				_, zoneCfg, _, err := GetZoneConfigInTxn(
-					ctx, txn, uint32(table.ID), &sqlbase.IndexDescriptor{}, "",
-				)
+				_, zoneCfg, _, err := GetZoneConfigInTxn(ctx, txn, uint32(table.ID),
+					&sqlbase.IndexDescriptor{}, "", false /* getInheritedDefault */)
 				if err != nil {
 					return err
 				}
@@ -606,7 +613,7 @@ func (sc *SchemaChanger) drainNames(
 func (sc *SchemaChanger) exec(
 	ctx context.Context, inSession bool, evalCtx *extendedEvalContext,
 ) error {
-	ctx = log.WithLogTag(ctx, "scExec", "")
+	ctx = logtags.AddTag(ctx, "scExec", nil)
 	if log.V(2) {
 		log.Infof(ctx, "exec pending schema change; table: %d, mutation: %d",
 			sc.tableID, sc.mutationID)
@@ -1270,6 +1277,10 @@ type SchemaChangerTestingKnobs struct {
 	// transaction is unable to commit because it is violating the two
 	// version lease invariant.
 	TwoVersionLeaseViolation func()
+
+	// OnError is called with all the errors seen by the
+	// synchronous code path.
+	OnError func(err error)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -1384,7 +1395,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 		for {
 			select {
 			case <-gossipUpdateC:
-				cfg, _ := s.execCfg.Gossip.GetSystemConfig()
+				cfg := s.execCfg.Gossip.GetSystemConfig()
 				// Read all tables and their versions
 				if log.V(2) {
 					log.Info(ctx, "received a new config")
@@ -1403,7 +1414,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					// and enqueued with the new TTL timeout.
 					for id, sc := range s.forGC {
 						if sc.dropTime > 0 {
-							zoneCfg, _, err := ZoneConfigHook(cfg, uint32(id), nil)
+							zoneCfg, _, _, err := ZoneConfigHook(cfg, uint32(id))
 							if err != nil {
 								log.Errorf(ctx, "no zone config for desc: %d", id)
 								return
@@ -1491,7 +1502,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 
 							if table.DropTime > 0 {
 								schemaChanger.dropTime = table.DropTime
-								zoneCfg, _, err := ZoneConfigHook(cfg, uint32(table.ID), nil)
+								zoneCfg, _, _, err := ZoneConfigHook(cfg, uint32(table.ID))
 								if err != nil {
 									log.Errorf(ctx, "no zone config for desc: %d", table.ID)
 									return

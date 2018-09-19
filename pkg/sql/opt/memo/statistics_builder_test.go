@@ -91,9 +91,10 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mem := New()
+	var mem Memo
+	mem.Init(&evalCtx)
 	tab := catalog.Table(tree.NewUnqualifiedTableName("sel"))
-	tabID := mem.metadata.AddTable(tab)
+	tabID := mem.Metadata().AddTable(tab)
 
 	// Test that applyConstraintSet correctly updates the statistics from
 	// constraint set cs, and selectivity is calculated correctly.
@@ -111,16 +112,16 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		// Make the scan.
 		def := &ScanOpDef{Table: tabID, Cols: cols}
 		scan := MakeScanExpr(mem.InternScanOpDef(def))
-		scanGroup := mem.MemoizeNormExpr(&evalCtx, Expr(scan))
+		scanGroup := mem.MemoizeNormExpr(&evalCtx, Expr(scan)).Group()
 
 		// Make the filter.
 		filter := MakeTrueExpr()
-		filterGroup := mem.MemoizeNormExpr(&evalCtx, Expr(filter))
+		filterGroup := mem.MemoizeNormExpr(&evalCtx, Expr(filter)).Group()
 
 		// Make the select.
 		sel := MakeSelectExpr(scanGroup, filterGroup)
 		selGroup := mem.newGroup(Expr(sel))
-		ev := MakeNormExprView(mem, selGroup.id)
+		ev := MakeNormExprView(&mem, selGroup.id)
 		relProps := &props.Relational{Cardinality: props.AnyCardinality}
 		s := &relProps.Stats
 		s.Init(relProps)

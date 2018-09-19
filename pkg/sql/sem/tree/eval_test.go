@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -1488,13 +1487,12 @@ func optBuildScalar(evalCtx *tree.EvalContext, e tree.TypedExpr) (tree.TypedExpr
 	o.Init(evalCtx)
 	b := optbuilder.NewScalar(context.TODO(), &tree.SemaContext{}, evalCtx, o.Factory())
 	b.AllowUnsupportedExpr = true
-	group, err := b.Build(e)
-	if err != nil {
+	if err := b.Build(e); err != nil {
 		return nil, err
 	}
-	ev := o.Optimize(group, &props.Physical{})
+	ev := o.Optimize()
 
-	bld := execbuilder.New(nil /* factory */, ev)
+	bld := execbuilder.New(nil /* factory */, ev, evalCtx)
 	ivh := tree.MakeIndexedVarHelper(nil /* container */, 0)
 
 	expr, err := bld.BuildScalar(&ivh)

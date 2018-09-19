@@ -34,10 +34,10 @@ import (
 	"time"
 
 	"github.com/cenk/backoff"
-	"github.com/coreos/etcd/raft"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	circuit "github.com/rubyist/circuitbreaker"
+	"go.etcd.io/etcd/raft"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -299,7 +299,7 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 	// Wait for gossip to startup.
 	testutils.SucceedsSoon(t, func() error {
 		for i, g := range m.gossips {
-			if _, ok := g.GetSystemConfig(); !ok {
+			if cfg := g.GetSystemConfig(); cfg == nil {
 				return errors.Errorf("system config not available at index %d", i)
 			}
 		}

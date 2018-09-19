@@ -197,13 +197,13 @@ func initRowFetcher(
 	return index, isSecondaryIndex, nil
 }
 
-func (tr *tableReader) generateTrailingMeta() []ProducerMetadata {
+func (tr *tableReader) generateTrailingMeta(ctx context.Context) []ProducerMetadata {
 	var trailingMeta []ProducerMetadata
 	ranges := misplannedRanges(tr.Ctx, tr.fetcher.GetRangeInfo(), tr.flowCtx.nodeID)
 	if ranges != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
 	}
-	if meta := getTxnCoordMeta(tr.flowCtx.txn); meta != nil {
+	if meta := getTxnCoordMeta(ctx, tr.flowCtx.txn); meta != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{TxnCoordMeta: meta})
 	}
 	tr.InternalClose()
@@ -242,6 +242,9 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		row, meta := tr.input.Next()
 
 		if meta != nil {
+			if meta.Err != nil {
+				tr.MoveToDraining(nil /* err */)
+			}
 			return nil, meta
 		}
 		if row == nil {
@@ -254,11 +257,6 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 	}
 	return nil, tr.DrainHelper()
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (tr *tableReader) ConsumerDone() {
-	tr.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.

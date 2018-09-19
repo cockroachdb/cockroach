@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -680,4 +681,81 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 		t.Errorf("expected %v to contain %d nodes, got %d", g[1].mu.nodeMap, e, a)
 	}
 	g[1].mu.Unlock()
+}
+
+// Test propagation of gossip infos in both directions across an existing
+// gossip connection.
+func TestGossipPropagation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	local := startGossip(1, stopper, t, metric.NewRegistry())
+	remote := startGossip(2, stopper, t, metric.NewRegistry())
+	remote.mu.Lock()
+	rAddr := remote.mu.is.NodeAddr
+	remote.mu.Unlock()
+	local.manage()
+	remote.manage()
+
+	mustAdd := func(g *Gossip, key string, val []byte, ttl time.Duration) {
+		if err := g.AddInfo(key, val, ttl); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Gossip a key on local and wait for it to show up on remote. This
+	// guarantees we have an active local to remote client connection.
+	mustAdd(local, "bootstrap", nil, 0)
+	testutils.SucceedsSoon(t, func() error {
+		c := local.findClient(func(c *client) bool { return c.addr.String() == rAddr.String() })
+		if c == nil {
+			// Restart the client connection in the loop. It might have failed due to
+			// a heartbeat timeout.
+			local.mu.Lock()
+			local.startClientLocked(&rAddr)
+			local.mu.Unlock()
+			return fmt.Errorf("unable to find local to remote client")
+		}
+		_, err := remote.GetInfo("bootstrap")
+		return err
+	})
+
+	// Add entries on both the local and remote nodes and verify they get propagated.
+	mustAdd(local, "local", nil, time.Minute)
+	mustAdd(remote, "remote", nil, time.Minute)
+
+	getInfo := func(g *Gossip, key string) *Info {
+		g.mu.RLock()
+		defer g.mu.RUnlock()
+		return g.mu.is.Infos[key]
+	}
+
+	var localInfo *Info
+	var remoteInfo *Info
+	testutils.SucceedsSoon(t, func() error {
+		localInfo = getInfo(remote, "local")
+		if localInfo == nil {
+			return fmt.Errorf("local info not propagated")
+		}
+		remoteInfo = getInfo(local, "remote")
+		if remoteInfo == nil {
+			return fmt.Errorf("remote info not propagated")
+		}
+		return nil
+	})
+
+	// Replace the existing entries on both the local and remote nodes and verify
+	// these new entries get propagated with updated timestamps.
+	mustAdd(local, "local", nil, 2*time.Minute)
+	mustAdd(remote, "remote", nil, 2*time.Minute)
+
+	testutils.SucceedsSoon(t, func() error {
+		if i := getInfo(remote, "local"); i == nil || reflect.DeepEqual(i, localInfo) {
+			return fmt.Errorf("new local info not propagated:\n%v\n%v", i, localInfo)
+		}
+		if i := getInfo(local, "remote"); reflect.DeepEqual(i, remoteInfo) {
+			return fmt.Errorf("new remote info not propagated:\n%v\n%v", i, remoteInfo)
+		}
+		return nil
+	})
 }

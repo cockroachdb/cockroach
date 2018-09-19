@@ -38,12 +38,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -89,7 +91,7 @@ const debugIteratorLeak = false
 //export rocksDBLog
 func rocksDBLog(logLevel C.int, s *C.char, n C.int) {
 	if log.V(int32(logLevel)) {
-		ctx := log.WithLogTagStr(context.Background(), "rocksdb", "")
+		ctx := logtags.AddTag(context.Background(), "rocksdb", nil)
 		log.Info(ctx, C.GoStringN(s, n))
 	}
 }
@@ -1102,6 +1104,41 @@ func (r *RocksDB) GetSSTables() SSTableInfos {
 	return res
 }
 
+// WALFileInfo contains metadata about a single write-ahead log file. Note this
+// mirrors the C.DBWALFile struct.
+type WALFileInfo struct {
+	LogNumber int64
+	Size      int64
+}
+
+// GetSortedWALFiles retrievews information about all of the write-ahead log
+// files in this engine in order from oldest to newest.
+func (r *RocksDB) GetSortedWALFiles() ([]WALFileInfo, error) {
+	var n C.int
+	var files *C.DBWALFile
+	status := C.DBGetSortedWALFiles(r.rdb, &files, &n)
+	if err := statusToError(status); err != nil {
+		return nil, errors.Wrap(err, "could not get sorted WAL files")
+	}
+	defer C.free(unsafe.Pointer(files))
+
+	// We can't index into files because it is a pointer, not a slice. The hackery
+	// below treats the pointer as an array and then constructs a slice from it.
+
+	structSize := unsafe.Sizeof(C.DBWALFile{})
+	getWALFile := func(i int) *C.DBWALFile {
+		return (*C.DBWALFile)(unsafe.Pointer(uintptr(unsafe.Pointer(files)) + uintptr(i)*structSize))
+	}
+
+	res := make([]WALFileInfo, n)
+	for i := range res {
+		wf := getWALFile(i)
+		res[i].LogNumber = int64(wf.log_number)
+		res[i].Size = int64(wf.size)
+	}
+	return res, nil
+}
+
 // getUserProperties fetches the user properties stored in each sstable's
 // metadata.
 func (r *RocksDB) getUserProperties() (enginepb.SSTUserPropertiesCollection, error) {
@@ -1732,6 +1769,12 @@ func (r *rocksDBBatch) Commit(syncCommit bool) error {
 	}
 	r.distinctOpen = false
 
+	if r.flushes == 0 && r.builder.count == 0 {
+		// Nothing was written to this batch. Fast path.
+		r.committed = true
+		return nil
+	}
+
 	// Combine multiple write-only batch commits into a single call to
 	// RocksDB. RocksDB is supposed to be performing such batching internally,
 	// but whether Cgo or something else, it isn't achieving the same degree of
@@ -1858,6 +1901,8 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 			C.DBClose(r.batch)
 			r.batch = nil
 		}
+	} else {
+		panic("commitInternal called on empty batch")
 	}
 	r.committed = true
 
@@ -2855,6 +2900,16 @@ func (r *RocksDB) LinkFile(oldname, newname string) error {
 	return nil
 }
 
+// NewSortedDiskMap implements the MapProvidingEngine interface.
+func (r *RocksDB) NewSortedDiskMap() diskmap.SortedDiskMap {
+	return NewRocksDBMap(r)
+}
+
+// NewSortedDiskMultiMap implements the MapProvidingEngine interface.
+func (r *RocksDB) NewSortedDiskMultiMap() diskmap.SortedDiskMap {
+	return NewRocksDBMultiMap(r)
+}
+
 // IsValidSplitKey returns whether the key is a valid split key. Certain key
 // ranges cannot be split (the meta1 span and the system DB span); split keys
 // chosen within any of these ranges are considered invalid. And a split key
@@ -2901,22 +2956,8 @@ func mvccScanSkipKeyValue(repr []byte) ([]byte, error) {
 // "batch" (this is not the RocksDB batch repr format), returning both the
 // key/value and the suffix of data remaining in the batch.
 func MVCCScanDecodeKeyValue(repr []byte) (key MVCCKey, value []byte, orepr []byte, err error) {
-	if len(repr) < 8 {
-		return key, nil, repr, errors.Errorf("unexpected batch EOF")
-	}
-	v := binary.LittleEndian.Uint64(repr)
-	keySize := v >> 32
-	valSize := v & ((1 << 32) - 1)
-	if (keySize + valSize) > uint64(len(repr)) {
-		return key, nil, nil, fmt.Errorf("expected %d bytes, but only %d remaining",
-			keySize+valSize, len(repr))
-	}
-	repr = repr[8:]
-	rawKey := repr[:keySize]
-	value = repr[keySize : keySize+valSize]
-	repr = repr[keySize+valSize:]
-	key, err = DecodeKey(rawKey)
-	return key, value, repr, err
+	k, ts, value, orepr, err := enginepb.ScanDecodeKeyValue(repr)
+	return MVCCKey{k, ts}, value, orepr, err
 }
 
 func notFoundErrOrDefault(err error) error {

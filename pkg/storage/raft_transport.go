@@ -25,8 +25,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft/raftpb"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

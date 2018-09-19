@@ -21,8 +21,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

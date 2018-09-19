@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -91,9 +92,10 @@ type fetcherEntryArgs struct {
 
 func TestNextRowSingle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	tables := map[string]fetcherEntryArgs{
 		"t1": {
@@ -153,7 +155,7 @@ func TestNextRowSingle(t *testing.T) {
 
 			if err := rf.StartScan(
 				context.TODO(),
-				client.NewTxn(kvDB, 0, client.RootTxn),
+				client.NewTxn(ctx, kvDB, 0, client.RootTxn),
 				roachpb.Spans{tableDesc.IndexSpan(tableDesc.PrimaryIndex.ID)},
 				false, /*limitBatches*/
 				0,     /*limitHint*/
@@ -210,9 +212,10 @@ func TestNextRowSingle(t *testing.T) {
 
 func TestNextRowBatchLimiting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	tables := map[string]fetcherEntryArgs{
 		"t1": {
@@ -272,7 +275,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 
 			if err := rf.StartScan(
 				context.TODO(),
-				client.NewTxn(kvDB, 0, client.RootTxn),
+				client.NewTxn(ctx, kvDB, 0, client.RootTxn),
 				roachpb.Spans{tableDesc.IndexSpan(tableDesc.PrimaryIndex.ID)},
 				true,  /*limitBatches*/
 				10,    /*limitHint*/
@@ -327,13 +330,119 @@ func TestNextRowBatchLimiting(t *testing.T) {
 	}
 }
 
+// Regression test for #29374. Ensure that RowFetcher can handle multi-span
+// fetches where individual batches end in the middle of a multi-column family
+// row with not-null columns.
+func TestNextRowPartialColumnFamily(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	tableName := "t1"
+	table := fetcherEntryArgs{
+		modFactor: 42,
+		nRows:     2,
+		nCols:     4,
+	}
+
+	// Initialize a table with multiple column families with some not null ones.
+	// We'll insert rows that contain nulls for the nullable column families, to
+	// trick the rowfetcher heuristic that multiplies the input batch size by the
+	// number of columns in the table.
+	sqlutils.CreateTable(
+		t, sqlDB, tableName,
+		`
+k INT PRIMARY KEY, a INT NOT NULL, b INT NOT NULL, c INT NULL,
+FAMILY f1 (k), FAMILY f2(a), FAMILY f3(b), FAMILY f4(c),
+INDEX(c)
+`,
+		table.nRows,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn,
+			sqlutils.RowModuloFn(table.modFactor),
+			sqlutils.RowModuloFn(table.modFactor),
+		),
+	)
+
+	alloc := &DatumAlloc{}
+
+	tableDesc := GetTableDescriptor(kvDB, sqlutils.TestDB, tableName)
+
+	var valNeededForCol util.FastIntSet
+	valNeededForCol.AddRange(0, table.nCols-1)
+
+	args := []initFetcherArgs{
+		{
+			tableDesc:       tableDesc,
+			indexIdx:        0,
+			valNeededForCol: valNeededForCol,
+		},
+	}
+
+	rf, err := initFetcher(args, false /*reverseScan*/, alloc)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Start a scan that has multiple input spans, to tickle the codepath that
+	// sees an "empty batch". When we have multiple input spans, the kv server
+	// will always return one response per input span. Make sure that the
+	// empty response that will be produced in the case where the first span
+	// does not end before the limit is satisfied doesn't cause the rowfetcher
+	// to think that a row has ended, and therefore have issues when it sees
+	// the next kvs from that row in isolation in the next batch.
+
+	// We'll make the first span go to some random key in the middle of the
+	// key space (by appending a number to the index's start key) and the
+	// second span go from that key to the end of the index.
+	indexSpan := tableDesc.IndexSpan(tableDesc.PrimaryIndex.ID)
+	endKey := indexSpan.EndKey
+	midKey := encoding.EncodeUvarintAscending(indexSpan.Key, uint64(100))
+	indexSpan.EndKey = midKey
+
+	if err := rf.StartScan(
+		context.TODO(),
+		client.NewTxn(ctx, kvDB, 0, client.RootTxn),
+		roachpb.Spans{indexSpan,
+			roachpb.Span{Key: midKey, EndKey: endKey},
+		},
+		true, /*limitBatches*/
+		// Set a limitHint of 1 to more quickly end the first batch, causing a
+		// batch that ends between rows.
+		1,     /*limitHint*/
+		false, /*traceKV*/
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	var count int
+	for {
+		// Just try to grab the row - we don't need to validate the contents
+		// in this test.
+		datums, _, _, err := rf.NextRowDecoded(context.TODO())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if datums == nil {
+			break
+		}
+		count++
+	}
+
+	if table.nRows != count {
+		t.Fatalf("expected %d rows, got %d rows", table.nRows, count)
+	}
+}
+
 // Secondary indexes contain extra values (the primary key of the primary index
 // as well as STORING columns).
 func TestNextRowSecondaryIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	// Modulo to use for s1, s2 storing columns.
 	storingMods := [2]int{7, 13}
@@ -446,7 +555,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 
 			if err := rf.StartScan(
 				context.TODO(),
-				client.NewTxn(kvDB, 0, client.RootTxn),
+				client.NewTxn(ctx, kvDB, 0, client.RootTxn),
 				roachpb.Spans{tableDesc.IndexSpan(tableDesc.Indexes[0].ID)},
 				false, /*limitBatches*/
 				0,     /*limitHint*/
@@ -574,9 +683,10 @@ func generateIdxSubsets(maxIdx int, subsets [][]int) [][]int {
 // We test reading rows from every non-empty subset for completeness.
 func TestNextRowInterleaved(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	tableArgs := map[string]*fetcherEntryArgs{
 		"parent1": {
@@ -806,7 +916,7 @@ func TestNextRowInterleaved(t *testing.T) {
 
 			if err := rf.StartScan(
 				context.TODO(),
-				client.NewTxn(kvDB, 0, client.RootTxn),
+				client.NewTxn(ctx, kvDB, 0, client.RootTxn),
 				lookupSpans,
 				false, /*limitBatches*/
 				0,     /*limitHint*/

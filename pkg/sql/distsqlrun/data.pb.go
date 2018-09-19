@@ -507,7 +507,8 @@ type ProducerMessage struct {
 	Header *ProducerHeader `protobuf:"bytes,1,opt,name=header" json:"header,omitempty"`
 	// Typing information. There will be one DatumInfo for each element in a row.
 	// This field has to be populated on, or before, a ProducerMessage with data
-	// in it, and can only be populated once.
+	// in it, and can only be populated once. It can be nil if only zero length
+	// rows will be sent.
 	// TODO(andrei): It'd be nice if the typing information for streams would be
 	// configured statically at plan creation time, instead of being discovered
 	// dynamically through the first rows that flow.

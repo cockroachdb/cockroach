@@ -27,6 +27,7 @@
 [Scalar]
 define Subquery {
     Input Expr
+    Def   SubqueryDef
 }
 
 # Any is a SQL operator that applies a comparison to every row of an input
@@ -53,7 +54,7 @@ define Subquery {
 define Any {
     Input  Expr
     Scalar Expr
-    Cmp    Operator
+    Def    SubqueryDef
 }
 
 # Variable is the typed scalar value of a column in the query. The private
@@ -163,6 +164,7 @@ define MergeOn {
 [Scalar]
 define Exists {
     Input Expr
+    Def   SubqueryDef
 }
 
 # Filters is a boolean And operator that only appears as the Filters child of

@@ -41,7 +41,7 @@ func registerAllocator(r *registry) {
 		m := newMonitor(ctx, c, c.Range(1, start))
 		m.Go(func(ctx context.Context) error {
 			t.Status("loading fixture")
-			if _, err := db.Exec(`RESTORE DATABASE workload FROM $1`, fixturePath); err != nil {
+			if _, err := db.Exec(`RESTORE DATABASE tpch FROM $1`, fixturePath); err != nil {
 				t.Fatal(err)
 			}
 			return nil

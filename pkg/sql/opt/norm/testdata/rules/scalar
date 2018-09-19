@@ -17,7 +17,7 @@ TABLE a
 
 # Put variables on both sides of comparison operator to avoid matching constant
 # patterns.
-opt
+opt expect=CommuteVar
 SELECT
     (1+i) = k AS r,
     (2-k) <> i AS s,
@@ -51,7 +51,7 @@ project
 # --------------------------------------------------
 # CommuteConst
 # --------------------------------------------------
-opt
+opt expect=CommuteConst
 SELECT
     (length('foo')+1) = (i+k) AS r,
     length('bar') <> (i*2) AS s,
@@ -75,17 +75,17 @@ project
       ├── (i + k) = (length('foo') + 1) [type=bool, outer=(1,2)]
       ├── (i * 2) != length('bar') [type=bool, outer=(2)]
       ├── (1 - k) IS NOT DISTINCT FROM 5 [type=bool, outer=(1)]
-      ├── k IS DISTINCT FROM (10 + 1) [type=bool, outer=(1)]
+      ├── k IS DISTINCT FROM 11 [type=bool, outer=(1)]
       ├── f + 1.0 [type=float, outer=(3)]
       ├── (i * i) * (5 * length('foo')) [type=int, outer=(2)]
-      ├── (i + i) & (100 ^ 2) [type=int, outer=(2)]
+      ├── (i + i) & 10000 [type=int, outer=(2)]
       ├── (i + i) | (length('foo') + 1) [type=int, outer=(2)]
       └── (k ^ 2) # (1 - length('foo')) [type=int, outer=(1)]
 
 # --------------------------------------------------
 # EliminateCoalesce
 # --------------------------------------------------
-opt
+opt expect=EliminateCoalesce
 SELECT COALESCE(i) FROM a
 ----
 project
@@ -95,10 +95,7 @@ project
  └── projections [outer=(2)]
       └── variable: i [type=int, outer=(2)]
 
-# --------------------------------------------------
-# SimplifyCoalesce
-# --------------------------------------------------
-opt
+opt expect=EliminateCoalesce
 SELECT COALESCE(NULL) FROM a
 ----
 project
@@ -108,7 +105,11 @@ project
  └── projections
       └── null [type=unknown]
 
-opt
+# --------------------------------------------------
+# SimplifyCoalesce
+# --------------------------------------------------
+
+opt expect=SimplifyCoalesce
 SELECT COALESCE(NULL, 'foo', s) FROM a
 ----
 project
@@ -118,7 +119,7 @@ project
  └── projections
       └── const: 'foo' [type=string]
 
-opt
+opt expect=SimplifyCoalesce
 SELECT COALESCE(NULL, NULL, s, s || 'foo') FROM a
 ----
 project
@@ -139,10 +140,21 @@ project
  └── projections [outer=(2)]
       └── COALESCE(i, NULL, NULL) [type=int, outer=(2)]
 
+opt expect=SimplifyCoalesce
+SELECT COALESCE((1, 2, 3), (2, 3, 4)) FROM a
+----
+project
+ ├── columns: coalesce:7(tuple{int, int, int})
+ ├── fd: ()-->(7)
+ ├── scan a
+ └── projections
+      └── (1, 2, 3) [type=tuple{int, int, int}]
+
+
 # --------------------------------------------------
 # EliminateCast
 # --------------------------------------------------
-opt
+opt expect=EliminateCast
 SELECT
     i::int, arr::int[], '[1, 2]'::jsonb::json, null::char(2)::bit, s::string::string
 FROM a
@@ -190,7 +202,7 @@ project
 # --------------------------------------------------
 # FoldNullCast
 # --------------------------------------------------
-opt
+opt expect=FoldNullCast
 SELECT
     null::int,
     null::timestamptz,
@@ -217,7 +229,7 @@ project
 # --------------------------------------------------
 # FoldNullUnary
 # --------------------------------------------------
-opt
+opt expect=FoldNullUnary
 SELECT +null::int AS r, -null::int AS s, ~null::int AS t FROM a
 ----
 project
@@ -232,7 +244,7 @@ project
 # --------------------------------------------------
 # FoldNullBinaryLeft, FoldNullBinaryRight
 # --------------------------------------------------
-opt
+opt expect=(FoldNullBinaryLeft,FoldNullBinaryRight)
 SELECT
     null::int & 1 AS ra, 1 & null::int AS rb,
     null::decimal + 1 AS sa, 1 + null::decimal AS sb,
@@ -294,7 +306,7 @@ project
 # --------------------------------------------------
 # FoldNullInNonEmpty
 # --------------------------------------------------
-opt
+opt expect=FoldNullInNonEmpty
 SELECT null IN (i) AS r, null NOT IN (s) AS s FROM a
 ----
 project
@@ -308,7 +320,7 @@ project
 # --------------------------------------------------
 # FoldInNull
 # --------------------------------------------------
-opt
+opt expect=FoldInNull
 SELECT i IN (null, null) AS r, k NOT IN (1 * null, null::int, 1 < null) AS s FROM a
 ----
 project
@@ -322,7 +334,7 @@ project
 # --------------------------------------------------
 # NormalizeInConst
 # --------------------------------------------------
-opt
+opt expect=NormalizeInConst
 SELECT i IN (2, 1, 1, null, 3, null, 2, 3.0) AS r FROM a
 ----
 project
@@ -332,7 +344,7 @@ project
  └── projections [outer=(2)]
       └── i IN (NULL, 1, 2, 3) [type=bool, outer=(2)]
 
-opt
+opt expect=NormalizeInConst
 SELECT s NOT IN ('foo', s || 'foo', 'bar', length(s)::string, NULL) AS r FROM a
 ----
 project
@@ -345,7 +357,7 @@ project
 # --------------------------------------------------
 # EliminateExistsProject
 # --------------------------------------------------
-opt
+opt expect=EliminateExistsProject
 SELECT * FROM a WHERE EXISTS(SELECT i+1, i*k FROM a)
 ----
 select
@@ -368,7 +380,7 @@ select
 # --------------------------------------------------
 
 # Scalar group by shouldn't get eliminated.
-opt
+opt expect-not=EliminateExistsGroupBy
 SELECT * FROM a WHERE EXISTS(SELECT max(s) FROM a WHERE False)
 ----
 select
@@ -395,7 +407,7 @@ select
                      └── max [type=string, outer=(10)]
                           └── variable: a.s [type=string, outer=(10)]
 
-opt
+opt expect=EliminateExistsGroupBy
 SELECT * FROM a WHERE EXISTS(SELECT DISTINCT s FROM a)
 ----
 select
@@ -411,7 +423,7 @@ select
            └── scan a
                 └── columns: a.s:10(string)
 
-opt
+opt expect=EliminateExistsGroupBy
 SELECT * FROM a WHERE EXISTS(SELECT DISTINCT ON (i) s FROM a)
 ----
 select
@@ -430,7 +442,7 @@ select
 # --------------------------------------------------
 # EliminateExistsGroupBy + EliminateExistsProject
 # --------------------------------------------------
-opt
+opt expect=(EliminateExistsGroupBy,EliminateExistsProject)
 SELECT * FROM a WHERE EXISTS(SELECT max(s) FROM a GROUP BY i)
 ----
 select
@@ -449,7 +461,7 @@ select
 # --------------------------------------------------
 # NormalizeJSONFieldAccess
 # --------------------------------------------------
-opt
+opt expect=NormalizeJSONFieldAccess
 SELECT * FROM a WHERE j->'a' = '"b"'::JSON
 ----
 select
@@ -463,21 +475,7 @@ select
  └── filters [type=bool, outer=(5)]
       └── j @> '{"a": "b"}' [type=bool, outer=(5)]
 
-opt
-SELECT * FROM a WHERE j->'a' @> '{"x": "b"}'::JSON
-----
-select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
- ├── key: (1)
- ├── fd: (1)-->(2-6)
- ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
- │    ├── key: (1)
- │    └── fd: (1)-->(2-6)
- └── filters [type=bool, outer=(5)]
-      └── j @> '{"a": {"x": "b"}}' [type=bool, outer=(5)]
-
-opt
+opt expect=NormalizeJSONFieldAccess
 SELECT * FROM a WHERE j->'a'->'x' = '"b"'::JSON
 ----
 select
@@ -492,7 +490,7 @@ select
       └── j @> '{"a": {"x": "b"}}' [type=bool, outer=(5)]
 
 # The transformation is not valid in this case.
-opt
+opt expect-not=NormalizeJSONFieldAccess
 SELECT * FROM a WHERE j->2 = '"b"'::JSON
 ----
 select
@@ -507,7 +505,7 @@ select
       └── (j->2) = '"b"' [type=bool, outer=(5)]
 
 # The transformation is not valid in this case, since j->'a' could be an array.
-opt
+opt expect-not=NormalizeJSONFieldAccess
 SELECT * FROM a WHERE j->'a' @> '"b"'::JSON
 ----
 select
@@ -520,3 +518,196 @@ select
  │    └── fd: (1)-->(2-6)
  └── filters [type=bool, outer=(5)]
       └── (j->'a') @> '"b"' [type=bool, outer=(5)]
+
+# --------------------------------------------------
+# NormalizeJSONContains
+# --------------------------------------------------
+
+opt expect=NormalizeJSONContains
+SELECT * FROM a WHERE j->'a' @> '{"x": "b"}'::JSON
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ └── filters [type=bool, outer=(5)]
+      └── j @> '{"a": {"x": "b"}}' [type=bool, outer=(5)]
+
+# --------------------------------------------------
+# SimplifyCaseWhenConstValue
+# --------------------------------------------------
+
+opt expect=SimplifyCaseWhenConstValue
+SELECT CASE 1 WHEN 1 THEN 'one' END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'one' [type=string]
+
+opt expect=SimplifyCaseWhenConstValue
+SELECT CASE WHEN 1 = 1 THEN 'one' END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'one' [type=string]
+
+opt expect=SimplifyCaseWhenConstValue
+SELECT CASE false WHEN 0 = 1 THEN 'one' END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'one' [type=string]
+
+# Verify that a true condition does not remove non-constant expressions
+# proceeding it.
+opt expect=SimplifyCaseWhenConstValue
+SELECT
+    CASE 1
+    WHEN k THEN 'one'
+    WHEN 1 THEN 'two'
+    WHEN 1 THEN 'three'
+    ELSE 'four'
+    END
+FROM
+    a
+----
+project
+ ├── columns: case:7(string)
+ ├── scan a
+ │    ├── columns: k:1(int!null)
+ │    └── key: (1)
+ └── projections [outer=(1)]
+      └── CASE 1 WHEN k THEN 'one' ELSE 'two' END [type=string, outer=(1)]
+
+opt expect=SimplifyCaseWhenConstValue
+SELECT
+    CASE WHEN k = 1 THEN 'one' WHEN true THEN 'two' END
+FROM
+    a
+----
+project
+ ├── columns: case:7(string)
+ ├── scan a
+ │    ├── columns: k:1(int!null)
+ │    └── key: (1)
+ └── projections [outer=(1)]
+      └── CASE WHEN k = 1 THEN 'one' ELSE 'two' END [type=string, outer=(1)]
+
+opt expect=SimplifyCaseWhenConstValue
+SELECT CASE 1 WHEN 2 THEN 'one' ELSE 'three' END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'three' [type=string]
+
+opt expect=SimplifyCaseWhenConstValue
+SELECT
+    CASE 1
+    WHEN 2 THEN 'one'
+    WHEN k THEN 'two'
+    WHEN 1 THEN 'three'
+    WHEN 1 THEN 'four'
+    END
+FROM
+    a
+----
+project
+ ├── columns: case:7(string)
+ ├── scan a
+ │    ├── columns: k:1(int!null)
+ │    └── key: (1)
+ └── projections [outer=(1)]
+      └── CASE 1 WHEN k THEN 'two' ELSE 'three' END [type=string, outer=(1)]
+
+opt expect=SimplifyCaseWhenConstValue
+SELECT
+    CASE 1
+    WHEN 2 THEN 'one'
+    WHEN 1 THEN 'three'
+    WHEN 1 THEN 'four'
+    ELSE 'five'
+    END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'three' [type=string]
+
+opt expect=SimplifyCaseWhenConstValue
+SELECT
+    CASE NULL
+    WHEN true THEN 'one'
+    WHEN false THEN 'two'
+    WHEN NULL THEN 'three'
+    ELSE 'four'
+    END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'four' [type=string]
+
+opt expect=SimplifyCaseWhenConstValue
+SELECT CASE WHEN false THEN 'one' WHEN true THEN 'two' END
+----
+project
+ ├── columns: case:1(string!null)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── values
+ │    ├── cardinality: [1 - 1]
+ │    ├── key: ()
+ │    └── tuple [type=tuple]
+ └── projections
+      └── const: 'two' [type=string]

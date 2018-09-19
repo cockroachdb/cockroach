@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/coreos/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 var (

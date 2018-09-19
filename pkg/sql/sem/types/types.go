@@ -214,7 +214,7 @@ func (TCollatedString) FamilyEqual(other T) bool {
 }
 
 // Oid implements the T interface.
-func (TCollatedString) Oid() oid.Oid { return oid.T_unknown }
+func (TCollatedString) Oid() oid.Oid { return oid.T_text }
 
 // SQLName implements the T interface.
 func (TCollatedString) SQLName() string { return "text" }
