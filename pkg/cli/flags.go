@@ -235,13 +235,17 @@ func init() {
 			// is only overriding the default value for the pflag package (and what
 			// is visible in help text), not the stdlib flag value.
 			flag.DefValue = "NONE"
+		case logflags.LogDirName,
+			logflags.LogFileMaxSizeName,
+			logflags.LogFilesCombinedMaxSizeName,
+			logflags.LogFileVerbosityThresholdName:
+			// The --log-dir* and --log-file* flags are specified only for the
+			// `start` and `demo` commands.
+			return
 		}
 		pf.AddFlag(flag)
 	})
 
-	// The --log-dir default changes depending on the command. Avoid confusion by
-	// simply clearing it.
-	pf.Lookup(logflags.LogDirName).DefValue = ""
 	// When a flag is specified but without a value, pflag assigns its
 	// NoOptDefVal to it via Set(). This is also the value used to
 	// generate the implicit assigned value in the usage text
@@ -332,6 +336,22 @@ func init() {
 		StringFlag(f, &startCtx.externalIODir, cliflags.ExternalIODir, startCtx.externalIODir)
 
 		VarFlag(f, serverCfg.SQLAuditLogDirName, cliflags.SQLAuditLogDirName)
+	}
+
+	// Log flags.
+	for _, cmd := range []*cobra.Command{demoCmd, StartCmd} {
+		f := cmd.Flags()
+		VarFlag(f, &startCtx.logDir, cliflags.LogDir)
+		startCtx.logDirFlag = f.Lookup(cliflags.LogDir.Name)
+		VarFlag(f,
+			pflag.PFlagFromGoFlag(flag.Lookup(logflags.LogFilesCombinedMaxSizeName)).Value,
+			cliflags.LogDirMaxSize)
+		VarFlag(f,
+			pflag.PFlagFromGoFlag(flag.Lookup(logflags.LogFileMaxSizeName)).Value,
+			cliflags.LogFileMaxSize)
+		VarFlag(f,
+			pflag.PFlagFromGoFlag(flag.Lookup(logflags.LogFileVerbosityThresholdName)).Value,
+			cliflags.LogFileVerbosity)
 	}
 
 	for _, cmd := range certCmds {
