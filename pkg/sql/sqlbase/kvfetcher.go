@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -158,10 +159,6 @@ type txnKVFetcher struct {
 	batchIdx  int
 	responses []roachpb.ResponseUnion
 
-	// Keep track if the previous batch was limited. Used to calculate if
-	// the currentSpan is a new span.
-	lastBatchLimited bool
-
 	// As the kvFetcher fetches batches of kvs, it accumulates information on the
 	// replicas where the batches came from. This info can be retrieved through
 	// getRangeInfo(), to be used for updating caches.
@@ -249,6 +246,24 @@ func makeKVFetcher(
 			if spans[i].Key.Compare(spans[i-1].EndKey) < 0 {
 				return txnKVFetcher{}, errors.Errorf("unordered spans (%s %s)", spans[i-1], spans[i])
 			}
+		}
+	} else if util.RaceEnabled {
+		// Otherwise, just verify the spans don't contain consecutive overlapping
+		// spans.
+		for i := 1; i < len(spans); i++ {
+			if spans[i].Key.Compare(spans[i-1].EndKey) >= 0 {
+				// Current span's start key is greater than or equal to the last span's
+				// end key - we're good.
+				continue
+			} else if spans[i].EndKey.Compare(spans[i-1].EndKey) < 0 {
+				// Current span's end key is less than or equal to the last span's start
+				// key - also good.
+				continue
+			}
+			// Otherwise, the two spans overlap, which isn't allowed - it leaves us at
+			// risk of incorrect results, since the row fetcher can't distinguish
+			// between identical rows in two different batches.
+			return txnKVFetcher{}, errors.Errorf("overlapping neighbor spans (%s %s)", spans[i-1], spans[i])
 		}
 	}
 
@@ -357,48 +372,27 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	return nil
 }
 
-func (f *txnKVFetcher) batchIsLimited(batchSize int64) bool {
-	if f.useBatchLimit {
-		// f.batchIdx - 1 refers to the most recent fetch.
-		return batchSize == f.getBatchSizeForIdx(f.batchIdx-1)
-	}
-	return false
-}
-
 // nextBatch returns the next batch of key/value pairs. If there are none
 // available, a fetch is initiated. When there are no more keys, returns false.
 // ok returns whether or not there are more kv pairs to be fetched.
-// maybeNewSpan returns true if it was possible that the kv pairs returned were
-// from a new span.
 func (f *txnKVFetcher) nextBatch(
 	ctx context.Context,
-) (
-	ok bool,
-	kvs []roachpb.KeyValue,
-	batchResponse []byte,
-	numKvs int64,
-	maybeNewSpan bool,
-	err error,
-) {
+) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, numKvs int64, err error) {
 	if len(f.responses) > 0 {
 		reply := f.responses[0].GetInner()
 		f.responses = f.responses[1:]
-		// Assume a new span is started as long as the last one wasn't limited.
-		maybeNewSpan = !f.lastBatchLimited
 		switch t := reply.(type) {
 		case *roachpb.ScanResponse:
-			f.lastBatchLimited = f.batchIsLimited(t.NumKeys)
-			return true, t.Rows, t.BatchResponse, t.NumKeys, maybeNewSpan, nil
+			return true, t.Rows, t.BatchResponse, t.NumKeys, nil
 		case *roachpb.ReverseScanResponse:
-			f.lastBatchLimited = f.batchIsLimited(t.NumKeys)
-			return true, t.Rows, t.BatchResponse, t.NumKeys, maybeNewSpan, nil
+			return true, t.Rows, t.BatchResponse, t.NumKeys, nil
 		}
 	}
 	if f.fetchEnd {
-		return false, nil, nil, 0, false, nil
+		return false, nil, nil, 0, nil
 	}
 	if err := f.fetch(ctx); err != nil {
-		return false, nil, nil, 0, false, err
+		return false, nil, nil, 0, err
 	}
 	return f.nextBatch(ctx)
 }
