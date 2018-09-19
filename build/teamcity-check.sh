@@ -4,6 +4,8 @@ set -euo pipefail
 
 source "$(dirname "${0}")/teamcity-support.sh"
 
+exit 0
+
 tc_prepare
 
 tc_start_block "Ensure dependencies are up-to-date"

@@ -10,8 +10,8 @@ export TMPDIR=$PWD/artifacts/testrace
 mkdir -p "$TMPDIR"
 
 tc_start_block "Maybe stressrace pull request"
-build/builder.sh go install ./pkg/cmd/github-pull-request-make
-build/builder.sh env BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET=stressrace github-pull-request-make
+#build/builder.sh go install ./pkg/cmd/github-pull-request-make
+#build/builder.sh env BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET=stressrace github-pull-request-make
 tc_end_block "Maybe stressrace pull request"
 
 tc_start_block "Determine changed packages"
@@ -37,7 +37,8 @@ run build/builder.sh env \
     COCKROACH_FAILSUITE=1 \
     COCKROACH_LOGIC_TESTS_SKIP=true \
     make testrace \
-    PKG="$pkgspec" \
+    PKG=./pkg/util... \
+    #PKG="$pkgspec" \
     TESTTIMEOUT=45m \
     TESTFLAGS='-v -json' \
     USE_ROCKSDB_ASSERTIONS=1 2>&1 \
