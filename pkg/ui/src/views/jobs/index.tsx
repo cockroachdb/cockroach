@@ -150,7 +150,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
 const sortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "jobs/sort_setting",
   s => s.localSettings,
-  { sortKey: 2 /* creation time */, ascending: false },
+  { sortKey: 3 /* creation time */, ascending: false },
 );
 
 interface JobsTableProps {
