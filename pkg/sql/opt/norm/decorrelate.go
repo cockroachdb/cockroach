@@ -470,7 +470,7 @@ func (c *CustomFuncs) TranslateNonIgnoreAggs(
 
 	var aggCanaryVar memo.GroupID
 	pb := projectionsBuilder{f: c.f}
-	passthroughCols := c.OutputCols(newIn)
+	passthroughCols := c.OutputCols(newIn).Copy()
 	passthroughCols.Remove(int(canaryCol))
 
 	for i, elem := range aggsElems {
