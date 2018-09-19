@@ -182,6 +182,23 @@ SELECT * FROM c WHERE (bill > ANY(SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NO
 5  NULL
 6  FL
 
+# Customers where bill state matches any ship state.
+query IT rowsort
+SELECT * FROM c WHERE bill = ANY(SELECT ship FROM o);
+----
+1  CA
+2  TX
+4  TX
+
+# Customers where bill state matches any ship state or is null.
+query IT rowsort
+SELECT * FROM c WHERE bill = ANY(SELECT ship FROM o) OR bill IS NULL;
+----
+1  CA
+2  TX
+4  TX
+5  NULL
+
 # Test NULL IN case. Use IS NOT NULL to prevent normalize ANY into EXISTS.
 query IT rowsort
 SELECT * FROM c WHERE (NULL::text IN (SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NOT NULL;
@@ -586,7 +603,7 @@ SELECT c_id, (bill > ANY(SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NULL FROM c
 5  false
 6  false
 
-# Customers where bill state > any ship state is not null result..
+# Customers where bill state > any ship state is not null result.
 query IB
 SELECT c_id, (bill > ANY(SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NOT NULL FROM c ORDER BY c_id;
 ----
@@ -596,6 +613,28 @@ SELECT c_id, (bill > ANY(SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NOT NULL FR
 4  false
 5  true
 6  true
+
+# Customers where bill state matches any non-null ship state.
+query IB rowsort
+SELECT c_id, bill = ANY(SELECT ship FROM o WHERE ship IS NOT NULL) FROM c;
+----
+1  true
+2  true
+3  false
+4  true
+5  NULL
+6  false
+
+# Customers where bill state matches any non-null ship state or is null.
+query IB rowsort
+SELECT c_id, bill = ANY(SELECT ship FROM o WHERE ship IS NOT NULL) OR bill IS NULL FROM c;
+----
+1  true
+2  true
+3  false
+4  true
+5  true
+6  false
 
 # Test NULL IN case.
 query IB

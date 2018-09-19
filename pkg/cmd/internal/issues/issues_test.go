@@ -250,8 +250,10 @@ Failed test: %s`,
 				p.init()
 
 				ctx := context.Background()
-				if err := p.post(ctx, " under stress", c.packageName, c.testName,
-					c.message, c.author); err != nil {
+				if err := p.post(
+					ctx, DefaultStressFailureTitle(c.packageName, c.testName),
+					c.packageName, c.testName, c.message, c.author,
+				); err != nil {
 					t.Fatal(err)
 				}
 

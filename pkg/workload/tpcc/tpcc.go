@@ -403,7 +403,7 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 			}
 		}
 	} else {
-		fmt.Println("Tables are not being parititioned because they've been previously partitioned.")
+		fmt.Println("Tables are not being partitioned because they've been previously partitioned.")
 	}
 
 	if w.scatter {

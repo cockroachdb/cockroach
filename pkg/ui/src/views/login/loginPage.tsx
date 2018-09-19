@@ -129,9 +129,10 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
             <div className="form-container">
               <h1 className="heading">Log in to the Web UI</h1>
               {this.renderError()}
-              <form onSubmit={this.handleSubmit} className="form-internal">
+              <form onSubmit={this.handleSubmit} className="form-internal" method="post">
                 <input
                   type="text"
+                  name="username"
                   className={inputClasses}
                   onChange={this.handleUpdateUsername}
                   value={this.state.username}
@@ -139,6 +140,7 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
                 />
                 <input
                   type="password"
+                  name="password"
                   className={inputClasses}
                   onChange={this.handleUpdatePassword}
                   value={this.state.password}

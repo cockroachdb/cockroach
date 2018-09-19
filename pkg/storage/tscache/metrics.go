@@ -66,8 +66,7 @@ var (
 	}
 )
 
-// MakeMetrics returns a Metrics struct.
-func MakeMetrics() Metrics {
+func makeMetrics() Metrics {
 	return Metrics{
 		Skl: sklImplMetrics{
 			Read: sklMetrics{

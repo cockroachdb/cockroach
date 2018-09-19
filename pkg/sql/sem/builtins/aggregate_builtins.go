@@ -178,7 +178,7 @@ var aggregates = map[string]builtinDefinition{
 				"Identifies the minimum selected value.")
 		}),
 
-	"string_agg": makeBuiltin(aggProps(),
+	"string_agg": makeBuiltin(aggPropsNullableArgs(),
 		makeAggOverload([]types.T{types.String, types.String}, types.String, newStringConcatAggregate,
 			"Concatenates all selected values using the provided delimiter."),
 		makeAggOverload([]types.T{types.Bytes, types.Bytes}, types.Bytes, newBytesConcatAggregate,
@@ -588,13 +588,11 @@ func (a *avgAggregate) Size() int64 {
 }
 
 type concatAggregate struct {
-	forBytes      bool
-	sawNonNull    bool
-	delimiter     string  // used for non window functions
-	delimiterSize uintptr // used for non window functions
-	first         bool
-	result        bytes.Buffer
-	acc           mon.BoundAccount
+	forBytes   bool
+	sawNonNull bool
+	delimiter  string // used for non window functions
+	result     bytes.Buffer
+	acc        mon.BoundAccount
 }
 
 func newBytesConcatAggregate(
@@ -602,12 +600,10 @@ func newBytesConcatAggregate(
 ) tree.AggregateFunc {
 	concatAgg := &concatAggregate{
 		forBytes: true,
-		first:    true,
 		acc:      evalCtx.Mon.MakeBoundAccount(),
 	}
-	if len(arguments) == 1 {
+	if len(arguments) == 1 && arguments[0] != tree.DNull {
 		concatAgg.delimiter = string(tree.MustBeDBytes(arguments[0]))
-		concatAgg.delimiterSize = arguments[0].Size()
 	} else if len(arguments) > 1 {
 		panic(fmt.Sprintf("too many arguments passed in, expected < 2, got %d", len(arguments)))
 	}
@@ -618,12 +614,10 @@ func newStringConcatAggregate(
 	_ []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
 	concatAgg := &concatAggregate{
-		first: true,
-		acc:   evalCtx.Mon.MakeBoundAccount(),
+		acc: evalCtx.Mon.MakeBoundAccount(),
 	}
-	if len(arguments) == 1 {
+	if len(arguments) == 1 && arguments[0] != tree.DNull {
 		concatAgg.delimiter = string(tree.MustBeDString(arguments[0]))
-		concatAgg.delimiterSize = arguments[0].Size()
 	} else if len(arguments) > 1 {
 		panic(fmt.Sprintf("too many arguments passed in, expected < 2, got %d", len(arguments)))
 	}
@@ -634,26 +628,23 @@ func (a *concatAggregate) Add(ctx context.Context, datum tree.Datum, others ...t
 	if datum == tree.DNull {
 		return nil
 	}
-	delimiter := a.delimiter
-	delimiterSize := a.delimiterSize
-	// If this is called as part of a window function, the delimiter is passed in
-	// via the first element in others.
-	if len(others) == 1 && others[0] != tree.DNull {
-		if a.forBytes {
-			delimiter = string(tree.MustBeDBytes(others[0]))
-		} else {
-			delimiter = string(tree.MustBeDString(others[0]))
+	if !a.sawNonNull {
+		a.sawNonNull = true
+	} else {
+		delimiter := a.delimiter
+		// If this is called as part of a window function, the delimiter is passed in
+		// via the first element in others.
+		if len(others) == 1 && others[0] != tree.DNull {
+			if a.forBytes {
+				delimiter = string(tree.MustBeDBytes(others[0]))
+			} else {
+				delimiter = string(tree.MustBeDString(others[0]))
+			}
+		} else if len(others) > 1 {
+			panic(fmt.Sprintf("too many other datums passed in, expected < 2, got %d", len(others)))
 		}
-		delimiterSize = others[0].Size()
-	} else if len(others) > 1 {
-		panic(fmt.Sprintf("too many other datums passed in, expected < 2, got %d", len(others)))
-	}
-	a.sawNonNull = true
-	if delimiterSize > 0 {
-		if a.first {
-			a.first = false
-		} else {
-			if err := a.acc.Grow(ctx, int64(delimiterSize)); err != nil {
+		if len(delimiter) > 0 {
+			if err := a.acc.Grow(ctx, int64(len(delimiter))); err != nil {
 				return err
 			}
 			a.result.WriteString(delimiter)
@@ -665,7 +656,7 @@ func (a *concatAggregate) Add(ctx context.Context, datum tree.Datum, others ...t
 	} else {
 		arg = string(tree.MustBeDString(datum))
 	}
-	if err := a.acc.Grow(ctx, int64(datum.Size())); err != nil {
+	if err := a.acc.Grow(ctx, int64(len(arg))); err != nil {
 		return err
 	}
 	a.result.WriteString(arg)

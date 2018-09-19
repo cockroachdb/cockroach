@@ -67,7 +67,7 @@ func GetWindowFunctionInfo(
 			"function is neither an aggregate nor a window function",
 		)
 	}
-	_, builtins := builtins.GetBuiltinProperties(strings.ToLower(funcStr))
+	props, builtins := builtins.GetBuiltinProperties(strings.ToLower(funcStr))
 	for _, b := range builtins {
 		types := b.Types.Types()
 		if len(types) != len(inputTypes) {
@@ -76,6 +76,9 @@ func GetWindowFunctionInfo(
 		match := true
 		for i, t := range types {
 			if !datumTypes[i].Equivalent(t) {
+				if props.NullableArgs && datumTypes[i].IsAmbiguous() {
+					continue
+				}
 				match = false
 				break
 			}
@@ -234,7 +237,7 @@ func newWindower(
 		output,
 		memMonitor,
 		ProcStateOpts{InputsToDrain: []RowSource{w.input},
-			TrailingMetaCallback: func() []ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
 				w.close()
 				return nil
 			}},
@@ -274,11 +277,6 @@ func (w *windower) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		return row, meta
 	}
 	return nil, w.DrainHelper()
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (w *windower) ConsumerDone() {
-	w.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.

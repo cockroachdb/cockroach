@@ -524,7 +524,7 @@ type ProcessorBase struct {
 	// other than what has otherwise been manually put in trailingMeta) and no
 	// closing other than InternalClose is needed, then no callback needs to be
 	// specified.
-	trailingMetaCallback func() []ProducerMetadata
+	trailingMetaCallback func(context.Context) []ProducerMetadata
 	// trailingMeta is scratch space where metadata is stored to be returned
 	// later.
 	trailingMeta []ProducerMetadata
@@ -690,7 +690,7 @@ func (pb *ProcessorBase) moveToTrailingMeta() {
 	// generally calls InternalClose, indirectly, which switches the context and
 	// the span.
 	if pb.trailingMetaCallback != nil {
-		pb.trailingMeta = append(pb.trailingMeta, pb.trailingMetaCallback()...)
+		pb.trailingMeta = append(pb.trailingMeta, pb.trailingMetaCallback(pb.Ctx)...)
 	} else {
 		pb.InternalClose()
 	}
@@ -740,7 +740,7 @@ func (pb *ProcessorBase) Run(ctx context.Context, wg *sync.WaitGroup) {
 type ProcStateOpts struct {
 	// TrailingMetaCallback, if specified, is a callback to be called by
 	// moveToTrailingMeta(). See ProcessorBase.TrailingMetaCallback.
-	TrailingMetaCallback func() []ProducerMetadata
+	TrailingMetaCallback func(context.Context) []ProducerMetadata
 	// InputsToDrain, if specified, will be drained by DrainHelper().
 	// MoveToDraining() calls ConsumerDone() on them, InternalClose() calls
 	// ConsumerClosed() on them.
@@ -843,6 +843,11 @@ func (pb *ProcessorBase) InternalClose() bool {
 	return closing
 }
 
+// ConsumerDone is part of the RowSource interface.
+func (pb *ProcessorBase) ConsumerDone() {
+	pb.MoveToDraining(nil /* err */)
+}
+
 // NewMonitor is a utility function used by processors to create a new
 // memory monitor with the given name and start it. The returned monitor must
 // be closed.
@@ -899,12 +904,7 @@ func (rb *rowSourceBase) consumerClosed(name string) {
 // processorSpan creates a child span for a processor (if we are doing any
 // tracing). The returned span needs to be finished using tracing.FinishSpan.
 func processorSpan(ctx context.Context, name string) (context.Context, opentracing.Span) {
-	parentSp := opentracing.SpanFromContext(ctx)
-	if parentSp == nil || tracing.IsBlackHoleSpan(parentSp) {
-		return ctx, nil
-	}
-	newSpan := tracing.StartChildSpan(name, parentSp, true /* separateRecording */)
-	return opentracing.ContextWithSpan(ctx, newSpan), newSpan
+	return tracing.ChildSpanSeparateRecording(ctx, name)
 }
 
 func newProcessor(

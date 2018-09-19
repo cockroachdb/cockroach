@@ -361,14 +361,17 @@ where
 ----
 inner-join
  ├── columns: id1_4_0_:1(int!null) id1_2_1_:7(int!null) address2_4_0_:2(string!null) createdo3_4_0_:3(timestamp) name4_4_0_:4(string) nickname5_4_0_:5(string) version6_4_0_:6(int!null) name2_2_1_:8(string!null) version3_2_1_:9(int!null)
+ ├── has-placeholder
  ├── key: (1,7)
  ├── fd: ()-->(9), (1)-->(2-6), (7)-->(8)
  ├── semi-join
  │    ├── columns: person.id:1(int!null) address:2(string!null) createdon:3(timestamp) person.name:4(string) nickname:5(string) person.version:6(int!null)
+ │    ├── has-placeholder
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-6)
  │    ├── select
  │    │    ├── columns: person.id:1(int!null) address:2(string!null) createdon:3(timestamp) person.name:4(string) nickname:5(string) person.version:6(int!null)
+ │    │    ├── has-placeholder
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-6)
  │    │    ├── scan person
@@ -385,6 +388,7 @@ inner-join
  │         └── person.id = person_id [type=bool, outer=(1,13), constraints=(/1: (/NULL - ]; /13: (/NULL - ])]
  ├── select
  │    ├── columns: partner.id:7(int!null) partner.name:8(string!null) partner.version:9(int!null)
+ │    ├── has-placeholder
  │    ├── key: (7)
  │    ├── fd: ()-->(9), (7)-->(8)
  │    ├── scan partner
@@ -450,23 +454,28 @@ where
 ----
 project
  ├── columns: id1_1_:1(int!null) rev2_1_:2(int!null) revtype3_1_:3(int) created_4_1_:4(timestamp) firstnam5_1_:5(string) lastname6_1_:6(string)
+ ├── has-placeholder
  ├── key: (1,2)
  ├── fd: (1,2)-->(3-6)
  └── select
       ├── columns: customer_aud.id:1(int!null) customer_aud.rev:2(int!null) customer_aud.revtype:3(int) customer_aud.created_on:4(timestamp) customer_aud.firstname:5(string) customer_aud.lastname:6(string) max:13(int!null)
+      ├── has-placeholder
       ├── key: (1,2)
       ├── fd: (1,2)-->(3-6,13), (2)==(13), (13)==(2)
       ├── group-by
       │    ├── columns: customer_aud.id:1(int!null) customer_aud.rev:2(int!null) customer_aud.revtype:3(int) customer_aud.created_on:4(timestamp) customer_aud.firstname:5(string) customer_aud.lastname:6(string) max:13(int)
       │    ├── grouping columns: customer_aud.id:1(int!null) customer_aud.rev:2(int!null)
+      │    ├── has-placeholder
       │    ├── key: (1,2)
       │    ├── fd: (1,2)-->(3-6,13)
       │    ├── inner-join (merge)
       │    │    ├── columns: customer_aud.id:1(int!null) customer_aud.rev:2(int!null) customer_aud.revtype:3(int!null) customer_aud.created_on:4(timestamp) customer_aud.firstname:5(string) customer_aud.lastname:6(string) customer_aud.id:7(int!null) customer_aud.rev:8(int!null)
+      │    │    ├── has-placeholder
       │    │    ├── key: (2,7,8)
       │    │    ├── fd: (1,2)-->(3-6), (1)==(7), (7)==(1)
       │    │    ├── select
       │    │    │    ├── columns: customer_aud.id:1(int!null) customer_aud.rev:2(int!null) customer_aud.revtype:3(int!null) customer_aud.created_on:4(timestamp) customer_aud.firstname:5(string) customer_aud.lastname:6(string)
+      │    │    │    ├── has-placeholder
       │    │    │    ├── key: (1,2)
       │    │    │    ├── fd: (1,2)-->(3-6)
       │    │    │    ├── ordering: +1
@@ -479,6 +488,7 @@ project
       │    │    │         └── customer_aud.revtype != $2 [type=bool, outer=(3), constraints=(/3: (/NULL - ])]
       │    │    ├── select
       │    │    │    ├── columns: customer_aud.id:7(int!null) customer_aud.rev:8(int!null)
+      │    │    │    ├── has-placeholder
       │    │    │    ├── key: (7,8)
       │    │    │    ├── ordering: +7
       │    │    │    ├── scan customer_aud
@@ -567,28 +577,34 @@ order by
 ----
 sort
  ├── columns: id1_3_:1(int!null) rev2_3_:2(int!null) revtype3_3_:3(int) revend4_3_:4(int) created_5_3_:5(timestamp) firstnam6_3_:6(string) lastname7_3_:7(string) address_8_3_:8(int)
+ ├── has-placeholder
  ├── key: (1,2)
  ├── fd: (1,2)-->(3-8)
  ├── ordering: +2
  └── project
       ├── columns: customer_aud.id:1(int!null) customer_aud.rev:2(int!null) customer_aud.revtype:3(int) customer_aud.revend:4(int) customer_aud.created_on:5(timestamp) customer_aud.firstname:6(string) customer_aud.lastname:7(string) customer_aud.address_id:8(int)
+      ├── has-placeholder
       ├── key: (1,2)
       ├── fd: (1,2)-->(3-8)
       └── select
            ├── columns: customer_aud.id:1(int!null) customer_aud.rev:2(int!null) customer_aud.revtype:3(int) customer_aud.revend:4(int) customer_aud.created_on:5(timestamp) customer_aud.firstname:6(string) customer_aud.lastname:7(string) customer_aud.address_id:8(int) max:17(int!null)
+           ├── has-placeholder
            ├── key: (1,2)
            ├── fd: (1,2)-->(3-8,17), (2)==(17), (17)==(2)
            ├── group-by
            │    ├── columns: customer_aud.id:1(int!null) customer_aud.rev:2(int!null) customer_aud.revtype:3(int) customer_aud.revend:4(int) customer_aud.created_on:5(timestamp) customer_aud.firstname:6(string) customer_aud.lastname:7(string) customer_aud.address_id:8(int) max:17(int)
            │    ├── grouping columns: customer_aud.id:1(int!null) customer_aud.rev:2(int!null)
+           │    ├── has-placeholder
            │    ├── key: (1,2)
            │    ├── fd: (1,2)-->(3-8,17)
            │    ├── inner-join (merge)
            │    │    ├── columns: customer_aud.id:1(int!null) customer_aud.rev:2(int!null) customer_aud.revtype:3(int!null) customer_aud.revend:4(int) customer_aud.created_on:5(timestamp) customer_aud.firstname:6(string) customer_aud.lastname:7(string) customer_aud.address_id:8(int) customer_aud.id:9(int!null) customer_aud.rev:10(int!null)
+           │    │    ├── has-placeholder
            │    │    ├── key: (2,9,10)
            │    │    ├── fd: (1,2)-->(3-8), (1)==(9), (9)==(1)
            │    │    ├── select
            │    │    │    ├── columns: customer_aud.id:1(int!null) customer_aud.rev:2(int!null) customer_aud.revtype:3(int!null) customer_aud.revend:4(int) customer_aud.created_on:5(timestamp) customer_aud.firstname:6(string) customer_aud.lastname:7(string) customer_aud.address_id:8(int)
+           │    │    │    ├── has-placeholder
            │    │    │    ├── key: (1,2)
            │    │    │    ├── fd: (1,2)-->(3-8)
            │    │    │    ├── ordering: +1
@@ -833,10 +849,12 @@ where
 ----
 project
  ├── columns: id1_4_:1(int!null) phone_nu2_4_:2(string) person_i4_4_:4(int) phone_ty3_4_:3(string)
+ ├── has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── select
       ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int) max:10(int!null)
+      ├── has-placeholder
       ├── key: (1)
       ├── fd: (1)-->(2-4,10)
       ├── group-by
@@ -950,10 +968,12 @@ where
 ----
 project
  ├── columns: id1_4_:1(int!null) phone_nu2_4_:2(string) person_i4_4_:4(int) phone_ty3_4_:3(string)
+ ├── has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── select
       ├── columns: phone.id:1(int!null) phone_number:2(string) phone_type:3(string) person_id:4(int) min:10(int!null)
+      ├── has-placeholder
       ├── key: (1)
       ├── fd: (1)-->(2-4,10)
       ├── group-by
@@ -1073,6 +1093,7 @@ where
 ----
 semi-join
  ├── columns: id1_2_:1(int!null) address2_2_:2(string) createdo3_2_:3(timestamp) name4_2_:4(string) nickname5_2_:5(string) version6_2_:6(int!null)
+ ├── has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  ├── scan person
@@ -1081,6 +1102,7 @@ semi-join
  │    └── fd: (1)-->(2-6)
  ├── select
  │    ├── columns: phone.id:7(int!null) person_id:10(int)
+ │    ├── has-placeholder
  │    ├── key: (7)
  │    ├── fd: (7)-->(10)
  │    ├── scan phone
@@ -1114,6 +1136,7 @@ where
 ----
 semi-join
  ├── columns: id1_2_:1(int!null) address2_2_:2(string) createdo3_2_:3(timestamp) name4_2_:4(string) nickname5_2_:5(string) version6_2_:6(int!null)
+ ├── has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-6)
  ├── scan person
@@ -1122,6 +1145,7 @@ semi-join
  │    └── fd: (1)-->(2-6)
  ├── select
  │    ├── columns: phone.id:7(int!null) person_id:10(int)
+ │    ├── has-placeholder
  │    ├── key: (7)
  │    ├── fd: (7)-->(10)
  │    ├── scan phone
@@ -1188,6 +1212,7 @@ where
 ----
 anti-join
  ├── columns: id1_4_:1(int!null) phone_nu2_4_:2(string) person_i4_4_:4(int) phone_ty3_4_:3(string)
+ ├── has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── scan phone
@@ -1196,6 +1221,7 @@ anti-join
  │    └── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: phone_id:6(int!null) repairtimestamps:7(timestamp)
+ │    ├── has-placeholder
  │    ├── scan phone_repairtimestamps
  │    │    └── columns: phone_id:6(int!null) repairtimestamps:7(timestamp)
  │    └── filters [type=bool, outer=(7)]
@@ -2035,15 +2061,18 @@ where
 ----
 project
  ├── columns: auctioni4_1_0_:4(int) id1_1_0_:1(int!null) id1_1_1_:1(int!null) amount2_1_1_:2(decimal) createdd3_1_1_:3(timestamp) auctioni4_1_1_:4(int) formula41_1_:9(bool)
+ ├── has-placeholder
  ├── key: (1)
  ├── fd: (1)-->(2-4,9)
  ├── group-by
  │    ├── columns: tbid2.id:1(int!null) amount:2(decimal) createddatetime:3(timestamp) auctionid:4(int) true_agg:11(bool)
  │    ├── grouping columns: tbid2.id:1(int!null)
+ │    ├── has-placeholder
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4,11)
  │    ├── right-join
  │    │    ├── columns: tbid2.id:1(int!null) amount:2(decimal) createddatetime:3(timestamp) auctionid:4(int!null) successfulbid:8(int) true:10(bool)
+ │    │    ├── has-placeholder
  │    │    ├── fd: (1)-->(2-4), ()~~>(10)
  │    │    ├── project
  │    │    │    ├── columns: true:10(bool!null) successfulbid:8(int)
@@ -2054,6 +2083,7 @@ project
  │    │    │         └── true [type=bool]
  │    │    ├── select
  │    │    │    ├── columns: tbid2.id:1(int!null) amount:2(decimal) createddatetime:3(timestamp) auctionid:4(int!null)
+ │    │    │    ├── has-placeholder
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: (1)-->(2-4)
  │    │    │    ├── scan tbid2

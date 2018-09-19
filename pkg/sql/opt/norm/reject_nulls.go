@@ -24,7 +24,7 @@ import (
 // rejection filter pushdown. See the Relational.Rule.RejectNullCols comment for
 // more details.
 func (c *CustomFuncs) RejectNullCols(group memo.GroupID) opt.ColSet {
-	return DeriveRejectNullCols(memo.MakeNormExprView(c.f.mem, group))
+	return DeriveRejectNullCols(memo.MakeNormExprView(c.mem, group))
 }
 
 // HasNullRejectingFilter returns true if the filter causes some of the columns
@@ -46,14 +46,14 @@ func (c *CustomFuncs) HasNullRejectingFilter(filter memo.GroupID, nullRejectCols
 // null-rejection column was identified by the deriveGroupByRejectNullCols
 // method (see its comment for more details).
 func (c *CustomFuncs) NullRejectAggVar(aggs memo.GroupID) memo.GroupID {
-	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
-	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
+	aggsExpr := c.mem.NormExpr(aggs).AsAggregations()
+	aggsElems := c.mem.LookupList(aggsExpr.Aggs())
 
 	for i := len(aggsElems) - 1; i >= 0; i-- {
-		agg := c.f.mem.NormExpr(aggsElems[i])
+		agg := c.mem.NormExpr(aggsElems[i])
 		if agg.Operator() != opt.ConstAggOp {
 			// Return the input Variable operator.
-			return agg.ChildGroup(c.f.mem, 0)
+			return agg.ChildGroup(c.mem, 0)
 		}
 	}
 	panic("couldn't find an aggregate that is not ConstAgg")
@@ -139,7 +139,7 @@ func deriveGroupByRejectNullCols(ev memo.ExprView) opt.ColSet {
 		}
 
 		// Get column ID of aggregate's Variable operator input.
-		inColID := extractAggInputColumn(agg)
+		inColID := memo.ExtractAggSingleInputColumn(agg)
 
 		// Criteria #3.
 		if savedInColID != 0 && savedInColID != inColID {

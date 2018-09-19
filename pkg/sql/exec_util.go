@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -120,9 +121,11 @@ var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	"default distributed SQL execution mode",
 	"auto",
 	map[int64]string{
-		int64(sessiondata.DistSQLOff):  "off",
-		int64(sessiondata.DistSQLAuto): "auto",
-		int64(sessiondata.DistSQLOn):   "on",
+		int64(sessiondata.DistSQLOff):       "off",
+		int64(sessiondata.DistSQLAuto):      "auto",
+		int64(sessiondata.DistSQLOn):        "on",
+		int64(sessiondata.DistSQL2Dot0Auto): "2.0-auto",
+		int64(sessiondata.DistSQL2Dot0Off):  "2.0-off",
 	},
 )
 
@@ -432,7 +435,7 @@ var _ dbCacheSubscriber = &databaseCacheHolder{}
 
 // updateSystemConfig is called whenever a new system config gossip entry is
 // received.
-func (dc *databaseCacheHolder) updateSystemConfig(cfg config.SystemConfig) {
+func (dc *databaseCacheHolder) updateSystemConfig(cfg *config.SystemConfig) {
 	dc.mu.Lock()
 	dc.mu.c = newDatabaseCache(cfg)
 	dc.mu.cv.Broadcast()
@@ -477,13 +480,29 @@ func countRowsAffected(params runParams, p planNode) (int, error) {
 	return count, err
 }
 
+// shouldUseDistSQL returns true if the combination of mode and distribution
+// requirement given by shouldDistributeGivenRecAndMode requires that the
+// distSQL engine should be used.
+// This is always true unless the mode is set to 2.0-auto or 2.0-off.
+// 2.0-auto causes the distribution recommendation to control whether distsql is
+// used at all, and 2.0-off causes distsql to never be used regardless of the
+// recommendation.
+func shouldUseDistSQL(distributePlan bool, mode sessiondata.DistSQLExecMode) bool {
+	if mode == sessiondata.DistSQL2Dot0Off {
+		return false
+	} else if mode == sessiondata.DistSQL2Dot0Auto {
+		return distributePlan
+	}
+	return true
+}
+
 func shouldDistributeGivenRecAndMode(
 	rec distRecommendation, mode sessiondata.DistSQLExecMode,
 ) bool {
 	switch mode {
-	case sessiondata.DistSQLOff:
+	case sessiondata.DistSQLOff, sessiondata.DistSQL2Dot0Off:
 		return false
-	case sessiondata.DistSQLAuto:
+	case sessiondata.DistSQLAuto, sessiondata.DistSQL2Dot0Auto:
 		return rec == shouldDistribute
 	case sessiondata.DistSQLOn, sessiondata.DistSQLAlways:
 		return rec != cannotDistribute
@@ -890,8 +909,11 @@ func (scc *schemaChangerCollection) reset() {
 func (scc *schemaChangerCollection) execSchemaChanges(
 	ctx context.Context, cfg *ExecutorConfig, tracing *SessionTracing,
 ) error {
-	if cfg.SchemaChangerTestingKnobs.SyncFilter != nil && (len(scc.schemaChangers) > 0) {
-		cfg.SchemaChangerTestingKnobs.SyncFilter(TestingSchemaChangerCollection{scc})
+	if len(scc.schemaChangers) == 0 {
+		return nil
+	}
+	if fn := cfg.SchemaChangerTestingKnobs.SyncFilter; fn != nil {
+		fn(TestingSchemaChangerCollection{scc})
 	}
 	// Execute any schema changes that were scheduled, in the order of the
 	// statements that scheduled them.
@@ -904,10 +926,19 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 			evalCtx := createSchemaChangeEvalCtx(cfg.Clock.Now(), tracing)
 			if err := sc.exec(ctx, true /* inSession */, &evalCtx); err != nil {
+				if onError := cfg.SchemaChangerTestingKnobs.OnError; onError != nil {
+					onError(err)
+				}
 				if shouldLogSchemaChangeError(err) {
 					log.Warningf(ctx, "error executing schema change: %s", err)
 				}
-				if err == sqlbase.ErrDescriptorNotFound {
+
+				if err == sqlbase.ErrDescriptorNotFound || err == ctx.Err() {
+					// 1. If the descriptor is dropped while the schema change
+					// is executing, the schema change is considered completed.
+					// 2. If the context is canceled the schema changer quits here
+					// letting the asynchronous code path complete the schema
+					// change.
 				} else if isPermanentSchemaChangeError(err) {
 					// All constraint violations can be reported; we report it as the result
 					// corresponding to the statement that enqueued this changer.
@@ -1089,13 +1120,20 @@ func (st *SessionTracing) StartTracing(
 
 	opName := "session recording"
 	var sp opentracing.Span
-	if parentSp := opentracing.SpanFromContext(st.ex.ctxHolder.connCtx); parentSp != nil {
+	connCtx := st.ex.ctxHolder.connCtx
+	if parentSp := opentracing.SpanFromContext(connCtx); parentSp != nil {
 		// Create a child span while recording.
 		sp = parentSp.Tracer().StartSpan(
-			opName, opentracing.ChildOf(parentSp.Context()), tracing.Recordable)
+			opName,
+			opentracing.ChildOf(parentSp.Context()), tracing.Recordable,
+			tracing.LogTagsFromCtx(connCtx),
+		)
 	} else {
 		// Create a root span while recording.
-		sp = st.ex.server.cfg.AmbientCtx.Tracer.StartSpan(opName, tracing.Recordable)
+		sp = st.ex.server.cfg.AmbientCtx.Tracer.StartSpan(
+			opName, tracing.Recordable,
+			tracing.LogTagsFromCtx(connCtx),
+		)
 	}
 	tracing.StartRecording(sp, recType)
 	st.connSpan = sp
@@ -1453,6 +1491,7 @@ func getMessagesForSubtrace(
 		}
 		spanStartMsgs = append(spanStartMsgs, fmt.Sprintf("%s: %s", name, value))
 	}
+	sort.Strings(spanStartMsgs[1:])
 
 	// This message holds all the spanStartMsgs and marks the beginning of the
 	// span, to indicate the start time and duration of the span.

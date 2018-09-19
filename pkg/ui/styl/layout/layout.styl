@@ -49,14 +49,23 @@ $page-padding-top   = 20px
 
   z-index $z-index-page-config
   background-color $background-color
+  max-width 1350px
 
   &__list
-    clearfix()
+    display flex
+    justify-content flex-start
+    align-items center
+
+    .page-config__item
+      margin-right 24px
+
+  &__spread
+    display flex
+    justify-content space-between
+    align-items center
 
   &__item
-    float left
     list-style none
-    margin-right 24px
 
 .l-columns
   display flex
@@ -83,6 +92,9 @@ $page-padding-top   = 20px
   &--heading
     padding-top 0
     padding-bottom 0
+
+  &--container
+    padding 0 24px 0 0
 
 .parent-link a
   color $link-color

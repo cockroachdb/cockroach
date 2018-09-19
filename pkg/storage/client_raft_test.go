@@ -27,9 +27,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coreos/etcd/raft"
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/raftpb"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1366,7 +1367,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const numReplicas = 3
+	const numReplicas = 5
 	const extraStores = 3
 
 	ctx := context.Background()
@@ -2506,14 +2507,26 @@ func TestRaftRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
-	mtc.Start(t, 10)
-
 	const rangeID = roachpb.RangeID(1)
-	// Up-replicate to a bunch of nodes which stresses a condition where a
-	// replica created via a preemptive snapshot receives a message for a
-	// previous incarnation of the replica (i.e. has a smaller replica ID) that
-	// existed on the same store.
-	mtc.replicateRange(rangeID, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+
+	if !util.RaceEnabled {
+		mtc.Start(t, 10)
+		// Up-replicate to a bunch of nodes which stresses a condition where a
+		// replica created via a preemptive snapshot receives a message for a
+		// previous incarnation of the replica (i.e. has a smaller replica ID) that
+		// existed on the same store.
+		mtc.replicateRange(rangeID, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+	} else {
+		// In race builds, running 10 nodes needs more than 1 full CPU
+		// (due to background gossip and heartbeat overhead), so it can't
+		// keep up when run under stress with one process per CPU. Run a
+		// reduced version of this test in race builds. This isn't as
+		// likely to reproduce the preemptive-snapshot race described in
+		// the previous comment, but will still have a chance to do so, or
+		// to find other races.
+		mtc.Start(t, 3)
+		mtc.replicateRange(rangeID, 1, 2)
+	}
 
 	for i := 0; i < 10; i++ {
 		mtc.unreplicateRange(rangeID, 2)
@@ -2788,7 +2801,7 @@ func TestStoreRangeMoveDecommissioning(t *testing.T) {
 	sc.TestingKnobs.DisableReplicaRebalancing = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
-	mtc.Start(t, 4)
+	mtc.Start(t, 6)
 	mtc.initGossipNetwork()
 
 	// Replicate the range to 2 more stores. Note that there are 4 stores in the
@@ -2815,8 +2828,8 @@ func TestStoreRangeMoveDecommissioning(t *testing.T) {
 		// Wait for a replacement replica for the decommissioning node to be added
 		// and the replica on the decommissioning node to be removed.
 		curReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
-		if len(curReplicas) != 3 {
-			return errors.Errorf("expected 3 replicas, got %v", curReplicas)
+		if len(curReplicas) != 5 {
+			return errors.Errorf("expected 5 replicas, got %v", curReplicas)
 		}
 		if reflect.DeepEqual(origReplicas, curReplicas) {
 			return errors.Errorf("expected replica to be moved, but found them to be same as original %v", origReplicas)
@@ -2840,7 +2853,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.timeUntilStoreDead = storage.TestTimeUntilStoreDead
 	defer mtc.Stop()
-	mtc.Start(t, 4)
+	mtc.Start(t, 5)
 
 	// Replicate the range to 2 more stores. Note that there are 4 stores in the
 	// cluster leaving an extra store available as a replication target once the

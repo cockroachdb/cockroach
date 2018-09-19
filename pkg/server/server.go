@@ -18,9 +18,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
-	"html/template"
 	"io"
 	"io/ioutil"
 	"math"
@@ -33,7 +31,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	assetfs "github.com/elazarl/go-bindata-assetfs"
 	raven "github.com/getsentry/raven-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -42,7 +39,6 @@ import (
 
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -74,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -82,6 +79,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -486,6 +484,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	s.sessionRegistry = sql.MakeSessionRegistry()
 	s.jobRegistry = jobs.MakeRegistry(
 		s.cfg.AmbientCtx,
+		s.stopper,
 		s.clock,
 		s.db,
 		internalExecutor,
@@ -1234,17 +1233,19 @@ func (s *Server) Start(ctx context.Context) error {
 	// endpoints.
 	s.mux.Handle(debug.Endpoint, debug.NewServer(s.st))
 
-	fileServer := http.FileServer(&assetfs.AssetFS{
-		Asset:     ui.Asset,
-		AssetDir:  ui.AssetDir,
-		AssetInfo: ui.AssetInfo,
-	})
-
 	// Serve UI assets. This needs to be before the gRPC handlers are registered, otherwise
 	// the `s.mux.Handle("/", ...)` would cover all URLs, allowing anonymous access.
 	maybeAuthMux := newAuthenticationMuxAllowAnonymous(
-		s.authentication, serveUIAssets(fileServer, s.cfg),
-	)
+		s.authentication, ui.Handler(ui.Config{
+			ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
+			LoginEnabled:         s.cfg.RequireWebSession(),
+			GetUser: func(ctx context.Context) *string {
+				if u, ok := ctx.Value(webSessionUserKey{}).(string); ok {
+					return &u
+				}
+				return nil
+			},
+		}))
 	s.mux.Handle("/", maybeAuthMux)
 
 	// Initialize grpc-gateway mux and context in order to get the /health
@@ -1618,7 +1619,7 @@ func (s *Server) Start(ctx context.Context) error {
 			return
 		}
 		netutil.FatalIfUnexpected(httpServer.ServeWith(pgCtx, s.stopper, pgL, func(conn net.Conn) {
-			connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
+			connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
 			setTCPKeepAlive(connCtx, conn)
 
 			// Unless this is a simple disconnect or context timeout, report the error on
@@ -1654,7 +1655,7 @@ func (s *Server) Start(ctx context.Context) error {
 				return
 			}
 			netutil.FatalIfUnexpected(httpServer.ServeWith(pgCtx, s.stopper, unixLn, func(conn net.Conn) {
-				connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
+				connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
 				if err := s.pgServer.ServeConn(connCtx, conn); err != nil &&
 					!netutil.IsClosedConnection(err) {
 					// Report the error on this connection's context, so that we
@@ -1894,6 +1895,8 @@ func (s *Server) PGServer() *pgwire.Server {
 	return s.pgServer
 }
 
+// TODO(benesch): Use https://github.com/NYTimes/gziphandler instead.
+// gzipResponseWriter reinvents the wheel and is not as robust.
 type gzipResponseWriter struct {
 	gz gzip.Writer
 	http.ResponseWriter
@@ -1916,6 +1919,11 @@ func (w *gzipResponseWriter) Reset(rw http.ResponseWriter) {
 }
 
 func (w *gzipResponseWriter) Write(b []byte) (int, error) {
+	// The underlying http.ResponseWriter can't sniff gzipped data properly, so we
+	// do our own sniffing on the uncompressed data.
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", http.DetectContentType(b))
+	}
 	return w.gz.Write(b)
 }
 
@@ -1942,39 +1950,6 @@ func (w *gzipResponseWriter) Close() error {
 	return err
 }
 
-func serveUIAssets(fileServer http.Handler, cfg Config) http.Handler {
-	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/" {
-			fileServer.ServeHTTP(writer, request)
-			return
-		}
-
-		// Construct arguments for template.
-		tmplArgs := ui.IndexHTMLArgs{
-			ExperimentalUseLogin: cfg.EnableWebSessionAuthentication,
-			LoginEnabled:         cfg.RequireWebSession(),
-			Tag:                  build.GetInfo().Tag,
-			Version:              build.VersionPrefix(),
-		}
-		loggedInUser, ok := request.Context().Value(webSessionUserKey{}).(string)
-		if ok && loggedInUser != "" {
-			tmplArgs.LoggedInUser = &loggedInUser
-		}
-
-		argsJSON, err := json.Marshal(tmplArgs)
-		if err != nil {
-			http.Error(writer, err.Error(), 500)
-		}
-
-		// Execute the template.
-		writer.Header().Add("Content-Type", "text/html")
-		if err := ui.IndexHTMLTemplate.Execute(writer, map[string]template.JS{
-			"DataFromServer": template.JS(string(argsJSON)),
-		}); err != nil {
-			wrappedErr := errors.Wrap(err, "templating index.html")
-			http.Error(writer, wrappedErr.Error(), 500)
-			log.Error(request.Context(), wrappedErr)
-			return
-		}
-	})
+func init() {
+	tracing.RegisterTagRemapping("n", "node")
 }

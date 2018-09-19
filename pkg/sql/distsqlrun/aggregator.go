@@ -57,7 +57,7 @@ func GetAggregateInfo(
 		datumTypes[i] = inputTypes[i].ToDatumType()
 	}
 
-	_, builtins := builtins.GetBuiltinProperties(strings.ToLower(fn.String()))
+	props, builtins := builtins.GetBuiltinProperties(strings.ToLower(fn.String()))
 	for _, b := range builtins {
 		types := b.Types.Types()
 		if len(types) != len(inputTypes) {
@@ -66,6 +66,9 @@ func GetAggregateInfo(
 		match := true
 		for i, t := range types {
 			if !datumTypes[i].Equivalent(t) {
+				if props.NullableArgs && datumTypes[i].IsAmbiguous() {
+					continue
+				}
 				match = false
 				break
 			}
@@ -149,7 +152,7 @@ func (ag *aggregatorBase) init(
 	input RowSource,
 	post *PostProcessSpec,
 	output RowReceiver,
-	trailingMetaCallback func() []ProducerMetadata,
+	trailingMetaCallback func(context.Context) []ProducerMetadata,
 ) error {
 	ctx := flowCtx.EvalCtx.Ctx()
 	memMonitor := NewMonitor(ctx, flowCtx.EvalCtx.Mon, "aggregator-mem")
@@ -346,7 +349,7 @@ func newAggregator(
 		input,
 		post,
 		output,
-		func() []ProducerMetadata {
+		func(context.Context) []ProducerMetadata {
 			ag.close()
 			return nil
 		},
@@ -375,7 +378,7 @@ func newOrderedAggregator(
 		input,
 		post,
 		output,
-		func() []ProducerMetadata {
+		func(context.Context) []ProducerMetadata {
 			ag.close()
 			return nil
 		},
@@ -716,11 +719,6 @@ func (ag *orderedAggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		return row, meta
 	}
 	return nil, ag.DrainHelper()
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (ag *aggregatorBase) ConsumerDone() {
-	ag.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.

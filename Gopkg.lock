@@ -118,11 +118,12 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:7cd501539a6126e82ab5835d3ae2b0d996f9c426dda4856bfb975ce72894fc87"
+  digest = "1:b20392f0a4ea88031e44e6a13c8566da8ece9ce834a9fb70768e0518db0fe003"
   name = "github.com/abourget/teamcity"
   packages = ["."]
   pruneopts = "UT"
-  revision = "e241104394f91bf4e65048f9ea5d0c0f3c25b35e"
+  revision = "8ca25c33eb11b24ed691f5f8fc4ca869ef970017"
+  source = "https://github.com/cockroachdb/teamcity"
 
 [[projects]]
   branch = "master"
@@ -309,6 +310,21 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:8e61a301e4c18b3fc0f3612b78fc0f3aed960bfa8d211e459e87062f9d1f6ce0"
+  name = "github.com/cockroachdb/gostdlib"
+  packages = [
+    "cmd/gofmt",
+    "go/format",
+    "go/printer",
+    "x/tools/cmd/goimports",
+    "x/tools/imports",
+    "x/tools/internal/fastwalk",
+  ]
+  pruneopts = "UT"
+  revision = "2ba3d6f3048c93f59bfdb444b285875a8753d567"
+
+[[projects]]
+  branch = "master"
   digest = "1:7fd6f030a3e71e62c6a04a74b7d1777995b39730cd5cc905aab2b726f3455863"
   name = "github.com/cockroachdb/returncheck"
   packages = ["."]
@@ -338,17 +354,6 @@
   packages = ["."]
   pruneopts = "UT"
   revision = "3a0bb77429bd3a61596f5e8a3172445844342120"
-
-[[projects]]
-  branch = "master"
-  digest = "1:7ecae2db1ca129a75fc3b17870b32d71fa8cab2c116c154b14efca06f4b276fd"
-  name = "github.com/coreos/etcd"
-  packages = [
-    "raft",
-    "raft/raftpb",
-  ]
-  pruneopts = "UT"
-  revision = "3a037744dee9a7df42d3469917e3b34c02ae0bb3"
 
 [[projects]]
   digest = "1:0ff2bad72e274682c67085ca89e764506f85280310df2d30b522f7ba21dfc4fb"
@@ -596,7 +601,8 @@
   revision = "11a7a839e723aa293cccdc353b394dbfce7c131e"
 
 [[projects]]
-  digest = "1:5376fe6ba8b3f1d54401ccdc2a26da4f3cd3c20831fd6bf1448cde10c394a535"
+  branch = "master"
+  digest = "1:c4a33776db6799b4b76d373662939dbab8aacb0ee5ff97cc40f3941eebf40e35"
   name = "github.com/golang/dep"
   packages = [
     ".",
@@ -619,8 +625,7 @@
     "internal/importers/vndr",
   ]
   pruneopts = "UT"
-  revision = "224a564abe296670b692fe08bb63a3e4c4ad7978"
-  version = "v0.5.0"
+  revision = "bbe56e5e9a2596e258cc3fcd24c2153c7b252cb8"
 
 [[projects]]
   branch = "master"
@@ -936,6 +941,14 @@
   pruneopts = "UT"
   revision = "ba38bae1f0ec1ece9092d35bbecbb497ee344cbc"
   version = "v0.15.0"
+
+[[projects]]
+  digest = "1:b22c26daf3e7af2e1bf09da50ab9bc6d7744d7b8c0cba6502e40d2e6163283bc"
+  name = "github.com/linkedin/goavro"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "9e3ffbc22b459192a7090bfd06433b24be086370"
+  version = "v2.6.0"
 
 [[projects]]
   branch = "master"
@@ -1325,6 +1338,17 @@
   revision = "b5bfa59ec0adc420475f97f89b58045c721d761c"
 
 [[projects]]
+  branch = "master"
+  digest = "1:6ed3bd1e5b150f6454b5163a451e4f2efa4d915541f202d5fa42dc4a5c326dcc"
+  name = "go.etcd.io/etcd"
+  packages = [
+    "raft",
+    "raft/raftpb",
+  ]
+  pruneopts = "UT"
+  revision = "1df1ddff4361ed7f2c0f33571923511889a115ce"
+
+[[projects]]
   digest = "1:f163a34487229f36dfdb298191d8e17c0e3e6a899aa2cddb020f2ac61ca364ab"
   name = "go.opencensus.io"
   packages = [
@@ -1459,10 +1483,9 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:f220e3515f6c728e636a70daf8a063f9665edcc995a36d1a6de001977274a2b0"
+  digest = "1:38ab68af034d87c7ce7327e1a8e47c0f674ed2e8e7d72d17dd596f58a7ea6faa"
   name = "golang.org/x/tools"
   packages = [
-    "cmd/goimports",
     "cmd/goyacc",
     "cmd/stringer",
     "container/intsets",
@@ -1640,12 +1663,12 @@
     "github.com/cockroachdb/cmux",
     "github.com/cockroachdb/cockroach-go/crdb",
     "github.com/cockroachdb/crlfmt",
+    "github.com/cockroachdb/gostdlib/cmd/gofmt",
+    "github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
     "github.com/cockroachdb/returncheck",
     "github.com/cockroachdb/stress",
     "github.com/cockroachdb/ttycolor",
     "github.com/codahale/hdrhistogram",
-    "github.com/coreos/etcd/raft",
-    "github.com/coreos/etcd/raft/raftpb",
     "github.com/docker/distribution/reference",
     "github.com/docker/docker/api/types",
     "github.com/docker/docker/api/types/container",
@@ -1698,6 +1721,7 @@
     "github.com/lib/pq",
     "github.com/lib/pq/oid",
     "github.com/lightstep/lightstep-tracer-go",
+    "github.com/linkedin/goavro",
     "github.com/lufia/iostat",
     "github.com/marusama/semaphore",
     "github.com/mattn/go-isatty",
@@ -1734,6 +1758,8 @@
     "github.com/stretchr/testify/assert",
     "github.com/stretchr/testify/require",
     "github.com/wadey/gocovmerge",
+    "go.etcd.io/etcd/raft",
+    "go.etcd.io/etcd/raft/raftpb",
     "golang.org/x/crypto/bcrypt",
     "golang.org/x/crypto/ssh/terminal",
     "golang.org/x/net/html",
@@ -1751,7 +1777,6 @@
     "golang.org/x/text/language",
     "golang.org/x/text/unicode/norm",
     "golang.org/x/time/rate",
-    "golang.org/x/tools/cmd/goimports",
     "golang.org/x/tools/cmd/goyacc",
     "golang.org/x/tools/cmd/stringer",
     "golang.org/x/tools/container/intsets",

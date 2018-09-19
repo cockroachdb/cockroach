@@ -57,7 +57,8 @@ func runTestFlow(
 ) sqlbase.EncDatumRows {
 	distSQLSrv := srv.DistSQLServer().(*distsqlrun.ServerImpl)
 
-	txnCoordMeta := txn.GetStrippedTxnCoordMeta()
+	txnCoordMeta := txn.GetTxnCoordMeta(context.TODO())
+	txnCoordMeta.StripRootToLeaf()
 	req := distsqlrun.SetupFlowRequest{
 		Version:      distsqlrun.Version,
 		TxnCoordMeta: &txnCoordMeta,
@@ -109,6 +110,7 @@ func runTestFlow(
 // table. We assume the table's first column is the primary key, with values
 // from 1 to numRows. A non-PK column that works with the function is chosen.
 func checkDistAggregationInfo(
+	ctx context.Context,
 	t *testing.T,
 	srv serverutils.TestServerInterface,
 	tableDesc *sqlbase.TableDescriptor,
@@ -150,7 +152,7 @@ func checkDistAggregationInfo(
 		}
 	}
 
-	txn := client.NewTxn(srv.DB(), srv.NodeID(), client.RootTxn)
+	txn := client.NewTxn(ctx, srv.DB(), srv.NodeID(), client.RootTxn)
 
 	// First run a flow that aggregates all the rows without any local stages.
 
@@ -424,7 +426,8 @@ func TestDistAggregationTable(t *testing.T) {
 			for _, numRows := range []int{5, numRows / 10, numRows / 2, numRows} {
 				name := fmt.Sprintf("%s/%s/%d", fn, desc.Columns[colIdx].Name, numRows)
 				t.Run(name, func(t *testing.T) {
-					checkDistAggregationInfo(t, tc.Server(0), desc, colIdx, numRows, fn, info)
+					checkDistAggregationInfo(
+						context.Background(), t, tc.Server(0), desc, colIdx, numRows, fn, info)
 				})
 			}
 		}

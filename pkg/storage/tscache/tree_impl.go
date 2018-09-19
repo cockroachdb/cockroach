@@ -75,6 +75,7 @@ type treeImpl struct {
 
 	bytes    uint64
 	maxBytes uint64
+	metrics  Metrics
 }
 
 var _ Cache = &treeImpl{}
@@ -85,6 +86,7 @@ func newTreeImpl(clock *hlc.Clock) *treeImpl {
 		rCache:   cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
 		wCache:   cache.NewIntervalCache(cache.Config{Policy: cache.CacheFIFO}),
 		maxBytes: uint64(defaultTreeImplSize),
+		metrics:  makeMetrics(),
 	}
 	tc.clear(clock.Now())
 	tc.rCache.Config.ShouldEvict = tc.shouldEvict
@@ -537,4 +539,9 @@ func (tc *treeImpl) onEvicted(k, v interface{}) {
 		panic(fmt.Sprintf("bad reqSize: %d < %d", tc.bytes, reqSize))
 	}
 	tc.bytes -= reqSize
+}
+
+// Metrics implements the Cache interface.
+func (tc *treeImpl) Metrics() Metrics {
+	return tc.metrics
 }

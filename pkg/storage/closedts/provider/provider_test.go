@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -103,7 +104,7 @@ func TestProviderSubscribeNotify(t *testing.T) {
 		i := atomic.AddInt32(&readerSeq, 1)
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		ctx = log.WithLogTagInt(ctx, "reader", int(i))
+		ctx = logtags.AddTag(ctx, "reader", int(i))
 
 		log.Infof(ctx, "starting")
 		defer log.Infof(ctx, "done")
@@ -199,7 +200,7 @@ func TestProviderSubscribeNotify(t *testing.T) {
 	for i := range []struct{}{{}, {}} { // twice
 		i := i // goroutine copy
 		g.Go(func() error {
-			ctx := log.WithLogTagInt(context.Background(), "writer", i)
+			ctx := logtags.AddTag(context.Background(), "writer", i)
 			log.Info(ctx, "starting")
 			defer log.Info(ctx, "done")
 			nCh := p.Notify(roachpb.NodeID(2))

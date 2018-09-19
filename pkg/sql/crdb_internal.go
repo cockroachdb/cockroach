@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	yaml "gopkg.in/yaml.v2"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -1049,14 +1048,14 @@ CREATE TABLE crdb_internal.create_statements (
 				var err error
 				if table.IsView() {
 					descType = typeView
-					stmt, err = p.showCreateView(ctx, (*tree.Name)(&table.Name), table)
+					stmt, err = ShowCreateView(ctx, (*tree.Name)(&table.Name), table)
 				} else if table.IsSequence() {
 					descType = typeSequence
-					stmt, err = p.showCreateSequence(ctx, (*tree.Name)(&table.Name), table)
+					stmt, err = ShowCreateSequence(ctx, (*tree.Name)(&table.Name), table)
 				} else {
 					descType = typeTable
 					tn := (*tree.Name)(&table.Name)
-					createNofk, err = p.showCreateTable(ctx, tn, contextName, table, lCtx, true /* ignoreFKs */)
+					createNofk, err = ShowCreateTable(ctx, tn, contextName, table, lCtx, true /* ignoreFKs */)
 					if err != nil {
 						return err
 					}
@@ -1070,7 +1069,7 @@ CREATE TABLE crdb_internal.create_statements (
 							f.WriteString(" ADD CONSTRAINT ")
 							f.FormatNameP(&fk.Name)
 							f.WriteByte(' ')
-							if err := p.printForeignKeyConstraint(ctx, f.Buffer, contextName, idx, lCtx); err != nil {
+							if err := printForeignKeyConstraint(ctx, f.Buffer, contextName, idx, lCtx); err != nil {
 								return err
 							}
 							if err := alterStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
@@ -1088,7 +1087,7 @@ CREATE TABLE crdb_internal.create_statements (
 							}
 						}
 					}
-					stmt, err = p.showCreateTable(ctx, tn, contextName, table, lCtx, false /* ignoreFKs */)
+					stmt, err = ShowCreateTable(ctx, tn, contextName, table, lCtx, false /* ignoreFKs */)
 				}
 				if err != nil {
 					return err
@@ -1555,13 +1554,13 @@ CREATE TABLE crdb_internal.ranges (
   lease_holder INT NOT NULL
 )
 `,
-	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, error) {
 		if err := p.RequireSuperUser(ctx, "read crdb_internal.ranges"); err != nil {
-			return err
+			return nil, err
 		}
 		descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		// TODO(knz): maybe this could use internalLookupCtx.
 		dbNames := make(map[uint64]string)
@@ -1587,17 +1586,27 @@ CREATE TABLE crdb_internal.ranges (
 			EndKey: keys.MaxKey,
 		})
 		if err != nil {
-			return err
+			return nil, err
 		}
 		var desc roachpb.RangeDescriptor
-		for _, r := range ranges {
+
+		i := 0
+
+		return func() (tree.Datums, error) {
+			if i >= len(ranges) {
+				return nil, nil
+			}
+
+			r := ranges[i]
+			i++
+
 			if err := r.ValueProto(&desc); err != nil {
-				return err
+				return nil, err
 			}
 			arr := tree.NewDArray(types.Int)
 			for _, replica := range desc.Replicas {
 				if err := arr.Append(tree.NewDInt(tree.DInt(replica.StoreID))); err != nil {
-					return err
+					return nil, err
 				}
 			}
 			var dbName, tableName, indexName string
@@ -1624,11 +1633,11 @@ CREATE TABLE crdb_internal.ranges (
 				},
 			})
 			if err := p.txn.Run(ctx, b); err != nil {
-				return errors.Wrap(err, "error getting lease info")
+				return nil, errors.Wrap(err, "error getting lease info")
 			}
 			resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)
 
-			if err := addRow(
+			return tree.Datums{
 				tree.NewDInt(tree.DInt(desc.RangeID)),
 				tree.NewDBytes(tree.DBytes(desc.StartKey)),
 				tree.NewDString(keys.PrettyPrint(nil /* valDirs */, desc.StartKey.AsRawKey())),
@@ -1639,11 +1648,8 @@ CREATE TABLE crdb_internal.ranges (
 				tree.NewDString(indexName),
 				arr,
 				tree.NewDInt(tree.DInt(resp.Lease.Replica.StoreID)),
-			); err != nil {
-				return err
-			}
-		}
-		return nil
+			}, nil
+		}, nil
 	},
 }
 
@@ -1654,7 +1660,9 @@ var crdbInternalZonesTable = virtualSchemaTable{
 CREATE TABLE crdb_internal.zones (
   zone_id          INT NOT NULL,
   cli_specifier    STRING,
-  config_yaml      BYTES NOT NULL,
+  config_yaml      STRING NOT NULL,
+  config_sql       STRING, -- this column can be NULL if there is no specifier syntax
+                           -- possible (e.g. the object was deleted).
   config_protobuf  BYTES NOT NULL
 )
 `,
@@ -1675,17 +1683,19 @@ CREATE TABLE crdb_internal.zones (
 		if err != nil {
 			return err
 		}
+		values := make(tree.Datums, len(showZoneConfigNodeColumns))
 		for _, r := range rows {
 			id := uint32(tree.MustBeDInt(r[0]))
+
+			var zoneSpecifier *tree.ZoneSpecifier
 			zs, err := config.ZoneSpecifierFromID(id, resolveID)
-			var cliSpecifier tree.Datum
-			if err == nil {
-				cliSpecifier = tree.NewDString(config.CLIZoneSpecifier(&zs))
+			if err != nil {
+				// The database or table has been deleted so there is no way
+				// to refer to it anymore. We are still going to show
+				// something but the CLI specifier part will become NULL.
+				zoneSpecifier = nil
 			} else {
-				// The table was deleted but hasn't yet been cleaned up by the schema
-				// changer. The user has no way to refer to the zone, so provide a NULL
-				// CLI specifier.
-				cliSpecifier = tree.DNull
+				zoneSpecifier = &zs
 			}
 
 			configBytes := []byte(*r[1].(*tree.DBytes))
@@ -1699,20 +1709,11 @@ CREATE TABLE crdb_internal.zones (
 				// Ensure subzones don't infect the value of the config_proto column.
 				configProto.Subzones = nil
 				configProto.SubzoneSpans = nil
-				configBytes, err = protoutil.Marshal(&configProto)
-				if err != nil {
+
+				if err := generateZoneConfigIntrospectionValues(values, r[0], zoneSpecifier, &configProto); err != nil {
 					return err
 				}
-				configYAML, err := yaml.Marshal(configProto)
-				if err != nil {
-					return err
-				}
-				if err := addRow(
-					r[0], // id
-					cliSpecifier,
-					tree.NewDBytes(tree.DBytes(configYAML)),
-					tree.NewDBytes(tree.DBytes(configBytes)),
-				); err != nil {
+				if err := addRow(values...); err != nil {
 					return err
 				}
 			}
@@ -1727,26 +1728,17 @@ CREATE TABLE crdb_internal.zones (
 					if err != nil {
 						return err
 					}
-					if cliSpecifier != tree.DNull {
+					if zoneSpecifier != nil {
 						zs := zs
 						zs.TableOrIndex.Index = tree.UnrestrictedName(index.Name)
 						zs.Partition = tree.Name(s.PartitionName)
-						cliSpecifier = tree.NewDString(config.CLIZoneSpecifier(&zs))
+						zoneSpecifier = &zs
 					}
-					configYAML, err := yaml.Marshal(s.Config)
-					if err != nil {
+
+					if err := generateZoneConfigIntrospectionValues(values, r[0], zoneSpecifier, &s.Config); err != nil {
 						return err
 					}
-					configBytes, err := protoutil.Marshal(&s.Config)
-					if err != nil {
-						return err
-					}
-					if err := addRow(
-						r[0], // id
-						cliSpecifier,
-						tree.NewDBytes(tree.DBytes(configYAML)),
-						tree.NewDBytes(tree.DBytes(configBytes)),
-					); err != nil {
+					if err := addRow(values...); err != nil {
 						return err
 					}
 				}
@@ -1768,6 +1760,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
   server_version  STRING NOT NULL,
   build_tag       STRING NOT NULL,
   started_at      TIMESTAMP NOT NULL,
+  is_live          BOOL NOT NULL,
   ranges          INT NOT NULL,
   leases          INT NOT NULL
 )
@@ -1793,6 +1786,13 @@ CREATE TABLE crdb_internal.gossip_nodes (
 			return nil
 		}); err != nil {
 			return err
+		}
+
+		alive := make(map[roachpb.NodeID]tree.DBool)
+		for _, d := range descriptors {
+			if _, err := g.GetInfo(gossip.MakeGossipClientsKey(d.NodeID)); err == nil {
+				alive[d.NodeID] = true
+			}
 		}
 
 		sort.Slice(descriptors, func(i, j int) bool {
@@ -1845,6 +1845,7 @@ CREATE TABLE crdb_internal.gossip_nodes (
 				tree.NewDString(d.ServerVersion.String()),
 				tree.NewDString(d.BuildTag),
 				tree.MakeDTimestamp(timeutil.Unix(0, d.StartedAt), time.Microsecond),
+				tree.MakeDBool(alive[d.NodeID]),
 				tree.NewDInt(tree.DInt(stats[d.NodeID].ranges)),
 				tree.NewDInt(tree.DInt(stats[d.NodeID].leases)),
 			); err != nil {

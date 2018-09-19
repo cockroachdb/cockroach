@@ -357,16 +357,10 @@ statement ok
 CREATE TABLE a (id INT PRIMARY KEY)
 
 statement ok
-ALTER TABLE a EXPERIMENTAL CONFIGURE ZONE 'range_max_bytes: 67108865'
+ALTER TABLE a CONFIGURE ZONE USING range_max_bytes = 67108865
 
 statement ok
-ALTER TABLE a EXPERIMENTAL CONFIGURE ZONE NULL
-
-statement ok
-ALTER RANGE liveness EXPERIMENTAL CONFIGURE ZONE 'range_min_bytes: 1048577'
-
-statement ok
-ALTER RANGE liveness EXPERIMENTAL CONFIGURE ZONE NULL
+ALTER TABLE a CONFIGURE ZONE DISCARD
 
 # verify zone config changes are logged
 ##################
@@ -376,8 +370,7 @@ FROM system.eventlog
 WHERE "eventType" = 'set_zone_config'
 ORDER BY "timestamp"
 ----
-60  1  {"Target":"test.a","Config":"range_max_bytes: 67108865","User":"root"}
-22  1  {"Target":".liveness","Config":"range_min_bytes: 1048577","User":"root"}
+60  1  {"Target":"test.a","Options":"range_max_bytes = 67108865","User":"root"}
 
 query IIT
 SELECT "targetID", "reportingID", "info"
@@ -386,7 +379,6 @@ WHERE "eventType" = 'remove_zone_config'
 ORDER BY "timestamp"
 ----
 60  1  {"Target":"test.a","User":"root"}
-22  1  {"Target":".liveness","User":"root"}
 
 statement ok
 DROP TABLE a

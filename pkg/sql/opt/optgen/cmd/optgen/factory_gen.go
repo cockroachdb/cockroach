@@ -47,6 +47,7 @@ func (g *factoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 
 	g.genInternPrivateFuncs()
 	g.genConstructFuncs()
+	g.genAssignPlaceholders()
 	g.genDynamicConstruct()
 }
 
@@ -123,6 +124,109 @@ func (g *factoryGen) genConstructFuncs() {
 		g.w.writeIndent("return _f.onConstruct(memo.Expr(%s))\n", varName)
 		g.w.unnest("}\n\n")
 	}
+}
+
+// genAssignPlaceholders generates code that recursively walks a subtree looking
+// for Placeholder operators and replacing them with their assigned values. This
+// will trigger the rebuild of that node's ancestors, as well as triggering
+// additional normalization rules that can substantially rewrite the tree. The
+// generated code is similar to this:
+//
+//   func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+//     if !f.mem.GroupProperties(group).HasPlaceholder() {
+//       return group
+//     }
+//     expr := f.mem.NormExpr(group)
+//     switch expr.Operator() {
+//     case opt.SelectOp:
+//       selectExpr := expr.AsSelect()
+//       input := f.assignPlaceholders(selectExpr.Input())
+//       filter := f.assignPlaceholders(selectExpr.Filter())
+//       return f.ConstructSelect(input, filter)
+//
+func (g *factoryGen) genAssignPlaceholders() {
+	g.w.nestIndent("func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {\n")
+	g.w.nestIndent("if !f.mem.GroupProperties(group).HasPlaceholder() {\n")
+	g.w.writeIndent("return group\n")
+	g.w.unnest("}\n")
+	g.w.writeIndent("expr := f.mem.NormExpr(group)\n")
+
+	g.w.writeIndent("switch expr.Operator() {\n")
+
+	for _, define := range g.compiled.Defines.WithoutTag("Enforcer") {
+		// Determine if the operator can be skipped altogether:
+		//   1. The operator is an aggregate. Aggregates never contain placeholders
+		//      because non-Variable children always get rewritten as part of an
+		//      input projection.
+		//   2. The operator has no children.
+		if define.Tags.Contains("Aggregate") {
+			continue
+		}
+
+		skipOp := true
+		for _, field := range define.Fields {
+			if !isPrivateType(string(field.Type)) {
+				skipOp = false
+				break
+			}
+		}
+		if skipOp {
+			continue
+		}
+
+		varName := fmt.Sprintf("%sExpr", unTitle(string(define.Name)))
+
+		g.w.nestIndent("case opt.%sOp:\n", define.Name)
+		if len(define.Fields) > 0 {
+			g.w.writeIndent("%s := expr.As%s()\n", varName, define.Name)
+		}
+
+		// Determine whether a list builder is needed.
+		for _, field := range define.Fields {
+			if isListType(string(field.Type)) {
+				g.w.writeIndent("lb := MakeListBuilder(&f.funcs)\n")
+				break
+			}
+		}
+
+		for _, field := range define.Fields {
+			fieldVarName := unTitle(string(field.Name))
+
+			if isListType(string(field.Type)) {
+				g.w.nestIndent("for _, item := range f.mem.LookupList(%s.%s()) {\n", varName, field.Name)
+				g.w.writeIndent("lb.AddItem(f.assignPlaceholders(item))\n")
+				g.w.unnest("}\n")
+				g.w.writeIndent("%s := lb.BuildList()\n", fieldVarName)
+			} else if isPrivateType(string(field.Type)) {
+				g.w.writeIndent("%s := %s.%s()\n", fieldVarName, varName, field.Name)
+			} else {
+				g.w.writeIndent("%s := f.assignPlaceholders(%s.%s())\n", fieldVarName, varName, field.Name)
+			}
+		}
+
+		g.w.writeIndent("return f.Construct%s(", define.Name)
+		for i, field := range define.Fields {
+			if i != 0 {
+				g.w.write(", ")
+			}
+			g.w.write(unTitle(string(field.Name)))
+		}
+		g.w.unnest(")\n")
+	}
+
+	// Generate code that assigns a placeholder value.
+	g.w.nestIndent("case opt.PlaceholderOp:\n")
+	g.w.writeIndent("value := expr.AsPlaceholder().Value()\n")
+	g.w.writeIndent("placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)\n")
+	g.w.writeIndent("d, err := placeholder.Eval(f.evalCtx)\n")
+	g.w.nestIndent("if err != nil {\n")
+	g.w.writeIndent("panic(err)\n")
+	g.w.unnest("}\n")
+	g.w.writeIndent("return f.ConstructConstVal(d)")
+
+	g.w.unnest("}\n")
+	g.w.writeIndent("panic(\"unhandled operator\")\n")
+	g.w.unnest("}\n\n")
 }
 
 // genDynamicConstruct generates the factory's DynamicConstruct method, which

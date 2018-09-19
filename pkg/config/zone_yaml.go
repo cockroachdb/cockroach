@@ -198,7 +198,7 @@ type marshalableZoneConfig struct {
 	GC                           GCPolicy          `json:"gc"`
 	NumReplicas                  int32             `json:"num_replicas" yaml:"num_replicas"`
 	Constraints                  ConstraintsList   `json:"constraints" yaml:"constraints,flow"`
-	LeasePreferences             []LeasePreference `json:"lease_preferences" yaml:"lease_preferences,flow,omitempty"`
+	LeasePreferences             []LeasePreference `json:"lease_preferences" yaml:"lease_preferences,flow"`
 	ExperimentalLeasePreferences []LeasePreference `json:"experimental_lease_preferences" yaml:"experimental_lease_preferences,flow,omitempty"`
 	Subzones                     []Subzone         `json:"subzones" yaml:"-"`
 	SubzoneSpans                 []SubzoneSpan     `json:"subzone_spans" yaml:"-"`

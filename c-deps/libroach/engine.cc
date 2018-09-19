@@ -57,6 +57,22 @@ DBSSTable* DBEngine::GetSSTables(int* n) {
   return tables;
 }
 
+DBStatus DBEngine::GetSortedWALFiles(DBWALFile** out_files, int* n) {
+  rocksdb::VectorLogPtr files;
+  rocksdb::Status s = rep->GetSortedWalFiles(files);
+  if (!s.ok()) {
+    return ToDBStatus(s);
+  }
+  *n = files.size();
+  // We calloc the result so it can be deallocated by the caller using free().
+  *out_files = reinterpret_cast<DBWALFile*>(calloc(files.size(), sizeof(DBWALFile)));
+  for (int i = 0; i < files.size(); i++) {
+    (*out_files)[i].log_number = files[i]->LogNumber();
+    (*out_files)[i].size = files[i]->SizeFileBytes();
+  }
+  return kSuccess;
+}
+
 DBString DBEngine::GetUserProperties() {
   rocksdb::TablePropertiesCollection props;
   rocksdb::Status status = rep->GetPropertiesOfAllTables(&props);

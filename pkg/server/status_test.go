@@ -187,6 +187,52 @@ func startServer(t *testing.T) *TestServer {
 	return ts
 }
 
+// TestStatusLocalFileRetrieval tests the files/local endpoint.
+// See debug/heap roachtest for testing heap profile file collection.
+func TestStatusLocalFileRetrieval(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ts := startServer(t)
+	defer ts.Stopper().Stop(context.TODO())
+
+	rootConfig := testutils.NewTestBaseContext(security.RootUser)
+	rpcContext := rpc.NewContext(
+		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, rootConfig, ts.Clock(), ts.Stopper(),
+		&ts.ClusterSettings().Version)
+	url := ts.ServingAddr()
+	conn, err := rpcContext.GRPCDial(url).Connect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := serverpb.NewStatusClient(conn)
+
+	request := serverpb.GetFilesRequest{
+		NodeId: "local", ListOnly: true, Type: serverpb.FileType_HEAP, Patterns: []string{"*"}}
+	response, err := client.GetFiles(context.Background(), &request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if a, e := len(response.Files), 0; a != e {
+		t.Errorf("expected %d files(s), found %d", e, a)
+	}
+
+	// Testing path separators in pattern.
+	request = serverpb.GetFilesRequest{NodeId: "local", ListOnly: true,
+		Type: serverpb.FileType_HEAP, Patterns: []string{"pattern/with/separators"}}
+	_, err = client.GetFiles(context.Background(), &request)
+	if err == nil {
+		t.Errorf("GetFiles: path separators allowed in pattern")
+	}
+
+	// Testing invalid filetypes.
+	request = serverpb.GetFilesRequest{NodeId: "local", ListOnly: true,
+		Type: -1, Patterns: []string{"*"}}
+	_, err = client.GetFiles(context.Background(), &request)
+	if err == nil {
+		t.Errorf("GetFiles: invalid file type allowed")
+	}
+}
+
 // TestStatusLocalLogs checks to ensure that local/logfiles,
 // local/logfiles/{filename} and local/log function
 // correctly.

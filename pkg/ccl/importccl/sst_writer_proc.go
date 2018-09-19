@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -73,7 +74,7 @@ type sstWriter struct {
 	input       distsqlrun.RowSource
 	out         distsqlrun.ProcOutputHelper
 	output      distsqlrun.RowReceiver
-	tempStorage engine.Engine
+	tempStorage diskmap.Factory
 	settings    *cluster.Settings
 	registry    *jobs.Registry
 	progress    distsqlrun.JobProgress
@@ -108,7 +109,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		types := sp.input.OutputTypes()
 		input := distsqlrun.MakeNoMetadataRowSource(sp.input, sp.output)
 		alloc := &sqlbase.DatumAlloc{}
-		store := engine.NewRocksDBMultiMap(sp.tempStorage)
+		store := sp.tempStorage.NewSortedDiskMultiMap()
 		defer store.Close(ctx)
 		batch := store.NewBatchWriter()
 		var key, val []byte
@@ -272,19 +273,27 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 						key := roachpb.Key(samples[i])
 						return key.Compare(span.End) >= 0
 					})
-					finished := roachpb.Span{EndKey: span.End}
-					// Special case: if we're processing the first span, we want
-					// to mark the table key itself as being complete.  This
-					// means that at the end of importing, the table's entire
-					// key-space will be marked as complete.
-					if idx == 0 {
-						_, table, err := keys.DecodeTablePrefix(span.End)
-						if err != nil {
-							return errors.Wrapf(err, "expected a table key, had %s", span.End)
+					var finished roachpb.Span
+					// Mark the processed span as done for resume. If it was the first or last
+					// span, use min or max key. This is easier than trying to correctly determine
+					// the table ID we imported and getting its start span because span.End
+					// might be (in the case of an empty table) the start key of the next table.
+					switch idx {
+					case 0:
+						finished = roachpb.Span{
+							Key:    keys.MinKey,
+							EndKey: span.End,
 						}
-						finished.Key = keys.MakeTablePrefix(uint32(table))
-					} else {
-						finished.Key = samples[idx-1]
+					case len(samples):
+						finished = roachpb.Span{
+							Key:    samples[idx-1],
+							EndKey: keys.MaxKey,
+						}
+					default:
+						finished = roachpb.Span{
+							Key:    samples[idx-1],
+							EndKey: span.End,
+						}
 					}
 					var sg roachpb.SpanGroup
 					sg.Add(d.SpanProgress...)
@@ -321,7 +330,7 @@ const errSSTCreationMaybeDuplicateTemplate = "SST creation error at %s; this can
 // if not nil, will stop processing at the specified key.
 func makeSSTs(
 	ctx context.Context,
-	it engine.SortedDiskMapIterator,
+	it diskmap.SortedDiskMapIterator,
 	sstMaxSize int64,
 	contentCh chan<- sstContent,
 	walltime int64,

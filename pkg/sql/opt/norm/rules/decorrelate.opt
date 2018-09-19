@@ -674,7 +674,7 @@
 # addition, the Exists can be transformed into a semi-join.
 [NormalizeAnyFilter, Normalize]
 (Filters
-    $list:[ ... $any:(Any $input:* $scalar:* $cmp:*) ... ]
+    $list:[ ... $any:(Any $input:* $scalar:* $subqueryDef:*) ... ]
 )
 =>
 (Filters
@@ -684,8 +684,9 @@
         (Exists
             (Select
                 $input
-                (Filters [ (ConstructAnyCondition $input $scalar $cmp) ])
+                (Filters [ (ConstructAnyCondition $input $scalar $subqueryDef) ])
             )
+            $subqueryDef
         )
     )
 )
@@ -700,7 +701,7 @@
 # Citations: [5] (section 3.5)
 [NormalizeNotAnyFilter, Normalize]
 (Filters
-    $list:[ ... $notany:(Not (Any $input:* $scalar:* $cmp:*)) ... ]
+    $list:[ ... $notany:(Not (Any $input:* $scalar:* $subqueryDef:*)) ... ]
 )
 =>
 (Filters
@@ -712,9 +713,10 @@
                 (Select
                     $input
                     (Filters
-                        [ (IsNot (ConstructAnyCondition $input $scalar $cmp) (False)) ]
+                        [ (IsNot (ConstructAnyCondition $input $scalar $subqueryDef) (False)) ]
                     )
                 )
+                $subqueryDef
             )
         )
     )

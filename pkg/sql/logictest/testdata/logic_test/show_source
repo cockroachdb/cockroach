@@ -32,7 +32,7 @@ database                           test
 datestyle                          ISO
 default_transaction_isolation      serializable
 default_transaction_read_only      off
-distsql                            off
+distsql                            2.0-off
 experimental_force_lookup_join     off
 experimental_force_split_at        off
 experimental_force_zigzag_join     off
@@ -61,7 +61,7 @@ query I colnames
 SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]
 ----
 sql.defaults.distsql
-0
+3
 
 query TTTT colnames
 SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE variable LIKE '%organization'
@@ -80,6 +80,16 @@ SELECT * FROM [SHOW DATABASE]
 ----
 database
 test
+
+query ITTTT colnames
+SELECT * FROM [SHOW ZONE CONFIGURATIONS] LIMIT 0
+----
+zone_id  cli_specifier  config_yaml  config_sql  config_protobuf
+
+query ITTTT colnames
+SELECT * FROM [SHOW ZONE CONFIGURATION FOR TABLE system.users] LIMIT 0
+----
+zone_id  cli_specifier  config_yaml  config_sql  config_protobuf
 
 query T colnames
 SELECT * FROM [SHOW DATABASES]

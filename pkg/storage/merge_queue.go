@@ -131,7 +131,7 @@ func (mq *mergeQueue) enabled() bool {
 }
 
 func (mq *mergeQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	if !mq.enabled() {
 		return false, 0
@@ -193,7 +193,7 @@ func (mq *mergeQueue) requestRangeStats(
 }
 
 func (mq *mergeQueue) process(
-	ctx context.Context, lhsRepl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, lhsRepl *Replica, sysCfg *config.SystemConfig,
 ) error {
 	if !mq.enabled() {
 		log.VEventf(ctx, 2, "skipping merge: queue has been disabled")
@@ -272,6 +272,11 @@ func (mq *mergeQueue) process(
 		// While range merges are unstable, be extra cautious and mark every error
 		// as purgatory-worthy.
 		return rangeMergePurgatoryError{err}
+	}
+	if testingAggressiveConsistencyChecks {
+		if err := mq.store.consistencyQueue.process(ctx, lhsRepl, sysCfg); err != nil {
+			log.Warning(ctx, err)
+		}
 	}
 	return nil
 }

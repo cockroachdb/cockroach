@@ -208,13 +208,13 @@ func (c *CustomFuncs) hasRemovableAggDistinct(
 ) (ok bool, aggDistinctInput memo.GroupID) {
 	aggExpr := c.f.mem.NormExpr(aggregation)
 	if aggExpr.ChildCount() == 1 {
-		argExpr := c.f.mem.NormExpr(aggExpr.ChildGroup(c.f.mem, 0))
+		argExpr := c.f.mem.NormExpr(aggExpr.ChildGroup(c.mem, 0))
 		if argExpr.Operator() == opt.AggDistinctOp {
-			aggDistinctInput := argExpr.ChildGroup(c.f.mem, 0)
+			aggDistinctInput := argExpr.ChildGroup(c.mem, 0)
 			v := c.f.mem.NormExpr(aggDistinctInput)
 			if v.Operator() == opt.VariableOp {
 				cols := groupingCols.Copy()
-				cols.Add(int(v.Private(c.f.mem).(opt.ColumnID)))
+				cols.Add(int(v.Private(c.mem).(opt.ColumnID)))
 				if inputFDs.ColsAreStrictKey(cols) {
 					return true, aggDistinctInput
 				}
@@ -222,16 +222,4 @@ func (c *CustomFuncs) hasRemovableAggDistinct(
 		}
 	}
 	return false, 0
-}
-
-// extractAggInputColumn returns the input ColumnID of an aggregate operator.
-func extractAggInputColumn(ev memo.ExprView) opt.ColumnID {
-	if !ev.IsAggregate() {
-		panic("not an Aggregate")
-	}
-	arg := ev.Child(0)
-	if arg.Operator() == opt.AggDistinctOp {
-		arg = arg.Child(0)
-	}
-	return arg.Private().(opt.ColumnID)
 }

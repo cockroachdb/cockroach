@@ -40,7 +40,9 @@ func main() {
 			if clusterName != "" && local {
 				return fmt.Errorf("cannot specify both an existing cluster (%s) and --local", clusterName)
 			}
-			initBinaries()
+			if !dryrun {
+				initBinaries()
+			}
 			return nil
 		},
 	}

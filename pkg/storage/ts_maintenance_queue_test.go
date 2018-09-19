@@ -140,7 +140,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 		if a, e := store.ReplicaCount(), len(expectedEndKeys); a != e {
 			return fmt.Errorf("expected %d replicas in store; found %d", a, e)
 		}
-		if _, ok := store.Gossip().GetSystemConfig(); !ok {
+		if cfg := store.Gossip().GetSystemConfig(); cfg == nil {
 			return fmt.Errorf("system config not yet available")
 		}
 		return nil

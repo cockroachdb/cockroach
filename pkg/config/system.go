@@ -23,11 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 type zoneConfigHook func(
-	sysCfg SystemConfig, objectID uint32, keySuffix []byte,
-) (zoneCfg ZoneConfig, found bool, err error)
+	sysCfg *SystemConfig, objectID uint32,
+) (zone *ZoneConfig, placeholder *ZoneConfig, cache bool, err error)
 
 var (
 	// ZoneConfigHook is a function used to lookup a zone config given a table
@@ -40,10 +41,34 @@ var (
 	testingLargestIDHook func(uint32) uint32
 )
 
+type zoneEntry struct {
+	zone        *ZoneConfig
+	placeholder *ZoneConfig
+}
+
+// SystemConfig embeds a SystemConfigEntries message which contains an
+// entry for every system descriptor (e.g. databases, tables, zone
+// configs). It also has a map from object ID to unmarshaled zone
+// config for caching.
+type SystemConfig struct {
+	SystemConfigEntries
+	mu struct {
+		syncutil.RWMutex
+		cache map[uint32]zoneEntry
+	}
+}
+
+// NewSystemConfig returns an initialized instance of SystemConfig.
+func NewSystemConfig() *SystemConfig {
+	sc := &SystemConfig{}
+	sc.mu.cache = map[uint32]zoneEntry{}
+	return sc
+}
+
 // Equal checks for equality.
 //
 // It assumes that s.Values and other.Values are sorted in key order.
-func (s SystemConfig) Equal(other SystemConfig) bool {
+func (s *SystemConfig) Equal(other *SystemConfigEntries) bool {
 	if len(s.Values) != len(other.Values) {
 		return false
 	}
@@ -65,7 +90,7 @@ func (s SystemConfig) Equal(other SystemConfig) bool {
 
 // GetValue searches the kv list for 'key' and returns its
 // roachpb.Value if found.
-func (s SystemConfig) GetValue(key roachpb.Key) *roachpb.Value {
+func (s *SystemConfig) GetValue(key roachpb.Key) *roachpb.Value {
 	if kv := s.get(key); kv != nil {
 		return &kv.Value
 	}
@@ -74,7 +99,7 @@ func (s SystemConfig) GetValue(key roachpb.Key) *roachpb.Value {
 
 // get searches the kv list for 'key' and returns its roachpb.KeyValue
 // if found.
-func (s SystemConfig) get(key roachpb.Key) *roachpb.KeyValue {
+func (s *SystemConfig) get(key roachpb.Key) *roachpb.KeyValue {
 	if index, found := s.GetIndex(key); found {
 		// TODO(marc): I'm pretty sure a Value returned by MVCCScan can
 		// never be nil. Should check.
@@ -84,7 +109,7 @@ func (s SystemConfig) get(key roachpb.Key) *roachpb.KeyValue {
 }
 
 // GetIndex searches the kv list for 'key' and returns its index if found.
-func (s SystemConfig) GetIndex(key roachpb.Key) (int, bool) {
+func (s *SystemConfig) GetIndex(key roachpb.Key) (int, bool) {
 	l := len(s.Values)
 	index := sort.Search(l, func(i int) bool {
 		return bytes.Compare(s.Values[i].Key, key) >= 0
@@ -98,7 +123,7 @@ func (s SystemConfig) GetIndex(key roachpb.Key) (int, bool) {
 // GetLargestObjectID returns the largest object ID found in the config which is
 // less than or equal to maxID. If maxID is 0, returns the largest ID in the
 // config.
-func (s SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
+func (s *SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
 	testingLock.Lock()
 	hook := testingLargestIDHook
 	testingLock.Unlock()
@@ -171,9 +196,10 @@ func (s SystemConfig) GetLargestObjectID(maxID uint32) (uint32, error) {
 	return uint32(id), nil
 }
 
-// GetZoneConfigForKey looks up the zone config for the range containing 'key'.
-// It is the caller's responsibility to ensure that the range does not need to be split.
-func (s SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (ZoneConfig, error) {
+// GetZoneConfigForKey looks up the zone config for the object (table
+// or database, specified by key.id). It is the caller's
+// responsibility to ensure that the range does not need to be split.
+func (s *SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*ZoneConfig, error) {
 	objectID, keySuffix, ok := DecodeObjectID(key)
 	if !ok {
 		// Not in the structured data namespace.
@@ -199,19 +225,39 @@ func (s SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (ZoneConfig, error) 
 		}
 	}
 
-	return s.getZoneConfigForID(objectID, keySuffix)
+	return s.getZoneConfigForKey(objectID, keySuffix)
 }
 
-// getZoneConfigForID looks up the zone config for the object (table or database)
-// with 'id'.
-func (s SystemConfig) getZoneConfigForID(id uint32, keySuffix []byte) (ZoneConfig, error) {
+func (s *SystemConfig) getZoneConfigForKey(id uint32, keySuffix []byte) (*ZoneConfig, error) {
 	testingLock.Lock()
 	hook := ZoneConfigHook
 	testingLock.Unlock()
-	if cfg, found, err := hook(s, id, keySuffix); err != nil || found {
-		return cfg, err
+	s.mu.RLock()
+	entry, ok := s.mu.cache[id]
+	s.mu.RUnlock()
+	if !ok {
+		if zone, placeholder, cache, err := hook(s, id); err != nil {
+			return nil, err
+		} else if zone != nil {
+			entry = zoneEntry{zone: zone, placeholder: placeholder}
+			if cache {
+				s.mu.Lock()
+				s.mu.cache[id] = entry
+				s.mu.Unlock()
+			}
+		}
 	}
-	return DefaultZoneConfig(), nil
+	if entry.zone != nil {
+		if entry.placeholder != nil {
+			if subzone := entry.placeholder.GetSubzoneForKeySuffix(keySuffix); subzone != nil {
+				return &subzone.Config, nil
+			}
+		} else if subzone := entry.zone.GetSubzoneForKeySuffix(keySuffix); subzone != nil {
+			return &subzone.Config, nil
+		}
+		return entry.zone, nil
+	}
+	return DefaultZoneConfigRef(), nil
 }
 
 var staticSplits = []roachpb.RKey{
@@ -243,7 +289,7 @@ func StaticSplits() []roachpb.RKey {
 // system ranges that come before the system tables. The system-config range is
 // somewhat special in that it can contain multiple SQL tables
 // (/table/0-/table/<max-system-config-desc>) within a single range.
-func (s SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RKey {
+func (s *SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RKey {
 	// Before dealing with splits necessitated by SQL tables, handle all of the
 	// static splits earlier in the keyspace. Note that this list must be kept in
 	// the proper order (ascending in the keyspace) for the logic below to work.
@@ -342,6 +388,6 @@ func (s SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RKe
 
 // NeedsSplit returns whether the range [startKey, endKey) needs a split due
 // to zone configs.
-func (s SystemConfig) NeedsSplit(startKey, endKey roachpb.RKey) bool {
+func (s *SystemConfig) NeedsSplit(startKey, endKey roachpb.RKey) bool {
 	return len(s.ComputeSplitKey(startKey, endKey)) > 0
 }

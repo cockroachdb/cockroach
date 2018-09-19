@@ -45,12 +45,20 @@ import (
 // Go key value) or contain a non-interned pointer (because pointers to
 // equivalent values in different memory locations do not map to the same key
 // value).
+//
+// Private values must be immutable; that is, once set, they can never be
+// modified again. Without this property, they could not be be hashed nor copied
+// for independent concurrent use by multiple Memos.
 type privateStorage struct {
 	// privatesMap maps from the interning key to the index of the private
 	// value in the privates slice. Note that PrivateID 0 is invalid in order
 	// to indicate an unknown private.
 	privatesMap map[privateKey]PrivateID
 	privates    []interface{}
+
+	// memEstimate is a rough estimate of the memory usage of privateStorage, in
+	// bytes.
+	memEstimate int64
 
 	// datumCtx is used to get the string representation of datum values.
 	datumCtx tree.FmtCtx
@@ -71,11 +79,43 @@ type privateKey struct {
 	str   string
 }
 
-// init must be called before privateStorage can be used.
+// init prepares privateStorage for use (or reuse).
 func (ps *privateStorage) init() {
 	ps.datumCtx = tree.MakeFmtCtx(&ps.keyBuf.Buffer, tree.FmtSimple)
+	ps.memEstimate = 0
 	ps.privatesMap = make(map[privateKey]PrivateID)
-	ps.privates = make([]interface{}, 1, 8)
+
+	if ps.privates == nil {
+		ps.privates = make([]interface{}, 1, 8)
+	} else {
+		// Clear the privates to release memory (this clearing pattern is
+		// optimized by Go).
+		for i := range ps.privates {
+			ps.privates[i] = nil
+		}
+		ps.privates = ps.privates[:1]
+	}
+}
+
+// initFrom initializes the private storage with a copy of all private values
+// from another private storage. This private storage can then be modified
+// independent of the other.
+func (ps *privateStorage) initFrom(from *privateStorage) {
+	ps.datumCtx = tree.MakeFmtCtx(&ps.keyBuf.Buffer, tree.FmtSimple)
+	ps.memEstimate = from.memEstimate
+	ps.privatesMap = make(map[privateKey]PrivateID, len(from.privatesMap))
+	for k, v := range from.privatesMap {
+		ps.privatesMap[k] = v
+	}
+	ps.privates = make([]interface{}, len(from.privates))
+	copy(ps.privates, from.privates)
+}
+
+// memoryEstimate returns a rough estimate of the private storage memory usage,
+// in bytes. It only includes memory usage that is proportional to the number of
+// privates in the storage and their size, rather than constant overhead bytes.
+func (ps *privateStorage) memoryEstimate() int64 {
+	return ps.memEstimate
 }
 
 // lookup returns a private value previously interned by privateStorage.
@@ -322,7 +362,7 @@ func (ps *privateStorage) internLookupJoinDef(def *LookupJoinDef) PrivateID {
 	// Add a separator between the list and the set. Note that the column IDs
 	// cannot be 0.
 	ps.keyBuf.writeUvarint(0)
-	ps.keyBuf.writeColSet(def.LookupCols)
+	ps.keyBuf.writeColSet(def.Cols)
 	typ := (*LookupJoinDef)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
 		return id
@@ -407,6 +447,18 @@ func (ps *privateStorage) internRowNumberDef(def *RowNumberDef) PrivateID {
 	ps.keyBuf.writeUvarint(uint64(def.ColID))
 
 	typ := (*RowNumberDef)(nil)
+	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
+		return id
+	}
+	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, def)
+}
+
+func (ps *privateStorage) internSubqueryDef(def *SubqueryDef) PrivateID {
+	ps.keyBuf.Reset()
+	ps.keyBuf.writeUvarint(uint64(uintptr(unsafe.Pointer(def.OriginalExpr))))
+	ps.keyBuf.writeUvarint(uint64(def.Cmp))
+
+	typ := (*SubqueryDef)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
 		return id
 	}
@@ -538,6 +590,10 @@ func (ps *privateStorage) internPhysProps(physical *props.Physical) PrivateID {
 }
 
 func (ps *privateStorage) addValue(key privateKey, val interface{}) PrivateID {
+	// Multiply the size of the key by 2 to account for size of the value.
+	const keySize = int(unsafe.Sizeof(privateKey{}))
+	ps.memEstimate += int64(keySize+len(key.str)) * 2
+
 	id := PrivateID(len(ps.privates))
 	ps.privates = append(ps.privates, val)
 	ps.privatesMap[key] = id

@@ -16,10 +16,14 @@ package memo
 
 import (
 	"bytes"
+	"context"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // PhysicalPropsID identifies a set of physical properties that has been
@@ -135,24 +139,119 @@ type Memo struct {
 	// there are so many duplicates.
 	privateStorage privateStorage
 
-	// root is the root of the lowest cost expression tree in the memo. It is
-	// set once after optimization is complete.
-	root BestExprID
+	// rootGroup is the root group of the memo expression forest. It is set via
+	// a call to SetRoot.
+	rootGroup GroupID
+
+	// rootProps are the physical properties required of the root memo group. It
+	// is set via a call to SetRoot.
+	rootProps PhysicalPropsID
+
+	// memEstimate is the approximate memory usage of the memo, in bytes.
+	memEstimate int64
+
+	// locName is the location which the memo is compiled against. This determines
+	// the timezone, which is used for time-related data type construction and
+	// comparisons. If the location changes, then this memo is invalidated.
+	locName string
+
+	// dbName is the current database at the time the memo was compiled. If this
+	// changes, then the memo is invalidated.
+	dbName string
+
+	// searchPath is the current search path at the time the memo was compiled.
+	// If this changes, then the memo is invalidated.
+	searchPath sessiondata.SearchPath
 }
 
-// New constructs a new empty memo instance.
-func New() *Memo {
+// Init initializes a new empty memo instance, or resets existing state so it
+// can be reused. It must be called before use (or reuse). The memo collects
+// information about the context in which it is compiled from the evalContext
+// argument. If any of that changes, then the memo must be invalidated (see the
+// IsStale method for more details).
+func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	// NB: group 0 is reserved and intentionally nil so that the 0 group index
 	// can indicate that we don't know the group for an expression. Similarly,
 	// index 0 for private data, index 0 for physical properties, and index 0
 	// for lists are all reserved.
-	m := &Memo{
-		exprMap: make(map[Fingerprint]GroupID),
-		groups:  make([]group, 1, 12),
+	m.metadata.Init()
+
+	// TODO(andyk): Investigate fast map clear when we move to Go 1.11.
+	m.exprMap = make(map[Fingerprint]GroupID)
+
+	// Reuse groups slice unless it was under-utilized.
+	const minGroupCount = 12
+	if m.groups == nil || (len(m.groups) > minGroupCount && len(m.groups) < cap(m.groups)/2) {
+		m.groups = make([]group, 1, minGroupCount)
+	} else {
+		m.groups = m.groups[:1]
 	}
 
+	m.listStorage.init()
 	m.privateStorage.init()
-	return m
+	m.rootGroup = 0
+	m.rootProps = 0
+	m.memEstimate = 0
+	m.locName = evalCtx.GetLocation().String()
+	m.dbName = evalCtx.SessionData.Database
+	m.searchPath = evalCtx.SessionData.SearchPath
+}
+
+// InitFrom initializes the memo with a deep copy of the provided memo. This
+// memo can then be modified independent of the copied memo.
+func (m *Memo) InitFrom(from *Memo) {
+	if from.groups == nil {
+		panic("cannot initialize from an uninitialized memo")
+	}
+
+	m.rootGroup = from.rootGroup
+	m.rootProps = from.rootProps
+	m.memEstimate = from.memEstimate
+	m.locName = from.locName
+	m.dbName = from.dbName
+	m.searchPath = from.searchPath
+
+	// Copy the metadata.
+	m.metadata.InitFrom(&from.metadata)
+
+	// Copy the expression map.
+	m.exprMap = make(map[Fingerprint]GroupID, len(from.exprMap))
+	for k, v := range from.exprMap {
+		m.exprMap[k] = v
+	}
+
+	// Copy the groups.
+	if m.groups == nil {
+		m.groups = make([]group, 0, len(from.groups))
+	} else {
+		m.groups = m.groups[:0]
+	}
+	for i := range from.groups {
+		from := &from.groups[i]
+		m.groups = append(m.groups, group{
+			id:            from.id,
+			logical:       from.logical,
+			normExpr:      from.normExpr,
+			firstBestExpr: from.firstBestExpr,
+
+			// These slices are never reused, so can share the slice prefix.
+			otherExprs:     from.otherExprs[:len(from.otherExprs):len(from.otherExprs)],
+			otherBestExprs: from.otherBestExprs[:len(from.otherBestExprs):len(from.otherBestExprs)],
+		})
+	}
+
+	// Copy all memoized lists.
+	m.listStorage.initFrom(&from.listStorage)
+
+	// Copy all private values.
+	m.privateStorage.initFrom(&from.privateStorage)
+}
+
+// MemoryEstimate returns a rough estimate of the memo's memory usage, in bytes.
+// It only includes memory usage that is proportional to the size and complexity
+// of the query, rather than constant overhead bytes.
+func (m *Memo) MemoryEstimate() int64 {
+	return m.memEstimate + m.listStorage.memoryEstimate() + m.privateStorage.memoryEstimate()
 }
 
 // Metadata returns the metadata instance associated with the memo.
@@ -160,30 +259,101 @@ func (m *Memo) Metadata() *opt.Metadata {
 	return &m.metadata
 }
 
-// Root returns the root of the memo's lowest cost expression tree. It can only
-// be accessed once the memo has been fully optimized.
-func (m *Memo) Root() ExprView {
-	if !m.isOptimized() {
-		panic("memo has not yet been optimized and had its root expression set")
-	}
-	return MakeExprView(m, m.root)
+// RootGroup returns the root memo group previously set via a call to SetRoot.
+func (m *Memo) RootGroup() GroupID {
+	return m.rootGroup
 }
 
-// SetRoot stores the root of the memo's lowest cost expression tree.
-func (m *Memo) SetRoot(root ExprView) {
-	if root.mem != m {
-		panic("the given root is in a different memo")
+// RootProps returns the physical properties required of the root memo group,
+// previously set via a call to SetRoot.
+func (m *Memo) RootProps() PhysicalPropsID {
+	return m.rootProps
+}
+
+// Root returns an ExprView wrapper around the root of the memo. If the memo has
+// not yet been optimized, this will be a view over the normalized expression
+// tree. Otherwise, it's a view over the lowest cost expression tree.
+func (m *Memo) Root() ExprView {
+	if m.isOptimized() {
+		root := m.group(m.rootGroup)
+		for i, n := 0, root.bestExprCount(); i < n; i++ {
+			be := root.bestExpr(bestOrdinal(i))
+			if be.required == m.rootProps {
+				return MakeExprView(m, BestExprID{group: m.rootGroup, ordinal: bestOrdinal(i)})
+			}
+		}
+		panic("could not find best expression that matches the root properties")
 	}
-	if root.best == normBestOrdinal {
-		panic("cannot set the memo root to be a normalized expression tree")
+	return MakeNormExprView(m, m.rootGroup)
+}
+
+// SetRoot stores the root memo group, as well as the physical properties
+// required of the root group.
+func (m *Memo) SetRoot(group GroupID, physical PhysicalPropsID) {
+	m.rootGroup = group
+	m.rootProps = physical
+}
+
+// HasPlaceholders returns true if the memo contains at least one placeholder
+// operator.
+func (m *Memo) HasPlaceholders() bool {
+	return m.GroupProperties(m.rootGroup).Relational.HasPlaceholder
+}
+
+// IsStale returns true if the memo has been invalidated by changes to any of
+// its dependencies. Once a memo is known to be stale, it must be ejected from
+// any query cache or prepared statement and replaced with a recompiled memo
+// that takes into account the changes. IsStale checks the following
+// dependencies:
+//
+//   1. Current database: this can change name resolution.
+//   2. Current search path: this can change name resolution.
+//   3. Current location: this determines time zone, and can change how time-
+//      related types are constructed and compared.
+//   4. Data source schema: this determines most aspects of how the query is
+//      compiled.
+//   5. Data source privileges: current user may no longer have access to one or
+//      more data sources.
+//
+func (m *Memo) IsStale(ctx context.Context, evalCtx *tree.EvalContext, catalog opt.Catalog) bool {
+	// Memo is stale if the current database has changed.
+	if m.dbName != evalCtx.SessionData.Database {
+		return true
 	}
-	m.root = root.bestExprID()
+
+	// Memo is stale if the search path has changed. Assume it's changed if the
+	// slice length is different, or if it no longer points to the same underlying
+	// array. If two slices are the same length and point to the same underlying
+	// array, then they are guaranteed to be identical. Note that GetPathArray
+	// already specifies that the slice must not be modified, so its elements will
+	// never be modified in-place.
+	left := m.searchPath.GetPathArray()
+	right := evalCtx.SessionData.SearchPath.GetPathArray()
+	if len(left) != len(right) {
+		return true
+	}
+	if len(left) != 0 && &left[0] != &right[0] {
+		return true
+	}
+
+	// Memo is stale if the location has changed.
+	if m.locName != evalCtx.GetLocation().String() {
+		return true
+	}
+
+	// Memo is stale if the fingerprint of any data source in the memo's metadata
+	// has changed, or if the current user no longer has sufficient privilege to
+	// access the data source.
+	if !m.Metadata().CheckDependencies(ctx, catalog) {
+		return true
+	}
+	return false
 }
 
 // isOptimized returns true if the memo has been fully optimized.
 func (m *Memo) isOptimized() bool {
 	// The memo is optimized once a best expression has been set at the root.
-	return m.root.ordinal != normBestOrdinal
+	return m.rootGroup != 0 && m.group(m.rootGroup).firstBestExpr.initialized()
 }
 
 // --------------------------------------------------------------------
@@ -261,16 +431,29 @@ func (m *Memo) NormOp(group GroupID) opt.Operator {
 // MemoizeNormExpr enters a normalized expression into the memo. This requires
 // the creation of a new memo group with the normalized expression as its first
 // expression. If the expression is already part of an existing memo group, then
-// MemoizeNormExpr is a no-op, and returns the existing group.
-func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) GroupID {
+// MemoizeNormExpr is a no-op, and returns the existing ExprView.
+func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) ExprView {
 	existing := m.exprMap[norm.Fingerprint()]
 	if existing != 0 {
-		return existing
+		return MakeNormExprView(m, existing)
 	}
+
+	// Use rough memory usage estimate of size of group * 4 to account for size
+	// of group struct + logical props + best exprs + expr map overhead.
+	const groupSize = int64(unsafe.Sizeof(group{}))
+	m.memEstimate += groupSize * 4
+
 	mgrp := m.newGroup(norm)
 	ev := MakeNormExprView(m, mgrp.id)
 	mgrp.logical = m.logPropsBuilder.buildProps(evalCtx, ev)
-	return mgrp.id
+
+	// RaceEnabled ensures that checks are run on every PR (as part of make
+	// testrace) while keeping the check code out of non-test builds.
+	if util.RaceEnabled {
+		m.CheckExpr(MakeNormExprID(mgrp.id))
+	}
+
+	return ev
 }
 
 // MemoizeDenormExpr enters a denormalized expression into the given memo
@@ -278,17 +461,47 @@ func (m *Memo) MemoizeNormExpr(evalCtx *tree.EvalContext, norm Expr) GroupID {
 // normalized expression, but is an alternate form that may have a lower cost.
 // The group must already exist, since the normalized version of the expression
 // should have triggered its creation earlier.
-func (m *Memo) MemoizeDenormExpr(group GroupID, denorm Expr) {
+func (m *Memo) MemoizeDenormExpr(evalCtx *tree.EvalContext, group GroupID, denorm Expr) {
 	existing := m.exprMap[denorm.Fingerprint()]
 	if existing != 0 {
 		// Expression has already been entered into the memo.
 		if existing != group {
 			panic("denormalized expression's group doesn't match fingerprint group")
 		}
-	} else {
-		// Add the denormalized expression to the memo.
-		m.group(group).addExpr(denorm)
-		m.exprMap[denorm.Fingerprint()] = group
+		return
+	}
+
+	// Use rough memory usage estimate of size of expr * 4 to account for size
+	// of expr struct + fingerprint + expr map overhead.
+	const exprSize = int64(unsafe.Sizeof(Expr{}))
+	m.memEstimate += exprSize * 4
+
+	// Add the denormalized expression to the memo.
+	m.group(group).addExpr(denorm)
+	m.exprMap[denorm.Fingerprint()] = group
+
+	// RaceEnabled ensures that checks are run on every PR (as part of make
+	// testrace) while keeping the check code out of non-test builds.
+	if util.RaceEnabled {
+		m.CheckExpr(ExprID{
+			Group: group,
+			Expr:  ExprOrdinal(m.group(group).exprCount() - 1),
+		})
+
+		// Create logical properties for this expression and cross-check them
+		// against the group properties. To do this without modifying a lot of code,
+		// we put this expression in a temporary group. We skip this check if the
+		// operator is known to not have code for building logical props.
+		if denorm.Operator() != opt.MergeJoinOp {
+			tmpGroupID := GroupID(len(m.groups))
+			m.groups = append(m.groups, makeMemoGroup(tmpGroupID, denorm))
+			ev := MakeNormExprView(m, tmpGroupID)
+			logical := m.logPropsBuilder.buildProps(evalCtx, ev)
+			logical.VerifyAgainst(&m.group(group).logical)
+
+			// Clean up the temporary group.
+			m.groups = m.groups[:len(m.groups)-1]
+		}
 	}
 }
 

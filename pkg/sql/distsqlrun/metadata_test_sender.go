@@ -56,7 +56,7 @@ func newMetadataTestSender(
 		nil, /* memMonitor */
 		ProcStateOpts{
 			InputsToDrain: []RowSource{mts.input},
-			TrailingMetaCallback: func() []ProducerMetadata {
+			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
 				mts.InternalClose()
 				// Send a final record with LastMsg set.
 				meta := ProducerMetadata{
@@ -115,11 +115,6 @@ func (mts *metadataTestSender) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 	}
 	return nil, mts.DrainHelper()
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (mts *metadataTestSender) ConsumerDone() {
-	mts.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.

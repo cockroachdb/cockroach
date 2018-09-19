@@ -21,8 +21,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -181,7 +181,7 @@ func newReplicateQueue(store *Store, g *gossip.Gossip, allocator Allocator) *rep
 }
 
 func (rq *replicateQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	if !repl.store.splitQueue.Disabled() && repl.needsSplitBySize() {
 		// If the range exceeds the split threshold, let that finish first.
@@ -195,16 +195,11 @@ func (rq *replicateQueue) shouldQueue(
 		return
 	}
 
-	// Find the zone config for this range.
-	desc := repl.Desc()
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		log.Error(ctx, err)
-		return
-	}
+	// Get the descriptor and zone config for this range.
+	desc, zone := repl.DescAndZone()
 
 	rangeInfo := rangeInfoForRepl(repl, desc)
-	action, priority := rq.allocator.ComputeAction(ctx, zone, rangeInfo, false)
+	action, priority := rq.allocator.ComputeAction(ctx, zone, rangeInfo)
 	if action == AllocatorNoop {
 		log.VEventf(ctx, 2, "no action to take")
 		return false, 0
@@ -214,7 +209,7 @@ func (rq *replicateQueue) shouldQueue(
 	}
 
 	if !rq.store.TestingKnobs().DisableReplicaRebalancing {
-		target, _ := rq.allocator.RebalanceTarget(ctx, zone, repl.RaftStatus(), rangeInfo, storeFilterThrottled, false)
+		target, _ := rq.allocator.RebalanceTarget(ctx, zone, repl.RaftStatus(), rangeInfo, storeFilterThrottled)
 		if target != nil {
 			log.VEventf(ctx, 2, "rebalance target found, enqueuing")
 			return true, 0
@@ -236,7 +231,7 @@ func (rq *replicateQueue) shouldQueue(
 }
 
 func (rq *replicateQueue) process(
-	ctx context.Context, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, repl *Replica, sysCfg *config.SystemConfig,
 ) error {
 	retryOpts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
@@ -249,7 +244,7 @@ func (rq *replicateQueue) process(
 	// snapshot errors, usually signaling that a rebalancing
 	// reservation could not be made with the selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		if requeue, err := rq.processOneChange(ctx, repl, sysCfg, rq.canTransferLease, false /* dryRun */, false /* disableStatsBasedRebalancing */); err != nil {
+		if requeue, err := rq.processOneChange(ctx, repl, sysCfg, rq.canTransferLease, false /* dryRun */); err != nil {
 			if IsSnapshotError(err) {
 				// If ChangeReplicas failed because the preemptive snapshot failed, we
 				// log the error but then return success indicating we should retry the
@@ -265,6 +260,11 @@ func (rq *replicateQueue) process(
 			// Enqueue this replica again to see if there are more changes to be made.
 			rq.MaybeAdd(repl, rq.store.Clock().Now())
 		}
+		if testingAggressiveConsistencyChecks {
+			if err := rq.store.consistencyQueue.process(ctx, repl, sysCfg); err != nil {
+				log.Warning(ctx, err)
+			}
+		}
 		return nil
 	}
 	return errors.Errorf("failed to replicate after %d retries", retryOpts.MaxRetries)
@@ -273,12 +273,11 @@ func (rq *replicateQueue) process(
 func (rq *replicateQueue) processOneChange(
 	ctx context.Context,
 	repl *Replica,
-	sysCfg config.SystemConfig,
+	sysCfg *config.SystemConfig,
 	canTransferLease func() bool,
 	dryRun bool,
-	disableStatsBasedRebalancing bool,
 ) (requeue bool, _ error) {
-	desc := repl.Desc()
+	desc, zone := repl.DescAndZone()
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
@@ -291,13 +290,8 @@ func (rq *replicateQueue) processOneChange(
 		}
 	}
 
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		return false, err
-	}
-
 	rangeInfo := rangeInfoForRepl(repl, desc)
-	switch action, _ := rq.allocator.ComputeAction(ctx, zone, rangeInfo, disableStatsBasedRebalancing); action {
+	switch action, _ := rq.allocator.ComputeAction(ctx, zone, rangeInfo); action {
 	case AllocatorNoop:
 		break
 	case AllocatorAdd:
@@ -307,7 +301,6 @@ func (rq *replicateQueue) processOneChange(
 			zone,
 			liveReplicas, // only include liveReplicas, since deadReplicas should soon be removed
 			rangeInfo,
-			disableStatsBasedRebalancing,
 		)
 		if err != nil {
 			return false, err
@@ -317,7 +310,10 @@ func (rq *replicateQueue) processOneChange(
 			StoreID: newStore.StoreID,
 		}
 
-		need := int(zone.NumReplicas)
+		decommissioningReplicas := len(rq.allocator.storePool.decommissioningReplicas(desc.RangeID, desc.Replicas))
+		_, aliveStoreCount, _ := rq.allocator.storePool.getStoreList(desc.RangeID, storeFilterNone)
+
+		need := GetNeededReplicas(zone.NumReplicas, aliveStoreCount, decommissioningReplicas)
 		willHave := len(desc.Replicas) + 1
 
 		// Only up-replicate if there are suitable allocation targets such
@@ -342,7 +338,6 @@ func (rq *replicateQueue) processOneChange(
 				zone,
 				oldPlusNewReplicas,
 				rangeInfo,
-				disableStatsBasedRebalancing,
 			)
 			if err != nil {
 				// It does not seem possible to go to the next odd replica state. Note
@@ -379,7 +374,7 @@ func (rq *replicateQueue) processOneChange(
 			return false, errors.Errorf("no removable replicas from range that needs a removal: %s",
 				rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
 		}
-		removeReplica, details, err := rq.allocator.RemoveTarget(ctx, zone, candidates, rangeInfo, disableStatsBasedRebalancing)
+		removeReplica, details, err := rq.allocator.RemoveTarget(ctx, zone, candidates, rangeInfo)
 		if err != nil {
 			return false, err
 		}
@@ -493,7 +488,7 @@ func (rq *replicateQueue) processOneChange(
 
 		if !rq.store.TestingKnobs().DisableReplicaRebalancing {
 			rebalanceStore, details := rq.allocator.RebalanceTarget(
-				ctx, zone, repl.RaftStatus(), rangeInfo, storeFilterThrottled, disableStatsBasedRebalancing)
+				ctx, zone, repl.RaftStatus(), rangeInfo, storeFilterThrottled)
 			if rebalanceStore == nil {
 				log.VEventf(ctx, 1, "no suitable rebalance target")
 			} else {
@@ -561,7 +556,7 @@ func (rq *replicateQueue) findTargetAndTransferLease(
 	ctx context.Context,
 	repl *Replica,
 	desc *roachpb.RangeDescriptor,
-	zone config.ZoneConfig,
+	zone *config.ZoneConfig,
 	opts transferLeaseOptions,
 ) (bool, error) {
 	candidates := filterBehindReplicas(repl.RaftStatus(), desc.Replicas, 0 /* brandNewReplicaID */)

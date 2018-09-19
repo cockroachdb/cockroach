@@ -47,7 +47,6 @@ import (
 //   flags logic, because some tests to not use the flag logic at all.
 var serverListenPort, serverAdvertiseAddr, serverAdvertisePort string
 var serverHTTPAddr, serverHTTPPort string
-var clientConnHost, clientConnPort string
 var localityAdvertiseHosts localityList
 
 // initPreFlagsDefaults initializes the values of the global variables
@@ -60,8 +59,6 @@ func initPreFlagsDefaults() {
 	serverHTTPAddr = ""
 	serverHTTPPort = base.DefaultHTTPPort
 
-	clientConnHost = ""
-	clientConnPort = base.DefaultPort
 	localityAdvertiseHosts = localityList{}
 }
 
@@ -225,24 +222,30 @@ func init() {
 		// TODO(peter): Decide if we want to make the lightstep flags visible.
 		if strings.HasPrefix(flag.Name, "lightstep_") {
 			flag.Hidden = true
-		} else if flag.Name == logflags.NoRedirectStderrName {
+		}
+		switch flag.Name {
+		case logflags.NoRedirectStderrName:
 			flag.Hidden = true
-		} else if flag.Name == logflags.ShowLogsName {
+		case logflags.ShowLogsName:
 			flag.Hidden = true
-		} else if flag.Name == logflags.LogToStderrName {
+		case logflags.LogToStderrName:
 			// The actual default value for --logtostderr is overridden in
 			// cli.Main. We don't override it here as doing so would affect all of
 			// the cli tests and any package which depends on cli. The following line
 			// is only overriding the default value for the pflag package (and what
 			// is visible in help text), not the stdlib flag value.
 			flag.DefValue = "NONE"
+		case logflags.LogDirName,
+			logflags.LogFileMaxSizeName,
+			logflags.LogFilesCombinedMaxSizeName,
+			logflags.LogFileVerbosityThresholdName:
+			// The --log-dir* and --log-file* flags are specified only for the
+			// `start` and `demo` commands.
+			return
 		}
 		pf.AddFlag(flag)
 	})
 
-	// The --log-dir default changes depending on the command. Avoid confusion by
-	// simply clearing it.
-	pf.Lookup(logflags.LogDirName).DefValue = ""
 	// When a flag is specified but without a value, pflag assigns its
 	// NoOptDefVal to it via Set(). This is also the value used to
 	// generate the implicit assigned value in the usage text
@@ -335,6 +338,22 @@ func init() {
 		VarFlag(f, serverCfg.SQLAuditLogDirName, cliflags.SQLAuditLogDirName)
 	}
 
+	// Log flags.
+	for _, cmd := range []*cobra.Command{demoCmd, StartCmd} {
+		f := cmd.Flags()
+		VarFlag(f, &startCtx.logDir, cliflags.LogDir)
+		startCtx.logDirFlag = f.Lookup(cliflags.LogDir.Name)
+		VarFlag(f,
+			pflag.PFlagFromGoFlag(flag.Lookup(logflags.LogFilesCombinedMaxSizeName)).Value,
+			cliflags.LogDirMaxSize)
+		VarFlag(f,
+			pflag.PFlagFromGoFlag(flag.Lookup(logflags.LogFileMaxSizeName)).Value,
+			cliflags.LogFileMaxSize)
+		VarFlag(f,
+			pflag.PFlagFromGoFlag(flag.Lookup(logflags.LogFileVerbosityThresholdName)).Value,
+			cliflags.LogFileVerbosity)
+	}
+
 	for _, cmd := range certCmds {
 		f := cmd.Flags()
 		// All certs commands need the certificate directory.
@@ -382,8 +401,8 @@ func init() {
 	clientCmds = append(clientCmds, initCmd)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
-		VarFlag(f, addrSetter{&clientConnHost, &clientConnPort}, cliflags.ClientHost)
-		StringFlag(f, &clientConnPort, cliflags.ClientPort, clientConnPort)
+		VarFlag(f, addrSetter{&cliCtx.clientConnHost, &cliCtx.clientConnPort}, cliflags.ClientHost)
+		StringFlag(f, &cliCtx.clientConnPort, cliflags.ClientPort, cliCtx.clientConnPort)
 		_ = f.MarkHidden(cliflags.ClientPort.Name)
 
 		BoolFlag(f, &baseCfg.Insecure, cliflags.ClientInsecure, baseCfg.Insecure)
@@ -439,17 +458,27 @@ func init() {
 	sqlCmds = append(sqlCmds, zoneCmds...)
 	sqlCmds = append(sqlCmds, userCmds...)
 	for _, cmd := range sqlCmds {
-		f := cmd.PersistentFlags()
+		f := cmd.Flags()
 		BoolFlag(f, &sqlCtx.echo, cliflags.EchoSQL, sqlCtx.echo)
 
 		if cmd != demoCmd {
-			StringFlag(f, &cliCtx.sqlConnURL, cliflags.URL, cliCtx.sqlConnURL)
+			VarFlag(f, urlParser{cmd, &cliCtx, false /* strictSSL */}, cliflags.URL)
 			StringFlag(f, &cliCtx.sqlConnUser, cliflags.User, cliCtx.sqlConnUser)
 		}
 
 		if cmd == sqlShellCmd {
 			StringFlag(f, &cliCtx.sqlConnDBName, cliflags.Database, cliCtx.sqlConnDBName)
 		}
+	}
+
+	// Make the other non-SQL client commands also recognize --url in
+	// strict SSL mode.
+	for _, cmd := range clientCmds {
+		if f := cmd.Flags().Lookup(cliflags.URL.Name); f != nil {
+			// --url already registered above, nothing to do.
+			continue
+		}
+		VarFlag(cmd.PersistentFlags(), urlParser{cmd, &cliCtx, true /* strictSSL */}, cliflags.URL)
 	}
 
 	// Commands that print tables.
@@ -464,18 +493,19 @@ func init() {
 	// By default, query times are not displayed. The default is overridden
 	// in the CLI shell.
 	for _, cmd := range tableOutputCommands {
-		f := cmd.Flags()
+		f := cmd.PersistentFlags()
 		VarFlag(f, &cliCtx.tableDisplayFormat, cliflags.TableDisplayFormat)
 	}
 
 	// sqlfmt command.
-	VarFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.execStmts, cliflags.Execute)
+	fmtFlags := sqlfmtCmd.Flags()
+	VarFlag(fmtFlags, &sqlfmtCtx.execStmts, cliflags.Execute)
 	cfg := tree.DefaultPrettyCfg()
-	IntFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.len, cliflags.SQLFmtLen, cfg.LineWidth)
-	BoolFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.useSpaces, cliflags.SQLFmtSpaces, !cfg.UseTabs)
-	IntFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.tabWidth, cliflags.SQLFmtTabWidth, cfg.TabWidth)
-	BoolFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.noSimplify, cliflags.SQLFmtNoSimplify, !cfg.Simplify)
-	BoolFlag(sqlfmtCmd.Flags(), &sqlfmtCtx.align, cliflags.SQLFmtAlign, (cfg.Align != tree.PrettyNoAlign))
+	IntFlag(fmtFlags, &sqlfmtCtx.len, cliflags.SQLFmtLen, cfg.LineWidth)
+	BoolFlag(fmtFlags, &sqlfmtCtx.useSpaces, cliflags.SQLFmtSpaces, !cfg.UseTabs)
+	IntFlag(fmtFlags, &sqlfmtCtx.tabWidth, cliflags.SQLFmtTabWidth, cfg.TabWidth)
+	BoolFlag(fmtFlags, &sqlfmtCtx.noSimplify, cliflags.SQLFmtNoSimplify, !cfg.Simplify)
+	BoolFlag(fmtFlags, &sqlfmtCtx.align, cliflags.SQLFmtAlign, (cfg.Align != tree.PrettyNoAlign))
 
 	// Debug commands.
 	{
@@ -517,7 +547,7 @@ func extraServerFlagInit() {
 }
 
 func extraClientFlagInit() {
-	serverCfg.Addr = net.JoinHostPort(clientConnHost, clientConnPort)
+	serverCfg.Addr = net.JoinHostPort(cliCtx.clientConnHost, cliCtx.clientConnPort)
 	serverCfg.AdvertiseAddr = serverCfg.Addr
 	if serverHTTPAddr == "" {
 		serverHTTPAddr = startCtx.serverListenAddr

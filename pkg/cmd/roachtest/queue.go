@@ -18,6 +18,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -101,9 +102,13 @@ func runQueue(ctx context.Context, t *test, c *cluster) {
 
 	// Set TTL on table queue.queue to 0, so that rows are deleted immediately
 	db := c.Conn(ctx, 1)
-	if _, err := db.ExecContext(
-		ctx, `ALTER TABLE queue.queue EXPERIMENTAL CONFIGURE ZONE 'gc: {ttlseconds: 30}'`,
-	); err != nil {
+	_, err := db.ExecContext(ctx, `ALTER TABLE queue.queue CONFIGURE ZONE USING gc.ttlseconds = 30`)
+	if err != nil && strings.Contains(err.Error(), "syntax error") {
+		// Pre-2.1 was EXPERIMENTAL.
+		// TODO(knz): Remove this in 2.2.
+		_, err = db.ExecContext(ctx, `ALTER TABLE queue.queue EXPERIMENTAL CONFIGURE ZONE 'gc: {ttlseconds: 30}'`)
+	}
+	if err != nil {
 		t.Fatalf("error setting zone config TTL: %s", err)
 	}
 	// Truncate table to avoid duplicate key constraints.

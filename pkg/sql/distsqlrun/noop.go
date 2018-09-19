@@ -82,11 +82,6 @@ func (n *noopProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	return nil, n.DrainHelper()
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (n *noopProcessor) ConsumerDone() {
-	n.MoveToDraining(nil /* err */)
-}
-
 // ConsumerClosed is part of the RowSource interface.
 func (n *noopProcessor) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.

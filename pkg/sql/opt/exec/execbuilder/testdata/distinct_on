@@ -230,23 +230,27 @@ render               ·            ·            (y, z, x)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (max(y)) max(x) FROM xyz
 ----
-group      ·            ·            (max)   ·
- │         aggregate 0  max(x)       ·       ·
- │         scalar       ·            ·       ·
- └── scan  ·            ·            (x, y)  ·
-·          table        xyz@primary  ·       ·
-·          spans        ALL          ·       ·
+group           ·            ·            (max)   ·
+ │              aggregate 0  max(x)       ·       ·
+ │              scalar       ·            ·       ·
+ └── render     ·            ·            (x)     ·
+      │         render 0     x            ·       ·
+      └── scan  ·            ·            (x, y)  ·
+·               table        xyz@primary  ·       ·
+·               spans        ALL          ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(a), max(b), min(c)) max(a) FROM abc
 ----
-group         ·            ·                (max)      ·
- │            aggregate 0  any_not_null(a)  ·          ·
- │            scalar       ·                ·          ·
- └── revscan  ·            ·                (a, b, c)  ·
-·             table        abc@primary      ·          ·
-·             spans        ALL              ·          ·
-·             limit        1                ·          ·
+group              ·            ·                (max)      ·
+ │                 aggregate 0  any_not_null(a)  ·          ·
+ │                 scalar       ·                ·          ·
+ └── render        ·            ·                (a)        ·
+      │            render 0     a                ·          ·
+      └── revscan  ·            ·                (a, b, c)  ·
+·                  table        abc@primary      ·          ·
+·                  spans        ALL              ·          ·
+·                  limit        1                ·          ·
 
 #################
 # With GROUP BY #

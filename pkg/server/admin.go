@@ -1456,7 +1456,7 @@ func (s *adminServer) DataDistribution(
 
 		// Get zone config for table.
 		zoneConfigQuery := fmt.Sprintf(
-			`SELECT zone_id, cli_specifier FROM [EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE %s.%s]`,
+			`SELECT zone_id, cli_specifier FROM [SHOW ZONE CONFIGURATION FOR TABLE %s.%s]`,
 			(*tree.Name)(dbName), (*tree.Name)(tableName),
 		)
 		rows, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
@@ -1528,7 +1528,7 @@ func (s *adminServer) DataDistribution(
 
 	// Get zone configs.
 	// TODO(vilterp): this can be done in parallel with getting table/db names and replica counts.
-	zoneConfigsQuery := `EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS`
+	zoneConfigsQuery := `SHOW ALL ZONE CONFIGURATIONS`
 	rows2, _ /* cols */, err := s.server.internalExecutor.QueryWithSessionArgs(
 		ctx, "admin-replica-matrix", nil /* txn */, args, zoneConfigsQuery,
 	)
@@ -1539,8 +1539,8 @@ func (s *adminServer) DataDistribution(
 	for _, row := range rows2 {
 		zcID := int64(tree.MustBeDInt(row[0]))
 		zcCliSpecifier := string(tree.MustBeDString(row[1]))
-		zcYaml := tree.MustBeDBytes(row[2])
-		zcBytes := tree.MustBeDBytes(row[3])
+		zcYaml := tree.MustBeDString(row[2])
+		zcBytes := tree.MustBeDBytes(row[4])
 		var zcProto config.ZoneConfig
 		if err := protoutil.Unmarshal([]byte(zcBytes), &zcProto); err != nil {
 			return nil, s.serverError(err)
@@ -1590,7 +1590,7 @@ func (s *adminServer) EnqueueRange(
 	// only it, since we choose which nodes to send the request to based on
 	// what's in isLiveMap.
 	if req.NodeID > 0 {
-		isLiveMap = map[roachpb.NodeID]bool{req.NodeID: isLiveMap[req.NodeID]}
+		isLiveMap = storage.IsLiveMap{req.NodeID: isLiveMap[req.NodeID]}
 	}
 
 	response := &serverpb.EnqueueRangeResponse{}

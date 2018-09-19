@@ -92,7 +92,7 @@ func (p *postgreStream) Next() (interface{}, error) {
 			if isIgnoredStatement(t) {
 				continue
 			}
-			return nil, errors.Errorf("%v: (%s)", err, t)
+			return nil, err
 		}
 		switch len(stmts) {
 		case 0:
@@ -134,10 +134,15 @@ func (p *postgreStream) Next() (interface{}, error) {
 var (
 	ignoreComments   = regexp.MustCompile(`^\s*(--.*)`)
 	ignoreStatements = []*regexp.Regexp{
+		regexp.MustCompile("(?i)^alter function"),
 		regexp.MustCompile("(?i)^alter sequence .* owned by"),
 		regexp.MustCompile("(?i)^alter table .* owner to"),
 		regexp.MustCompile("(?i)^comment on"),
 		regexp.MustCompile("(?i)^create extension"),
+		regexp.MustCompile("(?i)^create function"),
+		regexp.MustCompile("(?i)^create trigger"),
+		regexp.MustCompile("(?i)^grant .* on sequence"),
+		regexp.MustCompile("(?i)^revoke .* on sequence"),
 	}
 )
 
@@ -287,6 +292,9 @@ func readPostgresCreateTable(
 			return ret, nil
 		}
 		if err != nil {
+			if pg, ok := pgerror.GetPGCause(err); ok {
+				return nil, errors.Errorf("%s\n%s", pg.Message, pg.Detail)
+			}
 			return nil, errors.Wrap(err, "postgres parse error")
 		}
 		switch stmt := stmt.(type) {

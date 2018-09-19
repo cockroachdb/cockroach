@@ -259,10 +259,6 @@ func (irj *interleavedReaderJoiner) nextRow() (irjState, sqlbase.EncDatumRow, *P
 	return newState, unmatchedAncestor, nil
 }
 
-func (irj *interleavedReaderJoiner) ConsumerDone() {
-	irj.MoveToDraining(nil /* err */)
-}
-
 func (irj *interleavedReaderJoiner) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	irj.InternalClose()
@@ -420,13 +416,13 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 		args...)
 }
 
-func (irj *interleavedReaderJoiner) generateTrailingMeta() []ProducerMetadata {
+func (irj *interleavedReaderJoiner) generateTrailingMeta(ctx context.Context) []ProducerMetadata {
 	var trailingMeta []ProducerMetadata
 	ranges := misplannedRanges(irj.Ctx, irj.fetcher.GetRangeInfo(), irj.flowCtx.nodeID)
 	if ranges != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
 	}
-	if meta := getTxnCoordMeta(irj.flowCtx.txn); meta != nil {
+	if meta := getTxnCoordMeta(ctx, irj.flowCtx.txn); meta != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{TxnCoordMeta: meta})
 	}
 	irj.InternalClose()

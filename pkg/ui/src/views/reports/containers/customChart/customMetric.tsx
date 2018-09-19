@@ -3,10 +3,17 @@ import * as React from "react";
 import Select from "react-select";
 
 import * as protos from  "src/js/protos";
-import { DropdownOption } from "src/views/shared/components/dropdown";
+import { AxisUnits } from "src/views/shared/components/metricQuery";
+import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 
 import TimeSeriesQueryAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator;
 import TimeSeriesQueryDerivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative;
+
+const axisUnitsOptions: DropdownOption[] = [
+  AxisUnits.Count,
+  AxisUnits.Bytes,
+  AxisUnits.Duration,
+].map(au => ({ label: AxisUnits[au], value: au.toString() }));
 
 const downsamplerOptions: DropdownOption[] = [
   TimeSeriesQueryAggregator.AVG,
@@ -30,6 +37,15 @@ export class CustomMetricState {
   derivative = TimeSeriesQueryDerivative.NONE;
   perNode = false;
   source = "";
+}
+
+export class CustomChartState {
+  metrics: CustomMetricState[];
+  axisUnits: AxisUnits = AxisUnits.Count;
+
+  constructor() {
+    this.metrics = [new CustomMetricState()];
+  }
 }
 
 interface CustomMetricRowProps {
@@ -160,10 +176,116 @@ export class CustomMetricRow extends React.Component<CustomMetricRowProps> {
         <td className="metric-table__cell">
           <input type="checkbox" checked={perNode} onChange={this.changePerNode} />
         </td>
-        <td>
-          <button className="metric-edit-button" onClick={this.deleteOption}>Remove</button>
+        <td className="metric-table__cell">
+          <button className="metric-edit-button" onClick={this.deleteOption}>Remove Metric</button>
         </td>
       </tr>
+    );
+  }
+}
+
+interface CustomChartTableProps {
+  metricOptions: DropdownOption[];
+  nodeOptions: DropdownOption[];
+  index: number;
+  chartState: CustomChartState;
+  onChange: (index: number, newState: CustomChartState) => void;
+  onDelete: (index: number) => void;
+}
+
+export class CustomChartTable extends React.Component<CustomChartTableProps> {
+  currentMetrics() {
+    return this.props.chartState.metrics;
+  }
+
+  addMetric = () => {
+    this.props.onChange(this.props.index, {
+      metrics: [...this.currentMetrics(), new CustomMetricState()],
+      axisUnits: this.currentAxisUnits(),
+    });
+  }
+
+  updateMetricRow = (index: number, newState: CustomMetricState) => {
+    const metrics = this.currentMetrics().slice();
+    metrics[index] = newState;
+    this.props.onChange(this.props.index, {
+      metrics,
+      axisUnits: this.currentAxisUnits(),
+    });
+  }
+
+  removeMetric = (index: number) => {
+    const metrics = this.currentMetrics();
+    this.props.onChange(this.props.index, {
+      metrics: metrics.slice(0, index).concat(metrics.slice(index + 1)),
+      axisUnits: this.currentAxisUnits(),
+    });
+  }
+
+  currentAxisUnits(): AxisUnits {
+    return this.props.chartState.axisUnits;
+  }
+
+  changeAxisUnits = (selected: DropdownOption) => {
+    this.props.onChange(this.props.index, {
+      metrics: this.currentMetrics(),
+      axisUnits: +selected.value,
+    });
+  }
+
+  removeChart = () => {
+    this.props.onDelete(this.props.index);
+  }
+
+  render() {
+    const metrics = this.currentMetrics();
+    let table: JSX.Element = (
+      <h3>Click "Add Metric" to add a metric to the custom chart.</h3>
+    );
+
+    if (!_.isEmpty(metrics)) {
+      table = (
+        <table className="metric-table">
+          <thead>
+            <tr>
+              <td className="metric-table__header">Metric Name</td>
+              <td className="metric-table__header">Downsampler</td>
+              <td className="metric-table__header">Aggregator</td>
+              <td className="metric-table__header">Rate</td>
+              <td className="metric-table__header">Source</td>
+              <td className="metric-table__header">Per Node</td>
+              <td className="metric-table__header"></td>
+            </tr>
+          </thead>
+          <tbody>
+            { metrics.map((row, i) =>
+              <CustomMetricRow
+                key={i}
+                metricOptions={this.props.metricOptions}
+                nodeOptions={this.props.nodeOptions}
+                index={i}
+                rowState={row}
+                onChange={this.updateMetricRow}
+                onDelete={this.removeMetric}
+              />,
+            )}
+          </tbody>
+        </table>
+      );
+    }
+
+    return (
+      <div>
+        <Dropdown
+          title="Units"
+          selected={this.currentAxisUnits().toString()}
+          options={axisUnitsOptions}
+          onChange={this.changeAxisUnits}
+        />
+        <button className="chart-edit-button chart-edit-button--remove" onClick={this.removeChart}>Remove Chart</button>
+        { table }
+        <button className="metric-edit-button metric-edit-button--add" onClick={this.addMetric}>Add Metric</button>
+      </div>
     );
   }
 }

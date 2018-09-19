@@ -18,6 +18,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"time"
 
@@ -51,19 +52,32 @@ func registerDrop(r *registry) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
-			run := func(stmt string, args ...interface{}) {
+			run := func(maybeExperimental bool, stmtStr string, args ...interface{}) {
+				stmt := stmtStr
+				// We are removing the EXPERIMENTAL keyword in 2.1. For compatibility
+				// with 2.0 clusters we still need to try with it if the
+				// syntax without EXPERIMENTAL fails.
+				// TODO(knz): Remove this in 2.2.
+				if maybeExperimental {
+					stmt = fmt.Sprintf(stmtStr, "", "=")
+				}
 				t.WorkerStatus(stmt)
-				_, err := db.ExecContext(ctx, stmt, args...)
+				_, err := db.ExecContext(ctx, stmt)
+				if err != nil && maybeExperimental && strings.Contains(err.Error(), "syntax error") {
+					stmt = fmt.Sprintf(stmtStr, "EXPERIMENTAL", "")
+					t.WorkerStatus(stmt)
+					_, err = db.ExecContext(ctx, stmt)
+				}
 				if err != nil {
 					t.Fatal(err)
 				}
 			}
 
-			run(`SET CLUSTER SETTING trace.debug.enable = true`)
+			run(false, `SET CLUSTER SETTING trace.debug.enable = true`)
 
 			// Drop a constraint that would get in the way of deleting from tpcc.stock.
 			const stmtDropConstraint = "ALTER TABLE tpcc.order_line DROP CONSTRAINT fk_ol_supply_w_id_ref_stock"
-			run(stmtDropConstraint)
+			run(false, stmtDropConstraint)
 
 			var rows, minWarehouse, maxWarehouse int
 			if err := db.QueryRow("select count(*), min(s_w_id), max(s_w_id) from tpcc.stock").Scan(&rows,
@@ -88,21 +102,17 @@ func registerDrop(r *registry) {
 
 			for i := minWarehouse; i <= maxWarehouse; i++ {
 				t.Progress(float64(i) / float64(maxWarehouse))
-				run("DELETE FROM tpcc.stock WHERE s_w_id = $1", i)
+				run(false, "DELETE FROM tpcc.stock WHERE s_w_id = $1", i)
 			}
 
 			const stmtTruncate = "TRUNCATE TABLE tpcc.stock"
-			run(stmtTruncate)
+			run(false, stmtTruncate)
 
 			const stmtDrop = "DROP DATABASE tpcc"
-			run(stmtDrop)
+			run(false, stmtDrop)
 			// The data has already been deleted, but changing the default zone config
 			// should take effect retroactively.
-			const stmtZone = `ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE '
-gc:
-  ttlseconds: 1
-'`
-			run(stmtZone)
+			run(true, "ALTER RANGE default %[1]s CONFIGURE ZONE %[2]s '\ngc:\n  ttlseconds: 1\n'")
 
 			var allNodesSpaceCleared bool
 			var sizeReport string

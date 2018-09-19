@@ -22,8 +22,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft/raftpb"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -564,7 +564,7 @@ func (r *Replica) AdminMerge(
 	// Note that client.DB.Txn performs retries using the same transaction, so we
 	// have to use our own retry loop.
 	for {
-		txn := client.NewTxn(r.store.DB(), r.NodeID(), client.RootTxn)
+		txn := client.NewTxn(ctx, r.store.DB(), r.NodeID(), client.RootTxn)
 		err := runMergeTxn(txn)
 		if err != nil {
 			txn.CleanupOnError(ctx, err)
@@ -1139,8 +1139,8 @@ func RelocateRange(
 func (r *Replica) adminScatter(
 	ctx context.Context, args roachpb.AdminScatterRequest,
 ) (roachpb.AdminScatterResponse, error) {
-	sysCfg, ok := r.store.cfg.Gossip.GetSystemConfig()
-	if !ok {
+	sysCfg := r.store.cfg.Gossip.GetSystemConfig()
+	if sysCfg == nil {
 		log.Infof(ctx, "scatter failed (system config not yet available)")
 		return roachpb.AdminScatterResponse{}, errors.New("system config not yet available")
 	}
@@ -1159,7 +1159,7 @@ func (r *Replica) adminScatter(
 	var allowLeaseTransfer bool
 	canTransferLease := func() bool { return allowLeaseTransfer }
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
-		requeue, err := rq.processOneChange(ctx, r, sysCfg, canTransferLease, false /* dryRun */, true /* disableStatsBasedRebalancing */)
+		requeue, err := rq.processOneChange(ctx, r, sysCfg, canTransferLease, false /* dryRun */)
 		if err != nil {
 			if IsSnapshotError(err) {
 				continue

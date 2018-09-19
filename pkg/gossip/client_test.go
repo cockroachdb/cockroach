@@ -16,6 +16,7 @@ package gossip
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"net"
 	"testing"
@@ -353,28 +354,45 @@ func TestClientDisconnectRedundant(t *testing.T) {
 	remote.mu.Lock()
 	rAddr := remote.mu.is.NodeAddr
 	lAddr := local.mu.is.NodeAddr
-	local.startClientLocked(&rAddr)
-	remote.startClientLocked(&lAddr)
 	local.mu.Unlock()
 	remote.mu.Unlock()
 	local.manage()
 	remote.manage()
+
+	// Gossip a key on local and wait for it to show up on remote. This
+	// guarantees we have an active local to remote client connection.
+	if err := local.AddInfo("local-key", nil, 0); err != nil {
+		t.Fatal(err)
+	}
+	testutils.SucceedsSoon(t, func() error {
+		c := local.findClient(func(c *client) bool { return c.addr.String() == rAddr.String() })
+		if c == nil {
+			// Restart the client connection in the loop. It might have failed due to
+			// a heartbeat time.
+			local.mu.Lock()
+			local.startClientLocked(&rAddr)
+			local.mu.Unlock()
+			return fmt.Errorf("unable to find local to remote client")
+		}
+		_, err := remote.GetInfo("local-key")
+		return err
+	})
+
+	// Start a remote to local client. This client will get removed as being
+	// redundant as there is already a connection between the two nodes.
+	remote.mu.Lock()
+	remote.startClientLocked(&lAddr)
+	remote.mu.Unlock()
+
 	testutils.SucceedsSoon(t, func() error {
 		// Check which of the clients is connected to the other.
 		ok1 := local.findClient(func(c *client) bool { return c.addr.String() == rAddr.String() }) != nil
 		ok2 := remote.findClient(func(c *client) bool { return c.addr.String() == lAddr.String() }) != nil
-		// We expect node 2 to disconnect; if both are still connected,
-		// it's possible that node 1 gossiped before node 2 connected, in
-		// which case we have to gossip from node 1 to trigger the
-		// disconnect redundant client code.
-		if ok1 && ok2 {
-			if err := local.AddInfo("local-key", nil, time.Second); err != nil {
-				t.Fatal(err)
-			}
-		} else if ok1 && !ok2 && verifyServerMaps(local, 0) && verifyServerMaps(remote, 1) {
+		if ok1 && !ok2 && verifyServerMaps(local, 0) && verifyServerMaps(remote, 1) {
 			return nil
 		}
-		return errors.New("local client to remote not yet closed as redundant")
+		return fmt.Errorf("remote to local client not yet closed as redundant: local=%t remote=%t",
+			ok1, ok2)
 	})
 }
 

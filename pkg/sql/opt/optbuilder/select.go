@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -67,7 +66,7 @@ func (b *Builder) buildDataSource(
 			panic(builderError{err})
 		}
 
-		ds := b.resolveDataSource(tn, privilege.SELECT)
+		ds := b.resolveDataSource(tn)
 		switch t := ds.(type) {
 		case opt.Table:
 			return b.buildScan(t, tn, nil /* ordinals */, indexFlags, inScope)
@@ -99,7 +98,7 @@ func (b *Builder) buildDataSource(
 		return outScope
 
 	case *tree.TableRef:
-		ds := b.resolveDataSourceRef(source, privilege.SELECT)
+		ds := b.resolveDataSourceRef(source)
 		switch t := ds.(type) {
 		case opt.Table:
 			outScope = b.buildScanFromTableRef(t, source, indexFlags, inScope)
@@ -451,11 +450,10 @@ func (b *Builder) buildSelectClause(
 		b.buildProjectionList(fromScope, projectionsScope)
 		b.buildOrderBy(fromScope, projectionsScope, orderByScope)
 		b.buildDistinctOnArgs(fromScope, projectionsScope, distinctOnScope)
+		if len(fromScope.srfs) > 0 {
+			fromScope.group = b.constructProjectSet(fromScope.group, fromScope.srfs)
+		}
 		outScope = fromScope
-	}
-
-	if len(fromScope.srfs) > 0 {
-		outScope.group = b.constructProjectSet(outScope.group, fromScope.srfs)
 	}
 
 	// Construct the projection.
@@ -486,24 +484,9 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 		b.validateAsOf(from.AsOf)
 	}
 
-	for _, table := range from.Tables {
-		tableScope := b.buildDataSource(table, nil /* indexFlags */, inScope)
-
-		if outScope == nil {
-			outScope = tableScope
-			continue
-		}
-
-		// Check that the same table name is not used multiple times.
-		b.validateJoinTableNames(outScope, tableScope)
-
-		outScope.appendColumnsFromScope(tableScope)
-		outScope.group = b.factory.ConstructInnerJoin(
-			outScope.group, tableScope.group, b.factory.ConstructTrue(),
-		)
-	}
-
-	if outScope == nil {
+	if len(from.Tables) > 0 {
+		outScope = b.buildFromTables(from.Tables, inScope)
+	} else {
 		rows := []memo.GroupID{b.factory.ConstructTuple(
 			b.factory.InternList(nil), b.factory.InternType(memo.EmptyTupleType),
 		)}
@@ -531,6 +514,39 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 		outScope.group = b.factory.ConstructSelect(outScope.group, filter)
 	}
 
+	return outScope
+}
+
+// buildFromTables recursively builds a series of InnerJoin expressions that
+// join together the given FROM tables. The tables are joined in the reverse
+// order that they appear in the list, with the innermost join involving the
+// tables at the end of the list. For example:
+//
+//   SELECT * FROM a,b,c
+//
+// is joined like:
+//
+//   SELECT * FROM a JOIN (b JOIN c ON true) ON true
+//
+// See Builder.buildStmt for a description of the remaining input and
+// return values.
+func (b *Builder) buildFromTables(tables tree.TableExprs, inScope *scope) (outScope *scope) {
+	outScope = b.buildDataSource(tables[0], nil /* indexFlags */, inScope)
+
+	// Recursively build table join.
+	tables = tables[1:]
+	if len(tables) == 0 {
+		return outScope
+	}
+	tableScope := b.buildFromTables(tables, inScope)
+
+	// Check that the same table name is not used multiple times.
+	b.validateJoinTableNames(outScope, tableScope)
+
+	outScope.appendColumnsFromScope(tableScope)
+	outScope.group = b.factory.ConstructInnerJoin(
+		outScope.group, tableScope.group, b.factory.ConstructTrue(),
+	)
 	return outScope
 }
 

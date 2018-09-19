@@ -27,8 +27,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft/raftpb"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -988,7 +988,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	config.TestingSetZoneConfig(descID, config.ZoneConfig{RangeMaxBytes: maxBytes})
 
 	// Trigger gossip callback.
-	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
+	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfigEntries{}, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1048,7 +1048,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	config.TestingSetZoneConfig(descID, config.ZoneConfig{RangeMaxBytes: maxBytes})
 
 	// Trigger gossip callback.
-	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
+	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfigEntries{}, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1578,7 +1578,6 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 		EvalKnobs: batcheval.TestingKnobs{
 			TestingEvalFilter: filter,
 		},
-		DisableMergeQueue: true,
 	}
 
 	tc := testcluster.StartTestCluster(t, 2, args)
@@ -1602,7 +1601,7 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 	defer cancel()
 
 	// This transaction will try to write "under" a served read.
-	txnOld := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
+	txnOld := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
 
 	// Do something with txnOld so that its timestamp gets set.
 	if _, err := txnOld.Scan(ctx, "a", "b", 0); err != nil {
@@ -1760,7 +1759,6 @@ func TestStoreSplitOnRemovedReplica(t *testing.T) {
 	args.ReplicationMode = base.ReplicationManual
 	args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
 		TestingRequestFilter: filter,
-		DisableMergeQueue:    true,
 	}
 
 	tc := testcluster.StartTestCluster(t, 3, args)
@@ -1850,7 +1848,6 @@ func TestStoreSplitFailsAfterMaxRetries(t *testing.T) {
 	args.ReplicationMode = base.ReplicationManual
 	args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
 		TestingRequestFilter: filter,
-		DisableMergeQueue:    true,
 	}
 
 	tc := testcluster.StartTestCluster(t, 1, args)
@@ -2462,7 +2459,7 @@ func TestDistributedTxnCleanup(t *testing.T) {
 			// Run a distributed transaction involving the lhsKey and rhsKey.
 			var txnKey roachpb.Key
 			ctx := context.Background()
-			txn := client.NewTxn(store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
+			txn := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
 			txnFn := func(ctx context.Context, txn *client.Txn) error {
 				b := txn.NewBatch()
 				b.Put(fmt.Sprintf("%s.force=%t,commit=%t", string(lhsKey), force, commit), "lhsValue")
@@ -2532,6 +2529,12 @@ func TestUnsplittableRange(t *testing.T) {
 	ttl := 1 * time.Hour
 	const maxBytes = 1 << 16
 	defer config.TestingSetDefaultZoneConfig(config.ZoneConfig{
+		RangeMaxBytes: maxBytes,
+		GC: config.GCPolicy{
+			TTLSeconds: int32(ttl.Seconds()),
+		},
+	})()
+	defer config.TestingSetDefaultSystemZoneConfig(config.ZoneConfig{
 		RangeMaxBytes: maxBytes,
 		GC: config.GCPolicy{
 			TTLSeconds: int32(ttl.Seconds()),

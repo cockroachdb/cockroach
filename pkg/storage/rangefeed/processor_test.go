@@ -378,7 +378,7 @@ func TestProcessorSlowConsumer(t *testing.T) {
 	defer stopper.Stop(context.Background())
 
 	// Set the Processor's eventC timeout.
-	p.EventChanTimeout = 30 * time.Millisecond
+	p.EventChanTimeout = 100 * time.Millisecond
 
 	// Add a registration.
 	r1Stream := newTestStream()

@@ -1,0 +1,36 @@
+# LogicTest: local-opt
+
+statement ok
+CREATE TABLE ab (a INT PRIMARY KEY, b INT); INSERT INTO ab (a, b) VALUES (1, 10)
+
+## Table index change: Add/remove index that query depends on, and ensure that
+## the plan is recomputed each time.
+statement ok
+PREPARE change_index AS SELECT * FROM [EXPLAIN SELECT * FROM ab WHERE b=10]
+
+query TTT
+EXECUTE change_index
+----
+scan  ·      ·
+·     table  ab@primary
+·     spans  ALL
+
+statement ok
+CREATE INDEX bindex ON ab (b)
+
+query TTT
+EXECUTE change_index
+----
+scan  ·      ·
+·     table  ab@bindex
+·     spans  /10-/11
+
+statement ok
+DROP INDEX bindex
+
+query TTT
+EXECUTE change_index
+----
+scan  ·      ·
+·     table  ab@primary
+·     spans  ALL

@@ -94,6 +94,9 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 	bareStrings := flags.HasFlags(EncBareStrings)
 	// Loop through each unicode code point.
 	for i, r := range in {
+		if i < start {
+			continue
+		}
 		ch := byte(r)
 		if r >= 0x20 && r < 0x7F {
 			if mustQuoteMap[ch] {
@@ -123,7 +126,9 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 	if quote {
 		buf.WriteByte('\'') // begin 'xxx' string if nothing was escaped
 	}
-	buf.WriteString(in[start:])
+	if start < len(in) {
+		buf.WriteString(in[start:])
+	}
 	if escapedString || quote {
 		buf.WriteByte('\'')
 	}

@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/pkg/errors"
 )
 
@@ -179,7 +181,7 @@ func LoadCSV(
 	oversample int64,
 	makeRewriter func(map[sqlbase.ID]*sqlbase.TableDescriptor) (KeyRewriter, error),
 ) error {
-	ctx = log.WithLogTag(ctx, "import-distsql", nil)
+	ctx = logtags.AddTag(ctx, "import-distsql", nil)
 
 	dsp := phs.DistSQLPlanner()
 	evalCtx := phs.ExtendedEvalContext()
@@ -323,6 +325,16 @@ func LoadCSV(
 
 	splits = append(splits, samples...)
 	sort.Slice(splits, func(a, b int) bool { return roachpb.Key(splits[a]).Compare(splits[b]) < 0 })
+
+	// Remove duplicates. These occur when the end span of a descriptor is the
+	// same as the start span of another.
+	origSplits := splits
+	splits = splits[:0]
+	for _, x := range origSplits {
+		if len(splits) == 0 || !bytes.Equal(x, splits[len(splits)-1]) {
+			splits = append(splits, x)
+		}
+	}
 
 	// jobSpans is a slice of split points, including table start and end keys
 	// for the table. We create router range spans then from taking each pair

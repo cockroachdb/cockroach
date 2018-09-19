@@ -18,11 +18,12 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"sync/atomic"
 	"time"
 
-	"github.com/coreos/etcd/raft"
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/raftpb"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -77,8 +78,7 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 
 // Entries implements the raft.Storage interface. Note that maxBytes is advisory
 // and this method will always return at least one entry even if it exceeds
-// maxBytes. Passing maxBytes equal to zero disables size checking. Sideloaded
-// proposals count towards maxBytes with their payloads inlined.
+// maxBytes. Sideloaded proposals count towards maxBytes with their payloads inlined.
 func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	readonly := r.store.Engine().NewReadOnly()
 	defer readonly.Close()
@@ -115,10 +115,11 @@ func entries(
 	}
 	ents := make([]raftpb.Entry, 0, n)
 
-	ents, size, hitIndex := eCache.getEntries(ents, rangeID, lo, hi, maxBytes)
+	ents, size, hitIndex, exceededMaxBytes := eCache.getEntries(ents, rangeID, lo, hi, maxBytes)
+
 	// Return results if the correct number of results came back or if
 	// we ran into the max bytes limit.
-	if uint64(len(ents)) == hi-lo || (maxBytes > 0 && size > maxBytes) {
+	if uint64(len(ents)) == hi-lo || exceededMaxBytes {
 		return ents, nil
 	}
 
@@ -131,7 +132,6 @@ func entries(
 	canCache := true
 
 	var ent raftpb.Entry
-	exceededMaxBytes := false
 	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
 		if err := kv.Value.GetProto(&ent); err != nil {
 			return false, err
@@ -159,9 +159,13 @@ func entries(
 
 		// Note that we track the size of proposals with payloads inlined.
 		size += uint64(ent.Size())
-
+		if size > maxBytes {
+			exceededMaxBytes = true
+			if len(ents) > 0 {
+				return exceededMaxBytes, nil
+			}
+		}
 		ents = append(ents, ent)
-		exceededMaxBytes = maxBytes > 0 && size > maxBytes
 		return exceededMaxBytes, nil
 	}
 
@@ -275,7 +279,7 @@ func term(
 ) (uint64, error) {
 	// entries() accepts a `nil` sideloaded storage and will skip inlining of
 	// sideloaded entries. We only need the term, so this is what we do.
-	ents, err := entries(ctx, rsl, eng, rangeID, eCache, nil /* sideloaded */, i, i+1, 0)
+	ents, err := entries(ctx, rsl, eng, rangeID, eCache, nil /* sideloaded */, i, i+1, math.MaxUint64 /* maxBytes */)
 	if err == raft.ErrCompacted {
 		ts, err := rsl.LoadTruncatedState(ctx, eng)
 		if err != nil {
@@ -632,8 +636,8 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 	// the original range wont work as the original and new ranges might belong
 	// to different zones.
 	// Load the system config.
-	cfg, ok := r.store.Gossip().GetSystemConfig()
-	if !ok {
+	cfg := r.store.Gossip().GetSystemConfig()
+	if cfg == nil {
 		// This could be before the system config was ever gossiped,
 		// or it expired. Let the gossip callback set the info.
 		ctx := r.AnnotateCtx(context.TODO())
@@ -647,7 +651,7 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 		return errors.Errorf("%s: failed to lookup zone config: %s", r, err)
 	}
 
-	r.SetByteThresholds(zone.RangeMinBytes, zone.RangeMaxBytes)
+	r.SetZoneConfig(zone)
 	return nil
 }
 
@@ -718,14 +722,21 @@ func clearRangeData(
 	return nil
 }
 
-// applySnapshot updates the replica based on the given snapshot and associated
-// HardState. All snapshots must pass through Raft for correctness, i.e. the
-// parameters to this method must be taken from a raft.Ready. Any replicas
-// specified in subsumedRepls will be destroyed atomically with the application
-// of the snapshot. It is the caller's responsibility to call
-// r.store.processRangeDescriptorUpdate(r) after a successful applySnapshot.
+// applySnapshot updates the replica and its store based on the given snapshot
+// and associated HardState. All snapshots must pass through Raft for
+// correctness, i.e. the parameters to this method must be taken from a
+// raft.Ready. Any replicas specified in subsumedRepls will be destroyed
+// atomically with the application of the snapshot.
+//
+// If there is a placeholder associated with r, applySnapshot will remove that
+// placeholder from the store if and only if it does not return an error.
+//
 // This method requires that r.raftMu is held, as well as the raftMus of any
 // replicas in subsumedRepls.
+//
+// TODO(benesch): the way this replica method reaches into its store to update
+// replicasByKey is unfortunate, but the fix requires a substantial refactor to
+// maintain the necessary synchronization.
 func (r *Replica) applySnapshot(
 	ctx context.Context,
 	inSnap IncomingSnapshot,
@@ -757,6 +768,14 @@ func (r *Replica) applySnapshot(
 		// Raft discarded the snapshot, indicating that our local state is
 		// already ahead of what the snapshot provides. But we count it for
 		// stats (see the defer above).
+		//
+		// Since we're not returning an error, we're responsible for removing any
+		// placeholder that might exist.
+		r.store.mu.Lock()
+		if r.store.removePlaceholderLocked(ctx, r.RangeID) {
+			atomic.AddInt32(&r.store.counts.filledPlaceholders, 1)
+		}
+		r.store.mu.Unlock()
 		return nil
 	}
 	if raft.IsEmptyHardState(hs) {
@@ -908,11 +927,15 @@ func (r *Replica) applySnapshot(
 	}
 	stats.commit = timeutil.Now()
 
+	// The on-disk state is now committed, but the corresponding in-memory state
+	// has not yet been updated. Any errors past this point must therefore be
+	// treated as fatal.
+
 	for _, sr := range subsumedRepls {
 		// We removed sr's data when we committed the batch. Finish subsumption by
 		// updating the in-memory bookkeping.
 		if err := sr.postDestroyRaftMuLocked(ctx, sr.GetMVCCStats()); err != nil {
-			return err
+			log.Fatalf(ctx, "unable to finish destroying %s while applying snapshot: %s", sr, err)
 		}
 		// We already hold sr's raftMu, so we must call removeReplicaImpl directly.
 		// Note that it's safe to update the store's metadata for sr's removal
@@ -924,9 +947,21 @@ func (r *Replica) applySnapshot(
 		if err := r.store.removeReplicaImpl(ctx, sr, subsumedNextReplicaID, RemoveOptions{
 			DestroyData: false, // data is already destroyed
 		}); err != nil {
-			return err
+			log.Fatalf(ctx, "unable to remove %s while applying snapshot: %s", sr, err)
 		}
 	}
+
+	// Atomically swap the placeholder, if any, for the replica, and update the
+	// replica's descriptor.
+	r.store.mu.Lock()
+	if r.store.removePlaceholderLocked(ctx, r.RangeID) {
+		atomic.AddInt32(&r.store.counts.filledPlaceholders, 1)
+	}
+	r.setDesc(ctx, s.Desc)
+	if err := r.store.maybeMarkReplicaInitializedLocked(ctx, r); err != nil {
+		log.Fatalf(ctx, "unable to mark replica initialized while applying snapshot: %s", err)
+	}
+	r.store.mu.Unlock()
 
 	r.mu.Lock()
 	// We set the persisted last index to the last applied index. This is
@@ -939,9 +974,12 @@ func (r *Replica) applySnapshot(
 	r.mu.lastIndex = s.RaftAppliedIndex
 	r.mu.lastTerm = lastTerm
 	r.mu.raftLogSize = raftLogSize
-	// Update the range and store stats.
+	// Update the store stats for the data in the snapshot.
 	r.store.metrics.subtractMVCCStats(*r.mu.state.Stats)
 	r.store.metrics.addMVCCStats(*s.Stats)
+	// Update the rest of the Raft state. Changes to r.mu.state.Desc must be
+	// managed by r.setDesc, but we called that above, so now it's safe to
+	// wholesale replace r.mu.state.
 	r.mu.state = s
 	r.assertStateLocked(ctx, r.store.Engine())
 	r.mu.Unlock()
@@ -953,17 +991,13 @@ func (r *Replica) applySnapshot(
 		roachpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
 	)
 
-	// As the last deferred action after committing the batch, update other
-	// fields which are uninitialized or need updating. This may not happen
-	// if the system config has not yet been loaded. While config update
-	// will correctly set the fields, there is no order guarantee in
-	// ApplySnapshot.
-	// TODO: should go through the standard store lock when adding a replica.
+	// Update the replica's cached byte thresholds. This is a no-op if the system
+	// config is not available, in which case we rely on the next gossip update
+	// to perform the update.
 	if err := r.updateRangeInfo(s.Desc); err != nil {
-		panic(err)
+		log.Fatalf(ctx, "unable to update range info while applying snapshot: %s", err)
 	}
 
-	r.setDescWithoutProcessUpdate(s.Desc)
 	return nil
 }
 

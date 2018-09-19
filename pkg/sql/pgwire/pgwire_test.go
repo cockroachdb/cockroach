@@ -28,7 +28,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"strings"
 	"testing"
 	"time"
 
@@ -49,13 +48,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// https://golang.org/cl/38533 and https://golang.org/cl/91115 changed the
-// validation message.
 func wrongArgCountString(want, got int) string {
-	if strings.HasPrefix(runtime.Version(), "go1.10") {
-		return fmt.Sprintf("sql: expected %d arguments, got %d", want, got)
-	}
-	return fmt.Sprintf("sql: statement expects %d inputs; got %d", want, got)
+	return fmt.Sprintf("sql: expected %d arguments, got %d", want, got)
 }
 
 func trivialQuery(pgURL url.URL) error {
@@ -951,9 +945,17 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(`1101`).Results(`1101`),
 			baseTest.SetArgs(`1101001`).Results(`1101001`),
 		}},
-
 		{"SELECT $1::INT[]", []preparedQueryTest{
 			baseTest.SetArgs(pq.Array([]int64{10})).Results(pq.Array([]int64{10})),
+		}},
+		{"ALTER RANGE liveness CONFIGURE ZONE = $1", []preparedQueryTest{
+			baseTest.SetArgs("num_replicas: 1"),
+		}},
+		{"ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = $1", []preparedQueryTest{
+			baseTest.SetArgs(1),
+		}},
+		{"ALTER RANGE liveness CONFIGURE ZONE = $1", []preparedQueryTest{
+			baseTest.SetArgs(gosql.NullString{}),
 		}},
 
 		// TODO(nvanbenschoten): Same class of limitation as that in logic_test/typing:
@@ -1444,6 +1446,72 @@ func TestPGPrepareNameQual(t *testing.T) {
 
 		if _, err = stmt.Exec(); err != nil {
 			t.Fatal(err)
+		}
+	}
+}
+
+// TestPGPrepareInvalidate ensures that changing table schema triggers recompile
+// of a prepared query.
+func TestPGPrepareInvalidate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanupFn()
+
+	db, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	testCases := []struct {
+		stmt    string
+		prep    bool
+		numCols int
+	}{
+		{
+			stmt: `CREATE DATABASE IF NOT EXISTS testing`,
+		},
+		{
+			stmt: `CREATE TABLE IF NOT EXISTS ab (a INT PRIMARY KEY, b INT)`,
+		},
+		{
+			stmt:    `INSERT INTO ab (a, b) VALUES (1, 10)`,
+			prep:    true,
+			numCols: 2,
+		},
+		{
+			stmt:    `ALTER TABLE ab ADD COLUMN c INT`,
+			numCols: 3,
+		},
+		{
+			stmt:    `ALTER TABLE ab DROP COLUMN c`,
+			numCols: 2,
+		},
+	}
+
+	var prep *gosql.Stmt
+	for _, tc := range testCases {
+		if _, err = db.Exec(tc.stmt); err != nil {
+			t.Fatal(err)
+		}
+
+		// Create the prepared statement.
+		if tc.prep {
+			if prep, err = db.Prepare(`SELECT * FROM ab WHERE b=10`); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if prep != nil {
+			rows, _ := prep.Query()
+			defer rows.Close()
+			cols, _ := rows.Columns()
+			if len(cols) != tc.numCols {
+				t.Fatalf("expected %d cols, got %d cols", tc.numCols, len(cols))
+			}
 		}
 	}
 }

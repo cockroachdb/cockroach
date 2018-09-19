@@ -356,19 +356,17 @@ const webSessionIDKeyStr = "webSessionID"
 
 func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	username, cookie, err := am.getSession(w, req)
-	if err != nil && !am.allowAnonymous {
+	if err == nil {
+		ctx := req.Context()
+		ctx = context.WithValue(ctx, webSessionUserKey{}, username)
+		ctx = context.WithValue(ctx, webSessionIDKey{}, cookie.ID)
+		req = req.WithContext(ctx)
+	} else if !am.allowAnonymous {
 		log.Infof(req.Context(), "Web session error: %s", err)
 		http.Error(w, "a valid authentication cookie is required", http.StatusUnauthorized)
 		return
 	}
-
-	newCtx := context.WithValue(req.Context(), webSessionUserKey{}, username)
-	if cookie != nil {
-		newCtx = context.WithValue(newCtx, webSessionIDKey{}, cookie.ID)
-	}
-	newReq := req.WithContext(newCtx)
-
-	am.inner.ServeHTTP(w, newReq)
+	am.inner.ServeHTTP(w, req)
 }
 
 func encodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, error) {
