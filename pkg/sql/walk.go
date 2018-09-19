@@ -678,6 +678,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&updateNode{}):               "update",
 	reflect.TypeOf(&upsertNode{}):               "upsert",
 	reflect.TypeOf(&valuesNode{}):               "values",
+	reflect.TypeOf(&virtualTableNode{}):         "virtual table values",
 	reflect.TypeOf(&windowNode{}):               "window",
 	reflect.TypeOf(&zeroNode{}):                 "norows",
 }
