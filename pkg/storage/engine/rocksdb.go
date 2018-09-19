@@ -1104,6 +1104,41 @@ func (r *RocksDB) GetSSTables() SSTableInfos {
 	return res
 }
 
+// WALFileInfo contains metadata about a single write-ahead log file. Note this
+// mirrors the C.DBWALFile struct.
+type WALFileInfo struct {
+	LogNumber int64
+	Size      int64
+}
+
+// GetSortedWALFiles retrievews information about all of the write-ahead log
+// files in this engine in order from oldest to newest.
+func (r *RocksDB) GetSortedWALFiles() ([]WALFileInfo, error) {
+	var n C.int
+	var files *C.DBWALFile
+	status := C.DBGetSortedWALFiles(r.rdb, &files, &n)
+	if err := statusToError(status); err != nil {
+		return nil, errors.Wrap(err, "could not get sorted WAL files")
+	}
+	defer C.free(unsafe.Pointer(files))
+
+	// We can't index into files because it is a pointer, not a slice. The hackery
+	// below treats the pointer as an array and then constructs a slice from it.
+
+	structSize := unsafe.Sizeof(C.DBWALFile{})
+	getWALFile := func(i int) *C.DBWALFile {
+		return (*C.DBWALFile)(unsafe.Pointer(uintptr(unsafe.Pointer(files)) + uintptr(i)*structSize))
+	}
+
+	res := make([]WALFileInfo, n)
+	for i := range res {
+		wf := getWALFile(i)
+		res[i].LogNumber = int64(wf.log_number)
+		res[i].Size = int64(wf.size)
+	}
+	return res, nil
+}
+
 // getUserProperties fetches the user properties stored in each sstable's
 // metadata.
 func (r *RocksDB) getUserProperties() (enginepb.SSTUserPropertiesCollection, error) {
@@ -1734,6 +1769,12 @@ func (r *rocksDBBatch) Commit(syncCommit bool) error {
 	}
 	r.distinctOpen = false
 
+	if r.flushes == 0 && r.builder.count == 0 {
+		// Nothing was written to this batch. Fast path.
+		r.committed = true
+		return nil
+	}
+
 	// Combine multiple write-only batch commits into a single call to
 	// RocksDB. RocksDB is supposed to be performing such batching internally,
 	// but whether Cgo or something else, it isn't achieving the same degree of
@@ -1860,6 +1901,8 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 			C.DBClose(r.batch)
 			r.batch = nil
 		}
+	} else {
+		panic("commitInternal called on empty batch")
 	}
 	r.committed = true
 
