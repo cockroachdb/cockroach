@@ -222,8 +222,8 @@ func (sr *StoreRebalancer) rebalanceStore(
 
 	var replicasToMaybeRebalance []replicaWithStats
 	storeMap := storeListToMap(storeList)
-	sysCfg, cfgOk := sr.rq.allocator.storePool.gossip.GetSystemConfig()
-	if !cfgOk {
+	sysCfg := sr.rq.allocator.storePool.gossip.GetSystemConfig()
+	if sysCfg == nil {
 		log.VEventf(ctx, 1, "no system config available, unable to choose lease transfer targets")
 		return
 	}
@@ -349,7 +349,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 // account here or just continue to let that happen in allocator.go?
 func (sr *StoreRebalancer) chooseLeaseToTransfer(
 	ctx context.Context,
-	sysCfg config.SystemConfig,
+	sysCfg *config.SystemConfig,
 	hottestRanges *[]replicaWithStats,
 	localDesc *roachpb.StoreDescriptor,
 	storeList StoreList,
@@ -387,7 +387,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			continue
 		}
 
-		desc := replWithStats.repl.Desc()
+		desc, zone := replWithStats.repl.DescAndZone()
 		log.VEventf(ctx, 3, "considering lease transfer for r%d with %.2f qps",
 			desc.RangeID, replWithStats.qps)
 
@@ -431,11 +431,6 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 				continue
 			}
 
-			zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-			if err != nil {
-				log.Error(ctx, err)
-				return replicaWithStats{}, roachpb.ReplicaDescriptor{}, considerForRebalance
-			}
 			preferred := sr.rq.allocator.preferredLeaseholders(zone, desc.Replicas)
 			if len(preferred) > 0 && !storeHasReplica(candidate.StoreID, preferred) {
 				log.VEventf(ctx, 3, "s%d not a preferred leaseholder; preferred: %v", candidate.StoreID, preferred)
@@ -467,7 +462,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 
 func (sr *StoreRebalancer) chooseReplicaToRebalance(
 	ctx context.Context,
-	sysCfg config.SystemConfig,
+	sysCfg *config.SystemConfig,
 	hottestRanges *[]replicaWithStats,
 	localDesc *roachpb.StoreDescriptor,
 	storeList StoreList,

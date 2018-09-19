@@ -58,7 +58,7 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 
 	// Verify that queueing is immediately possible.
 	if shouldQ, priority := mtc.stores[0].ConsistencyQueueShouldQueue(
-		context.TODO(), mtc.clock.Now(), repl, config.SystemConfig{}); !shouldQ {
+		context.TODO(), mtc.clock.Now(), repl, config.NewSystemConfig()); !shouldQ {
 		t.Fatalf("expected shouldQ true; got %t, %f", shouldQ, priority)
 	}
 
@@ -67,7 +67,7 @@ func TestConsistencyQueueRequiresLive(t *testing.T) {
 	mtc.advanceClock(context.TODO())
 
 	if shouldQ, priority := mtc.stores[0].ConsistencyQueueShouldQueue(
-		context.TODO(), mtc.clock.Now(), repl, config.SystemConfig{}); shouldQ {
+		context.TODO(), mtc.clock.Now(), repl, config.NewSystemConfig()); shouldQ {
 		t.Fatalf("expected shouldQ false; got %t, %f", shouldQ, priority)
 	}
 }

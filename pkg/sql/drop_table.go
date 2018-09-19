@@ -334,7 +334,7 @@ func (p *planner) initiateDropTable(
 		// Get the zone config applying to this table in order to
 		// ensure there is a GC TTL.
 		_, _, _, err := GetZoneConfigInTxn(
-			ctx, p.txn, uint32(tableDesc.ID), &sqlbase.IndexDescriptor{}, "", false,
+			ctx, p.txn, uint32(tableDesc.ID), &sqlbase.IndexDescriptor{}, "", false, /* getInheritedDefault */
 		)
 		if err != nil {
 			return err

@@ -246,8 +246,8 @@ func TestZoneConfigSubzones(t *testing.T) {
 
 	zone := DefaultZoneConfig()
 	subzoneAInvalid := Subzone{IndexID: 1, PartitionName: "a", Config: ZoneConfig{}}
-	subzoneA := Subzone{IndexID: 1, PartitionName: "a", Config: DefaultZoneConfig()}
-	subzoneB := Subzone{IndexID: 1, PartitionName: "b", Config: DefaultZoneConfig()}
+	subzoneA := Subzone{IndexID: 1, PartitionName: "a", Config: zone}
+	subzoneB := Subzone{IndexID: 1, PartitionName: "b", Config: zone}
 
 	if zone.IsSubzonePlaceholder() {
 		t.Errorf("default zone config should not be considered a subzone placeholder")

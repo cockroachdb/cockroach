@@ -299,6 +299,13 @@ func DefaultZoneConfig() ZoneConfig {
 	return defaultZoneConfig
 }
 
+// DefaultZoneConfigRef returns a reference to the default zone config.
+func DefaultZoneConfigRef() *ZoneConfig {
+	testingLock.Lock()
+	defer testingLock.Unlock()
+	return &defaultZoneConfig
+}
+
 // DefaultSystemZoneConfig is the default zone configuration used when no custom
 // config has been specified.
 func DefaultSystemZoneConfig() ZoneConfig {

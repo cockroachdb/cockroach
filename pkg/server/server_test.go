@@ -504,10 +504,10 @@ func TestSystemConfigGossip(t *testing.T) {
 	// wrote.
 	testutils.SucceedsSoon(t, func() error {
 		// New system config received.
-		var systemConfig config.SystemConfig
+		var systemConfig *config.SystemConfig
 		select {
 		case <-resultChan:
-			systemConfig, _ = ts.gossip.GetSystemConfig()
+			systemConfig = ts.gossip.GetSystemConfig()
 
 		case <-time.After(500 * time.Millisecond):
 			return errors.Errorf("did not receive gossip message")

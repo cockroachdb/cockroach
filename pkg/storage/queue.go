@@ -163,13 +163,13 @@ type queueImpl interface {
 	// and returns whether it should be queued and if so, at what priority.
 	// The Replica is guaranteed to be initialized.
 	shouldQueue(
-		context.Context, hlc.Timestamp, *Replica, config.SystemConfig,
+		context.Context, hlc.Timestamp, *Replica, *config.SystemConfig,
 	) (shouldQueue bool, priority float64)
 
 	// process accepts lease status, a replica, and the system config
 	// and executes queue-specific work on it. The Replica is guaranteed
 	// to be initialized.
-	process(context.Context, *Replica, config.SystemConfig) error
+	process(context.Context, *Replica, *config.SystemConfig) error
 
 	// timer returns a duration to wait between processing the next item
 	// from the queue. The duration of the last processing of a replica
@@ -399,11 +399,10 @@ func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
 
 func (bq *baseQueue) maybeAddLocked(ctx context.Context, repl *Replica, now hlc.Timestamp) {
 	// Load the system config if it's needed.
-	var cfg config.SystemConfig
-	var cfgOk bool
+	var cfg *config.SystemConfig
 	if bq.needsSystemConfig {
-		cfg, cfgOk = bq.gossip.GetSystemConfig()
-		if !cfgOk {
+		cfg = bq.gossip.GetSystemConfig()
+		if cfg == nil {
 			if log.V(1) {
 				log.Infof(ctx, "no system config available. skipping")
 			}
@@ -419,7 +418,7 @@ func (bq *baseQueue) maybeAddLocked(ctx context.Context, repl *Replica, now hlc.
 		return
 	}
 
-	if cfgOk && bq.requiresSplit(cfg, repl) {
+	if cfg != nil && bq.requiresSplit(cfg, repl) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		if log.V(1) {
@@ -446,7 +445,7 @@ func (bq *baseQueue) maybeAddLocked(ctx context.Context, repl *Replica, now hlc.
 	}
 }
 
-func (bq *baseQueue) requiresSplit(cfg config.SystemConfig, repl *Replica) bool {
+func (bq *baseQueue) requiresSplit(cfg *config.SystemConfig, repl *Replica) bool {
 	if bq.acceptsUnsplitRanges {
 		return false
 	}
@@ -671,11 +670,10 @@ func (bq *baseQueue) recordProcessDuration(ctx context.Context, dur time.Duratio
 // while calling this method.
 func (bq *baseQueue) processReplica(queueCtx context.Context, repl *Replica) error {
 	// Load the system config if it's needed.
-	var cfg config.SystemConfig
-	var cfgOk bool
+	var cfg *config.SystemConfig
 	if bq.needsSystemConfig {
-		cfg, cfgOk = bq.gossip.GetSystemConfig()
-		if !cfgOk {
+		cfg = bq.gossip.GetSystemConfig()
+		if cfg == nil {
 			if log.V(1) {
 				log.Infof(queueCtx, "no system config available. skipping")
 			}
@@ -683,7 +681,7 @@ func (bq *baseQueue) processReplica(queueCtx context.Context, repl *Replica) err
 		}
 	}
 
-	if cfgOk && bq.requiresSplit(cfg, repl) {
+	if cfg != nil && bq.requiresSplit(cfg, repl) {
 		// Range needs to be split due to zone configs, but queue does
 		// not accept unsplit ranges.
 		if log.V(3) {

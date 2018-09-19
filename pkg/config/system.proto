@@ -19,6 +19,6 @@ option go_package = "config";
 import "gogoproto/gogo.proto";
 import "roachpb/data.proto";
 
-message SystemConfig {
+message SystemConfigEntries {
   repeated roachpb.KeyValue values = 1 [(gogoproto.nullable) = false];
 }

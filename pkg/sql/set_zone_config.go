@@ -247,7 +247,8 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// the target ID is not a database object, i.e. one of the system
 		// ranges (liveness, meta, etc.), and did not have a zone config
 		// already.
-		zone = config.DefaultZoneConfig()
+		defZone := config.DefaultZoneConfig()
+		zone = &defZone
 	} else if err != nil {
 		return err
 	}
@@ -272,7 +273,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		}
 
 		// Determine where to load the configuration.
-		newZone := zone
+		newZone := *zone
 		if subzone != nil {
 			newZone = subzone.Config
 		}
@@ -321,7 +322,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// Are we operating on an index?
 		if index == nil {
 			// No: the final zone config is the one we just processed.
-			zone = newZone
+			zone = &newZone
 		} else {
 			// If the zone config for targetID was a subzone placeholder, it'll have
 			// been skipped over by GetZoneConfigInTxn. We need to load it regardless
@@ -468,7 +469,7 @@ func writeZoneConfig(
 	txn *client.Txn,
 	targetID sqlbase.ID,
 	table *sqlbase.TableDescriptor,
-	zone config.ZoneConfig,
+	zone *config.ZoneConfig,
 	execCfg *ExecutorConfig,
 	hasNewSubzones bool,
 ) (numAffected int, err error) {
@@ -503,7 +504,7 @@ func writeZoneConfig(
 			"DELETE FROM system.zones WHERE id = $1", targetID)
 	}
 
-	buf, err := protoutil.Marshal(&zone)
+	buf, err := protoutil.Marshal(zone)
 	if err != nil {
 		return 0, fmt.Errorf("could not marshal zone config: %s", err)
 	}
@@ -516,19 +517,19 @@ func writeZoneConfig(
 // zone config exists for the given ID, it returns an empty zone config.
 func getZoneConfigRaw(
 	ctx context.Context, txn *client.Txn, id sqlbase.ID,
-) (config.ZoneConfig, error) {
+) (*config.ZoneConfig, error) {
 	kv, err := txn.Get(ctx, config.MakeZoneKey(uint32(id)))
 	if err != nil {
-		return config.ZoneConfig{}, err
+		return nil, err
 	}
 	if kv.Value == nil {
-		return config.ZoneConfig{}, nil
+		return &config.ZoneConfig{}, nil
 	}
 	var zone config.ZoneConfig
 	if err := kv.ValueProto(&zone); err != nil {
-		return config.ZoneConfig{}, err
+		return nil, err
 	}
-	return zone, nil
+	return &zone, nil
 }
 
 func removeIndexZoneConfigs(

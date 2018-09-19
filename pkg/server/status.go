@@ -1220,14 +1220,14 @@ func (s *statusServer) Ranges(
 		}
 	}
 
-	cfg, ok := s.gossip.GetSystemConfig()
-	if !ok {
+	cfg := s.gossip.GetSystemConfig()
+	if cfg == nil {
 		// Very little on the status pages requires the system config -- as of June
 		// 2017, only the underreplicated range metric does. Refusing to return a
 		// status page (that may help debug why the config isn't available) due to
 		// such a small piece of missing information is overly harsh.
 		log.Error(ctx, "system config not yet available, serving status page without it")
-		cfg = config.SystemConfig{}
+		cfg = config.NewSystemConfig()
 	}
 	isLiveMap := s.nodeLiveness.GetIsLiveMap()
 

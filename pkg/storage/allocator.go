@@ -270,7 +270,7 @@ func GetNeededReplicas(
 // supplied range, as governed by the supplied zone configuration. It
 // returns the required action that should be taken and a priority.
 func (a *Allocator) ComputeAction(
-	ctx context.Context, zone config.ZoneConfig, rangeInfo RangeInfo,
+	ctx context.Context, zone *config.ZoneConfig, rangeInfo RangeInfo,
 ) (AllocatorAction, float64) {
 	if a.storePool == nil {
 		// Do nothing if storePool is nil for some unittests.
@@ -374,7 +374,7 @@ type decisionDetails struct {
 // a store.
 func (a *Allocator) AllocateTarget(
 	ctx context.Context,
-	zone config.ZoneConfig,
+	zone *config.ZoneConfig,
 	existing []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
 ) (*roachpb.StoreDescriptor, string, error) {
@@ -403,7 +403,7 @@ func (a *Allocator) AllocateTarget(
 func (a *Allocator) allocateTargetFromList(
 	ctx context.Context,
 	sl StoreList,
-	zone config.ZoneConfig,
+	zone *config.ZoneConfig,
 	existing []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
 	options scorerOptions,
@@ -430,7 +430,7 @@ func (a *Allocator) allocateTargetFromList(
 func (a Allocator) simulateRemoveTarget(
 	ctx context.Context,
 	targetStore roachpb.StoreID,
-	zone config.ZoneConfig,
+	zone *config.ZoneConfig,
 	candidates []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
 ) (roachpb.ReplicaDescriptor, string, error) {
@@ -454,7 +454,7 @@ func (a Allocator) simulateRemoveTarget(
 // replicas.
 func (a Allocator) RemoveTarget(
 	ctx context.Context,
-	zone config.ZoneConfig,
+	zone *config.ZoneConfig,
 	candidates []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
 ) (roachpb.ReplicaDescriptor, string, error) {
@@ -517,7 +517,7 @@ func (a Allocator) RemoveTarget(
 // under-utilized store.
 func (a Allocator) RebalanceTarget(
 	ctx context.Context,
-	zone config.ZoneConfig,
+	zone *config.ZoneConfig,
 	raftStatus *raft.Status,
 	rangeInfo RangeInfo,
 	filter storeFilter,
@@ -650,7 +650,7 @@ func (a *Allocator) scorerOptions() scorerOptions {
 // unless asked to do otherwise by the checkTransferLeaseSource parameter.
 func (a *Allocator) TransferLeaseTarget(
 	ctx context.Context,
-	zone config.ZoneConfig,
+	zone *config.ZoneConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
@@ -797,7 +797,7 @@ func (a *Allocator) TransferLeaseTarget(
 // attributes.
 func (a *Allocator) ShouldTransferLease(
 	ctx context.Context,
-	zone config.ZoneConfig,
+	zone *config.ZoneConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
@@ -1102,7 +1102,7 @@ func (a Allocator) shouldTransferLeaseWithoutStats(
 }
 
 func (a Allocator) preferredLeaseholders(
-	zone config.ZoneConfig, existing []roachpb.ReplicaDescriptor,
+	zone *config.ZoneConfig, existing []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	// Go one preference at a time. As soon as we've found replicas that match a
 	// preference, we don't need to look at the later preferences, because

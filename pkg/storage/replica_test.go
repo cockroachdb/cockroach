@@ -286,12 +286,12 @@ func (tc *testContext) initConfigs(realRange bool, t testing.TB) error {
 	// Put an empty system config into gossip so that gossip callbacks get
 	// run. We're using a fake config, but it's hooked into SystemConfig.
 	if err := tc.gossip.AddInfoProto(gossip.KeySystemConfig,
-		&config.SystemConfig{}, 0); err != nil {
+		&config.SystemConfigEntries{}, 0); err != nil {
 		return err
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if _, ok := tc.gossip.GetSystemConfig(); !ok {
+		if cfg := tc.gossip.GetSystemConfig(); cfg == nil {
 			return errors.Errorf("expected system config to be set")
 		}
 		return nil
@@ -1088,7 +1088,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 
 	// If this actually failed, we would have gossiped from MVCCPutProto.
 	// Unlikely, but why not check.
-	if cfg, ok := tc.gossip.GetSystemConfig(); ok {
+	if cfg := tc.gossip.GetSystemConfig(); cfg != nil {
 		if nv := len(cfg.Values); nv == 1 && cfg.Values[nv-1].Key.Equal(key) {
 			t.Errorf("unexpected gossip of system config: %s", cfg)
 		}
@@ -1126,8 +1126,8 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		cfg, ok := tc.gossip.GetSystemConfig()
-		if !ok {
+		cfg := tc.gossip.GetSystemConfig()
+		if cfg == nil {
 			return errors.Errorf("expected system config to be set")
 		}
 		numValues := len(cfg.Values)
@@ -1337,7 +1337,7 @@ func TestReplicaGossipAllConfigs(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
-	if _, ok := tc.gossip.GetSystemConfig(); !ok {
+	if cfg := tc.gossip.GetSystemConfig(); cfg == nil {
 		t.Fatal("config not set")
 	}
 }
@@ -1401,8 +1401,8 @@ func TestReplicaNoGossipConfig(t *testing.T) {
 		txn.Writing = true
 
 		// System config is not gossiped.
-		cfg, ok := tc.gossip.GetSystemConfig()
-		if !ok {
+		cfg := tc.gossip.GetSystemConfig()
+		if cfg == nil {
 			t.Fatal("config not set")
 		}
 		if len(cfg.Values) != 0 {
@@ -1461,7 +1461,7 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	// Fetch the raw gossip info. GetSystemConfig is based on callbacks at
 	// modification time. But we're checking for _not_ gossiped, so there should
 	// be no callbacks. Easier to check the raw info.
-	var cfg config.SystemConfig
+	var cfg config.SystemConfigEntries
 	err := tc.gossip.GetInfoProto(gossip.KeySystemConfig, &cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -9179,7 +9179,7 @@ func TestReplicaMetrics(t *testing.T) {
 			c.expected.Quiescent = i%2 == 0
 			c.expected.Ticking = !c.expected.Quiescent
 			metrics := calcReplicaMetrics(
-				context.Background(), hlc.Timestamp{}, config.SystemConfig{},
+				context.Background(), hlc.Timestamp{}, config.NewSystemConfig(), &zoneConfig,
 				c.liveness, &c.desc, c.raftStatus, LeaseStatus{},
 				c.storeID, c.expected.Quiescent, c.expected.Ticking, CommandQueueMetrics{}, CommandQueueMetrics{}, c.raftLogSize, tc.store.allocator.storePool)
 			if c.expected != metrics {
@@ -9976,7 +9976,7 @@ func TestConsistenctQueueErrorFromCheckConsistency(t *testing.T) {
 
 	for i := 0; i < 2; i++ {
 		// Do this twice because it used to deadlock. See #25456.
-		sysCfg, _ := tc.store.Gossip().GetSystemConfig()
+		sysCfg := tc.store.Gossip().GetSystemConfig()
 		if err := tc.store.consistencyQueue.process(ctx, tc.repl, sysCfg); !testutils.IsError(err, "boom") {
 			t.Fatal(err)
 		}
