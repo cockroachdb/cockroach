@@ -1581,3 +1581,45 @@ func TestSstFileWriterTimeBound(t *testing.T) {
 		t.Errorf(`expected 2 sstables got %d`, s.TimeBoundNumSSTs)
 	}
 }
+
+func TestRocksDBWALFile(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	defer e.Close()
+
+	b := e.NewBatch()
+	defer b.Close()
+	if err := b.Put(mvccKey("foo"), []byte{'b', 'a', 'r'}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Commit(true); err != nil {
+		t.Fatal(err)
+	}
+
+	walsBefore, err := e.GetSortedWALFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(walsBefore) != 1 {
+		t.Fatalf("expected exactly one WAL file, but got %d", len(walsBefore))
+	}
+	if walsBefore[0].Size == 0 {
+		t.Fatalf("expected non-empty WAL file")
+	}
+
+	b = e.NewBatch()
+	defer b.Close()
+	if err := b.Commit(true); err != nil {
+		t.Fatal(err)
+	}
+
+	walsAfter, err := e.GetSortedWALFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(walsBefore, walsAfter) {
+		t.Fatalf("expected wal files %#v after committing empty batch, but got %#v",
+			walsBefore, walsAfter)
+	}
+}
