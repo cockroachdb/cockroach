@@ -793,6 +793,9 @@ type StoreTestingKnobs struct {
 	DisableReplicaRebalancing bool
 	// DisableSplitQueue disables the split queue.
 	DisableSplitQueue bool
+	// VerboseSplitQueue enables verbose logging for the split queue. See
+	// #29144. TODO(peter): remove when that issue is understood / fixed.
+	VerboseSplitQueue bool
 	// DisableTimeSeriesMaintenanceQueue disables the time series maintenance
 	// queue.
 	DisableTimeSeriesMaintenanceQueue bool
@@ -1041,6 +1044,9 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	}
 	if cfg.TestingKnobs.DisableSplitQueue {
 		s.setSplitQueueActive(false)
+	}
+	if cfg.TestingKnobs.VerboseSplitQueue {
+		s.splitQueue.verbose = true
 	}
 	if cfg.TestingKnobs.DisableTimeSeriesMaintenanceQueue {
 		s.setTimeSeriesMaintenanceQueueActive(false)
