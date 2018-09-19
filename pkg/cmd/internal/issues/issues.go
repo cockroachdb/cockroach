@@ -50,11 +50,12 @@ var (
 	stacktraceRE = regexp.MustCompile(`(?m:^goroutine\s\d+)`)
 )
 
-// Based on the following observed API response:
+// Based on the following observed API response the maximum here is 1<<16-1
+// (but we stay way below that as nobody likes to scroll for pages and pages).
 //
 // 422 Validation Failed [{Resource:Issue Field:body Code:custom Message:body
 // is too long (maximum is 65536 characters)}]
-const githubIssueBodyMaximumLength = 1<<16 - 1
+const githubIssueBodyMaximumLength = 5000
 
 // trimIssueRequestBody trims message such that the total size of an issue body
 // is less than githubIssueBodyMaximumLength. usedCharacters specifies the
@@ -273,27 +274,31 @@ make stress TESTS=%[5]s PKG=%[4]s TESTTIMEOUT=5m STRESSFLAGS='-stderr=false -max
 Failed test: %[3]s`
 	const messageTemplate = "\n\n```\n%s\n```"
 
-	newIssueRequest := func(packageName, testName, message, assignee string) *github.IssueRequest {
+	body := func(packageName, testName, message string) string {
 		body := fmt.Sprintf(bodyTemplate, p.sha, p.parameters(), p.teamcityURL(), packageName, testName) + messageTemplate
 		// We insert a raw "%s" above so we can figure out the length of the
 		// body so far, without the actual error text. We need this length so we
 		// can calculate the maximum amount of error text we can include in the
 		// issue without exceeding GitHub's limit. We replace that %s in the
 		// following Sprintf.
-		body = fmt.Sprintf(body, trimIssueRequestBody(message, len(body)))
+		return fmt.Sprintf(body, trimIssueRequestBody(message, len(body)))
+	}
+
+	newIssueRequest := func(packageName, testName, message, assignee string) *github.IssueRequest {
+		b := body(packageName, testName, message)
 
 		return &github.IssueRequest{
 			Title:     &title,
-			Body:      &body,
+			Body:      &b,
 			Labels:    &issueLabels,
 			Assignee:  &assignee,
 			Milestone: p.milestone,
 		}
 	}
 
-	newIssueComment := func(packageName, testName string) *github.IssueComment {
-		body := fmt.Sprintf(bodyTemplate, p.sha, p.parameters(), p.teamcityURL(), packageName, testName)
-		return &github.IssueComment{Body: &body}
+	newIssueComment := func(packageName, testName, message string) *github.IssueComment {
+		b := body(packageName, testName, message)
+		return &github.IssueComment{Body: &b}
 	}
 
 	assignee, err := getAssignee(ctx, authorEmail, p.listCommits)
@@ -331,7 +336,7 @@ Failed test: %[3]s`
 				github.Stringify(issueRequest))
 		}
 	} else {
-		comment := newIssueComment(packageName, testName)
+		comment := newIssueComment(packageName, testName, message)
 		if _, _, err := p.createComment(
 			ctx, githubUser, githubRepo, *foundIssue, comment); err != nil {
 			return errors.Wrapf(err, "failed to update issue #%d with %s",
