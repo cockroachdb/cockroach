@@ -7,7 +7,7 @@ source "$(dirname "${0}")/teamcity-support.sh"
 tc_prepare
 
 export TMPDIR=$PWD/artifacts/testrace
-mkdir -p "$TMPDIR"
+mkdir -p "$TMPDIR" artifacts
 
 tc_start_block "Maybe stressrace pull request"
 #build/builder.sh go install ./pkg/cmd/github-pull-request-make
@@ -38,7 +38,6 @@ run build/builder.sh env \
     COCKROACH_LOGIC_TESTS_SKIP=true \
     make testrace \
     PKG=./pkg/util/failsuite/... \
-    #PKG="$pkgspec" \
     TESTTIMEOUT=45m \
     TESTFLAGS='-v -json' \
     USE_ROCKSDB_ASSERTIONS=1 2>&1 \
