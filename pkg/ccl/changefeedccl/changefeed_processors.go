@@ -179,7 +179,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 		targets:  ca.spec.Feed.Targets,
 		m:        tableHist,
 	}
-	rowsFn := kvsToRows(leaseMgr, tableHist, ca.spec.Feed, buf.Get)
+	rowsFn := kvsToRows(ca.flowCtx.ClientDB, leaseMgr, tableHist, ca.spec.Feed, buf.Get)
 
 	var knobs TestingKnobs
 	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {

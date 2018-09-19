@@ -131,7 +131,7 @@ func createBenchmarkChangefeed(
 		targets:  details.Targets,
 		m:        th,
 	}
-	rowsFn := kvsToRows(s.LeaseManager().(*sql.LeaseManager), th, details, buf.Get)
+	rowsFn := kvsToRows(s.DB(), s.LeaseManager().(*sql.LeaseManager), th, details, buf.Get)
 	tickFn := emitEntries(details, sink, rowsFn, TestingKnobs{})
 
 	ctx, cancel := context.WithCancel(ctx)

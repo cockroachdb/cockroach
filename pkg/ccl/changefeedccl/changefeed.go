@@ -14,8 +14,10 @@ import (
 	gojson "encoding/json"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -69,6 +71,7 @@ type emitEntry struct {
 // returns a closure that may be repeatedly called to advance the changefeed.
 // The returned closure is not threadsafe.
 func kvsToRows(
+	db *client.DB,
 	leaseMgr *sql.LeaseManager,
 	tableHist *tableHistory,
 	details jobspb.ChangefeedDetails,
@@ -99,12 +102,48 @@ func kvsToRows(
 		if err != nil {
 			return nil, err
 		}
-		// TODO(dan): Handle tables with multiple column families.
-		kvs.KVs = append(kvs.KVs, kv)
+
+		if len(desc.Families) > 1 {
+			// If there's more than one column family, we need a followup fetch.
+			// This is fairly late to be kicking off and blocking on this fetch,
+			// but, in the common case, this is not as bad as it sounds since
+			// this code is likely running on the leaseholder and the data can
+			// be served locally. If this is a problem, we could kick off the
+			// fetch earlier (when it enters the buffer) or cache some values or
+			// both.
+
+			// WIP: The real problem is that treating these a key at a time is a
+			// bit naive. If N column families from some row are updated at the
+			// same time, we'll refetch the row and emit an exact duplicate N
+			// times.
+			keyPrefix, err := keys.EnsureSafeSplitKey(kv.Key)
+			if err != nil {
+				return nil, err
+			}
+			if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				txn.SetFixedTimestamp(ctx, kv.Value.Timestamp)
+				clientKVs, err := txn.Scan(ctx, keyPrefix, keyPrefix.PrefixEnd(), 0 /* maxRows */)
+				if err != nil {
+					return err
+				}
+				kvs.KVs = kvs.KVs[:0]
+				for _, clientKV := range clientKVs {
+					kvs.KVs = append(kvs.KVs, roachpb.KeyValue{
+						Key:   clientKV.Key,
+						Value: *clientKV.Value,
+					})
+				}
+				return nil
+			}); err != nil {
+				return nil, err
+			}
+		} else {
+			kvs.KVs = append(kvs.KVs, kv)
+		}
+
 		if err := rf.StartScanFrom(ctx, &kvs); err != nil {
 			return nil, err
 		}
-
 		for {
 			var r emitEntry
 			r.row.datums, r.row.tableDesc, _, err = rf.NextRowDecoded(ctx)

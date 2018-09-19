@@ -326,11 +326,6 @@ func validateChangefeedTable(
 	if tableDesc.IsSequence() {
 		return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.Name)
 	}
-	if len(tableDesc.Families) != 1 {
-		return errors.Errorf(
-			`CHANGEFEEDs are currently supported on tables with exactly 1 column family: %s has %d`,
-			tableDesc.Name, len(tableDesc.Families))
-	}
 
 	if tableDesc.State == sqlbase.TableDescriptor_DROP {
 		return errors.Errorf(`"%s" was dropped or truncated`, t.StatementTimeName)

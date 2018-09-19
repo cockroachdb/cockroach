@@ -468,11 +468,28 @@ func TestChangefeedColumnFamily(t *testing.T) {
 
 		// Table with 2 column families.
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING, FAMILY (a), FAMILY (b))`)
-		if _, err := sqlDB.DB.Query(
-			`CREATE CHANGEFEED FOR foo`,
-		); !testutils.IsError(err, `exactly 1 column family`) {
-			t.Errorf(`expected "exactly 1 column family" error got: %+v`, err)
-		}
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'a')`)
+		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo`)
+		defer foo.Close(t)
+		assertPayloads(t, foo, []string{
+			// WIP Changefeeds currently emit a duplicate for every column
+			// family modified at the same time.
+			`foo: [1]->{"a": 1, "b": "a"}`,
+			`foo: [1]->{"a": 1, "b": "a"}`,
+		})
+
+		sqlDB.Exec(t, `UPDATE foo SET a = 2 WHERE b = 'a'`)
+		assertPayloads(t, foo, []string{
+			// WIP Changefeeds currently emit a duplicate for every column
+			// family modified at the same time.
+			`foo: [2]->{"a": 2, "b": "a"}`,
+			`foo: [2]->{"a": 2, "b": "a"}`,
+		})
+
+		sqlDB.Exec(t, `UPDATE foo SET b = 'b' WHERE a = 2`)
+		assertPayloads(t, foo, []string{
+			`foo: [2]->{"a": 2, "b": "b"}`,
+		})
 
 		// Table with a second column family added after the changefeed starts.
 		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, FAMILY f_a (a))`)
@@ -483,11 +500,13 @@ func TestChangefeedColumnFamily(t *testing.T) {
 			`bar: [0]->{"a": 0}`,
 		})
 		sqlDB.Exec(t, `ALTER TABLE bar ADD COLUMN b STRING CREATE FAMILY f_b`)
-		sqlDB.Exec(t, `INSERT INTO bar VALUES (1)`)
-		_, _, _, _, _, _ = bar.Next(t)
-		if err := bar.Err(); !testutils.IsError(err, `exactly 1 column family`) {
-			t.Errorf(`expected "exactly 1 column family" error got: %+v`, err)
-		}
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (1, 'a')`)
+		assertPayloads(t, bar, []string{
+			// WIP Changefeeds currently emit a duplicate for every column
+			// family modified at the same time.
+			`bar: [1]->{"a": 1, "b": "a"}`,
+			`bar: [1]->{"a": 1, "b": "a"}`,
+		})
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
