@@ -655,6 +655,10 @@ DBStatus DBGetEncryptionRegistries(DBEngine* db, DBEncryptionRegistries* result)
 
 DBSSTable* DBGetSSTables(DBEngine* db, int* n) { return db->GetSSTables(n); }
 
+DBStatus DBGetSortedWALFiles(DBEngine* db, DBWALFile** files, int* n) {
+  return db->GetSortedWALFiles(files, n);
+}
+
 DBString DBGetUserProperties(DBEngine* db) { return db->GetUserProperties(); }
 
 DBStatus DBIngestExternalFiles(DBEngine* db, char** paths, size_t len, bool move_files,
