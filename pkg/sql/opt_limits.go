@@ -202,6 +202,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 		p.setUnlimited(n.rows)
 
 	case *valuesNode:
+	case *virtualTableNode:
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
