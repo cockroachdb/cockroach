@@ -373,6 +373,12 @@ var (
 		Measurement: "Memory",
 		Unit:        metric.Unit_BYTES,
 	}
+	metaRdbWALSyncs = metric.Metadata{
+		Name:        "rocksdb.wal.syncs",
+		Help:        "Number of times the write-ahead log has been synced to disk",
+		Measurement: "Syncs",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRdbFlushes = metric.Metadata{
 		Name:        "rocksdb.flushes",
 		Help:        "Number of table flushes",
@@ -1043,6 +1049,7 @@ type StoreMetrics struct {
 	RdbBloomFilterPrefixChecked *metric.Gauge
 	RdbBloomFilterPrefixUseful  *metric.Gauge
 	RdbMemtableTotalSize        *metric.Gauge
+	RdbWALSyncs                 *metric.Gauge
 	RdbFlushes                  *metric.Gauge
 	RdbCompactions              *metric.Gauge
 	RdbTableReadersMemEstimate  *metric.Gauge
@@ -1253,6 +1260,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbBloomFilterPrefixChecked: metric.NewGauge(metaRdbBloomFilterPrefixChecked),
 		RdbBloomFilterPrefixUseful:  metric.NewGauge(metaRdbBloomFilterPrefixUseful),
 		RdbMemtableTotalSize:        metric.NewGauge(metaRdbMemtableTotalSize),
+		RdbWALSyncs:                 metric.NewGauge(metaRdbWALSyncs),
 		RdbFlushes:                  metric.NewGauge(metaRdbFlushes),
 		RdbCompactions:              metric.NewGauge(metaRdbCompactions),
 		RdbTableReadersMemEstimate:  metric.NewGauge(metaRdbTableReadersMemEstimate),
@@ -1442,6 +1450,7 @@ func (sm *StoreMetrics) updateRocksDBStats(stats engine.Stats) {
 	sm.RdbBloomFilterPrefixUseful.Update(stats.BloomFilterPrefixUseful)
 	sm.RdbBloomFilterPrefixChecked.Update(stats.BloomFilterPrefixChecked)
 	sm.RdbMemtableTotalSize.Update(stats.MemtableTotalSize)
+	sm.RdbWALSyncs.Update(stats.WALSyncs)
 	sm.RdbFlushes.Update(stats.Flushes)
 	sm.RdbCompactions.Update(stats.Compactions)
 	sm.RdbTableReadersMemEstimate.Update(stats.TableReadersMemEstimate)

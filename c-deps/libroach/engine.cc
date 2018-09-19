@@ -191,6 +191,7 @@ DBStatus DBImpl::GetStats(DBStatsResult* stats) {
   stats->bloom_filter_prefix_useful =
       (int64_t)s->getTickerCount(rocksdb::BLOOM_FILTER_PREFIX_USEFUL);
   stats->memtable_total_size = memtable_total_size;
+  stats->wal_syncs = (int64_t)s->getTickerCount(rocksdb::WAL_FILE_SYNCED);
   stats->flushes = (int64_t)event_listener->GetFlushes();
   stats->compactions = (int64_t)event_listener->GetCompactions();
   stats->table_readers_mem_estimate = table_readers_mem_estimate;

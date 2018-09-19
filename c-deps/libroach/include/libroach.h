@@ -326,6 +326,7 @@ typedef struct {
   int64_t bloom_filter_prefix_checked;
   int64_t bloom_filter_prefix_useful;
   int64_t memtable_total_size;
+  int64_t wal_syncs;
   int64_t flushes;
   int64_t compactions;
   int64_t table_readers_mem_estimate;

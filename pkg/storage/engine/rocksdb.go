@@ -1133,6 +1133,7 @@ func (r *RocksDB) GetStats() (*Stats, error) {
 		BloomFilterPrefixChecked:       int64(s.bloom_filter_prefix_checked),
 		BloomFilterPrefixUseful:        int64(s.bloom_filter_prefix_useful),
 		MemtableTotalSize:              int64(s.memtable_total_size),
+		WALSyncs:                       int64(s.wal_syncs),
 		Flushes:                        int64(s.flushes),
 		Compactions:                    int64(s.compactions),
 		TableReadersMemEstimate:        int64(s.table_readers_mem_estimate),

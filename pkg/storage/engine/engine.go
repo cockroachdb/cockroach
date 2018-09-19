@@ -372,6 +372,7 @@ type Stats struct {
 	BloomFilterPrefixChecked       int64
 	BloomFilterPrefixUseful        int64
 	MemtableTotalSize              int64
+	WALSyncs                       int64
 	Flushes                        int64
 	Compactions                    int64
 	TableReadersMemEstimate        int64
