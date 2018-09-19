@@ -3599,10 +3599,20 @@ func TestFindValidSplitKeys(t *testing.T) {
 		// by the actual value having a nonzero timestamp).
 		{
 			keys: []roachpb.Key{
-				roachpb.Key("a"),
+				roachpb.Key("b"),
 			},
-			expSplit: nil,
-			expError: false,
+			rangeStart: roachpb.Key("a"),
+			expSplit:   nil,
+			expError:   false,
+		},
+		// Similar test, but the range starts at first key.
+		{
+			keys: []roachpb.Key{
+				roachpb.Key("b"),
+			},
+			rangeStart: roachpb.Key("b"),
+			expSplit:   nil,
+			expError:   false,
 		},
 		// Some example table data. Make sure we don't split in the middle of a row
 		// or return the start key of the range.
@@ -3689,8 +3699,13 @@ func TestFindValidSplitKeys(t *testing.T) {
 			ms := &enginepb.MVCCStats{}
 			val := roachpb.MakeValueFromString(strings.Repeat("X", 10))
 			for _, k := range test.keys {
-				if err := MVCCPut(context.Background(), engine, ms, []byte(k), hlc.Timestamp{Logical: 1}, val, nil); err != nil {
-					t.Fatal(err)
+				// Add three MVCC versions of every key. Splits are not allowed
+				// between MVCC versions, so this shouldn't have any effect.
+				for j := 1; j <= 3; j++ {
+					ts := hlc.Timestamp{Logical: int32(j)}
+					if err := MVCCPut(context.Background(), engine, ms, []byte(k), ts, val, nil); err != nil {
+						t.Fatal(err)
+					}
 				}
 			}
 			rangeStart := test.keys[0]
