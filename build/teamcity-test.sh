@@ -19,8 +19,8 @@ run build/builder.sh make -Otarget c-deps
 tc_end_block "Compile C dependencies"
 
 tc_start_block "Run Go tests"
-run build/builder.sh env TZ=America/New_York COCKROACH_FAILSUITE=true make test PKG=./pkg/util... TESTFLAGS='-v -json' 2>&1 \
-	| tee artifacts/test.json \
+run build/builder.sh env TZ=America/New_York COCKROACH_FAILSUITE=true make test PKG=./pkg/util/failsuite/... TESTFLAGS='-v -json' 2>&1 \
+	| tee artifacts/test.json.txt \
 	| cat
 #	| go-test-teamcity
 tc_end_block "Run Go tests"

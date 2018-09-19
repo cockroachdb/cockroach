@@ -37,12 +37,12 @@ run build/builder.sh env \
     COCKROACH_FAILSUITE=1 \
     COCKROACH_LOGIC_TESTS_SKIP=true \
     make testrace \
-    PKG=./pkg/util... \
+    PKG=./pkg/util/failsuite/... \
     #PKG="$pkgspec" \
     TESTTIMEOUT=45m \
     TESTFLAGS='-v -json' \
     USE_ROCKSDB_ASSERTIONS=1 2>&1 \
-	| tee artifacts/testrace.json \
+	| tee artifacts/testrace.json.txt \
 	| cat
 #	| go-test-teamcity
 tc_end_block "Run Go tests under race detector"
