@@ -7,11 +7,11 @@ source "$(dirname "${0}")/teamcity-support.sh"
 tc_prepare
 
 export TMPDIR=$PWD/artifacts/testrace
-mkdir -p "$TMPDIR"
+mkdir -p "$TMPDIR" artifacts
 
 tc_start_block "Maybe stressrace pull request"
-build/builder.sh go install ./pkg/cmd/github-pull-request-make
-build/builder.sh env BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET=stressrace github-pull-request-make
+#build/builder.sh go install ./pkg/cmd/github-pull-request-make
+#build/builder.sh env BUILD_VCS_NUMBER="$BUILD_VCS_NUMBER" TARGET=stressrace github-pull-request-make
 tc_end_block "Maybe stressrace pull request"
 
 tc_start_block "Determine changed packages"
@@ -34,12 +34,14 @@ tc_end_block "Compile C dependencies"
 
 tc_start_block "Run Go tests under race detector"
 run build/builder.sh env \
+    COCKROACH_FAILSUITE=1 \
     COCKROACH_LOGIC_TESTS_SKIP=true \
     make testrace \
-    PKG="$pkgspec" \
+    PKG=./pkg/util/failsuite/... \
     TESTTIMEOUT=45m \
-    TESTFLAGS='-v' \
+    TESTFLAGS='-v -json' \
     USE_ROCKSDB_ASSERTIONS=1 2>&1 \
-	| tee artifacts/testrace.log \
-	| go-test-teamcity
+	| tee artifacts/testrace.json.txt \
+	| cat
+#	| go-test-teamcity
 tc_end_block "Run Go tests under race detector"

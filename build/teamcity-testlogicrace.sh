@@ -8,6 +8,8 @@ maybe_ccache
 
 mkdir -p artifacts
 
+exit 0
+
 build/builder.sh env \
 	make testrace \
 	PKG=./pkg/sql/logictest \
