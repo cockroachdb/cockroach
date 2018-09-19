@@ -375,8 +375,7 @@ GenerateMergeJoins
   +      └── merge-on
   +           ├── left ordering: +1
   +           ├── right ordering: +6
-  +           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-  +                └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+  +           └── true [type=bool]
 ================================================================================
 GenerateLookupJoins
   Cost: 1140.40
@@ -409,10 +408,8 @@ GenerateLookupJoins
   -      └── merge-on
   -           ├── left ordering: +1
   -           ├── right ordering: +6
-  -           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-  -                └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-  +      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-  +           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+  -           └── true [type=bool]
+  +      └── true [type=bool]
 --------------------------------------------------------------------------------
 CommuteJoin (no changes)
 --------------------------------------------------------------------------------
@@ -444,13 +441,11 @@ GenerateMergeJoins (higher cost)
   +      │    │    └── ordering: +1 opt(2)
          │    └── filters [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
          │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight)]
-  -      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-  -           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+  -      └── true [type=bool]
   +      └── merge-on
   +           ├── left ordering: +6
   +           ├── right ordering: +1
-  +           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-  +                └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+  +           └── true [type=bool]
 --------------------------------------------------------------------------------
 GenerateLookupJoinsWithFilter (higher cost)
 --------------------------------------------------------------------------------
@@ -481,11 +476,9 @@ GenerateLookupJoinsWithFilter (higher cost)
   -      └── merge-on
   -           ├── left ordering: +6
   -           ├── right ordering: +1
-  -           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-  -                └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+  -           └── true [type=bool]
   +      │    └── key: (6)
-  +      └── filters [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /2: [/9 - /9]; /6: (/NULL - ]), fd=()-->(2), (1)==(6), (6)==(1)]
-  +           ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+  +      └── filters [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
   +           └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight)]
 ================================================================================
 Final best expression
@@ -508,8 +501,7 @@ Final best expression
         │    │    └── fd: (1)-->(2,4)
         │    └── filters [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
         │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight)]
-        └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-             └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+        └── true [type=bool]
 
 # Exploration patterns with varying costs.
 optsteps
@@ -1633,7 +1625,7 @@ EliminateSingletonAndOr (no changes)
 --------------------------------------------------------------------------------
 ================================================================================
 TryDecorrelateProject
-  Cost: 2169.20
+  Cost: 2182.54
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -1724,7 +1716,7 @@ TryDecorrelateProject
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 TryDecorrelateScalarGroupBy
-  Cost: 2143.25
+  Cost: 2155.85
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -1812,7 +1804,7 @@ TryDecorrelateScalarGroupBy
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 TryDecorrelateProjectSelect
-  Cost: 2222.22
+  Cost: 2260.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -1894,7 +1886,7 @@ TryDecorrelateProjectSelect
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 DecorrelateJoin
-  Cost: 2222.22
+  Cost: 2260.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -1950,7 +1942,7 @@ DecorrelateJoin
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 PushFilterIntoJoinRight
-  Cost: 2220.56
+  Cost: 2258.33
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -2019,7 +2011,7 @@ PushFilterIntoJoinRight
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 PushSelectIntoProject
-  Cost: 2206.67
+  Cost: 2248.33
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -2087,7 +2079,7 @@ PushSelectIntoProject
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 EliminateSelect
-  Cost: 2207.22
+  Cost: 2245.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -2162,7 +2154,7 @@ EliminateSelect
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 PruneJoinRightCols
-  Cost: 2210.56
+  Cost: 2248.33
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -2241,7 +2233,7 @@ PruneJoinRightCols
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 PruneProjectCols
-  Cost: 2210.56
+  Cost: 2248.33
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -2306,7 +2298,7 @@ PruneProjectCols
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 EliminateProject
-  Cost: 2207.22
+  Cost: 2245.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -2382,7 +2374,7 @@ EliminateProject
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 EliminateGroupByProject
-  Cost: 2197.22
+  Cost: 2235.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -2466,7 +2458,7 @@ EliminateGroupByProject
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 EliminateSelect
-  Cost: 2211.67
+  Cost: 2225.00
 ================================================================================
    project
     ├── columns: r:8(bool)
@@ -2855,8 +2847,7 @@ GenerateMergeJoins
   + │    │    └── merge-on
   + │    │         ├── left ordering: +1
   + │    │         ├── right ordering: +3
-  + │    │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  + │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  + │    │         └── true [type=bool]
     │    └── aggregations [outer=(9)]
     │         └── bool-or [type=bool, outer=(9)]
     │              └── variable: notnull [type=bool, outer=(9)]
@@ -2909,8 +2900,7 @@ Final best expression
    │    │    └── merge-on
    │    │         ├── left ordering: +1
    │    │         ├── right ordering: +3
-   │    │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-   │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+   │    │         └── true [type=bool]
    │    └── aggregations [outer=(9)]
    │         └── bool-or [type=bool, outer=(9)]
    │              └── variable: notnull [type=bool, outer=(9)]

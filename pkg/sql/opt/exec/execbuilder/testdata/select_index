@@ -195,7 +195,6 @@ render                ·               ·                    (b, a, c, d, a, c, 
       │               type            inner                ·                         ·
       │               equality        (b) = (b)            ·                         ·
       │               mergeJoinOrder  +"(b=b)"             ·                         ·
-      │               pred            b = b                ·                         ·
       ├── index-join  ·               ·                    (a, b, c, d)              ·
       │    ├── scan   ·               ·                    (a, b, c)                 ·
       │    │          table           t@bc                 ·                         ·
