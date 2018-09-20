@@ -93,7 +93,7 @@ func (p *planner) Update(
 		ctx,
 		*desc,
 		sqlbase.CheckUpdates,
-		p.lookupFKTable,
+		p.LookupTableByID,
 		p.CheckPrivilege,
 		p.analyzeExpr,
 	)
