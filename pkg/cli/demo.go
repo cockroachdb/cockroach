@@ -24,6 +24,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -94,6 +95,14 @@ func setupTransientServer(
 	}
 	cleanup = func() { stopper.Stop(ctx) }
 
+	// Set up the default zone configuration. We are using an in-memory store
+	// so we really want to disable replication.
+	cfg := config.DefaultZoneConfig()
+	cfg.NumReplicas = 1
+	restoreCfg := config.TestingSetDefaultSystemZoneConfig(cfg)
+	prevCleanup := cleanup
+	cleanup = func() { prevCleanup(); restoreCfg() }
+
 	// Create the transient server.
 	args := base.TestServerArgs{
 		Insecure: true,
@@ -102,8 +111,8 @@ func setupTransientServer(
 	if err := server.Start(args); err != nil {
 		return connURL, adminURL, cleanup, err
 	}
-	prevCleanup := cleanup
-	cleanup = func() { prevCleanup(); server.Stopper().Stop(ctx) }
+	prevCleanup2 := cleanup
+	cleanup = func() { prevCleanup2(); server.Stopper().Stop(ctx) }
 
 	// Prepare the URL for use by the SQL shell.
 	options := url.Values{}
