@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/mitchellh/reflectwalk"
 	"github.com/pkg/errors"
 	"github.com/shirou/gopsutil/cpu"
@@ -385,10 +386,18 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 }
 
 func anonymizeZoneConfig(dst *config.ZoneConfig, src config.ZoneConfig, secret string) {
-	dst.RangeMinBytes = src.RangeMinBytes
-	dst.RangeMaxBytes = src.RangeMaxBytes
-	dst.GC.TTLSeconds = src.GC.TTLSeconds
-	dst.NumReplicas = src.NumReplicas
+	if src.RangeMinBytes != nil {
+		dst.RangeMinBytes = proto.Int64(*src.RangeMinBytes)
+	}
+	if src.RangeMaxBytes != nil {
+		dst.RangeMaxBytes = proto.Int64(*src.RangeMaxBytes)
+	}
+	if src.GC != nil {
+		dst.GC = &config.GCPolicy{TTLSeconds: src.GC.TTLSeconds}
+	}
+	if src.NumReplicas != nil {
+		dst.NumReplicas = proto.Int32(*src.NumReplicas)
+	}
 	dst.Constraints = make([]config.Constraints, len(src.Constraints))
 	for i := range src.Constraints {
 		dst.Constraints[i].NumReplicas = src.Constraints[i].NumReplicas

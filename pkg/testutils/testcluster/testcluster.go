@@ -517,7 +517,7 @@ func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*storage.Store,
 // WaitForFullReplication waits until all stores in the cluster
 // have no ranges with replication pending.
 func (tc *TestCluster) WaitForFullReplication() error {
-	if int32(len(tc.Servers)) < config.DefaultZoneConfig().NumReplicas {
+	if int32(len(tc.Servers)) < *config.DefaultZoneConfig().NumReplicas {
 		return nil
 	}
 

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/gogo/protobuf/proto"
 )
 
 // TestSplitQueueShouldQueue verifies shouldQueue method correctly
@@ -38,8 +39,8 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 	tc.Start(t, stopper)
 
 	// Set zone configs.
-	config.TestingSetZoneConfig(2000, config.ZoneConfig{RangeMaxBytes: 32 << 20})
-	config.TestingSetZoneConfig(2002, config.ZoneConfig{RangeMaxBytes: 32 << 20})
+	config.TestingSetZoneConfig(2000, config.ZoneConfig{RangeMaxBytes: proto.Int64(32 << 20)})
+	config.TestingSetZoneConfig(2002, config.ZoneConfig{RangeMaxBytes: proto.Int64(32 << 20)})
 
 	testCases := []struct {
 		start, end roachpb.RKey
@@ -90,7 +91,9 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		repl.mu.Lock()
 		repl.mu.state.Stats = &enginepb.MVCCStats{KeyBytes: test.bytes}
 		repl.mu.Unlock()
-		repl.SetZoneConfig(&config.ZoneConfig{RangeMaxBytes: test.maxBytes})
+		zoneConfig := config.DefaultZoneConfig()
+		zoneConfig.RangeMaxBytes = proto.Int64(test.maxBytes)
+		repl.SetZoneConfig(&zoneConfig)
 
 		shouldQ, priority := splitQ.shouldQueue(context.TODO(), hlc.Timestamp{}, repl, cfg)
 		if shouldQ != test.shouldQ {

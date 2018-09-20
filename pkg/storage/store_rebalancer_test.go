@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/gogo/protobuf/proto"
 	"go.etcd.io/etcd/raft"
 )
 
@@ -266,7 +267,7 @@ func TestChooseReplicaToRebalance(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			zone := config.DefaultZoneConfig()
-			zone.NumReplicas = int32(len(tc.storeIDs))
+			zone.NumReplicas = proto.Int32(int32(len(tc.storeIDs)))
 			defer config.TestingSetDefaultZoneConfig(zone)()
 			loadRanges(rr, s, []testRange{{storeIDs: tc.storeIDs, qps: tc.qps}})
 			hottestRanges := rr.topQPS()

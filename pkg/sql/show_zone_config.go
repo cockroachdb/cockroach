@@ -165,7 +165,9 @@ func generateZoneConfigIntrospectionValues(
 	if zs == nil {
 		values[configSQLCol] = tree.DNull
 	} else {
-		constraints, err := yamlMarshalFlow(config.ConstraintsList(zone.Constraints))
+		constraints, err := yamlMarshalFlow(config.ConstraintsList{
+			Constraints:   zone.Constraints,
+			ExplicitlySet: zone.ExplicitlySetConstraints})
 		if err != nil {
 			return err
 		}
@@ -180,10 +182,18 @@ func generateZoneConfigIntrospectionValues(
 		f.WriteString("ALTER ")
 		f.FormatNode(zs)
 		f.WriteString(" CONFIGURE ZONE USING\n")
-		f.Printf("\trange_min_bytes = %d,\n", zone.RangeMinBytes)
-		f.Printf("\trange_max_bytes = %d,\n", zone.RangeMaxBytes)
-		f.Printf("\tgc.ttlseconds = %d,\n", zone.GC.TTLSeconds)
-		f.Printf("\tnum_replicas = %d,\n", zone.NumReplicas)
+		if zone.RangeMinBytes != nil {
+			f.Printf("\trange_min_bytes = %d,\n", *zone.RangeMinBytes)
+		}
+		if zone.RangeMaxBytes != nil {
+			f.Printf("\trange_max_bytes = %d,\n", *zone.RangeMaxBytes)
+		}
+		if zone.GC != nil {
+			f.Printf("\tgc.ttlseconds = %d,\n", zone.GC.TTLSeconds)
+		}
+		if zone.NumReplicas != nil {
+			f.Printf("\tnum_replicas = %d,\n", *zone.NumReplicas)
+		}
 		f.Printf("\tconstraints = %s,\n", lex.EscapeSQLString(constraints))
 		f.Printf("\tlease_preferences = %s", lex.EscapeSQLString(prefs))
 		values[configSQLCol] = tree.NewDString(f.String())

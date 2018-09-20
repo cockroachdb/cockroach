@@ -2856,7 +2856,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	defer mtc.Stop()
 
 	zone := config.DefaultSystemZoneConfig()
-	mtc.Start(t, int(zone.NumReplicas+1))
+	mtc.Start(t, int(*zone.NumReplicas+1))
 
 	var nonDeadStores []*storage.Store
 	for i, s := range mtc.stores {
@@ -2898,7 +2898,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	// Wait for up-replication.
 	testutils.SucceedsSoon(t, func() error {
 		replicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
-		if len(replicas) == int(zone.NumReplicas) {
+		if len(replicas) == int(*zone.NumReplicas) {
 			return nil
 		}
 		return errors.Errorf("expected %d replicas; have %+v", zone.NumReplicas, replicas)
@@ -2914,7 +2914,7 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		replicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
-		if len(replicas) != int(zone.NumReplicas) {
+		if len(replicas) != int(*zone.NumReplicas) {
 			return errors.Errorf("expected %d replicas; have %+v", zone.NumReplicas, replicas)
 		}
 		for _, r := range replicas {

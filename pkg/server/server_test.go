@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/gogo/protobuf/jsonpb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 )
@@ -78,7 +79,7 @@ func TestHealthCheck(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	cfg := config.DefaultZoneConfig()
-	cfg.NumReplicas = 1
+	cfg.NumReplicas = proto.Int32(1)
 	fnSys := config.TestingSetDefaultSystemZoneConfig(cfg)
 	defer fnSys()
 

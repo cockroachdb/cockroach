@@ -23,6 +23,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -903,8 +904,9 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			zone := &config.ZoneConfig{
-				Constraints: tc.constraints,
-				NumReplicas: tc.zoneNumReplicas,
+				Constraints:              tc.constraints,
+				ExplicitlySetConstraints: true,
+				NumReplicas:              proto.Int32(tc.zoneNumReplicas),
 			}
 			analyzed := analyzeConstraints(
 				context.Background(), getTestStoreDesc, testStoreReplicas(tc.existing), zone)
@@ -1036,8 +1038,9 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 				})
 			}
 			zone := &config.ZoneConfig{
-				Constraints: tc.constraints,
-				NumReplicas: tc.zoneNumReplicas,
+				Constraints:              tc.constraints,
+				ExplicitlySetConstraints: true,
+				NumReplicas:              proto.Int32(tc.zoneNumReplicas),
 			}
 			analyzed := analyzeConstraints(context.Background(), getTestStoreDesc, existing, zone)
 			for storeID, expected := range tc.expected {
