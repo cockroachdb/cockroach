@@ -86,7 +86,14 @@ func (m *txnMetrics) closeLocked() {
 	restarts := int64(m.txn.Epoch)
 	status := m.txn.Status
 
-	m.metrics.Restarts.RecordValue(restarts)
+	// TODO(andrei): We only record txn that had any restarts, otherwise the
+	// serialization induced by the histogram shows on profiles. Figure something
+	// out to make it cheaper.
+	// Also, the epoch is not currently an accurate count since we sometimes bump
+	// it artificially (in the parallel execution queue).
+	if restarts > 0 {
+		m.metrics.Restarts.RecordValue(restarts)
+	}
 	switch status {
 	case roachpb.ABORTED:
 		m.metrics.Aborts.Inc(1)
