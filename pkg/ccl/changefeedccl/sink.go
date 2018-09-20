@@ -93,14 +93,6 @@ func getSink(
 		return nil, errors.Errorf(`unsupported sink: %s`, u.Scheme)
 	}
 
-	// Skip sink params used only by other parts of the system.
-	switch formatType(opts[optFormat]) {
-	case optFormatAvro:
-		q.Del(sinkParamConfluentSchemaRegistry)
-	default:
-		// No-op.
-	}
-
 	for k := range q {
 		_ = s.Close()
 		return nil, errors.Errorf(`unknown sink query parameter: %s`, k)
