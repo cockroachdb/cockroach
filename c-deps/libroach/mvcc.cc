@@ -239,7 +239,7 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
       return FmtStatus("unable to decode key");
     }
 
-    const bool valid = IsValidSplitKey(decoded_key) && decoded_key.compare(min_split_key) > 0;
+    const bool valid = IsValidSplitKey(decoded_key) && decoded_key.compare(min_split_key) >= 0;
     int64_t diff = target_size - size_so_far;
     if (diff < 0) {
       diff = -diff;
