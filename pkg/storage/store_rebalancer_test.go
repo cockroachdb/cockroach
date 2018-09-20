@@ -16,10 +16,13 @@ package storage
 
 import (
 	"context"
+	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -92,6 +95,11 @@ func loadRanges(rr *replicaRankings, s *Store, ranges []testRange) {
 			Expiration: &hlc.MaxTimestamp,
 			Replica:    repl.mu.state.Desc.Replicas[0],
 		}
+		// TODO(a-robinson): The below three lines won't be needed once the old
+		// rangeInfo code is ripped out of the allocator.
+		repl.mu.state.Stats = &enginepb.MVCCStats{}
+		repl.leaseholderStats = newReplicaStats(s.Clock(), nil)
+		repl.writeStats = newReplicaStats(s.Clock(), nil)
 		acc.addReplica(replicaWithStats{
 			repl: repl,
 			qps:  r.qps,
@@ -162,5 +170,95 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 			t.Errorf("got target store %d for range with replicas %v and %f qps; want %d",
 				target.StoreID, tc.storeIDs, tc.qps, tc.expectTarget)
 		}
+	}
+}
+
+func TestChooseReplicaToRebalance(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
+	defer stopper.Stop(context.Background())
+	gossiputil.NewStoreGossiper(g).GossipStores(noLocalityStores, t)
+	storeList, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
+	storeMap := storeListToMap(storeList)
+
+	const minQPS = 800
+	const maxQPS = 1200
+
+	localDesc := *noLocalityStores[0]
+	cfg := TestStoreConfig(nil)
+	s := createTestStoreWithoutStart(t, stopper, &cfg)
+	s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
+	rq := newReplicateQueue(s, g, a)
+	rr := newReplicaRankings()
+
+	sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)
+
+	testCases := []struct {
+		storeIDs      []roachpb.StoreID
+		qps           float64
+		expectTargets []roachpb.StoreID // the first listed store is expected to be the leaseholder
+	}{
+		{[]roachpb.StoreID{1}, 100, []roachpb.StoreID{5}},
+		{[]roachpb.StoreID{1}, 500, []roachpb.StoreID{5}},
+		{[]roachpb.StoreID{1}, 700, []roachpb.StoreID{5}},
+		{[]roachpb.StoreID{1}, 800, nil},
+		{[]roachpb.StoreID{1}, 1.5, []roachpb.StoreID{5}},
+		{[]roachpb.StoreID{1}, 1.49, nil},
+		{[]roachpb.StoreID{1, 2}, 100, []roachpb.StoreID{5, 2}},
+		{[]roachpb.StoreID{1, 3}, 100, []roachpb.StoreID{5, 3}},
+		{[]roachpb.StoreID{1, 4}, 100, []roachpb.StoreID{5, 4}},
+		{[]roachpb.StoreID{1, 2}, 800, nil},
+		{[]roachpb.StoreID{1, 2}, 1.49, nil},
+		{[]roachpb.StoreID{1, 4, 5}, 500, nil},
+		{[]roachpb.StoreID{1, 4, 5}, 100, nil},
+		{[]roachpb.StoreID{1, 3, 5}, 500, nil},
+		{[]roachpb.StoreID{1, 3, 4}, 500, []roachpb.StoreID{5, 4, 3}},
+		{[]roachpb.StoreID{1, 3, 5}, 100, []roachpb.StoreID{5, 4, 3}},
+		// Rebalancing to s2 isn't chosen even though it's better than s1 because it's above the mean.
+		{[]roachpb.StoreID{1, 3, 4, 5}, 100, nil},
+		{[]roachpb.StoreID{1, 2, 4, 5}, 100, nil},
+		{[]roachpb.StoreID{1, 2, 3, 5}, 100, []roachpb.StoreID{5, 4, 3, 2}},
+		{[]roachpb.StoreID{1, 2, 3, 4}, 100, []roachpb.StoreID{5, 4, 3, 2}},
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			zone := config.DefaultZoneConfig()
+			zone.NumReplicas = int32(len(tc.storeIDs))
+			defer config.TestingSetDefaultZoneConfig(zone)()
+			loadRanges(rr, s, []testRange{{storeIDs: tc.storeIDs, qps: tc.qps}})
+			hottestRanges := rr.topQPS()
+			_, targets := sr.chooseReplicaToRebalance(
+				ctx, config.NewSystemConfig(), &hottestRanges, &localDesc, storeList, storeMap, minQPS, maxQPS)
+
+			if len(targets) != len(tc.expectTargets) {
+				t.Fatalf("chooseReplicaToRebalance(existing=%v, qps=%f) got %v; want %v",
+					tc.storeIDs, tc.qps, targets, tc.expectTargets)
+			}
+			if len(targets) == 0 {
+				return
+			}
+
+			if targets[0].StoreID != tc.expectTargets[0] {
+				t.Errorf("chooseReplicaToRebalance(existing=%v, qps=%f) chose s%d as leaseholder; want s%v",
+					tc.storeIDs, tc.qps, targets[0], tc.expectTargets[0])
+			}
+
+			targetStores := make([]roachpb.StoreID, len(targets))
+			for i, target := range targets {
+				targetStores[i] = target.StoreID
+			}
+			sort.Sort(roachpb.StoreIDSlice(targetStores))
+			sort.Sort(roachpb.StoreIDSlice(tc.expectTargets))
+			if !reflect.DeepEqual(targetStores, tc.expectTargets) {
+				t.Errorf("chooseReplicaToRebalance(existing=%v, qps=%f) chose targets %v; want %v",
+					tc.storeIDs, tc.qps, targetStores, tc.expectTargets)
+			}
+		})
 	}
 }
