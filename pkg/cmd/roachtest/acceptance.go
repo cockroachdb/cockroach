@@ -25,8 +25,9 @@ func registerAcceptance(r *registry) {
 	// local mode the acceptance tests should be configured to run within a
 	// minute or so as these tests are run on every merge to master.
 	spec := testSpec{
-		Name:  "acceptance",
-		Nodes: nodes(4),
+		Name:   "acceptance",
+		Nodes:  nodes(4),
+		Stable: true, // DO NOT COPY to new tests
 	}
 
 	testCases := []struct {
