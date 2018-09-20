@@ -526,8 +526,8 @@ func (c *CustomFuncs) GenerateLimitedScans(def, limit, ordering memo.PrivateID) 
 //
 // ----------------------------------------------------------------------
 
-// ConstructMergeJoins spawns MergeJoinOps, based on any interesting orderings.
-func (c *CustomFuncs) ConstructMergeJoins(
+// GenerateMergeJoins spawns MergeJoinOps, based on any interesting orderings.
+func (c *CustomFuncs) GenerateMergeJoins(
 	originalOp opt.Operator, left memo.GroupID, right memo.GroupID, on memo.GroupID,
 ) []memo.Expr {
 	c.e.exprs = c.e.exprs[:0]
@@ -557,6 +557,8 @@ func (c *CustomFuncs) ConstructMergeJoins(
 		colToEq.Set(int(rightEq[i]), i)
 	}
 
+	var remainingFilter memo.GroupID
+
 	for _, o := range leftOrders {
 		if len(o) < n {
 			// TODO(radu): we have a partial ordering on the equality columns. We
@@ -583,9 +585,22 @@ func (c *CustomFuncs) ConstructMergeJoins(
 		def.LeftOrdering.Simplify(&c.e.mem.GroupProperties(left).Relational.FuncDeps)
 		def.RightOrdering.Simplify(&c.e.mem.GroupProperties(right).Relational.FuncDeps)
 
-		// TODO(radu): simplify the ON condition (we can remove the equalities we
-		// extracted).
-		mergeOn := c.e.f.ConstructMergeOn(on, c.e.mem.InternMergeOnDef(&def))
+		if remainingFilter == 0 {
+			remainingFilter = c.remainingJoinFilter(
+				onExpr,
+				func(a, b opt.ColumnID) bool {
+					for i := range leftEq {
+						if (a == leftEq[i] && b == rightEq[i]) ||
+							(a == rightEq[i] && b == leftEq[i]) {
+							return true
+						}
+					}
+					return false
+				},
+			)
+		}
+
+		mergeOn := c.e.f.ConstructMergeOn(remainingFilter, c.e.mem.InternMergeOnDef(&def))
 		// Create a merge join expression in the same group.
 		mergeJoin := memo.MakeMergeJoinExpr(left, right, mergeOn)
 		c.e.exprs = append(c.e.exprs, memo.Expr(mergeJoin))
@@ -736,9 +751,25 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			lookupJoinDef.KeyCols = append(lookupJoinDef.KeyCols, leftEq[eqIdx])
 		}
 
-		// TODO(radu): simplify the ON condition (we can remove the equalities on
-		// KeyCols).
-		lookupJoinOn := on
+		lookupJoinOn := c.remainingJoinFilter(
+			onExpr,
+			func(a, b opt.ColumnID) bool {
+				for i, leftCol := range lookupJoinDef.KeyCols {
+					var otherCol opt.ColumnID
+					if a == leftCol {
+						otherCol = b
+					} else if b == leftCol {
+						otherCol = a
+					} else {
+						continue
+					}
+					if otherCol == scanDef.Table.ColumnID(iter.index.Column(i).Ordinal) {
+						return true
+					}
+				}
+				return false
+			},
+		)
 
 		if iter.isCovering() {
 			// Case 1 (see function comment).
@@ -946,4 +977,35 @@ func (it *scanIndexIter) indexCols() opt.ColSet {
 // by the Scan operator.
 func (it *scanIndexIter) isCovering() bool {
 	return it.scanOpDef.Cols.SubsetOf(it.indexCols())
+}
+
+// remainingJoinFilter calculates the remaining ON condition after removing
+// equalities that are handled separately (for merge and lookup joins). The
+// given function determines if an equality is redundant.
+// The result is TrueOp if there are no remaining conditions.
+func (c *CustomFuncs) remainingJoinFilter(
+	on memo.ExprView, removeEquality func(a, b opt.ColumnID) bool,
+) memo.GroupID {
+	if on.Operator() != opt.FiltersOp {
+		return on.Group()
+	}
+	lb := norm.MakeListBuilder(&c.CustomFuncs)
+	for i, n := 0, on.ChildCount(); i < n; i++ {
+		child := on.Child(i)
+		if child.Operator() == opt.EqOp {
+			l, r := child.Child(0), child.Child(1)
+			if l.Operator() == opt.VariableOp && r.Operator() == opt.VariableOp {
+				lCol := l.Private().(opt.ColumnID)
+				rCol := r.Private().(opt.ColumnID)
+				if removeEquality(lCol, rCol) {
+					continue
+				}
+			}
+		}
+		lb.AddItem(child.Group())
+	}
+	if lb.Empty() {
+		return c.e.f.ConstructTrue()
+	}
+	return c.e.f.ConstructFilters(lb.BuildList())
 }
