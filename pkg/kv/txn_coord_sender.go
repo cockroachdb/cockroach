@@ -553,6 +553,23 @@ func (tc *TxnCoordSender) DisablePipelining() error {
 	return nil
 }
 
+// commitReadOnlyTxnLocked "commits" a read-only txn. It is equivalent, but
+// cheaper than, sending an EndTransactionRequest. A read-only txn doesn't have
+// a transaction record, so there's no need to send any request to the server.
+// An EndTransactionRequest for a read-only txn is elided by the txnHeartbeat
+// interceptor. However, calling this and short-circuting even earlier is
+// even more efficient (and shows in benchmarks).
+func (tc *TxnCoordSender) commitReadOnlyTxnLocked(
+	ctx context.Context, deadline *hlc.Timestamp,
+) *roachpb.Error {
+	if deadline != nil && deadline.Less(tc.mu.txn.Timestamp) {
+		return roachpb.NewError(
+			roachpb.NewTransactionStatusError("deadline exceeded before transaction finalization"))
+	}
+	tc.cleanupTxnLocked(ctx)
+	return nil
+}
+
 // Send is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
@@ -564,6 +581,10 @@ func (tc *TxnCoordSender) Send(
 	// comes, and unlock again in the defer below.
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
+
+	if ba.IsSingleEndTransactionRequest() && !tc.interceptorAlloc.txnHeartbeat.mu.everSentBeginTxn {
+		return nil, tc.commitReadOnlyTxnLocked(ctx, ba.Requests[0].GetEndTransaction().Deadline)
+	}
 
 	if pErr := tc.maybeRejectClientLocked(ctx, &ba); pErr != nil {
 		return nil, pErr
