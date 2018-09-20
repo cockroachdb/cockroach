@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -2227,8 +2228,8 @@ func TestMergeQueue(t *testing.T) {
 	}
 
 	defaultZone := config.DefaultZoneConfig()
-	zoneTwiceMin := defaultZone
-	zoneTwiceMin.RangeMinBytes *= 2
+	zoneTwiceMin := config.DefaultZoneConfig()
+	*zoneTwiceMin.RangeMinBytes *= 2
 
 	reset := func(t *testing.T) {
 		t.Helper()
@@ -2272,7 +2273,7 @@ func TestMergeQueue(t *testing.T) {
 	t.Run("rhs-replica-threshold", func(t *testing.T) {
 		reset(t)
 
-		bytes := randutil.RandBytes(rng, int(defaultZone.RangeMinBytes))
+		bytes := randutil.RandBytes(rng, int(*defaultZone.RangeMinBytes))
 		if err := store.DB().Put(ctx, "b-key", bytes); err != nil {
 			t.Fatal(err)
 		}
@@ -2287,7 +2288,7 @@ func TestMergeQueue(t *testing.T) {
 	t.Run("lhs-replica-threshold", func(t *testing.T) {
 		reset(t)
 
-		bytes := randutil.RandBytes(rng, int(defaultZone.RangeMinBytes))
+		bytes := randutil.RandBytes(rng, int(*defaultZone.RangeMinBytes))
 		if err := store.DB().Put(ctx, "a-key", bytes); err != nil {
 			t.Fatal(err)
 		}
@@ -2305,8 +2306,8 @@ func TestMergeQueue(t *testing.T) {
 		// The ranges are individually beneath the minimum size threshold, but
 		// together they'll exceed the maximum size threshold.
 		zone := defaultZone
-		zone.RangeMinBytes = 200
-		zone.RangeMaxBytes = 200
+		zone.RangeMinBytes = proto.Int64(200)
+		zone.RangeMaxBytes = proto.Int64(200)
 		setZones(zone)
 		bytes := randutil.RandBytes(rng, 100)
 		if err := store.DB().Put(ctx, "a-key", bytes); err != nil {
@@ -2318,7 +2319,7 @@ func TestMergeQueue(t *testing.T) {
 		store.ForceMergeScanAndProcess()
 		verifyUnmerged(t)
 
-		zone.RangeMaxBytes = 400
+		zone.RangeMaxBytes = proto.Int64(400)
 		setZones(zone)
 		store.ForceMergeScanAndProcess()
 		verifyMerged(t)

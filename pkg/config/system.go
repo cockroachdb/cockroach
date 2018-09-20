@@ -30,11 +30,19 @@ type zoneConfigHook func(
 	sysCfg *SystemConfig, objectID uint32,
 ) (zone *ZoneConfig, placeholder *ZoneConfig, cache bool, err error)
 
+type inheritParentConfigHook func(
+	cfg *ZoneConfig, parent ZoneConfig,
+)
+
 var (
 	// ZoneConfigHook is a function used to lookup a zone config given a table
 	// or database ID.
 	// This is also used by testing to simplify fake configs.
 	ZoneConfigHook zoneConfigHook
+
+	// InheritFromParent is a function that fills in the zone's missing fields
+	// by inheriting them from a parent.
+	InheritFromParent inheritParentConfigHook
 
 	// testingLargestIDHook is a function used to bypass GetLargestObjectID
 	// in tests.
@@ -250,9 +258,17 @@ func (s *SystemConfig) getZoneConfigForKey(id uint32, keySuffix []byte) (*ZoneCo
 	if entry.zone != nil {
 		if entry.placeholder != nil {
 			if subzone := entry.placeholder.GetSubzoneForKeySuffix(keySuffix); subzone != nil {
+				if indexSubzone := entry.placeholder.GetSubzone(subzone.IndexID, ""); indexSubzone != nil {
+					InheritFromParent(&subzone.Config, indexSubzone.Config)
+				}
+				InheritFromParent(&subzone.Config, *entry.zone)
 				return &subzone.Config, nil
 			}
 		} else if subzone := entry.zone.GetSubzoneForKeySuffix(keySuffix); subzone != nil {
+			if indexSubzone := entry.zone.GetSubzone(subzone.IndexID, ""); indexSubzone != nil {
+				InheritFromParent(&subzone.Config, indexSubzone.Config)
+			}
+			InheritFromParent(&subzone.Config, *entry.zone)
 			return &subzone.Config, nil
 		}
 		return entry.zone, nil
@@ -386,7 +402,7 @@ func (s *SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RK
 	return findSplitKey(startID, endID)
 }
 
-// NeedsSplit returns whether the range [startKey, endKey) needs a split due
+// NeedsSplit returns whether the range [startKy, endKey) needs a split due
 // to zone configs.
 func (s *SystemConfig) NeedsSplit(startKey, endKey roachpb.RKey) bool {
 	return len(s.ComputeSplitKey(startKey, endKey)) > 0
