@@ -259,7 +259,7 @@ func (td *tableDeleter) deleteIndex(
 	autoCommit autoCommitOpt,
 	traceKV bool,
 ) (roachpb.Span, error) {
-	if len(idx.Interleave.Ancestors) > 0 || len(idx.InterleavedBy) > 0 {
+	if idx.IsInterleaved() {
 		if log.V(2) {
 			log.Info(ctx, "delete forced to scan: table is interleaved")
 		}
