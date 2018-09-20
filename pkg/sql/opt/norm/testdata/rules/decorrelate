@@ -60,8 +60,7 @@ semi-join (merge)
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── true [type=bool]
 
 opt expect=DecorrelateJoin
 SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM xy WHERE x=k)
@@ -83,8 +82,7 @@ anti-join (merge)
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── true [type=bool]
 
 # --------------------------------------------------
 # TryDecorrelateSelect
@@ -267,8 +265,7 @@ project
       │    │    └── fd: ()-->(6)
       │    └── filters [type=bool, outer=(6), constraints=(/6: [/101 - ]; tight)]
       │         └── x > 100 [type=bool, outer=(6), constraints=(/6: [/101 - ]; tight)]
-      └── filters [type=bool, outer=(1,6), constraints=(/1: [/101 - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── filters [type=bool, outer=(1), constraints=(/1: [/101 - ]; tight)]
            └── k > 100 [type=bool, outer=(1), constraints=(/1: [/101 - ]; tight)]
 
 # Decorrelate with non-apply operator because of multi-level nesting.
@@ -355,8 +352,7 @@ project
  │    │    └── merge-on
  │    │         ├── left ordering: +1
  │    │         ├── right ordering: +6
- │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │              └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │         └── true [type=bool]
  │    └── aggregations [outer=(9)]
  │         └── bool-or [type=bool, outer=(9)]
  │              └── variable: notnull [type=bool, outer=(9)]
@@ -390,8 +386,7 @@ project
       │    │    └── fd: ()-->(6,7)
       │    └── filters [type=bool, outer=(7)]
       │         └── (y + 1) > 10 [type=bool, outer=(7)]
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── true [type=bool]
 
 # Any clause with constant.
 opt expect=(TryDecorrelateProject,TryDecorrelateProjectSelect,TryDecorrelateScalarGroupBy)
@@ -434,8 +429,7 @@ project
  │    │    └── merge-on
  │    │         ├── left ordering: +1
  │    │         ├── right ordering: +6
- │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │              └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │         └── true [type=bool]
  │    └── aggregations [outer=(9)]
  │         └── bool-or [type=bool, outer=(9)]
  │              └── variable: notnull [type=bool, outer=(9)]
@@ -477,8 +471,7 @@ project
  │    │    └── merge-on
  │    │         ├── left ordering: +1
  │    │         ├── right ordering: +6
- │    │         └── filters [type=bool, outer=(1,2,6,7), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │              ├── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │         └── filters [type=bool, outer=(2,7)]
  │    │              └── (i = y) IS NOT false [type=bool, outer=(2,7)]
  │    └── aggregations [outer=(2,9)]
  │         ├── bool-or [type=bool, outer=(9)]
@@ -534,8 +527,7 @@ project
  │    │    └── merge-on
  │    │         ├── left ordering: +1
  │    │         ├── right ordering: +6
- │    │         └── filters [type=bool, outer=(1,6,7,9), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │              ├── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │         └── filters [type=bool, outer=(7,9)]
  │    │              └── (scalar = y) IS NOT false [type=bool, outer=(7,9)]
  │    └── aggregations [outer=(9,10)]
  │         ├── bool-or [type=bool, outer=(10)]
@@ -776,15 +768,13 @@ project
  │    │    │    │    └── merge-on
  │    │    │    │         ├── left ordering: +6
  │    │    │    │         ├── right ordering: +8
- │    │    │    │         └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
- │    │    │    │              └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
+ │    │    │    │         └── true [type=bool]
  │    │    │    └── projections [outer=(6,7,9)]
  │    │    │         └── y + v [type=int, outer=(7,9)]
  │    │    └── merge-on
  │    │         ├── left ordering: +1
  │    │         ├── right ordering: +6
- │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │              └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │         └── true [type=bool]
  │    └── aggregations [outer=(10)]
  │         └── sum [type=decimal, outer=(10)]
  │              └── variable: column10 [type=int, outer=(10)]
@@ -827,13 +817,11 @@ semi-join (merge)
  │    └── merge-on
  │         ├── left ordering: +6
  │         ├── right ordering: +8
- │         └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
- │              └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
+ │         └── true [type=bool]
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── true [type=bool]
 
 # Anti-join as outer.
 opt expect=TryDecorrelateInnerJoin
@@ -868,13 +856,11 @@ anti-join (merge)
  │    └── merge-on
  │         ├── left ordering: +6
  │         ├── right ordering: +8
- │         └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
- │              └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
+ │         └── true [type=bool]
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── true [type=bool]
 
 # Right-join as outer.
 opt expect=TryDecorrelateInnerJoin
@@ -923,13 +909,11 @@ project
       │    │    │    └── merge-on
       │    │    │         ├── left ordering: +6
       │    │    │         ├── right ordering: +8
-      │    │    │         └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
-      │    │    │              └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
+      │    │    │         └── true [type=bool]
       │    │    └── merge-on
       │    │         ├── left ordering: +1
       │    │         ├── right ordering: +6
-      │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      │    │              └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │    │         └── true [type=bool]
       │    └── aggregations [outer=(6)]
       │         └── count [type=int, outer=(6)]
       │              └── variable: x [type=int, outer=(6)]
@@ -968,8 +952,7 @@ semi-join-apply
  │    └── merge-on
  │         ├── left ordering: +6
  │         ├── right ordering: +8
- │         └── filters [type=bool, outer=(1,6,8), constraints=(/1: (/NULL - ]; /6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(1,8), (8)==(1,6), (1)==(6,8)]
- │              ├── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
+ │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │              └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  └── true [type=bool]
 
@@ -1139,8 +1122,7 @@ project
       │    └── merge-on
       │         ├── left ordering: +1
       │         ├── right ordering: +3
-      │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-      │              └── u = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+      │         └── true [type=bool]
       ├── zip
       │    ├── columns: generate_series:5(int)
       │    ├── outer: (3)
@@ -2176,8 +2158,7 @@ semi-join
  │    └── merge-on
  │         ├── left ordering: +6
  │         ├── right ordering: +8
- │         └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
- │              └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
+ │         └── true [type=bool]
  └── filters [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ]), fd=(2)==(9), (9)==(2)]
       └── v = i [type=bool, outer=(2,9), constraints=(/2: (/NULL - ]; /9: (/NULL - ])]
 
@@ -2416,8 +2397,7 @@ project
  │    │    │    └── merge-on
  │    │    │         ├── left ordering: +3
  │    │    │         ├── right ordering: +5
- │    │    │         └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
- │    │    │              └── u = k [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+ │    │    │         └── true [type=bool]
  │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         └── i = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    └── aggregations [outer=(4)]
@@ -2494,8 +2474,7 @@ semi-join (merge)
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── true [type=bool]
 
 # Ensure that EXISTS is hoisted even when it is one of several conjuncts.
 opt expect=HoistSelectExists
@@ -2526,8 +2505,7 @@ semi-join (merge)
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── true [type=bool]
 
 # Multiple Exists operators in same Select list.
 opt expect=HoistSelectExists
@@ -2608,13 +2586,11 @@ semi-join (merge)
  │    └── merge-on
  │         ├── left ordering: +6
  │         ├── right ordering: +8
- │         └── filters [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
- │              └── x = u [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
+ │         └── true [type=bool]
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── true [type=bool]
 
 # --------------------------------------------------
 # HoistSelectNotExists
@@ -2639,8 +2615,7 @@ anti-join (merge)
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── true [type=bool]
 
 # Ensure that NOT EXISTS is hoisted even when one of several conjuncts.
 opt expect=HoistSelectNotExists
@@ -2671,8 +2646,7 @@ anti-join (merge)
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      └── true [type=bool]
 
 # Multiple Not Exists operators in same Select list.
 opt expect=HoistSelectNotExists
@@ -2862,8 +2836,7 @@ project
       │    │    └── merge-on
       │    │         ├── left ordering: +1
       │    │         ├── right ordering: +7
-      │    │         └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-      │    │              └── xy.y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+      │    │         └── true [type=bool]
       │    └── aggregations [outer=(1-5,7)]
       │         ├── const-agg [type=int, outer=(2)]
       │         │    └── variable: i [type=int, outer=(2)]
@@ -2986,8 +2959,7 @@ project
       │    │    └── merge-on
       │    │         ├── left ordering: +1
       │    │         ├── right ordering: +6
-      │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      │    │              └── k = u [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │    │         └── true [type=bool]
       │    └── aggregations [outer=(2-6)]
       │         ├── count [type=int, outer=(6)]
       │         │    └── variable: u [type=int, outer=(6)]
@@ -3094,8 +3066,7 @@ project
       │    │    │    └── merge-on
       │    │    │         ├── left ordering: +1
       │    │    │         ├── right ordering: +6
-      │    │    │         └── filters [type=bool, outer=(1,2,6,7), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      │    │    │              ├── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │    │    │         └── filters [type=bool, outer=(2,7)]
       │    │    │              └── (i = y) IS NOT false [type=bool, outer=(2,7)]
       │    │    └── aggregations [outer=(2-5,8)]
       │    │         ├── bool-or [type=bool, outer=(8)]
@@ -3179,8 +3150,7 @@ project
  │    │    └── merge-on
  │    │         ├── left ordering: +1
  │    │         ├── right ordering: +6
- │    │         └── filters [type=bool, outer=(1,6,7,9), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │              ├── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │         └── filters [type=bool, outer=(7,9)]
  │    │              └── (scalar >= y) IS NOT false [type=bool, outer=(7,9)]
  │    └── aggregations [outer=(4,9,10)]
  │         ├── bool-or [type=bool, outer=(10)]
@@ -3214,8 +3184,7 @@ project
  │    └── merge-on
  │         ├── left ordering: +1
  │         ├── right ordering: +6
- │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │              └── xy.x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │         └── true [type=bool]
  └── projections [outer=(6)]
       └── variable: xy.x [type=int, outer=(6)]
 
@@ -3254,8 +3223,7 @@ project
  │    │    │    └── merge-on
  │    │    │         ├── left ordering: +1
  │    │    │         ├── right ordering: +6
- │    │    │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │    │              └── xy.x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │    │         └── true [type=bool]
  │    │    ├── scan xy
  │    │    │    └── columns: xy.y:15(int)
  │    │    └── filters [type=bool, outer=(1,15), constraints=(/1: (/NULL - ]; /15: (/NULL - ]), fd=(1)==(15), (15)==(1)]
@@ -3831,8 +3799,7 @@ project
       │         └── merge-on
       │              ├── left ordering: +1
       │              ├── right ordering: +3
-      │              └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-      │                   └── u = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+      │              └── true [type=bool]
       ├── zip
       │    ├── columns: generate_series:5(int)
       │    ├── outer: (4)
@@ -3920,8 +3887,7 @@ project
       │         │         └── merge-on
       │         │              ├── left ordering: +1
       │         │              ├── right ordering: +6
-      │         │              └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      │         │                   └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │         │              └── true [type=bool]
       │         ├── scan uv
       │         │    ├── columns: u:8(int!null) v:9(int)
       │         │    ├── key: (8)
@@ -3930,8 +3896,7 @@ project
       │         └── merge-on
       │              ├── left ordering: +1
       │              ├── right ordering: +8
-      │              └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-      │                   └── u = k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+      │              └── true [type=bool]
       ├── zip
       │    ├── columns: generate_series:10(int)
       │    ├── outer: (7,9)
@@ -3974,8 +3939,7 @@ project
  │    │    │         └── merge-on
  │    │    │              ├── left ordering: +1
  │    │    │              ├── right ordering: +6
- │    │    │              └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │    │    │                   └── u = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    │    │              └── true [type=bool]
  │    │    ├── scan xy
  │    │    │    ├── columns: xy.x:9(int!null)
  │    │    │    ├── key: (9)
@@ -3983,8 +3947,7 @@ project
  │    │    └── merge-on
  │    │         ├── left ordering: +1
  │    │         ├── right ordering: +9
- │    │         └── filters [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
- │    │              └── xy.x = k [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ])]
+ │    │         └── true [type=bool]
  │    ├── zip
  │    │    ├── columns: generate_series:8(int) x:11(int) n:12(int)
  │    │    ├── outer: (7,9)

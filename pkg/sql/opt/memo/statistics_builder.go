@@ -1370,6 +1370,9 @@ const (
 func (sb *statisticsBuilder) applyFilter(
 	filter ExprView, ev ExprView, relProps *props.Relational,
 ) (numUnappliedConstraints int, constrainedCols opt.ColSet) {
+	if filter.Operator() == opt.TrueOp {
+		return 0, opt.ColSet{}
+	}
 	constraintSet := filter.Logical().Scalar.Constraints
 	tight := filter.Logical().Scalar.TightConstraints
 

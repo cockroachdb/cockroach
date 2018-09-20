@@ -158,9 +158,7 @@ New expression 1 of 1:
    └── merge-on
         ├── left ordering: +1,+2
         ├── right ordering: +5,+6
-        └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-             ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-             └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+        └── true [type=bool]
 
 ================================================================================
 GenerateLookupJoins
@@ -184,9 +182,7 @@ New expression 1 of 1:
    ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
    ├── scan abc
    │    └── columns: a:1(int) b:2(int) c:3(int)
-   └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+   └── true [type=bool]
 
 ================================================================================
 CommuteJoin
@@ -233,9 +229,7 @@ New expression 1 of 1:
    └── merge-on
         ├── left ordering: +5,+6
         ├── right ordering: +1,+2
-        └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-             ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-             └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+        └── true [type=bool]
 
 ================================================================================
 GenerateLookupJoins
@@ -259,8 +253,6 @@ New expression 1 of 1:
    ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
    ├── scan xyz
    │    └── columns: x:5(int) y:6(int) z:7(int)
-   └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+   └── true [type=bool]
 ----
 ----

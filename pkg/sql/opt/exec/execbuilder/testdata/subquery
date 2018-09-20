@@ -78,7 +78,6 @@ join       ·               ·            (a)  ·
  │         type            semi         ·    ·
  │         equality        (a) = (a)    ·    ·
  │         mergeJoinOrder  +"(a=a)"     ·    ·
- │         pred            a = a        ·    ·
  ├── scan  ·               ·            (a)  +a
  │         table           abc@primary  ·    ·
  │         spans           ALL          ·    ·
@@ -156,7 +155,6 @@ join       ·               ·          (x, y)  ·
  │         type            semi       ·       ·
  │         equality        (x) = (x)  ·       ·
  │         mergeJoinOrder  +"(x=x)"   ·       ·
- │         pred            x = x      ·       ·
  ├── scan  ·               ·          (x, y)  +x
  │         table           a@primary  ·       ·
  │         spans           ALL        ·       ·
@@ -184,7 +182,6 @@ join       ·               ·          (x, y)  ·
  │         type            anti       ·       ·
  │         equality        (x) = (x)  ·       ·
  │         mergeJoinOrder  +"(x=x)"   ·       ·
- │         pred            x = x      ·       ·
  ├── scan  ·               ·          (x, y)  +x
  │         table           a@primary  ·       ·
  │         spans           ALL        ·       ·
