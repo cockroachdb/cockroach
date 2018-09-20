@@ -17,6 +17,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/pkg/errors"
 
@@ -509,9 +510,14 @@ func (txn *Txn) Run(ctx context.Context, b *Batch) error {
 }
 
 func (txn *Txn) commit(ctx context.Context) error {
-	var ba roachpb.BatchRequest
-	ba.Add(endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger))
-	_, pErr := txn.Send(ctx, ba)
+
+	ba := getCommitReq(txn.deadline(), txn.systemConfigTrigger)
+
+	// !!!
+	// var ba roachpb.BatchRequest
+	// ba.Add(endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger))
+	_, pErr := txn.Send(ctx, *ba)
+	commitReqPool.Put(ba)
 	if pErr == nil {
 		for _, t := range txn.commitTriggers {
 			t(ctx)
@@ -532,6 +538,31 @@ func (txn *Txn) CleanupOnError(ctx context.Context, err error) {
 			log.Warningf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
 		}
 	}
+}
+
+var commitReqPool = sync.Pool{
+	New: func() interface{} {
+		ba := new(roachpb.BatchRequest)
+		ba.Add(&roachpb.EndTransactionRequest{Commit: true})
+		return ba
+	},
+}
+
+func getCommitReq(deadline *hlc.Timestamp, hasTrigger bool) *roachpb.BatchRequest {
+	ba := commitReqPool.Get().(*roachpb.BatchRequest)
+	ba.Requests = ba.Requests[:1]
+	etReq := ba.Requests[0].GetEndTransaction()
+	etReq.Reset()
+	etReq.Commit = true
+	etReq.Deadline = deadline
+	if hasTrigger {
+		etReq.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
+			ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{
+				SystemConfigSpan: true,
+			},
+		}
+	}
+	return ba
 }
 
 // Commit is the same as CommitOrCleanup but will not attempt to clean
