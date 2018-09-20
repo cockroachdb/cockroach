@@ -29,14 +29,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -855,7 +860,12 @@ CREATE TABLE t.foo (v INT);
 func TestTxnObeysTableModificationTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecQuickly: true,
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
 	if _, err := sqlDB.Exec(`
@@ -863,6 +873,10 @@ CREATE DATABASE t;
 CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 INSERT INTO t.kv VALUES ('a', 'b');
 `); err != nil {
+		t.Fatal(err)
+	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -959,11 +973,11 @@ INSERT INTO t.kv VALUES ('a', 'b');
 
 	// Test the deadline exceeded error with a CREATE/DROP INDEX.
 	schemaChanges := []struct{ sql string }{
-		{`CREATE INDEX foo on t.kv (v)`},
-		{`DROP INDEX t.kv@foo`},
+		{`CREATE INDEX foo ON t.public.kv (v)`},
+		{`DROP INDEX t.public.kv@foo`},
 	}
 
-	for _, change := range schemaChanges {
+	for i, change := range schemaChanges {
 
 		txWrite, err := sqlDB.Begin()
 		if err != nil {
@@ -978,6 +992,15 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		if _, err := sqlDB.Exec(change.sql); err != nil {
 			t.Fatal(err)
 		}
+		testutils.SucceedsSoon(t, func() error {
+			return jobutils.VerifySystemJob(t, sqlutils.MakeSQLRunner(sqlDB), i+1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+				Username:    security.RootUser,
+				Description: change.sql,
+				DescriptorIDs: sqlbase.IDs{
+					tableDesc.ID,
+				},
+			})
+		})
 
 		// This INSERT will cause the transaction to be pushed transparently,
 		// which will be detected when we attempt to Commit() below only because

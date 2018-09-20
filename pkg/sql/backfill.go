@@ -113,9 +113,6 @@ func (sc *SchemaChanger) runBackfill(
 	// mutations. Collect the elements that are part of the mutation.
 	var droppedIndexDescs []sqlbase.IndexDescriptor
 	var addedIndexDescs []sqlbase.IndexDescriptor
-	// Indexes within the Mutations slice for checkpointing.
-	mutationSentinel := -1
-	var droppedIndexMutationIdx int
 
 	var tableDesc *sqlbase.TableDescriptor
 	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -135,7 +132,7 @@ func (sc *SchemaChanger) runBackfill(
 		tableDesc.Name, tableDesc.Version, sc.mutationID)
 
 	needColumnBackfill := false
-	for i, m := range tableDesc.Mutations {
+	for _, m := range tableDesc.Mutations {
 		if m.MutationID != sc.mutationID {
 			break
 		}
@@ -157,9 +154,8 @@ func (sc *SchemaChanger) runBackfill(
 			case *sqlbase.DescriptorMutation_Column:
 				needColumnBackfill = true
 			case *sqlbase.DescriptorMutation_Index:
-				droppedIndexDescs = append(droppedIndexDescs, *t.Index)
-				if droppedIndexMutationIdx == mutationSentinel {
-					droppedIndexMutationIdx = i
+				if !sc.canClearRangeForDrop(t.Index) {
+					droppedIndexDescs = append(droppedIndexDescs, *t.Index)
 				}
 			default:
 				return errors.Errorf("unsupported mutation: %+v", m)
@@ -169,18 +165,9 @@ func (sc *SchemaChanger) runBackfill(
 
 	// First drop indexes, then add/drop columns, and only then add indexes.
 
-	// Drop indexes.
+	// Drop indexes not to be removed by `ClearRange`.
 	if len(droppedIndexDescs) > 0 {
-		if err := sc.truncateIndexes(
-			ctx, lease, version, droppedIndexDescs, droppedIndexMutationIdx,
-		); err != nil {
-			return err
-		}
-
-		// Remove index zone configs.
-		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			return removeIndexZoneConfigs(ctx, txn, sc.execCfg, tableDesc.ID, droppedIndexDescs)
-		}); err != nil {
+		if err := sc.truncateIndexes(ctx, lease, version, droppedIndexDescs); err != nil {
 			return err
 		}
 	}
@@ -221,7 +208,6 @@ func (sc *SchemaChanger) truncateIndexes(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 	dropped []sqlbase.IndexDescriptor,
-	mutationIdx int,
 ) error {
 	chunkSize := sc.getChunkSize(indexTruncateChunkSize)
 	if sc.testingKnobs.BackfillChunkSize > 0 {
@@ -269,13 +255,23 @@ func (sc *SchemaChanger) truncateIndexes(
 					return err
 				}
 				resume, err = td.deleteIndex(
-					ctx, &desc, resumeAt, chunkSize, noAutoCommit, false, /* traceKV */
+					ctx,
+					&desc,
+					resumeAt,
+					chunkSize,
+					noAutoCommit,
+					false, /* traceKV */
 				)
 				done = resume.Key == nil
 				return err
 			}); err != nil {
 				return err
 			}
+		}
+		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			return removeIndexZoneConfigs(ctx, txn, sc.execCfg, sc.tableID, dropped)
+		}); err != nil {
+			return err
 		}
 	}
 	return nil

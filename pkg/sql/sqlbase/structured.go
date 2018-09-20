@@ -141,6 +141,11 @@ func (dir IndexDescriptor_Direction) ToEncodingDirection() (encoding.Direction, 
 // descriptor could not be found with the given id.
 var ErrDescriptorNotFound = errors.New("descriptor not found")
 
+// ErrIndexGCMutationsList is returned by FindIndexByID to signal that the
+// index with the given ID does not have a descriptor and is in the garbage
+// collected mutations list.
+var ErrIndexGCMutationsList = errors.New("index in GC mutations list")
+
 // GetDatabaseDescFromID retrieves the database descriptor for the database
 // ID passed in using an existing txn. Returns an error if the descriptor
 // doesn't exist or if it exists and is not a database.
@@ -341,6 +346,11 @@ func (desc *IndexDescriptor) SQLString(tableName *tree.TableName) string {
 		f.WriteByte(')')
 	}
 	return f.CloseAndGetString()
+}
+
+// IsInterleaved returns whether the index is interleaved or not.
+func (desc *IndexDescriptor) IsInterleaved() bool {
+	return len(desc.Interleave.Ancestors) > 0 || len(desc.InterleavedBy) > 0
 }
 
 // SetID implements the DescriptorProto interface.
@@ -1944,6 +1954,11 @@ func (desc *TableDescriptor) FindIndexByID(id IndexID) (*IndexDescriptor, error)
 			return idx, nil
 		}
 	}
+	for _, m := range desc.GCMutations {
+		if m.IndexID == id {
+			return nil, ErrIndexGCMutationsList
+		}
+	}
 	return nil, fmt.Errorf("index-id \"%d\" does not exist", id)
 }
 
@@ -1987,10 +2002,7 @@ func (desc *TableDescriptor) GetIndexMutationCapabilities(id IndexID) (bool, boo
 // another table's data.
 func (desc *TableDescriptor) IsInterleaved() bool {
 	for _, index := range desc.AllNonDropIndexes() {
-		if len(index.Interleave.Ancestors) > 0 {
-			return true
-		}
-		if len(index.InterleavedBy) > 0 {
+		if index.IsInterleaved() {
 			return true
 		}
 	}
