@@ -3193,7 +3193,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		default:
 			t.Fatalf("unexpected error type %T: %s", pErr.GetDetail(), pErr)
 		}
-	case <-time.After(5 * time.Second):
+	case <-time.After(45 * time.Second):
 		t.Fatal("did not get expected error")
 	}
 
