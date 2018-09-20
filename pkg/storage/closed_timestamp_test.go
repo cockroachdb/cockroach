@@ -16,6 +16,7 @@ package storage_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -35,7 +37,13 @@ import (
 
 func TestClosedTimestampCanServe(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/28607")
+
+	if util.RaceEnabled {
+		// Limiting how long transactions can run does not work
+		// well with race unless we're extremely lenient, which
+		// drives up the test duration.
+		t.Skip("skipping under race")
+	}
 
 	ctx := context.Background()
 	const numNodes = 3
@@ -47,13 +55,16 @@ func TestClosedTimestampCanServe(t *testing.T) {
 	// Every 0.1s=100ms, try close out a timestamp ~300ms in the past.
 	// We don't want to be more aggressive than that since it's also
 	// a limit on how long transactions can run.
-	if _, err := db0.Exec(`
-SET CLUSTER SETTING kv.closed_timestamp.target_duration = '300ms';
-SET CLUSTER SETTING kv.closed_timestamp.close_fraction = 0.1/0.3;
+	targetDuration := 300 * time.Millisecond
+	closeFraction := 0.3
+
+	if _, err := db0.Exec(fmt.Sprintf(`
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '%s';
+SET CLUSTER SETTING kv.closed_timestamp.close_fraction = %.3f;
 SET CLUSTER SETTING kv.closed_timestamp.follower_reads_enabled = true;
 CREATE DATABASE cttest;
 CREATE TABLE cttest.kv (id INT PRIMARY KEY, value STRING);
-`); err != nil {
+`, targetDuration, closeFraction)); err != nil {
 		t.Fatal(err)
 	}
 
