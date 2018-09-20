@@ -1,2 +1,1 @@
 *.pb.* -diff
-*.golden -diff

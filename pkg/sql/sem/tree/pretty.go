@@ -16,6 +16,7 @@ package tree
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
@@ -777,7 +778,7 @@ func (node *OnJoinCond) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *Insert) doc(p *PrettyCfg) pretty.Doc {
-	items := make([]pretty.RLTableRow, 8)
+	items := make([]pretty.RLTableRow, 0, 8)
 	items = append(items, node.With.docRow(p))
 	kw := "INSERT"
 	if node.OnConflict.IsUpsertAlias() {
@@ -1183,6 +1184,46 @@ func (node *PartitionBy) doc(p *PrettyCfg) pretty.Doc {
 	)
 }
 
+func (node *ListPartition) doc(p *PrettyCfg) pretty.Doc {
+	d := pretty.Fold(pretty.ConcatSpace,
+		pretty.Text(`PARTITION`),
+		p.Doc(&node.Name),
+		pretty.Text(`VALUES IN (`),
+	)
+	d = pretty.BracketDoc(
+		d,
+		p.Doc(&node.Exprs),
+		pretty.Text(")"),
+	)
+	if node.Subpartition != nil {
+		d = p.nestUnder(d, p.Doc(node.Subpartition))
+	}
+	return d
+}
+
+func (node *RangePartition) doc(p *PrettyCfg) pretty.Doc {
+	d := pretty.Fold(pretty.ConcatSpace,
+		pretty.Text(`PARTITION`),
+		p.Doc(&node.Name),
+		pretty.Text(`VALUES`),
+	)
+	from := pretty.Bracket(
+		"FROM (",
+		p.Doc(&node.From),
+		")",
+	)
+	to := pretty.Bracket(
+		"TO (",
+		p.Doc(&node.To),
+		")",
+	)
+	d = p.nestUnder(d, pretty.Group(pretty.Stack(from, to)))
+	if node.Subpartition != nil {
+		d = p.nestUnder(d, p.Doc(node.Subpartition))
+	}
+	return d
+}
+
 func (node *InterleaveDef) doc(p *PrettyCfg) pretty.Doc {
 	title := pretty.Fold(
 		pretty.ConcatSpace,
@@ -1195,4 +1236,345 @@ func (node *InterleaveDef) doc(p *PrettyCfg) pretty.Doc {
 		d = pretty.ConcatSpace(d, pretty.Text(node.DropBehavior.String()))
 	}
 	return d
+}
+
+func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
+	d := pretty.Text("CREATE")
+	if node.Unique {
+		d = pretty.ConcatSpace(d, pretty.Text("UNIQUE"))
+	}
+	if node.Inverted {
+		d = pretty.ConcatSpace(d, pretty.Text("INVERTED"))
+	}
+	d = pretty.ConcatSpace(d, pretty.Text("INDEX"))
+	if node.IfNotExists {
+		d = pretty.ConcatSpace(d, pretty.Text("IF NOT EXISTS"))
+	}
+	if node.Name != "" {
+		d = pretty.ConcatSpace(d, p.Doc(&node.Name))
+	}
+	docs := []pretty.Doc{
+		pretty.Fold(
+			pretty.ConcatSpace,
+			d,
+			pretty.Text("ON"),
+			p.Doc(&node.Table),
+			pretty.Bracket("(", p.Doc(&node.Columns), ")")),
+	}
+
+	if len(node.Storing) > 0 {
+		docs = append(docs, pretty.Bracket(
+			"STORING (",
+			p.Doc(&node.Storing),
+			")",
+		))
+	}
+	if node.Interleave != nil {
+		docs = append(docs, p.Doc(node.Interleave))
+	}
+	if node.PartitionBy != nil {
+		docs = append(docs, p.Doc(node.PartitionBy))
+	}
+	return pretty.Group(pretty.Stack(docs...))
+}
+
+func (node *ColumnTableDef) doc(p *PrettyCfg) pretty.Doc {
+	// TODO(knz): add a LLTable prettifier so types are aligned under each other.
+	docs := make([]pretty.Doc, 0, 12)
+	docs = append(docs, pretty.Text(coltypes.ColTypeAsString(node.Type)))
+	if node.Nullable.Nullability != SilentNull && node.Nullable.ConstraintName != "" {
+		docs = append(docs, pretty.ConcatSpace(
+			pretty.Text("CONSTRAINT"),
+			p.Doc(&node.Nullable.ConstraintName),
+		))
+	}
+	switch node.Nullable.Nullability {
+	case Null:
+		docs = append(docs, pretty.Text("NULL"))
+	case NotNull:
+		docs = append(docs, pretty.Text("NOT NULL"))
+	}
+	if node.PrimaryKey || node.Unique {
+		if node.UniqueConstraintName != "" {
+			docs = append(docs, pretty.ConcatSpace(
+				pretty.Text("CONSTRAINT"),
+				p.Doc(&node.UniqueConstraintName),
+			))
+		}
+		if node.PrimaryKey {
+			docs = append(docs, pretty.Text("PRIMARY KEY"))
+		} else if node.Unique {
+			docs = append(docs, pretty.Text("UNIQUE"))
+		}
+	}
+	if node.HasDefaultExpr() {
+		if node.DefaultExpr.ConstraintName != "" {
+			docs = append(docs, pretty.ConcatSpace(
+				pretty.Text("CONSTRAINT"),
+				p.Doc(&node.DefaultExpr.ConstraintName),
+			))
+		}
+		docs = append(docs, pretty.ConcatSpace(
+			pretty.Text("DEFAULT"),
+			p.Doc(node.DefaultExpr.Expr),
+		))
+	}
+	for _, checkExpr := range node.CheckExprs {
+		d := pretty.Bracket(
+			"CHECK (",
+			p.Doc(checkExpr.Expr),
+			")",
+		)
+		if checkExpr.ConstraintName != "" {
+			d = p.nestUnder(
+				pretty.ConcatSpace(
+					pretty.Text("CONSTRAINT"),
+					p.Doc(&checkExpr.ConstraintName),
+				),
+				d,
+			)
+		}
+		docs = append(docs, d)
+	}
+	if node.HasFKConstraint() {
+		d := pretty.Nil
+		if node.References.ConstraintName != "" {
+			d = pretty.Fold(pretty.ConcatSpace,
+				d,
+				pretty.Text("CONSTRAINT"),
+				p.Doc(&node.References.ConstraintName),
+			)
+		}
+		d = pretty.Fold(pretty.ConcatSpace,
+			d,
+			pretty.Text("REFERENCES"),
+			p.Doc(&node.References.Table),
+		)
+		if node.References.Col != "" {
+			d = pretty.ConcatSpace(
+				d,
+				pretty.Bracket(
+					"(",
+					p.Doc(&node.References.Col),
+					")",
+				),
+			)
+		}
+		if ref := p.Doc(&node.References.Actions); ref != pretty.Nil {
+			d = p.nestUnder(d, ref)
+		}
+		docs = append(docs, d)
+	}
+	if node.IsComputed() {
+		docs = append(docs, pretty.Bracket(
+			"AS (",
+			p.Doc(node.Computed.Expr),
+			") STORED",
+		))
+	}
+	if node.HasColumnFamily() {
+		d := pretty.Nil
+		if node.Family.Create {
+			d = pretty.ConcatSpace(d, pretty.Text("CREATE"))
+		}
+		if node.Family.IfNotExists {
+			d = pretty.ConcatSpace(d, pretty.Text("IF NOT EXISTS"))
+		}
+		d = pretty.ConcatSpace(d, pretty.Text("FAMILY"))
+		if len(node.Family.Name) > 0 {
+			d = pretty.ConcatSpace(d, p.Doc(&node.Family.Name))
+		}
+		docs = append(docs, d)
+	}
+	return p.nestUnder(
+		p.Doc(&node.Name),
+		pretty.Stack(docs...),
+	)
+}
+
+func (node *CheckConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
+	d := pretty.Bracket(
+		"CHECK (",
+		p.Doc(node.Expr),
+		")",
+	)
+	if node.Name != "" {
+		d = p.nestUnder(
+			pretty.ConcatSpace(
+				pretty.Text("CONSTRAINT"),
+				p.Doc(&node.Name),
+			),
+			d,
+		)
+	}
+	return d
+}
+
+func (node *ReferenceActions) doc(p *PrettyCfg) pretty.Doc {
+	var docs []pretty.Doc
+	if node.Delete != NoAction {
+		docs = append(docs, pretty.ConcatSpace(
+			pretty.Text("ON DELETE"),
+			pretty.Text(node.Delete.String()),
+		))
+	}
+	if node.Update != NoAction {
+		docs = append(docs, pretty.ConcatSpace(
+			pretty.Text("ON UPDATE"),
+			pretty.Text(node.Update.String()),
+		))
+	}
+	return pretty.Fold(pretty.ConcatSpace, docs...)
+}
+
+func (node *Backup) doc(p *PrettyCfg) pretty.Doc {
+	items := make([]pretty.RLTableRow, 0, 6)
+
+	items = append(items, p.row("BACKUP", pretty.Nil))
+	items = append(items, node.Targets.docRow(p))
+	items = append(items, p.row("TO", p.Doc(node.To)))
+
+	if node.AsOf.Expr != nil {
+		items = append(items, node.AsOf.docRow(p))
+	}
+	if node.IncrementalFrom != nil {
+		items = append(items, p.row("INCREMENTAL FROM", p.Doc(&node.IncrementalFrom)))
+	}
+	if node.Options != nil {
+		items = append(items, p.row("WITH", p.Doc(&node.Options)))
+	}
+	return p.rlTable(items...)
+}
+
+func (node *Restore) doc(p *PrettyCfg) pretty.Doc {
+	items := make([]pretty.RLTableRow, 0, 5)
+
+	items = append(items, p.row("RESTORE", pretty.Nil))
+	items = append(items, node.Targets.docRow(p))
+	items = append(items, p.row("FROM", p.Doc(&node.From)))
+
+	if node.AsOf.Expr != nil {
+		items = append(items, node.AsOf.docRow(p))
+	}
+	if node.Options != nil {
+		items = append(items, p.row("WITH", p.Doc(&node.Options)))
+	}
+	return p.rlTable(items...)
+}
+
+func (node *TargetList) doc(p *PrettyCfg) pretty.Doc {
+	return p.unrow(node.docRow(p))
+}
+
+func (node *TargetList) docRow(p *PrettyCfg) pretty.RLTableRow {
+	if node.Databases != nil {
+		return p.row("DATABASE", p.Doc(&node.Databases))
+	}
+	return p.row("TABLE", p.Doc(&node.Tables))
+}
+
+func (node *AsOfClause) doc(p *PrettyCfg) pretty.Doc {
+	return p.unrow(node.docRow(p))
+}
+
+func (node *AsOfClause) docRow(p *PrettyCfg) pretty.RLTableRow {
+	return p.row("AS OF SYSTEM TIME", p.Doc(node.Expr))
+}
+
+func (node *KVOptions) doc(p *PrettyCfg) pretty.Doc {
+	var opts []pretty.Doc
+	for _, opt := range *node {
+		d := p.Doc(&opt.Key)
+		if opt.Value != nil {
+			d = pretty.Fold(pretty.ConcatSpace,
+				d,
+				pretty.Text("="),
+				p.Doc(opt.Value),
+			)
+		}
+		opts = append(opts, d)
+	}
+	return pretty.Join(",", opts...)
+}
+
+func (node *Import) doc(p *PrettyCfg) pretty.Doc {
+	items := make([]pretty.RLTableRow, 0, 5)
+	items = append(items, p.row("IMPORT", pretty.Nil))
+
+	if node.Bundle {
+		if node.Table.TableNameReference != nil {
+			items = append(items, p.row("TABLE", p.Doc(&node.Table)))
+			items = append(items, p.row("FROM", pretty.Nil))
+		}
+		items = append(items, p.row(node.FileFormat, p.Doc(&node.Files)))
+	} else {
+		if node.CreateFile != nil {
+			items = append(items, p.row("TABLE", p.Doc(&node.Table)))
+			items = append(items, p.row("CREATE USING", p.Doc(node.CreateFile)))
+		} else {
+			table := pretty.BracketDoc(
+				pretty.ConcatSpace(p.Doc(&node.Table), pretty.Text("(")),
+				p.Doc(&node.CreateDefs),
+				pretty.Text(")"),
+			)
+			items = append(items, p.row("TABLE", table))
+		}
+
+		data := pretty.Bracket(
+			"DATA (",
+			p.Doc(&node.Files),
+			")",
+		)
+		items = append(items, p.row(node.FileFormat, data))
+	}
+	if node.Options != nil {
+		items = append(items, p.row("WITH", p.Doc(&node.Options)))
+	}
+	return p.rlTable(items...)
+}
+
+func (node *Export) doc(p *PrettyCfg) pretty.Doc {
+	items := make([]pretty.RLTableRow, 0, 5)
+	items = append(items, p.row("EXPORT", pretty.Nil))
+	items = append(items, p.row("INTO "+node.FileFormat, p.Doc(node.File)))
+	if node.Options != nil {
+		items = append(items, p.row("WITH", p.Doc(&node.Options)))
+	}
+	items = append(items, p.row("FROM", p.Doc(node.Query)))
+	return p.rlTable(items...)
+}
+
+func (node *Explain) doc(p *PrettyCfg) pretty.Doc {
+	d := pretty.Text("EXPLAIN")
+	if len(node.Options) > 0 {
+		var opts []pretty.Doc
+		for _, opt := range node.Options {
+			upperCaseOpt := strings.ToUpper(opt)
+			if upperCaseOpt == "ANALYZE" {
+				d = pretty.ConcatSpace(d, pretty.Text("ANALYZE"))
+			} else {
+				opts = append(opts, pretty.Text(upperCaseOpt))
+			}
+		}
+		d = pretty.ConcatSpace(
+			d,
+			pretty.Bracket("(", pretty.Join(",", opts...), ")"),
+		)
+	}
+	return p.nestUnder(d, p.Doc(node.Statement))
+}
+
+func (node *NotExpr) doc(p *PrettyCfg) pretty.Doc {
+	return p.nestUnder(
+		pretty.Text("NOT"),
+		p.exprDocWithParen(node.Expr),
+	)
+}
+
+func (node *CoalesceExpr) doc(p *PrettyCfg) pretty.Doc {
+	return pretty.Bracket(
+		node.Name+"(",
+		p.Doc(&node.Exprs),
+		")",
+	)
 }

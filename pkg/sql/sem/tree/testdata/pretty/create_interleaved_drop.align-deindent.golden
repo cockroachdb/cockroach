@@ -3,6 +3,17 @@
 1:
 -
 CREATE TABLE t (
+	a
+		INT
+)
+INTERLEAVE IN PARENT p2 (
+	i,
+	test
+) RESTRICT
+
+9:
+---------
+CREATE TABLE t (
 	a INT
 )
 INTERLEAVE IN PARENT p2 (
