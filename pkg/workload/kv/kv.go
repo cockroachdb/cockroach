@@ -58,8 +58,17 @@ func init() {
 
 var kvMeta = workload.Meta{
 	Name: `kv`,
-	Description: `KV reads and writes to keys spread (by default, uniformly` +
-		` at random) across the cluster`,
+	Description: `
+	KV reads and writes to keys spread (by default, uniformly	at random) across
+	the cluster.
+	--concurrency workers alternate between doing selects and upserts (according
+	to a --read-percent ratio). Each select/upsert reads/writes a batch of --batch
+	rows. The write keys are randomly generated in a deterministic fashion (or
+	sequentially if --sequential is specified). Reads select a random batch of ids
+	out of the ones previously written.
+	--write-seq can be used to incorporate data produced by a previous run into
+	the current run.
+	`,
 	Version: `1.0.0`,
 	New: func() workload.Generator {
 		g := &kv{}
@@ -67,15 +76,24 @@ var kvMeta = workload.Meta{
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`batch`: {RuntimeOnly: true},
 		}
-		g.flags.IntVar(&g.batchSize, `batch`, 1, `Number of blocks to read/insert in a single SQL statement`)
-		g.flags.IntVar(&g.minBlockSizeBytes, `min-block-bytes`, 1, `Minimum amount of raw data written with each insertion`)
-		g.flags.IntVar(&g.maxBlockSizeBytes, `max-block-bytes`, 2, `Maximum amount of raw data written with each insertion`)
-		g.flags.Int64Var(&g.cycleLength, `cycle-length`, math.MaxInt64, `Number of keys repeatedly accessed by each writer`)
-		g.flags.IntVar(&g.readPercent, `read-percent`, 0, `Percent (0-100) of operations that are reads of existing keys`)
-		g.flags.Int64Var(&g.writeSeq, `write-seq`, 0, `Initial write sequence value.`)
+		g.flags.IntVar(&g.batchSize, `batch`, 1,
+			`Number of blocks to read/insert in a single SQL statement.`)
+		g.flags.IntVar(&g.minBlockSizeBytes, `min-block-bytes`, 1,
+			`Minimum amount of raw data written with each insertion.`)
+		g.flags.IntVar(&g.maxBlockSizeBytes, `max-block-bytes`, 2,
+			`Maximum amount of raw data written with each insertion`)
+		g.flags.Int64Var(&g.cycleLength, `cycle-length`, math.MaxInt64,
+			`Number of keys repeatedly accessed by each writer through upserts.`)
+		g.flags.IntVar(&g.readPercent, `read-percent`, 0,
+			`Percent (0-100) of operations that are reads of existing keys.`)
+		g.flags.Int64Var(&g.writeSeq, `write-seq`, 0,
+			`Initial write sequence value. Can be used to use the data produced by a previous run. `+
+				`Be careful to not mix a --sequential run with a random one.`)
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
-		g.flags.BoolVar(&g.sequential, `sequential`, false, `Pick keys sequentially instead of randomly.`)
-		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
+		g.flags.BoolVar(&g.sequential, `sequential`, false,
+			`Pick keys sequentially instead of randomly.`)
+		g.flags.IntVar(&g.splits, `splits`, 0,
+			`Number of splits to perform before starting normal operations.`)
 		g.flags.BoolVar(&g.useOpt, `use-opt`, true, `Use cost-based optimizer`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
