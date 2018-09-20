@@ -362,6 +362,13 @@ func (r fkResolver) LookupSchema(
 	return false, nil, errSchemaResolver
 }
 
+// Implements the sql.SchemaResolver interface.
+func (r fkResolver) LookupTableByID(
+	ctx context.Context, id sqlbase.ID,
+) (sqlbase.TableLookup, error) {
+	return sqlbase.TableLookup{}, errSchemaResolver
+}
+
 const csvDatabaseName = "csv"
 
 func finalizeCSVBackup(
