@@ -515,3 +515,10 @@ var aggOpLookup = map[string]opt.Operator{
 	"json_agg":   opt.JsonAggOp,
 	"jsonb_agg":  opt.JsonbAggOp,
 }
+
+func newGroupingError(name *tree.Name) error {
+	return pgerror.NewErrorf(pgerror.CodeGroupingError,
+		"column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function",
+		tree.ErrString(name),
+	)
+}
