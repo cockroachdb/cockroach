@@ -62,11 +62,11 @@ func registerDrop(r *registry) {
 					stmt = fmt.Sprintf(stmtStr, "", "=")
 				}
 				t.WorkerStatus(stmt)
-				_, err := db.ExecContext(ctx, stmt)
+				_, err := db.ExecContext(ctx, stmt, args...)
 				if err != nil && maybeExperimental && strings.Contains(err.Error(), "syntax error") {
 					stmt = fmt.Sprintf(stmtStr, "EXPERIMENTAL", "")
 					t.WorkerStatus(stmt)
-					_, err = db.ExecContext(ctx, stmt)
+					_, err = db.ExecContext(ctx, stmt, args...)
 				}
 				if err != nil {
 					t.Fatal(err)
