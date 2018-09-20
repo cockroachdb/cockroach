@@ -210,7 +210,7 @@ func (c *CustomFuncs) AnyType() memo.PrivateID {
 func (c *CustomFuncs) CanConstructBinary(op opt.Operator, left, right memo.GroupID) bool {
 	leftType := c.LookupScalar(left).Type
 	rightType := c.LookupScalar(right).Type
-	return memo.BinaryOverloadExists(opt.MinusOp, rightType, leftType)
+	return memo.BinaryOverloadExists(op, rightType, leftType)
 }
 
 // ----------------------------------------------------------------------
@@ -1146,9 +1146,8 @@ func (c *CustomFuncs) FoldArray(elems memo.ListID, typ memo.PrivateID) memo.Grou
 	return c.f.ConstructConst(c.f.InternDatum(a))
 }
 
-// FoldSucceeded returns true if the result of a constant-folding operation
-// is a valid memo group.
-func (c *CustomFuncs) FoldSucceeded(result memo.GroupID) bool {
+// Succeeded returns true if the result of an operation is a valid memo group.
+func (c *CustomFuncs) Succeeded(result memo.GroupID) bool {
 	return result != 0
 }
 
@@ -1197,6 +1196,82 @@ func (c *CustomFuncs) FoldUnary(op opt.Operator, input memo.GroupID) memo.GroupI
 		return 0
 	}
 	return c.f.ConstructConstVal(result)
+}
+
+// monotonicConversion returns true if conversion of a value from FROM to
+// TO is monotonic.
+// That is, if a and b are values of type from, then
+//
+//   a <= b implies a::TO <= b::TO
+//
+// Note that the stronger property,
+//
+//   a < b implies a::TO < b::TO
+//
+// is not required.
+// TODO(justin): fill this out with the complete set of such conversions.
+func monotonicConversion(from, to coltypes.T) bool {
+	if from == coltypes.Timestamp ||
+		from == coltypes.TimestampWithTZ ||
+		from == coltypes.Date {
+		return to == coltypes.Timestamp ||
+			to == coltypes.TimestampWithTZ ||
+			to == coltypes.Date
+	}
+
+	if from == coltypes.Int ||
+		from == coltypes.Float8 ||
+		from == coltypes.Decimal {
+		return to == coltypes.Int ||
+			to == coltypes.Float8 ||
+			to == coltypes.Decimal
+	}
+
+	return false
+}
+
+// UnifyComparison attempts to convert right to the type of left, if such a
+// conversion would be non-lossy and monotonic.
+func (c *CustomFuncs) UnifyComparison(left, right memo.GroupID) memo.GroupID {
+	desiredType := c.LookupScalar(left).Type
+	originalType := c.LookupScalar(right).Type
+
+	// Don't bother if they're already the same.
+	if desiredType.Equivalent(originalType) {
+		return 0
+	}
+
+	desiredColType, err := coltypes.DatumTypeToColumnType(desiredType)
+	if err != nil {
+		return 0
+	}
+
+	originalColType, err := coltypes.DatumTypeToColumnType(originalType)
+	if err != nil {
+		return 0
+	}
+
+	if !monotonicConversion(originalColType, desiredColType) {
+		return 0
+	}
+
+	rightDatum := c.ExtractConstValue(right).(tree.Datum)
+
+	convertedRightDatum, err := tree.PerformCast(c.f.evalCtx, rightDatum, desiredColType)
+	if err != nil {
+		return 0
+	}
+
+	convertedBack, err := tree.PerformCast(c.f.evalCtx, convertedRightDatum, originalColType)
+	if err != nil {
+		return 0
+	}
+
+	if convertedBack.Compare(c.f.evalCtx, rightDatum) != 0 {
+		return 0
+	}
+
+	return c.f.ConstructConst(c.f.mem.InternDatum(convertedRightDatum))
 }
 
 // FoldComparison evaluates a comparison expression with constant inputs. It

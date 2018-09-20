@@ -190,7 +190,7 @@ select
            │    └── variable: y [type=int, outer=(2)]
            └── const: 7 [type=int]
 
-# Verify that we ignore mixed-type comparisons.
+# Verify that we ignore some mixed-type comparisons.
 opt
 SELECT * FROM a WHERE x > 1.5
 ----
@@ -205,11 +205,12 @@ select
            ├── variable: x [type=int, outer=(1)]
            └── const: 1.5 [type=decimal]
 
+# This is a safe mixed-type comparison.
 opt
 SELECT * FROM kuv WHERE u > 1::INT
 ----
 select
- ├── columns: k:1(int!null) u:2(float) v:3(string)
+ ├── columns: k:1(int!null) u:2(float!null) v:3(string)
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── prune: (1,3)
@@ -220,10 +221,10 @@ select
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+1)
- └── filters [type=bool, outer=(2)]
-      └── gt [type=bool, outer=(2)]
+ └── filters [type=bool, outer=(2), constraints=(/2: [/1.0000000000000002 - ]; tight)]
+      └── gt [type=bool, outer=(2), constraints=(/2: [/1.0000000000000002 - ]; tight)]
            ├── variable: u [type=float, outer=(2)]
-           └── const: 1 [type=int]
+           └── const: 1.0 [type=float]
 
 opt
 SELECT * FROM kuv WHERE v <= 'foo' AND v >= 'bar'
@@ -947,3 +948,42 @@ select
                 └── tuple [type=tuple{int, int}]
                      ├── const: 4 [type=int]
                      └── const: 1 [type=int]
+
+exec-ddl
+CREATE TABLE e
+(
+    k INT PRIMARY KEY,
+    t TIMESTAMP,
+    d TIMESTAMP,
+    INDEX (t),
+    INDEX (d)
+)
+----
+TABLE e
+ ├── k int not null
+ ├── t timestamp
+ ├── d timestamp
+ ├── INDEX primary
+ │    └── k int not null
+ ├── INDEX secondary
+ │    ├── t timestamp
+ │    └── k int not null
+ └── INDEX secondary
+      ├── d timestamp
+      └── k int not null
+
+opt
+SELECT k FROM e WHERE d > '2018-07-01' AND d < '2018-07-01'::DATE + '1w'::INTERVAL
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ ├── prune: (1)
+ ├── interesting orderings: (+1)
+ └── scan e@secondary
+      ├── columns: k:1(int!null) d:3(timestamp!null)
+      ├── constraint: /3/1: [/'2018-07-01 00:00:00.000001+00:00' - /'2018-07-07 23:59:59.999999+00:00']
+      ├── key: (1)
+      ├── fd: (1)-->(3)
+      ├── prune: (1,3)
+      └── interesting orderings: (+1) (+3,+1)
