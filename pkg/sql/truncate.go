@@ -262,6 +262,7 @@ func (p *planner) truncateTable(
 		}
 	}
 	newTableDesc.Mutations = nil
+	newTableDesc.GCMutations = nil
 
 	tKey := tableKey{parentID: newTableDesc.ParentID, name: newTableDesc.Name}
 	key := tKey.Key()
