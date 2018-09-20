@@ -7861,7 +7861,10 @@ func TestReplicaIDChangePending(t *testing.T) {
 	repl.mu.Lock()
 	repl.mu.submitProposalFn = func(p *ProposalData) error {
 		if p.Request.Timestamp == magicTS {
-			commandProposed <- struct{}{}
+			select {
+			case commandProposed <- struct{}{}:
+			default:
+			}
 		}
 		return nil
 	}
