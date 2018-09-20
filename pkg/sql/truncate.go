@@ -20,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -42,6 +43,12 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 	// toTraverse is the list of tables whose references need to be traversed
 	// while constructing the list of tables that should be truncated.
 	toTraverse := make([]sqlbase.TableDescriptor, 0, len(n.Tables))
+
+	// This is the list of descriptors of truncated tables in the statement. These tables will have a mutationID and
+	// MutationJob related to the created job of the TRUNCATE statement.
+	stmtTableDescs := make([]*sqlbase.TableDescriptor, 0, len(n.Tables))
+	droppedTableDetails := make([]jobspb.DroppedTableDetails, 0, len(n.Tables))
+
 	for _, name := range n.Tables {
 		tn, err := name.Normalize()
 		if err != nil {
@@ -59,6 +66,18 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 
 		toTruncate[tableDesc.ID] = tn.FQString()
 		toTraverse = append(toTraverse, *tableDesc)
+
+		stmtTableDescs = append(stmtTableDescs, tableDesc)
+		droppedTableDetails = append(droppedTableDetails, jobspb.DroppedTableDetails{
+			Name: tn.FQString(),
+			ID:   tableDesc.ID,
+		})
+	}
+
+	dropJobID, err := p.createDropTablesJob(ctx, stmtTableDescs, droppedTableDetails, tree.AsStringWithFlags(n,
+		tree.FmtAlwaysQualifyTableNames), false /* drainNames */)
+	if err != nil {
+		return nil, err
 	}
 
 	// Check that any referencing tables are contained in the set, or, if CASCADE
@@ -122,7 +141,7 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 	}
 	traceKV := p.extendedEvalCtx.Tracing.KVTracingEnabled()
 	for id, name := range toTruncate {
-		if err := p.truncateTable(ctx, id, traceKV); err != nil {
+		if err := p.truncateTable(ctx, id, dropJobID, traceKV); err != nil {
 			return nil, err
 		}
 
@@ -149,13 +168,16 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 // truncateTable truncates the data of a table in a single transaction. It
 // drops the table and recreates it with a new ID. The dropped table is
 // GC-ed later through an asynchronous schema change.
-func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool) error {
+func (p *planner) truncateTable(
+	ctx context.Context, id sqlbase.ID, dropJobID int64, traceKV bool,
+) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.
 	tableDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, id)
 	if err != nil {
 		return err
 	}
+	tableDesc.DropJobID = dropJobID
 	newTableDesc := *tableDesc
 	newTableDesc.ReplacementOf = sqlbase.TableDescriptor_Replacement{
 		ID: id, Time: p.txn.CommitTimestamp(),

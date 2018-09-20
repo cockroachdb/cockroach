@@ -57,10 +57,15 @@ type Record struct {
 	DescriptorIDs sqlbase.IDs
 	Details       jobspb.Details
 	Progress      jobspb.ProgressDetails
+	RunningStatus RunningStatus
 }
 
 // Status represents the status of a job in the system.jobs table.
 type Status string
+
+// RunningStatus represents the more detailed status of a running job in
+// the system.jobs table.
+type RunningStatus string
 
 const (
 	// StatusPending is for jobs that have been created but on which work has
@@ -78,6 +83,15 @@ const (
 	// StatusCanceled is for jobs that were explicitly canceled by the user and
 	// cannot be resumed.
 	StatusCanceled Status = "canceled"
+	// RunningStatusDrainingNames is for jobs that are currently in progress and
+	// are draining names.
+	RunningStatusDrainingNames RunningStatus = "draining names"
+	// RunningStatusWaitingGC is for jobs that are currently in progress and
+	// are waiting for the GC interval to expire
+	RunningStatusWaitingGC RunningStatus = "waiting for GC TTL"
+	// RunningStatusCompaction is for jobs that are currently in progress and
+	// undergoing RocksDB compaction
+	RunningStatusCompaction RunningStatus = "RocksDB compaction"
 )
 
 // Terminal returns whether this status represents a "terminal" state: a state
@@ -137,6 +151,30 @@ func (j *Job) Started(ctx context.Context) error {
 		return true, nil
 	})
 }
+
+// RunningStatus updates the detailed status of a job currently in progress.
+// It sets the job's RunningStatus field to the value returned by runningStatusFn
+// and persists runningStatusFn's modifications to the job's details, if any.
+func (j *Job) RunningStatus(ctx context.Context, runningStatusFn RunningStatusFn) error {
+	return j.updateRow(ctx, updateProgressAndDetails,
+		func(_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
+			if *status != StatusRunning {
+				return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
+			}
+			runningStatus, err := runningStatusFn(ctx, progress.Details)
+			if err != nil {
+				return false, err
+			}
+			progress.RunningStatus = string(runningStatus)
+			return true, nil
+		},
+	)
+}
+
+// RunningStatusFn is a callback that computes a job's running status
+// given its details. It is safe to modify details in the callback; those
+// modifications will be automatically persisted to the database record.
+type RunningStatusFn func(ctx context.Context, details jobspb.Details) (RunningStatus, error)
 
 // FractionProgressedFn is a callback that computes a job's completion fraction
 // given its details. It is safe to modify details in the callback; those

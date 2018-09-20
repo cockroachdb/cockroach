@@ -399,6 +399,7 @@ CREATE TABLE crdb_internal.jobs (
 	user_name          		STRING,
 	descriptor_ids     		INT[],
 	status             		STRING,
+	running_status     		STRING,
 	created            		TIMESTAMP,
 	started            		TIMESTAMP,
 	finished           		TIMESTAMP,
@@ -421,10 +422,10 @@ CREATE TABLE crdb_internal.jobs (
 		for _, r := range rows {
 			id, status, created, payloadBytes, progressBytes := r[0], r[1], r[2], r[3], r[4]
 
-			var jobType, description, username, descriptorIDs, started,
+			var jobType, description, username, descriptorIDs, started, runningStatus,
 				finished, modified, fractionCompleted, highWaterTimestamp, errorStr, leaseNode = tree.DNull,
 				tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
-				tree.DNull, tree.DNull, tree.DNull
+				tree.DNull, tree.DNull, tree.DNull, tree.DNull
 
 			// Extract data from the payload.
 			payload, err := jobs.UnmarshalPayload(payloadBytes)
@@ -470,6 +471,16 @@ CREATE TABLE crdb_internal.jobs (
 						fractionCompleted = tree.NewDFloat(tree.DFloat(progress.GetFractionCompleted()))
 					}
 					modified = tsOrNull(progress.ModifiedMicros)
+
+					runningStatusStr := ""
+					if len(progress.RunningStatus) > 0 {
+						if s, ok := status.(*tree.DString); ok {
+							if jobs.Status(string(*s)) == jobs.StatusRunning {
+								runningStatusStr = progress.RunningStatus
+							}
+						}
+					}
+					runningStatus = tree.NewDString(runningStatusStr)
 				}
 			}
 
@@ -481,6 +492,7 @@ CREATE TABLE crdb_internal.jobs (
 				username,
 				descriptorIDs,
 				status,
+				runningStatus,
 				created,
 				started,
 				finished,

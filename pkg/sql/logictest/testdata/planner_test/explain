@@ -112,7 +112,7 @@ EXPLAIN SHOW JOBS
 ----
 render       ·     ·
  └── values  ·     ·
-·            size  14 columns, 0 rows
+·            size  15 columns, 0 rows
 
 statement ok
 CREATE INDEX a ON foo(x)
@@ -224,7 +224,7 @@ sort                                       ·            ·
                      ├── render            ·            ·
                      │    └── filter       ·            ·
                      │         └── values  ·            ·
-                     │                     size         20 columns, 915 rows
+                     │                     size         20 columns, 916 rows
                      └── render            ·            ·
                           └── filter       ·            ·
                                └── values  ·            ·

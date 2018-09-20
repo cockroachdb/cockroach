@@ -320,14 +320,14 @@ func (sc *SchemaChanger) ExtendLease(
 }
 
 // DropTableDesc removes a descriptor from the KV database.
-func DropTableDesc(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *client.DB, traceKV bool,
+func (sc *SchemaChanger) DropTableDesc(
+	ctx context.Context, tableDesc *sqlbase.TableDescriptor, traceKV bool,
 ) error {
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.ID)
 	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(tableDesc.ID))
 
 	// Finished deleting all the table data, now delete the table meta data.
-	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		// Delete table descriptor
 		b := &client.Batch{}
 		if traceKV {
@@ -338,8 +338,11 @@ func DropTableDesc(
 		b.Del(descKey)
 		// Delete the zone config entry for this table.
 		b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
-		if err := txn.SetSystemConfigTrigger(); err != nil {
-			return err
+
+		if tableDesc.GetDropJobID() != 0 {
+			if err := sc.updateDropTableJob(ctx, txn, tableDesc.GetDropJobID(), tableDesc.ID, jobspb.Status_DONE); err != nil {
+				return errors.Wrapf(err, "failed to update job %d", tableDesc.GetDropJobID())
+			}
 		}
 		return txn.Run(ctx, b)
 	})
@@ -471,7 +474,7 @@ func (sc *SchemaChanger) maybeAddDrop(
 			return false, err
 		}
 
-		return true, DropTableDesc(ctx, table, sc.db, false /* traceKV */)
+		return true, sc.DropTableDesc(ctx, table, false /* traceKV */)
 	}
 
 	if table.Adding() {
@@ -499,6 +502,53 @@ func (sc *SchemaChanger) maybeAddDrop(
 	return false, nil
 }
 
+func (sc *SchemaChanger) updateDropTableJob(
+	ctx context.Context, txn *client.Txn, jobID int64, tableID sqlbase.ID, status jobspb.Status,
+) error {
+	job, err := sc.jobRegistry.LoadJobWithTxn(ctx, jobID, txn)
+	if err != nil {
+		return err
+	}
+
+	schemaDetails, ok := job.Details().(jobspb.SchemaChangeDetails)
+	if !ok {
+		return errors.Errorf("unexpected details for job %d", *job.ID())
+	}
+
+	lowestStatus := jobspb.Status_DONE
+	for i := range schemaDetails.DroppedTables {
+		if tableID == schemaDetails.DroppedTables[i].ID {
+			schemaDetails.DroppedTables[i].Status = status
+		}
+
+		if lowestStatus > schemaDetails.DroppedTables[i].Status {
+			lowestStatus = schemaDetails.DroppedTables[i].Status
+		}
+	}
+
+	var runningStatus jobs.RunningStatus
+	switch lowestStatus {
+	case jobspb.Status_DRAINING_NAMES:
+		runningStatus = jobs.RunningStatusDrainingNames
+	case jobspb.Status_WAIT_FOR_GC_INTERVAL:
+		runningStatus = jobs.RunningStatusWaitingGC
+	case jobspb.Status_ROCKSDB_COMPACTION:
+		runningStatus = jobs.RunningStatusCompaction
+	case jobspb.Status_DONE:
+		return job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn)
+	default:
+		return errors.Errorf("unexpected dropped table status %d", lowestStatus)
+	}
+
+	if err := job.WithTxn(txn).SetDetails(ctx, schemaDetails); err != nil {
+		return err
+	}
+
+	return job.WithTxn(txn).RunningStatus(ctx, func(ctx context.Context, _ jobspb.Details) (jobs.RunningStatus, error) {
+		return runningStatus, nil
+	})
+}
+
 // Drain old names from the cluster.
 func (sc *SchemaChanger) drainNames(
 	ctx context.Context, lease *sqlbase.TableDescriptor_SchemaChangeLease,
@@ -511,6 +561,7 @@ func (sc *SchemaChanger) drainNames(
 	// has seen the version with the new name. All the draining names
 	// can be reused henceforth.
 	var namesToReclaim []sqlbase.TableDescriptor_NameInfo
+	var dropJobID int64
 	_, err := sc.leaseMgr.Publish(
 		ctx,
 		sc.tableID,
@@ -530,6 +581,7 @@ func (sc *SchemaChanger) drainNames(
 			// Free up the old name(s) for reuse.
 			namesToReclaim = desc.DrainingNames
 			desc.DrainingNames = nil
+			dropJobID = desc.GetDropJobID()
 			return nil
 		},
 		// Reclaim all the old names.
@@ -539,6 +591,13 @@ func (sc *SchemaChanger) drainNames(
 				tbKey := tableKey{drain.ParentID, drain.Name}.Key()
 				b.Del(tbKey)
 			}
+
+			if dropJobID != 0 {
+				if err := sc.updateDropTableJob(ctx, txn, dropJobID, sc.tableID, jobspb.Status_WAIT_FOR_GC_INTERVAL); err != nil {
+					return err
+				}
+			}
+
 			return txn.Run(ctx, b)
 		},
 	)
@@ -632,6 +691,7 @@ func (sc *SchemaChanger) exec(
 			break
 		}
 	}
+
 	if !foundJobID {
 		// No job means we've already run and completed this schema change
 		// successfully, so we can just exit.

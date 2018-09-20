@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -115,6 +116,26 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	ctx := params.ctx
 	p := params.p
 	tbNameStrings := make([]string, 0, len(n.td))
+	droppedTableDetails := make([]jobspb.DroppedTableDetails, 0, len(n.td))
+	tableDescs := make([]*sqlbase.TableDescriptor, 0, len(n.td))
+
+	for _, toDel := range n.td {
+		if toDel.desc.IsView() {
+			continue
+		}
+		droppedTableDetails = append(droppedTableDetails, jobspb.DroppedTableDetails{
+			Name: toDel.tn.FQString(),
+			ID:   toDel.desc.ID,
+		})
+		tableDescs = append(tableDescs, toDel.desc)
+	}
+
+	_, err := p.createDropTablesJob(ctx, tableDescs, droppedTableDetails, tree.AsStringWithFlags(n.n,
+		tree.FmtAlwaysQualifyTableNames), true /* drainNames */)
+	if err != nil {
+		return err
+	}
+
 	for _, toDel := range n.td {
 		tbDesc := toDel.desc
 		if tbDesc.IsView() {
