@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -113,10 +114,8 @@ func (sc *SchemaChanger) runBackfill(
 	// Mutations are applied in a FIFO order. Only apply the first set of
 	// mutations. Collect the elements that are part of the mutation.
 	var droppedIndexDescs []sqlbase.IndexDescriptor
+	var gcDroppedIndexDescs []sqlbase.IndexDescriptor
 	var addedIndexDescs []sqlbase.IndexDescriptor
-	// Indexes within the Mutations slice for checkpointing.
-	mutationSentinel := -1
-	var droppedIndexMutationIdx int
 
 	var tableDesc *sqlbase.TableDescriptor
 	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -136,7 +135,7 @@ func (sc *SchemaChanger) runBackfill(
 		tableDesc.Name, tableDesc.Version, sc.mutationID)
 
 	needColumnBackfill := false
-	for i, m := range tableDesc.Mutations {
+	for _, m := range tableDesc.Mutations {
 		if m.MutationID != sc.mutationID {
 			break
 		}
@@ -158,9 +157,10 @@ func (sc *SchemaChanger) runBackfill(
 			case *sqlbase.DescriptorMutation_Column:
 				needColumnBackfill = true
 			case *sqlbase.DescriptorMutation_Index:
-				droppedIndexDescs = append(droppedIndexDescs, *t.Index)
-				if droppedIndexMutationIdx == mutationSentinel {
-					droppedIndexMutationIdx = i
+				if m.ModificationTime == sqlbase.InvalidModificationTime {
+					droppedIndexDescs = append(droppedIndexDescs, *t.Index)
+				} else {
+					gcDroppedIndexDescs = append(gcDroppedIndexDescs, *t.Index)
 				}
 			default:
 				return errors.Errorf("unsupported mutation: %+v", m)
@@ -172,15 +172,38 @@ func (sc *SchemaChanger) runBackfill(
 
 	// Drop indexes.
 	if len(droppedIndexDescs) > 0 {
-		if err := sc.truncateIndexes(
-			ctx, lease, version, droppedIndexDescs, droppedIndexMutationIdx,
-		); err != nil {
+		if err := sc.truncateIndexes(ctx, lease, version, droppedIndexDescs); err != nil {
 			return err
 		}
 
 		// Remove index zone configs.
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			return removeIndexZoneConfigs(ctx, txn, sc.execCfg, tableDesc.ID, droppedIndexDescs)
+		}); err != nil {
+			return err
+		}
+	}
+
+	if len(gcDroppedIndexDescs) > 0 {
+		// Check if requires CCL binary.
+		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			zone, err := getZoneConfigRaw(ctx, txn, tableDesc.ID)
+			if err != nil {
+				return err
+			}
+			if len(zone.Subzones) > 0 {
+				st := sc.execCfg.Settings
+				if !st.Version.IsMinSupported(cluster.VersionPartitioning) {
+					return errors.New("cluster version does not support zone configs on indexes or partitions")
+				}
+				_, err = GenerateSubzoneSpans(
+					st, sc.execCfg.ClusterID(), tableDesc, zone.Subzones, false /* newSubzones */)
+				if err != nil {
+					return err
+				}
+
+			}
+			return nil
 		}); err != nil {
 			return err
 		}
@@ -222,7 +245,6 @@ func (sc *SchemaChanger) truncateIndexes(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 	dropped []sqlbase.IndexDescriptor,
-	mutationIdx int,
 ) error {
 	chunkSize := sc.getChunkSize(indexTruncateChunkSize)
 	if sc.testingKnobs.BackfillChunkSize > 0 {
@@ -270,7 +292,7 @@ func (sc *SchemaChanger) truncateIndexes(
 					return err
 				}
 				resume, err = td.deleteIndex(
-					ctx, &desc, resumeAt, chunkSize, noAutoCommit, false, /* traceKV */
+					ctx, &desc, resumeAt, chunkSize, noAutoCommit, false /* traceKV */, true, /* rangeDelete */
 				)
 				done = resume.Key == nil
 				return err
@@ -693,7 +715,7 @@ func indexTruncateInTxn(
 			return err
 		}
 		sp, err = td.deleteIndex(
-			ctx, idx, sp, indexTruncateChunkSize, noAutoCommit, traceKV,
+			ctx, idx, sp, indexTruncateChunkSize, noAutoCommit, traceKV, false, /* rangeDelete */
 		)
 		if err != nil {
 			return err

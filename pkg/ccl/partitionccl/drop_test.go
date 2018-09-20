@@ -60,7 +60,7 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 	// its partition are removed but the zone config for the primary index
 	// remains.
 	sqlDB.Exec(t, `DROP INDEX t.kv@i`)
-	tests.CheckKeyCount(t, kvDB, indexSpan, 0)
+	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 	if _, _, err := tableDesc.FindIndexByName("i"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")

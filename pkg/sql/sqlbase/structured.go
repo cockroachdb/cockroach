@@ -106,6 +106,9 @@ type MutationID uint32
 // InvalidMutationID is the uninitialised mutation id.
 const InvalidMutationID MutationID = 0
 
+// InvalidModificationTime is the uninitialised modification time.
+const InvalidModificationTime int64 = 0
+
 const (
 	// PrimaryKeyIndexName is the name of the index for the primary key.
 	PrimaryKeyIndexName = "primary"
@@ -341,6 +344,11 @@ func (desc *IndexDescriptor) SQLString(tableName *tree.TableName) string {
 		f.WriteByte(')')
 	}
 	return f.CloseAndGetString()
+}
+
+// IsInterleaved returns whether the index is interleaved or not.
+func (desc *IndexDescriptor) IsInterleaved() bool {
+	return len(desc.Interleave.Ancestors) > 0 || len(desc.InterleavedBy) > 0
 }
 
 // SetID implements the DescriptorProto interface.
@@ -1991,10 +1999,7 @@ func (desc *TableDescriptor) GetIndexMutationCapabilities(id IndexID) (bool, boo
 // another table's data.
 func (desc *TableDescriptor) IsInterleaved() bool {
 	for _, index := range desc.AllNonDropIndexes() {
-		if len(index.Interleave.Ancestors) > 0 {
-			return true
-		}
-		if len(index.InterleavedBy) > 0 {
+		if index.IsInterleaved() {
 			return true
 		}
 	}
@@ -2035,7 +2040,7 @@ func (desc *TableDescriptor) AddColumnMutation(
 
 // AddIndexMutation adds an index mutation to desc.Mutations.
 func (desc *TableDescriptor) AddIndexMutation(
-	idx IndexDescriptor, direction DescriptorMutation_Direction,
+	idx IndexDescriptor, direction DescriptorMutation_Direction, modificationTime int64,
 ) error {
 
 	switch idx.Type {
@@ -2049,7 +2054,7 @@ func (desc *TableDescriptor) AddIndexMutation(
 		}
 	}
 
-	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Index{Index: &idx}, Direction: direction}
+	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Index{Index: &idx}, Direction: direction, ModificationTime: modificationTime}
 	desc.addMutation(m)
 	return nil
 }

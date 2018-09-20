@@ -110,7 +110,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 
 	mutationIdx := len(n.tableDesc.Mutations)
-	if err := n.tableDesc.AddIndexMutation(*indexDesc, sqlbase.DescriptorMutation_ADD); err != nil {
+	if err := n.tableDesc.AddIndexMutation(*indexDesc, sqlbase.DescriptorMutation_ADD, sqlbase.InvalidModificationTime); err != nil {
 		return err
 	}
 	if err := n.tableDesc.AllocateIDs(); err != nil {

@@ -17,10 +17,11 @@ package sql
 import (
 	"context"
 	"fmt"
-
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -141,6 +142,29 @@ func (p *planner) dropIndexByName(
 		}
 	}
 
+	// If the index is not interleaved and the ClearRange feature is
+	// enabled in the cluster, use the GCDeadline mechanism to schedule
+	// usage of the more efficient ClearRange pathway. ClearRange will
+	// only work if the entire hierarchy of interleaved tables are
+	// dropped at once, as with ON DELETE CASCADE where the top-level
+	// "root" table is dropped.
+	//
+	// TODO(bram): If interleaved and ON DELETE CASCADE, we will be
+	// able to use this faster mechanism.
+	var indexModificationTime int64
+	if !idx.IsInterleaved() &&
+		p.ExecCfg().Settings.Version.IsActive(cluster.VersionClearRange) {
+		// Get the zone config applying to this table in order to
+		// set the GC deadline.
+		_, _, _, err := GetZoneConfigInTxn(
+			ctx, p.txn, uint32(tableDesc.ID), &idx, "", false, /* getInheritedDefault */
+		)
+		if err != nil {
+			return err
+		}
+		indexModificationTime = timeutil.Now().UnixNano()
+	}
+
 	if len(idx.Interleave.Ancestors) > 0 {
 		if err := p.removeInterleaveBackReference(ctx, tableDesc, idx); err != nil {
 			return err
@@ -191,7 +215,7 @@ func (p *planner) dropIndexByName(
 	found := false
 	for i := range tableDesc.Indexes {
 		if tableDesc.Indexes[i].ID == idx.ID {
-			if err := tableDesc.AddIndexMutation(tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP); err != nil {
+			if err := tableDesc.AddIndexMutation(tableDesc.Indexes[i], sqlbase.DescriptorMutation_DROP, indexModificationTime); err != nil {
 				return err
 			}
 			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)

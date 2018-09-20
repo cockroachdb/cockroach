@@ -599,12 +599,10 @@ func TestRaceWithBackfill(t *testing.T) {
 			backfillNotification = nil
 		}
 	}
-	// Disable asynchronous schema change execution to allow synchronous path
-	// to trigger start of backfill notification.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			AsyncExecNotification: asyncSchemaChangerDisabled,
-			BackfillChunkSize:     chunkSize,
+			AsyncExecQuickly:  true,
+			BackfillChunkSize: chunkSize,
 		},
 		DistSQL: &distsqlrun.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
@@ -638,8 +636,18 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		t.Fatal(err)
 	}
 
-	// Split the table into multiple ranges.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// Add a zone config for the table.
+	cfg := config.DefaultZoneConfig()
+	cfg.GC.TTLSeconds = 0
+	buf, err := protoutil.Marshal(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
+		t.Fatal(err)
+	}
+	// Split the table into multiple ranges.
 	// SplitTable moves the right range, so we split things back to front
 	// in order to move less data.
 	for i := numNodes - 1; i > 0; i-- {
@@ -882,11 +890,10 @@ func TestBackfillErrors(t *testing.T) {
 	const numNodes, chunkSize, maxValue = 5, 100, 4000
 	params, _ := tests.CreateTestServerParams()
 
-	// Disable asynchronous schema change execution.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			AsyncExecNotification: asyncSchemaChangerDisabled,
-			BackfillChunkSize:     chunkSize,
+			AsyncExecQuickly:  true,
+			BackfillChunkSize: chunkSize,
 		},
 	}
 
@@ -903,6 +910,18 @@ func TestBackfillErrors(t *testing.T) {
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// Add a zone config for the table.
+	cfg := config.DefaultZoneConfig()
+	cfg.GC.TTLSeconds = 0
+	buf, err := protoutil.Marshal(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -927,7 +946,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// Split the table into multiple ranges.
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	// SplitTable moves the right range, so we split things back to front
 	// in order to move less data.
 	for i := numNodes - 1; i > 0; i-- {
@@ -946,9 +964,9 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		t.Fatalf("got err=%s", err)
 	}
 
-	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
-		t.Fatal(err)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		return checkTableKeyCount(ctx, kvDB, 1, maxValue)
+	})
 
 	if _, err := sqlDB.Exec(`
 	   ALTER TABLE t.test ADD COLUMN p DECIMAL NOT NULL DEFAULT (DECIMAL '1-3');
@@ -988,12 +1006,10 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 	retriedBackfill := int64(0)
 	var retriedSpan roachpb.Span
 
-	// Disable asynchronous schema change execution to allow synchronous path
-	// to trigger start of backfill notification.
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			AsyncExecNotification: asyncSchemaChangerDisabled,
-			BackfillChunkSize:     maxValue,
+			AsyncExecQuickly:  true,
+			BackfillChunkSize: maxValue,
 		},
 		DistSQL: &distsqlrun.TestingKnobs{
 			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
@@ -1037,6 +1053,17 @@ func TestAbortSchemaChangeBackfill(t *testing.T) {
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 `); err != nil {
+		t.Fatal(err)
+	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// Add a zone config for the table.
+	cfg := config.DefaultZoneConfig()
+	cfg.GC.TTLSeconds = 0
+	buf, err := protoutil.Marshal(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1357,7 +1384,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	currChunk = 0
 	seenSpan = roachpb.Span{}
-	dropIndexSchemaChange(t, sqlDB, kvDB, maxValue, 1)
+	dropIndexSchemaChange(t, sqlDB, kvDB, maxValue, 2)
 }
 
 // Test schema changes are retried and complete properly when the table
@@ -1469,8 +1496,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	const chunkSize = 200
-	// Disable the async schema changer.
-	var enableAsyncSchemaChanges uint32
+	var enableAsyncSchemaChanges uint32 = 1
 	attempts := 0
 	// attempt 1: write the first chunk of the index.
 	// attempt 2: write the second chunk and hit a unique constraint
@@ -1496,6 +1522,8 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 				// Return a deadline exceeded error during the third attempt
 				// which attempts to clean up the schema change.
 				if attempts == expectedAttempts {
+					// Disable the async schema changer for assertions.
+					atomic.StoreUint32(&enableAsyncSchemaChanges, 0)
 					return context.DeadlineExceeded
 				}
 				return nil
@@ -1535,11 +1563,26 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	); !testutils.IsError(err, "violates unique constraint") {
 		t.Fatal(err)
 	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	cfg := config.DefaultZoneConfig()
+	cfg.GC.TTLSeconds = 0
+	buf, err := protoutil.Marshal(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
+		t.Fatal(err)
+	}
+
 	// The deadline exceeded error in the schema change purge results in no
 	// retry attempts of the purge.
-	if attempts != expectedAttempts {
-		t.Fatalf("%d retries, despite allowing only (schema change + reverse) = %d", attempts, expectedAttempts)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		if attempts != expectedAttempts {
+			return errors.Errorf("%d retries, despite allowing only (schema change + reverse) = %d", attempts, expectedAttempts)
+		}
+		return nil
+	})
 
 	// The index doesn't exist
 	if _, err := sqlDB.Query(
@@ -1548,16 +1591,11 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
-	// Read table descriptor.
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
-	// There is still a mutation hanging off of it.
-	if e := 1; len(tableDesc.Mutations) != e {
-		t.Fatalf("the table has %d instead of %d mutations", len(tableDesc.Mutations), e)
-	}
-	// The mutation is for a DROP.
-	if tableDesc.Mutations[0].Direction != sqlbase.DescriptorMutation_DROP {
-		t.Fatalf("the table has mutation %v instead of a DROP", tableDesc.Mutations[0])
+	// There is still a DROP INDEX mutation waiting for GC.
+	if e := 1; len(tableDesc.GCMutations) != e {
+		t.Fatalf("the table has %d instead of %d GC mutations", len(tableDesc.GCMutations), e)
 	}
 
 	// There is still some garbage index data that needs to be purged. All the
@@ -1581,8 +1619,8 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	testutils.SucceedsSoon(t, func() error {
 		tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
-		if len(tableDesc.Mutations) > 0 {
-			return errors.Errorf("%d mutations remaining", len(tableDesc.Mutations))
+		if len(tableDesc.GCMutations) > 0 {
+			return errors.Errorf("%d GC mutations remaining", len(tableDesc.GCMutations))
 		}
 		return nil
 	})
@@ -1725,6 +1763,18 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// Add a zone config for the table.
+	cfg := config.DefaultZoneConfig()
+	cfg.GC.TTLSeconds = 0
+	buf, err := protoutil.Marshal(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
+		t.Fatal(err)
+	}
+
 	testCases := []struct {
 		sql    string
 		status jobs.Status
@@ -1772,7 +1822,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		}
 	}
 
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	if e := 13; e != len(tableDesc.Mutations) {
 		t.Fatalf("e = %d, v = %d", e, len(tableDesc.Mutations))
 	}
@@ -1863,7 +1913,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	// Check that the index on b eventually goes live even though a schema
 	// change in front of it in the queue got purged.
-	rows, err := sqlDB.Query(`SELECT * from t.test@test_b_key`)
+	rows, err = sqlDB.Query(`SELECT * from t.test@test_b_key`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2113,12 +2163,10 @@ func TestSchemaUniqueColumnDropFailure(t *testing.T) {
 	const chunkSize = 200
 	attempts := 0
 	// DROP UNIQUE COLUMN is executed in two steps: drop index and drop column.
-	// Chunked backfill attempts:
-	// attempt 1-5: drop index
-	// attempt 6-7: drop part of the column before hitting a schema
-	// change error.
-	// purge the schema change.
-	const expectedAttempts = 7
+	// Dropping the index happens in a separate mutation job from the drop column
+	// and completes successfully. The drop column part of the change errors
+	// during backfilling the second chunk but cannot rollback the drop index.
+	const expectedAttempts = 2
 	const maxValue = (expectedAttempts/2+1)*chunkSize + 1
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -2170,12 +2218,16 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT UNIQUE DEFAULT 23 CREATE FAMILY F3
 	}
 
 	// The index is not regenerated.
-	if err := checkTableKeyCount(context.TODO(), kvDB, 1, maxValue); err != nil {
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if len(tableDesc.Indexes) > 0 {
+		t.Fatalf("indexes %+v", tableDesc.Indexes)
+	}
+	// Index data not wiped yet (waiting for GC TTL).
+	if err := checkTableKeyCount(context.TODO(), kvDB, 2, maxValue); err != nil {
 		t.Fatal(err)
 	}
 
 	// Column v still exists with the default value.
-	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	if e := 2; e != len(tableDesc.Columns) {
 		t.Fatalf("e = %d, v = %d, columns = %+v", e, len(tableDesc.Columns), tableDesc.Columns)
 	} else if tableDesc.Columns[0].Name != "k" || tableDesc.Columns[1].Name != "v" {
@@ -2346,7 +2398,7 @@ func TestBackfillCompletesOnChunkBoundary(t *testing.T) {
 		{sql: "ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')", numKeysPerRow: 2},
 		{sql: "ALTER TABLE t.test DROP pi", numKeysPerRow: 2},
 		{sql: "CREATE UNIQUE INDEX foo ON t.test (v)", numKeysPerRow: 3},
-		{sql: "DROP INDEX t.test@vidx CASCADE", numKeysPerRow: 2},
+		{sql: "DROP INDEX t.test@vidx CASCADE", numKeysPerRow: 3},
 	}
 
 	for _, tc := range testCases {
@@ -3351,6 +3403,7 @@ func TestCancelSchemaChange(t *testing.T) {
 	doCancel := false
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecQuickly:  true,
 			BackfillChunkSize: 10,
 		},
 		DistSQL: &distsqlrun.TestingKnobs{
@@ -3391,8 +3444,18 @@ func TestCancelSchemaChange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Split the table into multiple ranges.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	// Add a zone config for the table.
+	cfg := config.DefaultZoneConfig()
+	cfg.GC.TTLSeconds = 0
+	buf, err := protoutil.Marshal(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
+		t.Fatal(err)
+	}
+	// Split the table into multiple ranges.
 	// SplitTable moves the right range, so we split things back to front
 	// in order to move less data.
 	const numSplits = numNodes * 2
@@ -3409,15 +3472,17 @@ func TestCancelSchemaChange(t *testing.T) {
 		sql string
 		// Set to true if this schema change is to be canceled.
 		cancel bool
+		// Set to true if the rollback returns in a running, waiting status.
+		isGC bool
 	}{
 		{`ALTER TABLE t.public.test ADD COLUMN x DECIMAL DEFAULT 1.4::DECIMAL CREATE FAMILY f2`,
-			true},
+			true, false},
 		{`CREATE INDEX foo ON t.public.test (v)`,
-			true},
+			true, true},
 		{`ALTER TABLE t.public.test ADD COLUMN x DECIMAL DEFAULT 1.2::DECIMAL CREATE FAMILY f3`,
-			false},
+			false, false},
 		{`CREATE INDEX foo ON t.public.test (v)`,
-			false},
+			false, true},
 	}
 
 	idx := 0
@@ -3438,13 +3503,20 @@ func TestCancelSchemaChange(t *testing.T) {
 			}
 			jobID := jobutils.GetJobID(t, sqlDB, idx)
 			idx++
-			if err := jobutils.VerifySystemJob(t, sqlDB, idx, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+			jobRecord := jobs.Record{
 				Username:    security.RootUser,
 				Description: fmt.Sprintf("ROLL BACK JOB %d: %s", jobID, tc.sql),
 				DescriptorIDs: sqlbase.IDs{
 					tableDesc.ID,
 				},
-			}); err != nil {
+			}
+			var err error
+			if tc.isGC {
+				err = jobutils.VerifyRunningSystemJob(t, sqlDB, idx, jobspb.TypeSchemaChange, jobs.RunningStatusWaitingGC, jobRecord)
+			} else {
+				err = jobutils.VerifySystemJob(t, sqlDB, idx, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobRecord)
+			}
+			if err != nil {
 				t.Fatal(err)
 			}
 		} else {
