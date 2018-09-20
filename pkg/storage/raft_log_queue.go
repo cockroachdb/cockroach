@@ -115,8 +115,8 @@ func getTruncatableIndexes(ctx context.Context, r *Replica) (uint64, uint64, int
 	// larger than the replica size, we're better off recovering the replica
 	// using a snapshot.
 	targetSize := r.mu.state.Stats.Total()
-	if targetSize > r.mu.zone.RangeMaxBytes {
-		targetSize = r.mu.zone.RangeMaxBytes
+	if targetSize > *r.mu.zone.RangeMaxBytes {
+		targetSize = *r.mu.zone.RangeMaxBytes
 	}
 	if targetSize > raftLogMaxSize {
 		targetSize = raftLogMaxSize

@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft/raftpb"
 
@@ -985,7 +986,9 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	const maxBytes = 1 << 16
 	// Set max bytes.
 	descID := uint32(keys.MinUserDescID)
-	config.TestingSetZoneConfig(descID, config.ZoneConfig{RangeMaxBytes: maxBytes})
+	zoneConfig := config.DefaultZoneConfig()
+	zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
+	config.TestingSetZoneConfig(descID, zoneConfig)
 
 	// Trigger gossip callback.
 	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfigEntries{}, 0); err != nil {
@@ -1045,7 +1048,9 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	// Set max bytes.
 	const maxBytes = 1 << 16
 	descID := uint32(keys.MinUserDescID)
-	config.TestingSetZoneConfig(descID, config.ZoneConfig{RangeMaxBytes: maxBytes})
+	zoneConfig := config.DefaultZoneConfig()
+	zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
+	config.TestingSetZoneConfig(descID, zoneConfig)
 
 	// Trigger gossip callback.
 	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfigEntries{}, 0); err != nil {
@@ -1078,9 +1083,9 @@ func TestStoreRangeSplitBackpressureWrites(t *testing.T) {
 	// Set maxBytes to something small so we can exceed the maximum split
 	// size without adding 2x64MB of data.
 	const maxBytes = 1 << 16
-	defer config.TestingSetDefaultZoneConfig(config.ZoneConfig{
-		RangeMaxBytes: maxBytes,
-	})()
+	cfg := config.DefaultZoneConfig()
+	cfg.RangeMaxBytes = proto.Int64(maxBytes)
+	defer config.TestingSetDefaultZoneConfig(cfg)()
 
 	// Backpressured writes react differently depending on whether there is an
 	// ongoing split or not. If there is an ongoing split then the writes wait
@@ -2341,7 +2346,9 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 
 	// Avoid excessive logging on under-replicated ranges due to our many splits.
 	config.TestingSetupZoneConfigHook(stopper)
-	config.TestingSetZoneConfig(0, config.ZoneConfig{NumReplicas: 1})
+	zoneConfig := config.DefaultZoneConfig()
+	zoneConfig.NumReplicas = proto.Int32(1)
+	config.TestingSetZoneConfig(0, zoneConfig)
 
 	var lastSD roachpb.StoreDescriptor
 	rangeCountCh := make(chan int32)
@@ -2532,18 +2539,13 @@ func TestUnsplittableRange(t *testing.T) {
 
 	ttl := 1 * time.Hour
 	const maxBytes = 1 << 16
-	defer config.TestingSetDefaultZoneConfig(config.ZoneConfig{
-		RangeMaxBytes: maxBytes,
-		GC: config.GCPolicy{
-			TTLSeconds: int32(ttl.Seconds()),
-		},
-	})()
-	defer config.TestingSetDefaultSystemZoneConfig(config.ZoneConfig{
-		RangeMaxBytes: maxBytes,
-		GC: config.GCPolicy{
-			TTLSeconds: int32(ttl.Seconds()),
-		},
-	})()
+	zoneConfig := config.DefaultZoneConfig()
+	zoneConfig.RangeMaxBytes = proto.Int64(maxBytes)
+	zoneConfig.GC = &config.GCPolicy{
+		TTLSeconds: int32(ttl.Seconds()),
+	}
+	defer config.TestingSetDefaultZoneConfig(zoneConfig)()
+	defer config.TestingSetDefaultSystemZoneConfig(zoneConfig)()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
