@@ -100,20 +100,12 @@ inner-join
 norm
 SELECT * FROM a JOIN b ON false
 ----
-inner-join
- ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) x:5(int) z:6(int!null)
+values
+ ├── columns: x:1(int) y:2(int) s:3(string) d:4(decimal) x:5(int) z:6(int)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
- ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
- ├── scan a
- │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=5000]
- │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
- ├── scan b
- │    ├── columns: b.x:5(int) z:6(int!null)
- │    └── stats: [rows=10000]
- └── false [type=bool]
+ ├── key: ()
+ └── fd: ()-->(1-6)
 
 build
 SELECT *, rowid FROM a INNER JOIN b ON a.x=b.x
