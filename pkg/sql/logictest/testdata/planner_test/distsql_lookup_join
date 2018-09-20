@@ -22,6 +22,22 @@ statement ok
 ALTER TABLE data EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
 
+# Verify data placement.
+query TTITI colnames
+SHOW EXPERIMENTAL_RANGES FROM TABLE data
+----
+start_key  end_key  range_id  replicas  lease_holder
+NULL       /1       1         {1}       1
+/1         /2       2         {2}       2
+/2         /3       3         {3}       3
+/3         /4       4         {4}       4
+/4         /5       5         {5}       5
+/5         /6       6         {1}       1
+/6         /7       7         {2}       2
+/7         /8       8         {3}       3
+/8         /9       9         {4}       4
+/9         NULL     10        {5}       5
+
 statement ok
 CREATE TABLE distsql_lookup_test_1 (a INT, b INT, c INT, PRIMARY KEY (a, c))
 
@@ -161,6 +177,22 @@ ALTER TABLE multiples SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 statement ok
 ALTER TABLE multiples EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+# Verify data placement.
+query TTITI colnames
+SHOW EXPERIMENTAL_RANGES FROM TABLE multiples
+----
+start_key  end_key  range_id  replicas  lease_holder
+NULL       /1       10        {1}       1
+/1         /2       21        {2}       2
+/2         /3       22        {3}       3
+/3         /4       23        {4}       4
+/4         /5       24        {5}       5
+/5         /6       25        {1}       1
+/6         /7       26        {2}       2
+/7         /8       27        {3}       3
+/8         /9       28        {4}       4
+/9         NULL     29        {5}       5
 
 # Lookup join on covering secondary index
 query TTT colnames

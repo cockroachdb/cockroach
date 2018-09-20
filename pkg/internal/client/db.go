@@ -506,6 +506,16 @@ func (db *DB) AdminChangeReplicas(
 	return getOneErr(db.Run(ctx, b), b)
 }
 
+// AdminRelocateRange relocates the replicas for a range onto the specified
+// list of stores.
+func (db *DB) AdminRelocateRange(
+	ctx context.Context, key interface{}, targets []roachpb.ReplicationTarget,
+) error {
+	b := &Batch{}
+	b.adminRelocateRange(key, targets)
+	return getOneErr(db.Run(ctx, b), b)
+}
+
 // WriteBatch applies the operations encoded in a BatchRepr, which is the
 // serialized form of a RocksDB Batch. The command cannot span Ranges and must
 // be run on an empty keyrange.

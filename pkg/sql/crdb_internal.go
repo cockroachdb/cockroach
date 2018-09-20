@@ -1603,12 +1603,19 @@ CREATE TABLE crdb_internal.ranges (
 			if err := r.ValueProto(&desc); err != nil {
 				return nil, err
 			}
+
+			var replicas []int
+			for _, rd := range desc.Replicas {
+				replicas = append(replicas, int(rd.StoreID))
+			}
+			sort.Ints(replicas)
 			arr := tree.NewDArray(types.Int)
-			for _, replica := range desc.Replicas {
-				if err := arr.Append(tree.NewDInt(tree.DInt(replica.StoreID))); err != nil {
+			for _, replica := range replicas {
+				if err := arr.Append(tree.NewDInt(tree.DInt(replica))); err != nil {
 					return nil, err
 				}
 			}
+
 			var dbName, tableName, indexName string
 			if _, id, err := keys.DecodeTablePrefix(desc.StartKey.AsRawKey()); err == nil {
 				parent := parents[id]

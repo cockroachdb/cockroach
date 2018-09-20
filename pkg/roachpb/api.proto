@@ -619,6 +619,21 @@ message AdminChangeReplicasResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// An AdminRelocateRangeRequest is the argument to the AdminRelocateRange()
+// method. Relocates the replicas for a range to the specified target stores.
+// The first store in the list of targets becomes the new leaseholder.
+message AdminRelocateRangeRequest {
+  option (gogoproto.equal) = true;
+
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated ReplicationTarget targets = 2 [(gogoproto.nullable) = false];
+  // TODO(a-robinson): Add "reason"/"details" string fields?
+}
+
+message AdminRelocateRangeResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A HeartbeatTxnRequest is arguments to the HeartbeatTxn()
 // method. It's sent by transaction coordinators to let the system
 // know that the transaction is still ongoing. Note that this
@@ -1349,6 +1364,7 @@ message RequestUnion {
     AdminMergeRequest admin_merge = 11;
     AdminTransferLeaseRequest admin_transfer_lease = 29;
     AdminChangeReplicasRequest admin_change_replicas = 35;
+    AdminRelocateRangeRequest admin_relocate_range = 45;
     HeartbeatTxnRequest heartbeat_txn = 12;
     GCRequest gc = 13;
     PushTxnRequest push_txn = 14;
@@ -1397,6 +1413,7 @@ message ResponseUnion {
     AdminMergeResponse admin_merge = 11;
     AdminTransferLeaseResponse admin_transfer_lease = 29;
     AdminChangeReplicasResponse admin_change_replicas = 35;
+    AdminRelocateRangeResponse admin_relocate_range = 45;
     HeartbeatTxnResponse heartbeat_txn = 12;
     GCResponse gc = 13;
     PushTxnResponse push_txn = 14;

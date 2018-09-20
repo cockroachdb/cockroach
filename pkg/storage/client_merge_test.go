@@ -2199,6 +2199,7 @@ func TestMergeQueue(t *testing.T) {
 	mtc.storeConfig = &storeCfg
 	mtc.Start(t, 2)
 	defer mtc.Stop()
+	mtc.initGossipNetwork() // needed for the non-collocated case's rebalancing to work
 	store := mtc.Store(0)
 	store.SetMergeQueueActive(true)
 
