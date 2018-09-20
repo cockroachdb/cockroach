@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
@@ -54,7 +55,8 @@ const firstRange = roachpb.RangeID(1)
 var firstRangeInfo = testRangeInfo([]roachpb.ReplicaDescriptor{}, firstRange)
 
 var simpleZoneConfig = config.ZoneConfig{
-	NumReplicas: 1,
+	NumReplicas:              proto.Int32(1),
+	ExplicitlySetConstraints: true,
 	Constraints: []config.Constraints{
 		{
 			Constraints: []config.Constraint{
@@ -66,7 +68,8 @@ var simpleZoneConfig = config.ZoneConfig{
 }
 
 var multiDCConfig = config.ZoneConfig{
-	NumReplicas: 2,
+	NumReplicas:              proto.Int32(2),
+	ExplicitlySetConstraints: true,
 	Constraints: []config.Constraints{
 		{Constraints: []config.Constraint{{Value: "ssd", Type: config.Constraint_REQUIRED}}},
 	},
@@ -3581,7 +3584,7 @@ func TestRebalanceCandidatesNumReplicasConstraints(t *testing.T) {
 		rangeInfo := testRangeInfo(existingRepls, firstRange)
 		zone := &config.ZoneConfig{
 			Constraints: tc.constraints,
-			NumReplicas: tc.zoneNumReplicas,
+			NumReplicas: proto.Int32(tc.zoneNumReplicas),
 		}
 		analyzed := analyzeConstraints(
 			context.Background(), a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
@@ -4013,10 +4016,11 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Need three replicas, have three, one is on a dead store.
 		{
 			zone: config.ZoneConfig{
-				NumReplicas:   3,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				RangeMinBytes: 0,
-				RangeMaxBytes: 64000,
+				NumReplicas:              proto.Int32(3),
+				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				ExplicitlySetConstraints: true,
+				RangeMinBytes:            proto.Int64(0),
+				RangeMaxBytes:            proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
 				Replicas: []roachpb.ReplicaDescriptor{
@@ -4042,10 +4046,11 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Need five replicas, one is on a dead store.
 		{
 			zone: config.ZoneConfig{
-				NumReplicas:   5,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				RangeMinBytes: 0,
-				RangeMaxBytes: 64000,
+				NumReplicas:              proto.Int32(5),
+				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				ExplicitlySetConstraints: true,
+				RangeMinBytes:            proto.Int64(0),
+				RangeMaxBytes:            proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
 				Replicas: []roachpb.ReplicaDescriptor{
@@ -4081,10 +4086,11 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Need three replicas, have two.
 		{
 			zone: config.ZoneConfig{
-				NumReplicas:   3,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				RangeMinBytes: 0,
-				RangeMaxBytes: 64000,
+				NumReplicas:              proto.Int32(3),
+				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				ExplicitlySetConstraints: true,
+				RangeMinBytes:            proto.Int64(0),
+				RangeMaxBytes:            proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
 				Replicas: []roachpb.ReplicaDescriptor{
@@ -4105,10 +4111,11 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Need five replicas, have four, one is on a dead store.
 		{
 			zone: config.ZoneConfig{
-				NumReplicas:   5,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				RangeMinBytes: 0,
-				RangeMaxBytes: 64000,
+				NumReplicas:              proto.Int32(5),
+				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				ExplicitlySetConstraints: true,
+				RangeMinBytes:            proto.Int64(0),
+				RangeMaxBytes:            proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
 				Replicas: []roachpb.ReplicaDescriptor{
@@ -4139,10 +4146,11 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Need five replicas, have four.
 		{
 			zone: config.ZoneConfig{
-				NumReplicas:   5,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				RangeMinBytes: 0,
-				RangeMaxBytes: 64000,
+				NumReplicas:              proto.Int32(5),
+				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				ExplicitlySetConstraints: true,
+				RangeMinBytes:            proto.Int64(0),
+				RangeMaxBytes:            proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
 				Replicas: []roachpb.ReplicaDescriptor{
@@ -4173,10 +4181,11 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Need three replicas, have four, one is on a dead store.
 		{
 			zone: config.ZoneConfig{
-				NumReplicas:   3,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				RangeMinBytes: 0,
-				RangeMaxBytes: 64000,
+				NumReplicas:              proto.Int32(3),
+				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				ExplicitlySetConstraints: true,
+				RangeMinBytes:            proto.Int64(0),
+				RangeMaxBytes:            proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
 				Replicas: []roachpb.ReplicaDescriptor{
@@ -4207,10 +4216,11 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Need five replicas, have six, one is on a dead store.
 		{
 			zone: config.ZoneConfig{
-				NumReplicas:   5,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				RangeMinBytes: 0,
-				RangeMaxBytes: 64000,
+				NumReplicas:              proto.Int32(5),
+				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				ExplicitlySetConstraints: true,
+				RangeMinBytes:            proto.Int64(0),
+				RangeMaxBytes:            proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
 				Replicas: []roachpb.ReplicaDescriptor{
@@ -4251,10 +4261,11 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Need three replicas, have five, one is on a dead store.
 		{
 			zone: config.ZoneConfig{
-				NumReplicas:   3,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				RangeMinBytes: 0,
-				RangeMaxBytes: 64000,
+				NumReplicas:              proto.Int32(3),
+				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				ExplicitlySetConstraints: true,
+				RangeMinBytes:            proto.Int64(0),
+				RangeMaxBytes:            proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
 				Replicas: []roachpb.ReplicaDescriptor{
@@ -4290,10 +4301,11 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Need three replicas, have four.
 		{
 			zone: config.ZoneConfig{
-				NumReplicas:   3,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				RangeMinBytes: 0,
-				RangeMaxBytes: 64000,
+				NumReplicas:              proto.Int32(3),
+				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				ExplicitlySetConstraints: true,
+				RangeMinBytes:            proto.Int64(0),
+				RangeMaxBytes:            proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
 				Replicas: []roachpb.ReplicaDescriptor{
@@ -4324,10 +4336,11 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Need three replicas, have five.
 		{
 			zone: config.ZoneConfig{
-				NumReplicas:   3,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				RangeMinBytes: 0,
-				RangeMaxBytes: 64000,
+				NumReplicas:              proto.Int32(3),
+				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				ExplicitlySetConstraints: true,
+				RangeMinBytes:            proto.Int64(0),
+				RangeMaxBytes:            proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
 				Replicas: []roachpb.ReplicaDescriptor{
@@ -4365,10 +4378,11 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// a quorum.
 		{
 			zone: config.ZoneConfig{
-				NumReplicas:   3,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				RangeMinBytes: 0,
-				RangeMaxBytes: 64000,
+				NumReplicas:              proto.Int32(3),
+				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				ExplicitlySetConstraints: true,
+				RangeMinBytes:            proto.Int64(0),
+				RangeMaxBytes:            proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
 				Replicas: []roachpb.ReplicaDescriptor{
@@ -4394,10 +4408,11 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Need three replicas, have three, none of the replicas in the store pool.
 		{
 			zone: config.ZoneConfig{
-				NumReplicas:   3,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				RangeMinBytes: 0,
-				RangeMaxBytes: 64000,
+				NumReplicas:              proto.Int32(3),
+				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				ExplicitlySetConstraints: true,
+				RangeMinBytes:            proto.Int64(0),
+				RangeMaxBytes:            proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
 				Replicas: []roachpb.ReplicaDescriptor{
@@ -4423,10 +4438,11 @@ func TestAllocatorComputeAction(t *testing.T) {
 		// Need three replicas, have three.
 		{
 			zone: config.ZoneConfig{
-				NumReplicas:   3,
-				Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				RangeMinBytes: 0,
-				RangeMaxBytes: 64000,
+				NumReplicas:              proto.Int32(3),
+				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
+				ExplicitlySetConstraints: true,
+				RangeMinBytes:            proto.Int64(0),
+				RangeMaxBytes:            proto.Int64(64000),
 			},
 			desc: roachpb.RangeDescriptor{
 				Replicas: []roachpb.ReplicaDescriptor{
@@ -4490,7 +4506,7 @@ func TestAllocatorComputeActionRemoveDead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	zone := config.ZoneConfig{
-		NumReplicas: 3,
+		NumReplicas: proto.Int32(3),
 	}
 	threeReplDesc := roachpb.RangeDescriptor{
 		Replicas: []roachpb.ReplicaDescriptor{
@@ -4592,7 +4608,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 		// Has three replicas, but one is in decommissioning status
 		{
 			zone: config.ZoneConfig{
-				NumReplicas: 3,
+				NumReplicas: proto.Int32(3),
 			},
 			desc: roachpb.RangeDescriptor{
 				Replicas: []roachpb.ReplicaDescriptor{
@@ -4622,7 +4638,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 		// dead node.
 		{
 			zone: config.ZoneConfig{
-				NumReplicas: 3,
+				NumReplicas: proto.Int32(3),
 			},
 			desc: roachpb.RangeDescriptor{
 				Replicas: []roachpb.ReplicaDescriptor{
@@ -4652,7 +4668,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 		// dead.
 		{
 			zone: config.ZoneConfig{
-				NumReplicas: 3,
+				NumReplicas: proto.Int32(3),
 			},
 			desc: roachpb.RangeDescriptor{
 				Replicas: []roachpb.ReplicaDescriptor{
@@ -4687,7 +4703,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 		// decommissioned.
 		{
 			zone: config.ZoneConfig{
-				NumReplicas: 3,
+				NumReplicas: proto.Int32(3),
 			},
 			desc: roachpb.RangeDescriptor{
 				Replicas: []roachpb.ReplicaDescriptor{
@@ -4722,7 +4738,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 		// Needs three replicas, has three, all decommissioning
 		{
 			zone: config.ZoneConfig{
-				NumReplicas: 3,
+				NumReplicas: proto.Int32(3),
 			},
 			desc: roachpb.RangeDescriptor{
 				Replicas: []roachpb.ReplicaDescriptor{
@@ -4751,7 +4767,7 @@ func TestAllocatorComputeActionDecommission(t *testing.T) {
 		// Needs 3. Has 1 live, 3 decommissioning.
 		{
 			zone: config.ZoneConfig{
-				NumReplicas: 3,
+				NumReplicas: proto.Int32(3),
 			},
 			desc: roachpb.RangeDescriptor{
 				Replicas: []roachpb.ReplicaDescriptor{
@@ -4872,7 +4888,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 	zone := &config.ZoneConfig{
-		NumReplicas: 5,
+		NumReplicas: proto.Int32(5),
 	}
 
 	for _, prefixKey := range []roachpb.RKey{roachpb.RKey(keys.NodeLivenessPrefix), roachpb.RKey(keys.SystemPrefix)} {

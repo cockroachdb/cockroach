@@ -339,6 +339,10 @@ dist sender send  querying next range at /Table/3/1/53/2/1
 dist sender send  r1: sending batch 1 Get to (n1,s1):1
 dist sender send  querying next range at /Table/5/1/0/2/1
 dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/0/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/5/1/0/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
 sql txn           Put /Table/3/1/55/2/1 -> table:<name:"kv2" id:55 parent_id:53 version:2 up_version:false modification_time:<wall_time:... > columns:<name:"k" id:1 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:true hidden:false > columns:<name:"v" id:2 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:true hidden:false > columns:<name:"rowid" id:3 type:<semantic_type:INT width:0 precision:0 visible_type:NONE > nullable:false default_expr:"unique_rowid()" hidden:true > next_column_id:4 families:<name:"primary" id:0 column_names:"k" column_names:"v" column_names:"rowid" column_ids:1 column_ids:2 column_ids:3 default_column_id:0 > next_family_id:1 primary_index:<name:"primary" id:1 unique:true column_names:"rowid" column_directions:ASC column_ids:3 foreign_key:<table:0 index:0 name:"" validity:Validated shared_prefix_len:0 on_delete:NO_ACTION on_update:NO_ACTION > interleave:<> partitioning:<num_columns:0 > type:FORWARD > next_index_id:2 privileges:<users:<user:"admin" privileges:2 > users:<user:"root" privileges:2 > > next_mutation_id:1 format_version:3 state:DROP draining_names:<parent_id:53 name:"kv2" > view_query:"" drop_time:... replacement_of:<id:0 time:<> > audit_mode:DISABLED drop_job_id:... >
 dist sender send  querying next range at /Table/3/1/55/2/1
 dist sender send  r1: sending batch 1 Put to (n1,s1):1
@@ -435,6 +439,8 @@ dist sender send  r1: sending batch 1 Get to (n1,s1):1
 dist sender send  querying next range at /Table/5/1/53/2/1
 dist sender send  r1: sending batch 1 Get to (n1,s1):1
 dist sender send  querying next range at /Table/3/1/53/2/1
+dist sender send  r1: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/5/1/0/2/1
 dist sender send  r1: sending batch 1 Get to (n1,s1):1
 dist sender send  querying next range at /Table/5/1/0/2/1
 dist sender send  r1: sending batch 1 Get to (n1,s1):1

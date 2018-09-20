@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -179,7 +180,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	// Override default zone config.
 	cfg := config.DefaultZoneConfig()
-	cfg.RangeMaxBytes = 1 << 18
+	cfg.RangeMaxBytes = proto.Int64(1 << 18)
 	defer config.TestingSetDefaultZoneConfig(cfg)()
 
 	// Manually create the local test cluster so that the split queue

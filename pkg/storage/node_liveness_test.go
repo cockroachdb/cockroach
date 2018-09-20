@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -811,7 +812,7 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 	zoneConfig := config.DefaultZoneConfig()
 	// Force just one replica per range to ensure that we can shut down
 	// nodes without endangering the liveness range.
-	zoneConfig.NumReplicas = 1
+	zoneConfig.NumReplicas = proto.Int32(1)
 	config.TestingSetZoneConfig(keys.MetaRangesID, zoneConfig)
 
 	log.Infof(ctx, "starting 3 more nodes")

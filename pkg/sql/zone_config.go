@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -33,6 +34,7 @@ func init() {
 	// TODO(marc): we use a hook to avoid a dependency on the sql package. We
 	// should probably move keys/protos elsewhere.
 	config.ZoneConfigHook = ZoneConfigHook
+	config.InheritFromParent = InheritFromParent
 }
 
 var errNoZoneConfigApplies = errors.New("no zone config applies")
@@ -106,22 +108,102 @@ func getZoneConfig(
 	return 0, nil, 0, nil, errNoZoneConfigApplies
 }
 
+// CompleteZoneConfig takes a zone config pointer and fills in the
+// missing fields by following the chain of inheritance.
+// In the worst case, will have to inherit from the default zone config.
+// NOTE: This will not work for subzones. To complete subzones, find a complete
+// parent zone (index or table) and apply InheritFromParent to it.
+func CompleteZoneConfig(
+	cfg *config.ZoneConfig, id uint32, getKey func(roachpb.Key) (*roachpb.Value, error),
+) error {
+	if cfg.IsComplete() {
+		return nil
+	}
+	// Check to see if its a table. If so, inherit from the database.
+	// For all other cases, inherit from the default.
+	if descVal, err := getKey(sqlbase.MakeDescMetadataKey(sqlbase.ID(id))); err != nil {
+		return err
+	} else if descVal != nil {
+		var desc sqlbase.Descriptor
+		if err := descVal.GetProto(&desc); err != nil {
+			return err
+		}
+		if tableDesc := desc.GetTable(); tableDesc != nil {
+			_, dbzone, _, _, err := getZoneConfig(uint32(tableDesc.ParentID), getKey, false /* getInheritedDefault */)
+			if err != nil {
+				return err
+			}
+			InheritFromParent(cfg, *dbzone)
+		}
+	}
+
+	// Check if zone is complete. If not, inherit from the default zone config
+	if cfg.IsComplete() {
+		return nil
+	}
+	_, defaultZone, _, _, err := getZoneConfig(keys.RootNamespaceID, getKey, false /* getInheritedDefault */)
+	if err != nil {
+		return err
+	}
+	InheritFromParent(cfg, *defaultZone)
+	return nil
+}
+
+// InheritFromParent takes a pointer to a zone and hydrates its missing
+// fields from its parent (given as another argument).
+func InheritFromParent(cfg *config.ZoneConfig, parent config.ZoneConfig) {
+	if cfg.NumReplicas == nil {
+		if parent.NumReplicas != nil {
+			cfg.NumReplicas = proto.Int32(*parent.NumReplicas)
+		}
+	}
+	if cfg.RangeMinBytes == nil {
+		if parent.RangeMinBytes != nil {
+			cfg.RangeMinBytes = proto.Int64(*parent.RangeMinBytes)
+		}
+	}
+	if cfg.RangeMaxBytes == nil {
+		if parent.RangeMaxBytes != nil {
+			cfg.RangeMaxBytes = proto.Int64(*parent.RangeMaxBytes)
+		}
+	}
+	if cfg.GC == nil {
+		if parent.GC != nil {
+			tempGC := *parent.GC
+			cfg.GC = &tempGC
+		}
+	}
+	if !cfg.ExplicitlySetConstraints {
+		if parent.ExplicitlySetConstraints {
+			cfg.Constraints = parent.Constraints
+			cfg.ExplicitlySetConstraints = true
+		}
+	}
+	if !cfg.ExplicitlySetLeasePreferences {
+		if parent.ExplicitlySetLeasePreferences {
+			cfg.LeasePreferences = parent.LeasePreferences
+			cfg.ExplicitlySetLeasePreferences = true
+		}
+	}
+}
+
 // ZoneConfigHook returns the zone config for the object with id using the
 // cached system config. If keySuffix is within a subzone, the subzone's config
 // is returned instead.
 func ZoneConfigHook(
 	cfg *config.SystemConfig, id uint32,
 ) (*config.ZoneConfig, *config.ZoneConfig, bool, error) {
-	_, zone, _, placeholder, err := getZoneConfig(
-		id,
-		func(key roachpb.Key) (*roachpb.Value, error) {
-			return cfg.GetValue(key), nil
-		},
-		false, /* getInheritedDefault */
-	)
+	getKey := func(key roachpb.Key) (*roachpb.Value, error) {
+		return cfg.GetValue(key), nil
+	}
+	zoneID, zone, _, placeholder, err := getZoneConfig(
+		id, getKey, false /* getInheritedDefault */)
 	if err == errNoZoneConfigApplies {
 		return nil, nil, true, nil
 	} else if err != nil {
+		return nil, nil, false, err
+	}
+	if err = CompleteZoneConfig(zone, zoneID, getKey); err != nil {
 		return nil, nil, false, err
 	}
 	return zone, placeholder, true, nil
@@ -137,28 +219,38 @@ func GetZoneConfigInTxn(
 	partition string,
 	getInheritedDefault bool,
 ) (uint32, *config.ZoneConfig, *config.Subzone, error) {
+	getKey := func(key roachpb.Key) (*roachpb.Value, error) {
+		kv, err := txn.Get(ctx, key)
+		if err != nil {
+			return nil, err
+		}
+		return kv.Value, nil
+	}
 	zoneID, zone, placeholderID, placeholder, err := getZoneConfig(
-		id,
-		func(key roachpb.Key) (*roachpb.Value, error) {
-			kv, err := txn.Get(ctx, key)
-			if err != nil {
-				return nil, err
-			}
-			return kv.Value, nil
-		},
-		getInheritedDefault,
-	)
+		id, getKey, getInheritedDefault)
 	if err != nil {
+		return 0, nil, nil, err
+	}
+	if err = CompleteZoneConfig(zone, zoneID, getKey); err != nil {
 		return 0, nil, nil, err
 	}
 	var subzone *config.Subzone
 	if index != nil {
 		if placeholder != nil {
 			if subzone = placeholder.GetSubzone(uint32(index.ID), partition); subzone != nil {
+				if indexSubzone := placeholder.GetSubzone(uint32(index.ID), ""); indexSubzone != nil {
+					InheritFromParent(&subzone.Config, indexSubzone.Config)
+				}
+				InheritFromParent(&subzone.Config, *zone)
 				return placeholderID, placeholder, subzone, nil
 			}
 		} else {
-			subzone = zone.GetSubzone(uint32(index.ID), partition)
+			if subzone = zone.GetSubzone(uint32(index.ID), partition); subzone != nil {
+				if indexSubzone := zone.GetSubzone(uint32(index.ID), ""); indexSubzone != nil {
+					InheritFromParent(&subzone.Config, indexSubzone.Config)
+				}
+				InheritFromParent(&subzone.Config, *zone)
+			}
 		}
 	}
 	return zoneID, zone, subzone, nil

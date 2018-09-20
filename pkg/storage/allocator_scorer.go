@@ -937,7 +937,7 @@ func analyzeConstraints(
 			}
 		}
 	}
-	if constrainedReplicas > 0 && constrainedReplicas < zone.NumReplicas {
+	if constrainedReplicas > 0 && zone.NumReplicas != nil && constrainedReplicas < *zone.NumReplicas {
 		result.unconstrainedReplicas = true
 	}
 	return result

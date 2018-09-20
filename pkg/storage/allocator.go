@@ -287,7 +287,7 @@ func (a *Allocator) ComputeAction(
 	have := len(rangeInfo.Desc.Replicas)
 	decommissioningReplicas := a.storePool.decommissioningReplicas(rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas)
 	_, aliveStoreCount, _ := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterNone)
-	need := GetNeededReplicas(zone.NumReplicas, aliveStoreCount, len(decommissioningReplicas))
+	need := GetNeededReplicas(*zone.NumReplicas, aliveStoreCount, len(decommissioningReplicas))
 	desiredQuorum := computeQuorum(need)
 	quorum := computeQuorum(have)
 

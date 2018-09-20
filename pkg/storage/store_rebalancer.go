@@ -494,7 +494,7 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 		decommissioningReplicas := len(sr.rq.allocator.storePool.decommissioningReplicas(desc.RangeID, desc.Replicas))
 		_, aliveStoreCount, _ := sr.rq.allocator.storePool.getStoreList(desc.RangeID, storeFilterNone)
 
-		desiredReplicas := GetNeededReplicas(zone.NumReplicas, aliveStoreCount, decommissioningReplicas)
+		desiredReplicas := GetNeededReplicas(*zone.NumReplicas, aliveStoreCount, decommissioningReplicas)
 		targets := make([]roachpb.ReplicationTarget, 0, desiredReplicas)
 		targetReplicas := make([]roachpb.ReplicaDescriptor, 0, desiredReplicas)
 

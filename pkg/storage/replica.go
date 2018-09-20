@@ -1226,14 +1226,14 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 func (r *Replica) GetMinBytes() int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.zone.RangeMinBytes
+	return *r.mu.zone.RangeMinBytes
 }
 
 // GetMaxBytes gets the replica's maximum byte threshold.
 func (r *Replica) GetMaxBytes() int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.zone.RangeMaxBytes
+	return *r.mu.zone.RangeMaxBytes
 }
 
 // SetZoneConfig sets the replica's zone config.
@@ -1909,7 +1909,7 @@ func (r *Replica) State() storagebase.RangeInfo {
 	if r.mu.proposalQuota != nil {
 		ri.ApproximateProposalQuota = r.mu.proposalQuota.approximateQuota()
 	}
-	ri.RangeMaxBytes = r.mu.zone.RangeMaxBytes
+	ri.RangeMaxBytes = *r.mu.zone.RangeMaxBytes
 	return ri
 }
 
@@ -6721,7 +6721,7 @@ func (r *Replica) needsSplitBySizeRLocked() bool {
 }
 
 func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) bool {
-	maxBytes := r.mu.zone.RangeMaxBytes
+	maxBytes := *r.mu.zone.RangeMaxBytes
 	size := r.mu.state.Stats.Total()
 	return maxBytes > 0 && float64(size) > float64(maxBytes)*mult
 }
@@ -6889,7 +6889,7 @@ func calcReplicaMetrics(
 		decommissioningReplicas := len(storePool.decommissioningReplicas(desc.RangeID, desc.Replicas))
 		_, aliveStoreCount, _ := storePool.getStoreList(desc.RangeID, storeFilterNone)
 
-		if GetNeededReplicas(zone.NumReplicas, aliveStoreCount, decommissioningReplicas) > liveReplicas {
+		if GetNeededReplicas(*zone.NumReplicas, aliveStoreCount, decommissioningReplicas) > liveReplicas {
 			m.Underreplicated = true
 		}
 	}

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cenk/backoff"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	circuit "github.com/rubyist/circuitbreaker"
 
@@ -322,7 +323,7 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 		// Change the replication requirements so we don't get log spam about ranges
 		// not being replicated enough.
 		cfg := config.DefaultZoneConfig()
-		cfg.NumReplicas = 1
+		cfg.NumReplicas = proto.Int32(1)
 		fn := config.TestingSetDefaultZoneConfig(cfg)
 		params.Stopper.AddCloser(stop.CloserFn(fn))
 	}
