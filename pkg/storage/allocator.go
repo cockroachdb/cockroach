@@ -251,10 +251,16 @@ func GetNeededReplicas(
 	// replicas specified in the zone config, the cluster can still function.
 	need = int(math.Min(float64(aliveReplicas-decommissioningReplicas), float64(need)))
 
-	// Ensure that we don't up- or down-replicate to an even number of replicas.
-	// Note that in the case of 5 desired replicas and a decommissioning store, this prefers
-	// down-replicating from 5 to 3 rather than sticking with 4 desired stores or blocking
-	// the decommissioning from completing.
+	// Ensure that we don't up- or down-replicate to an even number of replicas
+	// unless an even number of replicas was specifically requested by the user
+	// in the zone config.
+	//
+	// Note that in the case of 5 desired replicas and a decommissioning store,
+	// this prefers down-replicating from 5 to 3 rather than sticking with 4
+	// desired stores or blocking the decommissioning from completing.
+	if need == numZoneReplicas {
+		return need
+	}
 	if need%2 == 0 {
 		need = need - 1
 	}
