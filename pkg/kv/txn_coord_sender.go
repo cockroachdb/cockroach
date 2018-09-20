@@ -236,10 +236,10 @@ func (gs *txnLockGatekeeper) SendLocked(
 
 // TxnMetrics holds all metrics relating to KV transactions.
 type TxnMetrics struct {
-	Aborts      *metric.CounterWithRates
-	Commits     *metric.CounterWithRates
-	Commits1PC  *metric.CounterWithRates // Commits which finished in a single phase
-	AutoRetries *metric.CounterWithRates // Auto retries which avoid client-side restarts
+	Aborts      *metric.Counter
+	Commits     *metric.Counter
+	Commits1PC  *metric.Counter // Commits which finished in a single phase
+	AutoRetries *metric.Counter // Auto retries which avoid client-side restarts
 	Durations   *metric.Histogram
 
 	// Restarts is the number of times we had to restart the transaction.
@@ -329,10 +329,10 @@ var (
 // windowed portions retain data for approximately histogramWindow.
 func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 	return TxnMetrics{
-		Aborts:                    metric.NewCounterWithRates(metaAbortsRates),
-		Commits:                   metric.NewCounterWithRates(metaCommitsRates),
-		Commits1PC:                metric.NewCounterWithRates(metaCommits1PCRates),
-		AutoRetries:               metric.NewCounterWithRates(metaAutoRetriesRates),
+		Aborts:                    metric.NewCounter(metaAbortsRates),
+		Commits:                   metric.NewCounter(metaCommitsRates),
+		Commits1PC:                metric.NewCounter(metaCommits1PCRates),
+		AutoRetries:               metric.NewCounter(metaAutoRetriesRates),
 		Durations:                 metric.NewLatency(metaDurationsHistograms, histogramWindow),
 		Restarts:                  metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
 		RestartsWriteTooOld:       metric.NewCounter(metaRestartsWriteTooOld),
