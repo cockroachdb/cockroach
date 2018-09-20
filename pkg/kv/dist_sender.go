@@ -786,6 +786,10 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			panic(r)
 		}
 		var hadSuccessWriting bool
+		// Combine all the responses.
+		// It's important that we wait for all of them even if an error is caught
+		// because the client.Sender() contract mandates that we don't "hold on" to
+		// any part of a request after DistSender.Send() returns.
 		for _, responseCh := range responseChs {
 			resp := <-responseCh
 			if resp.pErr != nil {
