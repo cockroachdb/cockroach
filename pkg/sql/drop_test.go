@@ -428,6 +428,7 @@ func TestDropIndex(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecQuickly:  true,
 			BackfillChunkSize: chunkSize,
 		},
 	}
@@ -450,12 +451,190 @@ func TestDropIndex(t *testing.T) {
 	if _, err := sqlDB.Exec(`DROP INDEX t.kv@foo`); err != nil {
 		t.Fatal(err)
 	}
-	tests.CheckKeyCount(t, kvDB, indexSpan, 0)
+	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
 
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.RunningStatusWaitingGC, jobs.Record{
+		Username:    security.RootUser,
+		Description: `DROP INDEX t.public.kv@foo`,
+		DescriptorIDs: sqlbase.IDs{
+			tableDesc.ID,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Test that the index data gets deleted after a DROP INDEX.
+func TestDropIndexGCData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const chunkSize = 200
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			BackfillChunkSize: chunkSize,
+			AsyncExecQuickly:  true,
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+	numRows := 2*chunkSize + 1
+	if err := tests.CreateKVTable(sqlDB, "kv", numRows); err != nil {
+		t.Fatal(err)
+	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(), 3*numRows)
+	idx, _, err := tableDesc.FindIndexByName("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	indexSpan := tableDesc.IndexSpan(idx.ID)
+	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
+	if _, err := sqlDB.Exec(`DROP INDEX t.kv@foo`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
+		t.Fatalf("table descriptor still contains index after index is dropped")
+	}
+	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
+	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(), 3*numRows)
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.RunningStatusWaitingGC, jobs.Record{
+		Username:    security.RootUser,
+		Description: `DROP INDEX t.public.kv@foo`,
+		DescriptorIDs: sqlbase.IDs{
+			tableDesc.ID,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add a zone config for the table.
+	cfg := config.DefaultZoneConfig()
+	cfg.GC.TTLSeconds = 0
+	buf, err := protoutil.Marshal(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
+		t.Fatal(err)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		if kvs, err := kvDB.Scan(context.TODO(), indexSpan.Key, indexSpan.EndKey, 0); err != nil {
+			return err
+		} else if l := 0; len(kvs) != l {
+			return errors.Errorf("expected %d key value pairs, but got %d", l, len(kvs))
+		}
+
+		return jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+			Username:    security.RootUser,
+			Description: `DROP INDEX t.public.kv@foo`,
+			DescriptorIDs: sqlbase.IDs{
+				tableDesc.ID,
+			},
+		})
+	})
+
+	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(), 2*numRows)
+}
+
+func TestDropIndexNameReuse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const chunkSize = 200
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			BackfillChunkSize: chunkSize,
+			AsyncExecQuickly:  true,
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+	numRows := 2*chunkSize + 1
+	if err := tests.CreateKVTable(sqlDB, "kv", numRows); err != nil {
+		t.Fatal(err)
+	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(), 3*numRows)
+	idx, _, err := tableDesc.FindIndexByName("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	indexSpan := tableDesc.IndexSpan(idx.ID)
+	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
+	if _, err := sqlDB.Exec(`DROP INDEX t.kv@foo`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
+		t.Fatalf("table descriptor still contains index after index is dropped")
+	}
+	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
+	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(), 3*numRows)
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.RunningStatusWaitingGC, jobs.Record{
+		Username:    security.RootUser,
+		Description: `DROP INDEX t.public.kv@foo`,
+		DescriptorIDs: sqlbase.IDs{
+			tableDesc.ID,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`CREATE INDEX foo on t.kv (v);`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+	newIdx, _, err := tableDesc.FindIndexByName("foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	newIdxSpan := tableDesc.IndexSpan(newIdx.ID)
+	tests.CheckKeyCount(t, kvDB, newIdxSpan, numRows)
+	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(), 4*numRows)
+
+	// Add a zone config for the table.
+	cfg := config.DefaultZoneConfig()
+	cfg.GC.TTLSeconds = 0
+	buf, err := protoutil.Marshal(&cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
+		t.Fatal(err)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		if kvs, err := kvDB.Scan(context.TODO(), indexSpan.Key, indexSpan.EndKey, 0); err != nil {
+			return err
+		} else if l := 0; len(kvs) != l {
+			return errors.Errorf("expected %d key value pairs, but got %d", l, len(kvs))
+		}
+
+		return jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+			Username:    security.RootUser,
+			Description: `DROP INDEX t.public.kv@foo`,
+			DescriptorIDs: sqlbase.IDs{
+				tableDesc.ID,
+			},
+		})
+	})
+
+	tests.CheckKeyCount(t, kvDB, newIdxSpan, numRows)
+	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(), 3*numRows)
 }
 
 func TestDropIndexWithZoneConfigOSS(t *testing.T) {
@@ -526,7 +705,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	if exists := sqlutils.ZoneConfigExists(t, sqlDB, "t.kv@foo"); exists {
 		t.Fatal("zone config for index still exists after dropping index")
 	}
-	tests.CheckKeyCount(t, kvDB, indexSpan, 0)
+	tests.CheckKeyCount(t, kvDB, indexSpan, numRows)
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "kv")
 	if _, _, err := tableDesc.FindIndexByName("foo"); err == nil {
 		t.Fatalf("table descriptor still contains index after index is dropped")

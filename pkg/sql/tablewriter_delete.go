@@ -258,14 +258,15 @@ func (td *tableDeleter) deleteIndex(
 	limit int64,
 	autoCommit autoCommitOpt,
 	traceKV bool,
+	rangeDelete bool,
 ) (roachpb.Span, error) {
-	if len(idx.Interleave.Ancestors) > 0 || len(idx.InterleavedBy) > 0 {
+	if idx.IsInterleaved() {
 		if log.V(2) {
 			log.Info(ctx, "delete forced to scan: table is interleaved")
 		}
 		return td.deleteIndexScan(ctx, idx, resume, limit, autoCommit, traceKV)
 	}
-	return td.deleteIndexFast(ctx, idx, resume, limit, autoCommit, traceKV)
+	return td.deleteIndexFast(ctx, idx, resume, limit, autoCommit, traceKV, rangeDelete)
 }
 
 func (td *tableDeleter) deleteIndexFast(
@@ -275,16 +276,40 @@ func (td *tableDeleter) deleteIndexFast(
 	limit int64,
 	autoCommit autoCommitOpt,
 	traceKV bool,
+	rangeDelete bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
 		resume = td.rd.Helper.TableDesc.IndexSpan(idx.ID)
 	}
 
+	if rangeDelete {
+		if traceKV {
+			log.VEventf(ctx, 2, "ClearRange %s - %s", resume.Key, resume.EndKey)
+		}
+
+		var b client.Batch
+		b.AddRawRequest(&roachpb.ClearRangeRequest{
+			RequestHeader: roachpb.RequestHeader{
+				Key:    resume.Key,
+				EndKey: resume.EndKey,
+			},
+		})
+
+		if err := td.txn.DB().Run(ctx, &b); err != nil {
+			return resume, err
+		}
+
+		if _, err := td.finalize(ctx, autoCommit, traceKV); err != nil {
+			return resume, err
+		}
+		return roachpb.Span{}, nil
+	}
+
+	// Legacy code that uses the slower DeleteRange, which is invoked when
+	// the schema change is run in the same transaction as the create table.
 	if traceKV {
 		log.VEventf(ctx, 2, "DelRange %s - %s", resume.Key, resume.EndKey)
 	}
-	// TODO(vivekmenezes): adapt index deletion to use the same GC
-	// deadline / ClearRange fast path that table deletion uses.
 	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
 	td.b.Header.MaxSpanRequestKeys = limit
 	if _, err := td.finalize(ctx, autoCommit, traceKV); err != nil {

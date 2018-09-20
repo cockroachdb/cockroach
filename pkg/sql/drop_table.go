@@ -378,6 +378,16 @@ func (p *planner) initiateDropTable(
 			}
 		}
 	}
+	for _, gcm := range tableDesc.GCMutations {
+		job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, gcm.JobID, p.txn)
+		if err != nil {
+			return err
+		}
+
+		if err := job.WithTxn(p.txn).Succeeded(ctx, jobs.NoopFn); err != nil {
+			return errors.Wrapf(err, "failed to mark job %d as as successful", gcm.JobID)
+		}
+	}
 
 	// Initiate an immediate schema change. When dropping a table
 	// in a session, the data and the descriptor are not deleted.

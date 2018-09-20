@@ -77,6 +77,11 @@ var schemaChangeLeaseRenewFraction = settings.RegisterFloatSetting(
 // attempting to become the job coordinator.
 const asyncSchemaChangeDelay = 1 * time.Minute
 
+type droppedIndex struct {
+	indexID  sqlbase.IndexID
+	dropTime int64
+}
+
 // SchemaChanger is used to change the schema on a table.
 type SchemaChanger struct {
 	tableID    sqlbase.ID
@@ -90,6 +95,11 @@ type SchemaChanger struct {
 
 	// table.DropTime.
 	dropTime int64
+
+	// The head of this list is the next index to have its data
+	// deleted when the SchemaChangeManager executes this schema
+	// changer.
+	dropIndexTimes []droppedIndex
 
 	readAsOf       hlc.Timestamp
 	testingKnobs   *SchemaChangerTestingKnobs
@@ -502,6 +512,102 @@ func (sc *SchemaChanger) maybeAddDrop(
 	return false, nil
 }
 
+func (sc *SchemaChanger) maybeGCMutations(
+	ctx context.Context,
+	inSession bool,
+	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	table *sqlbase.TableDescriptor,
+) error {
+	if inSession || len(table.GCMutations) == 0 || len(sc.dropIndexTimes) == 0 {
+		return nil
+	}
+
+	// Don't perform GC work if there are non-GC mutations waiting.
+	if len(table.Mutations) > 0 {
+		return nil
+	}
+
+	if err := sc.ExtendLease(ctx, lease); err != nil {
+		return err
+	}
+
+	found := false
+	var mutation sqlbase.TableDescriptor_GCDescriptorMutation
+	for _, gcm := range table.GCMutations {
+		if gcm.IndexID == sc.dropIndexTimes[0].indexID {
+			found = true
+			mutation = gcm
+			break
+		}
+	}
+	if !found {
+		return errors.Errorf("no GC mutation for index %d", sc.dropIndexTimes[0].indexID)
+	}
+
+	// This can happen if a change other than the drop originally
+	// scheduled the changer for this table. If that's the case,
+	// we still need to wait for the deadline to expire.
+	if mutation.DropTime != 0 {
+		var timeRemaining time.Duration
+		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			timeRemaining = 0
+			_, zoneCfg, _, err := GetZoneConfigInTxn(ctx, txn, uint32(table.ID),
+				&sqlbase.IndexDescriptor{ID: mutation.IndexID}, "", false /* getInheritedDefault */)
+			if err != nil {
+				return err
+			}
+			deadline := mutation.DropTime + int64(zoneCfg.GC.TTLSeconds)*time.Second.Nanoseconds()
+			timeRemaining = timeutil.Since(timeutil.Unix(0, deadline))
+			return nil
+		}); err != nil {
+			return err
+		}
+		if timeRemaining < 0 {
+			return nil
+		}
+	}
+
+	dropped := []sqlbase.IndexDescriptor{{ID: mutation.IndexID}}
+	if err := sc.truncateIndexes(ctx, lease, table.Version, dropped); err != nil {
+		return err
+	}
+
+	_, err := sc.leaseMgr.Publish(
+		ctx,
+		table.ID,
+		func(tbl *sqlbase.TableDescriptor) error {
+			if len(tbl.GCMutations) == 0 {
+				return errDidntUpdateDescriptor
+			}
+
+			found := false
+			for i := 0; i < len(tbl.GCMutations); i++ {
+				otherMut := tbl.GCMutations[i]
+				if otherMut.IndexID == mutation.IndexID {
+					tbl.GCMutations = append(tbl.GCMutations[:i], tbl.GCMutations[i+1:]...)
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				return errors.Errorf("could not find expected GC'd mutation")
+			}
+
+			return nil
+		},
+		func(txn *client.Txn) error {
+			job, err := sc.jobRegistry.LoadJobWithTxn(ctx, mutation.JobID, txn)
+			if err != nil {
+				return err
+			}
+			return job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn)
+		},
+	)
+
+	return err
+}
+
 func (sc *SchemaChanger) updateDropTableJob(
 	ctx context.Context, txn *client.Txn, jobID int64, tableID sqlbase.ID, status jobspb.Status,
 ) error {
@@ -655,6 +761,10 @@ func (sc *SchemaChanger) exec(
 		if err := sc.drainNames(ctx, &lease); err != nil {
 			return err
 		}
+	}
+
+	if err := sc.maybeGCMutations(ctx, inSession, &lease, tableDesc); err != nil {
+		return err
 	}
 
 	if drop, err := sc.maybeAddDrop(ctx, inSession, &lease, tableDesc, evalCtx); err != nil {
@@ -844,7 +954,14 @@ func (sc *SchemaChanger) waitToUpdateLeases(ctx context.Context, tableID sqlbase
 // Returns the updated of the descriptor.
 func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) {
 	isRollback := false
+	jobSucceeded := true
+	now := timeutil.Now().UnixNano()
+	allowClearRange := sc.execCfg.Settings.Version.IsActive(cluster.VersionClearRange)
 	return sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.TableDescriptor) error {
+		// Reset vars here because update function can be called multiple times in a retry.
+		isRollback = false
+		jobSucceeded = true
+
 		i := 0
 		for _, mutation := range desc.Mutations {
 			if mutation.MutationID != sc.mutationID {
@@ -853,7 +970,22 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) 
 				break
 			}
 			isRollback = mutation.Rollback
-			desc.MakeMutationComplete(mutation)
+			if indexDesc := mutation.GetIndex(); mutation.Direction == sqlbase.DescriptorMutation_DROP &&
+				indexDesc != nil &&
+				!indexDesc.IsInterleaved() &&
+				allowClearRange {
+
+				jobSucceeded = false
+				desc.GCMutations = append(
+					desc.GCMutations,
+					sqlbase.TableDescriptor_GCDescriptorMutation{
+						IndexID:  indexDesc.ID,
+						DropTime: now,
+						JobID:    *sc.job.ID(),
+					})
+			} else {
+				desc.MakeMutationComplete(mutation)
+			}
 			i++
 		}
 		if i == 0 {
@@ -873,8 +1005,16 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) 
 		}
 		return nil
 	}, func(txn *client.Txn) error {
-		if err := sc.job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn); err != nil {
-			return errors.Wrapf(err, "failed to mark job %d as as successful", *sc.job.ID())
+		if jobSucceeded {
+			if err := sc.job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn); err != nil {
+				return errors.Wrapf(err, "failed to mark job %d as successful", *sc.job.ID())
+			}
+		} else {
+			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
+				return jobs.RunningStatusWaitingGC, nil
+			}); err != nil {
+				return errors.Wrapf(err, "failed to update running status of job %d", *sc.job.ID())
+			}
 		}
 
 		schemaChangeEventType := EventLogFinishSchemaChange
@@ -980,7 +1120,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 			}
 
 			log.Warningf(ctx, "reverse schema change mutation: %+v", mutation)
-			desc.Mutations[i], columns = reverseMutation(mutation, false /*notStarted*/, columns)
+			desc.Mutations[i], columns = sc.reverseMutation(mutation, false /*notStarted*/, columns)
 
 			desc.Mutations[i].Rollback = true
 		}
@@ -1171,7 +1311,7 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 				// Reverse mutation. Update columns to reflect additional
 				// columns that have been purged. This mutation doesn't need
 				// a rollback because it was not started.
-				mutation, columns = reverseMutation(mutation, true /*notStarted*/, columns)
+				mutation, columns = sc.reverseMutation(mutation, true /*notStarted*/, columns)
 				// Mark as complete because this mutation needs no backfill.
 				desc.MakeMutationComplete(mutation)
 			} else {
@@ -1187,7 +1327,7 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 // Reverse a mutation. Returns the updated mutation and updated columns.
 // notStarted is set to true only if the schema change state machine
 // was not started for the mutation.
-func reverseMutation(
+func (sc *SchemaChanger) reverseMutation(
 	mutation sqlbase.DescriptorMutation, notStarted bool, columns map[string]struct{},
 ) (sqlbase.DescriptorMutation, map[string]struct{}) {
 	switch mutation.Direction {
@@ -1297,7 +1437,8 @@ type SchemaChangeManager struct {
 	testingKnobs *SchemaChangerTestingKnobs
 	// Create a schema changer for every outstanding schema change seen.
 	schemaChangers map[sqlbase.ID]SchemaChanger
-	// Create a schema changer for every dropped table that needs to be GC-ed.
+	// Create a schema changer for every table that is dropped or has
+	// dropped indexes that needs to be GC-ed.
 	forGC          map[sqlbase.ID]SchemaChanger
 	distSQLPlanner *DistSQLPlanner
 }
@@ -1413,24 +1554,49 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					// GC TTL for a table has indeed changed it is modified
 					// and enqueued with the new TTL timeout.
 					for id, sc := range s.forGC {
+						zoneCfg, placeholder, _, err := ZoneConfigHook(cfg, uint32(id))
+						if err != nil {
+							log.Errorf(ctx, "no zone config for desc: %d", id)
+							return
+						}
+						if placeholder == nil {
+							placeholder = zoneCfg
+						}
+
+						newExecTime := sc.execAfter
 						if sc.dropTime > 0 {
-							zoneCfg, _, _, err := ZoneConfigHook(cfg, uint32(id))
-							if err != nil {
-								log.Errorf(ctx, "no zone config for desc: %d", id)
-								return
-							}
 							deadline := sc.dropTime +
 								int64(zoneCfg.GC.TTLSeconds)*time.Second.Nanoseconds() +
 								int64(delay)
-							if ea := timeutil.Unix(0, deadline); ea != sc.execAfter {
-								resetTimer = true
-								sc.execAfter = ea
-								// Safe to modify map inplace while iterating over it.
-								s.forGC[id] = sc
-								if log.V(2) {
-									log.Infof(ctx,
-										"re-queue up pending drop table GC; table: %d", id)
+							newExecTime = timeutil.Unix(0, deadline)
+						}
+						if len(sc.dropIndexTimes) > 0 {
+							newExecTime = timeutil.Unix(0, 0)
+
+							for _, droppedIdx := range sc.dropIndexTimes {
+								ttlSeconds := zoneCfg.GC.TTLSeconds
+								if subzone := placeholder.GetSubzone(uint32(droppedIdx.indexID), ""); subzone != nil {
+									ttlSeconds = subzone.Config.GC.TTLSeconds
 								}
+
+								deadline := droppedIdx.dropTime +
+									int64(ttlSeconds)*time.Second.Nanoseconds() +
+									int64(delay)
+								execTime := timeutil.Unix(0, deadline)
+
+								if newExecTime.IsZero() || execTime.Before(newExecTime) {
+									newExecTime = execTime
+								}
+							}
+						}
+						if newExecTime != sc.execAfter {
+							resetTimer = true
+							sc.execAfter = newExecTime
+							// Safe to modify map inplace while iterating over it.
+							s.forGC[id] = sc
+							if log.V(2) {
+								log.Infof(ctx,
+									"re-queue up pending drop table GC; table: %d", id)
 							}
 						}
 					}
@@ -1475,6 +1641,38 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						schemaChanger.execAfter = execAfter
 						schemaChanger.dropTime = 0
 
+						needGC := false
+						var minDeadline int64
+						if len(table.GCMutations) > 0 {
+							needGC = true
+							zoneCfg, placeholder, _, err := ZoneConfigHook(cfg, uint32(table.ID))
+							if err != nil {
+								log.Errorf(ctx, "no zone config for desc: %d", table.ID)
+								return
+							}
+							if placeholder == nil {
+								placeholder = zoneCfg
+							}
+
+							for _, m := range table.GCMutations {
+								ttlSeconds := zoneCfg.GC.TTLSeconds
+								if subzone := placeholder.GetSubzone(uint32(m.IndexID), ""); subzone != nil {
+									ttlSeconds = subzone.Config.GC.TTLSeconds
+								}
+
+								deadline := m.DropTime +
+									int64(ttlSeconds)*time.Second.Nanoseconds() +
+									int64(delay)
+								dropped := droppedIndex{m.IndexID, m.DropTime}
+								if minDeadline == 0 || deadline < minDeadline {
+									minDeadline = deadline
+									schemaChanger.dropIndexTimes = append([]droppedIndex{dropped}, schemaChanger.dropIndexTimes...)
+								} else {
+									schemaChanger.dropIndexTimes = append(schemaChanger.dropIndexTimes, dropped)
+								}
+							}
+						}
+
 						// Keep track of outstanding schema changes.
 						// If all schema change commands always set UpVersion, why
 						// check for the presence of mutations?
@@ -1493,6 +1691,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 							}
 							s.schemaChangers[table.ID] = schemaChanger
 						} else if table.Dropped() {
+							needGC = true
 							// If the table is dropped add table to map forGC.
 							if log.V(2) {
 								log.Infof(ctx,
@@ -1510,14 +1709,24 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 								deadline := table.DropTime +
 									int64(zoneCfg.GC.TTLSeconds)*time.Second.Nanoseconds() +
 									int64(delay)
-								schemaChanger.execAfter = timeutil.Unix(0, deadline)
+								if minDeadline == 0 || deadline < minDeadline {
+									minDeadline = deadline
+								}
 							}
 
+							if minDeadline != 0 {
+								schemaChanger.execAfter = timeutil.Unix(0, minDeadline)
+							}
+						}
+
+						if needGC {
 							s.forGC[table.ID] = schemaChanger
-							// Remove from schema change map if present because
-							// this table has been dropped and is only waiting
-							// to be GC-ed.
-							delete(s.schemaChangers, table.ID)
+							if table.Dropped() {
+								// Remove from schema change map if present because
+								// this table has been dropped and is only waiting
+								// to be GC-ed.
+								delete(s.schemaChangers, table.ID)
+							}
 						}
 
 					case *sqlbase.Descriptor_Database:
