@@ -203,6 +203,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 
 	case *valuesNode:
 	case *virtualTableNode:
+	case *virtualTableAugmenterNode:
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:

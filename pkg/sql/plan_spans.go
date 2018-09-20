@@ -35,6 +35,7 @@ func collectSpans(params runParams, plan planNode) (reads, writes roachpb.Spans,
 	case
 		*valuesNode,
 		*virtualTableNode,
+		*virtualTableAugmenterNode,
 		*zeroNode,
 		*unaryNode:
 		return nil, nil, nil

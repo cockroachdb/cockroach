@@ -331,6 +331,7 @@ func doExpandPlan(
 
 	case *valuesNode:
 	case *virtualTableNode:
+	case *virtualTableAugmenterNode:
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
@@ -833,6 +834,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 
 	case *valuesNode:
 	case *virtualTableNode:
+	case *virtualTableAugmenterNode:
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:

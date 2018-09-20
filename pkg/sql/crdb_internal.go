@@ -24,12 +24,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1554,13 +1555,13 @@ CREATE TABLE crdb_internal.ranges (
   lease_holder INT NOT NULL
 )
 `,
-	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, error) {
+	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, virtualTableAugmenter, error) {
 		if err := p.RequireSuperUser(ctx, "read crdb_internal.ranges"); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		// TODO(knz): maybe this could use internalLookupCtx.
 		dbNames := make(map[uint64]string)
@@ -1586,77 +1587,81 @@ CREATE TABLE crdb_internal.ranges (
 			EndKey: keys.MaxKey,
 		})
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		var desc roachpb.RangeDescriptor
 
 		i := 0
 
 		return func() (tree.Datums, error) {
-			if i >= len(ranges) {
-				return nil, nil
-			}
+				if i >= len(ranges) {
+					return nil, nil
+				}
 
-			r := ranges[i]
-			i++
+				r := ranges[i]
+				i++
 
-			if err := r.ValueProto(&desc); err != nil {
-				return nil, err
-			}
-
-			var replicas []int
-			for _, rd := range desc.Replicas {
-				replicas = append(replicas, int(rd.StoreID))
-			}
-			sort.Ints(replicas)
-			arr := tree.NewDArray(types.Int)
-			for _, replica := range replicas {
-				if err := arr.Append(tree.NewDInt(tree.DInt(replica))); err != nil {
+				if err := r.ValueProto(&desc); err != nil {
 					return nil, err
 				}
-			}
 
-			var dbName, tableName, indexName string
-			if _, id, err := keys.DecodeTablePrefix(desc.StartKey.AsRawKey()); err == nil {
-				parent := parents[id]
-				if parent != 0 {
-					tableName = tableNames[id]
-					dbName = dbNames[parent]
-					if _, _, idxID, err := sqlbase.DecodeTableIDIndexID(desc.StartKey.AsRawKey()); err == nil {
-						indexName = indexNames[id][idxID]
-					}
-				} else {
-					dbName = dbNames[id]
+				var replicas []int
+				for _, rd := range desc.Replicas {
+					replicas = append(replicas, int(rd.StoreID))
 				}
-			}
+				sort.Ints(replicas)
+				arr := tree.NewDArray(types.Int)
+				for _, replica := range replicas {
+					if err := arr.Append(tree.NewDInt(tree.DInt(replica))); err != nil {
+						return nil, err
+					}
+				}
 
-			// Get the lease holder.
-			// TODO(radu): this will be slow if we have a lot of ranges; find a way to
-			// make this part optional.
-			b := &client.Batch{}
-			b.AddRawRequest(&roachpb.LeaseInfoRequest{
-				RequestHeader: roachpb.RequestHeader{
-					Key: desc.StartKey.AsRawKey(),
-				},
-			})
-			if err := p.txn.Run(ctx, b); err != nil {
-				return nil, errors.Wrap(err, "error getting lease info")
-			}
-			resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)
+				var dbName, tableName, indexName string
+				if _, id, err := keys.DecodeTablePrefix(desc.StartKey.AsRawKey()); err == nil {
+					parent := parents[id]
+					if parent != 0 {
+						tableName = tableNames[id]
+						dbName = dbNames[parent]
+						if _, _, idxID, err := sqlbase.DecodeTableIDIndexID(desc.StartKey.AsRawKey()); err == nil {
+							indexName = indexNames[id][idxID]
+						}
+					} else {
+						dbName = dbNames[id]
+					}
+				}
 
-			return tree.Datums{
-				tree.NewDInt(tree.DInt(desc.RangeID)),
-				tree.NewDBytes(tree.DBytes(desc.StartKey)),
-				tree.NewDString(keys.PrettyPrint(nil /* valDirs */, desc.StartKey.AsRawKey())),
-				tree.NewDBytes(tree.DBytes(desc.EndKey)),
-				tree.NewDString(keys.PrettyPrint(nil /* valDirs */, desc.EndKey.AsRawKey())),
-				tree.NewDString(dbName),
-				tree.NewDString(tableName),
-				tree.NewDString(indexName),
-				arr,
-				tree.NewDInt(tree.DInt(resp.Lease.Replica.StoreID)),
+				return tree.Datums{
+					tree.NewDInt(tree.DInt(desc.RangeID)),
+					tree.NewDBytes(tree.DBytes(desc.StartKey)),
+					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, desc.StartKey.AsRawKey())),
+					tree.NewDBytes(tree.DBytes(desc.EndKey)),
+					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, desc.EndKey.AsRawKey())),
+					tree.NewDString(dbName),
+					tree.NewDString(tableName),
+					tree.NewDString(indexName),
+					arr,
+					nil,
+				}, nil
+			}, func(row tree.Datums) (tree.Datums, error) {
+				// Get the lease holder.
+				// TODO(radu): this will be slow if we have a lot of ranges; find a way to
+				// make this part optional.
+				b := &client.Batch{}
+				b.AddRawRequest(&roachpb.LeaseInfoRequest{
+					RequestHeader: roachpb.RequestHeader{
+						Key: desc.StartKey.AsRawKey(),
+					},
+				})
+				if err := p.txn.Run(ctx, b); err != nil {
+					return nil, errors.Wrap(err, "error getting lease info")
+				}
+				resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)
+
+				row[9] = tree.NewDInt(tree.DInt(resp.Lease.Replica.StoreID))
+
+				return row, err
 			}, nil
-		}, nil
 	},
 }
 

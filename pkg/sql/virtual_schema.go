@@ -63,8 +63,11 @@ type virtualSchemaTable struct {
 
 	// generator, if non-nil, is a function that is used when creating a
 	// virtualTableNode. This function returns a virtualTableGenerator function
-	// which generates the next row of the virtual table when called.
-	generator func(ctx context.Context, p *planner, db *DatabaseDescriptor) (virtualTableGenerator, error)
+	// and a virtualTableAugmenter function which work together to generate the
+	// rows of the virtual table. Both virtualTableGenerator and
+	// virtualTableAugmentor return values must be non-nil, or an error should be
+	// returned.
+	generator func(ctx context.Context, p *planner, db *DatabaseDescriptor) (virtualTableGenerator, virtualTableAugmenter, error)
 }
 
 // virtualSchemas holds a slice of statically registered virtualSchema objects.
@@ -114,6 +117,10 @@ var errInvalidVirtualSchema = pgerror.NewError(pgerror.CodeInternalError,
 	"programming error: virtualSchema cannot have both the populate and generator functions defined",
 )
 
+var errInvalidVirtualTableGenerator = pgerror.NewError(pgerror.CodeInternalError,
+	"programming error: virtualSchema.generator must return two non-nil functions, or produce an error",
+)
+
 // getPlanInfo returns the column metadata and a constructor for a new
 // valuesNode for the virtual table. We use deferred construction here
 // so as to avoid populating a RowContainer during query preparation,
@@ -147,12 +154,20 @@ func (e virtualTableEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableCon
 		}
 
 		if e.tableDef.generator != nil {
-			next, err := e.tableDef.generator(ctx, p, dbDesc)
+			generator, augmenter, err := e.tableDef.generator(ctx, p, dbDesc)
 			if err != nil {
 				return nil, err
 			}
-			return p.newContainerVirtualTableNode(columns, 0, next), nil
+
+			if generator == nil || augmenter == nil {
+				return nil, errInvalidVirtualTableGenerator
+			}
+
+			return p.newContainerVirtualTableAugmenterNode(columns, augmenter, planDataSource{
+				plan: p.newContainerVirtualTableNode(columns, generator),
+			}), nil
 		}
+
 		v := p.newContainerValuesNode(columns, 0)
 
 		if err := e.tableDef.populate(ctx, p, dbDesc, func(datums ...tree.Datum) error {
@@ -208,8 +223,8 @@ func NewVirtualSchemaHolder(
 				}
 			}
 			tables[tableDesc.Name] = virtualTableEntry{
-				tableDef: table,
-				desc:     &tableDesc,
+				tableDef:                   table,
+				desc:                       &tableDesc,
 				validWithNoDatabaseContext: schema.validWithNoDatabaseContext,
 			}
 			orderedTableNames = append(orderedTableNames, tableDesc.Name)
