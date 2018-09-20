@@ -74,6 +74,8 @@ func setupTransientServer(
 	cleanup = func() {}
 	ctx := context.Background()
 
+	// Set up logging. For demo/transient server we use non-standard
+	// behavior where we avoid file creation if possible.
 	df := startCtx.logDirFlag
 	sf := cmd.Flags().Lookup(logflags.LogToStderrName)
 	if !df.Changed && !sf.Changed {
@@ -86,13 +88,13 @@ func setupTransientServer(
 		_ = sf.Value.Set(log.Severity_ERROR.String())
 		sf.Changed = true
 	}
-
 	stopper, err := setupAndInitializeLoggingAndProfiling(ctx)
 	if err != nil {
 		return connURL, adminURL, cleanup, err
 	}
 	cleanup = func() { stopper.Stop(ctx) }
 
+	// Create the transient server.
 	args := base.TestServerArgs{
 		Insecure: true,
 	}
@@ -103,6 +105,7 @@ func setupTransientServer(
 	prevCleanup := cleanup
 	cleanup = func() { prevCleanup(); server.Stopper().Stop(ctx) }
 
+	// Prepare the URL for use by the SQL shell.
 	options := url.Values{}
 	options.Add("sslmode", "disable")
 	options.Add("application_name", sql.InternalAppNamePrefix+"cockroach demo")
@@ -112,11 +115,15 @@ func setupTransientServer(
 		Host:     server.ServingAddr(),
 		RawQuery: options.Encode(),
 	}
-
 	if gen != nil {
-		meta := gen.Meta()
-		url.Path = meta.Name
-		db, err := gosql.Open("postgres", url.String())
+		url.Path = gen.Meta().Name
+	}
+	urlStr := url.String()
+
+	// If there is a load generator, create its database and load its
+	// fixture.
+	if gen != nil {
+		db, err := gosql.Open("postgres", urlStr)
 		if err != nil {
 			return ``, ``, cleanup, err
 		}
@@ -133,7 +140,7 @@ func setupTransientServer(
 		}
 	}
 
-	return url.String(), server.AdminURL(), cleanup, nil
+	return urlStr, server.AdminURL(), cleanup, nil
 }
 
 func runDemo(cmd *cobra.Command, gen workload.Generator) error {
