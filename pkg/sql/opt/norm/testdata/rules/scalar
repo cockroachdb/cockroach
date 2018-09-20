@@ -711,3 +711,276 @@ project
  │    └── tuple [type=tuple]
  └── projections
       └── const: 'two' [type=string]
+
+# --------------------------------------------------
+# UnifyComparisonTypes
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE e
+(
+    k INT PRIMARY KEY,
+    i INT,
+    t TIMESTAMP,
+    tz TIMESTAMPTZ,
+    d DATE,
+    INDEX (i),
+    INDEX (t),
+    INDEX (tz),
+    INDEX (d)
+)
+----
+TABLE e
+ ├── k int not null
+ ├── i int
+ ├── t timestamp
+ ├── tz timestamptz
+ ├── d date
+ ├── INDEX primary
+ │    └── k int not null
+ ├── INDEX secondary
+ │    ├── i int
+ │    └── k int not null
+ ├── INDEX secondary
+ │    ├── t timestamp
+ │    └── k int not null
+ ├── INDEX secondary
+ │    ├── tz timestamptz
+ │    └── k int not null
+ └── INDEX secondary
+      ├── d date
+      └── k int not null
+
+## --------------------------------------------------
+## INT / FLOAT / DECIMAL
+## --------------------------------------------------
+
+# Compare how we can generate spans with and without the rule enabled.
+opt expect=UnifyComparisonTypes
+SELECT * FROM e WHERE k > '1.0'::FLOAT
+----
+scan e
+ ├── columns: k:1(int!null) i:2(int) t:3(timestamp) tz:4(timestamptz) d:5(date)
+ ├── constraint: /1: [/2 - ]
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
+
+opt disable=UnifyComparisonTypes
+SELECT * FROM e WHERE k > '1.0'::FLOAT
+----
+select
+ ├── columns: k:1(int!null) i:2(int) t:3(timestamp) tz:4(timestamptz) d:5(date)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan e
+ │    ├── columns: k:1(int!null) i:2(int) t:3(timestamp) tz:4(timestamptz) d:5(date)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters [type=bool, outer=(1)]
+      └── k > 1.0 [type=bool, outer=(1)]
+
+# Ensure the rest of normalization does its work and we move things around appropriately.
+opt expect=UnifyComparisonTypes
+SELECT * FROM e WHERE '1.0'::FLOAT > k
+----
+scan e
+ ├── columns: k:1(int!null) i:2(int) t:3(timestamp) tz:4(timestamptz) d:5(date)
+ ├── constraint: /1: [ - /0]
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
+
+opt expect=UnifyComparisonTypes
+SELECT * FROM e WHERE k - 1 = 2::DECIMAL
+----
+scan e
+ ├── columns: k:1(int!null) i:2(int) t:3(timestamp) tz:4(timestamptz) d:5(date)
+ ├── constraint: /1: [/3 - /3]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+# TODO(justin): we should theoretically be able to generate constraints in this
+# case.
+opt expect-not=UnifyComparisonTypes
+SELECT * FROM e WHERE k > '1.1'::FLOAT
+----
+select
+ ├── columns: k:1(int!null) i:2(int) t:3(timestamp) tz:4(timestamptz) d:5(date)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan e
+ │    ├── columns: k:1(int!null) i:2(int) t:3(timestamp) tz:4(timestamptz) d:5(date)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters [type=bool, outer=(1)]
+      └── k > 1.1 [type=bool, outer=(1)]
+
+# -0 can generate spans
+opt expect=UnifyComparisonTypes
+SELECT * FROM e WHERE k > '-0'::FLOAT
+----
+scan e
+ ├── columns: k:1(int!null) i:2(int) t:3(timestamp) tz:4(timestamptz) d:5(date)
+ ├── constraint: /1: [/1 - ]
+ ├── key: (1)
+ └── fd: (1)-->(2-5)
+
+# NaN cannot generate spans.
+opt expect-not=UnifyComparisonTypes
+SELECT * FROM e WHERE k > 'NaN'::FLOAT
+----
+select
+ ├── columns: k:1(int!null) i:2(int) t:3(timestamp) tz:4(timestamptz) d:5(date)
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan e
+ │    ├── columns: k:1(int!null) i:2(int) t:3(timestamp) tz:4(timestamptz) d:5(date)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters [type=bool, outer=(1)]
+      └── k > NaN [type=bool, outer=(1)]
+
+# IS/IS NOT
+# We do not do the unification here (the rule matches on Const and NULL is its
+# own operator), but this is fine because when an explicit NULL is involved we
+# can generate spans anyway.
+opt expect-not=UnifyComparisonTypes format=show-all
+SELECT k FROM e WHERE i IS NOT DISTINCT FROM NULL::FLOAT
+----
+project
+ ├── columns: k:1(int!null)
+ ├── stats: [rows=10]
+ ├── cost: 10.5
+ ├── key: (1)
+ ├── prune: (1)
+ ├── interesting orderings: (+1)
+ └── scan e@secondary
+      ├── columns: t.public.e.k:1(int!null) t.public.e.i:2(int)
+      ├── constraint: /2/1: [/NULL - /NULL]
+      ├── stats: [rows=10, distinct(2)=1]
+      ├── cost: 10.4
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── prune: (1,2)
+      └── interesting orderings: (+1) (+2,+1)
+
+opt expect-not=UnifyComparisonTypes format=show-all
+SELECT k FROM e WHERE i IS DISTINCT FROM NULL::FLOAT
+----
+project
+ ├── columns: k:1(int!null)
+ ├── stats: [rows=895.95846]
+ ├── cost: 940.756383
+ ├── key: (1)
+ ├── prune: (1)
+ ├── interesting orderings: (+1)
+ └── scan e@secondary
+      ├── columns: t.public.e.k:1(int!null) t.public.e.i:2(int!null)
+      ├── constraint: /2/1: (/NULL - ]
+      ├── stats: [rows=895.95846]
+      ├── cost: 931.796798
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── prune: (1,2)
+      └── interesting orderings: (+1) (+2,+1)
+
+opt expect=UnifyComparisonTypes
+SELECT * FROM e WHERE k IS NOT DISTINCT FROM '1.0'::FLOAT
+----
+scan e
+ ├── columns: k:1(int!null) i:2(int) t:3(timestamp) tz:4(timestamptz) d:5(date)
+ ├── constraint: /1: [/1 - /1]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+## --------------------------------------------------
+## TIMESTAMP / TIMESTAMPTZ / DATE
+## --------------------------------------------------
+
+opt disable=UnifyComparisonTypes
+SELECT k FROM e WHERE tz > '2017-11-12 07:35:01+00:00'::TIMESTAMP
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) tz:4(timestamptz)
+      ├── key: (1)
+      ├── fd: (1)-->(4)
+      ├── scan e@secondary
+      │    ├── columns: k:1(int!null) tz:4(timestamptz!null)
+      │    ├── constraint: /4/1: (/NULL - ]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(4)
+      └── filters [type=bool, outer=(4)]
+           └── tz > '2017-11-12 07:35:01+00:00' [type=bool, outer=(4)]
+
+opt expect=UnifyComparisonTypes
+SELECT k FROM e WHERE tz > '2017-11-12 07:35:01+00:00'::TIMESTAMP
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── scan e@secondary
+      ├── columns: k:1(int!null) tz:4(timestamptz!null)
+      ├── constraint: /4/1: [/'2017-11-12 07:35:01.000001+00:00' - ]
+      ├── key: (1)
+      └── fd: (1)-->(4)
+
+# Common case arising from constant folding: the folding here results in a
+# TIMESTAMP, but we would still like to be able to generate DATE spans.
+opt
+SELECT k FROM e WHERE d > '2018-07-01' AND d < '2018-07-01'::DATE + '1w'::INTERVAL
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── scan e@secondary
+      ├── columns: k:1(int!null) d:5(date!null)
+      ├── constraint: /5/1: [/'2018-07-02' - /'2018-07-07']
+      ├── key: (1)
+      └── fd: (1)-->(5)
+
+# A case where we can theoretically generate spans, but do not.
+# TODO(justin): modify the logic to allow us to create spans in this case.
+opt
+SELECT k FROM e WHERE d > '2018-07-01' AND d < '2018-07-01'::DATE + '1w1s'::INTERVAL
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── select
+      ├── columns: k:1(int!null) d:5(date!null)
+      ├── key: (1)
+      ├── fd: (1)-->(5)
+      ├── scan e@secondary
+      │    ├── columns: k:1(int!null) d:5(date!null)
+      │    ├── constraint: /5/1: [/'2018-07-02' - ]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(5)
+      └── filters [type=bool, outer=(5)]
+           └── d < '2018-07-08 00:00:01+00:00' [type=bool, outer=(5)]
+
+# NULL value.
+opt
+SELECT k FROM e WHERE tz > NULL::TIMESTAMP
+----
+values
+ ├── columns: k:1(int)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+# Working in concert with other norm rules
+opt
+SELECT k FROM e WHERE d - '1w'::INTERVAL > '2018-07-01'::DATE
+----
+project
+ ├── columns: k:1(int!null)
+ ├── key: (1)
+ └── scan e@secondary
+      ├── columns: k:1(int!null) d:5(date!null)
+      ├── constraint: /5/1: [/'2018-07-09' - ]
+      ├── key: (1)
+      └── fd: (1)-->(5)
