@@ -118,11 +118,13 @@ class JobStatusCell extends React.Component<{ job: Job }, {}> {
       );
     }
     const percent = this.props.job.fraction_completed * 100;
-    return <div>
-      {this.props.job.running_status ? <div>{this.props.job.running_status}</div> : null}
-      <Line percent={percent} strokeWidth={10} trailWidth={10} className="jobs-table__progress-bar" />
-      <span title={percent.toFixed(3) + "%"}>{percent.toFixed(1) + "%"}</span>
-    </div>;
+    return (
+      <div>
+        {this.props.job.running_status ? <div>{this.props.job.running_status}</div> : null}
+        <Line percent={percent} strokeWidth={10} trailWidth={10} className="jobs-table__progress-bar" />
+        <span title={percent.toFixed(3) + "%"}>{percent.toFixed(1) + "%"}</span>
+      </div>
+    );
   }
 
   renderDuration() {
@@ -305,56 +307,57 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
   }
 
   render() {
-    return <div className="jobs-page">
-      <Helmet>
-        <title>Jobs</title>
-      </Helmet>
-      <section className="section">
-        <h1>
-          Jobs
-          <div className="section-heading__tooltip">
-            <ToolTipWrapper text={titleTooltip}>
-              <div className="section-heading__tooltip-hover-area">
-                <div className="section-heading__info-icon">i</div>
-              </div>
-            </ToolTipWrapper>
-          </div>
-        </h1>
-      </section>
-      <div>
-        <PageConfig>
-          <PageConfigItem>
-            <Dropdown
-              title="Status"
-              options={statusOptions}
-              selected={this.props.status}
-              onChange={this.onStatusSelected}
-            />
-          </PageConfigItem>
-          <PageConfigItem>
-            <Dropdown
-              title="Type"
-              options={typeOptions}
-              selected={this.props.type.toString()}
-              onChange={this.onTypeSelected}
-            />
-          </PageConfigItem>
-          <PageConfigItem>
-            <Dropdown
-              title="Show"
-              options={showOptions}
-              selected={this.props.show}
-              onChange={this.onShowSelected}
-            />
-          </PageConfigItem>
-        </PageConfig>
+    return (
+      <div className="jobs-page">
+        <Helmet>
+          <title>Jobs</title>
+        </Helmet>
+        <section className="section">
+          <h1>
+            Jobs
+            <div className="section-heading__tooltip">
+              <ToolTipWrapper text={titleTooltip}>
+                <div className="section-heading__tooltip-hover-area">
+                  <div className="section-heading__info-icon">i</div>
+                </div>
+              </ToolTipWrapper>
+            </div>
+          </h1>
+        </section>
+        <div>
+          <PageConfig>
+            <PageConfigItem>
+              <Dropdown
+                title="Status"
+                options={statusOptions}
+                selected={this.props.status}
+                onChange={this.onStatusSelected}
+              />
+            </PageConfigItem>
+            <PageConfigItem>
+              <Dropdown
+                title="Type"
+                options={typeOptions}
+                selected={this.props.type.toString()}
+                onChange={this.onTypeSelected}
+              />
+            </PageConfigItem>
+            <PageConfigItem>
+              <Dropdown
+                title="Show"
+                options={showOptions}
+                selected={this.props.show}
+                onChange={this.onShowSelected}
+              />
+            </PageConfigItem>
+          </PageConfig>
+        </div>
+        <Loading
+          loading={_.isNil(this.props.jobs)}
+          render={this.renderTable}
+        />
       </div>
-      <Loading
-        loading={_.isNil(this.props.jobs)}
-        className="loading-image loading-image__spinner"
-        render={this.renderTable}
-      />
-    </div>;
+    );
   }
 }
 
