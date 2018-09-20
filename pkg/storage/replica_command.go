@@ -1012,24 +1012,24 @@ func updateRangeDescriptor(
 	return nil
 }
 
-// RelocateRange relocates a given range to a given set of stores. The first
-// store in the slice becomes the new leaseholder.
+// AdminRelocateRange relocates a given range to a given set of stores. The
+// first store in the slice becomes the new leaseholder.
 //
-// This is best-effort; if replication queues are enabled and a change in
-// membership happens at the same time, there will be errors.
-func RelocateRange(
-	ctx context.Context,
-	db *client.DB,
-	rangeDesc roachpb.RangeDescriptor,
-	targets []roachpb.ReplicationTarget,
+// This is best-effort; it's possible that the replicate queue on the
+// leaseholder could take action at the same time, causing errors.
+//
+// TODO: How does this being a method on the leaseholder replica affect things?
+func (s *Store) AdminRelocateRange(
+	ctx context.Context, rangeDesc roachpb.RangeDescriptor, targets []roachpb.ReplicationTarget,
 ) error {
-	// Step 1: Add any stores that don't already have a replica of the range.
+	// Step 1: Compute which replicas are to be added and which are to be removed.
 	//
-	// TODO(radu): we can't have multiple replicas on different stores on the same
-	// node, which can lead to some odd corner cases where we would have to first
-	// remove some replicas (currently these cases fail).
+	// TODO(radu): we can't have multiple replicas on different stores on the
+	// same node, and this code doesn't do anything to specifically avoid that
+	// case (although the allocator will avoid even trying to send snapshots to
+	// such stores), so it could cause some failures.
 
-	var addTargets []roachpb.ReplicationTarget
+	var addTargets []roachpb.ReplicaDescriptor
 	for _, t := range targets {
 		found := false
 		for _, replicaDesc := range rangeDesc.Replicas {
@@ -1039,7 +1039,27 @@ func RelocateRange(
 			}
 		}
 		if !found {
-			addTargets = append(addTargets, t)
+			addTargets = append(addTargets, roachpb.ReplicaDescriptor{
+				NodeID:  t.NodeID,
+				StoreID: t.StoreID,
+			})
+		}
+	}
+
+	var removeTargets []roachpb.ReplicaDescriptor
+	for _, replicaDesc := range rangeDesc.Replicas {
+		found := false
+		for _, t := range targets {
+			if replicaDesc.StoreID == t.StoreID && replicaDesc.NodeID == t.NodeID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			removeTargets = append(removeTargets, roachpb.ReplicaDescriptor{
+				NodeID:  replicaDesc.NodeID,
+				StoreID: replicaDesc.StoreID,
+			})
 		}
 	}
 
@@ -1056,83 +1076,160 @@ func RelocateRange(
 		return false
 	}
 
-	every := log.Every(time.Minute)
-	re := retry.StartWithCtx(ctx, retry.Options{MaxBackoff: 5 * time.Second})
-	for len(addTargets) > 0 {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		target := addTargets[0]
-		if err := db.AdminChangeReplicas(
-			ctx, rangeDesc.StartKey.AsRawKey(), roachpb.ADD_REPLICA, []roachpb.ReplicationTarget{target},
-		); err != nil {
-			returnErr := errors.Wrapf(err, "while adding target %v", target)
-			if !canRetry(err) {
-				return returnErr
-			}
-			if every.ShouldLog() {
-				log.Warning(ctx, returnErr)
-			}
-			re.Next()
-			continue
-		}
-		addTargets = addTargets[1:]
-	}
-
-	// Step 2: Transfer the lease to the first target. This needs to happen before
-	// we remove replicas or we may try to remove the lease holder.
-
 	transferLease := func() {
-		if err := db.AdminTransferLease(
+		if err := s.DB().AdminTransferLease(
 			ctx, rangeDesc.StartKey.AsRawKey(), targets[0].StoreID,
 		); err != nil {
 			log.Warningf(ctx, "while transferring lease: %s", err)
 		}
 	}
 
-	transferLease()
-
-	// Step 3: Remove any replicas that are not targets.
-
-	var removeTargets []roachpb.ReplicationTarget
-	for _, replicaDesc := range rangeDesc.Replicas {
-		found := false
-		for _, t := range targets {
-			if replicaDesc.StoreID == t.StoreID && replicaDesc.NodeID == t.NodeID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			removeTargets = append(removeTargets, roachpb.ReplicationTarget{
-				StoreID: replicaDesc.StoreID,
-				NodeID:  replicaDesc.NodeID,
-			})
-		}
+	sysCfg := s.cfg.Gossip.GetSystemConfig()
+	if sysCfg == nil {
+		return fmt.Errorf("no system config available, unable to perform RelocateRange")
+	}
+	zone, err := sysCfg.GetZoneConfigForKey(rangeDesc.StartKey)
+	if err != nil {
+		return err
 	}
 
-	re.Reset()
-	for len(removeTargets) > 0 {
+	storeList, _, _ := s.allocator.storePool.getStoreList(rangeDesc.RangeID, storeFilterNone)
+	storeMap := storeListToMap(storeList)
+
+	// Deep-copy the Replicas slice (in our shallow copy of the RangeDescriptor)
+	// since we'll mutate it in the loop below.
+	desc := rangeDesc
+	desc.Replicas = append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)
+	rangeInfo := RangeInfo{Desc: &rangeDesc}
+
+	// Step 2: Repeatedly add a replica then remove a replica until we reach the
+	// desired state.
+	every := log.Every(time.Minute)
+	re := retry.StartWithCtx(ctx, retry.Options{MaxBackoff: 5 * time.Second})
+	for len(addTargets) > 0 || len(removeTargets) > 0 {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 
-		target := removeTargets[0]
-		transferLease()
-		if err := db.AdminChangeReplicas(
-			ctx, rangeDesc.StartKey.AsRawKey(), roachpb.REMOVE_REPLICA, []roachpb.ReplicationTarget{target},
-		); err != nil {
-			log.Warningf(ctx, "while removing target %v: %s", target, err)
-			if !canRetry(err) {
-				return err
+		if len(addTargets) > 0 && len(addTargets) >= len(removeTargets) {
+			// Each iteration, pick the most desirable replica to add. However,
+			// prefer the first target if it doesn't yet have a replica so that we
+			// can always transfer the lease to it before removing a replica below.
+			// This makes it easier to avoid removing a replica that's still
+			// leaseholder without needing to bounce the lease around a bunch.
+			candidates := addTargets
+			if storeHasReplica(targets[0].StoreID, candidates) {
+				candidates = []roachpb.ReplicaDescriptor{
+					{NodeID: targets[0].NodeID, StoreID: targets[0].StoreID},
+				}
 			}
-			re.Next()
-			continue
+
+			// The storeList's list of stores is used to constrain which stores the
+			// allocator considers putting a new replica on. We want it to only
+			// consider the stores in candidates.
+			candidateDescs := make([]roachpb.StoreDescriptor, 0, len(candidates))
+			for _, candidate := range candidates {
+				store, ok := storeMap[candidate.StoreID]
+				if !ok {
+					return fmt.Errorf("cannot up-repliate to s%d; missing gossiped StoreDescriptor", candidate.StoreID)
+				}
+				candidateDescs = append(candidateDescs, *store)
+			}
+			storeList = makeStoreList(candidateDescs)
+
+			targetStore, _ := s.allocator.allocateTargetFromList(
+				ctx,
+				storeList,
+				zone,
+				rangeInfo.Desc.Replicas,
+				rangeInfo,
+				s.allocator.scorerOptions())
+			if targetStore == nil {
+				return fmt.Errorf("none of the remaining targets %v are legal additions to %v",
+					addTargets, rangeInfo.Desc.Replicas)
+			}
+
+			target := roachpb.ReplicationTarget{
+				NodeID:  targetStore.Node.NodeID,
+				StoreID: targetStore.StoreID,
+			}
+			if err := s.DB().AdminChangeReplicas(
+				ctx, rangeDesc.StartKey.AsRawKey(), roachpb.ADD_REPLICA, []roachpb.ReplicationTarget{target},
+			); err != nil {
+				returnErr := errors.Wrapf(err, "while adding target %v", target)
+				if !canRetry(err) {
+					return returnErr
+				}
+				if every.ShouldLog() {
+					log.Warning(ctx, returnErr)
+				}
+				re.Next()
+				continue
+			}
+
+			// Upon success, remove the target from our to-do list and add it to our
+			// local copy of the range descriptor such that future allocator
+			// decisions take it into account.
+			addTargets = removeTargetFromSlice(addTargets, target)
+			rangeInfo.Desc.Replicas = append(rangeInfo.Desc.Replicas, roachpb.ReplicaDescriptor{
+				NodeID:  target.NodeID,
+				StoreID: target.StoreID,
+			})
 		}
-		removeTargets = removeTargets[1:]
+
+		if len(removeTargets) > 0 && len(removeTargets) > len(addTargets) {
+			targetStore, _, err := s.allocator.RemoveTarget(ctx, zone, removeTargets, rangeInfo)
+			if err != nil {
+				return errors.Wrapf(err, "unable to select removal target from %v; current replicas %v",
+					removeTargets, rangeInfo.Desc.Replicas)
+			}
+			target := roachpb.ReplicationTarget{
+				NodeID:  targetStore.NodeID,
+				StoreID: targetStore.StoreID,
+			}
+			// Note that attempting to remove the leaseholder won't work, so transfer
+			// the lease first in such scenarios. The first specified target should be
+			// the leaseholder now, so we can always transfer the lease there.
+			transferLease()
+			if err := s.DB().AdminChangeReplicas(
+				ctx, rangeDesc.StartKey.AsRawKey(), roachpb.REMOVE_REPLICA, []roachpb.ReplicationTarget{target},
+			); err != nil {
+				log.Warningf(ctx, "while removing target %v: %s", target, err)
+				if !canRetry(err) {
+					return err
+				}
+				re.Next()
+				continue
+			}
+
+			// Upon success, remove the target from our to-do list and from our local
+			// copy of the range descriptor such that future allocator decisions take
+			// its absence into account.
+			removeTargets = removeTargetFromSlice(removeTargets, target)
+			rangeInfo.Desc.Replicas = removeTargetFromSlice(rangeInfo.Desc.Replicas, target)
+		}
 	}
+
+	// Step 3: Transfer the lease to the first listed target, as the API specifies.
+	transferLease()
+
 	return ctx.Err()
+}
+
+// Modifies the underlying storage of the slice rather than copying.
+// Don't use on a shared slice where the order matters.
+func removeTargetFromSlice(
+	targets []roachpb.ReplicaDescriptor, target roachpb.ReplicationTarget,
+) []roachpb.ReplicaDescriptor {
+	for i, t := range targets {
+		if t.NodeID == target.NodeID && t.StoreID == target.StoreID {
+			// Swap the removed target with the last element in the slice and return
+			// a slice that's 1 element shorter than before.
+			targets[i], targets[len(targets)-1] = targets[len(targets)-1], targets[i]
+			return targets[:len(targets)-1]
+		}
+	}
+	return targets
 }
 
 // adminScatter moves replicas and leaseholders for a selection of ranges.

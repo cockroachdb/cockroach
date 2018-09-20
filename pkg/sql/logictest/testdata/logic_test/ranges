@@ -53,7 +53,7 @@ NULL       /1       {1}       1
 /10        NULL     {1}       1
 
 statement ok
-ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 5, 1), (ARRAY[5,2,3], 5, 2), (ARRAY[4,1,2], 5, 3)
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 5, 1), (ARRAY[5,2,3], 5, 2), (ARRAY[4,2,1], 5, 3)
 
 statement ok
 ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[3,4], 4)
@@ -280,11 +280,11 @@ SELECT * FROM crdb_internal.ranges
 ----
 range_id  start_key                          start_pretty              end_key                            end_pretty                database  table  index    replicas  lease_holder
 1         ·                                  /Min                      [189 137 137]                      /Table/53/1/1             ·         ·      ·        {1}       1
-2         [189 137 137]                      /Table/53/1/1             [189 137 141 137]                  /Table/53/1/5/1           test      t      ·        {4,3}     3
-11        [189 137 141 137]                  /Table/53/1/5/1           [189 137 141 138]                  /Table/53/1/5/2           test      t      ·        {3,1,2}   1
-12        [189 137 141 138]                  /Table/53/1/5/2           [189 137 141 139]                  /Table/53/1/5/3           test      t      ·        {3,5,2}   5
-13        [189 137 141 139]                  /Table/53/1/5/3           [189 137 143 144 254 190 137 145]  /Table/53/1/7/8/#/54/1/9  test      t      ·        {4,1,2}   4
-14        [189 137 143 144 254 190 137 145]  /Table/53/1/7/8/#/54/1/9  [189 137 146]                      /Table/53/1/10            test      t      ·        {4,1,2}   4
+2         [189 137 137]                      /Table/53/1/1             [189 137 141 137]                  /Table/53/1/5/1           test      t      ·        {3,4}     3
+11        [189 137 141 137]                  /Table/53/1/5/1           [189 137 141 138]                  /Table/53/1/5/2           test      t      ·        {1,2,3}   1
+12        [189 137 141 138]                  /Table/53/1/5/2           [189 137 141 139]                  /Table/53/1/5/3           test      t      ·        {2,3,5}   5
+13        [189 137 141 139]                  /Table/53/1/5/3           [189 137 143 144 254 190 137 145]  /Table/53/1/7/8/#/54/1/9  test      t      ·        {1,2,4}   4
+14        [189 137 143 144 254 190 137 145]  /Table/53/1/7/8/#/54/1/9  [189 137 146]                      /Table/53/1/10            test      t      ·        {1,2,4}   4
 3         [189 137 146]                      /Table/53/1/10            [189 137 147]                      /Table/53/1/11            test      t      ·        {1}       1
 8         [189 137 147]                      /Table/53/1/11            [189 137 151 152 254 191 138]      /Table/53/1/15/16/#/55/2  test      t      ·        {1}       1
 9         [189 137 151 152 254 191 138]      /Table/53/1/15/16/#/55/2  [189 138 144]                      /Table/53/2/8             test      t      ·        {1}       1

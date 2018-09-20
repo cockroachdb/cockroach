@@ -305,9 +305,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 		log.VEventf(ctx, 1, "rebalancing r%d (%.2f qps) from %v to %v to better balance load",
 			replWithStats.repl.RangeID, replWithStats.qps, descBeforeRebalance.Replicas, targets)
 		replCtx, cancel := context.WithTimeout(replWithStats.repl.AnnotateCtx(ctx), sr.rq.processTimeout)
-		// TODO(a-robinson): Either make RelocateRange production-ready or do the
-		// rebalancing another way.
-		if err := RelocateRange(replCtx, sr.rq.store.DB(), *descBeforeRebalance, targets); err != nil {
+		if err := sr.rq.store.AdminRelocateRange(replCtx, *descBeforeRebalance, targets); err != nil {
 			cancel()
 			log.Errorf(replCtx, "unable to relocate range to %v: %v", targets, err)
 			continue
@@ -594,8 +592,7 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 		}
 
 		// Pick the replica with the least QPS to be leaseholder;
-		// TestingRelocateRange transfers the lease to the first provided
-		// target.
+		// RelocateRange transfers the lease to the first provided target.
 		newLeaseIdx := 0
 		newLeaseQPS := math.MaxFloat64
 		for i := 0; i < len(targets); i++ {

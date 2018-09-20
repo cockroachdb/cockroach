@@ -2690,6 +2690,11 @@ func (r *Replica) executeAdminBatch(
 		pErr = roachpb.NewError(err)
 		resp = &roachpb.AdminChangeReplicasResponse{}
 
+	case *roachpb.AdminRelocateRangeRequest:
+		err := r.store.AdminRelocateRange(ctx, *r.Desc(), tArgs.Targets)
+		pErr = roachpb.NewError(err)
+		resp = &roachpb.AdminRelocateRangeResponse{}
+
 	case *roachpb.CheckConsistencyRequest:
 		var reply roachpb.CheckConsistencyResponse
 		reply, pErr = r.CheckConsistency(ctx, *tArgs)
