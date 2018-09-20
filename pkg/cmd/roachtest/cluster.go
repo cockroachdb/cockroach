@@ -1222,7 +1222,7 @@ func (m *monitor) Wait() {
 }
 
 func (m *monitor) wait(args ...string) error {
-	// It is surprisingly difficult to get the cancelation semantics exactly
+	// It is surprisingly difficult to get the cancellation semantics exactly
 	// right. We need to watch for the "workers" group (m.g) to finish, or for
 	// the monitor command to emit an unexpected node failure, or for the monitor
 	// command itself to exit. We want to capture whichever error happens first
@@ -1236,12 +1236,12 @@ func (m *monitor) wait(args ...string) error {
 	//   })
 	//
 	// Now consider what happens when an error is returned. Before the error
-	// reaches the errgroup, we invoke the cancelation closure which can cause
+	// reaches the errgroup, we invoke the cancellation closure which can cause
 	// the other goroutines to wake up and perhaps race and set the errgroup
 	// error first.
 	//
 	// The solution is to implement our own errgroup mechanism here which allows
-	// us to set the error before performing the cancelation.
+	// us to set the error before performing the cancellation.
 
 	var errOnce sync.Once
 	var err error
