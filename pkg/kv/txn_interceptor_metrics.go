@@ -80,11 +80,12 @@ func (m *txnMetrics) closeLocked() {
 		m.metrics.Commits1PC.Inc(1)
 	}
 
-	duration := m.clock.PhysicalNow() - m.txnStartNanos
+	if m.txnStartNanos != 0 {
+		m.metrics.Durations.RecordValue(m.clock.PhysicalNow() - m.txnStartNanos)
+	}
 	restarts := int64(m.txn.Epoch)
 	status := m.txn.Status
 
-	m.metrics.Durations.RecordValue(duration)
 	m.metrics.Restarts.RecordValue(restarts)
 	switch status {
 	case roachpb.ABORTED:
