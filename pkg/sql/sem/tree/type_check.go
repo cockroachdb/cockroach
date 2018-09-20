@@ -102,6 +102,11 @@ func (s *SemaProperties) Require(context string, rejectFlags SemaRejectFlags) {
 	s.Derived.Clear()
 }
 
+// IsSet checks if the given rejectFlag is set as a required property.
+func (s *SemaProperties) IsSet(rejectFlags SemaRejectFlags) bool {
+	return s.required.rejectFlags&rejectFlags != 0
+}
+
 // Restore restores a copy of a SemaProperties. Use with:
 // defer semaCtx.Properties.Restore(semaCtx.Properties)
 func (s *SemaProperties) Restore(orig SemaProperties) {
