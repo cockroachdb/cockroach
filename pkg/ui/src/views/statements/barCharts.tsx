@@ -308,8 +308,8 @@ export function latencyBreakdown(s: StatementStatistics) {
       const spread = scale(parseSd + (parseSd > parseMean ? parseMean : parseSd));
       const title = renderNumericStatLegend(s.stats.count, parseMean, parseSd, format);
       return (
-        <div className="bar-chart bar-chart--breakdown">
-          <ToolTipWrapper text={ title } short>
+        <ToolTipWrapper text={ title } short>
+          <div className="bar-chart bar-chart--breakdown">
             <div className="label">{ Duration(parseMean * 1e9) }</div>
             <div
               className="latency-parse bar-chart__bar"
@@ -319,8 +319,8 @@ export function latencyBreakdown(s: StatementStatistics) {
               className="latency-parse-dev bar-chart__bar bar-chart__bar--dev"
               style={{ width: spread + "%", position: "absolute", left: width + "%" }}
             />
-          </ToolTipWrapper>
-        </div>
+          </div>
+        </ToolTipWrapper>
       );
     },
 
@@ -331,8 +331,8 @@ export function latencyBreakdown(s: StatementStatistics) {
       const spread = scale(planSd + (planSd > planMean ? planMean : planSd));
       const title = renderNumericStatLegend(s.stats.count, planMean, planSd, format);
       return (
-        <div className="bar-chart bar-chart--breakdown">
-          <ToolTipWrapper text={ title } short>
+        <ToolTipWrapper text={ title } short>
+          <div className="bar-chart bar-chart--breakdown">
             <div className="label">{ Duration(planMean * 1e9) }</div>
             <div
               className="latency-plan bar-chart__bar"
@@ -342,8 +342,8 @@ export function latencyBreakdown(s: StatementStatistics) {
               className="latency-plan-dev bar-chart__bar bar-chart__bar--dev"
               style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
             />
-          </ToolTipWrapper>
-        </div>
+          </div>
+        </ToolTipWrapper>
       );
     },
 
@@ -354,8 +354,8 @@ export function latencyBreakdown(s: StatementStatistics) {
       const spread = scale(runSd + (runSd > runMean ? runMean : runSd));
       const title = renderNumericStatLegend(s.stats.count, runMean, runSd, format);
       return (
-        <div className="bar-chart bar-chart--breakdown">
-          <ToolTipWrapper text={ title } short>
+        <ToolTipWrapper text={ title } short>
+          <div className="bar-chart bar-chart--breakdown">
             <div className="label">{ Duration(runMean * 1e9) }</div>
             <div
               className="latency-run bar-chart__bar"
@@ -365,8 +365,8 @@ export function latencyBreakdown(s: StatementStatistics) {
               className="latency-run-dev bar-chart__bar bar-chart__bar--dev"
               style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
             />
-          </ToolTipWrapper>
-        </div>
+          </div>
+        </ToolTipWrapper>
       );
     },
 
@@ -377,8 +377,8 @@ export function latencyBreakdown(s: StatementStatistics) {
       const spread = scale(overheadSd + (overheadSd > overheadMean ? overheadMean : overheadSd));
       const title = renderNumericStatLegend(s.stats.count, overheadMean, overheadSd, format);
       return (
-        <div className="bar-chart bar-chart--breakdown">
-          <ToolTipWrapper text={ title } short>
+        <ToolTipWrapper text={ title } short>
+          <div className="bar-chart bar-chart--breakdown">
             <div className="label">{ Duration(overheadMean * 1e9) }</div>
             <div
               className="latency-overhead bar-chart__bar"
@@ -388,8 +388,8 @@ export function latencyBreakdown(s: StatementStatistics) {
               className="latency-overhead-dev bar-chart__bar bar-chart__bar--dev"
               style={{ width: spread + "%", position: "absolute", left: width + left + "%" }}
             />
-          </ToolTipWrapper>
-        </div>
+          </div>
+        </ToolTipWrapper>
       );
     },
 
@@ -402,8 +402,8 @@ export function latencyBreakdown(s: StatementStatistics) {
       const spread = scale(overallSd + (overallSd > overallMean ? overallMean : overallSd));
       const title = renderNumericStatLegend(s.stats.count, overallMean, overallSd, format);
       return (
-        <div className="bar-chart bar-chart--breakdown">
-          <ToolTipWrapper text={ title } short>
+        <ToolTipWrapper text={ title } short>
+          <div className="bar-chart bar-chart--breakdown">
             <div className="label">{ Duration(overallMean * 1e9) }</div>
             <div
               className="latency-parse bar-chart__bar"
@@ -425,8 +425,8 @@ export function latencyBreakdown(s: StatementStatistics) {
               className="latency-overall-dev bar-chart__bar bar-chart__bar--dev"
               style={{ width: spread + "%", position: "absolute", left: width + "%" }}
             />
-          </ToolTipWrapper>
-        </div>
+          </div>
+        </ToolTipWrapper>
       );
     },
   };

@@ -1,5 +1,6 @@
 import React from "react";
 import classNames from "classnames";
+import Popper from "popper.js";
 
 import "./tooltip.styl";
 
@@ -22,6 +23,10 @@ interface ToolTipWrapperState {
  * contents.
  */
 export class ToolTipWrapper extends React.Component<ToolTipWrapperProps, ToolTipWrapperState> {
+  popperInstance: Popper;
+  content: React.RefObject<HTMLDivElement> = React.createRef();
+  text: React.RefObject<HTMLDivElement> = React.createRef();
+
   constructor(props?: ToolTipWrapperProps, context?: any) {
     super(props, context);
     this.state = {
@@ -29,8 +34,24 @@ export class ToolTipWrapper extends React.Component<ToolTipWrapperProps, ToolTip
     };
   }
 
+  componentWillUnmount() {
+    if (this.popperInstance) {
+      this.popperInstance.destroy();
+    }
+  }
+
+  initPopper() {
+    // PopperOptions.eventsEnabled should be set to `false` to prevent
+    // performance issues on pages with a large number of tooltips
+    this.popperInstance = new Popper(this.content.current, this.text.current, {
+      placement: "auto",
+      eventsEnabled: false,
+    });
+  }
+
   onMouseEnter = () => {
     this.setState({hovered: true});
+    this.initPopper();
   }
 
   onMouseLeave = () => {
@@ -52,11 +73,11 @@ export class ToolTipWrapper extends React.Component<ToolTipWrapperProps, ToolTip
         onMouseEnter={this.onMouseEnter}
         onMouseLeave={this.onMouseLeave}
       >
-        <div className="hover-tooltip__text">
-          { text }
-        </div>
-        <div className="hover-tooltip__content">
+        <div className="hover-tooltip__content" ref={this.content}>
           { this.props.children }
+        </div>
+        <div className="hover-tooltip__text" ref={this.text}>
+          { text }
         </div>
       </div>
     );
