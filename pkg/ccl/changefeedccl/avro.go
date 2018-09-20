@@ -62,6 +62,11 @@ func avroEscapeName(name string) string {
 	return name
 }
 
+func avroUnescapeName(name string) string {
+	// TODO(dan): Name escaping.
+	return name
+}
+
 // columnDescToAvroSchema converts a column descriptor into its corresponding
 // avro field schema.
 func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField, error) {
@@ -119,7 +124,9 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 	schema.SchemaType = avroType
 
 	if colDesc.Nullable {
-		schema.SchemaType = []avroSchemaType{avroType, avroSchemaNull}
+		// The default for a union type is the default for the first element of
+		// the union. For nullable fields with no default, we want null.
+		schema.SchemaType = []avroSchemaType{avroSchemaNull, avroType}
 		encodeFn := schema.encodeFn
 		decodeFn := schema.decodeFn
 		schema.encodeFn = func(d tree.Datum) interface{} {
@@ -207,8 +214,8 @@ func tableToAvroSchema(tableDesc *sqlbase.TableDescriptor) (*avroSchemaRecord, e
 	return schema, nil
 }
 
-// TextualFromRow encodes the given row data into avro's defined JSON format.
-func (r *avroSchemaRecord) TextualFromRow(row sqlbase.EncDatumRow) ([]byte, error) {
+// textualFromRow encodes the given row data into avro's defined JSON format.
+func (r *avroSchemaRecord) textualFromRow(row sqlbase.EncDatumRow) ([]byte, error) {
 	native, err := r.nativeFromRow(row)
 	if err != nil {
 		return nil, err
@@ -225,8 +232,8 @@ func (r *avroSchemaRecord) BinaryFromRow(buf []byte, row sqlbase.EncDatumRow) ([
 	return r.codec.BinaryFromNative(buf, native)
 }
 
-// RowFromTextual decodes the given row data from avro's defined JSON format.
-func (r *avroSchemaRecord) RowFromTextual(buf []byte) (sqlbase.EncDatumRow, error) {
+// rowFromTextual decodes the given row data from avro's defined JSON format.
+func (r *avroSchemaRecord) rowFromTextual(buf []byte) (sqlbase.EncDatumRow, error) {
 	native, newBuf, err := r.codec.NativeFromTextual(buf)
 	if err != nil {
 		return nil, err
