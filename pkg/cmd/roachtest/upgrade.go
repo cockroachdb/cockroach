@@ -48,17 +48,7 @@ func registerUpgrade(r *registry) {
 		c.Put(ctx, b, "./cockroach", c.Range(1, nodes))
 		// Force disable encryption.
 		// TODO(mberhault): allow it once oldVersion >= 2.1.
-		start := func() {
-			c.Start(ctx, c.Range(1, nodes), startArgsDontEncrypt)
-		}
-		start()
-		time.Sleep(5 * time.Second)
-
-		// TODO(tschottdorf): this is a hack similar to the one in the mixed version
-		// test. Remove it when we have a 2.0.x binary that has #27639 fixed.
-		c.Stop(ctx, c.Range(1, nodes))
-		start()
-		time.Sleep(5 * time.Second)
+		c.Start(ctx, c.Range(1, nodes), startArgsDontEncrypt)
 
 		const stageDuration = 30 * time.Second
 		const timeUntilStoreDead = 90 * time.Second
@@ -266,7 +256,7 @@ func registerUpgrade(r *registry) {
 		}
 	}
 
-	const oldVersion = "v2.0.0"
+	const oldVersion = "v2.0.5"
 	for _, n := range []int{5} {
 		r.Add(testSpec{
 			Name:       fmt.Sprintf("upgrade/oldVersion=%s/nodes=%d", oldVersion, n),
