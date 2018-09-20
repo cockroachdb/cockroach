@@ -3,21 +3,15 @@ package rand
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
+	"database/sql/driver"
 	"fmt"
 	"log"
 	"math/rand"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
-
-	gosql "database/sql"
-
-	"github.com/lib/pq/oid"
-	"github.com/spf13/pflag"
-
-	"reflect"
-
-	"database/sql/driver"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -25,6 +19,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/lib/pq"
+	"github.com/lib/pq/oid"
+	"github.com/spf13/pflag"
 )
 
 type random struct {
@@ -311,6 +307,8 @@ func datumToGoSQL(d tree.Datum) interface{} {
 		return d.Time
 	case *tree.DTimestampTZ:
 		return d.Time
+	case *tree.DInterval:
+		return d.Duration.String()
 	case *tree.DBitArray:
 		return tree.AsStringWithFlags(d, tree.FmtBareStrings)
 	case *tree.DInt:
@@ -335,6 +333,10 @@ func datumToGoSQL(d tree.Datum) interface{} {
 			arr[i] = elt
 		}
 		return pq.Array(arr)
+	case *tree.DUuid:
+		return d.UUID
+	case *tree.DIPAddr:
+		return d.IPAddr.String()
 	}
 	log.Fatal("fail", d, reflect.TypeOf(d))
 	return nil

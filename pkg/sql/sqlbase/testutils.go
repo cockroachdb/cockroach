@@ -186,8 +186,7 @@ func RandDatumWithNullChance(rng *rand.Rand, typ ColumnType, nullChance int) tre
 		}
 		return tree.NewDName(string(p))
 	case ColumnType_OID:
-		// int64(rng.Uint64()) to get negative numbers, too
-		return tree.NewDOid(tree.DInt(int64(rng.Uint64())))
+		return tree.NewDOid(tree.DInt(rng.Uint32()))
 	case ColumnType_NULL:
 		return tree.DNull
 	case ColumnType_ARRAY:
