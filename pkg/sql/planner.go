@@ -390,7 +390,7 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) erro
 	return err
 }
 
-func (p *planner) lookupFKTable(
+func (p *planner) LookupTableID(
 	ctx context.Context, tableID sqlbase.ID,
 ) (sqlbase.TableLookup, error) {
 	flags := ObjectLookupFlags{

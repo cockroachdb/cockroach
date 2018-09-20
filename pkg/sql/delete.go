@@ -92,7 +92,7 @@ func (p *planner) Delete(
 		ctx,
 		*desc,
 		sqlbase.CheckDeletes,
-		p.lookupFKTable,
+		p.LookupTableID,
 		p.CheckPrivilege,
 		p.analyzeExpr,
 	)
