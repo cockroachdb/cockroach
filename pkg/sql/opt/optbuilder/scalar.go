@@ -141,10 +141,7 @@ func (b *Builder) buildScalar(
 			// Non-grouping column was referenced. Note that a column that is part
 			// of a larger grouping expression would have been detected by the
 			// groupStrs checking code above.
-			panic(builderError{pgerror.NewErrorf(pgerror.CodeGroupingError,
-				"column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function",
-				tree.ErrString(&t.name),
-			)})
+			panic(builderError{newGroupingError(&t.name)})
 		}
 
 		return b.finishBuildScalarRef(t, inScope, outScope, outCol, colRefs)
@@ -407,6 +404,12 @@ func (b *Builder) buildScalar(
 
 	case *srf:
 		if len(t.cols) == 1 {
+			if inGroupingContext {
+				// Non-grouping column was referenced. Note that a column that is part
+				// of a larger grouping expression would have been detected by the
+				// groupStrs checking code above.
+				panic(builderError{newGroupingError(&t.cols[0].name)})
+			}
 			return b.finishBuildScalarRef(&t.cols[0], inScope, outScope, outCol, colRefs)
 		}
 		list := make([]memo.GroupID, len(t.cols))
