@@ -118,17 +118,18 @@ func setupTransientServer(
 		url.Path = meta.Name
 		db, err := gosql.Open("postgres", url.String())
 		if err != nil {
-			return ``, ``, nil, err
+			return ``, ``, cleanup, err
 		}
 		defer db.Close()
-		if _, err := db.Exec(`CREATE DATABASE ` + meta.Name); err != nil {
-			return ``, ``, nil, err
+
+		if _, err := db.Exec(`CREATE DATABASE ` + gen.Meta().Name); err != nil {
+			return ``, ``, cleanup, err
 		}
 
 		ctx := context.TODO()
 		const batchSize, concurrency = 0, 0
 		if _, err := workload.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
-			return ``, ``, nil, err
+			return ``, ``, cleanup, err
 		}
 	}
 
