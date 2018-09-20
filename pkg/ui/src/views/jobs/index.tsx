@@ -254,7 +254,7 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
         <h1>
           Jobs
           <div className="section-heading__tooltip">
-            <ToolTipWrapper text={titleTooltip}>
+            <ToolTipWrapper text={titleTooltip} placement="right">
               <div className="section-heading__tooltip-hover-area">
                 <div className="section-heading__info-icon">i</div>
               </div>
