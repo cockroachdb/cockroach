@@ -908,3 +908,19 @@ project
                      │         │                   └── true [type=bool]
                      │         └── const: 1000 [type=int]
                      └── true [type=bool]
+
+# Regression test for #30412.
+build
+SELECT 0, unnest(ARRAY[0]) GROUP BY 1
+----
+error (42803): column "unnest" must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT 0, unnest(ARRAY[0]) GROUP BY 1, 2
+----
+error: unnest(): generator functions are not allowed in GROUP BY
+
+build
+SELECT 0, information_schema._pg_expandarray(ARRAY[0]) GROUP BY 1
+----
+error (42803): column "x" must appear in the GROUP BY clause or be used in an aggregate function
