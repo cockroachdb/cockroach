@@ -75,7 +75,7 @@ type txnSpanRefresher struct {
 	canAutoRetry bool
 	// autoRetryCounter counts the number of auto retries which avoid
 	// client-side restarts.
-	autoRetryCounter *metric.CounterWithRates
+	autoRetryCounter *metric.Counter
 }
 
 // SendLocked implements the lockedSender interface.
