@@ -61,17 +61,34 @@ type Sender interface {
 	// Send sends a batch for evaluation.
 	// The contract about whether both a response and an error can be returned
 	// varies between layers.
-	// The ownership of the pointers inside the batch (notably the Txn and the
-	// requests) is unusual, and the interface is leaky; the idea is that we don't
-	// clone batches before passing them to a transport, and the server on the
-	// other side of the transport might be local (and so the local server gets a
-	// shallow copy of the batch, like all the order Senders). Server-side modules
-	// are allowed to hold on to parts of the request and read them async (e.g. we
-	// might put a request in the timestamp cache). This all means that, once the
-	// batch reaches the transport boundary, all its deep fields are immutable -
-	// neither the server side nor the client side can change anything anymore
-	// (they must clone whatever they want to change). This is enforced in race
-	// tests by the "race transport" (transport_race.go).
+	//
+	// The caller retains ownership of all the memory referenced by the
+	// BatchRequest; the callee is not allowed to hold on to any parts of it past
+	// after it returns from the call (this is so that the client module can
+	// allocate requests from a pool and reuse them). For example, the DistSender
+	// makes sure that, if there are concurrent requests, it waits for all of them
+	// before returning, even in error cases.
+	//
+	// Once the request reaches the `transport` module, anothern restriction
+	// applies (particularly relevant for the case when the node that the
+	// transport is talking to is local, and so there's not gRPC
+	// marshaling/unmarshaling):
+	// - the callee has to treat everything inside the BatchRequest as
+	// read-only. This is so that the client module retains the right to pass
+	// pointers into its internals, like for example the Transaction. This
+	// wouldn't work if the server would be allowed to change the Transaction
+	// willy-nilly.
+	// TODO(andrei): The client does not currently use this last guarantee; it
+	// clones the txn for every request. Given that a client.Txn can be used
+	// concurrently, in order for the client to take advantage of this, it would
+	// need to switch to a copy-on-write scheme so that its updates to the txn do
+	// not race with the server reading it. We should do this to avoid the cloning
+	// allocations. And to be frank, it'd be a good idea for the
+	// BatchRequest/Response to generally stop carrying transactions; the requests
+	// usually only need a txn id and some timestamp. The responses would ideally
+	// contain a list of targeted instructions about what the client should
+	// update, as opposed to a full txn that the client is expected to diff with
+	// its copy and apply all the updates.
 	Send(context.Context, roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error)
 }
 
