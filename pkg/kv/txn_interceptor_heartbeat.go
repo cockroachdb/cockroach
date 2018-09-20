@@ -353,6 +353,10 @@ func (h *txnHeartbeat) startHeartbeatLoopLocked(ctx context.Context) error {
 		})
 }
 
+var errHeartbeatFailed = roachpb.NewErrorf("heartbeat failed fatally")
+var errHeartbeatClosed = roachpb.NewErrorf("txnHeartbeat already closed")
+var errHeartbeatQuiesced = roachpb.NewErrorf("node already quiescing")
+
 // heartbeatLoop periodically sends a HeartbeatTxn request to the transaction
 // record, stopping in the event the transaction is aborted or committed after
 // attempting to resolve the intents.
@@ -394,15 +398,15 @@ func (h *txnHeartbeat) heartbeatLoop(ctx context.Context) {
 				// This error we're generating here should not be seen by clients. Since
 				// the transaction is aborted, they should be rejected before they reach
 				// this interceptor.
-				finalErr = roachpb.NewErrorf("heartbeat failed fatally")
+				finalErr = errHeartbeatFailed
 				return
 			}
 		case <-closer:
 			// Transaction finished normally.
-			finalErr = roachpb.NewErrorf("txnHeartbeat already closed")
+			finalErr = errHeartbeatClosed
 			return
 		case <-h.stopper.ShouldQuiesce():
-			finalErr = roachpb.NewErrorf("node already quiescing")
+			finalErr = errHeartbeatQuiesced
 			return
 		}
 	}
