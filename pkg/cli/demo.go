@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -98,7 +99,7 @@ func setupTransientServer(
 	// Set up the default zone configuration. We are using an in-memory store
 	// so we really want to disable replication.
 	cfg := config.DefaultZoneConfig()
-	cfg.NumReplicas = 1
+	cfg.NumReplicas = proto.Int32(1)
 	restoreCfg := config.TestingSetDefaultSystemZoneConfig(cfg)
 	prevCleanup := cleanup
 	cleanup = func() { prevCleanup(); restoreCfg() }

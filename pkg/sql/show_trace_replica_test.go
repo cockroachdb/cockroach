@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -35,7 +36,7 @@ func TestShowTraceReplica(t *testing.T) {
 	const numNodes = 4
 
 	cfg := config.DefaultZoneConfig()
-	cfg.NumReplicas = 1
+	cfg.NumReplicas = proto.Int32(1)
 	defer config.TestingSetDefaultZoneConfig(cfg)()
 	defer config.TestingSetDefaultSystemZoneConfig(cfg)()
 
@@ -65,9 +66,12 @@ func TestShowTraceReplica(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE d.t1 (a INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `CREATE TABLE d.t2 (a INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `CREATE TABLE d.t3 (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE TABLE d.t4 (a INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `ALTER TABLE d.t1 CONFIGURE ZONE USING constraints = '[+n1]'`)
 	sqlDB.Exec(t, `ALTER TABLE d.t2 CONFIGURE ZONE USING constraints = '[+n2]'`)
 	sqlDB.Exec(t, `ALTER TABLE d.t3 CONFIGURE ZONE USING constraints = '[+n3]'`)
+	sqlDB.Exec(t, `ALTER TABLE d.t4 CONFIGURE ZONE USING num_replicas = 1`)
+	sqlDB.Exec(t, `ALTER DATABASE d CONFIGURE ZONE USING constraints = '[+n1]'`)
 
 	tests := []struct {
 		query    string
@@ -95,6 +99,11 @@ func TestShowTraceReplica(t *testing.T) {
 			query:    `ALTER TABLE d.t3 SCATTER`,
 			expected: [][]string{{`4`, `4`}, {`3`, `3`}},
 			distinct: true,
+		},
+		{
+			// Read from table that inherits constraints from database
+			query:    `SELECT * FROM d.t4`,
+			expected: [][]string{{`1`, `1`}},
 		},
 	}
 

@@ -90,13 +90,13 @@ message ZoneConfig {
   option (gogoproto.populate) = true;
 
   reserved 1;
-  optional int64 range_min_bytes = 2 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_min_bytes\""];
-  optional int64 range_max_bytes = 3 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"range_max_bytes\""];
+  optional int64 range_min_bytes = 2 [(gogoproto.moretags) = "yaml:\"range_min_bytes\""];
+  optional int64 range_max_bytes = 3 [(gogoproto.moretags) = "yaml:\"range_max_bytes\""];
   // If GC policy is not set, uses the next highest, non-null policy
   // in the zone config hierarchy, up to the default policy if necessary.
-  optional GCPolicy gc = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "GC"];
+  optional GCPolicy gc = 4 [(gogoproto.customname) = "GC"];
   // NumReplicas specifies the desired number of replicas
-  optional int32 num_replicas = 5 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"num_replicas\""];
+  optional int32 num_replicas = 5 [(gogoproto.moretags) = "yaml:\"num_replicas\""];
   // Constraints constrains which stores the replicas can be stored on. The
   // order in which the constraints are stored is arbitrary and may change.
   // https://github.com/cockroachdb/cockroach/blob/master/docs/RFCS/20160706_expressive_zone_config.md#constraint-system
@@ -129,6 +129,14 @@ message ZoneConfig {
   // TableDescriptor, but are denormalized here to make GetZoneConfigForKey
   // lookups efficient.
   repeated SubzoneSpan subzone_spans = 7 [(gogoproto.nullable) = false, (gogoproto.moretags) = "yaml:\"-\""];
+
+  // ExplicitlySetContraints specifies if value in the Constraints field was
+  // pupulated by the user explicitly and not inherited from the zone's parent.
+  optional bool explicitly_set_constraints = 10 [(gogoproto.nullable) = false];
+
+  // ExplicitlySetContraints specifies if value in the Constraints field was
+  // pupulated by the user explicitly and not inherited from the zone's parent.
+  optional bool explicitly_set_lease_preferences = 11 [(gogoproto.nullable) = false];
 }
 
 message Subzone {
