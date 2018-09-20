@@ -194,13 +194,15 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	seq := &sequence{config: w, val: w.writeSeq}
+	numEmptyResults := new(int64)
 	for i := 0; i < w.connFlags.Concurrency; i++ {
 		op := kvOp{
-			config:    w,
-			hists:     reg.GetHandle(),
-			db:        db,
-			readStmt:  readStmt,
-			writeStmt: writeStmt,
+			config:          w,
+			hists:           reg.GetHandle(),
+			db:              db,
+			readStmt:        readStmt,
+			writeStmt:       writeStmt,
+			numEmptyResults: numEmptyResults,
 		}
 		if w.sequential {
 			op.g = newSequentialGenerator(seq)
@@ -208,17 +210,19 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 			op.g = newHashGenerator(seq)
 		}
 		ql.WorkerFns = append(ql.WorkerFns, op.run)
+		ql.Close = op.close
 	}
 	return ql, nil
 }
 
 type kvOp struct {
-	config    *kv
-	hists     *workload.Histograms
-	db        *gosql.DB
-	readStmt  *gosql.Stmt
-	writeStmt *gosql.Stmt
-	g         keyGenerator
+	config          *kv
+	hists           *workload.Histograms
+	db              *gosql.DB
+	readStmt        *gosql.Stmt
+	writeStmt       *gosql.Stmt
+	g               keyGenerator
+	numEmptyResults *int64 // accessed atomically
 }
 
 func (o *kvOp) run(ctx context.Context) error {
@@ -232,7 +236,12 @@ func (o *kvOp) run(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		empty := true
 		for rows.Next() {
+			empty = false
+		}
+		if empty {
+			atomic.AddInt64(o.numEmptyResults, 1)
 		}
 		o.hists.Get(`read`).Record(timeutil.Since(start))
 		return rows.Err()
@@ -248,6 +257,15 @@ func (o *kvOp) run(ctx context.Context) error {
 	_, err := o.writeStmt.ExecContext(ctx, args...)
 	o.hists.Get(`write`).Record(timeutil.Since(start))
 	return err
+}
+
+func (o *kvOp) close(context.Context) {
+	if empty := atomic.LoadInt64(o.numEmptyResults); empty != 0 {
+		fmt.Printf("Number of reads that didn't return any results: %d.\n", empty)
+	}
+	seq := o.g.sequence()
+	fmt.Printf("Highest sequence written: %d. Can be passed as --write-seq=%d to the next run.\n",
+		seq, seq)
 }
 
 type sequence struct {
@@ -272,6 +290,7 @@ type keyGenerator interface {
 	writeKey() int64
 	readKey() int64
 	rand() *rand.Rand
+	sequence() int64
 }
 
 type hashGenerator struct {
@@ -314,6 +333,10 @@ func (g *hashGenerator) rand() *rand.Rand {
 	return g.random
 }
 
+func (g *hashGenerator) sequence() int64 {
+	return atomic.LoadInt64(&g.seq.val)
+}
+
 type sequentialGenerator struct {
 	seq    *sequence
 	random *rand.Rand
@@ -340,6 +363,10 @@ func (g *sequentialGenerator) readKey() int64 {
 
 func (g *sequentialGenerator) rand() *rand.Rand {
 	return g.random
+}
+
+func (g *sequentialGenerator) sequence() int64 {
+	return atomic.LoadInt64(&g.seq.val)
 }
 
 func randomBlock(config *kv, r *rand.Rand) []byte {
