@@ -105,7 +105,7 @@ func (p *planner) Insert(
 		ctx,
 		*desc,
 		fkCheckType,
-		p.lookupFKTable,
+		p.LookupTableID,
 		p.CheckPrivilege,
 		p.analyzeExpr,
 	)

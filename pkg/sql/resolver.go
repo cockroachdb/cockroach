@@ -43,6 +43,7 @@ type SchemaResolver interface {
 	CurrentSearchPath() sessiondata.SearchPath
 	CommonLookupFlags(ctx context.Context, required bool) CommonLookupFlags
 	ObjectLookupFlags(ctx context.Context, required bool) ObjectLookupFlags
+	LookupTableByID(ctx context.Context, id sqlbase.ID) (sqlbase.TableLookup, error)
 }
 
 var _ SchemaResolver = &planner{}
@@ -250,6 +251,15 @@ func (p *planner) ObjectLookupFlags(ctx context.Context, required bool) ObjectLo
 	return ObjectLookupFlags{
 		CommonLookupFlags: p.CommonLookupFlags(ctx, required),
 	}
+}
+
+// LookupTableByID looks up a table, by the given descriptor ID. Based on the
+// planner's flags, it could use or skip the TableCollection cache. See
+// TableCollection.getTableVersionByID for how it's used.
+func (p *planner) LookupTableByID(
+	ctx context.Context, id sqlbase.ID,
+) (sqlbase.TableLookup, error) {
+	return p.LookupTableID(ctx, id)
 }
 
 // getDescriptorsFromTargetList fetches the descriptors for the targets.
