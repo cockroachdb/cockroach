@@ -346,8 +346,7 @@ left-join (merge)
  │         │    │    │    │    └── merge-on
  │         │    │    │    │         ├── left ordering: +1
  │         │    │    │    │         ├── right ordering: +17
- │         │    │    │    │         └── filters [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ]), fd=(1)==(17), (17)==(1)]
- │         │    │    │    │              └── flavor_projects.flavor_id = flavors.id [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ])]
+ │         │    │    │    │         └── true [type=bool]
  │         │    │    │    └── aggregations [outer=(2-12,14,15,22)]
  │         │    │    │         ├── const-not-null-agg [type=bool, outer=(22)]
  │         │    │    │         │    └── variable: true [type=bool, outer=(22)]
@@ -393,8 +392,7 @@ left-join (merge)
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +28
-      └── filters [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ]), fd=(1)==(28), (28)==(1)]
-           └── flavor_extra_specs.flavor_id = flavors.id [type=bool, outer=(1,28), constraints=(/1: (/NULL - ]; /28: (/NULL - ])]
+      └── true [type=bool]
 
 opt
 select anon_1.flavors_created_at as anon_1_flavors_created_at,
@@ -573,8 +571,7 @@ sort
       │         │    │         │    │    │         │    │    └── merge-on
       │         │    │         │    │    │         │    │         ├── left ordering: +1
       │         │    │         │    │    │         │    │         ├── right ordering: +17
-      │         │    │         │    │    │         │    │         └── filters [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ]), fd=(1)==(17), (17)==(1)]
-      │         │    │         │    │    │         │    │              └── flavor_projects.flavor_id = flavors.id [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ])]
+      │         │    │         │    │    │         │    │         └── true [type=bool]
       │         │    │         │    │    │         │    └── aggregations [outer=(2-12,14,15,28)]
       │         │    │         │    │    │         │         ├── const-not-null-agg [type=bool, outer=(28)]
       │         │    │         │    │    │         │         │    └── variable: true [type=bool, outer=(28)]
@@ -799,8 +796,7 @@ sort
       │         │    │         │    │    └── merge-on
       │         │    │         │    │         ├── left ordering: +1
       │         │    │         │    │         ├── right ordering: +18
-      │         │    │         │    │         └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
-      │         │    │         │    │              └── instance_type_projects.instance_type_id = instance_types.id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
+      │         │    │         │    │         └── true [type=bool]
       │         │    │         │    └── aggregations [outer=(2-16,25)]
       │         │    │         │         ├── const-not-null-agg [type=bool, outer=(25)]
       │         │    │         │         │    └── variable: true [type=bool, outer=(25)]
@@ -954,8 +950,7 @@ sort
       │         │    │    └── merge-on
       │         │    │         ├── left ordering: +1
       │         │    │         ├── right ordering: +26
-      │         │    │         └── filters [type=bool, outer=(1,26), constraints=(/1: (/NULL - ]; /26: (/NULL - ]), fd=(1)==(26), (26)==(1)]
-      │         │    │              └── instance_type_projects.instance_type_id = instance_types.id [type=bool, outer=(1,26), constraints=(/1: (/NULL - ]; /26: (/NULL - ])]
+      │         │    │         └── true [type=bool]
       │         │    └── aggregations [outer=(2-16,33)]
       │         │         ├── const-not-null-agg [type=bool, outer=(33)]
       │         │         │    └── variable: true [type=bool, outer=(33)]
@@ -1164,8 +1159,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         └── (is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,26)]
  │    │         │    └── placeholder: $5 [type=int]
  │    │         └── placeholder: $6 [type=int]
- │    └── filters [type=bool, outer=(1,31,32), constraints=(/1: (/NULL - ]; /31: (/NULL - ]; /32: (/NULL - ]), fd=(1)==(31), (31)==(1)]
- │         ├── instance_type_extra_specs.instance_type_id = instance_types.id [type=bool, outer=(1,31), constraints=(/1: (/NULL - ]; /31: (/NULL - ])]
+ │    └── filters [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
  │         └── instance_type_extra_specs.deleted = $7 [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
  └── true [type=bool]
 
@@ -1303,8 +1297,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │    │    │    └── merge-on
  │    │         │    │    │    │         ├── left ordering: +1
  │    │         │    │    │    │         ├── right ordering: +18
- │    │         │    │    │    │         └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
- │    │         │    │    │    │              └── instance_type_projects.instance_type_id = instance_types.id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
+ │    │         │    │    │    │         └── true [type=bool]
  │    │         │    │    │    └── aggregations [outer=(2-16,25)]
  │    │         │    │    │         ├── const-not-null-agg [type=bool, outer=(25)]
  │    │         │    │    │         │    └── variable: true [type=bool, outer=(25)]
@@ -1342,8 +1335,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         └── (is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,26)]
  │    │         │    └── placeholder: $5 [type=int]
  │    │         └── placeholder: $6 [type=int]
- │    └── filters [type=bool, outer=(1,31,32), constraints=(/1: (/NULL - ]; /31: (/NULL - ]; /32: (/NULL - ]), fd=(1)==(31), (31)==(1)]
- │         ├── instance_type_extra_specs.instance_type_id = instance_types.id [type=bool, outer=(1,31), constraints=(/1: (/NULL - ]; /31: (/NULL - ])]
+ │    └── filters [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
  │         └── instance_type_extra_specs.deleted = $7 [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
  └── true [type=bool]
 
@@ -1468,8 +1460,7 @@ right-join
  │         │    │    │    │    └── merge-on
  │         │    │    │    │         ├── left ordering: +1
  │         │    │    │    │         ├── right ordering: +17
- │         │    │    │    │         └── filters [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ]), fd=(1)==(17), (17)==(1)]
- │         │    │    │    │              └── flavor_projects.flavor_id = flavors.id [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ])]
+ │         │    │    │    │         └── true [type=bool]
  │         │    │    │    └── aggregations [outer=(2-12,14,15,22)]
  │         │    │    │         ├── const-not-null-agg [type=bool, outer=(22)]
  │         │    │    │         │    └── variable: true [type=bool, outer=(22)]
@@ -1627,8 +1618,7 @@ right-join
  │         │    │    │    │    └── merge-on
  │         │    │    │    │         ├── left ordering: +1
  │         │    │    │    │         ├── right ordering: +17
- │         │    │    │    │         └── filters [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ]), fd=(1)==(17), (17)==(1)]
- │         │    │    │    │              └── flavor_projects.flavor_id = flavors.id [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ])]
+ │         │    │    │    │         └── true [type=bool]
  │         │    │    │    └── aggregations [outer=(2-12,14,15,22)]
  │         │    │    │         ├── const-not-null-agg [type=bool, outer=(22)]
  │         │    │    │         │    └── variable: true [type=bool, outer=(22)]
@@ -1805,8 +1795,7 @@ sort
       │         │    │         │    │    └── merge-on
       │         │    │         │    │         ├── left ordering: +1
       │         │    │         │    │         ├── right ordering: +17
-      │         │    │         │    │         └── filters [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ]), fd=(1)==(17), (17)==(1)]
-      │         │    │         │    │              └── flavor_projects.flavor_id = flavors.id [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ])]
+      │         │    │         │    │         └── true [type=bool]
       │         │    │         │    └── aggregations [outer=(2-12,14,15,22)]
       │         │    │         │         ├── const-not-null-agg [type=bool, outer=(22)]
       │         │    │         │         │    └── variable: true [type=bool, outer=(22)]
@@ -1996,8 +1985,7 @@ sort
       │         │    │         │    │    └── merge-on
       │         │    │         │    │         ├── left ordering: +1
       │         │    │         │    │         ├── right ordering: +18
-      │         │    │         │    │         └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
-      │         │    │         │    │              └── instance_type_projects.instance_type_id = instance_types.id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
+      │         │    │         │    │         └── true [type=bool]
       │         │    │         │    └── aggregations [outer=(2-16,25)]
       │         │    │         │         ├── const-not-null-agg [type=bool, outer=(25)]
       │         │    │         │         │    └── variable: true [type=bool, outer=(25)]
@@ -2208,8 +2196,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         └── (is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,26)]
  │    │         │    └── placeholder: $5 [type=int]
  │    │         └── placeholder: $6 [type=int]
- │    └── filters [type=bool, outer=(1,31,32), constraints=(/1: (/NULL - ]; /31: (/NULL - ]; /32: (/NULL - ]), fd=(1)==(31), (31)==(1)]
- │         ├── instance_type_extra_specs.instance_type_id = instance_types.id [type=bool, outer=(1,31), constraints=(/1: (/NULL - ]; /31: (/NULL - ])]
+ │    └── filters [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
  │         └── instance_type_extra_specs.deleted = $7 [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
  └── true [type=bool]
 
@@ -2305,8 +2292,7 @@ sort
       │         │    │    └── merge-on
       │         │    │         ├── left ordering: +1
       │         │    │         ├── right ordering: +23
-      │         │    │         └── filters [type=bool, outer=(1,23), constraints=(/1: (/NULL - ]; /23: (/NULL - ]), fd=(1)==(23), (23)==(1)]
-      │         │    │              └── flavor_projects.flavor_id = flavors.id [type=bool, outer=(1,23), constraints=(/1: (/NULL - ]; /23: (/NULL - ])]
+      │         │    │         └── true [type=bool]
       │         │    └── aggregations [outer=(2-12,14,15,28)]
       │         │         ├── const-not-null-agg [type=bool, outer=(28)]
       │         │         │    └── variable: true [type=bool, outer=(28)]
@@ -2529,8 +2515,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │              └── (is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,26)]
  │    │         │    └── placeholder: $7 [type=int]
  │    │         └── placeholder: $8 [type=int]
- │    └── filters [type=bool, outer=(1,31,32), constraints=(/1: (/NULL - ]; /31: (/NULL - ]; /32: (/NULL - ]), fd=(1)==(31), (31)==(1)]
- │         ├── instance_type_extra_specs.instance_type_id = instance_types.id [type=bool, outer=(1,31), constraints=(/1: (/NULL - ]; /31: (/NULL - ])]
+ │    └── filters [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
  │         └── instance_type_extra_specs.deleted = $9 [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
  └── true [type=bool]
 
@@ -2663,8 +2648,7 @@ sort
       │         │    │         │    │    └── merge-on
       │         │    │         │    │         ├── left ordering: +1
       │         │    │         │    │         ├── right ordering: +17
-      │         │    │         │    │         └── filters [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ]), fd=(1)==(17), (17)==(1)]
-      │         │    │         │    │              └── flavor_projects.flavor_id = flavors.id [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ])]
+      │         │    │         │    │         └── true [type=bool]
       │         │    │         │    └── aggregations [outer=(2-12,14,15,22)]
       │         │    │         │         ├── const-not-null-agg [type=bool, outer=(22)]
       │         │    │         │         │    └── variable: true [type=bool, outer=(22)]
@@ -2877,8 +2861,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         │    │    │         │    │    └── merge-on
  │    │         │    │         │    │    │         │    │         ├── left ordering: +1
  │    │         │    │         │    │    │         │    │         ├── right ordering: +18
- │    │         │    │         │    │    │         │    │         └── filters [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ]), fd=(1)==(18), (18)==(1)]
- │    │         │    │         │    │    │         │    │              └── instance_type_projects.instance_type_id = instance_types.id [type=bool, outer=(1,18), constraints=(/1: (/NULL - ]; /18: (/NULL - ])]
+ │    │         │    │         │    │    │         │    │         └── true [type=bool]
  │    │         │    │         │    │    │         │    └── aggregations [outer=(2-16,33)]
  │    │         │    │         │    │    │         │         ├── const-not-null-agg [type=bool, outer=(33)]
  │    │         │    │         │    │    │         │         │    └── variable: true [type=bool, outer=(33)]
@@ -2968,8 +2951,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │              └── (is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,37)]
  │    │         │    └── placeholder: $7 [type=int]
  │    │         └── placeholder: $8 [type=int]
- │    └── filters [type=bool, outer=(1,42,43), constraints=(/1: (/NULL - ]; /42: (/NULL - ]; /43: (/NULL - ]), fd=(1)==(42), (42)==(1)]
- │         ├── instance_type_extra_specs.instance_type_id = instance_types.id [type=bool, outer=(1,42), constraints=(/1: (/NULL - ]; /42: (/NULL - ])]
+ │    └── filters [type=bool, outer=(43), constraints=(/43: (/NULL - ])]
  │         └── instance_type_extra_specs.deleted = $9 [type=bool, outer=(43), constraints=(/43: (/NULL - ])]
  └── true [type=bool]
 
@@ -3159,8 +3141,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │              └── (is_public = true) OR (true_agg IS NOT NULL) [type=bool, outer=(12,26)]
  │    │         │    └── placeholder: $5 [type=int]
  │    │         └── placeholder: $6 [type=int]
- │    └── filters [type=bool, outer=(1,31,32), constraints=(/1: (/NULL - ]; /31: (/NULL - ]; /32: (/NULL - ]), fd=(1)==(31), (31)==(1)]
- │         ├── instance_type_extra_specs.instance_type_id = instance_types.id [type=bool, outer=(1,31), constraints=(/1: (/NULL - ]; /31: (/NULL - ])]
+ │    └── filters [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
  │         └── instance_type_extra_specs.deleted = $7 [type=bool, outer=(32), constraints=(/32: (/NULL - ])]
  └── true [type=bool]
 
@@ -3286,8 +3267,7 @@ right-join
  │         │    │    │    │    └── merge-on
  │         │    │    │    │         ├── left ordering: +1
  │         │    │    │    │         ├── right ordering: +17
- │         │    │    │    │         └── filters [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ]), fd=(1)==(17), (17)==(1)]
- │         │    │    │    │              └── flavor_projects.flavor_id = flavors.id [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ])]
+ │         │    │    │    │         └── true [type=bool]
  │         │    │    │    └── aggregations [outer=(2-12,14,15,22)]
  │         │    │    │         ├── const-not-null-agg [type=bool, outer=(22)]
  │         │    │    │         │    └── variable: true [type=bool, outer=(22)]
@@ -3447,8 +3427,7 @@ sort
       │         │         │    │    └── merge-on
       │         │         │    │         ├── left ordering: +1
       │         │         │    │         ├── right ordering: +17
-      │         │         │    │         └── filters [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ]), fd=(1)==(17), (17)==(1)]
-      │         │         │    │              └── flavor_projects.flavor_id = flavors.id [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ])]
+      │         │         │    │         └── true [type=bool]
       │         │         │    └── aggregations [outer=(2-15,22)]
       │         │         │         ├── const-not-null-agg [type=bool, outer=(22)]
       │         │         │         │    └── variable: true [type=bool, outer=(22)]

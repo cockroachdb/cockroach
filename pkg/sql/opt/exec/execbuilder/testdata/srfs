@@ -107,7 +107,7 @@ render                         ·               ·                              
                      │         type            inner                                                  ·                                                ·
                      │         equality        (x) = (x)                                              ·                                                ·
                      │         mergeJoinOrder  +"(x=x)"                                               ·                                                ·
-                     │         pred            (x = x) AND (y < z)                                    ·                                                ·
+                     │         pred            y < z                                                  ·                                                ·
                      ├── scan  ·               ·                                                      (x, y)                                           +x
                      │         table           xy@primary                                             ·                                                ·
                      │         spans           ALL                                                    ·                                                ·
@@ -152,7 +152,6 @@ render               ·               ·                                        
            │         type            left outer                               ·                                                           ·
            │         equality        (x) = (x)                                ·                                                           ·
            │         mergeJoinOrder  +"(x=x)"                                 ·                                                           ·
-           │         pred            x = x                                    ·                                                           ·
            ├── scan  ·               ·                                        (x, y)                                                      +x
            │         table           xy@primary                               ·                                                           ·
            │         spans           ALL                                      ·                                                           ·

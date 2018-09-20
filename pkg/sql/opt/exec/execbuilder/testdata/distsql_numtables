@@ -91,7 +91,6 @@ render          ·               ·                    (x, str)     ·
       │         type            inner                ·            ·
       │         equality        (x) = (y)            ·            ·
       │         mergeJoinOrder  +"(x=y)"             ·            ·
-      │         pred            x = y                ·            ·
       ├── scan  ·               ·                    (x)          +x
       │         table           numtosquare@primary  ·            ·
       │         spans           ALL                  ·            ·
@@ -104,7 +103,7 @@ render          ·               ·                    (x, str)     ·
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlUFr2zAUx-_7FOLBoKUasWSnaQQBnwYZLB2lt-GDG78lhsTKJBlWSr77sL2R2ckkuwKTWxzr56f3-wu9Nyhkhqt0jxrEd2BAgQOFEChEQGEKCYWDkmvUWqpqSQMss18gAgp5cShN9XdCYS0VgngDk5sdgoDn9GWHT5hmqCYBUMjQpPmuLnNQ-T5Vr3FR7o3UP8tUIVD4nO8MKkFuYkY-Ei6EWK6eb8mCBM1PoPBYGkFiBsmRgizNn-Knmi-vZJvqbbtavT6hoE26QRDsSN_XBLM1YVSfDnz2zf-779N3ykKqDBVmrS8lFfl3yaUFELO7pla3_6-oNvhF5gWqyX2b2eEPcxOzu9uFyjfb5mcV0YrEjCxIzE950TjstH5qK_Ro68KGV_KTPEwY6wq4WDtq1Wb9jwK_pqPAxj8KsxGOAu8fR3hNcfDx43gYIY6wfxzRNcURjh_HfIQ4ov5xTK8pjmj8OFgw8uC6sJ8n1AdZaOw1loKqI8w22EjSslRr_Kbkui7TPD7WXH35Z6hN85Y3D8uieVVtsD889YFnPvDcB2bMTrMBxvgweOoDz3zguQ_cMXZG8y4d_EuHdt2hFWZt30GXjnzCssOOsOywIyw77AjLDrvCmvqEde-j2w47dNthh2477NBth126Zz66H3x022GHbjvs0G2HHbrtsEv33Ec3GzIsz-_QIdNyKO26_IfMy6G0yzk7mx5W6cnxw-8AAAD__1z29JU=
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlV9r2zwUh-_fT2EOvNBSjVj-0zSCgq8GGSwdpXfDF258lhgcy5NkWCn57sPWRmYnk-yJhNzFsR6fc34P6LxDxXNcZTuUwL4CBQIBEAiBQAQEYkgJ1IKvUUou2iMaWOY_gPkEiqpuVPt3SmDNBQJ7B1WoEoHBS_Za4jNmOYqZDwRyVFlRdmVqUewy8ZZUzU5x-b3JBAKBj0WpUDDvJqHe_17AGFuuXm69R8_XP4HAU6OYl1BI9wR4o34VP9R8ffO2mdz2q3XnUwJSZRsERvfk34agpiGUGDOBS9_BX_s-fKepuMhRYN77UtqSv4-cOgAJvdO1hvN_RrHBT7yoUMzu-0yJ39RNQu9uH0Wx2eqfB0UkCQfTHiYJHSY50eOKf-D1jNLhzCdrR73adLz94Jrs08vbn5_HfjDeQHhNBoLLG3g4j4FwvIHomgyElzewOI-BaLyB-JoMRJc3QP3zL6ETLTyjrHklcdSK8dshMN-gzkXyRqzxi-Drrox-fOq47iLPUSr9NtAPy0q_ahscD8cu8NwFXrjAlJppOiGxYBocu8BzF3jhAg8SO6KDIe3_SYfmuEMjTPt5-0M6cpFlhi2yzLBFlhm2yDLDNlmxi6x7l7jNsCVuM2yJ2wxb4jbDtrjnLnE_uMRthi1xm2FL3GbYErcZtsW9cImbTlmWx3folG05lbZd_lP25VTaljk92h7G0NP9fz8DAAD___Wz59Q=
 
 #
 # -- Aggregation tests --

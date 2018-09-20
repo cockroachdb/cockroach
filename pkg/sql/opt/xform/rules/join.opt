@@ -39,7 +39,7 @@
 [GenerateMergeJoins, Explore]
 (JoinNonApply $left:* $right:* $on:*)
 =>
-(ConstructMergeJoins (OpName) $left $right $on)
+(GenerateMergeJoins (OpName) $left $right $on)
 
 # GenerateLookupJoins creates LookupJoin operators for all indexes (of the Scan
 # table) which allow it (including non-covering indexes). See the

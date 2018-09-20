@@ -64,8 +64,7 @@ inner-join (merge)
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +4
-      └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
-           └── dst = id [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+      └── true [type=bool]
 
 # ------------------------------------------------------------------------------
 # Github Issues 16313/16426: Ensure that STORING index is used to filter unread
@@ -393,8 +392,7 @@ group-by
  │    └── merge-on
  │         ├── left ordering: +3
  │         ├── right ordering: +9
- │         └── filters [type=bool, outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
- │              └── vehicles.id = vehicle_id [type=bool, outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ])]
+ │         └── true [type=bool]
  └── aggregations
       └── count-rows [type=int]
 
@@ -747,8 +745,7 @@ scalar-group-by
  │    └── merge-on
  │         ├── left ordering: +1
  │         ├── right ordering: +11
- │         └── filters [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
- │              └── o_orderkey = l_orderkey [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ])]
+ │         └── true [type=bool]
  └── aggregations [outer=(11)]
       └── count [type=int, outer=(11)]
            └── variable: l_orderkey [type=int, outer=(11)]
