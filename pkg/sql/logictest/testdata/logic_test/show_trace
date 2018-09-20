@@ -23,12 +23,10 @@ WHERE message LIKE '%SPAN START%' OR message LIKE '%pos%executing%';
 1  [Open pos:?] executing ExecStmt: SELECT 1            sql txn
 2  === SPAN START: consuming rows ===                   consuming rows
 1  [Open pos:?] executing ExecStmt: COMMIT TRANSACTION  sql txn
-3  === SPAN START: txn coordinator send ===             txn coordinator send
 0  [NoTxn pos:?] executing ExecStmt: SELECT 2           session recording
-4  === SPAN START: sql txn ===                          sql txn
-4  [Open pos:?] executing ExecStmt: SELECT 2            sql txn
-5  === SPAN START: consuming rows ===                   consuming rows
-6  === SPAN START: txn coordinator send ===             txn coordinator send
+3  === SPAN START: sql txn ===                          sql txn
+3  [Open pos:?] executing ExecStmt: SELECT 2            sql txn
+4  === SPAN START: consuming rows ===                   consuming rows
 0  [NoTxn pos:?] executing ExecStmt: SET TRACING = off  session recording
 
 # Check SHOW KV TRACE FOR SESSION.
