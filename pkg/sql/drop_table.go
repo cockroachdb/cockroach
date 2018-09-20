@@ -21,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -107,6 +108,13 @@ func (n *dropTableNode) startExec(params runParams) error {
 		if droppedDesc == nil {
 			continue
 		}
+
+		droppedDetails := jobspb.DroppedTableDetails{Name: toDel.tn.FQString(), ID: toDel.desc.ID}
+		if _, err := params.p.createDropTablesJob(ctx, sqlbase.TableDescriptors{droppedDesc}, []jobspb.DroppedTableDetails{droppedDetails}, tree.AsStringWithFlags(n.n,
+			tree.FmtAlwaysQualifyTableNames), true /* drainNames */); err != nil {
+			return err
+		}
+
 		droppedViews, err := params.p.dropTableImpl(params, droppedDesc)
 		if err != nil {
 			return err

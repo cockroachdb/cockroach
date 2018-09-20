@@ -112,6 +112,19 @@ message ResumeSpanList {
   repeated roachpb.Span resume_spans = 1 [(gogoproto.nullable) = false];
 }
 
+enum Status {
+  DRAINING_NAMES = 0;
+  WAIT_FOR_GC_INTERVAL = 1;
+  ROCKSDB_COMPACTION = 2;
+  DONE = 10;
+}
+
+message DroppedTableDetails {
+  string name = 1;
+  uint32 ID = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+  Status status = 3;
+}
+
 message SchemaChangeDetails {
   util.hlc.Timestamp read_as_of = 1 [(gogoproto.nullable) = false];
   // A schema change can involve running multiple processors backfilling
@@ -121,6 +134,7 @@ message SchemaChangeDetails {
   // be processed. The index represents the index of a mutation in a
   // mutation list containing mutations for the same mutationID.
   repeated ResumeSpanList resume_span_list = 2 [(gogoproto.nullable) = false];
+  repeated DroppedTableDetails dropped_tables = 3 [(gogoproto.nullable) = false];
 }
 
 message SchemaChangeProgress {
@@ -205,6 +219,7 @@ message Progress {
     util.hlc.Timestamp high_water = 3;
   }
   int64 modified_micros = 2;
+  string running_status = 4;
 
   oneof details {
     BackupProgress backup = 10;

@@ -50,6 +50,11 @@ query II
 SELECT * FROM kview
 ----
 
+query TT
+SELECT status, running_status FROM [SHOW JOBS]
+----
+running  waiting for GC TTL
+
 # Ensure that TRUNCATE works with a self referential FK.
 statement ok
 CREATE TABLE selfref (

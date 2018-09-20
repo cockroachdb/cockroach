@@ -83,6 +83,7 @@ func (n *dropViewNode) startExec(params runParams) error {
 		if droppedDesc == nil {
 			continue
 		}
+
 		cascadeDroppedViews, err := params.p.dropViewImpl(ctx, droppedDesc, n.n.DropBehavior)
 		if err != nil {
 			return err

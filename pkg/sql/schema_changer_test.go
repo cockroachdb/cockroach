@@ -2834,6 +2834,18 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	if !droppedDesc.Dropped() {
 		t.Fatalf("bad state = %s", droppedDesc.State)
 	}
+
+	// Job still running, waiting for GC.
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.RunningStatusWaitingGC, jobs.Record{
+		Username:    security.RootUser,
+		Description: "TRUNCATE TABLE t.test",
+		DescriptorIDs: sqlbase.IDs{
+			tableDesc.ID,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Test that a table truncation completes properly.
@@ -2963,6 +2975,18 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 		t.Fatal(err)
 	} else if e := 1; len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+
+	// Ensure that the job is marked as succeeded.
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+		Username:    security.RootUser,
+		Description: "TRUNCATE TABLE t.test",
+		DescriptorIDs: sqlbase.IDs{
+			tableDesc.ID,
+		},
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 

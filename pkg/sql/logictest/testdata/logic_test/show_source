@@ -270,10 +270,10 @@ SELECT * FROM [SHOW COMPACT TRACE FOR SESSION] LIMIT 0
 ----
 age  message  tag  operation
 
-query ITTTTTTTTRTI colnames
+query ITTTTTTTTTRTI colnames
 SELECT * FROM [SHOW JOBS] LIMIT 0
 ----
-job_id  job_type  description  user_name  status  created  started  finished  modified  fraction_completed  error  coordinator_id
+job_id  job_type  description  user_name  status  running_status  created  started  finished  modified  fraction_completed  error  coordinator_id
 
 query TT colnames
 SELECT * FROM [SHOW SYNTAX 'select 1; select 2']
