@@ -88,6 +88,15 @@ func waitForConfigChange(t testing.TB, s *server.TestServer) config.SystemConfig
 func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
+	cfg := config.DefaultSystemZoneConfig()
+	cfg.NumReplicas = 1
+	cfg.RangeMinBytes = 1 << 20
+	cfg.RangeMaxBytes = 1 << 20
+	cfg.GC.TTLSeconds = 60
+
+	fnSys := config.TestingSetDefaultSystemZoneConfig(cfg)
+	defer fnSys()
+
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.TODO())
 	s := srv.(*server.TestServer)
