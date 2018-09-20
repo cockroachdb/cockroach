@@ -70,6 +70,7 @@ SELECT * FROM a WHERE s = 'foo' LIMIT (SELECT 5 AS c)
 ----
 limit
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
+ ├── side-effects
  ├── stats: [rows=200]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)

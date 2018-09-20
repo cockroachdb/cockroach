@@ -180,29 +180,9 @@ offset
 opt
 SELECT s, x FROM (SELECT * FROM xyzs LIMIT 100) WHERE s='foo' OFFSET 4294967296
 ----
-offset
- ├── columns: s:4(string!null) x:1(int!null)
+values
+ ├── columns: s:4(string) x:1(int)
  ├── cardinality: [0 - 0]
- ├── key: (1)
- ├── fd: ()-->(4)
- ├── prune: (1)
- ├── interesting orderings: (+1) (-4)
- ├── select
- │    ├── columns: x:1(int!null) s:4(string!null)
- │    ├── cardinality: [0 - 100]
- │    ├── key: (1)
- │    ├── fd: ()-->(4)
- │    ├── prune: (1)
- │    ├── interesting orderings: (+1) (-4)
- │    ├── scan xyzs@secondary
- │    │    ├── columns: x:1(int!null) s:4(string)
- │    │    ├── limit: 100
- │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(4)
- │    │    ├── prune: (1,4)
- │    │    └── interesting orderings: (+1) (-4)
- │    └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
- │         └── eq [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
- │              ├── variable: s [type=string, outer=(4)]
- │              └── const: 'foo' [type=string]
- └── const: 4294967296 [type=int]
+ ├── key: ()
+ ├── fd: ()-->(1,4)
+ └── prune: (1,4)

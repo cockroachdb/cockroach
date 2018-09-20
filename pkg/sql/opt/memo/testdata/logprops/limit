@@ -72,6 +72,7 @@ SELECT * FROM xyzs LIMIT (SELECT 1)
 ----
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ ├── side-effects
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── prune: (1-4)
@@ -125,6 +126,7 @@ SELECT (SELECT x FROM kuv LIMIT y) FROM xyzs
 ----
 project
  ├── columns: x:9(int)
+ ├── side-effects
  ├── prune: (9)
  ├── scan xyzs
  │    ├── columns: xyzs.x:1(int!null) y:2(int) z:3(float!null) s:4(string)
@@ -132,17 +134,19 @@ project
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-4,+3,+1)
- └── projections [outer=(1,2)]
-      └── subquery [type=int, outer=(1,2)]
+ └── projections [outer=(1,2), side-effects]
+      └── subquery [type=int, outer=(1,2), side-effects]
            └── max1-row
                 ├── columns: x:8(int)
                 ├── outer: (1,2)
                 ├── cardinality: [0 - 1]
+                ├── side-effects
                 ├── key: ()
                 ├── fd: ()-->(8)
                 └── limit
                      ├── columns: x:8(int)
                      ├── outer: (1,2)
+                     ├── side-effects
                      ├── fd: ()-->(8)
                      ├── prune: (8)
                      ├── project

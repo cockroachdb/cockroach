@@ -71,25 +71,21 @@ limit
  │    └── fd: (1)-->(2-5)
  └── const: 5100000000 [type=int]
 
-# Don't eliminate in case of zero or negative limit.
+# Don't eliminate in case of negative limit.
 opt
 SELECT * FROM (SELECT * FROM a LIMIT 0) LIMIT -1
 ----
 limit
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── cardinality: [0 - 0]
+ ├── side-effects
  ├── key: ()
  ├── fd: ()-->(1-5)
- ├── limit
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── values
+ │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── cardinality: [0 - 0]
  │    ├── key: ()
- │    ├── fd: ()-->(1-5)
- │    ├── scan a
- │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    │    ├── key: (1)
- │    │    └── fd: (1)-->(2-5)
- │    └── const: 0 [type=int]
+ │    └── fd: ()-->(1-5)
  └── const: -1 [type=int]
 
 # --------------------------------------------------
@@ -187,21 +183,6 @@ project
  └── projections [outer=(3)]
       └── f + 1.1 [type=float, outer=(3)]
 
-# Don't push zero limit into Scan.
-opt
-SELECT * FROM a LIMIT 0
-----
-limit
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── cardinality: [0 - 0]
- ├── key: ()
- ├── fd: ()-->(1-5)
- ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── const: 0 [type=int]
-
 # Don't push negative limit into Scan.
 opt
 SELECT * FROM a LIMIT -1
@@ -209,6 +190,7 @@ SELECT * FROM a LIMIT -1
 limit
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── cardinality: [0 - 0]
+ ├── side-effects
  ├── key: ()
  ├── fd: ()-->(1-5)
  ├── scan a

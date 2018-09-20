@@ -84,14 +84,11 @@ project
  └── projections
       └── gt [type=bool]
            ├── subquery [type=int]
-           │    └── limit
+           │    └── values
            │         ├── columns: i:2(int)
            │         ├── cardinality: [0 - 0]
            │         ├── key: ()
-           │         ├── fd: ()-->(2)
-           │         ├── scan a
-           │         │    └── columns: i:2(int)
-           │         └── const: 0 [type=int]
+           │         └── fd: ()-->(2)
            └── const: 5 [type=int]
 
 # Don't remove the Max1Row operator.
