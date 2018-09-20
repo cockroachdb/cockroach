@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -88,16 +89,73 @@ func parseValues(tableDesc *sqlbase.TableDescriptor, values string) ([]sqlbase.E
 	return rows, nil
 }
 
+func parseAvroSchema(j string) (*avroSchemaRecord, error) {
+	var s avroSchemaRecord
+	if err := json.Unmarshal([]byte(j), &s); err != nil {
+		return nil, err
+	}
+	// This avroSchemaRecord doesn't have any of the derived fields we need for
+	// serde. Instead of duplicating the logic, fake out a TableDescriptor, so
+	// we can reuse tableToAvroSchema and get them for free.
+	tableDesc := &sqlbase.TableDescriptor{
+		Name: avroUnescapeName(s.Name),
+	}
+	for _, f := range s.Fields {
+		// s.Fields[idx] has `Name` and `SchemaType` set but nonething else.
+		// They're needed for serialization/deserialization, so fake out a
+		// column descriptor so that we can reuse columnDescToAvroSchema to get
+		// all the various fields of avroSchemaField populated for free.
+		colDesc, err := avroSchemaToColDesc(avroUnescapeName(f.Name), f.SchemaType)
+		if err != nil {
+			return nil, err
+		}
+		tableDesc.Columns = append(tableDesc.Columns, *colDesc)
+	}
+	return tableToAvroSchema(tableDesc)
+}
+
+func avroSchemaToColDesc(
+	name string, schemaType avroSchemaType,
+) (*sqlbase.ColumnDescriptor, error) {
+	colDesc := &sqlbase.ColumnDescriptor{Name: name}
+
+	union, ok := schemaType.([]interface{})
+	if ok {
+		if len(union) == 2 && union[0] == avroSchemaNull {
+			colDesc.Nullable = true
+			schemaType = union[1]
+		} else {
+			return nil, errors.Errorf(`unsupported union: %v`, union)
+		}
+	}
+
+	switch schemaType {
+	case avroSchemaLong:
+		colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	case avroSchemaString:
+		colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING}
+	case avroSchemaBoolean:
+		colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}
+	case avroSchemaBytes:
+		colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
+	case avroSchemaDouble:
+		colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT}
+	default:
+		return nil, errors.Errorf(`unknown schema type: %s`, schemaType)
+	}
+	return colDesc, nil
+}
+
 func TestAvroSchema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rng, _ := randutil.NewPseudoRand()
 
-	type avroTest struct {
+	type test struct {
 		name   string
 		schema string
 		values string
 	}
-	tests := []avroTest{
+	tests := []test{
 		{
 			name:   `NULLABLE`,
 			schema: `(a INT PRIMARY KEY, b INT NULL)`,
@@ -134,12 +192,12 @@ func TestAvroSchema(t *testing.T) {
 		// schema is used in a fmt.Sprintf to fill in the table name, so we have
 		// to escape any stray %s.
 		escapedDatum := strings.Replace(serializedDatum, `%`, `%%`, -1)
-		test := avroTest{
+		randTypeTest := test{
 			name:   semTypeName,
 			schema: fmt.Sprintf(`(a %s PRIMARY KEY)`, colType),
 			values: fmt.Sprintf(`(%s)`, escapedDatum),
 		}
-		tests = append(tests, test)
+		tests = append(tests, randTypeTest)
 	}
 
 	for _, test := range tests {
@@ -147,24 +205,140 @@ func TestAvroSchema(t *testing.T) {
 			tableDesc, err := parseTableDesc(
 				fmt.Sprintf(`CREATE TABLE "%s" %s`, test.name, test.schema))
 			require.NoError(t, err)
-			tableSchema, err := tableToAvroSchema(tableDesc)
+			origSchema, err := tableToAvroSchema(tableDesc)
 			require.NoError(t, err)
+			jsonSchema := origSchema.codec.Schema()
+			roundtrippedSchema, err := parseAvroSchema(jsonSchema)
+			require.NoError(t, err)
+			// It would require some work, but we could also check that the
+			// roundtrippedSchema can be used to recreate the original `CREATE
+			// TABLE`.
 
 			rows, err := parseValues(tableDesc, `VALUES `+test.values)
 			require.NoError(t, err)
 
 			for _, row := range rows {
-				serialized, err := tableSchema.TextualFromRow(row)
+				serialized, err := origSchema.textualFromRow(row)
 				require.NoError(t, err)
-				roundtripped, err := tableSchema.RowFromTextual(serialized)
+				roundtripped, err := roundtrippedSchema.rowFromTextual(serialized)
 				require.NoError(t, err)
 				require.Equal(t, row, roundtripped)
 
-				serialized, err = tableSchema.BinaryFromRow(nil, row)
+				serialized, err = origSchema.BinaryFromRow(nil, row)
 				require.NoError(t, err)
-				roundtripped, err = tableSchema.RowFromBinary(serialized)
+				roundtripped, err = roundtrippedSchema.RowFromBinary(serialized)
 				require.NoError(t, err)
 				require.Equal(t, row, roundtripped)
+			}
+		})
+	}
+}
+
+func (f *avroSchemaField) defaultValueNative() (interface{}, bool) {
+	schemaType := f.SchemaType
+	if union, ok := schemaType.([]avroSchemaType); ok {
+		// "Default values for union fields correspond to the first schema in
+		// the union."
+		schemaType = union[0]
+	}
+	switch schemaType {
+	case avroSchemaNull:
+		return nil, true
+	}
+	panic(errors.Errorf(`unimplemented %T: %v`, schemaType, schemaType))
+}
+
+// rowFromBinaryEvolved decodes `buf` using writerSchema but evolves/resolves it
+// to readerSchema using the rules from the avro spec:
+// https://avro.apache.org/docs/1.8.2/spec.html#Schema+Resolution
+//
+// It'd be nice if our avro library handled this for us, but neither of the
+// popular golang once seem to have it implemented.
+func rowFromBinaryEvolved(
+	buf []byte, writerSchema, readerSchema *avroSchemaRecord,
+) (sqlbase.EncDatumRow, error) {
+	native, newBuf, err := writerSchema.codec.NativeFromBinary(buf)
+	if err != nil {
+		return nil, err
+	}
+	if len(newBuf) > 0 {
+		return nil, errors.New(`only one row was expected`)
+	}
+	nativeMap, ok := native.(map[string]interface{})
+	if !ok {
+		return nil, errors.Errorf(`unknown avro native type: %T`, native)
+	}
+	adjustNative(nativeMap, writerSchema, readerSchema)
+	return readerSchema.rowFromNative(nativeMap)
+}
+
+func adjustNative(native map[string]interface{}, writerSchema, readerSchema *avroSchemaRecord) {
+	for _, writerField := range writerSchema.Fields {
+		if _, inReader := readerSchema.fieldIdxByName[writerField.Name]; !inReader {
+			// "If the writer's record contains a field with a name not present
+			// in the reader's record, the writer's value for that field is
+			// ignored."
+			delete(native, writerField.Name)
+		}
+	}
+	for _, readerField := range readerSchema.Fields {
+		if _, inWriter := writerSchema.fieldIdxByName[readerField.Name]; !inWriter {
+			// "If the reader's record schema has a field that contains a
+			// default value, and writer's schema does not have a field with the
+			// same name, then the reader should use the default value from its
+			// field."
+			if readerFieldDefault, ok := readerField.defaultValueNative(); ok {
+				native[readerField.Name] = readerFieldDefault
+			}
+		}
+	}
+}
+
+func TestAvroMigration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	type test struct {
+		name           string
+		writerSchema   string
+		writerValues   string
+		readerSchema   string
+		expectedValues string
+	}
+	tests := []test{
+		{
+			name:           `add_nullable`,
+			writerSchema:   `(a INT PRIMARY KEY)`,
+			writerValues:   `(1)`,
+			readerSchema:   `(a INT PRIMARY KEY, b INT)`,
+			expectedValues: `(1, NULL)`,
+		},
+		// TODO(dan): add a column with a default value
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			writerDesc, err := parseTableDesc(
+				fmt.Sprintf(`CREATE TABLE "%s" %s`, test.name, test.writerSchema))
+			require.NoError(t, err)
+			writerSchema, err := tableToAvroSchema(writerDesc)
+			require.NoError(t, err)
+			readerDesc, err := parseTableDesc(
+				fmt.Sprintf(`CREATE TABLE "%s" %s`, test.name, test.readerSchema))
+			require.NoError(t, err)
+			readerSchema, err := tableToAvroSchema(readerDesc)
+			require.NoError(t, err)
+
+			writerRows, err := parseValues(writerDesc, `VALUES `+test.writerValues)
+			require.NoError(t, err)
+			expectedRows, err := parseValues(readerDesc, `VALUES `+test.expectedValues)
+			require.NoError(t, err)
+
+			for i := range writerRows {
+				writerRow, expectedRow := writerRows[i], expectedRows[i]
+				encoded, err := writerSchema.BinaryFromRow(nil, writerRow)
+				require.NoError(t, err)
+				row, err := rowFromBinaryEvolved(encoded, writerSchema, readerSchema)
+				require.NoError(t, err)
+				require.Equal(t, expectedRow, row)
 			}
 		})
 	}

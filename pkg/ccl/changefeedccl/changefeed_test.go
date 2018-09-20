@@ -863,22 +863,17 @@ func TestChangefeedErrors(t *testing.T) {
 		}
 
 		// Check that confluent_schema_registry is only accepted if format is
-		// avro (even excluding avro=json).
+		// avro.
 		s := f.Server()
 		sink, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
 		defer cleanup()
 		sink.Scheme = sinkSchemeExperimentalSQL
 		sink.Path = `d`
 		q := sink.Query()
-		q.Set(sinkParamConfluentSchemaRegistry, `foo`)
+		q.Set(optConfluentSchemaRegistry, `foo`)
 		sink.RawQuery = q.Encode()
 		if _, err := sqlDB.DB.Exec(
 			`CREATE CHANGEFEED FOR foo INTO $1`, sink.String(),
-		); !testutils.IsError(err, `unknown sink query parameter: confluent_schema_registry`) {
-			t.Errorf(`expected "unknown sink query parameter: confluent_schema_registry" error got: %v`, err)
-		}
-		if _, err := sqlDB.DB.Exec(
-			`CREATE CHANGEFEED FOR foo INTO $1 WITH format=$2`, sink.String(), optFormatAvroJSON,
 		); !testutils.IsError(err, `unknown sink query parameter: confluent_schema_registry`) {
 			t.Errorf(`expected "unknown sink query parameter: confluent_schema_registry" error got: %v`, err)
 		}
