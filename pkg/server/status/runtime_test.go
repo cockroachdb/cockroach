@@ -28,30 +28,24 @@ func TestSumDiskCounters(t *testing.T) {
 	counters := []diskStats{
 		{
 			readBytes:      1,
-			readTime:       1,
 			readCount:      1,
 			iopsInProgress: 1,
 			writeBytes:     1,
-			writeTime:      1,
 			writeCount:     1,
 		},
 		{
 			readBytes:      1,
-			readTime:       1,
 			readCount:      1,
 			iopsInProgress: 1,
 			writeBytes:     1,
-			writeTime:      1,
 			writeCount:     1,
 		},
 	}
 	summed := sumDiskCounters(counters)
 	expected := diskStats{
 		readBytes:      2,
-		readTime:       2,
 		readCount:      2,
 		writeBytes:     2,
-		writeTime:      2,
 		writeCount:     2,
 		iopsInProgress: 2,
 	}
@@ -94,28 +88,22 @@ func TestSubtractDiskCounters(t *testing.T) {
 
 	from := diskStats{
 		readBytes:      3,
-		readTime:       3,
 		readCount:      3,
 		writeBytes:     3,
-		writeTime:      3,
 		writeCount:     3,
 		iopsInProgress: 3,
 	}
 	sub := diskStats{
 		readBytes:      1,
-		readTime:       1,
 		readCount:      1,
 		iopsInProgress: 1,
 		writeBytes:     1,
-		writeTime:      1,
 		writeCount:     1,
 	}
 	expected := diskStats{
 		readBytes:  2,
-		readTime:   2,
 		readCount:  2,
 		writeBytes: 2,
-		writeTime:  2,
 		writeCount: 2,
 		// Don't touch iops in progress; it is a gauge, not a counter.
 		iopsInProgress: 3,
