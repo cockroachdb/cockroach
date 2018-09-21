@@ -120,6 +120,7 @@ func (dsp *DistSQLPlanner) Exec(
 		},
 		p.ExtendedEvalContext().Tracing,
 	)
+	defer recv.Release()
 
 	evalCtx := p.ExtendedEvalContext()
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p.txn)
