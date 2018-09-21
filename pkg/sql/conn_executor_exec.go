@@ -954,6 +954,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		},
 		&ex.sessionTracing,
 	)
+	defer recv.Release()
 
 	evalCtx := planner.ExtendedEvalContext()
 	var planCtx *PlanningCtx
