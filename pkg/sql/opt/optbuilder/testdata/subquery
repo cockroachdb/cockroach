@@ -2466,3 +2466,75 @@ project
                      │              └── array-agg [type=int[]]
                      │                   └── variable: x [type=int]
                      └── array: [type=int[]]
+
+# Regression test for #30424. Aggregate function in the WHERE subquery
+# is aggregated in the outer scope, so it's not allowed.
+build
+SELECT s FROM a WHERE (SELECT count(i) >= 100) GROUP BY s
+----
+error (42803): aggregate functions are not allowed in WHERE
+
+# Aggregate function in the WHERE subquery is aggregated in the subquery scope,
+# so it's allowed.
+build
+SELECT s FROM a WHERE (SELECT count(i) >= 100 FROM a) GROUP BY s
+----
+group-by
+ ├── columns: s:4(string)
+ ├── grouping columns: a.s:4(string)
+ └── project
+      ├── columns: a.s:4(string)
+      └── select
+           ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+           ├── scan a
+           │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+           └── filters [type=bool]
+                └── subquery [type=bool]
+                     └── max1-row
+                          ├── columns: "?column?":12(bool)
+                          └── project
+                               ├── columns: "?column?":12(bool)
+                               ├── scalar-group-by
+                               │    ├── columns: count:11(int)
+                               │    ├── project
+                               │    │    ├── columns: a.i:7(int)
+                               │    │    └── scan a
+                               │    │         └── columns: a.k:6(int!null) a.i:7(int) a.f:8(float) a.s:9(string) a.j:10(jsonb)
+                               │    └── aggregations
+                               │         └── count [type=int]
+                               │              └── variable: a.i [type=int]
+                               └── projections
+                                    └── ge [type=bool]
+                                         ├── variable: count [type=int]
+                                         └── const: 100 [type=int]
+
+exec-ddl
+CREATE TABLE xyzs (x INT PRIMARY KEY, y INT, z FLOAT NOT NULL, s STRING, UNIQUE (s DESC, z));
+----
+TABLE xyzs
+ ├── x int not null
+ ├── y int
+ ├── z float not null
+ ├── s string
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX secondary
+      ├── s string desc
+      ├── z float not null
+      └── x int not null (storing)
+
+exec-ddl
+CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING);
+----
+TABLE kuv
+ ├── k int not null
+ ├── u float
+ ├── v string
+ └── INDEX primary
+      └── k int not null
+
+# Regression test for #29114.
+build
+SELECT * FROM xyzs WHERE (SELECT sum(x) FROM (SELECT u FROM kuv) GROUP BY u) > 100;
+----
+error (42803): aggregate functions are not allowed in WHERE
