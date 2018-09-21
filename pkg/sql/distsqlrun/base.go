@@ -647,9 +647,27 @@ func (rb *RowBuffer) ConsumerClosed() {
 	}
 }
 
+var copyingRowReceiverPool = sync.Pool{
+	New: func() interface{} {
+		return &copyingRowReceiver{}
+	},
+}
+
 type copyingRowReceiver struct {
 	RowReceiver
 	alloc sqlbase.EncDatumRowAlloc
+}
+
+func newCopyingRowReceiver(wrapped RowReceiver) *copyingRowReceiver {
+	ret := copyingRowReceiverPool.Get().(*copyingRowReceiver)
+	ret.RowReceiver = wrapped
+	return ret
+}
+
+// Release implements the Releasable interface.
+func (r *copyingRowReceiver) Release() {
+	*r = copyingRowReceiver{}
+	copyingRowReceiverPool.Put(r)
 }
 
 func (r *copyingRowReceiver) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus {

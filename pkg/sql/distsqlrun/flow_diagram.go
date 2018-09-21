@@ -620,7 +620,7 @@ func generateDiagramData(
 // across all flows. If spans are provided, stats are extracted from the spans
 // and added to the plan.
 func GeneratePlanDiagram(
-	flows map[roachpb.NodeID]FlowSpec, spans []tracing.RecordedSpan, w io.Writer,
+	flows map[roachpb.NodeID]*FlowSpec, spans []tracing.RecordedSpan, w io.Writer,
 ) error {
 	// We sort the flows by node because we want the diagram data to be
 	// deterministic.
@@ -634,7 +634,7 @@ func GeneratePlanDiagram(
 	nodeNames := make([]string, len(nodeIDs))
 	for i, nVal := range nodeIDs {
 		n := roachpb.NodeID(nVal)
-		flowSlice[i] = flows[n]
+		flowSlice[i] = *flows[n]
 		nodeNames[i] = n.String()
 	}
 
@@ -649,7 +649,7 @@ func GeneratePlanDiagram(
 // GeneratePlanDiagramURL generates the json data for a flow diagram and a
 // URL which encodes the diagram. There should be one FlowSpec per node. The
 // function assumes that StreamIDs are unique across all flows.
-func GeneratePlanDiagramURL(flows map[roachpb.NodeID]FlowSpec) (string, url.URL, error) {
+func GeneratePlanDiagramURL(flows map[roachpb.NodeID]*FlowSpec) (string, url.URL, error) {
 	return GeneratePlanDiagramURLWithSpans(flows, nil /* spans */)
 }
 
@@ -657,7 +657,7 @@ func GeneratePlanDiagramURL(flows map[roachpb.NodeID]FlowSpec) (string, url.URL,
 // called with no spans. If spans are provided, stats are extracted and added to
 // the plan.
 func GeneratePlanDiagramURLWithSpans(
-	flows map[roachpb.NodeID]FlowSpec, spans []tracing.RecordedSpan,
+	flows map[roachpb.NodeID]*FlowSpec, spans []tracing.RecordedSpan,
 ) (string, url.URL, error) {
 	var json bytes.Buffer
 	if err := GeneratePlanDiagram(flows, spans, &json); err != nil {

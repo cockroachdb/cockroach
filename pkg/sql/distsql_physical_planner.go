@@ -846,10 +846,13 @@ func getIndexIdx(n *scanNode) (uint32, error) {
 
 // initTableReaderSpec initializes a TableReaderSpec/PostProcessSpec that
 // corresponds to a scanNode, except for the Spans and OutputColumns.
+// Only needs indexVarMap for a filter expression - if there's no filter
+// expression in the scanNode, it's valid to pass a nil indexVarMap.
 func initTableReaderSpec(
 	n *scanNode, planCtx *PlanningCtx, indexVarMap []int,
-) (distsqlrun.TableReaderSpec, distsqlrun.PostProcessSpec, error) {
-	s := distsqlrun.TableReaderSpec{
+) (*distsqlrun.TableReaderSpec, distsqlrun.PostProcessSpec, error) {
+	s := distsqlrun.NewTableReaderSpec()
+	*s = distsqlrun.TableReaderSpec{
 		Table:      *n.desc,
 		Reverse:    n.reverse,
 		IsCheck:    n.run.isCheck,
@@ -857,7 +860,7 @@ func initTableReaderSpec(
 	}
 	indexIdx, err := getIndexIdx(n)
 	if err != nil {
-		return distsqlrun.TableReaderSpec{}, distsqlrun.PostProcessSpec{}, err
+		return nil, distsqlrun.PostProcessSpec{}, err
 	}
 	s.IndexIdx = indexIdx
 
@@ -870,7 +873,7 @@ func initTableReaderSpec(
 
 	filter, err := distsqlplan.MakeExpression(n.filter, planCtx, indexVarMap)
 	if err != nil {
-		return distsqlrun.TableReaderSpec{}, distsqlrun.PostProcessSpec{}, err
+		return nil, distsqlrun.PostProcessSpec{}, err
 	}
 	post := distsqlrun.PostProcessSpec{
 		Filter: filter,
@@ -1048,17 +1051,12 @@ func (dsp *DistSQLPlanner) createTableReaders(
 	planCtx *PlanningCtx, n *scanNode, overrideResultColumns []sqlbase.ColumnID,
 ) (PhysicalPlan, error) {
 
-	scanNodeToTableOrdinalMap := getScanNodeToTableOrdinalMap(n)
-	spec, post, err := initTableReaderSpec(n, planCtx, scanNodeToTableOrdinalMap)
-	if err != nil {
-		return PhysicalPlan{}, err
-	}
-
 	var spanPartitions []SpanPartition
 	if planCtx.isLocal {
 		spanPartitions = []SpanPartition{{dsp.nodeDesc.NodeID, n.spans}}
 	} else if n.hardLimit == 0 && n.softLimit == 0 {
 		// No limit - plan all table readers where their data live.
+		var err error
 		spanPartitions, err = dsp.PartitionSpans(planCtx, n.spans)
 		if err != nil {
 			return PhysicalPlan{}, err
@@ -1080,12 +1078,40 @@ func (dsp *DistSQLPlanner) createTableReaders(
 	stageID := p.NewStageID()
 
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
+	p.Processors = make([]distsqlplan.Processor, 0, len(spanPartitions))
 
 	returnMutations := n.colCfg.visibility == publicAndNonPublicColumns
 
+	needMergeOrdering := len(p.ResultRouters) > 1 && len(n.props.ordering) > 0
+	var scanNodeToTableOrdinalMap []int
+	if n.filter != nil || needMergeOrdering {
+		// If n.filter != nil, we need to make a scanNodeToTableOrdinalMap to pass
+		// to initTableReaderSpec, so it can properly create a filter expression.
+		scanNodeToTableOrdinalMap = getScanNodeToTableOrdinalMap(n)
+
+		if needMergeOrdering {
+			// Make a note of the fact that we have to maintain a certain ordering
+			// between the parallel streams.
+			//
+			// This information is taken into account by the AddProjection call below:
+			// specifically, it will make sure these columns are kept even if they are
+			// not in the projection (e.g. "SELECT v FROM kv ORDER BY k").
+			p.SetMergeOrdering(dsp.convertOrdering(n.props, scanNodeToTableOrdinalMap))
+		}
+	}
+	spec, post, err := initTableReaderSpec(n, planCtx, scanNodeToTableOrdinalMap)
+	if err != nil {
+		return PhysicalPlan{}, err
+	}
+
 	for i, sp := range spanPartitions {
-		tr := &distsqlrun.TableReaderSpec{}
-		*tr = spec
+		var tr *distsqlrun.TableReaderSpec
+		if i == 0 {
+			tr = spec
+		} else {
+			tr = new(distsqlrun.TableReaderSpec)
+			*tr = *spec
+		}
 		tr.Spans = makeTableReaderSpans(sp.Spans)
 
 		proc := distsqlplan.Processor{
@@ -1099,16 +1125,6 @@ func (dsp *DistSQLPlanner) createTableReaders(
 
 		pIdx := p.AddProcessor(proc)
 		p.ResultRouters[i] = pIdx
-	}
-
-	if len(p.ResultRouters) > 1 && len(n.props.ordering) > 0 {
-		// Make a note of the fact that we have to maintain a certain ordering
-		// between the parallel streams.
-		//
-		// This information is taken into account by the AddProjection call below:
-		// specifically, it will make sure these columns are kept even if they are
-		// not in the projection (e.g. "SELECT v FROM kv ORDER BY k").
-		p.SetMergeOrdering(dsp.convertOrdering(n.props, scanNodeToTableOrdinalMap))
 	}
 
 	var types []sqlbase.ColumnType
@@ -1140,9 +1156,9 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		}
 	}
 	planToStreamColMap := make([]int, len(n.cols))
-	var descColumnIDs []sqlbase.ColumnID
-	for _, c := range n.desc.Columns {
-		descColumnIDs = append(descColumnIDs, c.ID)
+	descColumnIDs := make([]sqlbase.ColumnID, 0, len(n.desc.Columns))
+	for i := range n.desc.Columns {
+		descColumnIDs = append(descColumnIDs, n.desc.Columns[i].ID)
 	}
 	if returnMutations {
 		for _, m := range n.desc.Mutations {

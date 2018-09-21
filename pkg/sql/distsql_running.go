@@ -60,6 +60,8 @@ type runnerResult struct {
 }
 
 func (req runnerRequest) run() {
+	defer req.flowReq.Release()
+
 	res := runnerResult{nodeID: req.nodeID}
 
 	conn, err := req.nodeDialer.Dial(req.ctx, req.nodeID)
@@ -203,7 +205,7 @@ func (dsp *DistSQLPlanner) Run(
 			continue
 		}
 		req := setupReq
-		req.Flow = flowSpec
+		req.Flow = *flowSpec
 		runReq := runnerRequest{
 			ctx:        ctx,
 			nodeDialer: dsp.nodeDialer,
@@ -238,7 +240,8 @@ func (dsp *DistSQLPlanner) Run(
 
 	// Set up the flow on this node.
 	localReq := setupReq
-	localReq.Flow = flows[thisNodeID]
+	localReq.Flow = *flows[thisNodeID]
+	defer localReq.Release()
 	ctx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
 	if err != nil {
 		recv.SetError(err)

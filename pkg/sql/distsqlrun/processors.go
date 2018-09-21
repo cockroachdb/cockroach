@@ -87,6 +87,17 @@ type ProcOutputHelper struct {
 	rowIdx uint64
 }
 
+// Reset resets this ProcOutputHelper.
+func (h *ProcOutputHelper) Reset() {
+	if r, ok := h.output.(Releasable); ok {
+		r.Release()
+	}
+	*h = ProcOutputHelper{
+		renderExprs: h.renderExprs[:0],
+		outputTypes: h.outputTypes[:0],
+	}
+}
+
 // Init sets up a ProcOutputHelper. The types describe the internal schema of
 // the processor (as described for each processor core spec); they can be
 // omitted if there is no filtering expression.
@@ -120,14 +131,28 @@ func (h *ProcOutputHelper) Init(
 			// nil indicates no projection; use an empty slice.
 			h.outputCols = make([]uint32, 0)
 		}
-		h.outputTypes = make([]sqlbase.ColumnType, len(h.outputCols))
+		nOutputCols := len(h.outputCols)
+		if cap(h.outputTypes) >= nOutputCols {
+			h.outputTypes = h.outputTypes[:nOutputCols]
+		} else {
+			h.outputTypes = make([]sqlbase.ColumnType, nOutputCols)
+		}
 		for i, c := range h.outputCols {
 			h.outputTypes[i] = types[c]
 		}
-	} else if len(post.RenderExprs) > 0 {
-		h.renderExprs = make([]exprHelper, len(post.RenderExprs))
-		h.outputTypes = make([]sqlbase.ColumnType, len(post.RenderExprs))
+	} else if nRenders := len(post.RenderExprs); nRenders > 0 {
+		if cap(h.renderExprs) >= nRenders {
+			h.renderExprs = h.renderExprs[:nRenders]
+		} else {
+			h.renderExprs = make([]exprHelper, nRenders)
+		}
+		if cap(h.outputTypes) >= nRenders {
+			h.outputTypes = h.outputTypes[:nRenders]
+		} else {
+			h.outputTypes = make([]sqlbase.ColumnType, nRenders)
+		}
 		for i, expr := range post.RenderExprs {
+			h.renderExprs[i] = exprHelper{}
 			if err := h.renderExprs[i].init(expr, types, evalCtx); err != nil {
 				return err
 			}
@@ -537,6 +562,15 @@ type ProcessorBase struct {
 	// one by one (in stateDraining, inputsToDrain[0] is the one currently being
 	// drained).
 	inputsToDrain []RowSource
+}
+
+func (pb *ProcessorBase) Reset() {
+	pb.out.Reset()
+	*pb = ProcessorBase{
+		out:           pb.out,
+		trailingMeta:  pb.trailingMeta[:0],
+		inputsToDrain: pb.inputsToDrain[:0],
+	}
 }
 
 // procState represents the standard states that a processor can be in. These
@@ -1362,4 +1396,21 @@ func (spec WindowerSpec_Frame_Bounds) convertToAST() tree.WindowFrameBounds {
 
 func (spec *WindowerSpec_Frame) convertToAST() *tree.WindowFrame {
 	return &tree.WindowFrame{Mode: spec.Mode.convertToAST(), Bounds: spec.Bounds.convertToAST()}
+}
+
+var flowSpecPool = sync.Pool{
+	New: func() interface{} {
+		return &FlowSpec{}
+	},
+}
+
+func (spec *FlowSpec) Release() {
+	*spec = FlowSpec{
+		Processors: spec.Processors[:0],
+	}
+	flowSpecPool.Put(spec)
+}
+
+func NewFlowSpec() *FlowSpec {
+	return flowSpecPool.Get().(*FlowSpec)
 }
