@@ -229,7 +229,6 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
   std::string best_split_key = start_key;
   int64_t best_split_diff = std::numeric_limits<int64_t>::max();
   std::string prev_key;
-  int n = 0;
 
   for (; iter_rep->Valid() && kComparator.Compare(iter_rep->key(), end_key) < 0; iter_rep->Next()) {
     const rocksdb::Slice key = iter_rep->key();
@@ -240,9 +239,7 @@ DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_sp
       return FmtStatus("unable to decode key");
     }
 
-    ++n;
-    const bool valid =
-        n > 1 && IsValidSplitKey(decoded_key) && decoded_key.compare(min_split_key) >= 0;
+    const bool valid = IsValidSplitKey(decoded_key) && decoded_key.compare(min_split_key) >= 0;
     int64_t diff = target_size - size_so_far;
     if (diff < 0) {
       diff = -diff;
