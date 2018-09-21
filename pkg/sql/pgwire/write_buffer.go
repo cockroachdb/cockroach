@@ -52,11 +52,14 @@ type writeBuffer struct {
 }
 
 func newWriteBuffer(bytecount *metric.Counter) *writeBuffer {
-	b := &writeBuffer{
-		bytecount: bytecount,
-	}
-	b.textFormatter = tree.MakeFmtCtx(&b.variablePutbuf, tree.FmtPgwireText)
+	b := new(writeBuffer)
+	b.init(bytecount)
 	return b
+}
+
+func (b *writeBuffer) init(bytecount *metric.Counter) {
+	b.bytecount = bytecount
+	b.textFormatter = tree.MakeFmtCtx(&b.variablePutbuf, tree.FmtPgwireText)
 }
 
 // Write implements the io.Write interface.
