@@ -123,6 +123,9 @@ func HandleCSV(w http.ResponseWriter, req *http.Request, prefix string, meta Met
 	if table == nil {
 		return errors.Errorf(`could not find table %s in generator %s`, tableName, meta.Name)
 	}
+	if table.InitialRows.Batch == nil {
+		return errors.Errorf(`csv-server is not supported for workload %s`, meta.Name)
+	}
 
 	rowStart, rowEnd := 0, table.InitialRows.NumBatches
 	if vals, ok := req.Form[rowStartParam]; ok && len(vals) > 0 {
