@@ -100,6 +100,13 @@ func (b *RocksDBBatchBuilder) maybeInit() {
 	}
 }
 
+func (b *RocksDBBatchBuilder) reset() {
+	if b.repr != nil {
+		b.repr = b.repr[:headerSize]
+	}
+	b.count = 0
+}
+
 // Finish returns the constructed batch representation. After calling Finish,
 // the builder may be used to construct another batch, but the returned []byte
 // is only valid until the next builder method is called.
