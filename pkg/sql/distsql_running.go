@@ -661,7 +661,7 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 			recv.SetError(err)
 			return false
 		}
-		dsp.FinalizePlan(subqueryPlanCtx, &subqueryPhysPlan)
+		dsp.FinalizePlan(subqueryPlanCtx, subqueryPhysPlan)
 
 		// TODO(arjun): #28264: We set up a row container, wrap it in a row
 		// receiver, and use it and serialize the results of the subquery. The type
@@ -679,7 +679,7 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 		subqueryRowReceiver := NewRowResultWriter(rows)
 		subqueryRecv.resultWriter = subqueryRowReceiver
 		subqueryPlans[planIdx].started = true
-		dsp.Run(subqueryPlanCtx, planner.txn, &subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)
+		dsp.Run(subqueryPlanCtx, planner.txn, subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)
 		if subqueryRecv.commErr != nil {
 			recv.SetError(subqueryRecv.commErr)
 			return false
@@ -761,6 +761,6 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		recv.SetError(err)
 		return
 	}
-	dsp.FinalizePlan(planCtx, &physPlan)
-	dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
+	dsp.FinalizePlan(planCtx, physPlan)
+	dsp.Run(planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)
 }
