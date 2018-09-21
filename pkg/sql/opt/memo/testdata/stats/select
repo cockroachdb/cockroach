@@ -653,3 +653,134 @@ select
  │         └── u = v [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
  └── filters [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight), fd=()-->(1)]
       └── u = 10 [type=bool, outer=(1), constraints=(/1: [/10 - /10]; tight)]
+
+exec-ddl
+CREATE TABLE lineitem
+(
+    l_orderkey int NOT NULL,
+    l_partkey int NOT NULL,
+    l_suppkey int NOT NULL,
+    l_linenumber int NOT NULL,
+    l_quantity float NOT NULL,
+    l_extendedprice float NOT NULL,
+    l_discount float NOT NULL,
+    l_tax float NOT NULL,
+    l_returnflag char(1) NOT NULL,
+    l_linestatus char(1) NOT NULL,
+    l_shipdate date NOT NULL,
+    l_commitdate date NOT NULL,
+    l_receiptdate date NOT NULL,
+    l_shipinstruct char(25) NOT NULL,
+    l_shipmode char(10) NOT NULL,
+    l_comment varchar(44) NOT NULL,
+    PRIMARY KEY (l_orderkey, l_linenumber),
+    INDEX l_ok (l_orderkey ASC),
+    INDEX l_pk (l_partkey ASC),
+    INDEX l_sk (l_suppkey ASC),
+    INDEX l_sd (l_shipdate ASC),
+    INDEX l_cd (l_commitdate ASC),
+    INDEX l_rd (l_receiptdate ASC),
+    INDEX l_pk_sk (l_partkey ASC, l_suppkey ASC),
+    INDEX l_sk_pk (l_suppkey ASC, l_partkey ASC)
+);
+----
+TABLE lineitem
+ ├── l_orderkey int not null
+ ├── l_partkey int not null
+ ├── l_suppkey int not null
+ ├── l_linenumber int not null
+ ├── l_quantity float not null
+ ├── l_extendedprice float not null
+ ├── l_discount float not null
+ ├── l_tax float not null
+ ├── l_returnflag string not null
+ ├── l_linestatus string not null
+ ├── l_shipdate date not null
+ ├── l_commitdate date not null
+ ├── l_receiptdate date not null
+ ├── l_shipinstruct string not null
+ ├── l_shipmode string not null
+ ├── l_comment string not null
+ ├── INDEX primary
+ │    ├── l_orderkey int not null
+ │    └── l_linenumber int not null
+ ├── INDEX l_ok
+ │    ├── l_orderkey int not null
+ │    └── l_linenumber int not null
+ ├── INDEX l_pk
+ │    ├── l_partkey int not null
+ │    ├── l_orderkey int not null
+ │    └── l_linenumber int not null
+ ├── INDEX l_sk
+ │    ├── l_suppkey int not null
+ │    ├── l_orderkey int not null
+ │    └── l_linenumber int not null
+ ├── INDEX l_sd
+ │    ├── l_shipdate date not null
+ │    ├── l_orderkey int not null
+ │    └── l_linenumber int not null
+ ├── INDEX l_cd
+ │    ├── l_commitdate date not null
+ │    ├── l_orderkey int not null
+ │    └── l_linenumber int not null
+ ├── INDEX l_rd
+ │    ├── l_receiptdate date not null
+ │    ├── l_orderkey int not null
+ │    └── l_linenumber int not null
+ ├── INDEX l_pk_sk
+ │    ├── l_partkey int not null
+ │    ├── l_suppkey int not null
+ │    ├── l_orderkey int not null
+ │    └── l_linenumber int not null
+ └── INDEX l_sk_pk
+      ├── l_suppkey int not null
+      ├── l_partkey int not null
+      ├── l_orderkey int not null
+      └── l_linenumber int not null
+
+# Regression test for #30226. The following two queries should have the same
+# estimate for number of rows.
+opt
+SELECT *
+FROM lineitem
+WHERE
+    l_shipdate >= DATE '1995-09-01'
+    AND l_shipdate < DATE '1995-10-01';
+----
+index-join lineitem
+ ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_suppkey:3(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_tax:8(float!null) l_returnflag:9(string!null) l_linestatus:10(string!null) l_shipdate:11(date!null) l_commitdate:12(date!null) l_receiptdate:13(date!null) l_shipinstruct:14(string!null) l_shipmode:15(string!null) l_comment:16(string!null)
+ ├── stats: [rows=111.111111]
+ ├── key: (1,4)
+ ├── fd: (1,4)-->(2,3,5-16)
+ └── scan lineitem@l_sd
+      ├── columns: l_orderkey:1(int!null) l_linenumber:4(int!null) l_shipdate:11(date!null)
+      ├── constraint: /11/1/4: [/'1995-09-01' - /'1995-09-30']
+      ├── stats: [rows=111.111111]
+      ├── key: (1,4)
+      └── fd: (1,4)-->(11)
+
+opt
+SELECT *
+FROM lineitem
+WHERE
+    l_shipdate >= DATE '1995-09-01'
+    AND l_shipdate::timestamptz < DATE '1995-10-01';
+----
+index-join lineitem
+ ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_suppkey:3(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_tax:8(float!null) l_returnflag:9(string!null) l_linestatus:10(string!null) l_shipdate:11(date!null) l_commitdate:12(date!null) l_receiptdate:13(date!null) l_shipinstruct:14(string!null) l_shipmode:15(string!null) l_comment:16(string!null)
+ ├── stats: [rows=111.111111]
+ ├── key: (1,4)
+ ├── fd: (1,4)-->(2,3,5-16)
+ └── select
+      ├── columns: l_orderkey:1(int!null) l_linenumber:4(int!null) l_shipdate:11(date!null)
+      ├── stats: [rows=111.111111]
+      ├── key: (1,4)
+      ├── fd: (1,4)-->(11)
+      ├── scan lineitem@l_sd
+      │    ├── columns: l_orderkey:1(int!null) l_linenumber:4(int!null) l_shipdate:11(date!null)
+      │    ├── constraint: /11/1/4: [/'1995-09-01' - ]
+      │    ├── stats: [rows=333.333333]
+      │    ├── key: (1,4)
+      │    └── fd: (1,4)-->(11)
+      └── filters [type=bool, outer=(11)]
+           └── l_shipdate::TIMESTAMPTZ < '1995-10-01' [type=bool, outer=(11)]
