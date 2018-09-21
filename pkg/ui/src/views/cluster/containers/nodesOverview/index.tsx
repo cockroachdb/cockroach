@@ -22,6 +22,7 @@ import { LongToMoment } from "src/util/convert";
 import { BytesWithPrecision } from "src/util/format";
 import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
 import { FixLong } from "src/util/fixLong";
+import { Percentage } from "src/util/format";
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting", (s) => s.localSettings,
@@ -143,7 +144,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                     <span title={`Total: ${BytesWithPrecision(usable, 0)}`}>
                       {BytesWithPrecision(used, 0)}
                       {" "}
-                      ({Math.round(used / usable * 100)}%)
+                      ({Percentage(used, usable)})
                     </span>
                   );
                 },
@@ -160,7 +161,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                     <span title={`Total: ${BytesWithPrecision(available, 0)}`}>
                       {BytesWithPrecision(used, 0)}
                       {" "}
-                      ({Math.round(used / available * 100)}%)
+                      ({Percentage(used, available)})
                     </span>
                   );
                 },
