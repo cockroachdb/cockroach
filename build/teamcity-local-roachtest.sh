@@ -28,5 +28,5 @@ run build/builder.sh ./bin/roachtest run '(acceptance|kv/splits)' \
   --cockroach "cockroach" \
   --workload "bin/workload" \
   --artifacts artifacts \
-  --teamcity
+  --teamcity 2>&1 | tee artifacts/roachtest.log
 tc_end_block "Run local roachtests"
