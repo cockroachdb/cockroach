@@ -99,7 +99,8 @@ type Iterator interface {
 	ComputeStats(start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error)
 	// FindSplitKey finds a key from the given span such that the left side of
 	// the split is roughly targetSize bytes. The returned key will never be
-	// chosen from the key ranges listed in keys.NoSplitSpans.
+	// chosen from the key ranges listed in keys.NoSplitSpans and will always
+	// sort equal to or after minSplitKey.
 	FindSplitKey(start, end, minSplitKey MVCCKey, targetSize int64) (MVCCKey, error)
 	// MVCCGet retrieves the value for the key at the specified timestamp. The
 	// value is returned in batch repr format with the key being present as the
