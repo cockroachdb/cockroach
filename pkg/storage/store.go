@@ -264,19 +264,21 @@ func (e *NotBootstrappedError) Error() string {
 // to visit replicas in increasing RangeID order.
 type storeReplicaVisitor struct {
 	store   *Store
-	repls   []*Replica // Replicas to be visited
-	ordered bool       // Option to visit replicas in sorted order
-	visited int        // Number of visited ranges, -1 before first call to Visit()
+	shims   []*ReplicaShim // Replicas to be visited
+	ordered bool           // Option to visit replicas in sorted order
+	visited int            // Number of visited ranges, -1 before first call to Visit()
 }
 
 // Len implements sort.Interface.
-func (rs storeReplicaVisitor) Len() int { return len(rs.repls) }
+func (rs storeReplicaVisitor) Len() int { return len(rs.shims) }
 
 // Less implements sort.Interface.
-func (rs storeReplicaVisitor) Less(i, j int) bool { return rs.repls[i].RangeID < rs.repls[j].RangeID }
+func (rs storeReplicaVisitor) Less(i, j int) bool {
+	return rs.shims[i].RangeID() < rs.shims[j].RangeID()
+}
 
 // Swap implements sort.Interface.
-func (rs storeReplicaVisitor) Swap(i, j int) { rs.repls[i], rs.repls[j] = rs.repls[j], rs.repls[i] }
+func (rs storeReplicaVisitor) Swap(i, j int) { rs.shims[i], rs.shims[j] = rs.shims[j], rs.shims[i] }
 
 // newStoreReplicaVisitor constructs a storeReplicaVisitor.
 func newStoreReplicaVisitor(store *Store) *storeReplicaVisitor {
@@ -292,14 +294,27 @@ func (rs *storeReplicaVisitor) InOrder() *storeReplicaVisitor {
 	return rs
 }
 
-// Visit calls the visitor with each Replica until false is returned.
+// Visit calls the visitor with each Replica until false is
+// returned. ALL replicas are visited, including ones which are
+// currently non-resident.
 func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
+	rs.visitImpl(false /* onlyResident */, visitor)
+}
+
+// Visit calls the visitor with each Replica until false is
+// returned. Only those replicas which are currently resident
+// will be visited.
+func (rs *storeReplicaVisitor) VisitResident(visitor func(*Replica) bool) {
+	rs.visitImpl(true /* onlyResident */, visitor)
+}
+
+func (rs *storeReplicaVisitor) visitImpl(onlyResident bool, visitor func(*Replica) bool) {
 	// Copy the range IDs to a slice so that we iterate over some (possibly
 	// stale) view of all Replicas without holding the Store lock. In particular,
 	// no locks are acquired during the copy process.
-	rs.repls = nil
-	rs.store.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
-		rs.repls = append(rs.repls, (*Replica)(v))
+	rs.shims = nil
+	rs.store.mu.replicaShims.Range(func(k int64, v unsafe.Pointer) bool {
+		rs.shims = append(rs.shims, (*ReplicaShim)(v))
 		return true
 	})
 
@@ -319,11 +334,31 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 	}
 
 	rs.visited = 0
-	for _, repl := range rs.repls {
+	for _, shim := range rs.shims {
 		// TODO(tschottdorf): let the visitor figure out if something's been
 		// destroyed once we return errors from mutexes (#9190). After all, it
 		// can still happen with this code.
 		rs.visited++
+
+		var repl *Replica
+		if onlyResident {
+			shim.Lock()
+			repl = shim.replica
+			shim.Unlock()
+			if repl == nil {
+				continue
+			}
+		} else {
+			var err error
+			repl, err = rs.store.GetReplica(shim.RangeID())
+			if err != nil {
+				if _, ok := err.(*roachpb.RangeNotFoundError); !ok {
+					log.Errorf(context.TODO(), "%s: unable to load replica %s: %s", rs.store, shim, err)
+				}
+				continue
+			}
+		}
+
 		repl.mu.RLock()
 		destroyed := repl.mu.destroyStatus
 		initialized := repl.isInitializedRLocked()
@@ -340,10 +375,10 @@ func (rs *storeReplicaVisitor) Visit(visitor func(*Replica) bool) {
 //
 // TODO(tschottdorf): this method has highly doubtful semantics.
 func (rs *storeReplicaVisitor) EstimatedCount() int {
-	if rs.visited <= 0 {
+	if rs.visited < 0 {
 		return rs.store.ReplicaCount()
 	}
-	return len(rs.repls) - rs.visited
+	return len(rs.shims) - rs.visited
 }
 
 type raftRequestInfo struct {
@@ -518,10 +553,10 @@ type Store struct {
 
 	mu struct {
 		syncutil.RWMutex
-		// Map of replicas by Range ID (map[roachpb.RangeID]*Replica). This
-		// includes `uninitReplicas`. May be read without holding Store.mu.
-		replicas syncutil.IntMap
-		// A btree key containing objects of type *Replica or *ReplicaPlaceholder.
+		// Map of replica shims by Range ID (map[roachpb.RangeID]*ReplicaShim).
+		// This includes `uninitReplicas`. May be read without holding Store.mu.
+		replicaShims syncutil.IntMap
+		// A btree key containing objects of type *ReplicaShim or *ReplicaPlaceholder.
 		// Both types have an associated key range; the btree is keyed on their
 		// start keys.
 		replicasByKey  *btree.BTree
@@ -547,7 +582,7 @@ type Store struct {
 	// queues might more naturally belong in Replica, but are kept separate to
 	// avoid reworking the locking in getOrCreateReplica which requires
 	// Replica.raftMu to be held while a replica is being inserted into
-	// Store.mu.replicas.
+	// Store.mu.replicaShims.
 	replicaQueues syncutil.IntMap // map[roachpb.RangeID]*raftRequestQueue
 
 	scheduler *raftScheduler
@@ -923,7 +958,7 @@ const raftLeadershipTransferWait = 5 * time.Second
 func (s *Store) SetDraining(drain bool) {
 	s.draining.Store(drain)
 	if !drain {
-		newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
+		newStoreReplicaVisitor(s).VisitResident(func(r *Replica) bool {
 			r.mu.Lock()
 			r.mu.draining = false
 			r.mu.Unlock()
@@ -1152,7 +1187,7 @@ func IterateRangeDescriptors(
 	ctx context.Context, eng engine.Reader, fn func(desc roachpb.RangeDescriptor) (bool, error),
 ) error {
 	log.Event(ctx, "beginning range descriptor iteration")
-	// Iterator over all range-local key-based data.
+	// Iterator over range-local descriptor data.
 	start := keys.RangeDescriptorKey(roachpb.RKeyMin)
 	end := keys.RangeDescriptorKey(roachpb.RKeyMax)
 
@@ -1178,6 +1213,10 @@ func IterateRangeDescriptors(
 		return fn(desc)
 	}
 
+	// The iteration ignores uncommitted versions (consistent=false).
+	// Uncommitted intents which have been abandoned due to a split
+	// crashing halfway will simply be resolved on the next split
+	// attempt. They can otherwise be ignored.
 	_, err := engine.MVCCIterate(ctx, eng, start, end, hlc.MaxTimestamp, false /* consistent */, false, /* tombstones */
 		nil /* txn */, false /* reverse */, kvToDesc)
 	log.Eventf(ctx, "iterated over %d keys to find %d range descriptors (by suffix: %v)",
@@ -1271,45 +1310,42 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		f(ctx, "ran legacy tombstone migration in %s", dur)
 	}
 
-	// Iterate over all range descriptors, ignoring uncommitted versions
-	// (consistent=false). Uncommitted intents which have been abandoned
-	// due to a split crashing halfway will simply be resolved on the
-	// next split attempt. They can otherwise be ignored.
+	// Iterate over all range descriptors.
+	s.mu.Lock()
 
-	// TODO(peter): While we have to iterate to find the replica descriptors
-	// serially, we can perform the migrations and replica creation
-	// concurrently. Note that while we can perform this initialization
-	// concurrently, all of the initialization must be performed before we start
-	// listening for Raft messages and starting the process Raft loop.
-	err = IterateRangeDescriptors(ctx, s.engine,
+	iterBegin := timeutil.Now()
+	eng := s.engine.NewSnapshot()
+	err = IterateRangeDescriptors(ctx, eng,
 		func(desc roachpb.RangeDescriptor) (bool, error) {
 			if !desc.IsInitialized() {
 				return false, errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
 			}
 
-			rep, err := NewReplica(&desc, s, 0)
+			stl := stateloader.Make(s.cfg.Settings, desc.RangeID)
+			stats, err := stl.LoadMVCCStats(ctx, eng)
 			if err != nil {
+				log.Errorf(ctx, "unable to load stats for range %d: %s", desc.RangeID, err)
+			}
+
+			shim := &ReplicaShim{
+				desc:  &desc,
+				stats: stats,
+				zone:  config.DefaultZoneConfigRef(),
+			}
+			if err = s.addReplicaShimInternalLocked(shim); err != nil {
 				return false, err
 			}
 
-			// We can't lock s.mu across NewReplica due to the lock ordering
-			// constraint (*Replica).raftMu < (*Store).mu. See the comment on
-			// (Store).mu.
-			s.mu.Lock()
-			err = s.addReplicaInternalLocked(rep)
-			s.mu.Unlock()
-			if err != nil {
-				return false, err
-			}
-
-			// Add this range and its stats to our counter.
+			// Add this range and its stats to our metrics.
 			s.metrics.ReplicaCount.Inc(1)
-			s.metrics.addMVCCStats(rep.GetMVCCStats())
+			s.metrics.addMVCCStats(stats)
 
 			if _, ok := desc.GetReplicaDescriptor(s.StoreID()); !ok {
 				// We are no longer a member of the range, but we didn't GC the replica
 				// before shutting down. Add the replica to the GC queue.
-				if added, err := s.replicaGCQueue.Add(rep, replicaGCPriorityRemoved); err != nil {
+				if rep, err := s.GetReplica(desc.RangeID); err != nil {
+					log.Errorf(ctx, "unable to load GC'able replica for range %d: %s", desc.RangeID, err)
+				} else if added, err := s.replicaGCQueue.Add(rep, replicaGCPriorityRemoved); err != nil {
 					log.Errorf(ctx, "%s: unable to add replica to GC queue: %s", rep, err)
 				} else if added {
 					log.Infof(ctx, "%s: added to replica GC queue", rep)
@@ -1326,9 +1362,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			// and initialize those groups.
 			return false, nil
 		})
+	s.mu.Unlock()
 	if err != nil {
 		return err
 	}
+	log.Infof(ctx, "initialized %d replicas in %s", s.metrics.ReplicaCount.Value(), timeutil.Since(iterBegin))
 
 	// Ensure that no Raft entries were abandoned by previous versions of Cockroach
 	// that did not delete Raft entries atomically with applying log truncation
@@ -1396,7 +1434,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 	if s.replicateQueue != nil {
 		s.storeRebalancer = NewStoreRebalancer(
-			s.cfg.AmbientCtx, s.cfg.Settings, s.replicateQueue, s.replRankings)
+			s.cfg.AmbientCtx, s.cfg.Settings, s.replicateQueue, s.replRankings, s.GetReplica)
 		s.storeRebalancer.Start(ctx, s.stopper)
 	}
 
@@ -1642,20 +1680,29 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 		log.Event(ctx, "computed initial metrics")
 	})
 
-	// For every range, update its zone config and check if it needs to
-	// be split or merged.
-	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
-		key := repl.Desc().StartKey
-		zone, err := sysCfg.GetZoneConfigForKey(key)
+	// For every range, update its zone config. If the zone config has
+	// changed, potentially add the replica to the background processing
+	// queues (merge, split, replicate, etc.).
+	s.mu.replicaShims.Range(func(_ int64, v unsafe.Pointer) bool {
+		shim := (*ReplicaShim)(v)
+		desc := shim.Desc()
+		zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 		if err != nil {
 			if log.V(1) {
-				log.Infof(context.TODO(), "failed to get zone config for key %s", key)
+				log.Infof(context.TODO(), "failed to get zone config for key %s", desc.StartKey)
 			}
 			zone = config.DefaultZoneConfigRef()
 		}
-		repl.SetZoneConfig(zone)
-		s.mergeQueue.MaybeAdd(repl, s.cfg.Clock.Now())
-		s.splitQueue.MaybeAdd(repl, s.cfg.Clock.Now())
+		shim.SetZoneConfig(zone)
+		// To avoid making every replica resident every time the system
+		// config is gossiped, check the shim's descriptor against zones
+		// to determine if a split is required before making the replica
+		// resident to add it to the split queue.
+		if sysCfg.NeedsSplit(desc.StartKey, desc.EndKey) {
+			if repl, ok := s.mustGetReplica(context.TODO(), shim.RangeID()); ok {
+				s.splitQueue.MaybeAdd(repl, s.cfg.Clock.Now())
+			}
+		}
 		return true // more
 	})
 }
@@ -1957,12 +2004,44 @@ func checkEngineEmpty(ctx context.Context, eng engine.Engine) error {
 	return nil
 }
 
-// GetReplica fetches a replica by Range ID. Returns an error if no replica is found.
+// GetReplica fetches a replica by Range ID. If the replica is currently
+// non-resident, it is initialized. Returns an error if no replica is found.
 func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
-	if value, ok := s.mu.replicas.Load(int64(rangeID)); ok {
-		return (*Replica)(value), nil
+	if value, ok := s.mu.replicaShims.Load(int64(rangeID)); ok {
+		shim := (*ReplicaShim)(value)
+		shim.Lock()
+		defer shim.Unlock()
+		if shim.replica != nil {
+			return shim.replica, nil
+		}
+		rep, err := NewReplica(shim.desc, s, 0)
+		if err != nil {
+			return nil, err
+		}
+		rep.SetZoneConfig(shim.zone)
+		shim.replica = rep
+		shim.desc = nil
+		shim.zone = nil
+		return rep, nil
 	}
 	return nil, roachpb.NewRangeNotFoundError(rangeID, s.StoreID())
+}
+
+// mustGetReplica fetches a replica by Range ID. Any error
+// initializing the replica will result in a fatal error. Returns the
+// replica and a bool indicating whether or not the range ID was found
+// on this store.
+func (s *Store) mustGetReplica(ctx context.Context, rangeID roachpb.RangeID) (*Replica, bool) {
+	r, err := s.GetReplica(rangeID)
+	if err != nil {
+		switch err.(type) {
+		case *roachpb.RangeNotFoundError:
+			return nil, false
+		default:
+			log.Fatalf(ctx, "failed to fetch replica for range %d: %s", rangeID, err)
+		}
+	}
+	return r, true
 }
 
 // LookupReplica looks up the replica that contains the specified key. It
@@ -1970,16 +2049,17 @@ func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 func (s *Store) LookupReplica(key roachpb.RKey) *Replica {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var repl *Replica
+	var shim *ReplicaShim
 	s.mu.replicasByKey.DescendLessOrEqual(rangeBTreeKey(key), func(item btree.Item) bool {
-		repl, _ = item.(*Replica)
+		shim, _ = item.(*ReplicaShim)
 		// Stop iterating immediately. The first item we see is the only one that
 		// can possibly contain key.
 		return false
 	})
-	if repl == nil || !repl.Desc().ContainsKey(key) {
+	if shim == nil || !shim.ContainsKey(key.AsRawKey()) {
 		return nil
 	}
+	repl, _ := s.mustGetReplica(context.TODO(), shim.RangeID())
 	return repl
 }
 
@@ -1995,11 +2075,12 @@ func (s *Store) lookupPrecedingReplica(key roachpb.RKey) *Replica {
 	defer s.mu.RUnlock()
 	var repl *Replica
 	s.mu.replicasByKey.DescendLessOrEqual(rangeBTreeKey(key), func(item btree.Item) bool {
-		if r, ok := item.(*Replica); ok && !r.ContainsKey(key.AsRawKey()) {
-			repl = r
-			return false // stop iterating
+		if shim, ok := item.(*ReplicaShim); ok && !shim.ContainsKey(key.AsRawKey()) {
+			if repl, ok = s.mustGetReplica(context.TODO(), shim.RangeID()); ok {
+				return false // stop iterating
+			}
 		}
-		return true // keep iterating
+		return true // keep iterating if we haven't found a replica
 	})
 	return repl
 }
@@ -2025,8 +2106,8 @@ func (s *Store) getOverlappingKeyRangeLocked(rngDesc *roachpb.RangeDescriptor) K
 // RaftStatus returns the current raft status of the local replica of
 // the given range.
 func (s *Store) RaftStatus(rangeID roachpb.RangeID) *raft.Status {
-	if value, ok := s.mu.replicas.Load(int64(rangeID)); ok {
-		return (*Replica)(value).RaftStatus()
+	if repl, err := s.GetReplica(rangeID); err == nil {
+		return repl.RaftStatus()
 	}
 	return nil
 }
@@ -2315,13 +2396,26 @@ func (s *Store) SplitRange(
 	leftRepl.leaseholderStats.resetRequestCounts()
 	leftRepl.writeStats.splitRequestCounts(rightRepl.writeStats)
 
-	if err := s.addReplicaInternalLocked(rightRepl); err != nil {
+	// Look up existing replica shim; this might have been added as an
+	// uninitialized replica previously.
+	var shim *ReplicaShim
+	if value, ok := s.mu.replicaShims.Load(int64(rightRepl.RangeID)); ok {
+		shim = (*ReplicaShim)(value)
+		// Note that we never allow a replica to be made non-resident if
+		// it's uninitialized, so it will not be nil in this case.
+		if shim.replica != rightRepl {
+			return errors.Errorf("%s: replica already exists", shim)
+		}
+	} else {
+		shim = &ReplicaShim{replica: rightRepl}
+	}
+	if err := s.addReplicaShimInternalLocked(shim); err != nil {
 		return errors.Errorf("unable to add replica %v: %s", rightRepl, err)
 	}
 
-	// Update the replica's cached byte thresholds. This is a no-op if the system
-	// config is not available, in which case we rely on the next gossip update
-	// to perform the update.
+	// Update the zone for the new replica. This is a no-op if the
+	// system config is not available, in which case we rely on the next
+	// gossip update to perform the update.
 	if err := rightRepl.updateRangeInfo(rightRepl.Desc()); err != nil {
 		return err
 	}
@@ -2426,25 +2520,27 @@ func (s *Store) MergeRange(
 	return nil
 }
 
-// addReplicaInternalLocked adds the replica to the replicas map and the
-// replicasByKey btree. Returns an error if a replica with
-// the same Range ID or a KeyRange that overlaps has already been added to
-// this store. addReplicaInternalLocked requires that the store lock is held.
-func (s *Store) addReplicaInternalLocked(repl *Replica) error {
-	if !repl.IsInitialized() {
-		return errors.Errorf("attempted to add uninitialized replica %s", repl)
+// addReplicaShimInternalLocked adds the replica shim to the replicas
+// map and the replicasByKey btree. Returns an error if a replica with
+// the same Range ID or a KeyRange that overlaps has already been
+// added to this store. addReplicaShimInternalLocked requires that the
+// store lock is held.
+func (s *Store) addReplicaShimInternalLocked(shim *ReplicaShim) error {
+	desc := shim.Desc()
+	if !desc.IsInitialized() {
+		return errors.Errorf("attempted to add uninitialized %s", shim)
 	}
 
-	if err := s.addReplicaToRangeMapLocked(repl); err != nil {
+	if err := s.addReplicaShimToRangeMapLocked(shim); err != nil {
 		return err
 	}
 
-	if exRange := s.getOverlappingKeyRangeLocked(repl.Desc()); exRange != nil {
-		return errors.Errorf("%s: cannot addReplicaInternalLocked; range %s has overlapping range %s", s, repl, exRange.Desc())
+	if exRange := s.getOverlappingKeyRangeLocked(desc); exRange != nil {
+		return errors.Errorf("%s: %s has overlapping key span %s", s, shim, exRange.Desc())
 	}
 
-	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(repl); exRngItem != nil {
-		return errors.Errorf("%s: cannot addReplicaInternalLocked; range for key %v already exists in replicasByKey btree", s,
+	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(shim); exRngItem != nil {
+		return errors.Errorf("%s: range for key %v already exists in replicasByKey btree", s,
 			exRngItem.(KeyRange).startKey())
 	}
 
@@ -2505,22 +2601,25 @@ func (s *Store) removePlaceholderLocked(ctx context.Context, rngID roachpb.Range
 	return false // appease the compiler
 }
 
-// addReplicaToRangeMapLocked adds the replica to the replicas map.
-func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
-	// It's ok for the replica to exist in the replicas map as long as it is the
-	// same replica object. This occurs during splits where the right-hand side
-	// is added to the replicas map before it is initialized.
-	if existing, loaded := s.mu.replicas.LoadOrStore(
-		int64(repl.RangeID), unsafe.Pointer(repl)); loaded && (*Replica)(existing) != repl {
-		return errors.Errorf("%s: replica already exists", repl)
+// addReplicaShimToRangeMapLocked adds the replica shim to the
+// replicaShims map.
+func (s *Store) addReplicaShimToRangeMapLocked(shim *ReplicaShim) error {
+	rangeID := shim.RangeID()
+	if existing, loaded := s.mu.replicaShims.LoadOrStore(int64(rangeID), unsafe.Pointer(shim)); loaded {
+		// It's ok for the shim to exist in the replicaShims map as long as it
+		// is the same object. This occurs during splits where the right-hand side
+		// is added to the map before it is initialized.
+		if shim != (*ReplicaShim)(existing) {
+			return errors.Errorf("replica for %d already exists", rangeID)
+		}
 	}
-	// Check whether the replica is unquiesced but not in the map. This
-	// can happen during splits and merges, where the uninitialized (but
-	// also unquiesced) replica is removed from the unquiesced replica
-	// map in advance of this method being called.
+	// Check whether the replica is unquiesced, and add it to the map if
+	// so. This can happen during splits and merges, where the
+	// uninitialized (but also unquiesced) replica is removed from the
+	// unquiesced replica map in advance of this method being called.
 	s.unquiescedReplicas.Lock()
-	if _, ok := s.unquiescedReplicas.m[repl.RangeID]; !repl.mu.quiescent && !ok {
-		s.unquiescedReplicas.m[repl.RangeID] = struct{}{}
+	if repl := shim.replica; repl != nil && !repl.mu.quiescent {
+		s.unquiescedReplicas.m[rangeID] = struct{}{}
 	}
 	s.unquiescedReplicas.Unlock()
 	return nil
@@ -2571,21 +2670,23 @@ func (s *Store) removeReplicaImpl(
 	}
 	rep.mu.Unlock()
 
-	if _, err := s.GetReplica(rep.RangeID); err != nil {
-		return err
-	}
-
 	// During merges, the context might have the subsuming range, so we explicitly
 	// log the replica to be removed.
 	log.Infof(ctx, "removing replica r%d/%d", rep.RangeID, replicaID)
 
+	v, ok := s.mu.replicaShims.Load(int64(desc.RangeID))
+	if !ok {
+		return roachpb.NewRangeNotFoundError(desc.RangeID, rep.store.StoreID())
+	}
+	shim := (*ReplicaShim)(v)
+
 	s.mu.Lock()
-	if placeholder := s.getOverlappingKeyRangeLocked(desc); placeholder != rep {
+	if placeholder := s.getOverlappingKeyRangeLocked(desc); placeholder != shim {
 		// This is a fatal error because uninitialized replicas shouldn't make it
 		// this far. This method will need some changes when we introduce GC of
 		// uninitialized replicas.
 		s.mu.Unlock()
-		log.Fatalf(ctx, "replica %+v unexpectedly overlapped by %+v", rep, placeholder)
+		log.Fatalf(ctx, "replica %+v unexpectedly overlapped by %+v", shim, placeholder)
 	}
 	// Adjust stats before calling Destroy. This can be called before or after
 	// Destroy, but this configuration helps avoid races in stat verification
@@ -2621,7 +2722,7 @@ func (s *Store) removeReplicaImpl(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.unlinkReplicaByRangeIDLocked(rep.RangeID)
-	if placeholder := s.mu.replicasByKey.Delete(rep); placeholder != rep {
+	if placeholder := s.mu.replicasByKey.Delete(shim); placeholder != shim {
 		// We already checked that our replica was present in replicasByKey
 		// above. Nothing should have been able to change that.
 		log.Fatalf(ctx, "replica %+v unexpectedly overlapped by %+v", rep, placeholder)
@@ -2649,7 +2750,7 @@ func (s *Store) unlinkReplicaByRangeIDLocked(rangeID roachpb.RangeID) {
 	s.unquiescedReplicas.Unlock()
 	delete(s.mu.uninitReplicas, rangeID)
 	s.replicaQueues.Delete(int64(rangeID))
-	s.mu.replicas.Delete(int64(rangeID))
+	s.mu.replicaShims.Delete(int64(rangeID))
 }
 
 // maybeMarkReplicaInitializedLocked should be called whenever a previously
@@ -2670,10 +2771,14 @@ func (s *Store) maybeMarkReplicaInitializedLocked(ctx context.Context, repl *Rep
 	delete(s.mu.uninitReplicas, rangeID)
 
 	if exRange := s.getOverlappingKeyRangeLocked(repl.Desc()); exRange != nil {
-		return errors.Errorf("%s: cannot initialize replica; range %s has overlapping range %s",
+		return errors.Errorf("%s: cannot initialize replica; range %s has overlapping key span %s",
 			s, repl, exRange.Desc())
 	}
-	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert(repl); exRngItem != nil {
+	value, ok := s.mu.replicaShims.Load(int64(repl.RangeID))
+	if !ok {
+		return errors.Errorf("unable to locate shim for initialized replica %s", repl)
+	}
+	if exRngItem := s.mu.replicasByKey.ReplaceOrInsert((*ReplicaShim)(value)); exRngItem != nil {
 		return errors.Errorf("range for key %v already exists in replicasByKey btree",
 			(exRngItem.(*Replica)).startKey())
 	}
@@ -2710,6 +2815,11 @@ func (s *Store) Capacity(useCached bool) (roachpb.StoreCapacity, error) {
 	}
 
 	now := s.cfg.Clock.Now()
+	var livenessMap IsLiveMap
+	if s.cfg.NodeLiveness != nil {
+		livenessMap = s.cfg.NodeLiveness.GetIsLiveMap()
+	}
+
 	var leaseCount int32
 	var rangeCount int32
 	var logicalBytes int64
@@ -2719,32 +2829,32 @@ func (s *Store) Capacity(useCached bool) (roachpb.StoreCapacity, error) {
 	bytesPerReplica := make([]float64, 0, replicaCount)
 	writesPerReplica := make([]float64, 0, replicaCount)
 	rankingsAccumulator := s.replRankings.newAccumulator()
-	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
+	s.mu.replicaShims.Range(func(_ int64, v unsafe.Pointer) bool {
 		rangeCount++
-		if r.OwnsValidLease(now) {
+
+		shim := (*ReplicaShim)(v)
+		capacity := shim.Capacity(s.Ident.StoreID, now, livenessMap)
+		if capacity.Leaseholder {
 			leaseCount++
 		}
-		mvccStats := r.GetMVCCStats()
-		logicalBytes += mvccStats.Total()
-		bytesPerReplica = append(bytesPerReplica, float64(mvccStats.Total()))
+		statsTotal := capacity.Stats.Total()
+		logicalBytes += statsTotal
+		bytesPerReplica = append(bytesPerReplica, float64(statsTotal))
 		// TODO(a-robinson): How dangerous is it that these numbers will be
 		// incorrectly low the first time or two it gets gossiped when a store
 		// starts? We can't easily have a countdown as its value changes like for
 		// leases/replicas.
-		var qps float64
-		if avgQPS, dur := r.leaseholderStats.avgQPS(); dur >= MinStatsDuration {
-			qps = avgQPS
-			totalQueriesPerSecond += avgQPS
-			// TODO(a-robinson): Calculate percentiles for qps? Get rid of other percentiles?
+		// TODO(a-robinson): Calculate percentiles for qps? Get rid of other percentiles?
+		totalQueriesPerSecond += capacity.QPS
+		totalWritesPerSecond += capacity.WPS
+		writesPerReplica = append(writesPerReplica, capacity.WPS)
+
+		if capacity.QPS > 0 {
+			rankingsAccumulator.addReplica(replicaWithStats{
+				rangeID: shim.RangeID(),
+				qps:     capacity.QPS,
+			})
 		}
-		if wps, dur := r.writeStats.avgQPS(); dur >= MinStatsDuration {
-			totalWritesPerSecond += wps
-			writesPerReplica = append(writesPerReplica, wps)
-		}
-		rankingsAccumulator.addReplica(replicaWithStats{
-			repl: r,
-			qps:  qps,
-		})
 		return true
 	})
 	capacity.RangeCount = rangeCount
@@ -2764,16 +2874,9 @@ func (s *Store) Capacity(useCached bool) (roachpb.StoreCapacity, error) {
 	return capacity, nil
 }
 
-// ReplicaCount returns the number of replicas contained by this store. This
-// method is O(n) in the number of replicas and should not be called from
-// performance critical code.
+// ReplicaCount returns the number of replicas contained by this store.
 func (s *Store) ReplicaCount() int {
-	var count int
-	s.mu.replicas.Range(func(_ int64, _ unsafe.Pointer) bool {
-		count++
-		return true
-	})
-	return count
+	return int(s.metrics.ReplicaCount.Value())
 }
 
 // Registry returns the store registry.
@@ -2819,18 +2922,25 @@ func (s *Store) deadReplicas() roachpb.StoreDeadReplicas {
 	// TODO(bram): does this need to visit all the replicas? Could we just use the
 	// store pool to locate any dead replicas on this store directly?
 	var deadReplicas []roachpb.ReplicaIdent
-	s.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
-		r := (*Replica)(v)
-		r.mu.RLock()
-		corrupted := r.mu.destroyStatus.reason == destroyReasonCorrupted
-		desc := r.mu.state.Desc
-		r.mu.RUnlock()
-		replicaDesc, ok := desc.GetReplicaDescriptor(s.Ident.StoreID)
-		if ok && corrupted {
-			deadReplicas = append(deadReplicas, roachpb.ReplicaIdent{
-				RangeID: desc.RangeID,
-				Replica: replicaDesc,
-			})
+	s.mu.replicaShims.Range(func(k int64, v unsafe.Pointer) bool {
+		shim := (*ReplicaShim)(v)
+		var corrupted bool
+		var desc *roachpb.RangeDescriptor
+		shim.Lock()
+		if repl := shim.replica; repl != nil {
+			repl.mu.RLock()
+			corrupted = repl.mu.destroyStatus.reason == destroyReasonCorrupted
+			desc = repl.mu.state.Desc
+			repl.mu.RUnlock()
+		}
+		shim.Unlock()
+		if corrupted {
+			if replicaDesc, ok := desc.GetReplicaDescriptor(s.Ident.StoreID); ok {
+				deadReplicas = append(deadReplicas, roachpb.ReplicaIdent{
+					RangeID: desc.RangeID,
+					Replica: replicaDesc,
+				})
+			}
 		}
 		return true
 	})
@@ -3740,13 +3850,12 @@ func (s *Store) processRequestQueue(ctx context.Context, rangeID roachpb.RangeID
 }
 
 func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
-	value, ok := s.mu.replicas.Load(int64(rangeID))
+	r, ok := s.mustGetReplica(ctx, rangeID)
 	if !ok {
 		return
 	}
 
 	start := timeutil.Now()
-	r := (*Replica)(value)
 	stats, expl, err := r.handleRaftReady(noSnap)
 	if err != nil {
 		log.Fatalf(ctx, "%s: %s", log.Safe(expl), err) // TODO(bdarnell)
@@ -3779,14 +3888,13 @@ func (s *Store) processReady(ctx context.Context, rangeID roachpb.RangeID) {
 }
 
 func (s *Store) processTick(ctx context.Context, rangeID roachpb.RangeID) bool {
-	value, ok := s.mu.replicas.Load(int64(rangeID))
+	r, ok := s.mustGetReplica(ctx, rangeID)
 	if !ok {
 		return false
 	}
 	livenessMap, _ := s.livenessMap.Load().(IsLiveMap)
 
 	start := timeutil.Now()
-	r := (*Replica)(value)
 	exists, err := r.tick(livenessMap)
 	if err != nil {
 		log.Error(ctx, err)
@@ -3807,14 +3915,19 @@ func (s *Store) nodeIsLiveCallback(nodeID roachpb.NodeID) {
 	// Update the liveness map.
 	s.livenessMap.Store(s.cfg.NodeLiveness.GetIsLiveMap())
 
-	s.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
-		r := (*Replica)(v)
-		for _, rep := range r.Desc().Replicas {
-			if rep.NodeID == nodeID {
-				r.unquiesce()
+	s.mu.replicaShims.Range(func(k int64, v unsafe.Pointer) bool {
+		shim := (*ReplicaShim)(v)
+		if shim.QuiescentButBehind() {
+			for _, repDesc := range shim.Desc().Replicas {
+				if repDesc.NodeID == nodeID {
+					if repl, ok := s.mustGetReplica(context.TODO(), shim.RangeID()); ok {
+						repl.unquiesce()
+					}
+					break
+				}
 			}
 		}
-		return true
+		return true // more
 	})
 }
 
@@ -3947,13 +4060,13 @@ func (s *Store) sendQueuedHeartbeatsToNode(
 
 	if !s.cfg.Transport.SendAsync(chReq) {
 		for _, beat := range beats {
-			if value, ok := s.mu.replicas.Load(int64(beat.RangeID)); ok {
-				(*Replica)(value).addUnreachableRemoteReplica(beat.ToReplicaID)
+			if repl, ok := s.mustGetReplica(ctx, beat.RangeID); ok {
+				repl.addUnreachableRemoteReplica(beat.ToReplicaID)
 			}
 		}
 		for _, resp := range resps {
-			if value, ok := s.mu.replicas.Load(int64(resp.RangeID)); ok {
-				(*Replica)(value).addUnreachableRemoteReplica(resp.ToReplicaID)
+			if repl, ok := s.mustGetReplica(ctx, resp.RangeID); ok {
+				repl.addUnreachableRemoteReplica(resp.ToReplicaID)
 			}
 		}
 		return 0
@@ -4022,8 +4135,7 @@ func (s *Store) tryGetOrCreateReplica(
 	creatingReplica *roachpb.ReplicaDescriptor,
 ) (_ *Replica, created bool, _ error) {
 	// The common case: look up an existing (initialized) replica.
-	if value, ok := s.mu.replicas.Load(int64(rangeID)); ok {
-		repl := (*Replica)(value)
+	if repl, ok := s.mustGetReplica(ctx, rangeID); ok {
 		repl.raftMu.Lock() // not unlocked
 		repl.mu.Lock()
 		defer repl.mu.Unlock()
@@ -4086,11 +4198,11 @@ func (s *Store) tryGetOrCreateReplica(
 	// Store.mu to maintain lock ordering invariant.
 	repl.mu.Lock()
 	repl.mu.minReplicaID = tombstone.NextReplicaID
-	// Add the range to range map, but not replicasByKey since the range's start
+	// Add new shim to map, but not replicasByKey since the range's start
 	// key is unknown. The range will be added to replicasByKey later when a
 	// snapshot is applied. After unlocking Store.mu above, another goroutine
 	// might have snuck in and created the replica, so we retry on error.
-	if err := s.addReplicaToRangeMapLocked(repl); err != nil {
+	if err := s.addReplicaShimToRangeMapLocked(&ReplicaShim{replica: repl}); err != nil {
 		repl.mu.Unlock()
 		s.mu.Unlock()
 		repl.raftMu.Unlock()
@@ -4131,18 +4243,9 @@ func (s *Store) updateCapacityGauges() error {
 	return nil
 }
 
-// updateReplicationGauges counts a number of simple replication statistics for
-// the ranges in this store.
-// TODO(bram): #4564 It may be appropriate to compute these statistics while
-// scanning ranges. An ideal solution would be to create incremental events
-// whenever availability changes.
+// updateReplicationGauges counts a number of simple replication
+// statistics for the ranges in this store.
 func (s *Store) updateReplicationGauges(ctx context.Context) error {
-	// Load the system config.
-	cfg := s.Gossip().GetSystemConfig()
-	if cfg == nil {
-		return errors.Errorf("%s: system config not yet available", s)
-	}
-
 	var (
 		raftLeaderCount               int64
 		leaseHolderCount              int64
@@ -4150,6 +4253,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		leaseEpochCount               int64
 		raftLeaderNotLeaseHolderCount int64
 		quiescentCount                int64
+		residentCount                 int64
 		averageQueriesPerSecond       float64
 		averageWritesPerSecond        float64
 
@@ -4166,8 +4270,8 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	}
 	availableNodes := s.cfg.StorePool.AvailableNodeCount()
 
-	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
-		metrics := rep.Metrics(ctx, timestamp, livenessMap, availableNodes)
+	s.mu.replicaShims.Range(func(_ int64, v unsafe.Pointer) bool {
+		rep, metrics := (*ReplicaShim)(v).Metrics(ctx, s.Ident.StoreID, timestamp, livenessMap, availableNodes)
 		if metrics.Leader {
 			raftLeaderCount++
 			if metrics.LeaseValid && !metrics.Leaseholder {
@@ -4197,11 +4301,14 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			}
 		}
 		behindCount += metrics.BehindCount
-		if qps, dur := rep.leaseholderStats.avgQPS(); dur >= MinStatsDuration {
-			averageQueriesPerSecond += qps
-		}
-		if wps, dur := rep.writeStats.avgQPS(); dur >= MinStatsDuration {
-			averageWritesPerSecond += wps
+		if rep != nil {
+			residentCount++
+			if qps, dur := rep.leaseholderStats.avgQPS(); dur >= MinStatsDuration {
+				averageQueriesPerSecond += qps
+			}
+			if wps, dur := rep.writeStats.avgQPS(); dur >= MinStatsDuration {
+				averageWritesPerSecond += wps
+			}
 		}
 		return true // more
 	})
@@ -4212,6 +4319,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.LeaseExpirationCount.Update(leaseExpirationCount)
 	s.metrics.LeaseEpochCount.Update(leaseEpochCount)
 	s.metrics.QuiescentCount.Update(quiescentCount)
+	s.metrics.ResidentCount.Update(residentCount)
 	s.metrics.AverageQueriesPerSecond.Update(averageQueriesPerSecond)
 	s.metrics.AverageWritesPerSecond.Update(averageWritesPerSecond)
 	s.recordNewPerSecondStats(averageQueriesPerSecond, averageWritesPerSecond)
@@ -4237,7 +4345,14 @@ func (s *Store) updateCommandQueueGauges() error {
 		combinedCommandWriteCount int64
 		combinedCommandReadCount  int64
 	)
-	newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
+	s.mu.replicaShims.Range(func(_ int64, v unsafe.Pointer) bool {
+		shim := (*ReplicaShim)(v)
+		shim.Lock()
+		rep := shim.replica
+		shim.Unlock()
+		if rep == nil {
+			return true // more
+		}
 		rep.cmdQMu.Lock()
 
 		writes := rep.cmdQMu.queues[spanset.SpanGlobal].localMetrics.writeCommands
@@ -4337,20 +4452,35 @@ type StoreKeySpanStats struct {
 	ApproximateDiskBytes uint64
 }
 
-// ComputeStatsForKeySpan computes the aggregated MVCCStats for all replicas on
-// this store which contain any keys in the supplied range.
+// ComputeStatsForKeySpan computes the aggregated MVCCStats for all
+// replicas on this store which overlap the supplied range.
 func (s *Store) ComputeStatsForKeySpan(startKey, endKey roachpb.RKey) (StoreKeySpanStats, error) {
 	var result StoreKeySpanStats
 
-	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
-		desc := repl.Desc()
-		if bytes.Compare(startKey, desc.EndKey) >= 0 || bytes.Compare(desc.StartKey, endKey) >= 0 {
+	// Descend one iteration so we can include the first overlapping range.
+	s.mu.replicasByKey.DescendLessOrEqual(rangeBTreeKey(startKey),
+		func(item btree.Item) bool {
+			kr := item.(KeyRange)
+			if startKey.Less(kr.Desc().EndKey) {
+				startKey = kr.Desc().StartKey
+			}
+			return false
+		})
+
+	// Now ascend until we encounter a range which is not overlapping.
+	s.mu.replicasByKey.AscendGreaterOrEqual(rangeBTreeKey(startKey),
+		func(item btree.Item) bool {
+			kr := item.(KeyRange)
+			if !kr.Desc().StartKey.Less(endKey) {
+				// The range is outside of the requested key span.
+				return false
+			}
+			if shim, ok := item.(*ReplicaShim); ok {
+				result.ReplicaCount++
+				result.MVCC.Add(shim.GetMVCCStats())
+			}
 			return true // continue
-		}
-		result.MVCC.Add(repl.GetMVCCStats())
-		result.ReplicaCount++
-		return true
-	})
+		})
 
 	var err error
 	result.ApproximateDiskBytes, err = s.engine.ApproximateDiskBytes(startKey.AsRawKey(), endKey.AsRawKey())

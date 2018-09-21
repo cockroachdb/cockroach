@@ -2810,11 +2810,12 @@ func TestStoreRangeMoveDecommissioning(t *testing.T) {
 	sc.TestingKnobs.DisableReplicaRebalancing = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
-	mtc.Start(t, 6)
+	zone := config.DefaultSystemZoneConfig()
+	mtc.Start(t, int(*zone.NumReplicas+1))
 	mtc.initGossipNetwork()
 
-	// Replicate the range to 2 more stores. Note that there are 4 stores in the
-	// cluster leaving an extra store available as a replication target once the
+	// Replicate the range to more stores. Note that there is an extra
+	// store in the cluster available as a replication target once the
 	// replica on the dead node is removed.
 	replica := mtc.stores[0].LookupReplica(roachpb.RKeyMin)
 	mtc.replicateRange(replica.RangeID, 1, 2)

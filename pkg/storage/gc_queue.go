@@ -163,9 +163,9 @@ func makeGCQueueScore(
 	repl.mu.Lock()
 	ms := *repl.mu.state.Stats
 	gcThreshold := *repl.mu.state.GCThreshold
+	desc := repl.mu.state.Desc
+	zone := repl.mu.zone
 	repl.mu.Unlock()
-
-	desc, zone := repl.DescAndZone()
 
 	// Use desc.RangeID for fuzzing the final score, so that different ranges
 	// have slightly different priorities and even symmetrical workloads don't
