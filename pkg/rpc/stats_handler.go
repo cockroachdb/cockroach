@@ -133,6 +133,7 @@ func (sh *StatsHandler) HandleRPC(ctx context.Context, rpcStats stats.RPCStats) 
 	remoteAddr, ok := ctx.Value(remoteAddrKey{}).(string)
 	if !ok {
 		log.Warningf(ctx, "unable to record stats (%+v); remote addr not found in context", rpcStats)
+		return
 	}
 	// There is a race here, but it's meaningless in practice. Worst
 	// case is we fail to record a handful of observations. We do
