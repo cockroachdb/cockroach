@@ -250,7 +250,7 @@ func (b *RocksDBMapBatchWriter) Put(k []byte, v []byte) error {
 	if err := b.batch.Put(b.makeKey(k), v); err != nil {
 		return err
 	}
-	if len(b.batch.Repr()) >= b.capacity {
+	if b.batch.Len() >= b.capacity {
 		return b.Flush()
 	}
 	return nil

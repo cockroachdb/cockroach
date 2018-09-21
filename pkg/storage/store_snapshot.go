@@ -185,7 +185,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			return err
 		}
 
-		if int64(len(b.Repr())) >= kvSS.batchSize {
+		if int64(b.Len()) >= kvSS.batchSize {
 			if err := kvSS.limiter.WaitN(ctx, 1); err != nil {
 				return err
 			}
