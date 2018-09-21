@@ -108,8 +108,8 @@ func (fakeExprContext) EvalContext() *tree.EvalContext {
 	return &tree.EvalContext{}
 }
 
-func (fakeExprContext) MaybeAddLocalExpr(expr tree.TypedExpr, indexVarMap []int) (int, bool) {
-	return 0, false
+func (fakeExprContext) IsLocal() bool {
+	return false
 }
 
 // checkDistAggregationInfo tests that a flow with multiple local stages and a

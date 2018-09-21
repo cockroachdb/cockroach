@@ -28,38 +28,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// exprFmtCtxBase produces a FmtCtx used for serializing expressions; a proper
-// IndexedVar formatting function needs to be added on. It replaces placeholders
-// with their values.
-func exprFmtCtxBase(buf *bytes.Buffer, evalCtx *tree.EvalContext) tree.FmtCtx {
-	fmtCtx := tree.MakeFmtCtx(buf, tree.FmtCheckEquivalence)
-	fmtCtx.WithPlaceholderFormat(
-		func(fmtCtx *tree.FmtCtx, p *tree.Placeholder) {
-			d, err := p.Eval(evalCtx)
-			if err != nil {
-				panic(fmt.Sprintf("failed to serialize placeholder: %s", err))
-			}
-			d.Format(fmtCtx)
-		})
-	return fmtCtx
-}
-
-type LocalExprState struct {
-	expressions []tree.TypedExpr
-}
-
 // ExprContext is an interface containing objects necessary for creating
 // distsqlrun.Expressions.
 type ExprContext interface {
 	// EvalContext returns the tree.EvalContext for planning.
 	EvalContext() *tree.EvalContext
 
-	// MaybeAddLocalExpr adds an expression to the list of local expressions if
-	// the current plan is local, returning the index of the expression in the
-	// list if so. Returns false in the 2nd position of the current plan isn't
-	// local.
-	MaybeAddLocalExpr(expr tree.TypedExpr, indexVarMap []int) (idx int, ok bool)
+	// IsLocal returns true if the current plan is local.
+	IsLocal() bool
 }
+
+type ivarRemapper struct {
+	indexVarMap []int
+}
+
+func (v *ivarRemapper) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	if ivar, ok := expr.(*tree.IndexedVar); ok {
+		newIvar := *ivar
+		newIvar.Idx = v.indexVarMap[ivar.Idx]
+		return false, &newIvar
+	}
+	return true, expr
+}
+
+func (*ivarRemapper) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 // MakeExpression creates a distsqlrun.Expression.
 //
@@ -76,11 +68,14 @@ func MakeExpression(
 		return distsqlrun.Expression{}, nil
 	}
 
-	if idx, ok := ctx.MaybeAddLocalExpr(expr, indexVarMap); ok {
-		log.VEventf(ctx.EvalContext().Context, 1, "added local expr %v %d", expr, idx)
-		return distsqlrun.Expression{
-			LocalExprIdx: uint32(idx + 1),
-		}, nil
+	if ctx.IsLocal() {
+		if indexVarMap != nil {
+			// Remap our indexed vars
+			v := &ivarRemapper{indexVarMap: indexVarMap}
+			newExpr, _ := tree.WalkExpr(v, expr)
+			expr = newExpr.(tree.TypedExpr)
+		}
+		return distsqlrun.Expression{LocalExpr: expr}, nil
 	}
 
 	evalCtx := ctx.EvalContext()
@@ -94,7 +89,7 @@ func MakeExpression(
 	}
 	// We format the expression using the IndexedVar and Placeholder formatting interceptors.
 	var buf bytes.Buffer
-	fmtCtx := exprFmtCtxBase(&buf, evalCtx)
+	fmtCtx := distsqlrun.ExprFmtCtxBase(&buf, evalCtx)
 	if indexVarMap != nil {
 		fmtCtx.WithIndexedVarFormat(
 			func(ctx *tree.FmtCtx, idx int) {

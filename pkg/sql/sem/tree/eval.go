@@ -2489,11 +2489,6 @@ type EvalContext struct {
 	// evaluation. It can change over the course of evaluation, such as on a
 	// per-row basis.
 	ActiveMemAcc *mon.BoundAccount
-
-	// LocalExprs contains the list of typed expressions that DistSQL Expressions
-	// can index into when running on the gateway. See distsqlrun.Expression and
-	// its LocalExprIdx field.
-	LocalExprs *[]TypedExpr
 }
 
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.

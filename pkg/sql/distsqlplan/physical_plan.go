@@ -422,10 +422,7 @@ func exprColumn(expr tree.TypedExpr, indexVarMap []int) (int, bool) {
 //
 // See MakeExpression for a description of indexVarMap.
 func (p *PhysicalPlan) AddRendering(
-	exprs []tree.TypedExpr,
-	exprCtx ExprContext,
-	indexVarMap []int,
-	outTypes []sqlbase.ColumnType,
+	exprs []tree.TypedExpr, exprCtx ExprContext, indexVarMap []int, outTypes []sqlbase.ColumnType,
 ) error {
 	// First check if we need an Evaluator, or we are just shuffling values. We
 	// also check if the rendering is a no-op ("identity").
@@ -620,8 +617,15 @@ func (p *PhysicalPlan) AddFilter(
 	if err != nil {
 		return err
 	}
-	if post.Filter.Expr != "" {
-		filter.Expr = fmt.Sprintf("(%s) AND (%s)", post.Filter.Expr, filter.Expr)
+	if !post.Filter.Empty() {
+		if filter.Expr != "" {
+			filter.Expr = fmt.Sprintf("(%s) AND (%s)", post.Filter.Expr, filter.Expr)
+		} else if filter.LocalExpr != nil {
+			filter.LocalExpr = tree.NewTypedAndExpr(
+				post.Filter.LocalExpr,
+				filter.LocalExpr,
+			)
+		}
 	}
 	for _, pIdx := range p.ResultRouters {
 		p.Processors[pIdx].Spec.Post.Filter = filter

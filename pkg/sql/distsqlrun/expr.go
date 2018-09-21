@@ -145,18 +145,15 @@ func (eh *exprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 func (eh *exprHelper) init(
 	expr Expression, types []sqlbase.ColumnType, evalCtx *tree.EvalContext,
 ) error {
-	eh.evalCtx = evalCtx
-	if expr.Expr == "" && evalCtx.LocalExprs == nil {
+	if expr.Empty() {
 		return nil
 	}
+	eh.evalCtx = evalCtx
 	eh.types = types
 	eh.vars = tree.MakeIndexedVarHelper(eh, len(types))
 
-	if expr.LocalExprIdx != 0 {
-		eh.expr = (*evalCtx.LocalExprs)[expr.LocalExprIdx-1]
-		if eh.expr == nil {
-			return errors.Errorf("programming error: local expr %d was not available in slice %v", expr.LocalExprIdx-1, evalCtx.LocalExprs)
-		}
+	if expr.LocalExpr != nil {
+		eh.expr = expr.LocalExpr
 		// Bind IndexedVars to our eh.vars.
 		eh.vars.Rebind(eh.expr, true /* alsoReset */, false /* normalizeToNonNil */)
 		return nil

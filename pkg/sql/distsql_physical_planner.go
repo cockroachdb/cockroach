@@ -492,8 +492,6 @@ type PlanningCtx struct {
 	// keep track of whether it's valid to run a root node in a special fast path
 	// mode.
 	planDepth int
-
-	localExprs []tree.TypedExpr
 }
 
 var _ distsqlplan.ExprContext = &PlanningCtx{}
@@ -506,34 +504,10 @@ func (p *PlanningCtx) EvalContext() *tree.EvalContext {
 	return &p.ExtendedEvalCtx.EvalContext
 }
 
-type ivarRemapper struct {
-	indexVarMap []int
-}
-
-func (v *ivarRemapper) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
-	if ivar, ok := expr.(*tree.IndexedVar); ok {
-		newIvar := *ivar
-		newIvar.Idx = v.indexVarMap[ivar.Idx]
-		return false, &newIvar
-	}
-	return true, expr
-}
-
-func (*ivarRemapper) VisitPost(expr tree.Expr) tree.Expr { return expr }
-
-// MaybeAddLocalExpr implements the ExprContext interface.
-func (p *PlanningCtx) MaybeAddLocalExpr(expr tree.TypedExpr, indexVarMap []int) (int, bool) {
-	if p.isLocal {
-		if indexVarMap != nil {
-			// Remap our indexed vars
-			v := &ivarRemapper{indexVarMap: indexVarMap}
-			newExpr, _ := tree.WalkExpr(v, expr)
-			expr = newExpr.(tree.TypedExpr)
-		}
-		p.localExprs = append(p.localExprs, expr)
-		return len(p.localExprs) - 1, true
-	}
-	return -1, false
+// IsLocal returns true if this PlanningCtx is being used to plan a query that
+// has no remote flows.
+func (p *PlanningCtx) IsLocal() bool {
+	return p.isLocal
 }
 
 // sanityCheckAddresses returns an error if the same address is used by two
@@ -3303,7 +3277,6 @@ func (dsp *DistSQLPlanner) newLocalPlanningCtx(
 		ctx:             ctx,
 		ExtendedEvalCtx: evalCtx,
 	}
-	evalCtx.LocalExprs = &ret.localExprs
 	return ret
 }
 

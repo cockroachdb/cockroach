@@ -742,9 +742,6 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 		recv.SetError(err)
 		return
 	}
-	if planCtx.isLocal {
-		//fmt.Println("Made local exprs: ", planCtx.localExprs, *planCtx.ExtendedEvalCtx.LocalExprs)
-	}
 	dsp.FinalizePlan(planCtx, &physPlan)
 	dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
 }
