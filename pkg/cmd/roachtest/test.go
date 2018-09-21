@@ -776,12 +776,16 @@ func (r *registry) run(
 
 					select {
 					case <-time.After(timeout):
-						t.printf("test timed out (%s)", timeout)
+						t.printf("test timed out (%s)\n", timeout)
 						if c != nil {
 							c.FetchLogs(ctx)
 							// NB: c.destroyed is nil for cloned clusters (i.e. in subtests).
 							if !debugEnabled && c.destroyed != nil {
 								c.Destroy(ctx)
+							}
+							if local {
+								t.printf("waiting for test to tear down since cluster is local\n")
+								<-done
 							}
 						}
 					case <-done:
