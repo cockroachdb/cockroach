@@ -474,6 +474,7 @@ func LoadCSV(
 		func(ts hlc.Timestamp) {},
 		evalCtx.Tracing,
 	)
+	defer recv.Release()
 
 	defer log.VEventf(ctx, 1, "finished job %s", job.Payload().Description)
 	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -614,6 +615,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 		func(ts hlc.Timestamp) {},
 		evalCtx.Tracing,
 	)
+	defer recv.Release()
 	log.VEventf(ctx, 1, "begin sampling phase of job %s", job.Payload().Description)
 	// Clear the stage 2 data in case this function is ever restarted (it shouldn't be).
 	samples = nil

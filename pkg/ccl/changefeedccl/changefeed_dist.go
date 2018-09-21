@@ -171,6 +171,7 @@ func distChangefeedFlow(
 		func(ts hlc.Timestamp) {},
 		evalCtx.Tracing,
 	)
+	defer recv.Release()
 
 	var finishedSetupFn func()
 	if details.SinkURI != `` {

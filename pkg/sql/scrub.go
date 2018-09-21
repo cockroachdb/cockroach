@@ -561,6 +561,7 @@ func scrubRunDistSQL(
 		},
 		p.extendedEvalCtx.Tracing,
 	)
+	defer recv.Release()
 
 	p.extendedEvalCtx.DistSQLPlanner.Run(
 		planCtx, p.txn, plan, recv, &p.extendedEvalCtx, nil /* finishedSetupFn */)
