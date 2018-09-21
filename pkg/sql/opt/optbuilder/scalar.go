@@ -579,9 +579,13 @@ func (b *Builder) buildRangeCond(
 
 // checkSubqueryOuterCols uses the subquery outer columns to update the given
 // set of column references and the set of outer columns for any enclosing
-// subuqery. If this is a grouping context, it checks that any outer columns
-// from the given subquery that reference inScope are either aggregate or
-// grouping columns in inScope.
+// subuqery. It also performs the following checks:
+//   1. If aggregates are not allowed in the current context (e.g., if we
+//      are building the WHERE clause), it checks that the subquery does not
+//      reference any aggregates from this scope.
+//   2. If this is a grouping context, it checks that any outer columns from
+//      the given subquery that reference inScope are either aggregate or
+//      grouping columns in inScope.
 func (b *Builder) checkSubqueryOuterCols(
 	subqueryOuterCols opt.ColSet, inGroupingContext bool, inScope *scope, colRefs *opt.ColSet,
 ) {
@@ -602,6 +606,19 @@ func (b *Builder) checkSubqueryOuterCols(
 		b.subquery.outerCols.UnionWith(subqueryOuterCols.Difference(inScopeCols))
 	}
 
+	// Check 1 (see function comment).
+	if b.semaCtx.Properties.IsSet(tree.RejectAggregates) && inScope.groupby.aggOutScope != nil {
+		aggCols := inScope.groupby.aggOutScope.getAggregateCols()
+		for i := range aggCols {
+			if subqueryOuterCols.Contains(int(aggCols[i].id)) {
+				panic(builderError{
+					tree.NewInvalidFunctionUsageError(tree.AggregateClass, inScope.context),
+				})
+			}
+		}
+	}
+
+	// Check 2 (see function comment).
 	if inGroupingContext {
 		subqueryOuterCols.IntersectionWith(inScopeCols)
 		if !subqueryOuterCols.Empty() &&
