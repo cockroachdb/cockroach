@@ -73,7 +73,7 @@ type conn struct {
 	rd bufio.Reader
 
 	// stmtBuf is populated with commands queued for execution by this conn.
-	stmtBuf *sql.StmtBuf
+	stmtBuf sql.StmtBuf
 
 	// err is an error, accessed atomically. It represents any error encountered
 	// while accessing the underlying network connection. This can read via
@@ -169,13 +169,13 @@ func newConn(
 ) *conn {
 	c := &conn{
 		conn:        netConn,
-		stmtBuf:     sql.NewStmtBuf(),
 		sessionArgs: sArgs,
-		msgBuilder:  newWriteBuffer(metrics.BytesOutCount),
+		execCfg:     execCfg,
 		metrics:     metrics,
 		rd:          *bufio.NewReader(netConn),
-		execCfg:     execCfg,
+		msgBuilder:  newWriteBuffer(metrics.BytesOutCount),
 	}
+	c.stmtBuf.Init()
 	c.writerState.fi.buf = &c.writerState.buf
 	c.writerState.fi.lastFlushed = -1
 	c.writerState.fi.cmdStarts = make(map[sql.CmdPos]int)
@@ -266,7 +266,7 @@ func (c *conn) serveImpl(
 		wg.Add(1)
 		go func() {
 			writerErr = sqlServer.ServeConn(
-				processorCtx, c.sessionArgs, c.stmtBuf, c, reserved, c.metrics.SQLMemMetrics, stopProcessor)
+				processorCtx, c.sessionArgs, &c.stmtBuf, c, reserved, c.metrics.SQLMemMetrics, stopProcessor)
 			// TODO(andrei): Should we sometimes transmit the writerErr's to the
 			// client?
 			wg.Done()
