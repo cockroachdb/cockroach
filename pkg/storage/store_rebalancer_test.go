@@ -165,7 +165,7 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 		loadRanges(rr, s, []testRange{{storeIDs: tc.storeIDs, qps: tc.qps}})
 		hottestRanges := rr.topQPS()
 		_, target, _ := sr.chooseLeaseToTransfer(
-			ctx, config.NewSystemConfig(), &hottestRanges, &localDesc, storeList, storeMap, minQPS, maxQPS)
+			ctx, &hottestRanges, &localDesc, storeList, storeMap, minQPS, maxQPS)
 		if target.StoreID != tc.expectTarget {
 			t.Errorf("got target store %d for range with replicas %v and %f qps; want %d",
 				target.StoreID, tc.storeIDs, tc.qps, tc.expectTarget)
@@ -234,7 +234,7 @@ func TestChooseReplicaToRebalance(t *testing.T) {
 			loadRanges(rr, s, []testRange{{storeIDs: tc.storeIDs, qps: tc.qps}})
 			hottestRanges := rr.topQPS()
 			_, targets := sr.chooseReplicaToRebalance(
-				ctx, config.NewSystemConfig(), &hottestRanges, &localDesc, storeList, storeMap, minQPS, maxQPS)
+				ctx, &hottestRanges, &localDesc, storeList, storeMap, minQPS, maxQPS)
 
 			if len(targets) != len(tc.expectTargets) {
 				t.Fatalf("chooseReplicaToRebalance(existing=%v, qps=%f) got %v; want %v",

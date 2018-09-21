@@ -20,7 +20,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -222,11 +221,6 @@ func (sr *StoreRebalancer) rebalanceStore(
 
 	var replicasToMaybeRebalance []replicaWithStats
 	storeMap := storeListToMap(storeList)
-	sysCfg := sr.rq.allocator.storePool.gossip.GetSystemConfig()
-	if sysCfg == nil {
-		log.VEventf(ctx, 1, "no system config available, unable to choose lease transfer targets")
-		return
-	}
 
 	log.Infof(ctx,
 		"considering load-based lease transfers for s%d with %.2f qps (mean=%.2f, upperThreshold=%.2f)",
@@ -235,7 +229,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 	hottestRanges := sr.replRankings.topQPS()
 	for localDesc.Capacity.QueriesPerSecond > qpsMaxThreshold {
 		replWithStats, target, considerForRebalance := sr.chooseLeaseToTransfer(
-			ctx, sysCfg, &hottestRanges, localDesc, storeList, storeMap, qpsMinThreshold, qpsMaxThreshold)
+			ctx, &hottestRanges, localDesc, storeList, storeMap, qpsMinThreshold, qpsMaxThreshold)
 		replicasToMaybeRebalance = append(replicasToMaybeRebalance, considerForRebalance...)
 		if replWithStats.repl == nil {
 			break
@@ -287,7 +281,6 @@ func (sr *StoreRebalancer) rebalanceStore(
 	for localDesc.Capacity.QueriesPerSecond > qpsMaxThreshold {
 		replWithStats, targets := sr.chooseReplicaToRebalance(
 			ctx,
-			sysCfg,
 			&replicasToMaybeRebalance,
 			localDesc,
 			storeList,
@@ -347,7 +340,6 @@ func (sr *StoreRebalancer) rebalanceStore(
 // account here or just continue to let that happen in allocator.go?
 func (sr *StoreRebalancer) chooseLeaseToTransfer(
 	ctx context.Context,
-	sysCfg *config.SystemConfig,
 	hottestRanges *[]replicaWithStats,
 	localDesc *roachpb.StoreDescriptor,
 	storeList StoreList,
@@ -444,7 +436,6 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 
 func (sr *StoreRebalancer) chooseReplicaToRebalance(
 	ctx context.Context,
-	sysCfg *config.SystemConfig,
 	hottestRanges *[]replicaWithStats,
 	localDesc *roachpb.StoreDescriptor,
 	storeList StoreList,
@@ -480,21 +471,12 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 			continue
 		}
 
-		desc := replWithStats.repl.Desc()
+		desc, zone := replWithStats.repl.DescAndZone()
 		log.VEventf(ctx, 3, "considering replica rebalance for r%d with %.2f qps",
 			desc.RangeID, replWithStats.qps)
 
-		// Pick out the stores that we want the range on, keeping existing replicas
-		// around if they aren't on overfull stores.
-		zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-		if err != nil {
-			log.Error(ctx, err)
-			return replicaWithStats{}, nil
-		}
-		decommissioningReplicas := len(sr.rq.allocator.storePool.decommissioningReplicas(desc.RangeID, desc.Replicas))
-		_, aliveStoreCount, _ := sr.rq.allocator.storePool.getStoreList(desc.RangeID, storeFilterNone)
-
-		desiredReplicas := GetNeededReplicas(zone.NumReplicas, aliveStoreCount, decommissioningReplicas)
+		availableNodes := sr.rq.allocator.storePool.AvailableNodeCount()
+		desiredReplicas := GetNeededReplicas(zone.NumReplicas, availableNodes)
 		targets := make([]roachpb.ReplicationTarget, 0, desiredReplicas)
 		targetReplicas := make([]roachpb.ReplicaDescriptor, 0, desiredReplicas)
 

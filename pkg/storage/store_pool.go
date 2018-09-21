@@ -435,6 +435,29 @@ func (sp *StorePool) decommissioningReplicas(
 	return
 }
 
+// AvailableNodeCount returns the number of nodes which are
+// considered available for use as allocation targets. This includes
+// only live nodes which are not decommissioning.
+func (sp *StorePool) AvailableNodeCount() int {
+	sp.detailsMu.RLock()
+	defer sp.detailsMu.RUnlock()
+
+	now := sp.clock.PhysicalTime()
+	availableNodes := map[roachpb.NodeID]struct{}{}
+	for _, detail := range sp.detailsMu.storeDetails {
+		switch s := detail.status(now, TimeUntilStoreDead.Get(&sp.st.SV), 0, sp.nodeLivenessFn); s {
+		case storeStatusThrottled, storeStatusAvailable:
+			availableNodes[detail.desc.Node.NodeID] = struct{}{}
+		case storeStatusReplicaCorrupted, storeStatusDead, storeStatusUnknown, storeStatusDecommissioning:
+			// Do nothing; this node cannot be used.
+		default:
+			panic(fmt.Sprintf("unknown store status: %d", s))
+		}
+	}
+
+	return len(availableNodes)
+}
+
 // liveAndDeadReplicas divides the provided repls slice into two slices: the
 // first for live replicas, and the second for dead replicas.
 // Replicas for which liveness or deadness cannot be ascertained are excluded

@@ -310,10 +310,8 @@ func (rq *replicateQueue) processOneChange(
 			StoreID: newStore.StoreID,
 		}
 
-		decommissioningReplicas := len(rq.allocator.storePool.decommissioningReplicas(desc.RangeID, desc.Replicas))
-		_, aliveStoreCount, _ := rq.allocator.storePool.getStoreList(desc.RangeID, storeFilterNone)
-
-		need := GetNeededReplicas(zone.NumReplicas, aliveStoreCount, decommissioningReplicas)
+		availableNodes := rq.allocator.storePool.AvailableNodeCount()
+		need := GetNeededReplicas(zone.NumReplicas, availableNodes)
 		willHave := len(desc.Replicas) + 1
 
 		// Only up-replicate if there are suitable allocation targets such
