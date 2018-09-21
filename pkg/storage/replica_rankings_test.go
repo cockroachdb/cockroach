@@ -51,8 +51,8 @@ func TestReplicaRankings(t *testing.T) {
 
 		for i, replQPS := range tc.replicasByQPS {
 			acc.addReplica(replicaWithStats{
-				repl: &Replica{RangeID: roachpb.RangeID(i)},
-				qps:  replQPS,
+				rangeID: roachpb.RangeID(i),
+				qps:     replQPS,
 			})
 		}
 		rr.update(acc)

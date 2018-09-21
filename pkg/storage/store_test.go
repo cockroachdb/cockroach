@@ -677,9 +677,9 @@ func TestReplicasByKey(t *testing.T) {
 		expectedErrorOnAdd string
 	}{
 		// [a,c) is contained in [KeyMin, e)
-		{nil, 2, roachpb.RKey("a"), roachpb.RKey("c"), ".*has overlapping range"},
+		{nil, 2, roachpb.RKey("a"), roachpb.RKey("c"), ".*has overlapping key span"},
 		// [c,f) partially overlaps with [KeyMin, e)
-		{nil, 3, roachpb.RKey("c"), roachpb.RKey("f"), ".*has overlapping range"},
+		{nil, 3, roachpb.RKey("c"), roachpb.RKey("f"), ".*has overlapping key span"},
 		// [e, f) is disjoint from [KeyMin, e)
 		{nil, 4, roachpb.RKey("e"), roachpb.RKey("f"), ""},
 	}
@@ -1483,8 +1483,12 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	}
 
 	// Set zone configs.
-	config.TestingSetZoneConfig(baseID, config.ZoneConfig{RangeMaxBytes: proto.Int64(1 << 20)})
-	config.TestingSetZoneConfig(baseID+2, config.ZoneConfig{RangeMaxBytes: proto.Int64(2 << 20)})
+	zoneBase := *config.EmptyCompleteZoneConfig()
+	zoneBase.RangeMaxBytes = proto.Int64(1 << 20)
+	zoneBase2 := *config.EmptyCompleteZoneConfig()
+	zoneBase2.RangeMaxBytes = proto.Int64(2 << 20)
+	config.TestingSetZoneConfig(baseID, zoneBase)
+	config.TestingSetZoneConfig(baseID+2, zoneBase2)
 
 	// Despite faking the zone configs, we still need to have a system config
 	// entry so that the store picks up the new zone configs. This new system
@@ -1497,9 +1501,9 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		for _, test := range testData {
+		for i, test := range testData {
 			if mb := test.repl.GetMaxBytes(); mb != test.expMaxBytes {
-				return errors.Errorf("range max bytes values did not change to %d; got %d", test.expMaxBytes, mb)
+				return errors.Errorf("%d: range max bytes values did not change to %d; got %d", i, test.expMaxBytes, mb)
 			}
 		}
 		return nil

@@ -114,6 +114,8 @@ const (
 	LBRebalancingLeasesAndReplicas
 )
 
+type getReplicaFunc func(roachpb.RangeID) (*Replica, error)
+
 // StoreRebalancer is responsible for examining how the associated store's load
 // compares to the load on other stores in the cluster and transferring leases
 // or replicas away if the local store is overloaded.
@@ -131,6 +133,7 @@ type StoreRebalancer struct {
 	rq              *replicateQueue
 	replRankings    *replicaRankings
 	getRaftStatusFn func(replica *Replica) *raft.Status
+	getReplicaFn    getReplicaFunc
 }
 
 // NewStoreRebalancer creates a StoreRebalancer to work in tandem with the
@@ -140,6 +143,7 @@ func NewStoreRebalancer(
 	st *cluster.Settings,
 	rq *replicateQueue,
 	replRankings *replicaRankings,
+	getReplicaFn getReplicaFunc,
 ) *StoreRebalancer {
 	sr := &StoreRebalancer{
 		AmbientContext: ambientCtx,
@@ -150,6 +154,7 @@ func NewStoreRebalancer(
 		getRaftStatusFn: func(replica *Replica) *raft.Status {
 			return replica.RaftStatus()
 		},
+		getReplicaFn: getReplicaFn,
 	}
 	sr.AddLogTag("store-rebalancer", nil)
 	sr.rq.store.metrics.registry.AddMetricStruct(&sr.metrics)
@@ -245,16 +250,19 @@ func (sr *StoreRebalancer) rebalanceStore(
 		replWithStats, target, considerForRebalance := sr.chooseLeaseToTransfer(
 			ctx, &hottestRanges, localDesc, storeList, storeMap, qpsMinThreshold, qpsMaxThreshold)
 		replicasToMaybeRebalance = append(replicasToMaybeRebalance, considerForRebalance...)
-		if replWithStats.repl == nil {
+		if replWithStats.rangeID == 0 {
 			break
+		}
+		repl, err := sr.getReplicaFn(replWithStats.rangeID)
+		if err != nil {
+			log.Errorf(ctx, "unable to get replica for range ID %d: %v", replWithStats.rangeID, err)
+			continue
 		}
 
 		log.VEventf(ctx, 1, "transferring r%d (%.2f qps) to s%d to better balance load",
-			replWithStats.repl.RangeID, replWithStats.qps, target.StoreID)
-		replCtx, cancel := context.WithTimeout(replWithStats.repl.AnnotateCtx(ctx), sr.rq.processTimeout)
-		if err := sr.rq.transferLease(
-			replCtx, replWithStats.repl, target, replWithStats.qps,
-		); err != nil {
+			repl.RangeID, replWithStats.qps, target.StoreID)
+		replCtx, cancel := context.WithTimeout(repl.AnnotateCtx(ctx), sr.rq.processTimeout)
+		if err := sr.rq.transferLease(replCtx, repl, target, replWithStats.qps); err != nil {
 			cancel()
 			log.Errorf(replCtx, "unable to transfer lease to s%d: %v", target.StoreID, err)
 			continue
@@ -303,17 +311,22 @@ func (sr *StoreRebalancer) rebalanceStore(
 			storeMap,
 			qpsMinThreshold,
 			qpsMaxThreshold)
-		if replWithStats.repl == nil {
+		if replWithStats.rangeID == 0 {
 			log.Infof(ctx,
 				"ran out of replicas worth transferring and qps (%.2f) is still above desired threshold (%.2f); will check again soon",
 				localDesc.Capacity.QueriesPerSecond, qpsMaxThreshold)
 			return
 		}
+		repl, err := sr.getReplicaFn(replWithStats.rangeID)
+		if err != nil {
+			log.Errorf(ctx, "unable to get replica for range ID %d: %v", replWithStats.rangeID, err)
+			continue
+		}
 
-		descBeforeRebalance := replWithStats.repl.Desc()
+		descBeforeRebalance := repl.Desc()
 		log.VEventf(ctx, 1, "rebalancing r%d (%.2f qps) from %v to %v to better balance load",
-			replWithStats.repl.RangeID, replWithStats.qps, descBeforeRebalance.Replicas, targets)
-		replCtx, cancel := context.WithTimeout(replWithStats.repl.AnnotateCtx(ctx), sr.rq.processTimeout)
+			repl.RangeID, replWithStats.qps, descBeforeRebalance.Replicas, targets)
+		replCtx, cancel := context.WithTimeout(repl.AnnotateCtx(ctx), sr.rq.processTimeout)
 		if err := sr.rq.store.AdminRelocateRange(replCtx, *descBeforeRebalance, targets); err != nil {
 			cancel()
 			log.Errorf(replCtx, "unable to relocate range to %v: %v", targets, err)
@@ -373,11 +386,16 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 		*hottestRanges = (*hottestRanges)[1:]
 
 		// We're all out of replicas.
-		if replWithStats.repl == nil {
+		if replWithStats.rangeID == 0 {
 			return replicaWithStats{}, roachpb.ReplicaDescriptor{}, considerForRebalance
 		}
+		repl, err := sr.getReplicaFn(replWithStats.rangeID)
+		if err != nil {
+			log.Errorf(ctx, "unable to get replica for range ID %d: %v", replWithStats.rangeID, err)
+			continue
+		}
 
-		if shouldNotMoveAway(ctx, replWithStats, localDesc, now, minQPS) {
+		if shouldNotMoveAway(ctx, repl, replWithStats, localDesc, now, minQPS) {
 			continue
 		}
 
@@ -389,11 +407,11 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 		if replWithStats.qps < localDesc.Capacity.QueriesPerSecond*minQPSFraction &&
 			float64(localDesc.Capacity.LeaseCount) <= storeList.candidateLeases.mean {
 			log.VEventf(ctx, 5, "r%d's %.2f qps is too little to matter relative to s%d's %.2f total qps",
-				replWithStats.repl.RangeID, replWithStats.qps, localDesc.StoreID, localDesc.Capacity.QueriesPerSecond)
+				repl.RangeID, replWithStats.qps, localDesc.StoreID, localDesc.Capacity.QueriesPerSecond)
 			continue
 		}
 
-		desc, zone := replWithStats.repl.DescAndZone()
+		desc, zone := repl.DescAndZone()
 		log.VEventf(ctx, 3, "considering lease transfer for r%d with %.2f qps",
 			desc.RangeID, replWithStats.qps)
 
@@ -424,7 +442,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			}
 
 			if raftStatus == nil {
-				raftStatus = sr.getRaftStatusFn(replWithStats.repl)
+				raftStatus = sr.getRaftStatusFn(repl)
 			}
 			if replicaIsBehind(raftStatus, candidate.ReplicaID) {
 				log.VEventf(ctx, 3, "%v is behind or this store isn't the raft leader; raftStatus: %v",
@@ -445,7 +463,7 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 				*localDesc,
 				candidate.StoreID,
 				desc.Replicas,
-				replWithStats.repl.leaseholderStats,
+				repl.leaseholderStats,
 			) {
 				log.VEventf(ctx, 3, "r%d is on s%d due to follow-the-workload; skipping",
 					desc.RangeID, localDesc.StoreID)
@@ -478,11 +496,16 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 		replWithStats := (*hottestRanges)[0]
 		*hottestRanges = (*hottestRanges)[1:]
 
-		if replWithStats.repl == nil {
+		if replWithStats.rangeID == 0 {
 			return replicaWithStats{}, nil
 		}
+		repl, err := sr.getReplicaFn(replWithStats.rangeID)
+		if err != nil {
+			log.Errorf(ctx, "unable to get replica for range ID %d: %v", replWithStats.rangeID, err)
+			continue
+		}
 
-		if shouldNotMoveAway(ctx, replWithStats, localDesc, now, minQPS) {
+		if shouldNotMoveAway(ctx, repl, replWithStats, localDesc, now, minQPS) {
 			continue
 		}
 
@@ -494,11 +517,11 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 		if replWithStats.qps < localDesc.Capacity.QueriesPerSecond*minQPSFraction &&
 			float64(localDesc.Capacity.RangeCount) <= storeList.candidateRanges.mean {
 			log.VEventf(ctx, 5, "r%d's %.2f qps is too little to matter relative to s%d's %.2f total qps",
-				replWithStats.repl.RangeID, replWithStats.qps, localDesc.StoreID, localDesc.Capacity.QueriesPerSecond)
+				repl.RangeID, replWithStats.qps, localDesc.StoreID, localDesc.Capacity.QueriesPerSecond)
 			continue
 		}
 
-		desc, zone := replWithStats.repl.DescAndZone()
+		desc, zone := repl.DescAndZone()
 		log.VEventf(ctx, 3, "considering replica rebalance for r%d with %.2f qps",
 			desc.RangeID, replWithStats.qps)
 
@@ -533,7 +556,7 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 		}
 
 		// Then pick out which new stores to add the remaining replicas to.
-		rangeInfo := rangeInfoForRepl(replWithStats.repl, desc)
+		rangeInfo := rangeInfoForRepl(repl, desc)
 		// Make sure to use the same qps measurement throughout everything we do.
 		rangeInfo.QueriesPerSecond = replWithStats.qps
 		options := sr.rq.allocator.scorerOptions()
@@ -607,7 +630,7 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 			}
 			if replicaID != 0 {
 				if raftStatus == nil {
-					raftStatus = sr.getRaftStatusFn(replWithStats.repl)
+					raftStatus = sr.getRaftStatusFn(repl)
 				}
 				if replicaIsBehind(raftStatus, replicaID) {
 					continue
@@ -627,18 +650,19 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 
 func shouldNotMoveAway(
 	ctx context.Context,
+	repl *Replica,
 	replWithStats replicaWithStats,
 	localDesc *roachpb.StoreDescriptor,
 	now hlc.Timestamp,
 	minQPS float64,
 ) bool {
-	if !replWithStats.repl.OwnsValidLease(now) {
-		log.VEventf(ctx, 3, "store doesn't own the lease for r%d", replWithStats.repl.RangeID)
+	if !repl.OwnsValidLease(now) {
+		log.VEventf(ctx, 3, "store doesn't own the lease for r%d", replWithStats.rangeID)
 		return true
 	}
 	if localDesc.Capacity.QueriesPerSecond-replWithStats.qps < minQPS {
 		log.VEventf(ctx, 3, "moving r%d's %.2f qps would bring s%d below the min threshold (%.2f)",
-			replWithStats.repl.RangeID, replWithStats.qps, localDesc.StoreID, minQPS)
+			replWithStats.rangeID, replWithStats.qps, localDesc.StoreID, minQPS)
 		return true
 	}
 	return false
@@ -664,13 +688,13 @@ func shouldNotMoveTo(
 		if newCandidateQPS > maxQPS {
 			log.VEventf(ctx, 3,
 				"r%d's %.2f qps would push s%d over the max threshold (%.2f) with %.2f qps afterwards",
-				replWithStats.repl.RangeID, replWithStats.qps, candidateStore, maxQPS, newCandidateQPS)
+				replWithStats.rangeID, replWithStats.qps, candidateStore, maxQPS, newCandidateQPS)
 			return true
 		}
 	} else if newCandidateQPS > meanQPS {
 		log.VEventf(ctx, 3,
 			"r%d's %.2f qps would push s%d over the mean (%.2f) with %.2f qps afterwards",
-			replWithStats.repl.RangeID, replWithStats.qps, candidateStore, meanQPS, newCandidateQPS)
+			replWithStats.rangeID, replWithStats.qps, candidateStore, meanQPS, newCandidateQPS)
 		return true
 	}
 
