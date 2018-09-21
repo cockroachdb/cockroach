@@ -24,6 +24,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -74,6 +75,8 @@ func setupTransientServer(
 	cleanup = func() {}
 	ctx := context.Background()
 
+	// Set up logging. For demo/transient server we use non-standard
+	// behavior where we avoid file creation if possible.
 	df := startCtx.logDirFlag
 	sf := cmd.Flags().Lookup(logflags.LogToStderrName)
 	if !df.Changed && !sf.Changed {
@@ -86,13 +89,21 @@ func setupTransientServer(
 		_ = sf.Value.Set(log.Severity_ERROR.String())
 		sf.Changed = true
 	}
-
 	stopper, err := setupAndInitializeLoggingAndProfiling(ctx)
 	if err != nil {
 		return connURL, adminURL, cleanup, err
 	}
 	cleanup = func() { stopper.Stop(ctx) }
 
+	// Set up the default zone configuration. We are using an in-memory store
+	// so we really want to disable replication.
+	cfg := config.DefaultZoneConfig()
+	cfg.NumReplicas = 1
+	restoreCfg := config.TestingSetDefaultSystemZoneConfig(cfg)
+	prevCleanup := cleanup
+	cleanup = func() { prevCleanup(); restoreCfg() }
+
+	// Create the transient server.
 	args := base.TestServerArgs{
 		Insecure: true,
 	}
@@ -100,9 +111,10 @@ func setupTransientServer(
 	if err := server.Start(args); err != nil {
 		return connURL, adminURL, cleanup, err
 	}
-	prevCleanup := cleanup
-	cleanup = func() { prevCleanup(); server.Stopper().Stop(ctx) }
+	prevCleanup2 := cleanup
+	cleanup = func() { prevCleanup2(); server.Stopper().Stop(ctx) }
 
+	// Prepare the URL for use by the SQL shell.
 	options := url.Values{}
 	options.Add("sslmode", "disable")
 	options.Add("application_name", sql.InternalAppNamePrefix+"cockroach demo")
@@ -112,27 +124,32 @@ func setupTransientServer(
 		Host:     server.ServingAddr(),
 		RawQuery: options.Encode(),
 	}
-
 	if gen != nil {
-		meta := gen.Meta()
-		url.Path = meta.Name
-		db, err := gosql.Open("postgres", url.String())
+		url.Path = gen.Meta().Name
+	}
+	urlStr := url.String()
+
+	// If there is a load generator, create its database and load its
+	// fixture.
+	if gen != nil {
+		db, err := gosql.Open("postgres", urlStr)
 		if err != nil {
-			return ``, ``, nil, err
+			return ``, ``, cleanup, err
 		}
 		defer db.Close()
-		if _, err := db.Exec(`CREATE DATABASE ` + meta.Name); err != nil {
-			return ``, ``, nil, err
+
+		if _, err := db.Exec(`CREATE DATABASE ` + gen.Meta().Name); err != nil {
+			return ``, ``, cleanup, err
 		}
 
 		ctx := context.TODO()
 		const batchSize, concurrency = 0, 0
 		if _, err := workload.Setup(ctx, db, gen, batchSize, concurrency); err != nil {
-			return ``, ``, nil, err
+			return ``, ``, cleanup, err
 		}
 	}
 
-	return url.String(), server.AdminURL(), cleanup, nil
+	return urlStr, server.AdminURL(), cleanup, nil
 }
 
 func runDemo(cmd *cobra.Command, gen workload.Generator) error {
