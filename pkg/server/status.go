@@ -46,7 +46,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -130,6 +129,7 @@ type statusServer struct {
 	gossip          *gossip.Gossip
 	metricSource    metricMarshaler
 	nodeLiveness    *storage.NodeLiveness
+	storePool       *storage.StorePool
 	rpcCtx          *rpc.Context
 	stores          *storage.Stores
 	stopper         *stop.Stopper
@@ -146,6 +146,7 @@ func newStatusServer(
 	gossip *gossip.Gossip,
 	metricSource metricMarshaler,
 	nodeLiveness *storage.NodeLiveness,
+	storePool *storage.StorePool,
 	rpcCtx *rpc.Context,
 	stores *storage.Stores,
 	stopper *stop.Stopper,
@@ -161,6 +162,7 @@ func newStatusServer(
 		gossip:          gossip,
 		metricSource:    metricSource,
 		nodeLiveness:    nodeLiveness,
+		storePool:       storePool,
 		rpcCtx:          rpcCtx,
 		stores:          stores,
 		stopper:         stopper,
@@ -1220,16 +1222,8 @@ func (s *statusServer) Ranges(
 		}
 	}
 
-	cfg := s.gossip.GetSystemConfig()
-	if cfg == nil {
-		// Very little on the status pages requires the system config -- as of June
-		// 2017, only the underreplicated range metric does. Refusing to return a
-		// status page (that may help debug why the config isn't available) due to
-		// such a small piece of missing information is overly harsh.
-		log.Error(ctx, "system config not yet available, serving status page without it")
-		cfg = config.NewSystemConfig()
-	}
 	isLiveMap := s.nodeLiveness.GetIsLiveMap()
+	availableNodes := s.storePool.AvailableNodeCount()
 
 	err = s.stores.VisitStores(func(store *storage.Store) error {
 		timestamp := store.Clock().Now()
@@ -1249,7 +1243,7 @@ func (s *statusServer) Ranges(
 							desc,
 							rep,
 							store.Ident.StoreID,
-							rep.Metrics(ctx, timestamp, cfg, isLiveMap),
+							rep.Metrics(ctx, timestamp, isLiveMap, availableNodes),
 						))
 					return false, nil
 				})
@@ -1269,7 +1263,7 @@ func (s *statusServer) Ranges(
 					*desc,
 					rep,
 					store.Ident.StoreID,
-					rep.Metrics(ctx, timestamp, cfg, isLiveMap),
+					rep.Metrics(ctx, timestamp, isLiveMap, availableNodes),
 				))
 		}
 		return nil

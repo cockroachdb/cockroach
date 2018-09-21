@@ -641,8 +641,7 @@ func (nl *NodeLiveness) Self() (*Liveness, error) {
 }
 
 // IsLiveMapEntry encapsulates data about current liveness for a
-// node. A bool indicating liveness and the last-recorded epoch for
-// the node.
+// node.
 type IsLiveMapEntry struct {
 	IsLive bool
 	Epoch  int64
