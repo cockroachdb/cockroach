@@ -151,3 +151,110 @@ distinct-on
  └── scan a
       ├── columns: y:2(int) s:3(string)
       └── stats: [rows=3000, distinct(2,3)=1000]
+
+opt
+SELECT s, d, x FROM a WHERE (s <= 'aaa') OR (s >= 'bar' AND s <= 'foo')
+----
+select
+ ├── columns: s:3(string) d:4(decimal!null) x:1(int!null)
+ ├── stats: [rows=1000]
+ ├── key: (1)
+ ├── fd: (1)-->(3,4), (3,4)~~>(1)
+ ├── scan a@secondary
+ │    ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
+ │    ├── constraint: /-3/4: [/'foo' - /'bar'] [/'aaa' - /NULL)
+ │    ├── stats: [rows=1000]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(3,4), (3,4)-->(1)
+ └── filters [type=bool, outer=(3)]
+      └── (s <= 'aaa') OR (s >= 'bar') [type=bool, outer=(3)]
+
+opt
+SELECT s, d, x FROM a WHERE (s <= 'aaa') OR (s >= 'bar' AND s <= 'foo') OR s IS NULL
+----
+select
+ ├── columns: s:3(string) d:4(decimal!null) x:1(int!null)
+ ├── stats: [rows=1000]
+ ├── key: (1)
+ ├── fd: (1)-->(3,4), (3,4)~~>(1)
+ ├── scan a@secondary
+ │    ├── columns: x:1(int!null) s:3(string) d:4(decimal!null)
+ │    ├── constraint: /-3/4: [/'foo' - /'bar'] [/'aaa' - /NULL]
+ │    ├── stats: [rows=1000]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(3,4), (3,4)~~>(1)
+ └── filters [type=bool, outer=(3)]
+      └── ((s <= 'aaa') OR ((s >= 'bar') AND (s <= 'foo'))) OR (s IS NULL) [type=bool, outer=(3)]
+
+opt
+SELECT s, d, x FROM a WHERE s IS NOT NULL
+----
+scan a@secondary
+ ├── columns: s:3(string!null) d:4(decimal!null) x:1(int!null)
+ ├── constraint: /-3/4: [ - /NULL)
+ ├── stats: [rows=2687.87538]
+ ├── key: (1)
+ └── fd: (1)-->(3,4), (3,4)-->(1)
+
+opt
+SELECT s, d, x FROM a WHERE (s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')
+----
+select
+ ├── columns: s:3(string) d:4(decimal!null) x:1(int!null)
+ ├── stats: [rows=1000]
+ ├── key: (1)
+ ├── fd: (1)-->(3,4), (3,4)~~>(1)
+ ├── scan a@secondary
+ │    ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
+ │    ├── constraint: /-3/4: [ - /'foobar'] [/'foo' - /'bar']
+ │    ├── stats: [rows=1000]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(3,4), (3,4)-->(1)
+ └── filters [type=bool, outer=(3)]
+      └── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3)]
+
+opt
+SELECT * FROM a WHERE ((s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')) AND d > 5.0
+----
+index-join a
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool)
+ ├── stats: [rows=333.333333]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+ └── select
+      ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
+      ├── stats: [rows=111.111111]
+      ├── key: (1)
+      ├── fd: (1)-->(3,4), (3,4)-->(1)
+      ├── scan a@secondary
+      │    ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
+      │    ├── constraint: /-3/4: [ - /'foobar'] (/'foo'/5.0 - /'bar']
+      │    ├── stats: [rows=1000]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(3,4), (3,4)-->(1)
+      └── filters [type=bool, outer=(3,4), constraints=(/4: (/5.0 - ])]
+           ├── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3)]
+           └── d > 5.0 [type=bool, outer=(4), constraints=(/4: (/5.0 - ]; tight)]
+
+opt
+SELECT * FROM a WHERE ((s >= 'bar' AND s <= 'foo') OR (s >= 'foobar')) AND d <= 5.0
+----
+index-join a
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null) b:5(bool)
+ ├── stats: [rows=333.333333]
+ ├── key: (1)
+ ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
+ └── select
+      ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
+      ├── stats: [rows=111.111111]
+      ├── key: (1)
+      ├── fd: (1)-->(3,4), (3,4)-->(1)
+      ├── scan a@secondary
+      │    ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
+      │    ├── constraint: /-3/4: [ - /'foobar'/5.0] [/'foo' - /'bar'/5.0]
+      │    ├── stats: [rows=1000]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(3,4), (3,4)-->(1)
+      └── filters [type=bool, outer=(3,4), constraints=(/4: (/NULL - /5.0])]
+           ├── (s <= 'foo') OR (s >= 'foobar') [type=bool, outer=(3)]
+           └── d <= 5.0 [type=bool, outer=(4), constraints=(/4: (/NULL - /5.0]; tight)]
