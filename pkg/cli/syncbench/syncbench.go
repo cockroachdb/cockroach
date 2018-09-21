@@ -103,7 +103,7 @@ func (w *worker) run(wg *sync.WaitGroup) {
 				buf = key[:0]
 			}
 		}
-		bytes := uint64(len(b.Repr()))
+		bytes := uint64(b.Len())
 		if err := b.Commit(true); err != nil {
 			log.Fatal(ctx, err)
 		}

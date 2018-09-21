@@ -348,8 +348,13 @@ type Batch interface {
 	// situations where we know all of the batched operations are for distinct
 	// keys.
 	Distinct() ReadWriter
-	// Empty returns whether the batch is empty or not.
+	// Empty returns whether the batch has been written to or not.
 	Empty() bool
+	// Len returns the size of the underlying representation of the batch.
+	// Because of the batch header, the size of the batch is never 0 and should
+	// not be used interchangeably with Empty. The method avoids the memory copy
+	// that Repr imposes, but it still may require flushing the batch's mutations.
+	Len() int
 	// Repr returns the underlying representation of the batch and can be used to
 	// reconstitute the batch on a remote node using Writer.ApplyBatchRepr().
 	Repr() []byte
