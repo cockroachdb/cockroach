@@ -620,6 +620,9 @@ const (
 	// for replica rebalancing, for example, but can still be considered for lease
 	// rebalancing.
 	storeFilterThrottled
+	// storeFilterDecommissioning requests that the returned store list exclude
+	// stores that are on nodes which are decommissioning.
+	storeFilterDecommissioning
 )
 
 // getStoreList returns a storeList that contains all active stores that contain

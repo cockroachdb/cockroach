@@ -395,21 +395,24 @@ func (s *Store) canApplySnapshotLocked(
 	ctx context.Context, snapHeader *SnapshotRequest_Header,
 ) (*ReplicaPlaceholder, error) {
 	desc := *snapHeader.State.Desc
-	if v, ok := s.mu.replicas.Load(int64(desc.RangeID)); ok && (*Replica)(v).IsInitialized() {
-		// We have an initialized replica. Preemptive snapshots can be applied with
-		// no further checks if they do not widen the existing replica. Raft
-		// snapshots can be applied with no further checks even if they widen the
-		// existing replica—we can't reject them at this point—but see the comments
-		// in Replica.maybeAcquireSnapshotMergeLock for how this is made safe.
-		existingDesc := (*Replica)(v).Desc()
-		if !snapHeader.IsPreemptive() || !existingDesc.EndKey.Less(desc.EndKey) {
-			return nil, nil
-		}
+	if v, ok := s.mu.replicaShims.Load(int64(desc.RangeID)); ok {
+		shim := (*ReplicaShim)(v)
+		existingDesc := shim.Desc()
+		if existingDesc.IsInitialized() {
+			// We have an initialized replica. Preemptive snapshots can be applied with
+			// no further checks if they do not widen the existing replica. Raft
+			// snapshots can be applied with no further checks even if they widen the
+			// existing replica—we can't reject them at this point—but see the comments
+			// in Replica.maybeAcquireSnapshotMergeLock for how this is made safe.
+			if !snapHeader.IsPreemptive() || !existingDesc.EndKey.Less(desc.EndKey) {
+				return nil, nil
+			}
 
-		// We have a preemptive snapshot that widens an existing replica. Proceed
-		// by checking the keyspace covered by the snapshot but not the existing
-		// replica.
-		desc.StartKey = existingDesc.EndKey
+			// We have a preemptive snapshot that widens an existing replica. Proceed
+			// by checking the keyspace covered by the snapshot but not the existing
+			// replica.
+			desc.StartKey = existingDesc.EndKey
+		}
 	}
 
 	// We don't have the range, or we have an uninitialized placeholder, or the

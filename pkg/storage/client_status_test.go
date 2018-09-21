@@ -75,10 +75,20 @@ func TestComputeStatsForKeySpan(t *testing.T) {
 		expectedRanges int
 		expectedKeys   int64
 	}{
+		// All ranges.
 		{"a", "i", 4, 6},
+		// Subset of ranges including first.
 		{"a", "c", 1, 3},
-		{"b", "e", 2, 5},
+		// middle subset of ranges.
+		{"c", "g", 2, 2},
+		// Subset of ranges including last.
 		{"e", "i", 2, 1},
+		// Offset into starting range (a-c), which should be included.
+		{"b", "e", 2, 5},
+		// Offset into ending range (g-i), which should be included.
+		{"e", "h", 2, 1},
+		// Offset into starting and ending ranges.
+		{"b", "h", 4, 6},
 	} {
 		start, end := tcase.startKey, tcase.endKey
 		result, err := mtc.stores[0].ComputeStatsForKeySpan(

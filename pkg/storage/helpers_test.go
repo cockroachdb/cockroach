@@ -51,7 +51,7 @@ import (
 func (s *Store) AddReplica(repl *Replica) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := s.addReplicaInternalLocked(repl); err != nil {
+	if err := s.addReplicaShimInternalLocked(&ReplicaShim{replica: repl}); err != nil {
 		return err
 	}
 	s.metrics.ReplicaCount.Inc(1)
@@ -241,15 +241,19 @@ func (s *Store) ReservationCount() int {
 	return len(s.snapshotApplySem)
 }
 
-// AssertInvariants verifies that the store's bookkeping is self-consistent. It
+// AssertInvariants verifies that the store's bookkeeping is self-consistent. It
 // is only valid to call this method when there is no in-flight traffic to the
 // store (e.g., after the store is shut down).
 func (s *Store) AssertInvariants() {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	s.mu.replicas.Range(func(_ int64, p unsafe.Pointer) bool {
+	s.mu.replicaShims.Range(func(_ int64, p unsafe.Pointer) bool {
 		ctx := s.cfg.AmbientCtx.AnnotateCtx(context.Background())
-		repl := (*Replica)(p)
+		shim := (*ReplicaShim)(p)
+		repl, ok := s.mustGetReplica(ctx, shim.RangeID())
+		if !ok {
+			log.Fatalf(ctx, "failed to get replica %s", shim)
+		}
 		// We would normally need to hold repl.raftMu. Otherwise we can observe an
 		// initialized replica that is not in s.replicasByKey, e.g., if we race with
 		// a goroutine that is currently initializing repl. The lock ordering makes
@@ -257,7 +261,7 @@ func (s *Store) AssertInvariants() {
 		// called only when there is no in-flight traffic to the store, at which
 		// point acquiring repl.raftMu is unnecessary.
 		if repl.IsInitialized() {
-			if ex := s.mu.replicasByKey.Get(repl); ex != repl {
+			if ex := s.mu.replicasByKey.Get(repl); ex.(*ReplicaShim).replica != repl {
 				log.Fatalf(ctx, "%v misplaced in replicasByKey; found %v instead", repl, ex)
 			}
 		} else if _, ok := s.mu.uninitReplicas[repl.RangeID]; !ok {
@@ -598,13 +602,13 @@ func WatchForDisappearingReplicas(t testing.TB, store *Store) {
 		default:
 		}
 
-		store.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
+		store.mu.replicaShims.Range(func(k int64, v unsafe.Pointer) bool {
 			m[k] = struct{}{}
 			return true
 		})
 
 		for k := range m {
-			if _, ok := store.mu.replicas.Load(k); !ok {
+			if _, ok := store.mu.replicaShims.Load(k); !ok {
 				t.Fatalf("r%d disappeared from Store.mu.replicas map", k)
 			}
 		}

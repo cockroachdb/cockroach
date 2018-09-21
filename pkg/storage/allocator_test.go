@@ -4966,7 +4966,7 @@ func makeDescriptor(storeList []roachpb.StoreID) roachpb.RangeDescriptor {
 func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	a := MakeAllocator(nil /* storePool */, nil /* rpcContext */)
+	a := MakeAllocator(nil /* storePool */, nil /* nodeLatencyFn */)
 	action, priority := a.ComputeAction(context.Background(), &config.ZoneConfig{NumReplicas: proto.Int32(0)}, RangeInfo{})
 	if action != AllocatorNoop {
 		t.Errorf("expected AllocatorNoop, but got %v", action)
