@@ -92,7 +92,7 @@ type conn struct {
 	}
 
 	readBuf    pgwirebase.ReadBuffer
-	msgBuilder *writeBuffer
+	msgBuilder writeBuffer
 }
 
 // serveConn creates a conn that will serve the netConn. It returns once the
@@ -173,12 +173,12 @@ func newConn(
 		execCfg:     execCfg,
 		metrics:     metrics,
 		rd:          *bufio.NewReader(netConn),
-		msgBuilder:  newWriteBuffer(metrics.BytesOutCount),
 	}
 	c.stmtBuf.Init()
 	c.writerState.fi.buf = &c.writerState.buf
 	c.writerState.fi.lastFlushed = -1
 	c.writerState.fi.cmdStarts = make(map[sql.CmdPos]int)
+	c.msgBuilder.init(metrics.BytesOutCount)
 
 	return c
 }
@@ -377,7 +377,7 @@ Loop:
 	// and flushing the buffer.
 	if ctxCanceled || draining() {
 		_ /* err */ = writeErr(
-			newAdminShutdownErr(err), c.msgBuilder, &c.writerState.buf)
+			newAdminShutdownErr(err), &c.msgBuilder, &c.writerState.buf)
 		_ /* n */, _ /* err */ = c.writerState.buf.WriteTo(c.conn)
 
 		// Swallow whatever error we might have gotten from the writer. If we're
@@ -900,7 +900,7 @@ func (c *conn) bufferCommandComplete(tag []byte) {
 }
 
 func (c *conn) bufferErr(err error) {
-	if err := writeErr(err, c.msgBuilder, &c.writerState.buf); err != nil {
+	if err := writeErr(err, &c.msgBuilder, &c.writerState.buf); err != nil {
 		panic(fmt.Sprintf("unexpected err from buffer: %s", err))
 	}
 }
@@ -1224,7 +1224,7 @@ func (r *pgwireReader) ReadByte() (byte, error) {
 func (c *conn) handleAuthentication(ctx context.Context, insecure bool) error {
 
 	sendError := func(err error) error {
-		_ /* err */ = writeErr(err, c.msgBuilder, c.conn)
+		_ /* err */ = writeErr(err, &c.msgBuilder, c.conn)
 		return err
 	}
 
