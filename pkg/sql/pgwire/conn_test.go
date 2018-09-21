@@ -116,7 +116,7 @@ func TestConn(t *testing.T) {
 
 	// Now we'll expect to receive the commands corresponding to the operations in
 	// client().
-	rd := sql.MakeStmtBufReader(conn.stmtBuf)
+	rd := sql.MakeStmtBufReader(&conn.stmtBuf)
 	expectExecStmt(ctx, t, "SELECT 1", &rd, conn, queryStringComplete)
 	expectSync(ctx, t, &rd)
 	expectExecStmt(ctx, t, "SELECT 2", &rd, conn, queryStringComplete)
@@ -182,7 +182,7 @@ func TestConn(t *testing.T) {
 // processPgxStartup processes the first few queries that the pgx driver
 // automatically sends on a new connection that has been established.
 func processPgxStartup(ctx context.Context, s serverutils.TestServerInterface, c *conn) error {
-	rd := sql.MakeStmtBufReader(c.stmtBuf)
+	rd := sql.MakeStmtBufReader(&c.stmtBuf)
 
 	for {
 		cmd, err := rd.CurCmd()

@@ -353,9 +353,15 @@ var _ Command = SendError{}
 // NewStmtBuf creates a StmtBuf.
 func NewStmtBuf() *StmtBuf {
 	var buf StmtBuf
+	buf.Init()
+	return &buf
+}
+
+// Init initializes a StmtBuf. It exists to avoid the allocation imposed by
+// NewStmtBuf.
+func (buf *StmtBuf) Init() {
 	buf.mu.lastPos = -1
 	buf.mu.cond = sync.NewCond(&buf.mu.Mutex)
-	return &buf
 }
 
 // Close marks the buffer as closed. Once Close() is called, no further push()es
