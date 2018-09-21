@@ -1046,12 +1046,12 @@ func (dsp *DistSQLPlanner) CheckNodeHealthAndVersion(
 // overridesResultColumns is optional.
 func (dsp *DistSQLPlanner) createTableReaders(
 	planCtx *PlanningCtx, n *scanNode, overrideResultColumns []sqlbase.ColumnID,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 
 	scanNodeToTableOrdinalMap := getScanNodeToTableOrdinalMap(n)
 	spec, post, err := initTableReaderSpec(n, planCtx, scanNodeToTableOrdinalMap)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
 	var spanPartitions []SpanPartition
@@ -1061,7 +1061,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		// No limit - plan all table readers where their data live.
 		spanPartitions, err = dsp.PartitionSpans(planCtx, n.spans)
 		if err != nil {
-			return PhysicalPlan{}, err
+			return nil, err
 		}
 	} else {
 		// If the scan is limited, use a single TableReader to avoid reading more
@@ -1071,12 +1071,12 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		// side to modulate table reads.
 		nodeID, err := dsp.getNodeIDForScan(planCtx, n.spans, n.reverse)
 		if err != nil {
-			return PhysicalPlan{}, err
+			return nil, err
 		}
 		spanPartitions = []SpanPartition{{nodeID, n.spans}}
 	}
 
-	var p PhysicalPlan
+	p := &PhysicalPlan{}
 	stageID := p.NewStageID()
 
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
@@ -1817,10 +1817,10 @@ func (dsp *DistSQLPlanner) addAggregators(
 
 func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	planCtx *PlanningCtx, n *indexJoinNode,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	plan, err := dsp.createTableReaders(planCtx, n.index, n.index.desc.PrimaryIndex.ColumnIDs)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
 	joinReaderSpec := distsqlrun.JoinReaderSpec{
@@ -1832,7 +1832,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	filter, err := distsqlplan.MakeExpression(
 		n.table.filter, planCtx, nil /* indexVarMap */)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 	post := distsqlrun.PostProcessSpec{
 		Filter:     filter,
@@ -1853,7 +1853,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 
 	types, err := getTypesForPlanResult(n, plan.PlanToStreamColMap)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 	if distributeIndexJoin.Get(&dsp.st.SV) && len(plan.ResultRouters) > 1 {
 		// Instantiate one join reader for every stream.
@@ -1885,10 +1885,10 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 // converts joins to lookup joins.
 func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	planCtx *PlanningCtx, n *lookupJoinNode,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	plan, err := dsp.createPlanForNode(planCtx, n.input)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
 	joinReaderSpec := distsqlrun.JoinReaderSpec{
@@ -1897,7 +1897,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 	}
 	joinReaderSpec.IndexIdx, err = getIndexIdx(n.table)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 	joinReaderSpec.LookupColumns = make([]uint32, len(n.keyCols))
 	for i, col := range n.keyCols {
@@ -1951,7 +1951,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 			n.onCond, planCtx, indexVarMap,
 		)
 		if err != nil {
-			return PhysicalPlan{}, err
+			return nil, err
 		}
 	}
 
@@ -2004,12 +2004,12 @@ func getTypesForPlanResult(node planNode, planToStreamColMap []int) ([]sqlbase.C
 
 func (dsp *DistSQLPlanner) createPlanForJoin(
 	planCtx *PlanningCtx, n *joinNode,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	// See if we can create an interleave join plan.
 	if planInterleavedJoins.Get(&dsp.st.SV) {
 		plan, ok, err := dsp.tryCreatePlanForInterleavedJoin(planCtx, n)
 		if err != nil {
-			return PhysicalPlan{}, err
+			return nil, err
 		}
 		// An interleave join plan could be used. Return it.
 		if ok {
@@ -2038,11 +2038,11 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 
 	leftPlan, err := dsp.createPlanForNode(planCtx, n.left.plan)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 	rightPlan, err := dsp.createPlanForNode(planCtx, n.right.plan)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
 	// Nodes where we will run the join processors.
@@ -2079,7 +2079,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		isLookupJoin = false
 	}
 
-	var p PhysicalPlan
+	p := &PhysicalPlan{}
 	var leftRouters, rightRouters []distsqlplan.ProcessorIdx
 	if isLookupJoin {
 		// Lookup joins only take the left side as input. The right side will
@@ -2138,7 +2138,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	post, joinToStreamColMap := joinOutColumns(n, leftPlan.PlanToStreamColMap, rightMap)
 	onExpr, err := remapOnExpr(planCtx, n, leftPlan.PlanToStreamColMap, rightMap)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
 	// Create the Core spec.
@@ -2163,11 +2163,11 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		// [1, 2].
 		indexColumns, err := applySortBasedOnFirst(rightEqCols, indexColumns)
 		if err != nil {
-			return PhysicalPlan{}, err
+			return nil, err
 		}
 		lookupCols, err := applySortBasedOnFirst(indexColumns, leftEqCols)
 		if err != nil {
-			return PhysicalPlan{}, err
+			return nil, err
 		}
 
 		// If the right side scan has a filter, specify this as IndexFilterExpr so
@@ -2177,13 +2177,13 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 			var err error
 			indexFilterExpr, err = distsqlplan.MakeExpression(lookupJoinScan.origFilter, planCtx, nil)
 			if err != nil {
-				return PhysicalPlan{}, err
+				return nil, err
 			}
 		}
 
 		indexIdx, err := getIndexIdx(lookupJoinScan)
 		if err != nil {
-			return PhysicalPlan{}, err
+			return nil, err
 		}
 		core.JoinReader = &distsqlrun.JoinReaderSpec{
 			Table:           *(lookupJoinScan.desc),
@@ -2217,7 +2217,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	p.PlanToStreamColMap = joinToStreamColMap
 	p.ResultTypes, err = getTypesForPlanResult(n, joinToStreamColMap)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
 	// Joiners may guarantee an ordering to outputs, so we ensure that
@@ -2304,7 +2304,7 @@ func applySortBasedOnFirst(source, target []uint32) ([]uint32, error) {
 
 func (dsp *DistSQLPlanner) createPlanForNode(
 	planCtx *PlanningCtx, node planNode,
-) (plan PhysicalPlan, err error) {
+) (plan *PhysicalPlan, err error) {
 	planCtx.planDepth++
 
 	switch n := node.(type) {
@@ -2323,51 +2323,51 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 	case *renderNode:
 		plan, err = dsp.createPlanForNode(planCtx, n.source.plan)
 		if err != nil {
-			return PhysicalPlan{}, err
+			return nil, err
 		}
-		err = dsp.selectRenders(&plan, n, planCtx)
+		err = dsp.selectRenders(plan, n, planCtx)
 		if err != nil {
-			return PhysicalPlan{}, err
+			return nil, err
 		}
 
 	case *groupNode:
 		plan, err = dsp.createPlanForNode(planCtx, n.plan)
 		if err != nil {
-			return PhysicalPlan{}, err
+			return nil, err
 		}
 
-		if err := dsp.addAggregators(planCtx, &plan, n); err != nil {
-			return PhysicalPlan{}, err
+		if err := dsp.addAggregators(planCtx, plan, n); err != nil {
+			return nil, err
 		}
 
 	case *sortNode:
 		plan, err = dsp.createPlanForNode(planCtx, n.plan)
 		if err != nil {
-			return PhysicalPlan{}, err
+			return nil, err
 		}
 
-		dsp.addSorters(&plan, n)
+		dsp.addSorters(plan, n)
 
 	case *filterNode:
 		plan, err = dsp.createPlanForNode(planCtx, n.source.plan)
 		if err != nil {
-			return PhysicalPlan{}, err
+			return nil, err
 		}
 
 		if err := plan.AddFilter(n.filter, planCtx, plan.PlanToStreamColMap); err != nil {
-			return PhysicalPlan{}, err
+			return nil, err
 		}
 
 	case *limitNode:
 		plan, err = dsp.createPlanForNode(planCtx, n.plan)
 		if err != nil {
-			return PhysicalPlan{}, err
+			return nil, err
 		}
 		if err := n.evalLimit(planCtx.EvalContext()); err != nil {
-			return PhysicalPlan{}, err
+			return nil, err
 		}
 		if err := plan.AddLimit(n.count, n.offset, planCtx, dsp.nodeDesc.NodeID); err != nil {
-			return PhysicalPlan{}, err
+			return nil, err
 		}
 
 	case *distinctNode:
@@ -2440,7 +2440,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 // will create a planNodeToRowSource wrapper for the sub-tree that's not
 // plannable by DistSQL. If that sub-tree has DistSQL-plannable sources, they
 // will be planned by DistSQL and connected to the wrapper.
-func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (PhysicalPlan, error) {
+func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*PhysicalPlan, error) {
 	useFastPath := planCtx.planDepth == 1 && planCtx.stmtType == tree.RowsAffected
 
 	// First, we search the planNode tree we're trying to wrap for the first
@@ -2448,7 +2448,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (PhysicalP
 	// continue the DistSQL planning recursion on that planNode.
 	seenTop := false
 	nParents := uint32(0)
-	var p PhysicalPlan
+	p := &PhysicalPlan{}
 	// This will be set to first DistSQL-enabled planNode we find, if any. We'll
 	// modify its parent later to connect its source to the DistSQL-planned
 	// subtree.
@@ -2488,10 +2488,10 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (PhysicalP
 			return true, nil
 		},
 	}); err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 	if nParents > 1 {
-		return PhysicalPlan{}, errors.Errorf("can't wrap plan %v %T with more than one input", n, n)
+		return nil, errors.Errorf("can't wrap plan %v %T with more than one input", n, n)
 	}
 
 	// Copy the evalCtx.
@@ -2509,7 +2509,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (PhysicalP
 		useFastPath,
 	)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 	wrapper.firstNotWrapped = firstNotWrapped
 
@@ -2567,7 +2567,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (PhysicalP
 // and rawBytes that need to be precomputed beforehand.
 func (dsp *DistSQLPlanner) createValuesPlan(
 	resultTypes []sqlbase.ColumnType, numRows int, rawBytes [][]byte,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	numColumns := len(resultTypes)
 	s := distsqlrun.ValuesCoreSpec{
 		Columns: make([]distsqlrun.DatumInfo, numColumns),
@@ -2594,7 +2594,7 @@ func (dsp *DistSQLPlanner) createValuesPlan(
 		ResultTypes:   resultTypes,
 	}
 
-	return PhysicalPlan{
+	return &PhysicalPlan{
 		PhysicalPlan:       plan,
 		PlanToStreamColMap: identityMapInPlace(make([]int, numColumns)),
 	}, nil
@@ -2602,7 +2602,7 @@ func (dsp *DistSQLPlanner) createValuesPlan(
 
 func (dsp *DistSQLPlanner) createPlanForValues(
 	planCtx *PlanningCtx, n *valuesNode,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	params := runParams{
 		ctx:             planCtx.ctx,
 		extendedEvalCtx: planCtx.ExtendedEvalCtx,
@@ -2610,11 +2610,11 @@ func (dsp *DistSQLPlanner) createPlanForValues(
 
 	types, err := getTypesForPlanResult(n, nil /* planToStreamColMap */)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
 	if err := n.startExec(params); err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 	defer n.Close(planCtx.ctx)
 
@@ -2624,7 +2624,7 @@ func (dsp *DistSQLPlanner) createPlanForValues(
 	rawBytes := make([][]byte, numRows)
 	for i := 0; i < numRows; i++ {
 		if next, err := n.Next(runParams{ctx: planCtx.ctx}); !next {
-			return PhysicalPlan{}, err
+			return nil, err
 		}
 
 		var buf []byte
@@ -2634,7 +2634,7 @@ func (dsp *DistSQLPlanner) createPlanForValues(
 			datum := sqlbase.DatumToEncDatum(types[j], datums[j])
 			buf, err = datum.Encode(&types[j], &a, sqlbase.DatumEncoding_VALUE, buf)
 			if err != nil {
-				return PhysicalPlan{}, err
+				return nil, err
 			}
 		}
 		rawBytes[i] = buf
@@ -2645,10 +2645,10 @@ func (dsp *DistSQLPlanner) createPlanForValues(
 
 func (dsp *DistSQLPlanner) createPlanForUnary(
 	planCtx *PlanningCtx, n *unaryNode,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	types, err := getTypesForPlanResult(n, nil /* planToStreamColMap */)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
 	return dsp.createValuesPlan(types, 1 /* numRows */, nil /* rawBytes */)
@@ -2656,10 +2656,10 @@ func (dsp *DistSQLPlanner) createPlanForUnary(
 
 func (dsp *DistSQLPlanner) createPlanForZero(
 	planCtx *PlanningCtx, n *zeroNode,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	types, err := getTypesForPlanResult(n, nil /* planToStreamColMap */)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
 	return dsp.createValuesPlan(types, 0 /* numRows */, nil /* rawBytes */)
@@ -2698,10 +2698,10 @@ func createDistinctSpec(n *distinctNode, cols []int) *distsqlrun.DistinctSpec {
 
 func (dsp *DistSQLPlanner) createPlanForDistinct(
 	planCtx *PlanningCtx, n *distinctNode,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	plan, err := dsp.createPlanForNode(planCtx, n.plan)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 	currentResultRouters := plan.ResultRouters
 
@@ -2755,10 +2755,10 @@ func createProjectSetSpec(
 
 func (dsp *DistSQLPlanner) createPlanForProjectSet(
 	planCtx *PlanningCtx, n *projectSetNode,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	plan, err := dsp.createPlanForNode(planCtx, n.source)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 	numResults := len(plan.ResultTypes)
 
@@ -2768,7 +2768,7 @@ func (dsp *DistSQLPlanner) createPlanForProjectSet(
 	// Create the project set processor spec.
 	projectSetSpec, err := createProjectSetSpec(planCtx, n, indexVarMap)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 	spec := distsqlrun.ProcessorCoreUnion{
 		ProjectSet: projectSetSpec,
@@ -2843,22 +2843,22 @@ func (dsp *DistSQLPlanner) isOnlyOnGateway(plan *PhysicalPlan) bool {
 //          JOIN
 func (dsp *DistSQLPlanner) createPlanForSetOp(
 	planCtx *PlanningCtx, n *unionNode,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	leftLogicalPlan := n.left
 	leftPlan, err := dsp.createPlanForNode(planCtx, n.left)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 	rightLogicalPlan := n.right
 	rightPlan, err := dsp.createPlanForNode(planCtx, n.right)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 	if n.inverted {
 		leftPlan, rightPlan = rightPlan, leftPlan
 		leftLogicalPlan, rightLogicalPlan = rightLogicalPlan, leftLogicalPlan
 	}
-	childPhysicalPlans := []*PhysicalPlan{&leftPlan, &rightPlan}
+	childPhysicalPlans := []*PhysicalPlan{leftPlan, rightPlan}
 	childLogicalPlans := []planNode{leftLogicalPlan, rightLogicalPlan}
 
 	// Check that the left and right side PlanToStreamColMaps are equivalent.
@@ -2867,7 +2867,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 	// the unioned columns on each side, similar to how we handle mismatched
 	// ResultTypes.
 	if !reflect.DeepEqual(leftPlan.PlanToStreamColMap, rightPlan.PlanToStreamColMap) {
-		return PhysicalPlan{}, errors.Errorf(
+		return nil, errors.Errorf(
 			"planToStreamColMap mismatch: %v, %v", leftPlan.PlanToStreamColMap,
 			rightPlan.PlanToStreamColMap)
 	}
@@ -2923,7 +2923,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		}
 	}
 
-	var p PhysicalPlan
+	p := &PhysicalPlan{}
 
 	// Merge the plans' PlanToStreamColMap, which we know are equivalent.
 	p.PlanToStreamColMap = planToStreamColMap
@@ -2956,12 +2956,12 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 				childLogicalPlans[side], plan.PlanToStreamColMap,
 			)
 			if err != nil {
-				return PhysicalPlan{}, err
+				return nil, err
 			}
 		}
 		resultTypes, err = distsqlplan.MergeResultTypes(childResultTypes[0], childResultTypes[1])
 		if err != nil {
-			return PhysicalPlan{}, err
+			return nil, err
 		}
 	} else if err != nil || !mergeOrdering.Equal(rightPlan.MergeOrdering) {
 		// The result types or merge ordering can differ between the two sides in
@@ -2980,7 +2980,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		// Result types should now be mergeable.
 		resultTypes, err = distsqlplan.MergeResultTypes(leftPlan.ResultTypes, rightPlan.ResultTypes)
 		if err != nil {
-			return PhysicalPlan{}, err
+			return nil, err
 		}
 		mergeOrdering = distsqlrun.Ordering{}
 	}
@@ -3094,14 +3094,14 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 // scheme found in the query's window functions.
 func (dsp *DistSQLPlanner) createPlanForWindow(
 	planCtx *PlanningCtx, n *windowNode,
-) (PhysicalPlan, error) {
+) (*PhysicalPlan, error) {
 	plan, err := dsp.createPlanForNode(planCtx, n.plan)
 	if err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
 	numWindowFuncProcessed := 0
-	windowPlanState := createWindowPlanState(n, planCtx, &plan)
+	windowPlanState := createWindowPlanState(n, planCtx, plan)
 	// Each iteration of this loop adds a new stage of windowers. The steps taken:
 	// 1. find a set of unprocessed window functions that have the same PARTITION BY
 	//    clause. All of these will be computed using the single stage of windowers.
@@ -3158,7 +3158,7 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 
 			windowFnSpec, outputType, err := windowPlanState.createWindowFnSpec(windowFn)
 			if err != nil {
-				return PhysicalPlan{}, err
+				return nil, err
 			}
 
 			// Windower processor does not pass through ("consumes") all arguments of
@@ -3266,7 +3266,7 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 
 	// After all window functions are computed, we might need to add rendering.
 	if err := windowPlanState.addRenderingIfNecessary(); err != nil {
-		return PhysicalPlan{}, err
+		return nil, err
 	}
 
 	return plan, nil

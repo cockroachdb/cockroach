@@ -74,7 +74,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	distSQLPlanner.FinalizePlan(planCtx, &plan)
+	distSQLPlanner.FinalizePlan(planCtx, plan)
 
 	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
 	diagram, err := distsqlrun.GeneratePlanDiagram(flows)
@@ -137,7 +137,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			newParams.extendedEvalCtx.Tracing,
 		)
 		distSQLPlanner.Run(
-			planCtx, newParams.p.txn, &plan, recv, newParams.extendedEvalCtx, nil /* finishedSetupFn */)
+			planCtx, newParams.p.txn, plan, recv, newParams.extendedEvalCtx, nil /* finishedSetupFn */)
 
 		n.run.executedStatement = true
 

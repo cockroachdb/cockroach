@@ -78,7 +78,7 @@ func PlanAndRunExport(
 	// columns filename/rows/bytes.
 	p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(ExportPlanResultTypes))
 
-	dsp.FinalizePlan(planCtx, &p)
+	dsp.FinalizePlan(planCtx, p)
 
 	recv := MakeDistSQLReceiver(
 		ctx, resultRows, tree.Rows,
@@ -88,7 +88,7 @@ func PlanAndRunExport(
 
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
-	dsp.Run(planCtx, txn, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+	dsp.Run(planCtx, txn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 	return resultRows.Err()
 }
 
@@ -362,7 +362,7 @@ func LoadCSV(
 
 	// We have the split ranges. Now re-read the CSV files and route them to SST writers.
 
-	p := PhysicalPlan{}
+	p := &PhysicalPlan{}
 	// This is a hardcoded two stage plan. The first stage is the mappers,
 	// the second stage is the reducers. We have to keep track of all the mappers
 	// we create because the reducers need to hook up a stream for each mapper.
@@ -464,7 +464,7 @@ func LoadCSV(
 		return err
 	}
 
-	dsp.FinalizePlan(planCtx, &p)
+	dsp.FinalizePlan(planCtx, p)
 
 	recv := MakeDistSQLReceiver(
 		ctx,
@@ -481,7 +481,7 @@ func LoadCSV(
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := *evalCtx
 	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		dsp.Run(planCtx, txn, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
+		dsp.Run(planCtx, txn, p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 		return resultRows.Err()
 	})
 }

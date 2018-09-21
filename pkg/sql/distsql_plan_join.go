@@ -38,9 +38,9 @@ var planInterleavedJoins = settings.RegisterBoolSetting(
 
 func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	planCtx *PlanningCtx, n *joinNode,
-) (plan PhysicalPlan, ok bool, err error) {
+) (plan *PhysicalPlan, ok bool, err error) {
 	if !useInterleavedJoin(n) {
-		return PhysicalPlan{}, false, nil
+		return nil, false, nil
 	}
 
 	leftScan, leftOk := n.left.plan.(*scanNode)
@@ -49,7 +49,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	// We know they are scan nodes from useInterleaveJoin, but we add
 	// this check to prevent future panics.
 	if !leftOk || !rightOk {
-		return PhysicalPlan{}, false, pgerror.NewErrorf(
+		return nil, false, pgerror.NewErrorf(
 			pgerror.CodeInternalError,
 			"left and right children of join node must be scan nodes to execute an interleaved join",
 		)
@@ -58,7 +58,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	// We iterate through each table and collate their metadata for
 	// the InterleavedReaderJoinerSpec.
 	tables := make([]distsqlrun.InterleavedReaderJoinerSpec_Table, 2)
-	plans := make([]PhysicalPlan, 2)
+	plans := make([]*PhysicalPlan, 2)
 	var totalLimitHint int64
 	for i, t := range []struct {
 		scan      *scanNode
@@ -79,7 +79,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 		// onCond and columns.
 		var err error
 		if plans[i], err = dsp.createTableReaders(planCtx, t.scan, nil); err != nil {
-			return PhysicalPlan{}, false, err
+			return nil, false, err
 		}
 
 		eqCols := eqCols(t.eqIndices, plans[i].PlanToStreamColMap)
@@ -114,7 +114,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	post, joinToStreamColMap := joinOutColumns(n, plans[0].PlanToStreamColMap, plans[1].PlanToStreamColMap)
 	onExpr, err := remapOnExpr(planCtx, n, plans[0].PlanToStreamColMap, plans[1].PlanToStreamColMap)
 	if err != nil {
-		return PhysicalPlan{}, false, err
+		return nil, false, err
 	}
 
 	ancestor, descendant := n.interleavedNodes()
@@ -122,11 +122,11 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	// We partition each set of spans to their respective nodes.
 	ancsPartitions, err := dsp.PartitionSpans(planCtx, ancestor.spans)
 	if err != nil {
-		return PhysicalPlan{}, false, err
+		return nil, false, err
 	}
 	descPartitions, err := dsp.PartitionSpans(planCtx, descendant.spans)
 	if err != nil {
-		return PhysicalPlan{}, false, err
+		return nil, false, err
 	}
 
 	// We want to ensure that all child spans with a given interleave
@@ -146,7 +146,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	// partitioned to node 2 and 3, then we need to move the child spans
 	// to node 1 where the PK1 = 1 parent row is read.
 	if descPartitions, err = alignInterleavedSpans(n, ancsPartitions, descPartitions); err != nil {
-		return PhysicalPlan{}, false, err
+		return nil, false, err
 	}
 
 	// Figure out which nodes we need to schedule a processor on.
@@ -168,6 +168,8 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	} else {
 		ancsIdx, descIdx = 1, 0
 	}
+
+	plan = &PhysicalPlan{}
 
 	stageID := plan.NewStageID()
 
@@ -234,7 +236,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	plan.PlanToStreamColMap = joinToStreamColMap
 	plan.ResultTypes, err = getTypesForPlanResult(n, joinToStreamColMap)
 	if err != nil {
-		return PhysicalPlan{}, false, err
+		return nil, false, err
 	}
 
 	plan.SetMergeOrdering(dsp.convertOrdering(n.props, plan.PlanToStreamColMap))
