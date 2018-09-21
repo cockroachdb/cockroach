@@ -61,38 +61,36 @@ func runRapidRestart(ctx context.Context, t *test, c *cluster) {
 			}
 
 			waitTime := time.Duration(rand.Int63n(int64(time.Second)))
-			if !c.isLocal() {
-				// TODO(peter): This is hacky: the signal might be sent before the
-				// cockroach process starts, which is especially true on remote
-				// clusters. Perhaps combine this with a monitor so that we can detect
-				// as soon as the process starts before killing it. Or a custom kill
-				// script which loops looking for a cockroach process and kills it as
-				// soon as it appears. Using --pid_file or --background isn't quite
-				// right as we want to be able to kill the process before it is ready.
-				waitTime += time.Second
-			}
 			time.Sleep(waitTime)
 
 			sig := [2]string{"2", "9"}[rand.Intn(2)]
-			c.Stop(ctx, nodes, stopArgs("--sig="+sig))
-			select {
-			case <-ctx.Done():
-				return
-			case err := <-exitCh:
-				cause := errors.Cause(err)
-				if exitErr, ok := cause.(*exec.ExitError); ok {
-					switch status := sysutil.ExitStatus(exitErr); status {
-					case -1:
-						// Received SIGINT before setting up our own signal handlers or
-						// SIGKILL.
-					case 1:
-						// Exit code from a SIGINT received by our signal handlers.
-					default:
-						t.Fatalf("unexpected exit status %d", status)
-					}
-				} else {
-					t.Fatalf("unexpected exit err: %v", err)
+
+			var err error
+			for err == nil {
+				c.Stop(ctx, nodes, stopArgs("--sig="+sig))
+				select {
+				case <-ctx.Done():
+					return
+				case err = <-exitCh:
+				case <-time.After(10 * time.Second):
+					// We likely ended up killing before the process spawned.
+					// Loop around.
+					c.l.Printf("no exit status yet, killing again")
 				}
+			}
+			cause := errors.Cause(err)
+			if exitErr, ok := cause.(*exec.ExitError); ok {
+				switch status := sysutil.ExitStatus(exitErr); status {
+				case -1:
+					// Received SIGINT before setting up our own signal handlers or
+					// SIGKILL.
+				case 1:
+					// Exit code from a SIGINT received by our signal handlers.
+				default:
+					t.Fatalf("unexpected exit status %d", status)
+				}
+			} else {
+				t.Fatalf("unexpected exit err: %v", err)
 			}
 		}
 
