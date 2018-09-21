@@ -121,13 +121,14 @@ void timestampPrint(PGtimestamp ts) {
 
 int main(int argc, char *argv[]) {
 	if (argc != 2) {
-		fprintf(stderr, "usage: %s QUERY", argv[0]);
+		fprintf(stderr, "usage: %s QUERY\n", argv[0]);
+		return 1;
 	}
 	char *query = argv[1];
 
 	PGconn *conn = PQconnectdb("");
 	if (PQstatus(conn) != CONNECTION_OK) {
-		fprintf(stderr, "Connection to database failed: %s", PQerrorMessage(conn));
+		fprintf(stderr, "Connection to database failed: %s\n", PQerrorMessage(conn));
 		return 1;
 	}
 
