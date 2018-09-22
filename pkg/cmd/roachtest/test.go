@@ -783,10 +783,6 @@ func (r *registry) run(
 							if !debugEnabled && c.destroyed != nil {
 								c.Destroy(ctx)
 							}
-							if local {
-								t.printf("waiting for test to tear down since cluster is local\n")
-								<-done
-							}
 						}
 					case <-done:
 					}
