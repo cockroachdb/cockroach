@@ -299,31 +299,63 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				{
 					ctx, cancel := timeoutCtx(baseCtx)
 					defer cancel()
-					if logs, err := status.LogFilesList(
-						ctx, &serverpb.LogFilesListRequest{NodeId: id}); err != nil {
-						if err := z.createError(prefix+"/logs", err); err != nil {
-							return err
-						}
-					} else {
-						for _, file := range logs.Files {
-							name := prefix + "/logs/" + file.Name
-							ctx, cancel := timeoutCtx(baseCtx)
-							defer cancel()
-							entries, err := status.LogFile(
-								ctx, &serverpb.LogFileRequest{NodeId: id, File: file.Name})
-							if err != nil {
-								if err := z.createError(name, err); err != nil {
-									return err
-								}
-								continue
-							}
-							logOut, err := z.create(name)
-							if err != nil {
+					// Use older method of log fetching for backwards compatibility.
+					nodeVersion := node.Desc.ServerVersion
+					if nodeVersion.Major <= 2 && nodeVersion.Minor < 1 {
+						if logs, err := status.LogFilesList(
+							ctx, &serverpb.LogFilesListRequest{NodeId: id}); err != nil {
+							if err := z.createError(prefix+"/logs", err); err != nil {
 								return err
 							}
-							for _, e := range entries.Entries {
-								if err := e.Format(logOut); err != nil {
+						} else {
+							for _, file := range logs.Files {
+								name := prefix + "/logs/" + file.Name
+								ctx, cancel = timeoutCtx(baseCtx)
+								defer cancel()
+								entries, err := status.LogFile(
+									ctx, &serverpb.LogFileRequest{NodeId: id, File: file.Name})
+								if err != nil {
+									if err := z.createError(name, err); err != nil {
+										return err
+									}
+									continue
+								}
+								logOut, err := z.create(name)
+								if err != nil {
 									return err
+								}
+								for _, e := range entries.Entries {
+									if err := e.Format(logOut); err != nil {
+										return err
+									}
+								}
+							}
+						}
+					} else {
+						if logs, err := status.GetFiles(ctx, &serverpb.GetFilesRequest{
+							NodeId:   id,
+							Type:     serverpb.FileType_LOG,
+							ListOnly: true,
+							Patterns: []string{"*"},
+						}); err != nil {
+							if err := z.createError(prefix+"/logs", err); err != nil {
+								return err
+							}
+						} else {
+							for _, file := range logs.Files {
+								if logfiles, err := status.GetFiles(ctx, &serverpb.GetFilesRequest{
+									NodeId:   id,
+									Type:     serverpb.FileType_LOG,
+									Patterns: []string{file.Name},
+								}); err != nil {
+									if err := z.createError(prefix+"/logs", err); err != nil {
+										return err
+									}
+								} else {
+									name := prefix + "/logs/" + logfiles.Files[0].Name
+									if err := z.createRaw(name, logfiles.Files[0].Contents); err != nil {
+										return err
+									}
 								}
 							}
 						}

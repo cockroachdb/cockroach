@@ -191,6 +191,14 @@ func startServer(t *testing.T) *TestServer {
 // See debug/heap roachtest for testing heap profile file collection.
 func TestStatusLocalFileRetrieval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	if log.V(3) {
+		t.Skip("Test only works with low verbosity levels")
+	}
+
+	s := log.ScopeWithoutShowLogs(t)
+	defer s.Close(t)
+
 	ts := startServer(t)
 	defer ts.Stopper().Stop(context.TODO())
 
@@ -205,6 +213,7 @@ func TestStatusLocalFileRetrieval(t *testing.T) {
 	}
 	client := serverpb.NewStatusClient(conn)
 
+	// Testing heap profile collection
 	request := serverpb.GetFilesRequest{
 		NodeId: "local", ListOnly: true, Type: serverpb.FileType_HEAP, Patterns: []string{"*"}}
 	response, err := client.GetFiles(context.Background(), &request)
@@ -213,6 +222,18 @@ func TestStatusLocalFileRetrieval(t *testing.T) {
 	}
 
 	if a, e := len(response.Files), 0; a != e {
+		t.Errorf("expected %d files(s), found %d", e, a)
+	}
+
+	// Testing Log file collection
+	request = serverpb.GetFilesRequest{
+		NodeId: "local", Type: serverpb.FileType_LOG, Patterns: []string{"*"}}
+	response, err = client.GetFiles(context.Background(), &request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if a, e := len(response.Files), 0; a == e {
 		t.Errorf("expected %d files(s), found %d", e, a)
 	}
 

@@ -621,10 +621,13 @@ func (s *statusServer) GetFiles(
 
 	var dir string
 	switch req.Type {
-	//TODO(ridwanmsharif): Serve logfiles so debug-zip can fetch them
-	// intead of reading indididual entries.
 	case serverpb.FileType_HEAP: // Requesting for saved Heap Profiles.
 		dir = filepath.Join(s.admin.server.cfg.HeapProfileDirName, heapDir)
+	case serverpb.FileType_LOG: // Requesting for saved Heap Profiles.
+		dir, err = log.GetLogDir()
+		if err != nil {
+			return nil, grpcstatus.Errorf(codes.Internal, err.Error())
+		}
 	default:
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "unknown file type: %s", req.Type)
 	}
@@ -640,6 +643,9 @@ func (s *statusServer) GetFiles(
 
 		for _, path := range filepaths {
 			fileinfo, _ := os.Stat(path)
+			if fileinfo.IsDir() {
+				continue
+			}
 			var contents []byte
 			if !req.ListOnly {
 				contents, err = ioutil.ReadFile(path)

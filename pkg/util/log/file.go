@@ -290,6 +290,9 @@ func (l *loggingT) listLogFiles() ([]FileInfo, error) {
 	return results, nil
 }
 
+// GetLogDir returns the log directory
+func GetLogDir() (string, error) { return logging.logDir.get() }
+
 // GetLogReader returns a reader for the specified filename. In
 // restricted mode, the filename must be the base name of a file in
 // this process's log directory (this is safe for cases when the
