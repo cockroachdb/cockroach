@@ -265,6 +265,11 @@ func (rq *replicateQueue) process(
 			// Enqueue this replica again to see if there are more changes to be made.
 			rq.MaybeAdd(repl, rq.store.Clock().Now())
 		}
+		if testingAggressiveConsistencyChecks {
+			if err := rq.store.consistencyQueue.process(ctx, repl, sysCfg); err != nil {
+				log.Warning(ctx, err)
+			}
+		}
 		return nil
 	}
 	return errors.Errorf("failed to replicate after %d retries", retryOpts.MaxRetries)
