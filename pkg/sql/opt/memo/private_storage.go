@@ -230,11 +230,14 @@ func (ps *privateStorage) internFuncOpDef(def *FuncOpDef) PrivateID {
 	// The below code is carefully constructed to not allocate in the case where
 	// the value is already in the map. Be careful when modifying.
 	// The Overload field is already interned, because it's the address of one
-	// of the Builtin structs in the builtins package.
-	if id, ok := ps.privatesMap[privateKey{iface: def.Overload}]; ok {
+	// of the Builtin structs in the builtins package. Add the return type, since
+	// some functions use the same overload, but with a different return type
+	// (e.g. unnest).
+	typ := def.Type.String()
+	if id, ok := ps.privatesMap[privateKey{iface: def.Overload, str: typ}]; ok {
 		return id
 	}
-	return ps.addValue(privateKey{iface: def.Overload}, def)
+	return ps.addValue(privateKey{iface: def.Overload, str: typ}, def)
 }
 
 // internProjectionsOpDef adds the given value to storage and returns an id
