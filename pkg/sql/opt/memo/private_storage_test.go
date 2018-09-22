@@ -557,11 +557,19 @@ func TestInternFuncOpDef(t *testing.T) {
 	ttuple1 := types.TTuple{Types: []types.T{types.Int}}
 	ttuple2 := types.TTuple{Types: []types.T{types.Decimal}}
 	nowProps, nowOvls := builtins.GetBuiltinProperties("now")
+
+	// Same type, same overloads.
 	funcDef1 := &FuncOpDef{Name: "foo", Type: ttuple1, Properties: nowProps, Overload: &nowOvls[0]}
-	funcDef2 := &FuncOpDef{Name: "bar", Type: ttuple2, Properties: nowProps, Overload: &nowOvls[0]}
+	funcDef2 := &FuncOpDef{Name: "bar", Type: ttuple1, Properties: nowProps, Overload: &nowOvls[0]}
 	test(funcDef1, funcDef2, true)
-	funcDef3 := &FuncOpDef{Name: "bar", Type: ttuple2, Properties: nowProps, Overload: &nowOvls[1]}
+
+	// Same type, different overloads.
+	funcDef3 := &FuncOpDef{Name: "bar", Type: ttuple1, Properties: nowProps, Overload: &nowOvls[1]}
 	test(funcDef2, funcDef3, false)
+
+	// Same overload, different types.
+	funcDef4 := &FuncOpDef{Name: "bar", Type: ttuple2, Properties: nowProps, Overload: &nowOvls[1]}
+	test(funcDef3, funcDef4, false)
 }
 
 func TestInternSubqueryDef(t *testing.T) {
