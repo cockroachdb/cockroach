@@ -1045,12 +1045,6 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 	}
 
 	if desc.IsSequence() {
-		if st != nil && st.Version.IsInitialized() {
-			if err := st.Version.CheckVersion(cluster.Version2_0, "sequences"); err != nil {
-				return err
-			}
-		}
-
 		return nil
 	}
 
@@ -1117,18 +1111,6 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 	}
 
 	if st != nil && st.Version.IsInitialized() {
-		if !st.Version.IsMinSupported(cluster.Version2_0) {
-			for _, def := range desc.Columns {
-				if def.Type.SemanticType == ColumnType_JSONB {
-					return fmt.Errorf("cluster version does not support JSONB (required: %s)",
-						cluster.VersionByKey(cluster.Version2_0))
-				}
-				if def.ComputeExpr != nil {
-					return fmt.Errorf("cluster version does not support computed columns (required: %s)",
-						cluster.VersionByKey(cluster.Version2_0))
-				}
-			}
-		}
 		if !st.Version.IsMinSupported(cluster.VersionBitArrayColumns) {
 			for _, def := range desc.Columns {
 				if def.Type.SemanticType == ColumnType_BIT {
