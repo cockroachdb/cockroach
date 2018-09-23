@@ -42,19 +42,11 @@ func GenerateCerts(ctx context.Context) func() {
 
 	maybePanic(security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		512, 48*time.Hour, false, security.RootUser))
+		512, 48*time.Hour, false, security.RootUser, true /* generate pk8 key */))
 
 	maybePanic(security.CreateClientPair(
 		certsDir, filepath.Join(certsDir, security.EmbeddedCAKey),
-		512, 48*time.Hour, false, "testuser"))
-
-	// Store a copy of the client private key in PKCS#8 format, which is
-	// the only format understood by PgJDBC (Java).
-	{
-		execCmd("openssl", "pkcs8", "-topk8", "-outform", "DER", "-nocrypt",
-			"-in", filepath.Join(certsDir, "client.root.key"),
-			"-out", filepath.Join(certsDir, "client.root.pk8"))
-	}
+		512, 48*time.Hour, false, "testuser", true /* generate pk8 key */))
 
 	// Store a copy of the client certificate and private key in a PKCS#12
 	// bundle, which is the only format understood by Npgsql (.NET).

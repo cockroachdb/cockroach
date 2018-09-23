@@ -62,7 +62,7 @@ func TestEvalComparisonExprCaching(t *testing.T) {
 		if _, err := typedExpr.Eval(ctx); err != nil {
 			t.Fatalf("%v: %v", d, err)
 		}
-		if typedExpr.(*ComparisonExpr).fn.fn == nil {
+		if typedExpr.(*ComparisonExpr).fn.Fn == nil {
 			t.Errorf("%s: expected the comparison function to be looked up and memoized, but it wasn't", expr)
 		}
 		if count := ctx.ReCache.Len(); count != d.cacheCount {

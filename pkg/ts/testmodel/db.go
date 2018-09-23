@@ -118,6 +118,7 @@ func (mdb *ModelDB) Query(
 	derivative tspb.TimeSeriesQueryDerivative,
 	slabDuration, sampleDuration, start, end, interpolationLimit, now int64,
 ) DataSeries {
+	start = normalizeTime(start, sampleDuration)
 	// Check query bounds against the provided current time. Queries in the future
 	// are disallowed; "future" is considered to be at or later than the sample
 	// period containing the current system time (represented by the "now"

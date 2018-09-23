@@ -31,25 +31,26 @@ import (
 // to fully test with data-driven rules tests.
 func TestFactoryProjectColsFromBoth(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	f := NewFactory(&evalCtx)
-	pb := projectionsBuilder{f: f}
+	var f Factory
+	f.Init(&evalCtx)
+	pb := projectionsBuilder{f: &f}
 
 	cat := createFiltersCatalog(t)
-	a := f.Metadata().AddTable(cat.Table("a"))
-	ax := f.Metadata().TableColumn(a, 0)
-	ay := f.Metadata().TableColumn(a, 1)
+	a := f.Metadata().AddTable(cat.Table(tree.NewTableName("t", "a")))
+	ax := a.ColumnID(0)
+	ay := a.ColumnID(1)
 	aCols := util.MakeFastIntSet(int(ax), int(ay))
 
-	a2 := f.Metadata().AddTable(cat.Table("a"))
-	a2x := f.Metadata().TableColumn(a2, 0)
-	a2y := f.Metadata().TableColumn(a2, 1)
+	a2 := f.Metadata().AddTable(cat.Table(tree.NewTableName("t", "a")))
+	a2x := a2.ColumnID(0)
+	a2y := a2.ColumnID(1)
 	a2Cols := util.MakeFastIntSet(int(a2x), int(a2y))
 
 	scan := f.ConstructScan(f.InternScanOpDef(&memo.ScanOpDef{Table: a, Cols: aCols}))
 	scan2 := f.ConstructScan(f.InternScanOpDef(&memo.ScanOpDef{Table: a2, Cols: a2Cols}))
 
 	// Construct Projections with two passthrough columns.
-	pb.addPassthroughCols(f.outputCols(scan))
+	pb.addPassthroughCols(f.funcs.OutputCols(scan))
 	passthroughProj := pb.buildProjections()
 
 	// Construct Projections with one passthrough and two synthesized columns.
@@ -97,16 +98,16 @@ func TestFactoryProjectColsFromBoth(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		combined := f.projectColsFromBoth(tc.left, tc.right)
-		f.checkExpr(memo.MakeNormExprView(f.mem, combined))
-		actual := f.outputCols(combined).String()
+		combined := f.funcs.ProjectColsFromBoth(tc.left, tc.right)
+		f.Memo().CheckExpr(memo.MakeNormExprID(combined))
+		actual := f.funcs.OutputCols(combined).String()
 		if actual != tc.expected {
 			t.Errorf("expected: %s, actual: %s", tc.expected, actual)
 		}
 
-		def := f.extractProjectionsOpDef(f.mem.NormExpr(combined).AsProjections().Def())
+		def := f.funcs.ExtractProjectionsOpDef(f.Memo().NormExpr(combined).AsProjections().Def())
 		expectedCount := def.PassthroughCols.Len() + len(def.SynthesizedCols)
-		actualCount := f.outputCols(combined).Len()
+		actualCount := f.funcs.OutputCols(combined).Len()
 		if actualCount != expectedCount {
 			t.Errorf("expected column count: %d, actual column count: %d", expectedCount, actualCount)
 		}
@@ -118,11 +119,12 @@ func TestFactoryProjectColsFromBoth(t *testing.T) {
 // operator is created.
 func TestSimplifyFilters(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	f := NewFactory(&evalCtx)
+	var f Factory
+	f.Init(&evalCtx)
 
 	cat := createFiltersCatalog(t)
-	a := f.Metadata().AddTable(cat.Table("a"))
-	ax := f.Metadata().TableColumn(a, 0)
+	a := f.Metadata().AddTable(cat.Table(tree.NewTableName("t", "a")))
+	ax := a.ColumnID(0)
 
 	variable := f.ConstructVariable(f.InternColumnID(ax))
 	constant := f.ConstructConst(f.InternDatum(tree.NewDInt(1)))

@@ -52,6 +52,10 @@ type groupNode struct {
 	// Indices of the group by columns in the source plan that have an ordering.
 	orderedGroupCols []int
 
+	// isScalar is set for "scalar groupby", where we want a result
+	// even if there are no input rows, e.g. SELECT MIN(x) FROM t.
+	isScalar bool
+
 	// funcs are the aggregation functions that the renders use.
 	funcs []*aggregateFuncHolder
 
@@ -286,11 +290,7 @@ func (p *planner) groupBy(
 	postRender.sourceInfo = sqlbase.MultiSourceInfo{postRender.source.info}
 
 	// Queries like `SELECT MAX(n) FROM t` expect a row of NULLs if nothing was aggregated.
-	group.run.addNullBucketIfEmpty = len(groupByExprs) == 0
-
-	// TODO(peter): This memory isn't being accounted for. The similar code in
-	// sql/distsqlrun/aggregator.go does account for the memory.
-	group.run.buckets = make(map[string]struct{})
+	group.isScalar = len(groupByExprs) == 0
 
 	if log.V(2) {
 		strs := make([]string, 0, len(group.funcs))
@@ -315,8 +315,6 @@ type groupRun struct {
 
 	lastOrderedGroupKey tree.Datums
 	consumedGroupKey    bool
-
-	addNullBucketIfEmpty bool
 
 	// The current result row.
 	values tree.Datums
@@ -346,7 +344,7 @@ func (n *groupNode) accumulateRow(params runParams, values tree.Datums) error {
 	bucket := n.run.scratch
 	for _, idx := range n.groupCols {
 		var err error
-		bucket, err = sqlbase.EncodeDatum(bucket, values[idx])
+		bucket, err = sqlbase.EncodeDatumKeyAscending(bucket, values[idx])
 		if err != nil {
 			return err
 		}
@@ -373,6 +371,13 @@ func (n *groupNode) accumulateRow(params runParams, values tree.Datums) error {
 	n.run.scratch = bucket[:0]
 	n.run.gotOneRow = true
 
+	return nil
+}
+
+func (n *groupNode) startExec(params runParams) error {
+	// TODO(peter): This memory isn't being accounted for. The similar code in
+	// sql/distsqlrun/aggregator.go does account for the memory.
+	n.run.buckets = make(map[string]struct{})
 	return nil
 }
 
@@ -447,7 +452,7 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 			// No input for this bucket (possible if f has a FILTER).
 			// In most cases the result is NULL but there are exceptions
 			// (like COUNT).
-			aggregateFunc = f.create(params.EvalContext())
+			aggregateFunc = f.create(params.EvalContext(), nil /* arguments */)
 		}
 		var err error
 		n.run.values[i], err = aggregateFunc.Result()
@@ -473,7 +478,7 @@ func (n *groupNode) Close(ctx context.Context) {
 // setupOutput runs once after all the input rows have been processed. It sets
 // up the necessary state to start iterating through the buckets in Next().
 func (n *groupNode) setupOutput() {
-	if len(n.run.buckets) < 1 && n.run.addNullBucketIfEmpty {
+	if len(n.run.buckets) < 1 && n.isScalar {
 		n.run.buckets[""] = struct{}{}
 	}
 	if n.run.values == nil {
@@ -529,7 +534,7 @@ func (n *groupNode) desiredAggregateOrdering(evalCtx *tree.EvalContext) sqlbase.
 		return nil
 	}
 	f := n.funcs[0]
-	impl := f.create(evalCtx)
+	impl := f.create(evalCtx, nil /* arguments */)
 	switch impl.(type) {
 	case *builtins.MinAggregate:
 		return sqlbase.ColumnOrdering{{ColIdx: f.argRenderIdx, Direction: encoding.Ascending}}
@@ -617,6 +622,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 			v.preRender.render[groupIdx].ResolvedType(),
 			groupIdx,
 			builtins.NewAnyNotNullAggregate,
+			nil,
 			v.planner.EvalContext().Mon.MakeBoundAccount(),
 		)
 
@@ -627,18 +633,37 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 	case *tree.FuncExpr:
 		if agg := t.GetAggregateConstructor(); agg != nil {
 			var f *aggregateFuncHolder
-			switch len(t.Exprs) {
-			case 0:
+			if len(t.Exprs) == 0 {
 				// COUNT_ROWS has no arguments.
 				f = v.groupNode.newAggregateFuncHolder(
 					t.Func.String(),
 					t.ResolvedType(),
 					noRenderIdx,
 					agg,
+					nil,
 					v.planner.EvalContext().Mon.MakeBoundAccount(),
 				)
+			} else {
+				// Only the first argument can be an expression, all the following ones
+				// must be consts. So before we proceed, they must be checked.
+				arguments := make(tree.Datums, len(t.Exprs)-1)
+				if len(t.Exprs) > 1 {
+					evalContext := v.planner.EvalContext()
+					for i := 1; i < len(t.Exprs); i++ {
+						if !tree.IsConst(evalContext, t.Exprs[i]) {
+							v.err = pgerror.UnimplementedWithIssueError(28417, "aggregate functions with multiple non-constant expressions are not supported")
+							return false, expr
+						}
+						var err error
+						arguments[i-1], err = t.Exprs[i].(tree.TypedExpr).Eval(evalContext)
+						if err != nil {
+							v.err = pgerror.NewErrorf(pgerror.CodeInternalError,
+								"programming error: can't evaluate %s - %v", t.Exprs[i].String(), err)
+							return false, expr
+						}
+					}
+				}
 
-			case 1:
 				argExpr := t.Exprs[0].(tree.TypedExpr)
 
 				// TODO(knz): it's really a shame that we need to recurse
@@ -667,13 +692,9 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 					t.ResolvedType(),
 					argRenderIdx,
 					agg,
+					arguments,
 					v.planner.EvalContext().Mon.MakeBoundAccount(),
 				)
-
-			default:
-				// TODO: #10495
-				v.err = pgerror.UnimplementedWithIssueError(10495, "aggregate functions with multiple arguments are not supported yet")
-				return false, expr
 			}
 
 			if t.Type == tree.DistinctFuncType {
@@ -746,7 +767,11 @@ type aggregateFuncHolder struct {
 
 	// create instantiates the built-in execution context for the
 	// aggregation function.
-	create func(*tree.EvalContext) tree.AggregateFunc
+	create func(*tree.EvalContext, tree.Datums) tree.AggregateFunc
+
+	// arguments are constant expressions that can be optionally passed into an
+	// aggregator.
+	arguments tree.Datums
 
 	run aggregateFuncRun
 }
@@ -772,7 +797,8 @@ func (n *groupNode) newAggregateFuncHolder(
 	funcName string,
 	resultType types.T,
 	argRenderIdx int,
-	create func(*tree.EvalContext) tree.AggregateFunc,
+	create func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	arguments tree.Datums,
 	acc mon.BoundAccount,
 ) *aggregateFuncHolder {
 	res := &aggregateFuncHolder{
@@ -781,6 +807,7 @@ func (n *groupNode) newAggregateFuncHolder(
 		argRenderIdx:    argRenderIdx,
 		filterRenderIdx: noRenderIdx,
 		create:          create,
+		arguments:       arguments,
 		run: aggregateFuncRun{
 			buckets:       make(map[string]tree.AggregateFunc),
 			bucketsMemAcc: acc,
@@ -833,7 +860,7 @@ func (a *aggregateFuncHolder) add(
 	// https://github.com/golang/go/commit/f5f5a8b6209f84961687d993b93ea0d397f5d5bf
 
 	if a.run.seen != nil {
-		encoded, err := sqlbase.EncodeDatum(bucket, d)
+		encoded, err := sqlbase.EncodeDatumKeyAscending(bucket, d)
 		if err != nil {
 			return err
 		}
@@ -849,7 +876,7 @@ func (a *aggregateFuncHolder) add(
 
 	impl, ok := a.run.buckets[string(bucket)]
 	if !ok {
-		impl = a.create(evalCtx)
+		impl = a.create(evalCtx, a.arguments)
 		a.run.buckets[string(bucket)] = impl
 	}
 

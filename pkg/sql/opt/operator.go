@@ -105,24 +105,26 @@ var UnaryOpReverseMap = map[Operator]tree.UnaryOperator{
 // AggregateOpReverseMap maps from an optimizer operator type to the name of an
 // aggregation function.
 var AggregateOpReverseMap = map[Operator]string{
-	AnyNotNullOp: "any_not_null",
-	ArrayAggOp:   "array_agg",
-	AvgOp:        "avg",
-	BoolAndOp:    "bool_and",
-	BoolOrOp:     "bool_or",
-	ConcatAggOp:  "concat_agg",
-	CountOp:      "count",
-	CountRowsOp:  "count_rows",
-	MaxOp:        "max",
-	MinOp:        "min",
-	SumIntOp:     "sum_int",
-	SumOp:        "sum",
-	SqrDiffOp:    "sqrdiff",
-	VarianceOp:   "variance",
-	StdDevOp:     "stddev",
-	XorAggOp:     "xor_agg",
-	JsonAggOp:    "json_agg",
-	JsonbAggOp:   "jsonb_agg",
+	ArrayAggOp:        "array_agg",
+	AvgOp:             "avg",
+	BoolAndOp:         "bool_and",
+	BoolOrOp:          "bool_or",
+	ConcatAggOp:       "concat_agg",
+	CountOp:           "count",
+	CountRowsOp:       "count_rows",
+	MaxOp:             "max",
+	MinOp:             "min",
+	SumIntOp:          "sum_int",
+	SumOp:             "sum",
+	SqrDiffOp:         "sqrdiff",
+	VarianceOp:        "variance",
+	StdDevOp:          "stddev",
+	XorAggOp:          "xor_agg",
+	JsonAggOp:         "json_agg",
+	JsonbAggOp:        "jsonb_agg",
+	ConstAggOp:        "any_not_null",
+	ConstNotNullAggOp: "any_not_null",
+	AnyNotNullAggOp:   "any_not_null",
 }
 
 // NegateOpMap maps from a comparison operator type to its negated operator
@@ -159,6 +161,45 @@ func BoolOperatorRequiresNotNullArgs(op Operator) bool {
 		EqOp, LtOp, LeOp, GtOp, GeOp, NeOp,
 		LikeOp, NotLikeOp, ILikeOp, NotILikeOp, SimilarToOp, NotSimilarToOp,
 		RegMatchOp, NotRegMatchOp, RegIMatchOp, NotRegIMatchOp:
+		return true
+	}
+	return false
+}
+
+// AggregateIsOrderingSensitive returns true if the given aggregate operator is
+// non-commutative. That is, it can give different results based on the order
+// values are fed to it.
+func AggregateIsOrderingSensitive(op Operator) bool {
+	switch op {
+	case ArrayAggOp, ConcatAggOp, JsonAggOp, JsonbAggOp:
+		return true
+	}
+	return false
+}
+
+// AggregateIgnoresNulls returns true if the given aggregate operator has a
+// single input, and if it always evaluates to the same result regardless of
+// how many NULL values are included in that input, in any order.
+func AggregateIgnoresNulls(op Operator) bool {
+	switch op {
+	case AvgOp, BoolAndOp, BoolOrOp, CountOp, MaxOp, MinOp, SumIntOp, SumOp,
+		SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, ConstNotNullAggOp,
+		AnyNotNullAggOp:
+		return true
+	}
+	return false
+}
+
+// AggregateIsNullOnEmpty returns true if the given aggregate operator has a
+// single input, and if it returns NULL when the input set contains no values.
+// This group of aggregates overlaps considerably with the AggregateIgnoresNulls
+// group, with the notable exception of COUNT, which returns zero instead of
+// NULL when its input is empty.
+func AggregateIsNullOnEmpty(op Operator) bool {
+	switch op {
+	case AvgOp, BoolAndOp, BoolOrOp, MaxOp, MinOp, SumIntOp, SumOp, SqrDiffOp,
+		VarianceOp, StdDevOp, XorAggOp, ConstAggOp, ConstNotNullAggOp, ArrayAggOp,
+		ConcatAggOp, JsonAggOp, JsonbAggOp, AnyNotNullAggOp:
 		return true
 	}
 	return false

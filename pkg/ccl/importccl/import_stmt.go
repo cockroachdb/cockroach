@@ -11,21 +11,32 @@ package importccl
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/ioutil"
+	"math"
 	"sort"
 	"strconv"
+	"strings"
+
+	"github.com/pkg/errors"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -33,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -47,11 +57,16 @@ const (
 	mysqlOutfileEnclose  = "fields_enclosed_by"
 	mysqlOutfileEscape   = "fields_escaped_by"
 
-	importOptionTransform = "transform"
-	importOptionSSTSize   = "sstsize"
+	importOptionTransform  = "transform"
+	importOptionSSTSize    = "sstsize"
+	importOptionDecompress = "decompress"
+	importOptionOversample = "oversample"
+	importOptionSkipFKs    = "skip_foreign_keys"
 
 	pgCopyDelimiter = "delimiter"
 	pgCopyNull      = "nullif"
+
+	pgMaxRowSize = "max_row_size"
 )
 
 var importOptionExpectValues = map[string]bool{
@@ -65,8 +80,14 @@ var importOptionExpectValues = map[string]bool{
 	mysqlOutfileEnclose:  true,
 	mysqlOutfileEscape:   true,
 
-	importOptionTransform: true,
-	importOptionSSTSize:   true,
+	importOptionTransform:  true,
+	importOptionSSTSize:    true,
+	importOptionDecompress: true,
+	importOptionOversample: true,
+
+	importOptionSkipFKs: false,
+
+	pgMaxRowSize: true,
 }
 
 const (
@@ -105,30 +126,51 @@ func readCreateTableFromStore(
 	return create, nil
 }
 
+type fkHandler struct {
+	allowed  bool
+	skip     bool
+	resolver fkResolver
+}
+
+// NoFKs is used by formats that do not support FKs.
+var NoFKs = fkHandler{resolver: make(fkResolver)}
+
 // MakeSimpleTableDescriptor creates a TableDescriptor from a CreateTable parse
 // node without the full machinery. Many parts of the syntax are unsupported
 // (see the implementation and TestMakeSimpleTableDescriptorErrors for details),
 // but this is enough for our csv IMPORT and for some unit tests.
+//
+// Any occurrence of SERIAL in the column definitions is handled using
+// the CockroachDB legacy behavior, i.e. INT NOT NULL DEFAULT
+// unique_rowid().
 func MakeSimpleTableDescriptor(
 	ctx context.Context,
 	st *cluster.Settings,
 	create *tree.CreateTable,
 	parentID,
 	tableID sqlbase.ID,
+	fks fkHandler,
 	walltime int64,
 ) (*sqlbase.TableDescriptor, error) {
-	sql.HoistConstraints(create)
+	create.HoistConstraints()
 	if create.IfNotExists {
-		return nil, errors.New("unsupported IF NOT EXISTS")
+		return nil, pgerror.Unimplemented("import.if-no-exists", "unsupported IF NOT EXISTS")
 	}
 	if create.Interleave != nil {
-		return nil, errors.New("interleaved not supported")
+		return nil, pgerror.Unimplemented("import.interleave", "interleaved not supported")
 	}
 	if create.AsSource != nil {
-		return nil, errors.New("CREATE AS not supported")
+		return nil, pgerror.Unimplemented("import.create-as", "CREATE AS not supported")
 	}
-	for _, def := range create.Defs {
-		switch def := def.(type) {
+
+	tableName, err := create.Table.Normalize()
+	if err != nil {
+		return nil, err
+	}
+
+	filteredDefs := create.Defs[:0]
+	for i := range create.Defs {
+		switch def := create.Defs[i].(type) {
 		case *tree.CheckConstraintTableDef,
 			*tree.FamilyTableDef,
 			*tree.IndexTableDef,
@@ -136,35 +178,188 @@ func MakeSimpleTableDescriptor(
 			// ignore
 		case *tree.ColumnTableDef:
 			if def.Computed.Expr != nil {
-				return nil, errors.Errorf("computed columns not supported: %s", tree.AsString(def))
+				return nil, pgerror.Unimplemented("import.computed", "computed columns not supported: %s", tree.AsString(def))
 			}
+
+			if err := sql.SimplifySerialInColumnDefWithRowID(ctx, def, tableName); err != nil {
+				return nil, err
+			}
+
 		case *tree.ForeignKeyConstraintTableDef:
-			return nil, errors.Errorf("foreign keys not supported: %s", tree.AsString(def))
+			if !fks.allowed {
+				return nil, pgerror.Unimplemented("import.fk", "this IMPORT format does not support foreign keys")
+			}
+			if fks.skip {
+				continue
+			}
+			// Strip the schema/db prefix.
+			refTable, err := def.Table.Normalize()
+			if err != nil {
+				return nil, err
+			}
+			*refTable = tree.MakeUnqualifiedTableName(refTable.TableName)
+			def.Table.TableNameReference = refTable
+
 		default:
-			return nil, errors.Errorf("unsupported table definition: %s", tree.AsString(def))
+			return nil, pgerror.Unimplemented(fmt.Sprintf("import.%T", def), "unsupported table definition: %s", tree.AsString(def))
 		}
+		// only append this def after we make it past the error checks and continues
+		filteredDefs = append(filteredDefs, create.Defs[i])
 	}
+	create.Defs = filteredDefs
+
 	semaCtx := tree.SemaContext{}
-	evalCtx := tree.EvalContext{CtxProvider: ctxProvider{ctx}}
+	evalCtx := tree.EvalContext{
+		Context:  ctx,
+		Sequence: &importSequenceOperators{},
+	}
+	affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+
 	tableDesc, err := sql.MakeTableDesc(
 		ctx,
 		nil, /* txn */
-		nil, /* vt */
+		fks.resolver,
 		st,
 		create,
 		parentID,
 		tableID,
 		hlc.Timestamp{WallTime: walltime},
 		sqlbase.NewDefaultPrivilegeDescriptor(),
-		nil, /* affected */
+		affected,
 		&semaCtx,
 		&evalCtx,
 	)
 	if err != nil {
 		return nil, err
 	}
+	if err := fixDescriptorFKState(&tableDesc); err != nil {
+		return nil, err
+	}
 
 	return &tableDesc, nil
+}
+
+// fixDescriptorFKState repairs validity and table states set during descriptor
+// creation. sql.MakeTableDesc and ResolveFK set the table to the ADD state
+// and mark references an validated. This function sets the table to PUBLIC
+// and the FKs to unvalidated.
+func fixDescriptorFKState(tableDesc *sqlbase.TableDescriptor) error {
+	tableDesc.State = sqlbase.TableDescriptor_PUBLIC
+	return tableDesc.ForeachNonDropIndex(func(idx *sqlbase.IndexDescriptor) error {
+		if idx.ForeignKey.IsSet() {
+			idx.ForeignKey.Validity = sqlbase.ConstraintValidity_Unvalidated
+		}
+		return nil
+	})
+}
+
+var (
+	errSequenceOperators = errors.New("sequence operations unsupported")
+	errSchemaResolver    = errors.New("schema resolver unsupported")
+)
+
+// Implements the tree.SequenceOperators interface.
+type importSequenceOperators struct {
+}
+
+// Implements the tree.EvalDatabase interface.
+func (so *importSequenceOperators) ParseQualifiedTableName(
+	ctx context.Context, sql string,
+) (*tree.TableName, error) {
+	return parser.ParseTableName(sql)
+}
+
+// Implements the tree.EvalDatabase interface.
+func (so *importSequenceOperators) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
+	return errSequenceOperators
+}
+
+// Implements the tree.EvalDatabase interface.
+func (so *importSequenceOperators) LookupSchema(
+	ctx context.Context, dbName, scName string,
+) (bool, tree.SchemaMeta, error) {
+	return false, nil, errSequenceOperators
+}
+
+// Implements the tree.SequenceOperators interface.
+func (so *importSequenceOperators) IncrementSequence(
+	ctx context.Context, seqName *tree.TableName,
+) (int64, error) {
+	return 0, errSequenceOperators
+}
+
+// Implements the tree.SequenceOperators interface.
+func (so *importSequenceOperators) GetLatestValueInSessionForSequence(
+	ctx context.Context, seqName *tree.TableName,
+) (int64, error) {
+	return 0, errSequenceOperators
+}
+
+// Implements the tree.SequenceOperators interface.
+func (so *importSequenceOperators) SetSequenceValue(
+	ctx context.Context, seqName *tree.TableName, newVal int64, isCalled bool,
+) error {
+	return errSequenceOperators
+}
+
+type fkResolver map[string]*sqlbase.TableDescriptor
+
+var _ sql.SchemaResolver = fkResolver{}
+
+// Implements the sql.SchemaResolver interface.
+func (r fkResolver) Txn() *client.Txn {
+	return nil
+}
+
+// Implements the sql.SchemaResolver interface.
+func (r fkResolver) LogicalSchemaAccessor() sql.SchemaAccessor {
+	return nil
+}
+
+// Implements the sql.SchemaResolver interface.
+func (r fkResolver) CurrentDatabase() string {
+	return ""
+}
+
+// Implements the sql.SchemaResolver interface.
+func (r fkResolver) CurrentSearchPath() sessiondata.SearchPath {
+	return sessiondata.SearchPath{}
+}
+
+// Implements the sql.SchemaResolver interface.
+func (r fkResolver) CommonLookupFlags(ctx context.Context, required bool) sql.CommonLookupFlags {
+	return sql.CommonLookupFlags{}
+}
+
+// Implements the sql.SchemaResolver interface.
+func (r fkResolver) ObjectLookupFlags(ctx context.Context, required bool) sql.ObjectLookupFlags {
+	return sql.ObjectLookupFlags{}
+}
+
+// Implements the tree.TableNameExistingResolver interface.
+func (r fkResolver) LookupObject(
+	ctx context.Context, dbName, scName, obName string,
+) (found bool, objMeta tree.NameResolutionResult, err error) {
+	if scName != "" {
+		obName = strings.TrimPrefix(obName, scName+".")
+	}
+	tbl, ok := r[obName]
+	if ok {
+		return true, tbl, nil
+	}
+	names := make([]string, 0, len(r))
+	for k := range r {
+		names = append(names, k)
+	}
+	suggestions := strings.Join(names, ",")
+	return false, nil, errors.Errorf("referenced table %q not found in tables being imported (%s)", obName, suggestions)
+}
+
+// Implements the tree.TableNameTargetResolver interface.
+func (r fkResolver) LookupSchema(
+	ctx context.Context, dbName, scName string,
+) (found bool, scMeta tree.SchemaMeta, err error) {
+	return false, nil, errSchemaResolver
 }
 
 const csvDatabaseName = "csv"
@@ -173,19 +368,23 @@ func finalizeCSVBackup(
 	ctx context.Context,
 	backupDesc *backupccl.BackupDescriptor,
 	parentID sqlbase.ID,
-	tableDesc *sqlbase.TableDescriptor,
+	tables map[string]*sqlbase.TableDescriptor,
 	es storageccl.ExportStorage,
 	execCfg *sql.ExecutorConfig,
 ) error {
 	sort.Sort(backupccl.BackupFileDescriptors(backupDesc.Files))
-	backupDesc.Spans = []roachpb.Span{tableDesc.TableSpan()}
-	backupDesc.Descriptors = []sqlbase.Descriptor{
-		*sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{
-			Name: csvDatabaseName,
-			ID:   parentID,
-		}),
-		*sqlbase.WrapDescriptor(tableDesc),
+
+	backupDesc.Spans = make([]roachpb.Span, 0, len(tables))
+	backupDesc.Descriptors = make([]sqlbase.Descriptor, 1, len(tables)+1)
+	backupDesc.Descriptors[0] = *sqlbase.WrapDescriptor(
+		&sqlbase.DatabaseDescriptor{Name: csvDatabaseName, ID: parentID},
+	)
+
+	for _, table := range tables {
+		backupDesc.Spans = append(backupDesc.Spans, table.TableSpan())
+		backupDesc.Descriptors = append(backupDesc.Descriptors, *sqlbase.WrapDescriptor(table))
 	}
+
 	backupDesc.FormatVersion = backupccl.BackupFormatInitialVersion
 	backupDesc.BuildInfo = build.GetInfo()
 	if execCfg != nil {
@@ -248,7 +447,7 @@ func importPlanHook(
 	}
 
 	var createFileFn func() (string, error)
-	if importStmt.CreateDefs == nil {
+	if !importStmt.Bundle && importStmt.CreateDefs == nil {
 		createFileFn, err = p.TypeAsString(importStmt.CreateFile, "IMPORT")
 		if err != nil {
 			return nil, nil, nil, err
@@ -285,33 +484,52 @@ func importPlanHook(
 			return err
 		}
 
-		// Normalize must be called regardles of whether there is a
-		// transform because it prepares a TableName with the right
-		// structure and stores it back into the statement AST, which we
-		// need later when computing the job title.
-		name, err := importStmt.Table.Normalize()
-		if err != nil {
-			return errors.Wrap(err, "normalize create table")
+		var table *tree.TableName
+		if importStmt.Table.TableNameReference != nil {
+			// Normalize must be called regardles of whether there is a
+			// transform because it prepares a TableName with the right
+			// structure and stores it back into the statement AST, which we
+			// need later when computing the job title.
+			table, err = importStmt.Table.Normalize()
+			if err != nil {
+				return errors.Wrap(err, "normalize create table")
+			}
 		}
-		parentID := defaultCSVParentID
+
 		transform := opts[importOptionTransform]
-		if transform == "" {
-			found, descI, err := name.ResolveTarget(ctx,
+
+		var parentID sqlbase.ID
+		if transform != "" {
+			// If we're not ingesting the data, we don't care what DB we pick.
+			parentID = defaultCSVParentID
+		} else if table != nil {
+			// We have a target table, so it might specify a DB in its name.
+			found, descI, err := table.ResolveTarget(ctx,
 				p, p.SessionData().Database, p.SessionData().SearchPath)
+
 			if err != nil {
 				return errors.Wrap(err, "resolving target import name")
 			}
 			if !found {
 				// Check if database exists right now. It might not after the import is done,
 				// but it's better to fail fast than wait until restore.
-				return errors.Errorf("database does not exist: %q", name)
+				return errors.Errorf("database does not exist: %q", table)
 			}
 			parentID = descI.(*sqlbase.DatabaseDescriptor).ID
+		} else {
+			// No target table means we're importing whatever we find into the session
+			// database, so it must exist.
+			dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, p.SessionData().Database, true /*required*/)
+			if err != nil {
+				return errors.Wrap(err, "could not resolve current database")
+			}
+			parentID = dbDesc.ID
 		}
 
 		format := roachpb.IOFileFormat{}
 		switch importStmt.FileFormat {
 		case "CSV":
+			telemetry.Count("import.format.csv")
 			format.Format = roachpb.IOFileFormat_CSV
 			if override, ok := opts[csvDelimiter]; ok {
 				comma, err := util.GetSingleRune(override)
@@ -350,6 +568,7 @@ func importPlanHook(
 				format.Csv.Skip = uint32(skip)
 			}
 		case "MYSQLOUTFILE":
+			telemetry.Count("import.format.mysqlout")
 			format.Format = roachpb.IOFileFormat_MysqlOutfile
 			format.MysqlOut = roachpb.MySQLOutfileOptions{
 				RowSeparator:   '\n',
@@ -389,8 +608,10 @@ func importPlanHook(
 				format.MysqlOut.Escape = c
 			}
 		case "MYSQLDUMP":
+			telemetry.Count("import.format.mysqldump")
 			format.Format = roachpb.IOFileFormat_Mysqldump
 		case "PGCOPY":
+			telemetry.Count("import.format.pgcopy")
 			format.Format = roachpb.IOFileFormat_PgCopy
 			format.PgCopy = roachpb.PgCopyOptions{
 				Delimiter: '\t',
@@ -406,8 +627,35 @@ func importPlanHook(
 			if override, ok := opts[pgCopyNull]; ok {
 				format.PgCopy.Null = override
 			}
+			maxRowSize := int32(defaultScanBuffer)
+			if override, ok := opts[pgMaxRowSize]; ok {
+				sz, err := humanizeutil.ParseBytes(override)
+				if err != nil {
+					return err
+				}
+				if sz < 1 || sz > math.MaxInt32 {
+					return errors.Errorf("%s out of range: %d", pgMaxRowSize, sz)
+				}
+				maxRowSize = int32(sz)
+			}
+			format.PgCopy.MaxRowSize = maxRowSize
+		case "PGDUMP":
+			telemetry.Count("import.format.pgdump")
+			format.Format = roachpb.IOFileFormat_PgDump
+			maxRowSize := int32(defaultScanBuffer)
+			if override, ok := opts[pgMaxRowSize]; ok {
+				sz, err := humanizeutil.ParseBytes(override)
+				if err != nil {
+					return err
+				}
+				if sz < 1 || sz > math.MaxInt32 {
+					return errors.Errorf("%s out of range: %d", pgMaxRowSize, sz)
+				}
+				maxRowSize = int32(sz)
+			}
+			format.PgDump.MaxRowSize = maxRowSize
 		default:
-			return errors.Errorf("unsupported import format: %q", importStmt.FileFormat)
+			return pgerror.Unimplemented("import.format", "unsupported import format: %q", importStmt.FileFormat)
 		}
 
 		if format.Format != roachpb.IOFileFormat_CSV {
@@ -428,38 +676,117 @@ func importPlanHook(
 			}
 			sstSize = sz
 		}
+		var oversample int64
+		if override, ok := opts[importOptionOversample]; ok {
+			os, err := strconv.ParseInt(override, 10, 64)
+			if err != nil {
+				return err
+			}
+			oversample = os
+		}
 
-		var create *tree.CreateTable
-		if importStmt.CreateDefs != nil {
-			create = &tree.CreateTable{Table: importStmt.Table, Defs: importStmt.CreateDefs}
+		var skipFKs bool
+		if _, ok := opts[importOptionSkipFKs]; ok {
+			skipFKs = true
+		}
+
+		if override, ok := opts[importOptionDecompress]; ok {
+			found := false
+			for name, value := range roachpb.IOFileFormat_Compression_value {
+				if strings.EqualFold(name, override) {
+					format.Compression = roachpb.IOFileFormat_Compression(value)
+					found = true
+					break
+				}
+			}
+			if !found {
+				return pgerror.Unimplemented("import.compression", "unsupported compression value: %q", override)
+			}
+		}
+
+		var tableDescs []*sqlbase.TableDescriptor
+		var jobDesc string
+		var names []string
+		seqVals := make(map[sqlbase.ID]int64)
+		if importStmt.Bundle {
+			store, err := storageccl.ExportStorageFromURI(ctx, files[0], p.ExecCfg().Settings)
+			if err != nil {
+				return err
+			}
+			defer store.Close()
+			raw, err := store.ReadFile(ctx, "")
+			if err != nil {
+				return err
+			}
+			defer raw.Close()
+			reader, err := decompressingReader(raw, files[0], format.Compression)
+			if err != nil {
+				return err
+			}
+			defer reader.Close()
+
+			var match string
+			if table != nil {
+				match = table.TableName.String()
+			}
+			fks := fkHandler{skip: skipFKs, allowed: true, resolver: make(fkResolver)}
+			switch format.Format {
+			case roachpb.IOFileFormat_Mysqldump:
+				evalCtx := &p.ExtendedEvalContext().EvalContext
+				tableDescs, err = readMysqlCreateTable(ctx, reader, evalCtx, defaultCSVTableID, parentID, match, fks, seqVals)
+			case roachpb.IOFileFormat_PgDump:
+				evalCtx := &p.ExtendedEvalContext().EvalContext
+				tableDescs, err = readPostgresCreateTable(reader, evalCtx, p.ExecCfg().Settings, match, parentID, walltime, fks, int(format.PgDump.MaxRowSize))
+			default:
+				return errors.Errorf("non-bundle format %q does not support reading schemas", format.Format.String())
+			}
+			if err != nil {
+				return err
+			}
+			if tableDescs == nil && table != nil {
+				names = []string{table.TableName.String()}
+			}
+
+			descStr, err := importJobDescription(importStmt, nil, files, opts)
+			if err != nil {
+				return err
+			}
+			jobDesc = descStr
 		} else {
-			filename, err := createFileFn()
+			if table == nil {
+				return errors.Errorf("non-bundle format %q should always have a table name", importStmt.FileFormat)
+			}
+			var create *tree.CreateTable
+			if importStmt.CreateDefs != nil {
+				create = &tree.CreateTable{Table: importStmt.Table, Defs: importStmt.CreateDefs}
+			} else {
+				filename, err := createFileFn()
+				if err != nil {
+					return err
+				}
+				create, err = readCreateTableFromStore(ctx, filename, p.ExecCfg().Settings)
+				if err != nil {
+					return err
+				}
+
+				if parsed, err := create.Table.Normalize(); err != nil {
+					return errors.Wrap(err, "normalize create table")
+				} else if table.TableName != parsed.TableName {
+					return errors.Errorf("importing table %s, but file specifies a schema for table %s", table.TableName, parsed.TableName)
+				}
+			}
+
+			tbl, err := MakeSimpleTableDescriptor(
+				ctx, p.ExecCfg().Settings, create, parentID, defaultCSVTableID, NoFKs, walltime)
 			if err != nil {
 				return err
 			}
-			create, err = readCreateTableFromStore(ctx, filename, p.ExecCfg().Settings)
+			tableDescs = []*sqlbase.TableDescriptor{tbl}
+			descStr, err := importJobDescription(importStmt, create.Defs, files, opts)
 			if err != nil {
 				return err
 			}
-
-			if named, err := importStmt.Table.Normalize(); err != nil {
-				return errors.Wrap(err, "normalize import table")
-			} else if parsed, err := create.Table.Normalize(); err != nil {
-				return errors.Wrap(err, "normalize create table")
-			} else if named.TableName != parsed.TableName {
-				return errors.Errorf("importing table %s, but file specifies a schema for table %s", named.TableName, parsed.TableName)
-			}
-		}
-
-		tableDesc, err := MakeSimpleTableDescriptor(
-			ctx, p.ExecCfg().Settings, create, parentID, defaultCSVTableID, walltime)
-		if err != nil {
-			return err
-		}
-
-		jobDesc, err := importJobDescription(importStmt, create.Defs, files, opts)
-		if err != nil {
-			return err
+			jobDesc = descStr
 		}
 
 		if transform != "" {
@@ -473,45 +800,61 @@ func importPlanHook(
 			if err != nil {
 				return err
 			}
+			telemetry.Count("import.transform")
 		} else {
-			if err := backupccl.CheckTableExists(ctx, p.Txn(), parentID, tableDesc.Name); err != nil {
-				return err
+			for _, tableDesc := range tableDescs {
+				if err := backupccl.CheckTableExists(ctx, p.Txn(), parentID, tableDesc.Name); err != nil {
+					return err
+				}
 			}
-
 			// Verification steps have passed, generate a new table ID if we're
 			// restoring. We do this last because we want to avoid calling
 			// GenerateUniqueDescID if there's any kind of error above.
 			// Reserving a table ID now means we can avoid the rekey work during restore.
-			tableDesc.ID, err = sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
-			if err != nil {
+			tableRewrites := make(backupccl.TableRewriteMap)
+			newSeqVals := make(map[sqlbase.ID]int64, len(seqVals))
+			for _, tableDesc := range tableDescs {
+				id, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+				if err != nil {
+					return err
+				}
+				tableRewrites[tableDesc.ID] = &jobspb.RestoreDetails_TableRewrite{
+					TableID:  id,
+					ParentID: parentID,
+				}
+				newSeqVals[id] = seqVals[tableDesc.ID]
+			}
+			seqVals = newSeqVals
+			if err := backupccl.RewriteTableDescs(tableDescs, tableRewrites, ""); err != nil {
 				return err
 			}
 		}
 
-		var nullifVal *jobs.ImportDetails_Table_Nullif
-		if format.Csv.NullEncoding != nil {
-			nullifVal = &jobs.ImportDetails_Table_Nullif{Nullif: *format.Csv.NullEncoding}
+		tableDetails := make([]jobspb.ImportDetails_Table, 0, len(tableDescs))
+		for _, tbl := range tableDescs {
+			tableDetails = append(tableDetails, jobspb.ImportDetails_Table{Desc: tbl, SeqVal: seqVals[tbl.ID]})
 		}
+		for _, name := range names {
+			tableDetails = append(tableDetails, jobspb.ImportDetails_Table{Name: name})
+		}
+
+		telemetry.CountBucketed("import.files", int64(len(files)))
 
 		_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 			Description: jobDesc,
 			Username:    p.User(),
-			Details: jobs.ImportDetails{
-				Tables: []jobs.ImportDetails_Table{{
-					Format:        format,
-					Desc:          tableDesc,
-					URIs:          files,
-					BackupPath:    transform,
-					ParentID:      parentID,
-					SSTSize:       sstSize,
-					Walltime:      walltime,
-					LegacyComma:   format.Csv.Comma,
-					LegacyComment: format.Csv.Comment,
-					LegacyNullif:  nullifVal,
-					LegacySkip:    format.Csv.Skip,
-				}},
+			Details: jobspb.ImportDetails{
+				URIs:       files,
+				Format:     format,
+				ParentID:   parentID,
+				Tables:     tableDetails,
+				BackupPath: transform,
+				SSTSize:    sstSize,
+				Oversample: oversample,
+				Walltime:   walltime,
+				SkipFKs:    skipFKs,
 			},
-			Progress: jobs.ImportProgress{},
+			Progress: jobspb.ImportProgress{},
 		})
 		if err != nil {
 			return err
@@ -527,17 +870,18 @@ func doDistributedCSVTransform(
 	files []string,
 	p sql.PlanHookState,
 	parentID sqlbase.ID,
-	tableDesc *sqlbase.TableDescriptor,
+	tables map[string]*sqlbase.TableDescriptor,
 	transformOnly string,
 	format roachpb.IOFileFormat,
 	walltime int64,
 	sstSize int64,
-) error {
+	oversample int64,
+) (roachpb.BulkOpSummary, error) {
 	evalCtx := p.ExtendedEvalContext()
 
 	ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{
 		{SemanticType: sqlbase.ColumnType_STRING},
-		{SemanticType: sqlbase.ColumnType_INT},
+		{SemanticType: sqlbase.ColumnType_BYTES},
 		{SemanticType: sqlbase.ColumnType_BYTES},
 		{SemanticType: sqlbase.ColumnType_BYTES},
 		{SemanticType: sqlbase.ColumnType_BYTES},
@@ -554,13 +898,25 @@ func doDistributedCSVTransform(
 		p,
 		job,
 		sql.NewRowResultWriter(rows),
-		tableDesc,
+		tables,
 		files,
 		transformOnly,
 		format,
 		walltime,
 		sstSize,
+		oversample,
+		func(descs map[sqlbase.ID]*sqlbase.TableDescriptor) (sql.KeyRewriter, error) {
+			return storageccl.MakeKeyRewriter(descs)
+		},
 	); err != nil {
+
+		// Check if this was a context canceled error and restart if it was.
+		if s, ok := status.FromError(errors.Cause(err)); ok {
+			if s.Code() == codes.Canceled && s.Message() == context.Canceled.Error() {
+				return roachpb.BulkOpSummary{}, jobs.NewRetryJobError("node failure")
+			}
+		}
+
 		// If the job was canceled, any of the distsql processors could have been
 		// the first to encounter the .Progress error. This error's string is sent
 		// through distsql back here, so we can't examine the err type in this case
@@ -568,16 +924,13 @@ func doDistributedCSVTransform(
 		// job progress to coerce out the correct error type. If the update succeeds
 		// then return the original error, otherwise return this error instead so
 		// it can be cleaned up at a higher level.
-		if err := job.Progressed(ctx, func(ctx context.Context, details jobs.ProgressDetails) float32 {
-			d := details.(*jobs.Progress_Import).Import
+		if err := job.FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+			d := details.(*jobspb.Progress_Import).Import
 			return d.Completed()
 		}); err != nil {
-			return err
+			return roachpb.BulkOpSummary{}, err
 		}
-		return err
-	}
-	if transformOnly == "" {
-		return nil
+		return roachpb.BulkOpSummary{}, err
 	}
 
 	backupDesc := backupccl.BackupDescriptor{
@@ -587,11 +940,14 @@ func doDistributedCSVTransform(
 	for i := 0; i < n; i++ {
 		row := rows.At(i)
 		name := row[0].(*tree.DString)
-		size := row[1].(*tree.DInt)
+		var counts roachpb.BulkOpSummary
+		if err := protoutil.Unmarshal([]byte(*row[1].(*tree.DBytes)), &counts); err != nil {
+			return roachpb.BulkOpSummary{}, err
+		}
+		backupDesc.EntryCounts.Add(counts)
 		checksum := row[2].(*tree.DBytes)
 		spanStart := row[3].(*tree.DBytes)
 		spanEnd := row[4].(*tree.DBytes)
-		backupDesc.EntryCounts.DataSize += int64(*size)
 		backupDesc.Files = append(backupDesc.Files, backupccl.BackupDescriptor_File{
 			Path: string(*name),
 			Span: roachpb.Span{
@@ -600,6 +956,10 @@ func doDistributedCSVTransform(
 			},
 			Sha512: []byte(*checksum),
 		})
+	}
+
+	if transformOnly == "" {
+		return backupDesc.EntryCounts, nil
 	}
 
 	// The returned spans are from the SSTs themselves, and so don't perfectly
@@ -612,24 +972,34 @@ func doDistributedCSVTransform(
 	sort.Slice(backupDesc.Files, func(i, j int) bool {
 		return backupDesc.Files[i].Span.Key.Compare(backupDesc.Files[j].Span.Key) < 0
 	})
-	tableSpan := tableDesc.TableSpan()
-	backupDesc.Files[0].Span.Key = tableSpan.Key
+
+	var minTableSpan, maxTableSpan roachpb.Key
+	for _, tableDesc := range tables {
+		span := tableDesc.TableSpan()
+		if minTableSpan == nil || span.Key.Compare(minTableSpan) < 0 {
+			minTableSpan = span.Key
+		}
+		if maxTableSpan == nil || span.EndKey.Compare(maxTableSpan) > 0 {
+			maxTableSpan = span.EndKey
+		}
+	}
+	backupDesc.Files[0].Span.Key = minTableSpan
 	for i := 1; i < len(backupDesc.Files); i++ {
 		backupDesc.Files[i].Span.Key = backupDesc.Files[i-1].Span.EndKey
 	}
-	backupDesc.Files[len(backupDesc.Files)-1].Span.EndKey = tableSpan.EndKey
+	backupDesc.Files[len(backupDesc.Files)-1].Span.EndKey = maxTableSpan
 
 	dest, err := storageccl.ExportStorageConfFromURI(transformOnly)
 	if err != nil {
-		return err
+		return roachpb.BulkOpSummary{}, err
 	}
 	es, err := storageccl.MakeExportStorage(ctx, dest, p.ExecCfg().Settings)
 	if err != nil {
-		return err
+		return roachpb.BulkOpSummary{}, err
 	}
 	defer es.Close()
 
-	return finalizeCSVBackup(ctx, &backupDesc, parentID, tableDesc, es, p.ExecCfg())
+	return backupDesc.EntryCounts, finalizeCSVBackup(ctx, &backupDesc, parentID, tables, es, p.ExecCfg())
 }
 
 type importResumer struct {
@@ -640,26 +1010,18 @@ type importResumer struct {
 func (r *importResumer) Resume(
 	ctx context.Context, job *jobs.Job, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
-	details := job.Record.Details.(jobs.ImportDetails).Tables[0]
+	details := job.Details().(jobspb.ImportDetails)
 	p := phs.(sql.PlanHookState)
+
+	// TODO(dt): consider looking at the legacy fields used in 2.0.
+
 	walltime := details.Walltime
 	transform := details.BackupPath
 	files := details.URIs
-	tableDesc := details.Desc
 	parentID := details.ParentID
 	sstSize := details.SSTSize
-
 	format := details.Format
-	if format.Format == roachpb.IOFileFormat_Unknown {
-		format.Format = roachpb.IOFileFormat_CSV
-		format.Csv.Comma = details.LegacyComma
-		format.Csv.Comment = details.LegacyComment
-		format.Csv.Skip = details.LegacySkip
-		if details.LegacyNullif != nil {
-			format.Csv.NullEncoding = &details.LegacyNullif.Nullif
-		}
-
-	}
+	oversample := details.Oversample
 
 	if sstSize == 0 {
 		// The distributed importer will correctly chunk up large ranges into
@@ -672,9 +1034,28 @@ func (r *importResumer) Resume(
 		// smaller since there are fewer overall ranges.
 		sstSize = storageccl.MaxImportBatchSize(r.settings) * 5
 	}
-	return doDistributedCSVTransform(
-		ctx, job, files, p, parentID, tableDesc, transform, format, walltime, sstSize,
+
+	tables := make(map[string]*sqlbase.TableDescriptor, len(details.Tables))
+	if details.Tables != nil {
+		for _, i := range details.Tables {
+			if i.Name != "" {
+				tables[i.Name] = i.Desc
+			} else if i.Desc != nil {
+				tables[i.Desc.Name] = i.Desc
+			} else {
+				return errors.Errorf("invalid table specification")
+			}
+		}
+	}
+
+	res, err := doDistributedCSVTransform(
+		ctx, job, files, p, parentID, tables, transform, format, walltime, sstSize, oversample,
 	)
+	if err != nil {
+		return err
+	}
+	r.res = res
+	return nil
 }
 
 // OnFailOrCancel removes KV data that has been committed from a import that
@@ -682,7 +1063,7 @@ func (r *importResumer) Resume(
 // in DROP state, which causes the schema change stuff to delete the keys
 // in the background.
 func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
-	details := job.Record.Details.(jobs.ImportDetails).Tables[0]
+	details := job.Details().(jobspb.ImportDetails)
 	if details.BackupPath != "" {
 		return nil
 	}
@@ -692,23 +1073,50 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job
 		return err
 	}
 	b := txn.NewBatch()
-	tableDesc := details.Desc
-	tableDesc.State = sqlbase.TableDescriptor_DROP
-	b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc), nil)
+	for _, tbl := range details.Tables {
+		tableDesc := tbl.Desc
+		tableDesc.State = sqlbase.TableDescriptor_DROP
+		// If the DropTime if set, a table uses RangeClear for fast data removal. This
+		// operation starts at DropTime + the GC TTL. If we used now() here, it would
+		// not clean up data until the TTL from the time of the error. Instead, use 1
+		// (that is, 1ns past the epoch) to allow this to be cleaned up as soon as
+		// possible. This is safe since the table data was never visible to users,
+		// and so we don't need to preserve MVCC semantics.
+		tableDesc.DropTime = 1
+		b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc), nil)
+	}
 	return txn.Run(ctx, b)
 }
 
 func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
 	log.Event(ctx, "making tables live")
-	details := job.Record.Details.(jobs.ImportDetails).Tables[0]
+	details := job.Details().(jobspb.ImportDetails)
 
-	if details.BackupPath == "" {
-		// Write the new TableDescriptors and flip the namespace entries over to
-		// them. After this call, any queries on a table will be served by the newly
-		// imported data.
-		if err := backupccl.WriteTableDescs(ctx, txn, nil, []*sqlbase.TableDescriptor{details.Desc}, job.Record.Username, r.settings); err != nil {
-			return errors.Wrapf(err, "creating table %q", details.Desc.Name)
+	if details.BackupPath != "" {
+		return nil
+	}
+
+	toWrite := make([]*sqlbase.TableDescriptor, len(details.Tables))
+	var seqs []roachpb.KeyValue
+	for i := range details.Tables {
+		toWrite[i] = details.Tables[i].Desc
+		toWrite[i].ParentID = details.ParentID
+		if d := details.Tables[i]; d.SeqVal != 0 {
+			key, val, err := sql.MakeSequenceKeyVal(d.Desc, d.SeqVal, false)
+			if err != nil {
+				return err
+			}
+			kv := roachpb.KeyValue{Key: key}
+			kv.Value.SetInt(val)
+			seqs = append(seqs, kv)
 		}
+	}
+
+	// Write the new TableDescriptors and flip the namespace entries over to
+	// them. After this call, any queries on a table will be served by the newly
+	// imported data.
+	if err := backupccl.WriteTableDescs(ctx, txn, nil, toWrite, job.Payload().Username, r.settings, seqs); err != nil {
+		return errors.Wrapf(err, "creating tables")
 	}
 
 	return nil
@@ -717,7 +1125,7 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *job
 func (r *importResumer) OnTerminal(
 	ctx context.Context, job *jobs.Job, status jobs.Status, resultsCh chan<- tree.Datums,
 ) {
-	details := job.Record.Details.(jobs.ImportDetails).Tables[0]
+	details := job.Details().(jobspb.ImportDetails)
 
 	if transform := details.BackupPath; transform != "" {
 		transformStorage, err := storageccl.ExportStorageFromURI(ctx, transform, r.settings)
@@ -733,6 +1141,10 @@ func (r *importResumer) OnTerminal(
 	}
 
 	if status == jobs.StatusSucceeded {
+		telemetry.CountBucketed("import.rows", r.res.Rows)
+		const mb = 1 << 20
+		telemetry.CountBucketed("import.size-mb", r.res.DataSize/mb)
+
 		resultsCh <- tree.Datums{
 			tree.NewDInt(tree.DInt(*job.ID())),
 			tree.NewDString(string(jobs.StatusSucceeded)),
@@ -747,8 +1159,8 @@ func (r *importResumer) OnTerminal(
 
 var _ jobs.Resumer = &importResumer{}
 
-func importResumeHook(typ jobs.Type, settings *cluster.Settings) jobs.Resumer {
-	if typ != jobs.TypeImport {
+func importResumeHook(typ jobspb.Type, settings *cluster.Settings) jobs.Resumer {
+	if typ != jobspb.TypeImport {
 		return nil
 	}
 

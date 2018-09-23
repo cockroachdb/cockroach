@@ -31,9 +31,9 @@ func init() {
 	RegisterCommand(roachpb.BeginTransaction, declareKeysBeginTransaction, BeginTransaction)
 }
 
-// DeclareKeysWriteTransaction is the shared portion of
-// declareKeys{Begin,End,Heartbeat}Transaction
-func DeclareKeysWriteTransaction(
+// declareKeysWriteTransaction is the shared portion of
+// declareKeys{Begin,End,Heartbeat}Transaction.
+func declareKeysWriteTransaction(
 	_ roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
 	if header.Txn != nil {
@@ -47,7 +47,7 @@ func DeclareKeysWriteTransaction(
 func declareKeysBeginTransaction(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
-	DeclareKeysWriteTransaction(desc, header, req, spans)
+	declareKeysWriteTransaction(desc, header, req, spans)
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeTxnSpanGCThresholdKey(header.RangeID)})
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{
 		Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
@@ -86,7 +86,7 @@ func BeginTransaction(
 		case roachpb.ABORTED:
 			// Check whether someone has come in ahead and already aborted the
 			// txn.
-			return result.Result{}, roachpb.NewTransactionAbortedError()
+			return result.Result{}, roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 
 		case roachpb.PENDING:
 			if h.Txn.Epoch > tmpTxn.Epoch {
@@ -122,16 +122,12 @@ func BeginTransaction(
 	// See #9265.
 	threshold := cArgs.EvalCtx.GetTxnSpanGCThreshold()
 	if reply.Txn.LastActive().Less(threshold) {
-		return result.Result{}, roachpb.NewTransactionAbortedError()
+		return result.Result{}, roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_BEGIN_TOO_OLD)
 	}
 
-	// Transaction heartbeats don't begin until after the transaction record
-	// has been laid down and the response has returned to the transaction
-	// coordinator. This poses a problem for BeginTxn requests that get
-	// delayed, because it's possible that the transaction records they
-	// write will look inactive immediately after being written. To avoid
-	// this situation resulting in transactions being aborted unnecessarily,
-	// we bump the record's heartbeat timestamp right before laying it down.
+	// Initialize the LastHeartbeat field to the present time. This allows the
+	// transaction record to survive for a while regardless of when the first
+	// heartbeat arrives.
 	reply.Txn.LastHeartbeat.Forward(cArgs.EvalCtx.Clock().Now())
 
 	if !cArgs.EvalCtx.ClusterSettings().Version.IsActive(cluster.VersionClientSideWritingFlag) {

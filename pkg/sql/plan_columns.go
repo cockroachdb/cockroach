@@ -69,6 +69,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.columns
 	case *valuesNode:
 		return n.columns
+	case *virtualTableNode:
+		return n.columns
 	case *explainPlanNode:
 		return n.run.results.columns
 	case *windowNode:
@@ -89,13 +91,15 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return n.resultColumns
 	case *projectSetNode:
 		return n.columns
+	case *lookupJoinNode:
+		return n.columns
 
 	// Nodes with a fixed schema.
 	case *scrubNode:
 		return n.getColumns(mut, scrubColumns)
 	case *explainDistSQLNode:
 		return n.getColumns(mut, sqlbase.ExplainDistSQLColumns)
-	case *testingRelocateNode:
+	case *relocateNode:
 		return n.getColumns(mut, relocateNodeColumns)
 	case *scatterNode:
 		return n.getColumns(mut, scatterNodeColumns)
@@ -124,8 +128,9 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return getPlanColumns(n.source, mut)
 	case *serializeNode:
 		return getPlanColumns(n.source, mut)
-	case *distSQLWrapper:
-		return getPlanColumns(n.plan, mut)
+
+	case *rowSourceToPlanNode:
+		return n.planCols
 	}
 
 	// Every other node has no columns in their results.

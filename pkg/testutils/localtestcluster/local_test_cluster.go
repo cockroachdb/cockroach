@@ -100,7 +100,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	rpcContext := rpc.NewContext(ambient, baseCtx, ltc.Clock, ltc.Stopper, &cfg.Settings.Version)
 	c := &rpcContext.ClusterID
 	server := rpc.NewServer(rpcContext) // never started
-	ltc.Gossip = gossip.New(ambient, c, nc, rpcContext, server, ltc.Stopper, metric.NewRegistry())
+	ltc.Gossip = gossip.New(ambient, c, nc, rpcContext, server, ltc.Stopper, metric.NewRegistry(), roachpb.Locality{})
 	ltc.Eng = engine.NewInMem(roachpb.Attributes{}, 50<<20)
 	ltc.Stopper.AddCloser(ltc.Eng)
 
@@ -109,10 +109,11 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	factory := initFactory(cfg.Settings, nodeDesc, ambient.Tracer, ltc.Clock, ltc.Latency, ltc.Stores, ltc.Stopper, ltc.Gossip)
 	if ltc.DBContext == nil {
 		dbCtx := client.DefaultDBContext()
+		dbCtx.Stopper = ltc.Stopper
 		ltc.DBContext = &dbCtx
 	}
 	ltc.DBContext.NodeID.Set(context.Background(), nodeID)
-	ltc.DB = client.NewDBWithContext(factory, ltc.Clock, *ltc.DBContext)
+	ltc.DB = client.NewDBWithContext(cfg.AmbientCtx, factory, ltc.Clock, *ltc.DBContext)
 	transport := storage.NewDummyRaftTransport(cfg.Settings)
 	// By default, disable the replica scanner and split queue, which
 	// confuse tests using LocalTestCluster.
@@ -150,20 +151,20 @@ func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFacto
 	)
 	cfg.Transport = transport
 	cfg.TimestampCachePageSize = tscache.TestSklPageSize
-	ltc.Store = storage.NewStore(cfg, ltc.Eng, nodeDesc)
 	ctx := context.TODO()
 
-	if err := ltc.Store.Bootstrap(ctx, roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}, cfg.Settings.Version.BootstrapVersion()); err != nil {
+	if err := storage.Bootstrap(ctx, ltc.Eng, roachpb.StoreIdent{NodeID: nodeID, StoreID: 1}, cfg.Settings.Version.BootstrapVersion()); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
-
-	ltc.Stores.AddStore(ltc.Store)
+	ltc.Store = storage.NewStore(cfg, ltc.Eng, nodeDesc)
 	if err := ltc.Store.BootstrapRange(nil, cfg.Settings.Version.ServerVersion); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
 	if err := ltc.Store.Start(ctx, ltc.Stopper); err != nil {
 		t.Fatalf("unable to start local test cluster: %s", err)
 	}
+
+	ltc.Stores.AddStore(ltc.Store)
 	nc.Set(ctx, nodeDesc.NodeID)
 	if err := ltc.Gossip.SetNodeDescriptor(nodeDesc); err != nil {
 		t.Fatalf("unable to set node descriptor: %s", err)

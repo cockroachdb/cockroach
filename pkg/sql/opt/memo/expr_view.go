@@ -16,8 +16,6 @@ package memo
 
 import (
 	"bytes"
-	"fmt"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -101,12 +99,17 @@ func MakeExprView(mem *Memo, best BestExprID) ExprView {
 // bestExprs have been populated). See the struct comment in factory.go for
 // more details about the normalized expression tree.
 func MakeNormExprView(mem *Memo, group GroupID) ExprView {
-	return MakeExprView(mem, BestExprID{group: group, ordinal: normBestOrdinal})
+	return ExprView{mem: mem, group: group, op: mem.NormExpr(group).Operator(), best: normBestOrdinal}
 }
 
 // Operator returns the type of the expression.
 func (ev ExprView) Operator() opt.Operator {
 	return ev.op
+}
+
+// Memo returns the Memo structure over which the ExprView operates.
+func (ev ExprView) Memo() *Memo {
+	return ev.mem
 }
 
 // Logical returns the set of logical properties that this expression provides.
@@ -137,7 +140,7 @@ func (ev ExprView) Child(nth int) ExprView {
 		// normBestOrdinal is the special BestExpr index that indicates traversal
 		// of the normalized expression tree, regardless of whether it's the
 		// lowest cost.
-		group := ev.ChildGroup(nth)
+		group := ev.mem.NormExpr(ev.group).ChildGroup(ev.mem, nth)
 		return MakeNormExprView(ev.mem, group)
 	}
 	return MakeExprView(ev.mem, ev.bestExpr().Child(nth))
@@ -174,7 +177,7 @@ func (ev ExprView) Private() interface{} {
 // operator types refer to the metadata in their private fields. For example,
 // the Scan operator holds a metadata table index.
 func (ev ExprView) Metadata() *opt.Metadata {
-	return ev.mem.metadata
+	return ev.mem.Metadata()
 }
 
 // Cost returns the cost of executing this expression tree, as estimated by the
@@ -201,8 +204,7 @@ func (ev ExprView) Replace(evalCtx *tree.EvalContext, replace ReplaceChildFunc) 
 	}
 	existingExpr := ev.mem.NormExpr(ev.group)
 	newExpr := existingExpr.Replace(ev.mem, replace)
-	newGroup := ev.mem.MemoizeNormExpr(evalCtx, newExpr)
-	return MakeNormExprView(ev.mem, newGroup)
+	return ev.mem.MemoizeNormExpr(evalCtx, newExpr)
 }
 
 func (ev ExprView) childGroup(nth int) *group {
@@ -213,317 +215,38 @@ func (ev ExprView) bestExpr() *BestExpr {
 	return ev.mem.group(ev.group).bestExpr(ev.best)
 }
 
-func (ev ExprView) bestExprID() BestExprID {
-	return BestExprID{group: ev.group, ordinal: ev.best}
-}
-
 // --------------------------------------------------------------------
 // String representation.
 // --------------------------------------------------------------------
 
 // String returns a string representation of this expression for testing and
-// debugging. The output shows all properties of the expression.
+// debugging. The output shows all properties of the expression, except for
+// fully qualified names (when there are no ambiguities).
 func (ev ExprView) String() string {
-	return ev.FormatString(opt.ExprFmtShowAll)
+	return ev.FormatString(ExprFmtHideQualifications)
 }
 
 // FormatString returns a string representation of this expression for testing
 // and debugging. The given flags control which properties are shown.
-func (ev ExprView) FormatString(flags opt.ExprFmtFlags) string {
-	f := opt.MakeExprFmtCtx(ev.Metadata(), flags)
+func (ev ExprView) FormatString(flags ExprFmtFlags) string {
+	f := MakeExprFmtCtx(&bytes.Buffer{}, flags, ev.mem)
 	tp := treeprinter.New()
 	ev.format(&f, tp)
 	return tp.String()
 }
 
-// format constructs a treeprinter view of this expression for testing and
-// debugging. The given flags control which properties are added.
-func (ev ExprView) format(f *opt.ExprFmtCtx, tp treeprinter.Node) {
-	if ExprFmtInterceptor != nil && ExprFmtInterceptor(f, tp, ev) {
-		return
-	}
-	if ev.IsScalar() {
-		ev.formatScalar(f, tp)
-	} else {
-		ev.formatRelational(f, tp)
-	}
-}
-
-func (ev ExprView) formatRelational(f *opt.ExprFmtCtx, tp treeprinter.Node) {
-	var buf bytes.Buffer
-
-	fmt.Fprintf(&buf, "%v", ev.op)
-
-	switch ev.Operator() {
-	case opt.ScanOp, opt.LookupJoinOp, opt.ShowTraceOp, opt.ShowTraceForSessionOp:
-		formatter := ev.mem.makeExprFormatter(&buf)
-		formatter.formatPrivate(ev.Private(), formatNormal)
-	}
-
-	var physProps *props.Physical
-	if ev.best == normBestOrdinal {
-		physProps = &props.Physical{}
-	} else {
-		physProps = ev.Physical()
-	}
-
-	logProps := ev.Logical()
-
-	tp = tp.Child(buf.String())
-
-	// If a particular column presentation is required of the expression, then
-	// print columns using that information.
-	if physProps.Presentation.Defined() {
-		ev.formatPresentation(f, tp, physProps.Presentation)
-	} else {
-		// Special handling to improve the columns display for certain ops.
-		switch ev.Operator() {
-		case opt.ProjectOp:
-			// We want the synthesized column IDs to map 1-to-1 to the projections,
-			// and the pass-through columns at the end.
-
-			// Get the list of columns from the ProjectionsOp, which has the natural
-			// order.
-			def := ev.Child(1).Private().(*ProjectionsOpDef)
-			colList := append(opt.ColList(nil), def.SynthesizedCols...)
-			// Add pass-through columns.
-			def.PassthroughCols.ForEach(func(i int) {
-				colList = append(colList, opt.ColumnID(i))
-			})
-
-			logProps.FormatColList(f, tp, "columns:", colList)
-
-		case opt.ValuesOp:
-			colList := ev.Private().(opt.ColList)
-			logProps.FormatColList(f, tp, "columns:", colList)
-
-		case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
-			opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
-			colMap := ev.Private().(*SetOpColMap)
-			logProps.FormatColList(f, tp, "columns:", colMap.Out)
-
-		default:
-			// Fall back to writing output columns in column id order, with
-			// best guess label.
-			logProps.FormatColSet(f, tp, "columns:", logProps.Relational.OutputCols)
-		}
-	}
-
-	switch ev.Operator() {
-	// Special-case handling for GroupBy private; print grouping columns and
-	// ordering in addition to full set of columns.
-	case opt.GroupByOp:
-		def := ev.Private().(*GroupByDef)
-		groupingColSet := def.GroupingCols
-		ordering := def.Ordering
-		logProps.FormatColSet(f, tp, "grouping columns:", groupingColSet)
-		if ordering.Defined() {
-			tp.Childf("ordering: %s", ordering.String())
-		}
-
-	// Special-case handling for set operators to show the left and right
-	// input columns that correspond to the output columns.
-	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
-		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
-		colMap := ev.Private().(*SetOpColMap)
-		logProps.FormatColList(f, tp, "left columns:", colMap.Left)
-		logProps.FormatColList(f, tp, "right columns:", colMap.Right)
-
-	case opt.ScanOp:
-		def := ev.Private().(*ScanOpDef)
-		if def.Constraint != nil {
-			tp.Childf("constraint: %s", def.Constraint)
-		}
-		if def.HardLimit > 0 {
-			tp.Childf("limit: %d", def.HardLimit)
-		}
-
-	case opt.LookupJoinOp:
-		def := ev.Private().(*LookupJoinDef)
-		tp.Childf("key columns: %v", def.KeyCols)
-	}
-
-	if !f.HasFlags(opt.ExprFmtHideOuterCols) && !logProps.Relational.OuterCols.Empty() {
-		tp.Childf("outer: %s", logProps.Relational.OuterCols.String())
-	}
-
-	if !f.HasFlags(opt.ExprFmtHideRowCard) {
-		if logProps.Relational.Cardinality != props.AnyCardinality {
-			// Suppress cardinality for Scan ops if it's redundant with Limit field.
-			if ev.Operator() != opt.ScanOp || !logProps.Relational.Cardinality.CanBeZero() {
-				tp.Childf("cardinality: %s", logProps.Relational.Cardinality)
-			}
-		}
-	}
-
-	if !f.HasFlags(opt.ExprFmtHideStats) {
-		ev.formatStats(tp, &logProps.Relational.Stats)
-	}
-
-	if !f.HasFlags(opt.ExprFmtHideCost) && ev.best != normBestOrdinal {
-		tp.Childf("cost: %.2f", ev.bestExpr().cost)
-	}
-
-	// Format weak keys.
-	if !f.HasFlags(opt.ExprFmtHideKeys) {
-		ev.formatWeakKeys(tp)
-	}
-
-	if physProps.Ordering.Defined() {
-		tp.Childf("ordering: %s", physProps.Ordering.String())
-	}
-
-	if !f.HasFlags(opt.ExprFmtHideRuleProps) {
-		if !logProps.Relational.Rule.PruneCols.Empty() {
-			tp.Childf("prune: %s", logProps.Relational.Rule.PruneCols.String())
-		}
-	}
-
-	for i := 0; i < ev.ChildCount(); i++ {
-		ev.Child(i).format(f, tp)
-	}
-}
-
-func (ev ExprView) formatStats(tp treeprinter.Node, s *opt.Statistics) {
-	var buf bytes.Buffer
-
-	fmt.Fprintf(&buf, "stats: [rows=%d", s.RowCount)
-	colStats := make(ColumnStatistics, 0, len(s.ColStats)+len(s.MultiColStats))
-	for _, colStat := range s.ColStats {
-		colStats = append(colStats, *colStat)
-	}
-	for _, colStat := range s.MultiColStats {
-		colStats = append(colStats, *colStat)
-	}
-	sort.Sort(colStats)
-	for _, col := range colStats {
-		fmt.Fprintf(&buf, ", distinct%s=%d", col.Cols.String(), col.DistinctCount)
-	}
-	buf.WriteString("]")
-	tp.Child(buf.String())
-}
-
-func (ev ExprView) formatScalar(f *opt.ExprFmtCtx, tp treeprinter.Node) {
-	// Omit empty ProjectionsOp and AggregationsOp.
-	if (ev.Operator() == opt.ProjectionsOp || ev.Operator() == opt.AggregationsOp) &&
-		ev.ChildCount() == 0 {
-		return
-	}
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%v", ev.op)
-	ev.formatScalarPrivate(&buf, ev.Private())
-	ev.FormatScalarProps(f, &buf)
-	tp = tp.Child(buf.String())
-	for i := 0; i < ev.ChildCount(); i++ {
-		child := ev.Child(i)
-		child.format(f, tp)
-	}
-}
-
-// FormatScalarProps writes out a string representation of the scalar
-// properties (with a preceding space); for example:
-//  " [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]"
-func (ev ExprView) FormatScalarProps(f *opt.ExprFmtCtx, buf *bytes.Buffer) {
-	// Don't panic if scalar properties don't yet exist when printing
-	// expression.
-	scalar := ev.Logical().Scalar
-	if scalar == nil {
-		buf.WriteString(" [type=undefined]")
-	} else {
-		showType := true
-		switch ev.Operator() {
-		case opt.ProjectionsOp, opt.AggregationsOp:
-			// Don't show the type of these ops because they are simply tuple
-			// types of their children's types, and the types of children are
-			// already listed.
-			showType = false
-		}
-		hasOuterCols := !f.HasFlags(opt.ExprFmtHideOuterCols) && !scalar.OuterCols.Empty()
-		hasConstraints := !f.HasFlags(opt.ExprFmtHideConstraints) &&
-			scalar.Constraints != nil &&
-			!scalar.Constraints.IsUnconstrained()
-
-		if showType || hasOuterCols || hasConstraints {
-			buf.WriteString(" [")
-			if showType {
-				fmt.Fprintf(buf, "type=%s", scalar.Type)
-				if hasOuterCols || hasConstraints {
-					buf.WriteString(", ")
-				}
-			}
-			if hasOuterCols {
-				fmt.Fprintf(buf, "outer=%s", scalar.OuterCols)
-				if hasConstraints {
-					buf.WriteString(", ")
-				}
-			}
-			if hasConstraints {
-				fmt.Fprintf(buf, "constraints=(%s", scalar.Constraints)
-				if scalar.TightConstraints {
-					buf.WriteString("; tight")
-				}
-				buf.WriteString(")")
-			}
-			buf.WriteString("]")
-		}
-	}
-
-}
-
-func (ev ExprView) formatScalarPrivate(buf *bytes.Buffer, private interface{}) {
-	switch ev.op {
-	case opt.NullOp:
-		// Private is redundant with logical type property.
-		private = nil
-
-	case opt.ProjectionsOp, opt.AggregationsOp:
-		// The private data of these ops was already used to print the output
-		// columns for their containing op (Project or GroupBy), so no need to
-		// print again.
-		private = nil
-	}
-
-	if private != nil {
-		buf.WriteRune(':')
-		formatter := ev.mem.makeExprFormatter(buf)
-		formatter.formatPrivate(private, formatNormal)
-	}
-}
-
-func (ev ExprView) formatPresentation(
-	f *opt.ExprFmtCtx, tp treeprinter.Node, presentation props.Presentation,
-) {
-	logProps := ev.Logical()
-
-	var buf bytes.Buffer
-	buf.WriteString("columns:")
-	for _, col := range presentation {
-		logProps.FormatCol(f, &buf, col.Label, col.ID)
-	}
-	tp.Child(buf.String())
-}
-
-func (ev ExprView) formatWeakKeys(tp treeprinter.Node) {
-	var buf bytes.Buffer
-	rel := ev.Logical().Relational
-	for i, key := range rel.WeakKeys {
-		if i != 0 {
-			buf.WriteRune(' ')
-		}
-		if !key.SubsetOf(rel.NotNullCols) {
-			buf.WriteString("weak")
-		}
-		buf.WriteString(key.String())
-	}
-	if buf.Len() != 0 {
-		tp.Childf("keys: %s", buf.String())
-	}
+// RequestColStat causes a column statistic to be calculated on the expression.
+// This is used for testing.
+func (ev ExprView) RequestColStat(evalCtx *tree.EvalContext, cols opt.ColSet) {
+	var sb statisticsBuilder
+	sb.init(evalCtx, ev.Metadata())
+	sb.colStat(cols, ev)
 }
 
 // HasOnlyConstChildren returns true if all children of ev are constant values
 // (tuples of constant values are considered constant values).
 func HasOnlyConstChildren(ev ExprView) bool {
-	for i := 0; i < ev.ChildCount(); i++ {
+	for i, n := 0, ev.ChildCount(); i < n; i++ {
 		child := ev.Child(i)
 		switch {
 		case child.IsConstValue():
@@ -540,7 +263,3 @@ func HasOnlyConstChildren(ev ExprView) bool {
 func MatchesTupleOfConstants(ev ExprView) bool {
 	return ev.Operator() == opt.TupleOp && HasOnlyConstChildren(ev)
 }
-
-// ExprFmtInterceptor is a callback that can be set to a custom formatting
-// function. If the function returns true, the normal formatting code is bypassed.
-var ExprFmtInterceptor func(f *opt.ExprFmtCtx, tp treeprinter.Node, ev ExprView) bool

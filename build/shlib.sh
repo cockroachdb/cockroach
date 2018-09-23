@@ -22,3 +22,10 @@ retry() {
   echo "$term_red[$n/$n] $1 failed: giving up$term_reset"
   return 1
 }
+
+# `die [ARGS...]` outputs its arguments to stderr, then exits the program with
+# a failing exit code.
+die() {
+  echo "$@" >&2
+  exit 1
+}

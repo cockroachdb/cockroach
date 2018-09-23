@@ -21,11 +21,20 @@ import (
 // VersionKey is a unique identifier for a version of CockroachDB.
 type VersionKey int
 
-// Version constants. To add a version:
+// Version constants.
+//
+// To add a version:
 //   - Add it at the end of this block.
 //   - Add it at the end of the `Versions` block below.
 //   - For major or minor versions, bump BinaryMinimumSupportedVersion. For
 //     example, if introducing the `1.4` release, bump it from `1.2` to `1.3`.
+//
+// To delete a version.
+//   - Remove its associated runtime checks.
+//   - Mark it as "unused" when it is only referenced in this file.
+//   - If the version key after a major or minor version is unused, remove it
+//     and its associated keyedVersion.
+//     - Apply recursively.
 const (
 	VersionBase VersionKey = iota
 	VersionRaftLogTruncationBelowRaft
@@ -34,17 +43,17 @@ const (
 	Version1_1
 	VersionRaftLastIndex
 	VersionMVCCNetworkStats
-	VersionMeta2Splits
+	VersionMeta2Splits // unused
 	VersionRPCNetworkStats
 	VersionRPCVersionCheck
 	VersionClearRange
 	VersionPartitioning
-	VersionLeaseSequence
-	VersionUnreplicatedTombstoneKey
+	VersionLeaseSequence            // unused
+	VersionUnreplicatedTombstoneKey // unused
 	VersionRecomputeStats
 	VersionNoRaftProposalKeys
 	VersionTxnSpanRefresh
-	VersionReadUncommittedRangeLookups
+	VersionReadUncommittedRangeLookups // unused
 	VersionPerReplicaZoneConstraints
 	VersionLeasePreferences
 	Version2_0
@@ -54,6 +63,13 @@ const (
 	VersionImportFormats
 	VersionSecondaryLookupJoins
 	VersionClientSideWritingFlag
+	VersionColumnarTimeSeries
+	VersionTxnCoordMetaInvalidField
+	VersionAsyncConsensus
+	VersionBatchResponse
+	VersionCreateChangefeed
+	VersionRangeMerges
+	VersionBitArrayColumns
 
 	// Add new versions here (step one of two).
 
@@ -226,6 +242,41 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionClientSideWritingFlag,
 		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 6},
 	},
+	{
+		// VersionColumnarTimeSeries is https://github.com/cockroachdb/cockroach/pull/26614.
+		Key:     VersionColumnarTimeSeries,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 7},
+	},
+	{
+		// VersionTxnCoordMetaInvalidField is https://github.com/cockroachdb/cockroach/pull/27420.
+		Key:     VersionTxnCoordMetaInvalidField,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 8},
+	},
+	{
+		// VersionAsyncConsensus is https://github.com/cockroachdb/cockroach/pull/26599.
+		Key:     VersionAsyncConsensus,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 9},
+	},
+	{
+		// VersionBatchResponse is https://github.com/cockroachdb/cockroach/pull/26553.
+		Key:     VersionBatchResponse,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 10},
+	},
+	{
+		// VersionCreateChangefeed is https://github.com/cockroachdb/cockroach/pull/27962.
+		Key:     VersionCreateChangefeed,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 11},
+	},
+	{
+		// VersionRangeMerges is https://github.com/cockroachdb/cockroach/pull/28865.
+		Key:     VersionRangeMerges,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 12},
+	},
+	{
+		// VersionBitArrayColumns is https://github.com/cockroachdb/cockroach/pull/28807.
+		Key:     VersionBitArrayColumns,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 13},
+	},
 
 	// Add new versions here (step two of two).
 
@@ -236,7 +287,7 @@ var (
 	// this binary. If this binary is started using a store marked with an older
 	// version than BinaryMinimumSupportedVersion, then the binary will exit with
 	// an error.
-	BinaryMinimumSupportedVersion = VersionByKey(Version1_1)
+	BinaryMinimumSupportedVersion = VersionByKey(Version2_0)
 
 	// BinaryServerVersion is the version of this binary.
 	//

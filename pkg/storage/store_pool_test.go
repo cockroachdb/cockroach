@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 var uniqueStore = []*roachpb.StoreDescriptor{
@@ -439,22 +440,26 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 			StoreID: 1,
 			Node:    roachpb.NodeDescriptor{NodeID: 1},
 			Capacity: roachpb.StoreCapacity{
-				Capacity:        100,
-				Available:       50,
-				RangeCount:      5,
-				LogicalBytes:    30,
-				WritesPerSecond: 30,
+				Capacity:         100,
+				Available:        50,
+				RangeCount:       5,
+				LeaseCount:       1,
+				LogicalBytes:     30,
+				QueriesPerSecond: 100,
+				WritesPerSecond:  30,
 			},
 		},
 		{
 			StoreID: 2,
 			Node:    roachpb.NodeDescriptor{NodeID: 2},
 			Capacity: roachpb.StoreCapacity{
-				Capacity:        100,
-				Available:       55,
-				RangeCount:      4,
-				LogicalBytes:    25,
-				WritesPerSecond: 25,
+				Capacity:         100,
+				Available:        55,
+				RangeCount:       4,
+				LeaseCount:       2,
+				LogicalBytes:     25,
+				QueriesPerSecond: 50,
+				WritesPerSecond:  25,
 			},
 		},
 	}
@@ -472,6 +477,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 		rs.record(store.Node.NodeID)
 	}
 	manual.Increment(int64(MinStatsDuration + time.Second))
+	replica.leaseholderStats = rs
 	replica.writeStats = rs
 
 	rangeDesc := &roachpb.RangeDescriptor{
@@ -485,10 +491,19 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	if !ok {
 		t.Fatalf("couldn't find StoreDescriptor for Store ID %d", 1)
 	}
-	QPS, _ := replica.writeStats.avgQPS()
-	if expectedBytes, expectedQPS := int64(36), 30+QPS; desc.Capacity.LogicalBytes != expectedBytes || desc.Capacity.WritesPerSecond != expectedQPS {
-		t.Fatalf("expected Logical bytes %d, but got %d, expected WritesPerSecond %f, but got %f",
-			expectedBytes, desc.Capacity.LogicalBytes, expectedQPS, desc.Capacity.WritesPerSecond)
+	QPS, _ := replica.leaseholderStats.avgQPS()
+	WPS, _ := replica.writeStats.avgQPS()
+	if expectedRangeCount := int32(6); desc.Capacity.RangeCount != expectedRangeCount {
+		t.Errorf("expected RangeCount %d, but got %d", expectedRangeCount, desc.Capacity.RangeCount)
+	}
+	if expectedBytes := int64(36); desc.Capacity.LogicalBytes != expectedBytes {
+		t.Errorf("expected logical bytes %d, but got %d", expectedBytes, desc.Capacity.LogicalBytes)
+	}
+	if expectedQPS := float64(100); desc.Capacity.QueriesPerSecond != expectedQPS {
+		t.Errorf("expected QueriesPerSecond %f, but got %f", expectedQPS, desc.Capacity.QueriesPerSecond)
+	}
+	if expectedWPS := 30 + WPS; desc.Capacity.WritesPerSecond != expectedWPS {
+		t.Errorf("expected WritesPerSecond %f, but got %f", expectedWPS, desc.Capacity.WritesPerSecond)
 	}
 
 	sp.updateLocalStoreAfterRebalance(roachpb.StoreID(2), rangeInfo, roachpb.REMOVE_REPLICA)
@@ -496,9 +511,39 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	if !ok {
 		t.Fatalf("couldn't find StoreDescriptor for Store ID %d", 2)
 	}
-	if expectedBytes, expectedQPS := int64(19), 25-QPS; desc.Capacity.LogicalBytes != expectedBytes || desc.Capacity.WritesPerSecond != expectedQPS {
-		t.Fatalf("expected Logical bytes %d, but got %d, expected WritesPerSecond %f, but got %f",
-			expectedBytes, desc.Capacity.LogicalBytes, expectedQPS, desc.Capacity.WritesPerSecond)
+	if expectedRangeCount := int32(3); desc.Capacity.RangeCount != expectedRangeCount {
+		t.Errorf("expected RangeCount %d, but got %d", expectedRangeCount, desc.Capacity.RangeCount)
+	}
+	if expectedBytes := int64(19); desc.Capacity.LogicalBytes != expectedBytes {
+		t.Errorf("expected logical bytes %d, but got %d", expectedBytes, desc.Capacity.LogicalBytes)
+	}
+	if expectedQPS := float64(50); desc.Capacity.QueriesPerSecond != expectedQPS {
+		t.Errorf("expected QueriesPerSecond %f, but got %f", expectedQPS, desc.Capacity.QueriesPerSecond)
+	}
+	if expectedWPS := 25 - WPS; desc.Capacity.WritesPerSecond != expectedWPS {
+		t.Errorf("expected WritesPerSecond %f, but got %f", expectedWPS, desc.Capacity.WritesPerSecond)
+	}
+
+	sp.updateLocalStoresAfterLeaseTransfer(roachpb.StoreID(1), roachpb.StoreID(2), rangeInfo.QueriesPerSecond)
+	desc, ok = sp.getStoreDescriptor(roachpb.StoreID(1))
+	if !ok {
+		t.Fatalf("couldn't find StoreDescriptor for Store ID %d", 1)
+	}
+	if expectedLeaseCount := int32(0); desc.Capacity.LeaseCount != expectedLeaseCount {
+		t.Errorf("expected LeaseCount %d, but got %d", expectedLeaseCount, desc.Capacity.LeaseCount)
+	}
+	if expectedQPS := 100 - QPS; desc.Capacity.QueriesPerSecond != expectedQPS {
+		t.Errorf("expected QueriesPerSecond %f, but got %f", expectedQPS, desc.Capacity.QueriesPerSecond)
+	}
+	desc, ok = sp.getStoreDescriptor(roachpb.StoreID(2))
+	if !ok {
+		t.Fatalf("couldn't find StoreDescriptor for Store ID %d", 2)
+	}
+	if expectedLeaseCount := int32(3); desc.Capacity.LeaseCount != expectedLeaseCount {
+		t.Errorf("expected LeaseCount %d, but got %d", expectedLeaseCount, desc.Capacity.LeaseCount)
+	}
+	if expectedQPS := 50 + QPS; desc.Capacity.QueriesPerSecond != expectedQPS {
+		t.Errorf("expected QueriesPerSecond %f, but got %f", expectedQPS, desc.Capacity.QueriesPerSecond)
 	}
 }
 
@@ -519,6 +564,13 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	cfg := TestStoreConfig(clock)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 	store := NewStore(cfg, eng, &node)
+	// Fake an ident because this test doesn't want to start the store
+	// but without an Ident there will be NPEs.
+	store.Ident = &roachpb.StoreIdent{
+		ClusterID: uuid.Nil,
+		StoreID:   1,
+		NodeID:    1,
+	}
 
 	// Create replica.
 	rg := roachpb.RangeDescriptor{
@@ -530,6 +582,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("make replica error : %s", err)
 	}
+	replica.leaseholderStats = newReplicaStats(store.Clock(), nil)
 
 	rangeInfo := rangeInfoForRepl(replica, &rg)
 

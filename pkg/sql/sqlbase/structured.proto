@@ -21,11 +21,101 @@ import "util/hlc/timestamp.proto";
 import "sql/sqlbase/privilege.proto";
 import "gogoproto/gogo.proto";
 
+
+// Protobuf encoding for scalar values
+// ===================================
+//
+// Simple (unary) scalars types
+// ----------------------------
+//
+// | SQL type          | Semantic Type  | Visible Type | Precision | Width | Notes            |
+// |-------------------|----------------|--------------|-----------|-------|------------------|
+// | NULL (unknown)    | NULL           | NONE         | 0         | 0     |                  |
+// | BOOL              | BOOL           | NONE         | 0         | 0     |                  |
+// | DATE              | DATE           | NONE         | 0         | 0     |                  |
+// | TIMESTAMP         | TIMESTAMP      | NONE         | 0         | 0     |                  |
+// | TIMESTAMPTZ       | TIMESTAMPTZ    | NONE         | 0         | 0     |                  |
+// | INTERVAL          | INTERVAL       | NONE         | 0         | 0     |                  |
+// | NAME              | NAME           | NONE         | 0         | 0     |                  |
+// | OID               | OID            | NONE         | 0         | 0     |                  |
+// | UUID              | UUID           | NONE         | 0         | 0     |                  |
+// | INET              | INET           | NONE         | 0         | 0     |                  |
+// | TIME              | TIME           | NONE         | 0         | 0     |                  |
+// | JSON              | JSON           | NONE         | 0         | 0     |                  |
+// |                   |                |              |           |       |                  |
+// | BYTES             | BYTES          | NONE         | 0         | 0     |                  |
+// |                   |                |              |           |       |                  |
+// | STRING            | STRING         | NONE         | 0         | 0     |                  |
+// | STRING(N)         | STRING         | NONE         | 0         | N     |                  |
+// | VARCHAR           | STRING         | VARCHAR      | 0         | 0     |                  |
+// | VARCHAR(N)        | STRING         | VARCHAR      | 0         | N     |                  |
+// | CHAR              | STRING         | CHAR         | 0         | 1     |                  |
+// | CHAR(N)           | STRING         | CHAR         | 0         | N     |                  |
+// | "char"            | STRING         | QCHAR        | 0         | 0     |                  |
+// |                   |                |              |           |       |                  |
+// | COLLATEDSTRING    | COLLATEDSTRING | NONE         | 0         | 0     | also uses Locale |
+// | COLLATEDSTRING(N) | COLLATEDSTRING | NONE         | 0         | N     | also uses Locale |
+// |                   |                |              |           |       |                  |
+// | DECIMAL           | DECIMAL        | NONE         | 0         | 0     |                  |
+// | DECIMAL(N)        | DECIMAL        | NONE         | N         | 0     |                  |
+// | DECIMAL(N,M)      | DECIMAL        | NONE         | N         | M     |                  |
+// |                   |                |              |           |       |                  |
+// | FLOAT8            | FLOAT          | NONE         | 0         | 0     |                  |
+// | FLOAT4            | FLOAT          | REAL         | 0         | 0     |                  |
+// |                   |                |              |           |       |                  |
+// | BIT               | BIT            | NONE         | 0         | 1     |                  |
+// | BIT(N)            | BIT            | NONE         | 0         | N     |                  |
+// | VARBIT            | BIT            | VARBIT       | 0         | 0     |                  |
+// | VARBIT(N)         | BIT            | VARBIT       | 0         | N     |                  |
+// |                   |                |              |           |       |                  |
+// | INT,INTEGER       | INT            | NONE         | 0         | 0     |                  |
+// | INT2,SMALLINT     | INT            | NONE         | 0         | 16    |                  |
+// | INT4              | INT            | NONE         | 0         | 32    |                  |
+// | INT8,INT64,BIGINT | INT            | NONE         | 0         | 64    |                  |
+//
+// Tuple columns
+// -------------
+//
+// These cannot (yet) be used in tables but are used in DistSQL flow
+// processors for queries that have tuple-typed intermediate results.
+//
+// - SemanticType is set to TUPLE.
+// - TupleContents contains the tuple element types. These can be recursively defined.
+// - TupleLabels contains the tuple labels, if any.
+//
+// Array values
+// ------------
+//
+// | Field           | Description                                                         |
+// |-----------------|---------------------------------------------------------------------|
+// | SemanticType    | ARRAY (with 2 exceptions, see below)                                |
+// | ArrayDimensions | array sizes in each dimension.                                      |
+// | ArrayContents   | semantic type of the array elements, as per the two sections above. |
+// | VisibleType     | describes the element type like above.                              |
+// | Width           | describes the element type like above.                              |
+// | Precision       | describes the element type like above.                              |
+// | TupleContents   | describes the element type like above. (Arrays of tuples)           |
+// | TupleLabels     | describes the element type like above. (Arrays of tuples)           |
+//
+// If the original type was INT2VECTOR or OIDVECTOR, the semantic type is set to that. The
+// other fields are set as per regular arrays:
+//
+// - INT2VECTOR: SemanticType=INT2VECTOR, ArrayContents=INT,
+//   VisibleType=NONE, Width=0, Prec=0, TupleContents/Labels=nil
+// - OIDVECTOR: SemanticType=OIDVECTOR, ArrayContents=OID,
+//   VisibleType=NONE, Width=0, Prec=0, TupleContents/Labels=nil
+//
+
 message ColumnType {
   option (gogoproto.equal) = true;
 
-  // These mirror the types supported by the sql/parser. See
-  // sql/parser/col_types.go.
+  // These mirror the types supported by sql/coltypes.
+  //
+  // Note: when adding constants to this list or renaming constants,
+  // verify with PostgreSQL what the type name should be in
+  // information_schema.columns.data_type, and modify
+  // (*ColumnType).InformationSchemaVisibleType() accordingly.
+  //
   enum SemanticType {
     BOOL = 0;
     INT = 1;        // INT(width)
@@ -55,9 +145,10 @@ message ColumnType {
     ARRAY = 15;
     INET = 16;
     TIME = 17;
-    JSON = 18;
-    TIMETZ = 19;
+    JSONB = 18;
+    reserved 19; // Reserved for TIMETZ if/when fully implemented. See #26097.
     TUPLE = 20;
+	BIT = 21;
 
     INT2VECTOR = 200;
     OIDVECTOR = 201;
@@ -65,18 +156,23 @@ message ColumnType {
 
   enum VisibleType {
     NONE = 0;
-    INTEGER = 1;
-    SMALLINT = 2;
-    BIGINT = 3;
-    BIT = 4;
+    INTEGER = 1;   // Deprecated, remove post-2.2.
+    SMALLINT = 2;  // Deprecated, remove post-2.2.
+    BIGINT = 3;    // Deprecated, remove post-2.2.
+    reserved 4;
     REAL = 5;
-    DOUBLE_PRECISION = 6;
+    DOUBLE_PRECISION = 6; // Deprecated, remove post-2.2.
+    VARCHAR = 7;
+    CHAR = 8;
+    QCHAR = 9;
+	VARBIT = 10;
   }
 
   optional SemanticType semantic_type = 1 [(gogoproto.nullable) = false];
-  // BIT, INT, FLOAT, DECIMAL, CHAR and BINARY
+  // INT, DECIMAL, CHAR and BINARY
   optional int32 width = 2 [(gogoproto.nullable) = false];
-  // FLOAT and DECIMAL.
+  // DECIMAL
+  // Also FLOAT pre-2.1 (this was incorrect.)
   optional int32 precision = 3 [(gogoproto.nullable) = false];
   // The length of each dimension in the array. A dimension of -1 means that
   // no bound was specified for that dimension.
@@ -91,6 +187,7 @@ message ColumnType {
   optional SemanticType array_contents = 7;
   // Only used if the kind is TUPLE
   repeated ColumnType tuple_contents = 8 [(gogoproto.nullable) = false];
+  repeated string tuple_labels = 9;
 }
 
 enum ConstraintValidity {
@@ -461,48 +558,25 @@ message TableDescriptor {
       (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
   // Monotonically increasing version of the table descriptor.
   //
-  // Invariants:
-  // 1. not more than two subsequent versions of the table
-  // descriptor can be leased. This is to make the system
-  // easy to reason about, by permitting mutation state
-  // changes (reflected in the next version), only when the existing
-  // state (reflected in the current version) is present on all
-  // outstanding unexpired leases.
-  // 2. A schema change command (ALTER, RENAME, etc) never directly
-  // increments the version. This allows the command to execute without
-  // waiting for the entire cluster to converge to a single version
-  // preventing weird deadlock situations. For instance, a transaction
-  // with a schema change command might use a descriptor lease that is
-  // at version: v - 1, and therefore deadlock when it tries to wait
-  // for version: v, in the process of incrementing it to v + 1.
-  // Therefore, a schema change command never increments the version,
-  // and instead, sets the up_version boolean to notify the schema
-  // changer execution engine that runs a future transaction to
-  // increment the version.
+  // The design maintains two invariant:
+  // 1. Two safe versions: A transaction at a particular timestamp is
+  //    allowed to use one of two versions of a table descriptor:
+  //    the one that would be read from the store at that timestamp,
+  //    and the one behind it in version.
+  // 2. Two leased version: There can be valid leases on at most the 2
+  //    latest versions of a table in the cluster at any time. New leases
+  //    are only granted on the latest version.
   //
-  // The schema change commands must therefore make *safe* modifications
-  // to the table descriptor, such as scheduling long running schema
-  // changes through mutations for future execution, or making simple
-  // schema changes like RENAME that only modify the table descriptor in a
-  // single transaction.
+  // The database must maintain correctness in light of there being two
+  // versions of a descriptor that can be used.
   //
-  // Multiple schema changes in the same transaction set up_version.
-  // The actual schema change execution that follows a schema change
-  // command sees the up_version boolean set, and increments the
-  // table version after ensuring that there are no unexpired leases
-  // for version - 1. The schema change execution must increment
-  // the version before executing future state changes, to ensure
-  // that the scheduled mutations made by the original commands are
-  // visible on all leases. Multiple schema change mutations can be
-  // grouped together on a particular version increment.
-  //
-  // If schema change commands are safe to run without incrementing
-  // the version, why do it later on? We increment the version
-  // to ensure that all the nodes renew their leases with the new version
-  // and get to see what the schema change command has done quickly.
+  // Multiple schema change mutations can be grouped together on a
+  // particular version increment.
   optional uint32 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
-  // See comment above.
+
+  // Do not use. On the path to deprecation.
   optional bool up_version = 6 [(gogoproto.nullable) = false];
+
   // Last modification time of the table descriptor.
   optional util.hlc.Timestamp modification_time = 7 [(gogoproto.nullable) = false];
   repeated ColumnDescriptor columns = 8 [(gogoproto.nullable) = false];
@@ -718,6 +792,8 @@ message TableDescriptor {
     optional int64 max_value = 3 [(gogoproto.nullable) = false];
     // Start value of the sequence.
     optional int64 start = 4 [(gogoproto.nullable) = false];
+    // Whether the sequence is virtual.
+    optional bool virtual = 5 [(gogoproto.nullable) = false];
   }
 
   // The presence of sequence_opts indicates that this descriptor is for a sequence.
@@ -749,6 +825,10 @@ message TableDescriptor {
     READWRITE = 1;
   }
   optional AuditMode audit_mode = 31 [(gogoproto.nullable) = false];
+
+  // The job id for a drop job is the id in the system.jobs table of the
+  // dropping of this table.
+  optional int64 drop_job_id = 32 [(gogoproto.nullable) = false, (gogoproto.customname) = "DropJobID"];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

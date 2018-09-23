@@ -17,23 +17,26 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
 var sstOutputTypes = []sqlbase.ColumnType{
 	{SemanticType: sqlbase.ColumnType_STRING},
-	{SemanticType: sqlbase.ColumnType_INT},
+	{SemanticType: sqlbase.ColumnType_BYTES},
 	{SemanticType: sqlbase.ColumnType_BYTES},
 	{SemanticType: sqlbase.ColumnType_BYTES},
 	{SemanticType: sqlbase.ColumnType_BYTES},
@@ -71,7 +74,7 @@ type sstWriter struct {
 	input       distsqlrun.RowSource
 	out         distsqlrun.ProcOutputHelper
 	output      distsqlrun.RowReceiver
-	tempStorage engine.Engine
+	tempStorage diskmap.Factory
 	settings    *cluster.Settings
 	registry    *jobs.Registry
 	progress    distsqlrun.JobProgress
@@ -99,14 +102,14 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 		if err != nil {
 			return err
 		}
-		samples := job.Payload().Details.(*jobs.Payload_Import).Import.Tables[0].Samples
+		samples := job.Details().(jobspb.ImportDetails).Samples
 
 		// Sort incoming KVs, which will be from multiple spans, into a single
 		// RocksDB instance.
 		types := sp.input.OutputTypes()
 		input := distsqlrun.MakeNoMetadataRowSource(sp.input, sp.output)
 		alloc := &sqlbase.DatumAlloc{}
-		store := engine.NewRocksDBMultiMap(sp.tempStorage)
+		store := sp.tempStorage.NewSortedDiskMultiMap()
 		defer store.Close(ctx)
 		batch := store.NewBatchWriter()
 		var key, val []byte
@@ -181,7 +184,7 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 						scatterReq := &roachpb.AdminScatterRequest{
 							RequestHeader: roachpb.RequestHeaderFromSpan(sst.span),
 						}
-						if _, pErr := client.SendWrapped(ctx, sp.db.GetSender(), scatterReq); pErr != nil {
+						if _, pErr := client.SendWrapped(ctx, sp.db.NonTransactionalSender(), scatterReq); pErr != nil {
 							// TODO(dan): Unfortunately, Scatter is still too unreliable to
 							// fail the IMPORT when Scatter fails. I'm uncomfortable that
 							// this could break entirely and not start failing the tests,
@@ -212,14 +215,19 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 						}
 					}
 
+					countsBytes, err := protoutil.Marshal(&sst.counts)
+					if err != nil {
+						return err
+					}
+
 					row := sqlbase.EncDatumRow{
 						sqlbase.DatumToEncDatum(
 							sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
 							tree.NewDString(name),
 						),
 						sqlbase.DatumToEncDatum(
-							sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
-							tree.NewDInt(tree.DInt(len(sst.data))),
+							sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+							tree.NewDBytes(tree.DBytes(countsBytes)),
 						),
 						sqlbase.DatumToEncDatum(
 							sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
@@ -251,8 +259,8 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 			// There's no direct way to return an error from the Progressed()
 			// callback when decoding the span.End key.
 			var progressErr error
-			if err := job.Progressed(ctx, func(ctx context.Context, details jobs.ProgressDetails) float32 {
-				d := details.(*jobs.Progress_Import).Import
+			if err := job.FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+				d := details.(*jobspb.Progress_Import).Import
 				d.WriteProgress[sp.progress.Slot] = float32(i+1) / float32(len(sp.spec.Spans)) * sp.progress.Contribution
 
 				// Fold the newly-completed span into existing progress.  Since
@@ -265,19 +273,27 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 						key := roachpb.Key(samples[i])
 						return key.Compare(span.End) >= 0
 					})
-					finished := roachpb.Span{EndKey: span.End}
-					// Special case: if we're processing the first span, we want
-					// to mark the table key itself as being complete.  This
-					// means that at the end of importing, the table's entire
-					// key-space will be marked as complete.
-					if idx == 0 {
-						_, table, err := keys.DecodeTablePrefix(span.End)
-						if err != nil {
-							return errors.Wrapf(err, "expected a table key, had %s", span.End)
+					var finished roachpb.Span
+					// Mark the processed span as done for resume. If it was the first or last
+					// span, use min or max key. This is easier than trying to correctly determine
+					// the table ID we imported and getting its start span because span.End
+					// might be (in the case of an empty table) the start key of the next table.
+					switch idx {
+					case 0:
+						finished = roachpb.Span{
+							Key:    keys.MinKey,
+							EndKey: span.End,
 						}
-						finished.Key = keys.MakeTablePrefix(uint32(table))
-					} else {
-						finished.Key = samples[idx-1]
+					case len(samples):
+						finished = roachpb.Span{
+							Key:    samples[idx-1],
+							EndKey: keys.MaxKey,
+						}
+					default:
+						finished = roachpb.Span{
+							Key:    samples[idx-1],
+							EndKey: span.End,
+						}
 					}
 					var sg roachpb.SpanGroup
 					sg.Add(d.SpanProgress...)
@@ -299,10 +315,11 @@ func (sp *sstWriter) Run(ctx context.Context, wg *sync.WaitGroup) {
 }
 
 type sstContent struct {
-	data []byte
-	size int64
-	span roachpb.Span
-	more bool
+	data   []byte
+	size   int64
+	span   roachpb.Span
+	more   bool
+	counts roachpb.BulkOpSummary
 }
 
 const errSSTCreationMaybeDuplicateTemplate = "SST creation error at %s; this can happen when a primary or unique index has duplicate keys"
@@ -313,7 +330,7 @@ const errSSTCreationMaybeDuplicateTemplate = "SST creation error at %s; this can
 // if not nil, will stop processing at the specified key.
 func makeSSTs(
 	ctx context.Context,
-	it engine.SortedDiskMapIterator,
+	it diskmap.SortedDiskMapIterator,
 	sstMaxSize int64,
 	contentCh chan<- sstContent,
 	walltime int64,
@@ -326,12 +343,14 @@ func makeSSTs(
 	}
 	defer sst.Close()
 
+	var counts storageccl.RowCounter
 	var writtenKVs int
 	writeSST := func(key, endKey roachpb.Key, more bool) error {
 		data, err := sst.Finish()
 		if err != nil {
 			return err
 		}
+		counts.BulkOpSummary.DataSize = sst.DataSize
 		sc := sstContent{
 			data: data,
 			size: sst.DataSize,
@@ -339,13 +358,16 @@ func makeSSTs(
 				Key:    key,
 				EndKey: endKey,
 			},
-			more: more,
+			more:   more,
+			counts: counts.BulkOpSummary,
 		}
+
 		select {
 		case contentCh <- sc:
 		case <-ctx.Done():
 			return ctx.Err()
 		}
+		counts.Reset()
 		sst.Close()
 		if progressFn != nil {
 			if err := progressFn(writtenKVs); err != nil {
@@ -409,9 +431,14 @@ func makeSSTs(
 				defer sst.Close()
 			}
 		}
+
 		if err := sst.Add(kv); err != nil {
 			return errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, kv.Key.Key)
 		}
+		if err := counts.Count(kv.Key.Key); err != nil {
+			return errors.Wrapf(err, "failed to count key")
+		}
+
 		if sst.DataSize > sstMaxSize && lastKey == nil {
 			// When we would like to split the file, proceed until we aren't in the
 			// middle of a row. Start by finding the next safe split key.
@@ -422,6 +449,7 @@ func makeSSTs(
 			lastKey = lastKey.PrefixEnd()
 		}
 	}
+
 	if sst.DataSize > 0 {
 		// Although we don't need to avoid row splitting here because there aren't any
 		// more keys to read, we do still want to produce the same kind of lastKey

@@ -17,11 +17,15 @@ package ts_test
 import (
 	"context"
 	"fmt"
+	"io"
+	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/kr/pretty"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
@@ -344,6 +348,97 @@ func TestServerQueryMemoryManagement(t *testing.T) {
 		Queries:    queries,
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestServerDump(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.TODO())
+	tsrv := s.(*server.TestServer)
+
+	seriesCount := 10
+	sourceCount := 5
+	// Number of slabs (hours) of data we want to generate
+	slabCount := 5
+	// Generated datapoints every 100 seconds, so compute how many we want to
+	// generate data across the target number of hours.
+	valueCount := int(ts.Resolution10s.SlabDuration()/(100*1e9)) * slabCount
+
+	if err := populateSeries(seriesCount, sourceCount, valueCount, tsrv.TsDB()); err != nil {
+		t.Fatal(err)
+	}
+
+	conn, err := tsrv.RPCContext().GRPCDial(tsrv.Cfg.Addr).Connect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := tspb.NewTimeSeriesClient(conn)
+
+	dumpClient, err := client.Dump(context.TODO(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Read data from dump command.
+	resultMap := make(map[string]map[string]tspb.TimeSeriesData)
+	totalMsgCount := 0
+	for {
+		msg, err := dumpClient.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The dump will include all of the real time series metrics recorded by the
+		// server. Filter out everything other than the metrics we are creating
+		// for this test.
+		if !strings.HasPrefix(msg.Name, "metric.") {
+			continue
+		}
+		sourceMap, ok := resultMap[msg.Name]
+		if !ok {
+			sourceMap = make(map[string]tspb.TimeSeriesData)
+			resultMap[msg.Name] = sourceMap
+		}
+		if data, ok := sourceMap[msg.Source]; !ok {
+			sourceMap[msg.Source] = *msg
+		} else {
+			data.Datapoints = append(data.Datapoints, msg.Datapoints...)
+			sourceMap[msg.Source] = data
+		}
+		totalMsgCount++
+	}
+
+	// Generate expected data.
+	expectedMap := make(map[string]map[string]tspb.TimeSeriesData)
+	for series := 0; series < seriesCount; series++ {
+		sourceMap := make(map[string]tspb.TimeSeriesData)
+		expectedMap[seriesName(series)] = sourceMap
+		for source := 0; source < sourceCount; source++ {
+			sourceMap[sourceName(source)] = tspb.TimeSeriesData{
+				Name:       seriesName(series),
+				Source:     sourceName(source),
+				Datapoints: generateTimeSeriesDatapoints(valueCount),
+			}
+		}
+	}
+
+	if a, e := totalMsgCount, seriesCount*sourceCount*slabCount; a != e {
+		t.Fatalf("dump returned %d messages, expected %d", a, e)
+	}
+	if a, e := resultMap, expectedMap; !reflect.DeepEqual(a, e) {
+		for _, diff := range pretty.Diff(a, e) {
+			t.Error(diff)
+		}
 	}
 }
 

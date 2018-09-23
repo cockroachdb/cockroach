@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -139,6 +140,22 @@ func (r RangeDescriptor) IsInitialized() bool {
 	return len(r.EndKey) != 0
 }
 
+// GetGeneration returns the generation of this RangeDescriptor.
+func (r RangeDescriptor) GetGeneration() int64 {
+	if r.Generation != nil {
+		return *r.Generation
+	}
+	return 0
+}
+
+// IncrementGeneration increments the generation of this RangeDescriptor.
+func (r *RangeDescriptor) IncrementGeneration() {
+	// Create a new *int64 for the new generation. We permit shallow copies of
+	// RangeDescriptors, so we need to be careful not to mutate the
+	// potentially-shared generation counter.
+	r.Generation = proto.Int64(r.GetGeneration() + 1)
+}
+
 // Validate performs some basic validation of the contents of a range descriptor.
 func (r RangeDescriptor) Validate() error {
 	if r.NextReplicaID == 0 {
@@ -182,7 +199,7 @@ func (r RangeDescriptor) String() string {
 	} else {
 		buf.WriteString("<no replicas>")
 	}
-	fmt.Fprintf(&buf, ", next=%d]", r.NextReplicaID)
+	fmt.Fprintf(&buf, ", next=%d, gen=%d]", r.NextReplicaID, r.GetGeneration())
 
 	return buf.String()
 }
@@ -255,11 +272,11 @@ func (p Percentiles) String() string {
 // String returns a string representation of the StoreCapacity.
 func (sc StoreCapacity) String() string {
 	return fmt.Sprintf("disk (capacity=%s, available=%s, used=%s, logicalBytes=%s), "+
-		"ranges=%d, leases=%d, writes=%.2f, "+
+		"ranges=%d, leases=%d, queries=%.2f, writes=%.2f, "+
 		"bytesPerReplica={%s}, writesPerReplica={%s}",
 		humanizeutil.IBytes(sc.Capacity), humanizeutil.IBytes(sc.Available),
 		humanizeutil.IBytes(sc.Used), humanizeutil.IBytes(sc.LogicalBytes),
-		sc.RangeCount, sc.LeaseCount, sc.WritesPerSecond,
+		sc.RangeCount, sc.LeaseCount, sc.QueriesPerSecond, sc.WritesPerSecond,
 		sc.BytesPerReplica, sc.WritesPerReplica)
 }
 

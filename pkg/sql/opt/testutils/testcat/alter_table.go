@@ -38,16 +38,12 @@ func (tc *Catalog) AlterTable(stmt *tree.AlterTable) {
 
 	// Update the table name to include catalog and schema if not provided.
 	tc.qualifyTableName(tn)
-
-	table, ok := tc.tables[tn.FQString()]
-	if !ok {
-		panic(fmt.Sprintf("cannot find table %q", tree.ErrString(tn)))
-	}
+	tab := tc.Table(tn)
 
 	for _, cmd := range stmt.Cmds {
 		switch t := cmd.(type) {
 		case *tree.AlterTableInjectStats:
-			injectTableStats(table, t.Stats)
+			injectTableStats(tab, t.Stats)
 
 		default:
 			panic(fmt.Sprintf("unsupported ALTER TABLE command %T", t))

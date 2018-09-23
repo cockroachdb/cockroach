@@ -18,10 +18,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -30,10 +29,13 @@ import (
 // process. As part of the build process, it performs name resolution and
 // type checking on the expressions within Builder.stmt.
 //
-// The memo structure is the primary data structure used for query
-// optimization, so building the memo is the first step required to
-// optimize a query. The memo is maintained inside Builder.factory,
-// which exposes methods to construct expression groups inside the memo.
+// The memo structure is the primary data structure used for query optimization,
+// so building the memo is the first step required to optimize a query. The memo
+// is maintained inside Builder.factory, which exposes methods to construct
+// expression groups inside the memo. Once the expression tree has been built,
+// the builder calls SetRoot on the memo to indicate the root memo group, as
+// well as the set of physical properties (e.g., row and column ordering) that
+// at least one expression in the root group must satisfy.
 //
 // A memo is essentially a compact representation of a forest of logically-
 // equivalent query trees. Each tree is either a logical or a physical plan
@@ -54,12 +56,10 @@ type Builder struct {
 	// interfacing with the old planning code.
 	AllowUnsupportedExpr bool
 
-	// AllowImpureFuncs is a control knob: if set, when building a scalar, the
-	// builder will not panic when it encounters an impure function. While the
-	// cost-based optimizer does not currently handle impure functions, the
-	// heuristic planner can handle them (and uses the builder code for index
-	// constraints).
-	AllowImpureFuncs bool
+	// KeepPlaceholders is a control knob: if set, optbuilder will never replace
+	// a placeholder operator with its assigned value, even when it is available.
+	// This is used when re-preparing invalidated queries.
+	KeepPlaceholders bool
 
 	// FmtFlags controls the way column names are formatted in test output. For
 	// example, if set to FmtAlwaysQualifyTableNames, the builder fully qualifies
@@ -69,16 +69,33 @@ type Builder struct {
 	// case.
 	FmtFlags tree.FmtFlags
 
+	// IsCorrelated is set to true during semantic analysis if a scalar variable was
+	// pulled from an outer scope, that is, if the query was found to be correlated.
+	IsCorrelated bool
+
 	factory *norm.Factory
 	stmt    tree.Statement
 
-	ctx     context.Context
-	semaCtx *tree.SemaContext
-	evalCtx *tree.EvalContext
-	catalog opt.Catalog
+	ctx              context.Context
+	semaCtx          *tree.SemaContext
+	evalCtx          *tree.EvalContext
+	catalog          opt.Catalog
+	exprTransformCtx transform.ExprTransformContext
+	scopeAlloc       []scope
 
-	// Skip index 0 in order to reserve it to indicate the "unknown" column.
-	colMap []scopeColumn
+	// If set, the planner will skip checking for the SELECT privilege when
+	// resolving data sources (tables, views, etc). This is used when compiling
+	// views and the view SELECT privilege has already been checked. This should
+	// be used with care.
+	skipSelectPrivilegeChecks bool
+
+	// views contains a cache of views that have already been parsed, in case they
+	// are referenced multiple times in the same query.
+	views map[opt.View]*tree.Select
+
+	// subquery contains a pointer to the subquery which is currently being built
+	// (if any).
+	subquery *subquery
 }
 
 // New creates a new Builder structure initialized with the given
@@ -94,7 +111,6 @@ func New(
 	return &Builder{
 		factory: factory,
 		stmt:    stmt,
-		colMap:  make([]scopeColumn, 1),
 		ctx:     ctx,
 		semaCtx: semaCtx,
 		evalCtx: evalCtx,
@@ -106,12 +122,9 @@ func New(
 // Builder.factory from the parsed SQL statement in Builder.stmt. See the
 // comment above the Builder type declaration for details.
 //
-// The first return value `root` is the group ID of the root memo group.
-// The second return value `required` is the set of physical properties
-// (e.g., row and column ordering) that are required of the root memo group.
 // If any subroutines panic with a builderError as part of the build process,
 // the panic is caught here and returned as an error.
-func (b *Builder) Build() (root memo.GroupID, required *props.Physical, err error) {
+func (b *Builder) Build() (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			// This code allows us to propagate builder errors without adding
@@ -126,10 +139,12 @@ func (b *Builder) Build() (root memo.GroupID, required *props.Physical, err erro
 		}
 	}()
 
-	outScope := b.buildStmt(b.stmt, &scope{builder: b})
-	root = outScope.group
-	outScope.setPresentation()
-	return root, &outScope.physicalProps, nil
+	// Build the memo, and call SetRoot on the memo to indicate the root group
+	// and physical properties.
+	outScope := b.buildStmt(b.stmt, b.allocScope())
+	physical := b.factory.Memo().InternPhysicalProps(outScope.makePhysicalProps())
+	b.factory.Memo().SetRoot(outScope.group, physical)
+	return nil
 }
 
 // builderError is used for semantic errors that occur during the build process
@@ -174,10 +189,22 @@ func (b *Builder) buildStmt(stmt tree.Statement, inScope *scope) (outScope *scop
 	case *tree.Explain:
 		return b.buildExplain(stmt, inScope)
 
-	case *tree.ShowTrace:
+	case *tree.ShowTraceForSession:
 		return b.buildShowTrace(stmt, inScope)
 
 	default:
 		panic(unimplementedf("unsupported statement: %T", stmt))
 	}
+}
+
+func (b *Builder) allocScope() *scope {
+	if len(b.scopeAlloc) == 0 {
+		// scope is relatively large (~250 bytes), so only allocate in small
+		// chunks.
+		b.scopeAlloc = make([]scope, 4)
+	}
+	r := &b.scopeAlloc[0]
+	b.scopeAlloc = b.scopeAlloc[1:]
+	r.builder = b
+	return r
 }

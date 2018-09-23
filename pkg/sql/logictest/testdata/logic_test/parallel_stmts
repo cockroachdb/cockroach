@@ -397,9 +397,51 @@ DELETE FROM kv WHERE k = 1 RETURNING NOTHING
 # If any of the previous three statements are reordered, this result of this
 # query will not be correct.
 query I
-SELECT COUNT(*) FROM kv WHERE k = 2
+SELECT count(*) FROM kv WHERE k = 2
 ----
 1
 
 statement ok
 ROLLBACK
+
+
+# Parallel statements can be prepared and executed.
+
+statement ok
+PREPARE x AS INSERT INTO kv VALUES ($1, $2) RETURNING NOTHING
+
+statement ok
+BEGIN
+
+statement ok
+EXECUTE x(1, 2)
+
+statement ok
+EXECUTE x(1, 2)
+
+# We know the ParallelizeQueue was used because the error was not returned
+# when the statement was EXECUTED.
+statement error duplicate key value \(k\)=\(1\) violates unique constraint "primary"
+COMMIT
+
+statement ok
+BEGIN
+
+statement ok
+EXECUTE x(1, 2)
+
+statement ok
+EXECUTE x(2, 3)
+
+statement ok
+EXECUTE x(3, 4)
+
+statement ok
+COMMIT
+
+query II
+SELECT k, v FROM kv ORDER BY k
+----
+1  2
+2  3
+3  4

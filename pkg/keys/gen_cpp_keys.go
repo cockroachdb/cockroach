@@ -73,6 +73,7 @@ namespace cockroach {
 	genKey(keys.LocalRangeIDReplicatedInfix, "LocalRangeIDReplicatedInfix")
 	genKey(keys.LocalRangeAppliedStateSuffix, "LocalRangeAppliedStateSuffix")
 	genKey(keys.Meta2KeyMax, "Meta2KeyMax")
+	genKey(keys.MaxKey, "MaxKey")
 	fmt.Fprintf(f, "\n")
 
 	genSortedSpans := func(spans []roachpb.Span, name string) {
@@ -91,7 +92,6 @@ namespace cockroach {
 		fmt.Fprintf(f, "};\n")
 	}
 	genSortedSpans(keys.NoSplitSpans, "NoSplitSpans")
-	genSortedSpans(keys.NoSplitSpansWithoutMeta2Splits, "NoSplitSpansWithoutMeta2Splits")
 
 	fmt.Fprintf(f, `
 }  // namespace cockroach

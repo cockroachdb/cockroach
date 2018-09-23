@@ -23,8 +23,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -48,7 +49,7 @@ func WaitForJob(db *gosql.DB, jobID int64) error {
 		}
 		if jobs.Status(status) == jobs.StatusFailed {
 			jobFailedErr = errors.New("job failed")
-			payload := &jobs.Payload{}
+			payload := &jobspb.Payload{}
 			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
 				jobFailedErr = errors.Errorf("job failed: %s", payload.Error)
 			}
@@ -111,8 +112,9 @@ func RunJob(
 // discussion on RunJob for where this might be useful.
 func BulkOpResponseFilter(allowProgressIota *chan struct{}) storagebase.ReplicaResponseFilter {
 	return func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
-		for _, res := range br.Responses {
-			if res.Export != nil || res.Import != nil || res.AddSstable != nil {
+		for _, ru := range br.Responses {
+			switch ru.GetInner().(type) {
+			case *roachpb.ExportResponse, *roachpb.ImportResponse, *roachpb.AddSSTableResponse:
 				<-*allowProgressIota
 			}
 		}
@@ -123,28 +125,34 @@ func BulkOpResponseFilter(allowProgressIota *chan struct{}) storagebase.ReplicaR
 // GetSystemJobsCount queries the number of entries in the jobs table.
 func GetSystemJobsCount(t testing.TB, db *sqlutils.SQLRunner) int {
 	var jobCount int
-	db.QueryRow(t, `SELECT COUNT(*) FROM crdb_internal.jobs`).Scan(&jobCount)
+	db.QueryRow(t, `SELECT count(*) FROM crdb_internal.jobs`).Scan(&jobCount)
 	return jobCount
 }
 
-// VerifySystemJob checks that that job records are created as expected.
-func VerifySystemJob(
-	t testing.TB, db *sqlutils.SQLRunner, offset int, expectedType jobs.Type, expected jobs.Record,
+func verifySystemJob(
+	t testing.TB,
+	db *sqlutils.SQLRunner,
+	offset int,
+	expectedType jobspb.Type,
+	expectedStatus string,
+	expectedRunningStatus string,
+	expected jobs.Record,
 ) error {
 	var actual jobs.Record
 	var rawDescriptorIDs pq.Int64Array
 	var actualType string
 	var statusString string
+	var runningStatusString string
 	// We have to query for the nth job created rather than filtering by ID,
 	// because job-generating SQL queries (e.g. BACKUP) do not currently return
 	// the job ID.
 	db.QueryRow(t, `
-		SELECT type, description, username, descriptor_ids, status
+		SELECT job_type, description, user_name, descriptor_ids, status, running_status
 		FROM crdb_internal.jobs ORDER BY created LIMIT 1 OFFSET $1`,
 		offset,
 	).Scan(
 		&actualType, &actual.Description, &actual.Username, &rawDescriptorIDs,
-		&statusString,
+		&statusString, &runningStatusString,
 	)
 
 	for _, id := range rawDescriptorIDs {
@@ -158,8 +166,11 @@ func VerifySystemJob(
 			offset, strings.Join(pretty.Diff(e, a), "\n"))
 	}
 
-	if e, a := jobs.StatusSucceeded, jobs.Status(statusString); e != a {
-		return errors.Errorf("job %d: expected status %v, got %v", offset, e, a)
+	if expectedStatus != statusString {
+		return errors.Errorf("job %d: expected status %v, got %v", offset, expectedStatus, statusString)
+	}
+	if expectedRunningStatus != runningStatusString {
+		return errors.Errorf("job %d: expected status %v, got %v", offset, expectedStatus, statusString)
 	}
 	if e, a := expectedType.String(), actualType; e != a {
 		return errors.Errorf("job %d: expected type %v, got type %v", offset, e, a)
@@ -168,9 +179,43 @@ func VerifySystemJob(
 	return nil
 }
 
+// VerifyRunningSystemJob checks that job records are created as expected
+// and is marked as running.
+func VerifyRunningSystemJob(
+	t testing.TB,
+	db *sqlutils.SQLRunner,
+	offset int,
+	expectedType jobspb.Type,
+	expectedRunningStatus jobs.RunningStatus,
+	expected jobs.Record,
+) error {
+	return verifySystemJob(t, db, offset, expectedType, "running", string(expectedRunningStatus), expected)
+}
+
+// VerifySystemJob checks that job records are created as expected.
+func VerifySystemJob(
+	t testing.TB,
+	db *sqlutils.SQLRunner,
+	offset int,
+	expectedType jobspb.Type,
+	expectedStatus jobs.Status,
+	expected jobs.Record,
+) error {
+	return verifySystemJob(t, db, offset, expectedType, string(expectedStatus), "", expected)
+}
+
+// GetJobID gets a particular job's ID.
+func GetJobID(t testing.TB, db *sqlutils.SQLRunner, offset int) int64 {
+	var jobID int64
+	db.QueryRow(t, `
+	SELECT job_id FROM crdb_internal.jobs ORDER BY created LIMIT 1 OFFSET $1`, offset,
+	).Scan(&jobID)
+	return jobID
+}
+
 // GetJobProgress loads the Progress message associated with the job.
-func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID int64) *jobs.Progress {
-	ret := &jobs.Progress{}
+func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID int64) *jobspb.Progress {
+	ret := &jobspb.Progress{}
 	var buf []byte
 	db.QueryRow(t, `SELECT progress FROM system.jobs WHERE id = $1`, jobID).Scan(&buf)
 	if err := protoutil.Unmarshal(buf, ret); err != nil {

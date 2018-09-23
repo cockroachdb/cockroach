@@ -16,7 +16,6 @@ syntax = "proto3";
 package cockroach.storage.storagebase;
 option go_package = "storagebase";
 
-import "roachpb/api.proto";
 import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "storage/engine/enginepb/mvcc.proto";
@@ -60,6 +59,25 @@ message ChangeReplicas {
 
   roachpb.ChangeReplicasTrigger trigger = 1 [(gogoproto.nullable) = false,
     (gogoproto.embed) = true];
+}
+
+// ComputeChecksum is emitted when a ComputeChecksum request is evaluated. It
+// instructs the replica to compute a checksum at the time the command is
+// applied.
+message ComputeChecksum {
+  option (gogoproto.equal) = true;
+
+  // ChecksumID is a handle by which the checksum can be retrieved in a later
+  // CollectChecksum request.
+  bytes checksum_id = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "ChecksumID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+
+  // SaveSnapshot indicates that the snapshot used to compute the checksum
+  // should be saved so that a diff of divergent replicas can later be computed.
+  bool save_snapshot = 2;
 }
 
 // Compaction holds core details about a suggested compaction.
@@ -106,7 +124,8 @@ message ReplicatedEvalResult {
   storage.storagebase.ReplicaState state = 2;
   Split split = 3;
   Merge merge = 4;
-  roachpb.ComputeChecksumRequest compute_checksum = 5;
+  reserved 5;
+  ComputeChecksum compute_checksum = 21;
   bool is_lease_request = 6;
   reserved 7;
   // Duplicates BatchRequest.Timestamp for proposer-evaluated KV. Used
@@ -156,10 +175,17 @@ message ReplicatedEvalResult {
 // WriteBatch is the serialized representation of a RocksDB write
 // batch. A wrapper message is used so that the absence of the field
 // can be distinguished from a zero-length batch, and so structs
-// containing pointers to it can be compared with the == operator (we
-// rely on this in storage.EvalResult)
+// containing pointers to it can be compared with the == operator.
 message WriteBatch {
   bytes data = 1;
+}
+
+// LogicalOpLog is a log of logical MVCC operations. A wrapper message
+// is used so that the absence of the field can be distinguished from a
+// zero-length batch, and so structs containing pointers to it can be
+// compared with the == operator.
+message LogicalOpLog {
+  repeated storage.engine.enginepb.MVCCLogicalOp ops = 1 [(gogoproto.nullable) = false];
 }
 
 // RaftCommand is the message written to the raft log. It contains
@@ -231,17 +257,22 @@ message RaftCommand {
   // well as that uproots whatever ordering was originally envisioned.
   uint64 max_lease_index = 4;
 
-  // testing_batch_request is the KV request that generated this Raft command.
-  //
-  // TODO(bdarnell): This used to be a pre-proposer-evaluated-kv field; we're
-  // now exclusively proposer-evaluated, but it is still needed by certain tests
-  // that use TestingEvalFilter. See #10493.
-  roachpb.BatchRequest testing_batch_request = 3;
+  reserved 3;
 
   // Proposer-evaluated KV mode.
 
+  // replicated_eval_result is a set of structured information that instructs
+  // replicated state changes to the part of a Range's replicated state machine
+  // that exists outside of RocksDB.
   ReplicatedEvalResult replicated_eval_result = 13 [(gogoproto.nullable) = false];
+  // write_batch is a RocksDB WriteBatch that will be applied to RockDB during
+  // the application of the Raft command. The batch can be thought of as a
+  // series of replicated instructions that inform a RocksDB engine on how to
+  // change.
   WriteBatch write_batch = 14;
+  // logical_op_log contains a series of logical MVCC operations that correspond
+  // to the physical operations being made in the write_batch.
+  LogicalOpLog logical_op_log = 15;
 
   reserved 1, 10001 to 10014;
 }

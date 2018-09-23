@@ -12,7 +12,7 @@ import { refreshNodes } from "src/redux/apiReducers";
 import * as timewindow from "src/redux/timewindow";
 import { LocalSetting } from "src/redux/localsettings";
 
-import { NodeStatus$Properties } from "src/util/proto";
+import { INodeStatus } from "src/util/proto";
 import { LongToMoment } from "src/util/convert";
 
 // Tracks whether the default timescale been set once in the app. Tracked across
@@ -63,7 +63,7 @@ interface TimeScaleDropdownProps {
   setTimeScale: typeof timewindow.setTimeScale;
   // Track node data to find the oldest node and set the default timescale.
   refreshNodes: typeof refreshNodes;
-  nodeStatuses: NodeStatus$Properties[];
+  nodeStatuses: INodeStatus[];
   nodeStatusesValid: boolean;
   // Track whether the default has been set.
   setDefaultSet: typeof timescaleDefaultSet.set;
@@ -128,7 +128,7 @@ class TimeScaleDropdown extends React.Component<TimeScaleDropdownProps, {}> {
   // Sets the default timescale based on the start time of the oldest node.
   setDefaultTime(props = this.props) {
     if (props.nodeStatusesValid && !props.defaultTimescaleSet) {
-      const oldestNode = _.minBy(props.nodeStatuses, (nodeStatus: NodeStatus$Properties) => nodeStatus.started_at);
+      const oldestNode = _.minBy(props.nodeStatuses, (nodeStatus: INodeStatus) => nodeStatus.started_at);
       const clusterStarted = LongToMoment(oldestNode.started_at);
       // TODO (maxlang): This uses the longest uptime, not the oldest
       const clusterDurationHrs = moment.utc().diff(clusterStarted, "hours");

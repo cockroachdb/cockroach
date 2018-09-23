@@ -19,11 +19,12 @@ package distsqlplan
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -53,11 +54,19 @@ func exprFmtCtxBase(buf *bytes.Buffer, evalCtx *tree.EvalContext) tree.FmtCtx {
 // becomes column indexVarMap[i].
 func MakeExpression(
 	expr tree.TypedExpr, evalCtx *tree.EvalContext, indexVarMap []int,
-) distsqlrun.Expression {
+) (distsqlrun.Expression, error) {
 	if expr == nil {
-		return distsqlrun.Expression{}
+		return distsqlrun.Expression{}, nil
 	}
 
+	subqueryVisitor := &evalAndReplaceSubqueryVisitor{
+		evalCtx: evalCtx,
+	}
+
+	exprWithoutSubqueries, _ := tree.WalkExpr(subqueryVisitor, expr)
+	if subqueryVisitor.err != nil {
+		return distsqlrun.Expression{}, subqueryVisitor.err
+	}
 	// We format the expression using the IndexedVar and Placeholder formatting interceptors.
 	var buf bytes.Buffer
 	fmtCtx := exprFmtCtxBase(&buf, evalCtx)
@@ -72,9 +81,44 @@ func MakeExpression(
 			},
 		)
 	}
-	fmtCtx.FormatNode(expr)
+	fmtCtx.FormatNode(exprWithoutSubqueries)
 	if log.V(1) {
-		log.Infof(context.TODO(), "Expr %s:\n%s", buf.String(), tree.ExprDebugString(expr))
+		log.Infof(evalCtx.Ctx(), "Expr %s:\n%s", buf.String(), tree.ExprDebugString(exprWithoutSubqueries))
 	}
-	return distsqlrun.Expression{Expr: buf.String()}
+	return distsqlrun.Expression{Expr: buf.String()}, nil
 }
+
+type evalAndReplaceSubqueryVisitor struct {
+	evalCtx *tree.EvalContext
+	err     error
+}
+
+var _ tree.Visitor = &evalAndReplaceSubqueryVisitor{}
+
+func (e *evalAndReplaceSubqueryVisitor) VisitPre(expr tree.Expr) (bool, tree.Expr) {
+	switch expr := expr.(type) {
+	case *tree.Subquery:
+		val, err := e.evalCtx.Planner.EvalSubquery(expr)
+		if err != nil {
+			e.err = err
+			return false, expr
+		}
+		var newExpr tree.Expr = val
+		if _, isTuple := val.(*tree.DTuple); !isTuple && expr.ResolvedType() != types.Unknown {
+			colType, err := coltypes.DatumTypeToColumnType(expr.ResolvedType())
+			if err != nil {
+				e.err = err
+				return false, expr
+			}
+			newExpr = &tree.CastExpr{
+				Expr: val,
+				Type: colType,
+			}
+		}
+		return false, newExpr
+	default:
+		return true, expr
+	}
+}
+
+func (evalAndReplaceSubqueryVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }

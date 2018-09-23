@@ -51,6 +51,8 @@ var (
 	Unknown T = tUnknown{}
 	// Bool is the type of a DBool. Can be compared with ==.
 	Bool T = tBool{}
+	// BitArray is the type of a DBitArray. Can be compared with ==.
+	BitArray T = tBitArray{}
 	// Int is the type of a DInt. Can be compared with ==.
 	Int T = tInt{}
 	// Float is the type of a DFloat. Can be compared with ==.
@@ -65,8 +67,6 @@ var (
 	Date T = tDate{}
 	// Time is the type of a DTime. Can be compared with ==.
 	Time T = tTime{}
-	//TimeTZ is the type of a DTimeTZ, Can be compared with ==.
-	TimeTZ T = tTimeTZ{}
 	// Timestamp is the type of a DTimestamp. Can be compared with ==.
 	Timestamp T = tTimestamp{}
 	// TimestampTZ is the type of a DTimestampTZ. Can be compared with ==.
@@ -88,6 +88,7 @@ var (
 	// AnyNonArray contains all non-array types.
 	AnyNonArray = []T{
 		Bool,
+		BitArray,
 		Int,
 		Float,
 		Decimal,
@@ -95,7 +96,6 @@ var (
 		Bytes,
 		Date,
 		Time,
-		TimeTZ,
 		Timestamp,
 		TimestampTZ,
 		Interval,
@@ -145,6 +145,15 @@ func (tInt) FamilyEqual(other T) bool { return UnwrapType(other) == Int }
 func (tInt) Oid() oid.Oid             { return oid.T_int8 }
 func (tInt) SQLName() string          { return "bigint" }
 func (tInt) IsAmbiguous() bool        { return false }
+
+type tBitArray struct{}
+
+func (tBitArray) String() string           { return "varbit" }
+func (tBitArray) Equivalent(other T) bool  { return UnwrapType(other) == BitArray || other == Any }
+func (tBitArray) FamilyEqual(other T) bool { return UnwrapType(other) == BitArray }
+func (tBitArray) Oid() oid.Oid             { return oid.T_varbit }
+func (tBitArray) SQLName() string          { return "bit varying" }
+func (tBitArray) IsAmbiguous() bool        { return false }
 
 type tFloat struct{}
 
@@ -205,7 +214,7 @@ func (TCollatedString) FamilyEqual(other T) bool {
 }
 
 // Oid implements the T interface.
-func (TCollatedString) Oid() oid.Oid { return oid.T_unknown }
+func (TCollatedString) Oid() oid.Oid { return oid.T_text }
 
 // SQLName implements the T interface.
 func (TCollatedString) SQLName() string { return "text" }
@@ -241,15 +250,6 @@ func (tTime) FamilyEqual(other T) bool { return UnwrapType(other) == Time }
 func (tTime) Oid() oid.Oid             { return oid.T_time }
 func (tTime) SQLName() string          { return "time" }
 func (tTime) IsAmbiguous() bool        { return false }
-
-type tTimeTZ struct{}
-
-func (tTimeTZ) String() string           { return "timetz" }
-func (tTimeTZ) Equivalent(other T) bool  { return UnwrapType(other) == TimeTZ || other == Any }
-func (tTimeTZ) FamilyEqual(other T) bool { return UnwrapType(other) == TimeTZ }
-func (tTimeTZ) Oid() oid.Oid             { return oid.T_timetz }
-func (tTimeTZ) SQLName() string          { return "time with time zone" }
-func (tTimeTZ) IsAmbiguous() bool        { return false }
 
 type tTimestamp struct{}
 
@@ -506,5 +506,39 @@ func IsValidArrayElementType(t T) bool {
 		return false
 	default:
 		return true
+	}
+}
+
+// IsDateTimeType returns true if the T is
+// date- or time-related type.
+func IsDateTimeType(t T) bool {
+	switch t {
+	case Date:
+		return true
+	case Time:
+		return true
+	case Timestamp:
+		return true
+	case TimestampTZ:
+		return true
+	case Interval:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsAdditiveType returns true if the T
+// supports addition and subtraction.
+func IsAdditiveType(t T) bool {
+	switch t {
+	case Int:
+		return true
+	case Float:
+		return true
+	case Decimal:
+		return true
+	default:
+		return IsDateTimeType(t)
 	}
 }

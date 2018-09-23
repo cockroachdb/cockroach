@@ -21,9 +21,10 @@ import (
 )
 
 func (p *planner) ShowSessions(ctx context.Context, n *tree.ShowSessions) (planNode, error) {
-	query := `TABLE crdb_internal.node_sessions`
+	const query = `SELECT node_id, session_id, user_name, client_address, application_name, active_queries, last_active_query, session_start, oldest_query_start FROM crdb_internal.`
+	table := `node_sessions`
 	if n.Cluster {
-		query = `TABLE crdb_internal.cluster_sessions`
+		table = `cluster_sessions`
 	}
-	return p.delegateQuery(ctx, "SHOW SESSIONS", query, nil, nil)
+	return p.delegateQuery(ctx, "SHOW SESSIONS", query+table, nil, nil)
 }

@@ -92,10 +92,9 @@ func contains(str string, t *testing.T) bool {
 	return strings.Contains(c, str)
 }
 
-// setFlags configures the logging flags and exitFunc how the test expects
-// them.
+// setFlags resets the logging flags and exit function to what tests expect.
 func setFlags() {
-	SetExitFunc(os.Exit)
+	ResetExitFunc()
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
 	logging.noStderrRedirect = false
@@ -699,7 +698,7 @@ func TestFatalStacktraceStderr(t *testing.T) {
 
 	setFlags()
 	logging.stderrThreshold = Severity_NONE
-	SetExitFunc(func(int) {})
+	SetExitFunc(false /* hideStack */, func(int) {})
 
 	defer setFlags()
 	defer logging.swap(logging.newBuffers())
@@ -790,11 +789,11 @@ func TestExitOnFullDisk(t *testing.T) {
 
 	var exited sync.WaitGroup
 	exited.Add(1)
-	l := &loggingT{
-		exitFunc: func(int) {
-			exited.Done()
-		},
+	l := &loggingT{}
+	l.exitOverride.f = func(int) {
+		exited.Done()
 	}
+
 	l.file = &syncBuffer{
 		logger: l,
 		Writer: bufio.NewWriterSize(&outOfSpaceWriter{}, 1),
@@ -812,4 +811,15 @@ func BenchmarkHeader(b *testing.B) {
 		buf := formatHeader(Severity_INFO, timeutil.Now(), 200, "file.go", 100, nil)
 		logging.putBuffer(buf)
 	}
+}
+
+func BenchmarkVDepthWithVModule(b *testing.B) {
+	if err := SetVModule("craigthecockroach=5"); err != nil {
+		b.Fatal(err)
+	}
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_ = VDepth(1, 1)
+		}
+	})
 }

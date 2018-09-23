@@ -24,6 +24,11 @@ std::string MakePlaintextExtraOptions();
 // It needs an Env for the current time.
 enginepbccl::SecretKey* MakeAES128Key(rocksdb::Env* env);
 
+// WriteAES<size>KeyFile writes a AES key of the specified size to 'filename'
+// using 'env'.
+// The resulting filename can be used in the encryption options.
+rocksdb::Status WriteAES128KeyFile(rocksdb::Env* env, const std::string& filename);
+
 // MemKeyManager is a simple key manager useful for tests.
 // It holds a single key. ie: there is only an active key, no old keys.
 class MemKeyManager : public KeyManager {
@@ -31,8 +36,8 @@ class MemKeyManager : public KeyManager {
   explicit MemKeyManager(enginepbccl::SecretKey* key) : key_(key) {}
   virtual ~MemKeyManager();
 
-  virtual std::unique_ptr<enginepbccl::SecretKey> CurrentKey() override;
-  virtual std::unique_ptr<enginepbccl::SecretKey> GetKey(const std::string& id) override;
+  virtual std::shared_ptr<enginepbccl::SecretKey> CurrentKey() override;
+  virtual std::shared_ptr<enginepbccl::SecretKey> GetKey(const std::string& id) override;
 
   // Replace the key with the passed-in one. Takes ownership.
   void set_key(enginepbccl::SecretKey* key);

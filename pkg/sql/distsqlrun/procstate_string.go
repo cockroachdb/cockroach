@@ -4,7 +4,7 @@ package distsqlrun
 
 import "strconv"
 
-const _procState_name = "stateRunningstateDrainingstateTrailingMetastateExhausted"
+const _procState_name = "StateRunningstateDrainingstateTrailingMetastateExhausted"
 
 var _procState_index = [...]uint8{0, 12, 25, 42, 56}
 

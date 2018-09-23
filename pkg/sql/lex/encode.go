@@ -28,7 +28,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -95,6 +94,9 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 	bareStrings := flags.HasFlags(EncBareStrings)
 	// Loop through each unicode code point.
 	for i, r := range in {
+		if i < start {
+			continue
+		}
 		ch := byte(r)
 		if r >= 0x20 && r < 0x7F {
 			if mustQuoteMap[ch] {
@@ -124,28 +126,12 @@ func EncodeSQLStringWithFlags(buf *bytes.Buffer, in string, flags EncodeFlags) {
 	if quote {
 		buf.WriteByte('\'') // begin 'xxx' string if nothing was escaped
 	}
-	buf.WriteString(in[start:])
+	if start < len(in) {
+		buf.WriteString(in[start:])
+	}
 	if escapedString || quote {
 		buf.WriteByte('\'')
 	}
-}
-
-// EncodeSQLStringInsideArray writes a string literal to buf using the "string
-// within array" formatting.
-func EncodeSQLStringInsideArray(buf *bytes.Buffer, in string) {
-	buf.WriteByte('"')
-	// Loop through each unicode code point.
-	for i, r := range in {
-		ch := byte(r)
-		if unicode.IsPrint(r) && !stringencoding.NeedEscape(ch) && ch != '"' {
-			// Character is printable doesn't need escaping - just print it out.
-			buf.WriteRune(r)
-		} else {
-			stringencoding.EncodeEscapedChar(buf, in, r, ch, i, '"')
-		}
-	}
-
-	buf.WriteByte('"')
 }
 
 // EncodeUnrestrictedSQLIdent writes the identifier in s to buf.

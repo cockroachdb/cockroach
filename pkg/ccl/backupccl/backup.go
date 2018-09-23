@@ -23,11 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -266,10 +267,6 @@ func allSQLDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 	endKey := startKey.PrefixEnd()
 	rows, err := txn.Scan(ctx, startKey, endKey, 0)
 	if err != nil {
-		// NB: Don't wrap this error, as wrapped HandledRetryableTxnErrors are not
-		// automatically retried by db.Txn.
-		//
-		// TODO(benesch): teach the KV layer to use errors.Cause.
 		return nil, err
 	}
 
@@ -315,11 +312,7 @@ func ensureInterleavesIncluded(tables []*sqlbase.TableDescriptor) error {
 func allRangeDescriptors(ctx context.Context, txn *client.Txn) ([]roachpb.RangeDescriptor, error) {
 	rows, err := txn.Scan(ctx, keys.Meta2Prefix, keys.MetaMax, 0)
 	if err != nil {
-		// NB: Don't wrap this error, as wrapped HandledRetryableTxnErrors are not
-		// automatically retried by db.Txn.
-		//
-		// TODO(benesch): teach the KV layer to use errors.Cause.
-		return nil, err
+		return nil, errors.Wrap(err, "unable to scan range descriptors")
 	}
 
 	rangeDescs := make([]roachpb.RangeDescriptor, len(rows))
@@ -440,12 +433,32 @@ func splitAndFilterSpans(
 	return out
 }
 
+func optsToKVOptions(opts map[string]string) tree.KVOptions {
+	if len(opts) == 0 {
+		return nil
+	}
+	sortedOpts := make([]string, 0, len(opts))
+	for k := range opts {
+		sortedOpts = append(sortedOpts, k)
+	}
+	sort.Strings(sortedOpts)
+	kvopts := make(tree.KVOptions, 0, len(opts))
+	for _, k := range sortedOpts {
+		opt := tree.KVOption{Key: tree.Name(k)}
+		if v := opts[k]; v != "" {
+			opt.Value = tree.NewDString(v)
+		}
+		kvopts = append(kvopts, opt)
+	}
+	return kvopts
+}
+
 func backupJobDescription(
-	backup *tree.Backup, to string, incrementalFrom []string,
+	backup *tree.Backup, to string, incrementalFrom []string, opts map[string]string,
 ) (string, error) {
 	b := &tree.Backup{
 		AsOf:    backup.AsOf,
-		Options: backup.Options,
+		Options: optsToKVOptions(opts),
 		Targets: backup.Targets,
 	}
 
@@ -468,11 +481,10 @@ func backupJobDescription(
 // clusterNodeCount returns the approximate number of nodes in the cluster.
 func clusterNodeCount(g *gossip.Gossip) int {
 	var nodes int
-	for k := range g.GetInfoStatus().Infos {
-		if gossip.IsNodeIDKey(k) {
-			nodes++
-		}
-	}
+	_ = g.IterateInfos(gossip.KeyNodeIDPrefix, func(_ string, _ gossip.Info) error {
+		nodes++
+		return nil
+	})
 	return nodes
 }
 
@@ -508,18 +520,14 @@ func loadAllDescs(
 	ctx context.Context, db *client.DB, asOf hlc.Timestamp,
 ) ([]sqlbase.Descriptor, error) {
 	var allDescs []sqlbase.Descriptor
-	// TODO(andrei): Plumb a gatewayNodeID in here and also find a way to
-	// express that whatever this txn does should not count towards lease
-	// placement stats.
-	txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
-	opt := client.TxnExecOptions{AutoRetry: true, AutoCommit: true}
-	err := txn.Exec(ctx, opt, func(ctx context.Context, txn *client.Txn, opt *client.TxnExecOptions) error {
-		var err error
-		txn.SetFixedTimestamp(ctx, asOf)
-		allDescs, err = allSQLDescriptors(ctx, txn)
-		return err
-	})
-	if err != nil {
+	if err := db.Txn(
+		ctx,
+		func(ctx context.Context, txn *client.Txn) error {
+			var err error
+			txn.SetFixedTimestamp(ctx, asOf)
+			allDescs, err = allSQLDescriptors(ctx, txn)
+			return err
+		}); err != nil {
 		return nil, err
 	}
 	return allDescs, nil
@@ -591,7 +599,7 @@ func backup(
 		ranges, err = allRangeDescriptors(ctx, txn)
 		return err
 	}); err != nil {
-		return mu.exported, errors.Wrap(err, "fetching range descriptors")
+		return mu.exported, err
 	}
 
 	var completedSpans, completedIntroducedSpans []roachpb.Span
@@ -679,7 +687,7 @@ func backup(
 				StartTime:     span.start,
 				MVCCFilter:    roachpb.MVCCFilter(backupDesc.MVCCFilter),
 			}
-			rawRes, pErr := client.SendWrappedWith(ctx, db.GetSender(), header, req)
+			rawRes, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 			if pErr != nil {
 				return pErr.GoError()
 			}
@@ -839,7 +847,7 @@ func backupPlanHook(
 		endTime := p.ExecCfg().Clock.Now()
 		if backupStmt.AsOf.Expr != nil {
 			var err error
-			if endTime, err = sql.EvalAsOfTimestamp(nil, backupStmt.AsOf, endTime); err != nil {
+			if endTime, err = p.EvalAsOfTimestamp(backupStmt.AsOf, endTime); err != nil {
 				return err
 			}
 		}
@@ -1036,7 +1044,7 @@ func backupPlanHook(
 			return err
 		}
 
-		description, err := backupJobDescription(backupStmt, to, incrementalFrom)
+		description, err := backupJobDescription(backupStmt, to, incrementalFrom, opts)
 		if err != nil {
 			return err
 		}
@@ -1054,13 +1062,13 @@ func backupPlanHook(
 				}
 				return sqlDescIDs
 			}(),
-			Details: jobs.BackupDetails{
+			Details: jobspb.BackupDetails{
 				StartTime:        startTime,
 				EndTime:          endTime,
 				URI:              to,
 				BackupDescriptor: descBytes,
 			},
-			Progress: jobs.BackupProgress{},
+			Progress: jobspb.BackupProgress{},
 		})
 		if err != nil {
 			return err
@@ -1078,7 +1086,7 @@ type backupResumer struct {
 func (b *backupResumer) Resume(
 	ctx context.Context, job *jobs.Job, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
-	details := job.Record.Details.(jobs.BackupDetails)
+	details := job.Details().(jobspb.BackupDetails)
 	p := phs.(sql.PlanHookState)
 
 	if len(details.BackupDescriptor) == 0 {
@@ -1135,7 +1143,7 @@ func (b *backupResumer) OnTerminal(
 ) {
 	// Attempt to delete BACKUP-CHECKPOINT.
 	if err := func() error {
-		details := job.Record.Details.(jobs.BackupDetails)
+		details := job.Details().(jobspb.BackupDetails)
 		conf, err := storageccl.ExportStorageConfFromURI(details.URI)
 		if err != nil {
 			return err
@@ -1169,8 +1177,8 @@ func (b *backupResumer) OnTerminal(
 
 var _ jobs.Resumer = &backupResumer{}
 
-func backupResumeHook(typ jobs.Type, settings *cluster.Settings) jobs.Resumer {
-	if typ != jobs.TypeBackup {
+func backupResumeHook(typ jobspb.Type, settings *cluster.Settings) jobs.Resumer {
+	if typ != jobspb.TypeBackup {
 		return nil
 	}
 
@@ -1200,8 +1208,9 @@ func getAllRevisions(
 		StartTime:     startTime,
 		MVCCFilter:    roachpb.MVCCFilter_All,
 		ReturnSST:     true,
+		OmitChecksum:  true,
 	}
-	resp, pErr := client.SendWrappedWith(ctx, db.GetSender(), header, req)
+	resp, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 	if pErr != nil {
 		return nil, pErr.GoError()
 	}

@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -409,12 +410,174 @@ func (*DBool) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (d *DBool) Format(ctx *FmtCtx) {
+	if ctx.HasFlags(fmtPgwireFormat) {
+		if bool(*d) {
+			ctx.WriteByte('t')
+		} else {
+			ctx.WriteByte('f')
+		}
+		return
+	}
 	ctx.WriteString(strconv.FormatBool(bool(*d)))
 }
 
 // Size implements the Datum interface.
 func (d *DBool) Size() uintptr {
 	return unsafe.Sizeof(*d)
+}
+
+// DBitArray is the BIT/VARBIT Datum.
+type DBitArray struct {
+	bitarray.BitArray
+}
+
+// ParseDBitArray parses a string representation of binary digits.
+func ParseDBitArray(s string) (*DBitArray, error) {
+	var a DBitArray
+	var err error
+	a.BitArray, err = bitarray.Parse(s)
+	if err != nil {
+		return nil, err
+	}
+	return &a, nil
+}
+
+// NewDBitArray returns a DBitArray.
+func NewDBitArray(bitLen uint) *DBitArray {
+	a := MakeDBitArray(bitLen)
+	return &a
+}
+
+// MakeDBitArray returns a DBitArray.
+func MakeDBitArray(bitLen uint) DBitArray {
+	return DBitArray{BitArray: bitarray.MakeZeroBitArray(bitLen)}
+}
+
+// MustBeDBitArray attempts to retrieve a DBitArray from an Expr, panicking if the
+// assertion fails.
+func MustBeDBitArray(e Expr) *DBitArray {
+	b, ok := AsDBitArray(e)
+	if !ok {
+		panic(pgerror.NewErrorf(pgerror.CodeInternalError, "expected *DBitArray, found %T", e))
+	}
+	return b
+}
+
+// AsDBitArray attempts to retrieve a *DBitArray from an Expr, returning a *DBitArray and
+// a flag signifying whether the assertion was successful. The function should
+// be used instead of direct type assertions.
+func AsDBitArray(e Expr) (*DBitArray, bool) {
+	switch t := e.(type) {
+	case *DBitArray:
+		return t, true
+	}
+	return nil, false
+}
+
+var errCannotCastNegativeIntToBitArray = pgerror.NewErrorf(pgerror.CodeCannotCoerceError,
+	"cannot cast negative integer to bit varying with unbounded width")
+
+// NewDBitArrayFromInt creates a bit array from the specified integer
+// at the specified width.
+// If the width is zero, only positive integers can be converted.
+// If the width is nonzero, the value is truncated to that width.
+// Negative values are encoded using two's complement.
+func NewDBitArrayFromInt(i int64, width uint) (*DBitArray, error) {
+	if width == 0 && i < 0 {
+		return nil, errCannotCastNegativeIntToBitArray
+	}
+	return &DBitArray{
+		BitArray: bitarray.MakeBitArrayFromInt64(width, i, 64),
+	}, nil
+}
+
+// AsDInt computes the integer value of the given bit array.
+// The value is assumed to be encoded using two's complement.
+// The result is truncated to the given integer number of bits,
+// if specified.
+// The given width must be 64 or smaller. The results are undefined
+// if n is greater than 64.
+func (d *DBitArray) AsDInt(n uint) *DInt {
+	if n == 0 {
+		n = 64
+	}
+	return NewDInt(DInt(d.BitArray.AsInt64(n)))
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DBitArray) ResolvedType() types.T {
+	return types.BitArray
+}
+
+// Compare implements the Datum interface.
+func (d *DBitArray) Compare(ctx *EvalContext, other Datum) int {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1
+	}
+	v, ok := UnwrapDatum(ctx, other).(*DBitArray)
+	if !ok {
+		panic(makeUnsupportedComparisonMessage(d, other))
+	}
+	return bitarray.Compare(d.BitArray, v.BitArray)
+}
+
+// Prev implements the Datum interface.
+func (d *DBitArray) Prev(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d *DBitArray) Next(_ *EvalContext) (Datum, bool) {
+	a := bitarray.Next(d.BitArray)
+	return &DBitArray{BitArray: a}, true
+}
+
+// IsMax implements the Datum interface.
+func (d *DBitArray) IsMax(_ *EvalContext) bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DBitArray) IsMin(_ *EvalContext) bool {
+	return d.BitArray.IsEmpty()
+}
+
+var bitArrayZero = NewDBitArray(0)
+
+// Min implements the Datum interface.
+func (d *DBitArray) Min(_ *EvalContext) (Datum, bool) {
+	return bitArrayZero, true
+}
+
+// Max implements the Datum interface.
+func (d *DBitArray) Max(_ *EvalContext) (Datum, bool) {
+	return nil, false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DBitArray) AmbiguousFormat() bool { return false }
+
+// Format implements the NodeFormatter interface.
+func (d *DBitArray) Format(ctx *FmtCtx) {
+	f := ctx.flags
+	if f.HasFlags(fmtPgwireFormat) {
+		d.BitArray.Format(ctx.Buffer)
+	} else {
+		withQuotes := !f.HasFlags(FmtFlags(lex.EncBareStrings))
+		if withQuotes {
+			ctx.WriteString("B'")
+		}
+		d.BitArray.Format(ctx.Buffer)
+		if withQuotes {
+			ctx.WriteByte('\'')
+		}
+	}
+}
+
+// Size implements the Datum interface.
+func (d *DBitArray) Size() uintptr {
+	return d.BitArray.Sizeof()
 }
 
 // DInt is the int Datum.
@@ -528,12 +691,14 @@ func (*DInt) AmbiguousFormat() bool { return true }
 func (d *DInt) Format(ctx *FmtCtx) {
 	// If the number is negative, we need to use parens or the `:::INT` type hint
 	// will take precedence over the negation sign.
-	quote := ctx.flags.HasFlags(fmtDisambiguateDatumTypes) && *d < 0
-	if quote {
+	disambiguate := ctx.flags.HasFlags(fmtDisambiguateDatumTypes)
+	parsable := ctx.flags.HasFlags(FmtParsableNumerics)
+	needParens := (disambiguate || parsable) && *d < 0
+	if needParens {
 		ctx.WriteByte('(')
 	}
 	ctx.WriteString(strconv.FormatInt(int64(*d), 10))
-	if quote {
+	if needParens {
 		ctx.WriteByte(')')
 	}
 }
@@ -657,9 +822,18 @@ func (*DFloat) AmbiguousFormat() bool { return true }
 // Format implements the NodeFormatter interface.
 func (d *DFloat) Format(ctx *FmtCtx) {
 	fl := float64(*d)
-	quote := ctx.flags.HasFlags(fmtDisambiguateDatumTypes) && (math.IsNaN(fl) || math.IsInf(fl, 0))
+
+	disambiguate := ctx.flags.HasFlags(fmtDisambiguateDatumTypes)
+	parsable := ctx.flags.HasFlags(FmtParsableNumerics)
+	quote := parsable && (math.IsNaN(fl) || math.IsInf(fl, 0))
+	// We need to use Signbit here and not just fl < 0 because of -0.
+	needParens := !quote && (disambiguate || parsable) && math.Signbit(fl)
+	// If the number is negative, we need to use parens or the `:::INT` type hint
+	// will take precedence over the negation sign.
 	if quote {
 		ctx.WriteByte('\'')
+	} else if needParens {
+		ctx.WriteByte('(')
 	}
 	if _, frac := math.Modf(fl); frac == 0 && -1000000 < *d && *d < 1000000 {
 		// d is a small whole number. Ensure it is printed using a decimal point.
@@ -669,6 +843,8 @@ func (d *DFloat) Format(ctx *FmtCtx) {
 	}
 	if quote {
 		ctx.WriteByte('\'')
+	} else if needParens {
+		ctx.WriteByte(')')
 	}
 }
 
@@ -697,7 +873,7 @@ func ParseDDecimal(s string) (*DDecimal, error) {
 }
 
 // SetString sets d to s. Any non-standard NaN values are converted to a
-// normal NaN.
+// normal NaN. Any negative zero is converted to positive.
 func (d *DDecimal) SetString(s string) error {
 	// Using HighPrecisionCtx here restricts the max and min exponents to 2000,
 	// and the precision to 2000 places. Any rounding or other inexact conversion
@@ -706,11 +882,16 @@ func (d *DDecimal) SetString(s string) error {
 	if res != 0 || err != nil {
 		return makeParseError(s, types.Decimal, nil)
 	}
-	if d.Decimal.Form == apd.NaNSignaling {
-		d.Decimal.Form = apd.NaN
-	}
-	if d.Decimal.Form == apd.NaN {
+	switch d.Form {
+	case apd.NaNSignaling:
+		d.Form = apd.NaN
 		d.Negative = false
+	case apd.NaN:
+		d.Negative = false
+	case apd.Finite:
+		if d.IsZero() && d.Negative {
+			d.Negative = false
+		}
 	}
 	return nil
 }
@@ -788,7 +969,15 @@ func (*DDecimal) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DDecimal) Format(ctx *FmtCtx) {
-	quote := ctx.flags.HasFlags(fmtDisambiguateDatumTypes) && d.Decimal.Form != apd.Finite
+	// If the number is negative, we need to use parens or the `:::INT` type hint
+	// will take precedence over the negation sign.
+	disambiguate := ctx.flags.HasFlags(fmtDisambiguateDatumTypes)
+	parsable := ctx.flags.HasFlags(FmtParsableNumerics)
+	quote := parsable && d.Decimal.Form != apd.Finite
+	needParens := !quote && (disambiguate || parsable) && d.Negative
+	if needParens {
+		ctx.WriteByte('(')
+	}
 	if quote {
 		ctx.WriteByte('\'')
 	}
@@ -796,12 +985,19 @@ func (d *DDecimal) Format(ctx *FmtCtx) {
 	if quote {
 		ctx.WriteByte('\'')
 	}
+	if needParens {
+		ctx.WriteByte(')')
+	}
+}
+
+// SizeOfDecimal returns the size in bytes of an apd.Decimal.
+func SizeOfDecimal(d apd.Decimal) uintptr {
+	return uintptr(cap(d.Coeff.Bits())) * unsafe.Sizeof(big.Word(0))
 }
 
 // Size implements the Datum interface.
 func (d *DDecimal) Size() uintptr {
-	intVal := d.Decimal.Coeff
-	return unsafe.Sizeof(*d) + uintptr(cap(intVal.Bits()))*unsafe.Sizeof(big.Word(0))
+	return unsafe.Sizeof(*d) + SizeOfDecimal(d.Decimal)
 }
 
 var (
@@ -920,8 +1116,6 @@ func (d *DString) Format(ctx *FmtCtx) {
 	buf, f := ctx.Buffer, ctx.flags
 	if f.HasFlags(fmtUnicodeStrings) {
 		buf.WriteString(string(*d))
-	} else if f.HasFlags(fmtWithinArray) {
-		lex.EncodeSQLStringInsideArray(buf, string(*d))
 	} else {
 		lex.EncodeSQLStringWithFlags(buf, string(*d), f.EncodeFlags())
 	}
@@ -988,14 +1182,9 @@ func (*DCollatedString) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (d *DCollatedString) Format(ctx *FmtCtx) {
-	buf, f := ctx.Buffer, ctx.flags
-	if f.HasFlags(fmtWithinArray) {
-		lex.EncodeSQLStringInsideArray(buf, d.Contents)
-	} else {
-		lex.EncodeSQLString(buf, d.Contents)
-		ctx.WriteString(" COLLATE ")
-		lex.EncodeUnrestrictedSQLIdent(buf, d.Locale, lex.EncNoFlags)
-	}
+	lex.EncodeSQLString(ctx.Buffer, d.Contents)
+	ctx.WriteString(" COLLATE ")
+	lex.EncodeUnrestrictedSQLIdent(ctx.Buffer, d.Locale, lex.EncNoFlags)
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -1154,7 +1343,7 @@ func writeAsHexString(ctx *FmtCtx, d *DBytes) {
 // Format implements the NodeFormatter interface.
 func (d *DBytes) Format(ctx *FmtCtx) {
 	f := ctx.flags
-	if f.HasFlags(fmtWithinArray) {
+	if f.HasFlags(fmtPgwireFormat) {
 		ctx.WriteString(`"\\x`)
 		writeAsHexString(ctx, d)
 		ctx.WriteString(`"`)
@@ -1248,7 +1437,7 @@ func (*DUuid) Max(_ *EvalContext) (Datum, bool) {
 }
 
 // AmbiguousFormat implements the Datum interface.
-func (*DUuid) AmbiguousFormat() bool { return false }
+func (*DUuid) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DUuid) Format(ctx *FmtCtx) {
@@ -1609,7 +1798,7 @@ func (d *DTime) Min(_ *EvalContext) (Datum, bool) {
 }
 
 // AmbiguousFormat implements the Datum interface.
-func (*DTime) AmbiguousFormat() bool { return false }
+func (*DTime) AmbiguousFormat() bool { return true }
 
 // Format implements the NodeFormatter interface.
 func (d *DTime) Format(ctx *FmtCtx) {
@@ -1626,118 +1815,6 @@ func (d *DTime) Format(ctx *FmtCtx) {
 
 // Size implements the Datum interface.
 func (d *DTime) Size() uintptr {
-	return unsafe.Sizeof(*d)
-}
-
-// DTimeTZ is the time with time zone Datum.
-type DTimeTZ struct {
-	timeofday.TimeOfDay
-	*time.Location
-}
-
-// ToTime converts a DTimeTZ to a time.Time, using the Unix epoch as the date.
-func (d *DTimeTZ) ToTime() time.Time {
-	t := d.TimeOfDay.ToTime().In(d.Location)
-	tSeconds := t.Unix() * int64(time.Second)
-	_, tOffset := t.Zone()
-	tNanos := int64(t.Nanosecond())
-	nanos := tSeconds - int64(tOffset)*int64(time.Second) + tNanos
-	return timeutil.Unix(0, nanos).In(d.Location)
-}
-
-// MakeDTimeTZ creates a DTimeTZ from a TimeOfDay and time.Location.
-func MakeDTimeTZ(t timeofday.TimeOfDay, loc *time.Location) *DTimeTZ {
-	d := DTimeTZ{t, loc}
-	return &d
-}
-
-// ParseDTimeTZ parses and returns the *DTime Datum value represented by the
-// provided string, or an error if parsing is unsuccessful.
-func ParseDTimeTZ(s string, loc *time.Location) (*DTimeTZ, error) {
-	t, err := parseTimestampInLocation("1970-01-01 "+s, loc, types.TimeTZ)
-	if err != nil {
-		// Build our own error message to avoid exposing the dummy date.
-		return nil, makeParseError(s, types.TimeTZ, nil)
-	}
-	return MakeDTimeTZ(timeofday.FromTime(t), t.Location()), nil
-}
-
-// ResolvedType implements the TypedExpr interface.
-func (*DTimeTZ) ResolvedType() types.T {
-	return types.TimeTZ
-}
-
-// Compare implements the Datum interface.
-func (d *DTimeTZ) Compare(ctx *EvalContext, other Datum) int {
-	if other == DNull {
-		// NULL is less than any non-NULL value.
-		return 1
-	}
-	return compareTimestamps(ctx, d, other)
-}
-
-// Prev implements the Datum interface.
-func (d *DTimeTZ) Prev(_ *EvalContext) (Datum, bool) {
-	prev := DTimeTZ{d.TimeOfDay - 1, d.Location}
-	return &prev, true
-}
-
-// Next implements the Datum interface.
-func (d *DTimeTZ) Next(_ *EvalContext) (Datum, bool) {
-	next := DTimeTZ{d.TimeOfDay + 1, d.Location}
-	return &next, true
-}
-
-// IsMax implements the Datum interface.
-func (d *DTimeTZ) IsMax(_ *EvalContext) bool {
-	t := d.ToTime()
-	tNext := t.Add(time.Microsecond)
-	return t.After(tNext)
-}
-
-// IsMin implements the Datum interface.
-func (d *DTimeTZ) IsMin(_ *EvalContext) bool {
-	t := d.ToTime()
-	tPrev := t.Add(-time.Microsecond)
-	return t.Before(tPrev)
-}
-
-// Max implements the Datum interface.
-func (d *DTimeTZ) Max(_ *EvalContext) (Datum, bool) {
-	return nil, false
-}
-
-// Min implements the Datum interface.
-func (d *DTimeTZ) Min(_ *EvalContext) (Datum, bool) {
-	return nil, false
-}
-
-// AmbiguousFormat implements the Datum interface.
-func (*DTimeTZ) AmbiguousFormat() bool { return false }
-
-// Format implements the NodeFormatter interface.
-func (d *DTimeTZ) Format(ctx *FmtCtx) {
-	f := ctx.flags
-	bareStrings := f.HasFlags(FmtFlags(lex.EncBareStrings))
-	if !bareStrings {
-		ctx.WriteByte('\'')
-	}
-
-	ds := d.ToTime().String()
-	// Get the time zone information, eg. -05:00
-	tz := strings.Split(ds, " ")[2]
-	tz = tz[0:3] + ":" + tz[3:]
-	tod := d.TimeOfDay.String()
-	ds = tod + tz
-
-	ctx.WriteString(ds)
-	if !bareStrings {
-		ctx.WriteByte('\'')
-	}
-}
-
-// Size implements the Datum interface.
-func (d *DTimeTZ) Size() uintptr {
 	return unsafe.Sizeof(*d)
 }
 
@@ -1873,6 +1950,9 @@ func ParseDTimestamp(s string, precision time.Duration) (*DTimestamp, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Truncate the timezone. DTimestamp doesn't carry its timezone around.
+	_, offset := t.Zone()
+	t = duration.Add(t, duration.FromInt64(int64(offset))).UTC()
 	return MakeDTimestamp(t, precision), nil
 }
 
@@ -1887,11 +1967,9 @@ func timeFromDatum(ctx *EvalContext, d Datum) (time.Time, bool) {
 	case *DDate:
 		return MakeDTimestampTZFromDate(ctx.GetLocation(), t).Time, true
 	case *DTimestampTZ:
-		return t.Time, true
+		return t.stripTimeZone(ctx).Time, true
 	case *DTimestamp:
 		return t.Time, true
-	case *DTimeTZ:
-		return t.ToTime(), true
 	case *DTime:
 		return timeofday.TimeOfDay(*t).ToTime(), true
 	default:
@@ -2077,6 +2155,15 @@ func (d *DTimestampTZ) Format(ctx *FmtCtx) {
 // Size implements the Datum interface.
 func (d *DTimestampTZ) Size() uintptr {
 	return unsafe.Sizeof(*d)
+}
+
+// stripTimeZone removes the time zone from this TimestampTZ. For example, a
+// TimestampTZ '2012-01-01 12:00:00 +02:00' would become
+//             '2012-01-01 12:00:00'.
+func (d *DTimestampTZ) stripTimeZone(ctx *EvalContext) *DTimestamp {
+	_, locOffset := d.Time.In(ctx.GetLocation()).Zone()
+	newTime := duration.Add(d.Time.UTC(), duration.FromInt64(int64(locOffset)))
+	return MakeDTimestamp(newTime, time.Microsecond)
 }
 
 // DInterval is the interval Datum.
@@ -2382,7 +2469,7 @@ func AsJSON(d Datum) (json.JSON, error) {
 			builder.Add(fmt.Sprintf("f%d", i+1), j)
 		}
 		return builder.Build(), nil
-	case *DTimestamp, *DTimestampTZ, *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ:
+	case *DTimestamp, *DTimestampTZ, *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DBitArray:
 		return json.FromString(AsStringWithFlags(t, FmtBareStrings)), nil
 	default:
 		if d == DNull {
@@ -2473,24 +2560,36 @@ func (d *DJSON) Size() uintptr {
 type DTuple struct {
 	D Datums
 
+	// sorted indicates that the values in D are pre-sorted.
+	// This is used to accelerate IN comparisons.
 	sorted bool
+
+	// typ is the tuple's type.
+	//
+	// The Types sub-field can be initially uninitialized, and is then
+	// populated upon first invocation of ResolvedTypes(). If
+	// initialized it must have the same arity as D.
+	//
+	// The Labels sub-field can be left nil. If populated, it must have
+	// the same arity as D.
+	//
+	// TODO(knz): this ought to be a pointer when #26680 is resolved.
+	// Also when it becomes a pointer a nil value should be valid and
+	// the tuple type auto-computed when ResolvedType() is called the
+	// first time.
+	typ types.TTuple
 }
 
 // NewDTuple creates a *DTuple with the provided datums. When creating a new
 // DTuple with Datums that are known to be sorted in ascending order, chain
 // this call with DTuple.SetSorted.
-func NewDTuple(d ...Datum) *DTuple {
-	return &DTuple{D: d}
+func NewDTuple(typ types.TTuple, d ...Datum) *DTuple {
+	return &DTuple{D: d, typ: typ}
 }
 
 // NewDTupleWithLen creates a *DTuple with the provided length.
-func NewDTupleWithLen(l int) *DTuple {
-	return &DTuple{D: make(Datums, l)}
-}
-
-// NewDTupleWithCap creates a *DTuple with the provided capacity.
-func NewDTupleWithCap(c int) *DTuple {
-	return &DTuple{D: make(Datums, 0, c)}
+func NewDTupleWithLen(typ types.TTuple, l int) *DTuple {
+	return &DTuple{D: make(Datums, l), typ: typ}
 }
 
 // AsDTuple attempts to retrieve a *DTuple from an Expr, returning a *DTuple and
@@ -2509,11 +2608,13 @@ func AsDTuple(e Expr) (*DTuple, bool) {
 
 // ResolvedType implements the TypedExpr interface.
 func (d *DTuple) ResolvedType() types.T {
-	typ := types.TTuple{Types: make([]types.T, len(d.D))}
-	for i, v := range d.D {
-		typ.Types[i] = v.ResolvedType()
+	if d.typ.Types == nil {
+		d.typ.Types = make([]types.T, len(d.D))
+		for i, v := range d.D {
+			d.typ.Types[i] = v.ResolvedType()
+		}
 	}
-	return typ
+	return d.typ
 }
 
 // Compare implements the Datum interface.
@@ -2556,7 +2657,7 @@ func (d *DTuple) Prev(ctx *EvalContext) (Datum, bool) {
 	// zero or more values that are a minimum and a maximum value of the
 	// same type exists, and the first element before that has a prev
 	// value.
-	res := NewDTupleWithLen(len(d.D))
+	res := NewDTupleWithLen(d.typ, len(d.D))
 	copy(res.D, d.D)
 	for i := len(res.D) - 1; i >= 0; i-- {
 		if !res.D[i].IsMin(ctx) {
@@ -2587,7 +2688,7 @@ func (d *DTuple) Next(ctx *EvalContext) (Datum, bool) {
 	// zero or more values that are a maximum and a minimum value of the
 	// same type exists, and the first element before that has a next
 	// value.
-	res := NewDTupleWithLen(len(d.D))
+	res := NewDTupleWithLen(d.typ, len(d.D))
 	copy(res.D, d.D)
 	for i := len(res.D) - 1; i >= 0; i-- {
 		if !res.D[i].IsMax(ctx) {
@@ -2606,7 +2707,7 @@ func (d *DTuple) Next(ctx *EvalContext) (Datum, bool) {
 
 // Max implements the Datum interface.
 func (d *DTuple) Max(ctx *EvalContext) (Datum, bool) {
-	res := NewDTupleWithLen(len(d.D))
+	res := NewDTupleWithLen(d.typ, len(d.D))
 	for i, v := range d.D {
 		m, ok := v.Max(ctx)
 		if !ok {
@@ -2619,7 +2720,7 @@ func (d *DTuple) Max(ctx *EvalContext) (Datum, bool) {
 
 // Min implements the Datum interface.
 func (d *DTuple) Min(ctx *EvalContext) (Datum, bool) {
-	res := NewDTupleWithLen(len(d.D))
+	res := NewDTupleWithLen(d.typ, len(d.D))
 	for i, v := range d.D {
 		m, ok := v.Min(ctx)
 		if !ok {
@@ -2654,13 +2755,51 @@ func (d *DTuple) IsMin(ctx *EvalContext) bool {
 func (*DTuple) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
-// TODO(bram): We don't format tuples in the same way as postgres. See #25522.
 func (d *DTuple) Format(ctx *FmtCtx) {
-	if ctx.HasFlags(FmtParsable) && (len(d.D) == 0) {
-		ctx.WriteString("ROW()")
+	if ctx.HasFlags(fmtPgwireFormat) {
+		d.pgwireFormat(ctx)
 		return
 	}
-	ctx.FormatNode(&d.D)
+
+	showLabels := len(d.typ.Labels) > 0
+	if showLabels {
+		ctx.WriteByte('(')
+	}
+	ctx.WriteByte('(')
+	comma := ""
+	parsable := ctx.HasFlags(FmtParsable)
+	for i, v := range d.D {
+		ctx.WriteString(comma)
+		ctx.FormatNode(v)
+		if parsable && (v == DNull) && len(d.typ.Types) > i {
+			coltype, err := coltypes.DatumTypeToColumnType(d.typ.Types[i])
+			// If err != nil, we can't determine the column type to write this
+			// annotation. This will primarily happen if the Tuple has types.Unknown
+			// for this slot. Somebody else will provide an error message in this
+			// case, if necessary, so just skip the annotation and continue.
+			if err == nil {
+				ctx.WriteString("::")
+				coltype.Format(ctx.Buffer, ctx.flags.EncodeFlags())
+			}
+		}
+		comma = ", "
+	}
+	if len(d.D) == 1 {
+		// Ensure the pretty-printed 1-value tuple is not ambiguous with
+		// the equivalent value enclosed in grouping parentheses.
+		ctx.WriteByte(',')
+	}
+	ctx.WriteByte(')')
+	if showLabels {
+		ctx.WriteString(" AS ")
+		comma := ""
+		for i := range d.typ.Labels {
+			ctx.WriteString(comma)
+			ctx.FormatNode((*Name)(&d.typ.Labels[i]))
+			comma = ", "
+		}
+		ctx.WriteByte(')')
+	}
 }
 
 // Sorted returns true if the tuple is known to be sorted (and contains no
@@ -2814,6 +2953,11 @@ func (dNull) AmbiguousFormat() bool { return false }
 
 // Format implements the NodeFormatter interface.
 func (dNull) Format(ctx *FmtCtx) {
+	if ctx.HasFlags(fmtPgwireFormat) {
+		// NULL sub-expressions in pgwire text values are represented with
+		// the empty string.
+		return
+	}
 	ctx.WriteString("NULL")
 }
 
@@ -2937,12 +3081,17 @@ func (d *DArray) AmbiguousFormat() bool {
 
 // Format implements the NodeFormatter interface.
 func (d *DArray) Format(ctx *FmtCtx) {
+	if ctx.HasFlags(fmtPgwireFormat) {
+		d.pgwireFormat(ctx)
+		return
+	}
+
 	ctx.WriteString("ARRAY[")
-	for i, v := range d.Array {
-		if i > 0 {
-			ctx.WriteString(",")
-		}
+	comma := ""
+	for _, v := range d.Array {
+		ctx.WriteString(comma)
 		ctx.FormatNode(v)
+		comma = ","
 	}
 	ctx.WriteByte(']')
 }
@@ -3034,6 +3183,16 @@ func NewDOid(d DInt) *DOid {
 	return &oid
 }
 
+// NewDOidWithName is a helper routine to create a *DOid initialized from a DInt
+// and a string.
+func NewDOidWithName(d DInt, typ *coltypes.TOid, name string) *DOid {
+	return &DOid{
+		DInt:         d,
+		semanticType: typ,
+		name:         name,
+	}
+}
+
 // AsRegProc changes the input DOid into a regproc with the given name and
 // returns it.
 func (d *DOid) AsRegProc(name string) *DOid {
@@ -3073,7 +3232,17 @@ func (d *DOid) Format(ctx *FmtCtx) {
 		// roundtrippable. Since in this branch, a DOid is a thin wrapper around
 		// a DInt, I _think_ it's correct to just delegate to the DInt's Format.
 		d.DInt.Format(ctx)
+	} else if ctx.HasFlags(fmtDisambiguateDatumTypes) {
+		ctx.WriteString("crdb_internal.create_")
+		ctx.WriteString(d.semanticType.Name)
+		ctx.WriteByte('(')
+		d.DInt.Format(ctx)
+		ctx.WriteByte(',')
+		lex.EncodeSQLStringWithFlags(ctx.Buffer, d.name, lex.EncNoFlags)
+		ctx.WriteByte(')')
 	} else {
+		// This is used to print the name of pseudo-procedures in e.g.
+		// pg_catalog.pg_type.typinput
 		lex.EncodeSQLStringWithFlags(ctx.Buffer, d.name, lex.EncBareStrings)
 	}
 }
@@ -3391,6 +3560,7 @@ var baseDatumTypeSizes = map[types.T]struct {
 }{
 	types.Unknown:     {unsafe.Sizeof(dNull{}), fixedSize},
 	types.Bool:        {unsafe.Sizeof(DBool(false)), fixedSize},
+	types.BitArray:    {unsafe.Sizeof(DBitArray{}), variableSize},
 	types.Int:         {unsafe.Sizeof(DInt(0)), fixedSize},
 	types.Float:       {unsafe.Sizeof(DFloat(0.0)), fixedSize},
 	types.Decimal:     {unsafe.Sizeof(DDecimal{}), variableSize},
@@ -3398,7 +3568,6 @@ var baseDatumTypeSizes = map[types.T]struct {
 	types.Bytes:       {unsafe.Sizeof(DBytes("")), variableSize},
 	types.Date:        {unsafe.Sizeof(DDate(0)), fixedSize},
 	types.Time:        {unsafe.Sizeof(DTime(0)), fixedSize},
-	types.TimeTZ:      {unsafe.Sizeof(DTimeTZ{}), fixedSize},
 	types.Timestamp:   {unsafe.Sizeof(DTimestamp{}), fixedSize},
 	types.TimestampTZ: {unsafe.Sizeof(DTimestampTZ{}), fixedSize},
 	types.Interval:    {unsafe.Sizeof(DInterval{}), fixedSize},

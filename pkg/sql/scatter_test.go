@@ -24,13 +24,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestScatterRandomizeLeases(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	if testutils.NightlyStress() && util.RaceEnabled {
+		t.Skip("uses too many resources for stressrace")
+	}
 
 	const numHosts = 3
 	tc := serverutils.StartTestCluster(t, numHosts, base.TestClusterArgs{})
@@ -45,11 +51,14 @@ func TestScatterRandomizeLeases(t *testing.T) {
 
 	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
+	// Prevent the merge queue from immediately discarding our splits.
+	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
+
 	// Introduce 99 splits to get 100 ranges.
 	r.Exec(t, "ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
 
 	getLeaseholders := func() (map[int]int, error) {
-		rows := r.Query(t, `SELECT "Range ID", "Lease Holder" FROM [SHOW TESTING_RANGES FROM TABLE test.t]`)
+		rows := r.Query(t, `SELECT range_id, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE test.t]`)
 		leaseholders := make(map[int]int)
 		numRows := 0
 		for ; rows.Next(); numRows++ {
@@ -61,7 +70,7 @@ func TestScatterRandomizeLeases(t *testing.T) {
 				t.Fatalf("invalid rangeID: %d", rangeID)
 			}
 			if leaseholder < 1 || leaseholder > numHosts {
-				return nil, fmt.Errorf("invalid leaseholder value: %d", leaseholder)
+				return nil, fmt.Errorf("invalid lease_holder value: %d", leaseholder)
 			}
 			leaseholders[rangeID] = leaseholder
 		}
@@ -116,6 +125,8 @@ func TestScatterResponse(t *testing.T) {
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	r := sqlutils.MakeSQLRunner(sqlDB)
+	// Prevent the merge queue from immediately discarding our splits.
+	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
 	r.Exec(t, "ALTER TABLE test.t SPLIT AT (SELECT i*10 FROM generate_series(1, 99) AS g(i))")
 	rows := r.Query(t, "ALTER TABLE test.t SCATTER")
 
@@ -131,7 +142,7 @@ func TestScatterResponse(t *testing.T) {
 			expectedKey = keys.MakeTablePrefix(uint32(tableDesc.ID))
 		} else {
 			var err error
-			expectedKey, err = sqlbase.MakePrimaryIndexKey(tableDesc, i*10)
+			expectedKey, err = sqlbase.TestingMakePrimaryIndexKey(tableDesc, i*10)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -28,12 +28,12 @@ import (
 	"strconv"
 	"sync"
 	"time"
-	"unicode"
 
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -431,6 +431,15 @@ func (v *Value) SetDuration(t duration.Duration) error {
 	return nil
 }
 
+// SetBitArray encodes the specified bit array value into the bytes field of the
+// receiver, sets the tag and clears the checksum.
+func (v *Value) SetBitArray(t bitarray.BitArray) {
+	words, _ := t.EncodingParts()
+	v.RawBytes = make([]byte, headerSize, headerSize+encoding.NonsortingUvarintMaxLen+8*len(words))
+	v.RawBytes = encoding.EncodeUntaggedBitArrayValue(v.RawBytes, t)
+	v.setTag(ValueType_BITARRAY)
+}
+
 // SetDecimal encodes the specified decimal value into the bytes field of
 // the receiver using Gob encoding, sets the tag and clears the checksum.
 func (v *Value) SetDecimal(dec *apd.Decimal) error {
@@ -545,6 +554,16 @@ func (v Value) GetDuration() (duration.Duration, error) {
 	return t, err
 }
 
+// GetBitArray decodes a bit array value from the bytes field of the receiver. If
+// the tag is not BITARRAY an error will be returned.
+func (v Value) GetBitArray() (bitarray.BitArray, error) {
+	if tag := v.GetTag(); tag != ValueType_BITARRAY {
+		return bitarray.BitArray{}, fmt.Errorf("value type is not %s: %s", ValueType_BITARRAY, tag)
+	}
+	_, t, err := encoding.DecodeUntaggedBitArrayValue(v.dataBytes())
+	return t, err
+}
+
 // GetDecimal decodes a decimal value from the bytes of the receiver. If the
 // tag is not DECIMAL an error will be returned.
 func (v Value) GetDecimal() (apd.Decimal, error) {
@@ -656,12 +675,17 @@ func (v Value) PrettyPrint() string {
 	case ValueType_BYTES:
 		var data []byte
 		data, err = v.GetBytes()
-		printable := len(bytes.TrimLeftFunc(data, unicode.IsPrint)) == 0
-		if printable {
+		if encoding.PrintableBytes(data) {
 			buf.WriteString(string(data))
 		} else {
+			buf.WriteString("0x")
 			buf.WriteString(hex.EncodeToString(data))
 		}
+	case ValueType_BITARRAY:
+		var data bitarray.BitArray
+		data, err = v.GetBitArray()
+		buf.WriteByte('B')
+		data.Format(&buf)
 	case ValueType_TIME:
 		var t time.Time
 		t, err = v.GetTime()
@@ -734,6 +758,29 @@ func MakeTransaction(
 		OrigTimestamp: now,
 		MaxTimestamp:  maxTS,
 	}
+}
+
+// MakeTxnCoordMeta creates a new transaction coordinator meta for the given
+// transaction.
+func MakeTxnCoordMeta(txn Transaction) TxnCoordMeta {
+	return TxnCoordMeta{Txn: txn, DeprecatedRefreshValid: true}
+}
+
+// StripRootToLeaf strips out all information that is unnecessary to communicate
+// to leaf transactions.
+func (meta *TxnCoordMeta) StripRootToLeaf() *TxnCoordMeta {
+	meta.Intents = nil
+	meta.CommandCount = 0
+	meta.RefreshReads = nil
+	meta.RefreshWrites = nil
+	return meta
+}
+
+// StripLeafToRoot strips out all information that is unnecessary to communicate
+// back to the root transaction.
+func (meta *TxnCoordMeta) StripLeafToRoot() *TxnCoordMeta {
+	meta.OutstandingWrites = nil
+	return meta
 }
 
 // LastActive returns the last timestamp at which client activity definitely
@@ -1080,9 +1127,7 @@ func PrepareTransactionForRetry(
 		// advanced to at least the error's timestamp?
 		now := clock.Now()
 		newTxnTimestamp := now
-		if newTxnTimestamp.Less(txn.Timestamp) {
-			newTxnTimestamp = txn.Timestamp
-		}
+		newTxnTimestamp.Forward(txn.Timestamp)
 		txn = MakeTransaction(
 			txn.Name,
 			nil, // baseKey
@@ -1137,6 +1182,11 @@ func CanTransactionRetryAtRefreshedTimestamp(
 			return false, nil
 		}
 	case *WriteTooOldError:
+		// TODO(andrei): Chances of success for on write-too-old conditions might be
+		// usually small: if our txn previously read the key that generated this
+		// error, obviously the refresh will fail. It might be worth trying to
+		// detect these cases and save the futile attempt; we'd need to have access
+		// to the key that generated the error.
 		timestamp.Forward(writeTooOldRetryTimestamp(txn, err))
 	case *ReadWithinUncertaintyIntervalError:
 		timestamp.Forward(

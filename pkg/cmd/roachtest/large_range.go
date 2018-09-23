@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/dustin/go-humanize"
+	humanize "github.com/dustin/go-humanize"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 )
@@ -38,9 +38,10 @@ func registerLargeRange(r *registry) {
 	const numNodes = 3
 
 	r.Add(testSpec{
-		Name:   fmt.Sprintf("largerange/splits/size=%s,nodes=%d", bytesStr(size), numNodes),
-		Nodes:  nodes(numNodes),
-		Stable: true, // DO NOT COPY to new tests
+		Name:    fmt.Sprintf("largerange/splits/size=%s,nodes=%d", bytesStr(size), numNodes),
+		Nodes:   nodes(numNodes),
+		Timeout: 5 * time.Hour,
+		Stable:  true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runLargeRangeSplits(ctx, t, c, size)
 		},
@@ -80,10 +81,15 @@ func runLargeRangeSplits(ctx context.Context, t *test, c *cluster, size int) {
 
 		t.Status("increasing range_max_bytes")
 		setRangeMaxBytes := func(maxBytes int) {
-			stmtZone := fmt.Sprintf(`ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE '
-range_max_bytes: %d
-'`, maxBytes)
-			if _, err := db.Exec(stmtZone); err != nil {
+			stmtZone := fmt.Sprintf("ALTER RANGE default CONFIGURE ZONE USING range_max_bytes = %d", maxBytes)
+			_, err := db.Exec(stmtZone)
+			if err != nil && strings.Contains(err.Error(), "syntax error") {
+				// Pre-2.1 was EXPERIMENTAL.
+				// TODO(knz): Remove this in 2.2.
+				stmtZone = fmt.Sprintf("ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE '\nrange_max_bytes: %d\n'", maxBytes)
+				_, err = db.Exec(stmtZone)
+			}
+			if err != nil {
 				t.Fatalf("failed to set range_max_bytes: %v", err)
 			}
 		}
@@ -96,26 +102,13 @@ range_max_bytes: %d
 		// NB: workload init does not wait for upreplication after creating the
 		// schema but before populating it. This is ok because upreplication
 		// occurs much faster than we can actually create a large range.
-		//
-		// NB: the bespoke timeout mechanism below serves to diagnose #26109.
-		// We don't get the logs if the test fails due to GCE removing the
-		// hardware out from under us.
-		done := make(chan struct{})
-		go func() {
-			c.Run(ctx, c.Node(1), fmt.Sprintf("./workload init bank "+
-				"--rows=%d --payload-bytes=%d --ranges=1 {pgurl:1-%d}", rows, payload, c.nodes))
-			close(done)
-		}()
-		select {
-		case <-done:
-		case <-time.After(5 * time.Hour):
-			t.Fatal("test got stuck while initializing dataset")
-		}
+		c.Run(ctx, c.Node(1), fmt.Sprintf("./workload init bank "+
+			"--rows=%d --payload-bytes=%d --ranges=1 {pgurl:1-%d}", rows, payload, c.nodes))
 
 		t.Status("checking for single range")
 		rangeCount := func() int {
 			var count int
-			const q = "SELECT COUNT(*) FROM [SHOW TESTING_RANGES FROM TABLE bank.bank]"
+			const q = "SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE bank.bank]"
 			if err := db.QueryRow(q).Scan(&count); err != nil {
 				t.Fatalf("failed to get range count: %v", err)
 			}

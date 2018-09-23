@@ -16,8 +16,9 @@ syntax = "proto2";
 package cockroach.roachpb;
 option go_package = "roachpb";
 
-import "roachpb/metadata.proto";
 import "roachpb/data.proto";
+import "roachpb/metadata.proto";
+import "storage/engine/enginepb/mvcc3.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
@@ -108,15 +109,75 @@ message ReadWithinUncertaintyIntervalError {
   repeated ObservedTimestamp observed_timestamps = 4 [(gogoproto.nullable) = false];
 }
 
-// A TransactionAbortedError indicates that the transaction was aborted by
-// another concurrent transaction. Upon seeing this error, the client is
-// supposed to reset its Transaction proto and try the transaction again.
+// TransactionAbortedReason specifies what caused a TransactionAbortedError.
+// The reasons below are not necessarily disjoint - they describe where the
+// error was generated, but generally it's possible that a
+// TransactionAbortedError would have been generated somewhere else if the
+// client would have performed different operations.
+enum TransactionAbortedReason {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // For backwards compatibility.
+  ABORT_REASON_UNKNOWN = 0;
+
+  // A BeginTransaction or EndTransaction(commit=true) request found an aborted
+  // transaction record. Another txn must have written this record - that other
+  // txn probably ran into one of our intents written before BeginTransaction
+  // (on a different range) and pushed it successfully. Or, a high-priority
+  // transaction simply pushed us, or we failed to heartbeat for a while and
+  // another txn (of any priority) considered us abandoned and pushed us.
+  ABORT_REASON_ABORTED_RECORD_FOUND = 1;
+
+  // The BeginTransaction has a timestamp below the TxnSpanGCThreshold, so there
+  // might have been an ABORTED txn record that got GCed (so, we might be in the
+  // ABORT_REASON_ABORTED_RECORD_FOUND case and not know).
+  ABORT_REASON_BEGIN_TOO_OLD = 2;
+
+  // The client is trying to use a transaction that's already been aborted. The
+  // TxnCoordSender detects this. Either the client is misusing a txn, or the
+  // TxnCoordSender found out about the transaction being aborted async through
+  // the heartbeat loop.
+  ABORT_REASON_CLIENT_REJECT = 3;
+
+  // The txn was trying to push another and found out that it itself got aborted
+  // somehow while waiting for the push.
+  ABORT_REASON_PUSHER_ABORTED = 4;
+
+  // The txn ran into the "abort span" - it was trying to read from a range
+  // where it had previously laid down intents that have been cleaned up in the
+  // meantime because the transaction was aborted.
+  ABORT_REASON_ABORT_SPAN = 5;
+
+  // An EndTransaction encountered a timestamp cache entry for the txn key, and
+  // the entry identifies this transaction. This means that the transaction
+  // definitely committed or rolled back before.
+  // So, this EndTransaction is either a delayed replay of some sort, or it
+  // raced with an async abort and lost. If a client gets this
+  // TransactionAbortedError (without it being wrapped in an ambiguous error),
+  // it must be the latter case, and the transaction can be retried.
+  ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY = 6;
+
+  // Like the above, except the timestamp cache doesn't have a txn id in it.
+  // This means that it no longer has good accuracy; likely as a result of a
+  // lease transfer. As above, if the error has not been converted by the time
+  // it reaches a client, then it's not a replay.
+  ABORT_REASON_TIMESTAMP_CACHE_REJECTED_POSSIBLE_REPLAY= 7;
+}
+
+// A TransactionAbortedError indicates that the client should retry the
+// transaction (and use a different txn id, as opposed to
+// TransactionRetryError). This most often happens when the transaction was
+// aborted by another concurrent transaction. Upon seeing this error, the client
+// is supposed to reset its Transaction proto and try the transaction again.
 //
 // In contrast with other errors, the Transaction that the client gets in the
-// pErr carrying this ErrorDetail is not supposed to be used by the client,
-// besides checking that the transaction's ID is right.
+// pErr carrying this ErrorDetail is not supposed to be used as is by the
+// client; the ID should be checked and then attributes like the timestamp
+// should be used in creating a new txn.
 message TransactionAbortedError {
   option (gogoproto.equal) = true;
+
+  optional TransactionAbortedReason reason = 1 [(gogoproto.nullable) = false];
 }
 
 // A TransactionPushError indicates that the transaction could not
@@ -144,6 +205,8 @@ enum TransactionRetryReason {
   // A possible replay caused by duplicate begin txn or out-of-order
   // txn sequence number.
   RETRY_POSSIBLE_REPLAY = 4;
+  // An asynchronous write was observed to have failed.
+  RETRY_ASYNC_WRITE_FAILURE = 5;
 }
 
 // A TransactionRetryError indicates that the transaction must be
@@ -152,14 +215,6 @@ message TransactionRetryError {
   option (gogoproto.equal) = true;
 
   optional TransactionRetryReason reason = 1 [(gogoproto.nullable) = false];
-}
-
-// A TransactionReplayError indicates that a BeginTransaction request
-// is being replayed. This can happen on network replays in which a
-// BeginTransaction request is sent again either from the client or
-// is belatedly delivered after an earlier attempt succeeded.
-message TransactionReplayError {
-  option (gogoproto.equal) = true;
 }
 
 // A TransactionStatusError indicates that the transaction status is
@@ -179,6 +234,8 @@ message TransactionStatusError {
     REASON_UNKNOWN = 0;
     // The request was sent to a transaction record that does not exist.
     REASON_TXN_NOT_FOUND = 1;
+    // A committed transaction record was found.
+    REASON_TXN_COMMITTED = 2;
   }
   optional Reason reason = 2 [(gogoproto.nullable) = false];
 }
@@ -338,14 +395,6 @@ message HandledRetryableTxnError {
   optional Transaction transaction = 3 [(gogoproto.nullable) = false];
 }
 
-// A TxnPrevAttemptError indicates a batch response for a request sent through
-// client Txn was found that was meant for a previous incarnation of the
-// transaction. This can happen in cases where concurrent requests are made
-// for a Transaction and one of the requests results in a Txn abort.
-message TxnPrevAttemptError {
-  option (gogoproto.equal) = true;
-}
-
 // TxnAlreadyEncounteredErrorError indicates that an operation tried to use a
 // transaction that already received an error from a previous request. Once that
 // happens, client.Txn rejects future requests.
@@ -381,46 +430,87 @@ message BatchTimestampBeforeGCError {
   optional util.hlc.Timestamp Threshold = 2 [(gogoproto.nullable) = false];
 }
 
+// An IntentMissingError indicates that a QueryIntent request expected
+// an intent to be present at its specified key but the intent was
+// not there.
+message IntentMissingError {
+  option (gogoproto.equal) = true;
+
+  // The non-matching intent that was found at that key, if any.
+  optional Intent wrong_intent = 1;
+}
+
+// A MergeInProgressError indicates that the request could not be completed
+// because the replica is being merged into its left-hand neighbor. The request
+// should be resubmitted after the merge completes.
+//
+// This error is handled by the Store and should not escape to higher levels.
+message MergeInProgressError {
+  option (gogoproto.equal) = true;
+}
+
+// A RangeFeedRetryError indicates that a rangefeed was disconnected, often
+// because of a range lifecycle event, and can be retried.
+message RangeFeedRetryError {
+  option (gogoproto.equal) = true;
+
+  // Reason specifies what caused the error.
+  enum Reason {
+    // The replica was removed from its store.
+    REASON_REPLICA_REMOVED = 0;
+    // The range was split in two.
+    REASON_RANGE_SPLIT = 1;
+    // The range was merged into another.
+    REASON_RANGE_MERGED = 2;
+    // A Raft snapshot applied on the replica.
+    REASON_RAFT_SNAPSHOT = 3;
+    // A Raft command was missing a logical operation log.
+    REASON_LOGICAL_OPS_MISSING = 4;
+  }
+  optional Reason reason = 1 [(gogoproto.nullable) = false];
+}
+
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.equal) = true;
-  option (gogoproto.onlyone) = true;
 
-  optional NotLeaseHolderError not_lease_holder = 1;
-  optional RangeNotFoundError range_not_found = 2;
-  optional RangeKeyMismatchError range_key_mismatch = 3;
-  optional ReadWithinUncertaintyIntervalError read_within_uncertainty_interval = 4;
-  optional TransactionAbortedError transaction_aborted = 5;
-  optional TransactionPushError transaction_push = 6;
-  optional TransactionRetryError transaction_retry = 7;
-  optional TransactionReplayError transaction_replay = 22;
-  optional TransactionStatusError transaction_status = 8;
-  optional WriteIntentError write_intent = 9;
-  optional WriteTooOldError write_too_old = 10;
-  optional OpRequiresTxnError op_requires_txn = 11;
-  optional ConditionFailedError condition_failed = 12;
-  optional LeaseRejectedError lease_rejected = 13;
-  optional NodeUnavailableError node_unavailable = 14;
-  optional SendError send = 15;
-  // TODO(kaneda): Following three are added to preserve the type when
-  // converting Go errors from/to proto Errors. Revisit this design.
-  optional RaftGroupDeletedError raft_group_deleted = 16;
-  optional ReplicaCorruptionError replica_corruption = 17;
-  optional ReplicaTooOldError replica_too_old = 18;
-  reserved 25;
-  optional AmbiguousResultError ambiguous_result = 26;
-  optional StoreNotFoundError store_not_found = 27;
-  // The following three are ErrorDetails (and proto messages) because they
-  // needs to be communicated from the TxnCoordSender and Txn to the upper
-  // layers through the Sender interface.
-  optional HandledRetryableTxnError handled_retryable_txn_error = 28;
-  reserved 29;
-  optional TxnPrevAttemptError txn_aborted_async_err = 30;
-  optional IntegerOverflowError integer_overflow = 31;
-  optional UnsupportedRequestError unsupported_request = 32;
-  optional MixedSuccessError mixed_success = 33;
-  optional BatchTimestampBeforeGCError timestamp_before = 34;
-  optional TxnAlreadyEncounteredErrorError txn_already_encountered_error = 35;
+  reserved 22, 25, 29, 30;
+  oneof value {
+    NotLeaseHolderError not_lease_holder = 1;
+    RangeNotFoundError range_not_found = 2;
+    RangeKeyMismatchError range_key_mismatch = 3;
+    ReadWithinUncertaintyIntervalError read_within_uncertainty_interval = 4;
+    TransactionAbortedError transaction_aborted = 5;
+    TransactionPushError transaction_push = 6;
+    TransactionRetryError transaction_retry = 7;
+    TransactionStatusError transaction_status = 8;
+    WriteIntentError write_intent = 9;
+    WriteTooOldError write_too_old = 10;
+    OpRequiresTxnError op_requires_txn = 11;
+    ConditionFailedError condition_failed = 12;
+    LeaseRejectedError lease_rejected = 13;
+    NodeUnavailableError node_unavailable = 14;
+    SendError send = 15;
+    // TODO(kaneda): Following three are added to preserve the type when
+    // converting Go errors from/to proto Errors. Revisit this design.
+    RaftGroupDeletedError raft_group_deleted = 16;
+    ReplicaCorruptionError replica_corruption = 17;
+    ReplicaTooOldError replica_too_old = 18;
+    AmbiguousResultError ambiguous_result = 26;
+    StoreNotFoundError store_not_found = 27;
+    // The following three are ErrorDetails (and proto messages) because they
+    // needs to be communicated from the TxnCoordSender and Txn to the upper
+    // layers through the Sender interface.
+    HandledRetryableTxnError handled_retryable_txn_error = 28;
+    IntegerOverflowError integer_overflow = 31;
+    UnsupportedRequestError unsupported_request = 32;
+    MixedSuccessError mixed_success = 33;
+    BatchTimestampBeforeGCError timestamp_before = 34;
+    TxnAlreadyEncounteredErrorError txn_already_encountered_error = 35;
+    IntentMissingError intent_missing = 36;
+    MergeInProgressError merge_in_progress = 37;
+    RangeFeedRetryError rangefeed_retry = 38;
+  }
 }
 
 // TransactionRestart indicates how an error should be handled in a
@@ -472,11 +562,11 @@ message Error {
   optional Transaction unexposed_txn = 4;
 
   // Node at which the error was generated (zero if does not apply).
-  optional int32 origin_node = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "NodeID" ];
+  optional int32 origin_node = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "NodeID"];
 
   // If an ErrorDetail is present, it may contain additional structured data
   // about the error.
-  optional ErrorDetail detail = 6;
+  optional ErrorDetail detail = 6 [(gogoproto.nullable) = false];
 
   // The index, if given, contains the index of the request (in the batch)
   // whose execution caused the error.

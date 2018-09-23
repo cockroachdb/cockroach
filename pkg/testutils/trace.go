@@ -18,7 +18,17 @@ import (
 	"regexp"
 
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
+
+// MakeAmbientCtx creates an AmbientContext with a Tracer in it.
+func MakeAmbientCtx() log.AmbientContext {
+	return log.AmbientContext{
+		Tracer: tracing.NewTracer(),
+	}
+}
 
 // MatchInOrder matches interprets the given slice of strings as a slice of
 // regular expressions and checks that they match, in order and without overlap,

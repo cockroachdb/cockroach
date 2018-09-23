@@ -161,3 +161,58 @@ When creating an error for an unexpected situation, use methods from the
 The reason for this distinction is somewhat historical (#7424), but maintaining
 it will help us immensely if we ever switch to using new error types for the
 different situations.
+
+## Go implementation of SQL
+
+When defining the result column labels of statements or virtual
+tables, apply the following general principles:
+
+- the casing of column labels must be consistent.
+
+- the same concept in different statements should be named using the
+  same word.
+
+  For example, `variable` and `value` corresponds between SHOW ALL
+  CLUSTER SETTINGS and SHOW SESSION ALL.
+
+- the labels must be usable by a surrounding query without mandating
+  quotes.
+
+  For example, `start_key` instead of `"Start Key"`. Also, avoid SQL
+  keywords which would also need to be quoted: `table_name` instead of
+  `"table"`, `index_name` instead of `"index"`, etc.
+
+  Never name a column `"user"`! The risk of mistake with the syntax
+  special form `user` is too high. Use `user_name` instead.
+
+- use underscores to separate words, for consistency with
+  `information_schema`.
+
+  For example, `start_key` instead of `startkey`
+
+- avoid abbreviations unless most uses of the word in spoken English
+  use the abbreviation already.
+
+  For example, `id` for "identifier" is OK, but `loc` for "location"
+  is not.
+
+- for columns akin to "primary keys" (that identify the object being
+  described by the remaining columns), words whose meaning is highly
+  overloaded must be disambiguated in the label.
+
+  For example, `zone_id`, `job_id`, `table_id` instead of just `id`
+  everywhere. `table_name`, `column_name`, etc instead of `name`
+  everywhere.
+
+- for database objects that can be referred to by two or more types of
+  handles (e.g. by-ID or by-name), the column label must disambiguate
+  which type of handle is being reported. This makes it possible to
+  later report the other handles in additional columns.
+
+  For example, `table_name` instead of `table`, so that `table_id` can
+  be added later.
+
+- labels that reproduce data already present in an
+  `information_schema` table or a prior `SHOW` statement should use
+  the same labels as the `information_schema` table or `SHOW`
+  statement, provided it matches the principles above already.

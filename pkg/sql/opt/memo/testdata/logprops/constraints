@@ -23,13 +23,13 @@ SELECT * FROM a WHERE x > 1
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=333]
+ ├── prune: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000]
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
       └── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
-           ├── variable: a.x [type=int, outer=(1)]
+           ├── variable: x [type=int, outer=(1)]
            └── const: 1 [type=int]
 
 opt
@@ -37,13 +37,13 @@ SELECT * FROM a WHERE x >= 1
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=333]
+ ├── prune: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000]
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
       └── ge [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
-           ├── variable: a.x [type=int, outer=(1)]
+           ├── variable: x [type=int, outer=(1)]
            └── const: 1 [type=int]
 
 opt
@@ -51,13 +51,13 @@ SELECT * FROM a WHERE x < 1
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=333]
+ ├── prune: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000]
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - /0]; tight)]
       └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /0]; tight)]
-           ├── variable: a.x [type=int, outer=(1)]
+           ├── variable: x [type=int, outer=(1)]
            └── const: 1 [type=int]
 
 opt
@@ -65,13 +65,13 @@ SELECT * FROM a WHERE x <= 1
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=333]
+ ├── prune: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000]
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - /1]; tight)]
       └── le [type=bool, outer=(1), constraints=(/1: (/NULL - /1]; tight)]
-           ├── variable: a.x [type=int, outer=(1)]
+           ├── variable: x [type=int, outer=(1)]
            └── const: 1 [type=int]
 
 opt
@@ -79,13 +79,14 @@ SELECT * FROM a WHERE x = 1
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=1, distinct(1)=1]
+ ├── fd: ()-->(1)
+ ├── prune: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000, distinct(1)=700]
- └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+ │    └── prune: (1,2)
+ └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
       └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
-           ├── variable: a.x [type=int, outer=(1)]
+           ├── variable: x [type=int, outer=(1)]
            └── const: 1 [type=int]
 
 opt
@@ -93,16 +94,16 @@ SELECT * FROM a WHERE x > 1 AND x < 5
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=4, distinct(1)=3]
+ ├── prune: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000, distinct(1)=700]
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1), constraints=(/1: [/2 - /4]; tight)]
       ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
-      │    ├── variable: a.x [type=int, outer=(1)]
+      │    ├── variable: x [type=int, outer=(1)]
       │    └── const: 1 [type=int]
       └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
-           ├── variable: a.x [type=int, outer=(1)]
+           ├── variable: x [type=int, outer=(1)]
            └── const: 5 [type=int]
 
 opt
@@ -110,16 +111,16 @@ SELECT * FROM a WHERE x = 1 AND y = 5
 ----
 select
  ├── columns: x:1(int!null) y:2(int!null)
- ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
+ ├── fd: ()-->(1,2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
- └── filters [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/5 - /5]; tight)]
+ │    └── prune: (1,2)
+ └── filters [type=bool, outer=(1,2), constraints=(/1: [/1 - /1]; /2: [/5 - /5]; tight), fd=()-->(1,2)]
       ├── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
-      │    ├── variable: a.x [type=int, outer=(1)]
+      │    ├── variable: x [type=int, outer=(1)]
       │    └── const: 1 [type=int]
       └── eq [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
-           ├── variable: a.y [type=int, outer=(2)]
+           ├── variable: y [type=int, outer=(2)]
            └── const: 5 [type=int]
 
 opt
@@ -127,22 +128,21 @@ SELECT * FROM a WHERE x > 1 AND x < 5 AND y >= 7 AND y <= 9
 ----
 select
  ├── columns: x:1(int!null) y:2(int!null)
- ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000, distinct(1)=700, distinct(2)=700]
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/2 - /4]; /2: [/7 - /9]; tight)]
       ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
-      │    ├── variable: a.x [type=int, outer=(1)]
+      │    ├── variable: x [type=int, outer=(1)]
       │    └── const: 1 [type=int]
       ├── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
-      │    ├── variable: a.x [type=int, outer=(1)]
+      │    ├── variable: x [type=int, outer=(1)]
       │    └── const: 5 [type=int]
       ├── ge [type=bool, outer=(2), constraints=(/2: [/7 - ]; tight)]
-      │    ├── variable: a.y [type=int, outer=(2)]
+      │    ├── variable: y [type=int, outer=(2)]
       │    └── const: 7 [type=int]
       └── le [type=bool, outer=(2), constraints=(/2: (/NULL - /9]; tight)]
-           ├── variable: a.y [type=int, outer=(2)]
+           ├── variable: y [type=int, outer=(2)]
            └── const: 9 [type=int]
 
 # Verify the resulting constraints are not tight.
@@ -151,21 +151,20 @@ SELECT * FROM a WHERE x > 1 AND x < 5 AND x + y = 5
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=37]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000]
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/2 - /4])]
       ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
-      │    ├── variable: a.x [type=int, outer=(1)]
+      │    ├── variable: x [type=int, outer=(1)]
       │    └── const: 1 [type=int]
       ├── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
-      │    ├── variable: a.x [type=int, outer=(1)]
+      │    ├── variable: x [type=int, outer=(1)]
       │    └── const: 5 [type=int]
       └── eq [type=bool, outer=(1,2)]
            ├── plus [type=int, outer=(1,2)]
-           │    ├── variable: a.x [type=int, outer=(1)]
-           │    └── variable: a.y [type=int, outer=(2)]
+           │    ├── variable: x [type=int, outer=(1)]
+           │    └── variable: y [type=int, outer=(2)]
            └── const: 5 [type=int]
 
 opt
@@ -173,23 +172,22 @@ SELECT * FROM a WHERE x > 1 AND x + y >= 5 AND x + y <= 7
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=37]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000]
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/2 - ])]
       ├── gt [type=bool, outer=(1), constraints=(/1: [/2 - ]; tight)]
-      │    ├── variable: a.x [type=int, outer=(1)]
+      │    ├── variable: x [type=int, outer=(1)]
       │    └── const: 1 [type=int]
       ├── ge [type=bool, outer=(1,2)]
       │    ├── plus [type=int, outer=(1,2)]
-      │    │    ├── variable: a.x [type=int, outer=(1)]
-      │    │    └── variable: a.y [type=int, outer=(2)]
+      │    │    ├── variable: x [type=int, outer=(1)]
+      │    │    └── variable: y [type=int, outer=(2)]
       │    └── const: 5 [type=int]
       └── le [type=bool, outer=(1,2)]
            ├── plus [type=int, outer=(1,2)]
-           │    ├── variable: a.x [type=int, outer=(1)]
-           │    └── variable: a.y [type=int, outer=(2)]
+           │    ├── variable: x [type=int, outer=(1)]
+           │    └── variable: y [type=int, outer=(2)]
            └── const: 7 [type=int]
 
 # Verify that we ignore mixed-type comparisons.
@@ -198,13 +196,13 @@ SELECT * FROM a WHERE x > 1.5
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=333]
+ ├── prune: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000]
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1)]
       └── gt [type=bool, outer=(1)]
-           ├── variable: a.x [type=int, outer=(1)]
+           ├── variable: x [type=int, outer=(1)]
            └── const: 1.5 [type=decimal]
 
 opt
@@ -212,15 +210,19 @@ SELECT * FROM kuv WHERE u > 1::INT
 ----
 select
  ├── columns: k:1(int!null) u:2(float) v:3(string)
- ├── stats: [rows=333]
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── prune: (1,3)
+ ├── interesting orderings: (+1)
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string)
- │    ├── stats: [rows=1000]
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1)
  └── filters [type=bool, outer=(2)]
       └── gt [type=bool, outer=(2)]
-           ├── variable: kuv.u [type=float, outer=(2)]
+           ├── variable: u [type=float, outer=(2)]
            └── const: 1 [type=int]
 
 opt
@@ -228,18 +230,22 @@ SELECT * FROM kuv WHERE v <= 'foo' AND v >= 'bar'
 ----
 select
  ├── columns: k:1(int!null) u:2(float) v:3(string!null)
- ├── stats: [rows=333]
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── prune: (1,2)
+ ├── interesting orderings: (+1)
  ├── scan kuv
  │    ├── columns: k:1(int!null) u:2(float) v:3(string)
- │    ├── stats: [rows=1000]
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1)
  └── filters [type=bool, outer=(3), constraints=(/3: [/'bar' - /'foo']; tight)]
       ├── le [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo']; tight)]
-      │    ├── variable: kuv.v [type=string, outer=(3)]
+      │    ├── variable: v [type=string, outer=(3)]
       │    └── const: 'foo' [type=string]
       └── ge [type=bool, outer=(3), constraints=(/3: [/'bar' - ]; tight)]
-           ├── variable: kuv.v [type=string, outer=(3)]
+           ├── variable: v [type=string, outer=(3)]
            └── const: 'bar' [type=string]
 
 # Test IN.
@@ -248,13 +254,13 @@ SELECT * FROM a WHERE x IN (1, 2, 3, NULL)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=4, distinct(1)=3]
+ ├── prune: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000, distinct(1)=700]
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
       └── in [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/2 - /2] [/3 - /3]; tight)]
-           ├── variable: a.x [type=int, outer=(1)]
+           ├── variable: x [type=int, outer=(1)]
            └── tuple [type=tuple{unknown, int, int, int}]
                 ├── null [type=unknown]
                 ├── const: 1 [type=int]
@@ -262,12 +268,22 @@ select
                 └── const: 3 [type=int]
 
 opt
-SELECT * FROM a WHERE x IN (NULL)
+SELECT * FROM a WHERE rowid IS NULL
 ----
-scan a
+project
  ├── columns: x:1(int) y:2(int)
- ├── constraint: /3: contradiction
- └── stats: [rows=333]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── prune: (1,2)
+ └── scan a
+      ├── columns: x:1(int) y:2(int) rowid:3(int!null)
+      ├── constraint: /3: contradiction
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(1-3)
+      ├── prune: (1-3)
+      └── interesting orderings: (+3)
 
 # Test IN in combination with another condition on the same column (which rules
 # out some of the entries in the IN condition).
@@ -276,13 +292,13 @@ SELECT * FROM a WHERE x IN (1, 3, 5, 7, 9) AND x > 6
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=2, distinct(1)=2]
+ ├── prune: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000, distinct(1)=700]
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1), constraints=(/1: [/7 - /7] [/9 - /9]; tight)]
       ├── in [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/3 - /3] [/5 - /5] [/7 - /7] [/9 - /9]; tight)]
-      │    ├── variable: a.x [type=int, outer=(1)]
+      │    ├── variable: x [type=int, outer=(1)]
       │    └── tuple [type=tuple{int, int, int, int, int}]
       │         ├── const: 1 [type=int]
       │         ├── const: 3 [type=int]
@@ -290,7 +306,7 @@ select
       │         ├── const: 7 [type=int]
       │         └── const: 9 [type=int]
       └── gt [type=bool, outer=(1), constraints=(/1: [/7 - ]; tight)]
-           ├── variable: a.x [type=int, outer=(1)]
+           ├── variable: x [type=int, outer=(1)]
            └── const: 6 [type=int]
 
 # Test IN in combination with a condition on another column.
@@ -299,18 +315,17 @@ SELECT * FROM a WHERE x IN (1, 3) AND y > 4
 ----
 select
  ├── columns: x:1(int!null) y:2(int!null)
- ├── stats: [rows=1, distinct(1)=1]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000, distinct(1)=700]
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2), constraints=(/1: [/1 - /1] [/3 - /3]; /2: [/5 - ]; tight)]
       ├── in [type=bool, outer=(1), constraints=(/1: [/1 - /1] [/3 - /3]; tight)]
-      │    ├── variable: a.x [type=int, outer=(1)]
+      │    ├── variable: x [type=int, outer=(1)]
       │    └── tuple [type=tuple{int, int}]
       │         ├── const: 1 [type=int]
       │         └── const: 3 [type=int]
       └── gt [type=bool, outer=(2), constraints=(/2: [/5 - ]; tight)]
-           ├── variable: a.y [type=int, outer=(2)]
+           ├── variable: y [type=int, outer=(2)]
            └── const: 4 [type=int]
 
 # Test tuple inequality.
@@ -319,15 +334,14 @@ SELECT * FROM a WHERE (x, y) > (1, 2)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000]
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2), constraints=(/1/2: [/1/3 - ]; tight)]
       └── gt [type=bool, outer=(1,2), constraints=(/1/2: [/1/3 - ]; tight)]
            ├── tuple [type=tuple{int, int}, outer=(1,2)]
-           │    ├── variable: a.x [type=int, outer=(1)]
-           │    └── variable: a.y [type=int, outer=(2)]
+           │    ├── variable: x [type=int, outer=(1)]
+           │    └── variable: y [type=int, outer=(2)]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
                 └── const: 2 [type=int]
@@ -337,15 +351,14 @@ SELECT * FROM a WHERE (x, y) >= (1, 2)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000]
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2), constraints=(/1/2: [/1/2 - ]; tight)]
       └── ge [type=bool, outer=(1,2), constraints=(/1/2: [/1/2 - ]; tight)]
            ├── tuple [type=tuple{int, int}, outer=(1,2)]
-           │    ├── variable: a.x [type=int, outer=(1)]
-           │    └── variable: a.y [type=int, outer=(2)]
+           │    ├── variable: x [type=int, outer=(1)]
+           │    └── variable: y [type=int, outer=(2)]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
                 └── const: 2 [type=int]
@@ -355,15 +368,14 @@ SELECT * FROM a WHERE (x, y) < (1, 2)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000]
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2), constraints=(/1/2: (/NULL - /1/1]; tight)]
       └── lt [type=bool, outer=(1,2), constraints=(/1/2: (/NULL - /1/1]; tight)]
            ├── tuple [type=tuple{int, int}, outer=(1,2)]
-           │    ├── variable: a.x [type=int, outer=(1)]
-           │    └── variable: a.y [type=int, outer=(2)]
+           │    ├── variable: x [type=int, outer=(1)]
+           │    └── variable: y [type=int, outer=(2)]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
                 └── const: 2 [type=int]
@@ -373,15 +385,14 @@ SELECT * FROM a WHERE (x, y) <= (1, 2)
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000]
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2), constraints=(/1/2: (/NULL - /1/2]; tight)]
       └── le [type=bool, outer=(1,2), constraints=(/1/2: (/NULL - /1/2]; tight)]
            ├── tuple [type=tuple{int, int}, outer=(1,2)]
-           │    ├── variable: a.x [type=int, outer=(1)]
-           │    └── variable: a.y [type=int, outer=(2)]
+           │    ├── variable: x [type=int, outer=(1)]
+           │    └── variable: y [type=int, outer=(2)]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
                 └── const: 2 [type=int]
@@ -392,15 +403,14 @@ SELECT * FROM a WHERE (x, y) >= (1, 2.5)
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000]
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2)]
       └── ge [type=bool, outer=(1,2)]
            ├── tuple [type=tuple{int, int}, outer=(1,2)]
-           │    ├── variable: a.x [type=int, outer=(1)]
-           │    └── variable: a.y [type=int, outer=(2)]
+           │    ├── variable: x [type=int, outer=(1)]
+           │    └── variable: y [type=int, outer=(2)]
            └── tuple [type=tuple{int, decimal}]
                 ├── const: 1 [type=int]
                 └── const: 2.5 [type=decimal]
@@ -411,15 +421,14 @@ SELECT * FROM a WHERE (x, y) >= (1, NULL)
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=333]
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000]
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1,2)]
       └── ge [type=bool, outer=(1,2)]
            ├── tuple [type=tuple{int, int}, outer=(1,2)]
-           │    ├── variable: a.x [type=int, outer=(1)]
-           │    └── variable: a.y [type=int, outer=(2)]
+           │    ├── variable: x [type=int, outer=(1)]
+           │    └── variable: y [type=int, outer=(2)]
            └── tuple [type=tuple{int, unknown}]
                 ├── const: 1 [type=int]
                 └── null [type=unknown]
@@ -431,14 +440,14 @@ SELECT * FROM a WHERE (x, 1) >= (1, 2)
 ----
 select
  ├── columns: x:1(int) y:2(int)
- ├── stats: [rows=333]
+ ├── prune: (2)
  ├── scan a
  │    ├── columns: x:1(int) y:2(int)
- │    └── stats: [rows=1000]
+ │    └── prune: (1,2)
  └── filters [type=bool, outer=(1)]
       └── ge [type=bool, outer=(1)]
            ├── tuple [type=tuple{int, int}, outer=(1)]
-           │    ├── variable: a.x [type=int, outer=(1)]
+           │    ├── variable: x [type=int, outer=(1)]
            │    └── const: 1 [type=int]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
@@ -460,13 +469,13 @@ SELECT * FROM abc WHERE a != 5
 ----
 select
  ├── columns: a:1(int!null) b:2(bool) c:3(string)
- ├── stats: [rows=333]
+ ├── prune: (2,3)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── stats: [rows=1000]
+ │    └── prune: (1-3)
  └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - /4] [/6 - ]; tight)]
       └── ne [type=bool, outer=(1), constraints=(/1: (/NULL - /4] [/6 - ]; tight)]
-           ├── variable: abc.a [type=int, outer=(1)]
+           ├── variable: a [type=int, outer=(1)]
            └── const: 5 [type=int]
 
 opt
@@ -474,13 +483,13 @@ SELECT * FROM abc WHERE a IS DISTINCT FROM 5
 ----
 select
  ├── columns: a:1(int) b:2(bool) c:3(string)
- ├── stats: [rows=333]
+ ├── prune: (2,3)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── stats: [rows=1000]
+ │    └── prune: (1-3)
  └── filters [type=bool, outer=(1), constraints=(/1: [ - /4] [/6 - ]; tight)]
       └── is-not [type=bool, outer=(1), constraints=(/1: [ - /4] [/6 - ]; tight)]
-           ├── variable: abc.a [type=int, outer=(1)]
+           ├── variable: a [type=int, outer=(1)]
            └── const: 5 [type=int]
 
 opt
@@ -488,13 +497,13 @@ SELECT * FROM abc WHERE b != true
 ----
 select
  ├── columns: a:1(int) b:2(bool!null) c:3(string)
- ├── stats: [rows=333]
+ ├── prune: (1,3)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── stats: [rows=1000]
+ │    └── prune: (1-3)
  └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /false]; tight)]
       └── ne [type=bool, outer=(2), constraints=(/2: (/NULL - /false]; tight)]
-           ├── variable: abc.b [type=bool, outer=(2)]
+           ├── variable: b [type=bool, outer=(2)]
            └── true [type=bool]
 
 opt
@@ -502,13 +511,13 @@ SELECT * FROM abc WHERE b != false
 ----
 select
  ├── columns: a:1(int) b:2(bool!null) c:3(string)
- ├── stats: [rows=333]
+ ├── prune: (1,3)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── stats: [rows=1000]
+ │    └── prune: (1-3)
  └── filters [type=bool, outer=(2), constraints=(/2: [/true - ]; tight)]
       └── ne [type=bool, outer=(2), constraints=(/2: [/true - ]; tight)]
-           ├── variable: abc.b [type=bool, outer=(2)]
+           ├── variable: b [type=bool, outer=(2)]
            └── false [type=bool]
 
 opt
@@ -516,13 +525,13 @@ SELECT * FROM abc WHERE b IS NOT true
 ----
 select
  ├── columns: a:1(int) b:2(bool) c:3(string)
- ├── stats: [rows=333]
+ ├── prune: (1,3)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── stats: [rows=1000]
+ │    └── prune: (1-3)
  └── filters [type=bool, outer=(2), constraints=(/2: [ - /false]; tight)]
       └── is-not [type=bool, outer=(2), constraints=(/2: [ - /false]; tight)]
-           ├── variable: abc.b [type=bool, outer=(2)]
+           ├── variable: b [type=bool, outer=(2)]
            └── true [type=bool]
 
 opt
@@ -530,13 +539,13 @@ SELECT * FROM abc WHERE b IS NOT false
 ----
 select
  ├── columns: a:1(int) b:2(bool) c:3(string)
- ├── stats: [rows=333]
+ ├── prune: (1,3)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── stats: [rows=1000]
+ │    └── prune: (1-3)
  └── filters [type=bool, outer=(2), constraints=(/2: [ - /false) [/true - ]; tight)]
       └── is-not [type=bool, outer=(2), constraints=(/2: [ - /false) [/true - ]; tight)]
-           ├── variable: abc.b [type=bool, outer=(2)]
+           ├── variable: b [type=bool, outer=(2)]
            └── false [type=bool]
 
 opt
@@ -544,53 +553,56 @@ SELECT * FROM abc WHERE b
 ----
 select
  ├── columns: a:1(int) b:2(bool!null) c:3(string)
- ├── stats: [rows=1, distinct(2)=1]
+ ├── fd: ()-->(2)
+ ├── prune: (1,3)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── stats: [rows=1000, distinct(2)=700]
- └── filters [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
-      └── variable: abc.b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
+ │    └── prune: (1-3)
+ └── filters [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+      └── variable: b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
 
 opt
 SELECT * FROM abc WHERE NOT b
 ----
 select
  ├── columns: a:1(int) b:2(bool!null) c:3(string)
- ├── stats: [rows=1, distinct(2)=1]
+ ├── fd: ()-->(2)
+ ├── prune: (1,3)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── stats: [rows=1000, distinct(2)=700]
- └── filters [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight)]
+ │    └── prune: (1-3)
+ └── filters [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight), fd=()-->(2)]
       └── not [type=bool, outer=(2), constraints=(/2: [/false - /false]; tight)]
-           └── variable: abc.b [type=bool, outer=(2)]
+           └── variable: b [type=bool, outer=(2)]
 
 opt
 SELECT * FROM abc WHERE a > 5 AND b
 ----
 select
  ├── columns: a:1(int!null) b:2(bool!null) c:3(string)
- ├── stats: [rows=1, distinct(2)=1]
+ ├── fd: ()-->(2)
+ ├── prune: (3)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── stats: [rows=1000, distinct(2)=700]
- └── filters [type=bool, outer=(1,2), constraints=(/1: [/6 - ]; /2: [/true - /true]; tight)]
+ │    └── prune: (1-3)
+ └── filters [type=bool, outer=(1,2), constraints=(/1: [/6 - ]; /2: [/true - /true]; tight), fd=()-->(2)]
       ├── gt [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
-      │    ├── variable: abc.a [type=int, outer=(1)]
+      │    ├── variable: a [type=int, outer=(1)]
       │    └── const: 5 [type=int]
-      └── variable: abc.b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
+      └── variable: b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight)]
 
 opt
 SELECT * FROM abc WHERE c != 'foo'
 ----
 select
  ├── columns: a:1(int) b:2(bool) c:3(string!null)
- ├── stats: [rows=333]
+ ├── prune: (1,2)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── stats: [rows=1000]
+ │    └── prune: (1-3)
  └── filters [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo') [/e'foo\x00' - ]; tight)]
       └── ne [type=bool, outer=(3), constraints=(/3: (/NULL - /'foo') [/e'foo\x00' - ]; tight)]
-           ├── variable: abc.c [type=string, outer=(3)]
+           ├── variable: c [type=string, outer=(3)]
            └── const: 'foo' [type=string]
 
 opt
@@ -598,13 +610,13 @@ SELECT * FROM abc WHERE c IS DISTINCT FROM 'foo'
 ----
 select
  ├── columns: a:1(int) b:2(bool) c:3(string)
- ├── stats: [rows=333]
+ ├── prune: (1,2)
  ├── scan abc
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
- │    └── stats: [rows=1000]
+ │    └── prune: (1-3)
  └── filters [type=bool, outer=(3), constraints=(/3: [ - /'foo') [/e'foo\x00' - ]; tight)]
       └── is-not [type=bool, outer=(3), constraints=(/3: [ - /'foo') [/e'foo\x00' - ]; tight)]
-           ├── variable: abc.c [type=string, outer=(3)]
+           ├── variable: c [type=string, outer=(3)]
            └── const: 'foo' [type=string]
 
 opt
@@ -612,20 +624,326 @@ SELECT * FROM (SELECT (x, y) AS col FROM a) WHERE col > (1, 2)
 ----
 select
  ├── columns: col:4(tuple{int, int}!null)
- ├── stats: [rows=333]
  ├── project
  │    ├── columns: col:4(tuple{int, int})
- │    ├── stats: [rows=1000]
+ │    ├── prune: (4)
  │    ├── scan a
  │    │    ├── columns: x:1(int) y:2(int)
- │    │    └── stats: [rows=1000]
+ │    │    └── prune: (1,2)
  │    └── projections [outer=(1,2)]
  │         └── tuple [type=tuple{int, int}, outer=(1,2)]
- │              ├── variable: a.x [type=int, outer=(1)]
- │              └── variable: a.y [type=int, outer=(2)]
+ │              ├── variable: x [type=int, outer=(1)]
+ │              └── variable: y [type=int, outer=(2)]
  └── filters [type=bool, outer=(4), constraints=(/4: [/(1, 3) - ]; tight)]
       └── gt [type=bool, outer=(4), constraints=(/4: [/(1, 3) - ]; tight)]
            ├── variable: col [type=tuple{int, int}, outer=(4)]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
                 └── const: 2 [type=int]
+
+exec-ddl
+CREATE TABLE c
+(
+    k INT PRIMARY KEY,
+    u INT,
+    v INT,
+    INDEX v (v, u)
+)
+----
+TABLE c
+ ├── k int not null
+ ├── u int
+ ├── v int
+ ├── INDEX primary
+ │    └── k int not null
+ └── INDEX v
+      ├── v int
+      ├── u int
+      └── k int not null
+
+opt
+SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 50), (5, 100))
+----
+scan c@v
+ ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+ ├── constraint: /3/2/1: [/1/2 - /1/2] [/3/50 - /3/50] [/5/100 - /5/100]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── prune: (1)
+ └── interesting orderings: (+1) (+3,+2,+1)
+
+opt format=hide-qual
+SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 3), (1, 4))
+----
+scan c@v
+ ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+ ├── constraint: /3/2/1: [/1/2 - /1/4]
+ ├── stats: [rows=0.3, distinct(2)=0.3, distinct(3)=0.3]
+ ├── cost: 0.318
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2)
+ ├── prune: (1)
+ └── interesting orderings: (+1) (+3,+2,+1)
+
+opt format=hide-qual
+SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 2), (5, 2))
+----
+scan c@v
+ ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+ ├── constraint: /3/2/1: [/1/2 - /1/2] [/3/2 - /3/2] [/5/2 - /5/2]
+ ├── stats: [rows=0.3, distinct(2)=0.3, distinct(3)=0.3]
+ ├── cost: 0.318
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ ├── prune: (1)
+ └── interesting orderings: (+1) (+3,+2,+1)
+
+opt format=hide-qual
+SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 2), (1, 2))
+----
+scan c@v
+ ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+ ├── constraint: /3/2/1: [/1/2 - /1/2]
+ ├── stats: [rows=0.1, distinct(2)=0.1, distinct(3)=0.1]
+ ├── cost: 0.106
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ ├── prune: (1)
+ └── interesting orderings: (+1) (+3,+2,+1)
+
+opt format=hide-qual
+SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 3), (1, 4))
+----
+scan c@v
+ ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+ ├── constraint: /3/2/1: [/1/2 - /1/4]
+ ├── stats: [rows=0.3, distinct(2)=0.3, distinct(3)=0.3]
+ ├── cost: 0.318
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2)
+ ├── prune: (1)
+ └── interesting orderings: (+1) (+3,+2,+1)
+
+opt format=hide-qual
+SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 2), (5, 2))
+----
+scan c@v
+ ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+ ├── constraint: /3/2/1: [/1/2 - /1/2] [/3/2 - /3/2] [/5/2 - /5/2]
+ ├── stats: [rows=0.3, distinct(2)=0.3, distinct(3)=0.3]
+ ├── cost: 0.318
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ ├── prune: (1)
+ └── interesting orderings: (+1) (+3,+2,+1)
+
+opt format=hide-qual
+SELECT * FROM c WHERE (v, u) IN ((1, 2), (1, 2), (1, 2))
+----
+scan c@v
+ ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+ ├── constraint: /3/2/1: [/1/2 - /1/2]
+ ├── stats: [rows=0.1, distinct(2)=0.1, distinct(3)=0.1]
+ ├── cost: 0.106
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ ├── prune: (1)
+ └── interesting orderings: (+1) (+3,+2,+1)
+
+# A tuple with NULL in it can't match anything, so it should be excluded from the constraints.
+opt
+SELECT * FROM c WHERE (v, u) IN ((1, 2), (3, 50), (5, NULL))
+----
+scan c@v
+ ├── columns: k:1(int!null) u:2(int!null) v:3(int!null)
+ ├── constraint: /3/2/1: [/1/2 - /1/2] [/3/50 - /3/50]
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── prune: (1)
+ └── interesting orderings: (+1) (+3,+2,+1)
+
+# TODO(justin): ideally we would be normalizing away the 2 on the LHS here to
+# get v = 1 and tight spans.
+opt
+SELECT * FROM c WHERE (v, 2) IN ((1, 2), (3, 50), (5, 100))
+----
+select
+ ├── columns: k:1(int!null) u:2(int) v:3(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── prune: (1,2)
+ ├── interesting orderings: (+1) (+3,+2,+1)
+ ├── scan c@v
+ │    ├── columns: k:1(int!null) u:2(int) v:3(int!null)
+ │    ├── constraint: /3/2/1: [/1 - /1] [/3 - /3] [/5 - /5]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1) (+3,+2,+1)
+ └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1] [/3 - /3] [/5 - /5])]
+      └── in [type=bool, outer=(3), constraints=(/3: [/1 - /1] [/3 - /3] [/5 - /5])]
+           ├── tuple [type=tuple{int, int}, outer=(3)]
+           │    ├── variable: v [type=int, outer=(3)]
+           │    └── const: 2 [type=int]
+           └── tuple [type=tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}}]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── const: 1 [type=int]
+                │    └── const: 2 [type=int]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── const: 3 [type=int]
+                │    └── const: 50 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 5 [type=int]
+                     └── const: 100 [type=int]
+
+# TODO(justin): in a perfect world we would be able to somehow transform this
+# filter to (v, u) IN ((1, 1), (3, 47), (5, 95)) in order to get tight spans.
+# This could be achieved via row-reduction.
+opt
+SELECT * FROM c WHERE (v, u + v) IN ((1, 2), (3, 50), (5, 100))
+----
+select
+ ├── columns: k:1(int!null) u:2(int) v:3(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── prune: (1)
+ ├── interesting orderings: (+1) (+3,+2,+1)
+ ├── scan c@v
+ │    ├── columns: k:1(int!null) u:2(int) v:3(int!null)
+ │    ├── constraint: /3/2/1: [/1 - /1] [/3 - /3] [/5 - /5]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1) (+3,+2,+1)
+ └── filters [type=bool, outer=(2,3), constraints=(/3: [/1 - /1] [/3 - /3] [/5 - /5])]
+      └── in [type=bool, outer=(2,3), constraints=(/3: [/1 - /1] [/3 - /3] [/5 - /5])]
+           ├── tuple [type=tuple{int, int}, outer=(2,3)]
+           │    ├── variable: v [type=int, outer=(3)]
+           │    └── plus [type=int, outer=(2,3)]
+           │         ├── variable: u [type=int, outer=(2)]
+           │         └── variable: v [type=int, outer=(3)]
+           └── tuple [type=tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}}]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── const: 1 [type=int]
+                │    └── const: 2 [type=int]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── const: 3 [type=int]
+                │    └── const: 50 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 5 [type=int]
+                     └── const: 100 [type=int]
+
+opt
+SELECT * FROM c WHERE (v, u) IN ((1, 2), (k, 50), (5, 100))
+----
+select
+ ├── columns: k:1(int!null) u:2(int!null) v:3(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3)
+ ├── interesting orderings: (+1) (+3,+2,+1)
+ ├── scan c
+ │    ├── columns: k:1(int!null) u:2(int) v:3(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1) (+3,+2,+1)
+ └── filters [type=bool, outer=(1-3), constraints=(/2: [/2 - /2] [/50 - /50] [/100 - /100])]
+      └── in [type=bool, outer=(1-3), constraints=(/2: [/2 - /2] [/50 - /50] [/100 - /100])]
+           ├── tuple [type=tuple{int, int}, outer=(2,3)]
+           │    ├── variable: v [type=int, outer=(3)]
+           │    └── variable: u [type=int, outer=(2)]
+           └── tuple [type=tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}}, outer=(1)]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── const: 1 [type=int]
+                │    └── const: 2 [type=int]
+                ├── tuple [type=tuple{int, int}, outer=(1)]
+                │    ├── variable: k [type=int, outer=(1)]
+                │    └── const: 50 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 5 [type=int]
+                     └── const: 100 [type=int]
+
+exec-ddl
+CREATE TABLE d
+(
+    k INT PRIMARY KEY,
+    p INT,
+    q INT
+)
+----
+TABLE d
+ ├── k int not null
+ ├── p int
+ ├── q int
+ └── INDEX primary
+      └── k int not null
+
+opt format=hide-qual
+SELECT * FROM d WHERE (p, q) IN ((1, 2), (1, 3), (1, 4))
+----
+select
+ ├── columns: k:1(int!null) p:2(int!null) q:3(int!null)
+ ├── stats: [rows=0.3, distinct(2)=0.3, distinct(3)=0.3]
+ ├── cost: 1070
+ ├── key: (1)
+ ├── fd: ()-->(2), (1)-->(3)
+ ├── prune: (1)
+ ├── interesting orderings: (+1)
+ ├── scan d
+ │    ├── columns: k:1(int!null) p:2(int) q:3(int)
+ │    ├── stats: [rows=1000, distinct(2)=100, distinct(3)=100]
+ │    ├── cost: 1060
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1)
+ └── filters [type=bool, outer=(2,3), constraints=(/2/3: [/1/2 - /1/2] [/1/3 - /1/3] [/1/4 - /1/4]; /3: [/2 - /2] [/3 - /3] [/4 - /4]; tight), fd=()-->(2)]
+      └── in [type=bool, outer=(2,3), constraints=(/2/3: [/1/2 - /1/2] [/1/3 - /1/3] [/1/4 - /1/4]; /3: [/2 - /2] [/3 - /3] [/4 - /4]; tight)]
+           ├── tuple [type=tuple{int, int}, outer=(2,3)]
+           │    ├── variable: p [type=int, outer=(2)]
+           │    └── variable: q [type=int, outer=(3)]
+           └── tuple [type=tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}}]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── const: 1 [type=int]
+                │    └── const: 2 [type=int]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── const: 1 [type=int]
+                │    └── const: 3 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 1 [type=int]
+                     └── const: 4 [type=int]
+
+opt format=hide-qual
+SELECT * FROM d WHERE (p, q) IN ((2, 1), (3, 1), (4, 1))
+----
+select
+ ├── columns: k:1(int!null) p:2(int!null) q:3(int!null)
+ ├── stats: [rows=0.3, distinct(2)=0.3, distinct(3)=0.3]
+ ├── cost: 1070
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2)
+ ├── prune: (1)
+ ├── interesting orderings: (+1)
+ ├── scan d
+ │    ├── columns: k:1(int!null) p:2(int) q:3(int)
+ │    ├── stats: [rows=1000, distinct(2)=100, distinct(3)=100]
+ │    ├── cost: 1060
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+1)
+ └── filters [type=bool, outer=(2,3), constraints=(/2/3: [/2/1 - /2/1] [/3/1 - /3/1] [/4/1 - /4/1]; /3: [/1 - /1]; tight), fd=()-->(3)]
+      └── in [type=bool, outer=(2,3), constraints=(/2/3: [/2/1 - /2/1] [/3/1 - /3/1] [/4/1 - /4/1]; /3: [/1 - /1]; tight)]
+           ├── tuple [type=tuple{int, int}, outer=(2,3)]
+           │    ├── variable: p [type=int, outer=(2)]
+           │    └── variable: q [type=int, outer=(3)]
+           └── tuple [type=tuple{tuple{int, int}, tuple{int, int}, tuple{int, int}}]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── const: 2 [type=int]
+                │    └── const: 1 [type=int]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── const: 3 [type=int]
+                │    └── const: 1 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 4 [type=int]
+                     └── const: 1 [type=int]

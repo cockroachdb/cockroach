@@ -27,6 +27,7 @@
 [Scalar]
 define Subquery {
     Input Expr
+    Def   SubqueryDef
 }
 
 # Any is a SQL operator that applies a comparison to every row of an input
@@ -53,7 +54,7 @@ define Subquery {
 define Any {
     Input  Expr
     Scalar Expr
-    Cmp    Operator
+    Def    SubqueryDef
 }
 
 # Variable is the typed scalar value of a column in the query. The private
@@ -113,6 +114,7 @@ define Placeholder {
 [Scalar]
 define Tuple {
     Elems ExprList
+    Typ   Type
 }
 
 # Projections is a set of typed scalar expressions that will become output
@@ -133,8 +135,13 @@ define Projections {
 
 # Aggregations is a set of aggregate expressions that will become output columns
 # for a containing GroupBy operator. The expressions can only consist of
-# aggregate functions and variable references. More complex expressions must be
-# formulated using a Project operator as input to the GroupBy operator.
+# aggregate functions, variable references, and modifiers like AggDistinct.
+# Examples of valid expressions:
+#   (Min (Variable 1))
+#   (Count (AggDistinct (Variable 1)))
+#
+# More complex arguments must be formulated using a Project operator as input to
+# the GroupBy operator.
 #
 # The private Cols field contains the list of column indexes returned by the
 # expression, as an opt.ColList. It is legal for Cols to be empty.
@@ -144,11 +151,20 @@ define Aggregations {
     Cols ColList
 }
 
+# MergeOn contains the ON condition and the metadata for a merge join; it is
+# always a child of MergeJoin.
+[Scalar]
+define MergeOn {
+    On Expr
+    Def MergeOnDef
+}
+
 # Exists takes a relational query as its input, and evaluates to true if the
 # query returns at least one row.
 [Scalar]
 define Exists {
     Input Expr
+    Def   SubqueryDef
 }
 
 # Filters is a boolean And operator that only appears as the Filters child of
@@ -334,6 +350,13 @@ define JsonSomeExists {
    Right Expr
 }
 
+[Scalar]
+define AnyScalar {
+   Left  Expr
+   Right Expr
+   Cmp   Operator
+}
+
 [Scalar, Binary]
 define Bitand {
    Left  Expr
@@ -514,6 +537,15 @@ define Coalesce {
     Args ExprList
 }
 
+# ColumnAccess is a scalar expression that returns a column from the given
+# input expression (which is assumed to be of type Tuple). Idx is the ordinal
+# index of the column in Input.
+[Scalar]
+define ColumnAccess {
+    Input Expr
+    Idx   TupleOrdinal
+}
+
 # UnsupportedExpr is used for interfacing with the old planner code. It can
 # encapsulate a TypedExpr that is otherwise not supported by the optimizer.
 [Scalar]
@@ -605,13 +637,53 @@ define JsonbAgg {
     Input Expr
 }
 
-# AnyNotNull returns any non-null value in the grouping set, or null if there
-# are no non-null values. This is particularly useful for "passing through" the
-# value of a column that is known to be constant within a grouping set.
+# ConstAgg is used in the special case when the value of a column is known to be
+# constant within a grouping set; it returns that value. If there are no rows
+# in the grouping set, then ConstAgg returns NULL.
 #
-# AnyNotNull is not part of SQL, but it's used internally to rewrite correlated
+# ConstAgg is not part of SQL, but it's used internally to rewrite correlated
 # subqueries into an efficient and convenient form.
 [Scalar, Aggregate]
-define AnyNotNull {
+define ConstAgg {
+    Input Expr
+}
+
+# ConstNotNullAgg is used in the special case when the value of a column is
+# known to be constant within a grouping set, except on some rows where it can
+# have a NULL value; it returns the non-NULL constant value. If there are no
+# rows in the grouping set, or all rows have a NULL value, then ConstNotNullAgg
+# returns NULL.
+#
+# ConstNotNullAgg is not part of SQL, but it's used internally to rewrite
+# correlated subqueries into an efficient and convenient form.
+[Scalar, Aggregate]
+define ConstNotNullAgg {
+    Input Expr
+}
+
+# AnyNotNullAgg returns any non-NULL value it receives, with no other guarantees.
+# If it does not receive any values, it returns NULL.
+#
+# AnyNotNullAgg is not part of SQL, but it's used internally to rewrite
+# correlated subqueries into an efficient and convenient form.
+[Scalar, Aggregate]
+define AnyNotNullAgg {
+    Input Expr
+}
+
+# FirstAgg is used only by DistinctOn; it returns the value on the first row
+# according to an ordering; if the ordering is unspecified (or partially
+# specified), it is an arbitrary ordering but it must be the same across all
+# FirstAggs in a DistinctOn.
+[Scalar, Aggregate]
+define FirstAgg {
+    Input Expr
+}
+
+# AggDistinct is used as a modifier that wraps the input of an aggregate
+# function. It causes the respective aggregation to only process each distinct
+# value once.
+[Scalar]
+define AggDistinct {
     Input Expr
 }

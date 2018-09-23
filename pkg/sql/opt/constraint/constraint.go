@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -419,6 +420,7 @@ func (c *Constraint) ConsolidateSpans(evalCtx *tree.EvalContext) {
 //   /a/b/c: [/1/2/3 - /1/2/3]                    ->  ExactPrefix = 3
 //   /a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/2/8]  ->  ExactPrefix = 2
 //   /a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/3/8]  ->  ExactPrefix = 1
+//   /a/b/c: [/1/2/3 - /1/2/3] [/1/3/3 - /1/3/3]  ->  ExactPrefix = 1
 //   /a/b/c: [/1/2/3 - /1/2/3] [/3 - /4]          ->  ExactPrefix = 0
 func (c *Constraint) ExactPrefix(evalCtx *tree.EvalContext) int {
 	if c.IsContradiction() {
@@ -444,4 +446,99 @@ func (c *Constraint) ExactPrefix(evalCtx *tree.EvalContext) int {
 			}
 		}
 	}
+}
+
+// Prefix returns the length of the longest prefix of columns for which all the
+// spans have the same start and end values. For example:
+//   /a/b/c: [/1/1/1 - /1/1/2] [/3/3/3 - /3/3/4]
+// has prefix 2.
+//
+// Note that Prefix returns a value that is greater than or equal to the value
+// returned by ExactPrefix. For example:
+//   /a/b/c: [/1/2/3 - /1/2/3] [/1/2/5 - /1/3/8] -> ExactPrefix = 1, Prefix = 1
+//   /a/b/c: [/1/2/3 - /1/2/3] [/1/3/3 - /1/3/3] -> ExactPrefix = 1, Prefix = 3
+func (c *Constraint) Prefix(evalCtx *tree.EvalContext) int {
+	prefix := 0
+	for ; prefix < c.Columns.Count(); prefix++ {
+		for i := 0; i < c.Spans.Count(); i++ {
+			sp := c.Spans.Get(i)
+			start := sp.StartKey()
+			end := sp.EndKey()
+			if start.Length() <= prefix || end.Length() <= prefix ||
+				start.Value(prefix).Compare(evalCtx, end.Value(prefix)) != 0 {
+				return prefix
+			}
+		}
+	}
+
+	return prefix
+}
+
+// ExtractConstCols returns a set of columns which are restricted to be
+// constant by the constraint.
+func (c *Constraint) ExtractConstCols(evalCtx *tree.EvalContext) opt.ColSet {
+	var res opt.ColSet
+	pre := c.ExactPrefix(evalCtx)
+	for i := 0; i < pre; i++ {
+		res.Add(int(c.Columns.Get(i).ID()))
+	}
+	return res
+}
+
+// ExtractNotNullCols returns a set of columns that cannot be NULL when the
+// constraint holds.
+func (c *Constraint) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {
+	if c.IsUnconstrained() || c.IsContradiction() {
+		return opt.ColSet{}
+	}
+
+	var res opt.ColSet
+
+	// If we have a span where the start and end key value diverge for a column,
+	// none of the columns that follow can be not-null. For example:
+	//   /1/2/3: [/1/2/3 - /1/4/1]
+	// Because the span is not restricted to a single value on column 2, column 3
+	// can take any value, like /1/3/NULL.
+	//
+	// Find the longest prefix of columns for which all the spans have the same
+	// start and end values. For example:
+	//   [/1/1/1 - /1/1/2] [/3/3/3 - /3/3/4]
+	// has prefix 2. Only these columns and the first following column can be
+	// known to be not-null.
+	prefix := c.Prefix(evalCtx)
+	for i := 0; i < prefix; i++ {
+		// hasNull identifies cases like [/1/NULL/1 - /1/NULL/2].
+		hasNull := false
+		for j := 0; j < c.Spans.Count(); j++ {
+			start := c.Spans.Get(j).StartKey()
+			hasNull = hasNull || start.Value(i) == tree.DNull
+		}
+		if !hasNull {
+			res.Add(int(c.Columns.Get(i).ID()))
+		}
+	}
+	if prefix == c.Columns.Count() {
+		return res
+	}
+
+	// Now look at the first column that follows the prefix.
+	col := c.Columns.Get(prefix)
+	for i := 0; i < c.Spans.Count(); i++ {
+		span := c.Spans.Get(i)
+		var key Key
+		var boundary SpanBoundary
+		if !col.Descending() {
+			key, boundary = span.StartKey(), span.StartBoundary()
+		} else {
+			key, boundary = span.EndKey(), span.EndBoundary()
+		}
+		// If the span is unbounded on the NULL side, or if it is of the form
+		// [/NULL - /x], the column is nullable.
+		if key.Length() <= prefix || (key.Value(prefix) == tree.DNull && boundary == IncludeBoundary) {
+			return res
+		}
+	}
+	// All spans constrain col to be not-null.
+	res.Add(int(col.ID()))
+	return res
 }

@@ -18,7 +18,6 @@ package tree
 type CreateChangefeed struct {
 	Targets TargetList
 	SinkURI Expr
-	AsOf    AsOfClause
 	Options KVOptions
 }
 
@@ -26,13 +25,11 @@ var _ Statement = &CreateChangefeed{}
 
 // Format implements the NodeFormatter interface.
 func (node *CreateChangefeed) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE EXPERIMENTAL_CHANGEFEED EMIT ")
+	ctx.WriteString("CREATE CHANGEFEED FOR ")
 	ctx.FormatNode(&node.Targets)
-	ctx.WriteString(" TO ")
-	ctx.FormatNode(node.SinkURI)
-	if node.AsOf.Expr != nil {
-		ctx.WriteString(" ")
-		ctx.FormatNode(&node.AsOf)
+	if node.SinkURI != nil {
+		ctx.WriteString(" INTO ")
+		ctx.FormatNode(node.SinkURI)
 	}
 	if node.Options != nil {
 		ctx.WriteString(" WITH ")

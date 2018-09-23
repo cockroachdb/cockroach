@@ -27,6 +27,7 @@ func TestLoadTLSConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	config, err := security.LoadServerTLSConfig(
 		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
+		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedCACert),
 		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeCert),
 		filepath.Join(security.EmbeddedCertsDir, security.EmbeddedNodeKey))
 	if err != nil {

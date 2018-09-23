@@ -31,9 +31,9 @@ var flagNodes = flag.Int("nodes", 4, "number of nodes")
 var flagStores = flag.Int("stores", 1, "number of stores to use for each node")
 var flagLogDir = flag.String("l", "", "the directory to store log files, relative to the test source")
 
-// readConfigFromFlags will convert the flags to a TestConfig for the purposes
+// ReadConfigFromFlags will convert the flags to a TestConfig for the purposes
 // of starting up a cluster.
-func readConfigFromFlags() cluster.TestConfig {
+func ReadConfigFromFlags() cluster.TestConfig {
 	cfg := cluster.TestConfig{
 		Name:     fmt.Sprintf("AdHoc %dx%d", *flagNodes, *flagStores),
 		Duration: *flagDuration,

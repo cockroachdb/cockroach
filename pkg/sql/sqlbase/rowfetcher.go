@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -38,7 +39,12 @@ import (
 const debugRowFetch = false
 
 type kvFetcher interface {
-	nextBatch(ctx context.Context) (bool, []roachpb.KeyValue, error)
+	// nextBatch returns the next batch of rows. Returns false in the first
+	// parameter if there are no more keys in the scan. May return either a slice
+	// of KeyValues or a batchResponse, numKvs pair, depending on the server
+	// version - both must be handled by calling code.
+	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue,
+		batchResponse []byte, numKvs int64, err error)
 	getRangesInfo() []roachpb.RangeInfo
 }
 
@@ -181,6 +187,9 @@ type RowFetcher struct {
 	// table has no interleave children.
 	mustDecodeIndexKey bool
 
+	// knownPrefixLength is the number of bytes in the index key prefix this
+	// RowFetcher is configured for. The index key prefix is the table id, index
+	// id pair at the start of the key.
 	knownPrefixLength int
 
 	// returnRangeInfo, if set, causes the underlying kvFetcher to return
@@ -214,6 +223,9 @@ type RowFetcher struct {
 	kvEnd             bool
 
 	kvs []roachpb.KeyValue
+
+	batchResponse []byte
+	batchNumKvs   int64
 
 	// isCheck indicates whether or not we are running checks for k/v
 	// correctness. It is set only during SCRUB commands.
@@ -428,18 +440,45 @@ func (rf *RowFetcher) StartScanFrom(ctx context.Context, f kvFetcher) error {
 	rf.indexKey = nil
 	rf.kvFetcher = f
 	rf.kvs = nil
+	rf.batchNumKvs = 0
+	rf.batchResponse = nil
 	// Retrieve the first key.
 	_, err := rf.NextKey(ctx)
 	return err
 }
 
+// Pops off the first kv stored in rf.kvs. If none are found attempts to fetch
+// the next batch until there are no more kvs to fetch.
+// Returns whether or not there are more kvs to fetch, the kv that was fetched,
+// and any errors that may have occurred.
 func (rf *RowFetcher) nextKV(ctx context.Context) (ok bool, kv roachpb.KeyValue, err error) {
 	if len(rf.kvs) != 0 {
 		kv = rf.kvs[0]
 		rf.kvs = rf.kvs[1:]
 		return true, kv, nil
 	}
-	ok, rf.kvs, err = rf.kvFetcher.nextBatch(ctx)
+	if rf.batchNumKvs > 0 {
+		rf.batchNumKvs--
+		var key []byte
+		var rawBytes []byte
+		var err error
+		key, _, rawBytes, rf.batchResponse, err = enginepb.ScanDecodeKeyValue(rf.batchResponse)
+		if err != nil {
+			return false, kv, err
+		}
+		return true, roachpb.KeyValue{
+			Key: key,
+			Value: roachpb.Value{
+				RawBytes: rawBytes,
+			},
+		}, nil
+	}
+
+	var numKeys int64
+	ok, rf.kvs, rf.batchResponse, numKeys, err = rf.kvFetcher.nextBatch(ctx)
+	if rf.batchResponse != nil {
+		rf.batchNumKvs = numKeys
+	}
 	if err != nil {
 		return ok, kv, err
 	}
@@ -447,24 +486,6 @@ func (rf *RowFetcher) nextKV(ctx context.Context) (ok bool, kv roachpb.KeyValue,
 		return false, kv, nil
 	}
 	return rf.nextKV(ctx)
-}
-
-// IndexKeyString returns the currently searching index key up to `numCols`.
-// For example, if there is an index on 2 columns and the current index key
-// is '/Table/81/1/12/13/1', IndexKeyString(1) will return 'Table/81/1/12'.
-func (rf *RowFetcher) IndexKeyString(numCols int) string {
-	if rf.kv.Key == nil {
-		return ""
-	}
-	splitKey := strings.Split(rf.kv.Key.String(), "/")
-	// Take example index key from above, will be split into:
-	// ["", "Table", "81", "1", "12", "13", "1"], first 4 are always returned
-	// plus any additional columns requested.
-	targetSlashes := 4 + numCols
-	if targetSlashes > len(splitKey) {
-		return strings.Join(splitKey, "/")
-	}
-	return strings.Join(splitKey[:targetSlashes], "/")
 }
 
 // NextKey retrieves the next key/value and sets kv/kvEnd. Returns whether a row
@@ -525,7 +546,23 @@ func (rf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 		// secondary index as secondary indexes have only one key per row.
 		// If rf.rowReadyTable differs from rf.currentTable, this denotes
 		// a row is ready for output.
-		if rf.indexKey != nil && (rf.currentTable.isSecondaryIndex || !bytes.HasPrefix(rf.kv.Key, rf.indexKey) || rf.rowReadyTable != rf.currentTable) {
+		switch {
+		case rf.currentTable.isSecondaryIndex:
+			// Secondary indexes have only one key per row.
+			rowDone = true
+		case !bytes.HasPrefix(rf.kv.Key, rf.indexKey):
+			// If the prefix of the key has changed, current key is from a different
+			// row than the previous one.
+			rowDone = true
+		case rf.rowReadyTable != rf.currentTable:
+			// For rowFetchers with more than one table, if the table changes the row
+			// is done.
+			rowDone = true
+		default:
+			rowDone = false
+		}
+
+		if rf.indexKey != nil && rowDone {
 			// The current key belongs to a new row. Output the
 			// current row.
 			rf.indexKey = nil
@@ -1227,6 +1264,21 @@ func (rf *RowFetcher) finalizeRow() error {
 // Key returns nil when there are no more rows.
 func (rf *RowFetcher) Key() roachpb.Key {
 	return rf.kv.Key
+}
+
+// PartialKey returns a partial slice of the next key (the key that follows the
+// last returned row) containing nCols columns, without the ending column
+// family. Returns nil when there are no more rows.
+func (rf *RowFetcher) PartialKey(nCols int) (roachpb.Key, error) {
+	if rf.kv.Key == nil {
+		return nil, nil
+	}
+	n, err := consumeIndexKeyWithoutTableIDIndexIDPrefix(
+		rf.currentTable.index, nCols, rf.kv.Key[rf.knownPrefixLength:])
+	if err != nil {
+		return nil, err
+	}
+	return rf.kv.Key[:n+rf.knownPrefixLength], nil
 }
 
 // GetRangeInfo returns information about the ranges where the rows came from.

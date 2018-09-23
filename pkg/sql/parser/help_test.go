@@ -70,6 +70,9 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER USER IF ??`, `ALTER USER`},
 		{`ALTER USER foo WITH PASSWORD ??`, `ALTER USER`},
 
+		{`ALTER RANGE foo CONFIGURE ??`, `ALTER RANGE`},
+		{`ALTER RANGE ??`, `ALTER RANGE`},
+
 		{`CANCEL ??`, `CANCEL`},
 		{`CANCEL JOB ??`, `CANCEL JOBS`},
 		{`CANCEL JOBS ??`, `CANCEL JOBS`},
@@ -255,11 +258,10 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW CONSTRAINTS FROM ??`, `SHOW CONSTRAINTS`},
 		{`SHOW CONSTRAINTS FROM foo ??`, `SHOW CONSTRAINTS`},
 
-		{`SHOW CREATE TABLE blah ??`, `SHOW CREATE TABLE`},
-
-		{`SHOW CREATE VIEW blah ??`, `SHOW CREATE VIEW`},
-
-		{`SHOW CREATE SEQUENCE blah ??`, `SHOW CREATE SEQUENCE`},
+		{`SHOW CREATE ??`, `SHOW CREATE`},
+		{`SHOW CREATE TABLE blah ??`, `SHOW CREATE`},
+		{`SHOW CREATE VIEW blah ??`, `SHOW CREATE`},
+		{`SHOW CREATE SEQUENCE blah ??`, `SHOW CREATE`},
 
 		{`SHOW DATABASES ??`, `SHOW DATABASES`},
 

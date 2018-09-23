@@ -18,7 +18,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -30,13 +32,12 @@ type explainDistSQLNode struct {
 
 	plan planNode
 
+	stmtType tree.StatementType
+
 	// If analyze is set, plan will be executed with tracing enabled and a url
 	// pointing to a visual query plan with statistics will be in the row
 	// returned by the node.
 	analyze bool
-	// stmtType is the StatementType of the plan. It is needed by the
-	// distSQLWrapper when analyzing a statement.
-	stmtType tree.StatementType
 
 	run explainDistSQLRun
 }
@@ -48,24 +49,27 @@ type explainDistSQLRun struct {
 
 	// done is set if Next() was called.
 	done bool
+
+	// executedStatement is set if EXPLAIN ANALYZE was active and finished
+	// executing the query, regardless of query success or failure.
+	executedStatement bool
 }
 
 func (n *explainDistSQLNode) startExec(params runParams) error {
-	// Check for subqueries and trigger limit propagation.
-	if _, err := params.p.prepareForDistSQLSupportCheck(
-		params.ctx, true, /* returnError */
-	); err != nil {
-		return err
-	}
+	// Trigger limit propagation.
+	params.p.prepareForDistSQLSupportCheck()
 
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-	auto, err := distSQLPlanner.CheckSupport(n.plan)
-	if err != nil {
-		return err
-	}
+	recommendation, _ := distSQLPlanner.checkSupportForNode(n.plan)
 
-	planCtx := distSQLPlanner.newPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
-	plan, err := distSQLPlanner.createPlanForNode(&planCtx, n)
+	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
+	planCtx.isLocal = !shouldDistributeGivenRecAndMode(recommendation, params.SessionData().DistSQLMode)
+	planCtx.ignoreClose = true
+	planCtx.planner = params.p
+	planCtx.stmtType = n.stmtType
+	planCtx.validExtendedEvalCtx = true
+
+	plan, err := distSQLPlanner.createPlanForNode(&planCtx, n.plan)
 	if err != nil {
 		return err
 	}
@@ -73,40 +77,58 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 
 	var spans []tracing.RecordedSpan
 	if n.analyze {
-		// If tracing is already enabled, don't call StopTracing at the end.
-		shouldStopTracing := !params.extendedEvalCtx.Tracing.Enabled()
-
+		if params.SessionData().DistSQLMode == sessiondata.DistSQLOff {
+			return pgerror.NewErrorf(
+				pgerror.CodeObjectNotInPrerequisiteStateError,
+				"cannot run EXPLAIN ANALYZE while distsql is disabled",
+			)
+		}
+		if params.extendedEvalCtx.Tracing.Enabled() {
+			return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
+				"cannot run EXPLAIN ANALYZE while tracing is enabled")
+		}
 		// Start tracing. KV tracing is not enabled because we are only interested
 		// in stats present on the spans. Noop if tracing is already enabled.
 		if err := params.extendedEvalCtx.Tracing.StartTracing(
-			tracing.SnowballRecording, false, /* kvTracingEnabled */
+			tracing.SnowballRecording,
+			false, /* kvTracingEnabled */
+			false, /* showResults */
 		); err != nil {
 			return err
 		}
+
+		planCtx.ctx = params.extendedEvalCtx.Tracing.ex.ctxHolder.ctx()
 
 		// Discard rows that are returned.
 		rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			return nil
 		})
 		execCfg := params.p.ExecCfg()
-		recv := makeDistSQLReceiver(
-			params.ctx,
+		const stmtType = tree.Rows
+		recv := MakeDistSQLReceiver(
+			planCtx.ctx,
 			rw,
-			n.stmtType,
+			stmtType,
 			execCfg.RangeDescriptorCache,
 			execCfg.LeaseHolderCache,
 			params.p.txn,
 			func(ts hlc.Timestamp) {
 				_ = execCfg.Clock.Update(ts)
 			},
+			params.extendedEvalCtx.Tracing,
 		)
-		distSQLPlanner.Run(&planCtx, params.p.txn, &plan, recv, params.p.ExtendedEvalContext())
+		distSQLPlanner.Run(
+			&planCtx, params.p.txn, &plan, recv, params.extendedEvalCtx, nil /* finishedSetupFn */)
+
+		n.run.executedStatement = true
 
 		spans = params.extendedEvalCtx.Tracing.getRecording()
-		if shouldStopTracing {
-			if err := params.extendedEvalCtx.Tracing.StopTracing(); err != nil {
-				return err
-			}
+		if err := params.extendedEvalCtx.Tracing.StopTracing(); err != nil {
+			return err
+		}
+
+		if err := rw.Err(); err != nil {
+			return err
 		}
 	}
 
@@ -117,7 +139,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	}
 
 	n.run.values = tree.Datums{
-		tree.MakeDBool(tree.DBool(auto)),
+		tree.MakeDBool(tree.DBool(recommendation == shouldDistribute)),
 		tree.NewDString(planURL.String()),
 		tree.NewDString(planJSON),
 	}
@@ -134,9 +156,5 @@ func (n *explainDistSQLNode) Next(runParams) (bool, error) {
 
 func (n *explainDistSQLNode) Values() tree.Datums { return n.run.values }
 func (n *explainDistSQLNode) Close(ctx context.Context) {
-	// If we analyzed the statement, we relinquished ownership of the plan to a
-	// distSQLWrapper.
-	if !n.analyze {
-		n.plan.Close(ctx)
-	}
+	n.plan.Close(ctx)
 }

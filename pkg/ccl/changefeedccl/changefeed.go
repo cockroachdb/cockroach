@@ -9,27 +9,18 @@
 package changefeedccl
 
 import (
-	"bytes"
 	"context"
-	"net/url"
 	"time"
 
-	"github.com/Shopify/sarama"
-
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
 
 var changefeedPollInterval = settings.RegisterDurationSetting(
@@ -42,304 +33,254 @@ func init() {
 	changefeedPollInterval.Hide()
 }
 
-type changedKVs struct {
-	// sst, if non-nil, is an sstable with mvcc key values as returned by
-	// ExportRequest.
-	sst []byte
-	// resolved, if non-zero, is a guarantee that all key values in subsequent
-	// changedKVs will have an equal or higher timestamp.
-	resolved hlc.Timestamp
-}
+const (
+	jsonMetaSentinel = `__crdb__`
+)
 
 type emitRow struct {
-	// row is the new value of a changed table row.
-	row tree.Datums
-	// rowTimestamp is the mvcc timestamp corresponding to the latest update in
+	// datums is the new value of a changed table row.
+	datums sqlbase.EncDatumRow
+	// timestamp is the mvcc timestamp corresponding to the latest update in
 	// `row`.
-	rowTimestamp hlc.Timestamp
-	// deleted is true if row is a deletion. In this case, only the primary key
-	// columns are guaranteed to be set in `row`.
+	timestamp hlc.Timestamp
+	// deleted is true if row is a deletion. In this case, only the primary
+	// key columns are guaranteed to be set in `datums`.
 	deleted bool
-	// tableDesc is a TableDescriptor for the table containing `row`. It's valid
-	// for interpreting the row at `rowTimestamp`.
+	// tableDesc is a TableDescriptor for the table containing `datums`.
+	// It's valid for interpreting the row at `timestamp`.
 	tableDesc *sqlbase.TableDescriptor
-	// resolved, if non-zero, is a guarantee that all key values in subsequent
-	// changedKVs will have an equal or higher timestamp.
-	resolved hlc.Timestamp
 }
 
-func runChangefeedFlow(ctx context.Context, execCfg *sql.ExecutorConfig, job *jobs.Job) error {
-	details, err := validateChangefeed(job.Record.Details.(jobs.ChangefeedDetails))
-	if err != nil {
-		return err
-	}
-	jobProgressedFn := func(ctx context.Context, highwater hlc.Timestamp) error {
-		return job.Progressed(ctx, func(ctx context.Context, details jobs.ProgressDetails) float32 {
-			cfDetails := details.(*jobs.Progress_Changefeed).Changefeed
-			cfDetails.Highwater = highwater
-			// TODO(dan): Having this stuck at 0% forever is bad UX. Revisit.
-			return 0.0
-		})
-	}
+type emitEntry struct {
+	// row, if datums is non-nil, represents a changed row to be emitted.
+	row emitRow
 
-	// The changefeed flow is intentionally structured as a pull model so it's
-	// easy to later make it into a DistSQL processor.
-	//
-	// TODO(dan): Make this into a DistSQL flow.
-	progress := job.Progress().Details.(*jobs.Progress_Changefeed).Changefeed
-	changedKVsFn := exportRequestPoll(execCfg, details, progress)
-	rowsFn := kvsToRows(execCfg, details, changedKVsFn)
-	emitRowsFn, err := emitRows(details, jobProgressedFn, rowsFn)
-	if err != nil {
-		return err
-	}
-
-	for {
-		if err := emitRowsFn(ctx); err != nil {
-			return err
-		}
-	}
-}
-
-// exportRequestPoll uses ExportRequest with the `ReturnSST` to fetch every kvs
-// that changed between a set of timestamps. It returns a closure that may be
-// repeatedly called to pull new changes. The returned closure is not
-// threadsafe.
-//
-// Changes are looked up for every relevant span in a batch and buffered.
-// Whenever the returned closure is called, changed kvs are returned from the
-// buffer if it's non-empty. If the buffer is empty, then the closure blocks on
-// a synchronous fetch to fill it. After all the changed kvs for a given fetch
-// are returned, the timestamp used for the fetch is returned as resolved.
-//
-// The fetches are rate limited to be no more often than the
-// `changefeed.experimental_poll_interval` setting.
-func exportRequestPoll(
-	execCfg *sql.ExecutorConfig, details jobs.ChangefeedDetails, progress *jobs.ChangefeedProgress,
-) func(context.Context) (changedKVs, error) {
-	sender := execCfg.DB.GetSender()
-	var spans []roachpb.Span
-	for _, tableDesc := range details.TableDescs {
-		spans = append(spans, tableDesc.PrimaryIndexSpan())
-	}
-
-	var buffer changefeedBuffer
-	highwater := progress.Highwater
-	return func(ctx context.Context) (changedKVs, error) {
-		if ret, ok := buffer.get(); ok {
-			return ret, nil
-		}
-
-		pollDuration := changefeedPollInterval.Get(&execCfg.Settings.SV)
-		pollDuration = pollDuration - timeutil.Since(timeutil.Unix(0, highwater.WallTime))
-		if pollDuration > 0 {
-			log.VEventf(ctx, 1, `sleeping for %s`, pollDuration)
-			select {
-			case <-ctx.Done():
-				return changedKVs{}, ctx.Err()
-			case <-time.After(pollDuration):
-			}
-		}
-
-		nextHighwater := execCfg.Clock.Now()
-		log.VEventf(ctx, 1, `changefeed poll [%s,%s): %s`,
-			highwater, nextHighwater, time.Duration(nextHighwater.WallTime-highwater.WallTime))
-
-		// TODO(dan): Send these out in parallel.
-		for _, span := range spans {
-			header := roachpb.Header{Timestamp: nextHighwater}
-			req := &roachpb.ExportRequest{
-				RequestHeader: roachpb.RequestHeaderFromSpan(span),
-				StartTime:     highwater,
-				MVCCFilter:    roachpb.MVCCFilter_Latest,
-				ReturnSST:     true,
-			}
-			res, pErr := client.SendWrappedWith(ctx, sender, header, req)
-			if pErr != nil {
-				return changedKVs{}, errors.Wrapf(
-					pErr.GoError(), `fetching changes for [%s,%s)`, span.Key, span.EndKey)
-			}
-			for _, file := range res.(*roachpb.ExportResponse).Files {
-				buffer.append(changedKVs{sst: file.SST})
-			}
-		}
-		log.VEventf(ctx, 2, `poll took %s`,
-			time.Duration(execCfg.Clock.Now().WallTime-nextHighwater.WallTime))
-
-		// There is guaranteed to be at least one entry in buffer because we
-		// always append the resolved timestamp.
-		highwater = nextHighwater
-		buffer.append(changedKVs{resolved: highwater})
-		ret, _ := buffer.get()
-		return ret, nil
-	}
+	// resolved, if non-nil, is a guarantee for the associated
+	// span that no previously unseen entries with a lower or equal updated
+	// timestamp will be emitted.
+	resolved *jobspb.ResolvedSpan
 }
 
 // kvsToRows gets changed kvs from a closure and converts them into sql rows. It
 // returns a closure that may be repeatedly called to advance the changefeed.
 // The returned closure is not threadsafe.
 func kvsToRows(
-	execCfg *sql.ExecutorConfig,
-	details jobs.ChangefeedDetails,
-	inputFn func(context.Context) (changedKVs, error),
-) func(context.Context) ([]emitRow, error) {
-	rfCache := newRowFetcherCache(execCfg.LeaseManager)
+	leaseMgr *sql.LeaseManager,
+	tableHist *tableHistory,
+	details jobspb.ChangefeedDetails,
+	inputFn func(context.Context) (bufferEntry, error),
+) func(context.Context) ([]emitEntry, error) {
+	rfCache := newRowFetcherCache(leaseMgr, tableHist)
 
-	var output []emitRow
 	var kvs sqlbase.SpanKVFetcher
-	return func(ctx context.Context) ([]emitRow, error) {
-		// Reuse output and kvs to save allocations.
-		output, kvs.KVs = output[:0], kvs.KVs[:0]
+	appendEmitEntryForKV := func(
+		ctx context.Context, output []emitEntry, kv roachpb.KeyValue,
+	) ([]emitEntry, error) {
+		// Reuse kvs to save allocations.
+		kvs.KVs = kvs.KVs[:0]
 
-		input, err := inputFn(ctx)
+		desc, err := rfCache.TableDescForKey(ctx, kv.Key, kv.Value.Timestamp)
 		if err != nil {
 			return nil, err
 		}
-		if input.sst != nil {
-			it, err := engineccl.NewMemSSTIterator(input.sst, false /* verify */)
+		if _, ok := details.Targets[desc.ID]; !ok {
+			// This kv is for an interleaved table that we're not watching.
+			if log.V(3) {
+				log.Infof(ctx, `skipping key from unwatched table %s: %s`, desc.Name, kv.Key)
+			}
+			return nil, nil
+		}
+
+		rf, err := rfCache.RowFetcherForTableDesc(desc)
+		if err != nil {
+			return nil, err
+		}
+		// TODO(dan): Handle tables with multiple column families.
+		kvs.KVs = append(kvs.KVs, kv)
+		if err := rf.StartScanFrom(ctx, &kvs); err != nil {
+			return nil, err
+		}
+
+		for {
+			var r emitEntry
+			r.row.datums, r.row.tableDesc, _, err = rf.NextRow(ctx)
 			if err != nil {
 				return nil, err
 			}
-			defer it.Close()
-			for it.Seek(engine.NilKey); ; it.Next() {
-				if ok, err := it.Valid(); err != nil {
-					return nil, err
-				} else if !ok {
-					break
-				}
-
-				unsafeKey := it.UnsafeKey()
-				rf, err := rfCache.RowFetcherForKey(ctx, unsafeKey)
-				if err != nil {
-					return nil, err
-				}
-				if log.V(3) {
-					log.Infof(ctx, "changed key %s", unsafeKey)
-				}
-
-				// TODO(dan): Handle tables with multiple column families.
-				kvs.KVs = append(kvs.KVs[0:], roachpb.KeyValue{
-					Key: append([]byte(nil), unsafeKey.Key...),
-					Value: roachpb.Value{
-						Timestamp: unsafeKey.Timestamp,
-						RawBytes:  append([]byte(nil), it.UnsafeValue()...),
-					},
-				})
-				if err := rf.StartScanFrom(ctx, &kvs); err != nil {
-					return nil, err
-				}
-
-				for {
-					var r emitRow
-					r.row, r.tableDesc, _, err = rf.NextRowDecoded(ctx)
-					if err != nil {
-						return nil, err
-					}
-					if r.row == nil {
-						break
-					}
-					r.deleted = rf.RowIsDeleted()
-
-					r.rowTimestamp = unsafeKey.Timestamp
-					output = append(output, r)
-				}
+			if r.row.datums == nil {
+				break
 			}
-		}
-		if input.resolved != (hlc.Timestamp{}) {
-			output = append(output, emitRow{resolved: input.resolved})
+			r.row.datums = append(sqlbase.EncDatumRow(nil), r.row.datums...)
+
+			r.row.deleted = rf.RowIsDeleted()
+			r.row.timestamp = kv.Value.Timestamp
+			output = append(output, r)
 		}
 		return output, nil
 	}
+
+	var output []emitEntry
+	return func(ctx context.Context) ([]emitEntry, error) {
+		// Reuse output to save allocations.
+		output = output[:0]
+		for {
+			input, err := inputFn(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if input.kv.Key != nil {
+				if log.V(3) {
+					log.Infof(ctx, "changed key %s %s", input.kv.Key, input.kv.Value.Timestamp)
+				}
+				output, err = appendEmitEntryForKV(ctx, output, input.kv)
+				if err != nil {
+					return nil, err
+				}
+			}
+			if input.resolved != nil {
+				output = append(output, emitEntry{resolved: input.resolved})
+			}
+			if output != nil {
+				return output, nil
+			}
+		}
+	}
 }
 
-// emitRows connects to a sink, receives rows from a closure, and repeatedly
-// emits them and close notifications to the sink. It returns a closure that may
-// be repeatedly called to advance the changefeed. The returned closure is not
-// threadsafe.
-func emitRows(
-	details jobs.ChangefeedDetails,
-	jobProgressedFn func(context.Context, hlc.Timestamp) error,
-	inputFn func(context.Context) ([]emitRow, error),
-) (func(context.Context) error, error) {
-	var kafkaTopicPrefix string
-	var producer sarama.SyncProducer
+// emitEntries connects to a sink, receives rows from a closure, and repeatedly
+// emits them to the sink. It returns a closure that may be repeatedly called to
+// advance the changefeed and which returns span-level resolved timestamp
+// updates. The returned closure is not threadsafe.
+func emitEntries(
+	details jobspb.ChangefeedDetails,
+	encoder Encoder,
+	sink Sink,
+	inputFn func(context.Context) ([]emitEntry, error),
+	knobs TestingKnobs,
+) func(context.Context) ([]jobspb.ResolvedSpan, error) {
+	var scratch bufalloc.ByteAllocator
+	emitRowFn := func(ctx context.Context, row emitRow) error {
+		var keyCopy, valueCopy []byte
 
-	sinkURI, err := url.Parse(details.SinkURI)
-	if err != nil {
-		return nil, err
-	}
-	switch sinkURI.Scheme {
-	case sinkSchemeKafka:
-		kafkaTopicPrefix = sinkURI.Query().Get(sinkParamTopicPrefix)
-		producer, err = getKafkaProducer(sinkURI.Host)
-		if err != nil {
-			return nil, err
-		}
-		defer func() { _ = producer.Close() }()
-	default:
-		return nil, errors.Errorf(`unsupported sink: %s`, sinkURI.Scheme)
-	}
-
-	return func(ctx context.Context) error {
-		inputs, err := inputFn(ctx)
+		encodedKey, err := encoder.EncodeKey(row.tableDesc, row.datums)
 		if err != nil {
 			return err
 		}
+		scratch, keyCopy = scratch.Copy(encodedKey, 0 /* extraCap */)
+
+		if !row.deleted && envelopeType(details.Opts[optEnvelope]) == optEnvelopeRow {
+			var encodedValue []byte
+			encodedValue, err = encoder.EncodeValue(row.tableDesc, row.datums, row.timestamp)
+			if err != nil {
+				return err
+			}
+			scratch, valueCopy = scratch.Copy(encodedValue, 0 /* extraCap */)
+		}
+
+		if knobs.BeforeEmitRow != nil {
+			if err := knobs.BeforeEmitRow(); err != nil {
+				return err
+			}
+		}
+		if err := sink.EmitRow(ctx, row.tableDesc.Name, keyCopy, valueCopy); err != nil {
+			return err
+		}
+		if log.V(3) {
+			log.Infof(ctx, `row %s: %s -> %s`, row.tableDesc.Name, keyCopy, valueCopy)
+		}
+		return nil
+	}
+
+	return func(ctx context.Context) ([]jobspb.ResolvedSpan, error) {
+		inputs, err := inputFn(ctx)
+		if err != nil {
+			return nil, err
+		}
+		var resolvedSpans []jobspb.ResolvedSpan
 		for _, input := range inputs {
-			if input.row != nil {
-				keyColumns := input.tableDesc.PrimaryIndex.ColumnNames
-				jsonKeyRaw := make([]interface{}, len(keyColumns))
-				jsonValueRaw := make(map[string]interface{}, len(input.row))
-				for i := range input.row {
-					jsonValueRaw[input.tableDesc.Columns[i].Name], err = tree.AsJSON(input.row[i])
-					if err != nil {
-						return err
-					}
-				}
-				for i, columnName := range keyColumns {
-					jsonKeyRaw[i] = jsonValueRaw[columnName]
-				}
-
-				jsonKey, err := json.MakeJSON(jsonKeyRaw)
-				if err != nil {
-					return err
-				}
-				var key bytes.Buffer
-				jsonKey.Format(&key)
-				var value bytes.Buffer
-				if !input.deleted && envelopeType(details.Opts[optEnvelope]) == optEnvelopeRow {
-					jsonValue, err := json.MakeJSON(jsonValueRaw)
-					if err != nil {
-						return err
-					}
-					jsonValue.Format(&value)
-				}
-				if log.V(2) {
-					log.Infof(ctx, `row %s -> %s`, key.String(), value.String())
-				}
-
-				message := &sarama.ProducerMessage{
-					Topic: kafkaTopicPrefix + input.tableDesc.Name,
-					Key:   sarama.ByteEncoder(key.Bytes()),
-					Value: sarama.ByteEncoder(value.Bytes()),
-				}
-				if _, _, err := producer.SendMessage(message); err != nil {
-					return errors.Wrapf(err, `sending message to kafka topic %s`, message.Topic)
+			if input.row.datums != nil {
+				if err := emitRowFn(ctx, input.row); err != nil {
+					return nil, err
 				}
 			}
-			if input.resolved != (hlc.Timestamp{}) {
-				if err := jobProgressedFn(ctx, input.resolved); err != nil {
-					return err
-				}
-
-				// TODO(dan): HACK for testing. We call SendMessages with nil to
-				// indicate to the test that a full poll finished. Figure out
-				// something better.
-				if err := producer.SendMessages(nil); err != nil {
-					return err
+			if input.resolved != nil {
+				resolvedSpans = append(resolvedSpans, *input.resolved)
+			}
+		}
+		if len(resolvedSpans) > 0 {
+			// Make sure to flush the sink before forwarding resolved spans,
+			// otherwise, we could lose buffered messages and violate the
+			// at-least-once guarantee. This is also true for checkpointing the
+			// resolved spans in the job progress.
+			//
+			// TODO(dan): We'll probably want some rate limiting on these
+			// flushes.
+			if err := sink.Flush(ctx); err != nil {
+				return nil, err
+			}
+			if knobs.AfterSinkFlush != nil {
+				if err := knobs.AfterSinkFlush(); err != nil {
+					return nil, err
 				}
 			}
 		}
-		return nil
-	}, nil
+		return resolvedSpans, nil
+	}
+}
+
+// emitResolvedTimestamp emits a changefeed-level resolved timestamp to the sink
+// and checkpoints it and the span-level resolved timestamps to the job record.
+func emitResolvedTimestamp(
+	ctx context.Context,
+	details jobspb.ChangefeedDetails,
+	encoder Encoder,
+	sink Sink,
+	jobProgressedFn func(context.Context, jobs.HighWaterProgressedFn) error,
+	sf *spanFrontier,
+) error {
+	resolved := sf.Frontier()
+	var resolvedSpans []jobspb.ResolvedSpan
+	sf.Entries(func(span roachpb.Span, ts hlc.Timestamp) {
+		resolvedSpans = append(resolvedSpans, jobspb.ResolvedSpan{
+			Span: span, Timestamp: ts,
+		})
+	})
+
+	// Some benchmarks want to skip the job progress update for a bit more
+	// isolation.
+	//
+	// NB: To minimize the chance that a user sees duplicates from below
+	// this resolved timestamp, keep this update of the high-water mark
+	// before emitting the resolved timestamp to the sink.
+	if jobProgressedFn != nil {
+		progressedClosure := func(ctx context.Context, d jobspb.ProgressDetails) hlc.Timestamp {
+			// TODO(dan): This was making enormous jobs rows, especially in
+			// combination with how many mvcc versions there are. Cut down on
+			// the amount of data used here dramatically and re-enable.
+			//
+			// d.(*jobspb.Progress_Changefeed).Changefeed.ResolvedSpans = resolvedSpans
+			return resolved
+		}
+		if err := jobProgressedFn(ctx, progressedClosure); err != nil {
+			return err
+		}
+	}
+
+	if _, ok := details.Opts[optResolvedTimestamps]; ok {
+		payload, err := encoder.EncodeResolvedTimestamp(resolved)
+		if err != nil {
+			return err
+		}
+		// TODO(dan): Plumb a bufalloc.ByteAllocator to use here.
+		payload = append([]byte(nil), payload...)
+		// TODO(dan): Emit more fine-grained (table level) resolved
+		// timestamps.
+		if err := sink.EmitResolvedTimestamp(ctx, payload); err != nil {
+			return err
+		}
+	}
+	if log.V(2) {
+		log.Infof(ctx, `resolved %s`, resolved)
+	}
+	return nil
 }

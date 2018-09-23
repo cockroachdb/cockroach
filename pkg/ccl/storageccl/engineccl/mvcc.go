@@ -30,7 +30,11 @@ import (
 // CockroachDB uses that as a sentinel for key metadata anyway.
 //
 // Expected usage:
-//    iter := NewMVCCIncrementalIterator(e, startTime, endTime)
+//    iter := NewMVCCIncrementalIterator(e, IterOptions{
+//        StartTime:  startTime,
+//        EndTime:    endTime,
+//        UpperBound: endKey,
+//    })
 //    defer iter.Close()
 //    for iter.Seek(startKey); ; iter.Next() {
 //        ok, err := iter.Valid()
@@ -56,21 +60,30 @@ type MVCCIncrementalIterator struct {
 
 var _ engine.SimpleIterator = &MVCCIncrementalIterator{}
 
+// IterOptions bundles options for NewMVCCIncrementalIterator.
+type IterOptions struct {
+	StartTime  hlc.Timestamp
+	EndTime    hlc.Timestamp
+	UpperBound roachpb.Key
+	WithStats  bool
+}
+
 // NewMVCCIncrementalIterator creates an MVCCIncrementalIterator with the
-// specified engine and time range.
-func NewMVCCIncrementalIterator(
-	e engine.Reader, startTime, endTime hlc.Timestamp,
-) *MVCCIncrementalIterator {
+// specified engine and options.
+func NewMVCCIncrementalIterator(e engine.Reader, opts IterOptions) *MVCCIncrementalIterator {
 	return &MVCCIncrementalIterator{
-		// The call to startTime.Next() converts our half-open (start, end] time
-		// interval into the fully-inclusive [start, end] interval that
-		// NewTimeBoundIterator expects. This is strictly a performance
-		// optimization; omitting the call would still return correct results.
-		//
-		// TODO(tschottdorf): plumb withStats in when needed.
-		iter:      e.NewTimeBoundIterator(startTime.Next(), endTime, false /* withStats */),
-		startTime: startTime,
-		endTime:   endTime,
+		iter: e.NewIterator(engine.IterOptions{
+			// The call to startTime.Next() converts our exclusive start bound into
+			// the inclusive start bound that MinTimestampHint expects. This is
+			// strictly a performance optimization; omitting the call would still
+			// return correct results.
+			MinTimestampHint: opts.StartTime.Next(),
+			MaxTimestampHint: opts.EndTime,
+			UpperBound:       opts.UpperBound,
+			WithStats:        opts.WithStats,
+		}),
+		startTime: opts.StartTime,
+		endTime:   opts.EndTime,
 	}
 }
 

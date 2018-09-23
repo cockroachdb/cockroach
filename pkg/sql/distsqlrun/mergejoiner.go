@@ -17,10 +17,14 @@ package distsqlrun
 import (
 	"context"
 	"errors"
-	"sync"
+
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/opentracing/opentracing-go"
 )
 
 // mergeJoiner performs merge join, it has two input row sources with the same
@@ -71,23 +75,36 @@ func newMergeJoiner(
 		rightSource: rightSource,
 	}
 
+	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+		m.leftSource = NewInputStatCollector(m.leftSource)
+		m.rightSource = NewInputStatCollector(m.rightSource)
+		m.finishTrace = m.outputStatsToTrace
+	}
+
 	if err := m.joinerBase.init(
-		flowCtx, processorID, leftSource.OutputTypes(), rightSource.OutputTypes(),
+		m /* self */, flowCtx, processorID, leftSource.OutputTypes(), rightSource.OutputTypes(),
 		spec.Type, spec.OnExpr, leftEqCols, rightEqCols, 0, post, output,
-		procStateOpts{
-			inputsToDrain: []RowSource{leftSource, rightSource},
+		ProcStateOpts{
+			InputsToDrain: []RowSource{leftSource, rightSource},
+			TrailingMetaCallback: func(context.Context) []ProducerMetadata {
+				m.close()
+				return nil
+			},
 		},
 	); err != nil {
 		return nil, err
 	}
 
+	m.MemMonitor = NewMonitor(flowCtx.EvalCtx.Ctx(), flowCtx.EvalCtx.Mon, "mergejoiner-mem")
+
 	var err error
 	m.streamMerger, err = makeStreamMerger(
-		leftSource,
+		m.leftSource,
 		convertToColumnOrdering(spec.LeftOrdering),
-		rightSource,
+		m.rightSource,
 		convertToColumnOrdering(spec.RightOrdering),
 		spec.NullEquality,
+		m.MemMonitor,
 	)
 	if err != nil {
 		return nil, err
@@ -96,46 +113,34 @@ func newMergeJoiner(
 	return m, nil
 }
 
-// Run is part of the Processor interface.
-func (m *mergeJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if m.out.output == nil {
-		panic("mergeJoiner output not initialized for emitting rows")
-	}
-	ctx = m.Start(ctx)
-	Run(ctx, m, m.out.output)
-	if wg != nil {
-		wg.Done()
-	}
-}
-
 // Start is part of the RowSource interface.
 func (m *mergeJoiner) Start(ctx context.Context) context.Context {
 	m.streamMerger.start(ctx)
-	ctx = m.startInternal(ctx, mergeJoinerProcName)
+	ctx = m.StartInternal(ctx, mergeJoinerProcName)
 	m.cancelChecker = sqlbase.NewCancelChecker(ctx)
 	return ctx
 }
 
 // Next is part of the Processor interface.
 func (m *mergeJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	for m.state == stateRunning {
+	for m.State == StateRunning {
 		row, meta := m.nextRow()
 		if meta != nil {
 			if meta.Err != nil {
-				m.moveToDraining(nil /* err */)
+				m.MoveToDraining(nil /* err */)
 			}
 			return nil, meta
 		}
 		if row == nil {
-			m.moveToDraining(nil /* err */)
+			m.MoveToDraining(nil /* err */)
 			break
 		}
 
-		if outRow := m.processRowHelper(row); outRow != nil {
+		if outRow := m.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}
-	return nil, m.drainHelper()
+	return nil, m.DrainHelper()
 }
 
 func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
@@ -235,13 +240,65 @@ func (m *mergeJoiner) nextRow() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (m *mergeJoiner) ConsumerDone() {
-	m.moveToDraining(nil /* err */)
+func (m *mergeJoiner) close() {
+	if m.InternalClose() {
+		ctx := m.evalCtx.Ctx()
+		m.streamMerger.close(ctx)
+		m.MemMonitor.Stop(ctx)
+	}
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (m *mergeJoiner) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	m.internalClose()
+	m.close()
+}
+
+var _ DistSQLSpanStats = &MergeJoinerStats{}
+
+const mergeJoinerTagPrefix = "mergejoiner."
+
+// Stats implements the SpanStats interface.
+func (mjs *MergeJoinerStats) Stats() map[string]string {
+	// statsMap starts off as the left input stats map.
+	statsMap := mjs.LeftInputStats.Stats(mergeJoinerTagPrefix + "left.")
+	rightInputStatsMap := mjs.RightInputStats.Stats(mergeJoinerTagPrefix + "right.")
+	// Merge the two input maps.
+	for k, v := range rightInputStatsMap {
+		statsMap[k] = v
+	}
+	statsMap[mergeJoinerTagPrefix+maxMemoryTagSuffix] = humanizeutil.IBytes(mjs.MaxAllocatedMem)
+	return statsMap
+}
+
+// StatsForQueryPlan implements the DistSQLSpanStats interface.
+func (mjs *MergeJoinerStats) StatsForQueryPlan() []string {
+	stats := append(
+		mjs.LeftInputStats.StatsForQueryPlan("left "),
+		mjs.RightInputStats.StatsForQueryPlan("right ")...,
+	)
+	return append(stats, fmt.Sprintf("%s: %s", maxMemoryQueryPlanSuffix, humanizeutil.IBytes(mjs.MaxAllocatedMem)))
+}
+
+// outputStatsToTrace outputs the collected mergeJoiner stats to the trace. Will
+// fail silently if the mergeJoiner is not collecting stats.
+func (m *mergeJoiner) outputStatsToTrace() {
+	lis, ok := getInputStats(m.flowCtx, m.leftSource)
+	if !ok {
+		return
+	}
+	ris, ok := getInputStats(m.flowCtx, m.rightSource)
+	if !ok {
+		return
+	}
+	if sp := opentracing.SpanFromContext(m.Ctx); sp != nil {
+		tracing.SetSpanStats(
+			sp,
+			&MergeJoinerStats{
+				LeftInputStats:  lis,
+				RightInputStats: ris,
+				MaxAllocatedMem: m.MemMonitor.MaximumBytes(),
+			},
+		)
+	}
 }

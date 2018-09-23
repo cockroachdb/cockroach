@@ -179,6 +179,82 @@ func TestRegistryStatusUnknown(t *testing.T) {
 	}
 }
 
+func TestRegistryRunTimeout(t *testing.T) {
+	var buf syncedBuffer
+	timeoutRE := regexp.MustCompile(`(?m)^.*test timed out \(.*\)$`)
+
+	r := newRegistry()
+	r.out = &buf
+
+	r.Add(testSpec{
+		Name:    `timeout`,
+		Timeout: 10 * time.Millisecond,
+		Stable:  true,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			<-ctx.Done()
+		},
+	})
+	r.Run([]string{"timeout"})
+
+	out := buf.String()
+	if !timeoutRE.MatchString(out) {
+		t.Fatalf("unable to find \"timed out\" message:\n%s", out)
+	}
+}
+
+func TestRegistryRunSubTestFailed(t *testing.T) {
+	var buf syncedBuffer
+	failedRE := regexp.MustCompile(`(?m)^.*--- FAIL: parent \(.*$`)
+
+	r := newRegistry()
+	r.out = &buf
+	r.Add(testSpec{
+		Name:   "parent",
+		Stable: true,
+		SubTests: []testSpec{{
+			Name:   "child",
+			Stable: true,
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				t.Fatal("failed")
+			},
+		}},
+	})
+
+	r.Run([]string{"."})
+	out := buf.String()
+	if !failedRE.MatchString(out) {
+		t.Fatalf("unable to find \"FAIL: parent\" message:\n%s", out)
+	}
+}
+
+func TestRegistryRunClusterExpired(t *testing.T) {
+	defer func(l, v bool, n string) {
+		local, testingSkipValidation, clusterName = l, v, n
+	}(local, testingSkipValidation, clusterName)
+	local, testingSkipValidation, clusterName = true, true, "local"
+
+	var buf syncedBuffer
+	expiredRE := regexp.MustCompile(`(?m)^.*cluster expired \(.*\)$`)
+
+	r := newRegistry()
+	r.out = &buf
+
+	r.Add(testSpec{
+		Name:   `expired`,
+		Stable: true,
+		Nodes:  nodes(1, nodeLifetimeOption(time.Second)),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			panic("not reached")
+		},
+	})
+	r.Run([]string{"expired"})
+
+	out := buf.String()
+	if !expiredRE.MatchString(out) {
+		t.Fatalf("unable to find \"cluster expired\" message:\n%s", out)
+	}
+}
+
 func TestRegistryVerifyClusterName(t *testing.T) {
 	testCases := []struct {
 		testNames   []string
@@ -306,6 +382,18 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				Run:        dummyRun,
 			},
 			"a: unable to parse min-version: foo",
+			nil,
+		},
+		{
+			testSpec{
+				Name:    "a",
+				Timeout: time.Second,
+				SubTests: []testSpec{{
+					Name: "b",
+					Run:  dummyRun,
+				}},
+			},
+			"a: timeouts only apply to tests specifying Run",
 			nil,
 		},
 	}

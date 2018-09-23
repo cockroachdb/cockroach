@@ -58,8 +58,9 @@ func (t *ExprTransformContext) AggregateInExpr(
 		return false
 	}
 
-	t.isAggregateVisitor.searchPath = searchPath
-	defer t.isAggregateVisitor.Reset()
+	t.isAggregateVisitor = IsAggregateVisitor{
+		searchPath: searchPath,
+	}
 	tree.WalkExprConst(&t.isAggregateVisitor, expr)
 	return t.isAggregateVisitor.Aggregated
 }
@@ -71,5 +72,6 @@ func (t *ExprTransformContext) AggregateInExpr(
 // should collect scalar properties (see tree.ScalarProperties) and
 // then the collected properties should be tested directly.
 func (t *ExprTransformContext) WindowFuncInExpr(expr tree.Expr) bool {
+	t.containsWindowVisitor = ContainsWindowVisitor{}
 	return t.containsWindowVisitor.ContainsWindowFunc(expr)
 }

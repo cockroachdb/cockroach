@@ -17,82 +17,32 @@ package sql
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
 
-// ShowCreateTable returns a SHOW CREATE TABLE statement for the specified table.
-// Privileges: Any privilege on table.
-func (p *planner) ShowCreateTable(ctx context.Context, n *tree.ShowCreateTable) (planNode, error) {
-	// We make the check whether the name points to a table or not in
-	// SQL, so as to avoid a double lookup (a first one to check if the
-	// descriptor is of the right type, another to populate the
-	// create_statements vtable).
+// ShowCreate implements the SHOW CREATE statement.
+// Privileges: Any privilege on object.
+func (p *planner) ShowCreate(ctx context.Context, n *tree.ShowCreate) (planNode, error) {
 	// The condition "database_name IS NULL" ensures that virtual tables are included.
-	const showCreateTableQuery = `
-     SELECT %[3]s AS "Table",
-            IFNULL(create_statement,
-                   crdb_internal.force_error('` + pgerror.CodeUndefinedTableError + `',
-                                             %[3]s || ' is not a table')::string
-            ) AS "CreateTable"
-       FROM (SELECT create_statement FROM %[4]s.crdb_internal.create_statements
-              WHERE (database_name IS NULL OR database_name = %[1]s)
-                AND schema_name = %[5]s
-                AND descriptor_name = %[2]s
-                AND descriptor_type = 'table'
-              UNION ALL VALUES (NULL) ORDER BY 1 DESC) LIMIT 1
-  `
-	return p.showTableDetails(ctx, "SHOW CREATE TABLE", n.Table, showCreateTableQuery)
+	const showCreateQuery = `
+     SELECT %[3]s AS table_name,
+            create_statement
+       FROM %[4]s.crdb_internal.create_statements
+      WHERE (database_name IS NULL OR database_name = %[1]s)
+        AND schema_name = %[5]s
+        AND descriptor_name = %[2]s
+`
+	return p.showTableDetails(ctx, "SHOW CREATE", n.Name, showCreateQuery)
 }
 
-// ShowCreateView returns a CREATE VIEW statement for the specified view.
-// Privileges: Any privilege on view.
-func (p *planner) ShowCreateView(ctx context.Context, n *tree.ShowCreateView) (planNode, error) {
-	// We make the check whether the name points to a view or not in
-	// SQL, so as to avoid a double lookup (a first one to check if the
-	// descriptor is of the right type, another to populate the
-	// create_statements vtable).
-	const showCreateViewQuery = `
-     SELECT %[3]s AS "View",
-            IFNULL(create_statement,
-                   crdb_internal.force_error('` + pgerror.CodeUndefinedTableError + `',
-                                             %[3]s || ' is not a view')::string
-            ) AS "CreateView"
-       FROM (SELECT create_statement FROM %[4]s.crdb_internal.create_statements
-              WHERE database_name = %[1]s AND schema_name = %[5]s AND descriptor_name = %[2]s AND descriptor_type = 'view'
-              UNION ALL VALUES (NULL) ORDER BY 1 DESC) LIMIT 1
-  `
-	return p.showTableDetails(ctx, "SHOW CREATE VIEW", n.View, showCreateViewQuery)
-}
-
-func (p *planner) ShowCreateSequence(
-	ctx context.Context, n *tree.ShowCreateSequence,
-) (planNode, error) {
-	// We make the check whether the name points to a sequence or not in
-	// SQL, so as to avoid a double lookup (a first one to check if the
-	// descriptor is of the right type, another to populate the
-	// create_statements vtable).
-	const showCreateSequenceQuery = `
-			SELECT %[3]s AS "Sequence",
-							IFNULL(create_statement,
-										 crdb_internal.force_error('` + pgerror.CodeUndefinedTableError + `',
-                                              %[3]s || ' is not a sequence')::string
-							) AS "CreateSequence"
-				 FROM (SELECT create_statement FROM %[4]s.crdb_internal.create_statements
-								WHERE database_name = %[1]s AND schema_name = %[5]s AND descriptor_name = %[2]s
-								AND descriptor_type = 'sequence'
-								UNION ALL VALUES (NULL) ORDER BY 1 DESC) LIMIT 1
-	`
-	return p.showTableDetails(ctx, "SHOW CREATE SEQUENCE", n.Sequence, showCreateSequenceQuery)
-}
-
-// showCreateView returns a valid SQL representation of the CREATE
+// ShowCreateView returns a valid SQL representation of the CREATE
 // VIEW statement used to create the given view.
-func (p *planner) showCreateView(
+func ShowCreateView(
 	ctx context.Context, tn *tree.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
@@ -110,7 +60,7 @@ func (p *planner) showCreateView(
 	return f.CloseAndGetString(), nil
 }
 
-func (p *planner) printForeignKeyConstraint(
+func printForeignKeyConstraint(
 	ctx context.Context,
 	buf *bytes.Buffer,
 	dbPrefix string,
@@ -121,27 +71,37 @@ func (p *planner) printForeignKeyConstraint(
 	if !fk.IsSet() {
 		return nil
 	}
-	fkTable, err := lCtx.getTableByID(fk.Table)
-	if err != nil {
-		return err
+	var refNames []string
+	var fkTableName tree.TableName
+	if lCtx != nil {
+		fkTable, err := lCtx.getTableByID(fk.Table)
+		if err != nil {
+			return err
+		}
+		fkDb, err := lCtx.getDatabaseByID(fkTable.ParentID)
+		if err != nil {
+			return err
+		}
+		fkIdx, err := fkTable.FindIndexByID(fk.Index)
+		if err != nil {
+			return err
+		}
+		refNames = fkIdx.ColumnNames
+		fkTableName = tree.MakeTableName(tree.Name(fkDb.Name), tree.Name(fkTable.Name))
+		fkTableName.ExplicitSchema = fkDb.Name != dbPrefix
+	} else {
+		refNames = []string{"???"}
+		fkTableName = tree.MakeTableName(tree.Name(""), tree.Name(fmt.Sprintf("[%d as ref]", fk.Table)))
+		fkTableName.ExplicitSchema = false
+		fkTableName.ExplicitSchema = false
 	}
-	fkDb, err := lCtx.getDatabaseByID(fkTable.ParentID)
-	if err != nil {
-		return err
-	}
-	fkIdx, err := fkTable.FindIndexByID(fk.Index)
-	if err != nil {
-		return err
-	}
-	fkTableName := tree.MakeTableName(tree.Name(fkDb.Name), tree.Name(fkTable.Name))
-	fkTableName.ExplicitSchema = fkDb.Name != dbPrefix
 	fmtCtx := tree.MakeFmtCtx(buf, tree.FmtSimple)
 	buf.WriteString("FOREIGN KEY (")
 	formatQuoteNames(buf, idx.ColumnNames[0:idx.ForeignKey.SharedPrefixLen]...)
 	buf.WriteString(") REFERENCES ")
 	fmtCtx.FormatNode(&fkTableName)
 	buf.WriteString(" (")
-	formatQuoteNames(buf, fkIdx.ColumnNames...)
+	formatQuoteNames(buf, refNames...)
 	buf.WriteByte(')')
 	idx.ColNamesString()
 	if fk.OnDelete != sqlbase.ForeignKeyReference_NO_ACTION {
@@ -155,9 +115,9 @@ func (p *planner) printForeignKeyConstraint(
 	return nil
 }
 
-// showCreateSequence returns a valid SQL representation of the
+// ShowCreateSequence returns a valid SQL representation of the
 // CREATE SEQUENCE statement used to create the given sequence.
-func (p *planner) showCreateSequence(
+func ShowCreateSequence(
 	ctx context.Context, tn *tree.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
@@ -168,10 +128,13 @@ func (p *planner) showCreateSequence(
 	f.Printf(" MAXVALUE %d", opts.MaxValue)
 	f.Printf(" INCREMENT %d", opts.Increment)
 	f.Printf(" START %d", opts.Start)
+	if opts.Virtual {
+		f.Printf(" VIRTUAL")
+	}
 	return f.CloseAndGetString(), nil
 }
 
-// showCreateTable returns a valid SQL representation of the CREATE
+// ShowCreateTable returns a valid SQL representation of the CREATE
 // TABLE statement used to create the given table.
 //
 // The names of the tables references by foreign keys, and the
@@ -179,7 +142,7 @@ func (p *planner) showCreateSequence(
 // unless it is equal to the given dbPrefix. This allows us to elide
 // the prefix when the given table references other tables in the
 // current database.
-func (p *planner) showCreateTable(
+func ShowCreateTable(
 	ctx context.Context,
 	tn *tree.Name,
 	dbPrefix string,
@@ -219,17 +182,17 @@ func (p *planner) showCreateTable(
 			f.WriteString(",\n\tCONSTRAINT ")
 			f.FormatNameP(&fk.Name)
 			f.WriteString(" ")
-			if err := p.printForeignKeyConstraint(ctx, f.Buffer, dbPrefix, idx, lCtx); err != nil {
+			if err := printForeignKeyConstraint(ctx, f.Buffer, dbPrefix, idx, lCtx); err != nil {
 				return "", err
 			}
 		}
 		if idx.ID != desc.PrimaryIndex.ID {
 			// Showing the primary index is handled above.
 			f.WriteString(",\n\t")
-			f.WriteString(idx.SQLString(""))
+			f.WriteString(idx.SQLString(&sqlbase.AnonymousTable))
 			// Showing the INTERLEAVE and PARTITION BY for the primary index are
 			// handled last.
-			if err := p.showCreateInterleave(ctx, idx, f.Buffer, dbPrefix, lCtx); err != nil {
+			if err := showCreateInterleave(ctx, idx, f.Buffer, dbPrefix, lCtx); err != nil {
 				return "", err
 			}
 			if err := ShowCreatePartitioning(
@@ -268,7 +231,7 @@ func (p *planner) showCreateTable(
 
 	f.WriteString("\n)")
 
-	if err := p.showCreateInterleave(ctx, &desc.PrimaryIndex, f.Buffer, dbPrefix, lCtx); err != nil {
+	if err := showCreateInterleave(ctx, &desc.PrimaryIndex, f.Buffer, dbPrefix, lCtx); err != nil {
 		return "", err
 	}
 	if err := ShowCreatePartitioning(
@@ -297,7 +260,7 @@ func formatQuoteNames(buf *bytes.Buffer, names ...string) {
 // The name of the parent table is prefixed by its database name unless
 // it is equal to the given dbPrefix. This allows us to elide the prefix
 // when the given index is interleaved in a table of the current database.
-func (p *planner) showCreateInterleave(
+func showCreateInterleave(
 	ctx context.Context,
 	idx *sqlbase.IndexDescriptor,
 	buf *bytes.Buffer,
@@ -308,16 +271,25 @@ func (p *planner) showCreateInterleave(
 		return nil
 	}
 	intl := idx.Interleave
-	parentTable, err := lCtx.getTableByID(intl.Ancestors[len(intl.Ancestors)-1].TableID)
-	if err != nil {
-		return err
+	parentTableID := intl.Ancestors[len(intl.Ancestors)-1].TableID
+
+	var parentName tree.TableName
+	if lCtx != nil {
+		parentTable, err := lCtx.getTableByID(parentTableID)
+		if err != nil {
+			return err
+		}
+		parentDbDesc, err := lCtx.getDatabaseByID(parentTable.ParentID)
+		if err != nil {
+			return err
+		}
+		parentName = tree.MakeTableName(tree.Name(parentDbDesc.Name), tree.Name(parentTable.Name))
+		parentName.ExplicitSchema = parentDbDesc.Name != dbPrefix
+	} else {
+		parentName = tree.MakeTableName(tree.Name(""), tree.Name(fmt.Sprintf("[%d as parent]", parentTableID)))
+		parentName.ExplicitCatalog = false
+		parentName.ExplicitSchema = false
 	}
-	parentDbDesc, err := lCtx.getDatabaseByID(parentTable.ParentID)
-	if err != nil {
-		return err
-	}
-	parentName := tree.MakeTableName(tree.Name(parentDbDesc.Name), tree.Name(parentTable.Name))
-	parentName.ExplicitSchema = parentDbDesc.Name != dbPrefix
 	var sharedPrefixLen int
 	for _, ancestor := range intl.Ancestors {
 		sharedPrefixLen += int(ancestor.SharedPrefixLen)

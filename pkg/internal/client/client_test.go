@@ -798,19 +798,17 @@ func TestReadConsistencyTypes(t *testing.T) {
 		t.Run(rc.String(), func(t *testing.T) {
 			// Mock out DistSender's sender function to check the read consistency for
 			// outgoing BatchRequests and return an empty reply.
-			factory := client.TxnSenderFactoryFunc(func(client.TxnType) client.TxnSender {
-				return client.TxnSenderFunc(
-					func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-						if ba.ReadConsistency != rc {
-							return nil, roachpb.NewErrorf("BatchRequest has unexpected ReadConsistency %s", ba.ReadConsistency)
-						}
-						return ba.CreateReply(), nil
-					},
-				)
-			})
+			factory := client.NonTransactionalFactoryFunc(
+				func(_ context.Context, ba roachpb.BatchRequest,
+				) (*roachpb.BatchResponse, *roachpb.Error) {
+					if ba.ReadConsistency != rc {
+						return nil, roachpb.NewErrorf("BatchRequest has unexpected ReadConsistency %s", ba.ReadConsistency)
+					}
+					return ba.CreateReply(), nil
+				})
 
 			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-			db := client.NewDB(factory, clock)
+			db := client.NewDB(testutils.MakeAmbientCtx(), factory, clock)
 			ctx := context.TODO()
 
 			prepWithRC := func() *client.Batch {
@@ -852,45 +850,6 @@ func TestReadConsistencyTypes(t *testing.T) {
 	}
 }
 
-// TestReadOnlyTxnObeysDeadline tests that read-only transactions obey the
-// deadline. Read-only transactions have their EndTransaction elided, so the
-// enforcement of the deadline is done in the client.
-func TestReadOnlyTxnObeysDeadline(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
-	db := createTestClient(t, s)
-
-	if err := db.Put(context.TODO(), "k", "v"); err != nil {
-		t.Fatal(err)
-	}
-
-	txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
-	// Only snapshot transactions can observe deadline errors; serializable ones
-	// get a restart error before the deadline check.
-	if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
-		t.Fatal(err)
-	}
-	opts := client.TxnExecOptions{
-		AutoRetry:  false,
-		AutoCommit: true,
-	}
-	if err := txn.Exec(
-		context.TODO(), opts,
-		func(ctx context.Context, txn *client.Txn, _ *client.TxnExecOptions) error {
-			// Set a deadline, then set a higher commit timestamp for the txn.
-			txn.UpdateDeadlineMaybe(ctx, s.Clock().Now())
-			txn.Proto().Timestamp.Forward(s.Clock().Now())
-			_, err := txn.Get(ctx, "k")
-			return err
-		}); !testutils.IsError(err, "deadline exceeded before transaction finalization") {
-		// We test for TransactionAbortedError. If this was not a read-only txn,
-		// the error returned by the server would have been different - a
-		// TransactionStatusError. This inconsistency is unfortunate.
-		t.Fatal(err)
-	}
-}
-
 // TestTxn_ReverseScan a simple test for Txn.ReverseScan
 func TestTxn_ReverseScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -909,62 +868,68 @@ func TestTxn_ReverseScan(t *testing.T) {
 		t.Error(err)
 	}
 
-	err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-		// Try reverse scans for all keys.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/10", 100)
-			if err != nil {
-				return err
-			}
-			checkKVs(t, rows,
-				keys[9], 9, keys[8], 8, keys[7], 7, keys[6], 6, keys[5], 5,
-				keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
+	// Try reverse scans for all keys.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/10", 100)
+		if err != nil {
+			return err
 		}
-
-		// Try reverse scans for half of the keys.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 100)
-			if err != nil {
-				return err
-			}
-			checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
-		}
-
-		// Try limit maximum rows.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 3)
-			if err != nil {
-				return err
-			}
-			checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2)
-		}
-
-		// Try reverse scan with the same start and end key.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/00", 100)
-			if len(rows) > 0 {
-				t.Errorf("expected empty, got %v", rows)
-			}
-			if err == nil {
-				t.Errorf("expected a truncation error, got %s", err)
-			}
-		}
-
-		// Try reverse scan with non-existent key.
-		{
-			rows, err := txn.ReverseScan(ctx, testUser+"/key/aa", testUser+"/key/bb", 100)
-			if err != nil {
-				return err
-			}
-			if len(rows) > 0 {
-				t.Errorf("expected empty, got %v", rows)
-			}
-		}
-
+		checkKVs(t, rows,
+			keys[9], 9, keys[8], 8, keys[7], 7, keys[6], 6, keys[5], 5,
+			keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
 		return nil
-	})
+	}); err != nil {
+		t.Fatal(err)
+	}
 
-	if err != nil {
+	// Try reverse scans for half of the keys.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 100)
+		if err != nil {
+			return err
+		}
+		checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2, keys[1], 1, keys[0], 0)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Try limit maximum rows.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/05", 3)
+		if err != nil {
+			return err
+		}
+		checkKVs(t, rows, keys[4], 4, keys[3], 3, keys[2], 2)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Try reverse scan with the same start and end key.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/00", testUser+"/key/00", 100)
+		if len(rows) > 0 {
+			t.Errorf("expected empty, got %v", rows)
+		}
+		return err
+	}); err != nil {
+		if err == nil {
+			t.Errorf("expected a truncation error, got %s", err)
+		}
+	}
+
+	// Try reverse scan with non-existent key.
+	if err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		rows, err := txn.ReverseScan(ctx, testUser+"/key/aa", testUser+"/key/bb", 100)
+		if err != nil {
+			return err
+		}
+		if len(rows) > 0 {
+			t.Errorf("expected empty, got %v", rows)
+		}
+		return nil
+	}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -974,18 +939,15 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 
 	// Mock out sender function to check that created transactions
 	// have the observed timestamp set for the configured node ID.
-	factory := client.TxnSenderFactoryFunc(func(client.TxnType) client.TxnSender {
-		return client.TxnSenderFunc(
-			func(_ context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-				return ba.CreateReply(), nil
-			},
-		)
-	})
+	factory := client.MakeMockTxnSenderFactory(
+		func(_ context.Context, _ *roachpb.Transaction, ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+			return ba.CreateReply(), nil
+		})
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
 	dbCtx := client.DefaultDBContext()
 	dbCtx.NodeID = &base.NodeIDContainer{}
-	db := client.NewDBWithContext(factory, clock, dbCtx)
+	db := client.NewDBWithContext(testutils.MakeAmbientCtx(), factory, clock, dbCtx)
 	ctx := context.Background()
 
 	// Verify direct creation of Txns.
@@ -1001,8 +963,9 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 	}
 	for i, test := range directCases {
 		t.Run(fmt.Sprintf("direct-txn-%d", i), func(t *testing.T) {
-			txn := client.NewTxn(db, test.nodeID, test.typ)
-			if ots := txn.Proto().ObservedTimestamps; (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
+			txn := client.NewTxn(ctx, db, test.nodeID, test.typ)
+			ots := txn.Serialize().ObservedTimestamps
+			if (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
 				t.Errorf("expected observed ts %t; got %+v", test.expObserved, ots)
 			}
 		})
@@ -1023,7 +986,8 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 			}
 			if err := db.Txn(
 				ctx, func(_ context.Context, txn *client.Txn) error {
-					if ots := txn.Proto().ObservedTimestamps; (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
+					ots := txn.Serialize().ObservedTimestamps
+					if (len(ots) == 1 && ots[0].NodeID == test.nodeID) != test.expObserved {
 						t.Errorf("expected observed ts %t; got %+v", test.expObserved, ots)
 					}
 					return nil
@@ -1086,5 +1050,108 @@ func TestIntentCleanupUnblocksReaders(t *testing.T) {
 		if dur > 800*time.Millisecond {
 			t.Fatalf("txn wasn't cleaned up. Get took: %s", dur)
 		}
+	}
+}
+
+// Test that a transaction can be rolled back even with a canceled context.
+// This relies on custom code in txn.rollback(), otherwise RPCs can't be sent.
+func TestRollbackWithCanceledContextBasic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	key := roachpb.Key("a")
+	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := txn.Put(ctx, key, "txn-value"); err != nil {
+			return err
+		}
+		cancel()
+		return fmt.Errorf("test err")
+	})
+	if !testutils.IsError(err, "test err") {
+		t.Fatal(err)
+	}
+	start := timeutil.Now()
+
+	// Do a Get using a different ctx (not the canceled one), and check that it
+	// didn't take too long - take that as proof that it was not blocked on
+	// intents. If the Get would have been blocked, it would have had to wait for
+	// the transaction abandon timeout before the Get would proceed.
+	// The difficulty with this test is that the cleanup done by the rollback with
+	// a canceled ctx is async, so we can't simply do a Get with READ_UNCOMMITTED
+	// to see if there's an intent.
+	// TODO(andrei): It'd be better to use tracing to verify that either we
+	// weren't blocked on an intent or, if we were, that intent was cleaned up by
+	// someone else than the would-be pusher fast. Similar in
+	// TestSessionFinishRollsBackTxn.
+	if _, err := db.Get(context.TODO(), key); err != nil {
+		t.Fatal(err)
+	}
+	dur := timeutil.Since(start)
+	if dur > 500*time.Millisecond {
+		t.Fatalf("txn wasn't cleaned up. Get took: %s", dur)
+	}
+}
+
+// This test is like TestRollbackWithCanceledContextBasic, except that, instead
+// of the ctx being canceled before the rollback is sent, this time it is
+// canceled after the rollback is sent. So, the first rollback is expected to
+// fail, and we're testing that a 2nd one is sent.
+func TestRollbackWithCanceledContextInsidious(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Add a request filter which cancels the ctx when it sees a rollback.
+	var storeKnobs storage.StoreTestingKnobs
+	key := roachpb.Key("a")
+	ctx, cancel := context.WithCancel(context.Background())
+	var rollbacks int
+	storeKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+		if !ba.IsSingleEndTransactionRequest() {
+			return nil
+		}
+		et := ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest)
+		if !et.Commit && et.Key.Equal(key) {
+			rollbacks++
+			cancel()
+		}
+		return nil
+	}
+	s, _, db := serverutils.StartServer(t,
+		base.TestServerArgs{Knobs: base.TestingKnobs{Store: &storeKnobs}})
+	defer s.Stopper().Stop(context.Background())
+
+	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		if err := txn.Put(ctx, key, "txn-value"); err != nil {
+			return err
+		}
+		return fmt.Errorf("test err")
+	})
+	if !testutils.IsError(err, "test err") {
+		t.Fatal(err)
+	}
+	start := timeutil.Now()
+
+	// Do a Get using a different ctx (not the canceled one), and check that it
+	// didn't take too long - take that as proof that it was not blocked on
+	// intents. If the Get would have been blocked, it would have had to wait for
+	// the transaction abandon timeout before the Get would proceed.
+	// The difficulty with this test is that the cleanup done by the rollback with
+	// a canceled ctx is async, so we can't simply do a Get with READ_UNCOMMITTED
+	// to see if there's an intent.
+	// TODO(andrei): It'd be better to use tracing to verify that either we
+	// weren't blocked on an intent or, if we were, that intent was cleaned up by
+	// someone else than the would-be pusher fast. Similar in
+	// TestSessionFinishRollsBackTxn.
+	if _, err := db.Get(context.TODO(), key); err != nil {
+		t.Fatal(err)
+	}
+	dur := timeutil.Since(start)
+	if dur > 500*time.Millisecond {
+		t.Fatalf("txn wasn't cleaned up. Get took: %s", dur)
+	}
+	if rollbacks != 2 {
+		t.Fatalf("expected 2 rollbacks, got: %d", rollbacks)
 	}
 }

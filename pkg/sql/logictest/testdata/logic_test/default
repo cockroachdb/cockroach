@@ -18,11 +18,11 @@ CREATE TABLE null_default (ts TIMESTAMP PRIMARY KEY NULL DEFAULT NULL)
 
 # Aggregate function calls in CHECK are not ok.
 statement error aggregate functions are not allowed in DEFAULT
-CREATE TABLE bad (a INT DEFAULT COUNT(1))
+CREATE TABLE bad (a INT DEFAULT count(1))
 
 # Window function calls in CHECK are not ok.
 statement error window functions are not allowed in DEFAULT
-CREATE TABLE bad (a INT DEFAULT COUNT(1) OVER ())
+CREATE TABLE bad (a INT DEFAULT count(1) OVER ())
 
 statement ok
 CREATE TABLE t (
@@ -31,13 +31,13 @@ CREATE TABLE t (
   c FLOAT DEFAULT random()
 )
 
-query TTBTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
-Field Type      Null  Default  Indices
-a     INT       false 42:::INT {"primary"}
-b     TIMESTAMP true  now()    {}
-c     FLOAT     true  random() {}
+column_name  data_type  is_nullable  column_default     generation_expression  indices      is_hidden
+a            INT        false        42:::INT           ·                      {"primary"}  false
+b            TIMESTAMP  true         now():::TIMESTAMP  ·                      {}           false
+c            FLOAT8     true         random()           ·                      {}           false
 
 statement ok
 INSERT INTO t VALUES (DEFAULT, DEFAULT, DEFAULT)
@@ -113,10 +113,10 @@ UPDATE v SET a = DEFAULT
 statement ok
 UPDATE v SET (a, c) = (DEFAULT, DEFAULT)
 
-query TTBTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM v
 ----
-Field Type      Null  Default  Indices
-a     INT       false NULL     {"primary"}
-b     TIMESTAMP true  NULL     {}
-c     INT       true  NULL     {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices      is_hidden
+a            INT        false        NULL            ·                      {"primary"}  false
+b            TIMESTAMP  true         NULL            ·                      {}           false
+c            INT        true         NULL            ·                      {}           false

@@ -15,9 +15,7 @@
 package gossip
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 	"math/rand"
 	"net"
 	"sync"
@@ -52,7 +50,7 @@ type server struct {
 	stopper *stop.Stopper
 
 	mu struct {
-		syncutil.Mutex
+		syncutil.RWMutex
 		is       *infoStore                         // The backing infostore
 		incoming nodeSet                            // Incoming client node IDs
 		nodeMap  map[util.UnresolvedAddr]serverInfo // Incoming client's local address -> serverInfo
@@ -160,11 +158,20 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		// select below.
 		ready := s.mu.ready
 		delta := s.mu.is.delta(args.HighWaterStamps)
+		if args.HighWaterStamps == nil {
+			args.HighWaterStamps = make(map[roachpb.NodeID]int64)
+		}
 
 		if infoCount := len(delta); infoCount > 0 {
 			if log.V(1) {
 				log.Infof(ctx, "returning %d info(s) to node %d: %s",
 					infoCount, args.NodeID, extractKeys(delta))
+			}
+			// Ensure that the high water stamps for the remote client are kept up to
+			// date so that we avoid resending the same gossip infos as infos are
+			// updated locally.
+			for _, i := range delta {
+				ratchetHighWaterStamp(args.HighWaterStamps, i.NodeID, i.OrigStamp)
 			}
 
 			*reply = Response{
@@ -333,6 +340,7 @@ func (s *server) gossipReceiver(
 		// receive a new non-nil request. We avoid assigning to *argsPtr directly
 		// because the gossip sender above has closed over *argsPtr and will NPE if
 		// *argsPtr were set to nil.
+		mergeHighWaterStamps(&recvArgs.HighWaterStamps, (*argsPtr).HighWaterStamps)
 		*argsPtr = recvArgs
 	}
 }
@@ -363,9 +371,12 @@ func (s *server) start(addr net.Addr) {
 		s.mu.ready = ready
 	}
 
+	// We require redundant callbacks here as the broadcast callback is
+	// propagating gossip infos to other nodes and needs to propagate the new
+	// expiration info.
 	unregister := s.mu.is.registerCallback(".*", func(_ string, _ roachpb.Value) {
 		broadcast()
-	})
+	}, Redundant)
 
 	s.stopper.RunWorker(context.TODO(), func(context.Context) {
 		<-s.stopper.ShouldQuiesce()
@@ -378,20 +389,23 @@ func (s *server) start(addr net.Addr) {
 	})
 }
 
-func (s *server) status() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "gossip server (%d/%d cur/max conns, %s)\n",
-		s.mu.incoming.gauge.Value(), s.mu.incoming.maxSize, s.serverMetrics)
+func (s *server) status() ServerStatus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var status ServerStatus
+	status.ConnStatus = make([]ConnStatus, 0, len(s.mu.nodeMap))
+	status.MaxConns = int32(s.mu.incoming.maxSize)
+	status.MetricSnap = s.serverMetrics.Snapshot()
+
 	for addr, info := range s.mu.nodeMap {
-		// TODO(peter): Report per connection sent/received statistics. The
-		// structure of server.Gossip and server.gossipReceiver makes this
-		// irritating to track.
-		fmt.Fprintf(&buf, "  %d: %s (%s)\n",
-			info.peerID, addr.AddressField, roundSecs(timeutil.Since(info.createdAt)))
+		status.ConnStatus = append(status.ConnStatus, ConnStatus{
+			NodeID:   info.peerID,
+			Address:  addr.String(),
+			AgeNanos: timeutil.Since(info.createdAt).Nanoseconds(),
+		})
 	}
-	return buf.String()
+	return status
 }
 
 func roundSecs(d time.Duration) time.Duration {
@@ -400,7 +414,7 @@ func roundSecs(d time.Duration) time.Duration {
 
 // GetNodeAddr returns the node's address stored in the Infostore.
 func (s *server) GetNodeAddr() *util.UnresolvedAddr {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return &s.mu.is.NodeAddr
 }

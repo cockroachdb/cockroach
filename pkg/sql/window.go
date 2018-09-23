@@ -20,12 +20,13 @@ import (
 	"sort"
 	"unsafe"
 
-	"github.com/pkg/errors"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -36,8 +37,6 @@ type windowNode struct {
 	// The "wrapped" node (which returns un-windowed results).
 	plan planNode
 
-	sourceCols int
-
 	// A sparse array holding renders specific to this windowNode. This will contain
 	// nil entries for renders that do not contain window functions, and which therefore
 	// can be propagated directly from the "wrapped" node.
@@ -47,11 +46,21 @@ type windowNode struct {
 	// an entire column in windowValues for each windowFuncHolder, in order.
 	funcs []*windowFuncHolder
 
-	// colContainer and aggContainer are IndexedVarContainers that provide indirection
+	// colAndAggContainer is an IndexedVarContainer that provides indirection
 	// to migrate IndexedVars and aggregate functions below the windowing level.
-	colContainer windowNodeColContainer
-	aggContainer windowNodeAggContainer
-	ivarHelper   *tree.IndexedVarHelper
+	colAndAggContainer windowNodeColAndAggContainer
+
+	// numRendersNotToBeReused indicates the number of renders that are being used
+	// as arguments to window functions plus (possibly) some columns that are simply
+	// being passed through windowNode (i.e. with no window functions).
+	//
+	// Currently, we do not want to reuse these renders because the columns these renders
+	// refer to will not be output by window processors in DistSQL once
+	// the corresponding window functions have been computed (window processors
+	// put the result of computing of window functions in place of the arguments
+	// to window functions).
+	// TODO(yuzefovich): once this is no longer necessary, remove this restriction.
+	numRendersNotToBeReused int
 
 	run windowRun
 }
@@ -111,7 +120,6 @@ func (p *planner) window(
 	if err := window.extractWindowFunctions(s); err != nil {
 		return nil, err
 	}
-	window.sourceCols = len(s.columns)
 
 	if err := p.constructWindowDefinitions(ctx, window, n, s); err != nil {
 		return nil, err
@@ -152,12 +160,14 @@ type windowRun struct {
 
 	windowValues [][]tree.Datum
 	curRowIdx    int
+	windowFrames []*tree.WindowFrame
 
 	windowsAcc mon.BoundAccount
 }
 
 func (n *windowNode) startExec(params runParams) error {
 	n.run.windowsAcc = params.EvalContext().Mon.MakeBoundAccount()
+
 	return nil
 }
 
@@ -271,16 +281,45 @@ func (p *planner) constructWindowDefinitions(
 	for _, windowDef := range sc.Window {
 		name := string(windowDef.Name)
 		if _, ok := namedWindowSpecs[name]; ok {
-			return errors.Errorf("window %q is already defined", name)
+			return pgerror.NewErrorf(pgerror.CodeWindowingError, "window %q is already defined", name)
 		}
 		namedWindowSpecs[name] = windowDef
 	}
 
+	n.run.windowFrames = make([]*tree.WindowFrame, len(n.funcs))
+	n.numRendersNotToBeReused = len(s.render)
+
 	// Construct window definitions for each window function application.
-	for _, windowFn := range n.funcs {
+	for idx, windowFn := range n.funcs {
 		windowDef, err := constructWindowDef(*windowFn.expr.WindowDef, namedWindowSpecs)
 		if err != nil {
 			return err
+		}
+
+		// Validate FILTER clause.
+		if windowFn.expr.Filter != nil {
+			filterExpr := windowFn.expr.Filter.(tree.TypedExpr)
+
+			// We need to save and restore the previous value of the field in
+			// semaCtx in case we are recursively called within a subquery
+			// context.
+			scalarProps := &p.semaCtx.Properties
+			defer scalarProps.Restore(*scalarProps)
+			scalarProps.Require("FILTER", tree.RejectSpecial)
+
+			col, renderExpr, err := p.computeRender(ctx,
+				tree.SelectExpr{Expr: filterExpr}, types.Bool, s.sourceInfo, s.ivarHelper,
+				autoGenerateRenderOutputName,
+			)
+			if err != nil {
+				return err
+			}
+			if renderExpr.ResolvedType() != types.Bool {
+				return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+					"argument of FILTER must be type boolean, not type %s", renderExpr.ResolvedType(),
+				)
+			}
+			windowFn.filterColIdx = s.addOrReuseRenderStartingFromIdx(col, renderExpr, true /* reuse */, n.numRendersNotToBeReused)
 		}
 
 		// Validate PARTITION BY clause.
@@ -292,7 +331,7 @@ func (p *planner) constructWindowDefinitions(
 				return err
 			}
 
-			colIdxs := s.addOrReuseRenders(cols, exprs, true)
+			colIdxs := s.addOrReuseRendersStartingFromIdx(cols, exprs, true, n.numRendersNotToBeReused)
 			windowFn.partitionIdxs = append(windowFn.partitionIdxs, colIdxs...)
 		}
 
@@ -310,7 +349,7 @@ func (p *planner) constructWindowDefinitions(
 				direction = encoding.Descending
 			}
 
-			colIdxs := s.addOrReuseRenders(cols, exprs, true)
+			colIdxs := s.addOrReuseRendersStartingFromIdx(cols, exprs, true, n.numRendersNotToBeReused)
 			for _, idx := range colIdxs {
 				ordering := sqlbase.ColumnOrderInfo{
 					ColIdx:    idx,
@@ -320,7 +359,17 @@ func (p *planner) constructWindowDefinitions(
 			}
 		}
 
-		windowFn.windowDef = windowDef
+		// Validate frame of the window definition if present.
+		if windowDef.Frame != nil {
+			if err := windowDef.Frame.TypeCheck(&p.semaCtx, &windowDef); err != nil {
+				return err
+			}
+			if windowDef.Frame.Mode == tree.RANGE && windowDef.Frame.Bounds.HasOffset() {
+				n.funcs[idx].ordColTyp = windowDef.OrderBy[0].Expr.(tree.TypedExpr).ResolvedType()
+			}
+		}
+
+		n.run.windowFrames[idx] = windowDef.Frame
 	}
 	return nil
 }
@@ -352,7 +401,7 @@ func constructWindowDef(
 
 	referencedSpec, ok := namedWindowSpecs[refName]
 	if !ok {
-		return def, errors.Errorf("window %q does not exist", refName)
+		return def, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError, "window %q does not exist", refName)
 	}
 	if !modifyRef {
 		return *referencedSpec, nil
@@ -360,17 +409,22 @@ func constructWindowDef(
 
 	// referencedSpec.Partitions is always used.
 	if len(def.Partitions) > 0 {
-		return def, errors.Errorf("cannot override PARTITION BY clause of window %q", refName)
+		return def, pgerror.NewErrorf(pgerror.CodeWindowingError, "cannot override PARTITION BY clause of window %q", refName)
 	}
 	def.Partitions = referencedSpec.Partitions
 
 	// referencedSpec.OrderBy is used if set.
 	if len(referencedSpec.OrderBy) > 0 {
 		if len(def.OrderBy) > 0 {
-			return def, errors.Errorf("cannot override ORDER BY clause of window %q", refName)
+			return def, pgerror.NewErrorf(pgerror.CodeWindowingError, "cannot override ORDER BY clause of window %q", refName)
 		}
 		def.OrderBy = referencedSpec.OrderBy
 	}
+
+	if referencedSpec.Frame != nil {
+		return def, pgerror.NewErrorf(pgerror.CodeWindowingError, "cannot copy window %q because it has a frame clause", refName)
+	}
+
 	return def, nil
 }
 
@@ -441,22 +495,16 @@ func constructWindowDef(
 //    window plan's renders: [nil, nil, @5 + @6 + first_value(@3) OVER (PARTITION BY @4)]
 //
 func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
-	n.colContainer = windowNodeColContainer{
-		windowNodeIvarContainer: makeWindowNodeIvarContainer(&n.run),
-		sourceInfo:              s.sourceInfo[0],
-	}
-	ivarHelper := tree.MakeIndexedVarHelper(&n.colContainer, s.ivarHelper.NumVars())
-	n.ivarHelper = &ivarHelper
+	n.colAndAggContainer = makeWindowNodeColAndAggContainer(&n.run, s.sourceInfo[0], s.ivarHelper.NumVars())
 
-	n.aggContainer = windowNodeAggContainer{
-		windowNodeIvarContainer: makeWindowNodeIvarContainer(&n.run),
-		aggFuncs:                make(map[int]*tree.FuncExpr),
-	}
-	// The number of aggregation functions that need to be replaced with IndexedVars
-	// is unknown, so we collect them here and bind them to an IndexedVarHelper later.
-	// We use a map indexed by render index to leverage addOrMergeRender's deduplication
-	// of identical aggregate functions.
-	aggIVars := make(map[int]*tree.IndexedVar)
+	// The number of aggregation functions that need to be replaced with
+	// IndexedVars is unknown, so we collect them here and bind them to
+	// an IndexedVarHelper later. Consequently, we cannot yet create
+	// that IndexedVarHelper, so we collect new unbounded IndexedVars
+	// that replace existing IndexedVars and similarly bind them later.
+	// We use a map indexed by render index to leverage addOrReuseRender's
+	// deduplication of identical IndexedVars and aggregate functions.
+	iVars := make(map[int]*tree.IndexedVar)
 
 	for i, render := range n.windowRender {
 		if render == nil {
@@ -471,31 +519,43 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 					Name: t.String(),
 					Typ:  t.ResolvedType(),
 				}
-				colIdx := s.addOrReuseRender(col, t, true)
-				n.colContainer.idxMap[t.Idx] = colIdx
-				return nil, false, ivarHelper.IndexedVar(t.Idx)
+				colIdx := s.addOrReuseRenderStartingFromIdx(col, t, true, n.numRendersNotToBeReused)
+
+				if iVar, ok := iVars[colIdx]; ok {
+					// If we have already created an IndexedVar for this
+					// IndexedVar, return it.
+					return nil, false, iVar
+				}
+
+				// Create a new IndexedVar with index t.Idx.
+				colIVar := tree.NewIndexedVar(t.Idx)
+				iVars[colIdx] = colIVar
+				n.colAndAggContainer.idxMap[t.Idx] = colIdx
+				return nil, false, colIVar
+
 			case *tree.FuncExpr:
 				// All window function applications will have been replaced by
 				// windowFuncHolders at this point, so if we see an aggregate
-				// function in the window renders, it is above a window function.
+				// function in the window renders, it is above the windowing level.
 				if t.GetAggregateConstructor() != nil {
 					// We add a new render to the source renderNode for each new aggregate
 					// function we see.
 					col := sqlbase.ResultColumn{Name: t.String(), Typ: t.ResolvedType()}
 					colIdx := s.addOrReuseRender(col, t, true)
 
-					if iVar, ok := aggIVars[colIdx]; ok {
+					if iVar, ok := iVars[colIdx]; ok {
 						// If we have already created an IndexedVar for this aggregate
 						// function, return it.
 						return nil, false, iVar
 					}
 
 					// Create a new IndexedVar with the next available index.
-					idx := len(n.aggContainer.idxMap)
+					idx := n.colAndAggContainer.startAggIdx + n.colAndAggContainer.numAggFuncs
+					n.colAndAggContainer.numAggFuncs++
 					aggIVar := tree.NewIndexedVar(idx)
-					aggIVars[colIdx] = aggIVar
-					n.aggContainer.idxMap[idx] = colIdx
-					n.aggContainer.aggFuncs[idx] = t
+					iVars[colIdx] = aggIVar
+					n.colAndAggContainer.idxMap[idx] = colIdx
+					n.colAndAggContainer.aggFuncs[idx] = t
 					return nil, false, aggIVar
 				}
 				return nil, true, expr
@@ -510,42 +570,39 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 		n.windowRender[i] = expr.(tree.TypedExpr)
 	}
 
-	if len(aggIVars) > 0 {
-		// Now that we know how many aggregate functions there were, we can create
-		// an IndexedVarHelper and bind each of the corresponding IndexedVars to
-		// the helper.
-		aggHelper := tree.MakeIndexedVarHelper(&n.aggContainer, len(aggIVars))
-		for _, ivar := range aggIVars {
-			// The ivars above have been created with a nil container, and
-			// therefore they are guaranteed to be modified in-place by
-			// BindIfUnbound().
-			if newIvar, err := aggHelper.BindIfUnbound(ivar); err != nil {
-				panic(err)
-			} else if newIvar != ivar {
-				panic(fmt.Sprintf("unexpected binding: %v, expected: %v", newIvar, ivar))
-			}
+	colAggHelper := tree.MakeIndexedVarHelper(&n.colAndAggContainer, s.ivarHelper.NumVars()+n.colAndAggContainer.numAggFuncs)
+	for _, ivar := range iVars {
+		// The ivars above have been created with a nil container, and
+		// therefore they are guaranteed to be modified in-place by
+		// BindIfUnbound().
+		if newIvar, err := colAggHelper.BindIfUnbound(ivar); err != nil {
+			panic(err)
+		} else if newIvar != ivar {
+			panic(fmt.Sprintf("unexpected binding: %v, expected: %v", newIvar, ivar))
 		}
 	}
 }
 
 type partitionSorter struct {
 	evalCtx       *tree.EvalContext
-	rows          []tree.IndexedRow
+	rows          indexedRows
 	windowDefVals *sqlbase.RowContainer
 	ordering      sqlbase.ColumnOrdering
 }
 
 // partitionSorter implements the sort.Interface interface.
-func (n *partitionSorter) Len() int           { return len(n.rows) }
-func (n *partitionSorter) Swap(i, j int)      { n.rows[i], n.rows[j] = n.rows[j], n.rows[i] }
+func (n *partitionSorter) Len() int { return n.rows.Len() }
+func (n *partitionSorter) Swap(i, j int) {
+	n.rows.rows[i], n.rows.rows[j] = n.rows.rows[j], n.rows.rows[i]
+}
 func (n *partitionSorter) Less(i, j int) bool { return n.Compare(i, j) < 0 }
 
-// partitionSorter implements the peerGroupChecker interface.
+// partitionSorter implements the PeerGroupChecker interface.
 func (n *partitionSorter) InSameGroup(i, j int) bool { return n.Compare(i, j) == 0 }
 
 func (n *partitionSorter) Compare(i, j int) int {
-	ra, rb := n.rows[i], n.rows[j]
-	defa, defb := n.windowDefVals.At(ra.Idx), n.windowDefVals.At(rb.Idx)
+	ra, rb := n.rows.rows[i], n.rows.rows[j]
+	defa, defb := n.windowDefVals.At(ra.idx), n.windowDefVals.At(rb.idx)
 	for _, o := range n.ordering {
 		da := defa[o.ColIdx]
 		db := defb[o.ColIdx]
@@ -561,14 +618,8 @@ func (n *partitionSorter) Compare(i, j int) int {
 
 type allPeers struct{}
 
-// allPeers implements the peerGroupChecker interface.
+// allPeers implements the PeerGroupChecker interface.
 func (allPeers) InSameGroup(i, j int) bool { return true }
-
-// peerGroupChecker can check if a pair of row indexes within a partition are
-// in the same peer group.
-type peerGroupChecker interface {
-	InSameGroup(i, j int) bool
-}
 
 // computeWindows populates n.run.windowValues, adding a column of values to the
 // 2D-slice for each window function in n.funcs. This needs to be performed
@@ -609,16 +660,80 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 	var scratchBytes []byte
 	var scratchDatum []tree.Datum
 	for windowIdx, windowFn := range n.funcs {
-		partitions := make(map[string][]tree.IndexedRow)
+		frameRun := &tree.WindowFrameRun{
+			ArgIdxStart:  windowFn.argIdxStart,
+			ArgCount:     windowFn.argCount,
+			RowIdx:       0,
+			FilterColIdx: windowFn.filterColIdx,
+		}
+		if n.run.windowFrames[windowIdx] != nil {
+			frameRun.Frame = n.run.windowFrames[windowIdx]
+			// OffsetExpr's must be integer expressions not containing any variables, aggregate functions, or window functions,
+			// so we need to make sure these expressions are evaluated before using offsets.
+			bounds := frameRun.Frame.Bounds
+			if bounds.StartBound.HasOffset() {
+				typedStartOffset := bounds.StartBound.OffsetExpr.(tree.TypedExpr)
+				dStartOffset, err := typedStartOffset.Eval(evalCtx)
+				if err != nil {
+					return err
+				}
+				if dStartOffset == tree.DNull {
+					return pgerror.NewErrorf(pgerror.CodeNullValueNotAllowedError, "frame starting offset must not be null")
+				}
+				if isNegative(evalCtx, dStartOffset) {
+					if frameRun.Frame.Mode == tree.RANGE {
+						return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
+					}
+					return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "frame starting offset must not be negative")
+				}
+				frameRun.StartBoundOffset = dStartOffset
+			}
+			if bounds.EndBound != nil && bounds.EndBound.HasOffset() {
+				typedEndOffset := bounds.EndBound.OffsetExpr.(tree.TypedExpr)
+				dEndOffset, err := typedEndOffset.Eval(evalCtx)
+				if err != nil {
+					return err
+				}
+				if dEndOffset == tree.DNull {
+					return pgerror.NewErrorf(pgerror.CodeNullValueNotAllowedError, "frame ending offset must not be null")
+				}
+				if isNegative(evalCtx, dEndOffset) {
+					if frameRun.Frame.Mode == tree.RANGE {
+						return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
+					}
+					return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "frame ending offset must not be negative")
+				}
+				frameRun.EndBoundOffset = dEndOffset
+			}
+			if frameRun.RangeModeWithOffsets() {
+				frameRun.OrdColIdx = windowFn.columnOrdering[0].ColIdx
+				frameRun.OrdDirection = windowFn.columnOrdering[0].Direction
+
+				colTyp := windowFn.ordColTyp
+				// Type of offset depends on the ordering column's type.
+				offsetTyp := colTyp
+				if types.IsDateTimeType(colTyp) {
+					// For datetime related ordering columns, offset must be an Interval.
+					offsetTyp = types.Interval
+				}
+				plusOp, minusOp, found := tree.WindowFrameRangeOps{}.LookupImpl(colTyp, offsetTyp)
+				if !found {
+					return pgerror.NewErrorf(pgerror.CodeWindowingError, "given logical offset cannot be combined with ordering column")
+				}
+				frameRun.PlusOp, frameRun.MinusOp = plusOp, minusOp
+			}
+		}
+
+		partitions := make(map[string]indexedRows)
 
 		if len(windowFn.partitionIdxs) == 0 {
 			// If no partition indexes are included for the window function, all
 			// rows are added to the same partition, which need to be pre-allocated.
-			sz := int64(uintptr(rowCount) * unsafe.Sizeof(tree.IndexedRow{}))
+			sz := int64(uintptr(rowCount)*unsafe.Sizeof(indexedRow{}) + unsafe.Sizeof(indexedRows{}))
 			if err := n.run.windowsAcc.Grow(ctx, sz); err != nil {
 				return err
 			}
-			partitions[""] = make([]tree.IndexedRow, rowCount)
+			partitions[""] = indexedRows{rows: make([]indexedRow, rowCount)}
 		}
 
 		if num := len(windowFn.partitionIdxs); num > cap(scratchDatum) {
@@ -639,12 +754,15 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 		// See Cao et al. [http://vldb.org/pvldb/vol5/p1244_yucao_vldb2012.pdf]
 		for rowI := 0; rowI < rowCount; rowI++ {
 			row := n.run.wrappedRenderVals.At(rowI)
-			sourceVals := row[:n.sourceCols]
-			entry := tree.IndexedRow{Idx: rowI, Row: sourceVals}
+			// We need the whole row and not just arguments to window functions since
+			// in RANGE mode we might need access to the column over which the rows
+			// are sorted, and all such columns come after all arguments to window
+			// functions.
+			entry := indexedRow{idx: rowI, row: row}
 			if len(windowFn.partitionIdxs) == 0 {
 				// If no partition indexes are included for the window function, all
 				// rows are added to the same partition.
-				partitions[""][rowI] = entry
+				partitions[""].rows[rowI] = entry
 			} else {
 				// If the window function has partition indexes, we hash the values of each
 				// of these indexes for each row, and partition based on this hashed value.
@@ -652,7 +770,7 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 					scratchDatum[i] = row[idx]
 				}
 
-				encoded, err := sqlbase.EncodeDatums(scratchBytes, scratchDatum)
+				encoded, err := sqlbase.EncodeDatumsKeyAscending(scratchBytes, scratchDatum)
 				if err != nil {
 					return err
 				}
@@ -661,7 +779,9 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 				if err := n.run.windowsAcc.Grow(ctx, sz); err != nil {
 					return err
 				}
-				partitions[string(encoded)] = append(partitions[string(encoded)], entry)
+				partition := partitions[string(encoded)]
+				partition.rows = append(partition.rows, entry)
+				partitions[string(encoded)] = partition
 				scratchBytes = encoded[:0]
 			}
 		}
@@ -677,22 +797,13 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 		//   * Segment Tree
 		// See Leis et al. [http://www.vldb.org/pvldb/vol8/p1058-leis.pdf]
 		for _, partition := range partitions {
-			// TODO(nvanbenschoten): Handle framing here. Right now we only handle the default
-			// framing option of RANGE UNBOUNDED PRECEDING. With ORDER BY, this sets the frame
-			// to be all rows from the partition start up through the current row's last ORDER BY
-			// peer. Without ORDER BY, all rows of the partition are included in the window frame,
-			// since all rows become peers of the current row. Once we add better framing support,
-			// we should flesh this logic out more.
 			builtin := windowFn.expr.GetWindowConstructor()(evalCtx)
 			defer builtin.Close(ctx, evalCtx)
 
-			// Since we only support two types of window frames (see TODO above), we only
-			// need two possible types of peerGroupChecker's to help determine peer groups
-			// for given tuples.
-			var peerGrouper peerGroupChecker
+			var peerGrouper tree.PeerGroupChecker
 			if windowFn.columnOrdering != nil {
 				// If an ORDER BY clause is provided, order the partition and use the
-				// sorter as our peerGroupChecker.
+				// sorter as our PeerGroupChecker.
 				sorter := &partitionSorter{
 					evalCtx:       evalCtx,
 					rows:          partition,
@@ -708,31 +819,30 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 				sort.Sort(sorter)
 				peerGrouper = sorter
 			} else {
-				// If no ORDER BY clause is provided, all rows in the partition are peers.
+				// If ORDER BY clause is not provided, all rows are peers.
 				peerGrouper = allPeers{}
 			}
 
-			// Iterate over peer groups within partition using a window frame.
-			frame := tree.WindowFrame{
-				Rows:        partition,
-				ArgIdxStart: windowFn.argIdxStart,
-				ArgCount:    windowFn.argCount,
-				RowIdx:      0,
-			}
-			for frame.RowIdx < len(partition) {
-				// Compute the size of the current peer group.
-				frame.FirstPeerIdx = frame.RowIdx
-				frame.PeerRowCount = 1
-				for ; frame.FirstPeerIdx+frame.PeerRowCount < len(partition); frame.PeerRowCount++ {
-					cur := frame.FirstPeerIdx + frame.PeerRowCount
-					if !peerGrouper.InSameGroup(cur, cur-1) {
-						break
-					}
-				}
+			frameRun.Rows = partition
+			frameRun.RowIdx = 0
 
+			if !frameRun.IsDefaultFrame() {
+				// We have a custom frame not equivalent to default one, so if we have
+				// an aggregate function, we want to reset it for each row.
+				// Not resetting is an optimization since we're not computing
+				// the result over the whole frame but only as a result of the current
+				// row and previous results of aggregation.
+				builtins.ShouldReset(builtin)
+			}
+
+			frameRun.PeerHelper.Init(frameRun, peerGrouper)
+			frameRun.CurRowPeerGroupNum = 0
+
+			for frameRun.RowIdx < partition.Len() {
 				// Perform calculations on each row in the current peer group.
-				for ; frame.RowIdx < frame.FirstPeerIdx+frame.PeerRowCount; frame.RowIdx++ {
-					res, err := builtin.Compute(ctx, evalCtx, frame)
+				peerGroupEndIdx := frameRun.PeerHelper.GetFirstPeerIdx(frameRun.CurRowPeerGroupNum) + frameRun.PeerHelper.GetRowCount(frameRun.CurRowPeerGroupNum)
+				for ; frameRun.RowIdx < peerGroupEndIdx; frameRun.RowIdx++ {
+					res, err := builtin.Compute(ctx, evalCtx, frameRun)
 					if err != nil {
 						return err
 					}
@@ -744,13 +854,31 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 					}
 
 					// Save result into n.run.windowValues, indexed by original row index.
-					valRowIdx := partition[frame.RowIdx].Idx
+					valRowIdx := partition.rows[frameRun.RowIdx].idx
 					n.run.windowValues[valRowIdx][windowIdx] = res
 				}
+				frameRun.PeerHelper.Update(frameRun)
+				frameRun.CurRowPeerGroupNum++
 			}
 		}
 	}
 	return nil
+}
+
+// isNegative returns whether offset is negative.
+func isNegative(evalCtx *tree.EvalContext, offset tree.Datum) bool {
+	switch o := offset.(type) {
+	case *tree.DInt:
+		return *o < 0
+	case *tree.DDecimal:
+		return o.Negative
+	case *tree.DFloat:
+		return *o < 0
+	case *tree.DInterval:
+		return o.Compare(evalCtx, &tree.DInterval{Duration: duration.Duration{}}) < 0
+	default:
+		panic("unexpected offset type")
+	}
 }
 
 // populateValues populates n.run.values with final datum values after computing
@@ -786,7 +914,7 @@ func (n *windowNode) populateValues(ctx context.Context, evalCtx *tree.EvalConte
 				}
 				// Instead, we evaluate the current window render, which depends on at least
 				// one window function, at the given row.
-				evalCtx.PushIVarContainer(&n.colContainer)
+				evalCtx.PushIVarContainer(&n.colAndAggContainer)
 				res, err := curWindowRender.Eval(evalCtx)
 				evalCtx.PopIVarContainer()
 				if err != nil {
@@ -843,16 +971,17 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr tree.Expr) (recurse bool, newE
 			// Make sure this window function does not contain another window function.
 			for _, argExpr := range t.Exprs {
 				if v.subWindowVisitor.ContainsWindowFunc(argExpr) {
-					v.err = fmt.Errorf("window function calls cannot be nested under %s()", &t.Func)
+					v.err = pgerror.NewErrorf(pgerror.CodeWindowingError, "window function calls cannot be nested")
 					return false, expr
 				}
 			}
 
 			f := &windowFuncHolder{
-				expr:     t,
-				args:     t.Exprs,
-				argCount: len(t.Exprs),
-				window:   v.n,
+				expr:         t,
+				args:         t.Exprs,
+				argCount:     len(t.Exprs),
+				window:       v.n,
+				filterColIdx: noFilterIdx,
 			}
 			v.windowFnCount++
 			v.n.funcs = append(v.n.funcs, f)
@@ -903,17 +1032,20 @@ func (v extractWindowFuncsVisitor) extract(typedExpr tree.TypedExpr) (tree.Typed
 var _ tree.TypedExpr = &windowFuncHolder{}
 var _ tree.VariableExpr = &windowFuncHolder{}
 
+const noFilterIdx = -1
+
 type windowFuncHolder struct {
 	window *windowNode
 
 	expr *tree.FuncExpr
 	args []tree.Expr
 
-	funcIdx     int // index of the windowFuncHolder in window.funcs
-	argIdxStart int // index of the window function's first arguments in window.wrappedValues
-	argCount    int // number of arguments taken by the window function
+	funcIdx      int     // index of the windowFuncHolder in window.funcs
+	argIdxStart  int     // index of the window function's first arguments in window.wrappedValues
+	argCount     int     // number of arguments taken by the window function
+	filterColIdx int     // optional index of filtering column, -1 if no filter
+	ordColTyp    types.T // type of the ordering column, used only in RANGE mode with offsets
 
-	windowDef      tree.WindowDef
 	partitionIdxs  []int
 	columnOrdering sqlbase.ColumnOrdering
 }
@@ -944,74 +1076,99 @@ func (w *windowFuncHolder) ResolvedType() types.T {
 	return w.expr.ResolvedType()
 }
 
-// windowNodeIvarContainer is an abstract implementation of the
-// tree.IndexedVarContainer interface. It handles evaluation of IndexedVars,
-// but needs to be extended to handle formatting and type introspection
-// for its IndexedVars.
-type windowNodeIvarContainer struct {
+func makeWindowNodeColAndAggContainer(
+	n *windowRun, sourceInfo *sqlbase.DataSourceInfo, numColVars int,
+) windowNodeColAndAggContainer {
+	return windowNodeColAndAggContainer{
+		n:           n,
+		idxMap:      make(map[int]int),
+		sourceInfo:  sourceInfo,
+		aggFuncs:    make(map[int]*tree.FuncExpr),
+		startAggIdx: numColVars,
+	}
+}
+
+// windowNodeColContainer is an IndexedVarContainer providing indirection for
+// IndexedVars found above the windowing level. See replaceIndexVarsAndAggFuncs.
+type windowNodeColAndAggContainer struct {
 	n *windowRun
 
 	// idxMap maps the index of IndexedVars created in replaceIndexVarsAndAggFuncs
 	// to the index their corresponding results in this container. It permits us to
 	// add a single render to the source plan per unique expression.
 	idxMap map[int]int
+	// sourceInfo contains information on the IndexedVars from the
+	// source plan where they were originally created.
+	sourceInfo *sqlbase.DataSourceInfo
+	// aggFuncs maps the index of IndexedVars to their corresponding aggregate function.
+	aggFuncs map[int]*tree.FuncExpr
+	// startAggIdx indicates the smallest index to be used by an IndexedVar replacing
+	// an aggregate function. We don't want to mix these IndexedVars with those
+	// that replace "original" IndexedVars.
+	startAggIdx int
+	numAggFuncs int
 }
 
-func makeWindowNodeIvarContainer(n *windowRun) windowNodeIvarContainer {
-	return windowNodeIvarContainer{
-		n:      n,
-		idxMap: make(map[int]int),
-	}
-}
-
-// IndexedVarEval implements the tree.IndexedVarContainer interface.
-func (ic *windowNodeIvarContainer) IndexedVarEval(
+func (c *windowNodeColAndAggContainer) IndexedVarEval(
 	idx int, ctx *tree.EvalContext,
 ) (tree.Datum, error) {
 	// Determine which row in the buffered values to evaluate.
-	curRow := ic.n.wrappedRenderVals.At(ic.n.curRowIdx)
+	curRow := c.n.wrappedRenderVals.At(c.n.curRowIdx)
 	// Determine which value in that row to evaluate.
-	curVal := curRow[ic.idxMap[idx]]
+	curVal := curRow[c.idxMap[idx]]
 	return curVal.Eval(ctx)
 }
 
-// windowNodeColContainer is a IndexedVarContainer providing indirection for
-// IndexedVars found above the windowing level. See replaceIndexVarsAndAggFuncs.
-type windowNodeColContainer struct {
-	windowNodeIvarContainer
-
-	// sourceInfo contains information on the for the IndexedVars from the
-	// source plan where they were originally created.
-	sourceInfo *sqlbase.DataSourceInfo
-}
-
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
-func (cc *windowNodeColContainer) IndexedVarResolvedType(idx int) types.T {
-	return cc.sourceInfo.SourceColumns[idx].Typ
+func (c *windowNodeColAndAggContainer) IndexedVarResolvedType(idx int) types.T {
+	if idx >= c.startAggIdx {
+		return c.aggFuncs[idx].ResolvedType()
+	}
+	return c.sourceInfo.SourceColumns[idx].Typ
 }
 
 // IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
-func (cc *windowNodeColContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+func (c *windowNodeColAndAggContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
+	if idx >= c.startAggIdx {
+		// Avoid duplicating the type annotation by calling .Format directly.
+		return c.aggFuncs[idx]
+	}
 	// Avoid duplicating the type annotation by calling .Format directly.
-	return cc.sourceInfo.NodeFormatter(idx)
+	return c.sourceInfo.NodeFormatter(idx)
 }
 
-// windowNodeAggContainer is a IndexedVarContainer providing indirection for
-// aggregate functions found above the windowing level. See replaceIndexVarsAndAggFuncs.
-type windowNodeAggContainer struct {
-	windowNodeIvarContainer
-
-	// aggFuncs maps the index of IndexedVars to their corresponding aggregate function.
-	aggFuncs map[int]*tree.FuncExpr
+// indexedRows are rows with the corresponding indices.
+type indexedRows struct {
+	rows []indexedRow
 }
 
-// IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
-func (ac *windowNodeAggContainer) IndexedVarResolvedType(idx int) types.T {
-	return ac.aggFuncs[idx].ResolvedType()
+// Len implements tree.IndexedRows interface.
+func (ir indexedRows) Len() int {
+	return len(ir.rows)
 }
 
-// IndexedVarNodeFormatter implements the tree.IndexedVarContainer interface.
-func (ac *windowNodeAggContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	// Avoid duplicating the type annotation by calling .Format directly.
-	return ac.aggFuncs[idx]
+// GetRow implements tree.IndexedRows interface.
+func (ir indexedRows) GetRow(idx int) tree.IndexedRow {
+	return ir.rows[idx]
+}
+
+// indexedRow is a row with a corresponding index.
+type indexedRow struct {
+	idx int
+	row tree.Datums
+}
+
+// GetIdx implements tree.IndexedRow interface.
+func (ir indexedRow) GetIdx() int {
+	return ir.idx
+}
+
+// GetDatum implements tree.IndexedRow interface.
+func (ir indexedRow) GetDatum(colIdx int) tree.Datum {
+	return ir.row[colIdx]
+}
+
+// GetDatum implements tree.IndexedRow interface.
+func (ir indexedRow) GetDatums(firstColIdx, lastColIdx int) tree.Datums {
+	return ir.row[firstColIdx:lastColIdx]
 }

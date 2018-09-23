@@ -7,7 +7,6 @@
 
 #include <google/protobuf/stubs/common.h>
 #include <google/protobuf/stubs/port.h>
-#include <google/protobuf/stubs/once.h>
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/wire_format_lite_inl.h>
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
@@ -16,6 +15,7 @@
 #include "third_party/protobuf/version.h"
 #endif
 // @@protoc_insertion_point(includes)
+
 namespace cockroach {
 namespace util {
 class UnresolvedAddrDefaultTypeInternal {
@@ -26,14 +26,9 @@ class UnresolvedAddrDefaultTypeInternal {
 }  // namespace util
 }  // namespace cockroach
 namespace protobuf_util_2funresolved_5faddr_2eproto {
-void InitDefaultsUnresolvedAddrImpl() {
+static void InitDefaultsUnresolvedAddr() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
-#ifdef GOOGLE_PROTOBUF_ENFORCE_UNIQUENESS
-  ::google::protobuf::internal::InitProtobufDefaultsForceUnique();
-#else
-  ::google::protobuf::internal::InitProtobufDefaults();
-#endif  // GOOGLE_PROTOBUF_ENFORCE_UNIQUENESS
   {
     void* ptr = &::cockroach::util::_UnresolvedAddr_default_instance_;
     new (ptr) ::cockroach::util::UnresolvedAddr();
@@ -42,9 +37,11 @@ void InitDefaultsUnresolvedAddrImpl() {
   ::cockroach::util::UnresolvedAddr::InitAsDefaultInstance();
 }
 
-void InitDefaultsUnresolvedAddr() {
-  static GOOGLE_PROTOBUF_DECLARE_ONCE(once);
-  ::google::protobuf::GoogleOnceInit(&once, &InitDefaultsUnresolvedAddrImpl);
+::google::protobuf::internal::SCCInfo<0> scc_info_UnresolvedAddr =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsUnresolvedAddr}, {}};
+
+void InitDefaults() {
+  ::google::protobuf::internal::InitSCC(&scc_info_UnresolvedAddr.base);
 }
 
 }  // namespace protobuf_util_2funresolved_5faddr_2eproto
@@ -62,17 +59,15 @@ const int UnresolvedAddr::kAddressFieldFieldNumber;
 
 UnresolvedAddr::UnresolvedAddr()
   : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
-  if (GOOGLE_PREDICT_TRUE(this != internal_default_instance())) {
-    ::protobuf_util_2funresolved_5faddr_2eproto::InitDefaultsUnresolvedAddr();
-  }
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_util_2funresolved_5faddr_2eproto::scc_info_UnresolvedAddr.base);
   SharedCtor();
   // @@protoc_insertion_point(constructor:cockroach.util.UnresolvedAddr)
 }
 UnresolvedAddr::UnresolvedAddr(const UnresolvedAddr& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
-      _has_bits_(from._has_bits_),
-      _cached_size_(0) {
+      _has_bits_(from._has_bits_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   network_field_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (from.has_network_field()) {
@@ -86,7 +81,6 @@ UnresolvedAddr::UnresolvedAddr(const UnresolvedAddr& from)
 }
 
 void UnresolvedAddr::SharedCtor() {
-  _cached_size_ = 0;
   network_field_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   address_field_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
 }
@@ -102,22 +96,13 @@ void UnresolvedAddr::SharedDtor() {
 }
 
 void UnresolvedAddr::SetCachedSize(int size) const {
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  _cached_size_.Set(size);
 }
 const UnresolvedAddr& UnresolvedAddr::default_instance() {
-  ::protobuf_util_2funresolved_5faddr_2eproto::InitDefaultsUnresolvedAddr();
+  ::google::protobuf::internal::InitSCC(&protobuf_util_2funresolved_5faddr_2eproto::scc_info_UnresolvedAddr.base);
   return *internal_default_instance();
 }
 
-UnresolvedAddr* UnresolvedAddr::New(::google::protobuf::Arena* arena) const {
-  UnresolvedAddr* n = new UnresolvedAddr;
-  if (arena != NULL) {
-    arena->Own(n);
-  }
-  return n;
-}
 
 void UnresolvedAddr::Clear() {
 // @@protoc_insertion_point(message_clear_start:cockroach.util.UnresolvedAddr)
@@ -128,12 +113,10 @@ void UnresolvedAddr::Clear() {
   cached_has_bits = _has_bits_[0];
   if (cached_has_bits & 3u) {
     if (cached_has_bits & 0x00000001u) {
-      GOOGLE_DCHECK(!network_field_.IsDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited()));
-      (*network_field_.UnsafeRawStringPointer())->clear();
+      network_field_.ClearNonDefaultToEmptyNoArena();
     }
     if (cached_has_bits & 0x00000002u) {
-      GOOGLE_DCHECK(!address_field_.IsDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited()));
-      (*address_field_.UnsafeRawStringPointer())->clear();
+      address_field_.ClearNonDefaultToEmptyNoArena();
     }
   }
   _has_bits_.Clear();
@@ -152,7 +135,7 @@ bool UnresolvedAddr::MergePartialFromCodedStream(
       &unknown_fields_output, false);
   // @@protoc_insertion_point(parse_start:cockroach.util.UnresolvedAddr)
   for (;;) {
-    ::std::pair< ::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
@@ -241,9 +224,7 @@ size_t UnresolvedAddr::ByteSizeLong() const {
 
   }
   int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
-  GOOGLE_SAFE_CONCURRENT_WRITES_BEGIN();
-  _cached_size_ = cached_size;
-  GOOGLE_SAFE_CONCURRENT_WRITES_END();
+  SetCachedSize(cached_size);
   return total_size;
 }
 
@@ -289,11 +270,12 @@ void UnresolvedAddr::Swap(UnresolvedAddr* other) {
 }
 void UnresolvedAddr::InternalSwap(UnresolvedAddr* other) {
   using std::swap;
-  network_field_.Swap(&other->network_field_);
-  address_field_.Swap(&other->address_field_);
+  network_field_.Swap(&other->network_field_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
+  address_field_.Swap(&other->address_field_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
   swap(_has_bits_[0], other->_has_bits_[0]);
   _internal_metadata_.Swap(&other->_internal_metadata_);
-  swap(_cached_size_, other->_cached_size_);
 }
 
 ::std::string UnresolvedAddr::GetTypeName() const {
@@ -304,5 +286,12 @@ void UnresolvedAddr::InternalSwap(UnresolvedAddr* other) {
 // @@protoc_insertion_point(namespace_scope)
 }  // namespace util
 }  // namespace cockroach
+namespace google {
+namespace protobuf {
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::util::UnresolvedAddr* Arena::CreateMaybeMessage< ::cockroach::util::UnresolvedAddr >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::util::UnresolvedAddr >(arena);
+}
+}  // namespace protobuf
+}  // namespace google
 
 // @@protoc_insertion_point(global_scope)

@@ -19,6 +19,7 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
+	"runtime"
 	"sort"
 	"strconv"
 	"sync"
@@ -93,7 +94,7 @@ func (fs fakeStore) StoreID() roachpb.StoreID {
 	return fs.storeID
 }
 
-func (fs fakeStore) Descriptor() (*roachpb.StoreDescriptor, error) {
+func (fs fakeStore) Descriptor(_ bool) (*roachpb.StoreDescriptor, error) {
 	return &fs.desc, nil
 }
 
@@ -322,6 +323,11 @@ func TestMetricsRecorder(t *testing.T) {
 		t.Errorf("recorder did not yield expected time series collection; diff:\n %v", pretty.Diff(e, a))
 	}
 
+	totalMemory, err := GetTotalMemory(context.Background())
+	if err != nil {
+		t.Error("couldn't get total memory", err)
+	}
+
 	// ========================================
 	// Verify node summary generation
 	// ========================================
@@ -341,6 +347,8 @@ func TestMetricsRecorder(t *testing.T) {
 				Metrics: expectedStoreSummaryMetrics,
 			},
 		},
+		TotalSystemMemory: totalMemory,
+		NumCpus:           int32(runtime.NumCPU()),
 	}
 
 	// Make sure there is at least one environment variable that will be

@@ -3,30 +3,30 @@
 query TTT colnames
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE FALSE
 ----
-Tree         Field  Description
+tree         field  description
 render       ·      ·
  └── norows  ·      ·
 
 query TTT colnames
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE NULL
 ----
-Tree         Field  Description
+tree         field  description
 render       ·      ·
  └── norows  ·      ·
 
 query TTT colnames
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE TRUE
 ----
-Tree       Field  Description
+tree       field  description
 render     ·      ·
-└── scan  ·      ·
+ └── scan  ·      ·
 ·          table  jobs@primary
 ·          spans  ALL
 
 query TTTTT colnames
 EXPLAIN (PLAN, VERBOSE) SELECT 1 a
 ----
-Tree           Field     Description  Columns  Ordering
+tree           field     description  columns  ordering
 render         ·         ·            (a)      a=CONST
  │             render 0  1            ·        ·
  └── emptyrow  ·         ·            ()       ·
@@ -34,13 +34,16 @@ render         ·         ·            (a)      a=CONST
 query TTTTT colnames
 EXPLAIN (VERBOSE,PLAN) SELECT 1 a
 ----
-Tree           Field     Description  Columns  Ordering
+tree           field     description  columns  ordering
 render         ·         ·            (a)      a=CONST
  │             render 0  1            ·        ·
  └── emptyrow  ·         ·            ()       ·
 
+statement ok
+SET tracing = on,kv,results; SELECT 1; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT 1]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 output row: [1]
@@ -48,7 +51,7 @@ output row: [1]
 query TTTTT colnames
 EXPLAIN (TYPES) SELECT 1 a
 ----
-Tree           Field     Description  Columns  Ordering
+tree           field     description  columns  ordering
 render         ·         ·            (a int)  a=CONST
  │             render 0  (1)[int]     ·        ·
  └── emptyrow  ·         ·            ()       ·
@@ -68,7 +71,7 @@ EXPLAIN (TYPES) SELECT $1
 query TTTTT colnames
 EXPLAIN (TYPES) SELECT $1::INT
 ----
-Tree           Field     Description               Columns      Ordering
+tree           field     description               columns      ordering
 render         ·         ·                         ("int" int)  "int"=CONST
  │             render 0  (($1)[string]::INT)[int]  ·            ·
  └── emptyrow  ·         ·                         ()           ·
@@ -109,7 +112,7 @@ EXPLAIN SHOW JOBS
 ----
 render       ·     ·
  └── values  ·     ·
-·            size  13 columns, 0 rows
+·            size  15 columns, 0 rows
 
 statement ok
 CREATE INDEX a ON foo(x)
@@ -125,7 +128,7 @@ EXPLAIN ALTER TABLE foo ADD COLUMN y INT
 alter table  ·  ·
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [EXPLAIN (VERBOSE) ALTER TABLE foo SPLIT AT VALUES (42)]
+SELECT tree, field, description FROM [EXPLAIN (VERBOSE) ALTER TABLE foo SPLIT AT VALUES (42)]
 ----
 split        ·              ·
  └── values  ·              ·
@@ -141,9 +144,9 @@ query TTT
 EXPLAIN SHOW DATABASES
 ----
 distinct               ·          ·
- │                     order key  Database
+ │                     order key  database_name
  └── sort              ·          ·
-      │                order      +"Database"
+      │                order      +database_name
       └── render       ·          ·
            └── values  ·          ·
 ·                      size       4 columns, 20 rows
@@ -152,11 +155,11 @@ query TTT
 EXPLAIN SHOW TABLES
 ----
 sort                   ·      ·
- │                     order  +table_schema,+"Table"
+ │                     order  +table_schema,+table_name
  └── render            ·      ·
       └── filter       ·      ·
            └── values  ·      ·
-·                      size   6 columns, 89 rows
+·                      size   6 columns, 90 rows
 
 query TTT
 EXPLAIN SHOW DATABASE
@@ -164,7 +167,7 @@ EXPLAIN SHOW DATABASE
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 29 rows
+·                 size  2 columns, 33 rows
 
 query TTT
 EXPLAIN SHOW TIME ZONE
@@ -172,7 +175,7 @@ EXPLAIN SHOW TIME ZONE
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 29 rows
+·                 size  2 columns, 33 rows
 
 query TTT
 EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
@@ -180,7 +183,7 @@ EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 29 rows
+·                 size  2 columns, 33 rows
 
 query TTT
 EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
@@ -188,7 +191,7 @@ EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 29 rows
+·                 size  2 columns, 33 rows
 
 query TTT
 EXPLAIN SHOW TRANSACTION PRIORITY
@@ -196,7 +199,7 @@ EXPLAIN SHOW TRANSACTION PRIORITY
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 29 rows
+·                 size  2 columns, 33 rows
 
 query TTT
 EXPLAIN SHOW COLUMNS FROM foo
@@ -206,12 +209,14 @@ sort                                       ·            ·
  └── render                                ·            ·
       └── group                            ·            ·
            │                               aggregate 0  column_name
-           │                               aggregate 1  data_type
+           │                               aggregate 1  crdb_sql_type
            │                               aggregate 2  is_nullable
            │                               aggregate 3  column_default
-           │                               aggregate 4  ordinal_position
-           │                               aggregate 5  array_agg(index_name)
-           │                               group by     @1-@5
+           │                               aggregate 4  generation_expression
+           │                               aggregate 5  ordinal_position
+           │                               aggregate 6  is_hidden
+           │                               aggregate 7  array_agg(index_name)
+           │                               group by     @1-@7
            └── render                      ·            ·
                 └── join                   ·            ·
                      │                     type         left outer
@@ -219,7 +224,7 @@ sort                                       ·            ·
                      ├── render            ·            ·
                      │    └── filter       ·            ·
                      │         └── values  ·            ·
-                     │                     size         17 columns, 900 rows
+                     │                     size         20 columns, 916 rows
                      └── render            ·            ·
                           └── filter       ·            ·
                                └── values  ·            ·
@@ -229,11 +234,11 @@ query TTT
 EXPLAIN SHOW GRANTS ON foo
 ----
 sort                   ·      ·
- │                     order  +"Database",+"Schema",+"Table",+"User"
+ │                     order  +database_name,+schema_name,+table_name,+grantee,+privilege_type
  └── render            ·      ·
       └── filter       ·      ·
            └── values  ·      ·
-·                      size   8 columns, 570 rows
+·                      size   8 columns, 575 rows
 
 
 query TTT
@@ -247,10 +252,22 @@ render            ·     ·
 query TTT
 EXPLAIN SHOW CONSTRAINTS FROM foo
 ----
-sort         ·      ·
- │           order  +"Table",+"Name"
- └── values  ·      ·
-·            size   5 columns, 0 rows
+sort                             ·         ·
+ │                               order     +table_name,+constraint_name
+ └── render                      ·         ·
+      └── join                   ·         ·
+           │                     type      inner
+           │                     equality  (relnamespace, oid) = (oid, conrelid)
+           ├── filter            ·         ·
+           │    └── values       ·         ·
+           │                     size      27 columns, 92 rows
+           └── join              ·         ·
+                │                type      cross
+                ├── filter       ·         ·
+                │    └── values  ·         ·
+                │                size      4 columns, 4 rows
+                └── values       ·         ·
+·                                size      26 columns, 0 rows
 
 query TTT
 EXPLAIN SHOW USERS
@@ -267,7 +284,7 @@ CREATE SEQUENCE select_test
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM select_test
 ----
-Tree             Field  Description  Columns                           Ordering
+tree             field  description  columns                           ordering
 sequence select  ·      ·            (last_value, log_cnt, is_called)  ·
 
 statement ok
@@ -286,7 +303,7 @@ count             ·     ·
 ·                 size  2 columns, 1 row
 
 query I
-SELECT MAX("Level") FROM [EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 2)]
+SELECT max(level) FROM [EXPLAIN (VERBOSE) INSERT INTO t VALUES (1, 2)]
 ----
 2
 
@@ -335,7 +352,7 @@ values  ·     ·
 ·       size  1 column, 1 row
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [EXPLAIN (VERBOSE) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1]
+SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT * FROM t WITH ORDINALITY LIMIT 1 OFFSET 1]
 ----
 limit            ·       ·
  │               count   1
@@ -356,7 +373,7 @@ distinct        ·      ·
 ·               spans  ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [EXPLAIN (VERBOSE) SELECT DISTINCT v FROM t LIMIT 1 OFFSET 1]
+SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT DISTINCT v FROM t LIMIT 1 OFFSET 1]
 ----
 limit                ·         ·
  │                   count     1
@@ -374,7 +391,7 @@ statement ok
 PREPARE x AS SELECT DISTINCT v from t LIMIT $1
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [EXPLAIN (VERBOSE) EXECUTE x(3)]
+SELECT tree, field, description FROM [EXPLAIN (VERBOSE) EXECUTE x(3)]
 ----
 limit                ·         ·
  │                   count     3
@@ -386,7 +403,7 @@ limit                ·         ·
 ·                    spans     ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM [EXECUTE x(3)]
 ]
 ----
@@ -420,7 +437,7 @@ sort                  ·         ·                 (a, b)                      
 query TTTTT colnames
 EXPLAIN (TYPES) INSERT INTO t VALUES (1, 2)
 ----
-Tree              Field          Description       Columns                     Ordering
+tree              field          description       columns                     ordering
 count             ·              ·                 ()                          ·
  └── insert       ·              ·                 ()                          ·
       │           into           t(k, v)           ·                           ·
@@ -492,7 +509,7 @@ values  ·              ·                  (column1 int, column2 int, column3 i
 ·       row 1, expr 2  (6)[int]           ·                                        ·
 
 query TTTTT
-EXPLAIN (TYPES,NOEXPAND) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND COUNT(k)>1
+EXPLAIN (TYPES,NOEXPAND) SELECT 2*count(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND count(k)>1
 ----
 render                    ·            ·                                                                          (z int, v int)        ·
  │                        render 0     ((2)[int] * (agg1)[int])[int]                                              ·                     ·
@@ -512,7 +529,7 @@ render                    ·            ·                                      
 
 
 query TTTTT
-EXPLAIN (TYPES) SELECT 2*COUNT(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND COUNT(k)>1
+EXPLAIN (TYPES) SELECT 2*count(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND count(k)>1
 ----
 render                    ·            ·                                                                          (z int, v int)        v!=NULL; key(v)
  │                        render 0     ((2)[int] * (agg1)[int])[int]                                              ·                     ·
@@ -694,14 +711,14 @@ render         ·         ·                            (a int)  a=CONST
  └── emptyrow  ·         ·                            ()       ·
 
 query TTTTT
-EXPLAIN (TYPES,NONORMALIZE) SELECT ABS(2-3) AS a
+EXPLAIN (TYPES,NONORMALIZE) SELECT abs(2-3) AS a
 ----
 render         ·         ·                      (a int)  a=CONST
  │             render 0  (abs((-1)[int]))[int]  ·        ·
  └── emptyrow  ·         ·                      ()       ·
 
 query TTTTT
-EXPLAIN (TYPES) SELECT ABS(2-3) AS a
+EXPLAIN (TYPES) SELECT abs(2-3) AS a
 ----
 render         ·         ·         (a int)  a=CONST
  │             render 0  (1)[int]  ·        ·
@@ -719,3 +736,11 @@ render              ·         ·                                           (x i
 
 statement error EXPLAIN \(OPT\) only supported with the cost-based optimizer
 EXPLAIN (OPT) SELECT 1
+
+# Make sure that casts of null values to collated strings roundtrip correctly.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT NULL COLLATE en
+----
+render         ·         ·                                ("?column?")  "?column?"=CONST
+ │             render 0  CAST(NULL AS STRING) COLLATE en  ·             ·
+ └── emptyrow  ·         ·                                ()            ·

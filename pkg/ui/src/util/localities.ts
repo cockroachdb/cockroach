@@ -1,7 +1,7 @@
 import _ from "lodash";
 
 import { LocalityTier, LocalityTree } from "src/redux/localities";
-import { NodeStatus$Properties } from "src/util/proto";
+import { INodeStatus } from "src/util/proto";
 
 /*
  * parseLocalityRoute parses the URL fragment used to route to a particular
@@ -31,7 +31,7 @@ export function generateLocalityRoute(tiers: LocalityTier[]): string {
  * getNodeLocalityTiers returns the locality tiers of a node, typed as an array
  * of LocalityTier rather than Tier$Properties.
  */
-export function getNodeLocalityTiers(node: NodeStatus$Properties): LocalityTier[] {
+export function getNodeLocalityTiers(node: INodeStatus): LocalityTier[] {
   return node.desc.locality.tiers.map(({ key, value }) => ({ key, value }));
 }
 
@@ -75,8 +75,8 @@ export function getLocality(localityTree: LocalityTree, tiers: LocalityTier[]): 
 /* getLeaves returns the leaves under the given locality tree. Confusingly,
  * in this tree the "leaves" of the tree are nodes, i.e. servers.
  */
-export function getLeaves(tree: LocalityTree): NodeStatus$Properties[] {
-  const output: NodeStatus$Properties[] = [];
+export function getLeaves(tree: LocalityTree): INodeStatus[] {
+  const output: INodeStatus[] = [];
   function recur(curTree: LocalityTree) {
     output.push(...curTree.nodes);
     _.forEach(curTree.localities, (localityValues) => {
@@ -102,7 +102,7 @@ export function getLocalityLabel(path: LocalityTier[]): string {
 /*
  * allNodesHaveLocality returns true if there exists a node without a locality flag.
  */
-export function allNodesHaveLocality(nodes: NodeStatus$Properties[]): boolean {
+export function allNodesHaveLocality(nodes: INodeStatus[]): boolean {
   const nodesWithoutLocality = nodes.filter((n) => n.desc.locality.tiers.length === 0);
   return nodesWithoutLocality.length === 0;
 }

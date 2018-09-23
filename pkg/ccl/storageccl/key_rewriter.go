@@ -56,11 +56,8 @@ type KeyRewriter struct {
 	descs    map[sqlbase.ID]*sqlbase.TableDescriptor
 }
 
-// MakeKeyRewriter creates a KeyRewriter. This includes a simple []byte
-// prefix rewriter to rewrite table IDs including prefix ends, and table
-// descriptor data to traverse interleaved keys to child tables.
-func MakeKeyRewriter(rekeys []roachpb.ImportRequest_TableRekey) (*KeyRewriter, error) {
-	var prefixes prefixRewriter
+// MakeKeyRewriterFromRekeys makes a KeyRewriter from Rekey protos.
+func MakeKeyRewriterFromRekeys(rekeys []roachpb.ImportRequest_TableRekey) (*KeyRewriter, error) {
 	descs := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
 	for _, rekey := range rekeys {
 		var desc sqlbase.Descriptor
@@ -73,6 +70,12 @@ func MakeKeyRewriter(rekeys []roachpb.ImportRequest_TableRekey) (*KeyRewriter, e
 		}
 		descs[sqlbase.ID(rekey.OldID)] = table
 	}
+	return MakeKeyRewriter(descs)
+}
+
+// MakeKeyRewriter makes a KeyRewriter from a map of descs keyed by original ID.
+func MakeKeyRewriter(descs map[sqlbase.ID]*sqlbase.TableDescriptor) (*KeyRewriter, error) {
+	var prefixes prefixRewriter
 	seenPrefixes := make(map[string]bool)
 	for oldID, desc := range descs {
 		// The PrefixEnd() of index 1 is the same as the prefix of index 2, so use a

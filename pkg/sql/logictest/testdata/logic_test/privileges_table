@@ -12,6 +12,9 @@ statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v int)
 
 statement ok
+SELECT * from [54 as num_ref]
+
+statement ok
 SHOW GRANTS ON t
 
 statement ok
@@ -63,6 +66,12 @@ SHOW GRANTS ON t
 statement error pq: user testuser has no privileges on relation t
 SHOW COLUMNS FROM t
 
+statement error pq: user testuser does not have SELECT privilege on relation t
+SELECT r FROM t
+
+statement error pq: user testuser does not have SELECT privilege on relation t
+SELECT * from [56 as num_ref]
+
 statement error user testuser does not have GRANT privilege on relation t
 GRANT ALL ON t TO bar
 
@@ -104,11 +113,11 @@ GRANT SELECT ON t TO testuser
 
 user testuser
 
-query TTBTT
+query TTBTTTB
 SHOW COLUMNS FROM t
 ----
-k INT false NULL {"primary"}
-v INT true  NULL {}
+k  INT  false  NULL  ·  {"primary"}  false
+v  INT  true   NULL  ·  {}           false
 
 statement error user testuser does not have GRANT privilege on relation t
 GRANT ALL ON t TO bar

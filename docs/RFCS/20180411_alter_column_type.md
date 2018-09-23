@@ -27,6 +27,7 @@
     - [Process](#process)
     - [Failure modes](#failure-modes)
     - [Job control](#job-control)
+        - [Compatibility and upgrade path](#compatibility-and-upgrade-path)
     - [Allowable conversions](#allowable-conversions)
         - [Array conversions](#array-conversions)
     - [Drawbacks](#drawbacks)
@@ -285,25 +286,95 @@ about why a value could not be inserted.
 
 ## Job control
 
-The type change will be modeled as a bulk-IO job (e.g. `IMPORT CSV`),
-allowing it to be paused and resumed and to have a place to store
-ongoing state and progress information. In general, we expect that the
-implementation of other DDL statements should become more job-like in
-the future, so the implementation should attempt to produce reusable
-components and abstractions where it makes sense to.
+The current `TableDescriptor.Mutations` collection is somewhat
+overloaded: it acts as a collection of not-public columns that
+require special handling in the write path and as storage for managing
+the state of the column operation.  As part of this change, a new
+approach for handling multi-step table schema mutations will be added.
 
-The job will consist of:
-* A planning phase that, given an existing table schema, will determine
-  all necessary steps to perform.
-* A de-duplication phase which will apply heuristics to determine if
-  there are existing schema elements that satisfy portions of the plan.
-* A "macro" phase which executes the necessary remaining steps.
-* A finalization phase which can revert partial changes if a step fails
-  (e.g. a `UNIQUE` shadow index detects duplicate values in the
-  converted shadow column).
+The state-management role of `TableDescriptor.Mutations` will be retired
+in favor of a new `TableDescriptor.Actions` collection that the
+schema-change code will operate on.  The existing use of
+`TableDescriptor.Mutations` for not-public columns will be retained to
+minimize impact on the SQL write path.
 
-As the job progresses through the various steps, it will update a
-progress entry, allowing it to be visualized like other jobs.
+Conceptually, an `TableAction` represents a function which operates on a
+`TableDescriptor` to produce a derived `TableDescriptor`, dependencies
+on other actions, and any necessary state to drive the
+transformation.  Actions have a monotonically increasing id number,
+which is assigned using a `TableDescriptor.NextActionID` field.
+
+Each table will have an "action loop", driven by a table-specific,
+schema-change leaseholder.  The action loop performs the following:
+* Identify disjoint graphs of actions to perform.
+  * These action graphs can be thought of as transactions on the
+    `TableDescriptor`.  Either all actions in a graph eventually
+    complete successfully, or all of them are reverted.
+  * When a graph has reached a terminal state, all of its associated
+    actions are retired from the `TableDescriptor`.
+* Randomly select an action whose dependencies have been
+  successfully completed.
+  * A `TableAction` can be marked as having been definitively completed
+    by the schema-changer code, or by invoking a
+    `TableAction.IsComplete()` function in cases where the table's
+    schema-change coordinator node has restarted.
+  * Executing actions or action graphs in parallel is currently out of
+    scope for this RFC, but could represent a significant wall-time win
+    in cases where a user is making several independent changes to a
+    table schema.
+* `Resume()` the action by:
+  * Applying the action's function to the active `TableDescriptor` to
+    produce the next `TableDescriptor` to publish when the action
+    completes.  This allows for continuous revalidation of whether
+    or not the action is still valid.
+  * Marking the `TableAction` as in-progress, persisting any updates
+    made to the `TableAction` by the `Resume()` function, and the
+    original `TableDescriptor` contents.
+  * Waiting for the success or failure of any long-running background
+    processes necessary to effect the action (e.g. index backfills).
+  * Marking the `TableAction` as being definitively completed.
+* In the event that an action graph fails, a `TableAction.Rollback()`
+   function will be invoked that is given the original and proposed
+   `TableDescriptor` values to undo the change.
+   * Simply replacing the active `TableDescriptor` with the stored,
+     original `TableDescriptor` would work, but would limit future
+     opportunities for parallel schema-change execution.
+
+With this low-level action loop in mind, any long-running or multi-step
+DDL statement that operates on a `TableDescriptor` can be expanded into
+some number of `TableAction` entries which are executed in sequence.
+The user's DDL statement can also be associated with a system job which
+reflects the execution state of the associated action graph.  This will
+allow long-running DDL statements to provide status feedback to the user
+and offer a hook for canceling their execution.
+
+Thus, an `ALTER COLUMN TYPE` command would expand to the following
+collection of actions:
+* Add the shadow column
+* Add shadow indexes
+  * These depend on the add-column `TableAction`
+* Finalize the `ALTER COLUMN TYPE`
+  * This represents a point-of-no-return for the schema change and
+    is guaranteed to operate last by depending on all previous actions.
+
+### Compatibility and upgrade path
+
+Attempting to make a mixed-version cluster operate with and without
+`TableAction`-aware nodes would be exceeding complicated, so for the
+purposes of implementing this RFC, we will maintain the existing code
+path in parallel with the proposed changes.  `ALTER COLUMN TYPE` will
+be available only via the new `TableAction` code path.
+
+A new `TableDescriptor.ClusterVersion` field will be added that the
+schema-change code uses in conjunction with the global cluster version
+to enable future migrations of `TableDescriptor` data.  This
+`ClusterVersion` field will be set to enable the new `TableAction` path
+once the cluster's version has been upgraded to an action-aware value
+and there are no `TableMutation` entries still in flight.
+
+This scheme can also be extended in the future to enable multi-table
+schema changes by allowing `TableAction` dependencies to reference
+actions in other `TableDescriptor` instances.
 
 ## Allowable conversions
 

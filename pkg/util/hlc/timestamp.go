@@ -39,6 +39,11 @@ func (t Timestamp) String() string {
 	return fmt.Sprintf("%d.%09d,%d", t.WallTime/1E9, t.WallTime%1E9, t.Logical)
 }
 
+// AsOfSystemTime returns a string to be used in an AS OF SYSTEM TIME query.
+func (t Timestamp) AsOfSystemTime() string {
+	return fmt.Sprintf("%d.%010d", t.WallTime, t.Logical)
+}
+
 // Less compares two timestamps.
 func (t LegacyTimestamp) Less(s LegacyTimestamp) bool {
 	return Timestamp(t).Less(Timestamp(s))
@@ -94,6 +99,24 @@ func (t Timestamp) Prev() Timestamp {
 		return Timestamp{
 			WallTime: t.WallTime - 1,
 			Logical:  math.MaxInt32,
+		}
+	}
+	panic("cannot take the previous value to a zero timestamp")
+}
+
+// FloorPrev returns a timestamp earlier than the current timestamp. If it
+// can subtract a logical tick without wrapping around, it does so. Otherwise
+// it subtracts a nanosecond from the walltime.
+func (t Timestamp) FloorPrev() Timestamp {
+	if t.Logical > 0 {
+		return Timestamp{
+			WallTime: t.WallTime,
+			Logical:  t.Logical - 1,
+		}
+	} else if t.WallTime > 0 {
+		return Timestamp{
+			WallTime: t.WallTime - 1,
+			Logical:  0,
 		}
 	}
 	panic("cannot take the previous value to a zero timestamp")

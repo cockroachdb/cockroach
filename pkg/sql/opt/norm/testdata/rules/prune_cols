@@ -18,68 +18,98 @@ TABLE xy
  └── INDEX primary
       └── x int not null
 
+exec-ddl
+CREATE TABLE abcde (
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
+    d INT,
+    e INT,
+    UNIQUE INDEX bc (b, c)
+)
+----
+TABLE abcde
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── d int
+ ├── e int
+ ├── INDEX primary
+ │    └── a int not null
+ └── INDEX bc
+      ├── b int
+      ├── c int
+      └── a int not null (storing)
+
 # --------------------------------------------------
 # PruneProjectCols
 # --------------------------------------------------
 
 # Discard some of columns.
-opt
+opt expect=PruneProjectCols
 SELECT k FROM (SELECT k, i+1 FROM a) a
 ----
 scan a
  ├── columns: k:1(int!null)
- └── keys: (1)
+ └── key: (1)
 
 # Discard all columns.
-opt
+opt expect=PruneProjectCols
 SELECT 1 r FROM (SELECT i+1, k FROM a) a
 ----
 project
  ├── columns: r:6(int!null)
+ ├── fd: ()-->(6)
  ├── scan a
  └── projections
       └── const: 1 [type=int]
 
 # Use column values within computed column.
-opt
+opt expect=PruneProjectCols
 SELECT k+i AS r FROM (SELECT i, k, s || 'foo' FROM a) a
 ----
 project
  ├── columns: r:6(int)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
  └── projections [outer=(1,2)]
-      └── a.k + a.i [type=int, outer=(1,2)]
+      └── k + i [type=int, outer=(1,2)]
 
 # Discard non-computed columns and keep computed column.
-opt
+opt expect=PruneProjectCols
 SELECT l, k FROM (SELECT length(s) l, * FROM a) a
 ----
 project
  ├── columns: l:5(int) k:1(int!null)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(5)
  ├── scan a
  │    ├── columns: k:1(int!null) s:4(string)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(4)
  └── projections [outer=(1,4)]
-      └── length(a.s) [type=int, outer=(4)]
+      └── length(s) [type=int, outer=(4)]
 
 # Compute column based on another computed column.
-opt
+opt expect=PruneProjectCols
 SELECT l*l AS r, k FROM (SELECT k, length(s) l, i FROM a) a
 ----
 project
  ├── columns: r:6(int) k:1(int!null)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(6)
  ├── project
  │    ├── columns: l:5(int) k:1(int!null)
- │    ├── keys: (1)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(5)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) s:4(string)
- │    │    └── keys: (1)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(4)
  │    └── projections [outer=(1,4)]
- │         └── length(a.s) [type=int, outer=(4)]
+ │         └── length(s) [type=int, outer=(4)]
  └── projections [outer=(1,5)]
       └── l * l [type=int, outer=(5)]
 
@@ -88,45 +118,49 @@ project
 # --------------------------------------------------
 
 # Project subset of columns.
-opt
+opt expect=PruneScanCols
 SELECT k FROM a
 ----
 scan a
  ├── columns: k:1(int!null)
- └── keys: (1)
+ └── key: (1)
 
 # Project subset of columns, some used in computed columns.
-opt
+opt expect=PruneScanCols
 SELECT k, k+1 AS r, i+1 AS s FROM a
 ----
 project
  ├── columns: k:1(int!null) r:5(int) s:6(int)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(5,6)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
  └── projections [outer=(1,2)]
-      ├── a.k + 1 [type=int, outer=(1)]
-      └── a.i + 1 [type=int, outer=(2)]
+      ├── k + 1 [type=int, outer=(1)]
+      └── i + 1 [type=int, outer=(2)]
 
 # Use columns only in computed columns.
-opt
+opt expect=PruneScanCols
 SELECT k+i AS r FROM a
 ----
 project
  ├── columns: r:5(int)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
  └── projections [outer=(1,2)]
-      └── a.k + a.i [type=int, outer=(1,2)]
+      └── k + i [type=int, outer=(1,2)]
 
 # Use no scan columns.
-opt
+opt expect=PruneScanCols
 SELECT 1 r FROM a
 ----
 project
  ├── columns: r:5(int!null)
+ ├── fd: ()-->(5)
  ├── scan a
  └── projections
       └── const: 1 [type=int]
@@ -136,42 +170,51 @@ project
 # --------------------------------------------------
 
 # Columns used only by projection or filter, but not both.
-opt
+opt expect=PruneSelectCols
 SELECT k FROM a WHERE i<5
 ----
 project
  ├── columns: k:1(int!null)
- ├── keys: (1)
+ ├── key: (1)
  └── select
       ├── columns: k:1(int!null) i:2(int!null)
-      ├── keys: (1)
+      ├── key: (1)
+      ├── fd: (1)-->(2)
       ├── scan a
       │    ├── columns: k:1(int!null) i:2(int)
-      │    └── keys: (1)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
       └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
-           └── a.i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+           └── i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
 
 # Columns used by both projection and filter.
-opt
+opt expect=PruneSelectCols
 SELECT k, i FROM a WHERE k=1 AND i<5
 ----
 select
  ├── columns: k:1(int!null) i:2(int!null)
- ├── keys: (1)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    ├── constraint: /1: [/1 - /1]
- │    └── keys: (1)
+ │    ├── cardinality: [0 - 1]
+ │    ├── key: ()
+ │    └── fd: ()-->(1,2)
  └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
-      └── a.i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+      └── i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
 
 # No needed select columns.
-opt
+opt expect=PruneSelectCols
 SELECT 1 r FROM a WHERE $1<'2000-01-01T02:00:00'::timestamp
 ----
 project
  ├── columns: r:5(int!null)
+ ├── has-placeholder
+ ├── fd: ()-->(5)
  ├── select
+ │    ├── has-placeholder
  │    ├── scan a
  │    └── filters [type=bool]
  │         └── $1 < '2000-01-01 02:00:00+00:00' [type=bool]
@@ -179,116 +222,175 @@ project
       └── const: 1 [type=int]
 
 # Select columns used in computed columns.
-opt
+opt expect=PruneSelectCols
 SELECT i-1 AS r, k*k AS t FROM a WHERE k+1<5 AND s||'o'='foo'
 ----
 project
  ├── columns: r:5(int) t:6(int)
  ├── select
  │    ├── columns: k:1(int!null) i:2(int) s:4(string)
- │    ├── keys: (1)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,4)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
- │    │    └── keys: (1)
- │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ])]
- │         ├── a.k < (5 - 1) [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
- │         └── (a.s || 'o') = 'foo' [type=bool, outer=(4)]
+ │    │    ├── constraint: /1: [ - /3]
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2,4)
+ │    └── filters [type=bool, outer=(4)]
+ │         └── (s || 'o') = 'foo' [type=bool, outer=(4)]
  └── projections [outer=(1,2)]
-      ├── a.i - 1 [type=int, outer=(2)]
-      └── a.k * a.k [type=int, outer=(1)]
+      ├── i - 1 [type=int, outer=(2)]
+      └── k * k [type=int, outer=(1)]
 
 # Select nested in select.
-opt
+opt expect=PruneSelectCols
 SELECT i FROM (SELECT k, i, s, f/2.0 f FROM a WHERE k = 5) a2 WHERE i::float = f
 ----
 project
  ├── columns: i:2(int)
+ ├── cardinality: [0 - 1]
+ ├── side-effects
+ ├── key: ()
+ ├── fd: ()-->(2)
  └── select
       ├── columns: i:2(int) f:5(float!null)
+      ├── cardinality: [0 - 1]
+      ├── side-effects
+      ├── key: ()
+      ├── fd: ()-->(2,5)
       ├── project
       │    ├── columns: f:5(float) i:2(int)
+      │    ├── cardinality: [0 - 1]
+      │    ├── side-effects
+      │    ├── key: ()
+      │    ├── fd: ()-->(2,5)
       │    ├── scan a
       │    │    ├── columns: k:1(int!null) i:2(int) a.f:3(float)
       │    │    ├── constraint: /1: [/5 - /5]
-      │    │    └── keys: (1)
-      │    └── projections [outer=(2,3)]
-      │         └── a.f / 2.0 [type=float, outer=(3)]
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    └── fd: ()-->(1-3)
+      │    └── projections [outer=(2,3), side-effects]
+      │         └── a.f / 2.0 [type=float, outer=(3), side-effects]
       └── filters [type=bool, outer=(2,5), constraints=(/5: (/NULL - ])]
-           └── f = a.i::FLOAT [type=bool, outer=(2,5), constraints=(/5: (/NULL - ])]
+           └── f = i::FLOAT8 [type=bool, outer=(2,5), constraints=(/5: (/NULL - ])]
 
 # Detect PruneSelectCols and PushSelectIntoProject dependency cycle.
 opt
-SELECT f, f+1.1 AS r FROM (SELECT f, k FROM a GROUP BY f, k HAVING SUM(k)=100) a
+SELECT f, f+1.1 AS r FROM (SELECT f, k FROM a GROUP BY f, k HAVING sum(k)=100) a
 ----
 project
  ├── columns: f:3(float) r:6(float)
  ├── select
- │    ├── columns: k:1(int!null) f:3(float) column5:5(decimal!null)
- │    ├── keys: (1)
+ │    ├── columns: k:1(int!null) f:3(float) sum:5(decimal!null)
+ │    ├── key: (1)
+ │    ├── fd: ()-->(5), (1)-->(3)
  │    ├── group-by
- │    │    ├── columns: k:1(int!null) f:3(float) column5:5(decimal)
- │    │    ├── grouping columns: k:1(int!null) f:3(float)
- │    │    ├── keys: (1)
+ │    │    ├── columns: k:1(int!null) f:3(float) sum:5(decimal)
+ │    │    ├── grouping columns: k:1(int!null)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(3,5)
  │    │    ├── scan a
  │    │    │    ├── columns: k:1(int!null) f:3(float)
- │    │    │    └── keys: (1)
- │    │    └── aggregations [outer=(1)]
- │    │         └── sum [type=decimal, outer=(1)]
- │    │              └── variable: a.k [type=int, outer=(1)]
- │    └── filters [type=bool, outer=(5), constraints=(/5: [/100 - /100]; tight)]
- │         └── column5 = 100 [type=bool, outer=(5), constraints=(/5: [/100 - /100]; tight)]
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(3)
+ │    │    └── aggregations [outer=(1,3)]
+ │    │         ├── sum [type=decimal, outer=(1)]
+ │    │         │    └── variable: k [type=int, outer=(1)]
+ │    │         └── const-agg [type=float, outer=(3)]
+ │    │              └── variable: f [type=float, outer=(3)]
+ │    └── filters [type=bool, outer=(5), constraints=(/5: [/100 - /100]; tight), fd=()-->(5)]
+ │         └── sum = 100 [type=bool, outer=(5), constraints=(/5: [/100 - /100]; tight)]
  └── projections [outer=(3)]
-      └── a.f + 1.1 [type=float, outer=(3)]
+      └── f + 1.1 [type=float, outer=(3)]
 
 # --------------------------------------------------
 # PruneLimitCols
 # --------------------------------------------------
 
+opt expect=PruneLimitCols
+SELECT i FROM (SELECT i, s FROM a LIMIT 1)
+----
+scan a
+ ├── columns: i:2(int)
+ ├── limit: 1
+ ├── key: ()
+ └── fd: ()-->(2)
+
 # The projection on top of Limit should trickle down and we shouldn't scan f.
-opt
+opt expect=PruneLimitCols
 SELECT k FROM (SELECT k, i, f FROM a ORDER BY i LIMIT 10)
 ----
 project
  ├── columns: k:1(int!null)
  ├── cardinality: [0 - 10]
- ├── keys: (1)
+ ├── key: (1)
  └── limit
       ├── columns: k:1(int!null) i:2(int)
+      ├── internal-ordering: +2
       ├── cardinality: [0 - 10]
-      ├── keys: (1)
+      ├── key: (1)
+      ├── fd: (1)-->(2)
       ├── sort
       │    ├── columns: k:1(int!null) i:2(int)
-      │    ├── keys: (1)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
       │    ├── ordering: +2
       │    └── scan a
       │         ├── columns: k:1(int!null) i:2(int)
-      │         └── keys: (1)
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2)
       └── const: 10 [type=int]
 
 # We should scan k, i, s.
-opt
-SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY k, i LIMIT 10)
+opt expect=PruneLimitCols
+SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY i, k LIMIT 10)
 ----
 project
  ├── columns: s:4(string)
  ├── cardinality: [0 - 10]
- └── scan a
+ └── limit
       ├── columns: k:1(int!null) i:2(int) s:4(string)
-      ├── limit: 10
-      └── keys: (1)
+      ├── internal-ordering: +2,+1
+      ├── cardinality: [0 - 10]
+      ├── key: (1)
+      ├── fd: (1)-->(2,4)
+      ├── sort
+      │    ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,4)
+      │    ├── ordering: +2,+1
+      │    └── scan a
+      │         ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2,4)
+      └── const: 10 [type=int]
 
 # We should scan k, i, s.
-opt
-SELECT k, s FROM (SELECT k, i, f, s FROM a ORDER BY k, i LIMIT 10)
+opt expect=PruneLimitCols
+SELECT k, s FROM (SELECT k, i, f, s FROM a ORDER BY i, k LIMIT 10)
 ----
 project
  ├── columns: k:1(int!null) s:4(string)
  ├── cardinality: [0 - 10]
- ├── keys: (1)
- └── scan a
+ ├── key: (1)
+ ├── fd: (1)-->(4)
+ └── limit
       ├── columns: k:1(int!null) i:2(int) s:4(string)
-      ├── limit: 10
-      └── keys: (1)
+      ├── internal-ordering: +2,+1
+      ├── cardinality: [0 - 10]
+      ├── key: (1)
+      ├── fd: (1)-->(2,4)
+      ├── sort
+      │    ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,4)
+      │    ├── ordering: +2,+1
+      │    └── scan a
+      │         ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2,4)
+      └── const: 10 [type=int]
 
 # Project uses subset of Limit columns, but no additional Project should be
 # introduced to tree, because it can't be pushed down to Scan.
@@ -301,167 +403,222 @@ project
  ├── limit
  │    ├── columns: f:3(float) s:4(string)
  │    ├── cardinality: [0 - 5]
- │    ├── keys: weak(3,4)
- │    ├── group-by
+ │    ├── key: (3,4)
+ │    ├── distinct-on
  │    │    ├── columns: f:3(float) s:4(string)
  │    │    ├── grouping columns: f:3(float) s:4(string)
- │    │    ├── keys: weak(3,4)
+ │    │    ├── key: (3,4)
  │    │    └── scan a
  │    │         └── columns: f:3(float) s:4(string)
  │    └── const: 5 [type=int]
  └── projections [outer=(3)]
-      └── a.f * 2.0 [type=float, outer=(3)]
+      └── f * 2.0 [type=float, outer=(3)]
 
 # --------------------------------------------------
 # PruneOffsetCols
 # --------------------------------------------------
 
-opt
+opt expect=PruneOffsetCols
+SELECT f FROM (SELECT * FROM a OFFSET 1)
+----
+offset
+ ├── columns: f:3(float)
+ ├── scan a
+ │    └── columns: f:3(float)
+ └── const: 1 [type=int]
+
+opt expect=PruneOffsetCols
 SELECT k FROM (SELECT k, i, f FROM a ORDER BY i OFFSET 10)
 ----
 project
  ├── columns: k:1(int!null)
- ├── keys: (1)
+ ├── key: (1)
  └── offset
       ├── columns: k:1(int!null) i:2(int)
-      ├── keys: (1)
+      ├── internal-ordering: +2
+      ├── key: (1)
+      ├── fd: (1)-->(2)
       ├── sort
       │    ├── columns: k:1(int!null) i:2(int)
-      │    ├── keys: (1)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
       │    ├── ordering: +2
       │    └── scan a
       │         ├── columns: k:1(int!null) i:2(int)
-      │         └── keys: (1)
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2)
       └── const: 10 [type=int]
 
 # We should scan k, i, s.
-opt
-SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY k, i OFFSET 10)
+opt expect=PruneOffsetCols
+SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY i, k OFFSET 10)
 ----
 project
  ├── columns: s:4(string)
  └── offset
       ├── columns: k:1(int!null) i:2(int) s:4(string)
-      ├── keys: (1)
-      ├── scan a
+      ├── internal-ordering: +2,+1
+      ├── key: (1)
+      ├── fd: (1)-->(2,4)
+      ├── sort
       │    ├── columns: k:1(int!null) i:2(int) s:4(string)
-      │    ├── keys: (1)
-      │    └── ordering: +1,+2
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,4)
+      │    ├── ordering: +2,+1
+      │    └── scan a
+      │         ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2,4)
       └── const: 10 [type=int]
 
 # We should scan k, i, s.
-opt
-SELECT k, s FROM (SELECT k, i, f, s FROM a ORDER BY k, i OFFSET 10)
+opt expect=PruneOffsetCols
+SELECT k, s FROM (SELECT k, i, f, s FROM a ORDER BY i, k OFFSET 10)
 ----
 project
  ├── columns: k:1(int!null) s:4(string)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(4)
  └── offset
       ├── columns: k:1(int!null) i:2(int) s:4(string)
-      ├── keys: (1)
-      ├── scan a
+      ├── internal-ordering: +2,+1
+      ├── key: (1)
+      ├── fd: (1)-->(2,4)
+      ├── sort
       │    ├── columns: k:1(int!null) i:2(int) s:4(string)
-      │    ├── keys: (1)
-      │    └── ordering: +1,+2
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,4)
+      │    ├── ordering: +2,+1
+      │    └── scan a
+      │         ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2,4)
       └── const: 10 [type=int]
 
 # Project uses subset of Offset columns, but no additional Project should be
 # introduced to tree, because it can't be pushed down past Explain.
 opt
-SELECT "Tree", "Columns"
+SELECT tree, columns
 FROM
 (
     SELECT *
     FROM [ EXPLAIN (VERBOSE) SELECT * FROM a ]
-    ORDER BY "Tree"
+    ORDER BY tree
     OFFSET 1
 )
 ----
 project
- ├── columns: Tree:5(string) Columns:10(string)
+ ├── columns: tree:5(string) columns:10(string)
  └── offset
-      ├── columns: Tree:5(string) Level:6(int) Type:7(string) Field:8(string) Description:9(string) Columns:10(string) Ordering:11(string)
+      ├── columns: tree:5(string) level:6(int) node_type:7(string) field:8(string) description:9(string) columns:10(string) ordering:11(string)
+      ├── internal-ordering: +5
       ├── sort
-      │    ├── columns: Tree:5(string) Level:6(int) Type:7(string) Field:8(string) Description:9(string) Columns:10(string) Ordering:11(string)
+      │    ├── columns: tree:5(string) level:6(int) node_type:7(string) field:8(string) description:9(string) columns:10(string) ordering:11(string)
       │    ├── ordering: +5
       │    └── explain
-      │         ├── columns: Tree:5(string) Level:6(int) Type:7(string) Field:8(string) Description:9(string) Columns:10(string) Ordering:11(string)
+      │         ├── columns: tree:5(string) level:6(int) node_type:7(string) field:8(string) description:9(string) columns:10(string) ordering:11(string)
       │         └── scan a
       │              ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
-      │              └── keys: (1)
+      │              ├── key: (1)
+      │              └── fd: (1)-->(2-4)
       └── const: 1 [type=int]
 
 # --------------------------------------------------
 # PruneLimitCols + PruneOffsetCols
 # --------------------------------------------------
 
-opt
+opt expect=(PruneLimitCols,PruneOffsetCols)
 SELECT k FROM (SELECT k, i, f FROM a ORDER BY i LIMIT 10 OFFSET 10)
 ----
 project
  ├── columns: k:1(int!null)
  ├── cardinality: [0 - 10]
- ├── keys: (1)
+ ├── key: (1)
  └── limit
       ├── columns: k:1(int!null) i:2(int)
+      ├── internal-ordering: +2
       ├── cardinality: [0 - 10]
-      ├── keys: (1)
+      ├── key: (1)
+      ├── fd: (1)-->(2)
       ├── offset
       │    ├── columns: k:1(int!null) i:2(int)
-      │    ├── keys: (1)
+      │    ├── internal-ordering: +2
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
       │    ├── ordering: +2
       │    ├── sort
       │    │    ├── columns: k:1(int!null) i:2(int)
-      │    │    ├── keys: (1)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2)
       │    │    ├── ordering: +2
       │    │    └── scan a
       │    │         ├── columns: k:1(int!null) i:2(int)
-      │    │         └── keys: (1)
+      │    │         ├── key: (1)
+      │    │         └── fd: (1)-->(2)
       │    └── const: 10 [type=int]
       └── const: 10 [type=int]
 
 # We should scan k, i, s.
-opt
-SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY k, i LIMIT 10 OFFSET 10)
+opt expect=(PruneLimitCols,PruneOffsetCols)
+SELECT s FROM (SELECT k, i, f, s FROM a ORDER BY i, k LIMIT 10 OFFSET 10)
 ----
 project
  ├── columns: s:4(string)
  ├── cardinality: [0 - 10]
  └── limit
       ├── columns: k:1(int!null) i:2(int) s:4(string)
+      ├── internal-ordering: +2,+1
       ├── cardinality: [0 - 10]
-      ├── keys: (1)
+      ├── key: (1)
+      ├── fd: (1)-->(2,4)
       ├── offset
       │    ├── columns: k:1(int!null) i:2(int) s:4(string)
-      │    ├── keys: (1)
-      │    ├── ordering: +1,+2
-      │    ├── scan a
+      │    ├── internal-ordering: +2,+1
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,4)
+      │    ├── ordering: +2,+1
+      │    ├── sort
       │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
-      │    │    ├── keys: (1)
-      │    │    └── ordering: +1,+2
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2,4)
+      │    │    ├── ordering: +2,+1
+      │    │    └── scan a
+      │    │         ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │    │         ├── key: (1)
+      │    │         └── fd: (1)-->(2,4)
       │    └── const: 10 [type=int]
       └── const: 10 [type=int]
 
 # We should scan k, i, s.
-opt
-SELECT k, s FROM (SELECT k, i, f, s FROM a ORDER BY k, i LIMIT 10 OFFSET 10)
+opt expect=(PruneLimitCols,PruneOffsetCols)
+SELECT k, s FROM (SELECT k, i, f, s FROM a ORDER BY i, k LIMIT 10 OFFSET 10)
 ----
 project
  ├── columns: k:1(int!null) s:4(string)
  ├── cardinality: [0 - 10]
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(4)
  └── limit
       ├── columns: k:1(int!null) i:2(int) s:4(string)
+      ├── internal-ordering: +2,+1
       ├── cardinality: [0 - 10]
-      ├── keys: (1)
+      ├── key: (1)
+      ├── fd: (1)-->(2,4)
       ├── offset
       │    ├── columns: k:1(int!null) i:2(int) s:4(string)
-      │    ├── keys: (1)
-      │    ├── ordering: +1,+2
-      │    ├── scan a
+      │    ├── internal-ordering: +2,+1
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,4)
+      │    ├── ordering: +2,+1
+      │    ├── sort
       │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
-      │    │    ├── keys: (1)
-      │    │    └── ordering: +1,+2
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2,4)
+      │    │    ├── ordering: +2,+1
+      │    │    └── scan a
+      │    │         ├── columns: k:1(int!null) i:2(int) s:4(string)
+      │    │         ├── key: (1)
+      │    │         └── fd: (1)-->(2,4)
       │    └── const: 10 [type=int]
       └── const: 10 [type=int]
 
@@ -475,132 +632,171 @@ project
  ├── limit
  │    ├── columns: f:3(float) s:4(string)
  │    ├── cardinality: [0 - 5]
- │    ├── keys: weak(3,4)
+ │    ├── key: (3,4)
  │    ├── offset
  │    │    ├── columns: f:3(float) s:4(string)
- │    │    ├── keys: weak(3,4)
- │    │    ├── group-by
+ │    │    ├── key: (3,4)
+ │    │    ├── distinct-on
  │    │    │    ├── columns: f:3(float) s:4(string)
  │    │    │    ├── grouping columns: f:3(float) s:4(string)
- │    │    │    ├── keys: weak(3,4)
+ │    │    │    ├── key: (3,4)
  │    │    │    └── scan a
  │    │    │         └── columns: f:3(float) s:4(string)
  │    │    └── const: 5 [type=int]
  │    └── const: 5 [type=int]
  └── projections [outer=(3)]
-      └── a.f * 2.0 [type=float, outer=(3)]
+      └── f * 2.0 [type=float, outer=(3)]
 
 # --------------------------------------------------
 # PruneJoinLeftCols
 # --------------------------------------------------
 
 # Columns used only by projection or on condition, but not both.
-opt
+opt expect=PruneJoinLeftCols
 SELECT a.i, xy.* FROM a INNER JOIN xy ON a.k=xy.x
 ----
 project
  ├── columns: i:2(int) x:5(int!null) y:6(int)
- └── inner-join
+ ├── key: (5)
+ ├── fd: (5)-->(2,6)
+ └── inner-join (merge)
       ├── columns: k:1(int!null) i:2(int) x:5(int!null) y:6(int)
+      ├── key: (5)
+      ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
       ├── scan a
       │    ├── columns: k:1(int!null) i:2(int)
-      │    └── keys: (1)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
       ├── scan xy
       │    ├── columns: x:5(int!null) y:6(int)
-      │    └── keys: (5)
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-           └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +5
+           └── true [type=bool]
 
 # Columns used by both projection and on condition, left join.
-opt
+opt expect=PruneJoinLeftCols
 SELECT a.k, a.i, xy.* FROM a LEFT JOIN xy ON a.k=xy.x AND a.i<5
 ----
-left-join
+left-join (merge)
  ├── columns: k:1(int!null) i:2(int) x:5(int) y:6(int)
+ ├── key: (1,5)
+ ├── fd: (1)-->(2), (5)-->(6)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── ordering: +1
  ├── scan xy
  │    ├── columns: x:5(int!null) y:6(int)
- │    └── keys: (5)
- └── filters [type=bool, outer=(1,2,5), constraints=(/1: (/NULL - ]; /2: (/NULL - /4]; /5: (/NULL - ])]
-      ├── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-      └── a.i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+ │    ├── key: (5)
+ │    ├── fd: (5)-->(6)
+ │    └── ordering: +5
+ └── merge-on
+      ├── left ordering: +1
+      ├── right ordering: +5
+      └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+           └── i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
 
 # Columns only used by on condition, right join
-opt
+opt expect=PruneJoinLeftCols
 SELECT xy.* FROM a RIGHT JOIN xy ON a.k=xy.x
 ----
 project
  ├── columns: x:5(int!null) y:6(int)
- └── right-join
+ ├── fd: (5)-->(6)
+ └── right-join (merge)
       ├── columns: k:1(int) x:5(int!null) y:6(int)
+      ├── key: (1,5)
+      ├── fd: (5)-->(6)
       ├── scan a
       │    ├── columns: k:1(int!null)
-      │    └── keys: (1)
+      │    ├── key: (1)
+      │    └── ordering: +1
       ├── scan xy
       │    ├── columns: x:5(int!null) y:6(int)
-      │    └── keys: (5)
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-           └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +5
+           └── true [type=bool]
 
 # Columns needed only by projection, full join.
-opt
+opt expect=PruneJoinLeftCols
 SELECT a.k+1 AS r, xy.* FROM a FULL JOIN xy ON True
 ----
 project
  ├── columns: r:7(int) x:5(int) y:6(int)
+ ├── fd: (5)-->(6)
  ├── full-join
  │    ├── columns: k:1(int) x:5(int) y:6(int)
+ │    ├── key: (1,5)
+ │    ├── fd: (5)-->(6)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null)
- │    │    └── keys: (1)
+ │    │    └── key: (1)
  │    ├── scan xy
  │    │    ├── columns: x:5(int!null) y:6(int)
- │    │    └── keys: (5)
+ │    │    ├── key: (5)
+ │    │    └── fd: (5)-->(6)
  │    └── true [type=bool]
  └── projections [outer=(1,5,6)]
-      └── a.k + 1 [type=int, outer=(1)]
+      └── k + 1 [type=int, outer=(1)]
 
 # No columns needed from left side of join.
-opt
+opt expect=PruneJoinLeftCols
 SELECT xy.* FROM a, xy
 ----
 inner-join
  ├── columns: x:5(int!null) y:6(int)
+ ├── fd: (5)-->(6)
  ├── scan a
  ├── scan xy
  │    ├── columns: x:5(int!null) y:6(int)
- │    └── keys: (5)
+ │    ├── key: (5)
+ │    └── fd: (5)-->(6)
  └── true [type=bool]
 
 # Computed columns.
-opt
+opt expect=PruneJoinLeftCols
 SELECT a.k+1 AS r, a.i/2 AS s, xy.* FROM a INNER JOIN xy ON a.k*a.k=xy.x AND a.s||'o'='foo'
 ----
 project
  ├── columns: r:7(int) s:8(decimal) x:5(int!null) y:6(int)
+ ├── side-effects
+ ├── fd: (5)-->(6)
  ├── inner-join
  │    ├── columns: k:1(int!null) i:2(int) a.s:4(string) x:5(int!null) y:6(int)
- │    ├── select
- │    │    ├── columns: k:1(int!null) i:2(int) a.s:4(string)
- │    │    ├── keys: (1)
- │    │    ├── scan a
- │    │    │    ├── columns: k:1(int!null) i:2(int) a.s:4(string)
- │    │    │    └── keys: (1)
- │    │    └── filters [type=bool, outer=(4)]
- │    │         └── (a.s || 'o') = 'foo' [type=bool, outer=(4)]
+ │    ├── key: (1,5)
+ │    ├── fd: (1)-->(2,4), (5)-->(6)
  │    ├── scan xy
  │    │    ├── columns: x:5(int!null) y:6(int)
- │    │    └── keys: (5)
+ │    │    ├── key: (5)
+ │    │    └── fd: (5)-->(6)
+ │    ├── select
+ │    │    ├── columns: k:1(int!null) i:2(int) a.s:4(string)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2,4)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1(int!null) i:2(int) a.s:4(string)
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2,4)
+ │    │    └── filters [type=bool, outer=(4)]
+ │    │         └── (a.s || 'o') = 'foo' [type=bool, outer=(4)]
  │    └── filters [type=bool, outer=(1,5), constraints=(/5: (/NULL - ])]
- │         └── xy.x = (a.k * a.k) [type=bool, outer=(1,5), constraints=(/5: (/NULL - ])]
- └── projections [outer=(1,2,5,6)]
-      ├── a.k + 1 [type=int, outer=(1)]
-      └── a.i / 2 [type=decimal, outer=(2)]
+ │         └── x = (k * k) [type=bool, outer=(1,5), constraints=(/5: (/NULL - ])]
+ └── projections [outer=(1,2,5,6), side-effects]
+      ├── k + 1 [type=int, outer=(1)]
+      └── i / 2 [type=decimal, outer=(2), side-effects]
 
 # Join that is nested in another join.
-opt
+opt expect=PruneJoinLeftCols
 SELECT a.k, xy.*
 FROM
 (
@@ -610,136 +806,325 @@ INNER JOIN xy
 ON a.i < xy.y
 ----
 project
- ├── columns: k:1(int!null) x:7(int!null) y:8(int)
+ ├── columns: k:1(int!null) x:7(int!null) y:8(int!null)
+ ├── key: (1,7)
+ ├── fd: (7)-->(8)
  └── inner-join
-      ├── columns: k:1(int!null) i:2(int) xy.x:5(int!null) xy.x:7(int!null) xy.y:8(int)
-      ├── inner-join
+      ├── columns: k:1(int!null) i:2(int!null) xy.x:5(int!null) xy.x:7(int!null) xy.y:8(int!null)
+      ├── key: (5,7)
+      ├── fd: (1)-->(2), (1)==(5), (5)==(1), (7)-->(8)
+      ├── inner-join (merge)
       │    ├── columns: k:1(int!null) i:2(int) xy.x:5(int!null)
+      │    ├── key: (5)
+      │    ├── fd: (1)-->(2), (1)==(5), (5)==(1)
       │    ├── scan a
       │    │    ├── columns: k:1(int!null) i:2(int)
-      │    │    └── keys: (1)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2)
+      │    │    └── ordering: +1
       │    ├── scan xy
       │    │    ├── columns: xy.x:5(int!null)
-      │    │    └── keys: (5)
-      │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-      │         └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    │    ├── key: (5)
+      │    │    └── ordering: +5
+      │    └── merge-on
+      │         ├── left ordering: +1
+      │         ├── right ordering: +5
+      │         └── true [type=bool]
       ├── scan xy
       │    ├── columns: xy.x:7(int!null) xy.y:8(int)
-      │    └── keys: (7)
+      │    ├── key: (7)
+      │    └── fd: (7)-->(8)
       └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
-           └── a.i < xy.y [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+           └── i < xy.y [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+
+# ApplyJoin operator.
+opt expect=PruneJoinLeftCols
+SELECT k, i
+FROM a
+WHERE (SELECT k+1 AS r FROM xy WHERE y=k) = 1
+----
+project
+ ├── columns: k:1(int!null) i:2(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ └── inner-join-apply
+      ├── columns: k:1(int!null) i:2(int) r:7(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(2,7)
+      ├── scan a
+      │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── select
+      │    ├── columns: r:7(int!null)
+      │    ├── outer: (1)
+      │    ├── cardinality: [0 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(7)
+      │    ├── max1-row
+      │    │    ├── columns: r:7(int)
+      │    │    ├── outer: (1)
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(7)
+      │    │    └── project
+      │    │         ├── columns: r:7(int)
+      │    │         ├── outer: (1)
+      │    │         ├── fd: ()-->(7)
+      │    │         ├── select
+      │    │         │    ├── columns: y:6(int!null)
+      │    │         │    ├── outer: (1)
+      │    │         │    ├── fd: ()-->(6)
+      │    │         │    ├── scan xy
+      │    │         │    │    └── columns: y:6(int)
+      │    │         │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      │    │         │         └── y = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │    │         └── projections [outer=(1)]
+      │    │              └── k + 1 [type=int, outer=(1)]
+      │    └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      │         └── r = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+      └── true [type=bool]
+
+# SemiJoin operator.
+opt expect=PruneJoinLeftCols
+SELECT a.i
+FROM a
+WHERE
+    EXISTS(SELECT * FROM xy WHERE a.k=xy.x) AND
+    EXISTS(SELECT * FROM xy WHERE a.k=xy.x)
+----
+project
+ ├── columns: i:2(int)
+ └── semi-join (merge)
+      ├── columns: k:1(int!null) i:2(int)
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── semi-join (merge)
+      │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    ├── ordering: +1
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null) i:2(int)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2)
+      │    │    └── ordering: +1
+      │    ├── scan xy
+      │    │    ├── columns: xy.x:7(int!null) xy.y:8(int)
+      │    │    ├── key: (7)
+      │    │    ├── fd: (7)-->(8)
+      │    │    └── ordering: +7
+      │    └── merge-on
+      │         ├── left ordering: +1
+      │         ├── right ordering: +7
+      │         └── true [type=bool]
+      ├── scan xy
+      │    ├── columns: xy.x:5(int!null)
+      │    ├── key: (5)
+      │    └── ordering: +5
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +5
+           └── true [type=bool]
+
+# AntiJoin operator.
+opt expect=PruneJoinLeftCols
+SELECT a.i
+FROM a
+WHERE
+    NOT EXISTS(SELECT * FROM xy WHERE a.k=xy.x) AND
+    NOT EXISTS(SELECT * FROM xy WHERE a.k=xy.x)
+----
+project
+ ├── columns: i:2(int)
+ └── anti-join (merge)
+      ├── columns: k:1(int!null) i:2(int)
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── anti-join (merge)
+      │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    ├── ordering: +1
+      │    ├── scan a
+      │    │    ├── columns: k:1(int!null) i:2(int)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2)
+      │    │    └── ordering: +1
+      │    ├── scan xy
+      │    │    ├── columns: xy.x:7(int!null) xy.y:8(int)
+      │    │    ├── key: (7)
+      │    │    ├── fd: (7)-->(8)
+      │    │    └── ordering: +7
+      │    └── merge-on
+      │         ├── left ordering: +1
+      │         ├── right ordering: +7
+      │         └── true [type=bool]
+      ├── scan xy
+      │    ├── columns: xy.x:5(int!null)
+      │    ├── key: (5)
+      │    └── ordering: +5
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +5
+           └── true [type=bool]
 
 # --------------------------------------------------
 # PruneJoinRightCols
 # --------------------------------------------------
 
 # Columns used only by projection or on condition, but not both.
-opt
+opt expect=PruneJoinRightCols
 SELECT xy.*, a.i FROM xy INNER JOIN a ON xy.x=a.k
 ----
 project
  ├── columns: x:1(int!null) y:2(int) i:4(int)
- └── inner-join
+ ├── key: (1)
+ ├── fd: (1)-->(2,4)
+ └── inner-join (merge)
       ├── columns: x:1(int!null) y:2(int) k:3(int!null) i:4(int)
+      ├── key: (3)
+      ├── fd: (1)-->(2), (3)-->(4), (1)==(3), (3)==(1)
       ├── scan xy
       │    ├── columns: x:1(int!null) y:2(int)
-      │    └── keys: (1)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
       ├── scan a
       │    ├── columns: k:3(int!null) i:4(int)
-      │    └── keys: (3)
-      └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-           └── xy.x = a.k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+      │    ├── key: (3)
+      │    ├── fd: (3)-->(4)
+      │    └── ordering: +3
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +3
+           └── true [type=bool]
 
 # Columns used by both projection and on condition, left join.
-opt
+opt expect=PruneJoinRightCols
 SELECT xy.*, a.k, a.i FROM xy LEFT JOIN a ON xy.x=a.k AND a.i<xy.x
 ----
-left-join
+left-join (merge)
  ├── columns: x:1(int!null) y:2(int) k:3(int) i:4(int)
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
  ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)
- │    └── keys: (1)
- ├── scan a
- │    ├── columns: k:3(int!null) i:4(int)
- │    └── keys: (3)
- └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ])]
-      ├── xy.x = a.k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-      └── a.i < xy.x [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── ordering: +1
+ ├── select
+ │    ├── columns: k:3(int!null) i:4(int!null)
+ │    ├── key: (3)
+ │    ├── fd: (3)-->(4)
+ │    ├── ordering: +3
+ │    ├── scan a
+ │    │    ├── columns: k:3(int!null) i:4(int)
+ │    │    ├── key: (3)
+ │    │    ├── fd: (3)-->(4)
+ │    │    └── ordering: +3
+ │    └── filters [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ])]
+ │         └── i < k [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ])]
+ └── merge-on
+      ├── left ordering: +1
+      ├── right ordering: +3
+      └── true [type=bool]
 
 # Columns only used by on condition, right join
-opt
+opt expect=PruneJoinRightCols
 SELECT xy.* FROM xy RIGHT JOIN a ON xy.x=a.k
 ----
 project
  ├── columns: x:1(int) y:2(int)
- └── right-join
+ ├── fd: (1)-->(2)
+ └── right-join (merge)
       ├── columns: x:1(int) y:2(int) k:3(int!null)
+      ├── key: (1,3)
+      ├── fd: (1)-->(2)
       ├── scan xy
       │    ├── columns: x:1(int!null) y:2(int)
-      │    └── keys: (1)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
       ├── scan a
       │    ├── columns: k:3(int!null)
-      │    └── keys: (3)
-      └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-           └── xy.x = a.k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+      │    ├── key: (3)
+      │    └── ordering: +3
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +3
+           └── true [type=bool]
 
 # Columns needed only by projection, full join.
-opt
+opt expect=PruneJoinRightCols
 SELECT xy.*, a.k+1 AS r FROM xy FULL JOIN a ON True
 ----
 project
  ├── columns: x:1(int) y:2(int) r:7(int)
+ ├── fd: (1)-->(2)
  ├── full-join
  │    ├── columns: x:1(int) y:2(int) k:3(int)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2)
  │    ├── scan xy
  │    │    ├── columns: x:1(int!null) y:2(int)
- │    │    └── keys: (1)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
  │    ├── scan a
  │    │    ├── columns: k:3(int!null)
- │    │    └── keys: (3)
+ │    │    └── key: (3)
  │    └── true [type=bool]
  └── projections [outer=(1-3)]
-      └── a.k + 1 [type=int, outer=(3)]
+      └── k + 1 [type=int, outer=(3)]
 
 # No columns needed from right side of join.
-opt
+opt expect=PruneJoinRightCols
 SELECT xy.* FROM xy, a
 ----
 inner-join
  ├── columns: x:1(int!null) y:2(int)
+ ├── fd: (1)-->(2)
  ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
  ├── scan a
  └── true [type=bool]
 
 # Computed columns.
-opt
+opt expect=PruneJoinRightCols
 SELECT xy.*, a.k+1 AS r, a.i/2 AS s FROM xy INNER JOIN a ON xy.x=a.k*a.k AND a.s||'o'='foo'
 ----
 project
  ├── columns: x:1(int!null) y:2(int) r:7(int) s:8(decimal)
+ ├── side-effects
+ ├── fd: (1)-->(2)
  ├── inner-join
  │    ├── columns: x:1(int!null) y:2(int) k:3(int!null) i:4(int) a.s:6(string)
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4,6)
  │    ├── scan xy
  │    │    ├── columns: x:1(int!null) y:2(int)
- │    │    └── keys: (1)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
  │    ├── select
  │    │    ├── columns: k:3(int!null) i:4(int) a.s:6(string)
- │    │    ├── keys: (3)
+ │    │    ├── key: (3)
+ │    │    ├── fd: (3)-->(4,6)
  │    │    ├── scan a
  │    │    │    ├── columns: k:3(int!null) i:4(int) a.s:6(string)
- │    │    │    └── keys: (3)
+ │    │    │    ├── key: (3)
+ │    │    │    └── fd: (3)-->(4,6)
  │    │    └── filters [type=bool, outer=(6)]
  │    │         └── (a.s || 'o') = 'foo' [type=bool, outer=(6)]
  │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ])]
- │         └── xy.x = (a.k * a.k) [type=bool, outer=(1,3), constraints=(/1: (/NULL - ])]
- └── projections [outer=(1-4)]
-      ├── a.k + 1 [type=int, outer=(3)]
-      └── a.i / 2 [type=decimal, outer=(4)]
+ │         └── x = (k * k) [type=bool, outer=(1,3), constraints=(/1: (/NULL - ])]
+ └── projections [outer=(1-4), side-effects]
+      ├── k + 1 [type=int, outer=(3)]
+      └── i / 2 [type=decimal, outer=(4), side-effects]
 
 # Join that is nested in another join.
-opt
+opt expect=PruneJoinRightCols
 SELECT a.k, xy.*
 FROM xy
 INNER JOIN
@@ -749,22 +1134,34 @@ INNER JOIN
 ON a.y < xy.y
 ----
 project
- ├── columns: k:3(int!null) x:1(int!null) y:2(int)
+ ├── columns: k:3(int!null) x:1(int!null) y:2(int!null)
+ ├── key: (1,3)
+ ├── fd: (1)-->(2)
  └── inner-join
-      ├── columns: xy.x:1(int!null) xy.y:2(int) k:3(int!null) xy.x:7(int!null) xy.y:8(int)
+      ├── columns: xy.x:1(int!null) xy.y:2(int!null) k:3(int!null) xy.x:7(int!null) xy.y:8(int!null)
+      ├── key: (1,7)
+      ├── fd: (1)-->(2), (7)-->(8), (3)==(7), (7)==(3)
       ├── scan xy
       │    ├── columns: xy.x:1(int!null) xy.y:2(int)
-      │    └── keys: (1)
-      ├── inner-join
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── inner-join (merge)
       │    ├── columns: k:3(int!null) xy.x:7(int!null) xy.y:8(int)
+      │    ├── key: (7)
+      │    ├── fd: (7)-->(8), (3)==(7), (7)==(3)
       │    ├── scan a
       │    │    ├── columns: k:3(int!null)
-      │    │    └── keys: (3)
+      │    │    ├── key: (3)
+      │    │    └── ordering: +3
       │    ├── scan xy
       │    │    ├── columns: xy.x:7(int!null) xy.y:8(int)
-      │    │    └── keys: (7)
-      │    └── filters [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ])]
-      │         └── a.k = xy.x [type=bool, outer=(3,7), constraints=(/3: (/NULL - ]; /7: (/NULL - ])]
+      │    │    ├── key: (7)
+      │    │    ├── fd: (7)-->(8)
+      │    │    └── ordering: +7
+      │    └── merge-on
+      │         ├── left ordering: +3
+      │         ├── right ordering: +7
+      │         └── true [type=bool]
       └── filters [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
            └── xy.y < xy.y [type=bool, outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
 
@@ -773,11 +1170,12 @@ project
 # --------------------------------------------------
 
 # Columns not needed by either side of join.
-opt
+opt expect=(PruneJoinLeftCols,PruneJoinRightCols)
 SELECT 1 r FROM a,xy
 ----
 project
  ├── columns: r:7(int!null)
+ ├── fd: ()-->(7)
  ├── inner-join
  │    ├── scan a
  │    ├── scan xy
@@ -786,198 +1184,267 @@ project
       └── const: 1 [type=int]
 
 # Subset of columns needed by each side of join.
-opt
+opt expect=(PruneJoinLeftCols,PruneJoinRightCols)
 SELECT a.k, xy.x, a.k+xy.x AS r FROM a LEFT JOIN xy ON a.k=xy.x
 ----
 project
  ├── columns: k:1(int!null) x:5(int) r:7(int)
- ├── left-join
+ ├── key: (1,5)
+ ├── fd: (1,5)-->(7)
+ ├── left-join (merge)
  │    ├── columns: k:1(int!null) x:5(int)
+ │    ├── key: (1,5)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null)
- │    │    └── keys: (1)
+ │    │    ├── key: (1)
+ │    │    └── ordering: +1
  │    ├── scan xy
  │    │    ├── columns: x:5(int!null)
- │    │    └── keys: (5)
- │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
- │         └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ │    │    ├── key: (5)
+ │    │    └── ordering: +5
+ │    └── merge-on
+ │         ├── left ordering: +1
+ │         ├── right ordering: +5
+ │         └── true [type=bool]
  └── projections [outer=(1,5)]
-      └── a.k + xy.x [type=int, outer=(1,5)]
+      └── k + x [type=int, outer=(1,5)]
 
 # --------------------------------------------------
 # PruneAggCols
 # --------------------------------------------------
 
 # Discard all aggregates.
-opt
-SELECT s FROM (SELECT s, SUM(i), MIN(s||'foo') FROM a GROUP BY s) a
+opt expect=PruneAggCols
+SELECT s FROM (SELECT s, sum(i), min(s||'foo') FROM a GROUP BY s) a
 ----
-group-by
+distinct-on
  ├── columns: s:4(string)
  ├── grouping columns: s:4(string)
- ├── keys: weak(4)
+ ├── key: (4)
  └── scan a
       └── columns: s:4(string)
 
 # Discard subset of aggregates.
-opt
-SELECT s, sumi FROM (SELECT SUM(i) sumi, s, MIN(s||'foo') FROM a GROUP BY s) a
+opt expect=PruneAggCols
+SELECT s, sumi FROM (SELECT sum(i) sumi, s, min(s||'foo') FROM a GROUP BY s) a
 ----
 group-by
  ├── columns: s:4(string) sumi:5(decimal)
  ├── grouping columns: s:4(string)
- ├── keys: weak(4)
+ ├── key: (4)
+ ├── fd: (4)-->(5)
  ├── scan a
  │    └── columns: i:2(int) s:4(string)
  └── aggregations [outer=(2)]
       └── sum [type=decimal, outer=(2)]
-           └── variable: a.i [type=int, outer=(2)]
+           └── variable: i [type=int, outer=(2)]
 
 # No aggregates to discard.
-opt
+opt expect-not=PruneAggCols
 SELECT 1 r FROM (SELECT s FROM a GROUP BY s) a
 ----
 project
  ├── columns: r:5(int!null)
- ├── group-by
+ ├── fd: ()-->(5)
+ ├── distinct-on
  │    ├── columns: s:4(string)
  │    ├── grouping columns: s:4(string)
- │    ├── keys: weak(4)
+ │    ├── key: (4)
  │    └── scan a
  │         └── columns: s:4(string)
  └── projections
       └── const: 1 [type=int]
 
+# Scalar GroupBy case.
+opt expect=PruneAggCols
+SELECT sumi FROM (SELECT sum(i) sumi, min(s||'foo') FROM a) a
+----
+scalar-group-by
+ ├── columns: sumi:5(decimal)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(5)
+ ├── project
+ │    ├── columns: column6:6(string) i:2(int)
+ │    ├── scan a
+ │    │    └── columns: i:2(int) s:4(string)
+ │    └── projections [outer=(2,4)]
+ │         └── s || 'foo' [type=string, outer=(4)]
+ └── aggregations [outer=(2)]
+      └── sum [type=decimal, outer=(2)]
+           └── variable: i [type=int, outer=(2)]
+
+opt expect=PruneAggCols
+SELECT f FROM (SELECT DISTINCT ON (i) f, s FROM a)
+----
+project
+ ├── columns: f:3(float)
+ └── distinct-on
+      ├── columns: i:2(int) f:3(float)
+      ├── grouping columns: i:2(int)
+      ├── key: (2)
+      ├── fd: (2)-->(3)
+      ├── scan a
+      │    └── columns: i:2(int) f:3(float)
+      └── aggregations [outer=(3)]
+           └── first-agg [type=float, outer=(3)]
+                └── variable: f [type=float, outer=(3)]
+
+# Columns used only by aggregation, no grouping columns.
+opt expect=PruneAggCols
+SELECT min(i), max(k), max(k) FROM a ORDER BY max(f)
+----
+scalar-group-by
+ ├── columns: min:5(int) max:6(int) max:6(int)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(5,6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── aggregations [outer=(1,2)]
+      ├── min [type=int, outer=(2)]
+      │    └── variable: i [type=int, outer=(2)]
+      └── max [type=int, outer=(1)]
+           └── variable: k [type=int, outer=(1)]
+
 # --------------------------------------------------
 # PruneGroupByCols
 # --------------------------------------------------
 
-# Columns used by grouping or aggregation, but not both.
-opt
-SELECT s, SUM(i) FROM a GROUP BY s
+# Columns used by grouping or aggregation, but not both should not be pruned.
+opt expect=PruneGroupByCols
+SELECT s, sum(i) FROM a GROUP BY s, s||'foo'
 ----
 group-by
  ├── columns: s:4(string) sum:5(decimal)
  ├── grouping columns: s:4(string)
- ├── keys: weak(4)
+ ├── key: (4)
+ ├── fd: (4)-->(5)
  ├── scan a
  │    └── columns: i:2(int) s:4(string)
  └── aggregations [outer=(2)]
       └── sum [type=decimal, outer=(2)]
-           └── variable: a.i [type=int, outer=(2)]
+           └── variable: i [type=int, outer=(2)]
 
-# Columns used by both grouping and aggregation.
-opt
-SELECT AVG(s::int+i), s, i FROM a GROUP BY s, i
+# Columns used by both grouping and aggregation should not be pruned.
+opt expect=PruneGroupByCols
+SELECT avg(s::int+i), s, i FROM a GROUP BY s, i, i+1
 ----
 group-by
  ├── columns: avg:6(decimal) s:4(string) i:2(int)
  ├── grouping columns: i:2(int) s:4(string)
- ├── keys: weak(2,4)
+ ├── key: (2,4)
+ ├── fd: (2,4)-->(6)
  ├── project
  │    ├── columns: column5:5(int) i:2(int) s:4(string)
+ │    ├── fd: (2,4)-->(5)
  │    ├── scan a
  │    │    └── columns: i:2(int) s:4(string)
  │    └── projections [outer=(2,4)]
- │         └── a.i + a.s::INT [type=int, outer=(2,4)]
+ │         └── i + s::INT [type=int, outer=(2,4)]
  └── aggregations [outer=(5)]
       └── avg [type=decimal, outer=(5)]
            └── variable: column5 [type=int, outer=(5)]
 
-# Columns used only by aggregation, no grouping columns.
-opt
-SELECT MIN(i), MAX(k), MAX(k) FROM a
-----
-group-by
- ├── columns: min:5(int) max:6(int) max:6(int)
- ├── cardinality: [1 - 1]
- ├── scan a
- │    ├── columns: k:1(int!null) i:2(int)
- │    └── keys: (1)
- └── aggregations [outer=(1,2)]
-      ├── min [type=int, outer=(2)]
-      │    └── variable: a.i [type=int, outer=(2)]
-      └── max [type=int, outer=(1)]
-           └── variable: a.k [type=int, outer=(1)]
-
 # Columns used only by groupings, no aggregation columns.
-opt
-SELECT s, i+1 AS r FROM a GROUP BY i, s
+opt expect=PruneGroupByCols
+SELECT s, i+1 AS r FROM a GROUP BY i, s, s||'foo'
 ----
 project
- ├── columns: s:4(string) r:5(int)
- ├── group-by
+ ├── columns: s:4(string) r:6(int)
+ ├── distinct-on
  │    ├── columns: i:2(int) s:4(string)
  │    ├── grouping columns: i:2(int) s:4(string)
- │    ├── keys: weak(2,4)
+ │    ├── key: (2,4)
  │    └── scan a
  │         └── columns: i:2(int) s:4(string)
  └── projections [outer=(2,4)]
-      └── a.i + 1 [type=int, outer=(2)]
+      └── i + 1 [type=int, outer=(2)]
 
 # Groupby a groupby.
-opt
-SELECT MIN(sm), i FROM (SELECT s, i, SUM(k) sm, AVG(k) av FROM a GROUP BY i, s) a GROUP BY i
+opt expect=PruneGroupByCols
+SELECT min(sm), i FROM (SELECT s, i, sum(k) sm, avg(k) av FROM a GROUP BY i, s) a GROUP BY i, i+1
 ----
 group-by
  ├── columns: min:7(decimal) i:2(int)
  ├── grouping columns: i:2(int)
- ├── keys: weak(2)
+ ├── key: (2)
+ ├── fd: (2)-->(7)
  ├── group-by
- │    ├── columns: i:2(int) s:4(string) sm:5(decimal)
+ │    ├── columns: i:2(int) s:4(string) sum:5(decimal)
  │    ├── grouping columns: i:2(int) s:4(string)
- │    ├── keys: weak(2,4)
+ │    ├── key: (2,4)
+ │    ├── fd: (2,4)-->(5)
  │    ├── scan a
  │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
- │    │    └── keys: (1)
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2,4)
  │    └── aggregations [outer=(1)]
  │         └── sum [type=decimal, outer=(1)]
- │              └── variable: a.k [type=int, outer=(1)]
+ │              └── variable: k [type=int, outer=(1)]
  └── aggregations [outer=(5)]
       └── min [type=decimal, outer=(5)]
-           └── variable: sm [type=decimal, outer=(5)]
+           └── variable: sum [type=decimal, outer=(5)]
+
+# Distinct (GroupBy operator with no aggregates).
+opt expect=PruneGroupByCols
+SELECT DISTINCT ON (s, s||'foo') s, f FROM a
+----
+distinct-on
+ ├── columns: s:4(string) f:3(float)
+ ├── grouping columns: s:4(string)
+ ├── key: (4)
+ ├── fd: (4)-->(3)
+ ├── scan a
+ │    └── columns: f:3(float) s:4(string)
+ └── aggregations [outer=(3)]
+      └── first-agg [type=float, outer=(3)]
+           └── variable: f [type=float, outer=(3)]
 
 # --------------------------------------------------
-# PruneValueCols
+# PruneValuesCols
 # --------------------------------------------------
 
 # Discard all but first Values column.
-opt
+opt expect=PruneValuesCols
 SELECT column1 FROM (VALUES (1, 2), (3, 4)) a
 ----
 values
  ├── columns: column1:1(int)
  ├── cardinality: [2 - 2]
- ├── (1) [type=tuple{int}]
- └── (3) [type=tuple{int}]
+ ├── (1,) [type=tuple{int}]
+ └── (3,) [type=tuple{int}]
 
 # Discard all but middle Values column.
-opt
+opt expect=PruneValuesCols
 SELECT column2 FROM (VALUES (1, 2, 3), (4, 5, 6)) a
 ----
 values
  ├── columns: column2:2(int)
  ├── cardinality: [2 - 2]
- ├── (2) [type=tuple{int}]
- └── (5) [type=tuple{int}]
+ ├── (2,) [type=tuple{int}]
+ └── (5,) [type=tuple{int}]
 
 # Discard all but last Values column.
-opt
+opt expect=PruneValuesCols
 SELECT column3 FROM (VALUES ('foo', 'bar', 'baz'), ('apple', 'banana', 'cherry')) a
 ----
 values
  ├── columns: column3:3(string)
  ├── cardinality: [2 - 2]
- ├── ('baz') [type=tuple{string}]
- └── ('cherry') [type=tuple{string}]
+ ├── ('baz',) [type=tuple{string}]
+ └── ('cherry',) [type=tuple{string}]
 
 # Discard all Values columns.
-opt
+opt expect=PruneValuesCols
 SELECT 1 r FROM (VALUES ('foo', 'bar', 'baz'), ('apple', 'banana', 'cherry')) a
 ----
 project
  ├── columns: r:4(int!null)
  ├── cardinality: [2 - 2]
+ ├── fd: ()-->(4)
  ├── values
  │    ├── cardinality: [2 - 2]
  │    ├── tuple [type=tuple{}]
@@ -994,69 +1461,106 @@ SELECT a.k, xy.y FROM a INNER JOIN xy ON a.k=xy.x WHERE a.i < 5
 ----
 project
  ├── columns: k:1(int!null) y:6(int)
- └── inner-join
+ ├── key: (1)
+ ├── fd: (1)-->(6)
+ └── inner-join (merge)
       ├── columns: k:1(int!null) i:2(int!null) x:5(int!null) y:6(int)
+      ├── key: (5)
+      ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
       ├── select
       │    ├── columns: k:1(int!null) i:2(int!null)
-      │    ├── keys: (1)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    ├── ordering: +1
       │    ├── scan a
       │    │    ├── columns: k:1(int!null) i:2(int)
-      │    │    └── keys: (1)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2)
+      │    │    └── ordering: +1
       │    └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
-      │         └── a.i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
+      │         └── i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
       ├── scan xy
       │    ├── columns: x:5(int!null) y:6(int)
-      │    └── keys: (5)
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-           └── a.k = xy.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(6)
+      │    └── ordering: +5
+      └── merge-on
+           ├── left ordering: +1
+           ├── right ordering: +5
+           └── true [type=bool]
 
 opt
-SELECT k FROM (SELECT k, MIN(s) FROM a GROUP BY k HAVING SUM(i) > 5)
+SELECT k FROM (SELECT k, min(s) FROM a GROUP BY k HAVING sum(i) > 5)
 ----
 project
  ├── columns: k:1(int!null)
- ├── keys: (1)
+ ├── key: (1)
  └── select
-      ├── columns: k:1(int!null) column5:5(decimal!null)
-      ├── keys: (1)
+      ├── columns: k:1(int!null) sum:6(decimal!null)
+      ├── key: (1)
+      ├── fd: (1)-->(6)
       ├── group-by
-      │    ├── columns: k:1(int!null) column5:5(decimal)
+      │    ├── columns: k:1(int!null) sum:6(decimal)
       │    ├── grouping columns: k:1(int!null)
-      │    ├── keys: (1)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(6)
       │    ├── scan a
       │    │    ├── columns: k:1(int!null) i:2(int)
-      │    │    └── keys: (1)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
       │    └── aggregations [outer=(2)]
       │         └── sum [type=decimal, outer=(2)]
-      │              └── variable: a.i [type=int, outer=(2)]
-      └── filters [type=bool, outer=(5), constraints=(/5: (/5 - ]; tight)]
-           └── column5 > 5 [type=bool, outer=(5), constraints=(/5: (/5 - ]; tight)]
+      │              └── variable: i [type=int, outer=(2)]
+      └── filters [type=bool, outer=(6), constraints=(/6: (/5 - ]; tight)]
+           └── sum > 5 [type=bool, outer=(6), constraints=(/6: (/5 - ]; tight)]
 
 # --------------------------------------------------
 # PruneRowNumberCols
 # --------------------------------------------------
-opt
+opt expect=PruneRowNumberCols
 SELECT i, s FROM a WITH ORDINALITY
 ----
 project
  ├── columns: i:2(int) s:4(string)
  └── row-number
       ├── columns: i:2(int) s:4(string) ordinality:5(int!null)
-      ├── keys: (5)
+      ├── key: (5)
+      ├── fd: (5)-->(2,4)
       └── scan a
            └── columns: i:2(int) s:4(string)
 
 # With order by.
-opt
+opt expect=PruneRowNumberCols
 SELECT i, s FROM (SELECT * FROM a ORDER BY f) WITH ORDINALITY
 ----
 project
  ├── columns: i:2(int) s:4(string)
  └── row-number
       ├── columns: i:2(int) f:3(float) s:4(string) ordinality:5(int!null)
-      ├── keys: (5)
+      ├── key: (5)
+      ├── fd: (5)-->(2-4)
       └── sort
            ├── columns: i:2(int) f:3(float) s:4(string)
            ├── ordering: +3
            └── scan a
                 └── columns: i:2(int) f:3(float) s:4(string)
+
+# --------------------------------------------------
+# PruneExplainCols
+# --------------------------------------------------
+opt expect=PruneExplainCols
+EXPLAIN SELECT a FROM abcde WHERE b=1 AND c IS NOT NULL ORDER BY c, d
+----
+explain
+ ├── columns: tree:6(string) field:7(string) description:8(string)
+ └── project
+      ├── columns: a:1(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(3), (3)-->(1)
+      ├── ordering: +3
+      └── scan abcde@bc
+           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+           ├── constraint: /2/3: (/1/NULL - /1]
+           ├── key: (1)
+           ├── fd: ()-->(2), (1)-->(3), (3)-->(1)
+           └── ordering: +3 opt(2)

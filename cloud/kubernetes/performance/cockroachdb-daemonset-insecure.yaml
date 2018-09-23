@@ -10,8 +10,8 @@
 # the output of `kubectl get pods`, then run:
 #   kubectl exec -it <pod-name> -- ./cockroach init --insecure
 #
-# If you're interested in using a DaemonSet in secure mode, please reach
-# out to us via a Github issue or our public Gitter channel.
+# If you're interested in using a DaemonSet in secure mode instead, please see
+# cockroachdb-daemonset-secure.yaml.
 apiVersion: v1
 kind: Service
 metadata:
@@ -78,7 +78,7 @@ spec:
       hostNetwork: true
       containers:
       - name: cockroachdb
-        image: cockroachdb/cockroach:v2.0.2
+        image: cockroachdb/cockroach:v2.0.5
         imagePullPolicy: IfNotPresent
         # TODO: If you configured taints to give CockroachDB exclusive access to nodes, feel free
         # to remove the requests and limits sections. If you didn't, you'll need to change these to

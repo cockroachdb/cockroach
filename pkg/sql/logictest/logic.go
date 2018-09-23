@@ -47,6 +47,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -55,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -351,6 +354,14 @@ var (
 			"run. Used to update tests when a change affects many cases; please verify the testfile "+
 			"diffs carefully!",
 	)
+	rewriteSQL = flag.Bool(
+		"rewrite-sql", false,
+		"pretty-reformat the SQL queries. Only use this incidentally when importing new tests. "+
+			"beware! some tests INTEND to use non-formatted SQL queries (e.g. case sensitivity). "+
+			"do not bluntly apply!",
+	)
+	sqlfmtLen = flag.Int("line-length", tree.DefaultPrettyCfg().LineWidth,
+		"target line length when using -rewrite-sql")
 )
 
 type testClusterConfig struct {
@@ -385,8 +396,9 @@ type testClusterConfig struct {
 // If no configs are indicated, the default one is used (unless overridden
 // via -config).
 var logicTestConfigs = []testClusterConfig{
-	{name: "local", numNodes: 1, overrideDistSQLMode: "Off"},
-	{name: "local-v1.1@v1.0-noupgrade", numNodes: 1, overrideDistSQLMode: "Off",
+	{name: "local", numNodes: 1, overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "off"},
+	{name: "local-v1.1@v1.0-noupgrade", numNodes: 1,
+		overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "off",
 		bootstrapVersion: &cluster.ClusterVersion{
 			UseVersion:     cluster.VersionByKey(cluster.VersionBase),
 			MinimumVersion: cluster.VersionByKey(cluster.VersionBase),
@@ -394,17 +406,21 @@ var logicTestConfigs = []testClusterConfig{
 		serverVersion:  &roachpb.Version{Major: 1, Minor: 1},
 		disableUpgrade: 1,
 	},
-	{name: "local-opt", numNodes: 1, overrideDistSQLMode: "Off", overrideOptimizerMode: "On"},
-	{name: "local-parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "Off"},
-	{name: "fakedist", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On"},
-	{name: "fakedist-opt", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", overrideOptimizerMode: "On"},
-	{name: "fakedist-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true, skipShort: true},
-	{name: "fakedist-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "On", distSQLUseDisk: true, skipShort: true},
-	{name: "5node-local", numNodes: 5, overrideDistSQLMode: "Off"},
-	{name: "5node-dist", numNodes: 5, overrideDistSQLMode: "On"},
-	{name: "5node-dist-opt", numNodes: 5, overrideDistSQLMode: "On", overrideOptimizerMode: "On"},
-	{name: "5node-dist-metadata", numNodes: 5, overrideDistSQLMode: "On", distSQLMetadataTestEnabled: true, skipShort: true},
-	{name: "5node-dist-disk", numNodes: 5, overrideDistSQLMode: "On", distSQLUseDisk: true, skipShort: true},
+	{name: "local-opt", numNodes: 1, overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "on"},
+	{name: "local-parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "off"},
+	{name: "fakedist", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off"},
+	{name: "fakedist-opt", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "on"},
+	{name: "fakedist-metadata", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off",
+		distSQLMetadataTestEnabled: true, skipShort: true},
+	{name: "fakedist-disk", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off",
+		distSQLUseDisk: true, skipShort: true},
+	{name: "5node-local", numNodes: 5, overrideDistSQLMode: "2.0-off", overrideOptimizerMode: "off"},
+	{name: "5node-dist", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "off"},
+	{name: "5node-dist-opt", numNodes: 5, overrideDistSQLMode: "on", overrideOptimizerMode: "on"},
+	{name: "5node-dist-metadata", numNodes: 5, overrideDistSQLMode: "on", distSQLMetadataTestEnabled: true,
+		skipShort: true, overrideOptimizerMode: "off"},
+	{name: "5node-dist-disk", numNodes: 5, overrideDistSQLMode: "on", distSQLUseDisk: true, skipShort: true,
+		overrideOptimizerMode: "off"},
 }
 
 // An index in the above slice.
@@ -470,10 +486,17 @@ func (ls *logicStatement) readSQL(
 	t *logicTest, s *lineScanner, allowSeparator bool,
 ) (separator bool, _ error) {
 	var buf bytes.Buffer
+	hasVars := false
 	for s.Scan() {
 		line := s.Text()
-		t.emit(line)
-		line = t.substituteVars(line)
+		if !*rewriteSQL {
+			t.emit(line)
+		}
+		substLine := t.substituteVars(line)
+		if line != substLine {
+			hasVars = true
+			line = substLine
+		}
 		if line == "" {
 			break
 		}
@@ -493,6 +516,44 @@ func (ls *logicStatement) readSQL(
 		fmt.Fprintln(&buf, line)
 	}
 	ls.sql = strings.TrimSpace(buf.String())
+	if *rewriteSQL {
+		if !hasVars {
+			newSyntax, err := func(inSql string) (string, error) {
+				// Can't rewrite the SQL otherwise because the vars make it invalid.
+				stmtList, err := parser.Parse(inSql)
+				if err != nil {
+					if ls.expectErr != "" {
+						// Maybe a parse error was expected. Simply do not rewrite.
+						return inSql, nil
+					}
+					return "", errors.Wrapf(err, "%s: error while parsing SQL for reformat:\n%s", ls.pos, ls.sql)
+				}
+				var newSyntax bytes.Buffer
+				pcfg := tree.DefaultPrettyCfg()
+				pcfg.LineWidth = *sqlfmtLen
+				pcfg.Simplify = false
+				pcfg.UseTabs = false
+				for i, s := range stmtList {
+					if i > 0 {
+						fmt.Fprintln(&newSyntax, ";")
+					}
+					fmt.Fprint(&newSyntax, pcfg.Pretty(s))
+				}
+				return newSyntax.String(), nil
+			}(ls.sql)
+			if err != nil {
+				return false, err
+			}
+			ls.sql = newSyntax
+		}
+
+		t.emit(ls.sql)
+		if separator {
+			t.emit("----")
+		} else {
+			t.emit("")
+		}
+	}
 	return separator, nil
 }
 
@@ -783,7 +844,7 @@ func (t *logicTest) substituteVars(line string) string {
 
 // emit is used for the --generate-testfiles mode; it emits a line of testfile.
 func (t *logicTest) emit(line string) {
-	if *rewriteResultsInTestfiles {
+	if *rewriteResultsInTestfiles || *rewriteSQL {
 		t.rewriteResTestBuf.WriteString(line)
 		t.rewriteResTestBuf.WriteString("\n")
 	}
@@ -844,7 +905,7 @@ func (t *logicTest) setUser(user string) func() {
 	}
 	// Enable the cost-based optimizer rather than the heuristic planner.
 	if optMode := t.cfg.overrideOptimizerMode; optMode != "" {
-		if _, err := db.Exec(fmt.Sprintf("SET EXPERIMENTAL_OPT = %s;", optMode)); err != nil {
+		if _, err := db.Exec(fmt.Sprintf("SET OPTIMIZER = %s;", optMode)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -885,18 +946,22 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 				},
 			},
 			UseDatabase: "test",
+			// Set Locality so we can use it in zone config tests.
+			Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "test"}}},
 		},
 		// For distributed SQL tests, we use the fake span resolver; it doesn't
 		// matter where the data really is.
 		ReplicationMode: base.ReplicationManual,
 	}
 
-	distSQLKnobs := &distsqlrun.TestingKnobs{MetadataTestLevel: distsqlrun.Off}
+	distSQLKnobs := &distsqlrun.TestingKnobs{
+		MetadataTestLevel: distsqlrun.Off, DeterministicStats: true,
+	}
 	if cfg.distSQLUseDisk {
 		distSQLKnobs.MemoryLimitBytes = 1
 	}
 	if cfg.distSQLMetadataTestEnabled {
-		distSQLKnobs.MetadataTestLevel = distsqlrun.NoExplain
+		distSQLKnobs.MetadataTestLevel = distsqlrun.On
 	}
 	params.ServerArgs.Knobs.DistSQL = distSQLKnobs
 
@@ -1067,7 +1132,7 @@ func (t *logicTest) processTestFile(path string, config testClusterConfig) error
 		}
 	}
 
-	if *rewriteResultsInTestfiles && !t.t.Failed() {
+	if (*rewriteResultsInTestfiles || *rewriteSQL) && !t.t.Failed() {
 		// Rewrite the test file.
 		file, err := os.Create(path)
 		if err != nil {
@@ -1539,14 +1604,20 @@ func (t *logicTest) verifyError(
 		return cont, err
 	}
 	if !testutils.IsError(err, expectErr) {
-		newErr := errors.Errorf("%s: %s\nexpected %q, but found %v", pos, sql, expectErr, err)
-		if err != nil && strings.Contains(err.Error(), expectErr) {
+		if err == nil {
+			newErr := errors.Errorf("%s: %s\nexpected %q, but no error occurred", pos, sql, expectErr)
+			return false, newErr
+		}
+
+		errString := pgerror.FullError(err)
+		newErr := errors.Errorf("%s: %s\nexpected %q, but found %q", pos, sql, expectErr, errString)
+		if err != nil && strings.Contains(errString, expectErr) {
 			if t.subtestT != nil {
 				t.subtestT.Logf("The output string contained the input regexp. Perhaps you meant to write:\n"+
-					"query error %s", regexp.QuoteMeta(err.Error()))
+					"query error %s", regexp.QuoteMeta(errString))
 			} else {
 				t.t.Logf("The output string contained the input regexp. Perhaps you meant to write:\n"+
-					"query error %s", regexp.QuoteMeta(err.Error()))
+					"query error %s", regexp.QuoteMeta(errString))
 			}
 		}
 		return (err == nil) == (expectErr == ""), newErr
@@ -1604,6 +1675,9 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 		t.outf("%s;", stmt.sql)
 	}
 	res, err := t.db.Exec(stmt.sql)
+	if err == nil {
+		sqlutils.VerifyStatementPrettyRoundtrip(t.t, stmt.sql)
+	}
 	if err == nil && stmt.expectCount >= 0 {
 		var count int64
 		count, err = res.RowsAffected()
@@ -1646,6 +1720,9 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		t.outf("%s;", query.sql)
 	}
 	rows, err := t.db.Query(query.sql)
+	if err == nil {
+		sqlutils.VerifyStatementPrettyRoundtrip(t.t, query.sql)
+	}
 	if _, err := t.verifyError(query.sql, query.pos, query.expectErr, query.expectErrCode, err); err != nil {
 		return err
 	}
@@ -1789,7 +1866,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		}
 	}
 
-	if *rewriteResultsInTestfiles {
+	if *rewriteResultsInTestfiles || *rewriteSQL {
 		if query.expectedHash != "" {
 			if query.expectedValues == 1 {
 				t.emit(fmt.Sprintf("1 value hashing to %s", query.expectedHash))
@@ -1799,9 +1876,9 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		}
 
 		if query.checkResults {
-			// If the results match, emit them the way they were originally
+			// If the results match or we're not rewriting, emit them the way they were originally
 			// formatted/ordered in the testfile. Otherwise, emit the actual results.
-			if reflect.DeepEqual(query.expectedResults, actualResults) {
+			if !*rewriteResultsInTestfiles || reflect.DeepEqual(query.expectedResults, actualResults) {
 				for _, l := range query.expectedResultsRaw {
 					t.emit(l)
 				}
@@ -1980,9 +2057,12 @@ func RunLogicTest(t *testing.T, globs ...string) {
 				path := path // Rebind range variable.
 				// Inner test: one per file path.
 				t.Run(filepath.Base(path), func(t *testing.T) {
-					if !*showSQL && !*rewriteResultsInTestfiles {
-						// If we're not printing out all of the SQL interactions and we're
-						// not generating testfiles, run the tests in parallel.
+					// Run the test in parallel, unless:
+					//  - we're printing out all of the SQL interactions, or
+					//  - we're generating testfiles, or
+					//  - we are in race mode (where we can hit a limit on alive
+					//    goroutines).
+					if !*showSQL && !*rewriteResultsInTestfiles && !*rewriteSQL && !util.RaceEnabled {
 						// Skip parallelizing tests that use the kv-batch-size directive since
 						// the batch size is a global variable.
 						// TODO(jordan, radu): make sqlbase.kvBatchSize non-global to fix this.
@@ -2149,11 +2229,11 @@ func (t *logicTest) Error(args ...interface{}) {
 	if *showSQL {
 		t.outf("\t-- FAIL")
 	}
-	log.Error(context.Background(), args...)
+	log.Error(context.Background(), "\n", fmt.Sprint(args...))
 	if t.subtestT != nil {
-		t.subtestT.Error(args...)
+		t.subtestT.Error("\n", fmt.Sprint(args...))
 	} else {
-		t.t.Error(args...)
+		t.t.Error("\n", fmt.Sprint(args...))
 	}
 	t.failures++
 }
@@ -2167,9 +2247,9 @@ func (t *logicTest) Errorf(format string, args ...interface{}) {
 	}
 	log.Errorf(context.Background(), format, args...)
 	if t.subtestT != nil {
-		t.subtestT.Errorf(format, args...)
+		t.subtestT.Errorf("\n"+format, args...)
 	} else {
-		t.t.Errorf(format, args...)
+		t.t.Errorf("\n"+format, args...)
 	}
 	t.failures++
 }

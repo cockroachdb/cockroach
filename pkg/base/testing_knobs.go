@@ -24,7 +24,7 @@ type ModuleTestingKnobs interface {
 // system for testing.
 type TestingKnobs struct {
 	Store               ModuleTestingKnobs
-	DistSender          ModuleTestingKnobs
+	KVClient            ModuleTestingKnobs
 	SQLExecutor         ModuleTestingKnobs
 	SQLLeaseManager     ModuleTestingKnobs
 	SQLSchemaChanger    ModuleTestingKnobs

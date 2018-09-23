@@ -34,7 +34,7 @@ func BenchmarkNoop(b *testing.B) {
 
 	flowCtx := &FlowCtx{
 		Settings: st,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 	}
 	post := &PostProcessSpec{}
 	disposer := &RowDisposer{}

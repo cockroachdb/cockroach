@@ -525,6 +525,10 @@ func (b *BoundAccount) Resize(ctx context.Context, oldSz, newSz int64) error {
 
 // ResizeTo resizes (grows or shrinks) the account to a specified size.
 func (b *BoundAccount) ResizeTo(ctx context.Context, newSz int64) error {
+	if newSz == b.used {
+		// Performance optimization to avoid an unnecessary dispatch.
+		return nil
+	}
 	return b.Resize(ctx, b.used, newSz)
 }
 

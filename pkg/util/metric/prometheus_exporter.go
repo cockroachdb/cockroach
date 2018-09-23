@@ -18,6 +18,7 @@ import (
 	"io"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 )
@@ -92,4 +93,18 @@ func (pm *PrometheusExporter) PrintAsText(w io.Writer) error {
 		family.Metric = []*prometheusgo.Metric{}
 	}
 	return nil
+}
+
+// Verify GraphiteExporter implements Gatherer interface.
+var _ prometheus.Gatherer = (*PrometheusExporter)(nil)
+
+// Gather implements prometheus.Gatherer
+func (pm *PrometheusExporter) Gather() ([]*prometheusgo.MetricFamily, error) {
+	v := make([]*prometheusgo.MetricFamily, len(pm.families))
+	i := 0
+	for _, family := range pm.families {
+		v[i] = family
+		i++
+	}
+	return v, nil
 }

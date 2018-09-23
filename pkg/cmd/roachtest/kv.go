@@ -19,8 +19,6 @@ import (
 	"context"
 	"fmt"
 
-	"time"
-
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -67,6 +65,7 @@ func registerKV(r *registry) {
 					Name:       fmt.Sprintf("kv%d/encrypt=%t/nodes=%d", p, e, n),
 					MinVersion: minVersion,
 					Nodes:      nodes(n+1, cpu(8)),
+					Stable:     true, // DO NOT COPY to new tests
 					Run: func(ctx context.Context, t *test, c *cluster) {
 						runKV(ctx, t, c, p, startArgs(fmt.Sprintf("--encrypt=%t", e)))
 					},
@@ -78,9 +77,10 @@ func registerKV(r *registry) {
 
 func registerKVQuiescenceDead(r *registry) {
 	r.Add(testSpec{
-		Name:   "kv/quiescence/nodes=3",
-		Nodes:  nodes(4),
-		Stable: false, // added 6/7/2018
+		Name:       "kv/quiescence/nodes=3",
+		Nodes:      nodes(4),
+		MinVersion: "2.1.0",
+		Stable:     false, // added 6/7/2018
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if !c.isLocal() {
 				c.RemountNoBarrier(ctx)
@@ -108,18 +108,7 @@ func registerKVQuiescenceDead(r *registry) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
-			for {
-				fullReplicated := false
-				if err := db.QueryRow(
-					"SELECT min(array_length(replicas, 1)) >= 3 FROM crdb_internal.ranges",
-				).Scan(&fullReplicated); err != nil {
-					t.Fatal(err)
-				}
-				if fullReplicated {
-					break
-				}
-				time.Sleep(time.Second)
-			}
+			waitForFullReplication(t, db)
 
 			qps := func(f func()) float64 {
 
@@ -151,7 +140,7 @@ func registerKVQuiescenceDead(r *registry) {
 				run(kv+" --seed 1 {pgurl:1}", true)
 			})
 			// Gracefully shut down third node (doesn't matter whether it's graceful or not).
-			c.Run(ctx, c.Node(nodes), "./cockroach quit --insecure --port {pgport:3}")
+			c.Run(ctx, c.Node(nodes), "./cockroach quit --insecure --host=:{pgport:3}")
 			c.Stop(ctx, c.Node(nodes))
 			// Measure qps with node down (i.e. without quiescence).
 			qpsOneDown := qps(func() {
@@ -166,7 +155,7 @@ func registerKVQuiescenceDead(r *registry) {
 					qpsAllUp, qpsOneDown, actFrac, minFrac,
 				)
 			}
-			c.l.printf("QPS went from %.2f to %2.f with one node down\n", qpsAllUp, qpsOneDown)
+			c.l.Printf("QPS went from %.2f to %2.f with one node down\n", qpsAllUp, qpsOneDown)
 		},
 	})
 }
@@ -180,7 +169,8 @@ func registerKVSplits(r *registry) {
 			nodes := c.nodes - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-			c.Start(ctx, c.Range(1, nodes), startArgs("--env=COCKROACH_MEMPROF_INTERVAL=1m"))
+			c.Start(ctx, c.Range(1, nodes),
+				startArgs("--env=COCKROACH_MEMPROF_INTERVAL=1m", "--args=--cache=256MiB"))
 
 			t.Status("running workload")
 			m := newMonitor(ctx, c, c.Range(1, nodes))
@@ -224,7 +214,7 @@ func registerKVScalability(r *registry) {
 					" {pgurl:1-%d}",
 					percent, nodes)
 
-				l, err := c.l.childLogger(fmt.Sprint(i))
+				l, err := c.l.ChildLogger(fmt.Sprint(i))
 				if err != nil {
 					t.Fatal(err)
 				}

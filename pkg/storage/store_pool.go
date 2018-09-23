@@ -234,8 +234,11 @@ func NewStorePool(
 	sp.detailsMu.storeDetails = make(map[roachpb.StoreID]*storeDetail)
 	sp.localitiesMu.nodeLocalities = make(map[roachpb.NodeID]localityWithString)
 
+	// Enable redundant callbacks for the store keys because we use these
+	// callbacks as a clock to determine when a store was last updated even if it
+	// hasn't otherwise changed.
 	storeRegex := gossip.MakePrefixPattern(gossip.KeyStorePrefix)
-	g.RegisterCallback(storeRegex, sp.storeGossipUpdate)
+	g.RegisterCallback(storeRegex, sp.storeGossipUpdate, gossip.Redundant)
 	deadReplicasRegex := gossip.MakePrefixPattern(gossip.KeyDeadReplicasPrefix)
 	g.RegisterCallback(deadReplicasRegex, sp.deadReplicasGossipUpdate)
 
@@ -314,7 +317,7 @@ func (sp *StorePool) deadReplicasGossipUpdate(_ string, content roachpb.Value) {
 }
 
 // updateLocalStoreAfterRebalance is used to update the local copy of the
-// target store immediately after a rebalance.
+// target store immediately after a replica addition or removal.
 func (sp *StorePool) updateLocalStoreAfterRebalance(
 	storeID roachpb.StoreID, rangeInfo RangeInfo, changeType roachpb.ReplicaChangeType,
 ) {
@@ -329,9 +332,11 @@ func (sp *StorePool) updateLocalStoreAfterRebalance(
 	}
 	switch changeType {
 	case roachpb.ADD_REPLICA:
+		detail.desc.Capacity.RangeCount++
 		detail.desc.Capacity.LogicalBytes += rangeInfo.LogicalBytes
 		detail.desc.Capacity.WritesPerSecond += rangeInfo.WritesPerSecond
 	case roachpb.REMOVE_REPLICA:
+		detail.desc.Capacity.RangeCount--
 		if detail.desc.Capacity.LogicalBytes <= rangeInfo.LogicalBytes {
 			detail.desc.Capacity.LogicalBytes = 0
 		} else {
@@ -344,6 +349,33 @@ func (sp *StorePool) updateLocalStoreAfterRebalance(
 		}
 	}
 	sp.detailsMu.storeDetails[storeID] = &detail
+}
+
+// updateLocalStoresAfterLeaseTransfer is used to update the local copies of the
+// involved store descriptors immediately after a lease transfer.
+func (sp *StorePool) updateLocalStoresAfterLeaseTransfer(
+	from roachpb.StoreID, to roachpb.StoreID, rangeQPS float64,
+) {
+	sp.detailsMu.Lock()
+	defer sp.detailsMu.Unlock()
+
+	fromDetail := *sp.getStoreDetailLocked(from)
+	if fromDetail.desc != nil {
+		fromDetail.desc.Capacity.LeaseCount--
+		if fromDetail.desc.Capacity.QueriesPerSecond < rangeQPS {
+			fromDetail.desc.Capacity.QueriesPerSecond = 0
+		} else {
+			fromDetail.desc.Capacity.QueriesPerSecond -= rangeQPS
+		}
+		sp.detailsMu.storeDetails[from] = &fromDetail
+	}
+
+	toDetail := *sp.getStoreDetailLocked(to)
+	if toDetail.desc != nil {
+		toDetail.desc.Capacity.LeaseCount++
+		toDetail.desc.Capacity.QueriesPerSecond += rangeQPS
+		sp.detailsMu.storeDetails[to] = &toDetail
+	}
 }
 
 // newStoreDetail makes a new storeDetail struct. It sets index to be -1 to
@@ -482,6 +514,10 @@ type StoreList struct {
 	// to be rebalance targets.
 	candidateLogicalBytes stat
 
+	// candidateQueriesPerSecond tracks queries-per-second stats for stores that
+	// are eligible to be rebalance targets.
+	candidateQueriesPerSecond stat
+
 	// candidateWritesPerSecond tracks writes-per-second stats for stores that are
 	// eligible to be rebalance targets.
 	candidateWritesPerSecond stat
@@ -497,6 +533,7 @@ func makeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
 		}
 		sl.candidateLeases.update(float64(desc.Capacity.LeaseCount))
 		sl.candidateLogicalBytes.update(float64(desc.Capacity.LogicalBytes))
+		sl.candidateQueriesPerSecond.update(desc.Capacity.QueriesPerSecond)
 		sl.candidateWritesPerSecond.update(desc.Capacity.WritesPerSecond)
 	}
 	return sl
@@ -505,10 +542,11 @@ func makeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
 func (sl StoreList) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf,
-		"  candidate: avg-ranges=%v avg-leases=%v avg-disk-usage=%v avg-writes-per-second=%v",
+		"  candidate: avg-ranges=%v avg-leases=%v avg-disk-usage=%v avg-queries-per-second=%v avg-writes-per-second=%v",
 		sl.candidateRanges.mean,
 		sl.candidateLeases.mean,
 		humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)),
+		sl.candidateQueriesPerSecond.mean,
 		sl.candidateWritesPerSecond.mean)
 	if len(sl.stores) > 0 {
 		fmt.Fprintf(&buf, "\n")
@@ -516,9 +554,10 @@ func (sl StoreList) String() string {
 		fmt.Fprintf(&buf, " <no candidates>")
 	}
 	for _, desc := range sl.stores {
-		fmt.Fprintf(&buf, "  %d: ranges=%d leases=%d disk-usage=%s writes-per-second=%.2f\n",
+		fmt.Fprintf(&buf, "  %d: ranges=%d leases=%d disk-usage=%s queries-per-second=%.2f writes-per-second=%.2f\n",
 			desc.StoreID, desc.Capacity.RangeCount,
-			desc.Capacity.LeaseCount, humanizeutil.IBytes(desc.Capacity.LogicalBytes), desc.Capacity.WritesPerSecond)
+			desc.Capacity.LeaseCount, humanizeutil.IBytes(desc.Capacity.LogicalBytes),
+			desc.Capacity.QueriesPerSecond, desc.Capacity.WritesPerSecond)
 	}
 	return buf.String()
 }

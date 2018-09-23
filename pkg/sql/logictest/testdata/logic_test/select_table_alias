@@ -117,3 +117,15 @@ SELECT ab.rowid FROM ab AS foo (foo1)
 
 query error source "foo" has 2 columns available but 3 columns specified
 SELECT * FROM ab AS foo (foo1, foo2, foo3)
+
+query T colnames
+SELECT * FROM to_english(3) AS x
+----
+x
+three
+
+query T colnames
+TABLE ROWS FROM (to_english(3)) AS x;
+----
+x
+three

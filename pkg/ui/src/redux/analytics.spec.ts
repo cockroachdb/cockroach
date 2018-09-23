@@ -173,6 +173,11 @@ describe("analytics listener", function() {
         "/login?redirectTo=%2Fdatabase%2Ffoobar%2Ftable%2Fbaz",
         "/login?redirectTo=%2Fdatabase%2F%5Bdb%5D%2Ftable%2F%5Btbl%5D",
       ),
+      testRedaction(
+        "statement details page",
+        "/statement/SELECT * FROM database.table",
+        "/statement/[statement]",
+      ),
     ]).map(function ({ title, input, expected }) {
       it(`applies a redaction for ${title}`, function () {
         setClusterData();

@@ -61,6 +61,15 @@ SELECT NULL::INT[]
 ----
 NULL
 
+query TTTT
+SELECT
+  ARRAY[NULL]::STRING[],
+  ARRAY[NULL]::INT[],
+  ARRAY[NULL]::FLOAT[],
+  ARRAY[NULL]::TIMESTAMP[]
+----
+{NULL} {NULL} {NULL} {NULL}
+
 query BB
 SELECT NULL::INT[] IS DISTINCT FROM NULL, ARRAY[1,2,3] IS DISTINCT FROM NULL
 ----
@@ -76,7 +85,7 @@ SELECT ARRAY['one', 'two', 'fünf']
 query T
 SELECT ARRAY[e'\n', e'g\x10h']
 ----
-{"\n","g\x10h"}
+{"\012","g\020h"}
 
 query T
 SELECT ARRAY['foo', 'bar']
@@ -84,6 +93,14 @@ SELECT ARRAY['foo', 'bar']
 {"foo","bar"}
 
 # array construction from subqueries
+
+query T
+SELECT ARRAY(SELECT 3 WHERE false)
+----
+{}
+
+statement ok
+SELECT ARRAY(SELECT 3 WHERE false) FROM k
 
 query T
 SELECT ARRAY(SELECT 3)
@@ -95,10 +112,18 @@ SELECT ARRAY(VALUES (1),(2),(1))
 ----
 {1,2,1}
 
+statement error arrays cannot have arrays as element type
+SELECT ARRAY(VALUES (ARRAY[1]))
+
 query T
 SELECT ARRAY(VALUES ('a'),('b'),('c'))
 ----
 {"a","b","c"}
+
+query T
+SELECT ARRAY(SELECT (1,2))
+----
+{"(1,2)"}
 
 query error subquery must return only one column, found 2
 SELECT ARRAY(SELECT 1, 2)
@@ -136,6 +161,27 @@ SELECT '{hello}'::VARCHAR(2)[]
 {"he"}
 
 # array casting
+
+query T
+SELECT ARRAY['foo']::STRING
+----
+{"foo"}
+
+query T
+SELECT ARRAY[e'foo\nbar']::STRING
+----
+{"foo\012bar"}
+
+query TTTTTT
+SELECT
+  ARRAY[e'foo\000bar']::STRING,
+  ARRAY[e'foo\001bar']::STRING,
+  ARRAY[e'foo\002bar']::STRING,
+  ARRAY[e'foo\030bar']::STRING,
+  ARRAY[e'foo\034bar']::STRING,
+  ARRAY[e'foo\100bar']::STRING
+----
+{"foo\000bar"}  {"foo\001bar"}  {"foo\002bar"}  {"foo\030bar"}  {"foo\034bar"}  {"foo@bar"}
 
 query T
 SELECT ARRAY[1,2,3]::INT[]
@@ -280,6 +326,11 @@ SELECT (SELECT ARRAY['a', 'b', 'c'])[3]
 ----
 c
 
+query T
+SELECT ARRAY(SELECT generate_series(1,10) ORDER BY 1 DESC);
+----
+{10,9,8,7,6,5,4,3,2,1}
+
 # From a function call expression.
 query T
 SELECT current_schemas(true)[1]
@@ -319,6 +370,18 @@ SELECT k FROM t WHERE k = ANY ARRAY[2,4]
 ----
 2
 4
+
+query I rowsort
+SELECT k FROM t WHERE k > ANY ARRAY[2,4]
+----
+3
+4
+5
+
+query I
+SELECT k FROM t WHERE k < ALL ARRAY[2,4]
+----
+1
 
 # Undocumented - bounds should be allowed, as in Postgres
 statement ok
@@ -441,7 +504,7 @@ DELETE FROM a;
 # Make sure arrays originating from ARRAY_AGG work as expected.
 
 statement ok
-INSERT INTO a (SELECT ARRAY_AGG(GENERATE_SERIES) from GENERATE_SERIES(1,3))
+INSERT INTO a (SELECT array_agg(generate_series) from generate_series(1,3))
 
 query T
 SELECT * FROM a
@@ -523,9 +586,9 @@ query TT
 SHOW CREATE TABLE a
 ----
 a  CREATE TABLE a (
-    b SMALLINT[] NULL,
-    FAMILY "primary" (b, rowid)
-  )
+   b INT2[] NULL,
+   FAMILY "primary" (b, rowid)
+)
 
 statement error integer out of range for type SMALLINT \(column "b"\)
 INSERT INTO a VALUES (ARRAY[100000])
@@ -582,10 +645,10 @@ query T rowsort
 SELECT b FROM a
 ----
 {}
-{true}
-{false}
-{true,true}
-{false,true}
+{t}
+{f}
+{t,t}
+{f,t}
 
 statement ok
 DROP TABLE a
@@ -647,7 +710,7 @@ statement ok
 INSERT INTO a VALUES (ARRAY[current_date])
 
 query I
-SELECT COUNT(b) FROM a
+SELECT count(b) FROM a
 ----
 1
 
@@ -663,7 +726,7 @@ statement ok
 INSERT INTO a VALUES (ARRAY[now()])
 
 query I
-SELECT COUNT(b) FROM a
+SELECT count(b) FROM a
 ----
 1
 
@@ -695,7 +758,7 @@ statement ok
 INSERT INTO a VALUES (ARRAY[uuid_v4()::uuid])
 
 query I
-SELECT COUNT(b) FROM a
+SELECT count(b) FROM a
 ----
 1
 
@@ -739,13 +802,13 @@ statement ok
 DROP TABLE a
 
 query T
-SELECT * FROM UNNEST(ARRAY['a', 'B']) ORDER BY UNNEST;
+SELECT * FROM unnest(ARRAY['a', 'B']) ORDER BY UNNEST;
 ----
 B
 a
 
 query T
-SELECT * FROM UNNEST(ARRAY['a' COLLATE en, 'B' COLLATE en]) ORDER BY UNNEST;
+SELECT * FROM unnest(ARRAY['a' COLLATE en, 'B' COLLATE en]) ORDER BY UNNEST;
 ----
 a
 B
@@ -935,154 +998,154 @@ false
 # ARRAY_APPEND function
 
 query TT
-SELECT ARRAY_APPEND(ARRAY[1,2,3], 4), ARRAY_APPEND(ARRAY[1,2,3], NULL::INT)
+SELECT array_append(ARRAY[1,2,3], 4), array_append(ARRAY[1,2,3], NULL::INT)
 ----
 {1,2,3,4} {1,2,3,NULL}
 
 query TT
-SELECT ARRAY_APPEND(NULL::INT[], 4), ARRAY_APPEND(NULL::INT[], NULL::INT)
+SELECT array_append(NULL::INT[], 4), array_append(NULL::INT[], NULL::INT)
 ----
 {4} {NULL}
 
 # ARRAY_PREPEND function
 
 query TT
-SELECT ARRAY_PREPEND(4, ARRAY[1,2,3]), ARRAY_PREPEND(NULL::INT, ARRAY[1,2,3])
+SELECT array_prepend(4, ARRAY[1,2,3]), array_prepend(NULL::INT, ARRAY[1,2,3])
 ----
 {4,1,2,3} {NULL,1,2,3}
 
 query TT
-SELECT ARRAY_PREPEND(4, NULL::INT[]), ARRAY_PREPEND(NULL::INT, NULL::INT[])
+SELECT array_prepend(4, NULL::INT[]), array_prepend(NULL::INT, NULL::INT[])
 ----
 {4} {NULL}
 
 # ARRAY_CAT function
 
 query TT
-SELECT ARRAY_CAT(ARRAY[1,2,3], ARRAY[4,5,6]), ARRAY_CAT(ARRAY[1,2,3], NULL::INT[])
+SELECT array_cat(ARRAY[1,2,3], ARRAY[4,5,6]), array_cat(ARRAY[1,2,3], NULL::INT[])
 ----
 {1,2,3,4,5,6} {1,2,3}
 
 query TT
-SELECT ARRAY_CAT(NULL::INT[], ARRAY[4,5,6]), ARRAY_CAT(NULL::INT[], NULL::INT[])
+SELECT array_cat(NULL::INT[], ARRAY[4,5,6]), array_cat(NULL::INT[], NULL::INT[])
 ----
 {4,5,6} NULL
 
 # ARRAY_REMOVE function
 
 query T
-SELECT ARRAY_REMOVE(ARRAY[1,2,3,2], 2)
+SELECT array_remove(ARRAY[1,2,3,2], 2)
 ----
 {1,3}
 
 query T
-SELECT ARRAY_REMOVE(ARRAY[1,2,3,NULL::INT], NULL::INT)
+SELECT array_remove(ARRAY[1,2,3,NULL::INT], NULL::INT)
 ----
 {1,2,3}
 
 query T
-SELECT ARRAY_REMOVE(NULL::INT[], NULL::INT)
+SELECT array_remove(NULL::INT[], NULL::INT)
 ----
 NULL
 
 # ARRAY_REPLACE function
 
 query T
-SELECT ARRAY_REPLACE(ARRAY[1,2,5,4], 5, 3)
+SELECT array_replace(ARRAY[1,2,5,4], 5, 3)
 ----
 {1,2,3,4}
 
 query TT
-SELECT ARRAY_REPLACE(ARRAY[1,2,NULL,4], NULL::INT, 3), ARRAY_REPLACE(NULL::INT[], 5, 3)
+SELECT array_replace(ARRAY[1,2,NULL,4], NULL::INT, 3), array_replace(NULL::INT[], 5, 3)
 ----
 {1,2,3,4} NULL
 
 # ARRAY_POSITION function
 
 query I
-SELECT ARRAY_POSITION(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'mon')
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'mon')
 ----
 2
 
 query I
-SELECT ARRAY_POSITION(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'abc')
+SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'abc')
 ----
 NULL
 
 query I
-SELECT ARRAY_POSITION(NULL::STRING[], 'abc')
+SELECT array_position(NULL::STRING[], 'abc')
 ----
 NULL
 
 # ARRAY_POSITIONS function
 
 query TT
-SELECT ARRAY_POSITIONS(ARRAY['A','A','B','A'], 'A'), ARRAY_POSITIONS(ARRAY['A','A','B','A'], 'C')
+SELECT array_positions(ARRAY['A','A','B','A'], 'A'), array_positions(ARRAY['A','A','B','A'], 'C')
 ----
 {1,2,4} {}
 
 query T
-SELECT ARRAY_POSITIONS(NULL::STRING[], 'A')
+SELECT array_positions(NULL::STRING[], 'A')
 ----
 NULL
 
 query T
-SELECT STRING_TO_ARRAY('axbxc', 'x')
+SELECT string_to_array('axbxc', 'x')
 ----
 {"a","b","c"}
 
 query T
-SELECT STRING_TO_ARRAY('~a~~b~c', '~')
+SELECT string_to_array('~a~~b~c', '~')
 ----
 {"","a","","b","c"}
 
 query T
-SELECT STRING_TO_ARRAY('~foo~~bar~baz', '~', 'bar')
+SELECT string_to_array('~foo~~bar~baz', '~', 'bar')
 ----
 {"","foo","",NULL,"baz"}
 
 query T
-SELECT STRING_TO_ARRAY('xx~^~yy~^~zz', '~^~', 'yy')
+SELECT string_to_array('xx~^~yy~^~zz', '~^~', 'yy')
 ----
 {"xx",NULL,"zz"}
 
 query T
-SELECT STRING_TO_ARRAY('foo', '')
+SELECT string_to_array('foo', '')
 ----
 {"foo"}
 
 query T
-SELECT STRING_TO_ARRAY('', '')
+SELECT string_to_array('', '')
 ----
 {}
 
 query T
-SELECT STRING_TO_ARRAY('', 'foo')
+SELECT string_to_array('', 'foo')
 ----
 {}
 
 query T
-SELECT STRING_TO_ARRAY('a', NULL)
+SELECT string_to_array('a', NULL)
 ----
 {"a"}
 
 query T
-SELECT STRING_TO_ARRAY(NULL, 'a')
+SELECT string_to_array(NULL, 'a')
 ----
 NULL
 
 query T
-SELECT STRING_TO_ARRAY(NULL, 'a', 'b')
+SELECT string_to_array(NULL, 'a', 'b')
 ----
 NULL
 
 query T
-SELECT STRING_TO_ARRAY('a', 'foo', NULL)
+SELECT string_to_array('a', 'foo', NULL)
 ----
 {"a"}
 
 query T
-SELECT STRING_TO_ARRAY('foofoofoofoo', 'foo', 'foo')
+SELECT string_to_array('foofoofoofoo', 'foo', 'foo')
 ----
 {"","","","",""}
 
@@ -1093,3 +1156,41 @@ CREATE TABLE x (a STRING[], b INT[])
 
 statement ok
 UPDATE x SET a = ARRAY[], b = ARRAY[]
+
+
+# Github Issue 24175: Regression test for error when using ANY with UUID array.
+statement ok
+CREATE TABLE documents (shared_users UUID[]);
+
+statement ok
+INSERT INTO documents
+VALUES
+    (ARRAY[]),
+    (ARRAY['3ae3560e-d771-4b63-affb-47e8d7853680'::UUID,
+           '6CC1B5C1-FE4F-417D-96BD-AFD1FEEEC34F'::UUID]),
+    (ARRAY['C6F8286C-3A41-4D7E-A4F4-3234B7A57BA9'::UUID])
+
+query T
+SELECT *
+FROM documents
+WHERE '3ae3560e-d771-4b63-affb-47e8d7853680'::UUID = ANY (documents.shared_users);
+----
+{3ae3560e-d771-4b63-affb-47e8d7853680,6cc1b5c1-fe4f-417d-96bd-afd1feeec34f}
+
+statement ok
+CREATE TABLE u (x INT)
+
+statement ok
+INSERT INTO u VALUES (1), (2)
+
+statement ok
+CREATE TABLE v (y INT[])
+
+statement ok
+INSERT INTO v VALUES (ARRAY[1, 2])
+
+# Regression test for #30191. Ensure ArrayFlatten returns correct type.
+query T
+SELECT * FROM v WHERE y = ARRAY(SELECT x FROM u ORDER BY x);
+----
+{1,2}

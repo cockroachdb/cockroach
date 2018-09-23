@@ -118,7 +118,7 @@ func initTestData(
 	// later be compared with the returned stats using reflect.DeepEqual.
 	expStatsList := []TableStatistic{
 		{
-			TableID:       sqlbase.ID(0),
+			TableID:       sqlbase.ID(100),
 			StatisticID:   0,
 			Name:          "table0",
 			ColumnIDs:     []sqlbase.ColumnID{1},
@@ -131,7 +131,7 @@ func initTestData(
 			},
 		},
 		{
-			TableID:       sqlbase.ID(0),
+			TableID:       sqlbase.ID(100),
 			StatisticID:   1,
 			ColumnIDs:     []sqlbase.ColumnID{2, 3},
 			CreatedAt:     time.Date(2010, 11, 20, 11, 35, 23, 0, time.UTC),
@@ -140,7 +140,7 @@ func initTestData(
 			NullCount:     5,
 		},
 		{
-			TableID:       sqlbase.ID(1),
+			TableID:       sqlbase.ID(101),
 			StatisticID:   0,
 			ColumnIDs:     []sqlbase.ColumnID{0},
 			CreatedAt:     time.Date(2017, 11, 20, 11, 35, 23, 0, time.UTC),
@@ -149,7 +149,7 @@ func initTestData(
 			NullCount:     100,
 		},
 		{
-			TableID:       sqlbase.ID(2),
+			TableID:       sqlbase.ID(102),
 			StatisticID:   34,
 			Name:          "table2",
 			ColumnIDs:     []sqlbase.ColumnID{1, 2, 3},
@@ -174,7 +174,7 @@ func initTestData(
 	}
 
 	// Add another TableID for which we don't have stats.
-	expectedStats[sqlbase.ID(3)] = nil
+	expectedStats[sqlbase.ID(103)] = nil
 
 	return expectedStats, nil
 }
@@ -211,7 +211,7 @@ func TestTableStatisticsCache(t *testing.T) {
 	}
 
 	// Table IDs 0 and 1 should have been evicted since the cache size is 2.
-	tableIDs = []sqlbase.ID{sqlbase.ID(0), sqlbase.ID(1)}
+	tableIDs = []sqlbase.ID{sqlbase.ID(100), sqlbase.ID(101)}
 	for _, tableID := range tableIDs {
 		if statsList, ok := sc.lookupTableStats(ctx, tableID); ok {
 			t.Fatalf("lookup of evicted key %d returned: %s", tableID, statsList)
@@ -219,7 +219,7 @@ func TestTableStatisticsCache(t *testing.T) {
 	}
 
 	// Table IDs 2 and 3 should still be in the cache.
-	tableIDs = []sqlbase.ID{sqlbase.ID(2), sqlbase.ID(3)}
+	tableIDs = []sqlbase.ID{sqlbase.ID(102), sqlbase.ID(103)}
 	for _, tableID := range tableIDs {
 		if _, ok := sc.lookupTableStats(ctx, tableID); !ok {
 			t.Fatalf("for lookup of key %d, expected stats %s", tableID, expectedStats[tableID])
@@ -227,7 +227,7 @@ func TestTableStatisticsCache(t *testing.T) {
 	}
 
 	// After invalidation Table ID 2 should be gone.
-	tableID := sqlbase.ID(2)
+	tableID := sqlbase.ID(102)
 	sc.InvalidateTableStats(ctx, tableID)
 	if statsList, ok := sc.lookupTableStats(ctx, tableID); ok {
 		t.Fatalf("lookup of invalidated key %d returned: %s", tableID, statsList)

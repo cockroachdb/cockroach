@@ -182,6 +182,23 @@ SELECT * FROM c WHERE (bill > ANY(SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NO
 5  NULL
 6  FL
 
+# Customers where bill state matches any ship state.
+query IT rowsort
+SELECT * FROM c WHERE bill = ANY(SELECT ship FROM o);
+----
+1  CA
+2  TX
+4  TX
+
+# Customers where bill state matches any ship state or is null.
+query IT rowsort
+SELECT * FROM c WHERE bill = ANY(SELECT ship FROM o) OR bill IS NULL;
+----
+1  CA
+2  TX
+4  TX
+5  NULL
+
 # Test NULL IN case. Use IS NOT NULL to prevent normalize ANY into EXISTS.
 query IT rowsort
 SELECT * FROM c WHERE (NULL::text IN (SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NOT NULL;
@@ -229,14 +246,14 @@ WHERE
 1  CA
 
 # For now, we can't decorrelate semi-join-apply cases.
-statement error pq: unsupported relational op semi-join-apply
+statement error could not decorrelate subquery
 SELECT *
 FROM c
-WHERE (SELECT MIN(ship) FROM o WHERE o.c_id=c.c_id) IN (SELECT ship FROM o WHERE o.c_id=c.c_id);
+WHERE (SELECT min(ship) FROM o WHERE o.c_id=c.c_id) IN (SELECT ship FROM o WHERE o.c_id=c.c_id);
 
 # Customers with more than one order.
 query IT rowsort
-SELECT * FROM c WHERE (SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id) > 1;
+SELECT * FROM c WHERE (SELECT count(*) FROM o WHERE o.c_id=c.c_id) > 1;
 ----
 1  CA
 2  TX
@@ -244,18 +261,49 @@ SELECT * FROM c WHERE (SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id) > 1;
 
 # Customers with more than one order shipped to a known state (i.e. NOT NULL).
 query IT rowsort
-SELECT * FROM c WHERE (SELECT COUNT(ship) FROM o WHERE o.c_id=c.c_id) > 1;
+SELECT * FROM c WHERE (SELECT count(ship) FROM o WHERE o.c_id=c.c_id) > 1;
 ----
 1  CA
 2  TX
+
+# For each customer, orders shipped to lowest state (alphabetically).
+query IIT rowsort
+SELECT c.c_id, o.o_id, o.ship
+FROM c
+INNER JOIN o
+ON c.c_id=o.c_id AND o.ship = (SELECT min(o.ship) FROM o WHERE o.c_id=c.c_id);
+----
+1  20  CA
+2  40  CA
+4  70  WY
+1  10  CA
+6  90  WA
+1  30  CA
+
+# Customers who have shipped more orders to a particular state than all other
+# customers have shipped to that state, combined.
+query ITI rowsort
+SELECT c.c_id, o.ship, count(*)
+FROM c
+INNER JOIN o
+ON c.c_id=o.c_id
+WHERE
+    (SELECT count(*) FROM o AS o2 WHERE o2.ship = o.ship AND o2.c_id = o.c_id) >
+    (SELECT count(*) FROM o AS o2 WHERE o2.ship = o.ship AND o2.c_id <> o.c_id)
+GROUP BY c.c_id, o.ship;
+----
+1  CA  3
+2  TX  1
+4  WY  1
+6  WA  1
 
 # Customers with more than one order and with the highest state = 'CA'.
 query IT rowsort
 SELECT *
 FROM c
 WHERE
-    (SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id) > 1
-    AND (SELECT MAX(ship) FROM o WHERE o.c_id=c.c_id) = 'CA';
+    (SELECT count(*) FROM o WHERE o.c_id=c.c_id) > 1
+    AND (SELECT max(ship) FROM o WHERE o.c_id=c.c_id) = 'CA';
 ----
 1  CA
 
@@ -264,15 +312,80 @@ query IT rowsort
 SELECT *
 FROM c
 WHERE
-    (SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id) > 1
+    (SELECT count(*) FROM o WHERE o.c_id=c.c_id) > 1
     OR EXISTS(SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NULL);
 ----
 1  CA
 2  TX
 4  TX
 
+# Customers that have a bill state equal to the max ship state of all their
+# orders (alphabetically).
+query IT rowsort
+SELECT c_id, bill
+FROM c AS c2
+WHERE EXISTS
+(
+    SELECT * FROM c WHERE bill=(SELECT max(ship) FROM o WHERE c_id=c2.c_id AND c_id=c.c_id)
+)
+----
+1  CA
+2  TX
+
+# Customers that have at least one order shipped to their billing state (or if
+# the ship state is null).
+query IT rowsort
+SELECT c_id, bill
+FROM c AS c2
+WHERE EXISTS
+(
+    SELECT *
+    FROM (SELECT c_id, coalesce(ship, bill) AS state FROM o WHERE c_id=c2.c_id) AS o
+    WHERE state=bill
+)
+----
+1  CA
+2  TX
+4  TX
+
+# Customers with each of their orders numbered.
+query II rowsort
+SELECT c_id, generate_series(1, (SELECT count(*) FROM o WHERE o.c_id=c.c_id)) FROM c
+----
+1  1
+1  2
+1  3
+2  1
+2  2
+2  3
+4  1
+4  2
+6  1
+
+# Customers that have no orders with a NULL ship state.
+query IT rowsort
+SELECT *
+FROM c
+WHERE (SELECT ship FROM o WHERE o.c_id=c.c_id ORDER BY ship LIMIT 1) IS NOT NULL
+----
+1  CA
+6  FL
+
+# Customers that have first order shipping to 'CA' or 'WY' (no NULL ship).
+query IT
+SELECT *
+FROM c
+WHERE
+    (SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NOT NULL ORDER BY ship LIMIT 1)='CA'
+    OR (SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NOT NULL ORDER BY ship LIMIT 1)='WY'
+ORDER BY c_id
+----
+1  CA
+2  TX
+4  TX
+
 # Max1Row prevents decorrelation.
-statement error pq: unsupported relational op left-join-apply
+statement error could not decorrelate subquery
 SELECT *
 FROM c
 WHERE (SELECT o_id FROM o WHERE o.c_id=c.c_id AND ship='WY')=4;
@@ -490,7 +603,7 @@ SELECT c_id, (bill > ANY(SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NULL FROM c
 5  false
 6  false
 
-# Customers where bill state > any ship state is not null result..
+# Customers where bill state > any ship state is not null result.
 query IB
 SELECT c_id, (bill > ANY(SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NOT NULL FROM c ORDER BY c_id;
 ----
@@ -500,6 +613,28 @@ SELECT c_id, (bill > ANY(SELECT ship FROM o WHERE o.c_id=c.c_id)) IS NOT NULL FR
 4  false
 5  true
 6  true
+
+# Customers where bill state matches any non-null ship state.
+query IB rowsort
+SELECT c_id, bill = ANY(SELECT ship FROM o WHERE ship IS NOT NULL) FROM c;
+----
+1  true
+2  true
+3  false
+4  true
+5  NULL
+6  false
+
+# Customers where bill state matches any non-null ship state or is null.
+query IB rowsort
+SELECT c_id, bill = ANY(SELECT ship FROM o WHERE ship IS NOT NULL) OR bill IS NULL FROM c;
+----
+1  true
+2  true
+3  false
+4  true
+5  true
+6  false
 
 # Test NULL IN case.
 query IB
@@ -576,16 +711,16 @@ ORDER BY c_id;
 6  false
 
 # For now, we can't decorrelate semi-join-apply cases.
-statement error pq: unsupported relational op semi-join-apply
+statement error could not decorrelate subquery
 SELECT *
 FROM c
-WHERE (SELECT MIN(ship) FROM o WHERE o.c_id=c.c_id) IN (SELECT ship FROM o WHERE o.c_id=c.c_id);
+WHERE (SELECT min(ship) FROM o WHERE o.c_id=c.c_id) IN (SELECT ship FROM o WHERE o.c_id=c.c_id);
 
 # Customers with at least one shipping address = minimum shipping address.
 query IB
 SELECT
     c_id,
-    (SELECT MIN(ship) FROM o WHERE o.c_id=c.c_id) IN (SELECT ship FROM o WHERE o.c_id=c.c_id)
+    (SELECT min(ship) FROM o WHERE o.c_id=c.c_id) IN (SELECT ship FROM o WHERE o.c_id=c.c_id)
 FROM c
 ORDER BY c_id;
 ----
@@ -598,7 +733,7 @@ ORDER BY c_id;
 
 # Maximum number of orders for a customer. Use subquery in aggregate function.
 query I
-SELECT MAX((SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id)) FROM c;
+SELECT max((SELECT count(*) FROM o WHERE o.c_id=c.c_id)) FROM c;
 ----
 3
 
@@ -606,7 +741,7 @@ SELECT MAX((SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id)) FROM c;
 query II
 SELECT
     c_id,
-    (SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id)
+    (SELECT count(*) FROM o WHERE o.c_id=c.c_id)
 FROM c
 ORDER BY c_id;
 ----
@@ -621,7 +756,7 @@ ORDER BY c_id;
 query TI
 SELECT
     s.st,
-    (SELECT COUNT(*) FROM c WHERE c.bill=s.st) + (SELECT COUNT(*) FROM o WHERE o.ship=s.st)
+    (SELECT count(*) FROM c WHERE c.bill=s.st) + (SELECT count(*) FROM o WHERE o.ship=s.st)
 FROM (SELECT c.bill AS st FROM c UNION SELECT o.ship AS st FROM o) s
 ORDER BY s.st;
 ----
@@ -633,10 +768,98 @@ TX    3
 WA    1
 WY    1
 
-# ConcatAgg prevents decorrelation.
-statement error pq: unsupported relational op inner-join-apply
-SELECT (SELECT CONCAT_AGG(ship || ' ') FROM o WHERE o.c_id=c.c_id)
-FROM c;
+# Customer orders grouped by ship state, compared with count of all orders
+# shipped to that state by all other customers combined.
+query ITII rowsort
+SELECT c.c_id, o.ship, count(*) AS cust,
+    (SELECT count(*) FROM o AS o2 WHERE o2.ship = o.ship AND o2.c_id <> c.c_id) AS other
+FROM c
+INNER JOIN o
+ON c.c_id=o.c_id
+GROUP BY c.c_id, o.ship;
+----
+2  TX    1  0
+4  NULL  1  0
+6  WA    1  0
+2  NULL  1  0
+4  WY    1  0
+1  CA    3  1
+2  CA    1  3
+
+# Customers with their orders (even if no orders), plus max of bill and ship
+# states for that customer (alphabetically).
+query IIT
+SELECT
+    c.c_id,
+    o.o_id,
+    (
+        SELECT max(CASE WHEN c2.bill > o2.ship THEN c2.bill ELSE o2.ship END)
+        FROM c AS c2, o AS o2
+        WHERE c2.c_id=o2.c_id AND c2.c_id=c.c_id
+    )
+FROM c
+LEFT JOIN o
+ON c.c_id=o.c_id
+ORDER BY c.c_id, o.o_id
+----
+1  10    CA
+1  20    CA
+1  30    CA
+2  40    TX
+2  50    TX
+2  60    TX
+3  NULL  NULL
+4  70    WY
+4  80    WY
+5  NULL  NULL
+6  90    WA
+
+# Customers, with boolean indicating whether they have at least one order with a
+# NULL ship state.
+query IB
+SELECT
+    c.c_id,
+    (SELECT ship FROM o WHERE o.c_id=c.c_id ORDER BY ship LIMIT 1) IS NOT NULL
+FROM c
+ORDER BY c.c_id
+----
+1  true
+2  false
+3  false
+4  false
+5  false
+6  true
+
+# Customers, with boolean indicating whether their first order shipped to 'CA'
+# or 'WY' (no NULL ship).
+query IB
+SELECT
+    c.c_id,
+    (SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NOT NULL ORDER BY ship LIMIT 1)='CA'
+    OR (SELECT ship FROM o WHERE o.c_id=c.c_id AND ship IS NOT NULL ORDER BY ship LIMIT 1)='WY'
+FROM c
+ORDER BY c_id
+----
+1  true
+2  true
+3  NULL
+4  true
+5  NULL
+6  false
+
+query T
+SELECT (SELECT concat_agg(ship || ' ')
+  FROM
+  (SELECT c_id AS o_c_id, ship FROM o ORDER BY ship)
+  WHERE o_c_id=c.c_id)
+FROM c ORDER BY c_id
+----
+CA CA CA
+CA TX
+NULL
+WY
+NULL
+WA
 
 # ------------------------------------------------------------------------------
 # Subqueries in other interesting locations.
@@ -645,11 +868,11 @@ FROM c;
 # Group by order count by customer, and order by that order count as well.
 query II
 SELECT
-    (SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id) AS order_cnt,
-    COUNT(*) AS cust_cnt
+    (SELECT count(*) FROM o WHERE o.c_id=c.c_id) AS order_cnt,
+    count(*) AS cust_cnt
 FROM c
-GROUP BY (SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id)
-ORDER BY (SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id) DESC;
+GROUP BY (SELECT count(*) FROM o WHERE o.c_id=c.c_id)
+ORDER BY (SELECT count(*) FROM o WHERE o.c_id=c.c_id) DESC;
 ----
 3  2
 2  1
@@ -659,7 +882,7 @@ ORDER BY (SELECT COUNT(*) FROM o WHERE o.c_id=c.c_id) DESC;
 # Subquery in VALUES clause.
 query III
 SELECT c_cnt, o_cnt, c_cnt + o_cnt AS total
-FROM (VALUES ((SELECT COUNT(*) FROM c), (SELECT COUNT(*) FROM o))) AS v(c_cnt, o_cnt)
+FROM (VALUES ((SELECT count(*) FROM c), (SELECT count(*) FROM o))) AS v(c_cnt, o_cnt)
 WHERE c_cnt > 0 AND o_cnt > 0;
 ----
 6  9  15
@@ -678,8 +901,41 @@ ON c.c_id=o.c_id AND EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id AND ship IS NULL
 4  80
 
 # Can't decorrelate this case.
-statement error pq: unsupported relational op inner-join-apply
+statement error could not decorrelate subquery
 SELECT c.c_id, o.o_id
 FROM c
 INNER JOIN o
-ON c.c_id=o.c_id AND o.ship = (SELECT MIN(o.ship) FROM o WHERE o.c_id=c.c_id);
+ON c.c_id=o.c_id AND o.ship = (SELECT o.ship FROM o WHERE o.c_id=c.c_id);
+
+statement error AS OF SYSTEM TIME must be provided on a top-level statement
+SELECT (SELECT c_id FROM o AS OF SYSTEM TIME '-0ns')
+FROM c
+WHERE EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id)
+
+# Subquery in ARRAY(...)
+query ITT
+SELECT
+  c_id,
+  ARRAY(SELECT o_id FROM o WHERE o.c_id = c.c_id ORDER BY o_id),
+  ARRAY(SELECT o_id FROM o WHERE o.ship = c.bill ORDER BY o_id)
+FROM c ORDER BY c_id
+----
+1  {10,20,30}  {10,20,30,40}
+2  {40,50,60}  {50}
+3  {}          {}
+4  {70,80}     {50}
+5  {}          {}
+6  {90}        {}
+
+query IT
+SELECT
+  c_id,
+  ARRAY(SELECT o_id FROM o WHERE o.c_id = c.c_id ORDER BY o_id)
+FROM c ORDER BY c_id
+----
+1  {10,20,30}
+2  {40,50,60}
+3  {}
+4  {70,80}
+5  {}
+6  {90}

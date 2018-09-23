@@ -17,8 +17,9 @@ SELECT a.attname, format_type(a.atttypid, a.atttypmod), pg_get_expr(d.adbin, d.a
     AND a.attnum > 0 AND NOT a.attisdropped
     ORDER BY a.attnum
 ----
-id   bigint  NULL  false  20  -1
-name text    NULL  false  25  -1
+id     bigint  NULL            false  20  -1
+name   text    NULL            false  25  -1
+rowid  bigint  unique_rowid()  true   20  -1
 
 
 # #12115
@@ -49,8 +50,8 @@ SELECT i.relname AS name,
        ix.indisprimary AS PRIMARY,
        ix.indisunique AS UNIQUE,
        ix.indkey AS indkey,
-       ARRAY_AGG(a.attnum) AS column_indexes,
-       ARRAY_AGG(a.attname) AS column_names,
+       array_agg(a.attnum) AS column_indexes,
+       array_agg(a.attname) AS column_names,
        pg_get_indexdef(ix.indexrelid) AS definition
 FROM pg_class t,
      pg_class i,
@@ -68,9 +69,9 @@ GROUP BY i.relname,
          ix.indkey
 ORDER BY i.relname
 ----
-name              primary  unique  indkey  column_indexes  column_names   definition
-customers_id_idx  false    false   2       {1,2}           {"name","id"}  CREATE INDEX customers_id_idx ON test.public.customers (id ASC)
-primary           true     true    1       {1,2}           {"name","id"}  CREATE UNIQUE INDEX "primary" ON test.public.customers (name ASC)
+name              primary  unique  indkey  column_indexes  column_names  definition
+customers_id_idx  false    false   2       {1,2}           {name,id}     CREATE INDEX customers_id_idx ON test.public.customers (id ASC)
+primary           true     true    1       {1,2}           {name,id}     CREATE UNIQUE INDEX "primary" ON test.public.customers (name ASC)
 
 
 query TT colnames
@@ -82,6 +83,7 @@ JOIN   pg_attribute a ON a.attrelid = i.indrelid
                      AND    i.indisprimary
 ----
 attname  data_type
+rowid    bigint
 
 statement ok
 CREATE TABLE b (id INT, a_id INT, FOREIGN KEY (a_id) REFERENCES a (id))
@@ -120,7 +122,7 @@ CREATE INDEX b_idx ON b(a_id);
 # ActiveRecord 4.2.x query for checking if an index exists
 # Relies on OID IN tuple support
 query I
-SELECT COUNT(*)
+SELECT count(*)
 FROM pg_class t
 INNER JOIN pg_index d ON t.oid = d.indrelid
 INNER JOIN pg_class i ON d.indexrelid = i.oid

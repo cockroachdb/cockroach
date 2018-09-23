@@ -57,7 +57,7 @@ type DistAggregationInfo struct {
 	// The final stage consists of one or more aggregations that take in an
 	// arbitrary number of inputs from the local stages. The inputs are ordered and
 	// mapped by the indices of the local aggregations in LocalStage (specified by
-	// inlocalIdxs).
+	// LocalIdxs).
 	FinalStage []FinalStageInfo
 
 	// An optional rendering expression used to obtain the final result; required
@@ -219,7 +219,7 @@ var DistAggregationTable = map[distsqlrun.AggregatorSpec_Func]DistAggregationInf
 			if sum.ResolvedType().Equivalent(types.Float) {
 				expr.Right = &tree.CastExpr{
 					Expr: count,
-					Type: coltypes.NewFloat(0 /* prec */, false /* precSpecified */),
+					Type: coltypes.Float8,
 				}
 			}
 			ctx := &tree.SemaContext{IVarContainer: h.Container()}

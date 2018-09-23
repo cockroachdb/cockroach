@@ -108,8 +108,8 @@ func (sd *StreamDecoder) AddMessage(msg *ProducerMessage) error {
 			case *RemoteProducerMetadata_TraceData_:
 				meta.TraceData = v.TraceData.CollectedSpans
 
-			case *RemoteProducerMetadata_TxnMeta:
-				meta.TxnMeta = v.TxnMeta
+			case *RemoteProducerMetadata_TxnCoordMeta:
+				meta.TxnCoordMeta = v.TxnCoordMeta
 
 			case *RemoteProducerMetadata_RowNum_:
 				meta.RowNum = v.RowNum
@@ -176,9 +176,6 @@ func (sd *StreamDecoder) GetRow(
 // Types returns the types of the columns; can only be used after we received at
 // least one row.
 func (sd *StreamDecoder) Types() []sqlbase.ColumnType {
-	if !sd.typingReceived {
-		panic("no typing info received yet")
-	}
 	types := make([]sqlbase.ColumnType, len(sd.typing))
 	for i := range types {
 		types[i] = sd.typing[i].Type

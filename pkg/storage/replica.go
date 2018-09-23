@@ -27,13 +27,12 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
-	"github.com/coreos/etcd/raft"
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/google/btree"
 	"github.com/kr/pretty"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/raftpb"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -46,8 +45,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
+	ctstorage "github.com/cockroachdb/cockroach/pkg/storage/closedts/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -58,6 +61,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -65,16 +70,6 @@ import (
 )
 
 const (
-	// sentinelGossipTTL is time-to-live for the gossip sentinel. The
-	// sentinel informs a node whether or not it's connected to the
-	// primary gossip network and not just a partition. As such it must
-	// expire on a reasonable basis and be continually re-gossiped. The
-	// replica which is the lease holder of the first range gossips it.
-	sentinelGossipTTL = 2 * time.Minute
-	// sentinelGossipInterval is the approximate interval at which the
-	// sentinel info is gossiped.
-	sentinelGossipInterval = sentinelGossipTTL / 2
-
 	// configGossipTTL is the time-to-live for configuration maps.
 	configGossipTTL = 0 // does not expire
 	// optimizePutThreshold is the minimum length of a contiguous run
@@ -95,6 +90,8 @@ const (
 	defaultReplicaRaftMuWarnThreshold = 500 * time.Millisecond
 )
 
+var raftLogTooLargeSize = 4 * raftLogMaxSize
+
 // TODO(irfansharif, peter): What's a good default? Too low and everything comes
 // to a grinding halt, too high and we're not really throttling anything
 // (we'll still generate snapshots). Should it be adjusted dynamically?
@@ -103,12 +100,6 @@ const (
 // we ensure all replicas have sufficiently up to date logs so that when the
 // log gets truncated, the followers do not need non-preemptive snapshots.
 var defaultProposalQuota = raftLogMaxSize / 4
-
-// This flag controls whether Transaction entries are automatically gc'ed
-// upon EndTransaction if they only have local intents (which can be
-// resolved synchronously with EndTransaction). Certain tests become
-// simpler with this being turned off.
-var txnAutoGC = true
 
 var syncRaftLog = settings.RegisterBoolSetting(
 	"kv.raft_log.synchronize",
@@ -133,13 +124,14 @@ var MaxCommandSize = settings.RegisterValidatedByteSizeSetting(
 	},
 )
 
-// raftInitialLog{Index,Term} are the starting points for the raft log. We
-// bootstrap the raft membership by synthesizing a snapshot as if there were
-// some discarded prefix to the log, so we must begin the log at an arbitrary
-// index greater than 1.
-const (
-	raftInitialLogIndex = 10
-	raftInitialLogTerm  = 5
+// FollowerReadsEnabled controls whether replicas attempt to serve follower
+// reads. The closed timestamp machinery is unaffected by this, i.e. the same
+// information is collected and passed around, regardless of the value of this
+// setting.
+var FollowerReadsEnabled = settings.RegisterBoolSetting(
+	"kv.closed_timestamp.follower_reads_enabled",
+	"allow (all) replicas to serve consistent historical reads based on closed timestamp information",
+	false,
 )
 
 type proposalRetryReason int
@@ -271,7 +263,7 @@ type Replica struct {
 	log.AmbientContext
 
 	// TODO(tschottdorf): Duplicates r.mu.state.desc.RangeID; revisit that.
-	RangeID roachpb.RangeID // Should only be set by the constructor.
+	RangeID roachpb.RangeID // Only set by the constructor
 
 	store        *Store
 	abortSpan    *abortspan.AbortSpan // Avoids anomalous reads after abort
@@ -301,8 +293,6 @@ type Replica struct {
 	// raftMu protects Raft processing the replica.
 	//
 	// Locking notes: Replica.raftMu < Replica.mu
-	//
-	// TODO(peter): evaluate runtime overhead of the timed mutex.
 	raftMu struct {
 		syncutil.Mutex
 
@@ -311,6 +301,11 @@ type Replica struct {
 		stateLoader stateloader.StateLoader
 		// on-disk storage for sideloaded SSTables. nil when there's no ReplicaID.
 		sideloaded sideloadStorage
+
+		// rangefeed is an instance of a rangefeed Processor that is capable of
+		// routing rangefeed events to a set of subscribers. Will be nil if no
+		// subscribers are registered.
+		rangefeed *rangefeed.Processor
 	}
 
 	// Contains the lease history when enabled.
@@ -339,6 +334,10 @@ type Replica struct {
 		// Is the range quiescent? Quiescent ranges are not Tick()'d and unquiesce
 		// whenever a Raft operation is performed.
 		quiescent bool
+		// mergeComplete is non-nil if a merge is in-progress, in which case any
+		// requests should be held until the completion of the merge is signaled by
+		// the closing of the channel.
+		mergeComplete chan struct{}
 		// The state of the Raft state machine.
 		state storagebase.ReplicaState
 		// Counter used for assigning lease indexes for proposals.
@@ -381,18 +380,22 @@ type Replica struct {
 		// lease extension that were in flight at the time of the transfer cannot be
 		// used, if they eventually apply.
 		minLeaseProposedTS hlc.Timestamp
-		// Max bytes before split.
-		maxBytes int64
-		// proposals stores the Raft in-flight commands which
-		// originated at this Replica, i.e. all commands for which
-		// propose has been called, but which have not yet
-		// applied.
+		// A pointer to the zone config for this replica.
+		zone *config.ZoneConfig
+		// localProposals stores the Raft in-flight commands which originated at
+		// this Replica, i.e. all commands for which propose has been called,
+		// but which have not yet applied.
 		//
 		// The *ProposalData in the map are "owned" by it. Elements from the
 		// map must only be referenced while Replica.mu is held, except if the
 		// element is removed from the map first. The notable exception is the
 		// contained RaftCommand, which we treat as immutable.
-		proposals         map[storagebase.CmdIDKey]*ProposalData
+		localProposals map[storagebase.CmdIDKey]*ProposalData
+		// remoteProposals is maintained by Raft leaders and stores in-flight
+		// commands that were forwarded to the leader during its current term.
+		// The set allows leaders to detect duplicate forwarded commands and
+		// avoid re-proposing the same forwarded command multiple times.
+		remoteProposals   map[storagebase.CmdIDKey]struct{}
 		internalRaftGroup *raft.RawNode
 		// The ID of the replica within the Raft group. May be 0 if the replica has
 		// been created from a preemptive snapshot (i.e. before being added to the
@@ -523,7 +526,9 @@ var _ KeyRange = &Replica{}
 // leader awoken). See handleRaftReady for an instance of where this value
 // varies.
 //
-// Requires that both Replica.mu and Replica.raftMu are held.
+// Requires that Replica.mu is held. Also requires that Replica.raftMu is held
+// if either the caller can't guarantee that r.mu.internalRaftGroup != nil or
+// the provided function requires Replica.raftMu.
 func (r *Replica) withRaftGroupLocked(
 	mayCampaignOnWake bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
@@ -539,9 +544,10 @@ func (r *Replica) withRaftGroupLocked(
 		return nil
 	}
 
-	ctx := r.AnnotateCtx(context.TODO())
-
 	if r.mu.internalRaftGroup == nil {
+		r.raftMu.Mutex.AssertHeld()
+
+		ctx := r.AnnotateCtx(context.TODO())
 		raftGroup, err := raft.NewRawNode(newRaftConfig(
 			raft.Storage((*replicaRaftStorage)(r)),
 			uint64(r.mu.replicaID),
@@ -559,7 +565,11 @@ func (r *Replica) withRaftGroupLocked(
 		}
 	}
 
-	unquiesce, err := f(r.mu.internalRaftGroup)
+	// This wrapper function is a hack to add range IDs to stack traces
+	// using the same pattern as Replica.sendWithRangeID.
+	unquiesce, err := func(rangeID roachpb.RangeID, raftGroup *raft.RawNode) (bool, error) {
+		return f(raftGroup)
+	}(r.RangeID, r.mu.internalRaftGroup)
 	if unquiesce {
 		r.unquiesceAndWakeLeaderLocked()
 	}
@@ -578,7 +588,7 @@ func (r *Replica) withRaftGroupLocked(
 // messages (which may include MsgVotes from an election in progress,
 // and this election would be disrupted if we started our own).
 //
-// Requires that Replica.raftMu is held.
+// Has the same requirement for Replica.raftMu as withRaftGroupLocked.
 func (r *Replica) withRaftGroup(
 	mayCampaignOnWake bool, f func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error),
 ) error {
@@ -597,6 +607,7 @@ func shouldCampaignOnWake(
 	// thanks to PreVote, unnecessary campaigns are not disruptive so
 	// we should err on the side of campaigining here.
 	anotherOwnsLease := leaseStatus.State == LeaseState_VALID && !lease.OwnedBy(storeID)
+
 	// If we're already campaigning or know who the leader is, don't
 	// start a new term.
 	noLeader := raftStatus.RaftState == raft.StateFollower && raftStatus.Lead == 0
@@ -639,6 +650,9 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	}
 	r.mu.pendingLeaseRequest = makePendingLeaseRequest(r)
 	r.mu.stateLoader = stateloader.Make(r.store.cfg.Settings, rangeID)
+	r.mu.quiescent = true
+	r.mu.zone = config.DefaultZoneConfigRef()
+
 	if leaseHistoryMaxEntries > 0 {
 		r.leaseHistory = newLeaseHistory()
 	}
@@ -697,7 +711,7 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 	r.cmdQMu.queues[spanset.SpanLocal] = NewCommandQueue(false /* optimizeOverlap */)
 	r.cmdQMu.Unlock()
 
-	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
+	r.mu.localProposals = map[storagebase.CmdIDKey]*ProposalData{}
 	r.mu.checksums = map[uuid.UUID]ReplicaChecksum{}
 	// Clear the internal raft group in case we're being reset. Since we're
 	// reloading the raft state below, it isn't safe to use the existing raft
@@ -773,46 +787,73 @@ func (r *Replica) String() string {
 	return fmt.Sprintf("[n%d,s%d,r%s]", r.store.Ident.NodeID, r.store.Ident.StoreID, &r.rangeStr)
 }
 
-// destroyData deletes all data associated with a replica, leaving a
-// tombstone. Requires that Replica.raftMu is held.
-func (r *Replica) destroyDataRaftMuLocked(
-	ctx context.Context, consistentDesc roachpb.RangeDescriptor,
+func (r *Replica) preDestroyRaftMuLocked(
+	ctx context.Context,
+	reader engine.Reader,
+	batch engine.Batch,
+	nextReplicaID roachpb.ReplicaID,
+	destroyData bool,
 ) error {
-	startTime := timeutil.Now()
-
-	// Use a more efficient write-only batch because we don't need to do any
-	// reads from the batch.
-	batch := r.store.Engine().NewWriteOnlyBatch()
-	defer batch.Close()
-
-	ms := r.GetMVCCStats()
-
-	// NB: this uses the local descriptor instead of the consistent one to match
-	// the data on disk.
 	desc := r.Desc()
-	if err := clearRangeData(ctx, desc, ms.KeyCount, r.store.Engine(), batch); err != nil {
+	err := clearRangeData(ctx, desc, reader, batch, destroyData)
+	if err != nil {
 		return err
 	}
-	clearTime := timeutil.Now()
-
-	// Suggest the cleared range to the compactor queue.
-	r.store.compactor.Suggest(ctx, storagebase.SuggestedCompaction{
-		StartKey: roachpb.Key(desc.StartKey),
-		EndKey:   roachpb.Key(desc.EndKey),
-		Compaction: storagebase.Compaction{
-			Bytes:            ms.Total(),
-			SuggestedAtNanos: clearTime.UnixNano(),
-		},
-	})
 
 	// Save a tombstone to ensure that replica IDs never get reused.
 	//
 	// NB: Legacy tombstones (which are in the replicated key space) are wiped
 	// in clearRangeData, but that's OK since we're writing a new one in the same
 	// batch (and in particular, sequenced *after* the wipe).
-	if err := r.setTombstoneKey(ctx, batch, &consistentDesc); err != nil {
+	return r.setTombstoneKey(ctx, batch, nextReplicaID)
+}
+
+func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCStats) error {
+	// Suggest the cleared range to the compactor queue.
+	//
+	// TODO(benesch): we would ideally atomically suggest the compaction with
+	// the deletion of the data itself.
+	desc := r.Desc()
+	r.store.compactor.Suggest(ctx, storagebase.SuggestedCompaction{
+		StartKey: roachpb.Key(desc.StartKey),
+		EndKey:   roachpb.Key(desc.EndKey),
+		Compaction: storagebase.Compaction{
+			Bytes:            ms.Total(),
+			SuggestedAtNanos: timeutil.Now().UnixNano(),
+		},
+	})
+
+	// NB: we need the nil check below because it's possible that we're GC'ing a
+	// Replica without a replicaID, in which case it does not have a sideloaded
+	// storage.
+	//
+	// TODO(tschottdorf): at node startup, we should remove all on-disk
+	// directories belonging to replicas which aren't present. A crash before a
+	// call to postDestroyRaftMuLocked will currently leave the files around
+	// forever.
+	if r.raftMu.sideloaded != nil {
+		return r.raftMu.sideloaded.Clear(ctx)
+	}
+	return nil
+}
+
+// destroyRaftMuLocked deletes data associated with a replica, leaving a
+// tombstone. If `destroyData` is true, data in all of the range's keyspaces
+// will be deleted. Otherwise, only data in the range-ID local keyspace will be
+// deleted. Requires that Replica.raftMu is held.
+func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb.ReplicaID) error {
+	startTime := timeutil.Now()
+
+	ms := r.GetMVCCStats()
+
+	const destroyData = true
+	batch := r.Engine().NewWriteOnlyBatch()
+	defer batch.Close()
+	if err := r.preDestroyRaftMuLocked(ctx, r.Engine(), batch, nextReplicaID, destroyData); err != nil {
 		return err
 	}
+	preTime := timeutil.Now()
+
 	// We need to sync here because we are potentially deleting sideloaded
 	// proposals from the file system next. We could write the tombstone only in
 	// a synchronous batch first and then delete the data alternatively, but
@@ -823,81 +864,75 @@ func (r *Replica) destroyDataRaftMuLocked(
 	}
 	commitTime := timeutil.Now()
 
-	// NB: we need the nil check below because it's possible that we're
-	// GC'ing a Replica without a replicaID, in which case it does not
-	// have a sideloaded storage.
-	//
-	// TODO(tschottdorf): at node startup, we should remove all on-disk
-	// directories belonging to replicas which aren't present. A crash
-	// here will currently leave the files around forever.
-	if r.raftMu.sideloaded != nil {
-		if err := r.raftMu.sideloaded.Clear(ctx); err != nil {
-			return err
-		}
+	if err := r.postDestroyRaftMuLocked(ctx, ms); err != nil {
+		return err
 	}
 
 	log.Infof(ctx, "removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
 		ms.KeyCount+ms.SysCount, ms.KeyCount, ms.SysCount,
 		commitTime.Sub(startTime).Seconds()*1000,
-		clearTime.Sub(startTime).Seconds()*1000,
-		commitTime.Sub(clearTime).Seconds()*1000)
+		preTime.Sub(startTime).Seconds()*1000,
+		commitTime.Sub(preTime).Seconds()*1000)
 	return nil
 }
 
 func (r *Replica) cancelPendingCommandsLocked() {
 	r.mu.AssertHeld()
-	for _, p := range r.mu.proposals {
-		resp := proposalResult{
-			Reply:         &roachpb.BatchResponse{},
-			Err:           roachpb.NewError(roachpb.NewAmbiguousResultError("removing replica")),
-			ProposalRetry: proposalRangeNoLongerExists,
-		}
-		p.finishApplication(resp)
+	pr := proposalResult{
+		Err:           roachpb.NewError(roachpb.NewAmbiguousResultError("removing replica")),
+		ProposalRetry: proposalRangeNoLongerExists,
 	}
-	r.mu.proposals = map[storagebase.CmdIDKey]*ProposalData{}
+	for _, p := range r.mu.localProposals {
+		r.cleanupFailedProposalLocked(p)
+		p.finishApplication(pr)
+	}
+	r.mu.remoteProposals = nil
+}
+
+// cleanupFailedProposalLocked cleans up after a proposal that has failed. It
+// clears any references to the proposal and releases associated quota.
+func (r *Replica) cleanupFailedProposalLocked(p *ProposalData) {
+	// Clear the proposal from the proposals map. May be a no-op if the
+	// proposal has not yet been inserted into the map.
+	delete(r.mu.localProposals, p.idKey)
+	// Release associated quota pool resources if we have been tracking
+	// this command.
+	//
+	// NB: We may be double free-ing here in cases where proposals are
+	// duplicated. To counter this our quota pool is capped at the initial
+	// quota size.
+	if cmdSize, ok := r.mu.commandSizes[p.idKey]; ok {
+		r.mu.proposalQuota.add(int64(cmdSize))
+		delete(r.mu.commandSizes, p.idKey)
+	}
 }
 
 // setTombstoneKey writes a tombstone to disk to ensure that replica IDs never
 // get reused. It determines what the minimum next replica ID can be using
-// the provided RangeDescriptor and the Replica's own ID.
+// the provided nextReplicaID and the Replica's own ID.
 //
 // We have to be careful to set the right key, since a replica can be using an
 // ID that it hasn't yet received a RangeDescriptor for if it receives raft
 // requests for that replica ID (as seen in #14231).
 func (r *Replica) setTombstoneKey(
-	ctx context.Context, eng engine.ReadWriter, desc *roachpb.RangeDescriptor,
+	ctx context.Context, eng engine.ReadWriter, externalNextReplicaID roachpb.ReplicaID,
 ) error {
 	r.mu.Lock()
-	nextReplicaID := r.nextReplicaIDLocked(desc)
-	r.mu.minReplicaID = nextReplicaID
+	nextReplicaID := r.mu.state.Desc.NextReplicaID
+	if nextReplicaID < externalNextReplicaID {
+		nextReplicaID = externalNextReplicaID
+	}
+	if nextReplicaID > r.mu.minReplicaID {
+		r.mu.minReplicaID = nextReplicaID
+	}
 	r.mu.Unlock()
 
-	tombstoneKey := keys.RaftTombstoneKey(desc.RangeID)
-	if !r.store.cfg.Settings.Version.IsMinSupported(cluster.VersionUnreplicatedTombstoneKey) {
-		tombstoneKey = keys.RaftTombstoneIncorrectLegacyKey(desc.RangeID)
-	}
+	tombstoneKey := keys.RaftTombstoneKey(r.RangeID)
 	tombstone := &roachpb.RaftTombstone{
 		NextReplicaID: nextReplicaID,
 	}
 	return engine.MVCCPutProto(ctx, eng, nil, tombstoneKey,
 		hlc.Timestamp{}, nil, tombstone)
-}
-
-// nextReplicaIDLocked returns the minimum ID that a new replica can be created
-// with for this replica's range. We have to be very careful to ensure that
-// replica IDs never get re-used because that can cause panics.
-//
-// The externalDesc parameter is an optional way to provide an additional
-// descriptor for the range that was looked up outside the replica code.
-func (r *Replica) nextReplicaIDLocked(externalDesc *roachpb.RangeDescriptor) roachpb.ReplicaID {
-	result := r.mu.state.Desc.NextReplicaID
-	if externalDesc != nil && result < externalDesc.NextReplicaID {
-		result = externalDesc.NextReplicaID
-	}
-	if result < r.mu.minReplicaID {
-		result = r.mu.minReplicaID
-	}
-	return result
 }
 
 func (r *Replica) setReplicaID(replicaID roachpb.ReplicaID) error {
@@ -1023,8 +1058,10 @@ func (r *Replica) maybeAcquireProposalQuota(ctx context.Context, quota int64) er
 
 	// Trace if we're running low on available proposal quota; it might explain
 	// why we're taking so long.
-	if q := quotaPool.approximateQuota(); q < quotaPool.maxQuota()/10 && log.HasSpanOrEvent(ctx) {
-		log.Eventf(ctx, "quota running low, currently available ~%d", q)
+	if log.HasSpanOrEvent(ctx) {
+		if q := quotaPool.approximateQuota(); q < quotaPool.maxQuota()/10 {
+			log.Eventf(ctx, "quota running low, currently available ~%d", q)
+		}
 	}
 
 	return quotaPool.acquire(ctx, quota)
@@ -1128,11 +1165,7 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	for _, rep := range r.mu.state.Desc.Replicas {
 		// Only consider followers that that have "healthy" RPC connections.
 
-		addr, err := r.store.cfg.Transport.resolver(rep.NodeID)
-		if err != nil {
-			continue
-		}
-		if err := r.store.cfg.Transport.rpcContext.ConnHealth(addr.String()); err != nil {
+		if err := r.store.cfg.NodeDialer.ConnHealth(rep.NodeID); err != nil {
 			continue
 		}
 
@@ -1189,18 +1222,25 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 	}
 }
 
-// GetMaxBytes gets the range maximum byte limit.
+// GetMinBytes gets the replica's minimum byte threshold.
+func (r *Replica) GetMinBytes() int64 {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.zone.RangeMinBytes
+}
+
+// GetMaxBytes gets the replica's maximum byte threshold.
 func (r *Replica) GetMaxBytes() int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.maxBytes
+	return r.mu.zone.RangeMaxBytes
 }
 
-// SetMaxBytes sets the maximum byte limit before split.
-func (r *Replica) SetMaxBytes(maxBytes int64) {
+// SetZoneConfig sets the replica's zone config.
+func (r *Replica) SetZoneConfig(zone *config.ZoneConfig) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.mu.maxBytes = maxBytes
+	r.mu.zone = zone
 }
 
 // IsFirstRange returns true if this is the first range.
@@ -1217,17 +1257,17 @@ func (r *Replica) IsDestroyed() (DestroyReason, error) {
 }
 
 // GetLease returns the lease and, if available, the proposed next lease.
-func (r *Replica) GetLease() (roachpb.Lease, *roachpb.Lease) {
+func (r *Replica) GetLease() (roachpb.Lease, roachpb.Lease) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.getLeaseRLocked()
 }
 
-func (r *Replica) getLeaseRLocked() (roachpb.Lease, *roachpb.Lease) {
+func (r *Replica) getLeaseRLocked() (roachpb.Lease, roachpb.Lease) {
 	if nextLease, ok := r.mu.pendingLeaseRequest.RequestPending(); ok {
-		return *r.mu.state.Lease, &nextLease
+		return *r.mu.state.Lease, nextLease
 	}
-	return *r.mu.state.Lease, nil
+	return *r.mu.state.Lease, roachpb.Lease{}
 }
 
 // OwnsValidLease returns whether this replica is the current valid
@@ -1353,7 +1393,7 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 						// This would be the situation in which the lease holder gets removed when
 						// holding the lease, or in which a lease request erroneously gets accepted
 						// for a replica that is not in the replica set. Neither of the two can
-						// happen since appropriate mechanisms have been added:
+						// happen in normal usage since appropriate mechanisms have been added:
 						//
 						// 1. Only the lease holder (at the time) schedules removal of a replica,
 						// but the lease can change hands and so the situation in which a follower
@@ -1379,7 +1419,12 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 						// ProposerLease. Hence, an extra check is in order: processRaftCommand
 						// makes sure that lease requests for a replica not in the descriptor are
 						// bounced.
-						log.Fatalf(ctx, "lease %s owned by replica %+v that no longer exists",
+						//
+						// However, this is possible if the `cockroach debug
+						// unsafe-remove-dead-replicas` command has been used, so
+						// this is just a logged error instead of a fatal
+						// assertion.
+						log.Errorf(ctx, "lease %s owned by replica %+v that no longer exists",
 							status.Lease, status.Lease.Replica)
 					}
 					// Otherwise, if the lease is currently held by another replica, redirect
@@ -1458,10 +1503,11 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 		}
 
 		// Wait for the range lease to finish, or the context to expire.
-		pErr = func() *roachpb.Error {
+		pErr = func() (pErr *roachpb.Error) {
 			slowTimer := timeutil.NewTimer()
 			defer slowTimer.Stop()
 			slowTimer.Reset(base.SlowRequestThreshold)
+			tBegin := timeutil.Now()
 			for {
 				select {
 				case pErr = <-llHandle.C():
@@ -1506,7 +1552,10 @@ func (r *Replica) redirectOnOrAcquireLease(ctx context.Context) (LeaseStatus, *r
 					log.Warningf(ctx, "have been waiting %s attempting to acquire lease",
 						base.SlowRequestThreshold)
 					r.store.metrics.SlowLeaseRequests.Inc(1)
-					defer r.store.metrics.SlowLeaseRequests.Dec(1)
+					defer func() {
+						r.store.metrics.SlowLeaseRequests.Dec(1)
+						log.Infof(ctx, "slow lease acquisition finished after %s with error %v after %d attempts", timeutil.Since(tBegin), pErr, attempt)
+					}()
 				case <-ctx.Done():
 					llHandle.Cancel()
 					log.VErrEventf(ctx, 2, "lease acquisition failed: %s", ctx.Err())
@@ -1542,6 +1591,14 @@ func (r *Replica) isInitializedRLocked() bool {
 	return r.mu.state.Desc.IsInitialized()
 }
 
+// DescAndZone returns the authoritative range descriptor as well
+// as the zone config for the replica.
+func (r *Replica) DescAndZone() (*roachpb.RangeDescriptor, *config.ZoneConfig) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.mu.state.Desc, r.mu.zone
+}
+
 // Desc returns the authoritative range descriptor, acquiring a replica lock in
 // the process.
 func (r *Replica) Desc() *roachpb.RangeDescriptor {
@@ -1550,39 +1607,115 @@ func (r *Replica) Desc() *roachpb.RangeDescriptor {
 	return r.mu.state.Desc
 }
 
+func (r *Replica) descRLocked() *roachpb.RangeDescriptor {
+	return r.mu.state.Desc
+}
+
 // NodeID returns the ID of the node this replica belongs to.
 func (r *Replica) NodeID() roachpb.NodeID {
 	return r.store.nodeDesc.NodeID
 }
 
-// setDesc atomically sets the range's descriptor. This method calls
-// processRangeDescriptorUpdate() to make the Store handle the descriptor
-// update. Requires raftMu to be locked.
-func (r *Replica) setDesc(desc *roachpb.RangeDescriptor) error {
-	r.setDescWithoutProcessUpdate(desc)
-	if r.store == nil {
-		// r.rm is null in some tests.
-		return nil
-	}
-	return r.store.processRangeDescriptorUpdate(r.AnnotateCtx(context.TODO()), r)
+// ClusterSettings returns the node's ClusterSettings.
+func (r *Replica) ClusterSettings() *cluster.Settings {
+	return r.store.cfg.Settings
 }
 
-// setDescWithoutProcessUpdate updates the range descriptor without calling
-// processRangeDescriptorUpdate. Requires raftMu to be locked.
-func (r *Replica) setDescWithoutProcessUpdate(desc *roachpb.RangeDescriptor) {
+// StoreID returns the Replica's StoreID.
+func (r *Replica) StoreID() roachpb.StoreID {
+	return r.store.StoreID()
+}
+
+// EvalKnobs returns the EvalContext's Knobs.
+func (r *Replica) EvalKnobs() batcheval.TestingKnobs {
+	return r.store.cfg.TestingKnobs.EvalKnobs
+}
+
+// Tracer returns the Replica's Tracer.
+func (r *Replica) Tracer() opentracing.Tracer {
+	return r.store.Tracer()
+}
+
+// Clock returns the hlc clock shared by this replica.
+func (r *Replica) Clock() *hlc.Clock {
+	return r.store.Clock()
+}
+
+// DB returns the Replica's client DB.
+func (r *Replica) DB() *client.DB {
+	return r.store.DB()
+}
+
+// Engine returns the Replica's underlying Engine. In most cases the
+// evaluation Batch should be used instead.
+func (r *Replica) Engine() engine.Engine {
+	return r.store.Engine()
+}
+
+// AbortSpan returns the Replica's AbortSpan.
+func (r *Replica) AbortSpan() *abortspan.AbortSpan {
+	// Despite its name, the AbortSpan doesn't hold on-disk data in
+	// memory. It just provides methods that take a Batch, so SpanSet
+	// declarations are enforced there.
+	return r.abortSpan
+}
+
+// GetLimiters returns the Replica's limiters.
+func (r *Replica) GetLimiters() *batcheval.Limiters {
+	return &r.store.limiters
+}
+
+// GetTxnWaitQueue returns the Replica's txnwait.Queue.
+func (r *Replica) GetTxnWaitQueue() *txnwait.Queue {
+	return r.txnWaitQueue
+}
+
+// GetTerm returns the term of the given index in the raft log.
+func (r *Replica) GetTerm(i uint64) (uint64, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.raftTermRLocked(i)
+}
+
+// GetRangeID returns the Range ID.
+func (r *Replica) GetRangeID() roachpb.RangeID {
+	return r.RangeID
+}
+
+// GetGCThreshold returns the GC threshold.
+func (r *Replica) GetGCThreshold() hlc.Timestamp {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return *r.mu.state.GCThreshold
+}
+
+// GetTxnSpanGCThreshold returns the time of the replica's last transaction span
+// GC.
+func (r *Replica) GetTxnSpanGCThreshold() hlc.Timestamp {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return *r.mu.state.TxnSpanGCThreshold
+}
+
+// setDesc atomically sets the replica's descriptor. It requires raftMu to be
+// locked.
+func (r *Replica) setDesc(ctx context.Context, desc *roachpb.RangeDescriptor) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if desc.RangeID != r.RangeID {
-		ctx := r.AnnotateCtx(context.TODO())
 		log.Fatalf(ctx, "range descriptor ID (%d) does not match replica's range ID (%d)",
 			desc.RangeID, r.RangeID)
 	}
 	if r.mu.state.Desc != nil && r.mu.state.Desc.IsInitialized() &&
 		(desc == nil || !desc.IsInitialized()) {
-		ctx := r.AnnotateCtx(context.TODO())
 		log.Fatalf(ctx, "cannot replace initialized descriptor with uninitialized one: %+v -> %+v",
 			r.mu.state.Desc, desc)
+	}
+	if r.mu.state.Desc != nil && r.mu.state.Desc.IsInitialized() &&
+		!r.mu.state.Desc.StartKey.Equal(desc.StartKey) {
+		log.Fatalf(ctx, "attempted to change replica's start key from %s to %s",
+			r.mu.state.Desc.StartKey, desc.StartKey)
 	}
 
 	newMaxID := maxReplicaID(desc)
@@ -1635,6 +1768,13 @@ func (r *Replica) getReplicaDescriptorRLocked() (roachpb.ReplicaDescriptor, erro
 	return roachpb.ReplicaDescriptor{}, roachpb.NewRangeNotFoundError(r.RangeID)
 }
 
+func (r *Replica) getMergeCompleteCh() chan struct{} {
+	r.mu.RLock()
+	mergeCompleteCh := r.mu.mergeComplete
+	r.mu.RUnlock()
+	return mergeCompleteCh
+}
+
 // setLastReplicaDescriptors sets the the most recently seen replica
 // descriptors to those contained in the *RaftMessageRequest, acquiring r.mu
 // to do so.
@@ -1646,6 +1786,8 @@ func (r *Replica) setLastReplicaDescriptors(req *RaftMessageRequest) {
 }
 
 // GetMVCCStats returns a copy of the MVCC stats object for this range.
+// This accessor is thread-safe, but provides no guarantees about its
+// synchronization with any concurrent writes.
 func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -1656,36 +1798,13 @@ func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 //
 // TODO(bdarnell): This is not the same as RangeDescriptor.ContainsKey.
 func (r *Replica) ContainsKey(key roachpb.Key) bool {
-	return containsKey(*r.Desc(), key)
-}
-
-func containsKey(desc roachpb.RangeDescriptor, key roachpb.Key) bool {
-	if bytes.HasPrefix(key, keys.LocalRangeIDPrefix) {
-		return bytes.HasPrefix(key, keys.MakeRangeIDPrefix(desc.RangeID))
-	}
-	keyAddr, err := keys.Addr(key)
-	if err != nil {
-		return false
-	}
-	return desc.ContainsKey(keyAddr)
+	return storagebase.ContainsKey(*r.Desc(), key)
 }
 
 // ContainsKeyRange returns whether this range contains the specified
 // key range from start to end.
 func (r *Replica) ContainsKeyRange(start, end roachpb.Key) bool {
-	return containsKeyRange(*r.Desc(), start, end)
-}
-
-func containsKeyRange(desc roachpb.RangeDescriptor, start, end roachpb.Key) bool {
-	startKeyAddr, err := keys.Addr(start)
-	if err != nil {
-		return false
-	}
-	endKeyAddr, err := keys.Addr(end)
-	if err != nil {
-		return false
-	}
-	return desc.ContainsKeyRange(startKeyAddr, endKeyAddr)
+	return storagebase.ContainsKeyRange(*r.Desc(), start, end)
 }
 
 // GetLastReplicaGCTimestamp reads the timestamp at which the replica was
@@ -1784,13 +1903,13 @@ func (r *Replica) State() storagebase.RangeInfo {
 	var ri storagebase.RangeInfo
 	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*storagebase.ReplicaState)
 	ri.LastIndex = r.mu.lastIndex
-	ri.NumPending = uint64(len(r.mu.proposals))
+	ri.NumPending = uint64(len(r.mu.localProposals))
 	ri.RaftLogSize = r.mu.raftLogSize
 	ri.NumDropped = uint64(r.mu.droppedMessages)
 	if r.mu.proposalQuota != nil {
 		ri.ApproximateProposalQuota = r.mu.proposalQuota.approximateQuota()
 	}
-	ri.RangeMaxBytes = r.mu.maxBytes
+	ri.RangeMaxBytes = r.mu.zone.RangeMaxBytes
 	return ri
 }
 
@@ -1835,6 +1954,7 @@ func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
 	if err := r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		return true, nil
 	}); err != nil {
@@ -1847,6 +1967,23 @@ func (r *Replica) maybeInitializeRaftGroup(ctx context.Context) {
 // ctx should contain the log tags from the store (and up).
 func (r *Replica) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, *roachpb.Error) {
+	return r.sendWithRangeID(ctx, r.RangeID, ba)
+}
+
+// sendWithRangeID takes an unused rangeID argument so that the range
+// ID will be accessible in stack traces (both in panics and when
+// sampling goroutines from a live server). This line is subject to
+// the whims of the compiler and it can be difficult to find the right
+// value, but as of this writing the following example shows a stack
+// while processing range 21 (0x15) (the first occurrence of that
+// number is the rangeID argument, the second is within the encoded
+// BatchRequest, although we don't want to rely on that occurring
+// within the portion printed in the stack trace):
+//
+// github.com/cockroachdb/cockroach/pkg/storage.(*Replica).sendWithRangeID(0xc420d1a000, 0x64bfb80, 0xc421564b10, 0x15, 0x153fd4634aeb0193, 0x0, 0x100000001, 0x1, 0x15, 0x0, ...)
+func (r *Replica) sendWithRangeID(
+	ctx context.Context, rangeID roachpb.RangeID, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	var br *roachpb.BatchResponse
 	if r.leaseholderStats != nil && ba.Header.GatewayNodeID != 0 {
@@ -1923,10 +2060,10 @@ func (r *Replica) Send(
 // declared in the SpanSet; this is OK because it can never change the
 // evaluation of a batch, only allow or disallow it.
 func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error {
-	r.mu.Lock()
+	r.mu.RLock()
 	desc := r.mu.state.Desc
 	threshold := r.mu.state.GCThreshold
-	r.mu.Unlock()
+	r.mu.RUnlock()
 	if !threshold.Less(ts) {
 		return &roachpb.BatchTimestampBeforeGCError{
 			Timestamp: ts,
@@ -1946,7 +2083,7 @@ func (r *Replica) requestCanProceed(rspan roachpb.RSpan, ts hlc.Timestamp) error
 	// Try to suggest the correct range on a key mismatch error where
 	// even the start key of the request went to the wrong range.
 	if !desc.ContainsKey(rspan.Key) {
-		if repl := r.store.LookupReplica(rspan.Key, nil); repl != nil {
+		if repl := r.store.LookupReplica(rspan.Key); repl != nil {
 			// Only return the correct range descriptor as a hint
 			// if we know the current lease holder for that range, which
 			// indicates that our knowledge is not stale.
@@ -2081,6 +2218,21 @@ func (r *Replica) updateTimestampCache(
 					start = resp.ResumeSpan.EndKey
 				}
 				tc.Add(start, end, ts, txnID, readOnlyUseReadCache)
+			case *roachpb.QueryIntentRequest:
+				if t.IfMissing == roachpb.QueryIntentRequest_PREVENT {
+					resp := br.Responses[i].GetInner().(*roachpb.QueryIntentResponse)
+					if !resp.FoundIntent {
+						// If the QueryIntent request has an "if missing" behavior
+						// of PREVENT and the intent is missing then we update the
+						// timestamp cache at the intent's key to the intent's
+						// transactional timestamp. This will prevent the intent
+						// from ever being written in the future. We use an empty
+						// transaction ID so that we block the intent regardless
+						// of whether it is part of the current batch's transaction
+						// or not.
+						tc.Add(start, end, t.Txn.Timestamp, uuid.UUID{}, readOnlyUseReadCache)
+					}
+				}
 			case *roachpb.RefreshRequest:
 				tc.Add(start, end, ts, txnID, !t.Write /* readCache */)
 			case *roachpb.RefreshRangeRequest:
@@ -2118,9 +2270,6 @@ func collectSpans(
 
 	for _, union := range ba.Requests {
 		inner := union.GetInner()
-		if _, ok := inner.(*roachpb.NoopRequest); ok {
-			continue
-		}
 		if cmd, ok := batcheval.LookupCommand(inner.Method()); ok {
 			cmd.DeclareKeys(desc, ba.Header, inner, spans)
 		} else {
@@ -2136,13 +2285,16 @@ func collectSpans(
 	return spans, nil
 }
 
-// beginCmds waits for any overlapping, already-executing commands via
-// the command queue and adds itself to queues based on keys affected by the
-// batched commands. This gates subsequent commands with overlapping keys or
-// key ranges. This method will block if there are any overlapping commands
-// already in the queue. Returns a cleanup function to be called when the
-// commands are done and can be removed from the queue, and whose returned
-// error is to be used in place of the supplied error.
+// beginCmds waits for any in-flight, conflicting commands to complete. This
+// includes merges in their critical phase or overlapping, already-executing
+// commands.
+//
+// More specifically, after waiting for in-flight merges, beginCmds adds the
+// request to the command queue based on keys affected by the batched commands.
+// This gates subsequent commands with overlapping keys or key ranges. It
+// returns a cleanup function to be called when the commands are done and can be
+// removed from the queue, and whose returned error is to be used in place of
+// the supplied error.
 func (r *Replica) beginCmds(
 	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
 ) (*endCmds, error) {
@@ -2233,16 +2385,18 @@ func (r *Replica) beginCmds(
 						err := ctx.Err()
 						log.VEventf(ctx, 2, "%s while in command queue: %s", err, ba)
 
-						// Remove the command from the command queue immediately. Dependents will
-						// transfer transitive dependencies when they try to block on this command,
-						// because our prereqs slice is not empty. This migration of dependencies
-						// will happen for each dependent in ResolvePendingPrereq, which will notice
-						// that our prereqs slice was not empty when we stopped pending and will
-						// adopt our prerequisites in turn. New commands that would have established
-						// a dependency on this command will never see it, which is fine.
 						if fn := r.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
 							fn(ba, storagebase.CommandQueueCancellation)
 						}
+
+						// Remove the command from the command queue immediately. New commands that
+						// would have established a dependency on this command will never see it,
+						// which is fine. Current dependents that already have a dependency on this
+						// command will transfer transitive dependencies when they try to block on
+						// this command, because our prereqs slice is not empty. This migration of
+						// dependencies will happen for each dependent in ResolvePendingPrereq,
+						// which will notice that our prereqs slice was not empty when we stopped
+						// pending and will adopt our prerequisites in turn.
 						r.removeCmdsFromCommandQueue(newCmds)
 						return nil, err
 					case <-r.store.stopper.ShouldQuiesce():
@@ -2259,6 +2413,54 @@ func (r *Replica) beginCmds(
 		}
 		if fn := r.store.cfg.TestingKnobs.OnCommandQueueAction; fn != nil {
 			fn(ba, storagebase.CommandQueueBeginExecuting)
+		}
+
+		if r.getMergeCompleteCh() != nil && !ba.IsSingleSubsumeRequest() {
+			// The replica is being merged into its left-hand neighbor. This request
+			// cannot proceed until the merge completes, signaled by the closing of
+			// the channel.
+			//
+			// It is very important that this check occur after the command queue has
+			// allowed us to proceed. Only after we exit the command queue are we
+			// guaranteed that we're not racing with a Subsume command. (Subsume
+			// commands declare a conflict with all other commands.)
+			//
+			// Note that Subsume commands are exempt from waiting on the mergeComplete
+			// channel. This is necessary to avoid deadlock. While normally a Subsume
+			// request will trigger the installation of a mergeComplete channel after
+			// it is executed, it may sometimes execute after the mergeComplete
+			// channel has been installed. Consider the case where the RHS replica
+			// acquires a new lease after the merge transaction deletes its local
+			// range descriptor but before the Subsume command is sent. The lease
+			// acquisition request will notice the intent on the local range
+			// descriptor and install a mergeComplete channel. If the forthcoming
+			// Subsume blocked on that channel, the merge transaction would deadlock.
+			//
+			// This exclusion admits a small race condition. If a Subsume request is
+			// sent to the right-hand side of a merge, outside of a merge transaction,
+			// after the merge has committed but before the RHS has noticed that the
+			// merge has committed, the request may return stale data. Since the merge
+			// has committed, the LHS may have processed writes to the keyspace
+			// previously owned by the RHS that the RHS is unaware of. This window
+			// closes quickly, as the RHS will soon notice the merge transaction has
+			// committed and mark itself as destroyed, which prevents it from serving
+			// all traffic, including Subsume requests.
+			//
+			// In our current, careful usage of Subsume, this race condition is
+			// irrelevant. Subsume is only sent from within a merge transaction, and
+			// merge transactions read the RHS descriptor at the beginning of the
+			// transaction to verify that it has not already been merged away.
+			//
+			// We can't wait for the merge to complete here, though. The replica might
+			// need to respond to a Subsume request in order for the merge to
+			// complete, and blocking here would force that Subsume request to sit in
+			// the command queue forever, deadlocking the merge. Instead, we remove
+			// the commands from the command queue and return a MergeInProgressError.
+			// The store will catch that error and resubmit the request after
+			// mergeCompleteCh closes. See #27442 for the full context.
+			log.Event(ctx, "waiting on in-progress merge")
+			r.removeCmdsFromCommandQueue(newCmds)
+			return nil, &roachpb.MergeInProgressError{}
 		}
 	} else {
 		log.Event(ctx, "operation accepts inconsistent results")
@@ -2294,6 +2496,16 @@ func (r *Replica) removeCmdsFromCommandQueue(cmds batchCmdSet) {
 	r.cmdQMu.Lock()
 	for _, accessCmds := range cmds {
 		for scope, cmd := range accessCmds {
+			if cmd.PrereqLen() > 0 {
+				// The command was canceled while it still had prerequisites to
+				// wait on. To avoid transferring already resolved prerequisites
+				// to our dependencies, we perform one last optimistic scan over
+				// our prerequisites and resolve any that are no longer pending
+				// and were not canceled themselves. This helps bound the
+				// quadratic blowup of prerequisites during cascading
+				// cancellations.
+				cmd.OptimisticallyResolvePrereqs()
+			}
 			r.cmdQMu.queues[scope].remove(cmd)
 		}
 	}
@@ -2314,8 +2526,17 @@ func (r *Replica) removeCmdsFromCommandQueue(cmds batchCmdSet) {
 // timestamp cache. When the write returns, the updated timestamp
 // will inform the batch response timestamp or batch response txn
 // timestamp.
+//
+// minReadTS is used as a per-request low water mark for the value returned from
+// the read timestamp cache. That is, if the read timestamp cache returns a
+// value below minReadTS, minReadTS (without an associated txn id) will be used
+// instead to adjust the batch's timestamp.
+//
+// The timestamp cache also has a role in preventing replays of BeginTransaction
+// reordered after an EndTransaction. If that's detected, an error will be
+// returned.
 func (r *Replica) applyTimestampCache(
-	ctx context.Context, ba *roachpb.BatchRequest,
+	ctx context.Context, ba *roachpb.BatchRequest, minReadTS hlc.Timestamp,
 ) (bool, *roachpb.Error) {
 	var bumped bool
 	for _, union := range ba.Requests {
@@ -2324,29 +2545,42 @@ func (r *Replica) applyTimestampCache(
 			header := args.Header()
 			// BeginTransaction is a special case. We use the transaction
 			// key to look for an entry which would indicate this transaction
-			// has already been finalized, in which case this is a replay.
+			// has already been finalized, in which case this BeginTxn might be a
+			// replay (it might also be delayed, coming in behind an async EndTxn).
+			// If the request hits the timestamp cache, then we return a retriable
+			// error: if this is a re-evaluation, then the error will be transformed
+			// into an ambiguous one higher up. Otherwise, if the client is still
+			// waiting for a result, then this cannot be a "replay" of any sort.
+			//
+			// The retriable error we return is a TransactionAbortedError, instructing
+			// the client to create a new transaction. Since a transaction record
+			// doesn't exist, there's no point in the client to continue with the
+			// existing transaction at a new epoch.
 			if _, ok := args.(*roachpb.BeginTransactionRequest); ok {
 				key := keys.TransactionKey(header.Key, ba.Txn.ID)
-				wTS, wTxnID := r.store.tsCache.GetMaxWrite(key, nil)
+				wTS, wTxnID := r.store.tsCache.GetMaxWrite(key, nil /* end */)
 				// GetMaxWrite will only find a timestamp interval with an
 				// associated txnID on the TransactionKey if an EndTxnReq has
 				// been processed. All other timestamp intervals will have no
 				// associated txnID and will be due to the low-water mark.
 				switch wTxnID {
 				case ba.Txn.ID:
-					return bumped, roachpb.NewError(roachpb.NewTransactionReplayError())
+					newTxn := ba.Txn.Clone()
+					newTxn.Status = roachpb.ABORTED
+					newTxn.Timestamp.Forward(wTS.Next())
+					return false, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(
+						roachpb.ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY), &newTxn)
 				case uuid.UUID{} /* noTxnID */ :
 					if !wTS.Less(ba.Txn.Timestamp) {
-						// This is a crucial bit of code. The timestamp cache is
-						// reset with the current time as the low-water mark, so
-						// if this replica recently obtained the lease, this
-						// case will be true for new txns, even if they're not a
-						// replay. We move the timestamp forward and return
-						// retry. If it's really a replay, it won't retry.
-						txn := ba.Txn.Clone()
-						bumped = txn.Timestamp.Forward(wTS.Next()) || bumped
-						err := roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
-						return bumped, roachpb.NewErrorWithTxn(err, &txn)
+						// On lease transfers the timestamp cache is reset with the transfer
+						// time as the low-water mark, so if this replica recently obtained
+						// the lease, this case will be true for new txns, even if they're
+						// not a replay. We move the timestamp forward and return retry.
+						newTxn := ba.Txn.Clone()
+						newTxn.Status = roachpb.ABORTED
+						newTxn.Timestamp.Forward(wTS.Next())
+						return false, roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(
+							roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED_POSSIBLE_REPLAY), &newTxn)
 					}
 				default:
 					log.Fatalf(ctx, "unexpected tscache interval (%s,%s) on TxnKey %s",
@@ -2357,6 +2591,9 @@ func (r *Replica) applyTimestampCache(
 
 			// Forward the timestamp if there's been a more recent read (by someone else).
 			rTS, rTxnID := r.store.tsCache.GetMaxRead(header.Key, header.EndKey)
+			if rTS.Forward(minReadTS) {
+				rTxnID = uuid.Nil
+			}
 			if ba.Txn != nil {
 				if ba.Txn.ID != rTxnID {
 					nextTS := rTS.Next()
@@ -2453,6 +2690,11 @@ func (r *Replica) executeAdminBatch(
 		pErr = roachpb.NewError(err)
 		resp = &roachpb.AdminChangeReplicasResponse{}
 
+	case *roachpb.AdminRelocateRangeRequest:
+		err := r.store.AdminRelocateRange(ctx, *r.Desc(), tArgs.Targets)
+		pErr = roachpb.NewError(err)
+		resp = &roachpb.AdminRelocateRangeResponse{}
+
 	case *roachpb.CheckConsistencyRequest:
 		var reply roachpb.CheckConsistencyResponse
 		reply, pErr = r.CheckConsistency(ctx, *tArgs)
@@ -2480,6 +2722,11 @@ func (r *Replica) executeAdminBatch(
 	if pErr != nil {
 		return nil, pErr
 	}
+
+	if ba.Header.ReturnRangeInfo {
+		returnRangeInfo(resp, r)
+	}
+
 	br := &roachpb.BatchResponse{}
 	br.Add(resp)
 	br.Txn = resp.Header().Txn
@@ -2541,17 +2788,140 @@ func (r *Replica) limitTxnMaxTimestamp(
 	}
 }
 
+// maybeWatchForMerge checks whether a merge of this replica into its left
+// neighbor is in its critical phase and, if so, arranges to block all requests
+// until the merge completes.
+func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
+	desc := r.Desc()
+	descKey := keys.RangeDescriptorKey(desc.StartKey)
+	_, intents, err := engine.MVCCGet(ctx, r.Engine(), descKey, r.Clock().Now(),
+		false /* consistent */, nil /* txn */)
+	if err != nil {
+		return err
+	} else if len(intents) == 0 {
+		return nil
+	} else if len(intents) > 1 {
+		log.Fatalf(ctx, "MVCCGet returned an impossible number of intents (%d)", len(intents))
+	}
+	val, _, err := engine.MVCCGetAsTxn(
+		ctx, r.Engine(), descKey, intents[0].Txn.Timestamp, intents[0].Txn)
+	if err != nil {
+		return err
+	} else if val != nil {
+		return nil
+	}
+
+	// At this point, we know we have a deletion intent on our range descriptor.
+	// That means a merge is in progress. Block all commands until we can
+	// retrieve an updated range descriptor from meta2, which will indicate
+	// whether the merge succeeded or not.
+
+	mergeCompleteCh := make(chan struct{})
+	r.mu.Lock()
+	if r.mu.mergeComplete != nil {
+		// Another request already noticed the merge, installed a mergeComplete
+		// channel, and launched a goroutine to watch for the merge's completion.
+		// Nothing more to do.
+		r.mu.Unlock()
+		return nil
+	}
+	r.mu.mergeComplete = mergeCompleteCh
+	r.mu.Unlock()
+
+	taskCtx := r.AnnotateCtx(context.Background())
+	err = r.store.stopper.RunAsyncTask(taskCtx, "wait-for-merge", func(ctx context.Context) {
+		for retry := retry.Start(base.DefaultRetryOptions()); retry.Next(); {
+			// Wait for the merge transaction to complete by attempting to push it. We
+			// don't want to accidentally abort the merge transaction, so we use the
+			// minimum transaction priority. Note that a push type of
+			// roachpb.PUSH_TOUCH, though it might appear more semantically correct,
+			// returns immediately and causes us to spin hot, whereas
+			// roachpb.PUSH_ABORT efficiently blocks until the transaction completes.
+			_, pErr := client.SendWrapped(ctx, r.DB().NonTransactionalSender(), &roachpb.PushTxnRequest{
+				RequestHeader: roachpb.RequestHeader{Key: intents[0].Txn.Key},
+				PusherTxn: roachpb.Transaction{
+					TxnMeta: enginepb.TxnMeta{Priority: roachpb.MinTxnPriority},
+				},
+				PusheeTxn: intents[0].Txn,
+				Now:       r.Clock().Now(),
+				PushType:  roachpb.PUSH_ABORT,
+			})
+			if pErr != nil {
+				select {
+				case <-r.store.stopper.ShouldQuiesce():
+					// The server is shutting down. The error while fetching the range
+					// descriptor was probably caused by the shutdown, so ignore it.
+					return
+				default:
+					log.Warningf(ctx, "error while watching for merge to complete: %s", pErr)
+					// We can't safely unblock traffic until we can prove that the merge
+					// transaction is committed or aborted. Nothing to do but try again.
+					continue
+				}
+			}
+			// Unblock pending requests. If the merge committed, the requests will
+			// notice that the replica has been destroyed and return an appropriate
+			// error. If the merge aborted, the requests will be handled normally.
+			r.mu.Lock()
+			r.mu.mergeComplete = nil
+			close(mergeCompleteCh)
+			r.mu.Unlock()
+			return
+		}
+		log.Fatal(ctx, "unreachable")
+	})
+	if err == stop.ErrUnavailable {
+		// We weren't able to launch a goroutine to watch for the merge's completion
+		// because the server is shutting down. Normally failing to launch the
+		// watcher goroutine would wedge pending requests on the replica's
+		// mergeComplete channel forever, but since we're shutting down those
+		// requests will get dropped and retried on another node. Suppress the error.
+		err = nil
+	}
+	return err
+}
+
 // executeReadOnlyBatch updates the read timestamp cache and waits for any
 // overlapping writes currently processing through Raft ahead of us to
 // clear via the command queue.
 func (r *Replica) executeReadOnlyBatch(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
-	// If the read is not inconsistent, the read requires the range lease.
+	// If the read is not inconsistent, the read requires the range lease or
+	// permission to serve via follower reads.
 	var status LeaseStatus
 	if ba.ReadConsistency.RequiresReadLease() {
 		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
-			return nil, pErr
+			if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok &&
+				FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV) &&
+				lErr.LeaseHolder != nil && lErr.Lease.Type() == roachpb.LeaseEpoch {
+
+				r.mu.RLock()
+				lai := r.mu.state.LeaseAppliedIndex
+				r.mu.RUnlock()
+				if !r.store.cfg.ClosedTimestamp.Provider.CanServe(
+					lErr.LeaseHolder.NodeID, ba.Timestamp, r.RangeID, ctpb.Epoch(lErr.Lease.Epoch), ctpb.LAI(lai),
+				) {
+					r.store.cfg.ClosedTimestamp.Clients.Request(lErr.LeaseHolder.NodeID, r.RangeID)
+					// NB: this can't go behind V(x) because the log message created by the
+					// storage might be gigantic in real clusters, and we don't want to trip it
+					// using logspy.
+					if false {
+						log.Warningf(ctx, "can't serve follower read for %s at epo %d lai %d, storage is %s",
+							ba.Timestamp, lErr.Lease.Epoch, lai,
+							r.store.cfg.ClosedTimestamp.Storage.(*ctstorage.MultiStorage).StringForNodes(lErr.LeaseHolder.NodeID),
+						)
+					}
+					return nil, pErr
+				}
+				// This replica can serve this read!
+				//
+				// TODO(tschottdorf): once a read for a timestamp T has been served, the replica may
+				// serve reads for that and smaller timestamps forever.
+				log.Event(ctx, "serving via follower read")
+			} else {
+				return nil, pErr
+			}
 		}
 	}
 	r.limitTxnMaxTimestamp(ctx, &ba, status)
@@ -2606,6 +2976,12 @@ func (r *Replica) executeReadOnlyBatch(
 	defer readOnly.Close()
 	br, result, pErr = evaluateBatch(ctx, storagebase.CmdIDKey(""), readOnly, rec, nil, ba)
 
+	if result.Local.DetachMaybeWatchForMerge() {
+		if err := r.maybeWatchForMerge(ctx); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+	}
+
 	if intents := result.Local.DetachIntents(); len(intents) > 0 {
 		log.Eventf(ctx, "submitting %d intents to asynchronous processing", len(intents))
 		// We only allow synchronous intent resolution for consistent requests.
@@ -2617,7 +2993,7 @@ func (r *Replica) executeReadOnlyBatch(
 		// range descriptor cache has an in-flight RangeLookup request which
 		// prohibits any concurrent requests for the same range. See #17760.
 		allowSyncProcessing := ba.ReadConsistency == roachpb.CONSISTENT
-		if err := r.store.intentResolver.processIntentsAsync(ctx, r, intents, allowSyncProcessing); err != nil {
+		if err := r.store.intentResolver.cleanupIntentsAsync(ctx, r, intents, allowSyncProcessing); err != nil {
 			log.Warning(ctx, err)
 		}
 	}
@@ -2768,11 +3144,14 @@ func (r *Replica) tryExecuteWriteBatch(
 	}
 	r.limitTxnMaxTimestamp(ctx, &ba, status)
 
+	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
+	defer untrack(ctx, 0, 0) // covers all error returns below
+
 	// Examine the read and write timestamp caches for preceding
 	// commands which require this command to move its timestamp
 	// forward. Or, in the case of a transactional write, the txn
 	// timestamp and possible write-too-old bool.
-	if bumped, pErr := r.applyTimestampCache(ctx, &ba); pErr != nil {
+	if bumped, pErr := r.applyTimestampCache(ctx, &ba, minTS); pErr != nil {
 		return nil, pErr, proposalNoRetry
 	} else if bumped {
 		// If we bump the transaction's timestamp, we must absolutely
@@ -2795,19 +3174,20 @@ func (r *Replica) tryExecuteWriteBatch(
 
 	log.Event(ctx, "applied timestamp cache")
 
-	ch, tryAbandon, undoQuotaAcquisition, pErr := r.propose(ctx, lease, ba, endCmds, spans)
-	defer func() {
-		// NB: We may be double free-ing here, consider the following cases:
-		//  - The request was evaluated and the command resulted in an error, but a
-		//    proposal is still sent.
-		//  - Proposals get duplicated.
-		// To counter this our quota pool is capped at the initial quota size.
-		if pErr != nil {
-			undoQuotaAcquisition()
-		}
-	}()
+	ch, tryAbandon, maxLeaseIndex, pErr := r.propose(ctx, lease, ba, endCmds, spans)
 	if pErr != nil {
+		if maxLeaseIndex != 0 {
+			log.Fatalf(
+				ctx, "unexpected max lease index %d assigned to failed proposal: %s, error %s",
+				maxLeaseIndex, ba, pErr,
+			)
+		}
 		return nil, pErr, proposalNoRetry
+	}
+	// A max lease index of zero is returned when no proposal was made or a lease was proposed.
+	// In both cases, we don't need to communicate a MLAI.
+	if maxLeaseIndex != 0 {
+		untrack(ctx, r.RangeID, ctpb.LAI(maxLeaseIndex))
 	}
 
 	// After the command is proposed to Raft, invoking endCmds.done is now the
@@ -2820,6 +3200,8 @@ func (r *Replica) tryExecuteWriteBatch(
 	slowTimer := timeutil.NewTimer()
 	defer slowTimer.Stop()
 	slowTimer.Reset(base.SlowRequestThreshold)
+	tBegin := timeutil.Now()
+
 	for {
 		select {
 		case propResult := <-ch:
@@ -2833,7 +3215,7 @@ func (r *Replica) tryExecuteWriteBatch(
 				// both leave intents to GC that don't hit this code path. No good
 				// solution presents itself at the moment and such intents will be
 				// resolved on reads.
-				if err := r.store.intentResolver.processIntentsAsync(ctx, r, propResult.Intents, true /* allowSync */); err != nil {
+				if err := r.store.intentResolver.cleanupIntentsAsync(ctx, r, propResult.Intents, true /* allowSync */); err != nil {
 					log.Warning(ctx, err)
 				}
 			}
@@ -2848,7 +3230,14 @@ func (r *Replica) tryExecuteWriteBatch(
 			log.Warningf(ctx, "have been waiting %s for proposing command %s",
 				base.SlowRequestThreshold, ba)
 			r.store.metrics.SlowRaftRequests.Inc(1)
-			defer r.store.metrics.SlowRaftRequests.Dec(1)
+			defer func() {
+				r.store.metrics.SlowRaftRequests.Dec(1)
+				contextStr := ""
+				if err := ctx.Err(); err != nil {
+					contextStr = " with context cancellation"
+				}
+				log.Infof(ctx, "slow command %s finished after %s%s", ba, timeutil.Since(tBegin), contextStr)
+			}()
 
 		case <-ctxDone:
 			// If our context was canceled, return an AmbiguousResultError
@@ -2906,11 +3295,7 @@ func (r *Replica) requestToProposal(
 		proposal.command = &storagebase.RaftCommand{
 			ReplicatedEvalResult: res.Replicated,
 			WriteBatch:           res.WriteBatch,
-		}
-		if r.store.TestingKnobs().EvalKnobs.TestingEvalFilter != nil {
-			// For backwards compatibility, tests that use TestingEvalFilter
-			// need the original request to be preserved. See #10493
-			proposal.command.TestingBatchRequest = &ba
+			LogicalOpLog:         res.LogicalOpLog,
 		}
 	}
 
@@ -2969,9 +3354,9 @@ func (r *Replica) evaluateProposal(
 		intents := res.Local.DetachIntents()
 		endTxns := res.Local.DetachEndTxns(true /* alwaysOnly */)
 		res.Local = result.LocalResult{
-			Intents:            &intents,
-			EndTxns:            &endTxns,
-			LeaseMetricsResult: res.Local.LeaseMetricsResult,
+			Intents: &intents,
+			EndTxns: &endTxns,
+			Metrics: res.Local.Metrics,
 		}
 		res.Replicated.Reset()
 		return &res, false /* needConsensus */, pErr
@@ -2981,6 +3366,17 @@ func (r *Replica) evaluateProposal(
 	// returned to the client after the proposal completes, or immediately if
 	// replication is not necessary.
 	res.Local.Reply = br
+
+	// Assert that successful write requests result in intents. This is
+	// important for transactional pipelining and the parallel commit proposal
+	// because both use the presence of an intent to indicate that a write
+	// succeeded. This check may have false negatives but will never have false
+	// positives.
+	if br.Txn != nil && br.Txn.Status != roachpb.ABORTED {
+		if ba.IsTransactionWrite() && !ba.IsRange() && batch.Empty() {
+			log.Fatalf(ctx, "successful transaction point write batch %v resulted in no-op", ba)
+		}
+	}
 
 	// needConsensus determines if the result needs to be replicated and
 	// proposed through Raft. This is necessary if at least one of the
@@ -3049,10 +3445,10 @@ func (r *Replica) evaluateProposal(
 }
 
 // insertProposalLocked assigns a MaxLeaseIndex to a proposal and adds
-// it to the pending map.
+// it to the pending map. Returns the assigned MaxLeaseIndex, if any.
 func (r *Replica) insertProposalLocked(
 	proposal *ProposalData, proposerReplica roachpb.ReplicaDescriptor, proposerLease roachpb.Lease,
-) {
+) int64 {
 	// Assign a lease index. Note that we do this as late as possible
 	// to make sure (to the extent that we can) that we don't assign
 	// (=predict) the index differently from the order in which commands are
@@ -3060,37 +3456,30 @@ func (r *Replica) insertProposalLocked(
 	if r.mu.lastAssignedLeaseIndex < r.mu.state.LeaseAppliedIndex {
 		r.mu.lastAssignedLeaseIndex = r.mu.state.LeaseAppliedIndex
 	}
-	if !proposal.Request.IsLeaseRequest() {
+	isLease := proposal.Request.IsLeaseRequest()
+	if !isLease {
 		r.mu.lastAssignedLeaseIndex++
 	}
 	proposal.command.MaxLeaseIndex = r.mu.lastAssignedLeaseIndex
 	proposal.command.ProposerReplica = proposerReplica
-
-	// If the proposerLease has a sequence number then we can send this through
-	// Raft instead of sending the entire Lease through Raft.
-	//
-	// NB: We can't check IsMinSupported(VersionLeaseSequence) here because its
-	// value may not have been the same when a lease request was evaluated,
-	// meaning that we have no guarantee that a new lease isn't being proposed
-	// without a sequence number. If we started sending only lease sequence
-	// numbers in this case, we wouldn't be able to distinguish the old and the
-	// new lease.
-	if proposerLease.Sequence != 0 {
-		proposal.command.ProposerLeaseSequence = proposerLease.Sequence
-	} else {
-		proposal.command.DeprecatedProposerLease = &proposerLease
-	}
+	proposal.command.ProposerLeaseSequence = proposerLease.Sequence
 
 	if log.V(4) {
 		log.Infof(proposal.ctx, "submitting proposal %x: maxLeaseIndex=%d",
 			proposal.idKey, proposal.command.MaxLeaseIndex)
 	}
 
-	if _, ok := r.mu.proposals[proposal.idKey]; ok {
+	if _, ok := r.mu.localProposals[proposal.idKey]; ok {
 		ctx := r.AnnotateCtx(context.TODO())
 		log.Fatalf(ctx, "pending command already exists for %s", proposal.idKey)
 	}
-	r.mu.proposals[proposal.idKey] = proposal
+	r.mu.localProposals[proposal.idKey] = proposal
+	if isLease {
+		// For lease requests, we return zero because no real MaxLeaseIndex is assigned.
+		// We could also return the lastAssignedIndex but this invites confusion.
+		return 0
+	}
+	return int64(proposal.command.MaxLeaseIndex)
 }
 
 func makeIDKey() storagebase.CmdIDKey {
@@ -3112,6 +3501,7 @@ func makeIDKey() storagebase.CmdIDKey {
 // - a callback to undo quota acquisition if the attempt to propose the batch
 //   request to raft fails. This also cleans up the command sizes stored for
 //   the corresponding proposal.
+// - the MaxLeaseIndex of the resulting proposal, if any.
 // - any error obtained during the creation or proposal of the command, in
 //   which case the other returned values are zero.
 func (r *Replica) propose(
@@ -3120,27 +3510,25 @@ func (r *Replica) propose(
 	ba roachpb.BatchRequest,
 	endCmds *endCmds,
 	spans *spanset.SpanSet,
-) (chan proposalResult, func() bool, func(), *roachpb.Error) {
-	noop := func() {}
-
+) (_ chan proposalResult, _ func() bool, _ int64, pErr *roachpb.Error) {
 	r.mu.Lock()
 	if !r.mu.destroyStatus.IsAlive() {
 		err := r.mu.destroyStatus.err
 		r.mu.Unlock()
-		return nil, nil, noop, roachpb.NewError(err)
+		return nil, nil, 0, roachpb.NewError(err)
 	}
 	r.mu.Unlock()
 
 	rSpan, err := keys.Range(ba)
 	if err != nil {
-		return nil, nil, noop, roachpb.NewError(err)
+		return nil, nil, 0, roachpb.NewError(err)
 	}
 
 	// Checking the context just before proposing can help avoid ambiguous errors.
 	if err := ctx.Err(); err != nil {
 		errStr := fmt.Sprintf("%s before proposing: %s", err, ba.Summary())
 		log.Warning(ctx, errStr)
-		return nil, nil, noop, roachpb.NewError(err)
+		return nil, nil, 0, roachpb.NewError(err)
 	}
 
 	// Only need to check that the request is in bounds at proposal time,
@@ -3148,12 +3536,16 @@ func (r *Replica) propose(
 	// all requests (notably EndTransaction with SplitTrigger) that may
 	// cause this condition to change.
 	if err := r.requestCanProceed(rSpan, ba.Timestamp); err != nil {
-		return nil, nil, noop, roachpb.NewError(err)
+		return nil, nil, 0, roachpb.NewError(err)
 	}
 
 	idKey := makeIDKey()
 	proposal, pErr := r.requestToProposal(ctx, idKey, ba, endCmds, spans)
 	log.Event(proposal.ctx, "evaluated request")
+
+	// Pull out proposal channel to return. proposal.doneCh may be set to
+	// nil if it is signaled in this function.
+	proposalCh := proposal.doneCh
 
 	// There are two cases where request evaluation does not lead to a Raft
 	// proposal:
@@ -3173,7 +3565,35 @@ func (r *Replica) propose(
 			EndTxns: endTxns,
 		}
 		proposal.finishApplication(pr)
-		return proposal.doneCh, func() bool { return false }, noop, nil
+		return proposalCh, func() bool { return false }, 0, nil
+	}
+
+	// If the request requested that Raft consensus be performed asynchronously,
+	// return a proposal result immediately on the proposal's done channel.
+	// The channel's capacity will be large enough to accommodate this.
+	if ba.AsyncConsensus {
+		if ets := proposal.Local.DetachEndTxns(false /* alwaysOnly */); len(ets) != 0 {
+			// Disallow async consensus for commands with EndTxnIntents because
+			// any !Always EndTxnIntent can't be cleaned up until after the
+			// command succeeds.
+			return nil, nil, 0, roachpb.NewErrorf("cannot perform consensus asynchronously for "+
+				"proposal with EndTxnIntents=%v; %v", ets, ba)
+		}
+
+		// Fork the proposal's context span so that the proposal's context
+		// can outlive the original proposer's context.
+		proposal.ctx, proposal.sp = tracing.ForkCtxSpan(ctx, "async consensus")
+
+		// Signal the proposal's response channel immediately.
+		reply := *proposal.Local.Reply
+		reply.Responses = append([]roachpb.ResponseUnion(nil), reply.Responses...)
+		pr := proposalResult{
+			Reply:   &reply,
+			Intents: proposal.Local.DetachIntents(),
+		}
+		proposal.signalProposalResult(pr)
+
+		// Continue with proposal...
 	}
 
 	// TODO(irfansharif): This int cast indicates that if someone configures a
@@ -3184,57 +3604,75 @@ func (r *Replica) propose(
 		// Once a command is written to the raft log, it must be loaded
 		// into memory and replayed on all replicas. If a command is
 		// too big, stop it here.
-		return nil, nil, noop, roachpb.NewError(errors.Errorf(
+		return nil, nil, 0, roachpb.NewError(errors.Errorf(
 			"command is too large: %d bytes (max: %d)",
 			proposalSize, MaxCommandSize.Get(&r.store.cfg.Settings.SV),
 		))
 	}
 
+	// TODO(tschottdorf): blocking a proposal here will leave it dangling in the
+	// closed timestamp tracker for an extended period of time, which will in turn
+	// prevent the node-wide closed timestamp from making progress. This is quite
+	// unfortunate; we should hoist the quota pool before the reference with the
+	// closed timestamp tracker is acquired. This is better anyway; right now many
+	// commands can evaluate but then be blocked on quota, which has worse memory
+	// behavior.
 	if err := r.maybeAcquireProposalQuota(ctx, int64(proposalSize)); err != nil {
-		return nil, nil, noop, roachpb.NewError(err)
+		return nil, nil, 0, roachpb.NewError(err)
 	}
 
-	// submitProposalLocked calls withRaftGroupLocked which requires that
-	// raftMu is held. In order to maintain our lock ordering we need to lock
-	// Replica.raftMu here before locking Replica.mu.
-	//
-	// TODO(peter): It appears that we only need to hold Replica.raftMu when
-	// calling raft.NewRawNode. We could get fancier with the locking here to
-	// optimize for the common case where Replica.mu.internalRaftGroup is
-	// non-nil, but that doesn't currently seem worth it. Always locking raftMu
-	// has a tiny (~1%) performance hit for single-node block_writer testing.
-	r.raftMu.Lock()
-	defer r.raftMu.Unlock()
+	// submitProposalLocked calls withRaftGroupLocked which requires that raftMu
+	// is held, but only if Replica.mu.internalRaftGroup == nil. To avoid
+	// locking Replica.raftMu in the common case where the raft group is
+	// non-nil, we lock only Replica.mu at first before checking the status of
+	// the internal raft group. If it equals nil then we fall back to the slow
+	// path of locking Replica.raftMu. However, in order to maintain our lock
+	// ordering we need to lock Replica.raftMu here before locking Replica.mu,
+	// so we unlock Replica.mu before locking them both again.
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	log.Event(proposal.ctx, "acquired {raft,replica}mu")
+	if r.mu.internalRaftGroup == nil {
+		// Unlock first before locking in {raft,replica}mu order.
+		r.mu.Unlock()
+
+		r.raftMu.Lock()
+		defer r.raftMu.Unlock()
+		r.mu.Lock()
+		log.Event(proposal.ctx, "acquired {raft,replica}mu")
+	} else {
+		log.Event(proposal.ctx, "acquired replica mu")
+	}
 
 	// Add size of proposal to commandSizes map.
 	if r.mu.commandSizes != nil {
 		r.mu.commandSizes[proposal.idKey] = proposalSize
 	}
-	undoQuotaAcquisition := func() {
-		r.mu.Lock()
-		if r.mu.commandSizes != nil && r.mu.proposalQuota != nil {
-			delete(r.mu.commandSizes, proposal.idKey)
-			r.mu.proposalQuota.add(int64(proposalSize))
+	// Make sure we clean up the proposal if we fail to submit it successfully.
+	// This is important both to ensure that that the proposals map doesn't
+	// grow without bound and to ensure that we always release any quota that
+	// we acquire.
+	defer func() {
+		if pErr != nil {
+			r.cleanupFailedProposalLocked(proposal)
 		}
-		r.mu.Unlock()
-	}
+	}()
 
 	// NB: We need to check Replica.mu.destroyStatus again in case the Replica has
 	// been destroyed between the initial check at the beginning of this method
 	// and the acquisition of Replica.mu. Failure to do so will leave pending
 	// proposals that never get cleared.
 	if !r.mu.destroyStatus.IsAlive() {
-		return nil, nil, undoQuotaAcquisition, roachpb.NewError(r.mu.destroyStatus.err)
+		return nil, nil, 0, roachpb.NewError(r.mu.destroyStatus.err)
 	}
 
 	repDesc, err := r.getReplicaDescriptorRLocked()
 	if err != nil {
-		return nil, nil, undoQuotaAcquisition, roachpb.NewError(err)
+		return nil, nil, 0, roachpb.NewError(err)
 	}
-	r.insertProposalLocked(proposal, repDesc, lease)
+	maxLeaseIndex := r.insertProposalLocked(proposal, repDesc, lease)
+	if maxLeaseIndex == 0 && !ba.IsLeaseRequest() {
+		log.Fatalf(ctx, "no MaxLeaseIndex returned for %s", ba)
+	}
 
 	if filter := r.store.TestingKnobs().TestingProposalFilter; filter != nil {
 		filterArgs := storagebase.ProposalFilterArgs{
@@ -3244,8 +3682,7 @@ func (r *Replica) propose(
 			Req:   ba,
 		}
 		if pErr := filter(filterArgs); pErr != nil {
-			delete(r.mu.proposals, idKey)
-			return nil, nil, undoQuotaAcquisition, pErr
+			return nil, nil, 0, pErr
 		}
 	}
 
@@ -3255,11 +3692,11 @@ func (r *Replica) propose(
 		// TODO(bdarnell): Handle ErrProposalDropped better.
 		// https://github.com/cockroachdb/cockroach/issues/21849
 	} else if err != nil {
-		delete(r.mu.proposals, proposal.idKey)
-		return nil, nil, undoQuotaAcquisition, roachpb.NewError(err)
+		return nil, nil, 0, roachpb.NewError(err)
 	}
+
 	// Must not use `proposal` in the closure below as a proposal which is not
-	// present in r.mu.proposals is no longer protected by the mutex. Abandoning
+	// present in r.mu.localProposals is no longer protected by the mutex. Abandoning
 	// a command only abandons the associated context. As soon as we propose a
 	// command to Raft, ownership passes to the "below Raft" machinery. In
 	// particular, endCmds will be invoked when the command is applied. There are
@@ -3268,7 +3705,7 @@ func (r *Replica) propose(
 	// range.
 	tryAbandon := func() bool {
 		r.mu.Lock()
-		p, ok := r.mu.proposals[idKey]
+		p, ok := r.mu.localProposals[idKey]
 		if ok {
 			// TODO(radu): Should this context be created via tracer.ForkCtxSpan?
 			// We'd need to make sure the span is finished eventually.
@@ -3277,10 +3714,10 @@ func (r *Replica) propose(
 		r.mu.Unlock()
 		return ok
 	}
-	return proposal.doneCh, tryAbandon, undoQuotaAcquisition, nil
+	return proposalCh, tryAbandon, maxLeaseIndex, nil
 }
 
-// submitProposalLocked proposes or re-proposes a command in r.mu.proposals.
+// submitProposalLocked proposes or re-proposes a command in r.mu.localProposals.
 // The replica lock must be held.
 func (r *Replica) submitProposalLocked(p *ProposalData) error {
 	p.proposedAtTicks = r.mu.ticks
@@ -3378,8 +3815,8 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		if log.V(4) {
 			log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
 		}
-		// We're proposing a command so there is no need to wake the leader if we
-		// were quiesced.
+		// We're proposing a command so there is no need to wake the leader if
+		// we're quiesced.
 		r.unquiesceLocked()
 		return false /* unquiesceAndWakeLeader */, raftGroup.Propose(encode(p.idKey, data))
 	})
@@ -3395,16 +3832,17 @@ func (r *Replica) quiesce() bool {
 
 func (r *Replica) quiesceLocked() bool {
 	ctx := r.AnnotateCtx(context.TODO())
-	if len(r.mu.proposals) != 0 {
-		log.Infof(ctx, "not quiescing: %d pending commands", len(r.mu.proposals))
+	if len(r.mu.localProposals) != 0 {
+		if log.V(3) {
+			log.Infof(ctx, "not quiescing: %d pending commands", len(r.mu.localProposals))
+		}
 		return false
 	}
 	if !r.mu.quiescent {
 		if log.V(3) {
-			log.Infof(ctx, "quiescing")
+			log.Infof(ctx, "quiescing %d", r.RangeID)
 		}
 		r.mu.quiescent = true
-
 		r.store.unquiescedReplicas.Lock()
 		delete(r.store.unquiescedReplicas.m, r.RangeID)
 		r.store.unquiescedReplicas.Unlock()
@@ -3414,26 +3852,38 @@ func (r *Replica) quiesceLocked() bool {
 	return true
 }
 
+func (r *Replica) unquiesce() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.unquiesceLocked()
+}
+
 func (r *Replica) unquiesceLocked() {
-	if r.mu.quiescent {
+	r.unquiesceWithOptionsLocked(true /* campaignOnWake */)
+}
+
+func (r *Replica) unquiesceWithOptionsLocked(campaignOnWake bool) {
+	if r.mu.quiescent && r.mu.internalRaftGroup != nil {
 		ctx := r.AnnotateCtx(context.TODO())
 		if log.V(3) {
-			log.Infof(ctx, "unquiescing")
+			log.Infof(ctx, "unquiescing %d", r.RangeID)
 		}
 		r.mu.quiescent = false
 		r.store.unquiescedReplicas.Lock()
 		r.store.unquiescedReplicas.m[r.RangeID] = struct{}{}
 		r.store.unquiescedReplicas.Unlock()
-		r.maybeCampaignOnWakeLocked(ctx)
+		if campaignOnWake {
+			r.maybeCampaignOnWakeLocked(ctx)
+		}
 		r.refreshLastUpdateTimeForAllReplicasLocked()
 	}
 }
 
 func (r *Replica) unquiesceAndWakeLeaderLocked() {
-	if r.mu.quiescent {
+	if r.mu.quiescent && r.mu.internalRaftGroup != nil {
 		ctx := r.AnnotateCtx(context.TODO())
 		if log.V(3) {
-			log.Infof(ctx, "unquiescing: waking leader")
+			log.Infof(ctx, "unquiescing %d: waking leader", r.RangeID)
 		}
 		r.mu.quiescent = false
 		r.store.unquiescedReplicas.Lock()
@@ -3455,8 +3905,18 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 	return r.withRaftGroup(false, func(raftGroup *raft.RawNode) (bool, error) {
 		// We're processing a message from another replica which means that the
 		// other replica is not quiesced, so we don't need to wake the leader.
-		r.unquiesceLocked()
+		// Note that we avoid campaigning when receiving raft messages, because
+		// we expect the originator to campaign instead.
+		r.unquiesceWithOptionsLocked(false /* campaignOnWake */)
 		r.refreshLastUpdateTimeForReplicaLocked(req.FromReplica.ReplicaID)
+
+		// Check if the message is a proposal that should be dropped.
+		if r.shouldDropForwardedProposalLocked(req) {
+			// If we could signal to the sender that it's proposal was
+			// accepted or dropped then we wouldn't need to track anything.
+			return false /* unquiesceAndWakeLeader */, nil
+		}
+
 		err := raftGroup.Step(req.Message)
 		if err == raft.ErrProposalDropped {
 			// A proposal was forwarded to this replica but we couldn't propose it.
@@ -3468,6 +3928,53 @@ func (r *Replica) stepRaftGroup(req *RaftMessageRequest) error {
 		}
 		return false /* unquiesceAndWakeLeader */, err
 	})
+}
+
+func (r *Replica) shouldDropForwardedProposalLocked(req *RaftMessageRequest) bool {
+	if req.Message.Type != raftpb.MsgProp {
+		// Not a proposal.
+		return false
+	}
+
+	if r.mu.replicaID != r.mu.leaderID {
+		// Always continue to forward proposals if we're not the leader.
+		return false
+	}
+
+	// Record that the proposal was seen and drop the proposal if it was
+	// already seen. This prevents duplicate forwarded proposals from each
+	// being appended to a leader's raft log.
+	drop := true
+	for _, e := range req.Message.Entries {
+		switch e.Type {
+		case raftpb.EntryNormal:
+			cmdID, data := DecodeRaftCommand(e.Data)
+			if len(data) == 0 {
+				// An empty command is proposed to unquiesce a range and
+				// wake the leader. Don't keep track of these forwarded
+				// proposals because they will never be cleaned up.
+				drop = false
+			} else {
+				// Record that the proposal was seen so that we can catch
+				// duplicate proposals in the future.
+				if r.mu.remoteProposals == nil {
+					r.mu.remoteProposals = map[storagebase.CmdIDKey]struct{}{}
+				}
+				if _, ok := r.mu.remoteProposals[cmdID]; !ok {
+					r.mu.remoteProposals[cmdID] = struct{}{}
+					drop = false
+				}
+			}
+		case raftpb.EntryConfChange:
+			// We could peek into the EntryConfChange to find the
+			// command ID, but we don't expect follower-initiated
+			// conf changes.
+			drop = false
+		default:
+			log.Fatalf(context.TODO(), "unexpected Raft entry: %v", e)
+		}
+	}
+	return drop
 }
 
 type handleRaftReadyStats struct {
@@ -3581,21 +4088,16 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			log.Fatalf(ctx, "incoming snapshot id doesn't match raft snapshot id: %s != %s", snapUUID, inSnap.SnapUUID)
 		}
 
-		if err := r.applySnapshot(ctx, inSnap, rd.Snapshot, rd.HardState); err != nil {
+		// Applying this snapshot may require us to subsume one or more of our right
+		// neighbors. This occurs if this replica is informed about the merges via a
+		// Raft snapshot instead of a MsgApp containing the merge commits, e.g.,
+		// because it went offline before the merge commits applied and did not come
+		// back online until after the merge commits were truncated away.
+		subsumedRepls, releaseMergeLock := r.maybeAcquireSnapshotMergeLock(ctx, inSnap)
+		defer releaseMergeLock()
+
+		if err := r.applySnapshot(ctx, inSnap, rd.Snapshot, rd.HardState, subsumedRepls); err != nil {
 			const expl = "while applying snapshot"
-			return stats, expl, errors.Wrap(err, expl)
-		}
-
-		if err := func() error {
-			r.store.mu.Lock()
-			defer r.store.mu.Unlock()
-
-			if r.store.removePlaceholderLocked(ctx, r.RangeID) {
-				atomic.AddInt32(&r.store.counts.filledPlaceholders, 1)
-			}
-			return r.store.processRangeDescriptorUpdateLocked(ctx, r)
-		}(); err != nil {
-			const expl = "could not processRangeDescriptorUpdate after applySnapshot"
 			return stats, expl, errors.Wrap(err, expl)
 		}
 
@@ -3654,8 +4156,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// > Other state variables are safe to lose on a restart, as they can all be
 	// > recreated. The most interesting example is the commit index, which can
 	// > safely be reinitialized to zero on a restart.
-	mgsApps, otherMsgs := splitMsgApps(rd.Messages)
-	r.sendRaftMessages(ctx, mgsApps)
+	msgApps, otherMsgs := splitMsgApps(rd.Messages)
+	r.sendRaftMessages(ctx, msgApps)
 
 	// Use a more efficient write-only batch because we don't need to do any
 	// reads from the batch. Any reads are performed via the "distinct" batch
@@ -3728,16 +4230,23 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		}
 	}
 
-	// Update protected state (last index, last term, raft log size and raft
-	// leader ID) and set raft log entry cache. We clear any older, uncommitted
-	// log entries and cache the latest ones.
+	// Update protected state - last index, last term, raft log size, and raft
+	// leader ID.
 	r.mu.Lock()
-	r.store.raftEntryCache.addEntries(r.RangeID, rd.Entries)
 	r.mu.lastIndex = lastIndex
 	r.mu.lastTerm = lastTerm
 	r.mu.raftLogSize = raftLogSize
-	r.mu.leaderID = leaderID
+	if r.mu.leaderID != leaderID {
+		r.mu.leaderID = leaderID
+		// Clear the remote proposal set. Would have been nil already if not
+		// previously the leader.
+		r.mu.remoteProposals = nil
+	}
 	r.mu.Unlock()
+
+	// Update raft log entry cache. We clear any older, uncommitted log entries
+	// and cache the latest ones.
+	r.store.raftEntryCache.addEntries(r.RangeID, rd.Entries)
 
 	r.sendRaftMessages(ctx, otherMsgs)
 
@@ -3771,7 +4280,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			if len(e.Data) == 0 {
 				// Overwrite unconditionally since this is the most aggressive
 				// reproposal mode.
-				refreshReason = reasonNewLeaderOrConfigChange
+				if !r.store.TestingKnobs().DisableRefreshReasonNewLeaderOrConfigChange {
+					refreshReason = reasonNewLeaderOrConfigChange
+				}
 				commandID = "" // special-cased value, command isn't used
 			} else {
 				var encodedCommand []byte
@@ -3874,7 +4385,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 // splitMsgApps splits the Raft message slice into two slices, one containing
 // MsgApps and one containing all other message types. Each slice retains the
 // relative ordering between messages in the original slice.
-func splitMsgApps(msgs []raftpb.Message) (mgsApps, otherMsgs []raftpb.Message) {
+func splitMsgApps(msgs []raftpb.Message) (msgApps, otherMsgs []raftpb.Message) {
 	splitIdx := 0
 	for i, msg := range msgs {
 		if msg.Type == raftpb.MsgApp {
@@ -3890,9 +4401,9 @@ func fatalOnRaftReadyErr(ctx context.Context, expl string, err error) {
 	log.Fatalf(ctx, "%s: %s", log.Safe(expl), err) // TODO(bdarnell)
 }
 
-// tick the Raft group, returning any error and true if the raft group exists
-// and false otherwise.
-func (r *Replica) tick() (bool, error) {
+// tick the Raft group, returning true if the raft group exists and is
+// unquiesced; false otherwise.
+func (r *Replica) tick(livenessMap IsLiveMap) (bool, error) {
 	r.unreachablesMu.Lock()
 	remotes := r.unreachablesMu.remotes
 	r.unreachablesMu.remotes = nil
@@ -3903,8 +4414,7 @@ func (r *Replica) tick() (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// If the raft group is uninitialized, do not initialize raft groups on
-	// tick.
+	// If the raft group is uninitialized, do not initialize on tick.
 	if r.mu.internalRaftGroup == nil {
 		return false, nil
 	}
@@ -3916,23 +4426,34 @@ func (r *Replica) tick() (bool, error) {
 	if r.mu.quiescent {
 		return false, nil
 	}
-	if r.maybeQuiesceLocked() {
+	if r.maybeQuiesceLocked(livenessMap) {
 		return false, nil
 	}
 
 	r.mu.ticks++
 	r.mu.internalRaftGroup.Tick()
+
+	refreshAtDelta := r.store.cfg.RaftElectionTimeoutTicks
+	if knob := r.store.TestingKnobs().RefreshReasonTicksPeriod; knob > 0 {
+		refreshAtDelta = knob
+	}
 	if !r.store.TestingKnobs().DisableRefreshReasonTicks &&
-		r.mu.ticks%r.store.cfg.RaftElectionTimeoutTicks == 0 {
+		r.mu.replicaID != r.mu.leaderID &&
+		r.mu.ticks%refreshAtDelta == 0 {
 		// RaftElectionTimeoutTicks is a reasonable approximation of how long we
 		// should wait before deciding that our previous proposal didn't go
 		// through. Note that the combination of the above condition and passing
 		// RaftElectionTimeoutTicks to refreshProposalsLocked means that commands
 		// will be refreshed when they have been pending for 1 to 2 election
 		// cycles.
-		r.refreshProposalsLocked(
-			r.store.cfg.RaftElectionTimeoutTicks, reasonTicks,
-		)
+		//
+		// However, we don't refresh proposals if we are the leader because
+		// doing so would be useless. The commands tracked by a leader replica
+		// were either all proposed when the replica was a leader or were
+		// re-proposed when the replica became a leader. Either way, they are
+		// guaranteed to be in the leader's Raft log so re-proposing won't do
+		// anything.
+		r.refreshProposalsLocked(refreshAtDelta, reasonTicks)
 	}
 	return true, nil
 }
@@ -3975,6 +4496,18 @@ func (r *Replica) tick() (bool, error) {
 // it will either still apply to the recipient or the recipient will have moved
 // forward and the quiesce message will fall back to being a heartbeat.
 //
+// The supplied livenessMap maps from node ID to a boolean indicating
+// liveness. A range may be quiesced in the presence of non-live
+// replicas if the remaining live replicas all meet the quiesce
+// requirements. When a node considered non-live becomes live, the
+// node liveness instance invokes a callback which causes all nodes to
+// wakes up any ranges containing replicas owned by the newly-live
+// node, allowing the out-of-date replicas to be brought back up to date.
+// If livenessMap is nil, liveness data will not be used, meaning no range
+// will quiesce if any replicas are behind, whether or not they are live.
+// If any entry in the livenessMap is nil, then the missing node ID is
+// treated as not live.
+//
 // TODO(peter): There remains a scenario in which a follower is left unquiesced
 // while the leader is quiesced: the follower's receive queue is full and the
 // "quiesce" message is dropped. This seems very very unlikely because if the
@@ -3982,17 +4515,9 @@ func (r *Replica) tick() (bool, error) {
 // would quiesce. The fallout from this situation are undesirable raft
 // elections which will cause throughput hiccups to the range, but not
 // correctness issues.
-//
-// TODO(peter): When a node goes down, any range which has a replica on the
-// down node will not quiesce. This could be a significant performance
-// impact. Additionally, when the node comes back up we want to bring any
-// replicas it contains back up to date. Right now this will be handled because
-// those ranges never quiesce. One thought for handling both these scenarios is
-// to hook into the StorePool and its notion of "down" nodes. But that might
-// not be sensitive enough.
-func (r *Replica) maybeQuiesceLocked() bool {
+func (r *Replica) maybeQuiesceLocked(livenessMap IsLiveMap) bool {
 	ctx := r.AnnotateCtx(context.TODO())
-	status, ok := shouldReplicaQuiesce(ctx, r, r.store.Clock().Now(), len(r.mu.proposals))
+	status, ok := shouldReplicaQuiesce(ctx, r, r.store.Clock().Now(), len(r.mu.localProposals), livenessMap)
 	if !ok {
 		return false
 	}
@@ -4000,6 +4525,7 @@ func (r *Replica) maybeQuiesceLocked() bool {
 }
 
 type quiescer interface {
+	descRLocked() *roachpb.RangeDescriptor
 	raftStatusRLocked() *raft.Status
 	raftLastIndexLocked() (uint64, error)
 	hasRaftReadyRLocked() bool
@@ -4019,6 +4545,9 @@ func (r *Replica) maybeTransferRaftLeader(
 	if !r.isLeaseValidRLocked(l, now) {
 		return
 	}
+	if r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
+		return
+	}
 	if pr, ok := status.Progress[uint64(l.Replica.ReplicaID)]; ok && pr.Match >= status.Commit {
 		log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", l.Replica.ReplicaID)
 		r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
@@ -4031,7 +4560,7 @@ func (r *Replica) maybeTransferRaftLeader(
 // facilitate testing. Returns the raft.Status and true on success, and (nil,
 // false) on failure.
 func shouldReplicaQuiesce(
-	ctx context.Context, q quiescer, now hlc.Timestamp, numProposals int,
+	ctx context.Context, q quiescer, now hlc.Timestamp, numProposals int, livenessMap IsLiveMap,
 ) (*raft.Status, bool) {
 	if numProposals != 0 {
 		if log.V(4) {
@@ -4096,15 +4625,30 @@ func shouldReplicaQuiesce(
 		}
 		return nil, false
 	}
+
 	var foundSelf bool
-	for id, progress := range status.Progress {
-		if id == status.ID {
+	for _, rep := range q.descRLocked().Replicas {
+		if uint64(rep.ReplicaID) == status.ID {
 			foundSelf = true
 		}
-		if progress.Match != status.Applied {
+		if progress, ok := status.Progress[uint64(rep.ReplicaID)]; !ok {
+			if log.V(4) {
+				log.Infof(ctx, "not quiescing: could not locate replica %d in progress: %+v",
+					rep.ReplicaID, progress)
+			}
+			return nil, false
+		} else if progress.Match != status.Applied {
+			// Skip any node in the descriptor which is not live.
+			if livenessMap != nil && !livenessMap[rep.NodeID].IsLive {
+				if log.V(4) {
+					log.Infof(ctx, "skipping node %d because not live. Progress=%+v",
+						rep.NodeID, progress)
+				}
+				continue
+			}
 			if log.V(4) {
 				log.Infof(ctx, "not quiescing: replica %d match (%d) != applied (%d)",
-					id, progress.Match, status.Applied)
+					rep.ReplicaID, progress.Match, status.Applied)
 			}
 			return nil, false
 		}
@@ -4137,8 +4681,20 @@ func (r *Replica) quiesceAndNotifyLocked(ctx context.Context, status *raft.Statu
 	if !r.quiesceLocked() {
 		return false
 	}
-	for id := range status.Progress {
+
+	for id, prog := range status.Progress {
 		if roachpb.ReplicaID(id) == r.mu.replicaID {
+			continue
+		}
+		// In common operation, we only quiesce when all followers are
+		// up-to-date. However, when we quiesce in the presence of dead
+		// nodes, a follower which is behind but considered dead may not
+		// have the log entry referenced by status.Commit and would
+		// explode if it were told to commit up to that point. So if
+		// prog.Match for a replica is not up to date with status.Commit,
+		// assume the replica is considered dead and skip the quiesce
+		// heartbeat.
+		if prog.Match < status.Commit {
 			continue
 		}
 		toReplica, toErr := r.getReplicaDescriptorByIDRLocked(
@@ -4218,12 +4774,12 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 
 	numShouldRetry := 0
 	var reproposals pendingCmdSlice
-	for idKey, p := range r.mu.proposals {
+	for _, p := range r.mu.localProposals {
 		if p.command.MaxLeaseIndex == 0 {
 			// Commands without a MaxLeaseIndex cannot be reproposed, as they might
 			// apply twice. We also don't want to ask the proposer to retry these
 			// special commands.
-			delete(r.mu.proposals, idKey)
+			r.cleanupFailedProposalLocked(p)
 			log.VEventf(p.ctx, 2, "refresh (reason: %s) returning AmbiguousResultError for command "+
 				"without MaxLeaseIndex: %v", reason, p.command)
 			p.finishApplication(proposalResult{Err: roachpb.NewError(
@@ -4233,7 +4789,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 		} else if cannotApplyAnyMore := !p.command.ReplicatedEvalResult.IsLeaseRequest &&
 			p.command.MaxLeaseIndex <= r.mu.state.LeaseAppliedIndex; cannotApplyAnyMore {
 			// The command's designated lease index slot was filled up. We got to
-			// LeaseAppliedIndex and p is still pending in r.mu.proposals; generally
+			// LeaseAppliedIndex and p is still pending in r.mu.localProposals; generally
 			// this means that proposal p didn't commit, and it will be sent back to
 			// the proposer for a retry - the request needs to be re-evaluated and the
 			// command re-proposed with a new MaxLeaseIndex. Note that this branch is not
@@ -4244,9 +4800,9 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			// reasonSnapshotApplied - in that case we don't know if p or some other
 			// command filled the p.command.MaxLeaseIndex slot (i.e. p might have been
 			// applied, but we're not watching for every proposal when applying a
-			// snapshot, so nobody removed p from r.mu.proposals). In this ambiguous
-			// case, we'll also send the command back to the proposer for a retry, but
-			// the proposer needs to be aware that, if the retry fails, an
+			// snapshot, so nobody removed p from r.mu.localProposals). In this
+			// ambiguous case, we'll also send the command back to the proposer for a
+			// retry, but the proposer needs to be aware that, if the retry fails, an
 			// AmbiguousResultError needs to be returned to the higher layers.
 			// We're relying on the fact that all commands are either idempotent
 			// (generally achieved through the wonders of MVCC) or, if they aren't,
@@ -4258,7 +4814,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			// little ahead), because a pending command is removed only as it
 			// applies. Thus we'd risk reproposing a command that has been committed
 			// but not yet applied.
-			delete(r.mu.proposals, idKey)
+			r.cleanupFailedProposalLocked(p)
 			log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
 			if reason == reasonSnapshotApplied {
 				p.finishApplication(proposalResult{ProposalRetry: proposalAmbiguousShouldBeReevaluated})
@@ -4305,7 +4861,8 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 	// that they can make it in the right place. Reproposing in order is
 	// definitely required, however.
 	//
-	// TODO(tschottdorf): evaluate whether `r.mu.proposals` should be a list/slice.
+	// TODO(tschottdorf): evaluate whether `r.mu.localProposals` should
+	// be a list/slice.
 	sort.Sort(reproposals)
 	for _, p := range reproposals {
 		log.Eventf(p.ctx, "re-submitting command %x to Raft: %s", p.idKey, reason)
@@ -4313,7 +4870,7 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 			// TODO(bdarnell): Handle ErrProposalDropped better.
 			// https://github.com/cockroachdb/cockroach/issues/21849
 		} else if err != nil {
-			delete(r.mu.proposals, p.idKey)
+			r.cleanupFailedProposalLocked(p)
 			p.finishApplication(proposalResult{Err: roachpb.NewError(err), ProposalRetry: proposalErrorReproposing})
 		}
 	}
@@ -4664,16 +5221,12 @@ func (r *Replica) checkForcedErrLocked(
 //
 // This method returns true if the command successfully applied a
 // replica change.
-//
-// TODO(tschottdorf): once we properly check leases and lease requests etc,
-// make sure that the error returned from this method is always populated in
-// those cases, as one of the callers uses it to abort replica changes.
 func (r *Replica) processRaftCommand(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
 	term, raftIndex uint64,
 	raftCmd storagebase.RaftCommand,
-) bool {
+) (changedRepl bool) {
 	if raftIndex == 0 {
 		log.Fatalf(ctx, "processRaftCommand requires a non-zero index")
 	}
@@ -4688,15 +5241,18 @@ func (r *Replica) processRaftCommand(
 	}
 
 	r.mu.Lock()
-	proposal, proposedLocally := r.mu.proposals[idKey]
+	proposal, proposedLocally := r.mu.localProposals[idKey]
 
 	// TODO(tschottdorf): consider the Trace situation here.
 	if proposedLocally {
 		// We initiated this command, so use the caller-supplied context.
 		ctx = proposal.ctx
 		proposal.ctx = nil // avoid confusion
-		delete(r.mu.proposals, idKey)
+		delete(r.mu.localProposals, idKey)
 	}
+
+	// Delete the entry for a forwarded proposal set.
+	delete(r.mu.remoteProposals, idKey)
 
 	leaseIndex, proposalRetry, forcedErr := r.checkForcedErrLocked(ctx, idKey, raftCmd, proposal, proposedLocally)
 
@@ -4769,6 +5325,7 @@ func (r *Replica) processRaftCommand(
 			// Apply an empty entry.
 			raftCmd.ReplicatedEvalResult = storagebase.ReplicatedEvalResult{}
 			raftCmd.WriteBatch = nil
+			raftCmd.LogicalOpLog = nil
 		}
 
 		// Update the node clock with the serviced request. This maintains
@@ -4828,6 +5385,29 @@ func (r *Replica) processRaftCommand(
 				log.Fatal(ctx, err)
 			}
 			splitPreApply(ctx, r.store.cfg.Settings, tmpBatch, raftCmd.ReplicatedEvalResult.Split.SplitTrigger)
+			writeBatch.Data = tmpBatch.Repr()
+			tmpBatch.Close()
+		}
+
+		if merge := raftCmd.ReplicatedEvalResult.Merge; merge != nil {
+			// Merges require the subsumed range to be atomically deleted when the
+			// merge transaction commits.
+			//
+			// This is not the most efficient, but it only happens on merges,
+			// which are relatively infrequent and don't write much data.
+			tmpBatch := r.store.engine.NewBatch()
+			if err := tmpBatch.ApplyBatchRepr(writeBatch.Data, false); err != nil {
+				log.Fatal(ctx, err)
+			}
+			rhsRepl, err := r.store.GetReplica(merge.RightDesc.RangeID)
+			if err != nil {
+				log.Fatal(ctx, err)
+			}
+			const destroyData = false
+			err = rhsRepl.preDestroyRaftMuLocked(ctx, tmpBatch, tmpBatch, merge.RightDesc.NextReplicaID, destroyData)
+			if err != nil {
+				log.Fatal(ctx, err)
+			}
 			writeBatch.Data = tmpBatch.Repr()
 			tmpBatch.Close()
 		}
@@ -4900,6 +5480,17 @@ func (r *Replica) processRaftCommand(
 		// before notifying a potentially waiting client.
 		r.handleEvalResultRaftMuLocked(ctx, lResult,
 			raftCmd.ReplicatedEvalResult, raftIndex, leaseIndex)
+
+		// Provide the command's corresponding logical operations to the
+		// Replica's rangefeed. Only do so if the WriteBatch is non-nil,
+		// otherwise it's valid for the logical op log to be nil, which
+		// would shut down all rangefeeds. If no rangefeed is running,
+		// this call will be a no-op.
+		if raftCmd.WriteBatch != nil {
+			r.handleLogicalOpLogRaftMuLocked(ctx, raftCmd.LogicalOpLog)
+		} else if raftCmd.LogicalOpLog != nil {
+			log.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", raftCmd)
+		}
 	}
 
 	// When set to true, recomputes the stats for the LHS and RHS of splits and
@@ -4942,6 +5533,54 @@ func (r *Replica) processRaftCommand(
 	return raftCmd.ReplicatedEvalResult.ChangeReplicas != nil
 }
 
+// maybeAcquireSnapshotMergeLock checks whether the incoming snapshot subsumes
+// any replicas and, if so, locks them for subsumption. See acquireMergeLock
+// for details about the lock itself.
+func (r *Replica) maybeAcquireSnapshotMergeLock(
+	ctx context.Context, inSnap IncomingSnapshot,
+) (subsumedRepls []*Replica, releaseMergeLock func()) {
+	// Any replicas that overlap with the bounds of the incoming snapshot are ours
+	// to subsume; further, the end of the last overlapping replica will exactly
+	// align with the end of the snapshot. How are we guaranteed this? Each merge
+	// could not have committed unless this store had an up-to-date replica of the
+	// RHS at the time of the merge. Nothing could have removed that RHS replica,
+	// as the replica GC queue cannot GC a replica unless it can prove its
+	// left-hand neighbor has no pending merges to apply. And that RHS replica
+	// could not have been further split or merged, as it never processes another
+	// command after the merge commits.
+	endKey := r.Desc().EndKey
+	if endKey == nil {
+		// The existing replica is unitialized, in which case we've already
+		// installed a placeholder for snapshot's keyspace. No merge lock needed.
+		return nil, func() {}
+	}
+	for endKey.Less(inSnap.State.Desc.EndKey) {
+		sRepl := r.store.LookupReplica(endKey)
+		if sRepl == nil || !endKey.Equal(sRepl.Desc().StartKey) {
+			log.Fatalf(ctx, "snapshot widens existing replica, but no replica exists for subsumed key %s", endKey)
+		}
+		sRepl.raftMu.Lock()
+		subsumedRepls = append(subsumedRepls, sRepl)
+		endKey = sRepl.Desc().EndKey
+	}
+	// TODO(benesch): we may be unnecessarily forcing another Raft snapshot here
+	// by subsuming too much. Consider the case where [a, b) and [c, e) first
+	// merged into [a, e), then split into [a, d) and [d, e), and we're applying a
+	// snapshot that spans this merge and split. The bounds of this snapshot will
+	// be [a, d), so we'll subsume [c, e). But we're still a member of [d, e)!
+	// We'll currently be forced to get a Raft snapshot to catch up. Ideally, we'd
+	// subsume only half of [c, e) and synthesize a new RHS [d, e), effectively
+	// applying both the split and merge during snapshot application. This isn't a
+	// huge deal, though: we're probably behind enough that the RHS would need to
+	// get caught up with a Raft snapshot anyway, even if we synthesized it
+	// properly.
+	return subsumedRepls, func() {
+		for _, sr := range subsumedRepls {
+			sr.raftMu.Unlock()
+		}
+	}
+}
+
 // maybeAcquireSplitMergeLock examines the given raftCmd (which need
 // not be evaluated yet) and acquires the split or merge lock if
 // necessary (in addition to other preparation). It returns a function
@@ -4953,7 +5592,7 @@ func (r *Replica) maybeAcquireSplitMergeLock(
 	if split := raftCmd.ReplicatedEvalResult.Split; split != nil {
 		return r.acquireSplitLock(ctx, &split.SplitTrigger)
 	} else if merge := raftCmd.ReplicatedEvalResult.Merge; merge != nil {
-		return r.acquireMergeLock(&merge.MergeTrigger)
+		return r.acquireMergeLock(ctx, &merge.MergeTrigger)
 	}
 	return nil, nil
 }
@@ -4994,12 +5633,7 @@ func (r *Replica) acquireSplitLock(
 			rightRng.mu.destroyStatus.Set(errors.Errorf("%s: failed to initialize", rightRng), destroyReasonRemoved)
 			rightRng.mu.Unlock()
 			r.store.mu.Lock()
-			r.store.unquiescedReplicas.Lock()
-			delete(r.store.unquiescedReplicas.m, rightRng.RangeID)
-			r.store.unquiescedReplicas.Unlock()
-			r.store.mu.replicas.Delete(int64(rightRng.RangeID))
-			delete(r.store.mu.uninitReplicas, rightRng.RangeID)
-			r.store.replicaQueues.Delete(int64(rightRng.RangeID))
+			r.store.unlinkReplicaByRangeIDLocked(rightRng.RangeID)
 			r.store.mu.Unlock()
 		}
 		rightRng.raftMu.Unlock()
@@ -5007,18 +5641,27 @@ func (r *Replica) acquireSplitLock(
 }
 
 func (r *Replica) acquireMergeLock(
-	merge *roachpb.MergeTrigger,
+	ctx context.Context, merge *roachpb.MergeTrigger,
 ) (func(storagebase.ReplicatedEvalResult), error) {
-	rightRng, err := r.store.GetReplica(merge.RightDesc.RangeID)
+	// The merge lock is the right-hand replica's raftMu. The right-hand replica
+	// is required to exist on this store. Otherwise, an incoming snapshot could
+	// create the right-hand replica before the merge trigger has a chance to
+	// widen the left-hand replica's end key. The merge trigger would then fatal
+	// the node upon realizing the right-hand replica already exists. With a
+	// right-hand replica in place, any snapshots for the right-hand range will
+	// block on raftMu, waiting for the merge to complete, after which the replica
+	// will realize it has been destroyed and reject the snapshot.
+	rightRepl, _, err := r.store.getOrCreateReplica(ctx, merge.RightDesc.RangeID, 0, nil)
 	if err != nil {
 		return nil, err
 	}
-
-	// TODO(peter,tschottdorf): This is necessary but likely not sufficient. The
-	// right hand side of the merge can still race on reads. See #8630.
-	rightRng.raftMu.Lock()
+	rightDesc := rightRepl.Desc()
+	if !rightDesc.StartKey.Equal(merge.RightDesc.StartKey) || !rightDesc.EndKey.Equal(merge.RightDesc.EndKey) {
+		log.Fatalf(ctx, "RHS of merge %s <- %s not present on store; found %s in place of the RHS",
+			merge.LeftDesc, merge.RightDesc, rightDesc)
+	}
 	return func(storagebase.ReplicatedEvalResult) {
-		rightRng.raftMu.Unlock()
+		rightRepl.raftMu.Unlock()
 	}, nil
 }
 
@@ -5051,6 +5694,7 @@ func (r *Replica) applyRaftCommand(
 	usingAppliedStateKey := r.mu.state.UsingAppliedStateKey
 	oldRaftAppliedIndex := r.mu.state.RaftAppliedIndex
 	oldLeaseAppliedIndex := r.mu.state.LeaseAppliedIndex
+	oldTruncatedState := r.mu.state.TruncatedState
 
 	// Exploit the fact that a split will result in a full stats
 	// recomputation to reset the ContainsEstimates flag.
@@ -5139,6 +5783,35 @@ func (r *Replica) applyRaftCommand(
 		}
 	}
 
+	if rResult.State != nil && rResult.State.TruncatedState != nil {
+		newTruncatedState := rResult.State.TruncatedState
+
+		if r.store.cfg.Settings.Version.IsActive(cluster.VersionRaftLogTruncationBelowRaft) {
+			// Truncate the Raft log from the entry after the previous
+			// truncation index to the new truncation index. This is performed
+			// atomically with the raft command application so that the
+			// TruncatedState index is always consistent with the state of the
+			// Raft log itself. We can use the distinct writer because we know
+			// all writes will be to distinct keys.
+			//
+			// Intentionally don't use range deletion tombstones (ClearRange())
+			// due to performance concerns connected to having many range
+			// deletion tombstones. There is a chance that ClearRange will
+			// perform well here because the tombstones could be "collapsed",
+			// but it is hardly worth the risk at this point.
+			prefixBuf := &r.raftMu.stateLoader.RangeIDPrefixBuf
+			for idx := oldTruncatedState.Index + 1; idx <= newTruncatedState.Index; idx++ {
+				// NB: RangeIDPrefixBufs have sufficient capacity (32 bytes) to
+				// avoid allocating when constructing Raft log keys (16 bytes).
+				unsafeKey := prefixBuf.RaftLogKey(idx)
+				if err := writer.Clear(engine.MakeMVCCMetadataKey(unsafeKey)); err != nil {
+					err = errors.Wrapf(err, "unable to clear truncated Raft entries for %+v", newTruncatedState)
+					return enginepb.MVCCStats{}, err
+				}
+			}
+		}
+	}
+
 	// TODO(peter): We did not close the writer in an earlier version of
 	// the code, which went undetected even though we used the batch after
 	// (though only to commit it). We should add an assertion to prevent that in
@@ -5188,20 +5861,20 @@ func checkIfTxnAborted(
 	var entry roachpb.AbortSpanEntry
 	aborted, err := rec.AbortSpan().Get(ctx, b, txn.ID, &entry)
 	if err != nil {
-		return roachpb.NewError(NewReplicaCorruptionError(errors.Wrap(err, "could not read from AbortSpan")))
+		return roachpb.NewError(roachpb.NewReplicaCorruptionError(
+			errors.Wrap(err, "could not read from AbortSpan")))
 	}
 	if aborted {
 		// We hit the cache, so let the transaction restart.
-		if log.V(1) {
-			log.Infof(ctx, "found AbortSpan entry for %s with priority %d",
-				txn.ID.Short(), entry.Priority)
-		}
+		log.VEventf(ctx, 1, "found AbortSpan entry for %s with priority %d",
+			txn.ID.Short(), entry.Priority)
 		newTxn := txn.Clone()
 		if entry.Priority > newTxn.Priority {
 			newTxn.Priority = entry.Priority
 		}
 		newTxn.Status = roachpb.ABORTED
-		return roachpb.NewErrorWithTxn(roachpb.NewTransactionAbortedError(), &newTxn)
+		return roachpb.NewErrorWithTxn(
+			roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORT_SPAN), &newTxn)
 	}
 	return nil
 }
@@ -5244,7 +5917,7 @@ func (r *Replica) evaluateWriteBatch(
 			ctx, idKey, rec, &ms, strippedBa, spans, retryLocally,
 		)
 		if pErr == nil && (ba.Timestamp == br.Timestamp ||
-			(retryLocally && !isEndTransactionExceedingDeadline(br.Timestamp, *etArg))) {
+			(retryLocally && !batcheval.IsEndTransactionExceedingDeadline(br.Timestamp, *etArg))) {
 			clonedTxn := ba.Txn.Clone()
 			clonedTxn.Status = roachpb.COMMITTED
 			// Make sure the returned txn has the actual commit
@@ -5263,7 +5936,7 @@ func (r *Replica) evaluateWriteBatch(
 				ms = enginepb.MVCCStats{}
 			} else {
 				// Run commit trigger manually.
-				innerResult, err := runCommitTrigger(ctx, rec, batch, &ms, *etArg, &clonedTxn)
+				innerResult, err := batcheval.RunCommitTrigger(ctx, rec, batch, &ms, *etArg, &clonedTxn)
 				if err != nil {
 					return batch, ms, br, res, roachpb.NewErrorf("failed to run commit trigger: %s", err)
 				}
@@ -5274,8 +5947,11 @@ func (r *Replica) evaluateWriteBatch(
 
 			br.Txn = &clonedTxn
 			// Add placeholder responses for begin & end transaction requests.
-			br.Responses = append([]roachpb.ResponseUnion{{BeginTransaction: &roachpb.BeginTransactionResponse{}}}, br.Responses...)
-			br.Responses = append(br.Responses, roachpb.ResponseUnion{EndTransaction: &roachpb.EndTransactionResponse{OnePhaseCommit: true}})
+			resps := make([]roachpb.ResponseUnion, len(br.Responses)+2)
+			resps[0].MustSetInner(&roachpb.BeginTransactionResponse{})
+			copy(resps[1:], br.Responses)
+			resps[len(resps)-1].MustSetInner(&roachpb.EndTransactionResponse{OnePhaseCommit: true})
+			br.Responses = resps
 			return batch, ms, br, res, nil
 		}
 
@@ -5320,9 +5996,47 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 			batch.Close()
 		}
 		batch = r.store.Engine().NewBatch()
+		var opLogger *engine.OpLoggerBatch
+		if RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
+			// TODO(nvanbenschoten): once we get rid of the RangefeedEnabled
+			// cluster setting we'll need a way to turn this on when any
+			// replica (not just the leaseholder) wants it and off when no
+			// replicas want it. This turns out to be pretty involved.
+			//
+			// The current plan is to:
+			// - create a range-id local key that stores all replicas that are
+			//   subscribed to logical operations, along with their corresponding
+			//   liveness epoch.
+			// - create a new command that adds or subtracts replicas from this
+			//   structure. The command will be a write across the entire replica
+			//   span so that it is serialized with all writes.
+			// - each replica will add itself to this set when it first needs
+			//   logical ops. It will then wait until it sees the replicated command
+			//   that added itself pop out through Raft so that it knows all
+			//   commands that are missing logical ops are gone.
+			// - It will then proceed as normal, relying on the logical ops to
+			//   always be included on the raft commands. When its no longer
+			//   needs logical ops, it will remove itself from the set.
+			// - The leaseholder will have a new queue to detect registered
+			//   replicas that are no longer live and remove them from the
+			//   set to prevent "leaking" subscriptions.
+			// - The condition here to add logical logging will be:
+			//     if len(replicaState.logicalOpsSubs) > 0 { ... }
+			//
+			// An alternative to this is the reduce the cost of the including
+			// the logical op log to a negligible amount such that it can be
+			// included on all raft commands, regardless of whether any replica
+			// has a rangefeed running or not.
+			//
+			// Another alternative is to make the setting table/zone-scoped
+			// instead of a fine-grained per-replica state.
+			opLogger = engine.NewOpLoggerBatch(batch)
+			batch = opLogger
+		}
 		if util.RaceEnabled {
 			batch = spanset.NewBatch(batch, spans)
 		}
+
 		br, res, pErr = evaluateBatch(ctx, idKey, batch, rec, ms, ba)
 		// If we can retry, set a higher batch timestamp and continue.
 		if wtoErr, ok := pErr.GetDetail().(*roachpb.WriteTooOldError); ok && canRetry {
@@ -5333,6 +6047,11 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 			}
 			ba.Timestamp = wtoErr.ActualTimestamp
 			continue
+		}
+		if opLogger != nil {
+			res.LogicalOpLog = &storagebase.LogicalOpLog{
+				Ops: opLogger.LogicalOps(),
+			}
 		}
 		break
 	}
@@ -5358,20 +6077,17 @@ func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
 		return false
 	}
 	etArg := arg.(*roachpb.EndTransactionRequest)
-	if isEndTransactionExceedingDeadline(ba.Txn.Timestamp, *etArg) {
+	if batcheval.IsEndTransactionExceedingDeadline(ba.Txn.Timestamp, *etArg) {
 		return false
 	}
-	if retry, _ := isEndTransactionTriggeringRetryError(ba.Txn, *etArg); retry {
+	if retry, _ := batcheval.IsEndTransactionTriggeringRetryError(ba.Txn, *etArg); retry {
 		return false
 	}
-	if ba.Txn != nil && ba.Txn.OrigTimestamp != ba.Txn.Timestamp {
-		// Transactions that have been pushed are never eligible for the
-		// 1PC path. For serializable transactions this is covered by
-		// isEndTransactionTriggeringRetryError, but even snapshot
-		// transactions must go through the slow path when their
-		// transaction has been pushed. See comments on
-		// Transaction.orig_timestamp for the reasons why this is necessary
-		// to prevent lost update anomalies.
+	if ba.Txn.Isolation == enginepb.SNAPSHOT && ba.Txn.OrigTimestamp != ba.Txn.Timestamp {
+		// Snapshot transactions that have been pushed are never eligible for
+		// the 1PC path. Instead, they must go through the slow path when their
+		// timestamp has been pushed. See comments on Transaction.orig_timestamp
+		// for the reasons why this is necessary to prevent lost update anomalies.
 		return false
 	}
 	return !knobs.DisableOptional1PC || etArg.Require1PC
@@ -5435,7 +6151,11 @@ func optimizePuts(
 	if firstUnoptimizedIndex < optimizePutThreshold { // don't bother if below this threshold
 		return origReqs
 	}
-	iter := batch.NewIterator(engine.IterOptions{})
+	iter := batch.NewIterator(engine.IterOptions{
+		// We want to include maxKey in our scan. Since UpperBound is exclusive, we
+		// need to set it to the key after maxKey.
+		UpperBound: maxKey.Next(),
+	})
 	defer iter.Close()
 
 	// If there are enough puts in the run to justify calling seek,
@@ -5520,12 +6240,15 @@ func evaluateBatch(
 		// transaction field cleared by this point so we do not execute
 		// this check in that case.
 		if ba.IsTransactionWrite() || ba.Txn.Writing {
-			// If the request is asking to abort the transaction, then don't check the
+			// We don't check the abort span for a couple of special requests:
+			// - if the request is asking to abort the transaction, then don't check the
 			// AbortSpan; we don't want the request to be rejected if the transaction
 			// has already been aborted.
+			// - heartbeats don't check the abort span. If the txn is aborted, they'll
+			// return an aborted proto in their otherwise successful response.
 			singleAbort := ba.IsSingleEndTransactionRequest() &&
 				!ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest).Commit
-			if !singleAbort {
+			if !singleAbort && !ba.IsSingleHeartbeatTxnRequest() {
 				if pErr := checkIfTxnAborted(ctx, rec, batch, *ba.Txn); pErr != nil {
 					return nil, result.Result{}, pErr
 				}
@@ -5790,7 +6513,9 @@ func (r *Replica) gossipFirstRange(ctx context.Context) {
 	if log.V(1) {
 		log.Infof(ctx, "gossiping sentinel from store %d, r%d", r.store.StoreID(), r.RangeID)
 	}
-	if err := r.store.Gossip().AddInfo(gossip.KeySentinel, r.store.ClusterID().GetBytes(), sentinelGossipTTL); err != nil {
+	if err := r.store.Gossip().AddInfo(
+		gossip.KeySentinel, r.store.ClusterID().GetBytes(),
+		r.store.cfg.SentinelGossipTTL()); err != nil {
 		log.Errorf(ctx, "failed to gossip sentinel: %s", err)
 	}
 	if log.V(1) {
@@ -5853,14 +6578,14 @@ func (r *Replica) MaybeGossipSystemConfig(ctx context.Context) error {
 		return errors.Wrap(err, "could not load SystemConfig span")
 	}
 
-	if gossipedCfg, ok := r.store.Gossip().GetSystemConfig(); ok && gossipedCfg.Equal(loadedCfg) &&
+	if gossipedCfg := r.store.Gossip().GetSystemConfig(); gossipedCfg != nil && gossipedCfg.Equal(loadedCfg) &&
 		r.store.Gossip().InfoOriginatedHere(gossip.KeySystemConfig) {
 		log.VEventf(ctx, 2, "not gossiping unchanged system config")
 		return nil
 	}
 
 	log.VEventf(ctx, 2, "gossiping system config")
-	if err := r.store.Gossip().AddInfoProto(gossip.KeySystemConfig, &loadedCfg, 0); err != nil {
+	if err := r.store.Gossip().AddInfoProto(gossip.KeySystemConfig, loadedCfg, 0); err != nil {
 		return errors.Wrap(err, "failed to gossip system config")
 	}
 	return nil
@@ -5915,12 +6640,6 @@ func (r *Replica) MaybeGossipNodeLiveness(ctx context.Context, span roachpb.Span
 	return nil
 }
 
-// NewReplicaCorruptionError creates a new error indicating a corrupt replica,
-// with the supplied list of errors given as history.
-func NewReplicaCorruptionError(err error) *roachpb.ReplicaCorruptionError {
-	return &roachpb.ReplicaCorruptionError{ErrorMsg: err.Error()}
-}
-
 // maybeSetCorrupt is a stand-in for proper handling of failing replicas. Such a
 // failure is indicated by a call to maybeSetCorrupt with a ReplicaCorruptionError.
 // Currently any error is passed through, but prospectively it should stop the
@@ -5958,7 +6677,7 @@ var errSystemConfigIntent = errors.New("must retry later due to intent on System
 
 // loadSystemConfig scans the system config span and returns the system
 // config.
-func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, error) {
+func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEntries, error) {
 	ba := roachpb.BatchRequest{}
 	ba.ReadConsistency = roachpb.INCONSISTENT
 	ba.Timestamp = r.store.Clock().Now()
@@ -5969,7 +6688,7 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, er
 		ctx, storagebase.CmdIDKey(""), r.store.Engine(), rec, nil, ba,
 	)
 	if pErr != nil {
-		return config.SystemConfig{}, pErr.GoError()
+		return nil, pErr.GoError()
 	}
 	if intents := result.Local.DetachIntents(); len(intents) > 0 {
 		// There were intents, so what we read may not be consistent. Attempt
@@ -5978,13 +6697,15 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (config.SystemConfig, er
 		// This is called from handleLocalEvalResult (with raftMu locked),
 		// so disallow synchronous processing (which blocks that mutex for
 		// too long and is a potential deadlock).
-		if err := r.store.intentResolver.processIntentsAsync(ctx, r, intents, false /* allowSync */); err != nil {
+		if err := r.store.intentResolver.cleanupIntentsAsync(ctx, r, intents, false /* allowSync */); err != nil {
 			log.Warning(ctx, err)
 		}
-		return config.SystemConfig{}, errSystemConfigIntent
+		return nil, errSystemConfigIntent
 	}
 	kvs := br.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
-	return config.SystemConfig{Values: kvs}, nil
+	sysCfg := &config.SystemConfigEntries{}
+	sysCfg.Values = kvs
+	return sysCfg, nil
 }
 
 // needsSplitBySize returns true if the size of the range requires it
@@ -6000,7 +6721,7 @@ func (r *Replica) needsSplitBySizeRLocked() bool {
 }
 
 func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) bool {
-	maxBytes := r.mu.maxBytes
+	maxBytes := r.mu.zone.RangeMaxBytes
 	size := r.mu.state.Stats.Total()
 	return maxBytes > 0 && float64(size) > float64(maxBytes)*mult
 }
@@ -6027,13 +6748,13 @@ func (r *Replica) clearPendingSnapshotIndex() {
 	r.mu.Unlock()
 }
 
-func (r *Replica) endKey() roachpb.RKey {
-	return r.Desc().EndKey
+func (r *Replica) startKey() roachpb.RKey {
+	return r.Desc().StartKey
 }
 
 // Less implements the btree.Item interface.
 func (r *Replica) Less(i btree.Item) bool {
-	return r.endKey().Less(i.(rangeKeyItem).endKey())
+	return r.startKey().Less(i.(rangeKeyItem).startKey())
 }
 
 // ReplicaMetrics contains details on the current status of the replica.
@@ -6058,20 +6779,20 @@ type ReplicaMetrics struct {
 	BehindCount       int64
 	CmdQMetricsLocal  CommandQueueMetrics
 	CmdQMetricsGlobal CommandQueueMetrics
+	RaftLogTooLarge   bool
 }
 
 // Metrics returns the current metrics for the replica.
 func (r *Replica) Metrics(
-	ctx context.Context,
-	now hlc.Timestamp,
-	cfg config.SystemConfig,
-	livenessMap map[roachpb.NodeID]bool,
+	ctx context.Context, now hlc.Timestamp, cfg *config.SystemConfig, livenessMap IsLiveMap,
 ) ReplicaMetrics {
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
 	leaseStatus := r.leaseStatus(*r.mu.state.Lease, now, r.mu.minLeaseProposedTS)
 	quiescent := r.mu.quiescent || r.mu.internalRaftGroup == nil
 	desc := r.mu.state.Desc
+	zone := r.mu.zone
+	raftLogSize := r.mu.raftLogSize
 	r.cmdQMu.Lock()
 	cmdQMetricsLocal := r.cmdQMu.queues[spanset.SpanLocal].metrics()
 	cmdQMetricsGlobal := r.cmdQMu.queues[spanset.SpanGlobal].metrics()
@@ -6086,6 +6807,7 @@ func (r *Replica) Metrics(
 		ctx,
 		now,
 		cfg,
+		zone,
 		livenessMap,
 		desc,
 		raftStatus,
@@ -6095,6 +6817,8 @@ func (r *Replica) Metrics(
 		ticking,
 		cmdQMetricsLocal,
 		cmdQMetricsGlobal,
+		raftLogSize,
+		r.store.allocator.storePool,
 	)
 }
 
@@ -6110,8 +6834,9 @@ func HasRaftLeader(raftStatus *raft.Status) bool {
 func calcReplicaMetrics(
 	ctx context.Context,
 	now hlc.Timestamp,
-	cfg config.SystemConfig,
-	livenessMap map[roachpb.NodeID]bool,
+	cfg *config.SystemConfig,
+	zone *config.ZoneConfig,
+	livenessMap IsLiveMap,
 	desc *roachpb.RangeDescriptor,
 	raftStatus *raft.Status,
 	leaseStatus LeaseStatus,
@@ -6120,6 +6845,8 @@ func calcReplicaMetrics(
 	ticking bool,
 	cmdQMetricsLocal CommandQueueMetrics,
 	cmdQMetricsGlobal CommandQueueMetrics,
+	raftLogSize int64,
+	storePool *StorePool,
 ) ReplicaMetrics {
 	var m ReplicaMetrics
 
@@ -6146,7 +6873,7 @@ func calcReplicaMetrics(
 	// scenario seems rare as it requires the partitioned node to be alive enough
 	// to be performing liveness heartbeats.
 	for _, rd := range desc.Replicas {
-		if livenessMap[rd.NodeID] {
+		if livenessMap[rd.NodeID].IsLive {
 			m.RangeCounter = rd.StoreID == storeID
 			break
 		}
@@ -6159,9 +6886,10 @@ func calcReplicaMetrics(
 		if liveReplicas < computeQuorum(len(desc.Replicas)) {
 			m.Unavailable = true
 		}
-		if zoneConfig, err := cfg.GetZoneConfigForKey(desc.StartKey); err != nil {
-			log.Error(ctx, err)
-		} else if int32(liveReplicas) < zoneConfig.NumReplicas {
+		decommissioningReplicas := len(storePool.decommissioningReplicas(desc.RangeID, desc.Replicas))
+		_, aliveStoreCount, _ := storePool.getStoreList(desc.RangeID, storeFilterNone)
+
+		if GetNeededReplicas(zone.NumReplicas, aliveStoreCount, decommissioningReplicas) > liveReplicas {
 			m.Underreplicated = true
 		}
 	}
@@ -6175,15 +6903,17 @@ func calcReplicaMetrics(
 	m.CmdQMetricsLocal = cmdQMetricsLocal
 	m.CmdQMetricsGlobal = cmdQMetricsGlobal
 
+	m.RaftLogTooLarge = raftLogSize > raftLogTooLargeSize
+
 	return m
 }
 
 // calcLiveReplicas returns a count of the live replicas; a live replica is
 // determined by checking its node in the provided liveness map.
-func calcLiveReplicas(desc *roachpb.RangeDescriptor, livenessMap map[roachpb.NodeID]bool) int {
+func calcLiveReplicas(desc *roachpb.RangeDescriptor, livenessMap IsLiveMap) int {
 	var goodReplicas int
 	for _, rd := range desc.Replicas {
-		if livenessMap[rd.NodeID] {
+		if livenessMap[rd.NodeID].IsLive {
 			goodReplicas++
 		}
 	}
@@ -6193,7 +6923,7 @@ func calcLiveReplicas(desc *roachpb.RangeDescriptor, livenessMap map[roachpb.Nod
 // calcBehindCount returns a total count of log entries that follower replicas
 // are behind. This can only be computed on the raft leader.
 func calcBehindCount(
-	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap map[roachpb.NodeID]bool,
+	raftStatus *raft.Status, desc *roachpb.RangeDescriptor, livenessMap IsLiveMap,
 ) int64 {
 	var behindCount int64
 	for _, rd := range desc.Replicas {
@@ -6252,4 +6982,24 @@ func (r *Replica) GetCommandQueueSnapshot() storagebase.CommandQueuesSnapshot {
 		LocalScope:  r.cmdQMu.queues[spanset.SpanLocal].GetSnapshot(),
 		GlobalScope: r.cmdQMu.queues[spanset.SpanGlobal].GetSnapshot(),
 	}
+}
+
+// EmitMLAI registers the replica's last assigned max lease index with the
+// closed timestamp tracker. This is called to emit an update about this
+// replica in the absence of write activity.
+func (r *Replica) EmitMLAI() {
+	r.mu.Lock()
+	lai := r.mu.lastAssignedLeaseIndex
+	if r.mu.state.LeaseAppliedIndex > lai {
+		lai = r.mu.state.LeaseAppliedIndex
+	}
+	r.mu.Unlock()
+
+	ctx := r.AnnotateCtx(context.Background())
+	_, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
+	untrack(ctx, r.RangeID, ctpb.LAI(lai))
+}
+
+func init() {
+	tracing.RegisterTagRemapping("r", "range")
 }

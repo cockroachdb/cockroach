@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -29,12 +30,14 @@ func (p *planner) ShowVar(ctx context.Context, n *tree.ShowVar) (planNode, error
 	name := strings.ToLower(n.Name)
 
 	if name == "all" {
-		return p.delegateQuery(ctx, "SHOW SESSION ALL", "TABLE crdb_internal.session_variables",
+		return p.delegateQuery(ctx, "SHOW SESSION ALL",
+			"SELECT variable, value FROM crdb_internal.session_variables",
 			nil, nil)
 	}
 
 	if _, ok := varGen[name]; !ok {
-		return nil, fmt.Errorf("unknown variable: %q", origName)
+		return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+			"unrecognized configuration parameter %q", origName)
 	}
 
 	varName := lex.EscapeSQLString(name)

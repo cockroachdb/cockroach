@@ -17,7 +17,6 @@ package server_test
 import (
 	"context"
 	gosql "database/sql"
-	"os"
 	"path/filepath"
 	"strconv"
 	"sync/atomic"
@@ -118,6 +117,7 @@ func setupMixedCluster(
 		}}
 
 	tc := testcluster.StartTestCluster(t, len(versions), base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual, // speeds up test
 		ServerArgsPerNode: twh.args(),
 	})
 
@@ -141,6 +141,55 @@ func prev(version roachpb.Version) roachpb.Version {
 	} else {
 		// version will be at least 2.0-X, so it's safe to set new Major to be version.Major-1.
 		return roachpb.Version{Major: version.Major - 1}
+	}
+}
+
+func TestClusterVersionPersistedOnJoin(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var newVersion = cluster.BinaryServerVersion
+	var oldVersion = prev(newVersion)
+
+	// Starts 3 nodes that have cluster versions set to be oldVersion and
+	// self-declared binary version set to be newVersion with a cluster
+	// running at the new version (i.e. a very regular setup). Want to check
+	// that after joining the cluster, the second two servers persist the
+	// new version (and not the old one).
+	versions := [][2]string{{oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}, {oldVersion.String(), newVersion.String()}}
+
+	bootstrapVersion := cluster.ClusterVersion{
+		UseVersion:     newVersion,
+		MinimumVersion: newVersion,
+	}
+
+	knobs := base.TestingKnobs{
+		Store: &storage.StoreTestingKnobs{
+			BootstrapVersion: &bootstrapVersion,
+		},
+		Upgrade: &server.UpgradeTestingKnobs{
+			DisableUpgrade: 1,
+		},
+	}
+
+	ctx := context.Background()
+	dir, finish := testutils.TempDir(t)
+	defer finish()
+	tc := setupMixedCluster(t, knobs, versions, dir)
+	defer tc.TestCluster.Stopper().Stop(ctx)
+
+	for i := 0; i < len(tc.TestCluster.Servers); i++ {
+		testutils.SucceedsSoon(t, func() error {
+			for _, engine := range tc.TestCluster.Servers[i].Engines() {
+				cv, err := storage.ReadClusterVersion(ctx, engine)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if cv.MinimumVersion != newVersion {
+					return errors.Errorf("n%d: expected version %v, got %v", i+1, newVersion, cv)
+				}
+			}
+			return nil
+		})
 	}
 }
 
@@ -320,8 +369,8 @@ func TestClusterVersionMixedVersionTooOld(t *testing.T) {
 
 	exits := make(chan int, 100)
 
-	log.SetExitFunc(func(i int) { exits <- i })
-	defer log.SetExitFunc(os.Exit)
+	log.SetExitFunc(true /* hideStack */, func(i int) { exits <- i })
+	defer log.ResetExitFunc()
 
 	// Three nodes at v1.1 and a fourth one at 1.0, but all operating at v1.0.
 	versions := [][2]string{{"1.0", "1.1"}, {"1.0", "1.1"}, {"1.0", "1.1"}, {"1.0", "1.0"}}
@@ -376,8 +425,8 @@ func TestClusterVersionMixedVersionTooNew(t *testing.T) {
 
 	exits := make(chan int, 100)
 
-	log.SetExitFunc(func(i int) { exits <- i })
-	defer log.SetExitFunc(os.Exit)
+	log.SetExitFunc(true /* hideStack */, func(i int) { exits <- i })
+	defer log.ResetExitFunc()
 
 	// Three nodes at v1.1 and a fourth one (started later) at 1.1-2 (and
 	// incompatible with anything earlier).

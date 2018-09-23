@@ -56,7 +56,7 @@ func initBackfillerSpec(
 // processors, one for each node that has spans that we are reading. The plan is
 // finalized.
 func (dsp *DistSQLPlanner) createBackfiller(
-	planCtx *planningCtx,
+	planCtx *PlanningCtx,
 	backfillType backfillType,
 	desc sqlbase.TableDescriptor,
 	duration time.Duration,
@@ -64,29 +64,29 @@ func (dsp *DistSQLPlanner) createBackfiller(
 	spans []roachpb.Span,
 	otherTables []sqlbase.TableDescriptor,
 	readAsOf hlc.Timestamp,
-) (physicalPlan, error) {
+) (PhysicalPlan, error) {
 	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize, otherTables, readAsOf)
 	if err != nil {
-		return physicalPlan{}, err
+		return PhysicalPlan{}, err
 	}
 
-	spanPartitions, err := dsp.partitionSpans(planCtx, spans)
+	spanPartitions, err := dsp.PartitionSpans(planCtx, spans)
 	if err != nil {
-		return physicalPlan{}, err
+		return PhysicalPlan{}, err
 	}
 
-	var p physicalPlan
+	var p PhysicalPlan
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		ib := &distsqlrun.BackfillerSpec{}
 		*ib = spec
-		ib.Spans = make([]distsqlrun.TableReaderSpan, len(sp.spans))
-		for j := range sp.spans {
-			ib.Spans[j].Span = sp.spans[j]
+		ib.Spans = make([]distsqlrun.TableReaderSpan, len(sp.Spans))
+		for j := range sp.Spans {
+			ib.Spans[j].Span = sp.Spans[j]
 		}
 
 		proc := distsqlplan.Processor{
-			Node: sp.node,
+			Node: sp.Node,
 			Spec: distsqlrun.ProcessorSpec{
 				Core:   distsqlrun.ProcessorCoreUnion{Backfiller: ib},
 				Output: []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},

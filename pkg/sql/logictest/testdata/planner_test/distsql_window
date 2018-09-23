@@ -1,0 +1,68 @@
+# LogicTest: 5node-dist
+
+statement ok
+CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c, d))
+
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
+# Split into ten parts.
+statement ok
+ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+statement ok
+ALTER TABLE data EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+# Verify data placement.
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE data]
+----
+start_key  end_key  replicas  lease_holder
+NULL       /1       {1}       1
+/1         /2       {2}       2
+/2         /3       {3}       3
+/3         /4       {4}       4
+/4         /5       {5}       5
+/5         /6       {1}       1
+/6         /7       {2}       2
+/7         /8       {3}       3
+/8         /9       {4}       4
+/9         NULL     {5}       5
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT sum(a) OVER () FROM data]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJy0kk9LwzAYxu9-CnlOCoE1bechp1530MlUPEgPsXkZhS4pSYrK6HeXpofZ0Uml9Zg_v_f3vPAcoY2iB3kgB_EGDoYYDAkYUjCskTPU1hTknLHdlx7YqE-IiKHUdeO765yhMJYgjvClrwgCz_K9oh1JRXYVgUGRl2UVNLUtD9J-ZUp6CYZt48V1xpG3DKbxp5HOyz1B8JZd0J5sjTZWkSU1MOXtSLDXUivzQXa1HqZ6erm_yfjtxRjxIAafvj1fcPt4ujZeUJtM1yYLatPp2vSfKjai3ZGrjXZ0VrXxyVFXQVJ76vvqTGMLerSmCJr-uA1cuFDkfP_K-8NGh6cQ8CfMf4XvBnB0DsdzzMkcOJ0Dr_8E5-3VdwAAAP__SlOZlw==
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT sum(a) OVER (PARTITION BY b ORDER BY c) FROM data]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzElc9um0AQh-99CjSnRN3KLGDH4USj9uBD7Yi6qqKKA_GOEiSHRbuL2ijyu1dAJBea7iAtro8Yvvnz_aTxC5RS4Dp_Qg3xD-DAIAAGITCIgMEcMgaVkjvUWqrmkw5YiV8Q-wyKsqpN83PGYCcVQvwCpjB7hBi2-f0eU8wFqpkPDASavNi3bSpVPOXqORG5yYHBpjaxl3CWBCwJITswkLV5LXysd__sPeb6sV8pCSA7ZAy0yR8QYn5g_xjwWKcupRKoUPQqtVWGK3wvSiF_oprN-11vP6bb1Xa1WXs3d7GXNMa-fvtykfBL72KTfvqcejd3XhK-vxwscxw0mHbQtfwgqxn3B1--3Tvs9ebjU-RnSZFPluLitCkG400GZzEZTGby6rQmw_Emw7OYDCczuTytyWi8yegsJqPJTF7_vxv9xhgp6kqWGkddYL9ZBMUDdltrWasd3iq5a9t0j5uWa8-fQG26t68Pq7J71Qw4Ho5c4IULvHSBuW-n-ZD2_6QDOxxYYd737Q_p0CUsO0yEZYeJsOwwERaxMxFW5BLW3EW3HSZ022FCtx0mdBM7E7oXLrqvXHTbYUK3HSZ022FCN7EzoXvpovvaRbcdJnTbYUK3HSZ0EztTl_-vPw6r7-zw7ncAAAD__34O4ms=
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT sum(a) OVER (PARTITION BY b ORDER BY c) FROM data ORDER BY d]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzElU9v2kAQxe_9FNacEmUr2PWagE9u1B44FCJCVUUVB4cdJUjEi9aL2ijiu1eYIGLH7DhaI47-82bevt9o9hUyrXCUPmMO8R_gwEAAgxAYSGAQwYzByug55rk22192gqH6B3GXwSJbre329YzBXBuE-BXswi4RYpimD0ucYKrQdLrAQKFNF8uizcosnlPzkqjUpsBgvLZxkHCWSJYIloQw2zDQa_tW-1Dy4SV4SvOncrHi_xmD3KaPCDHfsCMeD3XWmTYKDapSpaJK9RS_F5nSf9F0onLX22-T6XA6HI-Cm_s4SLaB3f36eZHwy-BiPPn-YxLc3AeJvLqsHOZgVBw1WmPjThuLpsMrQSbi6n1-4mizsEEqdZkUHWqDGemvetXhUSXC-vay1J43Hxx-rsHhrQ1O77SDQ4S5HxzeyuCI5uTEuciJ1shdn5YcEeaenGiFXNicXHgucmFr5PqnJUeEuScXtkJONicnz0VOtkZucFpyRJh7crL1a7am2QTzlc5ybHSDdrepoXrEXcS5Xps53ho9L9rsHseFrrgSFOZ29_XtYZjtPm0NNhdHPuK-j5h7-ebSreZVdfe9WpTE3apYOMWhu3PoFPOeu7X0Qe0WE6jdYgI1YdvLN4U6cgZO5N3zQX3tA8stJmC5xQQswraXbwpW35n3wA1r4AOLe21RQk3gItQEL8q5n3Vyk7pXKSd2KfdapvzDNv0UNLeaguZWU9AI537WSWgfVmoZWkRAc-_UKrTZ5sv_AAAA__-pavjK
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT sum(a) OVER (PARTITION BY b ORDER BY c), avg(a) OVER (PARTITION BY b) FROM data ORDER BY d]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzElU9v2kwQxu_vp7DmBMq-gvUfAj45UauKQyEitFVU-eCwowSJeNF6URtFfPfKdhCx4-y4WhckLsZ-Zp59fqPZF0ilwFnyhBmEP4EDAxcYeMDABwYBxAy2Sq4wy6TKPykFU_EbwiGDdbrd6fzvmMFKKoTwBfRabxBCWCb3G1xgIlANhsBAoE7Wm6LNVq2fEvUciUQnwGC-06ETcZb_fBa5LPIg3jOQO_1a_lj1_tl5TLLHar3Ih3gfM8h08oAQ8j37wOaxzi6VSqBCUalUVKkf5Mc6FfIXqkFQ7XpztVhOl9P5zLm-C50oz-v229dexPtOb7749HnhXN85UXDRBwZX37_0IrdfO9bRsvuh5QZDt1JpVANeSzXyLt6G2RDjsZ_XIqKmgIomjSnN5P9yO-BBLc_m9n6lPW8_SPyMg8Q7G6TRqQaJSPYwSLyrQXLbk3TPSNLtjOTlqUgSyR5Iul2R9NqT9M5I0uuM5PhUJIlkDyS9rkj67Un6ZyTpd0ZyciqSRLIHkv6_uKYb-i0w28o0w1Y38DCPEMUDlnlncqdWeKPkqmhTPs4LXXGLCMx0-fb1YZqWr3KD7cWBjXhsI-ZWvrlvVvO6evhW7VbEw7rYNYo9c2fPKOYjc2vfBrVZTKA2iwnUhG0r3xTqwBg4kffIBvWlDSyzmIBlFhOwCNtWvilYY2PeEzOsiQ0sbrVFCTWBi1ATvCjndtbJTWpepZzYpdxqmfJ32_SvoJnVFDSzmoJGOLezTkJ7t1Kr0AICmnmn1qHF-__-BAAA__-fWglv
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT sum(a) OVER w1 AS sum_a, avg(b) OVER w2 FROM data WINDOW w1 AS (PARTITION BY b ORDER BY c), w2 AS (PARTITION BY a, d) ORDER BY sum_a ]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlk9P20wQxu_vp7DmBGJf4V07_3wyqFWVQwkKtBWqcjDxCiJBNrIdtQjlu1d2iKjjMI-j3SqROBDCz7Mz-xs9fqW5SfVV8qxzin6SJEGKBAUkKCRBHZoIWmRmqvPcZOW_rIFh-psiX9BsvlgW5Z8ngqYm0xS9UjErnjRFdJvcP-mxTlKdnfskKNVFMnuqyiyy2XOSvcRpUiQkaLQsIi-WIlbVTyDK30OarASZZfFW4f3B9y_eY5I_1h8ZBzRZTQTlRfKgKZIr8cFJ35-znJss1ZlOa0-qnrLdy4_ZPDW_dHbeqVe9vhjfDm-Hoyvv8i7y4nJsN9--nsTy1DsZjT99HnuXd14cnp3u2UxHxN1aP-of9SN9tqHqHIIuvn85idV2E--nCz483Y7aNyYryspbo4zlWU2FD4uFLUaxaxBVhZ3TuDL_m8W58rfmtrt8p1Zett8BedgdkM6c6R7FDrjrR0r3OwC82OxA18kOqPYSqsNKqJxdWu8oJHTXj1TuJQRebCTsOZEwaC9hcFgJA2eX1j8KCd31IwP3EgIvNhL2nUgYtpcwPKyEobNLGxyFhO76kaF7CYEXGwkHzl9JdxQb63xh5rlu9bbpl6PS6YNezzU3y2yqrzMzrcqsP44qrnrnSHVerL99-zCcr78qD9ge7trA0reiQyu6z9OSpZUN3LOBJbguQHes6AFPq23a_5sOarC_DQcsDO46ZGEl-dIdm_3gYbAfoDLYD0CDmQEa7EfXZj94GOwHD6P9ADTYD0CD_eixlvZ5Sfs2-zGwMZyHgeGgMjAc0HZdowTgAwRFAE-jDADhhUIA4CgFAA40l40UqakqFS-65GME3Lls5Mg-qgMauI5qA9kRbtk50r2RoXvpztNId56GugMc6Q5wpHsjSOu6d4HujUzZS_dGpuylO08j3UFtpDvALTtHujfydC_deRrpztNQd4Aj3QGOdG-kav1d2-d1V41sYXWfrP77EwAA__8d9kEN
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT sum(a) OVER w1 AS sum_a, avg(b) OVER w2, rank() OVER w1 AS rnk, row_number() OVER w3 AS rnumber, max(a) OVER w3, min(b) OVER w2 FROM data WINDOW w1 AS (PARTITION BY b ORDER BY c), w2 AS (PARTITION BY a, d), w3 AS (PARTITION BY a, c ORDER BY b, d) ORDER BY rnk, rnumber ]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMmN9P4k4Uxd-_fwW5TxjnG5hpy6-nwazZkA1gqq5rNmRT6URJlJK2ZNcY_vcNRdYt4hzYW0hfjFA_c-bO9Zy58ELTKDSD4Mkk1PlOkgQpEuSQIJcEeTQSNIujsUmSKF7-yQrohb-oUxc0mc7m6fLtkaBxFBvqvFA6SR8NdegquHs0vglCE9fqJCg0aTB5zGRm8eQpiJ91GKQBCRrO005FS6GVeP2phHay310aLQRF8_RV5235u-fKQ5A85BfWHo0WI0FJGtwb6siF-GC_b-vMp1EcmtiEuZWyVTYruplMw-iniWteXvWi61_1rnrDQeXstlPRy6eX1_2qlieV6tD_dO5Xzm4runF6QoL87uBL9d37-xXZErqdq1MdqE5Ztxaa7UNQ9-vnqlbL4vq9QVV7_1BOM1eOc6hy7H3L9iHIH978GFz3z879zT4J3c562O9-q2p368N85W8luR-WtGXDl1GcmrimNk5fO6dCu6cbhnGEdoX2hG58KO7tcJ7bTvOP4tZjHUT_R7Oa8jYasH0LjdwW5O7JIcuQHLKwf8FGqZOjuDqlLEFyFFiOvW_HSw7gnHVyyIMkh9rdtqoMtlWF9b9ZatsWV6dUJbBtgeXY-3Y82wLnrG2rDmJbZ3fbOmWwrVNY_1ultm1xdUqnBLYtsBx7345nW-CctW2dg9jW3d22bhls6xbW_3apbVtcndItgW0LLMfet-PZFjhnbVv34B-vt4j7JplF08Ts9Km5vjxvE96bVXOSaB6PzUUcjTOZ1cthxmWfDEKTpKunry9609Wj5QZ3h5scWCoWzdJWQFvaaQ7c4sDSYdEsbQW0lZVmwW0OLF0WzdJWQNvZpOt_03m4vgm7VtizK3tWWDXs0g1Opthh4GugDKwJaJY2ypQmJ1PsMPC1HUaZAmiWNsqUFidT7DDwtR1GmQJoljbKlLbV2bJud7Z8d3HukyoSXEAsGrgTaaNbG-A8dThwgHuERaNrH9yAaOYAOE8dJYR8d4XuExGABj4FNAoJhPPUUUxI-_ggPZAT9gEC5QRrgAA0cipvhEA4Tx3mBGuKADRyKm-OQDhPHeYEa5QANHIqb5hAOE8d5oR9nlBgnlCseUKx5glAA6cibeA1hPPUUU4o1jwBaOBUQKOcQDhPHX6LwZonAI2-S-DNEwjnqaOcUPZ5QoF5Qu03T4wW__0OAAD__1jr_eE=
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT min(d) OVER w1, sum(a) OVER w2, avg(b) OVER w3 FROM data WINDOW w1 AS (PARTITION BY b ORDER BY c), w2 AS (ORDER BY c), w3 AS (PARTITION BY a, d) ORDER BY a, b ]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJzMlV1v2jwYhs_fXxE9R1RYavzBV47c6p0mDgoVZZuqKQcptlokGiPHaKsq_vuUpBtLWvwEBSZOECFcfm5fueW8QmqUniTPOoPoO1AgwIAABwICCPQgJrC2ZqGzzNj8LyUwVj8hCgks0_XG5T_HBBbGaohewS3dSkME8-RhpWc6UdpehkBAaZcsV8WYtV0-J_ZFqsQlQGC6cVEgBZGUSPb7kxHJi-8C4i0Bs3Fvo3YTHl6CpyR7qq4t-xBvYwKZSx41RHRL9kTerbNJjVXaalVZqVilvqlvy1SZH9pe9qpTb69m8_F8PJ0E1_dRIPtA4GY86Uh6EXSms_8_zYLr-0AOuhe1zeyCshMFpTX3d19uOpI1jsX3xvIOpV49QyJHQODq6-eO5Ptni0Nm3xnr8smsVgfRJbLX_dOyslx878xeZSZtXnF6JhWnR2tO_7QVZ83dsjNxy47mdnBat7y5W34mbvnR3A5P61Y0dyvOxK04mtvRv3vtfRBjprO1STNdC_zxymG-Ea0edbnrzGzsQt9asyjGlJfTgisOTaUzV959uxin5a08YHO43wYetoFp2IpmfprW6fBvGoGZF-YVOKzD3AsLPyy8MEVG99r0xA8jPfHDSE-Q2EhPEBp51P02PRm08e2HEd9-GPGNxEZ8IzSibNjG96iNbz-M-PbDiG8kNuIbobFz8N0xeohw-u4YPcQ4QiPKERpxjiVHpGM45s3_BqnT8fa_XwEAAP__jHZv-w==

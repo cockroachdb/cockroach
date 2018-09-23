@@ -41,10 +41,8 @@ func TestIterStats(t *testing.T) {
 	defer batch.Close()
 
 	testCases := []Iterator{
-		db.NewIterator(IterOptions{WithStats: true}),
-		db.NewTimeBoundIterator(hlc.Timestamp{}, hlc.Timestamp{WallTime: 999}, true /* withStats */),
-		batch.NewIterator(IterOptions{WithStats: true}),
-		batch.NewTimeBoundIterator(hlc.Timestamp{}, hlc.Timestamp{WallTime: 999}, true /* withStats */),
+		db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax, WithStats: true}),
+		batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax, WithStats: true}),
 	}
 
 	defer func() {

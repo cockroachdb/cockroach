@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
@@ -96,6 +97,9 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		if err := os.Unsetenv("COCKROACH_SCAN_INTERVAL"); err != nil {
 			t.Fatal(err)
 		}
+		if err := os.Unsetenv("COCKROACH_SCAN_MIN_IDLE_TIME"); err != nil {
+			t.Fatal(err)
+		}
 		if err := os.Unsetenv("COCKROACH_SCAN_MAX_IDLE_TIME"); err != nil {
 			t.Fatal(err)
 		}
@@ -116,9 +120,7 @@ func TestReadEnvironmentVariables(t *testing.T) {
 
 	resetEnvVar()
 	cfg.readEnvironmentVariables()
-	if !reflect.DeepEqual(cfg, cfgExpected) {
-		t.Fatalf("actual context does not match expected: diff(actual, expected) = %s\nactual:\n%+v\nexpected:\n%+v", pretty.Diff(cfg, cfgExpected), cfg, cfgExpected)
-	}
+	require.Equal(t, cfgExpected, cfg)
 
 	// Set all the environment variables to valid values and ensure they are set
 	// correctly.
@@ -130,6 +132,10 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfgExpected.ScanInterval = time.Hour * 48
+	if err := os.Setenv("COCKROACH_SCAN_MIN_IDLE_TIME", "1h"); err != nil {
+		t.Fatal(err)
+	}
+	cfgExpected.ScanMinIdleTime = time.Hour
 	if err := os.Setenv("COCKROACH_SCAN_MAX_IDLE_TIME", "100ns"); err != nil {
 		t.Fatal(err)
 	}
@@ -144,6 +150,7 @@ func TestReadEnvironmentVariables(t *testing.T) {
 	for _, envVar := range []string{
 		"COCKROACH_EXPERIMENTAL_LINEARIZABLE",
 		"COCKROACH_SCAN_INTERVAL",
+		"COCKROACH_SCAN_MIN_IDLE_TIME",
 		"COCKROACH_SCAN_MAX_IDLE_TIME",
 	} {
 		t.Run("invalid", func(t *testing.T) {

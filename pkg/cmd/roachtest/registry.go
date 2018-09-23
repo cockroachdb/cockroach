@@ -18,28 +18,36 @@ package main
 func registerTests(r *registry) {
 	// Helpful shell pipeline to generate the list below:
 	//
-	// grep -h -E 'func register[^(]+\(.*registry\) {' *.go | grep -E -o 'register[^(]+' | grep -v '^registerTests$' | grep -v '^\w*Bench$' | sort | awk '{printf "\t%s(r)\n", $0}'
+	// grep -h -E 'func register[^(]+\(.*registry\) {' *.go | grep -E -o 'register[^(]+' | grep -E -v '^register(Tests|Benchmarks)$' | grep -v '^\w*Bench$' | sort -f | awk '{printf "\t%s(r)\n", $0}'
 
+	registerAcceptance(r)
 	registerAllocator(r)
 	registerBackup(r)
 	registerCancel(r)
+	registerCDC(r)
 	registerClearRange(r)
 	registerClock(r)
 	registerCopy(r)
 	registerDebug(r)
+	registerDebugHeap(r)
 	registerDecommission(r)
 	registerDiskUsage(r)
 	registerDrop(r)
 	registerElectionAfterRestart(r)
+	registerEncryption(r)
+	registerGossip(r)
 	registerHotSpotSplits(r)
 	registerImportTPCC(r)
 	registerImportTPCH(r)
+	registerInterleaved(r)
 	registerJepsen(r)
 	registerKV(r)
+	registerKVQuiescenceDead(r)
 	registerKVScalability(r)
 	registerKVSplits(r)
-	registerKVQuiescenceDead(r)
 	registerLargeRange(r)
+	registerQueue(r)
+	registerRebalanceLoad(r)
 	registerRestore(r)
 	registerRoachmart(r)
 	registerScaleData(r)
@@ -47,7 +55,7 @@ func registerTests(r *registry) {
 	registerTPCC(r)
 	registerUpgrade(r)
 	registerVersion(r)
-	registerEncryption(r)
+	registerYCSB(r)
 }
 
 func registerBenchmarks(r *registry) {

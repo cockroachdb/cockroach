@@ -20,6 +20,7 @@ syntax = "proto2";
 package cockroach.sql.distsqlrun;
 option go_package = "distsqlrun";
 
+import "jobs/jobspb/jobs.proto";
 import "roachpb/api.proto";
 import "roachpb/data.proto";
 import "roachpb/errors.proto";
@@ -52,7 +53,7 @@ import "gogoproto/gogo.proto";
 // each type of core. Column indices in a PostProcessSpec refers to these
 // internal columns. Some columns may be unused by the post-processing stage;
 // processor implementations are internally optimized to not produce values for
-// such unneded columns.
+// such unneeded columns.
 message ProcessorSpec {
   // In most cases, there is one input.
   repeated InputSyncSpec input = 1 [(gogoproto.nullable) = false];
@@ -136,6 +137,11 @@ message ProcessorCoreUnion {
   optional MetadataTestSenderSpec metadataTestSender = 18;
   optional MetadataTestReceiverSpec metadataTestReceiver = 19;
   optional ZigzagJoinerSpec zigzagJoiner = 21;
+  optional ProjectSetSpec projectSet = 22;
+  optional WindowerSpec windower = 23;
+  optional LocalPlanNodeSpec localPlanNode = 24;
+  optional ChangeAggregatorSpec changeAggregator = 25;
+  optional ChangeFrontierSpec changeFrontier = 26;
 
   reserved 6, 12;
 }
@@ -177,13 +183,20 @@ message TableReaderSpan {
   optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
 }
 
+// ScanVisibility controls which columns are seen by scans - just normal
+// columns, or normal columns and also in-progress schema change columns.
+enum ScanVisibility {
+  PUBLIC = 0;
+  PUBLIC_AND_NOT_PUBLIC = 1;
+}
+
 // TableReaderSpec is the specification for a "table reader". A table reader
 // performs KV operations to retrieve rows for a table and outputs the desired
 // columns of the rows that pass a filter expression.
 //
 // The "internal columns" of a TableReader (see ProcessorSpec) are all the
 // columns of the table. Internally, only the values for the columns needed by
-// the post-processing stage are be populated. If is_check is set, the
+// the post-processing stage are to be populated. If is_check is set, the
 // TableReader will run additional data checking procedures and the
 // "internal columns" are:
 //  - Error type (string).
@@ -208,6 +221,12 @@ message TableReaderSpec {
   // Indicates whether the TableReader is being run as an exhaustive
   // check. This is only true during SCRUB commands.
   optional bool is_check = 6 [(gogoproto.nullable) = false];
+
+  // Indicates the visibility level of the columns that should be returned.
+  // Normally, will be set to public. Will be set to publicAndNotPublic if the
+  // consumer of this TableReader expects to be able to see in-progress schema
+  // changes.
+  optional ScanVisibility visibility = 7 [(gogoproto.nullable) = false];
 }
 
 // JoinReaderSpec is the specification for a "join reader". A join reader
@@ -259,6 +278,13 @@ message JoinReaderSpec {
   optional Expression index_filter_expr = 5 [(gogoproto.nullable) = false];
 
   optional sqlbase.JoinType type = 6 [(gogoproto.nullable) = false];
+
+  // For index joins that are sources to mutation statements - what visibility
+  // of columns should we return? Mutations sometimes need to see in-progress
+  // schema change columns, in which case this field will be changed from its
+  // default PUBLIC state. Causes the index join to return these schema change
+  // columns.
+  optional ScanVisibility visibility = 7 [(gogoproto.nullable) = false];
 }
 
 // SorterSpec is the specification for a "sorting aggregator". A sorting
@@ -281,7 +307,8 @@ message DistinctSpec {
   // The ordered columns in the input stream can be optionally specified for
   // possible optimizations. The specific ordering (ascending/descending) of
   // the column itself is not important nor is the order in which the columns
-  // are specified.
+  // are specified. The ordered columns must be a subset of the distinct
+  // columns.
   repeated uint32 ordered_columns = 1;
   // The distinct columns in the input stream are those columns on which we
   // check for distinct rows. If A,B,C are in distinct_columns and there is a
@@ -318,6 +345,19 @@ message ZigzagJoinerSpec {
   optional Expression on_expr = 4 [(gogoproto.nullable) = false];
 
   optional sqlbase.JoinType type = 5 [(gogoproto.nullable) = false];
+}
+
+// LocalPlanNodeSpec is the specification for a local planNode wrapping
+// processor. It's created for situations where a planNode has no DistSQL
+// processor equivalent, and constrains the plan to live on the gateway node.
+// This spec contains just an index, which is used by the execution engine to
+// find the planNode instance this processor is executing in an array of local
+// planNodes. See LocalProcessors and LocalProcessorIndexes on
+// distsqlplan.PhysicalPlan.
+message LocalPlanNodeSpec {
+  optional uint32 RowSourceIdx = 1;
+  optional uint32 NumInputs = 2;
+  optional string Name = 3;
 }
 
 message Columns {
@@ -448,10 +488,23 @@ message AggregatorSpec {
     FINAL_VARIANCE = 16;
     FINAL_STDDEV = 17;
     ARRAY_AGG = 18;
-
     JSON_AGG = 19;
     // JSONB_AGG is an alias for JSON_AGG, they do the same thing.
     JSONB_AGG = 20;
+    STRING_AGG = 21;
+  }
+
+  enum Type {
+    // This setting exists just for backwards compatibility; it's equivalent to
+    // SCALAR when there are no grouping columns, and to NON_SCALAR when there
+    // are grouping columns.
+    AUTO = 0;
+    // A scalar aggregation has no grouping columns and always returns one
+    // result row.
+    SCALAR = 1;
+    // A non-scalar aggregation returns no rows if there are no input rows; it
+    // may or may not have grouping columns.
+    NON_SCALAR = 2;
   }
 
   message Aggregation {
@@ -476,8 +529,13 @@ message AggregatorSpec {
     //   SELECT SUM(x) FILTER (WHERE y > 1), SUM(x) FILTER (WHERE y < 1) FROM t
     optional uint32 filter_col_idx = 4;
 
+    // Arguments are const expressions passed to aggregation functions.
+    repeated Expression arguments = 6 [(gogoproto.nullable) = false];
+
     reserved 3;
   }
+
+  optional Type type = 5 [(gogoproto.nullable) = false];
 
   // The group key is a subset of the columns in the input stream schema on the
   // basis of which we define our groups.
@@ -554,12 +612,24 @@ message JobProgress {
 }
 
 message ReadImportDataSpec {
-  optional roachpb.CSVOptions legacy_csv_options = 1 [(gogoproto.nullable) = false];
+  reserved 1;
   optional roachpb.IOFileFormat format = 8 [(gogoproto.nullable) = false];
   // sample_size is the rate at which to output rows, based on an input row's size.
   optional int32 sample_size = 2 [(gogoproto.nullable) = false];
-  // table_desc is the table descriptor of the CSV file.
-  optional sqlbase.TableDescriptor table_desc = 3 [(gogoproto.nullable) = false];
+  reserved 3;
+
+  // tables is an alternative to table_desc for input formats that can read
+  // multiple tables. If it is non-empty, the keys specify the names of tables
+  // for which the processor should read and emit data (ignoring data for any
+  // other tables that is present in the input).
+  //
+  // TODO(dt): If a key has a nil value, the schema for that table should be
+  // determined from the input on-the-fly (e.g. by parsing a CREATE TABLE in a
+  // dump file) and the processor should emit a key/value for the generated
+  // TableDescriptor with the corresponding descriptor ID key. If tables is
+  // empty (and table_desc above is not specified), the processor should read
+  // all tables in the input, determining their schemas on the fly.
+  map<string, sqlbase.TableDescriptor> tables = 9 [(gogoproto.nullable) = true];
 
   // uri is a storageccl.ExportStorage URI pointing to the CSV files to be
   // read. The map key must be unique across the entire IMPORT job.
@@ -569,6 +639,8 @@ message ReadImportDataSpec {
 
   reserved 4;
   reserved 5;
+
+  optional bool skip_missing_foreign_keys = 10 [(gogoproto.nullable) = false];
 }
 
 // SSTWriterSpec is the specification for a processor that consumes rows, uses
@@ -776,4 +848,148 @@ message InterleavedReaderJoinerSpec {
   optional Expression on_expr = 4 [(gogoproto.nullable) = false];
 
   optional sqlbase.JoinType type = 5 [(gogoproto.nullable) = false];
+}
+
+// ProjectSetSpec is the specification of a processor which applies a set of
+// expressions, which may be set-returning functions, to its input.
+message ProjectSetSpec {
+  // Expressions to be applied
+  repeated Expression exprs = 1 [(gogoproto.nullable) = false];
+
+  // Column types for the generated values
+  repeated sqlbase.ColumnType generated_columns = 2 [(gogoproto.nullable) = false];
+
+  // The number of columns each expression returns. Same length as exprs.
+  repeated uint32 num_cols_per_gen = 3;
+}
+
+// WindowerSpec is the specification of a processor that performs computations
+// of window functions that have the same PARTITION BY clause. For a particular
+// windowFn, the processor puts result at windowFn.ArgIdxStart and "consumes"
+// all arguments to windowFn (windowFn.ArgCount of them). So if windowFn takes
+// no arguments, an extra column is added; if windowFn takes more than one
+// argument, (windowFn.ArgCount - 1) columns are removed.
+message WindowerSpec {
+  enum WindowFunc {
+    // These mirror window functions from window_builtins.go.
+    ROW_NUMBER = 0;
+    RANK = 1;
+    DENSE_RANK = 2;
+    PERCENT_RANK = 3;
+    CUME_DIST = 4;
+    NTILE = 5;
+    LAG = 6;
+    LEAD = 7;
+    FIRST_VALUE = 8;
+    LAST_VALUE = 9;
+    NTH_VALUE = 10;
+  }
+
+  // Func specifies which function to compute. It can either be built-in
+  // aggregate or built-in window function.
+  message Func {
+    option (gogoproto.onlyone) = true;
+
+    optional AggregatorSpec.Func aggregateFunc = 1;
+    optional WindowFunc windowFunc = 2;
+  }
+
+  // Frame is the specification of a single window frame for a window function.
+  message Frame {
+    // Mode indicates which mode of framing is used.
+    enum Mode {
+      // RANGE specifies frame in terms of logical range (e.g. 1 unit cheaper).
+      RANGE = 0;
+      // ROWS specifies frame in terms of physical offsets (e.g. 1 row before).
+      ROWS = 1;
+      // GROUPS specifies frame in terms of peer groups (where "peers" mean
+      // rows not distinct in the ordering columns).
+      GROUPS = 2;
+    }
+
+    // BoundType indicates which type of boundary is used.
+    enum BoundType {
+      UNBOUNDED_PRECEDING = 0;
+      UNBOUNDED_FOLLOWING = 1;
+      // Offsets are stored within Bound.
+      OFFSET_PRECEDING = 2;
+      OFFSET_FOLLOWING = 3;
+      CURRENT_ROW = 4;
+    }
+
+    // Bound specifies the type of boundary and the offset (if present).
+    message Bound {
+      optional BoundType boundType = 1 [(gogoproto.nullable) = false];
+      // For UNBOUNDED_PRECEDING, UNBOUNDED_FOLLOWING, and CURRENT_ROW offset
+      // is ignored. Integer offset for ROWS mode is stored in int_offset while
+      // an encoded datum and the type information are stored for RANGE mode.
+      optional uint32 int_offset = 2 [(gogoproto.nullable) = false];
+      optional bytes typed_offset = 3;
+      optional DatumInfo offset_type = 4 [(gogoproto.nullable) = false];
+    }
+    // Bounds specifies boundaries of the window frame.
+    message Bounds {
+      // Start bound must always be present whereas end bound might be omitted.
+      optional Bound start = 1 [(gogoproto.nullable) = false];
+      optional Bound end = 2;
+    }
+    optional Mode mode = 1 [(gogoproto.nullable) = false];
+    optional Bounds bounds = 2 [(gogoproto.nullable) = false];
+  }
+
+  // WindowFn is the specification of a single window function.
+  message WindowFn {
+    // Func is which function to compute.
+    optional Func func = 1 [(gogoproto.nullable) = false];
+    // ArgIdxStart is which index arguments to this window function start at.
+    optional uint32 argIdxStart = 2 [(gogoproto.nullable) = false];
+    // ArgCount indicates how many arguments this window function takes in.
+    optional uint32 argCount = 3 [(gogoproto.nullable) = false];
+    // Ordering specifies in which order rows should be considered by this
+    // window function. Its contents come from ORDER BY clause of the window
+    // function.
+    optional Ordering ordering = 4 [(gogoproto.nullable) = false];
+    // Frame specifies over which frame this window function is computed.
+    optional Frame frame = 5;
+    // Optional index of a column over which filtering of rows will be done.
+    // Special value -1 indicates that filter is not present.
+    optional int32 filterColIdx = 6 [(gogoproto.nullable) = false];
+  }
+
+  // PartitionBy specifies how to partition rows for all window functions.
+  repeated uint32 partitionBy = 1;
+  // WindowFns is the specification of all window functions to be computed.
+  repeated WindowFn windowFns = 2 [(gogoproto.nullable) = false];
+}
+
+// ChangeAggregatorSpec is the specification for a processor that watches for
+// changes in a set of spans. Each span may cross multiple ranges.
+message ChangeAggregatorSpec {
+  message Watch {
+    optional util.hlc.Timestamp initial_resolved = 1 [(gogoproto.nullable) = false];
+    optional roachpb.Span span = 2 [(gogoproto.nullable) = false];
+  }
+  repeated Watch watches = 1 [(gogoproto.nullable) = false];
+
+  // Feed is the specification for this changefeed.
+  optional cockroach.sql.jobs.jobspb.ChangefeedDetails feed = 2 [(gogoproto.nullable) = false];
+}
+
+// ChangeFrontierSpec is the specification for a processor that receives
+// span-level resolved timestamps, track them, and emits the changefeed-level
+// resolved timestamp whenever it changes.
+message ChangeFrontierSpec {
+  // TrackedSpans is the entire span set being watched. Once all these spans
+  // have been resolved at a certain timestamp, then it's safe to resolve the
+  // changefeed at that timestamp.
+  repeated roachpb.Span tracked_spans = 1 [(gogoproto.nullable) = false];
+
+  // Feed is the specification for this changefeed.
+  optional cockroach.sql.jobs.jobspb.ChangefeedDetails feed = 2 [(gogoproto.nullable) = false];
+
+  // JobID is the id of this changefeed in the system jobs.
+  optional int64 job_id = 3 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "JobID"
+  ];
 }

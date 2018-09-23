@@ -63,6 +63,10 @@ type Config struct {
 	// OnEvicted optionally specifies a callback function to be
 	// executed when an entry is purged from the cache.
 	OnEvicted func(key, value interface{})
+
+	// OnEvictedEntry optionally specifies a callback function to
+	// be executed when an entry is purged from the cache.
+	OnEvictedEntry func(entry *Entry)
 }
 
 // Entry holds the key and value and a pointer to the linked list
@@ -259,9 +263,14 @@ func (bc *baseCache) DelEntry(entry *Entry) {
 
 // Clear clears all entries from the cache.
 func (bc *baseCache) Clear() {
-	if bc.OnEvicted != nil {
+	if bc.OnEvicted != nil || bc.OnEvictedEntry != nil {
 		for e := bc.ll.back(); e != &bc.ll.root; e = e.prev {
-			bc.OnEvicted(e.Key, e.Value)
+			if bc.OnEvicted != nil {
+				bc.OnEvicted(e.Key, e.Value)
+			}
+			if bc.OnEvictedEntry != nil {
+				bc.OnEvictedEntry(e)
+			}
 		}
 	}
 	bc.ll.init()
@@ -284,6 +293,9 @@ func (bc *baseCache) removeElement(e *Entry) {
 	bc.store.del(e)
 	if bc.OnEvicted != nil {
 		bc.OnEvicted(e.Key, e.Value)
+	}
+	if bc.OnEvictedEntry != nil {
+		bc.OnEvictedEntry(e)
 	}
 }
 

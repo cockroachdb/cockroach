@@ -45,20 +45,34 @@ type valuesNode struct {
 
 // Values implements the VALUES clause.
 func (p *planner) Values(
-	ctx context.Context, n *tree.ValuesClause, desiredTypes []types.T,
+	ctx context.Context, origN tree.Statement, desiredTypes []types.T,
 ) (planNode, error) {
 	v := &valuesNode{
 		specifiedInQuery: true,
 		isConst:          true,
 	}
-	if len(n.Tuples) == 0 {
+
+	// If we have names, extract them.
+	var n *tree.ValuesClause
+	var names tree.NameList
+	switch t := origN.(type) {
+	case *tree.ValuesClauseWithNames:
+		n = &t.ValuesClause
+		names = t.Names
+	case *tree.ValuesClause:
+		n = t
+	default:
+		log.Fatalf(ctx, "programming error. unhandled case in values: %T %v", origN, origN)
+	}
+
+	if len(n.Rows) == 0 {
 		return v, nil
 	}
 
-	numCols := len(n.Tuples[0].Exprs)
+	numCols := len(n.Rows[0])
 
-	v.tuples = make([][]tree.TypedExpr, 0, len(n.Tuples))
-	tupleBuf := make([]tree.TypedExpr, len(n.Tuples)*numCols)
+	v.tuples = make([][]tree.TypedExpr, 0, len(n.Rows))
+	tupleBuf := make([]tree.TypedExpr, len(n.Rows)*numCols)
 
 	v.columns = make(sqlbase.ResultColumns, 0, numCols)
 
@@ -72,8 +86,8 @@ func (p *planner) Values(
 	// Ensure there are no special functions in the clause.
 	p.semaCtx.Properties.Require("VALUES", tree.RejectSpecial)
 
-	for num, tuple := range n.Tuples {
-		if a, e := len(tuple.Exprs), numCols; a != e {
+	for num, tuple := range n.Rows {
+		if a, e := len(tuple), numCols; a != e {
 			return nil, newValuesListLenErr(e, a)
 		}
 
@@ -81,7 +95,7 @@ func (p *planner) Values(
 		tupleRow := tupleBuf[:numCols:numCols]
 		tupleBuf = tupleBuf[numCols:]
 
-		for i, expr := range tuple.Exprs {
+		for i, expr := range tuple {
 			desired := types.Any
 			if len(desiredTypes) > i {
 				desired = desiredTypes[i]
@@ -94,6 +108,25 @@ func (p *planner) Values(
 			}
 
 			typ := typedExpr.ResolvedType()
+			if names != nil && (!(typ.Equivalent(desired) || typ == types.Unknown)) {
+				var colName tree.Name
+				if len(names) > i {
+					colName = names[i]
+				} else {
+					colName = "unknown"
+				}
+				desiredColTyp, err := sqlbase.DatumTypeToColumnType(desired)
+				if err != nil {
+					return nil, err
+				}
+				err = sqlbase.CheckColumnValueType(typ, desiredColTyp, string(colName))
+				if err != nil {
+					return nil, err
+				}
+				// For some reason we didn't detect a new error. Return a fresh one.
+				return nil, sqlbase.NewMismatchedTypeError(typ, desiredColTyp.SemanticType, string(colName))
+			}
+
 			if num == 0 {
 				v.columns = append(v.columns, sqlbase.ResultColumn{Name: "column" + strconv.Itoa(i+1), Typ: typ})
 			} else if v.columns[i].Typ == types.Unknown {
@@ -145,7 +178,7 @@ func (n *valuesNode) startExec(params runParams) error {
 
 	// This node is coming from a SQL query (as opposed to sortNode and
 	// others that create a valuesNode internally for storing results
-	// from other planNodes), so its expressions need evaluting.
+	// from other planNodes), so its expressions need evaluating.
 	// This may run subqueries.
 	n.rows = sqlbase.NewRowContainer(
 		params.extendedEvalCtx.Mon.MakeBoundAccount(),

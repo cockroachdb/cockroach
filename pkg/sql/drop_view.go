@@ -83,6 +83,7 @@ func (n *dropViewNode) startExec(params runParams) error {
 		if droppedDesc == nil {
 			continue
 		}
+
 		cascadeDroppedViews, err := params.p.dropViewImpl(ctx, droppedDesc, n.n.DropBehavior)
 		if err != nil {
 			return err
@@ -189,7 +190,7 @@ func (p *planner) dropViewImpl(
 			continue
 		}
 		dependencyDesc.DependedOnBy = removeMatchingReferences(dependencyDesc.DependedOnBy, viewDesc.ID)
-		if err := p.saveNonmutationAndNotify(ctx, dependencyDesc); err != nil {
+		if err := p.writeSchemaChange(ctx, dependencyDesc, sqlbase.InvalidMutationID); err != nil {
 			return cascadeDroppedViews, err
 		}
 	}

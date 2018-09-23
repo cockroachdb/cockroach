@@ -1,6 +1,6 @@
 # LogicTest: local local-opt
 
-statement error unknown variable: "foo"
+statement error unrecognized configuration parameter "foo"
 RESET FOO
 
 statement ok
@@ -19,10 +19,10 @@ SHOW SEARCH_PATH
 ----
 public
 
-statement error variable "server_version" cannot be reset
+statement error parameter "server_version" cannot be reset
 RESET SERVER_VERSION
 
-statement error variable "server_version_num" cannot be reset
+statement error parameter "server_version_num" cannot be reset
 RESET SERVER_VERSION_NUM
 
 # Lower case

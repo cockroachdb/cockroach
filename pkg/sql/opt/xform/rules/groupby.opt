@@ -1,0 +1,49 @@
+# =============================================================================
+# groupby.opt contains exploration rules for the groupby operators
+# =============================================================================
+
+# ReplaceMinWithLimit replaces a min with a limit 1. This rule may result in a
+# lower cost plan if the column min(x) is applied to is indexed.
+[ReplaceMinWithLimit, Explore]
+(ScalarGroupBy
+    $input:*
+    (Aggregations [(Min $variable:(Variable $col:*))] $cols:*)
+    $def:*
+)
+=>
+(ScalarGroupBy
+    (Limit
+        (Select
+            $input
+            (Filters [(IsNot $variable (Null (AnyType)))])
+        )
+        (Const 1)
+        (MakeOrderingChoiceFromColumn Min $col)
+    )
+    (Aggregations [(ConstAgg $variable)] $cols)
+    $def
+)
+
+# ReplaceMaxWithLimit is analogous to the ReplaceMinWithLimit rule.
+# Due to limitations with OpName in exploration rules, the rule
+# had to be duplicated with minor modifications (we replace occurrences
+# of Min with Max)
+[ReplaceMaxWithLimit, Explore]
+(ScalarGroupBy
+    $input:*
+    (Aggregations [(Max $variable:(Variable $col:*))] $cols:*)
+    $def:*
+)
+=>
+(ScalarGroupBy
+    (Limit
+        (Select
+            $input
+            (Filters [(IsNot $variable (Null (AnyType)))])
+        )
+        (Const 1)
+        (MakeOrderingChoiceFromColumn Max $col)
+    )
+    (Aggregations [(ConstAgg $variable)] $cols)
+    $def
+)

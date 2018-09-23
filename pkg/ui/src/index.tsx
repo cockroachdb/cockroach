@@ -1,16 +1,9 @@
-/// <reference path="../node_modules/protobufjs/stub-node.d.ts" />
-
 import "nvd3/build/nv.d3.min.css";
 import "react-select/dist/react-select.css";
 import "styl/app.styl";
 
 import "src/polyfills";
-
-import * as protobuf from "protobufjs/minimal";
-import Long from "long";
-
-protobuf.util.Long = Long as any;
-protobuf.configure();
+import "src/protobufInit";
 
 import React from "react";
 import * as ReactDOM from "react-dom";
@@ -18,7 +11,7 @@ import { Provider } from "react-redux";
 import { Router, Route, IndexRoute, IndexRedirect, Redirect } from "react-router";
 
 import {
-  tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr, rangeIDAttr,
+  tableNameAttr, databaseNameAttr, nodeIDAttr, dashboardNameAttr, rangeIDAttr, statementAttr, appAttr,
 } from "src/util/constants";
 
 import { alertDataSync } from "src/redux/alerts";
@@ -33,6 +26,7 @@ import Layout from "src/views/app/containers/layout";
 import { DatabaseTablesList, DatabaseGrantsList } from "src/views/databases/containers/databases";
 import TableDetails from "src/views/databases/containers/tableDetails";
 import { EventPage } from "src/views/cluster/containers/events";
+import DataDistributionPage from "src/views/cluster/containers/dataDistribution";
 import Raft from "src/views/devtools/containers/raft";
 import RaftRanges from "src/views/devtools/containers/raftRanges";
 import RaftMessages from "src/views/devtools/containers/raftMessages";
@@ -52,6 +46,8 @@ import ReduxDebug from "src/views/reports/containers/redux";
 import Range from "src/views/reports/containers/range";
 import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
+import StatementsPage from "src/views/statements/statementsPage";
+import StatementDetails from "src/views/statements/statementDetails";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
@@ -121,6 +117,20 @@ ReactDOM.render(
           </Route>
         </Route>
 
+        { /* data distribution */ }
+        <Route path="data-distribution" component={ DataDistributionPage } />
+
+        { /* statement statistics */ }
+        <Route path="statements">
+          <IndexRoute component={ StatementsPage } />
+          <Route path={ `:${appAttr}` } component={ StatementsPage } />
+          <Route path={ `:${appAttr}/:${statementAttr}` } component={ StatementDetails } />
+        </Route>
+        <Route path="statement">
+          <IndexRedirect to="/statements" />
+          <Route path={ `:${statementAttr}` } component={ StatementDetails } />
+        </Route>
+
         { /* debug pages */ }
         <Route path="debug">
           <IndexRoute component={Debug} />
@@ -145,7 +155,6 @@ ReactDOM.render(
           <Route path={`range/:${rangeIDAttr}`} component={ Range } />
           <Route path={`range/:${rangeIDAttr}/cmdqueue`} component={ CommandQueue } />
           <Route path={`stores/:${nodeIDAttr}`} component={ Stores } />
-
         </Route>
 
         { /* old route redirects */ }

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -45,23 +46,53 @@ const (
 
 var (
 	metaDistSenderBatchCount = metric.Metadata{
-		Name: "distsender.batches",
-		Help: "Number of batches processed"}
+		Name:        "distsender.batches",
+		Help:        "Number of batches processed",
+		Measurement: "Batches",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaDistSenderPartialBatchCount = metric.Metadata{
-		Name: "distsender.batches.partial",
-		Help: "Number of partial batches processed"}
+		Name:        "distsender.batches.partial",
+		Help:        "Number of partial batches processed after being divided on range boundaries",
+		Measurement: "Partial Batches",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaDistSenderAsyncSentCount = metric.Metadata{
+		Name:        "distsender.batches.async.sent",
+		Help:        "Number of partial batches sent asynchronously",
+		Measurement: "Partial Batches",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaDistSenderAsyncThrottledCount = metric.Metadata{
+		Name:        "distsender.batches.async.throttled",
+		Help:        "Number of partial batches not sent asynchronously due to throttling",
+		Measurement: "Partial Batches",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaTransportSentCount = metric.Metadata{
-		Name: "distsender.rpc.sent",
-		Help: "Number of RPCs sent"}
+		Name:        "distsender.rpc.sent",
+		Help:        "Number of RPCs sent",
+		Measurement: "RPCs",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaTransportLocalSentCount = metric.Metadata{
-		Name: "distsender.rpc.sent.local",
-		Help: "Number of local RPCs sent"}
-	metaDistSenderNextReplicaErrCount = metric.Metadata{
-		Name: "distsender.rpc.sent.nextreplicaerror",
-		Help: "Number of RPCs sent due to per-replica errors"}
+		Name:        "distsender.rpc.sent.local",
+		Help:        "Number of local RPCs sent",
+		Measurement: "RPCs",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaTransportSenderNextReplicaErrCount = metric.Metadata{
+		Name:        "distsender.rpc.sent.nextreplicaerror",
+		Help:        "Number of RPCs sent due to per-replica errors",
+		Measurement: "RPCs",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaDistSenderNotLeaseHolderErrCount = metric.Metadata{
-		Name: "distsender.errors.notleaseholder",
-		Help: "Number of NotLeaseHolderErrors encountered"}
+		Name:        "distsender.errors.notleaseholder",
+		Help:        "Number of NotLeaseHolderErrors encountered",
+		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 var rangeDescriptorCacheSize = settings.RegisterIntSetting(
@@ -74,6 +105,8 @@ var rangeDescriptorCacheSize = settings.RegisterIntSetting(
 type DistSenderMetrics struct {
 	BatchCount             *metric.Counter
 	PartialBatchCount      *metric.Counter
+	AsyncSentCount         *metric.Counter
+	AsyncThrottledCount    *metric.Counter
 	SentCount              *metric.Counter
 	LocalSentCount         *metric.Counter
 	NextReplicaErrCount    *metric.Counter
@@ -84,9 +117,11 @@ func makeDistSenderMetrics() DistSenderMetrics {
 	return DistSenderMetrics{
 		BatchCount:             metric.NewCounter(metaDistSenderBatchCount),
 		PartialBatchCount:      metric.NewCounter(metaDistSenderPartialBatchCount),
+		AsyncSentCount:         metric.NewCounter(metaDistSenderAsyncSentCount),
+		AsyncThrottledCount:    metric.NewCounter(metaDistSenderAsyncThrottledCount),
 		SentCount:              metric.NewCounter(metaTransportSentCount),
 		LocalSentCount:         metric.NewCounter(metaTransportLocalSentCount),
-		NextReplicaErrCount:    metric.NewCounter(metaDistSenderNextReplicaErrCount),
+		NextReplicaErrCount:    metric.NewCounter(metaTransportSenderNextReplicaErrCount),
 		NotLeaseHolderErrCount: metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
 	}
 }
@@ -129,9 +164,14 @@ type DistSender struct {
 	leaseHolderCache *LeaseHolderCache
 	transportFactory TransportFactory
 	rpcContext       *rpc.Context
+	nodeDialer       *nodedialer.Dialer
 	rpcRetryOptions  retry.Options
 	asyncSenderSem   chan struct{}
-	asyncSenderCount int32
+
+	// disableFirstRangeUpdates disables updates of the first range via
+	// gossip. Used by tests which want finer control of the contents of the
+	// range cache.
+	disableFirstRangeUpdates int32
 }
 
 var _ client.Sender = &DistSender{}
@@ -151,21 +191,10 @@ type DistSenderConfig struct {
 	RPCContext        *rpc.Context
 	RangeDescriptorDB RangeDescriptorDB
 
-	TestingKnobs DistSenderTestingKnobs
+	NodeDialer *nodedialer.Dialer
+
+	TestingKnobs ClientTestingKnobs
 }
-
-// DistSenderTestingKnobs is a part of the context used to control parts of
-// the system.
-type DistSenderTestingKnobs struct {
-	// The RPC dispatcher. Defaults to grpc but can be changed here for
-	// testing purposes.
-	TransportFactory TransportFactory
-}
-
-var _ base.ModuleTestingKnobs = &DistSenderTestingKnobs{}
-
-// ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
-func (*DistSenderTestingKnobs) ModuleTestingKnobs() {}
 
 // NewDistSender returns a batch.Sender instance which connects to the
 // Cockroach cluster via the supplied gossip instance. Supplying a
@@ -173,10 +202,11 @@ func (*DistSenderTestingKnobs) ModuleTestingKnobs() {}
 // defaults will be used.
 func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	ds := &DistSender{
-		st:      cfg.Settings,
-		clock:   cfg.Clock,
-		gossip:  g,
-		metrics: makeDistSenderMetrics(),
+		st:         cfg.Settings,
+		clock:      cfg.Clock,
+		gossip:     g,
+		metrics:    makeDistSenderMetrics(),
+		nodeDialer: cfg.NodeDialer,
 	}
 	if ds.st == nil {
 		ds.st = cluster.MakeTestingClusterSettings()
@@ -214,12 +244,16 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 			ds.rpcRetryOptions.Closer = ds.rpcContext.Stopper.ShouldQuiesce()
 		}
 	}
+	ds.nodeDialer = cfg.NodeDialer
 	ds.asyncSenderSem = make(chan struct{}, defaultSenderConcurrency)
 
 	if g != nil {
 		ctx := ds.AnnotateCtx(context.Background())
 		g.RegisterCallback(gossip.KeyFirstRangeDescriptor,
 			func(_ string, value roachpb.Value) {
+				if atomic.LoadInt32(&ds.disableFirstRangeUpdates) == 1 {
+					return
+				}
 				if log.V(1) {
 					var desc roachpb.RangeDescriptor
 					if err := value.GetProto(&desc); err != nil {
@@ -237,16 +271,17 @@ func NewDistSender(cfg DistSenderConfig, g *gossip.Gossip) *DistSender {
 	return ds
 }
 
+// DisableFirstRangeUpdates disables updates of the first range via
+// gossip. Used by tests which want finer control of the contents of the range
+// cache.
+func (ds *DistSender) DisableFirstRangeUpdates() {
+	atomic.StoreInt32(&ds.disableFirstRangeUpdates, 1)
+}
+
 // Metrics returns a struct which contains metrics related to the distributed
 // sender's activity.
 func (ds *DistSender) Metrics() DistSenderMetrics {
 	return ds.metrics
-}
-
-// GetParallelSendCount returns the number of parallel batch requests
-// the dist sender has dispatched in its lifetime.
-func (ds *DistSender) GetParallelSendCount() int32 {
-	return atomic.LoadInt32(&ds.asyncSenderCount)
 }
 
 // RangeDescriptorCache gives access to the DistSender's range cache.
@@ -321,9 +356,11 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 			return nodeDesc
 		}
 	}
-	ctx := ds.AnnotateCtx(context.TODO())
-	log.Infof(ctx, "unable to determine this node's attributes for replica "+
-		"selection; node is most likely bootstrapping")
+	if log.V(1) {
+		ctx := ds.AnnotateCtx(context.TODO())
+		log.Infof(ctx, "unable to determine this node's attributes for replica "+
+			"selection; node is most likely bootstrapping")
+	}
 	return nil
 }
 
@@ -347,7 +384,7 @@ func (ds *DistSender) sendRPC(
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
 
-	return ds.sendToReplicas(ctx, SendOptions{metrics: &ds.metrics}, rangeID, replicas, ba, ds.rpcContext)
+	return ds.sendToReplicas(ctx, SendOptions{metrics: &ds.metrics}, rangeID, replicas, ba, ds.nodeDialer)
 }
 
 // CountRanges returns the number of ranges that encompass the given key span.
@@ -396,22 +433,25 @@ func (ds *DistSender) sendSingleRange(
 	// Try to send the call.
 	replicas := NewReplicaSlice(ds.gossip, desc)
 
-	// Rearrange the replicas so that they're ordered in expectation of
-	// request latency.
-	var latencyFn LatencyFunc
-	if ds.rpcContext != nil {
-		latencyFn = ds.rpcContext.RemoteClocks.Latency
-	}
-	replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), latencyFn)
-
 	// If this request needs to go to a lease holder and we know who that is, move
 	// it to the front.
+	var knowLeaseholder bool
 	if !ba.IsReadOnly() || ba.ReadConsistency.RequiresReadLease() {
 		if storeID, ok := ds.leaseHolderCache.Lookup(ctx, desc.RangeID); ok {
 			if i := replicas.FindReplica(storeID); i >= 0 {
 				replicas.MoveToFront(i)
+				knowLeaseholder = true
 			}
 		}
+	}
+	if !knowLeaseholder {
+		// Rearrange the replicas so that they're ordered in expectation of
+		// request latency.
+		var latencyFn LatencyFunc
+		if ds.rpcContext != nil {
+			latencyFn = ds.rpcContext.RemoteClocks.Latency
+		}
+		replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), latencyFn)
 	}
 
 	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba)
@@ -469,7 +509,7 @@ func (ds *DistSender) initAndVerifyBatch(
 					return roachpb.NewErrorf("batch with limit contains both forward and reverse scans")
 				}
 
-			case *roachpb.ResolveIntentRangeRequest:
+			case *roachpb.QueryIntentRequest, *roachpb.ResolveIntentRangeRequest:
 				continue
 
 			case *roachpb.BeginTransactionRequest, *roachpb.EndTransactionRequest, *roachpb.ReverseScanRequest:
@@ -502,6 +542,19 @@ func (ds *DistSender) initAndVerifyBatch(
 		}
 	}
 
+	// Make sure that MVCCScan requests aren't in batch form if our cluster
+	// version is too old.
+	// TODO(jordan): delete this stanza after 2.1 is released.
+	if !ds.st.Version.IsMinSupported(cluster.VersionBatchResponse) {
+		for i := range ba.Requests {
+			switch req := ba.Requests[i].GetInner().(type) {
+			case *roachpb.ScanRequest:
+				req.ScanFormat = roachpb.KEY_VALUES
+			case *roachpb.ReverseScanRequest:
+				req.ScanFormat = roachpb.KEY_VALUES
+			}
+		}
+	}
 	return nil
 }
 
@@ -512,7 +565,7 @@ func (ds *DistSender) initAndVerifyBatch(
 var errNo1PCTxn = roachpb.NewErrorf("cannot send 1PC txn to multiple ranges")
 
 // splitBatchAndCheckForRefreshSpans splits the batch according to the
-// canSplitET parmeter and checks whether the final request is an
+// canSplitET parameter and checks whether the final request is an
 // EndTransaction. If so, the EndTransactionRequest.NoRefreshSpans
 // flag is reset to indicate whether earlier parts of the split may
 // result in refresh spans.
@@ -577,14 +630,20 @@ func (ds *DistSender) Send(
 	}
 
 	ctx = ds.AnnotateCtx(ctx)
-	ctx, cleanup := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender")
+	ctx, cleanup := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender send")
 	defer cleanup()
 
 	var rplChunks []*roachpb.BatchResponse
 	splitET := false
+	var require1PC bool
+	lastReq := ba.Requests[len(ba.Requests)-1].GetInner()
+	if et, ok := lastReq.(*roachpb.EndTransactionRequest); ok && et.Require1PC {
+		require1PC = true
+	}
 	// To ensure that we lay down intents to prevent starvation, always
 	// split the end transaction request into its own batch on retries.
-	if ba.Txn != nil && ba.Txn.Epoch > 0 {
+	// Txns requiring 1PC are an exception and should never be split.
+	if ba.Txn != nil && ba.Txn.Epoch > 0 && !require1PC {
 		splitET = true
 	}
 	parts := splitBatchAndCheckForRefreshSpans(ba, splitET)
@@ -617,13 +676,12 @@ func (ds *DistSender) Send(
 			// here and try again.
 			if len(parts) != 1 {
 				panic("EndTransaction not in last chunk of batch")
+			} else if require1PC {
+				log.Fatalf(ctx, "required 1PC transaction cannot be split: %s", ba)
 			}
 			parts = splitBatchAndCheckForRefreshSpans(ba, true /* split ET */)
-			if len(parts) != 2 {
-				panic("split of final EndTransaction chunk resulted in != 2 parts")
-			}
-			// Restart transaction of the last chunk as two parts
-			// with EndTransaction in the second part.
+			// Restart transaction of the last chunk as multiple parts
+			// with EndTransaction in the last part.
 			continue
 		}
 		if pErr != nil {
@@ -702,6 +760,11 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 		return resp.reply, resp.pErr
 	}
 
+	if ba.IsUnsplittable() {
+		mismatch := roachpb.NewRangeKeyMismatchError(rs.Key.AsRawKey(), rs.EndKey.AsRawKey(), ri.Desc())
+		return nil, roachpb.NewError(mismatch)
+	}
+
 	// Make an empty slice of responses which will be populated with responses
 	// as they come in via Combine().
 	br = &roachpb.BatchResponse{
@@ -722,7 +785,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// If we're in the middle of a panic, don't wait on responseChs.
 			panic(r)
 		}
-		var hadSuccess bool
+		var hadSuccessWriting bool
 		for _, responseCh := range responseChs {
 			resp := <-responseCh
 			if resp.pErr != nil {
@@ -731,7 +794,15 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 				}
 				continue
 			}
-			hadSuccess = true
+			if !hadSuccessWriting {
+				for _, i := range resp.positions {
+					req := ba.Requests[i].GetInner()
+					if !roachpb.IsReadOnly(req) {
+						hadSuccessWriting = true
+						break
+					}
+				}
+			}
 
 			// Combine the new response with the existing one (including updating
 			// the headers).
@@ -756,7 +827,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// If this is a write batch with any successful responses, but
 			// we're ultimately returning an error, wrap the error with a
 			// MixedSuccessError.
-			if hadSuccess && ba.IsWrite() {
+			if hadSuccessWriting {
 				pErr = roachpb.NewError(&roachpb.MixedSuccessError{Wrapped: pErr})
 			}
 		} else if couldHaveSkippedResponses {
@@ -930,10 +1001,11 @@ func (ds *DistSender) sendPartialBatchAsync(
 		ctx, "kv.DistSender: sending partial batch",
 		ds.asyncSenderSem, false, /* wait */
 		func(ctx context.Context) {
-			atomic.AddInt32(&ds.asyncSenderCount, 1)
+			ds.metrics.AsyncSentCount.Inc(1)
 			responseCh <- ds.sendPartialBatch(ctx, ba, rs, desc, evictToken, batchIdx, true /* needsTruncate */)
 		},
 	); err != nil {
+		ds.metrics.AsyncThrottledCount.Inc(1)
 		return false
 	}
 	return true
@@ -999,6 +1071,8 @@ func (ds *DistSender) sendPartialBatch(
 			} else {
 				descKey = rs.Key
 			}
+			// TODO(nvanbenschoten): shouldn't we be passing an eviction token
+			// here from the previous iteration? See #28967.
 			desc, evictToken, err = ds.getDescriptor(ctx, descKey, nil, isReverse)
 			if err != nil {
 				log.VErrEventf(ctx, 1, "range descriptor re-lookup failed: %s", err)
@@ -1205,28 +1279,31 @@ func (ds *DistSender) sendToReplicas(
 	opts SendOptions,
 	rangeID roachpb.RangeID,
 	replicas ReplicaSlice,
-	args roachpb.BatchRequest,
-	rpcContext *rpc.Context,
+	ba roachpb.BatchRequest,
+	nodeDialer *nodedialer.Dialer,
 ) (*roachpb.BatchResponse, error) {
 	var ambiguousError error
 	var haveCommit bool
 	// We only check for committed txns, not aborts because aborts may
 	// be retried without any risk of inconsistencies.
-	if etArg, ok := args.GetArg(roachpb.EndTransaction); ok {
+	if etArg, ok := ba.GetArg(roachpb.EndTransaction); ok {
 		haveCommit = etArg.(*roachpb.EndTransactionRequest).Commit
 	}
 
-	transport, err := ds.transportFactory(opts, rpcContext, replicas, args)
+	transport, err := ds.transportFactory(opts, nodeDialer, replicas)
 	if err != nil {
 		return nil, err
 	}
-	defer transport.Close()
 	if transport.IsExhausted() {
 		return nil, roachpb.NewSendError(
 			fmt.Sprintf("sending to all %d replicas failed", len(replicas)))
 	}
-	log.VEventf(ctx, 2, "r%d: sending batch %s to %s", rangeID, args.Summary(), transport.NextReplica())
-	br, err := transport.SendNext(ctx)
+
+	curReplica := transport.NextReplica()
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "r%d: sending batch %s to %s", rangeID, ba.Summary(), curReplica)
+	}
+	br, err := transport.SendNext(ctx, ba)
 
 	// This loop will retry operations that fail with errors that reflect
 	// per-replica state and may succeed on other replicas.
@@ -1240,16 +1317,29 @@ func (ds *DistSender) sendToReplicas(
 			// We retry ambiguous commit batches to avoid returning the
 			// unrecoverable AmbiguousResultError. This is safe because
 			// repeating an already-successfully applied batch is
-			// guaranteed to return either a TransactionReplayError (in
-			// case the replay happens at the original leader), or a
-			// TransactionRetryError (in case the replay happens at a new
-			// leader). If the original attempt merely timed out or was
-			// lost, then the batch will succeed and we can be assured the
+			// guaranteed to return an error. If the original attempt merely timed out
+			// or was lost, then the batch will succeed and we can be assured the
 			// commit was applied just once.
 			if haveCommit && !grpcutil.RequestDidNotStart(err) {
 				ambiguousError = err
 			}
 			log.VErrEventf(ctx, 2, "RPC error: %s", err)
+
+			// If the error wasn't just a context cancellation and the down replica
+			// is cached as the lease holder, evict it. The only other eviction
+			// happens below on NotLeaseHolderError, but if the next replica is the
+			// actual lease holder, we're never going to receive one of those and
+			// will thus pay the price of trying the down node first forever.
+			//
+			// NB: we should consider instead adding a successful reply from the next
+			// replica into the cache, but without a leaseholder (and taking into
+			// account that the local node can't be down) it won't take long until we
+			// talk to a replica that tells us who the leaseholder is.
+			if ctx.Err() == nil {
+				if storeID, ok := ds.leaseHolderCache.Lookup(ctx, rangeID); ok && curReplica.StoreID == storeID {
+					ds.leaseHolderCache.Update(ctx, rangeID, 0 /* evict */)
+				}
+			}
 		} else {
 			propagateError := false
 			switch tErr := br.Error.GetDetail().(type) {
@@ -1294,6 +1384,20 @@ func (ds *DistSender) sendToReplicas(
 			log.VErrEventf(ctx, 1, "application error: %s", br.Error)
 		}
 
+		// Has the caller given up?
+		if ctx.Err() != nil {
+			errMsg := fmt.Sprintf("context done during DistSender.Send: %s", ctx.Err())
+			log.Eventf(ctx, errMsg)
+			if ambiguousError != nil {
+				return nil, roachpb.NewAmbiguousResultError(errMsg)
+			}
+			// Don't consider this a SendError, because SendErrors indicate that we
+			// were unable to reach a replica that could serve the request, and they
+			// cause range cache evictions. Context cancellations just mean the
+			// sender changed its mind or the request timed out.
+			return nil, ctx.Err()
+		}
+
 		if transport.IsExhausted() {
 			if ambiguousError != nil {
 				return nil, roachpb.NewAmbiguousResultError(fmt.Sprintf("error=%s [exhausted]", ambiguousError))
@@ -1309,7 +1413,8 @@ func (ds *DistSender) sendToReplicas(
 		}
 
 		ds.metrics.NextReplicaErrCount.Inc(1)
-		log.VEventf(ctx, 2, "error: %v %v; trying next peer %s", br, err, transport.NextReplica())
-		br, err = transport.SendNext(ctx)
+		curReplica = transport.NextReplica()
+		log.VEventf(ctx, 2, "error: %v %v; trying next peer %s", br, err, curReplica)
+		br, err = transport.SendNext(ctx, ba)
 	}
 }

@@ -22,6 +22,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -145,6 +148,44 @@ func TestEval(t *testing.T) {
 		{`NOT false`, `true`},
 		{`NOT true`, `false`},
 		{`NOT NULL`, `NULL`},
+		// Bit arrays.
+		{`B'1001' = B'1001'`, `true`},
+		{`B'1001' = B'01001'`, `false`},
+		{`B'000' = B'0000'`, `false`},
+		{`B'000' IS NULL`, `false`},
+		{`B'001' < B'100'`, `true`},
+		{`B'0001' < B'100'`, `true`},
+		{`B'1001' || B'0011'`, `B'10010011'`},
+		{`B'' || B'0011'`, `B'0011'`},
+		{`B'1001' || B''`, `B'1001'`},
+		{`B'1001' & B'0011'`, `B'0001'`},
+		{`B'1001' | B'0011'`, `B'1011'`},
+		{`B'0010' << 2`, `B'1000'`},
+		{`B'0010' << 4`, `B'0000'`},
+		{`B'0100' << -1`, `B'0010'`},
+		{`B'0100' << -5`, `B'0000'`},
+		{`B'0100' >> 1`, `B'0010'`},
+		{`B'0100' >> 5`, `B'0000'`},
+		{`B'0010' >> -2`, `B'1000'`},
+		{`B'0010' >> -4`, `B'0000'`},
+		{`~ B'1001'`, `B'0110'`},
+		{`~ B''`, `B''`},
+		{`~ B'0'`, `B'1'`},
+		{`B'1001'::string`, `'1001'`},
+		{`B''::string`, `''`},
+		{`B'1001'::int`, `9`},
+		{`B''::int`, `0`},
+		{`''::bit`, `B'0'`},
+		{`'1001'::bit(2)`, `B'10'`},
+		{`'1001'::bit(4)`, `B'1001'`},
+		{`'1001'::bit(6)`, `B'100100'`},
+		{`123::bit(2)`, `B'11'`},
+		{`123::bit(10)`, `B'0001111011'`},
+		{`(-123)::bit(10)`, `B'1110000101'`},
+		{`(-123)::bit(2)`, `B'01'`},
+		{`B'1110000101'::int`, `901`},
+		{`B'11111111111111111111111110000101'::int4`, `-123`},
+		{`'{101011,101}'::varbit[]`, `ARRAY[B'101011',B'101']`},
 		// Boolean expressions short-circuit the evaluation.
 		{`false AND (2 = 1)`, `false`},
 		{`true OR (3 = 1)`, `true`},
@@ -198,19 +239,13 @@ func TestEval(t *testing.T) {
 		{`'12:00:00'::time <= '12:00:01'::time`, `true`},
 		{`'12:00:00'::time > '12:00:01'::time`, `false`},
 		{`'12:00:00'::time >= '12:00:01'::time`, `false`},
-		{`'12:00:00-07'::timetz = '12:00:00-08'::timetz`, `false`},
-		{`'12:00:00+09'::timetz = '12:00:00+09'::timetz`, `true`},
-		{`'12:00:00+01'::timetz != '12:00:00-01'::timetz`, `true`},
-		{`'12:00:00+01'::timetz < '12:00:00-01'::timetz`, `true`},
-		{`'12:00:00+01'::timetz <= '12:00:00-01'::timetz`, `true`},
-		{`'12:00:00+10'::timetz > '12:00:00+09'::timetz`, `false`},
-		{`'12:00:00+10'::timetz >= '12:00:00+09'::timetz`, `false`},
 		{`'2015-10-01'::timestamp = '2015-10-02'::timestamp`, `false`},
 		{`'2015-10-01'::timestamp != '2015-10-02'::timestamp`, `true`},
 		{`'2015-10-01'::timestamp < '2015-10-02'::timestamp`, `true`},
 		{`'2015-10-01'::timestamp <= '2015-10-02'::timestamp`, `true`},
 		{`'2015-10-01'::timestamp > '2015-10-02'::timestamp`, `false`},
 		{`'2015-10-01'::timestamp >= '2015-10-02'::timestamp`, `false`},
+		{`'2015-10-01 -01:00'::timestamptz = '2015-10-01 01:00:00'::timestamp`, `true`},
 		{`'12h2m1s23ms'::interval = '12h2m1s24ms'::interval`, `false`},
 		{`'12h2m1s23ms'::interval != '12h2m1s24ms'::interval`, `true`},
 		{`'12h2m1s23ms'::interval < '12h2m1s24ms'::interval`, `true`},
@@ -280,12 +315,6 @@ func TestEval(t *testing.T) {
 		{`NULL = '12:00:00'::time`, `NULL`},
 		{`NULL < '12:00:00'::time`, `NULL`},
 		{`NULL <= '12:00:00'::time`, `NULL`},
-		{`'12:00:00+01'::timetz = NULL`, `NULL`},
-		{`'12:00:00+01'::timetz < NULL`, `NULL`},
-		{`'12:00:00+01'::timetz <= NULL`, `NULL`},
-		{`NULL = '12:00:00+01'::timetz`, `NULL`},
-		{`NULL < '12:00:00+01'::timetz`, `NULL`},
-		{`NULL <= '12:00:00+01'::timetz`, `NULL`},
 		{`'2015-10-01'::timestamp = NULL`, `NULL`},
 		{`'2015-10-01'::timestamp < NULL`, `NULL`},
 		{`'2015-10-01'::timestamp <= NULL`, `NULL`},
@@ -356,6 +385,170 @@ func TestEval(t *testing.T) {
 		{`'漢漢' LIKE '漢\漢'`, `true`},
 		{`'_漢' LIKE '\_\漢'`, `true`},
 
+		// LIKE with ESCAPE clause
+		{`like_escape('A', '\A', '')`, `false`},
+		{`like_escape('\', '\', '-')`, `true`},
+		{`like_escape('\', '-\', '-')`, `true`},
+		{`like_escape('\abc\', '-\___-\', '-')`, `true`},
+		{`like_escape('\abc\', '\___\', '-')`, `true`},
+		{`like_escape('\abc\', '-\___-\', '')`, `false`},
+		{`like_escape('___', '\___', '')`, `false`},
+		{`like_escape('aa', '__', '_')`, `false`},
+		{`like_escape('aa', '_a_a', '_')`, `true`},
+		{`like_escape('_', '__', '_')`, `true`},
+		{`like_escape('__', '____', '_')`, `true`},
+		{`like_escape('___', '______', '_')`, `true`},
+		{`like_escape('abc', 'a%%', '%')`, `false`},
+		{`like_escape('ab', '____', '_')`, `false`},
+		{`like_escape('\a\b\c', '\_\_\_', '')`, `true`},
+		{`like_escape('%%', '_%_%', '_')`, `true`},
+		{`like_escape('%%a', '_%_%', '_')`, `false`},
+		{`like_escape('\-\', '-\---\', '-')`, `true`},
+		{`like_escape('\-\', '\--\', '-')`, `true`},
+		{`like_escape('_%', 'a_a%', 'a')`, `true`},
+		{`like_escape('\---\', '-\-------\', '-')`, `true`},
+		{`like_escape('abc', '%bc', '%')`, `false`},
+		{`like_escape('abc', '_bc', '_')`, `false`},
+		{`like_escape('abc', '_b%', '_')`, `false`},
+		{`like_escape('abc', '%b_', '%')`, `false`},
+		{`like_escape('abc', '_a%', '_')`, `true`},
+		{`like_escape('abc', '%a__', '%')`, `true`},
+		{`like_escape('ww', '@w@w', '@')`, `true`},
+		{`like_escape('\\', '@\@\', '@')`, `true`},
+		{`like_escape('@ww', '@@w@w', '@')`, `true`},
+		{`like_escape('@\', '@@@\', '@')`, `true`},
+		{`like_escape('\', '@\', '@')`, `true`},
+		{`like_escape('\@\', '@\@@@\', '@')`, `true`},
+		{`like_escape('a', '日a', '日')`, `true`},
+		{`like_escape('a日a', '%日日_', '日')`, `true`},
+		{`like_escape('_漢', '漢_漢漢', '漢')`, `true`},
+		{`like_escape('漢日', '漢漢漢日', '漢')`, `true`},
+		{`like_escape('漢日', '漢%漢日', '漢')`, `false`},
+		{`like_escape('%日_', '漢%漢日漢_', '漢')`, `true`},
+
+		// ILIKE with ESCAPE clause
+		{`ilike_escape('A', '\a', '')`, `false`},
+		{`ilike_escape('\', '\', '-')`, `true`},
+		{`ilike_escape('\', '-\', '-')`, `true`},
+		{`ilike_escape('\ABC\', '-\___-\', '-')`, `true`},
+		{`ilike_escape('\ABC\', '\___\', '-')`, `true`},
+		{`ilike_escape('\ABC\', '-\___-\', '')`, `false`},
+		{`ilike_escape('___', '\___', '')`, `false`},
+		{`ilike_escape('AA', '__', '_')`, `false`},
+		{`ilike_escape('AA', '_a_a', '_')`, `true`},
+		{`ilike_escape('_', '__', '_')`, `true`},
+		{`ilike_escape('__', '____', '_')`, `true`},
+		{`ilike_escape('___', '______', '_')`, `true`},
+		{`ilike_escape('ABC', 'a%%', '%')`, `false`},
+		{`ilike_escape('AB', '____', '_')`, `false`},
+		{`ilike_escape('\A\B\C', '\_\_\_', '')`, `true`},
+		{`ilike_escape('%%', '_%_%', '_')`, `true`},
+		{`ilike_escape('%%a', '_%_%', '_')`, `false`},
+		{`ilike_escape('\-\', '-\---\', '-')`, `true`},
+		{`ilike_escape('\-\', '\--\', '-')`, `true`},
+		{`ilike_escape('_%', 'a_a%', 'a')`, `true`},
+		{`ilike_escape('\---\', '-\-------\', '-')`, `true`},
+		{`ilike_escape('abc', '%bc', '%')`, `false`},
+		{`ilike_escape('abc', '_bc', '_')`, `false`},
+		{`ilike_escape('abc', '_b%', '_')`, `false`},
+		{`ilike_escape('abc', '%b_', '%')`, `false`},
+		{`ilike_escape('abc', '_a%', '_')`, `true`},
+		{`ilike_escape('abc', '%a__', '%')`, `true`},
+		{`ilike_escape('ww', '@w@w', '@')`, `true`},
+		{`ilike_escape('\\', '@\@\', '@')`, `true`},
+		{`ilike_escape('@ww', '@@w@w', '@')`, `true`},
+		{`ilike_escape('@\', '@@@\', '@')`, `true`},
+		{`ilike_escape('\', '@\', '@')`, `true`},
+		{`ilike_escape('\@\', '@\@@@\', '@')`, `true`},
+		{`ilike_escape('a', '日a', '日')`, `true`},
+		{`ilike_escape('a日a', '%日日_', '日')`, `true`},
+		{`ilike_escape('_漢', '漢_漢漢', '漢')`, `true`},
+		{`ilike_escape('漢日', '漢漢漢日', '漢')`, `true`},
+		{`ilike_escape('漢日', '漢%漢日', '漢')`, `false`},
+		{`ilike_escape('%日_', '漢%漢日漢_', '漢')`, `true`},
+		{`ilike_escape('abCD', 'AB-c-d', '-')`, `true`},
+		// NOT LIKE with ESCAPE clause
+		{`not_like_escape('A', '\A', '')`, `true`},
+		{`not_like_escape('\', '\', '-')`, `false`},
+		{`not_like_escape('\', '-\', '-')`, `false`},
+		{`not_like_escape('\abc\', '-\___-\', '-')`, `false`},
+		{`not_like_escape('\abc\', '\___\', '-')`, `false`},
+		{`not_like_escape('\abc\', '-\___-\', '')`, `true`},
+		{`not_like_escape('___', '\___', '')`, `true`},
+		{`not_like_escape('aa', '__', '_')`, `true`},
+		{`not_like_escape('aa', '_a_a', '_')`, `false`},
+		{`not_like_escape('_', '__', '_')`, `false`},
+		{`not_like_escape('__', '____', '_')`, `false`},
+		{`not_like_escape('___', '______', '_')`, `false`},
+		{`not_like_escape('abc', 'a%%', '%')`, `true`},
+		{`not_like_escape('ab', '____', '_')`, `true`},
+		{`not_like_escape('\a\b\c', '\_\_\_', '')`, `false`},
+		{`not_like_escape('%%', '_%_%', '_')`, `false`},
+		{`not_like_escape('%%a', '_%_%', '_')`, `true`},
+		{`not_like_escape('\-\', '-\---\', '-')`, `false`},
+		{`not_like_escape('\-\', '\--\', '-')`, `false`},
+		{`not_like_escape('_%', 'a_a%', 'a')`, `false`},
+		{`not_like_escape('\---\', '-\-------\', '-')`, `false`},
+		{`not_like_escape('abc', '%bc', '%')`, `true`},
+		{`not_like_escape('abc', '_bc', '_')`, `true`},
+		{`not_like_escape('abc', '_b%', '_')`, `true`},
+		{`not_like_escape('abc', '%b_', '%')`, `true`},
+		{`not_like_escape('abc', '_a%', '_')`, `false`},
+		{`not_like_escape('abc', '%a__', '%')`, `false`},
+		{`not_like_escape('ww', '@w@w', '@')`, `false`},
+		{`not_like_escape('\\', '@\@\', '@')`, `false`},
+		{`not_like_escape('@ww', '@@w@w', '@')`, `false`},
+		{`not_like_escape('@\', '@@@\', '@')`, `false`},
+		{`not_like_escape('\', '@\', '@')`, `false`},
+		{`not_like_escape('\@\', '@\@@@\', '@')`, `false`},
+		{`not_like_escape('a', '日a', '日')`, `false`},
+		{`not_like_escape('a日a', '%日日_', '日')`, `false`},
+		{`not_like_escape('_漢', '漢_漢漢', '漢')`, `false`},
+		{`not_like_escape('漢日', '漢漢漢日', '漢')`, `false`},
+		{`not_like_escape('漢日', '漢%漢日', '漢')`, `true`},
+		{`not_like_escape('%日_', '漢%漢日漢_', '漢')`, `false`},
+		// NOT ILIKE with ESCAPE clause
+		{`not_ilike_escape('A', '\a', '')`, `true`},
+		{`not_ilike_escape('\', '\', '-')`, `false`},
+		{`not_ilike_escape('\', '-\', '-')`, `false`},
+		{`not_ilike_escape('\ABC\', '-\___-\', '-')`, `false`},
+		{`not_ilike_escape('\ABC\', '\___\', '-')`, `false`},
+		{`not_ilike_escape('\ABC\', '-\___-\', '')`, `true`},
+		{`not_ilike_escape('___', '\___', '')`, `true`},
+		{`not_ilike_escape('AA', '__', '_')`, `true`},
+		{`not_ilike_escape('AA', '_a_a', '_')`, `false`},
+		{`not_ilike_escape('_', '__', '_')`, `false`},
+		{`not_ilike_escape('__', '____', '_')`, `false`},
+		{`not_ilike_escape('___', '______', '_')`, `false`},
+		{`not_ilike_escape('ABC', 'a%%', '%')`, `true`},
+		{`not_ilike_escape('AB', '____', '_')`, `true`},
+		{`not_ilike_escape('\A\B\C', '\_\_\_', '')`, `false`},
+		{`not_ilike_escape('%%', '_%_%', '_')`, `false`},
+		{`not_ilike_escape('%%a', '_%_%', '_')`, `true`},
+		{`not_ilike_escape('\-\', '-\---\', '-')`, `false`},
+		{`not_ilike_escape('\-\', '\--\', '-')`, `false`},
+		{`not_ilike_escape('_%', 'a_a%', 'a')`, `false`},
+		{`not_ilike_escape('\---\', '-\-------\', '-')`, `false`},
+		{`not_ilike_escape('abc', '%bc', '%')`, `true`},
+		{`not_ilike_escape('abc', '_bc', '_')`, `true`},
+		{`not_ilike_escape('abc', '_b%', '_')`, `true`},
+		{`not_ilike_escape('abc', '%b_', '%')`, `true`},
+		{`not_ilike_escape('abc', '_a%', '_')`, `false`},
+		{`not_ilike_escape('abc', '%a__', '%')`, `false`},
+		{`not_ilike_escape('ww', '@w@w', '@')`, `false`},
+		{`not_ilike_escape('\\', '@\@\', '@')`, `false`},
+		{`not_ilike_escape('@ww', '@@w@w', '@')`, `false`},
+		{`not_ilike_escape('@\', '@@@\', '@')`, `false`},
+		{`not_ilike_escape('\', '@\', '@')`, `false`},
+		{`not_ilike_escape('\@\', '@\@@@\', '@')`, `false`},
+		{`not_ilike_escape('a', '日a', '日')`, `false`},
+		{`not_ilike_escape('a日a', '%日日_', '日')`, `false`},
+		{`not_ilike_escape('_漢', '漢_漢漢', '漢')`, `false`},
+		{`not_ilike_escape('漢日', '漢漢漢日', '漢')`, `false`},
+		{`not_ilike_escape('漢日', '漢%漢日', '漢')`, `true`},
+		{`not_ilike_escape('%日_', '漢%漢日漢_', '漢')`, `false`},
+		{`not_ilike_escape('abCD', 'AB-c-d', '-')`, `false`},
+
 		// optimizedLikeFunc expressions.
 		{`'TEST' LIKE 'TE%'`, `true`},
 		{`'TEST' LIKE '%E%'`, `true`},
@@ -423,6 +616,60 @@ func TestEval(t *testing.T) {
 		{`'abc' SIMILAR TO '(b|c)%'`, `false`},
 		{`'abc' NOT SIMILAR TO '%(b|d)%'`, `false`},
 		{`'abc' NOT SIMILAR TO '(b|c)%'`, `true`},
+		// SIMILAR TO with ESCAPE
+		{`similar_to_escape('abc', 'abc', '')`, `true`},
+		{`similar_to_escape('a\b', 'a\b', '')`, `true`},
+		{`similar_to_escape('a\b', '%\%', '')`, `true`},
+		{`similar_to_escape('a\b', '_\_', '')`, `true`},
+		{`similar_to_escape('\\\', '\{3,}', '')`, `true`},
+		{`similar_to_escape('abc', '[\a\b\c]+', '')`, `true`},
+		{`similar_to_escape('%abc', '%%a__', '%')`, `true`},
+		{`similar_to_escape('abc', '%(b|d)%', '|')`, `false`},
+		{`similar_to_escape('a(b)c', '%((_()_', '(')`, `true`},
+		{`similar_to_escape('a||bc', '%||%', '|')`, `true`},
+		{`similar_to_escape('a||bc', '%||+%', '|')`, `true`},
+		{`similar_to_escape('a||bc', '%||*%', '|')`, `true`},
+		{`similar_to_escape('abc', '%||+%', '|')`, `false`},
+		{`similar_to_escape('abc', '%||*%', '|')`, `true`},
+		{`similar_to_escape('a|c', '(a||b*)%', '|')`, `true`},
+		{`similar_to_escape('(abc)', '|(_+|)', '|')`, `true`},
+		{`similar_to_escape('a*bc', '%|*b?%', '|')`, `true`},
+		{`similar_to_escape('|||', '||*', '|')`, `true`},
+		{`similar_to_escape('a|b|c', '_||+_||?||?_', '|')`, `true`},
+		{`similar_to_escape('a|b|c', '_q|+_q|?q|?_', 'q')`, `true`},
+		{`similar_to_escape('aaaa{bbbb}cccc', 'a{4}|{b{4,4}|}c{4,}', '|')`, `true`},
+		{`similar_to_escape('%b|', '%b||', '|')`, `true`},
+		{`similar_to_escape('%b漢', '%b漢漢', '漢')`, `true`},
+		{`similar_to_escape('%b漢aaa', '漢%b漢漢%', '漢')`, `true`},
+		{`similar_to_escape('%b漢aaa', '漢%b漢漢%漢', '漢')`, `true`},
+		{`similar_to_escape('_ab%c', '漢__%漢%_漢', '漢')`, `true`},
+		// NOT SIMILAR TO with ESCAPE
+		{`not_similar_to_escape('abc', 'abc', '')`, `false`},
+		{`not_similar_to_escape('a\b', 'a\b', '')`, `false`},
+		{`not_similar_to_escape('a\b', '%\%', '')`, `false`},
+		{`not_similar_to_escape('a\b', '_\_', '')`, `false`},
+		{`not_similar_to_escape('\\\', '\{3,}', '')`, `false`},
+		{`not_similar_to_escape('abc', '[\a\b\c]+', '')`, `false`},
+		{`not_similar_to_escape('%abc', '%%a__', '%')`, `false`},
+		{`not_similar_to_escape('abc', '%(b|d)%', '|')`, `true`},
+		{`not_similar_to_escape('a(b)c', '%((_()_', '(')`, `false`},
+		{`not_similar_to_escape('a||bc', '%||%', '|')`, `false`},
+		{`not_similar_to_escape('a||bc', '%||+%', '|')`, `false`},
+		{`not_similar_to_escape('a||bc', '%||*%', '|')`, `false`},
+		{`not_similar_to_escape('abc', '%||+%', '|')`, `true`},
+		{`not_similar_to_escape('abc', '%||*%', '|')`, `false`},
+		{`not_similar_to_escape('a|c', '(a||b*)%', '|')`, `false`},
+		{`not_similar_to_escape('(abc)', '|(_+|)', '|')`, `false`},
+		{`not_similar_to_escape('a*bc', '%|*b?%', '|')`, `false`},
+		{`not_similar_to_escape('|||', '||*', '|')`, `false`},
+		{`not_similar_to_escape('a|b|c', '_||+_||?||?_', '|')`, `false`},
+		{`not_similar_to_escape('a|b|c', '_q|+_q|?q|?_', 'q')`, `false`},
+		{`not_similar_to_escape('aaaa{bbbb}cccc', 'a{4}|{b{4,4}|}c{4,}', '|')`, `false`},
+		{`not_similar_to_escape('%b|', '%b||', '|')`, `false`},
+		{`not_similar_to_escape('%b漢', '%b漢漢', '漢')`, `false`},
+		{`not_similar_to_escape('%b漢aaa', '漢%b漢漢%', '漢')`, `false`},
+		{`not_similar_to_escape('%b漢aaa', '漢%b漢漢%漢', '漢')`, `false`},
+		{`not_similar_to_escape('_ab%c', '漢__%漢%_漢', '漢')`, `false`},
 		// ~ and !~
 		{`'TEST' ~ 'TEST'`, `true`},
 		{`'TEST' ~ 'test'`, `false`},
@@ -540,7 +787,6 @@ func TestEval(t *testing.T) {
 		{`b'hello' IS OF (BYTES)`, `true`},
 		{`'2012-09-21'::date IS OF (DATE)`, `true`},
 		{`'12:00:00'::time IS OF (TIME)`, `true`},
-		{`'12:00:00+01'::timetz IS OF (TIMETZ)`, `true`},
 		{`'2010-09-28 12:00:00.1'::timestamp IS OF (TIMESTAMP)`, `true`},
 		{`'34h'::interval IS OF (INTERVAL)`, `true`},
 		{`'P1Y2M10DT2H29M'::interval IS OF (INTERVAL)`, `true`},
@@ -672,7 +918,6 @@ func TestEval(t *testing.T) {
 		{`'a0' IN ('a'||0::char, 'b'||1::char, 'c'||2::char)`, `true`},
 		{`'2012-09-21'::date IN ('2012-09-21'::date)`, `true`},
 		{`'12:00:00'::time IN ('12:00:00'::time)`, `true`},
-		{`'12:00:00-01'::timetz IN ('12:00:00-01'::timetz)`, `true`},
 		{`'2010-09-28 12:00:00.1'::timestamp IN ('2010-09-28 12:00:00.1'::timestamp)`, `true`},
 		{`'34h'::interval IN ('34h'::interval)`, `true`},
 		{`(1, 2) IN ((0+1, 1+1), (3, 4), (5, 6))`, `true`},
@@ -691,6 +936,9 @@ func TestEval(t *testing.T) {
 		{`(NULL, NULL) IN ((1, NULL), (NULL, 2), (3, 4))`, `NULL`},
 		{`(NULL, NULL) IN ((NULL, 2), (3, 4))`, `NULL`},
 		{`(NULL, NULL) IN ((3, 4))`, `NULL`},
+		{`NULL IN ()`, `false`},
+		{`1 IN ()`, `false`},
+
 		// ANY, SOME, and ALL expressions.
 		{`1   = ANY ARRAY[]`, `false`},
 		{`1   = ANY (ARRAY[2, 3, 4])`, `false`},
@@ -729,7 +977,7 @@ func TestEval(t *testing.T) {
 		// Func expressions.
 		{`length('hel'||'lo')`, `5`},
 		{`lower('HELLO')`, `'hello'`},
-		{`UPPER('hello')`, `'HELLO'`},
+		{`UPPER('hello')`, `'HELLO'`}, // lint: uppercase function OK
 		// Array constructors.
 		{`ARRAY[]:::int[]`, `ARRAY[]`},
 		{`ARRAY[NULL]`, `ARRAY[NULL]`},
@@ -737,6 +985,7 @@ func TestEval(t *testing.T) {
 		{`ARRAY['a', 'b', 'c']`, `ARRAY['a','b','c']`},
 		{`ARRAY[ARRAY[1, 2], ARRAY[2, 3]]`, `ARRAY[ARRAY[1,2],ARRAY[2,3]]`},
 		{`ARRAY[1, NULL]`, `ARRAY[1,NULL]`},
+		{`ARRAY(1, 2)`, `ARRAY[1,2]`},
 		// Array sizes.
 		{`array_length(ARRAY[1, 2, 3], 1)`, `3`},
 		{`array_length(ARRAY[1, 2, 3], 2)`, `NULL`},
@@ -848,11 +1097,6 @@ func TestEval(t *testing.T) {
 		{`CAST('12:00:00' AS time)`, `'12:00:00'`},
 		{`'12:00:00'::time`, `'12:00:00'`},
 		{`'12:00:00'::time::text`, `'12:00:00'`},
-		{`timetz '12:00:00'`, `'12:00:00+00:00'`},
-		{`timetz '12:00:00+01'`, `'12:00:00+01:00'`},
-		{`CAST('12:00:00+01' AS timetz)`, `'12:00:00+01:00'`},
-		{`'12:00:00+01'::timetz`, `'12:00:00+01:00'`},
-		{`'12:00:00+01'::timetz::text`, `'12:00:00+01:00'`},
 		{`timestamp '2010-09-28'`, `'2010-09-28 00:00:00+00:00'`},
 		{`CAST('2010-09-28' AS timestamp)`, `'2010-09-28 00:00:00+00:00'`},
 		{`'2010-09-28'::timestamp`, `'2010-09-28 00:00:00+00:00'`},
@@ -861,15 +1105,15 @@ func TestEval(t *testing.T) {
 		{`'2010-09-28'::timestamptz`, `'2010-09-28 00:00:00+00:00'`},
 		{`('2010-09-28 12:00:00.1'::timestamp)::date`, `'2010-09-28'`},
 		{`'2010-09-28 12:00:00.1'::timestamp`, `'2010-09-28 12:00:00.1+00:00'`},
-		{`'2010-09-28 12:00:00.1+02:00'::timestamp`, `'2010-09-28 10:00:00.1+00:00'`},
-		{`'2010-09-28 12:00:00.524000 +02:00:00'::timestamp`, `'2010-09-28 10:00:00.524+00:00'`},
-		{`'2010-09-28 12:00:00.1-07:00'::timestamp`, `'2010-09-28 19:00:00.1+00:00'`},
+		{`'2010-09-28 12:00:00.1+02:00'::timestamp`, `'2010-09-28 12:00:00.1+00:00'`},
+		{`'2010-09-28 12:00:00.524000 +02:00:00'::timestamp`, `'2010-09-28 12:00:00.524+00:00'`},
+		{`'2010-09-28 12:00:00.1-07:00'::timestamp`, `'2010-09-28 12:00:00.1+00:00'`},
 		{`'2010-09-28T12:00:00'::timestamp`, `'2010-09-28 12:00:00+00:00'`},
 		{`'2010-09-28T12:00:00Z'::timestamp`, `'2010-09-28 12:00:00+00:00'`},
 		{`'2010-09-28T12:00:00.1'::timestamp`, `'2010-09-28 12:00:00.1+00:00'`},
 		{`('2010-09-28'::date)::timestamp`, `'2010-09-28 00:00:00+00:00'`},
-		{`'2010-09-28 12:00:00.1-04'::timestamp`, `'2010-09-28 16:00:00.1+00:00'`},
-		{`'2010-09-28 12:00:00.1-04'::timestamp::text`, `'2010-09-28 16:00:00.1+00:00'`},
+		{`'2010-09-28 12:00:00.1-04'::timestamp`, `'2010-09-28 12:00:00.1+00:00'`},
+		{`'2010-09-28 12:00:00.1-04'::timestamp::text`, `'2010-09-28 12:00:00.1+00:00'`},
 		{`'2010-09-28 12:00:00.1-04'::timestamptz::text`, `'2010-09-28 12:00:00.1-04:00'`},
 		{`'12h2m1s23ms'::interval`, `'12h2m1s23ms'`},
 		{`'12h2m1s23ms'::interval::text`, `'12h2m1s23ms'`},
@@ -885,21 +1129,23 @@ func TestEval(t *testing.T) {
 		{`'12:00:00'::time + '1s'::interval`, `'12:00:01'`},
 		{`'1s'::interval + '12:00:00'::time`, `'12:00:01'`},
 		{`'12:00:01'::time - '12:00:00'::time`, `'1s'`},
-		{`'12:00:00+01'::timetz + '1s'::interval`, `'12:00:01+01:00'`},
-		{`'1s'::interval + '12:00:00+01'::timetz`, `'12:00:01+01:00'`},
-		{`'12:00:01+01'::timetz - '12:00:00+01'::time`, `'00:00:01+01:00'`},
-		{`'2010-09-28 12:00:00.1-04:00'::timestamp + '12h2m'::interval`, `'2010-09-29 04:02:00.1+00:00'`},
-		{`'12h2m'::interval + '2010-09-28 12:00:00.1-04:00'::timestamp`, `'2010-09-29 04:02:00.1+00:00'`},
-		{`'12 hours 2 minutes'::interval + '2010-09-28 12:00:00.1-04:00'::timestamp`, `'2010-09-29 04:02:00.1+00:00'`},
-		{`'PT12H2M'::interval + '2010-09-28 12:00:00.1-04:00'::timestamp`, `'2010-09-29 04:02:00.1+00:00'`},
-		{`'12:2'::interval + '2010-09-28 12:00:00.1-04:00'::timestamp`, `'2010-09-29 04:02:00.1+00:00'`},
-		{`'2010-09-28 12:00:00.1-04:00'::timestamp - '12h2m'::interval`, `'2010-09-28 03:58:00.1+00:00'`},
-		{`'2010-09-28 12:00:00.1-04:00'::timestamp - '12 hours 2 minutes'::interval`, `'2010-09-28 03:58:00.1+00:00'`},
-		{`'2010-09-28 12:00:00.1-04:00'::timestamp - 'PT12H2M'::interval`, `'2010-09-28 03:58:00.1+00:00'`},
-		{`'2010-09-28 12:00:00.1-04:00'::timestamp - '12:2'::interval`, `'2010-09-28 03:58:00.1+00:00'`},
-		{`'2010-09-28 12:00:00.1-04:00'::timestamp - '2010-09-28 12:00:00.1+00:00'::timestamp`, `'4h'`},
+		{`'2010-09-28 12:00:00.1-04:00'::timestamp + '12h2m'::interval`, `'2010-09-29 00:02:00.1+00:00'`},
+		{`'12h2m'::interval + '2010-09-28 12:00:00.1-04:00'::timestamp`, `'2010-09-29 00:02:00.1+00:00'`},
+		{`'12 hours 2 minutes'::interval + '2010-09-28 12:00:00.1-04:00'::timestamp`, `'2010-09-29 00:02:00.1+00:00'`},
+		{`'PT12H2M'::interval + '2010-09-28 12:00:00.1-04:00'::timestamp`, `'2010-09-29 00:02:00.1+00:00'`},
+		{`'12:2'::interval + '2010-09-28 12:00:00.1-04:00'::timestamp`, `'2010-09-29 00:02:00.1+00:00'`},
+		{`'2010-09-28 12:00:00.1-04:00'::timestamp - '12h2m'::interval`, `'2010-09-27 23:58:00.1+00:00'`},
+		{`'2010-09-28 12:00:00.1-04:00'::timestamp - '12 hours 2 minutes'::interval`, `'2010-09-27 23:58:00.1+00:00'`},
+		{`'2010-09-28 12:00:00.1-04:00'::timestamp - 'PT12H2M'::interval`, `'2010-09-27 23:58:00.1+00:00'`},
+		{`'2010-09-28 12:00:00.1-04:00'::timestamp - '12:2'::interval`, `'2010-09-27 23:58:00.1+00:00'`},
+		{`'2010-09-28 12:00:00.1-04:00'::timestamp - '2010-09-28 12:00:00.1+00:00'::timestamp`, `'0s'`},
+		{`'2010-09-28 12:00:00.1-04:00'::timestamptz - '2010-09-28 16:00:00.1+00:00'::timestamp`, `'0s'`},
+		{`'2010-09-28 12:00:00.1-04:00'::timestamp - '2010-09-28 12:00:00.1+00:00'::timestamptz`, `'0s'`},
 		{`'1970-01-01 00:01:00.123456-00:00'::timestamp::int`, `60`},
 		{`'1970-01-01 00:01:00.123456-00:00'::timestamptz::int`, `60`},
+		// Ensure timezone is stripped when casting to timestamp.
+		{`'1970-01-01 00:01:00.1-01:00'::timestamptz::timestamp`, `'1970-01-01 01:01:00.1+00:00'`},
+		{`'1970-01-01 00:01:00.1-01:00'::timestamp`, `'1970-01-01 00:01:00.1+00:00'`},
 		{`'1970-01-10'::date::int`, `9`},
 		{`'2h3s4us5ns'::interval::int`, `7203`},
 		{`'2h3s4us5ns'::interval::int::interval`, `'2h3s'`},
@@ -940,7 +1186,7 @@ func TestEval(t *testing.T) {
 		{`10::int::timestamp`, `'1970-01-01 00:00:10+00:00'`},
 		{`10::int::timestamptz`, `'1970-01-01 00:00:10+00:00'`},
 		{`10123456::int::interval`, `'3mon27d4h4m16s'`},
-		{`ARRAY[NULL]::string[]`, `ARRAY['NULL']`},
+		{`ARRAY[NULL]::string[]`, `ARRAY[NULL]`},
 		{`ARRAY[1,2,3]::string[]`, `ARRAY['1','2','3']`},
 		{`ARRAY['1','2','3']::int[]`, `ARRAY[1,2,3]`},
 		{`ARRAY['1','2','3']::name[]`, `ARRAY['1','2','3']`},
@@ -949,14 +1195,13 @@ func TestEval(t *testing.T) {
 		{`ARRAY[19620326,19931223]::timestamp[]`, `ARRAY['1970-08-16 02:05:26+00:00','1970-08-19 16:27:03+00:00']`},
 		{`ARRAY[1.2,2.4,3.5]::decimal[]::float[]`, `ARRAY[1.2,2.4,3.5]`},
 		{`ARRAY['3h3us']::interval[]::decimal[]`, `ARRAY[10800.000003000]`},
-		{`ARRAY[1,NULL,3]::string[]`, `ARRAY['1','NULL','3']`},
+		{`ARRAY[1,NULL,3]::string[]`, `ARRAY['1',NULL,'3']`},
 		{`ARRAY['hello','world']::char(2)[]`, `ARRAY['he','wo']`},
 		// Type annotation expressions.
 		{`ANNOTATE_TYPE('s', string)`, `'s'`},
 		{`ANNOTATE_TYPE('s', bytes)`, `'\x73'`},
 		{`ANNOTATE_TYPE('2010-09-28', date)`, `'2010-09-28'`},
 		{`ANNOTATE_TYPE('12:00:00', time)`, `'12:00:00'`},
-		{`ANNOTATE_TYPE('12:00:00-01', timetz)`, `'12:00:00-01:00'`},
 		{`ANNOTATE_TYPE('PT12H2M', interval)`, `'12h2m'`},
 		{`ANNOTATE_TYPE('2 02:12', interval)`, `'2d2h12m'`},
 		{`ANNOTATE_TYPE('2 02:12:34', interval)`, `'2d2h12m34s'`},
@@ -991,12 +1236,6 @@ func TestEval(t *testing.T) {
 		{`extract(second from '12:00:30'::time)`, `30`},
 		{`extract(millisecond from '12:00:00.123456'::time)`, `123`},
 		{`extract(microsecond from '12:00:00.123456'::time)`, `123456`},
-		// Extract from timetzs.
-		{`extract(hour from '12:00:00+01'::timetz)`, `12`},
-		{`extract(minute from '12:30:00+01'::timetz)`, `30`},
-		{`extract(second from '12:00:30+01'::timetz)`, `30`},
-		{`extract(millisecond from '12:00:00.123456+01'::timetz)`, `123`},
-		{`extract(microsecond from '12:00:00.123456+01'::timetz)`, `123456`},
 		// Extract from timestamps.
 		{`extract(year from '2010-09-28 12:13:14.1+00:00'::timestamp)`, `2010`},
 		{`extract(year from '2010-09-28 12:13:14.1+00:00'::timestamp)`, `2010`},
@@ -1177,6 +1416,22 @@ func TestEval(t *testing.T) {
 		{`'192.168.162.1'::inet << '192.168.200.95/17'::inet`, `true`},
 		{`'192.168.2.1'::inet <<= '192.168.2.1'::inet`, `true`},
 		{`'192.168.200.95'::inet && '192.168.2.1/8'::inet`, `true`},
+		{`convert_from('\xE290A4'::bytea, 'utf8')`, `e'\U00002424'`},
+		{`convert_from('\x2424'::bytea, 'latin1')`, `'$$'`},
+		{`convert_from('\xaaaa'::bytea, 'latin1')`, `e'\u00AA\u00AA'`},
+		{`convert_to('abå', 'latin1')`, `'\x6162e5'`},
+		{`convert_to('abå', 'utf8')`, `'\x6162c3a5'`},
+		{`convert_to('ab漢', 'utf8')`, `'\x6162e6bca2'`},
+		{`(1,2,3)::string`, `'(1,2,3)'`},
+		{`(1,NULL,3)::string`, `'(1,,3)'`},
+		{`(1,'a"b',3)::string`, `'(1,"a""b",3)'`},
+		{`(1,(2,3))::string`, `'(1,"(2,3)")'`},
+		{`(1,(2,'a"b'))::string`, `'(1,"(2,""a""""b"")")'`},
+		{`(1,array['a','b"c'])::string`, `e'(1,"{""a"",""b\\\\""c""}")'`},
+		{`ARRAY[1,2,3]::string`, `'{1,2,3}'`},
+		{`ARRAY[1,NULL,3]::string`, `'{1,NULL,3}'`},
+		{`ARRAY['a b','c"d']::string`, `e'{"a b","c\\"d"}'`},
+		{`ARRAY[(1,'a b'),(2,'c"d')]::string`, `e'{"(1,\\"a b\\")","(2,\\"c\\"\\"d\\")"}'`},
 	}
 	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	// We have to manually close this account because we're doing the evaluations
@@ -1195,19 +1450,56 @@ func TestEval(t *testing.T) {
 				t.Fatalf("%s: %v", d.expr, err)
 			}
 			t.Logf("Type checked expression: %s", typedExpr)
-			if typedExpr, err = ctx.NormalizeExpr(typedExpr); err != nil {
-				t.Fatalf("%s: %v", d.expr, err)
+
+			checkExpr := func(e tree.TypedExpr) {
+				r, err := e.Eval(ctx)
+				if err != nil {
+					t.Fatalf("%s: %v", e, err)
+				}
+				if s := r.String(); d.expected != s {
+					t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
+				}
 			}
-			t.Logf("Normalized expression:   %s", typedExpr)
-			r, err := typedExpr.Eval(ctx)
-			if err != nil {
-				t.Fatalf("%s: %v", d.expr, err)
-			}
-			if s := r.String(); d.expected != s {
-				t.Errorf("%s: expected %s, but found %s", d.expr, d.expected, s)
-			}
+
+			t.Run("opt", func(t *testing.T) {
+				expr, err := optBuildScalar(ctx, typedExpr)
+				if err != nil {
+					t.Fatalf("%s: %v", typedExpr, err)
+				}
+
+				checkExpr(expr)
+			})
+
+			t.Run("no-opt", func(t *testing.T) {
+				if typedExpr, err = ctx.NormalizeExpr(typedExpr); err != nil {
+					t.Fatalf("%s: %v", d.expr, err)
+				}
+				t.Logf("Normalized expression:   %s", typedExpr)
+
+				checkExpr(typedExpr)
+			})
 		})
 	}
+}
+
+func optBuildScalar(evalCtx *tree.EvalContext, e tree.TypedExpr) (tree.TypedExpr, error) {
+	var o xform.Optimizer
+	o.Init(evalCtx)
+	b := optbuilder.NewScalar(context.TODO(), &tree.SemaContext{}, evalCtx, o.Factory())
+	b.AllowUnsupportedExpr = true
+	if err := b.Build(e); err != nil {
+		return nil, err
+	}
+	ev := o.Optimize()
+
+	bld := execbuilder.New(nil /* factory */, ev, evalCtx)
+	ivh := tree.MakeIndexedVarHelper(nil /* container */, 0)
+
+	expr, err := bld.BuildScalar(&ivh)
+	if err != nil {
+		return nil, err
+	}
+	return expr, nil
 }
 
 func TestTimeConversion(t *testing.T) {
@@ -1380,7 +1672,6 @@ func TestEvalError(t *testing.T) {
 		{`'2010-09-28 12:00:00.1q'::date`,
 			`could not parse "2010-09-28 12:00:00.1q" as type date`},
 		{`'12:00:00q'::time`, `could not parse "12:00:00q" as type time`},
-		{`'12:00:00+01q'::timetz`, `could not parse "12:00:00+01q" as type timetz`},
 		{`'2010-09-28 12:00.1 MST'::timestamp`,
 			`could not parse "2010-09-28 12:00.1 MST" as type timestamp`},
 		{`'abcd'::interval`,
@@ -1424,6 +1715,28 @@ func TestEvalError(t *testing.T) {
 		{`'1.1'::int`, `could not parse "1.1" as type int`},
 		{`IFERROR(1/0, 123, 'unknown')`, `division by zero`},
 		{`ISERROR(1/0, 'unknown')`, `division by zero`},
+		{`like_escape('___', '\___', 'abc')`, `invalid escape string`},
+		{`like_escape('abc', 'abc', 'a日')`, `invalid escape string`},
+		{`like_escape('abc', 'abc', '漢日')`, `invalid escape string`},
+		{`like_escape('__', '_', '_')`, `LIKE pattern must not end with escape character`},
+		{`like_escape('%%', '%', '%')`, `LIKE pattern must not end with escape character`},
+		{`like_escape('__', '___', '_')`, `LIKE pattern must not end with escape character`},
+		{`like_escape('%%', '%%%', '%')`, `LIKE pattern must not end with escape character`},
+		{`like_escape('abc', 'ab%', '%')`, `LIKE pattern must not end with escape character`},
+		{`like_escape('abc', '%b%', '%')`, `LIKE pattern must not end with escape character`},
+		{`like_escape('abc', 'ab_', '_')`, `LIKE pattern must not end with escape character`},
+		{`like_escape('abc', '%b_', '_')`, `LIKE pattern must not end with escape character`},
+		{`like_escape('abc', '%b漢', '漢')`, `LIKE pattern must not end with escape character`},
+		{`similar_to_escape('abc', '-a-b-c', '-')`, `error parsing regexp: invalid escape sequence`},
+		{`similar_to_escape('a(b)c', '%((_)_', '(')`, `error parsing regexp: unexpected )`},
+		{`convert_from('\xaaaa'::bytea, 'woo')`, `convert_from(): invalid source encoding name "woo"`},
+		{`convert_from('\xaaaa'::bytea, 'utf8')`, `convert_from(): invalid byte sequence for encoding "UTF8"`},
+		{`convert_to('abc', 'woo')`, `convert_to(): invalid destination encoding name "woo"`},
+		{`convert_to('漢', 'latin1')`, `convert_to(): character '漢' has no representation in encoding "LATIN1"`},
+		{`'123'::BIT`, `could not parse string as bit array: "2" is not a valid binary digit`},
+		{`B'1001' & B'101'`, `cannot AND bit strings of different sizes`},
+		{`B'1001' | B'101'`, `cannot OR bit strings of different sizes`},
+		{`B'1001' # B'101'`, `cannot XOR bit strings of different sizes`},
 	}
 	for _, d := range testData {
 		expr, err := parser.ParseExpr(d.expr)

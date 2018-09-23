@@ -91,8 +91,8 @@ type backupShower struct {
 
 var backupShowerDefault = backupShower{
 	header: sqlbase.ResultColumns{
-		{Name: "database", Typ: types.String},
-		{Name: "table", Typ: types.String},
+		{Name: "database_name", Typ: types.String},
+		{Name: "table_name", Typ: types.String},
 		{Name: "start_time", Typ: types.Timestamp},
 		{Name: "end_time", Typ: types.Timestamp},
 		{Name: "size_bytes", Typ: types.Int},

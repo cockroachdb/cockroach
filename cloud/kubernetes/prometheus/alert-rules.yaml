@@ -1,0 +1,205 @@
+# GENERATED FILE - DO NOT EDIT
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  labels:
+    app: cockroachdb
+    prometheus: cockroachdb
+    role: alert-rules
+  name: prometheus-cockroachdb-rules
+spec:
+  groups:
+  - name: rules/dummy.rules
+    rules:
+    - alert: TestAlertManager
+      expr: vector(1)
+  - name: rules/aggregation.rules
+    rules:
+    - expr: sum without(store) (capacity{job="cockroachdb"})
+      record: node:capacity
+    - expr: sum without(instance) (node:capacity{job="cockroachdb"})
+      record: cluster:capacity
+    - expr: sum without(store) (capacity_available{job="cockroachdb"})
+      record: node:capacity_available
+    - expr: sum without(instance) (node:capacity_available{job="cockroachdb"})
+      record: cluster:capacity_available
+    - expr: capacity_available{job="cockroachdb"} / capacity{job="cockroachdb"}
+      record: capacity_available:ratio
+    - expr: node:capacity_available{job="cockroachdb"} / node:capacity{job="cockroachdb"}
+      record: node:capacity_available:ratio
+    - expr: cluster:capacity_available{job="cockroachdb"} / cluster:capacity{job="cockroachdb"}
+      record: cluster:capacity_available:ratio
+    - expr: rate(txn_durations_bucket{job="cockroachdb"}[1m])
+      record: txn_durations_bucket:rate1m
+    - expr: histogram_quantile(0.5, txn_durations_bucket:rate1m)
+      record: txn_durations:rate1m:quantile_50
+    - expr: histogram_quantile(0.75, txn_durations_bucket:rate1m)
+      record: txn_durations:rate1m:quantile_75
+    - expr: histogram_quantile(0.9, txn_durations_bucket:rate1m)
+      record: txn_durations:rate1m:quantile_90
+    - expr: histogram_quantile(0.95, txn_durations_bucket:rate1m)
+      record: txn_durations:rate1m:quantile_95
+    - expr: histogram_quantile(0.99, txn_durations_bucket:rate1m)
+      record: txn_durations:rate1m:quantile_99
+    - expr: rate(exec_latency_bucket{job="cockroachdb"}[1m])
+      record: exec_latency_bucket:rate1m
+    - expr: histogram_quantile(0.5, exec_latency_bucket:rate1m)
+      record: exec_latency:rate1m:quantile_50
+    - expr: histogram_quantile(0.75, exec_latency_bucket:rate1m)
+      record: exec_latency:rate1m:quantile_75
+    - expr: histogram_quantile(0.9, exec_latency_bucket:rate1m)
+      record: exec_latency:rate1m:quantile_90
+    - expr: histogram_quantile(0.95, exec_latency_bucket:rate1m)
+      record: exec_latency:rate1m:quantile_95
+    - expr: histogram_quantile(0.99, exec_latency_bucket:rate1m)
+      record: exec_latency:rate1m:quantile_99
+    - expr: rate(round_trip_latency_bucket{job="cockroachdb"}[1m])
+      record: round_trip_latency_bucket:rate1m
+    - expr: histogram_quantile(0.5, round_trip_latency_bucket:rate1m)
+      record: round_trip_latency:rate1m:quantile_50
+    - expr: histogram_quantile(0.75, round_trip_latency_bucket:rate1m)
+      record: round_trip_latency:rate1m:quantile_75
+    - expr: histogram_quantile(0.9, round_trip_latency_bucket:rate1m)
+      record: round_trip_latency:rate1m:quantile_90
+    - expr: histogram_quantile(0.95, round_trip_latency_bucket:rate1m)
+      record: round_trip_latency:rate1m:quantile_95
+    - expr: histogram_quantile(0.99, round_trip_latency_bucket:rate1m)
+      record: round_trip_latency:rate1m:quantile_99
+    - expr: rate(sql_exec_latency_bucket{job="cockroachdb"}[1m])
+      record: sql_exec_latency_bucket:rate1m
+    - expr: histogram_quantile(0.5, sql_exec_latency_bucket:rate1m)
+      record: sql_exec_latency:rate1m:quantile_50
+    - expr: histogram_quantile(0.75, sql_exec_latency_bucket:rate1m)
+      record: sql_exec_latency:rate1m:quantile_75
+    - expr: histogram_quantile(0.9, sql_exec_latency_bucket:rate1m)
+      record: sql_exec_latency:rate1m:quantile_90
+    - expr: histogram_quantile(0.95, sql_exec_latency_bucket:rate1m)
+      record: sql_exec_latency:rate1m:quantile_95
+    - expr: histogram_quantile(0.99, sql_exec_latency_bucket:rate1m)
+      record: sql_exec_latency:rate1m:quantile_99
+    - expr: rate(raft_process_logcommit_latency_bucket{job="cockroachdb"}[1m])
+      record: raft_process_logcommit_latency_bucket:rate1m
+    - expr: histogram_quantile(0.5, raft_process_logcommit_latency_bucket:rate1m)
+      record: raft_process_logcommit_latency:rate1m:quantile_50
+    - expr: histogram_quantile(0.75, raft_process_logcommit_latency_bucket:rate1m)
+      record: raft_process_logcommit_latency:rate1m:quantile_75
+    - expr: histogram_quantile(0.9, raft_process_logcommit_latency_bucket:rate1m)
+      record: raft_process_logcommit_latency:rate1m:quantile_90
+    - expr: histogram_quantile(0.95, raft_process_logcommit_latency_bucket:rate1m)
+      record: raft_process_logcommit_latency:rate1m:quantile_95
+    - expr: histogram_quantile(0.99, raft_process_logcommit_latency_bucket:rate1m)
+      record: raft_process_logcommit_latency:rate1m:quantile_99
+    - expr: rate(raft_process_commandcommit_latency_bucket{job="cockroachdb"}[1m])
+      record: raft_process_commandcommit_latency_bucket:rate1m
+    - expr: histogram_quantile(0.5, raft_process_commandcommit_latency_bucket:rate1m)
+      record: raft_process_commandcommit_latency:rate1m:quantile_50
+    - expr: histogram_quantile(0.75, raft_process_commandcommit_latency_bucket:rate1m)
+      record: raft_process_commandcommit_latency:rate1m:quantile_75
+    - expr: histogram_quantile(0.9, raft_process_commandcommit_latency_bucket:rate1m)
+      record: raft_process_commandcommit_latency:rate1m:quantile_90
+    - expr: histogram_quantile(0.95, raft_process_commandcommit_latency_bucket:rate1m)
+      record: raft_process_commandcommit_latency:rate1m:quantile_95
+    - expr: histogram_quantile(0.99, raft_process_commandcommit_latency_bucket:rate1m)
+      record: raft_process_commandcommit_latency:rate1m:quantile_99
+  - name: rules/alerts.rules
+    rules:
+    - alert: InstanceDown
+      annotations:
+        description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} has
+          been down for more than 5 minutes.'
+        summary: Instance {{ $labels.instance }} down
+      expr: up{job="cockroachdb"} == 0
+      for: 5m
+    - alert: InstanceDead
+      annotations:
+        description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} has
+          been down for more than 15 minutes.'
+        summary: Instance {{ $labels.instance }} dead
+      expr: up{job="cockroachdb"} == 0
+      for: 15m
+    - alert: InstanceRestart
+      annotations:
+        description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} restarted
+          {{ $value }} time(s) in 10m'
+        summary: Instance {{ $labels.instance }} restarted
+      expr: resets(sys_uptime{job="cockroachdb"}[10m]) > 0 and resets(sys_uptime{job="cockroachdb"}[10m])
+        < 5
+    - alert: InstanceFlapping
+      annotations:
+        description: '{{ $labels.instance }} for cluster {{ $labels.cluster }} restarted
+          {{ $value }} time(s) in 10m'
+        summary: Instance {{ $labels.instance }} flapping
+      expr: resets(sys_uptime{job="cockroachdb"}[10m]) > 5
+    - alert: LivenessMismatch
+      annotations:
+        description: Prometheus and {{ $labels.instance }} disagree on liveness
+        summary: Liveness mismatch for {{ $labels.instance }}
+      expr: (liveness_livenodes{job="cockroachdb"}) != ignoring(instance) group_left()
+        (count by(cluster, job) (up{job="cockroachdb"} == 1))
+      for: 5m
+      labels:
+        severity: testing
+    - alert: VersionMismatch
+      annotations:
+        description: Cluster {{ $labels.cluster }} running {{ $value }} different
+          versions
+        summary: Binary version mismatch on {{ $labels.cluster }}
+      expr: count by(cluster) (count_values by(tag, cluster) ("version", build_timestamp{job="cockroachdb"}))
+        > 1
+      for: 30m
+    - alert: StoreDiskLow
+      annotations:
+        summary: Store {{ $labels.store }} on node {{ $labels.instance }} at {{ $value
+          }} available disk fraction
+      expr: capacity_available:ratio{job="cockroachdb"} < 0.15
+    - alert: ClusterDiskLow
+      annotations:
+        summary: Cluster {{ $labels.cluster }} at {{ $value }} available disk fraction
+      expr: cluster:capacity_available:ratio{job="cockroachdb"} < 0.2
+    - alert: ZeroSQLQps
+      annotations:
+        summary: Instance {{ $labels.instance }} has SQL connections but no queries
+      expr: sql_conns{job="cockroachdb"} > 0 and rate(sql_query_count{job="cockroachdb"}[5m])
+        == 0
+      for: 10m
+    - alert: UnavailableRanges
+      annotations:
+        summary: Instance {{ $labels.instance }} has {{ $value }} unavailable ranges
+      expr: (sum by(instance, cluster) (ranges_unavailable{job="cockroachdb"})) >
+        0
+      for: 10m
+      labels:
+        severity: testing
+    - alert: NoLeaseRanges
+      annotations:
+        summary: Instance {{ $labels.instance }} has {{ $value }} ranges without leases
+      expr: (sum by(instance, cluster) (replicas_leaders_not_leaseholders{job="cockroachdb"}))
+        > 0
+      for: 10m
+      labels:
+        severity: testing
+    - alert: CACertificateExpiresSoon
+      annotations:
+        summary: CA certificate for {{ $labels.instance }} expires in less than a
+          year
+      expr: (security_certificate_expiration_ca{job="cockroachdb"} > 0) and (security_certificate_expiration_ca{job="cockroachdb"}
+        - time()) < 86400 * 366
+      labels:
+        frequency: daily
+    - alert: NodeCertificateExpiresSoon
+      annotations:
+        summary: Node certificate for {{ $labels.instance }} expires in less than
+          six months
+      expr: (security_certificate_expiration_node{job="cockroachdb"} > 0) and (security_certificate_expiration_node{job="cockroachdb"}
+        - time()) < 86400 * 183
+      labels:
+        frequency: daily
+    - alert: HighOpenFDCount
+      annotations:
+        summary: 'Too many open file descriptors on {{ $labels.instance }}: {{ $value
+          }} fraction used'
+      expr: sys_fd_open{job="cockroachdb"} / sys_fd_softlimit{job="cockroachdb"} >
+        0.8
+      for: 10m
+      labels:
+        severity: testing

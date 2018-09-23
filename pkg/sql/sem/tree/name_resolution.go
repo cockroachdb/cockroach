@@ -16,6 +16,8 @@ package tree
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -319,7 +321,7 @@ func (t *TableName) ResolveExisting(
 
 	// This is a naked table name. Use the search path.
 	iter := searchPath.Iter()
-	for next, ok := iter(); ok; next, ok = iter() {
+	for next, ok := iter.Next(); ok; next, ok = iter.Next() {
 		if found, objMeta, err := r.LookupObject(ctx, curDb, next, t.Table()); found || err != nil {
 			if err == nil {
 				t.CatalogName = Name(curDb)
@@ -365,7 +367,7 @@ func (t *TableName) ResolveTarget(
 	// This is a naked table name. Use the current schema = the first
 	// valid item in the search path.
 	iter := searchPath.IterWithoutImplicitPGCatalog()
-	for scName, ok := iter(); ok; scName, ok = iter() {
+	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
 		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
 			if err == nil {
 				t.CatalogName = Name(curDb)
@@ -411,7 +413,7 @@ func (tp *TableNamePrefix) Resolve(
 	// This is a naked table name. Use the current schema = the first
 	// valid item in the search path.
 	iter := searchPath.IterWithoutImplicitPGCatalog()
-	for scName, ok := iter(); ok; scName, ok = iter() {
+	for scName, ok := iter.Next(); ok; scName, ok = iter.Next() {
 		if found, scMeta, err = r.LookupSchema(ctx, curDb, scName); found || err != nil {
 			if err == nil {
 				tp.CatalogName = Name(curDb)
@@ -475,7 +477,7 @@ func (n *UnresolvedName) ResolveFunction(
 			// The function wasn't qualified, so we must search for it via
 			// the search path first.
 			iter := searchPath.Iter()
-			for alt, ok := iter(); ok; alt, ok = iter() {
+			for alt, ok := iter.Next(); ok; alt, ok = iter.Next() {
 				fullName = alt + "." + function
 				if def, ok = FunDefs[fullName]; ok {
 					found = true
@@ -484,8 +486,13 @@ func (n *UnresolvedName) ResolveFunction(
 			}
 		}
 		if !found {
+			extraMsg := ""
+			// Try a little harder.
+			if rdef, ok := FunDefs[strings.ToLower(function)]; ok {
+				extraMsg = fmt.Sprintf(", but %s() exists", rdef.Name)
+			}
 			return nil, pgerror.NewErrorf(
-				pgerror.CodeUndefinedFunctionError, "unknown function: %s()", ErrString(n))
+				pgerror.CodeUndefinedFunctionError, "unknown function: %s()%s", ErrString(n), extraMsg)
 		}
 	}
 

@@ -132,6 +132,12 @@ func (*internalServer) Batch(
 	return nil, nil
 }
 
+func (*internalServer) RangeFeed(
+	_ *roachpb.RangeFeedRequest, _ roachpb.Internal_RangeFeedServer,
+) error {
+	panic("unimplemented")
+}
+
 // TestInternalServerAddress verifies that RPCContext uses AdvertiseAddr, not Addr, to
 // determine whether to apply the local server optimization.
 //
@@ -152,8 +158,9 @@ func TestInternalServerAddress(t *testing.T) {
 	internal := &internalServer{}
 	serverCtx.SetLocalInternalServer(internal)
 
-	if is := serverCtx.GetLocalInternalServerForAddr(serverCtx.Config.AdvertiseAddr); is != internal {
-		t.Fatalf("expected %+v, got %+v", internal, is)
+	exp := internalClientAdapter{internal}
+	if ic := serverCtx.GetLocalInternalClientForAddr(serverCtx.Config.AdvertiseAddr); ic != exp {
+		t.Fatalf("expected %+v, got %+v", exp, ic)
 	}
 }
 
@@ -206,9 +213,24 @@ func TestHeartbeatHealth(t *testing.T) {
 		}
 	}()
 
+	lisNotLocalServer, err := net.Listen("tcp", "127.0.0.1:0")
+	defer func() {
+		netutil.FatalIfUnexpected(lisNotLocalServer.Close())
+	}()
+	if err != nil {
+		t.Fatal(err)
+	}
+	lisLocalServer, err := net.Listen("tcp", "127.0.0.1:0")
+	defer func() {
+		netutil.FatalIfUnexpected(lisLocalServer.Close())
+	}()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	clientCtx := newTestContext(clock, stopper)
-	clientCtx.Addr = "notlocalserver"
-	clientCtx.AdvertiseAddr = "localserver"
+	clientCtx.Addr = lisNotLocalServer.Addr().String()
+	clientCtx.AdvertiseAddr = lisLocalServer.Addr().String()
 	// Make the interval shorter to speed up the test.
 	clientCtx.heartbeatInterval = 1 * time.Millisecond
 	if _, err := clientCtx.GRPCDial(remoteAddr).Connect(context.Background()); err != nil {
@@ -254,7 +276,14 @@ func TestHeartbeatHealth(t *testing.T) {
 		return clientCtx.ConnHealth(remoteAddr)
 	})
 
-	if err := clientCtx.ConnHealth("non-existent connection"); err != ErrNotHeartbeated {
+	lisNonExistentConnection, err := net.Listen("tcp", "127.0.0.1:0")
+	defer func() {
+		netutil.FatalIfUnexpected(lisNonExistentConnection.Close())
+	}()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := clientCtx.ConnHealth(lisNonExistentConnection.Addr().String()); err != ErrNotHeartbeated {
 		t.Errorf("wanted ErrNotHeartbeated, not %v", err)
 	}
 
@@ -785,7 +814,8 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.TODO())
-			ctx := stopper.WithCancel(context.TODO())
+			ctx, cancel := stopper.WithCancelOnQuiesce(context.TODO())
+			defer cancel()
 
 			// Construct server with server-side keepalive.
 			clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
@@ -1056,6 +1086,9 @@ func TestVersionCheckBidirectional(t *testing.T) {
 }
 
 func BenchmarkGRPCDial(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 

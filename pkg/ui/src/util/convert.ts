@@ -20,7 +20,7 @@ export function MilliToNano(milli: number): number {
  * TimestampToMoment converts a Timestamp$Properties object, as seen in wire.proto, to
  * a Moment object. If timestamp is null, it returns the current time.
  */
-export function TimestampToMoment(timestamp?: protos.google.protobuf.Timestamp$Properties): moment.Moment {
+export function TimestampToMoment(timestamp?: protos.google.protobuf.ITimestamp): moment.Moment {
   if (!timestamp) {
     return moment.utc();
   }

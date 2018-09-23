@@ -22,7 +22,7 @@ end_test
 
 proc start_secure_server {argv certs_dir} {
     report "BEGIN START SECURE SERVER"
-    system "mkfifo pid_fifo || true; $argv start --certs-dir=$certs_dir --pid-file=pid_fifo -s=path=logs/db >>expect-cmd.log 2>&1 & cat pid_fifo > server_pid"
+    system "mkfifo url_fifo || true; $argv start --certs-dir=$certs_dir --pid-file=server_pid --listening-url-file=url_fifo -s=path=logs/db >>expect-cmd.log 2>&1 & cat url_fifo > server_url"
     report "END START SECURE SERVER"
 }
 
@@ -50,13 +50,19 @@ eexpect "empty passwords are not permitted"
 eexpect $prompt
 end_test
 
+start_test "Make the user without password."
+send "$argv user set carl --certs-dir=$certs_dir\r"
+eexpect "CREATE USER"
+eexpect $prompt
+end_test
+
 start_test "Check a password can be changed."
 send "$argv user set carl --password --certs-dir=$certs_dir\r"
 eexpect "Enter password:"
 send "woof\r"
 eexpect "Confirm password:"
 send "woof\r"
-eexpect "CREATE USER"
+eexpect "ALTER USER"
 eexpect $prompt
 end_test
 
@@ -83,7 +89,7 @@ end_test
 
 start_test "Check that root cannot use password."
 # Run as root but with a non-existent certs directory.
-send "$argv sql --url='postgresql://root@localhost:26257?sslmode=verify-full'\r"
+send "$argv sql --url='postgresql://root@localhost:26257?sslmode=verify-full&sslrootcert=$certs_dir/ca.crt'\r"
 eexpect "Error: connections with user root must use a client certificate"
 eexpect "Failed running \"sql\""
 end_test

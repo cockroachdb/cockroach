@@ -93,7 +93,7 @@ class Certificates extends React.Component<CertificatesProps, {}> {
     return this.renderSimpleRow(header, timestamp, title);
   }
 
-  renderFields(fields: protos.cockroach.server.serverpb.CertificateDetails.Fields$Properties, id: number) {
+  renderFields(fields: protos.cockroach.server.serverpb.CertificateDetails.IFields, id: number) {
     return [
       this.renderSimpleRow("Cert ID", id.toString()),
       this.renderSimpleRow("Issuer", fields.issuer),
@@ -108,14 +108,26 @@ class Certificates extends React.Component<CertificatesProps, {}> {
     ];
   }
 
-  renderCert(cert: protos.cockroach.server.serverpb.CertificateDetails$Properties, key: number) {
+  renderCert(cert: protos.cockroach.server.serverpb.ICertificateDetails, key: number) {
     let certType: string;
     switch (cert.type) {
       case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.CA:
         certType = "Certificate Authority";
         break;
       case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.NODE:
-        certType = "Node";
+        certType = "Node Certificate";
+        break;
+      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.CLIENT_CA:
+        certType = "Client Certificate Authority";
+        break;
+      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.CLIENT:
+        certType = "Client Certificate";
+        break;
+      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.UI_CA:
+        certType = "UI Certificate Authority";
+        break;
+      case protos.cockroach.server.serverpb.CertificateDetails.CertificateType.UI:
+        certType = "UI Certificate";
         break;
       default:
         certType = "Unknown";

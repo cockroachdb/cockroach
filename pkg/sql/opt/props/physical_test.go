@@ -36,10 +36,10 @@ func TestPhysicalProps(t *testing.T) {
 		opt.LabeledColumn{Label: "b", ID: 2},
 	}
 	phys = &props.Physical{Presentation: presentation}
-	testPhysicalProps(t, phys, "p:a:1,b:2")
+	testPhysicalProps(t, phys, "[presentation: a:1,b:2]")
 
-	if !presentation.Defined() {
-		t.Error("presentation should be defined")
+	if presentation.Any() {
+		t.Error("presentation should not be empty")
 	}
 
 	if !presentation.Equals(presentation) {
@@ -50,46 +50,15 @@ func TestPhysicalProps(t *testing.T) {
 		t.Error("presentation should not equal the empty presentation")
 	}
 
-	// Add Ordering props.
-	ordering := props.Ordering{1, 5}
+	// Add ordering props.
+	ordering := props.ParseOrderingChoice("+1,+5")
 	phys.Ordering = ordering
-	testPhysicalProps(t, phys, "p:a:1,b:2 o:+1,+5")
-
-	if !ordering.Defined() {
-		t.Error("ordering should be defined")
-	}
-
-	if !ordering.Provides(ordering) {
-		t.Error("ordering should provide itself")
-	}
-
-	if !ordering.Provides(props.Ordering{1}) {
-		t.Error("ordering should provide the prefix ordering")
-	}
-
-	if (props.Ordering{}).Provides(ordering) {
-		t.Error("empty ordering should not provide ordering")
-	}
-
-	if !ordering.Provides(props.Ordering{}) {
-		t.Error("ordering should provide the empty ordering")
-	}
-
-	if !ordering.Equals(ordering) {
-		t.Error("ordering should be equal with itself")
-	}
-
-	if ordering.Equals(props.Ordering{}) {
-		t.Error("ordering should not equal the empty ordering")
-	}
-
-	if (props.Ordering{}).Equals(ordering) {
-		t.Error("empty ordering should not equal ordering")
-	}
+	testPhysicalProps(t, phys, "[presentation: a:1,b:2] [ordering: +1,+5]")
 }
 
 func testPhysicalProps(t *testing.T, physProps *props.Physical, expected string) {
-	actual := physProps.Fingerprint()
+	t.Helper()
+	actual := physProps.String()
 	if actual != expected {
 		t.Errorf("\nexpected: %s\nactual: %s", expected, actual)
 	}

@@ -81,12 +81,12 @@ type TestServerArgs struct {
 	RetryOptions                retry.Options
 	SocketFile                  string
 	ScanInterval                time.Duration
+	ScanMinIdleTime             time.Duration
 	ScanMaxIdleTime             time.Duration
 	SSLCertsDir                 string
 	TimeSeriesQueryWorkerMax    int
 	TimeSeriesQueryMemoryBudget int64
 	SQLMemoryPoolSize           int64
-	ListeningURLFile            string
 
 	// If set, this will be appended to the Postgres URL by functions that
 	// automatically open a connection to the server. That's equivalent to running

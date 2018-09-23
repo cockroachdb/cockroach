@@ -37,7 +37,11 @@ func (node *SetVar) Format(ctx *FmtCtx) {
 		ctx.FormatNode(&node.Values)
 		ctx.WriteString(")")
 	} else {
-		ctx.FormatNameP(&node.Name)
+		// Session var names never contain PII and should be distinguished
+		// for feature tracking purposes.
+		deAnonCtx := *ctx
+		deAnonCtx.flags &= ^FmtAnonymize
+		deAnonCtx.FormatNameP(&node.Name)
 		ctx.WriteString(" = ")
 		ctx.FormatNode(&node.Values)
 	}

@@ -20,8 +20,8 @@ import (
 	"io"
 	"math"
 
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft/raftpb"
 	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -43,7 +43,7 @@ const (
 
 	// Messages that provide detail about why a preemptive snapshot was rejected.
 	snapshotStoreTooFullMsg = "store almost out of disk space"
-	snapshotApplySemBusyMsg = "store busy applying snapshots and/or removing replicas"
+	snapshotApplySemBusyMsg = "store busy applying snapshots"
 	storeDrainingMsg        = "store is draining"
 
 	// IntersectingSnapshotMsg is part of the error message returned from
@@ -210,12 +210,48 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 	// together.
 	firstIndex := header.State.TruncatedState.Index + 1
 	endIndex := snap.RaftSnap.Metadata.Index + 1
-	logEntries := make([][]byte, 0, endIndex-firstIndex)
+	preallocSize := endIndex - firstIndex
+	const maxPreallocSize = 1000
+	if preallocSize > maxPreallocSize {
+		// It's possible for the raft log to become enormous in certain
+		// sustained failure conditions. We may bail out of the snapshot
+		// process early in scanFunc, but in the worst case this
+		// preallocation is enough to run the server out of memory. Limit
+		// the size of the buffer we will preallocate.
+		preallocSize = maxPreallocSize
+	}
+	logEntries := make([][]byte, 0, preallocSize)
 
+	var raftLogBytes int64
 	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
 		bytes, err := kv.Value.GetBytes()
 		if err == nil {
 			logEntries = append(logEntries, bytes)
+			raftLogBytes += int64(len(bytes))
+			if snap.snapType == snapTypePreemptive && raftLogBytes > 4*raftLogMaxSize {
+				// If the raft log is too large, abort the snapshot instead of
+				// potentially running out of memory. However, if this is a
+				// raft-initiated snapshot (instead of a preemptive one), we
+				// have a dilemma. It may be impossible to truncate the raft
+				// log until we have caught up a peer with a snapshot. Since
+				// we don't know the exact size at which we will run out of
+				// memory, we err on the size of allowing the snapshot if it
+				// is raft-initiated, while aborting preemptive snapshots at a
+				// reasonable threshold. (Empirically, this is good enough:
+				// the situations that result in large raft logs have not been
+				// observed to result in raft-initiated snapshots).
+				//
+				// By aborting preemptive snapshots here, we disallow replica
+				// changes until the current replicas have caught up and
+				// truncated the log (either the range is available, in which
+				// case this will eventually happen, or it's not,in which case
+				// the preemptive snapshot would be wasted anyway because the
+				// change replicas transaction would be unable to commit).
+				return false, errors.Errorf(
+					"aborting snapshot because raft log is too large "+
+						"(%d bytes after processing %d of %d entries)",
+					raftLogBytes, len(logEntries), endIndex-firstIndex)
+			}
 		}
 		return false, err
 	}
@@ -348,29 +384,43 @@ func (s *Store) reserveSnapshot(
 // the replica) and a placeholder can be added to the replicasByKey map (if
 // necessary). If a placeholder is required, it is returned as the first value.
 func (s *Store) canApplySnapshot(
-	ctx context.Context, rangeDescriptor *roachpb.RangeDescriptor,
+	ctx context.Context, snapHeader *SnapshotRequest_Header,
 ) (*ReplicaPlaceholder, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.canApplySnapshotLocked(ctx, rangeDescriptor)
+	return s.canApplySnapshotLocked(ctx, snapHeader)
 }
 
 func (s *Store) canApplySnapshotLocked(
-	ctx context.Context, rangeDescriptor *roachpb.RangeDescriptor,
+	ctx context.Context, snapHeader *SnapshotRequest_Header,
 ) (*ReplicaPlaceholder, error) {
-	if v, ok := s.mu.replicas.Load(int64(rangeDescriptor.RangeID)); ok &&
-		(*Replica)(v).IsInitialized() {
-		// We have the range and it's initialized, so let the snapshot through.
-		return nil, nil
+	desc := *snapHeader.State.Desc
+	if v, ok := s.mu.replicas.Load(int64(desc.RangeID)); ok && (*Replica)(v).IsInitialized() {
+		// We have an initialized replica. Preemptive snapshots can be applied with
+		// no further checks if they do not widen the existing replica. Raft
+		// snapshots can be applied with no further checks even if they widen the
+		// existing replica—we can't reject them at this point—but see the comments
+		// in Replica.maybeAcquireSnapshotMergeLock for how this is made safe.
+		existingDesc := (*Replica)(v).Desc()
+		if !snapHeader.IsPreemptive() || !existingDesc.EndKey.Less(desc.EndKey) {
+			return nil, nil
+		}
+
+		// We have a preemptive snapshot that widens an existing replica. Proceed
+		// by checking the keyspace covered by the snapshot but not the existing
+		// replica.
+		desc.StartKey = existingDesc.EndKey
 	}
 
-	// We don't have the range (or we have an uninitialized
-	// placeholder). Will we be able to create/initialize it?
-	if exRng, ok := s.mu.replicaPlaceholders[rangeDescriptor.RangeID]; ok {
+	// We don't have the range, or we have an uninitialized placeholder, or the
+	// existing range is less wide. Will we be able to create/initialize it?
+	if exRng, ok := s.mu.replicaPlaceholders[desc.RangeID]; ok {
 		return nil, errors.Errorf("%s: canApplySnapshotLocked: cannot add placeholder, have an existing placeholder %s", s, exRng)
 	}
 
-	if exRange := s.getOverlappingKeyRangeLocked(rangeDescriptor); exRange != nil {
+	// TODO(benesch): consider discovering and GC'ing *all* overlapping ranges,
+	// not just the first one that getOverlappingKeyRangeLocked happens to return.
+	if exRange := s.getOverlappingKeyRangeLocked(&desc); exRange != nil {
 		// We have a conflicting range, so we must block the snapshot.
 		// When such a conflict exists, it will be resolved by one range
 		// either being split or garbage collected.
@@ -387,7 +437,7 @@ func (s *Store) canApplySnapshotLocked(
 				lease, pendingLease := r.GetLease()
 				now := s.Clock().Now()
 				return !r.IsLeaseValid(lease, now) &&
-					(pendingLease == nil || !r.IsLeaseValid(*pendingLease, now))
+					(pendingLease == (roachpb.Lease{}) || !r.IsLeaseValid(pendingLease, now))
 			}
 
 			// If the existing range shows no signs of recent activity, give it a GC
@@ -404,7 +454,7 @@ func (s *Store) canApplySnapshotLocked(
 	}
 
 	placeholder := &ReplicaPlaceholder{
-		rangeDesc: *rangeDescriptor,
+		rangeDesc: desc,
 	}
 	return placeholder, nil
 }
@@ -430,7 +480,7 @@ func (s *Store) receiveSnapshot(
 	// We'll perform this check again later after receiving the rest of the
 	// snapshot data - this is purely an optimization to prevent downloading
 	// a snapshot that we know we won't be able to apply.
-	if _, err := s.canApplySnapshot(ctx, header.State.Desc); err != nil {
+	if _, err := s.canApplySnapshot(ctx, header); err != nil {
 		return sendSnapshotError(stream,
 			errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.State.Desc.RangeID),
 		)
@@ -461,7 +511,7 @@ func (s *Store) receiveSnapshot(
 	if err != nil {
 		return err
 	}
-	if err := s.processRaftSnapshotRequest(ctx, &header.RaftMessageRequest, inSnap); err != nil {
+	if err := s.processRaftSnapshotRequest(ctx, header, inSnap); err != nil {
 		return sendSnapshotError(stream, errors.Wrap(err.GoError(), "failed to apply snapshot"))
 	}
 
@@ -545,22 +595,24 @@ func sendSnapshot(
 			if len(resp.Message) > 0 {
 				declinedMsg = resp.Message
 			}
-			return errors.Errorf("%s: remote declined snapshot: %s", to, declinedMsg)
+			return errors.Errorf("%s: remote declined %s: %s", to, snap, declinedMsg)
 		}
 		storePool.throttle(throttleFailed, to.StoreID)
-		return errors.Errorf("%s: programming error: remote declined required snapshot: %s",
-			to, resp.Message)
+		return errors.Errorf("%s: programming error: remote declined required %s: %s",
+			to, snap, resp.Message)
 	case SnapshotResponse_ERROR:
 		storePool.throttle(throttleFailed, to.StoreID)
-		return errors.Errorf("%s: remote couldn't accept snapshot with error: %s",
-			to, resp.Message)
+		return errors.Errorf("%s: remote couldn't accept %s with error: %s",
+			to, snap, resp.Message)
 	case SnapshotResponse_ACCEPTED:
 	// This is the response we're expecting. Continue with snapshot sending.
 	default:
 		storePool.throttle(throttleFailed, to.StoreID)
-		return errors.Errorf("%s: server sent an invalid status during negotiation: %s",
-			to, resp.Status)
+		return errors.Errorf("%s: server sent an invalid status while negotiating %s: %s",
+			to, snap, resp.Status)
 	}
+
+	log.Infof(ctx, "sending %s", snap)
 
 	// The size of batches to send. This is the granularity of rate limiting.
 	const batchSize = 256 << 10 // 256 KB

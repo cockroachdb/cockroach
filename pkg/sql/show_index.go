@@ -27,14 +27,14 @@ import (
 func (p *planner) ShowIndex(ctx context.Context, n *tree.ShowIndex) (planNode, error) {
 	const getIndexes = `
 				SELECT
-					table_name AS "Table",
-					index_name AS "Name",
-					NOT non_unique::BOOL AS "Unique",
-					seq_in_index AS "Seq",
-					column_name AS "Column",
-					direction AS "Direction",
-					storing::BOOL AS "Storing",
-					implicit::BOOL AS "Implicit"
+					table_name,
+					index_name,
+					non_unique::BOOL,
+					seq_in_index,
+					column_name,
+					direction,
+					storing::BOOL,
+					implicit::BOOL
 				FROM %[4]s.information_schema.statistics
 				WHERE table_catalog=%[1]s AND table_schema=%[5]s AND table_name=%[2]s`
 	return p.showTableDetails(ctx, "SHOW INDEX", n.Table, getIndexes)

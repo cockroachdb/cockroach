@@ -59,14 +59,10 @@ func (p *planner) ShowFingerprints(
 		return nil, err
 	}
 
-	var tableDesc *TableDescriptor
 	// We avoid the cache so that we can observe the fingerprints without
 	// taking a lease, like other SHOW commands.
-	//
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		tableDesc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
-	})
+	tableDesc, err := p.ResolveUncachedTableDescriptor(
+		ctx, tn, true /*required*/, requireTableDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +78,7 @@ func (p *planner) ShowFingerprints(
 }
 
 var showFingerprintsColumns = sqlbase.ResultColumns{
-	{Name: "index", Typ: types.String},
+	{Name: "index_name", Typ: types.String},
 	{Name: "fingerprint", Typ: types.String},
 }
 
@@ -147,16 +143,15 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	// TODO(dan): If/when this ever loses its EXPERIMENTAL prefix and gets
 	// exposed to users, consider adding a version to the fingerprint output.
 	sql := fmt.Sprintf(`SELECT
-	  XOR_AGG(FNV64(%s))::string AS fingerprint
-	  FROM [%d AS t]@{FORCE_INDEX=[%d],NO_INDEX_JOIN}
+	  xor_agg(fnv64(%s))::string AS fingerprint
+	  FROM [%d AS t]@{FORCE_INDEX=[%d]}
 	`, strings.Join(cols, `,`), n.tableDesc.ID, index.ID)
 	// If were'in in an AOST context, propagate it to the inner statement so that
 	// the inner statement gets planned with planner.avoidCachedDescriptors set,
 	// like the outter one.
-	if params.p.asOfSystemTime {
+	if params.p.semaCtx.AsOfTimestamp != nil {
 		ts := params.p.txn.OrigTimestamp()
-		tsStr := fmt.Sprintf("%d.%d", ts.WallTime, ts.Logical)
-		sql = sql + " AS OF SYSTEM TIME " + tsStr
+		sql = sql + " AS OF SYSTEM TIME " + ts.AsOfSystemTime()
 	}
 
 	fingerprintCols, err := params.extendedEvalCtx.ExecCfg.InternalExecutor.QueryRow(

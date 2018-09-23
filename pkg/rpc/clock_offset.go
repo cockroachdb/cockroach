@@ -45,14 +45,23 @@ const avgLatencyMeasurementAge = 20.0
 
 var (
 	metaClockOffsetMeanNanos = metric.Metadata{
-		Name: "clock-offset.meannanos",
-		Help: "Mean clock offset with other nodes in nanoseconds"}
+		Name:        "clock-offset.meannanos",
+		Help:        "Mean clock offset with other nodes",
+		Measurement: "Clock Offset",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaClockOffsetStdDevNanos = metric.Metadata{
-		Name: "clock-offset.stddevnanos",
-		Help: "Stdddev clock offset with other nodes in nanoseconds"}
+		Name:        "clock-offset.stddevnanos",
+		Help:        "Stddev clock offset with other nodes",
+		Measurement: "Clock Offset",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaLatencyHistogramNanos = metric.Metadata{
-		Name: "round-trip-latency",
-		Help: "Distribution of round-trip latencies with other nodes in nanoseconds"}
+		Name:        "round-trip-latency",
+		Help:        "Distribution of round-trip latencies with other nodes",
+		Measurement: "Roundtrip Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 // RemoteClockMonitor keeps track of the most recent measurements of remote
@@ -62,7 +71,7 @@ type RemoteClockMonitor struct {
 	offsetTTL time.Duration
 
 	mu struct {
-		syncutil.Mutex
+		syncutil.RWMutex
 		offsets        map[string]RemoteOffset
 		latenciesNanos map[string]ewma.MovingAverage
 	}
@@ -101,8 +110,8 @@ func (r *RemoteClockMonitor) Metrics() *RemoteClockMetrics {
 // given node address. Returns true if the measurement is valid, or false if
 // we don't have enough samples to compute a reliable average.
 func (r *RemoteClockMonitor) Latency(addr string) (time.Duration, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	if avg, ok := r.mu.latenciesNanos[addr]; ok && avg.Value() != 0.0 {
 		return time.Duration(int64(avg.Value())), true
 	}
@@ -111,8 +120,8 @@ func (r *RemoteClockMonitor) Latency(addr string) (time.Duration, bool) {
 
 // AllLatencies returns a map of all currently valid latency measurements.
 func (r *RemoteClockMonitor) AllLatencies() map[string]time.Duration {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	result := make(map[string]time.Duration)
 	for addr, avg := range r.mu.latenciesNanos {
 		if avg.Value() != 0.0 {

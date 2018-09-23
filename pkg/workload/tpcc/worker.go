@@ -24,9 +24,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -45,7 +46,7 @@ type worker struct {
 }
 
 type tpccTx interface {
-	run(config *tpcc, db *gosql.DB, wID int) (interface{}, error)
+	run(ctx context.Context, config *tpcc, db *gosql.DB, wID int) (interface{}, error)
 }
 
 type tx struct {
@@ -148,14 +149,22 @@ func (w *worker) run(ctx context.Context) error {
 	if !w.config.doWaits {
 		warehouseID = rand.Intn(w.config.warehouses)
 	} else {
+		// Wait out the entire keying and think time even if the context is
+		// expired. This prevents all workers from immediately restarting when
+		// the workload's ramp period expires, which can overload a cluster.
 		time.Sleep(time.Duration(t.keyingTime) * time.Second)
 	}
 
+	// Run transactions with a background context because we don't want to
+	// cancel them when the context expires. Instead, let them finish normally
+	// but don't account for them in the histogram.
 	start := timeutil.Now()
-	if _, err := t.run(w.config, w.db, warehouseID); err != nil {
+	if _, err := t.run(context.Background(), w.config, w.db, warehouseID); err != nil {
 		return errors.Wrapf(err, "error in %s", t.name)
 	}
-	w.hists.Get(t.name).Record(timeutil.Since(start))
+	if ctx.Err() == nil {
+		w.hists.Get(t.name).Record(timeutil.Since(start))
+	}
 
 	if w.config.doWaits {
 		// 5.2.5.4: Think time is taken independently from a negative exponential
@@ -168,5 +177,5 @@ func (w *worker) run(ctx context.Context) error {
 		}
 		time.Sleep(time.Duration(thinkTime) * time.Second)
 	}
-	return nil
+	return ctx.Err()
 }

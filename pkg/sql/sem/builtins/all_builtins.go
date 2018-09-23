@@ -30,6 +30,10 @@ var AllBuiltinNames []string
 // AllBuiltinNames that corresponds to aggregate functions.
 var AllAggregateBuiltinNames []string
 
+// AllWindowBuiltinNames is an array containing the subset of
+// AllBuiltinNames that corresponds to window functions.
+var AllWindowBuiltinNames []string
+
 func init() {
 	initAggregateBuiltins()
 	initWindowBuiltins()
@@ -49,6 +53,8 @@ func init() {
 		AllBuiltinNames = append(AllBuiltinNames, name)
 		if def.props.Class == tree.AggregateClass {
 			AllAggregateBuiltinNames = append(AllAggregateBuiltinNames, name)
+		} else if def.props.Class == tree.WindowClass {
+			AllWindowBuiltinNames = append(AllWindowBuiltinNames, name)
 		}
 	}
 
@@ -63,6 +69,7 @@ func init() {
 
 	sort.Strings(AllBuiltinNames)
 	sort.Strings(AllAggregateBuiltinNames)
+	sort.Strings(AllWindowBuiltinNames)
 }
 
 func getCategory(b []tree.Overload) string {

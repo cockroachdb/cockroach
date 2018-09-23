@@ -15,7 +15,7 @@
 package cli
 
 import (
-	"context"
+	gohex "encoding/hex"
 	"fmt"
 	"math"
 	"regexp"
@@ -24,13 +24,60 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	humanize "github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
 )
+
+type localityList []roachpb.LocalityAddress
+
+// Type implements the pflag.Value interface.
+func (l *localityList) Type() string { return "localityList" }
+
+// String implements the pflag.Value interface.=
+func (l *localityList) String() string {
+	string := ""
+	for _, loc := range []roachpb.LocalityAddress(*l) {
+		string += loc.LocalityTier.Key + "=" + loc.LocalityTier.Value + ":" + loc.Address.String() + ","
+	}
+
+	return string
+}
+
+// String implements the pflag.Value interface.
+func (l *localityList) Set(value string) error {
+	*l = []roachpb.LocalityAddress{}
+
+	values := strings.Split(value, ",")
+
+	for _, value := range values {
+		split := strings.Split(value, "@")
+		if len(split) != 2 {
+			return fmt.Errorf("invalid value for --locality-advertise-address: %s", l)
+		}
+
+		tierSplit := strings.Split(split[0], "=")
+		if len(tierSplit) != 2 {
+			return fmt.Errorf("invalid value for --locality-advertise-address: %s", l)
+		}
+
+		tier := roachpb.Tier{}
+		tier.Key = tierSplit[0]
+		tier.Value = tierSplit[1]
+
+		locAddress := roachpb.LocalityAddress{}
+		locAddress.LocalityTier = tier
+		locAddress.Address = util.MakeUnresolvedAddr("tcp", split[1])
+
+		*l = append(*l, locAddress)
+	}
+
+	return nil
+}
 
 // This file contains definitions for data types suitable for use by
 // the flag+pflag packages.
@@ -119,6 +166,19 @@ func (k *mvccKey) Set(value string) error {
 	}
 
 	switch typ {
+	case hex:
+		b, err := gohex.DecodeString(keyStr)
+		if err != nil {
+			return err
+		}
+		newK, err := engine.DecodeMVCCKey(b)
+		if err != nil {
+			encoded := gohex.EncodeToString(engine.EncodeKey(engine.MakeMVCCMetadataKey(roachpb.Key(b))))
+			return errors.Wrapf(err, "perhaps this is just a hex-encoded key; you need an "+
+				"encoded MVCCKey (i.e. with a timestamp component); here's one with a zero timestamp: %s",
+				encoded)
+		}
+		*k = mvccKey(newK)
 	case raw:
 		unquoted, err := unquoteArg(keyStr)
 		if err != nil {
@@ -161,6 +221,7 @@ const (
 	raw keyType = iota
 	human
 	rangeID
+	hex
 )
 
 // _keyTypes stores the names of all the possible key types.
@@ -232,7 +293,7 @@ type tableDisplayFormat int
 const (
 	tableDisplayTSV tableDisplayFormat = iota
 	tableDisplayCSV
-	tableDisplayPretty
+	tableDisplayTable
 	tableDisplayRecords
 	tableDisplaySQL
 	tableDisplayHTML
@@ -250,8 +311,8 @@ func (f *tableDisplayFormat) String() string {
 		return "tsv"
 	case tableDisplayCSV:
 		return "csv"
-	case tableDisplayPretty:
-		return "pretty"
+	case tableDisplayTable:
+		return "table"
 	case tableDisplayRecords:
 		return "records"
 	case tableDisplaySQL:
@@ -271,8 +332,8 @@ func (f *tableDisplayFormat) Set(s string) error {
 		*f = tableDisplayTSV
 	case "csv":
 		*f = tableDisplayCSV
-	case "pretty":
-		*f = tableDisplayPretty
+	case "table":
+		*f = tableDisplayTable
 	case "records":
 		*f = tableDisplayRecords
 	case "sql":
@@ -283,7 +344,7 @@ func (f *tableDisplayFormat) Set(s string) error {
 		*f = tableDisplayRaw
 	default:
 		return fmt.Errorf("invalid table display format: %s "+
-			"(possible values: tsv, csv, pretty, records, sql, html, raw)", s)
+			"(possible values: tsv, csv, table, records, sql, html, raw)", s)
 	}
 	return nil
 }
@@ -325,7 +386,7 @@ type percentResolverFunc func(percent int) (int64, error)
 // memoryPercentResolver turns a percent into the respective fraction of the
 // system's internal memory.
 func memoryPercentResolver(percent int) (int64, error) {
-	sizeBytes, err := server.GetTotalMemory(context.TODO())
+	sizeBytes, _, err := status.GetTotalMemoryWithoutLogging()
 	if err != nil {
 		return 0, err
 	}

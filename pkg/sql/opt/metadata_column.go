@@ -30,7 +30,27 @@ type ColSet = util.FastIntSet
 //
 // TODO(radu): perhaps implement a FastIntList with the same "small"
 // representation as FastIntMap but with a slice for large cases.
-type ColList = []ColumnID
+type ColList []ColumnID
+
+// ToSet converts a column id list to a column id set.
+func (cl ColList) ToSet() ColSet {
+	var r ColSet
+	for _, col := range cl {
+		r.Add(int(col))
+	}
+	return r
+}
+
+// Find searches for a column in the list and returns its index in the list (if
+// successful).
+func (cl ColList) Find(col ColumnID) (idx int, ok bool) {
+	for i := range cl {
+		if cl[i] == col {
+			return i, true
+		}
+	}
+	return -1, false
+}
 
 // ColMap provides a 1:1 mapping from one column id to another. It is used by
 // operators that need to match columns from its inputs.
@@ -40,112 +60,4 @@ type ColMap = util.FastIntMap
 type LabeledColumn struct {
 	Label string
 	ID    ColumnID
-}
-
-// OrderingColumn is the ColumnID for a column that is part of an ordering,
-// except that it can be negated to indicate a descending ordering on that
-// column.
-type OrderingColumn int32
-
-// MakeOrderingColumn initializes an ordering column with a ColumnID and a flag
-// indicating whether the direction is descending.
-func MakeOrderingColumn(id ColumnID, descending bool) OrderingColumn {
-	if descending {
-		return OrderingColumn(-id)
-	}
-	return OrderingColumn(id)
-}
-
-// ID returns the ColumnID for this OrderingColumn.
-func (c OrderingColumn) ID() ColumnID {
-	if c < 0 {
-		return ColumnID(-c)
-	}
-	return ColumnID(c)
-}
-
-// Ascending returns true if the ordering on this column is ascending.
-func (c OrderingColumn) Ascending() bool {
-	return c > 0
-}
-
-// Descending returns true if the ordering on this column is descending.
-func (c OrderingColumn) Descending() bool {
-	return c < 0
-}
-
-// ColListToSet converts a column id list to a column id set.
-func ColListToSet(colList ColList) ColSet {
-	var r ColSet
-	for _, col := range colList {
-		r.Add(int(col))
-	}
-	return r
-}
-
-// WeakKeys are combinations of columns that form a weak key. No two non-null
-// rows are equal if they contain columns from a weak key. For more details, see
-// LogicalProps.WeakKeys.
-type WeakKeys []ColSet
-
-// ContainsSubsetOf returns true if the weak key list contains a key that is a
-// subset of the given key. In that case, there's no reason to add the key to
-// the list, since it's redundant.
-func (wk WeakKeys) ContainsSubsetOf(weakKey ColSet) bool {
-	for _, existing := range wk {
-		if existing.SubsetOf(weakKey) {
-			return true
-		}
-	}
-	return false
-}
-
-// Add appends a new weak key to the list of weak keys. It also ensures that no
-// weak key is a superset of another, since that is a redundant weak key.
-func (wk *WeakKeys) Add(new ColSet) {
-	// If one weak key is a subset of another, then use that, since the
-	// longer key is redundant.
-	insert := 0
-	for i, existing := range *wk {
-		// If new key is redundant, don't add it.
-		if existing.SubsetOf(new) {
-			return
-		}
-
-		// If existing key is redundant, then remove it from the list. Since
-		// there may be multiple redundant keys, wait until after looping to
-		// remove all at once.
-		if !new.SubsetOf(existing) {
-			if insert != i {
-				(*wk)[insert] = existing
-			}
-			insert++
-		}
-	}
-	*wk = append((*wk)[:insert], new)
-}
-
-// Copy returns a copy of the list of weak keys.
-func (wk WeakKeys) Copy() WeakKeys {
-	res := make(WeakKeys, len(wk))
-	copy(res, wk)
-	return res
-}
-
-// Combine combines this set of weak keys with the given set by constructing a
-// new set and then adding keys from both sets to it, using the same semantics
-// as the Add method.
-func (wk WeakKeys) Combine(other WeakKeys) WeakKeys {
-	if len(wk) == 0 {
-		return other
-	}
-	if len(other) == 0 {
-		return wk
-	}
-	res := make(WeakKeys, len(wk), len(wk)+len(other))
-	copy(res, wk)
-	for _, k := range other {
-		res.Add(k)
-	}
-	return res
 }

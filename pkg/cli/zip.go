@@ -25,6 +25,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -99,15 +100,19 @@ func (z *zipper) createError(name string, e error) error {
 
 func runDebugZip(cmd *cobra.Command, args []string) error {
 	const (
-		base         = "debug"
-		eventsName   = base + "/events"
-		gossipLName  = base + "/gossip/liveness"
-		gossipNName  = base + "/gossip/nodes"
-		metricsName  = base + "/metrics"
-		livenessName = base + "/liveness"
-		nodesPrefix  = base + "/nodes"
-		schemaPrefix = base + "/schema"
-		settingsName = base + "/settings"
+		base               = "debug"
+		eventsName         = base + "/events"
+		gossipLivenessName = base + "/gossip/liveness"
+		gossipNetworkName  = base + "/gossip/network"
+		gossipNodesName    = base + "/gossip/nodes"
+		alertsName         = base + "/alerts"
+		livenessName       = base + "/liveness"
+		metricsName        = base + "/metrics"
+		nodesPrefix        = base + "/nodes"
+		rangelogName       = base + "/rangelog"
+		reportsPrefix      = base + "/reports"
+		schemaPrefix       = base + "/schema"
+		settingsName       = base + "/settings"
 	)
 
 	baseCtx, cancel := context.WithCancel(context.Background())
@@ -163,6 +168,20 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	{
 		ctx, cancel := timeoutCtx(baseCtx)
 		defer cancel()
+		if rangelog, err := admin.RangeLog(ctx, &serverpb.RangeLogRequest{}); err != nil {
+			if err := z.createError(rangelogName, err); err != nil {
+				return err
+			}
+		} else {
+			if err := z.createJSON(rangelogName, rangelog); err != nil {
+				return err
+			}
+		}
+	}
+
+	{
+		ctx, cancel := timeoutCtx(baseCtx)
+		defer cancel()
 		if liveness, err := admin.Liveness(ctx, &serverpb.LivenessRequest{}); err != nil {
 			if err := z.createError(livenessName, err); err != nil {
 				return err
@@ -188,19 +207,17 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	{
-		queryLiveness := "SELECT * FROM crdb_internal.gossip_liveness;"
-		queryNodes := "SELECT * FROM crdb_internal.gossip_nodes;"
-		queryMetrics := "SELECT * FROM crdb_internal.node_metrics;"
-
-		if err := dumpTableDataForZip(z, sqlConn, queryLiveness, gossipLName); err != nil {
-			return err
-		}
-		if err := dumpTableDataForZip(z, sqlConn, queryNodes, gossipNName); err != nil {
-			return err
-		}
-		if err := dumpTableDataForZip(z, sqlConn, queryMetrics, metricsName); err != nil {
-			return err
+	for _, item := range []struct {
+		query, name string
+	}{
+		{"SELECT * FROM crdb_internal.gossip_liveness;", gossipLivenessName},
+		{"SELECT * FROM crdb_internal.gossip_network;", gossipNetworkName},
+		{"SELECT * FROM crdb_internal.gossip_nodes;", gossipNodesName},
+		{"SELECT * FROM crdb_internal.node_metrics;", metricsName},
+		{"SELECT * FROM crdb_internal.gossip_alerts;", alertsName},
+	} {
+		if err := dumpTableDataForZip(z, sqlConn, item.query, item.name); err != nil {
+			return errors.Wrap(err, item.name)
 		}
 	}
 
@@ -261,6 +278,27 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				{
 					ctx, cancel := timeoutCtx(baseCtx)
 					defer cancel()
+					if profiles, err := status.GetFiles(ctx, &serverpb.GetFilesRequest{
+						NodeId:   id,
+						Type:     serverpb.FileType_HEAP,
+						Patterns: []string{"*"},
+					}); err != nil {
+						if err := z.createError(prefix+"/heapfiles", err); err != nil {
+							return err
+						}
+					} else {
+						for _, file := range profiles.Files {
+							name := prefix + "/heapprof/" + file.Name
+							if err := z.createRaw(name, file.Contents); err != nil {
+								return err
+							}
+						}
+					}
+				}
+
+				{
+					ctx, cancel := timeoutCtx(baseCtx)
+					defer cancel()
 					if logs, err := status.LogFilesList(
 						ctx, &serverpb.LogFilesListRequest{NodeId: id}); err != nil {
 						if err := z.createError(prefix+"/logs", err); err != nil {
@@ -313,6 +351,18 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 					}
 				}
 			}
+		}
+	}
+
+	{
+		ctx, cancel := timeoutCtx(baseCtx)
+		defer cancel()
+		if problems, err := status.ProblemRanges(ctx, &serverpb.ProblemRangesRequest{}); err != nil {
+			if err := z.createError(reportsPrefix+"/problemranges", err); err != nil {
+				return err
+			}
+		} else if err := z.createJSON(reportsPrefix+"/problemranges", problems); err != nil {
+			return err
 		}
 	}
 

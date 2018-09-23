@@ -18,61 +18,77 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 )
 
-// listBuilder is a helper class that efficiently builds memo lists by always
+// ListBuilder is a helper class that efficiently builds memo lists by always
 // reusing a "scratch" slice to hold temporary results. The reusable slice
-// is stored in the Factory. Usage:
+// is stored in the CustomFuncs struct. Usage:
 //
-//   lb := listBuilder{f: f}
-//   lb.addItem(item)
-//   lb.addItems(items)
-//   res := lb.buildList()
+//   lb := MakeListBuilder(cf)
+//   lb.AddItem(item)
+//   lb.AddItems(items)
+//   res := lb.BuildList()
 //
-// The listBuilder should always be constructed on the stack so that it's safe
+// The ListBuilder should always be constructed on the stack so that it's safe
 // to recurse on factory construction methods without danger of trying to reuse
 // a scratch slice that's already in use further up the stack.
-type listBuilder struct {
-	f     *Factory
+type ListBuilder struct {
+	cf    *CustomFuncs
 	items []memo.GroupID
 }
 
-// addItem appends a single memo group ID to the list under construction.
-func (b *listBuilder) addItem(item memo.GroupID) {
+// MakeListBuilder returns a new ListBuilder initialized with the given
+// CustomFuncs pointer.
+func MakeListBuilder(cf *CustomFuncs) ListBuilder {
+	return ListBuilder{cf: cf}
+}
+
+// AddItem appends a single memo group ID to the list under construction.
+func (b *ListBuilder) AddItem(item memo.GroupID) {
 	b.ensureItems()
 	b.items = append(b.items, item)
 }
 
-// addItems appends a list of memo group IDs to the list under construction.
-func (b *listBuilder) addItems(items []memo.GroupID) {
+// AddItems appends a list of memo group IDs to the list under construction.
+func (b *ListBuilder) AddItems(items []memo.GroupID) {
 	b.ensureItems()
 	b.items = append(b.items, items...)
 }
 
+// Empty returns true if the slice of items maintained by ListBuilder is empty.
+func (b *ListBuilder) Empty() bool {
+	return len(b.items) == 0
+}
+
 // setLength sets the length of the list to the given value. This is useful for
 // truncating the list.
-func (b *listBuilder) setLength(len int) {
+func (b *ListBuilder) setLength(len int) {
 	b.items = b.items[:len]
 }
 
-// buildList constructs a memo list from the list of appended items, and returns
+// BuildList constructs a memo list from the list of appended items, and returns
 // the scratch list to the factory. The state of the list builder is reset.
-func (b *listBuilder) buildList() memo.ListID {
-	listID := b.f.InternList(b.items)
+func (b *ListBuilder) BuildList() memo.ListID {
+	listID := b.cf.mem.InternList(b.items)
 
 	// Save the list in the factory for possible future reuse.
-	b.f.scratchItems = b.items
+	b.cf.scratchItems = b.items
 	b.items = nil
 
 	return listID
 }
 
-func (b *listBuilder) ensureItems() {
+func (b *ListBuilder) ensureItems() {
 	// Try to reuse scratch list stored in factory.
 	if b.items == nil {
-		b.items = b.f.scratchItems
-		b.items = b.items[:0]
+		b.items = b.cf.scratchItems
+		if b.items == nil {
+			// Start with 8 slots to prevent unnecessary resizing.
+			b.items = make([]memo.GroupID, 0, 8)
+		} else {
+			b.items = b.items[:0]
 
-		// Set the factory scratch list to nil so that recursive calls won't try
-		// to use it when it's already in use.
-		b.f.scratchItems = nil
+			// Set the factory scratch list to nil so that recursive calls won't try
+			// to use it when it's already in use.
+			b.cf.scratchItems = nil
+		}
 	}
 }

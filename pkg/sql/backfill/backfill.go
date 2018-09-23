@@ -94,21 +94,19 @@ func (cb *ColumnBackfiller) Init(evalCtx *tree.EvalContext, desc sqlbase.TableDe
 	}
 
 	cb.updateCols = append(cb.added, dropped...)
-	if len(dropped) > 0 || len(defaultExprs) > 0 || len(computedExprs) > 0 {
-		// Populate default or computed values.
-		cb.updateExprs = make([]tree.TypedExpr, len(cb.updateCols))
-		for j, col := range cb.added {
-			if col.IsComputed() {
-				cb.updateExprs[j] = computedExprs[j]
-			} else if defaultExprs == nil || defaultExprs[j] == nil {
-				cb.updateExprs[j] = tree.DNull
-			} else {
-				cb.updateExprs[j] = defaultExprs[j]
-			}
+	// Populate default or computed values.
+	cb.updateExprs = make([]tree.TypedExpr, len(cb.updateCols))
+	for j, col := range cb.added {
+		if col.IsComputed() {
+			cb.updateExprs[j] = computedExprs[j]
+		} else if defaultExprs == nil || defaultExprs[j] == nil {
+			cb.updateExprs[j] = tree.DNull
+		} else {
+			cb.updateExprs[j] = defaultExprs[j]
 		}
-		for j := range dropped {
-			cb.updateExprs[j+len(cb.added)] = tree.DNull
-		}
+	}
+	for j := range dropped {
+		cb.updateExprs[j+len(cb.added)] = tree.DNull
 	}
 
 	// We need all the columns.
@@ -137,6 +135,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	sp roachpb.Span,
 	chunkSize int64,
 	alsoCommit bool,
+	traceKV bool,
 ) (roachpb.Key, error) {
 	fkTables, _ := sqlbase.TablesNeededForFKs(
 		ctx,
@@ -146,13 +145,14 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 		sqlbase.NoCheckPrivilege,
 		nil, /* AnalyzeExprFunction */
 	)
-	for _, fkTableDesc := range otherTables {
+	for i, fkTableDesc := range otherTables {
 		found, ok := fkTables[fkTableDesc.ID]
 		if !ok {
 			// We got passed an extra table for some reason - just ignore it.
 			continue
 		}
-		found.Table = &fkTableDesc
+
+		found.Table = &otherTables[i]
 		fkTables[fkTableDesc.ID] = found
 	}
 	for id, table := range fkTables {
@@ -196,7 +196,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	// populated and deleted by the OLTP commands but not otherwise
 	// read or used
 	if err := cb.fetcher.StartScan(
-		ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, chunkSize, false, /* traceKV */
+		ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, chunkSize, traceKV,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		return roachpb.Key{}, err
@@ -243,7 +243,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 			}
 		}
 		if _, err := ru.UpdateRow(
-			ctx, b, oldValues, updateValues, sqlbase.CheckFKs, false, /* traceKV */
+			ctx, b, oldValues, updateValues, sqlbase.CheckFKs, traceKV,
 		); err != nil {
 			return roachpb.Key{}, err
 		}
@@ -353,6 +353,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	tableDesc sqlbase.TableDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
+	traceKV bool,
 ) ([]sqlbase.IndexEntry, roachpb.Key, error) {
 	entries := make([]sqlbase.IndexEntry, 0, chunkSize*int64(len(ib.added)))
 
@@ -365,7 +366,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	// populated and deleted by the OLTP commands but not otherwise
 	// read or used
 	if err := ib.fetcher.StartScan(
-		ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, chunkSize, false, /* traceKV */
+		ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, chunkSize, traceKV,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
 		return nil, nil, err
@@ -412,14 +413,18 @@ func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	sp roachpb.Span,
 	chunkSize int64,
 	alsoCommit bool,
+	traceKV bool,
 ) (roachpb.Key, error) {
-	entries, key, err := ib.BuildIndexEntriesChunk(ctx, txn, tableDesc, sp, chunkSize)
+	entries, key, err := ib.BuildIndexEntriesChunk(ctx, txn, tableDesc, sp, chunkSize, traceKV)
 	if err != nil {
 		return nil, err
 	}
 	batch := txn.NewBatch()
 
 	for _, entry := range entries {
+		if traceKV {
+			log.VEventf(ctx, 2, "InitPut %s -> %s", entry.Key, entry.Value.PrettyPrint())
+		}
 		batch.InitPut(entry.Key, &entry.Value, false /* failOnTombstones */)
 	}
 	writeBatch := txn.Run

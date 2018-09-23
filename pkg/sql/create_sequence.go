@@ -19,9 +19,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 type createSequenceNode struct {
@@ -35,10 +37,7 @@ func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (p
 		return nil, err
 	}
 
-	var dbDesc *DatabaseDescriptor
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		dbDesc, err = ResolveTargetObject(ctx, p, name)
-	})
+	dbDesc, err := p.ResolveUncachedDatabase(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -54,10 +53,8 @@ func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (p
 }
 
 func (n *createSequenceNode) startExec(params runParams) error {
-	seqName := n.n.Name.TableName().Table()
-	tKey := tableKey{parentID: n.dbDesc.ID, name: seqName}
-	key := tKey.Key()
-	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
+	tKey := getSequenceKey(n.dbDesc, n.n.Name.TableName().Table())
+	if exists, err := descExists(params.ctx, params.p.txn, tKey.Key()); err == nil && exists {
 		if n.n.IfNotExists {
 			// If the sequence exists but the user specified IF NOT EXISTS, return without doing anything.
 			return nil
@@ -67,26 +64,46 @@ func (n *createSequenceNode) startExec(params runParams) error {
 		return err
 	}
 
+	return doCreateSequence(params, n.n.String(), n.dbDesc, n.n.Name.TableName(), n.n.Options)
+}
+
+func getSequenceKey(dbDesc *DatabaseDescriptor, seqName string) tableKey {
+	return tableKey{parentID: dbDesc.ID, name: seqName}
+}
+
+// doCreateSequence performs the creation of a sequence in KV. The
+// context argument is a string to use in the event log.
+func doCreateSequence(
+	params runParams,
+	context string,
+	dbDesc *DatabaseDescriptor,
+	name *ObjectName,
+	opts tree.SequenceOptions,
+) error {
 	id, err := GenerateUniqueDescID(params.ctx, params.p.ExecCfg().DB)
 	if err != nil {
 		return err
 	}
 
 	// Inherit permissions from the database descriptor.
-	privs := n.dbDesc.GetPrivileges()
+	privs := dbDesc.GetPrivileges()
 
-	desc, err := n.makeSequenceTableDesc(params, seqName, n.dbDesc.ID, id, privs)
+	desc, err := MakeSequenceTableDesc(name.Table(), opts,
+		dbDesc.ID, id, params.p.txn.CommitTimestamp(), privs, params.EvalContext().Settings)
 	if err != nil {
 		return err
 	}
 
-	if err = desc.ValidateTable(params.EvalContext().Settings); err != nil {
+	// makeSequenceTableDesc already validates the table. No call to
+	// desc.ValidateTable() needed here.
+
+	key := getSequenceKey(dbDesc, name.Table()).Key()
+	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc, params.EvalContext().Settings); err != nil {
 		return err
 	}
 
-	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
-		return err
-	}
+	// Remember the new descriptor for further uses in the same transaction.
+	params.p.Tables().addCreatedTable(id)
 
 	// Initialize the sequence value.
 	seqValueKey := keys.MakeSequenceKey(uint32(id))
@@ -112,7 +129,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 			SequenceName string
 			Statement    string
 			User         string
-		}{n.n.Name.TableName().FQString(), n.n.String(), params.SessionData().User},
+		}{name.FQString(), context, params.SessionData().User},
 	)
 }
 
@@ -125,15 +142,17 @@ const (
 	sequenceColumnName = "value"
 )
 
-func (n *createSequenceNode) makeSequenceTableDesc(
-	params runParams,
+// MakeSequenceTableDesc creates a sequence descriptor.
+func MakeSequenceTableDesc(
 	sequenceName string,
+	sequenceOptions tree.SequenceOptions,
 	parentID sqlbase.ID,
 	id sqlbase.ID,
+	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
+	settings *cluster.Settings,
 ) (sqlbase.TableDescriptor, error) {
-	desc := initTableDescriptor(id, parentID, sequenceName,
-		params.p.txn.CommitTimestamp(), privileges)
+	desc := InitTableDescriptor(id, parentID, sequenceName, creationTime, privileges)
 
 	// Mimic a table with one column, "value".
 	desc.Columns = []sqlbase.ColumnDescriptor{
@@ -166,11 +185,15 @@ func (n *createSequenceNode) makeSequenceTableDesc(
 	opts := &sqlbase.TableDescriptor_SequenceOpts{
 		Increment: 1,
 	}
-	err := assignSequenceOptions(opts, n.n.Options, true /* setDefaults */)
+	err := assignSequenceOptions(opts, sequenceOptions, true /* setDefaults */)
 	if err != nil {
 		return desc, err
 	}
 	desc.SequenceOpts = opts
 
-	return desc, desc.ValidateTable(params.EvalContext().Settings)
+	// A sequence doesn't have dependencies and thus can be made public
+	// immediately.
+	desc.State = sqlbase.TableDescriptor_PUBLIC
+
+	return desc, desc.ValidateTable(settings)
 }

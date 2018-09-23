@@ -35,6 +35,10 @@ INSERT INTO t VALUES
 (12, 0, 88, 0),
 (13, 0, 13, 0)
 
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
 # Split the table across multiple ranges.
 statement ok
 ALTER TABLE t SPLIT AT VALUES (2)

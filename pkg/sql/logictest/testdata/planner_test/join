@@ -9,7 +9,7 @@ CREATE TABLE twocolumn (x INT, y INT); INSERT INTO twocolumn(x, y) VALUES (44,51
 ## Simple test cases for inner, left, right, and outer joins
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM onecolumn JOIN twocolumn USING(x)
 ]
 ----
@@ -27,7 +27,7 @@ render          ·         ·
 ·               spans     ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 ]
 ----
@@ -47,7 +47,7 @@ render          ·         ·
 ·               spans     ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ]
 ----
@@ -67,7 +67,7 @@ render          ·         ·
 ·               spans     ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 ]
 ----
@@ -86,7 +86,7 @@ render          ·         ·
 ·               spans     ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 ]
 ----
@@ -106,7 +106,7 @@ render          ·         ·
 
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) LIMIT 1
 ]
 ----
@@ -269,7 +269,7 @@ statement ok
 CREATE TABLE customers(id INT PRIMARY KEY NOT NULL); CREATE TABLE orders(id INT, cust INT REFERENCES customers(id))
 
 query ITTT
-SELECT "Level", "Type", "Field", "Description" FROM [EXPLAIN (VERBOSE) SELECT
+SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
        NULL::text  AS pktable_cat,
        pkn.nspname AS pktable_schem,
        pkc.relname AS pktable_name,
@@ -333,7 +333,7 @@ SELECT "Level", "Type", "Field", "Description" FROM [EXPLAIN (VERBOSE) SELECT
            pkc.relname,
            con.conname,
            pos.n
-  ] WHERE "Type" <> 'values' AND "Field" <> 'size'
+  ] WHERE node_type <> 'values' AND field <> 'size'
 ----
 0   sort         ·          ·
 0   ·            order      +pktable_schem,+pktable_name,+fk_name,+key_seq
@@ -505,7 +505,7 @@ render               ·         ·                                              
 # Filter propagation through outer joins.
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE)
 SELECT *
   FROM (SELECT * FROM pairs LEFT JOIN square ON b = sq AND a > 1 AND n < 6)
@@ -533,7 +533,7 @@ render               ·         ·
 ·                    filter    sq > 1
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE)
 SELECT *
   FROM (SELECT * FROM pairs RIGHT JOIN square ON b = sq AND a > 1 AND n < 6)
@@ -561,7 +561,7 @@ render               ·         ·
 
 # The simpler plan for an inner join, to compare.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE)
 SELECT *
   FROM (SELECT * FROM pairs JOIN square ON b = sq AND a > 1 AND n < 6)
@@ -1237,7 +1237,7 @@ CREATE TABLE bar (
 
 # Only a and c can be equality columns.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo NATURAL JOIN bar
 ]
 ----
@@ -1259,7 +1259,7 @@ render          ·         ·
 
 # b can't be an equality column.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (b)
 ]
 ----
@@ -1294,7 +1294,7 @@ render               ·         ·
 
 # Only a can be an equality column.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (a, b)
 ]
 ----
@@ -1318,7 +1318,7 @@ render          ·         ·
 
 # Only a and c can be equality columns.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (a, b, c)
 ]
 ----
@@ -1341,7 +1341,7 @@ render          ·         ·
 
 # b can't be an equality column.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar ON foo.b = bar.b
 ]
 ----
@@ -1366,7 +1366,7 @@ render          ·         ·
 
 # Only a can be an equality column.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar ON foo.a = bar.a AND foo.b = bar.b
 ]
 ----
@@ -1391,7 +1391,7 @@ render          ·         ·
 ·               spans     ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo, bar WHERE foo.b = bar.b
 ]
 ----
@@ -1416,7 +1416,7 @@ render          ·         ·
 
 # Only a can be an equality column.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo, bar WHERE foo.a = bar.a AND foo.b = bar.b
 ]
 ----
@@ -1442,7 +1442,7 @@ render          ·         ·
 
 # Only a and c can be equality columns.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM foo JOIN bar USING (a,b) WHERE foo.c = bar.c AND foo.d = bar.d
 ]
 ----

@@ -53,7 +53,7 @@ var enabled = settings.RegisterBoolSetting(
 var minInterval = settings.RegisterDurationSetting(
 	"compactor.min_interval",
 	"minimum time interval to wait before compacting",
-	2*time.Minute,
+	15*time.Second,
 )
 
 // thresholdBytes is the threshold in bytes of suggested
@@ -69,7 +69,7 @@ var thresholdBytes = settings.RegisterByteSizeSetting(
 	256<<20, // more than 256MiB will trigger
 )
 
-// ThresholdBytesUsedFraction is the fraction of total logical
+// thresholdBytesUsedFraction is the fraction of total logical
 // bytes used which are up for suggested reclamation, after which
 // the compactor will begin processing (taking compactor min
 // interval into account). Note that this threshold handles the case
@@ -78,7 +78,7 @@ var thresholdBytes = settings.RegisterByteSizeSetting(
 // defaultThresholdBytes threshold.
 var thresholdBytesUsedFraction = settings.RegisterValidatedFloatSetting(
 	"compactor.threshold_used_fraction",
-	"Consider suggestions for at least the given percentage of the used logical space (zero to disable)",
+	"consider suggestions for at least the given percentage of the used logical space (zero to disable)",
 	0.10, // more than 10% of space will trigger
 	validateFraction,
 )
@@ -91,7 +91,7 @@ var thresholdBytesUsedFraction = settings.RegisterValidatedFloatSetting(
 // scenarios.	ThresholdBytesAvailableFraction() float64
 var thresholdBytesAvailableFraction = settings.RegisterValidatedFloatSetting(
 	"compactor.threshold_available_fraction",
-	"Consider suggestions for at least the given percentage of the available logical space (zero to disable)",
+	"consider suggestions for at least the given percentage of the available logical space (zero to disable)",
 	0.10, // more than 10% of space will trigger
 	validateFraction,
 )

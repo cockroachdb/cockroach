@@ -48,10 +48,7 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 		return nil, err
 	}
 
-	var dbDesc *DatabaseDescriptor
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		dbDesc, err = ResolveTargetObject(ctx, p, name)
-	})
+	dbDesc, err := p.ResolveUncachedDatabase(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +87,14 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 		return nil, fmtErr
 	}
 
-	planDeps, sourceColumns, err := p.analyzeViewQuery(ctx, n.AsSource)
+	var planDeps planDependencies
+	var sourceColumns sqlbase.ResultColumns
+	// To avoid races with ongoing schema changes to tables that the view
+	// depends on, make sure we use the most recent versions of table
+	// descriptors rather than the copies in the lease cache.
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
+		planDeps, sourceColumns, err = p.analyzeViewQuery(ctx, n.AsSource)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -146,16 +150,13 @@ func (n *createViewNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err = desc.ValidateTable(params.EvalContext().Settings); err != nil {
-		return err
-	}
-
 	// Collect all the tables/views this view depends on.
 	for backrefID := range n.planDeps {
 		desc.DependsOn = append(desc.DependsOn, backrefID)
 	}
 
-	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc); err != nil {
+	if err = params.p.createDescriptorWithID(
+		params.ctx, key, id, &desc, params.EvalContext().Settings); err != nil {
 		return err
 	}
 
@@ -171,7 +172,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			dep.ID = desc.ID
 			backrefDesc.DependedOnBy = append(backrefDesc.DependedOnBy, dep)
 		}
-		if err := params.p.saveNonmutationAndNotify(params.ctx, &backrefDesc); err != nil {
+		if err := params.p.writeSchemaChange(params.ctx, &backrefDesc, sqlbase.InvalidMutationID); err != nil {
 			return err
 		}
 	}
@@ -216,7 +217,7 @@ func (n *createViewNode) makeViewTableDesc(
 	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
 ) (sqlbase.TableDescriptor, error) {
-	desc := initTableDescriptor(id, parentID, viewName,
+	desc := InitTableDescriptor(id, parentID, viewName,
 		params.p.txn.CommitTimestamp(), privileges)
 	desc.ViewQuery = tree.AsStringWithFlags(n.n.AsSource, tree.FmtParsable)
 	for i, colRes := range resultColumns {
@@ -228,6 +229,8 @@ func (n *createViewNode) makeViewTableDesc(
 		if len(columnNames) > i {
 			columnTableDef.Name = columnNames[i]
 		}
+		// The new types in the CREATE VIEW column specs never use
+		// SERIAL so we need not process SERIAL types here.
 		col, _, _, err := sqlbase.MakeColumnDefDescs(
 			&columnTableDef, &params.p.semaCtx, params.EvalContext())
 		if err != nil {

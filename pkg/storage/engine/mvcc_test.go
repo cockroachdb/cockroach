@@ -1282,6 +1282,71 @@ func TestMVCCGetProtoInconsistent(t *testing.T) {
 	}
 }
 
+// Regression test for #28205: MVCCGet and MVCCScan, FindSplitKey, and
+// ComputeStats need to invalidate the cached iterator data.
+func TestMVCCInvalidateIterator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, which := range []string{"get", "scan", "findSplitKey", "computeStats"} {
+		t.Run(which, func(t *testing.T) {
+			engine := createTestEngine()
+			defer engine.Close()
+
+			ctx := context.Background()
+			ts1 := hlc.Timestamp{WallTime: 1}
+			ts2 := hlc.Timestamp{WallTime: 2}
+
+			key := roachpb.Key("a")
+			if err := MVCCPut(ctx, engine, nil, key, ts1, value1, nil); err != nil {
+				t.Fatal(err)
+			}
+
+			var iterOptions IterOptions
+			switch which {
+			case "get":
+				iterOptions.Prefix = true
+			case "scan", "findSplitKey", "computeStats":
+				iterOptions.UpperBound = roachpb.KeyMax
+			}
+
+			// Use a batch which internally caches the iterator.
+			batch := engine.NewBatch()
+			defer batch.Close()
+
+			{
+				// Seek the iter to a valid position.
+				iter := batch.NewIterator(iterOptions)
+				iter.Seek(MakeMVCCMetadataKey(key))
+				iter.Close()
+			}
+
+			var err error
+			switch which {
+			case "get":
+				_, _, err = MVCCGet(ctx, batch, key, ts2, true, nil)
+			case "scan":
+				_, _, _, err = MVCCScan(ctx, batch, key, roachpb.KeyMax, math.MaxInt64, ts2, true, nil)
+			case "findSplitKey":
+				_, err = MVCCFindSplitKey(ctx, batch, roachpb.RKeyMin, roachpb.RKeyMax, 64<<20)
+			case "computeStats":
+				iter := batch.NewIterator(iterOptions)
+				_, err = iter.ComputeStats(NilKey, MVCCKeyMax, 0)
+				iter.Close()
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Verify that the iter is invalid.
+			iter := batch.NewIterator(iterOptions)
+			defer iter.Close()
+			if ok, _ := iter.Valid(); ok {
+				t.Fatalf("iterator should not be valid")
+			}
+		})
+	}
+}
+
 func TestMVCCScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	engine := createTestEngine()
@@ -2257,8 +2322,17 @@ func TestMVCCInitPut(t *testing.T) {
 		t.Fatalf("unexpected error %T", e)
 	}
 
-	for _, ts := range []hlc.Timestamp{{Logical: 1}, {Logical: 2}, {WallTime: 1}} {
-		value, _, err := MVCCGet(ctx, engine, testKey1, ts, true, nil)
+	// Ensure that the timestamps were correctly updated.
+	for _, check := range []struct {
+		ts, expTS hlc.Timestamp
+	}{
+		{ts: hlc.Timestamp{Logical: 1}, expTS: hlc.Timestamp{Logical: 1}},
+		{ts: hlc.Timestamp{Logical: 2}, expTS: hlc.Timestamp{Logical: 2}},
+		// If we're checking the future wall time case, the rewrite after delete
+		// will be present.
+		{ts: hlc.Timestamp{WallTime: 1}, expTS: hlc.Timestamp{Logical: 5}},
+	} {
+		value, _, err := MVCCGet(ctx, engine, testKey1, check.ts, true, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2266,15 +2340,8 @@ func TestMVCCInitPut(t *testing.T) {
 			t.Fatalf("the value %s in get result does not match the value %s in request",
 				value1.RawBytes, value.RawBytes)
 		}
-		// Ensure that the timestamp didn't get updated.
-		expTS := (hlc.Timestamp{Logical: 1})
-		if ts.WallTime != 0 {
-			// If we're checking the future wall time case, the rewrite after delete
-			// will be present.
-			expTS.Logical = 5
-		}
-		if value.Timestamp != expTS {
-			t.Errorf("value at timestamp %s seen, expected %s", value.Timestamp, expTS)
+		if value.Timestamp != check.expTS {
+			t.Errorf("value at timestamp %s seen, expected %s", value.Timestamp, check.expTS)
 		}
 	}
 
@@ -3331,55 +3398,32 @@ func TestMVCCResolveTxnRangeResume(t *testing.T) {
 func TestValidSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	versionedTestCases := map[bool][]struct {
+	testCases := []struct {
 		key   roachpb.Key
 		valid bool
 	}{
-		false /* allowMeta2Splits */ : {
-			{roachpb.Key("\x02"), false},
-			{roachpb.Key("\x02\x00"), false},
-			{roachpb.Key("\x02\xff"), false},
-			{roachpb.Key("\x03"), false},
-			{roachpb.Key("\x03\x00"), false},
-			{roachpb.Key("\x03\xff"), false},
-			{roachpb.Key("\x03\xff\xff"), false},
-			{roachpb.Key("\x03\xff\xff\x88"), false},
-			{roachpb.Key("\x04"), true},
-			{roachpb.Key("\x05"), true},
-			{roachpb.Key("a"), true},
-			{roachpb.Key("\xff"), true},
-			{roachpb.Key("\xff\x01"), true},
-			{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID)), false},
-			{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID + 1)), true},
-		},
-		true /* allowMeta2Splits */ : {
-			{roachpb.Key("\x02"), false},
-			{roachpb.Key("\x02\x00"), false},
-			{roachpb.Key("\x02\xff"), false},
-			{roachpb.Key("\x03"), true},     // different
-			{roachpb.Key("\x03\x00"), true}, // different
-			{roachpb.Key("\x03\xff"), true}, // different
-			{roachpb.Key("\x03\xff\xff"), false},
-			{roachpb.Key("\x03\xff\xff\x88"), false},
-			{roachpb.Key("\x04"), true},
-			{roachpb.Key("\x05"), true},
-			{roachpb.Key("a"), true},
-			{roachpb.Key("\xff"), true},
-			{roachpb.Key("\xff\x01"), true},
-			{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID)), false},
-			{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID + 1)), true},
-		},
+		{roachpb.Key("\x02"), false},
+		{roachpb.Key("\x02\x00"), false},
+		{roachpb.Key("\x02\xff"), false},
+		{roachpb.Key("\x03"), true},
+		{roachpb.Key("\x03\x00"), true},
+		{roachpb.Key("\x03\xff"), true},
+		{roachpb.Key("\x03\xff\xff"), false},
+		{roachpb.Key("\x03\xff\xff\x88"), false},
+		{roachpb.Key("\x04"), true},
+		{roachpb.Key("\x05"), true},
+		{roachpb.Key("a"), true},
+		{roachpb.Key("\xff"), true},
+		{roachpb.Key("\xff\x01"), true},
+		{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID)), false},
+		{roachpb.Key(keys.MakeTablePrefix(keys.MaxSystemConfigDescID + 1)), true},
 	}
-	for allowMeta2Splits, testCases := range versionedTestCases {
-		t.Run(fmt.Sprintf("allowMeta2Splits=%t", allowMeta2Splits), func(t *testing.T) {
-			for i, test := range testCases {
-				valid := IsValidSplitKey(test.key, allowMeta2Splits)
-				if valid != test.valid {
-					t.Errorf("%d: expected %q [%x] valid %t; got %t",
-						i, test.key, []byte(test.key), test.valid, valid)
-				}
-			}
-		})
+	for i, test := range testCases {
+		valid := IsValidSplitKey(test.key)
+		if valid != test.valid {
+			t.Errorf("%d: expected %q [%x] valid %t; got %t",
+				i, test.key, []byte(test.key), test.valid, valid)
+		}
 	}
 }
 
@@ -3416,7 +3460,7 @@ func TestFindSplitKey(t *testing.T) {
 
 	for i, td := range testData {
 		humanSplitKey, err := MVCCFindSplitKey(context.Background(), engine,
-			roachpb.RKeyMin, roachpb.RKeyMax, td.targetSize, true /* allowMeta2Splits */)
+			roachpb.RKeyMin, roachpb.RKeyMax, td.targetSize)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3439,18 +3483,27 @@ func TestFindValidSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const userID = keys.MinUserDescID
+	const interleave1 = userID + 1
+	const interleave2 = userID + 2
+	const interleave3 = userID + 3
 	// Manually creates rows corresponding to the schema:
 	// CREATE TABLE t (id1 STRING, id2 STRING, ... PRIMARY KEY (id1, id2, ...))
-	tablePrefix := func(id uint32, rowVals ...string) roachpb.Key {
-		tableKey := keys.MakeTablePrefix(id)
-		rowKey := roachpb.Key(encoding.EncodeVarintAscending(append([]byte(nil), tableKey...), 1))
+	addTablePrefix := func(prefix roachpb.Key, id uint32, rowVals ...string) roachpb.Key {
+		tableKey := append(prefix, keys.MakeTablePrefix(id)...)
+		rowKey := roachpb.Key(encoding.EncodeVarintAscending(tableKey, 1))
 		for _, rowVal := range rowVals {
 			rowKey = encoding.EncodeStringAscending(rowKey, rowVal)
 		}
 		return rowKey
 	}
+	tablePrefix := func(id uint32, rowVals ...string) roachpb.Key {
+		return addTablePrefix(nil, id, rowVals...)
+	}
 	addColFam := func(rowKey roachpb.Key, colFam uint32) roachpb.Key {
 		return keys.MakeFamilyKey(append([]byte(nil), rowKey...), colFam)
+	}
+	addInterleave := func(rowKey roachpb.Key) roachpb.Key {
+		return encoding.EncodeInterleavedSentinel(rowKey)
 	}
 
 	testCases := []struct {
@@ -3555,10 +3608,20 @@ func TestFindValidSplitKeys(t *testing.T) {
 		// by the actual value having a nonzero timestamp).
 		{
 			keys: []roachpb.Key{
-				roachpb.Key("a"),
+				roachpb.Key("b"),
 			},
-			expSplit: nil,
-			expError: false,
+			rangeStart: roachpb.Key("a"),
+			expSplit:   nil,
+			expError:   false,
+		},
+		// Similar test, but the range starts at first key.
+		{
+			keys: []roachpb.Key{
+				roachpb.Key("b"),
+			},
+			rangeStart: roachpb.Key("b"),
+			expSplit:   nil,
+			expError:   false,
 		},
 		// Some example table data. Make sure we don't split in the middle of a row
 		// or return the start key of the range.
@@ -3635,6 +3698,84 @@ func TestFindValidSplitKeys(t *testing.T) {
 			expSplit:   tablePrefix(userID, "a", "b"),
 			expError:   false,
 		},
+		// One large first row with interleaved child rows. Check that we can
+		// split before the first interleaved row.
+		{
+			keys: []roachpb.Key{
+				addColFam(tablePrefix(userID, "a"), 0),
+				addColFam(tablePrefix(userID, "a"), 1),
+				addColFam(tablePrefix(userID, "a"), 2),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"), 0),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"), 1),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave2, "c"), 1),
+			},
+			rangeStart: tablePrefix(userID, "a"),
+			expSplit:   addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
+			expError:   false,
+		},
+		// One large first row with a double interleaved child row. Check that
+		// we can split before the double interleaved row.
+		{
+			keys: []roachpb.Key{
+				addColFam(tablePrefix(userID, "a"), 0),
+				addColFam(tablePrefix(userID, "a"), 1),
+				addColFam(tablePrefix(userID, "a"), 2),
+				addColFam(addTablePrefix(addInterleave(
+					addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
+				), interleave2, "d"), 3),
+			},
+			rangeStart: tablePrefix(userID, "a"),
+			expSplit: addTablePrefix(addInterleave(
+				addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
+			), interleave2, "d"),
+			expError: false,
+		},
+		// Two interleaved rows. Check that we can split between them.
+		{
+			keys: []roachpb.Key{
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"), 0),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"), 1),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave2, "c"), 3),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave2, "c"), 4),
+			},
+			rangeStart: addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
+			expSplit:   addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave2, "c"),
+			expError:   false,
+		},
+		// Two small rows with interleaved child rows after the second. Check
+		// that we can split before the first interleaved row.
+		{
+			keys: []roachpb.Key{
+				addColFam(tablePrefix(userID, "a"), 0),
+				addColFam(tablePrefix(userID, "b"), 0),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "b")), interleave1, "b"), 0),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "b")), interleave1, "b"), 1),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "b")), interleave2, "c"), 1),
+			},
+			rangeStart: tablePrefix(userID, "a"),
+			expSplit:   addTablePrefix(addInterleave(tablePrefix(userID, "b")), interleave1, "b"),
+			expError:   false,
+		},
+		// A chain of interleaved rows. Check that we can split them.
+		{
+			keys: []roachpb.Key{
+				addColFam(tablePrefix(userID, "a"), 0),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"), 0),
+				addColFam(addTablePrefix(addInterleave(
+					addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
+				), interleave2, "c"), 0),
+				addColFam(addTablePrefix(addInterleave(
+					addTablePrefix(addInterleave(
+						addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
+					), interleave2, "c"),
+				), interleave3, "d"), 0),
+			},
+			rangeStart: tablePrefix(userID, "a"),
+			expSplit: addTablePrefix(addInterleave(
+				addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
+			), interleave2, "c"),
+			expError: false,
+		},
 	}
 
 	for i, test := range testCases {
@@ -3645,8 +3786,13 @@ func TestFindValidSplitKeys(t *testing.T) {
 			ms := &enginepb.MVCCStats{}
 			val := roachpb.MakeValueFromString(strings.Repeat("X", 10))
 			for _, k := range test.keys {
-				if err := MVCCPut(context.Background(), engine, ms, []byte(k), hlc.Timestamp{Logical: 1}, val, nil); err != nil {
-					t.Fatal(err)
+				// Add three MVCC versions of every key. Splits are not allowed
+				// between MVCC versions, so this shouldn't have any effect.
+				for j := 1; j <= 3; j++ {
+					ts := hlc.Timestamp{Logical: int32(j)}
+					if err := MVCCPut(context.Background(), engine, ms, []byte(k), ts, val, nil); err != nil {
+						t.Fatal(err)
+					}
 				}
 			}
 			rangeStart := test.keys[0]
@@ -3664,7 +3810,7 @@ func TestFindValidSplitKeys(t *testing.T) {
 			}
 			targetSize := (ms.KeyBytes + ms.ValBytes) / 2
 			splitKey, err := MVCCFindSplitKey(context.Background(), engine,
-				rangeStartAddr, rangeEndAddr, targetSize, true /* allowMeta2Splits */)
+				rangeStartAddr, rangeEndAddr, targetSize)
 			if test.expError {
 				if !testutils.IsError(err, "has no valid splits") {
 					t.Fatalf("%d: unexpected error: %v", i, err)
@@ -3747,7 +3893,7 @@ func TestFindBalancedSplitKeys(t *testing.T) {
 			}
 			targetSize := (ms.KeyBytes + ms.ValBytes) / 2
 			splitKey, err := MVCCFindSplitKey(context.Background(), engine,
-				roachpb.RKey("\x02"), roachpb.RKeyMax, targetSize, true /* allowMeta2Splits */)
+				roachpb.RKey("\x02"), roachpb.RKeyMax, targetSize)
 			if err != nil {
 				t.Fatalf("unexpected error: %s", err)
 			}
@@ -3855,7 +4001,7 @@ func TestMVCCGarbageCollect(t *testing.T) {
 	}
 
 	// Verify aggregated stats match computed stats after GC.
-	iter := engine.NewIterator(IterOptions{})
+	iter := engine.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	defer iter.Close()
 	for _, mvccStatsTest := range mvccStatsTests {
 		t.Run(mvccStatsTest.name, func(t *testing.T) {

@@ -46,7 +46,7 @@ func evalAddSSTable(
 	// (Note: the expected case is that it's none or, in the case of a retry of
 	// the request, all.) So subtract out the existing mvcc stats, and add back
 	// what they'll be after the sstable is ingested.
-	existingIter := batch.NewIterator(engine.IterOptions{})
+	existingIter := batch.NewIterator(engine.IterOptions{UpperBound: args.EndKey})
 	defer existingIter.Close()
 	existingIter.Seek(mvccStartKey)
 	if ok, err := existingIter.Valid(); err != nil {

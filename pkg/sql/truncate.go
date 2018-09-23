@@ -20,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -42,17 +43,19 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 	// toTraverse is the list of tables whose references need to be traversed
 	// while constructing the list of tables that should be truncated.
 	toTraverse := make([]sqlbase.TableDescriptor, 0, len(n.Tables))
+
+	// This is the list of descriptors of truncated tables in the statement. These tables will have a mutationID and
+	// MutationJob related to the created job of the TRUNCATE statement.
+	stmtTableDescs := make([]*sqlbase.TableDescriptor, 0, len(n.Tables))
+	droppedTableDetails := make([]jobspb.DroppedTableDetails, 0, len(n.Tables))
+
 	for _, name := range n.Tables {
 		tn, err := name.Normalize()
 		if err != nil {
 			return nil, err
 		}
-		var tableDesc *TableDescriptor
-		// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-		// TODO(vivek): check if the cache can be used.
-		p.runWithOptions(resolveFlags{skipCache: true}, func() {
-			tableDesc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
-		})
+		tableDesc, err := p.ResolveMutableTableDescriptor(
+			ctx, tn, true /*required*/, requireTableDesc)
 		if err != nil {
 			return nil, err
 		}
@@ -63,6 +66,18 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 
 		toTruncate[tableDesc.ID] = tn.FQString()
 		toTraverse = append(toTraverse, *tableDesc)
+
+		stmtTableDescs = append(stmtTableDescs, tableDesc)
+		droppedTableDetails = append(droppedTableDetails, jobspb.DroppedTableDetails{
+			Name: tn.FQString(),
+			ID:   tableDesc.ID,
+		})
+	}
+
+	dropJobID, err := p.createDropTablesJob(ctx, stmtTableDescs, droppedTableDetails, tree.AsStringWithFlags(n,
+		tree.FmtAlwaysQualifyTableNames), false /* drainNames */)
+	if err != nil {
+		return nil, err
 	}
 
 	// Check that any referencing tables are contained in the set, or, if CASCADE
@@ -118,16 +133,15 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 		return nil, err
 	}
 
-	// TODO(knz): move truncate logic to Start/Next so it can be used with SHOW TRACE FOR.
-	// andrei: Also, the current code runs the risk of executing the truncation at
-	// prepare time. That doesn't happen currently because we don't prepare
-	// TRUNCATE statements.
+	// TODO(knz,andrei): The current code runs the risk of executing the
+	// truncation at prepare time. That doesn't happen currently because
+	// we don't prepare TRUNCATE statements.
 	if p.extendedEvalCtx.PrepareOnly {
 		return nil, errors.Errorf("programming error: cannot prepare a TRUNCATE statement")
 	}
 	traceKV := p.extendedEvalCtx.Tracing.KVTracingEnabled()
 	for id, name := range toTruncate {
-		if err := p.truncateTable(ctx, id, traceKV); err != nil {
+		if err := p.truncateTable(ctx, id, dropJobID, traceKV); err != nil {
 			return nil, err
 		}
 
@@ -154,13 +168,16 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 // truncateTable truncates the data of a table in a single transaction. It
 // drops the table and recreates it with a new ID. The dropped table is
 // GC-ed later through an asynchronous schema change.
-func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool) error {
+func (p *planner) truncateTable(
+	ctx context.Context, id sqlbase.ID, dropJobID int64, traceKV bool,
+) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.
 	tableDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, id)
 	if err != nil {
 		return err
 	}
+	tableDesc.DropJobID = dropJobID
 	newTableDesc := *tableDesc
 	newTableDesc.ReplacementOf = sqlbase.TableDescriptor_Replacement{
 		ID: id, Time: p.txn.CommitTimestamp(),
@@ -230,19 +247,14 @@ func (p *planner) truncateTable(ctx context.Context, id sqlbase.ID, traceKV bool
 	// Resolve all outstanding mutations. Make all new schema elements
 	// public because the table is empty and doesn't need to be backfilled.
 	for _, m := range newTableDesc.Mutations {
-		if m.Direction == sqlbase.DescriptorMutation_ADD {
-			if col := m.GetColumn(); col != nil {
-				newTableDesc.Columns = append(newTableDesc.Columns, *col)
-			}
-			if idx := m.GetIndex(); idx != nil {
-				newTableDesc.Indexes = append(newTableDesc.Indexes, *idx)
-			}
-		}
+		newTableDesc.MakeMutationComplete(m)
 	}
 	newTableDesc.Mutations = nil
+
 	tKey := tableKey{parentID: newTableDesc.ParentID, name: newTableDesc.Name}
 	key := tKey.Key()
-	if err := p.createDescriptorWithID(ctx, key, newID, &newTableDesc); err != nil {
+	if err := p.createDescriptorWithID(
+		ctx, key, newID, &newTableDesc, p.ExtendedEvalContext().Settings); err != nil {
 		return err
 	}
 

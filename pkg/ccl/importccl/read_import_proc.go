@@ -9,21 +9,26 @@
 package importccl
 
 import (
+	"compress/bzip2"
+	"compress/gzip"
 	"context"
 	"io"
+	"io/ioutil"
 	"math/rand"
+	"strings"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -33,14 +38,6 @@ import (
 )
 
 type readFileFunc func(context.Context, io.Reader, int32, string, progressFn) error
-
-type ctxProvider struct {
-	context.Context
-}
-
-func (c ctxProvider) Ctx() context.Context {
-	return c
-}
 
 // readInputFile reads each of the passed dataFiles using the passed func. The
 // key part of dataFiles is the unique index of the data file among all files in
@@ -53,6 +50,7 @@ func (c ctxProvider) Ctx() context.Context {
 func readInputFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,
+	format roachpb.IOFileFormat,
 	fileFunc readFileFunc,
 	progressFn func(float32) error,
 	settings *cluster.Settings,
@@ -106,7 +104,12 @@ func readInputFiles(
 				return err
 			}
 			defer f.Close()
-			bc := byteCounter{r: f}
+			bc := &byteCounter{r: f}
+			src, err := decompressingReader(bc, dataFile, format.Compression)
+			if err != nil {
+				return err
+			}
+			defer src.Close()
 
 			wrappedProgressFn := func(finished bool) error { return nil }
 			if updateFromBytes {
@@ -126,7 +129,7 @@ func readInputFiles(
 				}
 			}
 
-			if err := fileFunc(ctx, &bc, dataFileIndex, dataFile, wrappedProgressFn); err != nil {
+			if err := fileFunc(ctx, src, dataFileIndex, dataFile, wrappedProgressFn); err != nil {
 				return errors.Wrap(err, dataFile)
 			}
 			if updateFromFiles {
@@ -140,6 +143,35 @@ func readInputFiles(
 		}
 	}
 	return nil
+}
+
+func decompressingReader(
+	in io.Reader, name string, hint roachpb.IOFileFormat_Compression,
+) (io.ReadCloser, error) {
+	switch guessCompressionFromName(name, hint) {
+	case roachpb.IOFileFormat_Gzip:
+		return gzip.NewReader(in)
+	case roachpb.IOFileFormat_Bzip:
+		return ioutil.NopCloser(bzip2.NewReader(in)), nil
+	default:
+		return ioutil.NopCloser(in), nil
+	}
+}
+
+func guessCompressionFromName(
+	name string, hint roachpb.IOFileFormat_Compression,
+) roachpb.IOFileFormat_Compression {
+	if hint != roachpb.IOFileFormat_Auto {
+		return hint
+	}
+	switch {
+	case strings.HasSuffix(name, ".gz"):
+		return roachpb.IOFileFormat_Gzip
+	case strings.HasSuffix(name, ".bz2") || strings.HasSuffix(name, ".bz"):
+		return roachpb.IOFileFormat_Bzip
+	default:
+		return roachpb.IOFileFormat_None
+	}
 }
 
 type byteCounter struct {
@@ -315,21 +347,10 @@ func newReadImportDataProcessor(
 	cp := &readImportDataProcessor{
 		flowCtx:     flowCtx,
 		processorID: processorID,
-		inputFromat: spec.Format,
-		sampleSize:  spec.SampleSize,
-		tableDesc:   spec.TableDesc,
-		uri:         spec.Uri,
+		spec:        spec,
 		output:      output,
-		settings:    flowCtx.Settings,
-		registry:    flowCtx.JobRegistry,
-		progress:    spec.Progress,
 	}
 
-	// Check if this was was sent by an older node.
-	if spec.Format.Format == roachpb.IOFileFormat_Unknown {
-		spec.Format.Format = roachpb.IOFileFormat_CSV
-		spec.Format.Csv = spec.LegacyCsvOptions
-	}
 	if err := cp.out.Init(&distsqlrun.PostProcessSpec{}, csvOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
 	}
@@ -347,21 +368,24 @@ type inputConverter interface {
 type readImportDataProcessor struct {
 	flowCtx     *distsqlrun.FlowCtx
 	processorID int32
-	sampleSize  int32
-	tableDesc   sqlbase.TableDescriptor
-	uri         map[int32]string
-	inputFromat roachpb.IOFileFormat
+	spec        distsqlrun.ReadImportDataSpec
 	out         distsqlrun.ProcOutputHelper
 	output      distsqlrun.RowReceiver
-	settings    *cluster.Settings
-	registry    *jobs.Registry
-	progress    distsqlrun.JobProgress
 }
 
 var _ distsqlrun.Processor = &readImportDataProcessor{}
 
 func (cp *readImportDataProcessor) OutputTypes() []sqlbase.ColumnType {
 	return csvOutputTypes
+}
+
+func isMultiTableFormat(format roachpb.IOFileFormat_FileFormat) bool {
+	switch format {
+	case roachpb.IOFileFormat_Mysqldump,
+		roachpb.IOFileFormat_PgDump:
+		return true
+	}
+	return false
 }
 
 func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) {
@@ -372,39 +396,50 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 		defer wg.Done()
 	}
 
+	if err := cp.doRun(ctx, wg); err != nil {
+		distsqlrun.DrainAndClose(ctx, cp.output, err, func(context.Context) {} /* pushTrailingMeta */)
+	} else {
+		cp.out.Close()
+	}
+}
+
+// doRun uses a more familiar error return API, allowing concise early returns
+// on errors in setup that all then are handled by the actual DistSQL Run method
+// wrapper, doing the correct DrainAndClose error handling logic.
+func (cp *readImportDataProcessor) doRun(ctx context.Context, wg *sync.WaitGroup) error {
 	group := ctxgroup.WithContext(ctx)
 	kvCh := make(chan kvBatch)
 	evalCtx := cp.flowCtx.NewEvalCtx()
 
+	var singleTable *sqlbase.TableDescriptor
+	if len(cp.spec.Tables) == 1 {
+		for _, table := range cp.spec.Tables {
+			singleTable = table
+		}
+	}
+
+	if format := cp.spec.Format.Format; singleTable == nil && !isMultiTableFormat(format) {
+		return errors.Errorf("%s only supports reading a single, pre-specified table", format.String())
+	}
+
 	var conv inputConverter
-	switch cp.inputFromat.Format {
+	var err error
+	switch cp.spec.Format.Format {
 	case roachpb.IOFileFormat_CSV:
-		conv = newCSVInputReader(kvCh, cp.inputFromat.Csv, &cp.tableDesc, evalCtx)
+		conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, singleTable, cp.flowCtx)
 	case roachpb.IOFileFormat_MysqlOutfile:
-		c, err := newMysqloutfileReader(kvCh, cp.inputFromat.MysqlOut, &cp.tableDesc, evalCtx)
-		if err != nil {
-			distsqlrun.DrainAndClose(ctx, cp.output, err, func(context.Context) {} /* pushTrailingMeta */)
-			return
-		}
-		conv = c
+		conv, err = newMysqloutfileReader(kvCh, cp.spec.Format.MysqlOut, singleTable, evalCtx)
 	case roachpb.IOFileFormat_Mysqldump:
-		c, err := newMysqldumpReader(kvCh, &cp.tableDesc, evalCtx)
-		if err != nil {
-			distsqlrun.DrainAndClose(ctx, cp.output, err, func(context.Context) {} /* pushTrailingMeta */)
-			return
-		}
-		conv = c
+		conv, err = newMysqldumpReader(kvCh, cp.spec.Tables, evalCtx)
 	case roachpb.IOFileFormat_PgCopy:
-		c, err := newPgCopyReader(kvCh, cp.inputFromat.PgCopy, &cp.tableDesc, evalCtx)
-		if err != nil {
-			distsqlrun.DrainAndClose(ctx, cp.output, err, func(context.Context) {} /* pushTrailingMeta */)
-			return
-		}
-		conv = c
+		conv, err = newPgCopyReader(kvCh, cp.spec.Format.PgCopy, singleTable, evalCtx)
+	case roachpb.IOFileFormat_PgDump:
+		conv, err = newPgDumpReader(kvCh, cp.spec.Format.PgDump, cp.spec.Tables, evalCtx)
 	default:
-		err := errors.Errorf("Requested IMPORT format (%d) not supported by this node", cp.inputFromat.Format)
-		distsqlrun.DrainAndClose(ctx, cp.output, err, func(context.Context) {} /* pushTrailingMeta */)
-		return
+		err = errors.Errorf("Requested IMPORT format (%d) not supported by this node", cp.spec.Format.Format)
+	}
+	if err != nil {
+		return err
 	}
 	conv.start(group)
 
@@ -414,25 +449,25 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 		defer tracing.FinishSpan(span)
 		defer conv.inputFinished(ctx)
 
-		job, err := cp.registry.LoadJob(ctx, cp.progress.JobID)
+		job, err := cp.flowCtx.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
 		if err != nil {
 			return err
 		}
 
 		progFn := func(pct float32) error {
-			return job.Progressed(ctx, func(ctx context.Context, details jobs.ProgressDetails) float32 {
-				d := details.(*jobs.Progress_Import).Import
-				slotpct := pct * cp.progress.Contribution
+			return job.FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+				d := details.(*jobspb.Progress_Import).Import
+				slotpct := pct * cp.spec.Progress.Contribution
 				if len(d.SamplingProgress) > 0 {
-					d.SamplingProgress[cp.progress.Slot] = slotpct
+					d.SamplingProgress[cp.spec.Progress.Slot] = slotpct
 				} else {
-					d.ReadProgress[cp.progress.Slot] = slotpct
+					d.ReadProgress[cp.spec.Progress.Slot] = slotpct
 				}
 				return d.Completed()
 			})
 		}
 
-		return readInputFiles(ctx, cp.uri, conv.readFile, progFn, cp.settings)
+		return readInputFiles(ctx, cp.spec.Uri, cp.spec.Format, conv.readFile, progFn, cp.flowCtx.Settings)
 	})
 
 	// Sample KVs
@@ -441,24 +476,25 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 		defer tracing.FinishSpan(span)
 
 		var fn sampleFunc
-		if cp.sampleSize == 0 {
-			fn = sampleAll
+		var sampleAll bool
+		if cp.spec.SampleSize == 0 {
+			sampleAll = true
 		} else {
 			sr := sampleRate{
 				rnd:        rand.New(rand.NewSource(rand.Int63())),
-				sampleSize: float64(cp.sampleSize),
+				sampleSize: float64(cp.spec.SampleSize),
 			}
 			fn = sr.sample
 		}
 
 		// Populate the split-point spans which have already been imported.
 		var completedSpans roachpb.SpanGroup
-		job, err := cp.registry.LoadJob(ctx, cp.progress.JobID)
+		job, err := cp.flowCtx.JobRegistry.LoadJob(ctx, cp.spec.Progress.JobID)
 		if err != nil {
 			return err
 		}
 		progress := job.Progress()
-		if details, ok := progress.Details.(*jobs.Progress_Import); ok {
+		if details, ok := progress.Details.(*jobspb.Progress_Import); ok {
 			completedSpans.Add(details.Import.SpanProgress...)
 		} else {
 			return errors.Errorf("unexpected progress type %T", progress)
@@ -471,7 +507,7 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 				if completedSpans.Contains(kv.Key) {
 					continue
 				}
-				if fn(kv) {
+				if sampleAll || keys.IsDescriptorKey(kv.Key) || fn(kv) {
 					row := sqlbase.EncDatumRow{
 						sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Key))),
 						sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))),
@@ -489,12 +525,8 @@ func (cp *readImportDataProcessor) Run(ctx context.Context, wg *sync.WaitGroup) 
 		}
 		return nil
 	})
-	if err := group.Wait(); err != nil {
-		distsqlrun.DrainAndClose(ctx, cp.output, err, func(context.Context) {} /* pushTrailingMeta */)
-		return
-	}
 
-	cp.out.Close()
+	return group.Wait()
 }
 
 type sampleFunc func(roachpb.KeyValue) bool
@@ -510,10 +542,6 @@ func (s sampleRate) sample(kv roachpb.KeyValue) bool {
 	sz := float64(len(kv.Key) + len(kv.Value.RawBytes))
 	prob := sz / s.sampleSize
 	return prob > s.rnd.Float64()
-}
-
-func sampleAll(kv roachpb.KeyValue) bool {
-	return true
 }
 
 func makeRowErr(file string, row int64, format string, args ...interface{}) error {

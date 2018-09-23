@@ -31,8 +31,8 @@ func TestBatchSplit(t *testing.T) {
 	dr := &DeleteRangeRequest{}
 	bt := &BeginTransactionRequest{}
 	et := &EndTransactionRequest{}
+	qi := &QueryIntentRequest{}
 	rv := &ReverseScanRequest{}
-	np := &NoopRequest{}
 	testCases := []struct {
 		reqs       []Request
 		sizes      []int
@@ -52,11 +52,17 @@ func TestBatchSplit(t *testing.T) {
 		// have isAlone set). Could be useful if we ever want to allow executing
 		// multiple batches back-to-back.
 		{[]Request{et, scan, et}, []int{1, 2}, false},
-		// Check that Noop can mix with other requests regardless of flags.
-		{[]Request{np, put, np}, []int{3}, true},
-		{[]Request{np, spl, np}, []int{3}, true},
-		{[]Request{np, rv, np}, []int{3}, true},
-		{[]Request{np, np, et}, []int{3}, true}, // et does not split off
+		{[]Request{et, et}, []int{1, 1}, false},
+		// QueryIntents count as headers that are always compatible with the
+		// request that follows.
+		{[]Request{get, qi, put}, []int{1, 2}, true},
+		{[]Request{get, qi, qi, qi, qi, put}, []int{1, 5}, true},
+		{[]Request{qi, get, qi, get, qi, get, qi, put, qi, put, qi, get, qi, get}, []int{6, 4, 4}, true},
+		{[]Request{qi, spl, qi, get, scan, qi, qi, spl, qi, get}, []int{1, 1, 5, 1, 2}, true},
+		{[]Request{scan, qi, qi, qi, et}, []int{4, 1}, true},
+		{[]Request{scan, qi, qi, qi, et}, []int{5}, false},
+		{[]Request{put, qi, qi, qi, et}, []int{1, 3, 1}, true},
+		{[]Request{put, qi, qi, qi, et}, []int{5}, false},
 	}
 
 	for i, test := range testCases {
@@ -85,10 +91,10 @@ func TestBatchRequestGetArg(t *testing.T) {
 		expB, expG bool
 	}{
 		{[]RequestUnion{}, false, false},
-		{[]RequestUnion{{Get: &GetRequest{}}}, false, true},
-		{[]RequestUnion{{EndTransaction: &EndTransactionRequest{}}, {Get: &GetRequest{}}}, false, true},
-		{[]RequestUnion{{EndTransaction: &EndTransactionRequest{}}}, true, false},
-		{[]RequestUnion{{Get: &GetRequest{}}, {EndTransaction: &EndTransactionRequest{}}}, true, true},
+		{[]RequestUnion{{&RequestUnion_Get{Get: &GetRequest{}}}}, false, true},
+		{[]RequestUnion{{&RequestUnion_EndTransaction{EndTransaction: &EndTransactionRequest{}}}, {&RequestUnion_Get{Get: &GetRequest{}}}}, false, true},
+		{[]RequestUnion{{&RequestUnion_EndTransaction{EndTransaction: &EndTransactionRequest{}}}}, true, false},
+		{[]RequestUnion{{&RequestUnion_Get{Get: &GetRequest{}}}, {&RequestUnion_EndTransaction{EndTransaction: &EndTransactionRequest{}}}}, true, true},
 	}
 
 	for i, c := range testCases {
@@ -107,37 +113,37 @@ func TestBatchRequestSummary(t *testing.T) {
 	// The Summary function is generated automatically, so the tests don't need to
 	// be exhaustive.
 	testCases := []struct {
-		reqs     []interface{}
+		reqs     []Request
 		expected string
 	}{
 		{
-			reqs:     []interface{}{},
+			reqs:     []Request{},
 			expected: "empty batch",
 		},
 		{
-			reqs:     []interface{}{&GetRequest{}},
+			reqs:     []Request{&GetRequest{}},
 			expected: "1 Get",
 		},
 		{
-			reqs:     []interface{}{&PutRequest{}},
+			reqs:     []Request{&PutRequest{}},
 			expected: "1 Put",
 		},
 		{
-			reqs:     []interface{}{&ConditionalPutRequest{}},
+			reqs:     []Request{&ConditionalPutRequest{}},
 			expected: "1 CPut",
 		},
 		{
-			reqs:     []interface{}{&ReverseScanRequest{}},
+			reqs:     []Request{&ReverseScanRequest{}},
 			expected: "1 RevScan",
 		},
 		{
-			reqs: []interface{}{
+			reqs: []Request{
 				&GetRequest{}, &GetRequest{}, &PutRequest{}, &ScanRequest{}, &ScanRequest{},
 			},
 			expected: "2 Get, 1 Put, 2 Scan",
 		},
 		{
-			reqs: []interface{}{
+			reqs: []Request{
 				&CheckConsistencyRequest{}, &InitPutRequest{}, &TruncateLogRequest{},
 			},
 			expected: "1 TruncLog, 1 ChkConsistency, 1 InitPut",
@@ -147,7 +153,7 @@ func TestBatchRequestSummary(t *testing.T) {
 		var br BatchRequest
 		for _, v := range tc.reqs {
 			var ru RequestUnion
-			ru.SetValue(v)
+			ru.MustSetInner(v)
 			br.Requests = append(br.Requests, ru)
 		}
 		if str := br.Summary(); str != tc.expected {
@@ -250,12 +256,13 @@ func TestRefreshSpanIterate(t *testing.T) {
 
 	var readSpans []Span
 	var writeSpans []Span
-	fn := func(span Span, write bool) {
+	fn := func(span Span, write bool) bool {
 		if write {
 			writeSpans = append(writeSpans, span)
 		} else {
 			readSpans = append(readSpans, span)
 		}
+		return true
 	}
 	ba.RefreshSpanIterate(&br, fn)
 	// Only the conditional put isn't considered a read span.

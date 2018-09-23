@@ -124,7 +124,30 @@ func (db *verifyFormatDB) exec(ctx context.Context, sql string) error {
 		b := make([]byte, 1024*1024)
 		n := runtime.Stack(b, true)
 		fmt.Printf("%s\n", b[:n])
-		panic(errors.Errorf("timeout: %q. currently executing: %v", sql, db.mu.active))
+		// Now see if we can execute a SELECT 1. This is useful because sometimes an
+		// exec timeout is because of a slow-executing statement, and other times
+		// it's because the server is completely wedged. This is an automated way
+		// to find out.
+		errch := make(chan error, 1)
+		go func() {
+			rows, err := db.db.Query(`SELECT 1`)
+			if err == nil {
+				rows.Close()
+			}
+			errch <- err
+		}()
+		select {
+		case <-time.After(5 * time.Second):
+			fmt.Println("SELECT 1 timeout: probably a wedged server")
+		case err := <-errch:
+			if err != nil {
+				fmt.Println("SELECT 1 execute error:", err)
+			} else {
+				fmt.Println("SELECT 1 executed successfully: probably a slow statement")
+			}
+		}
+		fmt.Printf("timeout: %q. currently executing: %v\n", sql, db.mu.active)
+		panic("statement exec timeout")
 	}
 }
 
@@ -133,7 +156,7 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 
 	const rootStmt = "stmt"
 
-	testRandomSyntax(t, nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+	testRandomSyntax(t, false, nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		s := r.Generate(rootStmt, 20)
 		// Don't start transactions since closing them is tricky. Just issuing a
 		// ROLLBACK after all queries doesn't work due to the parellel uses of db,
@@ -149,6 +172,9 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 		if strings.Contains(s, "READ ONLY") || strings.Contains(s, "read_only") {
 			return errors.New("READ ONLY settings are unsupported")
 		}
+		if strings.Contains(s, "REVOKE") || strings.Contains(s, "GRANT") {
+			return errors.New("REVOKE and GRANT are unsupported")
+		}
 		// Recreate the database on every run in case it was dropped or renamed in
 		// a previous run. Should always succeed.
 		if err := db.exec(ctx, `CREATE DATABASE IF NOT EXISTS ident`); err != nil {
@@ -163,15 +189,15 @@ func TestRandomSyntaxSelect(t *testing.T) {
 
 	const rootStmt = "target_list"
 
-	testRandomSyntax(t, func(ctx context.Context, db *verifyFormatDB) error {
+	testRandomSyntax(t, false, func(ctx context.Context, db *verifyFormatDB) error {
 		return db.exec(ctx, `CREATE DATABASE IF NOT EXISTS ident; CREATE TABLE IF NOT EXISTS ident.ident (ident decimal);`)
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
-		targets := r.Generate(rootStmt, 30)
+		targets := r.Generate(rootStmt, 300)
 		var where, from string
 		// Only generate complex clauses half the time.
 		if rand.Intn(2) == 0 {
-			where = r.Generate("where_clause", 30)
-			from = r.Generate("from_clause", 30)
+			where = r.Generate("where_clause", 300)
+			from = r.Generate("from_clause", 300)
 		} else {
 			from = "FROM ident"
 		}
@@ -210,7 +236,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		}
 	}()
 
-	testRandomSyntax(t, nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+	testRandomSyntax(t, false, nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		nb := <-namedBuiltinChan
 		var args []string
 		switch ft := nb.builtin.Types.(type) {
@@ -258,9 +284,51 @@ func TestRandomSyntaxFuncCommon(t *testing.T) {
 
 	const rootStmt = "func_expr_common_subexpr"
 
-	testRandomSyntax(t, nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+	testRandomSyntax(t, false, nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		expr := r.Generate(rootStmt, 30)
 		s := fmt.Sprintf("SELECT %s", expr)
+		return db.exec(ctx, s)
+	})
+}
+
+func TestRandomSyntaxSchemaChangeDatabase(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	roots := []string{
+		"create_database_stmt",
+		"drop_database_stmt",
+		"alter_rename_database_stmt",
+		"create_user_stmt",
+		"drop_user_stmt",
+		"alter_user_stmt",
+	}
+
+	testRandomSyntax(t, true, func(ctx context.Context, db *verifyFormatDB) error {
+		return db.exec(ctx, `
+			CREATE DATABASE ident;
+		`)
+	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+		n := r.Intn(len(roots))
+		s := r.Generate(roots[n], 30)
+		return db.exec(ctx, s)
+	})
+}
+
+func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	roots := []string{
+		"alter_table_cmd",
+	}
+
+	testRandomSyntax(t, true, func(ctx context.Context, db *verifyFormatDB) error {
+		return db.exec(ctx, `
+			CREATE DATABASE ident;
+			CREATE TABLE ident.ident (ident decimal);
+		`)
+	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+		n := r.Intn(len(roots))
+		s := fmt.Sprintf("ALTER TABLE ident.ident %s", r.Generate(roots[n], 500))
 		return db.exec(ctx, s)
 	})
 }
@@ -272,6 +340,7 @@ func TestRandomSyntaxFuncCommon(t *testing.T) {
 // least 1 success occurs (otherwise it is likely a bad test).
 func testRandomSyntax(
 	t *testing.T,
+	allowDuplicates bool,
 	setup func(context.Context, *verifyFormatDB) error,
 	fn func(context.Context, *verifyFormatDB, *rsg.RSG) error,
 ) {
@@ -299,7 +368,7 @@ func testRandomSyntax(
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := rsg.NewRSG(timeutil.Now().UnixNano(), string(yBytes))
+	r, err := rsg.NewRSG(timeutil.Now().UnixNano(), string(yBytes), allowDuplicates)
 	if err != nil {
 		t.Fatal(err)
 	}

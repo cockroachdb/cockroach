@@ -43,15 +43,17 @@ type RSG struct {
 
 // NewRSG creates a random syntax generator from the given random seed and
 // yacc file.
-func NewRSG(seed int64, y string) (*RSG, error) {
+func NewRSG(seed int64, y string, allowDuplicates bool) (*RSG, error) {
 	tree, err := yacc.Parse("sql", y)
 	if err != nil {
 		return nil, err
 	}
 	rsg := RSG{
 		src:   rand.New(rand.NewSource(seed)),
-		seen:  make(map[string]bool),
 		prods: make(map[string][]*yacc.ExpressionNode),
+	}
+	if !allowDuplicates {
+		rsg.seen = make(map[string]bool)
 	}
 	for _, prod := range tree.Productions {
 		rsg.prods[prod.Name] = prod.Expressions
@@ -65,25 +67,30 @@ func NewRSG(seed int64, y string) (*RSG, error) {
 // goroutines. If Generate is called more times than it can generate unique
 // output, it will block forever.
 func (r *RSG) Generate(root string, depth int) string {
-	for {
+	for i := 0; i < 100000; i++ {
 		s := strings.Join(r.generate(root, depth), " ")
-		r.lock.Lock()
-		if !r.seen[s] {
-			r.seen[s] = true
-		} else {
-			s = ""
+		if r.seen != nil {
+			r.lock.Lock()
+			if !r.seen[s] {
+				r.seen[s] = true
+			} else {
+				s = ""
+			}
+			r.lock.Unlock()
 		}
-		r.lock.Unlock()
 		if s != "" {
 			s = strings.Replace(s, "_LA", "", -1)
 			s = strings.Replace(s, " AS OF SYSTEM TIME \"string\"", "", -1)
 			return s
 		}
 	}
+	panic("couldn't find unique string")
 }
 
 func (r *RSG) generate(root string, depth int) []string {
-	var ret []string
+	// Initialize to an empty slice instead of nil because nil is the signal
+	// that the depth has been exceeded.
+	ret := make([]string, 0)
 	prods := r.prods[root]
 	if len(prods) == 0 {
 		return []string{root}
@@ -109,6 +116,8 @@ func (r *RSG) generate(root string, depth int) []string {
 				v = []string{fmt.Sprint(r.Float64())}
 			case "BCONST":
 				v = []string{`b'bytes'`}
+			case "BITCONST":
+				v = []string{`B'10010'`}
 			case "substr_from":
 				v = []string{"FROM", `'string'`}
 			case "substr_for":
@@ -223,13 +232,20 @@ func (r *RSG) Float64() float64 {
 // GenerateRandomArg generates a random, valid, SQL function argument of
 // the specified type.
 func (r *RSG) GenerateRandomArg(typ types.T) string {
-	if r.Intn(10) == 0 {
+	switch r.Intn(10) {
+	case 0:
 		return "NULL"
+	case 1:
+		return fmt.Sprintf("NULL::%s", typ)
+	case 2:
+		return fmt.Sprintf("(SELECT NULL)::%s", typ)
 	}
 	var v interface{}
 	switch types.UnwrapType(typ) {
 	case types.Int:
 		v = r.Int()
+	case types.BitArray:
+		v = bitArrayArgs[r.Intn(len(bitArrayArgs))]
 	case types.Float, types.Decimal:
 		v = r.Float64()
 	case types.String:
@@ -249,10 +265,6 @@ func (r *RSG) GenerateRandomArg(typ types.T) string {
 	case types.Time:
 		i := r.Int63n(int64(timeofday.Max))
 		d := tree.MakeDTime(timeofday.FromInt(i))
-		v = fmt.Sprintf(`'%s'`, d)
-	case types.TimeTZ:
-		i := r.Int63n(int64(timeofday.Max))
-		d := tree.MakeDTimeTZ(timeofday.FromInt(i), time.UTC)
 		v = fmt.Sprintf(`'%s'`, d)
 	case types.Interval:
 		d := duration.Duration{Nanos: r.Int63()}
@@ -302,6 +314,12 @@ var stringArgs = map[int]string{
 	3: `'1234567890'`,
 	4: `'12345678901234567890'`,
 	5: `'123456789123456789123456789123456789123456789123456789123456789123456789'`,
+}
+
+var bitArrayArgs = map[int]string{
+	0: `B''`,
+	1: `B'1'`,
+	2: `B'10010'`,
 }
 
 var boolArgs = map[int]string{

@@ -39,7 +39,7 @@ func slurpUserDataKVs(t testing.TB, e engine.Engine) []roachpb.KeyValue {
 	t.Helper()
 
 	var kvs []roachpb.KeyValue
-	it := e.NewIterator(engine.IterOptions{})
+	it := e.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 	defer it.Close()
 	for it.Seek(engine.MVCCKey{Key: keys.UserTableDataMin}); ; it.NextKey() {
 		ok, err := it.Valid()

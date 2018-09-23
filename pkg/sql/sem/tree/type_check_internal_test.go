@@ -338,7 +338,7 @@ func annot(p *tree.Placeholder, typ coltypes.T) tree.Expr {
 
 func TestProcessPlaceholderAnnotations(t *testing.T) {
 	intType := coltypes.Int
-	boolType := coltypes.Boolean
+	boolType := coltypes.Bool
 
 	testData := []struct {
 		initArgs  tree.PlaceholderTypes
@@ -499,7 +499,7 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 	}
 	for i, d := range testData {
 		args := d.initArgs
-		stmt := &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: d.stmtExprs}}}
+		stmt := &tree.ValuesClause{Rows: []tree.Exprs{d.stmtExprs}}
 		if err := args.ProcessPlaceholderAnnotations(stmt); err != nil {
 			t.Errorf("%d: unexpected error returned from ProcessPlaceholderAnnotations: %v", i, err)
 		} else if !reflect.DeepEqual(args, d.desired) {
@@ -510,7 +510,7 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 
 func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 	intType := coltypes.Int
-	floatType := coltypes.Float
+	floatType := coltypes.Float8
 
 	testData := []struct {
 		initArgs  tree.PlaceholderTypes
@@ -569,7 +569,7 @@ func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 	}
 	for i, d := range testData {
 		args := d.initArgs
-		stmt := &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: d.stmtExprs}}}
+		stmt := &tree.ValuesClause{Rows: []tree.Exprs{d.stmtExprs}}
 		if err := args.ProcessPlaceholderAnnotations(stmt); !testutils.IsError(err, d.expected) {
 			t.Errorf("%d: expected %s, but found %v", i, d.expected, err)
 		}

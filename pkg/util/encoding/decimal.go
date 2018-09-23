@@ -533,10 +533,6 @@ func decodeLargeNumber(
 //  decimalNaNDesc          -> decimalNaNDesc
 //
 func EncodeNonsortingDecimal(b []byte, d *apd.Decimal) []byte {
-	if d.IsZero() && !d.Negative {
-		// Negative zero will use the decimalNegLarge encoding below.
-		return append(b, decimalZero)
-	}
 	neg := d.Negative
 	switch d.Form {
 	case apd.Finite:
@@ -550,6 +546,12 @@ func EncodeNonsortingDecimal(b []byte, d *apd.Decimal) []byte {
 		return append(b, decimalNaN)
 	default:
 		panic(errors.Errorf("unknown form: %s", d.Form))
+	}
+
+	// We only encode "0" as decimalZero. All others ("0.0", "-0", etc) are
+	// encoded like normal values.
+	if d.IsZero() && !neg && d.Exponent == 0 {
+		return append(b, decimalZero)
 	}
 
 	// Determine the exponent of the decimal, with the

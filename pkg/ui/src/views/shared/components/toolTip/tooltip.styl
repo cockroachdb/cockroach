@@ -30,9 +30,11 @@
 
 .hover-tooltip
   position relative
+  width 100%
+  height 100%
 
   &__text
-    visibility hidden
+    display none
     z-index $z-index-tooltip
     position absolute
     top -10px
@@ -47,8 +49,12 @@
     text-align left
     color $body-color
 
+  &--short &__text
+    width unset
+    max-width 400px
+
   &--hovered &__text
-    visibility visible
+    display block
 
   a
     color $link-color

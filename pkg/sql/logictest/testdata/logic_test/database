@@ -15,7 +15,7 @@ CREATE DATABASE ""
 query T colnames
 SHOW DATABASES
 ----
-Database
+database_name
 a
 defaultdb
 postgres
@@ -25,7 +25,7 @@ test
 query T colnames
 SHOW SCHEMAS FROM a
 ----
-Schema
+schema_name
 crdb_internal
 information_schema
 pg_catalog
@@ -133,7 +133,7 @@ DROP DATABASE ""
 query T colnames
 SHOW DATABASES
 ----
-Database
+database_name
 a
 c
 defaultdb

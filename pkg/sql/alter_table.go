@@ -54,12 +54,7 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 		return nil, err
 	}
 
-	var tableDesc *TableDescriptor
-	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		tableDesc, err = ResolveExistingObject(ctx, p, tn, !n.IfExists, requireTableDesc)
-	})
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, tn, !n.IfExists, requireTableDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -115,6 +110,18 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.Unimplemented(
 					"alter add fk", "adding a REFERENCES constraint via ALTER not supported")
 			}
+
+			newDef, seqDbDesc, seqName, seqOpts, err := params.p.processSerialInColumnDef(params.ctx, d, tn)
+			if err != nil {
+				return err
+			}
+			if seqName != nil {
+				if err := doCreateSequence(params, n.n.String(), seqDbDesc, seqName, seqOpts); err != nil {
+					return err
+				}
+			}
+			d = newDef
+
 			col, idx, expr, err := sqlbase.MakeColumnDefDescs(d, &params.p.semaCtx, params.EvalContext())
 			if err != nil {
 				return err
@@ -122,12 +129,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// If the new column has a DEFAULT expression that uses a sequence, add references between
 			// its descriptor and this column descriptor.
 			if d.HasDefaultExpr() {
-				var changedSeqDescs []*TableDescriptor
-				// DDL statements use uncached descriptors, and can view newly added things.
-				// TODO(vivek): check if the cache can be used.
-				params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
-					changedSeqDescs, err = maybeAddSequenceDependencies(params.p, n.tableDesc, col, expr, params.EvalContext())
-				})
+				changedSeqDescs, err := maybeAddSequenceDependencies(params.p, n.tableDesc, col, expr, params.EvalContext())
 				if err != nil {
 					return err
 				}
@@ -220,7 +222,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
-				ck, err := makeCheckConstraint(params.ctx,
+				ck, err := MakeCheckConstraint(params.ctx,
 					*n.tableDesc, d, inuseNames, &params.p.semaCtx, params.EvalContext(), *tableName)
 				if err != nil {
 					return err
@@ -258,7 +260,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 				descriptorChanged = true
 				for _, updated := range affected {
-					if err := params.p.saveNonmutationAndNotify(params.ctx, updated); err != nil {
+					if err := params.p.writeSchemaChange(params.ctx, updated, sqlbase.InvalidMutationID); err != nil {
 						return err
 					}
 				}
@@ -735,13 +737,7 @@ func applyColumnMutation(
 			col.DefaultExpr = &s
 
 			// Add references to the sequence descriptors this column is now using.
-
-			// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-			// TODO(vivek): check if the cache can be used.
-			var changedSeqDescs []*TableDescriptor
-			params.p.runWithOptions(resolveFlags{skipCache: true}, func() {
-				changedSeqDescs, err = maybeAddSequenceDependencies(params.p, tableDesc, col, expr, params.EvalContext())
-			})
+			changedSeqDescs, err := maybeAddSequenceDependencies(params.p, tableDesc, col, expr, params.EvalContext())
 			if err != nil {
 				return err
 			}
@@ -790,8 +786,8 @@ func injectTableStats(
 		return fmt.Errorf("statistics cannot be NULL")
 	}
 	jsonStr := val.(*tree.DJSON).JSON.String()
-	var stats []stats.JSONStatistic
-	if err := gojson.Unmarshal([]byte(jsonStr), &stats); err != nil {
+	var jsonStats []stats.JSONStatistic
+	if err := gojson.Unmarshal([]byte(jsonStr), &jsonStats); err != nil {
 		return err
 	}
 
@@ -806,8 +802,8 @@ func injectTableStats(
 	}
 
 	// Insert each statistic.
-	for i := range stats {
-		s := &stats[i]
+	for i := range jsonStats {
+		s := &jsonStats[i]
 		h, err := s.GetHistogram(params.EvalContext())
 		if err != nil {
 			return err
@@ -862,5 +858,11 @@ func injectTableStats(
 			return errors.Wrapf(err, "failed to insert stats")
 		}
 	}
-	return nil
+
+	// Invalidate the local cache synchronously; this guarantees that the next
+	// statement in the same session won't use a stale cache (whereas the gossip
+	// update is handled asynchronously).
+	params.extendedEvalCtx.ExecCfg.TableStatsCache.InvalidateTableStats(params.ctx, desc.ID)
+
+	return stats.GossipTableStatAdded(params.extendedEvalCtx.ExecCfg.Gossip, desc.ID)
 }

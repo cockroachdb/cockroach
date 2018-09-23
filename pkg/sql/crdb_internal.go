@@ -25,19 +25,18 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	yaml "gopkg.in/yaml.v2"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -65,6 +64,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalGossipNodesTable,
 		crdbInternalGossipAlertsTable,
 		crdbInternalGossipLivenessTable,
+		crdbInternalGossipNetworkTable,
 		crdbInternalIndexColumnsTable,
 		crdbInternalJobsTable,
 		crdbInternalKVNodeStatusTable,
@@ -354,16 +354,18 @@ CREATE TABLE crdb_internal.leases (
 						continue
 					}
 
-					if !state.leased {
+					state.mu.Lock()
+					lease := state.mu.lease
+					state.mu.Unlock()
+					if lease == nil {
 						continue
 					}
-					expCopy := state.leaseExpiration()
 					if err := addRow(
 						nodeID,
 						tableID,
 						tree.NewDString(state.Name),
 						tree.NewDInt(tree.DInt(int64(state.GetParentID()))),
-						&expCopy,
+						&lease.expiration,
 						dropped,
 					); err != nil {
 						return err
@@ -380,22 +382,32 @@ CREATE TABLE crdb_internal.leases (
 	},
 }
 
+func tsOrNull(micros int64) tree.Datum {
+	if micros == 0 {
+		return tree.DNull
+	}
+	ts := timeutil.Unix(0, micros*time.Microsecond.Nanoseconds())
+	return tree.MakeDTimestamp(ts, time.Microsecond)
+}
+
 var crdbInternalJobsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.jobs (
-	id                 INT,
-	type               STRING,
-	description        STRING,
-	username           STRING,
-	descriptor_ids     INT[],
-	status             STRING,
-	created            TIMESTAMP,
-	started            TIMESTAMP,
-	finished           TIMESTAMP,
-	modified           TIMESTAMP,
-	fraction_completed FLOAT,
-	error              STRING,
-	coordinator_id     INT
+	job_id             		INT,
+	job_type           		STRING,
+	description        		STRING,
+	user_name          		STRING,
+	descriptor_ids     		INT[],
+	status             		STRING,
+	running_status     		STRING,
+	created            		TIMESTAMP,
+	started            		TIMESTAMP,
+	finished           		TIMESTAMP,
+	modified           		TIMESTAMP,
+	fraction_completed 		FLOAT,
+	high_water_timestamp	DECIMAL,
+	error              		STRING,
+	coordinator_id     		INT
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -409,44 +421,85 @@ CREATE TABLE crdb_internal.jobs (
 
 		for _, r := range rows {
 			id, status, created, payloadBytes, progressBytes := r[0], r[1], r[2], r[3], r[4]
+
+			var jobType, description, username, descriptorIDs, started, runningStatus,
+				finished, modified, fractionCompleted, highWaterTimestamp, errorStr, leaseNode = tree.DNull,
+				tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
+				tree.DNull, tree.DNull, tree.DNull, tree.DNull
+
+			// Extract data from the payload.
 			payload, err := jobs.UnmarshalPayload(payloadBytes)
 			if err != nil {
-				return err
-			}
-			progress, err := jobs.UnmarshalProgress(progressBytes)
-			if err != nil {
-				return err
-			}
-			tsOrNull := func(micros int64) tree.Datum {
-				if micros == 0 {
-					return tree.DNull
+				errorStr = tree.NewDString(fmt.Sprintf("error decoding payload: %v", err))
+			} else {
+				jobType = tree.NewDString(payload.Type().String())
+				description = tree.NewDString(payload.Description)
+				username = tree.NewDString(payload.Username)
+				descriptorIDsArr := tree.NewDArray(types.Int)
+				for _, descID := range payload.DescriptorIDs {
+					if err := descriptorIDsArr.Append(tree.NewDInt(tree.DInt(int(descID)))); err != nil {
+						return err
+					}
 				}
-				ts := timeutil.Unix(0, micros*time.Microsecond.Nanoseconds())
-				return tree.MakeDTimestamp(ts, time.Microsecond)
+				descriptorIDs = descriptorIDsArr
+				started = tsOrNull(payload.StartedMicros)
+				finished = tsOrNull(payload.FinishedMicros)
+				if payload.Lease != nil {
+					leaseNode = tree.NewDInt(tree.DInt(payload.Lease.NodeID))
+				}
+				errorStr = tree.NewDString(payload.Error)
 			}
-			descriptorIDs := tree.NewDArray(types.Int)
-			for _, descID := range payload.DescriptorIDs {
-				if err := descriptorIDs.Append(tree.NewDInt(tree.DInt(int(descID)))); err != nil {
-					return err
+
+			// Extract data from the progress field.
+			if progressBytes != tree.DNull {
+				progress, err := jobs.UnmarshalProgress(progressBytes)
+				if err != nil {
+					baseErr := ""
+					if s, ok := errorStr.(*tree.DString); ok {
+						baseErr = string(*s)
+						if baseErr != "" {
+							baseErr += "\n"
+						}
+					}
+					errorStr = tree.NewDString(fmt.Sprintf("%serror decoding progress: %v", baseErr, err))
+				} else {
+					// Progress contains either fractionCompleted for traditional jobs,
+					// or the highWaterTimestamp for change feeds.
+					if highwater := progress.GetHighWater(); highwater != nil {
+						highWaterTimestamp = tree.TimestampToDecimal(*highwater)
+					} else {
+						fractionCompleted = tree.NewDFloat(tree.DFloat(progress.GetFractionCompleted()))
+					}
+					modified = tsOrNull(progress.ModifiedMicros)
+
+					runningStatusStr := ""
+					if len(progress.RunningStatus) > 0 {
+						if s, ok := status.(*tree.DString); ok {
+							if jobs.Status(string(*s)) == jobs.StatusRunning {
+								runningStatusStr = progress.RunningStatus
+							}
+						}
+					}
+					runningStatus = tree.NewDString(runningStatusStr)
 				}
 			}
-			leaseNode := tree.DNull
-			if payload.Lease != nil {
-				leaseNode = tree.NewDInt(tree.DInt(payload.Lease.NodeID))
-			}
+
+			// Report the data.
 			if err := addRow(
 				id,
-				tree.NewDString(payload.Type().String()),
-				tree.NewDString(payload.Description),
-				tree.NewDString(payload.Username),
+				jobType,
+				description,
+				username,
 				descriptorIDs,
 				status,
+				runningStatus,
 				created,
-				tsOrNull(payload.StartedMicros),
-				tsOrNull(payload.FinishedMicros),
-				tsOrNull(progress.ModifiedMicros),
-				tree.NewDFloat(tree.DFloat(progress.FractionCompleted)),
-				tree.NewDString(payload.Error),
+				started,
+				finished,
+				modified,
+				fractionCompleted,
+				highWaterTimestamp,
+				errorStr,
 				leaseNode,
 			); err != nil {
 				return err
@@ -591,11 +644,11 @@ CREATE TABLE crdb_internal.session_trace (
                                    -- (dummy) message on a span.
                                    -- NULL if the span was not finished at the time
                                    -- the trace has been collected.
-  operation   STRING NULL,         -- The span's operation. Set only on
-                                   -- the first (dummy) message in a span.
+  operation   STRING NULL,         -- The span's operation.
   loc         STRING NOT NULL,     -- The file name / line number prefix, if any.
   tag         STRING NOT NULL,     -- The logging tag, if any.
-  message     STRING NOT NULL      -- The logged message.
+  message     STRING NOT NULL,     -- The logged message.
+  age         INTERVAL NOT NULL    -- The age of this message relative to the beginning of the trace.
 );
 `,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -617,8 +670,8 @@ CREATE TABLE crdb_internal.session_trace (
 var crdbInternalClusterSettingsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.cluster_settings (
-  name          STRING NOT NULL,
-  current_value STRING NOT NULL,
+  variable      STRING NOT NULL,
+  value         STRING NOT NULL,
   type          STRING NOT NULL,
   description   STRING NOT NULL
 );
@@ -669,7 +722,7 @@ const queriesSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
   query_id         STRING,         -- the cluster-unique ID of the query
   node_id          INT NOT NULL,   -- the node on which the query is running
-  username         STRING,         -- the user running the query
+  user_name        STRING,         -- the user running the query
   start            TIMESTAMP,      -- the start time of the query
   query            STRING,         -- the SQL code of the query
   client_address   STRING,         -- the address of the client that issued the query
@@ -739,17 +792,18 @@ func populateQueriesTable(
 	for _, rpcErr := range response.Errors {
 		log.Warning(ctx, rpcErr.Message)
 		if rpcErr.NodeID != 0 {
-			// Add a row with this node ID, and nulls for all other columns
+			// Add a row with this node ID, the error for query, and
+			// nulls for all other columns.
 			if err := addRow(
-				tree.DNull,
-				tree.NewDInt(tree.DInt(rpcErr.NodeID)),
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
+				tree.DNull,                             // query ID
+				tree.NewDInt(tree.DInt(rpcErr.NodeID)), // node ID
+				tree.DNull,                             // username
+				tree.DNull,                             // start
+				tree.NewDString("-- "+rpcErr.Message),  // query
+				tree.DNull,                             // client_address
+				tree.DNull,                             // application_name
+				tree.DNull,                             // distributed
+				tree.DNull,                             // phase
 			); err != nil {
 				return err
 			}
@@ -762,7 +816,7 @@ const sessionsSchemaPattern = `
 CREATE TABLE crdb_internal.%s (
   node_id            INT NOT NULL,   -- the node on which the query is running
   session_id         STRING,         -- the ID of the session
-  username           STRING,         -- the user running the query
+  user_name          STRING,         -- the user running the query
   client_address     STRING,         -- the address of the client that issued the query
   application_name   STRING,         -- the name of the application as per SET application_name
   active_queries     STRING,         -- the currently running queries as SQL
@@ -857,18 +911,21 @@ func populateSessionsTable(
 	for _, rpcErr := range response.Errors {
 		log.Warning(ctx, rpcErr.Message)
 		if rpcErr.NodeID != 0 {
-			// Add a row with this node ID, and nulls for all other columns
+			// Add a row with this node ID, error in active queries, and nulls
+			// for all other columns.
 			if err := addRow(
-				tree.NewDInt(tree.DInt(rpcErr.NodeID)),
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
-				tree.DNull,
+				tree.NewDInt(tree.DInt(rpcErr.NodeID)), // node ID
+				tree.DNull,                             // session ID
+				tree.DNull,                             // username
+				tree.DNull,                             // client address
+				tree.DNull,                             // application name
+				tree.NewDString("-- "+rpcErr.Message),  // active queries
+				tree.DNull,                             // last active query
+				tree.DNull,                             // session start
+				tree.DNull,                             // oldest_query_start
+				tree.DNull,                             // kv_txn
+				tree.DNull,                             // alloc_bytes
+				tree.DNull,                             // max_alloc_bytes
 			); err != nil {
 				return err
 			}
@@ -991,14 +1048,14 @@ CREATE TABLE crdb_internal.create_statements (
 				var err error
 				if table.IsView() {
 					descType = typeView
-					stmt, err = p.showCreateView(ctx, (*tree.Name)(&table.Name), table)
+					stmt, err = ShowCreateView(ctx, (*tree.Name)(&table.Name), table)
 				} else if table.IsSequence() {
 					descType = typeSequence
-					stmt, err = p.showCreateSequence(ctx, (*tree.Name)(&table.Name), table)
+					stmt, err = ShowCreateSequence(ctx, (*tree.Name)(&table.Name), table)
 				} else {
 					descType = typeTable
 					tn := (*tree.Name)(&table.Name)
-					createNofk, err = p.showCreateTable(ctx, tn, contextName, table, lCtx, true /* ignoreFKs */)
+					createNofk, err = ShowCreateTable(ctx, tn, contextName, table, lCtx, true /* ignoreFKs */)
 					if err != nil {
 						return err
 					}
@@ -1012,7 +1069,7 @@ CREATE TABLE crdb_internal.create_statements (
 							f.WriteString(" ADD CONSTRAINT ")
 							f.FormatNameP(&fk.Name)
 							f.WriteByte(' ')
-							if err := p.printForeignKeyConstraint(ctx, f.Buffer, contextName, idx, lCtx); err != nil {
+							if err := printForeignKeyConstraint(ctx, f.Buffer, contextName, idx, lCtx); err != nil {
 								return err
 							}
 							if err := alterStmts.Append(tree.NewDString(f.CloseAndGetString())); err != nil {
@@ -1030,7 +1087,7 @@ CREATE TABLE crdb_internal.create_statements (
 							}
 						}
 					}
-					stmt, err = p.showCreateTable(ctx, tn, contextName, table, lCtx, false /* ignoreFKs */)
+					stmt, err = ShowCreateTable(ctx, tn, contextName, table, lCtx, false /* ignoreFKs */)
 				}
 				if err != nil {
 					return err
@@ -1497,13 +1554,13 @@ CREATE TABLE crdb_internal.ranges (
   lease_holder INT NOT NULL
 )
 `,
-	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, error) {
 		if err := p.RequireSuperUser(ctx, "read crdb_internal.ranges"); err != nil {
-			return err
+			return nil, err
 		}
 		descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		// TODO(knz): maybe this could use internalLookupCtx.
 		dbNames := make(map[uint64]string)
@@ -1529,19 +1586,36 @@ CREATE TABLE crdb_internal.ranges (
 			EndKey: keys.MaxKey,
 		})
 		if err != nil {
-			return err
+			return nil, err
 		}
 		var desc roachpb.RangeDescriptor
-		for _, r := range ranges {
-			if err := r.ValueProto(&desc); err != nil {
-				return err
+
+		i := 0
+
+		return func() (tree.Datums, error) {
+			if i >= len(ranges) {
+				return nil, nil
 			}
+
+			r := ranges[i]
+			i++
+
+			if err := r.ValueProto(&desc); err != nil {
+				return nil, err
+			}
+
+			var replicas []int
+			for _, rd := range desc.Replicas {
+				replicas = append(replicas, int(rd.StoreID))
+			}
+			sort.Ints(replicas)
 			arr := tree.NewDArray(types.Int)
-			for _, replica := range desc.Replicas {
-				if err := arr.Append(tree.NewDInt(tree.DInt(replica.StoreID))); err != nil {
-					return err
+			for _, replica := range replicas {
+				if err := arr.Append(tree.NewDInt(tree.DInt(replica))); err != nil {
+					return nil, err
 				}
 			}
+
 			var dbName, tableName, indexName string
 			if _, id, err := keys.DecodeTablePrefix(desc.StartKey.AsRawKey()); err == nil {
 				parent := parents[id]
@@ -1566,11 +1640,11 @@ CREATE TABLE crdb_internal.ranges (
 				},
 			})
 			if err := p.txn.Run(ctx, b); err != nil {
-				return errors.Wrap(err, "error getting lease info")
+				return nil, errors.Wrap(err, "error getting lease info")
 			}
 			resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)
 
-			if err := addRow(
+			return tree.Datums{
 				tree.NewDInt(tree.DInt(desc.RangeID)),
 				tree.NewDBytes(tree.DBytes(desc.StartKey)),
 				tree.NewDString(keys.PrettyPrint(nil /* valDirs */, desc.StartKey.AsRawKey())),
@@ -1581,11 +1655,8 @@ CREATE TABLE crdb_internal.ranges (
 				tree.NewDString(indexName),
 				arr,
 				tree.NewDInt(tree.DInt(resp.Lease.Replica.StoreID)),
-			); err != nil {
-				return err
-			}
-		}
-		return nil
+			}, nil
+		}, nil
 	},
 }
 
@@ -1594,10 +1665,12 @@ CREATE TABLE crdb_internal.ranges (
 var crdbInternalZonesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.zones (
-  id            INT NOT NULL,
-  cli_specifier STRING,
-  config_yaml   BYTES NOT NULL,
-  config_proto  BYTES NOT NULL
+  zone_id          INT NOT NULL,
+  cli_specifier    STRING,
+  config_yaml      STRING NOT NULL,
+  config_sql       STRING, -- this column can be NULL if there is no specifier syntax
+                           -- possible (e.g. the object was deleted).
+  config_protobuf  BYTES NOT NULL
 )
 `,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -1617,17 +1690,19 @@ CREATE TABLE crdb_internal.zones (
 		if err != nil {
 			return err
 		}
+		values := make(tree.Datums, len(showZoneConfigNodeColumns))
 		for _, r := range rows {
 			id := uint32(tree.MustBeDInt(r[0]))
+
+			var zoneSpecifier *tree.ZoneSpecifier
 			zs, err := config.ZoneSpecifierFromID(id, resolveID)
-			var cliSpecifier tree.Datum
-			if err == nil {
-				cliSpecifier = tree.NewDString(config.CLIZoneSpecifier(&zs))
+			if err != nil {
+				// The database or table has been deleted so there is no way
+				// to refer to it anymore. We are still going to show
+				// something but the CLI specifier part will become NULL.
+				zoneSpecifier = nil
 			} else {
-				// The table was deleted but hasn't yet been cleaned up by the schema
-				// changer. The user has no way to refer to the zone, so provide a NULL
-				// CLI specifier.
-				cliSpecifier = tree.DNull
+				zoneSpecifier = &zs
 			}
 
 			configBytes := []byte(*r[1].(*tree.DBytes))
@@ -1641,20 +1716,11 @@ CREATE TABLE crdb_internal.zones (
 				// Ensure subzones don't infect the value of the config_proto column.
 				configProto.Subzones = nil
 				configProto.SubzoneSpans = nil
-				configBytes, err = protoutil.Marshal(&configProto)
-				if err != nil {
+
+				if err := generateZoneConfigIntrospectionValues(values, r[0], zoneSpecifier, &configProto); err != nil {
 					return err
 				}
-				configYAML, err := yaml.Marshal(configProto)
-				if err != nil {
-					return err
-				}
-				if err := addRow(
-					r[0], // id
-					cliSpecifier,
-					tree.NewDBytes(tree.DBytes(configYAML)),
-					tree.NewDBytes(tree.DBytes(configBytes)),
-				); err != nil {
+				if err := addRow(values...); err != nil {
 					return err
 				}
 			}
@@ -1669,26 +1735,17 @@ CREATE TABLE crdb_internal.zones (
 					if err != nil {
 						return err
 					}
-					if cliSpecifier != tree.DNull {
+					if zoneSpecifier != nil {
 						zs := zs
 						zs.TableOrIndex.Index = tree.UnrestrictedName(index.Name)
 						zs.Partition = tree.Name(s.PartitionName)
-						cliSpecifier = tree.NewDString(config.CLIZoneSpecifier(&zs))
+						zoneSpecifier = &zs
 					}
-					configYAML, err := yaml.Marshal(s.Config)
-					if err != nil {
+
+					if err := generateZoneConfigIntrospectionValues(values, r[0], zoneSpecifier, &s.Config); err != nil {
 						return err
 					}
-					configBytes, err := protoutil.Marshal(&s.Config)
-					if err != nil {
-						return err
-					}
-					if err := addRow(
-						r[0], // id
-						cliSpecifier,
-						tree.NewDBytes(tree.DBytes(configYAML)),
-						tree.NewDBytes(tree.DBytes(configBytes)),
-					); err != nil {
+					if err := addRow(values...); err != nil {
 						return err
 					}
 				}
@@ -1707,7 +1764,12 @@ CREATE TABLE crdb_internal.gossip_nodes (
   address         STRING NOT NULL,
   attrs           JSON NOT NULL,
   locality        JSON NOT NULL,
-  server_version  STRING NOT NULL
+  server_version  STRING NOT NULL,
+  build_tag       STRING NOT NULL,
+  started_at      TIMESTAMP NOT NULL,
+  is_live          BOOL NOT NULL,
+  ranges          INT NOT NULL,
+  leases          INT NOT NULL
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -1733,9 +1795,42 @@ CREATE TABLE crdb_internal.gossip_nodes (
 			return err
 		}
 
+		alive := make(map[roachpb.NodeID]tree.DBool)
+		for _, d := range descriptors {
+			if _, err := g.GetInfo(gossip.MakeGossipClientsKey(d.NodeID)); err == nil {
+				alive[d.NodeID] = true
+			}
+		}
+
 		sort.Slice(descriptors, func(i, j int) bool {
 			return descriptors[i].NodeID < descriptors[j].NodeID
 		})
+
+		type nodeStats struct {
+			ranges int32
+			leases int32
+		}
+
+		stats := make(map[roachpb.NodeID]nodeStats)
+		if err := g.IterateInfos(gossip.KeyStorePrefix, func(key string, i gossip.Info) error {
+			bytes, err := i.Value.GetBytes()
+			if err != nil {
+				return errors.Wrapf(err, "failed to extract bytes for key %q", key)
+			}
+
+			var desc roachpb.StoreDescriptor
+			if err := protoutil.Unmarshal(bytes, &desc); err != nil {
+				return errors.Wrapf(err, "failed to parse value for key %q", key)
+			}
+
+			s := stats[desc.Node.NodeID]
+			s.ranges += desc.Capacity.RangeCount
+			s.leases += desc.Capacity.LeaseCount
+			stats[desc.Node.NodeID] = s
+			return nil
+		}); err != nil {
+			return err
+		}
 
 		for _, d := range descriptors {
 			attrs := json.NewArrayBuilder(len(d.Attrs.Attrs))
@@ -1755,6 +1850,11 @@ CREATE TABLE crdb_internal.gossip_nodes (
 				tree.NewDJSON(attrs.Build()),
 				tree.NewDJSON(locality.Build()),
 				tree.NewDString(d.ServerVersion.String()),
+				tree.NewDString(d.BuildTag),
+				tree.MakeDTimestamp(timeutil.Unix(0, d.StartedAt), time.Microsecond),
+				tree.MakeDBool(alive[d.NodeID]),
+				tree.NewDInt(tree.DInt(stats[d.NodeID].ranges)),
+				tree.NewDInt(tree.DInt(stats[d.NodeID].leases)),
 			); err != nil {
 				return err
 			}
@@ -1763,7 +1863,9 @@ CREATE TABLE crdb_internal.gossip_nodes (
 	},
 }
 
-// crdbInternalGossipLivenessTable exposes local information about the nodes' liveness.
+// crdbInternalGossipLivenessTable exposes local information about the nodes'
+// liveness. The data exposed in this table can be stale/incomplete because
+// gossip doesn't provide guarantees around freshness or consistency.
 var crdbInternalGossipLivenessTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.gossip_liveness (
@@ -1771,16 +1873,27 @@ CREATE TABLE crdb_internal.gossip_liveness (
   epoch           INT NOT NULL,
   expiration      STRING NOT NULL,
   draining        BOOL NOT NULL,
-  decommissioning BOOL NOT NULL
+  decommissioning BOOL NOT NULL,
+  updated_at      TIMESTAMP
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		// ATTENTION: This contents of this table should only access gossip data
+		// which is highly available. DO NOT CALL functions which require the
+		// cluster to be healthy, such as StatusServer.Nodes().
+
 		if err := p.RequireSuperUser(ctx, "read crdb_internal.gossip_liveness"); err != nil {
 			return err
 		}
 
 		g := p.ExecCfg().Gossip
-		var livenesses []storage.Liveness
+
+		type nodeInfo struct {
+			liveness  storage.Liveness
+			updatedAt int64
+		}
+
+		var nodes []nodeInfo
 		if err := g.IterateInfos(gossip.KeyNodeLivenessPrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()
 			if err != nil {
@@ -1791,23 +1904,29 @@ CREATE TABLE crdb_internal.gossip_liveness (
 			if err := protoutil.Unmarshal(bytes, &l); err != nil {
 				return errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
-			livenesses = append(livenesses, l)
+			nodes = append(nodes, nodeInfo{
+				liveness:  l,
+				updatedAt: i.OrigStamp,
+			})
 			return nil
 		}); err != nil {
 			return err
 		}
 
-		sort.Slice(livenesses, func(i, j int) bool {
-			return livenesses[i].NodeID < livenesses[j].NodeID
+		sort.Slice(nodes, func(i, j int) bool {
+			return nodes[i].liveness.NodeID < nodes[j].liveness.NodeID
 		})
 
-		for _, l := range livenesses {
+		for i := range nodes {
+			n := &nodes[i]
+			l := &n.liveness
 			if err := addRow(
 				tree.NewDInt(tree.DInt(l.NodeID)),
 				tree.NewDInt(tree.DInt(l.Epoch)),
 				tree.NewDString(l.Expiration.String()),
 				tree.MakeDBool(tree.DBool(l.Draining)),
 				tree.MakeDBool(tree.DBool(l.Decommissioning)),
+				tree.MakeDTimestamp(timeutil.Unix(0, n.updatedAt), time.Microsecond),
 			); err != nil {
 				return err
 			}
@@ -1828,7 +1947,7 @@ CREATE TABLE crdb_internal.gossip_alerts (
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		if err := p.RequireSuperUser(ctx, "read crdb_internal.gossip_alerts	"); err != nil {
+		if err := p.RequireSuperUser(ctx, "read crdb_internal.gossip_alerts"); err != nil {
 			return err
 		}
 
@@ -1874,6 +1993,33 @@ CREATE TABLE crdb_internal.gossip_alerts (
 				); err != nil {
 					return err
 				}
+			}
+		}
+		return nil
+	},
+}
+
+// crdbInternalGossipNetwork exposes the local view of the gossip network (i.e
+// the gossip client connections from source_id node to target_id node).
+var crdbInternalGossipNetworkTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.gossip_network (
+  source_id       INT NOT NULL,    -- source node of a gossip connection
+  target_id       INT NOT NULL     -- target node of a gossip connection
+)
+	`,
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		if err := p.RequireSuperUser(ctx, "read crdb_internal.gossip_network"); err != nil {
+			return err
+		}
+
+		c := p.ExecCfg().Gossip.Connectivity()
+		for _, conn := range c.ClientConns {
+			if err := addRow(
+				tree.NewDInt(tree.DInt(conn.SourceID)),
+				tree.NewDInt(tree.DInt(conn.TargetID)),
+			); err != nil {
+				return err
 			}
 		}
 		return nil

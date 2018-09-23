@@ -16,18 +16,27 @@ package cli
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"math/rand"
 	"os"
 	"strings"
 	"text/tabwriter"
 
+	_ "github.com/benesch/cgosymbolizer" // calls runtime.SetCgoTraceback on import
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	workloadcli "github.com/cockroachdb/cockroach/pkg/workload/cli"
+
+	// intentionally not all the workloads in pkg/ccl/workloadccl/allccl
+	_ "github.com/cockroachdb/cockroach/pkg/workload/bank"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 )
 
 // Main is the entry point for the cli, with a single line calling it intended
@@ -39,6 +48,12 @@ func Main() {
 
 	if len(os.Args) == 1 {
 		os.Args = append(os.Args, "help")
+	}
+
+	// Change the logging defaults for the main cockroach binary.
+	// The value is overridden after command-line parsing.
+	if err := flag.Lookup(logflags.LogToStderrName).Value.Set("NONE"); err != nil {
+		panic(err)
 	}
 
 	cmdName := commandName(os.Args[1:])
@@ -67,8 +82,8 @@ func Main() {
 func commandName(args []string) string {
 	rootName := cockroachCmd.CommandPath()
 	// Ask Cobra to find the command so that flags and their arguments are
-	// ignored. The name of "cockroach --verbosity 2 start" is "start", not
-	// "--verbosity" or "2".
+	// ignored. The name of "cockroach --log-dir foo start" is "start", not
+	// "--log-dir" or "foo".
 	if cmd, _, _ := cockroachCmd.Find(os.Args[1:]); cmd != nil {
 		return strings.TrimPrefix(cmd.CommandPath(), rootName+" ")
 	}
@@ -161,7 +176,9 @@ func init() {
 		demoCmd,
 		genCmd,
 		versionCmd,
-		debugCmd,
+		DebugCmd,
+		sqlfmtCmd,
+		workloadcli.WorkloadCmd(true /* userFacing */),
 	)
 }
 
@@ -174,4 +191,14 @@ func AddCmd(c *cobra.Command) {
 func Run(args []string) error {
 	cockroachCmd.SetArgs(args)
 	return cockroachCmd.Execute()
+}
+
+// usageAndErr informs the user about the usage of the command
+// and returns an error. This ensures that the top-level command
+// has a suitable exit status.
+func usageAndErr(cmd *cobra.Command, args []string) error {
+	if err := cmd.Usage(); err != nil {
+		return err
+	}
+	return fmt.Errorf("unknown sub-command: %s", strings.Join(args, " "))
 }

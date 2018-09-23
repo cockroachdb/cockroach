@@ -327,6 +327,13 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 	return pgwireConn, nil
 }
 
+func makeTestingConvCfg() sessiondata.DataConversionConfig {
+	return sessiondata.DataConversionConfig{
+		Location:          time.UTC,
+		BytesEncodeFormat: sessiondata.BytesEncodeHex,
+	}
+}
+
 // sendResult serializes a set of rows in pgwire format and sends them on a
 // connection.
 //
@@ -339,11 +346,12 @@ func sendResult(
 		return err
 	}
 
+	defaultConv := makeTestingConvCfg()
 	for _, row := range rows {
 		c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
 		c.msgBuilder.putInt16(int16(len(row)))
 		for _, col := range row {
-			c.msgBuilder.writeTextDatum(ctx, col, time.UTC /* sessionLoc */, sessiondata.BytesEncodeHex)
+			c.msgBuilder.writeTextDatum(ctx, col, defaultConv)
 		}
 
 		if err := c.msgBuilder.finishMsg(c.conn); err != nil {

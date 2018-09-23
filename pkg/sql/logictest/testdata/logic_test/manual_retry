@@ -5,7 +5,7 @@ subtest automatic_retry
 # On an implicit transaction, we retry automatically and the function
 # eventually returns a result.
 query I
-SELECT CRDB_INTERNAL.FORCE_RETRY('50ms':::INTERVAL)
+SELECT crdb_internal.force_retry('50ms':::INTERVAL)
 ----
 0
 
@@ -20,7 +20,7 @@ statement ok
 SELECT 1
 
 query error restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
-SELECT CRDB_INTERNAL.FORCE_RETRY('500ms':::INTERVAL)
+SELECT crdb_internal.force_retry('500ms':::INTERVAL)
 
 statement ok
 ROLLBACK TO SAVEPOINT cockroach_restart
@@ -32,7 +32,7 @@ statement ok
 SAVEPOINT cockroach_restart
 
 query I
-SELECT CRDB_INTERNAL.FORCE_RETRY('500ms':::INTERVAL)
+SELECT crdb_internal.force_retry('500ms':::INTERVAL)
 ----
 0
 

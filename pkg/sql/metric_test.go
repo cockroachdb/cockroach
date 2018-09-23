@@ -17,6 +17,7 @@ package sql_test
 import (
 	"bytes"
 	"context"
+	"regexp"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -30,14 +31,18 @@ import (
 
 type queryCounter struct {
 	query              string
+	expectError        bool
 	txnBeginCount      int64
 	selectCount        int64
 	distSQLSelectCount int64
+	optCount           int64
+	fallbackCount      int64
 	updateCount        int64
 	insertCount        int64
 	deleteCount        int64
 	ddlCount           int64
 	miscCount          int64
+	failureCount       int64
 	txnCommitCount     int64
 	txnRollbackCount   int64
 	txnAbortCount      int64
@@ -52,12 +57,20 @@ func TestQueryCounts(t *testing.T) {
 
 	var testcases = []queryCounter{
 		// The counts are deltas for each query.
+		{query: "SET OPTIMIZER = 'off'", miscCount: 1},
 		{query: "SET DISTSQL = 'off'", miscCount: 1},
 		{query: "BEGIN; END", txnBeginCount: 1, txnCommitCount: 1},
 		{query: "SELECT 1", selectCount: 1, txnCommitCount: 1},
 		{query: "CREATE DATABASE mt", ddlCount: 1},
-		{query: "CREATE TABLE mt.n (num INTEGER)", ddlCount: 1},
+		{query: "CREATE TABLE mt.n (num INTEGER PRIMARY KEY)", ddlCount: 1},
 		{query: "INSERT INTO mt.n VALUES (3)", insertCount: 1},
+		// Test failure (uniqueness violation).
+		{query: "INSERT INTO mt.n VALUES (3)", failureCount: 1, insertCount: 1, expectError: true},
+		// Test failure (planning error).
+		{
+			query:        "INSERT INTO nonexistent VALUES (3)",
+			failureCount: 1, insertCount: 1, expectError: true,
+		},
 		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1},
 		{query: "DELETE FROM mt.n", deleteCount: 1},
 		{query: "ALTER TABLE mt.n ADD COLUMN num2 INTEGER", ddlCount: 1},
@@ -72,13 +85,18 @@ func TestQueryCounts(t *testing.T) {
 		{query: "SET DISTSQL = 'off'", miscCount: 1},
 		{query: "DROP TABLE mt.n", ddlCount: 1},
 		{query: "SET database = system", miscCount: 1},
+		{query: "SET OPTIMIZER = 'on'", miscCount: 1, fallbackCount: 1},
+		{query: "SELECT 3", selectCount: 1, optCount: 1},
+		{query: "CREATE TABLE mt.n (num INTEGER PRIMARY KEY)", ddlCount: 1, fallbackCount: 1},
+		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1, fallbackCount: 1},
+		{query: "SET OPTIMIZER = 'off'", miscCount: 1},
 	}
 
 	accum := initializeQueryCounter(s)
 
 	for _, tc := range testcases {
 		t.Run(tc.query, func(t *testing.T) {
-			if _, err := sqlDB.Exec(tc.query); err != nil {
+			if _, err := sqlDB.Exec(tc.query); err != nil && !tc.expectError {
 				t.Fatalf("unexpected error executing '%s': %s'", tc.query, err)
 			}
 
@@ -118,6 +136,15 @@ func TestQueryCounts(t *testing.T) {
 			if accum.miscCount, err = checkCounterDelta(s, sql.MetaMisc, accum.miscCount, tc.miscCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
+			if accum.failureCount, err = checkCounterDelta(s, sql.MetaFailure, accum.failureCount, tc.failureCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.optCount, err = checkCounterDelta(s, sql.MetaSQLOpt, accum.optCount, tc.optCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.fallbackCount, err = checkCounterDelta(s, sql.MetaSQLOptFallback, accum.fallbackCount, tc.fallbackCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
 		})
 	}
 }
@@ -147,7 +174,8 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 			if bytes.Contains(req.Value.RawBytes, []byte("marker")) && !restarted {
 				restarted = true
 				return roachpb.NewErrorWithTxn(
-					roachpb.NewTransactionAbortedError(), args.Hdr.Txn)
+					roachpb.NewTransactionAbortedError(
+						roachpb.ABORT_REASON_ABORTED_RECORD_FOUND), args.Hdr.Txn)
 			}
 		}
 		return nil
@@ -164,8 +192,9 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 	}
 
 	_, err = txn.Exec("INSERT INTO db.t VALUES ('key', 'marker')")
-	if !testutils.IsError(err, "aborted") {
-		t.Fatalf("expected aborted error, got: %v", err)
+	expErr := "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)"
+	if !testutils.IsError(err, regexp.QuoteMeta(expErr)) {
+		t.Fatalf("expected %s, got: %v", expErr, err)
 	}
 
 	if err = txn.Rollback(); err != nil {

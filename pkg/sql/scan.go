@@ -22,6 +22,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -120,6 +121,17 @@ const (
 	// a row by correctly constructing ColumnFamilies and Indexes.
 	publicAndNonPublicColumns scanVisibility = 1
 )
+
+func (s scanVisibility) toDistSQLScanVisibility() distsqlrun.ScanVisibility {
+	switch s {
+	case publicColumns:
+		return distsqlrun.ScanVisibility_PUBLIC
+	case publicAndNonPublicColumns:
+		return distsqlrun.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	default:
+		panic(fmt.Sprintf("Unknown visibility %+v", s))
+	}
+}
 
 // scanColumnsConfig controls the "schema" of a scan node. The zero value is the
 // default: all "public" columns.
@@ -279,7 +291,7 @@ func (n *scanNode) initTable(
 	ctx context.Context,
 	p *planner,
 	desc *sqlbase.TableDescriptor,
-	indexHints *tree.IndexHints,
+	indexFlags *tree.IndexFlags,
 	colCfg scanColumnsConfig,
 ) error {
 	n.desc = desc
@@ -290,20 +302,20 @@ func (n *scanNode) initTable(
 		}
 	}
 
-	if indexHints != nil {
-		if err := n.lookupSpecifiedIndex(indexHints); err != nil {
+	if indexFlags != nil {
+		if err := n.lookupSpecifiedIndex(indexFlags); err != nil {
 			return err
 		}
 	}
 
-	n.noIndexJoin = (indexHints != nil && indexHints.NoIndexJoin)
+	n.noIndexJoin = (indexFlags != nil && indexFlags.NoIndexJoin)
 	return n.initDescDefaults(p.curPlan.deps, colCfg)
 }
 
-func (n *scanNode) lookupSpecifiedIndex(indexHints *tree.IndexHints) error {
-	if indexHints.Index != "" {
+func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
+	if indexFlags.Index != "" {
 		// Search index by name.
-		indexName := string(indexHints.Index)
+		indexName := string(indexFlags.Index)
 		if indexName == n.desc.PrimaryIndex.Name {
 			n.specifiedIndex = &n.desc.PrimaryIndex
 		} else {
@@ -315,22 +327,22 @@ func (n *scanNode) lookupSpecifiedIndex(indexHints *tree.IndexHints) error {
 			}
 		}
 		if n.specifiedIndex == nil {
-			return errors.Errorf("index %q not found", tree.ErrString(&indexHints.Index))
+			return errors.Errorf("index %q not found", tree.ErrString(&indexFlags.Index))
 		}
-	} else if indexHints.IndexID != 0 {
+	} else if indexFlags.IndexID != 0 {
 		// Search index by ID.
-		if n.desc.PrimaryIndex.ID == sqlbase.IndexID(indexHints.IndexID) {
+		if n.desc.PrimaryIndex.ID == sqlbase.IndexID(indexFlags.IndexID) {
 			n.specifiedIndex = &n.desc.PrimaryIndex
 		} else {
 			for i := range n.desc.Indexes {
-				if n.desc.Indexes[i].ID == sqlbase.IndexID(indexHints.IndexID) {
+				if n.desc.Indexes[i].ID == sqlbase.IndexID(indexFlags.IndexID) {
 					n.specifiedIndex = &n.desc.Indexes[i]
 					break
 				}
 			}
 		}
 		if n.specifiedIndex == nil {
-			return errors.Errorf("index [%d] not found", indexHints.IndexID)
+			return errors.Errorf("index [%d] not found", indexFlags.IndexID)
 		}
 	}
 	return nil

@@ -46,12 +46,7 @@ func (e *Error) GetDetail() ErrorDetailInterface {
 	if e == nil {
 		return nil
 	}
-	if e.Detail == nil {
-		// Unknown error detail; return the generic error.
-		return (*internalError)(e)
-	}
-
-	if err, ok := e.Detail.GetValue().(ErrorDetailInterface); ok {
+	if err, ok := e.Detail.GetInner().(ErrorDetailInterface); ok {
 		return err
 	}
 	// Unknown error detail; return the generic error.
@@ -67,7 +62,22 @@ func NewError(err error) *Error {
 	if intErr, ok := err.(*internalError); ok {
 		*e = *(*Error)(intErr)
 	} else {
-		e.setGoError(err)
+		if sErr, ok := err.(ErrorDetailInterface); ok {
+			e.Message = sErr.message(e)
+		} else {
+			e.Message = err.Error()
+		}
+		var isTxnError bool
+		if r, ok := err.(transactionRestartError); ok {
+			isTxnError = true
+			e.TransactionRestart = r.canRestartTransaction()
+		}
+		// If the specific error type exists in the detail union, set it.
+		if !e.Detail.SetInner(err) {
+			if _, isInternalError := err.(*internalError); !isInternalError && isTxnError {
+				panic(fmt.Sprintf("transactionRestartError %T must be an ErrorDetail", err))
+			}
+		}
 	}
 
 	return e
@@ -137,30 +147,6 @@ func (e *Error) GoError() error {
 	return e.GetDetail()
 }
 
-// setGoError sets Error using err.
-func (e *Error) setGoError(err error) {
-	if e.Message != "" {
-		panic("cannot re-use roachpb.Error")
-	}
-	if sErr, ok := err.(ErrorDetailInterface); ok {
-		e.Message = sErr.message(e)
-	} else {
-		e.Message = err.Error()
-	}
-	var isTxnError bool
-	if r, ok := err.(transactionRestartError); ok {
-		isTxnError = true
-		e.TransactionRestart = r.canRestartTransaction()
-	}
-	// If the specific error type exists in the detail union, set it.
-	detail := &ErrorDetail{}
-	if detail.SetValue(err) {
-		e.Detail = detail
-	} else if _, isInternalError := err.(*internalError); !isInternalError && isTxnError {
-		panic(fmt.Sprintf("transactionRestartError %T must be an ErrorDetail", err))
-	}
-}
-
 // SetTxn sets the txn and resets the error message. txn is cloned before being
 // stored in the Error.
 // TODO(kaneda): Unexpose this method and make callers use NewErrorWithTxn.
@@ -170,11 +156,9 @@ func (e *Error) SetTxn(txn *Transaction) {
 		txnClone := txn.Clone()
 		e.UnexposedTxn = &txnClone
 	}
-	if e.Detail != nil {
-		if sErr, ok := e.Detail.GetValue().(ErrorDetailInterface); ok {
-			// Refresh the message as the txn is updated.
-			e.Message = sErr.message(e)
-		}
+	if sErr, ok := e.Detail.GetInner().(ErrorDetailInterface); ok {
+		// Refresh the message as the txn is updated.
+		e.Message = sErr.message(e)
 	}
 }
 
@@ -319,11 +303,11 @@ func (e *AmbiguousResultError) message(_ *Error) string {
 var _ ErrorDetailInterface = &AmbiguousResultError{}
 
 func (e *TransactionAbortedError) Error() string {
-	return "TransactionAbortedError: txn aborted"
+	return fmt.Sprintf("TransactionAbortedError(%s)", e.Reason)
 }
 
 func (e *TransactionAbortedError) message(pErr *Error) string {
-	return fmt.Sprintf("TransactionAbortedError: txn aborted %s", pErr.GetTxn())
+	return fmt.Sprintf("TransactionAbortedError(%s): %s", e.Reason, pErr.GetTxn())
 }
 
 func (*TransactionAbortedError) canRestartTransaction() TransactionRestart {
@@ -344,8 +328,10 @@ func (e *HandledRetryableTxnError) message(_ *Error) string {
 var _ ErrorDetailInterface = &HandledRetryableTxnError{}
 
 // NewTransactionAbortedError initializes a new TransactionAbortedError.
-func NewTransactionAbortedError() *TransactionAbortedError {
-	return &TransactionAbortedError{}
+func NewTransactionAbortedError(reason TransactionAbortedReason) *TransactionAbortedError {
+	return &TransactionAbortedError{
+		Reason: reason,
+	}
 }
 
 // NewHandledRetryableTxnError initializes a new HandledRetryableTxnError.
@@ -406,21 +392,6 @@ func (*TransactionRetryError) canRestartTransaction() TransactionRestart {
 	return TransactionRestart_IMMEDIATE
 }
 
-// NewTransactionReplayError initializes a new TransactionReplayError.
-func NewTransactionReplayError() *TransactionReplayError {
-	return &TransactionReplayError{}
-}
-
-func (e *TransactionReplayError) Error() string {
-	return fmt.Sprintf("replay txn")
-}
-
-func (e *TransactionReplayError) message(pErr *Error) string {
-	return fmt.Sprintf("replay txn %s", pErr.GetTxn())
-}
-
-var _ ErrorDetailInterface = &TransactionReplayError{}
-
 // NewTransactionStatusError initializes a new TransactionStatusError from
 // the given message.
 func NewTransactionStatusError(msg string) *TransactionStatusError {
@@ -436,6 +407,15 @@ func NewTransactionNotFoundStatusError() *TransactionStatusError {
 	return &TransactionStatusError{
 		Msg:    "txn record not found",
 		Reason: TransactionStatusError_REASON_TXN_NOT_FOUND,
+	}
+}
+
+// NewTransactionCommittedStatusError initializes a new TransactionStatusError
+// with a REASON_TXN_COMMITTED.
+func NewTransactionCommittedStatusError() *TransactionStatusError {
+	return &TransactionStatusError{
+		Msg:    "already committed",
+		Reason: TransactionStatusError_REASON_TXN_COMMITTED,
 	}
 }
 
@@ -570,6 +550,12 @@ func (*RaftGroupDeletedError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &RaftGroupDeletedError{}
 
+// NewReplicaCorruptionError creates a new error indicating a corrupt replica.
+// The supplied error is used to provide additional detail in the error message.
+func NewReplicaCorruptionError(err error) *ReplicaCorruptionError {
+	return &ReplicaCorruptionError{ErrorMsg: err.Error()}
+}
+
 func (e *ReplicaCorruptionError) Error() string {
 	return e.message(nil)
 }
@@ -617,16 +603,6 @@ func (e *StoreNotFoundError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &StoreNotFoundError{}
-
-func (e *TxnPrevAttemptError) Error() string {
-	return e.message(nil)
-}
-
-func (*TxnPrevAttemptError) message(_ *Error) string {
-	return "response meant for previous incarnation of transaction"
-}
-
-var _ ErrorDetailInterface = &TxnPrevAttemptError{}
 
 func (e *TxnAlreadyEncounteredErrorError) Error() string {
 	return e.message(nil)
@@ -679,3 +655,51 @@ func (e *BatchTimestampBeforeGCError) message(_ *Error) string {
 }
 
 var _ ErrorDetailInterface = &BatchTimestampBeforeGCError{}
+
+// NewIntentMissingError creates a new IntentMissingError.
+func NewIntentMissingError(wrongIntent *Intent) *IntentMissingError {
+	return &IntentMissingError{
+		WrongIntent: wrongIntent,
+	}
+}
+
+func (e *IntentMissingError) Error() string {
+	return e.message(nil)
+}
+
+func (e *IntentMissingError) message(_ *Error) string {
+	var detail string
+	if e.WrongIntent != nil {
+		detail = fmt.Sprintf("; found intent %v at key instead", e.WrongIntent)
+	}
+	return fmt.Sprintf("intent missing%s", detail)
+}
+
+var _ ErrorDetailInterface = &IntentMissingError{}
+
+func (e *MergeInProgressError) Error() string {
+	return e.message(nil)
+}
+
+func (e *MergeInProgressError) message(_ *Error) string {
+	return "merge in progress"
+}
+
+var _ ErrorDetailInterface = &MergeInProgressError{}
+
+// NewRangeFeedRetryError initializes a new RangeFeedRetryError.
+func NewRangeFeedRetryError(reason RangeFeedRetryError_Reason) *RangeFeedRetryError {
+	return &RangeFeedRetryError{
+		Reason: reason,
+	}
+}
+
+func (e *RangeFeedRetryError) Error() string {
+	return e.message(nil)
+}
+
+func (e *RangeFeedRetryError) message(pErr *Error) string {
+	return fmt.Sprintf("retry rangefeed (%s)", e.Reason)
+}
+
+var _ ErrorDetailInterface = &RangeFeedRetryError{}

@@ -22,15 +22,20 @@ SELECT * FROM xy WHERE x=1
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=1, distinct(1)=1]
- ├── keys: (1)
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ ├── prune: (2)
+ ├── interesting orderings: (+1)
  ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)
- │    ├── stats: [rows=1000, distinct(1)=1000]
- │    └── keys: (1)
- └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── prune: (1,2)
+ │    └── interesting orderings: (+1)
+ └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
       └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
-           ├── variable: xy.x [type=int, outer=(1)]
+           ├── variable: x [type=int, outer=(1)]
            └── const: 1 [type=int]
 
 build
@@ -38,23 +43,33 @@ SELECT * FROM xy,kuv WHERE xy.x=kuv.k
 ----
 select
  ├── columns: x:1(int!null) y:2(int) k:3(int!null) u:4(float) v:5(string)
- ├── stats: [rows=111111]
+ ├── key: (3)
+ ├── fd: (1)-->(2), (3)-->(4,5), (1)==(3), (3)==(1)
+ ├── prune: (2,4,5)
+ ├── interesting orderings: (+1) (+3)
  ├── inner-join
  │    ├── columns: x:1(int!null) y:2(int) k:3(int!null) u:4(float) v:5(string)
- │    ├── stats: [rows=1000000]
+ │    ├── key: (1,3)
+ │    ├── fd: (1)-->(2), (3)-->(4,5)
+ │    ├── prune: (1-5)
+ │    ├── interesting orderings: (+1) (+3)
  │    ├── scan xy
  │    │    ├── columns: x:1(int!null) y:2(int)
- │    │    ├── stats: [rows=1000]
- │    │    └── keys: (1)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── prune: (1,2)
+ │    │    └── interesting orderings: (+1)
  │    ├── scan kuv
  │    │    ├── columns: k:3(int!null) u:4(float) v:5(string)
- │    │    ├── stats: [rows=1000]
- │    │    └── keys: (3)
+ │    │    ├── key: (3)
+ │    │    ├── fd: (3)-->(4,5)
+ │    │    ├── prune: (3-5)
+ │    │    └── interesting orderings: (+3)
  │    └── true [type=bool]
- └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
       └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-           ├── variable: xy.x [type=int, outer=(1)]
-           └── variable: kuv.k [type=int, outer=(3)]
+           ├── variable: x [type=int, outer=(1)]
+           └── variable: k [type=int, outer=(3)]
 
 # Propagate outer columns.
 build
@@ -62,60 +77,75 @@ SELECT * FROM xy WHERE EXISTS(SELECT * FROM (SELECT * FROM kuv WHERE k=y) WHERE 
 ----
 select
  ├── columns: x:1(int!null) y:2(int)
- ├── stats: [rows=333]
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── interesting orderings: (+1)
  ├── scan xy
  │    ├── columns: x:1(int!null) y:2(int)
- │    ├── stats: [rows=1000]
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── prune: (1,2)
+ │    └── interesting orderings: (+1)
  └── filters [type=bool, outer=(1,2)]
       └── exists [type=bool, outer=(1,2)]
            └── select
                 ├── columns: k:3(int!null) u:4(float) v:5(string)
                 ├── outer: (1,2)
-                ├── stats: [rows=12]
-                ├── keys: (3)
+                ├── cardinality: [0 - 1]
+                ├── key: ()
+                ├── fd: ()-->(3-5)
+                ├── prune: (4,5)
+                ├── interesting orderings: (+3)
                 ├── select
                 │    ├── columns: k:3(int!null) u:4(float) v:5(string)
                 │    ├── outer: (2)
-                │    ├── stats: [rows=111]
-                │    ├── keys: (3)
+                │    ├── cardinality: [0 - 1]
+                │    ├── key: ()
+                │    ├── fd: ()-->(3-5)
+                │    ├── prune: (4,5)
+                │    ├── interesting orderings: (+3)
                 │    ├── scan kuv
                 │    │    ├── columns: k:3(int!null) u:4(float) v:5(string)
-                │    │    ├── stats: [rows=1000]
-                │    │    └── keys: (3)
-                │    └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+                │    │    ├── key: (3)
+                │    │    ├── fd: (3)-->(4,5)
+                │    │    ├── prune: (3-5)
+                │    │    └── interesting orderings: (+3)
+                │    └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
                 │         └── eq [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
-                │              ├── variable: kuv.k [type=int, outer=(3)]
-                │              └── variable: xy.y [type=int, outer=(2)]
-                └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+                │              ├── variable: k [type=int, outer=(3)]
+                │              └── variable: y [type=int, outer=(2)]
+                └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
                      └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-                          ├── variable: kuv.k [type=int, outer=(3)]
-                          └── variable: xy.x [type=int, outer=(1)]
+                          ├── variable: k [type=int, outer=(3)]
+                          └── variable: x [type=int, outer=(1)]
 
 # Reduce min cardinality.
 build
-SELECT COUNT(*) FROM xy HAVING COUNT(*) = 5
+SELECT count(*) FROM xy HAVING count(*) = 5
 ----
 select
  ├── columns: count:3(int!null)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1, distinct(3)=1]
- ├── group-by
- │    ├── columns: column3:3(int)
+ ├── key: ()
+ ├── fd: ()-->(3)
+ ├── scalar-group-by
+ │    ├── columns: count_rows:3(int)
  │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1, distinct(3)=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(3)
+ │    ├── prune: (3)
  │    ├── project
- │    │    ├── stats: [rows=1000]
  │    │    └── scan xy
  │    │         ├── columns: x:1(int!null) y:2(int)
- │    │         ├── stats: [rows=1000]
- │    │         └── keys: (1)
+ │    │         ├── key: (1)
+ │    │         ├── fd: (1)-->(2)
+ │    │         ├── prune: (1,2)
+ │    │         └── interesting orderings: (+1)
  │    └── aggregations
  │         └── count-rows [type=int]
- └── filters [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
+ └── filters [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
       └── eq [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
-           ├── variable: column3 [type=int, outer=(3)]
+           ├── variable: count_rows [type=int, outer=(3)]
            └── const: 5 [type=int]
 
 build
@@ -123,12 +153,15 @@ SELECT * FROM xy WITH ORDINALITY
 ----
 row-number
  ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
- ├── stats: [rows=1000]
- ├── keys: (1) (3)
+ ├── key: (1)
+ ├── fd: (1)-->(2,3), (3)-->(1,2)
+ ├── prune: (1,2)
  └── scan xy
       ├── columns: x:1(int!null) y:2(int)
-      ├── stats: [rows=1000]
-      └── keys: (1)
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── prune: (1,2)
+      └── interesting orderings: (+1)
 
 # Verify not-null column deduction from constraints.
 exec-ddl
@@ -148,15 +181,19 @@ SELECT * FROM abcd WHERE true
 ----
 project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)
- ├── stats: [rows=333]
+ ├── prune: (1-4)
  └── select
       ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
-      ├── stats: [rows=333]
-      ├── keys: (5)
+      ├── key: (5)
+      ├── fd: (5)-->(1-4)
+      ├── prune: (1-5)
+      ├── interesting orderings: (+5)
       ├── scan abcd
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
-      │    ├── stats: [rows=1000]
-      │    └── keys: (5)
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(1-4)
+      │    ├── prune: (1-5)
+      │    └── interesting orderings: (+5)
       └── filters [type=bool]
            └── true [type=bool]
 
@@ -165,18 +202,22 @@ SELECT * FROM abcd WHERE c IS NOT NULL
 ----
 project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
- ├── stats: [rows=333]
+ ├── prune: (1-4)
  └── select
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
-      ├── stats: [rows=333]
-      ├── keys: (5)
+      ├── key: (5)
+      ├── fd: (5)-->(1-4)
+      ├── prune: (1,2,4,5)
+      ├── interesting orderings: (+5)
       ├── scan abcd
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
-      │    ├── stats: [rows=1000]
-      │    └── keys: (5)
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(1-4)
+      │    ├── prune: (1-5)
+      │    └── interesting orderings: (+5)
       └── filters [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
            └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
-                ├── variable: abcd.c [type=int, outer=(3)]
+                ├── variable: c [type=int, outer=(3)]
                 └── null [type=unknown]
 
 build
@@ -184,109 +225,134 @@ SELECT * FROM abcd WHERE c = d
 ----
 project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
- ├── stats: [rows=111]
+ ├── fd: (3)==(4), (4)==(3)
+ ├── prune: (1-4)
  └── select
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) rowid:5(int!null)
-      ├── stats: [rows=111]
-      ├── keys: (5)
+      ├── key: (5)
+      ├── fd: (5)-->(1-4), (3)==(4), (4)==(3)
+      ├── prune: (1,2,5)
+      ├── interesting orderings: (+5)
       ├── scan abcd
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
-      │    ├── stats: [rows=1000]
-      │    └── keys: (5)
-      └── filters [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ])]
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(1-4)
+      │    ├── prune: (1-5)
+      │    └── interesting orderings: (+5)
+      └── filters [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ]), fd=(3)==(4), (4)==(3)]
            └── eq [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ])]
-                ├── variable: abcd.c [type=int, outer=(3)]
-                └── variable: abcd.d [type=int, outer=(4)]
+                ├── variable: c [type=int, outer=(3)]
+                └── variable: d [type=int, outer=(4)]
 
 build
 SELECT * FROM abcd WHERE a > c
 ----
 project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
- ├── stats: [rows=111]
+ ├── prune: (1-4)
  └── select
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
-      ├── stats: [rows=111]
-      ├── keys: (5)
+      ├── key: (5)
+      ├── fd: (5)-->(1-4)
+      ├── prune: (2,4,5)
+      ├── interesting orderings: (+5)
       ├── scan abcd
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
-      │    ├── stats: [rows=1000]
-      │    └── keys: (5)
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(1-4)
+      │    ├── prune: (1-5)
+      │    └── interesting orderings: (+5)
       └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
            └── gt [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-                ├── variable: abcd.a [type=int, outer=(1)]
-                └── variable: abcd.c [type=int, outer=(3)]
+                ├── variable: a [type=int, outer=(1)]
+                └── variable: c [type=int, outer=(3)]
 
 build
 SELECT * FROM (SELECT * FROM abcd WHERE a = c) WHERE b < d
 ----
 select
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
- ├── stats: [rows=12]
+ ├── fd: (1)==(3), (3)==(1)
+ ├── prune: (1,3)
  ├── project
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
- │    ├── stats: [rows=111]
+ │    ├── fd: (1)==(3), (3)==(1)
+ │    ├── prune: (1-4)
  │    └── select
  │         ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
- │         ├── stats: [rows=111]
- │         ├── keys: (5)
+ │         ├── key: (5)
+ │         ├── fd: (5)-->(1-4), (1)==(3), (3)==(1)
+ │         ├── prune: (2,4,5)
+ │         ├── interesting orderings: (+5)
  │         ├── scan abcd
  │         │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
- │         │    ├── stats: [rows=1000]
- │         │    └── keys: (5)
- │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ │         │    ├── key: (5)
+ │         │    ├── fd: (5)-->(1-4)
+ │         │    ├── prune: (1-5)
+ │         │    └── interesting orderings: (+5)
+ │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
  │              └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
- │                   ├── variable: abcd.a [type=int, outer=(1)]
- │                   └── variable: abcd.c [type=int, outer=(3)]
+ │                   ├── variable: a [type=int, outer=(1)]
+ │                   └── variable: c [type=int, outer=(3)]
  └── filters [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ])]
       └── lt [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ])]
-           ├── variable: abcd.b [type=int, outer=(2)]
-           └── variable: abcd.d [type=int, outer=(4)]
+           ├── variable: b [type=int, outer=(2)]
+           └── variable: d [type=int, outer=(4)]
 
 # Test outer column in select filter that is part of a not-null constraint.
 build
-SELECT * FROM abcd WHERE (SELECT COUNT(*) FROM xy WHERE y = b) > 0
+SELECT * FROM abcd WHERE (SELECT count(*) FROM xy WHERE y = b) > 0
 ----
 project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int)
- ├── stats: [rows=333]
+ ├── prune: (1-4)
  └── select
       ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
-      ├── stats: [rows=333]
-      ├── keys: (5)
+      ├── key: (5)
+      ├── fd: (5)-->(1-4)
+      ├── prune: (1,3-5)
+      ├── interesting orderings: (+5)
       ├── scan abcd
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) d:4(int) rowid:5(int!null)
-      │    ├── stats: [rows=1000]
-      │    └── keys: (5)
+      │    ├── key: (5)
+      │    ├── fd: (5)-->(1-4)
+      │    ├── prune: (1-5)
+      │    └── interesting orderings: (+5)
       └── filters [type=bool, outer=(2)]
            └── gt [type=bool, outer=(2)]
                 ├── subquery [type=int, outer=(2)]
                 │    └── max1-row
-                │         ├── columns: count:8(int)
+                │         ├── columns: count_rows:8(int)
                 │         ├── outer: (2)
                 │         ├── cardinality: [1 - 1]
-                │         ├── stats: [rows=1]
-                │         └── group-by
-                │              ├── columns: count:8(int)
+                │         ├── key: ()
+                │         ├── fd: ()-->(8)
+                │         └── scalar-group-by
+                │              ├── columns: count_rows:8(int)
                 │              ├── outer: (2)
                 │              ├── cardinality: [1 - 1]
-                │              ├── stats: [rows=1]
+                │              ├── key: ()
+                │              ├── fd: ()-->(8)
+                │              ├── prune: (8)
                 │              ├── project
                 │              │    ├── outer: (2)
-                │              │    ├── stats: [rows=111]
                 │              │    └── select
                 │              │         ├── columns: x:6(int!null) y:7(int!null)
                 │              │         ├── outer: (2)
-                │              │         ├── stats: [rows=111]
-                │              │         ├── keys: (6)
+                │              │         ├── key: (6)
+                │              │         ├── fd: ()-->(7)
+                │              │         ├── prune: (6)
+                │              │         ├── interesting orderings: (+6)
                 │              │         ├── scan xy
                 │              │         │    ├── columns: x:6(int!null) y:7(int)
-                │              │         │    ├── stats: [rows=1000]
-                │              │         │    └── keys: (6)
-                │              │         └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+                │              │         │    ├── key: (6)
+                │              │         │    ├── fd: (6)-->(7)
+                │              │         │    ├── prune: (6,7)
+                │              │         │    └── interesting orderings: (+6)
+                │              │         └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
                 │              │              └── eq [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
-                │              │                   ├── variable: xy.y [type=int, outer=(7)]
-                │              │                   └── variable: abcd.b [type=int, outer=(2)]
+                │              │                   ├── variable: y [type=int, outer=(7)]
+                │              │                   └── variable: b [type=int, outer=(2)]
                 │              └── aggregations
                 │                   └── count-rows [type=int]
                 └── const: 0 [type=int]

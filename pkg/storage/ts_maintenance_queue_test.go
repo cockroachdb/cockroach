@@ -62,21 +62,23 @@ func (m *modelTimeSeriesDataStore) ContainsTimeSeries(start, end roachpb.RKey) b
 	return true
 }
 
-func (m *modelTimeSeriesDataStore) PruneTimeSeries(
+func (m *modelTimeSeriesDataStore) MaintainTimeSeries(
 	ctx context.Context,
 	snapshot engine.Reader,
 	start, end roachpb.RKey,
 	db *client.DB,
+	_ *mon.BytesMonitor,
+	_ int64,
 	now hlc.Timestamp,
 ) error {
 	if snapshot == nil {
-		m.t.Fatal("PruneTimeSeries was passed a nil snapshot")
+		m.t.Fatal("MaintainTimeSeries was passed a nil snapshot")
 	}
 	if db == nil {
-		m.t.Fatal("PruneTimeSeries was passed a nil client.DB")
+		m.t.Fatal("MaintainTimeSeries was passed a nil client.DB")
 	}
 	if !start.Less(end) {
-		m.t.Fatalf("PruneTimeSeries passed start key %v which is not less than end key %v", start, end)
+		m.t.Fatalf("MaintainTimeSeries passed start key %v which is not less than end key %v", start, end)
 	}
 
 	m.Lock()
@@ -103,6 +105,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	cfg.TimeSeriesDataStore = model
 	cfg.TestingKnobs.DisableScanner = true
 	cfg.TestingKnobs.DisableSplitQueue = true
+	cfg.TestingKnobs.DisableMergeQueue = true
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
@@ -111,7 +114,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	// Generate several splits.
 	splitKeys := []roachpb.Key{roachpb.Key("c"), roachpb.Key("b"), roachpb.Key("a")}
 	for _, k := range splitKeys {
-		repl := store.LookupReplica(roachpb.RKey(k), nil)
+		repl := store.LookupReplica(roachpb.RKey(k))
 		args := adminSplitArgs(k)
 		if _, pErr := client.SendWrappedWith(context.Background(), store, roachpb.Header{
 			RangeID: repl.RangeID,
@@ -137,7 +140,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 		if a, e := store.ReplicaCount(), len(expectedEndKeys); a != e {
 			return fmt.Errorf("expected %d replicas in store; found %d", a, e)
 		}
-		if _, ok := store.Gossip().GetSystemConfig(); !ok {
+		if cfg := store.Gossip().GetSystemConfig(); cfg == nil {
 			return fmt.Errorf("system config not yet available")
 		}
 		return nil
@@ -155,17 +158,17 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 			return fmt.Errorf("ContainsTimeSeries called %d times; expected %d", a, e)
 		}
 		if a, e := model.pruneCalled, len(expectedStartKeys); a != e {
-			return fmt.Errorf("PruneTimeSeries called %d times; expected %d", a, e)
+			return fmt.Errorf("MaintainTimeSeries called %d times; expected %d", a, e)
 		}
 		return nil
 	})
 
 	model.Lock()
 	if a, e := model.pruneSeenStartKeys, expectedStartKeys; !reflect.DeepEqual(a, e) {
-		t.Errorf("start keys seen by PruneTimeSeries did not match expectation: %s", pretty.Diff(a, e))
+		t.Errorf("start keys seen by MaintainTimeSeries did not match expectation: %s", pretty.Diff(a, e))
 	}
 	if a, e := model.pruneSeenEndKeys, expectedEndKeys; !reflect.DeepEqual(a, e) {
-		t.Errorf("end keys seen by PruneTimeSeries did not match expectation: %s", pretty.Diff(a, e))
+		t.Errorf("end keys seen by MaintainTimeSeries did not match expectation: %s", pretty.Diff(a, e))
 	}
 	model.Unlock()
 
@@ -175,7 +178,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 			keys = append(keys, roachpb.RKey(k))
 		}
 		for _, key := range keys {
-			repl := store.LookupReplica(key, nil)
+			repl := store.LookupReplica(key)
 			ts, err := repl.GetQueueLastProcessed(context.TODO(), "timeSeriesMaintenance")
 			if err != nil {
 				return err
@@ -195,7 +198,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 		t.Errorf("ContainsTimeSeries called %d times; expected %d", a, e)
 	}
 	if a, e := model.pruneCalled, len(expectedStartKeys); a != e {
-		t.Errorf("PruneTimeSeries called %d times; expected %d", a, e)
+		t.Errorf("MaintainTimeSeries called %d times; expected %d", a, e)
 	}
 	model.Unlock()
 
@@ -209,7 +212,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 			return errors.Errorf("ContainsTimeSeries called %d times; expected %d", a, e)
 		}
 		if a, e := model.pruneCalled, len(expectedStartKeys)*2; a != e {
-			return errors.Errorf("PruneTimeSeries called %d times; expected %d", a, e)
+			return errors.Errorf("MaintainTimeSeries called %d times; expected %d", a, e)
 		}
 		return nil
 	})

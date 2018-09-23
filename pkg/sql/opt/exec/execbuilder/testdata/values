@@ -28,14 +28,14 @@ values  ·              ·                  (column1, column2, column3)  ·
 ·       row 1, expr 2  6                  ·                            ·
 
 query TTTTT
-EXPLAIN (VERBOSE) VALUES (LENGTH('a')), (1 + LENGTH('a')), (LENGTH('abc')), (LENGTH('ab') * 2)
+EXPLAIN (VERBOSE) VALUES (length('a')), (1 + length('a')), (length('abc')), (length('ab') * 2)
 ----
 values  ·              ·                 (column1)  ·
 ·       size           1 column, 4 rows  ·          ·
-·       row 0, expr 0  length('a')       ·          ·
-·       row 1, expr 0  1 + length('a')   ·          ·
-·       row 2, expr 0  length('abc')     ·          ·
-·       row 3, expr 0  length('ab') * 2  ·          ·
+·       row 0, expr 0  1                 ·          ·
+·       row 1, expr 0  2                 ·          ·
+·       row 2, expr 0  3                 ·          ·
+·       row 3, expr 0  4                 ·          ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a + b AS r FROM (VALUES (1, 2), (3, 4), (5, 6)) AS v(a, b)

@@ -50,12 +50,12 @@ type testQueueImpl struct {
 }
 
 func (tq *testQueueImpl) shouldQueue(
-	_ context.Context, now hlc.Timestamp, r *Replica, _ config.SystemConfig,
+	_ context.Context, now hlc.Timestamp, r *Replica, _ *config.SystemConfig,
 ) (bool, float64) {
 	return tq.shouldQueueFn(now, r)
 }
 
-func (tq *testQueueImpl) process(_ context.Context, _ *Replica, _ config.SystemConfig) error {
+func (tq *testQueueImpl) process(_ context.Context, _ *Replica, _ *config.SystemConfig) error {
 	atomic.AddInt32(&tq.processed, 1)
 	return tq.err
 }
@@ -101,7 +101,9 @@ func createReplicas(t *testing.T, tc *testContext, num int) []*Replica {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tc.store.RemoveReplica(context.Background(), repl1, *repl1.Desc(), true); err != nil {
+	if err := tc.store.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+		DestroyData: true,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -535,7 +537,9 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := s.RemoveReplica(context.Background(), repl1, *repl1.Desc(), true); err != nil {
+	if err := s.RemoveReplica(context.Background(), repl1, repl1.Desc().NextReplicaID, RemoveOptions{
+		DestroyData: true,
+	}); err != nil {
 		t.Error(err)
 	}
 
@@ -562,11 +566,10 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	bq.Start(stopper)
 
 	// Check our config.
-	var sysCfg config.SystemConfig
+	var sysCfg *config.SystemConfig
 	testutils.SucceedsSoon(t, func() error {
-		var ok bool
-		sysCfg, ok = s.cfg.Gossip.GetSystemConfig()
-		if !ok {
+		sysCfg = s.cfg.Gossip.GetSystemConfig()
+		if sysCfg == nil {
 			return errors.New("system config not yet present")
 		}
 		return nil
@@ -777,7 +780,7 @@ type processTimeoutQueueImpl struct {
 }
 
 func (pq *processTimeoutQueueImpl) process(
-	ctx context.Context, r *Replica, _ config.SystemConfig,
+	ctx context.Context, r *Replica, _ *config.SystemConfig,
 ) error {
 	<-ctx.Done()
 	atomic.AddInt32(&pq.processed, 1)
@@ -835,7 +838,7 @@ type processTimeQueueImpl struct {
 }
 
 func (pq *processTimeQueueImpl) process(
-	_ context.Context, _ *Replica, _ config.SystemConfig,
+	_ context.Context, _ *Replica, _ *config.SystemConfig,
 ) error {
 	time.Sleep(5 * time.Millisecond)
 	return nil
@@ -966,7 +969,7 @@ type parallelQueueImpl struct {
 }
 
 func (pq *parallelQueueImpl) process(
-	ctx context.Context, repl *Replica, cfg config.SystemConfig,
+	ctx context.Context, repl *Replica, cfg *config.SystemConfig,
 ) error {
 	atomic.AddInt32(&pq.processing, 1)
 	if pq.processBlocker != nil {

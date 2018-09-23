@@ -21,6 +21,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pkg/errors"
 
@@ -44,14 +45,24 @@ func TestReplicateQueueRebalance(t *testing.T) {
 
 	const numNodes = 5
 	tc := testcluster.StartTestCluster(t, numNodes,
-		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationAuto,
+			ServerArgs: base.TestServerArgs{
+				Knobs: base.TestingKnobs{
+					Store: &storage.StoreTestingKnobs{
+						// Prevent the merge queue from immediately discarding our splits.
+						DisableMergeQueue: true,
+					},
+				},
+			},
+		},
 	)
 	defer tc.Stopper().Stop(context.TODO())
 
 	for _, server := range tc.Servers {
 		st := server.ClusterSettings()
 		st.Manual.Store(true)
-		storage.EnableStatsBasedRebalancing.Override(&st.SV, false)
+		storage.LoadBasedRebalancingMode.Override(&st.SV, int64(storage.LBRebalancingOff))
 	}
 
 	const newRanges = 5
@@ -177,7 +188,19 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 	// using the replicate queue, and to ensure that's the case, the test
 	// cluster needs to be kept in auto replication mode.
 	tc := testcluster.StartTestCluster(t, replicaCount+2,
-		base.TestClusterArgs{ReplicationMode: base.ReplicationAuto},
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationAuto,
+			ServerArgs: base.TestServerArgs{
+				ScanMinIdleTime: time.Millisecond,
+				ScanMaxIdleTime: time.Millisecond,
+				Knobs: base.TestingKnobs{
+					Store: &storage.StoreTestingKnobs{
+						// Prevent the merge queue from immediately discarding our splits.
+						DisableMergeQueue: true,
+					},
+				},
+			},
+		},
 	)
 	defer tc.Stopper().Stop(context.Background())
 

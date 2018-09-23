@@ -131,4 +131,16 @@ end_test
 interrupt
 eexpect eof
 
+start_test "Check that the hint for a single ? is also printed in non-interactive sessions."
+spawn /bin/bash
+
+send "echo '?' | $argv sql\r"
+eexpect "Note:"
+eexpect JSON
+eexpect "use '??'"
+
+send "exit\r"
+eexpect eof
+end_test
+
 stop_server $argv

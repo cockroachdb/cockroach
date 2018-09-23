@@ -90,14 +90,8 @@ func makeReplicaKeyRanges(
 func NewReplicaDataIterator(
 	d *roachpb.RangeDescriptor, e engine.Reader, replicatedOnly bool,
 ) *ReplicaDataIterator {
-	return WrapWithReplicaDataIterator(d, e.NewIterator(engine.IterOptions{}), replicatedOnly)
-}
+	it := e.NewIterator(engine.IterOptions{UpperBound: d.EndKey.AsRawKey()})
 
-// WrapWithReplicaDataIterator creates a ReplicaDataIterator for the given
-// replica that wraps the provided iterator.
-func WrapWithReplicaDataIterator(
-	d *roachpb.RangeDescriptor, it engine.SimpleIterator, replicatedOnly bool,
-) *ReplicaDataIterator {
 	rangeFunc := MakeAllKeyRanges
 	if replicatedOnly {
 		rangeFunc = MakeReplicatedKeyRanges
@@ -128,15 +122,13 @@ func (ri *ReplicaDataIterator) Next() {
 // invalid.
 func (ri *ReplicaDataIterator) advance() {
 	for {
-		if ok, _ := ri.Valid(); !ok || ri.it.UnsafeKey().Less(ri.ranges[ri.curIndex].End) {
+		if ok, _ := ri.Valid(); ok && ri.it.UnsafeKey().Less(ri.ranges[ri.curIndex].End) {
 			return
 		}
 		ri.curIndex++
 		if ri.curIndex < len(ri.ranges) {
 			ri.it.Seek(ri.ranges[ri.curIndex].Start)
 		} else {
-			// Otherwise, seek to end to make iterator invalid.
-			ri.it.Seek(engine.MVCCKeyMax)
 			return
 		}
 	}
@@ -144,7 +136,9 @@ func (ri *ReplicaDataIterator) advance() {
 
 // Valid returns true if the iterator currently points to a valid value.
 func (ri *ReplicaDataIterator) Valid() (bool, error) {
-	return ri.it.Valid()
+	ok, err := ri.it.Valid()
+	ok = ok && ri.curIndex < len(ri.ranges)
+	return ok, err
 }
 
 // Key returns the current key.

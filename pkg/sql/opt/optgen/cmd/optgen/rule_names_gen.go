@@ -39,6 +39,9 @@ func (g *ruleNamesGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	fmt.Fprintf(g.w, "  startAutoRule RuleName = iota + NumManualRuleNames\n\n")
 
 	g.genRuleNameEnumByTag("Normalize")
+	fmt.Fprintf(g.w, "  // startExploreRule tracks the number of normalization rules;\n")
+	fmt.Fprintf(g.w, "  // all rules greater than this value are exploration rules.\n")
+	fmt.Fprintf(g.w, "  startExploreRule\n\n")
 	g.genRuleNameEnumByTag("Explore")
 
 	fmt.Fprintf(g.w, "  // NumRuleNames tracks the total count of rule names.\n")

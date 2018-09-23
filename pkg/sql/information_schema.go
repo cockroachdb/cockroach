@@ -248,12 +248,15 @@ CREATE TABLE information_schema.columns (
 	CHARACTER_MAXIMUM_LENGTH INT,
 	CHARACTER_OCTET_LENGTH   INT,
 	NUMERIC_PRECISION        INT,
+	NUMERIC_PRECISION_RADIX  INT,
 	NUMERIC_SCALE            INT,
 	DATETIME_PRECISION       INT,
 	CHARACTER_SET_CATALOG    STRING,
 	CHARACTER_SET_SCHEMA     STRING,
 	CHARACTER_SET_NAME       STRING,
-	GENERATION_EXPRESSION    STRING
+	GENERATION_EXPRESSION    STRING,          -- MySQL/CockroachDB extension.
+	IS_HIDDEN                STRING NOT NULL, -- CockroachDB extension for SHOW COLUMNS / dump.
+	CRDB_SQL_TYPE            STRING NOT NULL  -- CockroachDB extension for SHOW COLUMNS / dump.
 );
 `,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -265,23 +268,26 @@ CREATE TABLE information_schema.columns (
 			return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
 				visible++
 				return addRow(
-					dbNameStr,                                // table_catalog
-					scNameStr,                                // table_schema
-					tree.NewDString(table.Name),              // table_name
-					tree.NewDString(column.Name),             // column_name
-					tree.NewDInt(tree.DInt(visible)),         // ordinal_position, 1-indexed
-					dStringPtrOrNull(column.DefaultExpr),     // column_default
-					yesOrNoDatum(column.Nullable),            // is_nullable
-					tree.NewDString(column.Type.SQLString()), // data_type
-					characterMaximumLength(column.Type),      // character_maximum_length
-					characterOctetLength(column.Type),        // character_octet_length
-					numericPrecision(column.Type),            // numeric_precision
-					numericScale(column.Type),                // numeric_scale
-					datetimePrecision(column.Type),           // datetime_precision
-					tree.DNull,                               // character_set_catalog
-					tree.DNull,                               // character_set_schema
-					tree.DNull,                               // character_set_name
-					dStringPtrOrEmpty(column.ComputeExpr),    // generation_expression
+					dbNameStr,                                                   // table_catalog
+					scNameStr,                                                   // table_schema
+					tree.NewDString(table.Name),                                 // table_name
+					tree.NewDString(column.Name),                                // column_name
+					tree.NewDInt(tree.DInt(visible)),                            // ordinal_position, 1-indexed
+					dStringPtrOrNull(column.DefaultExpr),                        // column_default
+					yesOrNoDatum(column.Nullable),                               // is_nullable
+					tree.NewDString(column.Type.InformationSchemaVisibleType()), // data_type
+					characterMaximumLength(column.Type),                         // character_maximum_length
+					characterOctetLength(column.Type),                           // character_octet_length
+					numericPrecision(column.Type),                               // numeric_precision
+					numericPrecisionRadix(column.Type),                          // numeric_precision_radix
+					numericScale(column.Type),                                   // numeric_scale
+					datetimePrecision(column.Type),                              // datetime_precision
+					tree.DNull,                                                  // character_set_catalog
+					tree.DNull,                                                  // character_set_schema
+					tree.DNull,                                                  // character_set_name
+					dStringPtrOrEmpty(column.ComputeExpr),                       // generation_expression
+					yesOrNoDatum(column.Hidden),                                 // is_hidden
+					tree.NewDString(column.Type.SQLString()),                    // crdb_sql_type
 				)
 			})
 		})
@@ -332,6 +338,10 @@ func characterOctetLength(colType sqlbase.ColumnType) tree.Datum {
 
 func numericPrecision(colType sqlbase.ColumnType) tree.Datum {
 	return dIntFnOrNull(colType.NumericPrecision)
+}
+
+func numericPrecisionRadix(colType sqlbase.ColumnType) tree.Datum {
+	return dIntFnOrNull(colType.NumericPrecisionRadix)
 }
 
 func numericScale(colType sqlbase.ColumnType) tree.Datum {
@@ -826,7 +836,7 @@ CREATE TABLE information_schema.sequences (
 					tree.NewDString(db.GetName()),    // catalog
 					tree.NewDString(scName),          // schema
 					tree.NewDString(table.GetName()), // name
-					tree.NewDString("INT"),           // type
+					tree.NewDString("integer"),       // type
 					tree.NewDInt(64),                 // numeric precision
 					tree.NewDInt(2),                  // numeric precision radix
 					tree.NewDInt(0),                  // numeric scale
@@ -1380,10 +1390,8 @@ func forEachColumnInTable(
 ) error {
 	// Table descriptors already hold columns in-order.
 	for i := range table.Columns {
-		if !table.Columns[i].Hidden {
-			if err := fn(&table.Columns[i]); err != nil {
-				return err
-			}
+		if err := fn(&table.Columns[i]); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -1399,10 +1407,9 @@ func forEachColumnInIndex(
 		colMap[column.ID] = &table.Columns[i]
 	}
 	for _, columnID := range index.ColumnIDs {
-		if column := colMap[columnID]; !column.Hidden {
-			if err := fn(column); err != nil {
-				return err
-			}
+		column := colMap[columnID]
+		if err := fn(column); err != nil {
+			return err
 		}
 	}
 	return nil

@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/pkg/errors"
 
@@ -56,6 +55,9 @@ func (ids IDs) Swap(i, j int)      { ids[i], ids[j] = ids[j], ids[i] }
 
 // TableDescriptors is a sortable list of *TableDescriptors.
 type TableDescriptors []*TableDescriptor
+
+// TablesByID is a shorthand for the common map of tables keyed by ID.
+type TablesByID map[ID]*TableDescriptor
 
 func (t TableDescriptors) Len() int           { return len(t) }
 func (t TableDescriptors) Less(i, j int) bool { return t[i].ID < t[j].ID }
@@ -310,7 +312,7 @@ func (desc *IndexDescriptor) ColNamesString() string {
 
 // SQLString returns the SQL string describing this index. If non-empty,
 // "ON tableName" is included in the output in the correct place.
-func (desc *IndexDescriptor) SQLString(tableName string) string {
+func (desc *IndexDescriptor) SQLString(tableName *tree.TableName) string {
 	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
 	if desc.Unique {
 		f.WriteString("UNIQUE ")
@@ -319,9 +321,9 @@ func (desc *IndexDescriptor) SQLString(tableName string) string {
 		f.WriteString("INVERTED ")
 	}
 	f.WriteString("INDEX ")
-	if tableName != "" {
+	if *tableName != AnonymousTable {
 		f.WriteString("ON ")
-		f.WriteString(tableName)
+		f.FormatNode(tableName)
 	}
 	f.FormatNameP(&desc.Name)
 	f.WriteString(" (")
@@ -645,14 +647,16 @@ func HasCompositeKeyEncoding(semanticType ColumnType_SemanticType) bool {
 // DatumTypeHasCompositeKeyEncoding is a version of HasCompositeKeyEncoding
 // which works on datum types.
 func DatumTypeHasCompositeKeyEncoding(typ types.T) bool {
-	colType, err := DatumTypeToColumnSemanticType(typ)
+	colType, err := datumTypeToColumnSemanticType(typ)
 	return err == nil && HasCompositeKeyEncoding(colType)
 }
 
 // MustBeValueEncoded returns true if columns of the given kind can only be value
 // encoded.
 func MustBeValueEncoded(semanticType ColumnType_SemanticType) bool {
-	return semanticType == ColumnType_ARRAY || semanticType == ColumnType_JSON || semanticType == ColumnType_TUPLE
+	return semanticType == ColumnType_ARRAY ||
+		semanticType == ColumnType_JSONB ||
+		semanticType == ColumnType_TUPLE
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old
@@ -1115,11 +1119,21 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 	if st != nil && st.Version.HasBeenInitialized() {
 		if !st.Version.IsMinSupported(cluster.Version2_0) {
 			for _, def := range desc.Columns {
-				if def.Type.SemanticType == ColumnType_JSON {
-					return errors.New("cluster version does not support JSONB (>= 2.0 required)")
+				if def.Type.SemanticType == ColumnType_JSONB {
+					return fmt.Errorf("cluster version does not support JSONB (required: %s)",
+						cluster.VersionByKey(cluster.Version2_0))
 				}
 				if def.ComputeExpr != nil {
-					return errors.New("cluster version does not support computed columns (>= 2.0 required)")
+					return fmt.Errorf("cluster version does not support computed columns (required: %s)",
+						cluster.VersionByKey(cluster.Version2_0))
+				}
+			}
+		}
+		if !st.Version.IsMinSupported(cluster.VersionBitArrayColumns) {
+			for _, def := range desc.Columns {
+				if def.Type.SemanticType == ColumnType_BIT {
+					return fmt.Errorf("cluster version does not support BIT (required: %s)",
+						cluster.VersionByKey(cluster.VersionBitArrayColumns))
 				}
 			}
 		}
@@ -1505,33 +1519,6 @@ func (desc *TableDescriptor) validatePartitioning() error {
 // current heuristic will assign to a family.
 const FamilyHeuristicTargetBytes = 256
 
-// upperBoundColumnValueEncodedSize returns the maximum encoded size of the
-// given column using the "value" encoding. If the size is unbounded, false is returned.
-func upperBoundColumnValueEncodedSize(col ColumnDescriptor) (int, bool) {
-	var typ encoding.Type
-	var size int
-	switch col.Type.SemanticType {
-	case ColumnType_BOOL:
-		typ = encoding.True
-	case ColumnType_INT, ColumnType_DATE, ColumnType_TIME, ColumnType_TIMETZ, ColumnType_TIMESTAMP,
-		ColumnType_TIMESTAMPTZ, ColumnType_OID:
-		typ, size = encoding.Int, int(col.Type.Width)
-	case ColumnType_FLOAT:
-		typ = encoding.Float
-	case ColumnType_INTERVAL:
-		typ = encoding.Duration
-	case ColumnType_STRING, ColumnType_BYTES, ColumnType_COLLATEDSTRING, ColumnType_NAME, ColumnType_UUID, ColumnType_INET:
-		// STRINGs are counted as runes, so this isn't totally correct, but this
-		// seems better than always assuming the maximum rune width.
-		typ, size = encoding.Bytes, int(col.Type.Width)
-	case ColumnType_DECIMAL:
-		typ, size = encoding.Decimal, int(col.Type.Precision)
-	default:
-		panic(errors.Errorf("unknown column type: %s", col.Type.SemanticType))
-	}
-	return encoding.UpperBoundValueEncodingSize(uint32(col.ID), typ, size)
-}
-
 // fitColumnToFamily attempts to fit a new column into the existing column
 // families. If the heuristics find a fit, true is returned along with the
 // index of the selected family. Otherwise, false is returned and the column
@@ -1576,7 +1563,7 @@ func columnTypeIsIndexable(t ColumnType) bool {
 // columnTypeIsInvertedIndexable returns whether the type t is valid to be indexed
 // using an inverted index.
 func columnTypeIsInvertedIndexable(t ColumnType) bool {
-	return t.SemanticType == ColumnType_JSON
+	return t.SemanticType == ColumnType_JSONB
 }
 
 func notIndexableError(cols []ColumnDescriptor, inverted bool) error {
@@ -1613,7 +1600,7 @@ func notIndexableError(cols []ColumnDescriptor, inverted bool) error {
 func checkColumnsValidForIndex(tableDesc *TableDescriptor, indexColNames []string) error {
 	invalidColumns := make([]ColumnDescriptor, 0, len(indexColNames))
 	for _, indexCol := range indexColNames {
-		for _, col := range tableDesc.Columns {
+		for _, col := range tableDesc.allNonDropColumns() {
 			if col.Name == indexCol {
 				if !columnTypeIsIndexable(col.Type) {
 					invalidColumns = append(invalidColumns, col)
@@ -1633,7 +1620,7 @@ func checkColumnsValidForInvertedIndex(tableDesc *TableDescriptor, indexColNames
 	}
 	invalidColumns := make([]ColumnDescriptor, 0, len(indexColNames))
 	for _, indexCol := range indexColNames {
-		for _, col := range tableDesc.Columns {
+		for _, col := range tableDesc.allNonDropColumns() {
 			if col.Name == indexCol {
 				if !columnTypeIsInvertedIndexable(col.Type) {
 					invalidColumns = append(invalidColumns, col)
@@ -1812,9 +1799,26 @@ func (desc *TableDescriptor) FindColumnByName(name tree.Name) (ColumnDescriptor,
 // ColumnIdxMap returns a map from Column ID to the ordinal position of that
 // column.
 func (desc *TableDescriptor) ColumnIdxMap() map[ColumnID]int {
+	return desc.ColumnIdxMapWithMutations(false)
+}
+
+// ColumnIdxMapWithMutations returns a map from Column ID to the ordinal
+// position of that column, optionally including mutation columns if the input
+// bool is true.
+func (desc *TableDescriptor) ColumnIdxMapWithMutations(mutations bool) map[ColumnID]int {
 	colIdxMap := make(map[ColumnID]int, len(desc.Columns))
 	for i, c := range desc.Columns {
 		colIdxMap[c.ID] = i
+	}
+	if mutations {
+		idx := len(desc.Columns)
+		for i := range desc.Mutations {
+			col := desc.Mutations[i].GetColumn()
+			if col != nil {
+				colIdxMap[col.ID] = idx
+				idx++
+			}
+		}
 	}
 	return colIdxMap
 }
@@ -2071,6 +2075,31 @@ func (desc *TableDescriptor) FinalizeMutation() (MutationID, error) {
 	return mutationID, nil
 }
 
+// ColumnNeedsBackfill returns true if adding the given column requires a
+// backfill (dropping a column always requires a backfill).
+func ColumnNeedsBackfill(desc *ColumnDescriptor) bool {
+	return desc.DefaultExpr != nil || !desc.Nullable || desc.IsComputed()
+}
+
+// HasColumnBackfillMutation returns whether the table has any queued column
+// mutations that require a backfill.
+func (desc *TableDescriptor) HasColumnBackfillMutation() bool {
+	for _, m := range desc.Mutations {
+		col := m.GetColumn()
+		if col == nil {
+			// Index backfills don't affect changefeeds.
+			continue
+		}
+		// It's unfortunate that there's no one method we can call to check if a
+		// mutation will be a backfill or not, but this logic was extracted from
+		// backfill.go.
+		if m.Direction == DescriptorMutation_DROP || ColumnNeedsBackfill(col) {
+			return true
+		}
+	}
+	return false
+}
+
 // Dropped returns true if the table is being dropped.
 func (desc *TableDescriptor) Dropped() bool {
 	return desc.State == TableDescriptor_DROP
@@ -2099,9 +2128,26 @@ func (desc *TableDescriptor) VisibleColumns() []ColumnDescriptor {
 
 // ColumnTypes returns the types of all columns.
 func (desc *TableDescriptor) ColumnTypes() []ColumnType {
-	types := make([]ColumnType, len(desc.Columns))
-	for i, col := range desc.Columns {
-		types[i] = col.Type
+	return desc.ColumnTypesWithMutations(false)
+}
+
+// ColumnTypesWithMutations returns the types of all columns, optionally
+// including mutation columns, which will be returned if the input bool is true.
+func (desc *TableDescriptor) ColumnTypesWithMutations(mutations bool) []ColumnType {
+	nCols := len(desc.Columns)
+	if mutations {
+		nCols += len(desc.Mutations)
+	}
+	types := make([]ColumnType, 0, nCols)
+	for i := range desc.Columns {
+		types = append(types, desc.Columns[i].Type)
+	}
+	if mutations {
+		for i := range desc.Mutations {
+			if col := desc.Mutations[i].GetColumn(); col != nil {
+				types = append(types, col.Type)
+			}
+		}
 	}
 	return types
 }
@@ -2116,308 +2162,6 @@ func ColumnsSelectors(cols []ColumnDescriptor, forUpdateOrDelete bool) tree.Sele
 		exprs[i].Expr = &colItems[i]
 	}
 	return exprs
-}
-
-func (c *ColumnType) elementColumnType() *ColumnType {
-	if c.SemanticType != ColumnType_ARRAY {
-		return nil
-	}
-	result := *c
-	result.SemanticType = *c.ArrayContents
-	result.ArrayContents = nil
-	return &result
-}
-
-// Equivalent checks whether a column type is equivalent to another, excluding
-// its VisibleType type alias, which doesn't effect equality.
-func (c *ColumnType) Equivalent(other ColumnType) bool {
-	other.VisibleType = c.VisibleType
-	return c.Equal(other)
-}
-
-// SQLString returns the SQL string corresponding to the type.
-func (c *ColumnType) SQLString() string {
-	switch c.SemanticType {
-	case ColumnType_INT:
-		if c.Width > 0 && c.VisibleType == ColumnType_BIT {
-			// A non-zero width indicates a bit array. The syntax "INT(N)"
-			// is invalid so be sure to use "BIT".
-			return fmt.Sprintf("BIT(%d)", c.Width)
-		}
-	case ColumnType_STRING:
-		if c.Width > 0 {
-			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Width)
-		}
-	case ColumnType_FLOAT:
-		if c.Precision > 0 {
-			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Precision)
-		}
-		if c.VisibleType == ColumnType_DOUBLE_PRECISION {
-			return "DOUBLE PRECISION"
-		}
-	case ColumnType_DECIMAL:
-		if c.Precision > 0 {
-			if c.Width > 0 {
-				return fmt.Sprintf("%s(%d,%d)", c.SemanticType.String(), c.Precision, c.Width)
-			}
-			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Precision)
-		}
-	case ColumnType_TIMESTAMPTZ:
-		return "TIMESTAMP WITH TIME ZONE"
-	case ColumnType_COLLATEDSTRING:
-		if c.Locale == nil {
-			panic("locale is required for COLLATEDSTRING")
-		}
-		if c.Width > 0 {
-			return fmt.Sprintf("%s(%d) COLLATE %s", ColumnType_STRING.String(), c.Width, *c.Locale)
-		}
-		return fmt.Sprintf("%s COLLATE %s", ColumnType_STRING.String(), *c.Locale)
-	case ColumnType_ARRAY:
-		return c.elementColumnType().SQLString() + "[]"
-	}
-	if c.VisibleType != ColumnType_NONE {
-		return c.VisibleType.String()
-	}
-	return c.SemanticType.String()
-}
-
-// MaxCharacterLength returns the declared maximum length of characters if the
-// ColumnType is a character or bit string data type. Returns false if the data
-// type is not a character or bit string, or if the string's length is not bounded.
-func (c *ColumnType) MaxCharacterLength() (int32, bool) {
-	switch c.SemanticType {
-	case ColumnType_INT, ColumnType_STRING, ColumnType_COLLATEDSTRING:
-		if c.Width > 0 {
-			return c.Width, true
-		}
-	}
-	return 0, false
-}
-
-// MaxOctetLength returns the maximum the maximum possible length in octets of a
-// datum if the ColumnType is a character string. Returns false if the data type
-// is not a character string, or if the string's length is not bounded.
-func (c *ColumnType) MaxOctetLength() (int32, bool) {
-	switch c.SemanticType {
-	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
-		if c.Width > 0 {
-			return c.Width * utf8.UTFMax, true
-		}
-	}
-	return 0, false
-}
-
-// NumericPrecision returns the declared or implicit precision of numeric
-// data types. Returns false if the data type is not numeric, or if the precision
-// of the numeric type is not bounded.
-func (c *ColumnType) NumericPrecision() (int32, bool) {
-	switch c.SemanticType {
-	case ColumnType_INT:
-		return 64, true
-	case ColumnType_FLOAT:
-		if c.Precision > 0 {
-			return c.Precision, true
-		}
-		return 53, true
-	case ColumnType_DECIMAL:
-		if c.Precision > 0 {
-			return c.Precision, true
-		}
-	}
-	return 0, false
-}
-
-// NumericScale returns the declared or implicit precision of exact numeric
-// data types. Returns false if the data type is not an exact numeric, or if the
-// scale of the exact numeric type is not bounded.
-func (c *ColumnType) NumericScale() (int32, bool) {
-	switch c.SemanticType {
-	case ColumnType_INT:
-		return 0, true
-	case ColumnType_DECIMAL:
-		if c.Precision > 0 {
-			return c.Width, true
-		}
-	}
-	return 0, false
-}
-
-// DatumTypeToColumnSemanticType converts a types.T to a SemanticType.
-func DatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error) {
-	switch ptyp {
-	case types.Bool:
-		return ColumnType_BOOL, nil
-	case types.Int:
-		return ColumnType_INT, nil
-	case types.Float:
-		return ColumnType_FLOAT, nil
-	case types.Decimal:
-		return ColumnType_DECIMAL, nil
-	case types.Bytes:
-		return ColumnType_BYTES, nil
-	case types.String:
-		return ColumnType_STRING, nil
-	case types.Name:
-		return ColumnType_NAME, nil
-	case types.Date:
-		return ColumnType_DATE, nil
-	case types.Time:
-		return ColumnType_TIME, nil
-	case types.TimeTZ:
-		return ColumnType_TIMETZ, nil
-	case types.Timestamp:
-		return ColumnType_TIMESTAMP, nil
-	case types.TimestampTZ:
-		return ColumnType_TIMESTAMPTZ, nil
-	case types.Interval:
-		return ColumnType_INTERVAL, nil
-	case types.UUID:
-		return ColumnType_UUID, nil
-	case types.INet:
-		return ColumnType_INET, nil
-	case types.Oid:
-		return ColumnType_OID, nil
-	case types.Unknown:
-		return ColumnType_NULL, nil
-	case types.IntVector:
-		return ColumnType_INT2VECTOR, nil
-	case types.OidVector:
-		return ColumnType_OIDVECTOR, nil
-	case types.JSON:
-		return ColumnType_JSON, nil
-	default:
-		if ptyp.FamilyEqual(types.FamCollatedString) {
-			return ColumnType_COLLATEDSTRING, nil
-		}
-		if ptyp.FamilyEqual(types.FamTuple) {
-			return ColumnType_TUPLE, nil
-		}
-		if wrapper, ok := ptyp.(types.TOidWrapper); ok {
-			return DatumTypeToColumnSemanticType(wrapper.T)
-		}
-		return -1, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "unsupported result type: %s, %T, %+v", ptyp, ptyp, ptyp)
-	}
-}
-
-// DatumTypeToColumnType converts a parser Type to a ColumnType.
-func DatumTypeToColumnType(ptyp types.T) (ColumnType, error) {
-	var ctyp ColumnType
-	switch t := ptyp.(type) {
-	case types.TCollatedString:
-		ctyp.SemanticType = ColumnType_COLLATEDSTRING
-		ctyp.Locale = &t.Locale
-	case types.TArray:
-		ctyp.SemanticType = ColumnType_ARRAY
-		contents, err := DatumTypeToColumnSemanticType(t.Typ)
-		if err != nil {
-			return ColumnType{}, err
-		}
-		ctyp.ArrayContents = &contents
-		if t.Typ.FamilyEqual(types.FamCollatedString) {
-			cs := t.Typ.(types.TCollatedString)
-			ctyp.Locale = &cs.Locale
-		}
-	case types.TTuple:
-		ctyp.SemanticType = ColumnType_TUPLE
-		ctyp.TupleContents = make([]ColumnType, len(t.Types))
-		for i, tc := range t.Types {
-			var err error
-			ctyp.TupleContents[i], err = DatumTypeToColumnType(tc)
-			if err != nil {
-				return ColumnType{}, err
-			}
-		}
-		return ctyp, nil
-	default:
-		semanticType, err := DatumTypeToColumnSemanticType(ptyp)
-		if err != nil {
-			return ColumnType{}, err
-		}
-		ctyp.SemanticType = semanticType
-	}
-	return ctyp, nil
-}
-
-func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) types.T {
-	switch k {
-	case ColumnType_BOOL:
-		return types.Bool
-	case ColumnType_INT:
-		return types.Int
-	case ColumnType_FLOAT:
-		return types.Float
-	case ColumnType_DECIMAL:
-		return types.Decimal
-	case ColumnType_STRING:
-		return types.String
-	case ColumnType_BYTES:
-		return types.Bytes
-	case ColumnType_DATE:
-		return types.Date
-	case ColumnType_TIME:
-		return types.Time
-	case ColumnType_TIMETZ:
-		return types.TimeTZ
-	case ColumnType_TIMESTAMP:
-		return types.Timestamp
-	case ColumnType_TIMESTAMPTZ:
-		return types.TimestampTZ
-	case ColumnType_INTERVAL:
-		return types.Interval
-	case ColumnType_UUID:
-		return types.UUID
-	case ColumnType_INET:
-		return types.INet
-	case ColumnType_JSON:
-		return types.JSON
-	case ColumnType_TUPLE:
-		return types.FamTuple
-	case ColumnType_COLLATEDSTRING:
-		if c.Locale == nil {
-			panic("locale is required for COLLATEDSTRING")
-		}
-		return types.TCollatedString{Locale: *c.Locale}
-	case ColumnType_NAME:
-		return types.Name
-	case ColumnType_OID:
-		return types.Oid
-	case ColumnType_NULL:
-		return types.Unknown
-	case ColumnType_INT2VECTOR:
-		return types.IntVector
-	case ColumnType_OIDVECTOR:
-		return types.OidVector
-	}
-	return nil
-}
-
-// ToDatumType converts the ColumnType to the correct type, or nil if there is
-// no correspondence.
-func (c *ColumnType) ToDatumType() types.T {
-	switch c.SemanticType {
-	case ColumnType_ARRAY:
-		return types.TArray{Typ: columnSemanticTypeToDatumType(c, *c.ArrayContents)}
-	case ColumnType_TUPLE:
-		datums := types.TTuple{
-			Types: make([]types.T, len(c.TupleContents)),
-		}
-		for i := range c.TupleContents {
-			datums.Types[i] = c.TupleContents[i].ToDatumType()
-		}
-		return datums
-	default:
-		return columnSemanticTypeToDatumType(c, c.SemanticType)
-	}
-}
-
-// ColumnTypesToDatumTypes converts a slice of ColumnTypes to a slice of
-// datum types.
-func ColumnTypesToDatumTypes(colTypes []ColumnType) []types.T {
-	res := make([]types.T, len(colTypes))
-	for i, t := range colTypes {
-		res[i] = t.ToDatumType()
-	}
-	return res
 }
 
 // SetID implements the DescriptorProto interface.
@@ -2644,8 +2388,8 @@ func (desc *ColumnDescriptor) IsNullable() bool {
 }
 
 // ColName is part of the opt.Column interface.
-func (desc *ColumnDescriptor) ColName() opt.ColumnName {
-	return opt.ColumnName(desc.Name)
+func (desc *ColumnDescriptor) ColName() tree.Name {
+	return tree.Name(desc.Name)
 }
 
 // DatumType is part of the opt.Column interface.
@@ -2742,6 +2486,12 @@ func (desc *TableDescriptor) FindAllReferences() (map[ID]struct{}, error) {
 		return nil
 	}); err != nil {
 		return nil, err
+	}
+
+	for _, c := range desc.allNonDropColumns() {
+		for _, id := range c.UsesSequenceIds {
+			refs[id] = struct{}{}
+		}
 	}
 
 	for _, dest := range desc.DependsOn {

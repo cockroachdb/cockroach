@@ -140,27 +140,6 @@ func doExpandPlan(
 		explainParams.atTop = true
 		n.plan, err = doExpandPlan(ctx, p, explainParams, n.plan)
 
-	case *showTraceNode:
-		// SHOW TRACE only shows the execution trace of the plan, and wants to do
-		// so "as if" plan was at the top level w.r.t spool semantics.
-		showTraceParams := noParamsBase
-		showTraceParams.atTop = true
-		n.plan, err = doExpandPlan(ctx, p, showTraceParams, n.plan)
-		if err != nil {
-			return plan, err
-		}
-		// Check if we can use distSQL for the wrapped plan and this is not a kv
-		// trace. distSQL does not handle kv tracing because this option is not
-		// plumbed down to the tableReader level.
-		// TODO(asubiotto): Handle kv tracing in distSQL.
-		if ok, _ := p.prepareForDistSQLSupportCheck(ctx, false /* returnError */); ok {
-			if useDistSQL, err := shouldUseDistSQL(
-				ctx, p.SessionData().DistSQLMode, p.ExecCfg().DistSQLPlanner, n.plan,
-			); useDistSQL && err == nil && !n.kvTracingEnabled {
-				n.plan = p.newDistSQLWrapper(n.plan, n.stmtType)
-			}
-		}
-
 	case *showTraceReplicaNode:
 		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
 
@@ -335,7 +314,7 @@ func doExpandPlan(
 	case *splitNode:
 		n.rows, err = doExpandPlan(ctx, p, noParams, n.rows)
 
-	case *testingRelocateNode:
+	case *relocateNode:
 		n.rows, err = doExpandPlan(ctx, p, noParams, n.rows)
 
 	case *cancelQueriesNode:
@@ -351,6 +330,7 @@ func doExpandPlan(
 		n.source, err = doExpandPlan(ctx, p, noParams, n.source)
 
 	case *valuesNode:
+	case *virtualTableNode:
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
@@ -384,6 +364,7 @@ func doExpandPlan(
 	case *showZoneConfigNode:
 	case *showRangesNode:
 	case *showFingerprintsNode:
+	case *showTraceNode:
 	case *scatterNode:
 	case nil:
 
@@ -480,16 +461,16 @@ func expandDistinctNode(
 		// column values again. We can thus clear out our bookkeeping.
 		// This needs to be planColumns(n.plan) and not planColumns(n) since
 		// distinctNode is "distinctifying" on the child plan's output rows.
-		d.columnsInOrder = make([]bool, len(planColumns(d.plan)))
-		for i := range d.columnsInOrder {
+		d.columnsInOrder = util.FastIntSet{}
+		for i, numCols := 0, len(planColumns(d.plan)); i < numCols; i++ {
 			group := distinctOnPp.eqGroups.Find(i)
 			if distinctOnPp.constantCols.Contains(group) {
-				d.columnsInOrder[i] = true
+				d.columnsInOrder.Add(i)
 				continue
 			}
 			for _, g := range distinctOnPp.ordering {
 				if g.ColIdx == group {
-					d.columnsInOrder[i] = true
+					d.columnsInOrder.Add(i)
 					break
 				}
 			}
@@ -686,13 +667,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *serializeNode:
 		n.source = p.simplifyOrderings(n.source, nil).(batchedPlanNode)
 
-	case *distSQLWrapper:
-		n.plan = p.simplifyOrderings(n.plan, nil)
-
 	case *explainDistSQLNode:
-		n.plan = p.simplifyOrderings(n.plan, nil)
-
-	case *showTraceNode:
 		n.plan = p.simplifyOrderings(n.plan, nil)
 
 	case *showTraceReplicaNode:
@@ -704,7 +679,18 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		}
 
 	case *projectSetNode:
-		n.source = p.simplifyOrderings(n.source, nil)
+		// We propagate down any ordering constraint relative to the
+		// source. We don't propagate orderings expressed over the SRF
+		// results.
+		var desiredUp sqlbase.ColumnOrdering
+		for _, colOrder := range usefulOrdering {
+			if colOrder.ColIdx >= n.numColsInSource {
+				break
+			}
+			desiredUp = append(desiredUp, colOrder)
+		}
+		n.source = p.simplifyOrderings(n.source, desiredUp)
+		n.computePhysicalProps()
 
 	case *indexJoinNode:
 		// Passing through usefulOrdering here is fine because indexJoinNodes
@@ -833,7 +819,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *splitNode:
 		n.rows = p.simplifyOrderings(n.rows, nil)
 
-	case *testingRelocateNode:
+	case *relocateNode:
 		n.rows = p.simplifyOrderings(n.rows, nil)
 
 	case *cancelQueriesNode:
@@ -846,6 +832,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 		n.rows = p.simplifyOrderings(n.rows, nil)
 
 	case *valuesNode:
+	case *virtualTableNode:
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
@@ -873,6 +860,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *showZoneConfigNode:
 	case *showRangesNode:
 	case *showFingerprintsNode:
+	case *showTraceNode:
 	case *scatterNode:
 
 	default:

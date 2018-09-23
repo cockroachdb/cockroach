@@ -41,12 +41,14 @@ func NewStoreGossiper(g *gossip.Gossip) *StoreGossiper {
 		storeKeyMap: make(map[string]struct{}),
 	}
 	sg.cond = sync.NewCond(&sg.mu)
+	// Redundant callbacks are required by StoreGossiper. See GossipWithFunction
+	// which waits for all of the callbacks to be invoked.
 	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix), func(key string, _ roachpb.Value) {
 		sg.mu.Lock()
 		defer sg.mu.Unlock()
 		delete(sg.storeKeyMap, key)
 		sg.cond.Broadcast()
-	})
+	}, gossip.Redundant)
 	return sg
 }
 

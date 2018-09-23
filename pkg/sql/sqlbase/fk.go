@@ -17,6 +17,7 @@ package sqlbase
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/pkg/errors"
 
@@ -272,13 +273,15 @@ type SpanKVFetcher struct {
 }
 
 // nextBatch implements the kvFetcher interface.
-func (f *SpanKVFetcher) nextBatch(_ context.Context) (bool, []roachpb.KeyValue, error) {
+func (f *SpanKVFetcher) nextBatch(
+	_ context.Context,
+) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, numKvs int64, err error) {
 	if len(f.KVs) == 0 {
-		return false, nil, nil
+		return false, nil, nil, 0, nil
 	}
 	res := f.KVs
 	f.KVs = nil
-	return true, res, nil
+	return true, res, nil, 0, nil
 }
 
 // getRangesInfo implements the kvFetcher interface.
@@ -355,7 +358,7 @@ func (f *fkBatchChecker) runCheck(
 				}
 				return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
 					"foreign key violation: value %s not found in %s@%s %s (txn=%s)",
-					fkValues, fk.searchTable.Name, fk.searchIdx.Name, fk.searchIdx.ColumnNames[:fk.prefixLen], f.txn.Proto())
+					fkValues, fk.searchTable.Name, fk.searchIdx.Name, fk.searchIdx.ColumnNames[:fk.prefixLen], f.txn.ID())
 			}
 		case CheckDeletes:
 			// If we're deleting, then there's a violation if the scan found something.
@@ -423,7 +426,7 @@ func makeFKInsertHelper(
 	return h, nil
 }
 
-func (h fkInsertHelper) checkAll(ctx context.Context, row tree.Datums) error {
+func (h fkInsertHelper) addAllIdxChecks(ctx context.Context, row tree.Datums) error {
 	if len(h.fks) == 0 {
 		return nil
 	}
@@ -432,7 +435,7 @@ func (h fkInsertHelper) checkAll(ctx context.Context, row tree.Datums) error {
 			return err
 		}
 	}
-	return h.checker.runCheck(ctx, nil, row)
+	return nil
 }
 
 // CollectSpans implements the FkSpanCollector interface.
@@ -519,7 +522,7 @@ func makeFKDeleteHelper(
 	return h, nil
 }
 
-func (h fkDeleteHelper) checkAll(ctx context.Context, row tree.Datums) error {
+func (h fkDeleteHelper) addAllIdxChecks(ctx context.Context, row tree.Datums) error {
 	if len(h.fks) == 0 {
 		return nil
 	}
@@ -528,7 +531,7 @@ func (h fkDeleteHelper) checkAll(ctx context.Context, row tree.Datums) error {
 			return err
 		}
 	}
-	return h.checker.runCheck(ctx, row, nil /* newRow */)
+	return nil
 }
 
 // CollectSpans implements the FkSpanCollector interface.
@@ -576,7 +579,7 @@ func (fks fkUpdateHelper) addCheckForIndex(indexID IndexID, descriptorType Index
 	}
 }
 
-func (fks fkUpdateHelper) runIndexChecks(
+func (fks fkUpdateHelper) addIndexChecks(
 	ctx context.Context, oldValues, newValues tree.Datums,
 ) error {
 	for indexID := range fks.indexIDsToCheck {
@@ -587,10 +590,11 @@ func (fks fkUpdateHelper) runIndexChecks(
 			return err
 		}
 	}
-	if len(fks.inbound.fks) == 0 && len(fks.outbound.fks) == 0 {
-		return nil
-	}
-	return fks.checker.runCheck(ctx, oldValues, newValues)
+	return nil
+}
+
+func (fks fkUpdateHelper) hasFKs() bool {
+	return len(fks.inbound.fks) > 0 || len(fks.outbound.fks) > 0
 }
 
 // CollectSpans implements the FkSpanCollector interface.
@@ -660,20 +664,32 @@ func makeBaseFKHelper(
 		return b, err
 	}
 
+	// Check for all NULL values, since these can skip FK checking in MATCH FULL
+	// TODO(bram): add MATCH SIMPLE and fix MATCH FULL #30026
 	b.ids = make(map[ColumnID]int, len(writeIdx.ColumnIDs))
 	nulls := true
+	var missingColumns []string
 	for i, writeColID := range writeIdx.ColumnIDs[:b.prefixLen] {
 		if found, ok := colMap[writeColID]; ok {
 			b.ids[searchIdx.ColumnIDs[i]] = found
 			nulls = false
-		} else if !nulls {
-			return b, errors.Errorf("missing value for column %q in multi-part foreign key", writeIdx.ColumnNames[i])
+		} else {
+			missingColumns = append(missingColumns, writeIdx.ColumnNames[i])
 		}
 	}
 	if nulls {
 		return b, errSkipUnusedFK
 	}
-	return b, nil
+
+	switch len(missingColumns) {
+	case 0:
+		return b, nil
+	case 1:
+		return b, errors.Errorf("missing value for column %q in multi-part foreign key", missingColumns[0])
+	default:
+		sort.Strings(missingColumns)
+		return b, errors.Errorf("missing values for columns %q in multi-part foreign key", missingColumns)
+	}
 }
 
 func (f baseFKHelper) spanForValues(values tree.Datums) (roachpb.Span, error) {

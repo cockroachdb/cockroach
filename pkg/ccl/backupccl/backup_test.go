@@ -36,11 +36,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/sampledataccl"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -188,7 +189,7 @@ func verifyBackupRestoreStatementResult(
 	}
 
 	sqlDB.QueryRow(t,
-		`SELECT id, status, fraction_completed FROM crdb_internal.jobs WHERE id = $1`, actualJob.id,
+		`SELECT job_id, status, fraction_completed FROM crdb_internal.jobs WHERE job_id = $1`, actualJob.id,
 	).Scan(
 		&expectedJob.id, &expectedJob.status, &expectedJob.fractionCompleted,
 	)
@@ -227,7 +228,7 @@ func TestBackupRestoreLocal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1000
-	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
 	backupAndRestore(ctx, t, tc, localFoo, numAccounts)
@@ -237,7 +238,7 @@ func TestBackupRestoreEmpty(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 0
-	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+	ctx, tc, _, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
 	backupAndRestore(ctx, t, tc, localFoo, numAccounts)
@@ -310,7 +311,7 @@ func backupAndRestore(
 	// Start a new cluster to restore into.
 	{
 		args := base.TestServerArgs{ExternalIODir: tc.Servers[0].ClusterSettings().ExternalIODir}
-		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{ServerArgs: args})
+		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(ctx)
 		sqlDBRestore := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
 
@@ -339,12 +340,12 @@ func backupAndRestore(
 		}
 
 		var rowCount int64
-		sqlDBRestore.QueryRow(t, `SELECT COUNT(*) FROM data.bank`).Scan(&rowCount)
+		sqlDBRestore.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&rowCount)
 		if rowCount != int64(numAccounts) {
 			t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
 		}
 
-		sqlDBRestore.QueryRow(t, `SELECT COUNT(*) FROM data.bank@balance_idx`).Scan(&rowCount)
+		sqlDBRestore.QueryRow(t, `SELECT count(*) FROM data.bank@balance_idx`).Scan(&rowCount)
 		if rowCount != int64(numAccounts) {
 			t.Fatalf("expected %d rows but found %d", numAccounts, rowCount)
 		}
@@ -470,7 +471,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	sqlDB.Exec(t, `SET DATABASE = data`)
 
 	sqlDB.Exec(t, `BACKUP TABLE bank TO $1 INCREMENTAL FROM $2`, incDir, fullDir)
-	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+1, jobs.TypeBackup, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+1, jobspb.TypeBackup, jobs.StatusSucceeded, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
 			`BACKUP TABLE bank TO '%s' INCREMENTAL FROM '%s'`,
@@ -485,7 +486,7 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	}
 
 	sqlDB.Exec(t, `RESTORE TABLE bank FROM $1, $2 WITH OPTIONS ('into_db'='restoredb')`, fullDir, incDir)
-	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+2, jobs.TypeRestore, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlDB, baseNumJobs+2, jobspb.TypeRestore, jobs.StatusSucceeded, jobs.Record{
 		Username: security.RootUser,
 		Description: fmt.Sprintf(
 			`RESTORE TABLE bank FROM '%s', '%s' WITH into_db = 'restoredb'`,
@@ -512,7 +513,7 @@ type inProgressState struct {
 func (ip inProgressState) latestJobID() (int64, error) {
 	var id int64
 	if err := ip.QueryRow(
-		`SELECT id FROM crdb_internal.jobs ORDER BY created DESC LIMIT 1`,
+		`SELECT job_id FROM crdb_internal.jobs ORDER BY created DESC LIMIT 1`,
 	).Scan(&id); err != nil {
 		return 0, err
 	}
@@ -533,8 +534,9 @@ func checkInProgressBackupRestore(
 	params := base.TestClusterArgs{}
 	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
 		TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
-			for _, res := range br.Responses {
-				if res.Export != nil || res.Import != nil {
+			for _, ru := range br.Responses {
+				switch ru.GetInner().(type) {
+				case *roachpb.ExportResponse, *roachpb.ImportResponse:
 					<-allowResponse
 				}
 			}
@@ -606,7 +608,7 @@ func TestBackupRestoreSystemJobsProgress(t *testing.T) {
 		}
 		var fractionCompleted float32
 		if err := ip.QueryRow(
-			`SELECT fraction_completed FROM crdb_internal.jobs WHERE id = $1`,
+			`SELECT fraction_completed FROM crdb_internal.jobs WHERE job_id = $1`,
 			jobID,
 		).Scan(&fractionCompleted); err != nil {
 			return err
@@ -654,15 +656,15 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		lowWaterMark, err := getLowWaterMark(jobID, ip.DB)
+		highWaterMark, err := getHighWaterMark(jobID, ip.DB)
 		if err != nil {
 			return err
 		}
 		low := keys.MakeTablePrefix(ip.backupTableID)
 		high := keys.MakeTablePrefix(ip.backupTableID + 1)
-		if bytes.Compare(lowWaterMark, low) <= 0 || bytes.Compare(lowWaterMark, high) >= 0 {
-			return errors.Errorf("expected low water mark %v to be between %v and %v",
-				lowWaterMark, roachpb.Key(low), roachpb.Key(high))
+		if bytes.Compare(highWaterMark, low) <= 0 || bytes.Compare(highWaterMark, high) >= 0 {
+			return errors.Errorf("expected high-water mark %v to be between %v and %v",
+				highWaterMark, roachpb.Key(low), roachpb.Key(high))
 		}
 		return nil
 	}
@@ -677,23 +679,23 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 }
 
 func createAndWaitForJob(
-	db *gosql.DB, descriptorIDs []sqlbase.ID, details jobs.Details, progress jobs.ProgressDetails,
+	db *gosql.DB, descriptorIDs []sqlbase.ID, details jobspb.Details, progress jobspb.ProgressDetails,
 ) error {
 	now := timeutil.ToUnixMicros(timeutil.Now())
-	payload, err := protoutil.Marshal(&jobs.Payload{
+	payload, err := protoutil.Marshal(&jobspb.Payload{
 		Username:      security.RootUser,
 		DescriptorIDs: descriptorIDs,
 		StartedMicros: now,
-		Details:       jobs.WrapPayloadDetails(details),
-		Lease:         &jobs.Lease{NodeID: 1},
+		Details:       jobspb.WrapPayloadDetails(details),
+		Lease:         &jobspb.Lease{NodeID: 1},
 	})
 	if err != nil {
 		return err
 	}
 
-	progressBytes, err := protoutil.Marshal(&jobs.Progress{
+	progressBytes, err := protoutil.Marshal(&jobspb.Progress{
 		ModifiedMicros: now,
-		Details:        jobs.WrapProgressDetails(progress),
+		Details:        jobspb.WrapProgressDetails(progress),
 	})
 	if err != nil {
 		return err
@@ -735,7 +737,7 @@ func TestBackupRestoreResume(t *testing.T) {
 	t.Run("backup", func(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(outerDB.DB)
 		backupStartKey := backupTableDesc.PrimaryIndexSpan().Key
-		backupEndKey, err := sqlbase.MakePrimaryIndexKey(backupTableDesc, numAccounts/2)
+		backupEndKey, err := sqlbase.TestingMakePrimaryIndexKey(backupTableDesc, numAccounts/2)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -757,11 +759,11 @@ func TestBackupRestoreResume(t *testing.T) {
 		if err := ioutil.WriteFile(checkpointFile, backupDesc, 0644); err != nil {
 			t.Fatal(err)
 		}
-		if err := createAndWaitForJob(sqlDB.DB, []sqlbase.ID{backupTableDesc.ID}, jobs.BackupDetails{
+		if err := createAndWaitForJob(sqlDB.DB, []sqlbase.ID{backupTableDesc.ID}, jobspb.BackupDetails{
 			EndTime:          tc.Servers[0].Clock().Now(),
 			URI:              "nodelocal:///backup",
 			BackupDescriptor: backupDesc,
-		}, jobs.BackupProgress{}); err != nil {
+		}, jobspb.BackupProgress{}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -796,20 +798,20 @@ func TestBackupRestoreResume(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		restoreLowWaterMark, err := sqlbase.MakePrimaryIndexKey(backupTableDesc, numAccounts/2)
+		restoreHighWaterMark, err := sqlbase.TestingMakePrimaryIndexKey(backupTableDesc, numAccounts/2)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := createAndWaitForJob(sqlDB.DB, []sqlbase.ID{restoreTableID}, jobs.RestoreDetails{
-			TableRewrites: map[sqlbase.ID]*jobs.RestoreDetails_TableRewrite{
+		if err := createAndWaitForJob(sqlDB.DB, []sqlbase.ID{restoreTableID}, jobspb.RestoreDetails{
+			TableRewrites: map[sqlbase.ID]*jobspb.RestoreDetails_TableRewrite{
 				backupTableDesc.ID: {
 					ParentID: sqlbase.ID(restoreDatabaseID),
 					TableID:  restoreTableID,
 				},
 			},
 			URIs: []string{restoreDir},
-		}, jobs.RestoreProgress{
-			LowWaterMark: restoreLowWaterMark,
+		}, jobspb.RestoreProgress{
+			HighWater: restoreHighWaterMark,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -817,7 +819,7 @@ func TestBackupRestoreResume(t *testing.T) {
 		// If the restore properly took the (incorrect) low-water mark into account,
 		// the first half of the table will be missing.
 		var restoredCount int64
-		sqlDB.QueryRow(t, `SELECT COUNT(*) FROM restoredb.bank`).Scan(&restoredCount)
+		sqlDB.QueryRow(t, `SELECT count(*) FROM restoredb.bank`).Scan(&restoredCount)
 		if e, a := int64(numAccounts)/2, restoredCount; e != a {
 			t.Fatalf("expected %d restored rows, but got %d\n", e, a)
 		}
@@ -829,20 +831,20 @@ func TestBackupRestoreResume(t *testing.T) {
 	})
 }
 
-func getLowWaterMark(jobID int64, sqlDB *gosql.DB) (roachpb.Key, error) {
+func getHighWaterMark(jobID int64, sqlDB *gosql.DB) (roachpb.Key, error) {
 	var progressBytes []byte
 	if err := sqlDB.QueryRow(
 		`SELECT progress FROM system.jobs WHERE id = $1`, jobID,
 	).Scan(&progressBytes); err != nil {
 		return nil, err
 	}
-	var payload jobs.Progress
+	var payload jobspb.Progress
 	if err := protoutil.Unmarshal(progressBytes, &payload); err != nil {
 		return nil, err
 	}
 	switch d := payload.Details.(type) {
-	case *jobs.Progress_Restore:
-		return d.Restore.LowWaterMark, nil
+	case *jobspb.Progress_Restore:
+		return d.Restore.HighWater, nil
 	default:
 		return nil, errors.Errorf("unexpected job details type %T", d)
 	}
@@ -955,8 +957,8 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			}
 		}
 		sqlDB.CheckQueryResults(t,
-			`SELECT COUNT(*) FROM pause.bank`,
-			sqlDB.QueryStr(t, `SELECT COUNT(*) FROM data.bank`),
+			`SELECT count(*) FROM pause.bank`,
+			sqlDB.QueryStr(t, `SELECT count(*) FROM data.bank`),
 		)
 
 		sqlDB.CheckQueryResults(t,
@@ -1005,7 +1007,8 @@ func TestRestoreFailCleanup(t *testing.T) {
 	}
 
 	const numAccounts = 1000
-	_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, initNone, base.TestClusterArgs{ServerArgs: params})
+	_, _, sqlDB, dir, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
+		initNone, base.TestClusterArgs{ServerArgs: params})
 	defer cleanup()
 
 	dir = filepath.Join(dir, "foo")
@@ -1093,19 +1096,19 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 		}
 
 		var rowCount int64
-		sqlDBRestore.QueryRow(t, `SELECT COUNT(*) FROM data.bank`).Scan(&rowCount)
+		sqlDBRestore.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&rowCount)
 		if rowCount != numAccounts {
 			t.Errorf("expected %d rows but found %d", numAccounts, rowCount)
 		}
-		sqlDBRestore.QueryRow(t, `SELECT COUNT(*) FROM data.i0`).Scan(&rowCount)
+		sqlDBRestore.QueryRow(t, `SELECT count(*) FROM data.i0`).Scan(&rowCount)
 		if rowCount != 2*numAccounts {
 			t.Errorf("expected %d rows but found %d", 2*numAccounts, rowCount)
 		}
-		sqlDBRestore.QueryRow(t, `SELECT COUNT(*) FROM data.i0_0`).Scan(&rowCount)
+		sqlDBRestore.QueryRow(t, `SELECT count(*) FROM data.i0_0`).Scan(&rowCount)
 		if rowCount != 3*numAccounts {
 			t.Errorf("expected %d rows but found %d", 3*numAccounts, rowCount)
 		}
-		sqlDBRestore.QueryRow(t, `SELECT COUNT(*) FROM data.i1`).Scan(&rowCount)
+		sqlDBRestore.QueryRow(t, `SELECT count(*) FROM data.i1`).Scan(&rowCount)
 		if rowCount != 4*numAccounts {
 			t.Errorf("expected %d rows but found %d", 4*numAccounts, rowCount)
 		}
@@ -1185,7 +1188,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		// and a few views for good measure.
 		origDB.Exec(t, `CREATE VIEW store.early_customers AS SELECT id, email from store.customers WHERE id < 5`)
 		origDB.Exec(t, `CREATE VIEW storestats.ordercounts AS
-			SELECT c.id, c.email, COUNT(o.id)
+			SELECT c.id, c.email, count(o.id)
 			FROM store.customers AS c
 			LEFT OUTER JOIN store.orders AS o ON o.customerid = c.id
 			GROUP BY c.id, c.email
@@ -1201,7 +1204,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 			for i := 0; i < 3; i++ {
 				oID := cID*100 + i
 				rID := oID * 10
-				origDB.Exec(t, `INSERT INTO store.orders VALUES ($1, NOW(), $2)`, oID, cID)
+				origDB.Exec(t, `INSERT INTO store.orders VALUES ($1, now(), $2)`, oID, cID)
 				origDB.Exec(t, `INSERT INTO store.receipts VALUES ($1, NULL, $2, $3)`, rID, cID, oID)
 				if i > 1 {
 					origDB.Exec(t, `INSERT INTO store.receipts VALUES ($1, $2, $3, $4)`, rID+1, rID, cID, oID)
@@ -1233,7 +1236,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 
 		// FK validation on customers from receipts is preserved.
 		if _, err := db.DB.Exec(
-			`UPDATE store.customers SET email = CONCAT(id::string, 'nope')`,
+			`UPDATE store.customers SET email = concat(id::string, 'nope')`,
 		); !testutils.IsError(err, "foreign key violation.* referenced in table \"receipts\"") {
 			t.Fatal(err)
 		}
@@ -1720,7 +1723,7 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 
 	const numAccounts = 1000
 
-	ctx, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+	ctx, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
 	var beforeTs, equalTs string
@@ -1729,7 +1732,7 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&beforeTs)
 
 	err := crdb.ExecuteTx(ctx, sqlDB.DB, nil /* txopts */, func(tx *gosql.Tx) error {
-		_, err := sqlDB.DB.Exec(`DELETE FROM data.bank`)
+		_, err := sqlDB.DB.Exec(`DELETE FROM data.bank WHERE id % 4 = 1`)
 		if err != nil {
 			return err
 		}
@@ -1739,8 +1742,8 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sqlDB.QueryRow(t, `SELECT COUNT(*) FROM data.bank`).Scan(&rowCount)
-	if expected := 0; rowCount != expected {
+	sqlDB.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&rowCount)
+	if expected := numAccounts * 3 / 4; rowCount != expected {
 		t.Fatalf("expected %d rows but found %d", expected, rowCount)
 	}
 
@@ -1751,15 +1754,15 @@ func TestBackupAsOfSystemTime(t *testing.T) {
 
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
 	sqlDB.Exec(t, `RESTORE data.* FROM $1`, beforeDir)
-	sqlDB.QueryRow(t, `SELECT COUNT(*) FROM data.bank`).Scan(&rowCount)
+	sqlDB.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&rowCount)
 	if expected := numAccounts; rowCount != expected {
 		t.Fatalf("expected %d rows but found %d", expected, rowCount)
 	}
 
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
 	sqlDB.Exec(t, `RESTORE data.* FROM $1`, equalDir)
-	sqlDB.QueryRow(t, `SELECT COUNT(*) FROM data.bank`).Scan(&rowCount)
-	if expected := 0; rowCount != expected {
+	sqlDB.QueryRow(t, `SELECT count(*) FROM data.bank`).Scan(&rowCount)
+	if expected := numAccounts * 3 / 4; rowCount != expected {
 		t.Fatalf("expected %d rows but found %d", expected, rowCount)
 	}
 }
@@ -1845,7 +1848,7 @@ func TestRestoreAsOfSystemTime(t *testing.T) {
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[7])
 
 	sqlDB.Exec(t, `UPSERT INTO data.bank (id, balance)
-	           SELECT i, 4 FROM GENERATE_SERIES(0, $1 - 1) AS g(i)`, numAccounts)
+	           SELECT i, 4 FROM generate_series(0, $1 - 1) AS g(i)`, numAccounts)
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts[8])
 
 	sqlDB.Exec(t,
@@ -2011,7 +2014,7 @@ func TestRestoreAsOfSystemTimeGCBounds(t *testing.T) {
 func TestAsOfSystemTimeOnRestoredData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	_, _, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, multiNode, 0, initNone)
+	_, _, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, initNone)
 	defer cleanupFn()
 
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
@@ -2029,7 +2032,7 @@ func TestAsOfSystemTimeOnRestoredData(t *testing.T) {
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&afterTs)
 
 	var rowCount int
-	const q = `SELECT COUNT(*) FROM data.bank AS OF SYSTEM TIME '%s'`
+	const q = `SELECT count(*) FROM data.bank AS OF SYSTEM TIME '%s'`
 	// Before the RESTORE, the table doesn't exist, so an AS OF query should fail.
 	if err := sqlDB.DB.QueryRow(fmt.Sprintf(q, beforeTs)).Scan(&rowCount); !testutils.IsError(
 		err, `relation "data.bank" does not exist`,
@@ -2343,7 +2346,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 	origDB.Exec(t, `BACKUP d4.* TO $1`, d4star)
 
 	t.Run("incomplete-db", func(t *testing.T) {
-		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{ServerArgs: args})
+		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
 
@@ -2384,7 +2387,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 	})
 
 	t.Run("db", func(t *testing.T) {
-		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{ServerArgs: args})
+		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
 		if _, err := sqlDB.DB.Exec(`RESTORE DATABASE data, d2, d3 FROM $1`, localFoo); err != nil {
@@ -2393,7 +2396,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 	})
 
 	t.Run("db-exists", func(t *testing.T) {
-		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{ServerArgs: args})
+		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
 
@@ -2409,7 +2412,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 	})
 
 	t.Run("tables", func(t *testing.T) {
-		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{ServerArgs: args})
+		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
 
@@ -2423,7 +2426,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 	})
 
 	t.Run("tables-needs-db", func(t *testing.T) {
-		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{ServerArgs: args})
+		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
 
@@ -2435,7 +2438,7 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 	})
 
 	t.Run("into_db", func(t *testing.T) {
-		tcRestore := testcluster.StartTestCluster(t, multiNode, base.TestClusterArgs{ServerArgs: args})
+		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
 		defer tcRestore.Stopper().Stop(context.TODO())
 		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
 
@@ -2479,7 +2482,7 @@ func TestPointInTimeRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const numAccounts = 1000
-	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, initNone)
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
 	defer cleanupFn()
 
 	fullBackupDir := filepath.Join(localFoo, "full")
@@ -2848,5 +2851,22 @@ func TestBackupRestoreSequence(t *testing.T) {
 		// Verify that the reference to the table that used it was removed, and
 		// it can be dropped.
 		newDB.Exec(t, `DROP SEQUENCE t_id_seq`)
+	})
+}
+
+func TestBackupRestoreShowJob(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const numAccounts = 1
+	_, _, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, initNone)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `BACKUP DATABASE data TO $1 WITH revision_history`, localFoo)
+	sqlDB.Exec(t, `CREATE DATABASE "data 2"`)
+
+	sqlDB.Exec(t, `RESTORE data.bank FROM $1 WITH skip_missing_foreign_keys, into_db = $2`, localFoo, "data 2")
+	sqlDB.CheckQueryResults(t, "SELECT description FROM [SHOW JOBS] ORDER BY description", [][]string{
+		{"BACKUP DATABASE data TO 'nodelocal:///foo' WITH revision_history"},
+		{"RESTORE TABLE data.bank FROM 'nodelocal:///foo' WITH into_db = 'data 2', skip_missing_foreign_keys"},
 	})
 }

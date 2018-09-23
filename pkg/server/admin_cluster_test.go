@@ -40,6 +40,7 @@ func TestAdminAPITableStats(t *testing.T) {
 		ReplicationMode: base.ReplicationAuto,
 		ServerArgs: base.TestServerArgs{
 			ScanInterval:    time.Millisecond,
+			ScanMinIdleTime: time.Millisecond,
 			ScanMaxIdleTime: time.Millisecond,
 		},
 	})
@@ -87,7 +88,7 @@ func TestAdminAPITableStats(t *testing.T) {
 	// this to occur, and for full replication.
 	testutils.SucceedsSoon(t, func() error {
 		if err := httputil.GetJSON(client, url, &tsResponse); err != nil {
-			return err
+			t.Fatal(err)
 		}
 		if len(tsResponse.MissingNodes) != 0 {
 			return errors.Errorf("missing nodes: %+v", tsResponse.MissingNodes)
@@ -101,14 +102,12 @@ func TestAdminAPITableStats(t *testing.T) {
 		if a, e := tsResponse.ReplicaCount, int64(nodeCount); a != e {
 			return errors.Errorf("expected %d replicas, found %d", e, a)
 		}
+		if a, e := tsResponse.Stats.KeyCount, int64(30); a < e {
+			return errors.Errorf("expected at least %d total keys, found %d", e, a)
+		}
 		return nil
 	})
 
-	// These two conditions *must* be true, given that the above
-	// SucceedsSoon has succeeded.
-	if a, e := tsResponse.Stats.KeyCount, int64(20); a < e {
-		t.Fatalf("expected at least 20 total keys, found %d", a)
-	}
 	if len(tsResponse.MissingNodes) > 0 {
 		t.Fatalf("expected no missing nodes, found %v", tsResponse.MissingNodes)
 	}

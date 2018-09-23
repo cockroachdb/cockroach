@@ -66,6 +66,7 @@ func (we *wrappedEngine) GetSSTables() engine.SSTableInfos {
 		{Level: 2, Size: 100, Start: key("k"), End: key("o")},
 		{Level: 2, Size: 100, Start: key("r"), End: key("t")},
 		// Level 6.
+		{Level: 6, Size: 200, Start: key("0"), End: key("9")},
 		{Level: 6, Size: 201, Start: key("a"), End: key("c")},
 		{Level: 6, Size: 200, Start: key("d"), End: key("f")},
 		{Level: 6, Size: 300, Start: key("h"), End: key("r")},
@@ -160,6 +161,27 @@ func TestCompactorThresholds(t *testing.T) {
 			expBytesCompacted: thresholdBytes.Default(),
 			expCompactions: []roachpb.Span{
 				{Key: key("a"), EndKey: key("b")},
+			},
+		},
+		// Single suggestion which is over absolute bytes threshold should not
+		// trigger a compaction if the span contains keys.
+		{
+			name: "outdated single suggestion over absolute threshold",
+			suggestions: []storagebase.SuggestedCompaction{
+				{
+					StartKey: key("0"), EndKey: key("9"),
+					Compaction: storagebase.Compaction{
+						Bytes:            thresholdBytes.Default(),
+						SuggestedAtNanos: nowNanos,
+					},
+				},
+			},
+			logicalBytes:      thresholdBytes.Default() * 100, // not going to trigger fractional threshold
+			availableBytes:    thresholdBytes.Default() * 100, // not going to trigger fractional threshold
+			expBytesCompacted: 0,
+			expCompactions:    nil,
+			expUncompacted: []roachpb.Span{
+				{Key: key("0"), EndKey: key("9")},
 			},
 		},
 		// Single suggestion over the fractional threshold.
@@ -331,6 +353,40 @@ func TestCompactorThresholds(t *testing.T) {
 				{Key: key("a"), EndKey: key("f")},
 			},
 		},
+		// Double suggestion with non-excessive gap, but there are live keys in the
+		// gap.
+		//
+		// NOTE: when a suggestion itself contains live keys, we skip the compaction
+		// because amounts of data may have been added to the span since the
+		// compaction was proposed. When only the gap contains live keys, however,
+		// it's still desirable to compact: the individual suggestions are empty, so
+		// we can assume there's lots of data to reclaim by compacting, and the
+		// aggregator is very careful not to jump gaps that span too many SSTs.
+		{
+			name: "double suggestion over gap with live keys",
+			suggestions: []storagebase.SuggestedCompaction{
+				{
+					StartKey: key("0"), EndKey: key("4"),
+					Compaction: storagebase.Compaction{
+						Bytes:            thresholdBytes.Default() / 2,
+						SuggestedAtNanos: nowNanos,
+					},
+				},
+				{
+					StartKey: key("6"), EndKey: key("9"),
+					Compaction: storagebase.Compaction{
+						Bytes:            thresholdBytes.Default() - (thresholdBytes.Default() / 2),
+						SuggestedAtNanos: nowNanos,
+					},
+				},
+			},
+			logicalBytes:      thresholdBytes.Default() * 100, // not going to trigger fractional threshold
+			availableBytes:    thresholdBytes.Default() * 100, // not going to trigger fractional threshold
+			expBytesCompacted: thresholdBytes.Default(),
+			expCompactions: []roachpb.Span{
+				{Key: key("0"), EndKey: key("9")},
+			},
+		},
 		// Double suggestion with excessive gap.
 		{
 			name: "double suggestion with excessive gap",
@@ -472,6 +528,12 @@ func TestCompactorThresholds(t *testing.T) {
 			defer cleanup()
 			// Shorten wait times for compactor processing.
 			minInterval.Override(&compactor.st.SV, time.Millisecond)
+
+			// Add a key so we can test that suggestions that span live data are
+			// ignored.
+			if err := we.Put(engine.MakeMVCCMetadataKey(key("5")), nil); err != nil {
+				t.Fatal(err)
+			}
 
 			for _, sc := range test.suggestions {
 				compactor.Suggest(context.Background(), sc)

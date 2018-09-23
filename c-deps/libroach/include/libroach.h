@@ -52,6 +52,14 @@ typedef struct {
 } DBTimestamp;
 
 typedef struct {
+  bool prefix;
+  DBKey upper_bound;
+  bool with_stats;
+  DBTimestamp min_timestamp_hint;
+  DBTimestamp max_timestamp_hint;
+} DBIterOptions;
+
+typedef struct {
   bool valid;
   DBKey key;
   DBSlice value;
@@ -90,6 +98,14 @@ void DBReleaseCache(DBCache* cache);
 // Opens the database located in "dir", creating it if it doesn't
 // exist.
 DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions options);
+
+// Set a callback to be invoked during DBOpen that can make changes to RocksDB
+// initialization. Used by CCL code to install additional features.
+//
+// The callback must be a pointer to a C++ function of type DBOpenHook. The type
+// is declared in db.cc. It cannot be part of the public C API as it refers to
+// C++ types.
+void DBSetOpenHook(void* hook);
 
 // Destroys the database located in "dir". As the name implies, this
 // operation is destructive. Use with caution.
@@ -171,18 +187,23 @@ DBEngine* DBNewSnapshot(DBEngine* db);
 // caller's responsibility to call DBClose().
 DBEngine* DBNewBatch(DBEngine* db, bool writeOnly);
 
-// Creates a new database iterator. When prefix is true, Seek will use
-// the user-key prefix of the key supplied to DBIterSeek() to restrict
-// which sstables are searched, but iteration (using Next) over keys
-// without the same user-key prefix will not work correctly (keys may
-// be skipped). When stats is true, the iterator will collect RocksDB
+// Creates a new database iterator.
+//
+// When iter_options.prefix is true, Seek will use the user-key prefix of the
+// key supplied to DBIterSeek() to restrict which sstables are searched, but
+// iteration (using Next) over keys without the same user-key prefix will not
+// work correctly (keys may be skipped).
+//
+// When iter_options.upper_bound is non-nil, the iterator will become invalid
+// after seeking past the provided upper bound. This can drastically improve
+// performance when seeking within a region covered by range deletion
+// tombstones. See #24029 for discussion.
+//
+// When iter_options.with_stats is true, the iterator will collect RocksDB
 // performance counters which can be retrieved via `DBIterStats`.
 //
 // It is the caller's responsibility to call DBIterDestroy().
-DBIterator* DBNewIter(DBEngine* db, bool prefix, bool stats);
-
-DBIterator* DBNewTimeBoundIter(DBEngine* db, DBTimestamp min_ts, DBTimestamp max_ts,
-                               bool with_stats);
+DBIterator* DBNewIter(DBEngine* db, DBIterOptions iter_options);
 
 // Destroys an iterator, freeing up any associated memory.
 void DBIterDestroy(DBIterator* iter);
@@ -222,10 +243,17 @@ DBIterState DBIterNext(DBIterator* iter, bool skip_current_key_versions);
 // iff the iterator was not positioned at the first key.
 DBIterState DBIterPrev(DBIterator* iter, bool skip_current_key_versions);
 
+// DBIterSetUpperBound updates this iterator's upper bound.
+void DBIterSetUpperBound(DBIterator* iter, DBKey key);
+
 // Implements the merge operator on a single pair of values. update is
 // merged with existing. This method is provided for invocation from
 // Go code.
 DBStatus DBMergeOne(DBSlice existing, DBSlice update, DBString* new_value);
+
+// Implements the partial merge operator on a single pair of values. update is
+// merged with existing. This method is provided for invocation from Go code.
+DBStatus DBPartialMergeOne(DBSlice existing, DBSlice update, DBString* new_value);
 
 // NB: The function (cStatsToGoStats) that converts these to the go
 // representation is unfortunately duplicated in engine and engineccl. If this
@@ -249,9 +277,9 @@ typedef struct {
 
 MVCCStatsResult MVCCComputeStats(DBIterator* iter, DBKey start, DBKey end, int64_t now_nanos);
 
-bool MVCCIsValidSplitKey(DBSlice key, bool allow_meta2_splits);
+bool MVCCIsValidSplitKey(DBSlice key);
 DBStatus MVCCFindSplitKey(DBIterator* iter, DBKey start, DBKey end, DBKey min_split,
-                          int64_t target_size, bool allow_meta2_splits, DBString* split_key);
+                          int64_t target_size, DBString* split_key);
 
 // DBTxn contains the fields from a roachpb.Transaction that are
 // necessary for MVCC Get and Scan operations. Note that passing a
@@ -306,14 +334,30 @@ typedef struct {
 
 // DBEnvStatsResult contains Env stats (filesystem layer).
 typedef struct {
+  // Basic file encryption stats:
+  // Files/bytes across all rocksdb files.
+  uint64_t total_files;
+  uint64_t total_bytes;
+  // Files/bytes using the active data key.
+  uint64_t active_key_files;
+  uint64_t active_key_bytes;
   // encryption status (CCL only).
   // This is a serialized enginepbccl/stats.proto:EncryptionStatus
   DBString encryption_status;
 } DBEnvStatsResult;
 
+// DBEncryptionRegistries contains file and key registries.
+typedef struct {
+  // File registry.
+  DBString file_registry;
+  // Key registry (with actual keys scrubbed).
+  DBString key_registry;
+} DBEncryptionRegistries;
+
 DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats);
 DBString DBGetCompactionStats(DBEngine* db);
 DBStatus DBGetEnvStats(DBEngine* db, DBEnvStatsResult* stats);
+DBStatus DBGetEncryptionRegistries(DBEngine* db, DBEncryptionRegistries* result);
 
 typedef struct {
   int level;
@@ -326,6 +370,15 @@ typedef struct {
 // array must be freed along with the start_key and end_key of each
 // table.
 DBSSTable* DBGetSSTables(DBEngine* db, int* n);
+
+typedef struct {
+  uint64_t log_number;
+  uint64_t size;
+} DBWALFile;
+
+// Retrieve information about all of the write-ahead log files in order from
+// oldest to newest. The files array must be freed.
+DBStatus DBGetSortedWALFiles(DBEngine* db, DBWALFile** files, int* n);
 
 // DBGetUserProperties fetches the user properties stored in each sstable's
 // metadata. These are returned as a serialized SSTUserPropertiesCollection
@@ -364,6 +417,7 @@ DBStatus DBSstFileWriterFinish(DBSstFileWriter* fw, DBString* data);
 void DBSstFileWriterClose(DBSstFileWriter* fw);
 
 void DBRunLDB(int argc, char** argv);
+void DBRunSSTDump(int argc, char** argv);
 
 // DBEnvWriteFile writes the given data as a new "file" in the given engine.
 DBStatus DBEnvWriteFile(DBEngine* db, DBSlice path, DBSlice contents);
@@ -390,6 +444,9 @@ DBStatus DBEnvDeleteFile(DBEngine* db, DBSlice path);
 // DBEnvDeleteDirAndFiles deletes the directory with the given dir name and any
 // files it contains but not subdirectories in the given engine.
 DBStatus DBEnvDeleteDirAndFiles(DBEngine* db, DBSlice dir);
+
+// DBEnvLinkFile creates 'newname' as a hard link to 'oldname using the given engine.
+DBStatus DBEnvLinkFile(DBEngine* db, DBSlice oldname, DBSlice newname);
 
 // DBFileLock contains various parameters set during DBLockFile and required for DBUnlockFile.
 typedef void* DBFileLock;

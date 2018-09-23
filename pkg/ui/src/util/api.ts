@@ -3,7 +3,6 @@
  */
 
 import _ from "lodash";
-import "whatwg-fetch"; // needed for jsdom?
 import moment from "moment";
 
 import * as protos from "src/js/protos";
@@ -93,6 +92,10 @@ export type StoresRequestMessage = protos.cockroach.server.serverpb.StoresReques
 export type StoresResponseMessage = protos.cockroach.server.serverpb.StoresResponse;
 
 export type UserLogoutResponseMessage = protos.cockroach.server.serverpb.UserLogoutResponse;
+
+export type StatementsResponseMessage = protos.cockroach.server.serverpb.StatementsResponse;
+
+export type DataDistributionResponseMessage = protos.cockroach.server.serverpb.DataDistributionResponse;
 
 // API constants
 
@@ -329,4 +332,14 @@ export function userLogout(timeout?: moment.Duration): Promise<UserLogoutRespons
 // getStores returns information about a node's stores.
 export function getStores(req: StoresRequestMessage, timeout?: moment.Duration): Promise<StoresResponseMessage> {
   return timeoutFetch(serverpb.StoresResponse, `${STATUS_PREFIX}/stores/${req.node_id}`, null, timeout);
+}
+
+// getStatements returns statements the cluster has recently executed, and some stats about them.
+export function getStatements(timeout?: moment.Duration): Promise<StatementsResponseMessage> {
+  return timeoutFetch(serverpb.StatementsResponse, `${STATUS_PREFIX}/statements`, null, timeout);
+}
+
+// getDataDistribution returns information about how replicas are distributed across nodes.
+export function getDataDistribution(timeout?: moment.Duration): Promise<DataDistributionResponseMessage> {
+  return timeoutFetch(serverpb.DataDistributionResponse, `${API_PREFIX}/data_distribution`, null, timeout);
 }

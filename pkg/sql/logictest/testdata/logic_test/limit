@@ -1,7 +1,7 @@
 # LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
 
 query I
-SELECT generate_series FROM GENERATE_SERIES(1, 100) ORDER BY generate_series LIMIT 5;
+SELECT generate_series FROM generate_series(1, 100) ORDER BY generate_series LIMIT 5;
 ----
 1
 2
@@ -10,7 +10,7 @@ SELECT generate_series FROM GENERATE_SERIES(1, 100) ORDER BY generate_series LIM
 5
 
 query I
-SELECT generate_series FROM GENERATE_SERIES(1, 100) ORDER BY generate_series FETCH FIRST 5 ROWS ONLY;
+SELECT generate_series FROM generate_series(1, 100) ORDER BY generate_series FETCH FIRST 5 ROWS ONLY;
 ----
 1
 2
@@ -19,26 +19,26 @@ SELECT generate_series FROM GENERATE_SERIES(1, 100) ORDER BY generate_series FET
 5
 
 query I
-SELECT generate_series FROM GENERATE_SERIES(1, 100) ORDER BY generate_series FETCH FIRST ROW ONLY;
+SELECT generate_series FROM generate_series(1, 100) ORDER BY generate_series FETCH FIRST ROW ONLY;
 ----
 1
 
 query I
-SELECT generate_series FROM GENERATE_SERIES(1, 100) ORDER BY generate_series OFFSET 3 ROWS FETCH NEXT ROW ONLY;
+SELECT generate_series FROM generate_series(1, 100) ORDER BY generate_series OFFSET 3 ROWS FETCH NEXT ROW ONLY;
 ----
 4
 
 statement error syntax error
-SELECT generate_series FROM GENERATE_SERIES(1, 100) FETCH NEXT ROW ONLY LIMIT 3;
+SELECT generate_series FROM generate_series(1, 100) FETCH NEXT ROW ONLY LIMIT 3;
 
 statement error syntax error
-SELECT generate_series FROM GENERATE_SERIES(1, 100) LIMIT 3 FETCH NEXT ROW ONLY;
+SELECT generate_series FROM generate_series(1, 100) LIMIT 3 FETCH NEXT ROW ONLY;
 
 statement error syntax error
-SELECT generate_series FROM GENERATE_SERIES(1, 100) FETCH NEXT 1 + 1 ROWS ONLY;
+SELECT generate_series FROM generate_series(1, 100) FETCH NEXT 1 + 1 ROWS ONLY;
 
 query I
-SELECT generate_series FROM GENERATE_SERIES(1, 100) ORDER BY generate_series FETCH FIRST (1 + 1) ROWS ONLY;
+SELECT generate_series FROM generate_series(1, 100) ORDER BY generate_series FETCH FIRST (1 + 1) ROWS ONLY;
 ----
 1
 2
@@ -89,7 +89,7 @@ SELECT k, v FROM t ORDER BY v DESC LIMIT (1+4) OFFSET 1
 6  -36
 
 query R
-SELECT SUM(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
+SELECT sum(w) FROM t GROUP BY k, v ORDER BY v DESC LIMIT 10
 ----
 125
 27
@@ -116,28 +116,28 @@ SELECT k FROM (SELECT k, v, w FROM t ORDER BY v LIMIT 4)
 
 # Use expression for LIMIT/OFFSET value.
 query II
-SELECT k, v FROM t ORDER BY k LIMIT LENGTH(PG_TYPEOF(123))
+SELECT k, v FROM t ORDER BY k LIMIT length(pg_typeof(123))
 ----
 1  1
 2  -4
 3  9
 
 query II
-SELECT k, v FROM t ORDER BY k LIMIT LENGTH(PG_TYPEOF(123)) OFFSET LENGTH(PG_TYPEOF(123))-2
+SELECT k, v FROM t ORDER BY k LIMIT length(pg_typeof(123)) OFFSET length(pg_typeof(123))-2
 ----
 2  -4
 3  9
 4  -16
 
 query II
-SELECT k, v FROM t ORDER BY k OFFSET (SELECT COUNT(*)-3 FROM t)
+SELECT k, v FROM t ORDER BY k OFFSET (SELECT count(*)-3 FROM t)
 ----
 4  -16
 5  25
 6  -36
 
 query II
-SELECT k, v FROM t ORDER BY k LIMIT (SELECT COUNT(*)-3 FROM t) OFFSET (SELECT COUNT(*)-5 FROM t)
+SELECT k, v FROM t ORDER BY k LIMIT (SELECT count(*)-3 FROM t) OFFSET (SELECT count(*)-5 FROM t)
 ----
 2  -4
 3  9

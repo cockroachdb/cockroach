@@ -1,5 +1,91 @@
 # LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
 
+subtest strict
+
+statement ok
+CREATE TABLE ex(
+  foo INT PRIMARY KEY,
+  bar INT UNIQUE,
+  baz INT
+)
+
+statement count 1
+INSERT INTO ex(foo,bar,baz) VALUES (1,1,1)
+
+statement count 0
+INSERT INTO ex(foo,bar,baz) VALUES (1,1,1) ON CONFLICT DO NOTHING
+
+statement count 0
+INSERT INTO ex(foo,bar,baz) VALUES (2,1,1) ON CONFLICT DO NOTHING
+
+statement count 1
+INSERT INTO ex(foo,bar,baz) VALUES (3,2,2), (3,1,2), (4,2,1) ON CONFLICT DO NOTHING
+
+query III colnames
+SELECT * from ex ORDER BY foo
+----
+foo bar baz
+1   1   1
+3   2   2
+
+query III colnames
+INSERT INTO ex(foo,bar,baz) VALUES (4,3,1), (5,2,1) ON CONFLICT DO NOTHING RETURNING *
+----
+foo  bar  baz
+4    3    1
+
+statement ok
+CREATE TABLE ex2(
+  a INT PRIMARY KEY,
+  b INT UNIQUE,
+  c INT,
+  d INT,
+  e INT,
+  UNIQUE (c,d)
+)
+
+statement count 1
+INSERT INTO ex2(a,b,c,d,e) VALUES (0,0,0,0,0)
+
+statement count 0
+INSERT INTO ex2(a,b,c,d,e) VALUES (1,0,1,1,0), (2,4,0,0,5) ON CONFLICT DO NOTHING
+
+statement count 3
+INSERT INTO ex2(a,b,c,d,e) VALUES (3,4,5,6,7), (8,9,10,11,12), (13,14,15,16,17) ON CONFLICT DO NOTHING
+
+statement count 0
+INSERT INTO ex2(a,b,c,d,e) VALUES (3,4,5,6,7), (8,9,10,11,12) ON CONFLICT DO NOTHING
+
+statement ok
+CREATE TABLE no_unique(
+  a INT,
+  b INT
+)
+
+statement count 1
+INSERT INTO no_unique(a,b) VALUES (1,2)
+
+statement count 1
+INSERT INTO no_unique(a,b) VALUES (1,2) ON CONFLICT DO NOTHING
+
+statement count 3
+INSERT INTO no_unique(a,b) VALUES (1,2), (1,3), (3,2) ON CONFLICT DO NOTHING
+
+query II colnames
+SELECT * from no_unique ORDER BY a, b
+----
+a  b
+1  2
+1  2
+1  2
+1  3
+3  2
+
+statement count 3
+INSERT INTO no_unique(a,b) VALUES (1,2), (1,2), (1,2) ON CONFLICT DO NOTHING
+
+subtest notstrict
+
 statement ok
 CREATE TABLE kv (
   k INT PRIMARY KEY,
@@ -26,7 +112,7 @@ statement count 3
 UPSERT INTO kv VALUES (7, 7), (3, 8), (9, 9)
 
 statement count 1
-INSERT INTO kv VALUES (1, 10) ON CONFLICT (k) DO UPDATE SET v = (SELECT CAST(SUM(k) AS INT) FROM kv)
+INSERT INTO kv VALUES (1, 10) ON CONFLICT (k) DO UPDATE SET v = (SELECT CAST(sum(k) AS INT) FROM kv)
 
 statement error column reference "v" is ambiguous \(candidates: excluded.v, kv.v\)
 INSERT INTO kv VALUES (4, 10) ON CONFLICT (k) DO UPDATE SET v = v + 1
@@ -52,10 +138,20 @@ UPSERT INTO kv VALUES (11, 10), (11, 12) RETURNING k, v
 11 10
 11 12
 
-statement count 1
-INSERT INTO kv VALUES (13, 13), (7, 8) ON CONFLICT (k) DO NOTHING
+query I
+UPSERT INTO kv VALUES (11) RETURNING k
+----
+11
 
-statement error there is no unique or exclusion constraint matching the ON CONFLICT specification
+query I
+UPSERT INTO kv VALUES (11, 12) RETURNING v
+----
+12
+
+statement count 1
+INSERT INTO kv VALUES (13, 13), (7, 8) ON CONFLICT (k) DO NOTHING RETURNING *
+
+statement count 0
 INSERT INTO kv VALUES (13, 13), (7, 8) ON CONFLICT DO NOTHING
 
 statement count 2
@@ -217,7 +313,7 @@ INSERT INTO upsert_returning VALUES (1, 1, NULL)
 query IIII rowsort
 INSERT INTO upsert_returning (a, c) VALUES (1, 1), (2, 2) ON CONFLICT (a) DO UPDATE SET c = excluded.c RETURNING *
 ----
-1 1 1 -1
+1 1    1 -1
 2 NULL 2 -1
 
 # Handle INSERT ... ON CONFLICT DO NOTHING ... RETURNING
@@ -230,7 +326,7 @@ INSERT INTO upsert_returning (a, c) VALUES (1, 1), (3, 3) ON CONFLICT (a) DO NOT
 query IIII rowsort
 UPSERT INTO upsert_returning (a, c) VALUES (1, 10), (3, 30) RETURNING *
 ----
-1 1 10 -1
+1 1    10 -1
 3 NULL 30 -1
 
 # Ensure returned values are inserted values after conflict resolution
@@ -420,3 +516,78 @@ query IIII rowsort
 SELECT * FROM tu
 ----
 1 NULL NULL NULL
+
+subtest check
+
+statement ok
+CREATE TABLE ab(
+    a INT PRIMARY KEY,
+    b INT, CHECK (b < 1)
+)
+
+statement count 1
+INSERT INTO ab(a, b) VALUES (1, 0);
+
+statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+INSERT INTO ab(a, b) VALUES (1, 0) ON CONFLICT(a) DO UPDATE SET b=12312313;
+
+statement count 1
+INSERT INTO ab(a, b) VALUES (1, 0) ON CONFLICT(a) DO UPDATE SET b=-1;
+
+statement ok
+CREATE TABLE abc_check(
+    a INT PRIMARY KEY,
+    b INT,
+    c INT,
+    CHECK (b < 1),
+    CHECK (c > 1)
+)
+
+statement count 1
+INSERT INTO abc_check(a, b, c) VALUES (1, 0, 2);
+
+statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+INSERT INTO abc_check(a, b, c) VALUES (1, 0, 2) ON CONFLICT(a) DO UPDATE SET b=12312313;
+
+statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+INSERT INTO abc_check(a, b, c) VALUES (1, 0, 2) ON CONFLICT(a) DO UPDATE SET (b, c) = (1, 1);
+
+statement error pq: failed to satisfy CHECK constraint \(c > 1\)
+INSERT INTO abc_check(a, b, c) VALUES (1, 0, 2) ON CONFLICT(a) DO UPDATE SET (b, c) = (-1, 1);
+
+statement count 1
+INSERT INTO abc_check(a, b, c) VALUES (2, 0, 3);
+
+statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+INSERT INTO abc_check(c, a, b) VALUES (3, 2, 0) ON CONFLICT(a) DO UPDATE SET b=12312313;
+
+statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+INSERT INTO abc_check(a, c) VALUES (2, 3) ON CONFLICT(a) DO UPDATE SET b=12312313;
+
+statement error pq: failed to satisfy CHECK constraint \(c > 1\)
+INSERT INTO abc_check(a, c) VALUES (2, 3) ON CONFLICT(a) DO UPDATE SET c=1;
+
+statement error pq: failed to satisfy CHECK constraint \(c > 1\)
+INSERT INTO abc_check(c, a) VALUES (3, 2) ON CONFLICT(a) DO UPDATE SET c=1;
+
+statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+INSERT INTO abc_check(c, a) VALUES (3, 2) ON CONFLICT(a) DO UPDATE SET b=123123123;
+
+statement error pq: failed to satisfy CHECK constraint \(b < 1\)
+INSERT INTO abc_check(c, a) VALUES (3, 2) ON CONFLICT(a) DO UPDATE SET b=123123123;
+
+subtest 29495
+
+statement ok
+CREATE TABLE IF NOT EXISTS example (
+  id SERIAL PRIMARY KEY
+ ,value string NOT NULL
+);
+
+query B
+UPSERT INTO example (value) VALUES ('foo') RETURNING id > 0
+----
+true
+
+statement ok
+DROP TABLE example

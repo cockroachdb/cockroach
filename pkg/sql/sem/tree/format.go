@@ -57,7 +57,8 @@ const (
 	FmtShowTypes
 
 	// FmtHideConstants instructs the pretty-printer to produce a
-	// representation that does not disclose query-specific data.
+	// representation that does not disclose query-specific data. It
+	// also shorten long lists in tuples, VALUES and array expressions.
 	FmtHideConstants
 
 	// FmtAnonymize instructs the pretty-printer to remove
@@ -81,9 +82,10 @@ const (
 	// using numeric notation (@S123).
 	FmtSymbolicSubqueries
 
-	// If set, strings will be formatted for being contents of ARRAYs.
-	// Used internally in combination with FmtArrays defined below.
-	fmtWithinArray
+	// If set, strings will be formatted using the postgres datum-to-text
+	// conversion. See comments in pgwire_encode.go.
+	// Used internally in combination with FmtPgwireText defined below.
+	fmtPgwireFormat
 
 	// If set, datums and placeholders will have type annotations (like
 	// :::interval) as necessary to disambiguate between possible type
@@ -96,6 +98,12 @@ const (
 
 	// fmtUnicodeStrings prints strings and JSON in their unicode representation.
 	fmtUnicodeStrings
+
+	// FmtParsableNumerics produces decimal and float representations
+	// that are always parsable, even if they require a string
+	// representation like -Inf. Negative values are preserved "inside"
+	// the numeric by enclosing them within parentheses.
+	FmtParsableNumerics
 )
 
 // Composite/derived flag definitions follow.
@@ -108,14 +116,15 @@ const (
 	// identifiers without wrapping quotes in any case.
 	FmtBareIdentifiers FmtFlags = FmtFlags(lex.EncBareIdentifiers)
 
-	// FmtArrays instructs the pretty-printer to print strings without
-	// wrapping quotes, if the string contains no special characters.
-	FmtArrays FmtFlags = fmtWithinArray | FmtFlags(lex.EncBareStrings)
+	// FmtPgwireText instructs the pretty-printer to use
+	// a pg-compatible conversion to strings. See comments
+	// in pgwire_encode.go.
+	FmtPgwireText FmtFlags = fmtPgwireFormat | FmtFlags(lex.EncBareStrings)
 
 	// FmtParsable instructs the pretty-printer to produce a representation that
 	// can be parsed into an equivalent expression (useful for serialization of
 	// expressions).
-	FmtParsable FmtFlags = fmtDisambiguateDatumTypes
+	FmtParsable FmtFlags = fmtDisambiguateDatumTypes | FmtParsableNumerics
 
 	// FmtCheckEquivalence instructs the pretty-printer to produce a representation
 	// that can be used to check equivalence of expressions. Specifically:
@@ -125,7 +134,7 @@ const (
 	//    annotations. This is necessary because datums of different types
 	//    can otherwise be formatted to the same string: (for example the
 	//    DDecimal 1 and the DInt 1).
-	FmtCheckEquivalence FmtFlags = fmtSymbolicVars | fmtDisambiguateDatumTypes
+	FmtCheckEquivalence FmtFlags = fmtSymbolicVars | fmtDisambiguateDatumTypes | FmtParsableNumerics
 
 	// FmtParseDatums, if set, formats datums in a raw form
 	// (e.g. suitable for output into a CSV file) such that they can be

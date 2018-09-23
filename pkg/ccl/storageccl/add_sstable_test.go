@@ -354,7 +354,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		// stats. Make sure recomputing from scratch gets the same answer as
 		// applying the diff to the stats
 		beforeStats := func() enginepb.MVCCStats {
-			iter := e.NewIterator(engine.IterOptions{})
+			iter := e.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 			defer iter.Close()
 			beforeStats, err := engine.ComputeStatsGo(iter, engine.NilKey, engine.MVCCKeyMax, nowNanos)
 			if err != nil {
@@ -373,7 +373,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		}
 
 		afterStats := func() enginepb.MVCCStats {
-			iter := e.NewIterator(engine.IterOptions{})
+			iter := e.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 			defer iter.Close()
 			afterStats, err := engine.ComputeStatsGo(iter, engine.NilKey, engine.MVCCKeyMax, nowNanos)
 			if err != nil {

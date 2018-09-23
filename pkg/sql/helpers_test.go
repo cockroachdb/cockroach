@@ -80,19 +80,21 @@ func (t RemovalTracker) WaitForRemoval() error {
 // LeaseRemovedNotification has to be called after a lease is removed from the
 // store. This should be hooked up as a callback to
 // LeaseStoreTestingKnobs.LeaseReleasedEvent.
-func (w *LeaseRemovalTracker) LeaseRemovedNotification(table sqlbase.TableDescriptor, err error) {
+func (w *LeaseRemovalTracker) LeaseRemovedNotification(
+	id sqlbase.ID, version sqlbase.DescriptorVersion, err error,
+) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	id := tableVersionID{
-		id:      table.ID,
-		version: table.Version,
+	idx := tableVersionID{
+		id:      id,
+		version: version,
 	}
 
-	if tracker, ok := w.tracking[id]; ok {
+	if tracker, ok := w.tracking[idx]; ok {
 		*tracker.err = err
 		close(tracker.removed)
-		delete(w.tracking, id)
+		delete(w.tracking, idx)
 	}
 }
 
@@ -116,10 +118,10 @@ func (m *LeaseManager) AcquireAndAssertMinVersion(
 	minVersion sqlbase.DescriptorVersion,
 ) (*sqlbase.TableDescriptor, hlc.Timestamp, error) {
 	t := m.findTableState(tableID, true)
-	if err := t.ensureVersion(ctx, minVersion, m); err != nil {
+	if err := ensureVersion(ctx, tableID, minVersion, m); err != nil {
 		return nil, hlc.Timestamp{}, err
 	}
-	table, err := t.acquire(ctx, timestamp, m)
+	table, _, err := t.findForTimestamp(ctx, timestamp)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
 	}

@@ -20,6 +20,8 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -106,6 +108,13 @@ func (n *dropTableNode) startExec(params runParams) error {
 		if droppedDesc == nil {
 			continue
 		}
+
+		droppedDetails := jobspb.DroppedTableDetails{Name: toDel.tn.FQString(), ID: toDel.desc.ID}
+		if _, err := params.p.createDropTablesJob(ctx, sqlbase.TableDescriptors{droppedDesc}, []jobspb.DroppedTableDetails{droppedDetails}, tree.AsStringWithFlags(n.n,
+			tree.FmtAlwaysQualifyTableNames), true /* drainNames */); err != nil {
+			return err
+		}
+
 		droppedViews, err := params.p.dropTableImpl(params, droppedDesc)
 		if err != nil {
 			return err
@@ -151,12 +160,8 @@ func (*dropTableNode) Close(context.Context)        {}
 // If the table does not exist, this function returns a nil descriptor.
 func (p *planner) prepareDrop(
 	ctx context.Context, name *tree.TableName, required bool, requiredType requiredType,
-) (tableDesc *sqlbase.TableDescriptor, err error) {
-	// DDL statements avoid the cache to avoid leases, and can view non-public descriptors.
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		tableDesc, err = ResolveExistingObject(ctx, p, name, required, requiredType)
-	})
+) (*MutableTableDescriptor, error) {
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, name, required, requiredType)
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +230,7 @@ func (p *planner) removeFK(
 		return err
 	}
 	idx.ForeignKey = sqlbase.ForeignKeyReference{}
-	return p.saveNonmutationAndNotify(ctx, table)
+	return p.writeSchemaChange(ctx, table, sqlbase.InvalidMutationID)
 }
 
 func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyReference) error {
@@ -242,7 +247,7 @@ func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyRe
 		return err
 	}
 	idx.Interleave.Ancestors = nil
-	return p.saveNonmutationAndNotify(ctx, table)
+	return p.writeSchemaChange(ctx, table, sqlbase.InvalidMutationID)
 }
 
 // dropTableImpl does the work of dropping a table (and everything that depends
@@ -332,12 +337,12 @@ func (p *planner) initiateDropTable(
 	//
 	// TODO(bram): If interleaved and ON DELETE CASCADE, we will be
 	// able to use this faster mechanism.
-	if !tableDesc.IsInterleaved() &&
+	if tableDesc.IsTable() && !tableDesc.IsInterleaved() &&
 		p.ExecCfg().Settings.Version.IsActive(cluster.VersionClearRange) {
 		// Get the zone config applying to this table in order to
 		// ensure there is a GC TTL.
 		_, _, _, err := GetZoneConfigInTxn(
-			ctx, p.txn, uint32(tableDesc.ID), &sqlbase.IndexDescriptor{}, "",
+			ctx, p.txn, uint32(tableDesc.ID), &sqlbase.IndexDescriptor{}, "", false, /* getInheritedDefault */
 		)
 		if err != nil {
 			return err
@@ -354,6 +359,26 @@ func (p *planner) initiateDropTable(
 			Name:     tableDesc.Name}
 		tableDesc.DrainingNames = append(tableDesc.DrainingNames, nameDetails)
 	}
+
+	// Mark all jobs scheduled for schema changes as successful.
+	var id sqlbase.MutationID
+	for _, m := range tableDesc.Mutations {
+		if id != m.MutationID {
+			id = m.MutationID
+			jobID, err := getJobIDForMutationWithDescriptor(ctx, tableDesc, id)
+			if err != nil {
+				return err
+			}
+			job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
+			if err != nil {
+				return err
+			}
+			if err := job.WithTxn(p.txn).Succeeded(ctx, jobs.NoopFn); err != nil {
+				return errors.Wrapf(err, "failed to mark job %d as as successful", jobID)
+			}
+		}
+	}
+
 	// Initiate an immediate schema change. When dropping a table
 	// in a session, the data and the descriptor are not deleted.
 	// Instead, that is taken care of asynchronously by the schema
@@ -390,7 +415,7 @@ func (p *planner) removeFKBackReference(
 			targetIdx.ReferencedBy = append(targetIdx.ReferencedBy[:k], targetIdx.ReferencedBy[k+1:]...)
 		}
 	}
-	return p.saveNonmutationAndNotify(ctx, t)
+	return p.writeSchemaChange(ctx, t, sqlbase.InvalidMutationID)
 }
 
 func (p *planner) removeInterleaveBackReference(
@@ -424,7 +449,7 @@ func (p *planner) removeInterleaveBackReference(
 		}
 	}
 	if t != tableDesc {
-		return p.saveNonmutationAndNotify(ctx, t)
+		return p.writeSchemaChange(ctx, t, sqlbase.InvalidMutationID)
 	}
 	return nil
 }

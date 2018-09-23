@@ -16,7 +16,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	opentracing "github.com/opentracing/opentracing-go"
@@ -107,10 +106,6 @@ type txnState struct {
 	// txnAbortCount is incremented whenever the state transitions to
 	// stateAborted.
 	txnAbortCount *metric.Counter
-
-	// inExternalTxn, if set, means that mu.txn is not owned by the txnState. This
-	// happens for the InternalExecutor.
-	inExternalTxn bool
 }
 
 // txnType represents the type of a SQL transaction.
@@ -166,10 +161,13 @@ func (ts *txnState) resetForNewSQLTxn(
 	if parentSp := opentracing.SpanFromContext(connCtx); parentSp != nil {
 		// Create a child span for this SQL txn.
 		sp = parentSp.Tracer().StartSpan(
-			opName, opentracing.ChildOf(parentSp.Context()), tracing.Recordable)
+			opName,
+			opentracing.ChildOf(parentSp.Context()), tracing.Recordable,
+			tracing.LogTagsFromCtx(connCtx),
+		)
 	} else {
 		// Create a root span for this SQL txn.
-		sp = tranCtx.tracer.StartSpan(opName, tracing.Recordable)
+		sp = tranCtx.tracer.StartSpan(opName, tracing.Recordable, tracing.LogTagsFromCtx(connCtx))
 	}
 
 	if txnType == implicitTxn {
@@ -198,11 +196,10 @@ func (ts *txnState) resetForNewSQLTxn(
 
 	ts.mu.Lock()
 	if txn == nil {
-		ts.mu.txn = client.NewTxn(tranCtx.db, tranCtx.nodeID, client.RootTxn)
+		ts.mu.txn = client.NewTxn(ts.Ctx, tranCtx.db, tranCtx.nodeID, client.RootTxn)
 		ts.mu.txn.SetDebugName(opName)
 	} else {
 		ts.mu.txn = txn
-		ts.inExternalTxn = true
 	}
 	ts.mu.Unlock()
 
@@ -226,10 +223,7 @@ func (ts *txnState) resetForNewSQLTxn(
 // finishSQLTxn finalizes a transaction's results and closes the root span for
 // the current SQL txn. This needs to be called before resetForNewSQLTxn() is
 // called for starting another SQL txn.
-//
-// ctx is the connExecutor's context. This will be used once ts.Ctx is
-// finalized.
-func (ts *txnState) finishSQLTxn(connCtx context.Context) {
+func (ts *txnState) finishSQLTxn() {
 	ts.mon.Stop(ts.Ctx)
 	if ts.cancel != nil {
 		ts.cancel()
@@ -237,11 +231,6 @@ func (ts *txnState) finishSQLTxn(connCtx context.Context) {
 	}
 	if ts.sp == nil {
 		panic("No span in context? Was resetForNewSQLTxn() called previously?")
-	}
-
-	if !ts.mu.txn.IsFinalized() && !ts.inExternalTxn {
-		panic(fmt.Sprintf(
-			"attempting to finishSQLTxn(), but KV txn is not finalized: %+v", ts.mu.txn))
 	}
 
 	if ts.recordingThreshold > 0 {
@@ -263,6 +252,28 @@ func (ts *txnState) finishSQLTxn(connCtx context.Context) {
 	ts.Ctx = nil
 	ts.mu.txn = nil
 	ts.recordingThreshold = 0
+}
+
+// finishExternalTxn is a stripped-down version of finishSQLTxn used by
+// connExecutors that run within a higher-level transaction (through the
+// InternalExecutor). These guys don't want to mess with the transaction per-se,
+// but still want to clean up other stuff.
+func (ts *txnState) finishExternalTxn() {
+	if ts.Ctx == nil {
+		ts.mon.Stop(ts.connCtx)
+	} else {
+		ts.mon.Stop(ts.Ctx)
+	}
+	if ts.cancel != nil {
+		ts.cancel()
+		ts.cancel = nil
+	}
+	if ts.sp != nil {
+		ts.sp.Finish()
+	}
+	ts.sp = nil
+	ts.Ctx = nil
+	ts.mu.txn = nil
 }
 
 func (ts *txnState) setIsolationLevel(isolation enginepb.IsolationType) error {

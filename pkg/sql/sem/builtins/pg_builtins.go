@@ -22,11 +22,8 @@ import (
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 
-	"bytes"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -60,7 +57,7 @@ func makeNotUsableFalseBuiltin() builtinDefinition {
 
 // typeBuiltinsHaveUnderscore is a map to keep track of which types have i/o
 // builtins with underscores in between their type name and the i/o builtin
-// name, like date_in vs int8int. There seems to be no other way to
+// name, like date_in vs int8in. There seems to be no other way to
 // programmatically determine whether or not this underscore is present, hence
 // the existence of this map.
 var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
@@ -68,11 +65,12 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	types.AnyArray.Oid():    {},
 	types.Date.Oid():        {},
 	types.Time.Oid():        {},
-	types.TimeTZ.Oid():      {},
 	types.Decimal.Oid():     {},
 	types.Interval.Oid():    {},
 	types.JSON.Oid():        {},
 	types.UUID.Oid():        {},
+	oid.T_varbit:            {},
+	oid.T_bit:               {},
 	types.Timestamp.Oid():   {},
 	types.TimestampTZ.Oid(): {},
 	types.FamTuple.Oid():    {},
@@ -82,7 +80,7 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 // is either the type's postgres display name or the type's postgres display
 // name plus an underscore, depending on the type.
 func PGIOBuiltinPrefix(typ types.T) string {
-	builtinPrefix := types.PGDisplayName(typ)
+	builtinPrefix := strings.ToLower(oid.TypeName[typ.Oid()])
 	if _, ok := typeBuiltinsHaveUnderscore[typ.Oid()]; ok {
 		return builtinPrefix + "_"
 	}
@@ -113,6 +111,12 @@ func initPGBuiltins() {
 	}
 	for name, builtin := range makeTypeIOBuiltins("anyarray_", types.AnyArray) {
 		builtins[name] = builtin
+	}
+
+	// Make crdb_internal.create_regfoo builtins.
+	for _, typ := range []types.TOid{types.RegType, types.RegProc, types.RegProcedure, types.RegClass, types.RegNamespace} {
+		typName := typ.SQLName()
+		builtins["crdb_internal.create_"+typName] = makeCreateRegDef(typ)
 	}
 }
 
@@ -165,6 +169,59 @@ var (
 	DatEncodingEnUTF8        = tree.NewDString("en_US.utf8")
 	datEncodingUTF8ShortName = tree.NewDString("UTF8")
 )
+
+// Make a pg_get_indexdef function with the given arguments.
+func makePGGetIndexDef(argTypes tree.ArgTypes) tree.Overload {
+	return tree.Overload{
+		Types:      argTypes,
+		ReturnType: tree.FixedReturnType(types.String),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			colNumber := *tree.NewDInt(0)
+			if len(args) == 3 {
+				colNumber = *args[1].(*tree.DInt)
+			}
+			r, err := ctx.InternalExecutor.QueryRow(
+				ctx.Ctx(), "pg_get_indexdef",
+				ctx.Txn,
+				"SELECT indexdef FROM pg_catalog.pg_indexes WHERE crdb_oid = $1", args[0])
+			if err != nil {
+				return nil, err
+			}
+			// If the index does not exist we return null.
+			if len(r) == 0 {
+				return tree.DNull, nil
+			}
+			// The 1 argument and 3 argument variants are equivalent when column number 0 is passed.
+			if colNumber == 0 {
+				return r[0], nil
+			}
+			// The 3 argument variant for column number other than 0 returns the column name.
+			r, err = ctx.InternalExecutor.QueryRow(
+				ctx.Ctx(), "pg_get_indexdef",
+				ctx.Txn,
+				`SELECT ischema.column_name as pg_get_indexdef 
+		               FROM information_schema.statistics AS ischema 
+											INNER JOIN pg_catalog.pg_indexes AS pgindex 
+													ON ischema.table_schema = pgindex.schemaname 
+													AND ischema.table_name = pgindex.tablename 
+													AND ischema.index_name = pgindex.indexname 
+													AND pgindex.crdb_oid = $1 
+													AND ischema.seq_in_index = $2`, args[0], args[1])
+			if err != nil {
+				return nil, err
+			}
+			// If the column number does not exist in the index we return an empty string.
+			if len(r) == 0 {
+				return tree.NewDString(""), nil
+			}
+			if len(r) > 1 {
+				return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "programming error: pg_get_indexdef query has more than 1 result row: %+v", r)
+			}
+			return r[0], nil
+		},
+		Info: notUsableInfo,
+	}
+}
 
 // Make a pg_get_viewdef function with the given arguments.
 func makePGGetViewDef(argTypes tree.ArgTypes) tree.Overload {
@@ -462,6 +519,22 @@ func evalPrivilegeCheck(
 	return tree.DBoolTrue, nil
 }
 
+func makeCreateRegDef(typ types.TOid) builtinDefinition {
+	return makeBuiltin(defProps(),
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"oid", types.Int},
+				{"name", types.String},
+			},
+			ReturnType: tree.FixedReturnType(typ),
+			Fn: func(_ *tree.EvalContext, d tree.Datums) (tree.Datum, error) {
+				return tree.NewDOidWithName(tree.MustBeDInt(d[0]), coltypes.OidTypeToColType(typ), string(tree.MustBeDString(d[1]))), nil
+			},
+			Info: notUsableInfo,
+		},
+	)
+}
+
 var pgBuiltins = map[string]builtinDefinition{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
 	"pg_backend_pid": makeBuiltin(defProps(),
@@ -535,29 +608,8 @@ var pgBuiltins = map[string]builtinDefinition{
 	// pg_get_indexdef functions like SHOW CREATE INDEX would if we supported that
 	// statement.
 	"pg_get_indexdef": makeBuiltin(tree.FunctionProperties{DistsqlBlacklist: true},
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{"index_oid", types.Oid},
-			},
-			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				r, err := ctx.InternalExecutor.QueryRow(
-					ctx.Ctx(), "pg_get_indexdef",
-					ctx.Txn,
-					"SELECT indexdef FROM pg_catalog.pg_indexes WHERE crdb_oid=$1", args[0])
-				if err != nil {
-					return nil, err
-				}
-				if len(r) == 0 {
-					return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "unknown index (OID=%s)", args[0])
-				}
-				return r[0], nil
-			},
-			Info: notUsableInfo,
-		},
-		// The other overload for this function, pg_get_indexdef(index_oid,
-		// column_no, pretty_bool), is unimplemented, because it isn't used by
-		// supported ORMs.
+		makePGGetIndexDef(tree.ArgTypes{{"index_oid", types.Oid}}),
+		makePGGetIndexDef(tree.ArgTypes{{"index_oid", types.Oid}, {"column_no", types.Int}, {"pretty_bool", types.Bool}}),
 	),
 
 	// pg_get_viewdef functions like SHOW CREATE VIEW but returns the same format as
@@ -668,24 +720,6 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	"quote_ident": makeBuiltin(defProps(),
-		tree.Overload{
-			Types:      tree.ArgTypes{{"text", types.String}},
-			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				/* From the PG source code:
-				 * Can avoid quoting if ident starts with a lowercase letter or underscore
-				 * and contains only lowercase letters, digits, and underscores, *and* is
-				 * not any SQL keyword.  Otherwise, supply quotes.
-				 */
-				var buf bytes.Buffer
-				lex.EncodeRestrictedSQLIdent(&buf, string(tree.MustBeDString(args[0])), lex.EncBareStrings)
-				return tree.NewDString(buf.String()), nil
-			},
-			Info: notUsableInfo,
-		},
-	),
-
 	"obj_description": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"object_oid", types.Oid}},
@@ -744,6 +778,19 @@ var pgBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
 				return tree.DBoolTrue, nil
+			},
+			Info: notUsableInfo,
+		},
+	),
+
+	// https://www.postgresql.org/docs/10/static/functions-string.html
+	// CockroachDB supports just UTF8 for now.
+	"pg_client_encoding": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ArgTypes{},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
+				return tree.NewDString("UTF8"), nil
 			},
 			Info: notUsableInfo,
 		},

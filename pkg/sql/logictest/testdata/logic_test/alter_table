@@ -18,19 +18,19 @@ ALTER TABLE t RENAME TO t.*
 statement ok
 ALTER TABLE t ADD b INT
 
-query TTBTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM t
 ----
-Field Type Null  Default Indices
-a     INT  false NULL    {"primary","t_f_idx"}
-f     INT  true  NULL    {"t_f_idx"}
-b     INT  true  NULL    {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices                is_hidden
+a            INT        false        NULL            ·                      {"primary","t_f_idx"}  false
+f            INT        true         NULL            ·                      {"t_f_idx"}            false
+b            INT        true         NULL            ·                      {}                     false
 
 statement ok
 ALTER TABLE t ADD CONSTRAINT foo UNIQUE (b)
 
 query TTTTRT
-SELECT type, description, username, status, fraction_completed, error
+SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 1
@@ -46,12 +46,12 @@ ALTER TABLE t ADD CONSTRAINT bar PRIMARY KEY (b)
 query TTBITTBB colnames
 SHOW INDEXES FROM t
 ----
-Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
-t      primary  true    1    a       ASC        false    false
-t      t_f_idx  false   1    f       ASC        false    false
-t      t_f_idx  false   2    a       ASC        false    true
-t      foo      true    1    b       ASC        false    false
-t      foo      true    2    a       ASC        false    true
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+t           primary     false       1             a            ASC        false    false
+t           t_f_idx     true        1             f            ASC        false    false
+t           t_f_idx     true        2             a            ASC        false    true
+t           foo         false       1             b            ASC        false    false
+t           foo         false       2             a            ASC        false    true
 
 query III
 SELECT * FROM t
@@ -69,12 +69,12 @@ ALTER TABLE t ADD CONSTRAINT bar UNIQUE (c)
 
 # Test that rollback was successful
 query TTTTRT
-SELECT type, description, username, status, fraction_completed::decimal(10,2), error
+SELECT job_type, regexp_replace(description, 'JOB \d+', 'JOB ...'), user_name, status, fraction_completed::decimal(10,2), error
 FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE  ROLL BACK ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  succeeded  1.00  ·
+SCHEMA CHANGE  ROLL BACK JOB ...: ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  succeeded  1.00  ·
 SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)            root  failed     0.00  duplicate key value (c)=(1) violates unique constraint "bar"
 
 query IIII colnames,rowsort
@@ -85,14 +85,14 @@ a f b    c
 2 9 1    1
 3 9 2    1
 
-query TTTTT colnames
+query TTTTB colnames
 SHOW CONSTRAINTS FROM t
 ----
-Table  Name            Type         Column(s)  Details
-t      check_a         CHECK        a          a > 0
-t      fk_f_ref_other  FOREIGN KEY  f          other.[b]
-t      foo             UNIQUE       b          NULL
-t      primary         PRIMARY KEY  a          NULL
+table_name  constraint_name  constraint_type  details                               validated
+t           check_a          CHECK            CHECK (a > 0)                         true
+t           fk_f_ref_other   FOREIGN KEY      FOREIGN KEY (f) REFERENCES other (b)  true
+t           foo              UNIQUE           UNIQUE (b ASC)                        true
+t           primary          PRIMARY KEY      PRIMARY KEY (a ASC)                   true
 
 statement error CHECK
 INSERT INTO t (a, f) VALUES (-2, 9)
@@ -109,13 +109,13 @@ ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
 statement error CHECK
 INSERT INTO t (a) VALUES (-3)
 
-query TTTTT
+query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK (UNVALIDATED)  a  a > 0
-t  fk_f_ref_other  FOREIGN KEY          f  other.[b]
-t  foo             UNIQUE               b  NULL
-t  primary         PRIMARY KEY          a  NULL
+t  check_a         CHECK        CHECK (a > 0)                         false
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other (b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                        true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                   true
 
 statement error duplicate constraint name
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
@@ -124,14 +124,14 @@ ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
 statement ok
 ALTER TABLE t ADD CHECK (a > 0)
 
-query TTTTT
+query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK (UNVALIDATED)  a  a > 0
-t  check_a1        CHECK (UNVALIDATED)  a  a > 0
-t  fk_f_ref_other  FOREIGN KEY          f  other.[b]
-t  foo             UNIQUE               b  NULL
-t  primary         PRIMARY KEY          a  NULL
+t  check_a         CHECK        CHECK (a > 0)                         false
+t  check_a1        CHECK        CHECK (a > 0)                         false
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other (b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                        true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                   true
 
 statement error constraint "typo" does not exist
 ALTER TABLE t VALIDATE CONSTRAINT typo
@@ -145,14 +145,14 @@ DELETE FROM t WHERE a = -2
 statement ok
 ALTER TABLE t VALIDATE CONSTRAINT check_a
 
-query TTTTT
+query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  check_a         CHECK                a  a > 0
-t  check_a1        CHECK (UNVALIDATED)  a  a > 0
-t  fk_f_ref_other  FOREIGN KEY          f  other.[b]
-t  foo             UNIQUE               b  NULL
-t  primary         PRIMARY KEY          a  NULL
+t  check_a         CHECK        CHECK (a > 0)                         true
+t  check_a1        CHECK        CHECK (a > 0)                         false
+t  fk_f_ref_other  FOREIGN KEY  FOREIGN KEY (f) REFERENCES other (b)  true
+t  foo             UNIQUE       UNIQUE (b ASC)                        true
+t  primary         PRIMARY KEY  PRIMARY KEY (a ASC)                   true
 
 statement ok
 ALTER TABLE t DROP CONSTRAINT check_a, DROP CONSTRAINT check_a1
@@ -179,7 +179,7 @@ statement ok
 DROP INDEX foo CASCADE
 
 query TTTTRT
-SELECT type, description, username, status, fraction_completed, error
+SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 1
@@ -189,10 +189,10 @@ SCHEMA CHANGE  DROP INDEX test.public.t@foo CASCADE root  succeeded  1  ·
 query TTBITTBB colnames
 SHOW INDEXES FROM t
 ----
-Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
-t      primary  true    1    a       ASC        false    false
-t      t_f_idx  false   1    f       ASC        false    false
-t      t_f_idx  false   2    a       ASC        false    true
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+t           primary     false       1             a            ASC        false    false
+t           t_f_idx     true        1             f            ASC        false    false
+t           t_f_idx     true        2             a            ASC        false    true
 
 statement ok
 ALTER TABLE t DROP b, DROP c
@@ -262,7 +262,7 @@ statement ok
 DROP INDEX t@t_f_idx
 
 query TTTTRT
-SELECT type, description, username, status, fraction_completed, error
+SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 1
@@ -376,12 +376,12 @@ a   x     y     z     d     e     f
 31  NULL  1.3   1.4   NULL  NULL  NULL
 33  2.0   2.1   2.2   NULL  NULL  NULL
 
-query TTTTT
+query TTTTB
 SHOW CONSTRAINTS FROM t
 ----
-t  primary  PRIMARY KEY  a  NULL
-t  t_d_key  UNIQUE       d  NULL
-t  t_e_key  UNIQUE       e  NULL
+t  primary  PRIMARY KEY  PRIMARY KEY (a ASC)  true
+t  t_d_key  UNIQUE       UNIQUE (d ASC)       true
+t  t_e_key  UNIQUE       UNIQUE (e ASC)       true
 
 # Subsequent operations succeed because the table is empty
 statement ok
@@ -401,15 +401,15 @@ ALTER TABLE tt ADD COLUMN s DECIMAL UNIQUE NOT NULL
 statement ok
 ALTER TABLE tt ADD t DECIMAL UNIQUE DEFAULT 4.0
 
-query TTBTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM tt
 ----
-Field  Type     Null   Default       Indices
-a      INT      false  NULL          {"primary","tt_s_key","tt_t_key"}
-q      DECIMAL  false  NULL          {}
-r      DECIMAL  true   NULL          {}
-s      DECIMAL  false  NULL          {"tt_s_key"}
-t      DECIMAL  true   4.0:::DECIMAL {"tt_t_key"}
+column_name  data_type  is_nullable  column_default  generation_expression  indices                            is_hidden
+a            INT        false        NULL            ·                      {"primary","tt_s_key","tt_t_key"}  false
+q            DECIMAL    false        NULL            ·                      {}                                 false
+r            DECIMAL    true         NULL            ·                      {}                                 false
+s            DECIMAL    false        NULL            ·                      {"tt_s_key"}                       false
+t            DECIMAL    true         4.0:::DECIMAL   ·                      {"tt_t_key"}                       false
 
 # Default values can be added and changed after table creation.
 statement ok
@@ -535,6 +535,23 @@ ALTER TABLE add_default ADD g OID DEFAULT 'foo'::regclass::oid
 statement error cannot access virtual schema in anonymous database
 ALTER TABLE add_default ADD g INT DEFAULT 'foo'::regtype::INT
 
+subtest 26422
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE add_default ADD fee FLOAT NOT NULL DEFAULT 2.99
+
+statement ok
+ALTER TABLE add_default ALTER COLUMN fee DROP DEFAULT
+
+statement error null value in column "fee" violates not-null constraint
+COMMIT
+
+statement error pgcode 42703 column "fee" does not exist
+ALTER TABLE add_default DROP fee
+
 # Multiple columns can be added at once with heterogeneous DEFAULT usage
 statement ok
 CREATE TABLE d (a INT PRIMARY KEY)
@@ -578,12 +595,12 @@ ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
 
 user root
 
-query TTBTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM privs
 ----
-Field Type Null  Default Indices
-a     INT  false NULL    {"primary"}
-b     INT  true  NULL    {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices      is_hidden
+a            INT        false        NULL            ·                      {"primary"}  false
+b            INT        true         NULL            ·                      {}           false
 
 statement ok
 GRANT CREATE ON privs TO testuser
@@ -596,13 +613,13 @@ ALTER TABLE privs ADD c INT
 statement ok
 ALTER TABLE privs ADD CONSTRAINT foo UNIQUE (b)
 
-query TTBTT colnames
+query TTBTTTB colnames
 SHOW COLUMNS FROM privs
 ----
-Field Type Null  Default Indices
-a     INT  false NULL    {"primary","foo"}
-b     INT  true  NULL    {"foo"}
-c     INT  true  NULL    {}
+column_name  data_type  is_nullable  column_default  generation_expression  indices            is_hidden
+a            INT        false        NULL            ·                      {"primary","foo"}  false
+b            INT        true         NULL            ·                      {"foo"}            false
+c            INT        true         NULL            ·                      {}                 false
 
 statement error pgcode 42P01 relation "nonexistent" does not exist
 ALTER TABLE nonexistent SPLIT AT VALUES (42)
@@ -636,7 +653,7 @@ SELECT count(distinct a) FROM impure
 
 # No orphaned schema change jobs.
 query I
-SELECT COUNT(*) FROM crdb_internal.jobs WHERE status = 'pending' OR status = 'started'
+SELECT count(*) FROM crdb_internal.jobs WHERE status = 'pending' OR status = 'started'
 ----
 0
 
@@ -694,6 +711,30 @@ decomputed_column  CREATE TABLE decomputed_column (
                    FAMILY "primary" (a, b)
 )
 
+# Test for https://github.com/cockroachdb/cockroach/issues/26483
+# We try to create a unique column on an un-indexable type.
+statement ok
+CREATE TABLE b26483()
+
+statement error unimplemented: column c is of type ARRAY and thus is not indexable
+ALTER TABLE b26483 ADD COLUMN c INT[] UNIQUE
+
+# As above, but performed in a transaction
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE b26483_tx()
+
+statement ok
+ALTER TABLE b26483_tx ADD COLUMN c INT[]
+
+statement error unimplemented: column c is of type ARRAY and thus is not indexable
+CREATE INDEX on b26483_tx (c)
+
+statement ok
+ROLLBACK
+
 # Verify that auditing can be enabled by root, and cannot be disabled by non-root.
 
 statement ok
@@ -712,3 +753,62 @@ ALTER TABLE audit ADD COLUMN y INT
 # But not the audit settings.
 statement error change auditing settings on a table
 ALTER TABLE audit EXPERIMENTAL_AUDIT SET OFF;
+
+user root
+
+# Check column backfill in the presence of fks
+subtest 27402
+
+statement ok
+CREATE TABLE users (
+    id INT NOT NULL,
+    city STRING NOT NULL,
+    name STRING NULL,
+    CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC)
+)
+
+statement ok
+CREATE TABLE vehicles (
+    id INT NOT NULL,
+    city STRING NOT NULL,
+    type STRING NULL,
+    owner_id INT NULL,
+    mycol STRING NULL,
+    CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC),
+    INDEX vehicles_auto_index_fk_city_ref_users (city ASC, owner_id ASC)
+)
+
+statement ok
+CREATE TABLE rides (
+    id INT NOT NULL,
+    city STRING NOT NULL,
+    vehicle_city STRING NULL,
+    rider_id INT NULL,
+    vehicle_id INT NULL,
+    CONSTRAINT "primary" PRIMARY KEY (city ASC, id ASC),
+    INDEX rides_auto_index_fk_city_ref_users (city ASC, rider_id ASC),
+    INDEX rides_auto_index_fk_vehicle_city_ref_vehicles (vehicle_city ASC, vehicle_id ASC),
+    CONSTRAINT check_vehicle_city_city CHECK (vehicle_city = city)
+)
+
+statement ok
+ALTER TABLE vehicles ADD CONSTRAINT fk_city_ref_users FOREIGN KEY (city, owner_id) REFERENCES users (city, id)
+
+statement ok
+ALTER TABLE rides ADD CONSTRAINT fk_city_ref_users FOREIGN KEY (city, rider_id) REFERENCES users (city, id)
+
+statement ok
+ALTER TABLE rides ADD CONSTRAINT fk_vehicle_city_ref_vehicles FOREIGN KEY (vehicle_city, vehicle_id) REFERENCES vehicles (city, id)
+
+
+statement ok
+INSERT INTO users VALUES (10, 'lagos', 'chimamanda')
+
+statement ok
+INSERT INTO vehicles VALUES (100, 'lagos', 'toyota', 10, 'mycol')
+
+statement ok
+INSERT INTO rides VALUES (567, 'lagos', 'lagos', 10, 100)
+
+statement ok
+ALTER TABLE vehicles DROP COLUMN mycol;

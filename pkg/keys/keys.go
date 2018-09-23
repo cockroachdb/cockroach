@@ -75,8 +75,8 @@ func StoreLastUpKey() roachpb.Key {
 	return MakeStoreKey(localStoreLastUpSuffix, nil)
 }
 
-// StoreHLCUpperBoundKey returns the key for storing an upper bound to the
-// wall time used by HLC
+// StoreHLCUpperBoundKey returns the store-local key for storing an upper bound
+// to the wall time used by HLC.
 func StoreHLCUpperBoundKey() roachpb.Key {
 	return MakeStoreKey(localHLCUpperBoundSuffix, nil)
 }
@@ -113,6 +113,13 @@ func DecodeStoreSuggestedCompactionKey(key roachpb.Key) (start, end roachpb.Key,
 		return nil, nil, errors.Errorf("invalid key has trailing garbage: %q", detail)
 	}
 	return start, end, nil
+}
+
+// StoreRemovedLeakedRaftEntriesKey returns a store-local key that marks
+// when a store has completed its migration to remove all possibly-leaked
+// Raft entries on all replicas.
+func StoreRemovedLeakedRaftEntriesKey() roachpb.Key {
+	return MakeStoreKey(localRemovedLeakedRaftEntriesSuffix, nil)
 }
 
 // NodeLivenessKey returns the key for the node liveness record.
@@ -679,6 +686,15 @@ func DecodeTablePrefix(key roachpb.Key) ([]byte, uint64, error) {
 	return encoding.DecodeUvarintAscending(key)
 }
 
+// IsDescriptorKey returns true if the passed Key is a valid Descriptor key.
+func IsDescriptorKey(key roachpb.Key) bool {
+	_, id, err := DecodeTablePrefix(key)
+	if err != nil {
+		return false
+	}
+	return id == DescriptorTableID
+}
+
 // DecodeDescMetadataID decodes a descriptor ID from a descriptor metadata key.
 func DecodeDescMetadataID(key roachpb.Key) (uint64, error) {
 	// Extract object ID from key.
@@ -801,9 +817,6 @@ func Range(ba roachpb.BatchRequest) (roachpb.RSpan, error) {
 	to := roachpb.RKeyMin
 	for _, arg := range ba.Requests {
 		req := arg.GetInner()
-		if _, ok := req.(*roachpb.NoopRequest); ok {
-			continue
-		}
 		h := req.Header()
 		if !roachpb.IsRange(req) && len(h.EndKey) != 0 {
 			return roachpb.RSpan{}, errors.Errorf("end key specified for non-range operation: %s", req)

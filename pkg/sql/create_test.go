@@ -194,7 +194,10 @@ func createTestTable(
 
 	for {
 		if _, err := db.Exec(tableSQL); err != nil {
-			if testutils.IsSQLRetryableError(err) {
+			// Scenario where an ambiguous commit error happens is described in more
+			// detail in
+			// https://reviewable.io/reviews/cockroachdb/cockroach/10251#-KVGGLbjhbPdlR6EFlfL
+			if testutils.IsError(err, "result is ambiguous") {
 				continue
 			}
 			t.Errorf("table %d: could not be created: %s", id, err)

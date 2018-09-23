@@ -27,11 +27,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -95,14 +95,15 @@ type Hooks struct {
 	Validate func() error
 	// PreLoad is called after workload tables are created and before workload
 	// data is loaded. It is not called when storing or loading a fixture.
+	// Implementations should be idempotent.
 	PreLoad func(*gosql.DB) error
 	// PostLoad is called after workload tables are created workload data is
 	// loaded. It called after restoring a fixture. This, for example, is where
-	// creating foreign keys should go.
+	// creating foreign keys should go. Implementations should be idempotent.
 	PostLoad func(*gosql.DB) error
-	// PostRun is called after workload run has ended, with the start time of the
+	// PostRun is called after workload run has ended, with the duration of the
 	// run. This is where any post-run special printing or validation can be done.
-	PostRun func(time.Time) error
+	PostRun func(time.Duration) error
 	// CheckConsistency is called to run generator-specific consistency checks.
 	// These are expected to pass after the initial data load as well as after
 	// running queryload.
@@ -224,6 +225,8 @@ func ApproxDatumSize(x interface{}) int64 {
 		return 0
 	}
 	switch t := x.(type) {
+	case bool:
+		return 1
 	case int:
 		if t < 0 {
 			t = -t
@@ -249,7 +252,8 @@ func ApproxDatumSize(x interface{}) int64 {
 
 // Setup creates the given tables and fills them with initial data via batched
 // INSERTs. batchSize will only be used when positive (but INSERTs are batched
-// either way).
+// either way). The function is idempotent and can be called multiple times if
+// the Generator does not have any initial rows.
 //
 // The size of the loaded data is returned in bytes, suitable for use with
 // SetBytes of benchmarks. The exact definition of this is deferred to the
@@ -271,7 +275,7 @@ func Setup(
 	}
 
 	for _, table := range tables {
-		createStmt := fmt.Sprintf(`CREATE TABLE "%s" %s`, table.Name, table.Schema)
+		createStmt := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS "%s" %s`, table.Name, table.Schema)
 		if _, err := db.ExecContext(ctx, createStmt); err != nil {
 			return 0, errors.Wrapf(err, "could not create table: %s", table.Name)
 		}
@@ -279,7 +283,7 @@ func Setup(
 
 	if hooks.PreLoad != nil {
 		if err := hooks.PreLoad(db); err != nil {
-			return 0, err
+			return 0, errors.Wrapf(err, "Could not preload")
 		}
 	}
 
@@ -351,15 +355,31 @@ func Setup(
 
 	if hooks.PostLoad != nil {
 		if err := hooks.PostLoad(db); err != nil {
-			return 0, err
+			return 0, errors.Wrapf(err, "Could not postload")
 		}
 	}
 
 	return size, nil
 }
 
+func maybeDisableMergeQueue(db *gosql.DB) error {
+	var ok bool
+	if err := db.QueryRow(
+		`SELECT count(*) > 0 FROM [ SHOW ALL CLUSTER SETTINGS ] AS _ (v) WHERE v = 'kv.range_merge.queue_enabled'`,
+	).Scan(&ok); err != nil || !ok {
+		return err
+	}
+	_, err := db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
+	return err
+}
+
 // Split creates the range splits defined by the given table.
 func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) error {
+	// Prevent the merge queue from immediately discarding our splits.
+	if err := maybeDisableMergeQueue(db); err != nil {
+		return err
+	}
+
 	if table.Splits.NumBatches <= 0 {
 		return nil
 	}
@@ -372,72 +392,77 @@ func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) erro
 	type pair struct {
 		lo, hi int
 	}
-	splitCh := make(chan pair, concurrency)
+	splitCh := make(chan pair, len(splitPoints)/2+1)
 	splitCh <- pair{0, len(splitPoints)}
 	doneCh := make(chan struct{})
-	errCh := make(chan error)
 
 	log.Infof(ctx, `starting %d splits`, len(splitPoints))
-	var wg sync.WaitGroup
+	g := ctxgroup.WithContext(ctx)
 	for i := 0; i < concurrency; i++ {
-		wg.Add(1)
-
-		var buf bytes.Buffer
-		go func() {
-			defer wg.Done()
+		g.GoCtx(func(ctx context.Context) error {
+			var buf bytes.Buffer
 			for {
-				var p pair
 				select {
-				case p = <-splitCh:
-				case <-doneCh:
-					return
-				}
-				m := (p.lo + p.hi) / 2
-				split := strings.Join(StringTuple(splitPoints[m]), `,`)
+				case p, ok := <-splitCh:
+					if !ok {
+						return nil
+					}
 
-				buf.Reset()
-				fmt.Fprintf(&buf, `ALTER TABLE %s SPLIT AT VALUES (%s)`, table.Name, split)
-				if _, err := db.Exec(buf.String()); err != nil {
-					errCh <- errors.Wrap(err, buf.String())
-					return
-				}
+					m := (p.lo + p.hi) / 2
+					split := strings.Join(StringTuple(splitPoints[m]), `,`)
 
-				buf.Reset()
-				fmt.Fprintf(&buf, `ALTER TABLE %s SCATTER FROM (%s) TO (%s)`,
-					table.Name, split, split)
-				if _, err := db.Exec(buf.String()); err != nil {
-					// SCATTER can collide with normal replicate queue
-					// operations and fail spuriously, so only print the
-					// error.
-					log.Warningf(ctx, `%s: %s`, buf.String(), err)
-				}
+					buf.Reset()
+					fmt.Fprintf(&buf, `ALTER TABLE %s SPLIT AT VALUES (%s)`, table.Name, split)
+					if _, err := db.Exec(buf.String()); err != nil {
+						return errors.Wrap(err, buf.String())
+					}
 
-				errCh <- nil
-				go func() {
+					buf.Reset()
+					fmt.Fprintf(&buf, `ALTER TABLE %s SCATTER FROM (%s) TO (%s)`,
+						table.Name, split, split)
+					if _, err := db.Exec(buf.String()); err != nil {
+						// SCATTER can collide with normal replicate queue
+						// operations and fail spuriously, so only print the
+						// error.
+						log.Warningf(ctx, `%s: %s`, buf.String(), err)
+					}
+
+					select {
+					case doneCh <- struct{}{}:
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+
 					if p.lo < m {
 						splitCh <- pair{p.lo, m}
 					}
 					if m+1 < p.hi {
 						splitCh <- pair{m + 1, p.hi}
 					}
-				}()
-			}
-		}()
-	}
+				case <-ctx.Done():
+					return ctx.Err()
+				}
 
-	defer func() {
-		close(doneCh)
-		wg.Wait()
-	}()
-	for finished := 1; finished <= len(splitPoints); finished++ {
-		if err := <-errCh; err != nil {
-			return err
-		}
-		if finished%1000 == 0 {
-			log.Infof(ctx, "finished %d of %d splits", finished, len(splitPoints))
-		}
+			}
+		})
 	}
-	return nil
+	g.GoCtx(func(ctx context.Context) error {
+		finished := 0
+		for finished < len(splitPoints) {
+			select {
+			case <-doneCh:
+				finished++
+				if finished%1000 == 0 {
+					log.Infof(ctx, "finished %d of %d splits", finished, len(splitPoints))
+				}
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		close(splitCh)
+		return nil
+	})
+	return g.Wait()
 }
 
 // StringTuple returns the given datums as strings suitable for use in directly

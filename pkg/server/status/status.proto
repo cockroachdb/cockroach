@@ -57,6 +57,12 @@ message NodeStatus {
     (gogoproto.nullable) = false,
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
   ];
+  // total_system_memory is the total RAM available to the system
+  // (or, if possible, the memory available to the cgroup this process is in)
+  // in bytes.
+  int64 total_system_memory = 11;
+  // num_cpus is the number of logical CPUs on this machine.
+  int32 num_cpus = 12;
 }
 
 // A HealthAlert is an undesired condition detected by a server which should be

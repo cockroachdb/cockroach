@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 
 #include "snapshot.h"
+#include "encoding.h"
 #include "getter.h"
 #include "iterator.h"
 #include "status.h"
@@ -42,10 +43,10 @@ DBStatus DBSnapshot::ApplyBatchRepr(DBSlice repr, bool sync) { return FmtStatus(
 
 DBSlice DBSnapshot::BatchRepr() { return ToDBSlice("unsupported"); }
 
-DBIterator* DBSnapshot::NewIter(rocksdb::ReadOptions* read_opts) {
-  read_opts->snapshot = snapshot;
-  DBIterator* iter = new DBIterator(iters);
-  iter->rep.reset(rep->NewIterator(*read_opts));
+DBIterator* DBSnapshot::NewIter(DBIterOptions iter_options) {
+  DBIterator* iter = new DBIterator(iters, iter_options);
+  iter->read_opts.snapshot = snapshot;
+  iter->rep.reset(rep->NewIterator(iter->read_opts));
   return iter;
 }
 
@@ -54,6 +55,10 @@ DBStatus DBSnapshot::GetStats(DBStatsResult* stats) { return FmtStatus("unsuppor
 DBString DBSnapshot::GetCompactionStats() { return ToDBString("unsupported"); }
 
 DBStatus DBSnapshot::GetEnvStats(DBEnvStatsResult* stats) { return FmtStatus("unsupported"); }
+
+DBStatus DBSnapshot::GetEncryptionRegistries(DBEncryptionRegistries* result) {
+  return FmtStatus("unsupported");
+}
 
 DBStatus DBSnapshot::EnvWriteFile(DBSlice path, DBSlice contents) {
   return FmtStatus("unsupported");
@@ -78,5 +83,9 @@ DBStatus DBSnapshot::EnvAppendFile(rocksdb::WritableFile* file, DBSlice contents
 DBStatus DBSnapshot::EnvDeleteFile(DBSlice path) { return FmtStatus("unsupported"); }
 
 DBStatus DBSnapshot::EnvDeleteDirAndFiles(DBSlice dir) { return FmtStatus("unsupported"); }
+
+DBStatus DBSnapshot::EnvLinkFile(DBSlice oldname, DBSlice newname) {
+  return FmtStatus("unsupported");
+}
 
 }  // namespace cockroach

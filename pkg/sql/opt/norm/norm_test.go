@@ -42,30 +42,9 @@ import (
 //   make test PKG=./pkg/sql/opt/norm TESTS="TestNormRules/comp"
 //   ...
 func TestNormRules(t *testing.T) {
-	const fmtFlags = opt.ExprFmtHideStats | opt.ExprFmtHideCost | opt.ExprFmtHideRuleProps |
-		opt.ExprFmtHideQualifications | opt.ExprFmtHideScalars
+	const fmtFlags = memo.ExprFmtHideStats | memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps |
+		memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars
 	datadriven.Walk(t, "testdata/rules", func(t *testing.T, path string) {
-		catalog := testcat.New()
-		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
-			tester := testutils.NewOptTester(catalog, d.Input)
-			tester.Flags.ExprFormat = fmtFlags
-			return tester.RunCommand(t, d)
-		})
-	})
-}
-
-// TestRuleProps tests the rule properties that power some of the normalization
-// rules. The tests are data-driven cases of the form:
-//   <command>
-//   <SQL statement>
-//   ----
-//   <expected results>
-//
-// See OptTester.Handle for supported commands.
-func TestRuleProps(t *testing.T) {
-	const fmtFlags = opt.ExprFmtHideStats | opt.ExprFmtHideCost | opt.ExprFmtHideQualifications |
-		opt.ExprFmtHideScalars
-	datadriven.Walk(t, "testdata/props", func(t *testing.T, path string) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
 			tester := testutils.NewOptTester(catalog, d.Input)
@@ -79,10 +58,11 @@ func TestRuleProps(t *testing.T) {
 // IN/NOT IN in SQL, so do it here.
 func TestRuleFoldNullInEmpty(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	f := norm.NewFactory(&evalCtx)
+	var f norm.Factory
+	f.Init(&evalCtx)
 
 	null := f.ConstructNull(f.InternType(types.Unknown))
-	empty := f.ConstructTuple(memo.EmptyList)
+	empty := f.ConstructTuple(memo.EmptyList, f.InternType(memo.EmptyTupleType))
 	in := f.ConstructIn(null, empty)
 	ev := memo.MakeNormExprView(f.Memo(), in)
 	if ev.Operator() != opt.FalseOp {
@@ -101,7 +81,7 @@ func TestRuleFoldNullInEmpty(t *testing.T) {
 func TestRuleBinaryAssumption(t *testing.T) {
 	fn := func(op opt.Operator) {
 		for _, overload := range tree.BinOps[opt.BinaryOpReverseMap[op]] {
-			binOp := overload.(tree.BinOp)
+			binOp := overload.(*tree.BinOp)
 			if !memo.BinaryOverloadExists(op, binOp.RightType, binOp.LeftType) {
 				t.Errorf("could not find inverse for overload: %+v", op)
 			}

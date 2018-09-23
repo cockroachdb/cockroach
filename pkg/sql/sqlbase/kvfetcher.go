@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -142,8 +143,11 @@ func SetKVBatchSize(val int64) func() {
 // txnKVFetcher handles retrieval of key/values.
 type txnKVFetcher struct {
 	// "Constant" fields, provided by the caller.
-	txn             *client.Txn
-	spans           roachpb.Spans
+	txn   *client.Txn
+	spans roachpb.Spans
+	// If useBatchLimit is true, batches are limited to kvBatchSize. If
+	// firstBatchLimit is also set, the first batch is limited to that value.
+	// Subsequent batches are larger, up to kvBatchSize.
 	firstBatchLimit int64
 	useBatchLimit   bool
 	reverse         bool
@@ -172,6 +176,10 @@ func (f *txnKVFetcher) getRangesInfo() []roachpb.RangeInfo {
 
 // getBatchSize returns the max size of the next batch.
 func (f *txnKVFetcher) getBatchSize() int64 {
+	return f.getBatchSizeForIdx(f.batchIdx)
+}
+
+func (f *txnKVFetcher) getBatchSizeForIdx(batchIdx int) int64 {
 	if !f.useBatchLimit {
 		return 0
 	}
@@ -182,7 +190,7 @@ func (f *txnKVFetcher) getBatchSize() int64 {
 	// We grab the first batch according to the limit. If it turns out that we
 	// need another batch, we grab a bigger batch. If that's still not enough,
 	// we revert to the default batch size.
-	switch f.batchIdx {
+	switch batchIdx {
 	case 0:
 		return f.firstBatchLimit
 
@@ -239,6 +247,24 @@ func makeKVFetcher(
 				return txnKVFetcher{}, errors.Errorf("unordered spans (%s %s)", spans[i-1], spans[i])
 			}
 		}
+	} else if util.RaceEnabled {
+		// Otherwise, just verify the spans don't contain consecutive overlapping
+		// spans.
+		for i := 1; i < len(spans); i++ {
+			if spans[i].Key.Compare(spans[i-1].EndKey) >= 0 {
+				// Current span's start key is greater than or equal to the last span's
+				// end key - we're good.
+				continue
+			} else if spans[i].EndKey.Compare(spans[i-1].EndKey) < 0 {
+				// Current span's end key is less than or equal to the last span's start
+				// key - also good.
+				continue
+			}
+			// Otherwise, the two spans overlap, which isn't allowed - it leaves us at
+			// risk of incorrect results, since the row fetcher can't distinguish
+			// between identical rows in two different batches.
+			return txnKVFetcher{}, errors.Errorf("overlapping neighbor spans (%s %s)", spans[i-1], spans[i])
+		}
 	}
 
 	// Make a copy of the spans because we update them.
@@ -271,12 +297,14 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	if f.reverse {
 		scans := make([]roachpb.ReverseScanRequest, len(f.spans))
 		for i := range f.spans {
+			scans[i].ScanFormat = roachpb.BATCH_RESPONSE
 			scans[i].SetSpan(f.spans[i])
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
 	} else {
 		scans := make([]roachpb.ScanRequest, len(f.spans))
 		for i := range f.spans {
+			scans[i].ScanFormat = roachpb.BATCH_RESPONSE
 			scans[i].SetSpan(f.spans[i])
 			ba.Requests[i].MustSetInner(&scans[i])
 		}
@@ -346,22 +374,25 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 
 // nextBatch returns the next batch of key/value pairs. If there are none
 // available, a fetch is initiated. When there are no more keys, returns false.
-func (f *txnKVFetcher) nextBatch(ctx context.Context) (bool, []roachpb.KeyValue, error) {
+// ok returns whether or not there are more kv pairs to be fetched.
+func (f *txnKVFetcher) nextBatch(
+	ctx context.Context,
+) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, numKvs int64, err error) {
 	if len(f.responses) > 0 {
 		reply := f.responses[0].GetInner()
 		f.responses = f.responses[1:]
 		switch t := reply.(type) {
 		case *roachpb.ScanResponse:
-			return true, t.Rows, nil
+			return true, t.Rows, t.BatchResponse, t.NumKeys, nil
 		case *roachpb.ReverseScanResponse:
-			return true, t.Rows, nil
+			return true, t.Rows, t.BatchResponse, t.NumKeys, nil
 		}
 	}
 	if f.fetchEnd {
-		return false, nil, nil
+		return false, nil, nil, 0, nil
 	}
 	if err := f.fetch(ctx); err != nil {
-		return false, nil, err
+		return false, nil, nil, 0, err
 	}
 	return f.nextBatch(ctx)
 }

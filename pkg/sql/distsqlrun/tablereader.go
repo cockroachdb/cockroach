@@ -16,19 +16,15 @@ package distsqlrun
 
 import (
 	"context"
-	"fmt"
-	"sync"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // tableReader is the start of a computation flow; it performs KV operations to
@@ -36,9 +32,8 @@ import (
 // desired column values to an output RowReceiver.
 // See docs/RFCS/distributed_sql.md
 type tableReader struct {
-	processorBase
+	ProcessorBase
 
-	tableDesc sqlbase.TableDescriptor
 	spans     roachpb.Spans
 	limitHint int64
 
@@ -67,29 +62,35 @@ func newTableReader(
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
 
-	tr := &tableReader{
-		tableDesc: spec.Table,
-	}
+	tr := &tableReader{}
 
 	tr.limitHint = limitHint(spec.LimitHint, post)
 
-	types := make([]sqlbase.ColumnType, len(spec.Table.Columns))
-	for i := range types {
-		types[i] = spec.Table.Columns[i].Type
+	numCols := len(spec.Table.Columns)
+	returnMutations := spec.Visibility == ScanVisibility_PUBLIC_AND_NOT_PUBLIC
+	if returnMutations {
+		for i := range spec.Table.Mutations {
+			if spec.Table.Mutations[i].GetColumn() != nil {
+				numCols++
+			}
+		}
 	}
-	if err := tr.init(
+	types := spec.Table.ColumnTypesWithMutations(returnMutations)
+	if err := tr.Init(
+		tr,
 		post,
 		types,
 		flowCtx,
 		processorID,
 		output,
-		procStateOpts{
+		nil, /* memMonitor */
+		ProcStateOpts{
 			// We don't pass tr.input as an inputToDrain; tr.input is just an adapter
 			// on top of a RowFetcher; draining doesn't apply to it. Moreover, Andrei
 			// doesn't trust that the adapter will do the right thing on a Next() call
 			// after it had previously returned an error.
-			inputsToDrain:        nil,
-			trailingMetaCallback: tr.generateTrailingMeta,
+			InputsToDrain:        nil,
+			TrailingMetaCallback: tr.generateTrailingMeta,
 		},
 	); err != nil {
 		return nil, err
@@ -97,9 +98,10 @@ func newTableReader(
 
 	neededColumns := tr.out.neededColumns()
 
+	columnIdxMap := spec.Table.ColumnIdxMapWithMutations(returnMutations)
 	if _, _, err := initRowFetcher(
-		&tr.fetcher, &tr.tableDesc, int(spec.IndexIdx), tr.tableDesc.ColumnIdxMap(), spec.Reverse,
-		neededColumns, spec.IsCheck, &tr.alloc,
+		&tr.fetcher, &spec.Table, int(spec.IndexIdx), columnIdxMap, spec.Reverse,
+		neededColumns, spec.IsCheck, &tr.alloc, spec.Visibility,
 	); err != nil {
 		return nil, err
 	}
@@ -109,6 +111,12 @@ func newTableReader(
 		tr.spans[i] = s.Span
 	}
 	tr.input = &rowFetcherWrapper{RowFetcher: &tr.fetcher}
+
+	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
+		tr.input = NewInputStatCollector(tr.input)
+		tr.finishTrace = tr.outputStatsToTrace
+	}
+
 	return tr, nil
 }
 
@@ -149,18 +157,35 @@ func initRowFetcher(
 	valNeededForCol util.FastIntSet,
 	isCheck bool,
 	alloc *sqlbase.DatumAlloc,
+	scanVisibility ScanVisibility,
 ) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
 	index, isSecondaryIndex, err = desc.FindIndexByIndexIdx(indexIdx)
 	if err != nil {
 		return nil, false, err
 	}
 
+	cols := desc.Columns
+	if scanVisibility == ScanVisibility_PUBLIC_AND_NOT_PUBLIC {
+		if len(desc.Mutations) > 0 {
+			cols = make([]sqlbase.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
+			cols = append(cols, desc.Columns...)
+			for _, mutation := range desc.Mutations {
+				if c := mutation.GetColumn(); c != nil {
+					col := *c
+					// Even if the column is non-nullable it can be null in the
+					// middle of a schema change.
+					col.Nullable = true
+					cols = append(cols, col)
+				}
+			}
+		}
+	}
 	tableArgs := sqlbase.RowFetcherTableArgs{
 		Desc:             desc,
 		Index:            index,
 		ColIdxMap:        colIdxMap,
 		IsSecondaryIndex: isSecondaryIndex,
-		Cols:             desc.Columns,
+		Cols:             cols,
 		ValNeededForCol:  valNeededForCol,
 	}
 	if err := fetcher.Init(
@@ -172,32 +197,16 @@ func initRowFetcher(
 	return index, isSecondaryIndex, nil
 }
 
-// Run is part of the processor interface.
-func (tr *tableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if tr.out.output == nil {
-		panic("tableReader output not initialized for emitting rows")
-	}
-	ctx = tr.Start(ctx)
-	Run(ctx, tr, tr.out.output)
-	if wg != nil {
-		wg.Done()
-	}
-}
-
-func (tr *tableReader) generateTrailingMeta() []ProducerMetadata {
+func (tr *tableReader) generateTrailingMeta(ctx context.Context) []ProducerMetadata {
 	var trailingMeta []ProducerMetadata
-	ranges := misplannedRanges(tr.ctx, tr.fetcher.GetRangeInfo(), tr.flowCtx.nodeID)
+	ranges := misplannedRanges(tr.Ctx, tr.fetcher.GetRangeInfo(), tr.flowCtx.nodeID)
 	if ranges != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
 	}
-
-	if tr.flowCtx.txn.Type() == client.LeafTxn {
-		txnMeta := tr.flowCtx.txn.GetTxnCoordMeta()
-		if txnMeta.Txn.ID != (uuid.UUID{}) {
-			trailingMeta = append(trailingMeta, ProducerMetadata{TxnMeta: &txnMeta})
-		}
+	if meta := getTxnCoordMeta(ctx, tr.flowCtx.txn); meta != nil {
+		trailingMeta = append(trailingMeta, ProducerMetadata{TxnCoordMeta: meta})
 	}
-	tr.internalClose()
+	tr.InternalClose()
 	return trailingMeta
 }
 
@@ -207,87 +216,77 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 		log.Fatalf(ctx, "tableReader outside of txn")
 	}
 
-	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
-		tr.input = NewInputStatCollector(tr.input)
-		tr.finishTrace = tr.outputStatsToTrace
-	}
-
 	// Like every processor, the tableReader will have a context with a log tag
 	// and a span. The underlying fetcher inherits the proc's span, but not the
 	// log tag.
 	fetcherCtx := ctx
-	ctx = tr.startInternal(ctx, tableReaderProcName)
+	ctx = tr.StartInternal(ctx, tableReaderProcName)
 	if procSpan := opentracing.SpanFromContext(ctx); procSpan != nil {
 		fetcherCtx = opentracing.ContextWithSpan(fetcherCtx, procSpan)
 	}
 
 	// This call doesn't do much; the real "starting" is below.
 	tr.input.Start(fetcherCtx)
-	// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
 	if err := tr.fetcher.StartScan(
 		fetcherCtx, tr.flowCtx.txn, tr.spans,
-		true /* limit batches */, tr.limitHint, false, /* traceKV */
+		true /* limit batches */, tr.limitHint, tr.flowCtx.traceKV,
 	); err != nil {
-		tr.moveToDraining(err)
+		tr.MoveToDraining(err)
 	}
 	return ctx
 }
 
 // Next is part of the RowSource interface.
 func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	for tr.state == stateRunning {
+	for tr.State == StateRunning {
 		row, meta := tr.input.Next()
 
 		if meta != nil {
+			if meta.Err != nil {
+				tr.MoveToDraining(nil /* err */)
+			}
 			return nil, meta
 		}
 		if row == nil {
-			tr.moveToDraining(nil /* err */)
+			tr.MoveToDraining(nil /* err */)
 			break
 		}
 
-		if outRow := tr.processRowHelper(row); outRow != nil {
+		if outRow := tr.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}
-	return nil, tr.drainHelper()
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (tr *tableReader) ConsumerDone() {
-	tr.moveToDraining(nil /* err */)
+	return nil, tr.DrainHelper()
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (tr *tableReader) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
-	tr.internalClose()
+	tr.InternalClose()
 }
 
 var _ DistSQLSpanStats = &TableReaderStats{}
 
+const tableReaderTagPrefix = "tablereader."
+
 // Stats implements the SpanStats interface.
 func (trs *TableReaderStats) Stats() map[string]string {
-	return map[string]string{
-		"tablereader.input.rows": fmt.Sprintf("%d", trs.InputStats.NumRows),
-	}
+	return trs.InputStats.Stats(tableReaderTagPrefix)
 }
 
 // StatsForQueryPlan implements the DistSQLSpanStats interface.
 func (trs *TableReaderStats) StatsForQueryPlan() []string {
-	return []string{fmt.Sprintf("rows read: %d", trs.InputStats.NumRows)}
+	return trs.InputStats.StatsForQueryPlan("" /* prefix */)
 }
 
 // outputStatsToTrace outputs the collected tableReader stats to the trace. Will
 // fail silently if the tableReader is not collecting stats.
 func (tr *tableReader) outputStatsToTrace() {
-	isc, ok := tr.input.(*InputStatCollector)
+	is, ok := getInputStats(tr.flowCtx, tr.input)
 	if !ok {
 		return
 	}
-	sp := opentracing.SpanFromContext(tr.ctx)
-	if sp == nil {
-		return
+	if sp := opentracing.SpanFromContext(tr.Ctx); sp != nil {
+		tracing.SetSpanStats(sp, &TableReaderStats{InputStats: is})
 	}
-	tracing.SetSpanStats(sp, &TableReaderStats{InputStats: isc.InputStats})
 }

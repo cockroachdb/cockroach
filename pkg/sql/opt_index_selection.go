@@ -131,25 +131,24 @@ func (p *planner) selectIndex(
 		c.init(s)
 	}
 
-	var optimizer *xform.Optimizer
+	var optimizer xform.Optimizer
 
 	if s.filter != nil {
-		optimizer = xform.NewOptimizer(p.EvalContext())
+		optimizer.Init(p.EvalContext())
 		md := optimizer.Memo().Metadata()
 		for i := range s.resultColumns {
 			md.AddColumn(s.resultColumns[i].Name, s.resultColumns[i].Typ)
 		}
 		bld := optbuilder.NewScalar(ctx, &p.semaCtx, p.EvalContext(), optimizer.Factory())
 		bld.AllowUnsupportedExpr = true
-		bld.AllowImpureFuncs = true
-		filterGroup, err := bld.Build(s.filter)
+		err := bld.Build(s.filter)
 		if err != nil {
 			return nil, err
 		}
-		filterExpr := memo.MakeNormExprView(optimizer.Memo(), filterGroup)
+		filterExpr := optimizer.Memo().Root()
 		for _, c := range candidates {
 			if err := c.makeIndexConstraints(
-				optimizer, filterExpr, p.EvalContext(),
+				&optimizer, filterExpr, p.EvalContext(),
 			); err != nil {
 				return nil, err
 			}
@@ -250,7 +249,7 @@ func (p *planner) selectIndex(
 		if remEv.Operator() == opt.TrueOp {
 			s.filter = nil
 		} else {
-			execBld := execbuilder.New(nil /* execFactory */, remEv)
+			execBld := execbuilder.New(nil /* execFactory */, remEv, nil /* evalCtx */)
 			s.filter, err = execBld.BuildScalar(&s.filterVars)
 			if err != nil {
 				return nil, err

@@ -35,11 +35,14 @@ import (
 // slices are not equal, it means that the result tree.Datums were modified during later
 // accumulation, which violates the "deep copy of any internal state" condition.
 func testAggregateResultDeepCopy(
-	t *testing.T, aggFunc func([]types.T, *tree.EvalContext) tree.AggregateFunc, vals []tree.Datum,
+	t *testing.T,
+	aggFunc func([]types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	vals []tree.Datum,
 ) {
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	aggImpl := aggFunc([]types.T{vals[0].ResolvedType()}, evalCtx)
+	aggImpl := aggFunc([]types.T{vals[0].ResolvedType()}, evalCtx, nil)
+	defer aggImpl.Close(context.Background())
 	runningDatums := make([]tree.Datum, len(vals))
 	runningStrings := make([]string, len(vals))
 	for i := range vals {
@@ -256,7 +259,7 @@ func testArrayAggAliasedTypeOverload(t *testing.T, expected types.T) {
 	defer tree.MockNameTypes(map[string]types.T{
 		"a": expected,
 	})()
-	exprStr := "ARRAY_AGG(a)"
+	exprStr := "array_agg(a)"
 	expr, err := parser.ParseExpr(exprStr)
 	if err != nil {
 		t.Fatalf("%s: %v", exprStr, err)
@@ -275,23 +278,28 @@ func testArrayAggAliasedTypeOverload(t *testing.T, expected types.T) {
 }
 
 func runBenchmarkAggregate(
-	b *testing.B, aggFunc func([]types.T, *tree.EvalContext) tree.AggregateFunc, vals []tree.Datum,
+	b *testing.B,
+	aggFunc func([]types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	vals []tree.Datum,
 ) {
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	params := []types.T{vals[0].ResolvedType()}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		aggImpl := aggFunc(params, evalCtx)
-		for i := range vals {
-			if err := aggImpl.Add(context.Background(), vals[i]); err != nil {
-				b.Fatal(err)
+		func() {
+			aggImpl := aggFunc(params, evalCtx, nil)
+			defer aggImpl.Close(context.Background())
+			for i := range vals {
+				if err := aggImpl.Add(context.Background(), vals[i]); err != nil {
+					b.Fatal(err)
+				}
 			}
-		}
-		res, err := aggImpl.Result()
-		if err != nil || res == nil {
-			b.Errorf("taking result of aggregate implementation %T failed", aggImpl)
-		}
+			res, err := aggImpl.Result()
+			if err != nil || res == nil {
+				b.Errorf("taking result of aggregate implementation %T failed", aggImpl)
+			}
+		}()
 	}
 }
 

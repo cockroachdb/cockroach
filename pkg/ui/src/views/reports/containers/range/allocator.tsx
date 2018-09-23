@@ -59,24 +59,25 @@ export default class AllocatorOutput extends React.Component<AllocatorOutputProp
           loading={!allocator || allocator.inFlight}
           className="loading-image loading-image__spinner-left"
           image={spinner}
-        >
-          <table className="allocator-table">
-            <tbody>
-              <tr className="allocator-table__row allocator-table__row--header">
-                <th className="allocator-table__cell allocator-table__cell--header">Timestamp</th>
-                <th className="allocator-table__cell allocator-table__cell--header">Message</th>
-              </tr>
-              {
-                _.map(allocator.data.dry_run.events, (event, key) => (
-                  <tr key={key} className="allocator-table__row">
-                    <td className="allocator-table__cell allocator-table__cell--date">{Print.Timestamp(event.time)}</td>
-                    <td className="allocator-table__cell">{event.message}</td>
-                  </tr>
-                ))
-              }
-            </tbody>
-          </table>
-        </Loading>
+          render={() => (
+            <table className="allocator-table">
+              <tbody>
+                <tr className="allocator-table__row allocator-table__row--header">
+                  <th className="allocator-table__cell allocator-table__cell--header">Timestamp</th>
+                  <th className="allocator-table__cell allocator-table__cell--header">Message</th>
+                </tr>
+                {
+                  _.map(allocator.data.dry_run.events, (event, key) => (
+                    <tr key={key} className="allocator-table__row">
+                      <td className="allocator-table__cell allocator-table__cell--date">{Print.Timestamp(event.time)}</td>
+                      <td className="allocator-table__cell">{event.message}</td>
+                    </tr>
+                  ))
+                }
+              </tbody>
+            </table>
+          )}
+        />
       </div>
     );
   }

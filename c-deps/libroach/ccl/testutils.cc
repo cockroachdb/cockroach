@@ -40,18 +40,23 @@ enginepbccl::SecretKey* MakeAES128Key(rocksdb::Env* env) {
   return key;
 }
 
+rocksdb::Status WriteAES128KeyFile(rocksdb::Env* env, const std::string& filename) {
+  return rocksdb::WriteStringToFile(env, RandomBytes(16 + kKeyIDLength), filename,
+                                    true /* should_sync */);
+}
+
 MemKeyManager::~MemKeyManager() {}
 
-std::unique_ptr<enginepbccl::SecretKey> MemKeyManager::CurrentKey() {
+std::shared_ptr<enginepbccl::SecretKey> MemKeyManager::CurrentKey() {
   if (key_ != nullptr) {
-    return std::unique_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(*key_.get()));
+    return std::shared_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(*key_.get()));
   }
   return nullptr;
 }
 
-std::unique_ptr<enginepbccl::SecretKey> MemKeyManager::GetKey(const std::string& id) {
+std::shared_ptr<enginepbccl::SecretKey> MemKeyManager::GetKey(const std::string& id) {
   if (key_ != nullptr && key_->info().key_id() == id) {
-    return std::unique_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(*key_.get()));
+    return std::shared_ptr<enginepbccl::SecretKey>(new enginepbccl::SecretKey(*key_.get()));
   }
   return nullptr;
 }

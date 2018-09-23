@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -99,14 +100,14 @@ func TestGossipOverwriteNode(t *testing.T) {
 		t.Errorf("expected node %d, got %+v", node3.NodeID, val)
 	}
 
-	// Quiesce the stopper now to ensure that the update has propagated before
-	// checking whether node 1 has been removed from the infoStore.
-	stopper.Quiesce(context.TODO())
-	expectedErr := "unable to look up descriptor for node"
-	if val, err := g.GetNodeDescriptor(node1.NodeID); !testutils.IsError(err, expectedErr) {
-		t.Errorf("expected error %q fetching node %d; got error %v and node %+v",
-			expectedErr, node1.NodeID, err, val)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		expectedErr := "node.*has been removed from the cluster"
+		if val, err := g.GetNodeDescriptor(node1.NodeID); !testutils.IsError(err, expectedErr) {
+			return fmt.Errorf("expected error %q fetching node %d; got error %v and node %+v",
+				expectedErr, node1.NodeID, err, val)
+		}
+		return nil
+	})
 }
 
 // TestGossipMoveNode verifies that if a node is moved to a new address, it
@@ -146,19 +147,19 @@ func TestGossipMoveNode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Quiesce the stopper now to ensure that the update has propagated before
-	// checking on either node descriptor.
-	stopper.Quiesce(context.TODO())
-	if val, err := g.GetNodeDescriptor(movedNode.NodeID); err != nil {
-		t.Error(err)
-	} else if !proto.Equal(movedNode, val) {
-		t.Errorf("expected node %+v, got %+v", movedNode, val)
-	}
-	expectedErr := "unable to look up descriptor for node"
-	if val, err := g.GetNodeDescriptor(replacedNode.NodeID); !testutils.IsError(err, expectedErr) {
-		t.Errorf("expected error %q fetching node %d; got error %v and node %+v",
-			expectedErr, replacedNode.NodeID, err, val)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		if val, err := g.GetNodeDescriptor(movedNode.NodeID); err != nil {
+			return err
+		} else if !proto.Equal(movedNode, val) {
+			return fmt.Errorf("expected node %+v, got %+v", movedNode, val)
+		}
+		expectedErr := "node.*has been removed from the cluster"
+		if val, err := g.GetNodeDescriptor(replacedNode.NodeID); !testutils.IsError(err, expectedErr) {
+			return fmt.Errorf("expected error %q fetching node %d; got error %v and node %+v",
+				expectedErr, replacedNode.NodeID, err, val)
+		}
+		return nil
+	})
 }
 
 func TestGossipGetNextBootstrapAddress(t *testing.T) {
@@ -183,7 +184,7 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 		t.Errorf("expected 3 resolvers; got %d", len(resolvers))
 	}
 	server := rpc.NewServer(newInsecureRPCContext(stopper))
-	g := NewTest(0, nil, server, stop.NewStopper(), metric.NewRegistry())
+	g := NewTest(0, nil, server, stopper, metric.NewRegistry())
 	g.setResolvers(resolvers)
 
 	// Using specified resolvers, fetch bootstrap addresses 3 times
@@ -201,6 +202,73 @@ func TestGossipGetNextBootstrapAddress(t *testing.T) {
 			t.Errorf("%d: expected addr %s; got %s", i, expAddresses[i], addrStr)
 		}
 		g.mu.Unlock()
+	}
+}
+
+func TestGossipLocalityResolver(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	rpcContext := newInsecureRPCContext(stopper)
+
+	gossipLocalityAdvertiseList := roachpb.Locality{}
+	tier := roachpb.Tier{}
+	tier.Key = "zone"
+	tier.Value = "1"
+
+	tier2 := roachpb.Tier{}
+	tier2.Key = "zone"
+	tier2.Value = "2"
+
+	gossipLocalityAdvertiseList.Tiers = append(gossipLocalityAdvertiseList.Tiers, tier)
+
+	node1PrivateAddress := util.MakeUnresolvedAddr("tcp", "1.0.0.1")
+	node2PrivateAddress := util.MakeUnresolvedAddr("tcp", "2.0.0.1")
+
+	node1PublicAddress := util.MakeUnresolvedAddr("tcp", "1.1.1.1:1")
+	node2PublicAddress := util.MakeUnresolvedAddr("tcp", "2.2.2.2:2")
+
+	var node1LocalityList []roachpb.LocalityAddress
+	nodeLocalityAddress := roachpb.LocalityAddress{}
+	nodeLocalityAddress.Address = node1PrivateAddress
+	nodeLocalityAddress.LocalityTier = tier
+
+	nodeLocalityAddress2 := roachpb.LocalityAddress{}
+	nodeLocalityAddress2.Address = node2PrivateAddress
+	nodeLocalityAddress2.LocalityTier = tier2
+
+	node1LocalityList = append(node1LocalityList, nodeLocalityAddress)
+	node1LocalityList = append(node1LocalityList, nodeLocalityAddress2)
+
+	var node2LocalityList []roachpb.LocalityAddress
+	node2LocalityList = append(node2LocalityList, nodeLocalityAddress2)
+
+	g := NewTestWithLocality(1, rpcContext, rpc.NewServer(rpcContext), stopper, metric.NewRegistry(), gossipLocalityAdvertiseList)
+	node1 := &roachpb.NodeDescriptor{NodeID: 1, Address: node1PublicAddress, LocalityAddress: node1LocalityList}
+	node2 := &roachpb.NodeDescriptor{NodeID: 2, Address: node2PublicAddress, LocalityAddress: node2LocalityList}
+
+	if err := g.SetNodeDescriptor(node1); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.SetNodeDescriptor(node2); err != nil {
+		t.Fatal(err)
+	}
+
+	nodeAddress, err := g.GetNodeIDAddress(node1.NodeID)
+	if err != nil {
+		t.Error(err)
+	}
+	if *nodeAddress != node1PrivateAddress {
+		t.Fatalf("expected: %s but got: %s address", node1PrivateAddress, *nodeAddress)
+	}
+
+	nodeAddress, err = g.GetNodeIDAddress(node2.NodeID)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if *nodeAddress != node2PublicAddress {
+		t.Fatalf("expected: %s but got: %s address", node2PublicAddress, *nodeAddress)
 	}
 }
 
@@ -290,7 +358,7 @@ func TestGossipOutgoingLimitEnforced(t *testing.T) {
 		copy.Hops = maxHops + 1
 		copy.Value.Timestamp.WallTime++
 		return local.mu.is.addInfo(key, &copy)
-	})
+	}, true /* deleteExpired */)
 	local.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
@@ -557,8 +625,7 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 
 		// node ID must be non-zero
 		gnode := NewTest(
-			roachpb.NodeID(i+1), rpcCtx, server, stopper, metric.NewRegistry(),
-		)
+			roachpb.NodeID(i+1), rpcCtx, server, stopper, metric.NewRegistry())
 		g = append(g, gnode)
 		gnode.SetStallInterval(interval)
 		gnode.SetBootstrapInterval(interval)
@@ -614,4 +681,81 @@ func TestGossipJoinTwoClusters(t *testing.T) {
 		t.Errorf("expected %v to contain %d nodes, got %d", g[1].mu.nodeMap, e, a)
 	}
 	g[1].mu.Unlock()
+}
+
+// Test propagation of gossip infos in both directions across an existing
+// gossip connection.
+func TestGossipPropagation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	local := startGossip(1, stopper, t, metric.NewRegistry())
+	remote := startGossip(2, stopper, t, metric.NewRegistry())
+	remote.mu.Lock()
+	rAddr := remote.mu.is.NodeAddr
+	remote.mu.Unlock()
+	local.manage()
+	remote.manage()
+
+	mustAdd := func(g *Gossip, key string, val []byte, ttl time.Duration) {
+		if err := g.AddInfo(key, val, ttl); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Gossip a key on local and wait for it to show up on remote. This
+	// guarantees we have an active local to remote client connection.
+	mustAdd(local, "bootstrap", nil, 0)
+	testutils.SucceedsSoon(t, func() error {
+		c := local.findClient(func(c *client) bool { return c.addr.String() == rAddr.String() })
+		if c == nil {
+			// Restart the client connection in the loop. It might have failed due to
+			// a heartbeat timeout.
+			local.mu.Lock()
+			local.startClientLocked(&rAddr)
+			local.mu.Unlock()
+			return fmt.Errorf("unable to find local to remote client")
+		}
+		_, err := remote.GetInfo("bootstrap")
+		return err
+	})
+
+	// Add entries on both the local and remote nodes and verify they get propagated.
+	mustAdd(local, "local", nil, time.Minute)
+	mustAdd(remote, "remote", nil, time.Minute)
+
+	getInfo := func(g *Gossip, key string) *Info {
+		g.mu.RLock()
+		defer g.mu.RUnlock()
+		return g.mu.is.Infos[key]
+	}
+
+	var localInfo *Info
+	var remoteInfo *Info
+	testutils.SucceedsSoon(t, func() error {
+		localInfo = getInfo(remote, "local")
+		if localInfo == nil {
+			return fmt.Errorf("local info not propagated")
+		}
+		remoteInfo = getInfo(local, "remote")
+		if remoteInfo == nil {
+			return fmt.Errorf("remote info not propagated")
+		}
+		return nil
+	})
+
+	// Replace the existing entries on both the local and remote nodes and verify
+	// these new entries get propagated with updated timestamps.
+	mustAdd(local, "local", nil, 2*time.Minute)
+	mustAdd(remote, "remote", nil, 2*time.Minute)
+
+	testutils.SucceedsSoon(t, func() error {
+		if i := getInfo(remote, "local"); i == nil || reflect.DeepEqual(i, localInfo) {
+			return fmt.Errorf("new local info not propagated:\n%v\n%v", i, localInfo)
+		}
+		if i := getInfo(local, "remote"); reflect.DeepEqual(i, remoteInfo) {
+			return fmt.Errorf("new remote info not propagated:\n%v\n%v", i, remoteInfo)
+		}
+		return nil
+	})
 }

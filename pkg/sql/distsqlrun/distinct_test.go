@@ -120,10 +120,10 @@ func TestDistinct(t *testing.T) {
 			defer evalCtx.Stop(context.Background())
 			flowCtx := FlowCtx{
 				Settings: st,
-				EvalCtx:  evalCtx,
+				EvalCtx:  &evalCtx,
 			}
 
-			d, err := newDistinct(&flowCtx, 0 /* processorID */, &ds, in, &PostProcessSpec{}, out)
+			d, err := NewDistinct(&flowCtx, 0 /* processorID */, &ds, in, &PostProcessSpec{}, out)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -158,7 +158,7 @@ func benchmarkDistinct(b *testing.B, orderedColumns []uint32) {
 
 	flowCtx := &FlowCtx{
 		Settings: st,
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 	}
 	spec := &DistinctSpec{
 		DistinctColumns: []uint32{0, 1},
@@ -173,7 +173,7 @@ func benchmarkDistinct(b *testing.B, orderedColumns []uint32) {
 			b.SetBytes(int64(8 * numRows * numCols))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				d, err := newDistinct(flowCtx, 0 /* processorID */, spec, input, post, &RowDisposer{})
+				d, err := NewDistinct(flowCtx, 0 /* processorID */, spec, input, post, &RowDisposer{})
 				if err != nil {
 					b.Fatal(err)
 				}

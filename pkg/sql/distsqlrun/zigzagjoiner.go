@@ -16,7 +16,6 @@ package distsqlrun
 
 import (
 	"context"
-	"sync"
 
 	"github.com/pkg/errors"
 
@@ -276,6 +275,7 @@ func newZigzagJoiner(
 	leftEqCols := make([]uint32, 0, len(spec.EqColumns[0].Columns))
 	rightEqCols := make([]uint32, 0, len(spec.EqColumns[1].Columns))
 	err := z.joinerBase.init(
+		z, /* self */
 		flowCtx,
 		processorID,
 		leftColumnTypes,
@@ -287,7 +287,7 @@ func newZigzagJoiner(
 		0, /* numMerged */
 		post,
 		output,
-		procStateOpts{}, // zigzagJoiner doesn't have any inputs to drain.
+		ProcStateOpts{}, // zigzagJoiner doesn't have any inputs to drain.
 	)
 	if err != nil {
 		return nil, err
@@ -314,21 +314,9 @@ func newZigzagJoiner(
 	return z, nil
 }
 
-// Run is part of the processor interface.
-func (z *zigzagJoiner) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if z.out.output == nil {
-		panic("zigzagJoiner output not initialized for emitting rows")
-	}
-	z.Start(ctx)
-	Run(z.ctx, z, z.out.output)
-	if wg != nil {
-		wg.Done()
-	}
-}
-
 // Start is part of the RowSource interface.
 func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
-	ctx = z.startInternal(ctx, zigzagJoinerProcName)
+	ctx = z.StartInternal(ctx, zigzagJoinerProcName)
 	z.evalCtx = z.flowCtx.NewEvalCtx()
 	z.cancelChecker = sqlbase.NewCancelChecker(ctx)
 	log.VEventf(ctx, 2, "starting zigzag joiner run")
@@ -412,6 +400,7 @@ func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int
 		neededCols,
 		false, /* check */
 		info.alloc,
+		ScanVisibility_PUBLIC,
 	)
 	if err != nil {
 		return err
@@ -429,7 +418,7 @@ func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int
 
 func (z *zigzagJoiner) close() {
 	if !z.closed {
-		log.VEventf(z.ctx, 2, "exiting zigzag joiner run")
+		log.VEventf(z.Ctx, 2, "exiting zigzag joiner run")
 	}
 }
 
@@ -442,7 +431,7 @@ func (z *zigzagJoiner) producerMeta(err error) *ProducerMetadata {
 	if !z.closed {
 		if err != nil {
 			meta = &ProducerMetadata{Err: err}
-		} else if trace := getTraceData(z.ctx); trace != nil {
+		} else if trace := getTraceData(z.Ctx); trace != nil {
 			meta = &ProducerMetadata{TraceData: trace}
 		}
 		// We need to close as soon as we send producer metadata as we're done
@@ -617,7 +606,7 @@ func (z *zigzagJoiner) matchBase(curRow sqlbase.EncDatumRow, side int) (bool, er
 
 	// Compare the equality columns of the baseRow to that of the curRow.
 	da := &sqlbase.DatumAlloc{}
-	cmp, err := prevEqDatums.Compare(eqColTypes, da, ordering, &z.flowCtx.EvalCtx, curEqDatums)
+	cmp, err := prevEqDatums.Compare(eqColTypes, da, ordering, z.flowCtx.EvalCtx, curEqDatums)
 	if err != nil {
 		return false, err
 	}
@@ -703,7 +692,7 @@ func (z *zigzagJoiner) nextRow(
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
 			true, /* batch limit */
 			zigzagJoinerBatchSize,
-			false, /* traceKV */
+			z.flowCtx.traceKV,
 		)
 		if err != nil {
 			return nil, z.producerMeta(err)
@@ -766,7 +755,7 @@ func (z *zigzagJoiner) nextRow(
 				return nil, z.producerMeta(err)
 			}
 			da := &sqlbase.DatumAlloc{}
-			cmp, err := prevEqCols.Compare(eqColTypes, da, ordering, &z.flowCtx.EvalCtx, currentEqCols)
+			cmp, err := prevEqCols.Compare(eqColTypes, da, ordering, z.flowCtx.EvalCtx, currentEqCols)
 			if err != nil {
 				return nil, z.producerMeta(err)
 			}
@@ -843,20 +832,19 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 		curInfo := z.infos[z.side]
 		// Fetch initial batch.
-		// TODO(pbardea): set the traceKV flag when requested by the session.
 		err := curInfo.fetcher.StartScan(
-			z.ctx,
+			z.Ctx,
 			txn,
 			roachpb.Spans{roachpb.Span{Key: curInfo.key, EndKey: curInfo.endKey}},
 			true, /* batch limit */
 			zigzagJoinerBatchSize,
-			false, /* traceKV */
+			z.flowCtx.traceKV,
 		)
 		if err != nil {
-			log.Errorf(z.ctx, "scan error: %s", err)
+			log.Errorf(z.Ctx, "scan error: %s", err)
 			return nil, z.producerMeta(err)
 		}
-		fetchedRow, err := z.fetchRow(z.ctx)
+		fetchedRow, err := z.fetchRow(z.Ctx)
 		if err != nil {
 			err = scrub.UnwrapScrubError(err)
 			return nil, z.producerMeta(err)
@@ -871,26 +859,22 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 
 	for {
-		row, meta := z.nextRow(z.ctx, txn)
+		row, meta := z.nextRow(z.Ctx, txn)
 		if z.closed || meta != nil {
 			return nil, meta
 		}
 		if row == nil {
-			z.moveToDraining(nil /* err */)
+			z.MoveToDraining(nil /* err */)
 			break
 		}
 
-		outRow := z.processRowHelper(row)
+		outRow := z.ProcessRowHelper(row)
 		if outRow == nil {
 			continue
 		}
 		return outRow, nil
 	}
-	return nil, z.drainHelper()
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (z *zigzagJoiner) ConsumerDone() {
+	return nil, z.DrainHelper()
 }
 
 // ConsumerClosed is part of the RowSource interface.

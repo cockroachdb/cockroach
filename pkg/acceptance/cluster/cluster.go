@@ -43,7 +43,7 @@ type Cluster interface {
 	// dismantle the cluster.
 	AssertAndStop(context.Context, testing.TB)
 	// ExecCLI runs `./cockroach <args>`, while filling in required flags such as
-	// --insecure, --certs-dir, --host or --port.
+	// --insecure, --certs-dir, --host.
 	//
 	// Returns stdout, stderr, and an error.
 	ExecCLI(ctx context.Context, i int, args []string) (string, string, error)

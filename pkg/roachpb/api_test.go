@@ -15,7 +15,6 @@
 package roachpb
 
 import (
-	"encoding/hex"
 	"reflect"
 	"testing"
 )
@@ -100,7 +99,7 @@ func TestMustSetInner(t *testing.T) {
 	req := RequestUnion{}
 	res := ResponseUnion{}
 
-	// GetRequest is checked first in the generated code for SetValue.
+	// GetRequest is checked first in the generated code for SetInner.
 	req.MustSetInner(&GetRequest{})
 	res.MustSetInner(&GetResponse{})
 	req.MustSetInner(&EndTransactionRequest{})
@@ -109,39 +108,7 @@ func TestMustSetInner(t *testing.T) {
 	if m := req.GetInner().Method(); m != EndTransaction {
 		t.Fatalf("unexpected request: %s in %+v", m, req)
 	}
-	if _, isET := res.GetValue().(*EndTransactionResponse); !isET {
+	if _, isET := res.GetInner().(*EndTransactionResponse); !isET {
 		t.Fatalf("unexpected response union: %+v", res)
-	}
-}
-
-func TestDeprecatedVerifyChecksumRequest(t *testing.T) {
-	t.Skip("TODO(nvanbenschoten): fix")
-	// hexData was generated using the following code snippet. The batch contains
-	// a VerifyChecksumRequest which is no longer part of RequestUnion.
-	//
-	// var ba BatchRequest
-	// ba.Add(&VerifyChecksumRequest{})
-	// var v Value
-	// if err := v.SetProto(&ba); err != nil {
-	// 	t.Fatal(err)
-	// }
-	// fmt.Printf("%s\n", hex.EncodeToString(v.RawBytes))
-
-	hexData := `00000000030a1f0a0408001000120608001000180018002100000000000000003000400048001219ba01160a0010001a1000000000000000000000000000000000`
-	data, err := hex.DecodeString(hexData)
-	if err != nil {
-		t.Fatal(err)
-	}
-	v := Value{RawBytes: data}
-	var ba BatchRequest
-	if err := v.GetProto(&ba); err != nil {
-		t.Fatal(err)
-	}
-	// This previously failed with a nil-pointer conversion error in
-	// BatchRequest.GetArg() because of the removal of
-	// RequestUnion.VerifyChecksum. We've now re-added that member as
-	// RequestUnion.DeprecatedVerifyChecksum.
-	if ba.IsLeaseRequest() {
-		t.Fatal("unexpected success")
 	}
 }

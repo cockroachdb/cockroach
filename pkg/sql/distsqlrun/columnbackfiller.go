@@ -70,7 +70,7 @@ func (cb *columnBackfiller) runChunk(
 ) (roachpb.Key, error) {
 	tableDesc := cb.backfiller.spec.Table
 	var key roachpb.Key
-	err := cb.flowCtx.clientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	err := cb.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		if cb.flowCtx.testingKnobs.RunBeforeBackfillChunk != nil {
 			if err := cb.flowCtx.testingKnobs.RunBeforeBackfillChunk(sp); err != nil {
 				return err
@@ -80,6 +80,7 @@ func (cb *columnBackfiller) runChunk(
 			defer cb.flowCtx.testingKnobs.RunAfterBackfillChunk()
 		}
 
+		// TODO(knz): do KV tracing in DistSQL processors.
 		var err error
 		key, err = cb.RunColumnBackfillChunk(
 			ctx,
@@ -88,7 +89,8 @@ func (cb *columnBackfiller) runChunk(
 			cb.backfiller.spec.OtherTables,
 			sp,
 			chunkSize,
-			true, /*alsoCommit*/
+			true,  /*alsoCommit*/
+			false, /*traceKV*/
 		)
 		return err
 	})

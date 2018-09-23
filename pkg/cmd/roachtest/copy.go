@@ -59,11 +59,11 @@ func registerCopy(r *registry) {
 			}
 
 			t.Status("create copy of Bank schema")
-			c.Run(ctx, c.Node(1), "./workload init bank --rows=0 --ranges=1 {pgurl:1}")
+			c.Run(ctx, c.Node(1), "./workload init bank --rows=0 --ranges=0 {pgurl:1}")
 
 			rangeCount := func() int {
 				var count int
-				const q = "SELECT COUNT(*) FROM [SHOW TESTING_RANGES FROM TABLE bank.bank]"
+				const q = "SELECT count(*) FROM [SHOW EXPERIMENTAL_RANGES FROM TABLE bank.bank]"
 				if err := db.QueryRow(q).Scan(&count); err != nil {
 					t.Fatalf("failed to get range count: %v", err)
 				}
@@ -121,7 +121,7 @@ func registerCopy(r *registry) {
 			}
 
 			rc := rangeCount()
-			c.l.printf("range count after copy = %d\n", rc)
+			c.l.Printf("range count after copy = %d\n", rc)
 			highExp := (rows * rowEstimate) / (32 << 20 /* 32MB */)
 			lowExp := (rows * rowEstimate) / (64 << 20 /* 64MB */)
 			if rc > highExp || rc < lowExp {

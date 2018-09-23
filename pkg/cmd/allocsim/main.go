@@ -522,7 +522,7 @@ func main() {
 	a := newAllocSim(c)
 	a.localities = localities
 
-	log.SetExitFunc(func(code int) {
+	log.SetExitFunc(false /* hideStack */, func(code int) {
 		c.Close()
 		os.Exit(code)
 	})

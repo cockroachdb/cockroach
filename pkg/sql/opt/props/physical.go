@@ -47,19 +47,31 @@ type Physical struct {
 	// one or more columns, each of which can be sorted in either ascending or
 	// descending order. If Ordering is not defined, then no particular ordering
 	// is required or provided.
-	Ordering Ordering
+	Ordering OrderingChoice
 }
 
-// Defined returns true if any physical property is defined. If none is
-// defined, then this is an instance of MinPhysProps.
+// MinPhysProps are the default physical properties that require nothing and
+// provide nothing.
+var MinPhysProps Physical
+
+// Defined is true if any physical property is defined. If none is defined, then
+// this is an instance of MinPhysProps.
 func (p *Physical) Defined() bool {
-	return p.Presentation.Defined() || p.Ordering.Defined()
+	return !p.Presentation.Any() || !p.Ordering.Any()
 }
 
-// FormatString writes physical properties to a human-readable format.
-func (p *Physical) FormatString(verbose bool) string {
-	hasProjection := p.Presentation.Defined()
-	hasOrdering := p.Ordering.Defined()
+// ColSet returns the set of columns used by any of the physical properties.
+func (p *Physical) ColSet() opt.ColSet {
+	colSet := p.Ordering.ColSet()
+	for _, col := range p.Presentation {
+		colSet.Add(int(col.ID))
+	}
+	return colSet
+}
+
+func (p *Physical) String() string {
+	hasProjection := !p.Presentation.Any()
+	hasOrdering := !p.Ordering.Any()
 
 	// Handle empty properties case.
 	if !hasProjection && !hasOrdering {
@@ -69,14 +81,9 @@ func (p *Physical) FormatString(verbose bool) string {
 	var buf bytes.Buffer
 
 	if hasProjection {
-		if verbose {
-			buf.WriteString("[presentation: ")
-			p.Presentation.format(&buf)
-			buf.WriteByte(']')
-		} else {
-			buf.WriteString("p:")
-			p.Presentation.format(&buf)
-		}
+		buf.WriteString("[presentation: ")
+		p.Presentation.format(&buf)
+		buf.WriteByte(']')
 
 		if hasOrdering {
 			buf.WriteString(" ")
@@ -84,32 +91,17 @@ func (p *Physical) FormatString(verbose bool) string {
 	}
 
 	if hasOrdering {
-		if verbose {
-			buf.WriteString("[ordering: ")
-			p.Ordering.format(&buf)
-			buf.WriteByte(']')
-		} else {
-			buf.WriteString("o:")
-			p.Ordering.format(&buf)
-		}
+		buf.WriteString("[ordering: ")
+		p.Ordering.Format(&buf)
+		buf.WriteByte(']')
 	}
 
 	return buf.String()
 }
 
-// Fingerprint returns a string that uniquely describes this set of physical
-// properties. It is suitable for use as a hash key in a map.
-func (p *Physical) Fingerprint() string {
-	return p.FormatString(false /* verbose */)
-}
-
-func (p *Physical) String() string {
-	return p.FormatString(true /* verbose */)
-}
-
 // Equals returns true if the two physical properties are identical.
 func (p *Physical) Equals(rhs *Physical) bool {
-	return p.Presentation.Equals(rhs.Presentation) && p.Ordering.Equals(rhs.Ordering)
+	return p.Presentation.Equals(rhs.Presentation) && p.Ordering.Equals(&rhs.Ordering)
 }
 
 // Presentation specifies the naming, membership (including duplicates), and
@@ -120,9 +112,9 @@ func (p *Physical) Equals(rhs *Physical) bool {
 //   a.y:2 a.x:1 a.y:2 column1:3
 type Presentation []opt.LabeledColumn
 
-// Defined is true if a particular column presentation is required or provided.
-func (p Presentation) Defined() bool {
-	return p != nil
+// Any is true if any column presentation is allowed or can be provided.
+func (p Presentation) Any() bool {
+	return p == nil
 }
 
 // Equals returns true iff this presentation exactly matches the given
@@ -153,70 +145,4 @@ func (p Presentation) format(buf *bytes.Buffer) {
 		}
 		fmt.Fprintf(buf, "%s:%d", col.Label, col.ID)
 	}
-}
-
-// Ordering defines the order of rows provided or required by an operator. A
-// negative value indicates descending order on the column id "-(value)".
-type Ordering []opt.OrderingColumn
-
-// Defined is true if a particular row ordering is required or provided.
-func (o Ordering) Defined() bool {
-	return len(o) != 0
-}
-
-func (o Ordering) String() string {
-	var buf bytes.Buffer
-	o.format(&buf)
-	return buf.String()
-}
-
-func (o Ordering) format(buf *bytes.Buffer) {
-	for i, col := range o {
-		if i > 0 {
-			buf.WriteString(",")
-		}
-		if col.Descending() {
-			buf.WriteByte('-')
-		} else {
-			buf.WriteByte('+')
-		}
-		fmt.Fprintf(buf, "%d", col.ID())
-	}
-}
-
-// ColSet returns the set of column IDs used in the ordering.
-func (o Ordering) ColSet() opt.ColSet {
-	var colSet opt.ColSet
-	for _, col := range o {
-		colSet.Add(int(col.ID()))
-	}
-	return colSet
-}
-
-// Provides returns true if the required ordering is a prefix of this ordering.
-func (o Ordering) Provides(required Ordering) bool {
-	if len(o) < len(required) {
-		return false
-	}
-
-	for i := range required {
-		if o[i] != required[i] {
-			return false
-		}
-	}
-	return true
-}
-
-// Equals returns true if the two orderings are identical.
-func (o Ordering) Equals(rhs Ordering) bool {
-	if len(o) != len(rhs) {
-		return false
-	}
-
-	for i := range o {
-		if o[i] != rhs[i] {
-			return false
-		}
-	}
-	return true
 }

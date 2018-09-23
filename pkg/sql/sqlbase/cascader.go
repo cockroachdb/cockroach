@@ -201,6 +201,18 @@ func spanForIndexValues(
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (roachpb.Span, error) {
+	// Currently, we only offer MATCH FULL, so this checks to ensure that if a
+	// reference is composed of all NULLs, then we don't cascade it.
+	nulls := true
+	for _, rowIndex := range indexColIDs {
+		if values[rowIndex] != tree.DNull {
+			nulls = false
+			break
+		}
+	}
+	if nulls {
+		return roachpb.Span{}, nil
+	}
 	keyBytes, _, err := EncodePartialIndexKey(table, index, prefixLen, indexColIDs, values, keyPrefix)
 	if err != nil {
 		return roachpb.Span{}, err
@@ -255,7 +267,9 @@ func batchRequestForIndexValues(
 		if err != nil {
 			return roachpb.BatchRequest{}, nil, err
 		}
-		req.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(span)})
+		if span.EndKey != nil {
+			req.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(span)})
+		}
 	}
 	return req, colIDtoRowIndex, nil
 }
@@ -286,7 +300,9 @@ func batchRequestForPKValues(
 		if err != nil {
 			return roachpb.BatchRequest{}, err
 		}
-		req.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(span)})
+		if span.EndKey != nil {
+			req.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeaderFromSpan(span)})
+		}
 	}
 	return req, nil
 }
@@ -483,6 +499,10 @@ func (c *cascader) deleteRows(
 	if err != nil {
 		return nil, nil, 0, err
 	}
+	// If there are no spans to search, there is no need to cascade.
+	if len(req.Requests) == 0 {
+		return nil, nil, 0, nil
+	}
 	br, roachErr := c.txn.Send(ctx, req)
 	if roachErr != nil {
 		return nil, nil, 0, roachErr.GoError()
@@ -544,6 +564,10 @@ func (c *cascader) deleteRows(
 		return nil, nil, 0, err
 	}
 	primaryKeysToDelete.Clear(ctx)
+	// If there are no spans to search, there is no need to cascade.
+	if len(pkLookupReq.Requests) == 0 {
+		return nil, nil, 0, nil
+	}
 	pkResp, roachErr := c.txn.Send(ctx, pkLookupReq)
 	if roachErr != nil {
 		return nil, nil, 0, roachErr.GoError()
@@ -704,6 +728,10 @@ func (c *cascader) updateRows(
 		if err != nil {
 			return nil, nil, nil, 0, err
 		}
+		// If there are no spans to search, there is no need to cascade.
+		if len(req.Requests) == 0 {
+			return nil, nil, nil, 0, nil
+		}
 		br, roachErr := c.txn.Send(ctx, req)
 		if roachErr != nil {
 			return nil, nil, nil, 0, roachErr.GoError()
@@ -759,6 +787,10 @@ func (c *cascader) updateRows(
 			return nil, nil, nil, 0, err
 		}
 		primaryKeysToUpdate.Clear(ctx)
+		// If there are no spans to search, there is no need to cascade.
+		if len(pkLookupReq.Requests) == 0 {
+			return nil, nil, nil, 0, nil
+		}
 		pkResp, roachErr := c.txn.Send(ctx, pkLookupReq)
 		if roachErr != nil {
 			return nil, nil, nil, 0, roachErr.GoError()
@@ -1085,8 +1117,10 @@ func (c *cascader) cascadeAll(
 			)
 		}
 		for deletedRows.Len() > 0 {
-			// TODO(bram): Can these be batched?
-			if err := rowDeleter.Fks.checkAll(ctx, deletedRows.At(0)); err != nil {
+			if err := rowDeleter.Fks.addAllIdxChecks(ctx, deletedRows.At(0)); err != nil {
+				return err
+			}
+			if err := rowDeleter.Fks.checker.runCheck(ctx, deletedRows.At(0), nil); err != nil {
 				return err
 			}
 			deletedRows.PopFirst()
@@ -1130,7 +1164,13 @@ func (c *cascader) cascadeAll(
 			// If there's only a single change, which is quite often the case, there
 			// is no need to worry about intermediate states.  Just run the check and
 			// avoid a bunch of allocations.
-			if err := rowUpdater.Fks.runIndexChecks(ctx, originalRows.At(0), updatedRows.At(0)); err != nil {
+			if err := rowUpdater.Fks.addIndexChecks(ctx, originalRows.At(0), updatedRows.At(0)); err != nil {
+				return err
+			}
+			if !rowUpdater.Fks.hasFKs() {
+				continue
+			}
+			if err := rowUpdater.Fks.checker.runCheck(ctx, originalRows.At(0), updatedRows.At(0)); err != nil {
 				return err
 			}
 			// Now check all check constraints for the table.
@@ -1164,7 +1204,14 @@ func (c *cascader) cascadeAll(
 					skipList[j] = struct{}{}
 				}
 			}
-			if err := rowUpdater.Fks.runIndexChecks(ctx, originalRows.At(i), finalRow); err != nil {
+
+			if err := rowUpdater.Fks.addIndexChecks(ctx, originalRows.At(i), finalRow); err != nil {
+				return err
+			}
+			if !rowUpdater.Fks.hasFKs() {
+				continue
+			}
+			if err := rowUpdater.Fks.checker.runCheck(ctx, originalRows.At(i), finalRow); err != nil {
 				return err
 			}
 			// Now check all check constraints for the table.

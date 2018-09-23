@@ -20,10 +20,13 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"runtime"
 	"sync"
 	"time"
 
+	"github.com/cenk/backoff"
 	"github.com/pkg/errors"
+	circuit "github.com/rubyist/circuitbreaker"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -45,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -128,6 +132,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.ScanInterval != 0 {
 		cfg.ScanInterval = params.ScanInterval
 	}
+	if params.ScanMinIdleTime != 0 {
+		cfg.ScanMinIdleTime = params.ScanMinIdleTime
+	}
 	if params.ScanMaxIdleTime != 0 {
 		cfg.ScanMaxIdleTime = params.ScanMaxIdleTime
 	}
@@ -165,10 +172,6 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 	if params.HTTPAddr != "" {
 		cfg.HTTPAddr = params.HTTPAddr
-	}
-
-	if params.ListeningURLFile != "" {
-		cfg.ListeningURLFile = params.ListeningURLFile
 	}
 	if params.DisableWebSessionAuthentication {
 		cfg.EnableWebSessionAuthentication = false
@@ -324,6 +327,12 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 		params.Stopper.AddCloser(stop.CloserFn(fn))
 	}
 
+	// TODO(peter): Remove once #29144 is understood / fixed.
+	if ts.Cfg.TestingKnobs.Store == nil {
+		ts.Cfg.TestingKnobs.Store = &storage.StoreTestingKnobs{}
+	}
+	ts.Cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs).VerboseSplitQueue = true
+
 	// Needs to be called before NewServer to ensure resolvers are initialized.
 	if err := ts.Cfg.InitNode(); err != nil {
 		return err
@@ -333,6 +342,14 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	ts.Server, err = NewServer(*ts.Cfg, params.Stopper)
 	if err != nil {
 		return err
+	}
+
+	// Create a breaker which never trips and never backs off to avoid
+	// introducing timing-based flakes.
+	ts.rpcContext.BreakerFactory = func() *circuit.Breaker {
+		return circuit.NewBreakerWithOptions(&circuit.Options{
+			BackOff: &backoff.ZeroBackOff{},
+		})
 	}
 
 	// Our context must be shared with our server.
@@ -363,6 +380,14 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 // process.
 func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
 	return ExpectedInitialRangeCount(ts.DB())
+}
+
+// ExpectedInitialUserRangeCount returns the expected number of ranges that should
+// be on the server after initial (asynchronous) splits have been completed,
+// assuming no additional information is added outside of the normal bootstrap
+// process.
+func (ts *TestServer) ExpectedInitialUserRangeCount() (int, error) {
+	return ExpectedInitialUserRangeCount(ts.DB())
 }
 
 // ExpectedInitialRangeCount returns the expected number of ranges that should
@@ -402,6 +427,24 @@ func ExpectedInitialRangeCount(db *client.DB) (int, error) {
 	return len(config.StaticSplits()) + systemTableSplits + userTableSplits + 1, nil
 }
 
+// ExpectedInitialUserRangeCount returns the expected number of user ranges that should
+// be on the server after initial (asynchronous) splits have been completed,
+// assuming no additional information is added outside of the normal bootstrap
+// process.
+func ExpectedInitialUserRangeCount(db *client.DB) (int, error) {
+	descriptorIDs, err := sqlmigrations.ExpectedDescriptorIDs(context.Background(), db)
+	if err != nil {
+		return 0, err
+	}
+
+	maxUserDescriptorID := descriptorIDs[len(descriptorIDs)-1]
+	userTableSplits := 0
+	if maxUserDescriptorID >= keys.MaxReservedDescID {
+		userTableSplits = int(maxUserDescriptorID - keys.MaxReservedDescID)
+	}
+	return userTableSplits + 1, nil
+}
+
 // WaitForInitialSplits waits for the server to complete its expected initial
 // splits at startup. If the expected range count is not reached within a
 // configured timeout, an error is returned.
@@ -417,17 +460,36 @@ func WaitForInitialSplits(db *client.DB) error {
 	if err != nil {
 		return err
 	}
-	return retry.ForDuration(initialSplitsTimeout, func() error {
+	err = retry.ForDuration(initialSplitsTimeout, func() error {
 		// Scan all keys in the Meta2Prefix; we only need a count.
 		rows, err := db.Scan(context.TODO(), keys.Meta2Prefix, keys.MetaMax, 0)
 		if err != nil {
 			return err
 		}
 		if a, e := len(rows), expectedRanges; a != e {
-			return errors.Errorf("had %d ranges at startup, expected %d", a, e)
+			err := errors.Errorf("had %d ranges at startup, expected %d", a, e)
+			log.InfoDepth(context.Background(), 3, err)
+			return err
 		}
 		return nil
 	})
+	if err == nil {
+		return nil
+	}
+
+	// TODO(peter): This is a debugging aid to track down the difficult to
+	// reproduce failures with the initial splits not finishing promptly.
+	for bufSize := 1 << 20; ; bufSize *= 2 {
+		buf := make([]byte, bufSize)
+		length := runtime.Stack(buf, true)
+		// If this wasn't large enough to accommodate the full set of
+		// stack traces, increase by 2 and try again.
+		if length == bufSize {
+			continue
+		}
+		log.Infof(context.TODO(), "%s\n%s", err, buf)
+		return err
+	}
 }
 
 // Stores returns the collection of stores from this TestServer's node.
@@ -537,8 +599,14 @@ func (ts *TestServer) MustGetSQLCounter(name string) int64 {
 
 	ts.registry.Each(func(n string, v interface{}) {
 		if name == n {
-			c = v.(*metric.Counter).Count()
-			found = true
+			switch t := v.(type) {
+			case *metric.Counter:
+				c = t.Count()
+				found = true
+			case *metric.Gauge:
+				c = t.Value()
+				found = true
+			}
 		}
 	})
 	if !found {
@@ -587,6 +655,11 @@ func (ts *TestServer) GetNode() *Node {
 	return ts.node
 }
 
+// GetNodeLiveness exposes the Server's nodeLiveness.
+func (ts *TestServer) GetNodeLiveness() *storage.NodeLiveness {
+	return ts.nodeLiveness
+}
+
 // DistSender exposes the Server's DistSender.
 func (ts *TestServer) DistSender() *kv.DistSender {
 	return ts.distSender
@@ -619,7 +692,7 @@ func (ts *TestServer) GetFirstStoreID() roachpb.StoreID {
 
 // LookupRange returns the descriptor of the range containing key.
 func (ts *TestServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, error) {
-	rs, _, err := client.RangeLookup(context.Background(), ts.DB().GetSender(),
+	rs, _, err := client.RangeLookup(context.Background(), ts.DB().NonTransactionalSender(),
 		key, roachpb.CONSISTENT, 0 /* prefetchNum */, false /* reverse */)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, errors.Errorf(
@@ -649,7 +722,7 @@ func (ts *TestServer) SplitRange(
 		},
 		SplitKey: splitKey,
 	}
-	_, pErr := client.SendWrapped(ctx, ts.DB().GetSender(), &splitReq)
+	_, pErr := client.SendWrapped(ctx, ts.DB().NonTransactionalSender(), &splitReq)
 	if pErr != nil {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
 			errors.Errorf(
@@ -735,7 +808,7 @@ func (ts *TestServer) GetRangeLease(
 	}
 	leaseResp, pErr := client.SendWrappedWith(
 		ctx,
-		ts.DB().GetSender(),
+		ts.DB().NonTransactionalSender(),
 		roachpb.Header{
 			// INCONSISTENT read, since we want to make sure that the node used to
 			// send this is the one that processes the command, for the hint to

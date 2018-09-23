@@ -22,8 +22,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -131,13 +129,17 @@ type Config struct {
 	// route to an interface that Addr is listening on.
 	AdvertiseAddr string
 
-	// HTTPAddr is server's public HTTP address.
+	// HTTPAddr is the configured HTTP listen address.
 	//
 	// This is temporary, and will be removed when grpc.(*Server).ServeHTTP
 	// performance problems are addressed upstream.
 	//
 	// See https://github.com/grpc/grpc-go/issues/586.
 	HTTPAddr string
+
+	// HTTPAdvertiseAddr is the advertised HTTP address.
+	// This is computed from HTTPAddr if specified otherwise Addr.
+	HTTPAdvertiseAddr string
 
 	// The certificate manager. Must be accessed through GetCertificateManager.
 	certificateManager lazyCertificateManager
@@ -152,8 +154,14 @@ type Config struct {
 	HistogramWindowInterval time.Duration
 }
 
-func didYouMeanInsecureError(err error) error {
-	return errors.Wrap(err, "problem using security settings, did you mean to use --insecure?")
+func wrapError(err error) error {
+	if _, ok := err.(*security.Error); !ok {
+		return &security.Error{
+			Message: "problem using security settings",
+			Err:     err,
+		}
+	}
+	return err
 }
 
 // InitDefaults sets up the default values for a config.
@@ -180,7 +188,7 @@ func (cfg *Config) HTTPRequestScheme() string {
 func (cfg *Config) AdminURL() *url.URL {
 	return &url.URL{
 		Scheme: cfg.HTTPRequestScheme(),
-		Host:   cfg.HTTPAddr,
+		Host:   cfg.HTTPAdvertiseAddr,
 	}
 }
 
@@ -207,21 +215,40 @@ func (cfg *Config) GetCACertPath() (string, error) {
 // already contained SSL config options.
 func (cfg *Config) LoadSecurityOptions(options url.Values, username string) error {
 	if cfg.Insecure {
-		options.Add("sslmode", "disable")
+		options.Set("sslmode", "disable")
+		options.Del("sslrootcert")
+		options.Del("sslcert")
+		options.Del("sslkey")
 	} else {
-		// Fetch CA cert. This is required.
-		caCertPath, err := cfg.GetCACertPath()
-		if err != nil {
-			return didYouMeanInsecureError(err)
+		sslMode := options.Get("sslmode")
+		if sslMode == "" || sslMode == "disable" {
+			options.Set("sslmode", "verify-full")
 		}
-		options.Add("sslmode", "verify-full")
-		options.Add("sslrootcert", caCertPath)
+
+		if sslMode != "require" {
+			// verify-ca and verify-full need a CA certificate.
+			if options.Get("sslrootcert") == "" {
+				// Fetch CA cert. This is required.
+				caCertPath, err := cfg.GetCACertPath()
+				if err != nil {
+					return wrapError(err)
+				}
+				options.Set("sslrootcert", caCertPath)
+			}
+		} else {
+			// require does not check the CA.
+			options.Del("sslrootcert")
+		}
 
 		// Fetch certs, but don't fail, we may be using a password.
 		certPath, keyPath, err := cfg.GetClientCertPaths(username)
 		if err == nil {
-			options.Add("sslcert", certPath)
-			options.Add("sslkey", keyPath)
+			if options.Get("sslcert") == "" {
+				options.Set("sslcert", certPath)
+			}
+			if options.Get("sslkey") == "" {
+				options.Set("sslkey", keyPath)
+			}
 		}
 	}
 	return nil
@@ -267,6 +294,9 @@ func (cfg *Config) InitializeNodeTLSConfigs(
 	if _, err := cfg.GetServerTLSConfig(); err != nil {
 		return nil, err
 	}
+	if _, err := cfg.GetUIServerTLSConfig(); err != nil {
+		return nil, err
+	}
 	if _, err := cfg.GetClientTLSConfig(); err != nil {
 		return nil, err
 	}
@@ -282,6 +312,7 @@ func (cfg *Config) InitializeNodeTLSConfigs(
 // GetClientTLSConfig returns the client TLS config, initializing it if needed.
 // If Insecure is true, return a nil config, otherwise ask the certificate
 // manager for a TLS config using certs for the config.User.
+// This TLSConfig might **NOT** be suitable to talk to the Admin UI, use GetUIClientTLSConfig instead.
 func (cfg *Config) GetClientTLSConfig() (*tls.Config, error) {
 	// Early out.
 	if cfg.Insecure {
@@ -290,12 +321,34 @@ func (cfg *Config) GetClientTLSConfig() (*tls.Config, error) {
 
 	cm, err := cfg.GetCertificateManager()
 	if err != nil {
-		return nil, didYouMeanInsecureError(err)
+		return nil, wrapError(err)
 	}
 
 	tlsCfg, err := cm.GetClientTLSConfig(cfg.User)
 	if err != nil {
-		return nil, didYouMeanInsecureError(err)
+		return nil, wrapError(err)
+	}
+	return tlsCfg, nil
+}
+
+// GetUIClientTLSConfig returns the client TLS config for Admin UI clients, initializing it if needed.
+// If Insecure is true, return a nil config, otherwise ask the certificate
+// manager for a TLS config configured to talk to the Admin UI.
+// This TLSConfig is **NOT** suitable to talk to the GRPC or SQL servers, use GetClientTLSConfig instead.
+func (cfg *Config) GetUIClientTLSConfig() (*tls.Config, error) {
+	// Early out.
+	if cfg.Insecure {
+		return nil, nil
+	}
+
+	cm, err := cfg.GetCertificateManager()
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	tlsCfg, err := cm.GetUIClientTLSConfig()
+	if err != nil {
+		return nil, wrapError(err)
 	}
 	return tlsCfg, nil
 }
@@ -311,12 +364,33 @@ func (cfg *Config) GetServerTLSConfig() (*tls.Config, error) {
 
 	cm, err := cfg.GetCertificateManager()
 	if err != nil {
-		return nil, didYouMeanInsecureError(err)
+		return nil, wrapError(err)
 	}
 
 	tlsCfg, err := cm.GetServerTLSConfig()
 	if err != nil {
-		return nil, didYouMeanInsecureError(err)
+		return nil, wrapError(err)
+	}
+	return tlsCfg, nil
+}
+
+// GetUIServerTLSConfig returns the server TLS config for the Admin UI, initializing it if needed.
+// If Insecure is true, return a nil config, otherwise ask the certificate
+// manager for a server UI TLS config.
+func (cfg *Config) GetUIServerTLSConfig() (*tls.Config, error) {
+	// Early out.
+	if cfg.Insecure {
+		return nil, nil
+	}
+
+	cm, err := cfg.GetCertificateManager()
+	if err != nil {
+		return nil, wrapError(err)
+	}
+
+	tlsCfg, err := cm.GetUIServerTLSConfig()
+	if err != nil {
+		return nil, wrapError(err)
 	}
 	return tlsCfg, nil
 }
@@ -328,7 +402,7 @@ func (cfg *Config) GetHTTPClient() (http.Client, error) {
 		cfg.httpClient.httpClient.Timeout = 10 * time.Second
 		var transport http.Transport
 		cfg.httpClient.httpClient.Transport = &transport
-		transport.TLSClientConfig, cfg.httpClient.err = cfg.GetClientTLSConfig()
+		transport.TLSClientConfig, cfg.httpClient.err = cfg.GetUIClientTLSConfig()
 	})
 
 	return cfg.httpClient.httpClient, cfg.httpClient.err
@@ -399,6 +473,16 @@ func (cfg RaftConfig) NodeLivenessDurations() (livenessActive, livenessRenewal t
 	livenessActive = cfg.RangeLeaseActiveDuration()
 	livenessRenewal = time.Duration(float64(livenessActive) * livenessRenewalFraction)
 	return
+}
+
+// SentinelGossipTTL is time-to-live for the gossip sentinel. The sentinel
+// informs a node whether or not it's connected to the primary gossip network
+// and not just a partition. As such it must expire fairly quickly and be
+// continually re-gossiped as a connected gossip network is necessary to
+// propagate liveness. The replica which is the lease holder of the first range
+// gossips it.
+func (cfg RaftConfig) SentinelGossipTTL() time.Duration {
+	return cfg.RangeLeaseActiveDuration() / 2
 }
 
 // DefaultRetryOptions should be used for retrying most
@@ -472,7 +556,7 @@ func TempStorageConfigFromEnv(
 			mon.DiskResource,
 			nil,             /* curCount */
 			nil,             /* maxHist */
-			64*1024*1024,    /* increment */
+			1024*1024,       /* increment */
 			maxSizeBytes/10, /* noteworthy */
 			st,
 		)

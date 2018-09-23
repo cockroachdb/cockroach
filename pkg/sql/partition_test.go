@@ -77,7 +77,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 ) PARTITION BY RANGE (k) (
 	PARTITION p1 VALUES FROM (1) TO (2)
 )`
-	if a := sqlDB.QueryStr(t, "SHOW CREATE TABLE t.kv")[0][1]; exp != a {
+	if a := sqlDB.QueryStr(t, "SHOW CREATE t.kv")[0][1]; exp != a {
 		t.Fatalf("expected:\n%s\n\ngot:\n%s\n\n", exp, a)
 	}
 
@@ -120,8 +120,8 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	// remove CCL features from a table using an OSS binary.
 	expectCCLRequired(`ALTER TABLE t.kv PARTITION BY NOTHING`)
 	expectCCLRequired(`ALTER INDEX t.kv@foo PARTITION BY NOTHING`)
-	expectCCLRequired(`ALTER PARTITION p1 OF TABLE t.kv EXPERIMENTAL CONFIGURE ZONE ''`)
-	expectCCLRequired(`ALTER PARTITION p2 OF TABLE t.kv EXPERIMENTAL CONFIGURE ZONE ''`)
+	expectCCLRequired(`ALTER PARTITION p1 OF TABLE t.kv CONFIGURE ZONE USING DEFAULT`)
+	expectCCLRequired(`ALTER PARTITION p2 OF TABLE t.kv CONFIGURE ZONE USING DEFAULT`)
 
 	// Odd exception: removing partitioning is, in fact, possible when there are
 	// no zone configs for the table's indices or partitions.
@@ -137,7 +137,7 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	FAMILY fam_0_k (k),
 	FAMILY fam_1_v (v)
 )`
-	if a := sqlDB.QueryStr(t, "SHOW CREATE TABLE t.kv")[0][1]; exp != a {
+	if a := sqlDB.QueryStr(t, "SHOW CREATE t.kv")[0][1]; exp != a {
 		t.Fatalf("expected:\n%s\n\ngot:\n%s\n\n", exp, a)
 	}
 }

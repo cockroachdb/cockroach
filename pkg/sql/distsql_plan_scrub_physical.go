@@ -28,36 +28,36 @@ import (
 // TableReaders will only emit errors encountered during scanning
 // instead of row data. The plan is finalized.
 func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
-	planCtx *planningCtx,
+	planCtx *PlanningCtx,
 	n *scanNode,
 	desc sqlbase.TableDescriptor,
 	indexDesc sqlbase.IndexDescriptor,
 	spans []roachpb.Span,
 	readAsOf hlc.Timestamp,
-) (physicalPlan, error) {
+) (PhysicalPlan, error) {
 	spec, _, err := initTableReaderSpec(n, planCtx.EvalContext(), nil /* indexVarMap */)
 	if err != nil {
-		return physicalPlan{}, err
+		return PhysicalPlan{}, err
 	}
 
-	spanPartitions, err := dsp.partitionSpans(planCtx, n.spans)
+	spanPartitions, err := dsp.PartitionSpans(planCtx, n.spans)
 	if err != nil {
-		return physicalPlan{}, err
+		return PhysicalPlan{}, err
 	}
 
-	var p physicalPlan
+	var p PhysicalPlan
 	stageID := p.NewStageID()
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		tr := &distsqlrun.TableReaderSpec{}
 		*tr = spec
-		tr.Spans = make([]distsqlrun.TableReaderSpan, len(sp.spans))
-		for j := range sp.spans {
-			tr.Spans[j].Span = sp.spans[j]
+		tr.Spans = make([]distsqlrun.TableReaderSpan, len(sp.Spans))
+		for j := range sp.Spans {
+			tr.Spans[j].Span = sp.Spans[j]
 		}
 
 		proc := distsqlplan.Processor{
-			Node: sp.node,
+			Node: sp.Node,
 			Spec: distsqlrun.ProcessorSpec{
 				Core:    distsqlrun.ProcessorCoreUnion{TableReader: tr},
 				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
@@ -71,7 +71,7 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 
 	// Set the plan's result types to be ScrubTypes.
 	p.ResultTypes = distsqlrun.ScrubTypes
-	p.planToStreamColMap = identityMapInPlace(make([]int, len(distsqlrun.ScrubTypes)))
+	p.PlanToStreamColMap = identityMapInPlace(make([]int, len(distsqlrun.ScrubTypes)))
 
 	dsp.FinalizePlan(planCtx, &p)
 	return p, nil

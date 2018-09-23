@@ -33,7 +33,7 @@ func TestOrderByRandom(t *testing.T) {
 	seenOne := false
 	seenTwo := false
 	for {
-		row := sqlDB.QueryRow("SELECT * FROM (VALUES (1),(2)) ORDER BY RANDOM() LIMIT 1")
+		row := sqlDB.QueryRow("SELECT * FROM (VALUES (1),(2)) ORDER BY random() LIMIT 1")
 		var val int
 		if err := row.Scan(&val); err != nil {
 			t.Fatal(err)

@@ -128,7 +128,7 @@ CREATE TABLE system.jobs (
 	// Design outlined in /docs/RFCS/web_session_login.rfc
 	WebSessionsTableSchema = `
 CREATE TABLE system.web_sessions (
-	id             SERIAL     PRIMARY KEY,
+	id             INT        NOT NULL DEFAULT unique_rowid() PRIMARY KEY,
 	"hashedSecret" BYTES      NOT NULL,
 	username       STRING     NOT NULL,
 	"createdAt"    TIMESTAMP  NOT NULL DEFAULT now(),
@@ -136,9 +136,9 @@ CREATE TABLE system.web_sessions (
 	"revokedAt"    TIMESTAMP,
 	"lastUsedAt"   TIMESTAMP  NOT NULL DEFAULT now(),
 	"auditInfo"    STRING,
-	INDEX("expiresAt"),
-	INDEX("createdAt"),
-	FAMILY(id, "hashedSecret", username, "createdAt", "expiresAt", "revokedAt", "lastUsedAt", "auditInfo")
+	INDEX ("expiresAt"),
+	INDEX ("createdAt"),
+	FAMILY (id, "hashedSecret", username, "createdAt", "expiresAt", "revokedAt", "lastUsedAt", "auditInfo")
 );`
 
 	// table_statistics is used to track statistics collected about individual columns
@@ -533,7 +533,7 @@ var (
 		NextMutationID: 1,
 	}
 
-	nowString = "now()"
+	nowString = "now():::TIMESTAMP"
 
 	// JobsTable is the descriptor for the jobs table.
 	JobsTable = TableDescriptor{
@@ -795,9 +795,9 @@ var (
 )
 
 // Create a kv pair for the zone config for the given key and config value.
-func createZoneConfigKV(keyID int, zoneConfig config.ZoneConfig) roachpb.KeyValue {
+func createZoneConfigKV(keyID int, zoneConfig *config.ZoneConfig) roachpb.KeyValue {
 	value := roachpb.Value{}
-	if err := value.SetProto(&zoneConfig); err != nil {
+	if err := value.SetProto(zoneConfig); err != nil {
 		panic(fmt.Sprintf("could not marshal ZoneConfig for ID: %d: %s", keyID, err))
 	}
 	return roachpb.KeyValue{
@@ -844,19 +844,26 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 
 	// Default zone config entry.
 	zoneConf := config.DefaultZoneConfig()
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.RootNamespaceID, zoneConf))
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.RootNamespaceID, &zoneConf))
+
+	systemZoneConf := config.DefaultSystemZoneConfig()
+	metaRangeZoneConf := config.DefaultSystemZoneConfig()
+	jobsZoneConf := config.DefaultSystemZoneConfig()
+	livenessZoneConf := config.DefaultSystemZoneConfig()
 
 	// .meta zone config entry with a shorter GC time.
-	zoneConf.GC.TTLSeconds = 60 * 60 // 1h
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.MetaRangesID, zoneConf))
-
-	// Liveness zone config entry with a shorter GC time.
-	zoneConf.GC.TTLSeconds = 10 * 60 // 10m
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.LivenessRangesID, zoneConf))
+	metaRangeZoneConf.GC.TTLSeconds = 60 * 60 // 1h
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.MetaRangesID, &metaRangeZoneConf))
 
 	// Jobs zone config entry with a shorter GC time.
-	zoneConf.GC.TTLSeconds = 10 * 60 // 10m
-	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.JobsTableID, zoneConf))
+	jobsZoneConf.GC.TTLSeconds = 10 * 60 // 10m
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.JobsTableID, &jobsZoneConf))
+
+	// Liveness zone config entry with a shorter GC time.
+	livenessZoneConf.GC.TTLSeconds = 10 * 60 // 10m
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.LivenessRangesID, &livenessZoneConf))
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.SystemRangesID, &systemZoneConf))
+	target.otherKV = append(target.otherKV, createZoneConfigKV(keys.SystemDatabaseID, &systemZoneConf))
 }
 
 // IsSystemConfigID returns whether this ID is for a system config object.

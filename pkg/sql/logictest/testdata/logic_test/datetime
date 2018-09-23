@@ -19,21 +19,21 @@ INSERT INTO t VALUES
   ('2015-08-29 23:10:09.98763', '2015-08-29', '234h45m2s234ms')
 
 query TTT
-SELECT * FROM t WHERE a = '2015-08-25 05:45:45.53453+01:00'::timestamp
+SELECT * FROM t WHERE a = '2015-08-25 04:45:45.53453+01:00'::timestamp
 ----
 2015-08-25 04:45:45.53453 +0000 +0000   2015-08-25 00:00:00 +0000 +0000   2h45m2s234ms
 
 # insert duplicate value with different time zone offset
 statement error duplicate key value \(a\)=\('2015-08-30 03:34:45\.34567\+00:00'\) violates unique constraint "primary"
 INSERT INTO t VALUES
-  ('2015-08-29 20:34:45.34567-07:00', '2015-08-31', '35h2s')
+  ('2015-08-30 03:34:45.34567-07:00', '2015-08-31', '35h2s')
 
 # Check that time/date/interval representations outside of the index are okay.
 statement ok
 CREATE TABLE u (
   a BIGINT PRIMARY KEY,
   b TIMESTAMP,
-  c TIMESTAMP WITH TIME ZONE,
+  c TIMESTAMPTZ,
   d DATE,
   e INTERVAL
 )
@@ -60,7 +60,7 @@ query ITTTT
 SELECT * FROM u ORDER BY a
 ----
 123  2015-08-30 03:34:45.34567 +0000 +0000  2015-08-29 22:34:45.34567 -0500 -0500  2015-08-30 00:00:00 +0000 +0000  34h2s
-234  2015-08-25 06:45:45.53453 +0000 +0000  2015-08-25 01:45:45.53453 -0500 -0500  2015-08-25 00:00:00 +0000 +0000  2h45m2s234ms
+234  2015-08-25 04:45:45.53453 +0000 +0000  2015-08-25 01:45:45.53453 -0500 -0500  2015-08-25 00:00:00 +0000 +0000  2h45m2s234ms
 345  2015-08-29 23:10:09.98763 +0000 +0000  2015-08-29 23:10:09.98763 -0500 -0500  2015-08-29 00:00:00 +0000 +0000  234h45m2s234ms
 456  2015-08-29 23:10:09.98763 +0000 +0000  2015-08-29 18:10:09.98763 -0500 -0500  2015-08-29 00:00:00 +0000 +0000  234h45m2s234ms
 
@@ -71,7 +71,7 @@ query ITTTT
 SELECT * FROM u ORDER BY a
 ----
 123  2015-08-30 03:34:45.34567 +0000 +0000  2015-08-30 03:34:45.34567 +0000 +0000  2015-08-30 00:00:00 +0000 +0000  34h2s
-234  2015-08-25 06:45:45.53453 +0000 +0000  2015-08-25 06:45:45.53453 +0000 +0000  2015-08-25 00:00:00 +0000 +0000  2h45m2s234ms
+234  2015-08-25 04:45:45.53453 +0000 +0000  2015-08-25 06:45:45.53453 +0000 +0000  2015-08-25 00:00:00 +0000 +0000  2h45m2s234ms
 345  2015-08-29 23:10:09.98763 +0000 +0000  2015-08-30 04:10:09.98763 +0000 +0000  2015-08-29 00:00:00 +0000 +0000  234h45m2s234ms
 456  2015-08-29 23:10:09.98763 +0000 +0000  2015-08-29 23:10:09.98763 +0000 +0000  2015-08-29 00:00:00 +0000 +0000  234h45m2s234ms
 
@@ -79,14 +79,14 @@ statement ok
 SET TIME ZONE -5
 
 query TTTT
-SELECT MAX(b), MAX(c), MAX(d), MAX(e) FROM u
+SELECT max(b), max(c), max(d), max(e) FROM u
 ----
 2015-08-30 03:34:45.34567 +0000 +0000  2015-08-29 23:10:09.98763 -0500 -0500  2015-08-30 00:00:00 +0000 +0000  234h45m2s234ms
 
 query TTTT
-SELECT MIN(b), MIN(c), MIN(d), MIN(e) FROM u
+SELECT min(b), min(c), min(d), min(e) FROM u
 ----
-2015-08-25 06:45:45.53453 +0000 +0000  2015-08-25 01:45:45.53453 -0500 -0500  2015-08-25 00:00:00 +0000 +0000  2h45m2s234ms
+2015-08-25 04:45:45.53453 +0000 +0000  2015-08-25 01:45:45.53453 -0500 -0500  2015-08-25 00:00:00 +0000 +0000  2h45m2s234ms
 
 query BB
 SELECT now() < now() + '1m'::interval, now() <= now() + '1m'::interval
@@ -146,16 +146,6 @@ SELECT current_date - current_date() = 0
 true
 
 query B
-SELECT current_time:::timetz::time - current_timestamp:::timestamp::time > interval '-2us';
-----
-true
-
-query B
-SELECT current_time():::timetz::time - current_timestamp:::timestamp::time > interval '-2us';
-----
-true
-
-query B
 SELECT now() - current_timestamp() = interval '0s'
 ----
 true
@@ -186,7 +176,7 @@ BEGIN TRANSACTION
 statement ok
 CREATE TABLE kv (
   k CHAR PRIMARY KEY,
-  v TIMESTAMP WITH TIME ZONE
+  v TIMESTAMPTZ
 )
 
 statement ok
@@ -233,7 +223,7 @@ INSERT INTO kv (k,v) VALUES ('i', transaction_timestamp());
 COMMIT
 
 query I
-SELECT COUNT(DISTINCT (v)) FROM kv
+SELECT count(DISTINCT (v)) FROM kv
 ----
 4
 
@@ -259,7 +249,7 @@ INSERT INTO kv (k,v) VALUES ('c', transaction_timestamp());
 COMMIT
 
 query I
-SELECT COUNT(DISTINCT (v)) FROM kv
+SELECT count(DISTINCT (v)) FROM kv
 ----
 2
 
@@ -291,7 +281,7 @@ INSERT INTO kv (k,v) VALUES (3, cluster_logical_timestamp());
 COMMIT
 
 query I
-SELECT COUNT(DISTINCT (v)) FROM kv
+SELECT count(DISTINCT (v)) FROM kv
 ----
 2
 
@@ -346,9 +336,9 @@ statement ok
 CREATE TABLE ex (
   k BIGINT PRIMARY KEY,
   element STRING,
-  input TIMESTAMP WITH TIME ZONE,
+  input TIMESTAMPTZ,
   extract_result INT,
-  date_trunc_result TIMESTAMP WITH TIME ZONE
+  date_trunc_result TIMESTAMPTZ
 )
 
 statement ok
@@ -917,17 +907,17 @@ statement ok
 CREATE TABLE tz (
   a INT PRIMARY KEY,
   b TIMESTAMP,
-  c TIMESTAMP WITH TIME ZONE,
+  c TIMESTAMPTZ,
   d TIMESTAMPTZ
 )
 
-query TTBTT
+query TTBTTTB
 SHOW COLUMNS FROM tz
 ----
-a     INT                       false     NULL {"primary"}
-b     TIMESTAMP                 true      NULL {}
-c     TIMESTAMP WITH TIME ZONE  true      NULL {}
-d     TIMESTAMP WITH TIME ZONE  true      NULL {}
+a  INT          false  NULL  ·  {"primary"}  false
+b  TIMESTAMP    true   NULL  ·  {}           false
+c  TIMESTAMPTZ  true   NULL  ·  {}           false
+d  TIMESTAMPTZ  true   NULL  ·  {}           false
 
 statement ok
 INSERT INTO tz VALUES
@@ -941,7 +931,7 @@ query ITT
 SELECT a, b, c FROM tz ORDER BY a
 ----
 1   2015-08-30 03:34:45 +0000 +0000     2015-08-30 01:34:45 -0200 -0200
-2   2015-08-30 02:34:45 +0000 +0000     2015-08-30 00:34:45 -0200 -0200
+2   2015-08-30 03:34:45 +0000 +0000     2015-08-30 00:34:45 -0200 -0200
 
 query TTTT
 SELECT b + interval '1m', interval '1m' + b, c + interval '1m', interval '1m' + c FROM tz WHERE a = 1
@@ -964,11 +954,15 @@ SELECT a FROM tz WHERE c < d
 ----
 2
 
+
 query I rowsort
 SELECT a FROM tz WHERE b = c::timestamp
 ----
+
+query I rowsort
+SELECT a FROM tz WHERE c = d::timestamp
+----
 1
-2
 
 # reset for what follows.
 statement ok

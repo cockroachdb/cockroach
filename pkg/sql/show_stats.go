@@ -27,9 +27,9 @@ import (
 )
 
 var showTableStatsColumns = sqlbase.ResultColumns{
-	{Name: "name", Typ: types.String},
-	{Name: "columns", Typ: types.TArray{Typ: types.String}},
-	{Name: "created_at", Typ: types.Timestamp},
+	{Name: "table_name", Typ: types.String},
+	{Name: "column_names", Typ: types.TArray{Typ: types.String}},
+	{Name: "created", Typ: types.Timestamp},
 	{Name: "row_count", Typ: types.Int},
 	{Name: "distinct_count", Typ: types.Int},
 	{Name: "null_count", Typ: types.Int},
@@ -48,14 +48,9 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 		return nil, err
 	}
 
-	var desc *TableDescriptor
 	// We avoid the cache so that we can observe the stats without
 	// taking a lease, like other SHOW commands.
-	//
-	// TODO(vivek): check if the cache can be used.
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		desc, err = ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
-	})
+	desc, err := p.ResolveUncachedTableDescriptor(ctx, tn, true /*required*/, requireTableDesc)
 	if err != nil {
 		return nil, err
 	}

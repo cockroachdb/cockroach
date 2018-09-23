@@ -22,6 +22,8 @@ class CTRCipherStreamCreator final : public rocksdb_utils::CipherStreamCreator {
       : key_manager_(key_mgr), env_type_(env_type) {}
   virtual ~CTRCipherStreamCreator();
 
+  // Initialize 'settings' based on the current encryption algorithm and key
+  // and assign a new cipher stream to 'result'.
   virtual rocksdb::Status InitSettingsAndCreateCipherStream(
       std::string* settings,
       std::unique_ptr<rocksdb_utils::BlockAccessCipherStream>* result) override;
@@ -44,7 +46,7 @@ class CTRCipherStream final : public rocksdb_utils::BlockAccessCipherStream {
   // - a block cipher (takes ownership)
   // - nonce of size 'cipher.BlockSize - sizeof(counter)' (eg: 16-4 = 12 bytes for AES)
   // - counter
-  CTRCipherStream(std::unique_ptr<enginepbccl::SecretKey> key, const std::string& nonce,
+  CTRCipherStream(std::shared_ptr<enginepbccl::SecretKey> key, const std::string& nonce,
                   uint32_t counter);
   virtual ~CTRCipherStream();
 
@@ -65,7 +67,7 @@ class CTRCipherStream final : public rocksdb_utils::BlockAccessCipherStream {
                                        char* data, char* scratch) const override;
 
  private:
-  const std::unique_ptr<enginepbccl::SecretKey> key_;
+  const std::shared_ptr<enginepbccl::SecretKey> key_;
   const std::string nonce_;
   const uint32_t counter_;
 };

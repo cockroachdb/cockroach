@@ -15,6 +15,7 @@
 package ts
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -141,6 +142,17 @@ func TestGetMaxTimespan(t *testing.T) {
 				InterpolationLimitNanos: 1,
 			},
 			10,
+			"",
+		},
+		// Overflow.
+		{
+			Resolution10s,
+			QueryMemoryOptions{
+				BudgetBytes:             math.MaxInt64,
+				EstimatedSources:        1,
+				InterpolationLimitNanos: math.MaxInt64,
+			},
+			math.MaxInt64,
 			"",
 		},
 	} {

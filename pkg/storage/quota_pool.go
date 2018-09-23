@@ -29,8 +29,10 @@ package storage
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -84,6 +86,12 @@ func newQuotaPool(q int64) *quotaPool {
 // Safe for concurrent use.
 func (qp *quotaPool) add(v int64) {
 	qp.Lock()
+	qp.addLocked(v)
+	qp.Unlock()
+}
+
+// addLocked is like add, but it requires that qp.Lock is held.
+func (qp *quotaPool) addLocked(v int64) {
 	select {
 	case q := <-qp.quota:
 		v += q
@@ -93,7 +101,15 @@ func (qp *quotaPool) add(v int64) {
 		v = qp.max
 	}
 	qp.quota <- v
-	qp.Unlock()
+}
+
+func logSlowQuota(ctx context.Context, v int64, start time.Time) func() {
+	log.Warningf(ctx, "have been waiting %s attempting to acquire %s of proposal quota",
+		timeutil.Since(start), humanizeutil.IBytes(v))
+	return func() {
+		log.Infof(ctx, "acquired %s of proposal quota after %s",
+			humanizeutil.IBytes(v), timeutil.Since(start))
+	}
 }
 
 // acquire acquires the specified amount of quota from the pool. On success,
@@ -124,10 +140,9 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 	slowTimer.Reset(base.SlowRequestThreshold)
 	for {
 		select {
-		case now := <-slowTimer.C:
+		case <-slowTimer.C:
 			slowTimer.Read = true
-			log.Warningf(ctx, "have been waiting %s attempting to acquire quota",
-				now.Sub(start))
+			defer logSlowQuota(ctx, v, start)()
 			continue
 		case <-ctx.Done():
 			qp.Lock()
@@ -168,19 +183,16 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 	// next in line (if any).
 
 	var acquired int64
-	slowTimer.Reset(base.SlowRequestThreshold)
 	for acquired < v {
 		select {
-		case now := <-slowTimer.C:
+		case <-slowTimer.C:
 			slowTimer.Read = true
-			log.Warningf(ctx, "have been waiting %s attempting to acquire quota",
-				now.Sub(start))
+			defer logSlowQuota(ctx, v, start)()
 		case <-ctx.Done():
-			if acquired > 0 {
-				qp.add(acquired)
-			}
-
 			qp.Lock()
+			if acquired > 0 {
+				qp.addLocked(acquired)
+			}
 			qp.notifyNextLocked()
 			qp.Unlock()
 			return ctx.Err()
@@ -192,11 +204,12 @@ func (qp *quotaPool) acquire(ctx context.Context, v int64) error {
 			acquired += q
 		}
 	}
-	if acquired > v {
-		qp.add(acquired - v)
-	}
+	extra := acquired - v
 
 	qp.Lock()
+	if extra > 0 {
+		qp.addLocked(extra)
+	}
 	qp.notifyNextLocked()
 	qp.Unlock()
 	return nil

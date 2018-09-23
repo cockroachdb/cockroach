@@ -21,7 +21,7 @@ import { MilliToNano } from "src/util/convert";
 function queryFromProps(
   metricProps: MetricProps,
   graphProps: MetricsDataComponentProps,
-): protos.cockroach.ts.tspb.Query$Properties {
+): protos.cockroach.ts.tspb.IQuery {
     let derivative = protos.cockroach.ts.tspb.TimeSeriesQueryDerivative.NONE;
     let sourceAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.SUM;
     let downsampler = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator.AVG;

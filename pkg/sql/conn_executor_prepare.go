@@ -164,12 +164,19 @@ func (ex *connExecutor) prepare(
 	prepared.Statement = stmt.AST
 	prepared.AnonymizedStr = anonymizeStmt(stmt)
 
+	// Point to the prepared state, which can be further populated during query
+	// preparation.
+	stmt.Prepared = prepared
+
 	if err := placeholderHints.ProcessPlaceholderAnnotations(stmt.AST); err != nil {
 		return nil, err
 	}
 	// Preparing needs a transaction because it needs to retrieve db/table
 	// descriptors for type checking.
-	txn := client.NewTxn(ex.server.cfg.DB, ex.server.cfg.NodeID.Get(), client.RootTxn)
+	// TODO(andrei): Needing a transaction for preparing seems non-sensical, as
+	// the prepared statement outlives the txn. I hope that it's not used for
+	// anything other than getting a timestamp.
+	txn := client.NewTxn(ctx, ex.server.cfg.DB, ex.server.cfg.NodeID.Get(), client.RootTxn)
 
 	// Create a plan for the statement to figure out the typing, then close the
 	// plan.
@@ -185,12 +192,12 @@ func (ex *connExecutor) prepare(
 		p.extendedEvalCtx.ActiveMemAcc = &constantMemAcc
 		defer constantMemAcc.Close(ctx)
 
-		protoTS, err := isAsOf(stmt.AST, p.EvalContext(), ex.server.cfg.Clock.Now() /* max */)
+		protoTS, err := p.isAsOf(stmt.AST, ex.server.cfg.Clock.Now() /* max */)
 		if err != nil {
 			return err
 		}
 		if protoTS != nil {
-			p.asOfSystemTime = true
+			p.semaCtx.AsOfTimestamp = protoTS
 			// We can't use cached descriptors anywhere in this query, because
 			// we want the descriptors at the timestamp given, not the latest
 			// known to the cache.
@@ -198,9 +205,26 @@ func (ex *connExecutor) prepare(
 			txn.SetFixedTimestamp(ctx, *protoTS)
 		}
 
-		if err := p.prepare(ctx, stmt.AST); err != nil {
+		// PREPARE has a limited subset of statements it can be run with. Postgres
+		// only allows SELECT, INSERT, UPDATE, DELETE and VALUES statements to be
+		// prepared.
+		// See: https://www.postgresql.org/docs/current/static/sql-prepare.html
+		// However, we allow a large number of additional statements.
+		// As of right now, the optimizer only works on SELECT statements and will
+		// fallback for all others, so this should be safe for the foreseeable
+		// future.
+		if optimizerPlanned, err := p.optionallyUseOptimizer(ctx, ex.sessionData, stmt); err != nil {
 			return err
+		} else if !optimizerPlanned {
+			isCorrelated := p.curPlan.isCorrelated
+			log.VEventf(ctx, 1, "query is correlated: %v", isCorrelated)
+			// Fallback if the optimizer was not enabled or used.
+			if err := p.prepare(ctx, stmt.AST); err != nil {
+				enhanceErrWithCorrelation(err, isCorrelated)
+				return err
+			}
 		}
+
 		if p.curPlan.plan == nil {
 			// The statement cannot be prepared. Nothing to do.
 			return nil
@@ -216,19 +240,21 @@ func (ex *connExecutor) prepare(
 		prepared.Types = p.semaCtx.Placeholders.Types
 		return nil
 	}(); err != nil {
+		txn.CleanupOnError(ctx, err)
+		return nil, err
+	}
+	if err := txn.CommitOrCleanup(ctx); err != nil {
 		return nil, err
 	}
 
-	// Account for the memory used by this prepared statement: for now we are just
-	// counting the size of the query string (we'll account for the statement name
-	// at a higher layer). When we start storing the prepared query plan during
-	// prepare, this should be tallied up to the monitor as well.
-	if err := prepared.memAcc.Grow(ctx,
-		int64(len(prepared.Str)+int(unsafe.Sizeof(*prepared))),
-	); err != nil {
+	// Account for the memory used by this prepared statement:
+	//   1. Size of the query string and prepared struct.
+	//   2. Size of the prepared memo, if using the cost-based optimizer.
+	size := int64(len(prepared.Str) + int(unsafe.Sizeof(*prepared)))
+	size += prepared.Memo.MemoryEstimate()
+	if err := prepared.memAcc.Grow(ctx, size); err != nil {
 		return nil, err
 	}
-
 	return prepared, nil
 }
 

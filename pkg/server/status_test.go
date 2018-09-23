@@ -19,7 +19,9 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -42,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -182,6 +185,52 @@ func startServer(t *testing.T) *TestServer {
 	}
 
 	return ts
+}
+
+// TestStatusLocalFileRetrieval tests the files/local endpoint.
+// See debug/heap roachtest for testing heap profile file collection.
+func TestStatusLocalFileRetrieval(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ts := startServer(t)
+	defer ts.Stopper().Stop(context.TODO())
+
+	rootConfig := testutils.NewTestBaseContext(security.RootUser)
+	rpcContext := rpc.NewContext(
+		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, rootConfig, ts.Clock(), ts.Stopper(),
+		&ts.ClusterSettings().Version)
+	url := ts.ServingAddr()
+	conn, err := rpcContext.GRPCDial(url).Connect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := serverpb.NewStatusClient(conn)
+
+	request := serverpb.GetFilesRequest{
+		NodeId: "local", ListOnly: true, Type: serverpb.FileType_HEAP, Patterns: []string{"*"}}
+	response, err := client.GetFiles(context.Background(), &request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if a, e := len(response.Files), 0; a != e {
+		t.Errorf("expected %d files(s), found %d", e, a)
+	}
+
+	// Testing path separators in pattern.
+	request = serverpb.GetFilesRequest{NodeId: "local", ListOnly: true,
+		Type: serverpb.FileType_HEAP, Patterns: []string{"pattern/with/separators"}}
+	_, err = client.GetFiles(context.Background(), &request)
+	if err == nil {
+		t.Errorf("GetFiles: path separators allowed in pattern")
+	}
+
+	// Testing invalid filetypes.
+	request = serverpb.GetFilesRequest{NodeId: "local", ListOnly: true,
+		Type: -1, Patterns: []string{"*"}}
+	_, err = client.GetFiles(context.Background(), &request)
+	if err == nil {
+		t.Errorf("GetFiles: invalid file type allowed")
+	}
 }
 
 // TestStatusLocalLogs checks to ensure that local/logfiles,
@@ -412,6 +461,35 @@ func TestMetricsEndpoint(t *testing.T) {
 	}
 }
 
+// TestMetricsMetadata ensures that the server's recorder return metrics and
+// that each metric has a Name, Help, Unit, and DisplayUnit defined.
+func TestMetricsMetadata(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := startServer(t)
+	defer s.Stopper().Stop(context.TODO())
+
+	metricsMetadata := s.recorder.GetMetricsMetadata()
+
+	if len(metricsMetadata) < 200 {
+		t.Fatal("s.recorder.GetMetricsMetadata() failed sanity check; didn't return enough metrics.")
+	}
+
+	for _, v := range metricsMetadata {
+		if v.Name == "" {
+			t.Fatal("metric missing name.")
+		}
+		if v.Help == "" {
+			t.Fatalf("%s missing Help.", v.Name)
+		}
+		if v.Measurement == "" {
+			t.Fatalf("%s missing Measurement.", v.Name)
+		}
+		if v.Unit == 0 {
+			t.Fatalf("%s missing Unit.", v.Name)
+		}
+	}
+}
+
 func TestRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer storage.EnableLeaseHistory(100)()
@@ -623,8 +701,8 @@ func TestCertificatesResponse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// We expect two certificates: CA and node.
-	if a, e := len(response.Certificates), 2; a != e {
+	// We expect 4 certificates: CA, node, and client certs for root, testuser.
+	if a, e := len(response.Certificates), 4; a != e {
 		t.Errorf("expected %d certificates, found %d", e, a)
 	}
 
@@ -847,5 +925,63 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 			strings.Contains(event.PrettyInfo.UpdatedDesc, "Min-System") {
 			t.Errorf("unexpected key value found in rangelog event info: %+v", event.PrettyInfo)
 		}
+	}
+}
+
+func TestStatusAPIStatements(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/27272")
+
+	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	firstServerProto := testCluster.Server(0)
+	thirdServerSQL := sqlutils.MakeSQLRunner(testCluster.ServerConn(2))
+
+	statements := []struct {
+		stmt          string
+		fingerprinted string
+	}{
+		{stmt: `CREATE DATABASE roachblog`},
+		{stmt: `SET database = roachblog`},
+		{stmt: `CREATE TABLE posts (id INT PRIMARY KEY, body TEXT)`},
+		{
+			stmt:          `INSERT INTO posts VALUES (1, 'foo')`,
+			fingerprinted: `INSERT INTO posts VALUES (_, _)`,
+		},
+		{stmt: `SELECT * FROM posts`},
+	}
+
+	for _, stmt := range statements {
+		thirdServerSQL.Exec(t, stmt.stmt)
+	}
+
+	// Hit query endpoint.
+	var resp serverpb.StatementsResponse
+	if err := getStatusJSONProto(firstServerProto, "statements", &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	// See if the statements returned are what we executed.
+	var expectedStatements []string
+	for _, stmt := range statements {
+		var expectedStmt = stmt.stmt
+		if stmt.fingerprinted != "" {
+			expectedStmt = stmt.fingerprinted
+		}
+		expectedStatements = append(expectedStatements, expectedStmt)
+	}
+
+	var statementsInResponse []string
+	for _, respStatement := range resp.Statements {
+		statementsInResponse = append(statementsInResponse, respStatement.Key.KeyData.Query)
+	}
+
+	sort.Strings(expectedStatements)
+	sort.Strings(statementsInResponse)
+
+	if !reflect.DeepEqual(expectedStatements, statementsInResponse) {
+		t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v", expectedStatements, statementsInResponse)
 	}
 }

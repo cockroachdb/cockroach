@@ -25,13 +25,17 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -69,7 +73,7 @@ func TestShowCreateTable(t *testing.T) {
 	i INT,
 	s STRING NULL,
 	v FLOAT NOT NULL,
-	t TIMESTAMP DEFAULT now(),
+	t TIMESTAMP DEFAULT now():::TIMESTAMP,
 	CHECK (i > 0),
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s)
@@ -77,8 +81,8 @@ func TestShowCreateTable(t *testing.T) {
 			expect: `CREATE TABLE %s (
 	i INT NULL,
 	s STRING NULL,
-	v FLOAT NOT NULL,
-	t TIMESTAMP NULL DEFAULT now(),
+	v FLOAT8 NOT NULL,
+	t TIMESTAMP NULL DEFAULT now():::TIMESTAMP,
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s),
 	CONSTRAINT check_i CHECK (i > 0)
@@ -89,15 +93,15 @@ func TestShowCreateTable(t *testing.T) {
 	i INT CHECK (i > 0),
 	s STRING NULL,
 	v FLOAT NOT NULL,
-	t TIMESTAMP DEFAULT now(),
+	t TIMESTAMP DEFAULT now():::TIMESTAMP,
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s)
 )`,
 			expect: `CREATE TABLE %s (
 	i INT NULL,
 	s STRING NULL,
-	v FLOAT NOT NULL,
-	t TIMESTAMP NULL DEFAULT now(),
+	v FLOAT8 NOT NULL,
+	t TIMESTAMP NULL DEFAULT now():::TIMESTAMP,
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s),
 	CONSTRAINT check_i CHECK (i > 0)
@@ -139,7 +143,7 @@ func TestShowCreateTable(t *testing.T) {
 			`,
 			expect: `CREATE TABLE %s (
 	i INT NULL,
-	f FLOAT NULL,
+	f FLOAT8 NULL,
 	s STRING NULL,
 	d DATE NULL,
 	INDEX idx_if (f ASC, i ASC) STORING (s, d),
@@ -277,6 +281,9 @@ func TestShowCreateTable(t *testing.T) {
 
 func TestShowCreateView(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	if testing.Short() {
+		t.Skip("short #26969")
+	}
 
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -285,7 +292,7 @@ func TestShowCreateView(t *testing.T) {
 	if _, err := sqlDB.Exec(`
 		CREATE DATABASE d;
 		SET DATABASE = d;
-		CREATE TABLE t (i INT, s STRING NULL, v FLOAT NOT NULL, t TIMESTAMP DEFAULT NOW());
+		CREATE TABLE t (i INT, s STRING NULL, v FLOAT NOT NULL, t TIMESTAMP DEFAULT now());
 	`); err != nil {
 		t.Fatal(err)
 	}
@@ -499,7 +506,8 @@ func TestShowQueries(t *testing.T) {
 	execKnobs.StatementFilter = func(ctx context.Context, stmt string, err error) {
 		if stmt == selectStmt {
 			found = true
-			const showQuery = "SELECT node_id, (now() - start)::FLOAT, query FROM [SHOW CLUSTER QUERIES]"
+			const showQuery = "SELECT node_id, (now() - start)::FLOAT8, query FROM [SHOW CLUSTER QUERIES]"
+			const showVersionQuery = "SHOW CLUSTER SETTING VERSION"
 
 			rows, err := conn1.Query(showQuery)
 			if err != nil {
@@ -519,7 +527,7 @@ func TestShowQueries(t *testing.T) {
 					return
 				}
 				switch sql {
-				case showQuery, expectedSelectStmt:
+				case showQuery, showVersionQuery, expectedSelectStmt:
 				default:
 					failure = fmt.Errorf(
 						"unexpected query in SHOW QUERIES: %+q, expected: %+q",
@@ -565,6 +573,38 @@ func TestShowQueries(t *testing.T) {
 	if !found {
 		t.Fatalf("knob did not activate in test")
 	}
+
+	// Now check the behavior on error.
+	tc.StopServer(1)
+
+	rows, err := conn1.Query(`SELECT node_id, query FROM [SHOW CLUSTER QUERIES]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	count := 0
+	errcount := 0
+	for rows.Next() {
+		count++
+
+		var nodeID int
+		var sql string
+		if err := rows.Scan(&nodeID, &sql); err != nil {
+			t.Fatal(err)
+		}
+		t.Log(sql)
+		if strings.HasPrefix(sql, "-- failed") || strings.HasPrefix(sql, "-- error") {
+			errcount++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	if errcount != 1 {
+		t.Fatalf("expected 1 error row, got %d", errcount)
+	}
 }
 
 func TestShowSessions(t *testing.T) {
@@ -579,10 +619,10 @@ func TestShowSessions(t *testing.T) {
 	sqlutils.CreateTable(t, conn, "t", "num INT", 0, nil)
 
 	// We'll skip "internal" sessions, as those are unpredictable.
-	const showSessions = `
+	var showSessions = fmt.Sprintf(`
 	select node_id, (now() - session_start)::float from
-		[show cluster sessions] where application_name not like 'internal-%'
-	`
+		[show cluster sessions] where application_name not like '%s%%'
+	`, sql.InternalAppNamePrefix)
 
 	rows, err := conn.Query(showSessions)
 	if err != nil {
@@ -644,6 +684,38 @@ func TestShowSessions(t *testing.T) {
 		t.Fatalf("unexpected number of running sessions: %d, expected %d.\n%s",
 			count, expectedCount, report)
 	}
+
+	// Now check the behavior on error.
+	tc.StopServer(1)
+
+	rows, err = conn.Query(`SELECT node_id, active_queries FROM [SHOW CLUSTER SESSIONS]`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	count = 0
+	errcount := 0
+	for rows.Next() {
+		count++
+
+		var nodeID int
+		var sql string
+		if err := rows.Scan(&nodeID, &sql); err != nil {
+			t.Fatal(err)
+		}
+		t.Log(sql)
+		if strings.HasPrefix(sql, "-- failed") || strings.HasPrefix(sql, "-- error") {
+			errcount++
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	if errcount != 1 {
+		t.Fatalf("expected 1 error row, got %d", errcount)
+	}
 }
 
 // TestShowJobs manually inserts a row into system.jobs and checks that the
@@ -671,67 +743,245 @@ func TestShowJobs(t *testing.T) {
 		finished          time.Time
 		modified          time.Time
 		fractionCompleted float32
+		highWater         hlc.Timestamp
 		coordinatorID     roachpb.NodeID
+		details           jobspb.Details
 	}
 
-	in := row{
-		id:          42,
-		typ:         "SCHEMA CHANGE",
-		status:      "superfailed",
-		description: "failjob",
-		username:    "failure",
-		err:         "boom",
-		// lib/pq returns time.Time objects with goofy locations, which breaks
-		// reflect.DeepEqual without this time.FixedZone song and dance.
-		// See: https://github.com/lib/pq/issues/329
-		created:           timeutil.Unix(1, 0).In(time.FixedZone("", 0)),
-		started:           timeutil.Unix(2, 0).In(time.FixedZone("", 0)),
-		finished:          timeutil.Unix(3, 0).In(time.FixedZone("", 0)),
-		modified:          timeutil.Unix(4, 0).In(time.FixedZone("", 0)),
-		fractionCompleted: 0.42,
-		coordinatorID:     7,
-	}
-
-	// system.jobs is part proper SQL columns, part protobuf, so we can't use the
-	// row struct directly.
-	inPayload, err := protoutil.Marshal(&jobs.Payload{
-		Description:    in.description,
-		StartedMicros:  in.started.UnixNano() / time.Microsecond.Nanoseconds(),
-		FinishedMicros: in.finished.UnixNano() / time.Microsecond.Nanoseconds(),
-		Username:       in.username,
-		Lease: &jobs.Lease{
-			NodeID: 7,
+	for _, in := range []row{
+		{
+			id:          42,
+			typ:         "SCHEMA CHANGE",
+			status:      "superfailed",
+			description: "failjob",
+			username:    "failure",
+			err:         "boom",
+			// lib/pq returns time.Time objects with goofy locations, which breaks
+			// reflect.DeepEqual without this time.FixedZone song and dance.
+			// See: https://github.com/lib/pq/issues/329
+			created:           timeutil.Unix(1, 0).In(time.FixedZone("", 0)),
+			started:           timeutil.Unix(2, 0).In(time.FixedZone("", 0)),
+			finished:          timeutil.Unix(3, 0).In(time.FixedZone("", 0)),
+			modified:          timeutil.Unix(4, 0).In(time.FixedZone("", 0)),
+			fractionCompleted: 0.42,
+			coordinatorID:     7,
+			details:           jobspb.SchemaChangeDetails{},
 		},
-		Error:   in.err,
-		Details: jobs.WrapPayloadDetails(jobs.SchemaChangeDetails{}),
-	})
-	if err != nil {
+		{
+			id:          43,
+			typ:         "CHANGEFEED",
+			status:      "running",
+			description: "persistent feed",
+			username:    "persistent",
+			err:         "",
+			// lib/pq returns time.Time objects with goofy locations, which breaks
+			// reflect.DeepEqual without this time.FixedZone song and dance.
+			// See: https://github.com/lib/pq/issues/329
+			created:  timeutil.Unix(1, 0).In(time.FixedZone("", 0)),
+			started:  timeutil.Unix(2, 0).In(time.FixedZone("", 0)),
+			finished: timeutil.Unix(3, 0).In(time.FixedZone("", 0)),
+			modified: timeutil.Unix(4, 0).In(time.FixedZone("", 0)),
+			highWater: hlc.Timestamp{
+				WallTime: 1533143242000000,
+				Logical:  4,
+			},
+			coordinatorID: 7,
+			details:       jobspb.ChangefeedDetails{},
+		},
+	} {
+		t.Run("", func(t *testing.T) {
+			// system.jobs is part proper SQL columns, part protobuf, so we can't use the
+			// row struct directly.
+			inPayload, err := protoutil.Marshal(&jobspb.Payload{
+				Description:    in.description,
+				StartedMicros:  in.started.UnixNano() / time.Microsecond.Nanoseconds(),
+				FinishedMicros: in.finished.UnixNano() / time.Microsecond.Nanoseconds(),
+				Username:       in.username,
+				Lease: &jobspb.Lease{
+					NodeID: 7,
+				},
+				Error:   in.err,
+				Details: jobspb.WrapPayloadDetails(in.details),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			progress := &jobspb.Progress{
+				ModifiedMicros: in.modified.UnixNano() / time.Microsecond.Nanoseconds(),
+			}
+			if in.highWater != (hlc.Timestamp{}) {
+				progress.Progress = &jobspb.Progress_HighWater{
+					HighWater: &in.highWater,
+				}
+			} else {
+				progress.Progress = &jobspb.Progress_FractionCompleted{
+					FractionCompleted: in.fractionCompleted,
+				}
+			}
+			inProgress, err := protoutil.Marshal(progress)
+			if err != nil {
+				t.Fatal(err)
+			}
+			sqlDB.Exec(t,
+				`INSERT INTO system.jobs (id, status, created, payload, progress) VALUES ($1, $2, $3, $4, $5)`,
+				in.id, in.status, in.created, inPayload, inProgress,
+			)
+
+			var out row
+			var maybeFractionCompleted *float32
+			var decimalHighWater *apd.Decimal
+			sqlDB.QueryRow(t, `
+      SELECT job_id, job_type, status, created, description, started, finished, modified,
+             fraction_completed, high_water_timestamp, user_name, ifnull(error, ''), coordinator_id
+        FROM crdb_internal.jobs WHERE job_id = $1`, in.id).Scan(
+				&out.id, &out.typ, &out.status, &out.created, &out.description, &out.started,
+				&out.finished, &out.modified, &maybeFractionCompleted, &decimalHighWater, &out.username,
+				&out.err, &out.coordinatorID,
+			)
+
+			if decimalHighWater != nil {
+				var err error
+				out.highWater, err = tree.DecimalToHLC(decimalHighWater)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			if maybeFractionCompleted != nil {
+				out.fractionCompleted = *maybeFractionCompleted
+			}
+
+			// details field is not explicitly checked for equality; its value is
+			// confirmed via the job_type field, which is dependent on the details
+			// field.
+			out.details = in.details
+
+			if !reflect.DeepEqual(in, out) {
+				diff := strings.Join(pretty.Diff(in, out), "\n")
+				t.Fatalf("in job did not match out job:\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestShowJobsWithError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	// Create at least 4 row, ensuring the last 3 rows are corrupted.
+	if _, err := sqlDB.Exec(`
+     -- Ensure there is at least one row in system.jobs.
+     CREATE TABLE foo(x INT); ALTER TABLE foo ADD COLUMN y INT;
+     -- Create a corrupted payload field from the first row.
+     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+1, status, '\xaaaa'::BYTES, progress FROM system.jobs ORDER BY id LIMIT 1;
+     -- Create a corrupted progress field.
+     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+2, status, payload, '\xaaaa'::BYTES FROM system.jobs ORDER BY id LIMIT 1;
+     -- Corrupt both fields.
+     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+3, status, '\xaaaa'::BYTES, '\xaaaa'::BYTES FROM system.jobs ORDER BY id LIMIT 1;
+     -- Test what happens with a NULL progress field (which is a valid value).
+     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+4, status, payload, NULL::BYTES FROM system.jobs ORDER BY id LIMIT 1;
+     INSERT INTO system.jobs(id, status, payload, progress) SELECT id+5, status, '\xaaaa'::BYTES, NULL::BYTES FROM system.jobs ORDER BY id LIMIT 1;
+	`); err != nil {
 		t.Fatal(err)
 	}
 
-	inProgress, err := protoutil.Marshal(&jobs.Progress{
-		ModifiedMicros:    in.modified.UnixNano() / time.Microsecond.Nanoseconds(),
-		FractionCompleted: in.fractionCompleted,
-	})
+	// Extract the last 4 rows from the query.
+	rows, err := sqlDB.Query(`
+  WITH a AS (SELECT job_id, description, fraction_completed, error FROM [SHOW JOBS] ORDER BY job_id DESC LIMIT 6)
+  SELECT ifnull(description, 'NULL'), ifnull(fraction_completed, -1)::string, ifnull(error,'NULL') FROM a ORDER BY job_id ASC`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sqlDB.Exec(t,
-		`INSERT INTO system.jobs (id, status, created, payload, progress) VALUES ($1, $2, $3, $4, $5)`,
-		in.id, in.status, in.created, inPayload, inProgress,
-	)
+	defer rows.Close()
 
-	var out row
-	sqlDB.QueryRow(t, `
-      SELECT id, type, status, created, description, started, finished, modified,
-             fraction_completed, username, error, coordinator_id
-        FROM crdb_internal.jobs`).Scan(
-		&out.id, &out.typ, &out.status, &out.created, &out.description, &out.started,
-		&out.finished, &out.modified, &out.fractionCompleted, &out.username,
-		&out.err, &out.coordinatorID,
-	)
-	if !reflect.DeepEqual(in, out) {
-		diff := strings.Join(pretty.Diff(in, out), "\n")
-		t.Fatalf("in job did not match out job:\n%s", diff)
+	var desc, frac, errStr string
+
+	// Valid row.
+	rowNum := 0
+	if !rows.Next() {
+		t.Fatalf("%d too few rows", rowNum)
 	}
+	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+		t.Fatalf("%d: %v", rowNum, err)
+	}
+	t.Logf("row %d: %q %q %v", rowNum, desc, errStr, frac)
+	if desc == "NULL" || errStr != "" || frac[0] == '-' {
+		t.Fatalf("%d: invalid row", rowNum)
+	}
+	rowNum++
+
+	// Corrupted payload but valid progress.
+	if !rows.Next() {
+		t.Fatalf("%d: too few rows", rowNum)
+	}
+	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+		t.Fatalf("%d: %v", rowNum, err)
+	}
+	t.Logf("row %d: %q %q %v", rowNum, desc, errStr, frac)
+	if desc != "NULL" || !strings.HasPrefix(errStr, "error decoding payload") || frac[0] == '-' {
+		t.Fatalf("%d: invalid row", rowNum)
+	}
+	rowNum++
+
+	// Corrupted progress but valid payload.
+	if !rows.Next() {
+		t.Fatalf("%d: too few rows", rowNum)
+	}
+	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+		t.Fatalf("%d: %v", rowNum, err)
+	}
+	t.Logf("row %d: %q %q %v", rowNum, desc, errStr, frac)
+	if desc == "NULL" || !strings.HasPrefix(errStr, "error decoding progress") || frac[0] != '-' {
+		t.Fatalf("%d: invalid row", rowNum)
+	}
+	rowNum++
+
+	// Both payload and progress corrupted.
+	if !rows.Next() {
+		t.Fatalf("%d: too few rows", rowNum)
+	}
+	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+		t.Fatalf("%d: %v", rowNum, err)
+	}
+	t.Logf("row: %q %q %v", desc, errStr, frac)
+	if desc != "NULL" ||
+		!strings.Contains(errStr, "error decoding payload") ||
+		!strings.Contains(errStr, "error decoding progress") ||
+		frac[0] != '-' {
+		t.Fatalf("%d: invalid row", rowNum)
+	}
+	rowNum++
+
+	// Valid payload and missing progress.
+	if !rows.Next() {
+		t.Fatalf("%d too few rows", rowNum)
+	}
+	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+		t.Fatalf("%d: %v", rowNum, err)
+	}
+	t.Logf("row %d: %q %q %v", rowNum, desc, errStr, frac)
+	if desc == "NULL" || errStr != "" || frac[0] != '-' {
+		t.Fatalf("%d: invalid row", rowNum)
+	}
+	rowNum++
+
+	// Invalid payload and missing progress.
+	if !rows.Next() {
+		t.Fatalf("%d too few rows", rowNum)
+	}
+	if err := rows.Scan(&desc, &frac, &errStr); err != nil {
+		t.Fatalf("%d: %v", rowNum, err)
+	}
+	t.Logf("row %d: %q %q %v", rowNum, desc, errStr, frac)
+	if desc != "NULL" ||
+		!strings.Contains(errStr, "error decoding payload") ||
+		strings.Contains(errStr, "error decoding progress") ||
+		frac[0] != '-' {
+		t.Fatalf("%d: invalid row", rowNum)
+	}
+	rowNum++
 }

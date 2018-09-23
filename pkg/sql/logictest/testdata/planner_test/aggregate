@@ -10,7 +10,7 @@ CREATE TABLE kv (
 
 # Selecting and grouping on a more complex expression works.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT COUNT(*), k+v AS r FROM kv GROUP BY k+v
+EXPLAIN (VERBOSE) SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 ----
 group           ·            ·                                    (count, r)                      weak-key(r)
  │              aggregate 0  count_rows()                         ·                               ·
@@ -24,7 +24,7 @@ group           ·            ·                                    (count, r)  
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT COUNT(*), k+v AS r FROM kv GROUP BY k, v
+EXPLAIN (VERBOSE) SELECT count(*), k+v AS r FROM kv GROUP BY k, v
 ----
 render               ·            ·                 (count, r)                      ·
  │                   render 0     agg0              ·                               ·
@@ -34,6 +34,7 @@ render               ·            ·                 (count, r)                
       │              aggregate 1  k                 ·                               ·
       │              aggregate 2  v                 ·                               ·
       │              group by     @1-@2             ·                               ·
+      │              ordered      @1                ·                               ·
       └── render     ·            ·                 (k, v)                          k!=NULL; key(k); +k
            │         render 0     test.public.kv.k  ·                               ·
            │         render 1     test.public.kv.v  ·                               ·
@@ -42,12 +43,13 @@ render               ·            ·                 (count, r)                
 ·                    spans        ALL               ·                               ·
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT COUNT(k) FROM kv
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT count(k) FROM kv
 ]
 ----
 group           ·            ·
  │              aggregate 0  count(k)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.kv.k
       └── scan  ·            ·
@@ -55,14 +57,15 @@ group           ·            ·
 ·               spans        ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT COUNT(k), SUM(k), MAX(k) FROM kv
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT count(k), sum(k), max(k) FROM kv
 ]
 ----
 group           ·            ·
  │              aggregate 0  count(k)
  │              aggregate 1  sum(k)
  │              aggregate 2  max(k)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.kv.k
       └── scan  ·            ·
@@ -70,24 +73,25 @@ group           ·            ·
 ·               spans        ALL
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT COUNT(DISTINCT a.*) FROM kv a, kv b
+EXPLAIN (VERBOSE) SELECT count(DISTINCT a.*) FROM kv a, kv b
 ----
-group                ·            ·                             (count)                                                       ·
- │                   aggregate 0  count(DISTINCT (k, v, w, s))  ·                                                             ·
- └── render          ·            ·                             ("(k, v, w, s)")                                              ·
-      │              render 0     (a.k, a.v, a.w, a.s)          ·                                                             ·
-      └── join       ·            ·                             (k, v, w, s, k[omitted], v[omitted], w[omitted], s[omitted])  ·
-           │         type         cross                         ·                                                             ·
-           ├── scan  ·            ·                             (k, v, w, s)                                                  k!=NULL; key(k)
-           │         table        kv@primary                    ·                                                             ·
-           │         spans        ALL                           ·                                                             ·
-           └── scan  ·            ·                             (k[omitted], v[omitted], w[omitted], s[omitted])              k!=NULL; key(k)
-·                    table        kv@primary                    ·                                                             ·
-·                    spans        ALL                           ·                                                             ·
+group                ·            ·                                             (count)                                                       ·
+ │                   aggregate 0  count(DISTINCT ((k, v, w, s) AS k, v, w, s))  ·                                                             ·
+ │                   scalar       ·                                             ·                                                             ·
+ └── render          ·            ·                                             ("((k, v, w, s) AS k, v, w, s)")                              ·
+      │              render 0     ((a.k, a.v, a.w, a.s) AS k, v, w, s)          ·                                                             ·
+      └── join       ·            ·                                             (k, v, w, s, k[omitted], v[omitted], w[omitted], s[omitted])  ·
+           │         type         cross                                         ·                                                             ·
+           ├── scan  ·            ·                                             (k, v, w, s)                                                  k!=NULL; key(k)
+           │         table        kv@primary                                    ·                                                             ·
+           │         spans        ALL                                           ·                                                             ·
+           └── scan  ·            ·                                             (k[omitted], v[omitted], w[omitted], s[omitted])              k!=NULL; key(k)
+·                    table        kv@primary                                    ·                                                             ·
+·                    spans        ALL                                           ·                                                             ·
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(b.k) FROM kv a, kv b GROUP BY a.*
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY a.*
 ]
 ----
 group                ·            ·
@@ -109,8 +113,8 @@ group                ·            ·
 ·                    spans        ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(b.k) FROM kv a, kv b GROUP BY (1, (a.*))
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (1, (a.*))
 ]
 ----
 group                ·            ·
@@ -134,8 +138,8 @@ group                ·            ·
 
 # A useful optimization: naked tuple expansion in GROUP BY clause.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(b.k) FROM kv a, kv b GROUP BY (a.*)
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (a.*)
 ]
 ----
 group                ·            ·
@@ -158,7 +162,7 @@ group                ·            ·
 
 # Show reuse of renders expression inside an expansion.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT a.k FROM kv a, kv b GROUP BY a.*
 ]
 ----
@@ -188,12 +192,13 @@ CREATE TABLE abc (
 )
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(a) FROM abc
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT min(a) FROM abc
 ]
 ----
 group           ·            ·
  │              aggregate 0  min(a)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.abc.a
       └── scan  ·            ·
@@ -220,12 +225,13 @@ CREATE TABLE xyz (
 )
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT min(x) FROM xyz
 ]
 ----
 group           ·            ·
  │              aggregate 0  min(x)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.xyz.x
       └── scan  ·            ·
@@ -234,12 +240,13 @@ group           ·            ·
 ·               limit        1
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz WHERE x in (0, 4, 7)
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
 ]
 ----
 group           ·            ·
  │              aggregate 0  min(x)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.xyz.x
       └── scan  ·            ·
@@ -248,12 +255,13 @@ group           ·            ·
 ·               limit        1
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MAX(x) FROM xyz
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT max(x) FROM xyz
 ]
 ----
 group              ·            ·
  │                 aggregate 0  max(x)
+ │                 scalar       ·
  └── render        ·            ·
       │            render 0     test.public.xyz.x
       └── revscan  ·            ·
@@ -262,12 +270,13 @@ group              ·            ·
 ·                  limit        1
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(y) FROM xyz WHERE x = 1
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT min(y) FROM xyz WHERE x = 1
 ]
 ----
 group           ·            ·
  │              aggregate 0  min(y)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.xyz.y
       └── scan  ·            ·
@@ -276,12 +285,13 @@ group           ·            ·
 ·               limit        1
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MAX(y) FROM xyz WHERE x = 1
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT max(y) FROM xyz WHERE x = 1
 ]
 ----
 group              ·            ·
  │                 aggregate 0  max(y)
+ │                 scalar       ·
  └── render        ·            ·
       │            render 0     test.public.xyz.y
       └── revscan  ·            ·
@@ -290,12 +300,13 @@ group              ·            ·
 ·                  limit        1
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(y) FROM xyz WHERE x = 7
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT min(y) FROM xyz WHERE x = 7
 ]
 ----
 group           ·            ·
  │              aggregate 0  min(y)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.xyz.y
       └── scan  ·            ·
@@ -304,12 +315,13 @@ group           ·            ·
 ·               limit        1
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MAX(y) FROM xyz WHERE x = 7
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT max(y) FROM xyz WHERE x = 7
 ]
 ----
 group              ·            ·
  │                 aggregate 0  max(y)
+ │                 scalar       ·
  └── render        ·            ·
       │            render 0     test.public.xyz.y
       └── revscan  ·            ·
@@ -318,12 +330,13 @@ group              ·            ·
 ·                  limit        1
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0)
 ]
 ----
 group           ·            ·
  │              aggregate 0  min(x)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.xyz.x
       └── scan  ·            ·
@@ -334,20 +347,24 @@ group           ·            ·
 statement okSE
 INSERT INTO xyz VALUES (1, 2, 3.0), (4, 5, 6.0), (7, NULL, 8.0)
 
+statement ok
+SET tracing = on,kv,results; SELECT min(x) FROM xyz WHERE (y, z) = (2, 3.0); SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT MIN(x) FROM xyz WHERE (y, z) = (2, 3.0)]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /xyz/zyx/3.0/2/1 -> NULL
 output row: [1]
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MAX(x) FROM xyz WHERE (z, y) = (3.0, 2)
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT max(x) FROM xyz WHERE (z, y) = (3.0, 2)
 ]
 ----
 group              ·            ·
  │                 aggregate 0  max(x)
+ │                 scalar       ·
  └── render        ·            ·
       │            render 0     test.public.xyz.x
       └── revscan  ·            ·
@@ -357,8 +374,11 @@ group              ·            ·
 
 # VARIANCE/STDDEV
 
+statement ok
+SET tracing = on,kv,results; SELECT variance(x), variance(y::decimal), round(variance(z), 14) FROM xyz; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT VARIANCE(x), VARIANCE(y::decimal), round(VARIANCE(z), 14) FROM xyz]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /xyz/primary/1 -> NULL
@@ -372,12 +392,13 @@ fetched: /xyz/primary/7/z -> 8.0
 output row: [9 4.5 6.33333333333333]
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT VARIANCE(x) FROM xyz WHERE x = 1
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT variance(x) FROM xyz WHERE x = 1
 ]
 ----
 group           ·            ·
  │              aggregate 0  variance(x)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.xyz.x
       └── scan  ·            ·
@@ -385,8 +406,11 @@ group           ·            ·
 ·               spans        /1-/2
 
 # Verify we only look at one row for MIN when we have an index on that column.
+statement ok
+SET tracing = on,kv,results; SELECT min(z) FROM xyz; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT MIN(z) FROM xyz]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /xyz/zyx/3.0/2/1 -> NULL
@@ -402,12 +426,13 @@ CREATE TABLE ab (
 )
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MIN(a) FROM abc
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT min(a) FROM abc
 ]
 ----
 group           ·            ·
  │              aggregate 0  min(a)
+ │              scalar       ·
  └── render     ·            ·
       │         render 0     test.public.abc.a
       └── scan  ·            ·
@@ -424,8 +449,11 @@ INSERT INTO ab VALUES
   (5, 50)
 
 # Verify we only buffer one row.
+statement ok
+SET tracing = on,kv,results; SELECT min(a) FROM ab; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT MIN(a) FROM ab]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /ab/primary/1 -> NULL
@@ -433,12 +461,13 @@ fetched: /ab/primary/1/b -> 10
 output row: [1]
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT MAX(a) FROM abc
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT max(a) FROM abc
 ]
 ----
 group              ·            ·
  │                 aggregate 0  max(a)
+ │                 scalar       ·
  └── render        ·            ·
       │            render 0     test.public.abc.a
       └── revscan  ·            ·
@@ -447,8 +476,11 @@ group              ·            ·
 ·                  limit        1
 
 # Verify we only buffer one row.
+statement ok
+SET tracing = on,kv,results; SELECT max(a) FROM ab; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT MAX(a) FROM ab]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /ab/primary/5/b -> 50
@@ -456,8 +488,8 @@ fetched: /ab/primary/5 -> NULL
 output row: [5]
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT v, COUNT(k) FROM kv GROUP BY v ORDER BY COUNT(k)
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT v, count(k) FROM kv GROUP BY v ORDER BY count(k)
 ]
 ----
 sort                 ·            ·
@@ -474,8 +506,8 @@ sort                 ·            ·
 ·                    spans        ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT v, COUNT(*) FROM kv GROUP BY v ORDER BY COUNT(*)
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT v, count(*) FROM kv GROUP BY v ORDER BY count(*)
 ]
 ----
 sort                 ·            ·
@@ -491,8 +523,8 @@ sort                 ·            ·
 ·                    spans        ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT v, COUNT(1) FROM kv GROUP BY v ORDER BY COUNT(1)
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT v, count(1) FROM kv GROUP BY v ORDER BY count(1)
 ]
 ----
 sort                 ·            ·
@@ -510,8 +542,8 @@ sort                 ·            ·
 
 # Check that filters propagate through no-op aggregation.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, COUNT(1) FROM kv GROUP BY v) WHERE v > 10
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT v, count(1) FROM kv GROUP BY v) WHERE v > 10
 ]
 ----
 group           ·            ·
@@ -537,8 +569,8 @@ CREATE TABLE filter_test (
 
 # Check that filter expressions are only rendered once.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT COUNT(*) FILTER (WHERE k>5), MAX(k>5) FILTER(WHERE k>5) FROM filter_test GROUP BY v
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT count(*) FILTER (WHERE k>5), max(k>5) FILTER(WHERE k>5) FROM filter_test GROUP BY v
 ]
 ----
 group           ·            ·
@@ -553,7 +585,7 @@ group           ·            ·
 ·               spans        ALL
 
 query TTTTT
-EXPLAIN (TYPES) SELECT COUNT(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
+EXPLAIN (TYPES) SELECT count(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 ----
 group           ·            ·                                     (count int)                                                    ·
  │              aggregate 0  count_rows() FILTER (WHERE ?column?)  ·                                                              ·
@@ -567,7 +599,7 @@ group           ·            ·                                     (count int)
 
 # Tests with * inside GROUP BY.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT 1 FROM kv GROUP BY kv.*
 ]
 ----
@@ -575,13 +607,14 @@ render          ·         ·
  │              render 0  1
  └── group      ·         ·
       │         group by  @1-@4
+      │         ordered   @1
       └── scan  ·         ·
 ·               table     kv@primary
 ·               spans     ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
-EXPLAIN (VERBOSE) SELECT SUM(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*
+SELECT tree, field, description FROM [
+EXPLAIN (VERBOSE) SELECT sum(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*
 ]
 ----
 group                ·            ·
@@ -609,10 +642,11 @@ CREATE TABLE opt_test (k INT PRIMARY KEY, v INT, INDEX v(v))
 
 # Verify that we correctly add the v IS NOT NULL constraint (which restricts the span).
 query TTTTT
-EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test
+EXPLAIN (VERBOSE) SELECT min(v) FROM opt_test
 ----
 group           ·            ·                       (min)            ·
  │              aggregate 0  min(v)                  ·                ·
+ │              scalar       ·                       ·                ·
  └── render     ·            ·                       (v)              v!=NULL; +v
       │         render 0     test.public.opt_test.v  ·                ·
       └── scan  ·            ·                       (k[omitted], v)  k!=NULL; v!=NULL; key(k,v); +v
@@ -622,10 +656,11 @@ group           ·            ·                       (min)            ·
 
 # Repeat test when there is an existing filter.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test WHERE k <> 4
+EXPLAIN (VERBOSE) SELECT min(v) FROM opt_test WHERE k <> 4
 ----
 group           ·            ·                       (min)   ·
  │              aggregate 0  min(v)                  ·       ·
+ │              scalar       ·                       ·       ·
  └── render     ·            ·                       (v)     v!=NULL; +v
       │         render 0     test.public.opt_test.v  ·       ·
       └── scan  ·            ·                       (k, v)  k!=NULL; v!=NULL; key(k,v); +v
@@ -637,10 +672,11 @@ group           ·            ·                       (min)   ·
 # present an ordering on v+1 so the optimization is not applied, but the IS NOT
 # NULL filter should be added.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT MIN(v+1) FROM opt_test WHERE k <> 4
+EXPLAIN (VERBOSE) SELECT min(v+1) FROM opt_test WHERE k <> 4
 ----
 group           ·            ·                           (min)            ·
  │              aggregate 0  min(v + 1)                  ·                ·
+ │              scalar       ·                           ·                ·
  └── render     ·            ·                           ("v + 1")        ·
       │         render 0     test.public.opt_test.v + 1  ·                ·
       └── scan  ·            ·                           (k[omitted], v)  k!=NULL; v!=NULL; key(k)
@@ -650,17 +686,18 @@ group           ·            ·                           (min)            ·
 
 # Verify that we don't use the optimization if there is a GROUP BY.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT MIN(v) FROM opt_test GROUP BY k
+EXPLAIN (VERBOSE) SELECT min(v) FROM opt_test GROUP BY k
 ----
 group      ·            ·                 (min)   ·
  │         aggregate 0  min(v)            ·       ·
  │         group by     @1                ·       ·
+ │         ordered      @1                ·       ·
  └── scan  ·            ·                 (k, v)  k!=NULL; key(k)
 ·          table        opt_test@primary  ·       ·
 ·          spans        ALL               ·       ·
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT (b, a) FROM ab GROUP BY (b, a)
 ]
 ----
@@ -670,6 +707,7 @@ render               ·            ·
       │              aggregate 0  b
       │              aggregate 1  a
       │              group by     @1-@2
+      │              ordered      @2
       └── render     ·            ·
            │         render 0     test.public.ab.b
            │         render 1     test.public.ab.a
@@ -681,9 +719,9 @@ statement ok
 CREATE TABLE xy(x STRING, y STRING);
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE)
-   SELECT MIN(y), (b, a)
+   SELECT min(y), (b, a)
      FROM ab, xy GROUP BY (x, (a, b))
 ]
 ----
@@ -727,6 +765,7 @@ group           ·            ·                        (x, max)            x!=N
  │              aggregate 0  x                        ·                   ·
  │              aggregate 1  max(y)                   ·                   ·
  │              group by     @1                       ·                   ·
+ │              ordered      @1                       ·                   ·
  └── render     ·            ·                        (x, y)              x!=NULL; key(x); +x
       │         render 0     test.public.group_ord.x  ·                   ·
       │         render 1     test.public.group_ord.y  ·                   ·
@@ -743,6 +782,7 @@ group           ·            ·                        (x, max)            x!=N
  │              aggregate 0  x                        ·                   ·
  │              aggregate 1  max(y)                   ·                   ·
  │              group by     @1                       ·                   ·
+ │              ordered      @1                       ·                   ·
  └── render     ·            ·                        (x, y)              x!=NULL; key(x); +x
       │         render 0     test.public.group_ord.x  ·                   ·
       │         render 1     test.public.group_ord.y  ·                   ·
@@ -760,6 +800,7 @@ group           ·            ·                        (z, x, max)  x!=NULL; ke
  │              aggregate 1  x                        ·            ·
  │              aggregate 2  max(y)                   ·            ·
  │              group by     @1-@2                    ·            ·
+ │              ordered      @1                       ·            ·
  └── render     ·            ·                        (x, z, y)    x!=NULL; key(x); +x
       │         render 0     test.public.group_ord.x  ·            ·
       │         render 1     test.public.group_ord.z  ·            ·
@@ -778,6 +819,7 @@ group           ·            ·                        (z, x, max)  x!=NULL; ke
  │              aggregate 1  x                        ·            ·
  │              aggregate 2  max(y)                   ·            ·
  │              group by     @1-@2                    ·            ·
+ │              ordered      @1                       ·            ·
  └── render     ·            ·                        (x, z, y)    x!=NULL; key(x); +x
       │         render 0     test.public.group_ord.x  ·            ·
       │         render 1     test.public.group_ord.z  ·            ·
@@ -795,6 +837,7 @@ group                 ·            ·                        (z, max)          
  │                    aggregate 0  z                        ·                            ·
  │                    aggregate 1  max(y)                   ·                            ·
  │                    group by     @1                       ·                            ·
+ │                    ordered      @1                       ·                            ·
  └── render           ·            ·                        (z, y)                       +z
       │               render 0     test.public.group_ord.z  ·                            ·
       │               render 1     test.public.group_ord.y  ·                            ·
@@ -819,6 +862,7 @@ join                       ·               ·                        (x, max, z
  │    │                    aggregate 0     x                        ·                            ·
  │    │                    aggregate 1     max(y)                   ·                            ·
  │    │                    group by        @1                       ·                            ·
+ │    │                    ordered         @1                       ·                            ·
  │    └── render           ·               ·                        (x, y)                       x!=NULL; key(x); +x
  │         │               render 0        test.public.group_ord.x  ·                            ·
  │         │               render 1        test.public.group_ord.y  ·                            ·
@@ -829,6 +873,7 @@ join                       ·               ·                        (x, max, z
       │                    aggregate 0     z                        ·                            ·
       │                    aggregate 1     min(y)                   ·                            ·
       │                    group by        @1                       ·                            ·
+      │                    ordered         @1                       ·                            ·
       └── render           ·               ·                        (z, y)                       +z
            │               render 0        test.public.group_ord.z  ·                            ·
            │               render 1        test.public.group_ord.y  ·                            ·
@@ -868,6 +913,7 @@ sort                      ·            ·                 (a)                  
       │                   render 1     agg0              ·                                        ·
       └── group           ·            ·                 (agg0)                                   ·
            │              aggregate 0  max(v)            ·                                        ·
+           │              scalar       ·                 ·                                        ·
            └── render     ·            ·                 (v)                                      v!=NULL
                 │         render 0     test.public.kv.v  ·                                        ·
                 └── scan  ·            ·                 (k[omitted], v, w[omitted], s[omitted])  k!=NULL; v!=NULL; key(k)

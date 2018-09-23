@@ -26,7 +26,7 @@ import (
 func ComputeStatsForRange(
 	d *roachpb.RangeDescriptor, e engine.Reader, nowNanos int64,
 ) (enginepb.MVCCStats, error) {
-	iter := e.NewIterator(engine.IterOptions{})
+	iter := e.NewIterator(engine.IterOptions{UpperBound: d.EndKey.AsRawKey()})
 	defer iter.Close()
 
 	ms := enginepb.MVCCStats{}

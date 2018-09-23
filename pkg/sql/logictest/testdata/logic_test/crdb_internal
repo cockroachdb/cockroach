@@ -21,6 +21,7 @@ create_statements
 forward_dependencies
 gossip_alerts
 gossip_liveness
+gossip_network
 gossip_nodes
 index_columns
 jobs
@@ -103,10 +104,10 @@ Channel
 
 
 # The validity of the rows in this table are tested elsewhere; we merely assert the columns.
-query ITTTTTTTTTRTI colnames
+query ITTTTTTTTTTRTTI colnames
 SELECT * FROM crdb_internal.jobs WHERE false
 ----
-id  type  description  username  descriptor_ids  status  created  started  finished  modified  fraction_completed  error  coordinator_id
+job_id  job_type  description  user_name  descriptor_ids  status  running_status  created  started  finished  modified  fraction_completed  high_water_timestamp  error  coordinator_id
 
 query IITTITTT colnames
 SELECT * FROM crdb_internal.schema_changes WHERE table_id < 0
@@ -123,15 +124,15 @@ SELECT * FROM crdb_internal.node_statement_statistics WHERE node_id < 0
 ----
 node_id  application_name  flags  key  anonymized  count  first_attempt_count  max_retries  last_error  rows_avg  rows_var  parse_lat_avg  parse_lat_var  plan_lat_avg  plan_lat_var  run_lat_avg  run_lat_var  service_lat_avg  service_lat_var  overhead_lat_avg  overhead_lat_var
 
-query IITTTTTT colnames
+query IITTTTTTT colnames
 SELECT * FROM crdb_internal.session_trace WHERE span_idx < 0
 ----
-span_idx  message_idx  timestamp  duration  operation  loc  tag  message
+span_idx  message_idx  timestamp  duration  operation  loc  tag  message age
 
 query TTTT colnames
-SELECT * FROM crdb_internal.cluster_settings WHERE name = ''
+SELECT * FROM crdb_internal.cluster_settings WHERE variable = ''
 ----
-name  current_value  type  description
+variable  value  type  description
 
 query TT colnames
 SELECT * FROM crdb_internal.session_variables WHERE variable = ''
@@ -141,22 +142,22 @@ variable                       value
 query TITTTTTBT colnames
 SELECT * FROM crdb_internal.node_queries WHERE node_id < 0
 ----
-query_id  node_id  username  start  query  client_address  application_name  distributed  phase
+query_id  node_id  user_name  start  query  client_address  application_name  distributed  phase
 
 query TITTTTTBT colnames
 SELECT * FROM crdb_internal.cluster_queries WHERE node_id < 0
 ----
-query_id  node_id  username  start  query  client_address  application_name  distributed  phase
+query_id  node_id  user_name  start  query  client_address  application_name  distributed  phase
 
 query ITTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.node_sessions WHERE node_id < 0
 ----
-node_id  session_id  username  client_address  application_name  active_queries  last_active_query  session_start  oldest_query_start  kv_txn  alloc_bytes  max_alloc_bytes
+node_id  session_id  user_name  client_address  application_name  active_queries  last_active_query  session_start  oldest_query_start  kv_txn  alloc_bytes  max_alloc_bytes
 
 query ITTTTTTTTTTT colnames
 SELECT * FROM crdb_internal.cluster_sessions WHERE node_id < 0
 ----
-node_id  session_id  username  client_address  application_name  active_queries  last_active_query  session_start  oldest_query_start  kv_txn  alloc_bytes  max_alloc_bytes
+node_id  session_id  user_name  client_address  application_name  active_queries  last_active_query  session_start  oldest_query_start  kv_txn  alloc_bytes  max_alloc_bytes
 
 query TTTT colnames
 SELECT * FROM crdb_internal.builtin_functions WHERE function = ''
@@ -193,22 +194,22 @@ SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name = ''
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
 
-query ITTT colnames
+query ITTTT colnames
 SELECT * FROM crdb_internal.zones WHERE false
 ----
-id  cli_specifier  config_yaml  config_proto
+zone_id  cli_specifier  config_yaml  config_sql  config_protobuf
 
 statement ok
 INSERT INTO system.zones (id, config) VALUES
-  (17, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),
-  (18, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),
-  (53, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0)),
-  (54, (SELECT config_proto FROM crdb_internal.zones WHERE id = 0))
+  (18, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
+  (53, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0)),
+  (54, (SELECT config_protobuf FROM crdb_internal.zones WHERE zone_id = 0))
 
 query IT
-SELECT id, cli_specifier FROM crdb_internal.zones ORDER BY id
+SELECT zone_id, cli_specifier FROM crdb_internal.zones ORDER BY 1
 ----
 0   .default
+1   system
 15  system.jobs
 16  .meta
 17  .system
@@ -216,6 +217,22 @@ SELECT id, cli_specifier FROM crdb_internal.zones ORDER BY id
 22  .liveness
 53  testdb
 54  testdb.foo
+
+query T
+SELECT quote_literal(config_yaml) FROM crdb_internal.zones WHERE zone_id = 0
+----
+e'range_min_bytes: 1048576\nrange_max_bytes: 67108864\ngc:\n  ttlseconds: 90000\nnum_replicas: 3\nconstraints: []\nlease_preferences: []\n'
+
+query T
+SELECT config_sql FROM crdb_internal.zones WHERE zone_id = 0
+----
+ALTER RANGE default CONFIGURE ZONE USING
+  range_min_bytes = 1048576,
+  range_max_bytes = 67108864,
+  gc.ttlseconds = 90000,
+  num_replicas = 3,
+  constraints = '[]',
+  lease_preferences = '[]'
 
 query error pq: foo
 SELECT crdb_internal.force_error('', 'foo')
@@ -244,7 +261,7 @@ select crdb_internal.set_vmodule('')
 query T
 select crdb_internal.node_executable_version()
 ----
-2.0-6
+2.0-13
 
 query ITTT colnames
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
@@ -266,8 +283,8 @@ node_id  component  field   value
 query ITTTTT colnames
 SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(server_version, '^\d+\.\d+(-\d+)?$', '<server_version>') as server_version FROM crdb_internal.gossip_nodes WHERE node_id = 1
 ----
-node_id  network  address           attrs  locality  server_version
-1        tcp      127.0.0.1:<port>  []     {}        <server_version>
+node_id  network  address           attrs  locality            server_version
+1        tcp      127.0.0.1:<port>  []     {"region": "test"}  <server_version>
 
 query IITBB colnames
 SELECT node_id, epoch, regexp_replace(expiration, '^\d+\.\d+,\d+$', '<timestamp>') as expiration, draining, decommissioning FROM crdb_internal.gossip_liveness WHERE node_id = 1
@@ -279,8 +296,8 @@ query ITTTTTT colnames
 SELECT node_id, network, regexp_replace(address, '\d+$', '<port>') as address, attrs, locality, regexp_replace(server_version, '^\d+\.\d+(-\d+)?$', '<server_version>') as server_version, regexp_replace(go_version, '^go.+$', '<go_version>') as go_version
 FROM crdb_internal.kv_node_status WHERE node_id = 1
 ----
-node_id  network  address           attrs  locality  server_version    go_version
-1        tcp      127.0.0.1:<port>  []     {}        <server_version>  <go_version>
+node_id  network  address           attrs  locality            server_version    go_version
+1        tcp      127.0.0.1:<port>  []     {"region": "test"}  <server_version>  <go_version>
 
 query IITI colnames
 SELECT node_id, store_id, attrs, used
@@ -288,6 +305,15 @@ FROM crdb_internal.kv_store_status WHERE node_id = 1
 ----
 node_id  store_id  attrs  used
 1        1         []     0
+
+statement ok
+CREATE TABLE foo (a INT PRIMARY KEY); INSERT INTO foo VALUES(1)
+
+# Make sure that the cluster id isn't unset.
+query B
+select crdb_internal.cluster_id() != '00000000-0000-0000-0000-000000000000' FROM foo
+----
+true
 
 # Check that privileged builtins are only allowed for 'root'
 user testuser
@@ -332,4 +358,4 @@ select * from crdb_internal.gossip_alerts
 query T
 select crdb_internal.node_executable_version()
 ----
-2.0-6
+2.0-13

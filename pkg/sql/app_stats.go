@@ -22,9 +22,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -39,6 +41,7 @@ type stmtKey struct {
 	stmt        string
 	failed      bool
 	distSQLUsed bool
+	optUsed     bool
 }
 
 // appStats holds per-application statistics.
@@ -88,12 +91,16 @@ func (s stmtKey) flags() string {
 	if s.distSQLUsed {
 		b.WriteByte('+')
 	}
+	if !s.optUsed {
+		b.WriteByte('-')
+	}
 	return b.String()
 }
 
 func (a *appStats) recordStatement(
 	stmt Statement,
 	distSQLUsed bool,
+	optUsed bool,
 	automaticRetryCount int,
 	numRows int,
 	err error,
@@ -107,16 +114,10 @@ func (a *appStats) recordStatement(
 		return
 	}
 
-	// Some statements like SET, SHOW etc are not useful to collect
-	// stats about. Ignore them.
-	if _, ok := stmt.AST.(tree.HiddenFromStats); ok {
-		return
-	}
-
 	// Extend the statement key with a character that indicated whether
 	// there was an error and/or whether the query was distributed, so
 	// that we use separate buckets for the different situations.
-	key := stmtKey{failed: err != nil, distSQLUsed: distSQLUsed}
+	key := stmtKey{failed: err != nil, distSQLUsed: distSQLUsed, optUsed: optUsed}
 
 	if stmt.AnonymizedStr != "" {
 		// Use the cached anonymized string.
@@ -285,6 +286,24 @@ func scrubStmtStatKey(vt VirtualTabler, key string) (string, bool) {
 func (s *sqlStats) getScrubbedStmtStats(
 	vt *VirtualSchemaHolder,
 ) []roachpb.CollectedStatementStatistics {
+	return s.getStmtStats(vt, true /* scrub */)
+}
+
+func (s *sqlStats) getUnscrubbedStmtStats(
+	vt *VirtualSchemaHolder,
+) []roachpb.CollectedStatementStatistics {
+	return s.getStmtStats(vt, false /* scrub */)
+}
+
+// InternalAppNamePrefix designates that an application name is internal to
+// CockroachDB and therefore can be reported without scrubbing. (Note this only
+// applies to the application name itself. Query data is still scrubbed as
+// usual.)
+const InternalAppNamePrefix = "$ "
+
+func (s *sqlStats) getStmtStats(
+	vt *VirtualSchemaHolder, scrub bool,
+) []roachpb.CollectedStatementStatistics {
 	s.Lock()
 	defer s.Unlock()
 	var ret []roachpb.CollectedStatementStatistics
@@ -294,16 +313,24 @@ func (s *sqlStats) getScrubbedStmtStats(
 			// guesstimate that we'll need apps*(queries-per-app).
 			ret = make([]roachpb.CollectedStatementStatistics, 0, len(a.stmts)*len(s.apps))
 		}
-		hashedAppName := HashForReporting(salt, appName)
 		a.Lock()
 		for q, stats := range a.stmts {
-			scrubbed, ok := scrubStmtStatKey(vt, q.stmt)
+			maybeScrubbed := q.stmt
+			maybeHashedAppName := appName
+			ok := true
+			if scrub {
+				maybeScrubbed, ok = scrubStmtStatKey(vt, q.stmt)
+				if !strings.HasPrefix(appName, InternalAppNamePrefix) {
+					maybeHashedAppName = HashForReporting(salt, appName)
+				}
+			}
 			if ok {
 				k := roachpb.StatementStatisticsKey{
-					Query:   scrubbed,
+					Query:   maybeScrubbed,
 					DistSQL: q.distSQLUsed,
+					Opt:     q.optUsed,
 					Failed:  q.failed,
-					App:     hashedAppName,
+					App:     maybeHashedAppName,
 				}
 				stats.Lock()
 				data := stats.data
@@ -314,12 +341,39 @@ func (s *sqlStats) getScrubbedStmtStats(
 					// to report as-in though.
 					data.LastErr = "scrubbed"
 				}
+
+				// Quantize the counts to avoid leaking information that way.
+				quantizeCounts(&data)
+
 				ret = append(ret, roachpb.CollectedStatementStatistics{Key: k, Stats: data})
 			}
 		}
 		a.Unlock()
 	}
 	return ret
+}
+
+// quantizeCounts ensures that the counts are bucketed into "simple" values.
+func quantizeCounts(d *roachpb.StatementStatistics) {
+	oldCount := d.Count
+	newCount := telemetry.Bucket10(oldCount)
+	d.Count = newCount
+	// The SquaredDiffs values are meant to enable computing the variance
+	// via the formula variance = squareddiffs / (count - 1).
+	// Since we're adjusting the count, we must re-compute a value
+	// for SquaredDiffs that keeps the same variance with the new count.
+	oldCountMinusOne := float64(oldCount - 1)
+	newCountMinusOne := float64(newCount - 1)
+	d.NumRows.SquaredDiffs = (d.NumRows.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.ParseLat.SquaredDiffs = (d.ParseLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.PlanLat.SquaredDiffs = (d.PlanLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.RunLat.SquaredDiffs = (d.RunLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.ServiceLat.SquaredDiffs = (d.ServiceLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+	d.OverheadLat.SquaredDiffs = (d.OverheadLat.SquaredDiffs / oldCountMinusOne) * newCountMinusOne
+
+	d.MaxRetries = telemetry.Bucket10(d.MaxRetries)
+
+	d.FirstAttemptCount = int64((float64(d.FirstAttemptCount) / float64(oldCount)) * float64(newCount))
 }
 
 // FailedHashedValue is used as a default return value for when HashForReporting

@@ -1,0 +1,43 @@
+.matrix
+  background-color white
+  border-collapse collapse
+  border-bottom 1px solid lightgrey
+  border-top 1px solid lightgrey
+
+  thead
+    border-bottom 1px solid black
+
+  th, td
+    padding 5px
+    border-left 1px solid lightgrey
+    border-right 1px solid lightgrey
+
+  td.value
+    text-align center
+
+  &__metric-label
+    font-style italic
+
+  &__row--internal-node
+    cursor pointer
+
+  &__row--internal-node:hover
+    background-color rgb(240, 240, 240)
+
+  &__row-header
+    text-align left
+
+  &__row-header--internal-node
+    font-weight bold
+
+  &__column-header
+    font-weight bold
+
+  &__column-header--internal-node
+    cursor pointer
+
+  &__column-header--internal-node:hover
+    background-color rgb(240, 240, 240)
+
+  &__cell-value
+    text-align right

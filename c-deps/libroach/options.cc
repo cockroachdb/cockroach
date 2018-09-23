@@ -21,6 +21,7 @@
 #include "encoding.h"
 #include "godefs.h"
 #include "merge.h"
+#include "timebound.h"
 
 namespace cockroach {
 
@@ -42,9 +43,11 @@ class DBPrefixExtractor : public rocksdb::SliceTransform {
   virtual bool InDomain(const rocksdb::Slice& src) const { return true; }
 };
 
+// The DBLogger is a rocksdb::Logger that calls back into Go code for formatted logging.
 class DBLogger : public rocksdb::Logger {
  public:
-  DBLogger() {}
+  DBLogger(int go_log_level) : go_log_level_(go_log_level) {}
+
   virtual void Logv(const char* format, va_list ap) {
     // First try with a small fixed size buffer.
     char space[1024];
@@ -58,7 +61,7 @@ class DBLogger : public rocksdb::Logger {
     va_end(backup_ap);
 
     if ((result >= 0) && (result < sizeof(space))) {
-      rocksDBLog(space, result);
+      rocksDBLog(go_log_level_, space, result);
       return;
     }
 
@@ -81,64 +84,21 @@ class DBLogger : public rocksdb::Logger {
 
       if ((result >= 0) && (result < length)) {
         // It fit
-        rocksDBLog(buf, result);
+        rocksDBLog(go_log_level_, buf, result);
         delete[] buf;
         return;
       }
       delete[] buf;
     }
   }
-};
-
-class TimeBoundTblPropCollector : public rocksdb::TablePropertiesCollector {
- public:
-  const char* Name() const override { return "TimeBoundTblPropCollector"; }
-
-  rocksdb::Status Finish(rocksdb::UserCollectedProperties* properties) override {
-    *properties = rocksdb::UserCollectedProperties{
-        {"crdb.ts.min", ts_min_},
-        {"crdb.ts.max", ts_max_},
-    };
-    return rocksdb::Status::OK();
-  }
-
-  rocksdb::Status AddUserKey(const rocksdb::Slice& user_key, const rocksdb::Slice& value,
-                             rocksdb::EntryType type, rocksdb::SequenceNumber seq,
-                             uint64_t file_size) override {
-    rocksdb::Slice unused;
-    rocksdb::Slice ts;
-    if (SplitKey(user_key, &unused, &ts) && !ts.empty()) {
-      ts.remove_prefix(1);  // The NUL prefix.
-      if (ts_max_.empty() || ts.compare(ts_max_) > 0) {
-        ts_max_.assign(ts.data(), ts.size());
-      }
-      if (ts_min_.empty() || ts.compare(ts_min_) < 0) {
-        ts_min_.assign(ts.data(), ts.size());
-      }
-    }
-    return rocksdb::Status::OK();
-  }
-
-  virtual rocksdb::UserCollectedProperties GetReadableProperties() const override {
-    return rocksdb::UserCollectedProperties{};
-  }
 
  private:
-  std::string ts_min_;
-  std::string ts_max_;
-};
-
-class TimeBoundTblPropCollectorFactory : public rocksdb::TablePropertiesCollectorFactory {
- public:
-  explicit TimeBoundTblPropCollectorFactory() {}
-  virtual rocksdb::TablePropertiesCollector* CreateTablePropertiesCollector(
-      rocksdb::TablePropertiesCollectorFactory::Context context) override {
-    return new TimeBoundTblPropCollector();
-  }
-  const char* Name() const override { return "TimeBoundTblPropCollectorFactory"; }
+  int go_log_level_;
 };
 
 }  // namespace
+
+rocksdb::Logger* NewDBLogger(int go_log_level) { return new DBLogger(go_log_level); }
 
 rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // Use the rocksdb options builder to configure the base options
@@ -153,7 +113,7 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   options.max_subcompactions = std::max(db_opts.num_cpu / 2, 1);
   options.comparator = &kComparator;
   options.create_if_missing = !db_opts.must_exist;
-  options.info_log.reset(new DBLogger());
+  options.info_log.reset(NewDBLogger(kDefaultLogLevel));
   options.merge_operator.reset(NewMergeOperator());
   options.prefix_extractor.reset(new DBPrefixExtractor);
   options.statistics = rocksdb::CreateDBStatistics();
@@ -190,9 +150,7 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
 
   // Use the TablePropertiesCollector hook to store the min and max MVCC
   // timestamps present in each sstable in the metadata for that sstable.
-  std::shared_ptr<rocksdb::TablePropertiesCollectorFactory> time_bound_prop_collector(
-      new TimeBoundTblPropCollectorFactory());
-  options.table_properties_collector_factories.push_back(time_bound_prop_collector);
+  options.table_properties_collector_factories.emplace_back(DBMakeTimeBoundCollector());
 
   // The write buffer size is the size of the in memory structure that
   // will be flushed to create L0 files.
@@ -252,6 +210,7 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // of sstables.
   options.target_file_size_base = 4 << 20;  // 4 MB
   options.target_file_size_multiplier = 2;
+  options.manual_wal_flush = true;
 
   // Because we open a long running rocksdb instance, we do not want the
   // manifest file to grow unbounded. Assuming each manifest entry is about 1
@@ -267,9 +226,14 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
     // load situations we'll be using somewhat more than 1 memtable,
     // but usually not significantly more unless there is an I/O
     // throughput problem.
+    //
+    // We ensure that at least 1MB is allocated for the block cache.
+    // Some unit tests expect to see a non-zero block cache hit rate,
+    // but they use a cache that is small enough that all of it would
+    // otherwise be reserved for the memtable.
     std::lock_guard<std::mutex> guard(db_opts.cache->mu);
     const int64_t capacity = db_opts.cache->rep->GetCapacity();
-    const int64_t new_capacity = std::max<int64_t>(0, capacity - options.write_buffer_size);
+    const int64_t new_capacity = std::max<int64_t>(1 << 20, capacity - options.write_buffer_size);
     db_opts.cache->rep->SetCapacity(new_capacity);
   }
 

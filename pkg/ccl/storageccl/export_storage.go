@@ -12,7 +12,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -28,7 +27,7 @@ import (
 	"google.golang.org/api/option"
 
 	gcs "cloud.google.com/go/storage"
-	azr "github.com/Azure/azure-sdk-for-go/storage"
+	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -38,6 +37,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -57,6 +57,10 @@ const (
 	AzureAccountNameParam = "AZURE_ACCOUNT_NAME"
 	// AzureAccountKeyParam is the query parameter for account_key in an azure URI.
 	AzureAccountKeyParam = "AZURE_ACCOUNT_KEY"
+
+	// GoogleBillingProjectParam is the query parameter for the billing project
+	// in a gs URI.
+	GoogleBillingProjectParam = "GOOGLE_BILLING_PROJECT"
 
 	// AuthParam is the query parameter for the cluster settings named
 	// key in a URI.
@@ -115,9 +119,10 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 	case "gs":
 		conf.Provider = roachpb.ExportStorageProvider_GoogleCloud
 		conf.GoogleCloudConfig = &roachpb.ExportStorage_GCS{
-			Bucket: uri.Host,
-			Prefix: uri.Path,
-			Auth:   uri.Query().Get(AuthParam),
+			Bucket:         uri.Host,
+			Prefix:         uri.Path,
+			Auth:           uri.Query().Get(AuthParam),
+			BillingProject: uri.Query().Get(GoogleBillingProjectParam),
 		}
 		conf.GoogleCloudConfig.Prefix = strings.TrimLeft(conf.GoogleCloudConfig.Prefix, "/")
 	case "azure":
@@ -180,14 +185,19 @@ func MakeExportStorage(
 ) (ExportStorage, error) {
 	switch dest.Provider {
 	case roachpb.ExportStorageProvider_LocalFile:
+		telemetry.Count("external-io.nodelocal")
 		return makeLocalStorage(dest.LocalFile.Path, settings)
 	case roachpb.ExportStorageProvider_Http:
+		telemetry.Count("external-io.http")
 		return makeHTTPStorage(dest.HttpPath.BaseUri, settings)
 	case roachpb.ExportStorageProvider_S3:
+		telemetry.Count("external-io.s3")
 		return makeS3Storage(ctx, dest.S3Config, settings)
 	case roachpb.ExportStorageProvider_GoogleCloud:
+		telemetry.Count("external-io.google_cloud")
 		return makeGCSStorage(ctx, dest.GoogleCloudConfig, settings)
 	case roachpb.ExportStorageProvider_Azure:
+		telemetry.Count("external-io.azure")
 		return makeAzureStorage(dest.AzureConfig, settings)
 	}
 	return nil, errors.Errorf("unsupported export destination type: %s", dest.Provider.String())
@@ -476,10 +486,16 @@ type s3Storage struct {
 	settings *cluster.Settings
 }
 
-func s3Retry(ctx context.Context, fn func() error) error {
+// delayedRetry runs fn and re-runs it a limited number of times if it
+// fails. It knows about specific kinds of errors that need longer retry
+// delays than normal.
+func delayedRetry(ctx context.Context, fn func() error) error {
 	const maxAttempts = 3
 	return retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
 		err := fn()
+		if err == nil {
+			return nil
+		}
 		if s3err, ok := err.(s3.RequestFailure); ok {
 			// A 503 error could mean we need to reduce our request rate. Impose an
 			// arbitrary slowdown in that case.
@@ -489,6 +505,15 @@ func s3Retry(ctx context.Context, fn func() error) error {
 				case <-time.After(time.Second * 5):
 				case <-ctx.Done():
 				}
+			}
+		}
+		// See https:github.com/GoogleCloudPlatform/google-cloud-go/issues/1012#issuecomment-393606797
+		// which suggests this GCE error message could be due to auth quota limits
+		// being reached.
+		if strings.Contains(err.Error(), "net/http: timeout awaiting response headers") {
+			select {
+			case <-time.After(time.Second * 5):
+			case <-ctx.Done():
 			}
 		}
 		return err
@@ -508,7 +533,7 @@ func makeS3Storage(
 	if conf.Endpoint != "" {
 		config.Endpoint = &conf.Endpoint
 		if conf.Region == "" {
-			return nil, errors.New("s3 region must be specified when using custom endpoints")
+			region = "default-region"
 		}
 		client, err := makeHTTPClient(settings)
 		if err != nil {
@@ -521,7 +546,7 @@ func makeS3Storage(
 		return nil, errors.Wrap(err, "new aws session")
 	}
 	if region == "" {
-		err = s3Retry(ctx, func() error {
+		err = delayedRetry(ctx, func() error {
 			var err error
 			region, err = s3manager.GetBucketRegion(ctx, sess, conf.Bucket, "us-east-1")
 			return err
@@ -531,6 +556,9 @@ func makeS3Storage(
 		}
 	}
 	sess.Config.Region = aws.String(region)
+	if conf.Endpoint != "" {
+		sess.Config.S3ForcePathStyle = aws.Bool(true)
+	}
 	return &s3Storage{
 		bucket:   aws.String(conf.Bucket),
 		conf:     conf,
@@ -653,8 +681,12 @@ func makeGCSStorage(
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create google cloud client")
 	}
+	bucket := g.Bucket(conf.Bucket)
+	if conf.BillingProject != `` {
+		bucket = bucket.UserProject(conf.BillingProject)
+	}
 	return &gcsStorage{
-		bucket:   g.Bucket(conf.Bucket),
+		bucket:   bucket,
 		client:   g,
 		conf:     conf,
 		prefix:   conf.Prefix,
@@ -683,7 +715,14 @@ func (g *gcsStorage) WriteFile(ctx context.Context, basename string, content io.
 
 func (g *gcsStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
 	// https://github.com/cockroachdb/cockroach/issues/23859
-	return g.bucket.Object(path.Join(g.prefix, basename)).NewReader(ctx)
+
+	var rc io.ReadCloser
+	err := delayedRetry(ctx, func() error {
+		var readErr error
+		rc, readErr = g.bucket.Object(path.Join(g.prefix, basename)).NewReader(ctx)
+		return readErr
+	})
+	return rc, err
 }
 
 func (g *gcsStorage) Delete(ctx context.Context, basename string) error {
@@ -710,7 +749,7 @@ func (g *gcsStorage) Close() error {
 
 type azureStorage struct {
 	conf      *roachpb.ExportStorage_Azure
-	container *azr.Container
+	container azblob.ContainerURL
 	prefix    string
 	settings  *cluster.Settings
 }
@@ -723,17 +762,24 @@ func makeAzureStorage(
 	if conf == nil {
 		return nil, errors.Errorf("azure upload requested but info missing")
 	}
-	client, err := azr.NewBasicClient(conf.AccountName, conf.AccountKey)
+	credential := azblob.NewSharedKeyCredential(conf.AccountName, conf.AccountKey)
+	p := azblob.NewPipeline(credential, azblob.PipelineOptions{})
+	u, err := url.Parse(fmt.Sprintf("https://%s.blob.core.windows.net", conf.AccountName))
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create azure client")
+		return nil, errors.Wrap(err, "azure: account name is not valid")
 	}
-	blobClient := client.GetBlobService()
+	serviceURL := azblob.NewServiceURL(*u, p)
 	return &azureStorage{
 		conf:      conf,
-		container: blobClient.GetContainerReference(conf.Container),
+		container: serviceURL.NewContainerURL(conf.Container),
 		prefix:    conf.Prefix,
 		settings:  settings,
-	}, err
+	}, nil
+}
+
+func (s *azureStorage) getBlob(basename string) azblob.BlockBlobURL {
+	name := path.Join(s.prefix, basename)
+	return s.container.NewBlockBlobURL(name)
 }
 
 func (s *azureStorage) Conf() roachpb.ExportStorage {
@@ -746,131 +792,41 @@ func (s *azureStorage) Conf() roachpb.ExportStorage {
 func (s *azureStorage) WriteFile(
 	ctx context.Context, basename string, content io.ReadSeeker,
 ) error {
-	name := path.Join(s.prefix, basename)
-	// A blob in Azure is composed of an ordered list of blocks. To create a
-	// blob, we must first create an empty block blob (i.e., a blob backed
-	// by blocks). Then we upload the blocks. Blocks can only by 4 MiB (in
-	// this version of the API) and have some identifier. Once the blocks are
-	// uploaded, then we put a block list, which assigns a list of blocks to a
-	// blob. When assigning blocks to a blob, we can choose between committed
-	// (blocks already assigned to the blob), uncommitted (uploaded blocks not
-	// yet assigned to the blob), or latest. chunkReader takes care of splitting
-	// up the input file into small enough chunks the API can handle.
-
-	const maxAttempts = 3
-
-	blob := s.container.GetBlobReference(name)
-
-	writeFile := func(ctx context.Context) error {
-		if err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-			return blob.CreateBlockBlob(nil)
-		}); err != nil {
-			return errors.Wrap(err, "creating block blob")
-		}
-		const fourMiB = 1024 * 1024 * 4
-
-		// NB: Azure wants Block IDs to all be the same length.
-		// http://gauravmantri.com/2013/05/18/windows-azure-blob-storage-dealing-with-the-specified-blob-or-block-content-is-invalid-error/
-		// 9999 * 4mb = 40gb max upload size, well over our max range size.
-		const maxBlockID = 9999
-		const blockIDFmt = "%04d"
-
-		var blocks []azr.Block
-		i := 1
-		uploadBlockFunc := func(b []byte) error {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-			}
-
-			if len(b) < 1 {
-				return errors.New("cannot upload an empty block")
-			}
-
-			if i > maxBlockID {
-				return errors.Errorf("too many blocks for azure blob block writer")
-			}
-			id := base64.URLEncoding.EncodeToString([]byte(fmt.Sprintf(blockIDFmt, i)))
-			i++
-			blocks = append(blocks, azr.Block{ID: id, Status: azr.BlockStatusUncommitted})
-			return retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-				return blob.PutBlock(id, b, nil)
-			})
-		}
-
-		if err := chunkReader(content, fourMiB, uploadBlockFunc); err != nil {
-			return errors.Wrap(err, "putting blocks")
-		}
-
-		err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-			return blob.PutBlockList(blocks, nil)
-		})
-		return errors.Wrap(err, "putting block list")
-	}
-
-	err := retry.WithMaxAttempts(ctx, base.DefaultRetryOptions(), maxAttempts, func() error {
-		if _, err := content.Seek(0, io.SeekStart); err != nil {
-			return errors.Wrap(err, "seek")
-		}
-		// Set the timeout within the retry loop.
-		deadlineCtx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&s.settings.SV))
-		defer cancel()
-		return writeFile(deadlineCtx)
-	})
-	return errors.Wrap(err, "write file")
+	ctx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&s.settings.SV))
+	defer cancel()
+	blob := s.getBlob(basename)
+	_, err := blob.Upload(ctx, content, azblob.BlobHTTPHeaders{}, azblob.Metadata{}, azblob.BlobAccessConditions{})
+	return errors.Wrapf(err, "write file: %s", basename)
 }
 
-// chunkReader calls f with chunks of size from r. The same underlying byte
-// slice is used for each call to f. f can return an error to stop the file
-// reading. If so, that error will be returned.
-func chunkReader(r io.Reader, size int, f func([]byte) error) error {
-	b := make([]byte, size)
-	for {
-		n, err := r.Read(b)
-
-		if err != nil && err != io.EOF {
-			return errors.Wrap(err, "reading chunk")
-		}
-
-		if n > 0 {
-			funcErr := f(b[:n])
-			if funcErr != nil {
-				return funcErr
-			}
-		}
-
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (s *azureStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
-	// Would need to upgrade to https://github.com/Azure/azure-storage-blob-go for Context support
-	// https://github.com/cockroachdb/cockroach/issues/23860
-	// But, solve this first:
+func (s *azureStorage) ReadFile(ctx context.Context, basename string) (io.ReadCloser, error) {
 	// https://github.com/cockroachdb/cockroach/issues/23859
-	r, err := s.container.GetBlobReference(path.Join(s.prefix, basename)).Get(nil)
-	return r, errors.Wrap(err, "failed to create azure reader")
+	blob := s.getBlob(basename)
+	get, err := blob.Download(ctx, 0, 0, azblob.BlobAccessConditions{}, false)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create azure reader")
+	}
+	reader := get.Body(azblob.RetryReaderOptions{MaxRetryRequests: 3})
+	return reader, nil
 }
 
-func (s *azureStorage) Delete(_ context.Context, basename string) error {
-	// Would need to upgrade to https://github.com/Azure/azure-storage-blob-go for Context support
-	// https://github.com/cockroachdb/cockroach/issues/23860
-	return errors.Wrap(s.container.GetBlobReference(path.Join(s.prefix, basename)).Delete(nil), "failed to delete blob")
+func (s *azureStorage) Delete(ctx context.Context, basename string) error {
+	ctx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&s.settings.SV))
+	defer cancel()
+	blob := s.getBlob(basename)
+	_, err := blob.Delete(ctx, azblob.DeleteSnapshotsOptionNone, azblob.BlobAccessConditions{})
+	return errors.Wrap(err, "delete file")
 }
 
-func (s *azureStorage) Size(_ context.Context, basename string) (int64, error) {
-	// Would need to upgrade to https://github.com/Azure/azure-storage-blob-go for Context support
-	// https://github.com/cockroachdb/cockroach/issues/23860
-	b := s.container.GetBlobReference(path.Join(s.prefix, basename))
-	err := b.GetProperties(nil)
-	return b.Properties.ContentLength, errors.Wrap(err, "failed to get blob properties")
+func (s *azureStorage) Size(ctx context.Context, basename string) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeoutSetting.Get(&s.settings.SV))
+	defer cancel()
+	blob := s.getBlob(basename)
+	props, err := blob.GetProperties(ctx, azblob.BlobAccessConditions{})
+	if err != nil {
+		return 0, errors.Wrap(err, "get file properties")
+	}
+	return props.ContentLength(), nil
 }
 
 func (s *azureStorage) Close() error {

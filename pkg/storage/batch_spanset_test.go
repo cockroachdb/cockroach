@@ -78,7 +78,7 @@ func TestSpanSetBatch(t *testing.T) {
 		t.Errorf("ClearRange: unexpected error %v", err)
 	}
 	{
-		iter := batch.NewIterator(engine.IterOptions{})
+		iter := batch.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 		err := batch.ClearIterRange(iter, outsideKey, outsideKey2)
 		iter.Close()
 		if !isWriteSpanErr(err) {
@@ -93,6 +93,7 @@ func TestSpanSetBatch(t *testing.T) {
 	}
 
 	// Reads inside the range work.
+	//lint:ignore SA1019 historical usage of deprecated batch.Get is OK
 	if value, err := batch.Get(insideKey); err != nil {
 		t.Errorf("failed to read inside the range: %s", err)
 	} else if !bytes.Equal(value, []byte("value")) {
@@ -103,9 +104,11 @@ func TestSpanSetBatch(t *testing.T) {
 	isReadSpanErr := func(err error) bool {
 		return testutils.IsError(err, "cannot read undeclared span")
 	}
+	//lint:ignore SA1019 historical usage of deprecated batch.Get is OK
 	if _, err := batch.Get(outsideKey); !isReadSpanErr(err) {
 		t.Errorf("Get: unexpected error %v", err)
 	}
+	//lint:ignore SA1019 historical usage of deprecated batch.GetProto is OK
 	if _, _, _, err := batch.GetProto(outsideKey, nil); !isReadSpanErr(err) {
 		t.Errorf("GetProto: unexpected error %v", err)
 	}
@@ -118,7 +121,7 @@ func TestSpanSetBatch(t *testing.T) {
 	}
 
 	func() {
-		iter := batch.NewIterator(engine.IterOptions{})
+		iter := batch.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 		defer iter.Close()
 
 		// Iterators check boundaries on seek and next/prev
@@ -157,7 +160,7 @@ func TestSpanSetBatch(t *testing.T) {
 	if err := batch.Commit(true); err != nil {
 		t.Fatal(err)
 	}
-	iter := spanset.NewIterator(eng.NewIterator(engine.IterOptions{}), &ss)
+	iter := spanset.NewIterator(eng.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax}), &ss)
 	defer iter.Close()
 	iter.SeekReverse(outsideKey)
 	if _, err := iter.Valid(); !isReadSpanErr(err) {
@@ -224,14 +227,14 @@ func TestSpanSetMVCCResolveWriteIntentRangeUsingIter(t *testing.T) {
 	batch := spanset.NewBatch(eng.NewBatch(), &ss)
 	defer batch.Close()
 
-	iterAndBuf := engine.GetIterAndBuf(batch)
-	defer iterAndBuf.Cleanup()
-
 	intent := roachpb.Intent{
 		Span:   roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("b\x00")},
 		Txn:    enginepb.TxnMeta{}, // unused
 		Status: roachpb.PENDING,
 	}
+
+	iterAndBuf := engine.GetIterAndBuf(batch, engine.IterOptions{UpperBound: intent.Span.EndKey})
+	defer iterAndBuf.Cleanup()
 
 	if _, _, err := engine.MVCCResolveWriteIntentRangeUsingIter(
 		ctx, batch, iterAndBuf, nil /* ms */, intent, math.MaxInt64,

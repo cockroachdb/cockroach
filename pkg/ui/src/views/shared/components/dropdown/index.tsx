@@ -7,6 +7,7 @@ import "./dropdown.styl";
 
 import {leftArrow, rightArrow} from "src/views/shared/components/icons";
 import { trustIcon } from "src/util/trust";
+import ReactSelectClass from "react-select";
 
 export interface DropdownOption {
   value: string;
@@ -33,6 +34,29 @@ interface DropdownOwnProps {
  * Dropdown component that uses the URL query string for state.
  */
 export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
+  dropdownRef: React.RefObject<HTMLDivElement> = React.createRef();
+  titleRef: React.RefObject<HTMLDivElement> = React.createRef();
+  selectRef: React.RefObject<ReactSelectClass> = React.createRef();
+
+  triggerSelectClick = (e: any) => {
+    const dropdownNode = this.dropdownRef.current as Node;
+    const titleNode = this.titleRef.current as Node;
+    const selectNode = this.selectRef.current;
+
+    if (e.target.isSameNode(dropdownNode) || e.target.isSameNode(titleNode) || e.target.className.indexOf("dropdown__select") > -1) {
+      // This is a far-less-than-ideal solution to the need to trigger
+      // the react-select dropdown from the entirety of the dropdown area
+      // instead of just the nodes rendered by the component itself
+      // the approach borrows from:
+      // https://github.com/JedWatson/react-select/issues/305#issuecomment-172607534
+      //
+      // a broader discussion on the status of a possible feature addition that
+      // would render this hack moot can be found here:
+      // https://github.com/JedWatson/react-select/issues/1989
+      (selectNode as any).handleMouseDownOnMenu(e);
+    }
+  }
+
   render() {
     const {selected, options, onChange, onArrowClick, disabledArrows} = this.props;
 
@@ -49,15 +73,27 @@ export default class Dropdown extends React.Component<DropdownOwnProps, {}> {
       { "dropdown__side-arrow--disabled": _.includes(disabledArrows, ArrowDirection.RIGHT) },
     );
 
-    return <div className={className}>
+    return <div className={className} onClick={this.triggerSelectClick} ref={this.dropdownRef}>
       {/* TODO (maxlang): consider moving arrows outside the dropdown component */}
       <span
         className={leftClassName}
         dangerouslySetInnerHTML={trustIcon(leftArrow)}
         onClick={() => this.props.onArrowClick(ArrowDirection.LEFT)}>
       </span>
-      <span className="dropdown__title">{this.props.title}{this.props.title ? ":" : ""}</span>
-      <Select className="dropdown__select" clearable={false} searchable={false} options={options} value={selected} onChange={onChange} />
+      <span
+        className="dropdown__title"
+        ref={this.titleRef}>
+          {this.props.title}{this.props.title ? ":" : ""}
+      </span>
+      <Select
+        className="dropdown__select"
+        clearable={false}
+        searchable={false}
+        options={options}
+        value={selected}
+        onChange={onChange}
+        ref={this.selectRef}
+      />
       <span
         className={rightClassName}
         dangerouslySetInnerHTML={trustIcon(rightArrow)}

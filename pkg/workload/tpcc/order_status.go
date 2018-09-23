@@ -65,7 +65,9 @@ type orderStatus struct{}
 
 var _ tpccTx = orderStatus{}
 
-func (o orderStatus) run(config *tpcc, db *gosql.DB, wID int) (interface{}, error) {
+func (o orderStatus) run(
+	ctx context.Context, config *tpcc, db *gosql.DB, wID int,
+) (interface{}, error) {
 	atomic.AddUint64(&config.auditor.orderStatusTransactions, 1)
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -84,7 +86,7 @@ func (o orderStatus) run(config *tpcc, db *gosql.DB, wID int) (interface{}, erro
 	}
 
 	if err := crdb.ExecuteTx(
-		context.Background(),
+		ctx,
 		db,
 		config.txOpts,
 		func(tx *gosql.Tx) error {
@@ -93,7 +95,7 @@ func (o orderStatus) run(config *tpcc, db *gosql.DB, wID int) (interface{}, erro
 			// Select the customer
 			if d.cID != 0 {
 				// Case 1: select by customer id
-				if err := tx.QueryRow(fmt.Sprintf(`
+				if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
 					SELECT c_balance, c_first, c_middle, c_last
 					FROM customer
 					WHERE c_w_id = %[1]d AND c_d_id = %[2]d AND c_id = %[3]d`,
@@ -107,12 +109,13 @@ func (o orderStatus) run(config *tpcc, db *gosql.DB, wID int) (interface{}, erro
 				if config.usePostgres {
 					indexStr = ""
 				}
-				rows, err := tx.Query(fmt.Sprintf(`
+				queryStr := fmt.Sprintf(`
 					SELECT c_id, c_balance, c_first, c_middle
 					FROM customer%[1]s
 					WHERE c_w_id = %[2]d AND c_d_id = %[3]d AND c_last = '%[4]s'
-					ORDER BY c_first ASC`, indexStr,
-					wID, d.dID, d.cLast))
+					ORDER BY c_first ASC`,
+					indexStr, wID, d.dID, d.cLast)
+				rows, err := tx.QueryContext(ctx, queryStr)
 				if err != nil {
 					return errors.Wrap(err, "select by last name fail")
 				}
@@ -130,6 +133,9 @@ func (o orderStatus) run(config *tpcc, db *gosql.DB, wID int) (interface{}, erro
 					return err
 				}
 				rows.Close()
+				if len(customers) == 0 {
+					return fmt.Errorf("found no customers matching query: %s", queryStr)
+				}
 				cIdx := len(customers) / 2
 				if len(customers)%2 == 0 {
 					cIdx--
@@ -143,7 +149,7 @@ func (o orderStatus) run(config *tpcc, db *gosql.DB, wID int) (interface{}, erro
 			}
 
 			// Select the customer's order.
-			if err := tx.QueryRow(fmt.Sprintf(`
+			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
 				SELECT o_id, o_entry_d, o_carrier_id
 				FROM "order"
 				WHERE o_w_id = %[1]d AND o_d_id = %[2]d AND o_c_id = %[3]d
@@ -155,7 +161,7 @@ func (o orderStatus) run(config *tpcc, db *gosql.DB, wID int) (interface{}, erro
 			}
 
 			// Select the items from the customer's order.
-			rows, err := tx.Query(fmt.Sprintf(`
+			rows, err := tx.QueryContext(ctx, fmt.Sprintf(`
 				SELECT ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_delivery_d
 				FROM order_line
 				WHERE ol_w_id = %[1]d AND ol_d_id = %[2]d AND ol_o_id = %[3]d`,

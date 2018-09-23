@@ -20,6 +20,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 )
 
@@ -32,7 +33,8 @@ func IsError(err error, re string) bool {
 	if err == nil || re == "" {
 		return false
 	}
-	matched, merr := regexp.MatchString(re, err.Error())
+	errString := pgerror.FullError(err)
+	matched, merr := regexp.MatchString(re, errString)
 	if merr != nil {
 		return false
 	}
@@ -69,7 +71,7 @@ func IsPError(pErr *roachpb.Error, re string) bool {
 func IsSQLRetryableError(err error) bool {
 	// Don't forget to update the corresponding test when making adjustments
 	// here.
-	return IsError(err, "(connection reset by peer|connection refused|failed to send RPC|rpc error: code = Unavailable|EOF|result is ambiguous)")
+	return IsError(err, "(no inbound stream connection|connection reset by peer|connection refused|failed to send RPC|rpc error: code = Unavailable|EOF|result is ambiguous)")
 }
 
 // Caller returns filename and line number info for the specified stack

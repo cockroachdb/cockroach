@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -49,6 +51,8 @@ var (
 	// ErrEpochIncremented is returned when a heartbeat request fails because
 	// the underlying liveness record has had its epoch incremented.
 	ErrEpochIncremented = errors.New("heartbeat failed on epoch increment")
+
+	errLiveClockNotLive = errors.New("not live")
 )
 
 type errRetryLiveness struct {
@@ -66,20 +70,35 @@ func (e *errRetryLiveness) Error() string {
 // Node liveness metrics counter names.
 var (
 	metaLiveNodes = metric.Metadata{
-		Name: "liveness.livenodes",
-		Help: "Number of live nodes in the cluster (will be 0 if this node is not itself live)"}
+		Name:        "liveness.livenodes",
+		Help:        "Number of live nodes in the cluster (will be 0 if this node is not itself live)",
+		Measurement: "Nodes",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaHeartbeatSuccesses = metric.Metadata{
-		Name: "liveness.heartbeatsuccesses",
-		Help: "Number of successful node liveness heartbeats from this node"}
+		Name:        "liveness.heartbeatsuccesses",
+		Help:        "Number of successful node liveness heartbeats from this node",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaHeartbeatFailures = metric.Metadata{
-		Name: "liveness.heartbeatfailures",
-		Help: "Number of failed node liveness heartbeats from this node"}
+		Name:        "liveness.heartbeatfailures",
+		Help:        "Number of failed node liveness heartbeats from this node",
+		Measurement: "Messages",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaEpochIncrements = metric.Metadata{
-		Name: "liveness.epochincrements",
-		Help: "Number of times this node has incremented its liveness epoch"}
+		Name:        "liveness.epochincrements",
+		Help:        "Number of times this node has incremented its liveness epoch",
+		Measurement: "Epochs",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaHeartbeatLatency = metric.Metadata{
-		Name: "liveness.heartbeatlatency",
-		Help: "Node liveness heartbeat latency in nanoseconds"}
+		Name:        "liveness.heartbeatlatency",
+		Help:        "Node liveness heartbeat latency",
+		Measurement: "Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 // IsLive returns whether the node is considered live at the given time with the
@@ -441,22 +460,25 @@ func (nl *NodeLiveness) StartHeartbeat(
 	stopper.RunWorker(ctx, func(context.Context) {
 		ambient := nl.ambientCtx
 		ambient.AddLogTag("hb", nil)
+		ctx, cancel := stopper.WithCancelOnStop(context.Background())
+		defer cancel()
+		ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "liveness heartbeat loop")
+		defer sp.Finish()
+
+		incrementEpoch := true
 		ticker := time.NewTicker(nl.heartbeatInterval)
 		defer ticker.Stop()
-		incrementEpoch := true
 		for {
 			select {
 			case <-nl.heartbeatToken:
 			case <-stopper.ShouldStop():
 				return
 			}
-			func() {
+			func(ctx context.Context) {
 				// Give the context a timeout approximately as long as the time we
 				// have left before our liveness entry expires.
-				ctx, cancel := context.WithTimeout(context.Background(), nl.livenessThreshold-nl.heartbeatInterval)
-				ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "liveness heartbeat loop")
+				ctx, cancel := context.WithTimeout(ctx, nl.livenessThreshold-nl.heartbeatInterval)
 				defer cancel()
-				defer sp.Finish()
 
 				// Retry heartbeat in the event the conditional put fails.
 				for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
@@ -475,7 +497,7 @@ func (nl *NodeLiveness) StartHeartbeat(
 					}
 					break
 				}
-			}()
+			}(ctx)
 			nl.heartbeatToken <- struct{}{}
 			select {
 			case <-ticker.C:
@@ -618,22 +640,43 @@ func (nl *NodeLiveness) Self() (*Liveness, error) {
 	return nl.getLivenessLocked(nl.gossip.NodeID.Get())
 }
 
+// IsLiveMapEntry encapsulates data about current liveness for a
+// node. A bool indicating liveness and the last-recorded epoch for
+// the node.
+type IsLiveMapEntry struct {
+	IsLive bool
+	Epoch  int64
+}
+
+// IsLiveMap is a type alias for a map from NodeID to IsLiveMapEntry.
+type IsLiveMap map[roachpb.NodeID]IsLiveMapEntry
+
 // GetIsLiveMap returns a map of nodeID to boolean liveness status of
-// each node.
-func (nl *NodeLiveness) GetIsLiveMap() map[roachpb.NodeID]bool {
+// each node. This excludes nodes that were removed completely (dead +
+// decommissioning).
+func (nl *NodeLiveness) GetIsLiveMap() IsLiveMap {
 	nl.mu.Lock()
 	defer nl.mu.Unlock()
-	lMap := map[roachpb.NodeID]bool{}
+	lMap := IsLiveMap{}
 	now := nl.clock.Now()
 	maxOffset := nl.clock.MaxOffset()
 	for nID, l := range nl.mu.nodes {
-		lMap[nID] = l.IsLive(now, maxOffset)
+		isLive := l.IsLive(now, maxOffset)
+		if !isLive && l.Decommissioning {
+			// This is a node that was completely removed. Skip over it.
+			continue
+		}
+		lMap[nID] = IsLiveMapEntry{
+			IsLive: isLive,
+			Epoch:  l.Epoch,
+		}
 	}
 	return lMap
 }
 
-// GetLivenesses returns a slice containing the liveness status of every node
-// on the cluster.
+// GetLivenesses returns a slice containing the liveness status of
+// every node on the cluster known to gossip. Callers should consider
+// calling (statusServer).NodesWithLiveness() instead where possible.
 func (nl *NodeLiveness) GetLivenesses() []Liveness {
 	nl.mu.Lock()
 	defer nl.mu.Unlock()
@@ -654,6 +697,12 @@ func (nl *NodeLiveness) GetLiveness(nodeID roachpb.NodeID) (*Liveness, error) {
 }
 
 // GetLivenessStatusMap generates map from NodeID to LivenessStatus.
+// This includes only node known to gossip. To include all nodes,
+// Callers should consider calling (statusServer).NodesWithLiveness()
+// instead where possible.
+//
+// GetLivenessStatusMap() includes removed nodes (dead +
+// decommissioned).
 func (nl *NodeLiveness) GetLivenessStatusMap() map[roachpb.NodeID]NodeLivenessStatus {
 	now := nl.clock.PhysicalTime()
 	livenesses := nl.GetLivenesses()
@@ -662,9 +711,10 @@ func (nl *NodeLiveness) GetLivenessStatusMap() map[roachpb.NodeID]NodeLivenessSt
 
 	statusMap := make(map[roachpb.NodeID]NodeLivenessStatus, len(livenesses))
 	for _, liveness := range livenesses {
-		statusMap[liveness.NodeID] = liveness.LivenessStatus(
+		status := liveness.LivenessStatus(
 			now, threshold, maxOffset,
 		)
+		statusMap[liveness.NodeID] = status
 	}
 	return statusMap
 }
@@ -961,4 +1011,21 @@ func (nl *NodeLiveness) numLiveNodes() int64 {
 		}
 	}
 	return liveNodes
+}
+
+// AsLiveClock returns a closedts.LiveClockFn that takes a current timestamp off
+// the clock and returns it only if node liveness indicates that the node is live
+// at that timestamp and the returned epoch.
+func (nl *NodeLiveness) AsLiveClock() closedts.LiveClockFn {
+	return func(nodeID roachpb.NodeID) (hlc.Timestamp, ctpb.Epoch, error) {
+		now := nl.clock.Now()
+		liveness, err := nl.GetLiveness(nodeID)
+		if err != nil {
+			return hlc.Timestamp{}, 0, err
+		}
+		if !liveness.IsLive(now, nl.clock.MaxOffset()) {
+			return hlc.Timestamp{}, 0, errLiveClockNotLive
+		}
+		return now, ctpb.Epoch(liveness.Epoch), nil
+	}
 }

@@ -103,14 +103,14 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 		return err
 	}
 
-	indexHints := &tree.IndexHints{
+	indexFlags := &tree.IndexFlags{
 		IndexID:     tree.IndexID(o.indexDesc.ID),
 		NoIndexJoin: true,
 	}
 	scan := params.p.Scan()
 	scan.run.isCheck = true
 	colCfg := scanColumnsConfig{wantedColumns: columnIDs, addUnwantedAsHidden: true}
-	if err := scan.initTable(ctx, params.p, o.tableDesc, indexHints, colCfg); err != nil {
+	if err := scan.initTable(ctx, params.p, o.tableDesc, indexFlags, colCfg); err != nil {
 		return err
 	}
 	plan := planNode(scan)
@@ -134,7 +134,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	span := o.tableDesc.IndexSpan(o.indexDesc.ID)
 	spans := []roachpb.Span{span}
 
-	planCtx := params.extendedEvalCtx.DistSQLPlanner.newPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
+	planCtx := params.extendedEvalCtx.DistSQLPlanner.NewPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
 	physPlan, err := params.extendedEvalCtx.DistSQLPlanner.createScrubPhysicalCheck(
 		&planCtx, scan, *o.tableDesc, *o.indexDesc, spans, params.p.ExecCfg().Clock.Now())
 	if err != nil {

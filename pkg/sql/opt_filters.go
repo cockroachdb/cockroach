@@ -300,11 +300,6 @@ func (p *planner) propagateFilters(
 			return plan, extraFilter, err
 		}
 
-	case *distSQLWrapper:
-		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
-			return plan, extraFilter, err
-		}
-
 	case *explainDistSQLNode:
 		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 			return plan, extraFilter, err
@@ -312,13 +307,6 @@ func (p *planner) propagateFilters(
 
 	case *explainPlanNode:
 		if n.optimized {
-			if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
-				return plan, extraFilter, err
-			}
-		}
-
-	case *showTraceNode:
-		if n.plan != nil {
 			if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
 				return plan, extraFilter, err
 			}
@@ -341,7 +329,7 @@ func (p *planner) propagateFilters(
 			return plan, extraFilter, err
 		}
 
-	case *testingRelocateNode:
+	case *relocateNode:
 		if n.rows, err = p.triggerFilterPropagation(ctx, n.rows); err != nil {
 			return plan, extraFilter, err
 		}
@@ -387,6 +375,7 @@ func (p *planner) propagateFilters(
 	case *DropUserNode:
 	case *hookFnNode:
 	case *valuesNode:
+	case *virtualTableNode:
 	case *sequenceSelectNode:
 	case *setVarNode:
 	case *setClusterSettingNode:
@@ -394,6 +383,7 @@ func (p *planner) propagateFilters(
 	case *showZoneConfigNode:
 	case *showRangesNode:
 	case *showFingerprintsNode:
+	case *showTraceNode:
 	case *scatterNode:
 
 	default:
@@ -932,4 +922,19 @@ func mergeConj(left, right tree.TypedExpr) tree.TypedExpr {
 
 func isFilterTrue(expr tree.TypedExpr) bool {
 	return expr == nil || expr == tree.DBoolTrue
+}
+
+// splitAndExpr flattens a tree of AND expressions, appending all of the child
+// expressions as a list. Any non-AND expression is appended as a single element
+// in the list.
+//
+//   a AND b AND c AND d -> [a, b, c, d]
+func splitAndExpr(
+	evalCtx *tree.EvalContext, e tree.TypedExpr, exprs tree.TypedExprs,
+) tree.TypedExprs {
+	switch t := e.(type) {
+	case *tree.AndExpr:
+		return splitAndExpr(evalCtx, t.TypedRight(), splitAndExpr(evalCtx, t.TypedLeft(), exprs))
+	}
+	return append(exprs, e)
 }

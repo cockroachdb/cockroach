@@ -70,6 +70,9 @@ const (
 	AdminTransferLease
 	// AdminChangeReplicas is called to add or remove replicas for a range.
 	AdminChangeReplicas
+	// AdminRelocateRange is called to relocate the replicas for a range onto a
+	// specified list of stores.
+	AdminRelocateRange
 	// HeartbeatTxn sends a periodic heartbeat to extant
 	// transaction rows to indicate the client is still alive and
 	// the transaction should not be considered abandoned.
@@ -91,12 +94,12 @@ const (
 	PushTxn
 	// QueryTxn fetches the current state of the designated transaction.
 	QueryTxn
+	// QueryIntent checks whether the specified intent exists.
+	QueryIntent
 	// ResolveIntent resolves existing write intents for a key.
 	ResolveIntent
 	// ResolveIntentRange resolves existing write intents for a key range.
 	ResolveIntentRange
-	// Noop is a no-op.
-	Noop
 	// Merge merges a given value into the specified key. Merge is a
 	// high-performance operation provided by underlying data storage for values
 	// which are accumulated over several writes. Because it is not
@@ -115,8 +118,6 @@ const (
 	LeaseInfo
 	// ComputeChecksum starts a checksum computation over a replica snapshot.
 	ComputeChecksum
-	// DeprecatedVerifyChecksum is no longer used.
-	DeprecatedVerifyChecksum
 	// CheckConsistency verifies the consistency of all ranges falling within a
 	// key span.
 	CheckConsistency
@@ -145,4 +146,8 @@ const (
 	// since the transaction orig timestamp and sets a new span in the
 	// timestamp cache at the current transaction timestamp.
 	RefreshRange
+	// Subsume freezes a range for merging with its left-hand neighbor.
+	Subsume
+	// RangeStats returns the MVCC statistics for a range.
+	RangeStats
 )

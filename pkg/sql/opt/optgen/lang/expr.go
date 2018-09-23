@@ -172,6 +172,27 @@ func (e RuleSetExpr) Sort(less func(left, right *RuleExpr) bool) {
 	})
 }
 
+// SingleName returns the name of the function when there is exactly one choice.
+// If there is zero or more than one choice, SingleName will panic.
+func (e *FuncExpr) SingleName() string {
+	if names, ok := e.Name.(*NamesExpr); ok {
+		if len(*names) > 1 {
+			panic("function cannot have more than one name")
+		}
+		return string((*names)[0])
+	}
+	return (string)(*e.Name.(*NameExpr))
+}
+
+// NameChoice returns the set of names that this function can have. Multiple
+// choices are possible when this is a match function.
+func (e *FuncExpr) NameChoice() NamesExpr {
+	if names, ok := e.Name.(*NamesExpr); ok {
+		return *names
+	}
+	return NamesExpr{*e.Name.(*NameExpr)}
+}
+
 // visitChildren is a helper function called by the Visit function on AST
 // expressions. It invokes the visit function on each child of the specified
 // expression and returns the resulting children as a slice. If none of the
@@ -202,12 +223,17 @@ func visitChildren(e Expr, visit VisitFunc) []Expr {
 // expression to the given buffer, at the specified level of indentation.
 func formatExpr(e Expr, buf *bytes.Buffer, level int) {
 	if e.Value() != nil {
-		if e.Op() == StringOp {
+		switch e.Op() {
+		case StringOp:
 			buf.WriteByte('"')
 			buf.WriteString(e.Value().(string))
 			buf.WriteByte('"')
-		} else {
-			buf.WriteString(fmt.Sprintf("%v", e.Value()))
+
+		case NumberOp:
+			fmt.Fprintf(buf, "%d", e.Value().(int64))
+
+		default:
+			fmt.Fprintf(buf, "%v", e.Value())
 		}
 		return
 	}

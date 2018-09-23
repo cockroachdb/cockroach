@@ -77,7 +77,7 @@ VALUES (NULL) UNION ALL VALUES (NULL)
 NULL
 NULL
 
-query IT
+query IT rowsort
 SELECT x, pg_typeof(y) FROM (SELECT 1, NULL UNION ALL SELECT 2, 4) AS t(x, y)
 ----
 1  unknown
@@ -88,6 +88,35 @@ SELECT x, pg_typeof(y) FROM (SELECT 1, 3 UNION ALL SELECT 2, NULL) AS t(x, y)
 ----
 1  int
 2  unknown
+
+# INTERSECT with NULL columns in operands works.
+query I
+VALUES (1) INTERSECT VALUES (NULL) ORDER BY 1
+----
+
+query I
+VALUES (NULL) INTERSECT VALUES (1) ORDER BY 1
+----
+
+query I
+VALUES (NULL) INTERSECT VALUES (NULL)
+----
+NULL
+
+# EXCEPT with NULL columns in operands works.
+query I
+VALUES (1) EXCEPT VALUES (NULL) ORDER BY 1
+----
+1
+
+query I
+VALUES (NULL) EXCEPT VALUES (1) ORDER BY 1
+----
+NULL
+
+query I
+VALUES (NULL) EXCEPT VALUES (NULL)
+----
 
 statement ok
 CREATE TABLE uniontest (
@@ -216,3 +245,32 @@ CREATE TABLE c (a INT PRIMARY KEY, b INT)
 query I
 SELECT a FROM a WHERE a > 2 UNION ALL (SELECT a FROM c WHERE b > 2) LIMIT 1;
 ----
+
+statement ok
+INSERT INTO a VALUES (1)
+
+statement ok
+INSERT INTO c VALUES (1,2)
+
+statement ok
+INSERT INTO c VALUES (3,4)
+
+# Check that UNION ALL columns are mapped correctly - even if one side gets optimized out
+query I
+SELECT a FROM (SELECT a FROM a UNION ALL SELECT a FROM c) ORDER BY a
+----
+1
+1
+3
+
+query I
+SELECT a FROM (SELECT a FROM a WHERE a > 3 AND a < 1 UNION ALL SELECT a FROM c) ORDER BY a
+----
+1
+3
+
+query I
+SELECT a FROM (SELECT a FROM c UNION ALL SELECT a FROM a WHERE a > 3 AND a < 1) ORDER BY a
+----
+1
+3

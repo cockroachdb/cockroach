@@ -1,6 +1,6 @@
 import { assert } from "chai";
 
-import {MetricConstants, NodeStatus$Properties} from "src/util/proto";
+import {MetricConstants, INodeStatus} from "src/util/proto";
 import * as protos from "src/js/protos";
 
 import {
@@ -151,7 +151,7 @@ describe("node data selectors", function() {
 });
 
 describe("selectCommissionedNodeStatuses", function() {
-  const nodeStatuses: NodeStatus$Properties[] = [
+  const nodeStatuses: INodeStatus[] = [
     {
       desc: {
         node_id: 1,
@@ -186,7 +186,7 @@ describe("selectCommissionedNodeStatuses", function() {
     assert.deepEqual(result, nodeStatuses);
   });
 
-  const testCases: [string, LivenessStatus, NodeStatus$Properties[]][] = [
+  const testCases: [string, LivenessStatus, INodeStatus[]][] = [
     ["excludes decommissioned nodes", LivenessStatus.DECOMMISSIONED, []],
     ["includes decommissioning nodes", LivenessStatus.DECOMMISSIONING, nodeStatuses],
     ["includes live nodes", LivenessStatus.LIVE, nodeStatuses],
@@ -210,7 +210,7 @@ describe("sumNodeStats", function() {
     // Each of these nodes only has half of its capacity "usable" for cockroach data.
     // See diagram for what these stats mean:
     // https://github.com/cockroachdb/cockroach/blob/31e4299ab73a43f539b1ba63ed86be5ee18685f6/pkg/storage/metrics.go#L145-L153
-    const nodeStatuses: NodeStatus$Properties[] = [
+    const nodeStatuses: INodeStatus[] = [
       {
         desc: { node_id: 1 },
         metrics: {

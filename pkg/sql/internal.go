@@ -19,7 +19,6 @@ import (
 	"math"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -204,13 +204,18 @@ func (ie *internalExecutorImpl) initConnEx(
 		// txn committed. But if there is a higher-level txn, they don't get
 		// released.
 		defer func() {
-			if err := ex.resetExtraTxnState(ctx, txnAborted, ex.server.dbCache); err != nil {
+			if err := ex.resetExtraTxnState(ctx, ex.server.dbCache); err != nil {
 				log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 			}
 		}()
 		if err := ex.run(ctx, nil /* cancel */); err != nil {
 			errCallback(err)
 		}
+		closeMode := normalClose
+		if txn != nil {
+			closeMode = externalTxnClose
+		}
+		ex.close(ctx, closeMode)
 		wg.Done()
 	}()
 	return stmtBuf, &wg
@@ -386,7 +391,7 @@ func (ie *internalExecutorImpl) execInternal(
 	qargs ...interface{},
 ) (retRes result, retErr error) {
 	if sargs != nil && sargs.ApplicationName == "" {
-		sargs.ApplicationName = "internal-" + opName
+		sargs.ApplicationName = InternalAppNamePrefix + "internal-" + opName
 	}
 
 	defer func() {
@@ -403,7 +408,7 @@ func (ie *internalExecutorImpl) execInternal(
 
 	ctx, finishSp := tracing.EnsureChildSpan(ctx, ie.s.cfg.AmbientCtx.Tracer, opName)
 	defer finishSp()
-	ctx = log.WithLogTag(ctx, "intExec", opName)
+	ctx = logtags.AddTag(ctx, "intExec", opName)
 
 	timeReceived := timeutil.Now()
 	parseStart := timeReceived
@@ -521,8 +526,7 @@ func (icc *internalClientComm) CreateStatementResult(
 	_ RowDescOpt,
 	pos CmdPos,
 	_ []pgwirebase.FormatCode,
-	_ *time.Location,
-	_ sessiondata.BytesEncodeFormat,
+	_ sessiondata.DataConversionConfig,
 ) CommandResult {
 	return icc.createRes(pos, nil /* onClose */)
 }

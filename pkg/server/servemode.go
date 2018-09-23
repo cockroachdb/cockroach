@@ -15,6 +15,7 @@
 package server
 
 import (
+	"strings"
 	"sync/atomic"
 
 	"google.golang.org/grpc/codes"
@@ -50,9 +51,7 @@ func (s *Server) Intercept() func(string) error {
 			return nil
 		}
 		if _, allowed := interceptors[fullName]; !allowed {
-			return grpcstatus.Errorf(
-				codes.Unavailable, "node waiting for init; %s not available", fullName,
-			)
+			return WaitingForInitError(fullName)
 		}
 		return nil
 	}
@@ -69,4 +68,17 @@ func (s *serveMode) get() serveMode {
 func (s *serveMode) operational() bool {
 	sMode := s.get()
 	return sMode == modeOperational || sMode == modeDraining
+}
+
+// WaitingForInitError indicates that the server cannot run the specified
+// method until the node has been initialized.
+func WaitingForInitError(methodName string) error {
+	return grpcstatus.Errorf(codes.Unavailable, "node waiting for init; %s not available", methodName)
+}
+
+// IsWaitingForInit checks whether the provided error is because the node is
+// still waiting for initialization.
+func IsWaitingForInit(err error) bool {
+	s, ok := grpcstatus.FromError(err)
+	return ok && s.Code() == codes.Unavailable && strings.Contains(err.Error(), "node waiting for init")
 }

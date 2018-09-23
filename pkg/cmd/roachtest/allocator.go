@@ -33,7 +33,7 @@ func registerAllocator(r *registry) {
 		c.Put(ctx, workload, "./workload")
 
 		// Start the first `start` nodes and restore the fixture
-		args := startArgs("--args=--vmodule=allocator=5,allocator_scorer=5,replicate_queue=5")
+		args := startArgs("--args=--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
 		c.Start(ctx, c.Range(1, start), args)
 		db := c.Conn(ctx, 1)
 		defer db.Close()
@@ -41,7 +41,7 @@ func registerAllocator(r *registry) {
 		m := newMonitor(ctx, c, c.Range(1, start))
 		m.Go(func(ctx context.Context) error {
 			t.Status("loading fixture")
-			if _, err := db.Exec(`RESTORE DATABASE workload FROM $1`, fixturePath); err != nil {
+			if _, err := db.Exec(`RESTORE DATABASE tpch FROM $1`, fixturePath); err != nil {
 				t.Fatal(err)
 			}
 			return nil
@@ -58,7 +58,7 @@ func registerAllocator(r *registry) {
 			// but we can't put it in monitor as-is because the test deadlocks.
 			go func() {
 				const cmd = `./workload run kv --tolerate-errors --min-block-bytes=8 --max-block-bytes=128`
-				l, err := c.l.childLogger(fmt.Sprintf(`kv-%d`, node))
+				l, err := c.l.ChildLogger(fmt.Sprintf(`kv-%d`, node))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -102,35 +102,35 @@ func printRebalanceStats(l *logger, db *gosql.DB) error {
 	{
 		var rebalanceIntervalStr string
 		if err := db.QueryRow(
-			`SELECT (SELECT MAX(timestamp) FROM system.rangelog) - `+
-				`(SELECT MAX(timestamp) FROM system.eventlog WHERE "eventType"=$1)`,
+			`SELECT (SELECT max(timestamp) FROM system.rangelog) - `+
+				`(SELECT max(timestamp) FROM system.eventlog WHERE "eventType"=$1)`,
 			`node_join`, /* sql.EventLogNodeJoin */
 		).Scan(&rebalanceIntervalStr); err != nil {
 			return err
 		}
-		l.printf("cluster took %s to rebalance\n", rebalanceIntervalStr)
+		l.Printf("cluster took %s to rebalance\n", rebalanceIntervalStr)
 	}
 
 	// Output # of range events that occurred. All other things being equal,
 	// larger numbers are worse and potentially indicate thrashing.
 	{
 		var rangeEvents int64
-		q := `SELECT COUNT(*) from system.rangelog`
+		q := `SELECT count(*) from system.rangelog`
 		if err := db.QueryRow(q).Scan(&rangeEvents); err != nil {
 			return err
 		}
-		l.printf("%d range events\n", rangeEvents)
+		l.Printf("%d range events\n", rangeEvents)
 	}
 
 	// Output standard deviation of the replica counts for all stores.
 	{
 		var stdDev float64
 		if err := db.QueryRow(
-			`SELECT STDDEV(range_count) FROM crdb_internal.kv_store_status`,
+			`SELECT stddev(range_count) FROM crdb_internal.kv_store_status`,
 		).Scan(&stdDev); err != nil {
 			return err
 		}
-		l.printf("stdDev(replica count) = %.2f\n", stdDev)
+		l.Printf("stdDev(replica count) = %.2f\n", stdDev)
 	}
 
 	// Output the number of ranges on each store.
@@ -145,7 +145,7 @@ func printRebalanceStats(l *logger, db *gosql.DB) error {
 			if err := rows.Scan(&storeID, &rangeCount); err != nil {
 				return err
 			}
-			l.printf("s%d has %d ranges\n", storeID, rangeCount)
+			l.Printf("s%d has %d ranges\n", storeID, rangeCount)
 		}
 	}
 
@@ -195,7 +195,7 @@ func allocatorStats(db *gosql.DB) (s replicationStats, err error) {
 	}
 
 	if err := db.QueryRow(
-		`SELECT STDDEV(range_count) FROM crdb_internal.kv_store_status`,
+		`SELECT stddev(range_count) FROM crdb_internal.kv_store_status`,
 	).Scan(&s.ReplicaCountStdDev); err != nil {
 		return replicationStats{}, err
 	}
@@ -229,9 +229,9 @@ func waitForRebalance(ctx context.Context, l *logger, db *gosql.DB, maxStdDev fl
 				return err
 			}
 
-			l.printf("%v\n", stats)
+			l.Printf("%v\n", stats)
 			if stableSeconds <= stats.SecondsSinceLastEvent {
-				l.printf("replica count stddev = %f, max allowed stddev = %f\n", stats.ReplicaCountStdDev, maxStdDev)
+				l.Printf("replica count stddev = %f, max allowed stddev = %f\n", stats.ReplicaCountStdDev, maxStdDev)
 				if stats.ReplicaCountStdDev > maxStdDev {
 					_ = printRebalanceStats(l, db)
 					return errors.Errorf(

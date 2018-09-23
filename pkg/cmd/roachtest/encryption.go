@@ -40,7 +40,7 @@ func registerEncryption(r *registry) {
 
 		stop := func(node int) error {
 			port := fmt.Sprintf("{pgport:%d}", node)
-			if err := c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --port "+port); err != nil {
+			if err := c.RunE(ctx, c.Node(node), "./cockroach quit --insecure --host=:"+port); err != nil {
 				return err
 			}
 			c.Stop(ctx, c.Node(node))
@@ -92,6 +92,7 @@ func registerEncryption(r *registry) {
 			Name:       fmt.Sprintf("encryption/nodes=%d", n),
 			MinVersion: "v2.1.0",
 			Nodes:      nodes(n),
+			Stable:     true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runEncryption(ctx, t, c)
 			},

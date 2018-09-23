@@ -154,7 +154,7 @@ func TestSpanResolverUsesCaches(t *testing.T) {
 // the lease holder cache of the server to which db is connected.
 func populateCache(db *gosql.DB, expectedNumRows int) error {
 	var numRows int
-	err := db.QueryRow(`SELECT COUNT(1) FROM test`).Scan(&numRows)
+	err := db.QueryRow(`SELECT count(1) FROM test`).Scan(&numRows)
 	if err != nil {
 		return err
 	}
@@ -174,7 +174,7 @@ func splitRangeAtVal(
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
 			errors.Errorf("expected table with just a PK, got: %+v", tableDesc)
 	}
-	pik, err := sqlbase.MakePrimaryIndexKey(tableDesc, pk)
+	pik, err := sqlbase.TestingMakePrimaryIndexKey(tableDesc, pk)
 	if err != nil {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{}, err
 	}
@@ -353,7 +353,7 @@ func setupRanges(
 	time.Sleep(300 * time.Millisecond)
 	// Run a select across the whole table to populate the caches with all the
 	// ranges.
-	if _, err := db.Exec(`SELECT COUNT(1) from test`); err != nil {
+	if _, err := db.Exec(`SELECT count(1) from test`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -452,7 +452,7 @@ func expectResolved(actual [][]rngInfo, expected ...[]rngInfo) error {
 
 func makeSpan(tableDesc *sqlbase.TableDescriptor, i, j int) roachpb.Span {
 	makeKey := func(val int) roachpb.Key {
-		key, err := sqlbase.MakePrimaryIndexKey(tableDesc, val)
+		key, err := sqlbase.TestingMakePrimaryIndexKey(tableDesc, val)
 		if err != nil {
 			panic(err)
 		}

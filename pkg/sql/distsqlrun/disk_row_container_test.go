@@ -20,6 +20,8 @@ import (
 	"math/rand"
 	"testing"
 
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -277,5 +279,229 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	err = d.AddRow(ctx, row)
 	if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeDiskFullError) {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestDiskRowContainerFinalIterator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	alloc := &sqlbase.DatumAlloc{}
+	evalCtx := tree.MakeTestingEvalContext(st)
+	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
+
+	diskMonitor := mon.MakeMonitor(
+		"test-disk",
+		mon.DiskResource,
+		nil, /* curCount */
+		nil, /* maxHist */
+		-1,  /* increment: use default block size */
+		math.MaxInt64,
+		st,
+	)
+	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	defer diskMonitor.Stop(ctx)
+
+	d := makeDiskRowContainer(&diskMonitor, oneIntCol, nil /* ordering */, tempEngine)
+	defer d.Close(ctx)
+
+	const numCols = 1
+	const numRows = 100
+	rows := makeIntRows(numRows, numCols)
+	for _, row := range rows {
+		if err := d.AddRow(ctx, row); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// checkEqual checks that the given row is equal to otherRow.
+	checkEqual := func(row sqlbase.EncDatumRow, otherRow sqlbase.EncDatumRow) error {
+		for j, c := range row {
+			if cmp, err := c.Compare(&intType, alloc, &evalCtx, &otherRow[j]); err != nil {
+				return err
+			} else if cmp != 0 {
+				return fmt.Errorf(
+					"unexpected row %v, expected %v",
+					row.String(oneIntCol),
+					otherRow.String(oneIntCol),
+				)
+			}
+		}
+		return nil
+	}
+
+	rowsRead := 0
+	func() {
+		i := d.NewFinalIterator(ctx)
+		defer i.Close()
+		for i.Rewind(); rowsRead < numRows/2; i.Next() {
+			if ok, err := i.Valid(); err != nil {
+				t.Fatal(err)
+			} else if !ok {
+				t.Fatalf("unexpectedly reached the end after %d rows read", rowsRead)
+			}
+			row, err := i.Row()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := checkEqual(row, rows[rowsRead]); err != nil {
+				t.Fatal(err)
+			}
+			rowsRead++
+		}
+	}()
+
+	// Verify resumability.
+	func() {
+		i := d.NewFinalIterator(ctx)
+		defer i.Close()
+		for i.Rewind(); ; i.Next() {
+			if ok, err := i.Valid(); err != nil {
+				t.Fatal(err)
+			} else if !ok {
+				break
+			}
+			row, err := i.Row()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := checkEqual(row, rows[rowsRead]); err != nil {
+				t.Fatal(err)
+			}
+			rowsRead++
+		}
+	}()
+
+	if rowsRead != len(rows) {
+		t.Fatalf("only read %d rows, expected %d", rowsRead, len(rows))
+	}
+
+	// Add a couple extra rows to check that they're picked up by the iterator.
+	extraRows := makeIntRows(4, 1)
+	for _, row := range extraRows {
+		if err := d.AddRow(ctx, row); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	i := d.NewFinalIterator(ctx)
+	defer i.Close()
+	for i.Rewind(); ; i.Next() {
+		if ok, err := i.Valid(); err != nil {
+			t.Fatal(err)
+		} else if !ok {
+			break
+		}
+		row, err := i.Row()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := checkEqual(row, extraRows[rowsRead-len(rows)]); err != nil {
+			t.Fatal(err)
+		}
+		rowsRead++
+	}
+
+	if rowsRead != len(rows)+len(extraRows) {
+		t.Fatalf("only read %d rows, expected %d", rowsRead, len(rows)+len(extraRows))
+	}
+}
+
+func TestDiskRowContainerUnsafeReset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempEngine.Close()
+
+	monitor := mon.MakeMonitor(
+		"test-disk",
+		mon.DiskResource,
+		nil, /* curCount */
+		nil, /* maxHist */
+		-1,  /* increment: use default block size */
+		math.MaxInt64,
+		st,
+	)
+	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+
+	d := makeDiskRowContainer(&monitor, oneIntCol, nil /* ordering */, tempEngine)
+	defer d.Close(ctx)
+
+	const (
+		numCols = 1
+		numRows = 100
+	)
+	rows := makeIntRows(numRows, numCols)
+
+	const (
+		numResets            = 4
+		expectedRowsPerReset = numRows / numResets
+	)
+	for i := 0; i < numResets; i++ {
+		if err := d.UnsafeReset(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if d.Len() != 0 {
+			t.Fatalf("disk row container still contains %d row(s) after a reset", d.Len())
+		}
+		firstRow := rows[0]
+		for _, row := range rows[:len(rows)/numResets] {
+			if err := d.AddRow(ctx, row); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// Verify that the first row matches up.
+		func() {
+			i := d.NewFinalIterator(ctx)
+			defer i.Close()
+			i.Rewind()
+			if ok, err := i.Valid(); err != nil || !ok {
+				t.Fatalf("unexpected i.Valid() return values: ok=%t, err=%s", ok, err)
+			}
+			row, err := i.Row()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if row.String(oneIntCol) != firstRow.String(oneIntCol) {
+				t.Fatalf("unexpected row read %s, expected %s", row.String(oneIntCol), firstRow.String(oneIntCol))
+			}
+		}()
+
+		// diskRowFinalIterator does not actually discard rows, so Len() should
+		// still account for the row we just read.
+		if d.Len() != expectedRowsPerReset {
+			t.Fatalf("expected %d rows but got %d", expectedRowsPerReset, d.Len())
+		}
+	}
+
+	// Verify we read the expected number of rows (note that we already read one
+	// in the last iteration of the numResets loop).
+	i := d.NewFinalIterator(ctx)
+	defer i.Close()
+	rowsRead := 0
+	for i.Rewind(); ; i.Next() {
+		if ok, err := i.Valid(); err != nil {
+			t.Fatal(err)
+		} else if !ok {
+			break
+		}
+		_, err := i.Row()
+		if err != nil {
+			t.Fatal(err)
+		}
+		rowsRead++
+	}
+	if rowsRead != expectedRowsPerReset-1 {
+		t.Fatalf("read %d rows using a final iterator but expected %d", rowsRead, expectedRowsPerReset)
 	}
 }

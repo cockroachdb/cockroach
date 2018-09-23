@@ -11,10 +11,12 @@ package changefeedccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // rowFetcherCache maintains a cache of single table RowFetchers. Given a key
@@ -22,36 +24,74 @@ import (
 // and returns a RowFetcher initialized with that table. This RowFetcher's
 // StartScanFrom can be used to turn that key (or all the keys making up the
 // column families of one row) into a row.
-//
-// TODO(dan): Actually cache things.
 type rowFetcherCache struct {
-	leaseMgr *sql.LeaseManager
+	leaseMgr  *sql.LeaseManager
+	tableHist *tableHistory
+	fetchers  map[*sqlbase.TableDescriptor]*sqlbase.RowFetcher
 
 	a sqlbase.DatumAlloc
 }
 
-func newRowFetcherCache(leaseMgr *sql.LeaseManager) *rowFetcherCache {
-	return &rowFetcherCache{leaseMgr: leaseMgr}
+func newRowFetcherCache(leaseMgr *sql.LeaseManager, tableHist *tableHistory) *rowFetcherCache {
+	return &rowFetcherCache{
+		leaseMgr:  leaseMgr,
+		tableHist: tableHist,
+		fetchers:  make(map[*sqlbase.TableDescriptor]*sqlbase.RowFetcher),
+	}
 }
 
-func (c *rowFetcherCache) RowFetcherForKey(
-	ctx context.Context, key engine.MVCCKey,
-) (*sqlbase.RowFetcher, error) {
-	// TODO(dan): Handle interleaved tables.
-	_, tableID, _, err := sqlbase.DecodeTableIDIndexID(key.Key)
-	if err != nil {
-		return nil, err
+func (c *rowFetcherCache) TableDescForKey(
+	ctx context.Context, key roachpb.Key, ts hlc.Timestamp,
+) (*sqlbase.TableDescriptor, error) {
+	var tableDesc *sqlbase.TableDescriptor
+	for skippedCols := 0; ; {
+		remaining, tableID, _, err := sqlbase.DecodeTableIDIndexID(key)
+		if err != nil {
+			return nil, err
+		}
+		// No caching of these are attempted, since the lease manager does its
+		// own caching.
+		tableDesc, _, err = c.leaseMgr.Acquire(ctx, ts, tableID)
+		if err != nil {
+			return nil, err
+		}
+		// Immediately release the lease, since we only need it for the exact
+		// timestamp requested.
+		if err := c.leaseMgr.Release(tableDesc); err != nil {
+			return nil, err
+		}
+
+		// Skip over the column data.
+		for ; skippedCols < len(tableDesc.PrimaryIndex.ColumnIDs); skippedCols++ {
+			l, err := encoding.PeekLength(remaining)
+			if err != nil {
+				return nil, err
+			}
+			remaining = remaining[l:]
+		}
+		var interleaved bool
+		remaining, interleaved = encoding.DecodeIfInterleavedSentinel(remaining)
+		if !interleaved {
+			break
+		}
+		key = remaining
 	}
 
-	// TODO(dan): We don't really need a lease, this is just a convenient way to
-	// get the right descriptor for a timestamp, so release it immediately after
-	// we acquire it. Avoid the lease entirely.
-	tableDesc, _, err := c.leaseMgr.Acquire(ctx, key.Timestamp, tableID)
-	if err != nil {
+	// Leasing invariant: each new `tableDesc.Version` of a descriptor is
+	// initially written with an mvcc timestamp equal to its modification time.
+	// It might be updated later with backfill progress, but (critically) the
+	// `validateFn` we passed to `tableHist` doesn't care about this.
+	if err := c.tableHist.WaitForTS(ctx, tableDesc.ModificationTime); err != nil {
 		return nil, err
 	}
-	if err := c.leaseMgr.Release(tableDesc); err != nil {
-		return nil, err
+	return tableDesc, nil
+}
+
+func (c *rowFetcherCache) RowFetcherForTableDesc(
+	tableDesc *sqlbase.TableDescriptor,
+) (*sqlbase.RowFetcher, error) {
+	if rf, ok := c.fetchers[tableDesc]; ok {
+		return rf, nil
 	}
 
 	// TODO(dan): Allow for decoding a subset of the columns.
@@ -77,5 +117,9 @@ func (c *rowFetcherCache) RowFetcherForKey(
 	); err != nil {
 		return nil, err
 	}
+	// TODO(dan): Bound the size of the cache. Resolved notifications will let
+	// us evict anything for timestamps entirely before the notification. Then
+	// probably an LRU just in case?
+	c.fetchers[tableDesc] = &rf
 	return &rf, nil
 }

@@ -47,7 +47,6 @@ type IndexedVar struct {
 }
 
 var _ TypedExpr = &IndexedVar{}
-var _ VariableExpr = &IndexedVar{}
 
 // Variable is a dummy function part of the VariableExpr interface.
 func (*IndexedVar) Variable() {}

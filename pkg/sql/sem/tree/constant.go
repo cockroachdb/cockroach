@@ -62,7 +62,7 @@ func isConstant(expr Expr) bool {
 	return ok
 }
 
-func typeCheckConstant(c Constant, ctx *SemaContext, desired types.T) (TypedExpr, error) {
+func typeCheckConstant(c Constant, ctx *SemaContext, desired types.T) (ret TypedExpr, err error) {
 	avail := c.AvailableTypes()
 	if desired != types.Any {
 		for _, typ := range avail {
@@ -111,8 +111,12 @@ func canConstantBecome(c Constant, typ types.T) bool {
 // NumVal represents a constant numeric value.
 type NumVal struct {
 	constant.Value
+	// Negative is the sign bit to add to any interpretation of the
+	// Value or OrigString fields.
+	Negative bool
 
-	// We preserve the "original" string representation (before folding).
+	// We preserve the "original" string representation (before
+	// folding). This should remain sign-less.
 	OrigString string
 
 	// The following fields are used to avoid allocating Datums on type resolution.
@@ -126,6 +130,9 @@ func (expr *NumVal) Format(ctx *FmtCtx) {
 	s := expr.OrigString
 	if s == "" {
 		s = expr.Value.String()
+	}
+	if expr.Negative {
+		ctx.WriteByte('-')
 	}
 	ctx.WriteString(s)
 }
@@ -193,8 +200,13 @@ func (expr *NumVal) AsInt32() (int32, error) {
 
 // asConstantInt returns the value as an constant.Int if possible, along
 // with a flag indicating whether the conversion was possible.
+// The result contains the proper sign as per expr.Negative.
 func (expr *NumVal) asConstantInt() (constant.Value, bool) {
-	intVal := constant.ToInt(expr.Value)
+	v := expr.Value
+	if expr.Negative {
+		v = constant.UnaryOp(token.SUB, v, 0)
+	}
+	intVal := constant.ToInt(v)
 	if intVal.Kind() == constant.Int {
 		return intVal, true
 	}
@@ -247,6 +259,9 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 		return &expr.resInt, nil
 	case types.Float:
 		f, _ := constant.Float64Val(expr.Value)
+		if expr.Negative {
+			f = -f
+		}
 		expr.resFloat = DFloat(f)
 		return &expr.resFloat, nil
 	case types.Decimal:
@@ -282,6 +297,11 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 				return nil, errors.Wrapf(err, "could not evaluate %v as Datum type DDecimal from "+
 					"string %q", expr, s)
 			}
+		}
+		if !dd.IsZero() {
+			// Negative zero does not exist for DECIMAL, in that case we
+			// ignore the sign.
+			dd.Negative = expr.Negative
 		}
 		return dd, nil
 	case types.Oid,
@@ -396,13 +416,13 @@ var (
 		types.Decimal,
 		types.Date,
 		types.Time,
-		types.TimeTZ,
 		types.Timestamp,
 		types.TimestampTZ,
 		types.Interval,
 		types.UUID,
 		types.INet,
 		types.JSON,
+		types.BitArray,
 	}
 	// StrValAvailBytes is the set of types convertible to byte array.
 	StrValAvailBytes = []types.T{types.Bytes, types.UUID, types.String}
@@ -496,7 +516,6 @@ func (constantFolderVisitor) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
 }
 
 var unaryOpToToken = map[UnaryOperator]token.Token{
-	UnaryPlus:  token.ADD,
 	UnaryMinus: token.SUB,
 }
 var unaryOpToTokenIntOnly = map[UnaryOperator]token.Token{
@@ -547,8 +566,17 @@ func (constantFolderVisitor) VisitPost(expr Expr) (retExpr Expr) {
 	case *UnaryExpr:
 		switch cv := t.Expr.(type) {
 		case *NumVal:
-			if token, ok := unaryOpToToken[t.Operator]; ok {
-				return &NumVal{Value: constant.UnaryOp(token, cv.Value, 0)}
+			if tok, ok := unaryOpToToken[t.Operator]; ok {
+				switch tok {
+				case token.ADD:
+					return cv
+				case token.SUB:
+					// We always coerce -0 to 0 everywhere else, so this can be a passthrough.
+					if cv.Value.Kind() == constant.Float && constant.Compare(cv.Value, token.EQL, constant.MakeFloat64(0)) {
+						return cv
+					}
+				}
+				return &NumVal{Value: constant.UnaryOp(tok, cv.Value, 0)}
 			}
 			if token, ok := unaryOpToTokenIntOnly[t.Operator]; ok {
 				if intVal, ok := cv.asConstantInt(); ok {

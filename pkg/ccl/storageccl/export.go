@@ -39,12 +39,16 @@ func declareKeysExport(
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
 }
 
-type rowCounter struct {
+// RowCounter is a helper that counts how many distinct rows appear in the KVs
+// that is is shown via `Count`.
+type RowCounter struct {
 	prev roachpb.Key
 	roachpb.BulkOpSummary
 }
 
-func (r *rowCounter) count(key roachpb.Key) error {
+// Count examines each key passed to it and increments the running count when it
+// sees a key that belongs to a new row.
+func (r *RowCounter) Count(key roachpb.Key) error {
 	// EnsureSafeSplitKey is usually used to avoid splitting a row across ranges,
 	// by returning the row's key prefix.
 	// We reuse it here to count "rows" by counting when it changes.
@@ -152,10 +156,16 @@ func evalExport(
 		return result.Result{}, errors.Errorf("unknown MVCC filter: %s", args.MVCCFilter)
 	}
 
-	var rows rowCounter
+	debugLog := log.V(3)
+
+	var rows RowCounter
 	// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
 	// TODO(dan): Consider checking ctx periodically during the MVCCIterate call.
-	iter := engineccl.NewMVCCIncrementalIterator(batch, args.StartTime, h.Timestamp)
+	iter := engineccl.NewMVCCIncrementalIterator(batch, engineccl.IterOptions{
+		StartTime:  args.StartTime,
+		EndTime:    h.Timestamp,
+		UpperBound: args.EndKey,
+	})
 	defer iter.Close()
 	for iter.Seek(engine.MakeMVCCMetadataKey(args.Key)); ; iterFn(iter) {
 		ok, err := iter.Valid()
@@ -171,21 +181,17 @@ func evalExport(
 		// Skip tombstone (len=0) records when startTime is zero
 		// (non-incremental) and we're not exporting all versions.
 		if skipTombstones && args.StartTime.IsEmpty() && len(iter.UnsafeValue()) == 0 {
-			iter.NextKey()
-			if ok, err := iter.Valid(); err != nil {
-				return result.Result{}, err
-			} else if !ok {
-				break
-			}
 			continue
 		}
 
-		if log.V(3) {
+		if debugLog {
+			// Calling log.V is more expensive than you'd think. Keep it out of
+			// the hot path.
 			v := roachpb.Value{RawBytes: iter.UnsafeValue()}
 			log.Infof(ctx, "Export %s %s", iter.UnsafeKey(), v.PrettyPrint())
 		}
 
-		if err := rows.count(iter.UnsafeKey().Key); err != nil {
+		if err := rows.Count(iter.UnsafeKey().Key); err != nil {
 			return result.Result{}, errors.Wrapf(err, "decoding %s", iter.UnsafeKey())
 		}
 		if err := sst.Add(engine.MVCCKeyValue{Key: iter.UnsafeKey(), Value: iter.UnsafeValue()}); err != nil {
@@ -205,10 +211,13 @@ func evalExport(
 		return result.Result{}, err
 	}
 
-	// Compute the checksum before we upload and remove the local file.
-	checksum, err := SHA512ChecksumData(sstContents)
-	if err != nil {
-		return result.Result{}, err
+	var checksum []byte
+	if !args.OmitChecksum {
+		// Compute the checksum before we upload and remove the local file.
+		checksum, err = SHA512ChecksumData(sstContents)
+		if err != nil {
+			return result.Result{}, err
+		}
 	}
 
 	exported := roachpb.ExportResponse_File{

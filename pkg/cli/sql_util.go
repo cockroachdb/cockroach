@@ -15,7 +15,6 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	gosql "database/sql"
 	"database/sql/driver"
@@ -35,7 +34,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -67,6 +70,29 @@ type sqlConn struct {
 	clusterOrganization string
 }
 
+// initialSQLConnectionError signals to the error decorator in
+// error.go that we're failing during the initial connection set-up.
+type initialSQLConnectionError struct {
+	err error
+}
+
+// Error implements the error interface.
+func (i *initialSQLConnectionError) Error() string { return i.err.Error() }
+
+// wrapConnError detects TCP EOF errors during the initial SQL handshake.
+// These are translated to a message "perhaps this is not a CockroachDB node"
+// at the top level.
+// EOF errors later in the SQL session should not be wrapped in that way,
+// because by that time we've established that the server is indeed a SQL
+// server.
+func wrapConnError(err error) error {
+	errMsg := err.Error()
+	if errMsg == "EOF" || errMsg == "unexpected EOF" {
+		return &initialSQLConnectionError{err}
+	}
+	return err
+}
+
 func (c *sqlConn) ensureConn() error {
 	if c.conn == nil {
 		if c.reconnecting && cliCtx.isInteractive {
@@ -75,7 +101,7 @@ func (c *sqlConn) ensureConn() error {
 		}
 		conn, err := pq.Open(c.url)
 		if err != nil {
-			return err
+			return wrapConnError(err)
 		}
 		if c.reconnecting && c.dbName != "" {
 			// Attempt to reset the current database.
@@ -88,7 +114,7 @@ func (c *sqlConn) ensureConn() error {
 		c.conn = conn.(sqlConnI)
 		if err := c.checkServerMetadata(); err != nil {
 			c.Close()
-			return err
+			return wrapConnError(err)
 		}
 		c.reconnecting = false
 	}
@@ -453,95 +479,28 @@ func getPasswordAndMakeSQLClient(appName string) (*sqlConn, error) {
 	return makeSQLClient(appName)
 }
 
-// makeURLFromFlags constructs a pg connection URL using the values
-// initialized by command-line flags.
-func makeURLFromFlags(userinfo *url.Userinfo) *url.URL {
-	host := serverCfg.Addr
-	if !strings.HasPrefix(cliCtx.Addr, ":") {
-		host = cliCtx.Addr
-	}
-
-	// Build the URL object.
-	return &url.URL{
-		Scheme: "postgresql",
-		Path:   cliCtx.sqlConnDBName,
-		Host:   host,
-		User:   userinfo,
-	}
-}
+var sqlConnTimeout = envutil.EnvOrDefaultString("COCKROACH_CONNECT_TIMEOUT", "5")
 
 // makeSQLClient connects to the database using the connection
-// settings set by the command-line flags. The value of --url, if any
-// is provided is used as the source of configuration; otherwise a URL
-// is constructed from the other command-line parameters.
-//
-// If --url is specified but any of the following items is _missing_
-// from the URL, the remaining command-line flags are used to "fill it
-// in":
-//
-// - the current database (--database)
-// - the user (--user)
-// - the SSL configuration (--insecure, --certs-dir, etc)
-//
-// Otherwise, if an item is present both in the URL and specified
-// otherwise, a warning is printed to indicate that the URL prevails.
+// settings set by the command-line flags.
 //
 // The appName given as argument is added to the URL even if --url is
 // specified, but only if the URL didn't already specify
-// application_name.
+// application_name. It is prefixed with '$ ' to mark it as internal.
 func makeSQLClient(appName string) (*sqlConn, error) {
-	var baseURL *url.URL
-	var options url.Values
-
-	defaultUserinfo := url.User(security.RootUser)
-	if cliCtx.sqlConnUser != "" {
-		defaultUserinfo = url.User(cliCtx.sqlConnUser)
+	baseURL, err := cliCtx.makeClientConnURL()
+	if err != nil {
+		return nil, err
 	}
 
-	// Determine the starting point.
-	if cliCtx.sqlConnURL == "" {
-		baseURL = makeURLFromFlags(defaultUserinfo)
-		options = url.Values{}
-	} else {
-		// User-specified --url is the starting point.
-		var err error
-		baseURL, err = url.Parse(cliCtx.sqlConnURL)
-		if err != nil {
-			return nil, err
-		}
-		options, err = url.ParseQuery(baseURL.RawQuery)
-		if err != nil {
-			return nil, err
-		}
-
-		// Check that any argument otherwise used to
-		// populate a URL, if --url was not specified, have
-		// not been specified if --url was.
-		if baseURL.Path != "" && cliCtx.sqlConnDBName != "" {
-			log.Warning(context.Background(), "parameter --database ignored, using --url instead")
-		}
-		if baseURL.User.Username() != "" && cliCtx.sqlConnUser != "" {
-			log.Warning(context.Background(), "parameter --user ignored, using --url instead")
-		}
-		if !strings.HasPrefix(cliCtx.Addr, ":") {
-			log.Warning(context.Background(), "parameter --host ignored, using --url instead")
-		}
-		if options.Get("sslmode") != "" && cliCtx.Insecure {
-			log.Warning(context.Background(), "parameter --insecure ignored, using --url instead")
-		}
-	}
-
-	// If there is no user in the URL already, use the one passed as
-	// command-line flag.
+	// If there is no user in the URL already, fill in the default user.
 	if baseURL.User.Username() == "" {
-		baseURL.User = defaultUserinfo
+		baseURL.User = url.User(security.RootUser)
 	}
 
-	// If there are no SSL options yet, use the command-line flags to set them.
-	if options.Get("sslmode") == "" {
-		if err := cliCtx.LoadSecurityOptions(options, baseURL.User.Username()); err != nil {
-			return nil, err
-		}
+	options, err := url.ParseQuery(baseURL.RawQuery)
+	if err != nil {
+		return nil, err
 	}
 
 	// Insecure connections are insecure and should never see a password. Reject
@@ -572,16 +531,19 @@ func makeSQLClient(appName string) (*sqlConn, error) {
 		}
 	}
 
-	// If there is no database in the URL already, use the one passed as
-	// command-line flag.
-	if baseURL.Path == "" || baseURL.Path == "/" {
-		baseURL.Path = cliCtx.sqlConnDBName
-	}
-
 	// Load the application name. It's not a command-line flag, so
 	// anything already in the URL should take priority.
 	if options.Get("application_name") == "" && appName != "" {
-		options.Set("application_name", appName)
+		options.Set("application_name", sql.InternalAppNamePrefix+appName)
+	}
+
+	// Set a connection timeout if none is provided already. This
+	// ensures that if the server was not initialized or there is some
+	// network issue, the client will not be left to hang forever.
+	//
+	// This is a lib/pq feature.
+	if options.Get("connect_timeout") == "" {
+		options.Set("connect_timeout", sqlConnTimeout)
 	}
 
 	baseURL.RawQuery = options.Encode()
@@ -625,6 +587,50 @@ func runQuery(conn *sqlConn, fn queryFunc, showMoreChars bool) ([]string, [][]st
 
 	defer func() { _ = rows.Close() }()
 	return sqlRowsToStrings(rows, showMoreChars)
+}
+
+// runQueryRaw takes a 'query' with optional 'parameters'.
+// It returns the result rows as strings with minimal changes (no escaping, etc).
+func runQueryRaw(conn *sqlConn, fn queryFunc) (cols []string, results [][]string, err error) {
+	rows, err := fn(conn)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	defer func() {
+		rowsErr := rows.Close()
+		if err != nil {
+			err = errors.Wrapf(rowsErr, "error after row-wise error: %v", err)
+		}
+	}()
+	cols = rows.Columns()
+	vals := make([]driver.Value, len(cols))
+	for {
+		err := rows.Next(vals)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return cols, results, err
+		}
+		rowStrings := make([]string, len(cols))
+		for i, v := range vals {
+			switch t := v.(type) {
+			case nil:
+				rowStrings[i] = "NULL"
+			case string:
+				rowStrings[i] = t
+			case []byte:
+				rowStrings[i] = string(t)
+			case time.Time:
+				rowStrings[i] = t.Format(tree.TimestampOutputFormat)
+			default:
+				rowStrings[i] = fmt.Sprintf("%v", t)
+			}
+		}
+		results = append(results, rowStrings)
+	}
+	return cols, results, nil
 }
 
 // handleCopyError ensures the user is properly informed when they issue
@@ -731,11 +737,16 @@ func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) error {
 		}
 
 		cols := getColumnStrings(rows, true)
-		reporter, err := makeReporter()
+		reporter, cleanup, err := makeReporter(w)
 		if err != nil {
 			return err
 		}
-		if err := render(reporter, w, cols, newRowIter(rows, true), noRowsHook); err != nil {
+		if err := func() error {
+			if cleanup != nil {
+				defer cleanup()
+			}
+			return render(reporter, w, cols, newRowIter(rows, true), noRowsHook)
+		}(); err != nil {
 			return err
 		}
 
@@ -852,23 +863,21 @@ func formatVal(val driver.Value, showPrintableUnicode bool, showNewLinesAndTabs 
 		return s[1 : len(s)-1]
 
 	case []byte:
-		if showPrintableUnicode {
-			pred := isNotGraphicUnicode
-			if showNewLinesAndTabs {
-				pred = isNotGraphicUnicodeOrTabOrNewline
-			}
-			if utf8.Valid(t) && bytes.IndexFunc(t, pred) == -1 {
-				return string(t)
-			}
-		} else {
-			if bytes.IndexFunc(t, isNotPrintableASCII) == -1 {
-				return string(t)
-			}
-		}
-		// Strip the start and final quotes. The surrounding display
-		// format (e.g. CSV/TSV) will add its own quotes.
-		s := fmt.Sprintf("%+q", t)
-		return s[1 : len(s)-1]
+		// Format the bytes as per bytea_output = escape.
+		//
+		// We use the "escape" format here because it enables printing
+		// readable strings as-is -- the default hex format would always
+		// render as hexadecimal digits. The escape format is also more
+		// compact.
+		//
+		// TODO(knz): this formatting is unfortunate/incorrect, and exists
+		// only because lib/pq incorrectly interprets the bytes received
+		// from the server. The proper behavior would be for the driver to
+		// not interpret the bytes and for us here to print that as-is, so
+		// that we can let the user see and control the result using
+		// `bytea_output`.
+		return lex.EncodeByteArrayToRawBytes(string(t),
+			sessiondata.BytesEncodeEscape, false /* skipHexPrefix */)
 
 	case time.Time:
 		return t.Format(tree.TimestampOutputFormat)

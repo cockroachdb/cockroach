@@ -21,9 +21,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
@@ -67,7 +66,7 @@ func TestBuilder(t *testing.T) {
 			var err error
 
 			tester := testutils.NewOptTester(catalog, d.Input)
-			tester.Flags.ExprFormat = opt.ExprFmtHideAll ^ opt.ExprFmtHideScalars
+			tester.Flags.ExprFormat = memo.ExprFmtHideAll ^ memo.ExprFmtHideScalars
 
 			for _, arg := range d.CmdArgs {
 				key, vals := arg.Key, arg.Vals
@@ -98,7 +97,8 @@ func TestBuilder(t *testing.T) {
 				semaCtx := tree.MakeSemaContext(false /* privileged */)
 				evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
-				o := xform.NewOptimizer(&evalCtx)
+				var o xform.Optimizer
+				o.Init(&evalCtx)
 				for i, typ := range varTypes {
 					o.Memo().Metadata().AddColumn(fmt.Sprintf("@%d", i+1), typ)
 				}
@@ -107,11 +107,11 @@ func TestBuilder(t *testing.T) {
 				o.DisableOptimizations()
 				b := optbuilder.NewScalar(ctx, &semaCtx, &evalCtx, o.Factory())
 				b.AllowUnsupportedExpr = tester.Flags.AllowUnsupportedExpr
-				group, err := b.Build(typedExpr)
+				err = b.Build(typedExpr)
 				if err != nil {
 					return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
 				}
-				exprView := o.Optimize(group, &props.Physical{})
+				exprView := o.Optimize()
 				return exprView.FormatString(tester.Flags.ExprFormat)
 
 			default:

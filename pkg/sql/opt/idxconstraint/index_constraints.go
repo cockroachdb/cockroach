@@ -679,7 +679,7 @@ func (c *indexConstraintCtx) makeSpansForAnd(
 	// a map could help here.
 	c.makeSpansForExpr(offset, ev.Child(0), out)
 	var exprConstraint constraint.Constraint
-	for i := 1; i < ev.ChildCount(); i++ {
+	for i, n := 1, ev.ChildCount(); i < n; i++ {
 		c.makeSpansForExpr(offset, ev.Child(i), &exprConstraint)
 		out.IntersectWith(c.evalCtx, &exprConstraint)
 	}
@@ -716,7 +716,7 @@ func (c *indexConstraintCtx) makeSpansForAnd(
 		}
 
 		c.makeSpansForExpr(offset+delta, ev.Child(0), &ofsC)
-		for j := 1; j < ev.ChildCount(); j++ {
+		for j, n := 1, ev.ChildCount(); j < n; j++ {
 			c.makeSpansForExpr(offset+delta, ev.Child(j), &exprConstraint)
 			ofsC.IntersectWith(c.evalCtx, &exprConstraint)
 		}
@@ -943,9 +943,9 @@ func (c *indexConstraintCtx) simplifyFilter(
 ) memo.GroupID {
 	// Special handling for AND and OR.
 	if ev.Operator() == opt.OrOp || ev.Operator() == opt.AndOp || ev.Operator() == opt.FiltersOp {
-		newChildren := make([]memo.GroupID, ev.ChildCount())
-		for i := range newChildren {
-			newChildren[i] = c.simplifyFilter(ev.Child(i), final, maxSimplifyPrefix)
+		lb := norm.MakeListBuilder(c.factory.CustomFuncs())
+		for i, cnt := 0, ev.ChildCount(); i < cnt; i++ {
+			lb.AddItem(c.simplifyFilter(ev.Child(i), final, maxSimplifyPrefix))
 		}
 
 		// Note: if nothing changed, the factory will detect that it's the same
@@ -953,11 +953,11 @@ func (c *indexConstraintCtx) simplifyFilter(
 		// the node (e.g. if children have been simplified to True).
 		switch ev.Operator() {
 		case opt.AndOp:
-			return c.factory.ConstructAnd(c.factory.InternList(newChildren))
+			return c.factory.ConstructAnd(lb.BuildList())
 		case opt.FiltersOp:
-			return c.factory.ConstructFilters(c.factory.InternList(newChildren))
+			return c.factory.ConstructFilters(lb.BuildList())
 		case opt.OrOp:
-			return c.factory.ConstructOr(c.factory.InternList(newChildren))
+			return c.factory.ConstructOr(lb.BuildList())
 		}
 	}
 
@@ -1109,9 +1109,6 @@ func (c *indexConstraintCtx) init(
 	evalCtx *tree.EvalContext,
 	factory *norm.Factory,
 ) {
-	if isInverted && len(columns) > 1 {
-		panic(fmt.Sprintf("inverted index on multiple columns"))
-	}
 	c.md = factory.Metadata()
 	c.columns = columns
 	c.notNullCols = notNullCols

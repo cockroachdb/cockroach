@@ -33,6 +33,7 @@ type queryBench struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 	queryFile string
+	useOpt    bool
 
 	queries []string
 }
@@ -53,6 +54,7 @@ var queryBenchMeta = workload.Meta{
 			`query-file`: {RuntimeOnly: true},
 		}
 		g.flags.StringVar(&g.queryFile, `query-file`, ``, `File of newline separated queries to run`)
+		g.flags.BoolVar(&g.useOpt, `use-opt`, true, `Use cost-based optimizer`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -105,6 +107,13 @@ func (g *queryBench) Ops(
 	// Allow a maximum of concurrency+1 connections to the database.
 	db.SetMaxOpenConns(g.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(g.connFlags.Concurrency + 1)
+
+	if !g.useOpt {
+		_, err := db.Exec("SET optimizer=off")
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
+	}
 
 	stmts := make([]namedStmt, len(g.queries))
 	for i, query := range g.queries {

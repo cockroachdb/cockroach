@@ -122,7 +122,7 @@ SELECT DISTINCT (y,z) FROM xyz
 (2,)
 
 query I
-SELECT COUNT(*) FROM (SELECT DISTINCT y FROM xyz)
+SELECT count(*) FROM (SELECT DISTINCT y FROM xyz)
 ----
 3
 

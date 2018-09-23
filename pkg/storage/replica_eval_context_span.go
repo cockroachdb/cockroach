@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -107,6 +108,11 @@ func (rec *SpanSetReplicaEvalContext) GetTerm(i uint64) (uint64, error) {
 	return rec.i.GetTerm(i)
 }
 
+// GetLeaseAppliedIndex returns the lease index of the last applied command.
+func (rec *SpanSetReplicaEvalContext) GetLeaseAppliedIndex() uint64 {
+	return rec.i.GetLeaseAppliedIndex()
+}
+
 // IsFirstRange returns true iff the replica belongs to the first range.
 func (rec *SpanSetReplicaEvalContext) IsFirstRange() bool {
 	return rec.i.IsFirstRange()
@@ -127,7 +133,7 @@ func (rec SpanSetReplicaEvalContext) Desc() *roachpb.RangeDescriptor {
 // on Replica.ContainsKey.
 func (rec SpanSetReplicaEvalContext) ContainsKey(key roachpb.Key) bool {
 	desc := rec.Desc() // already asserts
-	return containsKey(*desc, key)
+	return storagebase.ContainsKey(*desc, key)
 }
 
 // GetMVCCStats returns the Replica's MVCCStats.
@@ -176,7 +182,7 @@ func (rec SpanSetReplicaEvalContext) GetLastReplicaGCTimestamp(
 }
 
 // GetLease returns the Replica's current and next lease (if any).
-func (rec SpanSetReplicaEvalContext) GetLease() (roachpb.Lease, *roachpb.Lease) {
+func (rec SpanSetReplicaEvalContext) GetLease() (roachpb.Lease, roachpb.Lease) {
 	rec.ss.AssertAllowed(spanset.SpanReadOnly,
 		roachpb.Span{Key: keys.RangeLeaseKey(rec.GetRangeID())},
 	)

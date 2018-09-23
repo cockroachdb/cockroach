@@ -47,7 +47,7 @@ type Overload struct {
 	// might be more appropriate.
 	Info string
 
-	AggregateFunc func([]types.T, *EvalContext) AggregateFunc
+	AggregateFunc func([]types.T, *EvalContext, Datums) AggregateFunc
 	WindowFunc    func([]types.T, *EvalContext) WindowFunc
 	Fn            func(*EvalContext, Datums) (Datum, error)
 	Generator     GeneratorFactory
@@ -97,8 +97,8 @@ type overloadImpl interface {
 }
 
 var _ overloadImpl = &Overload{}
-var _ overloadImpl = UnaryOp{}
-var _ overloadImpl = BinOp{}
+var _ overloadImpl = &UnaryOp{}
+var _ overloadImpl = &BinOp{}
 
 // GetParamsAndReturnType gets the parameters and return type of an
 // overloadImpl.

@@ -19,14 +19,14 @@ package kv
 
 import (
 	"context"
-	"encoding/gob"
+	"encoding/json"
 	"io/ioutil"
 	"math/rand"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -49,16 +49,40 @@ func jitter(avgInterval time.Duration) time.Duration {
 	return time.Duration(rand.Int63n(int64(2 * avgInterval)))
 }
 
+// raceTransport wrap a Transport implementation and intercepts all
+// BatchRequests, sending them to the transport racer task to read
+// them asynchronously in a tight loop.
+type raceTransport struct {
+	Transport
+}
+
+func (tr raceTransport) SendNext(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error) {
+	select {
+	// We have a shallow copy here and so the top level scalar fields can't
+	// really race, but making more copies doesn't make anything more
+	// transparent, so from now on we operate on a pointer.
+	case incoming <- &ba:
+	default:
+		// Avoid slowing down the tests if we're backed up.
+	}
+	return tr.Transport.SendNext(ctx, ba)
+}
+
 // GRPCTransportFactory during race builds wraps the implementation and
-// intercepts all BatchRequests, reading them in a tight loop. This allows the
-// race detector to catch any mutations of a batch passed to the transport.
+// intercepts all BatchRequests, reading them asynchronously in a tight loop.
+// This allows the race detector to catch any mutations of a batch passed to the
+// transport. The dealio is that batches passed to the transport are immutable -
+// neither the client nor the server are allowed to mutate anything and this
+// transport makes sure they don't. See client.Sender() for more.
 func GRPCTransportFactory(
-	opts SendOptions, rpcContext *rpc.Context, replicas ReplicaSlice, args roachpb.BatchRequest,
+	opts SendOptions, nodeDialer *nodedialer.Dialer, replicas ReplicaSlice,
 ) (Transport, error) {
 	if atomic.AddInt32(&running, 1) <= 1 {
 		// NB: We can't use Stopper.RunWorker because doing so would race with
 		// calling Stopper.Stop.
-		if err := rpcContext.Stopper.RunAsyncTask(
+		if err := nodeDialer.Stopper().RunAsyncTask(
 			context.TODO(), "transport racer", func(ctx context.Context) {
 				var iters int
 				var curIdx int
@@ -74,7 +98,7 @@ func GRPCTransportFactory(
 				// are evicted in FIFO order.
 				const size = 1000
 				bas := make([]*roachpb.BatchRequest, size)
-				encoder := gob.NewEncoder(ioutil.Discard)
+				encoder := json.NewEncoder(ioutil.Discard)
 				for {
 					iters++
 					start := timeutil.Now()
@@ -94,7 +118,7 @@ func GRPCTransportFactory(
 					// then access everything we have.
 					for {
 						select {
-						case <-rpcContext.Stopper.ShouldQuiesce():
+						case <-nodeDialer.Stopper().ShouldQuiesce():
 							return
 						case ba := <-incoming:
 							bas[curIdx%size] = ba
@@ -110,13 +134,10 @@ func GRPCTransportFactory(
 			atomic.StoreInt32(&running, 0)
 		}
 	}
-	select {
-	// We have a shallow copy here and so the top level scalar fields can't
-	// really race, but making more copies doesn't make anything more
-	// transparent, so from now on we operate on a pointer.
-	case incoming <- &args:
-	default:
-		// Avoid slowing down the tests if we're backed up.
+
+	t, err := grpcTransportFactoryImpl(opts, nodeDialer, replicas)
+	if err != nil {
+		return nil, err
 	}
-	return grpcTransportFactoryImpl(opts, rpcContext, replicas, args)
+	return &raceTransport{Transport: t}, nil
 }

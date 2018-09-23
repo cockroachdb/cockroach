@@ -119,6 +119,16 @@ func (p *planner) Insert(
 		// No target column, select all columns in the table, including
 		// hidden columns; these may have defaults too.
 		insertCols = desc.Columns
+		// Add mutation columns.
+		if len(desc.Mutations) > 0 {
+			insertCols = make([]sqlbase.ColumnDescriptor, 0, len(desc.Columns)+len(desc.Mutations))
+			insertCols = append(insertCols, desc.Columns...)
+			for i := range desc.Mutations {
+				if c := desc.Mutations[i].GetColumn(); c != nil && desc.Mutations[i].State == sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
+					insertCols = append(insertCols, *c)
+				}
+			}
+		}
 	} else {
 		var err error
 		if insertCols, err = p.processColumns(desc, n.Columns,
@@ -174,18 +184,22 @@ func (p *planner) Insert(
 	// Extract the AST for the data source.
 	var insertRows tree.SelectStatement
 	arityChecked := false
+	colNames := make(tree.NameList, len(insertCols))
+	for i := range insertCols {
+		colNames[i] = tree.Name(insertCols[i].Name)
+	}
 	if n.DefaultValues() {
-		insertRows = newDefaultValuesClause(defaultExprs, insertCols)
+		insertRows = newDefaultValuesClause(defaultExprs, colNames)
 	} else {
-		src, values, err := extractInsertSource(n.Rows)
+		src, values, err := extractInsertSource(colNames, n.Rows)
 		if err != nil {
 			return nil, err
 		}
 		if values != nil {
-			if len(values.Tuples) > 0 {
+			if len(values.Rows) > 0 {
 				// Check to make sure the values clause doesn't have too many or
 				// too few expressions in each tuple.
-				numExprs := len(values.Tuples[0].Exprs)
+				numExprs := len(values.Rows[0])
 				if err := checkNumExprs(numExprs, numInputColumns, n.Columns != nil); err != nil {
 					return nil, err
 				}
@@ -354,8 +368,7 @@ func (n *insertNode) startExec(params runParams) error {
 	if n.run.rowsNeeded {
 		n.run.rows = sqlbase.NewRowContainer(
 			params.EvalContext().Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromResCols(n.columns),
-			maxInsertBatchSize)
+			sqlbase.ColTypeInfoFromResCols(n.columns), 0)
 
 		// In some cases (e.g. `INSERT INTO t (a) ...`) the data source
 		// does not provide all the table columns. However we do need to
@@ -672,7 +685,9 @@ func (p *planner) processColumns(
 // extractInsertSource removes the parentheses around the data source of an INSERT statement.
 // If the data source is a VALUES clause not further qualified with LIMIT/OFFSET and ORDER BY,
 // the 3rd return value is a pre-casted pointer to the VALUES clause.
-func extractInsertSource(s *tree.Select) (tree.SelectStatement, *tree.ValuesClause, error) {
+func extractInsertSource(
+	colNames tree.NameList, s *tree.Select,
+) (tree.SelectStatement, *tree.ValuesClauseWithNames, error) {
 	wrapped := s.Select
 	limit := s.Limit
 	orderBy := s.OrderBy
@@ -695,7 +710,10 @@ func extractInsertSource(s *tree.Select) (tree.SelectStatement, *tree.ValuesClau
 
 	if orderBy == nil && limit == nil {
 		values, _ := wrapped.(*tree.ValuesClause)
-		return wrapped, values, nil
+		if values != nil {
+			return wrapped, &tree.ValuesClauseWithNames{ValuesClause: *values, Names: colNames}, nil
+		}
+		return wrapped, nil, nil
 	}
 	return &tree.ParenSelect{
 		Select: &tree.Select{Select: wrapped, OrderBy: orderBy, Limit: limit},
@@ -703,17 +721,20 @@ func extractInsertSource(s *tree.Select) (tree.SelectStatement, *tree.ValuesClau
 }
 
 func newDefaultValuesClause(
-	defaultExprs []tree.TypedExpr, cols []sqlbase.ColumnDescriptor,
+	defaultExprs []tree.TypedExpr, colNames tree.NameList,
 ) tree.SelectStatement {
-	row := make(tree.Exprs, 0, len(cols))
-	for i := range cols {
+	row := make(tree.Exprs, 0, len(colNames))
+	for i := range colNames {
 		if defaultExprs == nil {
 			row = append(row, tree.DNull)
 			continue
 		}
 		row = append(row, defaultExprs[i])
 	}
-	return &tree.ValuesClause{Tuples: []*tree.Tuple{{Exprs: row}}}
+	return &tree.ValuesClauseWithNames{
+		ValuesClause: tree.ValuesClause{Rows: []tree.Exprs{row}},
+		Names:        colNames,
+	}
 }
 
 // fillDefaults populates default expressions in the provided ValuesClause,
@@ -728,12 +749,14 @@ func newDefaultValuesClause(
 //
 // The function returns a ValuesClause with defaults filled or an error.
 func fillDefaults(
-	defaultExprs []tree.TypedExpr, cols []sqlbase.ColumnDescriptor, values *tree.ValuesClause,
-) (*tree.ValuesClause, error) {
+	defaultExprs []tree.TypedExpr,
+	cols []sqlbase.ColumnDescriptor,
+	values *tree.ValuesClauseWithNames,
+) (*tree.ValuesClauseWithNames, error) {
 	ret := values
 	copyValues := func() {
 		if ret == values {
-			ret = &tree.ValuesClause{Tuples: append([]*tree.Tuple(nil), values.Tuples...)}
+			ret = &tree.ValuesClauseWithNames{ValuesClause: tree.ValuesClause{Rows: append([]tree.Exprs(nil), values.Rows...)}, Names: values.Names}
 		}
 	}
 
@@ -747,9 +770,9 @@ func fillDefaults(
 		return defaultExprs[idx]
 	}
 
-	numColsOrig := len(ret.Tuples[0].Exprs)
-	for tIdx, tuple := range ret.Tuples {
-		if a, e := len(tuple.Exprs), numColsOrig; a != e {
+	numColsOrig := len(ret.Rows[0])
+	for tIdx, tuple := range ret.Rows {
+		if a, e := len(tuple), numColsOrig; a != e {
 			return nil, newValuesListLenErr(e, a)
 		}
 
@@ -757,26 +780,30 @@ func fillDefaults(
 		copyTuple := func() {
 			if !tupleCopied {
 				copyValues()
-				tuple = &tree.Tuple{Exprs: append([]tree.Expr(nil), tuple.Exprs...)}
-				ret.Tuples[tIdx] = tuple
+				tuple = append(tree.Exprs(nil), tuple...)
+				ret.Rows[tIdx] = tuple
 				tupleCopied = true
 			}
 		}
 
-		for eIdx, val := range tuple.Exprs {
+		for eIdx, val := range tuple {
 			switch val.(type) {
 			case tree.DefaultVal:
 				copyTuple()
-				tuple.Exprs[eIdx] = defaultExpr(eIdx)
+				tuple[eIdx] = defaultExpr(eIdx)
 			}
 		}
 
 		// The values for the row may be shorter than the number of columns being
 		// inserted into. Populate default expressions for those columns.
-		for i := len(tuple.Exprs); i < len(cols); i++ {
+		for i := len(tuple); i < len(cols); i++ {
 			copyTuple()
-			tuple.Exprs = append(tuple.Exprs, defaultExpr(len(tuple.Exprs)))
+			tuple = append(tuple, defaultExpr(len(tuple)))
+			ret.Rows[tIdx] = tuple
 		}
+	}
+	for i := numColsOrig; i < len(cols); i++ {
+		ret.Names = append(ret.Names, tree.Name(cols[i].Name))
 	}
 	return ret, nil
 }

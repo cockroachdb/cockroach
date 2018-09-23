@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
 )
 
@@ -42,15 +43,18 @@ type streamGroupAccumulator struct {
 	leftoverRow sqlbase.EncDatumRow
 
 	rowAlloc sqlbase.EncDatumRowAlloc
+
+	memAcc mon.BoundAccount
 }
 
 func makeStreamGroupAccumulator(
-	src RowSource, ordering sqlbase.ColumnOrdering,
+	src RowSource, ordering sqlbase.ColumnOrdering, memMonitor *mon.BytesMonitor,
 ) streamGroupAccumulator {
 	return streamGroupAccumulator{
 		src:      src,
 		types:    src.OutputTypes(),
 		ordering: ordering,
+		memAcc:   memMonitor.MakeBoundAccount(),
 	}
 }
 
@@ -84,6 +88,9 @@ func (s *streamGroupAccumulator) nextGroup(
 			return s.curGroup, nil
 		}
 
+		if err := s.memAcc.Grow(evalCtx.Ctx(), int64(row.Size())); err != nil {
+			return nil, &ProducerMetadata{Err: err}
+		}
 		row = s.rowAlloc.CopyRow(row)
 
 		if len(s.curGroup) == 0 {
@@ -110,8 +117,13 @@ func (s *streamGroupAccumulator) nextGroup(
 			n := len(s.curGroup)
 			ret := s.curGroup[:n:n]
 			s.curGroup = s.curGroup[:0]
+			s.memAcc.Clear(evalCtx.Ctx())
 			s.leftoverRow = row
 			return ret, nil
 		}
 	}
+}
+
+func (s *streamGroupAccumulator) close(ctx context.Context) {
+	s.memAcc.Close(ctx)
 }

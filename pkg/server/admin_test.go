@@ -35,6 +35,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
@@ -42,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -433,6 +434,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 				{Name: "nulls_not_allowed", Type: "INT", Nullable: false, DefaultValue: "1000:::INT"},
 				{Name: "default2", Type: "INT", Nullable: true, DefaultValue: "2:::INT"},
 				{Name: "string_default", Type: "STRING", Nullable: true, DefaultValue: "'default_string':::STRING"},
+				{Name: "rowid", Type: "INT", Nullable: false, DefaultValue: "unique_rowid()", Hidden: true},
 			}
 			testutils.SortStructs(expColumns, "Name")
 			testutils.SortStructs(resp.Columns, "Name")
@@ -1064,7 +1066,7 @@ func TestHealthAPI(t *testing.T) {
 
 // getSystemJobIDs queries the jobs table for all jobs IDs. Sorted by decreasing creation time.
 func getSystemJobIDs(t testing.TB, db *sqlutils.SQLRunner) []int64 {
-	rows := db.Query(t, `SELECT id FROM crdb_internal.jobs ORDER BY created DESC;`)
+	rows := db.Query(t, `SELECT job_id FROM crdb_internal.jobs ORDER BY created DESC;`)
 	defer rows.Close()
 
 	res := []int64{}
@@ -1091,20 +1093,34 @@ func TestAdminAPIJobs(t *testing.T) {
 	testJobs := []struct {
 		id       int64
 		status   jobs.Status
-		details  jobs.Details
-		progress jobs.ProgressDetails
+		details  jobspb.Details
+		progress jobspb.ProgressDetails
 	}{
-		{1, jobs.StatusRunning, jobs.RestoreDetails{}, jobs.RestoreProgress{}},
-		{2, jobs.StatusRunning, jobs.BackupDetails{}, jobs.BackupProgress{}},
-		{3, jobs.StatusSucceeded, jobs.BackupDetails{}, jobs.BackupProgress{}},
+		{1, jobs.StatusRunning, jobspb.RestoreDetails{}, jobspb.RestoreProgress{}},
+		{2, jobs.StatusRunning, jobspb.BackupDetails{}, jobspb.BackupProgress{}},
+		{3, jobs.StatusSucceeded, jobspb.BackupDetails{}, jobspb.BackupProgress{}},
+		{4, jobs.StatusRunning, jobspb.ChangefeedDetails{}, jobspb.ChangefeedProgress{}},
 	}
 	for _, job := range testJobs {
-		payload := jobs.Payload{Details: jobs.WrapPayloadDetails(job.details)}
+		payload := jobspb.Payload{Details: jobspb.WrapPayloadDetails(job.details)}
 		payloadBytes, err := protoutil.Marshal(&payload)
 		if err != nil {
 			t.Fatal(err)
 		}
-		progress := jobs.Progress{Details: jobs.WrapProgressDetails(job.progress)}
+
+		progress := jobspb.Progress{Details: jobspb.WrapProgressDetails(job.progress)}
+		// Populate progress.Progress field with a specific progress type based on
+		// the job type.
+		if _, ok := job.progress.(jobspb.ChangefeedProgress); ok {
+			progress.Progress = &jobspb.Progress_HighWater{
+				HighWater: &hlc.Timestamp{},
+			}
+		} else {
+			progress.Progress = &jobspb.Progress_FractionCompleted{
+				FractionCompleted: 1.0,
+			}
+		}
+
 		progressBytes, err := protoutil.Marshal(&progress)
 		if err != nil {
 			t.Fatal(err)
@@ -1121,16 +1137,16 @@ func TestAdminAPIJobs(t *testing.T) {
 		uri         string
 		expectedIDs []int64
 	}{
-		{"jobs", append([]int64{3, 2, 1}, existingIDs...)},
-		{"jobs?limit=1", []int64{3}},
-		{"jobs?status=running", []int64{2, 1}},
+		{"jobs", append([]int64{4, 3, 2, 1}, existingIDs...)},
+		{"jobs?limit=1", []int64{4}},
+		{"jobs?status=running", []int64{4, 2, 1}},
 		{"jobs?status=succeeded", append([]int64{3}, existingIDs...)},
 		{"jobs?status=pending", []int64{}},
 		{"jobs?status=garbage", []int64{}},
-		{fmt.Sprintf("jobs?type=%d", jobs.TypeBackup), []int64{3, 2}},
-		{fmt.Sprintf("jobs?type=%d", jobs.TypeRestore), []int64{1}},
+		{fmt.Sprintf("jobs?type=%d", jobspb.TypeBackup), []int64{3, 2}},
+		{fmt.Sprintf("jobs?type=%d", jobspb.TypeRestore), []int64{1}},
 		{fmt.Sprintf("jobs?type=%d", invalidJobType), []int64{}},
-		{fmt.Sprintf("jobs?status=running&type=%d", jobs.TypeBackup), []int64{2}},
+		{fmt.Sprintf("jobs?status=running&type=%d", jobspb.TypeBackup), []int64{2}},
 	}
 	for i, testCase := range testCases {
 		var res serverpb.JobsResponse
@@ -1203,7 +1219,7 @@ func TestAdminAPIQueryPlan(t *testing.T) {
 		exp   []string
 	}{
 		{"SELECT sum(id) FROM api_test.t1", []string{"nodeNames\":[\"1\"]", "Out: @1"}},
-		{"SELECT sum(1) FROM api_test.t1 JOIN api_test.t2 on t1.id = t2.id", []string{"nodeNames\":[\"1\"]", "Out: @1", "MergeJoiner"}},
+		{"SELECT sum(1) FROM api_test.t1 JOIN api_test.t2 on t1.id = t2.id", []string{"nodeNames\":[\"1\"]", "Out: @1"}},
 	}
 	for i, testCase := range testCases {
 		var res serverpb.QueryPlanResponse
@@ -1304,10 +1320,8 @@ func TestAdminAPIFullRangeLog(t *testing.T) {
 	}
 }
 
-func TestAdminAPIReplicaMatrix(t *testing.T) {
+func TestAdminAPIDataDistribution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	t.Skip("#24802")
 
 	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
@@ -1327,12 +1341,12 @@ func TestAdminAPIReplicaMatrix(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE "sp'ec\ch""ars"`)
 	sqlDB.Exec(t, `CREATE TABLE "sp'ec\ch""ars"."more\spec'chars" (id INT PRIMARY KEY)`)
 
-	// Verify that we see their replicas in the ReplicaMatrix response, evenly spread
+	// Verify that we see their replicas in the DataDistribution response, evenly spread
 	// across the test cluster's three nodes.
 
-	expectedResp := map[string]serverpb.ReplicaMatrixResponse_DatabaseInfo{
+	expectedResp := map[string]serverpb.DataDistributionResponse_DatabaseInfo{
 		"roachblog": {
-			TableInfo: map[string]serverpb.ReplicaMatrixResponse_TableInfo{
+			TableInfo: map[string]serverpb.DataDistributionResponse_TableInfo{
 				"posts": {
 					ReplicaCountByNodeId: map[roachpb.NodeID]int64{
 						1: 1,
@@ -1350,7 +1364,7 @@ func TestAdminAPIReplicaMatrix(t *testing.T) {
 			},
 		},
 		`sp'ec\ch"ars`: {
-			TableInfo: map[string]serverpb.ReplicaMatrixResponse_TableInfo{
+			TableInfo: map[string]serverpb.DataDistributionResponse_TableInfo{
 				`more\spec'chars`: {
 					ReplicaCountByNodeId: map[roachpb.NodeID]int64{
 						1: 1,
@@ -1364,8 +1378,8 @@ func TestAdminAPIReplicaMatrix(t *testing.T) {
 
 	// Wait for the new tables' ranges to be created and replicated.
 	testutils.SucceedsSoon(t, func() error {
-		var resp serverpb.ReplicaMatrixResponse
-		if err := getAdminJSONProto(firstServer, "replica_matrix", &resp); err != nil {
+		var resp serverpb.DataDistributionResponse
+		if err := getAdminJSONProto(firstServer, "data_distribution", &resp); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1381,53 +1395,12 @@ func TestAdminAPIReplicaMatrix(t *testing.T) {
 
 		return nil
 	})
-
-	// Add a zone config.
-	sqlDB.Exec(t, `ALTER TABLE roachblog.posts EXPERIMENTAL CONFIGURE ZONE 'num_replicas: 1'`)
-
-	expectedNewZoneConfigID := int64(51)
-	sqlDB.CheckQueryResults(
-		t,
-		`SELECT id
-		FROM [EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS]
-		WHERE cli_specifier = 'roachblog.posts'`,
-		[][]string{
-			{fmt.Sprintf("%d", expectedNewZoneConfigID)},
-		},
-	)
-
-	// Verify that we see the zone config and its effects.
-	testutils.SucceedsSoon(t, func() error {
-		var resp serverpb.ReplicaMatrixResponse
-		if err := getAdminJSONProto(firstServer, "replica_matrix", &resp); err != nil {
-			t.Fatal(err)
-		}
-
-		postsTableInfo := resp.DatabaseInfo["roachblog"].TableInfo["posts"]
-
-		// Verify that the TableInfo for roachblog.posts points at the new zone config.
-		if postsTableInfo.ZoneConfigId != expectedNewZoneConfigID {
-			t.Fatalf(
-				"expected roachblog.posts to have zone config id %d; had %d",
-				expectedNewZoneConfigID, postsTableInfo.ZoneConfigId,
-			)
-		}
-
-		// Verify that the num_replicas setting has taken effect.
-		numPostsReplicas := int64(0)
-		for _, count := range postsTableInfo.ReplicaCountByNodeId {
-			numPostsReplicas += count
-		}
-
-		if numPostsReplicas != 1 {
-			return fmt.Errorf("expected 1 replica; got %d", numPostsReplicas)
-		}
-
-		return nil
-	})
 }
 
-func BenchmarkAdminAPIReplicaMatrix(b *testing.B) {
+func BenchmarkAdminAPIDataDistribution(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
 	testCluster := serverutils.StartTestCluster(b, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
@@ -1447,10 +1420,101 @@ func BenchmarkAdminAPIReplicaMatrix(b *testing.B) {
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		var resp serverpb.ReplicaMatrixResponse
+		var resp serverpb.DataDistributionResponse
 		if err := getAdminJSONProto(firstServer, "replica_matrix", &resp); err != nil {
 			b.Fatal(err)
 		}
 	}
 	b.StopTimer()
+}
+
+func TestEnqueueRange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	// Up-replicate r1 to all 3 nodes. We use manual replication to avoid lease
+	// transfers causing temporary conditions in which no store is the
+	// leaseholder, which can break the the tests below.
+	_, err := testCluster.AddReplicas(roachpb.KeyMin, testCluster.Target(1), testCluster.Target(2))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// RangeID being queued
+	const realRangeID = 1
+	const fakeRangeID = 999
+
+	// Who we expect responses from.
+	const none = 0
+	const leaseholder = 1
+	const allReplicas = 3
+
+	testCases := []struct {
+		nodeID            roachpb.NodeID
+		queue             string
+		rangeID           roachpb.RangeID
+		expectedDetails   int
+		expectedNonErrors int
+	}{
+		// Success cases
+		{0, "gc", realRangeID, allReplicas, leaseholder},
+		{0, "split", realRangeID, allReplicas, leaseholder},
+		{0, "replicaGC", realRangeID, allReplicas, allReplicas},
+		{0, "RaFtLoG", realRangeID, allReplicas, allReplicas},
+		{0, "RAFTSNAPSHOT", realRangeID, allReplicas, allReplicas},
+		{0, "consistencyChecker", realRangeID, allReplicas, leaseholder},
+		{0, "TIMESERIESmaintenance", realRangeID, allReplicas, leaseholder},
+		{1, "raftlog", realRangeID, leaseholder, leaseholder},
+		// Error cases
+		{0, "gv", realRangeID, allReplicas, none},
+		{0, "GC", fakeRangeID, allReplicas, none},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.queue, func(t *testing.T) {
+			req := &serverpb.EnqueueRangeRequest{
+				NodeID:  tc.nodeID,
+				Queue:   tc.queue,
+				RangeID: tc.rangeID,
+			}
+			var resp serverpb.EnqueueRangeResponse
+			if err := postAdminJSONProto(testCluster.Server(0), "enqueue_range", req, &resp); err != nil {
+				t.Fatal(err)
+			}
+			if e, a := tc.expectedDetails, len(resp.Details); e != a {
+				t.Errorf("expected %d details; got %d: %+v", e, a, resp)
+			}
+			var numNonErrors int
+			for _, details := range resp.Details {
+				if len(details.Events) > 0 && details.Error == "" {
+					numNonErrors++
+				}
+			}
+			if tc.expectedNonErrors != numNonErrors {
+				t.Errorf("expected %d non-error details; got %d: %+v", tc.expectedNonErrors, numNonErrors, resp)
+			}
+		})
+	}
+
+	// Finally, test a few more basic error cases.
+	reqs := []*serverpb.EnqueueRangeRequest{
+		{NodeID: -1, Queue: "gc"},
+		{Queue: ""},
+		{RangeID: -1, Queue: "gc"},
+	}
+	for _, req := range reqs {
+		t.Run(fmt.Sprint(req), func(t *testing.T) {
+			var resp serverpb.EnqueueRangeResponse
+			err := postAdminJSONProto(testCluster.Server(0), "enqueue_range", req, &resp)
+			if err == nil {
+				t.Fatalf("unexpected success: %+v", resp)
+			}
+			if !testutils.IsError(err, "400 Bad Request") {
+				t.Fatalf("unexpected error type: %+v", err)
+			}
+		})
+	}
 }

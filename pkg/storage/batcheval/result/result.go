@@ -48,14 +48,9 @@ type LocalResult struct {
 	// commit fails, or we may accidentally make uncommitted values
 	// live.
 	EndTxns *[]EndTxnIntents
-	// Whether we successfully or non-successfully requested a lease.
-	//
-	// TODO(tschottdorf): Update this counter correctly with prop-eval'ed KV
-	// in the following case:
-	// - proposal does not fail fast and goes through Raft
-	// - downstream-of-Raft logic identifies a conflict and returns an error
-	// The downstream-of-Raft logic does not exist at time of writing.
-	LeaseMetricsResult *LeaseMetricsType
+	// Metrics contains counters which are to be passed to the
+	// metrics subsystem.
+	Metrics *Metrics
 
 	// When set (in which case we better be the first range), call
 	// GossipFirstRange if the Replica holds the lease.
@@ -66,11 +61,25 @@ type LocalResult struct {
 	MaybeAddToSplitQueue bool
 	// Call MaybeGossipNodeLiveness with the specified Span, if set.
 	MaybeGossipNodeLiveness *roachpb.Span
+	// Call maybeWatchForMerge.
+	MaybeWatchForMerge bool
 
 	// Set when transaction record(s) are updated, after calls to
 	// EndTransaction or PushTxn. This is a pointer to allow the zero
 	// (and as an unwelcome side effect, all) values to be compared.
 	UpdatedTxns *[]*roachpb.Transaction
+}
+
+// DetachMaybeWatchForMerge returns and falsifies the MaybeWatchForMerge flag
+// from the local result.
+func (lResult *LocalResult) DetachMaybeWatchForMerge() bool {
+	if lResult == nil {
+		return false
+	} else if lResult.MaybeWatchForMerge {
+		lResult.MaybeWatchForMerge = false
+		return true
+	}
+	return false
 }
 
 // DetachIntents returns (and removes) those intents from the
@@ -98,9 +107,14 @@ func (lResult *LocalResult) DetachEndTxns(alwaysOnly bool) []EndTxnIntents {
 	}
 	var r []EndTxnIntents
 	if lResult.EndTxns != nil {
-		for _, eti := range *lResult.EndTxns {
-			if !alwaysOnly || eti.Always {
-				r = append(r, eti)
+		r = *lResult.EndTxns
+		if alwaysOnly {
+			// If alwaysOnly, filter away any !Always EndTxnIntents.
+			r = r[:0]
+			for _, eti := range *lResult.EndTxns {
+				if eti.Always {
+					r = append(r, eti)
+				}
 			}
 		}
 	}
@@ -118,9 +132,10 @@ func (lResult *LocalResult) DetachEndTxns(alwaysOnly bool) []EndTxnIntents {
 // c) data which isn't sent to the followers but the proposer needs for tasks
 //    it must run when the command has applied (such as resolving intents).
 type Result struct {
-	Local      LocalResult
-	Replicated storagebase.ReplicatedEvalResult
-	WriteBatch *storagebase.WriteBatch
+	Local        LocalResult
+	Replicated   storagebase.ReplicatedEvalResult
+	WriteBatch   *storagebase.WriteBatch
+	LogicalOpLog *storagebase.LogicalOpLog
 }
 
 // IsZero reports whether p is the zero value.
@@ -132,6 +147,9 @@ func (p *Result) IsZero() bool {
 		return false
 	}
 	if p.WriteBatch != nil {
+		return false
+	}
+	if p.LogicalOpLog != nil {
 		return false
 	}
 	return true
@@ -286,12 +304,12 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	}
 	q.Local.EndTxns = nil
 
-	if p.Local.LeaseMetricsResult == nil {
-		p.Local.LeaseMetricsResult = q.Local.LeaseMetricsResult
-	} else if q.Local.LeaseMetricsResult != nil {
-		return errors.New("conflicting LeaseMetricsResult")
+	if p.Local.Metrics == nil {
+		p.Local.Metrics = q.Local.Metrics
+	} else if q.Local.Metrics != nil {
+		p.Local.Metrics.Add(*q.Local.Metrics)
 	}
-	q.Local.LeaseMetricsResult = nil
+	q.Local.Metrics = nil
 
 	if p.Local.MaybeGossipNodeLiveness == nil {
 		p.Local.MaybeGossipNodeLiveness = q.Local.MaybeGossipNodeLiveness
@@ -303,6 +321,7 @@ func (p *Result) MergeAndDestroy(q Result) error {
 	coalesceBool(&p.Local.GossipFirstRange, &q.Local.GossipFirstRange)
 	coalesceBool(&p.Local.MaybeGossipSystemConfig, &q.Local.MaybeGossipSystemConfig)
 	coalesceBool(&p.Local.MaybeAddToSplitQueue, &q.Local.MaybeAddToSplitQueue)
+	coalesceBool(&p.Local.MaybeWatchForMerge, &q.Local.MaybeWatchForMerge)
 
 	if q.Local.UpdatedTxns != nil {
 		if p.Local.UpdatedTxns == nil {
@@ -312,6 +331,15 @@ func (p *Result) MergeAndDestroy(q Result) error {
 		}
 	}
 	q.Local.UpdatedTxns = nil
+
+	if q.LogicalOpLog != nil {
+		if p.LogicalOpLog == nil {
+			p.LogicalOpLog = q.LogicalOpLog
+		} else {
+			p.LogicalOpLog.Ops = append(p.LogicalOpLog.Ops, q.LogicalOpLog.Ops...)
+		}
+	}
+	q.LogicalOpLog = nil
 
 	if !q.IsZero() {
 		log.Fatalf(context.TODO(), "unhandled EvalResult: %s", pretty.Diff(q, Result{}))

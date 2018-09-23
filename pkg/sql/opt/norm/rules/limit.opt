@@ -21,11 +21,11 @@ $input
 (Limit
     (Project $input:* $projections:*)
     $limit:*
-    $ordering:*
+    $ordering:* & (HasColsInOrdering $input $ordering)
 )
 =>
 (Project
-    (Limit $input $limit $ordering)
+    (Limit $input $limit (PruneOrdering $input $ordering))
     $projections
 )
 
@@ -36,10 +36,10 @@ $input
 (Offset
     (Project $input:* $projections:*)
     $offset:*
-    $ordering:*
+    $ordering:* & (HasColsInOrdering $input $ordering)
 )
 =>
 (Project
-    (Offset $input $offset $ordering)
+    (Offset $input $offset (PruneOrdering $input $ordering))
     $projections
 )

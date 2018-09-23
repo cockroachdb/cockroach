@@ -100,14 +100,10 @@ var generators = map[string]builtinDefinition{
 		makeGeneratorOverloadWithReturnType(
 			tree.ArgTypes{{"input", types.AnyArray}},
 			func(args []tree.TypedExpr) types.T {
-				if len(args) == 0 {
+				if len(args) == 0 || args[0].ResolvedType() == types.Unknown {
 					return tree.UnknownReturnType
 				}
-				t := types.UnwrapType(args[0].ResolvedType()).(types.TArray).Typ
-				return types.TTuple{
-					Types:  []types.T{t},
-					Labels: arrayValueGeneratorLabels,
-				}
+				return types.UnwrapType(args[0].ResolvedType()).(types.TArray).Typ
 			},
 			makeArrayGenerator,
 			"Returns the input array as a set of rows",
@@ -118,7 +114,7 @@ var generators = map[string]builtinDefinition{
 		makeGeneratorOverloadWithReturnType(
 			tree.ArgTypes{{"input", types.AnyArray}},
 			func(args []tree.TypedExpr) types.T {
-				if len(args) == 0 {
+				if len(args) == 0 || args[0].ResolvedType() == types.Unknown {
 					return tree.UnknownReturnType
 				}
 				t := types.UnwrapType(args[0].ResolvedType()).(types.TArray).Typ
@@ -178,7 +174,7 @@ var generators = map[string]builtinDefinition{
 }
 
 func makeGeneratorOverload(
-	in tree.ArgTypes, ret types.TTuple, g tree.GeneratorFactory, info string,
+	in tree.ArgTypes, ret types.T, g tree.GeneratorFactory, info string,
 ) tree.Overload {
 	return makeGeneratorOverloadWithReturnType(in, tree.FixedReturnType(ret), g, info)
 }
@@ -215,7 +211,7 @@ func makeKeywordsGenerator(_ *tree.EvalContext, _ tree.Datums) (tree.ValueGenera
 }
 
 // ResolvedType implements the tree.ValueGenerator interface.
-func (*keywordsValueGenerator) ResolvedType() types.TTuple { return keywordsValueGeneratorType }
+func (*keywordsValueGenerator) ResolvedType() types.T { return keywordsValueGeneratorType }
 
 // Close implements the tree.ValueGenerator interface.
 func (*keywordsValueGenerator) Close() {}
@@ -262,22 +258,16 @@ var keywordNames = func() []string {
 type seriesValueGenerator struct {
 	origStart, value, start, stop, step interface{}
 	nextOK                              bool
-	genType                             types.TTuple
+	genType                             types.T
 	next                                func(*seriesValueGenerator) (bool, error)
 	genValue                            func(*seriesValueGenerator) tree.Datums
 }
 
 var seriesValueGeneratorLabels = []string{"generate_series"}
 
-var seriesValueGeneratorType = types.TTuple{
-	Types:  []types.T{types.Int},
-	Labels: seriesValueGeneratorLabels,
-}
+var seriesValueGeneratorType = types.Int
 
-var seriesTSValueGeneratorType = types.TTuple{
-	Types:  []types.T{types.Timestamp},
-	Labels: seriesValueGeneratorLabels,
-}
+var seriesTSValueGeneratorType = types.Timestamp
 
 var errStepCannotBeZero = pgerror.NewError(pgerror.CodeInvalidParameterValueError, "step cannot be 0")
 
@@ -369,7 +359,7 @@ func makeTSSeriesGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGen
 }
 
 // ResolvedType implements the tree.ValueGenerator interface.
-func (s *seriesValueGenerator) ResolvedType() types.TTuple {
+func (s *seriesValueGenerator) ResolvedType() types.T {
 	return s.genType
 }
 
@@ -409,11 +399,8 @@ type arrayValueGenerator struct {
 var arrayValueGeneratorLabels = []string{"unnest"}
 
 // ResolvedType implements the tree.ValueGenerator interface.
-func (s *arrayValueGenerator) ResolvedType() types.TTuple {
-	return types.TTuple{
-		Types:  []types.T{s.array.ParamTyp},
-		Labels: arrayValueGeneratorLabels,
-	}
+func (s *arrayValueGenerator) ResolvedType() types.T {
+	return s.array.ParamTyp
 }
 
 // Start implements the tree.ValueGenerator interface.
@@ -458,7 +445,7 @@ type expandArrayValueGenerator struct {
 var expandArrayValueGeneratorLabels = []string{"x", "n"}
 
 // ResolvedType implements the tree.ValueGenerator interface.
-func (s *expandArrayValueGenerator) ResolvedType() types.TTuple {
+func (s *expandArrayValueGenerator) ResolvedType() types.T {
 	return types.TTuple{
 		Types:  []types.T{s.avg.array.ParamTyp, types.Int},
 		Labels: expandArrayValueGeneratorLabels,
@@ -484,7 +471,7 @@ func (s *expandArrayValueGenerator) Next() (bool, error) {
 func (s *expandArrayValueGenerator) Values() tree.Datums {
 	// Expand array's index is 1 based.
 	s.buf[0] = s.avg.array.Array[s.avg.nextIndex]
-	*s.buf[1].(*tree.DInt) = tree.DInt(s.avg.nextIndex + 1)
+	s.buf[1] = tree.NewDInt(tree.DInt(s.avg.nextIndex + 1))
 	return s.buf[:]
 }
 
@@ -524,13 +511,10 @@ type subscriptsValueGenerator struct {
 
 var subscriptsValueGeneratorLabels = []string{"generate_subscripts"}
 
-var subscriptsValueGeneratorType = types.TTuple{
-	Types:  []types.T{types.Int},
-	Labels: subscriptsValueGeneratorLabels,
-}
+var subscriptsValueGeneratorType = types.Int
 
 // ResolvedType implements the tree.ValueGenerator interface.
-func (s *subscriptsValueGenerator) ResolvedType() types.TTuple {
+func (s *subscriptsValueGenerator) ResolvedType() types.T {
 	return subscriptsValueGeneratorType
 }
 
@@ -560,7 +544,7 @@ func (s *subscriptsValueGenerator) Next() (bool, error) {
 // Values implements the tree.ValueGenerator interface.
 func (s *subscriptsValueGenerator) Values() tree.Datums {
 	// Generate Subscript's indexes are 1 based.
-	*s.buf[0].(*tree.DInt) = tree.DInt(s.avg.nextIndex + 1)
+	s.buf[0] = tree.NewDInt(tree.DInt(s.avg.nextIndex + 1))
 	return s.buf[:]
 }
 
@@ -582,7 +566,7 @@ func makeUnaryGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGenera
 }
 
 // ResolvedType implements the tree.ValueGenerator interface.
-func (*unaryValueGenerator) ResolvedType() types.TTuple { return unaryValueGeneratorType }
+func (*unaryValueGenerator) ResolvedType() types.T { return unaryValueGeneratorType }
 
 // Start implements the tree.ValueGenerator interface.
 func (s *unaryValueGenerator) Start() error {
@@ -641,15 +625,9 @@ var jsonArrayElementsTextImpl = makeGeneratorOverload(
 
 var jsonArrayGeneratorLabels = []string{"value"}
 
-var jsonArrayGeneratorType = types.TTuple{
-	Types:  []types.T{types.JSON},
-	Labels: jsonArrayGeneratorLabels,
-}
+var jsonArrayGeneratorType = types.JSON
 
-var jsonArrayTextGeneratorType = types.TTuple{
-	Types:  []types.T{types.String},
-	Labels: jsonArrayGeneratorLabels,
-}
+var jsonArrayTextGeneratorType = types.String
 
 type jsonArrayGenerator struct {
 	json      tree.DJSON
@@ -685,7 +663,7 @@ func makeJSONArrayGenerator(args tree.Datums, asText bool) (tree.ValueGenerator,
 }
 
 // ResolvedType implements the tree.ValueGenerator interface.
-func (g *jsonArrayGenerator) ResolvedType() types.TTuple {
+func (g *jsonArrayGenerator) ResolvedType() types.T {
 	if g.asText {
 		return jsonArrayTextGeneratorType
 	}
@@ -735,10 +713,7 @@ var jsonObjectKeysImpl = makeGeneratorOverload(
 
 var jsonObjectKeysGeneratorLabels = []string{"json_object_keys"}
 
-var jsonObjectKeysGeneratorType = types.TTuple{
-	Types:  []types.T{types.String},
-	Labels: jsonObjectKeysGeneratorLabels,
-}
+var jsonObjectKeysGeneratorType = types.String
 
 type jsonObjectKeysGenerator struct {
 	iter *json.ObjectIterator
@@ -766,7 +741,7 @@ func makeJSONObjectKeysGenerator(
 }
 
 // ResolvedType implements the tree.ValueGenerator interface.
-func (g *jsonObjectKeysGenerator) ResolvedType() types.TTuple {
+func (g *jsonObjectKeysGenerator) ResolvedType() types.T {
 	return jsonObjectKeysGeneratorType
 }
 
@@ -842,7 +817,7 @@ func makeJSONEachGenerator(args tree.Datums, asText bool) (tree.ValueGenerator, 
 }
 
 // ResolvedType implements the tree.ValueGenerator interface.
-func (g *jsonEachGenerator) ResolvedType() types.TTuple {
+func (g *jsonEachGenerator) ResolvedType() types.T {
 	if g.asText {
 		return jsonEachTextGeneratorType
 	}

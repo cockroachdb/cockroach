@@ -61,8 +61,8 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 	valueStr := strings.Repeat("0123456789", 1024)
 	var value roachpb.Value
 	value.SetString(valueStr) // 10KiB
-	halfFull := clearRangeBytesThreshold / (2 * len(valueStr))
-	overFull := clearRangeBytesThreshold/len(valueStr) + 1
+	halfFull := ClearRangeBytesThreshold / (2 * len(valueStr))
+	overFull := ClearRangeBytesThreshold/len(valueStr) + 1
 	tests := []struct {
 		keyCount           int
 		expClearCount      int

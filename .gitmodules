@@ -20,3 +20,6 @@
 [submodule "c-deps/googletest"]
 	path = c-deps/googletest
 	url = https://github.com/cockroachdb/googletest
+[submodule "pkg/ui/yarn-vendor"]
+	path = pkg/ui/yarn-vendor
+	url = https://github.com/cockroachdb/yarn-vendored

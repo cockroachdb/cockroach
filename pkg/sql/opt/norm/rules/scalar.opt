@@ -48,7 +48,7 @@
 # operand is a constant, replaces with that constant. Note that ConstValue
 # matches nulls as well as other constants.
 [SimplifyCoalesce, Normalize]
-(Coalesce $args:[ (ConstValue) ... ]) => (SimplifyCoalesce $args)
+(Coalesce $args:[ $arg:* & (IsConstValueOrTuple $arg) ... ]) => (SimplifyCoalesce $args)
 
 # EliminateCast discards the cast operator if its input already has a type
 # that's equivalent to the desired static type.
@@ -143,19 +143,89 @@
 # Project operator never changes the row cardinality of its input, and row
 # cardinality is the only thing that Exists cares about, so Project is a no-op.
 [EliminateExistsProject, Normalize]
-(Exists (Project $input:*)) => (Exists $input)
+(Exists (Project $input:*) $def:*) => (Exists $input $def)
 
 # EliminateExistsGroupBy discards a non-scalar GroupBy input to the Exists
-# operator. While non-scalar GroupBy can change row cardinality, it always
-# returns a non-empty set if its input is non-empty. Similarly, if its input is
-# empty, then it returns the empty set. Therefore, it's a no-op for Exists.
+# operator. While non-scalar GroupBy (or DistinctOn) can change row cardinality,
+# it always returns a non-empty set if its input is non-empty. Similarly, if its
+# input is empty, then it returns the empty set. Therefore, it's a no-op for
+# Exists.
 [EliminateExistsGroupBy, Normalize]
-(Exists
-    (GroupBy
-        $input:*
-        *
-        $def:* & ^(IsScalarGroupBy $def)
-    )
+(Exists (GroupBy | DistinctOn $input:*) $def:*) => (Exists $input $def)
+
+# NormalizeJSONFieldAccess transforms field access into a containment with a
+# simpler LHS. This allows inverted index constraints to be generated in some
+# cases.
+# The FetchVal operator also has a version with
+# integers instead of strings, but this transformation is not valid in that
+# case.
+# This transforms
+#
+#   a->'b' = '"c"'
+#
+# to
+#
+#   a @> '{"b": "c"}'
+#
+[NormalizeJSONFieldAccess, Normalize]
+(Eq
+  (FetchVal
+    $val:*
+    $key:(Const) & (IsString $key)
+  )
+  $right:(Const)
 )
 =>
-(Exists $input)
+(Contains
+  $val
+  (MakeSingleKeyJSONObject $key $right)
+)
+
+# NormalizeJSONContains contains transforms a field access containment into one
+# with a simpler LHS.  This transformation is only valid if the RHS is not a
+# scalar, since a JSON array "contains" a scalar which is inside of it.
+# This transforms
+#
+#   a->'b' @> '{"x": "c"}'
+#
+# to
+#
+#   a @> '{"b": {"x": "c"}}'
+#
+[NormalizeJSONContains, Normalize]
+(Contains
+  (FetchVal
+    $val:*
+    $key:(Const) & (IsString $key)
+  )
+  $right:(Const) & ^(IsJSONScalar $right)
+)
+=>
+(Contains
+  $val
+  (MakeSingleKeyJSONObject $key $right)
+)
+
+# SimplifyCaseWhenConstValue removes branches known to not match. Any
+# branch known to match is used as the ELSE and further WHEN conditions
+# are skipped. If all WHEN conditions have been removed, the ELSE
+# expression is used.
+# This transforms
+#
+#   CASE WHEN v THEN 1 WHEN false THEN a WHEN true THEN b ELSE c END
+#
+# to
+#
+#   CASE WHEN v THEN 1 ELSE b END
+#
+[SimplifyCaseWhenConstValue, Normalize]
+(Case
+  $condition:(ConstValue)
+  $whens:[
+    ...
+    (When (ConstValue))
+    ...
+  ]
+)
+=>
+(SimplifyWhens $condition $whens)

@@ -155,7 +155,7 @@ func runMVCCScan(emk engineMaker, numRows, numVersions, valueSize int, reverse b
 		// Pull all of the sstables into the RocksDB cache in order to make the
 		// timings more stable. Otherwise, the first run will be penalized pulling
 		// data into the cache while later runs will not.
-		iter := eng.NewIterator(IterOptions{})
+		iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 		_, _ = iter.ComputeStats(MakeMVCCMetadataKey(roachpb.KeyMin), MakeMVCCMetadataKey(roachpb.KeyMax), 0)
 		iter.Close()
 	}
@@ -594,7 +594,7 @@ func runMVCCComputeStats(emk engineMaker, valueBytes int, b *testing.B) {
 	var stats enginepb.MVCCStats
 	var err error
 	for i := 0; i < b.N; i++ {
-		iter := eng.NewIterator(IterOptions{})
+		iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 		stats, err = iter.ComputeStats(mvccKey(roachpb.KeyMin), mvccKey(roachpb.KeyMax), 0)
 		iter.Close()
 		if err != nil {
@@ -619,7 +619,7 @@ func runMVCCFindSplitKey(emk engineMaker, valueBytes int, b *testing.B) {
 	var err error
 	for i := 0; i < b.N; i++ {
 		_, err = MVCCFindSplitKey(context.Background(), eng, roachpb.RKeyMin,
-			roachpb.RKeyMax, rangeBytes/2, true /* allowMeta2Splits */)
+			roachpb.RKeyMax, rangeBytes/2)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -722,6 +722,9 @@ func runBenchmarkClearRange(
 }
 
 func BenchmarkClearRange_RocksDB(b *testing.B) {
+	if testing.Short() {
+		b.Skip("TODO: fix benchmark")
+	}
 	runBenchmarkClearRange(b, func(eng Engine, batch Batch, start, end MVCCKey) error {
 		return batch.ClearRange(start, end)
 	})
@@ -729,13 +732,16 @@ func BenchmarkClearRange_RocksDB(b *testing.B) {
 
 func BenchmarkClearIterRange_RocksDB(b *testing.B) {
 	runBenchmarkClearRange(b, func(eng Engine, batch Batch, start, end MVCCKey) error {
-		iter := eng.NewIterator(IterOptions{})
+		iter := eng.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 		defer iter.Close()
 		return batch.ClearIterRange(iter, start, end)
 	})
 }
 
 func BenchmarkMVCCGarbageCollect(b *testing.B) {
+	if testing.Short() {
+		b.Skip("short flag")
+	}
 	defer leaktest.AfterTest(b)()
 	ctx := context.Background()
 	ts := hlc.Timestamp{}.Add(time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC).UnixNano(), 0)

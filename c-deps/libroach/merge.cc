@@ -107,18 +107,24 @@ WARN_UNUSED_RESULT bool MergeTimeSeriesValues(std::string* left, const std::stri
     return false;
   }
 
+  // Determine if we are using row or columnar format, by checking if either
+  // format has a "last" column.
+  bool use_column_format = left_ts.last_size() > 0 || right_ts.last_size() > 0;
+
   // If only a partial merge, do not sort and combine - instead, just quickly
   // merge the two values together. Values will be processed later after a
   // full merge.
   if (!full_merge) {
+    // If using columnar format, convert both operands even in a partial merge.
+    // This is necessary to keep the order of merges stable.
+    if (use_column_format) {
+      convertToColumnar(&left_ts);
+      convertToColumnar(&right_ts);
+    }
     left_ts.MergeFrom(right_ts);
     SerializeTimeSeriesToValue(left, left_ts);
     return true;
   }
-
-  // Determine if we are using row or columnar format, by checking if either
-  // format has a "last" column.
-  bool use_column_format = left_ts.last_size() > 0 || right_ts.last_size() > 0;
 
   if (use_column_format) {
     // Convert from row format to column format if necessary.
@@ -210,6 +216,9 @@ WARN_UNUSED_RESULT bool ConsolidateTimeSeriesValue(std::string* val, rocksdb::Lo
   // Detect if the value is in columnar or row format. Columnar format is
   // detected by the presence of a non-zero-length offset field.
   if (val_ts.offset_size() > 0) {
+    // It's possible that, due to partial merges, the right hand value contain
+    // both row-format and column-format data. Convert it all to columnar.
+    convertToColumnar(&val_ts);
     sortAndDeduplicateColumns(&val_ts, 0);
   } else {
     std::stable_sort(val_ts.mutable_samples()->pointer_begin(),

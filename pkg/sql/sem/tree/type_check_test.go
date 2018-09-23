@@ -82,8 +82,8 @@ func TestTypeCheck(t *testing.T) {
 		{`true IS NOT FALSE`, `true IS NOT false`},
 		{`CASE 1 WHEN 1 THEN (1, 2) ELSE (1, 3) END`, `CASE 1:::INT WHEN 1:::INT THEN (1:::INT, 2:::INT) ELSE (1:::INT, 3:::INT) END`},
 		{`1 BETWEEN 2 AND 3`, `1:::INT BETWEEN 2:::INT AND 3:::INT`},
-		{`4 BETWEEN 2.4 AND 5.5::float`, `4:::INT BETWEEN 2.4:::DECIMAL AND 5.5:::FLOAT::FLOAT`},
-		{`COUNT(3)`, `count(3:::INT)`},
+		{`4 BETWEEN 2.4 AND 5.5::float`, `4:::INT BETWEEN 2.4:::DECIMAL AND 5.5:::FLOAT8::FLOAT8`},
+		{`count(3)`, `count(3:::INT)`},
 		{`ARRAY['a', 'b', 'c']`, `ARRAY['a':::STRING, 'b':::STRING, 'c':::STRING]`},
 		{`ARRAY[1.5, 2.5, 3.5]`, `ARRAY[1.5:::DECIMAL, 2.5:::DECIMAL, 3.5:::DECIMAL]`},
 		{`ARRAY[NULL]`, `ARRAY[NULL]`},
@@ -94,15 +94,15 @@ func TestTypeCheck(t *testing.T) {
 		{`NULL = ALL ARRAY[1.5, 2.5, 3.5]`, `NULL`},
 		{`NULL = ALL ARRAY[NULL, NULL]`, `NULL`},
 		{`1 = ALL NULL`, `NULL`},
-		{`'a' = ALL CURRENT_SCHEMAS(true)`, `'a':::STRING = ALL current_schemas(true)`},
-		{`NULL = ALL CURRENT_SCHEMAS(true)`, `NULL`},
+		{`'a' = ALL current_schemas(true)`, `'a':::STRING = ALL current_schemas(true)`},
+		{`NULL = ALL current_schemas(true)`, `NULL`},
 
 		{`INTERVAL '1'`, `'1s':::INTERVAL`},
 		{`DECIMAL '1.0'`, `1.0:::DECIMAL::DECIMAL`},
 
 		{`1 + 2`, `3:::INT`},
 		{`1:::decimal + 2`, `1:::DECIMAL + 2:::DECIMAL`},
-		{`1:::float + 2`, `1.0:::FLOAT + 2.0:::FLOAT`},
+		{`1:::float + 2`, `1.0:::FLOAT8 + 2.0:::FLOAT8`},
 		{`INTERVAL '1.5s' * 2`, `'1s500ms':::INTERVAL * 2:::INT`},
 		{`2 * INTERVAL '1.5s'`, `2:::INT * '1s500ms':::INTERVAL`},
 
@@ -111,12 +111,12 @@ func TestTypeCheck(t *testing.T) {
 		{`$1:::INT`, `$1:::INT`},
 
 		// Tuples with labels
-		{`(ROW (1) AS a)`, `(ROW(1:::INT) AS a)`},
-		{`(ROW(1:::INT) AS a)`, `(ROW(1:::INT) AS a)`},
+		{`(ROW (1) AS a)`, `((1:::INT,) AS a)`},
+		{`(ROW(1:::INT) AS a)`, `((1:::INT,) AS a)`},
 		{`((1,2) AS a,b)`, `((1:::INT, 2:::INT) AS a, b)`},
 		{`((1:::INT, 2:::INT) AS a, b)`, `((1:::INT, 2:::INT) AS a, b)`},
-		{`(ROW (1,2) AS a,b)`, `(ROW(1:::INT, 2:::INT) AS a, b)`},
-		{`(ROW(1:::INT, 2:::INT) AS a, b)`, `(ROW(1:::INT, 2:::INT) AS a, b)`},
+		{`(ROW (1,2) AS a,b)`, `((1:::INT, 2:::INT) AS a, b)`},
+		{`(ROW(1:::INT, 2:::INT) AS a, b)`, `((1:::INT, 2:::INT) AS a, b)`},
 		{
 			`((1,2,3) AS "One","Two","Three")`,
 			`((1:::INT, 2:::INT, 3:::INT) AS "One", "Two", "Three")`,
@@ -127,23 +127,34 @@ func TestTypeCheck(t *testing.T) {
 		},
 		{
 			`(ROW (1,2,3) AS "One",Two,"Three")`,
-			`(ROW(1:::INT, 2:::INT, 3:::INT) AS "One", two, "Three")`,
+			`((1:::INT, 2:::INT, 3:::INT) AS "One", two, "Three")`,
 		},
 		{
 			`(ROW(1:::INT, 2:::INT, 3:::INT) AS "One", two, "Three")`,
-			`(ROW(1:::INT, 2:::INT, 3:::INT) AS "One", two, "Three")`,
+			`((1:::INT, 2:::INT, 3:::INT) AS "One", two, "Three")`,
 		},
 		// And tuples without labels still work as advertized
-		{`(ROW (1))`, `ROW(1:::INT)`},
-		{`ROW(1:::INT)`, `ROW(1:::INT)`},
+		{`(ROW (1))`, `(1:::INT,)`},
+		{`ROW(1:::INT)`, `(1:::INT,)`},
 		{`((1,2))`, `(1:::INT, 2:::INT)`},
 		{`(1:::INT, 2:::INT)`, `(1:::INT, 2:::INT)`},
-		{`(ROW (1,2))`, `ROW(1:::INT, 2:::INT)`},
-		{`ROW(1:::INT, 2:::INT)`, `ROW(1:::INT, 2:::INT)`},
+		{`(ROW (1,2))`, `(1:::INT, 2:::INT)`},
+		{`ROW(1:::INT, 2:::INT)`, `(1:::INT, 2:::INT)`},
 
 		{`((ROW (1) AS a)).a`, `1:::INT`},
 		{`((('1', 2) AS a, b)).a`, `'1':::STRING`},
 		{`((('1', 2) AS a, b)).b`, `2:::INT`},
+		{`(pg_get_keywords()).word`, `(pg_get_keywords()).word`},
+		{
+			`(information_schema._pg_expandarray(ARRAY[1,3])).x`,
+			`(information_schema._pg_expandarray(ARRAY[1:::INT, 3:::INT])).x`,
+		},
+		{
+			`(information_schema._pg_expandarray(ARRAY[1:::INT, 3:::INT])).*`,
+			`information_schema._pg_expandarray(ARRAY[1:::INT, 3:::INT])`,
+		},
+		{`((ROW (1) AS a)).*`, `((1:::INT,) AS a)`},
+		{`((('1'||'', 1+1) AS a, b)).*`, `(('1':::STRING, 2:::INT) AS a, b)`},
 
 		// These outputs, while bizarre looking, are correct and expected. The
 		// type annotation is caused by the call to tree.Serialize, which formats the
@@ -184,7 +195,7 @@ func TestTypeCheckError(t *testing.T) {
 		{`~0.1`, `unsupported unary operator:`},
 		{`'a' > 2`, `unsupported comparison operator:`},
 		{`a`, `column "a" does not exist`},
-		{`COS(*)`, `cannot use "*" in this context`},
+		{`cos(*)`, `cannot use "*" in this context`},
 		{`a.*`, `cannot use "a.*" in this context`},
 		{`1 AND true`, `incompatible AND argument type: int`},
 		{`1.0 AND true`, `incompatible AND argument type: decimal`},
@@ -195,7 +206,7 @@ func TestTypeCheckError(t *testing.T) {
 		{`lower(1, 2)`, `unknown signature: lower(int, int)`},
 		{`lower(1)`, `unknown signature: lower(int)`},
 		{`lower('FOO') OVER ()`, `OVER specified, but lower() is neither a window function nor an aggregate function`},
-		{`count(1) FILTER (WHERE true) OVER ()`, `FILTER within a window function call is not yet supported`},
+		{`count(1) FILTER (WHERE 1) OVER ()`, `incompatible FILTER expression type: int`},
 		{`CASE 'one' WHEN 1 THEN 1 WHEN 'two' THEN 2 END`, `incompatible condition type`},
 		{`CASE 1 WHEN 1 THEN 'one' WHEN 2 THEN 2 END`, `incompatible value type`},
 		{`CASE 1 WHEN 1 THEN 'one' ELSE 2 END`, `incompatible value type`},
@@ -205,7 +216,7 @@ func TestTypeCheckError(t *testing.T) {
 		{`1 IN (1, 'a')`, `unsupported comparison operator: 1 IN (1, 'a'): could not parse "a" as type int`},
 		{`1 = ANY 2`, `unsupported comparison operator: 1 = ANY 2: op ANY <right> requires array, tuple or subquery on right side`},
 		{`1 = ANY ARRAY[2, 'a']`, `unsupported comparison operator: 1 = ANY ARRAY[2, 'a']: could not parse "a" as type int`},
-		{`1 = ALL CURRENT_SCHEMAS(true)`, `unsupported comparison operator: <int> = ALL <string[]>`},
+		{`1 = ALL current_schemas(true)`, `unsupported comparison operator: <int> = ALL <string[]>`},
 		{`1.0 BETWEEN 2 AND 'a'`, `unsupported comparison operator: <decimal> < <string>`},
 		{`IF(1, 2, 3)`, `incompatible IF condition type: int`},
 		{`IF(true, 'a', 2)`, `incompatible IF expressions: could not parse "a" as type int`},
@@ -217,7 +228,8 @@ func TestTypeCheckError(t *testing.T) {
 		{`ANNOTATE_TYPE('a', int)`, `could not parse "a" as type int`},
 		{`ANNOTATE_TYPE(ANNOTATE_TYPE(1, int), decimal)`, `incompatible type annotation for ANNOTATE_TYPE(1, INT) as decimal, found type: int`},
 		{`3:::int[]`, `incompatible type annotation for 3 as int[], found type: int`},
-
+		{`B'1001'::decimal`, `invalid cast: varbit -> DECIMAL`},
+		{`101.3::bit`, `invalid cast: decimal -> BIT`},
 		{
 			`((1,2) AS a)`,
 			`mismatch in tuple definition: 2 expressions, 1 labels`,
@@ -243,12 +255,8 @@ func TestTypeCheckError(t *testing.T) {
 			`could not identify column "x" in tuple{int AS a, string AS b}`,
 		},
 		{
-			`((ROW (1) AS a)).*`,
-			`star expansion of tuples is not supported`,
-		},
-		{
-			`((('1', 2) AS a, b)).*`,
-			`star expansion of tuples is not supported`,
+			`(pg_get_keywords()).foo`,
+			`could not identify column "foo" in tuple{string AS word, string AS catcode, string AS catdesc}`,
 		},
 	}
 	for _, d := range testData {

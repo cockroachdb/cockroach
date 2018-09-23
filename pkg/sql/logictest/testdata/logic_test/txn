@@ -6,8 +6,8 @@ BEGIN TRANSACTION
 
 statement ok
 CREATE TABLE kv (
-  k CHAR PRIMARY KEY,
-  v CHAR
+  k VARCHAR PRIMARY KEY,
+  v VARCHAR
 )
 
 statement ok
@@ -94,7 +94,7 @@ statement ok
 BEGIN
 
 query error syntax error at or near ","
-SELECT COUNT(*, 1) FROM kv
+SELECT count(*, 1) FROM kv
 
 statement error pgcode 25P02 current transaction is aborted, commands ignored until end of transaction block
 UPDATE kv SET v = 'b' WHERE k in ('a')
@@ -209,9 +209,6 @@ BEGIN TRANSACTION
 statement ok
 UPDATE kv SET v = 'b' WHERE k in ('a')
 
-statement error cannot change the isolation level of a running transaction
-SET TRANSACTION ISOLATION LEVEL SNAPSHOT
-
 statement ok
 ROLLBACK
 
@@ -220,9 +217,6 @@ BEGIN TRANSACTION
 
 statement ok
 UPDATE kv SET v = 'b' WHERE k in ('a')
-
-statement error cannot change the isolation level of a running transaction
-SET transaction_isolation = 'snapshot'
 
 statement ok
 ROLLBACK
@@ -242,28 +236,30 @@ SHOW transaction_isolation
 ----
 serializable
 
+# SNAPSHOT is now mapped to serializable
 statement ok
 SET TRANSACTION ISOLATION LEVEL SNAPSHOT
 
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+serializable
 
 query T
 SHOW transaction_isolation
 ----
-snapshot
+serializable
 
 statement ok
 COMMIT
 
 # We can't set isolation level to an unsupported one.
 
-statement error unsupported isolation level "read committed"
+statement error invalid value for parameter "transaction_isolation": "read committed"
 SET transaction_isolation = 'read committed'
 
-# We can explicitly start a transaction in snapshot isolation.
+# We can explicitly start a transaction with isolation level
+# specified.
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
@@ -271,7 +267,7 @@ BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+serializable
 
 statement ok
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
@@ -383,7 +379,7 @@ BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, PRIORITY LOW; COMMIT
 statement ok
 BEGIN TRANSACTION PRIORITY LOW, ISOLATION LEVEL SNAPSHOT; COMMIT
 
-# We can explicitly start a transaction in snapshot isolation level and low user priority.
+# We can explicitly start a transaction with specified isolation level and low user priority.
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, PRIORITY LOW
@@ -391,7 +387,7 @@ BEGIN TRANSACTION ISOLATION LEVEL SNAPSHOT, PRIORITY LOW
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+serializable
 
 query T
 SHOW TRANSACTION PRIORITY
@@ -417,7 +413,7 @@ SET TRANSACTION PRIORITY NORMAL, ISOLATION LEVEL SNAPSHOT
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+serializable
 
 query T
 SHOW TRANSACTION PRIORITY
@@ -433,13 +429,13 @@ SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SNAPSHOT
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
-snapshot
+serializable
 
 # SHOW without a transaction should create an auto-transaction with the default level
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+serializable
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE
@@ -455,7 +451,7 @@ SET DEFAULT_TRANSACTION_ISOLATION TO 'SNAPSHOT'
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
-snapshot
+serializable
 
 # Without the isolation level specified, BEGIN should use the default
 
@@ -465,7 +461,7 @@ BEGIN
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+serializable
 
 statement ok
 COMMIT
@@ -481,7 +477,7 @@ SET TRANSACTION ISOLATION LEVEL SNAPSHOT
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+serializable
 
 statement ok
 SET TRANSACTION PRIORITY HIGH
@@ -489,7 +485,7 @@ SET TRANSACTION PRIORITY HIGH
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+serializable
 
 statement ok
 COMMIT
@@ -562,7 +558,7 @@ statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1
 
 query error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
-SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)
+SELECT crdb_internal.force_retry('1s':::INTERVAL)
 
 query T
 SHOW TRANSACTION STATUS
@@ -583,7 +579,7 @@ COMMIT
 
 # Automatic retries for the first batch.
 statement ok
-BEGIN TRANSACTION; SELECT CRDB_INTERNAL.FORCE_RETRY('100ms':::INTERVAL)
+BEGIN TRANSACTION; SELECT crdb_internal.force_retry('100ms':::INTERVAL)
 
 statement ok
 ROLLBACK
@@ -594,7 +590,7 @@ statement ok
 BEGIN TRANSACTION;
 
 statement ok
-SELECT 1; SELECT CRDB_INTERNAL.FORCE_RETRY('100ms':::INTERVAL)
+SELECT 1; SELECT crdb_internal.force_retry('100ms':::INTERVAL)
 
 statement ok
 ROLLBACK
@@ -606,12 +602,12 @@ statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SET TRANSACTION PRIORITY HIGH; SET TRANSACTION ISOLATION LEVEL SNAPSHOT;
 
 statement ok
-SELECT CRDB_INTERNAL.FORCE_RETRY('100ms':::INTERVAL)
+SELECT crdb_internal.force_retry('100ms':::INTERVAL)
 
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
-snapshot
+serializable
 
 query T
 SHOW TRANSACTION PRIORITY
@@ -629,7 +625,7 @@ statement ok
 SAVEPOINT cockroach_restart;
 
 statement ok
-SELECT CRDB_INTERNAL.FORCE_RETRY('100ms':::INTERVAL)
+SELECT crdb_internal.force_retry('100ms':::INTERVAL)
 
 statement ok
 ROLLBACK
@@ -640,14 +636,14 @@ statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1;
 
 query error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
-SELECT CRDB_INTERNAL.FORCE_RETRY('1h':::INTERVAL)
+SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 statement ok
 ROLLBACK TO SAVEPOINT COCKROACH_RESTART;
 
 # This is the automatic retry we care about.
 statement ok
-SELECT CRDB_INTERNAL.FORCE_RETRY('50ms':::INTERVAL)
+SELECT crdb_internal.force_retry('50ms':::INTERVAL)
 
 statement ok
 ROLLBACK
@@ -658,7 +654,7 @@ statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1;
 
 query error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
-SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)
+SELECT crdb_internal.force_retry('1s':::INTERVAL)
 
 query T
 SHOW TRANSACTION STATUS
@@ -737,7 +733,7 @@ COMMIT
 
 # Because we rolled back, the 'savepoint' insert will not have been committed.
 query I
-SELECT COUNT(*) FROM kv WHERE k = 'savepoint'
+SELECT count(*) FROM kv WHERE k = 'savepoint'
 ----
 0
 
@@ -977,7 +973,7 @@ statement ok
 BEGIN; SELECT 1
 
 query error pgcode 40001 restart transaction: HandledRetryableTxnError: forced by crdb_internal.force_retry()
-SELECT CRDB_INTERNAL.FORCE_RETRY('1s':::INTERVAL)
+SELECT crdb_internal.force_retry('1s':::INTERVAL)
 
 statement ok
 ROLLBACK

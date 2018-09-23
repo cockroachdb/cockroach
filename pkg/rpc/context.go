@@ -17,6 +17,7 @@ package rpc
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"net"
 	"sync"
@@ -30,6 +31,7 @@ import (
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -38,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -246,7 +249,7 @@ func (c *Connection) Connect(ctx context.Context) (*grpc.ClientConn, error) {
 	// If connection is invalid, return latest heartbeat error.
 	h := c.heartbeatResult.Load().(heartbeatResult)
 	if !h.everSucceeded {
-		return nil, errors.Wrap(h.err, "initial connection heartbeat failed")
+		return nil, netutil.NewInitialHeartBeatFailedError(h.err)
 	}
 	return c.grpcConn, nil
 }
@@ -255,6 +258,13 @@ func (c *Connection) setInitialHeartbeatDone() {
 	c.validatedOnce.Do(func() {
 		close(c.initialHeartbeatDone)
 	})
+}
+
+// Health returns an error indicating the success or failure of the
+// connection's latest heartbeat. Returns ErrNotHeartbeated if the
+// first heartbeat has not completed.
+func (c *Connection) Health() error {
+	return c.heartbeatResult.Load().(heartbeatResult).err
 }
 
 // Context contains the fields required by the rpc framework.
@@ -274,7 +284,7 @@ type Context struct {
 
 	rpcCompression bool
 
-	localInternalServer roachpb.InternalServer
+	localInternalClient roachpb.InternalClient
 
 	conns syncmap.Map
 
@@ -346,18 +356,111 @@ func (ctx *Context) GetStatsMap() *syncmap.Map {
 	return &ctx.stats.stats
 }
 
-// GetLocalInternalServerForAddr returns the context's internal batch server
+// GetLocalInternalClientForAddr returns the context's internal batch client
 // for target, if it exists.
-func (ctx *Context) GetLocalInternalServerForAddr(target string) roachpb.InternalServer {
+func (ctx *Context) GetLocalInternalClientForAddr(target string) roachpb.InternalClient {
 	if target == ctx.AdvertiseAddr {
-		return ctx.localInternalServer
+		return ctx.localInternalClient
 	}
 	return nil
 }
 
+type internalClientAdapter struct {
+	roachpb.InternalServer
+}
+
+func (a internalClientAdapter) Batch(
+	ctx context.Context, ba *roachpb.BatchRequest, _ ...grpc.CallOption,
+) (*roachpb.BatchResponse, error) {
+	return a.InternalServer.Batch(ctx, ba)
+}
+
+type rangeFeedClientAdapter struct {
+	ctx    context.Context
+	eventC chan *roachpb.RangeFeedEvent
+	errC   chan error
+}
+
+// roachpb.Internal_RangeFeedServer methods.
+func (a rangeFeedClientAdapter) Recv() (*roachpb.RangeFeedEvent, error) {
+	// Prioritize eventC. Both channels are buffered and the only guarantee we
+	// have is that once an error is sent on errC no other events will be sent
+	// on eventC again.
+	select {
+	case e := <-a.eventC:
+		return e, nil
+	case err := <-a.errC:
+		select {
+		case e := <-a.eventC:
+			a.errC <- err
+			return e, nil
+		default:
+			return nil, err
+		}
+	}
+}
+
+// roachpb.Internal_RangeFeedServer methods.
+func (a rangeFeedClientAdapter) Send(e *roachpb.RangeFeedEvent) error {
+	select {
+	case a.eventC <- e:
+		return nil
+	case <-a.ctx.Done():
+		return a.ctx.Err()
+	}
+}
+
+// grpc.ClientStream methods.
+func (rangeFeedClientAdapter) Header() (metadata.MD, error) { panic("unimplemented") }
+func (rangeFeedClientAdapter) Trailer() metadata.MD         { panic("unimplemented") }
+func (rangeFeedClientAdapter) CloseSend() error             { panic("unimplemented") }
+
+// grpc.ServerStream methods.
+func (rangeFeedClientAdapter) SetHeader(metadata.MD) error  { panic("unimplemented") }
+func (rangeFeedClientAdapter) SendHeader(metadata.MD) error { panic("unimplemented") }
+func (rangeFeedClientAdapter) SetTrailer(metadata.MD)       { panic("unimplemented") }
+
+// grpc.Stream methods.
+func (a rangeFeedClientAdapter) Context() context.Context  { return a.ctx }
+func (rangeFeedClientAdapter) SendMsg(m interface{}) error { panic("unimplemented") }
+func (rangeFeedClientAdapter) RecvMsg(m interface{}) error { panic("unimplemented") }
+
+var _ roachpb.Internal_RangeFeedClient = rangeFeedClientAdapter{}
+var _ roachpb.Internal_RangeFeedServer = rangeFeedClientAdapter{}
+
+func (a internalClientAdapter) RangeFeed(
+	ctx context.Context, args *roachpb.RangeFeedRequest, _ ...grpc.CallOption,
+) (roachpb.Internal_RangeFeedClient, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	rfAdapter := rangeFeedClientAdapter{
+		ctx:    ctx,
+		eventC: make(chan *roachpb.RangeFeedEvent, 128),
+		errC:   make(chan error, 1),
+	}
+
+	go func() {
+		defer cancel()
+		err := a.InternalServer.RangeFeed(args, rfAdapter)
+		if err == nil {
+			err = io.EOF
+		}
+		rfAdapter.errC <- err
+	}()
+
+	return rfAdapter, nil
+}
+
+var _ roachpb.InternalClient = internalClientAdapter{}
+
+// IsLocal returns true if the given InternalClient is local.
+func IsLocal(iface roachpb.InternalClient) bool {
+	_, ok := iface.(internalClientAdapter)
+	return ok // internalClientAdapter is used for local connections.
+}
+
 // SetLocalInternalServer sets the context's local internal batch server.
 func (ctx *Context) SetLocalInternalServer(internalServer roachpb.InternalServer) {
-	ctx.localInternalServer = internalServer
+	ctx.localInternalClient = internalClientAdapter{internalServer}
 }
 
 func (ctx *Context) removeConn(key string, conn *Connection) {
@@ -430,6 +533,7 @@ func (ctx *Context) GRPCDialOptions() ([]grpc.DialOption, error) {
 // ensures that our initial heartbeat (and its version/clusterID
 // validation) occurs on every new connection.
 type onlyOnceDialer struct {
+	ctx context.Context
 	syncutil.Mutex
 	dialed     bool
 	closed     bool
@@ -445,7 +549,7 @@ func (ood *onlyOnceDialer) dial(addr string, timeout time.Duration) (net.Conn, e
 			Timeout:   timeout,
 			LocalAddr: sourceAddr,
 		}
-		return dialer.Dial("tcp", addr)
+		return dialer.DialContext(ood.ctx, "tcp", addr)
 	} else if !ood.closed {
 		ood.closed = true
 		close(ood.redialChan)
@@ -473,6 +577,7 @@ func (ctx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, <-chan struct{
 		grpc.WithInitialConnWindowSize(initialConnWindowSize))
 
 	dialer := onlyOnceDialer{
+		ctx:        ctx.masterCtx,
 		redialChan: make(chan struct{}),
 	}
 	dialOpts = append(dialOpts, grpc.WithDialer(dialer.dial))
@@ -543,12 +648,12 @@ var ErrNotHeartbeated = errors.New("not yet heartbeated")
 // prioritize among a list of candidate nodes, but not to filter out
 // "unhealthy" nodes.
 func (ctx *Context) ConnHealth(target string) error {
-	if ctx.GetLocalInternalServerForAddr(target) != nil {
+	if ctx.GetLocalInternalClientForAddr(target) != nil {
 		// The local server is always considered healthy.
 		return nil
 	}
 	conn := ctx.GRPCDial(target)
-	return conn.heartbeatResult.Load().(heartbeatResult).err
+	return conn.Health()
 }
 
 func (ctx *Context) runHeartbeat(

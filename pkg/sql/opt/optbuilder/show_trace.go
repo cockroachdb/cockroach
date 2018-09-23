@@ -18,25 +18,13 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-func (b *Builder) buildShowTrace(showTrace *tree.ShowTrace, inScope *scope) (outScope *scope) {
-	var stmtGroup memo.GroupID
-	var stmtProps props.Physical
-
-	if showTrace.Statement != nil {
-		// We don't allow the statement under ShowTrace to reference outer columns, so we
-		// pass a "blank" scope rather than inScope.
-		stmtScope := b.buildStmt(showTrace.Statement, &scope{builder: b})
-		// Calculate the presentation, since we will store it in the ShowTrace op.
-		stmtScope.setPresentation()
-		stmtGroup = stmtScope.group
-		stmtProps = stmtScope.physicalProps
-	}
-
+func (b *Builder) buildShowTrace(
+	showTrace *tree.ShowTraceForSession, inScope *scope,
+) (outScope *scope) {
 	outScope = inScope.push()
 
 	switch showTrace.TraceType {
@@ -58,15 +46,10 @@ func (b *Builder) buildShowTrace(showTrace *tree.ShowTrace, inScope *scope) (out
 		Type:    showTrace.TraceType,
 		Compact: showTrace.Compact,
 		ColList: colsToColList(outScope.cols),
-		Props:   stmtProps,
 	}
 	for i := range outScope.cols {
 		def.ColList[i] = outScope.cols[i].id
 	}
-	if showTrace.Statement != nil {
-		outScope.group = b.factory.ConstructShowTrace(stmtGroup, b.factory.InternShowTraceOpDef(&def))
-	} else {
-		outScope.group = b.factory.ConstructShowTraceForSession(b.factory.InternShowTraceOpDef(&def))
-	}
+	outScope.group = b.factory.ConstructShowTraceForSession(b.factory.InternShowTraceOpDef(&def))
 	return outScope
 }

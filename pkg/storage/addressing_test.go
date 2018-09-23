@@ -141,14 +141,20 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		// interface without sending through a TxnCoordSender (which initializes a
 		// transaction id). Also, we need the TxnCoordSender to clean up the
 		// intents, otherwise the MVCCScan that the test does below fails.
+		actx := testutils.MakeAmbientCtx()
 		tcsf := kv.NewTxnCoordSenderFactory(
-			log.AmbientContext{Tracer: st.Tracer}, st,
-			store.TestSender(), store.cfg.Clock,
-			false, stopper, kv.MakeTxnMetrics(time.Second),
+			kv.TxnCoordSenderFactoryConfig{
+				AmbientCtx: actx,
+				Settings:   st,
+				Clock:      store.cfg.Clock,
+				Stopper:    stopper,
+				Metrics:    kv.MakeTxnMetrics(time.Second),
+			},
+			store.TestSender(),
 		)
-		db := client.NewDB(tcsf, store.cfg.Clock)
-		txn := client.NewTxn(db, 0 /* gatewayNodeID */, client.RootTxn)
+		db := client.NewDB(actx, tcsf, store.cfg.Clock)
 		ctx := context.Background()
+		txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
 		if err := txn.Run(ctx, b); err != nil {
 			t.Fatal(err)
 		}

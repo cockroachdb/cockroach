@@ -16,17 +16,19 @@ package cli
 
 import (
 	"bytes"
-	"encoding/csv"
 	"fmt"
 	"html"
 	"io"
 	"reflect"
 	"strings"
 	"text/tabwriter"
+	"time"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 )
@@ -209,20 +211,21 @@ func render(
 	return r.doneRows(w, nRows)
 }
 
-type prettyReporter struct {
+type asciiTableReporter struct {
+	rows  int
 	table *tablewriter.Table
 	buf   bytes.Buffer
 	w     *tabwriter.Writer
 }
 
-func newPrettyReporter() *prettyReporter {
-	n := &prettyReporter{}
+func newASCIITableReporter() *asciiTableReporter {
+	n := &asciiTableReporter{}
 	// 4-wide columns, 1 character minimum width.
 	n.w = tabwriter.NewWriter(&n.buf, 4, 0, 1, ' ', 0)
 	return n
 }
 
-func (p *prettyReporter) describe(w io.Writer, cols []string) error {
+func (p *asciiTableReporter) describe(w io.Writer, cols []string) error {
 	if len(cols) > 0 {
 		// Ensure that tabs are converted to spaces and newlines are
 		// doubled so they can be recognized in the output.
@@ -237,13 +240,14 @@ func (p *prettyReporter) describe(w io.Writer, cols []string) error {
 		// Initialize tablewriter and set column names as the header row.
 		p.table = tablewriter.NewWriter(w)
 		p.table.SetAutoFormatHeaders(false)
-		p.table.SetAutoWrapText(true)
+		p.table.SetAutoWrapText(false)
+		p.table.SetBorder(false)
 		p.table.SetReflowDuringAutoWrap(false)
 		p.table.SetHeader(expandedCols)
 		// This width is sufficient to show a "standard text line width"
 		// on the screen when viewed as a single column on a 80-wide terminal.
 		//
-		// It's also wide enough for the output of SHOW CREATE TABLE on
+		// It's also wide enough for the output of SHOW CREATE on
 		// moderately long column definitions (e.g. including FK
 		// constraints).
 		p.table.SetColWidth(72)
@@ -251,14 +255,25 @@ func (p *prettyReporter) describe(w io.Writer, cols []string) error {
 	return nil
 }
 
-func (p *prettyReporter) beforeFirstRow(w io.Writer, iter rowStrIter) error {
+func (p *asciiTableReporter) beforeFirstRow(w io.Writer, iter rowStrIter) error {
 	p.table.SetColumnAlignment(iter.Align())
 	return nil
 }
 
-func (p *prettyReporter) iter(_ io.Writer, _ int, row []string) error {
+// asciiTableWarnRows is the number of rows at which a warning is
+// printed during buffering in memory.
+const asciiTableWarnRows = 10000
+
+func (p *asciiTableReporter) iter(_ io.Writer, _ int, row []string) error {
 	if p.table == nil {
 		return nil
+	}
+
+	if p.rows == asciiTableWarnRows {
+		fmt.Fprintf(stderr,
+			"warning: buffering more than %d result rows in client "+
+				"- RAM usage growing, consider another formatter instead\n",
+			asciiTableWarnRows)
 	}
 
 	for i, r := range row {
@@ -268,10 +283,11 @@ func (p *prettyReporter) iter(_ io.Writer, _ int, row []string) error {
 		row[i] = p.buf.String()
 	}
 	p.table.Append(row)
+	p.rows++
 	return nil
 }
 
-func (p *prettyReporter) doneRows(w io.Writer, seenRows int) error {
+func (p *asciiTableReporter) doneRows(w io.Writer, seenRows int) error {
 	if p.table != nil {
 		p.table.Render()
 	} else {
@@ -283,31 +299,68 @@ func (p *prettyReporter) doneRows(w io.Writer, seenRows int) error {
 	return nil
 }
 
-func (p *prettyReporter) doneNoRows(_ io.Writer) error { return nil }
+func (p *asciiTableReporter) doneNoRows(_ io.Writer) error { return nil }
 
 type csvReporter struct {
-	csvWriter *csv.Writer
+	mu struct {
+		syncutil.Mutex
+		csvWriter *csv.Writer
+	}
+	stop chan struct{}
+}
+
+// csvFlushInterval is the maximum time between flushes of the
+// buffered CSV/TSV data.
+const csvFlushInterval = 5 * time.Second
+
+func makeCSVReporter(w io.Writer, format tableDisplayFormat) (*csvReporter, func()) {
+	r := &csvReporter{}
+	r.mu.csvWriter = csv.NewWriter(w)
+	if format == tableDisplayTSV {
+		r.mu.csvWriter.Comma = '\t'
+	}
+
+	// Set up a flush daemon. This is useful when e.g. visualizing data
+	// from change feeds.
+	r.stop = make(chan struct{}, 1)
+	go func() {
+		ticker := time.NewTicker(csvFlushInterval)
+		for {
+			select {
+			case <-ticker.C:
+				r.mu.Lock()
+				r.mu.csvWriter.Flush()
+				r.mu.Unlock()
+			case <-r.stop:
+				return
+			}
+		}
+	}()
+	cleanup := func() {
+		close(r.stop)
+	}
+	return r, cleanup
 }
 
 func (p *csvReporter) describe(w io.Writer, cols []string) error {
-	p.csvWriter = csv.NewWriter(w)
-	if cliCtx.tableDisplayFormat == tableDisplayTSV {
-		p.csvWriter.Comma = '\t'
-	}
+	p.mu.Lock()
 	if len(cols) == 0 {
-		_ = p.csvWriter.Write([]string{"# no columns"})
+		_ = p.mu.csvWriter.Write([]string{"# no columns"})
 	} else {
-		_ = p.csvWriter.Write(cols)
+		_ = p.mu.csvWriter.Write(cols)
 	}
+	p.mu.Unlock()
 	return nil
 }
 
 func (p *csvReporter) iter(_ io.Writer, _ int, row []string) error {
+	p.mu.Lock()
 	if len(row) == 0 {
-		_ = p.csvWriter.Write([]string{"# empty"})
+		_ = p.mu.csvWriter.Write([]string{"# empty"})
 	} else {
-		_ = p.csvWriter.Write(row)
+		_ = p.mu.csvWriter.Write(row)
 	}
+	p.mu.Unlock()
 	return nil
 }
 
@@ -315,7 +368,9 @@ func (p *csvReporter) beforeFirstRow(_ io.Writer, _ rowStrIter) error { return n
 func (p *csvReporter) doneNoRows(_ io.Writer) error                   { return nil }
 
 func (p *csvReporter) doneRows(w io.Writer, seenRows int) error {
-	p.csvWriter.Flush()
+	p.mu.Lock()
+	p.mu.csvWriter.Flush()
+	p.mu.Unlock()
 	return nil
 }
 
@@ -513,39 +568,46 @@ func (p *sqlReporter) doneRows(w io.Writer, seenRows int) error {
 	return nil
 }
 
-func makeReporter() (rowReporter, error) {
+// makeReporter instantiates a table formatter. It returns the
+// formatter and a cleanup function that must be called in all cases
+// when the formatting completes.
+func makeReporter(w io.Writer) (rowReporter, func(), error) {
 	switch cliCtx.tableDisplayFormat {
-	case tableDisplayPretty:
-		return newPrettyReporter(), nil
+	case tableDisplayTable:
+		return newASCIITableReporter(), nil, nil
 
 	case tableDisplayTSV:
 		fallthrough
 	case tableDisplayCSV:
-		return &csvReporter{}, nil
+		reporter, cleanup := makeCSVReporter(w, cliCtx.tableDisplayFormat)
+		return reporter, cleanup, nil
 
 	case tableDisplayRaw:
-		return &rawReporter{}, nil
+		return &rawReporter{}, nil, nil
 
 	case tableDisplayHTML:
-		return &htmlReporter{escape: true, rowStats: true}, nil
+		return &htmlReporter{escape: true, rowStats: true}, nil, nil
 
 	case tableDisplayRecords:
-		return &recordReporter{}, nil
+		return &recordReporter{}, nil, nil
 
 	case tableDisplaySQL:
-		return &sqlReporter{}, nil
+		return &sqlReporter{}, nil, nil
 
 	default:
-		return nil, errors.Errorf("unhandled display format: %d", cliCtx.tableDisplayFormat)
+		return nil, nil, errors.Errorf("unhandled display format: %d", cliCtx.tableDisplayFormat)
 	}
 }
 
 // printQueryOutput takes a list of column names and a list of row
 // contents writes a formatted table to 'w'.
 func printQueryOutput(w io.Writer, cols []string, allRows rowStrIter) error {
-	reporter, err := makeReporter()
+	reporter, cleanup, err := makeReporter(w)
 	if err != nil {
 		return err
+	}
+	if cleanup != nil {
+		defer cleanup()
 	}
 	return render(reporter, w, cols, allRows, nil)
 }

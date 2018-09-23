@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 )
 
 func TestTrace(t *testing.T) {
@@ -40,8 +41,10 @@ func TestTrace(t *testing.T) {
 
 	// These are always appended, even without the test specifying it.
 	alwaysOptionalSpans := []string{
+		"[async] drain",
 		"[async] storage.pendingLeaseRequest: requesting lease",
 		"[async] storage.Store: gossip on capacity change",
+		"outbox",
 		"request range lease",
 		"range lookup",
 	}
@@ -55,70 +58,46 @@ func TestTrace(t *testing.T) {
 		{
 			name: "Session",
 			getRows: func(t *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
-				if _, err := sqlDB.Exec("SET DISTSQL = OFF"); err != nil {
+				if _, err := sqlDB.Exec("SET distsql = off"); err != nil {
 					t.Fatal(err)
 				}
-				// Start session tracing.
-				if _, err := sqlDB.Exec("SET TRACING = ON"); err != nil {
-					t.Fatal(err)
-				}
-
-				// Run some query
-				rows, err := sqlDB.Query(`SELECT * FROM test.foo`)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if err := rows.Close(); err != nil {
-					t.Fatal(err)
-				}
-
-				// Stop tracing and extract the trace
-				if _, err := sqlDB.Exec("SET TRACING = OFF"); err != nil {
+				// Run some query with session tracing enabled.
+				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
 					t.Fatal(err)
 				}
 
 				return sqlDB.Query(
-					"SELECT DISTINCT(operation) op FROM crdb_internal.session_trace " +
+					"SELECT DISTINCT operation AS op FROM crdb_internal.session_trace " +
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
+				"flow",
 				"session recording",
 				"sql txn",
-				"dist sender",
+				"table reader",
+				"consuming rows",
+				"txn coordinator send",
+				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 		},
 		{
 			name: "SessionDistSQL",
 			getRows: func(t *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
-				if _, err := sqlDB.Exec("SET DISTSQL = ON"); err != nil {
+				if _, err := sqlDB.Exec("SET distsql = on"); err != nil {
 					t.Fatal(err)
 				}
 
-				// Start session tracing.
-				if _, err := sqlDB.Exec("SET TRACING = ON"); err != nil {
-					t.Fatal(err)
-				}
-
-				// Run some query
-				rows, err := sqlDB.Query(`SELECT * FROM test.foo`)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if err := rows.Close(); err != nil {
-					t.Fatal(err)
-				}
-
-				// Stop tracing and extract the trace
-				if _, err := sqlDB.Exec("SET TRACING = OFF"); err != nil {
+				// Run some query with tracing enabled.
+				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
 					t.Fatal(err)
 				}
 
 				// Check that stat collection from the above SELECT statement is output
 				// to trace. We don't insert any rows in this test, thus the expected
 				// stat value is 0.
-				rows, err = sqlDB.Query(
-					"SELECT COUNT(message) FROM crdb_internal.session_trace " +
+				rows, err := sqlDB.Query(
+					"SELECT count(message) FROM crdb_internal.session_trace " +
 						"WHERE message LIKE '%cockroach.stat.tablereader.input.rows: 0%'",
 				)
 				if err != nil {
@@ -140,7 +119,7 @@ func TestTrace(t *testing.T) {
 				}
 
 				return sqlDB.Query(
-					"SELECT DISTINCT(operation) op FROM crdb_internal.session_trace " +
+					"SELECT DISTINCT operation AS op FROM crdb_internal.session_trace " +
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
@@ -148,7 +127,9 @@ func TestTrace(t *testing.T) {
 				"sql txn",
 				"flow",
 				"table reader",
-				"dist sender",
+				"consuming rows",
+				"txn coordinator send",
+				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 			// Depending on whether the data is local or not, we may not see these
@@ -164,27 +145,47 @@ func TestTrace(t *testing.T) {
 				if _, err := sqlDB.Exec("SET DISTSQL = OFF"); err != nil {
 					t.Fatal(err)
 				}
+				// TODO(justin): remove this and make sure the new results make sense.
+				// The optimizer elides some renders that the heuristic planner does
+				// not which makes the results different.
+				if _, err := sqlDB.Exec("SET OPTIMIZER = OFF"); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
+					t.Fatal(err)
+				}
 				return sqlDB.Query(
-					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR SELECT * FROM test.foo] " +
+					"SELECT DISTINCT operation AS op FROM [SHOW TRACE FOR SESSION] " +
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
+				"flow",
 				"session recording",
 				"sql txn",
-				"starting plan",
+				"table reader",
 				"consuming rows",
-				"dist sender",
+				"txn coordinator send",
+				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 		},
 		{
 			name: "ShowTraceForDistSQL",
 			getRows: func(_ *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
-				if _, err := sqlDB.Exec("SET DISTSQL = ON"); err != nil {
+				if _, err := sqlDB.Exec("SET distsql = on"); err != nil {
+					t.Fatal(err)
+				}
+				// TODO(justin): remove this and make sure the new results make sense.
+				// The optimizer elides some renders that the heuristic planner does
+				// not which makes the results different.
+				if _, err := sqlDB.Exec("SET OPTIMIZER = off"); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
 					t.Fatal(err)
 				}
 				return sqlDB.Query(
-					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR SELECT * FROM test.foo] " +
+					"SELECT DISTINCT operation AS op FROM [SHOW TRACE FOR SESSION] " +
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
@@ -192,9 +193,9 @@ func TestTrace(t *testing.T) {
 				"sql txn",
 				"flow",
 				"table reader",
-				"starting plan",
 				"consuming rows",
-				"dist sender",
+				"txn coordinator send",
+				"dist sender send",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 			// Depending on whether the data is local or not, we may not see these
@@ -207,19 +208,23 @@ func TestTrace(t *testing.T) {
 		{
 			name: "ShowTraceForSplitBatch",
 			getRows: func(_ *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
-				if _, err := sqlDB.Exec("SET DISTSQL = OFF"); err != nil {
+				if _, err := sqlDB.Exec("SET distsql = off"); err != nil {
 					t.Fatal(err)
 				}
 
 				// Deleting from a multi-range table will result in a 2PC transaction
 				// and will split the underlying BatchRequest/BatchResponse. Tracing
 				// in the presence of multi-part batches is what we want to test here.
+				if _, err := sqlDB.Exec("SET tracing = on; DELETE FROM test.bar; SET tracing = off"); err != nil {
+					t.Fatal(err)
+				}
+
 				return sqlDB.Query(
-					"SELECT DISTINCT(operation) op FROM [SHOW TRACE FOR DELETE FROM test.bar] " +
+					"SELECT DISTINCT operation AS op FROM [SHOW TRACE FOR SESSION] " +
 						"WHERE message LIKE '%1 DelRng%' ORDER BY op")
 			},
 			expSpans: []string{
-				"dist sender",
+				"dist sender send",
 				"kv.DistSender: sending partial batch",
 				"/cockroach.roachpb.Internal/Batch",
 			},
@@ -234,6 +239,9 @@ func TestTrace(t *testing.T) {
 	clusterDB := cluster.ServerConn(0)
 	if _, err := clusterDB.Exec(`
 		CREATE DATABASE test;
+
+		-- Prevent the merge queue from immediately discarding our splits.
+		SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
 
 		--- test.foo is a single range table.
 		CREATE TABLE test.foo (id INT PRIMARY KEY);
@@ -296,7 +304,7 @@ func TestTrace(t *testing.T) {
 							}
 
 							// Sanity check that new sessions don't have trace info on them.
-							row := sqlDB.QueryRow("SELECT COUNT(1) FROM crdb_internal.session_trace")
+							row := sqlDB.QueryRow("SELECT count(1) FROM crdb_internal.session_trace")
 							var count int
 							if err := row.Scan(&count); err != nil {
 								t.Fatal(err)
@@ -325,11 +333,26 @@ func TestTrace(t *testing.T) {
 								if ignoreSpans[op] {
 									continue
 								}
+
+								remainingErr := false
 								if r >= len(test.expSpans) {
-									t.Fatalf("extra span: %s", op)
+									t.Errorf("extra span: %s", op)
+									remainingErr = true
+								} else if op != test.expSpans[r] {
+									t.Errorf("expected span: %q, got: %q", test.expSpans[r], op)
+									remainingErr = true
 								}
-								if op != test.expSpans[r] {
-									t.Fatalf("expected span: %q, got: %q", test.expSpans[r], op)
+								if remainingErr {
+									for rows.Next() {
+										if err := rows.Scan(&op); err != nil {
+											t.Fatal(err)
+										}
+										if ignoreSpans[op] {
+											continue
+										}
+										t.Errorf("remaining span: %q", op)
+									}
+									return
 								}
 								r++
 							}
@@ -358,7 +381,7 @@ func TestTraceFieldDecomposition(t *testing.T) {
 					if strings.Contains(stmt, query) {
 						// We need to check a tag containing brackets (e.g. an
 						// IPv6 address).  See #18558.
-						taggedCtx := log.WithLogTag(ctx, "hello", "[::666]")
+						taggedCtx := logtags.AddTag(ctx, "hello", "[::666]")
 						// We use log.Infof here (instead of log.Event) to ensure
 						// the trace message contains also a file name prefix. See
 						// #19453/#20085.
@@ -386,7 +409,7 @@ func TestTraceFieldDecomposition(t *testing.T) {
 	}
 
 	t.Run("SHOW TRACE", func(t *testing.T) {
-		rows, err := sqlDB.Query(`SELECT message, tag, loc FROM [SHOW TRACE FOR SESSION];`)
+		rows, err := sqlDB.Query(`SELECT message, tag, location FROM [SHOW TRACE FOR SESSION]`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -485,7 +508,51 @@ func TestKVTraceWithCountStar(t *testing.T) {
 	r.Exec(t, "CREATE DATABASE test")
 	r.Exec(t, "CREATE TABLE test.a (a INT PRIMARY KEY, b INT)")
 	r.Exec(t, "INSERT INTO test.a VALUES (1,1), (2,2)")
-	r.Exec(t, "SHOW KV TRACE FOR SELECT COUNT(*) FROM test.a")
+	r.Exec(t, "SET tracing = on,kv; SELECT count(*) FROM test.a; SET tracing = off")
+}
+
+func TestKVTraceDistSQL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Test that kv tracing works in distsql.
+	const numNodes = 2
+	cluster := serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			UseDatabase: "test",
+		},
+	})
+	defer cluster.Stopper().Stop(context.TODO())
+
+	r := sqlutils.MakeSQLRunner(cluster.ServerConn(0))
+	r.Exec(t, "CREATE DATABASE test")
+	r.Exec(t, "CREATE TABLE test.a (a INT PRIMARY KEY, b INT)")
+	r.Exec(t, "INSERT INTO test.a VALUES (1,1), (2,2)")
+	r.Exec(t, "ALTER TABLE a SPLIT AT VALUES(1)")
+	r.Exec(t, "SET tracing = on,kv; SELECT count(*) FROM test.a; SET tracing = off")
+
+	for node := 0; node < 2; node++ {
+		rows := r.Query(t,
+			fmt.Sprintf(`SELECT tag
+			 FROM [SHOW KV TRACE FOR SESSION]
+			 WHERE tag LIKE '%%%d%%'`, node))
+		if !rows.Next() {
+			t.Fatalf("no message from n%d found", node)
+		}
+		if err := rows.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rows := r.Query(t, `SELECT *
+           FROM [SHOW KV TRACE FOR SESSION]
+           WHERE MESSAGE LIKE '%fetched: %'`)
+	if !rows.Next() {
+		t.Fatal("No kv messages found")
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Test that spans are collected from RPC that returned (structured) errors, in
@@ -523,15 +590,18 @@ func TestTraceFromErrorReplica(t *testing.T) {
 
 	// Replicate foo on n1,n2,n3 with the lease on n2.
 	if _, err := clusterDB.Exec(`
-		ALTER TABLE test.foo TESTING_RELOCATE VALUES (ARRAY[2,1,3], 1);
+		ALTER TABLE test.foo EXPERIMENTAL_RELOCATE VALUES (ARRAY[2,1,3], 1);
 	`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Query through n4 and look for a redirect log message from n1.
+	if _, err := n4.Exec("SET tracing = on; SELECT * FROM foo; SET tracing = off"); err != nil {
+		t.Fatal(err)
+	}
 	rows, err := n4.Query(
 		`SELECT tag, message
-			 FROM [SHOW TRACE FOR SELECT * FROM test.foo]
+			 FROM [SHOW TRACE FOR SESSION]
 				WHERE tag LIKE '%n1%' AND
 						 message LIKE '%NotLeaseHolderError%'
 		`)

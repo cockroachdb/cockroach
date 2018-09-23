@@ -22,23 +22,28 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/coreos/etcd/raft"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 const (
-	// baseLeaseRebalanceThreshold is the minimum ratio of a store's lease surplus
+	// leaseRebalanceThreshold is the minimum ratio of a store's lease surplus
 	// to the mean range/lease count that permits lease-transfers away from that
 	// store.
-	baseLeaseRebalanceThreshold = 0.05
+	leaseRebalanceThreshold = 0.05
+
+	// baseLoadBasedLeaseRebalanceThreshold is the equivalent of
+	// leaseRebalanceThreshold for load-based lease rebalance decisions (i.e.
+	// "follow-the-workload"). It's the base threshold for decisions that get
+	// adjusted based on the load and latency of the involved ranges/nodes.
+	baseLoadBasedLeaseRebalanceThreshold = 2 * leaseRebalanceThreshold
 
 	// minReplicaWeight sets a floor for how low a replica weight can be. This is
 	// needed because a weight of zero doesn't work in the current lease scoring
@@ -46,6 +51,7 @@ const (
 	minReplicaWeight = 0.001
 
 	// priorities for various repair operations.
+	addDeadReplacementPriority            float64 = 12000
 	addMissingReplicaPriority             float64 = 10000
 	addDecommissioningReplacementPriority float64 = 5000
 	removeDeadReplicaPriority             float64 = 1000
@@ -83,10 +89,6 @@ var leaseRebalancingAggressiveness = settings.RegisterNonNegativeFloatSetting(
 		"or between 0 and 1.0 to be more conservative about rebalancing leases",
 	1.0,
 )
-
-func statsBasedRebalancingEnabled(st *cluster.Settings, disableStatsBasedRebalance bool) bool {
-	return EnableStatsBasedRebalancing.Get(&st.SV) && st.Version.IsActive(cluster.VersionStatsBasedRebalancing) && !disableStatsBasedRebalance
-}
 
 // AllocatorAction enumerates the various replication adjustments that may be
 // recommended by the allocator.
@@ -130,20 +132,38 @@ const (
 // can be retried quickly as soon as new stores come online, or additional
 // space frees up.
 type allocatorError struct {
-	constraints     []config.Constraints
-	aliveStoreCount int
+	constraints      []config.Constraints
+	existingReplicas int
+	aliveStores      int
+	throttledStores  int
 }
 
 func (ae *allocatorError) Error() string {
-	var auxInfo string
-	// Whenever the likely problem is not having enough nodes up, make the
-	// message really clear.
-	if len(ae.constraints) == 0 {
-		auxInfo = "; likely not enough nodes in cluster"
+	var existingReplsStr string
+	if ae.existingReplicas == 1 {
+		existingReplsStr = "1 already has a replica"
+	} else {
+		existingReplsStr = fmt.Sprintf("%d already have a replica", ae.existingReplicas)
 	}
-	return fmt.Sprintf("0 of %d store%s with attributes matching %v%s",
-		ae.aliveStoreCount, util.Pluralize(int64(ae.aliveStoreCount)),
-		ae.constraints, auxInfo)
+
+	var baseMsg string
+	if ae.throttledStores != 0 {
+		baseMsg = fmt.Sprintf(
+			"0 of %d live stores are able to take a new replica for the range (%d throttled, %s)",
+			ae.aliveStores, ae.throttledStores, existingReplsStr)
+	} else {
+		baseMsg = fmt.Sprintf(
+			"0 of %d live stores are able to take a new replica for the range (%s)",
+			ae.aliveStores, existingReplsStr)
+	}
+
+	if len(ae.constraints) == 0 {
+		if ae.throttledStores > 0 {
+			return baseMsg
+		}
+		return baseMsg + "; likely not enough nodes in cluster"
+	}
+	return fmt.Sprintf("%s; must match constraints %v", baseMsg, ae.constraints)
 }
 
 func (*allocatorError) purgatoryErrorMarker() {}
@@ -171,15 +191,19 @@ func makeAllocatorRand(source rand.Source) allocatorRand {
 // RangeInfo contains the information needed by the allocator to make
 // rebalancing decisions for a given range.
 type RangeInfo struct {
-	Desc            *roachpb.RangeDescriptor
-	LogicalBytes    int64
-	WritesPerSecond float64
+	Desc             *roachpb.RangeDescriptor
+	LogicalBytes     int64
+	QueriesPerSecond float64
+	WritesPerSecond  float64
 }
 
 func rangeInfoForRepl(repl *Replica, desc *roachpb.RangeDescriptor) RangeInfo {
 	info := RangeInfo{
 		Desc:         desc,
 		LogicalBytes: repl.GetMVCCStats().Total(),
+	}
+	if queriesPerSecond, dur := repl.leaseholderStats.avgQPS(); dur >= MinStatsDuration {
+		info.QueriesPerSecond = queriesPerSecond
 	}
 	if writesPerSecond, dur := repl.writeStats.avgQPS(); dur >= MinStatsDuration {
 		info.WritesPerSecond = writesPerSecond
@@ -215,34 +239,67 @@ func MakeAllocator(
 	}
 }
 
+// GetNeededReplicas calculates the number of replicas a range should have given its zone config and
+// dynamic up and down replication.
+func GetNeededReplicas(
+	zoneConfigReplicaCount int32, aliveReplicas int, decommissioningReplicas int,
+) int {
+	numZoneReplicas := int(zoneConfigReplicaCount)
+	need := numZoneReplicas
+
+	// We're adjusting the replication factor all ranges so that if there are less nodes than
+	// replicas specified in the zone config, the cluster can still function.
+	need = int(math.Min(float64(aliveReplicas-decommissioningReplicas), float64(need)))
+
+	// Ensure that we don't up- or down-replicate to an even number of replicas
+	// unless an even number of replicas was specifically requested by the user
+	// in the zone config.
+	//
+	// Note that in the case of 5 desired replicas and a decommissioning store,
+	// this prefers down-replicating from 5 to 3 rather than sticking with 4
+	// desired stores or blocking the decommissioning from completing.
+	if need == numZoneReplicas {
+		return need
+	}
+	if need%2 == 0 {
+		need = need - 1
+	}
+	need = int(math.Max(3.0, float64(need)))
+	if need > numZoneReplicas {
+		need = numZoneReplicas
+	}
+
+	return need
+}
+
 // ComputeAction determines the exact operation needed to repair the
 // supplied range, as governed by the supplied zone configuration. It
 // returns the required action that should be taken and a priority.
 func (a *Allocator) ComputeAction(
-	ctx context.Context,
-	zone config.ZoneConfig,
-	rangeInfo RangeInfo,
-	disableStatsBasedRebalancing bool,
+	ctx context.Context, zone *config.ZoneConfig, rangeInfo RangeInfo,
 ) (AllocatorAction, float64) {
 	if a.storePool == nil {
 		// Do nothing if storePool is nil for some unittests.
 		return AllocatorNoop, 0
 	}
-
 	// TODO(mrtracy): Handle non-homogeneous and mismatched attribute sets.
-	need := int(zone.NumReplicas)
+
 	have := len(rangeInfo.Desc.Replicas)
-	quorum := computeQuorum(need)
+	decommissioningReplicas := a.storePool.decommissioningReplicas(rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas)
+	_, aliveStoreCount, _ := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterNone)
+	need := GetNeededReplicas(zone.NumReplicas, aliveStoreCount, len(decommissioningReplicas))
+	desiredQuorum := computeQuorum(need)
+	quorum := computeQuorum(have)
+
 	if have < need {
 		// Range is under-replicated, and should add an additional replica.
 		// Priority is adjusted by the difference between the current replica
 		// count and the quorum of the desired replica count.
-		priority := addMissingReplicaPriority + float64(quorum-have)
+		priority := addMissingReplicaPriority + float64(desiredQuorum-have)
 		log.VEventf(ctx, 3, "AllocatorAdd - missing replica need=%d, have=%d, priority=%.2f", need, have, priority)
 		return AllocatorAdd, priority
 	}
 
-	decommissioningReplicas := a.storePool.decommissioningReplicas(rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas)
 	if have == need && len(decommissioningReplicas) > 0 {
 		// Range has decommissioning replica(s). We should up-replicate to add
 		// another replica. The decommissioning replica(s) will be down-replicated
@@ -261,39 +318,34 @@ func (a *Allocator) ComputeAction(
 			liveReplicas, quorum)
 		return AllocatorNoop, 0
 	}
-	// Removal actions follow.
-	if len(deadReplicas) > 0 {
-		// The range has dead replicas, which should be removed immediately.
-		removeDead := false
-		switch {
-		case have > need:
-			// Allow removal of a dead replica if we have more than we need.
-			// Reduce priority for this case?
-			removeDead = true
-		default: // have == need
-			// Only allow removal of a dead replica if we have a suitable allocation
-			// target that we can up-replicate to. This isn't necessarily the target
-			// we'll up-replicate to, just an indication that such a target exists.
-			if _, _, err := a.AllocateTarget(
-				ctx,
-				zone,
-				liveReplicas,
-				rangeInfo,
-				disableStatsBasedRebalancing,
-			); err == nil {
-				removeDead = true
-			}
-		}
-		if removeDead {
-			// Adjust the priority by the distance of live replicas from quorum.
-			priority := removeDeadReplicaPriority + float64(quorum-len(liveReplicas))
-			log.VEventf(ctx, 3, "AllocatorRemoveDead - dead=%d, live=%d, quorum=%d, priority=%.2f",
-				len(deadReplicas), len(liveReplicas), quorum, priority)
-			return AllocatorRemoveDead, priority
-		}
+
+	if have == need && len(deadReplicas) > 0 {
+		// Range has dead replica(s). We should up-replicate to add another before
+		// before removing the dead one. This can avoid permanent data loss in cases
+		// where the node is only temporarily dead, but we remove it from the range
+		// and lose a second node before we can up-replicate (#25392).
+		// The dead replica(s) will be down-replicated later.
+		priority := addDeadReplacementPriority
+		log.VEventf(ctx, 3, "AllocatorAdd - replacement for %d dead replicas priority=%.2f",
+			len(deadReplicas), priority)
+		return AllocatorAdd, priority
 	}
 
-	if have > need && len(decommissioningReplicas) > 0 {
+	// Removal actions follow.
+	// TODO(a-robinson): There's an additional case related to dead replicas that
+	// we should handle above. If there are one or more dead replicas, have <
+	// need, and there are no available stores to up-replicate to, then we should
+	// try to remove the dead replica(s) to get down to an odd number of
+	// replicas.
+	if len(deadReplicas) > 0 {
+		// The range has dead replicas, which should be removed immediately.
+		priority := removeDeadReplicaPriority + float64(quorum-len(liveReplicas))
+		log.VEventf(ctx, 3, "AllocatorRemoveDead - dead=%d, live=%d, quorum=%d, priority=%.2f",
+			len(deadReplicas), len(liveReplicas), quorum, priority)
+		return AllocatorRemoveDead, priority
+	}
+
+	if len(decommissioningReplicas) > 0 {
 		// Range is over-replicated, and has a decommissioning replica which
 		// should be removed.
 		priority := removeDecommissioningReplicaPriority
@@ -317,10 +369,8 @@ func (a *Allocator) ComputeAction(
 }
 
 type decisionDetails struct {
-	Target               string
-	Existing             string  `json:",omitempty"`
-	RangeBytes           int64   `json:",omitempty"`
-	RangeWritesPerSecond float64 `json:",omitempty"`
+	Target   string
+	Existing string `json:",omitempty"`
 }
 
 // AllocateTarget returns a suitable store for a new allocation with the
@@ -330,32 +380,17 @@ type decisionDetails struct {
 // a store.
 func (a *Allocator) AllocateTarget(
 	ctx context.Context,
-	zone config.ZoneConfig,
+	zone *config.ZoneConfig,
 	existing []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
-	disableStatsBasedRebalancing bool,
 ) (*roachpb.StoreDescriptor, string, error) {
 	sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
 
-	analyzedConstraints := analyzeConstraints(
-		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
-	options := a.scorerOptions(disableStatsBasedRebalancing)
-	candidates := allocateCandidates(
-		sl, analyzedConstraints, existing, rangeInfo, a.storePool.getLocalities(existing), options,
-	)
-	log.VEventf(ctx, 3, "allocate candidates: %s", candidates)
-	if target := candidates.selectGood(a.randGen); target != nil {
-		log.VEventf(ctx, 3, "add target: %s", target)
-		details := decisionDetails{Target: target.compactString(options)}
-		if options.statsBasedRebalancingEnabled {
-			details.RangeBytes = rangeInfo.LogicalBytes
-			details.RangeWritesPerSecond = rangeInfo.WritesPerSecond
-		}
-		detailsBytes, err := json.Marshal(details)
-		if err != nil {
-			log.Warningf(ctx, "failed to marshal details for choosing allocate target: %s", err)
-		}
-		return &target.store, string(detailsBytes), nil
+	target, details := a.allocateTargetFromList(
+		ctx, sl, zone, existing, rangeInfo, a.scorerOptions())
+
+	if target != nil {
+		return target, details, nil
 	}
 
 	// When there are throttled stores that do match, we shouldn't send
@@ -364,18 +399,46 @@ func (a *Allocator) AllocateTarget(
 		return nil, "", errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
 	}
 	return nil, "", &allocatorError{
-		constraints:     zone.Constraints,
-		aliveStoreCount: aliveStoreCount,
+		constraints:      zone.Constraints,
+		existingReplicas: len(existing),
+		aliveStores:      aliveStoreCount,
+		throttledStores:  throttledStoreCount,
 	}
+}
+
+func (a *Allocator) allocateTargetFromList(
+	ctx context.Context,
+	sl StoreList,
+	zone *config.ZoneConfig,
+	existing []roachpb.ReplicaDescriptor,
+	rangeInfo RangeInfo,
+	options scorerOptions,
+) (*roachpb.StoreDescriptor, string) {
+	analyzedConstraints := analyzeConstraints(
+		ctx, a.storePool.getStoreDescriptor, existing, zone)
+	candidates := allocateCandidates(
+		sl, analyzedConstraints, existing, rangeInfo, a.storePool.getLocalities(existing), options,
+	)
+	log.VEventf(ctx, 3, "allocate candidates: %s", candidates)
+	if target := candidates.selectGood(a.randGen); target != nil {
+		log.VEventf(ctx, 3, "add target: %s", target)
+		details := decisionDetails{Target: target.compactString(options)}
+		detailsBytes, err := json.Marshal(details)
+		if err != nil {
+			log.Warningf(ctx, "failed to marshal details for choosing allocate target: %s", err)
+		}
+		return &target.store, string(detailsBytes)
+	}
+
+	return nil, ""
 }
 
 func (a Allocator) simulateRemoveTarget(
 	ctx context.Context,
 	targetStore roachpb.StoreID,
-	zone config.ZoneConfig,
+	zone *config.ZoneConfig,
 	candidates []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
-	disableStatsBasedRebalancing bool,
 ) (roachpb.ReplicaDescriptor, string, error) {
 	// Update statistics first
 	// TODO(a-robinson): This could theoretically interfere with decisions made by other goroutines,
@@ -386,7 +449,8 @@ func (a Allocator) simulateRemoveTarget(
 	defer func() {
 		a.storePool.updateLocalStoreAfterRebalance(targetStore, rangeInfo, roachpb.REMOVE_REPLICA)
 	}()
-	return a.RemoveTarget(ctx, zone, candidates, rangeInfo, disableStatsBasedRebalancing)
+	log.VEventf(ctx, 3, "simulating which replica would be removed after adding s%d", targetStore)
+	return a.RemoveTarget(ctx, zone, candidates, rangeInfo)
 }
 
 // RemoveTarget returns a suitable replica to remove from the provided replica
@@ -396,10 +460,9 @@ func (a Allocator) simulateRemoveTarget(
 // replicas.
 func (a Allocator) RemoveTarget(
 	ctx context.Context,
-	zone config.ZoneConfig,
+	zone *config.ZoneConfig,
 	candidates []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
-	disableStatsBasedRebalancing bool,
 ) (roachpb.ReplicaDescriptor, string, error) {
 	if len(candidates) == 0 {
 		return roachpb.ReplicaDescriptor{}, "", errors.Errorf("must supply at least one candidate replica to allocator.RemoveTarget()")
@@ -414,7 +477,7 @@ func (a Allocator) RemoveTarget(
 
 	analyzedConstraints := analyzeConstraints(
 		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
-	options := a.scorerOptions(disableStatsBasedRebalancing)
+	options := a.scorerOptions()
 	rankedCandidates := removeCandidates(
 		sl,
 		analyzedConstraints,
@@ -428,10 +491,6 @@ func (a Allocator) RemoveTarget(
 			if exist.StoreID == bad.store.StoreID {
 				log.VEventf(ctx, 3, "remove target: %s", bad)
 				details := decisionDetails{Target: bad.compactString(options)}
-				if options.statsBasedRebalancingEnabled {
-					details.RangeBytes = rangeInfo.LogicalBytes
-					details.RangeWritesPerSecond = rangeInfo.WritesPerSecond
-				}
 				detailsBytes, err := json.Marshal(details)
 				if err != nil {
 					log.Warningf(ctx, "failed to marshal details for choosing remove target: %s", err)
@@ -464,11 +523,10 @@ func (a Allocator) RemoveTarget(
 // under-utilized store.
 func (a Allocator) RebalanceTarget(
 	ctx context.Context,
-	zone config.ZoneConfig,
+	zone *config.ZoneConfig,
 	raftStatus *raft.Status,
 	rangeInfo RangeInfo,
 	filter storeFilter,
-	disableStatsBasedRebalancing bool,
 ) (*roachpb.StoreDescriptor, string) {
 	sl, _, _ := a.storePool.getStoreList(rangeInfo.Desc.RangeID, filter)
 
@@ -502,7 +560,7 @@ func (a Allocator) RebalanceTarget(
 
 	analyzedConstraints := analyzeConstraints(
 		ctx, a.storePool.getStoreDescriptor, rangeInfo.Desc.Replicas, zone)
-	options := a.scorerOptions(disableStatsBasedRebalancing)
+	options := a.scorerOptions()
 	results := rebalanceCandidates(
 		ctx,
 		sl,
@@ -558,8 +616,7 @@ func (a Allocator) RebalanceTarget(
 			target.store.StoreID,
 			zone,
 			replicaCandidates,
-			rangeInfo,
-			disableStatsBasedRebalancing)
+			rangeInfo)
 		if err != nil {
 			log.Warningf(ctx, "simulating RemoveTarget failed: %s", err)
 			return nil, ""
@@ -579,10 +636,6 @@ func (a Allocator) RebalanceTarget(
 		Target:   target.compactString(options),
 		Existing: existingCandidates.compactString(options),
 	}
-	if options.statsBasedRebalancingEnabled {
-		details.RangeBytes = rangeInfo.LogicalBytes
-		details.RangeWritesPerSecond = rangeInfo.WritesPerSecond
-	}
 	detailsBytes, err := json.Marshal(details)
 	if err != nil {
 		log.Warningf(ctx, "failed to marshal details for choosing rebalance target: %s", err)
@@ -591,12 +644,10 @@ func (a Allocator) RebalanceTarget(
 	return &target.store, string(detailsBytes)
 }
 
-func (a *Allocator) scorerOptions(disableStatsBasedRebalancing bool) scorerOptions {
+func (a *Allocator) scorerOptions() scorerOptions {
 	return scorerOptions{
-		deterministic:                a.storePool.deterministic,
-		statsBasedRebalancingEnabled: statsBasedRebalancingEnabled(a.storePool.st, disableStatsBasedRebalancing),
-		rangeRebalanceThreshold:      rangeRebalanceThreshold.Get(&a.storePool.st.SV),
-		statRebalanceThreshold:       statRebalanceThreshold.Get(&a.storePool.st.SV),
+		deterministic:           a.storePool.deterministic,
+		rangeRebalanceThreshold: rangeRebalanceThreshold.Get(&a.storePool.st.SV),
 	}
 }
 
@@ -605,7 +656,7 @@ func (a *Allocator) scorerOptions(disableStatsBasedRebalancing bool) scorerOptio
 // unless asked to do otherwise by the checkTransferLeaseSource parameter.
 func (a *Allocator) TransferLeaseTarget(
 	ctx context.Context,
-	zone config.ZoneConfig,
+	zone *config.ZoneConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
@@ -690,7 +741,7 @@ func (a *Allocator) TransferLeaseTarget(
 	// whether we actually should be transferring the lease. The transfer
 	// decision is only needed if we've been asked to check the source.
 	transferDec, repl := a.shouldTransferLeaseUsingStats(
-		ctx, sl, source, existing, stats,
+		ctx, sl, source, existing, stats, nil,
 	)
 	if checkTransferLeaseSource {
 		switch transferDec {
@@ -752,7 +803,7 @@ func (a *Allocator) TransferLeaseTarget(
 // attributes.
 func (a *Allocator) ShouldTransferLease(
 	ctx context.Context,
-	zone config.ZoneConfig,
+	zone *config.ZoneConfig,
 	existing []roachpb.ReplicaDescriptor,
 	leaseStoreID roachpb.StoreID,
 	rangeID roachpb.RangeID,
@@ -790,7 +841,7 @@ func (a *Allocator) ShouldTransferLease(
 		return false
 	}
 
-	transferDec, _ := a.shouldTransferLeaseUsingStats(ctx, sl, source, existing, stats)
+	transferDec, _ := a.shouldTransferLeaseUsingStats(ctx, sl, source, existing, stats, nil)
 	var result bool
 	switch transferDec {
 	case shouldNotTransfer:
@@ -807,12 +858,36 @@ func (a *Allocator) ShouldTransferLease(
 	return result
 }
 
+func (a Allocator) followTheWorkloadPrefersLocal(
+	ctx context.Context,
+	sl StoreList,
+	source roachpb.StoreDescriptor,
+	candidate roachpb.StoreID,
+	existing []roachpb.ReplicaDescriptor,
+	stats *replicaStats,
+) bool {
+	adjustments := make(map[roachpb.StoreID]float64)
+	decision, _ := a.shouldTransferLeaseUsingStats(ctx, sl, source, existing, stats, adjustments)
+	if decision == decideWithoutStats {
+		return false
+	}
+	adjustment := adjustments[candidate]
+	if adjustment > baseLoadBasedLeaseRebalanceThreshold {
+		log.VEventf(ctx, 3,
+			"s%d is a better fit than s%d due to follow-the-workload (score: %.2f; threshold: %.2f)",
+			source.StoreID, candidate, adjustment, baseLoadBasedLeaseRebalanceThreshold)
+		return true
+	}
+	return false
+}
+
 func (a Allocator) shouldTransferLeaseUsingStats(
 	ctx context.Context,
 	sl StoreList,
 	source roachpb.StoreDescriptor,
 	existing []roachpb.ReplicaDescriptor,
 	stats *replicaStats,
+	rebalanceAdjustments map[roachpb.StoreID]float64,
 ) (transferDecision, roachpb.ReplicaDescriptor) {
 	// Only use load-based rebalancing if it's enabled and we have both
 	// stats and locality information to base our decision on.
@@ -879,7 +954,7 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 		}
 		addr, err := a.storePool.gossip.GetNodeIDAddress(repl.NodeID)
 		if err != nil {
-			log.Errorf(ctx, "missing address for node %d: %s", repl.NodeID, err)
+			log.Errorf(ctx, "missing address for n%d: %s", repl.NodeID, err)
 			continue
 		}
 		remoteLatency, ok := a.nodeLatencyFn(addr.String())
@@ -888,20 +963,24 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 		}
 
 		remoteWeight := math.Max(minReplicaWeight, replicaWeights[repl.NodeID])
-		score := loadBasedLeaseRebalanceScore(
+		replScore, rebalanceAdjustment := loadBasedLeaseRebalanceScore(
 			ctx, a.storePool.st, remoteWeight, remoteLatency, storeDesc, sourceWeight, source, sl.candidateLeases.mean)
-		if score > bestReplScore {
-			bestReplScore = score
+		if replScore > bestReplScore {
+			bestReplScore = replScore
 			bestRepl = repl
 		}
+		if rebalanceAdjustments != nil {
+			rebalanceAdjustments[repl.StoreID] = rebalanceAdjustment
+		}
+	}
+
+	if bestReplScore > 0 {
+		return shouldTransfer, bestRepl
 	}
 
 	// Return the best replica even in cases where transferring is not advised in
 	// order to support forced lease transfers, such as when removing a replica or
 	// draining all leases before shutdown.
-	if bestReplScore > 0 {
-		return shouldTransfer, bestRepl
-	}
 	return shouldNotTransfer, bestRepl
 }
 
@@ -924,7 +1003,7 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 // logic behind each part of the formula is as follows:
 //
 // * LeaseRebalancingAggressiveness: Allow the aggressiveness to be tuned via
-//   an environment variable.
+//   a cluster setting.
 // * 0.1: Constant factor to reduce aggressiveness by default
 // * math.Log10(remoteWeight/sourceWeight): Comparison of the remote replica's
 //   weight to the local replica's weight. Taking the log of the ratio instead
@@ -939,6 +1018,18 @@ func (a Allocator) shouldTransferLeaseUsingStats(
 //   of the ideal number of leases on each store. We then calculate these to
 //   compare how close each node is to its ideal state and use the differences
 //   from the ideal state on each node to compute a final score.
+//
+// Returns a total score for the replica that takes into account the number of
+// leases already on each store. Also returns the raw "adjustment" value that's
+// purely based on replica weights and latency in order for the caller to
+// determine how large a role the user's workload played in the decision.  The
+// adjustment value is positive if the remote store is preferred for load-based
+// reasons or negative if the local store is preferred. The magnitude depends
+// on the difference in load and the latency between the nodes.
+//
+// TODO(a-robinson): Should this be changed to avoid even thinking about lease
+// counts now that we try to spread leases and replicas based on QPS? As is it
+// may fight back a little bit against store-level QPS-based rebalancing.
 func loadBasedLeaseRebalanceScore(
 	ctx context.Context,
 	st *cluster.Settings,
@@ -948,14 +1039,14 @@ func loadBasedLeaseRebalanceScore(
 	sourceWeight float64,
 	source roachpb.StoreDescriptor,
 	meanLeases float64,
-) int32 {
+) (int32, float64) {
 	remoteLatencyMillis := float64(remoteLatency) / float64(time.Millisecond)
 	rebalanceAdjustment :=
 		leaseRebalancingAggressiveness.Get(&st.SV) * 0.1 * math.Log10(remoteWeight/sourceWeight) * math.Log1p(remoteLatencyMillis)
 	// Start with twice the base rebalance threshold in order to fight more
 	// strongly against thrashing caused by small variances in the distribution
 	// of request weights.
-	rebalanceThreshold := (2 * baseLeaseRebalanceThreshold) - rebalanceAdjustment
+	rebalanceThreshold := baseLoadBasedLeaseRebalanceThreshold - rebalanceAdjustment
 
 	overfullLeaseThreshold := int32(math.Ceil(meanLeases * (1 + rebalanceThreshold)))
 	overfullScore := source.Capacity.LeaseCount - overfullLeaseThreshold
@@ -971,7 +1062,7 @@ func loadBasedLeaseRebalanceScore(
 		rebalanceThreshold, meanLeases, source.Capacity.LeaseCount, overfullLeaseThreshold,
 		remoteStore.Capacity.LeaseCount, underfullLeaseThreshold, totalScore,
 	)
-	return totalScore
+	return totalScore, rebalanceAdjustment
 }
 
 func (a Allocator) shouldTransferLeaseWithoutStats(
@@ -980,9 +1071,14 @@ func (a Allocator) shouldTransferLeaseWithoutStats(
 	source roachpb.StoreDescriptor,
 	existing []roachpb.ReplicaDescriptor,
 ) bool {
+	// TODO(a-robinson): Should we disable this behavior when load-based lease
+	// rebalancing is enabled? In happy cases it's nice to keep this working
+	// to even out the number of leases in addition to the number of replicas,
+	// but it's certainly a blunt instrument that could undo what we want.
+
 	// Allow lease transfer if we're above the overfull threshold, which is
-	// mean*(1+baseLeaseRebalanceThreshold).
-	overfullLeaseThreshold := int32(math.Ceil(sl.candidateLeases.mean * (1 + baseLeaseRebalanceThreshold)))
+	// mean*(1+leaseRebalanceThreshold).
+	overfullLeaseThreshold := int32(math.Ceil(sl.candidateLeases.mean * (1 + leaseRebalanceThreshold)))
 	minOverfullThreshold := int32(math.Ceil(sl.candidateLeases.mean + 5))
 	if overfullLeaseThreshold < minOverfullThreshold {
 		overfullLeaseThreshold = minOverfullThreshold
@@ -992,7 +1088,7 @@ func (a Allocator) shouldTransferLeaseWithoutStats(
 	}
 
 	if float64(source.Capacity.LeaseCount) > sl.candidateLeases.mean {
-		underfullLeaseThreshold := int32(math.Ceil(sl.candidateLeases.mean * (1 - baseLeaseRebalanceThreshold)))
+		underfullLeaseThreshold := int32(math.Ceil(sl.candidateLeases.mean * (1 - leaseRebalanceThreshold)))
 		minUnderfullThreshold := int32(math.Ceil(sl.candidateLeases.mean - 5))
 		if underfullLeaseThreshold > minUnderfullThreshold {
 			underfullLeaseThreshold = minUnderfullThreshold
@@ -1012,7 +1108,7 @@ func (a Allocator) shouldTransferLeaseWithoutStats(
 }
 
 func (a Allocator) preferredLeaseholders(
-	zone config.ZoneConfig, existing []roachpb.ReplicaDescriptor,
+	zone *config.ZoneConfig, existing []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	// Go one preference at a time. As soon as we've found replicas that match a
 	// preference, we don't need to look at the later preferences, because

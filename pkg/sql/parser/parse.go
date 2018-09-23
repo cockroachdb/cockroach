@@ -60,6 +60,21 @@ func (p *Parser) parseWithDepth(depth int, sql string) (stmts tree.StatementList
 	return p.scanner.stmts, nil
 }
 
+// unaryNegation constructs an AST node for a negation. This attempts
+// to preserve constant NumVals and embed the negative sign inside
+// them instead of wrapping in an UnaryExpr. This in turn ensures
+// that negative numbers get considered as a single constant
+// for the purpose of formatting and scrubbing.
+func unaryNegation(e tree.Expr) tree.Expr {
+	if cst, ok := e.(*tree.NumVal); ok {
+		cst.Negative = !cst.Negative
+		return cst
+	}
+
+	// Common case.
+	return &tree.UnaryExpr{Operator: tree.UnaryMinus, Expr: e}
+}
+
 // Parse parses a sql statement string and returns a list of Statements.
 func Parse(sql string) (tree.StatementList, error) {
 	return parseWithDepth(1, sql)

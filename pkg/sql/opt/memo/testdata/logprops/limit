@@ -29,31 +29,40 @@ SELECT * FROM xyzs LIMIT 1
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1]
- ├── keys: (1) weak(3,4)
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── prune: (1-4)
+ ├── interesting orderings: (+1) (-4,+3,+1)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-4,+3,+1)
  └── const: 1 [type=int]
 
 build
-SELECT COUNT(*) FROM xyzs LIMIT 10
+SELECT count(*) FROM xyzs LIMIT 10
 ----
 limit
  ├── columns: count:5(int)
  ├── cardinality: [1 - 1]
- ├── stats: [rows=1]
- ├── group-by
- │    ├── columns: count:5(int)
+ ├── key: ()
+ ├── fd: ()-->(5)
+ ├── prune: (5)
+ ├── scalar-group-by
+ │    ├── columns: count_rows:5(int)
  │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(5)
+ │    ├── prune: (5)
  │    ├── project
- │    │    ├── stats: [rows=1000]
  │    │    └── scan xyzs
  │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    │         ├── stats: [rows=1000]
- │    │         └── keys: (1) weak(3,4)
+ │    │         ├── key: (1)
+ │    │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    │         ├── prune: (1-4)
+ │    │         └── interesting orderings: (+1) (-4,+3,+1)
  │    └── aggregations
  │         └── count-rows [type=int]
  └── const: 10 [type=int]
@@ -63,25 +72,33 @@ SELECT * FROM xyzs LIMIT (SELECT 1)
 ----
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- ├── stats: [rows=1000]
- ├── keys: (1) weak(3,4)
+ ├── side-effects
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── prune: (1-4)
+ ├── interesting orderings: (+1) (-4,+3,+1)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-4,+3,+1)
  └── subquery [type=int]
       └── max1-row
            ├── columns: "?column?":5(int!null)
            ├── cardinality: [1 - 1]
-           ├── stats: [rows=1]
+           ├── key: ()
+           ├── fd: ()-->(5)
            └── project
                 ├── columns: "?column?":5(int!null)
                 ├── cardinality: [1 - 1]
-                ├── stats: [rows=1]
+                ├── key: ()
+                ├── fd: ()-->(5)
+                ├── prune: (5)
                 ├── values
                 │    ├── cardinality: [1 - 1]
-                │    ├── stats: [rows=1]
-                │    └── tuple [type=tuple{}]
+                │    ├── key: ()
+                │    └── tuple [type=tuple]
                 └── projections
                      └── const: 1 [type=int]
 
@@ -91,12 +108,16 @@ SELECT * FROM xyzs LIMIT 0
 limit
  ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  ├── cardinality: [0 - 0]
- ├── stats: [rows=1000]
- ├── keys: (1) weak(3,4)
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ ├── prune: (1-4)
+ ├── interesting orderings: (+1) (-4,+3,+1)
  ├── scan xyzs
  │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-4,+3,+1)
  └── const: 0 [type=int]
 
 # Propagate outer columns.
@@ -105,45 +126,53 @@ SELECT (SELECT x FROM kuv LIMIT y) FROM xyzs
 ----
 project
  ├── columns: x:9(int)
- ├── stats: [rows=1000]
+ ├── side-effects
+ ├── prune: (9)
  ├── scan xyzs
  │    ├── columns: xyzs.x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    ├── stats: [rows=1000]
- │    └── keys: (1) weak(3,4)
- └── projections [outer=(1,2)]
-      └── subquery [type=int, outer=(1,2)]
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    ├── prune: (1-4)
+ │    └── interesting orderings: (+1) (-4,+3,+1)
+ └── projections [outer=(1,2), side-effects]
+      └── subquery [type=int, outer=(1,2), side-effects]
            └── max1-row
                 ├── columns: x:8(int)
                 ├── outer: (1,2)
                 ├── cardinality: [0 - 1]
-                ├── stats: [rows=1]
+                ├── side-effects
+                ├── key: ()
+                ├── fd: ()-->(8)
                 └── limit
                      ├── columns: x:8(int)
                      ├── outer: (1,2)
-                     ├── stats: [rows=1000]
+                     ├── side-effects
+                     ├── fd: ()-->(8)
+                     ├── prune: (8)
                      ├── project
                      │    ├── columns: x:8(int)
                      │    ├── outer: (1)
-                     │    ├── stats: [rows=1000]
+                     │    ├── fd: ()-->(8)
+                     │    ├── prune: (8)
                      │    ├── scan kuv
                      │    │    ├── columns: k:5(int!null) u:6(float) v:7(string)
-                     │    │    ├── stats: [rows=1000]
-                     │    │    └── keys: (5)
+                     │    │    ├── key: (5)
+                     │    │    ├── fd: (5)-->(6,7)
+                     │    │    ├── prune: (5-7)
+                     │    │    └── interesting orderings: (+5)
                      │    └── projections [outer=(1)]
                      │         └── variable: xyzs.x [type=int, outer=(1)]
-                     └── variable: xyzs.y [type=int, outer=(2)]
+                     └── variable: y [type=int, outer=(2)]
 
 # Test very high limit (> max uint32).
 opt
-SELECT s, x FROM xyzs WHERE x=1 LIMIT 4294967296
+SELECT s, x FROM xyzs WHERE s='foo' LIMIT 4294967296
 ----
-limit
- ├── columns: s:4(string) x:1(int!null)
- ├── stats: [rows=1]
- ├── keys: (1)
- ├── scan xyzs
- │    ├── columns: x:1(int!null) s:4(string)
- │    ├── constraint: /1: [/1 - /1]
- │    ├── stats: [rows=1, distinct(1)=1]
- │    └── keys: (1)
- └── const: 4294967296 [type=int]
+scan xyzs@secondary
+ ├── columns: s:4(string!null) x:1(int!null)
+ ├── constraint: /-4/3: [/'foo' - /'foo']
+ ├── limit: 4294967296
+ ├── key: (1)
+ ├── fd: ()-->(4)
+ ├── prune: (1)
+ └── interesting orderings: (+1) (-4)

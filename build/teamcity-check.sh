@@ -23,7 +23,15 @@ fi
 tc_end_block "Ensure generated code is up-to-date"
 
 tc_start_block "Lint"
-run build/builder.sh make lint 2>&1 | tee artifacts/lint.log | go-test-teamcity
+# Disable ccache so that Go doesn't try to install dependencies into GOROOT,
+# where it doesn't have write permissions. (Using ccache busts the Go package
+# cache because it appears to the Go toolchain as a different C compiler than
+# the toolchain was compiled with.) We've already built the C dependencies
+# above, so we're not losing anything by turning it off.
+#
+# TODO(benesch): once GOPATH/pkg goes away because Go static analysis tools can
+# rebuild on demand, remove this. Upstream issue: golang/go#25650.
+COCKROACH_BUILDER_CCACHE= run build/builder.sh make lint 2>&1 | tee artifacts/lint.log | go-test-teamcity
 tc_end_block "Lint"
 
 tc_start_block "Test web UI"

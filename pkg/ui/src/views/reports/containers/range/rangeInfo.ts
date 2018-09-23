@@ -4,11 +4,11 @@ import Long from "long";
 import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
 
-export function GetLocalReplica(info: protos.cockroach.server.serverpb.RangeInfo$Properties) {
+export function GetLocalReplica(info: protos.cockroach.server.serverpb.IRangeInfo) {
   return _.find(info.state.state.desc.replicas, rep => rep.store_id === info.source_store_id);
 }
 
-export function IsLeader(info: protos.cockroach.server.serverpb.RangeInfo$Properties) {
+export function IsLeader(info: protos.cockroach.server.serverpb.IRangeInfo) {
   const localRep = GetLocalReplica(info);
   if (_.isNil(localRep)) {
     return false;

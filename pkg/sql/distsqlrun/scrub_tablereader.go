@@ -18,8 +18,6 @@ import (
 	"bytes"
 	"context"
 
-	"sync"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -42,11 +40,12 @@ import (
 var ScrubTypes = []sqlbase.ColumnType{
 	{SemanticType: sqlbase.ColumnType_STRING},
 	{SemanticType: sqlbase.ColumnType_STRING},
-	{SemanticType: sqlbase.ColumnType_JSON},
+	{SemanticType: sqlbase.ColumnType_JSONB},
 }
 
 type scrubTableReader struct {
 	tableReader
+	tableDesc sqlbase.TableDescriptor
 	// fetcherResultToColIdx maps RowFetcher results to the column index in
 	// the TableDescriptor. This is only initialized and used during scrub
 	// physical checks.
@@ -83,19 +82,21 @@ func newScrubTableReader(
 	tr.tableDesc = spec.Table
 	tr.limitHint = limitHint(spec.LimitHint, post)
 
-	if err := tr.init(
+	if err := tr.Init(
+		tr,
 		post,
 		ScrubTypes,
 		flowCtx,
 		processorID,
 		output,
-		procStateOpts{
+		nil, /* memMonitor */
+		ProcStateOpts{
 			// We don't pass tr.input as an inputToDrain; tr.input is just an adapter
 			// on top of a RowFetcher; draining doesn't apply to it. Moreover, Andrei
 			// doesn't trust that the adapter will do the right thing on a Next() call
 			// after it had previously returned an error.
-			inputsToDrain:        nil,
-			trailingMetaCallback: tr.generateTrailingMeta,
+			InputsToDrain:        nil,
+			TrailingMetaCallback: tr.generateTrailingMeta,
 		},
 	); err != nil {
 		return nil, err
@@ -125,6 +126,7 @@ func newScrubTableReader(
 	if _, _, err := initRowFetcher(
 		&tr.fetcher, &tr.tableDesc, int(spec.IndexIdx), tr.tableDesc.ColumnIdxMap(), spec.Reverse,
 		neededColumns, true /* isCheck */, &tr.alloc,
+		ScanVisibility_PUBLIC,
 	); err != nil {
 		return nil, err
 	}
@@ -207,30 +209,17 @@ func (tr *scrubTableReader) prettyPrimaryKeyValues(
 	return primaryKeyValues.String()
 }
 
-// Run is part of the processor interface.
-func (tr *scrubTableReader) Run(ctx context.Context, wg *sync.WaitGroup) {
-	if tr.out.output == nil {
-		panic("scrubTableReader output not initialized for emitting rows")
-	}
-	ctx = tr.Start(ctx)
-	Run(ctx, tr, tr.out.output)
-	if wg != nil {
-		wg.Done()
-	}
-}
-
 // Start is part of the RowSource interface.
 func (tr *scrubTableReader) Start(ctx context.Context) context.Context {
-	ctx = tr.startInternal(ctx, scrubTableReaderProcName)
+	ctx = tr.StartInternal(ctx, scrubTableReaderProcName)
 
 	log.VEventf(ctx, 1, "starting")
 
-	// TODO(radu,andrei,knz): set the traceKV flag when requested by the session.
 	if err := tr.fetcher.StartScan(
 		ctx, tr.flowCtx.txn, tr.spans,
-		true /* limit batches */, tr.limitHint, false, /* traceKV */
+		true /* limit batches */, tr.limitHint, tr.flowCtx.traceKV,
 	); err != nil {
-		tr.moveToDraining(err)
+		tr.MoveToDraining(err)
 	}
 
 	return ctx
@@ -238,13 +227,13 @@ func (tr *scrubTableReader) Start(ctx context.Context) context.Context {
 
 // Next is part of the RowSource interface.
 func (tr *scrubTableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
-	for tr.state == stateRunning {
+	for tr.State == StateRunning {
 		var row sqlbase.EncDatumRow
 		var err error
 		// If we are running a scrub physical check, we use a specialized
 		// procedure that runs additional checks while fetching the row
 		// data.
-		row, err = tr.fetcher.NextRowWithErrors(tr.ctx)
+		row, err = tr.fetcher.NextRowWithErrors(tr.Ctx)
 		// There are four cases that can happen after NextRowWithErrors:
 		// 1) We encounter a ScrubError. We do not propagate the error up,
 		//    but instead generate and emit a row for the final results.
@@ -265,13 +254,13 @@ func (tr *scrubTableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			continue
 		}
 		if row == nil || err != nil {
-			tr.moveToDraining(scrub.UnwrapScrubError(err))
+			tr.MoveToDraining(scrub.UnwrapScrubError(err))
 			break
 		}
 
-		if outRow := tr.processRowHelper(row); outRow != nil {
+		if outRow := tr.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil
 		}
 	}
-	return nil, tr.drainHelper()
+	return nil, tr.DrainHelper()
 }

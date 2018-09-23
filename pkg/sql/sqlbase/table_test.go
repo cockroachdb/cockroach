@@ -361,6 +361,10 @@ func TestArrayEncoding(t *testing.T) {
 			enc = append(enc, byte(len(test.encoding)))
 			enc = append(enc, test.encoding...)
 			d, _, err := decodeArray(&DatumAlloc{}, test.datum.ParamTyp, enc)
+			hasNulls := d.(*tree.DArray).HasNulls
+			if test.datum.HasNulls != hasNulls {
+				t.Fatalf("expected %v to have HasNulls=%t, got %t", enc, test.datum.HasNulls, hasNulls)
+			}
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -441,11 +445,6 @@ func TestMarshalColumnValue(t *testing.T) {
 		{
 			kind:  ColumnType_TIME,
 			datum: tree.MakeDTime(timeofday.FromInt(314159)),
-			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
-		},
-		{
-			kind:  ColumnType_TIMETZ,
-			datum: tree.MakeDTimeTZ(timeofday.FromInt(314159), time.UTC),
 			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
 		},
 		{
@@ -1493,5 +1492,12 @@ func TestDecodeTableValue(t *testing.T) {
 				t.Fatalf("decoded datum %[1]v (%[1]T) does not match encoded datum %[2]v (%[2]T)", d, tc.in)
 			}
 		})
+	}
+}
+
+func TestRandCreateTable(t *testing.T) {
+	for i := 0; i < 10; i++ {
+		tab := RandCreateTable(i)
+		fmt.Println(tab.String() + ";")
 	}
 }

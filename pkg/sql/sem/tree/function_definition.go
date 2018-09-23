@@ -85,6 +85,11 @@ type FunctionProperties struct {
 	// is properly migrated to a point past type checking.
 	// TODO(knz): remove this field once it becomes unneeded.
 	ReturnLabels []string
+
+	// AmbiguousReturnType is true if the builtin's return type can't be
+	// determined without extra context. This is used for formatting builtins
+	// with the FmtParsable directive.
+	AmbiguousReturnType bool
 }
 
 // FunctionClass specifies the class of the builtin function.
@@ -110,7 +115,12 @@ func NewFunctionDefinition(
 	name string, props *FunctionProperties, def []Overload,
 ) *FunctionDefinition {
 	overloads := make([]overloadImpl, len(def))
+
 	for i := range def {
+		if def[i].PreferredOverload {
+			// Builtins with a preferred overload are always ambiguous.
+			props.AmbiguousReturnType = true
+		}
 		overloads[i] = &def[i]
 	}
 	return &FunctionDefinition{

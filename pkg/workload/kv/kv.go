@@ -50,6 +50,7 @@ type kv struct {
 	writeSeq, seed                       int64
 	sequential                           bool
 	splits                               int
+	useOpt                               bool
 }
 
 func init() {
@@ -67,7 +68,7 @@ var kvMeta = workload.Meta{
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`batch`: {RuntimeOnly: true},
 		}
-		g.flags.IntVar(&g.batchSize, `batch`, 1, `Number of blocks to insert in a single SQL statement`)
+		g.flags.IntVar(&g.batchSize, `batch`, 1, `Number of blocks to read/insert in a single SQL statement`)
 		g.flags.IntVar(&g.minBlockSizeBytes, `min-block-bytes`, 1, `Minimum amount of raw data written with each insertion`)
 		g.flags.IntVar(&g.maxBlockSizeBytes, `max-block-bytes`, 2, `Maximum amount of raw data written with each insertion`)
 		g.flags.Int64Var(&g.cycleLength, `cycle-length`, math.MaxInt64, `Number of keys repeatedly accessed by each writer`)
@@ -76,6 +77,7 @@ var kvMeta = workload.Meta{
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.BoolVar(&g.sequential, `sequential`, false, `Pick keys sequentially instead of randomly.`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
+		g.flags.BoolVar(&g.useOpt, `use-opt`, true, `Use cost-based optimizer`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -112,11 +114,9 @@ func (w *kv) Tables() []workload.Table {
 		Splits: workload.Tuples(
 			w.splits,
 			func(splitIdx int) []interface{} {
-				rng := rand.New(rand.NewSource(w.seed + int64(splitIdx)))
-				g := newHashGenerator(&sequence{config: w, val: w.writeSeq})
-				return []interface{}{
-					int(g.hash(rng.Int63())),
-				}
+				stride := (float64(math.MaxInt64) - float64(math.MinInt64)) / float64(w.splits+1)
+				splitPoint := int(math.MinInt64 + float64(splitIdx+1)*stride)
+				return []interface{}{splitPoint}
 			},
 		),
 	}
@@ -136,6 +136,13 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 	// Allow a maximum of concurrency+1 connections to the database.
 	db.SetMaxOpenConns(w.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(w.connFlags.Concurrency + 1)
+
+	if !w.useOpt {
+		_, err := db.Exec("SET optimizer=off")
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
+	}
 
 	var buf bytes.Buffer
 	buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
@@ -203,7 +210,7 @@ func (o *kvOp) run(ctx context.Context) error {
 			args[i] = o.g.readKey()
 		}
 		start := timeutil.Now()
-		rows, err := o.readStmt.Query(args...)
+		rows, err := o.readStmt.QueryContext(ctx, args...)
 		if err != nil {
 			return err
 		}
@@ -220,7 +227,7 @@ func (o *kvOp) run(ctx context.Context) error {
 		args[j+1] = randomBlock(o.config, o.g.rand())
 	}
 	start := timeutil.Now()
-	_, err := o.writeStmt.Exec(args...)
+	_, err := o.writeStmt.ExecContext(ctx, args...)
 	o.hists.Get(`write`).Record(timeutil.Since(start))
 	return err
 }

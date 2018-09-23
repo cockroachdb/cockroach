@@ -155,6 +155,12 @@ type RowSource interface {
 	ConsumerClosed()
 }
 
+// RowSourcedProcessor is the union of RowSource and Processor.
+type RowSourcedProcessor interface {
+	RowSource
+	Run(_ context.Context, wg *sync.WaitGroup)
+}
+
 // Run reads records from the source and outputs them to the receiver, properly
 // draining the source of metadata and closing both the source and receiver.
 //
@@ -240,24 +246,22 @@ func sendTraceData(ctx context.Context, dst RowReceiver) {
 	}
 }
 
-// sendTxnCoordMetaMaybe reads the txn metadata from a leaf transactions and
-// sends it to dst, so that it eventually makes it to the root txn. The
-// ConsumerStatus returned by dst is ignored.
-//
-// If the txn is a root txn, this is a no-op.
+// getTxnCoordMeta returns the txn metadata from a transaction if it is present
+// and the transaction is a leaf transaction, otherwise nil.
 //
 // NOTE(andrei): As of 04/2018, the txn is shared by all processors scheduled on
 // a node, and so it's possible for multiple processors to send the same
 // TxnCoordMeta. The root TxnCoordSender doesn't care if it receives the same
 // thing multiple times.
-func sendTxnCoordMetaMaybe(txn *client.Txn, dst RowReceiver) {
-	if txn.Type() == client.RootTxn {
-		return
+func getTxnCoordMeta(ctx context.Context, txn *client.Txn) *roachpb.TxnCoordMeta {
+	if txn.Type() == client.LeafTxn {
+		txnMeta := txn.GetTxnCoordMeta(ctx)
+		txnMeta.StripLeafToRoot()
+		if txnMeta.Txn.ID != uuid.Nil {
+			return &txnMeta
+		}
 	}
-	txnMeta := txn.GetTxnCoordMeta()
-	if txnMeta.Txn.ID != (uuid.UUID{}) {
-		dst.Push(nil /* row */, &ProducerMetadata{TxnMeta: &txnMeta})
-	}
+	return nil
 }
 
 // DrainAndClose is a version of DrainAndForwardMetadata that drains multiple
@@ -361,10 +365,10 @@ type ProducerMetadata struct {
 	Err error
 	// TraceData is sent if snowball tracing is enabled.
 	TraceData []tracing.RecordedSpan
-	// TxnMeta contains the updated transaction coordinator metadata,
+	// TxnCoordMeta contains the updated transaction coordinator metadata,
 	// to be sent from leaf transactions to augment the root transaction,
 	// held by the flow's ultimate receiver.
-	TxnMeta *roachpb.TxnCoordMeta
+	TxnCoordMeta *roachpb.TxnCoordMeta
 	// RowNum corresponds to a row produced by a "source" processor that takes no
 	// inputs. It is used in tests to verify that all metadata is forwarded
 	// exactly once to the receiver on the gateway node.

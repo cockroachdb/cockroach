@@ -51,7 +51,7 @@ func TestExportCmd(t *testing.T) {
 			MVCCFilter: mvccFilter,
 			ReturnSST:  true,
 		}
-		res, pErr := client.SendWrapped(ctx, kvDB.GetSender(), req)
+		res, pErr := client.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
 		if pErr != nil {
 			t.Fatalf("%+v", pErr)
 		}
@@ -167,6 +167,8 @@ func TestExportCmd(t *testing.T) {
 
 	var res5 ExportAndSlurpResult
 	t.Run("ts5", func(t *testing.T) {
+		// Prevent the merge queue from immediately discarding our splits.
+		sqlDB.Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = false`)
 		sqlDB.Exec(t, `ALTER TABLE mvcclatest.export SPLIT AT VALUES (2)`)
 		res5 = exportAndSlurp(t, hlc.Timestamp{})
 		expect(t, res5, 2, 2, 2, 7)
@@ -185,7 +187,7 @@ func TestExportGCThreshold(t *testing.T) {
 		RequestHeader: roachpb.RequestHeader{Key: keys.UserTableDataMin, EndKey: keys.MaxKey},
 		StartTime:     hlc.Timestamp{WallTime: -1},
 	}
-	_, pErr := client.SendWrapped(ctx, kvDB.GetSender(), req)
+	_, pErr := client.SendWrapped(ctx, kvDB.NonTransactionalSender(), req)
 	if !testutils.IsPError(pErr, "must be after replica GC threshold") {
 		t.Fatalf(`expected "must be after replica GC threshold" error got: %+v`, pErr)
 	}

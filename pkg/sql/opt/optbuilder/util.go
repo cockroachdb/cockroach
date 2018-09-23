@@ -20,54 +20,112 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
-// expandStar expands expr into a list of columns if expr
-// corresponds to a "*" or "<table>.*".
-func (b *Builder) expandStar(expr tree.Expr, inScope *scope) (exprs []tree.TypedExpr) {
+func checkFrom(expr tree.Expr, inScope *scope) {
 	if len(inScope.cols) == 0 {
 		panic(builderError{pgerror.NewErrorf(pgerror.CodeInvalidNameError,
 			"cannot use %q without a FROM clause", tree.ErrString(expr))})
 	}
+}
 
+// expandStar expands expr into a list of columns if expr
+// corresponds to a "*", "<table>.*" or "(Expr).*".
+func (b *Builder) expandStar(
+	expr tree.Expr, inScope *scope,
+) (labels []string, exprs []tree.TypedExpr) {
 	switch t := expr.(type) {
+	case *tree.TupleStar:
+		texpr := inScope.resolveType(t.Expr, types.Any)
+		typ := texpr.ResolvedType()
+		tType, ok := typ.(types.TTuple)
+		if !ok || tType.Labels == nil {
+			panic(builderError{tree.NewTypeIsNotCompositeError(typ)})
+		}
+
+		// If the sub-expression is a tuple constructor, we'll de-tuplify below.
+		// Otherwise we'll re-evaluate the expression multiple times.
+		//
+		// The following query generates a tuple constructor:
+		//     SELECT (kv.*).* FROM kv
+		//     -- the inner star expansion (scope.VisitPre) first expands to
+		//     SELECT (((kv.k, kv.v) as k,v)).* FROM kv
+		//     -- then the inner tuple constructor detuplifies here to:
+		//     SELECT kv.k, kv.v FROM kv
+		//
+		// The following query generates a scalar var with tuple type that
+		// is not a tuple constructor:
+		//
+		//     SELECT (SELECT pg_get_keywords() AS x LIMIT 1).*
+		//     -- does not detuplify, one gets instead:
+		//     SELECT (SELECT pg_get_keywords() AS x LIMIT 1).word,
+		//            (SELECT pg_get_keywords() AS x LIMIT 1).catcode,
+		//            (SELECT pg_get_keywords() AS x LIMIT 1).catdesc
+		//     -- (and we hope a later opt will merge the subqueries)
+		tTuple, isTuple := texpr.(*tree.Tuple)
+
+		labels = tType.Labels
+		exprs = make([]tree.TypedExpr, len(tType.Types))
+		for i := range tType.Types {
+			if isTuple {
+				// De-tuplify: ((a,b,c)).* -> a, b, c
+				exprs[i] = tTuple.Exprs[i].(tree.TypedExpr)
+			} else {
+				// Can't de-tuplify: (Expr).* -> (Expr).a, (Expr).b, (Expr).c
+				exprs[i] = tree.NewTypedColumnAccessExpr(texpr, tType.Labels[i], i)
+			}
+		}
+
 	case *tree.AllColumnsSelector:
+		checkFrom(expr, inScope)
 		src, _, err := t.Resolve(b.ctx, inScope)
 		if err != nil {
 			panic(builderError{err})
 		}
+		exprs = make([]tree.TypedExpr, 0, len(inScope.cols))
+		labels = make([]string, 0, len(inScope.cols))
 		for i := range inScope.cols {
-			col := inScope.cols[i]
+			col := &inScope.cols[i]
 			if col.table == *src && !col.hidden {
-				exprs = append(exprs, &col)
+				exprs = append(exprs, col)
+				labels = append(labels, string(col.name))
 			}
 		}
 
 	case tree.UnqualifiedStar:
+		checkFrom(expr, inScope)
+		exprs = make([]tree.TypedExpr, 0, len(inScope.cols))
+		labels = make([]string, 0, len(inScope.cols))
 		for i := range inScope.cols {
-			col := inScope.cols[i]
+			col := &inScope.cols[i]
 			if !col.hidden {
-				exprs = append(exprs, &col)
+				exprs = append(exprs, col)
+				labels = append(labels, string(col.name))
 			}
 		}
+
+	default:
+		panic(fmt.Sprintf("unhandled type: %T", expr))
 	}
 
-	return exprs
+	return labels, exprs
 }
 
-// expandStarAndResolveType expands expr into a list of columns if expr
-// corresponds to a "*" or "<table>.*". Otherwise, expandStarAndResolveType
-// resolves the type of expr and returns it as a []TypedExpr.
+// expandStarAndResolveType expands expr into a list of columns if
+// expr corresponds to a "*", "<table>.*" or "(Expr).*". Otherwise,
+// expandStarAndResolveType resolves the type of expr and returns it
+// as a []TypedExpr.
 func (b *Builder) expandStarAndResolveType(
 	expr tree.Expr, inScope *scope,
 ) (exprs []tree.TypedExpr) {
 	switch t := expr.(type) {
-	case *tree.AllColumnsSelector, tree.UnqualifiedStar:
-		exprs = b.expandStar(expr, inScope)
+	case *tree.AllColumnsSelector, tree.UnqualifiedStar, *tree.TupleStar:
+		_, exprs = b.expandStar(expr, inScope)
 
 	case *tree.UnresolvedName:
 		vn, err := t.NormalizeVarName()
@@ -98,26 +156,69 @@ func (b *Builder) expandStarAndResolveType(
 // group  The memo group ID of this column/expression (if any). This parameter
 //        is optional and can be set later in the returned scopeColumn.
 //
-// The new column is returned as a columnProps object.
+// The new column is returned as a scopeColumn object.
 func (b *Builder) synthesizeColumn(
 	scope *scope, label string, typ types.T, expr tree.TypedExpr, group memo.GroupID,
 ) *scopeColumn {
 	if label == "" {
-		label = fmt.Sprintf("column%d", len(b.colMap))
+		label = fmt.Sprintf("column%d", b.factory.Metadata().NumColumns()+1)
 	}
 
 	name := tree.Name(label)
 	colID := b.factory.Metadata().AddColumn(label, typ)
-	col := scopeColumn{
-		origName: name,
-		name:     name,
-		typ:      typ,
-		id:       colID,
-		expr:     expr,
-		group:    group,
+	scope.cols = append(scope.cols, scopeColumn{
+		name:  name,
+		typ:   typ,
+		id:    colID,
+		expr:  expr,
+		group: group,
+	})
+	return &scope.cols[len(scope.cols)-1]
+}
+
+// populateSynthesizedColumn is similar to synthesizeColumn, but it fills in
+// the given existing column rather than allocating a new one.
+func (b *Builder) populateSynthesizedColumn(col *scopeColumn, group memo.GroupID) {
+	if col.name == "" {
+		col.name = tree.Name(fmt.Sprintf("column%d", b.factory.Metadata().NumColumns()+1))
 	}
-	b.colMap = append(b.colMap, col)
-	scope.cols = append(scope.cols, col)
+
+	colID := b.factory.Metadata().AddColumn(string(col.name), col.typ)
+	col.id = colID
+	col.group = group
+}
+
+// projectColumn projects src by copying its column ID to dst. projectColumn
+// also copies src.name to dst if an alias is not already set in dst. No other
+// fields are copied, for the following reasons:
+// - We don't copy group, as dst becomes a pass-through column in the new
+//   scope. dst already has group=0, so keep it as-is.
+// - We don't copy hidden, because projecting a column makes it visible.
+//   dst already has hidden=false, so keep it as-is.
+// - We don't copy table, since the table becomes anonymous in the new scope.
+// - We don't copy descending, since we don't want to overwrite dst.descending
+//   if dst is an ORDER BY column.
+// - expr, exprStr and typ in dst already correspond to the expression and type
+//   of the src column.
+func (b *Builder) projectColumn(dst *scopeColumn, src *scopeColumn) {
+	if dst.name == "" {
+		dst.name = src.name
+	}
+	dst.id = src.id
+}
+
+// addColumn adds a column to scope with the given label, type, and
+// expression. It returns a pointer to the new column. The column ID and group
+// are left empty so they can be filled in later.
+func (b *Builder) addColumn(
+	scope *scope, label string, typ types.T, expr tree.TypedExpr,
+) *scopeColumn {
+	name := tree.Name(label)
+	scope.cols = append(scope.cols, scopeColumn{
+		name: name,
+		typ:  typ,
+		expr: expr,
+	})
 	return &scope.cols[len(scope.cols)-1]
 }
 
@@ -198,7 +299,8 @@ func colIdxByProjectionAlias(expr tree.Expr, op string, scope *scope) int {
 			//   SELECT a AS b FROM t ORDER BY b
 			//   SELECT DISTINCT ON (b) a AS b FROM t
 			target := c.ColumnName
-			for j, col := range scope.cols {
+			for j := range scope.cols {
+				col := &scope.cols[j]
 				if col.name == target {
 					if index != -1 {
 						// There is more than one projection alias that matches the clause.
@@ -275,27 +377,62 @@ func colsToColList(cols []scopeColumn) opt.ColList {
 	return colList
 }
 
-func findColByIndex(cols []scopeColumn, id opt.ColumnID) *scopeColumn {
-	for i := range cols {
-		col := &cols[i]
-		if col.id == id {
-			return col
-		}
-	}
-
-	return nil
-}
-
 func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
-	exprTransformCtx := transform.ExprTransformContext{}
-	if exprTransformCtx.AggregateInExpr(expr, b.semaCtx.SearchPath) {
+	if b.exprTransformCtx.AggregateInExpr(expr, b.semaCtx.SearchPath) {
 		panic(builderError{
 			pgerror.NewErrorf(pgerror.CodeGroupingError, "aggregate functions are not allowed in %s", op),
 		})
 	}
-	if exprTransformCtx.WindowFuncInExpr(expr) {
+	if b.exprTransformCtx.WindowFuncInExpr(expr) {
 		panic(builderError{
 			pgerror.NewErrorf(pgerror.CodeWindowingError, "window functions are not allowed in %s", op),
 		})
 	}
+}
+
+// resolveDataSource returns the data source in the catalog with the given name.
+// If the name does not resolve to a table, or if the current user does not have
+// the right privileges, then resolveDataSource raises an error.
+func (b *Builder) resolveDataSource(tn *tree.TableName) opt.DataSource {
+	ds, err := b.catalog.ResolveDataSource(b.ctx, tn)
+	if err != nil {
+		panic(builderError{err})
+	}
+	b.checkPrivilege(ds)
+	return ds
+}
+
+// resolveDataSourceFromRef returns the data source in the catalog that matches
+// the given TableRef spec. If no data source matches, or if the current user
+// does not have the right privileges, then resolveDataSourceFromRef raises an
+// error.
+func (b *Builder) resolveDataSourceRef(ref *tree.TableRef) opt.DataSource {
+	ds, err := b.catalog.ResolveDataSourceByID(b.ctx, ref.TableID)
+	if err != nil {
+		panic(builderError{errors.Wrapf(err, "%s", tree.ErrString(ref))})
+	}
+	b.checkPrivilege(ds)
+	return ds
+}
+
+// checkPrivilege ensures that the current user has the privilege needed to
+// access the given data source in the catalog. If not, then checkPrivilege
+// raises an error. It also adds the data source as a dependency to the
+// metadata, so that the privileges can be re-checked on reuse of the memo.
+//
+// TODO(andyk): Add privilegeKind field to Builder when privileges other than
+// SELECT are needed.
+func (b *Builder) checkPrivilege(ds opt.DataSource) {
+	var priv privilege.Kind
+	if !b.skipSelectPrivilegeChecks {
+		priv = privilege.SELECT
+		err := ds.CheckPrivilege(b.ctx, priv)
+		if err != nil {
+			panic(builderError{err})
+		}
+	}
+
+	// Add dependency on this data source to the metadata, so that the metadata
+	// can be cached and later checked for freshness.
+	b.factory.Metadata().AddDependency(ds, priv)
 }

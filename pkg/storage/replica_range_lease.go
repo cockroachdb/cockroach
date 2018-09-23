@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 var leaseStatusLogLimiter = log.Every(5 * time.Second)
@@ -242,9 +243,13 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 		// We use FollowsFrom because the lease request's span can outlive the
 		// parent request. This is possible if parentCtx is canceled after others
 		// have coalesced on to this lease request (see leaseRequestHandle.Cancel).
-		sp = tr.StartSpan(opName, opentracing.FollowsFrom(parentSp.Context()))
+		sp = tr.StartSpan(
+			opName,
+			opentracing.FollowsFrom(parentSp.Context()),
+			tracing.LogTagsFromCtx(parentCtx),
+		)
 	} else {
-		sp = tr.StartSpan(opName)
+		sp = tr.StartSpan(opName, tracing.LogTagsFromCtx(parentCtx))
 	}
 
 	// Create a new context *without* a timeout. Instead, we multiplex the
@@ -289,7 +294,9 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 					if live, liveErr := p.repl.store.cfg.NodeLiveness.IsLive(nextLeaseHolder.NodeID); !live || liveErr != nil {
 						err = errors.Errorf("not incrementing epoch on n%d because next leaseholder (n%d) not live (err = %v)",
 							status.Liveness.NodeID, nextLeaseHolder.NodeID, liveErr)
-						log.Error(ctx, err)
+						if log.V(1) {
+							log.Info(ctx, err)
+						}
 					} else if err = p.repl.store.cfg.NodeLiveness.IncrementEpoch(ctx, status.Liveness); err != nil {
 						log.Error(ctx, err)
 					}
@@ -494,11 +501,18 @@ func (r *Replica) leaseStatus(
 	return status
 }
 
-// requiresExpiringLeaseRLocked returns whether this range uses an
-// expiration-based lease; false if epoch-based. Ranges located before or
-// including the node liveness table must use expiration leases to avoid
-// circular dependencies on the node liveness table. The replica mutex must be
-// held.
+// requiresExpiringLease returns whether this range uses an expiration-based
+// lease; false if epoch-based. Ranges located before or including the node
+// liveness table must use expiration leases to avoid circular dependencies on
+// the node liveness table.
+func (r *Replica) requiresExpiringLease() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.requiresExpiringLeaseRLocked()
+}
+
+// requiresExpiringLeaseRLocked is like requiresExpiringLease, but requires that
+// the replica mutex be held.
 func (r *Replica) requiresExpiringLeaseRLocked() bool {
 	return r.store.cfg.NodeLiveness == nil || !r.store.cfg.EnableEpochRangeLeases ||
 		r.mu.state.Desc.StartKey.Less(roachpb.RKey(keys.NodeLivenessKeyMax))

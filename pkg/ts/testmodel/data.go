@@ -42,7 +42,7 @@ func normalizeTime(time, resolution int64) int64 {
 }
 
 // TimeSlice returns the set of the dataPoints from the supplied series with
-// timestamps that fall in the interval [start, end] (not inclusive of end
+// timestamps that fall in the interval [start, end) (not inclusive of end
 // timestamp).
 func (data DataSeries) TimeSlice(start, end int64) DataSeries {
 	startIdx := sort.Search(len(data), func(i int) bool {

@@ -18,6 +18,7 @@ option go_package = "serverpb";
 
 import "build/info.proto";
 import "gossip/gossip.proto";
+import "roachpb/app_stats.proto";
 import "roachpb/data.proto";
 import "server/diagnosticspb/diagnostics.proto";
 import "server/status/status.proto";
@@ -45,6 +46,10 @@ message CertificateDetails {
   enum CertificateType {
     CA = 0;
     NODE = 1;
+    CLIENT_CA = 2;
+    CLIENT = 3;
+    UI_CA = 4;
+    UI = 5;
   }
 
   message Fields {
@@ -105,7 +110,7 @@ message NodeRequest {
 }
 
 // RaftState gives internal details about a Raft group's state.
-// Closely mirrors the upstream definitions in github.com/coreos/etcd/raft.
+// Closely mirrors the upstream definitions in github.com/etcd-io/etcd/raft.
 message RaftState {
   message Progress {
     uint64 match = 1;
@@ -140,6 +145,9 @@ message RangeProblems {
   // If the replica's quiescent flag doesn't agree with the store's
   // list of replicas that are ticking, warn about it.
   bool quiescent_equals_ticking = 6;
+
+  // When the raft log is too large, it can be a symptom of other issues.
+  bool raft_log_too_large = 7;
 }
 
 message RangeStatistics {
@@ -209,18 +217,19 @@ message GossipRequest {
   string node_id = 1;
 }
 
+message TraceEvent {
+  google.protobuf.Timestamp time = 1
+      [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+  string message = 2;
+}
+
 message AllocatorDryRun {
-  message Event {
-    google.protobuf.Timestamp time = 1
-        [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
-    string message = 2;
-  }
   int64 range_id = 1 [
     (gogoproto.customname) = "RangeID",
     (gogoproto.casttype) =
         "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
   ];
-  repeated Event events = 2;
+  repeated TraceEvent events = 2;
 }
 
 message AllocatorRangeRequest {
@@ -289,6 +298,38 @@ message StacksRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
+}
+
+// Represents the type of file.
+// TODO(ridwanmsharif): Add support for log files. They're currently served
+// by an endpoint that parses the log messages, which is not what the 
+// debug zip client wants.
+enum FileType { HEAP = 0; }
+
+message File {
+  string name = 1;
+  int64 file_size = 2;
+  // Contents may not be populated if only a list of Files are requested.
+  bytes contents = 3;
+}
+
+message GetFilesRequest {
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+  // If list_only is true then the contents of the files will not be populated
+  // in the response. Only filenames and sizes will be returned.
+  bool list_only = 2;
+  FileType type = 5;
+  // Each pattern given is matched with Files of the above type in the node
+  // using filepath.Glob(). The patterns only match to filenames and so path
+  // separators cannot be used.
+  // Example: * will match all files of requested type.
+  repeated string patterns = 6;
+}
+
+message GetFilesResponse {
+  repeated File files = 1;
 }
 
 message ProfileRequest {
@@ -521,6 +562,11 @@ message ProblemRangesResponse {
       (gogoproto.casttype) =
           "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
     ];
+    repeated int64 raft_log_too_large_range_ids = 8 [
+      (gogoproto.customname) = "RaftLogTooLargeRangeIDs",
+      (gogoproto.casttype) =
+          "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+    ];
   }
   reserved 1 to 7;
   // NodeID is the node that submitted all the requests.
@@ -600,10 +646,39 @@ message StoreDetails {
   // encryption_status is a serialized
   // ccl/storageccl/engineccl/enginepbccl/stats.go::EncryptionStatus protobuf.
   bytes encryption_status = 2;
+
+  // Basic file stats when encryption is enabled.
+  // Total files/bytes.
+  uint64 total_files = 3;
+  uint64 total_bytes = 4;
+  // Files/bytes using the active data key.
+  uint64 active_key_files = 5;
+  uint64 active_key_bytes = 6;
 }
 
 message StoresResponse {
   repeated StoreDetails stores = 1 [ (gogoproto.nullable) = false ];
+}
+
+message StatementsRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+}
+
+message StatementsResponse {
+  message ExtendedStatementStatisticsKey {
+    cockroach.sql.StatementStatisticsKey key_data = 1 [(gogoproto.nullable) = false];
+    int32 node_id = 2 [(gogoproto.customname) = "NodeID",
+                        (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  }
+
+  message CollectedStatementStatistics {
+    ExtendedStatementStatisticsKey key = 1 [(gogoproto.nullable) = false];
+    cockroach.sql.StatementStatistics stats = 2 [(gogoproto.nullable) = false];
+  }
+
+  repeated CollectedStatementStatistics statements = 1 [(gogoproto.nullable) = false];
+  // Timestamp of the last stats reset.
+  google.protobuf.Timestamp last_reset = 3 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 }
 
 service Status {
@@ -700,6 +775,11 @@ service Status {
       get : "/_status/metrics/{node_id}"
     };
   }
+  rpc GetFiles(GetFilesRequest) returns (GetFilesResponse) {
+    option (google.api.http) = {
+      get : "/_status/files/{node_id}"
+    };
+  }
   rpc LogFilesList(LogFilesListRequest) returns (LogFilesListResponse) {
     option (google.api.http) = {
       get : "/_status/logfiles/{node_id}"
@@ -741,4 +821,11 @@ service Status {
       get : "/_status/stores/{node_id}"
     };
   }
+
+  rpc Statements(StatementsRequest) returns (StatementsResponse) {
+    option (google.api.http) = {
+      get: "/_status/statements"
+    };
+  }
 }
+

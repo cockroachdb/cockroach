@@ -39,9 +39,10 @@ import (
 
 func TestTableReader(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.TODO())
+	defer s.Stopper().Stop(ctx)
 
 	// Create a table where each row is:
 	//
@@ -126,11 +127,11 @@ func TestTableReader(t *testing.T) {
 				ts.Table = *td
 
 				evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
-				defer evalCtx.Stop(context.Background())
+				defer evalCtx.Stop(ctx)
 				flowCtx := FlowCtx{
-					EvalCtx:  evalCtx,
+					EvalCtx:  &evalCtx,
 					Settings: s.ClusterSettings(),
-					txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
+					txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 					nodeID:   s.NodeID(),
 				}
 
@@ -147,21 +148,21 @@ func TestTableReader(t *testing.T) {
 
 				var results RowSource
 				if rowSource {
-					tr.Start(context.Background())
+					tr.Start(ctx)
 					results = tr
 				} else {
-					tr.Run(context.Background(), nil /* wg */)
+					tr.Run(ctx, nil /* wg */)
 					if !buf.ProducerClosed {
 						t.Fatalf("output RowReceiver not closed")
 					}
-					buf.Start(context.Background())
+					buf.Start(ctx)
 					results = buf
 				}
 
 				var res sqlbase.EncDatumRows
 				for {
 					row, meta := results.Next()
-					if meta != nil && meta.TxnMeta == nil {
+					if meta != nil && meta.TxnCoordMeta == nil {
 						t.Fatalf("unexpected metadata: %+v", meta)
 					}
 					if row == nil {
@@ -180,6 +181,7 @@ func TestTableReader(t *testing.T) {
 // Test that a TableReader outputs metadata about non-local ranges that it read.
 func TestMisplannedRangesMetadata(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	tc := serverutils.StartTestCluster(t, 3, /* numNodes */
 		base.TestClusterArgs{
@@ -188,7 +190,7 @@ func TestMisplannedRangesMetadata(t *testing.T) {
 				UseDatabase: "test",
 			},
 		})
-	defer tc.Stopper().Stop(context.TODO())
+	defer tc.Stopper().Stop(ctx)
 
 	db := tc.ServerConn(0)
 	sqlutils.CreateTable(t, db, "t",
@@ -198,7 +200,7 @@ func TestMisplannedRangesMetadata(t *testing.T) {
 
 	_, err := db.Exec(`
 ALTER TABLE t SPLIT AT VALUES (1), (2), (3);
-ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3);
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3);
 `)
 	if err != nil {
 		t.Fatal(err)
@@ -209,12 +211,12 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 
 	st := tc.Server(0).ClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
-	defer evalCtx.Stop(context.Background())
+	defer evalCtx.Stop(ctx)
 	nodeID := tc.Server(0).NodeID()
 	flowCtx := FlowCtx{
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 		Settings: st,
-		txn:      client.NewTxn(tc.Server(0).DB(), nodeID, client.RootTxn),
+		txn:      client.NewTxn(ctx, tc.Server(0).DB(), nodeID, client.RootTxn),
 		nodeID:   nodeID,
 	}
 	spec := TableReaderSpec{
@@ -240,14 +242,14 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 
 		var results RowSource
 		if rowSource {
-			tr.Start(context.Background())
+			tr.Start(ctx)
 			results = tr
 		} else {
-			tr.Run(context.Background(), nil /* wg */)
+			tr.Run(ctx, nil /* wg */)
 			if !buf.ProducerClosed {
 				t.Fatalf("output RowReceiver not closed")
 			}
-			buf.Start(context.Background())
+			buf.Start(ctx)
 			results = buf
 		}
 
@@ -272,8 +274,8 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 		for _, m := range metas {
 			if len(m.Ranges) > 0 {
 				misplannedRanges = m.Ranges
-			} else if m.TxnMeta == nil {
-				t.Fatalf("expected only txn meta or misplanned ranges, got: %+v", metas)
+			} else if m.TxnCoordMeta == nil {
+				t.Fatalf("expected only txn coord meta or misplanned ranges, got: %+v", metas)
 			}
 		}
 		if len(misplannedRanges) != 2 {
@@ -296,16 +298,22 @@ ALTER TABLE t TESTING_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[3], 3
 // we properly set the limit on the underlying RowFetcher/KVFetcher).
 func TestLimitScans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		UseDatabase: "test",
 	})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	sqlutils.CreateTable(t, sqlDB, "t",
 		"num INT PRIMARY KEY",
 		100, /* numRows */
 		sqlutils.ToRowFn(sqlutils.RowIdxFn))
+
+	// Prevent the merge queue from immediately discarding our splits.
+	if _, err := sqlDB.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false"); err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := sqlDB.Exec("ALTER TABLE t SPLIT AT VALUES (5)"); err != nil {
 		t.Fatal(err)
@@ -314,11 +322,11 @@ func TestLimitScans(t *testing.T) {
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
-	defer evalCtx.Stop(context.Background())
+	defer evalCtx.Stop(ctx)
 	flowCtx := FlowCtx{
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 		Settings: s.ClusterSettings(),
-		txn:      client.NewTxn(kvDB, s.NodeID(), client.RootTxn),
+		txn:      client.NewTxn(ctx, kvDB, s.NodeID(), client.RootTxn),
 		nodeID:   s.NodeID(),
 	}
 	spec := TableReaderSpec{
@@ -329,16 +337,17 @@ func TestLimitScans(t *testing.T) {
 	const limit = 3
 	post := PostProcessSpec{Limit: limit}
 
-	tr, err := newTableReader(&flowCtx, 0 /* processorID */, &spec, &post, nil /* output */)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	// Now we're going to run the tableReader and trace it.
 	tracer := tracing.NewTracer()
 	sp := tracer.StartSpan("root", tracing.Recordable)
 	tracing.StartRecording(sp, tracing.SnowballRecording)
-	ctx := opentracing.ContextWithSpan(context.Background(), sp)
+	ctx = opentracing.ContextWithSpan(ctx, sp)
+	flowCtx.EvalCtx.Context = ctx
+
+	tr, err := newTableReader(&flowCtx, 0 /* processorID */, &spec, &post, nil /* output */)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	tr.Start(ctx)
 	rows := 0
@@ -400,17 +409,18 @@ func BenchmarkTableReader(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	logScope := log.Scope(b)
 	defer logScope.Close(b)
+	ctx := context.Background()
 
 	s, sqlDB, kvDB := serverutils.StartServer(b, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	defer s.Stopper().Stop(ctx)
 
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
-	defer evalCtx.Stop(context.Background())
+	defer evalCtx.Stop(ctx)
 
 	flowCtx := FlowCtx{
-		EvalCtx:  evalCtx,
+		EvalCtx:  &evalCtx,
 		Settings: s.ClusterSettings(),
-		txn:      client.NewTxn(s.DB(), s.NodeID(), client.RootTxn),
+		txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
 		nodeID:   s.NodeID(),
 	}
 
@@ -438,10 +448,10 @@ func BenchmarkTableReader(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				tr.Start(context.Background())
+				tr.Start(ctx)
 				for {
 					row, meta := tr.Next()
-					if meta != nil && meta.TxnMeta == nil {
+					if meta != nil && meta.TxnCoordMeta == nil {
 						b.Fatalf("unexpected metadata: %+v", meta)
 					}
 					if row == nil {

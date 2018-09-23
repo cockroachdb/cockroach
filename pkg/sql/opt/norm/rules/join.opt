@@ -3,38 +3,115 @@
 # =============================================================================
 
 
-# EnsureJoinFiltersAnd replaces an And operator in a Join's On condition with
-# the Filters operator. This allows other rules to rely upon the presence of
-# the Filters when matching. See comment at top of bool.opt for more details.
-# This rule is a special-case of the EnsureJoinFilters rule, for performance
-# reasons (no need to construct a new conditions list) in a common case.
-[EnsureJoinFiltersAnd, Normalize]
-(Join
-    $left:*
-    $right:*
-    (And $conditions:*)
+# PushFilterIntoJoinLeftAndRight pushes a filter into both the left and right
+# sides of an InnerJoin or SemiJoin if it can be mapped to use the columns of
+# both sides. For example, consider this query:
+#
+#   SELECT * FROM a JOIN b ON a.x=b.x AND a.y=b.y AND a.x + b.y < 5
+#
+# In this case, we can map a.x + b.y < 5 to both sides based on the equality
+# filters a.x=b.x AND a.y=b.y. For the left side, we can map it to
+# a.x + a.y < 5, and for the right side, we can map it to b.x + b.y < 5.
+# Given this mapping, we can safely push the filter down to both sides and
+# remove it from the ON filters list.
+#
+# Note that this rule is only applied when the left and right inputs do not have
+# outer columns. If they do, then this rule can cause undetectable cycles with
+# TryDecorrelateSelect, since the filter is pushed down to both sides, but then
+# only pulled up from the right side by TryDecorrelateSelect. For this reason,
+# the rule also does not apply to InnerJoinApply or SemiJoinApply.
+#
+# NOTE: It is important that this rule is first among the join filter push-down
+#       rules.
+[PushFilterIntoJoinLeftAndRight, Normalize]
+(InnerJoin | SemiJoin
+    $left:* & ^(HasOuterCols $left)
+    $right:* & ^(HasOuterCols $right)
+    $filters:(Filters
+        $list:[
+            ...
+            $condition:* &
+                ^(Eq (Variable) (Variable)) &
+                (CanMap $filters $condition $left) &
+                (CanMap $filters $condition $right)
+            ...
+        ]
+    )
 )
 =>
 ((OpName)
-    $left
-    $right
-    (Filters $conditions)
+    (Select
+        $left
+        (Filters [(Map $filters $condition $left)])
+    )
+    (Select
+        $right
+        (Filters [(Map $filters $condition $right)])
+    )
+    (Filters (RemoveListItem $list $condition))
 )
 
-# EnsureJoinFilters adds a Filters operator to a Join's On condition if it does
-# not already exist. This allows other rules to rely upon the presence of the
-# Filters when matching. See comment at top of bool.opt for more details.
-[EnsureJoinFilters, Normalize]
-(Join
+# MapFilterIntoJoinLeft maps a filter that is not bound by the left side of
+# the join to use the columns from the left side. This will allow
+# the filter to be pushed down by the PushFilterIntoJoinLeft rule.
+# For example, consider this query:
+#
+#   SELECT * FROM a INNER JOIN b ON a.x = b.x AND b.x + a.y < 5
+#
+# In this case, we can map b.x + a.y < 5 to the left side by replacing b.x
+# with the equivalent column a.x.
+# NOTE: This rule only applies to cases where it is not possible or not safe
+#       to map the filter to both sides. If it can be mapped to both sides, it
+#       will be handled by PushFilterIntoJoinLeftAndRight (which must be
+#       ordered above this rule). For performance reasons, this rule should
+#       be ordered before PushFilterIntoJoinLeft (otherwise,
+#       PushFilterIntoJoinLeft might need to be applied multiple times).
+[MapFilterIntoJoinLeft, Normalize]
+(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply | SemiJoin | SemiJoinApply
     $left:*
     $right:*
-    $filter:^(Filters | And | True | False)
+    $filters:(Filters
+        $list:[
+            ...
+            $condition:* &
+                ^(Eq (Variable) (Variable)) &
+                ^(IsBoundBy $condition (OutputCols $left)) &
+                (CanMap $filters $condition $left)
+            ...
+        ]
+    )
 )
 =>
 ((OpName)
     $left
     $right
-    (Filters [ $filter ])
+    (Filters (ReplaceListItem $list $condition (Map $filters $condition $left)))
+)
+
+# MapFilterIntoJoinRight is symmetric with MapFilterIntoJoinLeft. It maps
+# Join filter conditions to use columns from the right side of the join rather
+# than the left side. See that rule's comments for more details.
+[MapFilterIntoJoinRight, Normalize]
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
+ SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
+    $left:*
+    $right:*
+    $filters:(Filters
+        $list:[
+            ...
+            $condition:* &
+                ^(Eq (Variable) (Variable)) &
+                ^(IsBoundBy $condition (OutputCols $right)) &
+                (CanMap $filters $condition $right)
+            ...
+        ]
+    )
+)
+=>
+((OpName)
+    $left
+    $right
+    (Filters (ReplaceListItem $list $condition (Map $filters $condition $right)))
 )
 
 # PushFilterIntoJoinLeft pushes Join filter conditions into the left side of the
@@ -63,16 +140,20 @@
 (InnerJoin | InnerJoinApply | RightJoin | RightJoinApply | SemiJoin | SemiJoinApply
     $left:*
     $right:*
-    $on:(Filters $list:[ ... $condition:* & (IsBoundBy $condition $left) ... ])
+    $on:(Filters $list:[
+        ...
+        $condition:* & (IsBoundBy $condition $leftCols:(OutputCols $left))
+        ...
+    ])
 )
 =>
 ((OpName)
     (Select
         $left
-        (Filters (ExtractBoundConditions $list $left))
+        (Filters (ExtractBoundConditions $list $leftCols))
     )
     $right
-    (Filters (ExtractUnboundConditions $list $left))
+    (Filters (ExtractUnboundConditions $list $leftCols))
 )
 
 # PushFilterIntoJoinRight is symmetric with PushFilterIntoJoinLeft. It pushes
@@ -86,27 +167,31 @@
  SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
     $left:*
     $right:*
-    $on:(Filters $list:[ ... $condition:* & (IsBoundBy $condition $right) ... ])
+    $on:(Filters $list:[
+        ...
+        $condition:* & (IsBoundBy $condition $rightCols:(OutputCols $right))
+        ...
+    ])
 )
 =>
 ((OpName)
     $left
     (Select
         $right
-        (Filters (ExtractBoundConditions $list $right))
+        (Filters (ExtractBoundConditions $list $rightCols))
     )
-    (Filters (ExtractUnboundConditions $list $right))
+    (Filters (ExtractUnboundConditions $list $rightCols))
 )
 
-# SimplifyLeftJoin reduces a LeftJoin operator to an InnerJoin operator (or a
-# FullJoin to a RightJoin) when it's known that the join's right input never
-# returns zero rows and when there's no join condition. The outer join only
-# populates the right side with NULL values when it would otherwise not be
-# present.
-[SimplifyLeftJoin, Normalize]
+# SimplifyLeftJoinWithoutFilters reduces a LeftJoin operator to an InnerJoin
+# operator (or a FullJoin to a RightJoin) when it's known that the join's right
+# input never returns zero rows and when there's no join condition. The outer
+# join only populates the right side with NULL values when it would otherwise
+# not be present.
+[SimplifyLeftJoinWithoutFilters, Normalize]
 (LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
     $left:*
-    $right:* & (HasOneOrMoreRows $right)
+    $right:* & ^(CanHaveZeroRows $right)
     $on:(True)
 )
 =>
@@ -117,16 +202,68 @@
     $on
 )
 
-# SimplifyRightJoin reduces a RightJoin operator to an InnerJoin operator (or a
-# FullJoin to a LeftJoin) when it's known that the join's left input never
-# returns zero rows and when there's no join condition. The outer join only
-# populates the left side with NULL values when it would otherwise not be
-# present.
-[SimplifyRightJoin, Normalize]
+# SimplifyRightJoinWithoutFilters reduces a RightJoin operator to an InnerJoin
+# operator (or a FullJoin to a LeftJoin) when it's known that the join's left
+# input never returns zero rows and when there's no join condition. The outer
+# join only populates the left side with NULL values when it would otherwise not
+# be present.
+[SimplifyRightJoinWithoutFilters, Normalize]
 (RightJoin | RightJoinApply | FullJoin | FullJoinApply
-    $left:* & (HasOneOrMoreRows $left)
+    $left:* & ^(CanHaveZeroRows $left)
     $right:*
     $on:(True)
+)
+=>
+(ConstructNonRightJoin
+    (OpName)
+    $left
+    $right
+    $on
+)
+
+# SimplifyLeftJoinWithFilters reduces a LeftJoin operator to an InnerJoin
+# operator (or a FullJoin to a RightJoin) when it's known that every row in the
+# join's left input will match at least one row in the right input. Since every
+# row matches, NULL-extended rows will never be added by the outer join, and
+# therefore can be mapped to an InnerJoin (or RightJoin in case of FullJoin).
+# See JoinConditionMatchesAllLeftRows comment for conditions in which this rule
+# can match.
+#
+# Self-join example:
+#   SELECT * FROM xy LEFT JOIN xy AS xy2 ON xy.y = xy2.y
+#   =>
+#   SELECT * FROM xy INNER JOIN xy AS xy2 ON xy.y = xy2.y
+#
+# Foreign-key example:
+#   SELECT * FROM orders o LEFT JOIN customers c ON o.customer_id = c.id
+#   =>
+#   SELECT * FROM orders o INNER JOIN customers c ON o.customer_id = c.id
+#
+# TODO(andyk): Need to implement foreign key case.
+[SimplifyLeftJoinWithFilters, Normalize]
+(LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
+    $left:*
+    $right:*
+    $on:(Filters) & (JoinFiltersMatchAllLeftRows $left $right $on)
+)
+=>
+(ConstructNonLeftJoin
+    (OpName)
+    $left
+    $right
+    $on
+)
+
+# SimplifyRightJoinWithFilters reduces a RightJoin operator to an InnerJoin
+# operator (or a FullJoin to a LeftJoin) when it's known that every row in the
+# join's right input will match at least one row in the left input. This rule
+# is symmetric with SimplifyLeftJoinWithFilters; see that rule for more details
+# and examples.
+[SimplifyRightJoinWithFilters, Normalize]
+(RightJoin | RightJoinApply | FullJoin | FullJoinApply
+    $left:*
+    $right:*
+    $on:(Filters) & (JoinFiltersMatchAllLeftRows $right $left $on)
 )
 =>
 (ConstructNonRightJoin
@@ -141,7 +278,7 @@
 [EliminateSemiJoin, Normalize]
 (SemiJoin | SemiJoinApply
     $left:*
-    $right:* & (HasOneOrMoreRows $right)
+    $right:* & ^(CanHaveZeroRows $right)
     (True)
 )
 =>
@@ -186,4 +323,74 @@ $left
 (Select
     $left
     $on
+)
+
+# HoistJoinProject lifts a passthrough Project operator from within a Join
+# operator to outside the join. This often allows the Project operator to be
+# merged with an outer Project. Since Project operators tend to prevent other
+# rules from matching, this and other rules try to either push them down (to
+# prune columns), or else to pull them up (to get them out of the way of other
+# operators).
+#
+# TODO(andyk): Add other join types.
+[HoistJoinProject, Normalize]
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
+    $left:*
+    $right:(Project $input:* (Projections []))
+    $on:*
+)
+=>
+(Project
+    ((OpName)
+        $left
+        $input
+        $on
+    )
+    (ProjectColsFromBoth $left $right)
+)
+
+# SimplifyJoinNotNullEquality simplifies an Is/IsNot equality filter condition
+# when it's not possible for it to be null, as in the following case:
+#
+#   WHERE (a=b) IS NOT False
+#
+# If a and b are not null, then this can be simplified to:
+#
+#   WHERE a=b
+#
+# This pattern can be generated by the NormalizeNotAnyFilter rule, and its
+# simplification is necessary for making anti-joins efficient, such as in TPCH
+# query 16.
+[SimplifyJoinNotNullEquality, Normalize]
+(Join
+    $left:*
+    $right:*
+    $on:(Filters $list:[
+        ...
+        $condition:(Is | IsNot
+            $eq:(Eq
+                # Check whether variable is a not-null column of left or right input.
+                (Variable $col1:* & (IsColNotNull2 $col1 $left $right))
+                (Variable $col2:* & (IsColNotNull2 $col2 $left $right))
+            )
+            $cnst:(True | False | Null)
+        )
+        ...
+    ])
+)
+=>
+((OpName)
+    $left
+    $right
+    (Filters
+        (ReplaceListItem
+            $list
+            $condition
+            (SimplifyNotNullEquality
+                $eq
+                (OpName $condition)
+                (OpName $cnst)
+            )
+        )
+    )
 )

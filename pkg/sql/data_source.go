@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -79,7 +78,7 @@ func (p *planner) getVirtualDataSource(
 		return planDataSource{}, err
 	}
 
-	columns, constructor := virtual.getPlanInfo(ctx)
+	columns, constructor := virtual.getPlanInfo()
 
 	// Define the name of the source visible in EXPLAIN(NOEXPAND).
 	sourceName := tree.MakeTableNameWithSchema(
@@ -101,7 +100,10 @@ func (p *planner) getVirtualDataSource(
 // getDataSource builds a planDataSource from a single data source clause
 // (TableExpr) in a SelectClause.
 func (p *planner) getDataSource(
-	ctx context.Context, src tree.TableExpr, hints *tree.IndexHints, scanVisibility scanVisibility,
+	ctx context.Context,
+	src tree.TableExpr,
+	indexFlags *tree.IndexFlags,
+	scanVisibility scanVisibility,
 ) (planDataSource, error) {
 	switch t := src.(type) {
 	case *tree.NormalizableTableName:
@@ -125,10 +127,10 @@ func (p *planner) getDataSource(
 		}
 
 		colCfg := scanColumnsConfig{visibility: scanVisibility}
-		return p.getPlanForDesc(ctx, desc, tn, hints, colCfg)
+		return p.getPlanForDesc(ctx, desc, tn, indexFlags, colCfg)
 
 	case *tree.RowsFromExpr:
-		return p.getPlanForRowsFrom(ctx, sqlbase.AnonymousTable, t.Items...)
+		return p.getPlanForRowsFrom(ctx, t.Items...)
 
 	case *tree.Subquery:
 		return p.getSubqueryPlan(ctx, sqlbase.AnonymousTable, t.Select, nil)
@@ -161,19 +163,19 @@ func (p *planner) getDataSource(
 		}, nil
 
 	case *tree.ParenTableExpr:
-		return p.getDataSource(ctx, t.Expr, hints, scanVisibility)
+		return p.getDataSource(ctx, t.Expr, indexFlags, scanVisibility)
 
 	case *tree.TableRef:
-		return p.getTableScanByRef(ctx, t, hints, scanVisibility)
+		return p.getTableScanByRef(ctx, t, indexFlags, scanVisibility)
 
 	case *tree.AliasedTableExpr:
 		// Alias clause: source AS alias(cols...)
 
-		if t.Hints != nil {
-			hints = t.Hints
+		if t.IndexFlags != nil {
+			indexFlags = t.IndexFlags
 		}
 
-		src, err := p.getDataSource(ctx, t.Expr, hints, scanVisibility)
+		src, err := p.getDataSource(ctx, t.Expr, indexFlags, scanVisibility)
 		if err != nil {
 			return src, err
 		}
@@ -208,23 +210,21 @@ func (p *planner) QualifyWithDatabase(
 	return tn, nil
 }
 
-func (p *planner) getTableDescByID(
-	ctx context.Context, tableID sqlbase.ID,
-) (*sqlbase.TableDescriptor, error) {
-	// TODO(knz): replace this by an API on SchemaAccessor/SchemaResolver.
-	descFunc := p.Tables().getTableVersionByID
-	if p.avoidCachedDescriptors {
-		descFunc = sqlbase.GetTableDescFromID
-	}
-	return descFunc(ctx, p.txn, tableID)
-}
-
 func (p *planner) getTableScanByRef(
-	ctx context.Context, tref *tree.TableRef, hints *tree.IndexHints, scanVisibility scanVisibility,
+	ctx context.Context,
+	tref *tree.TableRef,
+	indexFlags *tree.IndexFlags,
+	scanVisibility scanVisibility,
 ) (planDataSource, error) {
-	desc, err := p.getTableDescByID(ctx, sqlbase.ID(tref.TableID))
+	flags := ObjectLookupFlags{CommonLookupFlags{txn: p.txn, avoidCached: p.avoidCachedDescriptors}}
+	desc, err := p.Tables().getTableVersionByID(ctx, sqlbase.ID(tref.TableID), flags)
 	if err != nil {
 		return planDataSource{}, errors.Wrapf(err, "%s", tree.ErrString(tref))
+	}
+
+	if tref.Columns != nil && len(tref.Columns) == 0 {
+		return planDataSource{}, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"an explicit list of column IDs must include at least one column")
 	}
 
 	// Ideally, we'd like to populate DatabaseName here, however that
@@ -242,7 +242,7 @@ func (p *planner) getTableScanByRef(
 		addUnwantedAsHidden: true,
 		visibility:          scanVisibility,
 	}
-	src, err := p.getPlanForDesc(ctx, desc, &tn, hints, colCfg)
+	src, err := p.getPlanForDesc(ctx, desc, &tn, indexFlags, colCfg)
 	if err != nil {
 		return src, err
 	}
@@ -271,13 +271,9 @@ func renameSource(
 		if vg, ok := src.plan.(*projectSetNode); ok &&
 			isAnonymousTable && noColNameSpecified && len(vg.funcs) == 1 {
 			// And we only pluck the name if the projection is done over the
-			// unary table.
-			if _, ok := vg.source.(*unaryNode); ok {
-				// And there is just one column in the result.
-				if tType, ok := vg.funcs[0].ResolvedType().(types.TTuple); ok &&
-					len(tType.Types) == 1 {
-					colAlias = tree.NameList{as.Alias}
-				}
+			// unary table, and there is just one column in the result.
+			if _, ok := vg.source.(*unaryNode); ok && vg.numColsPerGen[0] == 1 {
+				colAlias = tree.NameList{as.Alias}
 			}
 		}
 
@@ -316,7 +312,7 @@ func (p *planner) getPlanForDesc(
 	ctx context.Context,
 	desc *sqlbase.TableDescriptor,
 	tn *tree.TableName,
-	hints *tree.IndexHints,
+	indexFlags *tree.IndexFlags,
 	colCfg scanColumnsConfig,
 ) (planDataSource, error) {
 	if desc.IsView() {
@@ -336,7 +332,7 @@ func (p *planner) getPlanForDesc(
 
 	// This name designates a real table.
 	scan := p.Scan()
-	if err := scan.initTable(ctx, p, desc, hints, colCfg); err != nil {
+	if err := scan.initTable(ctx, p, desc, indexFlags, colCfg); err != nil {
 		return planDataSource{}, err
 	}
 
@@ -423,16 +419,11 @@ func (p *planner) getSubqueryPlan(
 
 // getPlanForRowsFrom builds the plan for a ROWS FROM(...) expression.
 func (p *planner) getPlanForRowsFrom(
-	ctx context.Context, srcName tree.TableName, exprs ...tree.Expr,
+	ctx context.Context, exprs ...tree.Expr,
 ) (planDataSource, error) {
-	plan, err := p.ProjectSet(ctx, &unaryNode{}, "ROWS FROM", exprs...)
-	if err != nil {
-		return planDataSource{}, err
-	}
-	return planDataSource{
-		info: sqlbase.NewSourceInfoForSingleTable(srcName, planColumns(plan)),
-		plan: plan,
-	}, nil
+	srcPlan := &unaryNode{}
+	srcInfo := sqlbase.NewSourceInfoForSingleTable(sqlbase.AnonymousTable, nil)
+	return p.ProjectSet(ctx, srcPlan, srcInfo, "ROWS FROM", nil, exprs...)
 }
 
 func (p *planner) getSequenceSource(

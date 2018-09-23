@@ -17,6 +17,8 @@ package settings
 import (
 	"fmt"
 	"sort"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Registry contains all defined settings, their types and default values.
@@ -32,10 +34,13 @@ var Registry = make(map[string]Setting)
 // When a setting is removed, it should be added to this list so that we cannot
 // accidentally reuse its name, potentially mis-handling older values.
 var retiredSettings = map[string]struct{}{
-	//removed as of 2.0.
+	// removed as of 2.0.
 	"kv.gc.batch_size":                     {},
 	"kv.transaction.max_intents":           {},
 	"diagnostics.reporting.report_metrics": {},
+	// removed as of 2.1.
+	"kv.allocator.stat_based_rebalancing.enabled": {},
+	"kv.allocator.stat_rebalance_threshold":       {},
 }
 
 // Register adds a setting to the registry.
@@ -45,6 +50,12 @@ func register(key, desc string, s Setting) {
 	}
 	if _, ok := Registry[key]; ok {
 		panic(fmt.Sprintf("setting already defined: %s", key))
+	}
+	if len(desc) == 0 {
+		panic(fmt.Sprintf("setting missing description: %s", key))
+	}
+	if r, _ := utf8.DecodeRuneInString(desc); unicode.IsUpper(r) {
+		panic(fmt.Sprintf("setting descriptions should start with a lowercase letter: %q", desc))
 	}
 	s.setDescription(desc)
 	Registry[key] = s

@@ -236,7 +236,8 @@ func (n *unionNode) readRight(params runParams) (bool, error) {
 			return true, nil
 		}
 		n.run.scratch = n.run.scratch[:0]
-		if n.run.scratch, err = sqlbase.EncodeDatums(n.run.scratch, n.right.Values()); err != nil {
+		if n.run.scratch, err = sqlbase.EncodeDatumsKeyAscending(
+			n.run.scratch, n.right.Values()); err != nil {
 			return false, err
 		}
 		// TODO(dan): Sending the entire encodeDTuple to be stored in the map would
@@ -262,7 +263,8 @@ func (n *unionNode) readLeft(params runParams) (bool, error) {
 			return true, nil
 		}
 		n.run.scratch = n.run.scratch[:0]
-		if n.run.scratch, err = sqlbase.EncodeDatums(n.run.scratch, n.left.Values()); err != nil {
+		if n.run.scratch, err = sqlbase.EncodeDatumsKeyAscending(
+			n.run.scratch, n.left.Values()); err != nil {
 			return false, err
 		}
 		if n.emit.emitLeft(n.run.scratch) {

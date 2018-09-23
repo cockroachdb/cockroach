@@ -33,15 +33,16 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
-	"github.com/cockroachdb/cockroach/pkg/util/color"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/ttycolor"
 	"github.com/petermattis/goid"
 )
 
@@ -444,7 +445,7 @@ var noColor bool
 // 	line             The line number
 // 	msg              The user-supplied message
 func formatHeader(
-	s Severity, now time.Time, gid int, file string, line int, cp color.Profile,
+	s Severity, now time.Time, gid int, file string, line int, cp ttycolor.Profile,
 ) *buffer {
 	if noColor {
 		cp = nil
@@ -463,11 +464,11 @@ func formatHeader(
 	var prefix []byte
 	switch s {
 	case Severity_INFO:
-		prefix = cp[color.Cyan]
+		prefix = cp[ttycolor.Cyan]
 	case Severity_WARNING:
-		prefix = cp[color.Yellow]
+		prefix = cp[ttycolor.Yellow]
 	case Severity_ERROR, Severity_FATAL:
-		prefix = cp[color.Red]
+		prefix = cp[ttycolor.Red]
 	}
 	n += copy(tmp, prefix)
 	// Avoid Fprintf, for speed. The format is so simple that we can do it quickly by hand.
@@ -483,7 +484,7 @@ func formatHeader(
 	n += buf.twoDigits(n, year-2000)
 	n += buf.twoDigits(n, int(month))
 	n += buf.twoDigits(n, day)
-	n += copy(tmp[n:], cp[color.Gray]) // gray for time, file & line
+	n += copy(tmp[n:], cp[ttycolor.Gray]) // gray for time, file & line
 	tmp[n] = ' '
 	n++
 	n += buf.twoDigits(n, hour)
@@ -511,7 +512,7 @@ func formatHeader(
 	// Extra space between the header and the actual message for scannability.
 	tmp[n] = ' '
 	n++
-	n += copy(tmp[n:], cp[color.Reset])
+	n += copy(tmp[n:], cp[ttycolor.Reset])
 	tmp[n] = ' '
 	n++
 	buf.Write(tmp[:n])
@@ -562,7 +563,7 @@ func (buf *buffer) someDigits(i, d int) int {
 	return copy(buf.tmp[i:], buf.tmp[j:])
 }
 
-func formatLogEntry(entry Entry, stacks []byte, cp color.Profile) *buffer {
+func formatLogEntry(entry Entry, stacks []byte, cp ttycolor.Profile) *buffer {
 	buf := formatHeader(entry.Severity, timeutil.Unix(0, entry.Time),
 		int(entry.Goroutine), entry.File, int(entry.Line), cp)
 	_, _ = buf.WriteString(entry.Message)
@@ -582,9 +583,13 @@ func init() {
 	logging.stderrThreshold = Severity_INFO
 	logging.fileThreshold = Severity_INFO
 
+	logging.pcsPool = sync.Pool{
+		New: func() interface{} {
+			return [1]uintptr{}
+		},
+	}
 	logging.prefix = program
 	logging.setVState(0, nil, false)
-	logging.exitFunc = os.Exit
 	logging.gcNotify = make(chan struct{}, 1)
 	logging.fatalCh = make(chan struct{})
 
@@ -674,8 +679,9 @@ type loggingT struct {
 	file flushSyncWriter
 	// syncWrites if true calls file.Flush and file.Sync on every log write.
 	syncWrites bool
-	// pcs is used in V to avoid an allocation when computing the caller's PC.
-	pcs [1]uintptr
+	// pcsPool maintains a set of [1]uintptr buffers to be used in V to avoid
+	// allocating every time we compute the caller's PC.
+	pcsPool sync.Pool
 	// vmap is a cache of the V Level for each V() call site, identified by PC.
 	// It is wiped whenever the vmodule flag changes state.
 	vmap map[uintptr]level
@@ -689,11 +695,14 @@ type loggingT struct {
 	disableDaemons bool
 	// These flags are modified only under lock, although verbosity may be fetched
 	// safely using atomic.LoadInt32.
-	vmodule   moduleSpec    // The state of the --vmodule flag.
-	verbosity level         // V logging level, the value of the --verbosity flag/
-	exitFunc  func(int)     // func that will be called on fatal errors
-	gcNotify  chan struct{} // notify GC daemon that a new log file was created
-	fatalCh   chan struct{} // closed on fatal error
+	vmodule      moduleSpec // The state of the --vmodule flag.
+	verbosity    level      // V logging level, the value of the --verbosity flag/
+	exitOverride struct {
+		f         func(int) // overrides os.Exit when non-nil; testing only
+		hideStack bool      // hides stack trace; only in effect when f is not nil
+	}
+	gcNotify chan struct{} // notify GC daemon that a new log file was created
+	fatalCh  chan struct{} // closed on fatal error
 
 	interceptor atomic.Value // InterceptorFn
 
@@ -848,8 +857,15 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		//
 		// https://github.com/cockroachdb/cockroach/issues/23119
 		fatalTrigger = make(chan struct{})
-		exitFunc := l.exitFunc
+		exitFunc := os.Exit
+		if l.exitOverride.f != nil {
+			if l.exitOverride.hideStack {
+				stacks = []byte("stack trace omitted via SetExitFunc)\n")
+			}
+			exitFunc = l.exitOverride.f
+		}
 		exitCalled := make(chan struct{})
+
 		defer func() {
 			<-exitCalled
 		}()
@@ -935,7 +951,7 @@ func (l *loggingT) outputToStderr(entry Entry, stacks []byte) {
 
 // processForStderr formats a log entry for output to standard error.
 func (l *loggingT) processForStderr(entry Entry, stacks []byte) *buffer {
-	return formatLogEntry(entry, stacks, color.StderrProfile)
+	return formatLogEntry(entry, stacks, ttycolor.StderrProfile)
 }
 
 // processForFile formats a log entry for output to a file.
@@ -998,7 +1014,11 @@ func (l *loggingT) exitLocked(err error) {
 		return
 	}
 	l.flushAndSync(true /*doSync*/)
-	l.exitFunc(2)
+	if l.exitOverride.f != nil {
+		l.exitOverride.f(2)
+	} else {
+		os.Exit(2)
+	}
 }
 
 // syncBuffer joins a bufio.Writer to its underlying file, providing access to the
@@ -1375,27 +1395,30 @@ func VDepth(l int32, depth int) bool {
 		return true
 	}
 
-	// It's off globally but it vmodule may still be set.
+	// It's off globally but vmodule may still be set.
 	// Here is another cheap but safe test to see if vmodule is enabled.
 	if atomic.LoadInt32(&logging.filterLength) > 0 {
-		// Now we need a proper lock to use the logging structure. The pcs field
-		// is shared so we must lock before accessing it. This is fairly expensive,
-		// but if V logging is enabled we're slow anyway.
-		logging.mu.Lock()
+		// Grab a buffer to use for reading the program counter. Keeping the
+		// interface{} version around to Put back into the pool rather than
+		// Put-ting the array saves an interface allocation.
+		poolObj := logging.pcsPool.Get()
+		pcs := poolObj.([1]uintptr)
 		// We prefer not to use a defer in this function, which can be used in hot
 		// paths, because a defer anywhere in the body of a function causes a call
-		// to runtime.deferreturn at the end of that function. This call has a
+		// to runtime.deferreturn at the end of that function, which has a
 		// measurable performance penalty when in a very hot path.
-		// defer logging.mu.Unlock()
-		if runtime.Callers(2+depth, logging.pcs[:]) == 0 {
-			logging.mu.Unlock()
+		// defer logging.pcsPool.Put(pcs)
+		if runtime.Callers(2+depth, pcs[:]) == 0 {
+			logging.pcsPool.Put(poolObj)
 			return false
 		}
-		v, ok := logging.vmap[logging.pcs[0]]
+		logging.mu.Lock()
+		v, ok := logging.vmap[pcs[0]]
 		if !ok {
-			v = logging.setV(logging.pcs[0])
+			v = logging.setV(pcs[0])
 		}
 		logging.mu.Unlock()
+		logging.pcsPool.Put(poolObj)
 		return v >= level(l)
 	}
 	return false

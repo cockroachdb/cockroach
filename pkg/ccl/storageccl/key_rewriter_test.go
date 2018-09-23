@@ -68,7 +68,7 @@ func TestKeyRewriter(t *testing.T) {
 		},
 	}
 
-	kr, err := MakeKeyRewriter(rekeys)
+	kr, err := MakeKeyRewriterFromRekeys(rekeys)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,15 +113,9 @@ func TestKeyRewriter(t *testing.T) {
 		desc.ID = oldID + 10
 		desc2 := sqlbase.DescriptorTable
 		desc2.ID += 10
-		newKr, err := MakeKeyRewriter([]roachpb.ImportRequest_TableRekey{
-			{
-				OldID:   uint32(oldID),
-				NewDesc: mustMarshalDesc(t, &desc),
-			},
-			{
-				OldID:   uint32(sqlbase.DescriptorTable.ID),
-				NewDesc: mustMarshalDesc(t, &desc2),
-			},
+		newKr, err := MakeKeyRewriterFromRekeys([]roachpb.ImportRequest_TableRekey{
+			{OldID: uint32(oldID), NewDesc: mustMarshalDesc(t, &desc)},
+			{OldID: uint32(sqlbase.DescriptorTable.ID), NewDesc: mustMarshalDesc(t, &desc2)},
 		})
 		if err != nil {
 			t.Fatal(err)

@@ -20,6 +20,7 @@ import (
 	gosql "database/sql"
 	"math/rand"
 	"net/url"
+	"strings"
 	"sync"
 
 	"fmt"
@@ -36,10 +37,11 @@ import (
 type tpcc struct {
 	flags workload.Flags
 
-	seed        int64
-	warehouses  int
-	interleaved bool
-	nowString   string
+	seed             int64
+	warehouses       int
+	activeWarehouses int
+	interleaved      bool
+	nowString        string
 
 	mix        string
 	doWaits    bool
@@ -107,6 +109,7 @@ var tpccMeta = workload.Meta{
 			`wait`:               {RuntimeOnly: true},
 			`workers`:            {RuntimeOnly: true},
 			`zones`:              {RuntimeOnly: true},
+			`active-warehouses`:  {RuntimeOnly: true},
 			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
 		}
 
@@ -128,6 +131,7 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
 		g.flags.IntVar(&g.partitions, `partitions`, 0, `Partition tables (requires split)`)
 		g.flags.IntVar(&g.affinityPartition, `partition-affinity`, -1, `Run load generator against specific partition (requires partitions)`)
+		g.flags.IntVar(&g.activeWarehouses, `active-warehouses`, 0, `Run the load generator against a specific number of warehouses. Defaults to --warehouses'`)
 		g.flags.BoolVar(&g.scatter, `scatter`, false, `Scatter ranges`)
 		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
@@ -148,12 +152,20 @@ func (w *tpcc) Flags() workload.Flags { return w.flags }
 func (w *tpcc) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
-			if w.workers == 0 {
-				w.workers = w.warehouses * numWorkersPerWarehouse
+			if w.activeWarehouses > w.warehouses {
+				return errors.Errorf(`--active-warehouses needs to be less than or equal to warehouses`)
 			}
-			if w.doWaits && w.workers != w.warehouses*numWorkersPerWarehouse {
+
+			if w.activeWarehouses == 0 {
+				w.activeWarehouses = w.warehouses
+			}
+
+			if w.workers == 0 {
+				w.workers = w.activeWarehouses * numWorkersPerWarehouse
+			}
+			if w.doWaits && w.workers != w.activeWarehouses*numWorkersPerWarehouse {
 				return errors.Errorf(`--waits=true and --warehouses=%d requires --workers=%d`,
-					w.warehouses, w.warehouses*numWorkersPerWarehouse)
+					w.activeWarehouses, w.warehouses*numWorkersPerWarehouse)
 			}
 
 			if w.partitions != 0 && !w.split {
@@ -185,29 +197,35 @@ func (w *tpcc) Hooks() workload.Hooks {
 			return initializeMix(w)
 		},
 		PostLoad: func(sqlDB *gosql.DB) error {
-			fkStmts := []string{
-				`alter table district add foreign key (d_w_id) references warehouse (w_id)`,
-				`alter table customer add foreign key (c_w_id, c_d_id) references district (d_w_id, d_id)`,
-				`alter table history add foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id)`,
-				`alter table history add foreign key (h_w_id, h_d_id) references district (d_w_id, d_id)`,
-				`alter table "order" add foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id)`,
-				`alter table stock add foreign key (s_w_id) references warehouse (w_id)`,
-				`alter table stock add foreign key (s_i_id) references item (i_id)`,
-				`alter table order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id)`,
-				`alter table order_line add foreign key (ol_supply_w_id, ol_d_id) references stock (s_w_id, s_i_id)`,
-			}
-			for _, fkStmt := range fkStmts {
-				if _, err := sqlDB.Exec(fkStmt); err != nil {
-					return err
+			if w.fks {
+				fkStmts := []string{
+					`alter table district add foreign key (d_w_id) references warehouse (w_id)`,
+					`alter table customer add foreign key (c_w_id, c_d_id) references district (d_w_id, d_id)`,
+					`alter table history add foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id)`,
+					`alter table history add foreign key (h_w_id, h_d_id) references district (d_w_id, d_id)`,
+					`alter table "order" add foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id)`,
+					`alter table stock add foreign key (s_w_id) references warehouse (w_id)`,
+					`alter table stock add foreign key (s_i_id) references item (i_id)`,
+					`alter table order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id)`,
+					`alter table order_line add foreign key (ol_supply_w_id, ol_d_id) references stock (s_w_id, s_i_id)`,
+				}
+				for _, fkStmt := range fkStmts {
+					if _, err := sqlDB.Exec(fkStmt); err != nil {
+						// If the statement failed because the fk already exists,
+						// ignore it. Return the error for any other reason.
+						const duplFKErr = "columns cannot be used by multiple foreign key constraints"
+						if !strings.Contains(err.Error(), duplFKErr) {
+							return err
+						}
+					}
 				}
 			}
 			return nil
 		},
-		PostRun: func(start time.Time) error {
+		PostRun: func(startElapsed time.Duration) error {
 			w.auditor.runChecks()
 			const totalHeader = "\n_elapsed_______tpmC____efc__avg(ms)__p50(ms)__p90(ms)__p95(ms)__p99(ms)_pMax(ms)"
 			fmt.Println(totalHeader)
-			startElapsed := timeutil.Since(start)
 
 			const newOrderName = `newOrder`
 			w.reg.Tick(func(t workload.HistogramTick) {
@@ -216,7 +234,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 					fmt.Printf("%7.1fs %10.1f %5.1f%% %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f\n",
 						startElapsed.Seconds(),
 						tpmC,
-						100*tpmC/(12.86*float64(w.warehouses)),
+						100*tpmC/(12.86*float64(w.activeWarehouses)),
 						time.Duration(t.Cumulative.Mean()).Seconds()*1000,
 						time.Duration(t.Cumulative.ValueAtQuantile(50)).Seconds()*1000,
 						time.Duration(t.Cumulative.ValueAtQuantile(90)).Seconds()*1000,
@@ -356,7 +374,7 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 
 	w.usePostgres = parsedURL.Port() == "5432"
 
-	nConns := w.warehouses / len(urls)
+	nConns := w.activeWarehouses / len(urls)
 	dbs := make([]*gosql.DB, len(urls))
 	for i, url := range urls {
 		dbs[i], err = gosql.Open(`postgres`, url)
@@ -385,7 +403,7 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 			}
 		}
 	} else {
-		fmt.Println("Tables are not being parititioned because they've been previously partitioned.")
+		fmt.Println("Tables are not being partitioned because they've been previously partitioned.")
 	}
 
 	if w.scatter {
@@ -414,17 +432,16 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 
 	w.reg = reg
 
+	startWarehouse := 0
+	if w.affinityPartition != -1 {
+		startWarehouse = w.affinityPartition * (w.warehouses / w.partitions)
+	}
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for workerIdx := 0; workerIdx < w.workers; workerIdx++ {
-		warehouse := workerIdx % w.warehouses
+		warehouse := workerIdx % w.activeWarehouses
 		// NB: Each partition contains "warehouses / partitions" warehouses. See
 		// partitionTables().
-		p := (warehouse * w.partitions) / w.warehouses
-		// Here we're making sure that if we have a warehouse affinity, that we only create
-		// workers for the correct warehouses.
-		if w.affinityPartition != -1 && p != w.affinityPartition {
-			continue
-		}
+		p := (warehouse * w.partitions) / w.activeWarehouses
 		dbs := partitionDBs[p]
 		db := dbs[warehouse%len(dbs)]
 		worker := &worker{
@@ -432,7 +449,7 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 			hists:     reg.GetHandle(),
 			idx:       workerIdx,
 			db:        db,
-			warehouse: warehouse,
+			warehouse: warehouse + startWarehouse,
 			deckPerm:  make([]int, len(w.deck)),
 			permIdx:   len(w.deck),
 		}

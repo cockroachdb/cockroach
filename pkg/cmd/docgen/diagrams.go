@@ -378,6 +378,21 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
+		name:   "alter_type",
+		stmt:   "alter_onetable_stmt",
+		inline: []string{"alter_table_cmds", "alter_table_cmd", "opt_column", "opt_set_data"},
+		match:  []*regexp.Regexp{regexp.MustCompile(`'ALTER' ('COLUMN')? column_name ('SET' 'DATA')? 'TYPE'`)},
+		regreplace: map[string]string{
+			regList:                   "",
+			" opt_collate":            "",
+			" opt_alter_column_using": "",
+		},
+		replace: map[string]string{
+			"relation_expr": "table_name",
+		},
+		unlink: []string{"table_name", "column_name"},
+	},
+	{
 		name:    "alter_view",
 		stmt:    "alter_rename_view_stmt",
 		inline:  []string{"opt_transaction"},
@@ -390,7 +405,7 @@ var specs = []stmtSpec{
 		match:  []*regexp.Regexp{regexp.MustCompile("'BACKUP'")},
 		replace: map[string]string{
 			"non_reserved_word_or_sconst":                     "destination",
-			"'AS' 'OF' 'SYSTEM' 'TIME' a_expr_const":          "'AS OF SYSTEM TIME' timestamp",
+			"'AS' 'OF' 'SYSTEM' 'TIME' a_expr":                "'AS OF SYSTEM TIME' timestamp",
 			"'INCREMENTAL' 'FROM' string_or_placeholder_list": "'INCREMENTAL FROM' full_backup_location ( | ',' incremental_backup_location ( ',' incremental_backup_location )* )",
 			"'WITH' 'OPTIONS' '(' kv_option_list ')'":         "",
 			"targets": "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
@@ -444,9 +459,22 @@ var specs = []stmtSpec{
 	{name: "cancel_session", stmt: "cancel_sessions_stmt", replace: map[string]string{"a_expr": "session_id"}, unlink: []string{"session_id"}},
 	{name: "create_database_stmt", inline: []string{"opt_encoding_clause"}, replace: map[string]string{"'SCONST'": "encoding"}, unlink: []string{"name", "encoding"}},
 	{
+		name:   "create_changefeed_stmt",
+		inline: []string{"changefeed_targets", "single_table_pattern_list", "opt_changefeed_sink", "opt_with_options", "kv_option_list", "kv_option"},
+		replace: map[string]string{
+			"table_option":                 "table_name",
+			"'INTO' string_or_placeholder": "'INTO' sink",
+			"name":                      "option",
+			"'SCONST'":                  "option",
+			"'=' string_or_placeholder": "'=' value"},
+		exclude: []*regexp.Regexp{
+			regexp.MustCompile("'OPTIONS'")},
+		unlink: []string{"table_name", "sink", "option", "value"},
+	},
+	{
 		name:    "create_index_stmt",
 		inline:  []string{"opt_unique", "opt_storing", "storing", "opt_name", "index_params", "index_elem", "opt_asc_desc"},
-		replace: map[string]string{"opt_using_gin": ""},
+		replace: map[string]string{"opt_using_gin_btree": ""},
 		exclude: []*regexp.Regexp{regexp.MustCompile("'CREATE' 'INVERTED'")},
 	},
 	{
@@ -457,7 +485,7 @@ var specs = []stmtSpec{
 		replace: map[string]string{
 			" opt_index_name":                      "",
 			" opt_partition_by":                    "",
-			" opt_using_gin":                       "",
+			" opt_using_gin_btree":                 "",
 			"'ON' table_name '(' index_params ')'": "'...'",
 			"storing '(' name_list ')'":            "'STORING' '(' stored_columns ')'",
 			"table_name '(' name_list":             "parent_table '(' interleave_prefix",
@@ -642,7 +670,7 @@ var specs = []stmtSpec{
 		name:   "explain_stmt",
 		inline: []string{"explain_option_list"},
 		replace: map[string]string{
-			"explain_option_name": "( | 'EXPRS' | 'METADATA' | 'QUALIFY' | 'VERBOSE' | 'TYPES' )",
+			"explain_option_name": "( | 'EXPRS' | 'METADATA' | 'QUALIFY' | 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' )",
 		},
 	},
 	{
@@ -706,8 +734,10 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
-		name:   "on_conflict",
-		inline: []string{"opt_conf_expr", "name_list", "where_clause", "set_clause_list", "insert_column_list", "insert_column_item", "set_clause", "single_set_clause", "multiple_set_clause", "in_expr", "expr_list"},
+		name: "on_conflict",
+		inline: []string{"opt_conf_expr", "name_list", "where_clause", "set_clause_list", "insert_column_list",
+			"insert_column_item", "set_clause", "single_set_clause", "multiple_set_clause", "in_expr", "expr_list",
+			"expr_tuple1_ambiguous", "tuple1_ambiguous_values"},
 		replace: map[string]string{
 			"select_with_parens": "'(' select_stmt ')'",
 		},
@@ -782,7 +812,7 @@ var specs = []stmtSpec{
 		stmt:   "restore_stmt",
 		inline: []string{"as_of_clause", "opt_with_options"},
 		replace: map[string]string{
-			"a_expr_const":                            "timestamp",
+			"a_expr":                                  "timestamp",
 			"string_or_placeholder_list":              "full_backup_location ( | incremental_backup_location ( ',' incremental_backup_location )*)",
 			"'WITH' 'OPTIONS' '(' kv_option_list ')'": "",
 			"targets": "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
@@ -886,24 +916,24 @@ var specs = []stmtSpec{
 		name:   "table_ref",
 		inline: []string{"opt_ordinality", "opt_alias_clause", "opt_expr_list", "opt_column_list", "name_list", "alias_clause"},
 		replace: map[string]string{
-			"select_with_parens":                 "'(' select_stmt ')'",
-			"opt_index_hints":                    "( '@' scan_parameters | )",
-			"relation_expr":                      "table_name",
-			"func_name '(' ( expr_list |  ) ')'": "func_application",
+			"select_with_parens": "'(' select_stmt ')'",
+			"opt_index_flags":    "( '@' scan_parameters | )",
+			"relation_expr":      "table_name",
+			"func_table":         "func_application",
 			//			"| func_name '(' ( expr_list |  ) ')' ( 'WITH' 'ORDINALITY' |  ) ( ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) ) |  )": "",
 			"| special_function ( 'WITH' 'ORDINALITY' |  ) ( ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) ) |  )": "",
 			"| '(' joined_table ')' ( 'WITH' 'ORDINALITY' |  ) ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) )":    "| '(' joined_table ')' ( 'WITH' 'ORDINALITY' |  ) ( ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) ) |  )",
 		},
 		unlink: []string{"index_name"},
 		relink: map[string]string{
-			"scan_parameters": "opt_index_hints",
+			"scan_parameters": "opt_index_flags",
 		},
 		nosplit: true,
 	},
 	{
 		name:   "set_var",
 		stmt:   "set_stmt",
-		inline: []string{"set_session_stmt", "set_rest_more", "generic_set", "var_list"},
+		inline: []string{"set_session_stmt", "set_rest_more", "generic_set", "var_list", "to_or_eq"},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile(`'SET' . 'TRANSACTION'`),
 			regexp.MustCompile(`'SET' 'TRANSACTION'`),
@@ -920,7 +950,7 @@ var specs = []stmtSpec{
 	{
 		name:   "set_cluster_setting",
 		stmt:   "set_stmt",
-		inline: []string{"set_csetting_stmt", "generic_set", "var_list"},
+		inline: []string{"set_csetting_stmt", "generic_set", "var_list", "to_or_eq"},
 		match: []*regexp.Regexp{
 			regexp.MustCompile("'SET' 'CLUSTER'"),
 		},
@@ -955,19 +985,9 @@ var specs = []stmtSpec{
 		unlink:  []string{"table_name"},
 	},
 	{
-		name:    "show_create_sequence_stmt",
-		match:   []*regexp.Regexp{regexp.MustCompile("'SHOW' 'CREATE' 'SEQUENCE'")},
-		replace: map[string]string{"var_name": "sequence_name"},
-		unlink:  []string{"sequence_name"},
-	},
-	{
-		name: "show_create_table_stmt",
-	},
-	{
-		name:    "show_create_view_stmt",
-		match:   []*regexp.Regexp{regexp.MustCompile("'SHOW' 'CREATE' 'VIEW'")},
-		replace: map[string]string{"var_name": "view_name"},
-		unlink:  []string{"view_name"},
+		name:    "show_create_stmt",
+		replace: map[string]string{"table_name": "object_name"},
+		unlink:  []string{"object_name"},
 	},
 	{
 		name:  "show_databases",
@@ -1098,6 +1118,8 @@ var specs = []stmtSpec{
 			"multiple_set_clause",
 			"in_expr",
 			"expr_list",
+			"expr_tuple1_ambiguous",
+			"tuple1_ambiguous_values",
 			"where_clause",
 			"opt_sort_clause",
 			"returning_clause",

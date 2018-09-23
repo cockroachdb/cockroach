@@ -13,7 +13,7 @@ import {
   allNodesHaveLocality,
 } from "./localities";
 import { cockroach } from "src/js/protos";
-type NodeStatus$Properties = cockroach.server.status.NodeStatus$Properties;
+type INodeStatus = cockroach.server.status.INodeStatus;
 
 describe("parseLocalityRoute", function() {
   describe("with an empty route", function() {
@@ -101,7 +101,7 @@ describe("generateLocalityRoute", function() {
 
 describe("getNodeLocalityTiers", function() {
   it("returns the locality of a node", function() {
-    const tiers: protos.cockroach.roachpb.Tier$Properties[] = [
+    const tiers: protos.cockroach.roachpb.ITier[] = [
       { key: "region", value: "us-east" },
       { key: "zone", value: "us-east-1" },
       { key: "datacenter", value: "us-east-1b" },
@@ -399,7 +399,7 @@ describe("getLocalityLabel", function() {
 describe("allNodesHaveLocality", function() {
 
   it("returns false if a node exists without a locality", function() {
-    const nodes: NodeStatus$Properties[] = [
+    const nodes: INodeStatus[] = [
       { desc: { node_id: 1, locality: { tiers: [] } } },
       { desc: { node_id: 2, locality: { tiers: [{ key: "region", value: "us-east-1" }] } } },
     ];
@@ -408,7 +408,7 @@ describe("allNodesHaveLocality", function() {
   });
 
   it("returns true if all nodes have localities", function() {
-    const nodes: NodeStatus$Properties[] = [
+    const nodes: INodeStatus[] = [
       { desc: { node_id: 1, locality: { tiers: [{ key: "region", value: "us-west-1" }] } } },
       { desc: { node_id: 2, locality: { tiers: [{ key: "region", value: "us-east-1" }] } } },
     ];

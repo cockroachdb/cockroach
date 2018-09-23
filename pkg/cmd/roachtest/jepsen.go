@@ -28,18 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-var jepsenTests = []string{
-	"bank",
-	"bank-multitable",
-	// The comments test is expected to fail because it requires linearizability.
-	// "comments",
-	"g2",
-	"monotonic",
-	"register",
-	"sequential",
-	"sets",
-}
-
 var jepsenNemeses = []struct {
 	name, config string
 }{
@@ -77,10 +65,10 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 
 	// Check to see if the cluster has already been initialized.
 	if err := c.RunE(ctx, c.Node(1), "test -e jepsen_initialized"); err == nil {
-		c.l.printf("cluster already initialized\n")
+		c.l.Printf("cluster already initialized\n")
 		return
 	}
-	c.l.printf("initializing cluster\n")
+	c.l.Printf("initializing cluster\n")
 	t.Status("initializing cluster")
 	defer func() {
 		c.Run(ctx, c.Node(1), "touch jepsen_initialized")
@@ -148,9 +136,9 @@ func runJepsen(ctx context.Context, t *test, c *cluster, testName, nemesis strin
 	// Wrap roachtest's primitive logging in something more like util/log
 	logf := func(f string, args ...interface{}) {
 		// This log prefix matches the one (sometimes) used in roachprod
-		c.l.printf(timeutil.Now().Format("2006/01/02 15:04:05 "))
-		c.l.printf(f, args...)
-		c.l.printf("\n")
+		c.l.Printf(timeutil.Now().Format("2006/01/02 15:04:05 "))
+		c.l.Printf(f, args...)
+		c.l.Printf("\n")
 	}
 	run := func(c *cluster, ctx context.Context, node nodeListOption, args ...string) {
 		if !c.isLocal() {
@@ -158,14 +146,14 @@ func runJepsen(ctx context.Context, t *test, c *cluster, testName, nemesis strin
 			return
 		}
 		args = append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)
-		c.l.printf("> %s\n", strings.Join(args, " "))
+		c.l.Printf("> %s\n", strings.Join(args, " "))
 	}
 	runE := func(c *cluster, ctx context.Context, node nodeListOption, args ...string) error {
 		if !c.isLocal() {
 			return c.RunE(ctx, node, args...)
 		}
 		args = append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)
-		c.l.printf("> %s\n", strings.Join(args, " "))
+		c.l.Printf("> %s\n", strings.Join(args, " "))
 		return nil
 	}
 
@@ -272,25 +260,35 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 }
 
 func registerJepsen(r *registry) {
-	spec := testSpec{
-		Name:  "jepsen",
-		Nodes: nodes(6),
+	// NB: the "comments" test is not included because it requires
+	// linearizability.
+	groups := [][]string{
+		{"bank", "bank-multitable"},
+		{"g2", "monotonic"},
+		{"register", "sequential", "sets"},
 	}
 
-	for _, testName := range jepsenTests {
-		testName := testName
-		sub := testSpec{Name: testName}
-		for _, nemesis := range jepsenNemeses {
-			nemesis := nemesis
-			sub.SubTests = append(sub.SubTests, testSpec{
-				Name: nemesis.name,
-				Run: func(ctx context.Context, t *test, c *cluster) {
-					runJepsen(ctx, t, c, testName, nemesis.config)
-				},
-			})
+	for i := range groups {
+		spec := testSpec{
+			Name:  fmt.Sprintf("jepsen/%d", i+1),
+			Nodes: nodes(6),
 		}
-		spec.SubTests = append(spec.SubTests, sub)
-	}
 
-	r.Add(spec)
+		for _, testName := range groups[i] {
+			testName := testName
+			sub := testSpec{Name: testName}
+			for _, nemesis := range jepsenNemeses {
+				nemesis := nemesis
+				sub.SubTests = append(sub.SubTests, testSpec{
+					Name: nemesis.name,
+					Run: func(ctx context.Context, t *test, c *cluster) {
+						runJepsen(ctx, t, c, testName, nemesis.config)
+					},
+				})
+			}
+			spec.SubTests = append(spec.SubTests, sub)
+		}
+
+		r.Add(spec)
+	}
 }

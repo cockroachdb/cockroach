@@ -22,8 +22,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/coreos/etcd/raft"
-	"github.com/coreos/etcd/raft/raftpb"
+	"go.etcd.io/etcd/raft"
+	"go.etcd.io/etcd/raft/raftpb"
 )
 
 // init installs an adapter to use clog for log messages from raft which
@@ -132,7 +132,7 @@ func logRaftReady(ctx context.Context, ready raft.Ready) {
 			fmt.Fprintf(&buf, "  Outgoing Message[%d]: %.200s\n",
 				i, raftDescribeMessage(m, raftEntryFormatter))
 		}
-		log.Infof(ctx, "raft ready\n%s", buf.String())
+		log.Infof(ctx, "raft ready (must-sync=%t)\n%s", ready.MustSync, buf.String())
 	}
 }
 
@@ -182,4 +182,12 @@ var _ security.RequestWithUser = &RaftMessageRequest{}
 // Raft messages are always sent by the node user.
 func (*RaftMessageRequest) GetUser() string {
 	return security.NodeUser
+}
+
+// IsPreemptive returns whether this is a preemptive snapshot or a Raft
+// snapshot.
+func (h *SnapshotRequest_Header) IsPreemptive() bool {
+	// Preemptive snapshots are addressed to replica ID 0. No other requests to
+	// replica ID 0 are allowed.
+	return h.RaftMessageRequest.ToReplica.ReplicaID == 0
 }

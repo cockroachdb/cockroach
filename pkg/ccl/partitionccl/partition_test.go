@@ -125,7 +125,7 @@ func (t *partitioningTest) parse() error {
 		st := cluster.MakeTestingClusterSettings()
 		const parentID, tableID = keys.MinUserDescID, keys.MinUserDescID + 1
 		t.parsed.tableDesc, err = importccl.MakeSimpleTableDescriptor(
-			ctx, st, createTable, parentID, tableID, hlc.UnixNano())
+			ctx, st, createTable, parentID, tableID, importccl.NoFKs, hlc.UnixNano())
 		if err != nil {
 			return err
 		}
@@ -157,7 +157,7 @@ func (t *partitioningTest) parse() error {
 			subzone.IndexID = uint32(idxDesc.ID)
 			if len(constraints) > 0 {
 				fmt.Fprintf(&zoneConfigStmts,
-					`ALTER INDEX %s@%s EXPERIMENTAL CONFIGURE ZONE 'constraints: [%s]';`,
+					`ALTER INDEX %s@%s CONFIGURE ZONE USING constraints = '[%s]';`,
 					t.parsed.tableName, idxDesc.Name, constraints,
 				)
 			}
@@ -170,7 +170,7 @@ func (t *partitioningTest) parse() error {
 			subzone.IndexID = uint32(index.ID)
 			if len(constraints) > 0 {
 				fmt.Fprintf(&zoneConfigStmts,
-					`ALTER PARTITION %s OF TABLE %s EXPERIMENTAL CONFIGURE ZONE 'constraints: [%s]';`,
+					`ALTER PARTITION %s OF TABLE %s CONFIGURE ZONE USING constraints = '[%s]';`,
 					subzone.PartitionName, t.parsed.tableName, constraints,
 				)
 			}
@@ -196,7 +196,7 @@ func (t *partitioningTest) parse() error {
 func (t *partitioningTest) verifyScansFn(ctx context.Context, db *gosql.DB) func() error {
 	return func() error {
 		for where, expectedNodes := range t.scans {
-			query := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE %s`, tree.NameStringP(&t.name), where)
+			query := fmt.Sprintf(`SELECT count(*) FROM %s WHERE %s`, tree.NameStringP(&t.name), where)
 			log.Infof(ctx, "query: %s", query)
 			if err := verifyScansOnNode(db, query, expectedNodes); err != nil {
 				if log.V(1) {
@@ -853,7 +853,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 		case sqlbase.ColumnType_COLLATEDSTRING:
 			typ.Locale = sqlbase.RandCollationLocale(rng)
 			colType = fmt.Sprintf(`STRING COLLATE %s`, *typ.Locale)
-		case sqlbase.ColumnType_JSON:
+		case sqlbase.ColumnType_JSONB:
 			// Not indexable.
 			continue
 		}
@@ -1062,9 +1062,10 @@ func verifyScansOnNode(db *gosql.DB, query string, node string) error {
 	// doing this directly (running a query and getting back the nodes it ran on
 	// and attributes/localities of those nodes). Users will also want this to
 	// be sure their partitioning is working.
-	rows, err := db.Query(
-		fmt.Sprintf(`SELECT CONCAT(tag, ' ', message) FROM [SHOW TRACE FOR %s]`, query),
-	)
+	if _, err := db.Exec(fmt.Sprintf(`SET tracing = on; %s; SET tracing = off`, query)); err != nil {
+		return err
+	}
+	rows, err := db.Query(`SELECT concat(tag, ' ', message) FROM [SHOW TRACE FOR SESSION]`)
 	if err != nil {
 		return err
 	}
@@ -1134,6 +1135,9 @@ func setupPartitioningTestCluster(ctx context.Context, t testing.TB) (*sqlutils.
 
 func TestInitialPartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	t.Skip("#28789")
+
 	rng, _ := randutil.NewPseudoRand()
 	testCases := allPartitioningTests(rng)
 
@@ -1185,15 +1189,15 @@ func TestSelectPartitionExprs(t *testing.T) {
 		// expr is the expected output
 		expr string
 	}{
-		{`p33p44`, `(a, b) IN ((3, 3), (4, 4))`},
-		{`p335p445`, `(a, b, c) IN ((3, 3, 5), (4, 4, 5))`},
-		{`p33dp44d`, `(((a, b) IN ((3, 3))) AND ((a, b, c) != (3, 3, 5))) OR (((a, b) IN ((4, 4))) AND ((a, b, c) != (4, 4, 5)))`},
+		{`p33p44`, `((a, b) = (3, 3)) OR ((a, b) = (4, 4))`},
+		{`p335p445`, `((a, b, c) = (3, 3, 5)) OR ((a, b, c) = (4, 4, 5))`},
+		{`p33dp44d`, `(((a, b) = (3, 3)) AND (NOT ((a, b, c) = (3, 3, 5)))) OR (((a, b) = (4, 4)) AND (NOT ((a, b, c) = (4, 4, 5))))`},
 		// NB See the TODO in the impl for why this next case has some clearly
 		// unrelated `!=`s.
-		{`p6d`, `((a) IN ((6))) AND (((a, b) != (3, 3)) AND ((a, b) != (4, 4)))`},
-		{`pdd`, `((a, b) != (3, 3)) AND (((a, b) != (4, 4)) AND ((a) != (6)))`},
+		{`p6d`, `((a,) = (6,)) AND (NOT (((a, b) = (3, 3)) OR ((a, b) = (4, 4))))`},
+		{`pdd`, `NOT ((((a, b) = (3, 3)) OR ((a, b) = (4, 4))) OR ((a,) = (6,)))`},
 
-		{`p335p445,p6d`, `((a, b, c) IN ((3, 3, 5), (4, 4, 5))) OR (((a) IN ((6))) AND (((a, b) != (3, 3)) AND ((a, b) != (4, 4))))`},
+		{`p335p445,p6d`, `(((a, b, c) = (3, 3, 5)) OR ((a, b, c) = (4, 4, 5))) OR (((a,) = (6,)) AND (NOT (((a, b) = (3, 3)) OR ((a, b) = (4, 4)))))`},
 
 		// TODO(dan): The expression simplification in this method is all done
 		// by our normal SQL expression simplification code. Seems like it could
@@ -1202,9 +1206,9 @@ func TestSelectPartitionExprs(t *testing.T) {
 		// because for every requested partition, all descendent partitions are
 		// omitted, which is an optimization to save a little work with the side
 		// benefit of making more of these what we want.
-		{`p335p445,p33dp44d`, `((a, b, c) IN ((3, 3, 5), (4, 4, 5))) OR ((((a, b) IN ((4, 4))) AND ((a, b, c) != (4, 4, 5))) OR (((a, b) IN ((3, 3))) AND ((a, b, c) != (3, 3, 5))))`},
-		{`p33p44,p335p445`, `(a, b) IN ((3, 3), (4, 4))`},
-		{`p33p44,p335p445,p33dp44d`, `(a, b) IN ((3, 3), (4, 4))`},
+		{`p335p445,p33dp44d`, `(((a, b, c) = (3, 3, 5)) OR ((a, b, c) = (4, 4, 5))) OR ((((a, b) = (3, 3)) AND (NOT ((a, b, c) = (3, 3, 5)))) OR (((a, b) = (4, 4)) AND (NOT ((a, b, c) = (4, 4, 5)))))`},
+		{`p33p44,p335p445`, `((a, b) = (3, 3)) OR ((a, b) = (4, 4))`},
+		{`p33p44,p335p445,p33dp44d`, `((a, b) = (3, 3)) OR ((a, b) = (4, 4))`},
 	}
 
 	evalCtx := &tree.EvalContext{}
@@ -1234,6 +1238,8 @@ func TestSelectPartitionExprs(t *testing.T) {
 
 func TestRepartitioning(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	t.Skip("#28786")
 
 	rng, _ := randutil.NewPseudoRand()
 	testCases, err := allRepartitioningTests(allPartitioningTests(rng))
@@ -1297,7 +1303,7 @@ func TestRepartitioning(t *testing.T) {
 				for _, name := range test.new.parsed.tableDesc.PartitionNames() {
 					newPartitionNames[name] = struct{}{}
 				}
-				rows := sqlDB.QueryStr(t, "SELECT cli_specifier FROM [EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS] WHERE cli_specifier IS NOT NULL")
+				rows := sqlDB.QueryStr(t, "SELECT cli_specifier FROM [SHOW ALL ZONE CONFIGURATIONS] WHERE cli_specifier IS NOT NULL")
 				for _, row := range rows {
 					zs, err := config.ParseCLIZoneSpecifier(row[0])
 					if err != nil {
@@ -1352,10 +1358,10 @@ func TestRemovePartitioningExpiredLicense(t *testing.T) {
 	sqlDB.Exec(t, `CREATE INDEX i ON t (a) PARTITION BY RANGE (a) (
 		PARTITION p34 VALUES FROM (3) TO (4)
 	)`)
-	sqlDB.Exec(t, `ALTER PARTITION p1 OF TABLE t EXPERIMENTAL CONFIGURE ZONE ''`)
-	sqlDB.Exec(t, `ALTER PARTITION p34 OF TABLE t EXPERIMENTAL CONFIGURE ZONE ''`)
-	sqlDB.Exec(t, `ALTER INDEX t@primary EXPERIMENTAL CONFIGURE ZONE ''`)
-	sqlDB.Exec(t, `ALTER INDEX t@i EXPERIMENTAL CONFIGURE ZONE ''`)
+	sqlDB.Exec(t, `ALTER PARTITION p1 OF TABLE t CONFIGURE ZONE USING DEFAULT`)
+	sqlDB.Exec(t, `ALTER PARTITION p34 OF TABLE t CONFIGURE ZONE USING DEFAULT`)
+	sqlDB.Exec(t, `ALTER INDEX t@primary CONFIGURE ZONE USING DEFAULT`)
+	sqlDB.Exec(t, `ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`)
 
 	// Remove the enterprise license.
 	defer utilccl.TestingDisableEnterprise()()
@@ -1371,20 +1377,20 @@ func TestRemovePartitioningExpiredLicense(t *testing.T) {
 	// Partitions and zone configs cannot be modified without a valid license.
 	expectLicenseErr(`ALTER TABLE t PARTITION BY LIST (a) (PARTITION p2 VALUES IN (2))`)
 	expectLicenseErr(`ALTER INDEX t@i PARTITION BY RANGE (a) (PARTITION p45 VALUES FROM (4) TO (5))`)
-	expectLicenseErr(`ALTER PARTITION p1 OF TABLE t EXPERIMENTAL CONFIGURE ZONE ''`)
-	expectLicenseErr(`ALTER PARTITION p34 OF TABLE t EXPERIMENTAL CONFIGURE ZONE ''`)
-	expectLicenseErr(`ALTER INDEX t@primary EXPERIMENTAL CONFIGURE ZONE ''`)
-	expectLicenseErr(`ALTER INDEX t@i EXPERIMENTAL CONFIGURE ZONE ''`)
+	expectLicenseErr(`ALTER PARTITION p1 OF TABLE t CONFIGURE ZONE USING DEFAULT`)
+	expectLicenseErr(`ALTER PARTITION p34 OF TABLE t CONFIGURE ZONE USING DEFAULT`)
+	expectLicenseErr(`ALTER INDEX t@primary CONFIGURE ZONE USING DEFAULT`)
+	expectLicenseErr(`ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`)
 
 	// But they can be removed.
 	sqlDB.Exec(t, `ALTER TABLE t PARTITION BY NOTHING`)
 	sqlDB.Exec(t, `ALTER INDEX t@i PARTITION BY NOTHING`)
-	sqlDB.Exec(t, `ALTER INDEX t@primary EXPERIMENTAL CONFIGURE ZONE NULL`)
-	sqlDB.Exec(t, `ALTER INDEX t@i EXPERIMENTAL CONFIGURE ZONE NULL`)
+	sqlDB.Exec(t, `ALTER INDEX t@primary CONFIGURE ZONE DISCARD`)
+	sqlDB.Exec(t, `ALTER INDEX t@i CONFIGURE ZONE DISCARD`)
 
 	// Once removed, they cannot be added back.
 	expectLicenseErr(`ALTER TABLE t PARTITION BY LIST (a) (PARTITION p2 VALUES IN (2))`)
 	expectLicenseErr(`ALTER INDEX t@i PARTITION BY RANGE (a) (PARTITION p45 VALUES FROM (4) TO (5))`)
-	expectLicenseErr(`ALTER INDEX t@primary EXPERIMENTAL CONFIGURE ZONE ''`)
-	expectLicenseErr(`ALTER INDEX t@i EXPERIMENTAL CONFIGURE ZONE ''`)
+	expectLicenseErr(`ALTER INDEX t@primary CONFIGURE ZONE USING DEFAULT`)
+	expectLicenseErr(`ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`)
 }

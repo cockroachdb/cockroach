@@ -25,17 +25,16 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
-	"github.com/rubyist/circuitbreaker"
+	"go.etcd.io/etcd/raft/raftpb"
 	"google.golang.org/grpc"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -70,14 +69,23 @@ type RaftMessageResponseStream interface {
 // Send. Note that the default implementation of grpc.Stream for server
 // responses (grpc.serverStream) is not safe for concurrent calls to Send.
 type lockedRaftMessageResponseStream struct {
-	MultiRaft_RaftMessageBatchServer
-	sendMu syncutil.Mutex
+	wrapped MultiRaft_RaftMessageBatchServer
+	sendMu  syncutil.Mutex
+}
+
+func (s *lockedRaftMessageResponseStream) Context() context.Context {
+	return s.wrapped.Context()
 }
 
 func (s *lockedRaftMessageResponseStream) Send(resp *RaftMessageResponse) error {
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
-	return s.MultiRaft_RaftMessageBatchServer.Send(resp)
+	return s.wrapped.Send(resp)
+}
+
+func (s *lockedRaftMessageResponseStream) Recv() (*RaftMessageRequestBatch, error) {
+	// No need for lock. gRPC.Stream.RecvMsg is safe for concurrent use.
+	return s.wrapped.Recv()
 }
 
 // SnapshotResponseStream is the subset of the
@@ -91,11 +99,10 @@ type SnapshotResponseStream interface {
 // RaftMessageHandler is the interface that must be implemented by
 // arguments to RaftTransport.Listen.
 type RaftMessageHandler interface {
-	// HandleRaftRequest is called for each incoming Raft message. If it returns
-	// an error it will be streamed back to the sender of the message as a
-	// RaftMessageResponse. If the stream parameter is nil the request should be
-	// processed synchronously. If the stream is non-nil the request can be
-	// processed asynchronously and any error should be sent on the stream.
+	// HandleRaftRequest is called for each incoming Raft message. The request is
+	// always processed asynchronously and the response is sent over respStream.
+	// If an error is encountered during asynchronous processing, it will be
+	// streamed back to the sender of the message as a RaftMessageResponse.
 	HandleRaftRequest(ctx context.Context, req *RaftMessageRequest,
 		respStream RaftMessageResponseStream) *roachpb.Error
 
@@ -107,18 +114,6 @@ type RaftMessageHandler interface {
 	// HandleSnapshot is called for each new incoming snapshot stream, after
 	// parsing the initial SnapshotRequest_Header on the stream.
 	HandleSnapshot(header *SnapshotRequest_Header, respStream SnapshotResponseStream) error
-}
-
-// NodeAddressResolver is the function used by RaftTransport to map node IDs to
-// network addresses.
-type NodeAddressResolver func(roachpb.NodeID) (net.Addr, error)
-
-// GossipAddressResolver is a thin wrapper around gossip's GetNodeIDAddress
-// that allows its return value to be used as the net.Addr interface.
-func GossipAddressResolver(gossip *gossip.Gossip) NodeAddressResolver {
-	return func(nodeID roachpb.NodeID) (net.Addr, error) {
-		return gossip.GetNodeIDAddress(nodeID)
-	}
 }
 
 type raftTransportStats struct {
@@ -154,12 +149,11 @@ type RaftTransport struct {
 	log.AmbientContext
 	st *cluster.Settings
 
-	resolver   NodeAddressResolver
-	rpcContext *rpc.Context
+	stopper *stop.Stopper
 
 	queues   syncutil.IntMap // map[roachpb.NodeID]*chan *RaftMessageRequest
 	stats    syncutil.IntMap // map[roachpb.NodeID]*raftTransportStats
-	breakers syncutil.IntMap // map[roachpb.NodeID]*circuit.Breaker
+	dialer   *nodedialer.Dialer
 	handlers syncutil.IntMap // map[roachpb.StoreID]*RaftMessageHandler
 }
 
@@ -169,31 +163,33 @@ func NewDummyRaftTransport(st *cluster.Settings) *RaftTransport {
 	resolver := func(roachpb.NodeID) (net.Addr, error) {
 		return nil, errors.New("dummy resolver")
 	}
-	return NewRaftTransport(log.AmbientContext{Tracer: st.Tracer}, st, resolver, nil, nil)
+	return NewRaftTransport(log.AmbientContext{Tracer: st.Tracer}, st,
+		nodedialer.New(nil, resolver), nil, nil)
 }
 
 // NewRaftTransport creates a new RaftTransport.
 func NewRaftTransport(
 	ambient log.AmbientContext,
 	st *cluster.Settings,
-	resolver NodeAddressResolver,
+	dialer *nodedialer.Dialer,
 	grpcServer *grpc.Server,
-	rpcContext *rpc.Context,
+	stopper *stop.Stopper,
 ) *RaftTransport {
 	t := &RaftTransport{
 		AmbientContext: ambient,
-		resolver:       resolver,
-		rpcContext:     rpcContext,
 		st:             st,
+
+		stopper: stopper,
+		dialer:  dialer,
 	}
 
 	if grpcServer != nil {
 		RegisterMultiRaftServer(grpcServer, t)
 	}
 
-	if t.rpcContext != nil && log.V(1) {
+	if t.stopper != nil && log.V(1) {
 		ctx := t.AnnotateCtx(context.Background())
-		t.rpcContext.Stopper.RunWorker(ctx, func(ctx context.Context) {
+		t.stopper.RunWorker(ctx, func(ctx context.Context) {
 			ticker := time.NewTicker(10 * time.Second)
 			defer ticker.Stop()
 			lastStats := make(map[roachpb.NodeID]raftTransportStats)
@@ -249,7 +245,7 @@ func NewRaftTransport(
 					}
 					lastTime = now
 					log.Infof(ctx, "stats:\n%s", buf.String())
-				case <-t.rpcContext.Stopper.ShouldStop():
+				case <-t.stopper.ShouldStop():
 					return
 				}
 			}
@@ -319,13 +315,13 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 	errCh := make(chan error, 1)
 
 	// Node stopping error is caught below in the select.
-	if err := t.rpcContext.Stopper.RunTask(
+	if err := t.stopper.RunTask(
 		stream.Context(), "storage.RaftTransport: processing batch",
 		func(ctx context.Context) {
-			t.rpcContext.Stopper.RunWorker(ctx, func(ctx context.Context) {
+			t.stopper.RunWorker(ctx, func(ctx context.Context) {
 				errCh <- func() error {
 					var stats *raftTransportStats
-					stream := &lockedRaftMessageResponseStream{MultiRaft_RaftMessageBatchServer: stream}
+					stream := &lockedRaftMessageResponseStream{wrapped: stream}
 					for {
 						batch, err := stream.Recv()
 						if err != nil {
@@ -359,7 +355,7 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 	select {
 	case err := <-errCh:
 		return err
-	case <-t.rpcContext.Stopper.ShouldQuiesce():
+	case <-t.stopper.ShouldQuiesce():
 		return nil
 	}
 }
@@ -367,7 +363,7 @@ func (t *RaftTransport) RaftMessageBatch(stream MultiRaft_RaftMessageBatchServer
 // RaftSnapshot handles incoming streaming snapshot requests.
 func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error {
 	errCh := make(chan error, 1)
-	if err := t.rpcContext.Stopper.RunAsyncTask(
+	if err := t.stopper.RunAsyncTask(
 		stream.Context(), "storage.RaftTransport: processing snapshot",
 		func(ctx context.Context) {
 			errCh <- func() error {
@@ -393,7 +389,7 @@ func (t *RaftTransport) RaftSnapshot(stream MultiRaft_RaftSnapshotServer) error 
 		return err
 	}
 	select {
-	case <-t.rpcContext.Stopper.ShouldStop():
+	case <-t.stopper.ShouldStop():
 		return nil
 	case err := <-errCh:
 		return err
@@ -410,64 +406,6 @@ func (t *RaftTransport) Stop(storeID roachpb.StoreID) {
 	t.handlers.Delete(int64(storeID))
 }
 
-// GetCircuitBreaker returns the circuit breaker controlling
-// connection attempts to the specified node.
-func (t *RaftTransport) GetCircuitBreaker(nodeID roachpb.NodeID) *circuit.Breaker {
-	value, ok := t.breakers.Load(int64(nodeID))
-	if !ok {
-		breaker := t.rpcContext.NewBreaker()
-		value, _ = t.breakers.LoadOrStore(int64(nodeID), unsafe.Pointer(breaker))
-	}
-	return (*circuit.Breaker)(value)
-}
-
-// connectAndProcess connects to the node and then processes the
-// provided channel containing a queue of raft messages until there is
-// an unrecoverable error with the underlying connection. A circuit
-// breaker is used to allow fast failures in SendAsync which will drop
-// incoming raft messages and report unreachable status to the raft group.
-func (t *RaftTransport) connectAndProcess(
-	ctx context.Context,
-	nodeID roachpb.NodeID,
-	ch chan *RaftMessageRequest,
-	stats *raftTransportStats,
-) {
-	breaker := t.GetCircuitBreaker(nodeID)
-	successes := breaker.Successes()
-	consecFailures := breaker.ConsecFailures()
-	// NB: We don't check breaker.Ready() here or use breaker.Call() (which
-	// internally checks breaker.Ready()) because we've already done so in
-	// RaftTransport.SendAsync() and the nature of half-open breakers is that
-	// they only allow breaker.Ready() to return true once per backoff period.
-	if err := func() error {
-		addr, err := t.resolver(nodeID)
-		if err != nil {
-			return err
-		}
-		conn, err := t.rpcContext.GRPCDial(addr.String()).Connect(ctx)
-		if err != nil {
-			return err
-		}
-		client := NewMultiRaftClient(conn)
-		batchCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
-		stream, err := client.RaftMessageBatch(batchCtx)
-		if err != nil {
-			return err
-		}
-		if successes == 0 || consecFailures > 0 {
-			log.Infof(ctx, "raft transport stream to node %d established", nodeID)
-		}
-		breaker.Success()
-		return t.processQueue(nodeID, ch, stats, stream)
-	}(); err != nil {
-		if consecFailures == 0 {
-			log.Warningf(ctx, "raft transport stream to node %d failed: %s", nodeID, err)
-		}
-		breaker.Fail()
-	}
-}
-
 // processQueue opens a Raft client stream and sends messages from the
 // designated queue (ch) via that stream, exiting when an error is received or
 // when it idles out. All messages remaining in the queue at that point are
@@ -482,10 +420,10 @@ func (t *RaftTransport) processQueue(
 	errCh := make(chan error, 1)
 
 	// Starting workers in a task prevents data races during shutdown.
-	if err := t.rpcContext.Stopper.RunTask(
+	if err := t.stopper.RunTask(
 		stream.Context(), "storage.RaftTransport: processing queue",
 		func(ctx context.Context) {
-			t.rpcContext.Stopper.RunWorker(ctx, func(ctx context.Context) {
+			t.stopper.RunWorker(ctx, func(ctx context.Context) {
 				errCh <- func() error {
 					for {
 						resp, err := stream.Recv()
@@ -515,7 +453,7 @@ func (t *RaftTransport) processQueue(
 	for {
 		raftIdleTimer.Reset(raftIdleTimeout)
 		select {
-		case <-t.rpcContext.Stopper.ShouldStop():
+		case <-t.stopper.ShouldStop():
 			return nil
 		case <-raftIdleTimer.C:
 			raftIdleTimer.Read = true
@@ -562,7 +500,17 @@ func (t *RaftTransport) getQueue(nodeID roachpb.NodeID) (chan *RaftMessageReques
 // SendAsync sends a message to the recipient specified in the request. It
 // returns false if the outgoing queue is full and calls s.onError when the
 // recipient closes the stream.
-func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
+func (t *RaftTransport) SendAsync(req *RaftMessageRequest) (sent bool) {
+	toNodeID := req.ToReplica.NodeID
+	stats := t.getStats(toNodeID)
+	defer func() {
+		if !sent {
+			atomic.AddInt64(&stats.clientDropped, 1)
+		}
+	}()
+
+	ctx := t.AnnotateCtx(context.Background())
+
 	if req.RangeID == 0 && len(req.Heartbeats) == 0 && len(req.HeartbeatResps) == 0 {
 		// Coalesced heartbeats are addressed to range 0; everything else
 		// needs an explicit range ID.
@@ -571,28 +519,16 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 	if req.Message.Type == raftpb.MsgSnap {
 		panic("snapshots must be sent using SendSnapshot")
 	}
-	toNodeID := req.ToReplica.NodeID
 
-	stats := t.getStats(toNodeID)
-	breaker := t.GetCircuitBreaker(toNodeID)
-	if !breaker.Ready() {
-		atomic.AddInt64(&stats.clientDropped, 1)
+	if !t.dialer.GetCircuitBreaker(toNodeID).Ready() {
 		return false
 	}
 
 	ch, existingQueue := t.getQueue(toNodeID)
 	if !existingQueue {
-		// Starting workers in a task prevents data races during shutdown.
-		ctx := t.AnnotateCtx(context.Background())
-		if err := t.rpcContext.Stopper.RunTask(
-			ctx, "storage.RaftTransport: sending message",
-			func(ctx context.Context) {
-				t.rpcContext.Stopper.RunWorker(ctx, func(ctx context.Context) {
-					t.connectAndProcess(ctx, toNodeID, ch, stats)
-					t.queues.Delete(int64(toNodeID))
-				})
-			}); err != nil {
-			t.queues.Delete(int64(toNodeID))
+		// Note that startProcessNewQueue is in charge of deleting the queue,
+		// no matter what it returns.
+		if !t.startProcessNewQueue(ctx, toNodeID, stats) {
 			return false
 		}
 	}
@@ -605,9 +541,74 @@ func (t *RaftTransport) SendAsync(req *RaftMessageRequest) bool {
 		}
 		return true
 	default:
-		atomic.AddInt64(&stats.clientDropped, 1)
 		return false
 	}
+}
+
+// startProcessNewQueue connects to the node and launches a worker goroutine
+// that processes the queue for the given nodeID (which must exist) until
+// the underlying connection is closed or an error occurs. This method
+// takes on the responsibility of deleting the queue when the worker shuts down.
+//
+// Returns whether the worker was started (the queue is deleted either way).
+func (t *RaftTransport) startProcessNewQueue(
+	ctx context.Context, toNodeID roachpb.NodeID, stats *raftTransportStats,
+) bool {
+	conn, err := t.dialer.Dial(ctx, toNodeID)
+	if err != nil {
+		// DialNode already logs sufficiently, so just return after deleting the
+		// queue.
+		t.queues.Delete(int64(toNodeID))
+		return false
+	}
+	worker := func(ctx context.Context) {
+		defer t.queues.Delete(int64(toNodeID))
+
+		client := NewMultiRaftClient(conn)
+		batchCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		ch, existingQueue := t.getQueue(toNodeID)
+		if !existingQueue {
+			log.Fatalf(t.AnnotateCtx(context.Background()), "queue for n%d does not exist", toNodeID)
+		}
+
+		stream, err := client.RaftMessageBatch(batchCtx) // closed via cancellation
+		if err != nil {
+			log.Warningf(ctx, "creating batch client for node %d failed: %s", toNodeID, err)
+			return
+		}
+
+		if err := t.processQueue(toNodeID, ch, stats, stream); err != nil {
+			log.Warningf(ctx, "while processing outgoing Raft queue to node %d: %s:", toNodeID, err)
+			// Intentionally does not return.
+		}
+		// Account for the remainder of `ch` which was never sent.
+		// NB: we deleted the queue above, so within a short amount
+		// of time nobody should be writing into the channel any
+		// more. We might miss a message or two here, but that's
+		// OK (there's nobody who can safely close the channel the
+		// way the code is written).
+		for {
+			select {
+			case <-ch:
+				atomic.AddInt64(&stats.clientDropped, 1)
+			default:
+				return
+			}
+		}
+	}
+
+	// Starting workers in a task prevents data races during shutdown.
+	if t.stopper.RunTask(
+		ctx, "storage.RaftTransport: sending message",
+		func(ctx context.Context) {
+			t.stopper.RunWorker(ctx, worker)
+		}) != nil {
+		t.queues.Delete(int64(toNodeID))
+		return false
+	}
+	return true
 }
 
 // SendSnapshot streams the given outgoing snapshot. The caller is responsible
@@ -622,28 +623,18 @@ func (t *RaftTransport) SendSnapshot(
 ) error {
 	var stream MultiRaft_RaftSnapshotClient
 	nodeID := header.RaftMessageRequest.ToReplica.NodeID
-	breaker := t.GetCircuitBreaker(nodeID)
-	if err := breaker.Call(func() error {
-		addr, err := t.resolver(nodeID)
-		if err != nil {
-			return err
-		}
-		conn, err := t.rpcContext.GRPCDial(addr.String()).Connect(ctx)
-		if err != nil {
-			return err
-		}
-		client := NewMultiRaftClient(conn)
-		stream, err = client.RaftSnapshot(ctx)
-		return err
-	}, 0); err != nil {
+
+	conn, err := t.dialer.Dial(ctx, nodeID)
+	if err != nil {
 		return err
 	}
-	// Note that we intentionally do not open the breaker if we encounter an
-	// error while sending the snapshot. Snapshots are much less common than
-	// regular Raft messages so if there is a real problem with the remote we'll
-	// probably notice it really soon. Conversely, snapshots are a bit weird
-	// (much larger than regular messages) so if there is an error here we don't
-	// want to disrupt normal messages.
+
+	client := NewMultiRaftClient(conn)
+	stream, err = client.RaftSnapshot(ctx)
+	if err != nil {
+		return err
+	}
+
 	defer func() {
 		if err := stream.CloseSend(); err != nil {
 			log.Warningf(ctx, "failed to close snapshot stream: %s", err)

@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -51,15 +52,6 @@ const (
 	// intentAgeThreshold is the threshold after which an extant intent
 	// will be resolved.
 	intentAgeThreshold = 2 * time.Hour // 2 hour
-
-	// txnCleanupThreshold is the threshold after which a transaction is
-	// considered abandoned and fit for removal, as measured by the
-	// maximum of its last heartbeat and timestamp. Abort spans for the
-	// transaction are cleaned up at the same time.
-	//
-	// TODO(tschottdorf): need to enforce at all times that this is much
-	// larger than the heartbeat interval used by the coordinator.
-	txnCleanupThreshold = time.Hour
 
 	// Thresholds used to decide whether to queue for GC based
 	// on keys and intents.
@@ -159,26 +151,22 @@ func (r gcQueueScore) String() string {
 // in the event that the cumulative ages of GC'able bytes or extant
 // intents exceed thresholds.
 func (gcq *gcQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (bool, float64) {
 	r := makeGCQueueScore(ctx, repl, now, sysCfg)
 	return r.ShouldQueue, r.FinalScore
 }
 
 func makeGCQueueScore(
-	ctx context.Context, repl *Replica, now hlc.Timestamp, sysCfg config.SystemConfig,
+	ctx context.Context, repl *Replica, now hlc.Timestamp, sysCfg *config.SystemConfig,
 ) gcQueueScore {
 	repl.mu.Lock()
 	ms := *repl.mu.state.Stats
 	gcThreshold := *repl.mu.state.GCThreshold
 	repl.mu.Unlock()
 
-	desc := repl.Desc()
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		log.Errorf(ctx, "could not find zone config for range %s: %s", repl, err)
-		return gcQueueScore{}
-	}
+	desc, zone := repl.DescAndZone()
+
 	// Use desc.RangeID for fuzzing the final score, so that different ranges
 	// have slightly different priorities and even symmetrical workloads don't
 	// trigger GC at the same time.
@@ -465,13 +453,17 @@ func processAbortSpan(
 	abortSpan := abortspan.New(rangeID)
 	infoMu.Lock()
 	defer infoMu.Unlock()
-	abortSpan.Iterate(ctx, snap, func(key []byte, v roachpb.AbortSpanEntry) {
+	if err := abortSpan.Iterate(ctx, snap, func(key roachpb.Key, v roachpb.AbortSpanEntry) error {
 		infoMu.AbortSpanTotal++
 		if v.Timestamp.Less(threshold) {
 			infoMu.AbortSpanGCNum++
 			gcKeys = append(gcKeys, roachpb.GCRequest_GCKey{Key: key})
 		}
-	})
+		return nil
+	}); err != nil {
+		// Still return whatever we managed to collect.
+		log.Warning(ctx, err)
+	}
 	return gcKeys
 }
 
@@ -498,7 +490,7 @@ func processAbortSpan(
 // 6) scan the AbortSpan table for old entries
 // 7) push these transactions (again, recreating txn entries).
 // 8) send a GCRequest.
-func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg config.SystemConfig) error {
+func (gcq *gcQueue) process(ctx context.Context, repl *Replica, sysCfg *config.SystemConfig) error {
 	now := repl.store.Clock().Now()
 	r := makeGCQueueScore(ctx, repl, now, sysCfg)
 	if !r.ShouldQueue {
@@ -572,17 +564,13 @@ func (r *replicaGCer) GC(ctx context.Context, keys []roachpb.GCRequest_GCKey) er
 }
 
 func (gcq *gcQueue) processImpl(
-	ctx context.Context, repl *Replica, sysCfg config.SystemConfig, now hlc.Timestamp,
+	ctx context.Context, repl *Replica, sysCfg *config.SystemConfig, now hlc.Timestamp,
 ) error {
 	snap := repl.store.Engine().NewSnapshot()
-	desc := repl.Desc()
 	defer snap.Close()
 
-	// Lookup the GC policy for the zone containing this key range.
-	zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
-	if err != nil {
-		return errors.Errorf("could not find zone config for range %s: %s", repl, err)
-	}
+	// Lookup the descriptor and GC policy for the zone containing this key range.
+	desc, zone := repl.DescAndZone()
 
 	info, err := RunGC(ctx, desc, snap, now, zone.GC, &replicaGCer{repl: repl},
 		func(ctx context.Context, intents []roachpb.Intent) error {
@@ -713,7 +701,7 @@ func RunGC(
 
 	// Compute intent expiration (intent age at which we attempt to resolve).
 	intentExp := now.Add(-intentAgeThreshold.Nanoseconds(), 0)
-	txnExp := now.Add(-txnCleanupThreshold.Nanoseconds(), 0)
+	txnExp := now.Add(-storagebase.TxnCleanupThreshold.Nanoseconds(), 0)
 
 	gc := engine.MakeGarbageCollector(now, policy)
 	infoMu.Threshold = gc.Threshold
@@ -800,7 +788,15 @@ func RunGC(
 						// chunk and start a new one.
 						if batchGCKeysBytes >= gcKeyVersionChunkBytes {
 							batchGCKeys = append(batchGCKeys, roachpb.GCRequest_GCKey{Key: expBaseKey, Timestamp: keys[i].Timestamp})
-							if err := gcer.GC(ctx, batchGCKeys); err != nil {
+
+							err := gcer.GC(ctx, batchGCKeys)
+
+							// Succeed or fail, allow releasing the memory backing batchGCKeys.
+							iter.ResetAllocator()
+							batchGCKeys = nil
+							batchGCKeysBytes = 0
+
+							if err != nil {
 								// Even though we are batching the GC process, it's
 								// safe to continue because we bumped the GC
 								// thresholds. We may leave some inconsistent history
@@ -808,10 +804,6 @@ func RunGC(
 								log.Warning(ctx, err)
 								return
 							}
-							// Allow releasing the memory backing batchGCKeys.
-							iter.ResetAllocator()
-							batchGCKeys = nil
-							batchGCKeysBytes = 0
 						}
 					}
 					// Add the key to the batch at the GC timestamp, unless it was already added.
@@ -831,6 +823,9 @@ func RunGC(
 			return GCInfo{}, err
 		} else if !ok {
 			break
+		} else if ctx.Err() != nil {
+			// Stop iterating if our context has expired.
+			return GCInfo{}, err
 		}
 		iterKey := iter.Key()
 		if !iterKey.IsValue() || !iterKey.Key.Equal(expBaseKey) {

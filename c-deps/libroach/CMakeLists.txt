@@ -33,11 +33,14 @@ add_library(roach
   file_registry.cc
   getter.cc
   godefs.cc
+  iterator.cc
   ldb.cc
   merge.cc
   mvcc.cc
   options.cc
   snapshot.cc
+  sst_dump.cc
+  timebound.cc
   utils.cc
   protos/roachpb/data.pb.cc
   protos/roachpb/internal.pb.cc
@@ -92,6 +95,7 @@ set(tests
   encoding_test.cc
   file_registry_test.cc
   merge_test.cc
+  ccl/crypto_utils_test.cc
   ccl/db_test.cc
   ccl/encrypted_env_test.cc
   ccl/key_manager_test.cc
@@ -152,7 +156,6 @@ foreach(tsrc ${tests})
     roach
     gtest_main
     pthread
-    stdc++fs
     ${ROCKSDB_LIB}
     ${PROTOBUF_LIB}
     ${JEMALLOC_LIB}

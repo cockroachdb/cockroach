@@ -32,17 +32,17 @@ const histogramSamples = 10000
 const histogramBuckets = 200
 
 func (dsp *DistSQLPlanner) createStatsPlan(
-	planCtx *planningCtx, desc *sqlbase.TableDescriptor, stats []requestedStat,
-) (physicalPlan, error) {
+	planCtx *PlanningCtx, desc *sqlbase.TableDescriptor, stats []requestedStat,
+) (PhysicalPlan, error) {
 	// Create the table readers; for this we initialize a dummy scanNode.
 	scan := scanNode{desc: desc}
 	err := scan.initDescDefaults(nil /* planDependencies */, publicColumnsCfg)
 	if err != nil {
-		return physicalPlan{}, err
+		return PhysicalPlan{}, err
 	}
 	scan.spans, err = unconstrainedSpans(desc, scan.index)
 	if err != nil {
-		return physicalPlan{}, err
+		return PhysicalPlan{}, err
 	}
 
 	// Calculate the relevant columns.
@@ -52,7 +52,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		for _, c := range s.columns {
 			colIdx, ok := scan.colIdxMap[c]
 			if !ok {
-				return physicalPlan{}, errors.Errorf("unknown column ID %d", c)
+				return PhysicalPlan{}, errors.Errorf("unknown column ID %d", c)
 			}
 			if !scan.valNeededForCol.Contains(colIdx) {
 				scan.valNeededForCol.Add(colIdx)
@@ -63,7 +63,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 
 	p, err := dsp.createTableReaders(planCtx, &scan, nil /* overrideResultColumns */)
 	if err != nil {
-		return physicalPlan{}, err
+		return PhysicalPlan{}, err
 	}
 
 	sketchSpecs := make([]distsqlrun.SketchSpec, len(stats))
@@ -156,8 +156,8 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 }
 
 func (dsp *DistSQLPlanner) createPlanForCreateStats(
-	planCtx *planningCtx, n *createStatsNode,
-) (physicalPlan, error) {
+	planCtx *PlanningCtx, n *createStatsNode,
+) (PhysicalPlan, error) {
 
 	stats := []requestedStat{
 		{

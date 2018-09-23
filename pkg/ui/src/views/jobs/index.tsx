@@ -23,8 +23,8 @@ import spinner from "assets/spinner.gif";
 
 type Job = protos.cockroach.server.serverpb.JobsResponse.Job;
 
-type JobType = protos.cockroach.sql.jobs.Type;
-const jobType = protos.cockroach.sql.jobs.Type;
+type JobType = protos.cockroach.sql.jobs.jobspb.Type;
+const jobType = protos.cockroach.sql.jobs.jobspb.Type;
 
 const JobsRequest = protos.cockroach.server.serverpb.JobsRequest;
 
@@ -48,6 +48,7 @@ const typeOptions = [
   { value: jobType.RESTORE.toString(), label: "Restores" },
   { value: jobType.IMPORT.toString(), label: "Imports" },
   { value: jobType.SCHEMA_CHANGE.toString(), label: "Schema Changes" },
+  { value: jobType.CHANGEFEED.toString(), label: "Changefeed"},
 ];
 
 const typeSetting = new LocalSetting<AdminUIState, number>(
@@ -103,11 +104,37 @@ class JobStatusCell extends React.Component<{ job: Job }, {}> {
     }
   }
 
+  renderFractionCompleted() {
+    return (
+      <div>
+        {this.renderProgress()}
+        <span className="jobs-table__duration">{this.renderDuration()}</span>
+      </div>
+    );
+  }
+
+  renderHighwater() {
+    const highwater = this.props.job.highwater_timestamp;
+    const tooltip = this.props.job.highwater_decimal;
+    let highwaterMoment = moment(highwater.seconds.toNumber() * 1000);
+    // It's possible due to client clock skew that this timestamp could be in
+    // the future. To avoid confusion, set a maximum bound of now.
+    const now = moment();
+    if (highwaterMoment.isAfter(now)) {
+      highwaterMoment = now;
+    }
+    return (
+      <ToolTipWrapper text={`System Time: ${tooltip}`}>
+        High-water Timestamp: {highwaterMoment.fromNow()}
+      </ToolTipWrapper>
+    );
+  }
+
   render() {
-    return <div>
-      {this.renderProgress()}
-      <span className="jobs-table__duration">{this.renderDuration()}</span>
-    </div>;
+    if (this.props.job.highwater_timestamp) {
+      return this.renderHighwater();
+    }
+    return this.renderFractionCompleted();
   }
 }
 
@@ -145,7 +172,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
 const sortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "jobs/sort_setting",
   s => s.localSettings,
-  { sortKey: 2 /* creation time */, ascending: false },
+  { sortKey: 3 /* creation time */, ascending: false },
 );
 
 interface JobsTableProps {
@@ -199,7 +226,8 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
     this.props.setShow(selected.value);
   }
 
-  renderTable(jobs: Job[]) {
+  renderTable = () => {
+    const jobs = this.props.jobs && this.props.jobs.length > 0 && this.props.jobs;
     if (_.isEmpty(jobs)) {
       return <div className="no-results"><h2>No Results</h2></div>;
     }
@@ -218,7 +246,6 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
   }
 
   render() {
-    const data = this.props.jobs && this.props.jobs.length > 0 && this.props.jobs;
     return <div className="jobs-page">
       <Helmet>
         <title>Jobs</title>
@@ -263,9 +290,12 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
           </PageConfigItem>
         </PageConfig>
       </div>
-      <Loading loading={_.isNil(this.props.jobs)} className="loading-image loading-image__spinner" image={spinner}>
-          { this.renderTable(data) }
-      </Loading>
+      <Loading
+        loading={_.isNil(this.props.jobs)}
+        className="loading-image loading-image__spinner"
+        image={spinner}
+        render={this.renderTable}
+      />
     </div>;
   }
 }

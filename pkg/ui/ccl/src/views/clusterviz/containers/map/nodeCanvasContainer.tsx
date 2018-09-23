@@ -75,15 +75,16 @@ class NodeCanvasContainer extends React.Component<NodeCanvasContainerProps & Nod
         loading={!this.props.dataExists}
         className="loading-image loading-image__spinner-left"
         image={spinner}
-      >
-        <NodeCanvas
-          localityTree={currentLocality}
-          locationTree={this.props.locationTree}
-          tiers={this.props.tiers}
-          livenessStatuses={this.props.livenessStatuses}
-          livenesses={this.props.livenesses}
-        />
-      </Loading>
+        render={() => (
+          <NodeCanvas
+            localityTree={currentLocality}
+            locationTree={this.props.locationTree}
+            tiers={this.props.tiers}
+            livenessStatuses={this.props.livenessStatuses}
+            livenesses={this.props.livenesses}
+          />
+        )}
+      />
     );
   }
 }

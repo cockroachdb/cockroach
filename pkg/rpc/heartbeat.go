@@ -89,18 +89,6 @@ func checkVersion(
 // The requester should also estimate its offset from this server along
 // with the requester's address.
 func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingResponse, error) {
-	// Enforce that clock max offsets are identical between nodes.
-	// Commit suicide in the event that this is ever untrue.
-	// This check is ignored if either offset is set to 0 (for unittests).
-	mo, amo := hs.clock.MaxOffset(), time.Duration(args.MaxOffsetNanos)
-	if mo != 0 && amo != 0 &&
-		mo != timeutil.ClocklessMaxOffset && amo != timeutil.ClocklessMaxOffset &&
-		mo != amo {
-
-		panic(fmt.Sprintf("locally configured maximum clock offset (%s) "+
-			"does not match that of node %s (%s)", mo, args.Addr, amo))
-	}
-
 	// Check that cluster IDs match.
 	clusterID := hs.clusterID.Get()
 	if args.ClusterID != nil && *args.ClusterID != uuid.Nil && clusterID != uuid.Nil &&
@@ -112,6 +100,20 @@ func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingR
 	// Check version compatibility.
 	if err := checkVersion(hs.version, args.ServerVersion); err != nil {
 		return nil, errors.Wrap(err, "version compatibility check failed on ping request")
+	}
+
+	// Enforce that clock max offsets are identical between nodes.
+	// Commit suicide in the event that this is ever untrue.
+	// This check is ignored if either offset is set to 0 (for unittests).
+	// Note that we validated this connection already. Different clusters
+	// could very well have different max offsets.
+	mo, amo := hs.clock.MaxOffset(), time.Duration(args.MaxOffsetNanos)
+	if mo != 0 && amo != 0 &&
+		mo != timeutil.ClocklessMaxOffset && amo != timeutil.ClocklessMaxOffset &&
+		mo != amo {
+
+		panic(fmt.Sprintf("locally configured maximum clock offset (%s) "+
+			"does not match that of node %s (%s)", mo, args.Addr, amo))
 	}
 
 	serverOffset := args.Offset

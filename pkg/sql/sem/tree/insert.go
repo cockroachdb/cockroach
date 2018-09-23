@@ -67,11 +67,15 @@ func (node *Insert) Format(ctx *FmtCtx) {
 			ctx.WriteString(" DO UPDATE SET ")
 			ctx.FormatNode(&node.OnConflict.Exprs)
 			if node.OnConflict.Where != nil {
+				ctx.WriteByte(' ')
 				ctx.FormatNode(node.OnConflict.Where)
 			}
 		}
 	}
-	ctx.FormatNode(node.Returning)
+	if HasReturningClause(node.Returning) {
+		ctx.WriteByte(' ')
+		ctx.FormatNode(node.Returning)
+	}
 }
 
 // DefaultValues returns true iff only default values are being inserted.

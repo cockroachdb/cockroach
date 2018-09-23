@@ -27,11 +27,15 @@ import (
 // #cgo LDFLAGS: -lsnappy
 // #cgo LDFLAGS: -lcryptopp
 // #cgo linux LDFLAGS: -lrt -lpthread
-// #cgo windows LDFLAGS: -lrpcrt4
+// #cgo windows LDFLAGS: -lshlwapi -lrpcrt4
 //
 // #include <stdlib.h>
 // #include <libroachccl.h>
 import "C"
+
+func init() {
+	engine.SetRocksDBOpenHook(C.DBOpenHookCCL)
+}
 
 // VerifyBatchRepr asserts that all keys in a BatchRepr are between the specified
 // start and end keys and computes the enginepb.MVCCStats for it.

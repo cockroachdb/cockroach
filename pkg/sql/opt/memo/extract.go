@@ -45,7 +45,8 @@ func ExtractConstDatum(ev ExprView) tree.Datum {
 		for i := range datums {
 			datums[i] = ExtractConstDatum(ev.Child(i))
 		}
-		return tree.NewDTuple(datums...)
+		typ := ev.Logical().Scalar.Type.(types.TTuple)
+		return tree.NewDTuple(typ, datums...)
 
 	case opt.ArrayOp:
 		elementType := ev.Logical().Scalar.Type.(types.TArray).Typ
@@ -63,4 +64,38 @@ func ExtractConstDatum(ev ExprView) tree.Datum {
 		panic(fmt.Sprintf("non-const expression: %+v", ev))
 	}
 	return ev.Private().(tree.Datum)
+}
+
+// ExtractAggSingleInputColumn returns the input ColumnID of an aggregate
+// operator that has a single input.
+func ExtractAggSingleInputColumn(ev ExprView) opt.ColumnID {
+	if !ev.IsAggregate() {
+		panic("not an Aggregate")
+	}
+	return extractColumnFromAggInput(ev.Child(0))
+}
+
+// ExtractAggInputColumns returns the input columns of an aggregate (which can
+// be empty).
+func ExtractAggInputColumns(ev ExprView) opt.ColSet {
+	if !ev.IsAggregate() {
+		panic("not an Aggregate")
+	}
+	var res opt.ColSet
+	for i, n := 0, ev.ChildCount(); i < n; i++ {
+		res.Add(int(extractColumnFromAggInput(ev.Child(i))))
+	}
+	return res
+}
+
+// Given an expression that is an argument to an Aggregate, returns the column
+// ID it references.
+func extractColumnFromAggInput(arg ExprView) opt.ColumnID {
+	if arg.Operator() == opt.AggDistinctOp {
+		arg = arg.Child(0)
+	}
+	if arg.Operator() != opt.VariableOp {
+		panic("Aggregate input not a Variable")
+	}
+	return arg.Private().(opt.ColumnID)
 }

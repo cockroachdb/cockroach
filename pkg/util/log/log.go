@@ -40,11 +40,25 @@ func FatalOnPanic() {
 }
 
 // SetExitFunc allows setting a function that will be called to exit the
-// process when a Fatal message is generated.
-func SetExitFunc(f func(int)) {
+// process when a Fatal message is generated. The supplied bool, if true,
+// suppresses the stack trace, which is useful for test callers wishing
+// to keep the logs reasonably clean.
+//
+// Call with a nil function to undo.
+func SetExitFunc(hideStack bool, f func(int)) {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
-	logging.exitFunc = f
+	logging.exitOverride.f = f
+	logging.exitOverride.hideStack = hideStack
+}
+
+// ResetExitFunc undoes any prior call to SetExitFunc.
+func ResetExitFunc() {
+	logging.mu.Lock()
+	defer logging.mu.Unlock()
+
+	logging.exitOverride.f = nil
+	logging.exitOverride.hideStack = false
 }
 
 // logDepth uses the PrintWith to format the output string and
@@ -79,6 +93,15 @@ func Infof(ctx context.Context, format string, args ...interface{}) {
 // appended.
 func Info(ctx context.Context, args ...interface{}) {
 	logDepth(ctx, 1, Severity_INFO, "", args)
+}
+
+// InfoDepth logs to the INFO log, offsetting the caller's stack frame by
+// 'depth'.
+// It extracts log tags from the context and logs them along with the given
+// message. Arguments are handled in the manner of fmt.Print; a newline is
+// appended.
+func InfoDepth(ctx context.Context, depth int, args ...interface{}) {
+	logDepth(ctx, depth+1, Severity_INFO, "", args)
 }
 
 // InfofDepth logs to the INFO log, offsetting the caller's stack frame by
@@ -188,7 +211,7 @@ func V(level int32) bool {
 // enabled or whether a trace.EventLog or a trace.Trace (i.e. sp.netTr) is
 // attached to ctx. In particular, if some OpenTracing collection is enabled
 // (e.g. LightStep), that, by itself, does NOT cause the expensive messages to
-// be enabled. SHOW TRACE FOR <stmt> and friends, on the other hand, does cause
+// be enabled. "SET tracing" and friends, on the other hand, does cause
 // these messages to be enabled, as it shows that a user has expressed
 // particular interest in a trace.
 //

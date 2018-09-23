@@ -15,23 +15,27 @@
 package sql
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
 	"math/rand"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/pkg/errors"
 )
 
@@ -55,7 +59,11 @@ func PlanAndRunExport(
 	out distsqlrun.ProcessorCoreUnion,
 	resultRows *RowResultWriter,
 ) error {
-	planCtx := dsp.newPlanningCtx(ctx, evalCtx, txn)
+	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, txn)
+
+	rec, err := dsp.checkSupportForNode(in)
+	planCtx.isLocal = err != nil || rec == cannotDistribute
+
 	p, err := dsp.createPlanForNode(&planCtx, in)
 	if err != nil {
 		return errors.Wrap(err, "constructing distSQL plan")
@@ -65,19 +73,20 @@ func PlanAndRunExport(
 		out, distsqlrun.PostProcessSpec{}, ExportPlanResultTypes, distsqlrun.Ordering{},
 	)
 
-	// Overwrite planToStreamColMap (used by recv below) to reflect the output of
+	// Overwrite PlanToStreamColMap (used by recv below) to reflect the output of
 	// the non-grouping stage we've added above. That stage outputs produces
 	// columns filename/rows/bytes.
-	p.planToStreamColMap = identityMap(p.planToStreamColMap, len(ExportPlanResultTypes))
+	p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(ExportPlanResultTypes))
 
 	dsp.FinalizePlan(&planCtx, &p)
 
-	recv := makeDistSQLReceiver(
+	recv := MakeDistSQLReceiver(
 		ctx, resultRows, tree.Rows,
 		execCfg.RangeDescriptorCache, execCfg.LeaseHolderCache, txn, func(ts hlc.Timestamp) {},
+		evalCtx.Tracing,
 	)
 
-	dsp.Run(&planCtx, txn, &p, recv, evalCtx)
+	dsp.Run(&planCtx, txn, &p, recv, evalCtx, nil /* finishedSetupFn */)
 	return resultRows.Err()
 }
 
@@ -151,6 +160,11 @@ func (c *callbackResultWriter) Err() error {
 
 var colTypeBytes = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
 
+// KeyRewriter describes helpers that can rewrite keys (possibly in-place).
+type KeyRewriter interface {
+	RewriteKey(key []byte) (res []byte, ok bool, err error)
+}
+
 // LoadCSV performs a distributed transformation of the CSV files at from
 // and stores them in enterprise backup format at to.
 func LoadCSV(
@@ -158,18 +172,20 @@ func LoadCSV(
 	phs PlanHookState,
 	job *jobs.Job,
 	resultRows *RowResultWriter,
-	tableDesc *sqlbase.TableDescriptor,
+	tables map[string]*sqlbase.TableDescriptor,
 	from []string,
 	to string,
 	format roachpb.IOFileFormat,
 	walltime int64,
 	splitSize int64,
+	oversample int64,
+	makeRewriter func(map[sqlbase.ID]*sqlbase.TableDescriptor) (KeyRewriter, error),
 ) error {
-	ctx = log.WithLogTag(ctx, "import-distsql", nil)
+	ctx = logtags.AddTag(ctx, "import-distsql", nil)
 
 	dsp := phs.DistSQLPlanner()
 	evalCtx := phs.ExtendedEvalContext()
-	planCtx := dsp.newPlanningCtx(ctx, evalCtx, nil /* txn */)
+	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, nil /* txn */)
 
 	resp, err := phs.ExecCfg().StatusServer.Nodes(ctx, &serverpb.NodesRequest{})
 	if err != nil {
@@ -178,12 +194,12 @@ func LoadCSV(
 	// Because we're not going through the normal pathways, we have to set up
 	// the nodeID -> nodeAddress map ourselves.
 	for _, node := range resp.Nodes {
-		if err := dsp.checkNodeHealthAndVersion(&planCtx, &node.Desc); err != nil {
+		if err := dsp.CheckNodeHealthAndVersion(&planCtx, &node.Desc); err != nil {
 			continue
 		}
 	}
-	nodes := make([]roachpb.NodeID, 0, len(planCtx.nodeAddresses))
-	for nodeID := range planCtx.nodeAddresses {
+	nodes := make([]roachpb.NodeID, 0, len(planCtx.NodeAddresses))
+	for nodeID := range planCtx.NodeAddresses {
 		nodes = append(nodes, nodeID)
 	}
 	// Shuffle node order so that multiple IMPORTs done in parallel will not
@@ -197,29 +213,30 @@ func LoadCSV(
 	// Setup common to both stages.
 
 	// For each input file, assign it to a node.
-	csvSpecs := make([]*distsqlrun.ReadImportDataSpec, 0, len(nodes))
+	inputSpecs := make([]*distsqlrun.ReadImportDataSpec, 0, len(nodes))
 	for i, input := range from {
 		// Round robin assign CSV files to nodes. Files 0 through len(nodes)-1
 		// creates the spec. Future files just add themselves to the Uris.
 		if i < len(nodes) {
-			csvSpecs = append(csvSpecs, &distsqlrun.ReadImportDataSpec{
-				TableDesc: *tableDesc,
-				Format:    format,
+			spec := &distsqlrun.ReadImportDataSpec{
+				Tables: tables,
+				Format: format,
 				Progress: distsqlrun.JobProgress{
 					JobID: *job.ID(),
 					Slot:  int32(i),
 				},
 				Uri: make(map[int32]string),
-			})
+			}
+			inputSpecs = append(inputSpecs, spec)
 		}
 		n := i % len(nodes)
-		csvSpecs[n].Uri[int32(i)] = input
+		inputSpecs[n].Uri[int32(i)] = input
 	}
 
-	for _, rcs := range csvSpecs {
+	for i := range inputSpecs {
 		// TODO(mjibson): using the actual file sizes here would improve progress
 		// accuracy.
-		rcs.Progress.Contribution = float32(len(rcs.Uri)) / float32(len(from))
+		inputSpecs[i].Progress.Contribution = float32(len(inputSpecs[i].Uri)) / float32(len(from))
 	}
 
 	sstSpecs := make([]distsqlrun.SSTWriterSpec, len(nodes))
@@ -235,22 +252,89 @@ func LoadCSV(
 
 	// Determine if we need to run the sampling plan or not.
 
-	details := job.Record.Details.(jobs.ImportDetails)
-	samples := details.Tables[0].Samples
+	details := job.Details().(jobspb.ImportDetails)
+	samples := details.Samples
 	if samples == nil {
 		var err error
-		samples, err = dsp.loadCSVSamplingPlan(ctx, job, db, evalCtx, thisNode, nodes, from, splitSize, &planCtx, csvSpecs, sstSpecs)
+		samples, err = dsp.loadCSVSamplingPlan(ctx, job, db, evalCtx, thisNode, nodes, from, splitSize, oversample, &planCtx, inputSpecs, sstSpecs)
 		if err != nil {
 			return err
 		}
 	}
 
+	/*
+		TODO(dt): when we enable reading schemas during sampling, might do this:
+		// If sampling returns parsed table definitions, we need to potentially assign
+		// them real IDs and re-key the samples with those IDs, then update the job
+		// details to record the tables and their matching samples.
+			if len(parsedTables) > 0 {
+				importing := to == "" // are we actually ingesting, or just transforming?
+
+				rekeys := make(map[sqlbase.ID]*sqlbase.TableDescriptor, len(parsedTables))
+
+				// Update the tables map with the parsed tables and allocate them real IDs.
+				for _, parsed := range parsedTables {
+					name := parsed.Name
+					if existing, ok := tables[name]; ok && existing != nil {
+						return errors.Errorf("unexpected parsed table definition for %q", name)
+					}
+					tables[name] = parsed
+
+					// If we're actually importing, we'll need a real ID for this table.
+					if importing {
+						rekeys[parsed.ID] = parsed
+						parsed.ID, err = GenerateUniqueDescID(ctx, phs.ExecCfg().DB)
+						if err != nil {
+							return err
+						}
+					}
+				}
+
+				// The samples were created using the dummy IDs, but the IMPORT run will use
+				// the actual IDs, so we need to re-key the samples so that they actually
+				// act as splits in the IMPORTed key-space.
+				if importing {
+					kr, err := makeRewriter(rekeys)
+					if err != nil {
+						return err
+					}
+					for i := range samples {
+						var ok bool
+						samples[i], ok, err = kr.RewriteKey(samples[i])
+						if err != nil {
+							return err
+						}
+						if !ok {
+							return errors.Errorf("expected rewriter to rewrite key %v", samples[i])
+						}
+					}
+				}
+			}
+	*/
+
+	if len(tables) == 0 {
+		return errors.Errorf("must specify table(s) to import")
+	}
+
+	splits := make([][]byte, 0, 2*len(tables)+len(samples))
 	// Add the table keys to the spans.
-	tableSpan := tableDesc.TableSpan()
-	splits := make([][]byte, 0, 2+len(samples))
-	splits = append(splits, tableSpan.Key)
+	for _, desc := range tables {
+		tableSpan := desc.TableSpan()
+		splits = append(splits, tableSpan.Key, tableSpan.EndKey)
+	}
+
 	splits = append(splits, samples...)
-	splits = append(splits, tableSpan.EndKey)
+	sort.Slice(splits, func(a, b int) bool { return roachpb.Key(splits[a]).Compare(splits[b]) < 0 })
+
+	// Remove duplicates. These occur when the end span of a descriptor is the
+	// same as the start span of another.
+	origSplits := splits
+	splits = splits[:0]
+	for _, x := range origSplits {
+		if len(splits) == 0 || !bytes.Equal(x, splits[len(splits)-1]) {
+			splits = append(splits, x)
+		}
+	}
 
 	// jobSpans is a slice of split points, including table start and end keys
 	// for the table. We create router range spans then from taking each pair
@@ -276,11 +360,11 @@ func LoadCSV(
 
 	// We have the split ranges. Now re-read the CSV files and route them to SST writers.
 
-	p := physicalPlan{}
+	p := PhysicalPlan{}
 	// This is a hardcoded two stage plan. The first stage is the mappers,
 	// the second stage is the reducers. We have to keep track of all the mappers
 	// we create because the reducers need to hook up a stream for each mapper.
-	firstStageRouters := make([]distsqlplan.ProcessorIdx, len(csvSpecs))
+	firstStageRouters := make([]distsqlplan.ProcessorIdx, len(inputSpecs))
 	firstStageTypes := []sqlbase.ColumnType{colTypeBytes, colTypeBytes}
 
 	routerSpec := distsqlrun.OutputRouterSpec_RangeRouterSpec{
@@ -295,7 +379,7 @@ func LoadCSV(
 
 	stageID := p.NewStageID()
 	// We can reuse the phase 1 ReadCSV specs, just have to clear sampling.
-	for i, rcs := range csvSpecs {
+	for i, rcs := range inputSpecs {
 		rcs.SampleSize = 0
 		proc := distsqlplan.Processor{
 			Node: nodes[i],
@@ -313,12 +397,12 @@ func LoadCSV(
 		firstStageRouters[i] = pIdx
 	}
 
-	// The SST Writer returns 5 columns: name of the file, size of the file,
+	// The SST Writer returns 5 columns: name of the file, encoded BulkOpSummary,
 	// checksum, start key, end key.
-	p.planToStreamColMap = []int{0, 1, 2, 3, 4}
+	p.PlanToStreamColMap = []int{0, 1, 2, 3, 4}
 	p.ResultTypes = []sqlbase.ColumnType{
 		{SemanticType: sqlbase.ColumnType_STRING},
-		{SemanticType: sqlbase.ColumnType_INT},
+		colTypeBytes,
 		colTypeBytes,
 		colTypeBytes,
 		colTypeBytes,
@@ -360,17 +444,18 @@ func LoadCSV(
 		p.ResultRouters = append(p.ResultRouters, pIdx)
 	}
 
-	// Clear SamplingProgress and prep second stage job details for progress
+	// Update job details with the sampled keys, as well as any parsed tables,
+	// clear SamplingProgress and prep second stage job details for progress
 	// tracking.
-	if err := job.DetailProgressed(ctx,
-		func(ctx context.Context, details jobs.Details, progress jobs.ProgressDetails) float32 {
-			prog := progress.(*jobs.Progress_Import).Import
+	if err := job.FractionDetailProgressed(ctx,
+		func(ctx context.Context, details jobspb.Details, progress jobspb.ProgressDetails) float32 {
+			prog := progress.(*jobspb.Progress_Import).Import
 			prog.SamplingProgress = nil
-			prog.ReadProgress = make([]float32, len(csvSpecs))
+			prog.ReadProgress = make([]float32, len(inputSpecs))
 			prog.WriteProgress = make([]float32, len(p.ResultRouters))
 
-			d := details.(*jobs.Payload_Import).Import
-			d.Tables[0].Samples = samples
+			d := details.(*jobspb.Payload_Import).Import
+			d.Samples = samples
 			return prog.Completed()
 		},
 	); err != nil {
@@ -379,7 +464,7 @@ func LoadCSV(
 
 	dsp.FinalizePlan(&planCtx, &p)
 
-	recv := makeDistSQLReceiver(
+	recv := MakeDistSQLReceiver(
 		ctx,
 		resultRows,
 		tree.Rows,
@@ -387,13 +472,12 @@ func LoadCSV(
 		nil, /* leaseCache */
 		nil, /* txn - the flow does not read or write the database */
 		func(ts hlc.Timestamp) {},
+		evalCtx.Tracing,
 	)
 
-	defer log.VEventf(ctx, 1, "finished job %s", job.Record.Description)
-	// TODO(dan): We really don't need the txn for this flow, so remove it once
-	// Run works without one.
+	defer log.VEventf(ctx, 1, "finished job %s", job.Payload().Description)
 	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		dsp.Run(&planCtx, txn, &p, recv, evalCtx)
+		dsp.Run(&planCtx, txn, &p, recv, evalCtx, nil /* finishedSetupFn */)
 		return resultRows.Err()
 	})
 }
@@ -407,7 +491,8 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	nodes []roachpb.NodeID,
 	from []string,
 	splitSize int64,
-	planCtx *planningCtx,
+	oversample int64,
+	planCtx *PlanningCtx,
 	csvSpecs []*distsqlrun.ReadImportDataSpec,
 	sstSpecs []distsqlrun.SSTWriterSpec,
 ) ([][]byte, error) {
@@ -423,13 +508,15 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	// factor of 3 would sample the KV with probability 100/10000000 since we are
 	// sampling at 3x. Since we're now getting back 3x more samples than needed,
 	// we only use every 1/(oversample), or 1/3 here, in our final sampling.
-	const oversample = 3
+	if oversample < 1 {
+		oversample = 3
+	}
 	sampleSize := splitSize / oversample
 	if sampleSize > math.MaxInt32 {
 		return nil, errors.Errorf("SST size must fit in an int32: %d", splitSize)
 	}
 
-	var p physicalPlan
+	var p PhysicalPlan
 	stageID := p.NewStageID()
 
 	for _, cs := range csvSpecs {
@@ -450,8 +537,8 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 		p.ResultRouters[i] = pIdx
 	}
 
-	if err := job.Progressed(ctx, func(ctx context.Context, details jobs.ProgressDetails) float32 {
-		d := details.(*jobs.Progress_Import).Import
+	if err := job.FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+		d := details.(*jobspb.Progress_Import).Import
 		d.SamplingProgress = make([]float32, len(csvSpecs))
 		return d.Completed()
 	}); err != nil {
@@ -459,12 +546,15 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	}
 
 	// We only need the key during sorting.
-	p.planToStreamColMap = []int{0}
+	p.PlanToStreamColMap = []int{0, 1}
 	p.ResultTypes = []sqlbase.ColumnType{colTypeBytes, colTypeBytes}
 
 	kvOrdering := distsqlrun.Ordering{
 		Columns: []distsqlrun.Ordering_Column{{
 			ColIdx:    0,
+			Direction: distsqlrun.Ordering_Column_ASC,
+		}, {
+			ColIdx:    1,
 			Direction: distsqlrun.Ordering_Column_ASC,
 		}},
 	}
@@ -476,17 +566,32 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	p.AddSingleGroupStage(thisNode,
 		distsqlrun.ProcessorCoreUnion{Sorter: &sorterSpec},
 		distsqlrun.PostProcessSpec{},
-		[]sqlbase.ColumnType{colTypeBytes},
+		[]sqlbase.ColumnType{colTypeBytes, colTypeBytes},
 	)
 
 	var samples [][]byte
+
 	sampleCount := 0
 	rowResultWriter := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+		key := roachpb.Key(*row[0].(*tree.DBytes))
+
+		/*
+			TODO(dt): when we enable reading schemas during sampling, might do this:
+			if keys.IsDescriptorKey(key) {
+				kv := roachpb.KeyValue{Key: key}
+				kv.Value.RawBytes = []byte(*row[1].(*tree.DBytes))
+				var desc sqlbase.TableDescriptor
+				if err := kv.Value.GetProto(&desc); err != nil {
+					return err
+				}
+				parsedTables[desc.ID] = &desc
+				return nil
+			}
+		*/
 		sampleCount++
-		sampleCount = sampleCount % oversample
+		sampleCount = sampleCount % int(oversample)
 		if sampleCount == 0 {
-			b := row[0].(*tree.DBytes)
-			k, err := keys.EnsureSafeSplitKey(roachpb.Key(*b))
+			k, err := keys.EnsureSafeSplitKey(key)
 			if err != nil {
 				return err
 			}
@@ -499,7 +604,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	// of this PlanCtx. https://reviewable.io/reviews/cockroachdb/cockroach/17279#-KqOrLpy9EZwbRKHLYe6:-KqOp00ntQEyzwEthAsl:bd4nzje
 	dsp.FinalizePlan(planCtx, &p)
 
-	recv := makeDistSQLReceiver(
+	recv := MakeDistSQLReceiver(
 		ctx,
 		rowResultWriter,
 		tree.Rows,
@@ -507,20 +612,17 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 		nil, /* leaseCache */
 		nil, /* txn - the flow does not read or write the database */
 		func(ts hlc.Timestamp) {},
+		evalCtx.Tracing,
 	)
-	log.VEventf(ctx, 1, "begin sampling phase of job %s", job.Record.Description)
-	// TODO(dan): We really don't need the txn for this flow, so remove it once
-	// Run works without one.
-	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		// Clear the stage 2 data in case this function is ever restarted (it shouldn't be).
-		samples = nil
-		dsp.Run(planCtx, txn, &p, recv, evalCtx)
-		return rowResultWriter.Err()
-	}); err != nil {
+	log.VEventf(ctx, 1, "begin sampling phase of job %s", job.Payload().Description)
+	// Clear the stage 2 data in case this function is ever restarted (it shouldn't be).
+	samples = nil
+	dsp.Run(planCtx, nil, &p, recv, evalCtx, nil /* finishedSetupFn */)
+	if err := rowResultWriter.Err(); err != nil {
 		return nil, err
 	}
 
-	log.VEventf(ctx, 1, "generated %d splits; begin routing for job %s", len(samples), job.Record.Description)
+	log.VEventf(ctx, 1, "generated %d splits; begin routing for job %s", len(samples), job.Payload().Description)
 
 	return samples, nil
 }

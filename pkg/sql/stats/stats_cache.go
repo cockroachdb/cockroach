@@ -21,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awsutil"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -104,9 +105,12 @@ func NewTableStatisticsCache(
 		Policy:      cache.CacheLRU,
 		ShouldEvict: func(s int, key, value interface{}) bool { return s > cacheSize },
 	})
+	// The stat cache requires redundant callbacks as it is using gossip to
+	// signal the presence of new stats, not to actually propagate them.
 	g.RegisterCallback(
 		gossip.MakePrefixPattern(gossip.KeyTableStatAddedPrefix),
 		tableStatsCache.tableStatAddedGossipUpdate,
+		gossip.Redundant,
 	)
 	return tableStatsCache
 }
@@ -169,6 +173,16 @@ func (sc *TableStatisticsCache) refreshTableStats(
 func (sc *TableStatisticsCache) GetTableStats(
 	ctx context.Context, tableID sqlbase.ID,
 ) ([]*TableStatistic, error) {
+	if sqlbase.IsReservedID(tableID) {
+		// Don't try to get statistics for system tables (most importantly,
+		// for table_statistics itself).
+		return nil, nil
+	}
+	if tableID == keys.VirtualDescriptorID {
+		// Don't try to get statistics for virtual tables.
+		return nil, nil
+	}
+
 	if stats, ok := sc.lookupTableStats(ctx, tableID); ok {
 		return stats, nil
 	}

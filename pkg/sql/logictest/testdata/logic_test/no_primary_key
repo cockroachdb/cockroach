@@ -59,12 +59,13 @@ SELECT rowid FROM t WHERE a = 10
 ----
 11
 
-query TTBTT
+query TTBTTTB
 SHOW COLUMNS FROM t
 ----
-a  INT     true  NULL {}
-b  INT     true  NULL {}
-c  STRING  true  NULL {}
+a      INT     true   NULL            ·  {}           false
+b      INT     true   NULL            ·  {}           false
+rowid  INT     false  unique_rowid()  ·  {"primary"}  true
+c      STRING  true   NULL            ·  {}           false
 
 statement ok
 CREATE INDEX a_idx ON t (a)

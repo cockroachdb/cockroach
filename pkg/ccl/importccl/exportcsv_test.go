@@ -54,7 +54,7 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 		t.Fatal(err)
 	}
 	db.Exec(t, "ALTER TABLE bank SCATTER")
-	db.Exec(t, "SELECT 'force a scan to repopulate range cache' FROM [SELECT COUNT(*) FROM bank]")
+	db.Exec(t, "SELECT 'force a scan to repopulate range cache' FROM [SELECT count(*) FROM bank]")
 
 	return db, dir, func() {
 		tc.Stopper().Stop(ctx)
@@ -81,8 +81,14 @@ func TestExportImportBank(t *testing.T) {
 		}
 		t.Run("null="+null, func(t *testing.T) {
 			var files []string
+
+			var asOf string
+			db.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&asOf)
+
 			for _, row := range db.QueryStr(t,
-				fmt.Sprintf(`EXPORT INTO CSV 'nodelocal:///t' WITH chunk_rows = $1, delimiter = '|' %s FROM TABLE bank`, nullAs), chunkSize,
+				fmt.Sprintf(`EXPORT INTO CSV 'nodelocal:///t'
+					WITH chunk_rows = $1, delimiter = '|' %s
+					FROM SELECT * FROM bank AS OF SYSTEM TIME %s`, nullAs, asOf), chunkSize,
 			) {
 				files = append(files, row[0])
 				f, err := ioutil.ReadFile(filepath.Join(dir, "t", row[0]))
@@ -97,7 +103,7 @@ func TestExportImportBank(t *testing.T) {
 			db.Exec(t, fmt.Sprintf(`IMPORT TABLE bank2 %s CSV DATA (%s) WITH delimiter = '|'%s`, schema, fileList, nullIf))
 
 			db.CheckQueryResults(t,
-				`SELECT * FROM bank ORDER BY id`, db.QueryStr(t, `SELECT * FROM bank2 ORDER BY id`),
+				fmt.Sprintf(`SELECT * FROM bank AS OF SYSTEM TIME %s ORDER BY id`, asOf), db.QueryStr(t, `SELECT * FROM bank2 ORDER BY id`),
 			)
 			db.CheckQueryResults(t,
 				`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE bank2`, db.QueryStr(t, `SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE bank`),
@@ -156,22 +162,6 @@ func TestMultiNodeExportStmt(t *testing.T) {
 	}
 }
 
-func TestExportNonTable(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	tc := testcluster.StartTestCluster(t, 3,
-		base.TestClusterArgs{ServerArgs: base.TestServerArgs{UseDatabase: "test"}},
-	)
-	defer tc.Stopper().Stop(context.Background())
-	db := sqlutils.MakeSQLRunner(tc.Conns[0])
-	db.Exec(t, "CREATE DATABASE test")
-
-	if _, err := db.DB.Exec(
-		`EXPORT INTO CSV 'nodelocal:///series' WITH chunk_rows = '10' FROM SELECT generate_series(1, 100)`,
-	); !testutils.IsError(err, "unsupported EXPORT query") {
-		t.Fatal(err)
-	}
-}
-
 func TestExportJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	dir, cleanupDir := testutils.TempDir(t)
@@ -183,4 +173,45 @@ func TestExportJoin(t *testing.T) {
 
 	sqlDB.Exec(t, `CREATE TABLE t AS VALUES (1, 2)`)
 	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal:///join' FROM SELECT * FROM t, t as u`)
+}
+
+func TestExportOrder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	dir, cleanupDir := testutils.TempDir(t)
+	defer cleanupDir()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `create table foo (i int primary key, x int, y int, z int, index (y))`)
+	sqlDB.Exec(t, `insert into foo values (1, 12, 3, 14), (2, 22, 2, 24), (3, 32, 1, 34)`)
+
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal:///order' from select * from foo order by y asc limit 2`)
+	content, err := ioutil.ReadFile(filepath.Join(dir, "order", "n1.0.csv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expected, got := "3,32,1,34\n2,22,2,24\n", string(content); expected != got {
+		t.Fatalf("expected %q, got %q", expected, got)
+	}
+}
+
+func TestExportShow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	dir, cleanupDir := testutils.TempDir(t)
+	defer cleanupDir()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal:///show' FROM SELECT * FROM [SHOW DATABASES]`)
+	content, err := ioutil.ReadFile(filepath.Join(dir, "show", "n1.0.csv"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if expected, got := "defaultdb\npostgres\nsystem\n", string(content); expected != got {
+		t.Fatalf("expected %q, got %q", expected, got)
+	}
 }

@@ -36,6 +36,25 @@ func (c *CompiledExpr) LookupDefine(name string) *DefineExpr {
 	return c.defineIndex[name]
 }
 
+// LookupMatchingDefines returns the set of define expressions which either
+// exactly match the given name, or else have a tag that matches the given
+// name. If no matches can be found, then LookupMatchingDefines returns nil.
+func (c *CompiledExpr) LookupMatchingDefines(name string) DefineSetExpr {
+	var defines DefineSetExpr
+	define := c.LookupDefine(name)
+	if define != nil {
+		defines = append(defines, define)
+	} else {
+		// Name might be a tag name, so find all defines with that tag.
+		for _, define := range c.Defines {
+			if define.Tags.Contains(name) {
+				defines = append(defines, define)
+			}
+		}
+	}
+	return defines
+}
+
 // LookupMatchingRules returns the set of rules that match the given opname at
 // the top-level, or nil if none do. For example, "InnerJoin" would match this
 // rule:
@@ -120,7 +139,6 @@ func (c *Compiler) Compile() *CompiledExpr {
 	if !c.compileRules(root.Rules) {
 		return nil
 	}
-
 	return c.compiled
 }
 
@@ -175,7 +193,7 @@ func (c *Compiler) compileRules(rules RuleSetExpr) bool {
 	// Index compiled rules by the op that they match at the top-level of the
 	// rule.
 	for _, rule := range c.compiled.Rules {
-		name := string(rule.Match.Names[0])
+		name := rule.Match.SingleName()
 		existing := c.compiled.matchIndex[name]
 		c.compiled.matchIndex[name] = append(existing, rule)
 	}
@@ -210,10 +228,16 @@ func (c *ruleCompiler) compile(compiler *Compiler, rule *RuleExpr) {
 	c.compiled = compiler.compiled
 	c.rule = rule
 
+	if _, ok := rule.Match.Name.(*FuncExpr); ok {
+		// Function name is itself a function that dynamically determines name.
+		c.compiler.addErr(rule.Match.Source(), errors.New("cannot match dynamic name"))
+		return
+	}
+
 	// Expand root rules that match multiple operators into a separate match
 	// expression for each matching operator.
-	for _, name := range rule.Match.Names {
-		defines := c.findMatchingDefines(string(name))
+	for _, name := range rule.Match.NameChoice() {
+		defines := c.compiled.LookupMatchingDefines(string(name))
 		if len(defines) == 0 {
 			// No defines with that tag found, which is not allowed.
 			defines = nil
@@ -232,17 +256,17 @@ func (c *ruleCompiler) compile(compiler *Compiler, rule *RuleExpr) {
 // code generator, since all rules will never match more than one op at the
 // top-level.
 func (c *ruleCompiler) expandRule(opName NameExpr) {
-	// Remember the root opname in case its needed to compile the OpName
+	// Remember the root opname in case it's needed to compile the OpName
 	// built-in function.
 	c.opName = &opName
 	c.bindings = make(map[StringExpr]*BindExpr)
 
 	// Construct new match expression that matches a single name.
-	match := &MatchExpr{Src: c.rule.Match.Src, Names: NamesExpr{opName}}
+	match := &FuncExpr{Src: c.rule.Match.Src, Name: &NamesExpr{opName}}
 	match.Args = append(match.Args, c.rule.Match.Args...)
 
 	compiler := ruleContentCompiler{compiler: c, src: c.rule.Src, matchPattern: true}
-	match = compiler.compile(match).(*MatchExpr)
+	match = compiler.compile(match).(*FuncExpr)
 
 	compiler = ruleContentCompiler{compiler: c, src: c.rule.Src, matchPattern: false}
 	replace := compiler.compile(c.rule.Replace)
@@ -256,92 +280,7 @@ func (c *ruleCompiler) expandRule(opName NameExpr) {
 		Replace:  replace,
 	}
 
-	c.checkLiteralNames(newRule)
-
 	c.compiled.Rules = append(c.compiled.Rules, newRule)
-}
-
-// checkLiteralNames traverses the expression tree and verifies that each
-// literal name expressions is in a legal location (i.e. not in match pattern),
-// and that it matches an operator name.
-func (c *ruleCompiler) checkLiteralNames(rule *RuleExpr) {
-	allowLiteralName := false
-	src := rule.Src
-
-	var fn func(Expr) Expr
-	fn = func(e Expr) Expr {
-		// Save current value of allowLiteralName and restore after visit.
-		saveName := allowLiteralName
-
-		// Remember source information.
-		saveSrc := src
-		if e.Source() != nil {
-			src = e.Source()
-		}
-
-		// Only visit the arguments of the Match, Construct, and CustomFunc
-		// expressions, since literal names are allowed in their name operands.
-		switch t := e.(type) {
-		case *MatchExpr:
-			allowLiteralName = false
-			t.Args.Visit(fn)
-
-		case *ConstructExpr:
-			allowLiteralName = true
-			t.Args.Visit(fn)
-
-		case *CustomFuncExpr:
-			allowLiteralName = true
-			t.Args.Visit(fn)
-
-		case *NameExpr:
-			if !allowLiteralName {
-				c.compiler.addErr(src, errors.New("cannot match literal name"))
-			} else {
-				define := c.compiler.compiled.LookupDefine(string(*t))
-				if define == nil {
-					c.compiler.addErr(src, fmt.Errorf("%s is not an operator name", *t))
-				}
-			}
-
-		default:
-			// Recurse into every child of other kinds of expressions.
-			e.Visit(fn)
-		}
-
-		allowLiteralName = saveName
-		src = saveSrc
-		return e
-	}
-
-	if _, ok := rule.Replace.(*NameExpr); ok {
-		c.compiler.addErr(src, errors.New("replace pattern cannot be a literal name"))
-		return
-	}
-
-	rule.Visit(fn)
-}
-
-// findMatchingDefines returns the set of define expressions which either
-// exactly match the given name, or else have a tag that matches the given
-// name. If no matches can be found, then findMatchingDefines returns nil.
-func (c *ruleCompiler) findMatchingDefines(name string) []*DefineExpr {
-	var defines []*DefineExpr
-
-	compiled := c.compiler.compiled
-	define := compiled.LookupDefine(name)
-	if define != nil {
-		defines = append(defines, define)
-	} else {
-		// Name might be a tag name, so find all defines with that tag.
-		for _, define := range compiled.Defines {
-			if define.Tags.Contains(name) {
-				defines = append(defines, define)
-			}
-		}
-	}
-
-	return defines
 }
 
 // ruleContentCompiler is the workhorse of rule compilation. It is recursively
@@ -368,24 +307,16 @@ func (c *ruleContentCompiler) compile(e Expr) Expr {
 	// Recurse into match or construct operator separately, since they will need
 	// to ceate new context before visiting arguments.
 	switch t := e.(type) {
-	case *MatchExpr:
-		return c.compileMatch(t)
-
-	case *ConstructExpr:
-		return c.compileConstruct(t)
+	case *FuncExpr:
+		return c.compileFunc(t)
 
 	case *BindExpr:
-		// If in a match pattern and not in a custom match function, then ensure
-		// that binding labels are unique.
-		if c.matchPattern && !c.customFunc {
-			_, ok := c.compiler.bindings[t.Label]
-			if ok {
-				c.addErr(t, fmt.Errorf("duplicate bind label '%s'", t.Label))
-			}
-			c.compiler.bindings[t.Label] = t
-		} else {
-			c.addDisallowedErr(t, "cannot bind arguments")
+		// Ensure that binding labels are unique.
+		_, ok := c.compiler.bindings[t.Label]
+		if ok {
+			c.addErr(t, fmt.Errorf("duplicate bind label '%s'", t.Label))
 		}
+		c.compiler.bindings[t.Label] = t
 
 	case *RefExpr:
 		if c.matchPattern && !c.customFunc {
@@ -398,18 +329,29 @@ func (c *ruleContentCompiler) compile(e Expr) Expr {
 			}
 		}
 
-	case *MatchListAnyExpr, *MatchListEmptyExpr, *MatchListFirstExpr,
-		*MatchListLastExpr, *MatchListSingleExpr:
-		if !c.matchPattern || c.customFunc {
+	case *ListExpr:
+		if c.matchPattern && c.customFunc {
 			c.addDisallowedErr(t, "cannot use lists")
+		} else {
+			c.compileList(t)
 		}
 
-	case *MatchAndExpr, *MatchNotExpr:
+	case *AndExpr, *NotExpr:
 		if !c.matchPattern || c.customFunc {
 			c.addDisallowedErr(t, "cannot use boolean expressions")
 		}
 
-	case *MatchAnyExpr:
+	case *NameExpr:
+		if c.matchPattern && !c.customFunc {
+			c.addErr(t, fmt.Errorf("cannot match literal name '%s'", *t))
+		} else {
+			define := c.compiler.compiled.LookupDefine(string(*t))
+			if define == nil {
+				c.addErr(t, fmt.Errorf("%s is not an operator name", *t))
+			}
+		}
+
+	case *AnyExpr:
 		if !c.matchPattern || c.customFunc {
 			c.addDisallowedErr(t, "cannot use wildcard matcher")
 		}
@@ -419,125 +361,138 @@ func (c *ruleContentCompiler) compile(e Expr) Expr {
 	return e.Visit(c.compile)
 }
 
-func (c *ruleContentCompiler) compileMatch(match *MatchExpr) Expr {
-	// Ensure that all match names are defined and check whether this is a
-	// custom match function invocation.
-	var customFunc *CustomFuncExpr
-	for _, name := range match.Names {
-		defines := c.compiler.findMatchingDefines(string(name))
-		if defines == nil {
-			// This must be an invocation of a custom match function, because
-			// there is no matching define.
-			if len(match.Names) != 1 {
-				c.addErr(match, errors.New("custom function cannot have multiple names"))
-				return match
-			}
-
-			// Handle built-in function.
-			if match.Names[0] == "OpName" {
-				opName, ok := c.compileOpName(match, match.Args)
-				if ok {
-					return opName
-				}
-
-				// Fall through and create CustomFuncExpr if opname can't be
-				// determined at compile-time.
-			}
-
-			// Create a CustomFuncExpr to make it easier to distinguish between
-			// op matchers and and custom function invocations.
-			customFunc = &CustomFuncExpr{Name: match.Names[0], Args: match.Args}
-			break
-		}
-	}
-
-	if c.customFunc && customFunc == nil {
-		c.addErr(match, errors.New("custom function name cannot be an operator name"))
-		return match
-	}
-
-	// Create nested context and recurse into children.
-	nested := ruleContentCompiler{
-		compiler:     c.compiler,
-		src:          match.Source(),
-		matchPattern: c.matchPattern,
-		customFunc:   customFunc != nil,
-	}
-
-	if customFunc == nil {
-		return match.Visit(nested.compile)
-	}
-	return customFunc.Visit(nested.compile)
-}
-
-func (c *ruleContentCompiler) compileConstruct(construct *ConstructExpr) Expr {
-	var customFunc *CustomFuncExpr
-	if name, ok := construct.Name.(*NameExpr); ok {
-		// Create a CustomFuncExpr if not constructing an operator. This makes
-		// it easier to distinguish between op constructors and custom function
-		// invocations.
-		defines := c.compiler.findMatchingDefines(string(*name))
-		if defines != nil {
-			// Don't allow construct name to be a tag name.
-			if len(defines) > 1 || string(defines[0].Name) != string(*name) {
-				c.addErr(construct, fmt.Errorf("construct name cannot be a tag"))
+func (c *ruleContentCompiler) compileList(list *ListExpr) {
+	foundNotAny := false
+	for _, item := range list.Items {
+		if item.Op() == ListAnyOp {
+			if !c.matchPattern {
+				c.addErr(list, errors.New("list constructor cannot use '...'"))
 			}
 		} else {
-			// Handle built-in OpName function.
-			if *name == "OpName" {
-				opName, ok := c.compileOpName(construct, construct.Args)
-				if ok {
-					return opName
-				}
-
-				// Fall through and create CustomFuncExpr if opname can't be
-				// determined at compile-time.
+			if c.matchPattern && foundNotAny {
+				c.addErr(item, errors.New("list matcher cannot contain multiple expressions"))
+				break
 			}
-
-			customFunc = &CustomFuncExpr{Name: *name, Args: construct.Args, Src: construct.Src}
+			foundNotAny = true
 		}
 	}
+}
 
+func (c *ruleContentCompiler) compileFunc(fn *FuncExpr) Expr {
 	// Create nested context and recurse into children.
 	nested := ruleContentCompiler{
 		compiler:     c.compiler,
-		src:          construct.Source(),
+		src:          fn.Source(),
 		matchPattern: c.matchPattern,
-		customFunc:   customFunc != nil,
 	}
 
-	if customFunc == nil {
-		return construct.Visit(nested.compile)
+	funcName := fn.Name
+
+	if nameExpr, ok := funcName.(*FuncExpr); ok {
+		// Function name is itself a function that dynamically determines name.
+		if c.matchPattern {
+			c.addErr(fn, errors.New("cannot match dynamic name"))
+		}
+
+		funcName = c.compileFunc(nameExpr)
+	} else {
+		// Ensure that all function names are defined and check whether this is a
+		// custom match function invocation.
+		for _, name := range fn.NameChoice() {
+			defines := c.compiler.compiled.LookupMatchingDefines(string(name))
+			if defines != nil {
+				if !c.matchPattern {
+					if len(fn.NameChoice()) != 1 {
+						c.addErr(fn, errors.New("constructor cannot have multiple names"))
+						return fn
+					}
+
+					// Don't allow replace pattern name to be a tag name.
+					if len(defines) > 1 || string(defines[0].Name) != string(name) {
+						c.addErr(fn, fmt.Errorf("construct name cannot be a tag"))
+					}
+				}
+
+				// Normalize single name into NameExpr rather than NamesExpr.
+				if len(fn.NameChoice()) == 1 {
+					funcName = &fn.NameChoice()[0]
+				}
+
+				// Ensure that each operator to be matched has a sufficient number
+				// of fields.
+				for _, define := range defines {
+					if len(define.Fields) < len(fn.Args) {
+						c.addErr(fn, fmt.Errorf("%s has only %d fields", define.Name, len(define.Fields)))
+					}
+				}
+			} else {
+				// This must be an invocation of a custom function, because
+				// there is no matching define.
+				if len(fn.NameChoice()) != 1 {
+					c.addErr(fn, errors.New("custom function cannot have multiple names"))
+					return fn
+				}
+
+				// Handle built-in function.
+				if name == "OpName" {
+					opName, ok := c.compileOpName(fn)
+					if ok {
+						return opName
+					}
+
+					// Fall through and create CustomFuncExpr if opname can't be
+					// determined at compile-time.
+				}
+
+				// Save name of custom function.
+				funcName = &fn.NameChoice()[0]
+				nested.customFunc = true
+				break
+			}
+		}
 	}
-	return customFunc.Visit(nested.compile)
+
+	if c.matchPattern && c.customFunc && !nested.customFunc {
+		c.addErr(fn, errors.New("custom function name cannot be an operator name"))
+		return fn
+	}
+
+	args := fn.Args.Visit(nested.compile).(*SliceExpr)
+
+	if nested.customFunc {
+		// Create a CustomFuncExpr to make it easier to distinguish between
+		// op matchers and and custom function invocations.
+		return &CustomFuncExpr{Name: *funcName.(*NameExpr), Args: *args, Src: fn.Source()}
+	}
+	return &FuncExpr{Name: funcName, Args: *args, Src: fn.Source()}
 }
 
-func (c *ruleContentCompiler) compileOpName(fn Expr, args ListExpr) (_ Expr, ok bool) {
-	if len(args) > 1 {
+func (c *ruleContentCompiler) compileOpName(fn *FuncExpr) (_ Expr, ok bool) {
+	if len(fn.Args) > 1 {
 		c.addErr(fn, fmt.Errorf("too many arguments to OpName function"))
 		return fn, false
 	}
 
-	if len(args) == 0 {
+	if len(fn.Args) == 0 {
 		// No args to OpName function refers to top-level match operator.
 		return c.compiler.opName, true
 	}
 
 	// Otherwise expect a single variable reference argument.
-	ref, ok := args[0].(*RefExpr)
+	ref, ok := fn.Args[0].(*RefExpr)
 	if !ok {
 		c.addErr(fn, fmt.Errorf("invalid OpName argument: argument must be a variable reference"))
 		return fn, false
 	}
 
-	// Get the match name of the expression bound to the variable, if it's
+	// Get the name of the function expression bound to the variable, if it's
 	// constant.
 	bind, ok := c.compiler.bindings[ref.Label]
 	if ok {
-		if match, ok := bind.Target.(*MatchExpr); ok {
-			// Handle common case where match expression is bound to a single
+		if target, ok := bind.Target.(*FuncExpr); ok {
+			// Handle common case where target is a function expression with a single
 			// name that matches a definition name.
-			opName, ok := c.extractConstantName(match)
+			opName, ok := c.extractConstantName(target)
 			if ok {
 				return opName, true
 			}
@@ -547,21 +502,22 @@ func (c *ruleContentCompiler) compileOpName(fn Expr, args ListExpr) (_ Expr, ok 
 }
 
 // extractConstantName checks for the special, but common case where the given
-// expression matches a single constant opname, rather than multiple names or
-// a define tag.
-func (c *ruleContentCompiler) extractConstantName(match *MatchExpr) (name *NameExpr, ok bool) {
-	// If matching multiple names, then return false.
-	if len(match.Names) != 1 {
+// function expression has a single constant opname, rather than multiple names
+// or a define tag.
+func (c *ruleContentCompiler) extractConstantName(fn *FuncExpr) (name *NameExpr, ok bool) {
+	// If function has multiple names, then return false.
+	names, ok := fn.Name.(*NamesExpr)
+	if ok && len(*names) != 1 {
 		return nil, false
 	}
 
 	// If name is a tag name, then return false.
-	def := c.compiler.compiled.LookupDefine(string(match.Names[0]))
+	def := c.compiler.compiled.LookupDefine(string((*names)[0]))
 	if def == nil {
 		return nil, false
 	}
 
-	return &match.Names[0], true
+	return &(*names)[0], true
 }
 
 // addDisallowedErr creates an error prefixed by one of the following strings,

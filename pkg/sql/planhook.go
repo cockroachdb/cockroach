@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // planHookFn is a function that can intercept a statement being planned and
@@ -90,6 +91,9 @@ type PlanHookState interface {
 	GetAllUsersAndRoles(ctx context.Context) (map[string]bool, error)
 	BumpRoleMembershipTableVersion(ctx context.Context) error
 	Select(ctx context.Context, n *tree.Select, desiredTypes []types.T) (planNode, error)
+	EvalAsOfTimestamp(asOf tree.AsOfClause, max hlc.Timestamp) (hlc.Timestamp, error)
+	ResolveUncachedDatabaseByName(
+		ctx context.Context, dbName string, required bool) (*UncachedDatabaseDescriptor, error)
 }
 
 // AddPlanHook adds a hook used to short-circuit creating a planNode from a
@@ -128,14 +132,12 @@ func (f *hookFnNode) startExec(params runParams) error {
 	// TODO(dan): Make sure the resultCollector is set to flush after every row.
 	f.run.resultsCh = make(chan tree.Datums)
 	f.run.errCh = make(chan error)
-	// Since hook plans are opaque to the plan walker, these haven't been started.
-	for _, sub := range f.subplans {
-		if err := startExec(params, sub); err != nil {
-			return err
-		}
-	}
 	go func() {
-		f.run.errCh <- f.f(params.ctx, f.subplans, f.run.resultsCh)
+		err := f.f(params.ctx, f.subplans, f.run.resultsCh)
+		select {
+		case <-params.ctx.Done():
+		case f.run.errCh <- err:
+		}
 		close(f.run.errCh)
 		close(f.run.resultsCh)
 	}()

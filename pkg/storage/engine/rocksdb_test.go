@@ -23,6 +23,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"testing"
@@ -107,10 +108,10 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 
 	k := MakeMVCCMetadataKey(testKey1)
 
-	before := b.NewIterator(IterOptions{})
+	before := b.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	defer before.Close()
 
-	nonBatchBefore := db.NewIterator(IterOptions{})
+	nonBatchBefore := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	defer nonBatchBefore.Close()
 
 	if err := b.Put(k, []byte("abc")); err != nil {
@@ -142,7 +143,7 @@ func TestBatchIterReadOwnWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nonBatchAfter := db.NewIterator(IterOptions{})
+	nonBatchAfter := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	defer nonBatchAfter.Close()
 
 	nonBatchBefore.Seek(k)
@@ -204,6 +205,90 @@ func TestBatchPrefixIter(t *testing.T) {
 		t.Fatal(err)
 	} else if ok {
 		t.Fatalf("expected to not find anything, found %s -> %q", iter.Key(), iter.Value())
+	}
+}
+
+func TestIterUpperBound(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	db := setupMVCCInMemRocksDB(t, "iter_upper_bound")
+	defer db.Close()
+
+	if err := db.Put(mvccKey("a"), []byte("val")); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Put(mvccKey("b"), []byte("val")); err != nil {
+		t.Fatal(err)
+	}
+
+	testCases := []struct {
+		name         string
+		createEngine func() Reader
+	}{
+		{"batch", func() Reader { return db.NewBatch() }},
+		{"readonly", func() Reader { return db.NewReadOnly() }},
+		{"snapshot", func() Reader { return db.NewSnapshot() }},
+		{"engine", func() Reader { return db }},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := tc.createEngine()
+			defer e.Close()
+
+			// Test that a new iterator's upper bound is applied.
+			func() {
+				iter := e.NewIterator(IterOptions{UpperBound: roachpb.Key("a")})
+				defer iter.Close()
+				iter.Seek(mvccKey("a"))
+				if ok, err := iter.Valid(); err != nil {
+					t.Fatal(err)
+				} else if ok {
+					t.Fatalf("expected iterator to be invalid, but was valid")
+				}
+			}()
+
+			// Test that the cached iterator, if the underlying engine implementation
+			// caches iterators, can take on a new upper bound.
+			func() {
+				iter := e.NewIterator(IterOptions{UpperBound: roachpb.Key("b")})
+				defer iter.Close()
+
+				iter.Seek(mvccKey("a"))
+				if ok, err := iter.Valid(); !ok {
+					t.Fatal(err)
+				}
+				if !mvccKey("a").Equal(iter.Key()) {
+					t.Fatalf("expected key a, but got %q", iter.Key())
+				}
+				iter.Next()
+				if ok, err := iter.Valid(); err != nil {
+					t.Fatal(err)
+				} else if ok {
+					t.Fatalf("expected iterator to be invalid, but was valid")
+				}
+			}()
+
+			// If the engine supports writes, test that the upper bound is applied to
+			// newly written keys. This notably tests the logic in BaseDeltaIterator
+			// on batches.
+			w, isReadWriter := e.(ReadWriter)
+			if _, isSecretlyReadOnly := e.(*rocksDBReadOnly); !isReadWriter || isSecretlyReadOnly {
+				return
+			}
+			if err := w.Put(mvccKey("c"), []byte("val")); err != nil {
+				t.Fatal(err)
+			}
+			func() {
+				iter := w.NewIterator(IterOptions{UpperBound: roachpb.Key("c")})
+				defer iter.Close()
+				iter.Seek(mvccKey("c"))
+				if ok, err := iter.Valid(); err != nil {
+					t.Fatal(err)
+				} else if ok {
+					t.Fatalf("expected iterator to be invalid, but was valid")
+				}
+			}()
+		})
 	}
 }
 
@@ -544,7 +629,12 @@ func TestConcurrentBatch(t *testing.T) {
 			if err := batch.Put(MakeMVCCMetadataKey(key), nil); err != nil {
 				t.Fatal(err)
 			}
-			if len(batch.Repr()) >= 4<<20 {
+			const targetSize = 4 << 20
+			if targetSize < maxBatchGroupSize {
+				t.Fatalf("target size (%d) should be larger than the max batch group size (%d)",
+					targetSize, maxBatchGroupSize)
+			}
+			if len(batch.Repr()) >= targetSize {
 				break
 			}
 		}
@@ -792,15 +882,73 @@ func TestRocksDBTimeBound(t *testing.T) {
 		keys, ssts int
 	}{
 		// Completely to the right, not touching.
-		{iter: batch.NewTimeBoundIterator(maxTimestamp.Next(), maxTimestamp.Next().Next(), true /* withStats */), keys: 0, ssts: 0},
+		{
+			iter: batch.NewIterator(IterOptions{
+				MinTimestampHint: maxTimestamp.Next(),
+				MaxTimestampHint: maxTimestamp.Next().Next(),
+				UpperBound:       roachpb.KeyMax,
+				WithStats:        true,
+			}),
+			keys: 0,
+			ssts: 0,
+		},
 		// Completely to the left, not touching.
-		{iter: batch.NewTimeBoundIterator(minTimestamp.Prev().Prev(), minTimestamp.Prev(), true /* withStats */), keys: 0, ssts: 0},
+		{
+			iter: batch.NewIterator(IterOptions{
+				MinTimestampHint: minTimestamp.Prev().Prev(),
+				MaxTimestampHint: minTimestamp.Prev(),
+				UpperBound:       roachpb.KeyMax,
+				WithStats:        true,
+			}),
+			keys: 0,
+			ssts: 0,
+		},
 		// Touching on the right.
-		{iter: batch.NewTimeBoundIterator(maxTimestamp, maxTimestamp, true /* withStats */), keys: len(times), ssts: 1},
+		{
+			iter: batch.NewIterator(IterOptions{
+				MinTimestampHint: maxTimestamp,
+				MaxTimestampHint: maxTimestamp,
+				UpperBound:       roachpb.KeyMax,
+				WithStats:        true,
+			}),
+			keys: len(times),
+			ssts: 1,
+		},
 		// Touching on the left.
-		{iter: batch.NewTimeBoundIterator(minTimestamp, minTimestamp, true /* withStats */), keys: len(times), ssts: 1},
-		// Copy of last case, but confirm that we don't get SST stats if we don't ask for them.
-		{iter: batch.NewTimeBoundIterator(minTimestamp, minTimestamp, false /* withStats */), keys: len(times), ssts: 0}}
+		{
+			iter: batch.NewIterator(IterOptions{
+				MinTimestampHint: minTimestamp,
+				MaxTimestampHint: minTimestamp,
+				UpperBound:       roachpb.KeyMax,
+				WithStats:        true,
+			}),
+			keys: len(times),
+			ssts: 1,
+		},
+		// Copy of last case, but confirm that we don't get SST stats if we don't
+		// ask for them.
+		{
+			iter: batch.NewIterator(IterOptions{
+				MinTimestampHint: minTimestamp,
+				MaxTimestampHint: minTimestamp,
+				UpperBound:       roachpb.KeyMax,
+				WithStats:        false,
+			}),
+			keys: len(times),
+			ssts: 0,
+		},
+		// Copy of last case, but confirm that upper bound is respected.
+		{
+			iter: batch.NewIterator(IterOptions{
+				MinTimestampHint: minTimestamp,
+				MaxTimestampHint: minTimestamp,
+				UpperBound:       []byte("02"),
+				WithStats:        false,
+			}),
+			keys: 2,
+			ssts: 0,
+		},
+	}
 
 	for _, test := range testCases {
 		t.Run("", func(t *testing.T) {
@@ -810,7 +958,7 @@ func TestRocksDBTimeBound(t *testing.T) {
 
 	// Make a regular iterator. Before #21721, this would accidentally pick up the
 	// time bounded iterator instead.
-	iter := batch.NewIterator(IterOptions{})
+	iter := batch.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	defer iter.Close()
 	iter.Seek(NilKey)
 
@@ -886,7 +1034,7 @@ func TestRocksDBDeleteRangeBug(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	iter := db.NewIterator(IterOptions{})
+	iter := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
 	iter.Seek(key("a"))
 	if ok, _ := iter.Valid(); ok {
 		t.Fatalf("unexpected key: %s", iter.Key())
@@ -1111,5 +1259,373 @@ func TestRocksDBFileNotFoundError(t *testing.T) {
 	// Verify DeleteFile returns os.ErrNotExist if deleting an already deleted file.
 	if err := db.DeleteFile(fname); !os.IsNotExist(err) {
 		t.Fatalf("expected IsNotExist, but got %v (%T)", err, err)
+	}
+}
+
+// Verify that range tombstones do not result in sstables that cover an
+// exessively large portion of the key space.
+func TestRocksDBDeleteRangeCompaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	db := setupMVCCInMemRocksDB(t, "delrange").(InMem)
+	defer db.Close()
+
+	makeKey := func(prefix string, i int) roachpb.Key {
+		return roachpb.Key(fmt.Sprintf("%s%09d", prefix, i))
+	}
+
+	rnd, _ := randutil.NewPseudoRand()
+
+	// Create sstables in L6 that are half the L6 target size. Any smaller and
+	// RocksDB might choose to compact them.
+	const targetSize = 64 << 20
+	const numEntries = 10000
+	const keySize = 10
+	const valueSize = (targetSize / numEntries) - keySize
+
+	for _, p := range "abc" {
+		sst, err := MakeRocksDBSstFileWriter()
+		if err != nil {
+			t.Fatal(sst)
+		}
+		defer sst.Close()
+
+		for i := 0; i < numEntries; i++ {
+			kv := MVCCKeyValue{
+				Key: MVCCKey{
+					Key: makeKey(string(p), i),
+				},
+				Value: randutil.RandBytes(rnd, valueSize),
+			}
+			if err := sst.Add(kv); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		sstContents, err := sst.Finish()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		filename := fmt.Sprintf("ingest")
+		if err := db.WriteFile(filename, sstContents); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := db.IngestExternalFiles(context.Background(), []string{filename}, true); err != nil {
+			t.Fatal(err)
+		}
+		if testing.Verbose() {
+			fmt.Printf("ingested %s\n", string(p))
+		}
+	}
+
+	getSSTables := func() string {
+		ssts := db.GetSSTables()
+		sort.Slice(ssts, func(i, j int) bool {
+			a, b := ssts[i], ssts[j]
+			if a.Level < b.Level {
+				return true
+			}
+			if a.Level > b.Level {
+				return false
+			}
+			return a.Start.Less(b.Start)
+		})
+		var buf bytes.Buffer
+		fmt.Fprintf(&buf, "\n")
+		for i := range ssts {
+			fmt.Fprintf(&buf, "%d: %s - %s\n",
+				ssts[i].Level, ssts[i].Start.Key, ssts[i].End.Key)
+		}
+		return buf.String()
+	}
+
+	verifySSTables := func(expected string) {
+		actual := getSSTables()
+		if expected != actual {
+			t.Fatalf("expected%sgot%s", expected, actual)
+		}
+		if testing.Verbose() {
+			fmt.Printf("%s", actual)
+		}
+	}
+
+	// After setup there should be 3 sstables.
+	verifySSTables(`
+6: "a000000000" - "a000009999"
+6: "b000000000" - "b000009999"
+6: "c000000000" - "c000009999"
+`)
+
+	// Generate a batch which writes to the very first key, and then deletes the
+	// range of keys covered by the last sstable.
+	batch := db.NewBatch()
+	if err := batch.Put(MakeMVCCMetadataKey(makeKey("a", 0)), []byte("hello")); err != nil {
+		t.Fatal(err)
+	}
+	if err := batch.ClearRange(MakeMVCCMetadataKey(makeKey("c", 0)),
+		MakeMVCCMetadataKey(makeKey("c", numEntries))); err != nil {
+		t.Fatal(err)
+	}
+	if err := batch.Commit(true); err != nil {
+		t.Fatal(err)
+	}
+	batch.Close()
+	if err := db.Flush(); err != nil {
+		t.Fatal(err)
+	}
+
+	// After flushing, there is a single additional L0 table that covers the
+	// entire key range.
+	verifySSTables(`
+0: "a000000000" - "c000010000"
+6: "a000000000" - "a000009999"
+6: "b000000000" - "b000009999"
+6: "c000000000" - "c000009999"
+`)
+
+	// Compacting the key range covering the last sstable should result in that
+	// sstable being deleted. Prior to the hack in dbClearRange, all of the
+	// sstables would be compacted resulting in 2 L6 sstables with different
+	// boundaries than the ones below.
+	_ = db.CompactRange(makeKey("c", 0), makeKey("c", numEntries), false)
+	verifySSTables(`
+5: "a000000000" - "a000000000"
+6: "a000000000" - "a000009999"
+6: "b000000000" - "b000009999"
+`)
+}
+
+func BenchmarkRocksDBDeleteRangeIterate(b *testing.B) {
+	for _, entries := range []int{10, 1000, 100000} {
+		b.Run(fmt.Sprintf("entries=%d", entries), func(b *testing.B) {
+			for _, deleted := range []int{entries, entries - 1} {
+				b.Run(fmt.Sprintf("deleted=%d", deleted), func(b *testing.B) {
+					db := setupMVCCInMemRocksDB(b, "unused").(InMem)
+					defer db.Close()
+
+					makeKey := func(i int) roachpb.Key {
+						return roachpb.Key(fmt.Sprintf("%09d", i))
+					}
+
+					// Create an SST with N entries and ingest it. This is a fast way to get a
+					// lot of entries into RocksDB.
+					{
+						sst, err := MakeRocksDBSstFileWriter()
+						if err != nil {
+							b.Fatal(sst)
+						}
+						defer sst.Close()
+
+						for i := 0; i < entries; i++ {
+							kv := MVCCKeyValue{
+								Key: MVCCKey{
+									Key: makeKey(i),
+								},
+							}
+							if err := sst.Add(kv); err != nil {
+								b.Fatal(err)
+							}
+						}
+
+						sstContents, err := sst.Finish()
+						if err != nil {
+							b.Fatal(err)
+						}
+
+						filename := fmt.Sprintf("ingest")
+						if err := db.WriteFile(filename, sstContents); err != nil {
+							b.Fatal(err)
+						}
+
+						err = db.IngestExternalFiles(context.Background(), []string{filename}, true)
+						if err != nil {
+							b.Fatal(err)
+						}
+					}
+
+					// Create a range tombstone that deletes most (or all) of those entries.
+					from := makeKey(0)
+					to := makeKey(deleted)
+					if err := db.ClearRange(MakeMVCCMetadataKey(from), MakeMVCCMetadataKey(to)); err != nil {
+						b.Fatal(err)
+					}
+
+					b.ResetTimer()
+					for i := 0; i < b.N; i++ {
+						iter := db.NewIterator(IterOptions{UpperBound: roachpb.KeyMax})
+						iter.Seek(MakeMVCCMetadataKey(from))
+						ok, err := iter.Valid()
+						if err != nil {
+							b.Fatal(err)
+						}
+						if deleted < entries {
+							if !ok {
+								b.Fatal("key not found")
+							}
+						} else if ok {
+							b.Fatal("unexpected key found")
+						}
+						iter.Close()
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestMakeBatchGroup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		maxSize   int
+		sizes     []int
+		groupSize []int
+		leader    []bool
+		groups    []int
+	}{
+		{1, []int{100, 100, 100}, []int{100, 100, 100}, []bool{true, true, true}, []int{1, 1, 1}},
+		{199, []int{100, 100, 100}, []int{100, 100, 100}, []bool{true, true, true}, []int{1, 1, 1}},
+		{200, []int{100, 100, 100}, []int{100, 200, 100}, []bool{true, false, true}, []int{2, 1}},
+		{299, []int{100, 100, 100}, []int{100, 200, 100}, []bool{true, false, true}, []int{2, 1}},
+		{300, []int{100, 100, 100}, []int{100, 200, 300}, []bool{true, false, false}, []int{3}},
+		{
+			400,
+			[]int{100, 200, 300, 100, 500},
+			[]int{100, 300, 300, 400, 500},
+			[]bool{true, false, true, false, true},
+			[]int{2, 2, 1},
+		},
+	}
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+			var pending []*rocksDBBatch
+			var groupSize int
+			for i := range c.sizes {
+				// We use intimate knowledge of rocksDBBatch and RocksDBBatchBuilder to
+				// construct a batch of a specific size.
+				b := &rocksDBBatch{}
+				b.builder.repr = make([]byte, c.sizes[i])
+				var leader bool
+				pending, groupSize, leader = makeBatchGroup(pending, b, groupSize, c.maxSize)
+				if c.groupSize[i] != groupSize {
+					t.Fatalf("expected group size %d, but found %d", c.groupSize[i], groupSize)
+				}
+				if c.leader[i] != leader {
+					t.Fatalf("expected leader %t, but found %t", c.leader[i], leader)
+				}
+			}
+			var groups []int
+			for len(pending) > 0 {
+				var group []*rocksDBBatch
+				group, pending = nextBatchGroup(pending)
+				groups = append(groups, len(group))
+			}
+			if !reflect.DeepEqual(c.groups, groups) {
+				t.Fatalf("expected %d, but found %d", c.groups, groups)
+			}
+		})
+	}
+}
+
+// Verify that RocksDBSstFileWriter works with time bounded iterators.
+func TestSstFileWriterTimeBound(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	db := setupMVCCInMemRocksDB(t, "sstwriter-timebound").(InMem)
+	defer db.Close()
+
+	for walltime := int64(1); walltime < 5; walltime++ {
+		sst, err := MakeRocksDBSstFileWriter()
+		if err != nil {
+			t.Fatal(sst)
+		}
+		defer sst.Close()
+		if err := sst.Add(MVCCKeyValue{
+			Key:   MVCCKey{Key: []byte("key"), Timestamp: hlc.Timestamp{WallTime: walltime}},
+			Value: []byte("value"),
+		}); err != nil {
+			t.Fatal(err)
+		}
+		sstContents, err := sst.Finish()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := db.WriteFile(`ingest`, sstContents); err != nil {
+			t.Fatal(err)
+		}
+		if err := db.IngestExternalFiles(ctx, []string{`ingest`}, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	it := db.NewIterator(IterOptions{
+		UpperBound:       keys.MaxKey,
+		MinTimestampHint: hlc.Timestamp{WallTime: 2},
+		MaxTimestampHint: hlc.Timestamp{WallTime: 3},
+		WithStats:        true,
+	})
+	defer it.Close()
+	for it.Seek(MVCCKey{Key: keys.MinKey}); ; it.Next() {
+		ok, err := it.Valid()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !ok {
+			break
+		}
+	}
+	if s := it.Stats(); s.TimeBoundNumSSTs != 2 {
+		t.Errorf(`expected 2 sstables got %d`, s.TimeBoundNumSSTs)
+	}
+}
+
+// TestRocksDBWALFileEmptyBatch verifies that committing an empty batch does
+// not write an entry to RocksDB's write-ahead log.
+func TestRocksDBWALFileEmptyBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	e := NewInMem(roachpb.Attributes{}, 1<<20)
+	defer e.Close()
+
+	// Commit a batch with one key.
+	b := e.NewBatch()
+	defer b.Close()
+	if err := b.Put(mvccKey("foo"), []byte{'b', 'a', 'r'}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Commit(true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that RocksDB has created a non-empty WAL.
+	walsBefore, err := e.GetSortedWALFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(walsBefore) != 1 {
+		t.Fatalf("expected exactly one WAL file, but got %d", len(walsBefore))
+	}
+	if walsBefore[0].Size == 0 {
+		t.Fatalf("expected non-empty WAL file")
+	}
+
+	// Commit an empty batch.
+	b = e.NewBatch()
+	defer b.Close()
+	if err := b.Commit(true); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that the WAL has not changed in size.
+	walsAfter, err := e.GetSortedWALFiles()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(walsBefore, walsAfter) {
+		t.Fatalf("expected wal files %#v after committing empty batch, but got %#v",
+			walsBefore, walsAfter)
 	}
 }

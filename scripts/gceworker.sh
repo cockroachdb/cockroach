@@ -19,29 +19,34 @@ case "${cmd}" in
     gcloud "$@"
     ;;
     create)
-    echo -n "Enter your dev license key (if any): "
-    read cr_dev_license
+    if [[ "$COCKROACH_DEV_LICENSE" ]]; then
+      echo "Using dev license key from \$COCKROACH_DEV_LICENSE"
+    else
+      echo -n "Enter your dev license key (if any): "
+      read COCKROACH_DEV_LICENSE
+    fi
+
     gcloud compute instances \
            create "${NAME}" \
            --machine-type "custom-24-32768" \
            --network "default" \
            --maintenance-policy "MIGRATE" \
            --image-project "ubuntu-os-cloud" \
-           --image-family "ubuntu-1604-lts" \
+           --image-family "ubuntu-1804-lts" \
            --boot-disk-size "100" \
            --boot-disk-type "pd-ssd" \
            --boot-disk-device-name "${NAME}" \
            --scopes "cloud-platform"
     gcloud compute firewall-rules create "${NAME}-mosh" --allow udp:60000-61000
 
-    # Retry while vm and sshd to start up.
+    # Retry while vm and sshd start up.
     retry gcloud compute ssh "${NAME}" --command=true
 
-    gcloud compute copy-files "build/bootstrap" "${NAME}:bootstrap"
+    gcloud compute scp --recurse "build/bootstrap" "${NAME}:bootstrap"
     gcloud compute ssh "${NAME}" --ssh-flag="-A" --command="./bootstrap/bootstrap-debian.sh"
 
-    if [[ -n "${cr_dev_license}" ]]; then
-        $0 ssh "echo COCKROACH_DEV_LICENSE=${cr_dev_license} >> ~/.bashrc_bootstrap"
+    if [[ "$COCKROACH_DEV_LICENSE" ]]; then
+      gcloud compute ssh "${NAME}" --command="echo COCKROACH_DEV_LICENSE=$COCKROACH_DEV_LICENSE >> ~/.bashrc_bootstrap"
     fi
 
     # Install automatic shutdown after ten minutes of operation without a
@@ -51,6 +56,8 @@ case "${cmd}" in
     ;;
     start)
     gcloud compute instances start "${NAME}"
+    # Wait for vm and sshd to start up.
+    retry gcloud compute ssh "${NAME}" --command=true
     ;;
     stop)
     gcloud compute instances stop "${NAME}"
@@ -62,7 +69,7 @@ case "${cmd}" in
     exit ${status}
     ;;
     ssh)
-    retry gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
+    gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
     ;;
     mosh)
     # An alternative solution would be to run gcloud compute config-ssh after

@@ -93,6 +93,9 @@ func (m *mockEvalCtx) GetFirstIndex() (uint64, error) {
 func (m *mockEvalCtx) GetTerm(uint64) (uint64, error) {
 	panic("unimplemented")
 }
+func (m *mockEvalCtx) GetLeaseAppliedIndex() uint64 {
+	panic("unimplemented")
+}
 func (m *mockEvalCtx) Desc() *roachpb.RangeDescriptor {
 	return m.desc
 }
@@ -111,7 +114,7 @@ func (m *mockEvalCtx) GetTxnSpanGCThreshold() hlc.Timestamp {
 func (m *mockEvalCtx) GetLastReplicaGCTimestamp(context.Context) (hlc.Timestamp, error) {
 	panic("unimplemented")
 }
-func (m *mockEvalCtx) GetLease() (roachpb.Lease, *roachpb.Lease) {
+func (m *mockEvalCtx) GetLease() (roachpb.Lease, roachpb.Lease) {
 	panic("unimplemented")
 }
 

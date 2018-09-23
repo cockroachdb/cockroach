@@ -22,8 +22,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -159,28 +159,26 @@ type planNodeFastPath interface {
 }
 
 var _ planNode = &alterIndexNode{}
-var _ planNode = &alterTableNode{}
 var _ planNode = &alterSequenceNode{}
+var _ planNode = &alterTableNode{}
 var _ planNode = &createDatabaseNode{}
 var _ planNode = &createIndexNode{}
-var _ planNode = &createTableNode{}
-var _ planNode = &createViewNode{}
 var _ planNode = &createSequenceNode{}
 var _ planNode = &createStatsNode{}
+var _ planNode = &createTableNode{}
+var _ planNode = &CreateUserNode{}
+var _ planNode = &createViewNode{}
 var _ planNode = &delayedNode{}
 var _ planNode = &deleteNode{}
 var _ planNode = &distinctNode{}
 var _ planNode = &dropDatabaseNode{}
 var _ planNode = &dropIndexNode{}
-var _ planNode = &dropTableNode{}
-var _ planNode = &dropViewNode{}
 var _ planNode = &dropSequenceNode{}
-var _ planNode = &zeroNode{}
-var _ planNode = &unaryNode{}
-var _ planNode = &distSQLWrapper{}
+var _ planNode = &dropTableNode{}
+var _ planNode = &DropUserNode{}
+var _ planNode = &dropViewNode{}
 var _ planNode = &explainDistSQLNode{}
 var _ planNode = &explainPlanNode{}
-var _ planNode = &showTraceNode{}
 var _ planNode = &filterNode{}
 var _ planNode = &groupNode{}
 var _ planNode = &hookFnNode{}
@@ -190,23 +188,25 @@ var _ planNode = &joinNode{}
 var _ planNode = &limitNode{}
 var _ planNode = &ordinalityNode{}
 var _ planNode = &projectSetNode{}
-var _ planNode = &testingRelocateNode{}
+var _ planNode = &relocateNode{}
 var _ planNode = &renderNode{}
 var _ planNode = &rowCountNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &scatterNode{}
 var _ planNode = &serializeNode{}
-var _ planNode = &showRangesNode{}
 var _ planNode = &showFingerprintsNode{}
+var _ planNode = &showRangesNode{}
+var _ planNode = &showTraceNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &splitNode{}
+var _ planNode = &unaryNode{}
 var _ planNode = &unionNode{}
 var _ planNode = &updateNode{}
 var _ planNode = &upsertNode{}
 var _ planNode = &valuesNode{}
+var _ planNode = &virtualTableNode{}
 var _ planNode = &windowNode{}
-var _ planNode = &CreateUserNode{}
-var _ planNode = &DropUserNode{}
+var _ planNode = &zeroNode{}
 
 var _ planNodeFastPath = &CreateUserNode{}
 var _ planNodeFastPath = &DropUserNode{}
@@ -272,6 +272,10 @@ type planTop struct {
 	// #10028 is addressed.
 	hasStar bool
 
+	// isCorrelated collects whether the query was found to be correlated.
+	// Used to produce better error messages.
+	isCorrelated bool
+
 	// subqueryPlans contains all the sub-query plans.
 	subqueryPlans []subquery
 
@@ -294,6 +298,8 @@ type planTop struct {
 func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 	// Reinitialize.
 	p.curPlan = planTop{AST: stmt.AST}
+
+	log.VEvent(ctx, 1, "heuristic planner starts")
 
 	var err error
 	p.curPlan.plan, err = p.newPlan(ctx, stmt.AST, nil /*desiredTypes*/)
@@ -322,12 +328,16 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 		return err
 	}
 
+	log.VEvent(ctx, 1, "heuristic planner optimizes plan")
+
 	needed := allColumns(p.curPlan.plan)
 	p.curPlan.plan, err = p.optimizePlan(ctx, p.curPlan.plan, needed)
 	if err != nil {
 		p.curPlan.close(ctx)
 		return err
 	}
+
+	log.VEvent(ctx, 1, "heuristic planner optimizes subqueries")
 
 	// Now do the same work for all sub-queries.
 	for i := range p.curPlan.subqueryPlans {
@@ -345,9 +355,13 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 	return nil
 }
 
-// makeOptimizerPlan is an alternative to makePlan which uses the (experimental)
+// makeOptimizerPlan is an alternative to makePlan which uses the cost-based
 // optimizer.
 func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
+	// Ensure that p.curPlan is populated in case an error occurs early,
+	// so that maybeLogStatement in the error case does not find an empty AST.
+	p.curPlan = planTop{AST: stmt.AST}
+
 	// Start with fast check to see if top-level statement is supported.
 	switch stmt.AST.(type) {
 	case *tree.ParenSelect, *tree.Select, *tree.SelectClause,
@@ -360,22 +374,111 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	var catalog optCatalog
 	catalog.init(p.execCfg.TableStatsCache, p)
 
-	o := xform.NewOptimizer(p.EvalContext())
-	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &catalog, o.Factory(), stmt.AST)
-	root, props, err := bld.Build()
-	if err != nil {
-		return err
+	p.optimizer.Init(p.EvalContext())
+	f := p.optimizer.Factory()
+
+	// If the statement includes a PreparedStatement, then separate planning into
+	// two distinct phases:
+	//
+	//   PREPARE - Build the Memo (optbuild) and apply normalization rules to it.
+	//             If the query contains placeholders, values are not assigned
+	//             during this phase, as that only happens during the EXECUTE
+	//             phase. If the query does not contain placeholders, then also
+	//             apply exploration rules to the Memo so that there's even less
+	//             to do during the EXECUTE phase.
+	//
+	//   EXECUTE - Before the query can be executed, first any placeholders must
+	//             be assigned values. This can trigger additional normalization
+	//             rules, such as with this example:
+	//
+	//               SELECT * FROM abc WHERE b = $1 - 5
+	//
+	//             Without folding the Sub expression, any index on the "b" column
+	//             won't be found. This also means that after placeholders are
+	//             assigned, exploration rules must be applied (vs. applying them
+	//             during PREPARE when there are no placeholders).
+	//
+	//             Whether there were placeholders or not, after exploration the
+	//             plan tree must be built (execbuild). This tree is set as the
+	//             planner.curPlan, and the EXECUTE phase of planning is complete.
+	//
+	var prepMemo *memo.Memo
+	inPreparePhase := p.EvalContext().PrepareOnly
+	if stmt.Prepared != nil {
+		// Don't use memo if it was never prepared, typically because of fallback
+		// to the heuristic planner.
+		if inPreparePhase || stmt.Prepared.Memo.RootGroup() != 0 {
+			prepMemo = &stmt.Prepared.Memo
+		}
 	}
 
-	ev := o.Optimize(root, props)
+	// If this is the prepare phase, or if a prepared memo:
+	//   1. doesn't yet exist, or
+	//   2. it's been invalidated by schema or other changes
+	//
+	// Then entirely rebuild the memo from the AST.
+	if inPreparePhase || prepMemo == nil || prepMemo.IsStale(ctx, p.EvalContext(), &catalog) {
+		bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &catalog, f, stmt.AST)
+		bld.KeepPlaceholders = prepMemo != nil
+		err := bld.Build()
+		if err != nil {
+			// isCorrelated is used in the fallback case to create a better error.
+			p.curPlan.isCorrelated = bld.IsCorrelated
+			return err
+		}
 
-	factory := makeExecFactory(p)
-	plan, err := execbuilder.New(&factory, ev).Build()
+		if prepMemo != nil {
+			// If the memo doesn't have placeholders, then fully optimize it, since
+			// it can be reused without further changes to build the execution tree.
+			if !f.Memo().HasPlaceholders() {
+				p.optimizer.Optimize()
+			}
+
+			// Update the prepared memo.
+			prepMemo.InitFrom(f.Memo())
+		}
+	}
+
+	// If in the PREPARE phase, construct a dummy plan that has correct output
+	// columns. Only output columns and placeholder types are needed.
+	if inPreparePhase {
+		mem := f.Memo()
+		md := mem.Metadata()
+		physical := mem.LookupPhysicalProps(mem.RootProps())
+		resultCols := make(sqlbase.ResultColumns, len(physical.Presentation))
+		for i, col := range physical.Presentation {
+			resultCols[i].Name = col.Label
+			resultCols[i].Typ = md.ColumnType(col.ID)
+		}
+		p.curPlan.plan = &zeroNode{columns: resultCols}
+		return nil
+	}
+
+	// This is the EXECUTE phase, so finish optimization by assigning any
+	// remaining placeholders and applying exploration rules.
+	var ev memo.ExprView
+	if prepMemo == nil {
+		ev = p.optimizer.Optimize()
+	} else {
+		if prepMemo.HasPlaceholders() {
+			// Assign placeholders in the prepared memo.
+			f.Memo().InitFrom(prepMemo)
+			f.AssignPlaceholders()
+			ev = p.optimizer.Optimize()
+		} else {
+			ev = prepMemo.Root()
+		}
+	}
+
+	// Build the plan tree and store it in planner.curPlan.
+	execFactory := makeExecFactory(p)
+	plan, err := execbuilder.New(&execFactory, ev, p.EvalContext()).Build()
 	if err != nil {
 		return err
 	}
 
 	p.curPlan = *plan.(*planTop)
+	// Since the assignment above just cleared the AST, we need to set it again.
 	p.curPlan.AST = stmt.AST
 
 	cols := planColumns(p.curPlan.plan)
@@ -517,9 +620,6 @@ func startExec(params runParams, plan planNode) error {
 	o := planObserver{
 		enterNode: func(ctx context.Context, _ string, p planNode) (bool, error) {
 			switch p.(type) {
-			case *distSQLWrapper:
-				// Do not recurse: the plan is executed in distSQL.
-				return false, nil
 			case *explainPlanNode, *explainDistSQLNode:
 				// Do not recurse: we're not starting the plan if we just show its structure with EXPLAIN.
 				return false, nil
@@ -711,8 +811,8 @@ func (p *planner) newPlan(
 		return p.Insert(ctx, n, desiredTypes)
 	case *tree.ParenSelect:
 		return p.newPlan(ctx, n.Select, desiredTypes)
-	case *tree.TestingRelocate:
-		return p.TestingRelocate(ctx, n)
+	case *tree.Relocate:
+		return p.Relocate(ctx, n)
 	case *tree.RenameColumn:
 		return p.RenameColumn(ctx, n)
 	case *tree.RenameDatabase:
@@ -748,12 +848,8 @@ func (p *planner) newPlan(
 		return p.ShowColumns(ctx, n)
 	case *tree.ShowConstraints:
 		return p.ShowConstraints(ctx, n)
-	case *tree.ShowCreateTable:
-		return p.ShowCreateTable(ctx, n)
-	case *tree.ShowCreateView:
-		return p.ShowCreateView(ctx, n)
-	case *tree.ShowCreateSequence:
-		return p.ShowCreateSequence(ctx, n)
+	case *tree.ShowCreate:
+		return p.ShowCreate(ctx, n)
 	case *tree.ShowDatabases:
 		return p.ShowDatabases(ctx, n)
 	case *tree.ShowGrants:
@@ -780,7 +876,7 @@ func (p *planner) newPlan(
 		return p.ShowTables(ctx, n)
 	case *tree.ShowSchemas:
 		return p.ShowSchemas(ctx, n)
-	case *tree.ShowTrace:
+	case *tree.ShowTraceForSession:
 		return p.ShowTrace(ctx, n)
 	case *tree.ShowTransactionStatus:
 		return p.ShowTransactionStatus(ctx)
@@ -804,6 +900,8 @@ func (p *planner) newPlan(
 	case *tree.Update:
 		return p.Update(ctx, n, desiredTypes)
 	case *tree.ValuesClause:
+		return p.Values(ctx, n, desiredTypes)
+	case *tree.ValuesClauseWithNames:
 		return p.Values(ctx, n, desiredTypes)
 	default:
 		return nil, errors.Errorf("unknown statement type: %T", stmt)
@@ -867,16 +965,14 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.SetClusterSetting(ctx, n)
 	case *tree.SetVar:
 		return p.SetVar(ctx, n)
+	case *tree.SetZoneConfig:
+		return p.SetZoneConfig(ctx, n)
 	case *tree.ShowClusterSetting:
 		return p.ShowClusterSetting(ctx, n)
 	case *tree.ShowVar:
 		return p.ShowVar(ctx, n)
-	case *tree.ShowCreateTable:
-		return p.ShowCreateTable(ctx, n)
-	case *tree.ShowCreateView:
-		return p.ShowCreateView(ctx, n)
-	case *tree.ShowCreateSequence:
-		return p.ShowCreateSequence(ctx, n)
+	case *tree.ShowCreate:
+		return p.ShowCreate(ctx, n)
 	case *tree.ShowColumns:
 		return p.ShowColumns(ctx, n)
 	case *tree.ShowDatabases:
@@ -901,7 +997,7 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowTables(ctx, n)
 	case *tree.ShowSchemas:
 		return p.ShowSchemas(ctx, n)
-	case *tree.ShowTrace:
+	case *tree.ShowTraceForSession:
 		return p.ShowTrace(ctx, n)
 	case *tree.ShowUsers:
 		return p.ShowUsers(ctx, n)
@@ -911,8 +1007,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowRanges(ctx, n)
 	case *tree.Split:
 		return p.Split(ctx, n)
-	case *tree.TestingRelocate:
-		return p.TestingRelocate(ctx, n)
+	case *tree.Relocate:
+		return p.Relocate(ctx, n)
 	case *tree.Scatter:
 		return p.Scatter(ctx, n)
 	case *tree.Update:

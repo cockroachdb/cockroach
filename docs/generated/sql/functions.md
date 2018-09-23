@@ -31,7 +31,7 @@
 </span></td></tr>
 <tr><td><code>array_append(array: oid[], elem: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td></tr>
-<tr><td><code>array_append(array: timetz[], elem: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
+<tr><td><code>array_append(array: varbit[], elem: varbit) &rarr; varbit[]</code></td><td><span class="funcdesc"><p>Appends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td></tr>
 <tr><td><code>array_cat(left: <a href="bool.html">bool</a>[], right: <a href="bool.html">bool</a>[]) &rarr; <a href="bool.html">bool</a>[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td></tr>
@@ -61,7 +61,7 @@
 </span></td></tr>
 <tr><td><code>array_cat(left: oid[], right: oid[]) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td></tr>
-<tr><td><code>array_cat(left: timetz[], right: timetz[]) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
+<tr><td><code>array_cat(left: varbit[], right: varbit[]) &rarr; varbit[]</code></td><td><span class="funcdesc"><p>Appends two arrays.</p>
 </span></td></tr>
 <tr><td><code>array_length(input: anyelement[], array_dimension: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the length of <code>input</code> on the provided <code>array_dimension</code>. However, because CockroachDB doesn’t yet support multi-dimensional arrays, the only supported <code>array_dimension</code> is <strong>1</strong>.</p>
 </span></td></tr>
@@ -95,7 +95,7 @@
 </span></td></tr>
 <tr><td><code>array_position(array: oid[], elem: oid) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
-<tr><td><code>array_position(array: timetz[], elem: timetz) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
+<tr><td><code>array_position(array: varbit[], elem: varbit) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Return the index of the first occurrence of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
 <tr><td><code>array_positions(array: <a href="bool.html">bool</a>[], elem: <a href="bool.html">bool</a>) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
@@ -125,7 +125,7 @@
 </span></td></tr>
 <tr><td><code>array_positions(array: oid[], elem: oid) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
-<tr><td><code>array_positions(array: timetz[], elem: timetz) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
+<tr><td><code>array_positions(array: varbit[], elem: varbit) &rarr; <a href="int.html">int</a>[]</code></td><td><span class="funcdesc"><p>Returns and array of indexes of all occurrences of <code>elem</code> in <code>array</code>.</p>
 </span></td></tr>
 <tr><td><code>array_prepend(elem: <a href="bool.html">bool</a>, array: <a href="bool.html">bool</a>[]) &rarr; <a href="bool.html">bool</a>[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td></tr>
@@ -155,7 +155,7 @@
 </span></td></tr>
 <tr><td><code>array_prepend(elem: oid, array: oid[]) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td></tr>
-<tr><td><code>array_prepend(elem: timetz, array: timetz[]) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
+<tr><td><code>array_prepend(elem: varbit, array: varbit[]) &rarr; varbit[]</code></td><td><span class="funcdesc"><p>Prepends <code>elem</code> to <code>array</code>, returning the result.</p>
 </span></td></tr>
 <tr><td><code>array_remove(array: <a href="bool.html">bool</a>[], elem: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a>[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td></tr>
@@ -185,7 +185,7 @@
 </span></td></tr>
 <tr><td><code>array_remove(array: oid[], elem: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td></tr>
-<tr><td><code>array_remove(array: timetz[], elem: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
+<tr><td><code>array_remove(array: varbit[], elem: varbit) &rarr; varbit[]</code></td><td><span class="funcdesc"><p>Remove from <code>array</code> all elements equal to <code>elem</code>.</p>
 </span></td></tr>
 <tr><td><code>array_replace(array: <a href="bool.html">bool</a>[], toreplace: <a href="bool.html">bool</a>, replacewith: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a>[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td></tr>
@@ -215,7 +215,7 @@
 </span></td></tr>
 <tr><td><code>array_replace(array: oid[], toreplace: oid, replacewith: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td></tr>
-<tr><td><code>array_replace(array: timetz[], toreplace: timetz, replacewith: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
+<tr><td><code>array_replace(array: varbit[], toreplace: varbit, replacewith: varbit) &rarr; varbit[]</code></td><td><span class="funcdesc"><p>Replace all occurrences of <code>toreplace</code> in <code>array</code> with <code>replacewith</code>.</p>
 </span></td></tr>
 <tr><td><code>array_to_string(input: anyelement[], delim: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Join an array into a string with a delimiter.</p>
 </span></td></tr>
@@ -234,6 +234,8 @@
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
+<tr><td><code>ilike_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Matches case insensetively <code>unescaped</code> with <code>pattern</code> using ‘escape’ as an escape token.</p>
+</span></td></tr>
 <tr><td><code>inet_contained_by_or_equals(val: <a href="inet.html">inet</a>, container: <a href="inet.html">inet</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Test for subnet inclusion or equality, using only the network parts of the addresses. The host part of the addresses is ignored.</p>
 </span></td></tr>
 <tr><td><code>inet_contains_or_contained_by(val: <a href="inet.html">inet</a>, val: <a href="inet.html">inet</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Test for subnet inclusion, using only the network parts of the addresses. The host part of the addresses is ignored.</p>
@@ -241,6 +243,16 @@
 <tr><td><code>inet_contains_or_equals(container: <a href="inet.html">inet</a>, val: <a href="inet.html">inet</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Test for subnet inclusion or equality, using only the network parts of the addresses. The host part of the addresses is ignored.</p>
 </span></td></tr>
 <tr><td><code>inet_same_family(val: <a href="inet.html">inet</a>, val: <a href="inet.html">inet</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks if two IP addresses are of the same IP family.</p>
+</span></td></tr>
+<tr><td><code>like_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Matches <code>unescaped</code> with <code>pattern</code> using ‘escape’ as an escape token.</p>
+</span></td></tr>
+<tr><td><code>not_ilike_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether <code>unescaped</code> not matches case insensetively with <code>pattern</code> using ‘escape’ as an escape token.</p>
+</span></td></tr>
+<tr><td><code>not_like_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether <code>unescaped</code> not matches with <code>pattern</code> using ‘escape’ as an escape token.</p>
+</span></td></tr>
+<tr><td><code>not_similar_to_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Checks whether <code>unescaped</code> not matches with <code>pattern</code> using ‘escape’ as an escape token.</p>
+</span></td></tr>
+<tr><td><code>similar_to_escape(unescaped: <a href="string.html">string</a>, pattern: <a href="string.html">string</a>, escape: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Matches <code>unescaped</code> with <code>pattern</code> using ‘escape’ as an escape token.</p>
 </span></td></tr></tbody>
 </table>
 
@@ -260,9 +272,9 @@
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
-<tr><td><code>age(begin: <a href="timestamp.html">timestamptz</a>, end: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Calculates the interval between <code>begin</code> and <code>end</code>.</p>
+<tr><td><code>age(end: <a href="timestamp.html">timestamptz</a>, begin: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Calculates the interval between <code>begin</code> and <code>end</code>.</p>
 </span></td></tr>
-<tr><td><code>age(val: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Calculates the interval between the current time and <code>val</code>.</p>
+<tr><td><code>age(val: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="interval.html">interval</a></code></td><td><span class="funcdesc"><p>Calculates the interval between <code>val</code> and the current time.</p>
 </span></td></tr>
 <tr><td><code>clock_timestamp() &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Returns the current system time on one of the cluster nodes.</p>
 </span></td></tr>
@@ -324,9 +336,6 @@ hour, minute, second, millisecond, microsecond, epoch</p>
 <tr><td><code>extract(element: <a href="string.html">string</a>, input: <a href="timestamp.html">timestamptz</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
 <p>Compatible elements: year, quarter, month, week, dayofweek, dayofyear,
 hour, minute, second, millisecond, microsecond, epoch</p>
-</span></td></tr>
-<tr><td><code>extract(element: <a href="string.html">string</a>, input: timetz) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.</p>
-<p>Compatible elements: hour, minute, second, millisecond, microsecond, epoch</p>
 </span></td></tr>
 <tr><td><code>extract_duration(element: <a href="string.html">string</a>, input: <a href="interval.html">interval</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.
 Compatible elements: hour, minute, second, millisecond, microsecond.</p>
@@ -410,6 +419,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
+<tr><td><code>array_to_json(array: anyelement[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the array as JSON or JSONB.</p>
+</span></td></tr>
+<tr><td><code>array_to_json(array: anyelement[], pretty_bool: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the array as JSON or JSONB.</p>
+</span></td></tr>
 <tr><td><code>json_array_length(json: jsonb) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the number of elements in the outermost JSON or JSONB array.</p>
 </span></td></tr>
 <tr><td><code>json_build_array(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a possibly-heterogeneously-typed JSON or JSONB array out of a variadic argument list.</p>
@@ -439,6 +452,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><code>jsonb_build_object(anyelement...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Builds a JSON object out of a variadic argument list.</p>
 </span></td></tr>
 <tr><td><code>jsonb_extract_path(jsonb, <a href="string.html">string</a>...) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments.</p>
+</span></td></tr>
+<tr><td><code>jsonb_insert(target: jsonb, path: <a href="string.html">string</a>[], new_val: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments. <code>new_val</code> will be inserted before path target.</p>
+</span></td></tr>
+<tr><td><code>jsonb_insert(target: jsonb, path: <a href="string.html">string</a>[], new_val: jsonb, insert_after: <a href="bool.html">bool</a>) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Returns the JSON value pointed to by the variadic arguments. If <code>insert_after</code> is true (default is false), <code>new_val</code> will be inserted after path target.</p>
 </span></td></tr>
 <tr><td><code>jsonb_object(keys: <a href="string.html">string</a>[], values: <a href="string.html">string</a>[]) &rarr; jsonb</code></td><td><span class="funcdesc"><p>This form of json_object takes keys and values pairwise from two separate arrays. In all other respects it is identical to the one-argument form.</p>
 </span></td></tr>
@@ -575,7 +592,7 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><code>round(input: <a href="float.html">float</a>, decimal_accuracy: <a href="int.html">int</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Keeps <code>decimal_accuracy</code> number of figures to the right of the zero position  in <code>input</code> using half to even (banker’s) rounding.</p>
 </span></td></tr>
-<tr><td><code>round(val: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Rounds <code>val</code> to the nearest integer, half away from zero: ROUND(+/-2.4) = +/-2, ROUND(+/-2.5) = +/-3.</p>
+<tr><td><code>round(val: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Rounds <code>val</code> to the nearest integer, half away from zero: round(+/-2.4) = +/-2, round(+/-2.5) = +/-3.</p>
 </span></td></tr>
 <tr><td><code>round(val: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Rounds <code>val</code> to the nearest integer using half to even (banker’s) rounding.</p>
 </span></td></tr>
@@ -670,17 +687,35 @@ has no relationship with the commit order of concurrent transactions.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
-<tr><td><code>ascii(val: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the ASCII value for the first character in <code>val</code>.</p>
+<tr><td><code>ascii(val: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the character code of the first character in <code>val</code>. Despite the name, the function supports Unicode too.</p>
+</span></td></tr>
+<tr><td><code>bit_length(val: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bits in <code>val</code>.</p>
+</span></td></tr>
+<tr><td><code>bit_length(val: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bits used to represent <code>val</code>.</p>
 </span></td></tr>
 <tr><td><code>btrim(input: <a href="string.html">string</a>, trim_chars: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Removes any characters included in <code>trim_chars</code> from the beginning or end of <code>input</code> (applies recursively).</p>
 <p>For example, <code>btrim('doggie', 'eod')</code> returns <code>ggi</code>.</p>
 </span></td></tr>
 <tr><td><code>btrim(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Removes all spaces from the beginning and end of <code>val</code>.</p>
 </span></td></tr>
+<tr><td><code>char_length(val: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bytes in <code>val</code>.</p>
+</span></td></tr>
+<tr><td><code>char_length(val: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of characters in <code>val</code>.</p>
+</span></td></tr>
+<tr><td><code>character_length(val: <a href="bytes.html">bytes</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of bytes in <code>val</code>.</p>
+</span></td></tr>
+<tr><td><code>character_length(val: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the number of characters in <code>val</code>.</p>
+</span></td></tr>
+<tr><td><code>chr(val: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the character with the code given in <code>val</code>. Inverse function of <code>ascii()</code>.</p>
+</span></td></tr>
 <tr><td><code>concat(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Concatenates a comma-separated list of strings.</p>
 </span></td></tr>
 <tr><td><code>concat_ws(<a href="string.html">string</a>...) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Uses the first argument as a separator between the concatenation of the subsequent arguments.</p>
 <p>For example <code>concat_ws('!','wow','great')</code> returns <code>wow!great</code>.</p>
+</span></td></tr>
+<tr><td><code>convert_from(str: <a href="bytes.html">bytes</a>, enc: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Decode the bytes in <code>str</code> into a string using encoding <code>enc</code>. Supports encodings ‘UTF8’ and ‘LATIN1’.</p>
+</span></td></tr>
+<tr><td><code>convert_to(str: <a href="string.html">string</a>, enc: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Encode the string <code>str</code> as a byte array using encoding <code>enc</code>. Supports encodings ‘UTF8’ and ‘LATIN1’.</p>
 </span></td></tr>
 <tr><td><code>decode(text: <a href="string.html">string</a>, format: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Decodes <code>data</code> using <code>format</code> (<code>hex</code> / <code>escape</code> / <code>base64</code>).</p>
 </span></td></tr>
@@ -724,6 +759,16 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><code>overlay(input: <a href="string.html">string</a>, overlay_val: <a href="string.html">string</a>, start_pos: <a href="int.html">int</a>, end_pos: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Deletes the characters in <code>input</code> between <code>start_pos</code> and <code>end_pos</code> (count starts at 1), and then insert <code>overlay_val</code> at <code>start_pos</code>.</p>
 </span></td></tr>
+<tr><td><code>quote_ident(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Return <code>val</code> suitably quoted to serve as identifier in a SQL statement.</p>
+</span></td></tr>
+<tr><td><code>quote_literal(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Return <code>val</code> suitably quoted to serve as string literal in a SQL statement.</p>
+</span></td></tr>
+<tr><td><code>quote_literal(val: anyelement) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Coerce <code>val</code> to a string and then quote it as a literal.</p>
+</span></td></tr>
+<tr><td><code>quote_nullable(val: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Coerce <code>val</code> to a string and then quote it as a literal. If <code>val</code> is NULL, returns ‘NULL’.</p>
+</span></td></tr>
+<tr><td><code>quote_nullable(val: anyelement) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Coerce <code>val</code> to a string and then quote it as a literal. If <code>val</code> is NULL, returns ‘NULL’.</p>
+</span></td></tr>
 <tr><td><code>regexp_extract(input: <a href="string.html">string</a>, regex: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the first match for the Regular Expression <code>regex</code> in <code>input</code>.</p>
 </span></td></tr>
 <tr><td><code>regexp_replace(input: <a href="string.html">string</a>, regex: <a href="string.html">string</a>, replace: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Replaces matches for the Regular Expression <code>regex</code> in <code>input</code> with the Regular Expression <code>replace</code>.</p>
@@ -743,8 +788,12 @@ has no relationship with the commit order of concurrent transactions.</p>
 <td>Case-sensitive matching</td>
 </tr>
 <tr>
+<td><strong>g</strong></td>
+<td>Global matching (match each substring instead of only the first)</td>
+</tr>
+<tr>
 <td><strong>i</strong></td>
-<td>Global matching (match each substring instead of only the first).</td>
+<td>Case-insensitive matching</td>
 </tr>
 <tr>
 <td><strong>m</strong> or <strong>n</strong></td>
@@ -903,18 +952,6 @@ may increase either contention or retry errors, or both.</p>
 <tr><td><code>current_user() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current user. This function is provided for compatibility with PostgreSQL.</p>
 </span></td></tr>
 <tr><td><code>version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the node’s version of CockroachDB.</p>
-</span></td></tr></tbody>
-</table>
-
-### TIMETZ functions
-
-<table>
-<thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
-<tbody>
-<tr><td><code>current_time() &rarr; timetz</code></td><td><span class="funcdesc"><p>Returns the time of the current transaction, with time zone.</p>
-<p>The value is based on a timestamp picked when the transaction starts
-and which stays constant throughout the transaction. This timestamp
-has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr></tbody>
 </table>
 

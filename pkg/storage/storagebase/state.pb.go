@@ -7,7 +7,7 @@ import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
 import cockroach_storage_engine_enginepb1 "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-import cockroach_roachpb4 "github.com/cockroachdb/cockroach/pkg/roachpb"
+import cockroach_roachpb2 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_roachpb1 "github.com/cockroachdb/cockroach/pkg/roachpb"
 import cockroach_util_hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -52,7 +52,7 @@ type ReplicaState struct {
 	// the network as part of ReplicatedEvalResult.
 	Lease *cockroach_roachpb1.Lease `protobuf:"bytes,4,opt,name=lease" json:"lease,omitempty"`
 	// The truncation state of the Raft log.
-	TruncatedState *cockroach_roachpb4.RaftTruncatedState `protobuf:"bytes,5,opt,name=truncated_state,json=truncatedState" json:"truncated_state,omitempty"`
+	TruncatedState *cockroach_roachpb2.RaftTruncatedState `protobuf:"bytes,5,opt,name=truncated_state,json=truncatedState" json:"truncated_state,omitempty"`
 	// gcThreshold is the GC threshold of the Range, typically updated when keys
 	// are garbage collected. Reads and writes at timestamps <= this time will
 	// not be served.
@@ -842,7 +842,7 @@ func (m *ReplicaState) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.TruncatedState == nil {
-				m.TruncatedState = &cockroach_roachpb4.RaftTruncatedState{}
+				m.TruncatedState = &cockroach_roachpb2.RaftTruncatedState{}
 			}
 			if err := m.TruncatedState.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err

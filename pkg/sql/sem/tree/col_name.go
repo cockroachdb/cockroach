@@ -91,6 +91,9 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 			return 0, "", err
 		}
 		if strength <= 1 {
+			// Note: this is not exactly correct because it should use the
+			// PostgreSQL-internal type name which CockroachDB does not
+			// implement. However this is close enough.
 			tname := strings.ToLower(e.Type.TypeName())
 			// TTuple has no short time name, so check this
 			// here. Otherwise we'll want to fall back below.
@@ -107,6 +110,9 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 			return 0, "", err
 		}
 		if strength <= 1 {
+			// Note: this is not exactly correct because it should use the
+			// PostgreSQL-internal type name which CockroachDB does not
+			// implement. However this is close enough.
 			tname := strings.ToLower(e.Type.TypeName())
 			// TTuple has no short time name, so check this
 			// here. Otherwise we'll want to fall back below.
@@ -164,9 +170,7 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 		return 2, "iferror", nil
 
 	case *ColumnAccessExpr:
-		if !e.Star {
-			return 2, e.ColName, nil
-		}
+		return 2, e.ColName, nil
 
 	case *DBool:
 		// PostgreSQL implements the "true" and "false" literals
@@ -188,7 +192,7 @@ func computeColNameInternalSubquery(
 	case *ParenSelect:
 		return computeColNameInternalSubquery(sp, e.Select.Select)
 	case *ValuesClause:
-		if len(e.Tuples) > 0 && len(e.Tuples[0].Exprs) == 1 {
+		if len(e.Rows) > 0 && len(e.Rows[0]) == 1 {
 			return 2, "column1", nil
 		}
 	case *SelectClause:

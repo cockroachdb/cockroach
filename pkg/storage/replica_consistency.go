@@ -27,7 +27,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
@@ -60,23 +59,12 @@ const (
 func (r *Replica) CheckConsistency(
 	ctx context.Context, args roachpb.CheckConsistencyRequest,
 ) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
-	desc := r.Desc()
-	key := desc.StartKey.AsRawKey()
-	// Keep the request from crossing the local->global boundary.
-	if bytes.Compare(key, keys.LocalMax) < 0 {
-		key = keys.LocalMax
-	}
-	endKey := desc.EndKey.AsRawKey()
-	id := uuid.MakeV4()
+	startKey := r.Desc().StartKey.AsRawKey()
 
 	checkArgs := roachpb.ComputeChecksumRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key:    key,
-			EndKey: endKey,
-		},
-		Version:    batcheval.ReplicaChecksumVersion,
-		ChecksumID: id,
-		Snapshot:   args.WithDiff,
+		RequestHeader: roachpb.RequestHeader{Key: startKey},
+		Version:       batcheval.ReplicaChecksumVersion,
+		Snapshot:      args.WithDiff,
 	}
 
 	results, err := r.RunConsistencyCheck(ctx, checkArgs)
@@ -98,7 +86,7 @@ func (r *Replica) CheckConsistency(
 		if expResponse.Snapshot != nil && result.Response.Snapshot != nil {
 			diff := diffRange(expResponse.Snapshot, result.Response.Snapshot)
 			if report := r.store.cfg.TestingKnobs.BadChecksumReportDiff; report != nil {
-				report(r.store.Ident, diff)
+				report(*r.store.Ident, diff)
 			}
 			buf.WriteByte('\n')
 			_, _ = diff.WriteTo(&buf)
@@ -129,7 +117,7 @@ func (r *Replica) CheckConsistency(
 		log.Infof(ctx, "triggering stats recomputation to resolve delta of %+v", results[0].Response.Delta)
 
 		req := roachpb.RecomputeStatsRequest{
-			RequestHeader: roachpb.RequestHeader{Key: desc.StartKey.AsRawKey()},
+			RequestHeader: roachpb.RequestHeader{Key: startKey},
 		}
 
 		var b client.Batch
@@ -144,7 +132,7 @@ func (r *Replica) CheckConsistency(
 		if !args.WithDiff {
 			// We'll call this recursively with WithDiff==true; let's let that call
 			// be the one to trigger the handler.
-			p(r.store.Ident)
+			p(*r.store.Ident)
 		}
 		logFunc = log.Errorf
 	}
@@ -159,8 +147,9 @@ func (r *Replica) CheckConsistency(
 	// Note that this will call Fatal recursively in `CheckConsistency` (in the code above).
 	log.Errorf(ctx, "consistency check failed with %d inconsistent replicas; fetching details",
 		inconsistencyCount)
-	if err := r.store.db.CheckConsistency(ctx, key, endKey, true /* withDiff */); err != nil {
-		logFunc(ctx, "replica inconsistency detected; could not obtain actual diff: %s", err)
+	args.WithDiff = true
+	if _, pErr := r.CheckConsistency(ctx, args); pErr != nil {
+		logFunc(ctx, "replica inconsistency detected; could not obtain actual diff: %s", pErr)
 	}
 
 	// Not reached except in tests.
@@ -177,17 +166,12 @@ type ConsistencyCheckResult struct {
 func (r *Replica) collectChecksumFromReplica(
 	ctx context.Context, replica roachpb.ReplicaDescriptor, id uuid.UUID, checksum []byte,
 ) (CollectChecksumResponse, error) {
-	addr, err := r.store.cfg.Transport.resolver(replica.NodeID)
-	if err != nil {
-		return CollectChecksumResponse{}, errors.Wrapf(err, "could not resolve node ID %d",
-			replica.NodeID)
-	}
-	conn, err := r.store.cfg.Transport.rpcContext.GRPCDial(addr.String()).Connect(ctx)
+	conn, err := r.store.cfg.NodeDialer.Dial(ctx, replica.NodeID)
 	if err != nil {
 		return CollectChecksumResponse{},
-			errors.Wrapf(err, "could not dial node ID %d address %s", replica.NodeID, addr)
+			errors.Wrapf(err, "could not dial node ID %d", replica.NodeID)
 	}
-	client := NewConsistencyClient(conn)
+	client := NewPerReplicaClient(conn)
 	req := &CollectChecksumRequest{
 		StoreRequestHeader{NodeID: replica.NodeID, StoreID: replica.StoreID},
 		r.RangeID,
@@ -210,14 +194,11 @@ func (r *Replica) RunConsistencyCheck(
 ) ([]ConsistencyCheckResult, error) {
 	// Send a ComputeChecksum which will trigger computation of the checksum on
 	// all replicas.
-	{
-		var b client.Batch
-		b.AddRawRequest(&req)
-
-		if err := r.store.db.Run(ctx, &b); err != nil {
-			return nil, err
-		}
+	res, pErr := client.SendWrapped(ctx, r.store.db.NonTransactionalSender(), &req)
+	if pErr != nil {
+		return nil, pErr.GoError()
 	}
+	ccRes := res.(*roachpb.ComputeChecksumResponse)
 
 	var orderedReplicas []roachpb.ReplicaDescriptor
 	{
@@ -254,7 +235,7 @@ func (r *Replica) RunConsistencyCheck(
 				if len(results) > 0 {
 					masterChecksum = results[0].Response.Checksum
 				}
-				resp, err := r.collectChecksumFromReplica(ctx, replica, req.ChecksumID, masterChecksum)
+				resp, err := r.collectChecksumFromReplica(ctx, replica, ccRes.ChecksumID, masterChecksum)
 				resultCh <- ConsistencyCheckResult{
 					Replica:  replica,
 					Response: resp,
@@ -374,26 +355,17 @@ func (r *Replica) sha512(
 	snap engine.Reader,
 	snapshot *roachpb.RaftSnapshotData,
 ) (*replicaHash, error) {
-	legacyTombstoneKey := engine.MakeMVCCMetadataKey(keys.RaftTombstoneIncorrectLegacyKey(desc.RangeID))
-
 	// Iterate over all the data in the range.
-	iter := snap.NewIterator(engine.IterOptions{})
+	iter := snap.NewIterator(engine.IterOptions{UpperBound: desc.EndKey.AsRawKey()})
 	defer iter.Close()
 
 	var alloc bufalloc.ByteAllocator
+	var intBuf [8]byte
+	var legacyTimestamp hlc.LegacyTimestamp
+	var timestampBuf []byte
 	hasher := sha512.New()
 
-	var legacyTimestamp hlc.LegacyTimestamp
 	visitor := func(unsafeKey engine.MVCCKey, unsafeValue []byte) error {
-		if unsafeKey.Equal(legacyTombstoneKey) {
-			// Skip the tombstone key which is marked as replicated even though it
-			// isn't.
-			//
-			// TODO(peter): Figure out a way to migrate this key to the unreplicated
-			// key space.
-			return nil
-		}
-
 		if snapshot != nil {
 			// Add (a copy of) the kv pair into the debug message.
 			kv := roachpb.RaftSnapshotData_KeyValue{
@@ -405,24 +377,30 @@ func (r *Replica) sha512(
 		}
 
 		// Encode the length of the key and value.
-		if err := binary.Write(hasher, binary.LittleEndian, int64(len(unsafeKey.Key))); err != nil {
+		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(unsafeKey.Key)))
+		if _, err := hasher.Write(intBuf[:]); err != nil {
 			return err
 		}
-		if err := binary.Write(hasher, binary.LittleEndian, int64(len(unsafeValue))); err != nil {
+		binary.LittleEndian.PutUint64(intBuf[:], uint64(len(unsafeValue)))
+		if _, err := hasher.Write(intBuf[:]); err != nil {
 			return err
 		}
 		if _, err := hasher.Write(unsafeKey.Key); err != nil {
 			return err
 		}
 		legacyTimestamp = hlc.LegacyTimestamp(unsafeKey.Timestamp)
-		timestamp, err := protoutil.Marshal(&legacyTimestamp)
-		if err != nil {
+		if size := legacyTimestamp.Size(); size > cap(timestampBuf) {
+			timestampBuf = make([]byte, size)
+		} else {
+			timestampBuf = timestampBuf[:size]
+		}
+		if _, err := protoutil.MarshalToWithoutFuzzing(&legacyTimestamp, timestampBuf); err != nil {
 			return err
 		}
-		if _, err := hasher.Write(timestamp); err != nil {
+		if _, err := hasher.Write(timestampBuf); err != nil {
 			return err
 		}
-		_, err = hasher.Write(unsafeValue)
+		_, err := hasher.Write(unsafeValue)
 		return err
 	}
 

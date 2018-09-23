@@ -29,7 +29,7 @@
 </span></td></tr>
 <tr><td><code>array_agg(arg1: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td></tr>
-<tr><td><code>array_agg(arg1: timetz) &rarr; timetz[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
+<tr><td><code>array_agg(arg1: varbit) &rarr; varbit[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td></tr>
 <tr><td><code>avg(arg1: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the average of the selected values.</p>
 </span></td></tr>
@@ -83,7 +83,7 @@
 </span></td></tr>
 <tr><td><code>max(arg1: oid) &rarr; oid</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
-<tr><td><code>max(arg1: timetz) &rarr; timetz</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+<tr><td><code>max(arg1: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td></tr>
 <tr><td><code>min(arg1: <a href="bool.html">bool</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
@@ -115,7 +115,7 @@
 </span></td></tr>
 <tr><td><code>min(arg1: oid) &rarr; oid</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
-<tr><td><code>min(arg1: timetz) &rarr; timetz</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+<tr><td><code>min(arg1: varbit) &rarr; varbit</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td></tr>
 <tr><td><code>sqrdiff(arg1: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the sum of squared differences from the mean of the selected values.</p>
 </span></td></tr>
@@ -128,6 +128,10 @@
 <tr><td><code>stddev(arg1: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the standard deviation of the selected values.</p>
 </span></td></tr>
 <tr><td><code>stddev(arg1: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the standard deviation of the selected values.</p>
+</span></td></tr>
+<tr><td><code>string_agg(arg1: <a href="bytes.html">bytes</a>, arg2: <a href="bytes.html">bytes</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Concatenates all selected values using the provided delimiter.</p>
+</span></td></tr>
+<tr><td><code>string_agg(arg1: <a href="string.html">string</a>, arg2: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Concatenates all selected values using the provided delimiter.</p>
 </span></td></tr>
 <tr><td><code>sum(arg1: <a href="decimal.html">decimal</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the sum of the selected values.</p>
 </span></td></tr>

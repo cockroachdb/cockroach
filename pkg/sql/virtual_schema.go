@@ -52,8 +52,19 @@ type virtualSchema struct {
 
 // virtualSchemaTable represents a table within a virtualSchema.
 type virtualSchemaTable struct {
-	schema   string
+	// Exactly one of the populate and generator fields should be defined for
+	// each virtualSchemaTable.
+	schema string
+
+	// populate, if non-nil, is a function that is used when creating a
+	// valuesNode. This function eagerly loads every row of the virtual table
+	// during initialization of the valuesNode.
 	populate func(ctx context.Context, p *planner, db *DatabaseDescriptor, addRow func(...tree.Datum) error) error
+
+	// generator, if non-nil, is a function that is used when creating a
+	// virtualTableNode. This function returns a virtualTableGenerator function
+	// which generates the next row of the virtual table when called.
+	generator func(ctx context.Context, p *planner, db *DatabaseDescriptor) (virtualTableGenerator, error)
 }
 
 // virtualSchemas holds a slice of statically registered virtualSchema objects.
@@ -99,13 +110,15 @@ var errInvalidDbPrefix = pgerror.NewError(pgerror.CodeUndefinedObjectError,
 	"cannot access virtual schema in anonymous database",
 ).SetHintf("verify that the current database is set")
 
+var errInvalidVirtualSchema = pgerror.NewError(pgerror.CodeInternalError,
+	"programming error: virtualSchema cannot have both the populate and generator functions defined",
+)
+
 // getPlanInfo returns the column metadata and a constructor for a new
 // valuesNode for the virtual table. We use deferred construction here
 // so as to avoid populating a RowContainer during query preparation,
 // where we can't guarantee it will be Close()d in case of error.
-func (e virtualTableEntry) getPlanInfo(
-	ctx context.Context,
-) (sqlbase.ResultColumns, virtualTableConstructor) {
+func (e virtualTableEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConstructor) {
 	var columns sqlbase.ResultColumns
 	for _, col := range e.desc.Columns {
 		columns = append(columns, sqlbase.ResultColumn{
@@ -129,6 +142,17 @@ func (e virtualTableEntry) getPlanInfo(
 			}
 		}
 
+		if e.tableDef.generator != nil && e.tableDef.populate != nil {
+			return nil, errInvalidVirtualSchema
+		}
+
+		if e.tableDef.generator != nil {
+			next, err := e.tableDef.generator(ctx, p, dbDesc)
+			if err != nil {
+				return nil, err
+			}
+			return p.newContainerVirtualTableNode(columns, 0, next), nil
+		}
 		v := p.newContainerValuesNode(columns, 0)
 
 		if err := e.tableDef.populate(ctx, p, dbDesc, func(datums ...tree.Datum) error {
@@ -233,6 +257,8 @@ func initVirtualTableDesc(
 		}
 	}
 
+	// Virtual tables never use SERIAL so we need not process SERIAL
+	// types here.
 	return MakeTableDesc(
 		ctx,
 		nil, /* txn */

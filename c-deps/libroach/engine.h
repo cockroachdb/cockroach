@@ -38,10 +38,11 @@ struct DBEngine {
   virtual DBStatus ApplyBatchRepr(DBSlice repr, bool sync) = 0;
   virtual DBSlice BatchRepr() = 0;
   virtual DBStatus Get(DBKey key, DBString* value) = 0;
-  virtual DBIterator* NewIter(rocksdb::ReadOptions*) = 0;
+  virtual DBIterator* NewIter(DBIterOptions) = 0;
   virtual DBStatus GetStats(DBStatsResult* stats) = 0;
   virtual DBString GetCompactionStats() = 0;
   virtual DBString GetEnvStats(DBEnvStatsResult* stats) = 0;
+  virtual DBStatus GetEncryptionRegistries(DBEncryptionRegistries* result) = 0;
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents) = 0;
   virtual DBStatus EnvOpenFile(DBSlice path, rocksdb::WritableFile** file) = 0;
   virtual DBStatus EnvReadFile(DBSlice path, DBSlice* contents) = 0;
@@ -50,8 +51,10 @@ struct DBEngine {
   virtual DBStatus EnvCloseFile(rocksdb::WritableFile* file) = 0;
   virtual DBStatus EnvDeleteFile(DBSlice path) = 0;
   virtual DBStatus EnvDeleteDirAndFiles(DBSlice dir) = 0;
+  virtual DBStatus EnvLinkFile(DBSlice oldname, DBSlice newname) = 0;
 
   DBSSTable* GetSSTables(int* n);
+  DBStatus GetSortedWALFiles(DBWALFile** out_files, int* n);
   DBString GetUserProperties();
 };
 
@@ -82,10 +85,11 @@ struct DBImpl : public DBEngine {
   virtual DBStatus ApplyBatchRepr(DBSlice repr, bool sync);
   virtual DBSlice BatchRepr();
   virtual DBStatus Get(DBKey key, DBString* value);
-  virtual DBIterator* NewIter(rocksdb::ReadOptions*);
+  virtual DBIterator* NewIter(DBIterOptions);
   virtual DBStatus GetStats(DBStatsResult* stats);
   virtual DBString GetCompactionStats();
   virtual DBStatus GetEnvStats(DBEnvStatsResult* stats);
+  virtual DBStatus GetEncryptionRegistries(DBEncryptionRegistries* result);
   virtual DBStatus EnvWriteFile(DBSlice path, DBSlice contents);
   virtual DBStatus EnvOpenFile(DBSlice path, rocksdb::WritableFile** file);
   virtual DBStatus EnvReadFile(DBSlice path, DBSlice* contents);
@@ -94,6 +98,7 @@ struct DBImpl : public DBEngine {
   virtual DBStatus EnvCloseFile(rocksdb::WritableFile* file);
   virtual DBStatus EnvDeleteFile(DBSlice path);
   virtual DBStatus EnvDeleteDirAndFiles(DBSlice dir);
+  virtual DBStatus EnvLinkFile(DBSlice oldname, DBSlice newname);
 };
 
 }  // namespace cockroach

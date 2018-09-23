@@ -18,7 +18,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"runtime"
 	"strings"
 	"time"
@@ -90,7 +89,7 @@ func runSqlapp(ctx context.Context, t *test, c *cluster, app, flags string, dur 
 		// Kill one node at a time, with a minute of healthy cluster and thirty
 		// seconds of down node.
 		ch := Chaos{
-			Timer:   Periodic{Down: 30 * time.Second, Up: 1 * time.Minute},
+			Timer:   Periodic{Period: 90 * time.Second, DownTime: 30 * time.Second},
 			Target:  roachNodes.randNode,
 			Stopper: time.After(dur),
 		}
@@ -101,10 +100,11 @@ func runSqlapp(ctx context.Context, t *test, c *cluster, app, flags string, dur 
 		// they often have the effect of slowing down the test so much that it
 		// fails. To get around this we create a new logger that writes to an
 		// artifacts file but does not output to stdout or stderr.
-		sqlappL, err := newLogger(c.l.name, "sqlapp", "", ioutil.Discard, ioutil.Discard)
+		sqlappL, err := c.l.ChildLogger("sqlapp", logPrefix(""), quietStdout, quietStderr)
 		if err != nil {
 			return err
 		}
+		defer sqlappL.close()
 
 		t.Status("installing schema")
 		err = c.RunL(ctx, sqlappL, appNode, fmt.Sprintf("./%s --install_schema "+

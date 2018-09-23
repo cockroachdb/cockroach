@@ -22,6 +22,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -36,6 +37,7 @@ var gens = []params{
 }
 
 func TestCreateZipfGenerator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	for _, gen := range gens {
 		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 		_, err := NewZipfGenerator(rng, gen.iMin, gen.iMax, gen.theta, false)
@@ -62,6 +64,10 @@ var tests = []struct {
 }
 
 func TestZetaFromScratch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	if testing.Short() {
+		t.Skip("short")
+	}
 	for _, test := range tests {
 		computedZeta, err := computeZetaFromScratch(test.n, test.theta)
 		if err != nil {
@@ -74,6 +80,10 @@ func TestZetaFromScratch(t *testing.T) {
 }
 
 func TestZetaIncrementally(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	if testing.Short() {
+		t.Skip("short")
+	}
 	// Theta cannot be 1 by definition, so this is a safe initial value.
 	oldTheta := 1.0
 	var oldZetaN float64
@@ -159,6 +169,7 @@ func runZipfGenerators(t *testing.T, withIncrements bool) {
 }
 
 func TestZipfGenerator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	runZipfGenerators(t, false)
 	runZipfGenerators(t, true)
 }

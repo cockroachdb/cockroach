@@ -26,10 +26,10 @@ func check3321(db *gosql.DB) error {
 	// W_YTD = sum (D_YTD)
 
 	row := db.QueryRow(`
-SELECT COUNT(*)
+SELECT count(*)
 FROM warehouse
 FULL OUTER JOIN
-(SELECT d_w_id, SUM(d_ytd) as sum_d_ytd FROM district GROUP BY d_w_id)
+(SELECT d_w_id, sum(d_ytd) as sum_d_ytd FROM district GROUP BY d_w_id)
 ON (w_id = d_w_id)
 WHERE w_ytd != sum_d_ytd
 `)
@@ -55,13 +55,13 @@ func check3322(db *gosql.DB) error {
 		return err
 	}
 	newOrderRows, err := db.Query(`
-SELECT MAX(no_o_id) FROM new_order GROUP BY no_d_id, no_w_id ORDER BY no_w_id, no_d_id
+SELECT max(no_o_id) FROM new_order GROUP BY no_d_id, no_w_id ORDER BY no_w_id, no_d_id
 `)
 	if err != nil {
 		return err
 	}
 	orderRows, err := db.Query(`
-SELECT MAX(o_id) FROM "order" GROUP BY o_d_id, o_w_id ORDER BY o_w_id, o_d_id
+SELECT max(o_id) FROM "order" GROUP BY o_d_id, o_w_id ORDER BY o_w_id, o_d_id
 `)
 	if err != nil {
 		return err
@@ -108,8 +108,8 @@ SELECT MAX(o_id) FROM "order" GROUP BY o_d_id, o_w_id ORDER BY o_w_id, o_d_id
 func check3323(db *gosql.DB) error {
 	// max(NO_O_ID) - min(NO_O_ID) + 1 = # of rows in new_order for each warehouse/district
 	row := db.QueryRow(`
-SELECT COUNT(*) FROM
- (SELECT MAX(no_o_id) - MIN(no_o_id) - COUNT(*) AS nod FROM new_order
+SELECT count(*) FROM
+ (SELECT max(no_o_id) - min(no_o_id) - count(*) AS nod FROM new_order
   GROUP BY no_w_id, no_d_id)
  WHERE nod != -1
 `)
@@ -127,16 +127,16 @@ SELECT COUNT(*) FROM
 }
 
 func check3324(db *gosql.DB) error {
-	// SUM(O_OL_CNT) = [number of rows in the ORDER-LINE table for this district]
+	// sum(O_OL_CNT) = [number of rows in the ORDER-LINE table for this district]
 
 	leftRows, err := db.Query(`
-SELECT SUM(o_ol_cnt) FROM "order" GROUP BY o_w_id, o_d_id ORDER BY o_w_id, o_d_id
+SELECT sum(o_ol_cnt) FROM "order" GROUP BY o_w_id, o_d_id ORDER BY o_w_id, o_d_id
 `)
 	if err != nil {
 		return err
 	}
 	rightRows, err := db.Query(`
-SELECT COUNT(*) FROM order_line GROUP BY ol_w_id, ol_d_id ORDER BY ol_w_id, ol_d_id
+SELECT count(*) FROM order_line GROUP BY ol_w_id, ol_d_id ORDER BY ol_w_id, ol_d_id
 `)
 	if err != nil {
 		return err
@@ -151,14 +151,14 @@ SELECT COUNT(*) FROM order_line GROUP BY ol_w_id, ol_d_id ORDER BY ol_w_id, ol_d
 			return err
 		}
 		if left != right {
-			return errors.Errorf("order.SUM(o_ol_cnt): %d != order_line.count(*): %d", left, right)
+			return errors.Errorf("order.sum(o_ol_cnt): %d != order_line.count(*): %d", left, right)
 		}
 	}
 	if i == 0 {
 		return errors.Errorf("0 rows returned")
 	}
 	if leftRows.Next() || rightRows.Next() {
-		return errors.Errorf("length of order.SUM(o_ol_cnt) != order_line.count(*)")
+		return errors.Errorf("length of order.sum(o_ol_cnt) != order_line.count(*)")
 	}
 
 	if err := leftRows.Close(); err != nil {
@@ -211,14 +211,14 @@ func check3326(db *gosql.DB) error {
 (SELECT o_w_id, o_d_id, o_id, o_ol_cnt FROM "order"
   ORDER BY o_w_id, o_d_id, o_id DESC)
 EXCEPT ALL
-(SELECT ol_w_id, ol_d_id, ol_o_id, COUNT(*) FROM order_line
+(SELECT ol_w_id, ol_d_id, ol_o_id, count(*) FROM order_line
   GROUP BY (ol_w_id, ol_d_id, ol_o_id)
   ORDER BY ol_w_id, ol_d_id, ol_o_id DESC)`)
 	if err != nil {
 		return err
 	}
 	secondQuery, err := db.Query(`
-(SELECT ol_w_id, ol_d_id, ol_o_id, COUNT(*) FROM order_line
+(SELECT ol_w_id, ol_d_id, ol_o_id, count(*) FROM order_line
   GROUP BY (ol_w_id, ol_d_id, ol_o_id) ORDER BY ol_w_id, ol_d_id, ol_o_id DESC)
 EXCEPT ALL
 (SELECT o_w_id, o_d_id, o_id, o_ol_cnt FROM "order"
@@ -248,7 +248,7 @@ func check3327(db *gosql.DB) error {
 	// O_CARRIER_ID set to a null value.
 
 	row := db.QueryRow(`
-SELECT COUNT(*) FROM
+SELECT count(*) FROM
   (SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)
 FULL OUTER JOIN
   (SELECT ol_w_id, ol_d_id, ol_o_id FROM order_line WHERE ol_delivery_d IS NULL)
@@ -273,10 +273,10 @@ func check3328(db *gosql.DB) error {
 	// W_YTD = SUM(H_AMOUNT) for each warehouse defined by (W_ID = H _W_ID).
 
 	row := db.QueryRow(`
-SELECT COUNT(*) FROM
+SELECT count(*) FROM
   (SELECT w_id, w_ytd, sum FROM warehouse
   JOIN
-  (SELECT h_w_id, SUM(h_amount) FROM history GROUP BY h_w_id)
+  (SELECT h_w_id, sum(h_amount) FROM history GROUP BY h_w_id)
   ON w_id = h_w_id
   WHERE w_ytd != sum
   )
@@ -299,10 +299,10 @@ func check3329(db *gosql.DB) error {
 	// D_YTD=SUM(H_AMOUNT) for each district defined by (D_W_ID,D_ID)=(H_W_ID,H_D_ID)
 
 	row := db.QueryRow(`
-SELECT COUNT(*) FROM
+SELECT count(*) FROM
   (SELECT d_id, d_ytd, sum FROM district
   JOIN
-  (SELECT h_w_id, h_d_id, SUM(h_amount) FROM history GROUP BY (h_w_id, h_d_id))
+  (SELECT h_w_id, h_d_id, sum(h_amount) FROM history GROUP BY (h_w_id, h_d_id))
   ON d_id = h_d_id AND d_w_id = h_w_id
   WHERE d_ytd != sum
   )

@@ -158,6 +158,10 @@ std::string EncodeTimestamp(DBTimestamp ts) {
   return s;
 }
 
+bool EmptyTimestamp(DBTimestamp ts) {
+  return ts.wall_time == 0 && ts.logical == 0;
+}
+
 // MVCC keys are encoded as <key>\x00[<wall_time>[<logical>]]<#timestamp-bytes>. A
 // custom RocksDB comparator (DBComparator) is used to maintain the desired
 // ordering as these keys do not sort lexicographically correctly.

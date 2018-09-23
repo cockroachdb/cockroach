@@ -16,6 +16,7 @@ package batcheval
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -32,13 +33,7 @@ func init() {
 func declareKeysHeartbeatTransaction(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
-	DeclareKeysWriteTransaction(desc, header, req, spans)
-	if header.Txn != nil {
-		header.Txn.AssertInitialized(context.TODO())
-		spans.Add(spanset.SpanReadOnly, roachpb.Span{
-			Key: keys.AbortSpanKey(header.RangeID, header.Txn.ID),
-		})
-	}
+	declareKeysWriteTransaction(desc, header, req, spans)
 }
 
 // HeartbeatTxn updates the transaction status and heartbeat
@@ -53,6 +48,10 @@ func HeartbeatTxn(
 
 	if err := VerifyTransaction(h, args); err != nil {
 		return result.Result{}, err
+	}
+
+	if args.Now.IsEmpty() {
+		return result.Result{}, fmt.Errorf("Now not specified for heartbeat")
 	}
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)

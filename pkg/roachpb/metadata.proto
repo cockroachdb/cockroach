@@ -92,6 +92,16 @@ message RangeDescriptor {
   // next_replica_id is a counter used to generate replica IDs.
   optional int32 next_replica_id = 5 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextReplicaID", (gogoproto.casttype) = "ReplicaID"];
+
+  // generation is incremented on every split and every merge, i.e., whenever
+  // the end_key of this range changes. It is initialized to zero when the range
+  // is first created.
+  //
+  // Note that the generation counter is not incremented by versions of
+  // Cockroach prior to v2.1. To maintain backwards compatibility with these old
+  // versions of Cockroach, we cannot enable the gogoproto.nullable option, as
+  // we need to be able to encode this mesage with the generation field unset.
+  optional int64 generation = 6;
 }
 
 // Percentiles contains a handful of hard-coded percentiles meant to summarize
@@ -128,11 +138,13 @@ message StoreCapacity {
   optional int64 logical_bytes = 9 [(gogoproto.nullable) = false];
   optional int32 range_count = 3 [(gogoproto.nullable) = false];
   optional int32 lease_count = 4 [(gogoproto.nullable) = false];
+  // queries_per_second tracks the average number of queries processed per
+  // second by replicas in the store. The stat is tracked over the time period
+  // defined in storage/replica_stats.go, which as of July 2018 is 30 minutes.
+  optional double queries_per_second = 10 [(gogoproto.nullable) = false];
   // writes_per_second tracks the average number of keys written per second
   // by ranges in the store. The stat is tracked over the time period defined
-  // in storage/replica_stats.go, which as of July 2017 is 30 minutes.
-  // TODO(a-robinson): We can currently only include writes, not reads served
-  // by leaseholders. Should we record those too? This may be enabled by #7611.
+  // in storage/replica_stats.go, which as of July 2018 is 30 minutes.
   optional double writes_per_second = 5 [(gogoproto.nullable) = false];
   // bytes_per_replica and writes_per_replica contain percentiles for the
   // number of bytes and writes-per-second to each replica in the store.
@@ -149,6 +161,16 @@ message NodeDescriptor {
   optional Attributes attrs = 3 [(gogoproto.nullable) = false];
   optional Locality locality = 4 [(gogoproto.nullable) = false];
   optional Version ServerVersion = 5 [(gogoproto.nullable) = false];
+  optional string build_tag = 6 [(gogoproto.nullable) = false];
+  optional int64 started_at = 7 [(gogoproto.nullable) = false];
+  repeated LocalityAddress locality_address = 8 [(gogoproto.nullable) = false];
+}
+
+// LocalityAddress holds the private address accessible only from other nodes
+// in the corresponding locality.
+message LocalityAddress {
+  optional util.UnresolvedAddr address = 1 [(gogoproto.nullable) = false];
+  optional Tier locality_tier = 2 [(gogoproto.nullable) = false];
 }
 
 // StoreDescriptor holds store information including store attributes, node

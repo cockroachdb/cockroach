@@ -286,6 +286,15 @@ func (d *DistinctSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
+func (d *ProjectSetSpec) summary() (string, []string) {
+	var details []string
+	for _, expr := range d.Exprs {
+		details = append(details, expr.Expr)
+	}
+	return "ProjectSet", details
+}
+
+// summary implements the diagramCellType interface.
 func (s *SamplerSpec) summary() (string, []string) {
 	details := []string{fmt.Sprintf("SampleSize: %d", s.SampleSize)}
 	for _, sk := range s.Sketches {
@@ -321,6 +330,11 @@ func (is *InputSyncSpec) summary() (string, []string) {
 	default:
 		return "unknown", []string{}
 	}
+}
+
+// summary implements the diagramCellType interface.
+func (r *LocalPlanNodeSpec) summary() (string, []string) {
+	return fmt.Sprintf("local %s %d", *r.Name, *r.RowSourceIdx), []string{}
 }
 
 // summary implements the diagramCellType interface.
@@ -410,6 +424,51 @@ func (s *CSVWriterSpec) summary() (string, []string) {
 	return "CSVWriter", []string{s.Destination}
 }
 
+// summary implements the diagramCellType interface.
+func (w *WindowerSpec) summary() (string, []string) {
+	details := make([]string, 0, len(w.WindowFns))
+	if len(w.PartitionBy) > 0 {
+		details = append(details, fmt.Sprintf("PARTITION BY: %s", colListStr(w.PartitionBy)))
+	}
+	for _, windowFn := range w.WindowFns {
+		var buf bytes.Buffer
+		if windowFn.Func.WindowFunc != nil {
+			buf.WriteString(windowFn.Func.WindowFunc.String())
+		} else {
+			buf.WriteString(windowFn.Func.AggregateFunc.String())
+		}
+		buf.WriteByte('(')
+		args := make([]uint32, windowFn.ArgCount)
+		for i := uint32(0); i < windowFn.ArgCount; i++ {
+			args[i] = i + windowFn.ArgIdxStart
+		}
+		buf.WriteString(colListStr(args))
+		buf.WriteByte(')')
+		if len(windowFn.Ordering.Columns) > 0 {
+			buf.WriteString(" (ORDER BY ")
+			buf.WriteString(windowFn.Ordering.diagramString())
+			buf.WriteByte(')')
+		}
+		details = append(details, buf.String())
+	}
+
+	return "Windower", details
+}
+
+// summary implements the diagramCellType interface.
+func (s *ChangeAggregatorSpec) summary() (string, []string) {
+	var details []string
+	for _, watch := range s.Watches {
+		details = append(details, watch.Span.String())
+	}
+	return "ChangeAggregator", details
+}
+
+// summary implements the diagramCellType interface.
+func (s *ChangeFrontierSpec) summary() (string, []string) {
+	return "ChangeFrontier", []string{}
+}
+
 type diagramCell struct {
 	Title   string   `json:"title"`
 	Details []string `json:"details"`
@@ -424,10 +483,11 @@ type diagramProcessor struct {
 }
 
 type diagramEdge struct {
-	SourceProc   int `json:"sourceProc"`
-	SourceOutput int `json:"sourceOutput"`
-	DestProc     int `json:"destProc"`
-	DestInput    int `json:"destInput"`
+	SourceProc   int      `json:"sourceProc"`
+	SourceOutput int      `json:"sourceOutput"`
+	DestProc     int      `json:"destProc"`
+	DestInput    int      `json:"destInput"`
+	Stats        []string `json:"stats,omitempty"`
 }
 
 type diagramData struct {
@@ -437,7 +497,10 @@ type diagramData struct {
 }
 
 func generateDiagramData(
-	flows []FlowSpec, nodeNames []string, pidToStatDetails map[int][]string,
+	flows []FlowSpec,
+	nodeNames []string,
+	processorStats map[int][]string,
+	streamStats map[int][]string,
 ) (diagramData, error) {
 	d := diagramData{NodeNames: nodeNames}
 
@@ -452,7 +515,7 @@ func generateDiagramData(
 			proc := diagramProcessor{NodeIdx: n}
 			proc.Core.Title, proc.Core.Details = p.Core.GetValue().(diagramCellType).summary()
 			proc.Core.Title += fmt.Sprintf("/%d", p.ProcessorID)
-			if statDetails, ok := pidToStatDetails[int(p.ProcessorID)]; ok {
+			if statDetails, ok := processorStats[int(p.ProcessorID)]; ok {
 				proc.Core.Details = append(proc.Core.Details, statDetails...)
 			}
 			proc.Core.Details = append(proc.Core.Details, p.Post.summary()...)
@@ -530,6 +593,7 @@ func generateDiagramData(
 					edge := diagramEdge{
 						SourceProc:   pIdx,
 						SourceOutput: srcOutput,
+						Stats:        streamStats[int(o.StreamID)],
 					}
 					if o.Type == StreamEndpointSpec_SYNC_RESPONSE {
 						edge.DestProc = len(d.Processors) - 1
@@ -574,7 +638,8 @@ func GeneratePlanDiagram(
 		nodeNames[i] = n.String()
 	}
 
-	d, err := generateDiagramData(flowSlice, nodeNames, extractStatsFromSpans(spans))
+	processorStats, streamStats := extractStatsFromSpans(spans)
+	d, err := generateDiagramData(flowSlice, nodeNames, processorStats, streamStats)
 	if err != nil {
 		return err
 	}
@@ -620,7 +685,7 @@ func encodeJSONToURL(json bytes.Buffer) (string, url.URL, error) {
 		Scheme:   "https",
 		Host:     "cockroachdb.github.io",
 		Path:     "distsqlplan/decode.html",
-		RawQuery: compressed.String(),
+		Fragment: compressed.String(),
 	}
 	return jsonStr, url, nil
 }
@@ -628,13 +693,24 @@ func encodeJSONToURL(json bytes.Buffer) (string, url.URL, error) {
 // extractStatsFromSpans extracts stats from spans tagged with a processor id
 // and returns a map from that processor id to a slice of stat descriptions
 // that can be added to a plan.
-func extractStatsFromSpans(spans []tracing.RecordedSpan) map[int][]string {
-	res := make(map[int][]string)
+func extractStatsFromSpans(
+	spans []tracing.RecordedSpan,
+) (processorStats, streamStats map[int][]string) {
+	processorStats = make(map[int][]string)
+	streamStats = make(map[int][]string)
 	for _, span := range spans {
-		// Get the processor id for this span. If there isn't one, this span doesn't
-		// belong to a processor.
-		pid, ok := span.Tags[processorIDTagKey]
-		if !ok {
+		var id string
+		var stats map[int][]string
+
+		// Get the processor or stream id for this span. If neither exists, this
+		// span doesn't belong to a processor or stream.
+		if pid, ok := span.Tags[processorIDTagKey]; ok {
+			id = pid
+			stats = processorStats
+		} else if sid, ok := span.Tags[streamIDTagKey]; ok {
+			id = sid
+			stats = streamStats
+		} else {
 			continue
 		}
 
@@ -643,12 +719,12 @@ func extractStatsFromSpans(spans []tracing.RecordedSpan) map[int][]string {
 			continue
 		}
 		if dss, ok := da.Message.(DistSQLSpanStats); ok {
-			i, err := strconv.Atoi(pid)
+			i, err := strconv.Atoi(id)
 			if err != nil {
 				continue
 			}
-			res[i] = dss.StatsForQueryPlan()
+			stats[i] = append(stats[i], dss.StatsForQueryPlan()...)
 		}
 	}
-	return res
+	return processorStats, streamStats
 }

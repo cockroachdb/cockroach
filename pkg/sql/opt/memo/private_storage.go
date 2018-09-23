@@ -45,12 +45,20 @@ import (
 // Go key value) or contain a non-interned pointer (because pointers to
 // equivalent values in different memory locations do not map to the same key
 // value).
+//
+// Private values must be immutable; that is, once set, they can never be
+// modified again. Without this property, they could not be be hashed nor copied
+// for independent concurrent use by multiple Memos.
 type privateStorage struct {
 	// privatesMap maps from the interning key to the index of the private
 	// value in the privates slice. Note that PrivateID 0 is invalid in order
 	// to indicate an unknown private.
 	privatesMap map[privateKey]PrivateID
 	privates    []interface{}
+
+	// memEstimate is a rough estimate of the memory usage of privateStorage, in
+	// bytes.
+	memEstimate int64
 
 	// datumCtx is used to get the string representation of datum values.
 	datumCtx tree.FmtCtx
@@ -71,17 +79,52 @@ type privateKey struct {
 	str   string
 }
 
-// init must be called before privateStorage can be used.
+// init prepares privateStorage for use (or reuse).
 func (ps *privateStorage) init() {
 	ps.datumCtx = tree.MakeFmtCtx(&ps.keyBuf.Buffer, tree.FmtSimple)
+	ps.memEstimate = 0
 	ps.privatesMap = make(map[privateKey]PrivateID)
-	ps.privates = make([]interface{}, 1)
+
+	if ps.privates == nil {
+		ps.privates = make([]interface{}, 1, 8)
+	} else {
+		// Clear the privates to release memory (this clearing pattern is
+		// optimized by Go).
+		for i := range ps.privates {
+			ps.privates[i] = nil
+		}
+		ps.privates = ps.privates[:1]
+	}
+}
+
+// initFrom initializes the private storage with a copy of all private values
+// from another private storage. This private storage can then be modified
+// independent of the other.
+func (ps *privateStorage) initFrom(from *privateStorage) {
+	ps.datumCtx = tree.MakeFmtCtx(&ps.keyBuf.Buffer, tree.FmtSimple)
+	ps.memEstimate = from.memEstimate
+	ps.privatesMap = make(map[privateKey]PrivateID, len(from.privatesMap))
+	for k, v := range from.privatesMap {
+		ps.privatesMap[k] = v
+	}
+	ps.privates = make([]interface{}, len(from.privates))
+	copy(ps.privates, from.privates)
+}
+
+// memoryEstimate returns a rough estimate of the private storage memory usage,
+// in bytes. It only includes memory usage that is proportional to the number of
+// privates in the storage and their size, rather than constant overhead bytes.
+func (ps *privateStorage) memoryEstimate() int64 {
+	return ps.memEstimate
 }
 
 // lookup returns a private value previously interned by privateStorage.
 func (ps *privateStorage) lookup(id PrivateID) interface{} {
 	return ps.privates[id]
 }
+
+// EmptyTupleType represents an empty types.TTuple.
+var EmptyTupleType types.TTuple
 
 // internColumnID adds the given value to storage and returns an id that can
 // later be used to retrieve the value by calling the lookup method. If the
@@ -115,6 +158,22 @@ func (ps *privateStorage) internColList(colList opt.ColList) PrivateID {
 	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, colList)
 }
 
+// internTupleOrdinal adds the given value to storage and returns an id that
+// can later be used to retrieve the value by calling the lookup method. If the
+// value has been previously added to storage, then internTupleOrdinal always
+// returns the same private id that was returned from the previous call.
+func (ps *privateStorage) internTupleOrdinal(tupleOrdinal TupleOrdinal) PrivateID {
+	// The below code is carefully constructed to not allocate in the case
+	// where the value is already in the map. Be careful when modifying.
+	ps.keyBuf.Reset()
+	ps.keyBuf.writeUvarint(uint64(tupleOrdinal))
+	typ := (*TupleOrdinal)(nil)
+	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
+		return id
+	}
+	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, tupleOrdinal)
+}
+
 // internOperator adds the given value to storage and returns an id that can
 // later be used to retrieve the value by calling the lookup method. If the
 // value has been previously added to storage, then internOperator always
@@ -135,12 +194,28 @@ func (ps *privateStorage) internOperator(op opt.Operator) PrivateID {
 // later be used to retrieve the value by calling the lookup method. If the
 // value has been previously added to storage, then internOrdering always
 // returns the same private id that was returned from the previous call.
-func (ps *privateStorage) internOrdering(ordering props.Ordering) PrivateID {
+func (ps *privateStorage) internOrdering(ordering opt.Ordering) PrivateID {
 	// The below code is carefully constructed to not allocate in the case where
 	// the value is already in the map. Be careful when modifying.
 	ps.keyBuf.Reset()
 	ps.keyBuf.writeOrdering(ordering)
-	typ := (*props.Ordering)(nil)
+	typ := (*opt.Ordering)(nil)
+	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
+		return id
+	}
+	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, ordering)
+}
+
+// internOrderingChoice adds the given value to storage and returns an id that
+// can later be used to retrieve the value by calling the lookup method. If the
+// value has been previously added to storage, then internOrderingChoice always
+// returns the same private id that was returned from the previous call.
+func (ps *privateStorage) internOrderingChoice(ordering *props.OrderingChoice) PrivateID {
+	// The below code is carefully constructed to not allocate in the case where
+	// the value is already in the map. Be careful when modifying.
+	ps.keyBuf.Reset()
+	ps.keyBuf.writeOrderingChoice(ordering)
+	typ := (*opt.Ordering)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
 		return id
 	}
@@ -198,10 +273,36 @@ func (ps *privateStorage) internScanOpDef(def *ScanOpDef) PrivateID {
 	// It's unclear if we have cases where we expect the same constraints to be
 	// generated multiple times.
 	ps.keyBuf.writeUvarint(uint64(uintptr(unsafe.Pointer(def.Constraint))))
-	ps.keyBuf.writeVarint(def.HardLimit)
+	ps.keyBuf.writeVarint(int64(def.HardLimit))
 	ps.keyBuf.writeColSet(def.Cols)
 
+	flags := 0
+	if def.Flags.NoIndexJoin {
+		flags = 1
+	} else if def.Flags.ForceIndex {
+		flags = 2 + def.Flags.Index
+	}
+	ps.keyBuf.writeUvarint(uint64(flags))
+
 	typ := (*ScanOpDef)(nil)
+	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
+		return id
+	}
+	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, def)
+}
+
+// internVirtualScanOpDef adds the given value to storage and returns an id that
+// can later be used to retrieve the value by calling the lookup method. If the
+// value has been previously added to storage, then internVirtualScanOpDef
+// always  returns the same private id that was returned from the previous call.
+func (ps *privateStorage) internVirtualScanOpDef(def *VirtualScanOpDef) PrivateID {
+	// The below code is carefully constructed to not allocate in the case where
+	// the value is already in the map. Be careful when modifying.
+	ps.keyBuf.Reset()
+	ps.keyBuf.writeUvarint(uint64(def.Table))
+	ps.keyBuf.writeColSet(def.Cols)
+
+	typ := (*VirtualScanOpDef)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
 		return id
 	}
@@ -216,13 +317,30 @@ func (ps *privateStorage) internGroupByDef(def *GroupByDef) PrivateID {
 	// The below code is carefully constructed to not allocate in the case where
 	// the value is already in the map. Be careful when modifying.
 	ps.keyBuf.Reset()
-	ps.keyBuf.writeOrdering(def.Ordering)
+	ps.keyBuf.writeOrderingChoice(&def.Ordering)
 	// Add a separator between the ordering and the set. Note that the column IDs
 	// cannot be 0.
 	ps.keyBuf.writeUvarint(0)
 	ps.keyBuf.writeColSet(def.GroupingCols)
 
 	typ := (*GroupByDef)(nil)
+	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
+		return id
+	}
+	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, def)
+}
+
+// internIndexJoinDef adds the given value to storage and returns an id that
+// can later be used to retrieve the value by calling the lookup method. If the
+// value has been previously added to storage, then internIndexJoinDef always
+// returns the same private id that was returned from the previous call.
+func (ps *privateStorage) internIndexJoinDef(def *IndexJoinDef) PrivateID {
+	// The below code is carefully constructed to not allocate in the case where
+	// the value is already in the map. Be careful when modifying.
+	ps.keyBuf.Reset()
+	ps.keyBuf.writeUvarint(uint64(def.Table))
+	ps.keyBuf.writeColSet(def.Cols)
+	typ := (*IndexJoinDef)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
 		return id
 	}
@@ -237,12 +355,14 @@ func (ps *privateStorage) internLookupJoinDef(def *LookupJoinDef) PrivateID {
 	// The below code is carefully constructed to not allocate in the case where
 	// the value is already in the map. Be careful when modifying.
 	ps.keyBuf.Reset()
+	ps.keyBuf.writeUvarint(uint64(def.JoinType))
 	ps.keyBuf.writeUvarint(uint64(def.Table))
+	ps.keyBuf.writeUvarint(uint64(def.Index))
 	ps.keyBuf.writeColList(def.KeyCols)
 	// Add a separator between the list and the set. Note that the column IDs
 	// cannot be 0.
 	ps.keyBuf.writeUvarint(0)
-	ps.keyBuf.writeColSet(def.LookupCols)
+	ps.keyBuf.writeColSet(def.Cols)
 	typ := (*LookupJoinDef)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
 		return id
@@ -259,8 +379,13 @@ func (ps *privateStorage) internExplainOpDef(def *ExplainOpDef) PrivateID {
 	ps.keyBuf.writeUvarint(uint64(def.Options.Mode))
 	// This isn't a column set, but writing it out works just the same.
 	ps.keyBuf.writeColSet(def.Options.Flags)
+	// Add a separator between the set and list. Note that the column IDs cannot
+	// be 0.
+	ps.keyBuf.writeUvarint(0)
 	ps.keyBuf.writeColList(def.ColList)
-	ps.keyBuf.WriteString(def.Props.Fingerprint())
+	// Now write the physical properties.
+	ps.keyBuf.writeUvarint(0)
+	ps.keyBuf.writePhysProps(&def.Props)
 	typ := (*ExplainOpDef)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
 		return id
@@ -281,8 +406,29 @@ func (ps *privateStorage) internShowTraceOpDef(def *ShowTraceOpDef) PrivateID {
 		ps.keyBuf.WriteByte(0)
 	}
 	ps.keyBuf.writeColList(def.ColList)
-	ps.keyBuf.WriteString(def.Props.Fingerprint())
 	typ := (*ShowTraceOpDef)(nil)
+	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
+		return id
+	}
+	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, def)
+}
+
+// internMergeOnDef adds the given value to storage and returns an id that can
+// later be used to retrieve the value by calling the lookup method. If the
+// value has been previously added to storage, then internMergeOnDef always
+// returns the same private id that was returned from the previous call.
+func (ps *privateStorage) internMergeOnDef(def *MergeOnDef) PrivateID {
+	// The below code is carefully constructed to not allocate in the case where
+	// the value is already in the map. Be careful when modifying.
+	ps.keyBuf.Reset()
+	ps.keyBuf.writeUvarint(uint64(def.JoinType))
+	ps.keyBuf.writeOrdering(def.LeftEq)
+	ps.keyBuf.writeOrdering(def.RightEq)
+	ps.keyBuf.writeUvarint(0)
+	ps.keyBuf.writeOrderingChoice(&def.LeftOrdering)
+	ps.keyBuf.writeUvarint(0)
+	ps.keyBuf.writeOrderingChoice(&def.RightOrdering)
+	typ := (*MergeOnDef)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
 		return id
 	}
@@ -297,12 +443,22 @@ func (ps *privateStorage) internRowNumberDef(def *RowNumberDef) PrivateID {
 	// The below code is carefully constructed to not allocate in the case where
 	// the value is already in the map. Be careful when modifying.
 	ps.keyBuf.Reset()
-	for _, col := range def.Ordering {
-		ps.keyBuf.writeVarint(int64(col))
-	}
+	ps.keyBuf.writeOrderingChoice(&def.Ordering)
 	ps.keyBuf.writeUvarint(uint64(def.ColID))
 
 	typ := (*RowNumberDef)(nil)
+	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
+		return id
+	}
+	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, def)
+}
+
+func (ps *privateStorage) internSubqueryDef(def *SubqueryDef) PrivateID {
+	ps.keyBuf.Reset()
+	ps.keyBuf.writeUvarint(uint64(uintptr(unsafe.Pointer(def.OriginalExpr))))
+	ps.keyBuf.writeUvarint(uint64(def.Cmp))
+
+	typ := (*SubqueryDef)(nil)
 	if id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]; ok {
 		return id
 	}
@@ -366,10 +522,11 @@ func (ps *privateStorage) internType(datumType types.T) PrivateID {
 	// types.TTuple. So use the string name of the type, and distinguish that
 	// from other private types by using the reflect.Type of the types.T value.
 	typ := reflect.TypeOf(datumType)
-	if id, ok := ps.privatesMap[privateKey{iface: typ, str: datumType.String()}]; ok {
+	str := datumType.String()
+	if id, ok := ps.privatesMap[privateKey{iface: typ, str: str}]; ok {
 		return id
 	}
-	return ps.addValue(privateKey{iface: typ, str: datumType.String()}, datumType)
+	return ps.addValue(privateKey{iface: typ, str: str}, datumType)
 }
 
 // internColType adds the given value to storage and returns an id that can
@@ -407,7 +564,36 @@ func (ps *privateStorage) internTypedExpr(expr tree.TypedExpr) PrivateID {
 	return ps.addValue(privateKey{iface: expr}, expr)
 }
 
+// internPhysProps adds the given value to storage and returns an id that can
+// later be used to retrieve the value by calling the lookup method. If the
+// value has been previously added to storage, then internPhysProps always
+// returns the same private id that was returned from the previous call.
+//
+// NOTE: Unlike other intern methods, internPhysProps will make a copy of the
+//       physical props if they have not yet been interned (rather than directly
+//       adding the passed pointer). This allows callers to allocate the
+//       physical props on the stack without them escaping to the heap.
+func (ps *privateStorage) internPhysProps(physical *props.Physical) PrivateID {
+	// The below code is carefully constructed to not allocate in the case where
+	// the value is already in the map. Be careful when modifying.
+	ps.keyBuf.Reset()
+	ps.keyBuf.writePhysProps(physical)
+	typ := (*props.Physical)(nil)
+	id, ok := ps.privatesMap[privateKey{iface: typ, str: ps.keyBuf.String()}]
+	if ok {
+		return id
+	}
+
+	// Make a copy of the physical props so that argument doesn't escape.
+	copy := *physical
+	return ps.addValue(privateKey{iface: typ, str: ps.keyBuf.String()}, &copy)
+}
+
 func (ps *privateStorage) addValue(key privateKey, val interface{}) PrivateID {
+	// Multiply the size of the key by 2 to account for size of the value.
+	const keySize = int(unsafe.Sizeof(privateKey{}))
+	ps.memEstimate += int64(keySize+len(key.str)) * 2
+
 	id := PrivateID(len(ps.privates))
 	ps.privates = append(ps.privates, val)
 	ps.privatesMap[key] = id
@@ -443,10 +629,29 @@ func (kb *keyBuffer) writeColSet(colSet opt.ColSet) {
 
 // writeOrdering writes a series of varints, one for each column in the set, in
 // the order of the ordering.
-func (kb *keyBuffer) writeOrdering(ordering props.Ordering) {
+func (kb *keyBuffer) writeOrdering(ordering opt.Ordering) {
 	for _, col := range ordering {
 		kb.writeVarint(int64(col))
 	}
+}
+
+// writeOrderingChoice writes a series of varints, one for each column in the
+// set, in the order of the ordering.
+func (kb *keyBuffer) writeOrderingChoice(ordering *props.OrderingChoice) {
+	for _, col := range ordering.Columns {
+		kb.writeColSet(col.Group)
+
+		// Write an extra 0 for descending columns (column IDs cannot be 0).
+		if col.Descending {
+			kb.writeUvarint(0)
+		}
+
+		// Always add a separator between groups (column IDs cannot be 0).
+		kb.writeUvarint(0)
+	}
+
+	// Write optional columns.
+	kb.writeColSet(ordering.Optional)
 }
 
 // writeColSet writes a series of varints, one for each column in the list, in
@@ -459,12 +664,13 @@ func (kb *keyBuffer) writeColList(colList opt.ColList) {
 	}
 }
 
-// writeGroupList writes a series of varints, one for each column in the list,
-// in list order.
-func (kb *keyBuffer) writeGroupList(groupList []GroupID) {
-	var buf [10]byte
-	for _, col := range groupList {
-		cnt := binary.PutUvarint(buf[:], uint64(col))
-		kb.Write(buf[:cnt])
+// writePhysProps writes the presentation columns, followed by the ordering
+// spec.
+func (kb *keyBuffer) writePhysProps(physical *props.Physical) {
+	for _, col := range physical.Presentation {
+		kb.writeUvarint(uint64(col.ID))
+		kb.WriteString(col.Label)
+		kb.writeUvarint(0)
 	}
+	kb.writeOrderingChoice(&physical.Ordering)
 }

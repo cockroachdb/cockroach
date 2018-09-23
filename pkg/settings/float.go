@@ -40,6 +40,16 @@ func (f *FloatSetting) String(sv *Values) string {
 	return EncodeFloat(f.Get(sv))
 }
 
+// Encoded returns the encoded value of the current value of the setting.
+func (f *FloatSetting) Encoded(sv *Values) string {
+	return f.String(sv)
+}
+
+// EncodedDefault returns the encoded value of the default value of the setting.
+func (f *FloatSetting) EncodedDefault() string {
+	return EncodeFloat(f.defaultValue)
+}
+
 // Typ returns the short (1 char) string denoting the type of setting.
 func (*FloatSetting) Typ() string {
 	return "f"
@@ -87,6 +97,16 @@ func RegisterFloatSetting(key, desc string, defaultValue float64) *FloatSetting 
 	return RegisterValidatedFloatSetting(key, desc, defaultValue, nil)
 }
 
+// RegisterNonNegativeFloatSetting defines a new setting with type float.
+func RegisterNonNegativeFloatSetting(key, desc string, defaultValue float64) *FloatSetting {
+	return RegisterValidatedFloatSetting(key, desc, defaultValue, func(v float64) error {
+		if v < 0 {
+			return errors.Errorf("cannot set %s to a negative value: %f", key, v)
+		}
+		return nil
+	})
+}
+
 // RegisterValidatedFloatSetting defines a new setting with type float.
 func RegisterValidatedFloatSetting(
 	key, desc string, defaultValue float64, validateFn func(float64) error,
@@ -102,14 +122,4 @@ func RegisterValidatedFloatSetting(
 	}
 	register(key, desc, setting)
 	return setting
-}
-
-// RegisterNonNegativeFloatSetting defines a new setting with type float.
-func RegisterNonNegativeFloatSetting(key, desc string, defaultValue float64) *FloatSetting {
-	return RegisterValidatedFloatSetting(key, desc, defaultValue, func(v float64) error {
-		if v < 0 {
-			return errors.Errorf("cannot set %s to a negative value: %f", key, v)
-		}
-		return nil
-	})
 }

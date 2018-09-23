@@ -17,11 +17,12 @@ package cli
 import (
 	"crypto/rand"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
@@ -129,16 +130,15 @@ func runGenAutocompleteCmd(cmd *cobra.Command, args []string) error {
 }
 
 var aesSize int
+var overwriteKey bool
 
 var genEncryptionKeyCmd = &cobra.Command{
 	Use:   "encryption-key <key-file>",
 	Short: "generate store key for encryption at rest",
 	Long: `Generate store key for encryption at rest.
 
-If no AES key size is specified through "-s=256", the key size used for AES
-algorithm will be 128 by default. AES key size should only be 128, 192, or 256.
-
-Users are required to provide a filename for the key to be stored.
+Generates a key suitable for use as a store key for Encryption At Rest.
+The resulting key file will be 32 bytes (random key ID) + key_size in bytes.
 `,
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -157,7 +157,24 @@ Users are required to provide a filename for the key to be stored.
 		}
 
 		// Write key to the file with owner read/write permission.
-		if err := ioutil.WriteFile(encryptionKeyPath, b, 0600); err != nil {
+		openMode := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+		if !overwriteKey {
+			openMode |= os.O_EXCL
+		}
+
+		f, err := os.OpenFile(encryptionKeyPath, openMode, 0600)
+		if err != nil {
+			return err
+		}
+		n, err := f.Write(b)
+		if err == nil && n < len(b) {
+			err = io.ErrShortWrite
+		}
+		if err1 := f.Close(); err == nil {
+			err = err1
+		}
+
+		if err != nil {
 			return err
 		}
 
@@ -202,9 +219,12 @@ Output the list of cluster settings known to this binary.
 			rows = append(rows, row)
 		}
 
-		reporter, err := makeReporter()
+		reporter, cleanup, err := makeReporter(os.Stdout)
 		if err != nil {
 			return err
+		}
+		if cleanup != nil {
+			defer cleanup()
 		}
 		if hr, ok := reporter.(*htmlReporter); ok {
 			hr.escape = false
@@ -219,9 +239,7 @@ var genCmd = &cobra.Command{
 	Use:   "gen [command]",
 	Short: "generate auxiliary files",
 	Long:  "Generate manpages, example shell settings, example databases, etc.",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return cmd.Usage()
-	},
+	RunE:  usageAndErr,
 }
 
 var genCmds = []*cobra.Command{
@@ -240,8 +258,11 @@ func init() {
 		"path to generated autocomplete file")
 	genHAProxyCmd.PersistentFlags().StringVar(&haProxyPath, "out", "haproxy.cfg",
 		"path to generated haproxy configuration file")
+	VarFlag(genHAProxyCmd.Flags(), &haProxyLocality, cliflags.Locality)
 	genEncryptionKeyCmd.PersistentFlags().IntVarP(&aesSize, "size", "s", 128,
-		"AES key size for encryption at rest")
+		"AES key size for encryption at rest (one of: 128, 192, 256)")
+	genEncryptionKeyCmd.PersistentFlags().BoolVar(&overwriteKey, "overwrite", false,
+		"Overwrite key if it exists")
 
 	genCmd.AddCommand(genCmds...)
 }

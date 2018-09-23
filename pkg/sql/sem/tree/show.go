@@ -35,7 +35,11 @@ type ShowVar struct {
 // Format implements the NodeFormatter interface.
 func (node *ShowVar) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ")
-	ctx.WriteString(node.Name)
+	// Session var names never contain PII and should be distinguished
+	// for feature tracking purposes.
+	deAnonCtx := *ctx
+	deAnonCtx.flags &= ^FmtAnonymize
+	deAnonCtx.FormatNameP(&node.Name)
 }
 
 // ShowClusterSetting represents a SHOW CLUSTER SETTING statement.
@@ -46,7 +50,11 @@ type ShowClusterSetting struct {
 // Format implements the NodeFormatter interface.
 func (node *ShowClusterSetting) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW CLUSTER SETTING ")
-	ctx.WriteString(node.Name)
+	// Cluster setting names never contain PII and should be distinguished
+	// for feature tracking purposes.
+	deAnonCtx := *ctx
+	deAnonCtx.flags &= ^FmtAnonymize
+	deAnonCtx.FormatNameP(&node.Name)
 }
 
 // BackupDetails represents the type of details to display for a SHOW BACKUP
@@ -108,27 +116,20 @@ const (
 	ShowTraceReplica ShowTraceType = "EXPERIMENTAL_REPLICA TRACE"
 )
 
-// ShowTrace represents a SHOW TRACE FOR <stmt>/SESSION statement.
-type ShowTrace struct {
-	// If statement is nil, this is asking for the session trace.
-	Statement Statement
+// ShowTraceForSession represents a SHOW TRACE FOR SESSION statement.
+type ShowTraceForSession struct {
 	TraceType ShowTraceType
 	Compact   bool
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ShowTrace) Format(ctx *FmtCtx) {
+func (node *ShowTraceForSession) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW ")
 	if node.Compact {
 		ctx.WriteString("COMPACT ")
 	}
 	ctx.WriteString(string(node.TraceType))
-	ctx.WriteString(" FOR ")
-	if node.Statement == nil {
-		ctx.WriteString("SESSION")
-	} else {
-		ctx.FormatNode(node.Statement)
-	}
+	ctx.WriteString(" FOR SESSION")
 }
 
 // ShowIndex represents a SHOW INDEX statement.
@@ -262,37 +263,15 @@ func (node *ShowRoleGrants) Format(ctx *FmtCtx) {
 	}
 }
 
-// ShowCreateTable represents a SHOW CREATE TABLE statement.
-type ShowCreateTable struct {
-	Table NormalizableTableName
+// ShowCreate represents a SHOW CREATE statement.
+type ShowCreate struct {
+	Name NormalizableTableName
 }
 
 // Format implements the NodeFormatter interface.
-func (node *ShowCreateTable) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW CREATE TABLE ")
-	ctx.FormatNode(&node.Table)
-}
-
-// ShowCreateView represents a SHOW CREATE VIEW statement.
-type ShowCreateView struct {
-	View NormalizableTableName
-}
-
-// Format implements the NodeFormatter interface.
-func (node *ShowCreateView) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW CREATE VIEW ")
-	ctx.FormatNode(&node.View)
-}
-
-// ShowCreateSequence represents a SHOW CREATE SEQUENCE statement.
-type ShowCreateSequence struct {
-	Sequence NormalizableTableName
-}
-
-// Format implements the NodeFormatter interface.
-func (node *ShowCreateSequence) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW CREATE SEQUENCE ")
-	ctx.FormatNode(&node.Sequence)
+func (node *ShowCreate) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW CREATE ")
+	ctx.FormatNode(&node.Name)
 }
 
 // ShowSyntax represents a SHOW SYNTAX statement.

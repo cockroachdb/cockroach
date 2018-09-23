@@ -30,7 +30,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 func init() {
@@ -56,6 +55,11 @@ func init() {
 			}
 			if err := ioutil.WriteFile(
 				filepath.Join(outDir, "aggregates.md"), generateFunctions(builtins.AllAggregateBuiltinNames, false), 0644,
+			); err != nil {
+				return err
+			}
+			if err := ioutil.WriteFile(
+				filepath.Join(outDir, "window_functions.md"), generateFunctions(builtins.AllWindowBuiltinNames, false), 0644,
 			); err != nil {
 				return err
 			}
@@ -105,7 +109,7 @@ func generateOperators() []byte {
 	for optyp, overloads := range tree.UnaryOps {
 		op := optyp.String()
 		for _, untyped := range overloads {
-			v := untyped.(tree.UnaryOp)
+			v := untyped.(*tree.UnaryOp)
 			ops[op] = append(ops[op], operation{
 				left: v.Typ.String(),
 				ret:  v.ReturnType.String(),
@@ -116,7 +120,7 @@ func generateOperators() []byte {
 	for optyp, overloads := range tree.BinOps {
 		op := optyp.String()
 		for _, untyped := range overloads {
-			v := untyped.(tree.BinOp)
+			v := untyped.(*tree.BinOp)
 			left := v.LeftType.String()
 			right := v.RightType.String()
 			ops[op] = append(ops[op], operation{
@@ -130,7 +134,7 @@ func generateOperators() []byte {
 	for optyp, overloads := range tree.CmpOps {
 		op := optyp.String()
 		for _, untyped := range overloads {
-			v := untyped.(tree.CmpOp)
+			v := untyped.(*tree.CmpOp)
 			left := v.LeftType.String()
 			right := v.RightType.String()
 			ops[op] = append(ops[op], operation{
@@ -190,18 +194,14 @@ func generateFunctions(from []string, categorize bool) []byte {
 			if fn.Info == notUsableInfo {
 				continue
 			}
-			if categorize && fn.WindowFunc != nil {
+			// We generate docs for both aggregates and window functions in separate
+			// files, so we want to omit them when processing all builtins.
+			if categorize && (props.Class == tree.AggregateClass || props.Class == tree.WindowClass) {
 				continue
 			}
 			args := fn.Types.String()
 
 			retType := fn.FixedReturnType()
-			if t, ok := retType.(types.TTuple); ok &&
-				props.Class == tree.GeneratorClass && len(t.Types) == 1 {
-				// Set-generating functions with just one tuple element are
-				// simplified to return just a scalar.
-				retType = t.Types[0]
-			}
 			ret := retType.String()
 
 			cat := props.Category

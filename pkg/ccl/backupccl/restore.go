@@ -23,11 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -42,7 +43,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
-type tableRewriteMap map[sqlbase.ID]*jobs.RestoreDetails_TableRewrite
+// TableRewriteMap maps old table IDs to new table and parent IDs.
+type TableRewriteMap map[sqlbase.ID]*jobspb.RestoreDetails_TableRewrite
 
 const (
 	restoreOptIntoDB               = "into_db"
@@ -192,8 +194,8 @@ func allocateTableRewrites(
 	sqlDescs []sqlbase.Descriptor,
 	restoreDBs []*sqlbase.DatabaseDescriptor,
 	opts map[string]string,
-) (tableRewriteMap, error) {
-	tableRewrites := make(tableRewriteMap)
+) (TableRewriteMap, error) {
+	tableRewrites := make(TableRewriteMap)
 	overrideDB, renaming := opts[restoreOptIntoDB]
 
 	restoreDBNames := make(map[string]*sqlbase.DatabaseDescriptor, len(restoreDBs))
@@ -324,7 +326,7 @@ func allocateTableRewrites(
 				}
 				// Create the table rewrite with the new parent ID. We've done all the
 				// up-front validation that we can.
-				tableRewrites[table.ID] = &jobs.RestoreDetails_TableRewrite{ParentID: parentID}
+				tableRewrites[table.ID] = &jobspb.RestoreDetails_TableRewrite{ParentID: parentID}
 			}
 		}
 		return nil
@@ -350,9 +352,9 @@ func allocateTableRewrites(
 		if err != nil {
 			return nil, err
 		}
-		tableRewrites[db.ID] = &jobs.RestoreDetails_TableRewrite{TableID: newID}
+		tableRewrites[db.ID] = &jobspb.RestoreDetails_TableRewrite{TableID: newID}
 		for _, tableID := range needsNewParentIDs[db.Name] {
-			tableRewrites[tableID] = &jobs.RestoreDetails_TableRewrite{ParentID: newID}
+			tableRewrites[tableID] = &jobspb.RestoreDetails_TableRewrite{ParentID: newID}
 		}
 	}
 
@@ -388,11 +390,11 @@ func CheckTableExists(
 	return nil
 }
 
-// rewriteTableDescs mutates tables to match the ID and privilege specified in
-// tableRewrites, as well as adjusting cross-table references to use the new
-// IDs.
-func rewriteTableDescs(
-	tables []*sqlbase.TableDescriptor, tableRewrites tableRewriteMap, overrideDB string,
+// RewriteTableDescs mutates tables to match the ID and privilege specified
+// in tableRewrites, as well as adjusting cross-table references to use the
+// new IDs. overrideDB can be specified to set database names in views.
+func RewriteTableDescs(
+	tables []*sqlbase.TableDescriptor, tableRewrites TableRewriteMap, overrideDB string,
 ) error {
 	for _, table := range tables {
 		tableRewrite, ok := tableRewrites[table.ID]
@@ -799,7 +801,7 @@ func splitAndScatter(
 			scatterReq := &roachpb.AdminScatterRequest{
 				RequestHeader: roachpb.RequestHeaderFromSpan(chunkSpan),
 			}
-			if _, pErr := client.SendWrapped(ctx, db.GetSender(), scatterReq); pErr != nil {
+			if _, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), scatterReq); pErr != nil {
 				// TODO(dan): Unfortunately, Scatter is still too unreliable to
 				// fail the RESTORE when Scatter fails. I'm uncomfortable that
 				// this could break entirely and not start failing the tests,
@@ -843,7 +845,7 @@ func splitAndScatter(
 					scatterReq := &roachpb.AdminScatterRequest{
 						RequestHeader: roachpb.RequestHeaderFromSpan(newSpan),
 					}
-					if _, pErr := client.SendWrapped(ctx, db.GetSender(), scatterReq); pErr != nil {
+					if _, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), scatterReq); pErr != nil {
 						// TODO(dan): Unfortunately, Scatter is still too unreliable to
 						// fail the RESTORE when Scatter fails. I'm uncomfortable that
 						// this could break entirely and not start failing the tests,
@@ -878,6 +880,7 @@ func WriteTableDescs(
 	tables []*sqlbase.TableDescriptor,
 	user string,
 	settings *cluster.Settings,
+	extra []roachpb.KeyValue,
 ) error {
 	ctx, span := tracing.ChildSpan(ctx, "WriteTableDescs")
 	defer tracing.FinishSpan(span)
@@ -910,6 +913,9 @@ func WriteTableDescs(
 			b.CPut(table.GetDescMetadataKey(), sqlbase.WrapDescriptor(table), nil)
 			b.CPut(table.GetNameMetadataKey(), table.ID, nil)
 		}
+		for _, kv := range extra {
+			b.InitPut(kv.Key, &kv.Value, false)
+		}
 		if err := txn.Run(ctx, b); err != nil {
 			if _, ok := errors.Cause(err).(*roachpb.ConditionFailedError); ok {
 				return errors.New("table already exists")
@@ -927,10 +933,12 @@ func WriteTableDescs(
 	return errors.Wrap(err, "restoring table desc and namespace entries")
 }
 
-func restoreJobDescription(restore *tree.Restore, from []string) (string, error) {
+func restoreJobDescription(
+	restore *tree.Restore, from []string, opts map[string]string,
+) (string, error) {
 	r := &tree.Restore{
 		AsOf:    restore.AsOf,
-		Options: restore.Options,
+		Options: optsToKVOptions(opts),
 		Targets: restore.Targets,
 		From:    make(tree.Exprs, len(restore.From)),
 	}
@@ -955,7 +963,7 @@ func restore(
 	backupDescs []BackupDescriptor,
 	endTime hlc.Timestamp,
 	sqlDescs []sqlbase.Descriptor,
-	tableRewrites tableRewriteMap,
+	tableRewrites TableRewriteMap,
 	overrideDB string,
 	job *jobs.Job,
 	resultsCh chan<- tree.Datums,
@@ -968,9 +976,9 @@ func restore(
 		syncutil.Mutex
 		res               roachpb.BulkOpSummary
 		requestsCompleted []bool
-		lowWaterMark      int
+		highWaterMark     int
 	}{
-		lowWaterMark: -1,
+		highWaterMark: -1,
 	}
 
 	var databases []*sqlbase.DatabaseDescriptor
@@ -997,7 +1005,7 @@ func restore(
 
 	// Assign new IDs and privileges to the tables, and update all references to
 	// use the new IDs.
-	if err := rewriteTableDescs(tables, tableRewrites, overrideDB); err != nil {
+	if err := RewriteTableDescs(tables, tableRewrites, overrideDB); err != nil {
 		return mu.res, nil, nil, err
 	}
 
@@ -1013,15 +1021,15 @@ func restore(
 			NewDesc: newDescBytes,
 		})
 	}
-	kr, err := storageccl.MakeKeyRewriter(rekeys)
+	kr, err := storageccl.MakeKeyRewriterFromRekeys(rekeys)
 	if err != nil {
 		return mu.res, nil, nil, err
 	}
 
 	// Pivot the backups, which are grouped by time, into requests for import,
 	// which are grouped by keyrange.
-	lowWaterMark := job.Progress().Details.(*jobs.Progress_Restore).Restore.LowWaterMark
-	importSpans, _, err := makeImportSpans(spans, backupDescs, lowWaterMark, errOnMissingRange)
+	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
+	importSpans, _, err := makeImportSpans(spans, backupDescs, highWaterMark, errOnMissingRange)
 	if err != nil {
 		return mu.res, nil, nil, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
 	}
@@ -1035,12 +1043,12 @@ func restore(
 		Job:           job,
 		TotalChunks:   len(importSpans),
 		StartFraction: job.FractionCompleted(),
-		ProgressedFn: func(progressedCtx context.Context, details jobs.ProgressDetails) {
+		ProgressedFn: func(progressedCtx context.Context, details jobspb.ProgressDetails) {
 			switch d := details.(type) {
-			case *jobs.Progress_Restore:
+			case *jobspb.Progress_Restore:
 				mu.Lock()
-				if mu.lowWaterMark >= 0 {
-					d.Restore.LowWaterMark = importSpans[mu.lowWaterMark].Key
+				if mu.highWaterMark >= 0 {
+					d.Restore.HighWater = importSpans[mu.highWaterMark].Key
 				}
 				mu.Unlock()
 			default:
@@ -1125,7 +1133,7 @@ func restore(
 			defer tracing.FinishSpan(importSpan)
 			defer func() { <-importsSem }()
 
-			importRes, pErr := client.SendWrapped(ctx, db.GetSender(), importRequest)
+			importRes, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), importRequest)
 			if pErr != nil {
 				return pErr.GoError()
 			}
@@ -1142,8 +1150,8 @@ func restore(
 				)
 			}
 			mu.requestsCompleted[idx] = true
-			for j := mu.lowWaterMark + 1; j < len(mu.requestsCompleted) && mu.requestsCompleted[j]; j++ {
-				mu.lowWaterMark = j
+			for j := mu.highWaterMark + 1; j < len(mu.requestsCompleted) && mu.requestsCompleted[j]; j++ {
+				mu.highWaterMark = j
 			}
 			mu.Unlock()
 
@@ -1237,7 +1245,7 @@ func restorePlanHook(
 			// Use Now() for the max timestamp because Restore does its own
 			// (more restrictive) check.
 			var err error
-			endTime, err = sql.EvalAsOfTimestamp(nil, restoreStmt.AsOf, p.ExecCfg().Clock.Now())
+			endTime, err = p.EvalAsOfTimestamp(restoreStmt.AsOf, p.ExecCfg().Clock.Now())
 			if err != nil {
 				return err
 			}
@@ -1306,7 +1314,7 @@ func doRestorePlan(
 	if err != nil {
 		return err
 	}
-	description, err := restoreJobDescription(restoreStmt, from)
+	description, err := restoreJobDescription(restoreStmt, from, opts)
 	if err != nil {
 		return err
 	}
@@ -1317,7 +1325,7 @@ func doRestorePlan(
 			tables = append(tables, tableDesc)
 		}
 	}
-	if err := rewriteTableDescs(tables, tableRewrites, opts[restoreOptIntoDB]); err != nil {
+	if err := RewriteTableDescs(tables, tableRewrites, opts[restoreOptIntoDB]); err != nil {
 		return err
 	}
 
@@ -1330,14 +1338,14 @@ func doRestorePlan(
 			}
 			return sqlDescIDs
 		}(),
-		Details: jobs.RestoreDetails{
+		Details: jobspb.RestoreDetails{
 			EndTime:       endTime,
 			TableRewrites: tableRewrites,
 			URIs:          from,
 			TableDescs:    tables,
 			OverrideDB:    opts[restoreOptIntoDB],
 		},
-		Progress: jobs.RestoreProgress{},
+		Progress: jobspb.RestoreProgress{},
 	})
 	if err != nil {
 		return err
@@ -1346,7 +1354,7 @@ func doRestorePlan(
 }
 
 func loadBackupSQLDescs(
-	ctx context.Context, details jobs.RestoreDetails, settings *cluster.Settings,
+	ctx context.Context, details jobspb.RestoreDetails, settings *cluster.Settings,
 ) ([]BackupDescriptor, []sqlbase.Descriptor, error) {
 	backupDescs, err := loadBackupDescs(ctx, details.URIs, settings)
 	if err != nil {
@@ -1374,7 +1382,7 @@ type restoreResumer struct {
 func (r *restoreResumer) Resume(
 	ctx context.Context, job *jobs.Job, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
-	details := job.Record.Details.(jobs.RestoreDetails)
+	details := job.Details().(jobspb.RestoreDetails)
 	p := phs.(sql.PlanHookState)
 
 	backupDescs, sqlDescs, err := loadBackupSQLDescs(ctx, details, r.settings)
@@ -1405,7 +1413,7 @@ func (r *restoreResumer) Resume(
 // in DROP state, which causes the schema change stuff to delete the keys
 // in the background.
 func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
-	details := job.Record.Details.(jobs.RestoreDetails)
+	details := job.Details().(jobspb.RestoreDetails)
 
 	// Needed to trigger the schema change manager.
 	if err := txn.SetSystemConfigTrigger(); err != nil {
@@ -1425,7 +1433,7 @@ func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *jo
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// restored data.
-	if err := WriteTableDescs(ctx, txn, r.databases, r.tables, job.Record.Username, r.settings); err != nil {
+	if err := WriteTableDescs(ctx, txn, r.databases, r.tables, job.Payload().Username, r.settings, nil); err != nil {
 		return errors.Wrapf(err, "restoring %d TableDescriptors", len(r.tables))
 	}
 
@@ -1455,8 +1463,8 @@ func (r *restoreResumer) OnTerminal(
 
 var _ jobs.Resumer = &restoreResumer{}
 
-func restoreResumeHook(typ jobs.Type, settings *cluster.Settings) jobs.Resumer {
-	if typ != jobs.TypeRestore {
+func restoreResumeHook(typ jobspb.Type, settings *cluster.Settings) jobs.Resumer {
+	if typ != jobspb.TypeRestore {
 		return nil
 	}
 

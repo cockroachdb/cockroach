@@ -105,9 +105,9 @@
 =>
 (Project
     (Limit
-        (PruneCols $input (NeededColsLimit $projections $ordering))
+        $newInput:(PruneCols $input (NeededColsLimit $projections $ordering))
         $limit
-        $ordering
+        (PruneOrdering $newInput $ordering)
     )
     $projections
 )
@@ -129,9 +129,9 @@
 =>
 (Project
     (Offset
-        (PruneCols $input (NeededColsLimit $projections $ordering))
+        $newInput:(PruneCols $input (NeededColsLimit $projections $ordering))
         $offset
-        $ordering
+        (PruneOrdering $newInput $ordering)
     )
     $projections
 )
@@ -185,8 +185,8 @@
 # PruneAggCols discards aggregation columns in a GroupBy that are never used.
 [PruneAggCols, Normalize]
 (Project
-    (GroupBy
-        $input:*
+    $input:(GroupBy | ScalarGroupBy | DistinctOn
+        $innerInput:*
         $aggregations:*
         $def:*
     )
@@ -194,8 +194,8 @@
 )
 =>
 (Project
-    (GroupBy
-        $input
+    ((OpName $input)
+        $innerInput
         (PruneCols $aggregations (NeededCols $projections))
         $def
     )
@@ -204,16 +204,16 @@
 
 # PruneGroupByCols discards GroupBy input columns that are never used.
 [PruneGroupByCols, Normalize]
-(GroupBy
+(GroupBy | DistinctOn
     $input:*
     $aggregations:*
     $def:* & (CanPruneCols $input (NeededColsGroupBy $aggregations $def))
 )
 =>
-(GroupBy
-    (PruneCols $input (NeededColsGroupBy $aggregations $def))
+((OpName)
+    $newInput:(PruneCols $input (NeededColsGroupBy $aggregations $def))
     $aggregations
-    $def
+    (PruneOrderingGroupBy $newInput $def)
 )
 
 # PruneValuesCols discards Values columns that are never used.
@@ -237,8 +237,21 @@
 =>
 (Project
     (RowNumber
-        (PruneCols $input (NeededColsRowNumber $projections $def))
-        $def
+        $newInput:(PruneCols $input (NeededColsRowNumber $projections $def))
+        (PruneOrderingRowNumber $newInput $def)
     )
     $projections
+)
+
+# PruneExplainCols discards Explain input columns that are never used by its
+# required physical properties.
+[PruneExplainCols, Normalize]
+(Explain
+    $input:*
+    $def:* & (CanPruneCols $input (NeededColsExplain $def))
+)
+=>
+(Explain
+    (PruneCols $input (NeededColsExplain $def))
+    $def
 )

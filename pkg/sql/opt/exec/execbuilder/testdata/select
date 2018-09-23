@@ -1,5 +1,197 @@
 # LogicTest: local-opt
 
+
+# ------------------------------------------------------------------------------
+# Numeric References Tests.
+# These are put at the beginning of the file to ensure the numeric table
+# reference is 53 (the numeric reference of the first table).
+# If the numbering scheme in cockroach changes, this test will break.
+# These tests replicate the tests at sql/table_ref_test.go. The reason
+# for duplication is to include tests within the opt testing framework
+# TODO(madhavsuresh): get the numeric reference ID in a less brittle fashion
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE num_ref (a INT PRIMARY KEY, xx INT, b INT, c INT, INDEX bc (b,c))
+
+statement ok
+CREATE TABLE num_ref_hidden (a INT, b INT)
+
+statement ok
+ALTER TABLE num_ref RENAME COLUMN b TO d
+
+statement ok
+ALTER TABLE num_ref RENAME COLUMN a TO p
+
+statement ok
+ALTER TABLE num_ref DROP COLUMN xx
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53 AS num_ref_alias]
+----
+scan  ·      ·                (p, d, c)  ·
+·     table  num_ref@primary  ·          ·
+·     spans  ALL              ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(4) AS num_ref_alias]
+----
+scan  ·      ·                (c)  ·
+·     table  num_ref@primary  ·    ·
+·     spans  ALL              ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(1,4) AS num_ref_alias]
+----
+scan  ·      ·                (p, c)  ·
+·     table  num_ref@primary  ·       ·
+·     spans  ALL              ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(1,3,4) AS num_ref_alias]
+----
+scan  ·      ·                (p, d, c)  ·
+·     table  num_ref@primary  ·          ·
+·     spans  ALL              ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(4,3,1) AS num_ref_alias]
+----
+render     ·         ·                (c, d, p)  ·
+ │         render 0  c                ·          ·
+ │         render 1  d                ·          ·
+ │         render 2  p                ·          ·
+ └── scan  ·         ·                (p, d, c)  ·
+·          table     num_ref@primary  ·          ·
+·          spans     ALL              ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(4,3,1) AS num_ref_alias(col1,col2,col3)]
+----
+render     ·         ·                (col1, col2, col3)  ·
+ │         render 0  c                ·                   ·
+ │         render 1  d                ·                   ·
+ │         render 2  p                ·                   ·
+ └── scan  ·         ·                (p, d, c)           ·
+·          table     num_ref@primary  ·                   ·
+·          spans     ALL              ·                   ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(4,3,1) AS num_ref_alias]@bc
+----
+render     ·         ·           (c, d, p)  ·
+ │         render 0  c           ·          ·
+ │         render 1  d           ·          ·
+ │         render 2  p           ·          ·
+ └── scan  ·         ·           (p, d, c)  ·
+·          table     num_ref@bc  ·          ·
+·          spans     ALL         ·          ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(4) AS num_ref_alias]@bc
+----
+scan  ·      ·           (c)  ·
+·     table  num_ref@bc  ·    ·
+·     spans  ALL         ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(3) AS num_ref_alias]@bc
+----
+scan  ·      ·           (d)  ·
+·     table  num_ref@bc  ·    ·
+·     spans  ALL         ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(1) AS num_ref_alias]@bc
+----
+scan  ·      ·           (p)  ·
+·     table  num_ref@bc  ·    ·
+·     spans  ALL         ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(1) AS num_ref_alias]@[1]
+----
+scan  ·      ·                (p)  ·
+·     table  num_ref@primary  ·    ·
+·     spans  ALL              ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(1) AS num_ref_alias]@[2]
+----
+scan  ·      ·           (p)  ·
+·     table  num_ref@bc  ·    ·
+·     spans  ALL         ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(3) AS num_ref_alias]@[1]
+----
+scan  ·      ·                (d)  ·
+·     table  num_ref@primary  ·    ·
+·     spans  ALL              ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(3) AS num_ref_alias]@[2]
+----
+scan  ·      ·           (d)  ·
+·     table  num_ref@bc  ·    ·
+·     spans  ALL         ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(4) AS num_ref_alias]@[1]
+----
+scan  ·      ·                (c)  ·
+·     table  num_ref@primary  ·    ·
+·     spans  ALL              ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [53(4) AS num_ref_alias]@[2]
+----
+scan  ·      ·           (c)  ·
+·     table  num_ref@bc  ·    ·
+·     spans  ALL         ·    ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [54(1,3) AS num_ref_alias]
+----
+scan  ·      ·                       (a)  ·
+·     table  num_ref_hidden@primary  ·    ·
+·     spans  ALL                     ·    ·
+
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [54(3) AS num_ref_alias]
+----
+scan  ·      ·                       ()  ·
+·     table  num_ref_hidden@primary  ·   ·
+·     spans  ALL                     ·   ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT rowid FROM [54(3) AS num_ref_alias]
+----
+scan  ·      ·                       (rowid[hidden])  ·
+·     table  num_ref_hidden@primary  ·                ·
+·     spans  ALL                     ·                ·
+
+query error pq: \[666\(1\) AS num_ref_alias\]: relation \"\[666\]\" does not exist
+EXPLAIN (VERBOSE) SELECT * FROM [666(1) AS num_ref_alias]
+
+query error pq: column \[666\] does not exist
+EXPLAIN (VERBOSE) SELECT * FROM [53(666) AS num_ref_alias]
+
+query error pq: column \[2\] does not exist
+EXPLAIN (VERBOSE) SELECT * FROM [53(2) AS num_ref_alias]
+
+query error pq: an explicit list of column IDs must include at least one column
+EXPLAIN (VERBOSE) SELECT * FROM [53() AS num_ref_alias]
+
+query error pq: an explicit list of column IDs must include at least one column
+EXPLAIN (VERBOSE) SELECT 1 FROM [53() as num_ref_alias]
+
+statement ok
+DROP TABLE num_ref
+
+query error pq: \[53\(1\) AS num_ref_alias\]: table is being dropped
+EXPLAIN (VERBOSE) SELECT * FROM [53(1) AS num_ref_alias]
+
 # ------------------------------------------------------------------------------
 # Basic filter combinations.
 # ------------------------------------------------------------------------------
@@ -135,29 +327,35 @@ CREATE TABLE t (
 query TTBITTBB colnames
 SHOW INDEXES FROM t
 ----
-Table  Name     Unique  Seq  Column  Direction  Storing  Implicit
-t      primary  true    1    a       ASC        false    false
-t      b_idx    false   1    b       ASC        false    false
-t      b_idx    false   2    c       N/A        true     false
-t      b_idx    false   3    d       N/A        true     false
-t      b_idx    false   4    a       ASC        false    true
-t      c_idx    true    1    c       ASC        false    false
-t      c_idx    true    2    a       N/A        true     false
-t      c_idx    true    3    b       N/A        true     false
-t      c_idx    true    4    d       N/A        true     false
+table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
+t           primary     false       1             a            ASC        false    false
+t           b_idx       true        1             b            ASC        false    false
+t           b_idx       true        2             c            N/A        true     false
+t           b_idx       true        3             d            N/A        true     false
+t           b_idx       true        4             a            ASC        false    true
+t           c_idx       false       1             c            ASC        false    false
+t           c_idx       false       2             a            N/A        true     false
+t           c_idx       false       3             b            N/A        true     false
+t           c_idx       false       4             d            N/A        true     false
 
 statement ok
 INSERT INTO t VALUES (1, 2, 3, 4)
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@b_idx; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@b_idx]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/b_idx/2/1/c/d -> /3/4
 output row: [1 2 3 4]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@c_idx; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@c_idx]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/c_idx/3 -> /1/2/4
@@ -168,8 +366,11 @@ output row: [1 2 3 4]
 statement ok
 CREATE INDEX d_idx ON t (d) STORING (a, b)
 
+statement ok
+SET tracing = on,kv,results; SELECT a, b, d FROM t@d_idx; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT a, b, d FROM t@d_idx]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/d_idx/4/1/b -> /2
@@ -178,8 +379,11 @@ output row: [1 2 4]
 statement ok
 CREATE UNIQUE INDEX a_idx ON t (a) STORING (b)
 
+statement ok
+SET tracing = on,kv,results; SELECT a, b FROM t@a_idx; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT a, b FROM t@a_idx]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/a_idx/1/b -> /2
@@ -192,8 +396,11 @@ INSERT INTO t (a) VALUES (2)
 statement ok
 INSERT INTO t VALUES (3)
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@b_idx; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@b_idx]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/b_idx/NULL/2 -> NULL
@@ -365,8 +572,11 @@ INSERT INTO dt VALUES
   ('2015-08-25 04:45:45.53453', '2015-08-25', '2h45m2s234ms'),
   ('2015-08-29 23:10:09.98763', '2015-08-29', '234h45m2s234ms')
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM dt WHERE a = '2015-08-25 04:45:45.53453+02:00'::timestamp; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM dt WHERE a = '2015-08-25 06:45:45.53453+02:00'::timestamp]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00' -> NULL
@@ -374,15 +584,21 @@ fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00'/b -> '2015-08-25'
 fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00'/c -> '2h45m2s234ms'
 output row: ['2015-08-25 04:45:45.53453+00:00' '2015-08-25' '2h45m2s234ms']
 
+statement ok
+SET tracing = on,kv,results; SELECT b FROM dt WHERE b < '2015-08-29'::date; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT b FROM dt WHERE b < '2015-08-29'::date]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /dt/dt_b_key/'2015-08-25' -> /'2015-08-25 04:45:45.53453+00:00'
 output row: ['2015-08-25']
 
+statement ok
+SET tracing = on,kv,results; SELECT c FROM dt WHERE c < '234h45m2s234ms'::interval; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT c FROM dt WHERE c < '234h45m2s234ms'::interval]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /dt/dt_c_key/'2h45m2s234ms' -> /'2015-08-25 04:45:45.53453+00:00'
@@ -442,8 +658,11 @@ INSERT INTO c (a) VALUES(2)
 statement ok
 INSERT INTO c VALUES(3)
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM c@b_idx; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM c@b_idx]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /c/b_idx/NULL/2 -> NULL
@@ -520,6 +739,54 @@ scan  ·       ·                          (f float)  ·
 
 statement ok
 DROP TABLE flt
+
+# ------------------------------------------------------------------------------
+# Verify we create the correct spans for negative numbers with extra
+# operations.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE num (
+  i int null,
+  unique index (i),
+  f float null,
+  unique index (f),
+  d decimal null,
+  unique index (d),
+  n interval null,
+  unique index (n)
+)
+
+query TTTTT
+EXPLAIN (TYPES) SELECT i FROM num WHERE i = -1:::INT
+----
+scan  ·      ·              (i int)  ·
+·     table  num@num_i_key  ·        ·
+·     spans  /-1-/0         ·        ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT f FROM num WHERE f = -1:::FLOAT
+----
+scan  ·      ·                  (f float)  ·
+·     table  num@num_f_key      ·          ·
+·     spans  /-1-/-1/PrefixEnd  ·          ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT d FROM num WHERE d = -1:::DECIMAL
+----
+scan  ·      ·                  (d decimal)  ·
+·     table  num@num_d_key      ·            ·
+·     spans  /-1-/-1/PrefixEnd  ·            ·
+
+query TTTTT
+EXPLAIN (TYPES) SELECT n FROM num WHERE n = -'1h':::INTERVAL
+----
+scan  ·      ·              (n interval)  ·
+·     table  num@num_n_key  ·             ·
+·     spans  /-1h-/1d-25h   ·             ·
+
+statement ok
+DROP TABLE num
 
 # ------------------------------------------------------------------------------
 # ANY, ALL tests.

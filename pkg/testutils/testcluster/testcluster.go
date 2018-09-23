@@ -244,6 +244,7 @@ func (tc *TestCluster) doAddServer(t testing.TB, serverArgs base.TestServerArgs)
 			stkCopy = *stk.(*storage.StoreTestingKnobs)
 		}
 		stkCopy.DisableSplitQueue = true
+		stkCopy.DisableMergeQueue = true
 		stkCopy.DisableReplicateQueue = true
 		serverArgs.Knobs.Store = &stkCopy
 	}
@@ -347,37 +348,43 @@ func (tc *TestCluster) AddReplicas(
 	startKey roachpb.Key, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
 	rKey := keys.MustAddr(startKey)
-	rangeDesc, err := tc.changeReplicas(
-		roachpb.ADD_REPLICA, rKey, targets...,
-	)
-	if err != nil {
-		return roachpb.RangeDescriptor{}, err
-	}
-
-	// Wait for the replication to complete on all destination nodes.
-	if err := retry.ForDuration(time.Second*5, func() error {
-		for _, target := range targets {
-			// Use LookupReplica(keys) instead of GetRange(rangeID) to ensure that the
-			// snapshot has been transferred and the descriptor initialized.
-			store, err := tc.findMemberStore(target.StoreID)
-			if err != nil {
-				log.Errorf(context.TODO(), "unexpected error: %s", err)
-				return err
-			}
-			repl := store.LookupReplica(rKey, nil)
-			if repl == nil {
-				return errors.Errorf("range not found on store %d", target)
-			}
-			desc := repl.Desc()
-			if _, ok := desc.GetReplicaDescriptor(target.StoreID); !ok {
-				return errors.Errorf("target store %d not yet in range descriptor %v", target.StoreID, desc)
-			}
+	errRetry := errors.Errorf("target not found")
+	for {
+		rangeDesc, err := tc.changeReplicas(
+			roachpb.ADD_REPLICA, rKey, targets...,
+		)
+		if err != nil {
+			return roachpb.RangeDescriptor{}, err
 		}
-		return nil
-	}); err != nil {
-		return roachpb.RangeDescriptor{}, err
+
+		// Wait for the replication to complete on all destination nodes.
+		if err := retry.ForDuration(time.Second*25, func() error {
+			for _, target := range targets {
+				// Use LookupReplica(keys) instead of GetRange(rangeID) to ensure that the
+				// snapshot has been transferred and the descriptor initialized.
+				store, err := tc.findMemberStore(target.StoreID)
+				if err != nil {
+					log.Errorf(context.TODO(), "unexpected error: %s", err)
+					return err
+				}
+				repl := store.LookupReplica(rKey)
+				if repl == nil {
+					return errors.Wrapf(errRetry, "for target %s", target)
+				}
+				desc := repl.Desc()
+				if _, ok := desc.GetReplicaDescriptor(target.StoreID); !ok {
+					return errors.Errorf("target store %d not yet in range descriptor %v", target.StoreID, desc)
+				}
+			}
+			return nil
+		}); errors.Cause(err) == errRetry {
+			log.Warningf(context.Background(), "target was likely downreplicated again; retrying after %s", err)
+			continue
+		} else if err != nil {
+			return roachpb.RangeDescriptor{}, err
+		}
+		return rangeDesc, nil
 	}
-	return rangeDesc, nil
 }
 
 // RemoveReplicas is part of the TestServerInterface.
@@ -574,6 +581,11 @@ func (tc *TestCluster) WaitForNodeStatuses(t testing.TB) {
 		}
 		return nil
 	})
+}
+
+// ReplicationMode implements TestClusterInterface.
+func (tc *TestCluster) ReplicationMode() base.TestClusterReplicationMode {
+	return tc.replicationMode
 }
 
 type testClusterFactoryImpl struct{}

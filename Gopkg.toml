@@ -1,10 +1,11 @@
 required = [
  "github.com/client9/misspell/cmd/misspell",
  "github.com/cockroachdb/crlfmt",
+ "github.com/cockroachdb/gostdlib/cmd/gofmt",
+ "github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
  "github.com/cockroachdb/stress",
  "github.com/golang/dep/cmd/dep",
  "github.com/golang/lint/golint",
- "github.com/google/pprof",
  "github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway",
  "github.com/jteeuwen/go-bindata/go-bindata",
  "github.com/kisielk/errcheck",
@@ -12,7 +13,6 @@ required = [
  "github.com/mibk/dupl",
  "github.com/wadey/gocovmerge",
  "golang.org/x/perf/cmd/benchstat",
- "golang.org/x/tools/cmd/goimports",
  "golang.org/x/tools/cmd/goyacc",
  "golang.org/x/tools/cmd/stringer",
 ]
@@ -27,11 +27,8 @@ ignored = [
   name = "golang.org/x/text"
   revision = "470f45bf29f4147d6fbd7dfd0a02a848e49f5bf4"
 
-# https://github.com/coreos/etcd/commit/f03ed33
-#
-# https://github.com/coreos/etcd/commit/ce0ad377
 [[constraint]]
-  name = "github.com/coreos/etcd"
+  name = "go.etcd.io/etcd"
   branch = "master"
 
 # Used for the API client; we want the latest.
@@ -65,17 +62,10 @@ ignored = [
   name = "github.com/rubyist/circuitbreaker"
   branch = "master"
 
-# https://github.com/GoogleCloudPlatform/google-cloud-go/issues/784
-# Remove this when that commit is in a tagged release.
 [[constraint]]
-  name = "cloud.google.com/go"
-  revision = "094187a3a68a589c8217a46b90af0efae38542b9"
-
-# https://github.com/xwb1989/sqlparser/issues/31
-# https://github.com/xwb1989/sqlparser/issues/32
-[[constraint]]
-  name = "github.com/xwb1989/sqlparser"
-  source = "https://github.com/dt/sqlparser"
+  name = "vitess.io/vitess"
+  source = "https://github.com/cockroachdb/vitess"
+  branch = "no-flag-names-parens"
 
 # The master version of go.uuid has an incompatible interface and (as
 # of 2018-06-06) a serious bug. Don't upgrade without making sure
@@ -84,6 +74,27 @@ ignored = [
 [[constraint]]
   name = "github.com/satori/go.uuid"
   version = "v1.2.0"
+
+# Use master until 0562badec5489e409f1b18596e3f77a309420a84 is in a
+# tagged release.
+[[constraint]]
+  name = "github.com/Azure/azure-storage-blob-go"
+  branch = "master"
+
+# We want https://github.com/go-yaml/yaml/pull/381
+[[constraint]]
+  name = "gopkg.in/yaml.v2"
+  source = "https://github.com/cockroachdb/yaml"
+  branch = "v2-encoding-style"
+
+[[constraint]]
+  name = "github.com/abourget/teamcity"
+  source = "https://github.com/cockroachdb/teamcity"
+
+# https://github.com/golang/dep/pull/2003
+[[constraint]]
+  name = "github.com/golang/dep"
+  branch = "master"
 
 # github.com/docker/docker depends on a few functions not included in the
 # latest release: reference.{FamiliarName,ParseNormalizedNamed,TagNameOnly}.
@@ -106,6 +117,10 @@ ignored = [
 
   [[prune.project]]
     name = "github.com/grpc-ecosystem/grpc-gateway"
+    unused-packages = false
+
+  [[prune.project]]
+    name = "github.com/prometheus/client_model"
     unused-packages = false
 
   # Contains packages with used C files.

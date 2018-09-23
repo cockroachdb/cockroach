@@ -117,6 +117,16 @@ func (ba *BatchRequest) IsTransactionWrite() bool {
 	return ba.hasFlag(isTxnWrite)
 }
 
+// IsRange returns true iff the BatchRequest contains range-based requests.
+func (ba *BatchRequest) IsRange() bool {
+	return ba.hasFlag(isRange)
+}
+
+// IsUnsplittable returns true iff the BatchRequest an un-splittable request.
+func (ba *BatchRequest) IsUnsplittable() bool {
+	return ba.hasFlag(isUnsplittable)
+}
+
 // IsSingleRequest returns true iff the BatchRequest contains a single request.
 func (ba *BatchRequest) IsSingleRequest() bool {
 	return len(ba.Requests) == 1
@@ -148,11 +158,41 @@ func (ba *BatchRequest) IsSingleQueryTxnRequest() bool {
 	return false
 }
 
+// IsSingleHeartbeatTxnRequest returns true iff the batch contains a single
+// request, and that request is a HeartbeatTxn.
+func (ba *BatchRequest) IsSingleHeartbeatTxnRequest() bool {
+	if ba.IsSingleRequest() {
+		_, ok := ba.Requests[0].GetInner().(*HeartbeatTxnRequest)
+		return ok
+	}
+	return false
+}
+
 // IsSingleEndTransactionRequest returns true iff the batch contains a single
 // request, and that request is an EndTransactionRequest.
 func (ba *BatchRequest) IsSingleEndTransactionRequest() bool {
 	if ba.IsSingleRequest() {
 		_, ok := ba.Requests[0].GetInner().(*EndTransactionRequest)
+		return ok
+	}
+	return false
+}
+
+// IsSingleSubsumeRequest returns true iff the batch contains a single request,
+// and that request is an SubsumeRequest.
+func (ba *BatchRequest) IsSingleSubsumeRequest() bool {
+	if ba.IsSingleRequest() {
+		_, ok := ba.Requests[0].GetInner().(*SubsumeRequest)
+		return ok
+	}
+	return false
+}
+
+// IsSingleComputeChecksumRequest returns true iff the batch contains a single
+// request, and that request is a ComputeChecksumRequest.
+func (ba *BatchRequest) IsSingleComputeChecksumRequest() bool {
+	if ba.IsSingleRequest() {
+		_, ok := ba.Requests[0].GetInner().(*ComputeChecksumRequest)
 		return ok
 	}
 	return false
@@ -201,7 +241,15 @@ func (ba *BatchRequest) GetArg(method Method) (Request, bool) {
 func (br *BatchResponse) String() string {
 	var str []string
 	str = append(str, fmt.Sprintf("(err: %v)", br.Error))
-	for _, union := range br.Responses {
+	for count, union := range br.Responses {
+		// Limit the strings to provide just a summary. Without this limit a log
+		// message with a BatchResponse can be very long.
+		if count >= 20 && count < len(br.Responses)-5 {
+			if count == 20 {
+				str = append(str, fmt.Sprintf("... %d skipped ...", len(br.Responses)-25))
+			}
+			continue
+		}
 		str = append(str, fmt.Sprintf("%T", union.GetInner()))
 	}
 	return strings.Join(str, ", ")
@@ -237,7 +285,10 @@ func (ba *BatchRequest) IntentSpanIterate(br *BatchResponse, fn func(Span)) {
 // minimal span of keys affected by the request. The supplied function
 // is called with each span and a bool indicating whether the span
 // updates the write timestamp cache.
-func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span, bool)) {
+//
+// The function can return false if it wants the iteration to break. In that
+// case, RefreshSpanIterate also returns false.
+func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span, bool) bool) bool {
 	for i, arg := range ba.Requests {
 		req := arg.GetInner()
 		if !NeedsRefresh(req) {
@@ -248,9 +299,12 @@ func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(Span, bool
 			resp = br.Responses[i].GetInner()
 		}
 		if span, ok := actualSpan(req, resp); ok {
-			fn(span, UpdatesWriteTimestampCache(req))
+			if !fn(span, UpdatesWriteTimestampCache(req)) {
+				return false
+			}
 		}
 	}
+	return true
 }
 
 // actualSpan returns the actual request span which was operated on,
@@ -342,13 +396,15 @@ func (ba *BatchRequest) Methods() []Method {
 // sending a whole transaction in a single Batch when addressing a single
 // range.
 func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
-	compatible := func(method Method, exFlags, newFlags int) bool {
-		// If no flags are set so far, everything goes.
-		if exFlags == 0 || (!canSplitET && method == EndTransaction) {
-			return true
-		}
-		if (newFlags & isAlone) != 0 {
+	compatible := func(exFlags, newFlags int) bool {
+		// isAlone requests are never compatible.
+		if (exFlags&isAlone) != 0 || (newFlags&isAlone) != 0 {
 			return false
+		}
+		// If the current or new flags are empty and neither include isAlone,
+		// everything goes.
+		if exFlags == 0 || newFlags == 0 {
+			return true
 		}
 		// Otherwise, the flags below must remain the same with the new
 		// request added.
@@ -363,20 +419,51 @@ func (ba BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 	var parts [][]RequestUnion
 	for len(ba.Requests) > 0 {
 		part := ba.Requests
-		var gFlags int
+		var gFlags, hFlags = -1, -1
 		for i, union := range ba.Requests {
 			args := union.GetInner()
 			flags := args.flags()
 			method := args.Method()
-			// Regardless of flags, a NoopRequest is always compatible.
-			if method == Noop {
-				continue
+			if (flags & isPrefix) != 0 {
+				// Requests with the isPrefix flag want to be grouped with the
+				// next non-header request in a batch. Scan forward and find
+				// first non-header request. Naively, this would result in
+				// quadratic behavior for repeat isPrefix requests. We avoid
+				// this by caching first non-header request's flags in hFlags.
+				if hFlags == -1 {
+					for _, nUnion := range ba.Requests[i+1:] {
+						nArgs := nUnion.GetInner()
+						nFlags := nArgs.flags()
+						nMethod := nArgs.Method()
+						if !canSplitET && nMethod == EndTransaction {
+							nFlags = 0 // always compatible
+						}
+						if (nFlags & isPrefix) == 0 {
+							hFlags = nFlags
+							break
+						}
+					}
+				}
+				if hFlags != -1 && (hFlags&isAlone) == 0 {
+					flags = hFlags
+				}
+			} else {
+				hFlags = -1 // reset
 			}
-			if !compatible(method, gFlags, flags) {
-				part = ba.Requests[:i]
-				break
+			cmpFlags := flags
+			if !canSplitET && method == EndTransaction {
+				cmpFlags = 0 // always compatible
 			}
-			gFlags |= flags
+			if gFlags == -1 {
+				// If no flags are set so far, everything goes.
+				gFlags = flags
+			} else {
+				if !compatible(gFlags, cmpFlags) {
+					part = ba.Requests[:i]
+					break
+				}
+				gFlags |= flags
+			}
 		}
 		parts = append(parts, part)
 		ba.Requests = ba.Requests[len(part):]
@@ -402,9 +489,7 @@ func (ba BatchRequest) String() string {
 			continue
 		}
 		req := arg.GetInner()
-		if _, ok := req.(*NoopRequest); ok {
-			str = append(str, req.Method().String())
-		} else if et, ok := req.(*EndTransactionRequest); ok {
+		if et, ok := req.(*EndTransactionRequest); ok {
 			h := req.Header()
 			str = append(str, fmt.Sprintf("%s(commit:%t) [%s]", req.Method(), et.Commit, h.Key))
 		} else {

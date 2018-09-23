@@ -1,7 +1,1 @@
 create_index_stmt ::=
-	'CREATE' 'INVERTED' 'INDEX' opt_index_name 'ON' table_name '(' column_name 'ASC' ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')'
-	| 'CREATE' 'INVERTED' 'INDEX' opt_index_name 'ON' table_name '(' column_name 'DESC' ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')'
-	| 'CREATE' 'INVERTED' 'INDEX' opt_index_name 'ON' table_name '(' column_name  ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')'
-	| 'CREATE' 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' column_name 'ASC' ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')'
-	| 'CREATE' 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' column_name 'DESC' ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')'
-	| 'CREATE' 'INVERTED' 'INDEX' 'IF' 'NOT' 'EXISTS' index_name 'ON' table_name '(' column_name  ( ( ',' ( column_name ( 'ASC' | 'DESC' |  ) ) ) )* ')'

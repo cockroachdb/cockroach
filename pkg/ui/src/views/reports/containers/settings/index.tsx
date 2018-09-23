@@ -87,12 +87,13 @@ class Settings extends React.Component<SettingsProps, {}> {
           loading={!this.props.settings.data}
           className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
           image={spinner}
-        >
-          <div>
-            <p>Note that some settings have been redacted for security purposes.</p>
-            {this.renderTable()}
-          </div>
-        </Loading>
+          render={() => (
+            <div>
+              <p>Note that some settings have been redacted for security purposes.</p>
+              {this.renderTable()}
+            </div>
+          )}
+        />
       </div>
     );
   }

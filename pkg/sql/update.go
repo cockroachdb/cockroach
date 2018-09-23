@@ -459,8 +459,7 @@ func (u *updateNode) startExec(params runParams) error {
 	if u.run.rowsNeeded {
 		u.run.rows = sqlbase.NewRowContainer(
 			params.EvalContext().Mon.MakeBoundAccount(),
-			sqlbase.ColTypeInfoFromResCols(u.columns),
-			maxUpdateBatchSize)
+			sqlbase.ColTypeInfoFromResCols(u.columns), 0)
 	}
 	return u.run.tu.init(params.p.txn, params.EvalContext())
 }

@@ -10,22 +10,21 @@ define VALID_VARS
   BENCHTIMEOUT
   BUILDCHANNEL
   BUILDINFO
-  BUILDMODE
   BUILDTARGET
+  BUILDTYPE
   BUILD_DIR
   BUILD_TAGGED_RELEASE
-  BUILD_TYPE
-  CC_PATH
   CFLAGS
-  CGO_ENABLED
+  CGO_CFLAGS
+  CGO_CXXFLAGS
   CGO_FLAGS_FILES
+  CGO_LDFLAGS
   CGO_PKGS
   CGO_SUFFIXED_FLAGS_FILES
   CGO_UNSUFFIXED_FLAGS_FILES
-  CMAKE_FLAGS
-  CMAKE_SYSTEM_NAME
   COCKROACH
-  CONFIGURE_FLAGS
+  COCKROACHOSS
+  COCKROACHSHORT
   COREOS_PATH
   CPP_HEADERS
   CPP_HEADERS_CCL
@@ -38,14 +37,14 @@ define VALID_VARS
   CRYPTOPP_DIR
   CRYPTOPP_SRC_DIR
   CXXFLAGS
-  CXX_PATH
   C_DEPS_DIR
   C_LIBS_CCL
   C_LIBS_COMMON
   C_LIBS_OSS
   DOCGEN_TARGETS
   DUPLFLAGS
-  ENABLE_ROCKSDB_ASSERTIONS
+  EXTRA_XCMAKE_FLAGS
+  EXTRA_XCONFIGURE_FLAGS
   FILES
   FIND_RELEVANT
   GITHOOKS
@@ -70,12 +69,12 @@ define VALID_VARS
   HOST_TRIPLE
   IGNORE_GOVERS
   INSTALL
-  ISDARWIN
   JEMALLOC_DIR
   JEMALLOC_SRC_DIR
   JS_PROTOS_CCL
   KARMA
   LC_ALL
+  LDFLAGS
   LIBCRYPTOPP
   LIBJEMALLOC
   LIBPROTOBUF
@@ -85,17 +84,10 @@ define VALID_VARS
   LIBROACH_SRC_DIR
   LIBROCKSDB
   LIBSNAPPY
-  LINKFLAGS
-  MACOS
   MACOSX_DEPLOYMENT_TARGET
   MAKECMDGOALS
   MAKEFLAGS
-  MINGW
-  MSAN_CPPFLAGS
-  MSAN_LDFLAGS
-  NATIVE_SPECIFIER
-  NATIVE_SPECIFIER_TAG
-  NATIVE_SUFFIX
+  MAKE_TERMERR
   NCPUS
   NODE_RUN
   OPTGEN_TARGETS
@@ -120,7 +112,6 @@ define VALID_VARS
   SNAPPY_SRC_DIR
   SQLPARSER_TARGETS
   STARTFLAGS
-  STDMALLOC_SUFFIX
   STRESSFLAGS
   STYLINT
   SUBTESTS
@@ -130,6 +121,7 @@ define VALID_VARS
   TARGET
   TARGET_TRIPLE
   TAR_XFORM_FLAG
+  TESTCONFIG
   TESTFLAGS
   TESTS
   TESTTIMEOUT
@@ -147,34 +139,52 @@ define VALID_VARS
   UI_TS_CCL
   UI_TS_OSS
   UNAME
+  USE_ROCKSDB_ASSERTIONS
   WEBPACK
   WEBPACK_DASHBOARD
   WEBPACK_DEV_SERVER
-  XCMAKE_FLAGS
-  XGO
+  XCC
+  XCMAKE_SYSTEM_NAME
+  XCXX
   XGOARCH
   XGOOS
-  XHOST_BIN_DIR
-  XHOST_TRIPLE
+  aes
   bindir
   bins
+  build-mode
+  cmake-flags
+  configure-flags
   cyan
   go-targets
   go-targets-ccl
   have-defs
+  host-is-macos
+  host-is-mingw
+  is-cross-compile
   langgen-package
+  libroach-inputs
+  logic-test-selector
+  logictest-bins
   logictest-package
   logictestccl-package
+  logictestopt-package
   macos-version
+  native-tag
   optgen-defs
   optgen-norm-rules
   optgen-package
   optgen-xform-rules
   prefix
+  settings-doc-gen
   sig
   space
   sse
   term-reset
   testbins
+  use-msan
+  use-stdmalloc
+  xcmake-flags
+  xconfigure-flags
+  xgo
   yellow
 endef

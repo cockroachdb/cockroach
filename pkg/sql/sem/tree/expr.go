@@ -74,6 +74,13 @@ type VariableExpr interface {
 	Variable()
 }
 
+var _ VariableExpr = &IndexedVar{}
+var _ VariableExpr = &Subquery{}
+var _ VariableExpr = UnqualifiedStar{}
+var _ VariableExpr = &UnresolvedName{}
+var _ VariableExpr = &AllColumnsSelector{}
+var _ VariableExpr = &ColumnItem{}
+
 // operatorExpr is used to identify expression types that involve operators;
 // used by exprStrWithParen.
 type operatorExpr interface {
@@ -392,7 +399,7 @@ type ComparisonExpr struct {
 	Left, Right Expr
 
 	typeAnnotation
-	fn CmpOp
+	fn *CmpOp
 }
 
 func (*ComparisonExpr) operatorExpr() {}
@@ -438,7 +445,7 @@ func (node *ComparisonExpr) memoizeFn() {
 		// Array operators memoize the SubOperator's CmpOp.
 		fOp, _, _, _, _ = foldComparisonExpr(node.SubOperator, nil, nil)
 		// The right operand is either an array or a tuple/subquery.
-		switch t := rightRet.(type) {
+		switch t := types.UnwrapType(rightRet).(type) {
 		case types.TArray:
 			// For example:
 			//   x = ANY(ARRAY[1,2])
@@ -447,7 +454,11 @@ func (node *ComparisonExpr) memoizeFn() {
 			// For example:
 			//   x = ANY(SELECT y FROM t)
 			//   x = ANY(1,2)
-			rightRet = t.Types[0]
+			if len(t.Types) > 0 {
+				rightRet = t.Types[0]
+			} else {
+				rightRet = leftRet
+			}
 		}
 	}
 
@@ -726,24 +737,22 @@ func (node *Placeholder) ResolvedType() types.T {
 type Tuple struct {
 	Exprs  Exprs
 	Labels []string
-	// Row indicates whether or not the tuple should be textually represented as
-	// ROW ( ... ).
+
+	// Row indicates whether `ROW` was used in the input syntax. This is
+	// used solely to generate column names automatically, see
+	// col_name.go.
 	Row bool
 
-	types types.TTuple
+	typ types.TTuple
 }
 
 // NewTypedTuple returns a new Tuple that is verified to be well-typed.
-func NewTypedTuple(typedExprs TypedExprs) *Tuple {
-	node := &Tuple{
-		Exprs: make(Exprs, len(typedExprs)),
-		types: types.TTuple{Types: make([]types.T, len(typedExprs))},
+func NewTypedTuple(typ types.TTuple, typedExprs Exprs) *Tuple {
+	return &Tuple{
+		Exprs:  typedExprs,
+		Labels: typ.Labels,
+		typ:    typ,
 	}
-	for i := range typedExprs {
-		node.Exprs[i] = typedExprs[i].(Expr)
-		node.types.Types[i] = typedExprs[i].ResolvedType()
-	}
-	return node
 }
 
 // Format implements the NodeFormatter interface.
@@ -753,11 +762,13 @@ func (node *Tuple) Format(ctx *FmtCtx) {
 	if len(node.Labels) > 0 {
 		ctx.WriteByte('(')
 	}
-	if node.Row {
-		ctx.WriteString("ROW")
-	}
 	ctx.WriteByte('(')
 	ctx.FormatNode(&node.Exprs)
+	if len(node.Exprs) == 1 {
+		// Ensure the pretty-printed 1-value tuple is not ambiguous with
+		// the equivalent value enclosed in grouping parentheses.
+		ctx.WriteByte(',')
+	}
 	ctx.WriteByte(')')
 	if len(node.Labels) > 0 {
 		ctx.WriteString(" AS ")
@@ -773,7 +784,7 @@ func (node *Tuple) Format(ctx *FmtCtx) {
 
 // ResolvedType implements the TypedExpr interface.
 func (node *Tuple) ResolvedType() types.T {
-	return node.types
+	return node.typ
 }
 
 // Truncate returns a new Tuple that contains only a prefix of the original
@@ -784,7 +795,7 @@ func (node *Tuple) Truncate(prefix int) *Tuple {
 	return &Tuple{
 		Exprs: append(Exprs(nil), node.Exprs[:prefix]...),
 		Row:   node.Row,
-		types: types.TTuple{Types: append([]types.T(nil), node.types.Types[:prefix]...)},
+		typ:   types.TTuple{Types: append([]types.T(nil), node.typ.Types[:prefix]...)},
 	}
 }
 
@@ -796,11 +807,11 @@ func (node *Tuple) Project(set util.FastIntSet) *Tuple {
 	t := &Tuple{
 		Exprs: make(Exprs, 0, set.Len()),
 		Row:   node.Row,
-		types: types.TTuple{Types: make([]types.T, 0, set.Len())},
+		typ:   types.TTuple{Types: make([]types.T, 0, set.Len())},
 	}
 	for i, ok := set.Next(0); ok; i, ok = set.Next(i + 1) {
 		t.Exprs = append(t.Exprs, node.Exprs[i])
-		t.types.Types = append(t.types.Types, node.types.Types[i])
+		t.typ.Types = append(t.typ.Types, node.typ.Types[i])
 	}
 	return t
 }
@@ -830,6 +841,16 @@ type ArrayFlatten struct {
 func (node *ArrayFlatten) Format(ctx *FmtCtx) {
 	ctx.WriteString("ARRAY ")
 	exprFmtWithParen(ctx, node.Subquery)
+	if ctx.HasFlags(FmtParsable) {
+		if t, ok := node.Subquery.(*DTuple); ok {
+			if len(t.D) == 0 {
+				if colTyp, err := coltypes.DatumTypeToColumnType(node.typ); err == nil {
+					ctx.WriteString(":::")
+					colTyp.Format(ctx.Buffer, ctx.flags.EncodeFlags())
+				}
+			}
+		}
+	}
 }
 
 // Exprs represents a list of value expressions. It's not a valid expression
@@ -952,6 +973,31 @@ var binaryOpName = [...]string{
 	JSONFetchTextPath: "#>>",
 }
 
+// binaryOpPrio follows the precedence order in the grammar. Used for pretty-printing.
+var binaryOpPrio = [...]int{
+	Pow:  1,
+	Mult: 2, Div: 2, FloorDiv: 2, Mod: 2,
+	Plus: 3, Minus: 3,
+	LShift: 4, RShift: 4,
+	Bitand: 5,
+	Bitxor: 6,
+	Bitor:  7,
+	Concat: 8, JSONFetchVal: 8, JSONFetchText: 8, JSONFetchValPath: 8, JSONFetchTextPath: 8,
+}
+
+// binaryOpFullyAssoc indicates whether an operator is fully associative.
+// Reminder: an op R is fully associative if (a R b) R c == a R (b R c)
+var binaryOpFullyAssoc = [...]bool{
+	Pow:  false,
+	Mult: true, Div: false, FloorDiv: false, Mod: false,
+	Plus: true, Minus: false,
+	LShift: false, RShift: false,
+	Bitand: true,
+	Bitxor: true,
+	Bitor:  true,
+	Concat: true, JSONFetchVal: false, JSONFetchText: false, JSONFetchValPath: false, JSONFetchTextPath: false,
+}
+
 func (i BinaryOperator) isPadded() bool {
 	return !(i == JSONFetchVal || i == JSONFetchText || i == JSONFetchValPath || i == JSONFetchTextPath)
 }
@@ -969,7 +1015,7 @@ type BinaryExpr struct {
 	Left, Right Expr
 
 	typeAnnotation
-	fn BinOp
+	fn *BinOp
 }
 
 // TypedLeft returns the BinaryExpr's left expression as a TypedExpr.
@@ -985,7 +1031,7 @@ func (node *BinaryExpr) TypedRight() TypedExpr {
 // ResolvedBinOp returns the resolved binary op overload; can only be called
 // after Resolve (which happens during TypeCheck).
 func (node *BinaryExpr) ResolvedBinOp() *BinOp {
-	return &node.fn
+	return node.fn
 }
 
 // NewTypedBinaryExpr returns a new BinaryExpr that is well-typed.
@@ -1039,15 +1085,13 @@ func (UnaryOperator) operator() {}
 
 // UnaryExpr.Operator
 const (
-	UnaryPlus UnaryOperator = iota
-	UnaryMinus
+	UnaryMinus UnaryOperator = iota
 	UnaryComplement
 
 	NumUnaryOperators
 )
 
 var unaryOpName = [...]string{
-	UnaryPlus:       "+",
 	UnaryMinus:      "-",
 	UnaryComplement: "~",
 }
@@ -1065,7 +1109,7 @@ type UnaryExpr struct {
 	Expr     Expr
 
 	typeAnnotation
-	fn UnaryOp
+	fn *UnaryOp
 }
 
 func (*UnaryExpr) operatorExpr() {}
@@ -1073,7 +1117,17 @@ func (*UnaryExpr) operatorExpr() {}
 // Format implements the NodeFormatter interface.
 func (node *UnaryExpr) Format(ctx *FmtCtx) {
 	ctx.WriteString(node.Operator.String())
-	exprFmtWithParen(ctx, node.Expr)
+	e := node.Expr
+	_, isOp := e.(operatorExpr)
+	_, isDatum := e.(Datum)
+	_, isConstant := e.(Constant)
+	if isOp || (node.Operator == UnaryMinus && (isDatum || isConstant)) {
+		ctx.WriteByte('(')
+		ctx.FormatNode(e)
+		ctx.WriteByte(')')
+	} else {
+		ctx.FormatNode(e)
+	}
 }
 
 // TypedInnerExpr returns the UnaryExpr's inner expression as a TypedExpr.
@@ -1087,7 +1141,7 @@ func NewTypedUnaryExpr(op UnaryOperator, expr TypedExpr, typ types.T) *UnaryExpr
 	node.typ = typ
 	innerType := expr.ResolvedType()
 	for _, o := range UnaryOps[op] {
-		o := o.(UnaryOp)
+		o := o.(*UnaryOp)
 		if innerType.Equivalent(o.Typ) && node.typ.Equivalent(o.ReturnType) {
 			node.fn = o
 			return node
@@ -1104,10 +1158,6 @@ type FuncExpr struct {
 	// Filter is used for filters on aggregates: SUM(k) FILTER (WHERE k > 0)
 	Filter    Expr
 	WindowDef *WindowDef
-	// EscapeSRF is to be set to true if the FuncExpr
-	// is enclosed in a ColumnAccessExpr. This is a temporary
-	// mechanism until #24866 is solved.
-	EscapeSRF bool
 
 	typeAnnotation
 	fnProps *FunctionProperties
@@ -1149,13 +1199,13 @@ func (node *FuncExpr) ResolvedOverload() *Overload {
 
 // GetAggregateConstructor exposes the AggregateFunc field for use by
 // the group node in package sql.
-func (node *FuncExpr) GetAggregateConstructor() func(*EvalContext) AggregateFunc {
+func (node *FuncExpr) GetAggregateConstructor() func(*EvalContext, Datums) AggregateFunc {
 	if node.fn == nil || node.fn.AggregateFunc == nil {
 		return nil
 	}
-	return func(evalCtx *EvalContext) AggregateFunc {
+	return func(evalCtx *EvalContext, arguments Datums) AggregateFunc {
 		types := typesOfExprs(node.Exprs)
-		return node.fn.AggregateFunc(types, evalCtx)
+		return node.fn.AggregateFunc(types, evalCtx, arguments)
 	}
 }
 
@@ -1222,7 +1272,7 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 		typ = funcTypeName[node.Type] + " "
 	}
 
-	// We need to remove name anonimization for the function name in
+	// We need to remove name anonymization for the function name in
 	// particular. Do this by overriding the flags.
 	subCtx := ctx.CopyWithFlags(ctx.flags & ^FmtAnonymize)
 	subCtx.FormatNode(&node.Func)
@@ -1231,6 +1281,24 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 	ctx.WriteString(typ)
 	ctx.FormatNode(&node.Exprs)
 	ctx.WriteByte(')')
+	if ctx.HasFlags(FmtParsable) && node.typ != nil {
+		if node.fnProps.AmbiguousReturnType {
+			if typ, err := coltypes.DatumTypeToColumnType(node.typ); err == nil {
+				// There's no type annotation available for tuples.
+				// TODO(jordan,knz): clean this up. AmbiguousReturnType should be set only
+				// when we should and can put an annotation here. #28579
+				if _, ok := typ.(coltypes.TTuple); !ok {
+					ctx.WriteString(":::")
+					ctx.WriteString(typ.TypeName())
+				}
+			}
+		}
+	}
+	if node.Filter != nil {
+		ctx.WriteString(" FILTER (WHERE ")
+		ctx.FormatNode(node.Filter)
+		ctx.WriteString(")")
+	}
 	if window := node.WindowDef; window != nil {
 		ctx.WriteString(" OVER ")
 		if window.Name != "" {
@@ -1238,11 +1306,6 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 		} else {
 			ctx.FormatNode(window)
 		}
-	}
-	if node.Filter != nil {
-		ctx.WriteString(" FILTER (WHERE ")
-		ctx.FormatNode(node.Filter)
-		ctx.WriteString(")")
 	}
 }
 
@@ -1338,8 +1401,17 @@ func (node *CastExpr) Format(ctx *FmtCtx) {
 		ctx.WriteString("CAST(")
 		ctx.FormatNode(node.Expr)
 		ctx.WriteString(" AS ")
-		node.Type.Format(buf, ctx.flags.EncodeFlags())
+		t, isCollatedString := node.Type.(*coltypes.TCollatedString)
+		typ := node.Type
+		if isCollatedString {
+			typ = coltypes.String
+		}
+		typ.Format(buf, ctx.flags.EncodeFlags())
 		ctx.WriteByte(')')
+		if isCollatedString {
+			ctx.WriteString(" COLLATE ")
+			lex.EncodeUnrestrictedSQLIdent(ctx.Buffer, t.Locale, lex.EncNoFlags)
+		}
 	}
 }
 
@@ -1355,19 +1427,22 @@ func (node *CastExpr) castType() types.T {
 }
 
 var (
-	boolCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString}
-	intCastTypes  = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
-		types.Timestamp, types.TimestampTZ, types.Date, types.Interval, types.Oid}
+	bitArrayCastTypes = []types.T{types.Unknown, types.BitArray, types.Int, types.String, types.FamCollatedString}
+	boolCastTypes     = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString}
+	intCastTypes      = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+		types.Timestamp, types.TimestampTZ, types.Date, types.Interval, types.Oid, types.BitArray}
 	floatCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
 		types.Timestamp, types.TimestampTZ, types.Date, types.Interval}
 	decimalCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
 		types.Timestamp, types.TimestampTZ, types.Date, types.Interval}
 	stringCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
-		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.UUID, types.Date, types.Time, types.TimeTZ, types.Oid, types.INet, types.JSON}
-	bytesCastTypes     = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.UUID}
-	dateCastTypes      = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int}
-	timeCastTypes      = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Time, types.TimeTZ, types.Timestamp, types.TimestampTZ, types.Interval}
-	timetzCastTypes    = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Time, types.TimeTZ, types.TimestampTZ}
+		types.BitArray,
+		types.FamArray, types.FamTuple,
+		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.UUID, types.Date, types.Time, types.Oid, types.INet, types.JSON}
+	bytesCastTypes = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.UUID}
+	dateCastTypes  = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int}
+	timeCastTypes  = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Time,
+		types.Timestamp, types.TimestampTZ, types.Interval}
 	timestampCastTypes = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int}
 	intervalCastTypes  = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Int, types.Time, types.Interval, types.Float, types.Decimal}
 	oidCastTypes       = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Int, types.Oid}
@@ -1380,6 +1455,8 @@ var (
 // validCastTypes returns a set of types that can be cast into the provided type.
 func validCastTypes(t types.T) []types.T {
 	switch types.UnwrapType(t) {
+	case types.BitArray:
+		return bitArrayCastTypes
 	case types.Bool:
 		return boolCastTypes
 	case types.Int:
@@ -1396,8 +1473,6 @@ func validCastTypes(t types.T) []types.T {
 		return dateCastTypes
 	case types.Time:
 		return timeCastTypes
-	case types.TimeTZ:
-		return timetzCastTypes
 	case types.Timestamp, types.TimestampTZ:
 		return timestampCastTypes
 	case types.Interval:
@@ -1506,14 +1581,43 @@ func (node *CollateExpr) Format(ctx *FmtCtx) {
 	lex.EncodeUnrestrictedSQLIdent(ctx.Buffer, node.Locale, lex.EncNoFlags)
 }
 
-// ColumnAccessExpr represents (SRF).x or (SRF).* expression. Specifically, it
+// TupleStar represents (E).* expressions.
+// It is meant to evaporate during star expansion.
+type TupleStar struct {
+	Expr Expr
+}
+
+// NormalizeVarName implements the VarName interface.
+func (node *TupleStar) NormalizeVarName() (VarName, error) { return node, nil }
+
+// Format implements the NodeFormatter interface.
+func (node *TupleStar) Format(ctx *FmtCtx) {
+	ctx.WriteByte('(')
+	ctx.FormatNode(node.Expr)
+	ctx.WriteString(").*")
+}
+
+// ColumnAccessExpr represents (E).x expressions. Specifically, it
 // allows accessing the column(s) from a Set Retruning Function.
 type ColumnAccessExpr struct {
 	Expr    Expr
 	ColName string
-	Star    bool
+
+	// ColIndex indicates the index of the column in the tuple. This is
+	// set during type checking based on the label in ColName.
+	ColIndex int
 
 	typeAnnotation
+}
+
+// NewTypedColumnAccessExpr creates a pre-typed ColumnAccessExpr.
+func NewTypedColumnAccessExpr(expr TypedExpr, colName string, colIdx int) *ColumnAccessExpr {
+	return &ColumnAccessExpr{
+		Expr:           expr,
+		ColName:        colName,
+		ColIndex:       colIdx,
+		typeAnnotation: typeAnnotation{typ: expr.ResolvedType().(types.TTuple).Types[colIdx]},
+	}
 }
 
 // Format implements the NodeFormatter interface.
@@ -1521,11 +1625,7 @@ func (node *ColumnAccessExpr) Format(ctx *FmtCtx) {
 	ctx.WriteByte('(')
 	ctx.FormatNode(node.Expr)
 	ctx.WriteString(").")
-	if node.Star {
-		ctx.WriteByte('*')
-	} else {
-		ctx.WriteString(node.ColName)
-	}
+	ctx.WriteString(node.ColName)
 }
 
 func (node *AliasedTableExpr) String() string { return AsString(node) }
@@ -1541,11 +1641,11 @@ func (node *ColumnAccessExpr) String() string { return AsString(node) }
 func (node *CollateExpr) String() string      { return AsString(node) }
 func (node *ComparisonExpr) String() string   { return AsString(node) }
 func (node *Datums) String() string           { return AsString(node) }
+func (node *DBitArray) String() string        { return AsString(node) }
 func (node *DBool) String() string            { return AsString(node) }
 func (node *DBytes) String() string           { return AsString(node) }
 func (node *DDate) String() string            { return AsString(node) }
 func (node *DTime) String() string            { return AsString(node) }
-func (node *DTimeTZ) String() string          { return AsString(node) }
 func (node *DDecimal) String() string         { return AsString(node) }
 func (node *DFloat) String() string           { return AsString(node) }
 func (node *DInt) String() string             { return AsString(node) }
@@ -1580,6 +1680,7 @@ func (node *RangeCond) String() string        { return AsString(node) }
 func (node *StrVal) String() string           { return AsString(node) }
 func (node *Subquery) String() string         { return AsString(node) }
 func (node *Tuple) String() string            { return AsString(node) }
+func (node *TupleStar) String() string        { return AsString(node) }
 func (node *AnnotateTypeExpr) String() string { return AsString(node) }
 func (node *UnaryExpr) String() string        { return AsString(node) }
 func (node DefaultVal) String() string        { return AsString(node) }

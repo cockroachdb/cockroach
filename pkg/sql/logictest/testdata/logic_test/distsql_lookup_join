@@ -9,22 +9,26 @@ SET experimental_force_lookup_join = true;
 statement ok
 CREATE TABLE data (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c, d))
 
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
 # Split into ten parts.
 statement ok
-ALTER TABLE data SPLIT AT SELECT i FROM GENERATE_SERIES(1, 9) AS g(i)
+ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 # Relocate the ten parts to the five nodes.
 statement ok
-ALTER TABLE data TESTING_RELOCATE
-  SELECT ARRAY[i%5+1], i FROM GENERATE_SERIES(0, 9) AS g(i)
+ALTER TABLE data EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
 
 # Generate all combinations of values 1 to 10.
 statement ok
 INSERT INTO data SELECT a, b, c, d FROM
-   GENERATE_SERIES(1, 10) AS A(a),
-   GENERATE_SERIES(1, 10) AS B(b),
-   GENERATE_SERIES(1, 10) AS C(c),
-   GENERATE_SERIES(1, 10) AS D(d)
+   generate_series(1, 10) AS a(a),
+   generate_series(1, 10) AS b(b),
+   generate_series(1, 10) AS c(c),
+   generate_series(1, 10) AS d(d)
 
 statement ok
 CREATE TABLE distsql_lookup_test_1 (a INT, b INT, c INT, PRIMARY KEY (a, c));
@@ -33,6 +37,44 @@ INSERT INTO distsql_lookup_test_1 VALUES (1, 1, 2), (2, 1, 1), (2, NULL, 2)
 statement ok
 CREATE TABLE distsql_lookup_test_2 (d INT, e INT, f INT, PRIMARY KEY (f, e));
 INSERT INTO distsql_lookup_test_2 VALUES (1, 1, 2), (2, 1, 1), (NULL, 2, 1)
+
+statement ok
+CREATE TABLE distsql_lookup_test_3 (g INT, h INT, INDEX g_idx (g));
+INSERT INTO distsql_lookup_test_3 VALUES (NULL, 1)
+
+# Set up the statistics as if the first table is much smaller than the others.
+# This will make lookup join into the second table be the best plan.
+# TODO(radu): we have to use very small row counts because of the poor row
+# count estimation for joins (left-rows * right-rows / 10).
+statement ok
+ALTER TABLE distsql_lookup_test_1 INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 1,
+    "distinct_count": 1
+  }
+]'
+
+statement ok
+ALTER TABLE distsql_lookup_test_2 INJECT STATISTICS '[
+  {
+    "columns": ["f"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
+
+statement ok
+ALTER TABLE distsql_lookup_test_3 INJECT STATISTICS '[
+  {
+    "columns": ["g"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 10,
+    "distinct_count": 10
+  }
+]'
 
 query IIIIII rowsort
 SELECT * FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b
@@ -83,9 +125,28 @@ SELECT a, b, e FROM distsql_lookup_test_1 JOIN distsql_lookup_test_2 ON f = b WH
 2  1  1
 2  1  2
 
+# Test lookup join on NULL column. (https://github.com/cockroachdb/cockroach/issues/27032)
+query I
+SELECT h FROM distsql_lookup_test_1 JOIN distsql_lookup_test_3@g_idx ON b = g
+----
+
+# Test left lookup join on NULL column.
+query II rowsort
+SELECT b, h FROM distsql_lookup_test_1 LEFT JOIN distsql_lookup_test_3@g_idx ON b = g;
+----
+1     NULL
+1     NULL
+NULL  NULL
+
+# Test left lookup join where all input rows are NULL.
+query II
+SELECT b, h FROM distsql_lookup_test_1 LEFT JOIN distsql_lookup_test_3@g_idx ON b = g WHERE b IS NULL
+----
+NULL  NULL
+
 # Ensure join performs properly on input that has more than 100 rows.
 query I
-SELECT COUNT(*) FROM data as d1 NATURAL JOIN data as d2
+SELECT count(*) FROM data as d1 NATURAL JOIN data as d2
 ----
 10000
 
@@ -170,19 +231,23 @@ true
 statement ok
 CREATE TABLE multiples (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b), INDEX bc (b) STORING (c))
 
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
 # Split into ten parts.
 statement ok
-ALTER TABLE multiples SPLIT AT SELECT i FROM GENERATE_SERIES(1, 9) AS g(i)
+ALTER TABLE multiples SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 # Relocate the ten parts to the five nodes.
 statement ok
-ALTER TABLE multiples TESTING_RELOCATE
-  SELECT ARRAY[i%5+1], i FROM GENERATE_SERIES(0, 9) AS g(i)
+ALTER TABLE multiples EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
 
 # Generate 10 rows.
 statement ok
 INSERT INTO multiples SELECT x, 2*x, 3*x, 4*x FROM
-  GENERATE_SERIES(1, 10) AS A(x)
+  generate_series(1, 10) AS a(x)
 
 # Lookup join on covering secondary index
 query II rowsort

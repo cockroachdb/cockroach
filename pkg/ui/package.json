@@ -6,12 +6,14 @@
   "license": "MIT",
   "dependencies": {
     "analytics-node": "^3.0.0",
+    "babel-polyfill": "^6.26.0",
     "classnames": "^2.2.5",
     "combokeys": "^2.4.6",
     "highlight.js": "^9.10.0",
     "lodash": "^4.17.4",
     "moment": "^2.18.1",
     "nvd3": "^1.8.5",
+    "popper.js": "^1.14.4",
     "raw-loader": "^0.5.1",
     "rc-progress": "^2.2.1",
     "react": "^16.3.1",
@@ -28,12 +30,11 @@
     "redux": "^3.6.0",
     "redux-saga": "^0.15.6",
     "redux-thunk": "^2.2.0",
-    "regenerator-runtime": "^0.11.0",
     "reselect": "^3.0.0",
     "whatwg-fetch": "^2.0.3"
   },
   "devDependencies": {
-    "@types/analytics-node": "^0.0.30",
+    "@types/analytics-node": "^0.0.32",
     "@types/bytebuffer": "^5.0.33",
     "@types/chai": "^4.1.0",
     "@types/classnames": "^0.0.32",
@@ -93,6 +94,7 @@
     "nib": "^1.1.2",
     "prop-types": "^15.5.10",
     "protobufjs": "^6.7.3",
+    "redux-saga-test-plan": "^3.6.0",
     "rimraf": "^2.6.1",
     "sinon": "2.1.0",
     "source-map-loader": "^0.2.0",
@@ -110,6 +112,6 @@
   },
   "engines": {
     "node": ">=6",
-    "yarn": ">=1.0.0"
+    "yarn": ">=1.7.0"
   }
 }

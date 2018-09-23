@@ -23,39 +23,44 @@ TABLE b
 # --------------------------------------------------
 
 # Same order, same names.
-opt
+opt expect=EliminateProject
 SELECT x, y FROM a
 ----
 scan a
  ├── columns: x:1(int!null) y:2(int)
- └── keys: (1)
+ ├── key: (1)
+ └── fd: (1)-->(2)
 
 # Different order, aliased names.
-opt
+opt expect=EliminateProject
 SELECT a.y AS aliasy, a.x FROM a
 ----
 scan a
  ├── columns: aliasy:2(int) x:1(int!null)
- └── keys: (1)
+ ├── key: (1)
+ └── fd: (1)-->(2)
 
 # Reordered, duplicate, aliased columns.
-opt
+opt expect=EliminateProject
 SELECT a.y AS alias1, a.x, a.y AS alias1, a.x FROM a
 ----
 scan a
  ├── columns: alias1:2(int) x:1(int!null) alias1:2(int) x:1(int!null)
- └── keys: (1)
+ ├── key: (1)
+ └── fd: (1)-->(2)
 
 # Added column (projection should not be eliminated).
-opt
+opt expect-not=EliminateProject
 SELECT *, 1 r FROM a
 ----
 project
  ├── columns: x:1(int!null) y:2(int) f:3(float) s:4(string) r:5(int!null)
- ├── keys: (1)
+ ├── key: (1)
+ ├── fd: ()-->(5), (1)-->(2-4)
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(int) f:3(float) s:4(string)
- │    └── keys: (1)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
  └── projections [outer=(1-4)]
       └── const: 1 [type=int]
 
@@ -63,20 +68,27 @@ project
 # EliminateProjectProject
 # --------------------------------------------------
 
-opt
+opt expect=EliminateProjectProject
 SELECT y+1 AS r FROM (SELECT a.y FROM a, b WHERE a.x=b.x) a
 ----
 project
  ├── columns: r:7(int)
- ├── inner-join
+ ├── inner-join (merge)
  │    ├── columns: a.x:1(int!null) y:2(int) b.x:5(int!null)
+ │    ├── key: (5)
+ │    ├── fd: (1)-->(2), (1)==(5), (5)==(1)
  │    ├── scan a
  │    │    ├── columns: a.x:1(int!null) y:2(int)
- │    │    └── keys: (1)
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    └── ordering: +1
  │    ├── scan b
  │    │    ├── columns: b.x:5(int!null)
- │    │    └── keys: (5)
- │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
- │         └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ │    │    ├── key: (5)
+ │    │    └── ordering: +5
+ │    └── merge-on
+ │         ├── left ordering: +1
+ │         ├── right ordering: +5
+ │         └── true [type=bool]
  └── projections [outer=(2)]
-      └── a.y + 1 [type=int, outer=(2)]
+      └── y + 1 [type=int, outer=(2)]

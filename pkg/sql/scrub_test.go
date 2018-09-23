@@ -719,7 +719,7 @@ func TestScrubPhysicalNonnullableNullInMulticolumnFamily(t *testing.T) {
 	// Create the table and the row entry.
 	if _, err := db.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.test (k INT PRIMARY KEY, v INT NOT NULL, b INT NOT NULL, FAMILY (k), FAMILY(v, b));
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT NOT NULL, b INT NOT NULL, FAMILY (k), FAMILY (v, b));
 INSERT INTO t.test VALUES (217, 314, 1337);
 `); err != nil {
 		t.Fatalf("unexpected error: %s", err)

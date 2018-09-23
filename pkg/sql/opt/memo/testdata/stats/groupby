@@ -49,20 +49,23 @@ SELECT x FROM a GROUP BY x, y
 project
  ├── columns: x:1(int!null)
  ├── stats: [rows=2000]
- ├── keys: (1)
+ ├── key: (1)
  └── group-by
       ├── columns: x:1(int!null) y:2(int)
       ├── grouping columns: x:1(int!null) y:2(int)
       ├── stats: [rows=2000, distinct(1,2)=2000]
-      ├── keys: (1)
+      ├── key: (1)
+      ├── fd: (1)-->(2)
       └── project
            ├── columns: x:1(int!null) y:2(int)
            ├── stats: [rows=2000, distinct(1,2)=2000]
-           ├── keys: (1)
+           ├── key: (1)
+           ├── fd: (1)-->(2)
            └── scan a
                 ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
                 ├── stats: [rows=2000, distinct(1,2)=2000]
-                └── keys: (1) weak(3,4)
+                ├── key: (1)
+                └── fd: (1)-->(2-4), (3,4)~~>(1,2)
 
 # Group by single column key.
 build
@@ -75,18 +78,21 @@ project
       ├── columns: x:1(int!null) max:5(int)
       ├── grouping columns: x:1(int!null)
       ├── stats: [rows=2000, distinct(1)=2000]
-      ├── keys: (1)
+      ├── key: (1)
+      ├── fd: (1)-->(5)
       ├── project
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── stats: [rows=2000, distinct(1)=2000]
-      │    ├── keys: (1)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
       │    └── scan a
       │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
       │         ├── stats: [rows=2000, distinct(1)=2000]
-      │         └── keys: (1) weak(3,4)
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── aggregations [outer=(2)]
            └── max [type=int, outer=(2)]
-                └── variable: a.y [type=int, outer=(2)]
+                └── variable: y [type=int, outer=(2)]
 
 # Group by non-key.
 build
@@ -96,17 +102,19 @@ group-by
  ├── columns: y:2(int) sum:5(float)
  ├── grouping columns: y:2(int)
  ├── stats: [rows=400, distinct(2)=400]
- ├── keys: weak(2)
+ ├── key: (2)
+ ├── fd: (2)-->(5)
  ├── project
  │    ├── columns: y:2(int) z:3(float!null)
  │    ├── stats: [rows=2000, distinct(2)=400]
  │    └── scan a
  │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
  │         ├── stats: [rows=2000, distinct(2)=400]
- │         └── keys: (1) weak(3,4)
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── aggregations [outer=(3)]
       └── sum [type=float, outer=(3)]
-           └── variable: a.z [type=float, outer=(3)]
+           └── variable: z [type=float, outer=(3)]
 
 build
 SELECT max(x) FROM a GROUP BY y, z, s
@@ -118,18 +126,16 @@ project
       ├── columns: y:2(int) z:3(float!null) s:4(string) max:5(int)
       ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
       ├── stats: [rows=600, distinct(2-4)=600]
-      ├── keys: weak(3,4)
-      ├── project
+      ├── key: (2-4)
+      ├── fd: (3,4)~~>(2), (2-4)-->(5)
+      ├── scan a
       │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
       │    ├── stats: [rows=2000, distinct(2-4)=600]
-      │    ├── keys: (1) weak(3,4)
-      │    └── scan a
-      │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
-      │         ├── stats: [rows=2000, distinct(2-4)=600]
-      │         └── keys: (1) weak(3,4)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── aggregations [outer=(1)]
            └── max [type=int, outer=(1)]
-                └── variable: a.x [type=int, outer=(1)]
+                └── variable: x [type=int, outer=(1)]
 
 build
 SELECT min(x) FROM a GROUP BY y, z
@@ -141,18 +147,21 @@ project
       ├── columns: y:2(int) z:3(float!null) min:5(int)
       ├── grouping columns: y:2(int) z:3(float!null)
       ├── stats: [rows=2000, distinct(2,3)=2000]
-      ├── keys: weak(2,3)
+      ├── key: (2,3)
+      ├── fd: (2,3)-->(5)
       ├── project
       │    ├── columns: x:1(int!null) y:2(int) z:3(float!null)
       │    ├── stats: [rows=2000, distinct(2,3)=2000]
-      │    ├── keys: (1)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
       │    └── scan a
       │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
       │         ├── stats: [rows=2000, distinct(2,3)=2000]
-      │         └── keys: (1) weak(3,4)
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── aggregations [outer=(1)]
            └── min [type=int, outer=(1)]
-                └── variable: a.x [type=int, outer=(1)]
+                └── variable: x [type=int, outer=(1)]
 
 build
 SELECT max(x) FROM a GROUP BY y, z, s HAVING s IN ('a', 'b')
@@ -163,59 +172,84 @@ project
  └── select
       ├── columns: y:2(int) z:3(float!null) s:4(string!null) max:5(int)
       ├── stats: [rows=120, distinct(4)=2]
-      ├── keys: (3,4)
+      ├── key: (3,4)
+      ├── fd: (3,4)-->(2), (2-4)-->(5)
       ├── group-by
       │    ├── columns: y:2(int) z:3(float!null) s:4(string) max:5(int)
       │    ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
       │    ├── stats: [rows=600, distinct(4)=10, distinct(2-4)=600]
-      │    ├── keys: weak(3,4)
-      │    ├── project
+      │    ├── key: (2-4)
+      │    ├── fd: (3,4)~~>(2), (2-4)-->(5)
+      │    ├── scan a
       │    │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
       │    │    ├── stats: [rows=2000, distinct(4)=10, distinct(2-4)=600]
-      │    │    ├── keys: (1) weak(3,4)
-      │    │    └── scan a
-      │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
-      │    │         ├── stats: [rows=2000, distinct(4)=10, distinct(2-4)=600]
-      │    │         └── keys: (1) weak(3,4)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │    └── aggregations [outer=(1)]
       │         └── max [type=int, outer=(1)]
-      │              └── variable: a.x [type=int, outer=(1)]
+      │              └── variable: x [type=int, outer=(1)]
       └── filters [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
-           └── in [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
-                ├── variable: a.s [type=string, outer=(4)]
-                └── tuple [type=tuple{string, string}]
-                     ├── const: 'a' [type=string]
-                     └── const: 'b' [type=string]
+           └── s IN ('a', 'b') [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
 
 # Estimate the distinct count for an aggregate column.
 build
 SELECT sum(x), s FROM a GROUP BY s HAVING sum(x) = 5
 ----
-project
+select
  ├── columns: sum:5(decimal!null) s:4(string)
- ├── stats: [rows=1]
- ├── keys: weak(4)
- └── select
-      ├── columns: s:4(string) column5:5(decimal!null)
-      ├── stats: [rows=1, distinct(5)=1]
-      ├── keys: weak(4)
-      ├── group-by
-      │    ├── columns: s:4(string) column5:5(decimal)
-      │    ├── grouping columns: s:4(string)
-      │    ├── stats: [rows=10, distinct(4)=10, distinct(5)=10]
-      │    ├── keys: weak(4)
-      │    ├── project
-      │    │    ├── columns: x:1(int!null) s:4(string)
-      │    │    ├── stats: [rows=2000, distinct(4)=10]
-      │    │    ├── keys: (1)
-      │    │    └── scan a
-      │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
-      │    │         ├── stats: [rows=2000, distinct(4)=10]
-      │    │         └── keys: (1) weak(3,4)
-      │    └── aggregations [outer=(1)]
-      │         └── sum [type=decimal, outer=(1)]
-      │              └── variable: a.x [type=int, outer=(1)]
-      └── filters [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight)]
-           └── eq [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight)]
-                ├── variable: column5 [type=decimal, outer=(5)]
-                └── const: 5 [type=decimal]
+ ├── stats: [rows=1, distinct(5)=1]
+ ├── key: (4)
+ ├── fd: ()-->(5)
+ ├── group-by
+ │    ├── columns: s:4(string) sum:5(decimal)
+ │    ├── grouping columns: s:4(string)
+ │    ├── stats: [rows=10, distinct(4)=10, distinct(5)=10]
+ │    ├── key: (4)
+ │    ├── fd: (4)-->(5)
+ │    ├── project
+ │    │    ├── columns: x:1(int!null) s:4(string)
+ │    │    ├── stats: [rows=2000, distinct(4)=10]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(4)
+ │    │    └── scan a
+ │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ │    │         ├── stats: [rows=2000, distinct(4)=10]
+ │    │         ├── key: (1)
+ │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    └── aggregations [outer=(1)]
+ │         └── sum [type=decimal, outer=(1)]
+ │              └── variable: x [type=int, outer=(1)]
+ └── filters [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
+      └── sum = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight)]
+
+# Scalar GroupBy.
+build
+SELECT max(y), sum(z) FROM a HAVING sum(z) = 5.0
+----
+select
+ ├── columns: max:5(int) sum:6(float!null)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(6)=1]
+ ├── key: ()
+ ├── fd: ()-->(5,6)
+ ├── scalar-group-by
+ │    ├── columns: max:5(int) sum:6(float)
+ │    ├── cardinality: [1 - 1]
+ │    ├── stats: [rows=1, distinct(6)=1]
+ │    ├── key: ()
+ │    ├── fd: ()-->(5,6)
+ │    ├── project
+ │    │    ├── columns: y:2(int) z:3(float!null)
+ │    │    ├── stats: [rows=2000]
+ │    │    └── scan a
+ │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ │    │         ├── stats: [rows=2000]
+ │    │         ├── key: (1)
+ │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    └── aggregations [outer=(2,3)]
+ │         ├── max [type=int, outer=(2)]
+ │         │    └── variable: y [type=int, outer=(2)]
+ │         └── sum [type=float, outer=(3)]
+ │              └── variable: z [type=float, outer=(3)]
+ └── filters [type=bool, outer=(6), constraints=(/6: [/5.0 - /5.0]; tight), fd=()-->(6)]
+      └── sum = 5.0 [type=bool, outer=(6), constraints=(/6: [/5.0 - /5.0]; tight)]

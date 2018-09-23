@@ -11,7 +11,6 @@ package workloadccl
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -71,8 +70,6 @@ func TestFixture(t *testing.T) {
 		t.Skip("GS_BUCKET and GS_JSONKEY env vars must be set")
 	}
 
-	// This prevents leaking an http conn goroutine.
-	http.DefaultTransport.(*http.Transport).DisableKeepAlives = true
 	source, err := google.JWTConfigFromJSON([]byte(gcsKey), storage.ScopeReadWrite)
 	if err != nil {
 		t.Fatalf(`%+v`, err)
@@ -136,5 +133,5 @@ func TestFixture(t *testing.T) {
 		t.Fatalf(`%+v`, err)
 	}
 	sqlDB.CheckQueryResults(t,
-		`SELECT COUNT(*) FROM test.fx`, [][]string{{strconv.Itoa(fixtureTestGenRows)}})
+		`SELECT count(*) FROM test.fx`, [][]string{{strconv.Itoa(fixtureTestGenRows)}})
 }

@@ -56,10 +56,14 @@ func ResolveIntentRange(
 	// Use a time-bounded iterator as an optimization if indicated.
 	var iterAndBuf engine.IterAndBuf
 	if args.MinTimestamp != (hlc.Timestamp{}) {
-		iter := batch.NewTimeBoundIterator(args.MinTimestamp, args.IntentTxn.Timestamp, false)
+		iter := batch.NewIterator(engine.IterOptions{
+			MinTimestampHint: args.MinTimestamp,
+			MaxTimestampHint: args.IntentTxn.Timestamp,
+			UpperBound:       args.EndKey,
+		})
 		iterAndBuf = engine.GetBufUsingIter(iter)
 	} else {
-		iterAndBuf = engine.GetIterAndBuf(batch)
+		iterAndBuf = engine.GetIterAndBuf(batch, engine.IterOptions{UpperBound: args.EndKey})
 	}
 	defer iterAndBuf.Cleanup()
 
@@ -75,8 +79,14 @@ func ResolveIntentRange(
 		reply.ResumeSpan = resumeSpan
 		reply.ResumeReason = roachpb.RESUME_KEY_LIMIT
 	}
+
+	var res result.Result
+	res.Local.Metrics = resolveToMetricType(args.Status, args.Poison)
+
 	if WriteAbortSpanOnResolve(args.Status) {
-		return result.Result{}, SetAbortSpan(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison)
+		if err := SetAbortSpan(ctx, cArgs.EvalCtx, batch, ms, args.IntentTxn, args.Poison); err != nil {
+			return result.Result{}, err
+		}
 	}
-	return result.Result{}, nil
+	return res, nil
 }

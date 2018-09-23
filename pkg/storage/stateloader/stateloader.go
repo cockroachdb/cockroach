@@ -19,8 +19,8 @@ import (
 	"context"
 	"math"
 
-	"github.com/coreos/etcd/raft/raftpb"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft/raftpb"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -499,7 +499,7 @@ func (rsl StateLoader) SetTxnSpanGCThreshold(
 
 // LoadLastIndex loads the last index.
 func (rsl StateLoader) LoadLastIndex(ctx context.Context, reader engine.Reader) (uint64, error) {
-	iter := reader.NewIterator(engine.IterOptions{})
+	iter := reader.NewIterator(engine.IterOptions{UpperBound: roachpb.KeyMax})
 	defer iter.Close()
 
 	var lastIndex uint64

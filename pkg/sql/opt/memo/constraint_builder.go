@@ -165,6 +165,140 @@ func (cb *constraintsBuilder) buildSingleColumnConstraintConst(
 	return unconstrained, false
 }
 
+// buildConstraintForTupleIn handles the case where we have a tuple IN another
+// tuple, for instance:
+//
+//   (a, b, c) IN ((1, 2, 3), (4, 5, 6))
+//
+// This function is a less powerful version of makeSpansForTupleIn, since it
+// does not operate on a particular index.  The <tight> return value indicates
+// if the spans are exactly equivalent to the expression (and not weaker).
+// Assumes that ev is an InOp and both children are TupleOps.
+func (cb *constraintsBuilder) buildConstraintForTupleIn(
+	ev ExprView,
+) (_ *constraint.Set, tight bool) {
+	lhs, rhs := ev.Child(0), ev.Child(1)
+
+	// We can only constrain here if every element of rhs is a TupleOp.
+	for i, n := 0, rhs.ChildCount(); i < n; i++ {
+		val := rhs.Child(i)
+		if val.Operator() != opt.TupleOp {
+			return unconstrained, false
+		}
+	}
+
+	constrainedCols := make([]opt.OrderingColumn, 0, lhs.ChildCount())
+	colIdxsInLHS := make([]int, 0, lhs.ChildCount())
+	for i, n := 0, lhs.ChildCount(); i < n; i++ {
+		if colID, ok := lhs.Child(i).Private().(opt.ColumnID); ok {
+			// We can't constrain a column if it's compared to anything besides a constant.
+			allConstant := true
+			for j, m := 0, rhs.ChildCount(); j < m; j++ {
+				val := rhs.Child(j)
+
+				if val.Operator() != opt.TupleOp {
+					return unconstrained, false
+				}
+
+				if !val.Child(i).IsConstValue() {
+					allConstant = false
+					break
+				}
+			}
+
+			if allConstant {
+				constrainedCols = append(
+					constrainedCols,
+					opt.MakeOrderingColumn(colID, false /* descending */),
+				)
+				colIdxsInLHS = append(colIdxsInLHS, i)
+			}
+		}
+	}
+
+	if len(constrainedCols) == 0 {
+		return unconstrained, false
+	}
+
+	// If any of the LHS entries are not constrained then our constraints are not
+	// tight.
+	tight = (len(constrainedCols) == lhs.ChildCount())
+
+	keyCtx := constraint.KeyContext{EvalCtx: cb.evalCtx}
+	keyCtx.Columns.Init(constrainedCols)
+	var sp constraint.Span
+	var spans constraint.Spans
+	spans.Alloc(rhs.ChildCount())
+
+	keyCtx.Columns.Init(constrainedCols)
+	for i, n := 0, rhs.ChildCount(); i < n; i++ {
+		vals := make(tree.Datums, len(colIdxsInLHS))
+		val := rhs.Child(i)
+
+		hasNull := false
+		for j := range colIdxsInLHS {
+			elem := val.Child(colIdxsInLHS[j])
+			datum := ExtractConstDatum(elem)
+			if datum == tree.DNull {
+				hasNull = true
+				break
+			}
+			vals[j] = datum
+		}
+
+		// Nothing can match a tuple containing a NULL, so it introduces no
+		// constraints.
+		if hasNull {
+			// TODO(justin): consider redefining "tight" so that this is included in
+			// it.  The spans are not "exactly equivalent" in the presence of NULLs,
+			// because of examples like the following:
+			//   (x, y) IN ((1, 2), (NULL, 4))
+			// is not the same as
+			//   (x, y) IN ((1, 2)),
+			// because the former is NULL (not false) on (3,4).
+			tight = false
+			continue
+		}
+
+		key := constraint.MakeCompositeKey(vals...)
+		sp.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+		spans.Append(&sp)
+	}
+
+	spans.SortAndMerge(&keyCtx)
+
+	var c constraint.Constraint
+	c.Init(&keyCtx, &spans)
+	con := constraint.SingleConstraint(&c)
+
+	// Now add a constraint for each individual column. This makes extracting
+	// constant columns much simpler.
+	// TODO(justin): remove this when #27018 is resolved.
+	// We already have a constraint starting with the first column: the
+	// multi-column constraint we added above.
+	for i := 1; i < len(colIdxsInLHS); i++ {
+		var spans constraint.Spans
+		keyCtx := constraint.KeyContext{EvalCtx: cb.evalCtx}
+		keyCtx.Columns.InitSingle(constrainedCols[i])
+		for j, n := 0, rhs.ChildCount(); j < n; j++ {
+			val := rhs.Child(j)
+			elem := val.Child(colIdxsInLHS[i])
+			datum := ExtractConstDatum(elem)
+			key := constraint.MakeKey(datum)
+			var sp constraint.Span
+			sp.Init(key, constraint.IncludeBoundary, key, constraint.IncludeBoundary)
+			spans.Append(&sp)
+		}
+
+		spans.SortAndMerge(&keyCtx)
+		var c constraint.Constraint
+		c.Init(&keyCtx, &spans)
+		con = con.Intersect(cb.evalCtx, constraint.SingleConstraint(&c))
+	}
+
+	return con, tight
+}
+
 func (cb *constraintsBuilder) buildConstraintForTupleInequality(
 	ev ExprView,
 ) (_ *constraint.Set, tight bool) {
@@ -276,7 +410,7 @@ func (cb *constraintsBuilder) buildConstraints(ev ExprView) (_ *constraint.Set, 
 		// (e.g. when using optsteps).
 		if ev.ChildCount() > 0 {
 			c, tight := cb.getConstraints(ev.Child(0))
-			for i := 1; i < ev.ChildCount(); i++ {
+			for i, n := 1, ev.ChildCount(); i < n; i++ {
 				ci, tighti := cb.getConstraints(ev.Child(i))
 				c = c.Intersect(cb.evalCtx, ci)
 				tight = tight && tighti
@@ -301,7 +435,8 @@ func (cb *constraintsBuilder) buildConstraints(ev ExprView) (_ *constraint.Set, 
 			// Tuple inequality.
 			return cb.buildConstraintForTupleInequality(ev)
 
-			//TODO(radu): case opt.InOp:
+		case opt.InOp:
+			return cb.buildConstraintForTupleIn(ev)
 		}
 	}
 	if child0.Operator() == opt.VariableOp {

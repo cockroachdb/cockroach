@@ -17,10 +17,12 @@ package cockroach.server.serverpb;
 option go_package = "serverpb";
 
 import "config/zone.proto";
-import "sql/jobs/jobs.proto";
+import "jobs/jobspb/jobs.proto";
+import "server/serverpb/status.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/liveness.proto";
 import "storage/log.proto";
+import "util/metric/metric.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
@@ -115,6 +117,12 @@ message TableDetailsResponse {
 
     // default_value is the default value of this column.
     string default_value = 4;
+
+    // generation_expression is the generator expression if the column is computed.
+    string generation_expression = 5;
+
+    // hidden is whether this column is hidden.
+    bool hidden = 6;
   }
 
   message Index {
@@ -152,7 +160,7 @@ message TableDetailsResponse {
   // consider removing or renaming this field to reflect that difference. See
   // Github issue #5435 for more information.
   int64 range_count = 4;
-  // create_table_statement is the output of "SHOW CREATE TABLE" for this table;
+  // create_table_statement is the output of "SHOW CREATE" for this table;
   // it is a SQL statement that would re-create the table's current schema if
   // executed.
   string create_table_statement = 5;
@@ -375,6 +383,7 @@ message DecommissionStatusResponse {
     int32 node_id = 1 [ (gogoproto.customname) = "NodeID",
                         (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
     bool is_live = 2;
+    // The number of replicas on the node, computed by scanning meta2 ranges.
     int64 replica_count = 3;
     bool decommissioning = 4;
     bool draining = 5;
@@ -427,7 +436,7 @@ message LivenessResponse {
 message JobsRequest {
   int32 limit = 1;
   string status = 2;
-  cockroach.sql.jobs.Type type = 3;
+  cockroach.sql.jobs.jobspb.Type type = 3;
 }
 
 // JobsResponse contains the job record for each matching job.
@@ -448,6 +457,13 @@ message JobsResponse {
     google.protobuf.Timestamp modified = 10 [(gogoproto.stdtime) = true];
     float fraction_completed = 11;
     string error = 12;
+    // highwater_timestamp is the highwater timestamp returned as normal
+    // timestamp. This is appropriate for display to humans.
+    google.protobuf.Timestamp highwater_timestamp = 13 [(gogoproto.stdtime) = true];
+    // highwater_decimal is the highwater timestamp in the proprietary decimal
+    // form used by logical timestamps internally. This is appropriate to pass
+    // to a "AS OF SYSTEM TIME" SQL statement.
+    string highwater_decimal = 14;
   }
 
   repeated Job jobs = 1 [(gogoproto.nullable) = false];
@@ -514,10 +530,10 @@ message QueryPlanResponse {
   string distsql_physical_query_plan = 1 [(gogoproto.customname) = "DistSQLPhysicalQueryPlan"];
 }
 
-message ReplicaMatrixRequest {
+message DataDistributionRequest {
 }
 
-message ReplicaMatrixResponse {
+message DataDistributionResponse {
   message ZoneConfig {
     // cli_specifier is ".default" for the default zone config.
     // Otherwise, it's of the form [database.]table[@index[.partition]]
@@ -530,8 +546,7 @@ message ReplicaMatrixResponse {
   }
 
   message TableInfo {
-    map<int32, int64> replica_count_by_node_id = 1
-      [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    map<int32, int64> replica_count_by_node_id = 1 [(gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
 
     int64 zone_config_id = 2;
   }
@@ -546,6 +561,43 @@ message ReplicaMatrixResponse {
 
   // By zone config id.
   map<int64, ZoneConfig> zone_configs = 2 [(gogoproto.nullable) = false];
+}
+
+  // MetricMetadataRequest requests metadata for all metrics.
+message MetricMetadataRequest {
+}
+
+// MetricMetadataResponse contains the metadata for all metics.
+message MetricMetadataResponse {
+  map<string, cockroach.util.metric.Metadata> metadata = 1 [(gogoproto.nullable) = false];
+}
+
+message EnqueueRangeRequest {
+  // The node on which the queue should process the range. If node_id is 0,
+  // the request will be forwarded to all other nodes.
+  int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+                     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // The name of the replica queue to run the range through. Matched against
+  // each queue's name field. See the implementation of baseQueue for details.
+  string queue = 2;
+  // The ID of the range to run through the queue.
+  int32 range_id = 3 [(gogoproto.customname) = "RangeID",
+                      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  // If set, run the queue's process method without first checking whether the
+  // replica should be processed by calling shouldQueue.
+  bool skip_should_queue = 4;
+}
+
+message EnqueueRangeResponse {
+  message Details {
+    int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    // All trace events collected while processing the range in the queue.
+    repeated TraceEvent events = 2;
+    // The error message from the queue's processing, if any.
+    string error = 3;
+  }
+  repeated Details details = 1;
 }
 
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
@@ -722,9 +774,34 @@ service Admin {
     };
   }
 
-  rpc ReplicaMatrix(ReplicaMatrixRequest) returns (ReplicaMatrixResponse) {
+  rpc DataDistribution(DataDistributionRequest) returns (DataDistributionResponse) {
     option (google.api.http) = {
-      get: "/_admin/v1/replica_matrix"
+      get: "/_admin/v1/data_distribution"
+    };
+  }
+
+  // URL: /_admin/v1/metricmetadata
+  rpc AllMetricMetadata(MetricMetadataRequest) returns (MetricMetadataResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/metricmetadata"
+    };
+  }
+
+
+  // EnqueueRange runs the specified range through the specified queue on the
+  // range's leaseholder store, returning the detailed trace and error
+  // information from doing so. Parameters must be provided in the body of the
+  // POST request.
+  // For example:
+  //
+  // {
+  //   "queue": "raftlog",
+  //   "rangeId": 10
+  // }
+  rpc EnqueueRange(EnqueueRangeRequest) returns (EnqueueRangeResponse) {
+    option (google.api.http) = {
+      post: "/_admin/v1/enqueue_range"
+      body : "*"
     };
   }
 }

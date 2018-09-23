@@ -95,9 +95,11 @@ func TestFlowRegistry(t *testing.T) {
 		t.Error("looked up unregistered flow")
 	}
 
+	const flowStreamTimeout = 10 * time.Second
+
 	ctx := context.Background()
 	if err := reg.RegisterFlow(
-		ctx, id1, f1, nil /* inboundStreams */, flowStreamDefaultTimeout,
+		ctx, id1, f1, nil /* inboundStreams */, flowStreamTimeout,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +119,7 @@ func TestFlowRegistry(t *testing.T) {
 	go func() {
 		time.Sleep(jiffy)
 		if err := reg.RegisterFlow(
-			ctx, id1, f1, nil /* inboundStreams */, flowStreamDefaultTimeout,
+			ctx, id1, f1, nil /* inboundStreams */, flowStreamTimeout,
 		); err != nil {
 			t.Error(err)
 		}
@@ -152,7 +154,7 @@ func TestFlowRegistry(t *testing.T) {
 
 	time.Sleep(jiffy)
 	if err := reg.RegisterFlow(
-		ctx, id2, f2, nil /* inboundStreams */, flowStreamDefaultTimeout,
+		ctx, id2, f2, nil /* inboundStreams */, flowStreamTimeout,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +183,7 @@ func TestFlowRegistry(t *testing.T) {
 
 	wg1.Wait()
 	if err := reg.RegisterFlow(
-		ctx, id3, f3, nil /* inboundStreams */, flowStreamDefaultTimeout,
+		ctx, id3, f3, nil /* inboundStreams */, flowStreamTimeout,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +194,7 @@ func TestFlowRegistry(t *testing.T) {
 	go func() {
 		time.Sleep(jiffy)
 		if err := reg.RegisterFlow(
-			ctx, id4, f4, nil /* inboundStreams */, flowStreamDefaultTimeout,
+			ctx, id4, f4, nil /* inboundStreams */, flowStreamTimeout,
 		); err != nil {
 			t.Error(err)
 		}
@@ -530,13 +532,26 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 	// We create some flow; it doesn't matter what.
 	req := SetupFlowRequest{Version: Version}
 	req.Flow = FlowSpec{
-		Processors: []ProcessorSpec{{
-			Core: ProcessorCoreUnion{Values: &ValuesCoreSpec{}},
-			Output: []OutputRouterSpec{{
-				Type:    OutputRouterSpec_PASS_THROUGH,
-				Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
-			}},
-		}},
+		Processors: []ProcessorSpec{
+			{
+				Core: ProcessorCoreUnion{Values: &ValuesCoreSpec{}},
+				Output: []OutputRouterSpec{{
+					Type:    OutputRouterSpec_PASS_THROUGH,
+					Streams: []StreamEndpointSpec{{StreamID: 1, Type: StreamEndpointSpec_REMOTE}},
+				}},
+			},
+			{
+				Input: []InputSyncSpec{{
+					Type:    InputSyncSpec_UNORDERED,
+					Streams: []StreamEndpointSpec{{StreamID: 1, Type: StreamEndpointSpec_REMOTE}},
+				}},
+				Core: ProcessorCoreUnion{Noop: &NoopCoreSpec{}},
+				Output: []OutputRouterSpec{{
+					Type:    OutputRouterSpec_PASS_THROUGH,
+					Streams: []StreamEndpointSpec{{Type: StreamEndpointSpec_SYNC_RESPONSE}},
+				}},
+			},
+		},
 	}
 
 	types := make([]sqlbase.ColumnType, 0)
@@ -545,7 +560,7 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := flow.Start(ctx, func() {}); err != nil {
+	if err := flow.StartAsync(ctx, func() {}); err != nil {
 		t.Fatal(err)
 	}
 	flow.Wait()
@@ -557,4 +572,34 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 		t.Fatalf("expected draining err, got: %v", meta.Err)
 	}
 	flow.Cleanup(ctx)
+}
+
+// TestInboundStreamTimeoutIsRetryable verifies that a failure from an inbound
+// stream to connect in a timeout is considered retryable by
+// testutils.IsSQLRetryableError.
+// TODO(asubiotto): This error should also be considered retryable by clients.
+func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	fr := makeFlowRegistry(0)
+	wg := sync.WaitGroup{}
+	rb := &RowBuffer{}
+	inboundStreams := map[StreamID]*inboundStreamInfo{
+		0: {
+			receiver:  rb,
+			waitGroup: &wg,
+		},
+	}
+	wg.Add(1)
+	if err := fr.RegisterFlow(
+		context.Background(), FlowID{}, &Flow{}, inboundStreams, 0, /* timeout */
+	); err != nil {
+		t.Fatal(err)
+	}
+	wg.Wait()
+	if _, meta := rb.Next(); meta == nil {
+		t.Fatal("expected error but got no meta")
+	} else if !testutils.IsSQLRetryableError(meta.Err) {
+		t.Fatalf("unexpected error: %v", meta.Err)
+	}
 }

@@ -192,7 +192,7 @@ CREATE TABLE abc (
   a INT,
   b INT,
   c INT,
-  d CHAR,
+  d VARCHAR,
   PRIMARY KEY (a, b, c),
   UNIQUE INDEX bc (b, c),
   INDEX ba (b, a),
@@ -203,8 +203,11 @@ CREATE TABLE abc (
 statement ok
 INSERT INTO abc VALUES (1, 2, 3, 'one'), (4, 5, 6, 'Two')
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM abc ORDER BY a; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM abc ORDER BY a]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /abc/primary/1/2/3 -> NULL
@@ -214,8 +217,11 @@ fetched: /abc/primary/4/5/6 -> NULL
 fetched: /abc/primary/4/5/6/d -> 'Two'
 output row: [4 5 6 'Two']
 
+statement ok
+SET tracing = on,kv,results; SELECT a, b FROM abc ORDER BY b, a; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT a, b FROM abc ORDER BY b, a]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /abc/ba/2/1/3 -> NULL
@@ -301,8 +307,11 @@ nosort          ·      ·
 ·               table  abc@bc
 ·               spans  ALL
 
+statement ok
+SET tracing = on,kv,results; SELECT b, c FROM abc ORDER BY b, c; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT b, c FROM abc ORDER BY b, c]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /abc/bc/2/3 -> /1
@@ -310,8 +319,11 @@ output row: [2 3]
 fetched: /abc/bc/5/6 -> /4
 output row: [5 6]
 
+statement ok
+SET tracing = on,kv,results; SELECT a, b, c FROM abc ORDER BY b; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT a, b, c FROM abc ORDER BY b]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /abc/bc/2/3 -> /1
@@ -319,8 +331,11 @@ output row: [1 2 3]
 fetched: /abc/bc/5/6 -> /4
 output row: [4 5 6]
 
+statement ok
+SET tracing = on,kv,results; SELECT a FROM abc ORDER BY a DESC; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT a FROM abc ORDER BY a DESC]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /abc/primary/4/5/6/d -> 'Two'
@@ -610,7 +625,7 @@ statement ok
 CREATE TABLE a(x, y) AS VALUES (1, 1), (2, 2)
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY a.*
 ]
 ----
@@ -624,7 +639,7 @@ sort            ·         ·
 ·               spans     ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY (a.*)
 ]
 ----
@@ -698,8 +713,8 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo
 ----
 nosort     ·      ·       (k)     k!=NULL
- │         order  -v      ·       ·
- └── scan  ·      ·       (k, v)  k!=NULL; weak-key(k,v); -v
+ │         order  -v,+k   ·       ·
+ └── scan  ·      ·       (k, v)  k!=NULL; weak-key(k,v); -v,+k
 ·          table  kv@foo  ·       ·
 ·          spans  ALL     ·       ·
 
@@ -707,8 +722,8 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo ASC
 ----
 nosort     ·      ·       (k)     k!=NULL
- │         order  -v      ·       ·
- └── scan  ·      ·       (k, v)  k!=NULL; weak-key(k,v); -v
+ │         order  -v,+k   ·       ·
+ └── scan  ·      ·       (k, v)  k!=NULL; weak-key(k,v); -v,+k
 ·          table  kv@foo  ·       ·
 ·          spans  ALL     ·       ·
 
@@ -716,8 +731,8 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv ORDER BY INDEX kv@foo DESC
 ----
 nosort        ·      ·       (k)     k!=NULL
- │            order  +v      ·       ·
- └── revscan  ·      ·       (k, v)  k!=NULL; weak-key(k,v); +v
+ │            order  +v,-k   ·       ·
+ └── revscan  ·      ·       (k, v)  k!=NULL; weak-key(k,v); +v,-k
 ·             table  kv@foo  ·       ·
 ·             spans  ALL     ·       ·
 
@@ -740,7 +755,7 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv JOIN (VALUES (1,2)) AS z(a,b) ON kv.k = z.a ORDER BY INDEX kv@foo
 ----
 sort                   ·              ·                 (k)                             ·
- │                     order          -v                ·                               ·
+ │                     order          -v,+k             ·                               ·
  └── render            ·              ·                 (k, v)                          ·
       │                render 0       test.public.kv.k  ·                               ·
       │                render 1       test.public.kv.v  ·                               ·
@@ -757,38 +772,40 @@ sort                   ·              ·                 (k)                   
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
 ----
-sort                 ·               ·                 (k)                             k!=NULL; key(k)
- │                   order           -v                ·                               ·
- └── render          ·               ·                 (k, v)                          k!=NULL; v!=NULL; key(k)
-      │              render 0        a.k               ·                               ·
-      │              render 1        test.public.kv.v  ·                               ·
-      └── join       ·               ·                 (k, v[omitted], k[omitted], v)  k=k; v=v; k!=NULL; v!=NULL; key(k)
-           │         type            inner             ·                               ·
-           │         equality        (k, v) = (k, v)   ·                               ·
-           │         mergeJoinOrder  +"(k=k)"          ·                               ·
-           ├── scan  ·               ·                 (k, v)                          k!=NULL; key(k); +k
-           │         table           kv@primary        ·                               ·
-           │         spans           ALL               ·                               ·
-           └── scan  ·               ·                 (k, v)                          k!=NULL; key(k); +k
-·                    table           kv@primary        ·                               ·
-·                    spans           ALL               ·                               ·
+sort                 ·               ·                 (k)                    k!=NULL; key(k)
+ │                   order           -v,+k             ·                      ·
+ └── render          ·               ·                 (k, v, k)              k=k; k!=NULL; v!=NULL; key(k)
+      │              render 0        a.k               ·                      ·
+      │              render 1        test.public.kv.v  ·                      ·
+      │              render 2        test.public.kv.k  ·                      ·
+      └── join       ·               ·                 (k, v[omitted], k, v)  k=k; v=v; k!=NULL; v!=NULL; key(k)
+           │         type            inner             ·                      ·
+           │         equality        (k, v) = (k, v)   ·                      ·
+           │         mergeJoinOrder  +"(k=k)"          ·                      ·
+           ├── scan  ·               ·                 (k, v)                 k!=NULL; key(k); +k
+           │         table           kv@primary        ·                      ·
+           │         spans           ALL               ·                      ·
+           └── scan  ·               ·                 (k, v)                 k!=NULL; key(k); +k
+·                    table           kv@primary        ·                      ·
+·                    spans           ALL               ·                      ·
 
 # The underlying index can be forced manually, of course.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv@foo a NATURAL JOIN kv@foo ORDER BY INDEX kv@foo
 ----
-nosort               ·               ·                  (k)                             k!=NULL
- │                   order           -v                 ·                               ·
- └── render          ·               ·                  (k, v)                          k!=NULL; v!=NULL; -v
-      │              render 0        a.k                ·                               ·
-      │              render 1        test.public.kv.v   ·                               ·
-      └── join       ·               ·                  (k, v[omitted], k[omitted], v)  k=k; v=v; k!=NULL; v!=NULL; -v
-           │         type            inner              ·                               ·
-           │         equality        (k, v) = (k, v)    ·                               ·
-           │         mergeJoinOrder  -"(v=v)",+"(k=k)"  ·                               ·
-           ├── scan  ·               ·                  (k, v)                          k!=NULL; weak-key(k,v); -v,+k
-           │         table           kv@foo             ·                               ·
-           │         spans           ALL                ·                               ·
-           └── scan  ·               ·                  (k, v)                          k!=NULL; weak-key(k,v); -v,+k
-·                    table           kv@foo             ·                               ·
-·                    spans           ALL                ·                               ·
+nosort               ·               ·                  (k)                    k!=NULL
+ │                   order           -v,+k              ·                      ·
+ └── render          ·               ·                  (k, v, k)              k=k; k!=NULL; v!=NULL; -v,+k
+      │              render 0        a.k                ·                      ·
+      │              render 1        test.public.kv.v   ·                      ·
+      │              render 2        test.public.kv.k   ·                      ·
+      └── join       ·               ·                  (k, v[omitted], k, v)  k=k; v=v; k!=NULL; v!=NULL; -v,+k
+           │         type            inner              ·                      ·
+           │         equality        (k, v) = (k, v)    ·                      ·
+           │         mergeJoinOrder  -"(v=v)",+"(k=k)"  ·                      ·
+           ├── scan  ·               ·                  (k, v)                 k!=NULL; weak-key(k,v); -v,+k
+           │         table           kv@foo             ·                      ·
+           │         spans           ALL                ·                      ·
+           └── scan  ·               ·                  (k, v)                 k!=NULL; weak-key(k,v); -v,+k
+·                    table           kv@foo             ·                      ·
+·                    spans           ALL                ·                      ·

@@ -6,7 +6,7 @@
 //
 //     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
 
-#include "../db.h"
+#include "db.h"
 #include <iostream>
 #include <libroachccl.h>
 #include <memory>
@@ -18,10 +18,12 @@
 #include "../comparator.h"
 #include "../encoding.h"
 #include "../env_manager.h"
+#include "../options.h"
 #include "../rocksdbutils/env_encryption.h"
 #include "../status.h"
 #include "ccl/baseccl/encryption_options.pb.h"
 #include "ccl/storageccl/engineccl/enginepbccl/stats.pb.h"
+#include "crypto_utils.h"
 #include "ctr_stream.h"
 #include "key_manager.h"
 
@@ -31,31 +33,24 @@ namespace cockroach {
 
 class CCLEnvStatsHandler : public EnvStatsHandler {
  public:
-  explicit CCLEnvStatsHandler(KeyManager* store_key_manager, KeyManager* data_key_manager)
-      : store_key_manager_(store_key_manager), data_key_manager_(data_key_manager) {}
+  explicit CCLEnvStatsHandler(DataKeyManager* data_key_manager)
+      : data_key_manager_(data_key_manager) {}
   virtual ~CCLEnvStatsHandler() {}
 
   virtual rocksdb::Status GetEncryptionStats(std::string* serialized_stats) override {
-    enginepbccl::EncryptionStatus enc_status;
-
-    bool has_stats = false;
-    if (store_key_manager_ != nullptr) {
-      has_stats = true;
-      // CurrentKeyInfo returns a unique_ptr containing a copy. Transfer ownership from the
-      // unique_ptr to the proto. set_allocated_active_store deletes the existing field, if any.
-      enc_status.set_allocated_active_store_key(store_key_manager_->CurrentKeyInfo().release());
-    }
-
-    if (data_key_manager_ != nullptr) {
-      has_stats = true;
-      // CurrentKeyInfo returns a unique_ptr containing a copy. Transfer ownership from the
-      // unique_ptr to the proto. set_allocated_active_store deletes the existing field, if any.
-      enc_status.set_allocated_active_data_key(data_key_manager_->CurrentKeyInfo().release());
-    }
-
-    if (!has_stats) {
+    if (data_key_manager_ == nullptr) {
       return rocksdb::Status::OK();
     }
+
+    enginepbccl::EncryptionStatus enc_status;
+
+    // GetActiveStoreKeyInfo returns a unique_ptr containing a copy. Transfer ownership from the
+    // unique_ptr to the proto. set_allocated_active_store deletes the existing field, if any.
+    enc_status.set_allocated_active_store_key(data_key_manager_->GetActiveStoreKeyInfo().release());
+
+    // CurrentKeyInfo returns a unique_ptr containing a copy. Transfer ownership from the
+    // unique_ptr to the proto. set_allocated_active_store deletes the existing field, if any.
+    enc_status.set_allocated_active_data_key(data_key_manager_->CurrentKeyInfo().release());
 
     if (!enc_status.SerializeToString(serialized_stats)) {
       return rocksdb::Status::InvalidArgument("failed to serialize encryption status");
@@ -63,16 +58,69 @@ class CCLEnvStatsHandler : public EnvStatsHandler {
     return rocksdb::Status::OK();
   }
 
+  virtual rocksdb::Status GetEncryptionRegistry(std::string* serialized_registry) override {
+    if (data_key_manager_ == nullptr) {
+      return rocksdb::Status::OK();
+    }
+
+    auto key_registry = data_key_manager_->GetScrubbedRegistry();
+    if (key_registry == nullptr) {
+      return rocksdb::Status::OK();
+    }
+
+    if (!key_registry->SerializeToString(serialized_registry)) {
+      return rocksdb::Status::InvalidArgument("failed to serialize data keys registry");
+    }
+
+    return rocksdb::Status::OK();
+  }
+
+  virtual std::string GetActiveDataKeyID() override {
+    // Look up the current data key.
+    if (data_key_manager_ == nullptr) {
+      // No data key manager: plaintext.
+      return kPlainKeyID;
+    }
+
+    auto active_key_info = data_key_manager_->CurrentKeyInfo();
+    if (active_key_info == nullptr) {
+      // Plaintext.
+      return kPlainKeyID;
+    }
+    return active_key_info->key_id();
+  }
+
+  virtual rocksdb::Status GetFileEntryKeyID(const enginepb::FileEntry* entry,
+                                            std::string* id) override {
+    if (entry == nullptr) {
+      // No file entry: file written in plaintext before the file registry was used.
+      *id = kPlainKeyID;
+      return rocksdb::Status::OK();
+    }
+
+    enginepbccl::EncryptionSettings enc_settings;
+    if (!enc_settings.ParseFromString(entry->encryption_settings())) {
+      return rocksdb::Status::InvalidArgument("failed to parse encryption settings");
+    }
+
+    if (enc_settings.encryption_type() == enginepbccl::Plaintext) {
+      *id = kPlainKeyID;
+    } else {
+      *id = enc_settings.key_id();
+    }
+
+    return rocksdb::Status::OK();
+  }
+
  private:
-  // KeyManagers are needed to get key information but are not owned by the StatsHandler.
-  KeyManager* store_key_manager_;
-  KeyManager* data_key_manager_;
+  // The DataKeyManager is needed to get key information but is not owned by the StatsHandler.
+  DataKeyManager* data_key_manager_;
 };
 
-// DBOpenHook parses the extra_options field of DBOptions and initializes encryption objects if
-// needed.
-rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log, const std::string& db_dir,
-                           const DBOptions db_opts, EnvManager* env_mgr) {
+// DBOpenHookCCL parses the extra_options field of DBOptions and initializes
+// encryption objects if needed.
+rocksdb::Status DBOpenHookCCL(std::shared_ptr<rocksdb::Logger> info_log, const std::string& db_dir,
+                              const DBOptions db_opts, EnvManager* env_mgr) {
   DBSlice options = db_opts.extra_options;
   if (options.len == 0) {
     return rocksdb::Status::OK();
@@ -83,6 +131,26 @@ rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log, const std:
   if (!db_opts.use_file_registry) {
     return rocksdb::Status::InvalidArgument(
         "on-disk version does not support encryption, but we found encryption flags");
+  }
+
+  // We use a logger at V(0) for encryption status instead of the existing info_log.
+  // This should only be used to occasional logging (eg: key loading and rotation).
+  std::shared_ptr<rocksdb::Logger> logger(NewDBLogger(0));
+
+  // We have encryption options. Check whether the AES instruction set is supported.
+  if (!UsesAESNI()) {
+    rocksdb::Warn(
+        logger, "*** WARNING*** Encryption requested, but no AES instruction set detected: expect "
+                "significant performance degradation!");
+  }
+
+  // Attempt to disable core dumps.
+  auto status = DisableCoreFile();
+  if (!status.ok()) {
+    rocksdb::Warn(logger,
+                  "*** WARNING*** Encryption requested, but could not disable core dumps: %s. Keys "
+                  "may be leaked in core dumps!",
+                  status.getState());
   }
 
   // Parse extra_options.
@@ -98,8 +166,8 @@ rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log, const std:
   // Initialize store key manager.
   // NOTE: FileKeyManager uses the default env as the MemEnv can never have pre-populated files.
   FileKeyManager* store_key_manager = new FileKeyManager(
-      rocksdb::Env::Default(), opts.key_files().current_key(), opts.key_files().old_key());
-  rocksdb::Status status = store_key_manager->LoadKeys();
+      rocksdb::Env::Default(), logger, opts.key_files().current_key(), opts.key_files().old_key());
+  status = store_key_manager->LoadKeys();
   if (!status.ok()) {
     delete store_key_manager;
     return status;
@@ -117,7 +185,7 @@ rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log, const std:
 
   // Initialize data key manager using the stored-keyed-env.
   DataKeyManager* data_key_manager = new DataKeyManager(
-      store_keyed_env, db_dir, opts.data_key_rotation_period(), db_opts.read_only);
+      store_keyed_env, logger, db_dir, opts.data_key_rotation_period(), db_opts.read_only);
   status = data_key_manager->LoadKeys();
   if (!status.ok()) {
     delete data_key_manager;
@@ -142,19 +210,21 @@ rocksdb::Status DBOpenHook(std::shared_ptr<rocksdb::Logger> info_log, const std:
   if (!db_opts.read_only) {
     // Generate a new data key if needed by giving the active store key info to the data key
     // manager.
-    status = data_key_manager->SetActiveStoreKey(std::move(store_key));
+    status = data_key_manager->SetActiveStoreKeyInfo(std::move(store_key));
     if (!status.ok()) {
       return status;
     }
   }
 
   // Everything's ok: initialize a stats handler.
-  env_mgr->SetStatsHandler(new CCLEnvStatsHandler(store_key_manager, data_key_manager));
+  env_mgr->SetStatsHandler(new CCLEnvStatsHandler(data_key_manager));
 
   return rocksdb::Status::OK();
 }
 
 }  // namespace cockroach
+
+void* DBOpenHookCCL = (void*)cockroach::DBOpenHookCCL;
 
 DBStatus DBBatchReprVerify(DBSlice repr, DBKey start, DBKey end, int64_t now_nanos,
                            MVCCStatsResult* stats) {

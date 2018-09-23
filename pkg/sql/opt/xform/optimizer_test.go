@@ -15,9 +15,10 @@
 package xform_test
 
 import (
+	"flag"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
@@ -30,7 +31,7 @@ import (
 func TestCoster(t *testing.T) {
 	runDataDrivenTest(
 		t, "testdata/coster/",
-		opt.ExprFmtHideRuleProps|opt.ExprFmtHideQualifications|opt.ExprFmtHideScalars,
+		memo.ExprFmtHideRuleProps|memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars,
 	)
 }
 
@@ -39,7 +40,22 @@ func TestCoster(t *testing.T) {
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/presentation"
 //   ...
 func TestPhysicalPropsFactory(t *testing.T) {
-	runDataDrivenTest(t, "testdata/physprops/", opt.ExprFmtHideAll)
+	runDataDrivenTest(t, "testdata/physprops/", memo.ExprFmtHideAll)
+}
+
+// TestRuleProps files can be run separately like this:
+//   make test PKG=./pkg/sql/opt/xform TESTS="TestRuleProps/orderings"
+//   ...
+func TestRuleProps(t *testing.T) {
+	datadriven.Walk(t, "testdata/ruleprops", func(t *testing.T, path string) {
+		catalog := testcat.New()
+		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
+			tester := testutils.NewOptTester(catalog, d.Input)
+			tester.Flags.ExprFormat = memo.ExprFmtHideStats | memo.ExprFmtHideCost |
+				memo.ExprFmtHideQualifications | memo.ExprFmtHideScalars
+			return tester.RunCommand(t, d)
+		})
+	})
 }
 
 // TestRules files can be run separately like this:
@@ -50,10 +66,14 @@ func TestRules(t *testing.T) {
 	runDataDrivenTest(
 		t,
 		"testdata/rules/",
-		opt.ExprFmtHideStats|opt.ExprFmtHideCost|opt.ExprFmtHideRuleProps|
-			opt.ExprFmtHideQualifications|opt.ExprFmtHideScalars,
+		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
+			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars,
 	)
 }
+
+var externalTestData = flag.String(
+	"d", "testdata/external/", "test files directory for TestExternal",
+)
 
 // TestExternal contains test cases from external customers and external
 // benchmarks (like TPCH), so that changes in their query plans can be monitored
@@ -62,12 +82,16 @@ func TestRules(t *testing.T) {
 // TestExternal files can be run separately like this:
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestExternal/tpch"
 //   ...
+//
+// Test files from another location can be run using the -d flag:
+//   make test PKG=./pkg/sql/opt/xform TESTS=TestExternal TESTFLAGS='-d /some-dir'
+//
 func TestExternal(t *testing.T) {
 	runDataDrivenTest(
 		t,
-		"testdata/external/",
-		opt.ExprFmtHideStats|opt.ExprFmtHideCost|opt.ExprFmtHideRuleProps|
-			opt.ExprFmtHideQualifications|opt.ExprFmtHideScalars,
+		*externalTestData,
+		memo.ExprFmtHideStats|memo.ExprFmtHideCost|memo.ExprFmtHideRuleProps|
+			memo.ExprFmtHideQualifications|memo.ExprFmtHideScalars,
 	)
 }
 
@@ -78,7 +102,7 @@ func TestExternal(t *testing.T) {
 //   <expected results>
 //
 // See OptTester.Handle for supported commands.
-func runDataDrivenTest(t *testing.T, path string, fmtFlags opt.ExprFmtFlags) {
+func runDataDrivenTest(t *testing.T, path string, fmtFlags memo.ExprFmtFlags) {
 	datadriven.Walk(t, path, func(t *testing.T, path string) {
 		catalog := testcat.New()
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {

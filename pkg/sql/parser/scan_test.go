@@ -15,6 +15,7 @@
 package parser
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -81,16 +82,14 @@ func TestScanner(t *testing.T) {
 		{`"a" "b"`, []int{IDENT, IDENT}},
 		{`'a'`, []int{SCONST}},
 		{`b'a'`, []int{BCONST}},
-		{`B'a'`, []int{BCONST}},
 		{`b'\xff'`, []int{BCONST}},
-		{`B'\xff'`, []int{BCONST}},
+		{`B'10101'`, []int{BITCONST}},
 		{`e'a'`, []int{SCONST}},
 		{`E'a'`, []int{SCONST}},
 		{`NOT`, []int{NOT}},
 		{`NOT BETWEEN`, []int{NOT_LA, BETWEEN}},
 		{`NOT IN`, []int{NOT_LA, IN}},
 		{`NOT SIMILAR`, []int{NOT_LA, SIMILAR}},
-		{`NULLS`, []int{NULLS}},
 		{`WITH`, []int{WITH}},
 		{`WITH TIME`, []int{WITH_LA, TIME}},
 		{`WITH ORDINALITY`, []int{WITH_LA, ORDINALITY}},
@@ -212,11 +211,11 @@ func TestScanNumber(t *testing.T) {
 func TestScanPlaceholder(t *testing.T) {
 	testData := []struct {
 		sql      string
-		expected int64
+		expected string
 	}{
-		{`$1`, 1},
-		{`$1a`, 1},
-		{`$123`, 123},
+		{`$1`, "1"},
+		{`$1a`, "1"},
+		{`$123`, "123"},
 	}
 	for _, d := range testData {
 		s := MakeScanner(d.sql)
@@ -225,10 +224,8 @@ func TestScanPlaceholder(t *testing.T) {
 		if id != PLACEHOLDER {
 			t.Errorf("%s: expected %d, but found %d", d.sql, PLACEHOLDER, id)
 		}
-		if i, err := lval.union.numVal().AsInt64(); err != nil {
-			t.Errorf("%s: expected success, but found %v", d.sql, err)
-		} else if d.expected != i {
-			t.Errorf("%s: expected %d, but found %d", d.sql, d.expected, i)
+		if d.expected != lval.str {
+			t.Errorf("%s: expected %s, but found %s", d.sql, d.expected, lval.str)
 		}
 	}
 }
@@ -294,6 +291,7 @@ world`},
 		{`x'666f6f'`, `foo`},
 		{`X'626172'`, `bar`},
 		{`X'FF'`, "\xff"},
+		{`B'100101'`, "100101"},
 	}
 	for _, d := range testData {
 		s := MakeScanner(d.sql)
@@ -325,6 +323,7 @@ func TestScanError(t *testing.T) {
 		{`X'beef\x41\x41'`, "invalid hexadecimal bytes literal"},
 		{`x'a'`, "invalid hexadecimal bytes literal"},
 		{`$9223372036854775809`, "integer value out of range"},
+		{`B'123'`, `"2" is not a valid binary digit`},
 	}
 	for _, d := range testData {
 		s := MakeScanner(d.sql)
@@ -336,5 +335,52 @@ func TestScanError(t *testing.T) {
 		if !testutils.IsError(pgerror.NewError(pgerror.CodeInternalError, lval.str), d.err) {
 			t.Errorf("%s: expected %s, but found %v", d.sql, d.err, lval.str)
 		}
+	}
+}
+
+func TestScanUntil(t *testing.T) {
+	tests := []struct {
+		s     string
+		until int
+		pos   int
+	}{
+		{
+			``,
+			0,
+			0,
+		},
+		{
+			`;`,
+			';',
+			1,
+		},
+		{
+			`;`,
+			'a',
+			0,
+		},
+		{
+			"123;",
+			';',
+			4,
+		},
+		{
+			`
+--SELECT 1, 2, 3;
+SELECT 4, 5;
+--blah`,
+			';',
+			31,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("%c: %q", tc.until, tc.s), func(t *testing.T) {
+			s := MakeScanner(tc.s)
+			pos := s.Until(tc.until)
+			if pos != tc.pos {
+				t.Fatalf("got %d; expected %d", pos, tc.pos)
+			}
+		})
 	}
 }

@@ -70,10 +70,12 @@ func DatumTypeToColumnType(t types.T) (T, error) {
 	switch t {
 	case types.Bool:
 		return Bool, nil
+	case types.BitArray:
+		return VarBit, nil
 	case types.Int:
 		return Int, nil
 	case types.Float:
-		return Float, nil
+		return Float8, nil
 	case types.Decimal:
 		return Decimal, nil
 	case types.Timestamp:
@@ -92,8 +94,6 @@ func DatumTypeToColumnType(t types.T) (T, error) {
 		return Date, nil
 	case types.Time:
 		return Time, nil
-	case types.TimeTZ:
-		return TimeTZ, nil
 	case types.String:
 		return String, nil
 	case types.Name:
@@ -111,7 +111,10 @@ func DatumTypeToColumnType(t types.T) (T, error) {
 
 	switch typ := t.(type) {
 	case types.TCollatedString:
-		return &TCollatedString{Name: "STRING", Locale: typ.Locale}, nil
+		return &TCollatedString{
+			TString: TString{Variant: TStringVariantSTRING},
+			Locale:  typ.Locale,
+		}, nil
 	case types.TArray:
 		elemTyp, err := DatumTypeToColumnType(typ.Typ)
 		if err != nil {
@@ -149,7 +152,11 @@ func CastTargetToDatumType(t CastTargetType) types.T {
 	switch ct := t.(type) {
 	case *TBool:
 		return types.Bool
+	case *TBitArray:
+		return types.BitArray
 	case *TInt:
+		return types.Int
+	case *TSerial:
 		return types.Int
 	case *TFloat:
 		return types.Float
@@ -165,8 +172,6 @@ func CastTargetToDatumType(t CastTargetType) types.T {
 		return types.Date
 	case *TTime:
 		return types.Time
-	case *TTimeTZ:
-		return types.TimeTZ
 	case *TTimestamp:
 		return types.Timestamp
 	case *TTimestampTZ:

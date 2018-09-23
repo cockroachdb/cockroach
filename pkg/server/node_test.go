@@ -36,9 +36,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -80,20 +82,22 @@ func createTestNode(
 	cfg.AmbientCtx.Tracer = st.Tracer
 	distSender := kv.NewDistSender(kv.DistSenderConfig{
 		AmbientCtx:      cfg.AmbientCtx,
+		Settings:        st,
 		Clock:           cfg.Clock,
 		RPCContext:      nodeRPCContext,
 		RPCRetryOptions: &retryOpts,
+		NodeDialer:      nodedialer.New(nodeRPCContext, gossip.AddressResolver(cfg.Gossip)),
 	}, cfg.Gossip)
 	tsf := kv.NewTxnCoordSenderFactory(
-		cfg.AmbientCtx,
-		st,
+		kv.TxnCoordSenderFactoryConfig{
+			AmbientCtx: cfg.AmbientCtx,
+			Settings:   st,
+			Clock:      cfg.Clock,
+			Stopper:    stopper,
+		},
 		distSender,
-		cfg.Clock,
-		false, /* linearizable */
-		stopper,
-		kv.MakeTxnMetrics(metric.TestSampleInterval),
 	)
-	cfg.DB = client.NewDB(tsf, cfg.Clock)
+	cfg.DB = client.NewDB(cfg.AmbientCtx, tsf, cfg.Clock)
 	cfg.Transport = storage.NewDummyRaftTransport(st)
 	active, renewal := cfg.NodeLivenessDurations()
 	cfg.HistogramWindowInterval = metric.TestSampleInterval
@@ -108,6 +112,8 @@ func createTestNode(
 		cfg.Settings,
 		cfg.HistogramWindowInterval,
 	)
+	cfg.ClosedTimestamp = container.NoopContainer()
+
 	storage.TimeUntilStoreDead.Override(&cfg.Settings.SV, 10*time.Millisecond)
 	cfg.StorePool = storage.NewStorePool(
 		cfg.AmbientCtx,
@@ -122,6 +128,7 @@ func createTestNode(
 		kv.MakeTxnMetrics(metric.TestSampleInterval), nil, /* execCfg */
 		&nodeRPCContext.ClusterID)
 	roachpb.RegisterInternalServer(grpcServer, node)
+	node.storeCfg.ClosedTimestamp.RegisterClosedTimestampServer(grpcServer)
 	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
 	if err != nil {
 		t.Fatal(err)
@@ -161,7 +168,9 @@ func createAndStartTestNode(
 		t.Fatal(err)
 	}
 	if err := node.start(context.Background(), addr, bootstrappedEngines, newEngines,
-		roachpb.Attributes{}, locality, cv); err != nil {
+		roachpb.Attributes{}, locality, cv, []roachpb.LocalityAddress{},
+		nil, /*nodeDescriptorCallback */
+	); err != nil {
 		t.Fatal(err)
 	}
 	if err := WaitForInitialSplits(node.storeCfg.DB); err != nil {
@@ -403,6 +412,8 @@ func TestCorruptedClusterID(t *testing.T) {
 	if err := node.start(
 		context.Background(), serverAddr, bootstrappedEngines, newEngines,
 		roachpb.Attributes{}, roachpb.Locality{}, cv,
+		[]roachpb.LocalityAddress{},
+		nil, /* nodeDescriptorCallback */
 	); !testutils.IsError(err, "unidentified store") {
 		t.Errorf("unexpected error %v", err)
 	}
@@ -428,7 +439,7 @@ func compareNodeStatus(
 
 	// Descriptor values should be exactly equal to expected.
 	if a, e := nodeStatus.Desc, expectedNodeStatus.Desc; !reflect.DeepEqual(a, e) {
-		t.Errorf("%d: Descriptor does not match expected.\nexpected: %s\nactual: %s", testNumber, e, a)
+		t.Errorf("%d: Descriptor does not match expected.\nexpected: %s\nactual: %s", testNumber, &e, &a)
 	}
 
 	// ========================================
@@ -535,6 +546,12 @@ func TestNodeStatusWritten(t *testing.T) {
 	// ========================================
 	srv, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		DisableEventLog: true,
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				// Prevent the merge queue from immediately discarding our splits.
+				DisableMergeQueue: true,
+			},
+		},
 	})
 	defer srv.Stopper().Stop(context.TODO())
 	ts := srv.(*TestServer)
@@ -586,7 +603,7 @@ func TestNodeStatusWritten(t *testing.T) {
 
 	expectedStoreStatuses := make(map[roachpb.StoreID]status.StoreStatus)
 	if err := ts.node.stores.VisitStores(func(s *storage.Store) error {
-		desc, err := s.Descriptor()
+		desc, err := s.Descriptor(false /* useCached */)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -736,7 +753,7 @@ func TestStartNodeWithLocality(t *testing.T) {
 		// Check the store to make sure the locality was propagated to its
 		// nodeDescriptor.
 		if err := node.stores.VisitStores(func(store *storage.Store) error {
-			desc, err := store.Descriptor()
+			desc, err := store.Descriptor(false /* useCached */)
 			if err != nil {
 				t.Fatal(err)
 			}

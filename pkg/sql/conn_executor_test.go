@@ -57,11 +57,11 @@ select * from crdb_internal.node_runtime_info;
 
 	const (
 		expMessage = "panic while testing 2 statements: INSERT INTO _(_, _) VALUES " +
-			"(_, _, _, _); SELECT * FROM _._; caused by i'm not safe"
+			"(_, _, __more2__); SELECT * FROM _._; caused by i'm not safe"
 		expSafeRedactedMessage = "?:0: panic while testing 2 statements: INSERT INTO _(_, _) VALUES " +
-			"(_, _, _, _); SELECT * FROM _._: caused by <redacted>"
+			"(_, _, __more2__); SELECT * FROM _._: caused by <redacted>"
 		expSafeSafeMessage = "?:0: panic while testing 2 statements: INSERT INTO _(_, _) VALUES " +
-			"(_, _, _, _); SELECT * FROM _._: caused by something safe"
+			"(_, _, __more2__); SELECT * FROM _._: caused by something safe"
 	)
 
 	actMessage := safeErr.Error()
@@ -84,6 +84,10 @@ select * from crdb_internal.node_runtime_info;
 
 // Test that a connection closed abruptly while a SQL txn is in progress results
 // in that txn being rolled back.
+//
+// TODO(andrei): This test terminates a client connection by calling Close() on
+// a driver.Conn(), which sends a MsgTerminate. We should also have a test that
+// closes the connection more abruptly than that.
 func TestSessionFinishRollsBackTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	aborter := NewTxnAborter()
@@ -201,6 +205,7 @@ CREATE TABLE t.public.test (k INT PRIMARY KEY, v TEXT);
 			// any errors.
 			// TODO(andrei): Figure out a better way to test for non-blocking.
 			// Use a trace when the client-side tracing story gets good enough.
+			// There's a bit of difficulty because the cleanup is async.
 			txCheck, err := mainDB.Begin()
 			if err != nil {
 				t.Fatal(err)

@@ -28,7 +28,7 @@ func (node *TDate) TypeName() string { return "DATE" }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TDate) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString("DATE")
+	buf.WriteString(node.TypeName())
 }
 
 // TTime represents a TIME type.
@@ -39,18 +39,7 @@ func (node *TTime) TypeName() string { return "TIME" }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TTime) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString("TIME")
-}
-
-// TTimeTZ represents a TIMETZ type.
-type TTimeTZ struct{}
-
-// TypeName implements the ColTypeFormatter interface.
-func (node *TTimeTZ) TypeName() string { return "TIMETZ" }
-
-// Format implements the ColTypeFormatter interface.
-func (node *TTimeTZ) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString("TIME WITH TIME ZONE")
+	buf.WriteString(node.TypeName())
 }
 
 // TTimestamp represents a TIMESTAMP type.
@@ -61,7 +50,7 @@ func (node *TTimestamp) TypeName() string { return "TIMESTAMP" }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TTimestamp) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString("TIMESTAMP")
+	buf.WriteString(node.TypeName())
 }
 
 // TTimestampTZ represents a TIMESTAMP type.
@@ -72,7 +61,7 @@ func (node *TTimestampTZ) TypeName() string { return "TIMESTAMPTZ" }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TTimestampTZ) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString("TIMESTAMP WITH TIME ZONE")
+	buf.WriteString(node.TypeName())
 }
 
 // TInterval represents an INTERVAL type
@@ -83,5 +72,5 @@ func (node *TInterval) TypeName() string { return "INTERVAL" }
 
 // Format implements the ColTypeFormatter interface.
 func (node *TInterval) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
-	buf.WriteString("INTERVAL")
+	buf.WriteString(node.TypeName())
 }

@@ -35,7 +35,7 @@
         $input:*
         $projections:* & (CanInline $projections)
     )
-    $filter:*
+    $filter:* & ^(HasCorrelatedSubquery $filter)
 )
 =>
 (Project

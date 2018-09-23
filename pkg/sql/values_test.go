@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -83,11 +84,11 @@ func TestValues(t *testing.T) {
 		return []tree.Datums{datums}
 	}
 
-	makeValues := func(tuples ...*tree.Tuple) *tree.ValuesClause {
-		return &tree.ValuesClause{Tuples: tuples}
+	makeValues := func(tuples ...tree.Exprs) *tree.ValuesClause {
+		return &tree.ValuesClause{Rows: tuples}
 	}
-	makeTuple := func(exprs ...tree.Expr) *tree.Tuple {
-		return &tree.Tuple{Exprs: exprs}
+	makeTuple := func(exprs ...tree.Expr) tree.Exprs {
+		return tree.Exprs(exprs)
 	}
 
 	testCases := []struct {
@@ -181,6 +182,7 @@ type stringAlias string
 
 func TestGolangQueryArgs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	// Each test case pairs an arbitrary value and tree.Datum which has the same
 	// type
 	testCases := []struct {
@@ -232,6 +234,9 @@ func TestGolangQueryArgs(t *testing.T) {
 		// Byte slice aliases.
 		{roachpb.Key("key"), reflect.TypeOf(types.Bytes)},
 		{roachpb.RKey("key"), reflect.TypeOf(types.Bytes)},
+
+		// Bit array.
+		{bitarray.MakeBitArrayFromInt64(8, 58, 7), reflect.TypeOf(types.BitArray)},
 	}
 
 	for i, tcase := range testCases {

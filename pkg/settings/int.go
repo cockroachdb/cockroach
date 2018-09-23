@@ -38,6 +38,16 @@ func (i *IntSetting) String(sv *Values) string {
 	return EncodeInt(i.Get(sv))
 }
 
+// Encoded returns the encoded value of the current value of the setting.
+func (i *IntSetting) Encoded(sv *Values) string {
+	return i.String(sv)
+}
+
+// EncodedDefault returns the encoded value of the default value of the setting.
+func (i *IntSetting) EncodedDefault() string {
+	return EncodeInt(i.defaultValue)
+}
+
 // Typ returns the short (1 char) string denoting the type of setting.
 func (*IntSetting) Typ() string {
 	return "i"
@@ -81,6 +91,16 @@ func (i *IntSetting) Default() int64 {
 // RegisterIntSetting defines a new setting with type int.
 func RegisterIntSetting(key, desc string, defaultValue int64) *IntSetting {
 	return RegisterValidatedIntSetting(key, desc, defaultValue, nil)
+}
+
+// RegisterNonNegativeIntSetting defines a new setting with type int.
+func RegisterNonNegativeIntSetting(key, desc string, defaultValue int64) *IntSetting {
+	return RegisterValidatedIntSetting(key, desc, defaultValue, func(v int64) error {
+		if v < 0 {
+			return errors.Errorf("cannot set %s to a negative value: %d", key, v)
+		}
+		return nil
+	})
 }
 
 // RegisterValidatedIntSetting defines a new setting with type int with a

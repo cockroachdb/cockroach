@@ -138,6 +138,383 @@ func TestInternScanOpDef(t *testing.T) {
 	test(scanDef3, scanDef4, false)
 	scanDef5 := &ScanOpDef{Table: 1, Index: 2, Cols: util.MakeFastIntSet(1, 2)}
 	test(scanDef3, scanDef5, false)
+	scanDef6 := &ScanOpDef{Table: 1, Index: 2, Cols: util.MakeFastIntSet(1, 2), HardLimit: 10}
+	test(scanDef5, scanDef6, false)
+	scanDef7 := &ScanOpDef{Table: 1, Index: 2, Cols: util.MakeFastIntSet(1, 2), HardLimit: -10}
+	test(scanDef5, scanDef7, false)
+	scanDef8 := &ScanOpDef{Table: 1, Index: 2, Cols: util.MakeFastIntSet(1, 2), Flags: ScanFlags{NoIndexJoin: true}}
+	test(scanDef5, scanDef8, false)
+	scanDef9 := &ScanOpDef{Table: 1, Index: 2, Cols: util.MakeFastIntSet(1, 2), Flags: ScanFlags{ForceIndex: true}}
+	test(scanDef5, scanDef9, false)
+	test(scanDef8, scanDef9, false)
+	scanDef10 := &ScanOpDef{Table: 1, Index: 2, Cols: util.MakeFastIntSet(1, 2), Flags: ScanFlags{ForceIndex: true, Index: 1}}
+	test(scanDef5, scanDef10, false)
+	test(scanDef8, scanDef10, false)
+	test(scanDef9, scanDef10, false)
+}
+
+func TestVirtualScanOpDef(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right *VirtualScanOpDef, expected bool) {
+		t.Helper()
+		leftID := ps.internVirtualScanOpDef(left)
+		rightID := ps.internVirtualScanOpDef(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+	testEQ := func(left, right *VirtualScanOpDef) {
+		t.Helper()
+		test(left, right, true)
+	}
+	testNE := func(left, right *VirtualScanOpDef) {
+		t.Helper()
+		test(left, right, false)
+	}
+
+	def1 := &VirtualScanOpDef{Table: 0, Cols: util.MakeFastIntSet(1, 2)}
+	def2 := &VirtualScanOpDef{Table: 0, Cols: util.MakeFastIntSet(1, 2, 3)}
+	def3 := &VirtualScanOpDef{Table: 1, Cols: util.MakeFastIntSet(1, 2)}
+	testEQ(def1, def1)
+	testNE(def1, def2)
+	testNE(def1, def3)
+	testNE(def2, def3)
+}
+
+func TestIndexJoinDef(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right *IndexJoinDef, expected bool) {
+		t.Helper()
+		leftID := ps.internIndexJoinDef(left)
+		rightID := ps.internIndexJoinDef(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+	testEQ := func(left, right *IndexJoinDef) {
+		t.Helper()
+		test(left, right, true)
+	}
+	testNE := func(left, right *IndexJoinDef) {
+		t.Helper()
+		test(left, right, false)
+	}
+
+	def1 := &IndexJoinDef{Table: 0, Cols: util.MakeFastIntSet(1, 2)}
+	def2 := &IndexJoinDef{Table: 0, Cols: util.MakeFastIntSet(1, 2, 3)}
+	def3 := &IndexJoinDef{Table: 1, Cols: util.MakeFastIntSet(1, 2)}
+	testEQ(def1, def1)
+	testNE(def1, def2)
+	testNE(def1, def3)
+	testNE(def2, def3)
+}
+
+func TestLookupJoinDef(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+	test := func(left, right *LookupJoinDef, expected bool) {
+		t.Helper()
+		leftID := ps.internLookupJoinDef(left)
+		rightID := ps.internLookupJoinDef(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+	testEQ := func(left, right *LookupJoinDef) {
+		t.Helper()
+		test(left, right, true)
+	}
+	testNE := func(left, right *LookupJoinDef) {
+		t.Helper()
+		test(left, right, false)
+	}
+
+	def1 := &LookupJoinDef{
+		JoinType: opt.InnerJoinOp,
+		Table:    0,
+		Index:    0,
+		KeyCols:  opt.ColList{10, 11},
+		Cols:     util.MakeFastIntSet(1, 2),
+	}
+	def2 := &LookupJoinDef{
+		JoinType: opt.LeftJoinOp,
+		Table:    0,
+		Index:    0,
+		KeyCols:  opt.ColList{10, 11},
+		Cols:     util.MakeFastIntSet(1, 2),
+	}
+	def3 := &LookupJoinDef{
+		JoinType: opt.InnerJoinOp,
+		Table:    1,
+		Index:    0,
+		KeyCols:  opt.ColList{10, 11},
+		Cols:     util.MakeFastIntSet(1, 2),
+	}
+	def4 := &LookupJoinDef{
+		JoinType: opt.InnerJoinOp,
+		Table:    0,
+		Index:    1,
+		KeyCols:  opt.ColList{10, 11},
+		Cols:     util.MakeFastIntSet(1, 2),
+	}
+	def5 := &LookupJoinDef{
+		JoinType: opt.InnerJoinOp,
+		Table:    0,
+		Index:    0,
+		KeyCols:  opt.ColList{10},
+		Cols:     util.MakeFastIntSet(1, 2),
+	}
+	def6 := &LookupJoinDef{
+		JoinType: opt.InnerJoinOp,
+		Table:    0,
+		Index:    0,
+		KeyCols:  opt.ColList{10, 11},
+		Cols:     util.MakeFastIntSet(1, 2, 3),
+	}
+	testEQ(def1, def1)
+	testNE(def1, def2)
+	testNE(def1, def3)
+	testNE(def1, def4)
+	testNE(def1, def5)
+	testNE(def1, def6)
+}
+
+func TestExplainOpDef(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right *ExplainOpDef, expected bool) {
+		t.Helper()
+		leftID := ps.internExplainOpDef(left)
+		rightID := ps.internExplainOpDef(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+	testEQ := func(left, right *ExplainOpDef) {
+		t.Helper()
+		test(left, right, true)
+	}
+	testNE := func(left, right *ExplainOpDef) {
+		t.Helper()
+		test(left, right, false)
+	}
+
+	def1 := &ExplainOpDef{
+		Options: tree.ExplainOptions{
+			Mode:  tree.ExplainPlan,
+			Flags: util.MakeFastIntSet(tree.ExplainFlagVerbose),
+		},
+		ColList: opt.ColList{1, 2},
+		Props: props.Physical{
+			Presentation: props.Presentation{opt.LabeledColumn{Label: "c", ID: 1}},
+			Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		},
+	}
+	def2 := &ExplainOpDef{
+		Options: tree.ExplainOptions{
+			Mode: tree.ExplainPlan,
+		},
+		ColList: opt.ColList{1, 2},
+		Props: props.Physical{
+			Presentation: props.Presentation{opt.LabeledColumn{Label: "c", ID: 1}},
+			Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		},
+	}
+	def3 := &ExplainOpDef{
+		Options: tree.ExplainOptions{
+			Mode:  tree.ExplainOpt,
+			Flags: util.MakeFastIntSet(tree.ExplainFlagVerbose),
+		},
+		ColList: opt.ColList{1, 2},
+		Props: props.Physical{
+			Presentation: props.Presentation{opt.LabeledColumn{Label: "c", ID: 1}},
+			Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		},
+	}
+	def4 := &ExplainOpDef{
+		Options: tree.ExplainOptions{
+			Mode:  tree.ExplainPlan,
+			Flags: util.MakeFastIntSet(tree.ExplainFlagVerbose),
+		},
+		ColList: opt.ColList{1, 2, 3},
+		Props: props.Physical{
+			Presentation: props.Presentation{opt.LabeledColumn{Label: "c", ID: 1}},
+			Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		},
+	}
+	def5 := &ExplainOpDef{
+		Options: tree.ExplainOptions{
+			Mode:  tree.ExplainPlan,
+			Flags: util.MakeFastIntSet(tree.ExplainFlagVerbose),
+		},
+		ColList: opt.ColList{1, 2},
+		Props: props.Physical{
+			Presentation: props.Presentation{opt.LabeledColumn{Label: "x", ID: 1}},
+			Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		},
+	}
+	def6 := &ExplainOpDef{
+		Options: tree.ExplainOptions{
+			Mode:  tree.ExplainPlan,
+			Flags: util.MakeFastIntSet(tree.ExplainFlagVerbose),
+		},
+		ColList: opt.ColList{1, 2},
+		Props: props.Physical{
+			Presentation: props.Presentation{opt.LabeledColumn{Label: "c", ID: 1}},
+			Ordering:     props.ParseOrderingChoice("+1,+3 opt(4,5)"),
+		},
+	}
+	testEQ(def1, def1)
+	testNE(def1, def2)
+	testNE(def1, def3)
+	testNE(def1, def4)
+	testNE(def1, def5)
+	testNE(def1, def6)
+}
+
+func TestShowTraceOpDef(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right *ShowTraceOpDef, expected bool) {
+		t.Helper()
+		leftID := ps.internShowTraceOpDef(left)
+		rightID := ps.internShowTraceOpDef(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+	testEQ := func(left, right *ShowTraceOpDef) {
+		t.Helper()
+		test(left, right, true)
+	}
+	testNE := func(left, right *ShowTraceOpDef) {
+		t.Helper()
+		test(left, right, false)
+	}
+
+	def1 := &ShowTraceOpDef{Type: tree.ShowTraceRaw, Compact: false, ColList: opt.ColList{1, 2}}
+	def2 := &ShowTraceOpDef{Type: tree.ShowTraceReplica, Compact: false, ColList: opt.ColList{1, 2}}
+	def3 := &ShowTraceOpDef{Type: tree.ShowTraceRaw, Compact: true, ColList: opt.ColList{1, 2}}
+	def4 := &ShowTraceOpDef{Type: tree.ShowTraceRaw, Compact: false, ColList: opt.ColList{1}}
+	testEQ(def1, def1)
+	testNE(def1, def2)
+	testNE(def1, def3)
+	testNE(def1, def4)
+}
+
+func TestMergeOnDef(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right *MergeOnDef, expected bool) {
+		t.Helper()
+		leftID := ps.internMergeOnDef(left)
+		rightID := ps.internMergeOnDef(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+	testEQ := func(left, right *MergeOnDef) {
+		t.Helper()
+		test(left, right, true)
+	}
+	testNE := func(left, right *MergeOnDef) {
+		t.Helper()
+		test(left, right, false)
+	}
+
+	def1 := &MergeOnDef{
+		JoinType:      opt.InnerJoinOp,
+		LeftEq:        opt.Ordering{1, -2},
+		RightEq:       opt.Ordering{4, -5},
+		LeftOrdering:  props.ParseOrderingChoice("+1,-(2|9)"),
+		RightOrdering: props.ParseOrderingChoice("-5 opt(4)"),
+	}
+	def2 := &MergeOnDef{
+		JoinType:      opt.LeftJoinOp,
+		LeftEq:        opt.Ordering{1, -2},
+		RightEq:       opt.Ordering{4, -5},
+		LeftOrdering:  props.ParseOrderingChoice("+1,-(2|9)"),
+		RightOrdering: props.ParseOrderingChoice("-5 opt(4)"),
+	}
+	def3 := &MergeOnDef{
+		JoinType:      opt.InnerJoinOp,
+		LeftEq:        opt.Ordering{1, +2},
+		RightEq:       opt.Ordering{4, -5},
+		LeftOrdering:  props.ParseOrderingChoice("+1,-(2|9)"),
+		RightOrdering: props.ParseOrderingChoice("-5 opt(4)"),
+	}
+	def4 := &MergeOnDef{
+		JoinType:      opt.InnerJoinOp,
+		LeftEq:        opt.Ordering{1, -2},
+		RightEq:       opt.Ordering{4},
+		LeftOrdering:  props.ParseOrderingChoice("+1,-(2|9)"),
+		RightOrdering: props.ParseOrderingChoice("-5 opt(4)"),
+	}
+	def5 := &MergeOnDef{
+		JoinType:      opt.InnerJoinOp,
+		LeftEq:        opt.Ordering{1, -2},
+		RightEq:       opt.Ordering{4, -5},
+		LeftOrdering:  props.ParseOrderingChoice("+1,-2"),
+		RightOrdering: props.ParseOrderingChoice("-5 opt(4)"),
+	}
+	def6 := &MergeOnDef{
+		JoinType:      opt.InnerJoinOp,
+		LeftEq:        opt.Ordering{1, -2},
+		RightEq:       opt.Ordering{4, -5},
+		LeftOrdering:  props.ParseOrderingChoice("+1,-(2|9)"),
+		RightOrdering: props.ParseOrderingChoice("+4,-5"),
+	}
+	testEQ(def1, def1)
+	testNE(def1, def2)
+	testNE(def1, def3)
+	testNE(def1, def4)
+	testNE(def1, def5)
+	testNE(def1, def6)
+}
+
+func TestRowNumberDef(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right *RowNumberDef, expected bool) {
+		t.Helper()
+		leftID := ps.internRowNumberDef(left)
+		rightID := ps.internRowNumberDef(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+	testEQ := func(left, right *RowNumberDef) {
+		t.Helper()
+		test(left, right, true)
+	}
+	testNE := func(left, right *RowNumberDef) {
+		t.Helper()
+		test(left, right, false)
+	}
+
+	def1 := &RowNumberDef{
+		Ordering: props.ParseOrderingChoice("+1,+2"),
+		ColID:    1,
+	}
+	def2 := &RowNumberDef{
+		Ordering: props.ParseOrderingChoice("+1,+(2|3)"),
+		ColID:    1,
+	}
+	def3 := &RowNumberDef{
+		Ordering: props.ParseOrderingChoice("+1,+2"),
+		ColID:    2,
+	}
+	testEQ(def1, def1)
+	testNE(def1, def2)
+	testNE(def1, def3)
 }
 
 func TestInternGroupByDef(t *testing.T) {
@@ -153,10 +530,10 @@ func TestInternGroupByDef(t *testing.T) {
 		}
 	}
 
-	groupByDef1 := &GroupByDef{util.MakeFastIntSet(1, 2), props.Ordering{1, -1}}
-	groupByDef2 := &GroupByDef{util.MakeFastIntSet(2, 1), props.Ordering{1, -1}}
-	groupByDef3 := &GroupByDef{util.MakeFastIntSet(1), props.Ordering{1, 1}}
-	groupByDef4 := &GroupByDef{util.MakeFastIntSet(), props.Ordering{1, 1, 1}}
+	groupByDef1 := &GroupByDef{util.MakeFastIntSet(1, 2), props.ParseOrderingChoice("+1,-2")}
+	groupByDef2 := &GroupByDef{util.MakeFastIntSet(2, 1), props.ParseOrderingChoice("+1,-2")}
+	groupByDef3 := &GroupByDef{util.MakeFastIntSet(1), props.ParseOrderingChoice("+1,+2")}
+	groupByDef4 := &GroupByDef{util.MakeFastIntSet(), props.ParseOrderingChoice("+1,+2,+3")}
 
 	test(groupByDef1, groupByDef2, true)
 	test(groupByDef1, groupByDef3, false)
@@ -185,6 +562,39 @@ func TestInternFuncOpDef(t *testing.T) {
 	test(funcDef1, funcDef2, true)
 	funcDef3 := &FuncOpDef{Name: "bar", Type: ttuple2, Properties: nowProps, Overload: &nowOvls[1]}
 	test(funcDef2, funcDef3, false)
+}
+
+func TestInternSubqueryDef(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right *SubqueryDef, expected bool) {
+		t.Helper()
+		leftID := ps.internSubqueryDef(left)
+		rightID := ps.internSubqueryDef(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+
+	expr1 := &tree.Subquery{}
+	expr2 := &tree.Subquery{}
+
+	defs := []SubqueryDef{
+		{},
+		{OriginalExpr: expr1},
+		{OriginalExpr: expr2},
+		{Cmp: opt.LeOp},
+		{Cmp: opt.GtOp},
+		{OriginalExpr: expr1, Cmp: opt.GtOp},
+		{OriginalExpr: expr1, Cmp: opt.LeOp},
+		{OriginalExpr: expr2, Cmp: opt.GtOp},
+	}
+	for i := range defs {
+		for j := range defs {
+			test(&defs[i], &defs[j], i == j)
+		}
+	}
 }
 
 func TestInternSetOpColMap(t *testing.T) {
@@ -232,7 +642,7 @@ func TestInternOrdering(t *testing.T) {
 	var ps privateStorage
 	ps.init()
 
-	test := func(left, right props.Ordering, expected bool) {
+	test := func(left, right opt.Ordering, expected bool) {
 		t.Helper()
 		leftID := ps.internOrdering(left)
 		rightID := ps.internOrdering(right)
@@ -241,11 +651,34 @@ func TestInternOrdering(t *testing.T) {
 		}
 	}
 
-	test(props.Ordering{}, props.Ordering{}, true)
-	test(props.Ordering{1, -1, 0}, props.Ordering{1, -1, 0}, true)
-	test(props.Ordering{1, -1, 0}, props.Ordering{-1, 1, 0}, false)
-	test(props.Ordering{1, -1, 0}, props.Ordering{-1, 0, 1}, false)
-	test(props.Ordering{1, 2}, props.Ordering{1, 2, 3}, false)
+	test(opt.Ordering{}, opt.Ordering{}, true)
+	test(opt.Ordering{1, -1, 0}, opt.Ordering{1, -1, 0}, true)
+	test(opt.Ordering{1, -1, 0}, opt.Ordering{-1, 1, 0}, false)
+	test(opt.Ordering{1, -1, 0}, opt.Ordering{-1, 0, 1}, false)
+	test(opt.Ordering{1, 2}, opt.Ordering{1, 2, 3}, false)
+}
+
+func TestInternOrderingChoice(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right string, expected bool) {
+		t.Helper()
+		leftOrd := props.ParseOrderingChoice(left)
+		rightOrd := props.ParseOrderingChoice(right)
+		if (ps.internOrderingChoice(&leftOrd) == ps.internOrderingChoice(&rightOrd)) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+
+	test("", "", true)
+	test("+1", "+1", true)
+	test("+(1|2)", "+(2|1)", true)
+	test("+1 opt(2)", "+1 opt(2)", true)
+	test("+1", "-1", false)
+	test("+1,+2", "+1", false)
+	test("+(1|2)", "+1", false)
+	test("+1 opt(2)", "+1", false)
 }
 
 func TestInternDatum(t *testing.T) {
@@ -325,39 +758,42 @@ func TestInternColType(t *testing.T) {
 	}
 
 	// Arithmetic types.
-	test(coltypes.Boolean, &coltypes.TBool{Name: "BOOLEAN"}, true)
+	test(coltypes.Bool, &coltypes.TBool{}, true)
 
-	test(coltypes.SmallInt, &coltypes.TInt{Name: "SMALLINT", Width: 16, ImplicitWidth: true}, true)
-	test(&coltypes.TInt{Name: "BIT", Width: 8}, &coltypes.TInt{Name: "BIT", Width: 12}, false)
+	test(coltypes.Int2, &coltypes.TInt{Width: 16}, true)
 
-	test(coltypes.Float4, &coltypes.TFloat{Name: "FLOAT4", Width: 32}, true)
-	test(coltypes.Float8, &coltypes.TFloat{Name: "DOUBLE PRECISION", Width: 64}, false)
-	test(coltypes.Float, coltypes.NewFloat(64, true), false)
-	test(coltypes.NewFloat(0, true), coltypes.NewFloat(0, true), true)
+	test(coltypes.Float4, &coltypes.TFloat{Short: true}, true)
+	test(coltypes.Float4, &coltypes.TFloat{}, false)
+	nf30v1, _ := coltypes.NewFloat(16)
+	nf30v2, _ := coltypes.NewFloat(16)
+	test(coltypes.Float8, nf30v1, false)
+	test(nf30v1, nf30v2, true)
 
-	tdec := &coltypes.TDecimal{Name: "DECIMAL", Prec: 19}
-	test(coltypes.Numeric, &coltypes.TDecimal{Name: "NUMERIC"}, true)
+	tdec := &coltypes.TDecimal{Prec: 19}
+	test(coltypes.Decimal, &coltypes.TDecimal{}, true)
 	test(coltypes.Decimal, tdec, false)
-	test(tdec, &coltypes.TDecimal{Name: "DECIMAL", Prec: 19, Scale: 2}, false)
+	test(tdec, &coltypes.TDecimal{Prec: 19, Scale: 2}, false)
 
 	// Miscellaneous types.
 	test(coltypes.UUID, &coltypes.TUUID{}, true)
-	test(coltypes.INet, &coltypes.TIPAddr{Name: "INET"}, true)
-	test(coltypes.JSON, &coltypes.TJSON{Name: "JSON"}, true)
-	test(coltypes.JSONB, &coltypes.TJSON{Name: "JSONB"}, true)
-	test(coltypes.JSON, coltypes.JSONB, false)
+	test(coltypes.INet, &coltypes.TIPAddr{}, true)
+	test(coltypes.JSON, &coltypes.TJSON{}, true)
 	test(coltypes.Oid, &coltypes.TOid{Name: "OID"}, true)
+	test(coltypes.Bit, &coltypes.TBitArray{Width: 1}, true)
+	test(coltypes.Bit, &coltypes.TBitArray{Width: 1, Variable: true}, false)
+	test(coltypes.VarBit, &coltypes.TBitArray{Variable: true}, true)
 
 	// String types.
-	test(coltypes.String, &coltypes.TString{Name: "STRING"}, true)
-	test(coltypes.VarChar, &coltypes.TString{Name: "VARCHAR"}, true)
+	test(coltypes.String, &coltypes.TString{Variant: coltypes.TStringVariantSTRING}, true)
+	test(coltypes.VarChar, &coltypes.TString{Variant: coltypes.TStringVariantVARCHAR}, true)
 	test(coltypes.VarChar, coltypes.String, false)
-	test(&coltypes.TString{Name: "VARCHAR", N: 9}, &coltypes.TString{Name: "VARCHAR", N: 10}, false)
+	test(&coltypes.TString{Variant: coltypes.TStringVariantVARCHAR, N: 9},
+		&coltypes.TString{Variant: coltypes.TStringVariantVARCHAR, N: 10}, false)
 
-	tstr1 := &coltypes.TCollatedString{Name: "STRING"}
-	tstr2 := &coltypes.TCollatedString{Name: "STRING", N: 256}
-	tstr3 := &coltypes.TCollatedString{Name: "STRING", N: 256, Locale: "en_US"}
-	tstr4 := &coltypes.TCollatedString{Name: "STRING", Locale: "en_US"}
+	tstr1 := &coltypes.TCollatedString{}
+	tstr2 := &coltypes.TCollatedString{TString: coltypes.TString{N: 256}}
+	tstr3 := &coltypes.TCollatedString{TString: coltypes.TString{N: 256}, Locale: "en_US"}
+	tstr4 := &coltypes.TCollatedString{Locale: "en_US"}
 	test(tstr1, tstr2, false)
 	test(tstr2, tstr2, true)
 	test(tstr2, tstr3, false)
@@ -365,13 +801,11 @@ func TestInternColType(t *testing.T) {
 	test(tstr3, tstr4, false)
 
 	test(coltypes.Name, &coltypes.TName{}, true)
-	test(coltypes.Bytes, &coltypes.TBytes{Name: "BYTES"}, true)
-	test(coltypes.Bytes, coltypes.Blob, false)
+	test(coltypes.Bytes, &coltypes.TBytes{}, true)
 
 	// Time/date types.
 	test(coltypes.Date, &coltypes.TDate{}, true)
 	test(coltypes.Time, &coltypes.TTime{}, true)
-	test(coltypes.TimeTZ, &coltypes.TTimeTZ{}, true)
 	test(coltypes.Timestamp, &coltypes.TTimestamp{}, true)
 	test(coltypes.TimestampWithTZ, &coltypes.TTimestampTZ{}, true)
 	test(coltypes.Interval, &coltypes.TInterval{}, true)
@@ -417,6 +851,38 @@ func TestInternTypedExpr(t *testing.T) {
 	}
 }
 
+func TestInternPhysProps(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	presentation := props.Presentation{opt.LabeledColumn{Label: "c", ID: 1}}
+	ordering := props.ParseOrderingChoice("+(1|2),+3 opt(4,5)")
+
+	p := props.Physical{Presentation: presentation, Ordering: ordering}
+	id1 := ps.internPhysProps(&p)
+	id2 := ps.internPhysProps(&p)
+	if id1 != id2 {
+		t.Errorf("same physical property instance didn't return same private ID")
+	}
+
+	presentation2 := props.Presentation{opt.LabeledColumn{Label: "d", ID: 1}}
+	ordering2 := props.ParseOrderingChoice("+(1|2),+3 opt(4,6)")
+
+	p2 := props.Physical{Presentation: presentation2, Ordering: ordering}
+	id1 = ps.internPhysProps(&p)
+	id2 = ps.internPhysProps(&p2)
+	if id1 == id2 {
+		t.Errorf("different physical property instances didn't return different private IDs")
+	}
+
+	p3 := props.Physical{Presentation: presentation2, Ordering: ordering2}
+	id1 = ps.internPhysProps(&p2)
+	id2 = ps.internPhysProps(&p3)
+	if id1 == id2 {
+		t.Errorf("different physical property instances didn't return different private IDs")
+	}
+}
+
 // Ensure that interning values that already exist does not cause unexpected
 // allocations.
 func TestPrivateStorageAllocations(t *testing.T) {
@@ -426,7 +892,8 @@ func TestPrivateStorageAllocations(t *testing.T) {
 	colID := opt.ColumnID(1)
 	colSet := util.MakeFastIntSet(1, 2, 3)
 	colList := opt.ColList{3, 2, 1}
-	ordering := props.Ordering{1, -2, 3}
+	ordering := opt.Ordering{1, -2, 3}
+	orderingChoice := props.ParseOrderingChoice("+1,-2 opt(3)")
 	op := opt.PlusOp
 	concatProps, concatOvls := builtins.GetBuiltinProperties("concat")
 	funcOpDef := &FuncOpDef{
@@ -439,27 +906,44 @@ func TestPrivateStorageAllocations(t *testing.T) {
 		SynthesizedCols: colList,
 		PassthroughCols: colSet,
 	}
-	scanOpDef := &ScanOpDef{Table: 1, Index: 2, Cols: colSet}
-	groupByDef := &GroupByDef{GroupingCols: colSet, Ordering: ordering}
+	scanOpDef := &ScanOpDef{Table: 1, Index: 2, Cols: colSet, Flags: ScanFlags{NoIndexJoin: true}}
+	groupByDef := &GroupByDef{GroupingCols: colSet, Ordering: props.ParseOrderingChoice("+1")}
+	mergeOnDef := &MergeOnDef{
+		LeftEq:        opt.Ordering{+1, +2, +3},
+		RightEq:       opt.Ordering{+4, +5, +6},
+		LeftOrdering:  props.ParseOrderingChoice("+1,+2,+3"),
+		RightOrdering: props.ParseOrderingChoice("+4,+5,+6"),
+	}
+	indexJoinDef := &IndexJoinDef{Table: 1, Cols: colSet}
+	lookupJoinDef := &LookupJoinDef{Table: 1, Index: 2, KeyCols: colList, Cols: colSet}
+	subqueryDef := &SubqueryDef{OriginalExpr: &tree.Subquery{}, Cmp: opt.LtOp}
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
 	typ := types.Int
 	colTyp := coltypes.Int
+	presentation := props.Presentation{opt.LabeledColumn{Label: "c", ID: 1}}
+	physProps := props.Physical{Presentation: presentation, Ordering: orderingChoice}
 
 	testutils.TestNoMallocs(t, func() {
 		ps.internColumnID(colID)
 		ps.internColList(colList)
 		ps.internOperator(op)
 		ps.internOrdering(ordering)
+		ps.internOrderingChoice(&orderingChoice)
 		ps.internProjectionsOpDef(projectionsOpDef)
 		ps.internFuncOpDef(funcOpDef)
 		ps.internScanOpDef(scanOpDef)
 		ps.internGroupByDef(groupByDef)
+		ps.internMergeOnDef(mergeOnDef)
+		ps.internIndexJoinDef(indexJoinDef)
+		ps.internLookupJoinDef(lookupJoinDef)
+		ps.internSubqueryDef(subqueryDef)
 		ps.internSetOpColMap(setOpColMap)
 		ps.internDatum(datum)
 		ps.internType(typ)
 		ps.internColType(colTyp)
 		ps.internTypedExpr(datum)
+		ps.internPhysProps(&physProps)
 	})
 }
 
@@ -470,13 +954,14 @@ func BenchmarkPrivateStorage(b *testing.B) {
 	colID := opt.ColumnID(1)
 	colSet := util.MakeFastIntSet(1, 2, 3)
 	colList := opt.ColList{3, 2, 1}
-	ordering := props.Ordering{1, -2, 3}
+	ordering := opt.Ordering{1, -2, 3}
+	orderingChoice := props.ParseOrderingChoice("+1,-2 opt(3)")
 	op := opt.PlusOp
-	props, overloads := builtins.GetBuiltinProperties("concat")
+	funcProps, overloads := builtins.GetBuiltinProperties("concat")
 	funcOpDef := &FuncOpDef{
 		Name:       "concat",
 		Type:       types.String,
-		Properties: props,
+		Properties: funcProps,
 		Overload:   &overloads[0],
 	}
 	projectionsOpDef := &ProjectionsOpDef{
@@ -484,12 +969,22 @@ func BenchmarkPrivateStorage(b *testing.B) {
 		PassthroughCols: colSet,
 	}
 	scanOpDef := &ScanOpDef{Table: 1, Index: 2, Cols: colSet}
-	groupByDef := &GroupByDef{GroupingCols: colSet, Ordering: ordering}
-	indexJoinDef := &LookupJoinDef{Table: 1, Index: 2, KeyCols: colList, LookupCols: colSet}
+	groupByDef := &GroupByDef{GroupingCols: colSet, Ordering: props.ParseOrderingChoice("+1")}
+	mergeOnDef := &MergeOnDef{
+		LeftEq:        opt.Ordering{+1, +2, +3},
+		RightEq:       opt.Ordering{+4, +5, +6},
+		LeftOrdering:  props.ParseOrderingChoice("+1,+2,+3"),
+		RightOrdering: props.ParseOrderingChoice("+4,+5,+6"),
+	}
+	indexJoinDef := &IndexJoinDef{Table: 1, Cols: colSet}
+	lookupJoinDef := &LookupJoinDef{Table: 1, Index: 2, KeyCols: colList, Cols: colSet}
+	subqueryDef := &SubqueryDef{OriginalExpr: &tree.Subquery{}, Cmp: opt.LtOp}
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
 	typ := types.Int
 	colTyp := coltypes.Int
+	presentation := props.Presentation{opt.LabeledColumn{Label: "c", ID: 1}}
+	physProps := props.Physical{Presentation: presentation, Ordering: orderingChoice}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -497,16 +992,21 @@ func BenchmarkPrivateStorage(b *testing.B) {
 		ps.internColList(colList)
 		ps.internOperator(op)
 		ps.internOrdering(ordering)
+		ps.internOrderingChoice(&orderingChoice)
 		ps.internFuncOpDef(funcOpDef)
 		ps.internProjectionsOpDef(projectionsOpDef)
 		ps.internScanOpDef(scanOpDef)
 		ps.internScanOpDef(scanOpDef)
 		ps.internGroupByDef(groupByDef)
-		ps.internLookupJoinDef(indexJoinDef)
+		ps.internMergeOnDef(mergeOnDef)
+		ps.internIndexJoinDef(indexJoinDef)
+		ps.internLookupJoinDef(lookupJoinDef)
+		ps.internSubqueryDef(subqueryDef)
 		ps.internSetOpColMap(setOpColMap)
 		ps.internDatum(datum)
 		ps.internType(typ)
 		ps.internColType(colTyp)
 		ps.internTypedExpr(datum)
+		ps.internPhysProps(&physProps)
 	}
 }

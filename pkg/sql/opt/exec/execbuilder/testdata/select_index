@@ -3,9 +3,9 @@
 statement ok
 CREATE TABLE t (
   a INT,
-  b CHAR,
+  b VARCHAR,
   c INT,
-  d CHAR,
+  d VARCHAR,
   PRIMARY KEY (a, b),
   INDEX bc (b, c),
   INDEX dc (d, c),
@@ -21,8 +21,11 @@ INSERT INTO t VALUES
   (2, 'two', 22, 'bar'),
   (3, 'three', 33, 'blah')
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE a = 2; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a = 2]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/primary/2/'two' -> NULL
@@ -30,8 +33,11 @@ fetched: /t/primary/2/'two'/c -> 22
 fetched: /t/primary/2/'two'/d -> 'bar'
 output row: [2 'two' 22 'bar']
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE a IN (1, 3); SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a IN (1, 3)]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/primary/1/'one' -> NULL
@@ -43,8 +49,11 @@ fetched: /t/primary/3/'three'/c -> 33
 fetched: /t/primary/3/'three'/d -> 'blah'
 output row: [3 'three' 33 'blah']
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE d = 'foo' OR d = 'bar'; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE d = 'foo' OR d = 'bar']
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/dc/'bar'/22/2/'two' -> NULL
@@ -52,8 +61,11 @@ output row: [2 'two' 22 'bar']
 fetched: /t/dc/'foo'/11/1/'one' -> NULL
 output row: [1 'one' 11 'foo']
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE (d, c) IN (('foo', 11), ('bar', 22)); SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE (d, c) IN (('foo', 11), ('bar', 22))]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/dc/'bar'/22/2/'two' -> NULL
@@ -61,15 +73,21 @@ output row: [2 'two' 22 'bar']
 fetched: /t/dc/'foo'/11/1/'one' -> NULL
 output row: [1 'one' 11 'foo']
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE (d, c) = ('foo', 11); SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE (d, c) = ('foo', 11)]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/dc/'foo'/11/1/'one' -> NULL
 output row: [1 'one' 11 'foo']
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE a < 2; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a < 2]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/primary/1/'one' -> NULL
@@ -77,8 +95,11 @@ fetched: /t/primary/1/'one'/c -> 11
 fetched: /t/primary/1/'one'/d -> 'foo'
 output row: [1 'one' 11 'foo']
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE a <= (1 + 1); SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a <= (1 + 1)]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/primary/1/'one' -> NULL
@@ -90,8 +111,11 @@ fetched: /t/primary/2/'two'/c -> 22
 fetched: /t/primary/2/'two'/d -> 'bar'
 output row: [2 'two' 22 'bar']
 
+statement ok
+SET tracing = on,kv,results; SELECT a, b FROM t WHERE b > 't'; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT a, b FROM t WHERE b > 't']
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/bc/'three'/33/3 -> NULL
@@ -99,20 +123,21 @@ output row: [3 'three']
 fetched: /t/bc/'two'/22/2 -> NULL
 output row: [2 'two']
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE d < ('b' || 'l'); SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE d < ('b' || 'l')]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/dc/'bar'/22/2/'two' -> NULL
 output row: [2 'two' 22 'bar']
 
-# TODO(radu): Need to select "dc" index
-# The where-clause does not contain columns matching a prefix of any
-# index. Note that the index "dc" was chosen because it contains fewer
-# keys per row than the primary key index while still containing all
-# of the needed columns.
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE c = 22; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE c = 22]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/primary/1/'one' -> NULL
@@ -127,8 +152,11 @@ fetched: /t/primary/3/'three'/c -> 33
 fetched: /t/primary/3/'three'/d -> 'blah'
 
 # Use the descending index
+statement ok
+SET tracing = on,kv,results; SELECT a FROM t ORDER BY a DESC; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT a FROM t ORDER BY a DESC]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/a_desc/3/'three' -> NULL
@@ -139,8 +167,11 @@ fetched: /t/a_desc/1/'one' -> NULL
 output row: [1]
 
 # Use the descending index with multiple spans.
+statement ok
+SET tracing = on,kv,results; SELECT a FROM t WHERE a in (2, 3) ORDER BY a DESC; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT a FROM t WHERE a in (2, 3) ORDER BY a DESC]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/a_desc/3/'three' -> NULL
@@ -149,28 +180,33 @@ fetched: /t/a_desc/2/'two' -> NULL
 output row: [2]
 
 # Index selection occurs in direct join operands too.
-# TODO(radu): except that it doesn't in this case with new optimizer
 query TTTTT
-EXPLAIN (VERBOSE) SELECT * FROM t x JOIN t y USING(b) WHERE x.b < '3'
+EXPLAIN (VERBOSE) SELECT * FROM t x JOIN t y USING(b) WHERE x.b = '3'
 ----
-render          ·         ·          (b, a, c, d, a, c, d)     ·
- │              render 0  b          ·                         ·
- │              render 1  a          ·                         ·
- │              render 2  c          ·                         ·
- │              render 3  d          ·                         ·
- │              render 4  a          ·                         ·
- │              render 5  c          ·                         ·
- │              render 6  d          ·                         ·
- └── join       ·         ·          (a, b, c, d, a, b, c, d)  ·
-      │         type      inner      ·                         ·
-      │         equality  (b) = (b)  ·                         ·
-      ├── scan  ·         ·          (a, b, c, d)              ·
-      │         table     t@primary  ·                         ·
-      │         spans     ALL        ·                         ·
-      │         filter    b < '3'    ·                         ·
-      └── scan  ·         ·          (a, b, c, d)              ·
-·               table     t@primary  ·                         ·
-·               spans     ALL        ·                         ·
+render                ·               ·                    (b, a, c, d, a, c, d)     ·
+ │                    render 0        b                    ·                         ·
+ │                    render 1        a                    ·                         ·
+ │                    render 2        c                    ·                         ·
+ │                    render 3        d                    ·                         ·
+ │                    render 4        a                    ·                         ·
+ │                    render 5        c                    ·                         ·
+ │                    render 6        d                    ·                         ·
+ └── join             ·               ·                    (a, b, c, d, a, b, c, d)  ·
+      │               type            inner                ·                         ·
+      │               equality        (b) = (b)            ·                         ·
+      │               mergeJoinOrder  +"(b=b)"             ·                         ·
+      ├── index-join  ·               ·                    (a, b, c, d)              ·
+      │    ├── scan   ·               ·                    (a, b, c)                 ·
+      │    │          table           t@bc                 ·                         ·
+      │    │          spans           /"3"-/"3"/PrefixEnd  ·                         ·
+      │    └── scan   ·               ·                    (a, b, c, d)              ·
+      │               table           t@primary            ·                         ·
+      └── index-join  ·               ·                    (a, b, c, d)              ·
+           ├── scan   ·               ·                    (a, b, c)                 ·
+           │          table           t@bc                 ·                         ·
+           │          spans           /"3"-/"3"/PrefixEnd  ·                         ·
+           └── scan   ·               ·                    (a, b, c, d)              ·
+·                     table           t@primary            ·                         ·
 
 statement ok
 TRUNCATE TABLE t
@@ -181,22 +217,31 @@ INSERT INTO t VALUES
   (1, 'b', NULL, NULL),
   (1, 'c', NULL, NULL)
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE a = 1 AND b > 'b'; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a = 1 AND b > 'b']
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/primary/1/'c' -> NULL
 output row: [1 'c' NULL NULL]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE a > 0 AND b > 'b'; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a > 0 AND b > 'b']
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/primary/1/'c' -> NULL
 output row: [1 'c' NULL NULL]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE a > 1 AND b > 'b'; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a > 1 AND b > 'b']
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 
@@ -205,8 +250,11 @@ EXPLAIN SELECT * FROM t WHERE a > 1 AND a < 2
 ----
 norows  ·  ·
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t WHERE a = 1 AND 'a' < b AND 'c' > b; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t WHERE a = 1 AND 'a' < b AND 'c' > b]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/primary/1/'b' -> NULL
@@ -225,22 +273,31 @@ CREATE TABLE t (
 statement ok
 INSERT INTO t VALUES (1, 2), (3, 4), (5, 6)
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a >= 3 AND a < 5; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a >= 3 AND a < 5]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/3/4 -> NULL
 output row: [3 4]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a BETWEEN 3 AND 4; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a BETWEEN 3 AND 4]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/3/4 -> NULL
 output row: [3 4]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a BETWEEN 3 AND 5; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a BETWEEN 3 AND 5]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/3/4 -> NULL
@@ -248,8 +305,11 @@ output row: [3 4]
 fetched: /t/ab/5/6 -> NULL
 output row: [5 6]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a < 2 OR a < 4; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a < 2 OR a < 4]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/1/2 -> NULL
@@ -257,8 +317,11 @@ output row: [1 2]
 fetched: /t/ab/3/4 -> NULL
 output row: [3 4]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a < 3 OR a <= 3; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a < 3 OR a <= 3]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/1/2 -> NULL
@@ -266,8 +329,11 @@ output row: [1 2]
 fetched: /t/ab/3/4 -> NULL
 output row: [3 4]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a <= 3 OR a < 3; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a <= 3 OR a < 3]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/1/2 -> NULL
@@ -275,8 +341,11 @@ output row: [1 2]
 fetched: /t/ab/3/4 -> NULL
 output row: [3 4]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a > 3 OR a >= 3; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a > 3 OR a >= 3]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/3/4 -> NULL
@@ -284,8 +353,11 @@ output row: [3 4]
 fetched: /t/ab/5/6 -> NULL
 output row: [5 6]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a >= 3 OR a > 3; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a >= 3 OR a > 3]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/3/4 -> NULL
@@ -293,8 +365,11 @@ output row: [3 4]
 fetched: /t/ab/5/6 -> NULL
 output row: [5 6]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a = 3 OR a = 5; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a = 3 OR a = 5]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/3/4 -> NULL
@@ -302,8 +377,11 @@ output row: [3 4]
 fetched: /t/ab/5/6 -> NULL
 output row: [5 6]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a < 3 OR a > 3; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a < 3 OR a > 3]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/1/2 -> NULL
@@ -311,8 +389,11 @@ output row: [1 2]
 fetched: /t/ab/5/6 -> NULL
 output row: [5 6]
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a + 1 = 4; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t@ab WHERE a + 1 = 4]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t/ab/3/4 -> NULL
@@ -467,16 +548,14 @@ render     ·         ·          (b)     ·
 ·          table     abcd@abcd  ·       ·
 ·          spans     /1/4-/1/5  ·       ·
 
-# TODO(radu): in this case, we're not preferring abcd, unlike 2.0
 query TTTTT
 EXPLAIN (VERBOSE) SELECT b FROM abcd WHERE (a, b) IN ((1, 4), (2, 9))
 ----
-render     ·         ·                           (b)     ·
- │         render 0  b                           ·       ·
- └── scan  ·         ·                           (a, b)  ·
-·          table     abcd@adb                    ·       ·
-·          spans     /1-/3                       ·       ·
-·          filter    (a, b) IN ((1, 4), (2, 9))  ·       ·
+render     ·         ·                     (b)     ·
+ │         render 0  b                     ·       ·
+ └── scan  ·         ·                     (a, b)  ·
+·          table     abcd@abcd             ·       ·
+·          spans     /1/4-/1/5 /2/9-/2/10  ·       ·
 
 statement ok
 CREATE TABLE ab (
@@ -501,13 +580,13 @@ CREATE INDEX baz ON ab (i, s)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
 ----
-render     ·         ·                  (i, s)                         ·
- │         render 0  test.public.ab.i   ·                              ·
- │         render 1  test.public.ab.s   ·                              ·
- └── scan  ·         ·                  (s, i, rowid[hidden,omitted])  rowid!=NULL; weak-key(s,i,rowid)
-·          table     ab@baz             ·                              ·
-·          spans     /!NULL-/1/"c"      ·                              ·
-·          filter    (i, s) < (1, 'c')  ·                              ·
+render     ·         ·                  (i, s)  ·
+ │         render 0  i                  ·       ·
+ │         render 1  s                  ·       ·
+ └── scan  ·         ·                  (s, i)  ·
+·          table     ab@baz             ·       ·
+·          spans     /!NULL-/1/"c"      ·       ·
+·          filter    (i, s) < (1, 'c')  ·       ·
 
 # Check that primary key definitions can indicate index ordering,
 # and this information is subsequently used during index selection
@@ -515,16 +594,16 @@ render     ·         ·                  (i, s)                         ·
 query TTBITTBB
 CREATE TABLE abz(a INT, b INT, c INT, PRIMARY KEY (a DESC, b ASC), UNIQUE(c DESC, b ASC)); SHOW INDEX FROM abz
 ----
-abz    primary      true      1  a       DESC       false    false
-abz    primary      true      2  b       ASC        false    false
-abz    abz_c_b_key  true      1  c       DESC       false    false
-abz    abz_c_b_key  true      2  b       ASC        false    false
-abz    abz_c_b_key  true      3  a       ASC        false    true
+abz  primary      false  1  a  DESC  false  false
+abz  primary      false  2  b  ASC   false  false
+abz  abz_c_b_key  false  1  c  DESC  false  false
+abz  abz_c_b_key  false  2  b  ASC   false  false
+abz  abz_c_b_key  false  3  a  ASC   false  true
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM abz ORDER BY a DESC LIMIT 1
 ----
-scan  ·      ·            (a)  -a
+scan  ·      ·            (a)  ·
 ·     table  abz@primary  ·    ·
 ·     spans  ALL          ·    ·
 ·     limit  1            ·    ·
@@ -532,7 +611,7 @@ scan  ·      ·            (a)  -a
 query TTTTT
 EXPLAIN (VERBOSE) SELECT c FROM abz ORDER BY c DESC LIMIT 1
 ----
-scan  ·      ·                (c)  -c
+scan  ·      ·                (c)  ·
 ·     table  abz@abz_c_b_key  ·    ·
 ·     spans  ALL              ·    ·
 ·     limit  1                ·    ·
@@ -549,12 +628,12 @@ CREATE TABLE tab0(
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM tab0 WHERE (a IN (6) AND a > 6) OR b >= 4
 ----
-render     ·         ·                                     (k)        ·
- │         render 0  k                                     ·          ·
- └── scan  ·         ·                                     (k, a, b)  ·
-·          table     tab0@primary                          ·          ·
-·          spans     ALL                                   ·          ·
-·          filter    ((a IN (6)) AND (a > 6)) OR (b >= 4)  ·          ·
+render     ·         ·                                      (k)        ·
+ │         render 0  k                                      ·          ·
+ └── scan  ·         ·                                      (k, a, b)  ·
+·          table     tab0@primary                           ·          ·
+·          spans     ALL                                    ·          ·
+·          filter    ((a IN (6,)) AND (a > 6)) OR (b >= 4)  ·          ·
 
 # Check that no extraneous rows are fetched due to excessive batching (#15910)
 # The test is composed of three parts: populate a table, check
@@ -571,18 +650,16 @@ INSERT INTO test2(k)
 # Plan check:
 # The query is using an index-join and the limit is propagated to the scan.
 
-# TODO(radu): need revscan, index-join, and limit pushdown
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20
 ----
-limit           ·       ·              (id, k, v)  -k
- │              count   20             ·           ·
- └── sort       ·       ·              (id, k, v)  -k
-      │         order   -k             ·           ·
-      └── scan  ·       ·              (id, k, v)  ·
-·               table   test2@primary  ·           ·
-·               spans   ALL            ·           ·
-·               filter  k <= '100'     ·           ·
+index-join    ·      ·                        (id, k, v)  -k
+ ├── revscan  ·      ·                        (id, k)     -k
+ │            table  test2@test2_k_key        ·           ·
+ │            spans  /!NULL-/"100"/PrefixEnd  ·           ·
+ │            limit  20                       ·           ·
+ └── scan     ·      ·                        (id, k, v)  ·
+·             table  test2@primary            ·           ·
 
 # Result check: The following query must not issue more than the
 # requested LIMIT K/V reads, even though an index join batches 100
@@ -590,41 +667,54 @@ limit           ·       ·              (id, k, v)  -k
 # reading from the end (ORDER BY k DESC) so we should see 20 values
 # from 030 to 011 (thus not 001-010).
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20; SET tracing = off
+
 query T
 SELECT regexp_replace(message, '\d\d\d\d\d+', '...PK...')
-  FROM [SHOW KV TRACE FOR SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20]
+  FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%'
 ----
-fetched: /test2/primary/...PK.../k/v -> /'001'/42
-fetched: /test2/primary/...PK.../k/v -> /'002'/42
-fetched: /test2/primary/...PK.../k/v -> /'003'/42
-fetched: /test2/primary/...PK.../k/v -> /'004'/42
-fetched: /test2/primary/...PK.../k/v -> /'005'/42
-fetched: /test2/primary/...PK.../k/v -> /'006'/42
-fetched: /test2/primary/...PK.../k/v -> /'007'/42
-fetched: /test2/primary/...PK.../k/v -> /'008'/42
-fetched: /test2/primary/...PK.../k/v -> /'009'/42
-fetched: /test2/primary/...PK.../k/v -> /'010'/42
-fetched: /test2/primary/...PK.../k/v -> /'011'/42
-fetched: /test2/primary/...PK.../k/v -> /'012'/42
-fetched: /test2/primary/...PK.../k/v -> /'013'/42
-fetched: /test2/primary/...PK.../k/v -> /'014'/42
-fetched: /test2/primary/...PK.../k/v -> /'015'/42
-fetched: /test2/primary/...PK.../k/v -> /'016'/42
-fetched: /test2/primary/...PK.../k/v -> /'017'/42
-fetched: /test2/primary/...PK.../k/v -> /'018'/42
-fetched: /test2/primary/...PK.../k/v -> /'019'/42
-fetched: /test2/primary/...PK.../k/v -> /'020'/42
-fetched: /test2/primary/...PK.../k/v -> /'021'/42
-fetched: /test2/primary/...PK.../k/v -> /'022'/42
-fetched: /test2/primary/...PK.../k/v -> /'023'/42
-fetched: /test2/primary/...PK.../k/v -> /'024'/42
-fetched: /test2/primary/...PK.../k/v -> /'025'/42
-fetched: /test2/primary/...PK.../k/v -> /'026'/42
-fetched: /test2/primary/...PK.../k/v -> /'027'/42
-fetched: /test2/primary/...PK.../k/v -> /'028'/42
-fetched: /test2/primary/...PK.../k/v -> /'029'/42
+fetched: /test2/test2_k_key/'030' -> /...PK...
+fetched: /test2/test2_k_key/'029' -> /...PK...
+fetched: /test2/test2_k_key/'028' -> /...PK...
+fetched: /test2/test2_k_key/'027' -> /...PK...
+fetched: /test2/test2_k_key/'026' -> /...PK...
+fetched: /test2/test2_k_key/'025' -> /...PK...
+fetched: /test2/test2_k_key/'024' -> /...PK...
+fetched: /test2/test2_k_key/'023' -> /...PK...
+fetched: /test2/test2_k_key/'022' -> /...PK...
+fetched: /test2/test2_k_key/'021' -> /...PK...
+fetched: /test2/test2_k_key/'020' -> /...PK...
+fetched: /test2/test2_k_key/'019' -> /...PK...
+fetched: /test2/test2_k_key/'018' -> /...PK...
+fetched: /test2/test2_k_key/'017' -> /...PK...
+fetched: /test2/test2_k_key/'016' -> /...PK...
+fetched: /test2/test2_k_key/'015' -> /...PK...
+fetched: /test2/test2_k_key/'014' -> /...PK...
+fetched: /test2/test2_k_key/'013' -> /...PK...
+fetched: /test2/test2_k_key/'012' -> /...PK...
+fetched: /test2/test2_k_key/'011' -> /...PK...
 fetched: /test2/primary/...PK.../k/v -> /'030'/42
+fetched: /test2/primary/...PK.../k/v -> /'029'/42
+fetched: /test2/primary/...PK.../k/v -> /'028'/42
+fetched: /test2/primary/...PK.../k/v -> /'027'/42
+fetched: /test2/primary/...PK.../k/v -> /'026'/42
+fetched: /test2/primary/...PK.../k/v -> /'025'/42
+fetched: /test2/primary/...PK.../k/v -> /'024'/42
+fetched: /test2/primary/...PK.../k/v -> /'023'/42
+fetched: /test2/primary/...PK.../k/v -> /'022'/42
+fetched: /test2/primary/...PK.../k/v -> /'021'/42
+fetched: /test2/primary/...PK.../k/v -> /'020'/42
+fetched: /test2/primary/...PK.../k/v -> /'019'/42
+fetched: /test2/primary/...PK.../k/v -> /'018'/42
+fetched: /test2/primary/...PK.../k/v -> /'017'/42
+fetched: /test2/primary/...PK.../k/v -> /'016'/42
+fetched: /test2/primary/...PK.../k/v -> /'015'/42
+fetched: /test2/primary/...PK.../k/v -> /'014'/42
+fetched: /test2/primary/...PK.../k/v -> /'013'/42
+fetched: /test2/primary/...PK.../k/v -> /'012'/42
+fetched: /test2/primary/...PK.../k/v -> /'011'/42
 
 # Regression test for #20035.
 statement ok
@@ -669,15 +759,16 @@ AND   f1.resource_key IN ('ts', 'ts2', 'ts3')
 GROUP BY resource_key
 ORDER BY total DESC
 ----
-sort            ·            ·
- │              order        -total
- └── group      ·            ·
-      │         aggregate 0  resource_key
-      │         aggregate 1  count(resource_key)
-      │         group by     @2
-      └── scan  ·            ·
-·               table        favorites@favorites_glob_fav_idx
-·               spans        /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"/PrefixEnd
+sort                 ·            ·
+ │                   order        -total
+ └── group           ·            ·
+      │              aggregate 0  resource_key
+      │              aggregate 1  count(resource_key)
+      │              group by     @1
+      └── render     ·            ·
+           └── scan  ·            ·
+·                    table        favorites@favorites_glob_fav_idx
+·                    spans        /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"/PrefixEnd
 
 query TI rowsort
 SELECT
@@ -701,50 +792,30 @@ ts3 1
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL AND b > 5
 ----
-render     ·         ·                   (a, b, c, d)                         a=CONST; b!=NULL
- │         render 0  test.public.abcd.a  ·                                    ·
- │         render 1  test.public.abcd.b  ·                                    ·
- │         render 2  test.public.abcd.c  ·                                    ·
- │         render 3  test.public.abcd.d  ·                                    ·
- └── scan  ·         ·                   (a, b, c, d, rowid[hidden,omitted])  a=CONST; b!=NULL; rowid!=NULL; weak-key(b,c,d,rowid)
-·          table     abcd@abcd           ·                                    ·
-·          spans     /NULL/6-/!NULL      ·                                    ·
+scan  ·      ·               (a, b, c, d)  ·
+·     table  abcd@abcd       ·             ·
+·     spans  /NULL/6-/!NULL  ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL AND b < 5
 ----
-render     ·         ·                    (a, b, c, d)                         a=CONST; b!=NULL
- │         render 0  test.public.abcd.a   ·                                    ·
- │         render 1  test.public.abcd.b   ·                                    ·
- │         render 2  test.public.abcd.c   ·                                    ·
- │         render 3  test.public.abcd.d   ·                                    ·
- └── scan  ·         ·                    (a, b, c, d, rowid[hidden,omitted])  a=CONST; b!=NULL; rowid!=NULL; weak-key(b,c,d,rowid)
-·          table     abcd@abcd            ·                                    ·
-·          spans     /NULL/!NULL-/NULL/5  ·                                    ·
+scan  ·      ·                    (a, b, c, d)  ·
+·     table  abcd@abcd            ·             ·
+·     spans  /NULL/!NULL-/NULL/5  ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a IS NULL ORDER BY b
 ----
-render     ·         ·                   (a, b, c, d)                         a=CONST; +b
- │         render 0  test.public.abcd.a  ·                                    ·
- │         render 1  test.public.abcd.b  ·                                    ·
- │         render 2  test.public.abcd.c  ·                                    ·
- │         render 3  test.public.abcd.d  ·                                    ·
- └── scan  ·         ·                   (a, b, c, d, rowid[hidden,omitted])  a=CONST; rowid!=NULL; weak-key(b,c,d,rowid); +b
-·          table     abcd@abcd           ·                                    ·
-·          spans     /NULL-/!NULL        ·                                    ·
+scan  ·      ·             (a, b, c, d)  +b
+·     table  abcd@abcd     ·             ·
+·     spans  /NULL-/!NULL  ·             ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abcd@abcd WHERE a = 1 AND b IS NULL AND c > 0 AND c < 10 ORDER BY c
 ----
-render     ·         ·                     (a, b, c, d)                         a=CONST; b=CONST; c!=NULL; +c
- │         render 0  test.public.abcd.a    ·                                    ·
- │         render 1  test.public.abcd.b    ·                                    ·
- │         render 2  test.public.abcd.c    ·                                    ·
- │         render 3  test.public.abcd.d    ·                                    ·
- └── scan  ·         ·                     (a, b, c, d, rowid[hidden,omitted])  a=CONST; b=CONST; c!=NULL; rowid!=NULL; weak-key(c,d,rowid); +c
-·          table     abcd@abcd             ·                                    ·
-·          spans     /1/NULL/1-/1/NULL/10  ·                                    ·
+scan  ·      ·                     (a, b, c, d)  +c
+·     table  abcd@abcd             ·             ·
+·     spans  /1/NULL/1-/1/NULL/10  ·             ·
 
 # Regression test for #3548: verify we create constraints on implicit columns
 # when they are part of the key (non-unique index).
@@ -760,20 +831,38 @@ render     ·         ·              (c)     ·
 ·          table     abc@abc_c_idx  ·       ·
 ·          spans     /1/3-/1/4      ·       ·
 
-# Verify we don't create constraints on implicit columns when they are not part
-# of the key (unique index).
+# Verify we don't create constraints on implicit columns when they may be part
+# of the key (unique index on nullable column).
 statement ok
 CREATE TABLE def (d INT, e INT, f INT, PRIMARY KEY(d,e), UNIQUE INDEX(f))
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT f FROM def WHERE f = 1 and d = 3
 ----
-render     ·         ·            (f)     ·
- │         render 0  f            ·       ·
- └── scan  ·         ·            (d, f)  ·
-·          table     def@primary  ·       ·
-·          spans     /3-/4        ·       ·
-·          filter    f = 1        ·       ·
+render     ·         ·              (f)     ·
+ │         render 0  f              ·       ·
+ └── scan  ·         ·              (d, f)  ·
+·          table     def@def_f_key  ·       ·
+·          spans     /1-/2          ·       ·
+·          filter    d = 3          ·       ·
+
+statement ok
+DROP TABLE def
+
+# Verify we don't create constraints on implicit columns when they are not part
+# of the key (unique index on not-null column).
+statement ok
+CREATE TABLE def (d INT, e INT, f INT NOT NULL, PRIMARY KEY(d,e), UNIQUE INDEX(f))
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT f FROM def WHERE f = 1 and d = 3
+----
+render     ·         ·              (f)     ·
+ │         render 0  f              ·       ·
+ └── scan  ·         ·              (d, f)  ·
+·          table     def@def_f_key  ·       ·
+·          spans     /1-/2          ·       ·
+·          filter    d = 3          ·       ·
 
 # Regression test for #20504.
 query TTTTT
@@ -817,40 +906,34 @@ CREATE TABLE xy (x INT, y INT, INDEX (y))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM NULL
 ----
-render           ·         ·             (x, y)                 ·
- │               render 0  x             ·                      ·
- │               render 1  y             ·                      ·
- └── index-join  ·         ·             (x, y, rowid[hidden])  ·
-      ├── scan   ·         ·             (y, rowid[hidden])     ·
-      │          table     xy@xy_y_idx   ·                      ·
-      │          spans     /NULL-/!NULL  ·                      ·
-      └── scan   ·         ·             (x, y, rowid[hidden])  ·
-·                table     xy@primary    ·                      ·
+index-join  ·      ·             (x, y)              ·
+ ├── scan   ·      ·             (y, rowid[hidden])  ·
+ │          table  xy@xy_y_idx   ·                   ·
+ │          spans  /NULL-/!NULL  ·                   ·
+ └── scan   ·      ·             (x, y)              ·
+·           table  xy@primary    ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS NOT DISTINCT FROM 4
 ----
-render           ·         ·            (x, y)                 ·
- │               render 0  x            ·                      ·
- │               render 1  y            ·                      ·
- └── index-join  ·         ·            (x, y, rowid[hidden])  ·
-      ├── scan   ·         ·            (y, rowid[hidden])     ·
-      │          table     xy@xy_y_idx  ·                      ·
-      │          spans     /4-/5        ·                      ·
-      └── scan   ·         ·            (x, y, rowid[hidden])  ·
-·                table     xy@primary   ·                      ·
+index-join  ·      ·            (x, y)              ·
+ ├── scan   ·      ·            (y, rowid[hidden])  ·
+ │          table  xy@xy_y_idx  ·                   ·
+ │          spans  /4-/5        ·                   ·
+ └── scan   ·      ·            (x, y)              ·
+·           table  xy@primary   ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x FROM xy WHERE y > 0 AND y < 2 ORDER BY y
 ----
-render           ·         ·            (x)                    ·
- │               render 0  x            ·                      ·
- └── index-join  ·         ·            (x, y, rowid[hidden])  +y
-      ├── scan   ·         ·            (y, rowid[hidden])     +y
-      │          table     xy@xy_y_idx  ·                      ·
-      │          spans     /1-/2        ·                      ·
-      └── scan   ·         ·            (x, y, rowid[hidden])  ·
-·                table     xy@primary   ·                      ·
+render           ·         ·            (x)                 ·
+ │               render 0  x            ·                   ·
+ └── index-join  ·         ·            (x, y)              ·
+      ├── scan   ·         ·            (y, rowid[hidden])  ·
+      │          table     xy@xy_y_idx  ·                   ·
+      │          spans     /1-/2        ·                   ·
+      └── scan   ·         ·            (x, y)              ·
+·                table     xy@primary   ·                   ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE y IS DISTINCT FROM NULL
@@ -885,17 +968,9 @@ scan  ·      ·          (x, y)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xy WHERE (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))
 ----
-render                ·         ·                                                               (x, y)                 ·
- │                    render 0  x                                                               ·                      ·
- │                    render 1  y                                                               ·                      ·
- └── filter           ·         ·                                                               (x, y, rowid[hidden])  ·
-      │               filter    (x, y) IN ((NULL, NULL), (1, NULL), (NULL, 1), (1, 1), (1, 2))  ·                      ·
-      └── index-join  ·         ·                                                               (x, y, rowid[hidden])  ·
-           ├── scan   ·         ·                                                               (y, rowid[hidden])     ·
-           │          table     xy@xy_y_idx                                                     ·                      ·
-           │          spans     /1-/3                                                           ·                      ·
-           └── scan   ·         ·                                                               (x, y, rowid[hidden])  ·
-·                     table     xy@primary                                                      ·                      ·
+scan  ·      ·          (x, y)  ·
+·     table  xy@xy_idx  ·       ·
+·     spans  /1/1-/1/3  ·       ·
 
 # ------------------------------------------------------------------------------
 # Non-covering index
@@ -927,8 +1002,11 @@ index-join  ·      ·
  └── scan   ·      ·
 ·           table  noncover@primary
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM noncover WHERE b = 2; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM noncover WHERE b = 2]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /noncover/b/2/1 -> NULL
@@ -948,8 +1026,11 @@ index-join  ·      ·
  └── scan   ·      ·
 ·           table  noncover@primary
 
+statement ok
+SET tracing = on,kv,results; SELECT * FROM noncover WHERE c = 7; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM noncover WHERE c = 7]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /noncover/c/7 -> /5
@@ -999,19 +1080,19 @@ sort       ·      ·
 ·          table  noncover@primary
 ·          spans  ALL
 
-# TODO(radu): need to prefer the order-matching index
 query TTT
 EXPLAIN SELECT * FROM noncover ORDER BY c LIMIT 5
 ----
-limit           ·      ·
- └── sort       ·      ·
-      │         order  +c
-      └── scan  ·      ·
-·               table  noncover@primary
-·               spans  ALL
+index-join  ·      ·
+ ├── scan   ·      ·
+ │          table  noncover@c
+ │          spans  ALL
+ │          limit  5
+ └── scan   ·      ·
+·           table  noncover@primary
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c OFFSET 5
 ]
 ----
@@ -1023,9 +1104,9 @@ limit           ·       ·
 ·               table   noncover@primary
 ·               spans   ALL
 
-# TODO(radu): need to prefer the order-matching index
+# TODO(radu): need to prefer the order-matching index when OFFSET is present.
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 5 OFFSET 5
 ]
 ----
@@ -1039,7 +1120,7 @@ limit           ·       ·
 ·               spans   ALL
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 1000000
 ]
 ----
@@ -1081,61 +1162,66 @@ INSERT INTO t2 VALUES
   (8, 3, 2, '32'),
   (9, 3, 3, '33')
 
+# Pretend we have 10x more rows in the database than we really do.
+statement ok
+ALTER TABLE t2 INJECT STATISTICS '[
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 90,
+    "distinct_count": 30
+  }
+]'
+
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0
 ]
 ----
-filter           ·       ·
- │               filter  (c % 2) = 0
- └── index-join  ·       ·
-      ├── scan   ·       ·
-      │          table   t2@bc
-      │          spans   /2-/3
-      └── scan   ·       ·
-·                table   t2@primary
+index-join  ·       ·
+ ├── scan   ·       ·
+ │          table   t2@bc
+ │          spans   /2-/3
+ │          filter  (c % 2) = 0
+ └── scan   ·       ·
+·           table   t2@primary
 
 # We do NOT look up the table row for '21' and '23'.
-# TODO(justin): we need to push the c % 2 into the index scan.
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c % 2 = 0]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t2/bc/2/1/4 -> NULL
 fetched: /t2/bc/2/2/5 -> NULL
 fetched: /t2/bc/2/3/6 -> NULL
-fetched: /t2/primary/4 -> NULL
-fetched: /t2/primary/4/b -> 2
-fetched: /t2/primary/4/c -> 1
-fetched: /t2/primary/4/s -> '21'
 fetched: /t2/primary/5 -> NULL
 fetched: /t2/primary/5/b -> 2
 fetched: /t2/primary/5/c -> 2
 fetched: /t2/primary/5/s -> '22'
 output row: [5 2 2 '22']
-fetched: /t2/primary/6 -> NULL
-fetched: /t2/primary/6/b -> 2
-fetched: /t2/primary/6/c -> 3
-fetched: /t2/primary/6/s -> '23'
 
 query TTT
-SELECT "Tree", "Field", "Description" FROM [
+SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM t2 WHERE b = 2 AND c != b
 ]
 ----
-filter           ·       ·
- │               filter  c != b
- └── index-join  ·       ·
-      ├── scan   ·       ·
-      │          table   t2@bc
-      │          spans   /2/!NULL-/3
-      └── scan   ·       ·
-·                table   t2@primary
+index-join  ·       ·
+ ├── scan   ·       ·
+ │          table   t2@bc
+ │          spans   /2/!NULL-/3
+ │          filter  c != b
+ └── scan   ·       ·
+·           table   t2@primary
 
 # We do NOT look up the table row for '22'.
-# TODO(justin): we need to push the filter into the index scan.
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t2 WHERE b = 2 AND c != b; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c != b]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t2/bc/2/1/4 -> NULL
@@ -1146,10 +1232,6 @@ fetched: /t2/primary/4/b -> 2
 fetched: /t2/primary/4/c -> 1
 fetched: /t2/primary/4/s -> '21'
 output row: [4 2 1 '21']
-fetched: /t2/primary/5 -> NULL
-fetched: /t2/primary/5/b -> 2
-fetched: /t2/primary/5/c -> 2
-fetched: /t2/primary/5/s -> '22'
 fetched: /t2/primary/6 -> NULL
 fetched: /t2/primary/6/b -> 2
 fetched: /t2/primary/6/c -> 3
@@ -1157,9 +1239,11 @@ fetched: /t2/primary/6/s -> '23'
 output row: [6 2 3 '23']
 
 # We do NOT look up the table row for '22'.
-# TODO(justin): we need to push the filter into the index scan.
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t2 WHERE b = 2 AND c != b AND s <> '21'; SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b = 2 AND c != b AND s <> '21']
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t2/bc/2/1/4 -> NULL
@@ -1169,10 +1253,6 @@ fetched: /t2/primary/4 -> NULL
 fetched: /t2/primary/4/b -> 2
 fetched: /t2/primary/4/c -> 1
 fetched: /t2/primary/4/s -> '21'
-fetched: /t2/primary/5 -> NULL
-fetched: /t2/primary/5/b -> 2
-fetched: /t2/primary/5/c -> 2
-fetched: /t2/primary/5/s -> '22'
 fetched: /t2/primary/6 -> NULL
 fetched: /t2/primary/6/b -> 2
 fetched: /t2/primary/6/c -> 3
@@ -1181,8 +1261,11 @@ output row: [6 2 3 '23']
 
 # We only look up the table rows where c = b+1 or a > b+4: '23', '32', '33'.
 # TODO(justin): we need to push the filter into the index scan.
+statement ok
+SET tracing = on,kv,results; SELECT * FROM t2 WHERE b > 1 AND ((c = b+1 AND s != '23') OR (a > b+4 AND s != '32')); SET tracing = off
+
 query T
-SELECT message FROM [SHOW KV TRACE FOR SELECT * FROM t2 WHERE b > 1 AND ((c = b+1 AND s != '23') OR (a > b+4 AND s != '32'))]
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
 fetched: /t2/primary/1 -> NULL
@@ -1243,13 +1326,13 @@ statement ok
 CREATE TABLE t3 (k INT PRIMARY KEY, v INT, w INT, INDEX v(v))
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT w FROM t3 WHERE v > 0 AND v < 100 ORDER BY v
+EXPLAIN (VERBOSE) SELECT w FROM t3 WHERE v > 0 AND v < 10 ORDER BY v
 ----
-render           ·         ·           (w)        ·
- │               render 0  w           ·          ·
- └── index-join  ·         ·           (k, v, w)  +v
-      ├── scan   ·         ·           (k, v)     +v
-      │          table     t3@v        ·          ·
-      │          spans     /1-/100     ·          ·
-      └── scan   ·         ·           (k, v, w)  ·
-·                table     t3@primary  ·          ·
+render           ·         ·           (w)     ·
+ │               render 0  w           ·       ·
+ └── index-join  ·         ·           (v, w)  +v
+      ├── scan   ·         ·           (k, v)  +v
+      │          table     t3@v        ·       ·
+      │          spans     /1-/10      ·       ·
+      └── scan   ·         ·           (v, w)  ·
+·                table     t3@primary  ·       ·

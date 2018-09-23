@@ -21,7 +21,7 @@ CREATE INVERTED INDEX foo_inv ON t(b)
 statement error pq: column b is of type INT and thus is not indexable with an inverted index
 CREATE INDEX foo_inv2 ON t USING GIN (b)
 
-statement error pq: syntax error at or near "inverted"
+statement error pq: inverted indexes can't be unique
 CREATE UNIQUE INVERTED INDEX foo_inv ON t(b)
 
 statement ok
@@ -37,14 +37,14 @@ query TT
 SHOW CREATE TABLE c
 ----
 c  CREATE TABLE c (
-     id INT NOT NULL,
-     foo JSON NULL,
-     bar JSON NULL,
-     CONSTRAINT "primary" PRIMARY KEY (id ASC),
-     INVERTED INDEX c_foo_idx (foo),
-     INVERTED INDEX c_bar_idx (bar),
-     FAMILY "primary" (id, foo, bar)
-   )
+   id INT NOT NULL,
+   foo JSONB NULL,
+   bar JSONB NULL,
+   CONSTRAINT "primary" PRIMARY KEY (id ASC),
+   INVERTED INDEX c_foo_idx (foo),
+   INVERTED INDEX c_bar_idx (bar),
+   FAMILY "primary" (id, foo, bar)
+)
 
 statement error indexing more than one column with an inverted index is not supported
 CREATE TABLE d (
@@ -72,7 +72,7 @@ CREATE INDEX c on t1 USING GIN (id2)
 statement error pq: inverted indexes don't support stored columns
 CREATE INDEX c on t1 USING GIN (id2) STORING (id1,id3);
 
-statement error pq: syntax error at or near "storing"
+statement error pq: inverted indexes don't support stored columns
 CREATE INVERTED INDEX c on t1 (id2) STORING (id1,id3);
 
 statement error pq: inverted indexes can't be unique
@@ -484,7 +484,7 @@ statement ok
 CREATE INVERTED INDEX dogs on users(user_profile);
 
 statement error index "dogs" is inverted and cannot be used for this query
-SELECT COUNT(*) FROM users@dogs
+SELECT count(*) FROM users@dogs
 
 query T
 SELECT user_profile from users where user_profile @> '{"first_name":"Lola"}';

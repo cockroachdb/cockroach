@@ -44,7 +44,6 @@ func TestParseDatumStringAs(t *testing.T) {
 		},
 		types.Decimal: {
 			"0.0",
-			"-0.0",
 			"1.0",
 			"-1.0",
 			strconv.FormatFloat(math.MaxFloat64, 'G', -1, 64),
@@ -101,10 +100,6 @@ func TestParseDatumStringAs(t *testing.T) {
 		types.Time: {
 			"01:02:03",
 			"02:03:04.123456",
-		},
-		types.TimeTZ: {
-			"01:02:03+00:00",
-			"02:03:04.123456+00:00",
 		},
 		types.Timestamp: {
 			"2001-01-01 01:02:03+00:00",

@@ -11,7 +11,6 @@ package importccl
 import (
 	"bytes"
 	"context"
-	"encoding/csv"
 	"fmt"
 	"strconv"
 	"strings"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -72,8 +72,7 @@ func exportPlanHook(
 	}
 
 	if exportStmt.FileFormat != "CSV" {
-		// not possible with current parser rules.
-		return nil, nil, nil, errors.Errorf("unsupported import format: %q", exportStmt.FileFormat)
+		return nil, nil, nil, errors.Errorf("unsupported export format: %q", exportStmt.FileFormat)
 	}
 
 	optsFn, err := p.TypeAsStringOpts(exportStmt.Options, exportOptionExpectValues)
@@ -84,10 +83,6 @@ func exportPlanHook(
 	sel, err := p.Select(ctx, exportStmt.Query, nil)
 	if err != nil {
 		return nil, nil, nil, err
-	}
-
-	if !p.DistSQLPlanner().CheckPossible(sel) {
-		return nil, nil, nil, errors.Errorf("unsupported EXPORT query -- as an alternative try `cockroach sql --format=csv`")
 	}
 
 	fn := func(ctx context.Context, plans []sql.PlanNode, resultsCh chan<- tree.Datums) error {

@@ -129,13 +129,13 @@ func (c *client) startLocked(
 		log.Infof(ctx, "started gossip client to %s", c.addr)
 		if err := c.gossip(ctx, g, stream, stopper, &wg); err != nil {
 			if !grpcutil.IsClosedConnection(err) {
-				g.mu.Lock()
+				g.mu.RLock()
 				if c.peerID != 0 {
 					log.Infof(ctx, "closing client to node %d (%s): %s", c.peerID, c.addr, err)
 				} else {
 					log.Infof(ctx, "closing client to %s: %s", c.addr, err)
 				}
-				g.mu.Unlock()
+				g.mu.RUnlock()
 			}
 		}
 	})
@@ -154,14 +154,14 @@ func (c *client) close() {
 // supplying a map of this node's knowledge of other nodes' high water
 // timestamps.
 func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
-	g.mu.Lock()
+	g.mu.RLock()
 	args := &Request{
 		NodeID:          g.NodeID.Get(),
 		Addr:            g.mu.is.NodeAddr,
 		HighWaterStamps: g.mu.is.getHighWaterStamps(),
 		ClusterID:       g.clusterID.Get(),
 	}
-	g.mu.Unlock()
+	g.mu.RUnlock()
 
 	bytesSent := int64(args.Size())
 	c.clientMetrics.BytesSent.Inc(bytesSent)
@@ -175,6 +175,13 @@ func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
 func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient) error {
 	g.mu.Lock()
 	if delta := g.mu.is.delta(c.remoteHighWaterStamps); len(delta) > 0 {
+		// Ensure that the high water stamps for the remote server are kept up to
+		// date so that we avoid resending the same gossip infos as infos are
+		// updated locally.
+		for _, i := range delta {
+			ratchetHighWaterStamp(c.remoteHighWaterStamps, i.NodeID, i.OrigStamp)
+		}
+
 		args := Request{
 			NodeID:          g.NodeID.Get(),
 			Addr:            g.mu.is.NodeAddr,
@@ -233,7 +240,7 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 		g.maybeTightenLocked()
 	}
 	c.peerID = reply.NodeID
-	c.remoteHighWaterStamps = reply.HighWaterStamps
+	mergeHighWaterStamps(&c.remoteHighWaterStamps, reply.HighWaterStamps)
 
 	// If we haven't yet recorded which node ID we're connected to in the outgoing
 	// nodeSet, do so now. Note that we only want to do this if the peer has a
@@ -296,8 +303,11 @@ func (c *client) gossip(
 		default:
 		}
 	}
-	// Defer calling "undoer" callback returned from registration.
-	defer g.RegisterCallback(".*", updateCallback)()
+	// We require redundant callbacks here as the update callback is propagating
+	// gossip infos to other nodes and needs to propagate the new expiration
+	// info.
+	unregister := g.RegisterCallback(".*", updateCallback, Redundant)
+	defer unregister()
 
 	errCh := make(chan error, 1)
 	// This wait group is used to allow the caller to wait until gossip
@@ -307,6 +317,8 @@ func (c *client) gossip(
 		defer wg.Done()
 
 		errCh <- func() error {
+			var peerID roachpb.NodeID
+
 			for {
 				reply, err := stream.Recv()
 				if err != nil {
@@ -314,6 +326,10 @@ func (c *client) gossip(
 				}
 				if err := c.handleResponse(ctx, g, reply); err != nil {
 					return err
+				}
+				if peerID == 0 && c.peerID != 0 {
+					peerID = c.peerID
+					g.updateClients()
 				}
 			}
 		}()

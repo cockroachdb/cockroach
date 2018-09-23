@@ -30,7 +30,7 @@ func ParseConstraint(evalCtx *tree.EvalContext, str string) Constraint {
 		panic(str)
 	}
 	var cols []opt.OrderingColumn
-	for _, v := range parsePath(s[0]) {
+	for _, v := range parseIntPath(s[0]) {
 		cols = append(cols, opt.OrderingColumn(v))
 	}
 	var c Constraint
@@ -79,8 +79,8 @@ func parseSpan(str string) Span {
 		panic(str)
 	}
 	var sp Span
-	startVals := intsToDatums(parsePath(keys[0]))
-	endVals := intsToDatums(parsePath(keys[1]))
+	startVals := parseDatumPath(keys[0])
+	endVals := parseDatumPath(keys[1])
 	sp.Init(
 		MakeCompositeKey(startVals...), boundary[s],
 		MakeCompositeKey(endVals...), boundary[e],
@@ -88,24 +88,10 @@ func parseSpan(str string) Span {
 	return sp
 }
 
-func intsToDatums(vals []int) []tree.Datum {
-	r := make([]tree.Datum, len(vals))
-	for i, v := range vals {
-		r[i] = tree.NewDInt(tree.DInt(v))
-	}
-	return r
-}
-
-// parsePath parses a string like "/1/2/3" into a list of integers.
-func parsePath(str string) []int {
-	if str == "" {
-		return nil
-	}
-	if str[0] != '/' {
-		panic(str)
-	}
+// parseIntPath parses a string like "/1/2/3" into a list of integers.
+func parseIntPath(str string) []int {
 	var res []int
-	for _, valStr := range strings.Split(str, "/")[1:] {
+	for _, valStr := range parsePath(str) {
 		val, err := strconv.Atoi(valStr)
 		if err != nil {
 			panic(err)
@@ -113,4 +99,34 @@ func parsePath(str string) []int {
 		res = append(res, val)
 	}
 	return res
+}
+
+// parseDatumPath parses a span key string like "/1/2/3".
+// Only integers and NULL are currently supported.
+func parseDatumPath(str string) []tree.Datum {
+	var res []tree.Datum
+	for _, valStr := range parsePath(str) {
+		if valStr == "NULL" {
+			res = append(res, tree.DNull)
+			continue
+		}
+		val, err := strconv.Atoi(valStr)
+		if err != nil {
+			panic(err)
+		}
+		res = append(res, tree.NewDInt(tree.DInt(val)))
+	}
+	return res
+}
+
+// parsePath splits a string of the form "/foo/bar" into strings ["foo", "bar"].
+// An empty string is allowed, otherwise the string must start with /.
+func parsePath(str string) []string {
+	if str == "" {
+		return nil
+	}
+	if str[0] != '/' {
+		panic(str)
+	}
+	return strings.Split(str, "/")[1:]
 }

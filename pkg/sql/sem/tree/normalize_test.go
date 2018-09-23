@@ -96,6 +96,8 @@ func TestNormalizeExpr(t *testing.T) {
 		{`1 IN (3, 2, 1)`, `true`},
 		{`a IN (3, 2, 1)`, `a IN (1, 2, 3)`},
 		{`1 IN (1, 2, a)`, `1 IN (1, 2, a)`},
+		{`NULL IN ()`, `false`},
+		{`NULL NOT IN ()`, `true`},
 		{`NULL IN (1, 2, 3)`, `NULL`},
 		{`a IN (NULL)`, `NULL`},
 		{`a IN (NULL, NULL)`, `NULL`},
@@ -146,7 +148,6 @@ func TestNormalizeExpr(t *testing.T) {
 		{`random()`, `random()`},
 		{`gen_random_uuid()`, `gen_random_uuid()`},
 		{`current_date()`, `current_date()`},
-		{`current_time()`, `current_time()`},
 		{`clock_timestamp()`, `clock_timestamp()`},
 		{`now()`, `now()`},
 		{`current_timestamp()`, `current_timestamp()`},
@@ -213,6 +214,7 @@ func TestNormalizeExpr(t *testing.T) {
 		// #15454: ensure that operators are pretty-printed correctly after normalization.
 		{`(random() + 1.0)::INT`, `(random() + 1.0)::INT`},
 		{`('a' || left('b', random()::INT)) COLLATE en`, `('a' || left('b', random()::INT)) COLLATE en`},
+		{`NULL COLLATE en`, `CAST(NULL AS STRING) COLLATE en`},
 		{`(1.0 + random()) IS OF (INT)`, `(1.0 + random()) IS OF (INT)`},
 		// #14687: ensure that negative divisors flip the inequality when rotating.
 		{`1 < a / -2`, `a < -2`},
@@ -234,6 +236,10 @@ func TestNormalizeExpr(t *testing.T) {
 		{`j->'s' = jv`, `(j->'s') = jv`},
 		{`j->s = jv`, `(j->s) = jv`},
 		{`j->2 = '"jv"'::JSONB`, `(j->2) = '"jv"'`},
+		// We want to check that constant-folded tuples preserve their
+		// labels.
+		{`(ROW (1) AS a)`, `((1,) AS a)`}, // DTuple
+		{`(ROW (a) AS a)`, `((a,) AS a)`}, // Tuple
 	}
 
 	semaCtx := tree.MakeSemaContext(true /* privileged */)

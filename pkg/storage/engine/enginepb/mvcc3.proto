@@ -145,3 +145,64 @@ message RangeAppliedState {
   // of the Raft state machine.
   MVCCPersistentStats range_stats = 3 [(gogoproto.nullable) = false];
 }
+
+// MVCCWriteValueOp corresponds to a value being written outside of a
+// transaction.
+message MVCCWriteValueOp {
+  bytes key = 1;
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+  bytes value = 3;
+}
+
+// MVCCUpdateIntentOp corresponds to an intent being written for a given
+// transaction.
+message MVCCWriteIntentOp {
+  bytes txn_id = 1 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.nullable) = false];
+  bytes txn_key = 2;
+  util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+}
+
+// MVCCUpdateIntentOp corresponds to an intent being updates at a larger
+// timestamp for a given transaction.
+message MVCCUpdateIntentOp {
+  bytes txn_id = 1 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.nullable) = false];
+  util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
+}
+
+// MVCCCommitIntentOp corresponds to an intent being committed for a given
+// transaction.
+message MVCCCommitIntentOp {
+  bytes txn_id = 1 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.nullable) = false];
+  bytes key = 2;
+  util.hlc.Timestamp timestamp = 3 [(gogoproto.nullable) = false];
+  bytes value = 4;
+}
+
+// MVCCAbortIntentOp corresponds to an intent being aborted for a given
+// transaction.
+message MVCCAbortIntentOp {
+  bytes txn_id = 1 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.nullable) = false];
+}
+
+// MVCCLogicalOp is a union of all logical MVCC operation types.
+message MVCCLogicalOp {
+  option (gogoproto.onlyone) = true;
+
+  MVCCWriteValueOp   write_value   = 1;
+  MVCCWriteIntentOp  write_intent  = 2;
+  MVCCUpdateIntentOp update_intent = 3;
+  MVCCCommitIntentOp commit_intent = 4;
+  MVCCAbortIntentOp  abort_intent  = 5;
+}

@@ -22,6 +22,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"time"
@@ -68,13 +69,61 @@ func writeKeyToFile(keyFilePath string, key crypto.PrivateKey, overwrite bool) e
 	return WritePEMToFile(keyFilePath, keyFileMode, overwrite, keyBlock)
 }
 
-// CreateCAPair creates a CA key and a CA certificate.
+func writePKCS8KeyToFile(keyFilePath string, key crypto.PrivateKey, overwrite bool) error {
+	keyBytes, err := PrivateKeyToPKCS8(key)
+	if err != nil {
+		return err
+	}
+
+	return SafeWriteToFile(keyFilePath, keyFileMode, overwrite, keyBytes)
+}
+
+// CreateCAPair creates a general CA certificate and associated key.
+func CreateCAPair(
+	certsDir, caKeyPath string,
+	keySize int,
+	lifetime time.Duration,
+	allowKeyReuse bool,
+	overwrite bool,
+) error {
+	return createCACertAndKey(certsDir, caKeyPath, CAPem, keySize, lifetime, allowKeyReuse, overwrite)
+}
+
+// CreateClientCAPair creates a client CA certificate and associated key.
+func CreateClientCAPair(
+	certsDir, caKeyPath string,
+	keySize int,
+	lifetime time.Duration,
+	allowKeyReuse bool,
+	overwrite bool,
+) error {
+	return createCACertAndKey(certsDir, caKeyPath, ClientCAPem, keySize, lifetime, allowKeyReuse, overwrite)
+}
+
+// CreateUICAPair creates a UI CA certificate and associated key.
+func CreateUICAPair(
+	certsDir, caKeyPath string,
+	keySize int,
+	lifetime time.Duration,
+	allowKeyReuse bool,
+	overwrite bool,
+) error {
+	return createCACertAndKey(certsDir, caKeyPath, UICAPem, keySize, lifetime, allowKeyReuse, overwrite)
+}
+
+// createCACertAndKey creates a CA key and a CA certificate.
 // If the certs directory does not exist, it is created.
 // If the key does not exist, it is created.
 // The certificate is written to the certs directory. If the file already exists,
 // we append the original certificates to the new certificate.
-func CreateCAPair(
+//
+// The filename of the certificate file must be specified.
+// It should be one of:
+// - ca.crt: the general CA certificate
+// - ca-client.crt: the CA certificate to verify client certificates
+func createCACertAndKey(
 	certsDir, caKeyPath string,
+	caType PemUsage,
 	keySize int,
 	lifetime time.Duration,
 	allowKeyReuse bool,
@@ -85,6 +134,10 @@ func CreateCAPair(
 	}
 	if len(certsDir) == 0 {
 		return errors.New("the path to the certs directory is required")
+	}
+	if caType != CAPem && caType != ClientCAPem && caType != UICAPem {
+		return fmt.Errorf("caType argument to createCACertAndKey must be one of CAPem (%d), ClientCAPem (%d), or UICAPem (%d), got: %d",
+			CAPem, ClientCAPem, UICAPem, caType)
 	}
 
 	// The certificate manager expands the env for the certs directory.
@@ -139,7 +192,16 @@ func CreateCAPair(
 		return errors.Errorf("could not generate CA certificate: %v", err)
 	}
 
-	certPath := cm.CACertPath()
+	var certPath string
+	// We've already checked the caType value at the beginning of this function.
+	switch caType {
+	case CAPem:
+		certPath = cm.CACertPath()
+	case ClientCAPem:
+		certPath = cm.ClientCACertPath()
+	case UICAPem:
+		certPath = cm.UICACertPath()
+	}
 
 	var existingCertificates []*pem.Block
 	if _, err := os.Stat(certPath); err == nil {
@@ -227,11 +289,11 @@ func CreateNodePair(
 	return nil
 }
 
-// CreateClientPair creates a node key and certificate.
+// CreateUIPair creates a UI certificate and key using the UI CA.
 // The CA cert and key must load properly. If multiple certificates
 // exist in the CA cert, the first one is used.
-func CreateClientPair(
-	certsDir, caKeyPath string, keySize int, lifetime time.Duration, overwrite bool, user string,
+func CreateUIPair(
+	certsDir, caKeyPath string, keySize int, lifetime time.Duration, overwrite bool, hosts []string,
 ) error {
 	if len(caKeyPath) == 0 {
 		return errors.New("the path to the CA key is required")
@@ -251,7 +313,78 @@ func CreateClientPair(
 	}
 
 	// Load the CA pair.
-	caCert, caPrivateKey, err := loadCACertAndKey(cm.CACertPath(), caKeyPath)
+	caCert, caPrivateKey, err := loadCACertAndKey(cm.UICACertPath(), caKeyPath)
+	if err != nil {
+		return err
+	}
+
+	// Generate certificates and keys.
+	uiKey, err := rsa.GenerateKey(rand.Reader, keySize)
+	if err != nil {
+		return errors.Errorf("could not generate new UI key: %v", err)
+	}
+
+	uiCert, err := GenerateUIServerCert(caCert, caPrivateKey, uiKey.Public(), lifetime, hosts)
+	if err != nil {
+		return errors.Errorf("error creating UI server certificate and key: %s", err)
+	}
+
+	certPath := cm.UICertPath()
+	if err := writeCertificateToFile(certPath, uiCert, overwrite); err != nil {
+		return errors.Errorf("error writing UI server certificate to %s: %v", certPath, err)
+	}
+	log.Infof(context.Background(), "Generated UI certificate: %s", certPath)
+
+	keyPath := cm.UIKeyPath()
+	if err := writeKeyToFile(keyPath, uiKey, overwrite); err != nil {
+		return errors.Errorf("error writing UI server key to %s: %v", keyPath, err)
+	}
+	log.Infof(context.Background(), "Generated UI key: %s", keyPath)
+
+	return nil
+}
+
+// CreateClientPair creates a node key and certificate.
+// The CA cert and key must load properly. If multiple certificates
+// exist in the CA cert, the first one is used.
+// If a client CA exists, this is used instead.
+// If wantPKCS8Key is true, the private key in PKCS#8 encoding is written as well.
+func CreateClientPair(
+	certsDir, caKeyPath string,
+	keySize int,
+	lifetime time.Duration,
+	overwrite bool,
+	user string,
+	wantPKCS8Key bool,
+) error {
+	if len(caKeyPath) == 0 {
+		return errors.New("the path to the CA key is required")
+	}
+	if len(certsDir) == 0 {
+		return errors.New("the path to the certs directory is required")
+	}
+
+	// The certificate manager expands the env for the certs directory.
+	// For consistency, we need to do this for the key as well.
+	caKeyPath = os.ExpandEnv(caKeyPath)
+
+	// Create a certificate manager with "create dir if not exist".
+	cm, err := NewCertificateManagerFirstRun(certsDir)
+	if err != nil {
+		return err
+	}
+
+	var caCertPath string
+	// Check to see if we are using a client CA.
+	// We only check for its presence, not whether it has errors.
+	if cm.ClientCACert() != nil {
+		caCertPath = cm.ClientCACertPath()
+	} else {
+		caCertPath = cm.CACertPath()
+	}
+
+	// Load the CA pair.
+	caCert, caPrivateKey, err := loadCACertAndKey(caCertPath, caKeyPath)
 	if err != nil {
 		return err
 	}
@@ -278,6 +411,14 @@ func CreateClientPair(
 		return errors.Errorf("error writing client key to %s: %v", keyPath, err)
 	}
 	log.Infof(context.Background(), "Generated client key: %s", keyPath)
+
+	if wantPKCS8Key {
+		pkcs8KeyPath := keyPath + ".pk8"
+		if err := writePKCS8KeyToFile(pkcs8KeyPath, clientKey, overwrite); err != nil {
+			return errors.Errorf("error writing client PKCS8 key to %s: %v", pkcs8KeyPath, err)
+		}
+		log.Infof(context.Background(), "Generated PKCS8 client key: %s", pkcs8KeyPath)
+	}
 
 	return nil
 }

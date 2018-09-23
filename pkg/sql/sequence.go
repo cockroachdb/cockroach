@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -35,13 +36,7 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		return 0, readOnlyError("nextval()")
 	}
 
-	// TODO(vivek,knz): this lookup should really use the cached descriptor.
-	// However tests break if it does.
-	var descriptor *TableDescriptor
-	var err error
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		descriptor, err = ResolveExistingObject(ctx, p, seqName, true /*required*/, requireSequenceDesc)
-	})
+	descriptor, err := ResolveExistingObject(ctx, p, seqName, true /*required*/, requireSequenceDesc)
 	if err != nil {
 		return 0, err
 	}
@@ -49,21 +44,26 @@ func (p *planner) IncrementSequence(ctx context.Context, seqName *tree.TableName
 		return 0, err
 	}
 
-	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
-	val, err := client.IncrementValRetryable(
-		ctx, p.txn.DB(), seqValueKey, descriptor.SequenceOpts.Increment)
-	if err != nil {
-		switch err.(type) {
-		case *roachpb.IntegerOverflowError:
-			return 0, boundsExceededError(descriptor)
-		default:
-			return 0, err
-		}
-	}
-
 	seqOpts := descriptor.SequenceOpts
-	if val > seqOpts.MaxValue || val < seqOpts.MinValue {
-		return 0, boundsExceededError(descriptor)
+	var val int64
+	if seqOpts.Virtual {
+		rowid := builtins.GenerateUniqueInt(p.EvalContext().NodeID)
+		val = int64(rowid)
+	} else {
+		seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
+		val, err = client.IncrementValRetryable(
+			ctx, p.txn.DB(), seqValueKey, descriptor.SequenceOpts.Increment)
+		if err != nil {
+			switch err.(type) {
+			case *roachpb.IntegerOverflowError:
+				return 0, boundsExceededError(descriptor)
+			default:
+				return 0, err
+			}
+		}
+		if val > seqOpts.MaxValue || val < seqOpts.MinValue {
+			return 0, boundsExceededError(descriptor)
+		}
 	}
 
 	p.ExtendedEvalContext().SessionMutator.RecordLatestSequenceVal(uint32(descriptor.ID), val)
@@ -86,20 +86,15 @@ func boundsExceededError(descriptor *sqlbase.TableDescriptor) error {
 	}
 	return pgerror.NewErrorf(
 		pgerror.CodeSequenceGeneratorLimitExceeded,
-		`reached %s value of sequence "%s" (%d)`, word, descriptor.Name, value)
+		`reached %s value of sequence %q (%d)`, word,
+		tree.ErrString((*tree.Name)(&descriptor.Name)), value)
 }
 
 // GetLatestValueInSessionForSequence implements the tree.SequenceOperators interface.
 func (p *planner) GetLatestValueInSessionForSequence(
 	ctx context.Context, seqName *tree.TableName,
 ) (int64, error) {
-	// TODO(vivek,knz): this lookup should really use the cached descriptor.
-	// However tests break if it does.
-	var descriptor *TableDescriptor
-	var err error
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		descriptor, err = ResolveExistingObject(ctx, p, seqName, true /*required*/, requireSequenceDesc)
-	})
+	descriptor, err := ResolveExistingObject(ctx, p, seqName, true /*required*/, requireSequenceDesc)
 	if err != nil {
 		return 0, err
 	}
@@ -108,7 +103,7 @@ func (p *planner) GetLatestValueInSessionForSequence(
 	if !ok {
 		return 0, pgerror.NewErrorf(
 			pgerror.CodeObjectNotInPrerequisiteStateError,
-			`currval of sequence "%s" is not yet defined in this session`, seqName)
+			`currval of sequence %q is not yet defined in this session`, tree.ErrString(seqName))
 	}
 
 	return val, nil
@@ -122,13 +117,7 @@ func (p *planner) SetSequenceValue(
 		return readOnlyError("setval()")
 	}
 
-	// TODO(vivek,knz): this lookup should really use the cached descriptor.
-	// However tests break if it does.
-	var descriptor *TableDescriptor
-	var err error
-	p.runWithOptions(resolveFlags{skipCache: true}, func() {
-		descriptor, err = ResolveExistingObject(ctx, p, seqName, true /*required*/, requireSequenceDesc)
-	})
+	descriptor, err := ResolveExistingObject(ctx, p, seqName, true /*required*/, requireSequenceDesc)
 	if err != nil {
 		return err
 	}
@@ -136,23 +125,46 @@ func (p *planner) SetSequenceValue(
 		return err
 	}
 
-	opts := descriptor.SequenceOpts
-	if newVal > opts.MaxValue || newVal < opts.MinValue {
+	if descriptor.SequenceOpts.Virtual {
+		// TODO(knz): we currently return an error here, but if/when
+		// CockroachDB grows to automatically make sequences virtual when
+		// clients don't expect it, we may need to make this a no-op
+		// instead.
 		return pgerror.NewErrorf(
-			pgerror.CodeNumericValueOutOfRangeError,
-			`value %d is out of bounds for sequence "%s" (%d..%d)`,
-			newVal, descriptor.Name, opts.MinValue, opts.MaxValue,
-		)
-	}
-	if !isCalled {
-		newVal = newVal - descriptor.SequenceOpts.Increment
+			pgerror.CodeObjectNotInPrerequisiteStateError,
+			`cannot set the value of virtual sequence %q`, tree.ErrString(seqName))
 	}
 
-	seqValueKey := keys.MakeSequenceKey(uint32(descriptor.ID))
+	seqValueKey, newVal, err := MakeSequenceKeyVal(descriptor, newVal, isCalled)
+	if err != nil {
+		return err
+	}
+
 	// TODO(vilterp): not supposed to mix usage of Inc and Put on a key,
 	// according to comments on Inc operation. Switch to Inc if `desired-current`
 	// overflows correctly.
 	return p.txn.Put(ctx, seqValueKey, newVal)
+}
+
+// MakeSequenceKeyVal returns the key and value of a sequence being set
+// with newVal.
+func MakeSequenceKeyVal(
+	sequence *TableDescriptor, newVal int64, isCalled bool,
+) ([]byte, int64, error) {
+	opts := sequence.SequenceOpts
+	if newVal > opts.MaxValue || newVal < opts.MinValue {
+		return nil, 0, pgerror.NewErrorf(
+			pgerror.CodeNumericValueOutOfRangeError,
+			`value %d is out of bounds for sequence "%s" (%d..%d)`,
+			newVal, sequence.Name, opts.MinValue, opts.MaxValue,
+		)
+	}
+	if !isCalled {
+		newVal = newVal - sequence.SequenceOpts.Increment
+	}
+
+	seqValueKey := keys.MakeSequenceKey(uint32(sequence.ID))
+	return seqValueKey, newVal, nil
 }
 
 // GetSequenceValue returns the current value of the sequence.
@@ -247,6 +259,8 @@ func assignSequenceOptions(
 			}
 		case tree.SeqOptStart:
 			opts.Start = *option.IntVal
+		case tree.SeqOptVirtual:
+			opts.Virtual = true
 		}
 	}
 
@@ -284,7 +298,7 @@ func maybeAddSequenceDependencies(
 	col *sqlbase.ColumnDescriptor,
 	expr tree.TypedExpr,
 	evalCtx *tree.EvalContext,
-) ([]*sqlbase.TableDescriptor, error) {
+) ([]*MutableTableDescriptor, error) {
 	ctx := evalCtx.Ctx()
 	seqNames, err := getUsedSequenceNames(expr)
 	if err != nil {
@@ -296,9 +310,20 @@ func maybeAddSequenceDependencies(
 		if err != nil {
 			return nil, err
 		}
-		seqDesc, err := ResolveExistingObject(ctx, sc, parsedSeqName, true /*required*/, requireSequenceDesc)
-		if err != nil {
-			return nil, err
+
+		var seqDesc *MutableTableDescriptor
+		p, ok := sc.(*planner)
+		if ok {
+			seqDesc, err = p.ResolveMutableTableDescriptor(ctx, parsedSeqName, true /*required*/, requireSequenceDesc)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			// This is only executed via IMPORT which uses its own resolver.
+			seqDesc, err = ResolveExistingObject(ctx, sc, parsedSeqName, true /*required*/, requireSequenceDesc)
+			if err != nil {
+				return nil, err
+			}
 		}
 		col.UsesSequenceIds = append(col.UsesSequenceIds, seqDesc.ID)
 		// Add reference from sequence descriptor to column.

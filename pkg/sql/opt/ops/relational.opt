@@ -21,13 +21,33 @@
 #             step in some important transformations (like eliminating
 #             subqueries).
 
-# Scan returns a result set containing every row in the specified table, by
-# scanning one of the table's indexes according to its ordering. The private
-# Def field is an *opt.ScanOpDef that identifies the table and index to scan,
-# as well as the subset of columns to project from it.
+# Scan returns a result set containing every row in a table by scanning one of
+# the table's indexes according to its ordering. The private Def field is an
+# *opt.ScanOpDef that identifies the table and index to scan, as well as the
+# subset of columns to project from it.
+#
+# The scan can be constrained and/or have an internal row limit. A scan can be
+# executed either as a forward or as a reverse scan (except when it has a limit,
+# in which case the direction is fixed).
 [Relational]
 define Scan {
     Def ScanOpDef
+}
+
+# VirtualScan returns a result set containing every row in a virtual table.
+# Virtual tables are system tables that are populated "on the fly" with rows
+# synthesized from system metadata and other state. An example is the
+# "information_schema.tables" virtual table which returns one row for each
+# accessible system or user table.
+#
+# VirtualScan has many of the same characteristics as the Scan operator.
+# However, virtual tables do not have indexes or keys, and the physical operator
+# used to scan virtual tables does not support limits or constraints. Therefore,
+# nearly all the rules that apply to Scan do not apply to VirtualScan, so it
+# makes sense to have a separate operator.
+[Relational]
+define VirtualScan {
+    Def VirtualScanOpDef
 }
 
 # Values returns a manufactured result set containing a constant number of rows.
@@ -64,8 +84,8 @@ define Select {
 # synthesized output columns.
 [Relational]
 define Project {
-    Input           Expr
-    Projections     Expr
+    Input       Expr
+    Projections Expr
 }
 
 # InnerJoin creates a result set that combines columns from its left and right
@@ -73,53 +93,79 @@ define Project {
 # predicate are filtered. While expressions in the predicate can refer to
 # columns projected by either the left or right inputs, the inputs are not
 # allowed to refer to the other's projected columns.
-[Relational, Join]
+[Relational, Join, JoinNonApply]
 define InnerJoin {
     Left  Expr
     Right Expr
     On    Expr
 }
 
-[Relational, Join]
+[Relational, Join, JoinNonApply]
 define LeftJoin {
     Left  Expr
     Right Expr
     On    Expr
 }
 
-[Relational, Join]
+[Relational, Join, JoinNonApply]
 define RightJoin {
     Left  Expr
     Right Expr
     On    Expr
 }
 
-[Relational, Join]
+[Relational, Join, JoinNonApply]
 define FullJoin {
     Left  Expr
     Right Expr
     On    Expr
 }
 
-[Relational, Join]
+[Relational, Join, JoinNonApply]
 define SemiJoin {
     Left  Expr
     Right Expr
     On    Expr
 }
 
-[Relational, Join]
+[Relational, Join, JoinNonApply]
 define AntiJoin {
     Left  Expr
     Right Expr
     On    Expr
 }
 
+# IndexJoin represents an inner join between an input expression and a primary
+# index. It is a special case of LookupJoin where the input columns are the PK
+# columns of the table we are looking up into, and every input row results in
+# exactly one output row.
+#
+# IndexJoin operators are created from Scan operators (unlike lookup joins which
+# are created from Join operators).
+[Relational]
+define IndexJoin {
+    Input Expr
+    Def   IndexJoinDef
+}
+
 # LookupJoin represents a join between an input expression and an index.
+# The type of join is in the Def private.
 [Relational]
 define LookupJoin {
     Input Expr
-    Def LookupJoinDef
+    On    Expr
+    Def   LookupJoinDef
+}
+
+# MergeJoin represents a join that is executed using merge-join.
+# MergeOn is a scalar which contains the ON condition and merge-join ordering
+# information; see the MergeOn scalar operator.
+# It can be any type of join (identified in the private of MergeOn).
+[Relational]
+define MergeJoin {
+    Left    Expr
+    Right   Expr
+    MergeOn Expr
 }
 
 # InnerJoinApply has the same join semantics as InnerJoin. However, unlike
@@ -167,13 +213,84 @@ define AntiJoinApply {
     On    Expr
 }
 
-# GroupBy is an operator that is used for performing aggregations (for queries
-# with aggregate functions, HAVING clauses and/or group by expressions). It
-# groups results that are equal on the grouping columns and computes
-# aggregations as described by Aggregations (which is always an Aggregations
-# operator). The arguments of the aggregations are columns from the input.
+# GroupBy computes aggregate functions over groups of input rows. Input rows
+# that are equal on the grouping columns are grouped together. The set of
+# computed aggregate functions is described by the Aggregations field (which is
+# always an Aggregations operator).
+#
+# The arguments of the aggregate functions are columns from the input
+# (i.e. Variables), possibly wrapped in aggregate modifiers like AggDistinct.
+#
+# If the set of input rows is empty, then the output of the GroupBy operator
+# will also be empty. If the grouping columns are empty, then all input rows
+# form a single group. GroupBy is used for queries with aggregate functions,
+# HAVING clauses and/or GROUP BY expressions.
+#
+# The Def private contains an ordering; this ordering is used to determine
+# intra-group ordering and is only useful if there is an order-dependent
+# aggregation (like ARRAY_AGG). Grouping columns are inconsequential in this
+# ordering; we currently set all grouping columns as optional in this ordering
+# (but note that this is not required by the operator).
 [Relational]
 define GroupBy {
+    Input        Expr
+    Aggregations Expr
+    Def          GroupByDef
+}
+
+# ScalarGroupBy computes aggregate functions over the complete set of input
+# rows. This is similar to GroupBy with empty grouping columns, where all input
+# rows form a single group. However, there is an important difference. If the
+# input set is empty, then the output of the ScalarGroupBy operator will have a
+# single row containing default values for each aggregate function (typically
+# null or zero, depending on the function). ScalarGroupBy always returns exactly
+# one row - either the single-group aggregates or the default aggregate values.
+#
+# ScalarGroupBy uses the same GroupByDef private so that it's polymorphic with
+# GroupBy and can be used in the same rules (when appropriate). In the
+# ScalarGroupBy case, the grouping column field in GroupByDef is always empty.
+[Relational]
+define ScalarGroupBy {
+    Input        Expr
+    Aggregations Expr
+    Def          GroupByDef
+}
+
+# DistinctOn filters out rows that are identical on the set of grouping columns;
+# only the first row (according to an ordering) is kept for each set of possible
+# values. It is roughly equivalent with a GroupBy on the same grouping columns
+# except that it uses FirstAgg functions that ensure the value on the first row
+# is chosen (across all aggregations).
+#
+# In addition, the value on that first row must be chosen for all the grouping
+# columns as well; this is relevant in the case of equal but non-identical
+# values, like decimals. For example, if we have rows (1, 2.0) and (1.0, 2) and
+# we are grouping on these two columns, the values output can be either (1, 2.0)
+# or (1.0, 2), but not (1.0, 2.0).
+#
+# The execution of DistinctOn resembles that of Select more than that of
+# GroupBy: each row is tested against a map of what groups we have seen already,
+# and is either passed through or discarded. In particular, note that this
+# preserves the input ordering.
+#
+# The ordering in the private will be required of the input; it determines which
+# row can get "chosen" for each group of values on the grouping columns.
+# There is no restriction on the ordering; but note that grouping columns are
+# inconsequential - they can appear anywhere in the ordering and they won't
+# change the results (other than the result ordering).
+#
+# Currently when we build DistinctOn, we set all grouping columns as optional
+# cols in Ordering (but this is not required by the operator).
+#
+# TODO(radu): in the future we may want an exploration transform to try out more
+# specific interesting orderings because execution is more efficient when we can
+# rely on an ordering on the grouping columns (or a subset of them).
+#
+# DistinctOn uses an Aggregations child and the GroupByDef private so that it's
+# polymorphic with GroupBy and can be used in the same rules (when appropriate).
+# In the DistinctOn case, the aggregations can be only FirstAgg or ConstAgg.
+[Relational]
+define DistinctOn {
     Input        Expr
     Aggregations Expr
     Def          GroupByDef
@@ -293,13 +410,14 @@ define ExceptAll {
 
 # Limit returns a limited subset of the results in the input relation.
 # The limit expression is a scalar value; the operator returns at most this many
-# rows. The private field is an opt.Ordering which indicates the desired
-# row ordering (the first rows with respect to this ordering are returned).
+# rows. The private field is a props.OrderingChoice which indicates the row
+# ordering required from the input (the first rows with respect to this ordering
+# are returned).
 [Relational]
 define Limit {
     Input    Expr
     Limit    Expr
-    Ordering Ordering
+    Ordering OrderingChoice
 }
 
 # Offset filters out the first Offset rows of the input relation; used in
@@ -308,7 +426,7 @@ define Limit {
 define Offset {
     Input    Expr
     Offset   Expr
-    Ordering Ordering
+    Ordering OrderingChoice
 }
 
 # Max1Row enforces that its input must return at most one row. It is used as
@@ -327,14 +445,6 @@ define Explain {
     Def   ExplainOpDef
 }
 
-# ShowTrace runs the "input" expressions in a special tracing mode and returns
-# trace results.
-[Relational]
-define ShowTrace {
-    Input Expr
-    Def   ShowTraceOpDef
-}
-
 # ShowTraceForSession returns the current session traces.
 [Relational]
 define ShowTraceForSession {
@@ -347,4 +457,30 @@ define ShowTraceForSession {
 define RowNumber {
     Input    Expr
     Def      RowNumberDef
+}
+
+# Zip represents a functional zip over generators a,b,c, which returns tuples of
+# values from a,b,c picked "simultaneously". NULLs are used when a generator is
+# "shorter" than another. In SQL, these generators can be either a generator
+# function such as generate_series(), or a scalar function such as
+# upper(). For example, consider this query:
+#
+#    SELECT * FROM ROWS FROM (generate_series(0, 1), upper('abc'));
+#
+# It is equivalent to (Zip [(Function generate_series), (Function upper)]).
+# It produces:
+#
+#     generate_series | upper
+#    -----------------+-------
+#                   0 | ABC
+#                   1 | NULL
+#
+# In the Zip operation, Funcs represents the list of functions, and Cols
+# represents the columns output by the functions. Funcs and Cols might not be
+# the same length since a single function may output multiple columns
+# (e.g., pg_get_keywords() outputs three columns).
+[Relational]
+define Zip {
+    Funcs ExprList
+    Cols  ColList
 }

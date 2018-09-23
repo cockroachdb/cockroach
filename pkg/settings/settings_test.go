@@ -120,24 +120,24 @@ var changes = struct {
 	mA       int
 }{}
 
-var boolTA = settings.RegisterBoolSetting("bool.t", "", true)
-var boolFA = settings.RegisterBoolSetting("bool.f", "", false)
-var strFooA = settings.RegisterStringSetting("str.foo", "", "")
-var strBarA = settings.RegisterStringSetting("str.bar", "", "bar")
-var i1A = settings.RegisterIntSetting("i.1", "", 0)
-var i2A = settings.RegisterIntSetting("i.2", "", 5)
-var fA = settings.RegisterFloatSetting("f", "", 5.4)
-var dA = settings.RegisterDurationSetting("d", "", time.Second)
-var eA = settings.RegisterEnumSetting("e", "", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
-var byteSize = settings.RegisterByteSizeSetting("zzz", "", mb)
+var boolTA = settings.RegisterBoolSetting("bool.t", "desc", true)
+var boolFA = settings.RegisterBoolSetting("bool.f", "desc", false)
+var strFooA = settings.RegisterStringSetting("str.foo", "desc", "")
+var strBarA = settings.RegisterStringSetting("str.bar", "desc", "bar")
+var i1A = settings.RegisterIntSetting("i.1", "desc", 0)
+var i2A = settings.RegisterIntSetting("i.2", "desc", 5)
+var fA = settings.RegisterFloatSetting("f", "desc", 5.4)
+var dA = settings.RegisterDurationSetting("d", "desc", time.Second)
+var eA = settings.RegisterEnumSetting("e", "desc", "foo", map[int64]string{1: "foo", 2: "bar", 3: "baz"})
+var byteSize = settings.RegisterByteSizeSetting("zzz", "desc", mb)
 var mA = settings.RegisterStateMachineSetting("statemachine", "foo", dummyTransformer)
 
 func init() {
-	settings.RegisterBoolSetting("sekretz", "", false).Hide()
+	settings.RegisterBoolSetting("sekretz", "desc", false).Hide()
 }
 
 var strVal = settings.RegisterValidatedStringSetting(
-	"str.val", "", "", func(sv *settings.Values, v string) error {
+	"str.val", "desc", "", func(sv *settings.Values, v string) error {
 		for _, c := range v {
 			if !unicode.IsLetter(c) {
 				return errors.Errorf("not all runes of %s are letters: %c", v, c)
@@ -145,17 +145,17 @@ var strVal = settings.RegisterValidatedStringSetting(
 		}
 		return nil
 	})
-var dVal = settings.RegisterNonNegativeDurationSetting("dVal", "", time.Second)
-var fVal = settings.RegisterNonNegativeFloatSetting("fVal", "", 5.4)
+var dVal = settings.RegisterNonNegativeDurationSetting("dVal", "desc", time.Second)
+var fVal = settings.RegisterNonNegativeFloatSetting("fVal", "desc", 5.4)
 var byteSizeVal = settings.RegisterValidatedByteSizeSetting(
-	"byteSize.Val", "", mb, func(v int64) error {
+	"byteSize.Val", "desc", mb, func(v int64) error {
 		if v < 0 {
 			return errors.Errorf("bytesize cannot be negative")
 		}
 		return nil
 	})
 var iVal = settings.RegisterValidatedIntSetting(
-	"i.Val", "", 0, func(v int64) error {
+	"i.Val", "desc", 0, func(v int64) error {
 		if v < 0 {
 			return errors.Errorf("int cannot be negative")
 		}

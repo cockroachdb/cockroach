@@ -23,7 +23,7 @@ SELECT 5 r
 project
  ├── columns: r:1(int!null)
  ├── values
- │    └── tuple [type=tuple{}]
+ │    └── tuple [type=tuple]
  └── projections
       └── const: 5 [type=int]
 
@@ -44,10 +44,8 @@ scan a
 build
 SELECT a.y, a.x FROM a
 ----
-project
- ├── columns: y:2(float) x:1(int!null)
- └── scan a
-      └── columns: x:1(int!null) y:2(float)
+scan a
+ └── columns: y:2(float) x:1(int!null)
 
 build
 SELECT * FROM a
@@ -74,7 +72,7 @@ project
  │    └── columns: x:1(int!null) y:2(float)
  └── projections
       ├── plus [type=int]
-      │    ├── variable: a.x [type=int]
+      │    ├── variable: x [type=int]
       │    └── const: 3 [type=int]
       └── false [type=bool]
 
@@ -88,10 +86,10 @@ project
  └── projections
       └── or [type=bool]
            ├── lt [type=bool]
-           │    ├── variable: a.x [type=int]
-           │    └── variable: a.y [type=float]
+           │    ├── variable: x [type=int]
+           │    └── variable: y [type=float]
            └── gt [type=bool]
-                ├── variable: a.x [type=int]
+                ├── variable: x [type=int]
                 └── const: 1000 [type=int]
 
 build
@@ -115,10 +113,10 @@ project
  │    │    └── columns: x:1(int!null) y:2(float)
  │    └── projections
  │         ├── plus [type=int]
- │         │    ├── variable: a.x [type=int]
+ │         │    ├── variable: x [type=int]
  │         │    └── const: 3 [type=int]
  │         └── plus [type=float]
- │              ├── variable: a.y [type=float]
+ │              ├── variable: y [type=float]
  │              └── const: 1.0 [type=float]
  └── projections
       ├── plus [type=int]
@@ -189,7 +187,7 @@ select
  │    └── columns: x:1(int) y:2(float) rowid:3(int!null)
  └── filters [type=bool]
       └── gt [type=bool]
-           ├── variable: c.rowid [type=int]
+           ├── variable: rowid [type=int]
            └── const: 0 [type=int]
 
 build
@@ -267,3 +265,17 @@ project
  ├── columns: k:1(int!null)
  └── scan kv
       └── columns: t.public.kv.k:1(int!null) t.public.kv.v:2(int)
+
+# Check that tuple type includes labels.
+build
+SELECT x FROM (SELECT (row(v,v,v) AS a,b,c) AS x FROM kv)
+----
+project
+ ├── columns: x:3(tuple{int AS a, int AS b, int AS c})
+ ├── scan kv
+ │    └── columns: k:1(int!null) v:2(int)
+ └── projections
+      └── tuple [type=tuple{int AS a, int AS b, int AS c}]
+           ├── variable: v [type=int]
+           ├── variable: v [type=int]
+           └── variable: v [type=int]

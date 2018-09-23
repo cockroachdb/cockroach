@@ -47,6 +47,10 @@ CREATE TABLE decimal_t (a DECIMAL PRIMARY KEY)
 # Also split at the beginning of each index (0 for ASC, 100 for DESC) to
 # prevent interfering with previous indexes/tables.
 
+# Prevent the merge queue from immediately discarding our splits.
+statement ok
+SET CLUSTER SETTING kv.range_merge.queue_enabled = false;
+
 # p1 table (interleaved index)
 statement ok
 ALTER TABLE p1 SPLIT AT VALUES(2)
@@ -81,14 +85,14 @@ ALTER INDEX p2_id SPLIT AT VALUES(2)
 # (for seconary indexes) nodes.
 
 statement ok
-ALTER TABLE p1 TESTING_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3) AS g(i)
+ALTER TABLE p1 EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3) AS g(i)
 
 statement ok
-ALTER INDEX b TESTING_RELOCATE SELECT ARRAY[i+3], i FROM generate_series(1,2) AS g(i)
+ALTER INDEX b EXPERIMENTAL_RELOCATE SELECT ARRAY[i+3], i FROM generate_series(1,2) AS g(i)
 
 # Interleaved index table
 statement ok
-ALTER TABLE p2 TESTING_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3) as g(i)
+ALTER TABLE p2 EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3) as g(i)
 
 #############################
 # Verify range distribution #
@@ -97,9 +101,9 @@ ALTER TABLE p2 TESTING_RELOCATE SELECT ARRAY[i], i FROM generate_series(1,3) as 
 # p1 table (interleaved table)
 
 query TTITI colnames
-SHOW TESTING_RANGES FROM TABLE p1
+SHOW EXPERIMENTAL_RANGES FROM TABLE p1
 ----
-Start Key    End Key      Range ID  Replicas  Lease Holder
+start_key    end_key      range_id  replicas  lease_holder
 NULL         /2           1         {1}       1
 /2           /2/1/#/54/1  2         {2}       2
 /2/1/#/54/1  NULL         3         {3}       3
@@ -107,9 +111,9 @@ NULL         /2           1         {1}       1
 # Indexes
 
 query TTITI colnames
-SHOW TESTING_RANGES FROM INDEX b
+SHOW EXPERIMENTAL_RANGES FROM INDEX b
 ----
-Start Key  End Key  Range ID  Replicas  Lease Holder
+start_key  end_key  range_id  replicas  lease_holder
 NULL       /0       3         {3}       3
 /0         /2       4         {4}       4
 /2         NULL     5         {5}       5
@@ -117,9 +121,9 @@ NULL       /0       3         {3}       3
 # p2 table (interleaved index)
 
 query TTITI colnames
-SHOW TESTING_RANGES FROM TABLE p2
+SHOW EXPERIMENTAL_RANGES FROM TABLE p2
 ----
-Start Key  End Key    Range ID  Replicas  Lease Holder
+start_key  end_key    range_id  replicas  lease_holder
 NULL       /0         5         {5}       5
 /0         /2         6         {1}       1
 /2         /2/#/55/2  7         {2}       2
@@ -284,7 +288,7 @@ scan  ·      ·
 query TTT colnames
 EXPLAIN SELECT * FROM bytes_t WHERE a = 'a'
 ----
-Tree  Field  Description
+tree  field  description
 scan  ·      ·
 ·     table  bytes_t@primary
 ·     spans  /"a"-/"a"/#
@@ -294,7 +298,7 @@ scan  ·      ·
 query TTT colnames
 EXPLAIN SELECT * FROM bytes_t WHERE a < 'aa'
 ----
-Tree  Field  Description
+tree  field  description
 scan  ·      ·
 ·     table  bytes_t@primary
 ·     spans  -/"aa"
@@ -302,7 +306,7 @@ scan  ·      ·
 query TTT colnames
 EXPLAIN SELECT * FROM decimal_t WHERE a = 1.00
 ----
-Tree  Field  Description
+tree  field  description
 scan  ·      ·
 ·     table  decimal_t@primary
 ·     spans  /1-/1/#
@@ -312,7 +316,7 @@ scan  ·      ·
 query TTT colnames
 EXPLAIN SELECT * FROM decimal_t WHERE a < 2
 ----
-Tree  Field  Description
+tree  field  description
 scan  ·      ·
 ·     table  decimal_t@primary
 ·     spans  -/2

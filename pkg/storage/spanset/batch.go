@@ -161,12 +161,12 @@ func (s *Iterator) ComputeStats(
 
 // FindSplitKey is part of the engine.Iterator interface.
 func (s *Iterator) FindSplitKey(
-	start, end, minSplitKey engine.MVCCKey, targetSize int64, allowMeta2Splits bool,
+	start, end, minSplitKey engine.MVCCKey, targetSize int64,
 ) (engine.MVCCKey, error) {
 	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: start.Key, EndKey: end.Key}); err != nil {
 		return engine.MVCCKey{}, err
 	}
-	return s.i.FindSplitKey(start, end, minSplitKey, targetSize, allowMeta2Splits)
+	return s.i.FindSplitKey(start, end, minSplitKey, targetSize)
 }
 
 // MVCCGet is part of the engine.Iterator interface.
@@ -193,6 +193,11 @@ func (s *Iterator) MVCCScan(
 	return s.i.MVCCScan(start, end, max, timestamp, txn, consistent, reverse, tombstones)
 }
 
+// SetUpperBound is part of the engine.Iterator interface.
+func (s *Iterator) SetUpperBound(key roachpb.Key) {
+	s.i.SetUpperBound(key)
+}
+
 type spanSetReader struct {
 	r     engine.Reader
 	spans *SpanSet
@@ -212,6 +217,7 @@ func (s spanSetReader) Get(key engine.MVCCKey) ([]byte, error) {
 	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
 		return nil, err
 	}
+	//lint:ignore SA1019 implementing deprecated interface function (Get) is OK
 	return s.r.Get(key)
 }
 
@@ -221,6 +227,7 @@ func (s spanSetReader) GetProto(
 	if err := s.spans.CheckAllowed(SpanReadOnly, roachpb.Span{Key: key.Key}); err != nil {
 		return false, 0, 0, err
 	}
+	//lint:ignore SA1019 implementing deprecated interface function (GetProto) is OK
 	return s.r.GetProto(key, msg)
 }
 
@@ -235,12 +242,6 @@ func (s spanSetReader) Iterate(
 
 func (s spanSetReader) NewIterator(opts engine.IterOptions) engine.Iterator {
 	return &Iterator{s.r.NewIterator(opts), s.spans, nil, false}
-}
-
-func (s spanSetReader) NewTimeBoundIterator(
-	start, end hlc.Timestamp, withStats bool,
-) engine.Iterator {
-	return &Iterator{s.r.NewTimeBoundIterator(start, end, withStats), s.spans, nil, false}
 }
 
 type spanSetWriter struct {
@@ -292,6 +293,12 @@ func (s spanSetWriter) Put(key engine.MVCCKey, value []byte) error {
 
 func (s spanSetWriter) LogData(data []byte) error {
 	return s.w.LogData(data)
+}
+
+func (s spanSetWriter) LogLogicalOp(
+	op engine.MVCCLogicalOpType, details engine.MVCCLogicalOpDetails,
+) {
+	s.w.LogLogicalOp(op, details)
 }
 
 type spanSetReadWriter struct {

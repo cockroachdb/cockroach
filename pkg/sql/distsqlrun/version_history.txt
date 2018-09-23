@@ -62,6 +62,27 @@
     - Enhancements to lookup joins. They now support joining against secondary
       indexes as well as left outer joins. Left join support required two
       additional fields on JoinReaderSpec: index_filter_expr and type.
-- Version: 15 (MinAcceptedVersion: 6)
     - Add support for processing queries with tuples in DistSQL. Old versions
-      would not recognize the new tuple field in the proto.
+      would not recognize the new tuple field in the proto. (This change was
+      introduced without bumping the version.)
+- Version: 15 (MinAcceptedVersion: 6)
+    - Add SRF support via a new ProjectSet processor. The new processor spec
+      would not be recognized by old versions.
+- Version: 17 (MinAcceptedVersion: 6)
+    - Add scalar vs non-scalar designation to aggregator.
+- Version: 18 (MinAcceptedVersion: 6)
+    - New EvalContext field.
+- Version: 19 (MinAcceptedVersion: 6)
+    - More EvalContext fields.
+- Version: 20 (MinAcceptedVersion: 6)
+    - Add labels to tuple types.
+- Version: 21 (MinAcceptedVersion: 6)
+    - Permit non-public (mutation) columns in TableReader return values, when
+      requested. The new processor spec would be ignored by old versions.
+- MinAcceptedVersion: 21
+    - Bump in preparation for the 2.1 release. A large amount of changes
+      in both IMPORT and SQL execution have merged since 2.0. We have not
+      adequately tested them in skewed version clusters to have confidence
+      that they are compatible. We decided it was safer to bump the min
+      version to prevent possible bugs at the cost of performance during
+      the upgrade.

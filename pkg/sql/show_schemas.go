@@ -33,12 +33,12 @@ func (p *planner) ShowSchemas(ctx context.Context, n *tree.ShowSchemas) (planNod
 	if name == "" {
 		return nil, errNoDatabase
 	}
-	if _, err := ResolveDatabase(ctx, p, name, true /*required*/); err != nil {
+	if _, err := p.ResolveUncachedDatabaseByName(ctx, name, true /*required*/); err != nil {
 		return nil, err
 	}
 
 	const getSchemasQuery = `
-				SELECT schema_name AS "Schema"
+				SELECT schema_name
 				FROM %[1]s.information_schema.schemata
 				WHERE catalog_name = %[2]s
 				ORDER BY schema_name`

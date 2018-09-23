@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -98,12 +99,9 @@ type Iterator interface {
 	ComputeStats(start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error)
 	// FindSplitKey finds a key from the given span such that the left side of
 	// the split is roughly targetSize bytes. The returned key will never be
-	// chosen from the key ranges listed in keys.NoSplitSpans if
-	// allowMeta2Splits is true and keys.NoSplitSpansWithoutMeta2Splits if
-	// allowMeta2Splits is false.
-	//
-	// TODO(nvanbenschoten): remove allowMeta2Splits in version 2.1.
-	FindSplitKey(start, end, minSplitKey MVCCKey, targetSize int64, allowMeta2Splits bool) (MVCCKey, error)
+	// chosen from the key ranges listed in keys.NoSplitSpans and will always
+	// sort equal to or after minSplitKey.
+	FindSplitKey(start, end, minSplitKey MVCCKey, targetSize int64) (MVCCKey, error)
 	// MVCCGet retrieves the value for the key at the specified timestamp. The
 	// value is returned in batch repr format with the key being present as the
 	// empty string. If an intent exists at the specified key, it will be
@@ -122,20 +120,40 @@ type Iterator interface {
 	MVCCScan(start, end roachpb.Key, max int64, timestamp hlc.Timestamp,
 		txn *roachpb.Transaction, consistent, reverse, tombstone bool,
 	) (kvs []byte, numKvs int64, intents []byte, err error)
+	// SetUpperBound installs a new upper bound for this iterator.
+	SetUpperBound(roachpb.Key)
 
 	Stats() IteratorStats
 }
 
 // IterOptions contains options used to create an Iterator.
+//
+// For performance, every Iterator must specify either Prefix or UpperBound.
 type IterOptions struct {
 	// If Prefix is true, Seek will use the user-key prefix of
 	// the supplied MVCC key to restrict which sstables are searched,
 	// but iteration (using Next) over keys without the same user-key
-	// prefix will not work correctly (keys may be skipped)
+	// prefix will not work correctly (keys may be skipped).
 	Prefix bool
+	// UpperBound gives this iterator an upper bound. Attempts to Seek or Next
+	// past this point will invalidate the iterator. UpperBound must be provided
+	// unless Prefix is true, in which case the end of the prefix will be used as
+	// the upper bound.
+	UpperBound roachpb.Key
 	// If WithStats is true, the iterator accumulates RocksDB performance
 	// counters over its lifetime which can be queried via `Stats()`.
 	WithStats bool
+	// MinTimestampHint and MaxTimestampHint, if set, indicate that keys outside
+	// of the time range formed by [MinTimestampHint, MaxTimestampHint] do not
+	// need to be presented by the iterator. The underlying iterator may be able
+	// to efficiently skip over keys outside of the hinted time range, e.g., when
+	// an SST indicates that it contains no keys within the time range.
+	//
+	// Note that time bound hints are strictly a performance optimization, and
+	// iterators with time bounds hints will frequently return keys outside of the
+	// [start, end] time range. If you must guarantee that you never see a key
+	// outside of the time bounds, perform your own filtering.
+	MinTimestampHint, MaxTimestampHint hlc.Timestamp
 }
 
 // Reader is the read interface to an engine's data.
@@ -151,31 +169,26 @@ type Reader interface {
 	// engine; exported to enable wrappers to exist in other packages.
 	Closed() bool
 	// Get returns the value for the given key, nil otherwise.
+	//
+	// Deprecated: use MVCCGet instead.
 	Get(key MVCCKey) ([]byte, error)
 	// GetProto fetches the value at the specified key and unmarshals it
 	// using a protobuf decoder. Returns true on success or false if the
 	// key was not found. On success, returns the length in bytes of the
 	// key and the value.
+	//
+	// Deprecated: use Iterator.ValueProto instead.
 	GetProto(key MVCCKey, msg protoutil.Message) (ok bool, keyBytes, valBytes int64, err error)
-	// Iterate scans from start to end keys, visiting at most max
-	// key/value pairs. On each key value pair, the function f is
-	// invoked. If f returns an error or if the scan itself encounters
-	// an error, the iteration will stop and return the error.
-	// If the first result of f is true, the iteration stops.
-	Iterate(start, end MVCCKey, f func(MVCCKeyValue) (bool, error)) error
+	// Iterate scans from the start key to the end key (exclusive), invoking the
+	// function f on each key value pair. If f returns an error or if the scan
+	// itself encounters an error, the iteration will stop and return the error.
+	// If the first result of f is true, the iteration stops and returns a nil
+	// error.
+	Iterate(start, end MVCCKey, f func(MVCCKeyValue) (stop bool, err error)) error
 	// NewIterator returns a new instance of an Iterator over this
 	// engine. The caller must invoke Iterator.Close() when finished
 	// with the iterator to free resources.
 	NewIterator(opts IterOptions) Iterator
-	// NewTimeBoundIterator is like NewIterator, but the underlying iterator will
-	// efficiently skip over SSTs that contain no MVCC keys in the time range
-	// [start, end].
-	//
-	// Note that time-bound iterators are strictly a performance optimization, and
-	// will frequently return keys outside of the [start, end] time range. If you
-	// must guarantee that you never see a key outside of the time bounds, perform
-	// your own filtering.
-	NewTimeBoundIterator(start, end hlc.Timestamp, withStats bool) Iterator
 }
 
 // Writer is the write interface to an engine's data.
@@ -221,6 +234,10 @@ type Writer interface {
 	// sstables). Currently only used for performance testing of appending to the
 	// RocksDB WAL.
 	LogData(data []byte) error
+	// LogLogicalOp logs the specified logical mvcc operation with the provided
+	// details to the writer, if it has logical op logging enabled. For most
+	// Writer implementations, this is a no-op.
+	LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails)
 }
 
 // ReadWriter is the read/write interface to an engine's data.
@@ -294,6 +311,17 @@ type Engine interface {
 	// not subdirectories from this RocksDB's env. If dir does not exist,
 	// DeleteDirAndFiles returns nil (no error).
 	DeleteDirAndFiles(dir string) error
+	// LinkFile creates 'newname' as a hard link to 'oldname'. This is done using
+	// the engine implementation. For RocksDB, this means using the Env responsible for the file
+	// which may handle extra logic (eg: copy encryption settings for EncryptedEnv).
+	LinkFile(oldname, newname string) error
+}
+
+// MapProvidingEngine is an Engine that also provides facilities for making a
+// sorted map that's persisted by the Engine.
+type MapProvidingEngine interface {
+	Engine
+	diskmap.Factory
 }
 
 // WithSSTables extends the Engine interface with a method to get info
@@ -353,13 +381,34 @@ type Stats struct {
 
 // EnvStats is a set of RocksDB env stats, including encryption status.
 type EnvStats struct {
+	// TotalFiles is the total number of files reported by rocksdb.
+	TotalFiles uint64
+	// TotalBytes is the total size of files reported by rocksdb.
+	TotalBytes uint64
+	// ActiveKeyFiles is the number of files using the active data key.
+	ActiveKeyFiles uint64
+	// ActiveKeyBytes is the size of files using the active data key.
+	ActiveKeyBytes uint64
 	// EncryptionStatus is a serialized enginepbccl/stats.proto::EncryptionStatus protobuf.
 	EncryptionStatus []byte
+}
+
+// EncryptionRegistries contains the encryption-related registries:
+// Both are serialized protobufs.
+type EncryptionRegistries struct {
+	// FileRegistry is the list of files with encryption status.
+	// serialized storage/engine/enginepb/file_registry.proto::FileRegistry
+	FileRegistry []byte
+	// KeyRegistry is the list of keys, scrubbed of actual key data.
+	// serialized ccl/storageccl/engineccl/enginepbccl/key_registry.proto::DataKeysRegistry
+	KeyRegistry []byte
 }
 
 // PutProto sets the given key to the protobuf-serialized byte string
 // of msg and the provided timestamp. Returns the length in bytes of
 // key and the value.
+//
+// Deprecated: use MVCCPutProto instead.
 func PutProto(
 	engine Writer, key MVCCKey, msg protoutil.Message,
 ) (keyBytes, valBytes int64, err error) {

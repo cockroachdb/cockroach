@@ -43,7 +43,9 @@ type Scanner struct {
 	lastTok   sqlSymType
 	nextTok   *sqlSymType
 	lastError *scanErr
-	stmts     []tree.Statement
+
+	// stmts contains the list of statements at the end of parsing.
+	stmts []tree.Statement
 
 	initialized bool
 }
@@ -82,6 +84,20 @@ func (s *Scanner) Tokens(f func(token int)) {
 	}
 }
 
+// Until returns the position of token or 0 if it is not found.
+func (s *Scanner) Until(token int) int {
+	var t int
+	for {
+		t = s.Lex(&s.tokBuf)
+		switch t {
+		case 0:
+			return 0
+		case token:
+			return s.pos
+		}
+	}
+}
+
 // Lex lexes a token from input.
 func (s *Scanner) Lex(lval *sqlSymType) int {
 	// The core lexing takes place in scan(). Here we do a small bit of post
@@ -98,7 +114,7 @@ func (s *Scanner) Lex(lval *sqlSymType) int {
 	}
 
 	switch lval.id {
-	case NOT, NULLS, WITH, AS:
+	case NOT, WITH, AS:
 	default:
 		s.lastTok = *lval
 		return lval.id
@@ -250,10 +266,10 @@ func (s *Scanner) scan(lval *sqlSymType) {
 		}
 		return
 
-	case 'b', 'B':
+	case 'b':
 		// Bytes?
 		if s.peek() == singleQuote {
-			// [bB]'[^']'
+			// b'[^']'
 			s.pos++
 			if s.scanString(lval, singleQuote, true /* allowEscapes */, false /* requireUTF8 */) {
 				lval.id = BCONST
@@ -275,6 +291,17 @@ func (s *Scanner) scan(lval *sqlSymType) {
 			if s.scanString(lval, singleQuote, true /* allowEscapes */, true /* requireUTF8 */) {
 				lval.id = SCONST
 			}
+			return
+		}
+		s.scanIdent(lval)
+		return
+
+	case 'B':
+		// Bit array literal?
+		if s.peek() == singleQuote {
+			// B'[01]*'
+			s.pos++
+			s.scanBitString(lval, singleQuote)
 			return
 		}
 		s.scanIdent(lval)
@@ -662,7 +689,7 @@ func (s *Scanner) scanNumber(lval *sqlSymType, ch int) {
 
 	for {
 		ch := s.peek()
-		if isHex && lex.IsHexDigit(ch) || lex.IsDigit(ch) {
+		if (isHex && lex.IsHexDigit(ch)) || lex.IsDigit(ch) {
 			s.pos++
 			continue
 		}
@@ -769,9 +796,6 @@ func (s *Scanner) scanPlaceholder(lval *sqlSymType) {
 		return
 	}
 
-	// uval is now in the range [0, 1<<63]. Casting to an int64 leaves the range
-	// [0, 1<<63 - 1] intact and moves 1<<63 to -1<<63 (a.k.a. math.MinInt64).
-	lval.union.val = &tree.NumVal{Value: constant.MakeUint64(uval)}
 	lval.id = PLACEHOLDER
 }
 
@@ -827,6 +851,42 @@ outer:
 	}
 
 	lval.id = BCONST
+	lval.str = string(buf)
+	return true
+}
+
+// scanBitString scans the content inside B'....'.
+func (s *Scanner) scanBitString(lval *sqlSymType, ch int) bool {
+	var buf []byte
+outer:
+	for {
+		b := s.next()
+		switch b {
+		case ch:
+			newline, ok := s.skipWhitespace(lval, false)
+			if !ok {
+				return false
+			}
+			// SQL allows joining adjacent strings separated by whitespace
+			// as long as that whitespace contains at least one
+			// newline. Kind of strange to require the newline, but that
+			// is the standard.
+			if s.peek() == ch && newline {
+				s.pos++
+				continue
+			}
+			break outer
+
+		case '0', '1':
+			buf = append(buf, byte(b))
+		default:
+			lval.id = ERROR
+			lval.str = fmt.Sprintf(`"%c" is not a valid binary digit`, rune(b))
+			return false
+		}
+	}
+
+	lval.id = BITCONST
 	lval.str = string(buf)
 	return true
 }

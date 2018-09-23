@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // GetUserHashedPassword returns the hashedPassword for the given username if
@@ -68,7 +69,18 @@ func (p *planner) GetAllUsersAndRoles(ctx context.Context) (map[string]bool, err
 
 var roleMembersTableName = tree.MakeTableName("system", "role_members")
 
-// BumpRoleMembershipTableVersion increases the table version for the role membership table.
+// BumpRoleMembershipTableVersion increases the table version for the
+// role membership table.
 func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
-	return p.bumpTableVersion(ctx, &roleMembersTableName)
+	var tableDesc *TableDescriptor
+	var err error
+	p.runWithOptions(resolveFlags{skipCache: true}, func() {
+		tableDesc, _, err = p.PhysicalSchemaAccessor().GetObjectDesc(&roleMembersTableName,
+			p.ObjectLookupFlags(ctx, true /*required*/))
+	})
+	if err != nil {
+		return err
+	}
+
+	return p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID)
 }

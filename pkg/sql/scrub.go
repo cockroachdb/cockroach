@@ -171,7 +171,7 @@ func (n *scrubNode) Close(ctx context.Context) {
 func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tree.Name) error {
 	// Check that the database exists.
 	database := string(*name)
-	dbDesc, err := ResolveDatabase(ctx, p, database, true /*required*/)
+	dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, database, true /*required*/)
 	if err != nil {
 		return err
 	}
@@ -526,14 +526,14 @@ func createConstraintCheckOperations(
 
 // scrubPlanDistSQL will prepare and run the plan in distSQL.
 func scrubPlanDistSQL(
-	ctx context.Context, planCtx *planningCtx, plan planNode,
-) (*physicalPlan, error) {
+	ctx context.Context, planCtx *PlanningCtx, plan planNode,
+) (*PhysicalPlan, error) {
 	log.VEvent(ctx, 1, "creating DistSQL plan")
-	physPlan, err := planCtx.extendedEvalCtx.DistSQLPlanner.createPlanForNode(planCtx, plan)
+	physPlan, err := planCtx.ExtendedEvalCtx.DistSQLPlanner.createPlanForNode(planCtx, plan)
 	if err != nil {
 		return nil, err
 	}
-	planCtx.extendedEvalCtx.DistSQLPlanner.FinalizePlan(planCtx, &physPlan)
+	planCtx.ExtendedEvalCtx.DistSQLPlanner.FinalizePlan(planCtx, &physPlan)
 	return &physPlan, nil
 }
 
@@ -541,15 +541,15 @@ func scrubPlanDistSQL(
 // RowContainer is returned, the caller must close it.
 func scrubRunDistSQL(
 	ctx context.Context,
-	planCtx *planningCtx,
+	planCtx *PlanningCtx,
 	p *planner,
-	plan *physicalPlan,
+	plan *PhysicalPlan,
 	columnTypes []sqlbase.ColumnType,
 ) (*sqlbase.RowContainer, error) {
 	ci := sqlbase.ColTypeInfoFromColTypes(columnTypes)
 	rows := sqlbase.NewRowContainer(*p.extendedEvalCtx.ActiveMemAcc, ci, 0 /* rowCapacity */)
 	rowResultWriter := NewRowResultWriter(rows)
-	recv := makeDistSQLReceiver(
+	recv := MakeDistSQLReceiver(
 		ctx,
 		rowResultWriter,
 		tree.Rows,
@@ -559,9 +559,11 @@ func scrubRunDistSQL(
 		func(ts hlc.Timestamp) {
 			_ = p.ExecCfg().Clock.Update(ts)
 		},
+		p.extendedEvalCtx.Tracing,
 	)
 
-	p.extendedEvalCtx.DistSQLPlanner.Run(planCtx, p.txn, plan, recv, &p.extendedEvalCtx)
+	p.extendedEvalCtx.DistSQLPlanner.Run(
+		planCtx, p.txn, plan, recv, &p.extendedEvalCtx, nil /* finishedSetupFn */)
 	if rowResultWriter.Err() != nil {
 		return rows, rowResultWriter.Err()
 	} else if rows.Len() == 0 {

@@ -1,0 +1,13 @@
+# =============================================================================
+# agg.opt contains normalization rules for aggregation operators (like Min,
+# Sum) and modifiers (like AggDistinct).
+# =============================================================================
+
+# EliminateAggDistinct removes AggDistinct for aggregations where DISTINCT
+# never modifies the result; for example: min(DISTINCT x).
+[EliminateAggDistinct, Normalize]
+(Min | Max | BoolAnd | BoolOr
+    (AggDistinct $in:*)
+)
+=>
+((OpName) $in)

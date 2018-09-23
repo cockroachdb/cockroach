@@ -173,12 +173,10 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 		if n.sourcePlan != nil {
 			p.applyLimit(n.sourcePlan, numRows, soft)
 		}
-	case *distSQLWrapper:
-		p.applyLimit(n.plan, numRows, soft)
 	case *explainDistSQLNode:
-		p.setUnlimited(n.plan)
-	case *showTraceNode:
-		if n.plan != nil {
+		// EXPLAIN ANALYZE is special: it handles its own limit propagation, since
+		// it fully executes during startExec.
+		if !n.analyze {
 			p.setUnlimited(n.plan)
 		}
 	case *showTraceReplicaNode:
@@ -191,7 +189,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *splitNode:
 		p.setUnlimited(n.rows)
 
-	case *testingRelocateNode:
+	case *relocateNode:
 		p.setUnlimited(n.rows)
 
 	case *cancelQueriesNode:
@@ -204,6 +202,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 		p.setUnlimited(n.rows)
 
 	case *valuesNode:
+	case *virtualTableNode:
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
@@ -231,7 +230,11 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *showZoneConfigNode:
 	case *showRangesNode:
 	case *showFingerprintsNode:
+	case *showTraceNode:
 	case *scatterNode:
+
+	case *lookupJoinNode:
+		// The lookup join node is only planned by the optimizer.
 
 	default:
 		panic(fmt.Sprintf("unhandled node type: %T", plan))

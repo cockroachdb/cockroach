@@ -15,15 +15,11 @@
 package props
 
 import (
-	"bytes"
 	"fmt"
-	"strings"
-	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
 // Logical properties describe the content and characteristics of data returned
@@ -43,6 +39,31 @@ type Logical struct {
 	Scalar *Scalar
 }
 
+// AvailableRuleProps is a bit set that indicates when lazily-populated Rule
+// properties are initialized and ready for use.
+type AvailableRuleProps int
+
+const (
+	// PruneCols is set when the Relational.Rule.PruneCols field is populated.
+	PruneCols AvailableRuleProps = 1 << iota
+
+	// RejectNullCols is set when the Relational.Rule.RejectNullCols field is
+	// populated.
+	RejectNullCols
+
+	// InterestingOrderings is set when the Relational.Rule.InterestingOrderings
+	// field is populated.
+	InterestingOrderings
+
+	// UnfilteredCols is set when the Relational.Rule.UnfilteredCols field is
+	// populated.
+	UnfilteredCols
+
+	// HasHoistableSubquery is set when the Scalar.Rule.HasHoistableSubquery
+	// is populated.
+	HasHoistableSubquery
+)
+
 // Relational properties are the subset of logical properties that are computed
 // for relational expressions that return rows and columns rather than scalar
 // values.
@@ -56,28 +77,6 @@ type Relational struct {
 	// The NULL-ability of columns flows from the inputs and can also be
 	// derived from filters that are NULL-intolerant.
 	NotNullCols opt.ColSet
-
-	// WeakKeys are the column sets which form weak keys and are subsets of the
-	// expression's output columns. A weak key set cannot contain any other weak
-	// key set (it would be redundant).
-	//
-	// A column set is a key if no two rows are equal after projection onto that
-	// set. This definition treats NULL as if were equal to NULL, so two rows
-	// having duplicate NULL values would *not* qualify as key rows. Therefore,
-	// in the usual case, the key columns are also not nullable. The simplest
-	// example of a key is the primary key for a table (recall that all of the
-	// columns of the primary key are defined to be NOT NULL).
-	//
-	// A weak key is similar to a key, with the difference that NULL values are
-	// treated as *not equal* to other NULL values. Therefore, two rows having
-	// duplicate NULL values could still qualify as weak key rows. A UNIQUE index
-	// on a table is a weak key and possibly a key if all of the columns are NOT
-	// NULL. A weak key is a key if "(WeakKeys[i] & NotNullCols) == WeakKeys[i]".
-	//
-	// An empty key is valid (an empty key implies there is at most one row). Note
-	// that an empty key is always the only key in the set, since it's a subset of
-	// every other key (i.e. every other key would be redundant).
-	WeakKeys opt.WeakKeys
 
 	// OuterCols is the set of columns that are referenced by variables within
 	// this relational sub-expression, but are not bound within the scope of
@@ -94,6 +93,41 @@ type Relational struct {
 	// so its outer column set is empty.
 	OuterCols opt.ColSet
 
+	// CanHaveSideEffects is true if the subtree rooted at this expression might
+	// trigger a run-time error, might modify outside state, or might not always
+	// return the same output given the same input. For more details, see the
+	// comment for Logical.CanHaveSideEffects.
+	CanHaveSideEffects bool
+
+	// HasPlaceholder is true if the subtree rooted at this expression contains
+	// at least one Placeholder operator.
+	HasPlaceholder bool
+
+	// FuncDepSet is a set of functional dependencies (FDs) that encode useful
+	// relationships between columns in a base or derived relation. Given two sets
+	// of columns A and B, a functional dependency A-->B holds if A uniquely
+	// determines B. In other words, if two different rows have equal values for
+	// columns in A, then those two rows will also have equal values for columns
+	// in B. For example:
+	//
+	//   a1 a2 b1
+	//   --------
+	//   1  2  5
+	//   1  2  5
+	//
+	// FDs assist the optimizer in proving useful properties about query results.
+	// This information powers many optimizations, including eliminating
+	// unnecessary DISTINCT operators, simplifying ORDER BY columns, removing
+	// Max1Row operators, and mapping semi-joins to inner-joins.
+	//
+	// The methods that are most useful for optimizations are:
+	//   Key: extract a candidate key for the relation
+	//   ColsAreStrictKey: determine if a set of columns uniquely identify rows
+	//   ReduceCols: discard redundant columns to create a candidate key
+	//
+	// For more details, see the header comment for FuncDepSet.
+	FuncDeps FuncDepSet
+
 	// Cardinality is the number of rows that can be returned from this relational
 	// expression. The number of rows will always be between the inclusive Min and
 	// Max bounds. If Max=math.MaxUint32, then there is no limit to the number of
@@ -101,8 +135,8 @@ type Relational struct {
 	Cardinality Cardinality
 
 	// Stats is the set of statistics that apply to this relational expression.
-	// See opt/statistics.go and statistics_builder.go for more details.
-	Stats opt.Statistics
+	// See statistics.go and memo/statistics_builder.go for more details.
+	Stats Statistics
 
 	// Rule encapsulates the set of properties that are maintained to assist
 	// with specific sets of transformation rules. They are not intended to be
@@ -119,6 +153,12 @@ type Relational struct {
 	// what works best for those rules. Neither the rules nor their properties
 	// can be considered in isolation, without considering the other.
 	Rule struct {
+		// Available contains bits that indicate whether lazily-populated Rule
+		// properties have been initialized. For example, if the UnfilteredCols
+		// bit is set, then the Rule.UnfilteredCols field has been initialized
+		// and is ready for use.
+		Available AvailableRuleProps
+
 		// PruneCols is the subset of output columns that can potentially be
 		// eliminated by one of the PruneCols normalization rules. Those rules
 		// operate by pushing a Project operator down the tree that discards
@@ -147,7 +187,54 @@ type Relational struct {
 		// such an operator exists at the end of the journey. Operators that are
 		// not capable of filtering columns (like Explain) will not add any of
 		// their columns to this set.
+		//
+		// PruneCols is lazily populated by rules in prune_cols.opt. It is
+		// only valid once the Rule.Available.PruneCols bit has been set.
 		PruneCols opt.ColSet
+
+		// RejectNullCols is the subset of nullable output columns that can
+		// potentially be made not-null by one of the RejectNull normalization
+		// rules. Those rules work in concert with the predicate pushdown rules
+		// to synthesize a "col IS NOT NULL" filter and push it down the tree.
+		// See the header comments for the reject_nulls.opt file for more
+		// information and an example.
+		//
+		// RejectNullCols is built bottom-up by rulePropsBuilder, and only contains
+		// nullable outer join columns that can be simplified. The columns can be
+		// propagated up through multiple operators, giving higher levels of the
+		// tree a window into the structure of the tree several layers down. In
+		// particular, the null rejection rules use this property to determine when
+		// it's advantageous to synthesize a new "IS NOT NULL" filter. Without this
+		// information, the rules can clutter the tree with extraneous and
+		// marginally useful null filters.
+		//
+		// RejectNullCols is lazily populated by rules in reject_nulls.opt. It is
+		// only valid once the Rule.Available.RejectNullCols bit has been set.
+		RejectNullCols opt.ColSet
+
+		// InterestingOrderings is a list of orderings that potentially could be
+		// provided by the operator without sorting. Interesting orderings normally
+		// come from scans (index orders) and are bubbled up through some operators.
+		//
+		// Note that all prefixes of an interesting order are "interesting"; the
+		// list doesn't need to contain orderings that are prefixes of some other
+		// ordering in the list.
+		//
+		// InterestingOrderings is lazily populated by interesting_orderings.go.
+		// It is only valid once the Rule.Available.InterestingOrderings bit has
+		// been set.
+		InterestingOrderings opt.OrderingSet
+
+		// UnfilteredCols is the set of output columns that have values for every
+		// row in their owner table. Rows may be duplicated, but no rows can be
+		// missing. For example, an unconstrained, unlimited Scan operator can
+		// add all of its output columns to this property, but a Select operator
+		// cannot add any columns, as it may have filtered rows.
+		//
+		// UnfilteredCols is lazily populated by the SimplifyLeftJoinWithFilters
+		// and SimplifyRightJoinWithFilters rules. It is only valid once the
+		// Rule.Available.UnfilteredCols bit has been set.
+		UnfilteredCols opt.ColSet
 	}
 }
 
@@ -173,6 +260,24 @@ type Scalar struct {
 	// outer columns on the inner WHERE condition.
 	OuterCols opt.ColSet
 
+	// CanHaveSideEffects is true if the subtree rooted at this expression might
+	// trigger a run-time error, might modify outside state, or might not always
+	// return the same output given the same input. For more details, see the
+	// comment for Logical.CanHaveSideEffects.
+	CanHaveSideEffects bool
+
+	// HasPlaceholder is true if the subtree rooted at this expression contains
+	// at least one Placeholder operator.
+	HasPlaceholder bool
+
+	// HasCorrelatedSubquery is true if the scalar expression tree contains a
+	// subquery having one or more outer columns. The subquery can be a Subquery,
+	// Exists, or Any operator. These operators need to be hoisted out of scalar
+	// expression trees and turned into top-level apply joins. This property makes
+	// detection fast and easy so that the hoister doesn't waste time searching
+	// subtrees that don't contain subqueries.
+	HasCorrelatedSubquery bool
+
 	// Constraints is the set of constraints deduced from a boolean expression.
 	// For the expression to be true, all constraints in the set must be
 	// satisfied.
@@ -185,13 +290,77 @@ type Scalar struct {
 	// This field is populated lazily, as necessary.
 	TightConstraints bool
 
-	// HasCorrelatedSubquery is true if the scalar expression tree contains a
-	// subquery having one or more outer columns. The subquery can be a Subquery,
-	// Exists, or Any operator. These operators need to be hoisted out of scalar
-	// expression trees and turned into top-level apply joins. This property makes
-	// detection fast and easy so that the hoister doesn't waste time searching
-	// subtrees that don't contain subqueries.
-	HasCorrelatedSubquery bool
+	// FuncDeps is a set of functional dependencies (FDs) inferred from a
+	// boolean expression. This field is only populated for Filters expressions.
+	// FDs that can be inferred from Filters expressions include:
+	//  - Constant column FDs such as ()-->(1,2) from conjuncts such as
+	//    x = 5 AND y = 10.
+	//  - Equivalent column FDs such as (1)==(2), (2)==(1) from conjuncts such
+	//    as x = y.
+	//
+	// It is useful to calculate FDs on Filters expressions, because it allows
+	// additional filters to be inferred for push-down. For example, consider
+	// the query:
+	//
+	//   SELECT * FROM a, b WHERE a.x = b.x AND a.x > 5;
+	//
+	// By adding the equivalency FD for a.x = b.x, we can infer an additional
+	// filter, b.x > 5. This allows us to rewrite the query as:
+	//
+	//   SELECT * FROM (SELECT * FROM a WHERE a.x > 5) AS a,
+	//     (SELECT * FROM b WHERE b.x > 5) AS b WHERE a.x = b.x;
+	//
+	// For more details, see the header comment for FuncDepSet.
+	FuncDeps FuncDepSet
+
+	// Rule encapsulates the set of properties that are maintained to assist
+	// with specific sets of transformation rules. See the Relational.Rule
+	// comment for more details.
+	Rule struct {
+		// Available contains bits that indicate whether lazily-populated Rule
+		// properties have been initialized. For example, if the
+		// HasHoistableSubquery bit is set, then the Rule.HasHoistableSubquery
+		// field has been initialized and is ready for use.
+		Available AvailableRuleProps
+
+		// HasHoistableSubquery is true if the scalar expression tree contains a
+		// subquery having one or more outer columns, and if the subquery needs
+		// to be hoisted up into its parent query as part of query decorrelation.
+		// The subquery can be a Subquery, Exists, or Any operator. These operators
+		// need to be hoisted out of scalar expression trees and turned into top-
+		// level apply joins. This property makes detection fast and easy so that
+		// the hoister doesn't waste time searching subtrees that don't contain
+		// subqueries.
+		//
+		// HasHoistableSubquery is lazily populated by rules in decorrelate.opt.
+		// It is only valid once the Rule.Available.HasHoistableSubquery bit has
+		// been set.
+		HasHoistableSubquery bool
+	}
+}
+
+// IsAvailable returns true if the specified rule property has been populated
+// on this relational properties instance.
+func (r *Relational) IsAvailable(p AvailableRuleProps) bool {
+	return (r.Rule.Available & p) != 0
+}
+
+// SetAvailable sets the available bits for the given properties, in order to
+// mark them as populated on this relational properties instance.
+func (r *Relational) SetAvailable(p AvailableRuleProps) {
+	r.Rule.Available |= p
+}
+
+// IsAvailable returns true if the specified rule property has been populated
+// on this scalar properties instance.
+func (s *Scalar) IsAvailable(p AvailableRuleProps) bool {
+	return (s.Rule.Available & p) != 0
+}
+
+// SetAvailable sets the available bits for the given properties, in order to
+// mark them as populated on this scalar properties instance.
+func (s *Scalar) SetAvailable(p AvailableRuleProps) {
+	s.Rule.Available |= p
 }
 
 // OuterCols is a helper method that returns either the relational or scalar
@@ -203,115 +372,159 @@ func (p *Logical) OuterCols() opt.ColSet {
 	return p.Relational.OuterCols
 }
 
-// FormatColSet outputs the specified set of columns using FormatCol to format
-// the output.
-func (p *Logical) FormatColSet(
-	f *opt.ExprFmtCtx, tp treeprinter.Node, heading string, colSet opt.ColSet,
-) {
-	if !colSet.Empty() {
-		var buf bytes.Buffer
-		buf.WriteString(heading)
-		colSet.ForEach(func(i int) {
-			p.FormatCol(f, &buf, "", opt.ColumnID(i))
-		})
-		tp.Child(buf.String())
+// CanHaveSideEffects is true if the expression modifies state outside its own
+// scope, or if depends upon state that may change across evaluations. An
+// expression can have side effects if it can do any of the following:
+//
+//   1. Trigger a run-time error
+//        10 / col                           -- division by zero error possible
+//        crdb_internal.force_error('', '')  -- triggers run-time error
+//
+//   2. Modify outside session or database state
+//        nextval(seq)                -- modifies database sequence value
+//        SELECT * FROM [INSERT ...]  -- inserts rows into database
+//
+//   3. Return different results when repeatedly called with same input
+//        ORDER BY random()       -- random can return different values
+//        ts < clock_timestamp()  -- clock_timestamp can return different values
+//
+// The optimizer makes *only* the following side-effect related guarantees:
+//
+//   1. CASE/IF branches are only evaluated if the branch condition is true.
+//      Therefore, the following is guaranteed to never raise a divide by zero
+//      error, regardless of how cleverly the optimizer rewrites the expression:
+//
+//        CASE WHEN divisor<>0 THEN dividend / divisor ELSE NULL END
+//
+//      While this example is trivial, a more complex example might have
+//      correlated subqueries that cannot be hoisted outside the CASE expression
+//      in the usual way, since that would trigger premature evaluation.
+//
+//   2. Expressions with side effects are never treated as constant expressions,
+//      even though they do not depend on other columns in the query:
+//
+//        SELECT * FROM xy ORDER BY random()
+//
+//      If the random() expression were treated as a constant, then the ORDER BY
+//      could be dropped by the optimizer, since ordering by a constant is a
+//      no-op. Instead, the optimizer treats it like it would an expression that
+//      depends upon a column.
+//
+//   3. A common table expression (CTE) with side effects will only be evaluated
+//      one time. This will typically prevent inlining of the CTE into the query
+//      body. For example:
+//
+//        WITH a AS (INSERT ... RETURNING ...) SELECT * FROM a, a
+//
+//      Although the "a" CTE is referenced twice, it must be evaluated only one
+//      time (and its results cached to satisfy the second reference).
+//
+// As long as the optimizer provides these guarantees, it is free to rewrite,
+// reorder, duplicate, and eliminate as if no side effects were present. As an
+// example, the optimizer is free to eliminate the unused "nextval" column in
+// this query:
+//
+//   SELECT x FROM (SELECT nextval(seq), x FROM xy)
+//   =>
+//   SELECT x FROM xy
+//
+// It's also allowed to duplicate side-effecting expressions during predicate
+// pushdown:
+//
+//   SELECT * FROM xy INNER JOIN xz ON xy.x=xz.x WHERE xy.x=random()
+//   =>
+//   SELECT *
+//   FROM (SELECT * FROM xy WHERE xy.x=random())
+//   INNER JOIN (SELECT * FROM xz WHERE xz.x=random())
+//   ON xy.x=xz.x
+//
+func (p *Logical) CanHaveSideEffects() bool {
+	if p.Scalar != nil {
+		return p.Scalar.CanHaveSideEffects
 	}
+	return p.Relational.CanHaveSideEffects
 }
 
-// FormatColList outputs the specified list of columns using FormatCol to
-// format the output.
-func (p *Logical) FormatColList(
-	f *opt.ExprFmtCtx, tp treeprinter.Node, heading string, colList opt.ColList,
-) {
-	if len(colList) > 0 {
-		var buf bytes.Buffer
-		buf.WriteString(heading)
-		for _, col := range colList {
-			p.FormatCol(f, &buf, "", col)
-		}
-		tp.Child(buf.String())
+// HasPlaceholder is true if the subtree rooted at this expression contains
+// at least one Placeholder operator.
+func (p *Logical) HasPlaceholder() bool {
+	if p.Scalar != nil {
+		return p.Scalar.HasPlaceholder
 	}
+	return p.Relational.HasPlaceholder
 }
 
-// FormatCol outputs the specified column using the following format:
-//   label:index(type)
+// Verify runs consistency checks against the logical properties, in order to
+// ensure that they conform to several invariants:
 //
-// If the column is not nullable, then this is the format:
-//   label:index(type!null)
+//   1. Functional dependencies are internally consistent.
+//   2. Not null columns are a subset of output columns.
+//   3. Outer columns do not intersect output columns.
+//   4. If functional dependencies indicate that the relation can have at most
+//      one row, then the cardinality reflects that as well.
 //
-// If a label is given, then it is used. Otherwise, a "best effort" label is
-// used from query metadata.
-func (p *Logical) FormatCol(f *opt.ExprFmtCtx, buf *bytes.Buffer, label string, id opt.ColumnID) {
-	if label == "" {
-		label = f.Metadata().ColumnLabel(id)
-	}
+func (p *Logical) Verify() {
+	scalar := p.Scalar
+	if scalar != nil {
+		scalar.FuncDeps.Verify()
 
-	if !isSimpleColumnName(label) {
-		// Add quotations around the column name if it appears to be an
-		// expression. This also indicates that the column name is not eligible
-		// to be shortened.
-		label = "\"" + label + "\""
-	} else if f.HasFlags(opt.ExprFmtHideQualifications) {
-		// If the label is qualified, try to shorten it.
-		if idx := strings.LastIndex(label, "."); idx != -1 {
-			short := label[idx+1:]
-			suffix := label[idx:] // includes the "."
-			// Check if shortening the label could cause ambiguity: is there another
-			// column that would be shortened to the same name?
-			ambiguous := false
-			for col := opt.ColumnID(1); int(col) <= f.Metadata().NumColumns(); col++ {
-				if col != id {
-					if l := f.Metadata().ColumnLabel(col); l == short || strings.HasSuffix(l, suffix) {
-						ambiguous = true
-						break
-					}
-				}
-			}
-			if !ambiguous {
-				label = short
-			}
+		if p.Relational != nil {
+			panic("relational and scalar properties cannot both be set")
 		}
+		return
 	}
 
-	typ := f.Metadata().ColumnType(id)
-	buf.WriteByte(' ')
-	buf.WriteString(label)
-	buf.WriteByte(':')
-	fmt.Fprintf(buf, "%d", id)
-	buf.WriteByte('(')
-	buf.WriteString(typ.String())
+	relational := p.Relational
+	relational.FuncDeps.Verify()
 
-	if !p.Relational.NotNullCols.SubsetOf(p.Relational.OutputCols) {
+	if !relational.NotNullCols.SubsetOf(relational.OutputCols) {
 		panic(fmt.Sprintf("not null cols %s not a subset of output cols %s",
-			p.Relational.NotNullCols, p.Relational.OutputCols))
+			relational.NotNullCols, relational.OutputCols))
 	}
-	if p.Relational.NotNullCols.Contains(int(id)) {
-		buf.WriteString("!null")
+	if relational.OuterCols.Intersects(relational.OutputCols) {
+		panic(fmt.Sprintf("outer cols %s intersect output cols %s",
+			relational.OuterCols, relational.OutputCols))
 	}
-	buf.WriteByte(')')
+	if relational.FuncDeps.HasMax1Row() {
+		if relational.Cardinality.Max > 1 {
+			panic(fmt.Sprintf(
+				"max cardinality must be <= 1 if FDs have max 1 row: %s", relational.Cardinality))
+		}
+	}
 }
 
-// isSimpleColumnName returns true if the given label consists of only ASCII
-// letters, numbers, underscores, quotation marks, and periods ("."). It is
-// used to determine whether or not we can shorten a column label by removing
-// the prefix up to the last ".". Although isSimpleColumnName excludes some
-// valid table column names, it ensures that we don't shorten expressions such
-// as "a.x + b.x" to "x". It is better to err on the side of not shortening
-// than to incorrectly shorten a column name representing an expression.
-func isSimpleColumnName(label string) bool {
-	for i, r := range label {
-		if r > unicode.MaxASCII {
-			return false
+// VerifyAgainst checks that the two properties don't contradict each other.
+// Used for testing (e.g. to cross-check derived properties from expressions in
+// the same group).
+func (p *Logical) VerifyAgainst(other *Logical) {
+	if r1, r2 := p.Relational, other.Relational; r1 != nil || r2 != nil {
+		if !r1.OutputCols.Equals(r2.OutputCols) {
+			panic(fmt.Sprintf("output cols mismatch: %s vs %s", r1.OutputCols, r2.OutputCols))
 		}
 
-		if i == 0 {
-			if r != '"' && !unicode.IsLetter(r) {
-				// The first character must be a letter or quotation mark.
-				return false
-			}
-		} else if r != '.' && r != '_' && r != '"' && !unicode.IsNumber(r) && !unicode.IsLetter(r) {
-			return false
+		// NotNullCols, FuncDeps are best effort, so they might differ.
+
+		if r1.Cardinality.Max < r2.Cardinality.Min ||
+			r1.Cardinality.Min > r2.Cardinality.Max {
+			panic(fmt.Sprintf("cardinality mismatch: %s vs %s", r1.Cardinality, r2.Cardinality))
+		}
+
+		// TODO(radu): these checks might be overzealous - conceivably a
+		// subexpression with outer columns/side-effects/placeholders could be
+		// elided.
+		if !r1.OuterCols.Equals(r2.OuterCols) {
+			panic(fmt.Sprintf("outer cols mismatch: %s vs %s", r1.OuterCols, r2.OuterCols))
+		}
+		if r1.CanHaveSideEffects != r2.CanHaveSideEffects {
+			panic(fmt.Sprintf("can-have-side-effects mismatch"))
+		}
+		if r1.HasPlaceholder != r2.HasPlaceholder {
+			panic(fmt.Sprintf("has-placeholder mismatch"))
 		}
 	}
-	return true
+	if s1, s2 := p.Scalar, other.Scalar; s1 != nil || s2 != nil {
+		// TODO(radu): implement this if necessary. Currently we won't ever have
+		// multiple expressions in a scalar group.
+		panic("unimplemented")
+	}
 }

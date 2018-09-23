@@ -16,13 +16,18 @@ package cli
 
 import (
 	"context"
+	"net/url"
 	"os"
 	"time"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	isatty "github.com/mattn/go-isatty"
@@ -69,13 +74,17 @@ func initCLIDefaults() {
 	cliCtx.tableDisplayFormat = tableDisplayTSV
 	if cliCtx.terminalOutput {
 		// See also setCLIDefaultForTests() in cli_test.go.
-		cliCtx.tableDisplayFormat = tableDisplayPretty
+		cliCtx.tableDisplayFormat = tableDisplayTable
 	}
 	cliCtx.showTimes = false
 	cliCtx.cmdTimeout = 0 // no timeout
+	cliCtx.clientConnHost = ""
+	cliCtx.clientConnPort = base.DefaultPort
 	cliCtx.sqlConnURL = ""
 	cliCtx.sqlConnUser = ""
+	cliCtx.sqlConnPasswd = ""
 	cliCtx.sqlConnDBName = ""
+	cliCtx.extraConnURLOptions = nil
 
 	sqlCtx.setStmts = nil
 	sqlCtx.execStmts = nil
@@ -98,14 +107,17 @@ func initCLIDefaults() {
 	zoneCtx.zoneConfig = ""
 	zoneCtx.zoneDisableReplication = false
 
+	serverCfg.ReadyFn = nil
+	serverCfg.DelayedBootstrapFn = nil
 	serverCfg.SocketFile = ""
-	serverCfg.ListeningURLFile = ""
-	serverCfg.PIDFile = ""
 	startCtx.serverInsecure = baseCfg.Insecure
 	startCtx.serverSSLCertsDir = base.DefaultCertsDirectory
-	startCtx.serverConnHost = ""
+	startCtx.serverListenAddr = ""
 	startCtx.tempDir = ""
 	startCtx.externalIODir = ""
+	startCtx.listeningURLFile = ""
+	startCtx.pidFile = ""
+	startCtx.inBackground = false
 
 	quitCtx.serverDecommission = false
 
@@ -115,7 +127,25 @@ func initCLIDefaults() {
 	nodeCtx.statusShowAll = false
 	nodeCtx.statusShowDecommission = false
 
+	cfg := tree.DefaultPrettyCfg()
+	sqlfmtCtx.len = cfg.LineWidth
+	sqlfmtCtx.useSpaces = !cfg.UseTabs
+	sqlfmtCtx.tabWidth = cfg.TabWidth
+	sqlfmtCtx.noSimplify = !cfg.Simplify
+	sqlfmtCtx.align = (cfg.Align != tree.PrettyNoAlign)
+	sqlfmtCtx.execStmts = nil
+
 	initPreFlagsDefaults()
+
+	// Clear the "Changed" state of all the registered command-line flags.
+	clearFlagChanges(cockroachCmd)
+}
+
+func clearFlagChanges(cmd *cobra.Command) {
+	cmd.LocalFlags().VisitAll(func(f *pflag.Flag) { f.Changed = false })
+	for _, subCmd := range cmd.Commands() {
+		clearFlagChanges(subCmd)
+	}
 }
 
 // cliContext captures the command-line parameters of most CLI commands.
@@ -144,9 +174,22 @@ type cliContext struct {
 	// Commands that wish to use this must use cmdTimeoutContext().
 	cmdTimeout time.Duration
 
+	// clientConnHost is the hostname/address to use to connect to a server.
+	clientConnHost string
+
+	// clientConnPort is the port name/number to use to connect to a server.
+	clientConnPort string
+
 	// for CLI commands that use the SQL interface, these parameters
 	// determine how to connect to the server.
 	sqlConnURL, sqlConnUser, sqlConnDBName string
+
+	// The client password to use. This can be set via the --url flag.
+	sqlConnPasswd string
+
+	// extraConnURLOptions contains any additional query URL options
+	// specified in --url that do not have discrete equivalents.
+	extraConnURLOptions url.Values
 }
 
 // cliCtx captures the command-line parameters common to most CLI utilities.
@@ -209,13 +252,29 @@ var startCtx struct {
 	// server-specific values of some flags.
 	serverInsecure    bool
 	serverSSLCertsDir string
-	serverConnHost    string
+	serverListenAddr  string
 
 	// temporary directory to use to spill computation results to disk.
 	tempDir string
 	// directory to use for remotely-initiated operations that can
 	// specify node-local I/O paths, like BACKUP/RESTORE/IMPORT.
 	externalIODir string
+
+	// inBackground is set to true when restarting in the
+	// background after --background was processed.
+	inBackground bool
+
+	// listeningURLFile indicates the file to which the server writes
+	// its listening URL when it is ready.
+	listeningURLFile string
+
+	// pidFile indicates the file to which the server writes its PID
+	// when it is ready.
+	pidFile string
+
+	// logging settings specific to file logging.
+	logDir     log.DirName
+	logDirFlag *pflag.Flag
 }
 
 // quitCtx captures the command-line parameters of the `quit` command.
@@ -232,4 +291,15 @@ var nodeCtx struct {
 	statusShowStats        bool
 	statusShowDecommission bool
 	statusShowAll          bool
+}
+
+// sqlfmtCtx captures the command-line parameters of the `sqlfmt` command.
+// Defaults set by InitCLIDefaults() above.
+var sqlfmtCtx struct {
+	len        int
+	useSpaces  bool
+	tabWidth   int
+	noSimplify bool
+	align      bool
+	execStmts  statementsValue
 }

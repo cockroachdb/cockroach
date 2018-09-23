@@ -80,8 +80,9 @@ var baseNodeColumnHeaders = []string{
 	"id",
 	"address",
 	"build",
-	"updated_at",
 	"started_at",
+	"updated_at",
+	"is_available",
 	"is_live",
 }
 
@@ -111,8 +112,8 @@ var statusNodeCmd = &cobra.Command{
 	Use:   "status [<node id>]",
 	Short: "shows the status of a node or all nodes",
 	Long: `
-	If a node ID is specified, this will show the status for the corresponding node. If no node ID
-	is specified, this will display the status for all nodes in the cluster.
+If a node ID is specified, this will show the status for the corresponding node. If no node ID
+is specified, this will display the status for all nodes in the cluster.
 	`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: MaybeDecorateGRPCError(runStatusNode),
@@ -150,47 +151,52 @@ func runStatusNodeInner(showDecommissioned bool, args []string) ([]string, [][]s
 	}
 
 	baseQuery := joinUsingID(
-		[]string{
-			"SELECT node_id AS id, address, tag AS build, started_at, updated_at from crdb_internal.kv_node_status",
+		[]string{`
+SELECT node_id AS id,
+       address,
+       build_tag AS build,
+       started_at,
+       updated_at
+FROM crdb_internal.gossip_liveness JOIN crdb_internal.gossip_nodes USING (node_id)`,
 			maybeAddActiveNodesFilter(
 				`SELECT node_id AS id,
                 CASE WHEN split_part(expiration,',',1)::decimal > now()::decimal
                      THEN true
                      ELSE false
-                     END AS is_live
+                     END AS is_available
          FROM crdb_internal.gossip_liveness`,
 			),
+			`SELECT node_id AS id, is_live
+         FROM crdb_internal.gossip_nodes`,
 		},
 	)
 
 	rangesQuery := `
 SELECT node_id AS id,
-       SUM((metrics->>'replicas.leaders')::DECIMAL)::INT AS replicas_leaders,
-       SUM((metrics->>'replicas.leaseholders')::DECIMAL)::INT AS replicas_leaseholders,
-       SUM((metrics->>'replicas')::DECIMAL)::INT AS ranges,
-       SUM((metrics->>'ranges.underreplicated')::DECIMAL)::INT AS ranges_underreplicated,
-       SUM((metrics->>'ranges.unavailable')::DECIMAL)::INT AS ranges_unavailable
+       sum((metrics->>'replicas.leaders')::DECIMAL)::INT AS replicas_leaders,
+       sum((metrics->>'replicas.leaseholders')::DECIMAL)::INT AS replicas_leaseholders,
+       sum((metrics->>'replicas')::DECIMAL)::INT AS ranges,
+       sum((metrics->>'ranges.underreplicated')::DECIMAL)::INT AS ranges_underreplicated,
+       sum((metrics->>'ranges.unavailable')::DECIMAL)::INT AS ranges_unavailable
 FROM crdb_internal.kv_store_status
 GROUP BY node_id`
 
 	statsQuery := `
 SELECT node_id AS id,
-       SUM((metrics->>'livebytes')::DECIMAL)::INT AS live_bytes,
-       SUM((metrics->>'keybytes')::DECIMAL)::INT AS key_bytes,
-       SUM((metrics->>'valbytes')::DECIMAL)::INT AS value_bytes,
-       SUM((metrics->>'intentbytes')::DECIMAL)::INT AS intent_bytes,
-       SUM((metrics->>'sysbytes')::DECIMAL)::INT AS system_bytes
+       sum((metrics->>'livebytes')::DECIMAL)::INT AS live_bytes,
+       sum((metrics->>'keybytes')::DECIMAL)::INT AS key_bytes,
+       sum((metrics->>'valbytes')::DECIMAL)::INT AS value_bytes,
+       sum((metrics->>'intentbytes')::DECIMAL)::INT AS intent_bytes,
+       sum((metrics->>'sysbytes')::DECIMAL)::INT AS system_bytes
 FROM crdb_internal.kv_store_status
 GROUP BY node_id`
 
-	decommissionQuery := joinUsingID(
-		[]string{
-			`SELECT node_id AS id, SUM((metrics->>'replicas')::DECIMAL)::INT AS gossiped_replicas
-       FROM crdb_internal.kv_store_status GROUP BY node_id`,
-			`SELECT node_id AS id, decommissioning AS is_decommissioning, draining AS is_draining
-       FROM crdb_internal.gossip_liveness`,
-		},
-	)
+	decommissionQuery := `
+SELECT node_id AS id,
+       ranges AS gossiped_replicas,
+       decommissioning AS is_decommissioning,
+       draining AS is_draining
+FROM crdb_internal.gossip_liveness JOIN crdb_internal.gossip_nodes USING (node_id)`
 
 	conn, err := getPasswordAndMakeSQLClient("cockroach node status")
 	if err != nil {
@@ -273,7 +279,7 @@ func getStatusNodeAlignment() string {
 var decommissionNodesColumnHeaders = []string{
 	"id",
 	"is_live",
-	"gossiped_replicas",
+	"replicas",
 	"is_decommissioning",
 	"is_draining",
 }
@@ -316,6 +322,9 @@ func runDecommissionNode(cmd *cobra.Command, args []string) error {
 func runDecommissionNodeImpl(
 	ctx context.Context, c serverpb.AdminClient, wait nodeDecommissionWaitType, args []string,
 ) error {
+	if wait == nodeDecommissionWaitLive {
+		fmt.Fprintln(stderr, "\n--wait=live is deprecated and is treated as --wait=all")
+	}
 	nodeIDs, err := parseNodeIDs(args)
 	if err != nil {
 		return err
@@ -351,19 +360,12 @@ func runDecommissionNodeImpl(
 		var replicaCount int64
 		allDecommissioning := true
 		for _, status := range resp.Status {
-			if wait != nodeDecommissionWaitLive || status.IsLive {
-				replicaCount += status.ReplicaCount
-			}
+			replicaCount += status.ReplicaCount
 			allDecommissioning = allDecommissioning && status.Decommissioning
 		}
 		if replicaCount == 0 && allDecommissioning {
-			if wait == nodeDecommissionWaitAll {
-				fmt.Fprintln(os.Stdout, "\nAll target nodes report that they hold no more data. "+
-					"Please verify cluster health before removing the nodes.")
-			} else {
-				fmt.Fprintln(os.Stdout, "\nDecommissioning finished. Please verify cluster health "+
-					"before removing the nodes.")
-			}
+			fmt.Fprintln(os.Stdout, "\nNo more data reported on target nodes. "+
+				"Please verify cluster health before removing the nodes.")
 			return nil
 		}
 		if wait == nodeDecommissionWaitNone {
@@ -459,9 +461,7 @@ var nodeCmd = &cobra.Command{
 	Use:   "node [command]",
 	Short: "list, inspect or remove nodes",
 	Long:  "List, inspect or remove nodes.",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		return cmd.Usage()
-	},
+	RunE:  usageAndErr,
 }
 
 func init() {

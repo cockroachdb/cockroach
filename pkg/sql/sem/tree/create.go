@@ -234,7 +234,10 @@ func processCollationOnType(name Name, typ coltypes.T, c ColumnCollation) (colty
 	locale := string(c)
 	switch s := typ.(type) {
 	case *coltypes.TString:
-		return &coltypes.TCollatedString{Name: s.Name, N: s.N, Locale: locale}, nil
+		return &coltypes.TCollatedString{
+			TString: coltypes.TString{Variant: s.Variant, N: s.N},
+			Locale:  locale,
+		}, nil
 	case *coltypes.TCollatedString:
 		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"multiple COLLATE declarations for column %q", name)
@@ -371,10 +374,16 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 	case NotNull:
 		ctx.WriteString(" NOT NULL")
 	}
-	if node.PrimaryKey {
-		ctx.WriteString(" PRIMARY KEY")
-	} else if node.Unique {
-		ctx.WriteString(" UNIQUE")
+	if node.PrimaryKey || node.Unique {
+		if node.UniqueConstraintName != "" {
+			ctx.WriteString(" CONSTRAINT ")
+			ctx.FormatNode(&node.UniqueConstraintName)
+		}
+		if node.PrimaryKey {
+			ctx.WriteString(" PRIMARY KEY")
+		} else if node.Unique {
+			ctx.WriteString(" UNIQUE")
+		}
 	}
 	if node.HasDefaultExpr() {
 		if node.DefaultExpr.ConstraintName != "" {
@@ -426,6 +435,9 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 		}
 	}
 }
+
+// String implements the fmt.Stringer interface.
+func (node *ColumnTableDef) String() string { return AsString(node) }
 
 // NamedColumnQualification wraps a NamedColumnQualification with a name.
 type NamedColumnQualification struct {
@@ -511,6 +523,9 @@ func (node *IndexTableDef) SetName(name Name) {
 
 // Format implements the NodeFormatter interface.
 func (node *IndexTableDef) Format(ctx *FmtCtx) {
+	if node.Inverted {
+		ctx.WriteString("INVERTED ")
+	}
 	ctx.WriteString("INDEX ")
 	if node.Name != "" {
 		ctx.FormatNode(&node.Name)
@@ -526,9 +541,6 @@ func (node *IndexTableDef) Format(ctx *FmtCtx) {
 	}
 	if node.Interleave != nil {
 		ctx.FormatNode(node.Interleave)
-	}
-	if node.Inverted {
-		ctx.WriteString("INVERTED ")
 	}
 	if node.PartitionBy != nil {
 		ctx.FormatNode(node.PartitionBy)
@@ -810,8 +822,8 @@ func (node *ListPartition) Format(ctx *FmtCtx) {
 // RangePartition represents a PARTITION definition within a PARTITION BY RANGE.
 type RangePartition struct {
 	Name         UnrestrictedName
-	From         Expr
-	To           Expr
+	From         Exprs
+	To           Exprs
 	Subpartition *PartitionBy
 }
 
@@ -819,10 +831,11 @@ type RangePartition struct {
 func (node *RangePartition) Format(ctx *FmtCtx) {
 	ctx.WriteString(`PARTITION `)
 	ctx.FormatNode(&node.Name)
-	ctx.WriteString(` VALUES FROM `)
-	ctx.FormatNode(node.From)
-	ctx.WriteString(` TO `)
-	ctx.FormatNode(node.To)
+	ctx.WriteString(` VALUES FROM (`)
+	ctx.FormatNode(&node.From)
+	ctx.WriteString(`) TO (`)
+	ctx.FormatNode(&node.To)
+	ctx.WriteByte(')')
 	if node.Subpartition != nil {
 		ctx.FormatNode(node.Subpartition)
 	}
@@ -869,6 +882,62 @@ func (node *CreateTable) Format(ctx *FmtCtx) {
 		}
 		if node.PartitionBy != nil {
 			ctx.FormatNode(node.PartitionBy)
+		}
+	}
+}
+
+// HoistConstraints finds column constraints defined inline with their columns
+// and makes them table-level constraints, stored in n.Defs. For example, the
+// foreign key constraint in
+//
+//     CREATE TABLE foo (a INT REFERENCES bar(a))
+//
+// gets pulled into a top-level constraint like:
+//
+//     CREATE TABLE foo (a INT, FOREIGN KEY (a) REFERENCES bar(a))
+//
+// Similarly, the CHECK constraint in
+//
+//    CREATE TABLE foo (a INT CHECK (a < 1), b INT)
+//
+// gets pulled into a top-level constraint like:
+//
+//    CREATE TABLE foo (a INT, b INT, CHECK (a < 1))
+//
+// Note that some SQL databases require that a constraint attached to a column
+// to refer only to the column it is attached to. We follow Postgres' behavior,
+// however, in omitting this restriction by blindly hoisting all column
+// constraints. For example, the following table definition is accepted in
+// CockroachDB and Postgres, but not necessarily other SQL databases:
+//
+//    CREATE TABLE foo (a INT CHECK (a < b), b INT)
+//
+func (node *CreateTable) HoistConstraints() {
+	for _, d := range node.Defs {
+		if col, ok := d.(*ColumnTableDef); ok {
+			for _, checkExpr := range col.CheckExprs {
+				node.Defs = append(node.Defs,
+					&CheckConstraintTableDef{
+						Expr: checkExpr.Expr,
+						Name: checkExpr.ConstraintName,
+					},
+				)
+			}
+			col.CheckExprs = nil
+			if col.HasFKConstraint() {
+				var targetCol NameList
+				if col.References.Col != "" {
+					targetCol = append(targetCol, col.References.Col)
+				}
+				node.Defs = append(node.Defs, &ForeignKeyConstraintTableDef{
+					Table:    col.References.Table,
+					FromCols: NameList{col.Name},
+					ToCols:   targetCol,
+					Name:     col.References.ConstraintName,
+					Actions:  col.References.Actions,
+				})
+				col.References.Table = NormalizableTableName{}
+			}
 		}
 	}
 }
@@ -928,6 +997,8 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 				ctx.WriteString("BY ")
 			}
 			ctx.Printf("%d", *option.IntVal)
+		case SeqOptVirtual:
+			ctx.WriteString(option.Name)
 		default:
 			panic(fmt.Sprintf("unexpected SequenceOption: %v", option))
 		}
@@ -954,6 +1025,7 @@ const (
 	SeqOptMinValue  = "MINVALUE"
 	SeqOptMaxValue  = "MAXVALUE"
 	SeqOptStart     = "START"
+	SeqOptVirtual   = "VIRTUAL"
 
 	// Avoid unused warning for constants.
 	_ = SeqOptAs

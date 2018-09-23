@@ -40,7 +40,7 @@ send "PS1=':''/# '\r"
 eexpect ":/# "
 
 # Set the max memory usage to the baseline plus some margin.
-send "ulimit -v [ expr {2*$vmem+400} ]\r"
+send "ulimit -v [ expr {3*$vmem/2} ]\r"
 eexpect ":/# "
 
 # Start a server with this limit set. The server will now run in the foreground.
@@ -68,7 +68,7 @@ eexpect root@
 # Disable query distribution to force in-memory computation.
 send "set distsql=off;\r"
 eexpect SET
-send "select * from information_schema.columns as a, information_schema.columns as b,  information_schema.columns as c,  information_schema.columns as d limit 10;\r"
+send "select * from (select * from information_schema.columns as a, information_schema.columns as b) full join (select * from information_schema.columns as c, information_schema.columns as d) on true limit 10;\r"
 
 # Check that the query crashed the server
 set spawn_id $shell_spawn_id
@@ -77,6 +77,7 @@ expect {
     "out of memory" {}
     "cannot allocate memory" {}
     "std::bad_alloc" {}
+    "Resource temporarily unavailable" {}
     timeout { handle_timeout "memory allocation error" }
 }
 eexpect ":/# "
@@ -90,7 +91,7 @@ end_test
 start_test "Ensure that memory monitoring prevents crashes"
 # Re-launch a server with relatively lower limit for SQL memory
 set spawn_id $shell_spawn_id
-send "$argv start --insecure --max-sql-memory=150K --no-redirect-stderr -s=path=logs/db \r"
+send "$argv start --insecure --max-sql-memory=1000K --no-redirect-stderr -s=path=logs/db \r"
 eexpect "restarted pre-existing node"
 sleep 2
 
@@ -100,7 +101,7 @@ send "select 1;\r"
 eexpect root@
 send "set database=system;\r"
 eexpect root@
-send "select * from  information_schema.columns as a,  information_schema.columns as b,  information_schema.columns as c,  information_schema.columns as d limit 10;\r"
+send "select * from (select * from information_schema.columns as a, information_schema.columns as b) full join (select * from information_schema.columns as c, information_schema.columns as d) on true limit 10;\r"
 eexpect "memory budget exceeded"
 eexpect root@
 

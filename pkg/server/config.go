@@ -18,22 +18,18 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
-	"math"
 	"net"
-	"runtime"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
 
-	"github.com/dustin/go-humanize"
 	"github.com/elastic/gosigar"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -48,7 +44,6 @@ import (
 
 // Context defaults.
 const (
-	defaultCGroupMemPath = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
 	// DefaultCacheSize is the default size of the RocksDB cache. We default the
 	// cache size and SQL memory pool size to 128 MiB. Larger values might
 	// provide significantly better performance, but we're not sure what type of
@@ -58,7 +53,8 @@ const (
 	DefaultCacheSize         = 128 << 20 // 128 MB
 	defaultSQLMemoryPoolSize = 128 << 20 // 128 MB
 	defaultScanInterval      = 10 * time.Minute
-	defaultScanMaxIdleTime   = 200 * time.Millisecond
+	defaultScanMinIdleTime   = 10 * time.Millisecond
+	defaultScanMaxIdleTime   = 1 * time.Second
 	// NB: this can't easily become a variable as the UI hard-codes it to 10s.
 	// See https://github.com/cockroachdb/cockroach/issues/20310.
 	DefaultMetricsSampleInterval = 10 * time.Second
@@ -173,6 +169,9 @@ type Config struct {
 	// statistics cache.
 	SQLTableStatCacheSize int
 
+	// HeapProfileDirName is the directory name for heap profiles using
+	// heapprofiler.
+	HeapProfileDirName string
 	// Parsed values.
 
 	// NodeAttributes is the parsed representation of Attrs.
@@ -208,6 +207,12 @@ type Config struct {
 	// Environment Variable: COCKROACH_SCAN_INTERVAL
 	ScanInterval time.Duration
 
+	// ScanMinIdleTime is the minimum time the scanner will be idle between ranges.
+	// If enabled (> 0), the scanner may complete in more than ScanInterval for large
+	// stores.
+	// Environment Variable: COCKROACH_SCAN_MIN_IDLE_TIME
+	ScanMinIdleTime time.Duration
+
 	// ScanMaxIdleTime is the maximum time the scanner will be idle between ranges.
 	// If enabled (> 0), the scanner may complete in less than ScanInterval for small
 	// stores.
@@ -223,19 +228,26 @@ type Config struct {
 	// Locality is a description of the topography of the server.
 	Locality roachpb.Locality
 
+	// LocalityIPAddresses contains private IP addresses the can only be accessed
+	// in the corresponding locality.
+	LocalityIPAddresses []roachpb.LocalityAddress
+
 	// EventLogEnabled is a switch which enables recording into cockroach's SQL
 	// event log tables. These tables record transactional events about changes
 	// to cluster metadata, such as DDL statements and range rebalancing
 	// actions.
 	EventLogEnabled bool
 
-	// ListeningURLFile indicates the file to which the server writes
-	// its listening URL when it is ready.
-	ListeningURLFile string
+	// ReadyFn is called when the server has started listening on its
+	// sockets. The boolean argument indicates (iff true) that the
+	// server is not bootstrapped yet, will not bootstrap itself and
+	// will be waiting for an `init` command. This can be used to inform
+	// the user.
+	ReadyFn func(waitForInit bool)
 
-	// PIDFile indicates the file to which the server writes its PID when
-	// it is ready.
-	PIDFile string
+	// DelayedBootstrapFn is called if the boostrap process does not complete
+	// in a timely fashion, typically 30s after the server starts listening.
+	DelayedBootstrapFn func()
 
 	// EnableWebSessionAuthentication enables session-based authentication for
 	// the Admin API's HTTP endpoints.
@@ -276,63 +288,6 @@ func (cfg Config) HistogramWindowInterval() time.Duration {
 	return hwi
 }
 
-// GetTotalMemory returns either the total system memory or if possible the
-// cgroups available memory.
-func GetTotalMemory(ctx context.Context) (int64, error) {
-	totalMem, err := func() (int64, error) {
-		mem := gosigar.Mem{}
-		if err := mem.Get(); err != nil {
-			return 0, err
-		}
-		if mem.Total > math.MaxInt64 {
-			return 0, fmt.Errorf("inferred memory size %s exceeds maximum supported memory size %s",
-				humanize.IBytes(mem.Total), humanize.Bytes(math.MaxInt64))
-		}
-		return int64(mem.Total), nil
-	}()
-	if err != nil {
-		return 0, err
-	}
-	checkTotal := func(x int64) (int64, error) {
-		if x <= 0 {
-			// https://github.com/elastic/gosigar/issues/72
-			return 0, fmt.Errorf("inferred memory size %d is suspicious, considering invalid", x)
-		}
-		return x, nil
-	}
-	if runtime.GOOS != "linux" {
-		return checkTotal(totalMem)
-	}
-
-	var buf []byte
-	if buf, err = ioutil.ReadFile(defaultCGroupMemPath); err != nil {
-		log.Infof(ctx, "can't read available memory from cgroups (%s), using system memory %s instead", err,
-			humanizeutil.IBytes(totalMem))
-		return checkTotal(totalMem)
-	}
-
-	cgAvlMem, err := strconv.ParseUint(strings.TrimSpace(string(buf)), 10, 64)
-	if err != nil {
-		log.Infof(ctx, "can't parse available memory from cgroups (%s), using system memory %s instead", err,
-			humanizeutil.IBytes(totalMem))
-		return checkTotal(totalMem)
-	}
-
-	if cgAvlMem == 0 || cgAvlMem > math.MaxInt64 {
-		log.Infof(ctx, "available memory from cgroups (%s) is unsupported, using system memory %s instead",
-			humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
-		return checkTotal(totalMem)
-	}
-
-	if totalMem > 0 && int64(cgAvlMem) > totalMem {
-		log.Infof(ctx, "available memory from cgroups (%s) exceeds system memory %s, using system memory",
-			humanize.IBytes(cgAvlMem), humanizeutil.IBytes(totalMem))
-		return checkTotal(totalMem)
-	}
-
-	return checkTotal(int64(cgAvlMem))
-}
-
 // setOpenFileLimit sets the soft limit for open file descriptors to the hard
 // limit if needed. Returns an error if the hard limit is too low. Returns the
 // value to set maxOpenFiles to for each store.
@@ -368,7 +323,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		panic(err)
 	}
 
-	requireWebLogin := envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_REQUIRE_WEB_LOGIN", false)
+	disableWebLogin := envutil.EnvOrDefaultBool("COCKROACH_DISABLE_WEB_LOGIN", false)
 
 	cfg := Config{
 		Config:                         new(base.Config),
@@ -378,15 +333,19 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		SQLMemoryPoolSize:              defaultSQLMemoryPoolSize,
 		SQLTableStatCacheSize:          defaultSQLTableStatCacheSize,
 		ScanInterval:                   defaultScanInterval,
+		ScanMinIdleTime:                defaultScanMinIdleTime,
 		ScanMaxIdleTime:                defaultScanMaxIdleTime,
 		EventLogEnabled:                defaultEventLogEnabled,
-		EnableWebSessionAuthentication: requireWebLogin,
+		EnableWebSessionAuthentication: !disableWebLogin,
 		Stores: base.StoreSpecList{
 			Specs: []base.StoreSpec{storeSpec},
 		},
 		TempStorageConfig: base.TempStorageConfigFromEnv(
 			ctx, st, storeSpec, "" /* parentDir */, base.DefaultTempStorageMaxSizeBytes, 0),
-		ConnResultsBufferBytes: defaultConnResultsBufferBytes,
+		// TODO(dan): Hack. Remove this env override once changefeeds have
+		// control over buffering.
+		ConnResultsBufferBytes: envutil.EnvOrDefaultInt(
+			"COCKROACH_CONN_RESULTS_BUFFER_BYTES", defaultConnResultsBufferBytes),
 	}
 	cfg.AmbientCtx.Tracer = st.Tracer
 
@@ -406,16 +365,11 @@ func (cfg *Config) String() string {
 	fmt.Fprintln(w, "cache size\t", humanizeutil.IBytes(cfg.CacheSize))
 	fmt.Fprintln(w, "SQL memory pool size\t", humanizeutil.IBytes(cfg.SQLMemoryPoolSize))
 	fmt.Fprintln(w, "scan interval\t", cfg.ScanInterval)
+	fmt.Fprintln(w, "scan min idle time\t", cfg.ScanMinIdleTime)
 	fmt.Fprintln(w, "scan max idle time\t", cfg.ScanMaxIdleTime)
 	fmt.Fprintln(w, "event log enabled\t", cfg.EventLogEnabled)
 	if cfg.Linearizable {
 		fmt.Fprintln(w, "linearizable\t", cfg.Linearizable)
-	}
-	if cfg.ListeningURLFile != "" {
-		fmt.Fprintln(w, "listening URL file\t", cfg.ListeningURLFile)
-	}
-	if cfg.PIDFile != "" {
-		fmt.Fprintln(w, "PID file\t", cfg.PIDFile)
 	}
 	_ = w.Flush()
 
@@ -425,7 +379,7 @@ func (cfg *Config) String() string {
 // Report logs an overview of the server configuration parameters via
 // the given context.
 func (cfg *Config) Report(ctx context.Context) {
-	if memSize, err := GetTotalMemory(ctx); err != nil {
+	if memSize, err := status.GetTotalMemory(ctx); err != nil {
 		log.Infof(ctx, "unable to retrieve system total memory: %v", err)
 	} else {
 		log.Infof(ctx, "system total memory: %s", humanizeutil.IBytes(memSize))
@@ -488,7 +442,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		var sizeInBytes = spec.Size.InBytes
 		if spec.InMemory {
 			if spec.Size.Percent > 0 {
-				sysMem, err := GetTotalMemory(ctx)
+				sysMem, err := status.GetTotalMemory(ctx)
 				if err != nil {
 					return Engines{}, errors.Errorf("could not retrieve system memory")
 				}
@@ -605,6 +559,7 @@ func (cfg *Config) RequireWebSession() bool {
 func (cfg *Config) readEnvironmentVariables() {
 	cfg.Linearizable = envutil.EnvOrDefaultBool("COCKROACH_EXPERIMENTAL_LINEARIZABLE", cfg.Linearizable)
 	cfg.ScanInterval = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_INTERVAL", cfg.ScanInterval)
+	cfg.ScanMinIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MIN_IDLE_TIME", cfg.ScanMinIdleTime)
 	cfg.ScanMaxIdleTime = envutil.EnvOrDefaultDuration("COCKROACH_SCAN_MAX_IDLE_TIME", cfg.ScanMaxIdleTime)
 }
 

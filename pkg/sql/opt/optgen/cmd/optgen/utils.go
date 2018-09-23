@@ -53,15 +53,21 @@ func mapPrivateType(typ string) string {
 	case "Operator":
 		return "opt.Operator"
 	case "Ordering":
-		return "props.Ordering"
+		return "opt.Ordering"
+	case "OrderingChoice":
+		return "*props.OrderingChoice"
 	case "FuncOpDef":
 		return "*memo.FuncOpDef"
 	case "ProjectionsOpDef":
 		return "*memo.ProjectionsOpDef"
 	case "ScanOpDef":
 		return "*memo.ScanOpDef"
+	case "VirtualScanOpDef":
+		return "*memo.VirtualScanOpDef"
 	case "GroupByDef":
 		return "*memo.GroupByDef"
+	case "IndexJoinDef":
+		return "*memo.IndexJoinDef"
 	case "LookupJoinDef":
 		return "*memo.LookupJoinDef"
 	case "RowNumberDef":
@@ -72,6 +78,12 @@ func mapPrivateType(typ string) string {
 		return "*memo.ExplainOpDef"
 	case "ShowTraceOpDef":
 		return "*memo.ShowTraceOpDef"
+	case "MergeOnDef":
+		return "*memo.MergeOnDef"
+	case "SubqueryDef":
+		return "*memo.SubqueryDef"
+	case "TupleOrdinal":
+		return "memo.TupleOrdinal"
 	case "Datum":
 		return "tree.Datum"
 	case "Type":

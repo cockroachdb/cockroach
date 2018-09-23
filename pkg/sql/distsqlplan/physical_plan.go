@@ -72,6 +72,18 @@ type PhysicalPlan struct {
 	// Processors in the plan.
 	Processors []Processor
 
+	// LocalProcessors contains all of the planNodeToRowSourceWrappers that were
+	// installed in this physical plan to wrap any planNodes that couldn't be
+	// properly translated into DistSQL processors. This will be empty if no
+	// wrapping had to happen.
+	LocalProcessors []distsqlrun.LocalProcessor
+
+	// LocalProcessorIndexes contains pointers to all of the RowSourceIdx fields
+	// of the  LocalPlanNodeSpecs that were created. This list is in the same
+	// order as LocalProcessors, and is kept up-to-date so that LocalPlanNodeSpecs
+	// always have the correct index into the LocalProcessors slice.
+	LocalProcessorIndexes []*uint32
+
 	// Streams accumulates the streams in the plan - both local (intra-node) and
 	// remote (inter-node); when we have a final plan, the streams are used to
 	// generate processor input and output specs (see PopulateEndpoints).
@@ -107,6 +119,10 @@ type PhysicalPlan struct {
 
 	// Used internally for numbering stages.
 	stageCounter int32
+
+	// Used internally to avoid creating flow IDs for local flows. This boolean
+	// specifies whether there is more than one node involved in a plan.
+	remotePlan bool
 }
 
 // NewStageID creates a stage identifier that can be used in processor specs.
@@ -410,7 +426,7 @@ func (p *PhysicalPlan) AddRendering(
 	evalCtx *tree.EvalContext,
 	indexVarMap []int,
 	outTypes []sqlbase.ColumnType,
-) {
+) error {
 	// First check if we need an Evaluator, or we are just shuffling values. We
 	// also check if the rendering is a no-op ("identity").
 	needRendering := false
@@ -428,7 +444,7 @@ func (p *PhysicalPlan) AddRendering(
 	if !needRendering {
 		if identity {
 			// Nothing to do.
-			return
+			return nil
 		}
 		// We don't need to do any rendering: the expressions effectively describe
 		// just a projection.
@@ -441,7 +457,7 @@ func (p *PhysicalPlan) AddRendering(
 			cols[i] = uint32(streamCol)
 		}
 		p.AddProjection(cols)
-		return
+		return nil
 	}
 
 	post := p.GetLastStagePost()
@@ -464,7 +480,11 @@ func (p *PhysicalPlan) AddRendering(
 	}
 	post.RenderExprs = make([]distsqlrun.Expression, len(exprs))
 	for i, e := range exprs {
-		post.RenderExprs[i] = MakeExpression(e, evalCtx, compositeMap)
+		var err error
+		post.RenderExprs[i], err = MakeExpression(e, evalCtx, compositeMap)
+		if err != nil {
+			return err
+		}
 	}
 
 	if len(p.MergeOrdering.Columns) > 0 {
@@ -488,7 +508,10 @@ func (p *PhysicalPlan) AddRendering(
 				if post.Projection {
 					internalColIdx = post.OutputColumns[internalColIdx]
 				}
-				newExpr := MakeExpression(&tree.IndexedVar{Idx: int(internalColIdx)}, evalCtx, nil)
+				newExpr, err := MakeExpression(&tree.IndexedVar{Idx: int(internalColIdx)}, evalCtx, nil)
+				if err != nil {
+					return err
+				}
 
 				found = len(post.RenderExprs)
 				post.RenderExprs = append(post.RenderExprs, newExpr)
@@ -503,6 +526,7 @@ func (p *PhysicalPlan) AddRendering(
 	post.Projection = false
 	post.OutputColumns = nil
 	p.SetLastStagePost(post, outTypes)
+	return nil
 }
 
 // reverseProjection remaps expression variable indices to refer to internal
@@ -569,7 +593,7 @@ func reverseProjection(outputColumns []uint32, indexVarMap []int) []int {
 // See MakeExpression for a description of indexVarMap.
 func (p *PhysicalPlan) AddFilter(
 	expr tree.TypedExpr, evalCtx *tree.EvalContext, indexVarMap []int,
-) {
+) error {
 	post := p.GetLastStagePost()
 	if len(post.RenderExprs) > 0 || post.Offset != 0 || post.Limit != 0 {
 		// The last stage contains render expressions or a limit. The filter refers
@@ -592,13 +616,17 @@ func (p *PhysicalPlan) AddFilter(
 	if post.Projection {
 		compositeMap = reverseProjection(post.OutputColumns, indexVarMap)
 	}
-	filter := MakeExpression(expr, evalCtx, compositeMap)
+	filter, err := MakeExpression(expr, evalCtx, compositeMap)
+	if err != nil {
+		return err
+	}
 	if post.Filter.Expr != "" {
 		filter.Expr = fmt.Sprintf("(%s) AND (%s)", post.Filter.Expr, filter.Expr)
 	}
 	for _, pIdx := range p.ResultRouters {
 		p.Processors[pIdx].Spec.Post.Filter = filter
 	}
+	return nil
 }
 
 // emptyPlan creates a plan with a single processor that generates no rows; the
@@ -630,16 +658,30 @@ func emptyPlan(types []sqlbase.ColumnType, node roachpb.NodeID) PhysicalPlan {
 // that is placed on the given node.
 //
 // For no limit, count should be MaxInt64.
-func (p *PhysicalPlan) AddLimit(count int64, offset int64, node roachpb.NodeID) error {
+func (p *PhysicalPlan) AddLimit(
+	count int64, offset int64, evalCtx *tree.EvalContext, node roachpb.NodeID,
+) error {
 	if count < 0 {
 		return errors.Errorf("negative limit")
 	}
 	if offset < 0 {
 		return errors.Errorf("negative offset")
 	}
+	// limitZero is set to true if the limit is a legitimate LIMIT 0 requested by
+	// the user. This needs to be tracked as a separate condition because DistSQL
+	// uses count=0 to mean no limit, not a limit of 0. Normally, DistSQL will
+	// short circuit 0-limit plans, but wrapped local planNodes sometimes need to
+	// be fully-executed despite having 0 limit, so if we do in fact have a
+	// limit-0 case when there's local planNodes around, we add an empty plan
+	// instead of completely eliding the 0-limit plan.
+	limitZero := false
 	if count == 0 {
-		*p = emptyPlan(p.ResultTypes, node)
-		return nil
+		if len(p.LocalProcessors) == 0 {
+			*p = emptyPlan(p.ResultTypes, node)
+			return nil
+		}
+		count = 1
+		limitZero = true
 	}
 
 	if len(p.ResultRouters) == 1 {
@@ -654,8 +696,15 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, node roachpb.NodeID) 
 				//   SELECT * FROM (SELECT * FROM .. LIMIT 5) OFFSET 10
 				// TODO(radu): perform this optimization while propagating filters
 				// instead of having to detect it here.
-				*p = emptyPlan(p.ResultTypes, node)
-				return nil
+				if len(p.LocalProcessors) == 0 {
+					// Even though we know there will be no results, we don't elide the
+					// plan if there are local processors. See comment above limitZero
+					// for why.
+					*p = emptyPlan(p.ResultTypes, node)
+					return nil
+				}
+				count = 1
+				limitZero = true
 			}
 			post.Offset += uint64(offset)
 		}
@@ -663,6 +712,11 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, node roachpb.NodeID) 
 			post.Limit = uint64(count)
 		}
 		p.SetLastStagePost(post, p.ResultTypes)
+		if limitZero {
+			if err := p.AddFilter(tree.DBoolFalse, evalCtx, nil); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 
@@ -692,6 +746,11 @@ func (p *PhysicalPlan) AddLimit(count int64, offset int64, node roachpb.NodeID) 
 		post,
 		p.ResultTypes,
 	)
+	if limitZero {
+		if err := p.AddFilter(tree.DBoolFalse, evalCtx, nil); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -716,10 +775,14 @@ func (p *PhysicalPlan) PopulateEndpoints(nodeAddresses map[roachpb.NodeID]string
 		}
 		p2.Spec.Input[s.DestInput].Streams = append(p2.Spec.Input[s.DestInput].Streams, endpoint)
 		if endpoint.Type == distsqlrun.StreamEndpointSpec_REMOTE {
+			if !p.remotePlan {
+				p.remotePlan = true
+			}
 			var ok bool
-			endpoint.TargetAddr, ok = nodeAddresses[p2.Node]
+			endpoint.TargetNodeID = p2.Node
+			endpoint.DeprecatedTargetAddr, ok = nodeAddresses[p2.Node]
 			if !ok {
-				panic(fmt.Sprintf("node %d node in nodeAddresses map", p2.Node))
+				panic(fmt.Sprintf("node %d not in nodeAddresses map", p2.Node))
 			}
 		}
 
@@ -744,7 +807,13 @@ func (p *PhysicalPlan) PopulateEndpoints(nodeAddresses map[roachpb.NodeID]string
 func (p *PhysicalPlan) GenerateFlowSpecs(
 	gateway roachpb.NodeID,
 ) map[roachpb.NodeID]distsqlrun.FlowSpec {
-	flowID := distsqlrun.FlowID{UUID: uuid.MakeV4()}
+	// Only generate a flow ID for a remote plan because it will need to be
+	// referenced by remote nodes when connecting streams. This id generation is
+	// skipped for performance reasons on local flows.
+	flowID := distsqlrun.FlowID{}
+	if p.remotePlan {
+		flowID.UUID = uuid.MakeV4()
+	}
 	flows := make(map[roachpb.NodeID]distsqlrun.FlowSpec)
 
 	for _, proc := range p.Processors {
@@ -784,6 +853,13 @@ func MergePlans(
 	}
 	mergedPlan.stageCounter = left.stageCounter + right.stageCounter
 
+	mergedPlan.LocalProcessors = append(left.LocalProcessors, right.LocalProcessors...)
+	mergedPlan.LocalProcessorIndexes = append(left.LocalProcessorIndexes, right.LocalProcessorIndexes...)
+	// Update the local processor indices in the right streams.
+	for i := len(left.LocalProcessorIndexes); i < len(mergedPlan.LocalProcessorIndexes); i++ {
+		*mergedPlan.LocalProcessorIndexes[i] += uint32(len(left.LocalProcessorIndexes))
+	}
+
 	leftRouters = left.ResultRouters
 	rightRouters = append([]ProcessorIdx(nil), right.ResultRouters...)
 	// Update the processor indices in the right routers.
@@ -804,18 +880,27 @@ func MergeResultTypes(left, right []sqlbase.ColumnType) ([]sqlbase.ColumnType, e
 	}
 	merged := make([]sqlbase.ColumnType, len(left))
 	for i := range left {
-		leftType, rightType := left[i], right[i]
+		leftType, rightType := &left[i], &right[i]
 		if rightType.SemanticType == sqlbase.ColumnType_NULL {
-			merged[i] = leftType
+			merged[i] = *leftType
 		} else if leftType.SemanticType == sqlbase.ColumnType_NULL {
-			merged[i] = rightType
-		} else if leftType.Equivalent(rightType) {
-			merged[i] = leftType
+			merged[i] = *rightType
+		} else if equivalentTypes(leftType, rightType) {
+			merged[i] = *leftType
 		} else {
 			return nil, errors.Errorf("conflicting ColumnTypes: %v and %v", leftType, rightType)
 		}
 	}
 	return merged, nil
+}
+
+// equivalentType checks whether a column type is equivalent to
+// another for the purpose of UNION. This excludes its VisibleType
+// type alias, which doesn't effect the merging of values.
+func equivalentTypes(c, other *sqlbase.ColumnType) bool {
+	rhs := *other
+	rhs.VisibleType = c.VisibleType
+	return c.Equal(rhs)
 }
 
 // AddJoinStage adds join processors at each of the specified nodes, and wires
