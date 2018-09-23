@@ -1110,13 +1110,12 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 		}
 	}
 
-	if st != nil && st.Version.IsInitialized() {
-		if !st.Version.IsMinSupported(cluster.VersionBitArrayColumns) {
-			for _, def := range desc.Columns {
-				if def.Type.SemanticType == ColumnType_BIT {
-					return fmt.Errorf("cluster version does not support BIT (required: %s)",
-						cluster.VersionByKey(cluster.VersionBitArrayColumns))
-				}
+	// TODO(benesch): remove code paths that supply a nil st.
+	if st != nil && !st.Version.IsMinSupported(cluster.VersionBitArrayColumns) {
+		for _, def := range desc.Columns {
+			if def.Type.SemanticType == ColumnType_BIT {
+				return fmt.Errorf("cluster version does not support BIT (required: %s)",
+					cluster.VersionByKey(cluster.VersionBitArrayColumns))
 			}
 		}
 	}
