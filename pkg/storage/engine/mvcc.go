@@ -1166,6 +1166,9 @@ func mvccPutInternal(
 	if len(key) == 0 {
 		return emptyKeyError()
 	}
+	if timestamp.WallTime < 0 {
+		return errors.Errorf("Put at key: %q is invalid because of negative timestamp.WallTime: %d", key, timestamp.WallTime)
+	}
 
 	metaKey := MakeMVCCMetadataKey(key)
 	ok, origMetaKeySize, origMetaValSize, err := mvccGetMetadata(iter, metaKey, &buf.meta)
