@@ -1045,7 +1045,7 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 	}
 
 	if desc.IsSequence() {
-		if st != nil && st.Version.HasBeenInitialized() {
+		if st != nil && st.Version.IsInitialized() {
 			if err := st.Version.CheckVersion(cluster.Version2_0, "sequences"); err != nil {
 				return err
 			}
@@ -1116,7 +1116,7 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 		}
 	}
 
-	if st != nil && st.Version.HasBeenInitialized() {
+	if st != nil && st.Version.IsInitialized() {
 		if !st.Version.IsMinSupported(cluster.Version2_0) {
 			for _, def := range desc.Columns {
 				if def.Type.SemanticType == ColumnType_JSONB {
