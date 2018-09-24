@@ -356,8 +356,12 @@ func MakeFixture(
 	g, gCtx := errgroup.WithContext(ctx)
 	for _, t := range gen.Tables() {
 		table := t
-		tableCSVPathsCh := make(chan string)
+		if t.InitialRows.Batch == nil {
+			return Fixture{}, errors.Errorf(
+				`make fixture is not supported for workload %s`, gen.Meta().Name)
+		}
 
+		tableCSVPathsCh := make(chan string)
 		g.Go(func() error {
 			defer close(tableCSVPathsCh)
 			if len(config.CSVServerURL) == 0 {
