@@ -189,6 +189,7 @@ var _ planNode = &limitNode{}
 var _ planNode = &ordinalityNode{}
 var _ planNode = &projectSetNode{}
 var _ planNode = &relocateNode{}
+var _ planNode = &renameColumnNode{}
 var _ planNode = &renameDatabaseNode{}
 var _ planNode = &renameTableNode{}
 var _ planNode = &renderNode{}
