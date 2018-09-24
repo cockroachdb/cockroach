@@ -10,7 +10,11 @@ package changefeedccl
 
 import (
 	"encoding/json"
+	"fmt"
+	"math/big"
+	"time"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/linkedin/goavro"
@@ -29,6 +33,24 @@ const (
 	avroSchemaString  = `string`
 )
 
+type avroLogicalType struct {
+	SchemaType  avroSchemaType `json:"type"`
+	LogicalType string         `json:"logicalType"`
+	Precision   int            `json:"precision,omitempty"`
+	Scale       int            `json:"scale,omitempty"`
+}
+
+func avroUnionKey(t avroSchemaType) string {
+	switch s := t.(type) {
+	case string:
+		return s
+	case avroLogicalType:
+		return avroUnionKey(s.SchemaType) + `.` + s.LogicalType
+	default:
+		panic(fmt.Sprintf(`unsupported type %T %v`, t, t))
+	}
+}
+
 // avroSchemaField is our representation of the schema of a field in an avro
 // record. Serializing it to JSON gives the standard schema representation.
 type avroSchemaField struct {
@@ -40,8 +62,8 @@ type avroSchemaField struct {
 	// through avro.
 	typ sqlbase.ColumnType
 
-	encodeFn func(tree.Datum) interface{}
-	decodeFn func(interface{}) tree.Datum
+	encodeFn func(tree.Datum) (interface{}, error)
+	decodeFn func(interface{}) (tree.Datum, error)
 }
 
 // avroSchemaRecord is our representation of the schema of an avro record.
@@ -75,51 +97,91 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		typ:  colDesc.Type,
 	}
 
-	var avroType string
+	var avroType avroSchemaType
 	switch colDesc.Type.SemanticType {
 	case sqlbase.ColumnType_INT:
 		avroType = avroSchemaLong
-		schema.encodeFn = func(d tree.Datum) interface{} {
-			return int64(*d.(*tree.DInt))
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			return int64(*d.(*tree.DInt)), nil
 		}
-		schema.decodeFn = func(x interface{}) tree.Datum {
-			return tree.NewDInt(tree.DInt(x.(int64)))
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			return tree.NewDInt(tree.DInt(x.(int64))), nil
 		}
 	case sqlbase.ColumnType_BOOL:
 		avroType = avroSchemaBoolean
-		schema.encodeFn = func(d tree.Datum) interface{} {
-			return bool(*d.(*tree.DBool))
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			return bool(*d.(*tree.DBool)), nil
 		}
-		schema.decodeFn = func(x interface{}) tree.Datum {
-			return tree.MakeDBool(tree.DBool(x.(bool)))
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			return tree.MakeDBool(tree.DBool(x.(bool))), nil
 		}
 	case sqlbase.ColumnType_FLOAT:
 		avroType = avroSchemaDouble
-		schema.encodeFn = func(d tree.Datum) interface{} {
-			return float64(*d.(*tree.DFloat))
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			return float64(*d.(*tree.DFloat)), nil
 		}
-		schema.decodeFn = func(x interface{}) tree.Datum {
-			return tree.NewDFloat(tree.DFloat(x.(float64)))
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			return tree.NewDFloat(tree.DFloat(x.(float64))), nil
 		}
 	case sqlbase.ColumnType_STRING:
 		avroType = avroSchemaString
-		schema.encodeFn = func(d tree.Datum) interface{} {
-			return string(*d.(*tree.DString))
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			return string(*d.(*tree.DString)), nil
 		}
-		schema.decodeFn = func(x interface{}) tree.Datum {
-			return tree.NewDString(x.(string))
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			return tree.NewDString(x.(string)), nil
 		}
 	case sqlbase.ColumnType_BYTES:
 		avroType = avroSchemaBytes
-		schema.encodeFn = func(d tree.Datum) interface{} {
-			return []byte(*d.(*tree.DBytes))
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			return []byte(*d.(*tree.DBytes)), nil
 		}
-		schema.decodeFn = func(x interface{}) tree.Datum {
-			return tree.NewDBytes(tree.DBytes(x.([]byte)))
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			return tree.NewDBytes(tree.DBytes(x.([]byte))), nil
+		}
+	case sqlbase.ColumnType_TIMESTAMP:
+		avroType = avroLogicalType{
+			SchemaType:  avroSchemaLong,
+			LogicalType: `timestamp-micros`,
+		}
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			return d.(*tree.DTimestamp).Time, nil
+		}
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			return tree.MakeDTimestamp(x.(time.Time), time.Microsecond), nil
+		}
+	case sqlbase.ColumnType_DECIMAL:
+		if colDesc.Type.Precision == 0 {
+			return nil, errors.Errorf(
+				`column %s: decimal with no precision not yet supported with avro`, colDesc.Name)
+		}
+		decimalType := avroLogicalType{
+			SchemaType:  avroSchemaBytes,
+			LogicalType: `decimal`,
+			Precision:   int(colDesc.Type.Precision),
+			Scale:       int(colDesc.Type.Width),
+		}
+		avroType = decimalType
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
+			dec := d.(*tree.DDecimal).Decimal
+			// TODO(dan): For the cases that the avro defined decimal format
+			// would not roundtrip, serialize the decimal as a string. Also
+			// support the unspecified precision/scale case in this branch. We
+			// can't currently do this without surgery to the avro library we're
+			// using and that's too scary leading up to 2.1.0.
+			rat, err := decimalToRat(dec, colDesc.Type.Width)
+			if err != nil {
+				return nil, err
+			}
+			return &rat, nil
+		}
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
+			return &tree.DDecimal{Decimal: ratToDecimal(*x.(*big.Rat), colDesc.Type.Width)}, nil
 		}
 	default:
 		// TODO(dan): Support the other column types.
-		return nil, errors.Errorf(`unsupported column type: %s`, colDesc.Type.SemanticType)
+		return nil, errors.Errorf(`column %s: type %s not yet supported with avro`,
+			colDesc.Name, colDesc.Type.SemanticType)
 	}
 	schema.SchemaType = avroType
 
@@ -129,17 +191,22 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		schema.SchemaType = []avroSchemaType{avroSchemaNull, avroType}
 		encodeFn := schema.encodeFn
 		decodeFn := schema.decodeFn
-		schema.encodeFn = func(d tree.Datum) interface{} {
+		unionKey := avroUnionKey(avroType)
+		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
 			if d == tree.DNull {
-				return goavro.Union(avroSchemaNull, nil)
+				return goavro.Union(avroSchemaNull, nil), nil
 			}
-			return goavro.Union(avroType, encodeFn(d))
+			encoded, err := encodeFn(d)
+			if err != nil {
+				return nil, err
+			}
+			return goavro.Union(unionKey, encoded), nil
 		}
-		schema.decodeFn = func(x interface{}) tree.Datum {
+		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			if x == nil {
-				return tree.DNull
+				return tree.DNull, nil
 			}
-			return decodeFn(x.(map[string]interface{})[avroType])
+			return decodeFn(x.(map[string]interface{})[unionKey])
 		}
 	}
 
@@ -263,7 +330,10 @@ func (r *avroSchemaRecord) nativeFromRow(row sqlbase.EncDatumRow) (interface{}, 
 		if err := d.EnsureDecoded(&field.typ, &r.alloc); err != nil {
 			return nil, err
 		}
-		avroDatums[field.Name] = field.encodeFn(d.Datum)
+		var err error
+		if avroDatums[field.Name], err = field.encodeFn(d.Datum); err != nil {
+			return nil, err
+		}
 	}
 	return avroDatums, nil
 }
@@ -281,8 +351,58 @@ func (r *avroSchemaRecord) rowFromNative(native interface{}) (sqlbase.EncDatumRo
 	for fieldName, avroDatum := range avroDatums {
 		fieldIdx := r.fieldIdxByName[fieldName]
 		field := r.Fields[fieldIdx]
-		row[r.colIdxByFieldIdx[fieldIdx]] = sqlbase.DatumToEncDatum(
-			field.typ, field.decodeFn(avroDatum))
+		decoded, err := field.decodeFn(avroDatum)
+		if err != nil {
+			return nil, err
+		}
+		row[r.colIdxByFieldIdx[fieldIdx]] = sqlbase.DatumToEncDatum(field.typ, decoded)
 	}
 	return row, nil
+}
+
+// decimalToRat converts one of our apd decimals to the format expected by the
+// avro library we use. If the column has a fixed scale (which is always true if
+// precision is set) this is roundtripable without information loss.
+//
+// TODO(dan): We really should just be controlling our own encoding destiny
+// here. Make that possible.
+func decimalToRat(dec apd.Decimal, scale int32) (big.Rat, error) {
+	if dec.Form != apd.Finite {
+		return big.Rat{}, errors.Errorf(`cannot convert %s form decimal`, dec.Form)
+	}
+	if scale > 0 && scale != -dec.Exponent {
+		return big.Rat{}, errors.Errorf(`%s will not roundtrip at scale %d`, &dec, scale)
+	}
+	var r big.Rat
+	if dec.Exponent >= 0 {
+		exp := big.NewInt(10)
+		exp = exp.Exp(exp, big.NewInt(int64(dec.Exponent)), nil)
+		var coeff big.Int
+		r.SetFrac(coeff.Mul(&dec.Coeff, exp), big.NewInt(1))
+	} else {
+		exp := big.NewInt(10)
+		exp = exp.Exp(exp, big.NewInt(int64(-dec.Exponent)), nil)
+		r.SetFrac(&dec.Coeff, exp)
+	}
+	if dec.Negative {
+		r.Mul(&r, big.NewRat(-1, 1))
+	}
+	return r, nil
+}
+
+// ratToDecimal converts the output of decimalToRat back into the original apd
+// decimal, given a fixed column scale. NB: big.Rat is lossy-compared to apd
+// decimal, so this is not possible when the scale is not fixed.
+func ratToDecimal(rat big.Rat, scale int32) apd.Decimal {
+	num, denom := rat.Num(), rat.Denom()
+	exp := big.NewInt(10)
+	exp = exp.Exp(exp, big.NewInt(int64(scale)), nil)
+	sf := denom.Div(exp, denom)
+	coeff := num.Mul(num, sf)
+	dec := apd.NewWithBigInt(coeff, -scale)
+	if dec.Coeff.Sign() < 0 {
+		dec.Coeff.Neg(&dec.Coeff)
+		dec.Negative = true
+	}
+	return *dec
 }
