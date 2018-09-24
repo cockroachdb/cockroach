@@ -77,7 +77,7 @@ func makeStoreRebalancerMetrics() StoreRebalancerMetrics {
 var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 	"kv.allocator.load_based_rebalancing",
 	"whether to rebalance based on the distribution of QPS across stores",
-	"leases",
+	"leases and replicas",
 	map[int64]string{
 		int64(LBRebalancingOff):               "off",
 		int64(LBRebalancingLeasesOnly):        "leases",
