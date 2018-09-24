@@ -4541,8 +4541,7 @@ distinct-on
       │         ├── function: generate_series [type=int, side-effects]
       │         │    ├── const: 0 [type=int]
       │         │    └── const: 1 [type=int]
-      │         └── function: lower [type=string]
-      │              └── const: 'ABC' [type=string]
+      │         └── const: 'abc' [type=string]
       └── filters
            └── title = unnest [type=bool, outer=(4,11), constraints=(/4: (/NULL - ]; /11: (/NULL - ]), fd=(4)==(11), (11)==(4)]
 
