@@ -68,22 +68,16 @@ func (oc *optCatalog) ResolveDataSource(
 func (oc *optCatalog) ResolveDataSourceByID(
 	ctx context.Context, dataSourceID int64,
 ) (opt.DataSource, error) {
-	// ResolveDataSourceByID skips the descriptor cache. This is unlike the
-	// heuristic planner which attempts to get the table from a cache unless
-	// forced to skip the cache. See sql/data_source.go:getTableDescByID() for
-	// original implementation.
-	desc, err := sqlbase.GetTableDescFromID(ctx, oc.resolver.Txn(), sqlbase.ID(dataSourceID))
 
-	if err != nil {
-		if err == sqlbase.ErrDescriptorNotFound {
+	tableLookup, err := oc.resolver.LookupTableByID(ctx, sqlbase.ID(dataSourceID))
+
+	if err != nil || tableLookup.IsAdding {
+		if err == sqlbase.ErrDescriptorNotFound || tableLookup.IsAdding {
 			return nil, sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: dataSourceID})
 		}
 		return nil, err
 	}
-
-	if err := filterTableState(desc); err != nil {
-		return nil, err
-	}
+	desc := tableLookup.Table
 
 	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, oc.resolver.Txn(), desc.ParentID)
 	if err != nil {

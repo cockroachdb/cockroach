@@ -53,6 +53,12 @@ export default function Debug() {
       </Helmet>
       <h1>Advanced Debugging</h1>
       <DebugTable heading="Reports">
+        <DebugTableRow title="Custom Time-Series Chart">
+          <DebugTableLink
+            name="Customizable chart of time series metrics"
+            url="#/debug/chart"
+          />
+        </DebugTableRow>
         <DebugTableRow title="Node Diagnostics">
           <DebugTableLink name="All Nodes" url="#/reports/nodes" />
           <DebugTableLink
@@ -257,12 +263,6 @@ export default function Debug() {
           <DebugTableLink
             name="Export the Redux State of the UI"
             url="#/debug/redux"
-          />
-        </DebugTableRow>
-        <DebugTableRow title="Custom Time-Series Chart">
-          <DebugTableLink
-            name="Customizable chart of time series metrics"
-            url="#/debug/chart"
           />
         </DebugTableRow>
       </DebugTable>
