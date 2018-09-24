@@ -674,7 +674,7 @@ func (r *registry) run(
 					}
 
 					fmt.Fprintf(r.out, "--- FAIL: %s %s(%s)\n%s", t.Name(), stability, dstr, output)
-					if postIssues && issues.CanPost() {
+					if postIssues && issues.CanPost() && t.spec.Run != nil {
 						authorEmail := getAuthorEmail(failLoc.file, failLoc.line)
 						branch := "<unknown branch>"
 						if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
