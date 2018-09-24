@@ -287,6 +287,7 @@ func (dsp *DistSQLPlanner) mustWrapNode(node planNode) bool {
 	case *unionNode:
 	case *valuesNode:
 	case *virtualTableNode:
+	case *virtualTableAugmenterNode:
 	case *createStatsNode:
 	case *projectSetNode:
 	case *unaryNode:

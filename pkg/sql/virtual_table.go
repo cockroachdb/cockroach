@@ -24,8 +24,9 @@ import (
 // virtualTableGenerator is the function signature for the virtualTableNode
 // `next` property. Each time the virtualTableGenerator function is called, it
 // returns a tree.Datums corresponding to the next row of the virtual schema
-// table. If there is no next row (end of table is reached), then return (nil,
-// nil). If there is an error, then return (nil, error).
+// table. Only the row datums that are cheap to compute are resolved in this
+// function. If there is no next row (end of table is reached), then return
+// (nil, nil). If there is an error, then return (nil, error).
 type virtualTableGenerator func() (tree.Datums, error)
 
 // virtualTableNode is a planNode that constructs its rows by repeatedly
@@ -37,7 +38,7 @@ type virtualTableNode struct {
 }
 
 func (p *planner) newContainerVirtualTableNode(
-	columns sqlbase.ResultColumns, capacity int, next virtualTableGenerator,
+	columns sqlbase.ResultColumns, next virtualTableGenerator,
 ) *virtualTableNode {
 	return &virtualTableNode{
 		columns: columns,

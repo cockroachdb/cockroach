@@ -88,9 +88,8 @@ func setNeededColumns(plan planNode, needed []bool) {
 		markOmitted(n.columns[:len(needed)-1], needed[:len(needed)-1])
 
 	case *valuesNode:
-		markOmitted(n.columns, needed)
-
 	case *virtualTableNode:
+	case *virtualTableAugmenterNode:
 		markOmitted(n.columns, needed)
 
 	case *projectSetNode:

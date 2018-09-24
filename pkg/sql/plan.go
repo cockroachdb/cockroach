@@ -205,6 +205,7 @@ var _ planNode = &updateNode{}
 var _ planNode = &upsertNode{}
 var _ planNode = &valuesNode{}
 var _ planNode = &virtualTableNode{}
+var _ planNode = &virtualTableAugmenterNode{}
 var _ planNode = &windowNode{}
 var _ planNode = &zeroNode{}
 
