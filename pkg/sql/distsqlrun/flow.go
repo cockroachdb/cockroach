@@ -335,11 +335,13 @@ func checkNumInOut(inputs []RowSource, outputs []RowReceiver, numIn, numOut int)
 	return nil
 }
 
+// makeProcessor makes a processor and sets up the output according to ps. The
+// output is returned.
 func (f *Flow) makeProcessor(
 	ctx context.Context, ps *ProcessorSpec, inputs []RowSource,
-) (Processor, error) {
+) (Processor, RowReceiver, error) {
 	if len(ps.Output) != 1 {
-		return nil, errors.Errorf("only single-output processors supported")
+		return nil, nil, errors.Errorf("only single-output processors supported")
 	}
 	outputs := make([]RowReceiver, len(ps.Output))
 	for i := range ps.Output {
@@ -348,19 +350,19 @@ func (f *Flow) makeProcessor(
 			// There is no entity that corresponds to a pass-through router - we just
 			// use its output stream directly.
 			if len(spec.Streams) != 1 {
-				return nil, errors.Errorf("expected one stream for passthrough router")
+				return nil, nil, errors.Errorf("expected one stream for passthrough router")
 			}
 			var err error
 			outputs[i], err = f.setupOutboundStream(spec.Streams[0])
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			continue
 		}
 
 		r, err := f.setupRouter(spec)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		outputs[i] = r
 		f.startables = append(f.startables, r)
@@ -379,7 +381,7 @@ func (f *Flow) makeProcessor(
 
 	proc, err := newProcessor(ctx, &f.FlowCtx, ps.ProcessorID, &ps.Core, &ps.Post, inputs, outputs, f.localProcessors)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Initialize any routers (the setupRouter case above) and outboxes.
@@ -397,49 +399,67 @@ func (f *Flow) makeProcessor(
 			o.init(types)
 		}
 	}
-	return proc, nil
+	// Note that we assert that the output length is 1 at the top of the method..
+	return proc, outputs[0], nil
+}
+
+func (f *Flow) setupInputSync(ctx context.Context, is InputSyncSpec) (RowSource, error) {
+	if len(is.Streams) == 0 {
+		return nil, errors.Errorf("input sync with no streams")
+	}
+	var sync RowSource
+	switch is.Type {
+	case InputSyncSpec_UNORDERED:
+		mrc := &RowChannel{}
+		mrc.InitWithNumSenders(is.ColumnTypes, len(is.Streams))
+		for _, s := range is.Streams {
+			if err := f.setupInboundStream(ctx, s, mrc); err != nil {
+				return nil, err
+			}
+		}
+		sync = mrc
+	case InputSyncSpec_ORDERED:
+		// Ordered synchronizer: create a RowChannel for each input.
+		streams := make([]RowSource, len(is.Streams))
+		for i, s := range is.Streams {
+			rowChan := &RowChannel{}
+			rowChan.InitWithNumSenders(is.ColumnTypes, 1)
+			if err := f.setupInboundStream(ctx, s, rowChan); err != nil {
+				return nil, err
+			}
+			streams[i] = rowChan
+		}
+		var err error
+		sync, err = makeOrderedSync(convertToColumnOrdering(is.Ordering), f.EvalCtx, streams)
+		if err != nil {
+			return nil, err
+		}
+
+	default:
+		return nil, errors.Errorf("unsupported input sync type %s", is.Type)
+	}
+	return sync, nil
 }
 
 func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 	f.spec = spec
 
+	// Attempt to set up this flow using processor groups.
+	pGroups, err := f.ProcessorSpecsToProcessorGroups(ctx, spec.Processors)
+	if err == nil {
+		f.processors = pGroups
+		return nil
+	} else if err != ErrProcNotSupported {
+		return err
+	}
+
 	// First step: setup the input synchronizers for all processors.
 	inputSyncs := make([][]RowSource, len(spec.Processors))
 	for pIdx, ps := range spec.Processors {
 		for _, is := range ps.Input {
-			if len(is.Streams) == 0 {
-				return errors.Errorf("input sync with no streams")
-			}
-			var sync RowSource
-			switch is.Type {
-			case InputSyncSpec_UNORDERED:
-				mrc := &RowChannel{}
-				mrc.InitWithNumSenders(is.ColumnTypes, len(is.Streams))
-				for _, s := range is.Streams {
-					if err := f.setupInboundStream(ctx, s, mrc); err != nil {
-						return err
-					}
-				}
-				sync = mrc
-			case InputSyncSpec_ORDERED:
-				// Ordered synchronizer: create a RowChannel for each input.
-				streams := make([]RowSource, len(is.Streams))
-				for i, s := range is.Streams {
-					rowChan := &RowChannel{}
-					rowChan.InitWithNumSenders(is.ColumnTypes, 1)
-					if err := f.setupInboundStream(ctx, s, rowChan); err != nil {
-						return err
-					}
-					streams[i] = rowChan
-				}
-				var err error
-				sync, err = makeOrderedSync(convertToColumnOrdering(is.Ordering), f.EvalCtx, streams)
-				if err != nil {
-					return err
-				}
-
-			default:
-				return errors.Errorf("unsupported input sync type %s", is.Type)
+			sync, err := f.setupInputSync(ctx, is)
+			if err != nil {
+				return err
 			}
 			inputSyncs[pIdx] = append(inputSyncs[pIdx], sync)
 		}
@@ -451,7 +471,7 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 	// which are fused with their consumer.
 	for i := range spec.Processors {
 		pspec := &spec.Processors[i]
-		p, err := f.makeProcessor(ctx, pspec, inputSyncs[i])
+		p, _, err := f.makeProcessor(ctx, pspec, inputSyncs[i])
 		if err != nil {
 			return err
 		}
