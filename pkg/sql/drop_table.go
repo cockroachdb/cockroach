@@ -31,8 +31,7 @@ import (
 )
 
 type dropTableNode struct {
-	n  *tree.DropTable
-	td []toDelete
+	n *tree.DropTable
 }
 
 type toDelete struct {
@@ -45,16 +44,24 @@ type toDelete struct {
 //   Notes: postgres allows only the table owner to DROP a table.
 //          mysql requires the DROP privilege on the table.
 func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, error) {
-	td := make([]toDelete, 0, len(n.Names))
-	for i := range n.Names {
-		name := &n.Names[i]
+	return &dropTableNode{n: n}, nil
+}
+
+func (n *dropTableNode) startExec(params runParams) error {
+	p := params.p
+	ctx := params.ctx
+
+	// Prepare the list of objects to drop.
+	td := make([]toDelete, 0, len(n.n.Names))
+	for i := range n.n.Names {
+		name := &n.n.Names[i]
 		tn, err := name.Normalize()
 		if err != nil {
-			return nil, err
+			return err
 		}
-		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, requireTableDesc)
+		droppedDesc, err := p.prepareDrop(ctx, tn, !n.n.IfExists, requireTableDesc)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if droppedDesc == nil {
 			continue
@@ -63,6 +70,7 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 		td = append(td, toDelete{tn, droppedDesc})
 	}
 
+	// Check recursive dependencies.
 	dropping := make(map[sqlbase.ID]bool)
 	for _, d := range td {
 		dropping[d.desc.ID] = true
@@ -73,37 +81,30 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 		for _, idx := range droppedDesc.AllNonDropIndexes() {
 			for _, ref := range idx.ReferencedBy {
 				if !dropping[ref.Table] {
-					if _, err := p.canRemoveFK(ctx, droppedDesc.Name, ref, n.DropBehavior); err != nil {
-						return nil, err
+					if _, err := p.canRemoveFK(ctx, droppedDesc.Name, ref, n.n.DropBehavior); err != nil {
+						return err
 					}
 				}
 			}
 			for _, ref := range idx.InterleavedBy {
 				if !dropping[ref.Table] {
-					if err := p.canRemoveInterleave(ctx, droppedDesc.Name, ref, n.DropBehavior); err != nil {
-						return nil, err
+					if err := p.canRemoveInterleave(ctx, droppedDesc.Name, ref, n.n.DropBehavior); err != nil {
+						return err
 					}
 				}
 			}
 		}
 		for _, ref := range droppedDesc.DependedOnBy {
 			if !dropping[ref.ID] {
-				if err := p.canRemoveDependentView(ctx, droppedDesc, ref, n.DropBehavior); err != nil {
-					return nil, err
+				if err := p.canRemoveDependentView(ctx, droppedDesc, ref, n.n.DropBehavior); err != nil {
+					return err
 				}
 			}
 		}
 	}
 
-	if len(td) == 0 {
-		return newZeroNode(nil /* columns */), nil
-	}
-	return &dropTableNode{n: n, td: td}, nil
-}
-
-func (n *dropTableNode) startExec(params runParams) error {
-	ctx := params.ctx
-	for _, toDel := range n.td {
+	// Actually perform the deletion.
+	for _, toDel := range td {
 		droppedDesc := toDel.desc
 		if droppedDesc == nil {
 			continue
