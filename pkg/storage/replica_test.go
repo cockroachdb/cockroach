@@ -3479,19 +3479,6 @@ func TestReplicaCommandQueuePrereqDebugSummary(t *testing.T) {
 	}
 }
 
-func SendWrapped(
-	ctx context.Context, sender client.Sender, header roachpb.Header, args roachpb.Request,
-) (roachpb.Response, roachpb.BatchResponse_Header, *roachpb.Error) {
-	var ba roachpb.BatchRequest
-	ba.Add(args)
-	ba.Header = header
-	br, pErr := sender.Send(ctx, ba)
-	if pErr != nil {
-		return nil, roachpb.BatchResponse_Header{}, pErr
-	}
-	return br.Responses[0].GetInner(), br.BatchResponse_Header, pErr
-}
-
 // TestReplicaUseTSCache verifies that write timestamps are upgraded
 // based on the read timestamp cache.
 func TestReplicaUseTSCache(t *testing.T) {
@@ -3512,12 +3499,14 @@ func TestReplicaUseTSCache(t *testing.T) {
 	}
 	pArgs := putArgs([]byte("a"), []byte("value"))
 
-	_, respH, pErr := SendWrapped(context.Background(), tc.Sender(), roachpb.Header{}, &pArgs)
+	var ba roachpb.BatchRequest
+	ba.Add(&pArgs)
+	br, pErr := tc.Sender().Send(context.Background(), ba)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	if respH.Timestamp.WallTime != tc.Clock().Now().WallTime {
-		t.Errorf("expected write timestamp to upgrade to 1s; got %s", respH.Timestamp)
+	if br.Timestamp.WallTime != tc.Clock().Now().WallTime {
+		t.Errorf("expected write timestamp to upgrade to 1s; got %s", br.Timestamp)
 	}
 }
 
@@ -3545,17 +3534,19 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	}
 
 	// Try a transactional put at a lower timestamp and ensure it is pushed.
+	var ba roachpb.BatchRequest
 	txn := newTransaction("test", key, 1, enginepb.SERIALIZABLE, tc.Clock())
 	txn.OrigTimestamp, txn.Timestamp = makeTS(1, 0), makeTS(1, 0)
 	pArgs := putArgs(key, []byte("value"))
+	ba.Header = roachpb.Header{Txn: txn}
+	ba.Add(&pArgs)
 	assignSeqNumsForReqs(txn, &pArgs)
-	h := roachpb.Header{Txn: txn}
-	_, respH, pErr := SendWrapped(context.Background(), tc.Sender(), h, &pArgs)
+	br, pErr := tc.Sender().Send(context.Background(), ba)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	if respH.Txn.Timestamp.WallTime != t0.Nanoseconds() {
-		t.Errorf("expected write timestamp to upgrade to 1s; got %s", respH.Txn.Timestamp)
+	if br.Txn.Timestamp.WallTime != t0.Nanoseconds() {
+		t.Errorf("expected write timestamp to upgrade to 1s; got %s", br.Txn.Timestamp)
 	}
 
 	// Try a conditional put at a later timestamp which will fail
@@ -3578,16 +3569,19 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 		IntentTxn:     txn.TxnMeta,
 		Status:        roachpb.ABORTED,
 	}
-	h = roachpb.Header{Timestamp: txn.Timestamp}
+	h := roachpb.Header{Timestamp: txn.Timestamp}
 	if _, pErr = tc.SendWrappedWith(h, rArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	_, respH, pErr = SendWrapped(context.Background(), tc.Sender(), h, &pArgs)
+	ba = roachpb.BatchRequest{}
+	ba.Header = h
+	ba.Add(&pArgs)
+	br, pErr = tc.Sender().Send(context.Background(), ba)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	if respH.Timestamp.WallTime != t0.Nanoseconds() {
-		t.Errorf("expected write timestamp to succeed at 1s; got %s", respH.Timestamp)
+	if br.Timestamp.WallTime != t0.Nanoseconds() {
+		t.Errorf("expected write timestamp to succeed at 1s; got %s", br.Timestamp)
 	}
 }
 
@@ -3621,12 +3615,15 @@ func TestReplicaNoTSCacheInconsistent(t *testing.T) {
 			}
 			pArgs := putArgs([]byte("a"), []byte("value"))
 
-			_, respH, pErr := SendWrapped(context.Background(), tc.Sender(), roachpb.Header{Timestamp: hlc.Timestamp{WallTime: 0, Logical: 1}}, &pArgs)
+			var ba roachpb.BatchRequest
+			ba.Header = roachpb.Header{Timestamp: hlc.Timestamp{WallTime: 0, Logical: 1}}
+			ba.Add(&pArgs)
+			br, pErr := tc.Sender().Send(context.Background(), ba)
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
-			if respH.Timestamp.WallTime == tc.Clock().Now().WallTime {
-				t.Errorf("expected write timestamp not to upgrade to 1s; got %s", respH.Timestamp)
+			if br.Timestamp.WallTime == tc.Clock().Now().WallTime {
+				t.Errorf("expected write timestamp not to upgrade to 1s; got %s", br.Timestamp)
 			}
 		})
 	}
@@ -3669,11 +3666,16 @@ func TestReplicaNoTSCacheUpdateOnFailure(t *testing.T) {
 		}
 
 		// Write the intent again -- should not have its timestamp upgraded!
+		var ba roachpb.BatchRequest
+		ba.Header = roachpb.Header{Txn: txn}
+		ba.Add(&pArgs)
 		assignSeqNumsForReqs(txn, &pArgs)
-		if _, respH, pErr := SendWrapped(context.Background(), tc.Sender(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
-			t.Fatalf("test %d: %s", i, pErr)
-		} else if respH.Txn.Timestamp != txn.Timestamp {
-			t.Errorf("expected timestamp not to advance %s != %s", respH.Timestamp, txn.Timestamp)
+		br, pErr := tc.Sender().Send(context.Background(), ba)
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
+		if br.Txn.Timestamp != txn.Timestamp {
+			t.Errorf("expected timestamp not to advance %s != %s", br.Timestamp, txn.Timestamp)
 		}
 	}
 }
@@ -3703,15 +3705,17 @@ func TestReplicaNoTimestampIncrementWithinTxn(t *testing.T) {
 	}
 
 	// Now try a write and verify timestamp isn't incremented.
+	var ba roachpb.BatchRequest
+	ba.Header = roachpb.Header{Txn: txn}
 	pArgs := putArgs(key, []byte("value"))
+	ba.Add(&pArgs)
 	assignSeqNumsForReqs(txn, &pArgs)
-
-	_, respH, pErr := SendWrapped(context.Background(), tc.Sender(), roachpb.Header{Txn: txn}, &pArgs)
+	br, pErr := tc.Sender().Send(context.Background(), ba)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	if respH.Txn.Timestamp != txn.Timestamp {
-		t.Errorf("expected timestamp to remain %s; got %s", txn.Timestamp, respH.Timestamp)
+	if br.Txn.Timestamp != txn.Timestamp {
+		t.Errorf("expected timestamp to remain %s; got %s", txn.Timestamp, br.Timestamp)
 	}
 
 	// Resolve the intent.
@@ -3729,12 +3733,16 @@ func TestReplicaNoTimestampIncrementWithinTxn(t *testing.T) {
 	expTS := ts
 	expTS.Logical++
 
-	_, respH, pErr = SendWrapped(context.Background(), tc.Sender(), roachpb.Header{Timestamp: ts}, &pArgs)
+	ba = roachpb.BatchRequest{}
+	ba.Header = roachpb.Header{Timestamp: ts}
+	ba.Add(&pArgs)
+	assignSeqNumsForReqs(txn, &pArgs)
+	br, pErr = tc.Sender().Send(context.Background(), ba)
 	if pErr != nil {
-		t.Errorf("unexpected pError: %s", pErr)
+		t.Fatal(pErr)
 	}
-	if respH.Timestamp != expTS {
-		t.Errorf("expected timestamp to increment to %s; got %s", expTS, respH.Timestamp)
+	if br.Timestamp != expTS {
+		t.Errorf("expected timestamp to increment to %s; got %s", expTS, br.Timestamp)
 	}
 }
 
@@ -4765,16 +4773,19 @@ func TestRaftRetryCantCommitIntents(t *testing.T) {
 			}
 
 			// Send a put for keyB.
+			var ba2 roachpb.BatchRequest
 			putB := putArgs(keyB, []byte("value"))
 			putTxn := br.Txn.Clone()
+			ba2.Header = roachpb.Header{Txn: &putTxn}
+			ba2.Add(&putB)
 			assignSeqNumsForReqs(&putTxn, &putB)
-			_, respH, pErr := SendWrapped(context.Background(), tc.Sender(), roachpb.Header{Txn: &putTxn}, &putB)
+			br, pErr = tc.Sender().Send(context.Background(), ba2)
 			if pErr != nil {
-				t.Fatal(pErr)
+				t.Fatalf("unexpected error: %s", pErr)
 			}
 
 			// EndTransaction.
-			etTxn := respH.Txn.Clone()
+			etTxn := br.Txn.Clone()
 			et, etH := endTxnArgs(&etTxn, true)
 			et.IntentSpans = []roachpb.Span{{Key: key, EndKey: nil}, {Key: keyB, EndKey: nil}}
 			assignSeqNumsForReqs(&etTxn, &et)
@@ -4806,9 +4817,7 @@ func TestRaftRetryCantCommitIntents(t *testing.T) {
 
 			// Send a put for keyB; this currently succeeds as there's nothing to detect
 			// the retry.
-			if _, _, pErr = SendWrapped(
-				context.Background(), tc.Sender(),
-				roachpb.Header{Txn: &putTxn}, &putB); pErr != nil {
+			if _, pErr = tc.SendWrappedWith(roachpb.Header{Txn: &putTxn}, &putB); pErr != nil {
 				t.Error(pErr)
 			}
 
