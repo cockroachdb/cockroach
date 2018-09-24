@@ -107,3 +107,23 @@ ALTER TABLE users RENAME COLUMN id TO uid
 # TODO(knz): restore test after #17269 / #10083 is fixed.
 # statement ok
 # ALTER TABLE users RENAME COLUMN username TO name
+
+query T
+SELECT column_name FROM [SHOW COLUMNS FROM users]
+----
+id
+username
+species
+
+query TTT
+EXPLAIN ALTER TABLE users RENAME COLUMN species TO woo
+----
+rename column  ·  ·
+
+# Verify that EXPLAIN did not actually rename the column
+query T
+SELECT column_name FROM [SHOW COLUMNS FROM users]
+----
+id
+username
+species
