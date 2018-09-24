@@ -15,6 +15,8 @@
 package distsqlrun
 
 import (
+	"sync"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -59,4 +61,36 @@ func MakeEvalContext(evalCtx tree.EvalContext) EvalContext {
 		}
 	}
 	return res
+}
+
+var trSpecPool = sync.Pool{
+	New: func() interface{} {
+		return &TableReaderSpec{}
+	},
+}
+
+// NewTableReaderSpec returns a new TableReaderSpec.
+func NewTableReaderSpec() *TableReaderSpec {
+	return trSpecPool.Get().(*TableReaderSpec)
+}
+
+// Release puts this TableReaderSpec back into its sync pool. It may not be used
+// again after Release returns.
+func (s *TableReaderSpec) Release() {
+	s.Reset()
+	trSpecPool.Put(s)
+}
+
+// Release releases the resources of this SetupFlowRequest, putting them back
+// into their respective object pools.
+func (s *SetupFlowRequest) Release() {
+	if s == nil {
+		return
+	}
+	for i := range s.Flow.Processors {
+		if tr := s.Flow.Processors[i].Core.TableReader; tr != nil {
+			tr.Release()
+		}
+	}
+	s.Flow.Release()
 }

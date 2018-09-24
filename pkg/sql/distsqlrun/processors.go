@@ -1363,3 +1363,24 @@ func (spec WindowerSpec_Frame_Bounds) convertToAST() tree.WindowFrameBounds {
 func (spec *WindowerSpec_Frame) convertToAST() *tree.WindowFrame {
 	return &tree.WindowFrame{Mode: spec.Mode.convertToAST(), Bounds: spec.Bounds.convertToAST()}
 }
+
+var flowSpecPool = sync.Pool{
+	New: func() interface{} {
+		return &FlowSpec{}
+	},
+}
+
+// NewFlowSpec returns a new FlowSpec, which may have non-zero capacity in its
+// slice fields.
+func NewFlowSpec() *FlowSpec {
+	return flowSpecPool.Get().(*FlowSpec)
+}
+
+// Release returns this FlowSpec back to the pool of FlowSpecs. It may not be
+// used again after this call.
+func (spec *FlowSpec) Release() {
+	*spec = FlowSpec{
+		Processors: spec.Processors[:0],
+	}
+	flowSpecPool.Put(spec)
+}

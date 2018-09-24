@@ -846,10 +846,13 @@ func getIndexIdx(n *scanNode) (uint32, error) {
 
 // initTableReaderSpec initializes a TableReaderSpec/PostProcessSpec that
 // corresponds to a scanNode, except for the Spans and OutputColumns.
+// Only needs indexVarMap for a filter expression - if there's no filter
+// expression in the scanNode, it's valid to pass a nil indexVarMap.
 func initTableReaderSpec(
 	n *scanNode, planCtx *PlanningCtx, indexVarMap []int,
-) (distsqlrun.TableReaderSpec, distsqlrun.PostProcessSpec, error) {
-	s := distsqlrun.TableReaderSpec{
+) (*distsqlrun.TableReaderSpec, distsqlrun.PostProcessSpec, error) {
+	s := distsqlrun.NewTableReaderSpec()
+	*s = distsqlrun.TableReaderSpec{
 		Table:      *n.desc,
 		Reverse:    n.reverse,
 		IsCheck:    n.run.isCheck,
@@ -857,7 +860,7 @@ func initTableReaderSpec(
 	}
 	indexIdx, err := getIndexIdx(n)
 	if err != nil {
-		return distsqlrun.TableReaderSpec{}, distsqlrun.PostProcessSpec{}, err
+		return nil, distsqlrun.PostProcessSpec{}, err
 	}
 	s.IndexIdx = indexIdx
 
@@ -870,7 +873,7 @@ func initTableReaderSpec(
 
 	filter, err := distsqlplan.MakeExpression(n.filter, planCtx, indexVarMap)
 	if err != nil {
-		return distsqlrun.TableReaderSpec{}, distsqlrun.PostProcessSpec{}, err
+		return nil, distsqlrun.PostProcessSpec{}, err
 	}
 	post := distsqlrun.PostProcessSpec{
 		Filter: filter,
@@ -1080,12 +1083,20 @@ func (dsp *DistSQLPlanner) createTableReaders(
 	stageID := p.NewStageID()
 
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
+	p.Processors = make([]distsqlplan.Processor, 0, len(spanPartitions))
 
 	returnMutations := n.colCfg.visibility == publicAndNonPublicColumns
 
 	for i, sp := range spanPartitions {
-		tr := &distsqlrun.TableReaderSpec{}
-		*tr = spec
+		var tr *distsqlrun.TableReaderSpec
+		if i == 0 {
+			// For the first span, we can just directly use the spec we made above.
+			tr = spec
+		} else {
+			// For the rest, we have to copy the spec into a fresh spec.
+			tr = distsqlrun.NewTableReaderSpec()
+			*tr = *spec
+		}
 		tr.Spans = makeTableReaderSpans(sp.Spans)
 
 		proc := distsqlplan.Processor{
@@ -1140,9 +1151,9 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		}
 	}
 	planToStreamColMap := make([]int, len(n.cols))
-	var descColumnIDs []sqlbase.ColumnID
-	for _, c := range n.desc.Columns {
-		descColumnIDs = append(descColumnIDs, c.ID)
+	descColumnIDs := make([]sqlbase.ColumnID, 0, len(n.desc.Columns))
+	for i := range n.desc.Columns {
+		descColumnIDs = append(descColumnIDs, n.desc.Columns[i].ID)
 	}
 	if returnMutations {
 		for _, m := range n.desc.Mutations {
