@@ -499,14 +499,3 @@ func (ba BatchRequest) String() string {
 	}
 	return strings.Join(str, ", ")
 }
-
-// TODO(marc): we should assert
-// var _ security.RequestWithUser = &BatchRequest{}
-// here, but we need to break cycles first.
-
-// GetUser implements security.RequestWithUser.
-// KV messages are always sent by the node user.
-func (*BatchRequest) GetUser() string {
-	// TODO(marc): we should use security.NodeUser here, but we need to break cycles first.
-	return "node"
-}

@@ -14,9 +14,6 @@
 
 package security
 
-// TODO(jqmp): The use of TLS here is just a proof of concept; its security
-// properties haven't been analyzed or audited.
-
 import (
 	"crypto/tls"
 	"crypto/x509"

@@ -20,7 +20,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -174,14 +173,6 @@ func raftEntryFormatter(data []byte) string {
 	}
 	commandID, _ := DecodeRaftCommand(data)
 	return fmt.Sprintf("[%x] [%d]", commandID, len(data))
-}
-
-var _ security.RequestWithUser = &RaftMessageRequest{}
-
-// GetUser implements security.RequestWithUser.
-// Raft messages are always sent by the node user.
-func (*RaftMessageRequest) GetUser() string {
-	return security.NodeUser
 }
 
 // IsPreemptive returns whether this is a preemptive snapshot or a Raft
