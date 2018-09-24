@@ -18,18 +18,6 @@ if [[ "$TC_BUILD_BRANCH" != *-* ]] && [ "$TEAMCITY_BUILDCONF_NAME" == 'Publish R
   cp cockroach-linux-2.6.32-gnu-amd64 build/deploy/cockroach
   docker build --no-cache --tag=$image:{latest,"$TC_BUILD_BRANCH"} build/deploy
 
-  TYPE=release-$(go env GOOS)
-  case $TYPE in
-    *-linux)
-      TYPE+=-gnu
-      ;;
-  esac
-
-  # For the acceptance tests that run without Docker.
-  ln -s cockroach-linux-2.6.32-gnu-amd64 cockroach
-  build/builder.sh make TYPE=$TYPE testbuild TAGS=acceptance PKG=./pkg/acceptance
-  (cd pkg/acceptance && ./acceptance.test -i $image -b /cockroach/cockroach -nodes 4 -test.v -test.timeout -5m)
-
   sed "s/<EMAIL>/$DOCKER_EMAIL/;s/<AUTH>/$DOCKER_AUTH/" < build/.dockercfg.in > ~/.dockercfg
   docker push "$image:latest"
   docker push "$image:$TC_BUILD_BRANCH"
