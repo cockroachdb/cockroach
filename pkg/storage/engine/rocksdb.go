@@ -1769,7 +1769,7 @@ func (r *rocksDBBatch) Commit(syncCommit bool) error {
 	}
 	r.distinctOpen = false
 
-	if r.flushes == 0 && r.builder.count == 0 {
+	if r.Empty() {
 		// Nothing was written to this batch. Fast path.
 		r.committed = true
 		return nil
