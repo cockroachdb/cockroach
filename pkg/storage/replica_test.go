@@ -281,6 +281,21 @@ func (tc *testContext) SendWrapped(args roachpb.Request) (roachpb.Response, *roa
 	return tc.SendWrappedWith(roachpb.Header{}, args)
 }
 
+// SendWrappedForHeader is a convenience function which wraps the request in a
+// batch, sends it, and returns its batch response header.
+func (tc *testContext) SendWrappedForHeader(
+	h roachpb.Header, args roachpb.Request,
+) (roachpb.BatchResponse_Header, *roachpb.Error) {
+	ba := roachpb.BatchRequest{}
+	ba.Header = h
+	ba.Add(args)
+	br, pErr := tc.Sender().Send(context.Background(), ba)
+	if pErr != nil {
+		return roachpb.BatchResponse_Header{}, pErr
+	}
+	return br.BatchResponse_Header, pErr
+}
+
 // initConfigs creates default configuration entries.
 func (tc *testContext) initConfigs(realRange bool, t testing.TB) error {
 	// Put an empty system config into gossip so that gossip callbacks get
@@ -3381,19 +3396,6 @@ func TestReplicaCommandQueueSplitDeclaresWrites(t *testing.T) {
 	}
 }
 
-func SendWrapped(
-	ctx context.Context, sender client.Sender, header roachpb.Header, args roachpb.Request,
-) (roachpb.Response, roachpb.BatchResponse_Header, *roachpb.Error) {
-	var ba roachpb.BatchRequest
-	ba.Add(args)
-	ba.Header = header
-	br, pErr := sender.Send(ctx, ba)
-	if pErr != nil {
-		return nil, roachpb.BatchResponse_Header{}, pErr
-	}
-	return br.Responses[0].GetInner(), br.BatchResponse_Header, pErr
-}
-
 // TestReplicaUseTSCache verifies that write timestamps are upgraded
 // based on the read timestamp cache.
 func TestReplicaUseTSCache(t *testing.T) {
@@ -3414,7 +3416,7 @@ func TestReplicaUseTSCache(t *testing.T) {
 	}
 	pArgs := putArgs([]byte("a"), []byte("value"))
 
-	_, respH, pErr := SendWrapped(context.Background(), tc.Sender(), roachpb.Header{}, &pArgs)
+	respH, pErr := tc.SendWrappedForHeader(roachpb.Header{}, &pArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -3452,7 +3454,7 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	pArgs := putArgs(key, []byte("value"))
 	assignSeqNumsForReqs(txn, &pArgs)
 	h := roachpb.Header{Txn: txn}
-	_, respH, pErr := SendWrapped(context.Background(), tc.Sender(), h, &pArgs)
+	respH, pErr := tc.SendWrappedForHeader(h, &pArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -3484,7 +3486,7 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	if _, pErr = tc.SendWrappedWith(h, rArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
-	_, respH, pErr = SendWrapped(context.Background(), tc.Sender(), h, &pArgs)
+	respH, pErr = tc.SendWrappedForHeader(h, &pArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -3523,7 +3525,9 @@ func TestReplicaNoTSCacheInconsistent(t *testing.T) {
 			}
 			pArgs := putArgs([]byte("a"), []byte("value"))
 
-			_, respH, pErr := SendWrapped(context.Background(), tc.Sender(), roachpb.Header{Timestamp: hlc.Timestamp{WallTime: 0, Logical: 1}}, &pArgs)
+			respH, pErr := tc.SendWrappedForHeader(roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 0, Logical: 1},
+			}, &pArgs)
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
@@ -3572,7 +3576,7 @@ func TestReplicaNoTSCacheUpdateOnFailure(t *testing.T) {
 
 		// Write the intent again -- should not have its timestamp upgraded!
 		assignSeqNumsForReqs(txn, &pArgs)
-		if _, respH, pErr := SendWrapped(context.Background(), tc.Sender(), roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
+		if respH, pErr := tc.SendWrappedForHeader(roachpb.Header{Txn: txn}, &pArgs); pErr != nil {
 			t.Fatalf("test %d: %s", i, pErr)
 		} else if respH.Txn.Timestamp != txn.Timestamp {
 			t.Errorf("expected timestamp not to advance %s != %s", respH.Timestamp, txn.Timestamp)
@@ -3608,7 +3612,7 @@ func TestReplicaNoTimestampIncrementWithinTxn(t *testing.T) {
 	pArgs := putArgs(key, []byte("value"))
 	assignSeqNumsForReqs(txn, &pArgs)
 
-	_, respH, pErr := SendWrapped(context.Background(), tc.Sender(), roachpb.Header{Txn: txn}, &pArgs)
+	respH, pErr := tc.SendWrappedForHeader(roachpb.Header{Txn: txn}, &pArgs)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -3631,7 +3635,7 @@ func TestReplicaNoTimestampIncrementWithinTxn(t *testing.T) {
 	expTS := ts
 	expTS.Logical++
 
-	_, respH, pErr = SendWrapped(context.Background(), tc.Sender(), roachpb.Header{Timestamp: ts}, &pArgs)
+	respH, pErr = tc.SendWrappedForHeader(roachpb.Header{Timestamp: ts}, &pArgs)
 	if pErr != nil {
 		t.Errorf("unexpected pError: %s", pErr)
 	}
@@ -4670,7 +4674,7 @@ func TestRaftRetryCantCommitIntents(t *testing.T) {
 			putB := putArgs(keyB, []byte("value"))
 			putTxn := br.Txn.Clone()
 			assignSeqNumsForReqs(&putTxn, &putB)
-			_, respH, pErr := SendWrapped(context.Background(), tc.Sender(), roachpb.Header{Txn: &putTxn}, &putB)
+			respH, pErr := tc.SendWrappedForHeader(roachpb.Header{Txn: &putTxn}, &putB)
 			if pErr != nil {
 				t.Fatal(pErr)
 			}
@@ -4708,9 +4712,7 @@ func TestRaftRetryCantCommitIntents(t *testing.T) {
 
 			// Send a put for keyB; this currently succeeds as there's nothing to detect
 			// the retry.
-			if _, _, pErr = SendWrapped(
-				context.Background(), tc.Sender(),
-				roachpb.Header{Txn: &putTxn}, &putB); pErr != nil {
+			if _, pErr = tc.SendWrappedWith(roachpb.Header{Txn: &putTxn}, &putB); pErr != nil {
 				t.Error(pErr)
 			}
 
