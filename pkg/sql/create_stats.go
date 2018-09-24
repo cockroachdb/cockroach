@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -71,6 +72,9 @@ func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (pl
 	}, nil
 }
 
-func (*createStatsNode) Next(runParams) (bool, error) { panic("not implemented") }
-func (*createStatsNode) Close(context.Context)        {}
-func (*createStatsNode) Values() tree.Datums          { panic("not implemented") }
+func (*createStatsNode) Next(runParams) (bool, error) {
+	return false, pgerror.NewErrorf(pgerror.CodeInternalError,
+		"programming error: createStatsNode cannot be executed locally")
+}
+func (*createStatsNode) Close(context.Context) {}
+func (*createStatsNode) Values() tree.Datums   { return nil }
