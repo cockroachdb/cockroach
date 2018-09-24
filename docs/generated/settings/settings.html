@@ -17,7 +17,7 @@
 <tr><td><code>jobs.registry.leniency</code></td><td>duration</td><td><code>1m0s</code></td><td>the amount of time to defer any attempts to reschedule a job</td></tr>
 <tr><td><code>kv.allocator.lease_rebalancing_aggressiveness</code></td><td>float</td><td><code>1</code></td><td>set greater than 1.0 to rebalance leases toward load more aggressively, or between 0 and 1.0 to be more conservative about rebalancing leases</td></tr>
 <tr><td><code>kv.allocator.load_based_lease_rebalancing.enabled</code></td><td>boolean</td><td><code>true</code></td><td>set to enable rebalancing of range leases based on load and latency</td></tr>
-<tr><td><code>kv.allocator.load_based_rebalancing</code></td><td>enumeration</td><td><code>1</code></td><td>whether to rebalance based on the distribution of QPS across stores [off = 0, leases = 1, leases and replicas = 2]</td></tr>
+<tr><td><code>kv.allocator.load_based_rebalancing</code></td><td>enumeration</td><td><code>2</code></td><td>whether to rebalance based on the distribution of QPS across stores [off = 0, leases = 1, leases and replicas = 2]</td></tr>
 <tr><td><code>kv.allocator.qps_rebalance_threshold</code></td><td>float</td><td><code>0.25</code></td><td>minimum fraction away from the mean a store's QPS (such as queries per second) can be before it is considered overfull or underfull</td></tr>
 <tr><td><code>kv.allocator.range_rebalance_threshold</code></td><td>float</td><td><code>0.05</code></td><td>minimum fraction away from the mean a store's range count can be before it is considered overfull or underfull</td></tr>
 <tr><td><code>kv.bulk_io_write.concurrent_export_requests</code></td><td>integer</td><td><code>5</code></td><td>number of export requests a store will handle concurrently before queuing</td></tr>
