@@ -65,6 +65,10 @@ type virtualSchemaTable struct {
 	// virtualTableNode. This function returns a virtualTableGenerator function
 	// which generates the next row of the virtual table when called.
 	generator func(ctx context.Context, p *planner, db *DatabaseDescriptor) (virtualTableGenerator, error)
+
+	// delegate, if non-nil, uses delegateQuery to reroute a query on this virtual
+	// table into another more efficient query.
+	delegate func(ctx context.Context, p *planner, db *DatabaseDescriptor) (planNode, error)
 }
 
 // virtualSchemas holds a slice of statically registered virtualSchema objects.
@@ -140,6 +144,10 @@ func (e virtualTableEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableCon
 			if !e.validWithNoDatabaseContext {
 				return nil, errInvalidDbPrefix
 			}
+		}
+
+		if e.tableDef.delegate != nil {
+			return e.tableDef.delegate(ctx, p, dbDesc)
 		}
 
 		if e.tableDef.generator != nil && e.tableDef.populate != nil {

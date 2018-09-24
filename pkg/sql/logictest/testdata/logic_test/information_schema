@@ -235,6 +235,7 @@ crdb_internal       node_sessions
 crdb_internal       node_statement_statistics
 crdb_internal       partitions
 crdb_internal       ranges
+crdb_internal       ranges_no_leases
 crdb_internal       schema_changes
 crdb_internal       session_trace
 crdb_internal       session_variables
@@ -359,6 +360,7 @@ node_sessions
 node_statement_statistics
 partitions
 ranges
+ranges_no_leases
 schema_changes
 session_trace
 session_variables
@@ -490,6 +492,7 @@ system         crdb_internal       node_sessions                      SYSTEM VIE
 system         crdb_internal       node_statement_statistics          SYSTEM VIEW  NO                  1
 system         crdb_internal       partitions                         SYSTEM VIEW  NO                  1
 system         crdb_internal       ranges                             SYSTEM VIEW  NO                  1
+system         crdb_internal       ranges_no_leases                   SYSTEM VIEW  NO                  1
 system         crdb_internal       schema_changes                     SYSTEM VIEW  NO                  1
 system         crdb_internal       session_trace                      SYSTEM VIEW  NO                  1
 system         crdb_internal       session_variables                  SYSTEM VIEW  NO                  1
@@ -1057,6 +1060,7 @@ NULL     public   system         crdb_internal       node_sessions              
 NULL     public   system         crdb_internal       node_statement_statistics          SELECT          NULL          NULL
 NULL     public   system         crdb_internal       partitions                         SELECT          NULL          NULL
 NULL     public   system         crdb_internal       ranges                             SELECT          NULL          NULL
+NULL     public   system         crdb_internal       ranges_no_leases                   SELECT          NULL          NULL
 NULL     public   system         crdb_internal       schema_changes                     SELECT          NULL          NULL
 NULL     public   system         crdb_internal       session_trace                      SELECT          NULL          NULL
 NULL     public   system         crdb_internal       session_variables                  SELECT          NULL          NULL
@@ -1279,6 +1283,7 @@ NULL     public   system         crdb_internal       node_sessions              
 NULL     public   system         crdb_internal       node_statement_statistics          SELECT          NULL          NULL
 NULL     public   system         crdb_internal       partitions                         SELECT          NULL          NULL
 NULL     public   system         crdb_internal       ranges                             SELECT          NULL          NULL
+NULL     public   system         crdb_internal       ranges_no_leases                   SELECT          NULL          NULL
 NULL     public   system         crdb_internal       schema_changes                     SELECT          NULL          NULL
 NULL     public   system         crdb_internal       session_trace                      SELECT          NULL          NULL
 NULL     public   system         crdb_internal       session_variables                  SELECT          NULL          NULL
