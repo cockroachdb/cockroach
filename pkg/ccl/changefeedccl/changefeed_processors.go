@@ -47,6 +47,8 @@ type changeAggregator struct {
 	// tableHistUpdaterDoneCh is closed when the tableHistUpdater exits.
 	tableHistUpdaterDoneCh chan struct{}
 
+	// encoder is the Encoder to use for key and value serialization.
+	encoder Encoder
 	// sink is the Sink to write rows to. Resolved timestamps are never written
 	// by changeAggregator.
 	sink Sink
@@ -97,6 +99,11 @@ func newChangeAggregatorProcessor(
 		return nil, err
 	}
 
+	var err error
+	if ca.encoder, err = getEncoder(ca.spec.Feed.Opts, ca.spec.Feed.SinkURI); err != nil {
+		return nil, err
+	}
+
 	// Due to the possibility of leaked goroutines, it is not safe to start a sink
 	// in this method because there is no guarantee that the TrailingMetaCallback
 	// method will ever be called (this can happen, for example, if an error
@@ -105,7 +112,7 @@ func newChangeAggregatorProcessor(
 	// CHANGEFEED statement. Therefore, we create a "canary" sink, which will be
 	// immediately closed, only to check for errors.
 	{
-		canarySink, err := getSink(ca.spec.Feed.SinkURI, ca.spec.Feed.Targets)
+		canarySink, err := getSink(spec.Feed.SinkURI, spec.Feed.Opts, spec.Feed.Targets)
 		if err != nil {
 			return nil, err
 		}
@@ -129,7 +136,9 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	ctx = ca.StartInternal(ctx, changeAggregatorProcName)
 
 	var err error
-	if ca.sink, err = getSink(ca.spec.Feed.SinkURI, ca.spec.Feed.Targets); err != nil {
+	if ca.sink, err = getSink(
+		ca.spec.Feed.SinkURI, ca.spec.Feed.Opts, ca.spec.Feed.Targets,
+	); err != nil {
 		// Early abort in the case that there is an error creating the sink.
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -185,7 +194,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
 		knobs = *cfKnobs
 	}
-	ca.tickFn = emitEntries(ca.spec.Feed, ca.sink, rowsFn, knobs)
+	ca.tickFn = emitEntries(ca.spec.Feed, ca.encoder, ca.sink, rowsFn, knobs)
 
 	// Give errCh enough buffer both possible errors from supporting goroutines,
 	// but only the first one is ever used.
@@ -316,6 +325,8 @@ type changeFrontier struct {
 	// sf contains the current resolved timestamp high-water for the tracked
 	// span set.
 	sf *spanFrontier
+	// encoder is the Encoder to use for resolved timestamp serialization.
+	encoder Encoder
 	// sink is the Sink to write resolved timestamps to. Rows are never written
 	// by changeFrontier.
 	sink Sink
@@ -374,10 +385,15 @@ func newChangeFrontierProcessor(
 		return nil, err
 	}
 
+	var err error
+	if cf.encoder, err = getEncoder(spec.Feed.Opts, spec.Feed.SinkURI); err != nil {
+		return nil, err
+	}
+
 	// See comment in newChangeAggregatorProcessor for details on the use of canary
 	// sinks.
 	{
-		canarySink, err := getSink(spec.Feed.SinkURI, spec.Feed.Targets)
+		canarySink, err := getSink(spec.Feed.SinkURI, spec.Feed.Opts, spec.Feed.Targets)
 		if err != nil {
 			return nil, err
 		}
@@ -402,7 +418,9 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	ctx = cf.StartInternal(ctx, changeFrontierProcName)
 
 	var err error
-	if cf.sink, err = getSink(cf.spec.Feed.SinkURI, cf.spec.Feed.Targets); err != nil {
+	if cf.sink, err = getSink(
+		cf.spec.Feed.SinkURI, cf.spec.Feed.Opts, cf.spec.Feed.Targets,
+	); err != nil {
 		cf.MoveToDraining(err)
 		return ctx
 	}
@@ -516,7 +534,7 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 		}
 		cf.metrics.mu.Unlock()
 		if err := emitResolvedTimestamp(
-			cf.Ctx, cf.spec.Feed, cf.sink, cf.jobProgressedFn, cf.sf,
+			cf.Ctx, cf.spec.Feed, cf.encoder, cf.sink, cf.jobProgressedFn, cf.sf,
 		); err != nil {
 			return err
 		}
