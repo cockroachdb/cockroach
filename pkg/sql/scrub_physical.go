@@ -136,7 +136,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 
 	planCtx := params.extendedEvalCtx.DistSQLPlanner.NewPlanningCtx(ctx, params.extendedEvalCtx, params.p.txn)
 	physPlan, err := params.extendedEvalCtx.DistSQLPlanner.createScrubPhysicalCheck(
-		&planCtx, scan, *o.tableDesc, *o.indexDesc, spans, params.p.ExecCfg().Clock.Now())
+		planCtx, scan, *o.tableDesc, *o.indexDesc, spans, params.p.ExecCfg().Clock.Now())
 	if err != nil {
 		return err
 	}
@@ -144,7 +144,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	o.primaryColIdxs = primaryColIdxs
 	o.columns = columns
 	o.run.started = true
-	rows, err := scrubRunDistSQL(ctx, &planCtx, params.p, &physPlan, distsqlrun.ScrubTypes)
+	rows, err := scrubRunDistSQL(ctx, planCtx, params.p, &physPlan, distsqlrun.ScrubTypes)
 	if err != nil {
 		rows.Close(ctx)
 		return err
