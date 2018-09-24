@@ -48,7 +48,7 @@ func compareDiagrams(t *testing.T, result string, expected string) {
 func TestPlanDiagramIndexJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	flows := make(map[roachpb.NodeID]FlowSpec)
+	flows := make(map[roachpb.NodeID]*FlowSpec)
 
 	desc := &sqlbase.TableDescriptor{
 		Name:    "Table",
@@ -59,7 +59,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		IndexIdx: 1,
 	}
 
-	flows[1] = FlowSpec{
+	flows[1] = &FlowSpec{
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &tr},
 			Post: PostProcessSpec{
@@ -77,7 +77,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		}},
 	}
 
-	flows[2] = FlowSpec{
+	flows[2] = &FlowSpec{
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &tr},
 			Post: PostProcessSpec{
@@ -95,7 +95,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 		}},
 	}
 
-	flows[3] = FlowSpec{
+	flows[3] = &FlowSpec{
 		Processors: []ProcessorSpec{
 			{
 				Core: ProcessorCoreUnion{TableReader: &tr},
@@ -173,7 +173,7 @@ func TestPlanDiagramIndexJoin(t *testing.T) {
 func TestPlanDiagramJoin(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	flows := make(map[roachpb.NodeID]FlowSpec)
+	flows := make(map[roachpb.NodeID]*FlowSpec)
 
 	descA := &sqlbase.TableDescriptor{Name: "TableA"}
 	descB := &sqlbase.TableDescriptor{Name: "TableB"}
@@ -189,7 +189,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 		MergedColumns:  true,
 	}
 
-	flows[1] = FlowSpec{
+	flows[1] = &FlowSpec{
 		Processors: []ProcessorSpec{
 			{
 				Core: ProcessorCoreUnion{TableReader: &trA},
@@ -210,7 +210,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 		},
 	}
 
-	flows[2] = FlowSpec{
+	flows[2] = &FlowSpec{
 		Processors: []ProcessorSpec{
 			{
 				Core: ProcessorCoreUnion{TableReader: &trA},
@@ -277,7 +277,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 		},
 	}
 
-	flows[3] = FlowSpec{
+	flows[3] = &FlowSpec{
 		Processors: []ProcessorSpec{
 			{
 				Core: ProcessorCoreUnion{TableReader: &trA},
@@ -341,7 +341,7 @@ func TestPlanDiagramJoin(t *testing.T) {
 		},
 	}
 
-	flows[4] = FlowSpec{
+	flows[4] = &FlowSpec{
 		Processors: []ProcessorSpec{{
 			Core: ProcessorCoreUnion{TableReader: &trB},
 			Post: PostProcessSpec{
