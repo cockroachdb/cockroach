@@ -957,6 +957,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"ALTER RANGE liveness CONFIGURE ZONE = $1", []preparedQueryTest{
 			baseTest.SetArgs(gosql.NullString{}),
 		}},
+		{"TRUNCATE TABLE d.str", []preparedQueryTest{
+			baseTest.SetArgs(),
+		}},
 
 		// TODO(nvanbenschoten): Same class of limitation as that in logic_test/typing:
 		//   Nested constants are not exposed to the same constant type resolution rules
