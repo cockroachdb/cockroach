@@ -261,3 +261,22 @@ ROLLBACK
 
 statement error pgcode 42P01 relation \"d.kv2\" does not exist
 INSERT INTO d.kv2 (k,v) VALUES ('c', 'd')
+
+statement ok
+USE d
+
+query T
+SHOW TABLES
+----
+kv
+
+query TTT
+EXPLAIN ALTER TABLE kv RENAME TO kv2
+----
+rename table  ·  ·
+
+# Verify that the EXPLAIN above does not actually rename the table (#30543)
+query T
+SHOW TABLES
+----
+kv

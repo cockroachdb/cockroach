@@ -146,3 +146,28 @@ statement ok
 ALTER DATABASE defaultdb RENAME TO w;
   ALTER DATABASE postgres RENAME TO defaultdb;
   ALTER DATABASE w RENAME TO postgres
+
+query T
+SHOW DATABASES
+----
+defaultdb
+postgres
+system
+t
+v
+
+query TTT
+EXPLAIN ALTER DATABASE v RENAME TO x
+----
+rename database  ·  ·
+
+# Verify that the EXPLAIN above does not actually rename the database (#30543)
+query T colnames
+SHOW DATABASES
+----
+database_name
+defaultdb
+postgres
+system
+t
+v
