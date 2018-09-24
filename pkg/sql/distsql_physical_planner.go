@@ -21,6 +21,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -39,11 +41,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
 )
 
 // DistSQLPlanner is used to generate distributed plans from logical
@@ -517,8 +517,7 @@ func (p *PlanningCtx) sanityCheckAddresses() error {
 	inverted := make(map[string]roachpb.NodeID)
 	for nodeID, addr := range p.NodeAddresses {
 		if otherNodeID, ok := inverted[addr]; ok {
-			return errorutil.UnexpectedWithIssueErrorf(
-				12876,
+			return errors.Errorf(
 				"different nodes %d and %d with the same address '%s'", nodeID, otherNodeID, addr)
 		}
 		inverted[addr] = nodeID
