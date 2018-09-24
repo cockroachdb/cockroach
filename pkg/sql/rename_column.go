@@ -27,6 +27,11 @@ import (
 
 var errEmptyColumnName = pgerror.NewError(pgerror.CodeSyntaxError, "empty column name")
 
+type renameColumnNode struct {
+	n         *tree.RenameColumn
+	tableDesc *sqlbase.TableDescriptor
+}
+
 // RenameColumn renames the column.
 // Privileges: CREATE on table.
 //   notes: postgres requires CREATE on the table.
@@ -50,14 +55,22 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 		return nil, err
 	}
 
-	if n.NewName == "" {
-		return nil, errEmptyColumnName
+	return &renameColumnNode{n: n, tableDesc: tableDesc}, nil
+}
+
+func (n *renameColumnNode) startExec(params runParams) error {
+	p := params.p
+	ctx := params.ctx
+	tableDesc := n.tableDesc
+
+	if n.n.NewName == "" {
+		return errEmptyColumnName
 	}
 
-	col, _, err := tableDesc.FindColumnByName(n.Name)
-	// n.IfExists only applies to table, no need to check here.
+	col, _, err := tableDesc.FindColumnByName(n.n.Name)
+	// n.n.IfExists only applies to table, no need to check here.
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	for _, tableRef := range tableDesc.DependedOnBy {
@@ -68,18 +81,18 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 			}
 		}
 		if found {
-			return nil, p.dependentViewRenameError(
-				ctx, "column", n.Name.String(), tableDesc.ParentID, tableRef.ID)
+			return p.dependentViewRenameError(
+				ctx, "column", n.n.Name.String(), tableDesc.ParentID, tableRef.ID)
 		}
 	}
 
-	if n.Name == n.NewName {
+	if n.n.Name == n.n.NewName {
 		// Noop.
-		return newZeroNode(nil /* columns */), nil
+		return nil
 	}
 
-	if _, _, err := tableDesc.FindColumnByName(n.NewName); err == nil {
-		return nil, fmt.Errorf("column name %q already exists", string(n.NewName))
+	if _, _, err := tableDesc.FindColumnByName(n.n.NewName); err == nil {
+		return fmt.Errorf("column name %q already exists", string(n.n.NewName))
 	}
 
 	preFn := func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
@@ -89,8 +102,8 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 				return err, false, nil
 			}
 			if c, ok := v.(*tree.ColumnItem); ok {
-				if string(c.ColumnName) == string(n.Name) {
-					c.ColumnName = n.NewName
+				if string(c.ColumnName) == string(n.n.Name) {
+					c.ColumnName = n.n.NewName
 				}
 			}
 			return nil, false, v
@@ -117,7 +130,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 		var err error
 		tableDesc.Checks[i].Expr, err = renameIn(tableDesc.Checks[i].Expr)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
@@ -126,21 +139,22 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 		if tableDesc.Columns[i].IsComputed() {
 			newExpr, err := renameIn(*tableDesc.Columns[i].ComputeExpr)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			tableDesc.Columns[i].ComputeExpr = &newExpr
 		}
 	}
 
 	// Rename the column in the indexes.
-	tableDesc.RenameColumnDescriptor(col, string(n.NewName))
+	tableDesc.RenameColumnDescriptor(col, string(n.n.NewName))
 
 	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
-		return nil, err
+		return err
 	}
 
-	if err := p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID); err != nil {
-		return nil, err
-	}
-	return newZeroNode(nil /* columns */), nil
+	return p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID)
 }
+
+func (n *renameColumnNode) Next(runParams) (bool, error) { return false, nil }
+func (n *renameColumnNode) Values() tree.Datums          { return tree.Datums{} }
+func (n *renameColumnNode) Close(context.Context)        {}

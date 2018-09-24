@@ -360,6 +360,7 @@ func (p *planner) propagateFilters(
 	case *alterTableNode:
 	case *alterSequenceNode:
 	case *alterUserSetPasswordNode:
+	case *renameColumnNode:
 	case *renameDatabaseNode:
 	case *renameTableNode:
 	case *scrubNode:
