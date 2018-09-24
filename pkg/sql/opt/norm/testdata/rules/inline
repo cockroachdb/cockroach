@@ -53,7 +53,7 @@ project
  │    │    ├── columns: k:1(int!null)
  │    │    └── key: (1)
  │    └── filters [type=bool, outer=(1)]
- │         └── ((k * 2) + 1) > 10 [type=bool, outer=(1)]
+ │         └── (k * 2) > 9 [type=bool, outer=(1)]
  └── projections [outer=(1)]
       └── (k * 2) + 1 [type=int, outer=(1)]
 
@@ -333,3 +333,16 @@ project
  │              └── variable: true [type=bool, outer=(10)]
  └── projections [outer=(11)]
       └── true_agg IS NOT NULL [type=bool, outer=(11)]
+
+# After c is replaced with k+2, (k+2) > 2 should be simplified to k > 0.
+opt
+SELECT c FROM (SELECT k+2 AS c FROM a) AS t WHERE c > 2;
+----
+project
+ ├── columns: c:6(int)
+ ├── scan a
+ │    ├── columns: k:1(int!null)
+ │    ├── constraint: /1: [/1 - ]
+ │    └── key: (1)
+ └── projections [outer=(1)]
+      └── k + 2 [type=int, outer=(1)]
