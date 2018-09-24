@@ -50,7 +50,7 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		tr := &distsqlrun.TableReaderSpec{}
-		*tr = spec
+		*tr = *spec
 		tr.Spans = make([]distsqlrun.TableReaderSpan, len(sp.Spans))
 		for j := range sp.Spans {
 			tr.Spans[j].Span = sp.Spans[j]

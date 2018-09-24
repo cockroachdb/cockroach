@@ -648,7 +648,7 @@ func generateDiagramData(flows []FlowSpec, nodeNames []string) (FlowDiagram, err
 // GeneratePlanDiagram generates the data for a flow diagram. There should be
 // one FlowSpec per node. The function assumes that StreamIDs are unique across
 // all flows.
-func GeneratePlanDiagram(flows map[roachpb.NodeID]FlowSpec) (FlowDiagram, error) {
+func GeneratePlanDiagram(flows map[roachpb.NodeID]*FlowSpec) (FlowDiagram, error) {
 	// We sort the flows by node because we want the diagram data to be
 	// deterministic.
 	nodeIDs := make([]int, 0, len(flows))
@@ -661,7 +661,7 @@ func GeneratePlanDiagram(flows map[roachpb.NodeID]FlowSpec) (FlowDiagram, error)
 	nodeNames := make([]string, len(nodeIDs))
 	for i, nVal := range nodeIDs {
 		n := roachpb.NodeID(nVal)
-		flowSlice[i] = flows[n]
+		flowSlice[i] = *flows[n]
 		nodeNames[i] = n.String()
 	}
 
@@ -671,7 +671,7 @@ func GeneratePlanDiagram(flows map[roachpb.NodeID]FlowSpec) (FlowDiagram, error)
 // GeneratePlanDiagramURL generates the json data for a flow diagram and a
 // URL which encodes the diagram. There should be one FlowSpec per node. The
 // function assumes that StreamIDs are unique across all flows.
-func GeneratePlanDiagramURL(flows map[roachpb.NodeID]FlowSpec) (string, url.URL, error) {
+func GeneratePlanDiagramURL(flows map[roachpb.NodeID]*FlowSpec) (string, url.URL, error) {
 	d, err := GeneratePlanDiagram(flows)
 	if err != nil {
 		return "", url.URL{}, nil

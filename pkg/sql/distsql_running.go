@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -60,6 +61,8 @@ type runnerResult struct {
 }
 
 func (req runnerRequest) run() {
+	defer distsqlplan.ReleaseSetupFlowRequest(req.flowReq)
+
 	res := runnerResult{nodeID: req.nodeID}
 
 	conn, err := req.nodeDialer.Dial(req.ctx, req.nodeID)
@@ -205,7 +208,7 @@ func (dsp *DistSQLPlanner) Run(
 			continue
 		}
 		req := setupReq
-		req.Flow = flowSpec
+		req.Flow = *flowSpec
 		runReq := runnerRequest{
 			ctx:        ctx,
 			nodeDialer: dsp.nodeDialer,
@@ -240,7 +243,8 @@ func (dsp *DistSQLPlanner) Run(
 
 	// Set up the flow on this node.
 	localReq := setupReq
-	localReq.Flow = flows[thisNodeID]
+	localReq.Flow = *flows[thisNodeID]
+	defer distsqlplan.ReleaseSetupFlowRequest(&localReq)
 	ctx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
 	if err != nil {
 		recv.SetError(err)
