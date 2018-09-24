@@ -98,7 +98,7 @@ func distChangefeedFlow(
 		spanPartitions = []sql.SpanPartition{{Node: gatewayNodeID, Spans: trackedSpans}}
 	} else {
 		// All other feeds get a ChangeAggregator local on the leaseholder.
-		spanPartitions, err = dsp.PartitionSpans(&planCtx, trackedSpans)
+		spanPartitions, err = dsp.PartitionSpans(planCtx, trackedSpans)
 		if err != nil {
 			return err
 		}
@@ -158,7 +158,7 @@ func distChangefeedFlow(
 
 	p.ResultTypes = changefeedResultTypes
 	p.PlanToStreamColMap = []int{1, 2, 3}
-	dsp.FinalizePlan(&planCtx, &p)
+	dsp.FinalizePlan(planCtx, &p)
 
 	resultRows := makeChangefeedResultWriter(resultsCh)
 	recv := sql.MakeDistSQLReceiver(
@@ -184,7 +184,7 @@ func distChangefeedFlow(
 		finishedSetupFn = func() { resultsCh <- tree.Datums(nil) }
 	}
 
-	dsp.Run(&planCtx, noTxn, &p, recv, evalCtx, finishedSetupFn)
+	dsp.Run(planCtx, noTxn, &p, recv, evalCtx, finishedSetupFn)
 	return resultRows.Err()
 }
 

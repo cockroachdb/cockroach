@@ -103,7 +103,7 @@ func (h *ProcOutputHelper) Init(
 	}
 	h.output = output
 	h.numInternalCols = len(types)
-	if post.Filter.Expr != "" {
+	if post.Filter != (Expression{}) {
 		h.filter = &exprHelper{}
 		if err := h.filter.init(post.Filter, types, evalCtx); err != nil {
 			return err

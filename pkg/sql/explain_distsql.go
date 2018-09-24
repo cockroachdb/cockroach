@@ -69,11 +69,11 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	planCtx.stmtType = n.stmtType
 	planCtx.validExtendedEvalCtx = true
 
-	plan, err := distSQLPlanner.createPlanForNode(&planCtx, n.plan)
+	plan, err := distSQLPlanner.createPlanForNode(planCtx, n.plan)
 	if err != nil {
 		return err
 	}
-	distSQLPlanner.FinalizePlan(&planCtx, &plan)
+	distSQLPlanner.FinalizePlan(planCtx, &plan)
 
 	var spans []tracing.RecordedSpan
 	if n.analyze {
@@ -118,7 +118,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			params.extendedEvalCtx.Tracing,
 		)
 		distSQLPlanner.Run(
-			&planCtx, params.p.txn, &plan, recv, params.extendedEvalCtx, nil /* finishedSetupFn */)
+			planCtx, params.p.txn, &plan, recv, params.extendedEvalCtx, nil /* finishedSetupFn */)
 
 		n.run.executedStatement = true
 

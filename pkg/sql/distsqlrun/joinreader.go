@@ -186,11 +186,8 @@ func newJoinReader(
 	); err != nil {
 		return nil, err
 	}
-	if spec.IndexFilterExpr.Expr != "" {
-		err := jr.indexFilter.init(spec.IndexFilterExpr, columnTypes, jr.evalCtx)
-		if err != nil {
-			return nil, err
-		}
+	if err := jr.indexFilter.init(spec.IndexFilterExpr, columnTypes, jr.evalCtx); err != nil {
+		return nil, err
 	}
 
 	// neededIndexColumns is the set of columns we need to fetch from jr.index.

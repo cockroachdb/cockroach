@@ -62,7 +62,7 @@ func (jb *joinerBase) init(
 	jb.joinType = jType
 
 	if isSetOpJoin(jb.joinType) {
-		if onExpr.Expr != "" {
+		if !onExpr.Empty() {
 			return errors.Errorf("expected empty onExpr, got %v", onExpr.Expr)
 		}
 	}

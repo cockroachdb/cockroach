@@ -28,21 +28,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// exprFmtCtxBase produces a FmtCtx used for serializing expressions; a proper
-// IndexedVar formatting function needs to be added on. It replaces placeholders
-// with their values.
-func exprFmtCtxBase(buf *bytes.Buffer, evalCtx *tree.EvalContext) tree.FmtCtx {
-	fmtCtx := tree.MakeFmtCtx(buf, tree.FmtCheckEquivalence)
-	fmtCtx.WithPlaceholderFormat(
-		func(fmtCtx *tree.FmtCtx, p *tree.Placeholder) {
-			d, err := p.Eval(evalCtx)
-			if err != nil {
-				panic(fmt.Sprintf("failed to serialize placeholder: %s", err))
-			}
-			d.Format(fmtCtx)
-		})
-	return fmtCtx
+// ExprContext is an interface containing objects necessary for creating
+// distsqlrun.Expressions.
+type ExprContext interface {
+	// EvalContext returns the tree.EvalContext for planning.
+	EvalContext() *tree.EvalContext
+
+	// IsLocal returns true if the current plan is local.
+	IsLocal() bool
 }
+
+type ivarRemapper struct {
+	indexVarMap []int
+}
+
+func (v *ivarRemapper) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	if ivar, ok := expr.(*tree.IndexedVar); ok {
+		newIvar := *ivar
+		newIvar.Idx = v.indexVarMap[ivar.Idx]
+		return false, &newIvar
+	}
+	return true, expr
+}
+
+func (*ivarRemapper) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 // MakeExpression creates a distsqlrun.Expression.
 //
@@ -53,12 +62,23 @@ func exprFmtCtxBase(buf *bytes.Buffer, evalCtx *tree.EvalContext) tree.FmtCtx {
 // remap these columns by passing an indexVarMap: an IndexedVar with index i
 // becomes column indexVarMap[i].
 func MakeExpression(
-	expr tree.TypedExpr, evalCtx *tree.EvalContext, indexVarMap []int,
+	expr tree.TypedExpr, ctx ExprContext, indexVarMap []int,
 ) (distsqlrun.Expression, error) {
 	if expr == nil {
 		return distsqlrun.Expression{}, nil
 	}
 
+	if ctx.IsLocal() {
+		if indexVarMap != nil {
+			// Remap our indexed vars
+			v := &ivarRemapper{indexVarMap: indexVarMap}
+			newExpr, _ := tree.WalkExpr(v, expr)
+			expr = newExpr.(tree.TypedExpr)
+		}
+		return distsqlrun.Expression{LocalExpr: expr}, nil
+	}
+
+	evalCtx := ctx.EvalContext()
 	subqueryVisitor := &evalAndReplaceSubqueryVisitor{
 		evalCtx: evalCtx,
 	}
@@ -69,7 +89,7 @@ func MakeExpression(
 	}
 	// We format the expression using the IndexedVar and Placeholder formatting interceptors.
 	var buf bytes.Buffer
-	fmtCtx := exprFmtCtxBase(&buf, evalCtx)
+	fmtCtx := distsqlrun.ExprFmtCtxBase(&buf, evalCtx)
 	if indexVarMap != nil {
 		fmtCtx.WithIndexedVarFormat(
 			func(ctx *tree.FmtCtx, idx int) {

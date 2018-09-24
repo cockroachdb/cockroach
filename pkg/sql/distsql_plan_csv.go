@@ -64,7 +64,7 @@ func PlanAndRunExport(
 	rec, err := dsp.checkSupportForNode(in)
 	planCtx.isLocal = err != nil || rec == cannotDistribute
 
-	p, err := dsp.createPlanForNode(&planCtx, in)
+	p, err := dsp.createPlanForNode(planCtx, in)
 	if err != nil {
 		return errors.Wrap(err, "constructing distSQL plan")
 	}
@@ -78,7 +78,7 @@ func PlanAndRunExport(
 	// columns filename/rows/bytes.
 	p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(ExportPlanResultTypes))
 
-	dsp.FinalizePlan(&planCtx, &p)
+	dsp.FinalizePlan(planCtx, &p)
 
 	recv := MakeDistSQLReceiver(
 		ctx, resultRows, tree.Rows,
@@ -86,7 +86,7 @@ func PlanAndRunExport(
 		evalCtx.Tracing,
 	)
 
-	dsp.Run(&planCtx, txn, &p, recv, evalCtx, nil /* finishedSetupFn */)
+	dsp.Run(planCtx, txn, &p, recv, evalCtx, nil /* finishedSetupFn */)
 	return resultRows.Err()
 }
 
@@ -194,7 +194,7 @@ func LoadCSV(
 	// Because we're not going through the normal pathways, we have to set up
 	// the nodeID -> nodeAddress map ourselves.
 	for _, node := range resp.Nodes {
-		if err := dsp.CheckNodeHealthAndVersion(&planCtx, &node.Desc); err != nil {
+		if err := dsp.CheckNodeHealthAndVersion(planCtx, &node.Desc); err != nil {
 			continue
 		}
 	}
@@ -256,7 +256,7 @@ func LoadCSV(
 	samples := details.Samples
 	if samples == nil {
 		var err error
-		samples, err = dsp.loadCSVSamplingPlan(ctx, job, db, evalCtx, thisNode, nodes, from, splitSize, oversample, &planCtx, inputSpecs, sstSpecs)
+		samples, err = dsp.loadCSVSamplingPlan(ctx, job, db, evalCtx, thisNode, nodes, from, splitSize, oversample, planCtx, inputSpecs, sstSpecs)
 		if err != nil {
 			return err
 		}
@@ -462,7 +462,7 @@ func LoadCSV(
 		return err
 	}
 
-	dsp.FinalizePlan(&planCtx, &p)
+	dsp.FinalizePlan(planCtx, &p)
 
 	recv := MakeDistSQLReceiver(
 		ctx,
@@ -477,7 +477,7 @@ func LoadCSV(
 
 	defer log.VEventf(ctx, 1, "finished job %s", job.Payload().Description)
 	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		dsp.Run(&planCtx, txn, &p, recv, evalCtx, nil /* finishedSetupFn */)
+		dsp.Run(planCtx, txn, &p, recv, evalCtx, nil /* finishedSetupFn */)
 		return resultRows.Err()
 	})
 }

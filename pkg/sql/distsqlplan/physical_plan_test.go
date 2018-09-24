@@ -206,7 +206,7 @@ func TestProjectionAndRendering(t *testing.T) {
 						&tree.IndexedVar{Idx: 12},
 						&tree.IndexedVar{Idx: 13},
 					},
-					nil,
+					fakeExprContext{},
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
 					[]sqlbase.ColumnType{strToType("A"), strToType("B"), strToType("C"), strToType("D")},
 				); err != nil {
@@ -230,7 +230,7 @@ func TestProjectionAndRendering(t *testing.T) {
 						&tree.IndexedVar{Idx: 13},
 						&tree.IndexedVar{Idx: 12},
 					},
-					nil,
+					fakeExprContext{},
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
 					[]sqlbase.ColumnType{strToType("B"), strToType("D"), strToType("C")},
 				); err != nil {
@@ -261,7 +261,7 @@ func TestProjectionAndRendering(t *testing.T) {
 							Right:    &tree.IndexedVar{Idx: 2},
 						},
 					},
-					nil,
+					fakeExprContext{},
 					[]int{0, 1, 2},
 					[]sqlbase.ColumnType{strToType("X")},
 				); err != nil {
@@ -295,7 +295,7 @@ func TestProjectionAndRendering(t *testing.T) {
 						},
 						&tree.IndexedVar{Idx: 10},
 					},
-					nil,
+					fakeExprContext{},
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2},
 					[]sqlbase.ColumnType{strToType("X"), strToType("A")},
 				); err != nil {

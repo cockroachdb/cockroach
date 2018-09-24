@@ -2455,7 +2455,7 @@ type EvalContext struct {
 
 	// InternalExecutor gives access to an executor to be used for running
 	// "internal" statements. It may seem bizarre that "expression evaluation" may
-	// need to run a statement, and yet many builting function do it.
+	// need to run a statement, and yet many builtin functions do it.
 	// Note that the executor will be "session-bound" - it will inherit session
 	// variables from a parent session.
 	InternalExecutor SessionBoundInternalExecutor
