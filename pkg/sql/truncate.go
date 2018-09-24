@@ -32,11 +32,23 @@ import (
 // during a table truncation.
 const TableTruncateChunkSize = indexTruncateChunkSize
 
+type truncateNode struct {
+	n *tree.Truncate
+}
+
 // Truncate deletes all rows from a table.
 // Privileges: DROP on table.
 //   Notes: postgres requires TRUNCATE.
 //          mysql requires DROP (for mysql >= 5.1.16, DELETE before that).
 func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, error) {
+	return &truncateNode{n: n}, nil
+}
+
+func (t *truncateNode) startExec(params runParams) error {
+	p := params.p
+	n := t.n
+	ctx := params.ctx
+
 	// Since truncation may cascade to a given table any number of times, start by
 	// building the unique set (ID->name) of tables to truncate.
 	toTruncate := make(map[sqlbase.ID]string, len(n.Tables))
@@ -52,16 +64,16 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 	for _, name := range n.Tables {
 		tn, err := name.Normalize()
 		if err != nil {
-			return nil, err
+			return err
 		}
 		tableDesc, err := p.ResolveMutableTableDescriptor(
 			ctx, tn, true /*required*/, requireTableDesc)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		if err := p.CheckPrivilege(ctx, tableDesc, privilege.DROP); err != nil {
-			return nil, err
+			return err
 		}
 
 		toTruncate[tableDesc.ID] = tn.FQString()
@@ -77,7 +89,7 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 	dropJobID, err := p.createDropTablesJob(ctx, stmtTableDescs, droppedTableDetails, tree.AsStringWithFlags(n,
 		tree.FmtAlwaysQualifyTableNames), false /* drainNames */)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Check that any referencing tables are contained in the set, or, if CASCADE
@@ -116,13 +128,13 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 		for _, idx := range tableDesc.AllNonDropIndexes() {
 			for _, ref := range idx.ReferencedBy {
 				if err := maybeEnqueue(ref, "referenced by foreign key from"); err != nil {
-					return nil, err
+					return err
 				}
 			}
 
 			for _, ref := range idx.InterleavedBy {
 				if err := maybeEnqueue(ref, "interleaved by"); err != nil {
-					return nil, err
+					return err
 				}
 			}
 		}
@@ -130,19 +142,13 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 
 	// Mark this query as non-cancellable if autocommitting.
 	if err := p.cancelChecker.Check(); err != nil {
-		return nil, err
+		return err
 	}
 
-	// TODO(knz,andrei): The current code runs the risk of executing the
-	// truncation at prepare time. That doesn't happen currently because
-	// we don't prepare TRUNCATE statements.
-	if p.extendedEvalCtx.PrepareOnly {
-		return nil, errors.Errorf("programming error: cannot prepare a TRUNCATE statement")
-	}
 	traceKV := p.extendedEvalCtx.Tracing.KVTracingEnabled()
 	for id, name := range toTruncate {
 		if err := p.truncateTable(ctx, id, dropJobID, traceKV); err != nil {
-			return nil, err
+			return err
 		}
 
 		// Log a Truncate Table event for this table.
@@ -158,12 +164,16 @@ func (p *planner) Truncate(ctx context.Context, n *tree.Truncate) (planNode, err
 				User      string
 			}{name, n.String(), p.SessionData().User},
 		); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	return newZeroNode(nil /* columns */), nil
+	return nil
 }
+
+func (t *truncateNode) Next(runParams) (bool, error) { return false, nil }
+func (t *truncateNode) Values() tree.Datums          { return tree.Datums{} }
+func (t *truncateNode) Close(context.Context)        {}
 
 // truncateTable truncates the data of a table in a single transaction. It
 // drops the table and recreates it with a new ID. The dropped table is
