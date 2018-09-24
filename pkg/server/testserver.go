@@ -550,7 +550,11 @@ func (ts *TestServer) GetAuthenticatedHTTPClient() (http.Client, error) {
 	return httpClient, err
 }
 
-func (ts *TestServer) getAuthenticatedHTTPClientAndCookie() (http.Client, *serverpb.SessionCookie, error) {
+func (ts *TestServer) getAuthenticatedHTTPClientAndCookie() (
+	http.Client,
+	*serverpb.SessionCookie,
+	error,
+) {
 	ts.authClient.once.Do(func() {
 		// Create an authentication session for an arbitrary user. We do not
 		// currently have an authorization mechanism, so a specific user is not
