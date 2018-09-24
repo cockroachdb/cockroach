@@ -886,6 +886,9 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"INSERT INTO d.intStr VALUES ($1, 'hello ' || $1::TEXT) RETURNING *", []preparedQueryTest{
 			baseTest.SetArgs(123).Results(123, "hello 123"),
 		}},
+		{"TRUNCATE TABLE d.t", []preparedQueryTest{
+			baseTest.SetArgs(),
+		}},
 		{"SELECT * from d.T WHERE a = ANY($1)", []preparedQueryTest{
 			baseTest.SetArgs(pq.Array([]int{10})).Results(10),
 		}},

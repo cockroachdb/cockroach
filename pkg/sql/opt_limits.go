@@ -212,6 +212,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *renameIndexNode:
 	case *renameTableNode:
 	case *scrubNode:
+	case *truncateNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
 	case *CreateUserNode:

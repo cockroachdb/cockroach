@@ -156,3 +156,19 @@ TRUNCATE bar
 
 statement ok
 DROP TABLE bar;
+
+subtest truncate_30547
+
+statement ok
+CREATE TABLE tt AS SELECT 'foo'
+
+query TTT
+EXPLAIN TRUNCATE TABLE tt
+----
+truncate  ·  ·
+
+# Verify that EXPLAIN did not cause the truncate to be performed.
+query T
+SELECT * FROM tt
+----
+foo
