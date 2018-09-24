@@ -172,6 +172,18 @@ func (e *Expr) ChildGroup(mem *Memo, nth int) GroupID {
 // use this method as a building block when searching and replacing expressions
 // in a tree.
 func (e *Expr) Replace(mem *Memo, replace ReplaceChildFunc) Expr {
+	return MakeExpr(e.op, e.ReplaceOperands(mem, replace))
+}
+
+// ReplaceOperands invokes the given callback function for each child memo
+// group of the expression, including both fixed and list children. The
+// callback function can return the unchanged group, or it can construct a new
+// group and return that instead. Replace will assemble all of the changed and
+// unchanged children and return them as DynamicOperands, which can be passed
+// to MakeExpr or DynamicConstruct to create the new expression. Callers can
+// use this method as a building block when searching and replacing expressions
+// in a tree.
+func (e *Expr) ReplaceOperands(mem *Memo, replace ReplaceChildFunc) DynamicOperands {
 	var operands DynamicOperands
 	layout := opLayoutTable[e.op]
 
@@ -194,13 +206,12 @@ func (e *Expr) Replace(mem *Memo, replace ReplaceChildFunc) Expr {
 		nth++
 	}
 
-	// Append the private and construct a new Expr with possibly modified
-	// children.
+	// Append the private and return the operands.
 	privateID := e.PrivateID()
 	if privateID != 0 {
 		operands[nth] = DynamicID(privateID)
 	}
-	return MakeExpr(e.op, operands)
+	return operands
 }
 
 // Private returns the value of this expression's private field, if it has one,
