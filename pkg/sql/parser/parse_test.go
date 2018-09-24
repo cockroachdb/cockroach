@@ -53,6 +53,7 @@ func TestParse(t *testing.T) {
 		{"SAVEPOINT foo"},
 
 		{`CREATE DATABASE a`},
+		{`EXPLAIN CREATE DATABASE a`},
 		{`CREATE DATABASE a TEMPLATE = 'template0'`},
 		{`CREATE DATABASE a TEMPLATE = 'invalid'`},
 		{`CREATE DATABASE a ENCODING = 'UTF8'`},
@@ -74,6 +75,7 @@ func TestParse(t *testing.T) {
 		{`CREATE DATABASE IF NOT EXISTS a TEMPLATE = 'template0' ENCODING = 'UTF8' LC_COLLATE = 'C.UTF-8' LC_CTYPE = 'INVALID'`},
 
 		{`CREATE INDEX a ON b (c)`},
+		{`EXPLAIN CREATE INDEX a ON b (c)`},
 		{`CREATE INDEX a ON b.c (d)`},
 		{`CREATE INDEX ON a (b)`},
 		{`CREATE INDEX ON a (b) STORING (c)`},
@@ -91,6 +93,7 @@ func TestParse(t *testing.T) {
 		{`CREATE INVERTED INDEX a ON b (c) INTERLEAVE IN PARENT d (e)`},
 
 		{`CREATE TABLE a ()`},
+		{`EXPLAIN CREATE TABLE a ()`},
 		{`CREATE TABLE a (b INT)`},
 		{`CREATE TABLE a (b INT, c INT)`},
 		{`CREATE TABLE a (b CHAR)`},
@@ -238,6 +241,7 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b STRING(3)[] COLLATE "DE")`},
 
 		{`CREATE VIEW a AS SELECT * FROM b`},
+		{`EXPLAIN CREATE VIEW a AS SELECT * FROM b`},
 		{`CREATE VIEW a AS SELECT b.* FROM b LIMIT 5`},
 		{`CREATE VIEW a AS (SELECT c, d FROM b WHERE c > 0 ORDER BY c)`},
 		{`CREATE VIEW a (x, y) AS SELECT c, d FROM b`},
@@ -246,6 +250,7 @@ func TestParse(t *testing.T) {
 		{`CREATE VIEW a AS TABLE b`},
 
 		{`CREATE SEQUENCE a`},
+		{`EXPLAIN CREATE SEQUENCE a`},
 		{`CREATE SEQUENCE IF NOT EXISTS a`},
 		{`CREATE SEQUENCE a CYCLE`},
 		{`CREATE SEQUENCE a NO CYCLE`},
@@ -265,10 +270,12 @@ func TestParse(t *testing.T) {
 		{`CREATE SEQUENCE a VIRTUAL`},
 
 		{`CREATE STATISTICS a ON col1 FROM t`},
+		{`EXPLAIN CREATE STATISTICS a ON col1 FROM t`},
 		{`CREATE STATISTICS a ON col1, col2 FROM t`},
 		{`CREATE STATISTICS a ON col1 FROM d.t`},
 
 		{`DELETE FROM a`},
+		{`EXPLAIN DELETE FROM a`},
 		{`DELETE FROM a.b`},
 		{`DELETE FROM a WHERE a = b`},
 		{`DELETE FROM a WHERE a = b LIMIT c`},
@@ -283,10 +290,12 @@ func TestParse(t *testing.T) {
 		{`DISCARD ALL`},
 
 		{`DROP DATABASE a`},
+		{`EXPLAIN DROP DATABASE a`},
 		{`DROP DATABASE IF EXISTS a`},
 		{`DROP DATABASE a CASCADE`},
 		{`DROP DATABASE a RESTRICT`},
 		{`DROP TABLE a`},
+		{`EXPLAIN DROP TABLE a`},
 		{`DROP TABLE a.b`},
 		{`DROP TABLE a, b`},
 		{`DROP TABLE IF EXISTS a`},
@@ -315,6 +324,7 @@ func TestParse(t *testing.T) {
 		{`DROP VIEW a.b CASCADE`},
 		{`DROP VIEW a, b CASCADE`},
 		{`DROP SEQUENCE a`},
+		{`EXPLAIN DROP SEQUENCE a`},
 		{`DROP SEQUENCE a.b`},
 		{`DROP SEQUENCE a, b`},
 		{`DROP SEQUENCE IF EXISTS a`},
@@ -324,12 +334,17 @@ func TestParse(t *testing.T) {
 		{`DROP SEQUENCE a, b CASCADE`},
 
 		{`CANCEL JOBS SELECT a`},
+		{`EXPLAIN CANCEL JOBS SELECT a`},
 		{`CANCEL QUERIES SELECT a`},
+		{`EXPLAIN CANCEL QUERIES SELECT a`},
 		{`CANCEL SESSIONS SELECT a`},
+		{`EXPLAIN CANCEL SESSIONS SELECT a`},
 		{`CANCEL QUERIES IF EXISTS SELECT a`},
 		{`CANCEL SESSIONS IF EXISTS SELECT a`},
 		{`RESUME JOBS SELECT a`},
+		{`EXPLAIN RESUME JOBS SELECT a`},
 		{`PAUSE JOBS SELECT a`},
+		{`EXPLAIN PAUSE JOBS SELECT a`},
 
 		{`EXPLAIN SELECT 1`},
 		{`EXPLAIN EXPLAIN SELECT 1`},
@@ -339,40 +354,62 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM [SHOW TRANSACTION STATUS]`},
 
 		{`SHOW barfoo`},
+		{`EXPLAIN SHOW barfoo`},
 		{`SHOW database`},
 		{`SHOW timezone`},
 		{`SHOW "BLAH"`},
 
 		{`SHOW CLUSTER SETTING a`},
+		{`EXPLAIN SHOW CLUSTER SETTING a`},
 		{`SHOW CLUSTER SETTING "all"`},
 
 		{`SHOW DATABASES`},
+		{`EXPLAIN SHOW DATABASES`},
 		{`SHOW SCHEMAS`},
+		{`EXPLAIN SHOW SCHEMAS`},
 		{`SHOW SCHEMAS FROM a`},
 		{`SHOW TABLES`},
+		{`EXPLAIN SHOW TABLES`},
 		{`SHOW TABLES FROM a`},
 		{`SHOW TABLES FROM a.b`},
 		{`SHOW COLUMNS FROM a`},
+		{`EXPLAIN SHOW COLUMNS FROM a`},
 		{`SHOW COLUMNS FROM a.b.c`},
 		{`SHOW INDEXES FROM a`},
+		{`EXPLAIN SHOW INDEXES FROM a`},
 		{`SHOW INDEXES FROM a.b.c`},
 		{`SHOW CONSTRAINTS FROM a`},
 		{`SHOW CONSTRAINTS FROM a.b.c`},
+		{`EXPLAIN SHOW CONSTRAINTS FROM a.b.c`},
 		{`SHOW TABLES FROM a.b; SHOW COLUMNS FROM b`},
+		{`EXPLAIN SHOW TABLES FROM a`},
 		{`SHOW ROLES`},
+		{`EXPLAIN SHOW ROLES`},
 		{`SHOW USERS`},
+		{`EXPLAIN SHOW USERS`},
 		{`SHOW JOBS`},
+		{`EXPLAIN SHOW JOBS`},
 		{`SHOW CLUSTER QUERIES`},
+		{`EXPLAIN SHOW CLUSTER QUERIES`},
 		{`SHOW LOCAL QUERIES`},
+		{`EXPLAIN SHOW LOCAL QUERIES`},
 		{`SHOW CLUSTER SESSIONS`},
+		{`EXPLAIN SHOW CLUSTER SESSIONS`},
 		{`SHOW LOCAL SESSIONS`},
+		{`EXPLAIN SHOW LOCAL SESSIONS`},
 		{`SHOW TRACE FOR SESSION`},
+		{`EXPLAIN SHOW TRACE FOR SESSION`},
 		{`SHOW KV TRACE FOR SESSION`},
+		{`EXPLAIN SHOW KV TRACE FOR SESSION`},
 		{`SHOW EXPERIMENTAL_REPLICA TRACE FOR SESSION`},
+		{`EXPLAIN SHOW EXPERIMENTAL_REPLICA TRACE FOR SESSION`},
 		{`SHOW STATISTICS FOR TABLE t`},
+		{`EXPLAIN SHOW STATISTICS FOR TABLE t`},
 		{`SHOW STATISTICS FOR TABLE d.t`},
 		{`SHOW HISTOGRAM 123`},
+		{`EXPLAIN SHOW HISTOGRAM 123`},
 		{`SHOW EXPERIMENTAL_RANGES FROM TABLE d.t`},
+		{`EXPLAIN SHOW EXPERIMENTAL_RANGES FROM TABLE d.t`},
 		{`SHOW EXPERIMENTAL_RANGES FROM TABLE t`},
 		{`SHOW EXPERIMENTAL_RANGES FROM INDEX d.t@i`},
 		{`SHOW EXPERIMENTAL_RANGES FROM INDEX t@i`},
@@ -380,6 +417,7 @@ func TestParse(t *testing.T) {
 		{`SHOW EXPERIMENTAL_RANGES FROM INDEX i`},
 		{`SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE d.t`},
 		{`SHOW ZONE CONFIGURATIONS`},
+		{`EXPLAIN SHOW ZONE CONFIGURATIONS`},
 		{`SHOW ZONE CONFIGURATION FOR RANGE default`},
 		{`SHOW ZONE CONFIGURATION FOR RANGE meta`},
 		{`SHOW ZONE CONFIGURATION FOR DATABASE db`},
@@ -394,6 +432,7 @@ func TestParse(t *testing.T) {
 		// Tables are the default, but can also be specified with
 		// GRANT x ON TABLE y. However, the stringer does not output TABLE.
 		{`SHOW GRANTS`},
+		{`EXPLAIN SHOW GRANTS`},
 		{`SHOW GRANTS ON TABLE foo`},
 		{`SHOW GRANTS ON TABLE foo, db.foo`},
 		{`SHOW GRANTS ON DATABASE foo, bar`},
@@ -407,10 +446,13 @@ func TestParse(t *testing.T) {
 		{`SHOW GRANTS ON ROLE FOR bar, baz`},
 
 		{`SHOW TRANSACTION STATUS`},
+		{`EXPLAIN SHOW TRANSACTION STATUS`},
 
 		{`SHOW SYNTAX 'select 1'`},
+		{`EXPLAIN SHOW SYNTAX 'select 1'`},
 
 		{`PREPARE a AS SELECT 1`},
+		{`PREPARE a AS EXPLAIN SELECT 1`},
 		{`PREPARE a (INT) AS SELECT $1`},
 		{`PREPARE a (STRING, STRING) AS SELECT $1, $2`},
 		{`PREPARE a AS INSERT INTO a VALUES (1)`},
@@ -443,6 +485,7 @@ func TestParse(t *testing.T) {
 		{`PREPARE a (STRING, STRING, STRING) AS IMPORT TABLE a CREATE USING $1 CSV DATA ($2) WITH temp = $3`},
 
 		{`EXECUTE a`},
+		{`EXPLAIN EXECUTE a`}, // TODO(knz): Not sure we want to suppor this!
 		{`EXECUTE a (1)`},
 		{`EXECUTE a (1, 1)`},
 		{`EXECUTE a (1 + 1)`},
@@ -474,6 +517,7 @@ func TestParse(t *testing.T) {
 		{`REVOKE ADMIN OPTION FOR rolea, roleb FROM usera, userb`},
 
 		{`INSERT INTO a VALUES (1)`},
+		{`EXPLAIN INSERT INTO a VALUES (1)`},
 		{`INSERT INTO a.b VALUES (1)`},
 		{`INSERT INTO a VALUES (1, 2)`},
 		{`INSERT INTO a VALUES (1, DEFAULT)`},
@@ -488,6 +532,7 @@ func TestParse(t *testing.T) {
 		{`INSERT INTO a VALUES (1, 2) RETURNING NOTHING`},
 
 		{`UPSERT INTO a VALUES (1)`},
+		{`EXPLAIN UPSERT INTO a VALUES (1)`},
 		{`UPSERT INTO a.b VALUES (1)`},
 		{`UPSERT INTO a VALUES (1, 2)`},
 		{`UPSERT INTO a VALUES (1, DEFAULT)`},
@@ -861,7 +906,9 @@ func TestParse(t *testing.T) {
 		{`SELECT DISTINCT * FROM t`},
 		{`SELECT DISTINCT a, b FROM t`},
 		{`SELECT DISTINCT ON (a, b) c FROM t`},
+
 		{`SET a = 3`},
+		{`EXPLAIN SET a = 3`},
 		{`SET a = 3, 4`},
 		{`SET a = '3'`},
 		{`SET a = 3.0`},
@@ -874,10 +921,15 @@ func TestParse(t *testing.T) {
 		{`SET TRANSACTION PRIORITY NORMAL`},
 		{`SET TRANSACTION PRIORITY HIGH`},
 		{`SET TRANSACTION ISOLATION LEVEL SERIALIZABLE, PRIORITY HIGH`},
+
 		{`SET TRACING = off`},
+		{`EXPLAIN SET TRACING = off`},
 		{`SET TRACING = 'cluster', 'kv'`},
+
 		{`SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE`},
+
 		{`SET CLUSTER SETTING a = 3`},
+		{`EXPLAIN SET CLUSTER SETTING a = 3`},
 		{`SET CLUSTER SETTING a = '3s'`},
 		{`SET CLUSTER SETTING a = '3'`},
 		{`SET CLUSTER SETTING a = 3.0`},
@@ -901,13 +953,15 @@ func TestParse(t *testing.T) {
 		{`SELECT (ARRAY['a', 'b', 'c']).name`},
 
 		{`TABLE a`}, // Shorthand for: SELECT * FROM a; used e.g. in CREATE VIEW v AS TABLE t
+		{`EXPLAIN TABLE a`},
 		{`TABLE [123 AS a]`},
 
-		{`TRUNCATE TABLE a`},
+		{`TRUNCATE TABLE a`}, // TODO(knz): Make this explainable.
 		{`TRUNCATE TABLE a, b.c`},
 		{`TRUNCATE TABLE a CASCADE`},
 
 		{`UPDATE a SET b = 3`},
+		{`EXPLAIN UPDATE a SET b = 3`},
 		{`UPDATE a.b SET b = 3`},
 		{`UPDATE a SET b = 3, c = DEFAULT`},
 		{`UPDATE a SET b = 3 + 4`},
@@ -927,10 +981,15 @@ func TestParse(t *testing.T) {
 		{`SELECT * FROM "0" JOIN "0" USING (id, "0")`}, // last "0" lost its quotes.
 
 		{`ALTER DATABASE a RENAME TO b`},
+		{`EXPLAIN ALTER DATABASE a RENAME TO b`},
+
 		{`ALTER TABLE a RENAME TO b`},
+		{`EXPLAIN ALTER TABLE a RENAME TO b`},
 		{`ALTER TABLE IF EXISTS a RENAME TO b`},
-		{`ALTER INDEX a@b RENAME TO b`},
+
 		{`ALTER INDEX b RENAME TO b`},
+		{`EXPLAIN ALTER INDEX b RENAME TO b`},
+		{`ALTER INDEX a@b RENAME TO b`},
 		{`ALTER INDEX a@primary RENAME TO like`},
 		{`ALTER INDEX IF EXISTS a@b RENAME TO b`},
 		{`ALTER INDEX IF EXISTS a@primary RENAME TO like`},
@@ -938,6 +997,7 @@ func TestParse(t *testing.T) {
 		{`ALTER TABLE IF EXISTS a RENAME COLUMN c1 TO c2`},
 
 		{`ALTER TABLE a ADD COLUMN b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
+		{`EXPLAIN ALTER TABLE a ADD COLUMN b INT`},
 		{`ALTER TABLE a ADD COLUMN IF NOT EXISTS b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
 		{`ALTER TABLE IF EXISTS a ADD COLUMN b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
 		{`ALTER TABLE IF EXISTS a ADD COLUMN IF NOT EXISTS b INT, ADD CONSTRAINT a_idx UNIQUE (a)`},
@@ -978,6 +1038,7 @@ func TestParse(t *testing.T) {
 		{`COPY t (a, b, c) FROM STDIN`},
 
 		{`ALTER TABLE a SPLIT AT VALUES (1)`},
+		{`EXPLAIN ALTER TABLE a SPLIT AT VALUES (1)`},
 		{`ALTER TABLE a SPLIT AT SELECT * FROM t`},
 		{`ALTER TABLE d.a SPLIT AT VALUES ('b', 2)`},
 		{`ALTER INDEX a@i SPLIT AT VALUES (1)`},
@@ -986,6 +1047,7 @@ func TestParse(t *testing.T) {
 		{`ALTER INDEX d.i SPLIT AT VALUES (2)`},
 
 		{`ALTER TABLE a EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 1)`},
+		{`EXPLAIN ALTER TABLE a EXPERIMENTAL_RELOCATE TABLE b`},
 		{`ALTER TABLE a EXPERIMENTAL_RELOCATE SELECT * FROM t`},
 		{`ALTER TABLE d.a EXPERIMENTAL_RELOCATE VALUES (ARRAY[1, 2, 3], 'b', 2)`},
 		{`ALTER INDEX d.i EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 2)`},
@@ -996,20 +1058,32 @@ func TestParse(t *testing.T) {
 		{`ALTER INDEX d.i EXPERIMENTAL_RELOCATE LEASE VALUES (1, 2)`},
 
 		{`ALTER TABLE a SCATTER`},
+		{`EXPLAIN ALTER TABLE a SCATTER`},
 		{`ALTER TABLE a SCATTER FROM (1, 2, 3) TO (4, 5, 6)`},
 		{`ALTER TABLE d.a SCATTER`},
 		{`ALTER INDEX d.i SCATTER FROM (1) TO (2)`},
 
 		{`ALTER RANGE default CONFIGURE ZONE = 'foo'`},
+		{`EXPLAIN ALTER RANGE default CONFIGURE ZONE = 'foo'`},
 		{`ALTER RANGE meta CONFIGURE ZONE = 'foo'`},
+
 		{`ALTER DATABASE db CONFIGURE ZONE = 'foo'`},
+		{`EXPLAIN ALTER DATABASE db CONFIGURE ZONE = 'foo'`},
+
 		{`ALTER TABLE db.t CONFIGURE ZONE = 'foo'`},
+		{`EXPLAIN ALTER TABLE db.t CONFIGURE ZONE = 'foo'`},
+
 		{`ALTER PARTITION p OF TABLE db.t CONFIGURE ZONE = 'foo'`},
+		{`EXPLAIN ALTER PARTITION p OF TABLE db.t CONFIGURE ZONE = 'foo'`},
+
 		{`ALTER TABLE t CONFIGURE ZONE = 'foo'`},
 		{`ALTER PARTITION p OF TABLE t CONFIGURE ZONE = 'foo'`},
+
+		{`ALTER INDEX i CONFIGURE ZONE = 'foo'`},
+		{`EXPLAIN ALTER INDEX i CONFIGURE ZONE = 'foo'`},
 		{`ALTER INDEX db.t@i CONFIGURE ZONE = 'foo'`},
 		{`ALTER INDEX t@i CONFIGURE ZONE = 'foo'`},
-		{`ALTER INDEX i CONFIGURE ZONE = 'foo'`},
+
 		{`ALTER TABLE t CONFIGURE ZONE = b'foo'`},
 		{`ALTER TABLE t CONFIGURE ZONE = a || b`},
 
@@ -1047,11 +1121,15 @@ func TestParse(t *testing.T) {
 		{`ALTER INDEX i CONFIGURE ZONE USING DEFAULT`},
 
 		{`ALTER TABLE t EXPERIMENTAL_AUDIT SET READ WRITE`},
+		{`EXPLAIN ALTER TABLE t EXPERIMENTAL_AUDIT SET READ WRITE`},
 		{`ALTER TABLE t EXPERIMENTAL_AUDIT SET OFF`},
 
 		{`ALTER SEQUENCE a RENAME TO b`},
+		{`EXPLAIN ALTER SEQUENCE a RENAME TO b`},
 		{`ALTER SEQUENCE IF EXISTS a RENAME TO b`},
+
 		{`ALTER SEQUENCE a INCREMENT BY 5 START WITH 1000`},
+		{`EXPLAIN ALTER SEQUENCE a INCREMENT BY 5 START WITH 1000`},
 		{`ALTER SEQUENCE IF EXISTS a INCREMENT BY 5 START WITH 1000`},
 		{`ALTER SEQUENCE IF EXISTS a NO CYCLE CACHE 1`},
 
@@ -1068,38 +1146,56 @@ func TestParse(t *testing.T) {
 		{`EXPERIMENTAL SCRUB TABLE x WITH OPTIONS PHYSICAL, INDEX ALL, CONSTRAINT ALL`},
 
 		{`BACKUP TABLE foo TO 'bar'`},
+		{`EXPLAIN BACKUP TABLE foo TO 'bar'`},
 		{`BACKUP TABLE foo.foo, baz.baz TO 'bar'`},
+
 		{`SHOW BACKUP 'bar'`},
+		{`EXPLAIN SHOW BACKUP 'bar'`},
 		{`SHOW BACKUP RANGES 'bar'`},
 		{`SHOW BACKUP FILES 'bar'`},
+
 		{`BACKUP TABLE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'`},
 		{`BACKUP TABLE foo TO $1 INCREMENTAL FROM 'bar', $2, 'baz'`},
+
 		{`BACKUP DATABASE foo TO 'bar'`},
+		{`EXPLAIN BACKUP DATABASE foo TO 'bar'`},
 		{`BACKUP DATABASE foo, baz TO 'bar'`},
 		{`BACKUP DATABASE foo TO 'bar' AS OF SYSTEM TIME '1' INCREMENTAL FROM 'baz'`},
+
 		{`RESTORE TABLE foo FROM 'bar'`},
+		{`EXPLAIN RESTORE TABLE foo FROM 'bar'`},
 		{`RESTORE TABLE foo FROM $1`},
 		{`RESTORE TABLE foo FROM $1, $2, 'bar'`},
 		{`RESTORE TABLE foo, baz FROM 'bar'`},
 		{`RESTORE TABLE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`},
+
 		{`RESTORE DATABASE foo FROM 'bar'`},
+		{`EXPLAIN RESTORE DATABASE foo FROM 'bar'`},
 		{`RESTORE DATABASE foo, baz FROM 'bar'`},
 		{`RESTORE DATABASE foo, baz FROM 'bar' AS OF SYSTEM TIME '1'`},
+
 		{`BACKUP TABLE foo TO 'bar' WITH key1, key2 = 'value'`},
 		{`RESTORE TABLE foo FROM 'bar' WITH key1, key2 = 'value'`},
+
 		{`IMPORT TABLE foo CREATE USING 'nodelocal:///some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
+		{`EXPLAIN IMPORT TABLE foo CREATE USING 'nodelocal:///some/file' CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 		{`IMPORT TABLE foo CREATE USING 'nodelocal:///some/file' MYSQLOUTFILE DATA ('path/to/some/file', $1)`},
 		{`IMPORT TABLE foo (id INT PRIMARY KEY, email STRING, age INT) CSV DATA ('path/to/some/file', $1) WITH temp = 'path/to/temp'`},
 		{`IMPORT TABLE foo (id INT, email STRING, age INT) CSV DATA ('path/to/some/file', $1) WITH comma = ',', "nullif" = 'n/a', temp = $2`},
 		{`IMPORT TABLE foo FROM PGDUMPCREATE 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`},
+
 		{`IMPORT PGDUMP 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`},
-		{`EXPORT INTO CSV 'a' FROM TABLE a`},
+		{`EXPLAIN IMPORT PGDUMP 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`},
+
+		{`EXPORT INTO CSV 'a' FROM TABLE a`}, // TODO(knz): Make this explainable.
 		{`EXPORT INTO CSV 'a' FROM SELECT * FROM a`},
 		{`EXPORT INTO CSV 's3://my/path/%part%.csv' WITH delimiter = '|' FROM TABLE a`},
 		{`EXPORT INTO CSV 's3://my/path/%part%.csv' WITH delimiter = '|' FROM SELECT a, sum(b) FROM c WHERE d = 1 ORDER BY sum(b) DESC LIMIT 10`},
+
 		{`SET ROW (1, true, NULL)`},
 
 		{`CREATE CHANGEFEED FOR TABLE foo`},
+		{`EXPLAIN CREATE CHANGEFEED FOR TABLE foo`},
 		{`CREATE CHANGEFEED FOR TABLE foo, db.bar, schema.db.foo`},
 		{`CREATE CHANGEFEED FOR TABLE foo INTO 'sink'`},
 		// TODO(dan): Implement.
