@@ -75,7 +75,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
@@ -1602,12 +1601,4 @@ func (g *Gossip) findClient(match func(*client) bool) *client {
 		}
 	}
 	return nil
-}
-
-var _ security.RequestWithUser = &Request{}
-
-// GetUser implements security.RequestWithUser.
-// Gossip messages are always sent by the node user.
-func (*Request) GetUser() string {
-	return security.NodeUser
 }
