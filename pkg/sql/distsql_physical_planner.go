@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/pkg/errors"
 
@@ -555,6 +556,19 @@ type PhysicalPlan struct {
 	PlanToStreamColMap []int
 }
 
+// Release releases this PhysicalPlan back to the pool.
+func (p *PhysicalPlan) Release() {
+	*p = PhysicalPlan{
+		PhysicalPlan: distsqlplan.PhysicalPlan{
+			Processors:    p.Processors[:0],
+			ResultRouters: p.ResultRouters[:0],
+			ResultTypes:   p.ResultTypes[:0],
+		},
+		PlanToStreamColMap: p.PlanToStreamColMap[:0],
+	}
+	physicalPlanPool.Put(p)
+}
+
 // makePlanToStreamColMap initializes a new PhysicalPlan.PlanToStreamColMap. The
 // columns that are present in the result stream(s) should be set in the map.
 func makePlanToStreamColMap(numCols int) []int {
@@ -1076,11 +1090,15 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		spanPartitions = []SpanPartition{{nodeID, n.spans}}
 	}
 
-	p := &PhysicalPlan{}
+	p := newPhysicalPlan()
 	stageID := p.NewStageID()
 
-	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
-	p.Processors = make([]distsqlplan.Processor, 0, len(spanPartitions))
+	nPartitions := len(spanPartitions)
+	if cap(p.ResultRouters) >= nPartitions {
+		p.ResultRouters = p.ResultRouters[:nPartitions]
+	} else {
+		p.ResultRouters = make([]distsqlplan.ProcessorIdx, nPartitions)
+	}
 
 	returnMutations := n.colCfg.visibility == publicAndNonPublicColumns
 
@@ -1126,11 +1144,15 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		p.SetMergeOrdering(dsp.convertOrdering(n.props, scanNodeToTableOrdinalMap))
 	}
 
-	var types []sqlbase.ColumnType
+	var nTypes int
 	if returnMutations {
-		types = make([]sqlbase.ColumnType, 0, len(n.desc.Columns)+len(n.desc.Mutations))
+		nTypes = len(n.desc.Columns) + len(n.desc.Mutations)
 	} else {
-		types = make([]sqlbase.ColumnType, 0, len(n.desc.Columns))
+		nTypes = len(n.desc.Columns)
+	}
+	types := p.ResultTypes[:0]
+	if cap(types) < nTypes {
+		types = make([]sqlbase.ColumnType, 0, nTypes)
 	}
 	for i := range n.desc.Columns {
 		types = append(types, n.desc.Columns[i].Type)
@@ -1154,7 +1176,13 @@ func (dsp *DistSQLPlanner) createTableReaders(
 			outCols[i] = uint32(tableOrdinal(n.desc, id, n.colCfg.visibility))
 		}
 	}
-	planToStreamColMap := make([]int, len(n.cols))
+
+	nCols := len(n.cols)
+	if cap(p.PlanToStreamColMap) >= nCols {
+		p.PlanToStreamColMap = p.PlanToStreamColMap[:nCols]
+	} else {
+		p.PlanToStreamColMap = make([]int, nCols)
+	}
 	descColumnIDs := make([]sqlbase.ColumnID, 0, len(n.desc.Columns))
 	for i := range n.desc.Columns {
 		descColumnIDs = append(descColumnIDs, n.desc.Columns[i].ID)
@@ -1167,18 +1195,16 @@ func (dsp *DistSQLPlanner) createTableReaders(
 			}
 		}
 	}
-	for i := range planToStreamColMap {
-		planToStreamColMap[i] = -1
+	for i := range p.PlanToStreamColMap {
+		p.PlanToStreamColMap[i] = -1
 		for j, c := range outCols {
 			if descColumnIDs[c] == n.cols[i].ID {
-				planToStreamColMap[i] = j
+				p.PlanToStreamColMap[i] = j
 				break
 			}
 		}
 	}
 	p.AddProjection(outCols)
-
-	p.PlanToStreamColMap = planToStreamColMap
 	return p, nil
 }
 
@@ -2002,6 +2028,16 @@ func getTypesForPlanResult(node planNode, planToStreamColMap []int) ([]sqlbase.C
 	return types, nil
 }
 
+var physicalPlanPool = sync.Pool{
+	New: func() interface{} {
+		return new(PhysicalPlan)
+	},
+}
+
+func newPhysicalPlan() *PhysicalPlan {
+	return physicalPlanPool.Get().(*PhysicalPlan)
+}
+
 func (dsp *DistSQLPlanner) createPlanForJoin(
 	planCtx *PlanningCtx, n *joinNode,
 ) (*PhysicalPlan, error) {
@@ -2079,7 +2115,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		isLookupJoin = false
 	}
 
-	p := &PhysicalPlan{}
+	p := newPhysicalPlan()
 	var leftRouters, rightRouters []distsqlplan.ProcessorIdx
 	if isLookupJoin {
 		// Lookup joins only take the left side as input. The right side will
@@ -2448,7 +2484,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (*Physical
 	// continue the DistSQL planning recursion on that planNode.
 	seenTop := false
 	nParents := uint32(0)
-	p := &PhysicalPlan{}
+	p := newPhysicalPlan()
 	// This will be set to first DistSQL-enabled planNode we find, if any. We'll
 	// modify its parent later to connect its source to the DistSQL-planned
 	// subtree.
@@ -2582,22 +2618,22 @@ func (dsp *DistSQLPlanner) createValuesPlan(
 	s.RawBytes = rawBytes
 
 	plan := distsqlplan.PhysicalPlan{
-		Processors: []distsqlplan.Processor{{
-			// TODO: find a better node to place processor at
-			Node: dsp.nodeDesc.NodeID,
-			Spec: distsqlrun.ProcessorSpec{
-				Core:   distsqlrun.ProcessorCoreUnion{Values: &s},
-				Output: []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
-			},
-		}},
 		ResultRouters: []distsqlplan.ProcessorIdx{0},
 		ResultTypes:   resultTypes,
 	}
+	plan.AddProcessor(distsqlplan.Processor{
+		// TODO: find a better node to place processor at
+		Node: dsp.nodeDesc.NodeID,
+		Spec: distsqlrun.ProcessorSpec{
+			Core:   distsqlrun.ProcessorCoreUnion{Values: &s},
+			Output: []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
+		},
+	})
 
-	return &PhysicalPlan{
-		PhysicalPlan:       plan,
-		PlanToStreamColMap: identityMapInPlace(make([]int, numColumns)),
-	}, nil
+	p := newPhysicalPlan()
+	p.PhysicalPlan = plan
+	p.PlanToStreamColMap = identityMapInPlace(make([]int, numColumns))
+	return p, nil
 }
 
 func (dsp *DistSQLPlanner) createPlanForValues(
@@ -2923,7 +2959,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		}
 	}
 
-	p := &PhysicalPlan{}
+	p := newPhysicalPlan()
 
 	// Merge the plans' PlanToStreamColMap, which we know are equivalent.
 	p.PlanToStreamColMap = planToStreamColMap

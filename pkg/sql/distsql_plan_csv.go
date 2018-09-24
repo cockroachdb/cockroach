@@ -362,7 +362,7 @@ func LoadCSV(
 
 	// We have the split ranges. Now re-read the CSV files and route them to SST writers.
 
-	p := &PhysicalPlan{}
+	p := newPhysicalPlan()
 	// This is a hardcoded two stage plan. The first stage is the mappers,
 	// the second stage is the reducers. We have to keep track of all the mappers
 	// we create because the reducers need to hook up a stream for each mapper.
