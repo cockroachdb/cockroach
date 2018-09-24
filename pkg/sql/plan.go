@@ -895,9 +895,6 @@ func (p *planner) newPlan(
 	case *tree.Split:
 		return p.Split(ctx, n)
 	case *tree.Truncate:
-		if err := p.txn.SetSystemConfigTrigger(); err != nil {
-			return nil, err
-		}
 		return p.Truncate(ctx, n)
 	case *tree.UnionClause:
 		return p.Union(ctx, n, desiredTypes)

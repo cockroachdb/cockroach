@@ -765,6 +765,9 @@ func (*Truncate) StatementType() StatementType { return Ack }
 // StatementTag returns a short string identifying the type of statement.
 func (*Truncate) StatementTag() string { return "TRUNCATE" }
 
+// modifiesSchema implements the canModifySchema interface.
+func (*Truncate) modifiesSchema() bool { return true }
+
 // StatementType implements the Statement interface.
 func (n *Update) StatementType() StatementType { return n.Returning.statementType() }
 
