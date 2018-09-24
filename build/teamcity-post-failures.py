@@ -34,7 +34,7 @@ def tc_url(path, **params):
 
 
 def collect_build_results(build_id):
-    """Yield a sequence of (name, log) pairs for all failed tests.
+    """Yield a sequence of (name, log, category) pairs for all failed tests.
 
     Looks at the given build ID and all its dependencies.
     """
@@ -48,15 +48,18 @@ def collect_build_results(build_id):
                                             locator='count:100,status:FAILURE,build:(id:{0})'.format(build_id),
                                             fields='testOccurrence(details,name,duration,build(buildType(name)))')))
     for o in test_data.findall('./testOccurrence'):
-        test_name = re.split(r"[/:]", o.attrib['name'])[0]  # remove subtests, if present
-        test_name = '{0}/{1}'.format(o.find('build/buildType').attrib['name'], test_name)
+        # Category is test, race, acceptance, ...
+        category = o.find('build/buildType').attrib['name']
+        # Extract TestLint/Foo from "TestLint: TestLint/Foo".
+        matches = re.split(r"[: ]+", o.attrib['name'], 1)
+        test_name = matches[-1]
 
         test_log = '--- FAIL: {0}/{1} ({2:.3f}s)\n{3}\n'.format(
             o.find("build/buildType").attrib["name"],
             o.attrib["name"],
             int(o.attrib["duration"])/1000.,
             o.findtext("details"))
-        yield (test_name, test_log)
+        yield (test_name, test_log, category)
 
 def get_probable_milestone():
     try:
@@ -89,27 +92,35 @@ def get_probable_milestone():
     return None
 
 
-def create_issue(build_id, failed_tests):
+def create_issue(build_id, topname, category, failed_tests):
     """Format a list of failed tests as an issue.
 
     Returns a dict which should be encoded as json for posting to the
     github API.
     """
     return {
-        'title': 'teamcity: failed tests on {0}: {1}'.format(os.environ['TC_BUILD_BRANCH'],
-                                                             ', '.join(set(t[0] for t in failed_tests))),
+        'title': 'teamcity: failed test: {0}'.format(topname),
         'body': '''\
-The following tests appear to have failed:
+The following tests appear to have failed on {0} ({5}): {4}
 
-[#{0}](https://teamcity.cockroachdb.com/viewLog.html?buildId={0}):
+You may want to check [for open issues](https://github.com/cockroachdb/cockroach/issues?q=is%3Aissue+is%3Aopen+{3}).
+
+[#{1}](https://teamcity.cockroachdb.com/viewLog.html?buildId={1}):
 
 
 ```
-{1:.60000}
+{2}
 ```
 
 Please assign, take a look and update the issue accordingly.
-'''.format(build_id, ''.join(t[1] for t in failed_tests)),
+'''.format(
+            os.environ['TC_BUILD_BRANCH'],
+            build_id,
+            ''.join(set(t[0]+"\n"+("..." if len(t[1]) > 4000 else "") + t[1][-4000:]+"\n\n\n" for t in failed_tests)),
+            topname,
+            ', '.join(set(t[0] for t in failed_tests)),
+            category,
+            ),
         'labels': ['C-test-failure', 'O-robot'],
         'milestone': get_probable_milestone(),
     }
@@ -135,6 +146,26 @@ if __name__ == '__main__':
     if branch == 'master' or branch.startswith('release-'):
         build_id = os.environ['TC_BUILD_ID']
         failed_tests = list(collect_build_results(build_id))
-        if failed_tests:
-            issue = create_issue(build_id, failed_tests)
+        issues = {}
+        for failed_test in failed_tests:
+            category = failed_test[2]
+            # From TestImportPGDump/Subtest, extract TestImportPGDump.
+            matches = re.split(r"^([^/]+)/?", failed_test[0], 1)
+            if len(matches) < 3:
+                matches.append("")
+            topname, subname = matches[1], matches[2]
+            if category == "roachtest" and topname == "acceptance" and subname != "":
+                # Special casing for roachtest so that it doesn't lump any
+                # acceptance failure into an issue that just says "acceptance".
+                topname = subname
+                subname = ""
+
+            if topname in issues:
+                issues[topname].append(failed_test)
+            else:
+                issues[topname] = [failed_test]
+        for topname, failures in issues.items():
+            # TODO(tschottdorf): this should really shell out to our Go issue
+            # poster in pkg/cmd/internal/issues to avoid duplicating logic.
+            issue = create_issue(build_id, topname, failures[0][2], failures)
             post_issue(issue)
