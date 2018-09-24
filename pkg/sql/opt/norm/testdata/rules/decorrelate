@@ -369,13 +369,13 @@ project
  ├── key: ()
  ├── fd: ()-->(1-5)
  └── inner-join (lookup a)
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int!null)
       ├── key columns: [6] = [1]
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-7)
       ├── select
-      │    ├── columns: x:6(int!null) y:7(int)
+      │    ├── columns: x:6(int!null) y:7(int!null)
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(6,7)
@@ -384,8 +384,8 @@ project
       │    │    ├── limit: 1
       │    │    ├── key: ()
       │    │    └── fd: ()-->(6,7)
-      │    └── filters [type=bool, outer=(7)]
-      │         └── (y + 1) > 10 [type=bool, outer=(7)]
+      │    └── filters [type=bool, outer=(7), constraints=(/7: [/10 - ]; tight)]
+      │         └── y > 9 [type=bool, outer=(7), constraints=(/7: [/10 - ]; tight)]
       └── true [type=bool]
 
 # Any clause with constant.
