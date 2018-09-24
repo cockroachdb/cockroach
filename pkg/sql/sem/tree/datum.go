@@ -2184,6 +2184,12 @@ const (
 	Hour
 	Minute
 	Second
+
+	// While not technically part of the SQL standard for intervals, we provide
+	// Millisecond as a field to allow code to parse intervals with a default unit
+	// of milliseconds, which is useful for some internal use cases like
+	// statement_timeout.
+	Millisecond
 )
 
 // ParseDInterval parses and returns the *DInterval Datum value represented by the provided
@@ -2265,6 +2271,8 @@ func parseDInterval(s string, field DurationField) (*DInterval, error) {
 			ret.Nanos = time.Minute.Nanoseconds() * int64(f)
 		case Second:
 			ret.Nanos = int64(float64(time.Second.Nanoseconds()) * f)
+		case Millisecond:
+			ret.Nanos = int64(float64(time.Millisecond.Nanoseconds()) * f)
 		default:
 			panic(fmt.Sprintf("unhandled DurationField constant %d", field))
 		}
