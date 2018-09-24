@@ -790,9 +790,9 @@ func TestLint(t *testing.T) {
 				args[i] = strconv.Quote(args[i])
 			}
 			t.Logf("run the following to fix your formatting:\n"+
-				"\n%s %s\n\n"+
+				"\nbin/crlfmt %s\n\n"+
 				"Don't forget to add amend the result to the correct commits.",
-				cmd.Args[0], strings.Join(args, " "),
+				strings.Join(args, " "),
 			)
 		}
 	})
