@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	gojson "encoding/json"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -48,17 +49,12 @@ type Encoder interface {
 	EncodeResolvedTimestamp(hlc.Timestamp) ([]byte, error)
 }
 
-func getEncoder(opts map[string]string, sinkURI string) (Encoder, error) {
+func getEncoder(opts map[string]string) (Encoder, error) {
 	switch formatType(opts[optFormat]) {
 	case ``, optFormatJSON:
 		return makeJSONEncoder(opts), nil
-	case optFormatAvro, optFormatAvroJSON:
-		uri, err := url.Parse(sinkURI)
-		if err != nil {
-			return nil, err
-		}
-		registryURL := uri.Query().Get(sinkParamConfluentSchemaRegistry)
-		return newConfluentAvroEncoder(opts, registryURL)
+	case optFormatAvro:
+		return newConfluentAvroEncoder(opts)
 	default:
 		return nil, errors.Errorf(`unknown %s: %s`, optFormat, opts[optFormat])
 	}
@@ -157,7 +153,6 @@ func (e *jsonEncoder) EncodeResolvedTimestamp(resolved hlc.Timestamp) ([]byte, e
 // columns in a record.
 type confluentAvroEncoder struct {
 	registryURL string
-	json        bool
 
 	keyCache   map[tableIDAndVersion]confluentRegisteredSchema
 	valueCache map[tableIDAndVersion]confluentRegisteredSchema
@@ -176,9 +171,12 @@ type confluentRegisteredSchema struct {
 
 var _ Encoder = &confluentAvroEncoder{}
 
-func newConfluentAvroEncoder(
-	opts map[string]string, registryURL string,
-) (*confluentAvroEncoder, error) {
+func newConfluentAvroEncoder(opts map[string]string) (*confluentAvroEncoder, error) {
+	registryURL := opts[optConfluentSchemaRegistry]
+	if len(registryURL) == 0 {
+		return nil, errors.Errorf(`WITH option %s is required for %s=%s`,
+			optConfluentSchemaRegistry, optFormat, optFormatAvro)
+	}
 	// TODO(dan): Figure out what updated and resolved timestamps should
 	// look like with avro.
 	for _, opt := range []string{optUpdatedTimestamps, optResolvedTimestamps} {
@@ -189,14 +187,10 @@ func newConfluentAvroEncoder(
 	}
 	e := &confluentAvroEncoder{
 		registryURL: registryURL,
-		json:        formatType(opts[optFormat]) == optFormatAvroJSON,
 		keyCache:    make(map[tableIDAndVersion]confluentRegisteredSchema),
 		valueCache:  make(map[tableIDAndVersion]confluentRegisteredSchema),
 	}
-	if !e.json && len(e.registryURL) == 0 {
-		return nil, errors.Errorf(`parameter %s is required with %s=%s`,
-			sinkParamConfluentSchemaRegistry, optFormat, optFormatAvro)
-	}
+
 	return e, nil
 }
 
@@ -213,19 +207,14 @@ func (e *confluentAvroEncoder) EncodeKey(
 			return nil, err
 		}
 
-		if !e.json {
-			registered.registryID, err = e.register(registered.schema, confluentSubjectSuffixKey)
-			if err != nil {
-				return nil, err
-			}
+		registered.registryID, err = e.register(registered.schema, confluentSubjectSuffixKey)
+		if err != nil {
+			return nil, err
 		}
 		// TODO(dan): Bound the size of this cache.
 		e.keyCache[cacheKey] = registered
 	}
 
-	if e.json {
-		return registered.schema.TextualFromRow(row)
-	}
 	// https://docs.confluent.io/current/schema-registry/docs/serializer-formatter.html#wire-format
 	header := []byte{
 		confluentAvroWireFormatMagic,
@@ -248,17 +237,12 @@ func (e *confluentAvroEncoder) EncodeValue(
 			return nil, err
 		}
 
-		if !e.json {
-			registered.registryID, err = e.register(registered.schema, confluentSubjectSuffixValue)
-			if err != nil {
-				return nil, err
-			}
+		registered.registryID, err = e.register(registered.schema, confluentSubjectSuffixValue)
+		if err != nil {
+			return nil, err
 		}
 		// TODO(dan): Bound the size of this cache.
 		e.valueCache[cacheKey] = registered
-	}
-	if e.json {
-		return registered.schema.TextualFromRow(row)
 	}
 	// https://docs.confluent.io/current/schema-registry/docs/serializer-formatter.html#wire-format
 	header := []byte{
@@ -302,6 +286,10 @@ func (e *confluentAvroEncoder) register(
 		return 0, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := ioutil.ReadAll(resp.Body)
+		return 0, errors.Errorf(`registering schema to %s %s: %s`, url.String(), resp.Status, body)
+	}
 	var res confluentSchemaVersionResponse
 	if err := gojson.NewDecoder(resp.Body).Decode(&res); err != nil {
 		return 0, err
