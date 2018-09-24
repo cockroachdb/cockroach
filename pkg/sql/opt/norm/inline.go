@@ -169,8 +169,7 @@ func (c *CustomFuncs) InlineProjections(target, projections memo.GroupID) memo.G
 			return pb.buildProjections()
 		}
 
-		ev := memo.MakeNormExprView(c.mem, child)
-		return ev.Replace(c.f.evalCtx, replace).Group()
+		return c.f.DynamicConstruct(expr.Operator(), expr.ReplaceOperands(c.mem, replace))
 	}
 
 	return replace(target)
