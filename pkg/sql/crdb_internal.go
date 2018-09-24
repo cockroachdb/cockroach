@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -75,6 +74,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalLocalMetricsTable,
 		crdbInternalPartitionsTable,
 		crdbInternalRangesTable,
+		crdbInternalRangesNoLeasesTable,
 		crdbInternalRuntimeInfoTable,
 		crdbInternalSchemaChangesTable,
 		crdbInternalSessionTraceTable,
@@ -1554,8 +1554,31 @@ CREATE TABLE crdb_internal.ranges (
   lease_holder INT NOT NULL
 )
 `,
+	delegate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (planNode, error) {
+		return p.delegateQuery(ctx, "SELECT * FROM crdb_internal.ranges",
+			`SELECT *, crdb_internal.lease_holder(start_key) AS lease_holder FROM crdb_internal.ranges_no_leases`,
+			nil, nil)
+	},
+}
+
+// crdbInternalRangesNoLeasesTable exposes system ranges without the
+// `lease_holder` information.
+var crdbInternalRangesNoLeasesTable = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.ranges_no_leases (
+  range_id     INT NOT NULL,
+  start_key    BYTES NOT NULL,
+  start_pretty STRING NOT NULL,
+  end_key      BYTES NOT NULL,
+  end_pretty   STRING NOT NULL,
+  database     STRING NOT NULL,
+  "table"      STRING NOT NULL,
+  "index"      STRING NOT NULL,
+  replicas     INT[] NOT NULL
+)
+`,
 	generator: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (virtualTableGenerator, error) {
-		if err := p.RequireSuperUser(ctx, "read crdb_internal.ranges"); err != nil {
+		if err := p.RequireSuperUser(ctx, "read crdb_internal.ranges_no_leases"); err != nil {
 			return nil, err
 		}
 		descs, err := p.Tables().getAllDescriptors(ctx, p.txn)
@@ -1630,20 +1653,6 @@ CREATE TABLE crdb_internal.ranges (
 				}
 			}
 
-			// Get the lease holder.
-			// TODO(radu): this will be slow if we have a lot of ranges; find a way to
-			// make this part optional.
-			b := &client.Batch{}
-			b.AddRawRequest(&roachpb.LeaseInfoRequest{
-				RequestHeader: roachpb.RequestHeader{
-					Key: desc.StartKey.AsRawKey(),
-				},
-			})
-			if err := p.txn.Run(ctx, b); err != nil {
-				return nil, errors.Wrap(err, "error getting lease info")
-			}
-			resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)
-
 			return tree.Datums{
 				tree.NewDInt(tree.DInt(desc.RangeID)),
 				tree.NewDBytes(tree.DBytes(desc.StartKey)),
@@ -1654,7 +1663,6 @@ CREATE TABLE crdb_internal.ranges (
 				tree.NewDString(tableName),
 				tree.NewDString(indexName),
 				arr,
-				tree.NewDInt(tree.DInt(resp.Lease.Replica.StoreID)),
 			}, nil
 		}, nil
 	},
