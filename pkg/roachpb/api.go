@@ -15,11 +15,13 @@
 package roachpb
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
 )
@@ -231,119 +233,97 @@ type Response interface {
 // combine() allows responses from individual ranges to be aggregated
 // into a single one.
 type combinable interface {
-	combine(combinable) error
+	combine(context.Context, combinable)
 }
 
 // combine is used by range-spanning Response types (e.g. Scan or DeleteRange)
 // to merge their headers.
-func (rh *ResponseHeader) combine(otherRH ResponseHeader) error {
+func (rh *ResponseHeader) combine(ctx context.Context, otherRH ResponseHeader) {
 	if rh.Txn != nil && otherRH.Txn == nil {
 		rh.Txn = nil
 	}
 	if rh.ResumeSpan != nil {
-		panic(fmt.Sprintf("combining %+v with %+v", rh.ResumeSpan, otherRH.ResumeSpan))
+		log.Fatalf(ctx, "combining %+v with %+v", rh.ResumeSpan, otherRH.ResumeSpan)
 	}
 	rh.ResumeSpan = otherRH.ResumeSpan
 	rh.ResumeReason = otherRH.ResumeReason
 	rh.NumKeys += otherRH.NumKeys
 	rh.RangeInfos = append(rh.RangeInfos, otherRH.RangeInfos...)
-	return nil
 }
 
 // combine implements the combinable interface.
-func (sr *ScanResponse) combine(c combinable) error {
+func (sr *ScanResponse) combine(ctx context.Context, c combinable) {
 	otherSR := c.(*ScanResponse)
 	if sr != nil {
 		sr.Rows = append(sr.Rows, otherSR.Rows...)
 		sr.IntentRows = append(sr.IntentRows, otherSR.IntentRows...)
 		sr.BatchResponse = append(sr.BatchResponse, otherSR.BatchResponse...)
-		if err := sr.ResponseHeader.combine(otherSR.Header()); err != nil {
-			return err
-		}
+		sr.ResponseHeader.combine(ctx, otherSR.Header())
 	}
-	return nil
 }
 
 var _ combinable = &ScanResponse{}
 
 // combine implements the combinable interface.
-func (sr *ReverseScanResponse) combine(c combinable) error {
+func (sr *ReverseScanResponse) combine(ctx context.Context, c combinable) {
 	otherSR := c.(*ReverseScanResponse)
 	if sr != nil {
 		sr.Rows = append(sr.Rows, otherSR.Rows...)
 		sr.IntentRows = append(sr.IntentRows, otherSR.IntentRows...)
 		sr.BatchResponse = append(sr.BatchResponse, otherSR.BatchResponse...)
-		if err := sr.ResponseHeader.combine(otherSR.Header()); err != nil {
-			return err
-		}
+		sr.ResponseHeader.combine(ctx, otherSR.Header())
 	}
-	return nil
 }
 
 var _ combinable = &ReverseScanResponse{}
 
 // combine implements the combinable interface.
-func (dr *DeleteRangeResponse) combine(c combinable) error {
+func (dr *DeleteRangeResponse) combine(ctx context.Context, c combinable) {
 	otherDR := c.(*DeleteRangeResponse)
 	if dr != nil {
 		dr.Keys = append(dr.Keys, otherDR.Keys...)
-		if err := dr.ResponseHeader.combine(otherDR.Header()); err != nil {
-			return err
-		}
+		dr.ResponseHeader.combine(ctx, otherDR.Header())
 	}
-	return nil
 }
 
 // combine implements the combinable interface.
-func (rr *ResolveIntentRangeResponse) combine(c combinable) error {
+func (rr *ResolveIntentRangeResponse) combine(ctx context.Context, c combinable) {
 	otherRR := c.(*ResolveIntentRangeResponse)
 	if rr != nil {
-		if err := rr.ResponseHeader.combine(otherRR.Header()); err != nil {
-			return err
-		}
+		rr.ResponseHeader.combine(ctx, otherRR.Header())
 	}
-	return nil
 }
 
 var _ combinable = &ResolveIntentRangeResponse{}
 
 // Combine implements the combinable interface.
-func (cc *CheckConsistencyResponse) combine(c combinable) error {
+func (cc *CheckConsistencyResponse) combine(ctx context.Context, c combinable) {
 	if cc != nil {
 		otherCC := c.(*CheckConsistencyResponse)
-		if err := cc.ResponseHeader.combine(otherCC.Header()); err != nil {
-			return err
-		}
+		cc.ResponseHeader.combine(ctx, otherCC.Header())
 	}
-	return nil
 }
 
 var _ combinable = &CheckConsistencyResponse{}
 
 // Combine implements the combinable interface.
-func (er *ExportResponse) combine(c combinable) error {
+func (er *ExportResponse) combine(ctx context.Context, c combinable) {
 	if er != nil {
 		otherER := c.(*ExportResponse)
-		if err := er.ResponseHeader.combine(otherER.Header()); err != nil {
-			return err
-		}
+		er.ResponseHeader.combine(ctx, otherER.Header())
 		er.Files = append(er.Files, otherER.Files...)
 	}
-	return nil
 }
 
 var _ combinable = &ExportResponse{}
 
 // Combine implements the combinable interface.
-func (r *AdminScatterResponse) combine(c combinable) error {
+func (r *AdminScatterResponse) combine(ctx context.Context, c combinable) {
 	if r != nil {
 		otherR := c.(*AdminScatterResponse)
-		if err := r.ResponseHeader.combine(otherR.Header()); err != nil {
-			return err
-		}
+		r.ResponseHeader.combine(ctx, otherR.Header())
 		r.Ranges = append(r.Ranges, otherR.Ranges...)
 	}
-	return nil
 }
 
 var _ combinable = &AdminScatterResponse{}
@@ -375,12 +355,9 @@ func RequestHeaderFromSpan(s Span) RequestHeader {
 	return RequestHeader{Key: s.Key, EndKey: s.EndKey}
 }
 
-func (h *BatchResponse_Header) combine(o BatchResponse_Header) error {
+func (h *BatchResponse_Header) combine(ctx context.Context, o BatchResponse_Header) {
 	if h.Error != nil || o.Error != nil {
-		return errors.Errorf(
-			"can't combine batch responses with errors, have errors %q and %q",
-			h.Error, o.Error,
-		)
+		log.Fatalf(ctx, "asked to combine responses with err: %v and %v", h.Error, o.Error)
 	}
 	h.Timestamp.Forward(o.Timestamp)
 	if h.Txn == nil {
@@ -390,7 +367,6 @@ func (h *BatchResponse_Header) combine(o BatchResponse_Header) error {
 	}
 	h.Now.Forward(o.Now)
 	h.CollectedSpans = append(h.CollectedSpans, o.CollectedSpans...)
-	return nil
 }
 
 // SetHeader implements the Response interface.

@@ -15,6 +15,7 @@
 package roachpb
 
 import (
+	"context"
 	"reflect"
 	"testing"
 )
@@ -23,6 +24,7 @@ import (
 // the combinable interface, notably {Scan,DeleteRange}Response and
 // ResponseHeader.
 func TestCombinable(t *testing.T) {
+	ctx := context.Background()
 	// Test that GetResponse doesn't have anything to do with combinable.
 	if _, ok := interface{}(&GetResponse{}).(combinable); ok {
 		t.Fatalf("GetResponse implements combinable, so presumably all Response types will")
@@ -55,12 +57,8 @@ func TestCombinable(t *testing.T) {
 		IntentRows: append(append([]KeyValue(nil), sr1.IntentRows...), sr2.IntentRows...),
 	}
 
-	if err := sr1.combine(sr2); err != nil {
-		t.Fatal(err)
-	}
-	if err := sr1.combine(&ScanResponse{}); err != nil {
-		t.Fatal(err)
-	}
+	sr1.combine(ctx, sr2)
+	sr1.combine(ctx, &ScanResponse{})
 
 	if !reflect.DeepEqual(sr1, wantedSR) {
 		t.Errorf("wanted %v, got %v", wantedSR, sr1)
@@ -81,12 +79,8 @@ func TestCombinable(t *testing.T) {
 	wantedDR := &DeleteRangeResponse{
 		Keys: []Key{[]byte("1"), []byte("2")},
 	}
-	if err := dr2.combine(dr3); err != nil {
-		t.Fatal(err)
-	}
-	if err := dr1.combine(dr2); err != nil {
-		t.Fatal(err)
-	}
+	dr2.combine(ctx, dr3)
+	dr1.combine(ctx, dr2)
 
 	if !reflect.DeepEqual(dr1, wantedDR) {
 		t.Errorf("wanted %v, got %v", wantedDR, dr1)

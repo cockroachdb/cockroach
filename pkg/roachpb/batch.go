@@ -23,6 +23,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 //go:generate go run -tags gen-batch gen_batch.go
@@ -330,15 +331,16 @@ func actualSpan(req Request, resp Response) (Span, bool) {
 	return h.Span(), true
 }
 
-// Combine implements the Combinable interface. It combines each slot of the
-// given request into the corresponding slot of the base response. The number
-// of slots must be equal and the respective slots must be combinable.
+// Combine combines each slot of the given request into the corresponding slot
+// of the base response. The number of slots must be equal and the respective
+// slots must be combinable.
 // On error, the receiver BatchResponse is in an invalid state. In either case,
 // the supplied BatchResponse must not be used any more.
-func (br *BatchResponse) Combine(otherBatch *BatchResponse, positions []int) error {
-	if err := br.BatchResponse_Header.combine(otherBatch.BatchResponse_Header); err != nil {
-		return err
-	}
+//
+// It is illegal to call Combine on responses with errors in them. The
+// DistSender is does not combine any responses after seeing an error.
+func (br *BatchResponse) Combine(ctx context.Context, otherBatch *BatchResponse, positions []int) {
+	br.BatchResponse_Header.combine(ctx, otherBatch.BatchResponse_Header)
 	for i := range otherBatch.Responses {
 		pos := positions[i]
 		if br.Responses[pos] == (ResponseUnion{}) {
@@ -350,16 +352,13 @@ func (br *BatchResponse) Combine(otherBatch *BatchResponse, positions []int) err
 		cValLeft, lOK := valLeft.(combinable)
 		cValRight, rOK := valRight.(combinable)
 		if lOK && rOK {
-			if err := cValLeft.combine(cValRight); err != nil {
-				return err
-			}
+			cValLeft.combine(ctx, cValRight)
 			continue
 		} else if lOK != rOK {
-			return errors.Errorf("can not combine %T and %T", valLeft, valRight)
+			log.Fatalf(ctx, "can not combine %T and %T", valLeft, valRight)
 		}
 	}
 	br.Txn.Update(otherBatch.Txn)
-	return nil
 }
 
 // Add adds a request to the batch request. It's a convenience method;
