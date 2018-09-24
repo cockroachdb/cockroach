@@ -55,7 +55,7 @@ func (e UnexpectedWithIssueErr) Error() string {
 		e.msg, e.issue)
 }
 
-// SageMessage implements SafeMessager.
+// SafeMessage implements the SafeMessager interface.
 func (e UnexpectedWithIssueErr) SafeMessage() string {
 	return fmt.Sprintf("issue #%d: %s", e.issue, e.safeMsg)
 }

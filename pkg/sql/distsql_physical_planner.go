@@ -509,8 +509,7 @@ func (p *PlanningCtx) sanityCheckAddresses() error {
 	inverted := make(map[string]roachpb.NodeID)
 	for nodeID, addr := range p.NodeAddresses {
 		if otherNodeID, ok := inverted[addr]; ok {
-			return errorutil.UnexpectedWithIssueErrorf(
-				12876,
+			return errors.Errorf(
 				"different nodes %d and %d with the same address '%s'", nodeID, otherNodeID, addr)
 		}
 		inverted[addr] = nodeID
