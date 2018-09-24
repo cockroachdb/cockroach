@@ -30,7 +30,6 @@ import (
 type dropDatabaseNode struct {
 	n      *tree.DropDatabase
 	dbDesc *sqlbase.DatabaseDescriptor
-	td     []toDelete
 }
 
 // DropDatabase drops a database.
@@ -64,32 +63,42 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		return nil, err
 	}
 
+	return &dropDatabaseNode{n: n, dbDesc: dbDesc}, nil
+}
+
+func (n *dropDatabaseNode) startExec(params runParams) error {
+	ctx := params.ctx
+	p := params.p
+	dbDesc := n.dbDesc
+
+	// Prepare the list of objects to delete.
 	tbNames, err := GetObjectNames(ctx, p, dbDesc, tree.PublicSchema, true /*explicitPrefix*/)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if len(tbNames) > 0 {
-		switch n.DropBehavior {
+		switch n.n.DropBehavior {
 		case tree.DropRestrict:
-			return nil, pgerror.NewErrorf(pgerror.CodeDependentObjectsStillExistError,
+			return pgerror.NewErrorf(pgerror.CodeDependentObjectsStillExistError,
 				"database %q is not empty and RESTRICT was specified",
 				tree.ErrNameString(&dbDesc.Name))
 		case tree.DropDefault:
 			// The default is CASCADE, however be cautious if CASCADE was
 			// not specified explicitly.
 			if p.SessionData().SafeUpdates {
-				return nil, pgerror.NewDangerousStatementErrorf(
+				return pgerror.NewDangerousStatementErrorf(
 					"DROP DATABASE on non-empty database without explicit CASCADE")
 			}
 		}
 	}
 
+	// Collect the descriptors to delete.
 	td := make([]toDelete, 0, len(tbNames))
 	for i := range tbNames {
 		tbDesc, err := p.prepareDrop(ctx, &tbNames[i], false /*required*/, anyDescType)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if tbDesc == nil {
 			continue
@@ -98,7 +107,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 		// be in different databases.
 		for _, ref := range tbDesc.DependedOnBy {
 			if err := p.canRemoveDependentView(ctx, tbDesc, ref, tree.DropCascade); err != nil {
-				return nil, err
+				return err
 			}
 		}
 		td = append(td, toDelete{&tbNames[i], tbDesc})
@@ -106,20 +115,15 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 
 	td, err = p.filterCascadedTables(ctx, td)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return &dropDatabaseNode{n: n, dbDesc: dbDesc, td: td}, nil
-}
+	// Actually perform the deletion.
+	tbNameStrings := make([]string, 0, len(td))
+	droppedTableDetails := make([]jobspb.DroppedTableDetails, 0, len(td))
+	tableDescs := make([]*sqlbase.TableDescriptor, 0, len(td))
 
-func (n *dropDatabaseNode) startExec(params runParams) error {
-	ctx := params.ctx
-	p := params.p
-	tbNameStrings := make([]string, 0, len(n.td))
-	droppedTableDetails := make([]jobspb.DroppedTableDetails, 0, len(n.td))
-	tableDescs := make([]*sqlbase.TableDescriptor, 0, len(n.td))
-
-	for _, toDel := range n.td {
+	for _, toDel := range td {
 		if toDel.desc.IsView() {
 			continue
 		}
@@ -130,13 +134,13 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		tableDescs = append(tableDescs, toDel.desc)
 	}
 
-	_, err := p.createDropTablesJob(ctx, tableDescs, droppedTableDetails, tree.AsStringWithFlags(n.n,
+	_, err = p.createDropTablesJob(ctx, tableDescs, droppedTableDetails, tree.AsStringWithFlags(n.n,
 		tree.FmtAlwaysQualifyTableNames), true /* drainNames */)
 	if err != nil {
 		return err
 	}
 
-	for _, toDel := range n.td {
+	for _, toDel := range td {
 		tbDesc := toDel.desc
 		if tbDesc.IsView() {
 			cascadedViews, err := p.dropViewImpl(ctx, tbDesc, tree.DropCascade)
@@ -156,8 +160,8 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		tbNameStrings = append(tbNameStrings, toDel.tn.FQString())
 	}
 
-	_ /* zoneKey */, nameKey, descKey := getKeysForDatabaseDescriptor(n.dbDesc)
-	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(n.dbDesc.ID))
+	_ /* zoneKey */, nameKey, descKey := getKeysForDatabaseDescriptor(dbDesc)
+	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(dbDesc.ID))
 
 	b := &client.Batch{}
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
@@ -170,7 +174,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	// Delete the zone config entry for this database.
 	b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 
-	p.Tables().addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, dbDropped)
+	p.Tables().addUncommittedDatabase(dbDesc.Name, dbDesc.ID, dbDropped)
 
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
@@ -182,7 +186,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		ctx,
 		p.txn,
 		EventLogDropDatabase,
-		int32(n.dbDesc.ID),
+		int32(dbDesc.ID),
 		int32(params.extendedEvalCtx.NodeID),
 		struct {
 			DatabaseName         string
