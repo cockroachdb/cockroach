@@ -194,10 +194,10 @@ memo (optimized, ~8KB)
  ├── G1: (project G2 G3)
  │    ├── "[presentation: y:2,z:5] [ordering: +1,-2]"
  │    │    ├── best: (project G2="[ordering: +1,-2]" G3)
- │    │    └── cost: 1072.22
+ │    │    └── cost: 1076.67
  │    └── ""
  │         ├── best: (project G2 G3)
- │         └── cost: 1072.22
+ │         └── cost: 1076.67
  ├── G2: (select G4 G5)
  │    ├── ""
  │    │    ├── best: (select G4 G5)
@@ -243,17 +243,17 @@ memo (optimized, ~6KB)
  ├── G1: (project G2 G3)
  │    ├── "[presentation: y:2,z:3] [ordering: +2]"
  │    │    ├── best: (sort G1)
- │    │    └── cost: 1097.32
+ │    │    └── cost: 1142.54
  │    └── ""
  │         ├── best: (project G2 G3)
- │         └── cost: 1081.11
+ │         └── cost: 1083.33
  ├── G2: (select G4 G5)
  │    ├── ""
  │    │    ├── best: (select G4 G5)
  │    │    └── cost: 1080.00
  │    └── "[ordering: +2]"
  │         ├── best: (sort G2)
- │         └── cost: 1096.21
+ │         └── cost: 1139.21
  ├── G3: (projections y z)
  ├── G4: (scan a,cols=(1-3))
  │    ├── ""
