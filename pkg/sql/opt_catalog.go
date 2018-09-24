@@ -269,6 +269,11 @@ func (ot *optTable) CheckPrivilege(ctx context.Context, priv privilege.Kind) err
 	return ot.cat.resolver.CheckPrivilege(ctx, ot.desc, priv)
 }
 
+// InternalID is part of the opt.Table interface.
+func (ot *optTable) InternalID() uint64 {
+	return uint64(ot.desc.ID)
+}
+
 // IsVirtualTable is part of the opt.Table interface.
 func (ot *optTable) IsVirtualTable() bool {
 	return ot.desc.IsVirtualTable()
@@ -390,6 +395,10 @@ type optIndex struct {
 	numCols       int
 	numKeyCols    int
 	numLaxKeyCols int
+
+	// foreignKey stores IDs of another table and one of its indexes,
+	// if this index is part of an outbound foreign key relation.
+	foreignKey opt.ForeignKeyReference
 }
 
 var _ opt.Index = &optIndex{}
@@ -451,6 +460,12 @@ func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor) {
 		oi.numLaxKeyCols = len(desc.ColumnIDs) + len(desc.ExtraColumnIDs)
 		oi.numKeyCols = oi.numLaxKeyCols
 	}
+
+	if desc.ForeignKey.IsSet() {
+		oi.foreignKey.TableID = uint64(desc.ForeignKey.Table)
+		oi.foreignKey.IndexID = uint64(desc.ForeignKey.Index)
+		oi.foreignKey.PrefixLen = desc.ForeignKey.SharedPrefixLen
+	}
 }
 
 // IdxName is part of the opt.Index interface.
@@ -505,6 +520,22 @@ func (oi *optIndex) Column(i int) opt.IndexColumn {
 	i -= length
 	ord, _ := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
 	return opt.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+}
+
+// ForeignKey is part of the opt.Index interface.
+func (oi *optIndex) ForeignKey() (opt.ForeignKeyReference, bool) {
+	desc := oi.desc
+	if desc.ForeignKey.IsSet() {
+		oi.foreignKey.TableID = uint64(desc.ForeignKey.Table)
+		oi.foreignKey.IndexID = uint64(desc.ForeignKey.Index)
+		oi.foreignKey.PrefixLen = desc.ForeignKey.SharedPrefixLen
+	}
+	return oi.foreignKey, oi.desc.ForeignKey.IsSet()
+}
+
+// Table is part of the opt.Index interface.
+func (oi *optIndex) Table() opt.Table {
+	return oi.tab
 }
 
 type optTableStat struct {

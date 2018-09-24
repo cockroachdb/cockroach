@@ -88,6 +88,9 @@ type Table interface {
 	// information_schema tables.
 	IsVirtualTable() bool
 
+	// InternalID returns the table's globally-unique ID.
+	InternalID() uint64
+
 	// ColumnCount returns the number of columns in the table.
 	ColumnCount() int
 
@@ -183,6 +186,9 @@ type Index interface {
 	// when the query contains a numeric index reference.
 	InternalID() uint64
 
+	// Table returns a reference to the table this index is based on.
+	Table() Table
+
 	// IsInverted returns true if this is a JSON inverted index.
 	IsInverted() bool
 
@@ -249,6 +255,11 @@ type Index interface {
 	// Column returns the ith IndexColumn within the index definition, where
 	// i < ColumnCount.
 	Column(i int) IndexColumn
+
+	// ForeignKey returns a ForeignKeyReference if this index is part
+	// of an outbound foreign key relation. Returns false for the second
+	// return value if there is no foreign key reference on this index.
+	ForeignKey() (ForeignKeyReference, bool)
 }
 
 // TableStatistic is an interface to a table statistic. Each statistic is
@@ -278,6 +289,21 @@ type TableStatistic interface {
 	NullCount() uint64
 
 	// TODO(radu): add Histogram().
+}
+
+// ForeignKeyReference is a struct representing an outbound foreign key reference.
+// It has accessors for table and index IDs, as well as the prefix length.
+type ForeignKeyReference struct {
+	// Table contains the referenced table's internal ID.
+	TableID uint64
+
+	// Index contains the ID of the index that represents the
+	// destination table's side of the foreign key relation.
+	IndexID uint64
+
+	// PrefixLen contains the length of columns that form the foreign key
+	// relation in the current and destination indexes.
+	PrefixLen int32
 }
 
 // FormatCatalogTable nicely formats a catalog table using a treeprinter for
