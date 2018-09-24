@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/opttester"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
@@ -89,4 +90,30 @@ func TestRuleBinaryAssumption(t *testing.T) {
 	fn(opt.BitandOp)
 	fn(opt.BitorOp)
 	fn(opt.BitxorOp)
+}
+
+// These constants are copied from sql/sem/builtins/builtins.go.
+const (
+	categorySystemInfo  = "System info"
+	categoryDateAndTime = "Date and time"
+)
+
+// TestRuleFunctionAssumption checks that we do not fold impure functions.
+// There are other functions we should not fold such as current_user() because
+// they depend on context, but it is very difficult to test that we avoid all
+// such cases. Instead, we rely on clues like the category.
+func TestRuleFunctionAssumption(t *testing.T) {
+	for name := range norm.FoldFunctionWhitelist {
+		props, _ := builtins.GetBuiltinProperties(name)
+		if props == nil {
+			t.Errorf("could not find properties for function %s", name)
+			continue
+		}
+		if props.Impure {
+			t.Errorf("%s should not be folded because it is impure", name)
+		}
+		if props.Category == categorySystemInfo || props.Category == categoryDateAndTime {
+			t.Errorf("%s should not be folded because it has category %s", name, props.Category)
+		}
+	}
 }
