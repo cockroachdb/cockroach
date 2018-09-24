@@ -34,45 +34,73 @@ import (
 	"github.com/cockroachdb/ttycolor"
 )
 
-func registerTPCC(r *registry) {
-	runTPCC := func(ctx context.Context, t *test, c *cluster, warehouses int, extra string) {
-		if !c.isLocal() {
-			c.RemountNoBarrier(ctx)
-		}
-
-		nodes := c.nodes - 1
-		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-		c.Start(ctx, c.Range(1, nodes))
-
-		t.Status("running workload")
-		m := newMonitor(ctx, c, c.Range(1, nodes))
-		m.Go(func(ctx context.Context) error {
-			duration := " --duration=" + ifLocal("10s", "10m")
-			cmd := fmt.Sprintf(
-				"./workload run tpcc --init --warehouses=%d --histograms=logs/stats.json"+
-					extra+duration+" {pgurl:1-%d}",
-				warehouses, nodes)
-			c.Run(ctx, c.Node(nodes+1), cmd)
-			return nil
-		})
-		m.Wait()
+func runTPCC(
+	ctx context.Context, t *test, c *cluster, warehouses int, duration string, extraArgs ...string,
+) {
+	crdbNodes := c.Range(1, c.nodes-1)
+	workloadNode := c.Node(c.nodes)
+	if c.isLocal() {
+		warehouses = 1
+		duration = `10s`
+	} else {
+		c.RemountNoBarrier(ctx)
 	}
 
+	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
+	c.Put(ctx, workload, "./workload", workloadNode)
+	c.Start(ctx, crdbNodes)
+
+	t.Status("loading fixture")
+	fixtureWarehouses := -1
+	for _, w := range []int{1, 10, 100, 1000, 2000, 5000, 10000} {
+		if w >= warehouses {
+			fixtureWarehouses = w
+			break
+		}
+	}
+	if fixtureWarehouses == -1 {
+		t.Fatalf("could not find fixture big enough for %d warehouses", warehouses)
+	}
+	c.Run(ctx, workloadNode, fmt.Sprintf(
+		`./workload fixtures load tpcc --warehouses=%d {pgurl:1}`, fixtureWarehouses,
+	))
+
+	t.Status("running tpcc")
+	m := newMonitor(ctx, c, crdbNodes)
+	m.Go(func(ctx context.Context) error {
+		cmd := fmt.Sprintf(
+			"./workload run tpcc --warehouses=%d --duration=%s {pgurl%s}",
+			warehouses, duration, crdbNodes)
+		cmd += ` --histograms=logs/stats.json`
+		for _, extraArg := range extraArgs {
+			cmd += extraArg
+		}
+		c.Run(ctx, workloadNode, cmd)
+		return nil
+	})
+	m.Wait()
+}
+
+func registerTPCC(r *registry) {
 	r.Add(testSpec{
-		Name:   "tpcc/w=1/nodes=3",
-		Nodes:  nodes(4),
-		Stable: true, // DO NOT COPY to new tests
+		Name: "tpcc/nodes=3/w=max",
+		// TODO(dan): Instead of MinVersion, adjust the warehouses below to
+		// match our expectation for the max tpcc warehouses that previous
+		// releases will support on this hardware.
+		MinVersion: "2.1.0",
+		Nodes:      nodes(4, cpu(16)),
+		Stable:     false,
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runTPCC(ctx, t, c, 1, " --wait=false")
+			warehouses := 1400
+			runTPCC(ctx, t, c, warehouses, `120m`)
 		},
 	})
 	r.Add(testSpec{
-		Name:   "tpmc/w=1/nodes=3",
-		Nodes:  nodes(4),
-		Stable: true, // DO NOT COPY to new tests
+		Name:   "tpcc-nowait/nodes=3/w=1",
+		Nodes:  nodes(4, cpu(16)),
+		Stable: false,
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runTPCC(ctx, t, c, 1, "")
+			runTPCC(ctx, t, c, 1, `10m`, ` --wait=false`)
 		},
 	})
 
