@@ -286,13 +286,13 @@ func (w *windower) ConsumerClosed() {
 }
 
 func (w *windower) close() {
-	// Need to close the mem accounting while the context is still valid.
-	w.accumulationAcc.Close(w.Ctx)
-	w.decodingAcc.Close(w.Ctx)
-	w.resultsAcc.Close(w.Ctx)
-	w.partitionsAcc.Close(w.Ctx)
-	w.InternalClose()
-	w.MemMonitor.Stop(w.Ctx)
+	if w.InternalClose() {
+		w.accumulationAcc.Close(w.Ctx)
+		w.decodingAcc.Close(w.Ctx)
+		w.resultsAcc.Close(w.Ctx)
+		w.partitionsAcc.Close(w.Ctx)
+		w.MemMonitor.Stop(w.Ctx)
+	}
 }
 
 // accumulateRows continually reads rows from the input and accumulates them
