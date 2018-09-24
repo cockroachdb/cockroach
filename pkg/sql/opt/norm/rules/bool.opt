@@ -87,6 +87,14 @@ $item
 =>
 (Null (BoolType))
 
+# FoldNotTrue replaces NOT(True) with False.
+[FoldNotTrue, Normalize]
+(Not (True)) => (False)
+
+# FoldNotFalse replaces NOT(False) with True.
+[FoldNotFalse, Normalize]
+(Not (False)) => (True)
+
 # NegateComparison inverts eligible comparison operators when they are negated
 # by the Not operator. For example, Eq maps to Ne, and Gt maps to Le. All
 # comparisons can be negated except for the JSON comparisons.
