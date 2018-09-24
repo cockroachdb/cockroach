@@ -81,3 +81,19 @@ $result
 )
 =>
 $result
+
+# FoldFunction is similar to FoldBinary, but it involves a function with
+# constant inputs. As with FoldBinary, FoldFunction applies as long as the
+# evaluation would not cause an error. Additionally, only certain functions
+# are safe to fold as part of normalization. Other functions rely on context
+# that may change between runs of a prepared query.
+#
+# This rule is marked as low priority so that the FoldNull rules in scalar.opt
+# can run first.
+[FoldFunction, Normalize, LowPriority]
+(Function
+  $args:* & (IsListOfConstants $args)
+  $private:* & (Succeeded $result:(FoldFunction $args $private))
+)
+=>
+$result

@@ -650,6 +650,32 @@ func (c *CustomFuncs) ConsolidateFilters(filters memo.FiltersExpr) memo.FiltersE
 	return newFilters
 }
 
+// AreFiltersSorted determines whether the expressions in a FiltersExpr are
+// ordered by their expression IDs.
+func (c *CustomFuncs) AreFiltersSorted(f memo.FiltersExpr) bool {
+	for i, n := 0, f.ChildCount(); i < n-1; i++ {
+		if f.Child(i).Child(0).(opt.ScalarExpr).ID() > f.Child(i+1).Child(0).(opt.ScalarExpr).ID() {
+			return false
+		}
+	}
+	return true
+}
+
+// SortFilters sorts a filter list by the IDs of the expressions. This has the
+// effect of canonicalizing FiltersExprs which may have the same filters, but
+// in a different order.
+func (c *CustomFuncs) SortFilters(f memo.FiltersExpr) memo.FiltersExpr {
+	result := make(memo.FiltersExpr, len(f))
+	for i, n := 0, f.ChildCount(); i < n; i++ {
+		fi := f.Child(i).(*memo.FiltersItem)
+		result[i] = *fi
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Child(0).(opt.ScalarExpr).ID() < result[j].Child(0).(opt.ScalarExpr).ID()
+	})
+	return result
+}
+
 // ----------------------------------------------------------------------
 //
 // Project functions
@@ -1662,28 +1688,174 @@ func (c *CustomFuncs) FoldComparison(op opt.Operator, left, right opt.ScalarExpr
 	return c.f.ConstructConstVal(result, types.Bool)
 }
 
-// AreFiltersSorted determines whether the expressions in a FiltersExpr are
-// ordered by their expression IDs.
-func (c *CustomFuncs) AreFiltersSorted(f memo.FiltersExpr) bool {
-	for i, n := 0, f.ChildCount(); i < n-1; i++ {
-		if f.Child(i).Child(0).(opt.ScalarExpr).ID() > f.Child(i+1).Child(0).(opt.ScalarExpr).ID() {
-			return false
-		}
+// FoldFunction evaluates a function expression with constant inputs. It
+// returns a constant expression as long as the function is contained in the
+// FoldFunctionWhitelist, and the evaluation causes no error.
+func (c *CustomFuncs) FoldFunction(
+	args memo.ScalarListExpr, private *memo.FunctionPrivate,
+) opt.ScalarExpr {
+	if _, ok := FoldFunctionWhitelist[private.Name]; !ok {
+		return nil
 	}
-	return true
+
+	exprs := make(tree.TypedExprs, len(args))
+	for i := range exprs {
+		exprs[i] = memo.ExtractConstDatum(args[i])
+	}
+	funcRef := tree.WrapFunction(private.Name)
+	fn := tree.NewTypedFuncExpr(
+		funcRef,
+		0, /* aggQualifier */
+		exprs,
+		nil, /* filter */
+		nil, /* windowDef */
+		private.Typ,
+		private.Properties,
+		private.Overload,
+	)
+
+	result, err := fn.Eval(c.f.evalCtx)
+	if err != nil {
+		return nil
+	}
+	return c.f.ConstructConstVal(result, private.Typ)
 }
 
-// SortFilters sorts a filter list by the IDs of the expressions. This has the
-// effect of canonicalizing FiltersExprs which may have the same filters, but
-// in a different order.
-func (c *CustomFuncs) SortFilters(f memo.FiltersExpr) memo.FiltersExpr {
-	result := make(memo.FiltersExpr, len(f))
-	for i, n := 0, f.ChildCount(); i < n; i++ {
-		fi := f.Child(i).(*memo.FiltersItem)
-		result[i] = *fi
-	}
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Child(0).(opt.ScalarExpr).ID() < result[j].Child(0).(opt.ScalarExpr).ID()
-	})
-	return result
+// FoldFunctionWhitelist contains functions that are known to always produce
+// the same result given the same set of arguments. This excludes impure
+// functions and functions that rely on context such as locale or current user.
+// See sql/sem/builtins/builtins.go for the function definitions.
+// TODO(rytaft): This is a stopgap until #26582 is completed to identify
+// functions as immutable, stable or volatile.
+var FoldFunctionWhitelist = map[string]struct{}{
+	"length":                        {},
+	"char_length":                   {},
+	"character_length":              {},
+	"bit_length":                    {},
+	"octet_length":                  {},
+	"lower":                         {},
+	"upper":                         {},
+	"substr":                        {},
+	"substring":                     {},
+	"concat":                        {},
+	"concat_ws":                     {},
+	"convert_from":                  {},
+	"convert_to":                    {},
+	"to_uuid":                       {},
+	"from_uuid":                     {},
+	"abbrev":                        {},
+	"broadcast":                     {},
+	"family":                        {},
+	"host":                          {},
+	"hostmask":                      {},
+	"masklen":                       {},
+	"netmask":                       {},
+	"set_masklen":                   {},
+	"text":                          {},
+	"inet_same_family":              {},
+	"inet_contained_by_or_equals":   {},
+	"inet_contains_or_contained_by": {},
+	"inet_contains_or_equals":       {},
+	"from_ip":                       {},
+	"to_ip":                         {},
+	"split_part":                    {},
+	"repeat":                        {},
+	"encode":                        {},
+	"decode":                        {},
+	"ascii":                         {},
+	"chr":                           {},
+	"md5":                           {},
+	"sha1":                          {},
+	"sha256":                        {},
+	"sha512":                        {},
+	"fnv32":                         {},
+	"fnv32a":                        {},
+	"fnv64":                         {},
+	"fnv64a":                        {},
+	"crc32ieee":                     {},
+	"crc32c":                        {},
+	"to_hex":                        {},
+	"to_english":                    {},
+	"strpos":                        {},
+	"overlay":                       {},
+	"lpad":                          {},
+	"rpad":                          {},
+	"btrim":                         {},
+	"ltrim":                         {},
+	"rtrim":                         {},
+	"reverse":                       {},
+	"replace":                       {},
+	"translate":                     {},
+	"regexp_extract":                {},
+	"regexp_replace":                {},
+	"like_escape":                   {},
+	"not_like_escape":               {},
+	"ilike_escape":                  {},
+	"not_ilike_escape":              {},
+	"similar_to_escape":             {},
+	"not_similar_to_escape":         {},
+	"initcap":                       {},
+	"quote_ident":                   {},
+	"left":                          {},
+	"right":                         {},
+	"greatest":                      {},
+	"least":                         {},
+	"abs":                           {},
+	"acos":                          {},
+	"asin":                          {},
+	"atan":                          {},
+	"atan2":                         {},
+	"cbrt":                          {},
+	"ceil":                          {},
+	"ceiling":                       {},
+	"cos":                           {},
+	"cot":                           {},
+	"degrees":                       {},
+	"div":                           {},
+	"exp":                           {},
+	"floor":                         {},
+	"isnan":                         {},
+	"ln":                            {},
+	"log":                           {},
+	"mod":                           {},
+	"pi":                            {},
+	"pow":                           {},
+	"power":                         {},
+	"radians":                       {},
+	"round":                         {},
+	"sin":                           {},
+	"sign":                          {},
+	"sqrt":                          {},
+	"tan":                           {},
+	"trunc":                         {},
+	"string_to_array":               {},
+	"array_to_string":               {},
+	"array_length":                  {},
+	"array_lower":                   {},
+	"array_upper":                   {},
+	"array_append":                  {},
+	"array_prepend":                 {},
+	"array_cat":                     {},
+	"json_remove_path":              {},
+	"json_extract_path":             {},
+	"jsonb_extract_path":            {},
+	"json_set":                      {},
+	"jsonb_set":                     {},
+	"jsonb_insert":                  {},
+	"jsonb_pretty":                  {},
+	"json_typeof":                   {},
+	"jsonb_typeof":                  {},
+	"array_to_json":                 {},
+	"to_json":                       {},
+	"to_jsonb":                      {},
+	"json_build_array":              {},
+	"jsonb_build_array":             {},
+	"json_build_object":             {},
+	"jsonb_build_object":            {},
+	"json_object":                   {},
+	"jsonb_object":                  {},
+	"json_strip_nulls":              {},
+	"jsonb_strip_nulls":             {},
+	"json_array_length":             {},
+	"jsonb_array_length":            {},
 }

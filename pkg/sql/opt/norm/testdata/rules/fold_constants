@@ -586,3 +586,38 @@ values
  ├── key: ()
  ├── fd: ()-->(1)
  └── (1,) [type=tuple{decimal}]
+
+# --------------------------------------------------
+# FoldFunction
+# --------------------------------------------------
+
+opt expect=FoldFunction
+SELECT length('abc'), upper('xyz'), lower('DEF')
+----
+values
+ ├── columns: length:1(int) upper:2(string) lower:3(string)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ └── (3, 'XYZ', 'def') [type=tuple{int, string, string}]
+
+opt expect=FoldFunction
+SELECT encode('abc', 'hex'), decode('616263', 'hex')
+----
+values
+ ├── columns: encode:1(string) decode:2(bytes)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ └── ('616263', '\x616263') [type=tuple{string, bytes}]
+
+opt expect-not=FoldFunction
+SELECT now(), current_user(), current_database()
+----
+values
+ ├── columns: now:1(timestamptz) current_user:2(string) current_database:3(string)
+ ├── cardinality: [1 - 1]
+ ├── side-effects
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ └── (now(), current_user(), current_database()) [type=tuple{timestamptz, string, string}]

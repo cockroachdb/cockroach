@@ -55,8 +55,7 @@ select
       ├── i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
       └── s <= 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - /'foo']; tight)]
 
-# TODO(andyk): Constant fold functions
-opt expect-not=CommuteConstInequality
+opt expect=CommuteConstInequality
 SELECT * FROM a WHERE length('foo')+1<i+k AND length('bar')<=i*2
 ----
 select
@@ -68,8 +67,8 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      ├── (length('foo') + 1) < (i + k) [type=bool, outer=(1,2)]
-      └── length('bar') <= (i * 2) [type=bool, outer=(2)]
+      ├── (i + k) > 4 [type=bool, outer=(1,2)]
+      └── (i * 2) >= 3 [type=bool, outer=(2)]
 
 # Impure function should not be considered constant.
 opt expect-not=CommuteConstInequality
@@ -96,7 +95,7 @@ FROM a
 WHERE
     k+1 = 2 AND
     (f+f)+2 < 5 AND
-    1::decimal+i <= length('foo') AND
+    1::decimal+i >= length('foo') AND
     i+2+2 > 10 AND
     '1:00:00'::time + i::interval >= '2:00:00'::time
 ----
@@ -112,9 +111,8 @@ select
  │    ├── key: ()
  │    └── fd: ()-->(1-6)
  └── filters
+      ├── (i >= 2) AND (i > 6) [type=bool, outer=(2), constraints=(/2: [/7 - ]; tight)]
       ├── (f + f) < 3.0 [type=bool, outer=(3)]
-      ├── (i + 1) <= length('foo') [type=bool, outer=(2)]
-      ├── i > 6 [type=bool, outer=(2), constraints=(/2: [/7 - ]; tight)]
       └── i::INTERVAL >= '01:00:00' [type=bool, outer=(2)]
 
 # Try case that should not match pattern because Minus overload is not defined.
@@ -141,8 +139,8 @@ FROM a
 WHERE
     k-1 = 2 AND
     (f+f)-2 < 5 AND
-    i-1::decimal <= length('foo') AND
-    i-2-2 > 10 AND
+    i-1::decimal >= length('foo') AND
+    i-2-2 < 10 AND
     f+i::float-10.0 >= 100.0 AND
     d-'1w'::interval >= '2018-09-23'::date
 ----
@@ -158,9 +156,8 @@ select
  │    ├── key: ()
  │    └── fd: ()-->(1-6)
  └── filters
+      ├── (i >= 4) AND (i < 14) [type=bool, outer=(2), constraints=(/2: [/4 - /13]; tight)]
       ├── (f + f) < 7.0 [type=bool, outer=(3)]
-      ├── (i - 1) <= length('foo') [type=bool, outer=(2)]
-      ├── i > 14 [type=bool, outer=(2), constraints=(/2: [/15 - ]; tight)]
       ├── (f + i::FLOAT8) >= 110.0 [type=bool, outer=(2,3)]
       └── d >= '2018-09-30' [type=bool, outer=(6), constraints=(/6: [/'2018-09-30' - ]; tight)]
 
@@ -204,9 +201,8 @@ select
  │    ├── key: ()
  │    └── fd: ()-->(1-6)
  └── filters
+      ├── (i >= -2) AND (i > 10) [type=bool, outer=(2), constraints=(/2: [/11 - ]; tight)]
       ├── (f + f) > -3.0 [type=bool, outer=(3)]
-      ├── (1 - i) <= length('foo') [type=bool, outer=(2)]
-      ├── i > 10 [type=bool, outer=(2), constraints=(/2: [/11 - ]; tight)]
       └── (f + i::FLOAT8) <= -90.0 [type=bool, outer=(2,3)]
 
 # Try case that should not match pattern because Minus overload is not defined.
