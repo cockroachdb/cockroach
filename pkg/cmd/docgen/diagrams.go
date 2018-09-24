@@ -462,11 +462,17 @@ var specs = []stmtSpec{
 		name:   "create_changefeed_stmt",
 		inline: []string{"changefeed_targets", "single_table_pattern_list", "opt_changefeed_sink", "opt_with_options", "kv_option_list", "kv_option"},
 		replace: map[string]string{
-			"table_option":                 "table_name",
+
+			"table_option": "table_name",
+
 			"'INTO' string_or_placeholder": "'INTO' sink",
-			"name":                      "option",
-			"'SCONST'":                  "option",
-			"'=' string_or_placeholder": "'=' value"},
+
+			"name": "option",
+
+			"'SCONST'": "option",
+
+			"'=' string_or_placeholder": "'=' value",
+		},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile("'OPTIONS'")},
 		unlink: []string{"table_name", "sink", "option", "value"},
@@ -692,11 +698,16 @@ var specs = []stmtSpec{
 		inline: []string{"privileges", "privilege_list", "privilege", "table_pattern_list", "name_list"},
 		replace: map[string]string{
 			"( name | 'CREATE' | 'GRANT' | 'SELECT' )": "( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' )",
-			"table_pattern":                            "table_name",
-			"'TO' ( ( name ) ( ( ',' name ) )*":        "'TO' ( ( user_name ) ( ( ',' user_name ) )*",
+
+			"table_pattern": "table_name",
+
+			"'TO' ( ( name ) ( ( ',' name ) )*": "'TO' ( ( user_name ) ( ( ',' user_name ) )*",
+
 			"| 'GRANT' ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) 'TO' ( ( user_name ) ( ( ',' user_name ) )* )": "",
+
 			"'WITH' 'ADMIN' 'OPTION'": "",
-			"targets":                 "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+
+			"targets": "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
 		},
 		unlink:  []string{"table_name", "database_name", "user_name"},
 		nosplit: true,
@@ -812,9 +823,12 @@ var specs = []stmtSpec{
 		stmt:   "restore_stmt",
 		inline: []string{"as_of_clause", "opt_with_options"},
 		replace: map[string]string{
-			"a_expr":                                  "timestamp",
-			"string_or_placeholder_list":              "full_backup_location ( | incremental_backup_location ( ',' incremental_backup_location )*)",
+			"a_expr": "timestamp",
+
+			"string_or_placeholder_list": "full_backup_location ( | incremental_backup_location ( ',' incremental_backup_location )*)",
+
 			"'WITH' 'OPTIONS' '(' kv_option_list ')'": "",
+
 			"targets": "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
 		},
 		unlink: []string{"timestamp", "full_backup_location", "incremental_backup_location"},
@@ -824,11 +838,17 @@ var specs = []stmtSpec{
 		stmt:   "revoke_stmt",
 		inline: []string{"privileges", "privilege_list", "privilege", "name_list"},
 		replace: map[string]string{
+
 			"( name | 'CREATE' | 'GRANT' | 'SELECT' )": "( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' )",
+
 			"targets": "( ( 'TABLE' | ) table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+
 			"'FROM' ( ( name ) ( ( ',' name ) )*": "'FROM' ( ( user_name ) ( ( ',' user_name ) )*",
-			"| 'REVOKE' ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) 'FROM' ( ( user_name ) ( ( ',' user_name ) )* )":  "",
+
+			"| 'REVOKE' ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) 'FROM' ( ( user_name ) ( ( ',' user_name ) )* )": "",
+
 			"| 'REVOKE'  ( ( ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) ( ( ',' ( 'CREATE' | 'GRANT' | 'SELECT' | 'DROP' | 'INSERT' | 'DELETE' | 'UPDATE' ) ) )* ) 'FROM' ( ( user_name ) ( ( ',' user_name ) )* )": "",
+
 			"'ADMIN' 'OPTION' 'FOR'": "",
 		},
 		unlink:  []string{"table_name", "database_name", "user_name"},
@@ -932,7 +952,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "set_var",
-		stmt:   "set_stmt",
+		stmt:   "preparable_set_stmt",
 		inline: []string{"set_session_stmt", "set_rest_more", "generic_set", "var_list", "to_or_eq"},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile(`'SET' . 'TRANSACTION'`),
@@ -949,13 +969,13 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "set_cluster_setting",
-		stmt:   "set_stmt",
+		stmt:   "preparable_set_stmt",
 		inline: []string{"set_csetting_stmt", "generic_set", "var_list", "to_or_eq"},
 		match: []*regexp.Regexp{
 			regexp.MustCompile("'SET' 'CLUSTER'"),
 		},
 	},
-	{name: "set_transaction", stmt: "set_stmt", inline: []string{"set_transaction_stmt", "transaction_mode_list", "transaction_iso_level", "transaction_user_priority", "iso_level", "user_priority"}, match: []*regexp.Regexp{regexp.MustCompile("'SET' 'TRANSACTION'")}, exclude: []*regexp.Regexp{regexp.MustCompile("'READ'")}, replace: map[string]string{"'ISOLATION' 'LEVEL'": "'ISOLATION LEVEL'"}},
+	{name: "set_transaction", stmt: "nonpreparable_set_stmt", inline: []string{"set_transaction_stmt", "transaction_mode_list", "transaction_iso_level", "transaction_user_priority", "iso_level", "user_priority"}, match: []*regexp.Regexp{regexp.MustCompile("'SET' 'TRANSACTION'")}, exclude: []*regexp.Regexp{regexp.MustCompile("'READ'")}, replace: map[string]string{"'ISOLATION' 'LEVEL'": "'ISOLATION LEVEL'"}},
 	{
 		name: "show_var",
 		stmt: "show_stmt",
