@@ -1,49 +1,75 @@
-#!/bin/sh
+#!/usr/bin/env bash
 #
 # Prepare the commit message by adding a release note.
 
-if test "$2" = "message"; then
-    # This git command is non-interactive, and will not filter out the
-    # comments out so there is nothing for us to do here.
-    exit 0
+set -euo pipefail
+
+if [[ "${2-}" = "message" ]]; then
+  # This git command is non-interactive so it will not filter out any comments
+  # we add. There is nothing more for us to do.
+  exit 0
 fi
 
-oldmain=$(cat "$1"|grep -v '^#')
-oldcomm=$(cat "$1"|grep '^#' | sed -ne '/^# Changes to be committed/{q;};p')
+give_up() {
+  echo "prepare-commit-msg: $@" >&2
+  exit 0  # exit with successful status to allow the commit to proceed
+}
 
-echo "$oldmain" >"$1"
-echo >> "$1"
+# Git can be configured to use any character as the comment indicator. See the
+# core.commentChar Git option. We can deduce what comment character is in effect
+# by looking for text that we know will be preceded by the comment character.
+if ! cchar=$(grep "^. Please enter the commit message for your changes." "$1" | head -c1); then
+  give_up "unable to determine comment char"
+fi
+
+if ! tempfile=$(mktemp); then
+  give_up "failed to create temporary file"
+fi
+trap "rm -f $tempfile" EXIT
+
+# Inject commit message recommendations into the commit message help text.
+sed_script="/$cchar.*an empty message aborts the commit./a\\
+$cchar\\
+$cchar Commit message recommendation:\\
+$cchar\\
+$cchar     ---\\
+$cchar     <pkg>: <short description>\\
+$cchar\\
+$cchar     <long description>\\
+$cchar\\
+$cchar     Release note (category): <release note description>\\
+$cchar     ---\\
+$cchar\\
+$cchar Wrap long lines! 72 columns is best.\\
+$cchar\\
+$cchar The release note must be present if your commit has user-facing\\
+$cchar changes. Leave the default above if not.\\
+$cchar\\
+$cchar Categories for release notes:\\
+$cchar     - cli change\\
+$cchar     - sql change\\
+$cchar     - admin ui change\\
+$cchar     - general change (e.g., change of required Go version)\\
+$cchar     - build change (e.g., compatibility with older CPUs)\\
+$cchar     - enterprise change (e.g., change to backup/restore)\\
+$cchar     - backwards-incompatible change\\
+$cchar     - performance improvement\\
+$cchar     - bug fix\\
+"
+
+# Add an explicit "Release note: None" if no release note was specified.
 if ! grep -q '^Release note' "$1"; then
-	echo "Release note: None" >> "$1"
-	echo >> "$1"
+	sed_script+="
+;/$cchar Please enter the commit message for your changes./i\\
+\\
+Release note: None\\
+"
 fi
 
-cat >> "$1" << EOF
-$oldcomm
-#
-# Commit message recommendations:
-#
-#     ---
-#     <pkg>: <short description>
-#
-#     <long description>
-#
-#     Release note (category): <release note description>
-#     ---
-#
-# Wrap long lines! 72 columns is best.
-#
-# The release note must be present if your commit has
-# user-facing changes. Leave the default above if not.
-#
-# Categories for release notes:
-# - cli change
-# - sql change
-# - admin ui change
-# - general change (e.g., change of required Go version)
-# - build change (e.g., compatibility with older CPUs)
-# - enterprise change (e.g., change to backup/restore)
-# - backwards-incompatible change
-# - performance improvement
-# - bug fix
-EOF
+if ! sed "$sed_script" "$1" > "$tempfile"; then
+  give_up "unable to inject commit message recommendations"
+fi
+
+if ! mv "$tempfile" "$1"; then
+  give_up "failed overwriting commit message file"
+fi
