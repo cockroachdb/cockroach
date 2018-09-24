@@ -1131,7 +1131,7 @@ func (s *Store) AdminRelocateRange(
 			for _, candidate := range candidates {
 				store, ok := storeMap[candidate.StoreID]
 				if !ok {
-					return fmt.Errorf("cannot up-repliate to s%d; missing gossiped StoreDescriptor", candidate.StoreID)
+					return fmt.Errorf("cannot up-replicate to s%d; missing gossiped StoreDescriptor", candidate.StoreID)
 				}
 				candidateDescs = append(candidateDescs, *store)
 			}
