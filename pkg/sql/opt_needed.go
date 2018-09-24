@@ -257,6 +257,7 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *alterUserSetPasswordNode:
 	case *renameColumnNode:
 	case *renameDatabaseNode:
+	case *renameIndexNode:
 	case *renameTableNode:
 	case *scrubNode:
 	case *createDatabaseNode:

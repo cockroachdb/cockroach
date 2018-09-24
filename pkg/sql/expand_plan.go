@@ -337,6 +337,7 @@ func doExpandPlan(
 	case *alterUserSetPasswordNode:
 	case *renameColumnNode:
 	case *renameDatabaseNode:
+	case *renameIndexNode:
 	case *renameTableNode:
 	case *scrubNode:
 	case *createDatabaseNode:
@@ -842,6 +843,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *alterUserSetPasswordNode:
 	case *renameColumnNode:
 	case *renameDatabaseNode:
+	case *renameIndexNode:
 	case *renameTableNode:
 	case *scrubNode:
 	case *createDatabaseNode:
