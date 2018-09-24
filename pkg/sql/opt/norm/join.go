@@ -274,6 +274,38 @@ func (c *CustomFuncs) GetEquivColsWithEquivType(col opt.ColumnID, fd *props.Func
 	return res
 }
 
+// eqConditionsToColMap returns a map of left columns to right columns
+// that are being equated in the specified conditions. leftCols is used
+// to identify which column is a left column.
+func (c *CustomFuncs) eqConditionsToColMap(
+	conds memo.ListID, leftCols opt.ColSet,
+) map[opt.ColumnID]opt.ColumnID {
+	eqColMap := make(map[opt.ColumnID]opt.ColumnID)
+
+	for _, condition := range c.mem.LookupList(conds) {
+		eqExpr := c.mem.NormExpr(condition).AsEq()
+		if eqExpr == nil {
+			continue
+		}
+
+		leftVarExpr := c.mem.NormExpr(eqExpr.Left()).AsVariable()
+		rightVarExpr := c.mem.NormExpr(eqExpr.Right()).AsVariable()
+		if leftVarExpr == nil || rightVarExpr == nil {
+			continue
+		}
+
+		leftCol := c.ExtractColID(leftVarExpr.Col())
+		rightCol := c.ExtractColID(rightVarExpr.Col())
+		// Normalize leftCol to come from leftCols.
+		if !leftCols.Contains(int(leftCol)) {
+			leftCol, rightCol = rightCol, leftCol
+		}
+		eqColMap[leftCol] = rightCol
+	}
+
+	return eqColMap
+}
+
 // JoinFiltersMatchAllLeftRows returns true when each row in the given join's
 // left input matches at least one row from the right input, according to the
 // join filters. This is true when the following conditions are satisfied:
@@ -313,6 +345,9 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(left, right, filters memo.Grou
 	md := c.f.Metadata()
 
 	var leftTab, rightTab opt.Table
+	var leftTabID, rightTabID opt.TableID
+	// Any left columns that don't match conditions 1-4 end up in this set.
+	var remainingLeftCols opt.ColSet
 	for _, condition := range c.mem.LookupList(filtersExpr.Conditions()) {
 		eqExpr := c.mem.NormExpr(condition).AsEq()
 		if eqExpr == nil {
@@ -346,8 +381,8 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(left, right, filters memo.Grou
 		}
 
 		if leftTab == nil {
-			leftTabID := md.ColumnTableID(leftCol)
-			rightTabID := md.ColumnTableID(rightCol)
+			leftTabID = md.ColumnTableID(leftCol)
+			rightTabID = md.ColumnTableID(rightCol)
 			if leftTabID == 0 || rightTabID == 0 {
 				// Condition #2: Columns don't come from base tables.
 				return false
@@ -369,12 +404,98 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(left, right, filters memo.Grou
 				return false
 			}
 		} else {
-			// TODO(andyk): Check foreign key case.
-			return false
+			// Column could be a potential foreign key match so save it.
+			remainingLeftCols.Add(int(leftCol))
 		}
 	}
 
-	return true
+	if remainingLeftCols.Empty() {
+		return true
+	}
+
+	var leftRightColMap map[opt.ColumnID]opt.ColumnID
+	// Condition #5: All remaining left columns correspond to a foreign key relation.
+	for i, cnt := 0, leftTab.IndexCount(); i < cnt; i++ {
+		index := leftTab.Index(i)
+		fkRef, ok := index.ForeignKey()
+
+		if !ok {
+			// No foreign key reference on this index.
+			continue
+		}
+
+		fkTable := md.TableByDescID(fkRef.TableID)
+		fkPrefix := int(fkRef.PrefixLen)
+		if fkPrefix <= 0 {
+			panic("fkPrefix should always be positive")
+		}
+		if fkTable == nil || fkTable.Fingerprint() != rightTab.Fingerprint() {
+			continue
+		}
+
+		// Find the index corresponding to fkRef.IndexID - the index
+		// on the right table that forms the destination end of
+		// the fk relation.
+		var fkIndex opt.Index
+		found := false
+		for j, cnt2 := 0, fkTable.IndexCount(); j < cnt2; j++ {
+			if fkTable.Index(j).InternalID() == fkRef.IndexID {
+				found = true
+				fkIndex = fkTable.Index(j)
+				break
+			}
+		}
+		if !found {
+			panic("Foreign key referenced index not found in table")
+		}
+
+		var leftIndexCols opt.ColSet
+		for j := 0; j < fkPrefix; j++ {
+			ord := index.Column(j).Ordinal
+			leftIndexCols.Add(int(leftTabID.ColumnID(ord)))
+		}
+
+		if !remainingLeftCols.SubsetOf(leftIndexCols) {
+			continue
+		}
+
+		// Build a mapping of left to right columns as specified
+		// in the filter conditions - this is used to detect
+		// whether the filter conditions follow the foreign key
+		// constraint exactly.
+		if leftRightColMap == nil {
+			leftRightColMap = c.eqConditionsToColMap(filtersExpr.Conditions(), leftCols)
+		}
+
+		// Loop through all columns in fk index that also exist in LHS of match condition,
+		// and ensure that they correspond to the correct RHS column according to the
+		// foreign key relation. In other words, each LHS column's index ordinal
+		// in the foreign key index matches that of the RHS column (in the index being
+		// referenced) that it's being equated to.
+		fkMatch := true
+		for j := 0; j < fkPrefix; j++ {
+			indexLeftCol := leftTabID.ColumnID(index.Column(j).Ordinal)
+
+			// Not every fk column needs to be in the equality conditions.
+			if !remainingLeftCols.Contains(int(indexLeftCol)) {
+				continue
+			}
+
+			indexRightCol := rightTabID.ColumnID(fkIndex.Column(j).Ordinal)
+
+			if rightCol, ok := leftRightColMap[indexLeftCol]; !ok || rightCol != indexRightCol {
+				fkMatch = false
+				break
+			}
+		}
+
+		// Condition #5 satisfied.
+		if fkMatch {
+			return true
+		}
+	}
+
+	return false
 }
 
 // deriveUnfilteredCols returns the subset of the given group's output columns
