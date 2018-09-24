@@ -687,7 +687,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> rollback_stmt
 %type <tree.Statement> savepoint_stmt
 
-%type <tree.Statement> set_stmt
+%type <tree.Statement> preparable_set_stmt nonpreparable_set_stmt
 %type <tree.Statement> set_session_stmt
 %type <tree.Statement> set_csetting_stmt
 %type <tree.Statement> set_transaction_stmt
@@ -1052,41 +1052,21 @@ stmt_list:
 
 stmt:
   HELPTOKEN { return helpWith(sqllex, "") }
-| alter_stmt      // help texts in sub-rule
-| backup_stmt     // EXTEND WITH HELP: BACKUP
-| cancel_stmt     // help texts in sub-rule
+| explainable_stmt  // help texts in sub-rule
 | copy_from_stmt
 | comment_stmt
-| create_stmt     // help texts in sub-rule
-| deallocate_stmt // EXTEND WITH HELP: DEALLOCATE
-| delete_stmt     // EXTEND WITH HELP: DELETE
-| discard_stmt    // EXTEND WITH HELP: DISCARD
-| drop_stmt       // help texts in sub-rule
-| execute_stmt    // EXTEND WITH HELP: EXECUTE
-| explain_stmt    // EXTEND WITH HELP: EXPLAIN
-| export_stmt     // EXTEND WITH HELP: EXPORT
-| grant_stmt      // EXTEND WITH HELP: GRANT
-| insert_stmt     // EXTEND WITH HELP: INSERT
-| import_stmt     // EXTEND WITH HELP: IMPORT
-| pause_stmt      // EXTEND WITH HELP: PAUSE JOBS
-| prepare_stmt    // EXTEND WITH HELP: PREPARE
-| restore_stmt    // EXTEND WITH HELP: RESTORE
-| resume_stmt     // EXTEND WITH HELP: RESUME JOBS
-| revoke_stmt     // EXTEND WITH HELP: REVOKE
-| savepoint_stmt  // EXTEND WITH HELP: SAVEPOINT
-| scrub_stmt      // help texts in sub-rule
-| select_stmt     // help texts in sub-rule
-  {
-    $$.val = $1.slct()
-  }
+| deallocate_stmt   // EXTEND WITH HELP: DEALLOCATE
+| discard_stmt      // EXTEND WITH HELP: DISCARD
+| export_stmt       // EXTEND WITH HELP: EXPORT
+| grant_stmt        // EXTEND WITH HELP: GRANT
+| prepare_stmt      // EXTEND WITH HELP: PREPARE
+| revoke_stmt       // EXTEND WITH HELP: REVOKE
+| savepoint_stmt    // EXTEND WITH HELP: SAVEPOINT
+| scrub_stmt        // help texts in sub-rule
 | release_stmt      // EXTEND WITH HELP: RELEASE
-| reset_stmt        // help texts in sub-rule
-| set_stmt          // help texts in sub-rule
-| show_stmt         // help texts in sub-rule
+| nonpreparable_set_stmt // help texts in sub-rule
 | transaction_stmt  // help texts in sub-rule
 | truncate_stmt     // EXTEND WITH HELP: TRUNCATE
-| update_stmt       // EXTEND WITH HELP: UPDATE
-| upsert_stmt       // EXTEND WITH HELP: UPSERT
 | /* EMPTY */
   {
     $$.val = tree.Statement(nil)
@@ -2264,14 +2244,13 @@ explain_stmt:
 | EXPLAIN '(' error // SHOW HELP: EXPLAIN
 
 preparable_stmt:
-  alter_user_stmt   // EXTEND WITH HELP: ALTER USER
+  alter_stmt        // help texts in sub-rule
 | backup_stmt       // EXTEND WITH HELP: BACKUP
 | cancel_stmt       // help texts in sub-rule
-| create_user_stmt  // EXTEND WITH HELP: CREATE USER
-| create_role_stmt  // EXTEND WITH HELP: CREATE ROLE
+| create_stmt       // help texts in sub-rule
 | delete_stmt       // EXTEND WITH HELP: DELETE
-| drop_role_stmt    // EXTEND WITH HELP: DROP ROLE
-| drop_user_stmt    // EXTEND WITH HELP: DROP USER
+| drop_stmt         // help texts in sub-rule
+| explain_stmt      { /* SKIP DOC */ }
 | import_stmt       // EXTEND WITH HELP: IMPORT
 | insert_stmt       // EXTEND WITH HELP: INSERT
 | pause_stmt        // EXTEND WITH HELP: PAUSE JOBS
@@ -2282,20 +2261,16 @@ preparable_stmt:
   {
     $$.val = $1.slct()
   }
-| set_session_stmt  // EXTEND WITH HELP: SET SESSION
-| set_csetting_stmt // EXTEND WITH HELP: SET CLUSTER SETTING
+| preparable_set_stmt // help texts in sub-rule
 | show_stmt         // help texts in sub-rule
 | update_stmt       // EXTEND WITH HELP: UPDATE
 | upsert_stmt       // EXTEND WITH HELP: UPSERT
 
+// TODO(knz): it's not well justified that one could
+// EXPLAIN EXECUTE.
 explainable_stmt:
   preparable_stmt
-| alter_ddl_stmt    // help texts in sub-rule
-| create_ddl_stmt   // help texts in sub-rule
-| create_stats_stmt // help texts in sub-rule
-| drop_ddl_stmt     // help texts in sub-rule
 | execute_stmt      // EXTEND WITH HELP: EXECUTE
-| explain_stmt      { /* SKIP DOC */ }
 
 explain_option_list:
   explain_option_name
@@ -2522,14 +2497,17 @@ use_stmt:
   }
 | USE error // SHOW HELP: USE
 
-// SET SESSION / SET CLUSTER SETTING / SET TRANSACTION
-set_stmt:
+// SET remainder, e.g. SET TRANSACTION
+nonpreparable_set_stmt:
+  set_transaction_stmt // EXTEND WITH HELP: SET TRANSACTION
+| set_exprs_internal   { /* SKIP DOC */ }
+| SET LOCAL error { return unimplemented(sqllex, "set local") }
+
+// SET SESSION / SET CLUSTER SETTING
+preparable_set_stmt:
   set_session_stmt     // EXTEND WITH HELP: SET SESSION
 | set_csetting_stmt    // EXTEND WITH HELP: SET CLUSTER SETTING
-| set_transaction_stmt // EXTEND WITH HELP: SET TRANSACTION
-| set_exprs_internal   { /* SKIP DOC */ }
 | use_stmt             // EXTEND WITH HELP: USE
-| SET LOCAL error { return unimplemented(sqllex, "set local") }
 
 // %Help: SCRUB - run checks against databases or tables
 // %Category: Experimental
