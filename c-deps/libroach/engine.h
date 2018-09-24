@@ -54,6 +54,7 @@ struct DBEngine {
   virtual DBStatus EnvLinkFile(DBSlice oldname, DBSlice newname) = 0;
 
   DBSSTable* GetSSTables(int* n);
+  DBStatus GetSortedWALFiles(DBWALFile** out_files, int* n);
   DBString GetUserProperties();
 };
 
