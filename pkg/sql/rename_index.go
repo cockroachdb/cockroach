@@ -26,6 +26,12 @@ import (
 
 var errEmptyIndexName = pgerror.NewError(pgerror.CodeSyntaxError, "empty index name")
 
+type renameIndexNode struct {
+	n         *tree.RenameIndex
+	tableDesc *sqlbase.TableDescriptor
+	idx       sqlbase.IndexDescriptor
+}
+
 // RenameIndex renames the index.
 // Privileges: CREATE on table.
 //   notes: postgres requires CREATE on the table.
@@ -50,38 +56,47 @@ func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNod
 		return nil, err
 	}
 
+	return &renameIndexNode{n: n, idx: idx, tableDesc: tableDesc}, nil
+}
+
+func (n *renameIndexNode) startExec(params runParams) error {
+	p := params.p
+	ctx := params.ctx
+	tableDesc := n.tableDesc
+	idx := n.idx
+
 	for _, tableRef := range tableDesc.DependedOnBy {
 		if tableRef.IndexID != idx.ID {
 			continue
 		}
-		return nil, p.dependentViewRenameError(
-			ctx, "index", n.Index.Index.String(), tableDesc.ParentID, tableRef.ID)
+		return p.dependentViewRenameError(
+			ctx, "index", n.n.Index.Index.String(), tableDesc.ParentID, tableRef.ID)
 	}
 
-	if n.NewName == "" {
-		return nil, errEmptyIndexName
+	if n.n.NewName == "" {
+		return errEmptyIndexName
 	}
 
-	if n.Index.Index == n.NewName {
+	if n.n.Index.Index == n.n.NewName {
 		// Noop.
-		return newZeroNode(nil /* columns */), nil
+		return nil
 	}
 
-	if _, _, err := tableDesc.FindIndexByName(string(n.NewName)); err == nil {
-		return nil, fmt.Errorf("index name %q already exists", string(n.NewName))
+	if _, _, err := tableDesc.FindIndexByName(string(n.n.NewName)); err == nil {
+		return fmt.Errorf("index name %q already exists", string(n.n.NewName))
 	}
 
-	if err := tableDesc.RenameIndexDescriptor(idx, string(n.NewName)); err != nil {
-		return nil, err
+	if err := tableDesc.RenameIndexDescriptor(idx, string(n.n.NewName)); err != nil {
+		return err
 	}
 
 	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
-		return nil, err
+		return err
 	}
 
-	if err := p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID); err != nil {
-		return nil, err
-	}
-
-	return newZeroNode(nil /* columns */), nil
+	return p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID)
 }
+
+func (n *renameIndexNode) Next(runParams) (bool, error) { return false, nil }
+func (n *renameIndexNode) Values() tree.Datums          { return tree.Datums{} }
+func (n *renameIndexNode) Close(context.Context)        {}
