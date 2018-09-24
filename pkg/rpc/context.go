@@ -15,7 +15,6 @@
 package rpc
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -26,15 +25,18 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"github.com/rubyist/circuitbreaker"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/peer"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -91,6 +93,33 @@ func spanInclusionFunc(
 	return parentSpanCtx != nil && !tracing.IsNoopContext(parentSpanCtx)
 }
 
+func requireSuperUser(ctx context.Context) error {
+	// TODO(marc): grpc's authentication model (which gives credential access in
+	// the request handler) doesn't really fit with the current design of the
+	// security package (which assumes that TLS state is only given at connection
+	// time) - that should be fixed.
+	if grpcutil.IsLocalRequestContext(ctx) {
+		// This is a in-process request. Bypass authentication check.
+	} else if peer, ok := peer.FromContext(ctx); ok {
+		if tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo); ok {
+			certUser, err := security.GetCertificateUser(&tlsInfo.State)
+			if err != nil {
+				return err
+			}
+			// TODO(benesch): the vast majority of RPCs should be limited to just
+			// NodeUser. This is not a security concern, as RootUser has access to
+			// read and write all data, merely good hygiene. For example, there is
+			// no reason to permit the root user to send raw Raft RPCs.
+			if certUser != security.NodeUser && certUser != security.RootUser {
+				return errors.Errorf("user %s is not allowed to perform this RPC", certUser)
+			}
+		}
+	} else {
+		return errors.New("internal authentication error: TLSInfo is not available in request context")
+	}
+	return nil
+}
+
 // NewServer is a thin wrapper around grpc.NewServer that registers a heartbeat
 // service.
 func NewServer(ctx *Context) *grpc.Server {
@@ -133,14 +162,56 @@ func NewServer(ctx *Context) *grpc.Server {
 		}
 		opts = append(opts, grpc.Creds(credentials.NewTLS(tlsConfig)))
 	}
+
+	var unaryInterceptor grpc.UnaryServerInterceptor
+	var streamInterceptor grpc.StreamServerInterceptor
+
 	if tracer := ctx.AmbientCtx.Tracer; tracer != nil {
 		// We use a SpanInclusionFunc to save a bit of unnecessary work when
 		// tracing is disabled.
-		interceptor := otgrpc.OpenTracingServerInterceptor(
+		unaryInterceptor = otgrpc.OpenTracingServerInterceptor(
 			tracer,
 			otgrpc.IncludingSpans(otgrpc.SpanInclusionFunc(spanInclusionFunc)),
 		)
-		opts = append(opts, grpc.UnaryInterceptor(interceptor))
+
+		// TODO(tschottdorf): should set up tracing for stream-based RPCs as
+		// well. The otgrpc package has no such facility, but there's also this:
+		//
+		// https://github.com/grpc-ecosystem/go-grpc-middleware/tree/master/tracing/opentracing
+	}
+
+	// TODO(tschottdorf): when setting up the interceptors below, could make the
+	// functions a wee bit more performant by hoisting some of the nil checks
+	// out. Doubt measurements can tell the difference though.
+
+	if !ctx.Insecure {
+		prevUnaryInterceptor := unaryInterceptor
+		unaryInterceptor = func(
+			ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+		) (interface{}, error) {
+			if err := requireSuperUser(ctx); err != nil {
+				return nil, err
+			}
+			if prevUnaryInterceptor != nil {
+				return prevUnaryInterceptor(ctx, req, info, handler)
+			}
+			return handler(ctx, req)
+		}
+		streamInterceptor = func(
+			srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
+		) error {
+			if err := requireSuperUser(stream.Context()); err != nil {
+				return err
+			}
+			return handler(srv, stream)
+		}
+	}
+
+	if unaryInterceptor != nil {
+		opts = append(opts, grpc.UnaryInterceptor(unaryInterceptor))
+	}
+	if streamInterceptor != nil {
+		opts = append(opts, grpc.StreamInterceptor(streamInterceptor))
 	}
 	s := grpc.NewServer(opts...)
 	RegisterHeartbeatServer(s, &HeartbeatService{
