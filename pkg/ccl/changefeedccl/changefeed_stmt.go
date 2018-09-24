@@ -41,34 +41,34 @@ type envelopeType string
 type formatType string
 
 const (
-	optCursor             = `cursor`
-	optEnvelope           = `envelope`
-	optFormat             = `format`
-	optResolvedTimestamps = `resolved`
-	optUpdatedTimestamps  = `updated`
+	optConfluentSchemaRegistry = `confluent_schema_registry`
+	optCursor                  = `cursor`
+	optEnvelope                = `envelope`
+	optFormat                  = `format`
+	optResolvedTimestamps      = `resolved`
+	optUpdatedTimestamps       = `updated`
 
 	optEnvelopeKeyOnly envelopeType = `key_only`
 	optEnvelopeRow     envelopeType = `row`
 	optEnvelopeDiff    envelopeType = `diff`
 
-	optFormatJSON     formatType = `json`
-	optFormatAvro     formatType = `experimental-avro`
-	optFormatAvroJSON formatType = `experimental-avro-json`
+	optFormatJSON formatType = `json`
+	optFormatAvro formatType = `experimental-avro`
 
-	sinkParamConfluentSchemaRegistry = `confluent_schema_registry`
-	sinkParamTopicPrefix             = `topic_prefix`
-	sinkParamSchemaTopic             = `schema_topic`
-	sinkSchemeBuffer                 = ``
-	sinkSchemeExperimentalSQL        = `experimental-sql`
-	sinkSchemeKafka                  = `kafka`
+	sinkParamTopicPrefix      = `topic_prefix`
+	sinkParamSchemaTopic      = `schema_topic`
+	sinkSchemeBuffer          = ``
+	sinkSchemeExperimentalSQL = `experimental-sql`
+	sinkSchemeKafka           = `kafka`
 )
 
 var changefeedOptionExpectValues = map[string]bool{
-	optCursor:             true,
-	optEnvelope:           true,
-	optFormat:             true,
-	optResolvedTimestamps: false,
-	optUpdatedTimestamps:  false,
+	optConfluentSchemaRegistry: true,
+	optCursor:                  true,
+	optEnvelope:                true,
+	optFormat:                  true,
+	optResolvedTimestamps:      false,
+	optUpdatedTimestamps:       false,
 }
 
 // changefeedPlanHook implements sql.PlanHookFn.
@@ -291,7 +291,7 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 	switch formatType(details.Opts[optFormat]) {
 	case ``, optFormatJSON:
 		details.Opts[optFormat] = string(optFormatJSON)
-	case optFormatAvro, optFormatAvroJSON:
+	case optFormatAvro:
 		// No-op.
 	default:
 		return jobspb.ChangefeedDetails{}, errors.Errorf(
