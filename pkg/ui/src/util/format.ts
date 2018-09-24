@@ -75,7 +75,7 @@ export function BytesWithPrecision(bytes: number, precision: number): string {
  */
 export function Percentage(numerator: number, denominator: number): string {
   if (denominator === 0) {
-    return "100%";
+    return "--%";
   }
   return Math.floor(numerator / denominator * 100).toString() + "%";
 }
