@@ -1066,7 +1066,6 @@ stmt:
 | release_stmt      // EXTEND WITH HELP: RELEASE
 | nonpreparable_set_stmt // help texts in sub-rule
 | transaction_stmt  // help texts in sub-rule
-| truncate_stmt     // EXTEND WITH HELP: TRUNCATE
 | /* EMPTY */
   {
     $$.val = tree.Statement(nil)
@@ -2263,6 +2262,7 @@ preparable_stmt:
   }
 | preparable_set_stmt // help texts in sub-rule
 | show_stmt         // help texts in sub-rule
+| truncate_stmt     // EXTEND WITH HELP: TRUNCATE
 | update_stmt       // EXTEND WITH HELP: UPDATE
 | upsert_stmt       // EXTEND WITH HELP: UPSERT
 

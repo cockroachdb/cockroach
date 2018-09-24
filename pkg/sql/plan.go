@@ -203,6 +203,7 @@ var _ planNode = &showRangesNode{}
 var _ planNode = &showTraceNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &splitNode{}
+var _ planNode = &truncateNode{}
 var _ planNode = &unaryNode{}
 var _ planNode = &unionNode{}
 var _ planNode = &updateNode{}
@@ -1007,6 +1008,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowRanges(ctx, n)
 	case *tree.Split:
 		return p.Split(ctx, n)
+	case *tree.Truncate:
+		return p.Truncate(ctx, n)
 	case *tree.Relocate:
 		return p.Relocate(ctx, n)
 	case *tree.Scatter:
