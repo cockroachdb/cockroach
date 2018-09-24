@@ -390,7 +390,10 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) erro
 	return err
 }
 
-func (p *planner) lookupFKTable(
+// LookupTableByID looks up a table, by the given descriptor ID. Based on the
+// CommonLookupFlags, it could use or skip the TableCollection cache. See
+// TableCollection.getTableVersionByID for how it's used.
+func (p *planner) LookupTableByID(
 	ctx context.Context, tableID sqlbase.ID,
 ) (sqlbase.TableLookup, error) {
 	flags := ObjectLookupFlags{

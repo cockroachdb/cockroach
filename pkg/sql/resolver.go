@@ -43,6 +43,7 @@ type SchemaResolver interface {
 	CurrentSearchPath() sessiondata.SearchPath
 	CommonLookupFlags(ctx context.Context, required bool) CommonLookupFlags
 	ObjectLookupFlags(ctx context.Context, required bool) ObjectLookupFlags
+	LookupTableByID(ctx context.Context, id sqlbase.ID) (sqlbase.TableLookup, error)
 }
 
 var _ SchemaResolver = &planner{}
