@@ -265,6 +265,7 @@ func (dsp *DistSQLPlanner) Run(
 		planCtx.planner.curPlan.close(ctx)
 	}
 
+	plan.Release()
 	flow.Wait()
 	flow.Cleanup(ctx)
 }

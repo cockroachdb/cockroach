@@ -169,7 +169,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 		ancsIdx, descIdx = 1, 0
 	}
 
-	plan = &PhysicalPlan{}
+	plan = newPhysicalPlan()
 
 	stageID := plan.NewStageID()
 
