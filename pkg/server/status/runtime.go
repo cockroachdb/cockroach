@@ -153,30 +153,17 @@ var (
 		Measurement: "Operations",
 		Help:        "Disk read operations across all disks since this process started",
 	}
-	metaHostDiskReadTime = metric.Metadata{
-		Name:        "sys.host.disk.read.time",
-		Unit:        metric.Unit_NANOSECONDS,
-		Measurement: "Disk time",
-		Help:        "Time spent reading from all disks since this process started",
-	}
 	metaHostDiskReadBytes = metric.Metadata{
 		Name:        "sys.host.disk.read.bytes",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
 		Help:        "Bytes read from all disks since this process started",
 	}
-
 	metaHostDiskWriteCount = metric.Metadata{
 		Name:        "sys.host.disk.write.count",
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
 		Help:        "Disk write operations across all disks since this process started",
-	}
-	metaHostDiskWriteTime = metric.Metadata{
-		Name:        "sys.host.disk.write.time",
-		Unit:        metric.Unit_NANOSECONDS,
-		Measurement: "Disk time",
-		Help:        "Time spent writing to all disks since this process started",
 	}
 	metaHostDiskWriteBytes = metric.Metadata{
 		Name:        "sys.host.disk.write.bytes",
@@ -284,10 +271,8 @@ type RuntimeStatSampler struct {
 	FDSoftLimit *metric.Gauge
 	// Disk and network stats.
 	HostDiskReadBytes  *metric.Gauge
-	HostDiskReadTime   *metric.Gauge
 	HostDiskReadCount  *metric.Gauge
 	HostDiskWriteBytes *metric.Gauge
-	HostDiskWriteTime  *metric.Gauge
 	HostDiskWriteCount *metric.Gauge
 	IopsInProgress     *metric.Gauge // not collected on macOS.
 	HostNetRecvBytes   *metric.Gauge
@@ -353,10 +338,8 @@ func NewRuntimeStatSampler(ctx context.Context, clock *hlc.Clock) *RuntimeStatSa
 		CPUCombinedPercentNorm: metric.NewGaugeFloat64(metaCPUCombinedPercentNorm),
 		Rss:                metric.NewGauge(metaRSS),
 		HostDiskReadBytes:  metric.NewGauge(metaHostDiskReadBytes),
-		HostDiskReadTime:   metric.NewGauge(metaHostDiskReadTime),
 		HostDiskReadCount:  metric.NewGauge(metaHostDiskReadCount),
 		HostDiskWriteBytes: metric.NewGauge(metaHostDiskWriteBytes),
-		HostDiskWriteTime:  metric.NewGauge(metaHostDiskWriteTime),
 		HostDiskWriteCount: metric.NewGauge(metaHostDiskWriteCount),
 		IopsInProgress:     metric.NewGauge(metaHostIopsInProgress),
 		HostNetRecvBytes:   metric.NewGauge(metaHostNetRecvBytes),
@@ -424,10 +407,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 		subtractDiskCounters(&diskCounters, rsr.initialDiskCounters)
 
 		rsr.HostDiskReadBytes.Update(diskCounters.readBytes)
-		rsr.HostDiskReadTime.Update(int64(diskCounters.readTime))
 		rsr.HostDiskReadCount.Update(diskCounters.readCount)
 		rsr.HostDiskWriteBytes.Update(diskCounters.writeBytes)
-		rsr.HostDiskWriteTime.Update(int64(diskCounters.writeTime))
 		rsr.HostDiskWriteCount.Update(diskCounters.writeCount)
 		rsr.IopsInProgress.Update(diskCounters.iopsInProgress)
 	}
@@ -483,13 +464,11 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context) {
 	cgoRate := float64((numCgoCall-rsr.last.cgoCall)*int64(time.Second)) / dur
 	log.Infof(ctx, "runtime stats: %s RSS, %d goroutines, %s/%s/%s GO alloc/idle/total, "+
 		"%s/%s CGO alloc/total, %.1f CGO/sec, %.1f/%.1f %%(u/s)time, %.1f %%gc (%dx), "+
-		"%.1f/%.1f/%d (%%r/%%w/q)disk, %s/%s (r/w)net",
+		"%s/%s (r/w)net",
 		humanize.IBytes(mem.Resident), numGoroutine,
 		humanize.IBytes(ms.goAllocated), humanize.IBytes(ms.goIdle), humanize.IBytes(ms.goTotal),
 		humanize.IBytes(uint64(cgoAllocated)), humanize.IBytes(uint64(cgoTotal)),
 		cgoRate, 100*uPerc, 100*sPerc, 100*gcPausePercent, gc.NumGC-rsr.last.gcCount,
-		100*float64(deltaDisk.readTime)/dur, 100*float64(deltaDisk.writeTime)/dur,
-		diskCounters.iopsInProgress,
 		humanize.IBytes(deltaNet.BytesRecv), humanize.IBytes(deltaNet.BytesSent),
 	)
 	rsr.last.cgoCall = numCgoCall
@@ -553,11 +532,9 @@ func (rsr *RuntimeStatSampler) SampleMemStats(ctx context.Context) {
 
 type diskStats struct {
 	readBytes int64
-	readTime  time.Duration
 	readCount int64
 
 	writeBytes int64
-	writeTime  time.Duration
 	writeCount int64
 
 	iopsInProgress int64
@@ -587,11 +564,9 @@ func sumDiskCounters(disksStats []diskStats) diskStats {
 	output := diskStats{}
 	for _, stats := range disksStats {
 		output.readBytes += stats.readBytes
-		output.readTime += stats.readTime
 		output.readCount += stats.readCount
 
 		output.writeBytes += stats.writeBytes
-		output.writeTime += stats.writeTime
 		output.writeCount += stats.writeCount
 
 		output.iopsInProgress += stats.iopsInProgress
@@ -603,11 +578,9 @@ func sumDiskCounters(disksStats []diskStats) diskStats {
 // saving the results in `from`.
 func subtractDiskCounters(from *diskStats, sub diskStats) {
 	from.writeCount -= sub.writeCount
-	from.writeTime -= sub.writeTime
 	from.writeBytes -= sub.writeBytes
 
 	from.readCount -= sub.readCount
-	from.readTime -= sub.readTime
 	from.readBytes -= sub.readBytes
 }
 
