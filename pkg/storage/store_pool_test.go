@@ -428,8 +428,6 @@ func TestStoreListFilter(t *testing.T) {
 
 func TestStorePoolUpdateLocalStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	// We're going to manually mark stores dead in this test.
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false /* deterministic */, NodeLivenessStatus_DEAD)
@@ -472,11 +470,14 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 		ValBytes: 4,
 	}
 	replica.mu.Unlock()
-	rs := newReplicaStats(clock, nil)
+
+	var mockTime time.Time
+	nowFn := func() time.Time { return mockTime }
+	rs := newReplicaStats(nowFn, nil)
 	for _, store := range stores {
 		rs.record(store.Node.NodeID)
 	}
-	manual.Increment(int64(MinStatsDuration + time.Second))
+	mockTime = mockTime.Add(MinStatsDuration + time.Second)
 	replica.leaseholderStats = rs
 	replica.writeStats = rs
 
@@ -582,7 +583,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("make replica error : %s", err)
 	}
-	replica.leaseholderStats = newReplicaStats(store.Clock(), nil)
+	replica.leaseholderStats = newReplicaStats(clock.PhysicalTime, nil)
 
 	rangeInfo := rangeInfoForRepl(replica, &rg)
 

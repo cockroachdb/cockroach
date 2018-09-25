@@ -658,11 +658,11 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 		r.leaseHistory = newLeaseHistory()
 	}
 	if store.cfg.StorePool != nil {
-		r.leaseholderStats = newReplicaStats(store.Clock(), store.cfg.StorePool.getNodeLocalityString)
+		r.leaseholderStats = newReplicaStats(timeutil.Now, store.cfg.StorePool.getNodeLocalityString)
 	}
 	// Pass nil for the localityOracle because we intentionally don't track the
 	// origin locality of write load.
-	r.writeStats = newReplicaStats(store.Clock(), nil)
+	r.writeStats = newReplicaStats(timeutil.Now, nil)
 
 	// Init rangeStr with the range ID.
 	r.rangeStr.store(0, &roachpb.RangeDescriptor{RangeID: rangeID})

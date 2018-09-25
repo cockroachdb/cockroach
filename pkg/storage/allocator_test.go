@@ -747,8 +747,6 @@ func TestAllocatorRebalance(t *testing.T) {
 // we'll immediately remove.
 func TestAllocatorRebalanceTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
 	defer stopper.Stop(context.Background())
 	// We make 5 stores in this test -- 3 in the same datacenter, and 1 each in
@@ -844,8 +842,8 @@ func TestAllocatorRebalanceTarget(t *testing.T) {
 	repl.mu.state.Stats = &enginepb.MVCCStats{}
 	repl.mu.Unlock()
 
-	repl.leaseholderStats = newReplicaStats(clock, nil)
-	repl.writeStats = newReplicaStats(clock, nil)
+	repl.leaseholderStats = newReplicaStats(timeutil.Now, nil)
+	repl.writeStats = newReplicaStats(timeutil.Now, nil)
 
 	desc := &roachpb.RangeDescriptor{
 		Replicas: replicas,
@@ -3680,19 +3678,19 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 	localityFn := func(nodeID roachpb.NodeID) string {
 		return localities[nodeID]
 	}
-	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	var mockTime time.Time
+	nowFn := func() time.Time { return mockTime }
 
 	// Set up four different load distributions. Record a bunch of requests to
 	// the unknown node 99 in evenlyBalanced to verify that requests from
 	// unknown localities don't affect the algorithm.
-	evenlyBalanced := newReplicaStats(clock, localityFn)
+	evenlyBalanced := newReplicaStats(nowFn, localityFn)
 	evenlyBalanced.record(1)
 	evenlyBalanced.record(2)
 	evenlyBalanced.record(3)
-	imbalanced1 := newReplicaStats(clock, localityFn)
-	imbalanced2 := newReplicaStats(clock, localityFn)
-	imbalanced3 := newReplicaStats(clock, localityFn)
+	imbalanced1 := newReplicaStats(nowFn, localityFn)
+	imbalanced2 := newReplicaStats(nowFn, localityFn)
+	imbalanced3 := newReplicaStats(nowFn, localityFn)
 	for i := 0; i < 100*int(MinLeaseTransferStatsDuration.Seconds()); i++ {
 		evenlyBalanced.record(99)
 		imbalanced1.record(1)
@@ -3700,7 +3698,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 		imbalanced3.record(3)
 	}
 
-	manual.Increment(int64(MinLeaseTransferStatsDuration))
+	mockTime = mockTime.Add(MinLeaseTransferStatsDuration)
 
 	noLatency := map[string]time.Duration{}
 	highLatency := map[string]time.Duration{
