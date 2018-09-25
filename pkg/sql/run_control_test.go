@@ -236,14 +236,16 @@ func TestCancelDistSQLQuery(t *testing.T) {
 	if _, err := conn1.Exec("ALTER TABLE nums SPLIT AT VALUES (50)"); err != nil {
 		t.Fatal(err)
 	}
-	// Make the second node the leaseholder for the first range to distribute
-	// the query.
-	if _, err := conn1.Exec(fmt.Sprintf(
-		"ALTER TABLE nums EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 1)",
-		tc.Server(1).GetFirstStoreID(),
-	)); err != nil {
-		t.Fatal(err)
-	}
+
+	// Make the second node the leaseholder for the first range to distribute the
+	// query. This may have to retry if the second store's descriptor has not yet
+	// propagated to the first store's StorePool.
+	testutils.SucceedsSoon(t, func() error {
+		_, err := conn1.Exec(fmt.Sprintf(
+			"ALTER TABLE nums EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 1)",
+			tc.Server(1).GetFirstStoreID()))
+		return err
+	})
 
 	// Run queryToCancel to be able to get an estimate of how long it should
 	// take. The goroutine in charge of cancellation will sleep a random
