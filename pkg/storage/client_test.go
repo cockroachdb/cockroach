@@ -590,31 +590,40 @@ func (m *multiTestContext) FirstRange() (*roachpb.RangeDescriptor, error) {
 	var descs []*roachpb.RangeDescriptor
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	for _, str := range m.senders {
-		// Node liveness heartbeats start quickly, sometimes before the first
-		// range would be available here and before we've added all ranges.
-		if str == nil {
-			continue
-		}
-		// Find every version of the RangeDescriptor for the first range by
-		// querying all stores; it may not be present on all stores, but the
-		// current version is guaranteed to be present on one of them.
-		if err := str.VisitStores(func(s *storage.Store) error {
-			firstRng := s.LookupReplica(roachpb.RKeyMin)
-			if firstRng != nil {
-				descs = append(descs, firstRng.Desc())
+	testutils.SucceedsSoon(m.t, func() error {
+		descs = nil
+		missedSender := false
+		for _, str := range m.senders {
+			// Node liveness heartbeats start quickly, sometimes before the first
+			// range would be available here and before we've added all ranges.
+			if str == nil {
+				missedSender = true
+				continue
 			}
-			return nil
-		}); err != nil {
-			panic(fmt.Sprintf(
-				"no error should be possible from this invocation of VisitStores, but found %s", err))
+			// Find every version of the RangeDescriptor for the first range by
+			// querying all stores; it may not be present on all stores, but the
+			// current version is guaranteed to be present on one of them.
+			if err := str.VisitStores(func(s *storage.Store) error {
+				firstRng := s.LookupReplica(roachpb.RKeyMin)
+				if firstRng != nil {
+					descs = append(descs, firstRng.Desc())
+				}
+				return nil
+			}); err != nil {
+				m.t.Fatalf("no error should be possible from this invocation of VisitStores, but found %s", err)
+			}
 		}
-	}
-	if len(descs) == 0 {
-		// This is a panic because it should currently be impossible in a properly
-		// constructed multiTestContext.
-		panic("first Range is not present on any store in the multiTestContext.")
-	}
+		if len(descs) == 0 {
+			const msg = "first Range is not present on any store in the multiTestContext"
+			if missedSender {
+				return errors.New(msg + "; retrying")
+			}
+			// This is a Fatal because it should currently be impossible in a properly
+			// constructed multiTestContext (when all senders are queryable).
+			m.t.Fatal(msg)
+		}
+		return nil
+	})
 	// Sort the RangeDescriptor versions by age and return the most recent
 	// version.
 	sort.Sort(rangeDescByAge(descs))
