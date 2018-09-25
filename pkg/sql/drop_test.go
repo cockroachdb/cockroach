@@ -211,7 +211,8 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if err := descExists(sqlDB, false, dbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := zoneExists(sqlDB, nil, dbDesc.ID); err != nil {
+	// Database zone config is removed once all table data and zone configs are removed.
+	if err := zoneExists(sqlDB, &cfg, dbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -339,6 +340,9 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	if _, err := addImmediateGCZoneConfig(sqlDB, tbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := addDefaultZoneConfig(sqlDB, dbDesc.ID); err != nil {
+		t.Fatal(err)
+	}
 
 	testutils.SucceedsSoon(t, func() error {
 		if err := descExists(sqlDB, false, tbDesc.ID); err != nil {
@@ -351,6 +355,12 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	// Table 1 data is deleted.
 	tests.CheckKeyCount(t, kvDB, tableSpan, 0)
 	tests.CheckKeyCount(t, kvDB, table2Span, 6)
+
+	// Database zone config is removed once all table data and zone configs are removed.
+	def := config.DefaultZoneConfig()
+	if err := zoneExists(sqlDB, &def, dbDesc.ID); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.RunningStatusWaitingGC, jobs.Record{
 		Username:    security.RootUser,
@@ -387,6 +397,10 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 			tbDesc.ID, tb2Desc.ID,
 		},
 	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := zoneExists(sqlDB, nil, dbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 }

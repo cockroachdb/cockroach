@@ -16,6 +16,7 @@ package sql
 
 import (
 	"context"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -130,7 +131,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		tableDescs = append(tableDescs, toDel.desc)
 	}
 
-	_, err := p.createDropTablesJob(ctx, tableDescs, droppedTableDetails, tree.AsStringWithFlags(n.n,
+	jobID, err := p.createDropTablesJob(ctx, tableDescs, droppedTableDetails, tree.AsStringWithFlags(n.n,
 		tree.FmtAlwaysQualifyTableNames), true /* drainNames */)
 	if err != nil {
 		return err
@@ -157,18 +158,33 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	}
 
 	_ /* zoneKey */, nameKey, descKey := getKeysForDatabaseDescriptor(n.dbDesc)
-	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(n.dbDesc.ID))
 
 	b := &client.Batch{}
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Del %s", descKey)
 		log.VEventf(ctx, 2, "Del %s", nameKey)
-		log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
 	}
 	b.Del(descKey)
 	b.Del(nameKey)
-	// Delete the zone config entry for this database.
-	b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
+
+	if jobID != 0 {
+		job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
+		if err != nil {
+			return err
+		}
+		details := job.Details().(jobspb.SchemaChangeDetails)
+		details.DropDatabaseID = n.dbDesc.ID
+		if err := job.WithTxn(p.txn).SetDetails(ctx, details); err != nil {
+			return errors.Wrapf(err, "failed to set drop database ID %d for job", n.dbDesc.ID)
+		}
+	} else {
+		zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(n.dbDesc.ID))
+		if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
+			log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
+		}
+		// Delete the zone config entry for this database.
+		b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
+	}
 
 	p.Tables().addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, dbDropped)
 
