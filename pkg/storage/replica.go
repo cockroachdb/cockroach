@@ -6836,7 +6836,7 @@ type ReplicaMetrics struct {
 
 // Metrics returns the current metrics for the replica.
 func (r *Replica) Metrics(
-	ctx context.Context, now hlc.Timestamp, cfg *config.SystemConfig, livenessMap IsLiveMap,
+	ctx context.Context, now hlc.Timestamp, livenessMap IsLiveMap, availableNodes int,
 ) ReplicaMetrics {
 	r.mu.RLock()
 	raftStatus := r.raftStatusRLocked()
@@ -6858,9 +6858,9 @@ func (r *Replica) Metrics(
 	return calcReplicaMetrics(
 		ctx,
 		now,
-		cfg,
 		zone,
 		livenessMap,
+		availableNodes,
 		desc,
 		raftStatus,
 		leaseStatus,
@@ -6870,7 +6870,6 @@ func (r *Replica) Metrics(
 		cmdQMetricsLocal,
 		cmdQMetricsGlobal,
 		raftLogSize,
-		r.store.allocator.storePool,
 	)
 }
 
@@ -6886,9 +6885,9 @@ func HasRaftLeader(raftStatus *raft.Status) bool {
 func calcReplicaMetrics(
 	ctx context.Context,
 	now hlc.Timestamp,
-	cfg *config.SystemConfig,
 	zone *config.ZoneConfig,
 	livenessMap IsLiveMap,
+	availableNodes int,
 	desc *roachpb.RangeDescriptor,
 	raftStatus *raft.Status,
 	leaseStatus LeaseStatus,
@@ -6898,7 +6897,6 @@ func calcReplicaMetrics(
 	cmdQMetricsLocal CommandQueueMetrics,
 	cmdQMetricsGlobal CommandQueueMetrics,
 	raftLogSize int64,
-	storePool *StorePool,
 ) ReplicaMetrics {
 	var m ReplicaMetrics
 
@@ -6914,37 +6912,8 @@ func calcReplicaMetrics(
 	m.Quiescent = quiescent
 	m.Ticking = ticking
 
-	// We compute an estimated range count across the cluster by counting the
-	// first live replica in each descriptor. Note that the first live replica is
-	// an arbitrary choice. We want to select one live replica to do the counting
-	// that all replicas can agree on.
-	//
-	// Note that this heuristic can double count. If the first live replica is on
-	// a node that is partitioned from the other replicas in the range, there may
-	// be multiple nodes which believe they are the first live replica. This
-	// scenario seems rare as it requires the partitioned node to be alive enough
-	// to be performing liveness heartbeats.
-	for _, rd := range desc.Replicas {
-		if livenessMap[rd.NodeID].IsLive {
-			m.RangeCounter = rd.StoreID == storeID
-			break
-		}
-	}
-
-	// We also compute an estimated per-range count of under-replicated and
-	// unavailable ranges for each range based on the liveness table.
-	if m.RangeCounter {
-		liveReplicas := calcLiveReplicas(desc, livenessMap)
-		if liveReplicas < computeQuorum(len(desc.Replicas)) {
-			m.Unavailable = true
-		}
-		decommissioningReplicas := len(storePool.decommissioningReplicas(desc.RangeID, desc.Replicas))
-		_, aliveStoreCount, _ := storePool.getStoreList(desc.RangeID, storeFilterNone)
-
-		if GetNeededReplicas(zone.NumReplicas, aliveStoreCount, decommissioningReplicas) > liveReplicas {
-			m.Underreplicated = true
-		}
-	}
+	m.RangeCounter, m.Unavailable, m.Underreplicated =
+		calcRangeCounter(storeID, desc, livenessMap, zone.NumReplicas, availableNodes)
 
 	// The raft leader computes the number of raft entries that replicas are
 	// behind.
@@ -6960,16 +6929,58 @@ func calcReplicaMetrics(
 	return m
 }
 
+// calcRangeCounter returns whether this replica is designated as the
+// replica in the range responsible for range-level metrics, whether
+// the range doesn't have a quorum of live replicas, and whether the
+// range is currently under-replicated.
+//
+// Note: we compute an estimated range count across the cluster by counting the
+// first live replica in each descriptor. Note that the first live replica is
+// an arbitrary choice. We want to select one live replica to do the counting
+// that all replicas can agree on.
+//
+// Note that this heuristic can double count. If the first live replica is on
+// a node that is partitioned from the other replicas in the range, there may
+// be multiple nodes which believe they are the first live replica. This
+// scenario seems rare as it requires the partitioned node to be alive enough
+// to be performing liveness heartbeats.
+func calcRangeCounter(
+	storeID roachpb.StoreID,
+	desc *roachpb.RangeDescriptor,
+	livenessMap IsLiveMap,
+	numReplicas int32,
+	availableNodes int,
+) (rangeCounter, unavailable, underreplicated bool) {
+	for _, rd := range desc.Replicas {
+		if livenessMap[rd.NodeID].IsLive {
+			rangeCounter = rd.StoreID == storeID
+			break
+		}
+	}
+	// We also compute an estimated per-range count of under-replicated and
+	// unavailable ranges for each range based on the liveness table.
+	if rangeCounter {
+		liveReplicas := calcLiveReplicas(desc, livenessMap)
+		if liveReplicas < computeQuorum(len(desc.Replicas)) {
+			unavailable = true
+		}
+		if GetNeededReplicas(numReplicas, availableNodes) > liveReplicas {
+			underreplicated = true
+		}
+	}
+	return
+}
+
 // calcLiveReplicas returns a count of the live replicas; a live replica is
 // determined by checking its node in the provided liveness map.
 func calcLiveReplicas(desc *roachpb.RangeDescriptor, livenessMap IsLiveMap) int {
-	var goodReplicas int
+	var live int
 	for _, rd := range desc.Replicas {
 		if livenessMap[rd.NodeID].IsLive {
-			goodReplicas++
+			live++
 		}
 	}
-	return goodReplicas
+	return live
 }
 
 // calcBehindCount returns a total count of log entries that follower replicas

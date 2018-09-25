@@ -257,11 +257,12 @@ func (sp *StorePool) String() string {
 
 	var buf bytes.Buffer
 	now := sp.clock.PhysicalTime()
+	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
 
 	for _, id := range ids {
 		detail := sp.detailsMu.storeDetails[id]
 		fmt.Fprintf(&buf, "%d", id)
-		status := detail.status(now, TimeUntilStoreDead.Get(&sp.st.SV), 0, sp.nodeLivenessFn)
+		status := detail.status(now, timeUntilStoreDead, 0, sp.nodeLivenessFn)
 		if status != storeStatusAvailable {
 			fmt.Fprintf(&buf, " (status=%d)", status)
 		}
@@ -425,14 +426,41 @@ func (sp *StorePool) decommissioningReplicas(
 	defer sp.detailsMu.Unlock()
 
 	now := sp.clock.PhysicalTime()
+	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+
 	for _, repl := range repls {
 		detail := sp.getStoreDetailLocked(repl.StoreID)
-		switch detail.status(now, TimeUntilStoreDead.Get(&sp.st.SV), rangeID, sp.nodeLivenessFn) {
+		switch detail.status(now, timeUntilStoreDead, rangeID, sp.nodeLivenessFn) {
 		case storeStatusDecommissioning:
 			decommissioningReplicas = append(decommissioningReplicas, repl)
 		}
 	}
 	return
+}
+
+// AvailableNodeCount returns the number of nodes which are
+// considered available for use as allocation targets. This includes
+// only live nodes which are not decommissioning.
+func (sp *StorePool) AvailableNodeCount() int {
+	sp.detailsMu.RLock()
+	defer sp.detailsMu.RUnlock()
+
+	now := sp.clock.PhysicalTime()
+	availableNodes := map[roachpb.NodeID]struct{}{}
+	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+
+	for _, detail := range sp.detailsMu.storeDetails {
+		switch s := detail.status(now, timeUntilStoreDead, 0, sp.nodeLivenessFn); s {
+		case storeStatusThrottled, storeStatusAvailable:
+			availableNodes[detail.desc.Node.NodeID] = struct{}{}
+		case storeStatusReplicaCorrupted, storeStatusDead, storeStatusUnknown, storeStatusDecommissioning:
+			// Do nothing; this node cannot be used.
+		default:
+			panic(fmt.Sprintf("unknown store status: %d", s))
+		}
+	}
+
+	return len(availableNodes)
 }
 
 // liveAndDeadReplicas divides the provided repls slice into two slices: the
@@ -447,10 +475,12 @@ func (sp *StorePool) liveAndDeadReplicas(
 	defer sp.detailsMu.Unlock()
 
 	now := sp.clock.PhysicalTime()
+	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+
 	for _, repl := range repls {
 		detail := sp.getStoreDetailLocked(repl.StoreID)
 		// Mark replica as dead if store is dead.
-		status := detail.status(now, TimeUntilStoreDead.Get(&sp.st.SV), rangeID, sp.nodeLivenessFn)
+		status := detail.status(now, timeUntilStoreDead, rangeID, sp.nodeLivenessFn)
 		switch status {
 		case storeStatusDead:
 			deadReplicas = append(deadReplicas, repl)
@@ -636,9 +666,11 @@ func (sp *StorePool) getStoreListFromIDsRLocked(
 	var storeDescriptors []roachpb.StoreDescriptor
 
 	now := sp.clock.PhysicalTime()
+	timeUntilStoreDead := TimeUntilStoreDead.Get(&sp.st.SV)
+
 	for _, storeID := range storeIDs {
 		detail := sp.detailsMu.storeDetails[storeID]
-		switch s := detail.status(now, TimeUntilStoreDead.Get(&sp.st.SV), rangeID, sp.nodeLivenessFn); s {
+		switch s := detail.status(now, timeUntilStoreDead, rangeID, sp.nodeLivenessFn); s {
 		case storeStatusThrottled:
 			aliveStoreCount++
 			throttledStoreCount++

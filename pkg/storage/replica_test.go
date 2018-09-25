@@ -9279,9 +9279,10 @@ func TestReplicaMetrics(t *testing.T) {
 			c.expected.Quiescent = i%2 == 0
 			c.expected.Ticking = !c.expected.Quiescent
 			metrics := calcReplicaMetrics(
-				context.Background(), hlc.Timestamp{}, config.NewSystemConfig(), &zoneConfig,
-				c.liveness, &c.desc, c.raftStatus, LeaseStatus{},
-				c.storeID, c.expected.Quiescent, c.expected.Ticking, CommandQueueMetrics{}, CommandQueueMetrics{}, c.raftLogSize, tc.store.allocator.storePool)
+				context.Background(), hlc.Timestamp{}, &zoneConfig,
+				c.liveness, 0, &c.desc, c.raftStatus, LeaseStatus{},
+				c.storeID, c.expected.Quiescent, c.expected.Ticking,
+				CommandQueueMetrics{}, CommandQueueMetrics{}, c.raftLogSize)
 			if c.expected != metrics {
 				t.Fatalf("unexpected metrics:\n%s", pretty.Diff(c.expected, metrics))
 			}

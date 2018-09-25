@@ -2221,9 +2221,9 @@ func TestMergeQueue(t *testing.T) {
 
 	// setThresholds simulates a zone config update that updates the ranges'
 	// minimum and maximum sizes.
-	setZones := func(zone *config.ZoneConfig) {
-		lhs().SetZoneConfig(zone)
-		rhs().SetZoneConfig(zone)
+	setZones := func(zone config.ZoneConfig) {
+		lhs().SetZoneConfig(&zone)
+		rhs().SetZoneConfig(&zone)
 	}
 
 	defaultZone := config.DefaultZoneConfig()
@@ -2242,7 +2242,7 @@ func TestMergeQueue(t *testing.T) {
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
-		setZones(&defaultZone)
+		setZones(defaultZone)
 	}
 
 	verifyMerged := func(t *testing.T) {
@@ -2279,7 +2279,7 @@ func TestMergeQueue(t *testing.T) {
 		store.ForceMergeScanAndProcess()
 		verifyUnmerged(t)
 
-		setZones(&zoneTwiceMin)
+		setZones(zoneTwiceMin)
 		store.ForceMergeScanAndProcess()
 		verifyMerged(t)
 	})
@@ -2294,7 +2294,7 @@ func TestMergeQueue(t *testing.T) {
 		store.ForceMergeScanAndProcess()
 		verifyUnmerged(t)
 
-		setZones(&zoneTwiceMin)
+		setZones(zoneTwiceMin)
 		store.ForceMergeScanAndProcess()
 		verifyMerged(t)
 	})
@@ -2307,7 +2307,7 @@ func TestMergeQueue(t *testing.T) {
 		zone := defaultZone
 		zone.RangeMinBytes = 200
 		zone.RangeMaxBytes = 200
-		setZones(&zone)
+		setZones(zone)
 		bytes := randutil.RandBytes(rng, 100)
 		if err := store.DB().Put(ctx, "a-key", bytes); err != nil {
 			t.Fatal(err)
@@ -2319,7 +2319,7 @@ func TestMergeQueue(t *testing.T) {
 		verifyUnmerged(t)
 
 		zone.RangeMaxBytes = 400
-		setZones(&zone)
+		setZones(zone)
 		store.ForceMergeScanAndProcess()
 		verifyMerged(t)
 	})
