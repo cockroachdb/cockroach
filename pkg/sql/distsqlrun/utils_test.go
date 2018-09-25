@@ -127,13 +127,15 @@ func (rb *RowBuffer) GetRowsNoMeta(t *testing.T) sqlbase.EncDatumRows {
 	return res
 }
 
-var intType = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
-var boolType = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}
-var decType = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}
-var strType = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING}
-var oneIntCol = []sqlbase.ColumnType{intType}
-var twoIntCols = []sqlbase.ColumnType{intType, intType}
-var threeIntCols = []sqlbase.ColumnType{intType, intType, intType}
+var (
+	intType      = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	boolType     = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}
+	decType      = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}
+	strType      = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING}
+	oneIntCol    = []sqlbase.ColumnType{intType}
+	twoIntCols   = []sqlbase.ColumnType{intType, intType}
+	threeIntCols = []sqlbase.ColumnType{intType, intType, intType}
+)
 
 func makeIntCols(numCols int) []sqlbase.ColumnType {
 	ret := make([]sqlbase.ColumnType, numCols)
