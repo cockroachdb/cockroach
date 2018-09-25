@@ -49,7 +49,7 @@ func TestGossipAlertsTable(t *testing.T) {
 	}
 
 	ie := s.InternalExecutor().(*sql.InternalExecutor)
-	row, err := ie.QueryRow(ctx, "test", nil /* txn */, "SELECT * FROM crdb_internal.gossip_alerts")
+	row, err := ie.QueryRow(ctx, "test", nil /* txn */, "SELECT * FROM crdb_internal.gossip_alerts WHERE store_id = 123")
 	if err != nil {
 		t.Fatal(err)
 	}
