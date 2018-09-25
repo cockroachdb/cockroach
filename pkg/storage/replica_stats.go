@@ -19,9 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const (
@@ -44,7 +42,7 @@ type perLocalityCounts map[string]float64
 // initial use is tracking the number of requests received from each
 // cluster locality in order to inform lease transfer decisions.
 type replicaStats struct {
-	clock           *hlc.Clock
+	nowFn           func() time.Time
 	getNodeLocality localityOracle
 
 	// We use a set of time windows in order to age out old stats without having
@@ -64,13 +62,13 @@ type replicaStats struct {
 	}
 }
 
-func newReplicaStats(clock *hlc.Clock, getNodeLocality localityOracle) *replicaStats {
+func newReplicaStats(nowFn func() time.Time, getNodeLocality localityOracle) *replicaStats {
 	rs := &replicaStats{
-		clock:           clock,
+		nowFn:           nowFn,
 		getNodeLocality: getNodeLocality,
 	}
 	rs.mu.requests[rs.mu.idx] = make(perLocalityCounts)
-	rs.mu.lastRotate = timeutil.Unix(0, rs.clock.PhysicalNow())
+	rs.mu.lastRotate = rs.nowFn()
 	rs.mu.lastReset = rs.mu.lastRotate
 	return rs
 }
@@ -115,7 +113,7 @@ func (rs *replicaStats) recordCount(count float64, nodeID roachpb.NodeID) {
 	if rs.getNodeLocality != nil {
 		locality = rs.getNodeLocality(nodeID)
 	}
-	now := timeutil.Unix(0, rs.clock.PhysicalNow())
+	now := rs.nowFn()
 
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
@@ -141,7 +139,7 @@ func (rs *replicaStats) rotateLocked() {
 // Note that the QPS stats are exponentially decayed such that newer requests
 // are weighted more heavily than older requests.
 func (rs *replicaStats) perLocalityDecayingQPS() (perLocalityCounts, time.Duration) {
-	now := timeutil.Unix(0, rs.clock.PhysicalNow())
+	now := rs.nowFn()
 
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
@@ -186,7 +184,7 @@ func (rs *replicaStats) perLocalityDecayingQPS() (perLocalityCounts, time.Durati
 // one way or the the other, but not decaying makes the average more stable,
 // which is probably better for avoiding rebalance thrashing).
 func (rs *replicaStats) avgQPS() (float64, time.Duration) {
-	now := timeutil.Unix(0, rs.clock.PhysicalNow())
+	now := rs.nowFn()
 
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
@@ -225,6 +223,6 @@ func (rs *replicaStats) resetRequestCounts() {
 		rs.mu.requests[i] = nil
 	}
 	rs.mu.requests[rs.mu.idx] = make(perLocalityCounts)
-	rs.mu.lastRotate = timeutil.Unix(0, rs.clock.PhysicalNow())
+	rs.mu.lastRotate = rs.nowFn()
 	rs.mu.lastReset = rs.mu.lastRotate
 }

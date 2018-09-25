@@ -19,6 +19,7 @@ import (
 	"reflect"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -98,8 +99,8 @@ func loadRanges(rr *replicaRankings, s *Store, ranges []testRange) {
 		// TODO(a-robinson): The below three lines won't be needed once the old
 		// rangeInfo code is ripped out of the allocator.
 		repl.mu.state.Stats = &enginepb.MVCCStats{}
-		repl.leaseholderStats = newReplicaStats(s.Clock(), nil)
-		repl.writeStats = newReplicaStats(s.Clock(), nil)
+		repl.leaseholderStats = newReplicaStats(func() time.Time { return s.Clock().PhysicalTime() }, nil)
+		repl.writeStats = newReplicaStats(func() time.Time { return s.Clock().PhysicalTime() }, nil)
 		acc.addReplica(replicaWithStats{
 			repl: repl,
 			qps:  r.qps,
