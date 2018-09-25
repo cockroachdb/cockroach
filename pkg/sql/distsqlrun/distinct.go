@@ -204,10 +204,10 @@ func (d *Distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, err
 }
 
 func (d *Distinct) close() {
-	// Need to close the mem accounting while the context is still valid.
-	d.memAcc.Close(d.Ctx)
-	d.InternalClose()
-	d.MemMonitor.Stop(d.Ctx)
+	if d.InternalClose() {
+		d.memAcc.Close(d.Ctx)
+		d.MemMonitor.Stop(d.Ctx)
+	}
 }
 
 // Next is part of the RowSource interface.
