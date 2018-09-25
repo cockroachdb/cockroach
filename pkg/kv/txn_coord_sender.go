@@ -236,10 +236,10 @@ func (gs *txnLockGatekeeper) SendLocked(
 
 // TxnMetrics holds all metrics relating to KV transactions.
 type TxnMetrics struct {
-	Aborts      *metric.CounterWithRates
-	Commits     *metric.CounterWithRates
-	Commits1PC  *metric.CounterWithRates // Commits which finished in a single phase
-	AutoRetries *metric.CounterWithRates // Auto retries which avoid client-side restarts
+	Aborts      *metric.Counter
+	Commits     *metric.Counter
+	Commits1PC  *metric.Counter // Commits which finished in a single phase
+	AutoRetries *metric.Counter // Auto retries which avoid client-side restarts
 	Durations   *metric.Histogram
 
 	// Restarts is the number of times we had to restart the transaction.
@@ -329,10 +329,10 @@ var (
 // windowed portions retain data for approximately histogramWindow.
 func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 	return TxnMetrics{
-		Aborts:                    metric.NewCounterWithRates(metaAbortsRates),
-		Commits:                   metric.NewCounterWithRates(metaCommitsRates),
-		Commits1PC:                metric.NewCounterWithRates(metaCommits1PCRates),
-		AutoRetries:               metric.NewCounterWithRates(metaAutoRetriesRates),
+		Aborts:                    metric.NewCounter(metaAbortsRates),
+		Commits:                   metric.NewCounter(metaCommitsRates),
+		Commits1PC:                metric.NewCounter(metaCommits1PCRates),
+		AutoRetries:               metric.NewCounter(metaAutoRetriesRates),
 		Durations:                 metric.NewLatency(metaDurationsHistograms, histogramWindow),
 		Restarts:                  metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
 		RestartsWriteTooOld:       metric.NewCounter(metaRestartsWriteTooOld),
@@ -553,6 +553,23 @@ func (tc *TxnCoordSender) DisablePipelining() error {
 	return nil
 }
 
+// commitReadOnlyTxnLocked "commits" a read-only txn. It is equivalent, but
+// cheaper than, sending an EndTransactionRequest. A read-only txn doesn't have
+// a transaction record, so there's no need to send any request to the server.
+// An EndTransactionRequest for a read-only txn is elided by the txnHeartbeat
+// interceptor. However, calling this and short-circuting even earlier is
+// even more efficient (and shows in benchmarks).
+func (tc *TxnCoordSender) commitReadOnlyTxnLocked(
+	ctx context.Context, deadline *hlc.Timestamp,
+) *roachpb.Error {
+	if deadline != nil && deadline.Less(tc.mu.txn.Timestamp) {
+		return roachpb.NewError(
+			roachpb.NewTransactionStatusError("deadline exceeded before transaction finalization"))
+	}
+	tc.cleanupTxnLocked(ctx)
+	return nil
+}
+
 // Send is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
@@ -567,6 +584,10 @@ func (tc *TxnCoordSender) Send(
 
 	if pErr := tc.maybeRejectClientLocked(ctx, &ba); pErr != nil {
 		return nil, pErr
+	}
+
+	if ba.IsSingleEndTransactionRequest() && !tc.interceptorAlloc.txnHeartbeat.mu.everSentBeginTxn {
+		return nil, tc.commitReadOnlyTxnLocked(ctx, ba.Requests[0].GetEndTransaction().Deadline)
 	}
 
 	startNs := tc.clock.PhysicalNow()

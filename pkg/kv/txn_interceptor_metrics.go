@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // txnMetrics is a txnInterceptor in charge of updating some metrics in response
@@ -50,8 +51,8 @@ func (m *txnMetrics) SendLocked(
 	et, hasEnd := ba.GetArg(roachpb.EndTransaction)
 	m.onePCCommit = hasBegin && hasEnd && et.(*roachpb.EndTransactionRequest).Commit
 
-	if hasBegin {
-		m.txnStartNanos = m.clock.PhysicalNow()
+	if m.txnStartNanos == 0 {
+		m.txnStartNanos = timeutil.Now().UnixNano()
 	}
 
 	return m.wrapped.SendLocked(ctx, ba)
@@ -80,12 +81,24 @@ func (m *txnMetrics) closeLocked() {
 		m.metrics.Commits1PC.Inc(1)
 	}
 
-	duration := m.clock.PhysicalNow() - m.txnStartNanos
+	if m.txnStartNanos != 0 {
+		duration := timeutil.Now().UnixNano() - m.txnStartNanos
+		if duration >= 0 {
+			m.metrics.Durations.RecordValue(duration)
+		}
+	}
 	restarts := int64(m.txn.Epoch)
 	status := m.txn.Status
 
-	m.metrics.Durations.RecordValue(duration)
-	m.metrics.Restarts.RecordValue(restarts)
+	// TODO(andrei): We only record txn that had any restarts, otherwise the
+	// serialization induced by the histogram shows on profiles. Figure something
+	// out to make it cheaper - maybe augment the histogram library with an
+	// "expected value" that is a cheap counter for the common case. See #30644.
+	// Also, the epoch is not currently an accurate count since we sometimes bump
+	// it artificially (in the parallel execution queue).
+	if restarts > 0 {
+		m.metrics.Restarts.RecordValue(restarts)
+	}
 	switch status {
 	case roachpb.ABORTED:
 		m.metrics.Aborts.Inc(1)

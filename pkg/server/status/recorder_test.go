@@ -210,7 +210,6 @@ func TestMetricsRecorder(t *testing.T) {
 		{"testGauge", "gauge", 20},
 		{"testGaugeFloat64", "floatgauge", 20},
 		{"testCounter", "counter", 5},
-		{"testCounterWithRates", "counterwithrates", 2},
 		{"testHistogram", "histogram", 10},
 		{"testLatency", "latency", 10},
 
@@ -282,11 +281,6 @@ func TestMetricsRecorder(t *testing.T) {
 				c := metric.NewCounter(metric.Metadata{Name: reg.prefix + data.name})
 				reg.reg.AddMetric(c)
 				c.Inc((data.val))
-				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
-			case "counterwithrates":
-				r := metric.NewCounterWithRates(metric.Metadata{Name: reg.prefix + data.name})
-				reg.reg.AddMetric(r)
-				r.Inc(data.val)
 				addExpected(reg.prefix, data.name, reg.source, 100, data.val, reg.isNode)
 			case "histogram":
 				h := metric.NewHistogram(metric.Metadata{Name: reg.prefix + data.name}, time.Second, 1000, 2)
