@@ -238,7 +238,7 @@ var varGen = map[string]sessionVar{
 			}
 			mode, ok := sessiondata.DistSQLExecModeFromString(s)
 			if !ok {
-				return newVarValueError(`distsql`, s, "on", "off", "auto", "always", "2.0")
+				return newVarValueError(`distsql`, s, "on", "off", "auto", "always", "2.0-auto", "2.0-off")
 			}
 			m.SetDistSQLMode(mode)
 
