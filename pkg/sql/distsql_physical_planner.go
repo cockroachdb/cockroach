@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -516,7 +517,7 @@ func (p *PlanningCtx) sanityCheckAddresses() error {
 	inverted := make(map[string]roachpb.NodeID)
 	for nodeID, addr := range p.NodeAddresses {
 		if otherNodeID, ok := inverted[addr]; ok {
-			return util.UnexpectedWithIssueErrorf(
+			return errorutil.UnexpectedWithIssueErrorf(
 				12876,
 				"different nodes %d and %d with the same address '%s'", nodeID, otherNodeID, addr)
 		}
