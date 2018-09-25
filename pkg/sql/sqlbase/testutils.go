@@ -86,13 +86,13 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 	return RandDatumWithNullChance(rng, typ, nullDenominator)
 }
 
-// RandDatum generates a random Datum of the given type.
+// RandDatumWithNullChance generates a random Datum of the given type.
 // nullChance is the chance of returning null, expressed as a fraction
 // denominator. For example, a nullChance of 5 means that there's a 1/5 chance
 // that DNull will be returned. A nullChance of 0 means that DNull will not
 // be returned.
-// Note that if typ.SemanticType is ColumnType_NULL, the datum will always be DNull,
-// regardless of the null flag.
+// Note that if typ.SemanticType is ColumnType_NULL, the datum will always be
+// DNull, regardless of the null flag.
 func RandDatumWithNullChance(rng *rand.Rand, typ ColumnType, nullChance int) tree.Datum {
 	if nullChance != 0 && rng.Intn(nullChance) == 0 {
 		return tree.DNull
@@ -194,7 +194,9 @@ func RandDatumWithNullChance(rng *rand.Rand, typ ColumnType, nullChance int) tre
 		datumType := columnSemanticTypeToDatumType(eltTyp, eltTyp.SemanticType)
 		arr := tree.NewDArray(datumType)
 		for i := 0; i < rng.Intn(10); i++ {
-			arr.Append(RandDatumWithNullChance(rng, *eltTyp, 0))
+			if err := arr.Append(RandDatumWithNullChance(rng, *eltTyp, 0)); err != nil {
+				panic(err)
+			}
 		}
 		return arr
 	case ColumnType_INT2VECTOR:

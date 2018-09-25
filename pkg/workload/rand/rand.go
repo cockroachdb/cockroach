@@ -1,3 +1,18 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License. See the AUTHORS file
+// for names of contributors.
+
 package rand
 
 import (
@@ -6,9 +21,7 @@ import (
 	gosql "database/sql"
 	"database/sql/driver"
 	"fmt"
-	"log"
 	"math/rand"
-	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -20,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/lib/pq"
 	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )
 
@@ -54,12 +68,12 @@ var randMeta = workload.Meta{
 			`batch`: {RuntimeOnly: true},
 		}
 		g.flags.IntVar(&g.tables, `tables`, 1, `Number of tables to create`)
-		g.flags.StringVar(&g.tableName, `table`, ``, `table to write to`)
+		g.flags.StringVar(&g.tableName, `table`, ``, `Table to write to`)
 		g.flags.IntVar(&g.batchSize, `batch`, 1, `Number of rows to insert in a single SQL statement`)
-		g.flags.StringVar(&g.method, `method`, `upsert`, `choice of DML name (insert, upsert, ioc-update (insert on conflict update), ioc-nothing (insert on conflict no nothing)`)
+		g.flags.StringVar(&g.method, `method`, `upsert`, `Choice of DML name: insert, upsert, ioc-update (insert on conflict update), ioc-nothing (insert on conflict no nothing)`)
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.StringVar(&g.primaryKey, `primary-key`, ``, `ioc-update and ioc-nothing require primary key`)
-		g.flags.IntVar(&g.nullPct, `null-percent`, 5, `Percent random nulls.`)
+		g.flags.IntVar(&g.nullPct, `null-percent`, 5, `Percent random nulls`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -123,7 +137,7 @@ func (w *random) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Q
 
 	var relid int
 	if err := db.QueryRow(fmt.Sprintf("SELECT '%s'::REGCLASS::OID", tableName)).Scan(&relid); err != nil {
-		log.Fatal(err)
+		return workload.QueryLoad{}, err
 	}
 
 	rows, err := db.Query(
@@ -134,7 +148,7 @@ LEFT JOIN pg_catalog.pg_attrdef
 ON attrelid=adrelid AND attnum=adnum
 WHERE attrelid=$1`, relid)
 	if err != nil {
-		log.Fatal(err)
+		return workload.QueryLoad{}, err
 	}
 
 	var cols []col
@@ -142,32 +156,32 @@ WHERE attrelid=$1`, relid)
 
 	defer rows.Close()
 	for rows.Next() {
-		var col col
-		col.dataPrecision = 0
-		col.dataScale = 0
+		var c col
+		c.dataPrecision = 0
+		c.dataScale = 0
 
 		var typOid int
-		if err := rows.Scan(&col.name, &typOid, &col.cdefault, &col.isNullable); err != nil {
-			log.Fatal(err)
+		if err := rows.Scan(&c.name, &typOid, &c.cdefault, &c.isNullable); err != nil {
+			return workload.QueryLoad{}, err
 		}
 		datumType := types.OidToType[oid.Oid(typOid)]
 		colTyp, err := sqlbase.DatumTypeToColumnType(datumType)
 		if err != nil {
-			log.Fatal(err)
+			return workload.QueryLoad{}, err
 		}
-		col.dataType = colTyp
-		if col.cdefault.String == "unique_rowid()" { // skip
+		c.dataType = colTyp
+		if c.cdefault.String == "unique_rowid()" { // skip
 			continue
 		}
-		if strings.HasPrefix(col.cdefault.String, "uuid_v4()") { // skip
+		if strings.HasPrefix(c.cdefault.String, "uuid_v4()") { // skip
 			continue
 		}
-		cols = append(cols, col)
-		numCols += 1
+		cols = append(cols, c)
+		numCols++
 	}
 
 	if numCols == 0 {
-		log.Fatal("no columns detected")
+		return workload.QueryLoad{}, errors.New("no columns detected")
 	}
 
 	// insert on conflict requires the primary key. check information_schema if not specified on the command line
@@ -181,14 +195,14 @@ JOIN   pg_attribute a ON a.attrelid = i.indrelid
 WHERE  i.indrelid = $1
 AND    i.indisprimary`, relid)
 		if err != nil {
-			log.Fatal(err)
+			return workload.QueryLoad{}, err
 		}
 		defer rows.Close()
 		for rows.Next() {
 			var colname string
 
 			if err := rows.Scan(&colname); err != nil {
-				log.Fatal(err)
+				return workload.QueryLoad{}, err
 			}
 			if w.primaryKey != "" {
 				w.primaryKey += "," + colname
@@ -199,8 +213,10 @@ AND    i.indisprimary`, relid)
 	}
 
 	if strings.HasPrefix(w.method, "ioc") && w.primaryKey == "" {
-		log.Fatal("insert on conflict requires primary key to be specified via -primary if the table does not have primary key")
-		os.Exit(1)
+		err := errors.New(
+			"insert on conflict requires primary key to be specified via -primary if the table does " +
+				"not have primary key")
+		return workload.QueryLoad{}, err
 	}
 
 	var dmlMethod string
@@ -226,7 +242,7 @@ AND    i.indisprimary`, relid)
 			dmlSuffix.WriteString(fmt.Sprintf("%s=EXCLUDED.%s", c.name, c.name))
 		}
 	default:
-		log.Fatal(fmt.Sprintf("%s DML method not valid", w.primaryKey))
+		return workload.QueryLoad{}, errors.Errorf("%s DML method not valid", w.primaryKey)
 	}
 
 	fmt.Fprintf(&buf, `%s INTO %s.%s (`, dmlMethod, sqlDatabase, tableName)
@@ -244,7 +260,7 @@ AND    i.indisprimary`, relid)
 			buf.WriteString(", ")
 		}
 		buf.WriteString("(")
-		for j, _ := range cols {
+		for j := range cols {
 			if j > 0 {
 				buf.WriteString(", ")
 			}
@@ -289,57 +305,55 @@ type randOp struct {
 	writeStmt *gosql.Stmt
 }
 
-func datumToGoSQL(d tree.Datum) interface{} {
+func datumToGoSQL(d tree.Datum) (interface{}, error) {
 	d = tree.UnwrapDatum(nil, d)
 	if d == tree.DNull {
-		return nil
+		return nil, nil
 	}
 	switch d := d.(type) {
 	case *tree.DBool:
-		return bool(*d)
+		return bool(*d), nil
 	case *tree.DString:
-		return string(*d)
+		return string(*d), nil
 	case *tree.DBytes:
-		return string(*d)
+		return string(*d), nil
 	case *tree.DDate, *tree.DTime:
-		return tree.AsStringWithFlags(d, tree.FmtBareStrings)
+		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
 	case *tree.DTimestamp:
-		return d.Time
+		return d.Time, nil
 	case *tree.DTimestampTZ:
-		return d.Time
+		return d.Time, nil
 	case *tree.DInterval:
-		return d.Duration.String()
+		return d.Duration.String(), nil
 	case *tree.DBitArray:
-		return tree.AsStringWithFlags(d, tree.FmtBareStrings)
+		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
 	case *tree.DInt:
-		return int64(*d)
+		return int64(*d), nil
 	case *tree.DOid:
-		return int(d.DInt)
+		return int(d.DInt), nil
 	case *tree.DFloat:
-		return float64(*d)
+		return float64(*d), nil
 	case *tree.DDecimal:
-		float, err := d.Float64()
-		if err != nil {
-			log.Fatal("Couldn't deal with float conversion of decimal", d, err)
-		}
-		return float
+		return d.Float64()
 	case *tree.DArray:
 		arr := make([]interface{}, len(d.Array))
 		for i := range d.Array {
-			elt := datumToGoSQL(d.Array[i])
+			elt, err := datumToGoSQL(d.Array[i])
+			if err != nil {
+				return nil, err
+			}
 			if elt == nil {
 				elt = nullVal{}
 			}
 			arr[i] = elt
 		}
-		return pq.Array(arr)
+		return pq.Array(arr), nil
 	case *tree.DUuid:
-		return d.UUID
+		return d.UUID, nil
 	case *tree.DIPAddr:
-		return d.IPAddr.String()
+		return d.IPAddr.String(), nil
 	}
-	log.Fatal("fail", d, reflect.TypeOf(d))
-	return nil
+	return nil, errors.Errorf("unhandled datum type: %s", reflect.TypeOf(d))
 }
 
 type nullVal struct {
@@ -349,7 +363,7 @@ func (nullVal) Value() (driver.Value, error) {
 	return nil, nil
 }
 
-func (o *randOp) run(ctx context.Context) error {
+func (o *randOp) run(ctx context.Context) (err error) {
 	params := make([]interface{}, len(o.cols)*o.config.batchSize)
 	k := 0 // index into params
 	for j := 0; j < o.config.batchSize; j++ {
@@ -359,12 +373,15 @@ func (o *randOp) run(ctx context.Context) error {
 				nullPct = 100 / o.config.nullPct
 			}
 			d := sqlbase.RandDatumWithNullChance(o.rng, c.dataType, nullPct)
-			params[k] = datumToGoSQL(d)
-			k += 1
+			params[k], err = datumToGoSQL(d)
+			if err != nil {
+				return err
+			}
+			k++
 		}
 	}
 	start := timeutil.Now()
-	_, err := o.writeStmt.ExecContext(ctx, params...)
+	_, err = o.writeStmt.ExecContext(ctx, params...)
 	o.hists.Get(`write`).Record(timeutil.Since(start))
 	return err
 }
