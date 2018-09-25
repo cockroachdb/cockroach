@@ -19,6 +19,7 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -84,6 +85,7 @@ type cmd struct {
 	key       interval.Range
 	readOnly  bool
 	timestamp hlc.Timestamp
+	debugInfo summaryWriter
 
 	buffered bool // is this cmd buffered in readsBuffer
 	expanded bool // have the children been added
@@ -100,6 +102,14 @@ type cmd struct {
 	prereqIDs map[int64]struct{}
 
 	pending chan struct{} // closed when complete
+}
+
+// A summaryWriter is capable of writing a summary about itself. It is typically
+// implemented by *roachpb.BatchRequest, but the interface allows us to avoid
+// establishing a dependency on the full batch request on a *cmd, which could be
+// abused.
+type summaryWriter interface {
+	WriteSummary(*strings.Builder)
 }
 
 // ID implements interval.Interface.
@@ -129,23 +139,36 @@ func (c *cmd) String() string {
 	if c == nil {
 		return "<nil>"
 	}
-	var buf bytes.Buffer
+	var b strings.Builder
 	var readOnly string
 	if c.readOnly {
 		readOnly = " readonly"
 	}
-	fmt.Fprintf(&buf, "%d %s%s [%s", c.id, c.timestamp, readOnly, roachpb.Key(c.key.Start))
+	fmt.Fprintf(&b, "%d %s%s [%s", c.id, c.timestamp, readOnly, roachpb.Key(c.key.Start))
 	if !roachpb.Key(c.key.End).Equal(roachpb.Key(c.key.Start).Next()) {
-		fmt.Fprintf(&buf, ",%s", roachpb.Key(c.key.End))
+		fmt.Fprintf(&b, ",%s", roachpb.Key(c.key.End))
 	}
-	fmt.Fprintf(&buf, ")")
+	b.WriteString(")")
+	if c.debugInfo != nil {
+		b.WriteString(" [")
+		c.debugInfo.WriteSummary(&b)
+		b.WriteString("]")
+	}
 
 	if !c.expanded {
 		for i := range c.children {
-			fmt.Fprintf(&buf, "\n    %d: %s", i, &c.children[i])
+			fmt.Fprintf(&b, "\n    %d: %s", i, &c.children[i])
 		}
 	}
-	return buf.String()
+	return b.String()
+}
+
+// SetDebugInfo adds extra debug information to the command.
+func (c *cmd) SetDebugInfo(s summaryWriter) {
+	c.debugInfo = s
+	for i := range c.children {
+		c.children[i].debugInfo = s
+	}
 }
 
 // PrereqLen returns the number of immediate prerequisite command that the
