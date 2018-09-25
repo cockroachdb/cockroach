@@ -19,16 +19,20 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -248,5 +252,33 @@ func TestRemoveDeadReplicas(t *testing.T) {
 	row.Scan(&org)
 	if org != "remove dead replicas test" {
 		t.Fatalf("expected old setting to be present, got %s instead", org)
+	}
+}
+
+func TestParseGossipValues(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+
+	var gossipInfo gossip.InfoStatus
+	if err := serverutils.GetJSONProto(tc.Server(0), "/_status/gossip/1", &gossipInfo); err != nil {
+		t.Fatal(err)
+	}
+
+	debugOutput, err := parseGossipValues(&gossipInfo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	debugLines := strings.Split(debugOutput, "\n")
+	if len(debugLines) != len(gossipInfo.Infos) {
+		var gossipInfoKeys []string
+		for key := range gossipInfo.Infos {
+			gossipInfoKeys = append(gossipInfoKeys, key)
+		}
+		sort.Strings(gossipInfoKeys)
+		t.Errorf("`debug gossip-values` output contains %d entries, but the source gossip contains %d:\ndebug output:\n%v\n\ngossipInfos:\n%v",
+			len(debugLines), len(gossipInfo.Infos), debugOutput, strings.Join(gossipInfoKeys, "\n"))
 	}
 }
