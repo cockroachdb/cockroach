@@ -154,7 +154,11 @@ if __name__ == '__main__':
             if len(matches) < 3:
                 matches.append("")
             topname, subname = matches[1], matches[2]
-            if category == "roachtest" and topname == "acceptance" and subname != "":
+            if category == "roachtest" and topname == "acceptance":
+                if subname == "":
+                    # Don't post roachtest failures for the umbrella acceptance test.
+                    # In roachtest, parent tests contain no logic.
+                    continue
                 # Special casing for roachtest so that it doesn't lump any
                 # acceptance failure into an issue that just says "acceptance".
                 topname = subname
