@@ -31,8 +31,6 @@ import (
 func TestSplitAt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("TODO(benesch): #29169: will be fixed by #29324")
-
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
