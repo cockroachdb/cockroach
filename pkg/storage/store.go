@@ -1507,7 +1507,7 @@ func (s *Store) startGossip() {
 func (s *Store) startLeaseRenewer(ctx context.Context) {
 	// Start a goroutine that watches and proactively renews certain
 	// expiration-based leases.
-	s.stopper.RunWorker(ctx, func(context.Context) {
+	s.stopper.RunWorker(ctx, func(ctx context.Context) {
 		repls := make(map[*Replica]struct{})
 		timer := timeutil.NewTimer()
 		defer timer.Stop()
