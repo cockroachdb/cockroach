@@ -561,7 +561,7 @@ func randIndexTableDefFromCols(
 		}
 		indexElemList = append(indexElemList, tree.IndexElem{
 			Column:    cols[i].Name,
-			Direction: tree.Direction(rand.Intn(int(tree.Descending) + 1)),
+			Direction: tree.Direction(rng.Intn(int(tree.Descending) + 1)),
 		})
 	}
 	return tree.IndexTableDef{Columns: indexElemList}
