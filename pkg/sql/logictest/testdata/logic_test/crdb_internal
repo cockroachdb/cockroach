@@ -36,6 +36,7 @@ node_sessions
 node_statement_statistics
 partitions
 ranges
+ranges_no_leases
 schema_changes
 session_trace
 session_variables

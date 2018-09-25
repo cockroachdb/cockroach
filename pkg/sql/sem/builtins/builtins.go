@@ -34,6 +34,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+
 	"github.com/knz/strtime"
 
 	"github.com/cockroachdb/apd"
@@ -2850,6 +2852,33 @@ may increase either contention or retry errors, or both.`,
 				return tree.DZero, nil
 			},
 			Info: "This function is used only by CockroachDB's developers for testing purposes.",
+		},
+	),
+
+	// Fetches the corresponding lease_holder for the request key.
+	"crdb_internal.lease_holder": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"key", types.Bytes}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				key := []byte(tree.MustBeDBytes(args[0]))
+				b := &client.Batch{}
+				b.AddRawRequest(&roachpb.LeaseInfoRequest{
+					RequestHeader: roachpb.RequestHeader{
+						Key: key,
+					},
+				})
+				if err := ctx.Txn.Run(ctx.Context, b); err != nil {
+					return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "message: %s", err)
+				}
+				resp := b.RawResponse().Responses[0].GetInner().(*roachpb.LeaseInfoResponse)
+
+				return tree.NewDInt(tree.DInt(resp.Lease.Replica.StoreID)), nil
+			},
+			Info: "This function is used to fetch the leaseholder corresponding to a request key",
 		},
 	),
 

@@ -57,6 +57,7 @@ test           crdb_internal       node_sessions                      public   S
 test           crdb_internal       node_statement_statistics          public   SELECT
 test           crdb_internal       partitions                         public   SELECT
 test           crdb_internal       ranges                             public   SELECT
+test           crdb_internal       ranges_no_leases                   public   SELECT
 test           crdb_internal       schema_changes                     public   SELECT
 test           crdb_internal       session_trace                      public   SELECT
 test           crdb_internal       session_variables                  public   SELECT
