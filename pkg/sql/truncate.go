@@ -87,7 +87,7 @@ func (t *truncateNode) startExec(params runParams) error {
 	}
 
 	dropJobID, err := p.createDropTablesJob(ctx, stmtTableDescs, droppedTableDetails, tree.AsStringWithFlags(n,
-		tree.FmtAlwaysQualifyTableNames), false /* drainNames */)
+		tree.FmtAlwaysQualifyTableNames), false /* drainNames */, sqlbase.InvalidID /* droppedDatabaseID */)
 	if err != nil {
 		return err
 	}
