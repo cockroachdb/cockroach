@@ -139,6 +139,20 @@
 =>
 (Null (BoolType))
 
+# UnifyComparisonTypes takes a mixed-type comparison between a non-constant and
+# a constant and, if appropriate, converts the constant to the type of the
+# non-constant to allow constraints to be generated.
+[UnifyComparisonTypes, Normalize]
+(Comparison
+    $left:(Variable)
+    $right:(Const) & (Succeeded $result:(UnifyComparison $left $right))
+)
+=>
+((OpName)
+    $left
+    $result
+)
+
 # EliminateExistsProject discards a Project input to the Exists operator. The
 # Project operator never changes the row cardinality of its input, and row
 # cardinality is the only thing that Exists cares about, so Project is a no-op.

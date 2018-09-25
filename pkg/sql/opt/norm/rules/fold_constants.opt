@@ -28,7 +28,7 @@
 [FoldBinary, Normalize, LowPriority]
 (Binary
   $left:* & (IsConstValueOrTuple $left)
-  $right:* & (IsConstValueOrTuple $right) & (FoldSucceeded $result:(FoldBinary (OpName) $left $right))
+  $right:* & (IsConstValueOrTuple $right) & (Succeeded $result:(FoldBinary (OpName) $left $right))
 )
 =>
 $result
@@ -41,7 +41,7 @@ $result
 # can run first.
 [FoldUnary, Normalize, LowPriority]
 (Unary
-  $input:* & (IsConstValueOrTuple $input) & (FoldSucceeded $result:(FoldUnary (OpName) $input))
+  $input:* & (IsConstValueOrTuple $input) & (Succeeded $result:(FoldUnary (OpName) $input))
 )
 =>
 $result
@@ -55,7 +55,7 @@ $result
 [FoldComparison, Normalize, LowPriority]
 (Comparison
   $left:* & (IsConstValueOrTuple $left)
-  $right:* & (IsConstValueOrTuple $right) & (FoldSucceeded $result:(FoldComparison (OpName) $left $right))
+  $right:* & (IsConstValueOrTuple $right) & (Succeeded $result:(FoldComparison (OpName) $left $right))
 )
 =>
 $result
