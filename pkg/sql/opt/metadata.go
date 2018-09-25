@@ -16,6 +16,7 @@ package opt
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -221,8 +222,11 @@ func (md *Metadata) CheckDependencies(ctx context.Context, catalog Catalog) bool
 }
 
 // AddColumn assigns a new unique id to a column within the query and records
-// its label and type.
+// its label and type. If the label is empty, a "column<ID>" label is created.
 func (md *Metadata) AddColumn(label string, typ types.T) ColumnID {
+	if label == "" {
+		label = fmt.Sprintf("column%d", len(md.cols)+1)
+	}
 	md.cols = append(md.cols, mdColumn{label: label, typ: typ})
 	return ColumnID(len(md.cols))
 }

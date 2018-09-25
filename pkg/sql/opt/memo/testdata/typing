@@ -386,13 +386,17 @@ project
  │    │    ├── columns: a.x:1(int!null) y:2(int) max:6(string)
  │    │    ├── grouping columns: a.x:1(int!null)
  │    │    ├── inner-join
- │    │    │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:4(string!null) z:5(decimal!null)
+ │    │    │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:4(string!null) column7:7(int!null)
  │    │    │    ├── scan a
  │    │    │    │    └── columns: a.x:1(int!null) y:2(int)
- │    │    │    ├── scan b
- │    │    │    │    └── columns: b.x:4(string!null) z:5(decimal!null)
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: column7:7(int) b.x:4(string!null)
+ │    │    │    │    ├── scan b
+ │    │    │    │    │    └── columns: b.x:4(string!null) z:5(decimal!null)
+ │    │    │    │    └── projections
+ │    │    │    │         └── z::INT [type=int]
  │    │    │    └── filters [type=bool]
- │    │    │         └── y = z::INT [type=bool]
+ │    │    │         └── y = column7 [type=bool]
  │    │    └── aggregations
  │    │         ├── max [type=string]
  │    │         │    └── variable: b.x [type=string]
