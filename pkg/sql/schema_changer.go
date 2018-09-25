@@ -338,6 +338,9 @@ func (sc *SchemaChanger) DropTableDesc(
 		b.Del(descKey)
 		// Delete the zone config entry for this table.
 		b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
+		if err := txn.SetSystemConfigTrigger(); err != nil {
+			return err
+		}
 
 		if tableDesc.GetDropJobID() != 0 {
 			if err := sc.updateDropTableJob(ctx, txn, tableDesc.GetDropJobID(), tableDesc.ID, jobspb.Status_DONE); err != nil {
