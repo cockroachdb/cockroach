@@ -159,7 +159,7 @@ sort                   ·      ·
  └── render            ·      ·
       └── filter       ·      ·
            └── values  ·      ·
-·                      size   6 columns, 90 rows
+·                      size   6 columns, 91 rows
 
 query TTT
 EXPLAIN SHOW DATABASE
@@ -224,7 +224,7 @@ sort                                       ·            ·
                      ├── render            ·            ·
                      │    └── filter       ·            ·
                      │         └── values  ·            ·
-                     │                     size         20 columns, 916 rows
+                     │                     size         20 columns, 925 rows
                      └── render            ·            ·
                           └── filter       ·            ·
                                └── values  ·            ·
@@ -238,7 +238,7 @@ sort                   ·      ·
  └── render            ·      ·
       └── filter       ·      ·
            └── values  ·      ·
-·                      size   8 columns, 575 rows
+·                      size   8 columns, 580 rows
 
 
 query TTT
@@ -260,7 +260,7 @@ sort                             ·         ·
            │                     equality  (relnamespace, oid) = (oid, conrelid)
            ├── filter            ·         ·
            │    └── values       ·         ·
-           │                     size      27 columns, 92 rows
+           │                     size      27 columns, 93 rows
            └── join              ·         ·
                 │                type      cross
                 ├── filter       ·         ·
