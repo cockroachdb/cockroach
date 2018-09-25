@@ -3381,6 +3381,103 @@ func TestReplicaCommandQueueSplitDeclaresWrites(t *testing.T) {
 	}
 }
 
+// TestReplicaCommandQueuePrereqDebugSummary tests the debug summary logged
+// about a request's prerequisites when entering the command queue.
+func TestReplicaCommandQueuePrereqDebugSummary(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var ba1, ba2, ba3 roachpb.BatchRequest
+	txn := newTransaction("test", []byte("k"), 1, enginepb.SERIALIZABLE, nil)
+	bt, _ := beginTxnArgs([]byte("k"), txn)
+	put := putArgs([]byte("k"), []byte("v"))
+	et, _ := endTxnArgs(txn, true)
+	ba1.Add(&bt)
+	ba2.Add(&put, &put, &put)
+	ba3.Add(&bt, &put, &et)
+	cmdForBatch := func(ba *roachpb.BatchRequest) *cmd {
+		return &cmd{debugInfo: ba}
+	}
+
+	testCases := []struct {
+		prereqs prereqCmdSet
+		expect  string
+	}{
+		{
+			prereqs: prereqCmdSet{
+				/* SpanReadOnly */ {
+					/* SpanGlobal */ {},
+					/* SpanLocal */ {},
+				},
+				/* SpanReadWrite */ {
+					/* SpanGlobal */ {},
+					/* SpanLocal */ {},
+				},
+			},
+			expect: "no prereqs",
+		},
+		{
+			prereqs: prereqCmdSet{
+				/* SpanReadOnly */ {
+					/* SpanGlobal */ {},
+					/* SpanLocal */ {},
+				},
+				/* SpanReadWrite */ {
+					/* SpanGlobal */ {cmdForBatch(&ba3)},
+					/* SpanLocal */ {},
+				},
+			},
+			expect: "{write/global: [1 Put, 1 BeginTxn, 1 EndTxn]}",
+		},
+		{
+			prereqs: prereqCmdSet{
+				/* SpanReadOnly */ {
+					/* SpanGlobal */ {cmdForBatch(&ba1)},
+					/* SpanLocal */ {cmdForBatch(&ba1)},
+				},
+				/* SpanReadWrite */ {
+					/* SpanGlobal */ {cmdForBatch(&ba2)},
+					/* SpanLocal */ {cmdForBatch(&ba3)},
+				},
+			},
+			expect: "{read/global: [1 BeginTxn]} {read/local: [1 BeginTxn]} {write/global: [3 Put]} {write/local: [1 Put, 1 BeginTxn, 1 EndTxn]}",
+		},
+		{
+			prereqs: prereqCmdSet{
+				/* SpanReadOnly */ {
+					/* SpanGlobal */ {},
+					/* SpanLocal */ {cmdForBatch(&ba1)},
+				},
+				/* SpanReadWrite */ {
+					/* SpanGlobal */ {},
+					/* SpanLocal */ {cmdForBatch(&ba1), cmdForBatch(&ba2), cmdForBatch(&ba3), cmdForBatch(&ba1)},
+				},
+			},
+			expect: "{read/local: [1 BeginTxn]} {write/local: [1 BeginTxn], [3 Put], [1 Put, 1 BeginTxn, 1 EndTxn], [1 BeginTxn]}",
+		},
+		{
+			prereqs: prereqCmdSet{
+				/* SpanReadOnly */ {
+					/* SpanGlobal */ {},
+					/* SpanLocal */ {cmdForBatch(&ba1)},
+				},
+				/* SpanReadWrite */ {
+					/* SpanGlobal */ {},
+					/* SpanLocal */ {cmdForBatch(&ba1), cmdForBatch(&ba2), cmdForBatch(&ba3), cmdForBatch(&ba1), cmdForBatch(&ba2), cmdForBatch(&ba3)},
+				},
+			},
+			expect: "{read/local: [1 BeginTxn]} {write/local: [1 BeginTxn], [3 Put], [1 Put, 1 BeginTxn, 1 EndTxn], [1 BeginTxn], [3 Put], ...}",
+		},
+	}
+	for _, test := range testCases {
+		t.Run(test.expect, func(t *testing.T) {
+			s := prereqDebugSummary(test.prereqs)
+			if s != test.expect {
+				t.Errorf("expected %q for %+v, found %q", test.expect, test.prereqs, s)
+			}
+		})
+	}
+}
+
 func SendWrapped(
 	ctx context.Context, sender client.Sender, header roachpb.Header, args roachpb.Request,
 ) (roachpb.Response, roachpb.BatchResponse_Header, *roachpb.Error) {

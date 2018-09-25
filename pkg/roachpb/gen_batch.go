@@ -153,9 +153,9 @@ func main() {
 package roachpb
 
 import (
-	"bytes"
 	"fmt"
 	"strconv"
+	"strings"
 )
 `)
 
@@ -230,25 +230,33 @@ var requestNames = []string{`)
 	fmt.Fprint(f, `
 // Summary prints a short summary of the requests in a batch.
 func (ba *BatchRequest) Summary() string {
+	var b strings.Builder
+	ba.WriteSummary(&b)
+	return b.String()
+}
+
+// WriteSummary writes a short summary of the requests in a batch
+// to the provided builder.
+func (ba *BatchRequest) WriteSummary(b *strings.Builder) {
 	if len(ba.Requests) == 0 {
-		return "empty batch"
+		b.WriteString("empty batch")
+		return
 	}
 	counts := ba.getReqCounts()
-	var buf struct {
-		bytes.Buffer
-		tmp [10]byte
-	}
+	var tmp [10]byte
+	var comma bool
 	for i, v := range counts {
 		if v != 0 {
-			if buf.Len() > 0 {
-				buf.WriteString(", ")
+			if comma {
+				b.WriteString(", ")
 			}
-			buf.Write(strconv.AppendInt(buf.tmp[:0], int64(v), 10))
-			buf.WriteString(" ")
-			buf.WriteString(requestNames[i])
+			comma = true
+
+			b.Write(strconv.AppendInt(tmp[:0], int64(v), 10))
+			b.WriteString(" ")
+			b.WriteString(requestNames[i])
 		}
 	}
-	return buf.String()
 }
 `)
 
