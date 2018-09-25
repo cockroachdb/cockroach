@@ -265,6 +265,16 @@ SELECT * FROM generate_series(1,1000000)
 statement ok
 SET statement_timeout = '0ms'
 
+# Test that statement_timeout can be set with an interval string, defaulting to
+# milliseconds as a unit.
+statement ok
+SET statement_timeout = '100'
+
+query T
+SHOW statement_timeout
+----
+100ms
+
 # Test that composite variable names get rejected properly, especially
 # when "tracing" is used as prefix.
 
