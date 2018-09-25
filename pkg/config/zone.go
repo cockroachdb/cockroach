@@ -255,7 +255,7 @@ const minRangeMaxBytes = 64 << 10 // 64 KB
 
 // defaultZoneConfig is the default zone configuration used when no custom
 // config has been specified.
-var defaultZoneConfig = ZoneConfig{
+var defaultZoneConfig = &ZoneConfig{
 	NumReplicas:   3,
 	RangeMinBytes: 1 << 20,  // 1 MB
 	RangeMaxBytes: 64 << 20, // 64 MB
@@ -274,7 +274,7 @@ var defaultZoneConfig = ZoneConfig{
 
 // defaultSystemZoneConfig is the default zone configuration used when no custom
 // config has been specified for system ranges.
-var defaultSystemZoneConfig = ZoneConfig{
+var defaultSystemZoneConfig = &ZoneConfig{
 	NumReplicas:   5,
 	RangeMinBytes: 1 << 20,  // 1 MB
 	RangeMaxBytes: 64 << 20, // 64 MB
@@ -296,14 +296,14 @@ var defaultSystemZoneConfig = ZoneConfig{
 func DefaultZoneConfig() ZoneConfig {
 	testingLock.Lock()
 	defer testingLock.Unlock()
-	return defaultZoneConfig
+	return *defaultZoneConfig
 }
 
 // DefaultZoneConfigRef returns a reference to the default zone config.
 func DefaultZoneConfigRef() *ZoneConfig {
 	testingLock.Lock()
 	defer testingLock.Unlock()
-	return &defaultZoneConfig
+	return defaultZoneConfig
 }
 
 // DefaultSystemZoneConfig is the default zone configuration used when no custom
@@ -311,7 +311,7 @@ func DefaultZoneConfigRef() *ZoneConfig {
 func DefaultSystemZoneConfig() ZoneConfig {
 	testingLock.Lock()
 	defer testingLock.Unlock()
-	return defaultSystemZoneConfig
+	return *defaultSystemZoneConfig
 }
 
 // TestingSetDefaultZoneConfig is a testing-only function that changes the
@@ -319,7 +319,7 @@ func DefaultSystemZoneConfig() ZoneConfig {
 func TestingSetDefaultZoneConfig(cfg ZoneConfig) func() {
 	testingLock.Lock()
 	oldConfig := defaultZoneConfig
-	defaultZoneConfig = cfg
+	defaultZoneConfig = &cfg
 	testingLock.Unlock()
 
 	return func() {
@@ -334,7 +334,7 @@ func TestingSetDefaultZoneConfig(cfg ZoneConfig) func() {
 func TestingSetDefaultSystemZoneConfig(cfg ZoneConfig) func() {
 	testingLock.Lock()
 	oldConfig := defaultZoneConfig
-	defaultSystemZoneConfig = cfg
+	defaultSystemZoneConfig = &cfg
 	testingLock.Unlock()
 
 	return func() {
