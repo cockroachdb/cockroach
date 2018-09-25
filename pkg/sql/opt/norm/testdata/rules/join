@@ -2006,3 +2006,378 @@ inner-join
  └── filters [type=bool, outer=(1,2,6,7)]
       ├── (k = y) IS true [type=bool, outer=(1,7)]
       └── (i = x) IS false [type=bool, outer=(2,6)]
+
+# --------------------------------------------------
+# ExtractJoinEqualities
+# --------------------------------------------------
+
+opt expect=ExtractJoinEqualities
+SELECT * FROM xy JOIN uv ON x+y=u
+----
+project
+ ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2), (1,2)-->(3,4), (3)-->(4)
+ └── inner-join
+      ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) column5:5(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(2), (1,2)-->(5), (3)-->(4), (3)==(5), (5)==(3)
+      ├── project
+      │    ├── columns: column5:5(int) x:1(int!null) y:2(int)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2), (1,2)-->(5)
+      │    ├── scan xy
+      │    │    ├── columns: x:1(int!null) y:2(int)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    └── projections [outer=(1,2)]
+      │         └── x + y [type=int, outer=(1,2)]
+      ├── scan uv
+      │    ├── columns: u:3(int!null) v:4(int)
+      │    ├── key: (3)
+      │    └── fd: (3)-->(4)
+      └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+           └── column5 = u [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+
+opt expect=ExtractJoinEqualities
+SELECT * FROM xy JOIN uv ON u=x+y
+----
+project
+ ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2), (1,2)-->(3,4), (3)-->(4)
+ └── inner-join
+      ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) column5:5(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(2), (1,2)-->(5), (3)-->(4), (3)==(5), (5)==(3)
+      ├── project
+      │    ├── columns: column5:5(int) x:1(int!null) y:2(int)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2), (1,2)-->(5)
+      │    ├── scan xy
+      │    │    ├── columns: x:1(int!null) y:2(int)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    └── projections [outer=(1,2)]
+      │         └── x + y [type=int, outer=(1,2)]
+      ├── scan uv
+      │    ├── columns: u:3(int!null) v:4(int)
+      │    ├── key: (3)
+      │    └── fd: (3)-->(4)
+      └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+           └── column5 = u [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+
+opt expect=ExtractJoinEqualities
+SELECT * FROM xy JOIN uv ON x=u+v
+----
+project
+ ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
+ ├── key: (3)
+ ├── fd: (1)-->(2), (3)-->(4), (3,4)-->(1,2)
+ └── inner-join
+      ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) column5:5(int!null)
+      ├── key: (3)
+      ├── fd: (1)-->(2), (3)-->(4), (3,4)-->(5), (1)==(5), (5)==(1)
+      ├── scan xy
+      │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── project
+      │    ├── columns: column5:5(int) u:3(int!null) v:4(int)
+      │    ├── key: (3)
+      │    ├── fd: (3)-->(4), (3,4)-->(5)
+      │    ├── scan uv
+      │    │    ├── columns: u:3(int!null) v:4(int)
+      │    │    ├── key: (3)
+      │    │    └── fd: (3)-->(4)
+      │    └── projections [outer=(3,4)]
+      │         └── u + v [type=int, outer=(3,4)]
+      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+           └── x = column5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+
+opt expect=ExtractJoinEqualities
+SELECT * FROM xy JOIN uv ON u+v=x
+----
+project
+ ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
+ ├── key: (3)
+ ├── fd: (1)-->(2), (3)-->(4), (3,4)-->(1,2)
+ └── inner-join
+      ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) column5:5(int!null)
+      ├── key: (3)
+      ├── fd: (1)-->(2), (3)-->(4), (3,4)-->(5), (1)==(5), (5)==(1)
+      ├── scan xy
+      │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── project
+      │    ├── columns: column5:5(int) u:3(int!null) v:4(int)
+      │    ├── key: (3)
+      │    ├── fd: (3)-->(4), (3,4)-->(5)
+      │    ├── scan uv
+      │    │    ├── columns: u:3(int!null) v:4(int)
+      │    │    ├── key: (3)
+      │    │    └── fd: (3)-->(4)
+      │    └── projections [outer=(3,4)]
+      │         └── u + v [type=int, outer=(3,4)]
+      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+           └── x = column5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+
+opt expect=ExtractJoinEqualities
+SELECT * FROM xy JOIN uv ON x+y=u+v
+----
+project
+ ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ └── inner-join
+      ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) column5:5(int!null) column6:6(int!null)
+      ├── key: (1,3)
+      ├── fd: (1)-->(2), (1,2)-->(5), (3)-->(4), (3,4)-->(6), (5)==(6), (6)==(5)
+      ├── project
+      │    ├── columns: column5:5(int) x:1(int!null) y:2(int)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2), (1,2)-->(5)
+      │    ├── scan xy
+      │    │    ├── columns: x:1(int!null) y:2(int)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    └── projections [outer=(1,2)]
+      │         └── x + y [type=int, outer=(1,2)]
+      ├── project
+      │    ├── columns: column6:6(int) u:3(int!null) v:4(int)
+      │    ├── key: (3)
+      │    ├── fd: (3)-->(4), (3,4)-->(6)
+      │    ├── scan uv
+      │    │    ├── columns: u:3(int!null) v:4(int)
+      │    │    ├── key: (3)
+      │    │    └── fd: (3)-->(4)
+      │    └── projections [outer=(3,4)]
+      │         └── u + v [type=int, outer=(3,4)]
+      └── filters [type=bool, outer=(5,6), constraints=(/5: (/NULL - ]; /6: (/NULL - ]), fd=(5)==(6), (6)==(5)]
+           └── column5 = column6 [type=bool, outer=(5,6), constraints=(/5: (/NULL - ]; /6: (/NULL - ])]
+
+# Multiple extractable equalities.
+opt expect=ExtractJoinEqualities
+SELECT * FROM xy JOIN uv ON x+y=u AND x=u+v AND x+1=u+2
+----
+project
+ ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2), (1,2)-->(3,4), (3)-->(4), (3,4)-->(1,2)
+ └── inner-join
+      ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) column5:5(int!null) column6:6(int!null) column7:7(int!null) column8:8(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(2,7), (1,2)-->(5), (3)-->(4,8), (3,4)-->(6), (3)==(5), (5)==(3), (1)==(6), (6)==(1), (7)==(8), (8)==(7)
+      ├── project
+      │    ├── columns: column5:5(int) column7:7(int) x:1(int!null) y:2(int)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,7), (1,2)-->(5)
+      │    ├── scan xy
+      │    │    ├── columns: x:1(int!null) y:2(int)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    └── projections [outer=(1,2)]
+      │         ├── x + y [type=int, outer=(1,2)]
+      │         └── x + 1 [type=int, outer=(1)]
+      ├── project
+      │    ├── columns: column6:6(int) column8:8(int) u:3(int!null) v:4(int)
+      │    ├── key: (3)
+      │    ├── fd: (3)-->(4,8), (3,4)-->(6)
+      │    ├── scan uv
+      │    │    ├── columns: u:3(int!null) v:4(int)
+      │    │    ├── key: (3)
+      │    │    └── fd: (3)-->(4)
+      │    └── projections [outer=(3,4)]
+      │         ├── u + v [type=int, outer=(3,4)]
+      │         └── u + 2 [type=int, outer=(3)]
+      └── filters [type=bool, outer=(1,3,5-8), constraints=(/1: (/NULL - ]; /3: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]; /7: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(5), (5)==(3), (1)==(6), (6)==(1), (7)==(8), (8)==(7)]
+           ├── column5 = u [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+           ├── x = column6 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+           └── column7 = column8 [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ])]
+
+# An extractable equality with another expression.
+opt expect=ExtractJoinEqualities
+SELECT * FROM xy JOIN uv ON x+y=u AND x+u=v
+----
+project
+ ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int!null)
+ ├── key: (1)
+ ├── fd: (1)-->(2), (1,2)-->(3,4), (3)-->(4)
+ └── inner-join
+      ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int!null) column5:5(int!null)
+      ├── key: (1)
+      ├── fd: (1)-->(2), (1,2)-->(5), (3)-->(4), (3)==(5), (5)==(3)
+      ├── project
+      │    ├── columns: column5:5(int) x:1(int!null) y:2(int)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2), (1,2)-->(5)
+      │    ├── scan xy
+      │    │    ├── columns: x:1(int!null) y:2(int)
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    └── projections [outer=(1,2)]
+      │         └── x + y [type=int, outer=(1,2)]
+      ├── scan uv
+      │    ├── columns: u:3(int!null) v:4(int)
+      │    ├── key: (3)
+      │    └── fd: (3)-->(4)
+      └── filters [type=bool, outer=(1,3-5), constraints=(/3: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+           ├── column5 = u [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+           └── v = (x + u) [type=bool, outer=(1,3,4), constraints=(/4: (/NULL - ])]
+
+# Cases with non-extractable equality.
+opt expect-not=ExtractJoinEqualities
+SELECT * FROM xy FULL OUTER JOIN uv ON x=u
+----
+full-join (merge)
+ ├── columns: x:1(int) y:2(int) u:3(int) v:4(int)
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── scan xy
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── ordering: +1
+ ├── scan uv
+ │    ├── columns: u:3(int!null) v:4(int)
+ │    ├── key: (3)
+ │    ├── fd: (3)-->(4)
+ │    └── ordering: +3
+ └── merge-on
+      ├── left ordering: +1
+      ├── right ordering: +3
+      └── true [type=bool]
+
+opt expect-not=ExtractJoinEqualities
+SELECT * FROM xy FULL OUTER JOIN uv ON x+y=1
+----
+full-join
+ ├── columns: x:1(int) y:2(int) u:3(int) v:4(int)
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── scan xy
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── scan uv
+ │    ├── columns: u:3(int!null) v:4(int)
+ │    ├── key: (3)
+ │    └── fd: (3)-->(4)
+ └── filters [type=bool, outer=(1,2)]
+      └── (x + y) = 1 [type=bool, outer=(1,2)]
+
+opt expect-not=ExtractJoinEqualities
+SELECT * FROM xy FULL OUTER JOIN uv ON 1=u+v
+----
+full-join
+ ├── columns: x:1(int) y:2(int) u:3(int) v:4(int)
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ ├── scan xy
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ ├── scan uv
+ │    ├── columns: u:3(int!null) v:4(int)
+ │    ├── key: (3)
+ │    └── fd: (3)-->(4)
+ └── filters [type=bool, outer=(3,4)]
+      └── (u + v) = 1 [type=bool, outer=(3,4)]
+
+opt expect-not=ExtractJoinEqualities
+SELECT * FROM xy FULL OUTER JOIN uv ON (SELECT k FROM a WHERE i=x)=u
+----
+project
+ ├── columns: x:1(int) y:2(int) u:3(int) v:4(int)
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (1,3)-->(4)
+ └── full-join-apply
+      ├── columns: x:1(int) y:2(int) u:3(int) v:4(int) k:5(int)
+      ├── key: (1,3)
+      ├── fd: (1)-->(2), (1,3)-->(4,5)
+      ├── scan xy
+      │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── left-join
+      │    ├── columns: u:3(int!null) v:4(int) k:5(int)
+      │    ├── outer: (1)
+      │    ├── key: (3)
+      │    ├── fd: (3)-->(4,5), ()~~>(5)
+      │    ├── scan uv
+      │    │    ├── columns: u:3(int!null) v:4(int)
+      │    │    ├── key: (3)
+      │    │    └── fd: (3)-->(4)
+      │    ├── max1-row
+      │    │    ├── columns: k:5(int!null)
+      │    │    ├── outer: (1)
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(5)
+      │    │    └── project
+      │    │         ├── columns: k:5(int!null)
+      │    │         ├── outer: (1)
+      │    │         ├── key: (5)
+      │    │         └── select
+      │    │              ├── columns: k:5(int!null) i:6(int!null)
+      │    │              ├── outer: (1)
+      │    │              ├── key: (5)
+      │    │              ├── fd: ()-->(6)
+      │    │              ├── scan a
+      │    │              │    ├── columns: k:5(int!null) i:6(int)
+      │    │              │    ├── key: (5)
+      │    │              │    └── fd: (5)-->(6)
+      │    │              └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      │    │                   └── i = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      │    └── true [type=bool]
+      └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+           └── u = k [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+
+opt expect-not=ExtractJoinEqualities
+SELECT * FROM xy FULL OUTER JOIN uv ON x=(SELECT k FROM a WHERE i=u)
+----
+project
+ ├── columns: x:1(int) y:2(int) u:3(int) v:4(int)
+ ├── key: (1,3)
+ ├── fd: (1)-->(2), (3)-->(4)
+ └── full-join
+      ├── columns: x:1(int) y:2(int) u:3(int) v:4(int) k:5(int)
+      ├── key: (1,3)
+      ├── fd: (1)-->(2), (3)-->(4,5)
+      ├── scan xy
+      │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      ├── left-join-apply
+      │    ├── columns: u:3(int!null) v:4(int) k:5(int)
+      │    ├── key: (3)
+      │    ├── fd: (3)-->(4,5)
+      │    ├── scan uv
+      │    │    ├── columns: u:3(int!null) v:4(int)
+      │    │    ├── key: (3)
+      │    │    └── fd: (3)-->(4)
+      │    ├── max1-row
+      │    │    ├── columns: k:5(int!null)
+      │    │    ├── outer: (3)
+      │    │    ├── cardinality: [0 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(5)
+      │    │    └── project
+      │    │         ├── columns: k:5(int!null)
+      │    │         ├── outer: (3)
+      │    │         ├── key: (5)
+      │    │         └── select
+      │    │              ├── columns: k:5(int!null) i:6(int!null)
+      │    │              ├── outer: (3)
+      │    │              ├── key: (5)
+      │    │              ├── fd: ()-->(6)
+      │    │              ├── scan a
+      │    │              │    ├── columns: k:5(int!null) i:6(int)
+      │    │              │    ├── key: (5)
+      │    │              │    └── fd: (5)-->(6)
+      │    │              └── filters [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
+      │    │                   └── i = u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ])]
+      │    └── true [type=bool]
+      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+           └── x = k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]

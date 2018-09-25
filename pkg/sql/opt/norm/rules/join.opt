@@ -394,3 +394,30 @@ $left
         )
     )
 )
+
+# ExtractJoinEqualities finds equality conditions such that one side only
+# depends on left columns and the other only on right columns and pushes the
+# expressions down into ProjectOps. The result is a join that has an equality
+# constraint, which is much more efficient. For example:
+#   SELECT * FROM abc JOIN xyz ON a=x+1
+# This join would be quadratic because we have no equality columns.
+# This rule rewrites it as:
+#   SELECT a,b,c,x,y,z FROM abc JOIN (SELECT *, x+1 AS x1 FROM xyz) ON a=x1
+# This join can use hash join or lookup on the equality columns.
+#
+# Depending on the expressions involved, one or both sides require a projection.
+[ExtractJoinEqualities, Normalize]
+(JoinNonApply
+    $left:* & ^(HasOuterCols $left)
+    $right:* & ^(HasOuterCols $right)
+    (Filters
+        $list:[
+            ...
+            (Eq $a:* $b:*) &
+            (CanExtractJoinEquality $a $b (OutputCols $left) (OutputCols $right))
+            ...
+        ]
+    )
+)
+=>
+(ExtractJoinEqualities (OpName) $left $right $list)

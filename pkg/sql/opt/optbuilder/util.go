@@ -160,10 +160,6 @@ func (b *Builder) expandStarAndResolveType(
 func (b *Builder) synthesizeColumn(
 	scope *scope, label string, typ types.T, expr tree.TypedExpr, group memo.GroupID,
 ) *scopeColumn {
-	if label == "" {
-		label = fmt.Sprintf("column%d", b.factory.Metadata().NumColumns()+1)
-	}
-
 	name := tree.Name(label)
 	colID := b.factory.Metadata().AddColumn(label, typ)
 	scope.cols = append(scope.cols, scopeColumn{
@@ -179,10 +175,6 @@ func (b *Builder) synthesizeColumn(
 // populateSynthesizedColumn is similar to synthesizeColumn, but it fills in
 // the given existing column rather than allocating a new one.
 func (b *Builder) populateSynthesizedColumn(col *scopeColumn, group memo.GroupID) {
-	if col.name == "" {
-		col.name = tree.Name(fmt.Sprintf("column%d", b.factory.Metadata().NumColumns()+1))
-	}
-
 	colID := b.factory.Metadata().AddColumn(string(col.name), col.typ)
 	col.id = colID
 	col.group = group
