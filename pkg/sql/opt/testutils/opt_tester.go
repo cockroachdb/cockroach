@@ -211,11 +211,11 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	case "exec-ddl":
 		testCatalog, ok := ot.catalog.(*testcat.Catalog)
 		if !ok {
-			tb.Fatal("exec-ddl can only be used with TestCatalog")
+			d.Fatalf(tb, "exec-ddl can only be used with TestCatalog")
 		}
 		s, err := testCatalog.ExecuteDDL(d.Input)
 		if err != nil {
-			tb.Fatal(err)
+			d.Fatalf(tb, "%v", err)
 		}
 		return s
 
@@ -230,7 +230,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			return fmt.Sprintf("error: %s\n", text)
 		}
 		if err := ot.postProcess(ev); err != nil {
-			tb.Fatal(err)
+			d.Fatalf(tb, "%v", err)
 		}
 		return ev.FormatString(ot.Flags.ExprFormat)
 
@@ -245,7 +245,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			return fmt.Sprintf("error: %s\n", text)
 		}
 		if err := ot.postProcess(ev); err != nil {
-			tb.Fatal(err)
+			d.Fatalf(tb, "%v", err)
 		}
 		return ev.FormatString(ot.Flags.ExprFormat)
 
@@ -255,7 +255,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			d.Fatalf(tb, "%v", err)
 		}
 		if err := ot.postProcess(ev); err != nil {
-			tb.Fatal(err)
+			d.Fatalf(tb, "%v", err)
 		}
 		return ev.FormatString(ot.Flags.ExprFormat)
 
