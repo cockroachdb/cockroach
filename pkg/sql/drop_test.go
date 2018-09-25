@@ -956,18 +956,34 @@ func TestDropDatabaseAfterDropTable(t *testing.T) {
 			AsyncExecNotification: asyncSchemaChangerDisabled,
 		},
 	}
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
 	if err := tests.CreateKVTable(sqlDB, "kv", 100); err != nil {
 		t.Fatal(err)
 	}
 
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
+
 	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
 		t.Fatal(err)
 	}
 
 	if _, err := sqlDB.Exec(`DROP DATABASE t`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Job still running, waiting for draining names.
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	if err := jobutils.VerifyRunningSystemJob(
+		t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.RunningStatusDrainingNames,
+		jobs.Record{
+			Username:    security.RootUser,
+			Description: "DROP TABLE t.public.kv",
+			DescriptorIDs: sqlbase.IDs{
+				tableDesc.ID,
+			},
+		}); err != nil {
 		t.Fatal(err)
 	}
 }
