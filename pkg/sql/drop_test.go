@@ -211,7 +211,8 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if err := descExists(sqlDB, false, dbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
-	if err := zoneExists(sqlDB, nil, dbDesc.ID); err != nil {
+	// Database zone config is removed once all table data and zone configs are removed.
+	if err := zoneExists(sqlDB, &cfg, dbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -234,6 +235,49 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 			tbDesc.ID,
 		},
 	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Test that an empty, dropped database's zone config gets deleted immediately.
+func TestDropDatabaseEmpty(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+	ctx := context.TODO()
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	dbNameKey := sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, "t")
+	r, err := kvDB.Get(ctx, dbNameKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.Exists() {
+		t.Fatalf(`database "t" does not exist`)
+	}
+	dbID := sqlbase.ID(r.ValueInt())
+
+	if cfg, err := addDefaultZoneConfig(sqlDB, dbID); err != nil {
+		t.Fatal(err)
+	} else if err := zoneExists(sqlDB, &cfg, dbID); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`DROP DATABASE t`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := descExists(sqlDB, false, dbID); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := zoneExists(sqlDB, nil, dbID); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -311,6 +355,10 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	tests.CheckKeyCount(t, kvDB, tableSpan, 6)
 	tests.CheckKeyCount(t, kvDB, table2Span, 6)
 
+	if _, err := addDefaultZoneConfig(sqlDB, dbDesc.ID); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := sqlDB.Exec(`DROP DATABASE t RESTRICT`); !testutils.IsError(err,
 		`database "t" is not empty`) {
 		t.Fatal(err)
@@ -334,8 +382,8 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 		t.Fatal(err)
 	}
 
-	// Push a new zone config for both the table and database with TTL=0
-	// so the data is deleted immediately.
+	// Push a new zone config for the table with TTL=0 so the data is
+	// deleted immediately.
 	if _, err := addImmediateGCZoneConfig(sqlDB, tbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -351,6 +399,11 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	// Table 1 data is deleted.
 	tests.CheckKeyCount(t, kvDB, tableSpan, 0)
 	tests.CheckKeyCount(t, kvDB, table2Span, 6)
+
+	def := config.DefaultZoneConfig()
+	if err := zoneExists(sqlDB, &def, dbDesc.ID); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.RunningStatusWaitingGC, jobs.Record{
 		Username:    security.RootUser,
@@ -387,6 +440,11 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 			tbDesc.ID, tb2Desc.ID,
 		},
 	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Database zone config is removed once all table data and zone configs are removed.
+	if err := zoneExists(sqlDB, nil, dbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 }
