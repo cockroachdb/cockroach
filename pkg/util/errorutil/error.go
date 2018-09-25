@@ -12,12 +12,14 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package util
+package errorutil
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // UnexpectedWithIssueErr indicates an error with an associated Github issue.
@@ -28,41 +30,39 @@ import (
 //
 // Modeled after pgerror.Unimplemented.
 type UnexpectedWithIssueErr struct {
-	issue int
-	msg   string
+	issue   int
+	msg     string
+	safeMsg string
 }
 
 // UnexpectedWithIssueErrorf constructs an UnexpectedWithIssueError with the
 // provided issue and formatted message.
 func UnexpectedWithIssueErrorf(issue int, format string, args ...interface{}) error {
 	return UnexpectedWithIssueErr{
-		issue: issue,
-		msg:   fmt.Sprintf(format, args...),
+		issue:   issue,
+		msg:     fmt.Sprintf(format, args...),
+		safeMsg: log.ReportablesToSafeError(2 /* depth */, format, args).Error(),
 	}
 }
 
 // Error implements the error interface.
 func (e UnexpectedWithIssueErr) Error() string {
-	var fmtMsg string
-	if e.msg != "" {
-		fmtMsg = fmt.Sprintf(": %s", e.msg)
-	}
-	return fmt.Sprintf("unexpected error%s (we've been trying to track this particular issue down; "+
-		"please report your reproduction at "+
-		"https://github.com/cockroachdb/cockroach/issues/%d)", fmtMsg, e.issue)
+	return fmt.Sprintf("unexpected error: %s\nWe've been trying to track this particular issue down. "+
+		"Please report your reproduction at "+
+		"https://github.com/cockroachdb/cockroach/issues/%d "+
+		"unless that issue seems to have been resolved "+
+		"(in which case you might want to update crdb to a newer version).",
+		e.msg, e.issue)
 }
 
-// ErrorSource attempts to return the file:line where `i` was created if `i` has
-// that information (i.e. if it is an errors.withStack). Returns "" otherwise.
-func ErrorSource(i interface{}) string {
-	type stackTracer interface {
-		StackTrace() errors.StackTrace
-	}
-	if e, ok := i.(stackTracer); ok {
-		tr := e.StackTrace()
-		if len(tr) > 0 {
-			return fmt.Sprintf("%v", tr[0]) // prints file:line
-		}
-	}
-	return ""
+// SafeMessage implements the SafeMessager interface.
+func (e UnexpectedWithIssueErr) SafeMessage() string {
+	return fmt.Sprintf("issue #%d: %s", e.issue, e.safeMsg)
+}
+
+// SendReport creates a Sentry report about the error, if the settings allow.
+// The format string will be reproduced ad litteram in the report; the arguments
+// will be sanitized.
+func (e UnexpectedWithIssueErr) SendReport(ctx context.Context, sv *settings.Values) {
+	log.SendCrashReport(ctx, sv, 1 /* depth */, "%s", []interface{}{e})
 }

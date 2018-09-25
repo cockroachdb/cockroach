@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -331,7 +332,7 @@ func (s *Server) recordError(err error) {
 			}
 		}
 	} else {
-		typ := util.ErrorSource(err)
+		typ := log.ErrorSource(err)
 		if typ == "" {
 			typ = "unknown"
 		}
@@ -1866,6 +1867,17 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 	case noEvent:
 	case txnStart:
 	case txnCommit:
+		if res.Err() != nil {
+			err := errorutil.UnexpectedWithIssueErrorf(
+				26687,
+				"programming error: non-error event "+
+					advInfo.txnEvent.String()+ //the event is included like this so that it doesn't get sanitized
+					" generated even though res.Err() has been set to: %s",
+				res.Err())
+			log.Error(ex.Ctx(), err)
+			err.(errorutil.UnexpectedWithIssueErr).SendReport(ex.Ctx(), &ex.server.cfg.Settings.SV)
+			return advanceInfo{}, err
+		}
 		if schemaChangeErr := ex.extraTxnState.schemaChangers.execSchemaChanges(
 			ex.Ctx(), ex.server.cfg, &ex.sessionTracing,
 		); schemaChangeErr != nil {

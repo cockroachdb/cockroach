@@ -12,14 +12,26 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package util
+package errorutil
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestUnexpectedWithIssueErrorf(t *testing.T) {
 	err := UnexpectedWithIssueErrorf(1234, "args: %d %s %f", 1, "two", 3.0)
-	exp := "unexpected error: args: 1 two 3.000000 (we've been trying to track this particular issue down; please report your reproduction at https://github.com/cockroachdb/cockroach/issues/1234)"
+	exp := "unexpected error: args: 1 two 3.000000\n" +
+		"We've been trying to track this particular issue down. Please report your " +
+		"reproduction at https://github.com/cockroachdb/cockroach/issues/1234 unless " +
+		"that issue seems to have been resolved (in which case you might want to " +
+		"update crdb to a newer version)."
 	if err.Error() != exp {
 		t.Errorf("Expected message:\n  %s\ngot:\n  %s", exp, err.Error())
+	}
+
+	safeMsg := err.(UnexpectedWithIssueErr).SafeMessage()
+	exp = "issue #1234: error_test.go:22: args: %d %s %f | int; string; float64"
+	if safeMsg != exp {
+		t.Errorf("Expected SafeMessage:\n%s\ngot:\n%s", exp, safeMsg)
 	}
 }
