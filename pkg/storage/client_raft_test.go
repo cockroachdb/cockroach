@@ -3172,8 +3172,9 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	errChan := errorChannelTestHandler(make(chan *roachpb.Error, 1))
 	transport0.Listen(mtc.stores[0].StoreID(), errChan)
 
-	// Simulate an election triggered by the removed node.
-	transport0.SendAsync(&storage.RaftMessageRequest{
+	// Simulate an election triggered by the removed node. Try and try again
+	// until we're reasonably sure the message was sent.
+	for !transport0.SendAsync(&storage.RaftMessageRequest{
 		RangeID:     rangeID,
 		ToReplica:   replica1,
 		FromReplica: replica0,
@@ -3183,7 +3184,8 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 			Type: raftpb.MsgVote,
 			Term: term + 1,
 		},
-	})
+	}) {
+	}
 
 	// The receiver of this message should return an error.
 	select {
