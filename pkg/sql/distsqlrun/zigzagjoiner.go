@@ -417,7 +417,7 @@ func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int
 }
 
 func (z *zigzagJoiner) close() {
-	if !z.closed {
+	if z.InternalClose() {
 		log.VEventf(z.Ctx, 2, "exiting zigzag joiner run")
 	}
 }

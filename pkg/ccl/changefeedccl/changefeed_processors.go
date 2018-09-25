@@ -227,26 +227,26 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 // processor did not finish completion, there is an excessive amount of nil
 // checking.
 func (ca *changeAggregator) close() {
-	// Shut down the poller and tableHistUpdater if they weren't already.
-	if ca.cancel != nil {
-		ca.cancel()
-	}
-	// Wait for the poller and tableHistUpdater to finish shutting down.
-	if ca.pollerDoneCh != nil {
-		<-ca.pollerDoneCh
-	}
-	if ca.tableHistUpdaterDoneCh != nil {
-		<-ca.tableHistUpdaterDoneCh
-	}
-	if ca.sink != nil {
-		if err := ca.sink.Close(); err != nil {
-			log.Warningf(ca.Ctx, `error closing sink. goroutines may have leaked: %v`, err)
+	if ca.InternalClose() {
+		// Shut down the poller and tableHistUpdater if they weren't already.
+		if ca.cancel != nil {
+			ca.cancel()
 		}
+		// Wait for the poller and tableHistUpdater to finish shutting down.
+		if ca.pollerDoneCh != nil {
+			<-ca.pollerDoneCh
+		}
+		if ca.tableHistUpdaterDoneCh != nil {
+			<-ca.tableHistUpdaterDoneCh
+		}
+		if ca.sink != nil {
+			if err := ca.sink.Close(); err != nil {
+				log.Warningf(ca.Ctx, `error closing sink. goroutines may have leaked: %v`, err)
+			}
+		}
+		ca.memAcc.Close(ca.Ctx)
+		ca.MemMonitor.Stop(ca.Ctx)
 	}
-	// Need to close the mem accounting while the context is still valid.
-	ca.memAcc.Close(ca.Ctx)
-	ca.InternalClose()
-	ca.MemMonitor.Stop(ca.Ctx)
 }
 
 // Next is part of the RowSource interface.
@@ -466,15 +466,15 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 }
 
 func (cf *changeFrontier) close() {
-	if cf.sink != nil {
-		if err := cf.sink.Close(); err != nil {
-			log.Warningf(cf.Ctx, `error closing sink. goroutines may have leaked: %v`, err)
+	if cf.InternalClose() {
+		if cf.sink != nil {
+			if err := cf.sink.Close(); err != nil {
+				log.Warningf(cf.Ctx, `error closing sink. goroutines may have leaked: %v`, err)
+			}
 		}
+		cf.memAcc.Close(cf.Ctx)
+		cf.MemMonitor.Stop(cf.Ctx)
 	}
-	// Need to close the mem accounting while the context is still valid.
-	cf.memAcc.Close(cf.Ctx)
-	cf.InternalClose()
-	cf.MemMonitor.Stop(cf.Ctx)
 }
 
 // Next is part of the RowSource interface.
