@@ -362,6 +362,9 @@ var (
 	)
 	sqlfmtLen = flag.Int("line-length", tree.DefaultPrettyCfg().LineWidth,
 		"target line length when using -rewrite-sql")
+	disableOptRuleProbability = flag.Float64(
+		"disable-opt-rule-probability", 0,
+		"disable transformation rules in the cost-based optimizer with the given probability.")
 )
 
 type testClusterConfig struct {
@@ -937,9 +940,10 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 					BootstrapVersion: cfg.bootstrapVersion,
 				},
 				SQLEvalContext: &tree.EvalContextTestingKnobs{
-					AssertBinaryExprReturnTypes: true,
-					AssertUnaryExprReturnTypes:  true,
-					AssertFuncExprReturnTypes:   true,
+					AssertBinaryExprReturnTypes:     true,
+					AssertUnaryExprReturnTypes:      true,
+					AssertFuncExprReturnTypes:       true,
+					DisableOptimizerRuleProbability: *disableOptRuleProbability,
 				},
 				Upgrade: &server.UpgradeTestingKnobs{
 					DisableUpgrade: cfg.disableUpgrade,
