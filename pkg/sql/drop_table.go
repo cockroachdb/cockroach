@@ -110,8 +110,13 @@ func (n *dropTableNode) startExec(params runParams) error {
 		}
 
 		droppedDetails := jobspb.DroppedTableDetails{Name: toDel.tn.FQString(), ID: toDel.desc.ID}
-		if _, err := params.p.createDropTablesJob(ctx, sqlbase.TableDescriptors{droppedDesc}, []jobspb.DroppedTableDetails{droppedDetails}, tree.AsStringWithFlags(n.n,
-			tree.FmtAlwaysQualifyTableNames), true /* drainNames */); err != nil {
+		if _, err := params.p.createDropTablesJob(
+			ctx,
+			sqlbase.TableDescriptors{droppedDesc},
+			[]jobspb.DroppedTableDetails{droppedDetails},
+			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames),
+			true, /* drainNames */
+			sqlbase.InvalidID /* droppedDatabaseID */); err != nil {
 			return err
 		}
 
