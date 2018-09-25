@@ -428,6 +428,9 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 		// We need to instantiate our own HTTP Request, because we must inspect
 		// the returned headers.
 		httpClient, err := ts.GetHTTPClient()
+		if util.RaceEnabled {
+			httpClient.Timeout += 30 * time.Second
+		}
 		if err != nil {
 			t.Fatalf("could not get HTTP client: %s", err)
 		}
