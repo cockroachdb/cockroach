@@ -2393,6 +2393,9 @@ type EvalContextTestingKnobs struct {
 	// evaluations should assert that the returned Datum matches the
 	// expected ReturnType of the function.
 	AssertBinaryExprReturnTypes bool
+	// DisableOptimizerRuleProbability is the probability that any given
+	// transformation rule in the optimizer is disabled.
+	DisableOptimizerRuleProbability float64
 }
 
 var _ base.ModuleTestingKnobs = &EvalContextTestingKnobs{}
