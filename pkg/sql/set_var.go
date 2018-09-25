@@ -242,7 +242,7 @@ func setStmtTimeout(
 	var timeout time.Duration
 	switch v := tree.UnwrapDatum(&evalCtx.EvalContext, d).(type) {
 	case *tree.DString:
-		interval, err := tree.ParseDInterval(string(*v))
+		interval, err := tree.ParseDIntervalWithField(string(*v), tree.Millisecond)
 		if err != nil {
 			return wrapSetVarError("statement_timeout", values[0].String(), "%v", err)
 		}
