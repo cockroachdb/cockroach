@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package log
+package util
 
 import (
 	"testing"
@@ -41,8 +41,8 @@ func TestEveryN(t *testing.T) {
 		{11 * time.Minute, true},
 	}
 	for _, tc := range testCases {
-		if a, e := en.shouldLog(start.Add(tc.t)), tc.expected; a != e {
-			t.Errorf("ShouldLog(%v) got %v, want %v", tc.t, a, e)
+		if a, e := en.ShouldProcess(start.Add(tc.t)), tc.expected; a != e {
+			t.Errorf("ShouldProcess(%v) got %v, want %v", tc.t, a, e)
 		}
 	}
 }
