@@ -386,8 +386,7 @@ func (s *Server) GetStmtStatsLastReset() time.Time {
 	return s.sqlStats.lastReset
 }
 
-// ServeConn creates a connExecutor and serves a client connection by reading
-// commands from stmtBuf.
+// SetupConn creates a connExecutor for the client connection.
 //
 // Args:
 // stmtBuf: The incoming statement for the new connExecutor.
@@ -397,19 +396,30 @@ func (s *Server) GetStmtStatsLastReset() time.Time {
 // 	 takes ownership of this memory.
 // memMetrics: The metrics that statements executed on this connection will
 //   contribute to.
-func (s *Server) ServeConn(
+func (s *Server) SetupConn(
 	ctx context.Context,
 	args SessionArgs,
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	reserved mon.BoundAccount,
 	memMetrics MemoryMetrics,
-	cancel context.CancelFunc,
-) error {
-
-	ex := s.newConnExecutor(
+) (ConnectionHandler, error) {
+	return s.newConnExecutor(
 		ctx, sessionParams{args: &args}, stmtBuf, clientComm, s.pool, reserved, memMetrics,
 	)
+}
+
+// ConnectionHandler is the interface between the result of SetupConn
+// and the ServeConn below. It encapsulates the connExecutor and hides
+// it away from other packages.
+type ConnectionHandler *connExecutor
+
+// ServeConn serves a client connection by reading commands from
+// the stmtBuf embedded in the connHandler.
+func (s *Server) ServeConn(
+	ctx context.Context, connHandler ConnectionHandler, cancel context.CancelFunc,
+) error {
+	ex := (*connExecutor)(connHandler)
 	defer func() {
 		r := recover()
 		ex.closeWrapper(ctx, r)
@@ -466,7 +476,7 @@ func (s *Server) newConnExecutor(
 	parentMon *mon.BytesMonitor,
 	reserved mon.BoundAccount,
 	memMetrics MemoryMetrics,
-) *connExecutor {
+) (*connExecutor, error) {
 	// Create the various monitors.
 	//
 	// Note: we pass `reserved` to sessionRootMon where it causes it to act as a
@@ -561,7 +571,8 @@ func (s *Server) newConnExecutor(
 		}
 		ex.eventLog = trace.NewEventLog(fmt.Sprintf("sql session [%s]", sd.User), remoteStr)
 	}
-	return ex
+
+	return ex, nil
 }
 
 // newConnExecutorWithTxn creates a connExecutor that will execute statements
@@ -578,8 +589,11 @@ func (s *Server) newConnExecutorWithTxn(
 	reserved mon.BoundAccount,
 	memMetrics MemoryMetrics,
 	txn *client.Txn,
-) *connExecutor {
-	ex := s.newConnExecutor(ctx, sargs, stmtBuf, clientComm, parentMon, reserved, memMetrics)
+) (*connExecutor, error) {
+	ex, err := s.newConnExecutor(ctx, sargs, stmtBuf, clientComm, parentMon, reserved, memMetrics)
+	if err != nil {
+		return nil, err
+	}
 	// Perform some surgery on the executor - replace its state machine and
 	// initialize the state.
 	ex.machine = fsm.MakeMachine(
@@ -596,7 +610,7 @@ func (s *Server) newConnExecutorWithTxn(
 		tree.ReadWrite,
 		txn,
 		ex.transitionCtx)
-	return ex
+	return ex, nil
 }
 
 var maxStmtStatReset = settings.RegisterNonNegativeDurationSetting(
