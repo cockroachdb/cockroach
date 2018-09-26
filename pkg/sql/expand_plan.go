@@ -121,6 +121,18 @@ func doExpandPlan(
 		n.source, err = doExpandPlan(ctx, p, noParams, n.source)
 
 	case *deleteNode:
+		// If the source of the delete is a scan node (optionally with a render on
+		// top), mark it as such. Note that this parallels the logic in
+		// canDeleteFast.
+		maybeScan := n.source
+		if sel, ok := maybeScan.(*renderNode); ok {
+			maybeScan = sel.source.plan
+		}
+		scan, ok := maybeScan.(*scanNode)
+		if ok {
+			scan.isDeleteSource = true
+		}
+
 		n.source, err = doExpandPlan(ctx, p, noParams, n.source)
 
 	case *rowCountNode:
