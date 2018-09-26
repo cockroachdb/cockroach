@@ -17,6 +17,8 @@ package optbuilder
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -286,6 +288,13 @@ func (b *Builder) buildScan(
 		if indexFlags != nil {
 			panic(builderError{errors.Errorf("index flags not allowed with virtual tables")})
 		}
+
+		decompose, resultScope := b.maybeDecomposeVirtualTable(tn, ordinals, indexFlags, inScope)
+
+		if decompose {
+			return resultScope
+		}
+
 		def := memo.VirtualScanOpDef{Table: tabID, Cols: tabColIDs}
 		outScope.group = b.factory.ConstructVirtualScan(b.factory.InternVirtualScanOpDef(&def))
 	} else {
@@ -565,4 +574,62 @@ func (b *Builder) validateAsOf(asOf tree.AsOfClause) {
 	if *b.semaCtx.AsOfTimestamp != ts {
 		panic(builderError{errors.Errorf("cannot specify AS OF SYSTEM TIME with different timestamps")})
 	}
+}
+
+// maybeDecomposeVirtualTable determines if the current virtual table scan
+// should be transformed into a scan over a different virtual table with
+// additional projections.
+func (b *Builder) maybeDecomposeVirtualTable(
+	tn *tree.TableName, ordinals []int, indexFlags *tree.IndexFlags, inScope *scope,
+) (bool, *scope) {
+	if tn.SchemaName == "crdb_internal" {
+		if tn.TableName == "ranges" {
+			return true, b.buildRangesTable(tn, ordinals, indexFlags, inScope)
+		}
+	}
+	return false, nil
+}
+
+// buildRangesTable decomposes a virtual scan over the crdb_internal.ranges
+// table into a projection over a virtual scan over the
+// crdb_internal.ranges_no_leases table. The projection uses the
+// crdb_internal.lease_holder builtin to add a lease_holder column.
+func (b *Builder) buildRangesTable(
+	tn *tree.TableName, ordinals []int, indexFlags *tree.IndexFlags, inScope *scope,
+) *scope {
+	baseTn := tree.MakeTableNameWithSchema(tn.CatalogName, tn.SchemaName, "ranges_no_leases")
+	baseTab := b.resolveDataSource(&baseTn)
+
+	t, ok := baseTab.(opt.Table)
+	if !ok {
+		panic("programming error: expected ranges_no_leases to resolve to Table")
+	}
+	outScope := b.buildScan(t, &baseTn, ordinals, indexFlags, inScope)
+	augmenterName := "crdb_internal.lease_holder"
+
+	// Index of the start_key column.
+	argsExprs := tree.TypedExprs{&tree.IndexedVar{Idx: 1}}
+	fetchLeasesExpr := b.makeBuiltinExpr(augmenterName, argsExprs)
+
+	newCol := b.addColumn(outScope, "lease_holder", fetchLeasesExpr.ResolvedType(), fetchLeasesExpr)
+	b.buildScalar(fetchLeasesExpr, outScope, outScope, newCol, nil)
+	outScope.group = b.constructProject(outScope.group, outScope.cols)
+
+	return outScope
+}
+
+// makeBuiltinExpr takes in a builtinName and a list of TypedExprs corresponding
+// to the arguments of the builtin and returns a constructed tree.FuncExpr.
+func (b *Builder) makeBuiltinExpr(builtinName string, argsExprs tree.TypedExprs) *tree.FuncExpr {
+	augmenterProp, augmenterOverride := builtins.GetBuiltinProperties(builtinName)
+	return tree.NewTypedFuncExpr(
+		tree.WrapFunction(builtinName),
+		0, /* aggQualifier */
+		argsExprs,
+		nil, /* filter */
+		nil, /* windowDef */
+		types.Int,
+		augmenterProp,
+		&augmenterOverride[0],
+	)
 }
