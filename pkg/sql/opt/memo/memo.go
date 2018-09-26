@@ -496,6 +496,12 @@ func (m *Memo) MemoizeDenormExpr(evalCtx *tree.EvalContext, group GroupID, denor
 			tmpGroupID := GroupID(len(m.groups))
 			m.groups = append(m.groups, makeMemoGroup(tmpGroupID, denorm))
 			ev := MakeNormExprView(m, tmpGroupID)
+			// Building out logical props could lead to more lazy population of
+			// stats in child expressions, which could change the test output
+			// when run with and without -race.
+			//
+			// TODO: Figure out a way to either run this for all tests, or
+			// cleanly restore all column stats after this step.
 			logical := m.logPropsBuilder.buildProps(evalCtx, ev)
 			logical.VerifyAgainst(&m.group(group).logical)
 
