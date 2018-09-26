@@ -307,7 +307,7 @@ func formatRuleSet(r RuleSet) string {
 }
 
 func (ot *OptTester) postProcess(ev memo.ExprView) error {
-	fillInLazyProps(ev)
+	fillInLazyProps(ev, &ot.evalCtx)
 	for _, cols := range ot.Flags.ColStats {
 		ev.RequestColStat(&ot.evalCtx, cols)
 	}
@@ -326,7 +326,7 @@ func (ot *OptTester) postProcess(ev memo.ExprView) error {
 }
 
 // Fills in lazily-derived properties (for display).
-func fillInLazyProps(ev memo.ExprView) {
+func fillInLazyProps(ev memo.ExprView, evalCtx *tree.EvalContext) {
 	if !ev.IsScalar() {
 		// Derive columns that are candidates for pruning.
 		norm.DerivePruneCols(ev)
@@ -336,10 +336,18 @@ func fillInLazyProps(ev memo.ExprView) {
 
 		// Make sure the interesting orderings are calculated.
 		xform.DeriveInterestingOrderings(ev)
+
+		// Derive logical props for all child expressions, even
+		// denormalized ones - to make statistics look complete
+		// in the output tree. Derivation of logical props also
+		// triggers population of key column statistics for those
+		// expressions - which is what we're interested in seeing
+		// in the test output.
+		memo.DeriveLogicalProps(evalCtx, ev)
 	}
 
 	for i, n := 0, ev.ChildCount(); i < n; i++ {
-		fillInLazyProps(ev.Child(i))
+		fillInLazyProps(ev.Child(i), evalCtx)
 	}
 }
 
