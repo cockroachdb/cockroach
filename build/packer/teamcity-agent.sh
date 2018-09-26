@@ -15,6 +15,10 @@ EOF
 # Avoid saving any Bash history.
 HISTSIZE=0
 
+# At the time of writing we really want 1.11, but that doesn't
+# exist in the PPA yet.
+GOVERS=1.10
+
 # Add third-party APT repositories.
 apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 0EBFCD88
 cat > /etc/apt/sources.list.d/docker.list <<EOF
@@ -36,12 +40,12 @@ debconf-set-selections <<< "oracle-java8-installer shared/accepted-oracle-licens
 apt-get install --yes \
   docker-ce \
   git \
-  golang-1.9 \
+  golang-${GOVERS} \
   oracle-java8-installer \
   unzip
 
 # Link Go into the PATH; the PPA installs it into /usr/lib/go-1.x/bin.
-ln -s /usr/lib/go-1.9/bin/go /usr/bin/go
+ln -s /usr/lib/go-${GOVERS}/bin/go /usr/bin/go
 
 # Add a user for the TeamCity agent with Docker rights.
 adduser agent --disabled-password
