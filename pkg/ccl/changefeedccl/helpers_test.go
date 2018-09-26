@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -122,17 +123,20 @@ func createBenchmarkChangefeed(
 	sink := makeBenchSink()
 
 	buf := makeBuffer()
+	leaseMgr := s.LeaseManager().(*sql.LeaseManager)
 	poller := makePoller(
-		s.ClusterSettings(), s.DB(), feedClock, s.Gossip(), spans, details, initialHighWater, buf)
+		s.ClusterSettings(), s.DB(), feedClock, s.Gossip(),
+		spans, details, initialHighWater, buf, leaseMgr,
+	)
 
-	th := makeTableHistory(func(*sqlbase.TableDescriptor) error { return nil }, initialHighWater)
+	th := makeTableHistory(func(context.Context, *sqlbase.TableDescriptor) error { return nil }, initialHighWater)
 	thUpdater := &tableHistoryUpdater{
 		settings: s.ClusterSettings(),
 		db:       s.DB(),
 		targets:  details.Targets,
 		m:        th,
 	}
-	rowsFn := kvsToRows(s.LeaseManager().(*sql.LeaseManager), th, details, buf.Get)
+	rowsFn := kvsToRows(s.LeaseManager().(*sql.LeaseManager), details, buf.Get)
 	tickFn := emitEntries(details, encoder, sink, rowsFn, TestingKnobs{})
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -523,6 +527,25 @@ func (c *tableFeed) Close(t testing.TB) {
 		t.Error(err)
 	}
 	c.urlCleanup()
+}
+
+func waitForSchemaChange(
+	t testing.TB, sqlDB *sqlutils.SQLRunner, stmt string, arguments ...interface{},
+) {
+	sqlDB.Exec(t, stmt, arguments...)
+	row := sqlDB.QueryRow(t, "SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1")
+	var jobID string
+	row.Scan(&jobID)
+
+	testutils.SucceedsSoon(t, func() error {
+		row := sqlDB.QueryRow(t, "SELECT status FROM [SHOW JOBS] WHERE job_id = $1", jobID)
+		var status string
+		row.Scan(&status)
+		if status != "succeeded" {
+			return fmt.Errorf("Job %s had status %s, wanted 'succeeded'", jobID, status)
+		}
+		return nil
+	})
 }
 
 func assertPayloads(t testing.TB, f testfeed, expected []string) {
