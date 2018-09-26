@@ -2,7 +2,7 @@ import React from "react";
 import _ from "lodash";
 
 import { AggregationLevel } from "src/redux/aggregationLevel";
-import { LineGraph } from "src/views/cluster/components/linegraph";
+import { LineGraph, Group } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 
 import { GraphDashboardProps, nodeDisplayName } from "./dashboardUtils";
@@ -59,6 +59,7 @@ export default function (props: GraphDashboardProps) {
         tooltip={
           `The total amount of SQL client network traffic in bytes per second ${tooltipSelection}.`
         }
+        group={Group.Top}
       >
         <Axis units={AxisUnits.Bytes} label="byte traffic">
           {nodeIDs.map((nid) => (
@@ -79,6 +80,7 @@ export default function (props: GraphDashboardProps) {
         tooltip={
           `The total amount of SQL client network traffic in bytes per second ${tooltipSelection}.`
         }
+        group={Group.Bottom}
       >
         <Axis units={AxisUnits.Bytes} label="byte traffic">
           {nodeIDs.map((nid) => (

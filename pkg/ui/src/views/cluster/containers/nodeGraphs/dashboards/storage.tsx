@@ -3,7 +3,7 @@ import _ from "lodash";
 
 import { AggregationLevel } from "src/redux/aggregationLevel";
 import * as docsURL from "src/util/docs";
-import { LineGraph } from "src/views/cluster/components/linegraph";
+import { LineGraph, Group } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 
 import { GraphDashboardProps, nodeDisplayName, storeIDsForNode } from "./dashboardUtils";
@@ -269,6 +269,7 @@ export default function (props: GraphDashboardProps) {
           `The number of successfully written time series samples, and number of errors attempting
           to write time series, per second ${tooltipSelection}.`
         }
+      group={Group.Top}
       >
         <Axis label="count">
           {nodeIDs.map((nid) => (
@@ -287,6 +288,7 @@ export default function (props: GraphDashboardProps) {
         title="Time Series"
         subtitle="Errors"
         sources={nodeSources}
+        group={Group.Bottom}
       >
         <Axis label="count">
           {nodeIDs.map((nid) => (

@@ -1,7 +1,7 @@
 import React from "react";
 
 import { AggregationLevel } from "src/redux/aggregationLevel";
-import { LineGraph } from "src/views/cluster/components/linegraph";
+import { LineGraph, Group } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 
 import { GraphDashboardProps, nodeDisplayName, storeIDsForNode } from "./dashboardUtils";
@@ -93,6 +93,7 @@ export default function (props: GraphDashboardProps) {
         title="Disk Throughput"
         subtitle="Reads"
         sources={nodeSources}
+        group={Group.Top}
       >
         <Axis units={AxisUnits.Bytes} label="throughput">
           {nodeIDs.map((nid) => (
@@ -111,6 +112,7 @@ export default function (props: GraphDashboardProps) {
         title="Disk Throughput"
         subtitle="Writes"
         sources={nodeSources}
+        group={Group.Bottom}
       >
         <Axis units={AxisUnits.Bytes} label="bytes">
           {nodeIDs.map((nid) => (
@@ -148,6 +150,7 @@ export default function (props: GraphDashboardProps) {
         title="Disk Ops"
         subtitle="Reads"
         sources={nodeSources}
+        group={Group.Top}
       >
         <Axis units={AxisUnits.Count} label="Read Ops">
           {nodeIDs.map((nid) => (
@@ -166,6 +169,7 @@ export default function (props: GraphDashboardProps) {
         title="Disk Ops"
         subtitle="Writes"
         sources={nodeSources}
+        group={Group.Bottom}
       >
         <Axis units={AxisUnits.Count} label="Write Ops">
           {nodeIDs.map((nid) => (
@@ -270,6 +274,7 @@ export default function (props: GraphDashboardProps) {
         title="Network Throughput"
         subtitle="Received"
         sources={nodeSources}
+        group={Group.Top}
       >
         <Axis units={AxisUnits.Bytes} label="bytes">
           {nodeIDs.map((nid) => (
@@ -288,6 +293,7 @@ export default function (props: GraphDashboardProps) {
         title="Network Throughput"
         subtitle="Sent"
         sources={nodeSources}
+        group={Group.Bottom}
       >
         <Axis units={AxisUnits.Bytes} label="bytes">
           {nodeIDs.map((nid) => (

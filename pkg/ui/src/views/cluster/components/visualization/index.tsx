@@ -19,6 +19,23 @@ interface VisualizationProps {
   stale?: boolean;
   // If loading is true a spinner is shown instead of the graph.
   loading?: boolean;
+
+  group?: Group;
+}
+
+export enum Group {
+  Solo,
+  Top,
+  Bottom,
+  Middle,
+}
+
+function group_class(group?: Group) {
+  return {
+    "visualization--top": group === Group.Top,
+    "visualization--middle": group === Group.Middle,
+    "visualization--bottom": group === Group.Bottom,
+  };
 }
 
 /**
@@ -32,6 +49,7 @@ export default class Visualization extends React.Component<VisualizationProps, {
     const vizClasses = classNames(
       "visualization",
       { "visualization--faded": stale || false },
+      group_class(this.props.group),
     );
     const contentClasses = classNames(
       "visualization__content",

@@ -13,8 +13,10 @@ import {
   Metric, MetricProps, Axis, AxisProps,
 } from "src/views/shared/components/metricQuery";
 import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
-import Visualization from "src/views/cluster/components/visualization";
+import Visualization, { Group } from "src/views/cluster/components/visualization";
 import { NanoToMilli } from "src/util/convert";
+
+export { Group } from "src/views/cluster/components/visualization";
 
 interface LineGraphProps extends MetricsDataComponentProps {
   title?: string;
@@ -25,6 +27,7 @@ interface LineGraphProps extends MetricsDataComponentProps {
   hoverOn?: typeof hoverOn;
   hoverOff?: typeof hoverOff;
   hoverState?: HoverState;
+  group?: Group;
 }
 
 /**
@@ -181,7 +184,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
   }
 
   render() {
-    const { title, subtitle, tooltip, data } = this.props;
+    const { title, subtitle, tooltip, data, group } = this.props;
 
     let hoverProps: Partial<React.SVGProps<SVGSVGElement>> = {};
     if (this.props.hoverOn) {
@@ -192,7 +195,7 @@ export class LineGraph extends React.Component<LineGraphProps, {}> {
     }
 
     return (
-      <Visualization title={title} subtitle={subtitle} tooltip={tooltip} loading={!data} >
+      <Visualization title={title} subtitle={subtitle} tooltip={tooltip} loading={!data} group={group} >
         <div className="linegraph">
           <svg className="graph linked-guideline" ref={(svg) => this.graphEl = svg} {...hoverProps} />
         </div>
