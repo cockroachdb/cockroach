@@ -551,3 +551,85 @@ func (c *CustomFuncs) deriveUnfilteredCols(group memo.GroupID) opt.ColSet {
 
 	return relational.Rule.UnfilteredCols
 }
+
+// CanExtractJoinEquality returns true if:
+//   - one of a, b is bound by the left columns;
+//   - the other is bound by the right columns;
+//   - a and b are not "bare" variables;
+//   - a and b contain no correlated subqueries;
+//   - neither a or b are constants.
+//
+// Such an equality can be converted to a column equality by pushing down
+// expressions as projections.
+func (c *CustomFuncs) CanExtractJoinEquality(
+	a, b memo.GroupID, leftCols, rightCols opt.ColSet,
+) bool {
+	if (c.IsBoundBy(a, leftCols) && c.IsBoundBy(b, rightCols)) ||
+		(c.IsBoundBy(a, rightCols) && c.IsBoundBy(b, leftCols)) {
+		// The equality is of the form:
+		//   expression(leftCols) = expression(rightCols)
+
+		// Disallow cases when one side has a correlated subquery.
+		// TODO(radu): investigate relaxing this.
+		if c.HasCorrelatedSubquery(a) || c.HasCorrelatedSubquery(b) {
+			return false
+		}
+		aExpr := c.mem.NormExpr(a)
+		bExpr := c.mem.NormExpr(b)
+
+		// Disallow cases where one side is constant.
+		if aExpr.IsConstValue() || bExpr.IsConstValue() {
+			return false
+		}
+		// Disallow simple equality between variables.
+		if aExpr.Operator() == opt.VariableOp && bExpr.Operator() == opt.VariableOp {
+			return false
+		}
+		return true
+	}
+	return false
+}
+
+// ExtractJoinEqualities converts all join conditions that can satisfy
+// CanExtractJoinEquality to equality on input columns, by pushing down more
+// complicated expressions as projections. See the ExtractJoinEqualities rule.
+func (c *CustomFuncs) ExtractJoinEqualities(
+	joinOp opt.Operator, left, right memo.GroupID, filters memo.ListID,
+) memo.GroupID {
+	leftCols := c.OutputCols(left)
+	rightCols := c.OutputCols(right)
+
+	var leftProj, rightProj projectBuilder
+	leftProj.init(c)
+	rightProj.init(c)
+
+	newFilters := MakeListBuilder(c)
+	conditions := c.f.mem.LookupList(filters)
+	for i := range conditions {
+		expr := c.f.mem.NormExpr(conditions[i]).AsEq()
+		if expr == nil || !c.CanExtractJoinEquality(expr.Left(), expr.Right(), leftCols, rightCols) {
+			newFilters.AddItem(conditions[i])
+			continue
+		}
+		a, b := expr.Left(), expr.Right()
+		if !(c.IsBoundBy(a, leftCols) && c.IsBoundBy(b, rightCols)) {
+			a, b = b, a
+		}
+		newFilters.AddItem(c.f.ConstructEq(
+			leftProj.add(a),
+			rightProj.add(b),
+		))
+	}
+	if leftProj.empty() && rightProj.empty() {
+		panic("no equalities to extract")
+	}
+
+	join := c.f.DynamicConstruct(joinOp, memo.DynamicOperands{
+		memo.DynamicID(leftProj.buildProject(left)),
+		memo.DynamicID(rightProj.buildProject(right)),
+		memo.DynamicID(c.f.ConstructFilters(newFilters.BuildList())),
+	})
+
+	// Project away the synthesized columns.
+	return c.f.ConstructSimpleProject(join, leftCols.Union(rightCols))
+}
