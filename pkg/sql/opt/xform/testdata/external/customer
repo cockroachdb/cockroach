@@ -44,9 +44,11 @@ TABLE edges
  ├── INDEX primary
  │    ├── src int not null
  │    └── dst int not null
- └── INDEX edges_auto_index_fk_dst_ref_nodes
-      ├── dst int not null
-      └── src int not null
+ ├── INDEX edges_auto_index_fk_dst_ref_nodes
+ │    ├── dst int not null
+ │    └── src int not null
+ ├── FOREIGN KEY (src) REFERENCES t.public.nodes (id)
+ └── FOREIGN KEY (dst) REFERENCES t.public.nodes (id)
 
 opt
 select nodes.id,dst from nodes join edges on edges.dst=nodes.id

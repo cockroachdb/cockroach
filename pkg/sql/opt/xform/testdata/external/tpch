@@ -31,9 +31,10 @@ TABLE nation
  ├── n_comment string
  ├── INDEX primary
  │    └── n_nationkey int not null
- └── INDEX n_rk
-      ├── n_regionkey int not null
-      └── n_nationkey int not null
+ ├── INDEX n_rk
+ │    ├── n_regionkey int not null
+ │    └── n_nationkey int not null
+ └── FOREIGN KEY (n_regionkey) REFERENCES t.public.region (r_regionkey)
 
 exec-ddl
 CREATE TABLE public.supplier
@@ -59,9 +60,10 @@ TABLE supplier
  ├── s_comment string not null
  ├── INDEX primary
  │    └── s_suppkey int not null
- └── INDEX s_nk
-      ├── s_nationkey int not null
-      └── s_suppkey int not null
+ ├── INDEX s_nk
+ │    ├── s_nationkey int not null
+ │    └── s_suppkey int not null
+ └── FOREIGN KEY (s_nationkey) REFERENCES t.public.nation (n_nationkey)
 
 exec-ddl
 CREATE TABLE public.part
@@ -113,9 +115,11 @@ TABLE partsupp
  ├── INDEX primary
  │    ├── ps_partkey int not null
  │    └── ps_suppkey int not null
- └── INDEX ps_sk
-      ├── ps_suppkey int not null
-      └── ps_partkey int not null
+ ├── INDEX ps_sk
+ │    ├── ps_suppkey int not null
+ │    └── ps_partkey int not null
+ ├── FOREIGN KEY (ps_partkey) REFERENCES t.public.part (p_partkey)
+ └── FOREIGN KEY (ps_suppkey) REFERENCES t.public.supplier (s_suppkey)
 
 exec-ddl
 CREATE TABLE public.customer
@@ -143,9 +147,10 @@ TABLE customer
  ├── c_comment string not null
  ├── INDEX primary
  │    └── c_custkey int not null
- └── INDEX c_nk
-      ├── c_nationkey int not null
-      └── c_custkey int not null
+ ├── INDEX c_nk
+ │    ├── c_nationkey int not null
+ │    └── c_custkey int not null
+ └── FOREIGN KEY (c_nationkey) REFERENCES t.public.nation (n_nationkey)
 
 exec-ddl
 CREATE TABLE public.orders
@@ -179,9 +184,10 @@ TABLE orders
  ├── INDEX o_ck
  │    ├── o_custkey int not null
  │    └── o_orderkey int not null
- └── INDEX o_od
-      ├── o_orderdate date not null
-      └── o_orderkey int not null
+ ├── INDEX o_od
+ │    ├── o_orderdate date not null
+ │    └── o_orderkey int not null
+ └── FOREIGN KEY (o_custkey) REFERENCES t.public.customer (c_custkey)
 
 exec-ddl
 CREATE TABLE public.lineitem
@@ -265,11 +271,15 @@ TABLE lineitem
  │    ├── l_suppkey int not null
  │    ├── l_orderkey int not null
  │    └── l_linenumber int not null
- └── INDEX l_sk_pk
-      ├── l_suppkey int not null
-      ├── l_partkey int not null
-      ├── l_orderkey int not null
-      └── l_linenumber int not null
+ ├── INDEX l_sk_pk
+ │    ├── l_suppkey int not null
+ │    ├── l_partkey int not null
+ │    ├── l_orderkey int not null
+ │    └── l_linenumber int not null
+ ├── FOREIGN KEY (l_orderkey) REFERENCES t.public.orders (o_orderkey)
+ ├── FOREIGN KEY (l_partkey) REFERENCES t.public.part (p_partkey)
+ ├── FOREIGN KEY (l_suppkey) REFERENCES t.public.supplier (s_suppkey)
+ └── FOREIGN KEY (l_partkey, l_suppkey) REFERENCES t.public.partsupp (ps_partkey, ps_suppkey)
 
 # --------------------------------------------------
 # Q1
