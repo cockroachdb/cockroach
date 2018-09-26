@@ -164,6 +164,9 @@ type mdColumn struct {
 
 	// typ is the scalar SQL type of this column.
 	typ types.T
+
+	// notnull is whether this column is guaranteed to not hold nulls.
+	notnull bool
 }
 
 // Init prepares the metadata for use (or reuse).
@@ -274,6 +277,12 @@ func (md *Metadata) ColumnType(id ColumnID) types.T {
 	return md.cols[id-1].typ
 }
 
+// ColumnNotNull returns whether the given column has a not-null constraint.
+// Note that we default to false in the case of synthesized columns.
+func (md *Metadata) ColumnNotNull(id ColumnID) bool {
+	return md.cols[id-1].notnull
+}
+
 // ColumnOrdinal returns the ordinal position of the column in its base table.
 // It panics if the column has no base table because it was synthesized.
 func (md *Metadata) ColumnOrdinal(id ColumnID) int {
@@ -352,9 +361,10 @@ func (md *Metadata) AddTable(tab Table) TableID {
 	for i := 0; i < colCount; i++ {
 		col := tab.Column(i)
 		md.cols = append(md.cols, mdColumn{
-			tabID: tabID,
-			label: string(col.ColName()),
-			typ:   col.DatumType(),
+			tabID:   tabID,
+			label:   string(col.ColName()),
+			typ:     col.DatumType(),
+			notnull: !col.IsNullable(),
 		})
 	}
 

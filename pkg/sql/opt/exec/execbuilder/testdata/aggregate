@@ -355,26 +355,26 @@ group         ·            ·                (max int)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE x = 1
 ----
-group           ·            ·                (min int)       ·
- │              aggregate 0  any_not_null(y)  ·               ·
- │              scalar       ·                ·               ·
- └── render     ·            ·                (y int)         ·
-      │         render 0     (y)[int]         ·               ·
-      └── scan  ·            ·                (x int, y int)  ·
-·               table        xyz@xy           ·               ·
-·               spans        /1/!NULL-/2      ·               ·
+group           ·            ·         (min int)       ·
+ │              aggregate 0  min(y)    ·               ·
+ │              scalar       ·         ·               ·
+ └── render     ·            ·         (y int)         ·
+      │         render 0     (y)[int]  ·               ·
+      └── scan  ·            ·         (x int, y int)  ·
+·               table        xyz@xy    ·               ·
+·               spans        /1-/2     ·               ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE x = 1
 ----
-group           ·            ·                (max int)       ·
- │              aggregate 0  any_not_null(y)  ·               ·
- │              scalar       ·                ·               ·
- └── render     ·            ·                (y int)         ·
-      │         render 0     (y)[int]         ·               ·
-      └── scan  ·            ·                (x int, y int)  ·
-·               table        xyz@xy           ·               ·
-·               spans        /1/!NULL-/2      ·               ·
+group           ·            ·         (max int)       ·
+ │              aggregate 0  max(y)    ·               ·
+ │              scalar       ·         ·               ·
+ └── render     ·            ·         (y int)         ·
+      │         render 0     (y)[int]  ·               ·
+      └── scan  ·            ·         (x int, y int)  ·
+·               table        xyz@xy    ·               ·
+·               spans        /1-/2     ·               ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE z = 7

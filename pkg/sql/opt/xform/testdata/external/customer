@@ -141,24 +141,22 @@ project
       ├── key: (1)
       ├── fd: ()-->(9), (1)-->(2,3,5-8,10)
       ├── ordering: +1 opt(9)
-      ├── index-join article
+      ├── sort
       │    ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) title:5(string) summary:6(string) content:7(string) link:8(string) read:9(bool!null) date:10(timestamptz)
       │    ├── key: (1)
       │    ├── fd: ()-->(9), (1)-->(2,3,5-8,10)
       │    ├── ordering: +1 opt(9)
       │    └── select
-      │         ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) read:9(bool!null)
+      │         ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) title:5(string) summary:6(string) content:7(string) link:8(string) read:9(bool!null) date:10(timestamptz)
       │         ├── key: (1)
-      │         ├── fd: ()-->(9), (1)-->(2,3)
-      │         ├── ordering: +1 opt(9)
-      │         ├── scan article@article_idx_read_key
-      │         │    ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) read:9(bool)
-      │         │    ├── constraint: /1: [/1 - ]
+      │         ├── fd: ()-->(9), (1)-->(2,3,5-8,10)
+      │         ├── scan article
+      │         │    ├── columns: id:1(int!null) feed:2(int!null) folder:3(int!null) title:5(string) summary:6(string) content:7(string) link:8(string) read:9(bool) date:10(timestamptz)
       │         │    ├── key: (1)
-      │         │    ├── fd: (1)-->(2,3,9)
-      │         │    └── ordering: +1 opt(9)
-      │         └── filters [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
-      │              └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight)]
+      │         │    └── fd: (1)-->(2,3,5-10)
+      │         └── filters [type=bool, outer=(1,9), constraints=(/1: [/1 - ]; /9: [/false - /false]; tight), fd=()-->(9)]
+      │              ├── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight)]
+      │              └── id > 0 [type=bool, outer=(1), constraints=(/1: [/1 - ]; tight)]
       └── const: 50 [type=int]
 
 # Check that forcing the index works as well.

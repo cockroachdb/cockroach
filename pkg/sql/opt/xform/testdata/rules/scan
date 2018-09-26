@@ -497,11 +497,11 @@ memo (optimized, ~7KB)
  ├── G1: (project G2 G3)
  │    └── "[presentation: i:2,k:1]"
  │         ├── best: (project G2 G3)
- │         └── cost: 360.00
+ │         └── cost: 356.40
  ├── G2: (select G4 G5) (scan a@s_idx,cols=(1,2,4),constrained) (scan a@si_idx,cols=(1,2,4),constrained)
  │    └── ""
  │         ├── best: (scan a@s_idx,cols=(1,2,4),constrained)
- │         └── cost: 356.67
+ │         └── cost: 353.10
  ├── G3: (projections k i)
  ├── G4: (scan a,cols=(1,2,4)) (scan a@s_idx,cols=(1,2,4)) (scan a@si_idx,cols=(1,2,4))
  │    └── ""
