@@ -385,37 +385,6 @@ limit                ·         ·
 ·                    table     t@primary
 ·                    spans     ALL
 
-# Ensure EXPLAIN EXECUTE works properly
-
-statement ok
-PREPARE x AS SELECT DISTINCT v from t LIMIT $1
-
-query TTT
-SELECT tree, field, description FROM [EXPLAIN (VERBOSE) EXECUTE x(3)]
-----
-limit                ·         ·
- │                   count     3
- └── distinct        ·         ·
-      └── render     ·         ·
-           │         render 0  test.public.t.v
-           └── scan  ·         ·
-·                    table     t@primary
-·                    spans     ALL
-
-query TTT
-SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) SELECT * FROM [EXECUTE x(3)]
-]
-----
-limit                ·         ·
- │                   count     3
- └── distinct        ·         ·
-      └── render     ·         ·
-           │         render 0  test.public.t.v
-           └── scan  ·         ·
-·                    table     t@primary
-·                    spans     ALL
-
 statement ok
 CREATE TABLE tc (a INT, b INT, INDEX c(a))
 
