@@ -1,21 +1,38 @@
 import React from "react";
 import _ from "lodash";
 
+import { AggregationLevel } from "src/redux/aggregationLevel";
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 
 import { GraphDashboardProps, nodeDisplayName, storeIDsForNode } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
-  const { nodeIDs, nodesSummary, nodeSources, tooltipSelection } = props;
+  const { nodeIDs, nodesSummary, nodeSources, tooltipSelection, aggregationLevel } = props;
 
-  return [
+  function default_aggregate(name: string, title: string, otherProps?: { [key: string]: boolean }) {
+    if (aggregationLevel === AggregationLevel.Cluster) {
+      return (
+        <Metric name={name} title={title} sources={nodeSources} {...otherProps} />
+      );
+    }
+
+    return nodeIDs.map((nid) => (
+      <Metric name={name} title={nodeDisplayName(nodesSummary, nid)} sources={[nid]} {...otherProps} />
+    ));
+  }
+
+  const charts = [];
+
+  charts.push(
     <LineGraph title="Live Node Count" tooltip="The number of live nodes in the cluster.">
       <Axis label="nodes">
-        <Metric name="cr.node.liveness.livenodes" title="Live Nodes" aggregateMax />
+        {default_aggregate("cr.node.liveness.livenodes", "Live Nodes", { aggregateMax: true })}
       </Axis>
     </LineGraph>,
+  );
 
+  charts.push(
     <LineGraph
       title="Memory Usage"
       sources={nodeSources}
@@ -45,7 +62,9 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.node.sys.cgo.totalbytes" title="CGo Total" />
       </Axis>
     </LineGraph>,
+  );
 
+  charts.push(
     <LineGraph
       title="Goroutine Count"
       sources={nodeSources}
@@ -55,12 +74,15 @@ export default function (props: GraphDashboardProps) {
       }
     >
       <Axis label="goroutines">
-        <Metric name="cr.node.sys.goroutines" title="Goroutine Count" />
+        {default_aggregate("cr.node.sys.goroutines", "Goroutine Count")}
       </Axis>
     </LineGraph>,
+  );
 
-    // TODO(mrtracy): The following two graphs are a good first example of a graph with
-    // two axes; the two series should be highly correlated, but have different units.
+  // TODO(mrtracy): The following two graphs are a good first example of a graph with
+  // two axes; the two series should be highly correlated, but have different units.
+
+  charts.push(
     <LineGraph
       title="GC Runs"
       sources={nodeSources}
@@ -69,10 +91,12 @@ export default function (props: GraphDashboardProps) {
       }
     >
       <Axis label="runs">
-        <Metric name="cr.node.sys.gc.count" title="GC Runs" nonNegativeRate />
+        {default_aggregate("cr.node.sys.gc.count", "GC Runs", { nonNegativeRate: true })}
       </Axis>
     </LineGraph>,
+  );
 
+  charts.push(
     <LineGraph
       title="GC Pause Time"
       sources={nodeSources}
@@ -83,10 +107,12 @@ export default function (props: GraphDashboardProps) {
       }
     >
       <Axis units={AxisUnits.Duration} label="pause time">
-        <Metric name="cr.node.sys.gc.pause.ns" title="GC Pause Time" nonNegativeRate />
+        {default_aggregate("cr.node.sys.gc.pause.ns", "GC Pause Time", { nonNegativeRate: true })}
       </Axis>
     </LineGraph>,
+  );
 
+  charts.push(
     <LineGraph
       title="CPU Time"
       sources={nodeSources}
@@ -100,7 +126,9 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.node.sys.cpu.sys.ns" title="Sys CPU Time" nonNegativeRate />
       </Axis>
     </LineGraph>,
+  );
 
+  charts.push(
     <LineGraph
       title="Clock Offset"
       sources={nodeSources}
@@ -119,5 +147,7 @@ export default function (props: GraphDashboardProps) {
         }
       </Axis>
     </LineGraph>,
-  ];
+  );
+
+  return charts;
 }
