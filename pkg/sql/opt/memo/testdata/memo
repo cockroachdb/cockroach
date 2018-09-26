@@ -134,25 +134,25 @@ memo (optimized, ~24KB)
  ├── G1: (project G2 G3)
  │    ├── "[presentation: y:2,x:3,c:6] [ordering: +2]"
  │    │    ├── best: (project G2="[ordering: +2]" G3)
- │    │    └── cost: 2167.84
+ │    │    └── cost: 2166.99
  │    └── ""
  │         ├── best: (project G2 G3)
- │         └── cost: 2167.84
+ │         └── cost: 2166.99
  ├── G2: (limit G4 G5 ordering=+2)
  │    ├── ""
  │    │    ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │    │    └── cost: 2167.64
+ │    │    └── cost: 2166.79
  │    └── "[ordering: +2]"
  │         ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │         └── cost: 2167.64
+ │         └── cost: 2166.79
  ├── G3: (projections G6 y x)
  ├── G4: (inner-join G9 G8 G7) (inner-join G8 G9 G7) (lookup-join G9 G14 b,keyCols=[5],outCols=(2,3,5)) (merge-join G8 G9 G10)
  │    ├── ""
  │    │    ├── best: (inner-join G8 G9 G7)
- │    │    └── cost: 2108.33
+ │    │    └── cost: 2108.17
  │    └── "[ordering: +2]"
  │         ├── best: (sort G4)
- │         └── cost: 2167.54
+ │         └── cost: 2166.69
  ├── G5: (const 10)
  ├── G6: (plus G22 G23)
  ├── G7: (filters G11)
@@ -166,13 +166,13 @@ memo (optimized, ~24KB)
  ├── G9: (project G12 G13)
  │    ├── ""
  │    │    ├── best: (project G12 G13)
- │    │    └── cost: 1056.67
+ │    │    └── cost: 1056.60
  │    ├── "[ordering: +2]"
  │    │    ├── best: (sort G9)
- │    │    └── cost: 1115.87
+ │    │    └── cost: 1115.12
  │    └── "[ordering: +5]"
  │         ├── best: (sort G9)
- │         └── cost: 1115.87
+ │         └── cost: 1115.12
  ├── G10: (merge-on G14 inner-join,+3,+5)
  ├── G11: (eq G15 G16)
  ├── G12: (select G17 G18)
@@ -181,7 +181,7 @@ memo (optimized, ~24KB)
  │    │    └── cost: 1050.00
  │    └── "[ordering: +2]"
  │         ├── best: (sort G12)
- │         └── cost: 1109.21
+ │         └── cost: 1108.52
  ├── G13: (projections G19 y)
  ├── G14: (true)
  ├── G15: (variable column5)
@@ -306,7 +306,7 @@ memo (optimized, ~6KB)
  ├── G1: (union G2 G3)
  │    └── "[presentation: x:7,y:8]"
  │         ├── best: (union G2 G3)
- │         └── cost: 2150.00
+ │         └── cost: 2149.80
  ├── G2: (scan a)
  │    └── ""
  │         ├── best: (scan a)
