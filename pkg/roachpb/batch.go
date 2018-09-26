@@ -330,11 +330,13 @@ func actualSpan(req Request, resp Response) (Span, bool) {
 	return h.Span(), true
 }
 
-// Combine implements the Combinable interface. It combines each slot of the
-// given request into the corresponding slot of the base response. The number
-// of slots must be equal and the respective slots must be combinable.
+// Combine combines each slot of the given request into the corresponding slot
+// of the base response. The number of slots must be equal and the respective
+// slots must be combinable.
 // On error, the receiver BatchResponse is in an invalid state. In either case,
 // the supplied BatchResponse must not be used any more.
+// It is an error to call Combine on responses with errors in them. The
+// DistSender strips the errors from any responses that it combines.
 func (br *BatchResponse) Combine(otherBatch *BatchResponse, positions []int) error {
 	if err := br.BatchResponse_Header.combine(otherBatch.BatchResponse_Header); err != nil {
 		return err

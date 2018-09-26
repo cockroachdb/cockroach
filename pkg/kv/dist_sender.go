@@ -806,9 +806,10 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 
 			// Combine the new response with the existing one (including updating
 			// the headers).
-			if err := br.Combine(resp.reply, resp.positions); err != nil {
-				pErr = roachpb.NewError(err)
-				return
+			if pErr == nil {
+				if err := br.Combine(resp.reply, resp.positions); err != nil {
+					pErr = roachpb.NewError(err)
+				}
 			}
 		}
 
