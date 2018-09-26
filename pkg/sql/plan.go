@@ -283,9 +283,6 @@ type planTop struct {
 	// subqueryPlans contains all the sub-query plans.
 	subqueryPlans []subquery
 
-	// plannedExecute is true if this planner has planned an EXECUTE statement.
-	plannedExecute bool
-
 	// auditEvents becomes non-nil if any of the descriptors used by
 	// current statement is causing an auditing event. See exec_log.go.
 	auditEvents []auditEvent
@@ -805,8 +802,6 @@ func (p *planner) newPlan(
 		return p.DropSequence(ctx, n)
 	case *tree.DropUser:
 		return p.DropUser(ctx, n)
-	case *tree.Execute:
-		return p.Execute(ctx, n)
 	case *tree.Explain:
 		return p.Explain(ctx, n)
 	case *tree.Grant:
