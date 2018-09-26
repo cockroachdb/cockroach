@@ -187,6 +187,9 @@ func (c *sqlConn) checkServerMetadata() error {
 	}
 
 	newServerVersion, newClusterID, err := c.getServerMetadata()
+	if err == driver.ErrBadConn {
+		return err
+	}
 	if err != nil {
 		// It is not an error that the server version cannot be retrieved.
 		fmt.Fprintf(stderr, "warning: unable to retrieve the server's version: %s\n", err)
