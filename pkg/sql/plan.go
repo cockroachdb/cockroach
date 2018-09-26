@@ -189,6 +189,10 @@ var _ planNode = &limitNode{}
 var _ planNode = &ordinalityNode{}
 var _ planNode = &projectSetNode{}
 var _ planNode = &relocateNode{}
+var _ planNode = &renameColumnNode{}
+var _ planNode = &renameDatabaseNode{}
+var _ planNode = &renameIndexNode{}
+var _ planNode = &renameTableNode{}
 var _ planNode = &renderNode{}
 var _ planNode = &rowCountNode{}
 var _ planNode = &scanNode{}
@@ -199,6 +203,7 @@ var _ planNode = &showRangesNode{}
 var _ planNode = &showTraceNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &splitNode{}
+var _ planNode = &truncateNode{}
 var _ planNode = &unaryNode{}
 var _ planNode = &unionNode{}
 var _ planNode = &updateNode{}
@@ -890,9 +895,6 @@ func (p *planner) newPlan(
 	case *tree.Split:
 		return p.Split(ctx, n)
 	case *tree.Truncate:
-		if err := p.txn.SetSystemConfigTrigger(); err != nil {
-			return nil, err
-		}
 		return p.Truncate(ctx, n)
 	case *tree.UnionClause:
 		return p.Union(ctx, n, desiredTypes)
@@ -955,6 +957,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.Explain(ctx, n)
 	case *tree.Insert:
 		return p.Insert(ctx, n, nil)
+	case *tree.Scrub:
+		return p.Scrub(ctx, n)
 	case *tree.Select:
 		return p.Select(ctx, n, nil)
 	case *tree.SelectClause:
@@ -1006,6 +1010,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowRanges(ctx, n)
 	case *tree.Split:
 		return p.Split(ctx, n)
+	case *tree.Truncate:
+		return p.Truncate(ctx, n)
 	case *tree.Relocate:
 		return p.Relocate(ctx, n)
 	case *tree.Scatter:

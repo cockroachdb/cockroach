@@ -26,6 +26,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
+type renameTableNode struct {
+	n            *tree.RenameTable
+	oldTn, newTn *tree.TableName
+	tableDesc    *sqlbase.TableDescriptor
+}
+
 // RenameTable renames the table, view or sequence.
 // Privileges: DROP on source table/view/sequence, CREATE on destination database.
 //   Notes: postgres requires the table owner.
@@ -74,20 +80,30 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 			ctx, tableDesc.TypeName(), oldTn.String(), tableDesc.ParentID, tableDesc.DependedOnBy[0].ID)
 	}
 
+	return &renameTableNode{n: n, oldTn: oldTn, newTn: newTn, tableDesc: tableDesc}, nil
+}
+
+func (n *renameTableNode) startExec(params runParams) error {
+	p := params.p
+	ctx := params.ctx
+	oldTn := n.oldTn
+	newTn := n.newTn
+	tableDesc := n.tableDesc
+
 	prevDbDesc, err := p.ResolveUncachedDatabase(ctx, oldTn)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Check if target database exists.
 	// We also look at uncached descriptors here.
 	targetDbDesc, err := p.ResolveUncachedDatabase(ctx, newTn)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if err := p.CheckPrivilege(ctx, targetDbDesc, privilege.CREATE); err != nil {
-		return nil, err
+		return err
 	}
 
 	// oldTn and newTn are already normalized, so we can compare directly here.
@@ -95,7 +111,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		oldTn.Schema() == newTn.Schema() &&
 		oldTn.Table() == newTn.Table() {
 		// Noop.
-		return newZeroNode(nil /* columns */), nil
+		return nil
 	}
 
 	tableDesc.SetName(newTn.Table())
@@ -105,7 +121,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 	newTbKey := tableKey{targetDbDesc.ID, newTn.Table()}.Key()
 
 	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
-		return nil, err
+		return err
 	}
 
 	descID := tableDesc.GetID()
@@ -116,7 +132,7 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		Name:     oldTn.Table()}
 	tableDesc.DrainingNames = append(tableDesc.DrainingNames, renameDetails)
 	if err := p.writeSchemaChange(ctx, tableDesc, sqlbase.InvalidMutationID); err != nil {
-		return nil, err
+		return err
 	}
 
 	// We update the descriptor to the new name, but also leave the mapping of the
@@ -132,13 +148,17 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 
 	if err := p.txn.Run(ctx, b); err != nil {
 		if _, ok := err.(*roachpb.ConditionFailedError); ok {
-			return nil, sqlbase.NewRelationAlreadyExistsError(newTn.Table())
+			return sqlbase.NewRelationAlreadyExistsError(newTn.Table())
 		}
-		return nil, err
+		return err
 	}
 
-	return newZeroNode(nil /* columns */), nil
+	return nil
 }
+
+func (n *renameTableNode) Next(runParams) (bool, error) { return false, nil }
+func (n *renameTableNode) Values() tree.Datums          { return tree.Datums{} }
+func (n *renameTableNode) Close(context.Context)        {}
 
 // TODO(a-robinson): Support renaming objects depended on by views once we have
 // a better encoding for view queries (#10083).
