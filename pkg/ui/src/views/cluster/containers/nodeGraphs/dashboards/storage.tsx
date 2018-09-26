@@ -1,27 +1,93 @@
 import React from "react";
 import _ from "lodash";
 
+import { AggregationLevel } from "src/redux/aggregationLevel";
+import * as docsURL from "src/util/docs";
 import { LineGraph } from "src/views/cluster/components/linegraph";
 import { Metric, Axis, AxisUnits } from "src/views/shared/components/metricQuery";
 
 import { GraphDashboardProps, nodeDisplayName, storeIDsForNode } from "./dashboardUtils";
 
 export default function (props: GraphDashboardProps) {
-  const { nodeIDs, nodesSummary, nodeSources, storeSources, tooltipSelection } = props;
+  const { nodeIDs, nodesSummary, nodeSources, storeSources, tooltipSelection, aggregationLevel } = props;
 
-  return [
-    <LineGraph
-      title="Capacity"
-      sources={storeSources}
-      tooltip={`Summary of total and available capacity ${tooltipSelection}.`}
-    >
-      <Axis units={AxisUnits.Bytes} label="capacity">
-        <Metric name="cr.store.capacity" title="Capacity" />
-        <Metric name="cr.store.capacity.available" title="Available" />
-        <Metric name="cr.store.capacity.used" title="Used" />
-      </Axis>
-    </LineGraph>,
+  function default_aggregate(name: string, title: string, otherProps?: { [key: string]: boolean }) {
+    if (aggregationLevel === AggregationLevel.Cluster) {
+      return (
+        <Metric name={name} title={title} sources={nodeSources} {...otherProps} />
+      );
+    }
 
+    return nodeIDs.map((nid) => (
+      <Metric name={name} title={nodeDisplayName(nodesSummary, nid)} sources={[nid]} {...otherProps} />
+    ));
+  }
+
+  const charts = [];
+
+  if (props.aggregationLevel === AggregationLevel.Cluster) {
+    charts.push(
+      <LineGraph
+        title="Capacity"
+        sources={storeSources}
+        tooltip={(
+          <div>
+            <dl>
+              <dt>Capacity</dt>
+              <dd>
+                Total disk space available {tooltipSelection} to CockroachDB.
+                {" "}
+                <em>
+                  Control this value per node with the
+                  {" "}
+                  <code>
+                    <a href={docsURL.startFlags} target="_blank">
+                      --store
+                    </a>
+                  </code>
+                  {" "}
+                  flag.
+                </em>
+              </dd>
+              <dt>Available</dt>
+              <dd>Free disk space available {tooltipSelection} to CockroachDB.</dd>
+              <dt>Used</dt>
+              <dd>Disk space used {tooltipSelection} by CockroachDB.</dd>
+            </dl>
+          </div>
+        )}
+      >
+        <Axis units={AxisUnits.Bytes} label="capacity">
+          <Metric name="cr.store.capacity" title="Capacity" />
+          <Metric name="cr.store.capacity.available" title="Available" />
+          <Metric name="cr.store.capacity.used" title="Used" />
+        </Axis>
+      </LineGraph>,
+    );
+  } else {
+    charts.push(
+      <LineGraph
+        title="Capacity"
+        subtitle="Available"
+        tooltip="Free disk space available to CockroachDB on each node."
+      >
+        <Axis units={AxisUnits.Bytes} label="capacity">
+          {
+            _.map(nodeIDs, (nid) => (
+              <Metric
+                key={nid}
+                name="cr.store.capacity.available"
+                title={nodeDisplayName(nodesSummary, nid)}
+                sources={storeIDsForNode(nodesSummary, nid)}
+              />
+            ))
+          }
+        </Axis>
+      </LineGraph>,
+    );
+  }
+
+  charts.push(
     <LineGraph
       title="Live Bytes"
       sources={storeSources}
@@ -35,7 +101,9 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.store.sysbytes" title="System" />
       </Axis>
     </LineGraph>,
+  );
 
+  charts.push(
     <LineGraph
       title="Log Commit Latency: 99th Percentile"
       sources={storeSources}
@@ -54,7 +122,9 @@ export default function (props: GraphDashboardProps) {
         }
       </Axis>
     </LineGraph>,
+  );
 
+  charts.push(
     <LineGraph
       title="Command Commit Latency: 99th Percentile"
       sources={storeSources}
@@ -73,7 +143,9 @@ export default function (props: GraphDashboardProps) {
         }
       </Axis>
     </LineGraph>,
+  );
 
+  charts.push(
     <LineGraph
       title="RocksDB Read Amplification"
       sources={storeSources}
@@ -83,20 +155,24 @@ export default function (props: GraphDashboardProps) {
       }
     >
       <Axis label="factor">
-        <Metric name="cr.store.rocksdb.read-amplification" title="Read Amplification" aggregateAvg />
+        {default_aggregate("cr.store.rocksdb.read-amplification", "Read Amplification", { aggregateAvg: true })}
       </Axis>
     </LineGraph>,
+  );
 
+  charts.push(
     <LineGraph
       title="RocksDB SSTables"
       sources={storeSources}
       tooltip={`The number of RocksDB SSTables in use ${tooltipSelection}.`}
     >
       <Axis label="sstables">
-        <Metric name="cr.store.rocksdb.num-sstables" title="SSTables" />
+        {default_aggregate("cr.store.rocksdb.num-sstables", "SSTables")}
       </Axis>
     </LineGraph>,
+  );
 
+  charts.push(
     <LineGraph
       title="File Descriptors"
       sources={nodeSources}
@@ -110,34 +186,123 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.node.sys.fd.softlimit" title="Limit" />
       </Axis>
     </LineGraph>,
+  );
 
-    <LineGraph
-      title="RocksDB Compactions/Flushes"
-      sources={storeSources}
-      tooltip={
-        `The number of RocksDB compactions and memtable flushes, per second ${tooltipSelection}.`
-      }
-    >
-      <Axis label="count">
-        <Metric name="cr.store.rocksdb.compactions" title="Compactions" nonNegativeRate />
-        <Metric name="cr.store.rocksdb.flushes" title="Flushes" nonNegativeRate />
-      </Axis>
-    </LineGraph>,
+  if (props.aggregationLevel === AggregationLevel.Cluster) {
+    charts.push(
+      <LineGraph
+        title="RocksDB Compactions/Flushes"
+        sources={storeSources}
+        tooltip={
+          `The number of RocksDB compactions and memtable flushes per second ${tooltipSelection}.`
+        }
+      >
+        <Axis label="count">
+          <Metric name="cr.store.rocksdb.compactions" title="Compactions" nonNegativeRate />
+          <Metric name="cr.store.rocksdb.flushes" title="Flushes" nonNegativeRate />
+        </Axis>
+      </LineGraph>,
+    );
+  } else {
+    charts.push(
+      <LineGraph
+        title="RocksDB"
+        subtitle="Compactions"
+        tooltip={
+          `The number of RocksDB compactions and memtable flushes per second on each node.`
+        }
+      >
+        <Axis label="count">
+          {nodeIDs.map((nid) => (
+            <Metric
+              name="cr.store.rocksdb.compactions"
+              title={nodeDisplayName(nodesSummary, nid)}
+              sources={storeIDsForNode(nodesSummary, nid)}
+              nonNegativeRate
+            />
+          ))}
+        </Axis>
+      </LineGraph>,
+    );
+    charts.push(
+      <LineGraph
+        title="RocksDB"
+        subtitle="Flushes"
+      >
+        <Axis label="count">
+          {nodeIDs.map((nid) => (
+            <Metric
+              name="cr.store.rocksdb.flushes"
+              title={nodeDisplayName(nodesSummary, nid)}
+              sources={storeIDsForNode(nodesSummary, nid)}
+              nonNegativeRate
+            />
+          ))}
+        </Axis>
+      </LineGraph>,
+    );
+  }
 
-    <LineGraph
-      title="Time Series Writes"
-      sources={nodeSources}
-      tooltip={
-        `The number of successfully written time series samples, and number of errors attempting
-        to write time series, per second ${tooltipSelection}.`
-      }
-    >
-      <Axis label="count">
-        <Metric name="cr.node.timeseries.write.samples" title="Samples Written" nonNegativeRate />
-        <Metric name="cr.node.timeseries.write.errors" title="Errors" nonNegativeRate />
-      </Axis>
-    </LineGraph>,
+  if (props.aggregationLevel === AggregationLevel.Cluster) {
+    charts.push(
+      <LineGraph
+        title="Time Series Writes"
+        sources={nodeSources}
+        tooltip={
+          `The number of successfully written time series samples, and number of errors attempting
+          to write time series, per second ${tooltipSelection}.`
+        }
+      >
+        <Axis label="count">
+          <Metric name="cr.node.timeseries.write.samples" title="Samples Written" nonNegativeRate />
+          <Metric name="cr.node.timeseries.write.errors" title="Errors" nonNegativeRate />
+        </Axis>
+      </LineGraph>,
+    );
+  } else {
+    charts.push(
+      <LineGraph
+        title="Time Series"
+        subtitle="Writes"
+        sources={nodeSources}
+        tooltip={
+          `The number of successfully written time series samples, and number of errors attempting
+          to write time series, per second ${tooltipSelection}.`
+        }
+      >
+        <Axis label="count">
+          {nodeIDs.map((nid) => (
+            <Metric
+              name="cr.node.timeseries.write.samples"
+              title={nodeDisplayName(nodesSummary, nid)}
+              sources={[nid]}
+              nonNegativeRate
+            />
+          ))}
+        </Axis>
+      </LineGraph>,
+    );
+    charts.push(
+      <LineGraph
+        title="Time Series"
+        subtitle="Errors"
+        sources={nodeSources}
+      >
+        <Axis label="count">
+          {nodeIDs.map((nid) => (
+            <Metric
+              name="cr.node.timeseries.write.errors"
+              title={nodeDisplayName(nodesSummary, nid)}
+              sources={[nid]}
+              nonNegativeRate
+            />
+          ))}
+        </Axis>
+      </LineGraph>,
+    );
+  }
 
+  charts.push(
     <LineGraph
       title="Time Series Bytes Written"
       sources={nodeSources}
@@ -154,8 +319,10 @@ export default function (props: GraphDashboardProps) {
       }
     >
       <Axis units={AxisUnits.Bytes}>
-        <Metric name="cr.node.timeseries.write.bytes" title="Bytes Written" nonNegativeRate />
+        {default_aggregate("cr.node.timeseries.write.bytes", "Bytes Written", { nonNegativeRate: true })}
       </Axis>
     </LineGraph>,
-  ];
+  );
+
+  return charts;
 }
