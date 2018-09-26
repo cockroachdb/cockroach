@@ -428,6 +428,14 @@ func (m *Memo) NormOp(group GroupID) opt.Operator {
 	return m.groups[group].expr(normExprOrdinal).op
 }
 
+// DeriveLogicalProps derives logical props for the specified expression,
+// usually resulting in population of child stats in the test output tree.
+func DeriveLogicalProps(evalCtx *tree.EvalContext, ev ExprView) {
+	if ev.op != opt.MergeJoinOp && ev.op != opt.SortOp {
+		ev.mem.logPropsBuilder.buildProps(evalCtx, ev)
+	}
+}
+
 // MemoizeNormExpr enters a normalized expression into the memo. This requires
 // the creation of a new memo group with the normalized expression as its first
 // expression. If the expression is already part of an existing memo group, then
@@ -496,6 +504,12 @@ func (m *Memo) MemoizeDenormExpr(evalCtx *tree.EvalContext, group GroupID, denor
 			tmpGroupID := GroupID(len(m.groups))
 			m.groups = append(m.groups, makeMemoGroup(tmpGroupID, denorm))
 			ev := MakeNormExprView(m, tmpGroupID)
+			// Building out logical props could lead to more lazy population of
+			// stats in child expressions, which could change the test output
+			// when run with and without -race.
+			//
+			// TODO: Figure out a way to either run this for all tests, or
+			// cleanly restore all column stats after this step.
 			logical := m.logPropsBuilder.buildProps(evalCtx, ev)
 			logical.VerifyAgainst(&m.group(group).logical)
 

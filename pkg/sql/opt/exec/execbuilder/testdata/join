@@ -587,19 +587,24 @@ SELECT *
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
 ]
 ----
-filter          ·         ·
- │              filter    ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
- └── join       ·         ·
-      │         type      right outer
-      │         equality  (b) = (sq)
-      │         pred      n < 6
-      ├── scan  ·         ·
-      │         table     pairs@primary
-      │         spans     ALL
-      │         filter    a > 1
-      └── scan  ·         ·
-·               table     square@primary
-·               spans     /2-
+render               ·         ·
+ │                   render 0  a
+ │                   render 1  b
+ │                   render 2  n
+ │                   render 3  sq
+ └── filter          ·         ·
+      │              filter    ((a IS NULL) OR (a > 2)) AND ((a IS NULL) OR (a < sq))
+      └── join       ·         ·
+           │         type      left outer
+           │         equality  (sq) = (b)
+           │         pred      n < 6
+           ├── scan  ·         ·
+           │         table     square@primary
+           │         spans     /2-
+           └── scan  ·         ·
+·                    table     pairs@primary
+·                    spans     ALL
+·                    filter    a > 1
 
 # The simpler plan for an inner join, to compare.
 query TTT
