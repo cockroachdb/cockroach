@@ -62,3 +62,87 @@ project
                 └── eq [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
                      ├── variable: schema_name [type=string, outer=(2)]
                      └── variable: table_schema [type=string, outer=(6)]
+
+exec-ddl
+CREATE TABLE system.crdb_internal.ranges_no_leases (
+  range_id     INT NOT NULL,
+  start_key    BYTES NOT NULL,
+  start_pretty STRING NOT NULL,
+  end_key      BYTES NOT NULL,
+  end_pretty   STRING NOT NULL,
+  database     STRING NOT NULL,
+  "table"      STRING NOT NULL,
+  "index"      STRING NOT NULL,
+  replicas     INT[] NOT NULL
+)
+----
+TABLE ranges_no_leases
+ ├── range_id int not null
+ ├── start_key bytes not null
+ ├── start_pretty string not null
+ ├── end_key bytes not null
+ ├── end_pretty string not null
+ ├── database string not null
+ ├── table string not null
+ ├── index string not null
+ └── replicas int[] not null
+
+exec-ddl
+CREATE TABLE system.crdb_internal.ranges (
+  range_id     INT NOT NULL,
+  start_key    BYTES NOT NULL,
+  start_pretty STRING NOT NULL,
+  end_key      BYTES NOT NULL,
+  end_pretty   STRING NOT NULL,
+  database     STRING NOT NULL,
+  "table"      STRING NOT NULL,
+  "index"      STRING NOT NULL,
+  replicas     INT[] NOT NULL,
+  lease_holder INT NOT NULL
+)
+----
+TABLE ranges
+ ├── range_id int not null
+ ├── start_key bytes not null
+ ├── start_pretty string not null
+ ├── end_key bytes not null
+ ├── end_pretty string not null
+ ├── database string not null
+ ├── table string not null
+ ├── index string not null
+ ├── replicas int[] not null
+ └── lease_holder int not null
+
+build
+SELECT * FROM system.crdb_internal.ranges
+----
+project
+ ├── columns: range_id:11(int) start_key:12(bytes) start_pretty:13(string) end_key:14(bytes) end_pretty:15(string) database:16(string) table:17(string) index:18(string) replicas:19(int[]) lease_holder:20(int)
+ ├── fd: (12)-->(20)
+ ├── prune: (11-20)
+ ├── virtual-scan system.crdb_internal.ranges_no_leases
+ │    └── columns: ranges_no_leases.range_id:11(int) ranges_no_leases.start_key:12(bytes) ranges_no_leases.start_pretty:13(string) ranges_no_leases.end_key:14(bytes) ranges_no_leases.end_pretty:15(string) ranges_no_leases.database:16(string) ranges_no_leases.table:17(string) ranges_no_leases.index:18(string) ranges_no_leases.replicas:19(int[])
+ └── projections [outer=(11-19)]
+      └── function: crdb_internal.lease_holder [type=int, outer=(12)]
+           └── variable: ranges_no_leases.start_key [type=bytes, outer=(12)]
+
+
+opt
+SELECT * FROM system.crdb_internal.ranges WHERE range_id = 1
+----
+project
+ ├── columns: range_id:11(int!null) start_key:12(bytes) start_pretty:13(string) end_key:14(bytes) end_pretty:15(string) database:16(string) table:17(string) index:18(string) replicas:19(int[]) lease_holder:20(int)
+ ├── fd: ()-->(11), (12)-->(20)
+ ├── prune: (11-20)
+ ├── select
+ │    ├── columns: ranges_no_leases.range_id:11(int!null) ranges_no_leases.start_key:12(bytes) ranges_no_leases.start_pretty:13(string) ranges_no_leases.end_key:14(bytes) ranges_no_leases.end_pretty:15(string) ranges_no_leases.database:16(string) ranges_no_leases.table:17(string) ranges_no_leases.index:18(string) ranges_no_leases.replicas:19(int[])
+ │    ├── fd: ()-->(11)
+ │    ├── virtual-scan system.crdb_internal.ranges_no_leases
+ │    │    └── columns: ranges_no_leases.range_id:11(int) ranges_no_leases.start_key:12(bytes) ranges_no_leases.start_pretty:13(string) ranges_no_leases.end_key:14(bytes) ranges_no_leases.end_pretty:15(string) ranges_no_leases.database:16(string) ranges_no_leases.table:17(string) ranges_no_leases.index:18(string) ranges_no_leases.replicas:19(int[])
+ │    └── filters [type=bool, outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
+ │         └── eq [type=bool, outer=(11), constraints=(/11: [/1 - /1]; tight)]
+ │              ├── variable: ranges_no_leases.range_id [type=int, outer=(11)]
+ │              └── const: 1 [type=int]
+ └── projections [outer=(11-19)]
+      └── function: crdb_internal.lease_holder [type=int, outer=(12)]
+           └── variable: ranges_no_leases.start_key [type=bytes, outer=(12)]

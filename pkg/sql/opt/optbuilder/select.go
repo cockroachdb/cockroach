@@ -17,6 +17,8 @@ package optbuilder
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -286,6 +288,13 @@ func (b *Builder) buildScan(
 		if indexFlags != nil {
 			panic(builderError{errors.Errorf("index flags not allowed with virtual tables")})
 		}
+
+		if tn.SchemaName == "crdb_internal" {
+			if tn.TableName == "ranges" {
+				return b.buildRangesTable(tn, ordinals, indexFlags, inScope)
+			}
+		}
+
 		def := memo.VirtualScanOpDef{Table: tabID, Cols: tabColIDs}
 		outScope.group = b.factory.ConstructVirtualScan(b.factory.InternVirtualScanOpDef(&def))
 	} else {
@@ -564,5 +573,41 @@ func (b *Builder) validateAsOf(asOf tree.AsOfClause) {
 
 	if *b.semaCtx.AsOfTimestamp != ts {
 		panic(builderError{errors.Errorf("cannot specify AS OF SYSTEM TIME with different timestamps")})
+	}
+}
+
+func (b *Builder) buildRangesTable(
+	tn *tree.TableName, ordinals []int, indexFlags *tree.IndexFlags, inScope *scope,
+) *scope {
+	baseTn := tree.MakeTableNameWithSchema(tn.CatalogName, tn.SchemaName, "ranges_no_leases")
+	baseTab := b.resolveDataSource(&baseTn)
+
+	switch t := baseTab.(type) {
+	case opt.Table:
+		outScope := b.buildScan(t, &baseTn, ordinals, indexFlags, inScope)
+
+		argsExprs := make(tree.TypedExprs, 1)
+		argsExprs[0] = &tree.IndexedVar{Idx: 1} // index of the start_key column
+
+		augmenterName := "crdb_internal.lease_holder"
+		augmenterProp, augmenterOverride := builtins.GetBuiltinProperties(augmenterName)
+
+		fetchLeasesExpr := tree.NewTypedFuncExpr(
+			tree.WrapFunction(augmenterName),
+			0, /* aggQualifier */
+			argsExprs,
+			nil, /* filter */
+			nil, /* windowDef */
+			types.Int,
+			augmenterProp,
+			&augmenterOverride[0],
+		)
+
+		newCol := b.addColumn(outScope, "lease_holder", fetchLeasesExpr.ResolvedType(), fetchLeasesExpr)
+		b.buildScalar(fetchLeasesExpr, outScope, outScope, newCol, nil)
+		outScope.group = b.constructProject(outScope.group, outScope.cols)
+		return outScope
+	default:
+		panic(unimplementedf("this code should never be reached"))
 	}
 }
