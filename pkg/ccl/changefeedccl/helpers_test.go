@@ -125,17 +125,20 @@ func createBenchmarkChangefeed(
 	sink := makeBenchSink()
 
 	buf := makeBuffer()
+	leaseMgr := s.LeaseManager().(*sql.LeaseManager)
 	poller := makePoller(
-		s.ClusterSettings(), s.DB(), feedClock, s.Gossip(), spans, details, initialHighWater, buf)
+		s.ClusterSettings(), s.DB(), feedClock, s.Gossip(),
+		spans, details, initialHighWater, buf, leaseMgr,
+	)
 
-	th := makeTableHistory(func(*sqlbase.TableDescriptor) error { return nil }, initialHighWater)
+	th := makeTableHistory(func(context.Context, *sqlbase.TableDescriptor) error { return nil }, initialHighWater)
 	thUpdater := &tableHistoryUpdater{
 		settings: s.ClusterSettings(),
 		db:       s.DB(),
 		targets:  details.Targets,
 		m:        th,
 	}
-	rowsFn := kvsToRows(s.LeaseManager().(*sql.LeaseManager), th, details, buf.Get)
+	rowsFn := kvsToRows(s.LeaseManager().(*sql.LeaseManager), details, buf.Get)
 	tickFn := emitEntries(details, encoder, sink, rowsFn, TestingKnobs{})
 
 	ctx, cancel := context.WithCancel(ctx)

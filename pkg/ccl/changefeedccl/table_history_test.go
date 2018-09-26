@@ -26,7 +26,7 @@ func TestTableHistory(t *testing.T) {
 	ctx := context.Background()
 	ts := func(wt int64) hlc.Timestamp { return hlc.Timestamp{WallTime: wt} }
 
-	validateFn := func(desc *sqlbase.TableDescriptor) error {
+	validateFn := func(_ context.Context, desc *sqlbase.TableDescriptor) error {
 		if desc.Name != `` {
 			return errors.New(desc.Name)
 		}
@@ -46,28 +46,28 @@ func TestTableHistory(t *testing.T) {
 	require.Equal(t, ts(0), m.HighWater())
 
 	// advance
-	require.NoError(t, m.IngestDescriptors(ts(0), ts(1), nil))
+	require.NoError(t, m.IngestDescriptors(ctx, ts(0), ts(1), nil))
 	require.Equal(t, ts(1), m.HighWater())
-	require.NoError(t, m.IngestDescriptors(ts(1), ts(2), nil))
+	require.NoError(t, m.IngestDescriptors(ctx, ts(1), ts(2), nil))
 	require.Equal(t, ts(2), m.HighWater())
 
 	// no-ops
-	require.NoError(t, m.IngestDescriptors(ts(0), ts(1), nil))
+	require.NoError(t, m.IngestDescriptors(ctx, ts(0), ts(1), nil))
 	require.Equal(t, ts(2), m.HighWater())
-	require.NoError(t, m.IngestDescriptors(ts(1), ts(2), nil))
+	require.NoError(t, m.IngestDescriptors(ctx, ts(1), ts(2), nil))
 	require.Equal(t, ts(2), m.HighWater())
 
 	// overlap
-	require.NoError(t, m.IngestDescriptors(ts(1), ts(3), nil))
+	require.NoError(t, m.IngestDescriptors(ctx, ts(1), ts(3), nil))
 	require.Equal(t, ts(3), m.HighWater())
 
 	// gap
-	require.EqualError(t, m.IngestDescriptors(ts(4), ts(5), nil),
+	require.EqualError(t, m.IngestDescriptors(ctx, ts(4), ts(5), nil),
 		`gap between 0.000000003,0 and 0.000000004,0`)
 	require.Equal(t, ts(3), m.HighWater())
 
 	// validates
-	require.NoError(t, m.IngestDescriptors(ts(3), ts(4), []*sqlbase.TableDescriptor{
+	require.NoError(t, m.IngestDescriptors(ctx, ts(3), ts(4), []*sqlbase.TableDescriptor{
 		{ID: 0},
 	}))
 	require.Equal(t, ts(4), m.HighWater())
@@ -85,17 +85,17 @@ func TestTableHistory(t *testing.T) {
 	requireChannelEmpty(t, errCh7)
 
 	// high-water advances, but not enough
-	require.NoError(t, m.IngestDescriptors(ts(4), ts(5), nil))
+	require.NoError(t, m.IngestDescriptors(ctx, ts(4), ts(5), nil))
 	requireChannelEmpty(t, errCh6)
 	requireChannelEmpty(t, errCh7)
 
 	// high-water advances, unblocks only errCh6
-	require.NoError(t, m.IngestDescriptors(ts(5), ts(6), nil))
+	require.NoError(t, m.IngestDescriptors(ctx, ts(5), ts(6), nil))
 	require.NoError(t, <-errCh6)
 	requireChannelEmpty(t, errCh7)
 
 	// high-water advances again, unblocks errCh7
-	require.NoError(t, m.IngestDescriptors(ts(6), ts(7), nil))
+	require.NoError(t, m.IngestDescriptors(ctx, ts(6), ts(7), nil))
 	require.NoError(t, <-errCh7)
 
 	// validate ctx cancellation
@@ -107,7 +107,7 @@ func TestTableHistory(t *testing.T) {
 	require.EqualError(t, <-errCh8, `context canceled`)
 
 	// does not validate, high-water does not change
-	require.EqualError(t, m.IngestDescriptors(ts(7), ts(10), []*sqlbase.TableDescriptor{
+	require.EqualError(t, m.IngestDescriptors(ctx, ts(7), ts(10), []*sqlbase.TableDescriptor{
 		{ID: 0, Name: `whoops!`},
 	}), `whoops!`)
 	require.Equal(t, ts(7), m.HighWater())
@@ -124,7 +124,7 @@ func TestTableHistory(t *testing.T) {
 	requireChannelEmpty(t, errCh9)
 
 	// turns out ts 10 is not a tight bound. ts 9 also has an error
-	require.EqualError(t, m.IngestDescriptors(ts(7), ts(9), []*sqlbase.TableDescriptor{
+	require.EqualError(t, m.IngestDescriptors(ctx, ts(7), ts(9), []*sqlbase.TableDescriptor{
 		{ID: 0, Name: `oh no!`},
 	}), `oh no!`)
 	require.Equal(t, ts(7), m.HighWater())
@@ -138,7 +138,7 @@ func TestTableHistory(t *testing.T) {
 	require.EqualError(t, m.WaitForTS(ctx, ts(9)), `oh no!`)
 
 	// something earlier than ts 10 can still be okay
-	require.NoError(t, m.IngestDescriptors(ts(7), ts(8), nil))
+	require.NoError(t, m.IngestDescriptors(ctx, ts(7), ts(8), nil))
 	require.Equal(t, ts(8), m.HighWater())
 	require.NoError(t, <-errCh8)
 }

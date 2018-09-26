@@ -19,6 +19,9 @@ import (
 type bufferEntry struct {
 	kv       roachpb.KeyValue
 	resolved *jobspb.ResolvedSpan
+	// Timestamp of the schema that should be used to read this KV.
+	// If unset (zero-valued), the value's timestamp will be used instead.
+	schemaTimestamp hlc.Timestamp
 }
 
 // buffer mediates between the changed data poller and the rest of the
@@ -38,8 +41,8 @@ func makeBuffer() *buffer {
 // TODO(dan): AddKV currently requires that each key is added in increasing mvcc
 // timestamp order. This will have to change when we add support for RangeFeed,
 // which starts out in a catchup state without this guarantee.
-func (b *buffer) AddKV(ctx context.Context, kv roachpb.KeyValue) error {
-	return b.addEntry(ctx, bufferEntry{kv: kv})
+func (b *buffer) AddKV(ctx context.Context, kv roachpb.KeyValue, minTimestamp hlc.Timestamp) error {
+	return b.addEntry(ctx, bufferEntry{kv: kv, schemaTimestamp: minTimestamp})
 }
 
 // AddResolved inserts a resolved timestamp notification in the buffer.
