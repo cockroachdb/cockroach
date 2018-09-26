@@ -333,10 +333,10 @@ func (s *senderTransport) SendNext(
 	}
 	s.called = true
 
-	sp := s.tracer.StartSpan("node", tracing.LogTagsFromCtx(ctx))
-	defer sp.Finish()
+	ctx, cleanup := tracing.EnsureContext(ctx, s.tracer, "node" /* name */)
+	defer cleanup()
+
 	ba.Replica = s.replica
-	ctx = opentracing.ContextWithSpan(ctx, sp)
 	log.Event(ctx, ba.String())
 	br, pErr := s.sender.Send(ctx, ba)
 	if br == nil {
