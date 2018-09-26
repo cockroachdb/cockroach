@@ -58,7 +58,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 	// Update the table name to include catalog and schema if not provided.
 	tc.qualifyTableName(tn)
 
-	tab := &Table{TabFingerprint: tc.nextFingerprint(), TabName: *tn}
+	tab := &Table{TabFingerprint: tc.nextFingerprint(), TabName: *tn, Catalog: tc}
 
 	// Assume that every table in the "system" catalog is a virtual table. This
 	// is a simplified assumption for testing purposes.

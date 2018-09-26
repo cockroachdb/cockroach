@@ -66,9 +66,10 @@ TABLE district
  ├── d_tax decimal
  ├── d_ytd decimal
  ├── d_next_o_id int
- └── INDEX primary
-      ├── d_w_id int not null
-      └── d_id int not null
+ ├── INDEX primary
+ │    ├── d_w_id int not null
+ │    └── d_id int not null
+ └── FOREIGN KEY (d_w_id) REFERENCES t.public.warehouse (w_id)
 
 exec-ddl
 ALTER TABLE district INJECT STATISTICS '[
@@ -136,12 +137,13 @@ TABLE customer
  │    ├── c_w_id int not null
  │    ├── c_d_id int not null
  │    └── c_id int not null
- └── INDEX customer_idx
-      ├── c_w_id int not null
-      ├── c_d_id int not null
-      ├── c_last string
-      ├── c_first string
-      └── c_id int not null
+ ├── INDEX customer_idx
+ │    ├── c_w_id int not null
+ │    ├── c_d_id int not null
+ │    ├── c_last string
+ │    ├── c_first string
+ │    └── c_id int not null
+ └── FOREIGN KEY (c_w_id, c_d_id) REFERENCES t.public.district (d_w_id, d_id)
 
 exec-ddl
 ALTER TABLE customer INJECT STATISTICS '[
@@ -206,11 +208,13 @@ TABLE history
  │    ├── h_w_id int
  │    ├── h_d_id int
  │    └── rowid uuid not null
- └── INDEX secondary
-      ├── h_c_w_id int
-      ├── h_c_d_id int
-      ├── h_c_id int
-      └── rowid uuid not null
+ ├── INDEX secondary
+ │    ├── h_c_w_id int
+ │    ├── h_c_d_id int
+ │    ├── h_c_id int
+ │    └── rowid uuid not null
+ ├── FOREIGN KEY (h_w_id, h_d_id) REFERENCES t.public.district (d_w_id, d_id)
+ └── FOREIGN KEY (h_c_w_id, h_c_d_id, h_c_id) REFERENCES t.public.customer (c_w_id, c_d_id, c_id)
 
 exec-ddl
 ALTER TABLE history INJECT STATISTICS '[
@@ -270,11 +274,12 @@ TABLE order
  │    ├── o_d_id int not null
  │    ├── o_carrier_id int
  │    └── o_id int not null
- └── INDEX secondary
-      ├── o_w_id int not null
-      ├── o_d_id int not null
-      ├── o_c_id int
-      └── o_id int not null
+ ├── INDEX secondary
+ │    ├── o_w_id int not null
+ │    ├── o_d_id int not null
+ │    ├── o_c_id int
+ │    └── o_id int not null
+ └── FOREIGN KEY (o_w_id, o_d_id, o_c_id) REFERENCES t.public.customer (c_w_id, c_d_id, c_id)
 
 exec-ddl
 ALTER TABLE "order" INJECT STATISTICS '[
@@ -418,9 +423,11 @@ TABLE stock
  ├── INDEX primary
  │    ├── s_w_id int not null
  │    └── s_i_id int not null
- └── INDEX secondary
-      ├── s_i_id int not null
-      └── s_w_id int not null
+ ├── INDEX secondary
+ │    ├── s_i_id int not null
+ │    └── s_w_id int not null
+ ├── FOREIGN KEY (s_w_id) REFERENCES t.public.warehouse (w_id)
+ └── FOREIGN KEY (s_i_id) REFERENCES t.public.item (i_id)
 
 exec-ddl
 ALTER TABLE stock INJECT STATISTICS '[
@@ -474,12 +481,14 @@ TABLE order_line
  │    ├── ol_d_id int not null
  │    ├── ol_o_id int not null desc
  │    └── ol_number int not null
- └── INDEX order_line_fk
-      ├── ol_supply_w_id int
-      ├── ol_d_id int not null
-      ├── ol_w_id int not null
-      ├── ol_o_id int not null
-      └── ol_number int not null
+ ├── INDEX order_line_fk
+ │    ├── ol_supply_w_id int
+ │    ├── ol_d_id int not null
+ │    ├── ol_w_id int not null
+ │    ├── ol_o_id int not null
+ │    └── ol_number int not null
+ ├── FOREIGN KEY (ol_w_id, ol_d_id, ol_o_id) REFERENCES t.public."order" (o_w_id, o_d_id, o_id)
+ └── FOREIGN KEY (ol_supply_w_id, ol_d_id) REFERENCES t.public.stock (s_w_id, s_i_id)
 
 exec-ddl
 ALTER TABLE order_line INJECT STATISTICS '[
