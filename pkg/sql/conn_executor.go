@@ -387,10 +387,18 @@ func (s *Server) GetStmtStatsLastReset() time.Time {
 	return s.sqlStats.lastReset
 }
 
-// ServeConn creates a connExecutor and serves a client connection by reading
-// commands from stmtBuf.
+// SetupConn creates a connExecutor for the client connection.
+//
+// If there is no error, the result's method ServeConn() or
+// CloseBeforeUse() must be called to ensure resources are eventually
+// released properly. This includes:
+// - calling Finish() on the event log.
+// - closing the memory monitors and the "reserved" BoundAccount provided
+//   as argument here.
 //
 // Args:
+// args: The initial session parameters. They are validated by SetupConn
+//   and an error is returned if this validation fails.
 // stmtBuf: The incoming statement for the new connExecutor.
 // clientComm: The interface through which the new connExecutor is going to
 // 	 produce results for the client.
@@ -398,24 +406,42 @@ func (s *Server) GetStmtStatsLastReset() time.Time {
 // 	 takes ownership of this memory.
 // memMetrics: The metrics that statements executed on this connection will
 //   contribute to.
-func (s *Server) ServeConn(
+func (s *Server) SetupConn(
 	ctx context.Context,
 	args SessionArgs,
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	reserved mon.BoundAccount,
 	memMetrics MemoryMetrics,
-	cancel context.CancelFunc,
-) error {
-
-	ex := s.newConnExecutor(
+) (ConnectionHandler, error) {
+	ex, err := s.newConnExecutor(
 		ctx, sessionParams{args: &args}, stmtBuf, clientComm, s.pool, reserved, memMetrics,
 	)
+	return ConnectionHandler{ex}, err
+}
+
+// ConnectionHandler is the interface between the result of SetupConn
+// and the ServeConn below. It encapsulates the connExecutor and hides
+// it away from other packages.
+type ConnectionHandler struct {
+	ex *connExecutor
+}
+
+// CloseNoUse closes a ConnectionHandler before ServeConn could be
+// called, for example on an error path between SetupConn and
+// ServeConn.
+func (h ConnectionHandler) CloseNoUse(ctx context.Context) {
+	h.ex.close(ctx, normalClose)
+}
+
+// ServeConn serves a client connection by reading commands from
+// the stmtBuf embedded in the connHandler.
+func (h ConnectionHandler) ServeConn(ctx context.Context, cancel context.CancelFunc) error {
 	defer func() {
 		r := recover()
-		ex.closeWrapper(ctx, r)
+		h.ex.closeWrapper(ctx, r)
 	}()
-	return ex.run(ctx, cancel)
+	return h.ex.run(ctx, cancel)
 }
 
 // sessionParams groups arguments for initializing a connExecutor's session
@@ -467,7 +493,7 @@ func (s *Server) newConnExecutor(
 	parentMon *mon.BytesMonitor,
 	reserved mon.BoundAccount,
 	memMetrics MemoryMetrics,
-) *connExecutor {
+) (*connExecutor, error) {
 	// Create the various monitors.
 	//
 	// Note: we pass `reserved` to sessionRootMon where it causes it to act as a
@@ -526,6 +552,10 @@ func (s *Server) newConnExecutor(
 		memMetrics:       memMetrics,
 		appStats:         s.sqlStats.getStatsForApplication(sd.ApplicationName),
 		planner:          planner{execCfg: s.cfg},
+
+		// ctxHolder will be reset at the start of run(). We only define
+		// it here so that CloseNoUse() doesn't panic.
+		ctxHolder: ctxHolder{connCtx: ctx},
 	}
 	ex.phaseTimes[sessionInit] = timeutil.Now()
 	ex.extraTxnState.tables = TableCollection{
@@ -562,7 +592,8 @@ func (s *Server) newConnExecutor(
 		}
 		ex.eventLog = trace.NewEventLog(fmt.Sprintf("sql session [%s]", sd.User), remoteStr)
 	}
-	return ex
+
+	return ex, nil
 }
 
 // newConnExecutorWithTxn creates a connExecutor that will execute statements
@@ -579,8 +610,11 @@ func (s *Server) newConnExecutorWithTxn(
 	reserved mon.BoundAccount,
 	memMetrics MemoryMetrics,
 	txn *client.Txn,
-) *connExecutor {
-	ex := s.newConnExecutor(ctx, sargs, stmtBuf, clientComm, parentMon, reserved, memMetrics)
+) (*connExecutor, error) {
+	ex, err := s.newConnExecutor(ctx, sargs, stmtBuf, clientComm, parentMon, reserved, memMetrics)
+	if err != nil {
+		return nil, err
+	}
 	// Perform some surgery on the executor - replace its state machine and
 	// initialize the state.
 	ex.machine = fsm.MakeMachine(
@@ -597,7 +631,7 @@ func (s *Server) newConnExecutorWithTxn(
 		tree.ReadWrite,
 		txn,
 		ex.transitionCtx)
-	return ex
+	return ex, nil
 }
 
 var maxStmtStatReset = settings.RegisterNonNegativeDurationSetting(
