@@ -428,6 +428,16 @@ func (m *Memo) NormOp(group GroupID) opt.Operator {
 	return m.groups[group].expr(normExprOrdinal).op
 }
 
+// DeriveLogicalProps derives logical props for the specified expression,
+// usually resulting in population of child stats in the test output tree.
+// Only useful in testing, when we want the lazy population of column statistics
+// for every expression to ensure a consistent tree output.
+func DeriveLogicalProps(evalCtx *tree.EvalContext, ev ExprView) {
+	if ev.op != opt.MergeJoinOp && ev.op != opt.SortOp {
+		ev.mem.logPropsBuilder.buildProps(evalCtx, ev)
+	}
+}
+
 // MemoizeNormExpr enters a normalized expression into the memo. This requires
 // the creation of a new memo group with the normalized expression as its first
 // expression. If the expression is already part of an existing memo group, then

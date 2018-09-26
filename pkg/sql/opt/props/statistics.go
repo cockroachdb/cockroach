@@ -81,7 +81,9 @@ func (s *Statistics) ApplySelectivity(selectivity float64) {
 	if selectivity == 0 {
 		s.RowCount = 0
 		for i, n := 0, s.ColStats.Count(); i < n; i++ {
-			s.ColStats.Get(i).DistinctCount = 0
+			colStat := s.ColStats.Get(i)
+			colStat.DistinctCount = 0
+			colStat.NullCount = 0
 		}
 		return
 	}
@@ -89,11 +91,14 @@ func (s *Statistics) ApplySelectivity(selectivity float64) {
 	s.RowCount *= selectivity
 	s.Selectivity *= selectivity
 
-	// Make sure none of the distinct counts are larger than the row count.
+	// Make sure none of the distinct / null counts are larger than the row count.
 	for i, n := 0, s.ColStats.Count(); i < n; i++ {
 		colStat := s.ColStats.Get(i)
 		if colStat.DistinctCount > s.RowCount {
 			colStat.DistinctCount = s.RowCount
+		}
+		if colStat.NullCount > s.RowCount {
+			colStat.NullCount = s.RowCount
 		}
 	}
 }
@@ -109,6 +114,7 @@ func (s *Statistics) String() string {
 	sort.Sort(colStats)
 	for _, col := range colStats {
 		fmt.Fprintf(&buf, ", distinct%s=%.9g", col.Cols.String(), col.DistinctCount)
+		fmt.Fprintf(&buf, ", null%s=%.9g", col.Cols.String(), col.NullCount)
 	}
 	buf.WriteString("]")
 
@@ -126,8 +132,16 @@ type ColumnStatistic struct {
 	Cols opt.ColSet
 
 	// DistinctCount is the estimated number of distinct values of this
-	// set of columns for this expression.
+	// set of columns for this expression. Excludes values containing
+	// a null in one of the cols - those are counted in NullCount.
+	// TODO(itsbilal): Count null values as a distinct value as well.
 	DistinctCount float64
+
+	// NullCount is the estimated number of null values of this set of
+	// columns for this expression. For multi-column stats, this null
+	// count tracks all instances of at least one null value in the
+	// column set.
+	NullCount float64
 }
 
 // ApplySelectivity updates the distinct count according to a given selectivity.
@@ -151,6 +165,10 @@ func (c *ColumnStatistic) ApplySelectivity(selectivity, inputRows float64) {
 	// This formula returns d * selectivity when d=n but is closer to d
 	// when d << n.
 	c.DistinctCount = d - d*math.Pow(1-selectivity, n/d)
+
+	// Since the null count is a simple count of all null rows, we can
+	// just multiply the selectivity with it.
+	c.NullCount *= selectivity
 }
 
 // ColumnStatistics is a slice of pointers to ColumnStatistic values.
