@@ -1693,6 +1693,8 @@ var tableLeaseRefreshLimit = settings.RegisterIntSetting(
 func (m *LeaseManager) PeriodicallyRefreshSomeLeases() {
 	m.stopper.RunWorker(context.Background(), func(ctx context.Context) {
 		tickDuration := m.leaseDuration / 2
+		// Jitter tickDuration by a bit.
+		tickDuration = tickDuration - time.Duration(float64(tickDuration/10)*rand.Float64())
 		if tickDuration <= 0 {
 			return
 		}
