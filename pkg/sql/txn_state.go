@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -158,6 +159,9 @@ func (ts *txnState) resetForNewSQLTxn(
 
 	// Create a span for the new txn. The span is always Recordable to support the
 	// use of session tracing, which may start recording on it.
+	// TODO(andrei): We should use tracing.EnsureChildSpan() as that's much more
+	// efficient that StartSpan (and also it'd be simpler), but that interface
+	// doesn't current support the Recordable option.
 	if parentSp := opentracing.SpanFromContext(connCtx); parentSp != nil {
 		// Create a child span for this SQL txn.
 		sp = parentSp.Tracer().StartSpan(
@@ -167,7 +171,8 @@ func (ts *txnState) resetForNewSQLTxn(
 		)
 	} else {
 		// Create a root span for this SQL txn.
-		sp = tranCtx.tracer.StartSpan(opName, tracing.Recordable, tracing.LogTagsFromCtx(connCtx))
+		sp = tranCtx.tracer.(*tracing.Tracer).StartRootSpan(
+			opName, logtags.FromContext(connCtx), tracing.RecordableSpan)
 	}
 
 	if txnType == implicitTxn {
