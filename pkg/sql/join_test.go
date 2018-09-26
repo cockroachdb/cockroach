@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -41,7 +42,8 @@ func newTestScanNode(kvDB *client.DB, tableName string) (*scanNode, error) {
 		return nil, err
 	}
 	scan.initOrdering(0 /* exactPrefix */, p.EvalContext())
-	scan.spans, err = spansFromConstraint(desc, &desc.PrimaryIndex, nil /* constraint */)
+	scan.spans, err = spansFromConstraint(
+		desc, &desc.PrimaryIndex, nil /* constraint */, exec.ColumnOrdinalSet{})
 	if err != nil {
 		return nil, err
 	}

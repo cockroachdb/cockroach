@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -63,7 +64,8 @@ type lookupJoinRun struct {
 func (lj *lookupJoinNode) startExec(params runParams) error {
 	// Make sure the table node has a span (full scan).
 	var err error
-	lj.table.spans, err = spansFromConstraint(lj.table.desc, lj.table.index, nil /* constraint */)
+	lj.table.spans, err = spansFromConstraint(
+		lj.table.desc, lj.table.index, nil /* constraint */, exec.ColumnOrdinalSet{})
 	if err != nil {
 		return err
 	}

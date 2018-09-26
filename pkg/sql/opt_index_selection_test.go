@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -110,7 +111,7 @@ func makeSpans(
 		t.Fatal(err)
 	}
 
-	spans, err = spansFromConstraint(desc, index, c.ic.Constraint())
+	spans, err = spansFromConstraint(desc, index, c.ic.Constraint(), exec.ColumnOrdinalSet{})
 	if err != nil {
 		t.Fatal(err)
 	}

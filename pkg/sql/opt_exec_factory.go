@@ -101,7 +101,7 @@ func (ef *execFactory) ConstructScan(
 	scan.hardLimit = hardLimit
 	scan.reverse = reverse
 	var err error
-	scan.spans, err = spansFromConstraint(tabDesc, indexDesc, indexConstraint)
+	scan.spans, err = spansFromConstraint(tabDesc, indexDesc, indexConstraint, cols)
 	if err != nil {
 		return nil, err
 	}

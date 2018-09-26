@@ -579,7 +579,6 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00' -> NULL
 fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00'/b -> '2015-08-25'
 fetched: /dt/primary/'2015-08-25 04:45:45.53453+00:00'/c -> '2h45m2s234ms'
 output row: ['2015-08-25 04:45:45.53453+00:00' '2015-08-25' '2h45m2s234ms']
