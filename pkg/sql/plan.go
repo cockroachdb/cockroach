@@ -958,6 +958,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.Explain(ctx, n)
 	case *tree.Insert:
 		return p.Insert(ctx, n, nil)
+	case *tree.Scrub:
+		return p.Scrub(ctx, n)
 	case *tree.Select:
 		return p.Select(ctx, n, nil)
 	case *tree.SelectClause:
