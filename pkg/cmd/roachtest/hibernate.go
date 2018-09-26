@@ -19,8 +19,6 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
-	"io/ioutil"
-	"os"
 	"sort"
 	"strings"
 )
@@ -117,6 +115,7 @@ func registerHibernate(r *registry) {
 		for i, file := range files {
 			file = strings.TrimSpace(file)
 			if len(file) == 0 {
+				c.l.Printf("Skipping %d of %d: %s\n", i, len(files), file)
 				continue
 			}
 			c.l.Printf("Parsing %d of %d: %s\n", i, len(files), file)
@@ -129,12 +128,17 @@ func registerHibernate(r *registry) {
 				t.Fatal(err)
 			}
 			for i, test := range tests {
+				// There is at least a single test that's run twice, so if we already
+				// have a result, skip it.
+				if _, alreadyTested := results[test]; alreadyTested {
+					continue
+				}
 				allTests = append(allTests, test)
 				_, expectedFailure := expectedFailures[test]
 				pass := passed[i]
 				switch {
 				case pass && !expectedFailure:
-					results[test] = fmt.Sprintf("--- PASS: %s", test)
+					results[test] = fmt.Sprintf("--- PASS: %s (expected)", test)
 					passExpectedCount++
 				case pass && expectedFailure:
 					results[test] = fmt.Sprintf("--- PASS: %s (unexpected)", test)
@@ -144,7 +148,7 @@ func registerHibernate(r *registry) {
 					failExpectedCount++
 					currentFailures = append(currentFailures, test)
 				case !pass && !expectedFailure:
-					results[test] = fmt.Sprintf("--- FAIL: %s", test)
+					results[test] = fmt.Sprintf("--- FAIL: %s (unexpected)", test)
 					failUnexpectedCount++
 					currentFailures = append(currentFailures, test)
 				}
@@ -170,22 +174,6 @@ func registerHibernate(r *registry) {
 			c.l.Printf("%s\n", result)
 		}
 
-		// Create a new hibernate_blacklist so we can easily update this test.
-		sort.Strings(currentFailures)
-		blacklistFile, err := ioutil.TempFile("", "hibernateBlackList")
-		if err != nil {
-			t.Fatal(err)
-		}
-		fmt.Fprintf(blacklistFile, "var hibernateBlackList = []string{\n")
-		for _, test := range currentFailures {
-			fmt.Fprintf(blacklistFile, "\"%s\",\n", test)
-		}
-		fmt.Fprintf(blacklistFile, "}\n\n")
-		c.Put(ctx, blacklistFile.Name(), "~/logs/hibernateBlackList.txt")
-		if err := os.Remove(blacklistFile.Name()); err != nil {
-			t.Fatal(err)
-		}
-
 		c.l.Printf("------------------------\n")
 		c.l.Printf("%d Total Test Run\n",
 			passExpectedCount+passUnexpectedCount+failExpectedCount+failUnexpectedCount,
@@ -199,6 +187,15 @@ func registerHibernate(r *registry) {
 		c.l.Printf("------------------------\n")
 
 		if failUnexpectedCount > 0 || passUnexpectedCount > 0 || notRunCount > 0 {
+			// Create a new hibernate_blacklist so we can easily update this test.
+			sort.Strings(currentFailures)
+			c.l.Printf("Here is new hibernate blacklist that can be used to update the test:\n\n")
+			c.l.Printf("var hibernateBlackList = []string{\n")
+			for _, test := range currentFailures {
+				c.l.Printf("\"%s\",\n", test)
+			}
+			c.l.Printf("}\n\n")
+			c.l.Printf("------------------------\n")
 			t.Fatalf("\n"+
 				"%d tests failed unexpectedly\n"+
 				"%d tests passed unexpectedly\n"+

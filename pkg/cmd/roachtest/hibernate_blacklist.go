@@ -17,9 +17,15 @@ package main
 
 // This is a list of known hibernate test failures.
 // When the hibernate test suite is run, the results are compared to this list.
-// Please keep this list alphabetized.
-// After a run, artifacts/hibernate/log/logs/report/hibernateBlackList.txt will
-// have an updated version of this blacklist.
+// Any passed test that is not on this list is reported as PASS - expected
+// Any passed test that is on this list is reported as PASS - unexpected
+// Any failed test that is on this list is reported as FAIL - expected
+// Any failed test that is not on this list is reported as FAIL - unexpected
+// Any test on this list that is not run is reported as FAIL - not run
+//
+// Please keep this list alphabetized for easy diffing.
+// After a failed run, an updated version of this blacklist should be available
+// in the test log.
 var hibernateBlackList = []string{
 	"org.hibernate.id.QuotedIdentifierTest.testDirectIdPropertyAccess",
 	"org.hibernate.jpa.test.criteria.QueryBuilderTest.testDateTimeFunctions",
