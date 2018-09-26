@@ -85,6 +85,7 @@ func TestAnnotateCtxSpan(t *testing.T) {
 	sp.Finish()
 	if err := tracing.TestingCheckRecordedSpans(tracing.GetRecording(sp), `
 	  span s:
+			tags: ambient=
 			event: [ambient] a
 	`); err != nil {
 		t.Fatal(err)

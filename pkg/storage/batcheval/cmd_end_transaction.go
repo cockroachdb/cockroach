@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -765,7 +766,10 @@ func splitTrigger(
 ) (enginepb.MVCCStats, result.Result, error) {
 	// TODO(tschottdorf): should have an incoming context from the corresponding
 	// EndTransaction, but the plumbing has not been done yet.
-	sp := rec.Tracer().StartSpan("split", tracing.LogTagsFromCtx(ctx))
+	// TODO(andrei): should this span be a child of the ctx's (if any)?
+	sp := rec.Tracer().(*tracing.Tracer).StartRootSpan(
+		"split", logtags.FromContext(ctx), tracing.NonRecordableSpan,
+	)
 	defer sp.Finish()
 	desc := rec.Desc()
 	if !bytes.Equal(desc.StartKey, split.LeftDesc.StartKey) ||

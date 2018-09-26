@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 // jemallocHeapDump is an optional function to be called at heap dump time.
@@ -420,8 +421,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// the logging infrastructure below.
 	// This span concludes when the startup goroutine started below
 	// has completed.
+	// TODO(andrei): we don't close the span on the early returns below.
 	tracer := serverCfg.Settings.Tracer
-	sp := tracer.StartSpan("server start")
+	sp := tracer.StartRootSpan("server start", nil /* logTags */, tracing.NonRecordableSpan)
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 
 	// Set up the logging and profiling output.
