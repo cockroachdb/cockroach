@@ -26,18 +26,18 @@ union
  ├── columns: k:8(int) i:9(int)
  ├── left columns: a.k:1(int) a.i:2(int)
  ├── right columns: x:5(int) z:6(int)
- ├── stats: [rows=2000, distinct(8,9)=2000]
- ├── cost: 2150
+ ├── stats: [rows=1990, distinct(8,9)=1990, null(8,9)=19.92]
+ ├── cost: 2149.9
  ├── key: (8,9)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int)
- │    ├── stats: [rows=1000, distinct(1,2)=1000]
+ │    ├── stats: [rows=1000, distinct(1,2)=990, null(1,2)=10]
  │    ├── cost: 1060
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:5(int) z:6(int!null)
-      ├── stats: [rows=1000, distinct(5,6)=1000]
+      ├── stats: [rows=1000, distinct(5,6)=1000, null(5,6)=10]
       └── cost: 1050
 
 opt
@@ -67,18 +67,18 @@ intersect
  ├── columns: k:1(int) i:2(int)
  ├── left columns: k:1(int) i:2(int)
  ├── right columns: x:5(int) z:6(int)
- ├── stats: [rows=1000, distinct(1,2)=1000]
- ├── cost: 2140
+ ├── stats: [rows=990, distinct(1,2)=990, null(1,2)=9.91]
+ ├── cost: 2139.9
  ├── key: (1,2)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
- │    ├── stats: [rows=1000, distinct(1,2)=1000]
+ │    ├── stats: [rows=1000, distinct(1,2)=990, null(1,2)=10]
  │    ├── cost: 1060
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:5(int) z:6(int!null)
-      ├── stats: [rows=1000, distinct(5,6)=1000]
+      ├── stats: [rows=1000, distinct(5,6)=1000, null(5,6)=10]
       └── cost: 1050
 
 opt
@@ -108,18 +108,18 @@ except
  ├── columns: k:1(int) i:2(int)
  ├── left columns: k:1(int) i:2(int)
  ├── right columns: x:5(int) z:6(int)
- ├── stats: [rows=1000, distinct(1,2)=1000]
- ├── cost: 2140
+ ├── stats: [rows=990, distinct(1,2)=990, null(1,2)=9.91]
+ ├── cost: 2139.9
  ├── key: (1,2)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
- │    ├── stats: [rows=1000, distinct(1,2)=1000]
+ │    ├── stats: [rows=1000, distinct(1,2)=990, null(1,2)=10]
  │    ├── cost: 1060
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:5(int) z:6(int!null)
-      ├── stats: [rows=1000, distinct(5,6)=1000]
+      ├── stats: [rows=1000, distinct(5,6)=1000, null(5,6)=10]
       └── cost: 1050
 
 opt
