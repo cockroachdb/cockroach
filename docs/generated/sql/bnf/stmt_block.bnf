@@ -8,6 +8,7 @@ stmt ::=
 	'HELPTOKEN'
 	| explainable_stmt
 	| copy_from_stmt
+	| execute_stmt
 	| deallocate_stmt
 	| discard_stmt
 	| export_stmt
@@ -22,10 +23,12 @@ stmt ::=
 
 explainable_stmt ::=
 	preparable_stmt
-	| execute_stmt
 
 copy_from_stmt ::=
 	'COPY' table_name opt_column_list 'FROM' 'STDIN'
+
+execute_stmt ::=
+	'EXECUTE' table_alias_name execute_param_clause
 
 deallocate_stmt ::=
 	'DEALLOCATE' name
@@ -88,14 +91,18 @@ preparable_stmt ::=
 	| update_stmt
 	| upsert_stmt
 
-execute_stmt ::=
-	'EXECUTE' table_alias_name execute_param_clause
-
 table_name ::=
 	db_object_name
 
 opt_column_list ::=
 	'(' name_list ')'
+	| 
+
+table_alias_name ::=
+	name
+
+execute_param_clause ::=
+	'(' expr_list ')'
 	| 
 
 name ::=
@@ -137,9 +144,6 @@ name_list ::=
 
 privilege_list ::=
 	( privilege ) ( ( ',' privilege ) )*
-
-table_alias_name ::=
-	name
 
 prep_type_clause ::=
 	'(' type_list ')'
@@ -259,13 +263,12 @@ update_stmt ::=
 upsert_stmt ::=
 	opt_with_clause 'UPSERT' 'INTO' insert_target insert_rest returning_clause
 
-execute_param_clause ::=
-	'(' expr_list ')'
-	| 
-
 db_object_name ::=
 	simple_db_object_name
 	| complex_db_object_name
+
+expr_list ::=
+	( a_expr ) ( ( ',' a_expr ) )*
 
 unreserved_keyword ::=
 	'ABORT'
@@ -834,9 +837,6 @@ opt_drop_behavior ::=
 
 set_clause_list ::=
 	( set_clause ) ( ( ',' set_clause ) )*
-
-expr_list ::=
-	( a_expr ) ( ( ',' a_expr ) )*
 
 simple_db_object_name ::=
 	name

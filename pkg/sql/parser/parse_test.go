@@ -485,7 +485,6 @@ func TestParse(t *testing.T) {
 		{`PREPARE a (STRING, STRING, STRING) AS IMPORT TABLE a CREATE USING $1 CSV DATA ($2) WITH temp = $3`},
 
 		{`EXECUTE a`},
-		{`EXPLAIN EXECUTE a`}, // TODO(knz): Not sure we want to suppor this!
 		{`EXECUTE a (1)`},
 		{`EXECUTE a (1, 1)`},
 		{`EXECUTE a (1 + 1)`},
@@ -2334,6 +2333,13 @@ CREATE TABLE foo(a CHAR(0))
 e'\xad'::string
 ^
 `,
+		},
+		{
+			`EXPLAIN EXECUTE a`,
+			`syntax error at or near "execute"
+EXPLAIN EXECUTE a
+        ^
+HINT: try \h EXPLAIN`,
 		},
 	}
 	for _, d := range testData {

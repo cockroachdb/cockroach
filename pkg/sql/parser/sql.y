@@ -1055,6 +1055,7 @@ stmt:
 | explainable_stmt  // help texts in sub-rule
 | copy_from_stmt
 | comment_stmt
+| execute_stmt      // EXTEND WITH HELP: EXECUTE
 | deallocate_stmt   // EXTEND WITH HELP: DEALLOCATE
 | discard_stmt      // EXTEND WITH HELP: DISCARD
 | export_stmt       // EXTEND WITH HELP: EXPORT
@@ -2215,10 +2216,10 @@ table_name_list:
 //
 // Explainable statements:
 //     SELECT, CREATE, DROP, ALTER, INSERT, UPSERT, UPDATE, DELETE,
-//     SHOW, EXPLAIN, EXECUTE
+//     SHOW, EXPLAIN
 //
 // Plan options:
-//     TYPES, VERBOSE
+//     TYPES, VERBOSE, OPT
 //
 // %SeeAlso: WEBDOCS/explain.html
 explain_stmt:
@@ -2266,11 +2267,8 @@ preparable_stmt:
 | update_stmt       // EXTEND WITH HELP: UPDATE
 | upsert_stmt       // EXTEND WITH HELP: UPSERT
 
-// TODO(knz): it's not well justified that one could
-// EXPLAIN EXECUTE.
 explainable_stmt:
   preparable_stmt
-| execute_stmt      // EXTEND WITH HELP: EXECUTE
 
 explain_option_list:
   explain_option_name
