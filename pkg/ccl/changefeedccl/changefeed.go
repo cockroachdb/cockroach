@@ -66,20 +66,19 @@ type emitEntry struct {
 // The returned closure is not threadsafe.
 func kvsToRows(
 	leaseMgr *sql.LeaseManager,
-	tableHist *tableHistory,
 	details jobspb.ChangefeedDetails,
 	inputFn func(context.Context) (bufferEntry, error),
 ) func(context.Context) ([]emitEntry, error) {
-	rfCache := newRowFetcherCache(leaseMgr, tableHist)
+	rfCache := newRowFetcherCache(leaseMgr)
 
 	var kvs sqlbase.SpanKVFetcher
 	appendEmitEntryForKV := func(
-		ctx context.Context, output []emitEntry, kv roachpb.KeyValue,
+		ctx context.Context, output []emitEntry, kv roachpb.KeyValue, schemaTimestamp hlc.Timestamp,
 	) ([]emitEntry, error) {
 		// Reuse kvs to save allocations.
 		kvs.KVs = kvs.KVs[:0]
 
-		desc, err := rfCache.TableDescForKey(ctx, kv.Key, kv.Value.Timestamp)
+		desc, err := rfCache.TableDescForKey(ctx, kv.Key, schemaTimestamp)
 		if err != nil {
 			return nil, err
 		}
@@ -132,7 +131,11 @@ func kvsToRows(
 				if log.V(3) {
 					log.Infof(ctx, "changed key %s %s", input.kv.Key, input.kv.Value.Timestamp)
 				}
-				output, err = appendEmitEntryForKV(ctx, output, input.kv)
+				schemaTimestamp := input.kv.Value.Timestamp
+				if input.schemaTimestamp != (hlc.Timestamp{}) {
+					schemaTimestamp = input.schemaTimestamp
+				}
+				output, err = appendEmitEntryForKV(ctx, output, input.kv, schemaTimestamp)
 				if err != nil {
 					return nil, err
 				}
