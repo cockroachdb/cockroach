@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -455,7 +456,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 }
 
 func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
-	args := sql.SessionArgs{}
+	args := sql.SessionArgs{SessionDefaults: make(map[string]string)}
 	buf := pgwirebase.ReadBuffer{Msg: data}
 	for {
 		key, err := buf.GetString()
@@ -470,18 +471,25 @@ func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
 			return sql.SessionArgs{}, errors.Errorf("error reading option value: %s", err)
 		}
 		switch key {
-		case "database":
-			args.Database = value
 		case "user":
 			args.User = value
-		case "application_name":
-			args.ApplicationName = value
 		default:
-			if log.V(1) {
-				log.Warningf(ctx, "unrecognized configuration parameter %q", key)
+			if sql.IsSessionVariableConfigurable(key) {
+				args.SessionDefaults[key] = value
+			} else {
+				if log.V(1) {
+					log.Warningf(ctx, "unrecognized configuration parameter %q", key)
+				}
 			}
 		}
 	}
+
+	if _, ok := args.SessionDefaults["database"]; !ok {
+		// CockroachDB-specific behavior: if no database is specified,
+		// default to "defaultdb". In PostgreSQL this would be "postgres".
+		args.SessionDefaults["database"] = sessiondata.DefaultDatabaseName
+	}
+
 	return args, nil
 }
 
