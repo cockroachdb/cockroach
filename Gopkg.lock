@@ -302,11 +302,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:1e8d6557dd2e9cd72f8a89b1de79f931bee40791119b1d75a70f887e1faea8a8"
+  digest = "1:5c1a738aa52effccd91c780b1514727c347eed563a50bdae35ca9036b910f6bc"
   name = "github.com/cockroachdb/crlfmt"
   packages = ["."]
   pruneopts = "UT"
-  revision = "5895607e5ea790fcbb640260129a12d277b34e46"
+  revision = "ac589b2ed7aaa9410beb9963400c47898216a45e"
 
 [[projects]]
   branch = "master"
@@ -1483,7 +1483,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:38ab68af034d87c7ce7327e1a8e47c0f674ed2e8e7d72d17dd596f58a7ea6faa"
+  digest = "1:08224af962b4f6706598f999d43460f5c6a1080f033c586631d99d7ea8e5654f"
   name = "golang.org/x/tools"
   packages = [
     "cmd/goyacc",
@@ -1496,7 +1496,6 @@
     "go/gcimporter15",
     "go/loader",
     "go/types/typeutil",
-    "imports",
   ]
   pruneopts = "UT"
   revision = "90b807ada4cc7ab5d1409d637b1f3beb5a776be7"
