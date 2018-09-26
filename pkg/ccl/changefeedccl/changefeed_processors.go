@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -35,18 +36,13 @@ type changeAggregator struct {
 
 	// cancel shuts down the processor, both the `Next()` flow and the poller.
 	cancel func()
-	// errCh contains the return values of poller and tableHistUpdater.
+	// errCh contains the return values of the poller.
 	errCh chan error
 	// poller runs in the background and puts kv changes and resolved spans into
 	// a buffer, which is used by `Next()`.
 	poller *poller
 	// pollerDoneCh is closed when the poller exits.
 	pollerDoneCh chan struct{}
-	// tableHistUpdater runs in the background and continually advances the
-	// high-water of a tableHistory.
-	tableHistUpdater *tableHistoryUpdater
-	// tableHistUpdaterDoneCh is closed when the tableHistUpdater exits.
-	tableHistUpdaterDoneCh chan struct{}
 
 	// encoder is the Encoder to use for key and value serialization.
 	encoder Encoder
@@ -173,28 +169,12 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	ca.sink = makeMetricsSink(metrics, ca.sink)
 
 	buf := makeBuffer()
+	leaseMgr := ca.flowCtx.LeaseManager.(*sql.LeaseManager)
 	ca.poller = makePoller(
 		ca.flowCtx.Settings, ca.flowCtx.ClientDB, ca.flowCtx.ClientDB.Clock(), ca.flowCtx.Gossip,
-		spans, ca.spec.Feed, initialHighWater, buf,
+		spans, ca.spec.Feed, initialHighWater, buf, leaseMgr,
 	)
-
-	leaseMgr := ca.flowCtx.LeaseManager.(*sql.LeaseManager)
-	tableHist := makeTableHistory(func(desc *sqlbase.TableDescriptor) error {
-		// NB: Each new `tableDesc.Version` is initially written with an mvcc
-		// timestamp equal to its `ModificationTime`. It might later update that
-		// `Version` with backfill progress, but we only validate a table
-		// descriptor through its `ModificationTime` before using it, so this
-		// validation function can't depend on anything that changes after a new
-		// `Version` of a table desc is written.
-		return validateChangefeedTable(ca.spec.Feed.Targets, desc)
-	}, initialHighWater)
-	ca.tableHistUpdater = &tableHistoryUpdater{
-		settings: ca.flowCtx.Settings,
-		db:       ca.flowCtx.ClientDB,
-		targets:  ca.spec.Feed.Targets,
-		m:        tableHist,
-	}
-	rowsFn := kvsToRows(leaseMgr, tableHist, ca.spec.Feed, buf.Get)
+	rowsFn := kvsToRows(leaseMgr, ca.spec.Feed, buf.Get)
 
 	var knobs TestingKnobs
 	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
@@ -208,16 +188,13 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	ca.pollerDoneCh = make(chan struct{})
 	go func(ctx context.Context) {
 		defer close(ca.pollerDoneCh)
-		err := ca.poller.Run(ctx)
-		// Trying to call MoveToDraining here is racy (`MoveToDraining called in
-		// state stateTrailingMeta`), so return the error via a channel.
-		ca.errCh <- err
-		ca.cancel()
-	}(ctx)
-	ca.tableHistUpdaterDoneCh = make(chan struct{})
-	go func(ctx context.Context) {
-		defer close(ca.tableHistUpdaterDoneCh)
-		err := ca.tableHistUpdater.PollTableDescs(ctx)
+		var err error
+		if storage.RangefeedEnabled.Get(&ca.flowCtx.Settings.SV) {
+			err = ca.poller.RunUsingRangefeeds(ctx)
+		} else {
+			err = ca.poller.Run(ctx)
+		}
+
 		// Trying to call MoveToDraining here is racy (`MoveToDraining called in
 		// state stateTrailingMeta`), so return the error via a channel.
 		ca.errCh <- err
@@ -234,16 +211,13 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 // checking.
 func (ca *changeAggregator) close() {
 	if ca.InternalClose() {
-		// Shut down the poller and tableHistUpdater if they weren't already.
+		// Shut down the poller if it wasn't already.
 		if ca.cancel != nil {
 			ca.cancel()
 		}
-		// Wait for the poller and tableHistUpdater to finish shutting down.
+		// Wait for the poller to finish shutting down.
 		if ca.pollerDoneCh != nil {
 			<-ca.pollerDoneCh
-		}
-		if ca.tableHistUpdaterDoneCh != nil {
-			<-ca.tableHistUpdaterDoneCh
 		}
 		if ca.sink != nil {
 			if err := ca.sink.Close(); err != nil {
@@ -266,13 +240,12 @@ func (ca *changeAggregator) Next() (sqlbase.EncDatumRow, *distsqlrun.ProducerMet
 
 		if err := ca.tick(); err != nil {
 			select {
-			// If the poller or tableHistUpdater errored first, that's the
+			// If the poller errored first, that's the
 			// interesting one, so overwrite `err`.
 			case err = <-ca.errCh:
 			default:
 			}
-			// Shut down the poller and tableHistUpdater if they weren't
-			// already.
+			// Shut down the poller if it wasn't already.
 			ca.cancel()
 
 			ca.MoveToDraining(err)

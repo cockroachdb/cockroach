@@ -66,20 +66,19 @@ type emitEntry struct {
 // The returned closure is not threadsafe.
 func kvsToRows(
 	leaseMgr *sql.LeaseManager,
-	tableHist *tableHistory,
 	details jobspb.ChangefeedDetails,
 	inputFn func(context.Context) (bufferEntry, error),
 ) func(context.Context) ([]emitEntry, error) {
-	rfCache := newRowFetcherCache(leaseMgr, tableHist)
+	rfCache := newRowFetcherCache(leaseMgr)
 
 	var kvs sqlbase.SpanKVFetcher
 	appendEmitEntryForKV := func(
-		ctx context.Context, output []emitEntry, kv roachpb.KeyValue,
+		ctx context.Context, output []emitEntry, kv roachpb.KeyValue, schemaTimestamp hlc.Timestamp,
 	) ([]emitEntry, error) {
 		// Reuse kvs to save allocations.
 		kvs.KVs = kvs.KVs[:0]
 
-		desc, err := rfCache.TableDescForKey(ctx, kv.Key, kv.Value.Timestamp)
+		desc, err := rfCache.TableDescForKey(ctx, kv.Key, schemaTimestamp)
 		if err != nil {
 			return nil, err
 		}
@@ -111,9 +110,12 @@ func kvsToRows(
 				break
 			}
 			r.row.datums = append(sqlbase.EncDatumRow(nil), r.row.datums...)
-
 			r.row.deleted = rf.RowIsDeleted()
-			r.row.timestamp = kv.Value.Timestamp
+			// TODO(mrtracy): This should likely be set to schemaTimestamp instead of
+			// the value timestamp, if schema timestamp is set. However, doing so
+			// seems to break some of the assumptions of our existing tests in subtle
+			// ways, so this should be done as part of a dedicated PR.
+			r.row.timestamp = schemaTimestamp
 			output = append(output, r)
 		}
 		return output, nil
@@ -132,7 +134,11 @@ func kvsToRows(
 				if log.V(3) {
 					log.Infof(ctx, "changed key %s %s", input.kv.Key, input.kv.Value.Timestamp)
 				}
-				output, err = appendEmitEntryForKV(ctx, output, input.kv)
+				schemaTimestamp := input.kv.Value.Timestamp
+				if input.schemaTimestamp != (hlc.Timestamp{}) {
+					schemaTimestamp = input.schemaTimestamp
+				}
+				output, err = appendEmitEntryForKV(ctx, output, input.kv, schemaTimestamp)
 				if err != nil {
 					return nil, err
 				}
