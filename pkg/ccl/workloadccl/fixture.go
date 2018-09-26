@@ -126,34 +126,44 @@ func FixtureURL(config FixtureConfig, gen workload.Generator) string {
 func GetFixture(
 	ctx context.Context, gcs *storage.Client, config FixtureConfig, gen workload.Generator,
 ) (Fixture, error) {
-	b := gcs.Bucket(config.GCSBucket)
-	if config.BillingProject != `` {
-		b = b.UserProject(config.BillingProject)
-	}
+	var fixture Fixture
+	var err error
+	for r := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 10}); ; r.Next() {
+		err = func() error {
+			b := gcs.Bucket(config.GCSBucket)
+			if config.BillingProject != `` {
+				b = b.UserProject(config.BillingProject)
+			}
 
-	fixtureFolder := generatorToGCSFolder(config, gen)
-	_, err := b.Objects(ctx, &storage.Query{Prefix: fixtureFolder, Delimiter: `/`}).Next()
-	if err == iterator.Done {
-		return Fixture{}, errors.Errorf(`fixture not found: %s`, fixtureFolder)
-	} else if err != nil {
-		return Fixture{}, err
-	}
+			fixtureFolder := generatorToGCSFolder(config, gen)
+			_, err := b.Objects(ctx, &storage.Query{Prefix: fixtureFolder, Delimiter: `/`}).Next()
+			if err == iterator.Done {
+				return errors.Errorf(`fixture not found: %s`, fixtureFolder)
+			} else if err != nil {
+				return err
+			}
 
-	fixture := Fixture{Config: config, Generator: gen}
-	for _, table := range gen.Tables() {
-		tableFolder := filepath.Join(fixtureFolder, table.Name)
-		_, err := b.Objects(ctx, &storage.Query{Prefix: tableFolder, Delimiter: `/`}).Next()
-		if err == iterator.Done {
-			return Fixture{}, errors.Errorf(`fixture table not found: %s`, tableFolder)
-		} else if err != nil {
-			return Fixture{}, err
+			fixture = Fixture{Config: config, Generator: gen}
+			for _, table := range gen.Tables() {
+				tableFolder := filepath.Join(fixtureFolder, table.Name)
+				_, err := b.Objects(ctx, &storage.Query{Prefix: tableFolder, Delimiter: `/`}).Next()
+				if err == iterator.Done {
+					return errors.Errorf(`fixture table not found: %s`, tableFolder)
+				} else if err != nil {
+					return err
+				}
+				fixture.Tables = append(fixture.Tables, FixtureTable{
+					TableName: table.Name,
+					BackupURI: config.objectPathToURI(tableFolder),
+				})
+			}
+			return nil
+		}()
+		if err == nil {
+			break
 		}
-		fixture.Tables = append(fixture.Tables, FixtureTable{
-			TableName: table.Name,
-			BackupURI: config.objectPathToURI(tableFolder),
-		})
 	}
-	return fixture, nil
+	return fixture, err
 }
 
 type groupCSVWriter struct {
