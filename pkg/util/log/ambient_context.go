@@ -180,15 +180,5 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 		}
 	}
 
-	// If there is a span in context, create a child.
-	newCtx, childSpan := tracing.ChildSpan(ctx, opName)
-	if childSpan != nil {
-		return newCtx, childSpan
-	}
-	// Otherwise, create a root span.
-	if ac.Tracer == nil {
-		panic("no tracer in AmbientContext for root span")
-	}
-	rootSpan := ac.Tracer.StartSpan(opName)
-	return opentracing.ContextWithSpan(ctx, rootSpan), rootSpan
+	return tracing.EnsureChildSpan(ctx, ac.Tracer, opName)
 }
