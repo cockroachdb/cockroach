@@ -1336,3 +1336,119 @@ render           ·         ·           (w)     ·
       │          spans     /1-/10      ·       ·
       └── scan   ·         ·           (v, w)  ·
 ·                table     t3@primary  ·       ·
+
+# ------------------------------------------------------------------------------
+# These tests are for the point lookup optimization: for single row lookups on
+# a table with multiple column families, we only scan the relevant column
+# families. Note that this applies to SELECTs and UPDATEs but not DELETEs, since
+# we need to ensure that we delete across all column families.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE t4 (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  e INT,
+  PRIMARY KEY (a, b),
+  FAMILY (a, b),
+  FAMILY (c),
+  FAMILY (d),
+  FAMILY (e)
+)
+
+statement ok
+INSERT INTO t4 VALUES (10, 20, 30, 40, 50)
+
+# Point lookup on c does not touch the d or e families.
+query TTT
+EXPLAIN SELECT c FROM t4 WHERE a = 10 and b = 20
+----
+render     ·      ·
+ └── scan  ·      ·
+·          table  t4@primary
+·          spans  /10/20/0-/10/20/1/2
+
+statement ok
+SET tracing = on,kv,results; SELECT c FROM t4 WHERE a = 10 and b = 20; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /t4/primary/10/20 -> NULL
+fetched: /t4/primary/10/20/c -> 30
+output row: [30]
+
+# Point lookup on d does not touch the c or e families.
+query TTT
+EXPLAIN SELECT d FROM t4 WHERE a = 10 and b = 20
+----
+render     ·      ·
+ └── scan  ·      ·
+·          table  t4@primary
+·          spans  /10/20/0-/10/20/1 /10/20/2/1-/10/20/2/2
+
+statement ok
+SET tracing = on,kv,results; SELECT d FROM t4 WHERE a = 10 and b = 20; SET tracing = off
+
+query T
+SELECT message FROM [SHOW KV TRACE FOR SESSION]
+ WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
+----
+fetched: /t4/primary/10/20 -> NULL
+fetched: /t4/primary/10/20/c -> 40
+output row: [40]
+
+# Point lookup on both d and e uses a single span for the two adjacent column
+# families.
+query TTT
+EXPLAIN SELECT d, e FROM t4 WHERE a = 10 and b = 20
+----
+render     ·      ·
+ └── scan  ·      ·
+·          table  t4@primary
+·          spans  /10/20/0-/10/20/1 /10/20/2/1-/10/20/3/2
+
+# Optimization should also be applied for updates.
+query TTT
+EXPLAIN UPDATE t4 SET c = 30 WHERE a = 10 and b = 20
+----
+count                ·      ·
+ └── update          ·      ·
+      │              table  t4
+      │              set    c
+      └── render     ·      ·
+           └── scan  ·      ·
+·                    table  t4@primary
+·                    spans  /10/20/0-/10/20/1/2
+
+# Optimization should not be applied for deletes.
+query TTT
+EXPLAIN DELETE FROM t4 WHERE a = 10 and b = 20
+----
+count                ·      ·
+ └── delete          ·      ·
+      │              from   t4
+      └── render     ·      ·
+           └── scan  ·      ·
+·                    table  t4@primary
+·                    spans  /10/20-/10/20/#
+
+# Optimization should not be applied for non point lookups.
+query TTT
+EXPLAIN SELECT c FROM t4 WHERE a = 10 and b >= 20 and b < 22
+----
+render     ·      ·
+ └── scan  ·      ·
+·          table  t4@primary
+·          spans  /10/20-/10/21/#
+
+# Optimization should not be applied for partial primary key filter.
+query TTT
+EXPLAIN SELECT c FROM t4 WHERE a = 10
+----
+render     ·      ·
+ └── scan  ·      ·
+·          table  t4@primary
+·          spans  /10-/11
