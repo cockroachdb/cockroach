@@ -404,15 +404,24 @@ join       ·         ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs, square WHERE pairs.a + pairs.b = square.sq
 ----
-join       ·      ·               (a, b, n, sq)  ·
- │         type   inner           ·              ·
- │         pred   sq = (a + b)    ·              ·
- ├── scan  ·      ·               (a, b)         ·
- │         table  pairs@primary   ·              ·
- │         spans  ALL             ·              ·
- └── scan  ·      ·               (n, sq)        ·
-·          table  square@primary  ·              ·
-·          spans  ALL             ·              ·
+render               ·         ·                 (a, b, n, sq)           ·
+ │                   render 0  a                 ·                       ·
+ │                   render 1  b                 ·                       ·
+ │                   render 2  n                 ·                       ·
+ │                   render 3  sq                ·                       ·
+ └── join            ·         ·                 (column6, a, b, n, sq)  ·
+      │              type      inner             ·                       ·
+      │              equality  (column6) = (sq)  ·                       ·
+      ├── render     ·         ·                 (column6, a, b)         ·
+      │    │         render 0  a + b             ·                       ·
+      │    │         render 1  a                 ·                       ·
+      │    │         render 2  b                 ·                       ·
+      │    └── scan  ·         ·                 (a, b)                  ·
+      │              table     pairs@primary     ·                       ·
+      │              spans     ALL               ·                       ·
+      └── scan       ·         ·                 (n, sq)                 ·
+·                    table     square@primary    ·                       ·
+·                    spans     ALL               ·                       ·
 
 # Query similar to the one above, but the filter refers to a rendered
 # expression and can't "break through".
@@ -445,30 +454,48 @@ render                    ·         ·               (a, b, n, sq)       ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq
 ----
-join       ·      ·               (a, b, n, sq)  ·
- │         type   full outer      ·              ·
- │         pred   sq = (a + b)    ·              ·
- ├── scan  ·      ·               (a, b)         ·
- │         table  pairs@primary   ·              ·
- │         spans  ALL             ·              ·
- └── scan  ·      ·               (n, sq)        ·
-·          table  square@primary  ·              ·
-·          spans  ALL             ·              ·
+render               ·         ·                 (a, b, n, sq)           ·
+ │                   render 0  a                 ·                       ·
+ │                   render 1  b                 ·                       ·
+ │                   render 2  n                 ·                       ·
+ │                   render 3  sq                ·                       ·
+ └── join            ·         ·                 (column6, a, b, n, sq)  ·
+      │              type      full outer        ·                       ·
+      │              equality  (column6) = (sq)  ·                       ·
+      ├── render     ·         ·                 (column6, a, b)         ·
+      │    │         render 0  a + b             ·                       ·
+      │    │         render 1  a                 ·                       ·
+      │    │         render 2  b                 ·                       ·
+      │    └── scan  ·         ·                 (a, b)                  ·
+      │              table     pairs@primary     ·                       ·
+      │              spans     ALL               ·                       ·
+      └── scan       ·         ·                 (n, sq)                 ·
+·                    table     square@primary    ·                       ·
+·                    spans     ALL               ·                       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM pairs FULL OUTER JOIN square ON pairs.a + pairs.b = square.sq WHERE pairs.b%2 <> square.sq%2
 ----
-filter          ·       ·                    (a, b, n, sq)  ·
- │              filter  (b % 2) != (sq % 2)  ·              ·
- └── join       ·       ·                    (a, b, n, sq)  ·
-      │         type    full outer           ·              ·
-      │         pred    sq = (a + b)         ·              ·
-      ├── scan  ·       ·                    (a, b)         ·
-      │         table   pairs@primary        ·              ·
-      │         spans   ALL                  ·              ·
-      └── scan  ·       ·                    (n, sq)        ·
-·               table   square@primary       ·              ·
-·               spans   ALL                  ·              ·
+render                    ·         ·                    (a, b, n, sq)           ·
+ │                        render 0  a                    ·                       ·
+ │                        render 1  b                    ·                       ·
+ │                        render 2  n                    ·                       ·
+ │                        render 3  sq                   ·                       ·
+ └── filter               ·         ·                    (column6, a, b, n, sq)  ·
+      │                   filter    (b % 2) != (sq % 2)  ·                       ·
+      └── join            ·         ·                    (column6, a, b, n, sq)  ·
+           │              type      full outer           ·                       ·
+           │              equality  (column6) = (sq)     ·                       ·
+           ├── render     ·         ·                    (column6, a, b)         ·
+           │    │         render 0  a + b                ·                       ·
+           │    │         render 1  a                    ·                       ·
+           │    │         render 2  b                    ·                       ·
+           │    └── scan  ·         ·                    (a, b)                  ·
+           │              table     pairs@primary        ·                       ·
+           │              spans     ALL                  ·                       ·
+           └── scan       ·         ·                    (n, sq)                 ·
+·                         table     square@primary       ·                       ·
+·                         spans     ALL                  ·                       ·
 
 # Filter propagation through outer joins.
 

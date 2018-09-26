@@ -76,46 +76,47 @@ ORDER BY y
 LIMIT 10
 ----
 project
- ├── columns: y:2(int!null) x:3(string!null) c:5(int)
+ ├── columns: y:2(int!null) x:3(string!null) c:6(int)
  ├── cardinality: [0 - 10]
- ├── fd: (2)-->(5)
+ ├── fd: (2)-->(6)
  ├── ordering: +2
  ├── limit
- │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null)
+ │    ├── columns: y:2(int!null) b.x:3(string!null) column5:5(string!null)
  │    ├── internal-ordering: +2
  │    ├── cardinality: [0 - 10]
- │    ├── key: (1,3)
- │    ├── fd: (1)-->(2)
+ │    ├── fd: (3)==(5), (5)==(3)
  │    ├── ordering: +2
  │    ├── sort
- │    │    ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null)
- │    │    ├── key: (1,3)
- │    │    ├── fd: (1)-->(2)
+ │    │    ├── columns: y:2(int!null) b.x:3(string!null) column5:5(string!null)
+ │    │    ├── fd: (3)==(5), (5)==(3)
  │    │    ├── ordering: +2
  │    │    └── inner-join
- │    │         ├── columns: a.x:1(int!null) y:2(int!null) b.x:3(string!null)
- │    │         ├── key: (1,3)
- │    │         ├── fd: (1)-->(2)
+ │    │         ├── columns: y:2(int!null) b.x:3(string!null) column5:5(string!null)
+ │    │         ├── fd: (3)==(5), (5)==(3)
  │    │         ├── scan b
  │    │         │    ├── columns: b.x:3(string!null)
  │    │         │    └── key: (3)
- │    │         ├── select
- │    │         │    ├── columns: a.x:1(int!null) y:2(int!null)
- │    │         │    ├── key: (1)
- │    │         │    ├── fd: (1)-->(2)
- │    │         │    ├── scan a
- │    │         │    │    ├── columns: a.x:1(int!null) y:2(int)
+ │    │         ├── project
+ │    │         │    ├── columns: column5:5(string) y:2(int!null)
+ │    │         │    ├── select
+ │    │         │    │    ├── columns: a.x:1(int!null) y:2(int!null)
  │    │         │    │    ├── key: (1)
- │    │         │    │    └── fd: (1)-->(2)
- │    │         │    └── filters [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
- │    │         │         └── gt [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
- │    │         │              ├── variable: y [type=int, outer=(2)]
- │    │         │              └── const: 1 [type=int]
- │    │         └── filters [type=bool, outer=(1,3), constraints=(/3: (/NULL - ])]
- │    │              └── eq [type=bool, outer=(1,3), constraints=(/3: (/NULL - ])]
- │    │                   ├── variable: b.x [type=string, outer=(3)]
- │    │                   └── cast: STRING [type=string, outer=(1)]
- │    │                        └── variable: a.x [type=int, outer=(1)]
+ │    │         │    │    ├── fd: (1)-->(2)
+ │    │         │    │    ├── scan a
+ │    │         │    │    │    ├── columns: a.x:1(int!null) y:2(int)
+ │    │         │    │    │    ├── key: (1)
+ │    │         │    │    │    └── fd: (1)-->(2)
+ │    │         │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
+ │    │         │    │         └── gt [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
+ │    │         │    │              ├── variable: y [type=int, outer=(2)]
+ │    │         │    │              └── const: 1 [type=int]
+ │    │         │    └── projections [outer=(1,2)]
+ │    │         │         └── cast: STRING [type=string, outer=(1)]
+ │    │         │              └── variable: a.x [type=int, outer=(1)]
+ │    │         └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+ │    │              └── eq [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+ │    │                   ├── variable: column5 [type=string, outer=(5)]
+ │    │                   └── variable: b.x [type=string, outer=(3)]
  │    └── const: 10 [type=int]
  └── projections [outer=(2,3)]
       └── plus [type=int, outer=(2)]
@@ -129,52 +130,75 @@ WHERE a.y>1 AND a.x::string=b.x
 ORDER BY y
 LIMIT 10
 ----
-memo (optimized, ~17KB)
+memo (optimized, ~24KB)
  ├── G1: (project G2 G3)
- │    ├── "[presentation: y:2,x:3,c:5] [ordering: +2]"
+ │    ├── "[presentation: y:2,x:3,c:6] [ordering: +2]"
  │    │    ├── best: (project G2="[ordering: +2]" G3)
- │    │    └── cost: 41568.95
+ │    │    └── cost: 2167.84
  │    └── ""
  │         ├── best: (project G2 G3)
- │         └── cost: 41568.95
+ │         └── cost: 2167.84
  ├── G2: (limit G4 G5 ordering=+2)
  │    ├── ""
  │    │    ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │    │    └── cost: 41568.75
+ │    │    └── cost: 2167.64
  │    └── "[ordering: +2]"
  │         ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │         └── cost: 41568.75
+ │         └── cost: 2167.64
  ├── G3: (projections G6 y x)
- ├── G4: (inner-join G8 G7 G9) (inner-join G7 G8 G9)
+ ├── G4: (inner-join G9 G8 G7) (inner-join G8 G9 G7) (lookup-join G9 G14 b,keyCols=[5],outCols=(2,3,5)) (merge-join G8 G9 G10)
  │    ├── ""
- │    │    ├── best: (inner-join G7 G8 G9)
- │    │    └── cost: 3209.44
+ │    │    ├── best: (inner-join G8 G9 G7)
+ │    │    └── cost: 2108.33
  │    └── "[ordering: +2]"
  │         ├── best: (sort G4)
- │         └── cost: 41568.65
+ │         └── cost: 2167.54
  ├── G5: (const 10)
- ├── G6: (plus G16 G17)
- ├── G7: (scan b,cols=(3))
- │    └── ""
+ ├── G6: (plus G22 G23)
+ ├── G7: (filters G11)
+ ├── G8: (scan b,cols=(3))
+ │    ├── ""
+ │    │    ├── best: (scan b,cols=(3))
+ │    │    └── cost: 1030.00
+ │    └── "[ordering: +3]"
  │         ├── best: (scan b,cols=(3))
  │         └── cost: 1030.00
- ├── G8: (select G10 G11)
- │    └── ""
- │         ├── best: (select G10 G11)
- │         └── cost: 1050.00
- ├── G9: (filters G12)
- ├── G10: (scan a)
- │    └── ""
- │         ├── best: (scan a)
- │         └── cost: 1040.00
- ├── G11: (filters G13)
- ├── G12: (eq G14 G15)
- ├── G13: (gt G16 G17)
- ├── G14: (variable b.x)
- ├── G15: (cast G18 STRING)
- ├── G16: (variable y)
- ├── G17: (const 1)
- └── G18: (variable a.x)
+ ├── G9: (project G12 G13)
+ │    ├── ""
+ │    │    ├── best: (project G12 G13)
+ │    │    └── cost: 1056.67
+ │    ├── "[ordering: +2]"
+ │    │    ├── best: (sort G9)
+ │    │    └── cost: 1115.87
+ │    └── "[ordering: +5]"
+ │         ├── best: (sort G9)
+ │         └── cost: 1115.87
+ ├── G10: (merge-on G14 inner-join,+3,+5)
+ ├── G11: (eq G15 G16)
+ ├── G12: (select G17 G18)
+ │    ├── ""
+ │    │    ├── best: (select G17 G18)
+ │    │    └── cost: 1050.00
+ │    └── "[ordering: +2]"
+ │         ├── best: (sort G12)
+ │         └── cost: 1109.21
+ ├── G13: (projections G19 y)
+ ├── G14: (true)
+ ├── G15: (variable column5)
+ ├── G16: (variable b.x)
+ ├── G17: (scan a)
+ │    ├── ""
+ │    │    ├── best: (scan a)
+ │    │    └── cost: 1040.00
+ │    └── "[ordering: +2]"
+ │         ├── best: (sort G17)
+ │         └── cost: 1249.32
+ ├── G18: (filters G20)
+ ├── G19: (cast G21 STRING)
+ ├── G20: (gt G22 G23)
+ ├── G21: (variable a.x)
+ ├── G22: (variable y)
+ └── G23: (const 1)
 
 # Test interning of expressions.
 memo

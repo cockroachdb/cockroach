@@ -62,6 +62,10 @@ type projectionsBuilder struct {
 	synthesizedCols opt.ColList
 }
 
+func (b *projectionsBuilder) hasSynthesizedCols() bool {
+	return len(b.synthesizedCols) > 0
+}
+
 // addPassthroughCol adds a single passthrough column to the set of columns that
 // are passed through unchanged from the Project operator's input.
 func (b *projectionsBuilder) addPassthroughCol(colID opt.ColumnID) {
@@ -179,4 +183,56 @@ func (b *projectionsBuilder) ensureSlices() {
 		// to use it when it's already in use.
 		b.f.scratchColList = nil
 	}
+}
+
+// projectBuilder is a helper for constructing a ProjectOp that augments an
+// input with new synthesized columns. Sample usage:
+//
+//   var pb projectBuilder
+//   pb.init(c)
+//   e1 := pb.add(some expression)
+//   e2 := pb.add(some other expression)
+//   augmentedInput := pb.buildProject(input)
+//   // e1 and e2 are VariableOp expressions, with input columns
+//   // produced by augmentedInput.
+//
+type projectBuilder struct {
+	p projectionsBuilder
+}
+
+func (pb *projectBuilder) init(c *CustomFuncs) {
+	pb.p = projectionsBuilder{f: c.f}
+}
+
+// empty returns true if there are no synthesized columns (and hence a
+// projection is not necessary).
+func (pb *projectBuilder) empty() bool {
+	return !pb.p.hasSynthesizedCols()
+}
+
+// add incorporates the given expression as a projection, unless the expression
+// is already a "bare" variable. Returns a bare variable expression referring to
+// the synthesized column.
+func (pb *projectBuilder) add(expr memo.GroupID) (varExpr memo.GroupID) {
+	mem := pb.p.f.Memo()
+	if mem.NormOp(expr) == opt.VariableOp {
+		// The expression is a bare variable; we don't need to synthesize a column.
+		return expr
+	}
+
+	typ := mem.GroupProperties(expr).Scalar.Type
+	newCol := pb.p.f.Metadata().AddColumn("", typ)
+	pb.p.addSynthesized(expr, newCol)
+	return pb.p.f.ConstructVariable(mem.InternColumnID(newCol))
+}
+
+// buildProject creates the ProjectOp (if needed). The ProjectOp passes through
+// all columns of the input and adds any synthesized columns.
+func (pb *projectBuilder) buildProject(input memo.GroupID) memo.GroupID {
+	if pb.empty() {
+		// Avoid creating a Project that does nothing and just gets elided.
+		return input
+	}
+	pb.p.addPassthroughCols(pb.p.f.Memo().GroupProperties(input).Relational.OutputCols)
+	return pb.p.f.ConstructProject(input, pb.p.buildProjections())
 }
