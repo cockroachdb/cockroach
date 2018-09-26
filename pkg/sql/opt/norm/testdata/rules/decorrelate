@@ -205,6 +205,10 @@ project
       ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb) x:6(int!null)
       ├── key: (1)
       ├── fd: (1)-->(2-5), (2)==(6), (6)==(2)
+      ├── scan xy
+      │    ├── columns: x:6(int!null)
+      │    ├── constraint: /6: [/101 - ]
+      │    └── key: (6)
       ├── select
       │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
       │    ├── key: (1)
@@ -215,10 +219,6 @@ project
       │    │    └── fd: (1)-->(2-5)
       │    └── filters
       │         └── i > 100 [type=bool, outer=(2), constraints=(/2: [/101 - ]; tight)]
-      ├── scan xy
-      │    ├── columns: x:6(int!null)
-      │    ├── constraint: /6: [/101 - ]
-      │    └── key: (6)
       └── filters
            └── x = i [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
 

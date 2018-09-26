@@ -37,19 +37,19 @@ distinct-on
  ├── columns: a:1(string) b:2(int)
  ├── grouping columns: upper:1(string) generate_series:2(int)
  ├── side-effects
- ├── stats: [rows=1, distinct(1,2)=1]
+ ├── stats: [rows=1, distinct(1,2)=1, null(1,2)=0.199]
  ├── key: (1,2)
  └── inner-join
       ├── columns: upper:1(string) generate_series:2(int)
       ├── side-effects
-      ├── stats: [rows=10, distinct(1,2)=1]
+      ├── stats: [rows=10, distinct(1,2)=1, null(1,2)=0.199]
       ├── zip
       │    ├── columns: generate_series:2(int)
       │    ├── side-effects
-      │    ├── stats: [rows=10, distinct(2)=1]
+      │    ├── stats: [rows=10, distinct(2)=1, null(2)=0.1]
       │    └── generate_series(1, 2) [type=int]
       ├── zip
       │    ├── columns: upper:1(string)
-      │    ├── stats: [rows=1, distinct(1)=1]
+      │    ├── stats: [rows=1, distinct(1)=1, null(1)=0.01]
       │    └── upper('abc') [type=string]
       └── filters (true)

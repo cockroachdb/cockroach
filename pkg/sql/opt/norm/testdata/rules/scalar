@@ -869,7 +869,7 @@ project
  └── scan e@secondary
       ├── columns: t.public.e.k:1(int!null) t.public.e.i:2(int)
       ├── constraint: /2/1: [/NULL - /NULL]
-      ├── stats: [rows=10, distinct(2)=1]
+      ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(2)=1, null(2)=10]
       ├── cost: 10.4
       ├── key: (1)
       ├── fd: ()-->(2)
@@ -881,16 +881,16 @@ SELECT k FROM e WHERE i IS DISTINCT FROM NULL::FLOAT
 ----
 project
  ├── columns: k:1(int!null)
- ├── stats: [rows=895.95846]
- ├── cost: 940.756383
+ ├── stats: [rows=990]
+ ├── cost: 1039.5
  ├── key: (1)
  ├── prune: (1)
  ├── interesting orderings: (+1)
  └── scan e@secondary
       ├── columns: t.public.e.k:1(int!null) t.public.e.i:2(int!null)
       ├── constraint: /2/1: (/NULL - ]
-      ├── stats: [rows=895.95846]
-      ├── cost: 931.796798
+      ├── stats: [rows=990, distinct(1)=990, null(1)=0, distinct(2)=100, null(2)=0]
+      ├── cost: 1029.6
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── prune: (1,2)
