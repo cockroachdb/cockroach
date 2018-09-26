@@ -20,6 +20,8 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
+	"sync"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -52,6 +54,12 @@ var _ RowSource = &tableReader{}
 
 const tableReaderProcName = "table reader"
 
+var trPool = sync.Pool{
+	New: func() interface{} {
+		return &tableReader{}
+	},
+}
+
 // newTableReader creates a tableReader.
 func newTableReader(
 	flowCtx *FlowCtx,
@@ -64,7 +72,7 @@ func newTableReader(
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
 
-	tr := &tableReader{}
+	tr := trPool.Get().(*tableReader)
 
 	tr.limitHint = limitHint(spec.LimitHint, post)
 
@@ -109,7 +117,12 @@ func newTableReader(
 		return nil, err
 	}
 
-	tr.spans = make(roachpb.Spans, len(spec.Spans))
+	nSpans := len(spec.Spans)
+	if cap(tr.spans) >= nSpans {
+		tr.spans = tr.spans[:nSpans]
+	} else {
+		tr.spans = make(roachpb.Spans, nSpans)
+	}
 	for i, s := range spec.Spans {
 		tr.spans[i] = s.Span
 	}
@@ -239,6 +252,18 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 		tr.MoveToDraining(err)
 	}
 	return ctx
+}
+
+// Release releases this tableReader back to the pool.
+func (tr *tableReader) Release() {
+	tr.ProcessorBase.Reset()
+	tr.fetcher.Reset()
+	*tr = tableReader{
+		ProcessorBase: tr.ProcessorBase,
+		fetcher:       tr.fetcher,
+		spans:         tr.spans[:0],
+	}
+	trPool.Put(tr)
 }
 
 // Next is part of the RowSource interface.

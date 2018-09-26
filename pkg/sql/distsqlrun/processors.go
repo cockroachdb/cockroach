@@ -59,11 +59,12 @@ type ProcOutputHelper struct {
 	rowAlloc sqlbase.EncDatumRowAlloc
 
 	filter *exprHelper
-	// renderExprs is set if we have a rendering. Only one of renderExprs and
-	// outputCols can be set.
+	// renderExprs has length > 0 if we have a rendering. Only one of renderExprs
+	// and outputCols can be set.
 	renderExprs []exprHelper
-	// outputCols is set if we have a projection. Only one of renderExprs and
-	// outputCols can be set.
+	// outputCols is non-nil if we have a projection. Only one of renderExprs and
+	// outputCols can be set. Note that 0-length projections are possible, in
+	// which case outputCols will be 0-length but non-nil.
 	outputCols []uint32
 
 	outputRow sqlbase.EncDatumRow
@@ -85,6 +86,14 @@ type ProcOutputHelper struct {
 	maxRowIdx uint64
 
 	rowIdx uint64
+}
+
+// Reset resets this ProcOutputHelper, retaining allocated memory in its slices.
+func (h *ProcOutputHelper) Reset() {
+	*h = ProcOutputHelper{
+		renderExprs: h.renderExprs[:0],
+		outputTypes: h.outputTypes[:0],
+	}
 }
 
 // Init sets up a ProcOutputHelper. The types describe the internal schema of
@@ -120,14 +129,28 @@ func (h *ProcOutputHelper) Init(
 			// nil indicates no projection; use an empty slice.
 			h.outputCols = make([]uint32, 0)
 		}
-		h.outputTypes = make([]sqlbase.ColumnType, len(h.outputCols))
+		nOutputCols := len(h.outputCols)
+		if cap(h.outputTypes) >= nOutputCols {
+			h.outputTypes = h.outputTypes[:nOutputCols]
+		} else {
+			h.outputTypes = make([]sqlbase.ColumnType, nOutputCols)
+		}
 		for i, c := range h.outputCols {
 			h.outputTypes[i] = types[c]
 		}
-	} else if len(post.RenderExprs) > 0 {
-		h.renderExprs = make([]exprHelper, len(post.RenderExprs))
-		h.outputTypes = make([]sqlbase.ColumnType, len(post.RenderExprs))
+	} else if nRenders := len(post.RenderExprs); nRenders > 0 {
+		if cap(h.renderExprs) >= nRenders {
+			h.renderExprs = h.renderExprs[:nRenders]
+		} else {
+			h.renderExprs = make([]exprHelper, nRenders)
+		}
+		if cap(h.outputTypes) >= nRenders {
+			h.outputTypes = h.outputTypes[:nRenders]
+		} else {
+			h.outputTypes = make([]sqlbase.ColumnType, nRenders)
+		}
 		for i, expr := range post.RenderExprs {
+			h.renderExprs[i] = exprHelper{}
 			if err := h.renderExprs[i].init(expr, types, evalCtx); err != nil {
 				return err
 			}
@@ -138,9 +161,15 @@ func (h *ProcOutputHelper) Init(
 			h.outputTypes[i] = colTyp
 		}
 	} else {
-		h.outputTypes = types
+		// No rendering or projection.
+		if cap(h.outputTypes) >= len(types) {
+			h.outputTypes = h.outputTypes[:len(types)]
+		} else {
+			h.outputTypes = make([]sqlbase.ColumnType, len(types))
+		}
+		copy(h.outputTypes, types)
 	}
-	if h.outputCols != nil || h.renderExprs != nil {
+	if h.outputCols != nil || len(h.renderExprs) > 0 {
 		// We're rendering or projecting, so allocate an output row.
 		h.outputRow = h.rowAlloc.AllocRow(len(h.outputTypes))
 	}
@@ -158,7 +187,7 @@ func (h *ProcOutputHelper) Init(
 // neededColumns calculates the set of internal processor columns that are
 // actually used by the post-processing stage.
 func (h *ProcOutputHelper) neededColumns() (colIdxs util.FastIntSet) {
-	if h.outputCols == nil && h.renderExprs == nil {
+	if h.outputCols == nil && len(h.renderExprs) == 0 {
 		// No projection or rendering; all columns are needed.
 		colIdxs.AddRange(0, h.numInternalCols-1)
 		return colIdxs
@@ -177,12 +206,10 @@ func (h *ProcOutputHelper) neededColumns() (colIdxs util.FastIntSet) {
 		}
 
 		// See if render expressions require this column.
-		if h.renderExprs != nil {
-			for j := range h.renderExprs {
-				if h.renderExprs[j].vars.IndexedVarUsed(i) {
-					colIdxs.Add(i)
-					break
-				}
+		for j := range h.renderExprs {
+			if h.renderExprs[j].vars.IndexedVarUsed(i) {
+				colIdxs.Add(i)
+				break
 			}
 		}
 	}
@@ -345,7 +372,7 @@ func (h *ProcOutputHelper) ProcessRow(
 		return nil, true, nil
 	}
 
-	if h.renderExprs != nil {
+	if len(h.renderExprs) > 0 {
 		// Rendering.
 		for i := range h.renderExprs {
 			datum, err := h.renderExprs[i].eval(row)
@@ -537,6 +564,16 @@ type ProcessorBase struct {
 	// one by one (in stateDraining, inputsToDrain[0] is the one currently being
 	// drained).
 	inputsToDrain []RowSource
+}
+
+// Reset resets this ProcessorBase, retaining allocated memory in slices.
+func (pb *ProcessorBase) Reset() {
+	pb.out.Reset()
+	*pb = ProcessorBase{
+		out:           pb.out,
+		trailingMeta:  pb.trailingMeta[:0],
+		inputsToDrain: pb.inputsToDrain[:0],
+	}
 }
 
 // procState represents the standard states that a processor can be in. These
