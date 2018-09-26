@@ -1502,7 +1502,10 @@ func (g *Gossip) doDisconnected(c *client) {
 func (g *Gossip) maybeSignalStatusChangeLocked() {
 	ctx := g.AnnotateCtx(context.TODO())
 	orphaned := g.outgoing.len()+g.mu.incoming.len() == 0
-	stalled := orphaned || g.mu.is.getInfo(KeySentinel) == nil
+	multiNode := len(g.bootstrapInfo.Addresses) > 0
+	// We're stalled if we don't have the sentinel key, or if we're a multi node
+	// cluster and have no gossip connections.
+	stalled := (orphaned && multiNode) || g.mu.is.getInfo(KeySentinel) == nil
 	if stalled {
 		// We employ the stalled boolean to avoid filling logs with warnings.
 		if !g.stalled {
