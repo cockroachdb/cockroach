@@ -99,11 +99,11 @@ memo (optimized, ~5KB)
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
- │         └── cost: 353.33
+ │         └── cost: 349.80
  ├── G2: (select G4 G5) (scan a@v,cols=(1,3),constrained)
  │    └── []
  │         ├── best: (scan a@v,cols=(1,3),constrained)
- │         └── cost: 350.00
+ │         └── cost: 346.50
  ├── G3: (projections)
  ├── G4: (scan a,cols=(1,3)) (scan a@u,cols=(1,3)) (scan a@v,cols=(1,3))
  ├── G5: (filters G6)
@@ -133,11 +133,11 @@ memo (optimized, ~6KB)
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
- │         └── cost: 1.06
+ │         └── cost: 1.05
  ├── G2: (select G4 G5) (select G6 G7) (scan a@u,cols=(1,2),constrained)
  │    └── []
  │         ├── best: (scan a@u,cols=(1,2),constrained)
- │         └── cost: 1.05
+ │         └── cost: 1.04
  ├── G3: (projections)
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  ├── G5: (filters G8 G9)
@@ -176,18 +176,18 @@ memo (optimized, ~6KB)
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
- │         └── cost: 10.63
+ │         └── cost: 10.53
  ├── G2: (select G4 G5) (select G6 G7)
  │    └── []
  │         ├── best: (select G6 G7)
- │         └── cost: 10.60
+ │         └── cost: 10.49
  ├── G3: (projections)
  ├── G4: (scan a,cols=(1,2)) (scan a@u,cols=(1,2)) (scan a@v,cols=(1,2))
  ├── G5: (filters G8 G9)
  ├── G6: (scan a@u,cols=(1,2),constrained)
  │    └── []
  │         ├── best: (scan a@u,cols=(1,2),constrained)
- │         └── cost: 10.50
+ │         └── cost: 10.40
  ├── G7: (filters G9)
  ├── G8: (eq G10 G11)
  ├── G9: (eq G12 G11)
@@ -562,19 +562,19 @@ memo (optimized, ~4KB)
  ├── G1: (select G2 G3) (select G4 G3)
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (select G4 G3)
- │         └── cost: 411.20
+ │         └── cost: 407.09
  ├── G2: (scan b)
  ├── G3: (filters G5 G6)
  ├── G4: (index-join G7 b,cols=(1-4))
  │    └── []
  │         ├── best: (index-join G7 b,cols=(1-4))
- │         └── cost: 410.40
+ │         └── cost: 406.30
  ├── G5: (gt G8 G9)
  ├── G6: (lt G8 G10)
  ├── G7: (scan b@u,cols=(1,2),constrained)
  │    └── []
  │         ├── best: (scan b@u,cols=(1,2),constrained)
- │         └── cost: 83.20
+ │         └── cost: 82.37
  ├── G8: (tuple G11)
  ├── G9: (tuple G12)
  ├── G10: (tuple G13)

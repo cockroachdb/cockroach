@@ -130,29 +130,29 @@ WHERE a.y>1 AND a.x::string=b.x
 ORDER BY y
 LIMIT 10
 ----
-memo (optimized, ~14KB)
+memo (optimized, ~15KB)
  ├── G1: (project G2 G3 y x)
  │    └── [presentation: y:2,x:3,c:6] [ordering: +2]
  │         ├── best: (project G2="[ordering: +2]" G3 y x)
- │         └── cost: 2167.84
+ │         └── cost: 2166.99
  ├── G2: (limit G4 G5 ordering=+2)
  │    └── [ordering: +2]
  │         ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │         └── cost: 2167.64
+ │         └── cost: 2166.79
  ├── G3: (projections G6)
  ├── G4: (inner-join G7 G8 G9) (inner-join G8 G7 G9) (lookup-join G7 G10 b,keyCols=[5],outCols=(2,3,5)) (merge-join G8 G7 G10 inner-join,+3,+5)
  │    ├── [ordering: +2]
  │    │    ├── best: (sort G4)
- │    │    └── cost: 2167.54
+ │    │    └── cost: 2166.69
  │    └── []
  │         ├── best: (inner-join G8 G7 G9)
- │         └── cost: 2108.33
+ │         └── cost: 2108.17
  ├── G5: (const 10)
  ├── G6: (plus G11 G12)
  ├── G7: (project G13 G14 y)
  │    └── []
  │         ├── best: (project G13 G14 y)
- │         └── cost: 1056.67
+ │         └── cost: 1056.60
  ├── G8: (scan b,cols=(3))
  │    └── []
  │         ├── best: (scan b,cols=(3))
@@ -246,11 +246,11 @@ memo (optimized, ~4KB)
 memo 
 SELECT x, y FROM a UNION SELECT x+1, y+1 FROM a
 ----
-memo (optimized, ~3KB)
+memo (optimized, ~4KB)
  ├── G1: (union G2 G3)
  │    └── [presentation: x:7,y:8]
  │         ├── best: (union G2 G3)
- │         └── cost: 2150.00
+ │         └── cost: 2149.80
  ├── G2: (scan a)
  │    └── []
  │         ├── best: (scan a)
@@ -310,7 +310,7 @@ memo (optimized, ~2KB)
 memo
 SELECT array_agg(x) FROM (SELECT * FROM a ORDER BY y)
 ----
-memo (optimized, ~1KB)
+memo (optimized, ~2KB)
  ├── G1: (scalar-group-by G2 G3 cols=(),ordering=+2)
  │    └── [presentation: array_agg:3]
  │         ├── best: (scalar-group-by G2="[ordering: +2]" G3 cols=(),ordering=+2)

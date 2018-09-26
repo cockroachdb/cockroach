@@ -53,17 +53,17 @@ project
  └── group-by
       ├── columns: x:1(int!null) y:2(int)
       ├── grouping columns: x:1(int!null) y:2(int)
-      ├── stats: [rows=2000, distinct(1,2)=2000]
+      ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
       ├── key: (1)
       ├── fd: (1)-->(2)
       └── project
            ├── columns: x:1(int!null) y:2(int)
-           ├── stats: [rows=2000, distinct(1,2)=2000]
+           ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
            ├── key: (1)
            ├── fd: (1)-->(2)
            └── scan a
                 ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
-                ├── stats: [rows=2000, distinct(1,2)=2000]
+                ├── stats: [rows=2000, distinct(1,2)=2000, null(1,2)=0]
                 ├── key: (1)
                 └── fd: (1)-->(2-4), (3,4)~~>(1,2)
 
@@ -77,17 +77,17 @@ project
  └── group-by
       ├── columns: x:1(int!null) max:5(int)
       ├── grouping columns: x:1(int!null)
-      ├── stats: [rows=2000, distinct(1)=2000]
+      ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
       ├── key: (1)
       ├── fd: (1)-->(5)
       ├── project
       │    ├── columns: x:1(int!null) y:2(int)
-      │    ├── stats: [rows=2000, distinct(1)=2000]
+      │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    └── scan a
       │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
-      │         ├── stats: [rows=2000, distinct(1)=2000]
+      │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
       │         ├── key: (1)
       │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── aggregations
@@ -101,15 +101,15 @@ SELECT y, sum(z) FROM a GROUP BY y
 group-by
  ├── columns: y:2(int) sum:5(float)
  ├── grouping columns: y:2(int)
- ├── stats: [rows=400, distinct(2)=400]
+ ├── stats: [rows=400, distinct(2)=400, null(2)=0]
  ├── key: (2)
  ├── fd: (2)-->(5)
  ├── project
  │    ├── columns: y:2(int) z:3(float!null)
- │    ├── stats: [rows=2000, distinct(2)=400]
+ │    ├── stats: [rows=2000, distinct(2)=400, null(2)=0]
  │    └── scan a
  │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │         ├── stats: [rows=2000, distinct(2)=400]
+ │         ├── stats: [rows=2000, distinct(2)=400, null(2)=0]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── aggregations
@@ -125,12 +125,12 @@ project
  └── group-by
       ├── columns: y:2(int) z:3(float!null) s:4(string) max:5(int)
       ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
-      ├── stats: [rows=600, distinct(2-4)=600]
+      ├── stats: [rows=600, distinct(2-4)=600, null(2-4)=0]
       ├── key: (2-4)
       ├── fd: (3,4)~~>(2), (2-4)-->(5)
       ├── scan a
       │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
-      │    ├── stats: [rows=2000, distinct(2-4)=600]
+      │    ├── stats: [rows=2000, distinct(2-4)=600, null(2-4)=0]
       │    ├── key: (1)
       │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── aggregations
@@ -146,17 +146,17 @@ project
  └── group-by
       ├── columns: y:2(int) z:3(float!null) min:5(int)
       ├── grouping columns: y:2(int) z:3(float!null)
-      ├── stats: [rows=2000, distinct(2,3)=2000]
+      ├── stats: [rows=2000, distinct(2,3)=2000, null(2,3)=0]
       ├── key: (2,3)
       ├── fd: (2,3)-->(5)
       ├── project
       │    ├── columns: x:1(int!null) y:2(int) z:3(float!null)
-      │    ├── stats: [rows=2000, distinct(2,3)=2000]
+      │    ├── stats: [rows=2000, distinct(2,3)=2000, null(2,3)=0]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2,3)
       │    └── scan a
       │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
-      │         ├── stats: [rows=2000, distinct(2,3)=2000]
+      │         ├── stats: [rows=2000, distinct(2,3)=2000, null(2,3)=0]
       │         ├── key: (1)
       │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       └── aggregations
@@ -171,18 +171,18 @@ project
  ├── stats: [rows=120]
  └── select
       ├── columns: y:2(int) z:3(float!null) s:4(string!null) max:5(int)
-      ├── stats: [rows=120, distinct(4)=2]
+      ├── stats: [rows=120, distinct(3)=97.6, null(3)=0, distinct(4)=2, null(4)=0]
       ├── key: (3,4)
       ├── fd: (3,4)-->(2), (2-4)-->(5)
       ├── group-by
       │    ├── columns: y:2(int) z:3(float!null) s:4(string) max:5(int)
       │    ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
-      │    ├── stats: [rows=600, distinct(4)=10, distinct(2-4)=600]
+      │    ├── stats: [rows=600, distinct(3)=200, null(3)=0, distinct(4)=10, null(4)=0, distinct(2-4)=600, null(2-4)=0]
       │    ├── key: (2-4)
       │    ├── fd: (3,4)~~>(2), (2-4)-->(5)
       │    ├── scan a
       │    │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
-      │    │    ├── stats: [rows=2000, distinct(4)=10, distinct(2-4)=600]
+      │    │    ├── stats: [rows=2000, distinct(3)=200, null(3)=0, distinct(4)=10, null(4)=0, distinct(2-4)=600, null(2-4)=0]
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │    └── aggregations
@@ -197,23 +197,23 @@ SELECT sum(x), s FROM a GROUP BY s HAVING sum(x) = 5
 ----
 select
  ├── columns: sum:5(decimal!null) s:4(string)
- ├── stats: [rows=1, distinct(5)=1]
+ ├── stats: [rows=1, distinct(5)=1, null(5)=0]
  ├── key: (4)
  ├── fd: ()-->(5)
  ├── group-by
  │    ├── columns: s:4(string) sum:5(decimal)
  │    ├── grouping columns: s:4(string)
- │    ├── stats: [rows=10, distinct(4)=10, distinct(5)=10]
+ │    ├── stats: [rows=10, distinct(4)=10, null(4)=0, distinct(5)=10, null(5)=0]
  │    ├── key: (4)
  │    ├── fd: (4)-->(5)
  │    ├── project
  │    │    ├── columns: x:1(int!null) s:4(string)
- │    │    ├── stats: [rows=2000, distinct(4)=10]
+ │    │    ├── stats: [rows=2000, distinct(4)=10, null(4)=0]
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(4)
  │    │    └── scan a
  │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
- │    │         ├── stats: [rows=2000, distinct(4)=10]
+ │    │         ├── stats: [rows=2000, distinct(4)=10, null(4)=0]
  │    │         ├── key: (1)
  │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── aggregations
@@ -229,13 +229,13 @@ SELECT max(y), sum(z) FROM a HAVING sum(z) = 5.0
 select
  ├── columns: max:5(int) sum:6(float!null)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1, distinct(6)=1]
+ ├── stats: [rows=1, distinct(6)=1, null(6)=0]
  ├── key: ()
  ├── fd: ()-->(5,6)
  ├── scalar-group-by
  │    ├── columns: max:5(int) sum:6(float)
  │    ├── cardinality: [1 - 1]
- │    ├── stats: [rows=1, distinct(6)=1]
+ │    ├── stats: [rows=1, distinct(6)=1, null(6)=0]
  │    ├── key: ()
  │    ├── fd: ()-->(5,6)
  │    ├── project
@@ -253,3 +253,216 @@ select
  │              └── variable: z [type=float]
  └── filters
       └── sum = 5.0 [type=bool, outer=(6), constraints=(/6: [/5.0 - /5.0]; tight), fd=()-->(6)]
+
+# Bump up null counts.
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 400,
+    "null_count": 1000
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10,
+    "null_count": 1000
+  },
+  {
+    "columns": ["s","y","z"],
+    "created_at": "2018-01-01 2:10:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 600,
+    "null_count": 1100
+  }
+]'
+----
+
+# No aggregate.
+build
+SELECT x FROM a GROUP BY x, y
+----
+project
+ ├── columns: x:1(int!null)
+ ├── stats: [rows=1000]
+ ├── key: (1)
+ └── group-by
+      ├── columns: x:1(int!null) y:2(int)
+      ├── grouping columns: x:1(int!null) y:2(int)
+      ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=1000]
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      └── project
+           ├── columns: x:1(int!null) y:2(int)
+           ├── stats: [rows=2000, distinct(1,2)=1000, null(1,2)=1000]
+           ├── key: (1)
+           ├── fd: (1)-->(2)
+           └── scan a
+                ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+                ├── stats: [rows=2000, distinct(1,2)=1000, null(1,2)=1000]
+                ├── key: (1)
+                └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+
+# Group by single column key.
+build
+SELECT max(y) FROM a GROUP BY x
+----
+project
+ ├── columns: max:5(int)
+ ├── stats: [rows=2000]
+ └── group-by
+      ├── columns: x:1(int!null) max:5(int)
+      ├── grouping columns: x:1(int!null)
+      ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
+      ├── key: (1)
+      ├── fd: (1)-->(5)
+      ├── project
+      │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    └── scan a
+      │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+      │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0]
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      └── aggregations
+           └── max [type=int, outer=(2)]
+                └── variable: y [type=int]
+
+# Group by non-key.
+build
+SELECT y, sum(z) FROM a GROUP BY y
+----
+group-by
+ ├── columns: y:2(int) sum:5(float)
+ ├── grouping columns: y:2(int)
+ ├── stats: [rows=400, distinct(2)=400, null(2)=400]
+ ├── key: (2)
+ ├── fd: (2)-->(5)
+ ├── project
+ │    ├── columns: y:2(int) z:3(float!null)
+ │    ├── stats: [rows=2000, distinct(2)=400, null(2)=1000]
+ │    └── scan a
+ │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ │         ├── stats: [rows=2000, distinct(2)=400, null(2)=1000]
+ │         ├── key: (1)
+ │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ └── aggregations
+      └── sum [type=float, outer=(3)]
+           └── variable: z [type=float]
+
+build
+SELECT max(x) FROM a GROUP BY y, z, s
+----
+project
+ ├── columns: max:5(int)
+ ├── stats: [rows=600]
+ └── group-by
+      ├── columns: y:2(int) z:3(float!null) s:4(string) max:5(int)
+      ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
+      ├── stats: [rows=600, distinct(2-4)=600, null(2-4)=600]
+      ├── key: (2-4)
+      ├── fd: (3,4)~~>(2), (2-4)-->(5)
+      ├── scan a
+      │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+      │    ├── stats: [rows=2000, distinct(2-4)=600, null(2-4)=1100]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      └── aggregations
+           └── max [type=int, outer=(1)]
+                └── variable: x [type=int]
+
+build
+SELECT min(x) FROM a GROUP BY y, z
+----
+project
+ ├── columns: min:5(int)
+ ├── stats: [rows=2000]
+ └── group-by
+      ├── columns: y:2(int) z:3(float!null) min:5(int)
+      ├── grouping columns: y:2(int) z:3(float!null)
+      ├── stats: [rows=2000, distinct(2,3)=2000, null(2,3)=1000]
+      ├── key: (2,3)
+      ├── fd: (2,3)-->(5)
+      ├── project
+      │    ├── columns: x:1(int!null) y:2(int) z:3(float!null)
+      │    ├── stats: [rows=2000, distinct(2,3)=2000, null(2,3)=1000]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2,3)
+      │    └── scan a
+      │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+      │         ├── stats: [rows=2000, distinct(2,3)=2000, null(2,3)=1000]
+      │         ├── key: (1)
+      │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      └── aggregations
+           └── min [type=int, outer=(1)]
+                └── variable: x [type=int]
+
+build
+SELECT max(x) FROM a GROUP BY y, z, s HAVING s IN ('a', 'b')
+----
+project
+ ├── columns: max:5(int)
+ ├── stats: [rows=118.9]
+ └── select
+      ├── columns: y:2(int) z:3(float!null) s:4(string!null) max:5(int)
+      ├── stats: [rows=118.9, distinct(3)=97.6, null(3)=0, distinct(4)=2, null(4)=0]
+      ├── key: (3,4)
+      ├── fd: (3,4)-->(2), (2-4)-->(5)
+      ├── group-by
+      │    ├── columns: y:2(int) z:3(float!null) s:4(string) max:5(int)
+      │    ├── grouping columns: y:2(int) z:3(float!null) s:4(string)
+      │    ├── stats: [rows=600, distinct(3)=200, null(3)=0, distinct(4)=10, null(4)=5.5, distinct(2-4)=600, null(2-4)=600]
+      │    ├── key: (2-4)
+      │    ├── fd: (3,4)~~>(2), (2-4)-->(5)
+      │    ├── scan a
+      │    │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+      │    │    ├── stats: [rows=2000, distinct(3)=200, null(3)=0, distinct(4)=10, null(4)=1000, distinct(2-4)=600, null(2-4)=1100]
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+      │    └── aggregations
+      │         └── max [type=int, outer=(1)]
+      │              └── variable: x [type=int]
+      └── filters
+           └── s IN ('a', 'b') [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
+
+# Estimate the null count for an aggregate column.
+build
+SELECT sum(x), s FROM a GROUP BY s HAVING sum(x) = 5
+----
+select
+ ├── columns: sum:5(decimal!null) s:4(string)
+ ├── stats: [rows=0.9, distinct(5)=0.9, null(5)=0]
+ ├── key: (4)
+ ├── fd: ()-->(5)
+ ├── group-by
+ │    ├── columns: s:4(string) sum:5(decimal)
+ │    ├── grouping columns: s:4(string)
+ │    ├── stats: [rows=10, distinct(4)=10, null(4)=10, distinct(5)=10, null(5)=1]
+ │    ├── key: (4)
+ │    ├── fd: (4)-->(5)
+ │    ├── project
+ │    │    ├── columns: x:1(int!null) s:4(string)
+ │    │    ├── stats: [rows=2000, distinct(4)=10, null(4)=1000]
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(4)
+ │    │    └── scan a
+ │    │         ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string)
+ │    │         ├── stats: [rows=2000, distinct(4)=10, null(4)=1000]
+ │    │         ├── key: (1)
+ │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    └── aggregations
+ │         └── sum [type=decimal, outer=(1)]
+ │              └── variable: x [type=int]
+ └── filters
+      └── sum = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
