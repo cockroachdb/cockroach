@@ -15,7 +15,6 @@
 package distsqlrun
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -361,8 +360,12 @@ func TestPlanDiagramJoin(t *testing.T) {
 		}},
 	}
 
-	var buf bytes.Buffer
-	if err := GeneratePlanDiagram(flows, nil /* spans */, &buf); err != nil {
+	diagram, err := GeneratePlanDiagram(flows)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, _, err := diagram.ToURL()
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -398,5 +401,5 @@ func TestPlanDiagramJoin(t *testing.T) {
 	  }
 	`
 
-	compareDiagrams(t, buf.String(), expected)
+	compareDiagrams(t, s, expected)
 }

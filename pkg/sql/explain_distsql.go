@@ -76,7 +76,12 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	}
 	distSQLPlanner.FinalizePlan(planCtx, &plan)
 
-	var spans []tracing.RecordedSpan
+	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
+	diagram, err := distsqlrun.GeneratePlanDiagram(flows)
+	if err != nil {
+		return err
+	}
+
 	if n.analyze {
 		if params.SessionData().DistSQLMode == sessiondata.DistSQLOff {
 			return pgerror.NewErrorf(
@@ -137,15 +142,15 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		n.run.executedStatement = true
 
 		sp.Finish()
-		spans = tracing.GetRecording(sp)
+		spans := tracing.GetRecording(sp)
 
 		if err := rw.Err(); err != nil {
 			return err
 		}
+		diagram.AddSpans(spans)
 	}
 
-	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
-	planJSON, planURL, err := distsqlrun.GeneratePlanDiagramURLWithSpans(flows, spans)
+	planJSON, planURL, err := diagram.ToURL()
 	if err != nil {
 		return err
 	}
