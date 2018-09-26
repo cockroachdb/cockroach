@@ -16,6 +16,7 @@ package sql
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,7 +29,8 @@ import (
 
 // setVarNode represents a SET SESSION statement.
 type setVarNode struct {
-	v sessionVar
+	name string
+	v    sessionVar
 	// typedValues == nil means RESET.
 	typedValues []tree.TypedExpr
 }
@@ -80,19 +82,20 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 			"unrecognized configuration parameter %q", name)
 	}
 
-	if typedValues != nil {
-		if v.Set == nil {
-			return nil, pgerror.NewErrorf(pgerror.CodeCantChangeRuntimeParamError,
-				"parameter %q cannot be set", name)
-		}
-	} else {
-		if v.Reset == nil {
-			return nil, pgerror.NewErrorf(pgerror.CodeCantChangeRuntimeParamError,
-				"parameter %q cannot be reset", name)
+	if v.Set == nil && v.RuntimeSet == nil {
+		return nil, newCannotChangeParameterError(name)
+	}
+
+	if typedValues == nil {
+		// Statement is RESET. Do we have a default available?
+		// We do not use getDefaultString here because we need to delay
+		// the computation of the default to the execute phase.
+		if _, ok := p.sessionDataMutator.defaults[name]; !ok && v.GlobalDefault == nil {
+			return nil, newCannotChangeParameterError(name)
 		}
 	}
 
-	return &setVarNode{v: v, typedValues: typedValues}, nil
+	return &setVarNode{name: name, v: v, typedValues: typedValues}, nil
 }
 
 // Special rule for SET: because SET doesn't apply in the context
@@ -105,6 +108,7 @@ func unresolvedNameToStrVal(expr tree.Expr) tree.Expr {
 }
 
 func (n *setVarNode) startExec(params runParams) error {
+	var strVal string
 	if n.typedValues != nil {
 		for i, v := range n.typedValues {
 			d, err := v.Eval(params.EvalContext())
@@ -113,11 +117,40 @@ func (n *setVarNode) startExec(params runParams) error {
 			}
 			n.typedValues[i] = d
 		}
-		return n.v.Set(
-			params.ctx, params.p.sessionDataMutator,
-			params.extendedEvalCtx, n.typedValues)
+		var err error
+		if n.v.GetStringVal != nil {
+			strVal, err = n.v.GetStringVal(params.ctx, params.extendedEvalCtx, n.typedValues)
+		} else {
+			// No string converter defined, use the default one.
+			strVal, err = getStringVal(params.EvalContext(), n.name, n.typedValues)
+		}
+		if err != nil {
+			return err
+		}
+	} else {
+		// Statement is RESET and we already know we have a default. Find it.
+		_, strVal = getSessionVarDefaultString(n.name, n.v, params.p.sessionDataMutator)
 	}
-	return n.v.Reset(params.p.sessionDataMutator)
+
+	if n.v.RuntimeSet != nil {
+		return n.v.RuntimeSet(params.ctx, params.extendedEvalCtx, strVal)
+	}
+	return n.v.Set(params.ctx, params.p.sessionDataMutator, strVal)
+}
+
+// getSessionVarDefaultString retrieves a string suitable to pass to a
+// session var's Set() method. First return value is false if there is
+// no default.
+func getSessionVarDefaultString(
+	varName string, v sessionVar, m *sessionDataMutator,
+) (bool, string) {
+	if defVal, ok := m.defaults[varName]; ok {
+		return true, defVal
+	}
+	if v.GlobalDefault != nil {
+		return true, v.GlobalDefault(&m.settings.SV)
+	}
+	return false, ""
 }
 
 func (n *setVarNode) Next(_ runParams) (bool, error) { return false, nil }
@@ -166,15 +199,15 @@ func getIntVal(evalCtx *tree.EvalContext, name string, values []tree.TypedExpr) 
 	return datumAsInt(evalCtx, name, values[0])
 }
 
-func setTimeZone(
-	_ context.Context, m *sessionDataMutator, evalCtx *extendedEvalContext, values []tree.TypedExpr,
-) error {
+func timeZoneVarGetStringVal(
+	_ context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr,
+) (string, error) {
 	if len(values) != 1 {
-		return newSingleArgVarError("timezone")
+		return "", newSingleArgVarError("timezone")
 	}
 	d, err := values[0].Eval(&evalCtx.EvalContext)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	var loc *time.Location
@@ -189,7 +222,7 @@ func setTimeZone(
 			if err1 != nil {
 				loc, err1 = timeutil.LoadLocation(strings.ToTitle(location))
 				if err1 != nil {
-					return wrapSetVarError("timezone", values[0].String(),
+					return "", wrapSetVarError("timezone", values[0].String(),
 						"cannot find time zone %q: %v", location, err)
 				}
 			}
@@ -198,7 +231,7 @@ func setTimeZone(
 	case *tree.DInterval:
 		offset, _, _, err = v.Duration.Div(time.Second.Nanoseconds()).Encode()
 		if err != nil {
-			return wrapSetVarError("timezone", values[0].String(), "%v", err)
+			return "", wrapSetVarError("timezone", values[0].String(), "%v", err)
 		}
 
 	case *tree.DInt:
@@ -214,57 +247,77 @@ func setTimeZone(
 		ed.Mul(sixty, sixty, &v.Decimal)
 		offset = ed.Int64(sixty)
 		if ed.Err() != nil {
-			return wrapSetVarError("timezone", values[0].String(),
+			return "", wrapSetVarError("timezone", values[0].String(),
 				"time zone value %s would overflow an int64", sixty)
 		}
 
 	default:
-		return newVarValueError("timezone", values[0].String())
+		return "", newVarValueError("timezone", values[0].String())
 	}
 	if loc == nil {
 		loc = timeutil.FixedOffsetTimeZoneToLocation(int(offset), d.String())
 	}
+
+	return loc.String(), nil
+}
+
+func timeZoneVarSet(_ context.Context, m *sessionDataMutator, s string) error {
+	loc, err := timeutil.TimeZoneStringToLocation(s)
+	if err != nil {
+		// Maybe the string is coming from pgwire as a simple number.
+		intVal, err1 := strconv.ParseInt(s, 10, 64)
+		if err1 != nil {
+			// Ignore the int conversion, the original error is good enough.
+			return wrapSetVarError("TimeZone", s, "%v", err)
+		}
+		loc = timeutil.FixedOffsetTimeZoneToLocation(int(intVal)*60*60, s)
+	}
+
 	m.SetLocation(loc)
 	return nil
 }
 
-func setStmtTimeout(
-	_ context.Context, m *sessionDataMutator, evalCtx *extendedEvalContext, values []tree.TypedExpr,
-) error {
+func stmtTimeoutVarGetStringVal(
+	ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr,
+) (string, error) {
 	if len(values) != 1 {
-		return newSingleArgVarError("statement_timeout")
+		return "", newSingleArgVarError("statement_timeout")
 	}
 	d, err := values[0].Eval(&evalCtx.EvalContext)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	var timeout time.Duration
 	switch v := tree.UnwrapDatum(&evalCtx.EvalContext, d).(type) {
 	case *tree.DString:
-		interval, err := tree.ParseDIntervalWithField(string(*v), tree.Millisecond)
-		if err != nil {
-			return wrapSetVarError("statement_timeout", values[0].String(), "%v", err)
-		}
-		timeout, err = intervalToDuration(interval)
-		if err != nil {
-			return wrapSetVarError("statement_timeout", values[0].String(), "%v", err)
-		}
+		return string(*v), nil
 	case *tree.DInterval:
 		timeout, err = intervalToDuration(v)
 		if err != nil {
-			return wrapSetVarError("statement_timeout", values[0].String(), "%v", err)
+			return "", wrapSetVarError("statement_timeout", values[0].String(), "%v", err)
 		}
 	case *tree.DInt:
 		timeout = time.Duration(*v) * time.Millisecond
 	}
+	return timeout.String(), nil
+}
+
+func stmtTimeoutVarSet(ctx context.Context, m *sessionDataMutator, s string) error {
+	interval, err := tree.ParseDIntervalWithField(s, tree.Millisecond)
+	if err != nil {
+		return wrapSetVarError("statement_timeout", s, "%v", err)
+	}
+	timeout, err := intervalToDuration(interval)
+	if err != nil {
+		return wrapSetVarError("statement_timeout", s, "%v", err)
+	}
 
 	if timeout < 0 {
-		return wrapSetVarError("statement_timeout", values[0].String(),
+		return wrapSetVarError("statement_timeout", s,
 			"statement_timeout cannot have a negative duration")
 	}
 	m.SetStmtTimeout(timeout)
-
 	return nil
 }
 
@@ -293,4 +346,9 @@ func newVarValueError(varName, actualVal string, allowedVals ...string) *pgerror
 		err = err.SetHintf("Available values: %s", strings.Join(allowedVals, ","))
 	}
 	return err
+}
+
+func newCannotChangeParameterError(varName string) error {
+	return pgerror.NewErrorf(pgerror.CodeCantChangeRuntimeParamError,
+		"parameter %q cannot be changed", varName)
 }
