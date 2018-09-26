@@ -252,7 +252,7 @@ project
 # --------------------------------------------------
 # SimplifyFilters
 # --------------------------------------------------
-opt
+opt expect=SimplifyFilters
 SELECT * FROM a WHERE Null
 ----
 values
@@ -261,25 +261,16 @@ values
  ├── key: ()
  └── fd: ()-->(1-5)
 
-opt
+opt expect=SimplifyFilters
 SELECT * FROM a INNER JOIN b ON NULL
 ----
-inner-join
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) z:7(int)
+values
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) z:7(int)
  ├── cardinality: [0 - 0]
- ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
- ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- ├── scan b
- │    ├── columns: x:6(int!null) z:7(int)
- │    ├── key: (6)
- │    └── fd: (6)-->(7)
- └── false [type=bool]
+ ├── key: ()
+ └── fd: ()-->(1-7)
 
-opt
+opt expect=SimplifyFilters
 SELECT * FROM a WHERE i=1 AND Null
 ----
 values
