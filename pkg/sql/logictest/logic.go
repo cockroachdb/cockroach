@@ -912,6 +912,13 @@ func (t *logicTest) setUser(user string) func() {
 			t.Fatal(err)
 		}
 	}
+	// The default value for extra_float_digits assumed by tests is
+	// 0. However, lib/pq by default configures this to 2 during
+	// connection initialization, so we need to set it back to 0 before
+	// we run anything.
+	if _, err := db.Exec("SET extra_float_digits = 0"); err != nil {
+		t.Fatal(err)
+	}
 	t.clients[user] = db
 	t.db = db
 	t.user = user

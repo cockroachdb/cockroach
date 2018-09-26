@@ -313,7 +313,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	}
 
 	// Verify Descriptor ID.
-	path, err := ts.admin.queryDescriptorIDPath(ctx, sql.SessionArgs{User: security.RootUser}, []string{testdb})
+	path, err := ts.admin.queryDescriptorIDPath(ctx, security.RootUser, []string{testdb})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -508,9 +508,8 @@ func TestAdminAPITableDetails(t *testing.T) {
 			}
 
 			// Verify Descriptor ID.
-			path, err := ts.admin.queryDescriptorIDPath(
-				ctx, sql.SessionArgs{User: security.RootUser}, []string{tc.dbName, tc.tblName},
-			)
+			path, err := ts.admin.queryDescriptorIDPath(ctx,
+				security.RootUser, []string{tc.dbName, tc.tblName})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -601,9 +600,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 
 	// Get ID path for table. This will be an array of three IDs, containing the ID of the root namespace,
 	// the database, and the table (in that order).
-	idPath, err := ts.admin.queryDescriptorIDPath(
-		ctx, sql.SessionArgs{User: security.RootUser}, []string{"test", "tbl"},
-	)
+	idPath, err := ts.admin.queryDescriptorIDPath(ctx, security.RootUser, []string{"test", "tbl"})
 	if err != nil {
 		t.Fatal(err)
 	}

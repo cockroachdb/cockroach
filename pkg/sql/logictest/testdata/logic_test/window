@@ -2530,17 +2530,17 @@ Tablet      Kindle Fire      2018-07-31 12:34:56 +0000 +0000  150.00   150.00
 query TTTRR
 SELECT group_name, product_name, ptimestamptz, price, avg(price) OVER (PARTITION BY group_name ORDER BY ptimestamptz RANGE BETWEEN '1 days 12 hours' PRECEDING AND CURRENT ROW) FROM products ORDER BY group_name, ptimestamptz
 ----
-Laptop      HP Elite         2018-07-30 01:23:45 +0000 +0000  1200.00  1200.00
-Laptop      Sony VAIO        2018-07-30 11:23:45 +0000 +0000  700.00   950.00
-Laptop      Dell             2018-07-31 07:34:56 +0000 +0000  800.00   900.00
-Laptop      Lenovo Thinkpad  2018-07-31 12:34:56 +0000 +0000  700.00   850.00
-Smartphone  Microsoft Lumia  2018-07-30 01:23:45 +0000 +0000  200.00   200.00
-Smartphone  Nexus            2018-07-30 11:23:45 +0000 +0000  500.00   350.00
-Smartphone  iPhone           2018-07-31 07:34:56 +0000 +0000  900.00   533.33333333333333333
-Smartphone  HTC One          2018-07-31 12:34:56 +0000 +0000  400.00   500.00
-Tablet      iPad             2018-07-30 01:23:45 +0000 +0000  700.00   700.00
-Tablet      Samsung          2018-07-30 11:23:45 +0000 +0000  200.00   450.00
-Tablet      Kindle Fire      2018-07-31 12:34:56 +0000 +0000  150.00   350.00
+Laptop      HP Elite         2018-07-30 01:23:45 +0000 UTC  1200.00  1200.00
+Laptop      Sony VAIO        2018-07-30 11:23:45 +0000 UTC  700.00   950.00
+Laptop      Dell             2018-07-31 07:34:56 +0000 UTC  800.00   900.00
+Laptop      Lenovo Thinkpad  2018-07-31 12:34:56 +0000 UTC  700.00   850.00
+Smartphone  Microsoft Lumia  2018-07-30 01:23:45 +0000 UTC  200.00   200.00
+Smartphone  Nexus            2018-07-30 11:23:45 +0000 UTC  500.00   350.00
+Smartphone  iPhone           2018-07-31 07:34:56 +0000 UTC  900.00   533.33333333333333333
+Smartphone  HTC One          2018-07-31 12:34:56 +0000 UTC  400.00   500.00
+Tablet      iPad             2018-07-30 01:23:45 +0000 UTC  700.00   700.00
+Tablet      Samsung          2018-07-30 11:23:45 +0000 UTC  200.00   450.00
+Tablet      Kindle Fire      2018-07-31 12:34:56 +0000 UTC  150.00   350.00
 
 query TTRR
 SELECT product_name, pinterval, price, avg(price) OVER (ORDER BY pinterval RANGE BETWEEN '2 hours 34 minutes 56 seconds' PRECEDING AND '3 months' FOLLOWING) FROM products ORDER BY pinterval, group_id
@@ -2755,17 +2755,17 @@ Tablet      iPad             2018-07-30 01:23:45 +0000 +0000  700.00   200.00
 query TTTRR
 SELECT group_name, product_name, ptimestamptz, price, avg(price) OVER (PARTITION BY group_name ORDER BY ptimestamptz DESC RANGE BETWEEN '1 days 12 hours' PRECEDING AND CURRENT ROW) FROM products ORDER BY group_name, ptimestamptz DESC
 ----
-Laptop      Lenovo Thinkpad  2018-07-31 12:34:56 +0000 +0000  700.00   700.00
-Laptop      Dell             2018-07-31 07:34:56 +0000 +0000  800.00   750.00
-Laptop      Sony VAIO        2018-07-30 11:23:45 +0000 +0000  700.00   733.33333333333333333
-Laptop      HP Elite         2018-07-30 01:23:45 +0000 +0000  1200.00  850.00
-Smartphone  HTC One          2018-07-31 12:34:56 +0000 +0000  400.00   400.00
-Smartphone  iPhone           2018-07-31 07:34:56 +0000 +0000  900.00   650.00
-Smartphone  Nexus            2018-07-30 11:23:45 +0000 +0000  500.00   600.00
-Smartphone  Microsoft Lumia  2018-07-30 01:23:45 +0000 +0000  200.00   500.00
-Tablet      Kindle Fire      2018-07-31 12:34:56 +0000 +0000  150.00   150.00
-Tablet      Samsung          2018-07-30 11:23:45 +0000 +0000  200.00   175.00
-Tablet      iPad             2018-07-30 01:23:45 +0000 +0000  700.00   350.00
+Laptop      Lenovo Thinkpad  2018-07-31 12:34:56 +0000 UTC  700.00   700.00
+Laptop      Dell             2018-07-31 07:34:56 +0000 UTC  800.00   750.00
+Laptop      Sony VAIO        2018-07-30 11:23:45 +0000 UTC  700.00   733.33333333333333333
+Laptop      HP Elite         2018-07-30 01:23:45 +0000 UTC  1200.00  850.00
+Smartphone  HTC One          2018-07-31 12:34:56 +0000 UTC  400.00   400.00
+Smartphone  iPhone           2018-07-31 07:34:56 +0000 UTC  900.00   650.00
+Smartphone  Nexus            2018-07-30 11:23:45 +0000 UTC  500.00   600.00
+Smartphone  Microsoft Lumia  2018-07-30 01:23:45 +0000 UTC  200.00   500.00
+Tablet      Kindle Fire      2018-07-31 12:34:56 +0000 UTC  150.00   150.00
+Tablet      Samsung          2018-07-30 11:23:45 +0000 UTC  200.00   175.00
+Tablet      iPad             2018-07-30 01:23:45 +0000 UTC  700.00   350.00
 
 query TTRR
 SELECT product_name, pinterval, price, avg(price) OVER (ORDER BY pinterval DESC RANGE BETWEEN '2 hours 34 minutes 56 seconds' PRECEDING AND '3 months' FOLLOWING) FROM products ORDER BY pinterval DESC, group_id

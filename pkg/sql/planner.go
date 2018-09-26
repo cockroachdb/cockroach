@@ -216,10 +216,10 @@ func newInternalPlanner(
 	txnReadOnly := new(bool)
 	dataMutator := &sessionDataMutator{
 		data: sd,
-		defaults: sessionDefaults{
-			applicationName: "crdb-internal",
-			database:        "system",
-		},
+		defaults: SessionDefaults(map[string]string{
+			"application_name": "crdb-internal",
+			"database":         "system",
+		}),
 		settings:       execCfg.Settings,
 		curTxnReadOnly: txnReadOnly,
 	}

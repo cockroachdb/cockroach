@@ -1322,7 +1322,7 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name != 'optimizer'
+  name != 'optimizer' AND name != 'crdb_version'
 ----
 name                               setting       category  short_desc  extra_desc  vartype
 application_name                   ·             NULL      NULL        NULL        string
@@ -1330,7 +1330,7 @@ bytea_output                       hex           NULL      NULL        NULL     
 client_encoding                    UTF8          NULL      NULL        NULL        string
 client_min_messages                notice        NULL      NULL        NULL        string
 database                           test          NULL      NULL        NULL        string
-datestyle                          ISO           NULL      NULL        NULL        string
+datestyle                          ISO, MDY      NULL      NULL        NULL        string
 default_transaction_isolation      serializable  NULL      NULL        NULL        string
 default_transaction_read_only      off           NULL      NULL        NULL        string
 distsql                            2.0-off       NULL      NULL        NULL        string
@@ -1348,9 +1348,9 @@ server_encoding                    UTF8          NULL      NULL        NULL     
 server_version                     9.5.0         NULL      NULL        NULL        string
 server_version_num                 90500         NULL      NULL        NULL        string
 session_user                       root          NULL      NULL        NULL        string
-sql_safe_updates                   false         NULL      NULL        NULL        string
+sql_safe_updates                   off           NULL      NULL        NULL        string
 standard_conforming_strings        on            NULL      NULL        NULL        string
-statement_timeout                  0s            NULL      NULL        NULL        string
+statement_timeout                  0             NULL      NULL        NULL        string
 timezone                           UTC           NULL      NULL        NULL        string
 tracing                            off           NULL      NULL        NULL        string
 transaction_isolation              serializable  NULL      NULL        NULL        string
@@ -1364,23 +1364,23 @@ SELECT
 FROM
   pg_catalog.pg_settings
 WHERE
-  name != 'optimizer'
+  name != 'optimizer' AND name != 'crdb_version'
 ----
 name                               setting       unit  context  enumvals  boot_val      reset_val
 application_name                   ·             NULL  user     NULL      ·             ·
 bytea_output                       hex           NULL  user     NULL      hex           hex
 client_encoding                    UTF8          NULL  user     NULL      UTF8          UTF8
 client_min_messages                notice        NULL  user     NULL      notice        notice
-database                           test          NULL  user     NULL      test          test
-datestyle                          ISO           NULL  user     NULL      ISO           ISO
-default_transaction_isolation      serializable  NULL  user     NULL      serializable  serializable
+database                           test          NULL  user     NULL      ·             test
+datestyle                          ISO, MDY      NULL  user     NULL      ISO, MDY      ISO, MDY
+default_transaction_isolation      serializable  NULL  user     NULL      default       default
 default_transaction_read_only      off           NULL  user     NULL      off           off
 distsql                            2.0-off       NULL  user     NULL      2.0-off       2.0-off
 experimental_force_lookup_join     off           NULL  user     NULL      off           off
 experimental_force_split_at        off           NULL  user     NULL      off           off
 experimental_force_zigzag_join     off           NULL  user     NULL      off           off
 experimental_serial_normalization  rowid         NULL  user     NULL      rowid         rowid
-extra_float_digits                 0             NULL  user     NULL      0             0
+extra_float_digits                 0             NULL  user     NULL      0             2
 integer_datetimes                  on            NULL  user     NULL      on            on
 intervalstyle                      postgres      NULL  user     NULL      postgres      postgres
 max_index_keys                     32            NULL  user     NULL      32            32
@@ -1390,9 +1390,9 @@ server_encoding                    UTF8          NULL  user     NULL      UTF8  
 server_version                     9.5.0         NULL  user     NULL      9.5.0         9.5.0
 server_version_num                 90500         NULL  user     NULL      90500         90500
 session_user                       root          NULL  user     NULL      root          root
-sql_safe_updates                   false         NULL  user     NULL      false         false
+sql_safe_updates                   off           NULL  user     NULL      off           off
 standard_conforming_strings        on            NULL  user     NULL      on            on
-statement_timeout                  0s            NULL  user     NULL      0s            0s
+statement_timeout                  0             NULL  user     NULL      0             0
 timezone                           UTC           NULL  user     NULL      UTC           UTC
 tracing                            off           NULL  user     NULL      off           off
 transaction_isolation              serializable  NULL  user     NULL      serializable  serializable
@@ -1408,6 +1408,7 @@ application_name                   NULL    NULL     NULL     NULL        NULL
 bytea_output                       NULL    NULL     NULL     NULL        NULL
 client_encoding                    NULL    NULL     NULL     NULL        NULL
 client_min_messages                NULL    NULL     NULL     NULL        NULL
+crdb_version                       NULL    NULL     NULL     NULL        NULL
 database                           NULL    NULL     NULL     NULL        NULL
 datestyle                          NULL    NULL     NULL     NULL        NULL
 default_transaction_isolation      NULL    NULL     NULL     NULL        NULL

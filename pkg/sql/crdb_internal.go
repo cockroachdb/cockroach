@@ -413,8 +413,9 @@ CREATE TABLE crdb_internal.jobs (
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		query := `SELECT id, status, created, payload, progress FROM system.jobs`
 		rows, _ /* cols */, err :=
-			p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryWithSessionArgs(
-				ctx, "crdb-internal-jobs-table", p.txn, SessionArgs{User: p.SessionData().User}, query)
+			p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryWithUser(
+				ctx, "crdb-internal-jobs-table", p.txn,
+				p.SessionData().User, query)
 		if err != nil {
 			return err
 		}
