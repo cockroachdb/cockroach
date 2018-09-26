@@ -24,7 +24,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
 	zipkin "github.com/openzipkin/zipkin-go-opentracing"
@@ -110,15 +113,19 @@ func createLightStepTracer(token string) (shadowTracerManager, opentracing.Trace
 	})
 }
 
+var zipkinLogEveryN = util.Every(5 * time.Second)
+
 func createZipkinTracer(collectorAddr string) (shadowTracerManager, opentracing.Tracer) {
 	// Create our HTTP collector.
 	collector, err := zipkin.NewHTTPCollector(
 		fmt.Sprintf("http://%s/api/v1/spans", collectorAddr),
 		zipkin.HTTPLogger(zipkin.LoggerFunc(func(keyvals ...interface{}) error {
-			// These logs are from the collector (e.g. errors sending data, dropped
-			// traces). We can't use `log` from this package so print them to stderr.
-			toPrint := append([]interface{}{"Zipkin collector"}, keyvals...)
-			fmt.Fprintln(os.Stderr, toPrint)
+			if zipkinLogEveryN.ShouldProcess(timeutil.Now()) {
+				// These logs are from the collector (e.g. errors sending data, dropped
+				// traces). We can't use `log` from this package so print them to stderr.
+				toPrint := append([]interface{}{"Zipkin collector"}, keyvals...)
+				fmt.Fprintln(os.Stderr, toPrint)
+			}
 			return nil
 		})),
 	)
