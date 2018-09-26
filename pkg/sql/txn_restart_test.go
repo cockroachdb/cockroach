@@ -278,8 +278,13 @@ var valuesRE = regexp.MustCompile(`VALUES.*\((\d),`)
 
 // QueueStmtForAbortion registers a statement whose transaction will be aborted.
 //
-// stmt needs to be the statement, literally as the parser will convert it back
-// to a string.
+// stmt needs to be the statement, literally as the AST gets converted back to a
+// string. Note that, since we sometimes change the AST during planning, the
+// statements sent for execution that need to be intercepted by this filter
+// need to be written in a canonical form, and stmt passed here needs to also be
+// that canonical form. In particular, table names need to be fully qualified
+// with the schema (e.g. t.public.test).
+//
 // abortCount specifies how many times a txn running this statement will be
 // aborted.
 // willBeRetriedIbid should be set if the statement will be retried by the test
@@ -366,14 +371,12 @@ func (ta *TxnAborter) statementFilter(ctx context.Context, stmt string, err erro
 }
 
 // executorKnobs are the bridge between the TxnAborter and the sql.Executor.
-// The aborter is only set up when the 2nd return value is called.
-func (ta *TxnAborter) executorKnobs() (base.ModuleTestingKnobs, func()) {
-	knobs := &sql.ExecutorTestingKnobs{}
-	return knobs, func() {
+func (ta *TxnAborter) executorKnobs() base.ModuleTestingKnobs {
+	return &sql.ExecutorTestingKnobs{
 		// We're going to abort txns using a TxnAborter, and that's incompatible
 		// with AutoCommit.
-		knobs.DisableAutoCommit = true
-		knobs.StatementFilter = ta.statementFilter
+		DisableAutoCommit: true,
+		StatementFilter:   ta.statementFilter,
 	}
 }
 
@@ -450,8 +453,7 @@ func TestTxnAutoRetry(t *testing.T) {
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
 	params, cmdFilters := tests.CreateTestServerParams()
-	var activateKnobs func()
-	params.Knobs.SQLExecutor, activateKnobs = aborter.executorKnobs()
+	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	{
@@ -472,15 +474,9 @@ func TestTxnAutoRetry(t *testing.T) {
 	// do that.
 	sqlDB.SetMaxOpenConns(1)
 
-	// After this point, the abort knob is active. This also means that
-	// the AST is checked for modification. So we have to use fully
-	// qualified table names throughout to avoid a mismatch due to table
-	// qualification.
-	activateKnobs()
-
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.public.test (k INT PRIMARY KEY, v TEXT, t DECIMAL);
+CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT, t DECIMAL);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -788,8 +784,7 @@ func TestAbortedTxnOnlyRetriedOnce(t *testing.T) {
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
 	params, _ := tests.CreateTestServerParams()
-	var activateKnobs func()
-	params.Knobs.SQLExecutor, activateKnobs = aborter.executorKnobs()
+	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	{
@@ -800,12 +795,6 @@ func TestAbortedTxnOnlyRetriedOnce(t *testing.T) {
 		}
 	}
 
-	// After this point, the abort knob is active. This also means that
-	// the AST is checked for modification. So we have to use fully
-	// qualified table names throughout to avoid a mismatch due to table
-	// qualification.
-	activateKnobs()
-
 	const insertStmt = "INSERT INTO t.public.test(k, v) VALUES (1, 'boulanger')"
 	if err := aborter.QueueStmtForAbortion(
 		insertStmt, 1 /* abortCount */, true, /* willBeRetriedIbid */
@@ -815,7 +804,7 @@ func TestAbortedTxnOnlyRetriedOnce(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.public.test (k INT PRIMARY KEY, v TEXT);
+CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -950,8 +939,7 @@ func TestTxnUserRestart(t *testing.T) {
 				aborter := NewTxnAborter()
 				defer aborter.Close(t)
 				params, cmdFilters := tests.CreateTestServerParams()
-				var activateKnobs func()
-				params.Knobs.SQLExecutor, activateKnobs = aborter.executorKnobs()
+				params.Knobs.SQLExecutor = aborter.executorKnobs()
 				s, sqlDB, _ := serverutils.StartServer(t, params)
 				defer s.Stopper().Stop(context.TODO())
 				{
@@ -962,15 +950,9 @@ func TestTxnUserRestart(t *testing.T) {
 					}
 				}
 
-				// After this point, the abort knob is active. This also means that
-				// the AST is checked for modification. So we have to use fully
-				// qualified table names throughout to avoid a mismatch due to table
-				// qualification.
-				activateKnobs()
-
 				if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
-CREATE TABLE t.public.test (k INT PRIMARY KEY, v TEXT);
+CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 `); err != nil {
 					t.Fatal(err)
 				}
@@ -998,7 +980,7 @@ CREATE TABLE t.public.test (k INT PRIMARY KEY, v TEXT);
 				checkRestarts(t, tc.magicVals)
 
 				// Check that we only wrote the sentinel row.
-				rows, err := sqlDB.Query("SELECT * FROM t.public.test")
+				rows, err := sqlDB.Query("SELECT * FROM t.test")
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -1021,7 +1003,7 @@ CREATE TABLE t.public.test (k INT PRIMARY KEY, v TEXT);
 					t.Error(err)
 				}
 				// Clean up the table for the next test iteration.
-				_, err = sqlDB.Exec("DELETE FROM t.public.test WHERE true")
+				_, err = sqlDB.Exec("DELETE FROM t.test WHERE true")
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -1071,8 +1053,7 @@ func TestErrorOnCommitFinalizesTxn(t *testing.T) {
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
 	params, _ := tests.CreateTestServerParams()
-	var activateKnobs func()
-	params.Knobs.SQLExecutor, activateKnobs = aborter.executorKnobs()
+	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	{
@@ -1091,12 +1072,6 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 	// We need to do everything on one connection as we'll want to observe the
 	// connection state after a COMMIT.
 	sqlDB.SetMaxOpenConns(1)
-
-	// After this point, the abort knob is active. This also means that
-	// the AST is checked for modification. So we have to use fully
-	// qualified table names throughout to avoid a mismatch due to table
-	// qualification.
-	activateKnobs()
 
 	// We're going to test both errors that would leave the transaction in the
 	// RestartWait state and errors that would leave the transaction in Aborted,
@@ -1138,7 +1113,7 @@ CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 				t.Fatal(err)
 			}
 			// Check that we don't see any rows, so the previous txn was rolled back.
-			rows, err := sqlDB.Query("SELECT * FROM t.public.test")
+			rows, err := sqlDB.Query("SELECT * FROM t.test")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1164,8 +1139,7 @@ func TestRollbackInRestartWait(t *testing.T) {
 	aborter := NewTxnAborter()
 	defer aborter.Close(t)
 	params, _ := tests.CreateTestServerParams()
-	var activateKnobs func()
-	params.Knobs.SQLExecutor, activateKnobs = aborter.executorKnobs()
+	params.Knobs.SQLExecutor = aborter.executorKnobs()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 	{
@@ -1182,12 +1156,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 `); err != nil {
 		t.Fatal(err)
 	}
-
-	// After this point, the abort knob is active. This also means that
-	// the AST is checked for modification. So we have to use fully
-	// qualified table names throughout to avoid a mismatch due to table
-	// qualification.
-	activateKnobs()
 
 	// Set up error injection that causes retries.
 	const insertStmt = "INSERT INTO t.public.test(k, v) VALUES (0, 'boulanger')"
