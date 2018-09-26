@@ -73,7 +73,6 @@ func (p *planner) Returning(
 		// Ensure there are no special functions in the RETURNING clause.
 		p.semaCtx.Properties.Require("RETURNING", tree.RejectSpecial)
 
-		r.ivarHelper = tree.MakeIndexedVarHelper(r, len(r.source.info.SourceColumns))
 		err := p.initTargets(ctx, r, tree.SelectExprs(*t), desiredTypes)
 		if err != nil {
 			return nil, err
