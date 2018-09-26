@@ -451,7 +451,11 @@ func (ag *aggregatorBase) matchLastOrdGroupCols(row sqlbase.EncDatumRow) (bool, 
 // into intermediary aggregate results. If it encounters metadata, the metadata
 // is immediately returned. Subsequent calls of this function will resume row
 // accumulation.
-func (ag *hashAggregator) accumulateRows() (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata) {
+func (ag *hashAggregator) accumulateRows() (
+	aggregatorState,
+	sqlbase.EncDatumRow,
+	*ProducerMetadata,
+) {
 	for {
 		row, meta := ag.input.Next()
 		if meta != nil {
@@ -510,7 +514,11 @@ func (ag *hashAggregator) accumulateRows() (aggregatorState, sqlbase.EncDatumRow
 // into intermediary aggregate results. If it encounters metadata, the metadata
 // is immediately returned. Subsequent calls of this function will resume row
 // accumulation.
-func (ag *orderedAggregator) accumulateRows() (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata) {
+func (ag *orderedAggregator) accumulateRows() (
+	aggregatorState,
+	sqlbase.EncDatumRow,
+	*ProducerMetadata,
+) {
 	for {
 		row, meta := ag.input.Next()
 		if meta != nil {

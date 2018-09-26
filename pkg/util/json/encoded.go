@@ -220,7 +220,13 @@ type encodedObjectIterator struct {
 	data        []byte
 }
 
-func (e *encodedObjectIterator) nextEncoded() (nextKey []byte, nextJEntry jEntry, nextVal []byte, ok bool, err error) {
+func (e *encodedObjectIterator) nextEncoded() (
+	nextKey []byte,
+	nextJEntry jEntry,
+	nextVal []byte,
+	ok bool,
+	err error,
+) {
 	if e.idx >= e.len {
 		return nil, jEntry{}, nil, false, nil
 	}

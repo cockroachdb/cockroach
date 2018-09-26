@@ -80,7 +80,10 @@ func (f *windowFuncHolder) samePartition(other *windowFuncHolder) bool {
 // functions that use the same partitioning and updates their isProcessed flag
 // accordingly. It returns the set of unprocessed window functions and indices
 // of the columns in their PARTITION BY clause.
-func (s *windowPlanState) findUnprocessedWindowFnsWithSamePartition() (samePartitionFuncs []*windowFuncHolder, partitionIdxs []uint32) {
+func (s *windowPlanState) findUnprocessedWindowFnsWithSamePartition() (
+	samePartitionFuncs []*windowFuncHolder,
+	partitionIdxs []uint32,
+) {
 	var windowFnToProcess *windowFuncHolder
 	for _, windowFn := range s.infos {
 		if !windowFn.isProcessed {
