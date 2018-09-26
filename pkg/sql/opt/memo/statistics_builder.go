@@ -190,6 +190,12 @@ func (sb *statisticsBuilder) colStatFromChild(
 	return sb.colStat(colSet, child)
 }
 
+// statsFromChild retrieves the main statistics struct from a specific child
+// of the given expression.
+func (sb *statisticsBuilder) statsFromChild(ev ExprView, childIdx int) *props.Statistics {
+	return &ev.Child(childIdx).Logical().Relational.Stats
+}
+
 // colStatFromInput retrieves a column statistic from the input(s) of a Scan,
 // Select, or Join. The input to the Scan is the "raw" table.
 func (sb *statisticsBuilder) colStatFromInput(
@@ -305,7 +311,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, ev ExprView) *props.Colu
 
 	case opt.ExplainOp, opt.ShowTraceForSessionOp:
 		relProps := ev.Logical().Relational
-		return sb.colStatLeaf(colSet, &relProps.Stats, &relProps.FuncDeps)
+		return sb.colStatLeaf(colSet, &relProps.Stats, &relProps.FuncDeps, relProps.NotNullCols)
 	}
 
 	panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
@@ -316,7 +322,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, ev ExprView) *props.Colu
 // Used when there is no child expression to retrieve statistics from, typically
 // with the Statistics derived for a table.
 func (sb *statisticsBuilder) colStatLeaf(
-	colSet opt.ColSet, s *props.Statistics, fd *props.FuncDepSet,
+	colSet opt.ColSet, s *props.Statistics, fd *props.FuncDepSet, notNullCols opt.ColSet,
 ) *props.ColumnStatistic {
 	// Ensure that the requested column statistic is in the cache.
 	colStat, added := s.ColStats.Add(colSet)
@@ -326,25 +332,46 @@ func (sb *statisticsBuilder) colStatLeaf(
 	}
 
 	// If some of the columns are a lax key, the distinct count equals the row
-	// count. Note that this doesn't take into account the possibility of
-	// duplicates where all columns are NULL.
+	// count. The null count is 0 if these columns are not nullable, otherwise
+	// copy the null count from the nullable columns in colSet.
 	if fd.ColsAreLaxKey(colSet) {
-		colStat.DistinctCount = s.RowCount
+		if colSet.SubsetOf(notNullCols) {
+			colStat.NullCount = 0
+		} else {
+			nullableCols := colSet.Difference(notNullCols)
+			if nullableCols.Equals(colSet) {
+				// No column statistics on this colSet - use the unknown
+				// null count ratio.
+				colStat.NullCount = s.RowCount * unknownNullCountRatio
+			} else {
+				colStatLeaf := sb.colStatLeaf(nullableCols, s, fd, notNullCols)
+				colStat.NullCount = colStatLeaf.NullCount
+			}
+		}
+		colStat.DistinctCount = s.RowCount - colStat.NullCount
 		return colStat
 	}
 
 	if colSet.Len() == 1 {
 		col, _ := colSet.Next(0)
 		colStat.DistinctCount = unknownDistinctCountRatio * s.RowCount
+		colStat.NullCount = unknownNullCountRatio * s.RowCount
 		if sb.md.ColumnType(opt.ColumnID(col)) == types.Bool {
 			colStat.DistinctCount = min(colStat.DistinctCount, 2)
 		}
+		if notNullCols.Contains(col) {
+			colStat.NullCount = 0
+		}
 	} else {
 		distinctCount := 1.0
+		nullCount := 0.0
 		colSet.ForEach(func(i int) {
-			distinctCount *= sb.colStatLeaf(util.MakeFastIntSet(i), s, fd).DistinctCount
+			colStatLeaf := sb.colStatLeaf(util.MakeFastIntSet(i), s, fd, notNullCols)
+			distinctCount *= colStatLeaf.DistinctCount
+			nullCount += colStatLeaf.NullCount
 		})
 		colStat.DistinctCount = min(distinctCount, s.RowCount)
+		colStat.NullCount = min(nullCount, s.RowCount)
 	}
 
 	return colStat
@@ -386,6 +413,7 @@ func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Stati
 			}
 			if colStat, ok := stats.ColStats.Add(cols); ok {
 				colStat.DistinctCount = float64(stat.DistinctCount())
+				colStat.NullCount = float64(stat.NullCount())
 			}
 		}
 	}
@@ -398,7 +426,8 @@ func (sb *statisticsBuilder) colStatTable(
 ) *props.ColumnStatistic {
 	tableStats := sb.makeTableStatistics(tabID)
 	tableFD := makeTableFuncDep(sb.md, tabID)
-	return sb.colStatLeaf(colSet, tableStats, tableFD)
+	tableNotNullCols := tableNotNullCols(sb.md, tabID)
+	return sb.colStatLeaf(colSet, tableStats, tableFD, tableNotNullCols)
 }
 
 // +------+
@@ -421,18 +450,26 @@ func (sb *statisticsBuilder) buildScan(ev ExprView, relProps *props.Relational) 
 		// -------------------------------------------------
 		applied := sb.applyConstraint(def.Constraint, ev, relProps)
 
+		var cols opt.ColSet
+		for i := 0; i < def.Constraint.Columns.Count(); i++ {
+			cols.Add(int(def.Constraint.Columns.Get(i).ID()))
+		}
+
 		// Calculate row count and selectivity
 		// -----------------------------------
+		inputRowCount := s.RowCount
 		if applied {
-			var cols opt.ColSet
-			for i := 0; i < def.Constraint.Columns.Count(); i++ {
-				cols.Add(int(def.Constraint.Columns.Get(i).ID()))
-			}
 			s.ApplySelectivity(sb.selectivityFromDistinctCounts(cols, ev, s))
 		} else {
 			numUnappliedConjuncts := sb.numConjunctsInConstraint(def.Constraint)
 			s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 		}
+
+		// Set null counts to 0 for non-nullable columns
+		// -------------------------------------------------
+		sb.updateNullCountsFromProps(ev, relProps, inputStats.RowCount)
+
+		s.ApplySelectivity(sb.selectivityFromNullCounts(cols, ev, s, inputRowCount))
 	}
 
 	sb.finalizeFromCardinality(relProps)
@@ -449,11 +486,16 @@ func (sb *statisticsBuilder) colStatScan(colSet opt.ColSet, ev ExprView) *props.
 		colStat.ApplySelectivity(s.Selectivity, tableStats.RowCount)
 	}
 
-	// Cap distinct count at limit, if it exists.
+	// Cap distinct and null counts at limit, if it exists.
 	if def.HardLimit.IsSet() {
 		if limit := float64(def.HardLimit.RowCount()); limit < s.RowCount {
 			colStat.DistinctCount = min(colStat.DistinctCount, limit)
+			colStat.NullCount = min(colStat.NullCount, limit)
 		}
+	}
+
+	if colSet.SubsetOf(relProps.NotNullCols) {
+		colStat.NullCount = 0
 	}
 
 	return colStat
@@ -509,12 +551,14 @@ func (sb *statisticsBuilder) buildSelect(ev ExprView, relProps *props.Relational
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies.
 	inputFD := &ev.Child(0).Logical().Relational.FuncDeps
+	nonReducedCols := constrainedCols
 	constrainedCols = sb.tryReduceCols(constrainedCols, s, inputFD)
 
 	// Calculate selectivity and row count
 	// -----------------------------------
 	inputStats := &ev.childGroup(0).logical.Relational.Stats
 	s.RowCount = inputStats.RowCount
+	inputRowCount := s.RowCount
 	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols, ev, s))
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, filterFD, ev, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
@@ -522,6 +566,21 @@ func (sb *statisticsBuilder) buildSelect(ev ExprView, relProps *props.Relational
 	// Update distinct counts based on equivalencies; this should happen after
 	// selectivityFromDistinctCounts and selectivityFromEquivalencies.
 	sb.applyEquivalencies(equivReps, filterFD, ev, relProps)
+
+	// Update null counts for non-nullable columns.
+	sb.updateNullCountsFromProps(ev, relProps, inputRowCount)
+	// Note that for null count selectivity calculations, we use the un-reduced constraint
+	// columns. This is so we don't miss any null-rejecting filters. For example, in this
+	// query: SELECT min(y) FROM xyz WHERE x = 1 , where y is nullable and x is a key (so
+	// x -> y in the FD set), we still need to be able to catch the null rejection property
+	// on y inferred by the min aggregation and modify the row count accordingly.
+	//
+	// TODO(itsbilal): Calculate the one column in each FD group that yields the most
+	// selective (i.e. lowest selectivity value) from its null count reduction, and use
+	// that instead of just calculating selectivities from all columns. The current
+	// solution could easily lead to double-counting of null selectivities across
+	// multiple correlated columns.
+	s.ApplySelectivity(sb.selectivityFromNullCounts(nonReducedCols, ev, s, inputRowCount))
 
 	sb.finalizeFromCardinality(relProps)
 }
@@ -538,6 +597,9 @@ func (sb *statisticsBuilder) colStatSelect(colSet opt.ColSet, ev ExprView) *prop
 	// exploration could absorb some of the filter conditions.
 	selectivity := s.RowCount / inputStats.RowCount
 	colStat.ApplySelectivity(selectivity, inputStats.RowCount)
+	if colSet.SubsetOf(relProps.NotNullCols) {
+		colStat.NullCount = 0
+	}
 	return colStat
 }
 
@@ -595,9 +657,19 @@ func (sb *statisticsBuilder) colStatProject(colSet opt.ColSet, ev ExprView) *pro
 		// above.
 		inputColStat := sb.colStatFromChild(reqInputCols, ev, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
+		colStat.NullCount = inputColStat.NullCount
 	} else {
 		// There are no columns in this expression, so it must be a constant.
-		colStat.DistinctCount = 1
+		if ev.Child(0).Operator() == opt.NullOp {
+			colStat.DistinctCount = 0
+			colStat.NullCount = s.RowCount
+		} else {
+			colStat.DistinctCount = 1
+			colStat.NullCount = 0
+		}
+	}
+	if colSet.SubsetOf(relProps.NotNullCols) {
+		colStat.NullCount = 0
 	}
 	return colStat
 }
@@ -616,13 +688,17 @@ func (sb *statisticsBuilder) buildJoin(
 	}
 
 	leftProps := ev.childGroup(0).logical.Relational
+	leftCols := ev.Child(0).Logical().Relational.OutputCols.Copy()
 	leftStats := &leftProps.Stats
 	var rightStats *props.Statistics
+	var rightCols opt.ColSet
 	if h.lookupJoinDef == nil {
 		rightProps := ev.childGroup(1).logical.Relational
 		rightStats = &rightProps.Stats
+		rightCols = ev.Child(1).Logical().Relational.OutputCols.Copy()
 	} else {
 		rightStats = sb.makeTableStatistics(h.lookupJoinDef.Table)
+		rightCols = h.lookupJoinDef.Cols.Copy()
 	}
 	equivReps := h.filterFD.EquivReps()
 
@@ -678,6 +754,7 @@ func (sb *statisticsBuilder) buildJoin(
 	// Calculate selectivity and row count
 	// -----------------------------------
 	s.RowCount = leftStats.RowCount * rightStats.RowCount
+	inputRowCount := s.RowCount
 	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols, ev, s))
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &h.filterFD, ev, s))
 	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
@@ -685,6 +762,20 @@ func (sb *statisticsBuilder) buildJoin(
 	// Update distinct counts based on equivalencies; this should happen after
 	// selectivityFromDistinctCounts and selectivityFromEquivalencies.
 	sb.applyEquivalencies(equivReps, &h.filterFD, ev, relProps)
+
+	// Update null counts for non-nullable columns.
+	sb.updateNullCountsFromProps(ev, relProps, inputRowCount)
+
+	s.ApplySelectivity(sb.joinSelectivityFromNullCounts(
+		constrainedCols,
+		ev,
+		s,
+		inputRowCount,
+		leftCols,
+		leftStats.RowCount,
+		rightCols,
+		rightStats.RowCount,
+	))
 
 	// The above calculation is for inner joins. Other joins need to remove stats
 	// that involve outer columns.
@@ -721,6 +812,50 @@ func (sb *statisticsBuilder) buildJoin(
 		leftJoinRowCount := max(innerJoinRowCount, leftStats.RowCount)
 		rightJoinRowCount := max(innerJoinRowCount, rightStats.RowCount)
 		s.RowCount = leftJoinRowCount + rightJoinRowCount - innerJoinRowCount
+	}
+
+	// Loop through all colSets added in this step, and adjust null counts.
+	for i := 0; i < s.ColStats.Count(); i++ {
+		colStat := s.ColStats.Get(i)
+		leftSideCols := leftCols.Intersection(colStat.Cols)
+		rightSideCols := rightCols.Intersection(colStat.Cols)
+		leftNullCount, rightNullCount := sb.leftRightNullCounts(
+			ev,
+			leftSideCols,
+			rightSideCols,
+		)
+
+		// Update all null counts not zeroed out in updateNullCountsFromProps
+		// to equal the inner join count, instead of what it currently is (either
+		// leftNullCount or rightNullCount).
+		if colStat.NullCount != 0 {
+			colStat.NullCount = innerJoinNullCount(
+				s.RowCount,
+				leftNullCount,
+				leftStats.RowCount,
+				rightNullCount,
+				rightStats.RowCount,
+			)
+		}
+
+		switch h.joinType {
+		case opt.LeftJoinOp, opt.LeftJoinApplyOp, opt.RightJoinOp, opt.RightJoinApplyOp,
+			opt.FullJoinOp, opt.FullJoinApplyOp:
+			if !colStat.Cols.SubsetOf(relProps.NotNullCols) {
+				sb.adjustNullCountsForOuterJoins(
+					colStat,
+					h.joinType,
+					leftSideCols,
+					rightSideCols,
+					leftNullCount,
+					leftStats.RowCount,
+					rightNullCount,
+					rightStats.RowCount,
+					s.RowCount,
+					innerJoinRowCount,
+				)
+			}
+		}
 	}
 
 	sb.finalizeFromCardinality(relProps)
@@ -776,14 +911,17 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, ev ExprView) *props.
 		//   columns.
 		var colStat *props.ColumnStatistic
 		inputRowCount := leftStats.RowCount * rightStats.RowCount
+		var leftNullCount, rightNullCount float64
 		if rightCols.Empty() {
 			colStat = sb.copyColStat(colSet, s, sb.colStatFromJoinLeft(colSet, ev))
+			leftNullCount = colStat.NullCount
 			switch joinType {
 			case opt.InnerJoinOp, opt.InnerJoinApplyOp, opt.RightJoinOp, opt.RightJoinApplyOp:
 				colStat.ApplySelectivity(s.Selectivity, inputRowCount)
 			}
 		} else if leftCols.Empty() {
 			colStat = sb.copyColStat(colSet, s, sb.colStatFromJoinRight(colSet, ev))
+			rightNullCount = colStat.NullCount
 			switch joinType {
 			case opt.InnerJoinOp, opt.InnerJoinApplyOp, opt.LeftJoinOp, opt.LeftJoinApplyOp:
 				colStat.ApplySelectivity(s.Selectivity, inputRowCount)
@@ -792,6 +930,10 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, ev ExprView) *props.
 			// Make a copy of the input column stats so we don't modify the originals.
 			leftColStat := *sb.colStatFromJoinLeft(leftCols, ev)
 			rightColStat := *sb.colStatFromJoinRight(rightCols, ev)
+
+			leftNullCount = leftColStat.NullCount
+			rightNullCount = rightColStat.NullCount
+
 			switch joinType {
 			case opt.InnerJoinOp, opt.InnerJoinApplyOp:
 				leftColStat.ApplySelectivity(s.Selectivity, inputRowCount)
@@ -807,11 +949,138 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, ev ExprView) *props.
 			colStat.DistinctCount = leftColStat.DistinctCount * rightColStat.DistinctCount
 		}
 
+		// Null count estimation - assume an inner join and then bump the null count later
+		// based on the type of join.
+		colStat.NullCount = innerJoinNullCount(
+			s.RowCount,
+			leftNullCount,
+			leftStats.RowCount,
+			rightNullCount,
+			rightStats.RowCount,
+		)
+
+		switch joinType {
+		case opt.LeftJoinOp, opt.LeftJoinApplyOp, opt.RightJoinOp, opt.RightJoinApplyOp,
+			opt.FullJoinOp, opt.FullJoinApplyOp:
+			sb.adjustNullCountsForOuterJoins(
+				colStat,
+				joinType,
+				leftCols,
+				rightCols,
+				leftNullCount,
+				leftStats.RowCount,
+				rightNullCount,
+				rightStats.RowCount,
+				s.RowCount,
+				s.Selectivity*inputRowCount,
+			)
+		}
+
 		// The distinct count should be no larger than the row count.
 		if colStat.DistinctCount > s.RowCount {
 			colStat.DistinctCount = s.RowCount
 		}
+		// Similarly, the null count should be no larger than RowCount.
+		colStat.NullCount = min(s.RowCount, colStat.NullCount)
+		if colSet.SubsetOf(relProps.NotNullCols) {
+			colStat.NullCount = 0
+		}
 		return colStat
+	}
+}
+
+// leftRightNullCounts returns null counts on the left and right sides of the
+// specified join. If either leftCols or rightCols are empty, the corresponding
+// side's return value is zero.
+func (sb *statisticsBuilder) leftRightNullCounts(
+	ev ExprView, leftCols opt.ColSet, rightCols opt.ColSet,
+) (leftNullCount, rightNullCount float64) {
+	if !leftCols.Empty() {
+		leftColStat := sb.colStatFromJoinLeft(leftCols, ev)
+		leftNullCount = leftColStat.NullCount
+	}
+	if !rightCols.Empty() {
+		rightColStat := sb.colStatFromJoinRight(rightCols, ev)
+		rightNullCount = rightColStat.NullCount
+	}
+
+	return leftNullCount, rightNullCount
+}
+
+// innerJoinNullCount returns an estimate of the number of nulls in an inner
+// join with the specified column stats.
+func innerJoinNullCount(
+	rowCount float64,
+	leftNullCount float64,
+	leftRowCount float64,
+	rightNullCount float64,
+	rightRowCount float64,
+) float64 {
+	// Here, f1 and f2 are probabilities of nulls on either side of the join.
+	var f1, f2 float64
+	if leftRowCount != 0 {
+		f1 = leftNullCount / leftRowCount
+	}
+	if rightRowCount != 0 {
+		f2 = rightNullCount / rightRowCount
+	}
+
+	// Rough estimate of nulls in the combined result set,
+	// assuming independence.
+	return rowCount * (f1 + f2 - f1*f2)
+}
+
+// adjustNullCountsForOuterJoins modifies the null counts for the specified columns
+// to adjust for additional nulls created in this type of outer join. It first does
+// a max of the nulls on the appropriate side of the join (i.e. left for left, both
+// for full), and then adds an expected number of nulls created by column extension
+// on non-matching rows (such as on right cols for left joins and both for full).
+func (sb *statisticsBuilder) adjustNullCountsForOuterJoins(
+	colStat *props.ColumnStatistic,
+	joinType opt.Operator,
+	leftCols opt.ColSet,
+	rightCols opt.ColSet,
+	leftNullCount float64,
+	leftRowCount float64,
+	rightNullCount float64,
+	rightRowCount float64,
+	rowCount float64,
+	innerJoinRowCount float64,
+) {
+	// This switch is based on the same premise as the RowCount one in buildJoin.
+	// Adjust null counts for non-inner joins. The additive factor denotes
+	// nulls created due to column extension - such as right columns for non-matching
+	// rows in left joins.
+	switch joinType {
+	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
+		// All nulls from left side should be in the result.
+		colStat.NullCount = max(colStat.NullCount, leftNullCount)
+		if !rightCols.Empty() {
+			colStat.NullCount += (rowCount - innerJoinRowCount) * (1 - leftNullCount/leftRowCount)
+		}
+
+	case opt.RightJoinOp, opt.RightJoinApplyOp:
+		// All nulls from right side should be in the result.
+		colStat.NullCount = max(colStat.NullCount, rightNullCount)
+		if !leftCols.Empty() {
+			colStat.NullCount += (rowCount - innerJoinRowCount) * (1 - rightNullCount/rightRowCount)
+		}
+
+	case opt.FullJoinOp, opt.FullJoinApplyOp:
+		// All nulls from both sides should be in the result.
+		leftJoinNullCount := max(colStat.NullCount, leftNullCount)
+		rightJoinNullCount := max(colStat.NullCount, rightNullCount)
+		colStat.NullCount = leftJoinNullCount + rightJoinNullCount - colStat.NullCount
+
+		leftJoinRowCount := max(innerJoinRowCount, leftRowCount)
+		rightJoinRowCount := max(innerJoinRowCount, rightRowCount)
+
+		if !leftCols.Empty() {
+			colStat.NullCount += (rightJoinRowCount - innerJoinRowCount) * (1 - rightNullCount/rightRowCount)
+		}
+		if !rightCols.Empty() {
+			colStat.NullCount += (leftJoinRowCount - innerJoinRowCount) * (1 - leftNullCount/leftRowCount)
+		}
 	}
 }
 
@@ -863,12 +1132,14 @@ func (sb *statisticsBuilder) colStatIndexJoin(
 
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
+	colStat.NullCount = 0
 
 	// Some of the requested columns may be from the input index.
 	reqInputCols := colSet.Intersection(inputCols)
 	if !reqInputCols.Empty() {
 		inputColStat := sb.colStatFromChild(reqInputCols, ev, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
+		colStat.NullCount = inputColStat.NullCount
 	}
 
 	// Other requested columns may be from the primary index.
@@ -889,11 +1160,22 @@ func (sb *statisticsBuilder) colStatIndexJoin(
 		// provided by the input index. Multiplying the counts gives a worst-case
 		// estimate of the joint distinct count.
 		colStat.DistinctCount *= lookupColStat.DistinctCount
+
+		// Assuming null columns are completely independent, calculate
+		// the expected value of having nulls in either column set.
+		f1 := lookupColStat.NullCount / inputStats.RowCount
+		f2 := colStat.NullCount / inputStats.RowCount
+		colStat.NullCount = inputStats.RowCount * (f1 + f2 - f1*f2)
 	}
 
 	// The distinct count should be no larger than the row count.
 	if colStat.DistinctCount > s.RowCount {
 		colStat.DistinctCount = s.RowCount
+	}
+	// Similarly, the null count should be no larger than RowCount.
+	colStat.NullCount = min(s.RowCount, colStat.NullCount)
+	if colSet.SubsetOf(relProps.NotNullCols) {
+		colStat.NullCount = 0
 	}
 	return colStat
 }
@@ -917,6 +1199,9 @@ func (sb *statisticsBuilder) buildGroupBy(ev ExprView, relProps *props.Relationa
 	} else {
 		// Estimate the row count based on the distinct count of the grouping
 		// columns.
+		//
+		// TODO(itsbilal): Update null count here, using a formula similar to the
+		// ones in colStatGroupBy.
 		colStat := sb.copyColStatFromChild(groupingColSet, ev, s)
 		s.RowCount = colStat.DistinctCount
 	}
@@ -933,19 +1218,41 @@ func (sb *statisticsBuilder) colStatGroupBy(colSet opt.ColSet, ev ExprView) *pro
 		// ScalarGroupBy or GroupBy with empty grouping columns.
 		colStat, _ := s.ColStats.Add(colSet)
 		colStat.DistinctCount = 1
+		// TODO(itsbilal): Handle case where the scalar resolves to NULL.
+		colStat.NullCount = 0
 		return colStat
 	}
 
+	var colStat *props.ColumnStatistic
+	var inputColStat *props.ColumnStatistic
 	if !colSet.SubsetOf(groupingColSet) {
 		// Some of the requested columns are aggregates. Estimate the distinct
 		// count to be the same as the grouping columns.
-		colStat, _ := s.ColStats.Add(colSet)
-		inputColStat := sb.colStatFromChild(groupingColSet, ev, 0 /* childIdx */)
+		colStat, _ = s.ColStats.Add(colSet)
+		inputColStat = sb.colStatFromChild(groupingColSet, ev, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
-		return colStat
+	} else {
+		// Make a copy so we don't modify the original
+		colStat = sb.copyColStatFromChild(colSet, ev, s)
+		inputColStat = sb.colStatFromChild(colSet, ev, 0 /* childIdx */)
 	}
 
-	return sb.copyColStatFromChild(colSet, ev, s)
+	// For null counts - we either only have 1 possible null value (if we're
+	// grouping on a single column), or we have as many nulls as in the grouping
+	// col set, multiplied by (DistinctCount+1)/RowCount - an inverse of a rough
+	// duplicate factor. The + 1 accounts for the fact that nulls are not
+	// counted in distinct counts.
+	if groupingColSet.Len() == 1 {
+		colStat.NullCount = min(1, inputColStat.NullCount)
+	} else {
+		inputRowCount := sb.statsFromChild(ev, 0 /* childIdx */).RowCount
+		colStat.NullCount = ((colStat.DistinctCount + 1) / inputRowCount) * inputColStat.NullCount
+		colStat.NullCount = min(s.RowCount, colStat.NullCount)
+	}
+	if colSet.SubsetOf(relProps.NotNullCols) {
+		colStat.NullCount = 0
+	}
+	return colStat
 }
 
 // +--------+
@@ -1005,19 +1312,43 @@ func (sb *statisticsBuilder) colStatSetOpImpl(
 
 	colStat, _ := s.ColStats.Add(outputCols)
 
+	// Use the actual null counts for bag operations, and normalize them for set
+	// operations. See comment in colStatGroupBy for the reasoning behind the null
+	// count formula.
+	leftNullCount := leftColStat.NullCount
+	rightNullCount := rightColStat.NullCount
+	switch ev.Operator() {
+	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp:
+		if outputCols.Len() == 1 {
+			leftNullCount = min(1, leftNullCount)
+			rightNullCount = min(1, rightNullCount)
+		} else {
+			leftRowCount := sb.statsFromChild(ev, 0 /* childIdx */).RowCount
+			leftNullCount *= (leftColStat.DistinctCount + 1) / leftRowCount
+			rightRowCount := sb.statsFromChild(ev, 1 /* childIdx */).RowCount
+			rightNullCount *= (rightColStat.DistinctCount + 1) / rightRowCount
+		}
+	}
+
 	// These calculations are an upper bound on the distinct count. It's likely
 	// that there is some overlap between the two sets, but not full overlap.
 	switch ev.Operator() {
 	case opt.UnionOp, opt.UnionAllOp:
 		colStat.DistinctCount = leftColStat.DistinctCount + rightColStat.DistinctCount
+		colStat.NullCount = leftNullCount + rightNullCount
 
 	case opt.IntersectOp, opt.IntersectAllOp:
 		colStat.DistinctCount = min(leftColStat.DistinctCount, rightColStat.DistinctCount)
+		colStat.NullCount = min(leftNullCount, rightNullCount)
 
 	case opt.ExceptOp, opt.ExceptAllOp:
 		colStat.DistinctCount = leftColStat.DistinctCount
+		colStat.NullCount = leftNullCount
 	}
 
+	if outputCols.SubsetOf(relProps.NotNullCols) {
+		colStat.NullCount = 0
+	}
 	return colStat
 }
 
@@ -1050,21 +1381,32 @@ func (sb *statisticsBuilder) colStatValues(colSet opt.ColSet, ev ExprView) *prop
 	// map to find the exact count of distinct values for the columns in colSet.
 	// Use a hash to combine column values (this does not have to be exact).
 	distinct := make(map[int64]struct{}, ev.Child(0).ChildCount())
+	// Determine null count by looking at tuples that have at least one
+	// NullOp in them.
+	nullCount := 0
 	for i, in := 0, ev.ChildCount(); i < in; i++ {
 		const prime64 = 1099511628211
 		hash := int64(1)
+		hasNull := false
 		for j, jn := 0, ev.Child(i).ChildCount(); j < jn; j++ {
 			if colSet.Contains(int(colList[j])) {
 				hash *= prime64
 				hash ^= int64(ev.Child(i).ChildGroup(j))
 			}
+			if ev.Child(i).Child(j).Operator() == opt.NullOp {
+				hasNull = true
+			}
 		}
 		distinct[hash] = struct{}{}
+		if hasNull {
+			nullCount++
+		}
 	}
 
 	// Update the column statistics.
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = float64(len(distinct))
+	colStat.NullCount = float64(nullCount)
 	return colStat
 }
 
@@ -1105,6 +1447,9 @@ func (sb *statisticsBuilder) colStatLimit(colSet opt.ColSet, ev ExprView) *props
 
 	// Scale distinct count based on the selectivity of the limit operation.
 	colStat.ApplySelectivity(s.Selectivity, inputStats.RowCount)
+	if colSet.SubsetOf(relProps.NotNullCols) {
+		colStat.NullCount = 0
+	}
 	return colStat
 }
 
@@ -1147,6 +1492,9 @@ func (sb *statisticsBuilder) colStatOffset(colSet opt.ColSet, ev ExprView) *prop
 
 	// Scale distinct count based on the selectivity of the offset operation.
 	colStat.ApplySelectivity(s.Selectivity, inputStats.RowCount)
+	if colSet.SubsetOf(relProps.NotNullCols) {
+		colStat.NullCount = 0
+	}
 	return colStat
 }
 
@@ -1166,8 +1514,14 @@ func (sb *statisticsBuilder) buildMax1Row(ev ExprView, relProps *props.Relationa
 }
 
 func (sb *statisticsBuilder) colStatMax1Row(colSet opt.ColSet, ev ExprView) *props.ColumnStatistic {
-	colStat, _ := ev.Logical().Relational.Stats.ColStats.Add(colSet)
+	s := &ev.Logical().Relational.Stats
+
+	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = 1
+	colStat.NullCount = s.RowCount * unknownNullCountRatio
+	if colSet.SubsetOf(ev.Logical().Relational.NotNullCols) {
+		colStat.NullCount = 0
+	}
 	return colStat
 }
 
@@ -1200,11 +1554,25 @@ func (sb *statisticsBuilder) colStatRowNumber(
 	if colSet.Contains(int(def.ColID)) {
 		// The ordinality column is a key, so every row is distinct.
 		colStat.DistinctCount = s.RowCount
+		if colSet.Len() == 1 {
+			// The generated column is the only column being requested.
+			colStat.NullCount = 0
+		} else {
+			// Copy NullCount from child.
+			colSetChild := colSet.Copy()
+			colSetChild.Remove(int(def.ColID))
+			inputColStat := sb.colStatFromChild(colSetChild, ev, 0 /* childIdx */)
+			colStat.NullCount = inputColStat.NullCount
+		}
 	} else {
 		inputColStat := sb.colStatFromChild(colSet, ev, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
+		colStat.NullCount = inputColStat.NullCount
 	}
 
+	if colSet.SubsetOf(relProps.NotNullCols) {
+		colStat.NullCount = 0
+	}
 	return colStat
 }
 
@@ -1256,6 +1624,10 @@ func (sb *statisticsBuilder) colStatZip(colSet opt.ColSet, ev ExprView) *props.C
 	} else {
 		colStat.DistinctCount = s.RowCount * unknownDistinctCountRatio
 	}
+	colStat.NullCount = s.RowCount * unknownNullCountRatio
+	if colSet.SubsetOf(ev.Logical().Relational.NotNullCols) {
+		colStat.NullCount = 0
+	}
 	return colStat
 }
 
@@ -1301,6 +1673,7 @@ func (sb *statisticsBuilder) copyColStat(
 	}
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inputColStat.DistinctCount
+	colStat.NullCount = inputColStat.NullCount
 	return colStat
 }
 
@@ -1353,10 +1726,11 @@ func (sb *statisticsBuilder) finalizeFromCardinality(relProps *props.Relational)
 		s.RowCount = float64(relProps.Cardinality.Min)
 	}
 
-	// The distinct counts should be no larger than the row count.
+	// The distinct and null counts should be no larger than the row count.
 	for i, n := 0, s.ColStats.Count(); i < n; i++ {
 		colStat := s.ColStats.Get(i)
 		colStat.DistinctCount = min(colStat.DistinctCount, s.RowCount)
+		colStat.NullCount = min(colStat.NullCount, s.RowCount)
 	}
 }
 
@@ -1393,6 +1767,10 @@ const (
 	// used in the absence of any real statistics for non-key columns.
 	// TODO(rytaft): See if there is an industry standard value for this.
 	unknownDistinctCountRatio = 0.1
+
+	// This is the ratio of null column values to number of rows for nullable
+	// columns, which is used in the absence of any real statistics.
+	unknownNullCountRatio = 0.01
 )
 
 // applyFilter uses constraints to update the distinct counts for the
@@ -1500,6 +1878,40 @@ func (sb *statisticsBuilder) applyConstraintSet(
 	}
 
 	return numUnappliedConjuncts
+}
+
+// updateNullCountsFromProps zeroes null counts for columns that cannot
+// have nulls in them, usually due to a column property or an application.
+// of a null-excluding filter. The actual determination of non-nullable
+// columns is done in the logical props builder.
+//
+// For example, consider the following constraint sets:
+//   /a/b/c: [/1 - /1/2/3] [/1/2/5 - /1/2/8]
+//   /c: [/6 - /6]
+//
+// The first constraint set filters nulls out of column a, and the
+// second constraint set filters nulls out of column c.
+//
+// This function should be called before selectivityFromNullCounts but *after*
+// all other calls to ApplySelectivity (such as the ones that calculate and
+// apply selectivities from distinct counts, equivalences, and unapplied
+// constraints).
+//
+func (sb *statisticsBuilder) updateNullCountsFromProps(
+	ev ExprView, relProps *props.Relational, inputRowCount float64,
+) {
+	s := &relProps.Stats
+	relProps.NotNullCols.ForEach(func(col int) {
+		colSet := util.MakeFastIntSet(col)
+		colStat, ok := s.ColStats.Lookup(colSet)
+		if !ok {
+			colStat = sb.copyColStat(colSet, s, sb.colStatFromInput(colSet, ev))
+			if s.Selectivity != 1.0 {
+				colStat.ApplySelectivity(s.Selectivity, inputRowCount)
+			}
+		}
+		colStat.NullCount = 0
+	})
 }
 
 // updateDistinctCountsFromConstraint updates the distinct count for each
@@ -1616,17 +2028,19 @@ func (sb *statisticsBuilder) applyEquivalencies(
 ) {
 	equivReps.ForEach(func(i int) {
 		equivGroup := filterFD.ComputeEquivGroup(opt.ColumnID(i))
-		sb.updateDistinctCountsFromEquivalency(equivGroup, ev, relProps)
+		sb.updateDistinctNullCountsFromEquivalency(equivGroup, ev, relProps)
 	})
 }
 
-func (sb *statisticsBuilder) updateDistinctCountsFromEquivalency(
+func (sb *statisticsBuilder) updateDistinctNullCountsFromEquivalency(
 	equivGroup opt.ColSet, ev ExprView, relProps *props.Relational,
 ) {
 	s := &relProps.Stats
 
-	// Find the minimum distinct count for all columns in this equivalency group.
+	// Find the minimum distinct and null counts for all columns in this equivalency
+	// group.
 	minDistinctCount := s.RowCount
+	minNullCount := s.RowCount
 	equivGroup.ForEach(func(i int) {
 		colSet := util.MakeFastIntSet(i)
 		colStat, ok := s.ColStats.Lookup(colSet)
@@ -1636,13 +2050,17 @@ func (sb *statisticsBuilder) updateDistinctCountsFromEquivalency(
 		if colStat.DistinctCount < minDistinctCount {
 			minDistinctCount = colStat.DistinctCount
 		}
+		if colStat.NullCount < minNullCount {
+			minNullCount = colStat.NullCount
+		}
 	})
 
-	// Set the distinct count to the minimum for all columns in this equivalency
-	// group.
+	// Set the distinct and null counts to the minimum for all columns in this
+	// equivalency group.
 	equivGroup.ForEach(func(i int) {
 		colStat, _ := s.ColStats.Lookup(util.MakeFastIntSet(i))
 		colStat.DistinctCount = minDistinctCount
+		colStat.NullCount = minNullCount
 	})
 }
 
@@ -1673,8 +2091,106 @@ func (sb *statisticsBuilder) selectivityFromDistinctCounts(
 		}
 
 		inputStat := sb.colStatFromInput(colStat.Cols, ev)
-		if inputStat.DistinctCount != 0 && colStat.DistinctCount < inputStat.DistinctCount {
-			selectivity *= colStat.DistinctCount / inputStat.DistinctCount
+		newDistinct := colStat.DistinctCount
+		oldDistinct := inputStat.DistinctCount
+
+		if oldDistinct != 0 && newDistinct < oldDistinct {
+			selectivity *= newDistinct / oldDistinct
+		}
+	}
+
+	return selectivity
+}
+
+// selectivityFromNullCounts calculates the selectivity of a filter from the number
+// of null values removed. This can be represented by this formula:
+//
+//               ┬-┬ ⎛     old null(i) - new null(i)⎞
+// selectivity = │ │ ⎜ 1 - ------------------------ ⎟
+//               ┴ ┴ ⎝     old row count(i)         ⎠
+//              i in
+//            {constrained
+//               columns}
+//
+//
+// This selectivity will be used later to update the row count. Note that
+// this formula doesn't return the right selectivity for joins; the
+// function joinSelectivityFromNullCounts is for that purpose.
+//
+func (sb *statisticsBuilder) selectivityFromNullCounts(
+	cols opt.ColSet, ev ExprView, s *props.Statistics, rowCount float64,
+) (selectivity float64) {
+	selectivity = 1.0
+	// Short circuit if no rows.
+	if rowCount <= 0 {
+		return selectivity
+	}
+	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
+		colStat, ok := s.ColStats.Lookup(util.MakeFastIntSet(col))
+		if !ok {
+			continue
+		}
+
+		inputStat := sb.colStatFromInput(colStat.Cols, ev)
+		if inputStat.NullCount > rowCount {
+			panic("rowCount passed in was too small")
+		}
+		if colStat.NullCount < inputStat.NullCount {
+			selectivity *= (1 - (inputStat.NullCount-colStat.NullCount)/rowCount)
+		}
+	}
+
+	return selectivity
+}
+
+// joinSelectivityFromNullCounts calculates the selectivity of a join from the
+// number of null values removed. The formula used here is similar to the
+// selectivityFromNullCounts one above, except with old null and new null
+// being calculated from the sides of the join.
+//
+// This selectivity will be used later to update the row count.
+//
+func (sb *statisticsBuilder) joinSelectivityFromNullCounts(
+	cols opt.ColSet,
+	ev ExprView,
+	s *props.Statistics,
+	inputRowCount float64,
+	leftCols opt.ColSet,
+	leftRowCount float64,
+	rightCols opt.ColSet,
+	rightRowCount float64,
+) (selectivity float64) {
+	selectivity = 1.0
+	// Short circuit if no rows.
+	if inputRowCount <= 0 {
+		return selectivity
+	}
+	for col, ok := cols.Next(0); ok; col, ok = cols.Next(col + 1) {
+		colSet := util.MakeFastIntSet(col)
+		colStat, ok := s.ColStats.Lookup(colSet)
+		if !ok {
+			continue
+		}
+
+		var leftNullCount, rightNullCount float64
+		if leftCols.Contains(col) {
+			leftNullCount = sb.colStatFromJoinLeft(util.MakeFastIntSet(col), ev).NullCount
+		}
+		if rightCols.Contains(col) {
+			rightNullCount = sb.colStatFromJoinLeft(util.MakeFastIntSet(col), ev).NullCount
+		}
+		// One of leftNullCount or rightNullCount will be 0, so no need to account for
+		// collisions in this cross join count.
+		crossJoinNullCount := leftNullCount*rightRowCount + rightNullCount*leftRowCount
+
+		if crossJoinNullCount > inputRowCount {
+			panic("row count passed in was too small")
+		}
+		// We make the assumption that colStat.NullCount is either 0 or equal
+		// to / greater than crossJoinNullCount. In the zero case, account
+		// for this null elimination in the returned selectivity.
+		if colStat.NullCount == 0 {
+			selectivity *= (1 - crossJoinNullCount/inputRowCount)
 		}
 	}
 
@@ -1812,31 +2328,19 @@ func (sb *statisticsBuilder) numConjunctsInConstraint(
 		// /a/b: [/4/5 - ], which is more selective than /a/b: [/4 - ]. But we
 		// treat them all the same, with selectivity=1/3.
 		if span.StartKey().Length() > 0 {
-			if !c.Columns.Get(0).Descending() &&
-				span.StartKey().Value(0) == tree.DNull {
-				if span.EndKey().Length() == 0 &&
-					(span.StartBoundary() == constraint.ExcludeBoundary || span.StartKey().Length() > 1) {
-					// This is a hack to ensure that x IS NOT NULL is considered less
-					// selective than other inequalities such as x > 5. Once we track
-					// null counts, we will make this more precise.
-					numSpanConjuncts += 0.1
-				}
-				// Other cases of NULL in a constraint should be ignored. For example,
-				// without knowledge of the data distribution, /a: (/NULL - /10] should
-				// have the same estimated selectivity as /a: [/10 - ].
-			} else {
+			// Cases of NULL in a constraint should be ignored. For example,
+			// without knowledge of the data distribution, /a: (/NULL - /10] should
+			// have the same estimated selectivity as /a: [/10 - ]. Selectivity
+			// of NULL constraints is handled in selectivityFromNullCounts.
+			if c.Columns.Get(0).Descending() ||
+				span.StartKey().Value(0) != tree.DNull {
 				numSpanConjuncts++
 			}
 		}
 		if span.EndKey().Length() > 0 {
-			if c.Columns.Get(0).Descending() &&
-				span.EndKey().Value(0) == tree.DNull {
-				if span.StartKey().Length() == 0 &&
-					(span.EndBoundary() == constraint.ExcludeBoundary || span.EndKey().Length() > 1) {
-					// Hack for not-null constraints (see above comment).
-					numSpanConjuncts += 0.1
-				}
-			} else {
+			// Ignore cases of NULL in constraints. (see above comment).
+			if !c.Columns.Get(0).Descending() ||
+				span.EndKey().Value(0) != tree.DNull {
 				numSpanConjuncts++
 			}
 		}
