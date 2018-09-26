@@ -675,7 +675,7 @@ SELECT degrees(-0.5), degrees(0.5)
 -28.64788975654116  28.64788975654116
 
 statement ok
-RESET extra_float_digits
+SET extra_float_digits = 0
 
 subtest other_tests
 
@@ -943,7 +943,7 @@ SELECT 1.234567890123456789::float, round(1.234567890123456789::float, 15), roun
 1.2345678901234567 1.234567890123457 1.2345678901234567 1.2345678901234567
 
 statement ok
-RESET extra_float_digits
+SET extra_float_digits = 0
 
 subtest round_low_prec
 
@@ -976,7 +976,7 @@ SELECT 1.234567890123456789::float, round(1.234567890123456789::float, 15), roun
 1.23456789  1.23456789  1.23456789  1.23456789
 
 statement ok
-RESET extra_float_digits
+SET extra_float_digits = 0
 
 subtest more_round_tests
 
