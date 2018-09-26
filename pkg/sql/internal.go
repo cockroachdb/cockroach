@@ -406,9 +406,9 @@ func (ie *internalExecutorImpl) execInternal(
 		}
 	}()
 
+	ctx = logtags.AddTag(ctx, "intExec", opName)
 	ctx, finishSp := tracing.EnsureChildSpan(ctx, ie.s.cfg.AmbientCtx.Tracer, opName)
 	defer finishSp()
-	ctx = logtags.AddTag(ctx, "intExec", opName)
 
 	timeReceived := timeutil.Now()
 	parseStart := timeReceived
