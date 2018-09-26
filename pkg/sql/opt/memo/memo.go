@@ -293,6 +293,18 @@ func (m *Memo) InternPhysicalProps(physical *props.Physical) *props.Physical {
 	return m.interner.InternPhysicalProps(physical)
 }
 
+// DeriveLogicalProps derives logical props for the specified expression,
+// usually resulting in population of child stats in the test output tree.
+// Only useful in testing, when we want the lazy population of column statistics
+// for every expression to ensure a consistent tree output.
+func DeriveLogicalProps(e RelExpr) {
+	e.Relational().Verify()
+	if e != e.FirstExpr() && e.Op() != opt.MergeJoinOp && e.Op() != opt.SortOp {
+		var relProps props.Relational
+		e.Memo().logPropsBuilder.buildProps(e, &relProps)
+	}
+}
+
 // SetBestProps updates the physical properties and cost of a relational
 // expression's memo group. It is called by the optimizer once it determines
 // the lowest cost expression in a group.

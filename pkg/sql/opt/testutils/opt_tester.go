@@ -337,6 +337,16 @@ func fillInLazyProps(e opt.Expr) {
 
 		// Make sure the interesting orderings are calculated.
 		xform.DeriveInterestingOrderings(rel)
+
+		// Derive logical props for all child expressions, even
+		// denormalized ones - to make statistics look complete
+		// in the output tree. Derivation of logical props also
+		// triggers population of key column statistics for those
+		// expressions - which is what we're interested in seeing
+		// in the test output.
+		//
+		// TODO(itsbilal): Uncomment this
+		//memo.DeriveLogicalProps(rel)
 	}
 
 	for i, n := 0, e.ChildCount(); i < n; i++ {

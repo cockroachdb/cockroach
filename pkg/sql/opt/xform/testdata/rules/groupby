@@ -481,7 +481,7 @@ memo (optimized, ~4KB)
 memo
 SELECT min(b) FROM abc
 ----
-memo (optimized, ~4KB)
+memo (optimized, ~5KB)
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: min:5]
  │         ├── best: (scalar-group-by G2 G3 cols=())
@@ -525,7 +525,7 @@ memo (optimized, ~4KB)
 memo
 SELECT max(b) FROM abc
 ----
-memo (optimized, ~4KB)
+memo (optimized, ~5KB)
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: max:5]
  │         ├── best: (scalar-group-by G2 G3 cols=())
@@ -602,7 +602,7 @@ scalar-group-by
 memo
 select max(b) from abc
 ----
-memo (optimized, ~4KB)
+memo (optimized, ~5KB)
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: max:5]
  │         ├── best: (scalar-group-by G2 G3 cols=())
