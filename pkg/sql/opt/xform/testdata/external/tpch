@@ -1864,75 +1864,77 @@ WHERE
 ORDER BY
     s_suppkey;
 ----
-sort
+project
  ├── columns: s_suppkey:1(int!null) s_name:2(string!null) s_address:3(string!null) s_phone:5(string!null) total_revenue:25(float!null)
  ├── key: (1)
  ├── fd: (1)-->(2,3,5,25)
  ├── ordering: +1
- └── project
-      ├── columns: s_suppkey:1(int!null) s_name:2(string!null) s_address:3(string!null) s_phone:5(string!null) sum:25(float!null)
-      ├── key: (1)
-      ├── fd: (1)-->(2,3,5,25)
-      └── inner-join (lookup supplier)
-           ├── columns: s_suppkey:1(int!null) s_name:2(string!null) s_address:3(string!null) s_phone:5(string!null) lineitem.l_suppkey:10(int!null) sum:25(float!null)
-           ├── key columns: [10] = [1]
-           ├── key: (10)
-           ├── fd: (1)-->(2,3,5), (10)-->(25), (1)==(10), (10)==(1)
-           ├── select
-           │    ├── columns: lineitem.l_suppkey:10(int!null) sum:25(float!null)
-           │    ├── key: (10)
-           │    ├── fd: (10)-->(25)
-           │    ├── group-by
-           │    │    ├── columns: lineitem.l_suppkey:10(int!null) sum:25(float)
-           │    │    ├── grouping columns: lineitem.l_suppkey:10(int!null)
-           │    │    ├── key: (10)
-           │    │    ├── fd: (10)-->(25)
-           │    │    ├── project
-           │    │    │    ├── columns: column24:24(float) lineitem.l_suppkey:10(int!null)
-           │    │    │    ├── index-join lineitem
-           │    │    │    │    ├── columns: lineitem.l_suppkey:10(int!null) lineitem.l_extendedprice:13(float!null) lineitem.l_discount:14(float!null) lineitem.l_shipdate:18(date!null)
-           │    │    │    │    └── scan lineitem@l_sd
-           │    │    │    │         ├── columns: lineitem.l_orderkey:8(int!null) lineitem.l_linenumber:11(int!null) lineitem.l_shipdate:18(date!null)
-           │    │    │    │         ├── constraint: /18/8/11: [/'1996-01-01' - /'1996-03-31']
-           │    │    │    │         ├── key: (8,11)
-           │    │    │    │         └── fd: (8,11)-->(18)
-           │    │    │    └── projections [outer=(10,13,14)]
-           │    │    │         └── lineitem.l_extendedprice * (1.0 - lineitem.l_discount) [type=float, outer=(13,14)]
-           │    │    └── aggregations [outer=(24)]
-           │    │         └── sum [type=float, outer=(24)]
-           │    │              └── variable: column24 [type=float, outer=(24)]
-           │    └── filters [type=bool, outer=(25), constraints=(/25: (/NULL - ])]
-           │         └── eq [type=bool, outer=(25), constraints=(/25: (/NULL - ])]
-           │              ├── variable: sum [type=float, outer=(25)]
-           │              └── subquery [type=float]
-           │                   └── scalar-group-by
-           │                        ├── columns: max:44(float)
-           │                        ├── cardinality: [1 - 1]
-           │                        ├── key: ()
-           │                        ├── fd: ()-->(44)
-           │                        ├── group-by
-           │                        │    ├── columns: lineitem.l_suppkey:28(int!null) sum:43(float)
-           │                        │    ├── grouping columns: lineitem.l_suppkey:28(int!null)
-           │                        │    ├── key: (28)
-           │                        │    ├── fd: (28)-->(43)
-           │                        │    ├── project
-           │                        │    │    ├── columns: column42:42(float) lineitem.l_suppkey:28(int!null)
-           │                        │    │    ├── index-join lineitem
-           │                        │    │    │    ├── columns: lineitem.l_suppkey:28(int!null) lineitem.l_extendedprice:31(float!null) lineitem.l_discount:32(float!null) lineitem.l_shipdate:36(date!null)
-           │                        │    │    │    └── scan lineitem@l_sd
-           │                        │    │    │         ├── columns: lineitem.l_orderkey:26(int!null) lineitem.l_linenumber:29(int!null) lineitem.l_shipdate:36(date!null)
-           │                        │    │    │         ├── constraint: /36/26/29: [/'1996-01-01' - /'1996-03-31']
-           │                        │    │    │         ├── key: (26,29)
-           │                        │    │    │         └── fd: (26,29)-->(36)
-           │                        │    │    └── projections [outer=(28,31,32)]
-           │                        │    │         └── lineitem.l_extendedprice * (1.0 - lineitem.l_discount) [type=float, outer=(31,32)]
-           │                        │    └── aggregations [outer=(42)]
-           │                        │         └── sum [type=float, outer=(42)]
-           │                        │              └── variable: column42 [type=float, outer=(42)]
-           │                        └── aggregations [outer=(43)]
-           │                             └── max [type=float, outer=(43)]
-           │                                  └── variable: sum [type=float, outer=(43)]
-           └── true [type=bool]
+ └── inner-join (lookup supplier)
+      ├── columns: s_suppkey:1(int!null) s_name:2(string!null) s_address:3(string!null) s_phone:5(string!null) lineitem.l_suppkey:10(int!null) sum:25(float!null)
+      ├── key columns: [10] = [1]
+      ├── key: (10)
+      ├── fd: (1)-->(2,3,5), (10)-->(25), (1)==(10), (10)==(1)
+      ├── ordering: +(1|10)
+      ├── sort
+      │    ├── columns: lineitem.l_suppkey:10(int!null) sum:25(float!null)
+      │    ├── key: (10)
+      │    ├── fd: (10)-->(25)
+      │    ├── ordering: +10
+      │    └── select
+      │         ├── columns: lineitem.l_suppkey:10(int!null) sum:25(float!null)
+      │         ├── key: (10)
+      │         ├── fd: (10)-->(25)
+      │         ├── group-by
+      │         │    ├── columns: lineitem.l_suppkey:10(int!null) sum:25(float)
+      │         │    ├── grouping columns: lineitem.l_suppkey:10(int!null)
+      │         │    ├── key: (10)
+      │         │    ├── fd: (10)-->(25)
+      │         │    ├── project
+      │         │    │    ├── columns: column24:24(float) lineitem.l_suppkey:10(int!null)
+      │         │    │    ├── index-join lineitem
+      │         │    │    │    ├── columns: lineitem.l_suppkey:10(int!null) lineitem.l_extendedprice:13(float!null) lineitem.l_discount:14(float!null) lineitem.l_shipdate:18(date!null)
+      │         │    │    │    └── scan lineitem@l_sd
+      │         │    │    │         ├── columns: lineitem.l_orderkey:8(int!null) lineitem.l_linenumber:11(int!null) lineitem.l_shipdate:18(date!null)
+      │         │    │    │         ├── constraint: /18/8/11: [/'1996-01-01' - /'1996-03-31']
+      │         │    │    │         ├── key: (8,11)
+      │         │    │    │         └── fd: (8,11)-->(18)
+      │         │    │    └── projections [outer=(10,13,14)]
+      │         │    │         └── lineitem.l_extendedprice * (1.0 - lineitem.l_discount) [type=float, outer=(13,14)]
+      │         │    └── aggregations [outer=(24)]
+      │         │         └── sum [type=float, outer=(24)]
+      │         │              └── variable: column24 [type=float, outer=(24)]
+      │         └── filters [type=bool, outer=(25), constraints=(/25: (/NULL - ])]
+      │              └── eq [type=bool, outer=(25), constraints=(/25: (/NULL - ])]
+      │                   ├── variable: sum [type=float, outer=(25)]
+      │                   └── subquery [type=float]
+      │                        └── scalar-group-by
+      │                             ├── columns: max:44(float)
+      │                             ├── cardinality: [1 - 1]
+      │                             ├── key: ()
+      │                             ├── fd: ()-->(44)
+      │                             ├── group-by
+      │                             │    ├── columns: lineitem.l_suppkey:28(int!null) sum:43(float)
+      │                             │    ├── grouping columns: lineitem.l_suppkey:28(int!null)
+      │                             │    ├── key: (28)
+      │                             │    ├── fd: (28)-->(43)
+      │                             │    ├── project
+      │                             │    │    ├── columns: column42:42(float) lineitem.l_suppkey:28(int!null)
+      │                             │    │    ├── index-join lineitem
+      │                             │    │    │    ├── columns: lineitem.l_suppkey:28(int!null) lineitem.l_extendedprice:31(float!null) lineitem.l_discount:32(float!null) lineitem.l_shipdate:36(date!null)
+      │                             │    │    │    └── scan lineitem@l_sd
+      │                             │    │    │         ├── columns: lineitem.l_orderkey:26(int!null) lineitem.l_linenumber:29(int!null) lineitem.l_shipdate:36(date!null)
+      │                             │    │    │         ├── constraint: /36/26/29: [/'1996-01-01' - /'1996-03-31']
+      │                             │    │    │         ├── key: (26,29)
+      │                             │    │    │         └── fd: (26,29)-->(36)
+      │                             │    │    └── projections [outer=(28,31,32)]
+      │                             │    │         └── lineitem.l_extendedprice * (1.0 - lineitem.l_discount) [type=float, outer=(31,32)]
+      │                             │    └── aggregations [outer=(42)]
+      │                             │         └── sum [type=float, outer=(42)]
+      │                             │              └── variable: column42 [type=float, outer=(42)]
+      │                             └── aggregations [outer=(43)]
+      │                                  └── max [type=float, outer=(43)]
+      │                                       └── variable: sum [type=float, outer=(43)]
+      └── true [type=bool]
 
 # --------------------------------------------------
 # Q16
@@ -2202,10 +2204,6 @@ limit
  │         ├── inner-join
  │         │    ├── columns: c_custkey:1(int!null) c_name:2(string!null) o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null) lineitem.l_orderkey:18(int!null) lineitem.l_quantity:22(float!null)
  │         │    ├── fd: (1)-->(2), (9)-->(10,12,13), (9)==(18), (18)==(9), (1)==(10), (10)==(1)
- │         │    ├── scan customer
- │         │    │    ├── columns: c_custkey:1(int!null) c_name:2(string!null)
- │         │    │    ├── key: (1)
- │         │    │    └── fd: (1)-->(2)
  │         │    ├── inner-join (merge)
  │         │    │    ├── columns: o_orderkey:9(int!null) o_custkey:10(int!null) o_totalprice:12(float!null) o_orderdate:13(date!null) lineitem.l_orderkey:18(int!null) lineitem.l_quantity:22(float!null)
  │         │    │    ├── fd: (9)-->(10,12,13), (9)==(18), (18)==(9)
@@ -2249,6 +2247,10 @@ limit
  │         │    │         ├── left ordering: +9
  │         │    │         ├── right ordering: +18
  │         │    │         └── true [type=bool]
+ │         │    ├── scan customer
+ │         │    │    ├── columns: c_custkey:1(int!null) c_name:2(string!null)
+ │         │    │    ├── key: (1)
+ │         │    │    └── fd: (1)-->(2)
  │         │    └── filters [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
  │         │         └── c_custkey = o_custkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ])]
  │         └── aggregations [outer=(1,2,12,13,22)]

@@ -2379,13 +2379,10 @@ project
  │    ├── grouping columns: x:1(int!null)
  │    ├── key: (1)
  │    ├── fd: (1)-->(4)
- │    ├── left-join
+ │    ├── right-join
  │    │    ├── columns: x:1(int!null) u:3(int) uv.v:4(int) k:5(int) i:6(int)
  │    │    ├── key: (1,5)
  │    │    ├── fd: (3)-->(4), (5)-->(6), (3)==(5), (5)==(3)
- │    │    ├── scan xy
- │    │    │    ├── columns: x:1(int!null)
- │    │    │    └── key: (1)
  │    │    ├── inner-join (merge)
  │    │    │    ├── columns: u:3(int!null) uv.v:4(int) k:5(int!null) i:6(int)
  │    │    │    ├── key: (5)
@@ -2404,6 +2401,9 @@ project
  │    │    │         ├── left ordering: +3
  │    │    │         ├── right ordering: +5
  │    │    │         └── true [type=bool]
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:1(int!null)
+ │    │    │    └── key: (1)
  │    │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │         └── i = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
  │    └── aggregations [outer=(4)]

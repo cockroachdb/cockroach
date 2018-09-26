@@ -2578,13 +2578,9 @@ project
  │    ├── grouping columns: customerorder.customerid:1(string!null) customerorder.ordernumber:2(int!null)
  │    ├── key: (1,2)
  │    ├── fd: (1,2)-->(3,13)
- │    ├── left-join
+ │    ├── right-join
  │    │    ├── columns: customerorder.customerid:1(string!null) customerorder.ordernumber:2(int!null) orderdate:3(date!null) lineitem.customerid:4(string) lineitem.ordernumber:5(int) column12:12(decimal)
  │    │    ├── fd: (1,2)-->(3)
- │    │    ├── scan customerorder
- │    │    │    ├── columns: customerorder.customerid:1(string!null) customerorder.ordernumber:2(int!null) orderdate:3(date!null)
- │    │    │    ├── key: (1,2)
- │    │    │    └── fd: (1,2)-->(3)
  │    │    ├── project
  │    │    │    ├── columns: column12:12(decimal) lineitem.customerid:4(string!null) lineitem.ordernumber:5(int!null)
  │    │    │    ├── inner-join
@@ -2603,6 +2599,10 @@ project
  │    │    │    │         └── lineitem.productid = product.productid [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
  │    │    │    └── projections [outer=(4,5,7,10)]
  │    │    │         └── quantity * cost [type=decimal, outer=(7,10)]
+ │    │    ├── scan customerorder
+ │    │    │    ├── columns: customerorder.customerid:1(string!null) customerorder.ordernumber:2(int!null) orderdate:3(date!null)
+ │    │    │    ├── key: (1,2)
+ │    │    │    └── fd: (1,2)-->(3)
  │    │    └── filters [type=bool, outer=(1,2,4,5), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(4), (4)==(1), (2)==(5), (5)==(2)]
  │    │         ├── lineitem.customerid = customerorder.customerid [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
  │    │         └── lineitem.ordernumber = customerorder.ordernumber [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
