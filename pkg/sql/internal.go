@@ -151,7 +151,7 @@ func (ie *internalExecutorImpl) initConnEx(
 	sargs *SessionArgs,
 	syncCallback func([]resWithPos),
 	errCallback func(error),
-) (*StmtBuf, *sync.WaitGroup) {
+) (*StmtBuf, *sync.WaitGroup, error) {
 	clientComm := &internalClientComm{
 		sync: syncCallback,
 		// init lastDelivered below the position of the first result (0).
@@ -173,25 +173,26 @@ func (ie *internalExecutorImpl) initConnEx(
 
 	stmtBuf := NewStmtBuf()
 	var ex *connExecutor
+	var err error
 	if txn == nil {
-		ex = ie.s.newConnExecutor(
+		ex, err = ie.s.newConnExecutor(
 			ctx,
 			sp,
 			stmtBuf,
 			clientComm,
-			ie.mon,
-			mon.BoundAccount{}, /* reserved */
 			ie.memMetrics)
 	} else {
-		ex = ie.s.newConnExecutorWithTxn(
+		ex, err = ie.s.newConnExecutorWithTxn(
 			ctx,
 			sp,
 			stmtBuf,
 			clientComm,
 			ie.mon,
-			mon.BoundAccount{}, /* reserved */
 			ie.memMetrics,
 			txn)
+	}
+	if err != nil {
+		return nil, nil, err
 	}
 	ex.stmtCounterDisabled = true
 
@@ -208,7 +209,7 @@ func (ie *internalExecutorImpl) initConnEx(
 				log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 			}
 		}()
-		if err := ex.run(ctx, nil /* cancel */); err != nil {
+		if err := ex.run(ctx, ie.mon, mon.BoundAccount{} /*reserved*/, nil /* cancel */); err != nil {
 			errCallback(err)
 		}
 		closeMode := normalClose
@@ -218,7 +219,7 @@ func (ie *internalExecutorImpl) initConnEx(
 		ex.close(ctx, closeMode)
 		wg.Done()
 	}()
-	return stmtBuf, &wg
+	return stmtBuf, &wg, nil
 }
 
 // Query executes the supplied SQL statement and returns the resulting rows.
@@ -447,7 +448,10 @@ func (ie *internalExecutorImpl) execInternal(
 		}
 		resCh <- result{err: err}
 	}
-	stmtBuf, wg := ie.initConnEx(ctx, txn, sargs, syncCallback, errCallback)
+	stmtBuf, wg, err := ie.initConnEx(ctx, txn, sargs, syncCallback, errCallback)
+	if err != nil {
+		return result{}, err
+	}
 
 	// Transforms the args to datums. The datum types will be passed as type hints
 	// to the PrepareStmt command.

@@ -215,6 +215,19 @@ func (c *conn) serveImpl(
 ) error {
 	defer func() { _ = c.conn.Close() }()
 
+	ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
+
+	var connHandler sql.ConnectionHandler
+	if sqlServer != nil {
+		var err error
+		connHandler, err = sqlServer.SetupConn(
+			ctx, c.sessionArgs, &c.stmtBuf, c, c.metrics.SQLMemMetrics)
+		if err != nil {
+			_ /* err */ = writeErr(err, &c.msgBuilder, c.conn)
+			return err
+		}
+	}
+
 	// NOTE: We're going to write a few messages to the connection in this method,
 	// for the handshake. After that, all writes are done async, in the
 	// startWriter() goroutine.
@@ -235,7 +248,6 @@ func (c *conn) serveImpl(
 		return err
 	}
 
-	ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
 	ctx, cancelConn := context.WithCancel(ctx)
 	defer cancelConn() // This calms the linter that wants these callbacks to always be called.
 	var ctxCanceled bool
@@ -264,8 +276,7 @@ func (c *conn) serveImpl(
 	if sqlServer != nil {
 		wg.Add(1)
 		go func() {
-			writerErr = sqlServer.ServeConn(
-				ctx, c.sessionArgs, &c.stmtBuf, c, reserved, c.metrics.SQLMemMetrics, cancelConn)
+			writerErr = sqlServer.ServeConn(ctx, connHandler, reserved, cancelConn)
 			// TODO(andrei): Should we sometimes transmit the writerErr's to the
 			// client?
 			wg.Done()
