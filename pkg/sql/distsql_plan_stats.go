@@ -40,7 +40,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
-	scan.spans, err = unconstrainedSpans(desc, scan.index)
+	scan.spans, err = unconstrainedSpans(desc, scan.index, scan.isDeleteSource)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}

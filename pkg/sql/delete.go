@@ -447,8 +447,9 @@ func canDeleteFast(ctx context.Context, source planNode, r *deleteRun) (*scanNod
 		return nil, false
 	}
 
-	// Check whether the source plan is "simple": that it contains no
-	// remaining filtering, limiting, sorting, etc.
+	// Check whether the source plan is "simple": that it contains no remaining
+	// filtering, limiting, sorting, etc. Note that this logic must be kept in
+	// sync with the logic for setting scanNode.isDeleteSource (see doExpandPlan.)
 	// TODO(dt): We could probably be smarter when presented with an
 	// index-join, but this goes away anyway once we push-down more of
 	// SQL.
