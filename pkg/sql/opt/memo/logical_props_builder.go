@@ -41,6 +41,13 @@ type logicalPropsBuilder struct {
 	evalCtx *tree.EvalContext
 	mem     *Memo
 	sb      statisticsBuilder
+
+	// When set to true, disableStats disables stat generation during
+	// logical prop building. Useful in checkExpr when we don't want
+	// to create stats for non-normalized expressions and potentially
+	// mutate opt_tester output compared to cases where checkExpr is
+	// not run.
+	disableStats bool
 }
 
 func (b *logicalPropsBuilder) init(evalCtx *tree.EvalContext, mem *Memo) {
@@ -109,7 +116,9 @@ func (b *logicalPropsBuilder) buildScanProps(scan *ScanExpr, rel *props.Relation
 
 	// Statistics
 	// ----------
-	b.sb.buildScan(scan, rel)
+	if !b.disableStats {
+		b.sb.buildScan(scan, rel)
+	}
 }
 
 func (b *logicalPropsBuilder) buildVirtualScanProps(scan *VirtualScanExpr, rel *props.Relational) {
@@ -190,7 +199,9 @@ func (b *logicalPropsBuilder) buildSelectProps(sel *SelectExpr, rel *props.Relat
 
 	// Statistics
 	// ----------
-	b.sb.buildSelect(sel, rel)
+	if !b.disableStats {
+		b.sb.buildSelect(sel, rel)
+	}
 }
 
 func (b *logicalPropsBuilder) buildProjectProps(prj *ProjectExpr, rel *props.Relational) {
@@ -272,7 +283,9 @@ func (b *logicalPropsBuilder) buildProjectProps(prj *ProjectExpr, rel *props.Rel
 
 	// Statistics
 	// ----------
-	b.sb.buildProject(prj, rel)
+	if !b.disableStats {
+		b.sb.buildProject(prj, rel)
+	}
 }
 
 func (b *logicalPropsBuilder) buildInnerJoinProps(join *InnerJoinExpr, rel *props.Relational) {
@@ -378,7 +391,9 @@ func (b *logicalPropsBuilder) buildJoinProps(join RelExpr, rel *props.Relational
 
 	// Statistics
 	// ----------
-	b.sb.buildJoin(join, rel, &h)
+	if !b.disableStats {
+		b.sb.buildJoin(join, rel, &h)
+	}
 }
 
 func (b *logicalPropsBuilder) buildIndexJoinProps(indexJoin *IndexJoinExpr, rel *props.Relational) {
@@ -417,7 +432,9 @@ func (b *logicalPropsBuilder) buildIndexJoinProps(indexJoin *IndexJoinExpr, rel 
 
 	// Statistics
 	// ----------
-	b.sb.buildIndexJoin(indexJoin, rel)
+	if !b.disableStats {
+		b.sb.buildIndexJoin(indexJoin, rel)
+	}
 }
 
 func (b *logicalPropsBuilder) buildLookupJoinProps(join *LookupJoinExpr, rel *props.Relational) {
@@ -501,7 +518,9 @@ func (b *logicalPropsBuilder) buildGroupingExprProps(groupExpr RelExpr, rel *pro
 
 	// Statistics
 	// ----------
-	b.sb.buildGroupBy(groupExpr, rel)
+	if !b.disableStats {
+		b.sb.buildGroupBy(groupExpr, rel)
+	}
 }
 
 func (b *logicalPropsBuilder) buildUnionProps(union *UnionExpr, rel *props.Relational) {
@@ -580,7 +599,9 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 
 	// Statistics
 	// ----------
-	b.sb.buildSetNode(setNode, rel)
+	if !b.disableStats {
+		b.sb.buildSetNode(setNode, rel)
+	}
 }
 
 func (b *logicalPropsBuilder) buildValuesProps(values *ValuesExpr, rel *props.Relational) {
@@ -614,7 +635,9 @@ func (b *logicalPropsBuilder) buildValuesProps(values *ValuesExpr, rel *props.Re
 
 	// Statistics
 	// ----------
-	b.sb.buildValues(values, rel)
+	if !b.disableStats {
+		b.sb.buildValues(values, rel)
+	}
 }
 
 func (b *logicalPropsBuilder) buildExplainProps(explain *ExplainExpr, rel *props.Relational) {
@@ -734,7 +757,9 @@ func (b *logicalPropsBuilder) buildLimitProps(limit *LimitExpr, rel *props.Relat
 
 	// Statistics
 	// ----------
-	b.sb.buildLimit(limit, rel)
+	if !b.disableStats {
+		b.sb.buildLimit(limit, rel)
+	}
 }
 
 func (b *logicalPropsBuilder) buildOffsetProps(offset *OffsetExpr, rel *props.Relational) {
@@ -777,7 +802,9 @@ func (b *logicalPropsBuilder) buildOffsetProps(offset *OffsetExpr, rel *props.Re
 
 	// Statistics
 	// ----------
-	b.sb.buildOffset(offset, rel)
+	if !b.disableStats {
+		b.sb.buildOffset(offset, rel)
+	}
 }
 
 func (b *logicalPropsBuilder) buildMax1RowProps(max1Row *Max1RowExpr, rel *props.Relational) {
@@ -811,7 +838,9 @@ func (b *logicalPropsBuilder) buildMax1RowProps(max1Row *Max1RowExpr, rel *props
 
 	// Statistics
 	// ----------
-	b.sb.buildMax1Row(max1Row, rel)
+	if !b.disableStats {
+		b.sb.buildMax1Row(max1Row, rel)
+	}
 }
 
 func (b *logicalPropsBuilder) buildRowNumberProps(rowNum *RowNumberExpr, rel *props.Relational) {
@@ -854,7 +883,9 @@ func (b *logicalPropsBuilder) buildRowNumberProps(rowNum *RowNumberExpr, rel *pr
 
 	// Statistics
 	// ----------
-	b.sb.buildRowNumber(rowNum, rel)
+	if !b.disableStats {
+		b.sb.buildRowNumber(rowNum, rel)
+	}
 }
 
 func (b *logicalPropsBuilder) buildZipProps(zip *ZipExpr, rel *props.Relational) {
@@ -884,7 +915,9 @@ func (b *logicalPropsBuilder) buildZipProps(zip *ZipExpr, rel *props.Relational)
 
 	// Statistics
 	// ----------
-	b.sb.buildZip(zip, rel)
+	if !b.disableStats {
+		b.sb.buildZip(zip, rel)
+	}
 }
 
 func (b *logicalPropsBuilder) buildFiltersItemProps(item *FiltersItem, scalar *props.Scalar) {

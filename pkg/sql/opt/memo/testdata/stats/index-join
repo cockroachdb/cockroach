@@ -54,12 +54,12 @@ project
  └── group-by
       ├── columns: y:2(int) count_rows:5(int)
       ├── grouping columns: y:2(int)
-      ├── stats: [rows=49.2384513, distinct(2)=49.2384513]
+      ├── stats: [rows=49.2384513, distinct(2)=49.2384513, null(2)=0]
       ├── key: (2)
       ├── fd: (2)-->(5)
       ├── select
       │    ├── columns: x:1(int!null) y:2(int) s:3(string!null)
-      │    ├── stats: [rows=66.6666667, distinct(2)=49.2384513, distinct(3)=1]
+      │    ├── stats: [rows=66.6666667, distinct(1)=66.6666667, null(1)=0, distinct(2)=49.2384513, null(2)=0, distinct(3)=1, null(3)=0]
       │    ├── key: (1)
       │    ├── fd: ()-->(3), (1)-->(2)
       │    ├── index-join a
@@ -70,7 +70,7 @@ project
       │    │    └── scan a@secondary
       │    │         ├── columns: x:1(int!null) s:3(string!null)
       │    │         ├── constraint: /-3/4: [/'foo' - /'foo']
-      │    │         ├── stats: [rows=200, distinct(3)=1]
+      │    │         ├── stats: [rows=200, distinct(1)=200, null(1)=0, distinct(3)=1, null(3)=0]
       │    │         ├── key: (1)
       │    │         └── fd: ()-->(3)
       │    └── filters
@@ -83,18 +83,18 @@ SELECT * FROM a WHERE s = 'foo' AND x + y = 10
 ----
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
- ├── stats: [rows=66.6666667, distinct(1)=66.6666667, distinct(2)=52.9461341, distinct(3)=1, distinct(4)=60.3661899, distinct(1-3)=66.6666667]
+ ├── stats: [rows=66.6666667, distinct(1)=66.6666667, null(1)=0, distinct(2)=52.9461341, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=57.5057212, null(4)=0, distinct(1-3)=66.6666667, null(1-3)=0]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
  ├── index-join a
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=200, distinct(1)=200, distinct(2)=87.8423345, distinct(4)=130.264312, distinct(1-3)=200]
+ │    ├── stats: [rows=200, distinct(2)=87.8423345, null(2)=0, distinct(1-3)=200, null(1-3)=0]
  │    ├── key: (1)
  │    ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1), (3,4)~~>(1,2)
  │    └── scan a@secondary
  │         ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
  │         ├── constraint: /-3/4: [/'foo' - /'foo']
- │         ├── stats: [rows=200, distinct(1)=200, distinct(3)=1, distinct(4)=130.264312, distinct(1,3)=200]
+ │         ├── stats: [rows=200, distinct(1)=200, null(1)=0, distinct(3)=1, null(3)=0, distinct(4)=130.264312, null(4)=0, distinct(1,3)=200, null(1,3)=0]
  │         ├── key: (1)
  │         └── fd: ()-->(3), (1)-->(4), (4)-->(1)
  └── filters
@@ -105,13 +105,13 @@ SELECT * FROM a WHERE s = 'foo'
 ----
 index-join a
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
- ├── stats: [rows=200, distinct(1)=200, distinct(2)=87.8423345, distinct(3)=1, distinct(1-3)=200]
+ ├── stats: [rows=200, distinct(1)=200, null(1)=0, distinct(2)=87.8423345, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=130.264312, null(4)=0, distinct(1-3)=200, null(1-3)=0]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
  └── scan a@secondary
       ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
       ├── constraint: /-3/4: [/'foo' - /'foo']
-      ├── stats: [rows=200, distinct(1)=200, distinct(3)=1, distinct(1,3)=200]
+      ├── stats: [rows=200, distinct(1)=200, null(1)=0, distinct(3)=1, null(3)=0, distinct(4)=130.264312, null(4)=0, distinct(1,3)=200, null(1,3)=0]
       ├── key: (1)
       └── fd: ()-->(3), (1)-->(4), (4)-->(1)
 
@@ -125,13 +125,13 @@ SELECT * FROM a WHERE s = 'foo' OR s = 'bar'
 ----
 index-join a
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=666.666667, distinct(1)=400, distinct(2)=98.8470785, distinct(3)=2, distinct(2,3)=197.694157, distinct(1-3)=666.666667]
+ ├── stats: [rows=666.666667, distinct(1)=666.666667, null(1)=0, distinct(2)=98.8470785, null(2)=0, distinct(3)=2, null(3)=0, distinct(4)=196.531694, null(4)=0, distinct(2,3)=197.694157, null(2,3)=0, distinct(1-3)=666.666667, null(1-3)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── scan a@secondary
       ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
       ├── constraint: /-3/4: [/'foo' - /'foo'] [/'bar' - /'bar']
-      ├── stats: [rows=400, distinct(1)=400, distinct(3)=2, distinct(1,3)=400]
+      ├── stats: [rows=400, distinct(1)=400, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=178.525164, null(4)=0, distinct(1,3)=400, null(1,3)=0]
       ├── key: (1)
       └── fd: (1)-->(3,4), (3,4)-->(1)
 
@@ -140,13 +140,131 @@ SELECT * FROM a WHERE s = 'foo' OR s = 'bar'
 ----
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- ├── stats: [rows=666.666667]
+ ├── stats: [rows=666.666667, distinct(1)=666.666667, null(1)=0, distinct(4)=196.531694, null(4)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=2000]
+ │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, distinct(4)=200, null(4)=0]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── filters
       └── (s = 'foo') OR (s = 'bar') [type=bool, outer=(3)]
+
+# Bump up null counts.
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["x","y"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "null_count": 1000
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10,
+    "null_count": 1000
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 2:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 100,
+    "null_count": 1000
+  }
+]'
+----
+
+opt colstat=1 colstat=2 colstat=3 colstat=4 colstat=(1,2,3)
+SELECT * FROM a WHERE s = 'foo' AND x + y = 10
+----
+select
+ ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
+ ├── stats: [rows=33.3333333, distinct(1)=33.3333333, null(1)=0, distinct(2)=30.0546582, null(2)=16.6666667, distinct(3)=1, null(3)=0, distinct(4)=33.3333333, null(4)=0, distinct(1-3)=33.3333333, null(1-3)=16.6666667]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
+ ├── index-join a
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=100, distinct(2)=64.1514078, null(2)=50, distinct(1-3)=100, null(1-3)=50]
+ │    ├── key: (1)
+ │    ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1), (3,4)~~>(1,2)
+ │    └── scan a@secondary
+ │         ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
+ │         ├── constraint: /-3/4: [/'foo' - /'foo']
+ │         ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=1, null(3)=0, distinct(4)=100, null(4)=0, distinct(1,3)=97.5, null(1,3)=0]
+ │         ├── key: (1)
+ │         └── fd: ()-->(3), (1)-->(4), (4)-->(1)
+ └── filters
+      └── (x + y) = 10 [type=bool, outer=(1,2)]
+
+opt colstat=1 colstat=2 colstat=3 colstat=(1,2,3)
+SELECT * FROM a WHERE s = 'foo'
+----
+index-join a
+ ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
+ ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=64.1514078, null(2)=50, distinct(3)=1, null(3)=0, distinct(4)=100, null(4)=0, distinct(1-3)=100, null(1-3)=50]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
+ └── scan a@secondary
+      ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
+      ├── constraint: /-3/4: [/'foo' - /'foo']
+      ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=1, null(3)=0, distinct(4)=100, null(4)=0, distinct(1,3)=97.5, null(1,3)=0]
+      ├── key: (1)
+      └── fd: ()-->(3), (1)-->(4), (4)-->(1)
+
+# Note that the row count of the index join does not match the row count of
+# the scan, because the index join's row count was carried over from the
+# normalized SELECT expression in its memo group (see next test case).
+# In order to fix the row count, we need more precise constraint calculation
+# for filters.
+# Also note that we need to tack on an "s IS NOT NULL" clause to make s a
+# non-null column in the logical properties because the constraint
+# builder at the SELECT level cannot deduce whether an OR'd filter
+# is null-rejecting or not.
+opt colstat=1 colstat=2 colstat=3 colstat=(2,3) colstat=(1,2,3)
+SELECT * FROM a WHERE (s = 'foo' OR s = 'bar') AND s IS NOT NULL
+----
+index-join a
+ ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
+ ├── stats: [rows=333.333333, distinct(1)=333.333333, null(1)=0, distinct(2)=49.2384513, null(2)=33.3333333, distinct(3)=10, null(3)=0, distinct(4)=196.531694, null(4)=0, distinct(2,3)=98.4769026, null(2,3)=33.3333333, distinct(1-3)=333.333333, null(1-3)=33.3333333]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)-->(1,2)
+ └── select
+      ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
+      ├── stats: [rows=66.6666667, distinct(1)=66.6666667, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=65.1739644, null(4)=0, distinct(1,3)=66.0077957, null(1,3)=0]
+      ├── key: (1)
+      ├── fd: (1)-->(3,4), (3,4)-->(1)
+      ├── scan a@secondary
+      │    ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
+      │    ├── constraint: /-3/4: [/'foo' - /'foo'] [/'bar' - /'bar']
+      │    ├── stats: [rows=200, distinct(1)=200, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=178.525164, null(4)=0, distinct(1,3)=190, null(1,3)=0]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(3,4), (3,4)-->(1)
+      └── filters
+           └── (s = 'foo') OR (s = 'bar') [type=bool, outer=(3)]
+
+norm
+SELECT * FROM a WHERE (s = 'foo' OR s = 'bar') AND s IS NOT NULL
+----
+select
+ ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
+ ├── stats: [rows=333.333333, distinct(1)=333.333333, null(1)=0, distinct(3)=10, null(3)=0, distinct(4)=196.531694, null(4)=0]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)-->(1,2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, distinct(3)=10, null(3)=1000, distinct(4)=200, null(4)=0]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ └── filters
+      ├── (s = 'foo') OR (s = 'bar') [type=bool, outer=(3)]
+      └── s IS NOT NULL [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]

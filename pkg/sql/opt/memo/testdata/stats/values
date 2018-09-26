@@ -4,12 +4,12 @@ SELECT * FROM (VALUES (1, 2), (1, 2), (1, 3), (2, 3)) AS q(x, y) WHERE x = 5 AND
 select
  ├── columns: x:1(int!null) y:2(int!null)
  ├── cardinality: [0 - 4]
- ├── stats: [rows=1, distinct(1)=1, distinct(2)=1]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0]
  ├── fd: ()-->(1,2)
  ├── values
  │    ├── columns: column1:1(int) column2:2(int)
  │    ├── cardinality: [4 - 4]
- │    ├── stats: [rows=4, distinct(1)=2, distinct(2)=2]
+ │    ├── stats: [rows=4, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0]
  │    ├── (1, 2) [type=tuple{int, int}]
  │    ├── (1, 2) [type=tuple{int, int}]
  │    ├── (1, 3) [type=tuple{int, int}]
@@ -25,12 +25,12 @@ distinct-on
  ├── columns: x:1(int) y:2(int)
  ├── grouping columns: column1:1(int) column2:2(int)
  ├── cardinality: [1 - 4]
- ├── stats: [rows=3, distinct(1,2)=3]
+ ├── stats: [rows=3, distinct(1,2)=3, null(1,2)=0]
  ├── key: (1,2)
  └── values
       ├── columns: column1:1(int) column2:2(int)
       ├── cardinality: [4 - 4]
-      ├── stats: [rows=4, distinct(1,2)=3]
+      ├── stats: [rows=4, distinct(1,2)=3, null(1,2)=0]
       ├── (1, 2) [type=tuple{int, int}]
       ├── (1, 2) [type=tuple{int, int}]
       ├── (1, 3) [type=tuple{int, int}]
@@ -54,15 +54,51 @@ SELECT * FROM (VALUES (1), (1), (1), (2)) AS q(x) WHERE x = 1
 select
  ├── columns: x:1(int!null)
  ├── cardinality: [0 - 4]
- ├── stats: [rows=2, distinct(1)=1]
+ ├── stats: [rows=2, distinct(1)=1, null(1)=0]
  ├── fd: ()-->(1)
  ├── values
  │    ├── columns: column1:1(int)
  │    ├── cardinality: [4 - 4]
- │    ├── stats: [rows=4, distinct(1)=2]
+ │    ├── stats: [rows=4, distinct(1)=2, null(1)=0]
  │    ├── (1,) [type=tuple{int}]
  │    ├── (1,) [type=tuple{int}]
  │    ├── (1,) [type=tuple{int}]
  │    └── (2,) [type=tuple{int}]
  └── filters
       └── column1 = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+
+norm colstat=1
+SELECT * FROM (VALUES (1), (NULL), (NULL), (2))
+----
+values
+ ├── columns: column1:1(int)
+ ├── cardinality: [4 - 4]
+ ├── stats: [rows=4, distinct(1)=2, null(1)=2]
+ ├── (1,) [type=tuple{int}]
+ ├── (NULL,) [type=tuple{int}]
+ ├── (NULL,) [type=tuple{int}]
+ └── (2,) [type=tuple{int}]
+
+norm colstat=1
+SELECT * FROM (VALUES (NULL), (NULL), (NULL), (NULL))
+----
+values
+ ├── columns: column1:1(unknown)
+ ├── cardinality: [4 - 4]
+ ├── stats: [rows=4, distinct(1)=0, null(1)=4]
+ ├── (NULL,) [type=tuple{unknown}]
+ ├── (NULL,) [type=tuple{unknown}]
+ ├── (NULL,) [type=tuple{unknown}]
+ └── (NULL,) [type=tuple{unknown}]
+
+norm colstat=(1,2)
+SELECT * FROM (VALUES (NULL,1), (1,NULL), (NULL,NULL), (1,2))
+----
+values
+ ├── columns: column1:1(int) column2:2(int)
+ ├── cardinality: [4 - 4]
+ ├── stats: [rows=4, distinct(1,2)=2, null(1,2)=3]
+ ├── (NULL, 1) [type=tuple{int, int}]
+ ├── (1, NULL) [type=tuple{int, int}]
+ ├── (NULL, NULL) [type=tuple{int, int}]
+ └── (1, 2) [type=tuple{int, int}]
