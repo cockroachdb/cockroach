@@ -15,7 +15,6 @@ stmt ::=
 	| prepare_stmt
 	| revoke_stmt
 	| savepoint_stmt
-	| scrub_stmt
 	| release_stmt
 	| nonpreparable_set_stmt
 	| transaction_stmt
@@ -56,10 +55,6 @@ revoke_stmt ::=
 savepoint_stmt ::=
 	'SAVEPOINT' name
 
-scrub_stmt ::=
-	scrub_table_stmt
-	| scrub_database_stmt
-
 release_stmt ::=
 	'RELEASE' savepoint_name
 
@@ -85,6 +80,7 @@ preparable_stmt ::=
 	| reset_stmt
 	| restore_stmt
 	| resume_stmt
+	| scrub_stmt
 	| select_stmt
 	| preparable_set_stmt
 	| show_stmt
@@ -148,12 +144,6 @@ table_alias_name ::=
 prep_type_clause ::=
 	'(' type_list ')'
 	| 
-
-scrub_table_stmt ::=
-	'EXPERIMENTAL' 'SCRUB' 'TABLE' table_name opt_as_of_clause opt_scrub_options_clause
-
-scrub_database_stmt ::=
-	'EXPERIMENTAL' 'SCRUB' 'DATABASE' database_name opt_as_of_clause
 
 savepoint_name ::=
 	'SAVEPOINT' name
@@ -229,6 +219,10 @@ restore_stmt ::=
 resume_stmt ::=
 	'RESUME' 'JOB' a_expr
 	| 'RESUME' 'JOBS' select_stmt
+
+scrub_stmt ::=
+	scrub_table_stmt
+	| scrub_database_stmt
 
 preparable_set_stmt ::=
 	set_session_stmt
@@ -584,17 +578,6 @@ privilege ::=
 type_list ::=
 	( typename ) ( ( ',' typename ) )*
 
-opt_as_of_clause ::=
-	as_of_clause
-	| 
-
-opt_scrub_options_clause ::=
-	'WITH' 'OPTIONS' scrub_option_list
-	| 
-
-database_name ::=
-	name
-
 transaction_mode_list ::=
 	( transaction_mode ) ( ( opt_comma transaction_mode ) )*
 
@@ -627,6 +610,10 @@ alter_ddl_stmt ::=
 
 alter_user_stmt ::=
 	alter_user_password_stmt
+
+opt_as_of_clause ::=
+	as_of_clause
+	| 
 
 opt_incremental ::=
 	'INCREMENTAL' 'FROM' string_or_placeholder_list
@@ -737,6 +724,12 @@ reset_csetting_stmt ::=
 
 as_of_clause ::=
 	'AS' 'OF' 'SYSTEM' 'TIME' a_expr
+
+scrub_table_stmt ::=
+	'EXPERIMENTAL' 'SCRUB' 'TABLE' table_name opt_as_of_clause opt_scrub_options_clause
+
+scrub_database_stmt ::=
+	'EXPERIMENTAL' 'SCRUB' 'DATABASE' database_name opt_as_of_clause
 
 set_session_stmt ::=
 	'SET' 'SESSION' set_rest_more
@@ -897,9 +890,6 @@ typename ::=
 	simple_typename opt_array_bounds
 	| simple_typename 'ARRAY'
 	| postgres_oid
-
-scrub_option_list ::=
-	( scrub_option ) ( ( ',' scrub_option ) )*
 
 transaction_mode ::=
 	transaction_iso_level
@@ -1066,6 +1056,13 @@ session_var ::=
 var_name ::=
 	name
 	| name attrs
+
+opt_scrub_options_clause ::=
+	'WITH' 'OPTIONS' scrub_option_list
+	| 
+
+database_name ::=
+	name
 
 set_rest_more ::=
 	generic_set
@@ -1257,13 +1254,6 @@ postgres_oid ::=
 	| 'REGCLASS'
 	| 'REGTYPE'
 	| 'REGNAMESPACE'
-
-scrub_option ::=
-	'INDEX' 'ALL'
-	| 'INDEX' '(' name_list ')'
-	| 'CONSTRAINT' 'ALL'
-	| 'CONSTRAINT' '(' name_list ')'
-	| 'PHYSICAL'
 
 transaction_iso_level ::=
 	'ISOLATION' 'LEVEL' iso_level
@@ -1508,6 +1498,9 @@ math_op ::=
 attrs ::=
 	( '.' unrestricted_name ) ( ( '.' unrestricted_name ) )*
 
+scrub_option_list ::=
+	( scrub_option ) ( ( ',' scrub_option ) )*
+
 generic_set ::=
 	var_name to_or_eq var_list
 
@@ -1746,6 +1739,13 @@ tuple1_ambiguous_values ::=
 	a_expr
 	| a_expr ','
 	| a_expr ',' expr_list
+
+scrub_option ::=
+	'INDEX' 'ALL'
+	| 'INDEX' '(' name_list ')'
+	| 'CONSTRAINT' 'ALL'
+	| 'CONSTRAINT' '(' name_list ')'
+	| 'PHYSICAL'
 
 var_list ::=
 	( var_value ) ( ( ',' var_value ) )*

@@ -1062,7 +1062,6 @@ stmt:
 | prepare_stmt      // EXTEND WITH HELP: PREPARE
 | revoke_stmt       // EXTEND WITH HELP: REVOKE
 | savepoint_stmt    // EXTEND WITH HELP: SAVEPOINT
-| scrub_stmt        // help texts in sub-rule
 | release_stmt      // EXTEND WITH HELP: RELEASE
 | nonpreparable_set_stmt // help texts in sub-rule
 | transaction_stmt  // help texts in sub-rule
@@ -2256,6 +2255,7 @@ preparable_stmt:
 | reset_stmt        // help texts in sub-rule
 | restore_stmt      // EXTEND WITH HELP: RESTORE
 | resume_stmt       // EXTEND WITH HELP: RESUME JOBS
+| scrub_stmt        // help texts in sub-rule
 | select_stmt       // help texts in sub-rule
   {
     $$.val = $1.slct()
