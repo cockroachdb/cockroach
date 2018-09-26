@@ -19,7 +19,6 @@ stmt ::=
 	| release_stmt
 	| nonpreparable_set_stmt
 	| transaction_stmt
-	| truncate_stmt
 	| 
 
 explainable_stmt ::=
@@ -73,9 +72,6 @@ transaction_stmt ::=
 	| rollback_stmt
 	| abort_stmt
 
-truncate_stmt ::=
-	'TRUNCATE' opt_table relation_expr_list opt_drop_behavior
-
 preparable_stmt ::=
 	alter_stmt
 	| backup_stmt
@@ -92,6 +88,7 @@ preparable_stmt ::=
 	| select_stmt
 	| preparable_set_stmt
 	| show_stmt
+	| truncate_stmt
 	| update_stmt
 	| upsert_stmt
 
@@ -180,18 +177,6 @@ rollback_stmt ::=
 abort_stmt ::=
 	'ABORT' opt_abort_mod
 
-opt_table ::=
-	'TABLE'
-	| 
-
-relation_expr_list ::=
-	( relation_expr ) ( ( ',' relation_expr ) )*
-
-opt_drop_behavior ::=
-	'CASCADE'
-	| 'RESTRICT'
-	| 
-
 alter_stmt ::=
 	alter_ddl_stmt
 	| alter_user_stmt
@@ -270,6 +255,9 @@ show_stmt ::=
 	| show_trace_stmt
 	| show_users_stmt
 	| show_zone_stmt
+
+truncate_stmt ::=
+	'TRUNCATE' opt_table relation_expr_list opt_drop_behavior
 
 update_stmt ::=
 	opt_with_clause 'UPDATE' relation_expr_opt_alias 'SET' set_clause_list where_clause opt_sort_clause opt_limit_clause returning_clause
@@ -629,12 +617,6 @@ opt_abort_mod ::=
 	| 'WORK'
 	| 
 
-relation_expr ::=
-	table_name
-	| table_name '*'
-	| 'ONLY' table_name
-	| 'ONLY' '(' table_name ')'
-
 alter_ddl_stmt ::=
 	alter_table_stmt
 	| alter_index_stmt
@@ -845,6 +827,18 @@ show_zone_stmt ::=
 	| 'SHOW' 'ZONE' 'CONFIGURATIONS'
 	| 'SHOW' 'ALL' 'ZONE' 'CONFIGURATIONS'
 
+opt_table ::=
+	'TABLE'
+	| 
+
+relation_expr_list ::=
+	( relation_expr ) ( ( ',' relation_expr ) )*
+
+opt_drop_behavior ::=
+	'CASCADE'
+	| 'RESTRICT'
+	| 
+
 set_clause_list ::=
 	( set_clause ) ( ( ',' set_clause ) )*
 
@@ -979,6 +973,12 @@ create_view_stmt ::=
 create_sequence_stmt ::=
 	'CREATE' 'SEQUENCE' sequence_name opt_sequence_option_list
 	| 'CREATE' 'SEQUENCE' 'IF' 'NOT' 'EXISTS' sequence_name opt_sequence_option_list
+
+relation_expr ::=
+	table_name
+	| table_name '*'
+	| 'ONLY' table_name
+	| 'ONLY' '(' table_name ')'
 
 limit_clause ::=
 	'LIMIT' select_limit_value

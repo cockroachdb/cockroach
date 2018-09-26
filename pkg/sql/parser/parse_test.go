@@ -956,7 +956,8 @@ func TestParse(t *testing.T) {
 		{`EXPLAIN TABLE a`},
 		{`TABLE [123 AS a]`},
 
-		{`TRUNCATE TABLE a`}, // TODO(knz): Make this explainable.
+		{`TRUNCATE TABLE a`},
+		{`EXPLAIN TRUNCATE TABLE a`},
 		{`TRUNCATE TABLE a, b.c`},
 		{`TRUNCATE TABLE a CASCADE`},
 
