@@ -238,8 +238,6 @@
 #   SELECT * FROM orders o LEFT JOIN customers c ON o.customer_id = c.id
 #   =>
 #   SELECT * FROM orders o INNER JOIN customers c ON o.customer_id = c.id
-#
-# TODO(andyk): Need to implement foreign key case.
 [SimplifyLeftJoinWithFilters, Normalize]
 (LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
     $left:*

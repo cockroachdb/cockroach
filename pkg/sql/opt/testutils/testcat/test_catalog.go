@@ -279,6 +279,7 @@ type Table struct {
 	Indexes        []*Index
 	Stats          TableStats
 	IsVirtual      bool
+	Catalog        opt.Catalog
 
 	// If Revoked is true, then the user has had privileges on the table revoked.
 	Revoked bool
@@ -290,7 +291,7 @@ var _ opt.Table = &Table{}
 
 func (tt *Table) String() string {
 	tp := treeprinter.New()
-	opt.FormatCatalogTable(tt, tp)
+	opt.FormatCatalogTable(tt.Catalog, tt, tp)
 	return tp.String()
 }
 

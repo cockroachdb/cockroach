@@ -50,9 +50,11 @@ TABLE phone_register
  ├── INDEX primary
  │    ├── phone_id int not null
  │    └── person_id int not null
- └── INDEX secondary
-      ├── person_id int not null
-      └── phone_id int not null (storing)
+ ├── INDEX secondary
+ │    ├── person_id int not null
+ │    └── phone_id int not null (storing)
+ ├── FOREIGN KEY (phone_id) REFERENCES t.public.person (id)
+ └── FOREIGN KEY (person_id) REFERENCES t.public.phone (id)
 
 opt
 select

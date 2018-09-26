@@ -308,7 +308,7 @@ type ForeignKeyReference struct {
 
 // FormatCatalogTable nicely formats a catalog table using a treeprinter for
 // debugging and testing.
-func FormatCatalogTable(tab Table, tp treeprinter.Node) {
+func FormatCatalogTable(cat Catalog, tab Table, tp treeprinter.Node) {
 	child := tp.Childf("TABLE %s", tab.Name().TableName)
 
 	var buf bytes.Buffer
@@ -320,6 +320,14 @@ func FormatCatalogTable(tab Table, tp treeprinter.Node) {
 
 	for i := 0; i < tab.IndexCount(); i++ {
 		formatCatalogIndex(tab.Index(i), i == PrimaryIndex, child)
+	}
+
+	for i := 0; i < tab.IndexCount(); i++ {
+		fkRef, ok := tab.Index(i).ForeignKey()
+
+		if ok {
+			formatCatalogFKRef(cat, tab, tab.Index(i), fkRef, child)
+		}
 	}
 }
 
@@ -354,6 +362,50 @@ func formatCatalogIndex(idx Index, isPrimary bool, tp treeprinter.Node) {
 
 		child.Child(buf.String())
 	}
+}
+
+// formatColPrefix returns a string representation of the first prefixLen columns of idx.
+func formatColPrefix(idx Index, prefixLen int) string {
+	var buf bytes.Buffer
+	buf.WriteByte('(')
+	for i := 0; i < prefixLen; i++ {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		colName := idx.Column(i).Column.ColName()
+		buf.WriteString(colName.String())
+	}
+	buf.WriteByte(')')
+
+	return buf.String()
+}
+
+// formatCatalogFKRef nicely formats a catalog foreign key reference using a
+// treeprinter for debugging and testing.
+func formatCatalogFKRef(
+	cat Catalog, tab Table, idx Index, fkRef ForeignKeyReference, tp treeprinter.Node,
+) {
+	ds, err := cat.ResolveDataSourceByID(context.TODO(), int64(fkRef.TableID))
+	if err != nil {
+		panic(err)
+	}
+
+	fkTable := ds.(Table)
+
+	var fkIndex Index
+	for j, cnt := 0, fkTable.IndexCount(); j < cnt; j++ {
+		if fkTable.Index(j).InternalID() == fkRef.IndexID {
+			fkIndex = fkTable.Index(j)
+			break
+		}
+	}
+
+	tp.Childf(
+		"FOREIGN KEY %s REFERENCES %v %s",
+		formatColPrefix(idx, int(fkRef.PrefixLen)),
+		ds.Name(),
+		formatColPrefix(fkIndex, int(fkRef.PrefixLen)),
+	)
 }
 
 func formatColumn(col Column, buf *bytes.Buffer) {
