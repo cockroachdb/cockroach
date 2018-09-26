@@ -20,6 +20,7 @@ import (
 	"io"
 	"math"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -33,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -407,7 +407,7 @@ func (s *Server) SetupConn(
 	memMetrics MemoryMetrics,
 ) (ConnectionHandler, error) {
 	ex, err := s.newConnExecutor(
-		ctx, sessionParams{args: &args}, stmtBuf, clientComm, memMetrics,
+		ctx, sessionParams{args: args}, stmtBuf, clientComm, memMetrics,
 	)
 	return ConnectionHandler{ex}, err
 }
@@ -417,6 +417,24 @@ func (s *Server) SetupConn(
 // it away from other packages.
 type ConnectionHandler struct {
 	ex *connExecutor
+}
+
+// GetStatusParam retrieves the configured value of the session
+// variable identified by varName. This is used for the initial
+// message sent to a client during a session set-up.
+func (h ConnectionHandler) GetStatusParam(ctx context.Context, varName string) string {
+	name := strings.ToLower(varName)
+	v, ok := varGen[name]
+	if !ok {
+		log.Fatalf(ctx, "programming error: status param %q must be defined session var", varName)
+		return ""
+	}
+	hasDefault, defVal := getSessionVarDefaultString(name, v, &h.ex.dataMutator)
+	if !hasDefault {
+		log.Fatalf(ctx, "programming error: status param %q must have a default value", varName)
+		return ""
+	}
+	return defVal
 }
 
 // ServeConn serves a client connection by reading commands from
@@ -437,39 +455,31 @@ func (s *Server) ServeConn(
 // known by pgwire (args) or by a full set of variables (e.g. coming from a
 // parent session in the case of the InternalExecutor).
 type sessionParams struct {
-	args *SessionArgs
+	args SessionArgs
 	data *sessiondata.SessionData
 }
 
-func (sp sessionParams) sessionData(
-	ctx context.Context, settings *cluster.Settings,
-) sessiondata.SessionData {
-	if (sp.args != nil && sp.data != nil) || (sp.args == nil && sp.data == nil) {
-		log.Fatalf(ctx, "exactly one of args and data has to be set")
+func (sp sessionParams) initialSessionData(
+	ctx context.Context,
+) (sessiondata.SessionData, bool, SessionDefaults) {
+	if sp.data != nil {
+		// We're constructing a child executor on behalf of a parent. This
+		// is for executing ::regproc casts or "internal" queries. In this
+		// case we want to inherit the session configuration and
+		// not reset any parameter.
+		return *sp.data, false, nil
 	}
 
-	if sp.data != nil {
-		return *sp.data
-	}
-	curDb := sp.args.Database
-	if curDb == "" {
-		curDb = sessiondata.DefaultDatabaseName
-	}
 	sd := sessiondata.SessionData{
-		ApplicationName:         sp.args.ApplicationName,
-		Database:                curDb,
-		DistSQLMode:             sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(&settings.SV)),
-		OptimizerMode:           sessiondata.OptimizerMode(OptimizerClusterMode.Get(&settings.SV)),
-		SerialNormalizationMode: sessiondata.SerialNormalizationMode(SerialNormalizationMode.Get(&settings.SV)),
-		SearchPath:              sqlbase.DefaultSearchPath,
-		User:                    sp.args.User,
-		RemoteAddr:              sp.args.RemoteAddr,
-		SequenceState:           sessiondata.NewSequenceState(),
+		User:          sp.args.User,
+		RemoteAddr:    sp.args.RemoteAddr,
+		SequenceState: sessiondata.NewSequenceState(),
 		DataConversion: sessiondata.DataConversionConfig{
 			Location: time.UTC,
 		},
 	}
-	return sd
+
+	return sd, true, sp.args.SessionDefaults
 }
 
 func (s *Server) newConnExecutor(
@@ -498,7 +508,7 @@ func (s *Server) newConnExecutor(
 		memMetrics.TxnMaxBytesHist,
 		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings)
 
-	sd := sargs.sessionData(ctx, s.cfg.Settings)
+	sd, setFromDefaults, sessionDefaults := sargs.initialSessionData(ctx)
 
 	ex := &connExecutor{
 		server:      s,
@@ -527,30 +537,16 @@ func (s *Server) newConnExecutor(
 		},
 		parallelizeQueue: MakeParallelizeQueue(NewSpanBasedDependencyAnalyzer()),
 		memMetrics:       memMetrics,
-		appStats:         s.sqlStats.getStatsForApplication(sd.ApplicationName),
 		planner:          planner{execCfg: s.cfg},
 
 		// ctxHolder will be reset at the start of run(). We only define
 		// it here so that an early call to close() doesn't panic.
 		ctxHolder: ctxHolder{connCtx: ctx},
 	}
-	ex.phaseTimes[sessionInit] = timeutil.Now()
-	ex.extraTxnState.tables = TableCollection{
-		leaseMgr:          s.cfg.LeaseManager,
-		databaseCache:     s.dbCache.getDatabaseCache(),
-		dbCacheSubscriber: s.dbCache,
-	}
-	ex.extraTxnState.txnRewindPos = -1
-
-	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
-	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
 
 	ex.dataMutator = sessionDataMutator{
-		data: &ex.sessionData,
-		defaults: sessionDefaults{
-			applicationName: ex.sessionData.ApplicationName,
-			database:        ex.sessionData.Database,
-		},
+		data:           &ex.sessionData,
+		defaults:       sessionDefaults,
 		settings:       s.cfg.Settings,
 		curTxnReadOnly: &ex.state.readOnly,
 		applicationNameChanged: func(newName string) {
@@ -558,7 +554,28 @@ func (s *Server) newConnExecutor(
 			ex.applicationName.Store(newName)
 		},
 	}
-	ex.dataMutator.SetApplicationName(sd.ApplicationName)
+
+	if setFromDefaults {
+		// Initialize the session data from provided defaults. We need to do this early
+		// because other initializations below use the configured values.
+		if err := resetSessionVars(ctx, &ex.dataMutator); err != nil {
+			log.Errorf(ctx, "error setting up client session: %v", err)
+			return nil, err
+		}
+	}
+
+	ex.appStats = s.sqlStats.getStatsForApplication(sd.ApplicationName)
+
+	ex.phaseTimes[sessionInit] = timeutil.Now()
+	ex.extraTxnState.tables = TableCollection{
+		leaseMgr:          s.cfg.LeaseManager,
+		databaseCache:     s.dbCache.getDatabaseCache(),
+		dbCacheSubscriber: s.dbCache,
+	}
+	ex.extraTxnState.txnRewindPos = -1
+	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
+	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
+
 	ex.sessionTracing.ex = ex
 	ex.transitionCtx.sessionTracing = &ex.sessionTracing
 
