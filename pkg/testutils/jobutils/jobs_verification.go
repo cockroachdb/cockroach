@@ -170,7 +170,8 @@ func verifySystemJob(
 		return errors.Errorf("job %d: expected status %v, got %v", offset, expectedStatus, statusString)
 	}
 	if expectedRunningStatus != runningStatusString {
-		return errors.Errorf("job %d: expected status %v, got %v", offset, expectedStatus, statusString)
+		return errors.Errorf("job %d: expected running status %v, got %v",
+			offset, expectedRunningStatus, runningStatusString)
 	}
 	if e, a := expectedType.String(), actualType; e != a {
 		return errors.Errorf("job %d: expected type %v, got type %v", offset, e, a)
