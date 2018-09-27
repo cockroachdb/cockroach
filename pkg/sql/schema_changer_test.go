@@ -2890,13 +2890,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	// Add a zone config.
-	cfg := config.DefaultZoneConfig()
-	cfg.GC.TTLSeconds = 0 // Set TTL so the data is deleted immediately
-	buf, err := protoutil.Marshal(&cfg)
+	var cfg config.ZoneConfig
+	cfg, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
 		t.Fatal(err)
 	}
 
