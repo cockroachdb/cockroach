@@ -200,5 +200,5 @@ func usageAndErr(cmd *cobra.Command, args []string) error {
 	if err := cmd.Usage(); err != nil {
 		return err
 	}
-	return fmt.Errorf("unknown sub-command: %s", strings.Join(args, " "))
+	return fmt.Errorf("unknown sub-command: %q", strings.Join(args, " "))
 }

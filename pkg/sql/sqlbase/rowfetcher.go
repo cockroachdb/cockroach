@@ -235,6 +235,16 @@ type RowFetcher struct {
 	alloc *DatumAlloc
 }
 
+// Reset resets this RowFetcher, preserving the memory capacity that was used
+// for the tables slice, and the slices within each of the tableInfo objects
+// within tables. This permits reuse of this objects without forcing total
+// reallocation of all of those slice fields.
+func (rf *RowFetcher) Reset() {
+	*rf = RowFetcher{
+		tables: rf.tables[:0],
+	}
+}
+
 // Init sets up a RowFetcher for a given table and index. If we are using a
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
@@ -249,15 +259,25 @@ func (rf *RowFetcher) Init(
 	rf.reverse = reverse
 	rf.returnRangeInfo = returnRangeInfo
 	rf.alloc = alloc
-	rf.allEquivSignatures = make(map[string]int, len(tables))
 	rf.isCheck = isCheck
 
 	// We must always decode the index key if we need to distinguish between
 	// rows from more than one table.
-	rf.mustDecodeIndexKey = len(tables) >= 2
+	nTables := len(tables)
+	multipleTables := nTables >= 2
+	rf.mustDecodeIndexKey = multipleTables
+	if multipleTables {
+		rf.allEquivSignatures = make(map[string]int, len(tables))
+	}
 
-	rf.tables = make([]tableInfo, 0, len(tables))
+	if cap(rf.tables) >= nTables {
+		rf.tables = rf.tables[:nTables]
+	} else {
+		rf.tables = make([]tableInfo, nTables)
+	}
 	for tableIdx, tableArgs := range tables {
+		oldTable := rf.tables[tableIdx]
+
 		table := tableInfo{
 			spans:            tableArgs.Spans,
 			desc:             tableArgs.Desc,
@@ -265,12 +285,18 @@ func (rf *RowFetcher) Init(
 			index:            tableArgs.Index,
 			isSecondaryIndex: tableArgs.IsSecondaryIndex,
 			cols:             tableArgs.Cols,
-			row:              make([]EncDatum, len(tableArgs.Cols)),
-			decodedRow:       make([]tree.Datum, len(tableArgs.Cols)),
+			row:              make(EncDatumRow, len(tableArgs.Cols)),
+			decodedRow:       make(tree.Datums, len(tableArgs.Cols)),
+
+			// These slice fields might get re-allocated below, so reslice them from
+			// the old table here in case they've got enough capacity already.
+			indexColIdx: oldTable.indexColIdx[:0],
+			keyVals:     oldTable.keyVals[:0],
+			extraVals:   oldTable.extraVals[:0],
 		}
 
 		var err error
-		if len(tables) > 1 {
+		if multipleTables {
 			// We produce references to every signature's reference.
 			equivSignatures, err := TableEquivSignatures(table.desc, table.index)
 			if err != nil {
@@ -316,7 +342,12 @@ func (rf *RowFetcher) Init(
 
 		table.neededValueColsByIdx = tableArgs.ValNeededForCol.Copy()
 		neededIndexCols := 0
-		table.indexColIdx = make([]int, len(indexColumnIDs))
+		nIndexCols := len(indexColumnIDs)
+		if cap(table.indexColIdx) >= nIndexCols {
+			table.indexColIdx = table.indexColIdx[:nIndexCols]
+		} else {
+			table.indexColIdx = make([]int, nIndexCols)
+		}
 		for i, id := range indexColumnIDs {
 			colIdx, ok := table.colIdxMap[id]
 			if ok {
@@ -362,7 +393,11 @@ func (rf *RowFetcher) Init(
 		if err != nil {
 			return err
 		}
-		table.keyVals = make([]EncDatum, len(indexColumnIDs))
+		if cap(table.keyVals) >= nIndexCols {
+			table.keyVals = table.keyVals[:nIndexCols]
+		} else {
+			table.keyVals = make([]EncDatum, nIndexCols)
+		}
 
 		if hasExtraCols(&table) {
 			// Unique secondary indexes have a value that is the
@@ -371,7 +406,12 @@ func (rf *RowFetcher) Init(
 			// values. If this ever changes, we'll probably have to
 			// figure out the directions here too.
 			table.extraTypes, err = GetColumnTypes(table.desc, table.index.ExtraColumnIDs)
-			table.extraVals = make([]EncDatum, len(table.index.ExtraColumnIDs))
+			nExtraColumns := len(table.index.ExtraColumnIDs)
+			if cap(table.extraVals) >= nExtraColumns {
+				table.extraVals = table.extraVals[:nExtraColumns]
+			} else {
+				table.extraVals = make([]EncDatum, nExtraColumns)
+			}
 			if err != nil {
 				return err
 			}
@@ -383,7 +423,7 @@ func (rf *RowFetcher) Init(
 			rf.maxKeysPerRow = keysPerRow
 		}
 
-		rf.tables = append(rf.tables, table)
+		rf.tables[tableIdx] = table
 	}
 
 	if len(tables) == 1 {

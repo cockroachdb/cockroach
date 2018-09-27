@@ -20,6 +20,8 @@ import (
 	"strings"
 	"testing"
 
+	"reflect"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -38,11 +40,7 @@ type initFetcherArgs struct {
 	spans           roachpb.Spans
 }
 
-func initFetcher(
-	entries []initFetcherArgs, reverseScan bool, alloc *DatumAlloc,
-) (fetcher *RowFetcher, err error) {
-	fetcher = &RowFetcher{}
-
+func makeFetcherArgs(entries []initFetcherArgs) []RowFetcherTableArgs {
 	fetcherArgs := make([]RowFetcherTableArgs, len(entries))
 
 	for i, entry := range entries {
@@ -66,6 +64,15 @@ func initFetcher(
 			ValNeededForCol:  entry.valNeededForCol,
 		}
 	}
+	return fetcherArgs
+}
+
+func initFetcher(
+	entries []initFetcherArgs, reverseScan bool, alloc *DatumAlloc,
+) (fetcher *RowFetcher, err error) {
+	fetcher = &RowFetcher{}
+
+	fetcherArgs := makeFetcherArgs(entries)
 
 	if err := fetcher.Init(reverseScan, false /*reverse*/, false, /* isCheck */
 		alloc, fetcherArgs...); err != nil {
@@ -991,6 +998,59 @@ func TestNextRowInterleaved(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestRowFetcherReset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	sqlutils.CreateTable(
+		t, sqlDB, "foo",
+		"k INT PRIMARY KEY, v INT",
+		0,
+		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(1)),
+	)
+	tableDesc := GetTableDescriptor(kvDB, sqlutils.TestDB, "foo")
+	var valNeededForCol util.FastIntSet
+	valNeededForCol.AddRange(0, 1)
+	args := []initFetcherArgs{
+		{
+			tableDesc:       tableDesc,
+			indexIdx:        0,
+			valNeededForCol: valNeededForCol,
+		},
+	}
+	da := DatumAlloc{}
+	fetcher, err := initFetcher(args, false, &da)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resetFetcher, err := initFetcher(args, false, &da)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resetFetcher.Reset()
+	if len(resetFetcher.tables) != 0 || cap(resetFetcher.tables) != 1 {
+		t.Fatal("Didn't find saved slice:", resetFetcher.tables)
+	}
+
+	// Now re-init the reset fetcher and make sure its the same as the fetcher we
+	// didn't reset.
+
+	fetcherArgs := makeFetcherArgs(args)
+	if err := resetFetcher.Init(false, false /*reverse*/, false, /* isCheck */
+		&da, fetcherArgs...); err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(resetFetcher, fetcher) {
+		t.Fatal("unequal before and after reset", resetFetcher, fetcher)
+	}
+
 }
 
 func idLookupKey(tableID ID, indexID IndexID) uint64 {
