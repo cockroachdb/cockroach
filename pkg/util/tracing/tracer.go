@@ -17,6 +17,7 @@ package tracing
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/rand"
 	"regexp"
 	"sort"
@@ -26,14 +27,14 @@ import (
 	"time"
 	"unsafe"
 
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"golang.org/x/net/trace"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // Snowball is set as Baggage on traces which are used for snowball tracing.
@@ -376,12 +377,43 @@ func (t *Tracer) StartRootSpan(
 		operation: opName,
 		startTime: time.Now(),
 	}
+	t.initSpan(s, opName, logTags)
+	return s
+}
+
+// InitRootSpan is like StartRootSpan, except it operates on a pre-allocated
+// SpanAlloc.
+//
+// NB: The caller needs to ensure that the span inside alloc is not still in use
+// by anybody. It's illegal to pass in a span that was previously used and not
+// Finish()ed. Particular care must be taken by code that holds on to spans
+// after Finish()ing them - e.g. for taking their recording.
+func (t *Tracer) InitRootSpan(
+	s *PreallocatedSpan, opName string, logTags *logtags.Buffer,
+) opentracing.Span {
+	if s.mu.duration == -1 {
+		log.Fatalf("attempting to init a span that was not previously Finish()ed")
+	}
+	s.reset()
+	s.spanMeta = spanMeta{
+		TraceID: uint64(rand.Int63()),
+		SpanID:  uint64(rand.Int63()),
+	}
+	s.tracer = t
+	s.operation = opName
+	s.startTime = time.Now()
+	t.initSpan(s, opName, logTags)
+	return s
+}
+
+func (t *Tracer) initSpan(s *span, opName string, logTags *logtags.Buffer) {
+	shadowTracer := t.getShadowTracer()
 	s.mu.duration = -1
 
 	if shadowTracer != nil {
 		linkShadowSpan(
 			s, shadowTracer, nil, /* parentShadowCtx */
-			opentracing.SpanReferenceType(0) /* parentType - ignored*/)
+			opentracing.SpanReferenceType(0) /* parentType - ignored */)
 	}
 
 	if t.useNetTrace() {
@@ -390,14 +422,13 @@ func (t *Tracer) StartRootSpan(
 	}
 
 	if logTags != nil {
+		s.mu.tags = make([]tag, 0, len(logTags.Get()))
 		for _, t := range logTags.Get() {
 			s.setTagInner(
 				tagName(t.Key()), t.ValueStr(),
 				true /* locked - we're lying but we're just creating the span */)
 		}
 	}
-
-	return s
 }
 
 // StartChildSpan creates a child span of the given parent span. This is
@@ -467,6 +498,7 @@ func StartChildSpan(
 		}
 	}
 	if logTags != nil {
+		s.mu.tags = make([]tag, 0, len(logTags.Get()))
 		for _, t := range logTags.Get() {
 			s.SetTag(tagName(t.Key()), t.ValueStr())
 		}

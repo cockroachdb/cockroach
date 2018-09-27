@@ -1109,6 +1109,10 @@ func (st *SessionTracing) StartTracing(
 		}
 		tracing.StartRecording(sp, recType)
 		st.firstTxnSpan = sp
+		// The session tracing is holding on to sp, and sp might have come from the
+		// txnState's buffer. It it did, we need to permanently take it out of that
+		// buffer so that the txnState doesn't overwrite it.
+		st.ex.state.releaseSpanFromAllocIfEqual(sp)
 	}
 
 	st.enabled = true

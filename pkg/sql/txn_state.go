@@ -107,6 +107,11 @@ type txnState struct {
 	// txnAbortCount is incremented whenever the state transitions to
 	// stateAborted.
 	txnAbortCount *metric.Counter
+
+	// alloc holds pre-allocated buffers.
+	alloc struct {
+		sp tracing.PreallocatedSpan
+	}
 }
 
 // txnType represents the type of a SQL transaction.
@@ -170,9 +175,11 @@ func (ts *txnState) resetForNewSQLTxn(
 			tracing.LogTagsFromCtx(connCtx),
 		)
 	} else {
-		// Create a root span for this SQL txn.
-		sp = tranCtx.tracer.(*tracing.Tracer).StartRootSpan(
-			opName, logtags.FromContext(connCtx), tracing.RecordableSpan)
+		// Create a root span for this SQL txn. We use a pre-allocated buffer to
+		// avoid allocations.
+		tranCtx.tracer.(*tracing.Tracer).InitRootSpan(
+			&ts.alloc.sp, opName, logtags.FromContext(connCtx))
+		sp = &ts.alloc.sp
 	}
 
 	if txnType == implicitTxn {
@@ -430,4 +437,13 @@ func (ts *txnState) consumeAdvanceInfo() advanceInfo {
 	adv := ts.adv
 	ts.adv = advanceInfo{}
 	return adv
+}
+
+// detachSpanFromAllocIfEqual checks whether sp is the same as the one held in
+// the alloc and, if it is, puts a fresh one in the alloc. This way, the caller
+// can hold on to sp without worry that the txnState will overwrite it.
+func (ts *txnState) releaseSpanFromAllocIfEqual(sp opentracing.Span) {
+	if &ts.alloc.sp == sp {
+		ts.alloc.sp = tracing.PreallocatedSpan{}
+	}
 }

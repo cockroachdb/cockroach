@@ -92,7 +92,11 @@ func linkShadowSpan(
 	// Replicate the options, using the lightstep context in the reference.
 	opts = append(opts, opentracing.StartTime(s.startTime))
 	if s.mu.tags != nil {
-		opts = append(opts, s.mu.tags)
+		otTags := make(opentracing.Tags)
+		for _, tag := range s.mu.tags {
+			otTags[tag.key] = tag.val
+		}
+		opts = append(opts, otTags)
 	}
 	if parentShadowCtx != nil {
 		opts = append(opts, opentracing.SpanReference{
