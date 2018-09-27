@@ -2871,18 +2871,22 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 				mtc.manualClock.Increment(int64(tickerDur))
 
 				// Keep gossiping the stores, excepting the dead store.
-				for _, s := range mtc.stores {
-					if s.Ident.StoreID != roachpb.StoreID(atomic.LoadInt32(&deadStoreID)) {
-						if err := s.GossipStore(context.Background(), false /* useCached */); err != nil {
-							panic(err)
-						}
+				for i, s := range mtc.stores {
+					if i == 1 {
+						// Skip the dead store.
+						continue
+					}
+					if err := s.GossipStore(context.Background(), false /* useCached */); err != nil {
+						panic(err)
 					}
 				}
 				// Force the repair queues on all alive stores to run.
-				for _, s := range mtc.stores {
-					if s.Ident.StoreID != roachpb.StoreID(atomic.LoadInt32(&deadStoreID)) {
-						s.ForceReplicationScanAndProcess()
+				for i, s := range mtc.stores {
+					if i == 1 {
+						// Skip the dead store.
+						continue
 					}
+					s.ForceReplicationScanAndProcess()
 				}
 
 			case <-mtc.stoppers[0].ShouldStop():
@@ -2900,9 +2904,15 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 		return errors.Errorf("expected %d replicas; have %+v", zone.NumReplicas, replicas)
 	})
 
-	// Set the dead store and wait for the replica on the dead node to
-	// be removed and the replacement added. Use a store other than the leader.
-	atomic.StoreInt32(&deadStoreID, int32(getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas[1].StoreID))
+	// Stop a store which will be rebalanced away from. We can't use the very first
+	// one since getRangeMetadata is hard-coded to query that one, so we'll use the
+	// one after that.
+	storeID := mtc.stores[1].StoreID() // 2
+	atomic.StoreInt32(&deadStoreID, int32(storeID))
+	mtc.stopStore(1)
+	// The mtc asks us to restart this store before stopping the mtc.
+	defer mtc.restartStoreWithoutHeartbeat(1)
+
 	testutils.SucceedsSoon(t, func() error {
 		replicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
 		if len(replicas) != int(zone.NumReplicas) {
