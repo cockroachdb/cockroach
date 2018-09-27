@@ -644,7 +644,12 @@ func (bq *baseQueue) processLoop(stopper *stop.Stopper) {
 				} else {
 					// lastDur will be 0 after the first processing attempt.
 					lastDur := bq.lastProcessDuration()
-					nextTime = time.After(bq.impl.timer(lastDur))
+					switch t := bq.impl.timer(lastDur); t {
+					case 0:
+						nextTime = immediately
+					default:
+						nextTime = time.After(t)
+					}
 				}
 			}
 		}
