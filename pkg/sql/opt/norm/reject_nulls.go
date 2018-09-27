@@ -40,23 +40,31 @@ func (c *CustomFuncs) HasNullRejectingFilter(filter memo.GroupID, nullRejectCols
 	return notNullFilterCols.Intersects(nullRejectCols)
 }
 
-// NullRejectAggVar scans through the list of aggregate functions and returns
-// the Variable input of the first aggregate that is not ConstAgg. Such an
-// aggregate must exist, since this is only called if at least one eligible
-// null-rejection column was identified by the deriveGroupByRejectNullCols
-// method (see its comment for more details).
-func (c *CustomFuncs) NullRejectAggVar(aggs memo.GroupID) memo.GroupID {
+// NullRejectAggVar returns the Variable input of the aggregate functions that
+// produce rejectNullCols. These aggregations must have the same column as input.
+// See deriveGroupByRejectNullCols method for more details.
+func (c *CustomFuncs) NullRejectAggVar(aggs memo.GroupID, rejectNullCols opt.ColSet) memo.GroupID {
 	aggsExpr := c.mem.NormExpr(aggs).AsAggregations()
+	aggsColList := c.mem.LookupPrivate(aggsExpr.Cols()).(opt.ColList)
 	aggsElems := c.mem.LookupList(aggsExpr.Aggs())
 
-	for i := len(aggsElems) - 1; i >= 0; i-- {
-		agg := c.mem.NormExpr(aggsElems[i])
-		if agg.Operator() != opt.ConstAggOp {
-			// Return the input Variable operator.
-			return agg.ChildGroup(c.mem, 0)
+	var result memo.GroupID
+	for i, colID := range aggsColList {
+		if rejectNullCols.Contains(int(colID)) {
+			aggExpr := memo.MakeNormExprView(c.mem, aggsElems[i])
+			v := memo.ExtractVarFromAggInput(aggExpr.Child(0)).Group()
+			if result == 0 {
+				result = v
+			} else if result != v {
+				panic("rejected null cols don't have the same input")
+			}
 		}
 	}
-	panic("couldn't find an aggregate that is not ConstAgg")
+
+	if result == 0 {
+		panic("no aggregations found")
+	}
+	return result
 }
 
 // DeriveRejectNullCols returns the set of columns that are candidates for NULL
