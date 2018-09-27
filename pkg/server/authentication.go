@@ -355,6 +355,10 @@ const webSessionUserKeyStr = "webSessionUser"
 const webSessionIDKeyStr = "webSessionID"
 
 func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if !am.server.server.node.storeCfg.Settings.Version.IsInitialized() {
+		http.Error(w, "cluster version has not yet been initialized", 403)
+		return
+	}
 	username, cookie, err := am.getSession(w, req)
 	if err == nil {
 		ctx := req.Context()
