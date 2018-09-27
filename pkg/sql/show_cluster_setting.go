@@ -18,17 +18,16 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
@@ -46,8 +45,7 @@ func (p *planner) showStateMachineSetting(
 	retryCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	tBegin := timeutil.Now()
-	// The (slight ab)use of WithMaxAttempts achieves convenient context cancellation.
-	if err := retry.WithMaxAttempts(retryCtx, retry.Options{}, math.MaxInt32, func() error {
+	if err := p.execCfg.DB.Txn(retryCtx, func(ctx context.Context, txn *client.Txn) error {
 		datums, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
 			ctx, "read-setting",
 			p.txn,
