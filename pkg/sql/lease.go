@@ -1692,19 +1692,21 @@ var tableLeaseRefreshLimit = settings.RegisterIntSetting(
 // TODO(vivek): Remove once epoch based table leases are implemented.
 func (m *LeaseManager) PeriodicallyRefreshSomeLeases() {
 	m.stopper.RunWorker(context.Background(), func(ctx context.Context) {
-		tickDuration := m.leaseDuration / 2
-		if tickDuration <= 0 {
+		if m.leaseDuration <= 0 {
 			return
 		}
-		ticker := time.NewTicker(tickDuration)
-		tickChan := ticker.C
-		defer ticker.Stop()
+		refreshTimer := timeutil.NewTimer()
+		defer refreshTimer.Stop()
+		refreshTimer.Reset(m.LeaseStore.jitteredLeaseDuration() / 2)
 		for {
 			select {
 			case <-m.stopper.ShouldQuiesce():
 				return
 
-			case <-tickChan:
+			case <-refreshTimer.C:
+				refreshTimer.Read = true
+				refreshTimer.Reset(m.LeaseStore.jitteredLeaseDuration() / 2)
+
 				m.refreshSomeLeases(ctx)
 			}
 		}
