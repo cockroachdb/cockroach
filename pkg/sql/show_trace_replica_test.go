@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -43,8 +42,7 @@ func TestShowTraceReplica(t *testing.T) {
 	ctx := context.Background()
 	tsArgs := func(node string) base.TestServerArgs {
 		return base.TestServerArgs{
-			ScanInterval: 200 * time.Millisecond,
-			StoreSpecs:   []base.StoreSpec{{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{node}}}},
+			StoreSpecs: []base.StoreSpec{{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{node}}}},
 		}
 	}
 	tcArgs := base.TestClusterArgs{ServerArgsPerNode: map[int]base.TestServerArgs{
