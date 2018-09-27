@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -2684,9 +2685,15 @@ func MVCCFindSplitKey(
 	it := engine.NewIterator(IterOptions{UpperBound: endKey.AsRawKey()})
 	defer it.Close()
 
-	// We must never return a split key that falls within a table row. (Rows in
-	// tables with multiple column families are comprised of multiple keys, one
-	// key per column family.)
+	// We want to avoid splitting at the first key in the range because that
+	// could result in an empty left-hand range. To prevent this, we scan for
+	// the first key in the range and consider the key that sorts directly after
+	// this as the minimum split key.
+	//
+	// In addition, we must never return a split key that falls within a table
+	// row. (Rows in tables with multiple column families are comprised of
+	// multiple keys, one key per column family.) However, we do allow a split
+	// key that falls between a row and its interleaved rows.
 	//
 	// Managing this is complicated: the logic for picking a split key that
 	// creates ranges of the right size lives in C++, while the logic for
@@ -2728,7 +2735,7 @@ func MVCCFindSplitKey(
 	} else if !ok {
 		return nil, nil
 	}
-	minSplitKey := key
+	var minSplitKey roachpb.Key
 	if _, _, err := keys.DecodeTablePrefix(it.UnsafeKey().Key); err == nil {
 		// The first key in this range represents a row in a SQL table. Advance the
 		// minSplitKey past this row to avoid the problems described above.
@@ -2736,13 +2743,19 @@ func MVCCFindSplitKey(
 		if err != nil {
 			return nil, err
 		}
-		minSplitKey = roachpb.RKey(firstRowKey.PrefixEnd())
+		// Allow a split key before other rows in the same table or before any
+		// rows in interleaved tables.
+		minSplitKey = encoding.EncodeInterleavedSentinel(firstRowKey)
+	} else {
+		// The first key in the range does not represent a row in a SQL table.
+		// Allow a split at any key that sorts after it.
+		minSplitKey = it.Key().Key.Next()
 	}
 
 	splitKey, err := it.FindSplitKey(
 		MakeMVCCMetadataKey(key.AsRawKey()),
 		MakeMVCCMetadataKey(endKey.AsRawKey()),
-		MakeMVCCMetadataKey(minSplitKey.AsRawKey()),
+		MakeMVCCMetadataKey(minSplitKey),
 		targetSize)
 	if err != nil {
 		return nil, err

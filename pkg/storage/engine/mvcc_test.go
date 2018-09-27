@@ -3483,18 +3483,27 @@ func TestFindValidSplitKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const userID = keys.MinUserDescID
+	const interleave1 = userID + 1
+	const interleave2 = userID + 2
+	const interleave3 = userID + 3
 	// Manually creates rows corresponding to the schema:
 	// CREATE TABLE t (id1 STRING, id2 STRING, ... PRIMARY KEY (id1, id2, ...))
-	tablePrefix := func(id uint32, rowVals ...string) roachpb.Key {
-		tableKey := keys.MakeTablePrefix(id)
-		rowKey := roachpb.Key(encoding.EncodeVarintAscending(append([]byte(nil), tableKey...), 1))
+	addTablePrefix := func(prefix roachpb.Key, id uint32, rowVals ...string) roachpb.Key {
+		tableKey := append(prefix, keys.MakeTablePrefix(id)...)
+		rowKey := roachpb.Key(encoding.EncodeVarintAscending(tableKey, 1))
 		for _, rowVal := range rowVals {
 			rowKey = encoding.EncodeStringAscending(rowKey, rowVal)
 		}
 		return rowKey
 	}
+	tablePrefix := func(id uint32, rowVals ...string) roachpb.Key {
+		return addTablePrefix(nil, id, rowVals...)
+	}
 	addColFam := func(rowKey roachpb.Key, colFam uint32) roachpb.Key {
 		return keys.MakeFamilyKey(append([]byte(nil), rowKey...), colFam)
+	}
+	addInterleave := func(rowKey roachpb.Key) roachpb.Key {
+		return encoding.EncodeInterleavedSentinel(rowKey)
 	}
 
 	testCases := []struct {
@@ -3599,10 +3608,20 @@ func TestFindValidSplitKeys(t *testing.T) {
 		// by the actual value having a nonzero timestamp).
 		{
 			keys: []roachpb.Key{
-				roachpb.Key("a"),
+				roachpb.Key("b"),
 			},
-			expSplit: nil,
-			expError: false,
+			rangeStart: roachpb.Key("a"),
+			expSplit:   nil,
+			expError:   false,
+		},
+		// Similar test, but the range starts at first key.
+		{
+			keys: []roachpb.Key{
+				roachpb.Key("b"),
+			},
+			rangeStart: roachpb.Key("b"),
+			expSplit:   nil,
+			expError:   false,
 		},
 		// Some example table data. Make sure we don't split in the middle of a row
 		// or return the start key of the range.
@@ -3679,6 +3698,84 @@ func TestFindValidSplitKeys(t *testing.T) {
 			expSplit:   tablePrefix(userID, "a", "b"),
 			expError:   false,
 		},
+		// One large first row with interleaved child rows. Check that we can
+		// split before the first interleaved row.
+		{
+			keys: []roachpb.Key{
+				addColFam(tablePrefix(userID, "a"), 0),
+				addColFam(tablePrefix(userID, "a"), 1),
+				addColFam(tablePrefix(userID, "a"), 2),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"), 0),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"), 1),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave2, "c"), 1),
+			},
+			rangeStart: tablePrefix(userID, "a"),
+			expSplit:   addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
+			expError:   false,
+		},
+		// One large first row with a double interleaved child row. Check that
+		// we can split before the double interleaved row.
+		{
+			keys: []roachpb.Key{
+				addColFam(tablePrefix(userID, "a"), 0),
+				addColFam(tablePrefix(userID, "a"), 1),
+				addColFam(tablePrefix(userID, "a"), 2),
+				addColFam(addTablePrefix(addInterleave(
+					addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
+				), interleave2, "d"), 3),
+			},
+			rangeStart: tablePrefix(userID, "a"),
+			expSplit: addTablePrefix(addInterleave(
+				addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
+			), interleave2, "d"),
+			expError: false,
+		},
+		// Two interleaved rows. Check that we can split between them.
+		{
+			keys: []roachpb.Key{
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"), 0),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"), 1),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave2, "c"), 3),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave2, "c"), 4),
+			},
+			rangeStart: addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
+			expSplit:   addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave2, "c"),
+			expError:   false,
+		},
+		// Two small rows with interleaved child rows after the second. Check
+		// that we can split before the first interleaved row.
+		{
+			keys: []roachpb.Key{
+				addColFam(tablePrefix(userID, "a"), 0),
+				addColFam(tablePrefix(userID, "b"), 0),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "b")), interleave1, "b"), 0),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "b")), interleave1, "b"), 1),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "b")), interleave2, "c"), 1),
+			},
+			rangeStart: tablePrefix(userID, "a"),
+			expSplit:   addTablePrefix(addInterleave(tablePrefix(userID, "b")), interleave1, "b"),
+			expError:   false,
+		},
+		// A chain of interleaved rows. Check that we can split them.
+		{
+			keys: []roachpb.Key{
+				addColFam(tablePrefix(userID, "a"), 0),
+				addColFam(addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"), 0),
+				addColFam(addTablePrefix(addInterleave(
+					addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
+				), interleave2, "c"), 0),
+				addColFam(addTablePrefix(addInterleave(
+					addTablePrefix(addInterleave(
+						addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
+					), interleave2, "c"),
+				), interleave3, "d"), 0),
+			},
+			rangeStart: tablePrefix(userID, "a"),
+			expSplit: addTablePrefix(addInterleave(
+				addTablePrefix(addInterleave(tablePrefix(userID, "a")), interleave1, "b"),
+			), interleave2, "c"),
+			expError: false,
+		},
 	}
 
 	for i, test := range testCases {
@@ -3689,8 +3786,13 @@ func TestFindValidSplitKeys(t *testing.T) {
 			ms := &enginepb.MVCCStats{}
 			val := roachpb.MakeValueFromString(strings.Repeat("X", 10))
 			for _, k := range test.keys {
-				if err := MVCCPut(context.Background(), engine, ms, []byte(k), hlc.Timestamp{Logical: 1}, val, nil); err != nil {
-					t.Fatal(err)
+				// Add three MVCC versions of every key. Splits are not allowed
+				// between MVCC versions, so this shouldn't have any effect.
+				for j := 1; j <= 3; j++ {
+					ts := hlc.Timestamp{Logical: int32(j)}
+					if err := MVCCPut(context.Background(), engine, ms, []byte(k), ts, val, nil); err != nil {
+						t.Fatal(err)
+					}
 				}
 			}
 			rangeStart := test.keys[0]
