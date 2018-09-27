@@ -1254,11 +1254,6 @@ func (s *Server) Start(ctx context.Context) error {
 	gwCtx, gwCancel := context.WithCancel(s.AnnotateCtx(context.Background()))
 	s.stopper.AddCloser(stop.CloserFn(gwCancel))
 
-	var authHandler http.Handler = gwMux
-	if s.cfg.RequireWebSession() {
-		authHandler = newAuthenticationMux(s.authentication, authHandler)
-	}
-
 	// Setup HTTP<->gRPC handlers.
 	c1, c2 := net.Pipe()
 
@@ -1586,7 +1581,12 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Serve UI assets. This needs to be before the gRPC handlers are registered, otherwise
 	// the `s.mux.Handle("/", ...)` would cover all URLs, allowing anonymous access.
-	maybeAuthMux := newAuthenticationMuxAllowAnonymous(
+	//
+	// This authentication mux is created in "allow anonymous" mode so that the UI assets
+	// are served up whether or not there is a session. If there is a session, the mux
+	// adds it to the context, and it is templated into index.html so that the UI can
+	// show the username of the currently-logged-in user.
+	authenticatedUIHandler := newAuthenticationMuxAllowAnonymous(
 		s.authentication,
 		ui.Handler(ui.Config{
 			ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
@@ -1599,7 +1599,13 @@ func (s *Server) Start(ctx context.Context) error {
 			},
 		}),
 	)
-	s.mux.Handle("/", maybeAuthMux)
+	s.mux.Handle("/", authenticatedUIHandler)
+
+	// Register gRPC-gateway endpoints used by the admin UI.
+	var authHandler http.Handler = gwMux
+	if s.cfg.RequireWebSession() {
+		authHandler = newAuthenticationMux(s.authentication, authHandler)
+	}
 
 	s.mux.Handle(adminPrefix, authHandler)
 	// Exempt the health check endpoint from authentication.

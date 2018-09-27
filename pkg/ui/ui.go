@@ -112,7 +112,9 @@ type Config struct {
 	GetUser              func(ctx context.Context) *string
 }
 
-// Handler returns an http.Handler that serves the UI.
+// Handler returns an http.Handler that serves the UI,
+// including index.html, which has some login-related variables
+// templated into it, as well as static assets.
 func Handler(cfg Config) http.Handler {
 	fileServer := http.FileServer(&assetfs.AssetFS{
 		Asset:     Asset,
@@ -122,6 +124,7 @@ func Handler(cfg Config) http.Handler {
 	buildInfo := build.GetInfo()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("hello from ")
 		if !haveUI() {
 			http.ServeContent(w, r, "index.html", buildInfo.GoTime(), bytes.NewReader(bareIndexHTML))
 			return
