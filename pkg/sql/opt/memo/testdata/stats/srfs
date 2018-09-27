@@ -6,15 +6,15 @@ JOIN generate_series(1, 4) c ON true
 inner-join
  ├── columns: a:1(string) upper:2(string) generate_series:3(int) upper:4(string) c:5(int)
  ├── side-effects
- ├── stats: [rows=1000000]
+ ├── stats: [rows=100]
  ├── inner-join
  │    ├── columns: upper:1(string) upper:2(string) generate_series:3(int) upper:4(string)
  │    ├── side-effects
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=10]
  │    ├── zip
  │    │    ├── columns: upper:2(string) generate_series:3(int) upper:4(string)
  │    │    ├── side-effects
- │    │    ├── stats: [rows=1000]
+ │    │    ├── stats: [rows=10]
  │    │    ├── upper('def') [type=string]
  │    │    ├── generate_series(1, 3) [type=int, side-effects]
  │    │    └── upper('ghi') [type=string]
@@ -26,7 +26,7 @@ inner-join
  ├── zip
  │    ├── columns: generate_series:5(int)
  │    ├── side-effects
- │    ├── stats: [rows=1000]
+ │    ├── stats: [rows=10]
  │    └── generate_series(1, 4) [type=int, side-effects]
  └── true [type=bool]
 
@@ -37,16 +37,16 @@ distinct-on
  ├── columns: a:1(string) b:2(int)
  ├── grouping columns: upper:1(string) generate_series:2(int)
  ├── side-effects
- ├── stats: [rows=100, distinct(1,2)=100]
+ ├── stats: [rows=1, distinct(1,2)=1]
  ├── key: (1,2)
  └── inner-join
       ├── columns: upper:1(string) generate_series:2(int)
       ├── side-effects
-      ├── stats: [rows=1000, distinct(1,2)=100]
+      ├── stats: [rows=10, distinct(1,2)=1]
       ├── zip
       │    ├── columns: generate_series:2(int)
       │    ├── side-effects
-      │    ├── stats: [rows=1000, distinct(2)=100]
+      │    ├── stats: [rows=10, distinct(2)=1]
       │    └── generate_series(1, 2) [type=int, side-effects]
       ├── zip
       │    ├── columns: upper:1(string)
