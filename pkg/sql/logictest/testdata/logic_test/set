@@ -127,9 +127,12 @@ statement ok
 SET client_encoding = 'UTF8'
 
 statement ok
+SET client_encoding = 'UT! '' @#!$%%F------!@!!!8 ''   '
+
+statement ok
 SET client_encoding = 'unicode'
 
-statement error invalid value for parameter "client_encoding": "other"
+statement error unimplemented client encoding: "other"
 SET client_encoding = 'other'
 
 statement ok
