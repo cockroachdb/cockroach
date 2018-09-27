@@ -487,7 +487,7 @@ func WaitForInitialSplits(db *client.DB) error {
 		if length == bufSize {
 			continue
 		}
-		log.Infof(context.TODO(), "%s\n%s", err, buf)
+		log.Infof(context.TODO(), "%s\n%s", err, buf[:length])
 		return err
 	}
 }
