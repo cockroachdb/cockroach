@@ -266,6 +266,46 @@ project
       └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
            └── max = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
 
+# Aggregate function with DISTINCT.
+opt expect=RejectNullsGroupBy
+SELECT sum(DISTINCT y)
+FROM (SELECT k FROM a)
+LEFT JOIN (SELECT y FROM xy)
+ON True
+GROUP BY k
+HAVING sum(DISTINCT y)=1
+----
+project
+ ├── columns: sum:7(decimal!null)
+ ├── fd: ()-->(7)
+ └── select
+      ├── columns: k:1(int!null) sum:7(decimal!null)
+      ├── key: (1)
+      ├── fd: ()-->(7)
+      ├── group-by
+      │    ├── columns: k:1(int!null) sum:7(decimal)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(7)
+      │    ├── inner-join
+      │    │    ├── columns: k:1(int!null) y:6(int!null)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1(int!null)
+      │    │    │    └── key: (1)
+      │    │    ├── select
+      │    │    │    ├── columns: y:6(int!null)
+      │    │    │    ├── scan xy
+      │    │    │    │    └── columns: y:6(int)
+      │    │    │    └── filters [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    │         └── y IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    └── true [type=bool]
+      │    └── aggregations [outer=(6)]
+      │         └── sum [type=decimal, outer=(6)]
+      │              └── agg-distinct [type=int, outer=(6)]
+      │                   └── variable: y [type=int, outer=(6)]
+      └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+           └── sum = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+
 # Single max aggregate function without grouping columns.
 opt expect=RejectNullsGroupBy
 SELECT max(x)
@@ -335,6 +375,49 @@ project
       │              └── variable: x [type=int, outer=(5)]
       └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
            └── min = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+
+# Multiple aggregate functions on same column, some with DISTINCT.
+opt expect=RejectNullsGroupBy
+SELECT sum(DISTINCT y), max(y)
+FROM a
+LEFT JOIN xy
+ON True
+GROUP BY k
+HAVING max(y)=1
+----
+project
+ ├── columns: sum:7(decimal) max:8(int!null)
+ ├── fd: ()-->(8)
+ └── select
+      ├── columns: k:1(int!null) sum:7(decimal) max:8(int!null)
+      ├── key: (1)
+      ├── fd: ()-->(8), (1)-->(7)
+      ├── group-by
+      │    ├── columns: k:1(int!null) sum:7(decimal) max:8(int)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(7,8)
+      │    ├── inner-join
+      │    │    ├── columns: k:1(int!null) y:6(int!null)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1(int!null)
+      │    │    │    └── key: (1)
+      │    │    ├── select
+      │    │    │    ├── columns: y:6(int!null)
+      │    │    │    ├── scan xy
+      │    │    │    │    └── columns: y:6(int)
+      │    │    │    └── filters [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    │         └── y IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    └── true [type=bool]
+      │    └── aggregations [outer=(6)]
+      │         ├── sum [type=decimal, outer=(6)]
+      │         │    └── agg-distinct [type=int, outer=(6)]
+      │         │         └── variable: y [type=int, outer=(6)]
+      │         └── max [type=int, outer=(6)]
+      │              └── variable: y [type=int, outer=(6)]
+      └── filters [type=bool, outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
+           └── max = 1 [type=bool, outer=(8), constraints=(/8: [/1 - /1]; tight)]
+
 
 # Ignore ConstAgg aggregates on other columns.
 opt expect=RejectNullsGroupBy

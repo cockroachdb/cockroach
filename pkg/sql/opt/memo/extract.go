@@ -91,11 +91,17 @@ func ExtractAggInputColumns(ev ExprView) opt.ColSet {
 // Given an expression that is an argument to an Aggregate, returns the column
 // ID it references.
 func extractColumnFromAggInput(arg ExprView) opt.ColumnID {
+	return ExtractVarFromAggInput(arg).Private().(opt.ColumnID)
+}
+
+// ExtractVarFromAggInput is given an argument to an Aggregate and returns the
+// inner Variable expression, stripping out modifiers like AggDistinct.
+func ExtractVarFromAggInput(arg ExprView) ExprView {
 	if arg.Operator() == opt.AggDistinctOp {
 		arg = arg.Child(0)
 	}
 	if arg.Operator() != opt.VariableOp {
 		panic("Aggregate input not a Variable")
 	}
-	return arg.Private().(opt.ColumnID)
+	return arg
 }

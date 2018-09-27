@@ -130,14 +130,14 @@
         $aggregations:*
         $def:*
     )
-    $filter:(Filters) & (HasNullRejectingFilter $filter (RejectNullCols $input))
+    $filter:(Filters) & (HasNullRejectingFilter $filter $rejectCols:(RejectNullCols $input))
 )
 =>
 (Select
     ((OpName $input)
         (Select
             $innerInput
-            (Filters [(IsNot (NullRejectAggVar $aggregations) (Null (AnyType)))])
+            (Filters [(IsNot (NullRejectAggVar $aggregations $rejectCols) (Null (AnyType)))])
         )
         $aggregations
         $def
