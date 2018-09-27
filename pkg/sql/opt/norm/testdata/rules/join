@@ -31,9 +31,10 @@ TABLE c
  ├── INDEX secondary
  │    ├── x int not null
  │    └── z int not null
- └── INDEX c_auto_index_fk_y_ref_a
-      ├── y int not null
-      └── x int not null
+ ├── INDEX c_auto_index_fk_y_ref_a
+ │    ├── y int not null
+ │    └── x int not null
+ └── FOREIGN KEY (y) REFERENCES t.public.a (k)
 
 exec-ddl
 CREATE TABLE d (x INT PRIMARY KEY, y INT NOT NULL, z INT NOT NULL, FOREIGN KEY (y,z) REFERENCES c(x,z))
@@ -44,10 +45,11 @@ TABLE d
  ├── z int not null
  ├── INDEX primary
  │    └── x int not null
- └── INDEX d_auto_index_fk_y_ref_c
-      ├── y int not null
-      ├── z int not null
-      └── x int not null
+ ├── INDEX d_auto_index_fk_y_ref_c
+ │    ├── y int not null
+ │    ├── z int not null
+ │    └── x int not null
+ └── FOREIGN KEY (y, z) REFERENCES t.public.c (x, z)
 
 exec-ddl
 CREATE TABLE xy (x INT PRIMARY KEY, y INT)

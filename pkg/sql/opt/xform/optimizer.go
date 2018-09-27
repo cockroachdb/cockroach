@@ -16,6 +16,7 @@ package xform
 
 import (
 	"fmt"
+	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // MatchedRuleFunc defines the callback function for the NotifyOnMatchedRule
@@ -34,6 +36,9 @@ type MatchedRuleFunc = norm.MatchedRuleFunc
 // event supported by the optimizer. See the comment in factory.go for more
 // details.
 type AppliedRuleFunc = norm.AppliedRuleFunc
+
+// RuleSet efficiently stores an unordered set of RuleNames.
+type RuleSet = util.FastIntSet
 
 // Optimizer transforms an input expression tree into the logically equivalent
 // output expression tree with the lowest possible execution cost.
@@ -83,6 +88,10 @@ type Optimizer struct {
 	// optimization rule (Normalize or Explore) has been applied by the optimizer.
 	// It can be set via a call to the NotifyOnAppliedRule method.
 	appliedRule AppliedRuleFunc
+
+	// disabledRules is a set of rules that are not allowed to run, used for
+	// testing.
+	disabledRules RuleSet
 }
 
 // Init initializes the Optimizer with a new, blank memo structure inside. This
@@ -97,6 +106,9 @@ func (o *Optimizer) Init(evalCtx *tree.EvalContext) {
 	o.stateMap = make(map[optStateKey]*optState)
 	o.matchedRule = nil
 	o.appliedRule = nil
+	if evalCtx.TestingKnobs.DisableOptimizerRuleProbability > 0 {
+		o.disableRules(evalCtx.TestingKnobs.DisableOptimizerRuleProbability)
+	}
 }
 
 // Factory returns a factory interface that the caller uses to construct an
@@ -661,4 +673,34 @@ func (a *optStateAlloc) allocate() *optState {
 	state := &a.page[0]
 	a.page = a.page[1:]
 	return state
+}
+
+// disableRules disables rules with the given probability for testing.
+func (o *Optimizer) disableRules(probability float64) {
+	essentialRules := util.MakeFastIntSet(
+		// Needed to prevent constraint building from failing.
+		int(opt.NormalizeInConst),
+		// Needed when an index is forced.
+		int(opt.GenerateIndexScans),
+		// Needed to prevent "same fingerprint cannot map to different groups."
+		int(opt.PruneJoinLeftCols),
+		int(opt.PruneJoinRightCols),
+		// Needed to prevent stack overflow.
+		int(opt.PushFilterIntoJoinLeftAndRight),
+		int(opt.PruneSelectCols),
+	)
+
+	for i := opt.RuleName(1); i < opt.NumRuleNames; i++ {
+		if rand.Float64() < probability && !essentialRules.Contains(int(i)) {
+			o.disabledRules.Add(int(i))
+		}
+	}
+
+	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
+		if o.disabledRules.Contains(int(ruleName)) {
+			log.Infof(o.evalCtx.Context, "disabled rule matched: %s", ruleName.String())
+			return false
+		}
+		return true
+	})
 }
