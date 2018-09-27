@@ -53,14 +53,14 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
     evt.preventDefault();
 
     this.props.handleLogin(this.state.username, this.state.password)
-        .then(() => {
-            const { location, router } = this.props;
-            if (location.query && location.query.redirectTo) {
-                router.push(location.query.redirectTo);
-            } else {
-                router.push("/");
-            }
-        });
+      .then(() => {
+        const { location, router } = this.props;
+        if (location.query && location.query.redirectTo) {
+          router.push(location.query.redirectTo);
+        } else {
+          router.push("/");
+        }
+      });
   }
 
   renderError() {
