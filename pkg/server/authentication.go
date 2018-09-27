@@ -139,7 +139,7 @@ func (s *authenticationServer) UserLogin(
 		ID:     id,
 		Secret: secret,
 	}
-	cookie, err := encodeSessionCookie(cookieValue)
+	cookie, err := EncodeSessionCookie(cookieValue)
 	if err != nil {
 		return nil, apiInternalError(ctx, err)
 	}
@@ -369,7 +369,7 @@ func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	am.inner.ServeHTTP(w, req)
 }
 
-func encodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, error) {
+func EncodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, error) {
 	cookieValueBytes, err := protoutil.Marshal(sessionCookie)
 	if err != nil {
 		return nil, errors.Wrap(err, "session cookie could not be encoded")
