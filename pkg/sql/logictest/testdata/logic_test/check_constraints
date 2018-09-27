@@ -273,3 +273,32 @@ CREATE TABLE test2.t (
   CHECK (t.a > 0),
   CHECK (test2.t.a > 0)
 )
+
+# Use multiple column families.
+
+statement ok
+CREATE TABLE t9 (
+  a INT,
+  b INT,
+  FAMILY (a),
+  FAMILY (b),
+  CHECK (a > b)
+)
+
+statement ok
+INSERT INTO t9 VALUES (5, 3)
+
+statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
+INSERT INTO t9 VALUES (5, 6)
+
+statement ok
+UPDATE t9 SET b = 4 WHERE true
+
+statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
+UPDATE t9 SET b = 6 WHERE true
+
+statement ok
+UPDATE t9 SET a = 7 WHERE true
+
+statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
+UPDATE t9 SET a = 2 WHERE true
