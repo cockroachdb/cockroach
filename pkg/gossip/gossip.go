@@ -276,7 +276,6 @@ type Gossip struct {
 
 	localityTierMap map[string]struct{}
 
-	logCh            chan struct{}
 	lastConnectivity string
 }
 
@@ -319,7 +318,6 @@ func New(
 		resolverAddrs:     map[util.UnresolvedAddr]resolver.Resolver{},
 		bootstrapAddrs:    map[util.UnresolvedAddr]roachpb.NodeID{},
 		localityTierMap:   map[string]struct{}{},
-		logCh:             make(chan struct{}, 1),
 	}
 
 	for _, loc := range locality.Tiers {
@@ -337,17 +335,6 @@ func New(
 	g.mu.is.registerCallback(MakePrefixPattern(KeyNodeIDPrefix), g.updateNodeAddress)
 	g.mu.is.registerCallback(MakePrefixPattern(KeyStorePrefix), g.updateStoreMap)
 	// Log gossip connectivity whenever we receive an update.
-	g.mu.is.registerCallback(MakePrefixPattern(KeyGossipClientsPrefix),
-		func(_ string, _ roachpb.Value) {
-			// Rather than logging here directly, we signal logCh which "debounces"
-			// frequent updates. This approach is used rather than something like
-			// log.Every because gossip connectivity is critical for correct
-			// operation and we want to make sure the most recent update is logged.
-			select {
-			case g.logCh <- struct{}{}:
-			default:
-			}
-		})
 	g.mu.Unlock()
 
 	if grpcServer != nil {
@@ -558,9 +545,15 @@ func (g *Gossip) LogStatus() {
 	}
 	g.mu.RUnlock()
 
+	var connectivity string
+	if s := g.Connectivity().String(); s != g.lastConnectivity {
+		g.lastConnectivity = s
+		connectivity = s
+	}
+
 	ctx := g.AnnotateCtx(context.TODO())
-	log.Infof(ctx, "gossip status (%s, %d node%s)\n%s%s",
-		status, n, util.Pluralize(int64(n)), g.clientStatus(), g.server.status())
+	log.Infof(ctx, "gossip status (%s, %d node%s)\n%s%s%s",
+		status, n, util.Pluralize(int64(n)), g.clientStatus(), g.server.status(), connectivity)
 }
 
 func (g *Gossip) clientStatus() ClientStatus {
@@ -928,14 +921,6 @@ func (g *Gossip) updateClients() {
 
 	if err := g.AddInfo(MakeGossipClientsKey(nodeID), buf.Bytes(), 2*defaultClientsInterval); err != nil {
 		log.Error(g.AnnotateCtx(context.Background()), err)
-	}
-}
-
-func (g *Gossip) logConnectivity() {
-	s := g.Connectivity().String()
-	if g.lastConnectivity != s {
-		g.lastConnectivity = s
-		log.Infof(g.AnnotateCtx(context.Background()), "%s", s)
 	}
 }
 
@@ -1398,14 +1383,9 @@ func (g *Gossip) manage() {
 				g.doDisconnected(c)
 			case <-g.tighten:
 				g.tightenNetwork(ctx)
-			case <-g.logCh:
-				g.logConnectivity()
 			case <-clientsTimer.C:
 				clientsTimer.Read = true
 				g.updateClients()
-				// Log gossip connectivity (if it has changed) to account for the short
-				// TTLs on the connectivity keys.
-				g.logConnectivity()
 				clientsTimer.Reset(defaultClientsInterval)
 			case <-cullTimer.C:
 				cullTimer.Read = true
