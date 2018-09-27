@@ -4288,13 +4288,22 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.mu.lastIndex = lastIndex
 	r.mu.lastTerm = lastTerm
 	r.mu.raftLogSize = raftLogSize
+	var becameLeader bool
 	if r.mu.leaderID != leaderID {
 		r.mu.leaderID = leaderID
 		// Clear the remote proposal set. Would have been nil already if not
 		// previously the leader.
 		r.mu.remoteProposals = nil
+		becameLeader = r.mu.leaderID == r.mu.replicaID
 	}
 	r.mu.Unlock()
+
+	// When becoming the leader, proactively add the replica to the replicate
+	// queue. We might have been handed leadership by a remote node which wanted
+	// to remove itself from the range.
+	if becameLeader && r.store.replicateQueue != nil {
+		r.store.replicateQueue.MaybeAdd(r, r.store.Clock().Now())
+	}
 
 	// Update raft log entry cache. We clear any older, uncommitted log entries
 	// and cache the latest ones.
