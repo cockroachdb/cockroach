@@ -1808,7 +1808,6 @@ Available Commands:
 
   sql         open a sql shell
   user        get, set, list and remove users
-  zone        get, set, list and remove zones
   node        list, inspect or remove nodes
   dump        dump sql tables
 
