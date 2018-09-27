@@ -1,4 +1,4 @@
 explain_stmt ::=
-	'EXPLAIN' explainable_stmt
-	| 'EXPLAIN' '(' ( | 'EXPRS' | 'METADATA' | 'QUALIFY' | 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' ) ( ( ',' ( | 'EXPRS' | 'METADATA' | 'QUALIFY' | 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' ) ) )* ')' explainable_stmt
-	| 'EXPLAIN' 'ANALYZE' '(' ( | 'EXPRS' | 'METADATA' | 'QUALIFY' | 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' ) ( ( ',' ( | 'EXPRS' | 'METADATA' | 'QUALIFY' | 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' ) ) )* ')' explainable_stmt
+	'EXPLAIN' preparable_stmt
+	| 'EXPLAIN' '(' ( | 'EXPRS' | 'METADATA' | 'QUALIFY' | 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' ) ( ( ',' ( | 'EXPRS' | 'METADATA' | 'QUALIFY' | 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' ) ) )* ')' preparable_stmt
+	| 'EXPLAIN' 'ANALYZE' '(' ( | 'EXPRS' | 'METADATA' | 'QUALIFY' | 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' ) ( ( ',' ( | 'EXPRS' | 'METADATA' | 'QUALIFY' | 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' ) ) )* ')' preparable_stmt
