@@ -220,7 +220,8 @@ func (ri *Inserter) InsertRow(
 //   (must be adapted depending on whether 'overwrite' is set)
 // - helper is the rowHelper that knows about the table being modified.
 // - primaryIndexKey is the PK prefix for the current row.
-// - updatedCols is the list of schema columns being updated.
+// - fetchedCols is the list of schema columns that have been fetched
+//   in preparation for this update.
 // - values is the SQL-level row values that are being written.
 // - marshaledValues contains the pre-encoded KV-level row values.
 //   marshaledValues is only used when writing single column families.
@@ -241,7 +242,7 @@ func prepareInsertOrUpdateBatch(
 	batch putter,
 	helper *rowHelper,
 	primaryIndexKey []byte,
-	updatedCols []sqlbase.ColumnDescriptor,
+	fetchedCols []sqlbase.ColumnDescriptor,
 	values []tree.Datum,
 	valColIDMapping map[sqlbase.ColumnID]int,
 	marshaledValues []roachpb.Value,
@@ -317,7 +318,7 @@ func prepareInsertOrUpdateBatch(
 				continue
 			}
 
-			col := updatedCols[idx]
+			col := fetchedCols[idx]
 
 			if lastColID > col.ID {
 				return nil, pgerror.NewAssertionErrorf("cannot write column id %d after %d", col.ID, lastColID)
