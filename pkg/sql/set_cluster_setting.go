@@ -89,6 +89,8 @@ func (p *planner) SetClusterSetting(
 			}
 
 			value = typed
+		} else if _, isStateMachineSetting := setting.(*settings.StateMachineSetting); isStateMachineSetting {
+			return nil, errors.New("cannot RESET this cluster setting")
 		}
 	}
 
