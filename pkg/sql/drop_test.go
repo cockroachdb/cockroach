@@ -89,6 +89,17 @@ func descExists(sqlDB *gosql.DB, exists bool, id sqlbase.ID) error {
 	return nil
 }
 
+func addImmediateGCZoneConfig(sqlDB *gosql.DB, id sqlbase.ID) (config.ZoneConfig, error) {
+	cfg := config.DefaultZoneConfig()
+	cfg.GC.TTLSeconds = 0
+	buf, err := protoutil.Marshal(&cfg)
+	if err != nil {
+		return cfg, err
+	}
+	_, err = sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, id, buf)
+	return cfg, err
+}
+
 func TestDropDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
@@ -315,13 +326,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 
 	// Push a new zone config for both the table and database with TTL=0
 	// so the data is deleted immediately.
-	cfg := config.DefaultZoneConfig()
-	cfg.GC.TTLSeconds = 0
-	buf, err := protoutil.Marshal(&cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tbDesc.ID, buf); err != nil {
+	if _, err := addImmediateGCZoneConfig(sqlDB, tbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -347,10 +352,10 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 		t.Fatal(err)
 	}
 
-	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tb2Desc.ID, buf); err != nil {
+	if _, err := addImmediateGCZoneConfig(sqlDB, tb2Desc.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, dbDesc.ID, buf); err != nil {
+	if _, err := addImmediateGCZoneConfig(sqlDB, dbDesc.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -720,13 +725,7 @@ func TestDropTableDeleteData(t *testing.T) {
 
 	// The closure pushes a zone config reducing the TTL to 0 for descriptor i.
 	pushZoneCfg := func(i int) {
-		cfg := config.DefaultZoneConfig()
-		cfg.GC.TTLSeconds = 0
-		buf, err := protoutil.Marshal(&cfg)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, descs[i].ID, buf); err != nil {
+		if _, err := addImmediateGCZoneConfig(sqlDB, descs[i].ID); err != nil {
 			t.Fatal(err)
 		}
 	}
