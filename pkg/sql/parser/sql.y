@@ -669,7 +669,6 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> explain_stmt
 %type <tree.Statement> prepare_stmt
 %type <tree.Statement> preparable_stmt
-%type <tree.Statement> explainable_stmt
 %type <tree.Statement> export_stmt
 %type <tree.Statement> execute_stmt
 %type <tree.Statement> deallocate_stmt
@@ -1052,9 +1051,10 @@ stmt_list:
 
 stmt:
   HELPTOKEN { return helpWith(sqllex, "") }
-| explainable_stmt  // help texts in sub-rule
+| preparable_stmt  // help texts in sub-rule
 | copy_from_stmt
 | comment_stmt
+| execute_stmt      // EXTEND WITH HELP: EXECUTE
 | deallocate_stmt   // EXTEND WITH HELP: DEALLOCATE
 | discard_stmt      // EXTEND WITH HELP: DISCARD
 | export_stmt       // EXTEND WITH HELP: EXPORT
@@ -2215,28 +2215,28 @@ table_name_list:
 //
 // Explainable statements:
 //     SELECT, CREATE, DROP, ALTER, INSERT, UPSERT, UPDATE, DELETE,
-//     SHOW, EXPLAIN, EXECUTE
+//     SHOW, EXPLAIN
 //
 // Plan options:
-//     TYPES, VERBOSE
+//     TYPES, VERBOSE, OPT
 //
 // %SeeAlso: WEBDOCS/explain.html
 explain_stmt:
-  EXPLAIN explainable_stmt
+  EXPLAIN preparable_stmt
   {
     $$.val = &tree.Explain{Statement: $2.stmt()}
   }
 | EXPLAIN error // SHOW HELP: EXPLAIN
-| EXPLAIN '(' explain_option_list ')' explainable_stmt
+| EXPLAIN '(' explain_option_list ')' preparable_stmt
   {
     $$.val = &tree.Explain{Options: $3.strs(), Statement: $5.stmt()}
   }
-| EXPLAIN ANALYZE '(' explain_option_list ')' explainable_stmt
+| EXPLAIN ANALYZE '(' explain_option_list ')' preparable_stmt
   {
     $$.val = &tree.Explain{Options: append($4.strs(), $2), Statement: $6.stmt()}
   }
 // This second error rule is necessary, because otherwise
-// explainable_stmt also provides "selectclause := '(' error ..." and
+// preparable_stmt also provides "selectclause := '(' error ..." and
 // cause a help text for the select clause, which will be confusing in
 // the context of EXPLAIN.
 | EXPLAIN '(' error // SHOW HELP: EXPLAIN
@@ -2265,12 +2265,6 @@ preparable_stmt:
 | truncate_stmt     // EXTEND WITH HELP: TRUNCATE
 | update_stmt       // EXTEND WITH HELP: UPDATE
 | upsert_stmt       // EXTEND WITH HELP: UPSERT
-
-// TODO(knz): it's not well justified that one could
-// EXPLAIN EXECUTE.
-explainable_stmt:
-  preparable_stmt
-| execute_stmt      // EXTEND WITH HELP: EXECUTE
 
 explain_option_list:
   explain_option_name
@@ -5625,7 +5619,7 @@ table_ref:
 //   will know from the unusual choice that something rather different
 //   is going on and may be pushed by the unusual syntax to
 //   investigate further in the docs.
-| '[' explainable_stmt ']' opt_ordinality opt_alias_clause
+| '[' preparable_stmt ']' opt_ordinality opt_alias_clause
   {
     $$.val = &tree.AliasedTableExpr{Expr: &tree.StatementSource{ Statement: $2.stmt() }, Ordinality: $4.bool(), As: $5.aliasClause() }
   }
