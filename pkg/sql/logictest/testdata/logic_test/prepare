@@ -364,10 +364,10 @@ PREPARE x19597 AS SELECT $1 IN ($2, null);
 statement ok
 PREPARE innerStmt AS SELECT $1:::int i, 'foo' t
 
-statement error can't prepare an EXECUTE statement
+statement error syntax error at or near "execute"
 PREPARE outerStmt AS SELECT * FROM [EXECUTE innerStmt(3)] WHERE t = $1
 
-query error can't have more than 1 EXECUTE per statement
+query error syntax error at or near "execute"
 SELECT * FROM [EXECUTE innerStmt(1)] CROSS JOIN [EXECUTE x]
 
 statement ok
