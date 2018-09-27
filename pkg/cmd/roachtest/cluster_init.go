@@ -23,6 +23,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"golang.org/x/sync/errgroup"
 )
@@ -143,16 +145,37 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 				{"/_status/nodes", http.StatusNotFound},
 			}
 			for _, tc := range httpTests {
-				resp, err := http.Get(urlMap[1] + tc.endpoint)
-				if err != nil {
-					t.Fatalf("unexpected error hitting %s endpoint: %v", tc.endpoint, err)
+				for _, withCookie := range []bool{false, true} {
+					req, err := http.NewRequest("GET", urlMap[1]+tc.endpoint, nil /* body */)
+					if err != nil {
+						t.Fatalf("unexpected error while constructing request for %s: %s", tc.endpoint, err)
+					}
+					if withCookie {
+						// Prevent regression of #25771 by also sending authenticated
+						// requests, like would be sent if an admin UI were open against
+						// this node while it booted.
+						cookie, err := server.EncodeSessionCookie(&serverpb.SessionCookie{
+							// The actual contents of the cookie don't matter; the presence of
+							// a valid encoded cookie is enough to trigger the authentication
+							// code paths.
+						})
+						if err != nil {
+							t.Fatal(err)
+						}
+						req.AddCookie(cookie)
+					}
+					resp, err := http.DefaultClient.Do(req)
+					if err != nil {
+						t.Fatalf("unexpected error hitting %s endpoint: %v", tc.endpoint, err)
+					}
+					defer resp.Body.Close()
+					if resp.StatusCode != tc.expectedStatus {
+						bodyBytes, _ := ioutil.ReadAll(resp.Body)
+						t.Fatalf("unexpected response code %d (expected %d) hitting %s endpoint: %v",
+							resp.StatusCode, tc.expectedStatus, tc.endpoint, string(bodyBytes))
+					}
 				}
-				defer resp.Body.Close()
-				if resp.StatusCode != tc.expectedStatus {
-					bodyBytes, _ := ioutil.ReadAll(resp.Body)
-					t.Fatalf("unexpected response code %d (expected %d) hitting %s endpoint: %v",
-						resp.StatusCode, tc.expectedStatus, tc.endpoint, string(bodyBytes))
-				}
+
 			}
 
 			c.Run(ctx, c.Node(initNode),
