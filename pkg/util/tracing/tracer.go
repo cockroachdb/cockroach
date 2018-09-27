@@ -376,6 +376,27 @@ func (t *Tracer) StartRootSpan(
 		operation: opName,
 		startTime: time.Now(),
 	}
+	t.initSpan(s, opName, logTags)
+	return s
+}
+
+// InitRootSpan is like StartRootSpan, except it operates on a pre-allocated
+// SpanAlloc. The caller can get the initialized span using alloc.GetSpan().
+func (t *Tracer) InitRootSpan(alloc *SpanAlloc, opName string, logTags *logtags.Buffer) {
+	s := &alloc.sp
+	s.reset()
+	s.spanMeta = spanMeta{
+		TraceID: uint64(rand.Int63()),
+		SpanID:  uint64(rand.Int63()),
+	}
+	s.tracer = t
+	s.operation = opName
+	s.startTime = time.Now()
+	t.initSpan(s, opName, logTags)
+}
+
+func (t *Tracer) initSpan(s *span, opName string, logTags *logtags.Buffer) {
+	shadowTracer := t.getShadowTracer()
 	s.mu.duration = -1
 
 	if shadowTracer != nil {
@@ -396,8 +417,6 @@ func (t *Tracer) StartRootSpan(
 				true /* locked - we're lying but we're just creating the span */)
 		}
 	}
-
-	return s
 }
 
 // StartChildSpan creates a child span of the given parent span. This is

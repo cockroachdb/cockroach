@@ -107,6 +107,11 @@ type txnState struct {
 	// txnAbortCount is incremented whenever the state transitions to
 	// stateAborted.
 	txnAbortCount *metric.Counter
+
+	// alloc holds pre-allocated buffers.
+	alloc struct {
+		sp tracing.SpanAlloc
+	}
 }
 
 // txnType represents the type of a SQL transaction.
@@ -170,9 +175,11 @@ func (ts *txnState) resetForNewSQLTxn(
 			tracing.LogTagsFromCtx(connCtx),
 		)
 	} else {
-		// Create a root span for this SQL txn.
-		sp = tranCtx.tracer.(*tracing.Tracer).StartRootSpan(
-			opName, logtags.FromContext(connCtx), tracing.RecordableRoot)
+		// Create a root span for this SQL txn. We use a pre-allocated buffer to
+		// avoid allocations.
+		tranCtx.tracer.(*tracing.Tracer).InitRootSpan(
+			&ts.alloc.sp, opName, logtags.FromContext(connCtx))
+		sp = ts.alloc.sp.GetSpan()
 	}
 
 	if txnType == implicitTxn {

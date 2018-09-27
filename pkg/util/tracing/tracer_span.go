@@ -94,6 +94,24 @@ const (
 	SingleNodeRecording
 )
 
+// SpanAlloc is an exported span for the purposes of allowing other packages to
+// pre-allocate them. A *SpanAlloc can be passed to Tracer.InitRootSpan(),
+// allowing the creation of root spans in memory already allocated by the
+// caller.
+type SpanAlloc struct {
+	sp span
+}
+
+// GetSpan returns the span inside a SpanAlloc.
+func (s *SpanAlloc) GetSpan() opentracing.Span {
+	return &s.sp
+}
+
+type tag struct {
+	key string
+	val string
+}
+
 type span struct {
 	spanMeta
 
@@ -124,7 +142,7 @@ type span struct {
 		// tags are only set when recording.
 		// TODO(radu): perhaps we want a recording to capture all the tags (even
 		// those that were set before recording started)?
-		tags opentracing.Tags
+		tags []tag
 
 		stats SpanStats
 
@@ -134,6 +152,24 @@ type span struct {
 }
 
 var _ opentracing.Span = &span{}
+
+func (s *span) reset() {
+	s.spanMeta = spanMeta{}
+	s.parentSpanID = 0
+	s.tracer = nil
+	s.netTr = nil
+	s.shadowTr = nil
+	s.shadowSpan = nil
+	s.operation = ""
+	s.recording = 0
+	s.mu.duration = 0
+	s.mu.recordingGroup = nil
+	s.mu.recordingType = RecordingType(0)
+	s.mu.recordedLogs = nil
+	s.mu.tags = s.mu.tags[:0]
+	s.mu.stats = nil
+	s.mu.Baggage = nil
+}
 
 func (s *span) isRecording() bool {
 	return atomic.LoadInt32(&s.recording) != 0
@@ -352,24 +388,27 @@ func (s *span) SetOperationName(operationName string) opentracing.Span {
 
 // SetTag is part of the opentracing.Span interface.
 func (s *span) SetTag(key string, value interface{}) opentracing.Span {
-	return s.setTagInner(key, value, false /* locked */)
+	var valStr string
+	if s, ok := value.(string); ok {
+		valStr = s
+	} else {
+		valStr = fmt.Sprint(value)
+	}
+	return s.setTagInner(key, valStr, false /* locked */)
 }
 
-func (s *span) setTagInner(key string, value interface{}, locked bool) opentracing.Span {
+func (s *span) setTagInner(key string, val string, locked bool) opentracing.Span {
 	if s.shadowTr != nil {
-		s.shadowSpan.SetTag(key, value)
+		s.shadowSpan.SetTag(key, val)
 	}
 	if s.netTr != nil {
-		s.netTr.LazyPrintf("%s:%v", key, value)
+		s.netTr.LazyPrintf("%s:%v", key, val)
 	}
 	// The internal tags will be used if we start a recording on this span.
 	if !locked {
 		s.mu.Lock()
 	}
-	if s.mu.tags == nil {
-		s.mu.tags = make(opentracing.Tags)
-	}
-	s.mu.tags[key] = value
+	s.mu.tags = append(s.mu.tags, tag{key: key, val: val})
 	if !locked {
 		s.mu.Unlock()
 	}
@@ -540,9 +579,9 @@ func (ss *spanGroup) getSpans() []RecordedSpan {
 		}
 		if len(s.mu.tags) > 0 {
 			rs.Tags = make(map[string]string)
-			for k, v := range s.mu.tags {
+			for _, tag := range s.mu.tags {
 				// We encode the tag values as strings.
-				rs.Tags[k] = fmt.Sprint(v)
+				rs.Tags[tag.key] = tag.val
 			}
 		}
 		rs.Logs = make([]RecordedSpan_LogRecord, len(s.mu.recordedLogs))
