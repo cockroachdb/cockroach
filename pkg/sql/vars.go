@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -126,7 +127,26 @@ var varGen = map[string]sessionVar{
 	// Supported for PG compatibility only.
 	// See https://www.postgresql.org/docs/9.6/static/multibyte.html
 	// Also aliased to SET NAMES.
-	`client_encoding`: makeCompatStringVar(`client_encoding`, "UTF8", "utf-8", "unicode", "cp65001"),
+	`client_encoding`: {
+		Set: func(
+			ctx context.Context, m *sessionDataMutator,
+			evalCtx *extendedEvalContext, values []tree.TypedExpr,
+		) error {
+			encName, err := getStringVal(&evalCtx.EvalContext, `client_encoding`, values)
+			if err != nil {
+				return err
+			}
+			encName = builtins.CleanEncodingName(encName)
+			switch encName {
+			case "utf8", "unicode", "cp65001":
+				return nil
+			default:
+				return pgerror.Unimplemented("client_encoding "+encName,
+					"unimplemented client encoding: %q", encName)
+			}
+		},
+		Get: func(evalCtx *extendedEvalContext) string { return "UTF8" },
+	},
 
 	// Supported for PG compatibility only.
 	// See https://www.postgresql.org/docs/9.6/static/multibyte.html
