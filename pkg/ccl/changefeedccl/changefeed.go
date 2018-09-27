@@ -254,7 +254,11 @@ func emitResolvedTimestamp(
 	// before emitting the resolved timestamp to the sink.
 	if jobProgressedFn != nil {
 		progressedClosure := func(ctx context.Context, d jobspb.ProgressDetails) hlc.Timestamp {
-			d.(*jobspb.Progress_Changefeed).Changefeed.ResolvedSpans = resolvedSpans
+			// TODO(dan): This was making enormous jobs rows, especially in
+			// combination with how many mvcc versions there are. Cut down on
+			// the amount of data used here dramatically and re-enable.
+			//
+			// d.(*jobspb.Progress_Changefeed).Changefeed.ResolvedSpans = resolvedSpans
 			return resolved
 		}
 		if err := jobProgressedFn(ctx, progressedClosure); err != nil {
