@@ -2032,24 +2032,29 @@ sort
       │    ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null) p_partkey:6(int!null) p_brand:9(string!null) p_type:10(string!null) p_size:11(int!null)
       │    ├── key: (2,6)
       │    ├── fd: (6)-->(9-11), (1)==(6), (6)==(1)
-      │    ├── anti-join
+      │    ├── anti-join (merge)
       │    │    ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null)
       │    │    ├── key: (1,2)
       │    │    ├── scan partsupp@ps_sk
       │    │    │    ├── columns: ps_partkey:1(int!null) ps_suppkey:2(int!null)
-      │    │    │    └── key: (1,2)
+      │    │    │    ├── key: (1,2)
+      │    │    │    └── ordering: +2
       │    │    ├── select
       │    │    │    ├── columns: s_suppkey:15(int!null) s_comment:21(string!null)
       │    │    │    ├── key: (15)
       │    │    │    ├── fd: (15)-->(21)
+      │    │    │    ├── ordering: +15
       │    │    │    ├── scan supplier
       │    │    │    │    ├── columns: s_suppkey:15(int!null) s_comment:21(string!null)
       │    │    │    │    ├── key: (15)
-      │    │    │    │    └── fd: (15)-->(21)
+      │    │    │    │    ├── fd: (15)-->(21)
+      │    │    │    │    └── ordering: +15
       │    │    │    └── filters [type=bool, outer=(21)]
       │    │    │         └── s_comment LIKE '%Customer%Complaints%' [type=bool, outer=(21)]
-      │    │    └── filters [type=bool, outer=(2,15)]
-      │    │         └── (ps_suppkey = s_suppkey) IS NOT false [type=bool, outer=(2,15)]
+      │    │    └── merge-on
+      │    │         ├── left ordering: +2
+      │    │         ├── right ordering: +15
+      │    │         └── true [type=bool]
       │    ├── select
       │    │    ├── columns: p_partkey:6(int!null) p_brand:9(string!null) p_type:10(string!null) p_size:11(int!null)
       │    │    ├── key: (6)
