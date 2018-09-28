@@ -80,6 +80,9 @@ TESTFLAGS :=
 ## Extra flags to pass to `stress` during `make stress`.
 STRESSFLAGS :=
 
+## Cluster to use for `make roachprod-stress`
+CLUSTER :=
+
 DUPLFLAGS    := -t 100
 GOFLAGS      :=
 TAGS         :=
@@ -835,6 +838,17 @@ stressrace: ## Run tests under stress with the race detector enabled.
 stress stressrace:
 	$(xgo) test $(GOFLAGS) -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
 
+.PHONE: roachprod-stress
+roachprod-stress: bin/roachprod-stress
+	build/builder.sh make bin/stress
+	build/builder.sh make test GOFLAGS="-i -v -c -o $(notdir $(PKG)).test" PKG=$(PKG)
+	@if [ -z "$(CLUSTER)" ]; then \
+	  echo "ERROR: missing or empty CLUSTER"; \
+	else \
+	  bin/roachprod-stress $(CLUSTER) $(STRESSFLAGS) ./$(notdir $(PKG)).test \
+	    -test.run "$(TESTS)" $(filter-out -v,$(TESTFLAGS)) -test.v -test.timeout $(TESTTIMEOUT); \
+	fi
+
 testlogic: testbaselogic testplannerlogic testoptlogic
 
 testbaselogic: ## Run SQL Logic Tests.
@@ -1372,6 +1386,7 @@ bins = \
   bin/publish-artifacts \
   bin/optgen \
   bin/returncheck \
+  bin/roachprod-stress \
   bin/roachtest \
   bin/teamcity-trigger \
   bin/uptodate \
