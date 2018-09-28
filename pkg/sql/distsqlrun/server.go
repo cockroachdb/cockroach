@@ -434,6 +434,7 @@ func (ds *ServerImpl) setupFlow(
 		diskMonitor:    ds.DiskMonitor,
 		JobRegistry:    ds.ServerConfig.JobRegistry,
 		traceKV:        req.TraceKV,
+		local:          localState.IsLocal,
 	}
 	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer, localState.LocalProcs)
 	if err := f.setup(ctx, &req.Flow); err != nil {

@@ -117,6 +117,9 @@ type FlowCtx struct {
 
 	// traceKV is true if KV tracing was requested by the session.
 	traceKV bool
+
+	// local is true if this flow is being run as part of a local-only query.
+	local bool
 }
 
 // NewEvalCtx returns a modifiable copy of the FlowCtx's EvalContext.
