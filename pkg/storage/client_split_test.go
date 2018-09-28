@@ -3105,3 +3105,14 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestStoreWaitForInitialSplitsRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	store, _ := createTestStore(t, stopper)
+	go storage.WatchForDisappearingReplicas(t, store)
+	if err := server.WaitForInitialSplits(store.DB()); err != nil {
+		t.Fatal(err)
+	}
+}
