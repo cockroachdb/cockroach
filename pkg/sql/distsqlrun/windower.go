@@ -287,6 +287,7 @@ func (w *windower) ConsumerClosed() {
 
 func (w *windower) close() {
 	if w.InternalClose() {
+		w.encodedPartitions = nil
 		w.accumulationAcc.Close(w.Ctx)
 		w.decodingAcc.Close(w.Ctx)
 		w.resultsAcc.Close(w.Ctx)
@@ -337,7 +338,15 @@ func (w *windower) accumulateRows() (windowerState, sqlbase.EncDatumRow, *Produc
 					return windowerStateUnknown, nil, w.DrainHelper()
 				}
 			}
-			w.encodedPartitions[string(w.scratch)] = append(w.encodedPartitions[string(w.scratch)], w.rowAlloc.CopyRow(row))
+			encodedPartition := w.encodedPartitions[string(w.scratch)]
+			if encodedPartition == nil {
+				// Account for the new memory we'll use to store the partition in the map.
+				if err := w.accumulationAcc.Grow(w.Ctx, int64(len(w.scratch))); err != nil {
+					w.MoveToDraining(nil /* err */)
+					return windowerStateUnknown, nil, meta
+				}
+			}
+			w.encodedPartitions[string(w.scratch)] = append(encodedPartition, w.rowAlloc.CopyRow(row))
 		}
 	}
 
