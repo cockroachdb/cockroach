@@ -4598,6 +4598,28 @@ func (s *Store) ManuallyEnqueue(
 	return collect(), "", nil
 }
 
+// ManuallyEnqueueSpan runs all replicas in the supplied span through the named
+// queue. This is currently intended for use in internal tests which have access
+// to the store directly.
+func (s *Store) ManuallyEnqueueSpan(
+	ctx context.Context, queueName string, span roachpb.RSpan, skipShouldQueue bool,
+) error {
+	var outerErr error
+	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
+		desc := repl.Desc()
+		if bytes.Compare(span.Key, desc.EndKey) >= 0 || bytes.Compare(desc.StartKey, span.EndKey) >= 0 {
+			return true // continue
+		}
+
+		if _, _, err := s.ManuallyEnqueue(ctx, queueName, repl, skipShouldQueue); err != nil {
+			outerErr = err
+			return false
+		}
+		return true
+	})
+	return outerErr
+}
+
 // WriteClusterVersion writes the given cluster version to the store-local cluster version key.
 func WriteClusterVersion(
 	ctx context.Context, writer engine.ReadWriter, cv cluster.ClusterVersion,
