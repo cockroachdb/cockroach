@@ -530,13 +530,42 @@ func assertPayloads(t testing.TB, f testfeed, expected []string) {
 
 	var actual []string
 	for len(actual) < len(expected) {
-		topic, _, key, value, resolved, ok := f.Next(t)
+		topic, _, key, value, _, ok := f.Next(t)
 		if !ok {
 			break
 		} else if key != nil {
 			actual = append(actual, fmt.Sprintf(`%s: %s->%s`, topic, key, value))
-		} else if resolved != nil {
-			continue
+		}
+	}
+
+	// The tests that use this aren't concerned with order, just that these are
+	// the next len(expected) messages.
+	sort.Strings(expected)
+	sort.Strings(actual)
+	if !reflect.DeepEqual(expected, actual) {
+		t.Fatalf("expected\n  %s\ngot\n  %s",
+			strings.Join(expected, "\n  "), strings.Join(actual, "\n  "))
+	}
+}
+
+func assertPayloadsAvro(t testing.TB, reg *testSchemaRegistry, f testfeed, expected []string) {
+	t.Helper()
+
+	var actual []string
+	for len(actual) < len(expected) {
+		topic, _, keyBytes, valueBytes, _, ok := f.Next(t)
+		if !ok {
+			break
+		} else if keyBytes != nil {
+			key, err := reg.encodedAvroToJSON(keyBytes)
+			if err != nil {
+				t.Fatal(err)
+			}
+			value, err := reg.encodedAvroToJSON(valueBytes)
+			if err != nil {
+				t.Fatal(err)
+			}
+			actual = append(actual, fmt.Sprintf(`%s: %s->%s`, topic, key, value))
 		}
 	}
 
