@@ -38,18 +38,6 @@ type Txn struct {
 	// typ indicates the type of transaction.
 	typ TxnType
 
-	// alloc holds pre-allocated fields that can be used to avoid heap allocations
-	// for batches with lifetimes tied to a Txn.
-	// TODO(andrei): A lot more things should be pre-allocated or otherwise pooled
-	// - in particular the roachpb.Transaction proto and the TxnCoordSender which
-	// are quite large. Pooling them would also force us to clean up their
-	// lifetimes, which is a good idea on its own.
-	alloc struct {
-		requests [1]roachpb.RequestUnion
-		etUnion  roachpb.RequestUnion_EndTransaction
-		et       roachpb.EndTransactionRequest
-	}
-
 	// gatewayNodeID, if != 0, is the ID of the node on whose behalf this
 	// transaction is running. Normally this is the current node, but in the case
 	// of Txns created on remote nodes by DistSQL this will be the gateway.
@@ -521,7 +509,8 @@ func (txn *Txn) Run(ctx context.Context, b *Batch) error {
 }
 
 func (txn *Txn) commit(ctx context.Context) error {
-	ba := txn.getCommitReq(txn.deadline(), txn.systemConfigTrigger)
+	var ba roachpb.BatchRequest
+	ba.Add(endTxnReq(true /* commit */, txn.deadline(), txn.systemConfigTrigger))
 	_, pErr := txn.Send(ctx, ba)
 	if pErr == nil {
 		for _, t := range txn.commitTriggers {
@@ -543,27 +532,6 @@ func (txn *Txn) CleanupOnError(ctx context.Context, err error) {
 			log.Warningf(ctx, "failure aborting transaction: %s; abort caused by: %s", replyErr, err)
 		}
 	}
-}
-
-func (txn *Txn) getCommitReq(deadline *hlc.Timestamp, hasTrigger bool) roachpb.BatchRequest {
-	ba := roachpb.BatchRequest{
-		Requests: txn.alloc.requests[:1],
-	}
-	etReq := &txn.alloc.et
-	etUnion := &txn.alloc.etUnion
-	ba.Requests[0].Value = etUnion
-	etUnion.EndTransaction = etReq
-	etReq.Reset()
-	etReq.Commit = true
-	etReq.Deadline = deadline
-	if hasTrigger {
-		etReq.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
-			ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{
-				SystemConfigSpan: true,
-			},
-		}
-	}
-	return ba
 }
 
 // Commit is the same as CommitOrCleanup but will not attempt to clean
