@@ -70,34 +70,44 @@ func (_f *Factory) ConstructFuncCall(
 	return _f.onConstruct(memo.Expr(_funcCallExpr))
 }
 
-func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+func (f *Factory) assignPlaceholders(group memo.GroupID) (memo.GroupID, error) {
 	if !f.mem.GroupProperties(group).HasPlaceholder() {
-		return group
+		return group, nil
 	}
 	expr := f.mem.NormExpr(group)
 	switch expr.Operator() {
 	case opt.NotOp:
 		notExpr := expr.AsNot()
-		input := f.assignPlaceholders(notExpr.Input())
-		return f.ConstructNot(input)
+		input, err := f.assignPlaceholders(notExpr.Input())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructNot(input), nil
 	case opt.FuncCallOp:
 		funcCallExpr := expr.AsFuncCall()
 		lb := MakeListBuilder(&f.funcs)
-		name := f.assignPlaceholders(funcCallExpr.Name())
+		name, err := f.assignPlaceholders(funcCallExpr.Name())
+		if err != nil {
+			return 0, err
+		}
 		for _, item := range f.mem.LookupList(funcCallExpr.Args()) {
-			lb.AddItem(f.assignPlaceholders(item))
+			newItem, err := f.assignPlaceholders(item)
+			if err != nil {
+				return 0, err
+			}
+			lb.AddItem(newItem)
 		}
 		args := lb.BuildList()
 		def := funcCallExpr.Def()
-		return f.ConstructFuncCall(name, args, def)
+		return f.ConstructFuncCall(name, args, def), nil
 	case opt.PlaceholderOp:
 		value := expr.AsPlaceholder().Value()
 		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
 		d, err := placeholder.Eval(f.evalCtx)
 		if err != nil {
-			panic(err)
+			return 0, err
 		}
-		return f.ConstructConstVal(d)
+		return f.ConstructConstVal(d), nil
 	}
 	panic("unhandled operator")
 }
@@ -187,25 +197,31 @@ func (_f *Factory) ConstructInnerJoin(
 	return _f.onConstruct(memo.Expr(_innerJoinExpr))
 }
 
-func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+func (f *Factory) assignPlaceholders(group memo.GroupID) (memo.GroupID, error) {
 	if !f.mem.GroupProperties(group).HasPlaceholder() {
-		return group
+		return group, nil
 	}
 	expr := f.mem.NormExpr(group)
 	switch expr.Operator() {
 	case opt.InnerJoinOp:
 		innerJoinExpr := expr.AsInnerJoin()
-		left := f.assignPlaceholders(innerJoinExpr.Left())
-		right := f.assignPlaceholders(innerJoinExpr.Right())
-		return f.ConstructInnerJoin(left, right)
+		left, err := f.assignPlaceholders(innerJoinExpr.Left())
+		if err != nil {
+			return 0, err
+		}
+		right, err := f.assignPlaceholders(innerJoinExpr.Right())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructInnerJoin(left, right), nil
 	case opt.PlaceholderOp:
 		value := expr.AsPlaceholder().Value()
 		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
 		d, err := placeholder.Eval(f.evalCtx)
 		if err != nil {
-			panic(err)
+			return 0, err
 		}
-		return f.ConstructConstVal(d)
+		return f.ConstructConstVal(d), nil
 	}
 	panic("unhandled operator")
 }
@@ -428,40 +444,64 @@ func (_f *Factory) ConstructConst(
 	return _f.onConstruct(memo.Expr(_constExpr))
 }
 
-func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+func (f *Factory) assignPlaceholders(group memo.GroupID) (memo.GroupID, error) {
 	if !f.mem.GroupProperties(group).HasPlaceholder() {
-		return group
+		return group, nil
 	}
 	expr := f.mem.NormExpr(group)
 	switch expr.Operator() {
 	case opt.EqOp:
 		eqExpr := expr.AsEq()
-		left := f.assignPlaceholders(eqExpr.Left())
-		right := f.assignPlaceholders(eqExpr.Right())
-		return f.ConstructEq(left, right)
+		left, err := f.assignPlaceholders(eqExpr.Left())
+		if err != nil {
+			return 0, err
+		}
+		right, err := f.assignPlaceholders(eqExpr.Right())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructEq(left, right), nil
 	case opt.LtOp:
 		ltExpr := expr.AsLt()
-		left := f.assignPlaceholders(ltExpr.Left())
-		right := f.assignPlaceholders(ltExpr.Right())
-		return f.ConstructLt(left, right)
+		left, err := f.assignPlaceholders(ltExpr.Left())
+		if err != nil {
+			return 0, err
+		}
+		right, err := f.assignPlaceholders(ltExpr.Right())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructLt(left, right), nil
 	case opt.PlusOp:
 		plusExpr := expr.AsPlus()
-		left := f.assignPlaceholders(plusExpr.Left())
-		right := f.assignPlaceholders(plusExpr.Right())
-		return f.ConstructPlus(left, right)
+		left, err := f.assignPlaceholders(plusExpr.Left())
+		if err != nil {
+			return 0, err
+		}
+		right, err := f.assignPlaceholders(plusExpr.Right())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructPlus(left, right), nil
 	case opt.MinusOp:
 		minusExpr := expr.AsMinus()
-		left := f.assignPlaceholders(minusExpr.Left())
-		right := f.assignPlaceholders(minusExpr.Right())
-		return f.ConstructMinus(left, right)
+		left, err := f.assignPlaceholders(minusExpr.Left())
+		if err != nil {
+			return 0, err
+		}
+		right, err := f.assignPlaceholders(minusExpr.Right())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructMinus(left, right), nil
 	case opt.PlaceholderOp:
 		value := expr.AsPlaceholder().Value()
 		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
 		d, err := placeholder.Eval(f.evalCtx)
 		if err != nil {
-			panic(err)
+			return 0, err
 		}
-		return f.ConstructConstVal(d)
+		return f.ConstructConstVal(d), nil
 	}
 	panic("unhandled operator")
 }
@@ -610,30 +650,37 @@ func (_f *Factory) ConstructVariable(
 	return _f.onConstruct(memo.Expr(_variableExpr))
 }
 
-func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+func (f *Factory) assignPlaceholders(group memo.GroupID) (memo.GroupID, error) {
 	if !f.mem.GroupProperties(group).HasPlaceholder() {
-		return group
+		return group, nil
 	}
 	expr := f.mem.NormExpr(group)
 	switch expr.Operator() {
 	case opt.FuncOp:
 		funcExpr := expr.AsFunc()
 		lb := MakeListBuilder(&f.funcs)
-		name := f.assignPlaceholders(funcExpr.Name())
+		name, err := f.assignPlaceholders(funcExpr.Name())
+		if err != nil {
+			return 0, err
+		}
 		for _, item := range f.mem.LookupList(funcExpr.Args()) {
-			lb.AddItem(f.assignPlaceholders(item))
+			newItem, err := f.assignPlaceholders(item)
+			if err != nil {
+				return 0, err
+			}
+			lb.AddItem(newItem)
 		}
 		args := lb.BuildList()
 		def := funcExpr.Def()
-		return f.ConstructFunc(name, args, def)
+		return f.ConstructFunc(name, args, def), nil
 	case opt.PlaceholderOp:
 		value := expr.AsPlaceholder().Value()
 		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
 		d, err := placeholder.Eval(f.evalCtx)
 		if err != nil {
-			panic(err)
+			return 0, err
 		}
-		return f.ConstructConstVal(d)
+		return f.ConstructConstVal(d), nil
 	}
 	panic("unhandled operator")
 }
@@ -831,45 +878,75 @@ func (_f *Factory) ConstructAnd(
 	return _f.onConstruct(memo.Expr(_andExpr))
 }
 
-func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+func (f *Factory) assignPlaceholders(group memo.GroupID) (memo.GroupID, error) {
 	if !f.mem.GroupProperties(group).HasPlaceholder() {
-		return group
+		return group, nil
 	}
 	expr := f.mem.NormExpr(group)
 	switch expr.Operator() {
 	case opt.SelectOp:
 		selectExpr := expr.AsSelect()
-		input := f.assignPlaceholders(selectExpr.Input())
-		filter := f.assignPlaceholders(selectExpr.Filter())
-		return f.ConstructSelect(input, filter)
+		input, err := f.assignPlaceholders(selectExpr.Input())
+		if err != nil {
+			return 0, err
+		}
+		filter, err := f.assignPlaceholders(selectExpr.Filter())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructSelect(input, filter), nil
 	case opt.InnerJoinOp:
 		innerJoinExpr := expr.AsInnerJoin()
-		left := f.assignPlaceholders(innerJoinExpr.Left())
-		right := f.assignPlaceholders(innerJoinExpr.Right())
-		return f.ConstructInnerJoin(left, right)
+		left, err := f.assignPlaceholders(innerJoinExpr.Left())
+		if err != nil {
+			return 0, err
+		}
+		right, err := f.assignPlaceholders(innerJoinExpr.Right())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructInnerJoin(left, right), nil
 	case opt.FullJoinOp:
 		fullJoinExpr := expr.AsFullJoin()
-		left := f.assignPlaceholders(fullJoinExpr.Left())
-		right := f.assignPlaceholders(fullJoinExpr.Right())
-		return f.ConstructFullJoin(left, right)
+		left, err := f.assignPlaceholders(fullJoinExpr.Left())
+		if err != nil {
+			return 0, err
+		}
+		right, err := f.assignPlaceholders(fullJoinExpr.Right())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructFullJoin(left, right), nil
 	case opt.UnionOp:
 		unionExpr := expr.AsUnion()
-		left := f.assignPlaceholders(unionExpr.Left())
-		right := f.assignPlaceholders(unionExpr.Right())
-		return f.ConstructUnion(left, right)
+		left, err := f.assignPlaceholders(unionExpr.Left())
+		if err != nil {
+			return 0, err
+		}
+		right, err := f.assignPlaceholders(unionExpr.Right())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructUnion(left, right), nil
 	case opt.AndOp:
 		andExpr := expr.AsAnd()
-		left := f.assignPlaceholders(andExpr.Left())
-		right := f.assignPlaceholders(andExpr.Right())
-		return f.ConstructAnd(left, right)
+		left, err := f.assignPlaceholders(andExpr.Left())
+		if err != nil {
+			return 0, err
+		}
+		right, err := f.assignPlaceholders(andExpr.Right())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructAnd(left, right), nil
 	case opt.PlaceholderOp:
 		value := expr.AsPlaceholder().Value()
 		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
 		d, err := placeholder.Eval(f.evalCtx)
 		if err != nil {
-			panic(err)
+			return 0, err
 		}
-		return f.ConstructConstVal(d)
+		return f.ConstructConstVal(d), nil
 	}
 	panic("unhandled operator")
 }
@@ -1073,43 +1150,67 @@ func (_f *Factory) ConstructLookupJoin(
 	return _f.onConstruct(memo.Expr(_lookupJoinExpr))
 }
 
-func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+func (f *Factory) assignPlaceholders(group memo.GroupID) (memo.GroupID, error) {
 	if !f.mem.GroupProperties(group).HasPlaceholder() {
-		return group
+		return group, nil
 	}
 	expr := f.mem.NormExpr(group)
 	switch expr.Operator() {
 	case opt.SelectOp:
 		selectExpr := expr.AsSelect()
-		input := f.assignPlaceholders(selectExpr.Input())
-		filter := f.assignPlaceholders(selectExpr.Filter())
-		return f.ConstructSelect(input, filter)
+		input, err := f.assignPlaceholders(selectExpr.Input())
+		if err != nil {
+			return 0, err
+		}
+		filter, err := f.assignPlaceholders(selectExpr.Filter())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructSelect(input, filter), nil
 	case opt.GroupByOp:
 		groupByExpr := expr.AsGroupBy()
-		input := f.assignPlaceholders(groupByExpr.Input())
-		aggs := f.assignPlaceholders(groupByExpr.Aggs())
+		input, err := f.assignPlaceholders(groupByExpr.Input())
+		if err != nil {
+			return 0, err
+		}
+		aggs, err := f.assignPlaceholders(groupByExpr.Aggs())
+		if err != nil {
+			return 0, err
+		}
 		def := groupByExpr.Def()
-		return f.ConstructGroupBy(input, aggs, def)
+		return f.ConstructGroupBy(input, aggs, def), nil
 	case opt.ScalarGroupByOp:
 		scalarGroupByExpr := expr.AsScalarGroupBy()
-		input := f.assignPlaceholders(scalarGroupByExpr.Input())
-		aggs := f.assignPlaceholders(scalarGroupByExpr.Aggs())
+		input, err := f.assignPlaceholders(scalarGroupByExpr.Input())
+		if err != nil {
+			return 0, err
+		}
+		aggs, err := f.assignPlaceholders(scalarGroupByExpr.Aggs())
+		if err != nil {
+			return 0, err
+		}
 		def := scalarGroupByExpr.Def()
-		return f.ConstructScalarGroupBy(input, aggs, def)
+		return f.ConstructScalarGroupBy(input, aggs, def), nil
 	case opt.LookupJoinOp:
 		lookupJoinExpr := expr.AsLookupJoin()
-		input := f.assignPlaceholders(lookupJoinExpr.Input())
-		on := f.assignPlaceholders(lookupJoinExpr.On())
+		input, err := f.assignPlaceholders(lookupJoinExpr.Input())
+		if err != nil {
+			return 0, err
+		}
+		on, err := f.assignPlaceholders(lookupJoinExpr.On())
+		if err != nil {
+			return 0, err
+		}
 		def := lookupJoinExpr.Def()
-		return f.ConstructLookupJoin(input, on, def)
+		return f.ConstructLookupJoin(input, on, def), nil
 	case opt.PlaceholderOp:
 		value := expr.AsPlaceholder().Value()
 		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
 		d, err := placeholder.Eval(f.evalCtx)
 		if err != nil {
-			panic(err)
+			return 0, err
 		}
-		return f.ConstructConstVal(d)
+		return f.ConstructConstVal(d), nil
 	}
 	panic("unhandled operator")
 }
@@ -1245,9 +1346,9 @@ func (_f *Factory) ConstructList(
 	return _f.onConstruct(memo.Expr(_listExpr))
 }
 
-func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+func (f *Factory) assignPlaceholders(group memo.GroupID) (memo.GroupID, error) {
 	if !f.mem.GroupProperties(group).HasPlaceholder() {
-		return group
+		return group, nil
 	}
 	expr := f.mem.NormExpr(group)
 	switch expr.Operator() {
@@ -1255,18 +1356,22 @@ func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
 		listExpr := expr.AsList()
 		lb := MakeListBuilder(&f.funcs)
 		for _, item := range f.mem.LookupList(listExpr.Items()) {
-			lb.AddItem(f.assignPlaceholders(item))
+			newItem, err := f.assignPlaceholders(item)
+			if err != nil {
+				return 0, err
+			}
+			lb.AddItem(newItem)
 		}
 		items := lb.BuildList()
-		return f.ConstructList(items)
+		return f.ConstructList(items), nil
 	case opt.PlaceholderOp:
 		value := expr.AsPlaceholder().Value()
 		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
 		d, err := placeholder.Eval(f.evalCtx)
 		if err != nil {
-			panic(err)
+			return 0, err
 		}
-		return f.ConstructConstVal(d)
+		return f.ConstructConstVal(d), nil
 	}
 	panic("unhandled operator")
 }
@@ -1350,26 +1455,35 @@ func (_f *Factory) ConstructJoin(
 	return _f.onConstruct(memo.Expr(_joinExpr))
 }
 
-func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+func (f *Factory) assignPlaceholders(group memo.GroupID) (memo.GroupID, error) {
 	if !f.mem.GroupProperties(group).HasPlaceholder() {
-		return group
+		return group, nil
 	}
 	expr := f.mem.NormExpr(group)
 	switch expr.Operator() {
 	case opt.JoinOp:
 		joinExpr := expr.AsJoin()
-		left := f.assignPlaceholders(joinExpr.Left())
-		right := f.assignPlaceholders(joinExpr.Right())
-		on := f.assignPlaceholders(joinExpr.On())
-		return f.ConstructJoin(left, right, on)
+		left, err := f.assignPlaceholders(joinExpr.Left())
+		if err != nil {
+			return 0, err
+		}
+		right, err := f.assignPlaceholders(joinExpr.Right())
+		if err != nil {
+			return 0, err
+		}
+		on, err := f.assignPlaceholders(joinExpr.On())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructJoin(left, right, on), nil
 	case opt.PlaceholderOp:
 		value := expr.AsPlaceholder().Value()
 		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
 		d, err := placeholder.Eval(f.evalCtx)
 		if err != nil {
-			panic(err)
+			return 0, err
 		}
-		return f.ConstructConstVal(d)
+		return f.ConstructConstVal(d), nil
 	}
 	panic("unhandled operator")
 }
@@ -1484,9 +1598,9 @@ func (_f *Factory) ConstructOp(
 	return _f.onConstruct(memo.Expr(_opExpr))
 }
 
-func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+func (f *Factory) assignPlaceholders(group memo.GroupID) (memo.GroupID, error) {
 	if !f.mem.GroupProperties(group).HasPlaceholder() {
-		return group
+		return group, nil
 	}
 	expr := f.mem.NormExpr(group)
 	switch expr.Operator() {
@@ -1494,23 +1608,33 @@ func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
 		listExpr := expr.AsList()
 		lb := MakeListBuilder(&f.funcs)
 		for _, item := range f.mem.LookupList(listExpr.Items()) {
-			lb.AddItem(f.assignPlaceholders(item))
+			newItem, err := f.assignPlaceholders(item)
+			if err != nil {
+				return 0, err
+			}
+			lb.AddItem(newItem)
 		}
 		items := lb.BuildList()
-		return f.ConstructList(items)
+		return f.ConstructList(items), nil
 	case opt.OpOp:
 		opExpr := expr.AsOp()
-		empty := f.assignPlaceholders(opExpr.Empty())
-		single := f.assignPlaceholders(opExpr.Single())
-		return f.ConstructOp(empty, single)
+		empty, err := f.assignPlaceholders(opExpr.Empty())
+		if err != nil {
+			return 0, err
+		}
+		single, err := f.assignPlaceholders(opExpr.Single())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructOp(empty, single), nil
 	case opt.PlaceholderOp:
 		value := expr.AsPlaceholder().Value()
 		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
 		d, err := placeholder.Eval(f.evalCtx)
 		if err != nil {
-			panic(err)
+			return 0, err
 		}
-		return f.ConstructConstVal(d)
+		return f.ConstructConstVal(d), nil
 	}
 	panic("unhandled operator")
 }
@@ -1692,30 +1816,42 @@ func (_f *Factory) ConstructNe(
 	return _f.onConstruct(memo.Expr(_neExpr))
 }
 
-func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+func (f *Factory) assignPlaceholders(group memo.GroupID) (memo.GroupID, error) {
 	if !f.mem.GroupProperties(group).HasPlaceholder() {
-		return group
+		return group, nil
 	}
 	expr := f.mem.NormExpr(group)
 	switch expr.Operator() {
 	case opt.EqOp:
 		eqExpr := expr.AsEq()
-		left := f.assignPlaceholders(eqExpr.Left())
-		right := f.assignPlaceholders(eqExpr.Right())
-		return f.ConstructEq(left, right)
+		left, err := f.assignPlaceholders(eqExpr.Left())
+		if err != nil {
+			return 0, err
+		}
+		right, err := f.assignPlaceholders(eqExpr.Right())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructEq(left, right), nil
 	case opt.NeOp:
 		neExpr := expr.AsNe()
-		left := f.assignPlaceholders(neExpr.Left())
-		right := f.assignPlaceholders(neExpr.Right())
-		return f.ConstructNe(left, right)
+		left, err := f.assignPlaceholders(neExpr.Left())
+		if err != nil {
+			return 0, err
+		}
+		right, err := f.assignPlaceholders(neExpr.Right())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructNe(left, right), nil
 	case opt.PlaceholderOp:
 		value := expr.AsPlaceholder().Value()
 		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
 		d, err := placeholder.Eval(f.evalCtx)
 		if err != nil {
-			panic(err)
+			return 0, err
 		}
-		return f.ConstructConstVal(d)
+		return f.ConstructConstVal(d), nil
 	}
 	panic("unhandled operator")
 }
@@ -1861,30 +1997,42 @@ func (_f *Factory) ConstructNull() memo.GroupID {
 	return _f.onConstruct(memo.Expr(_nullExpr))
 }
 
-func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+func (f *Factory) assignPlaceholders(group memo.GroupID) (memo.GroupID, error) {
 	if !f.mem.GroupProperties(group).HasPlaceholder() {
-		return group
+		return group, nil
 	}
 	expr := f.mem.NormExpr(group)
 	switch expr.Operator() {
 	case opt.PlusOp:
 		plusExpr := expr.AsPlus()
-		left := f.assignPlaceholders(plusExpr.Left())
-		right := f.assignPlaceholders(plusExpr.Right())
-		return f.ConstructPlus(left, right)
+		left, err := f.assignPlaceholders(plusExpr.Left())
+		if err != nil {
+			return 0, err
+		}
+		right, err := f.assignPlaceholders(plusExpr.Right())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructPlus(left, right), nil
 	case opt.MinusOp:
 		minusExpr := expr.AsMinus()
-		left := f.assignPlaceholders(minusExpr.Left())
-		right := f.assignPlaceholders(minusExpr.Right())
-		return f.ConstructMinus(left, right)
+		left, err := f.assignPlaceholders(minusExpr.Left())
+		if err != nil {
+			return 0, err
+		}
+		right, err := f.assignPlaceholders(minusExpr.Right())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructMinus(left, right), nil
 	case opt.PlaceholderOp:
 		value := expr.AsPlaceholder().Value()
 		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
 		d, err := placeholder.Eval(f.evalCtx)
 		if err != nil {
-			panic(err)
+			return 0, err
 		}
-		return f.ConstructConstVal(d)
+		return f.ConstructConstVal(d), nil
 	}
 	panic("unhandled operator")
 }
@@ -2044,39 +2192,60 @@ func (_f *Factory) ConstructNot(
 	return _f.onConstruct(memo.Expr(_notExpr))
 }
 
-func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+func (f *Factory) assignPlaceholders(group memo.GroupID) (memo.GroupID, error) {
 	if !f.mem.GroupProperties(group).HasPlaceholder() {
-		return group
+		return group, nil
 	}
 	expr := f.mem.NormExpr(group)
 	switch expr.Operator() {
 	case opt.LtOp:
 		ltExpr := expr.AsLt()
-		left := f.assignPlaceholders(ltExpr.Left())
-		right := f.assignPlaceholders(ltExpr.Right())
-		return f.ConstructLt(left, right)
+		left, err := f.assignPlaceholders(ltExpr.Left())
+		if err != nil {
+			return 0, err
+		}
+		right, err := f.assignPlaceholders(ltExpr.Right())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructLt(left, right), nil
 	case opt.GtOp:
 		gtExpr := expr.AsGt()
-		left := f.assignPlaceholders(gtExpr.Left())
-		right := f.assignPlaceholders(gtExpr.Right())
-		return f.ConstructGt(left, right)
+		left, err := f.assignPlaceholders(gtExpr.Left())
+		if err != nil {
+			return 0, err
+		}
+		right, err := f.assignPlaceholders(gtExpr.Right())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructGt(left, right), nil
 	case opt.ContainsOp:
 		containsExpr := expr.AsContains()
-		left := f.assignPlaceholders(containsExpr.Left())
-		right := f.assignPlaceholders(containsExpr.Right())
-		return f.ConstructContains(left, right)
+		left, err := f.assignPlaceholders(containsExpr.Left())
+		if err != nil {
+			return 0, err
+		}
+		right, err := f.assignPlaceholders(containsExpr.Right())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructContains(left, right), nil
 	case opt.NotOp:
 		notExpr := expr.AsNot()
-		input := f.assignPlaceholders(notExpr.Input())
-		return f.ConstructNot(input)
+		input, err := f.assignPlaceholders(notExpr.Input())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructNot(input), nil
 	case opt.PlaceholderOp:
 		value := expr.AsPlaceholder().Value()
 		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
 		d, err := placeholder.Eval(f.evalCtx)
 		if err != nil {
-			panic(err)
+			return 0, err
 		}
-		return f.ConstructConstVal(d)
+		return f.ConstructConstVal(d), nil
 	}
 	panic("unhandled operator")
 }
@@ -2245,24 +2414,27 @@ func (_f *Factory) ConstructProject(
 	return _f.onConstruct(memo.Expr(_projectExpr))
 }
 
-func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+func (f *Factory) assignPlaceholders(group memo.GroupID) (memo.GroupID, error) {
 	if !f.mem.GroupProperties(group).HasPlaceholder() {
-		return group
+		return group, nil
 	}
 	expr := f.mem.NormExpr(group)
 	switch expr.Operator() {
 	case opt.ProjectOp:
 		projectExpr := expr.AsProject()
-		input := f.assignPlaceholders(projectExpr.Input())
-		return f.ConstructProject(input)
+		input, err := f.assignPlaceholders(projectExpr.Input())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructProject(input), nil
 	case opt.PlaceholderOp:
 		value := expr.AsPlaceholder().Value()
 		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
 		d, err := placeholder.Eval(f.evalCtx)
 		if err != nil {
-			panic(err)
+			return 0, err
 		}
-		return f.ConstructConstVal(d)
+		return f.ConstructConstVal(d), nil
 	}
 	panic("unhandled operator")
 }
@@ -2365,26 +2537,35 @@ func (_f *Factory) ConstructInnerJoin(
 	return _f.onConstruct(memo.Expr(_innerJoinExpr))
 }
 
-func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+func (f *Factory) assignPlaceholders(group memo.GroupID) (memo.GroupID, error) {
 	if !f.mem.GroupProperties(group).HasPlaceholder() {
-		return group
+		return group, nil
 	}
 	expr := f.mem.NormExpr(group)
 	switch expr.Operator() {
 	case opt.InnerJoinOp:
 		innerJoinExpr := expr.AsInnerJoin()
-		left := f.assignPlaceholders(innerJoinExpr.Left())
-		right := f.assignPlaceholders(innerJoinExpr.Right())
-		on := f.assignPlaceholders(innerJoinExpr.On())
-		return f.ConstructInnerJoin(left, right, on)
+		left, err := f.assignPlaceholders(innerJoinExpr.Left())
+		if err != nil {
+			return 0, err
+		}
+		right, err := f.assignPlaceholders(innerJoinExpr.Right())
+		if err != nil {
+			return 0, err
+		}
+		on, err := f.assignPlaceholders(innerJoinExpr.On())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructInnerJoin(left, right, on), nil
 	case opt.PlaceholderOp:
 		value := expr.AsPlaceholder().Value()
 		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
 		d, err := placeholder.Eval(f.evalCtx)
 		if err != nil {
-			panic(err)
+			return 0, err
 		}
-		return f.ConstructConstVal(d)
+		return f.ConstructConstVal(d), nil
 	}
 	panic("unhandled operator")
 }
@@ -2507,25 +2688,31 @@ func (_f *Factory) ConstructScan() memo.GroupID {
 	return _f.onConstruct(memo.Expr(_scanExpr))
 }
 
-func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
+func (f *Factory) assignPlaceholders(group memo.GroupID) (memo.GroupID, error) {
 	if !f.mem.GroupProperties(group).HasPlaceholder() {
-		return group
+		return group, nil
 	}
 	expr := f.mem.NormExpr(group)
 	switch expr.Operator() {
 	case opt.LimitOp:
 		limitExpr := expr.AsLimit()
-		input := f.assignPlaceholders(limitExpr.Input())
-		limit := f.assignPlaceholders(limitExpr.Limit())
-		return f.ConstructLimit(input, limit)
+		input, err := f.assignPlaceholders(limitExpr.Input())
+		if err != nil {
+			return 0, err
+		}
+		limit, err := f.assignPlaceholders(limitExpr.Limit())
+		if err != nil {
+			return 0, err
+		}
+		return f.ConstructLimit(input, limit), nil
 	case opt.PlaceholderOp:
 		value := expr.AsPlaceholder().Value()
 		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
 		d, err := placeholder.Eval(f.evalCtx)
 		if err != nil {
-			panic(err)
+			return 0, err
 		}
-		return f.ConstructConstVal(d)
+		return f.ConstructConstVal(d), nil
 	}
 	panic("unhandled operator")
 }

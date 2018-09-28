@@ -145,9 +145,9 @@ func (g *factoryGen) genConstructFuncs() {
 //       return f.ConstructSelect(input, filter)
 //
 func (g *factoryGen) genAssignPlaceholders() {
-	g.w.nestIndent("func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {\n")
+	g.w.nestIndent("func (f *Factory) assignPlaceholders(group memo.GroupID) (memo.GroupID, error) {\n")
 	g.w.nestIndent("if !f.mem.GroupProperties(group).HasPlaceholder() {\n")
-	g.w.writeIndent("return group\n")
+	g.w.writeIndent("return group, nil\n")
 	g.w.unnest("}\n")
 	g.w.writeIndent("expr := f.mem.NormExpr(group)\n")
 
@@ -194,13 +194,20 @@ func (g *factoryGen) genAssignPlaceholders() {
 
 			if isListType(string(field.Type)) {
 				g.w.nestIndent("for _, item := range f.mem.LookupList(%s.%s()) {\n", varName, field.Name)
-				g.w.writeIndent("lb.AddItem(f.assignPlaceholders(item))\n")
+				g.w.writeIndent("newItem, err := f.assignPlaceholders(item)\n")
+				g.w.nestIndent("if err != nil {\n")
+				g.w.writeIndent("return 0, err\n")
+				g.w.unnest("}\n")
+				g.w.writeIndent("lb.AddItem(newItem)\n")
 				g.w.unnest("}\n")
 				g.w.writeIndent("%s := lb.BuildList()\n", fieldVarName)
 			} else if isPrivateType(string(field.Type)) {
 				g.w.writeIndent("%s := %s.%s()\n", fieldVarName, varName, field.Name)
 			} else {
-				g.w.writeIndent("%s := f.assignPlaceholders(%s.%s())\n", fieldVarName, varName, field.Name)
+				g.w.writeIndent("%s, err := f.assignPlaceholders(%s.%s())\n", fieldVarName, varName, field.Name)
+				g.w.nestIndent("if err != nil {\n")
+				g.w.writeIndent("return 0, err\n")
+				g.w.unnest("}\n")
 			}
 		}
 
@@ -211,7 +218,7 @@ func (g *factoryGen) genAssignPlaceholders() {
 			}
 			g.w.write(unTitle(string(field.Name)))
 		}
-		g.w.unnest(")\n")
+		g.w.unnest("), nil\n")
 	}
 
 	// Generate code that assigns a placeholder value.
@@ -220,9 +227,9 @@ func (g *factoryGen) genAssignPlaceholders() {
 	g.w.writeIndent("placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)\n")
 	g.w.writeIndent("d, err := placeholder.Eval(f.evalCtx)\n")
 	g.w.nestIndent("if err != nil {\n")
-	g.w.writeIndent("panic(err)\n")
+	g.w.writeIndent("return 0, err\n")
 	g.w.unnest("}\n")
-	g.w.writeIndent("return f.ConstructConstVal(d)")
+	g.w.writeIndent("return f.ConstructConstVal(d), nil")
 
 	g.w.unnest("}\n")
 	g.w.writeIndent("panic(\"unhandled operator\")\n")
