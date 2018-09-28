@@ -17,6 +17,8 @@ package sql
 import (
 	"context"
 
+	opentracing "github.com/opentracing/opentracing-go"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -82,27 +84,40 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 				"cannot run EXPLAIN ANALYZE while distsql is disabled",
 			)
 		}
-		if params.extendedEvalCtx.Tracing.Enabled() {
-			return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
-				"cannot run EXPLAIN ANALYZE while tracing is enabled")
-		}
-		// Start tracing. KV tracing is not enabled because we are only interested
-		// in stats present on the spans. Noop if tracing is already enabled.
-		if err := params.extendedEvalCtx.Tracing.StartTracing(
-			tracing.SnowballRecording,
-			false, /* kvTracingEnabled */
-			false, /* showResults */
-		); err != nil {
-			return err
-		}
 
-		planCtx.ctx = params.extendedEvalCtx.Tracing.ex.ctxHolder.ctx()
+		// TODO(andrei): We don't create a child span if the parent is already
+		// recording because we don't currently have a good way to ask for a
+		// separate recording for the child such that it's also guaranteed that we
+		// don't get a noopSpan.
+		var sp opentracing.Span
+		if parentSp := opentracing.SpanFromContext(params.ctx); parentSp != nil &&
+			!tracing.IsRecording(parentSp) {
+			tracer := parentSp.Tracer()
+			sp = tracer.StartSpan(
+				"explain-distsql", tracing.Recordable,
+				opentracing.ChildOf(parentSp.Context()),
+				tracing.LogTagsFromCtx(params.ctx))
+		} else {
+			tracer := params.extendedEvalCtx.ExecCfg.AmbientCtx.Tracer
+			sp = tracer.StartSpan(
+				"explain-distsql", tracing.Recordable,
+				tracing.LogTagsFromCtx(params.ctx))
+		}
+		tracing.StartRecording(sp, tracing.SnowballRecording)
+		ctx := opentracing.ContextWithSpan(params.ctx, sp)
+		planCtx.ctx = ctx
+		// Make a copy of the evalContext with the recording span in it; we can't
+		// change the original.
+		newEvalCtx := *params.extendedEvalCtx
+		newEvalCtx.Context = ctx
+		newParams := params
+		newParams.extendedEvalCtx = &newEvalCtx
 
 		// Discard rows that are returned.
 		rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 			return nil
 		})
-		execCfg := params.p.ExecCfg()
+		execCfg := newParams.p.ExecCfg()
 		const stmtType = tree.Rows
 		recv := MakeDistSQLReceiver(
 			planCtx.ctx,
@@ -110,21 +125,19 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			stmtType,
 			execCfg.RangeDescriptorCache,
 			execCfg.LeaseHolderCache,
-			params.p.txn,
+			newParams.p.txn,
 			func(ts hlc.Timestamp) {
 				_ = execCfg.Clock.Update(ts)
 			},
-			params.extendedEvalCtx.Tracing,
+			newParams.extendedEvalCtx.Tracing,
 		)
 		distSQLPlanner.Run(
-			planCtx, params.p.txn, &plan, recv, params.extendedEvalCtx, nil /* finishedSetupFn */)
+			planCtx, newParams.p.txn, &plan, recv, newParams.extendedEvalCtx, nil /* finishedSetupFn */)
 
 		n.run.executedStatement = true
 
-		spans = params.extendedEvalCtx.Tracing.getRecording()
-		if err := params.extendedEvalCtx.Tracing.StopTracing(); err != nil {
-			return err
-		}
+		sp.Finish()
+		spans = tracing.GetRecording(sp)
 
 		if err := rw.Err(); err != nil {
 			return err
