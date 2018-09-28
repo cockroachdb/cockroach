@@ -1054,9 +1054,11 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		return PhysicalPlan{}, err
 	}
 
+	var ignoreMisplannedRanges bool
 	var spanPartitions []SpanPartition
 	if planCtx.isLocal {
 		spanPartitions = []SpanPartition{{dsp.nodeDesc.NodeID, n.spans}}
+		ignoreMisplannedRanges = true
 	} else if n.hardLimit == 0 && n.softLimit == 0 {
 		// No limit - plan all table readers where their data live.
 		spanPartitions, err = dsp.PartitionSpans(planCtx, n.spans)
@@ -1087,6 +1089,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		tr := &distsqlrun.TableReaderSpec{}
 		*tr = spec
 		tr.Spans = makeTableReaderSpans(sp.Spans)
+		tr.IgnoreMisplannedRanges = ignoreMisplannedRanges
 
 		proc := distsqlplan.Processor{
 			Node: sp.Node,
