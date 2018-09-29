@@ -3105,3 +3105,16 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Verify that replicas don't temporrily disappear from the replicas map during
+// the splits. See #29144.
+func TestStoreSplitDisappearingReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	store, _ := createTestStore(t, stopper)
+	go storage.WatchForDisappearingReplicas(t, store)
+	if err := server.WaitForInitialSplits(store.DB()); err != nil {
+		t.Fatal(err)
+	}
+}
