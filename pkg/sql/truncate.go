@@ -257,7 +257,9 @@ func (p *planner) truncateTable(
 	// Resolve all outstanding mutations. Make all new schema elements
 	// public because the table is empty and doesn't need to be backfilled.
 	for _, m := range newTableDesc.Mutations {
-		newTableDesc.MakeMutationComplete(m)
+		if err := newTableDesc.MakeMutationComplete(m); err != nil {
+			return err
+		}
 	}
 	newTableDesc.Mutations = nil
 
