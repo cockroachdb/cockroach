@@ -590,7 +590,9 @@ func runSchemaChangesInTxn(
 			}
 
 		}
-		tableDesc.MakeMutationComplete(m)
+		if err := tableDesc.MakeMutationComplete(m); err != nil {
+			return err
+		}
 	}
 	tableDesc.Mutations = nil
 
