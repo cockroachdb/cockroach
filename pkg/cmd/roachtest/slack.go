@@ -54,11 +54,12 @@ func sortTests(tests []*test) {
 	})
 }
 
-func postSlackReport(pass, fail map[*test]struct{}, skip int) {
+func postSlackReport(pass, fail, skip map[*test]struct{}) {
 	var stablePass []*test
 	var stableFail []*test
 	var unstablePass []*test
 	var unstableFail []*test
+	var skipped []*test
 	for t := range pass {
 		if t.spec.Stable {
 			stablePass = append(stablePass, t)
@@ -72,6 +73,9 @@ func postSlackReport(pass, fail map[*test]struct{}, skip int) {
 		} else {
 			unstableFail = append(unstableFail, t)
 		}
+	}
+	for t := range skip {
+		skipped = append(skipped, t)
 	}
 
 	client := makeSlackClient()
@@ -93,7 +97,7 @@ func postSlackReport(pass, fail map[*test]struct{}, skip int) {
 		branch = b
 	}
 	message := fmt.Sprintf("%s: %d passed, %d failed, %d skipped",
-		branch, len(stablePass), len(stableFail), skip)
+		branch, len(stablePass), len(stableFail), len(skipped))
 
 	{
 		status := "good"
@@ -123,6 +127,7 @@ func postSlackReport(pass, fail map[*test]struct{}, skip int) {
 		{stableFail, "Failures", "danger"},
 		{unstablePass, "Successes [unstable]", "good"},
 		{unstableFail, "Failures [unstable]", "warning"},
+		{skipped, "Skipped", "warning"},
 	}
 	for _, d := range data {
 		if len(d.tests) > 0 {
