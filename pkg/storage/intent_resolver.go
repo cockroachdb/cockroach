@@ -347,6 +347,13 @@ func (cq *contentionQueue) add(
 			// contended key (i.e. newWIErr != nil).
 			contended.setLastTxnMeta(nil)
 		}
+		if newIntentTxn != nil {
+			// Shallow copy the TxnMeta. After this request returns (i.e. now), we might
+			// mutate it (DistSender and such), but the receiver of the channel will read
+			// it.
+			newIntentTxnCopy := *newIntentTxn
+			newIntentTxn = &newIntentTxnCopy
+		}
 		curPusher.waitCh <- newIntentTxn
 		close(curPusher.waitCh)
 		cq.mu.Unlock()
