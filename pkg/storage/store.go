@@ -793,9 +793,6 @@ type StoreTestingKnobs struct {
 	DisableReplicaRebalancing bool
 	// DisableSplitQueue disables the split queue.
 	DisableSplitQueue bool
-	// VerboseSplitQueue enables verbose logging for the split queue. See
-	// #29144. TODO(peter): remove when that issue is understood / fixed.
-	VerboseSplitQueue bool
 	// DisableTimeSeriesMaintenanceQueue disables the time series maintenance
 	// queue.
 	DisableTimeSeriesMaintenanceQueue bool
@@ -1044,9 +1041,6 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	}
 	if cfg.TestingKnobs.DisableSplitQueue {
 		s.setSplitQueueActive(false)
-	}
-	if cfg.TestingKnobs.VerboseSplitQueue {
-		s.splitQueue.verbose = true
 	}
 	if cfg.TestingKnobs.DisableTimeSeriesMaintenanceQueue {
 		s.setTimeSeriesMaintenanceQueueActive(false)
@@ -2452,7 +2446,11 @@ func (s *Store) SplitRange(
 		if exRng != rightRepl {
 			log.Fatalf(ctx, "found unexpected uninitialized replica: %s vs %s", exRng, rightRepl)
 		}
-		s.unlinkReplicaByRangeIDLocked(rightDesc.RangeID)
+		// NB: We only remove from uninitReplicas and the replicaQueues maps here
+		// so that we don't leave open a window where a replica is temporarily not
+		// present in Store.mu.replicas.
+		delete(s.mu.uninitReplicas, rightDesc.RangeID)
+		s.replicaQueues.Delete(int64(rightDesc.RangeID))
 	}
 
 	leftRepl.setDesc(ctx, &newLeftDesc)
@@ -2479,7 +2477,7 @@ func (s *Store) SplitRange(
 	leftRepl.writeStats.splitRequestCounts(rightRepl.writeStats)
 
 	if err := s.addReplicaInternalLocked(rightRepl); err != nil {
-		return errors.Errorf("couldn't insert range %v in replicasByKey btree: %s", rightRepl, err)
+		return errors.Errorf("unable to add replica %v: %s", rightRepl, err)
 	}
 
 	// Update the replica's cached byte thresholds. This is a no-op if the system
@@ -2670,7 +2668,11 @@ func (s *Store) removePlaceholderLocked(ctx context.Context, rngID roachpb.Range
 
 // addReplicaToRangeMapLocked adds the replica to the replicas map.
 func (s *Store) addReplicaToRangeMapLocked(repl *Replica) error {
-	if _, loaded := s.mu.replicas.LoadOrStore(int64(repl.RangeID), unsafe.Pointer(repl)); loaded {
+	// It's ok for the replica to exist in the replicas map as long as it is the
+	// same replica object. This occurs during splits where the right-hand side
+	// is added to the replicas map before it is initialized.
+	if existing, loaded := s.mu.replicas.LoadOrStore(
+		int64(repl.RangeID), unsafe.Pointer(repl)); loaded && (*Replica)(existing) != repl {
 		return errors.Errorf("%s: replica already exists", repl)
 	}
 	// Check whether the replica is unquiesced but not in the map. This

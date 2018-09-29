@@ -587,3 +587,25 @@ func WriteRandomDataToRange(
 	midKey = append(midKey, []byte("Z")...)
 	return midKey
 }
+
+func WatchForDisappearingReplicas(t testing.TB, store *Store) {
+	m := make(map[int64]struct{})
+	for {
+		select {
+		case <-store.Stopper().ShouldQuiesce():
+			return
+		default:
+		}
+
+		store.mu.replicas.Range(func(k int64, v unsafe.Pointer) bool {
+			m[k] = struct{}{}
+			return true
+		})
+
+		for k := range m {
+			if _, ok := store.mu.replicas.Load(k); !ok {
+				t.Fatalf("r%d disappeared from Store.mu.replicas map", k)
+			}
+		}
+	}
+}
