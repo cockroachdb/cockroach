@@ -52,7 +52,6 @@ type splitQueue struct {
 	*baseQueue
 	db       *client.DB
 	purgChan <-chan time.Time
-	verbose  bool
 }
 
 // newSplitQueue returns a new instance of splitQueue.
@@ -112,9 +111,6 @@ func (sq *splitQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	shouldQ, priority = shouldSplitRange(repl.Desc(), repl.GetMVCCStats(), repl.GetMaxBytes(), sysCfg)
-	if sq.verbose {
-		log.Infof(ctx, "shouldQueue: shouldQ=%t priority=%.1f", shouldQ, priority)
-	}
 	return shouldQ, priority
 }
 
@@ -161,13 +157,7 @@ func (sq *splitQueue) processAttempt(
 			},
 			desc,
 		); err != nil {
-			if sq.verbose {
-				log.Infof(ctx, "split failed: %v", err)
-			}
 			return errors.Wrapf(err, "unable to split %s at key %q", r, splitKey)
-		}
-		if sq.verbose {
-			log.Infof(ctx, "split done")
 		}
 		return nil
 	}
@@ -183,17 +173,7 @@ func (sq *splitQueue) processAttempt(
 			roachpb.AdminSplitRequest{},
 			desc,
 		)
-		if sq.verbose {
-			if err != nil {
-				log.Infof(ctx, "split failed: %v", err)
-			} else {
-				log.Infof(ctx, "split done")
-			}
-		}
 		return err
-	}
-	if sq.verbose {
-		log.Infof(ctx, "split: nothing to do")
 	}
 	return nil
 }
