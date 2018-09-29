@@ -113,6 +113,7 @@ type registry struct {
 		running map[*test]struct{}
 		pass    map[*test]struct{}
 		fail    map[*test]struct{}
+		skip    map[*test]struct{}
 	}
 }
 
@@ -266,6 +267,7 @@ func (r *registry) Run(filter []string) int {
 	r.status.running = make(map[*test]struct{})
 	r.status.pass = make(map[*test]struct{})
 	r.status.fail = make(map[*test]struct{})
+	r.status.skip = make(map[*test]struct{})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -305,7 +307,7 @@ func (r *registry) Run(filter []string) int {
 		case <-done:
 			r.status.Lock()
 			defer r.status.Unlock()
-			postSlackReport(r.status.pass, r.status.fail, len(r.m)-len(tests))
+			postSlackReport(r.status.pass, r.status.fail, r.status.skip)
 
 			stableFails := 0
 			for t := range r.status.fail {
@@ -712,10 +714,15 @@ func (r *registry) run(
 
 			r.status.Lock()
 			delete(r.status.running, t)
-			if t.Failed() {
-				r.status.fail[t] = struct{}{}
-			} else {
-				r.status.pass[t] = struct{}{}
+			// Only include tests with a Run function in the summary output.
+			if t.spec.Run != nil {
+				if t.Failed() {
+					r.status.fail[t] = struct{}{}
+				} else if t.spec.Skip == "" {
+					r.status.pass[t] = struct{}{}
+				} else {
+					r.status.skip[t] = struct{}{}
+				}
 			}
 			r.status.Unlock()
 
