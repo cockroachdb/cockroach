@@ -74,17 +74,21 @@ cat > system/git/map <<EOS
 https://github.com/cockroachdb/cockroach = cockroach.git
 EOS
 
-# For master and the last two release, download the builder and postgres-test
+# For master and the last two release, download the builder and acceptance
 # containers.
 repo="$GOPATH"/src/github.com/cockroachdb/cockroach
 git clone --shared system/git/cockroach.git "$repo"
 cd "$repo"
+# Work around a bug in the builder's git version (at the time of writing)
+# which would corrupt the submodule defs. Probably good to remove once the
+# builder uses Ubuntu 18.04 or higher.
+git submodule update --init --recursive
 for branch in $(git branch --all --list --sort=-committerdate 'origin/release-*' | head -n1) master
 do
   git checkout "$branch"
   COCKROACH_BUILDER_CCACHE=1 build/builder.sh make test testrace TESTS=-
-  # TODO(benesch): store the postgres-test version somewhere more accessible.
-  docker pull $(git grep cockroachdb/postgres-test -- '*.go' | sed -E 's/.*"([^"]*).*"/\1/') || true
+  # TODO(benesch): store the acceptanceversion somewhere more accessible.
+  docker pull $(git grep cockroachdb/acceptance -- '*.go' | sed -E 's/.*"([^"]*).*"/\1/') || true
 done
 cd -
 EOF
