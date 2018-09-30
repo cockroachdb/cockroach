@@ -17,6 +17,7 @@ package workload
 import (
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -30,8 +31,25 @@ const (
 	maxLatency = 100 * time.Second
 )
 
+var (
+	histogramPool = sync.Pool{
+		New: func() interface{} {
+			return hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+		},
+	}
+	/*
+		namedHistogramPool = sync.Pool{
+			New: func() interface{} {
+				return &NamedHistogram{}
+			},
+		}
+	*/
+)
+
 func newHistogram() *hdrhistogram.Histogram {
-	return hdrhistogram.New(minLatency.Nanoseconds(), maxLatency.Nanoseconds(), sigFigs)
+	h := histogramPool.Get().(*hdrhistogram.Histogram)
+	h.Reset()
+	return h
 }
 
 // NamedHistogram is a named histogram for use in Operations. It is threadsafe
@@ -124,6 +142,7 @@ func (w *HistogramRegistry) Tick(fn func(HistogramTick)) {
 		hist.tick(func(h *hdrhistogram.Histogram) {
 			if m, ok := merged[hist.name]; ok {
 				m.Merge(h)
+				histogramPool.Put(h)
 			} else {
 				merged[hist.name] = h
 				names = append(names, hist.name)
@@ -152,6 +171,7 @@ func (w *HistogramRegistry) Tick(fn func(HistogramTick)) {
 			Elapsed:    now.Sub(prevTick),
 			Now:        now,
 		})
+		histogramPool.Put(merged[name])
 	}
 }
 
