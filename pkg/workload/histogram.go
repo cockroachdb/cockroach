@@ -74,10 +74,10 @@ func (w *NamedHistogram) Record(elapsed time.Duration) {
 // should be saved via the closure argument.
 func (w *NamedHistogram) tick(fn func(h *hdrhistogram.Histogram)) {
 	w.mu.Lock()
-	defer w.mu.Unlock()
 	h := w.mu.current
 	w.mu.current = newHistogram()
 	fn(h)
+	w.mu.Unlock()
 }
 
 // HistogramRegistry is a thread-safe enclosure for a (possibly large) number of
