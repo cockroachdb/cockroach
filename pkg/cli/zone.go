@@ -318,9 +318,10 @@ var zoneCmds = []*cobra.Command{
 }
 
 var zoneCmd = &cobra.Command{
-	Use:   "zone",
-	Short: "get, set, list and remove zones",
-	RunE:  usageAndErr,
+	Use:        "zone",
+	Short:      "get, set, list and remove zones",
+	RunE:       usageAndErr,
+	Deprecated: "use SHOW ZONE and CONFIGURE ZONE commands in a SQL client instead.",
 }
 
 func init() {
