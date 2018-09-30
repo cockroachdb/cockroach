@@ -52,6 +52,11 @@ func (n StoreID) String() string {
 	return strconv.FormatInt(int64(n), 10)
 }
 
+// CopysetID is a custom type for a cockroach copyset ID.
+// Copyset is a group of stores where a range should be contained within
+// if copyset based rebalancing is enabled.
+type CopysetID int32
+
 // ReplicaID is a custom type for a range replica ID.
 type ReplicaID int32
 
