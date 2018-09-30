@@ -32,6 +32,7 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -2853,64 +2854,76 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.timeUntilStoreDead = storage.TestTimeUntilStoreDead
 	defer mtc.Stop()
-	mtc.Start(t, 5)
 
-	// Replicate the range to 2 more stores. Note that there are 4 stores in the
-	// cluster leaving an extra store available as a replication target once the
-	// replica on the dead node is removed.
-	replica := mtc.stores[0].LookupReplica(roachpb.RKeyMin)
-	mtc.replicateRange(replica.RangeID, 1, 3)
+	zone := config.DefaultSystemZoneConfig()
+	mtc.Start(t, int(zone.NumReplicas+1))
 
-	origReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
-
-	for _, s := range mtc.stores {
-		if err := s.GossipStore(context.Background(), false /* useCached */); err != nil {
-			t.Fatal(err)
+	var nonDeadStores []*storage.Store
+	for i, s := range mtc.stores {
+		if i == 1 {
+			// Skip the dead store.
+			continue
 		}
+		nonDeadStores = append(nonDeadStores, s)
 	}
 
-	rangeDesc := getRangeMetadata(roachpb.RKeyMin, mtc, t)
-	if e, a := 3, len(rangeDesc.Replicas); e != a {
-		t.Fatalf("expected %d replicas, only found %d, rangeDesc: %+v", e, a, rangeDesc)
-	}
+	// Create a goroutine to gossip store capacity info periodically.
+	go func() {
+		tickerDur := storage.TestTimeUntilStoreDead / 2
+		ticker := time.NewTicker(tickerDur)
+		defer ticker.Stop()
 
-	// This can't use SucceedsSoon as using the backoff mechanic won't work
-	// as it requires a specific cadence of re-gossiping the alive stores to
-	// maintain their alive status.
-	tickerDur := storage.TestTimeUntilStoreDead / 2
-	ticker := time.NewTicker(tickerDur)
-	defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				mtc.manualClock.Increment(int64(tickerDur))
 
-	maxTime := 5 * time.Second
-	maxTimeout := time.After(maxTime)
-
-	for {
-		// Wait for the replica on the dead node to be removed and the replacement
-		// added.
-		curReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
-		if len(curReplicas) == 3 && !reflect.DeepEqual(origReplicas, curReplicas) {
-			break
-		}
-
-		select {
-		case <-maxTimeout:
-			t.Fatalf("Failed to remove the dead replica within %s", maxTime)
-		case <-ticker.C:
-			mtc.manualClock.Increment(int64(tickerDur))
-
-			// Keep gossiping the alive stores.
-			for _, s := range mtc.stores[:3] {
-				if err := s.GossipStore(context.Background(), false /* useCached */); err != nil {
-					t.Fatal(err)
+				// Keep gossiping the stores, excepting the dead store.
+				for _, s := range nonDeadStores {
+					if err := s.GossipStore(context.Background(), false /* useCached */); err != nil {
+						panic(err)
+					}
 				}
-			}
+				// Force the repair queues on all alive stores to run.
+				for _, s := range nonDeadStores {
+					s.ForceReplicationScanAndProcess()
+				}
 
-			// Force the repair queues on all alive stores to run.
-			for _, s := range mtc.stores[:3] {
-				s.ForceReplicationScanAndProcess()
+			case <-mtc.stoppers[0].ShouldStop():
+				return
 			}
 		}
-	}
+	}()
+
+	// Wait for up-replication.
+	testutils.SucceedsSoon(t, func() error {
+		replicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
+		if len(replicas) == int(zone.NumReplicas) {
+			return nil
+		}
+		return errors.Errorf("expected %d replicas; have %+v", zone.NumReplicas, replicas)
+	})
+
+	// Stop a store which will be rebalanced away from. We can't use the very first
+	// one since getRangeMetadata is hard-coded to query that one, so we'll use the
+	// one after that.
+	deadStoreID := mtc.stores[1].StoreID() // 2
+	mtc.stopStore(1)
+	// The mtc asks us to restart this store before stopping the mtc.
+	defer mtc.restartStoreWithoutHeartbeat(1)
+
+	testutils.SucceedsSoon(t, func() error {
+		replicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
+		if len(replicas) != int(zone.NumReplicas) {
+			return errors.Errorf("expected %d replicas; have %+v", zone.NumReplicas, replicas)
+		}
+		for _, r := range replicas {
+			if r.StoreID == deadStoreID {
+				return errors.Errorf("expected store %d to be replaced; have %+v", r.StoreID, replicas)
+			}
+		}
+		return nil
+	})
 }
 
 // TestReplicateRogueRemovedNode ensures that a rogue removed node
