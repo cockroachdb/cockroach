@@ -6,6 +6,7 @@
 
 	It is generated from these files:
 		storage/api.proto
+		storage/copysets.proto
 		storage/raft.proto
 
 	It has these top-level messages:
@@ -16,6 +17,9 @@
 		WaitForApplicationResponse
 		WaitForReplicaInitRequest
 		WaitForReplicaInitResponse
+		AllCopysets
+		Copysets
+		Copyset
 		RaftHeartbeat
 		RaftMessageRequest
 		RaftMessageRequestBatch

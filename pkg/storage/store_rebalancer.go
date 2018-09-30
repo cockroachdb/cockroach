@@ -286,6 +286,14 @@ func (sr *StoreRebalancer) rebalanceStore(
 			localDesc.Capacity.QueriesPerSecond, qpsMaxThreshold)
 		return
 	}
+
+	copysetsEnabled := copysetsEnabled.Get(&sr.st.SV)
+	if copysetsEnabled {
+		log.Info(ctx,
+			"replica rebalancing in store rebalancer is disabled with copysets to avoid thrashing with rebalancing by replicate queue.")
+		return
+	}
+
 	log.Infof(ctx,
 		"ran out of leases worth transferring and qps (%.2f) is still above desired threshold (%.2f); considering load-based replica rebalances",
 		localDesc.Capacity.QueriesPerSecond, qpsMaxThreshold)
