@@ -112,7 +112,9 @@ type Config struct {
 	GetUser              func(ctx context.Context) *string
 }
 
-// Handler returns an http.Handler that serves the UI.
+// Handler returns an http.Handler that serves the UI,
+// including index.html, which has some login-related variables
+// templated into it, as well as static assets.
 func Handler(cfg Config) http.Handler {
 	fileServer := http.FileServer(&assetfs.AssetFS{
 		Asset:     Asset,

@@ -139,7 +139,7 @@ func (s *authenticationServer) UserLogin(
 		ID:     id,
 		Secret: secret,
 	}
-	cookie, err := encodeSessionCookie(cookieValue)
+	cookie, err := EncodeSessionCookie(cookieValue)
 	if err != nil {
 		return nil, apiInternalError(ctx, err)
 	}
@@ -327,6 +327,13 @@ type authenticationMux struct {
 	server *authenticationServer
 	inner  http.Handler
 
+	// allowAnonymous, if true, indicates that the authentication mux should
+	// call its inner HTTP handler even if the request doesn't have a valid
+	// session. If there is a valid session, the mux calls its inner handler
+	// with a context containing the username and session ID.
+	//
+	// If allowAnonymous is false, the mux returns an error if there is no
+	// valid session.
 	allowAnonymous bool
 }
 
@@ -369,7 +376,8 @@ func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request)
 	am.inner.ServeHTTP(w, req)
 }
 
-func encodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, error) {
+// EncodeSessionCookie encodes a SessionCookie proto into an http.Cookie.
+func EncodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, error) {
 	cookieValueBytes, err := protoutil.Marshal(sessionCookie)
 	if err != nil {
 		return nil, errors.Wrap(err, "session cookie could not be encoded")

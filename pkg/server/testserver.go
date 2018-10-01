@@ -563,7 +563,7 @@ func (ts *TestServer) getAuthenticatedHTTPClientAndCookie() (
 				Secret: secret,
 			}
 			// Encode a session cookie and store it in a cookie jar.
-			cookie, err := encodeSessionCookie(rawCookie)
+			cookie, err := EncodeSessionCookie(rawCookie)
 			if err != nil {
 				return err
 			}
