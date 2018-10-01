@@ -93,8 +93,8 @@ func (w *NamedHistogram) tick(fn func(h *hdrhistogram.Histogram)) {
 	w.mu.Lock()
 	h := w.mu.current
 	w.mu.current = newHistogram()
-	fn(h)
 	w.mu.Unlock()
+	fn(h)
 }
 
 // HistogramRegistry is a thread-safe enclosure for a (possibly large) number of
