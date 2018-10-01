@@ -48,7 +48,6 @@ var (
 
 func newHistogram() *hdrhistogram.Histogram {
 	h := histogramPool.Get().(*hdrhistogram.Histogram)
-	h.Reset()
 	return h
 }
 
@@ -104,7 +103,7 @@ func (w *NamedHistogram) tick(fn func(h *hdrhistogram.Histogram)) {
 type HistogramRegistry struct {
 	mu struct {
 		syncutil.Mutex
-		registered []*NamedHistogram
+		registered map[string][]*NamedHistogram
 	}
 
 	start      time.Time
@@ -114,11 +113,13 @@ type HistogramRegistry struct {
 
 // NewHistogramRegistry returns an initialized HistogramRegistry.
 func NewHistogramRegistry() *HistogramRegistry {
-	return &HistogramRegistry{
+	r := &HistogramRegistry{
 		start:      timeutil.Now(),
 		cumulative: make(map[string]*hdrhistogram.Histogram),
 		prevTick:   make(map[string]time.Time),
 	}
+	r.mu.registered = make(map[string][]*NamedHistogram)
+	return r
 }
 
 // GetHandle returns a thread-local handle for creating and registering
@@ -132,23 +133,30 @@ func (w *HistogramRegistry) GetHandle() *Histograms {
 // Tick aggregates all registered histograms, grouped by name. It is expected to
 // be called periodically from one goroutine.
 func (w *HistogramRegistry) Tick(fn func(HistogramTick)) {
-	w.mu.Lock()
-	registered := append([]*NamedHistogram(nil), w.mu.registered...)
-	w.mu.Unlock()
-
 	merged := make(map[string]*hdrhistogram.Histogram)
 	var names []string
-	for _, hist := range registered {
-		hist.tick(func(h *hdrhistogram.Histogram) {
-			if m, ok := merged[hist.name]; ok {
-				m.Merge(h)
-				histogramPool.Put(h)
-			} else {
-				merged[hist.name] = h
-				names = append(names, hist.name)
+	var wg sync.WaitGroup
+
+	w.mu.Lock()
+	for name, nameRegistered := range w.mu.registered {
+		wg.Add(1)
+		registered := append([]*NamedHistogram(nil), nameRegistered...)
+		merged[name] = newHistogram()
+		names = append(names, name)
+		go func(registered []*NamedHistogram, merged *hdrhistogram.Histogram) {
+			for _, hist := range registered {
+				hist.tick(func(h *hdrhistogram.Histogram) {
+					merged.Merge(h)
+					h.Reset()
+					histogramPool.Put(h)
+				})
 			}
-		})
+			wg.Done()
+		}(registered, merged[name])
 	}
+	w.mu.Unlock()
+
+	wg.Wait()
 
 	now := timeutil.Now()
 	sort.Strings(names)
@@ -166,12 +174,13 @@ func (w *HistogramRegistry) Tick(fn func(HistogramTick)) {
 		w.prevTick[name] = now
 		fn(HistogramTick{
 			Name:       name,
-			Hist:       merged[name],
+			Hist:       mergedHist,
 			Cumulative: w.cumulative[name],
 			Elapsed:    now.Sub(prevTick),
 			Now:        now,
 		})
-		histogramPool.Put(merged[name])
+		mergedHist.Reset()
+		histogramPool.Put(mergedHist)
 	}
 }
 
@@ -198,7 +207,7 @@ func (w *Histograms) Get(name string) *NamedHistogram {
 
 	if !ok {
 		w.reg.mu.Lock()
-		w.reg.mu.registered = append(w.reg.mu.registered, hist)
+		w.reg.mu.registered[name] = append(w.reg.mu.registered[name], hist)
 		w.reg.mu.Unlock()
 	}
 
