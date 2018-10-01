@@ -163,7 +163,8 @@ func (w *worker) run(ctx context.Context) error {
 		return errors.Wrapf(err, "error in %s", t.name)
 	}
 	if ctx.Err() == nil {
-		w.hists.Get(t.name).Record(timeutil.Since(start))
+		elapsed := timeutil.Since(start)
+		w.hists.Get(t.name).Record(elapsed)
 	}
 
 	if w.config.doWaits {
