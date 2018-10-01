@@ -236,8 +236,8 @@ func (c *conn) serveImpl(
 	}
 
 	ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
-	ctx, stopReader := context.WithCancel(ctx)
-	defer stopReader() // This calms the linter that wants these callbacks to always be called.
+	ctx, cancelConn := context.WithCancel(ctx)
+	defer cancelConn() // This calms the linter that wants these callbacks to always be called.
 	var ctxCanceled bool
 
 	// Once a session has been set up, the underlying net.Conn is switched to
@@ -261,16 +261,15 @@ func (c *conn) serveImpl(
 
 	var wg sync.WaitGroup
 	var writerErr error
-	processorCtx, stopProcessor := context.WithCancel(ctx)
 	if sqlServer != nil {
 		wg.Add(1)
 		go func() {
 			writerErr = sqlServer.ServeConn(
-				processorCtx, c.sessionArgs, &c.stmtBuf, c, reserved, c.metrics.SQLMemMetrics, stopProcessor)
+				ctx, c.sessionArgs, &c.stmtBuf, c, reserved, c.metrics.SQLMemMetrics, cancelConn)
 			// TODO(andrei): Should we sometimes transmit the writerErr's to the
 			// client?
 			wg.Done()
-			stopReader()
+			cancelConn()
 		}()
 	}
 
@@ -367,7 +366,7 @@ Loop:
 	// canceled our context and that's how we got here; in that case, this will
 	// be a no-op.
 	c.stmtBuf.Close()
-	stopProcessor()
+	cancelConn() // This cancels the processor's context.
 	wg.Wait()
 
 	if terminateSeen {

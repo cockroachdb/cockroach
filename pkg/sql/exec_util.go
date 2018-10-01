@@ -781,24 +781,24 @@ type SessionArgs struct {
 // Use register() and deregister() to modify this registry.
 type SessionRegistry struct {
 	syncutil.Mutex
-	store map[ClusterWideID]registrySession
+	sessions map[ClusterWideID]registrySession
 }
 
-// MakeSessionRegistry creates a new SessionRegistry with an empty set
+// NewSessionRegistry creates a new SessionRegistry with an empty set
 // of sessions.
-func MakeSessionRegistry() *SessionRegistry {
-	return &SessionRegistry{store: make(map[ClusterWideID]registrySession)}
+func NewSessionRegistry() *SessionRegistry {
+	return &SessionRegistry{sessions: make(map[ClusterWideID]registrySession)}
 }
 
 func (r *SessionRegistry) register(id ClusterWideID, s registrySession) {
 	r.Lock()
-	r.store[id] = s
+	r.sessions[id] = s
 	r.Unlock()
 }
 
 func (r *SessionRegistry) deregister(id ClusterWideID) {
 	r.Lock()
-	delete(r.store, id)
+	delete(r.sessions, id)
 	r.Unlock()
 }
 
@@ -821,7 +821,7 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool,
 	r.Lock()
 	defer r.Unlock()
 
-	for _, session := range r.store {
+	for _, session := range r.sessions {
 		if !(username == security.RootUser || username == session.user()) {
 			// Skip this session.
 			continue
@@ -842,7 +842,7 @@ func (r *SessionRegistry) CancelSession(sessionIDBytes []byte, username string) 
 	r.Lock()
 	defer r.Unlock()
 
-	for id, session := range r.store {
+	for id, session := range r.sessions {
 		if !(username == security.RootUser || username == session.user()) {
 			// Skip this session.
 			continue
@@ -862,9 +862,9 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 	r.Lock()
 	defer r.Unlock()
 
-	response := make([]serverpb.Session, 0, len(r.store))
+	response := make([]serverpb.Session, 0, len(r.sessions))
 
-	for _, s := range r.store {
+	for _, s := range r.sessions {
 		response = append(response, s.serialize())
 	}
 
