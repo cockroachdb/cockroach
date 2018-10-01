@@ -20,4 +20,369 @@ build
 WITH t AS (SELECT a FROM y WHERE a < 3)
   SELECT * FROM x NATURAL JOIN t
 ----
-error (0A000): with clause not supported
+project
+ ├── columns: a:3(int!null)
+ └── inner-join
+      ├── columns: y.a:1(int!null) x.a:3(int!null) x.rowid:4(int!null)
+      ├── scan x
+      │    └── columns: x.a:3(int) x.rowid:4(int!null)
+      ├── project
+      │    ├── columns: y.a:1(int!null)
+      │    └── select
+      │         ├── columns: y.a:1(int!null) y.rowid:2(int!null)
+      │         ├── scan y
+      │         │    └── columns: y.a:1(int) y.rowid:2(int!null)
+      │         └── filters [type=bool]
+      │              └── lt [type=bool]
+      │                   ├── variable: y.a [type=int]
+      │                   └── const: 3 [type=int]
+      └── filters [type=bool]
+           └── eq [type=bool]
+                ├── variable: x.a [type=int]
+                └── variable: y.a [type=int]
+
+build
+WITH t AS (SELECT a FROM y WHERE a < 3)
+  SELECT * FROM t
+----
+project
+ ├── columns: a:1(int!null)
+ └── select
+      ├── columns: a:1(int!null) rowid:2(int!null)
+      ├── scan y
+      │    └── columns: a:1(int) rowid:2(int!null)
+      └── filters [type=bool]
+           └── lt [type=bool]
+                ├── variable: a [type=int]
+                └── const: 3 [type=int]
+
+# Chaining multiple CTEs.
+build
+WITH
+    t1 AS (SELECT a FROM y WHERE a < 3),
+    t2 AS (SELECT * FROM t1 WHERE a > 1)
+SELECT * FROM t2
+----
+select
+ ├── columns: a:1(int!null)
+ ├── project
+ │    ├── columns: a:1(int!null)
+ │    └── select
+ │         ├── columns: a:1(int!null) rowid:2(int!null)
+ │         ├── scan y
+ │         │    └── columns: a:1(int) rowid:2(int!null)
+ │         └── filters [type=bool]
+ │              └── lt [type=bool]
+ │                   ├── variable: a [type=int]
+ │                   └── const: 3 [type=int]
+ └── filters [type=bool]
+      └── gt [type=bool]
+           ├── variable: a [type=int]
+           └── const: 1 [type=int]
+
+build
+WITH
+    t1 AS (SELECT a FROM y WHERE a < 3),
+    t2 AS (SELECT * FROM t1 WHERE a > 1),
+    t3 AS (SELECT * FROM t2 WHERE a = 2)
+SELECT * FROM t3
+----
+select
+ ├── columns: a:1(int!null)
+ ├── select
+ │    ├── columns: a:1(int!null)
+ │    ├── project
+ │    │    ├── columns: a:1(int!null)
+ │    │    └── select
+ │    │         ├── columns: a:1(int!null) rowid:2(int!null)
+ │    │         ├── scan y
+ │    │         │    └── columns: a:1(int) rowid:2(int!null)
+ │    │         └── filters [type=bool]
+ │    │              └── lt [type=bool]
+ │    │                   ├── variable: a [type=int]
+ │    │                   └── const: 3 [type=int]
+ │    └── filters [type=bool]
+ │         └── gt [type=bool]
+ │              ├── variable: a [type=int]
+ │              └── const: 1 [type=int]
+ └── filters [type=bool]
+      └── eq [type=bool]
+           ├── variable: a [type=int]
+           └── const: 2 [type=int]
+
+build
+WITH
+    t1 AS (SELECT * FROM y WHERE a < 3),
+    t2 AS (SELECT * FROM y WHERE a > 1),
+    t3 AS (SELECT * FROM t1 WHERE a < 4),
+    t4 AS (SELECT * FROM t2 WHERE a > 3)
+SELECT * FROM t3 NATURAL JOIN t4
+----
+project
+ ├── columns: a:1(int!null)
+ └── inner-join
+      ├── columns: y.a:1(int!null) y.a:3(int!null)
+      ├── select
+      │    ├── columns: y.a:1(int!null)
+      │    ├── project
+      │    │    ├── columns: y.a:1(int!null)
+      │    │    └── select
+      │    │         ├── columns: y.a:1(int!null) y.rowid:2(int!null)
+      │    │         ├── scan y
+      │    │         │    └── columns: y.a:1(int) y.rowid:2(int!null)
+      │    │         └── filters [type=bool]
+      │    │              └── lt [type=bool]
+      │    │                   ├── variable: y.a [type=int]
+      │    │                   └── const: 3 [type=int]
+      │    └── filters [type=bool]
+      │         └── lt [type=bool]
+      │              ├── variable: y.a [type=int]
+      │              └── const: 4 [type=int]
+      ├── select
+      │    ├── columns: y.a:3(int!null)
+      │    ├── project
+      │    │    ├── columns: y.a:3(int!null)
+      │    │    └── select
+      │    │         ├── columns: y.a:3(int!null) y.rowid:4(int!null)
+      │    │         ├── scan y
+      │    │         │    └── columns: y.a:3(int) y.rowid:4(int!null)
+      │    │         └── filters [type=bool]
+      │    │              └── gt [type=bool]
+      │    │                   ├── variable: y.a [type=int]
+      │    │                   └── const: 1 [type=int]
+      │    └── filters [type=bool]
+      │         └── gt [type=bool]
+      │              ├── variable: y.a [type=int]
+      │              └── const: 3 [type=int]
+      └── filters [type=bool]
+           └── eq [type=bool]
+                ├── variable: y.a [type=int]
+                └── variable: y.a [type=int]
+
+# Make sure they scope properly.
+build
+WITH t AS (SELECT true) SELECT * FROM (WITH t AS (SELECT false) SELECT * FROM t)
+----
+project
+ ├── columns: bool:2(bool!null)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── false [type=bool]
+
+build
+WITH
+    t AS (SELECT true),
+    t AS (SELECT false)
+SELECT * FROM t
+----
+error: WITH query name t specified more than once
+
+# Using a CTE once in another CTE and once otherwise.
+build
+WITH
+    t1 AS (SELECT true),
+    t2 AS (SELECT * FROM t1)
+SELECT * FROM t1 NATURAL JOIN t2
+----
+error: unsupported multiple use of CTE clause "t1"
+
+build
+WITH
+    t1 AS (SELECT * FROM x),
+    t2 AS (SELECT * FROM x NATURAL JOIN t1)
+SELECT * FROM t2 NATURAL JOIN x
+----
+project
+ ├── columns: a:3(int!null)
+ └── inner-join
+      ├── columns: x.a:3(int!null) x.a:5(int!null) x.rowid:6(int!null)
+      ├── project
+      │    ├── columns: x.a:3(int!null)
+      │    └── inner-join
+      │         ├── columns: x.a:1(int!null) x.a:3(int!null) x.rowid:4(int!null)
+      │         ├── scan x
+      │         │    └── columns: x.a:3(int) x.rowid:4(int!null)
+      │         ├── project
+      │         │    ├── columns: x.a:1(int)
+      │         │    └── scan x
+      │         │         └── columns: x.a:1(int) x.rowid:2(int!null)
+      │         └── filters [type=bool]
+      │              └── eq [type=bool]
+      │                   ├── variable: x.a [type=int]
+      │                   └── variable: x.a [type=int]
+      ├── scan x
+      │    └── columns: x.a:5(int) x.rowid:6(int!null)
+      └── filters [type=bool]
+           └── eq [type=bool]
+                ├── variable: x.a [type=int]
+                └── variable: x.a [type=int]
+
+build
+WITH t AS (SELECT a FROM y WHERE a < 3)
+  SELECT * FROM t NATURAL JOIN t
+----
+error: unsupported multiple use of CTE clause "t"
+
+build
+WITH t(x) AS (SELECT a FROM x)
+  SELECT x FROM (SELECT x FROM t)
+----
+project
+ ├── columns: x:1(int)
+ └── scan x
+      └── columns: a:1(int) rowid:2(int!null)
+
+build
+WITH t(a, b) AS (SELECT true a, false b)
+  SELECT a, b FROM t
+----
+project
+ ├── columns: a:1(bool!null) b:2(bool!null)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      ├── true [type=bool]
+      └── false [type=bool]
+
+build
+WITH t(b, a) AS (SELECT true a, false b)
+  SELECT a, b FROM t
+----
+project
+ ├── columns: a:2(bool!null) b:1(bool!null)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      ├── true [type=bool]
+      └── false [type=bool]
+
+build
+WITH t AS (SELECT a FROM x)
+    SELECT * FROM y WHERE a IN (SELECT * FROM t)
+----
+project
+ ├── columns: a:3(int)
+ └── select
+      ├── columns: y.a:3(int) y.rowid:4(int!null)
+      ├── scan y
+      │    └── columns: y.a:3(int) y.rowid:4(int!null)
+      └── filters [type=bool]
+           └── any: eq [type=bool]
+                ├── project
+                │    ├── columns: x.a:1(int)
+                │    └── scan x
+                │         └── columns: x.a:1(int) x.rowid:2(int!null)
+                └── variable: y.a [type=int]
+
+build
+WITH t(x) AS (SELECT a FROM x)
+    SELECT * FROM y WHERE a IN (SELECT x FROM t)
+----
+project
+ ├── columns: a:3(int)
+ └── select
+      ├── columns: y.a:3(int) y.rowid:4(int!null)
+      ├── scan y
+      │    └── columns: y.a:3(int) y.rowid:4(int!null)
+      └── filters [type=bool]
+           └── any: eq [type=bool]
+                ├── project
+                │    ├── columns: x.a:1(int)
+                │    └── scan x
+                │         └── columns: x.a:1(int) x.rowid:2(int!null)
+                └── variable: y.a [type=int]
+
+# Using a subquery inside a CTE
+build
+SELECT * FROM x WHERE a IN
+  (WITH t AS (SELECT * FROM y WHERE a < 3) SELECT * FROM t)
+----
+project
+ ├── columns: a:1(int)
+ └── select
+      ├── columns: x.a:1(int) x.rowid:2(int!null)
+      ├── scan x
+      │    └── columns: x.a:1(int) x.rowid:2(int!null)
+      └── filters [type=bool]
+           └── any: eq [type=bool]
+                ├── project
+                │    ├── columns: y.a:3(int!null)
+                │    └── select
+                │         ├── columns: y.a:3(int!null) y.rowid:4(int!null)
+                │         ├── scan y
+                │         │    └── columns: y.a:3(int) y.rowid:4(int!null)
+                │         └── filters [type=bool]
+                │              └── lt [type=bool]
+                │                   ├── variable: y.a [type=int]
+                │                   └── const: 3 [type=int]
+                └── variable: x.a [type=int]
+
+# Using a correlated subquery inside a CTE
+build
+SELECT (WITH t AS (SELECT * FROM y WHERE x.a = y.a) SELECT * FROM t LIMIT 1) FROM x
+----
+project
+ ├── columns: "?column?":5(int)
+ ├── scan x
+ │    └── columns: x.a:1(int) x.rowid:2(int!null)
+ └── projections
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: y.a:3(int!null)
+                └── limit
+                     ├── columns: y.a:3(int!null)
+                     ├── project
+                     │    ├── columns: y.a:3(int!null)
+                     │    └── select
+                     │         ├── columns: y.a:3(int!null) y.rowid:4(int!null)
+                     │         ├── scan y
+                     │         │    └── columns: y.a:3(int) y.rowid:4(int!null)
+                     │         └── filters [type=bool]
+                     │              └── eq [type=bool]
+                     │                   ├── variable: x.a [type=int]
+                     │                   └── variable: y.a [type=int]
+                     └── const: 1 [type=int]
+
+# Rename columns
+build
+WITH t(b) AS (SELECT a FROM x) SELECT b, t.b FROM t
+----
+project
+ ├── columns: b:1(int) b:1(int)
+ └── scan x
+      └── columns: a:1(int) rowid:2(int!null)
+
+build
+WITH t(b, c) AS (SELECT a FROM x) SELECT b, t.b FROM t
+----
+error: source "t" has 1 columns available but 2 columns specified
+
+# Ensure you can't reference the original table name
+build
+WITH t AS (SELECT a FROM x) SELECT a, x.t FROM t
+----
+error (42P01): no data source matches prefix: x
+
+# Nested WITH, name shadowing
+build
+WITH t(x) AS (WITH t(x) AS (SELECT 1) SELECT x * 10 FROM t) SELECT x + 2 FROM t
+----
+project
+ ├── columns: "?column?":3(int)
+ ├── project
+ │    ├── columns: "?column?":2(int)
+ │    ├── project
+ │    │    ├── columns: "?column?":1(int!null)
+ │    │    ├── values
+ │    │    │    └── tuple [type=tuple]
+ │    │    └── projections
+ │    │         └── const: 1 [type=int]
+ │    └── projections
+ │         └── mult [type=int]
+ │              ├── variable: ?column? [type=int]
+ │              └── const: 10 [type=int]
+ └── projections
+      └── plus [type=int]
+           ├── variable: ?column? [type=int]
+           └── const: 2 [type=int]

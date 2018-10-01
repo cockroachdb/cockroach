@@ -69,9 +69,26 @@ type scope struct {
 	// cross join between the input and a Zip of all the srfs in this slice.
 	srfs []*srf
 
+	// ctes contains the CTEs which were created at this scope. This set
+	// is not exhaustive because expressions can reference CTEs from parent
+	// scopes.
+	ctes map[string]*cteSource
+
 	// context is the current context in the SQL query (e.g., "SELECT" or
 	// "HAVING"). It is used for error messages.
 	context string
+}
+
+// cteSource represents a CTE in the given query.
+type cteSource struct {
+	name  tree.AliasClause
+	cols  []scopeColumn
+	group memo.GroupID
+
+	// used tracks if this CTE has been referenced.  We are currently limited
+	// to only having a single reference to a given CTE, so if this is set then
+	// this CTE has already been referenced and may not be referenced again.
+	used bool
 }
 
 // groupByStrSet is a set of stringified GROUP BY expressions that map to the
@@ -236,6 +253,27 @@ func (s *scope) walkExprTree(expr tree.Expr) tree.Expr {
 	expr, _ = tree.WalkExpr(s, expr)
 	s.builder.semaCtx.IVarContainer = s
 	return expr
+}
+
+// resolveCTE looks up a CTE name in this and the parent scopes, returning nil
+// if it's not found.
+func (s *scope) resolveCTE(name *tree.TableName) *cteSource {
+	var nameStr string
+	seenCTEs := false
+	for s != nil {
+		if s.ctes != nil {
+			// Only compute the stringified name if we see any CTEs.
+			if !seenCTEs {
+				nameStr = name.String()
+				seenCTEs = true
+			}
+			if cte, ok := s.ctes[nameStr]; ok {
+				return cte
+			}
+		}
+		s = s.parent
+	}
+	return nil
 }
 
 // resolveType converts the given expr to a tree.TypedExpr. As part of the
