@@ -189,7 +189,7 @@ func (w *HistogramRegistry) Tick(fn func(HistogramTick)) {
 type Histograms struct {
 	reg *HistogramRegistry
 	mu  struct {
-		syncutil.Mutex
+		syncutil.RWMutex
 		hists map[string]*NamedHistogram
 	}
 }
@@ -197,8 +197,17 @@ type Histograms struct {
 // Get returns a NamedHistogram with the given name, creating and registering it
 // if necessary. The result is cached, so no need to cache it in the workload.
 func (w *Histograms) Get(name string) *NamedHistogram {
-	w.mu.Lock()
+	// Fast path for existing histograms, which is the common case by far.
+	w.mu.RLock()
 	hist, ok := w.mu.hists[name]
+	if ok {
+		w.mu.RUnlock()
+		return hist
+	}
+	w.mu.RUnlock()
+
+	w.mu.Lock()
+	hist, ok = w.mu.hists[name]
 	if !ok {
 		hist = newNamedHistogram(name)
 		w.mu.hists[name] = hist

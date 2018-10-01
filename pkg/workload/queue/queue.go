@@ -156,12 +156,14 @@ func (o *queueOp) run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	o.hists.Get("write").Record(timeutil.Since(startTime))
+	elapsed := timeutil.Since(startTime)
+	o.hists.Get("write").Record(elapsed)
 
 	// Delete batch which was just written.
 	startTime = timeutil.Now()
 	_, err = o.deleteStmt.Exec(end)
-	o.hists.Get(`delete`).Record(timeutil.Since(startTime))
+	elapsed = timeutil.Since(startTime)
+	o.hists.Get(`delete`).Record(elapsed)
 	return err
 }
 

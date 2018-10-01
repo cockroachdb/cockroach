@@ -122,6 +122,7 @@ func (w *worker) run(ctx context.Context) error {
 	if _, err := t.run(w.config, w.db, w.rng); err != nil {
 		return errors.Wrapf(err, "error in %s", t.name)
 	}
-	w.hists.Get(t.name).Record(timeutil.Since(start))
+	elapsed := timeutil.Since(start)
+	w.hists.Get(t.name).Record(elapsed)
 	return nil
 }

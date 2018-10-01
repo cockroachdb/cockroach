@@ -193,6 +193,7 @@ func (o *queryBenchWorker) run(ctx context.Context) error {
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	o.hists.Get(stmt.name).Record(timeutil.Since(start))
+	elapsed := timeutil.Since(start)
+	o.hists.Get(stmt.name).Record(elapsed)
 	return nil
 }
