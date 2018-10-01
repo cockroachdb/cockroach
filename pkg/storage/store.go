@@ -853,6 +853,8 @@ type StoreTestingKnobs struct {
 	DisableLeaseCapacityGossip bool
 	// BootstrapVersion overrides the version the stores will be bootstrapped with.
 	BootstrapVersion *cluster.ClusterVersion
+	// RangelogGCDone is used to notify when rangelog GC is done
+	RangelogGCDone chan<- struct{}
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}

@@ -38,6 +38,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cmux"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -83,6 +84,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
+const (
+	// defaultRangeLogGCInterval is the default interval to run gc on rangelog.
+	defaultRangeLogGCInteval = 30 * time.Minute
+)
+
 var (
 	// Allocation pool for gzipResponseWriters.
 	gzipResponseWriterPool sync.Pool
@@ -119,6 +125,25 @@ var (
 			"time across server restarts. Not setting this or setting a value of 0 disables this "+
 			"feature.",
 		0,
+	)
+
+	// RangeLogTTL is the TTL for rows in system.rangelog. If non zero, range log
+	// entries are periodically garbage collectd. The period is given by
+	// server.rangelog.gc_interval
+	RangeLogTTL = settings.RegisterDurationSetting(
+		"server.rangelog.ttl",
+		"if non zero, range log entries older than this duration are deleted periodically "+
+			"based on storage.rangelog.gc_interval",
+		0,
+	)
+
+	// RangeLogGCInterval is the interval between subsequent runs of gc on
+	// system.rangelog.
+	RangeLogGCInterval = settings.RegisterDurationSetting(
+		"server.rangelog.gc_interval",
+		"interval for running gc on rangelog. If storage.rangelog.ttl is non zero,"+
+			"range log entries older than server.rangelog.ttl are deleted",
+		defaultRangeLogGCInteval,
 	)
 )
 
@@ -1037,6 +1062,85 @@ func (s *Server) startPersistingHLCUpperBound(
 	)
 }
 
+// gcRangeLog deletes entries in system.rangelog older than the given
+// cutoffTimestamp
+func (s *Server) gcRangeLog(ctx context.Context, cutoffTimestamp time.Time) (int, error) {
+	const deleteStmt = `DELETE FROM system.rangelog WHERE timestamp <= $1 LIMIT 1000`
+	var totalRowsAffected int
+	var rowsAffected int
+	var err error
+	for {
+		_ = s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			rowsAffected, err = s.internalExecutor.Exec(
+				ctx,
+				"rangelog-gc",
+				txn,
+				deleteStmt,
+				cutoffTimestamp,
+			)
+			return err
+		})
+		totalRowsAffected += rowsAffected
+		if err != nil {
+			return totalRowsAffected, err
+		}
+		if rowsAffected == 0 {
+			return totalRowsAffected, nil
+		}
+	}
+}
+
+// startRangeLogGC starts a worker which periodically GCs system.rangelog.
+// The period is controlled by server.rangelog.gc_interval and the TTL is
+// controlled by server.rangelog.ttl
+func (s *Server) startRangeLogGC(ctx context.Context) {
+	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+		intervalChangeCh := make(chan time.Duration)
+		interval := RangeLogGCInterval.Get(&s.cfg.Settings.SV)
+		RangeLogGCInterval.SetOnChange(&s.cfg.Settings.SV, func() {
+			intervalChangeCh <- RangeLogGCInterval.Get(&s.cfg.Settings.SV)
+		})
+		t := time.NewTimer(interval)
+		defer t.Stop()
+		for {
+			select {
+			case interval = <-intervalChangeCh:
+				if !t.Stop() {
+					<-t.C
+				}
+				t.Reset(interval)
+			case <-t.C:
+				ttl := RangeLogTTL.Get(&s.cfg.Settings.SV)
+				if ttl > 0 {
+					cutoffTimestamp := timeutil.Unix(0, s.db.Clock().PhysicalNow()-int64(ttl))
+					if rowsAffected, err := s.gcRangeLog(ctx, cutoffTimestamp); err != nil {
+						log.Errorf(
+							ctx,
+							"error garbage collecting rangelog after garbage collecting %d rows: %v",
+							rowsAffected,
+							err,
+						)
+					} else {
+						log.Infof(ctx, "garbage collected %d rows from rangelog", rowsAffected)
+					}
+				}
+
+				if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.RangelogGCDone != nil {
+					select {
+					case storeKnobs.RangelogGCDone <- struct{}{}:
+					case <-s.stopper.ShouldStop():
+						// Test has finished
+						return
+					}
+				}
+				t.Reset(interval)
+			case <-s.stopper.ShouldStop():
+				return
+			}
+		}
+	})
+}
+
 // Start starts the server on the specified port, starts gossip and initializes
 // the node using the engines from the server's context. This is complex since
 // it sets up the listeners and the associated port muxing, but especially since
@@ -1678,6 +1782,8 @@ func (s *Server) Start(ctx context.Context) error {
 			}))
 		})
 	}
+
+	s.startRangeLogGC(ctx)
 
 	// Record that this node joined the cluster in the event log. Since this
 	// executes a SQL query, this must be done after the SQL layer is ready.
