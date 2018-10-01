@@ -139,9 +139,9 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	}
 	st := cluster.MakeTestingClusterSettings()
 	sc := StoreConfig{
-		Settings:   st,
-		AmbientCtx: log.AmbientContext{Tracer: st.Tracer},
-		Clock:      clock,
+		Settings:                    st,
+		AmbientCtx:                  log.AmbientContext{Tracer: st.Tracer},
+		Clock:                       clock,
 		CoalescedHeartbeatsInterval: 50 * time.Millisecond,
 		RaftHeartbeatIntervalTicks:  1,
 		ScanInterval:                10 * time.Minute,
@@ -853,6 +853,10 @@ type StoreTestingKnobs struct {
 	DisableLeaseCapacityGossip bool
 	// BootstrapVersion overrides the version the stores will be bootstrapped with.
 	BootstrapVersion *cluster.ClusterVersion
+	// SystemLogsGCPeriod is used to override the period of GC of system logs.
+	SystemLogsGCPeriod time.Duration
+	// SystemLogsGCGCDone is used to notify when system logs GC is done.
+	SystemLogsGCGCDone chan<- struct{}
 }
 
 var _ base.ModuleTestingKnobs = &StoreTestingKnobs{}
