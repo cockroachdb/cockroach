@@ -465,7 +465,10 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		if prepMemo.HasPlaceholders() {
 			// Assign placeholders in the prepared memo.
 			f.Memo().InitFrom(prepMemo)
-			f.AssignPlaceholders()
+			err := f.AssignPlaceholders()
+			if err != nil {
+				return err
+			}
 			ev = p.optimizer.Optimize()
 		} else {
 			ev = prepMemo.Root()
