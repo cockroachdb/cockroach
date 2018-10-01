@@ -31,8 +31,7 @@ func registerClearRange(r *registry) {
 			Name:       fmt.Sprintf(`clearrange/checks=%t`, checks),
 			MinVersion: `v2.1.0`,
 			Nodes:      nodes(10),
-			// TODO(tschottdorf): seems like this should be stable.
-			Stable: false,
+			Stable:     true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClearRange(ctx, t, c, checks)
 			},
