@@ -37,6 +37,8 @@ type tableReader struct {
 	spans     roachpb.Spans
 	limitHint int64
 
+	ignoreMisplannedRanges bool
+
 	// input is really the fetcher below, possibly wrapped in a stats generator.
 	input RowSource
 	// fetcher is the underlying RowFetcher, should only be used for
@@ -76,6 +78,7 @@ func newTableReader(
 		}
 	}
 	types := spec.Table.ColumnTypesWithMutations(returnMutations)
+	tr.ignoreMisplannedRanges = flowCtx.local
 	if err := tr.Init(
 		tr,
 		post,
@@ -199,9 +202,11 @@ func initRowFetcher(
 
 func (tr *tableReader) generateTrailingMeta(ctx context.Context) []ProducerMetadata {
 	var trailingMeta []ProducerMetadata
-	ranges := misplannedRanges(tr.Ctx, tr.fetcher.GetRangeInfo(), tr.flowCtx.nodeID)
-	if ranges != nil {
-		trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
+	if !tr.ignoreMisplannedRanges {
+		ranges := misplannedRanges(tr.Ctx, tr.fetcher.GetRangeInfo(), tr.flowCtx.nodeID)
+		if ranges != nil {
+			trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
+		}
 	}
 	if meta := getTxnCoordMeta(ctx, tr.flowCtx.txn); meta != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{TxnCoordMeta: meta})
