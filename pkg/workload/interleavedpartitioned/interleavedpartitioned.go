@@ -402,7 +402,8 @@ func (w *interleavedPartitioned) Ops(
 			if err != nil {
 				return err
 			}
-			hists.Get(`delete`).Record(timeutil.Since(start))
+			elapsed := timeutil.Since(start)
+			hists.Get(`delete`).Record(elapsed)
 
 			return nil
 		}
@@ -515,7 +516,8 @@ func (w *interleavedPartitioned) Ops(
 			if err := tx.Commit(); err != nil {
 				return nil
 			}
-			hists.Get(`insert`).Record(timeutil.Since(start))
+			elapsed := timeutil.Since(start)
+			hists.Get(`insert`).Record(elapsed)
 			return nil
 		} else if opRand < w.insertPercent+w.retrievePercent { // retrieve
 			sessionID := w.randomSessionID(rng, w.pickLocality(rng, w.retrieveLocalPercent))
@@ -533,7 +535,8 @@ func (w *interleavedPartitioned) Ops(
 					return err
 				}
 			}
-			hists.Get(`retrieve`).Record(timeutil.Since(start))
+			elapsed := timeutil.Since(start)
+			hists.Get(`retrieve`).Record(elapsed)
 			return nil
 		} else if opRand < w.insertPercent+w.retrievePercent+w.updatePercent { // update
 			sessionID := w.randomSessionID(rng, w.pickLocality(rng, w.updateLocalPercent))
@@ -563,7 +566,8 @@ func (w *interleavedPartitioned) Ops(
 				return err
 			}
 			_, err = updateStatement2.ExecContext(ctx, randString(rng, 20), sessionID)
-			hists.Get(`updates`).Record(timeutil.Since(start))
+			elapsed := timeutil.Since(start)
+			hists.Get(`updates`).Record(elapsed)
 			return err
 		}
 
