@@ -845,6 +845,12 @@ type connExecutor struct {
 	// of the file.
 	ctxHolder ctxHolder
 
+	// onCancelSession is called when the SessionRegistry is cancels this session.
+	// For pgwire connections, this is hooked up to canceling the connection's
+	// context.
+	// If nil, canceling this session will be a no-op.
+	onCancelSession context.CancelFunc
+
 	// planner is the "default planner" on a session, to save planner allocations
 	// during serial execution. Since planners are not threadsafe, this is only
 	// safe to use when a statement is not being parallelized. It must be reset
@@ -889,7 +895,6 @@ type connExecutor struct {
 type ctxHolder struct {
 	connCtx           context.Context
 	sessionTracingCtx context.Context
-	cancel            context.CancelFunc
 }
 
 func (ch *ctxHolder) ctx() context.Context {
@@ -1025,9 +1030,22 @@ func (ex *connExecutor) Ctx() context.Context {
 // also have an error from the reading side), or some other unexpected failure.
 // Returned errors have not been communicated to the client: it's up to the
 // caller to do that if it wants.
-func (ex *connExecutor) run(ctx context.Context, cancel context.CancelFunc) error {
+//
+// onCancel, if not nil, will be called when the SessionRegistry cancels the
+// session. TODO(andrei): This is hooked up to canceling the pgwire connection's
+// context (of which ctx is also a child). It seems uncouth for the connExecutor
+// to cancel a higher-level task. A better design would probably be for pgwire
+// to own the SessionRegistry, instead of it being owned by the sql.Server -
+// then pgwire would directly cancel its own tasks; the sessions also more
+// naturally belong there. There is a problem, however, as query cancelation (as
+// opposed to session cancelation) is done through the SessionRegistry and that
+// does belong with the connExecutor. Introducing a query registry, separate
+// from the session registry, might be too costly - the way query cancelation
+// works is that every session is asked to cancel a given query until the right
+// one is found. That seems like a good performance trade-off.
+func (ex *connExecutor) run(ctx context.Context, onCancel context.CancelFunc) error {
 	ex.ctxHolder.connCtx = ctx
-	ex.ctxHolder.cancel = cancel
+	ex.onCancelSession = onCancel
 
 	ex.sessionID = ex.generateID()
 	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex)
@@ -1950,8 +1968,11 @@ func (ex *connExecutor) cancelQuery(queryID ClusterWideID) bool {
 
 // cancelSession is part of the registrySession interface.
 func (ex *connExecutor) cancelSession() {
+	if ex.onCancelSession == nil {
+		return
+	}
 	// TODO(abhimadan): figure out how to send a nice error message to the client.
-	ex.ctxHolder.cancel()
+	ex.onCancelSession()
 }
 
 // user is part of the registrySession interface.
