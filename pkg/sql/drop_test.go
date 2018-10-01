@@ -825,6 +825,37 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 
 }
 
+// Tests DROP DATABASE after DROP TABLE just before the table name has been
+// recycle.
+func TestDropDatabaseAfterDropTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	// Disable schema change execution so that the dropped table name
+	// doesn't get recycled.
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter: func(tscc sql.TestingSchemaChangerCollection) {
+				tscc.ClearSchemaChangers()
+			},
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if err := tests.CreateKVTable(sqlDB, "kv", 100); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`DROP TABLE t.kv`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(`DROP DATABASE t`); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestDropAndCreateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
