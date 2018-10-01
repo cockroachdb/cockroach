@@ -148,36 +148,38 @@ func (mux *safeServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type Server struct {
 	nodeIDContainer base.NodeIDContainer
 
-	cfg                Config
-	st                 *cluster.Settings
-	mux                safeServeMux
-	clock              *hlc.Clock
-	rpcContext         *rpc.Context
-	grpc               *grpc.Server
-	gossip             *gossip.Gossip
-	nodeDialer         *nodedialer.Dialer
-	nodeLiveness       *storage.NodeLiveness
-	storePool          *storage.StorePool
-	tcsFactory         *kv.TxnCoordSenderFactory
-	distSender         *kv.DistSender
-	db                 *client.DB
-	pgServer           *pgwire.Server
-	distSQLServer      *distsqlrun.ServerImpl
-	node               *Node
-	registry           *metric.Registry
-	recorder           *status.MetricsRecorder
-	runtime            *status.RuntimeStatSampler
-	admin              *adminServer
-	status             *statusServer
-	authentication     *authenticationServer
-	initServer         *initServer
-	tsDB               *ts.DB
-	tsServer           ts.Server
-	raftTransport      *storage.RaftTransport
-	stopper            *stop.Stopper
-	execCfg            *sql.ExecutorConfig
-	internalExecutor   *sql.InternalExecutor
-	leaseMgr           *sql.LeaseManager
+	cfg              Config
+	st               *cluster.Settings
+	mux              safeServeMux
+	clock            *hlc.Clock
+	rpcContext       *rpc.Context
+	grpc             *grpc.Server
+	gossip           *gossip.Gossip
+	nodeDialer       *nodedialer.Dialer
+	nodeLiveness     *storage.NodeLiveness
+	storePool        *storage.StorePool
+	tcsFactory       *kv.TxnCoordSenderFactory
+	distSender       *kv.DistSender
+	db               *client.DB
+	pgServer         *pgwire.Server
+	distSQLServer    *distsqlrun.ServerImpl
+	node             *Node
+	registry         *metric.Registry
+	recorder         *status.MetricsRecorder
+	runtime          *status.RuntimeStatSampler
+	admin            *adminServer
+	status           *statusServer
+	authentication   *authenticationServer
+	initServer       *initServer
+	tsDB             *ts.DB
+	tsServer         ts.Server
+	raftTransport    *storage.RaftTransport
+	stopper          *stop.Stopper
+	execCfg          *sql.ExecutorConfig
+	internalExecutor *sql.InternalExecutor
+	leaseMgr         *sql.LeaseManager
+	// sessionRegistry can be queried for info on running SQL sessions. It is
+	// shared between the sql.Server and the statusServer.
 	sessionRegistry    *sql.SessionRegistry
 	jobRegistry        *jobs.Registry
 	engines            Engines
@@ -481,7 +483,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	storage.RegisterPerReplicaServer(s.grpc, s.node.perReplicaServer)
 	s.node.storeCfg.ClosedTimestamp.RegisterClosedTimestampServer(s.grpc)
 
-	s.sessionRegistry = sql.MakeSessionRegistry()
+	s.sessionRegistry = sql.NewSessionRegistry()
 	s.jobRegistry = jobs.MakeRegistry(
 		s.cfg.AmbientCtx,
 		s.stopper,
