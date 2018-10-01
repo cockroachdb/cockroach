@@ -313,10 +313,6 @@ def collect_authors(commit):
 
 def extract_release_notes(pr, title, commit):
     authors = collect_authors(commit)
-    if norelnote.search(commit.message) is not None:
-        # Explicitly no release note. Nothing to do.
-        # Just report the author(s).
-        return None, authors
 
     msglines = commit.message.split('\n')
     curnote = []
