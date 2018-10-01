@@ -1172,6 +1172,17 @@ func TestPeekType(t *testing.T) {
 	}
 }
 
+var sink string
+
+func BenchmarkPeekType(b *testing.B) {
+	buf := EncodeVarintAscending(nil, 0)
+	var typ Type
+	for i := 0; i < b.N; i++ {
+		typ = PeekType(buf)
+	}
+	sink = string(typ)
+}
+
 type randData struct {
 	*rand.Rand
 }
