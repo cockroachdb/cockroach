@@ -355,3 +355,26 @@ SELECT t1.c, t2.d FROM multiples t1 LEFT JOIN multiples@bc t2 ON t1.c = t2.b WHE
 ----
 6   12
 12  24
+
+# Regression test for #30812: make sure that lookup joins with limit don't
+# omit the final row.
+
+statement ok
+CREATE TABLE t_30182_l (id INT PRIMARY KEY, name TEXT NOT NULL)
+
+statement ok
+CREATE TABLE t_30182_r (id INT PRIMARY KEY, name TEXT NOT NULL, l_id int)
+
+statement ok
+INSERT INTO t_30182_l (id, name) values(1, 'a')
+
+statement ok
+INSERT INTO t_30182_r values(1, 'foo', 1);
+
+query ITI
+SELECT r.* FROM t_30182_r r
+JOIN t_30182_l l on r.l_id = l.id
+WHERE r.name = 'foo'
+LIMIT 1
+----
+1 foo 1
