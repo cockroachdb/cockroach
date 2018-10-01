@@ -38,6 +38,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cmux"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -1678,6 +1679,8 @@ func (s *Server) Start(ctx context.Context) error {
 			}))
 		})
 	}
+
+	s.startSystemLogsGC(ctx)
 
 	// Record that this node joined the cluster in the event log. Since this
 	// executes a SQL query, this must be done after the SQL layer is ready.
