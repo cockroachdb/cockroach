@@ -1121,6 +1121,10 @@ func (st *SessionTracing) StartTracing(
 	opName := "session recording"
 	var sp opentracing.Span
 	connCtx := st.ex.ctxHolder.connCtx
+
+	// TODO(andrei): use tracing.EnsureChildSpan() or something more efficient
+	// than StartSpan(). The problem is that the current interface doesn't allow
+	// the Recordable option to be passed.
 	if parentSp := opentracing.SpanFromContext(connCtx); parentSp != nil {
 		// Create a child span while recording.
 		sp = parentSp.Tracer().StartSpan(

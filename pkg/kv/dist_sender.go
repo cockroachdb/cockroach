@@ -630,8 +630,8 @@ func (ds *DistSender) Send(
 	}
 
 	ctx = ds.AnnotateCtx(ctx)
-	ctx, cleanup := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender send")
-	defer cleanup()
+	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender send")
+	defer sp.Finish()
 
 	var rplChunks []*roachpb.BatchResponse
 	splitET := false
