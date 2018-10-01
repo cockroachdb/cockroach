@@ -20,15 +20,19 @@ import (
 	gosql "database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"golang.org/x/time/rate"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/time/rate"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -50,6 +54,7 @@ var ramp = runFlags.Duration("ramp", 0*time.Second, "The duration over which to 
 
 var initFlags = pflag.NewFlagSet(`init`, pflag.ContinueOnError)
 var drop = initFlags.Bool("drop", false, "Drop the existing database, if it exists")
+var pprofport = initFlags.Int("pprofport", 26258, "Port for pprof endpoint.")
 
 var histograms = runFlags.String(
 	"histograms", "",
@@ -219,6 +224,7 @@ func runInit(gen workload.Generator, urls []string, dbName string) error {
 		return err
 	}
 
+	initPProfEndPoint(ctx)
 	return runInitImpl(ctx, gen, initDB, dbName)
 }
 
@@ -243,9 +249,27 @@ func runInitImpl(
 	return err
 }
 
+func initPProfEndPoint(ctx context.Context) {
+	b := envutil.EnvOrDefaultInt64("COCKROACH_BLOCK_PROFILE_RATE",
+		10000000 /* 1 sample per 10 milliseconds spent blocking */)
+
+	m := envutil.EnvOrDefaultInt("COCKROACH_MUTEX_PROFILE_RATE",
+		1000 /* 1 sample per 1000 mutex contention events */)
+	runtime.SetBlockProfileRate(int(b))
+	runtime.SetMutexProfileFraction(int(m))
+
+	go func() {
+		err := http.ListenAndServe(":"+strconv.Itoa(*pprofport), nil)
+		if err != nil {
+			log.Error(ctx, err)
+		}
+	}()
+}
+
 func runRun(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
 
+	initPProfEndPoint(ctx)
 	initDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return err
