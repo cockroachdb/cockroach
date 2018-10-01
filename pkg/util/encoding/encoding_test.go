@@ -1172,6 +1172,15 @@ func TestPeekType(t *testing.T) {
 	}
 }
 
+func BenchmarkPeekType(b *testing.B) {
+	buf := EncodeVarintAscending(nil, 0)
+	var typ Type
+	for i := 0; i < b.N; i++ {
+		typ = PeekType(buf)
+	}
+	typ = typ + 1
+}
+
 type randData struct {
 	*rand.Rand
 }
