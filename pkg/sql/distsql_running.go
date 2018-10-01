@@ -102,17 +102,19 @@ func (dsp *DistSQLPlanner) initRunners() {
 // Run executes a physical plan. The plan should have been finalized using
 // FinalizePlan.
 //
-// txn is the transaction in which the plan will run. If nil, the different
-// processors are expected to manage their own internal transactions.
-//
-// `finishedSetupFn`, if non-nil, is called synchronously after all the
-// processors have successfully started up.
-//
 // All errors encountered are reported to the DistSQLReceiver's resultWriter.
 // Additionally, if the error is a "communication error" (an error encountered
 // while using that resultWriter), the error is also stored in
 // DistSQLReceiver.commErr. That can be tested to see if a client session needs
 // to be closed.
+//
+// Args:
+// - txn is the transaction in which the plan will run. If nil, the different
+// processors are expected to manage their own internal transactions.
+// - evalCtx is the evaluation context in which the plan will run. It might be
+// mutated.
+// - finishedSetupFn, if non-nil, is called synchronously after all the
+// processors have successfully started up.
 func (dsp *DistSQLPlanner) Run(
 	planCtx *PlanningCtx,
 	txn *client.Txn,
@@ -127,9 +129,9 @@ func (dsp *DistSQLPlanner) Run(
 		localState   distsqlrun.LocalState
 		txnCoordMeta *roachpb.TxnCoordMeta
 	)
-	if planCtx.validExtendedEvalCtx {
-		localState.EvalContext = planCtx.EvalContext()
-	}
+	// NB: putting part of evalCtx in localState means it might be mutated down
+	// the line.
+	localState.EvalContext = &evalCtx.EvalContext
 	if planCtx.isLocal {
 		localState.IsLocal = true
 		localState.LocalProcs = plan.LocalProcessors
@@ -632,7 +634,6 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 		subqueryPlanCtx.isLocal = !distributeSubquery
 		subqueryPlanCtx.planner = planner
 		subqueryPlanCtx.stmtType = tree.Rows
-		subqueryPlanCtx.validExtendedEvalCtx = true
 		// Don't close the top-level plan from subqueries - someone else will handle
 		// that.
 		subqueryPlanCtx.ignoreClose = true
