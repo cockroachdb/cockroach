@@ -727,7 +727,15 @@ var specs = []stmtSpec{
 		name:   "index_def",
 		inline: []string{"opt_storing", "storing", "index_params", "opt_name"},
 	},
-	{name: "import_table", stmt: "import_stmt"},
+	{
+		name: "import_table",
+		stmt: "import_stmt",
+		replace: map[string]string{
+			"string_or_placeholder": "file_location",
+		},
+		inline: []string{"opt_with_options"},
+		unlink: []string{"import_format", "file_location", "file_location_list"},
+	},
 	{
 		name:    "insert_stmt",
 		inline:  []string{"insert_target", "insert_rest", "returning_clause", "insert_column_list", "insert_column_item", "target_list", "opt_with_clause", "with_clause", "cte_list"},
