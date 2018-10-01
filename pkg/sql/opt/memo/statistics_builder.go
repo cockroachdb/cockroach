@@ -1226,9 +1226,12 @@ func (sb *statisticsBuilder) buildZip(ev ExprView, relProps *props.Relational) {
 		if child.Operator() == opt.FunctionOp {
 			def := child.Private().(*FuncOpDef)
 			if def.Overload.Generator != nil {
+				// Use a small row count; this allows use of lookup join in cases like
+				// using json_array_elements with a small constant array.
+				//
 				// TODO(rytaft): We may want to estimate the number of rows based on
 				// the type of generator function and its parameters.
-				s.RowCount = unknownRowCount
+				s.RowCount = 10
 				break
 			}
 		}
