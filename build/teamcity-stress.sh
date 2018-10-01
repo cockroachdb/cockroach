@@ -46,7 +46,7 @@ go install ./pkg/cmd/github-post
 # Use an `if` so that the `-e` option doesn't stop the script on error.
 if ! make stress PKG="$PKG" TESTTIMEOUT=40m GOFLAGS="$GOFLAGS" TAGS="$TAGS" STRESSFLAGS="-maxruns 100 -maxfails 1 -stderr $STRESSFLAGS" 2>&1 \
   | tee artifacts/stress.log; then
-  exit_status=$?
+  exit_status=${PIPESTATUS[0]}
   go tool test2json -t < artifacts/stress.log | github-post
   exit $exit_status
 fi
