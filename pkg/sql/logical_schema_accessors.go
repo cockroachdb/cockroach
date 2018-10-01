@@ -47,13 +47,14 @@ func (l *LogicalSchemaAccessor) GetObjectNames(
 	dbDesc *DatabaseDescriptor, scName string, flags DatabaseListFlags,
 ) (TableNames, error) {
 	if entry, ok := l.vt.getVirtualSchemaEntry(scName); ok {
-		names := make(TableNames, len(entry.orderedTableNames))
-		for i, name := range entry.orderedTableNames {
+		names := make(TableNames, len(entry.orderedDefNames))
+		for i, name := range entry.orderedDefNames {
 			names[i] = tree.MakeTableNameWithSchema(
 				tree.Name(dbDesc.Name), tree.Name(entry.desc.Name), tree.Name(name))
 			names[i].ExplicitCatalog = flags.explicitPrefix
 			names[i].ExplicitSchema = flags.explicitPrefix
 		}
+
 		return names, nil
 	}
 
@@ -66,9 +67,10 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 	name *ObjectName, flags ObjectLookupFlags,
 ) (*ObjectDescriptor, *DatabaseDescriptor, error) {
 	if scEntry, ok := l.vt.getVirtualSchemaEntry(name.Schema()); ok {
-		if t, ok := scEntry.tables[name.Table()]; ok {
+		if t, ok := scEntry.defs[name.Table()]; ok {
 			return t.desc, nil, nil
 		}
+
 		if flags.required {
 			return nil, nil, sqlbase.NewUndefinedRelationError(name)
 		}
