@@ -501,11 +501,9 @@ func (jr *joinReader) performLookup() (joinReaderState, *ProducerMetadata) {
 				return jrStateUnknown, jr.DrainHelper()
 			}
 			if renderedRow != nil {
-				if row := jr.ProcessRowHelper(renderedRow); row != nil {
-					jr.toEmit = append(jr.toEmit, jr.out.rowAlloc.CopyRow(row))
-					if jr.emitted != nil {
-						jr.emitted[inputRowIdx] = true
-					}
+				jr.toEmit = append(jr.toEmit, jr.out.rowAlloc.CopyRow(renderedRow))
+				if jr.emitted != nil {
+					jr.emitted[inputRowIdx] = true
 				}
 			}
 		}
@@ -524,10 +522,8 @@ func (jr *joinReader) collectUnmatched() joinReaderState {
 	if jr.joinType == sqlbase.LeftOuterJoin {
 		for i := 0; i < len(jr.inputRows); i++ {
 			if !jr.emitted[i] {
-				if renderedRow := jr.renderUnmatchedRow(jr.inputRows[i], leftSide); renderedRow != nil {
-					if row := jr.ProcessRowHelper(renderedRow); row != nil {
-						jr.toEmit = append(jr.toEmit, jr.out.rowAlloc.CopyRow(row))
-					}
+				if row := jr.renderUnmatchedRow(jr.inputRows[i], leftSide); row != nil {
+					jr.toEmit = append(jr.toEmit, jr.out.rowAlloc.CopyRow(row))
 				}
 			}
 		}
@@ -551,6 +547,7 @@ func (jr *joinReader) emitRow() (joinReaderState, sqlbase.EncDatumRow, *Producer
 	}
 	row := jr.toEmit[0]
 	jr.toEmit = jr.toEmit[1:]
+	row = jr.ProcessRowHelper(row)
 	return jrEmittingRows, row, nil
 }
 
