@@ -163,7 +163,10 @@ func (w *worker) run(ctx context.Context) error {
 		return errors.Wrapf(err, "error in %s", t.name)
 	}
 	if ctx.Err() == nil {
-		w.hists.Get(t.name).Record(timeutil.Since(start))
+		// Calculate the duration before getting the histogram to prevent any lock
+		// contention in Get() from affecting the recorded duration.
+		dur := timeutil.Since(start)
+		w.hists.Get(t.name).Record(dur)
 	}
 
 	if w.config.doWaits {

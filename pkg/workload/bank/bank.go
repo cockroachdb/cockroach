@@ -181,7 +181,8 @@ func (b *bank) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 			amount := rand.Intn(maxTransfer)
 			start := timeutil.Now()
 			_, err := updateStmt.Exec(from, to, amount)
-			hists.Get(`transfer`).Record(timeutil.Since(start))
+			elapsed := timeutil.Since(start)
+			hists.Get(`transfer`).Record(elapsed)
 			return err
 		}
 		ql.WorkerFns = append(ql.WorkerFns, workerFn)
