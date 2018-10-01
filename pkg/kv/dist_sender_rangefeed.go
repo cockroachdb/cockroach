@@ -35,8 +35,8 @@ func (ds *DistSender) RangeFeed(
 	ctx context.Context, args *roachpb.RangeFeedRequest, eventCh chan<- *roachpb.RangeFeedEvent,
 ) *roachpb.Error {
 	ctx = ds.AnnotateCtx(ctx)
-	ctx, cleanup := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender")
-	defer cleanup()
+	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender")
+	defer sp.Finish()
 
 	startRKey, err := keys.Addr(args.Span.Key)
 	if err != nil {

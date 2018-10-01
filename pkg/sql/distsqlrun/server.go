@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -297,15 +298,20 @@ func (ds *ServerImpl) setupFlow(
 	const opName = "flow"
 	var sp opentracing.Span
 	if parentSpan == nil {
-		sp = ds.Tracer.StartSpan(opName, tracing.LogTagsFromCtx(ctx))
+		sp = ds.Tracer.(*tracing.Tracer).StartRootSpan(
+			opName, logtags.FromContext(ctx), tracing.NonRecordableSpan)
 	} else {
 		// We use FollowsFrom because the flow's span outlives the SetupFlow request.
+		// TODO(andrei): We should use something more efficient than StartSpan; we
+		// should use AmbientContext.AnnotateCtxWithSpan() but that interface
+		// doesn't currently support FollowsFrom relationships.
 		sp = ds.Tracer.StartSpan(
 			opName,
 			opentracing.FollowsFrom(parentSpan.Context()),
 			tracing.LogTagsFromCtx(ctx),
 		)
 	}
+	// sp will be Finish()ed by Flow.Cleanup().
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 
 	// The monitor and account opened here are closed in Flow.Cleanup().
