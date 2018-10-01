@@ -51,7 +51,7 @@ const crdbInternalName = "crdb_internal"
 
 var crdbInternal = virtualSchema{
 	name: crdbInternalName,
-	tables: []virtualSchemaTable{
+	tableDefs: []virtualSchemaDef{
 		crdbInternalBackwardDependenciesTable,
 		crdbInternalBuildInfoTable,
 		crdbInternalBuiltinFunctionsTable,
@@ -73,8 +73,8 @@ var crdbInternal = virtualSchema{
 		crdbInternalLocalSessionsTable,
 		crdbInternalLocalMetricsTable,
 		crdbInternalPartitionsTable,
-		crdbInternalRangesTable,
 		crdbInternalRangesNoLeasesTable,
+		crdbInternalRangesView,
 		crdbInternalRuntimeInfoTable,
 		crdbInternalSchemaChangesTable,
 		crdbInternalSessionTraceTable,
@@ -1538,26 +1538,33 @@ CREATE TABLE crdb_internal.forward_dependencies (
 	},
 }
 
-// crdbInternalRangesTable exposes system ranges.
-var crdbInternalRangesTable = virtualSchemaTable{
+// crdbInternalRangesView exposes system ranges.
+var crdbInternalRangesView = virtualSchemaView{
 	schema: `
-CREATE TABLE crdb_internal.ranges (
-  range_id     INT NOT NULL,
-  start_key    BYTES NOT NULL,
-  start_pretty STRING NOT NULL,
-  end_key      BYTES NOT NULL,
-  end_pretty   STRING NOT NULL,
-  database     STRING NOT NULL,
-  "table"      STRING NOT NULL,
-  "index"      STRING NOT NULL,
-  replicas     INT[] NOT NULL,
-  lease_holder INT NOT NULL
-)
+CREATE VIEW crdb_internal.ranges AS SELECT
+	range_id,
+	start_key,
+	start_pretty,
+	end_key,
+	end_pretty,
+	database_name,
+	table_name,
+	index_name,
+	replicas,
+	crdb_internal.lease_holder(start_key) AS lease_holder
+FROM crdb_internal.ranges_no_leases
 `,
-	delegate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor) (planNode, error) {
-		return p.delegateQuery(ctx, "SELECT * FROM crdb_internal.ranges",
-			`SELECT *, crdb_internal.lease_holder(start_key) AS lease_holder FROM crdb_internal.ranges_no_leases`,
-			nil, nil)
+	resultColumns: sqlbase.ResultColumns{
+		{Name: "range_id", Typ: types.Int},
+		{Name: "start_key", Typ: types.Bytes},
+		{Name: "start_pretty", Typ: types.String},
+		{Name: "end_key", Typ: types.Bytes},
+		{Name: "end_pretty", Typ: types.String},
+		{Name: "database_name", Typ: types.String},
+		{Name: "table_name", Typ: types.String},
+		{Name: "index_name", Typ: types.String},
+		{Name: "replicas", Typ: types.IntVector},
+		{Name: "lease_holder", Typ: types.Int},
 	},
 }
 
@@ -1571,9 +1578,9 @@ CREATE TABLE crdb_internal.ranges_no_leases (
   start_pretty STRING NOT NULL,
   end_key      BYTES NOT NULL,
   end_pretty   STRING NOT NULL,
-  database     STRING NOT NULL,
-  "table"      STRING NOT NULL,
-  "index"      STRING NOT NULL,
+  database_name     STRING NOT NULL,
+  table_name      STRING NOT NULL,
+  index_name      STRING NOT NULL,
   replicas     INT[] NOT NULL
 )
 `,
