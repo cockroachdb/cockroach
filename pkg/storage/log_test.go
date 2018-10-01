@@ -18,10 +18,13 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"testing"
+	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -29,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -393,5 +397,188 @@ func TestLogRebalances(t *testing.T) {
 	}
 	if a, e := count, 1; a != e {
 		t.Errorf("expected %d RemoveReplica events logged, found %d", e, a)
+	}
+}
+
+func TestLogGC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	a := assert.New(t)
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	ts := s.(*server.TestServer)
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	const testRangeID = 10001
+	const table = "rangelog"
+	store, pErr := ts.Stores().GetStore(ts.GetFirstStoreID())
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	rangeLogRowCount := func() int {
+		var count int
+		err := db.QueryRowContext(ctx,
+			`SELECT count(*) FROM system.rangelog WHERE "rangeID" = $1`,
+			testRangeID,
+		).Scan(&count)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+
+	rangeLogMaxTS := func() time.Time {
+		var time time.Time
+		err := db.QueryRowContext(ctx,
+			`SELECT timestamp FROM system.rangelog WHERE "rangeID" = $1 ORDER by timestamp DESC LIMIT 1`,
+			testRangeID,
+		).Scan(&time)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return time
+	}
+
+	logEvents := func(count int) {
+		for i := 0; i < count; i++ {
+			a.NoError(kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				return store.LogReplicaChangeTest(
+					ctx,
+					txn,
+					roachpb.ADD_REPLICA,
+					roachpb.ReplicaDescriptor{
+						NodeID:  1,
+						StoreID: 1,
+					},
+					roachpb.RangeDescriptor{
+						RangeID: testRangeID,
+					},
+					storage.ReasonUnknown,
+					"", // details.
+				)
+			}))
+		}
+	}
+
+	// Assert 0 rows before inserting any events.
+	a.Equal(0, rangeLogRowCount())
+	// Insert 100 events with timestamp of up to maxTs1.
+	logEvents(100)
+	a.Equal(100, rangeLogRowCount())
+	maxTs1 := rangeLogMaxTS()
+	// Insert 50 events with timestamp of up to maxTs2.
+	logEvents(50)
+	a.Equal(150, rangeLogRowCount())
+	maxTs2 := rangeLogMaxTS()
+	// Insert 25 events with timestamp of up to maxTs3.
+	logEvents(25)
+	a.Equal(175, rangeLogRowCount())
+	maxTs3 := rangeLogMaxTS()
+
+	// GC up to maxTs1.
+	rowsGCd, err := ts.GCSystemLog(ctx, table, maxTs1)
+	a.NoError(err)
+	a.True(rowsGCd >= 100, "Expected rowsGCd >= 100, found %d", rowsGCd)
+	a.Equal(75, rangeLogRowCount())
+
+	rowsGCd, err = ts.GCSystemLog(ctx, table, maxTs2)
+	a.NoError(err)
+	a.True(rowsGCd >= 50, "Expected rowsGCd >= 50, found %d", rowsGCd)
+	a.Equal(25, rangeLogRowCount())
+	// Insert 2000 more events.
+	logEvents(2000)
+	a.Equal(2025, rangeLogRowCount())
+
+	// GC up to maxTs3.
+	rowsGCd, err = ts.GCSystemLog(ctx, table, maxTs3)
+	a.NoError(err)
+	a.True(rowsGCd >= 25, "Expected rowsGCd >= 25, found %d", rowsGCd)
+	a.Equal(2000, rangeLogRowCount())
+
+	// GC everything.
+	rowsGCd, err = ts.GCSystemLog(ctx, table, rangeLogMaxTS())
+	a.NoError(err)
+	a.True(rowsGCd >= 2000, "Expected rowsGCd >= 2000, found %d", rowsGCd)
+	a.Equal(0, rangeLogRowCount())
+}
+
+func TestLogGCTrigger(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	a := assert.New(t)
+	gcDone := make(chan struct{})
+
+	storeKnobs := &storage.StoreTestingKnobs{
+		SystemLogsGCGCDone: gcDone,
+		SystemLogsGCPeriod: time.Nanosecond,
+	}
+	params := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: storeKnobs,
+		},
+	}
+	s, db, _ := serverutils.StartServer(t, params)
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	systemLogRowCount := func(table string, ts time.Time) int {
+		var count int
+		err := db.QueryRowContext(ctx,
+			fmt.Sprintf(`SELECT count(*) FROM system.%s WHERE timestamp <= $1`, table),
+			ts,
+		).Scan(&count)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return count
+	}
+
+	systemLogMaxTS := func(table string) time.Time {
+		var time time.Time
+		err := db.QueryRowContext(ctx,
+			fmt.Sprintf(`SELECT timestamp FROM system.%s ORDER by timestamp DESC LIMIT 1`, table),
+		).Scan(&time)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return time
+	}
+
+	testCases := []struct {
+		table   string
+		setting *settings.DurationSetting
+	}{
+		{
+			table:   "rangelog",
+			setting: server.RangeLogTTL,
+		},
+		{
+			table:   "eventlog",
+			setting: server.EventLogTTL,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.table, func(t *testing.T) {
+			maxTS := systemLogMaxTS(tc.table)
+			a.NotEqual(systemLogRowCount(tc.table, maxTS), 0, "Expected non zero number of rows before %v", maxTS)
+
+			// Reading gcDone once ensures that the previous gc is done
+			// (it could have been done long back and is waiting to send on this channel),
+			// and the next gc has started.
+			// Reading it twice guarantees that the next gc has also completed.
+			// Before running the assertions below one gc run has to be guaranteed.
+			<-gcDone
+			<-gcDone
+			a.NotEqual(
+				systemLogRowCount(tc.table, maxTS),
+				0,
+				"Expected non zero number of events before %v as gc is not enabled",
+				maxTS,
+			)
+
+			tc.setting.Override(&s.ClusterSettings().SV, time.Nanosecond)
+			<-gcDone
+			<-gcDone
+			a.Equal(0, systemLogRowCount(tc.table, maxTS), "Expected zero events before %v after gc", maxTS)
+		})
 	}
 }

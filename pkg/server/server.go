@@ -120,6 +120,22 @@ var (
 			"feature.",
 		0,
 	)
+
+	// RangeLogTTL is the TTL for rows in system.rangelog. If non zero, range log
+	// entries are periodically garbage collected.
+	RangeLogTTL = settings.RegisterDurationSetting(
+		"server.rangelog.ttl",
+		"if non zero, range log entries older than this duration are deleted periodically (10m period).",
+		30*24*time.Hour, // 30 days
+	)
+
+	// EventLogTTL is the TTL for rows in system.eventlog. If non zero, event log
+	// entries are periodically garbage collected.
+	EventLogTTL = settings.RegisterDurationSetting(
+		"server.eventlog.ttl",
+		"if non zero, event log entries older than this duration are deleted periodically (10m period).",
+		0,
+	)
 )
 
 // TODO(peter): Until go1.11, ServeMux.ServeHTTP was not safe to call
@@ -1678,6 +1694,8 @@ func (s *Server) Start(ctx context.Context) error {
 			}))
 		})
 	}
+
+	s.startSystemLogsGC(ctx)
 
 	// Record that this node joined the cluster in the event log. Since this
 	// executes a SQL query, this must be done after the SQL layer is ready.

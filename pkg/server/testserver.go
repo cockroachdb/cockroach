@@ -827,6 +827,18 @@ func (ts *TestServer) ExecutorConfig() interface{} {
 	return *ts.execCfg
 }
 
+// GCSystemLog deletes entries in the given system log table older than the
+// given cutoffTimestamp if the server is the lease holder for range 1.
+// Leaseholder constraint is present so that only one node in the cluster
+// performs gc.
+// The system log table is expected to have a "timestamp" column.
+// It returns the the number of rows affected and error (if any).
+func (ts *TestServer) GCSystemLog(
+	ctx context.Context, table string, cutoffTimestamp time.Time,
+) (int64, error) {
+	return ts.gcSystemLog(ctx, table, cutoffTimestamp)
+}
+
 type testServerFactoryImpl struct{}
 
 // TestServerFactory can be passed to serverutils.InitTestServerFactory
