@@ -20,9 +20,13 @@ import (
 	gosql "database/sql"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -34,6 +38,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -50,6 +55,9 @@ var ramp = runFlags.Duration("ramp", 0*time.Second, "The duration over which to 
 
 var initFlags = pflag.NewFlagSet(`init`, pflag.ContinueOnError)
 var drop = initFlags.Bool("drop", false, "Drop the existing database, if it exists")
+
+var sharedFlags = pflag.NewFlagSet(`shared`, pflag.ContinueOnError)
+var pprofport = initFlags.Int("pprofport", 26258, "Port for pprof endpoint.")
 
 var histograms = runFlags.String(
 	"histograms", "",
@@ -74,6 +82,7 @@ func init() {
 				Args:  cobra.ArbitraryArgs,
 			})
 			genInitCmd.Flags().AddFlagSet(initFlags)
+			genInitCmd.Flags().AddFlagSet(sharedFlags)
 			genInitCmd.Flags().AddFlagSet(genFlags)
 			genInitCmd.Run = CmdHelper(gen, runInit)
 			initCmd.AddCommand(genInitCmd)
@@ -98,6 +107,7 @@ func init() {
 				Args:  cobra.ArbitraryArgs,
 			})
 			genRunCmd.Flags().AddFlagSet(runFlags)
+			genRunCmd.Flags().AddFlagSet(sharedFlags)
 			genRunCmd.Flags().AddFlagSet(genFlags)
 			initFlags.VisitAll(func(initFlag *pflag.Flag) {
 				// Every init flag is a valid run flag that implies the --init option.
@@ -219,6 +229,7 @@ func runInit(gen workload.Generator, urls []string, dbName string) error {
 		return err
 	}
 
+	startPProfEndPoint(ctx)
 	return runInitImpl(ctx, gen, initDB, dbName)
 }
 
@@ -243,9 +254,27 @@ func runInitImpl(
 	return err
 }
 
+func startPProfEndPoint(ctx context.Context) {
+	b := envutil.EnvOrDefaultInt64("COCKROACH_BLOCK_PROFILE_RATE",
+		10000000 /* 1 sample per 10 milliseconds spent blocking */)
+
+	m := envutil.EnvOrDefaultInt("COCKROACH_MUTEX_PROFILE_RATE",
+		1000 /* 1 sample per 1000 mutex contention events */)
+	runtime.SetBlockProfileRate(int(b))
+	runtime.SetMutexProfileFraction(int(m))
+
+	go func() {
+		err := http.ListenAndServe(":"+strconv.Itoa(*pprofport), nil)
+		if err != nil {
+			log.Error(ctx, err)
+		}
+	}()
+}
+
 func runRun(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
 
+	startPProfEndPoint(ctx)
 	initDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return err
