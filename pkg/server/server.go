@@ -1234,21 +1234,6 @@ func (s *Server) Start(ctx context.Context) error {
 	// endpoints.
 	s.mux.Handle(debug.Endpoint, debug.NewServer(s.st))
 
-	// Serve UI assets. This needs to be before the gRPC handlers are registered, otherwise
-	// the `s.mux.Handle("/", ...)` would cover all URLs, allowing anonymous access.
-	maybeAuthMux := newAuthenticationMuxAllowAnonymous(
-		s.authentication, ui.Handler(ui.Config{
-			ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
-			LoginEnabled:         s.cfg.RequireWebSession(),
-			GetUser: func(ctx context.Context) *string {
-				if u, ok := ctx.Value(webSessionUserKey{}).(string); ok {
-					return &u
-				}
-				return nil
-			},
-		}))
-	s.mux.Handle("/", maybeAuthMux)
-
 	// Initialize grpc-gateway mux and context in order to get the /health
 	// endpoint working even before the node has fully initialized.
 	jsonpb := &protoutil.JSONPb{
@@ -1268,11 +1253,6 @@ func (s *Server) Start(ctx context.Context) error {
 	)
 	gwCtx, gwCancel := context.WithCancel(s.AnnotateCtx(context.Background()))
 	s.stopper.AddCloser(stop.CloserFn(gwCancel))
-
-	var authHandler http.Handler = gwMux
-	if s.cfg.RequireWebSession() {
-		authHandler = newAuthenticationMux(s.authentication, authHandler)
-	}
 
 	// Setup HTTP<->gRPC handlers.
 	c1, c2 := net.Pipe()
@@ -1537,16 +1517,6 @@ func (s *Server) Start(ctx context.Context) error {
 
 	s.serveMode.set(modeOperational)
 
-	s.mux.Handle(adminPrefix, authHandler)
-	// Exempt the health check endpoint from authentication.
-	s.mux.Handle("/_admin/v1/health", gwMux)
-	s.mux.Handle(ts.URLPrefix, authHandler)
-	s.mux.Handle(statusPrefix, authHandler)
-	s.mux.Handle(loginPath, gwMux)
-	s.mux.Handle(logoutPath, authHandler)
-	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
-	log.Event(ctx, "added http endpoints")
-
 	log.Infof(ctx, "starting %s server at %s (use: %s)",
 		s.cfg.HTTPRequestScheme(), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)
 	log.Infof(ctx, "starting grpc/postgres server at %s", s.cfg.Addr)
@@ -1608,6 +1578,43 @@ func (s *Server) Start(ctx context.Context) error {
 
 	log.Info(ctx, "serving sql connections")
 	// Start servicing SQL connections.
+
+	// Serve UI assets.
+	//
+	// The authentication mux used here is created in "allow anonymous" mode so that the UI
+	// assets are served up whether or not there is a session. If there is a session, the mux
+	// adds it to the context, and it is templated into index.html so that the UI can show
+	// the username of the currently-logged-in user.
+	authenticatedUIHandler := newAuthenticationMuxAllowAnonymous(
+		s.authentication,
+		ui.Handler(ui.Config{
+			ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
+			LoginEnabled:         s.cfg.RequireWebSession(),
+			GetUser: func(ctx context.Context) *string {
+				if u, ok := ctx.Value(webSessionUserKey{}).(string); ok {
+					return &u
+				}
+				return nil
+			},
+		}),
+	)
+	s.mux.Handle("/", authenticatedUIHandler)
+
+	// Register gRPC-gateway endpoints used by the admin UI.
+	var authHandler http.Handler = gwMux
+	if s.cfg.RequireWebSession() {
+		authHandler = newAuthenticationMux(s.authentication, authHandler)
+	}
+
+	s.mux.Handle(adminPrefix, authHandler)
+	// Exempt the health check endpoint from authentication.
+	s.mux.Handle("/_admin/v1/health", gwMux)
+	s.mux.Handle(ts.URLPrefix, authHandler)
+	s.mux.Handle(statusPrefix, authHandler)
+	s.mux.Handle(loginPath, gwMux)
+	s.mux.Handle(logoutPath, authHandler)
+	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
+	log.Event(ctx, "added http endpoints")
 
 	// Attempt to upgrade cluster version.
 	s.startAttemptUpgrade(ctx)
