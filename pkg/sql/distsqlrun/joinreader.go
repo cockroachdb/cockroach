@@ -348,12 +348,18 @@ func (jr *joinReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		case jrCollectingUnmatched:
 			jr.runningState = jr.collectUnmatched()
 		case jrEmittingRows:
-			jr.runningState, row, meta = jr.emitRow()
+			jr.runningState, row = jr.emitRow()
 		default:
 			log.Fatalf(jr.Ctx, "unsupported state: %d", jr.runningState)
 		}
-		if row != nil || meta != nil {
-			return row, meta
+		if row == nil && meta == nil {
+			continue
+		}
+		if meta != nil {
+			return nil, meta
+		}
+		if outRow := jr.ProcessRowHelper(row); outRow != nil {
+			return outRow, nil
 		}
 	}
 	return nil, jr.DrainHelper()
@@ -501,11 +507,9 @@ func (jr *joinReader) performLookup() (joinReaderState, *ProducerMetadata) {
 				return jrStateUnknown, jr.DrainHelper()
 			}
 			if renderedRow != nil {
-				if row := jr.ProcessRowHelper(renderedRow); row != nil {
-					jr.toEmit = append(jr.toEmit, jr.out.rowAlloc.CopyRow(row))
-					if jr.emitted != nil {
-						jr.emitted[inputRowIdx] = true
-					}
+				jr.toEmit = append(jr.toEmit, jr.out.rowAlloc.CopyRow(renderedRow))
+				if jr.emitted != nil {
+					jr.emitted[inputRowIdx] = true
 				}
 			}
 		}
@@ -524,10 +528,8 @@ func (jr *joinReader) collectUnmatched() joinReaderState {
 	if jr.joinType == sqlbase.LeftOuterJoin {
 		for i := 0; i < len(jr.inputRows); i++ {
 			if !jr.emitted[i] {
-				if renderedRow := jr.renderUnmatchedRow(jr.inputRows[i], leftSide); renderedRow != nil {
-					if row := jr.ProcessRowHelper(renderedRow); row != nil {
-						jr.toEmit = append(jr.toEmit, jr.out.rowAlloc.CopyRow(row))
-					}
+				if row := jr.renderUnmatchedRow(jr.inputRows[i], leftSide); row != nil {
+					jr.toEmit = append(jr.toEmit, jr.out.rowAlloc.CopyRow(row))
 				}
 			}
 		}
@@ -537,21 +539,21 @@ func (jr *joinReader) collectUnmatched() joinReaderState {
 
 // emitRow returns the next row from jr.toEmit, if present. Otherwise it
 // prepares for another input batch.
-func (jr *joinReader) emitRow() (joinReaderState, sqlbase.EncDatumRow, *ProducerMetadata) {
+func (jr *joinReader) emitRow() (joinReaderState, sqlbase.EncDatumRow) {
 	if len(jr.toEmit) == 0 {
 		if jr.finalLookupBatch {
 			// Ready for another input batch. Reset state.
 			jr.inputRows = jr.inputRows[:0]
 			jr.keyToInputRowIndices = make(map[string][]int)
 			jr.finalLookupBatch = false
-			return jrReadingInput, nil, nil
+			return jrReadingInput, nil
 		}
 		// Process the next index lookup batch.
-		return jrPerformingLookup, nil, nil
+		return jrPerformingLookup, nil
 	}
 	row := jr.toEmit[0]
 	jr.toEmit = jr.toEmit[1:]
-	return jrEmittingRows, row, nil
+	return jrEmittingRows, row
 }
 
 func (jr *joinReader) hasNullLookupColumn(row sqlbase.EncDatumRow) bool {
