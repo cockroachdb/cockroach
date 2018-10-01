@@ -32,9 +32,11 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
@@ -91,6 +93,33 @@ func spanInclusionFunc(
 	parentSpanCtx opentracing.SpanContext, method string, req, resp interface{},
 ) bool {
 	return parentSpanCtx != nil && !tracing.IsNoopContext(parentSpanCtx)
+}
+
+func requireSuperUser(ctx context.Context) error {
+	// TODO(marc): grpc's authentication model (which gives credential access in
+	// the request handler) doesn't really fit with the current design of the
+	// security package (which assumes that TLS state is only given at connection
+	// time) - that should be fixed.
+	if grpcutil.IsLocalRequestContext(ctx) {
+		// This is an in-process request. Bypass authentication check.
+	} else if peer, ok := peer.FromContext(ctx); ok {
+		if tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo); ok {
+			certUser, err := security.GetCertificateUser(&tlsInfo.State)
+			if err != nil {
+				return err
+			}
+			// TODO(benesch): the vast majority of RPCs should be limited to just
+			// NodeUser. This is not a security concern, as RootUser has access to
+			// read and write all data, merely good hygiene. For example, there is
+			// no reason to permit the root user to send raw Raft RPCs.
+			if certUser != security.NodeUser && certUser != security.RootUser {
+				return errors.Errorf("user %s is not allowed to perform this RPC", certUser)
+			}
+		}
+	} else {
+		return errors.New("internal authentication error: TLSInfo is not available in request context")
+	}
+	return nil
 }
 
 // NewServer is a thin wrapper around grpc.NewServer that registers a heartbeat
@@ -177,6 +206,33 @@ func NewServerWithInterceptor(
 			srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
 		) error {
 			if err := interceptor(info.FullMethod); err != nil {
+				return err
+			}
+			if prevStreamInterceptor != nil {
+				return prevStreamInterceptor(srv, stream, info, handler)
+			}
+			return handler(srv, stream)
+		}
+	}
+
+	if !ctx.Insecure {
+		prevUnaryInterceptor := unaryInterceptor
+		unaryInterceptor = func(
+			ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
+		) (interface{}, error) {
+			if err := requireSuperUser(ctx); err != nil {
+				return nil, err
+			}
+			if prevUnaryInterceptor != nil {
+				return prevUnaryInterceptor(ctx, req, info, handler)
+			}
+			return handler(ctx, req)
+		}
+		prevStreamInterceptor := streamInterceptor
+		streamInterceptor = func(
+			srv interface{}, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler,
+		) error {
+			if err := requireSuperUser(stream.Context()); err != nil {
 				return err
 			}
 			if prevStreamInterceptor != nil {

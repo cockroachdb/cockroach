@@ -191,6 +191,10 @@ func check92253(a *auditor) auditResult {
 	a.Lock()
 	defer a.Unlock()
 
+	if a.warehouses == 1 {
+		// Not applicable when there are no remote warehouses.
+		return passResult
+	}
 	if a.newOrderTransactions < minSignificantTransactions {
 		return newSkipResult("not enough orders to be statistically significant")
 	}
@@ -230,6 +234,10 @@ func check92254(a *auditor) auditResult {
 	a.Lock()
 	defer a.Unlock()
 
+	if a.warehouses == 1 {
+		// Not applicable when there are no remote warehouses.
+		return passResult
+	}
 	if a.paymentTransactions < minSignificantTransactions {
 		return newSkipResult("not enough payments to be statistically significant")
 	}
