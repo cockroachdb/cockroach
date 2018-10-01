@@ -57,6 +57,21 @@ export default function (props: GraphDashboardProps) {
       </Axis>
     </LineGraph>,
 
+    <LineGraph title="Average Queries per Store" tooltip={`Exponentially weighted moving average of the number of KV batch requests processed by leaseholder replicas on each store per second. Tracks roughly the last 30 minutes of requests. Used for load-based rebalancing decisions.`}>
+      <Axis label="queries">
+        {
+          _.map(nodeIDs, (nid) => (
+            <Metric
+              key={nid}
+              name="cr.store.rebalancing.queriespersecond"
+              title={nodeDisplayName(nodesSummary, nid)}
+              sources={storeIDsForNode(nodesSummary, nid)}
+            />
+          ))
+        }
+      </Axis>
+    </LineGraph>,
+
     <LineGraph title="Logical Bytes per Store" tooltip={`The number of logical bytes of data on each store.`}>
       <Axis units={AxisUnits.Bytes} label="logical store size">
         {
