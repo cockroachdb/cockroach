@@ -16,7 +16,6 @@
 package kv
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha1"
 	gosql "database/sql"
@@ -125,6 +124,7 @@ func (w *kv) Tables() []workload.Table {
 
 // Ops implements the Opser interface.
 func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.QueryLoad, error) {
+	ctx := context.Background()
 	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -144,7 +144,7 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 		}
 	}
 
-	var buf bytes.Buffer
+	var buf strings.Builder
 	buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
 	for i := 0; i < w.batchSize; i++ {
 		if i > 0 {
@@ -153,14 +153,10 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 		fmt.Fprintf(&buf, `$%d`, i+1)
 	}
 	buf.WriteString(`)`)
-	readStmt, err := db.Prepare(buf.String())
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
+	readStmtStr := buf.String()
 
 	buf.Reset()
 	buf.WriteString(`UPSERT INTO kv (k, v) VALUES`)
-
 	for i := 0; i < w.batchSize; i++ {
 		j := i * 2
 		if i > 0 {
@@ -168,19 +164,30 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 		}
 		fmt.Fprintf(&buf, ` ($%d, $%d)`, j+1, j+2)
 	}
-
-	writeStmt, err := db.Prepare(buf.String())
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
+	writeStmtStr := buf.String()
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	seq := &sequence{config: w, val: w.writeSeq}
 	for i := 0; i < w.connFlags.Concurrency; i++ {
+		// Give each kvOp worker its own SQL connection and prepare statements
+		// using this connection. This avoids lock contention in the sql.Rows
+		// objects they produce.
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
+		readStmt, err := conn.PrepareContext(ctx, readStmtStr)
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
+		writeStmt, err := db.PrepareContext(ctx, writeStmtStr)
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
 		op := kvOp{
 			config:    w,
 			hists:     reg.GetHandle(),
-			db:        db,
+			conn:      conn,
 			readStmt:  readStmt,
 			writeStmt: writeStmt,
 		}
@@ -197,7 +204,7 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 type kvOp struct {
 	config    *kv
 	hists     *workload.Histograms
-	db        *gosql.DB
+	conn      *gosql.Conn
 	readStmt  *gosql.Stmt
 	writeStmt *gosql.Stmt
 	g         keyGenerator
