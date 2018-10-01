@@ -144,8 +144,13 @@ func (n *Dialer) DialInternalClient(
 	if err != nil {
 		return nil, nil, err
 	}
-	// TODO(bdarnell): Reconcile the different health checks and circuit
-	// breaker behavior in this file
+	// TODO(bdarnell): Reconcile the different health checks and circuit breaker
+	// behavior in this file. Note that this different behavior causes problems
+	// for higher-levels in the system. For example, DistSQL checks for
+	// ConnHealth when scheduling processors, but can then see attempts to send
+	// RPCs fail when dial fails due to an open breaker. Reset the breaker here
+	// as a stop-gap before the reconciliation occurs.
+	n.getBreaker(nodeID).Reset()
 	if err := grpcutil.ConnectionReady(conn); err != nil {
 		return nil, nil, err
 	}
