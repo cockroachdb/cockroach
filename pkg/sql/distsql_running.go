@@ -128,7 +128,7 @@ func (dsp *DistSQLPlanner) Run(
 		txnCoordMeta *roachpb.TxnCoordMeta
 	)
 	if planCtx.validExtendedEvalCtx {
-		localState.EvalContext = planCtx.EvalContext()
+		localState.EvalContext = &evalCtx.EvalContext
 	}
 	if planCtx.isLocal {
 		localState.IsLocal = true
