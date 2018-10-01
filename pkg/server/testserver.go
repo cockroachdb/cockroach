@@ -827,6 +827,16 @@ func (ts *TestServer) ExecutorConfig() interface{} {
 	return *ts.execCfg
 }
 
+// GCRangeLog deletes rows older than the given cutoffTimestamp from
+// system.rangelog
+// It returns the node currently responsible for performing GC, the number of
+// rows affected and error (if any).
+func (ts *TestServer) GCRangeLog(
+	ctx context.Context, cutoffTimestamp time.Time,
+) (roachpb.NodeID, int, error) {
+	return ts.gcRangeLog(ctx, cutoffTimestamp)
+}
+
 type testServerFactoryImpl struct{}
 
 // TestServerFactory can be passed to serverutils.InitTestServerFactory

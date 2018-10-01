@@ -38,6 +38,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cmux"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -83,6 +84,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
+const (
+	// defaultRangeLogGCInterval is the default interval to run gc on rangelog.
+	defaultRangeLogGCInterval = 30 * time.Minute
+)
+
 var (
 	// Allocation pool for gzipResponseWriters.
 	gzipResponseWriterPool sync.Pool
@@ -119,6 +125,25 @@ var (
 			"time across server restarts. Not setting this or setting a value of 0 disables this "+
 			"feature.",
 		0,
+	)
+
+	// RangeLogTTL is the TTL for rows in system.rangelog. If non zero, range log
+	// entries are periodically garbage collectd. The period is given by
+	// server.rangelog.gc_interval
+	RangeLogTTL = settings.RegisterDurationSetting(
+		"server.rangelog.ttl",
+		"if non zero, range log entries older than this duration are deleted periodically "+
+			"based on storage.rangelog.gc_interval",
+		30*24*time.Hour, // 30 days
+	)
+
+	// RangeLogGCInterval is the interval between subsequent runs of gc on
+	// system.rangelog.
+	RangeLogGCInterval = settings.RegisterDurationSetting(
+		"server.rangelog.gc_interval",
+		"interval for running gc on rangelog. If storage.rangelog.ttl is non zero, "+
+			"range log entries older than server.rangelog.ttl are deleted",
+		defaultRangeLogGCInterval,
 	)
 )
 
@@ -1037,6 +1062,129 @@ func (s *Server) startPersistingHLCUpperBound(
 	)
 }
 
+// gcRangeLog deletes entries in system.rangelog older than the given
+// cutoffTimestamp if the server is the lease holder for range 1.
+// Leaseholder constraint is present so that only one node in the cluster
+// performs rangelog gc.
+// It returns the node currently responsible for performing GC, the number of
+// rows affected and error (if any).
+func (s *Server) gcRangeLog(
+	ctx context.Context, cutoffTimestamp time.Time,
+) (roachpb.NodeID, int, error) {
+	const selectLeaseHolderStmt = `SELECT lease_holder from crdb_internal.ranges where range_id=1`
+	const deleteStmt = `DELETE FROM system.rangelog WHERE timestamp <= $1 LIMIT 1000`
+	var totalRowsAffected int
+	var gcNode roachpb.NodeID
+	for {
+		var rowsAffected int
+		err := s.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.RangelogGCNode != 0 {
+				gcNode = storeKnobs.RangelogGCNode
+
+			} else {
+				row, err := s.internalExecutor.QueryRow(
+					ctx,
+					"leaseholder-r1",
+					txn,
+					selectLeaseHolderStmt,
+				)
+				if err != nil {
+					return err
+				}
+
+				if row == nil {
+					return errors.New("lease holder not found for range 1")
+				}
+
+				leaseHolder, ok := row[0].(*tree.DInt)
+				if !ok {
+					return errors.New("lease holder is not an int")
+				}
+				if leaseHolder == nil || *leaseHolder <= 0 {
+					return errors.Errorf("invalid lease holder %v", leaseHolder)
+				}
+
+				gcNode = roachpb.NodeID(*leaseHolder)
+			}
+
+			if gcNode != s.node.Descriptor.NodeID {
+				return nil
+			}
+
+			var err error
+			rowsAffected, err = s.internalExecutor.Exec(
+				ctx,
+				"rangelog-gc",
+				txn,
+				deleteStmt,
+				cutoffTimestamp,
+			)
+			return err
+		})
+		totalRowsAffected += rowsAffected
+		if err != nil || rowsAffected == 0 {
+			return gcNode, totalRowsAffected, err
+		}
+	}
+}
+
+// startRangeLogGC starts a worker which periodically GCs system.rangelog.
+// The period is controlled by server.rangelog.gc_interval and the TTL is
+// controlled by server.rangelog.ttl
+func (s *Server) startRangeLogGC(ctx context.Context) {
+	s.stopper.RunWorker(ctx, func(ctx context.Context) {
+		intervalChangeCh := make(chan time.Duration)
+		interval := RangeLogGCInterval.Get(&s.cfg.Settings.SV)
+		RangeLogGCInterval.SetOnChange(&s.cfg.Settings.SV, func() {
+			intervalChangeCh <- RangeLogGCInterval.Get(&s.cfg.Settings.SV)
+		})
+		t := time.NewTimer(interval)
+		defer t.Stop()
+		for {
+			select {
+			case interval = <-intervalChangeCh:
+				if !t.Stop() {
+					<-t.C
+				}
+				t.Reset(interval)
+			case <-t.C:
+				ttl := RangeLogTTL.Get(&s.cfg.Settings.SV)
+				if ttl > 0 {
+					cutoffTimestamp := timeutil.Unix(0, s.db.Clock().PhysicalNow()-int64(ttl))
+					gcNode, rowsAffected, err := s.gcRangeLog(ctx, cutoffTimestamp)
+					if err != nil {
+						log.Errorf(
+							ctx,
+							"error garbage collecting rangelog %v",
+							err,
+						)
+					}
+
+					if rowsAffected > 0 || gcNode == s.node.Descriptor.NodeID {
+						log.Infof(ctx, "garbage collected %d rows from rangelog", rowsAffected)
+					}
+
+					if gcNode != 0 && gcNode != s.node.Descriptor.NodeID {
+						log.Infof(ctx, "n%d is currently responsible for rangelog gc", gcNode)
+					}
+				}
+
+				if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.RangelogGCDone != nil {
+					select {
+					case storeKnobs.RangelogGCDone <- struct{}{}:
+					case <-s.stopper.ShouldStop():
+						// Test has finished
+						return
+					}
+				}
+				t.Reset(interval)
+			case <-s.stopper.ShouldStop():
+				return
+			}
+		}
+	})
+}
+
 // Start starts the server on the specified port, starts gossip and initializes
 // the node using the engines from the server's context. This is complex since
 // it sets up the listeners and the associated port muxing, but especially since
@@ -1678,6 +1826,8 @@ func (s *Server) Start(ctx context.Context) error {
 			}))
 		})
 	}
+
+	s.startRangeLogGC(ctx)
 
 	// Record that this node joined the cluster in the event log. Since this
 	// executes a SQL query, this must be done after the SQL layer is ready.
