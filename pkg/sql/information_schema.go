@@ -35,7 +35,7 @@ const (
 
 var informationSchema = virtualSchema{
 	name: informationSchemaName,
-	tables: []virtualSchemaTable{
+	tableDefs: []virtualSchemaDef{
 		informationSchemaAdministrableRoleAuthorizations,
 		informationSchemaApplicableRoles,
 		informationSchemaColumnPrivileges,
@@ -1330,8 +1330,8 @@ func forEachTableDescWithTableLookupInternal(
 		iterate := func(dbDesc *DatabaseDescriptor) error {
 			for _, virtSchemaName := range vSchemaNames {
 				e := vEntries[virtSchemaName]
-				for _, tName := range e.orderedTableNames {
-					te := e.tables[tName]
+				for _, tName := range e.orderedDefNames {
+					te := e.defs[tName]
 					if err := fn(dbDesc, virtSchemaName, te.desc, lCtx); err != nil {
 						return err
 					}

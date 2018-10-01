@@ -55,7 +55,7 @@ const (
 // in https://www.postgresql.org/docs/9.6/static/catalogs.html.
 var pgCatalog = virtualSchema{
 	name: pgCatalogName,
-	tables: []virtualSchemaTable{
+	tableDefs: []virtualSchemaDef{
 		pgCatalogAmTable,
 		pgCatalogAttrDefTable,
 		pgCatalogAttributeTable,
