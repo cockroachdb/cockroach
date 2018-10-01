@@ -57,7 +57,10 @@ func registerClearRange(r *registry) {
 			if aggressiveConsistencyChecks {
 				// Run with an env var that runs a synchronous consistency check after each rebalance and merge.
 				// This slows down merges, so it might hide some races.
-				c.Start(ctx, startArgs("--env=COCKROACH_CONSISTENCY_AGGRESSIVE=true"))
+				c.Start(ctx, startArgs(
+					"--env=COCKROACH_CONSISTENCY_AGGRESSIVE=true",
+					"--env=COCKROACH_FATAL_ON_STATS_MISMATCH=true",
+				))
 			} else {
 				c.Start(ctx)
 			}
