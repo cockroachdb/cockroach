@@ -80,6 +80,10 @@ func runSqlapp(ctx context.Context, t *test, c *cluster, app, flags string, dur 
 	c.Put(ctx, cockroach, "./cockroach", roachNodes)
 	c.Start(ctx, roachNodes)
 
+	// TODO(nvanbenschoten): We are currently running these consistency checks with
+	// basic chaos. We should also run them in more chaotic environments which
+	// could introduce network partitions, ENOSPACE, clock issues, etc.
+
 	// Sqlapps each take a `--cockroach_ip_addresses_csv` flag, which is a
 	// comma-separated list of node IP addresses with optional port specifiers.
 	addrStr := strings.Join(c.InternalAddr(ctx, c.Range(1, roachNodeCount)), ",")
@@ -113,11 +117,6 @@ func runSqlapp(ctx context.Context, t *test, c *cluster, app, flags string, dur 
 			return err
 		}
 
-		// TODO(nvanbenschoten): We are currently running these consistency
-		// checks in the most basic case where are nodes in the Cockroach
-		// cluster are healthy and able to communicate. We should also run them
-		// in a chaos environment, which could introduce network partitions,
-		// node and service restarts, ENOSPACE, clock issues, etc.
 		t.Status("running consistency checker")
 		const workers = 16
 		return c.RunL(ctx, sqlappL, appNode, fmt.Sprintf("./%s  --duration_secs=%d "+
