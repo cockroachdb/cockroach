@@ -35,12 +35,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
+
+var testingFatalOnStatsMismatch = envutil.EnvOrDefaultBool("COCKROACH_FATAL_ON_STATS_MISMATCH", false)
 
 const (
 	// collectChecksumTimeout controls how long we'll wait to collect a checksum
@@ -107,6 +110,13 @@ func (r *Replica) CheckConsistency(
 		// there's nothing else to do.
 		if delta == (enginepb.MVCCStats{}) || !r.ClusterSettings().Version.IsMinSupported(cluster.VersionRecomputeStats) {
 			return roachpb.CheckConsistencyResponse{}, nil
+		}
+
+		if !delta.ContainsEstimates && testingFatalOnStatsMismatch {
+			// ContainsEstimates is true if the replica's persisted MVCCStats had ContainsEstimates set.
+			// If this was *not* the case, the replica believed it had accurate stats. But we just found
+			// out that this isn't true.
+			log.Fatalf(ctx, "found a delta of %+v", log.Safe(delta))
 		}
 
 		// We've found that there's something to correct; send an RecomputeStatsRequest. Note that this
