@@ -1,0 +1,63 @@
+# LogicTest: local-opt
+
+query T
+EXPLAIN (OPT) SELECT * FROM crdb_internal.ranges
+----
+project
+ ├── columns: range_id:11(int) start_key:12(bytes) start_pretty:13(string) end_key:14(bytes) end_pretty:15(string) database:16(string) table:17(string) index:18(string) replicas:19(int[]) lease_holder:20(int)
+ ├── stats: [rows=1000]
+ ├── cost: 30
+ ├── fd: (12)-->(20)
+ ├── prune: (11-20)
+ ├── virtual-scan test.crdb_internal.ranges_no_leases
+ │    ├── columns: ranges_no_leases.range_id:11(int) ranges_no_leases.start_key:12(bytes) ranges_no_leases.start_pretty:13(string) ranges_no_leases.end_key:14(bytes) ranges_no_leases.end_pretty:15(string) ranges_no_leases.database:16(string) ranges_no_leases.table:17(string) ranges_no_leases.index:18(string) ranges_no_leases.replicas:19(int[])
+ │    ├── stats: [rows=1000]
+ │    └── cost: 10
+ └── projections [outer=(11-19)]
+      └── function: crdb_internal.lease_holder [type=int, outer=(12)]
+           └── variable: ranges_no_leases.start_key [type=bytes, outer=(12)]
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM crdb_internal.ranges WHERE range_id = 1
+----
+render                   ·         ·                                      (range_id, start_key, start_pretty, end_key, end_pretty, database, "table", "index", replicas, lease_holder)  ·
+ │                       render 0  range_id                               ·                                                                                                             ·
+ │                       render 1  start_key                              ·                                                                                                             ·
+ │                       render 2  start_pretty                           ·                                                                                                             ·
+ │                       render 3  end_key                                ·                                                                                                             ·
+ │                       render 4  end_pretty                             ·                                                                                                             ·
+ │                       render 5  database                               ·                                                                                                             ·
+ │                       render 6  "table"                                ·                                                                                                             ·
+ │                       render 7  "index"                                ·                                                                                                             ·
+ │                       render 8  replicas                               ·                                                                                                             ·
+ │                       render 9  crdb_internal.lease_holder(start_key)  ·                                                                                                             ·
+ └── filter              ·         ·                                      (range_id, start_key, start_pretty, end_key, end_pretty, database, "table", "index", replicas)                ·
+      │                  filter    range_id = 1                           ·                                                                                                             ·
+      └── virtual table  ·         ·                                      (range_id, start_key, start_pretty, end_key, end_pretty, database, "table", "index", replicas)                ·
+·                        source    ·                                      ·                                                                                                             ·
+
+query T
+EXPLAIN (OPT) SELECT * FROM crdb_internal.ranges WHERE range_id = 1
+----
+project
+ ├── columns: range_id:11(int!null) start_key:12(bytes) start_pretty:13(string) end_key:14(bytes) end_pretty:15(string) database:16(string) table:17(string) index:18(string) replicas:19(int[]) lease_holder:20(int)
+ ├── stats: [rows=10]
+ ├── cost: 20.2
+ ├── fd: ()-->(11), (12)-->(20)
+ ├── prune: (11-20)
+ ├── select
+ │    ├── columns: ranges_no_leases.range_id:11(int!null) ranges_no_leases.start_key:12(bytes) ranges_no_leases.start_pretty:13(string) ranges_no_leases.end_key:14(bytes) ranges_no_leases.end_pretty:15(string) ranges_no_leases.database:16(string) ranges_no_leases.table:17(string) ranges_no_leases.index:18(string) ranges_no_leases.replicas:19(int[])
+ │    ├── stats: [rows=10, distinct(11)=1]
+ │    ├── cost: 20
+ │    ├── fd: ()-->(11)
+ │    ├── virtual-scan test.crdb_internal.ranges_no_leases
+ │    │    ├── columns: ranges_no_leases.range_id:11(int) ranges_no_leases.start_key:12(bytes) ranges_no_leases.start_pretty:13(string) ranges_no_leases.end_key:14(bytes) ranges_no_leases.end_pretty:15(string) ranges_no_leases.database:16(string) ranges_no_leases.table:17(string) ranges_no_leases.index:18(string) ranges_no_leases.replicas:19(int[])
+ │    │    ├── stats: [rows=1000, distinct(11)=100]
+ │    │    └── cost: 10
+ │    └── filters [type=bool, outer=(11), constraints=(/11: [/1 - /1]; tight), fd=()-->(11)]
+ │         └── eq [type=bool, outer=(11), constraints=(/11: [/1 - /1]; tight)]
+ │              ├── variable: ranges_no_leases.range_id [type=int, outer=(11)]
+ │              └── const: 1 [type=int]
+ └── projections [outer=(11-19)]
+      └── function: crdb_internal.lease_holder [type=int, outer=(12)]
+           └── variable: ranges_no_leases.start_key [type=bytes, outer=(12)]
