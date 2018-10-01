@@ -21,7 +21,6 @@ WITH t AS (SELECT * FROM y WHERE a < 3)
 ----
 2
 
-
 # Using a CTE inside a subquery
 query I rowsort
 WITH t(x) AS (SELECT a FROM x)
@@ -44,6 +43,24 @@ WITH t(b) AS (SELECT a FROM x) SELECT b, t.b FROM t
 1 1
 2 2
 3 3
+
+query BB
+WITH t(a, b) AS (SELECT true a, false b)
+  SELECT a, b FROM t
+----
+true  false
+
+query BB
+WITH t(b, a) AS (SELECT true a, false b)
+  SELECT a, b FROM t
+----
+false  true
+
+statement error WITH query name t specified more than once
+WITH
+    t AS (SELECT true),
+    t AS (SELECT false)
+SELECT * FROM t
 
 query error source "t" has 1 columns available but 2 columns specified
 WITH t(b, c) AS (SELECT a FROM x) SELECT b, t.b FROM t

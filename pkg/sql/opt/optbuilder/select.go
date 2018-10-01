@@ -66,6 +66,21 @@ func (b *Builder) buildDataSource(
 			panic(builderError{err})
 		}
 
+		// CTEs take precedence over other data sources.
+		if cte := inScope.resolveCTE(tn); cte != nil {
+			s := inScope.push()
+			if cte.used {
+				panic(builderError{fmt.Errorf("unsupported multiple use of CTE clause %q", tn)})
+			}
+			cte.used = true
+
+			// TODO(justin): once we support mutations here, we will want to include a
+			// spool operation.
+			s.group = cte.group
+			s.cols = cte.cols
+			return s
+		}
+
 		ds := b.resolveDataSource(tn)
 		switch t := ds.(type) {
 		case opt.Table:
@@ -344,6 +359,53 @@ func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope 
 	return inScope
 }
 
+func (b *Builder) buildCTE(ctes []*tree.CTE, inScope *scope) (outScope *scope) {
+	outScope = inScope.push()
+
+	outScope.cteList = make([]cteSource, len(ctes))
+	for i := range ctes {
+		newScope := b.buildStmt(ctes[i].Stmt, outScope)
+		cols := newScope.cols
+		name := ctes[i].Name.Alias
+
+		for j := 0; j < i; j++ {
+			if outScope.cteList[j].name.Alias == name {
+				panic(builderError{
+					fmt.Errorf("WITH query name %s specified more than once", ctes[i].Name.Alias),
+				})
+			}
+		}
+
+		// Names for the output columns can optionally be specified.
+		if ctes[i].Name.Cols != nil {
+			if len(newScope.cols) != len(ctes[i].Name.Cols) {
+				panic(builderError{
+					fmt.Errorf(
+						"source %q has %d columns available but %d columns specified",
+						name, len(newScope.cols), len(ctes[i].Name.Cols),
+					),
+				})
+			}
+
+			cols = make([]scopeColumn, len(newScope.cols))
+			tableName := tree.MakeUnqualifiedTableName(ctes[i].Name.Alias)
+			copy(cols, newScope.cols)
+			for j := range cols {
+				cols[j].name = ctes[i].Name.Cols[j]
+				cols[j].table = tableName
+			}
+		}
+		outScope.cteList[i] = cteSource{
+			name:  ctes[i].Name,
+			cols:  cols,
+			group: newScope.group,
+			used:  false,
+		}
+	}
+
+	return outScope
+}
+
 // buildSelect builds a set of memo groups that represent the given select
 // statement.
 //
@@ -351,7 +413,7 @@ func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope 
 // return values.
 func (b *Builder) buildSelect(stmt *tree.Select, inScope *scope) (outScope *scope) {
 	if stmt.With != nil {
-		panic(unimplementedf("with clause not supported"))
+		inScope = b.buildCTE(stmt.With.CTEList, inScope)
 	}
 
 	wrapped := stmt.Select
