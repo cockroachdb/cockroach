@@ -162,9 +162,13 @@ func (f *Factory) InternList(items []memo.GroupID) memo.ListID {
 // will trigger the rebuild of that node's ancestors, as well as triggering
 // additional normalization rules that can substantially rewrite the tree. Once
 // all placeholders are assigned, the exploration phase can begin.
-func (f *Factory) AssignPlaceholders() {
-	root := f.assignPlaceholders(f.Memo().RootGroup())
+func (f *Factory) AssignPlaceholders() error {
+	root, err := f.assignPlaceholders(f.Memo().RootGroup())
+	if err != nil {
+		return err
+	}
 	f.Memo().SetRoot(root, f.Memo().RootProps())
+	return nil
 }
 
 // onConstruct is called as a final step by each factory construction method,
