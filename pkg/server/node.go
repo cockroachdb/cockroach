@@ -21,9 +21,6 @@ import (
 	"net"
 	"time"
 
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/peer"
-
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
@@ -33,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -874,31 +870,12 @@ func (n *Node) batchInternal(
 		return &br, nil
 	}
 
-	isLocalRequest := grpcutil.IsLocalRequestContext(ctx)
-	// TODO(marc): grpc's authentication model (which gives credential access in
-	// the request handler) doesn't really fit with the current design of the
-	// security package (which assumes that TLS state is only given at connection
-	// time) - that should be fixed.
-	if isLocalRequest {
-		// this is a in-process request, bypass checks.
-	} else if peer, ok := peer.FromContext(ctx); ok {
-		if tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo); ok {
-			certUser, err := security.GetCertificateUser(&tlsInfo.State)
-			if err != nil {
-				return nil, err
-			}
-			if certUser != security.NodeUser {
-				return nil, errors.Errorf("user %s is not allowed", certUser)
-			}
-		}
-	}
-
 	var br *roachpb.BatchResponse
 
 	if err := n.stopper.RunTaskWithErr(ctx, "node.Node: batch", func(ctx context.Context) error {
 		var finishSpan func(*roachpb.BatchResponse)
 		// Shadow ctx from the outer function. Written like this to pass the linter.
-		ctx, finishSpan = n.setupSpanForIncomingRPC(ctx, isLocalRequest)
+		ctx, finishSpan = n.setupSpanForIncomingRPC(ctx, grpcutil.IsLocalRequestContext(ctx))
 		defer func(br **roachpb.BatchResponse) {
 			finishSpan(*br)
 		}(&br)

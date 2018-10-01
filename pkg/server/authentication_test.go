@@ -27,13 +27,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/jsonpb"
+	"github.com/lib/pq"
+	"github.com/pkg/errors"
 	"golang.org/x/crypto/bcrypt"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -41,9 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/gogo/protobuf/jsonpb"
-	"github.com/lib/pq"
-	"github.com/pkg/errors"
 )
 
 type ctxI interface {
@@ -567,6 +572,111 @@ func TestAuthenticationMux(t *testing.T) {
 			// Verify authenticated client returns 200 OK.
 			if err := runRequest(authClient, tc.method, tc.path, tc.body, http.StatusOK); err != nil {
 				t.Fatalf("request %s failed when authorized: %s", tc.path, err)
+			}
+		})
+	}
+}
+
+func TestGRPCAuthentication(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	// For each subsystem we pick a representative RPC. The idea is not to
+	// exhaustively test each RPC but to prevent server startup from being
+	// refactored in such a way that an entire subsystem becomes inadvertently
+	// exempt from authentication checks.
+	subsystems := []struct {
+		name    string
+		sendRPC func(context.Context, *grpc.ClientConn) error
+	}{
+		{"gossip", func(ctx context.Context, conn *grpc.ClientConn) error {
+			stream, err := gossip.NewGossipClient(conn).Gossip(ctx)
+			if err != nil {
+				return err
+			}
+			_ = stream.Send(&gossip.Request{})
+			_, err = stream.Recv()
+			return err
+		}},
+		{"internal", func(ctx context.Context, conn *grpc.ClientConn) error {
+			_, err := roachpb.NewInternalClient(conn).Batch(ctx, &roachpb.BatchRequest{})
+			return err
+		}},
+		{"replicaConsistency", func(ctx context.Context, conn *grpc.ClientConn) error {
+			_, err := storage.NewConsistencyClient(conn).CollectChecksum(ctx, &storage.CollectChecksumRequest{})
+			return err
+		}},
+		{"raft", func(ctx context.Context, conn *grpc.ClientConn) error {
+			stream, err := storage.NewMultiRaftClient(conn).RaftMessageBatch(ctx)
+			if err != nil {
+				return err
+			}
+			_ = stream.Send(&storage.RaftMessageRequestBatch{})
+			_, err = stream.Recv()
+			return err
+		}},
+		{"distSQL", func(ctx context.Context, conn *grpc.ClientConn) error {
+			stream, err := distsqlrun.NewDistSQLClient(conn).RunSyncFlow(ctx)
+			if err != nil {
+				return err
+			}
+			_ = stream.Send(&distsqlrun.ConsumerSignal{})
+			_, err = stream.Recv()
+			return err
+		}},
+		{"init", func(ctx context.Context, conn *grpc.ClientConn) error {
+			_, err := serverpb.NewInitClient(conn).Bootstrap(ctx, &serverpb.BootstrapRequest{})
+			return err
+		}},
+		{"admin", func(ctx context.Context, conn *grpc.ClientConn) error {
+			_, err := serverpb.NewAdminClient(conn).Databases(ctx, &serverpb.DatabasesRequest{})
+			return err
+		}},
+		{"status", func(ctx context.Context, conn *grpc.ClientConn) error {
+			_, err := serverpb.NewStatusClient(conn).ListSessions(ctx, &serverpb.ListSessionsRequest{})
+			return err
+		}},
+	}
+
+	conn, err := grpc.DialContext(ctx, s.Addr(),
+		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
+			InsecureSkipVerify: true,
+		})))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func(conn *grpc.ClientConn) { _ = conn.Close() }(conn)
+	for _, subsystem := range subsystems {
+		t.Run(fmt.Sprintf("no-cert/%s", subsystem.name), func(t *testing.T) {
+			err := subsystem.sendRPC(ctx, conn)
+			if exp := "no client certificates in request"; !testutils.IsError(err, exp) {
+				t.Errorf("expected %q error, but got %v", exp, err)
+			}
+		})
+	}
+
+	certManager, err := s.RPCContext().GetCertificateManager()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsConfig, err := certManager.GetClientTLSConfig("testuser")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err = grpc.DialContext(ctx, s.Addr(),
+		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func(conn *grpc.ClientConn) { _ = conn.Close() }(conn)
+	for _, subsystem := range subsystems {
+		t.Run(fmt.Sprintf("bad-user/%s", subsystem.name), func(t *testing.T) {
+			err := subsystem.sendRPC(ctx, conn)
+			if exp := "user testuser is not allowed to perform this RPC"; !testutils.IsError(err, exp) {
+				t.Errorf("expected %q error, but got %v", exp, err)
 			}
 		})
 	}
