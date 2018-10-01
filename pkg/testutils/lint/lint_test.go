@@ -1215,6 +1215,7 @@ func TestLint(t *testing.T) {
 		for checker, ignores := range map[lint.Checker][]lint.Ignore{
 			&miscChecker{}:  nil,
 			&timerChecker{}: nil,
+			&hashChecker{}:  nil,
 			simple.NewChecker(): {
 				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/security/securitytest/embedded.go", Checks: []string{"S1013"}},
 				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/ui/embedded.go", Checks: []string{"S1013"}},
