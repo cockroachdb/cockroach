@@ -224,7 +224,8 @@ func (o *jsonOp) run(ctx context.Context) error {
 		}
 		for rows.Next() {
 		}
-		o.hists.Get(`read`).Record(timeutil.Since(start))
+		elapsed := timeutil.Since(start)
+		o.hists.Get(`read`).Record(elapsed)
 		return rows.Err()
 	}
 	argCount := 2
@@ -252,7 +253,8 @@ func (o *jsonOp) run(ctx context.Context) error {
 	}
 	start := timeutil.Now()
 	_, err := o.writeStmt.Exec(args...)
-	o.hists.Get(`write`).Record(timeutil.Since(start))
+	elapsed := timeutil.Since(start)
+	o.hists.Get(`write`).Record(elapsed)
 	return err
 }
 
