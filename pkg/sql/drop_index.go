@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -115,6 +116,24 @@ func (p *planner) dropIndexByName(
 	constraintBehavior dropIndexConstraintBehavior,
 	jobDesc string,
 ) error {
+
+	// Check if requires CCL binary for eventual zone config removal.
+	zone, err := getZoneConfigRaw(ctx, p.txn, tableDesc.ID)
+	if err != nil {
+		return err
+	}
+	if len(zone.Subzones) > 0 {
+		st := p.ExecCfg().Settings
+		if !st.Version.IsMinSupported(cluster.VersionPartitioning) {
+			return errors.New("cluster version does not support zone configs on indexes or partitions")
+		}
+		_, err = GenerateSubzoneSpans(
+			st, p.ExecCfg().ClusterID(), tableDesc, zone.Subzones, false /* newSubzones */)
+		if err != nil {
+			return err
+		}
+	}
+
 	idx, dropped, err := tableDesc.FindIndexByName(string(idxName))
 	if err != nil {
 		// Only index names of the form "table@idx" throw an error here if they
