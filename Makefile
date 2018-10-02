@@ -840,7 +840,8 @@ stress stressrace:
 
 .PHONE: roachprod-stress
 roachprod-stress: bin/roachprod-stress
-	build/builder.sh make bin/stress
+	# The bootstrap target creates, among other things, ./bin/stress.
+	build/builder.sh make bin/.bootstrap
 	build/builder.sh make test GOFLAGS="-i -v -c -o $(notdir $(PKG)).test" PKG=$(PKG)
 	@if [ -z "$(CLUSTER)" ]; then \
 	  echo "ERROR: missing or empty CLUSTER"; \
