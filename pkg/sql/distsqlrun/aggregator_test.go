@@ -451,6 +451,42 @@ func BenchmarkAggregation(b *testing.B) {
 	}
 }
 
+func BenchmarkCountRows(b *testing.B) {
+	spec := &AggregatorSpec{
+		Aggregations: []AggregatorSpec_Aggregation{
+			{
+				Func: AggregatorSpec_COUNT_ROWS,
+			},
+		},
+	}
+	post := &PostProcessSpec{}
+	disposer := &RowDisposer{}
+	const numCols = 1
+	const numRows = 100000
+	input := NewRepeatableRowSource(oneIntCol, makeIntRows(numRows, numCols))
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	flowCtx := &FlowCtx{
+		Settings: st,
+		EvalCtx:  &evalCtx,
+	}
+
+	b.SetBytes(int64(8 * numRows * numCols))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		d, err := newAggregator(flowCtx, 0 /* processorID */, spec, input, post, disposer)
+		if err != nil {
+			b.Fatal(err)
+		}
+		d.Run(context.TODO(), nil)
+		input.Reset()
+	}
+}
+
 func BenchmarkGrouping(b *testing.B) {
 	const numCols = 1
 	const numRows = 1000
