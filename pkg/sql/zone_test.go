@@ -43,7 +43,7 @@ func TestValidSetShowZones(t *testing.T) {
 	yamlOverride := "gc: {ttlseconds: 42}"
 	zoneOverride := config.DefaultZoneConfig()
 	zoneOverride.GC = &config.GCPolicy{TTLSeconds: 42}
-	partialZoneOverride := config.ZoneConfig{}
+	partialZoneOverride := *config.NewZoneConfig()
 	partialZoneOverride.GC = &config.GCPolicy{TTLSeconds: 42}
 
 	defaultRow := sqlutils.ZoneRow{

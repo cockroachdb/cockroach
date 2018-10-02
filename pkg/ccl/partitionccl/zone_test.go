@@ -47,7 +47,7 @@ func TestValidIndexPartitionSetShowZones(t *testing.T) {
 	yamlOverride := "gc: {ttlseconds: 42}"
 	zoneOverride := config.DefaultZoneConfig()
 	zoneOverride.GC = &config.GCPolicy{TTLSeconds: 42}
-	partialZoneOverride := config.ZoneConfig{}
+	partialZoneOverride := *config.NewZoneConfig()
 	partialZoneOverride.GC = &config.GCPolicy{TTLSeconds: 42}
 
 	dbDescID := uint32(keys.MinNonPredefinedUserDescID)

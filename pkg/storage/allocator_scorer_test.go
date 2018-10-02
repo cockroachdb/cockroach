@@ -904,9 +904,8 @@ func TestAllocateConstraintsCheck(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			zone := &config.ZoneConfig{
-				Constraints:              tc.constraints,
-				ExplicitlySetConstraints: true,
-				NumReplicas:              proto.Int32(tc.zoneNumReplicas),
+				Constraints: tc.constraints,
+				NumReplicas: proto.Int32(tc.zoneNumReplicas),
 			}
 			analyzed := analyzeConstraints(
 				context.Background(), getTestStoreDesc, testStoreReplicas(tc.existing), zone)
@@ -1038,9 +1037,8 @@ func TestRemoveConstraintsCheck(t *testing.T) {
 				})
 			}
 			zone := &config.ZoneConfig{
-				Constraints:              tc.constraints,
-				ExplicitlySetConstraints: true,
-				NumReplicas:              proto.Int32(tc.zoneNumReplicas),
+				Constraints: tc.constraints,
+				NumReplicas: proto.Int32(tc.zoneNumReplicas),
 			}
 			analyzed := analyzeConstraints(context.Background(), getTestStoreDesc, existing, zone)
 			for storeID, expected := range tc.expected {

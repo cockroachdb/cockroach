@@ -1946,23 +1946,23 @@ func (s *adminServer) queryZone(
 		ctx, "admin-query-zone", nil /* txn */, userName, query, id,
 	)
 	if err != nil {
-		return config.ZoneConfig{}, false, err
+		return *config.NewZoneConfig(), false, err
 	}
 
 	if len(rows) == 0 {
-		return config.ZoneConfig{}, false, nil
+		return *config.NewZoneConfig(), false, nil
 	}
 
 	var zoneBytes []byte
 	scanner := resultScanner{}
 	err = scanner.ScanIndex(rows[0], 0, &zoneBytes)
 	if err != nil {
-		return config.ZoneConfig{}, false, err
+		return *config.NewZoneConfig(), false, err
 	}
 
 	var zone config.ZoneConfig
 	if err := protoutil.Unmarshal(zoneBytes, &zone); err != nil {
-		return config.ZoneConfig{}, false, err
+		return *config.NewZoneConfig(), false, err
 	}
 	return zone, true, nil
 }
@@ -1979,7 +1979,7 @@ func (s *adminServer) queryZonePath(
 			return path[i], zone, true, err
 		}
 	}
-	return 0, config.ZoneConfig{}, false, nil
+	return 0, *config.NewZoneConfig(), false, nil
 }
 
 // queryNamespaceID queries for the ID of the namespace with the given name and

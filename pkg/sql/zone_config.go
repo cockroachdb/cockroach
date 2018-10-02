@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -34,7 +33,6 @@ func init() {
 	// TODO(marc): we use a hook to avoid a dependency on the sql package. We
 	// should probably move keys/protos elsewhere.
 	config.ZoneConfigHook = ZoneConfigHook
-	config.InheritFromParent = InheritFromParent
 }
 
 var errNoZoneConfigApplies = errors.New("no zone config applies")
@@ -133,7 +131,7 @@ func CompleteZoneConfig(
 			if err != nil {
 				return err
 			}
-			InheritFromParent(cfg, *dbzone)
+			cfg.InheritFromParent(*dbzone)
 		}
 	}
 
@@ -145,46 +143,8 @@ func CompleteZoneConfig(
 	if err != nil {
 		return err
 	}
-	InheritFromParent(cfg, *defaultZone)
+	cfg.InheritFromParent(*defaultZone)
 	return nil
-}
-
-// InheritFromParent takes a pointer to a zone and hydrates its missing
-// fields from its parent (given as another argument).
-func InheritFromParent(cfg *config.ZoneConfig, parent config.ZoneConfig) {
-	if cfg.NumReplicas == nil {
-		if parent.NumReplicas != nil {
-			cfg.NumReplicas = proto.Int32(*parent.NumReplicas)
-		}
-	}
-	if cfg.RangeMinBytes == nil {
-		if parent.RangeMinBytes != nil {
-			cfg.RangeMinBytes = proto.Int64(*parent.RangeMinBytes)
-		}
-	}
-	if cfg.RangeMaxBytes == nil {
-		if parent.RangeMaxBytes != nil {
-			cfg.RangeMaxBytes = proto.Int64(*parent.RangeMaxBytes)
-		}
-	}
-	if cfg.GC == nil {
-		if parent.GC != nil {
-			tempGC := *parent.GC
-			cfg.GC = &tempGC
-		}
-	}
-	if !cfg.ExplicitlySetConstraints {
-		if parent.ExplicitlySetConstraints {
-			cfg.Constraints = parent.Constraints
-			cfg.ExplicitlySetConstraints = true
-		}
-	}
-	if !cfg.ExplicitlySetLeasePreferences {
-		if parent.ExplicitlySetLeasePreferences {
-			cfg.LeasePreferences = parent.LeasePreferences
-			cfg.ExplicitlySetLeasePreferences = true
-		}
-	}
 }
 
 // ZoneConfigHook returns the zone config for the object with id using the
@@ -239,17 +199,17 @@ func GetZoneConfigInTxn(
 		if placeholder != nil {
 			if subzone = placeholder.GetSubzone(uint32(index.ID), partition); subzone != nil {
 				if indexSubzone := placeholder.GetSubzone(uint32(index.ID), ""); indexSubzone != nil {
-					InheritFromParent(&subzone.Config, indexSubzone.Config)
+					(&subzone.Config).InheritFromParent(indexSubzone.Config)
 				}
-				InheritFromParent(&subzone.Config, *zone)
+				(&subzone.Config).InheritFromParent(*zone)
 				return placeholderID, placeholder, subzone, nil
 			}
 		} else {
 			if subzone = zone.GetSubzone(uint32(index.ID), partition); subzone != nil {
 				if indexSubzone := zone.GetSubzone(uint32(index.ID), ""); indexSubzone != nil {
-					InheritFromParent(&subzone.Config, indexSubzone.Config)
+					(&subzone.Config).InheritFromParent(indexSubzone.Config)
 				}
-				InheritFromParent(&subzone.Config, *zone)
+				(&subzone.Config).InheritFromParent(*zone)
 			}
 		}
 	}
@@ -391,7 +351,7 @@ func deleteRemovedPartitionZoneConfigs(
 	if err != nil {
 		return err
 	} else if zone == nil {
-		zone = &config.ZoneConfig{}
+		zone = config.NewZoneConfig()
 	}
 	for _, n := range removedNames {
 		zone.DeleteSubzone(uint32(idxDesc.ID), n)

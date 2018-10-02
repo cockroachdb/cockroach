@@ -131,7 +131,7 @@ func (p *planner) dropIndexByName(
 	}
 
 	// Check if requires CCL binary for eventual zone config removal.
-	zone, err := getZoneConfigRaw(ctx, p.txn, tableDesc.ID)
+	_, zone, _, err := GetZoneConfigInTxn(ctx, p.txn, uint32(tableDesc.ID), nil, "", false)
 	if err != nil {
 		return err
 	}

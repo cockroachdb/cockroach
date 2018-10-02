@@ -16,11 +16,13 @@ package config
 
 import (
 	"fmt"
+	"math/rand"
 	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	proto "github.com/gogo/protobuf/proto"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -341,9 +343,7 @@ func TestZoneConfigMarshalYAML(t *testing.T) {
 		GC: &GCPolicy{
 			TTLSeconds: 1,
 		},
-		NumReplicas:                   proto.Int32(1),
-		ExplicitlySetConstraints:      true,
-		ExplicitlySetLeasePreferences: true,
+		NumReplicas: proto.Int32(1),
 	}
 
 	testCases := []struct {
@@ -722,11 +722,10 @@ func TestConstraintsListYAML(t *testing.T) {
 func TestMarshalableZoneConfigRoundTrip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// TODO(ridwanmsharif): Check if this makes sense
-	defZone := DefaultZoneConfig()
-	original := &defZone
+	original := NewPopulatedZoneConfig(
+		rand.New(rand.NewSource(timeutil.Now().UnixNano())), false /* easy */)
 	marshalable := zoneConfigToMarshalable(*original)
-	roundTripped := zoneConfigFromMarshalable(marshalable)
+	roundTripped := zoneConfigFromMarshalable(marshalable, *original)
 
 	if !reflect.DeepEqual(roundTripped, *original) {
 		t.Errorf("round-tripping a ZoneConfig through a marshalableZoneConfig failed:\noriginal:\n%+v\nmarshable:\n%+v\ngot:\n%+v", original, marshalable, roundTripped)

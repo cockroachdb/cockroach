@@ -70,8 +70,8 @@ func (c *Constraints) UnmarshalYAML(unmarshal func(interface{}) error) error {
 // ConstraintsList is an alias for a slice of Constraints that can be
 // properly marshaled to/from YAML.
 type ConstraintsList struct {
-	Constraints   []Constraints
-	ExplicitlySet bool
+	Constraints []Constraints
+	Inherited   bool
 }
 
 var _ yaml.Marshaler = ConstraintsList{}
@@ -89,7 +89,7 @@ var _ yaml.Unmarshaler = &ConstraintsList{}
 func (c ConstraintsList) MarshalYAML() (interface{}, error) {
 	// If per-replica Constraints aren't in use, marshal everything into a list
 	// for compatibility with pre-2.0-style configs.
-	if !c.ExplicitlySet || len(c.Constraints) == 0 {
+	if c.Inherited || len(c.Constraints) == 0 {
 		return []string{}, nil
 	}
 	if len(c.Constraints) == 1 && c.Constraints[0].NumReplicas == 0 {
@@ -118,6 +118,7 @@ func (c *ConstraintsList) UnmarshalYAML(unmarshal func(interface{}) error) error
 	// unmarshaling the legacy Constraints format, which is just a list of
 	// strings.
 	var strs []string
+	c.Inherited = true
 	if err := unmarshal(&strs); err == nil {
 		constraints := make([]Constraint, len(strs))
 		for i, short := range strs {
@@ -127,7 +128,7 @@ func (c *ConstraintsList) UnmarshalYAML(unmarshal func(interface{}) error) error
 		}
 		if len(constraints) == 0 {
 			c.Constraints = []Constraints{}
-			c.ExplicitlySet = true
+			c.Inherited = false
 		} else {
 			c.Constraints = []Constraints{
 				{
@@ -135,7 +136,7 @@ func (c *ConstraintsList) UnmarshalYAML(unmarshal func(interface{}) error) error
 					NumReplicas: 0,
 				},
 			}
-			c.ExplicitlySet = true
+			c.Inherited = false
 		}
 		return nil
 	}
@@ -187,7 +188,7 @@ func (c *ConstraintsList) UnmarshalYAML(unmarshal func(interface{}) error) error
 	})
 
 	c.Constraints = constraintsList
-	c.ExplicitlySet = true
+	c.Inherited = false
 	return nil
 }
 
@@ -226,8 +227,8 @@ func zoneConfigToMarshalable(c ZoneConfig) marshalableZoneConfig {
 	if c.NumReplicas != nil && *c.NumReplicas != 0 {
 		m.NumReplicas = proto.Int32(*c.NumReplicas)
 	}
-	m.Constraints = ConstraintsList{c.Constraints, c.ExplicitlySetConstraints}
-	if c.ExplicitlySetLeasePreferences {
+	m.Constraints = ConstraintsList{c.Constraints, c.InheritedConstraints}
+	if !c.InheritedLeasePreferences {
 		m.LeasePreferences = c.LeasePreferences
 	}
 	// We intentionally do not round-trip ExperimentalLeasePreferences. We never
@@ -237,8 +238,10 @@ func zoneConfigToMarshalable(c ZoneConfig) marshalableZoneConfig {
 	return m
 }
 
-func zoneConfigFromMarshalable(m marshalableZoneConfig) ZoneConfig {
-	var c ZoneConfig
+// zoneConfigFromMarshalable returns a ZoneConfig from the marshaled struct
+// NOTE: The config passed in the parameter is used so we can determine keep
+// the original value of the InheritedLeasePreferences field in the output.
+func zoneConfigFromMarshalable(m marshalableZoneConfig, c ZoneConfig) ZoneConfig {
 	if m.RangeMinBytes != nil {
 		c.RangeMinBytes = proto.Int64(*m.RangeMinBytes)
 	}
@@ -253,10 +256,9 @@ func zoneConfigFromMarshalable(m marshalableZoneConfig) ZoneConfig {
 		c.NumReplicas = proto.Int32(*m.NumReplicas)
 	}
 	c.Constraints = m.Constraints.Constraints
-	c.ExplicitlySetConstraints = m.Constraints.ExplicitlySet
+	c.InheritedConstraints = m.Constraints.Inherited
 	if m.LeasePreferences != nil {
 		c.LeasePreferences = m.LeasePreferences
-		c.ExplicitlySetLeasePreferences = true
 	}
 
 	// Prefer a provided m.ExperimentalLeasePreferences value over whatever is in
@@ -266,7 +268,10 @@ func zoneConfigFromMarshalable(m marshalableZoneConfig) ZoneConfig {
 	// internal storage that the user is now trying to overwrite.
 	if m.ExperimentalLeasePreferences != nil {
 		c.LeasePreferences = m.ExperimentalLeasePreferences
-		c.ExplicitlySetLeasePreferences = true
+	}
+
+	if m.LeasePreferences != nil || m.ExperimentalLeasePreferences != nil {
+		c.InheritedLeasePreferences = false
 	}
 	c.Subzones = m.Subzones
 	c.SubzoneSpans = m.SubzoneSpans
@@ -290,6 +295,6 @@ func (c *ZoneConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if err := unmarshal(&aux); err != nil {
 		return err
 	}
-	*c = zoneConfigFromMarshalable(aux)
+	*c = zoneConfigFromMarshalable(aux, *c)
 	return nil
 }
