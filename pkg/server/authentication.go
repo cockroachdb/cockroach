@@ -248,7 +248,8 @@ WHERE id = $1`
 	}
 
 	hasher := sha256.New()
-	hashedCookieSecret := hasher.Sum(cookie.Secret)
+	_, _ = hasher.Write(cookie.Secret)
+	hashedCookieSecret := hasher.Sum(nil)
 	if !bytes.Equal(hashedSecret, hashedCookieSecret) {
 		return false, "", nil
 	}
@@ -286,7 +287,8 @@ func (s *authenticationServer) newAuthSession(
 	}
 
 	hasher := sha256.New()
-	hashedSecret := hasher.Sum(secret)
+	_, _ = hasher.Write(secret)
+	hashedSecret := hasher.Sum(nil)
 	expiration := s.server.clock.PhysicalTime().Add(webSessionTimeout.Get(&s.server.st.SV))
 
 	insertSessionStmt := `

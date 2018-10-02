@@ -42,12 +42,22 @@ var ErrEmptyPassword = errors.New("empty passwords are not permitted")
 // error.
 func CompareHashAndPassword(hashedPassword []byte, password string) error {
 	h := sha256.New()
+	// TODO(benesch): properly apply SHA-256 to the password. The current code
+	// erroneously appends the SHA-256 of the empty hash to the unhashed password
+	// instead of actually hashing the password. Fixing this requires a somewhat
+	// complicated backwards compatibility dance. This is not a security issue
+	// because the round of SHA-256 was only intended to achieve a fixed-length
+	// input to bcrypt; it is bcrypt that provides the cryptographic security, and
+	// bcrypt is correctly applied.
+	//
+	//lint:ignore HC1000 backwards compatibility
 	return bcrypt.CompareHashAndPassword(hashedPassword, h.Sum([]byte(password)))
 }
 
 // HashPassword takes a raw password and returns a bcrypt hashed password.
 func HashPassword(password string) ([]byte, error) {
 	h := sha256.New()
+	//lint:ignore HC1000 backwards compatibility (see CompareHashAndPassword)
 	return bcrypt.GenerateFromPassword(h.Sum([]byte(password)), BcryptCost)
 }
 
