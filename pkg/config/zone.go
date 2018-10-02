@@ -293,6 +293,28 @@ var defaultSystemZoneConfig = &ZoneConfig{
 	},
 }
 
+// NewZoneConfig is the zone configuration used when no custom
+// config has been specified.
+func NewZoneConfig() *ZoneConfig {
+	return &ZoneConfig{
+		InheritedConstraints:      true,
+		InheritedLeasePreferences: true,
+	}
+}
+
+// EmptyCompleteZoneConfig is the zone configuration where
+// all fields are set but set to their respective zero values.
+func EmptyCompleteZoneConfig() *ZoneConfig {
+	return &ZoneConfig{
+		NumReplicas:               proto.Int32(0),
+		RangeMinBytes:             proto.Int64(0),
+		RangeMaxBytes:             proto.Int64(0),
+		GC:                        &GCPolicy{TTLSeconds: 0},
+		InheritedConstraints:      true,
+		InheritedLeasePreferences: true,
+	}
+}
+
 // DefaultZoneConfig is the default zone configuration used when no custom
 // config has been specified.
 func DefaultZoneConfig() ZoneConfig {
@@ -350,7 +372,7 @@ func TestingSetDefaultSystemZoneConfig(cfg ZoneConfig) func() {
 func (z *ZoneConfig) IsComplete() bool {
 	return ((z.NumReplicas != nil) && (z.RangeMinBytes != nil) &&
 		(z.RangeMaxBytes != nil) && (z.GC != nil) &&
-		(z.ExplicitlySetConstraints) && (z.ExplicitlySetLeasePreferences))
+		(!z.InheritedConstraints) && (!z.InheritedLeasePreferences))
 }
 
 // Validate returns an error if the ZoneConfig specifies a known-dangerous or
@@ -447,6 +469,43 @@ func (z *ZoneConfig) Validate() error {
 	return nil
 }
 
+// InheritFromParent hydrates a zones missing fields from its parent.
+func (z *ZoneConfig) InheritFromParent(parent ZoneConfig) {
+	if z.NumReplicas == nil {
+		if parent.NumReplicas != nil {
+			z.NumReplicas = proto.Int32(*parent.NumReplicas)
+		}
+	}
+	if z.RangeMinBytes == nil {
+		if parent.RangeMinBytes != nil {
+			z.RangeMinBytes = proto.Int64(*parent.RangeMinBytes)
+		}
+	}
+	if z.RangeMaxBytes == nil {
+		if parent.RangeMaxBytes != nil {
+			z.RangeMaxBytes = proto.Int64(*parent.RangeMaxBytes)
+		}
+	}
+	if z.GC == nil {
+		if parent.GC != nil {
+			tempGC := *parent.GC
+			z.GC = &tempGC
+		}
+	}
+	if z.InheritedConstraints {
+		if !parent.InheritedConstraints {
+			z.Constraints = parent.Constraints
+			z.InheritedConstraints = false
+		}
+	}
+	if z.InheritedLeasePreferences {
+		if !parent.InheritedLeasePreferences {
+			z.LeasePreferences = parent.LeasePreferences
+			z.InheritedLeasePreferences = false
+		}
+	}
+}
+
 // StoreMatchesConstraint returns whether a store matches the given constraint.
 func StoreMatchesConstraint(store roachpb.StoreDescriptor, constraint Constraint) bool {
 	hasConstraint := storeHasConstraint(store, constraint)
@@ -512,7 +571,8 @@ func (z *ZoneConfig) IsSubzonePlaceholder() bool {
 func (z *ZoneConfig) GetSubzone(indexID uint32, partition string) *Subzone {
 	for _, s := range z.Subzones {
 		if s.IndexID == indexID && s.PartitionName == partition {
-			return &s
+			copySubzone := s
+			return &copySubzone
 		}
 	}
 	if partition != "" {

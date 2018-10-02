@@ -45,8 +45,8 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 		return keys.MakeTablePrefix(keys.MaxReservedDescID + i)
 	}
 
-	config.TestingSetZoneConfig(keys.MaxReservedDescID+1, config.ZoneConfig{})
-	config.TestingSetZoneConfig(keys.MaxReservedDescID+2, config.ZoneConfig{})
+	config.TestingSetZoneConfig(keys.MaxReservedDescID+1, *config.NewZoneConfig())
+	config.TestingSetZoneConfig(keys.MaxReservedDescID+2, *config.NewZoneConfig())
 
 	type testCase struct {
 		startKey, endKey []byte
