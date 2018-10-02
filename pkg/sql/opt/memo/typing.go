@@ -128,6 +128,7 @@ func init() {
 		opt.ArrayOp:           typeAsPrivate,
 		opt.ColumnAccessOp:    typeColumnAccess,
 		opt.AnyScalarOp:       typeAsBool,
+		opt.IndirectionOp:     typeIndirection,
 
 		// Override default typeAsAggregate behavior for aggregate functions with
 		// a large number of possible overloads or where ReturnType depends on
@@ -189,6 +190,11 @@ func typeArrayAgg(ev ExprView) types.T {
 // typeAsBool returns the fixed boolean type.
 func typeAsBool(_ ExprView) types.T {
 	return types.Bool
+}
+
+// typeIndirection returns the type of the element of the array.
+func typeIndirection(ev ExprView) types.T {
+	return types.UnwrapType(ev.Child(0).Logical().Scalar.Type).(types.TArray).Typ
 }
 
 // typeAsFirstArg returns the type of the expression's 0th argument.
