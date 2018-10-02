@@ -35,7 +35,8 @@ import (
 )
 
 type tpcc struct {
-	flags workload.Flags
+	flags     workload.Flags
+	connFlags *workload.ConnFlags
 
 	seed             int64
 	warehouses       int
@@ -140,6 +141,7 @@ var tpccMeta = workload.Meta{
 		g.flags.StringSliceVar(&g.zones, "zones", []string{}, "Zones for partitioning, the number of zones should match the number of partitions and the zones used to start cockroach.")
 
 		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
+		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
 }

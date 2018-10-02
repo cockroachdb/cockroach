@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
 )
 
@@ -48,6 +49,10 @@ import (
 type delivery struct {
 	config *tpcc
 	db     *gosql.DB
+	sr     workload.SQLRunner
+
+	selectNewOrder workload.StmtHandle
+	sumAmount      workload.StmtHandle
 }
 
 var _ tpccTx = &delivery{}
@@ -57,6 +62,24 @@ func createDelivery(ctx context.Context, config *tpcc, db *gosql.DB) (tpccTx, er
 		config: config,
 		db:     db,
 	}
+
+	del.selectNewOrder = del.sr.Define(`
+		SELECT no_o_id
+		FROM new_order
+		WHERE no_w_id = $1 AND no_d_id = $2
+		ORDER BY no_o_id ASC
+		LIMIT 1`,
+	)
+
+	del.sumAmount = del.sr.Define(`
+		SELECT sum(ol_amount) FROM order_line
+		WHERE ol_w_id = $1 AND ol_d_id = $2 AND ol_o_id = $3`,
+	)
+
+	if err := del.sr.Init(ctx, db, config.connFlags); err != nil {
+		return nil, err
+	}
+
 	return del, nil
 }
 
@@ -78,13 +101,7 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 			dIDolTotalPairs := make(map[int]float64)
 			for dID := 1; dID <= 10; dID++ {
 				var oID int
-				if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
-					SELECT no_o_id
-					FROM new_order
-					WHERE no_w_id = %d AND no_d_id = %d
-					ORDER BY no_o_id ASC
-					LIMIT 1`,
-					wID, dID)).Scan(&oID); err != nil {
+				if err := del.selectNewOrder.QueryRow(ctx, tx, wID, dID).Scan(&oID); err != nil {
 					// If no matching order is found, the delivery of this order is skipped.
 					if err != gosql.ErrNoRows {
 						atomic.AddUint64(&del.config.auditor.skippedDelivieries, 1)
@@ -95,10 +112,9 @@ func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
 				dIDoIDPairs[dID] = oID
 
 				var olTotal float64
-				if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
-						SELECT sum(ol_amount) FROM order_line
-						WHERE ol_w_id = %d AND ol_d_id = %d AND ol_o_id = %d`,
-					wID, dID, oID)).Scan(&olTotal); err != nil {
+				if err := del.sumAmount.QueryRow(
+					ctx, tx, wID, dID, oID,
+				).Scan(&olTotal); err != nil {
 					return err
 				}
 				dIDolTotalPairs[dID] = olTotal
