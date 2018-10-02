@@ -56,6 +56,7 @@ func init() {
 		opt.ArrayOp:           (*Builder).buildArray,
 		opt.AnyOp:             (*Builder).buildAny,
 		opt.AnyScalarOp:       (*Builder).buildAnyScalar,
+		opt.IndirectionOp:     (*Builder).buildIndirection,
 		opt.UnsupportedExprOp: (*Builder).buildUnsupportedExpr,
 
 		// Subquery operators.
@@ -358,6 +359,20 @@ func (b *Builder) buildAnyScalar(ctx *buildScalarCtx, ev memo.ExprView) (tree.Ty
 
 	cmp := opt.ComparisonOpReverseMap[ev.Private().(opt.Operator)]
 	return tree.NewTypedComparisonExprWithSubOp(tree.Any, cmp, left, right), nil
+}
+
+func (b *Builder) buildIndirection(ctx *buildScalarCtx, ev memo.ExprView) (tree.TypedExpr, error) {
+	expr, err := b.buildScalar(ctx, ev.Child(0))
+	if err != nil {
+		return nil, err
+	}
+
+	index, err := b.buildScalar(ctx, ev.Child(1))
+	if err != nil {
+		return nil, err
+	}
+
+	return tree.NewTypedIndirectionExpr(expr, index), nil
 }
 
 func (b *Builder) buildUnsupportedExpr(
