@@ -19,11 +19,10 @@ import { LocalSetting } from "src/redux/localsettings";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import { LongToMoment } from "src/util/convert";
-import { BytesWithPrecision } from "src/util/format";
 import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
 import { FixLong } from "src/util/fixLong";
-import { Percentage } from "src/util/format";
 
+import { BytesBarChart } from "./barChart";
 import "./nodes.styl";
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
@@ -141,16 +140,9 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
               cell: (ns) => {
                 const { usable } = nodeCapacityStats(ns);
                 const used = BytesUsed(ns);
-                return (
-                  <span title={`Total: ${BytesWithPrecision(usable, 0)}`}>
-                    {BytesWithPrecision(used, 0)}
-                    {" "}
-                    ({Percentage(used, usable)})
-                  </span>
-                );
+                return <BytesBarChart used={used} usable={usable} />;
               },
               sort: (ns) => BytesUsed(ns),
-              className: "sort-table__cell--right-aligned-stat",
             },
             // Mem Usage - total memory being used on this node.
             {
@@ -158,16 +150,9 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
               cell: (ns) => {
                 const used = ns.metrics[MetricConstants.rss];
                 const available = FixLong(ns.total_system_memory).toNumber();
-                return (
-                  <span title={`Total: ${BytesWithPrecision(available, 0)}`}>
-                    {BytesWithPrecision(used, 0)}
-                    {" "}
-                    ({Percentage(used, available)})
-                  </span>
-                );
+                return <BytesBarChart used={used} usable={available} />;
               },
               sort: (ns) => ns.metrics[MetricConstants.rss],
-              className: "sort-table__cell--right-aligned-stat",
             },
             // Version - the currently running version of cockroach.
             {
