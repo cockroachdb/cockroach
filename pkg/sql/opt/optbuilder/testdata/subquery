@@ -57,7 +57,27 @@ project
 build
 SELECT ARRAY(((((VALUES (1), (2))))))[2]
 ----
-error (0A000): not yet implemented: scalar expression: *tree.IndirectionExpr
+project
+ ├── columns: array:3(int)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── indirection [type=int]
+           ├── coalesce [type=int[]]
+           │    ├── subquery [type=int[]]
+           │    │    └── scalar-group-by
+           │    │         ├── columns: array_agg:2(int[])
+           │    │         ├── values
+           │    │         │    ├── columns: column1:1(int)
+           │    │         │    ├── tuple [type=tuple{int}]
+           │    │         │    │    └── const: 1 [type=int]
+           │    │         │    └── tuple [type=tuple{int}]
+           │    │         │         └── const: 2 [type=int]
+           │    │         └── aggregations
+           │    │              └── array-agg [type=int[]]
+           │    │                   └── variable: column1 [type=int]
+           │    └── array: [type=int[]]
+           └── const: 2 [type=int]
 
 build
 SELECT 1 + (SELECT 1 a) AS r
