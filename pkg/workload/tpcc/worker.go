@@ -17,7 +17,6 @@ package tpcc
 
 import (
 	"context"
-	gosql "database/sql"
 	"math"
 	"math/rand"
 	"strconv"
@@ -40,7 +39,7 @@ type tpccTx interface {
 	run(ctx context.Context, wID int) (interface{}, error)
 }
 
-type createTxFn func(ctx context.Context, config *tpcc, db *gosql.DB) (tpccTx, error)
+type createTxFn func(ctx context.Context, config *tpcc, mcp *workload.MultiConnPool) (tpccTx, error)
 
 // txInfo stores high-level information about the TPCC transactions. The create
 // function is used to create an object that implements tpccTx.
@@ -142,7 +141,7 @@ type worker struct {
 func newWorker(
 	ctx context.Context,
 	config *tpcc,
-	db *gosql.DB,
+	mcp *workload.MultiConnPool,
 	hists *workload.Histograms,
 	workerIdx int,
 	warehouse int,
@@ -158,7 +157,7 @@ func newWorker(
 	}
 	for i := range w.txs {
 		var err error
-		w.txs[i], err = config.txInfos[i].constructor(ctx, config, db)
+		w.txs[i], err = config.txInfos[i].constructor(ctx, config, mcp)
 		if err != nil {
 			return nil, err
 		}
