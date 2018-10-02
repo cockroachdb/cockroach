@@ -53,14 +53,14 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
     evt.preventDefault();
 
     this.props.handleLogin(this.state.username, this.state.password)
-        .then(() => {
-            const { location, router } = this.props;
-            if (location.query && location.query.redirectTo) {
-                router.push(location.query.redirectTo);
-            } else {
-                router.push("/");
-            }
-        });
+      .then(() => {
+        const { location, router } = this.props;
+        if (location.query && location.query.redirectTo) {
+          router.push(location.query.redirectTo);
+        } else {
+          router.push("/");
+        }
+      });
   }
 
   renderError() {
@@ -113,6 +113,7 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
                 <span className="sql-keyword">WITH PASSWORD</span>
                 {" "}
                 <span className="sql-string">'cockroach'</span>
+                <span className="sql-keyword">;</span>
               </pre>
               <p className="aside">
                 <a href={docsURL.adminUILogin} className="login-docs-link">
