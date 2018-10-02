@@ -1200,8 +1200,29 @@ const (
 	BitArrayDesc Type = 18 // BitArray encoded descendingly
 )
 
+// typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
+// for every possible byte value.
+var typMap [256]Type
+
+func init() {
+	buf := []byte{0}
+	for i := range typMap {
+		buf[0] = byte(i)
+		typMap[i] = slowPeekType(buf)
+	}
+}
+
 // PeekType peeks at the type of the value encoded at the start of b.
 func PeekType(b []byte) Type {
+	if len(b) >= 1 {
+		return typMap[b[0]]
+	}
+	return Unknown
+}
+
+// slowPeekType is the old implementation of PeekType. It's used to generate
+// the lookup table for PeekType.
+func slowPeekType(b []byte) Type {
 	if len(b) >= 1 {
 		m := b[0]
 		switch {
