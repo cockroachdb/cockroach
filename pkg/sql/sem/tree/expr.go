@@ -437,6 +437,16 @@ func NewTypedComparisonExprWithSubOp(
 	return node
 }
 
+// NewTypedIndirectionExpr returns a new IndirectionExpr that is verified to be well-typed.
+func NewTypedIndirectionExpr(expr, index TypedExpr) *IndirectionExpr {
+	node := &IndirectionExpr{
+		Expr:        expr,
+		Indirection: ArraySubscripts{&ArraySubscript{Begin: index}},
+	}
+	node.typ = types.UnwrapType(expr.(TypedExpr).ResolvedType()).(types.TArray).Typ
+	return node
+}
+
 func (node *ComparisonExpr) memoizeFn() {
 	fOp, fLeft, fRight, _, _ := foldComparisonExpr(node.Operator, node.Left, node.Right)
 	leftRet, rightRet := fLeft.(TypedExpr).ResolvedType(), fRight.(TypedExpr).ResolvedType()

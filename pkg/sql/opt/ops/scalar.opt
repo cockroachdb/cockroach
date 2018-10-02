@@ -523,6 +523,15 @@ define Array {
     Typ   Type
 }
 
+# Indirection is a subscripting expression of the form <expr>[<index>].
+# Input must be an Array type and Index must be an int. Multiple indirections
+# and slicing are not supported.
+[Scalar]
+define Indirection {
+    Input Expr
+    Index Expr
+}
+
 # Function invokes a builtin SQL function like CONCAT or NOW, passing the given
 # arguments. The private field is a *opt.FuncOpDef struct that provides the
 # name of the function as well as a pointer to the builtin overload definition.
