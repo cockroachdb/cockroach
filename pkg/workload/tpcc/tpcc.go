@@ -49,8 +49,8 @@ type tpcc struct {
 	fks        bool
 	dbOverride string
 
-	txs []tx
-	// deck contains indexes into the txs slice.
+	txInfos []txInfo
+	// deck contains indexes into the txInfos slice.
 	deck []int
 
 	auditor *auditor
@@ -474,16 +474,12 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		p := (warehouse * w.partitions) / w.activeWarehouses
 		dbs := partitionDBs[p]
 		db := dbs[warehouse%len(dbs)]
-		worker := &worker{
-			config:    w,
-			hists:     reg.GetHandle(),
-			idx:       workerIdx,
-			db:        db,
-			warehouse: warehouse + startWarehouse,
-			deckPerm:  make([]int, len(w.deck)),
-			permIdx:   len(w.deck),
+		worker, err := newWorker(
+			context.TODO(), w, db, reg.GetHandle(), workerIdx, warehouse+startWarehouse,
+		)
+		if err != nil {
+			return workload.QueryLoad{}, err
 		}
-		copy(worker.deckPerm, w.deck)
 
 		ql.WorkerFns = append(ql.WorkerFns, worker.run)
 	}

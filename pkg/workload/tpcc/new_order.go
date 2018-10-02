@@ -77,14 +77,23 @@ type newOrderData struct {
 
 var errSimulated = errors.New("simulated user error")
 
-type newOrder struct{}
+type newOrder struct {
+	config *tpcc
+	db     *gosql.DB
+}
 
-var _ tpccTx = newOrder{}
+var _ tpccTx = &newOrder{}
 
-func (n newOrder) run(
-	ctx context.Context, config *tpcc, db *gosql.DB, wID int,
-) (interface{}, error) {
-	atomic.AddUint64(&config.auditor.newOrderTransactions, 1)
+func createNewOrder(ctx context.Context, config *tpcc, db *gosql.DB) (tpccTx, error) {
+	n := &newOrder{
+		config: config,
+		db:     db,
+	}
+	return n, nil
+}
+
+func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
+	atomic.AddUint64(&n.config.auditor.newOrderTransactions, 1)
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
@@ -96,10 +105,10 @@ func (n newOrder) run(
 	}
 	d.items = make([]orderItem, d.oOlCnt)
 
-	config.auditor.Lock()
-	config.auditor.orderLinesFreq[d.oOlCnt]++
-	config.auditor.Unlock()
-	atomic.AddUint64(&config.auditor.totalOrderLines, uint64(d.oOlCnt))
+	n.config.auditor.Lock()
+	n.config.auditor.orderLinesFreq[d.oOlCnt]++
+	n.config.auditor.Unlock()
+	atomic.AddUint64(&n.config.auditor.totalOrderLines, uint64(d.oOlCnt))
 
 	// itemIDs tracks the item ids in the order so that we can prevent adding
 	// multiple items with the same ID. This would not make sense because each
@@ -136,17 +145,17 @@ func (n newOrder) run(
 		// 2.4.1.5.2: 1% of the time, an item is supplied from a remote warehouse.
 		item.remoteWarehouse = rand.Intn(100) == 0
 		item.olSupplyWID = wID
-		if item.remoteWarehouse && config.warehouses > 1 {
+		if item.remoteWarehouse && n.config.warehouses > 1 {
 			allLocal = 0
 			// To avoid picking the local warehouse again, randomly choose among n-1
 			// warehouses and swap in the nth if necessary.
-			item.olSupplyWID = rand.Intn(config.warehouses - 1)
+			item.olSupplyWID = rand.Intn(n.config.warehouses - 1)
 			if item.olSupplyWID == wID {
-				item.olSupplyWID = config.warehouses - 1
+				item.olSupplyWID = n.config.warehouses - 1
 			}
-			config.auditor.Lock()
-			config.auditor.orderLineRemoteWarehouseFreq[item.olSupplyWID]++
-			config.auditor.Unlock()
+			n.config.auditor.Lock()
+			n.config.auditor.orderLineRemoteWarehouseFreq[item.olSupplyWID]++
+			n.config.auditor.Unlock()
 		} else {
 			item.olSupplyWID = wID
 		}
@@ -162,8 +171,8 @@ func (n newOrder) run(
 
 	err := crdb.ExecuteTx(
 		ctx,
-		db,
-		config.txOpts,
+		n.db,
+		n.config.txOpts,
 		func(tx *gosql.Tx) error {
 			// Select the district tax rate and next available order number, bumping it.
 			var dNextOID int
@@ -228,7 +237,7 @@ func (n newOrder) run(
 						// can't find the item. The spec requires us to actually go
 						// to the database for this, even though we know earlier
 						// that the item has an invalid number.
-						atomic.AddUint64(&config.auditor.newOrderRollbacks, 1)
+						atomic.AddUint64(&n.config.auditor.newOrderRollbacks, 1)
 						return errSimulated
 					}
 					return errors.New("missing item row")

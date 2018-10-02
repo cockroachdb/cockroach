@@ -75,14 +75,23 @@ type paymentData struct {
 	hDate   time.Time
 }
 
-type payment struct{}
+type payment struct {
+	config *tpcc
+	db     *gosql.DB
+}
 
-var _ tpccTx = payment{}
+var _ tpccTx = &payment{}
 
-func (p payment) run(
-	ctx context.Context, config *tpcc, db *gosql.DB, wID int,
-) (interface{}, error) {
-	atomic.AddUint64(&config.auditor.paymentTransactions, 1)
+func createPayment(ctx context.Context, config *tpcc, db *gosql.DB) (tpccTx, error) {
+	n := &payment{
+		config: config,
+		db:     db,
+	}
+	return n, nil
+}
+
+func (p *payment) run(ctx context.Context, wID int) (interface{}, error) {
+	atomic.AddUint64(&p.config.auditor.paymentTransactions, 1)
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
@@ -99,14 +108,14 @@ func (p payment) run(
 		d.cWID = wID
 		d.cDID = d.dID
 	} else {
-		d.cWID = rand.Intn(config.warehouses)
+		d.cWID = rand.Intn(p.config.warehouses)
 		// Find a cWID != w_id if there's more than 1 configured warehouse.
-		for d.cWID == wID && config.warehouses > 1 {
-			d.cWID = rand.Intn(config.warehouses)
+		for d.cWID == wID && p.config.warehouses > 1 {
+			d.cWID = rand.Intn(p.config.warehouses)
 		}
-		config.auditor.Lock()
-		config.auditor.paymentRemoteWarehouseFreq[d.cWID]++
-		config.auditor.Unlock()
+		p.config.auditor.Lock()
+		p.config.auditor.paymentRemoteWarehouseFreq[d.cWID]++
+		p.config.auditor.Unlock()
 		d.cDID = rand.Intn(10) + 1
 	}
 
@@ -114,15 +123,15 @@ func (p payment) run(
 	// and 40% by number.
 	if rand.Intn(100) < 60 {
 		d.cLast = randCLast(rng)
-		atomic.AddUint64(&config.auditor.paymentsByLastName, 1)
+		atomic.AddUint64(&p.config.auditor.paymentsByLastName, 1)
 	} else {
 		d.cID = randCustomerID(rng)
 	}
 
 	if err := crdb.ExecuteTx(
 		ctx,
-		db,
-		config.txOpts,
+		p.db,
+		p.config.txOpts,
 		func(tx *gosql.Tx) error {
 			var wName, dName string
 			// Update warehouse with payment
@@ -152,7 +161,7 @@ func (p payment) run(
 			if d.cID == 0 {
 				// 2.5.2.2 Case 2: Pick the middle row, rounded up, from the selection by last name.
 				indexStr := "@customer_idx"
-				if config.usePostgres {
+				if p.config.usePostgres {
 					indexStr = ""
 				}
 				rows, err := tx.QueryContext(ctx, fmt.Sprintf(`
