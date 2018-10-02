@@ -122,7 +122,7 @@ func (p *planner) getDataSource(
 		if err != nil {
 			return planDataSource{}, err
 		}
-		if desc.IsVirtualTable() {
+		if desc.IsVirtualTable() && !desc.IsView() {
 			return p.getVirtualDataSource(ctx, tn)
 		}
 

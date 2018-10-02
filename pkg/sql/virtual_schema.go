@@ -44,10 +44,18 @@ import (
 // in code. This means that they are accessed separately from standard descriptors.
 type virtualSchema struct {
 	name           string
-	tables         []virtualSchemaTable
+	tableDefs      []virtualSchemaDef
 	tableValidator func(*sqlbase.TableDescriptor) error // optional
 	// Some virtual tables can be used if there is no current database set; others can't.
 	validWithNoDatabaseContext bool
+}
+
+// virtualSchemaDef represents the interface of a table definition within a virtualSchema.
+type virtualSchemaDef interface {
+	getSchema() string
+	initVirtualTableDesc(
+		ctx context.Context, st *cluster.Settings,
+	) (sqlbase.TableDescriptor, error)
 }
 
 // virtualSchemaTable represents a table within a virtualSchema.
@@ -71,185 +79,20 @@ type virtualSchemaTable struct {
 	delegate func(ctx context.Context, p *planner, db *DatabaseDescriptor) (planNode, error)
 }
 
-// virtualSchemas holds a slice of statically registered virtualSchema objects.
-//
-// When adding a new virtualSchema, define a virtualSchema in a separate file, and
-// add that object to this slice.
-var virtualSchemas = []virtualSchema{
-	informationSchema,
-	pgCatalog,
-	crdbInternal,
+// virtualSchemaView represents a view within a virtualSchema
+type virtualSchemaView struct {
+	schema        string
+	resultColumns sqlbase.ResultColumns
 }
 
-//
-// SQL-layer interface to work with virtual schemas.
-//
-
-// VirtualSchemaHolder is a type used to provide convenient access to virtual
-// database and table descriptors. VirtualSchemaHolder, virtualSchemaEntry,
-// and virtualTableEntry make up the generated data structure which the
-// virtualSchemas slice is mapped to. Because of this, they should not be
-// created directly, but instead will be populated in a post-startup hook
-// on an Executor.
-type VirtualSchemaHolder struct {
-	entries      map[string]virtualSchemaEntry
-	orderedNames []string
+// getSchema is part of the virtualSchemaDef interface.
+func (t virtualSchemaTable) getSchema() string {
+	return t.schema
 }
 
-type virtualSchemaEntry struct {
-	desc              *sqlbase.DatabaseDescriptor
-	tables            map[string]virtualTableEntry
-	orderedTableNames []string
-}
-
-type virtualTableEntry struct {
-	tableDef                   virtualSchemaTable
-	desc                       *sqlbase.TableDescriptor
-	validWithNoDatabaseContext bool
-}
-
-type virtualTableConstructor func(context.Context, *planner, string) (planNode, error)
-
-var errInvalidDbPrefix = pgerror.NewError(pgerror.CodeUndefinedObjectError,
-	"cannot access virtual schema in anonymous database",
-).SetHintf("verify that the current database is set")
-
-var errInvalidVirtualSchema = pgerror.NewError(pgerror.CodeInternalError,
-	"programming error: virtualSchema cannot have both the populate and generator functions defined",
-)
-
-// getPlanInfo returns the column metadata and a constructor for a new
-// valuesNode for the virtual table. We use deferred construction here
-// so as to avoid populating a RowContainer during query preparation,
-// where we can't guarantee it will be Close()d in case of error.
-func (e virtualTableEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConstructor) {
-	var columns sqlbase.ResultColumns
-	for _, col := range e.desc.Columns {
-		columns = append(columns, sqlbase.ResultColumn{
-			Name: col.Name,
-			Typ:  col.Type.ToDatumType(),
-		})
-	}
-
-	constructor := func(ctx context.Context, p *planner, dbName string) (planNode, error) {
-		var dbDesc *DatabaseDescriptor
-		if dbName != "" {
-			var err error
-			dbDesc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(dbName,
-				DatabaseLookupFlags{ctx: ctx, txn: p.Txn(), required: true})
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			if !e.validWithNoDatabaseContext {
-				return nil, errInvalidDbPrefix
-			}
-		}
-
-		if e.tableDef.delegate != nil {
-			return e.tableDef.delegate(ctx, p, dbDesc)
-		}
-
-		if e.tableDef.generator != nil && e.tableDef.populate != nil {
-			return nil, errInvalidVirtualSchema
-		}
-
-		if e.tableDef.generator != nil {
-			next, err := e.tableDef.generator(ctx, p, dbDesc)
-			if err != nil {
-				return nil, err
-			}
-			return p.newContainerVirtualTableNode(columns, 0, next), nil
-		}
-		v := p.newContainerValuesNode(columns, 0)
-
-		if err := e.tableDef.populate(ctx, p, dbDesc, func(datums ...tree.Datum) error {
-			if r, c := len(datums), len(v.columns); r != c {
-				log.Fatalf(ctx, "datum row count and column count differ: %d vs %d", r, c)
-			}
-			for i, col := range v.columns {
-				datum := datums[i]
-				if datum == tree.DNull {
-					if !e.desc.Columns[i].Nullable {
-						log.Fatalf(ctx, "column %s.%s not nullable, but found NULL value",
-							e.desc.Name, col.Name)
-					}
-				} else if !datum.ResolvedType().Equivalent(col.Typ) {
-					log.Fatalf(ctx, "datum column %q expected to be type %s; found type %s",
-						col.Name, col.Typ, datum.ResolvedType())
-				}
-			}
-			_, err := v.rows.AddRow(ctx, datums)
-			return err
-		}); err != nil {
-			v.Close(ctx)
-			return nil, err
-		}
-		return v, nil
-	}
-
-	return columns, constructor
-}
-
-// NewVirtualSchemaHolder creates a new VirtualSchemaHolder.
-func NewVirtualSchemaHolder(
+// initVirtualTableDesc is part of the virtualSchemaDef interface.
+func (t virtualSchemaTable) initVirtualTableDesc(
 	ctx context.Context, st *cluster.Settings,
-) (*VirtualSchemaHolder, error) {
-	vs := &VirtualSchemaHolder{
-		entries:      make(map[string]virtualSchemaEntry, len(virtualSchemas)),
-		orderedNames: make([]string, len(virtualSchemas)),
-	}
-	for i, schema := range virtualSchemas {
-		dbName := schema.name
-		dbDesc := initVirtualDatabaseDesc(dbName)
-		tables := make(map[string]virtualTableEntry, len(schema.tables))
-		orderedTableNames := make([]string, 0, len(schema.tables))
-		for _, table := range schema.tables {
-			tableDesc, err := initVirtualTableDesc(ctx, table, st)
-			if err != nil {
-				return nil, errors.Wrapf(err, "failed to initialize %s", table.schema)
-			}
-
-			if schema.tableValidator != nil {
-				if err := schema.tableValidator(&tableDesc); err != nil {
-					return nil, errors.Wrap(err, "programmer error")
-				}
-			}
-			tables[tableDesc.Name] = virtualTableEntry{
-				tableDef: table,
-				desc:     &tableDesc,
-				validWithNoDatabaseContext: schema.validWithNoDatabaseContext,
-			}
-			orderedTableNames = append(orderedTableNames, tableDesc.Name)
-		}
-		sort.Strings(orderedTableNames)
-		vs.entries[dbName] = virtualSchemaEntry{
-			desc:              dbDesc,
-			tables:            tables,
-			orderedTableNames: orderedTableNames,
-		}
-		vs.orderedNames[i] = dbName
-	}
-	sort.Strings(vs.orderedNames)
-	return vs, nil
-}
-
-// Virtual databases and tables each have SELECT privileges for "public", which includes
-// all users. However, virtual schemas have more fine-grained access control.
-// For instance, information_schema will only expose rows to a given user which that
-// user has access to.
-var publicSelectPrivileges = sqlbase.NewPrivilegeDescriptor(sqlbase.PublicRole, privilege.List{privilege.SELECT})
-
-func initVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
-	return &sqlbase.DatabaseDescriptor{
-		Name:       name,
-		ID:         keys.VirtualDescriptorID,
-		Privileges: publicSelectPrivileges,
-	}
-}
-
-func initVirtualTableDesc(
-	ctx context.Context, t virtualSchemaTable, st *cluster.Settings,
 ) (sqlbase.TableDescriptor, error) {
 	stmt, err := parser.ParseOne(t.schema)
 	if err != nil {
@@ -283,6 +126,224 @@ func initVirtualTableDesc(
 	)
 }
 
+// getSchema is part of the virtualSchemaDef interface.
+func (v virtualSchemaView) getSchema() string {
+	return v.schema
+}
+
+// initVirtualTableDesc is part of the virtualSchemaDef interface.
+func (v virtualSchemaView) initVirtualTableDesc(
+	ctx context.Context, st *cluster.Settings,
+) (sqlbase.TableDescriptor, error) {
+	stmt, err := parser.ParseOne(v.schema)
+	if err != nil {
+		return sqlbase.TableDescriptor{}, err
+	}
+
+	create := stmt.(*tree.CreateView)
+
+	return MakeViewTableDesc(
+		create,
+		v.resultColumns,
+		0,
+		keys.VirtualDescriptorID,
+		hlc.Timestamp{},
+		publicSelectPrivileges,
+		nil, // semaCtx
+		nil, // evalCtx
+	)
+}
+
+// virtualSchemas holds a slice of statically registered virtualSchema objects.
+//
+// When adding a new virtualSchema, define a virtualSchema in a separate file, and
+// add that object to this slice.
+var virtualSchemas = []virtualSchema{
+	informationSchema,
+	pgCatalog,
+	crdbInternal,
+}
+
+//
+// SQL-layer interface to work with virtual schemas.
+//
+
+// VirtualSchemaHolder is a type used to provide convenient access to virtual
+// database and table descriptors. VirtualSchemaHolder, virtualSchemaEntry,
+// and virtualDefEntry make up the generated data structure which the
+// virtualSchemas slice is mapped to. Because of this, they should not be
+// created directly, but instead will be populated in a post-startup hook
+// on an Executor.
+type VirtualSchemaHolder struct {
+	entries      map[string]virtualSchemaEntry
+	orderedNames []string
+}
+
+type virtualSchemaEntry struct {
+	desc            *sqlbase.DatabaseDescriptor
+	defs            map[string]virtualDefEntry
+	orderedDefNames []string
+}
+
+type virtualDefEntry struct {
+	virtualDef                 virtualSchemaDef
+	desc                       *sqlbase.TableDescriptor
+	validWithNoDatabaseContext bool
+}
+
+type virtualTableConstructor func(context.Context, *planner, string) (planNode, error)
+
+var errInvalidDbPrefix = pgerror.NewError(pgerror.CodeUndefinedObjectError,
+	"cannot access virtual schema in anonymous database",
+).SetHintf("verify that the current database is set")
+
+var errInvalidVirtualSchema = pgerror.NewError(pgerror.CodeInternalError,
+	"programming error: virtualSchema cannot have both the populate and generator functions defined",
+)
+
+var errInvalidVirtualDefEntry = pgerror.NewError(pgerror.CodeInternalError, "programming error: virtualDefEntry.virtualDef must be a virtualSchemaTable")
+
+// getPlanInfo returns the column metadata and a constructor for a new
+// valuesNode for the virtual table. We use deferred construction here
+// so as to avoid populating a RowContainer during query preparation,
+// where we can't guarantee it will be Close()d in case of error.
+func (e virtualDefEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConstructor) {
+	var columns sqlbase.ResultColumns
+	for _, col := range e.desc.Columns {
+		columns = append(columns, sqlbase.ResultColumn{
+			Name: col.Name,
+			Typ:  col.Type.ToDatumType(),
+		})
+	}
+
+	constructor := func(ctx context.Context, p *planner, dbName string) (planNode, error) {
+		var dbDesc *DatabaseDescriptor
+		if dbName != "" {
+			var err error
+			dbDesc, err = p.LogicalSchemaAccessor().GetDatabaseDesc(dbName,
+				DatabaseLookupFlags{ctx: ctx, txn: p.Txn(), required: true})
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			if !e.validWithNoDatabaseContext {
+				return nil, errInvalidDbPrefix
+			}
+		}
+
+		switch def := e.virtualDef.(type) {
+		case virtualSchemaTable:
+			if def.delegate != nil {
+				return def.delegate(ctx, p, dbDesc)
+			}
+
+			if def.generator != nil && def.populate != nil {
+				return nil, errInvalidVirtualSchema
+			}
+
+			if def.generator != nil {
+				next, err := def.generator(ctx, p, dbDesc)
+				if err != nil {
+					return nil, err
+				}
+				return p.newContainerVirtualTableNode(columns, 0, next), nil
+			}
+			v := p.newContainerValuesNode(columns, 0)
+
+			if err := def.populate(ctx, p, dbDesc, func(datums ...tree.Datum) error {
+				if r, c := len(datums), len(v.columns); r != c {
+					log.Fatalf(ctx, "datum row count and column count differ: %d vs %d", r, c)
+				}
+				for i, col := range v.columns {
+					datum := datums[i]
+					if datum == tree.DNull {
+						if !e.desc.Columns[i].Nullable {
+							log.Fatalf(ctx, "column %s.%s not nullable, but found NULL value",
+								e.desc.Name, col.Name)
+						}
+					} else if !datum.ResolvedType().Equivalent(col.Typ) {
+						log.Fatalf(ctx, "datum column %q expected to be type %s; found type %s",
+							col.Name, col.Typ, datum.ResolvedType())
+					}
+				}
+				_, err := v.rows.AddRow(ctx, datums)
+				return err
+			}); err != nil {
+				v.Close(ctx)
+				return nil, err
+			}
+
+			return v, nil
+		default:
+			return nil, errInvalidVirtualDefEntry
+		}
+	}
+
+	return columns, constructor
+}
+
+// NewVirtualSchemaHolder creates a new VirtualSchemaHolder.
+func NewVirtualSchemaHolder(
+	ctx context.Context, st *cluster.Settings,
+) (*VirtualSchemaHolder, error) {
+	vs := &VirtualSchemaHolder{
+		entries:      make(map[string]virtualSchemaEntry, len(virtualSchemas)),
+		orderedNames: make([]string, len(virtualSchemas)),
+	}
+	for i, schema := range virtualSchemas {
+		dbName := schema.name
+		dbDesc := initVirtualDatabaseDesc(dbName)
+		defs := make(map[string]virtualDefEntry, len(schema.tableDefs))
+		orderedDefNames := make([]string, 0, len(schema.tableDefs))
+
+		for _, def := range schema.tableDefs {
+			tableDesc, err := def.initVirtualTableDesc(ctx, st)
+
+			if err != nil {
+				return nil, errors.Wrapf(err, "failed to initialize %s", def.getSchema())
+			}
+
+			if schema.tableValidator != nil {
+				if err := schema.tableValidator(&tableDesc); err != nil {
+					return nil, errors.Wrap(err, "programmer error")
+				}
+			}
+
+			defs[tableDesc.Name] = virtualDefEntry{
+				virtualDef: def,
+				desc:       &tableDesc,
+				validWithNoDatabaseContext: schema.validWithNoDatabaseContext,
+			}
+			orderedDefNames = append(orderedDefNames, tableDesc.Name)
+		}
+
+		sort.Strings(orderedDefNames)
+
+		vs.entries[dbName] = virtualSchemaEntry{
+			desc:            dbDesc,
+			defs:            defs,
+			orderedDefNames: orderedDefNames,
+		}
+		vs.orderedNames[i] = dbName
+	}
+	sort.Strings(vs.orderedNames)
+	return vs, nil
+}
+
+// Virtual databases and tables each have SELECT privileges for "public", which includes
+// all users. However, virtual schemas have more fine-grained access control.
+// For instance, information_schema will only expose rows to a given user which that
+// user has access to.
+var publicSelectPrivileges = sqlbase.NewPrivilegeDescriptor(sqlbase.PublicRole, privilege.List{privilege.SELECT})
+
+func initVirtualDatabaseDesc(name string) *sqlbase.DatabaseDescriptor {
+	return &sqlbase.DatabaseDescriptor{
+		Name:       name,
+		ID:         keys.VirtualDescriptorID,
+		Privileges: publicSelectPrivileges,
+	}
+}
+
 // getEntries is part of the VirtualTabler interface.
 func (vs *VirtualSchemaHolder) getEntries() map[string]virtualSchemaEntry {
 	return vs.entries
@@ -305,21 +366,21 @@ func (vs *VirtualSchemaHolder) getVirtualSchemaEntry(name string) (virtualSchema
 // a specific table. It will return an error if the name references a virtual database
 // but the table is non-existent.
 // getVirtualTableEntry is part of the VirtualTabler interface.
-func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtualTableEntry, error) {
+func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtualDefEntry, error) {
 	if db, ok := vs.getVirtualSchemaEntry(tn.Schema()); ok {
-		if t, ok := db.tables[tn.Table()]; ok {
+		if t, ok := db.defs[tn.Table()]; ok {
 			return t, nil
 		}
-		return virtualTableEntry{}, sqlbase.NewUndefinedRelationError(tn)
+		return virtualDefEntry{}, sqlbase.NewUndefinedRelationError(tn)
 	}
-	return virtualTableEntry{}, nil
+	return virtualDefEntry{}, nil
 }
 
 // VirtualTabler is used to fetch descriptors for virtual tables and databases.
 type VirtualTabler interface {
 	getVirtualTableDesc(tn *tree.TableName) (*sqlbase.TableDescriptor, error)
 	getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool)
-	getVirtualTableEntry(tn *tree.TableName) (virtualTableEntry, error)
+	getVirtualTableEntry(tn *tree.TableName) (virtualDefEntry, error)
 	getEntries() map[string]virtualSchemaEntry
 	getSchemaNames() []string
 }
