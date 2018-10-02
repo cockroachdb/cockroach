@@ -84,6 +84,8 @@ func waitForConfigChange(t testing.TB, s *server.TestServer) *config.SystemConfi
 	return cfg
 }
 
+// TODO(benesch,ridwansharif): modernize these tests to avoid hardcoding
+// expectations about descriptor IDs and zone config encoding.
 // TestGetZoneConfig exercises config.GetZoneConfig and the sql hook for it.
 func TestGetZoneConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -240,27 +242,22 @@ func TestGetZoneConfig(t *testing.T) {
 	db1Cfg := defaultZoneConfig
 	db1Cfg.NumReplicas = proto.Int32(1)
 	db1Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db1"}}}}
-	db1Cfg.ExplicitlySetConstraints = true
 
 	tb11Cfg := defaultZoneConfig
 	tb11Cfg.NumReplicas = proto.Int32(1)
 	tb11Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db1.tb1"}}}}
-	tb11Cfg.ExplicitlySetConstraints = true
 
 	p211Cfg := defaultZoneConfig
 	p211Cfg.NumReplicas = proto.Int32(1)
 	p211Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1.p1"}}}}
-	p211Cfg.ExplicitlySetConstraints = true
 
 	p212Cfg := defaultZoneConfig
 	p212Cfg.NumReplicas = proto.Int32(1)
 	p212Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1.p2"}}}}
-	p212Cfg.ExplicitlySetConstraints = true
 
 	tb21Cfg := defaultZoneConfig
 	tb21Cfg.NumReplicas = proto.Int32(1)
 	tb21Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1"}}}}
-	tb21Cfg.ExplicitlySetConstraints = true
 	tb21Cfg.Subzones = []config.Subzone{
 		{PartitionName: "p0", Config: p211Cfg},
 		{PartitionName: "p1", Config: p212Cfg},
@@ -274,10 +271,9 @@ func TestGetZoneConfig(t *testing.T) {
 	p221Cfg := defaultZoneConfig
 	p221Cfg.NumReplicas = proto.Int32(1)
 	p221Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb2.p1"}}}}
-	p221Cfg.ExplicitlySetConstraints = true
 
 	// Subzone Placeholder
-	tb22Cfg := config.ZoneConfig{}
+	tb22Cfg := *config.NewZoneConfig()
 	tb22Cfg.NumReplicas = proto.Int32(0)
 	tb22Cfg.Subzones = []config.Subzone{{PartitionName: "p0", Config: p221Cfg}}
 	tb22Cfg.SubzoneSpans = []config.SubzoneSpan{
@@ -483,49 +479,45 @@ func TestCascadingZoneConfig(t *testing.T) {
 	//   tb2: no zone config
 	//     p1: true  [1, 255) - inherits replciation factor from default
 
-	db1Cfg := config.ZoneConfig{}
+	db1Cfg := *config.NewZoneConfig()
 	db1Cfg.NumReplicas = proto.Int32(5)
 	db1Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db1"}}}}
-	db1Cfg.ExplicitlySetConstraints = true
+	db1Cfg.InheritedConstraints = false
 
 	// Expected complete config
 	expectedDb1Cfg := defaultZoneConfig
 	expectedDb1Cfg.NumReplicas = proto.Int32(5)
 	expectedDb1Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db1"}}}}
-	expectedDb1Cfg.ExplicitlySetConstraints = true
 
-	tb11Cfg := config.ZoneConfig{}
+	tb11Cfg := *config.NewZoneConfig()
 	tb11Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db1.tb1"}}}}
-	tb11Cfg.ExplicitlySetConstraints = true
+	tb11Cfg.InheritedConstraints = false
 
 	// Expected complete config
 	expectedTb11Cfg := expectedDb1Cfg
 	expectedTb11Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db1.tb1"}}}}
-	expectedTb11Cfg.ExplicitlySetConstraints = true
 
-	p211Cfg := config.ZoneConfig{}
+	p211Cfg := *config.NewZoneConfig()
 	p211Cfg.NumReplicas = proto.Int32(1)
 	p211Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1.p1"}}}}
-	p211Cfg.ExplicitlySetConstraints = true
+	p211Cfg.InheritedConstraints = false
 
 	// Expected complete config
 	expectedP211Cfg := defaultZoneConfig
 	expectedP211Cfg.NumReplicas = proto.Int32(1)
 	expectedP211Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1.p1"}}}}
-	expectedP211Cfg.ExplicitlySetConstraints = true
 
-	p212Cfg := config.ZoneConfig{}
+	p212Cfg := *config.NewZoneConfig()
 	p212Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1.p2"}}}}
-	p212Cfg.ExplicitlySetConstraints = true
+	p212Cfg.InheritedConstraints = false
 
 	// Expected complete config
 	expectedP212Cfg := defaultZoneConfig
 	expectedP212Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1.p2"}}}}
-	expectedP212Cfg.ExplicitlySetConstraints = true
 
-	tb21Cfg := config.ZoneConfig{}
+	tb21Cfg := *config.NewZoneConfig()
 	tb21Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1"}}}}
-	tb21Cfg.ExplicitlySetConstraints = true
+	tb21Cfg.InheritedConstraints = false
 	tb21Cfg.Subzones = []config.Subzone{
 		{PartitionName: "p0", Config: p211Cfg},
 		{PartitionName: "p1", Config: p212Cfg},
@@ -539,7 +531,6 @@ func TestCascadingZoneConfig(t *testing.T) {
 	// Expected complete config
 	expectedTb21Cfg := defaultZoneConfig
 	expectedTb21Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb1"}}}}
-	expectedTb21Cfg.ExplicitlySetConstraints = true
 	expectedTb21Cfg.Subzones = []config.Subzone{
 		{PartitionName: "p0", Config: p211Cfg},
 		{PartitionName: "p1", Config: p212Cfg},
@@ -550,17 +541,16 @@ func TestCascadingZoneConfig(t *testing.T) {
 		{SubzoneIndex: 0, Key: []byte{6}},
 	}
 
-	p221Cfg := config.ZoneConfig{}
+	p221Cfg := *config.NewZoneConfig()
 	p221Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb2.p1"}}}}
-	p221Cfg.ExplicitlySetConstraints = true
+	p221Cfg.InheritedConstraints = false
 
 	// Expected complete config
 	expectedP221Cfg := defaultZoneConfig
 	expectedP221Cfg.Constraints = []config.Constraints{{Constraints: []config.Constraint{{Value: "db2.tb2.p1"}}}}
-	expectedP221Cfg.ExplicitlySetConstraints = true
 
 	// Subzone Placeholder
-	tb22Cfg := config.ZoneConfig{}
+	tb22Cfg := *config.NewZoneConfig()
 	tb22Cfg.NumReplicas = proto.Int32(0)
 	tb22Cfg.Subzones = []config.Subzone{{PartitionName: "p0", Config: p221Cfg}}
 	tb22Cfg.SubzoneSpans = []config.SubzoneSpan{

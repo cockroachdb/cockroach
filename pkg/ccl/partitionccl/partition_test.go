@@ -182,7 +182,7 @@ func (t *partitioningTest) parse() error {
 			return errors.Wrapf(err, "parsing constraints: %s", constraints)
 		}
 		subzone.Config.Constraints = parsedConstraints.Constraints
-		subzone.Config.ExplicitlySetConstraints = parsedConstraints.ExplicitlySet
+		subzone.Config.InheritedConstraints = !parsedConstraints.ExplicitlySet
 
 		t.parsed.subzones = append(t.parsed.subzones, subzone)
 	}

@@ -293,6 +293,28 @@ var defaultSystemZoneConfig = &ZoneConfig{
 	},
 }
 
+// NewZoneConfig is the zone configuration used when no custom
+// config has been specified.
+func NewZoneConfig() *ZoneConfig {
+	return &ZoneConfig{
+		InheritedConstraints:      true,
+		InheritedLeasePreferences: true,
+	}
+}
+
+// EmptyCompleteZoneConfig is the zone configuration where
+// all fields are set but set to their respective zero values.
+func EmptyCompleteZoneConfig() *ZoneConfig {
+	return &ZoneConfig{
+		NumReplicas:               proto.Int32(0),
+		RangeMinBytes:             proto.Int64(0),
+		RangeMaxBytes:             proto.Int64(0),
+		GC:                        &GCPolicy{TTLSeconds: 0},
+		InheritedConstraints:      true,
+		InheritedLeasePreferences: true,
+	}
+}
+
 // DefaultZoneConfig is the default zone configuration used when no custom
 // config has been specified.
 func DefaultZoneConfig() ZoneConfig {
@@ -350,7 +372,7 @@ func TestingSetDefaultSystemZoneConfig(cfg ZoneConfig) func() {
 func (z *ZoneConfig) IsComplete() bool {
 	return ((z.NumReplicas != nil) && (z.RangeMinBytes != nil) &&
 		(z.RangeMaxBytes != nil) && (z.GC != nil) &&
-		(z.ExplicitlySetConstraints) && (z.ExplicitlySetLeasePreferences))
+		(!z.InheritedConstraints) && (!z.InheritedLeasePreferences))
 }
 
 // Validate returns an error if the ZoneConfig specifies a known-dangerous or
