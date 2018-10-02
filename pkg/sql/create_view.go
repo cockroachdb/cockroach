@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -243,5 +245,48 @@ func (n *createViewNode) makeViewTableDesc(
 	//
 	// See https://github.com/golang/go/issues/23188.
 	err := desc.AllocateIDs()
+	return desc, err
+}
+
+// MakeViewTableDesc returns the table descriptor for a new view.
+func MakeViewTableDesc(
+	n *tree.CreateView,
+	resultColumns sqlbase.ResultColumns,
+	parentID,
+	id sqlbase.ID,
+	creationTime hlc.Timestamp,
+	privileges *sqlbase.PrivilegeDescriptor,
+	semaCtx *tree.SemaContext,
+	evalCtx *tree.EvalContext,
+) (sqlbase.TableDescriptor, error) {
+	viewName, err := n.Name.Normalize()
+	if err != nil {
+		return sqlbase.TableDescriptor{}, err
+	}
+	desc := InitTableDescriptor(id, parentID, viewName.Table(), creationTime, privileges)
+	desc.ViewQuery = tree.AsStringWithFlags(n.AsSource, tree.FmtParsable)
+
+	for i, colRes := range resultColumns {
+		colType, err := coltypes.DatumTypeToColumnType(colRes.Typ)
+		if err != nil {
+			return desc, err
+		}
+		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colType}
+		if len(n.ColumnNames) > i {
+			columnTableDef.Name = n.ColumnNames[i]
+		}
+		// The new types in the CREATE VIEW column specs never use
+		// SERIAL so we need not process SERIAL types here.
+		col, _, _, err := sqlbase.MakeColumnDefDescs(&columnTableDef, semaCtx, evalCtx)
+		if err != nil {
+			return desc, err
+		}
+		desc.AddColumn(*col)
+	}
+	// AllocateIDs mutates its receiver. `return desc, desc.AllocateIDs()`
+	// happens to work in gc, but does not work in gccgo.
+	//
+	// See https://github.com/golang/go/issues/23188.
+	err = desc.AllocateIDs()
 	return desc, err
 }

@@ -97,7 +97,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 
 		for ok := false; !ok; {
 			stmtReplicaCount := fmt.Sprintf(
-				`SELECT count(*) = 0 FROM crdb_internal.ranges WHERE array_position(replicas, %s) IS NULL and database = 'kv';`, targetNodeID)
+				`SELECT count(*) = 0 FROM crdb_internal.ranges WHERE array_position(replicas, %s) IS NULL and database_name = 'kv';`, targetNodeID)
 			t.Status(stmtReplicaCount)
 			if err := db.QueryRow(stmtReplicaCount).Scan(&ok); err != nil {
 				return err
