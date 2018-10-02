@@ -333,7 +333,7 @@ func TestingSetDefaultZoneConfig(cfg ZoneConfig) func() {
 // default zone config and returns a function that reverts the change.
 func TestingSetDefaultSystemZoneConfig(cfg ZoneConfig) func() {
 	testingLock.Lock()
-	oldConfig := defaultZoneConfig
+	oldConfig := defaultSystemZoneConfig
 	defaultSystemZoneConfig = &cfg
 	testingLock.Unlock()
 
