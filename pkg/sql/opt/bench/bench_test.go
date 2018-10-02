@@ -555,7 +555,9 @@ func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType) {
 		}
 	} else if h.prepMemo.HasPlaceholders() {
 		h.optimizer.Memo().InitFrom(h.prepMemo)
-		h.optimizer.Factory().AssignPlaceholders()
+		if err = h.optimizer.Factory().AssignPlaceholders(); err != nil {
+			tb.Fatalf("%v", err)
+		}
 	}
 
 	if bmType == OptBuild || bmType == Normalize {

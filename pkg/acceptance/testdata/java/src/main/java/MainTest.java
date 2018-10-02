@@ -1,5 +1,6 @@
 import org.junit.*;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 import java.math.BigDecimal;
 import java.sql.Array;
@@ -12,6 +13,9 @@ import java.util.List;
 import java.util.UUID;
 
 public class MainTest extends CockroachDBTest {
+    @Rule
+    public ExpectedException exception = ExpectedException.none();
+
     @Test
     public void testNoOp() throws Exception {
       // This is a test we can target when building the Docker image to ensure
@@ -198,5 +202,24 @@ public class MainTest extends CockroachDBTest {
         rs = getNextVal.executeQuery();
         rs.next();
         Assert.assertEquals(rs.getInt(1), 2);
+    }
+
+    // Regression for 30538: SQL query with wrong parameter value crashes
+    // database. Unlike the Go client, the JDBC client sets placeholder type
+    // hints. When these do not match the types inferred during type checking,
+    // placeholder eval will try to convert to the needed type. If the conversion
+    // fails, AssignPlaceholders needs to gracefully report that error rather than
+    // panicking.
+    @Test
+    public void testPlaceholderTypeError() throws Exception {
+        PreparedStatement stmt1 = conn.prepareStatement("CREATE TABLE x (a INT PRIMARY KEY, b UUID)");
+        stmt1.execute();
+
+        // Send a UUID that's malformed (not long enough) and expect error.
+        PreparedStatement stmt = conn.prepareStatement("SELECT * FROM x WHERE b = ?");
+        stmt.setObject(1, "e81bb788-2291-4b6e-9cf3-b237fe6c2f3");
+        exception.expectMessage("ERROR: could not parse \"e81bb788-2291-4b6e-9cf3-b237fe6c2f3\" as " +
+            "type uuid: uuid: incorrect UUID length: e81bb788-2291-4b6e-9cf3-b237fe6c2f3");
+        stmt.executeQuery();
     }
 }
