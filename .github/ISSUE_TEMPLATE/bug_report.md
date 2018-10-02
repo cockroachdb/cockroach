@@ -1,10 +1,10 @@
 ---
-name: Bug report
-about: Create a report to help us improve
+name: Bug or crash report
+about: Report unexpected behavior to help us improve
 
 ---
 
-**Describe the bug**
+**Describe the problem**
 
 Please describe the issue you observed, and any steps we can take to reproduce it:
 
@@ -19,14 +19,21 @@ If possible, provide steps to reproduce the behavior:
 3. Look at UI / log file / client app ...
 4. See error
 
-
 **Expected behavior**
 A clear and concise description of what you expected to happen.
 
 **Additional data / screenshots**
-If applicable, add screenshots / log files to help explain your problem.
+If the problem is SQL-related, include a copy of the SQL query and the schema
+of the supporting tables.
 
-If the problem is SQL-related, include a copy of the SQL query and the schema of the supporting tables.
+If a node in your cluster encountered a fatal error, supply the contents of the
+log directories (at minimum of the affected node(s), but preferably all nodes).
+
+Note that log files can contain confidential information. Please continue
+creating this issue, but contact support@cockroachlabs.com to submit the log
+files in private.
+
+If applicable, add screenshots to help explain your problem.
 
 **Environment:**
  - CockroachDB version [e.g. 2.0.x]

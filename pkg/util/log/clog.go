@@ -46,6 +46,30 @@ import (
 	"github.com/petermattis/goid"
 )
 
+const fatalErrorPostamble = `
+
+****************************************************************************
+
+This node experienced a fatal error (printed above this message) as a result
+of which the process is terminating.
+
+Fatal errors can occur due to faulty hardware (disks, memory, clocks) or a
+problem in CockroachDB. With your help, the support team at Cockroach Labs
+can help you determine the root cause, recommend next steps, and will improve
+CockroachDB based on your report.
+
+Please consider submitting a report about this crash according to the
+instructions at
+
+    https://github.com/cockroachdb/cockroach/issues/new/choose
+
+If you would rather not post on a public forum, instead please contact
+
+    support@cockroachlabs.com
+
+The Cockroach Labs team appreciates your feedback.
+`
+
 // FatalChan is closed when Fatal is called. This can be used to make
 // the process stop handling requests while the final log messages and
 // crash report are being written.
@@ -842,6 +866,8 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 		case tracebackAll:
 			stacks = getStacks(true)
 		}
+		stacks = append(stacks, []byte(fatalErrorPostamble)...)
+
 		logExitFunc = func(error) {} // If we get a write error, we'll still exit.
 
 		// We don't want to hang forever writing our final log message. If
