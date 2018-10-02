@@ -562,8 +562,10 @@ func scrubRunDistSQL(
 		p.extendedEvalCtx.Tracing,
 	)
 
+	// Copy the evalCtx, as dsp.Run() might change it.
+	evalCtxCopy := p.extendedEvalCtx
 	p.extendedEvalCtx.DistSQLPlanner.Run(
-		planCtx, p.txn, plan, recv, &p.extendedEvalCtx, nil /* finishedSetupFn */)
+		planCtx, p.txn, plan, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 	if rowResultWriter.Err() != nil {
 		return rows, rowResultWriter.Err()
 	} else if rows.Len() == 0 {

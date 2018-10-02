@@ -14,7 +14,9 @@
 
 package mon
 
-import "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+)
 
 // Resource is an interface used to abstract the specifics of tracking bytes
 // usage by different types of resources.

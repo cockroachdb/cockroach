@@ -127,9 +127,7 @@ func (dsp *DistSQLPlanner) Run(
 		localState   distsqlrun.LocalState
 		txnCoordMeta *roachpb.TxnCoordMeta
 	)
-	if planCtx.validExtendedEvalCtx {
-		localState.EvalContext = &evalCtx.EvalContext
-	}
+	localState.EvalContext = &evalCtx.EvalContext
 	if planCtx.isLocal {
 		localState.IsLocal = true
 		localState.LocalProcs = plan.LocalProcessors
@@ -632,7 +630,6 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 		subqueryPlanCtx.isLocal = !distributeSubquery
 		subqueryPlanCtx.planner = planner
 		subqueryPlanCtx.stmtType = tree.Rows
-		subqueryPlanCtx.validExtendedEvalCtx = true
 		// Don't close the top-level plan from subqueries - someone else will handle
 		// that.
 		subqueryPlanCtx.ignoreClose = true

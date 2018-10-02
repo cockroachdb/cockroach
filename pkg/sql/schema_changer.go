@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1311,6 +1312,7 @@ type SchemaChangeManager struct {
 	// Create a schema changer for every dropped table that needs to be GC-ed.
 	forGC          map[sqlbase.ID]SchemaChanger
 	distSQLPlanner *DistSQLPlanner
+	ieFactory      sqlutil.SessionBoundInternalExecutorFactory
 }
 
 // NewSchemaChangeManager returns a new SchemaChangeManager.
@@ -1321,6 +1323,7 @@ func NewSchemaChangeManager(
 	db client.DB,
 	nodeDesc roachpb.NodeDescriptor,
 	dsp *DistSQLPlanner,
+	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
 ) *SchemaChangeManager {
 	return &SchemaChangeManager{
 		ambientCtx:     ambientCtx,
@@ -1329,6 +1332,7 @@ func NewSchemaChangeManager(
 		schemaChangers: make(map[sqlbase.ID]SchemaChanger),
 		forGC:          make(map[sqlbase.ID]SchemaChanger),
 		distSQLPlanner: dsp,
+		ieFactory:      ieFactory,
 	}
 }
 
@@ -1371,7 +1375,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 		execOneSchemaChange := func(schemaChangers map[sqlbase.ID]SchemaChanger) {
 			for tableID, sc := range schemaChangers {
 				if timeutil.Since(sc.execAfter) > 0 {
-					evalCtx := createSchemaChangeEvalCtx(s.execCfg.Clock.Now(), &SessionTracing{})
+					evalCtx := createSchemaChangeEvalCtx(ctx, s.execCfg.Clock.Now(), &SessionTracing{}, s.ieFactory)
 
 					execCtx, cleanup := tracing.EnsureContext(ctx, s.ambientCtx.Tracer, "schema change [async]")
 					err := sc.exec(execCtx, false /* inSession */, &evalCtx)
@@ -1574,27 +1578,41 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 //
 // TODO(andrei): This EvalContext() will be broken for backfills trying to use
 // functions marked with distsqlBlacklist.
-func createSchemaChangeEvalCtx(ts hlc.Timestamp, tracing *SessionTracing) extendedEvalContext {
+func createSchemaChangeEvalCtx(
+	ctx context.Context,
+	ts hlc.Timestamp,
+	tracing *SessionTracing,
+	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
+) extendedEvalContext {
 	dummyLocation := time.UTC
+
+	sd := &sessiondata.SessionData{
+		SearchPath: sqlbase.DefaultSearchPath,
+		// The database is not supposed to be needed in schema changes, as there
+		// shouldn't be unqualified identifiers in backfills, and the pure functions
+		// that need it should have already been evaluated.
+		//
+		// TODO(andrei): find a way to assert that this field is indeed not used.
+		// And in fact it is used by `current_schemas()`, which, although is a pure
+		// function, takes arguments which might be impure (so it can't always be
+		// pre-evaluated).
+		Database:      "",
+		SequenceState: sessiondata.NewSequenceState(),
+		DataConversion: sessiondata.DataConversionConfig{
+			Location: dummyLocation,
+		},
+	}
+
 	evalCtx := extendedEvalContext{
 		Tracing: tracing,
 		EvalContext: tree.EvalContext{
-			SessionData: &sessiondata.SessionData{
-				SearchPath: sqlbase.DefaultSearchPath,
-				// The database is not supposed to be needed in schema changes, as there
-				// shouldn't be unqualified identifiers in backfills, and the pure functions
-				// that need it should have already been evaluated.
-				//
-				// TODO(andrei): find a way to assert that this field is indeed not used.
-				// And in fact it is used by `current_schemas()`, which, although is a pure
-				// function, takes arguments which might be impure (so it can't always be
-				// pre-evaluated).
-				Database:      "",
-				SequenceState: sessiondata.NewSequenceState(),
-				DataConversion: sessiondata.DataConversionConfig{
-					Location: dummyLocation,
-				},
-			},
+			SessionData:      sd,
+			InternalExecutor: ieFactory(ctx, sd),
+			// TODO(andrei): This is wrong (just like on the main code path on
+			// setupFlow). Each processor should override Ctx with its own context.
+			Context:  ctx,
+			Sequence: &sqlbase.DummySequenceOperators{},
+			Planner:  &sqlbase.DummyEvalPlanner{},
 		},
 	}
 	// The backfill is going to use the current timestamp for the various
