@@ -553,12 +553,10 @@ func removeIndexZoneConfigs(
 		zone.DeleteIndexSubzones(uint32(indexDesc.ID))
 	}
 
-	hasNewSubzones := false
-	_, err = writeZoneConfig(ctx, txn, tableID, tableDesc, zone, execCfg, hasNewSubzones)
-	if sqlbase.IsCCLRequiredError(err) {
-		return sqlbase.NewCCLRequiredError(fmt.Errorf("schema change requires a CCL binary "+
-			"because table %q has at least one remaining index or partition with a zone config",
-			tableDesc.Name))
+	// Ignore CCL required error to allow schema change to progress.
+	_, err = writeZoneConfig(ctx, txn, tableID, tableDesc, zone, execCfg, false /* hasNewSubzones */)
+	if err != nil && !sqlbase.IsCCLRequiredError(err) {
+		return err
 	}
-	return err
+	return nil
 }
