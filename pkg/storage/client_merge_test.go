@@ -1972,6 +1972,93 @@ func TestStoreRangeMergeReadoptedLHSFollower(t *testing.T) {
 	mtc.transferLease(ctx, lhsDesc.RangeID, 0, 2)
 }
 
+// TestStoreRangeMergeWatcher verifies that the right-hand side's watcher
+// goroutine does not erroneously permit traffic after the merge commits.
+func TestStoreRangeMergeWatcher(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, retries := range []int64{0, 3} {
+		t.Run(fmt.Sprintf("retries=%d", retries), func(t *testing.T) {
+			testMergeWatcher(t, retries)
+		})
+	}
+}
+
+func testMergeWatcher(t *testing.T, retries int64) {
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+	storeCfg.TestingKnobs.DisableReplicaGCQueue = true
+
+	// Maybe inject some retryable errors when the merge transaction commits.
+	var mtc *multiTestContext
+	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+		for _, req := range ba.Requests {
+			if et := req.GetEndTransaction(); et != nil && et.InternalCommitTrigger.GetMergeTrigger() != nil {
+				if atomic.AddInt64(&retries, -1) >= 0 {
+					return roachpb.NewError(roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE))
+				}
+			}
+		}
+		return nil
+	}
+
+	mtc = &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+	store0, store2 := mtc.Store(0), mtc.Store(2)
+
+	// Make store0 the leaseholder of the LHS and store2 the leaseholder of the
+	// RHS. We'll be forcing store2's LHS to fall behind. This creates an
+	// interesting scenario in which the leaseholder for the RHS has very
+	// out-of-date information about the status of the merge.
+	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mtc.transferLease(ctx, rhsDesc.RangeID, 0, 2)
+
+	// Block Raft traffic to the LHS replica on store2, by holding its raftMu, so
+	// that its LHS isn't aware there's a merge in progress.
+	lhsRepl2, err := store2.GetReplica(lhsDesc.RangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lhsRepl2.RaftLock()
+
+	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Immediately after the merge completes, send a request to the RHS which will
+	// be handled by the leaseholder, on store2. This exercises a tricky scenario.
+	// We've forced store2's LHS replica to fall behind, so it can't subsume
+	// store2's RHS. store2's RHS is watching for the merge to complete, however,
+	// and will notice that the merge has committed before the LHS does.
+	getErr := make(chan error)
+	go func() {
+		_, pErr = client.SendWrappedWith(ctx, store2.TestSender(), roachpb.Header{
+			RangeID: rhsDesc.RangeID,
+		}, getArgs(rhsDesc.StartKey.AsRawKey()))
+		getErr <- pErr.GoError()
+	}()
+
+	// Restore communication with store2. Give it the lease to force all commands
+	// to be applied, including the merge trigger.
+	lhsRepl2.RaftUnlock()
+	mtc.transferLease(ctx, lhsDesc.RangeID, 0, 2)
+
+	// We *must* see a RangeNotFound error from the get request we sent earlier
+	// because we sent it after the merge completed. Anything else is a
+	// consistency error (or a bug in the test).
+	if err := <-getErr; !testutils.IsError(err, "r2 was not found") {
+		t.Fatalf("expected RangeNotFound error from get after merge, but got %v", err)
+	}
+}
+
 // unreliableRaftHandler drops all Raft messages that are addressed to the
 // specified rangeID, but lets all other messages through.
 type unreliableRaftHandler struct {
