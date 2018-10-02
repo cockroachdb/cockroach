@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -54,3 +55,9 @@ type InternalExecutor interface {
 		ctx context.Context, opName string, txn *client.Txn, statement string, qargs ...interface{},
 	) (tree.Datums, error)
 }
+
+// SessionBoundInternalExecutorFactory is a function that produces a "session
+// bound" internal executor.
+type SessionBoundInternalExecutorFactory func(
+	context.Context, *sessiondata.SessionData,
+) InternalExecutor

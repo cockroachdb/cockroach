@@ -665,7 +665,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the distsqlrun.Server and sql.Server and set
-	// SessionBoundInternalExecutorCtor.
+	// SessionBoundInternalExecutorFactory.
 	s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory =
 		func(
 			ctx context.Context, sessionData *sessiondata.SessionData,
@@ -1512,6 +1512,8 @@ func (s *Server) Start(ctx context.Context) error {
 		*s.db,
 		s.node.Descriptor,
 		s.execCfg.DistSQLPlanner,
+		// We're reusing the ieFactory from the distSQLServer.
+		s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory,
 	).Start(s.stopper)
 
 	s.distSQLServer.Start()

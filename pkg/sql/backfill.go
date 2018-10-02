@@ -132,7 +132,7 @@ func (sc *SchemaChanger) runBackfill(
 	}
 	version := tableDesc.Version
 
-	log.VEventf(ctx, 0, "Running backfill for %q, v=%d, m=%d",
+	log.Infof(ctx, "Running backfill for %q, v=%d, m=%d",
 		tableDesc.Name, tableDesc.Version, sc.mutationID)
 
 	needColumnBackfill := false
