@@ -180,7 +180,7 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
-		writeStmt, err := db.PrepareContext(ctx, writeStmtStr)
+		writeStmt, err := conn.PrepareContext(ctx, writeStmtStr)
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
