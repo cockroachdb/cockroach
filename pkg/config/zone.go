@@ -173,7 +173,8 @@ func CLIZoneSpecifier(zs *tree.ZoneSpecifier) string {
 // ResolveZoneSpecifier converts a zone specifier to the ID of most specific
 // zone whose config applies.
 func ResolveZoneSpecifier(
-	zs *tree.ZoneSpecifier, resolveName func(parentID uint32, name string) (id uint32, err error),
+	zs *tree.ZoneSpecifier,
+	resolveName func(parentID uint32, name string) (id uint32, err error),
 ) (uint32, error) {
 	// A zone specifier has one of 3 possible structures:
 	// - a predefined named zone;
@@ -293,6 +294,28 @@ var defaultSystemZoneConfig = &ZoneConfig{
 	},
 }
 
+// NewZoneConfig is the zone configuration used when no custom
+// config has been specified.
+func NewZoneConfig() *ZoneConfig {
+	return &ZoneConfig{
+		InheritedConstraints:      true,
+		InheritedLeasePreferences: true,
+	}
+}
+
+// EmptyCompleteZoneConfig is the zone configuration where
+// all fields are set but set to their respective zero values.
+func EmptyCompleteZoneConfig() *ZoneConfig {
+	return &ZoneConfig{
+		NumReplicas:               proto.Int32(0),
+		RangeMinBytes:             proto.Int64(0),
+		RangeMaxBytes:             proto.Int64(0),
+		GC:                        &GCPolicy{TTLSeconds: 0},
+		InheritedConstraints:      true,
+		InheritedLeasePreferences: true,
+	}
+}
+
 // DefaultZoneConfig is the default zone configuration used when no custom
 // config has been specified.
 func DefaultZoneConfig() ZoneConfig {
@@ -350,7 +373,7 @@ func TestingSetDefaultSystemZoneConfig(cfg ZoneConfig) func() {
 func (z *ZoneConfig) IsComplete() bool {
 	return ((z.NumReplicas != nil) && (z.RangeMinBytes != nil) &&
 		(z.RangeMaxBytes != nil) && (z.GC != nil) &&
-		(z.ExplicitlySetConstraints) && (z.ExplicitlySetLeasePreferences))
+		(!z.InheritedConstraints) && (!z.InheritedLeasePreferences))
 }
 
 // Validate returns an error if the ZoneConfig specifies a known-dangerous or

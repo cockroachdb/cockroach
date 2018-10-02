@@ -226,8 +226,8 @@ func zoneConfigToMarshalable(c ZoneConfig) marshalableZoneConfig {
 	if c.NumReplicas != nil && *c.NumReplicas != 0 {
 		m.NumReplicas = proto.Int32(*c.NumReplicas)
 	}
-	m.Constraints = ConstraintsList{c.Constraints, c.ExplicitlySetConstraints}
-	if c.ExplicitlySetLeasePreferences {
+	m.Constraints = ConstraintsList{c.Constraints, !c.InheritedConstraints}
+	if !c.InheritedLeasePreferences {
 		m.LeasePreferences = c.LeasePreferences
 	}
 	// We intentionally do not round-trip ExperimentalLeasePreferences. We never
@@ -237,8 +237,10 @@ func zoneConfigToMarshalable(c ZoneConfig) marshalableZoneConfig {
 	return m
 }
 
-func zoneConfigFromMarshalable(m marshalableZoneConfig) ZoneConfig {
-	var c ZoneConfig
+// zoneConfigFromMarshalable returns a ZoneConfig from the marshaled struct
+// NOTE: The config passed in the parameter is used so we can determine keep
+// the original value of the InheritedLeasePreferences field in the output.
+func zoneConfigFromMarshalable(m marshalableZoneConfig, c ZoneConfig) ZoneConfig {
 	if m.RangeMinBytes != nil {
 		c.RangeMinBytes = proto.Int64(*m.RangeMinBytes)
 	}
@@ -253,10 +255,9 @@ func zoneConfigFromMarshalable(m marshalableZoneConfig) ZoneConfig {
 		c.NumReplicas = proto.Int32(*m.NumReplicas)
 	}
 	c.Constraints = m.Constraints.Constraints
-	c.ExplicitlySetConstraints = m.Constraints.ExplicitlySet
+	c.InheritedConstraints = !m.Constraints.ExplicitlySet
 	if m.LeasePreferences != nil {
 		c.LeasePreferences = m.LeasePreferences
-		c.ExplicitlySetLeasePreferences = true
 	}
 
 	// Prefer a provided m.ExperimentalLeasePreferences value over whatever is in
@@ -266,7 +267,10 @@ func zoneConfigFromMarshalable(m marshalableZoneConfig) ZoneConfig {
 	// internal storage that the user is now trying to overwrite.
 	if m.ExperimentalLeasePreferences != nil {
 		c.LeasePreferences = m.ExperimentalLeasePreferences
-		c.ExplicitlySetLeasePreferences = true
+	}
+
+	if m.LeasePreferences != nil || m.ExperimentalLeasePreferences != nil {
+		c.InheritedLeasePreferences = false
 	}
 	c.Subzones = m.Subzones
 	c.SubzoneSpans = m.SubzoneSpans
@@ -290,6 +294,6 @@ func (c *ZoneConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if err := unmarshal(&aux); err != nil {
 		return err
 	}
-	*c = zoneConfigFromMarshalable(aux)
+	*c = zoneConfigFromMarshalable(aux, *c)
 	return nil
 }

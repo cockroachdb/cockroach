@@ -143,7 +143,7 @@ func generateZoneConfigIntrospectionValues(
 	} else {
 		constraints, err := yamlMarshalFlow(config.ConstraintsList{
 			Constraints:   zone.Constraints,
-			ExplicitlySet: zone.ExplicitlySetConstraints})
+			ExplicitlySet: !zone.InheritedConstraints})
 		if err != nil {
 			return err
 		}

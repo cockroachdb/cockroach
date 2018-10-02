@@ -173,16 +173,16 @@ func InheritFromParent(cfg *config.ZoneConfig, parent config.ZoneConfig) {
 			cfg.GC = &tempGC
 		}
 	}
-	if !cfg.ExplicitlySetConstraints {
-		if parent.ExplicitlySetConstraints {
+	if cfg.InheritedConstraints {
+		if !parent.InheritedConstraints {
 			cfg.Constraints = parent.Constraints
-			cfg.ExplicitlySetConstraints = true
+			cfg.InheritedConstraints = false
 		}
 	}
-	if !cfg.ExplicitlySetLeasePreferences {
-		if parent.ExplicitlySetLeasePreferences {
+	if cfg.InheritedLeasePreferences {
+		if !parent.InheritedLeasePreferences {
 			cfg.LeasePreferences = parent.LeasePreferences
-			cfg.ExplicitlySetLeasePreferences = true
+			cfg.InheritedLeasePreferences = false
 		}
 	}
 }
@@ -391,7 +391,7 @@ func deleteRemovedPartitionZoneConfigs(
 	if err != nil {
 		return err
 	} else if zone == nil {
-		zone = &config.ZoneConfig{}
+		zone = config.NewZoneConfig()
 	}
 	for _, n := range removedNames {
 		zone.DeleteSubzone(uint32(idxDesc.ID), n)
