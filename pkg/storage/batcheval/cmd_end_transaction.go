@@ -492,10 +492,7 @@ func resolveLocalIntents(
 			}
 			return nil
 		}(); err != nil {
-			// TODO(tschottdorf): any legitimate reason for this to happen?
-			// Figure that out and if not, should still be ReplicaCorruption
-			// and not a panic.
-			panic(fmt.Sprintf("error resolving intent at %s on end transaction [%s]: %s", span, txn.Status, err))
+			log.Fatalf(ctx, "error resolving intent at %s on end transaction [%s]: %s", span, txn.Status, err)
 		}
 	}
 	// If the poison arg is set, make sure to set the abort span entry.
