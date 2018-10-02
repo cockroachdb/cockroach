@@ -515,9 +515,8 @@ func nodes(count int, opts ...createOption) []nodeSpec {
 // starting and stopping a cockroach cluster on a subset of those machines, and
 // running load generators and other operations on the machines.
 //
-// A cluster is intended to be used only by a single test. Sharing of a cluster
-// between a test and a subtest is current disallowed (see cluster.assertT). A
-// cluster is safe for concurrent use by multiple goroutines.
+// A cluster is intended to be shared between all the subtests under a root.
+// A cluster is safe for concurrent use by multiple goroutines.
 type cluster struct {
 	name       string
 	nodes      int
