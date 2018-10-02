@@ -108,7 +108,7 @@ message ZoneConfig {
 
   // ExplicitlySetContraints specifies if value in the Constraints field was
   // pupulated by the user explicitly and not inherited from the zone's parent.
-  optional bool explicitly_set_constraints = 10 [(gogoproto.nullable) = false];
+  optional bool inherited_constraints = 10 [(gogoproto.nullable) = false];
 
   // LeasePreference stores information about where the user would prefer for
   // range leases to be placed. Leases are allowed to be placed elsewhere if
@@ -122,7 +122,7 @@ message ZoneConfig {
 
   // ExplicitlySetContraints specifies if value in the Constraints field was
   // pupulated by the user explicitly and not inherited from the zone's parent.
-  optional bool explicitly_set_lease_preferences = 11 [(gogoproto.nullable) = false];
+  optional bool inherited_lease_preferences = 11 [(gogoproto.nullable) = false];
 
   // Subzones stores config overrides for "subzones", each of which represents
   // either a SQL table index or a partition of a SQL table index. Subzones are

@@ -56,7 +56,6 @@ var firstRangeInfo = testRangeInfo([]roachpb.ReplicaDescriptor{}, firstRange)
 
 var simpleZoneConfig = config.ZoneConfig{
 	NumReplicas:              proto.Int32(1),
-	ExplicitlySetConstraints: true,
 	Constraints: []config.Constraints{
 		{
 			Constraints: []config.Constraint{
@@ -69,7 +68,6 @@ var simpleZoneConfig = config.ZoneConfig{
 
 var multiDCConfig = config.ZoneConfig{
 	NumReplicas:              proto.Int32(2),
-	ExplicitlySetConstraints: true,
 	Constraints: []config.Constraints{
 		{Constraints: []config.Constraint{{Value: "ssd", Type: config.Constraint_REQUIRED}}},
 	},
@@ -4019,7 +4017,6 @@ func TestAllocatorComputeAction(t *testing.T) {
 			zone: config.ZoneConfig{
 				NumReplicas:              proto.Int32(3),
 				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				ExplicitlySetConstraints: true,
 				RangeMinBytes:            proto.Int64(0),
 				RangeMaxBytes:            proto.Int64(64000),
 			},
@@ -4049,7 +4046,6 @@ func TestAllocatorComputeAction(t *testing.T) {
 			zone: config.ZoneConfig{
 				NumReplicas:              proto.Int32(5),
 				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				ExplicitlySetConstraints: true,
 				RangeMinBytes:            proto.Int64(0),
 				RangeMaxBytes:            proto.Int64(64000),
 			},
@@ -4089,7 +4085,6 @@ func TestAllocatorComputeAction(t *testing.T) {
 			zone: config.ZoneConfig{
 				NumReplicas:              proto.Int32(3),
 				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				ExplicitlySetConstraints: true,
 				RangeMinBytes:            proto.Int64(0),
 				RangeMaxBytes:            proto.Int64(64000),
 			},
@@ -4114,7 +4109,6 @@ func TestAllocatorComputeAction(t *testing.T) {
 			zone: config.ZoneConfig{
 				NumReplicas:              proto.Int32(5),
 				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				ExplicitlySetConstraints: true,
 				RangeMinBytes:            proto.Int64(0),
 				RangeMaxBytes:            proto.Int64(64000),
 			},
@@ -4149,7 +4143,6 @@ func TestAllocatorComputeAction(t *testing.T) {
 			zone: config.ZoneConfig{
 				NumReplicas:              proto.Int32(5),
 				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				ExplicitlySetConstraints: true,
 				RangeMinBytes:            proto.Int64(0),
 				RangeMaxBytes:            proto.Int64(64000),
 			},
@@ -4184,7 +4177,6 @@ func TestAllocatorComputeAction(t *testing.T) {
 			zone: config.ZoneConfig{
 				NumReplicas:              proto.Int32(3),
 				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				ExplicitlySetConstraints: true,
 				RangeMinBytes:            proto.Int64(0),
 				RangeMaxBytes:            proto.Int64(64000),
 			},
@@ -4219,7 +4211,6 @@ func TestAllocatorComputeAction(t *testing.T) {
 			zone: config.ZoneConfig{
 				NumReplicas:              proto.Int32(5),
 				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				ExplicitlySetConstraints: true,
 				RangeMinBytes:            proto.Int64(0),
 				RangeMaxBytes:            proto.Int64(64000),
 			},
@@ -4264,7 +4255,6 @@ func TestAllocatorComputeAction(t *testing.T) {
 			zone: config.ZoneConfig{
 				NumReplicas:              proto.Int32(3),
 				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				ExplicitlySetConstraints: true,
 				RangeMinBytes:            proto.Int64(0),
 				RangeMaxBytes:            proto.Int64(64000),
 			},
@@ -4304,7 +4294,6 @@ func TestAllocatorComputeAction(t *testing.T) {
 			zone: config.ZoneConfig{
 				NumReplicas:              proto.Int32(3),
 				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				ExplicitlySetConstraints: true,
 				RangeMinBytes:            proto.Int64(0),
 				RangeMaxBytes:            proto.Int64(64000),
 			},
@@ -4339,7 +4328,6 @@ func TestAllocatorComputeAction(t *testing.T) {
 			zone: config.ZoneConfig{
 				NumReplicas:              proto.Int32(3),
 				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				ExplicitlySetConstraints: true,
 				RangeMinBytes:            proto.Int64(0),
 				RangeMaxBytes:            proto.Int64(64000),
 			},
@@ -4381,7 +4369,6 @@ func TestAllocatorComputeAction(t *testing.T) {
 			zone: config.ZoneConfig{
 				NumReplicas:              proto.Int32(3),
 				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				ExplicitlySetConstraints: true,
 				RangeMinBytes:            proto.Int64(0),
 				RangeMaxBytes:            proto.Int64(64000),
 			},
@@ -4411,7 +4398,6 @@ func TestAllocatorComputeAction(t *testing.T) {
 			zone: config.ZoneConfig{
 				NumReplicas:              proto.Int32(3),
 				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				ExplicitlySetConstraints: true,
 				RangeMinBytes:            proto.Int64(0),
 				RangeMaxBytes:            proto.Int64(64000),
 			},
@@ -4441,7 +4427,6 @@ func TestAllocatorComputeAction(t *testing.T) {
 			zone: config.ZoneConfig{
 				NumReplicas:              proto.Int32(3),
 				Constraints:              []config.Constraints{{Constraints: []config.Constraint{{Value: "us-east", Type: config.Constraint_DEPRECATED_POSITIVE}}}},
-				ExplicitlySetConstraints: true,
 				RangeMinBytes:            proto.Int64(0),
 				RangeMaxBytes:            proto.Int64(64000),
 			},

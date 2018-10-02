@@ -61,15 +61,15 @@ var supportedZoneConfigOptions = map[tree.Name]struct {
 	"constraints": {types.String, func(c *config.ZoneConfig, d tree.Datum) {
 		constraintsList := config.ConstraintsList{
 			Constraints:   c.Constraints,
-			ExplicitlySet: c.ExplicitlySetConstraints,
+			ExplicitlySet: !c.InheritedConstraints,
 		}
 		loadYAML(&constraintsList, string(tree.MustBeDString(d)))
 		c.Constraints = constraintsList.Constraints
-		c.ExplicitlySetConstraints = true
+		c.InheritedConstraints = false
 	}},
 	"lease_preferences": {types.String, func(c *config.ZoneConfig, d tree.Datum) {
 		loadYAML(&c.LeasePreferences, string(tree.MustBeDString(d)))
-		c.ExplicitlySetLeasePreferences = true
+		c.InheritedLeasePreferences = false
 	}},
 }
 
@@ -251,7 +251,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 
 	// No zone was found. Possibly a SubzonePlaceholder dependig on the index.
 	if partialZone == nil {
-		partialZone = &config.ZoneConfig{}
+		partialZone = config.NewZoneConfig()
 		if index != nil {
 			subzonePlaceholder = true
 		}
@@ -320,7 +320,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// If an existing subzone is being modified, finalZone is overridden.
 		finalZone := *partialZone
 		if index != nil {
-			finalZone = config.ZoneConfig{}
+			finalZone = *config.NewZoneConfig()
 		}
 		if partialSubzone != nil {
 			finalZone = partialSubzone.Config
@@ -331,7 +331,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		if n.setDefault && keys.RootNamespaceID == uint32(targetID) {
 			finalZone = config.DefaultZoneConfig()
 		} else if n.setDefault {
-			finalZone = config.ZoneConfig{}
+			finalZone = *config.NewZoneConfig()
 		}
 		// Load settings from YAML. If there was no YAML (e.g. because the
 		// query specified CONFIGURE ZONE USING), the YAML string will be
@@ -401,7 +401,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 			if err != nil {
 				return err
 			} else if completeZone == nil {
-				completeZone = &config.ZoneConfig{}
+				completeZone = config.NewZoneConfig()
 			}
 			completeZone.SetSubzone(config.Subzone{
 				IndexID:       uint32(index.ID),
@@ -637,7 +637,7 @@ func removeIndexZoneConfigs(
 	if err != nil {
 		return err
 	} else if zone == nil {
-		zone = &config.ZoneConfig{}
+		zone = config.NewZoneConfig()
 	}
 
 	for _, indexDesc := range indexDescs {

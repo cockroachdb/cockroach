@@ -341,9 +341,7 @@ func TestZoneConfigMarshalYAML(t *testing.T) {
 		GC: &GCPolicy{
 			TTLSeconds: 1,
 		},
-		NumReplicas:                   proto.Int32(1),
-		ExplicitlySetConstraints:      true,
-		ExplicitlySetLeasePreferences: true,
+		NumReplicas: proto.Int32(1),
 	}
 
 	testCases := []struct {
@@ -726,7 +724,7 @@ func TestMarshalableZoneConfigRoundTrip(t *testing.T) {
 	defZone := DefaultZoneConfig()
 	original := &defZone
 	marshalable := zoneConfigToMarshalable(*original)
-	roundTripped := zoneConfigFromMarshalable(marshalable)
+	roundTripped := zoneConfigFromMarshalable(marshalable, *original)
 
 	if !reflect.DeepEqual(roundTripped, *original) {
 		t.Errorf("round-tripping a ZoneConfig through a marshalableZoneConfig failed:\noriginal:\n%+v\nmarshable:\n%+v\ngot:\n%+v", original, marshalable, roundTripped)

@@ -293,6 +293,15 @@ var defaultSystemZoneConfig = &ZoneConfig{
 	},
 }
 
+// NewZoneConfig is the zone configuration used when no custom
+// config has been specified.
+func NewZoneConfig() *ZoneConfig {
+	return &ZoneConfig{
+		InheritedConstraints:      true,
+		InheritedLeasePreferences: true,
+	}
+}
+
 // DefaultZoneConfig is the default zone configuration used when no custom
 // config has been specified.
 func DefaultZoneConfig() ZoneConfig {
@@ -350,7 +359,7 @@ func TestingSetDefaultSystemZoneConfig(cfg ZoneConfig) func() {
 func (z *ZoneConfig) IsComplete() bool {
 	return ((z.NumReplicas != nil) && (z.RangeMinBytes != nil) &&
 		(z.RangeMaxBytes != nil) && (z.GC != nil) &&
-		(z.ExplicitlySetConstraints) && (z.ExplicitlySetLeasePreferences))
+		(!z.InheritedConstraints) && (!z.InheritedLeasePreferences))
 }
 
 // Validate returns an error if the ZoneConfig specifies a known-dangerous or
