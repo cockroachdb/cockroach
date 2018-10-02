@@ -525,6 +525,38 @@ func TestChangefeedComputedColumn(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
+func TestChangefeedUpdatePrimaryKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		// This NOT NULL column checks a regression when used with UPDATE-ing a
+		// primary key column or with DELETE.
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING NOT NULL)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'bar')`)
+
+		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo`)
+		defer foo.Close(t)
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"a": 0, "b": "bar"}`,
+		})
+
+		sqlDB.Exec(t, `UPDATE foo SET a = 1`)
+		assertPayloads(t, foo, []string{
+			`foo: [0]->`,
+			`foo: [1]->{"a": 1, "b": "bar"}`,
+		})
+
+		sqlDB.Exec(t, `DELETE FROM foo`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->`,
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
 func TestChangefeedTruncateRenameDrop(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

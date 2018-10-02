@@ -1267,7 +1267,9 @@ func (rf *RowFetcher) finalizeRow() error {
 			return nil
 		}
 		if table.neededCols.Contains(int(table.cols[i].ID)) && table.row[i].IsUnset() {
-			if !table.cols[i].Nullable {
+			// If the row was deleted, we'll be missing any non-primary key
+			// columns, including nullable ones, but this is expected.
+			if !table.cols[i].Nullable && !table.rowIsDeleted {
 				var indexColValues []string
 				for _, idx := range table.indexColIdx {
 					if idx != -1 {
