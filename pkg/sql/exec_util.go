@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -907,7 +908,10 @@ func (scc *schemaChangerCollection) reset() {
 //
 // The list of closures is cleared after (attempting) execution.
 func (scc *schemaChangerCollection) execSchemaChanges(
-	ctx context.Context, cfg *ExecutorConfig, tracing *SessionTracing,
+	ctx context.Context,
+	cfg *ExecutorConfig,
+	tracing *SessionTracing,
+	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
 ) error {
 	if len(scc.schemaChangers) == 0 {
 		return nil
@@ -924,7 +928,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		sc.distSQLPlanner = cfg.DistSQLPlanner
 		sc.settings = cfg.Settings
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
-			evalCtx := createSchemaChangeEvalCtx(cfg.Clock.Now(), tracing)
+			evalCtx := createSchemaChangeEvalCtx(ctx, cfg.Clock.Now(), tracing, ieFactory)
 			if err := sc.exec(ctx, true /* inSession */, &evalCtx); err != nil {
 				if onError := cfg.SchemaChangerTestingKnobs.OnError; onError != nil {
 					onError(err)

@@ -470,11 +470,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 type PlanningCtx struct {
 	ctx             context.Context
 	ExtendedEvalCtx *extendedEvalContext
-	// validExtendedEvalCtx is set to true if a flow can use the ExtendedEvalCtx
-	// of this PlanningCtx directly, without having to instantiate a new one. This
-	// is normally false, with the main exception of the ordinary SQL executor.
-	validExtendedEvalCtx bool
-	spanIter             distsqlplan.SpanResolverIterator
+	spanIter        distsqlplan.SpanResolverIterator
 	// NodeAddresses contains addresses for all NodeIDs that are referenced by any
 	// PhysicalPlan we generate with this context.
 	// Nodes that fail a health check have empty addresses.

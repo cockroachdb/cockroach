@@ -184,7 +184,9 @@ func distChangefeedFlow(
 		finishedSetupFn = func() { resultsCh <- tree.Datums(nil) }
 	}
 
-	dsp.Run(planCtx, noTxn, &p, recv, evalCtx, finishedSetupFn)
+	// Copy the evalCtx, as dsp.Run() might change it.
+	evalCtxCopy := *evalCtx
+	dsp.Run(planCtx, noTxn, &p, recv, &evalCtxCopy, finishedSetupFn)
 	return resultRows.Err()
 }
 

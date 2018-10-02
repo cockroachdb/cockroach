@@ -33,9 +33,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -166,9 +166,7 @@ type ServerConfig struct {
 	// SessionBoundInternalExecutorFactory is used to construct session-bound
 	// executors. The idea is that a higher-layer binds some of the arguments
 	// required, so that users of ServerConfig don't have to care about them.
-	SessionBoundInternalExecutorFactory func(
-		ctx context.Context, sessionData *sessiondata.SessionData,
-	) sqlutil.InternalExecutor
+	SessionBoundInternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
 }
 
 // ServerImpl implements the server for the distributed SQL APIs.
@@ -390,8 +388,8 @@ func (ds *ServerImpl) setupFlow(
 			},
 		}
 
-		evalPlanner := &dummyEvalPlanner{}
-		sequence := &dummySequenceOperators{}
+		evalPlanner := &sqlbase.DummyEvalPlanner{}
+		sequence := &sqlbase.DummySequenceOperators{}
 		evalCtx = &tree.EvalContext{
 			Settings:     ds.ServerConfig.Settings,
 			SessionData:  sd,
@@ -645,89 +643,6 @@ const (
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*TestingKnobs) ModuleTestingKnobs() {}
-
-var errEvalPlanner = errors.New("cannot backfill such evaluated expression")
-
-// Implements the tree.EvalPlanner interface by returning errors.
-type dummyEvalPlanner struct {
-}
-
-var _ tree.EvalPlanner = &dummyEvalPlanner{}
-
-// Implements the tree.EvalDatabase interface.
-func (ep *dummyEvalPlanner) ParseQualifiedTableName(
-	ctx context.Context, sql string,
-) (*tree.TableName, error) {
-	return nil, errEvalPlanner
-}
-
-// Implements the tree.EvalDatabase interface.
-func (ep *dummyEvalPlanner) LookupSchema(
-	ctx context.Context, dbName, scName string,
-) (bool, tree.SchemaMeta, error) {
-	return false, nil, errEvalPlanner
-}
-
-// Implements the tree.EvalDatabase interface.
-func (ep *dummyEvalPlanner) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
-	return errEvalPlanner
-}
-
-// Implements the tree.EvalPlanner interface.
-func (ep *dummyEvalPlanner) ParseType(sql string) (coltypes.CastTargetType, error) {
-	return nil, errEvalPlanner
-}
-
-// Implements the tree.EvalPlanner interface.
-func (ep *dummyEvalPlanner) EvalSubquery(expr *tree.Subquery) (tree.Datum, error) {
-	return nil, errEvalPlanner
-}
-
-var errSequenceOperators = errors.New("cannot backfill such sequence operation")
-
-// Implements the tree.SequenceOperators interface by returning errors.
-type dummySequenceOperators struct {
-}
-
-// Implements the tree.EvalDatabase interface.
-func (so *dummySequenceOperators) ParseQualifiedTableName(
-	ctx context.Context, sql string,
-) (*tree.TableName, error) {
-	return nil, errSequenceOperators
-}
-
-// Implements the tree.EvalDatabase interface.
-func (so *dummySequenceOperators) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
-	return errSequenceOperators
-}
-
-// Implements the tree.EvalDatabase interface.
-func (so *dummySequenceOperators) LookupSchema(
-	ctx context.Context, dbName, scName string,
-) (bool, tree.SchemaMeta, error) {
-	return false, nil, errSequenceOperators
-}
-
-// Implements the tree.SequenceOperators interface.
-func (so *dummySequenceOperators) IncrementSequence(
-	ctx context.Context, seqName *tree.TableName,
-) (int64, error) {
-	return 0, errSequenceOperators
-}
-
-// Implements the tree.SequenceOperators interface.
-func (so *dummySequenceOperators) GetLatestValueInSessionForSequence(
-	ctx context.Context, seqName *tree.TableName,
-) (int64, error) {
-	return 0, errSequenceOperators
-}
-
-// Implements the tree.SequenceOperators interface.
-func (so *dummySequenceOperators) SetSequenceValue(
-	ctx context.Context, seqName *tree.TableName, newVal int64, isCalled bool,
-) error {
-	return errSequenceOperators
-}
 
 // lazyInternalExecutor is a tree.SessionBoundInternalExecutor that initializes
 // itself only on the first call to QueryRow.

@@ -86,7 +86,9 @@ func PlanAndRunExport(
 		evalCtx.Tracing,
 	)
 
-	dsp.Run(planCtx, txn, &p, recv, evalCtx, nil /* finishedSetupFn */)
+	// Copy the evalCtx, as dsp.Run() might change it.
+	evalCtxCopy := *evalCtx
+	dsp.Run(planCtx, txn, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 	return resultRows.Err()
 }
 
@@ -476,8 +478,10 @@ func LoadCSV(
 	)
 
 	defer log.VEventf(ctx, 1, "finished job %s", job.Payload().Description)
+	// Copy the evalCtx, as dsp.Run() might change it.
+	evalCtxCopy := *evalCtx
 	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		dsp.Run(planCtx, txn, &p, recv, evalCtx, nil /* finishedSetupFn */)
+		dsp.Run(planCtx, txn, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 		return resultRows.Err()
 	})
 }
@@ -617,7 +621,9 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	log.VEventf(ctx, 1, "begin sampling phase of job %s", job.Payload().Description)
 	// Clear the stage 2 data in case this function is ever restarted (it shouldn't be).
 	samples = nil
-	dsp.Run(planCtx, nil, &p, recv, evalCtx, nil /* finishedSetupFn */)
+	// Copy the evalCtx, as dsp.Run() might change it.
+	evalCtxCopy := *evalCtx
+	dsp.Run(planCtx, nil, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 	if err := rowResultWriter.Err(); err != nil {
 		return nil, err
 	}

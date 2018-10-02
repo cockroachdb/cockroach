@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -1896,20 +1897,32 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			err.(errorutil.UnexpectedWithIssueErr).SendReport(ex.Ctx(), &ex.server.cfg.Settings.SV)
 			return advanceInfo{}, err
 		}
-		if schemaChangeErr := ex.extraTxnState.schemaChangers.execSchemaChanges(
-			ex.Ctx(), ex.server.cfg, &ex.sessionTracing,
-		); schemaChangeErr != nil {
-			// We got a schema change error. We'll return it to the client as the
-			// result of the current statement - which is either the DDL statement or
-			// a COMMIT statement if the DDL was part of an explicit transaction. In
-			// the explicit transaction case, we return a funky error code to the
-			// client to seed fear about what happened to the transaction. The reality
-			// is that the transaction committed, but at least some of the staged
-			// schema changes failed. We don't have a good way to indicate this.
-			if implicitTxn {
-				res.SetError(schemaChangeErr)
-			} else {
-				res.SetError(sqlbase.NewStatementCompletionUnknownError(schemaChangeErr))
+		scc := &ex.extraTxnState.schemaChangers
+		if len(scc.schemaChangers) != 0 {
+			ieFactory := func(ctx context.Context, sd *sessiondata.SessionData) sqlutil.InternalExecutor {
+				ie := MakeSessionBoundInternalExecutor(
+					ctx,
+					sd,
+					ex.server,
+					ex.memMetrics,
+					ex.server.cfg.Settings)
+				return &ie
+			}
+			if schemaChangeErr := scc.execSchemaChanges(
+				ex.Ctx(), ex.server.cfg, &ex.sessionTracing, ieFactory,
+			); schemaChangeErr != nil {
+				// We got a schema change error. We'll return it to the client as the
+				// result of the current statement - which is either the DDL statement or
+				// a COMMIT statement if the DDL was part of an explicit transaction. In
+				// the explicit transaction case, we return a funky error code to the
+				// client to seed fear about what happened to the transaction. The reality
+				// is that the transaction committed, but at least some of the staged
+				// schema changes failed. We don't have a good way to indicate this.
+				if implicitTxn {
+					res.SetError(schemaChangeErr)
+				} else {
+					res.SetError(sqlbase.NewStatementCompletionUnknownError(schemaChangeErr))
+				}
 			}
 		}
 

@@ -67,7 +67,6 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	planCtx.ignoreClose = true
 	planCtx.planner = params.p
 	planCtx.stmtType = n.stmtType
-	planCtx.validExtendedEvalCtx = true
 
 	plan, err := distSQLPlanner.createPlanForNode(planCtx, n.plan)
 	if err != nil {
