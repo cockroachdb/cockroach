@@ -626,6 +626,14 @@ func (f *Flow) Wait() {
 	}
 }
 
+// Releasable is an interface for objects than can be Released back into a
+// memory pool when finished.
+type Releasable interface {
+	// Release allows this object to be returned to a memory pool. Objects must
+	// not be used after Release is called.
+	Release()
+}
+
 // Cleanup should be called when the flow completes (after all processors and
 // mailboxes exited).
 func (f *Flow) Cleanup(ctx context.Context) {
@@ -635,6 +643,11 @@ func (f *Flow) Cleanup(ctx context.Context) {
 	// This closes the account and monitor opened in ServerImpl.setupFlow.
 	f.EvalCtx.ActiveMemAcc.Close(ctx)
 	f.EvalCtx.Stop(ctx)
+	for _, p := range f.processors {
+		if d, ok := p.(Releasable); ok {
+			d.Release()
+		}
+	}
 	if log.V(1) {
 		log.Infof(ctx, "cleaning up")
 	}
