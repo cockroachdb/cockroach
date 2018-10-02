@@ -48,7 +48,7 @@ var (
 	flagMaxTime = flags.Duration("maxtime", 0, "maximum time to run")
 	flagMaxRuns = flags.Int("maxruns", 0, "maximum number of runs")
 	_           = flags.Int("maxfails", 1, "maximum number of failures")
-	_           = flags.Bool("stderr", true, "output failures to STDERR instead of to a temp file")
+	flagStderr  = flags.Bool("stderr", true, "output failures to STDERR instead of to a temp file")
 )
 
 func roundToSeconds(d time.Duration) time.Duration {
@@ -71,6 +71,10 @@ func run() error {
 	cluster := os.Args[1]
 	if err := flags.Parse(os.Args[2:]); err != nil {
 		return err
+	}
+
+	if !*flagStderr {
+		return errors.New("-stderr=false is unsupported, please tee to a file (or implement the feature)")
 	}
 
 	if *flagP <= 0 || *flagTimeout < 0 || len(flags.Args()) == 0 {
