@@ -47,13 +47,22 @@ type stockLevelData struct {
 	lowStock  int
 }
 
-type stockLevel struct{}
+type stockLevel struct {
+	config *tpcc
+	db     *gosql.DB
+}
 
-var _ tpccTx = stockLevel{}
+var _ tpccTx = &stockLevel{}
 
-func (s stockLevel) run(
-	ctx context.Context, config *tpcc, db *gosql.DB, wID int,
-) (interface{}, error) {
+func createStockLevel(ctx context.Context, config *tpcc, db *gosql.DB) (tpccTx, error) {
+	s := &stockLevel{
+		config: config,
+		db:     db,
+	}
+	return s, nil
+}
+
+func (s *stockLevel) run(ctx context.Context, wID int) (interface{}, error) {
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	// 2.8.1.2: The threshold of minimum quantity in stock is selected at random
@@ -65,8 +74,8 @@ func (s stockLevel) run(
 
 	if err := crdb.ExecuteTx(
 		ctx,
-		db,
-		config.txOpts,
+		s.db,
+		s.config.txOpts,
 		func(tx *gosql.Tx) error {
 			// This is the only join in the application, so we don't need to worry about
 			// this setting persisting incorrectly across queries.
