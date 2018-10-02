@@ -52,8 +52,8 @@ project
       │    │    ├── columns: a.k:6(int!null) a.i:7(int) a.s:9(string)
       │    │    └── scan a
       │    │         └── columns: a.k:6(int!null) a.i:7(int) a.f:8(float) a.s:9(string) a.j:10(jsonb)
-      │    └── true [type=bool]
-      └── filters [type=bool]
+      │    └── filters
+      └── filters
            └── eq [type=bool]
                 ├── variable: a.k [type=int]
                 └── variable: a.k [type=int]
@@ -77,7 +77,7 @@ project
            ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
            ├── scan a
            │    └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-           └── filters [type=bool]
+           └── filters
                 └── eq [type=bool]
                      ├── variable: i [type=int]
                      └── const: 10 [type=int]
@@ -100,7 +100,7 @@ scalar-group-by
  │                   ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
  │                   ├── scan a
  │                   │    └── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │                   └── filters [type=bool]
+ │                   └── filters
  │                        └── eq [type=bool]
  │                             ├── variable: i [type=int]
  │                             └── const: 10 [type=int]

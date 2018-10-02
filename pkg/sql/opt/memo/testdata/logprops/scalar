@@ -32,9 +32,9 @@ select
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1)
- └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
+ └── filters
       └── lt [type=bool, outer=(1), constraints=(/1: (/NULL - /4]; tight)]
-           ├── variable: x [type=int, outer=(1)]
+           ├── variable: x [type=int]
            └── const: 5 [type=int]
 
 build
@@ -61,19 +61,19 @@ project
  │    │    ├── fd: (5)-->(3,4)
  │    │    ├── prune: (3-5)
  │    │    └── interesting orderings: (+5)
- │    └── true [type=bool]
- └── projections [outer=(1,2,5)]
+ │    └── filters
+ └── projections
       ├── eq [type=bool, outer=(1,2)]
-      │    ├── plus [type=int, outer=(1)]
-      │    │    ├── variable: x [type=int, outer=(1)]
+      │    ├── plus [type=int]
+      │    │    ├── variable: x [type=int]
       │    │    └── const: 1 [type=int]
-      │    └── plus [type=int, outer=(2)]
+      │    └── plus [type=int]
       │         ├── function: length [type=int]
       │         │    └── const: 'foo' [type=string]
-      │         └── variable: y [type=int, outer=(2)]
+      │         └── variable: y [type=int]
       └── mult [type=int, outer=(1,5)]
-           ├── variable: rowid [type=int, outer=(5)]
-           └── variable: x [type=int, outer=(1)]
+           ├── variable: rowid [type=int]
+           └── variable: x [type=int]
 
 build
 SELECT * FROM xy WHERE EXISTS(SELECT * FROM uv WHERE u=x)
@@ -90,7 +90,7 @@ select
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1)
- └── filters [type=bool, outer=(1)]
+ └── filters
       └── exists [type=bool, outer=(1)]
            └── project
                 ├── columns: u:3(int!null) v:4(int!null)
@@ -110,10 +110,10 @@ select
                      │    ├── fd: (5)-->(3,4)
                      │    ├── prune: (3-5)
                      │    └── interesting orderings: (+5)
-                     └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-                          └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-                               ├── variable: u [type=int, outer=(3)]
-                               └── variable: x [type=int, outer=(1)]
+                     └── filters
+                          └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+                               ├── variable: u [type=int]
+                               └── variable: x [type=int]
 
 build
 SELECT * FROM xy WHERE y IN (SELECT v FROM uv WHERE u=x)
@@ -129,7 +129,7 @@ select
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1)
- └── filters [type=bool, outer=(1,2)]
+ └── filters
       └── any: eq [type=bool, outer=(1,2)]
            ├── project
            │    ├── columns: v:4(int!null)
@@ -148,11 +148,11 @@ select
            │         │    ├── fd: (5)-->(3,4)
            │         │    ├── prune: (3-5)
            │         │    └── interesting orderings: (+5)
-           │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-           │              └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-           │                   ├── variable: u [type=int, outer=(3)]
-           │                   └── variable: x [type=int, outer=(1)]
-           └── variable: y [type=int, outer=(2)]
+           │         └── filters
+           │              └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+           │                   ├── variable: u [type=int]
+           │                   └── variable: x [type=int]
+           └── variable: y [type=int]
 
 # Side-effects: test DivOp and impure FuncOp.
 build
@@ -194,10 +194,10 @@ group-by
  │         │    │    ├── fd: (1)-->(2)
  │         │    │    ├── prune: (1,2)
  │         │    │    └── interesting orderings: (+1)
- │         │    └── projections [outer=(1,2), side-effects]
+ │         │    └── projections
  │         │         └── div [type=decimal, outer=(1,2), side-effects]
- │         │              ├── variable: x [type=int, outer=(1)]
- │         │              └── variable: y [type=int, outer=(2)]
+ │         │              ├── variable: x [type=int]
+ │         │              └── variable: y [type=int]
  │         ├── project
  │         │    ├── columns: u:4(int) v:5(int!null)
  │         │    ├── side-effects
@@ -215,14 +215,14 @@ group-by
  │         │         │    ├── fd: (6)-->(4,5)
  │         │         │    ├── prune: (4-6)
  │         │         │    └── interesting orderings: (+6)
- │         │         └── filters [type=bool, side-effects]
+ │         │         └── filters
  │         │              └── gt [type=bool, side-effects]
- │         │                   ├── function: now [type=timestamptz, side-effects]
+ │         │                   ├── function: now [type=timestamptz]
  │         │                   └── const: '2018-01-01 00:00:00+00:00' [type=timestamptz]
- │         └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
- │              └── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
- │                   ├── variable: x [type=int, outer=(1)]
- │                   └── variable: u [type=int, outer=(4)]
- └── aggregations [outer=(1)]
+ │         └── filters
+ │              └── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │                   ├── variable: x [type=int]
+ │                   └── variable: u [type=int]
+ └── aggregations
       └── sum [type=decimal, outer=(1)]
-           └── variable: x [type=int, outer=(1)]
+           └── variable: x [type=int]

@@ -53,11 +53,11 @@ inner-join (lookup abcd)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    └── prune: (1,2)
- │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
- │         └── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
- │              ├── variable: a [type=int, outer=(4)]
- │              └── variable: m [type=int, outer=(1)]
- └── true [type=bool]
+ │    └── filters
+ │         └── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │              ├── variable: a [type=int]
+ │              └── variable: m [type=int]
+ └── filters
 
 # Filter that gets pushed down on both sides, but comes back into the ON
 # condition for the lookup side.
@@ -79,15 +79,15 @@ inner-join (lookup abcd)
  │    │    ├── scan small
  │    │    │    ├── columns: m:1(int) n:2(int)
  │    │    │    └── prune: (1,2)
- │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/3 - ]; tight)]
+ │    │    └── filters
  │    │         └── gt [type=bool, outer=(2), constraints=(/2: [/3 - ]; tight)]
- │    │              ├── variable: n [type=int, outer=(2)]
+ │    │              ├── variable: n [type=int]
  │    │              └── const: 2 [type=int]
- │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
- │         └── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
- │              ├── variable: a [type=int, outer=(4)]
- │              └── variable: m [type=int, outer=(1)]
- └── true [type=bool]
+ │    └── filters
+ │         └── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │              ├── variable: a [type=int]
+ │              └── variable: m [type=int]
+ └── filters
 
 # Filter that applies to the right side and gets pulled back into the ON
 # condition.
@@ -106,14 +106,14 @@ inner-join (lookup abcd)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    └── prune: (1,2)
- │    └── filters [type=bool, outer=(1,4,5), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /5: [/3 - ]), fd=(1)==(4), (4)==(1)]
- │         ├── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
- │         │    ├── variable: a [type=int, outer=(4)]
- │         │    └── variable: m [type=int, outer=(1)]
+ │    └── filters
+ │         ├── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │         │    ├── variable: a [type=int]
+ │         │    └── variable: m [type=int]
  │         └── gt [type=bool, outer=(5), constraints=(/5: [/3 - ]; tight)]
- │              ├── variable: b [type=int, outer=(5)]
+ │              ├── variable: b [type=int]
  │              └── const: 2 [type=int]
- └── true [type=bool]
+ └── filters
 
 # Filter that can only be applied after the primary index join.
 opt
@@ -131,13 +131,13 @@ inner-join (lookup abcd)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    └── prune: (1,2)
- │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
- │         └── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
- │              ├── variable: a [type=int, outer=(4)]
- │              └── variable: m [type=int, outer=(1)]
- └── filters [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
+ │    └── filters
+ │         └── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │              ├── variable: a [type=int]
+ │              └── variable: m [type=int]
+ └── filters
       └── gt [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
-           ├── variable: c [type=int, outer=(6)]
+           ├── variable: c [type=int]
            └── const: 2 [type=int]
 
 # Multiple equalities.
@@ -155,14 +155,14 @@ inner-join (lookup abcd)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    └── prune: (1,2)
- │    └── filters [type=bool, outer=(1,2,4,5), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(4), (4)==(1), (2)==(5), (5)==(2)]
- │         ├── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
- │         │    ├── variable: a [type=int, outer=(4)]
- │         │    └── variable: m [type=int, outer=(1)]
- │         └── eq [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
- │              ├── variable: b [type=int, outer=(5)]
- │              └── variable: n [type=int, outer=(2)]
- └── filters [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
+ │    └── filters
+ │         ├── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │         │    ├── variable: a [type=int]
+ │         │    └── variable: m [type=int]
+ │         └── eq [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+ │              ├── variable: b [type=int]
+ │              └── variable: n [type=int]
+ └── filters
       └── gt [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
-           ├── variable: c [type=int, outer=(6)]
+           ├── variable: c [type=int]
            └── const: 2 [type=int]

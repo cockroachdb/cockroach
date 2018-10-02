@@ -155,9 +155,9 @@ inner-join
  │    │    ├── columns: a:1(int) b:2(int!null) c:3(int!null)
  │    │    ├── constraint: /2/3/4: (/1/NULL - /1]
  │    │    └── fd: ()-->(2)
- │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
- │         └── a = c [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
- └── true [type=bool]
+ │    └── filters
+ │         └── a = c [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── filters
 
 opt
 SELECT * FROM (SELECT * FROM abc WHERE b=1) FULL OUTER JOIN xyz ON a=z
@@ -171,8 +171,8 @@ full-join
  │    ├── columns: a:1(int) b:2(int!null) c:3(int)
  │    ├── constraint: /2/3/4: [/1 - /1]
  │    └── fd: ()-->(2)
- └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-      └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+ └── filters
+      └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
 # --------------------------------------------------
 # CommuteLeftJoin
@@ -218,8 +218,8 @@ right-join
  │    ├── columns: a:1(int) b:2(int!null) c:3(int)
  │    ├── constraint: /2/3/4: [/1 - /1]
  │    └── fd: ()-->(2)
- └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-      └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+ └── filters
+      └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
 # --------------------------------------------------
 # CommuteRightJoin
@@ -265,8 +265,8 @@ left-join
  │    ├── columns: a:1(int) b:2(int!null) c:3(int)
  │    ├── constraint: /2/3/4: [/1 - /1]
  │    └── fd: ()-->(2)
- └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-      └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+ └── filters
+      └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
 # --------------------------------------------------
 # GenerateMergeJoins
@@ -277,6 +277,8 @@ SELECT * FROM abc JOIN xyz ON a=x
 ----
 inner-join (merge)
  ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int) z:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +5
  ├── fd: (1)==(5), (5)==(1)
  ├── scan abc@ab
  │    ├── columns: a:1(int) b:2(int) c:3(int)
@@ -284,11 +286,8 @@ inner-join (merge)
  ├── scan xyz@xy
  │    ├── columns: x:5(int) y:6(int) z:7(int)
  │    └── ordering: +5
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +5
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           └── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ └── filters
+      └── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 memo
 SELECT * FROM abc JOIN xyz ON a=x
@@ -324,6 +323,8 @@ SELECT * FROM abc JOIN xyz ON x=a
 ----
 inner-join (merge)
  ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int) z:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +5
  ├── fd: (1)==(5), (5)==(1)
  ├── scan abc@ab
  │    ├── columns: a:1(int) b:2(int) c:3(int)
@@ -331,17 +332,16 @@ inner-join (merge)
  ├── scan xyz@xy
  │    ├── columns: x:5(int) y:6(int) z:7(int)
  │    └── ordering: +5
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +5
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           └── x = a [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ └── filters
+      └── x = a [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 opt
 SELECT * FROM abc JOIN xyz ON a=x AND a=x AND x=a
 ----
 inner-join (merge)
  ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int) z:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +5
  ├── fd: (1)==(5), (5)==(1)
  ├── scan abc@ab
  │    ├── columns: a:1(int) b:2(int) c:3(int)
@@ -349,13 +349,10 @@ inner-join (merge)
  ├── scan xyz@xy
  │    ├── columns: x:5(int) y:6(int) z:7(int)
  │    └── ordering: +5
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +5
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-           ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-           └── x = a [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ └── filters
+      ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── x = a [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 # Use constraints to force the choice of an index which doesn't help, and
 # verify that we don't prefer a merge-join that has to sort both of its inputs.
@@ -373,9 +370,9 @@ inner-join
  │    ├── columns: x:5(int) y:6(int!null) z:7(int)
  │    ├── constraint: /6/7/8: [/1 - /1]
  │    └── fd: ()-->(6)
- └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-      ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-      └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+ └── filters
+      ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
 
 # Verify case where we generate multiple merge-joins.
 memo
@@ -439,14 +436,16 @@ Source expression:
    ├── scan stu
    │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
    │    └── key: (4-6)
-   └── filters [type=bool, outer=(1-6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)]
-        ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
-        ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
-        └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ])]
+   └── filters
+        ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+        ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+        └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
 
 New expression 1 of 2:
   inner-join (merge)
    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── left ordering: +1,+2,+3
+   ├── right ordering: +4,+5,+6
    ├── key: (4-6)
    ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
    ├── scan stu
@@ -457,17 +456,16 @@ New expression 1 of 2:
    │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
    │    ├── key: (4-6)
    │    └── ordering: +4,+5,+6
-   └── merge-on
-        ├── left ordering: +1,+2,+3
-        ├── right ordering: +4,+5,+6
-        └── filters [type=bool, outer=(1-6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)]
-             ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
-             ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
-             └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ])]
+   └── filters
+        ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+        ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+        └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
 
 New expression 2 of 2:
   inner-join (merge)
    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── left ordering: +3,+2,+1
+   ├── right ordering: +6,+5,+4
    ├── key: (4-6)
    ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
    ├── scan stu@uts
@@ -478,13 +476,10 @@ New expression 2 of 2:
    │    ├── columns: stu.s:4(int!null) stu.t:5(int!null) stu.u:6(int!null)
    │    ├── key: (4-6)
    │    └── ordering: +6,+5,+4
-   └── merge-on
-        ├── left ordering: +3,+2,+1
-        ├── right ordering: +6,+5,+4
-        └── filters [type=bool, outer=(1-6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)]
-             ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
-             ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
-             └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ])]
+   └── filters
+        ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+        ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+        └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
 
 ================================================================================
 GenerateMergeJoins
@@ -500,14 +495,16 @@ Source expression:
    ├── scan stu
    │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
    │    └── key: (1-3)
-   └── filters [type=bool, outer=(1-6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)]
-        ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
-        ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
-        └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ])]
+   └── filters
+        ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+        ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+        └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
 
 New expression 1 of 2:
   inner-join (merge)
    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── left ordering: +4,+5,+6
+   ├── right ordering: +1,+2,+3
    ├── key: (4-6)
    ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
    ├── scan stu
@@ -518,17 +515,16 @@ New expression 1 of 2:
    │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
    │    ├── key: (1-3)
    │    └── ordering: +1,+2,+3
-   └── merge-on
-        ├── left ordering: +4,+5,+6
-        ├── right ordering: +1,+2,+3
-        └── filters [type=bool, outer=(1-6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)]
-             ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
-             ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
-             └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ])]
+   └── filters
+        ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+        ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+        └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
 
 New expression 2 of 2:
   inner-join (merge)
    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) s:4(int!null) t:5(int!null) u:6(int!null)
+   ├── left ordering: +6,+5,+4
+   ├── right ordering: +3,+2,+1
    ├── key: (4-6)
    ├── fd: (1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)
    ├── scan stu@uts
@@ -539,13 +535,10 @@ New expression 2 of 2:
    │    ├── columns: stu.s:1(int!null) stu.t:2(int!null) stu.u:3(int!null)
    │    ├── key: (1-3)
    │    └── ordering: +3,+2,+1
-   └── merge-on
-        ├── left ordering: +6,+5,+4
-        ├── right ordering: +3,+2,+1
-        └── filters [type=bool, outer=(1-6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(4), (4)==(1), (2)==(5), (5)==(2), (3)==(6), (6)==(3)]
-             ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
-             ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
-             └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ])]
+   └── filters
+        ├── stu.s = stu.s [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+        ├── stu.t = stu.t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+        └── stu.u = stu.u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
 ----
 ----
 
@@ -567,6 +560,8 @@ SELECT * FROM stu LEFT OUTER JOIN abc ON (c,b,a) = (s,t,u)
 ----
 left-join (merge)
  ├── columns: s:1(int!null) t:2(int!null) u:3(int!null) a:4(int) b:5(int) c:6(int)
+ ├── left ordering: +1,+2,+3
+ ├── right ordering: +6,+5,+4
  ├── scan stu
  │    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null)
  │    ├── key: (1-3)
@@ -576,13 +571,10 @@ left-join (merge)
  │    ├── ordering: +6,+5,+4
  │    └── scan abc
  │         └── columns: a:4(int) b:5(int) c:6(int)
- └── merge-on
-      ├── left ordering: +1,+2,+3
-      ├── right ordering: +6,+5,+4
-      └── filters [type=bool, outer=(1-6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1), (2)==(5), (5)==(2), (3)==(4), (4)==(3)]
-           ├── c = s [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-           ├── b = t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
-           └── a = u [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ])]
+ └── filters
+      ├── c = s [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      ├── b = t [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+      └── a = u [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ]), fd=(3)==(4), (4)==(3)]
 
 # The ordering is coming from the right side.
 opt
@@ -590,6 +582,8 @@ SELECT * FROM abc RIGHT OUTER JOIN stu ON (c,b,a) = (s,t,u)
 ----
 left-join (merge)
  ├── columns: a:1(int) b:2(int) c:3(int) s:5(int!null) t:6(int!null) u:7(int!null)
+ ├── left ordering: +5,+6,+7
+ ├── right ordering: +3,+2,+1
  ├── scan stu
  │    ├── columns: s:5(int!null) t:6(int!null) u:7(int!null)
  │    ├── key: (5-7)
@@ -599,13 +593,10 @@ left-join (merge)
  │    ├── ordering: +3,+2,+1
  │    └── scan abc
  │         └── columns: a:1(int) b:2(int) c:3(int)
- └── merge-on
-      ├── left ordering: +5,+6,+7
-      ├── right ordering: +3,+2,+1
-      └── filters [type=bool, outer=(1-3,5-7), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]; /7: (/NULL - ]), fd=(3)==(5), (5)==(3), (2)==(6), (6)==(2), (1)==(7), (7)==(1)]
-           ├── c = s [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
-           ├── b = t [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
-           └── a = u [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+ └── filters
+      ├── c = s [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+      ├── b = t [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+      └── a = u [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
 # In these cases, we shouldn't pick up equivalencies.
 memo
@@ -677,6 +668,8 @@ SELECT * FROM abc JOIN xyz ON a=x AND a=y
 ----
 inner-join (merge)
  ├── columns: a:1(int!null) b:2(int) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +5
  ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
  ├── scan abc@ab
  │    ├── columns: a:1(int) b:2(int) c:3(int)
@@ -684,12 +677,9 @@ inner-join (merge)
  ├── scan xyz@xy
  │    ├── columns: x:5(int) y:6(int) z:7(int)
  │    └── ordering: +5
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +5
-      └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
-           ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-           └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters
+      ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # Verify that the required orderings are simplified: the equality columns are
 # (u,t)=(x,z) but we are able to utilize indexes on s,t,u and y,z.
@@ -698,6 +688,8 @@ SELECT * FROM (SELECT * FROM stu WHERE s = u) FULL OUTER JOIN (SELECT * FROM xyz
 ----
 full-join (merge)
  ├── columns: s:1(int) t:2(int) u:3(int) x:4(int) y:5(int) z:6(int)
+ ├── left ordering: +3,+2
+ ├── right ordering: +4,+6
  ├── fd: (1)==(3), (3)==(1), (4)==(5), (5)==(4)
  ├── select
  │    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null)
@@ -708,8 +700,8 @@ full-join (merge)
  │    │    ├── columns: s:1(int!null) t:2(int!null) u:3(int!null)
  │    │    ├── key: (1-3)
  │    │    └── ordering: +(1|3),+2
- │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
- │         └── s = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ │    └── filters
+ │         └── s = u [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
  ├── select
  │    ├── columns: x:4(int!null) y:5(int!null) z:6(int)
  │    ├── fd: (4)==(5), (5)==(4)
@@ -718,14 +710,11 @@ full-join (merge)
  │    │    ├── columns: x:4(int) y:5(int!null) z:6(int)
  │    │    ├── constraint: /5/6/7: (/NULL - ]
  │    │    └── ordering: +(4|5),+6
- │    └── filters [type=bool, outer=(4,5), constraints=(/4: (/NULL - ]; /5: (/NULL - ]), fd=(4)==(5), (5)==(4)]
- │         └── x = y [type=bool, outer=(4,5), constraints=(/4: (/NULL - ]; /5: (/NULL - ])]
- └── merge-on
-      ├── left ordering: +3,+2
-      ├── right ordering: +4,+6
-      └── filters [type=bool, outer=(2-4,6), constraints=(/2: (/NULL - ]; /3: (/NULL - ]; /4: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(4), (4)==(3), (2)==(6), (6)==(2)]
-           ├── u = x [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ])]
-           └── t = z [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+ │    └── filters
+ │         └── x = y [type=bool, outer=(4,5), constraints=(/4: (/NULL - ]; /5: (/NULL - ]), fd=(4)==(5), (5)==(4)]
+ └── filters
+      ├── u = x [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ]), fd=(3)==(4), (4)==(3)]
+      └── t = z [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
 
 # Verify multiple merge-joins can be chained.
 opt
@@ -733,9 +722,13 @@ SELECT * FROM abc JOIN xyz ON a=x AND b=y RIGHT OUTER JOIN stu ON a=s
 ----
 right-join (merge)
  ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int) s:9(int!null) t:10(int!null) u:11(int!null)
+ ├── left ordering: +1
+ ├── right ordering: +9
  ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
  ├── inner-join (merge)
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+ │    ├── left ordering: +1,+2
+ │    ├── right ordering: +5,+6
  │    ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
  │    ├── ordering: +(1|5)
  │    ├── scan abc@ab
@@ -744,27 +737,23 @@ right-join (merge)
  │    ├── scan xyz@xy
  │    │    ├── columns: x:5(int) y:6(int) z:7(int)
  │    │    └── ordering: +5,+6
- │    └── merge-on
- │         ├── left ordering: +1,+2
- │         ├── right ordering: +5,+6
- │         └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
- │              ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
- │              └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+ │    └── filters
+ │         ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ │         └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
  ├── scan stu
  │    ├── columns: s:9(int!null) t:10(int!null) u:11(int!null)
  │    ├── key: (9-11)
  │    └── ordering: +9
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +9
-      └── filters [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
-           └── a = s [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ])]
+ └── filters
+      └── a = s [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
 
 opt
 SELECT * FROM abc JOIN xyz ON a=x AND b=y RIGHT OUTER JOIN stu ON a=u AND y=t
 ----
 left-join (merge)
  ├── columns: a:1(int) b:2(int) c:3(int) x:5(int) y:6(int) z:7(int) s:9(int!null) t:10(int!null) u:11(int!null)
+ ├── left ordering: +11,+10
+ ├── right ordering: +1,+6
  ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
  ├── scan stu@uts
  │    ├── columns: s:9(int!null) t:10(int!null) u:11(int!null)
@@ -772,6 +761,8 @@ left-join (merge)
  │    └── ordering: +11,+10
  ├── inner-join (merge)
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int) x:5(int!null) y:6(int!null) z:7(int)
+ │    ├── left ordering: +1,+2
+ │    ├── right ordering: +5,+6
  │    ├── fd: (1)==(5), (5)==(1), (2)==(6), (6)==(2)
  │    ├── ordering: +(1|5),+(2|6)
  │    ├── scan abc@ab
@@ -780,18 +771,12 @@ left-join (merge)
  │    ├── scan xyz@xy
  │    │    ├── columns: x:5(int) y:6(int) z:7(int)
  │    │    └── ordering: +5,+6
- │    └── merge-on
- │         ├── left ordering: +1,+2
- │         ├── right ordering: +5,+6
- │         └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
- │              ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
- │              └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
- └── merge-on
-      ├── left ordering: +11,+10
-      ├── right ordering: +1,+6
-      └── filters [type=bool, outer=(1,6,10,11), constraints=(/1: (/NULL - ]; /6: (/NULL - ]; /10: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1), (6)==(10), (10)==(6)]
-           ├── a = u [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ])]
-           └── y = t [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ])]
+ │    └── filters
+ │         ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ │         └── b = y [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+ └── filters
+      ├── a = u [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+      └── y = t [type=bool, outer=(6,10), constraints=(/6: (/NULL - ]; /10: (/NULL - ]), fd=(6)==(10), (10)==(6)]
 
 # --------------------------------------------------
 # GenerateLookupJoins
@@ -843,8 +828,8 @@ inner-join (lookup abcd@secondary)
  ├── fd: (1)==(4), (4)==(1)
  ├── scan small
  │    └── columns: m:1(int) n:2(int)
- └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
-      └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ └── filters
+      └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
 
 # Covering case, left-join.
 opt
@@ -855,8 +840,8 @@ left-join (lookup abcd@secondary)
  ├── key columns: [1] = [4]
  ├── scan small
  │    └── columns: m:1(int) n:2(int)
- └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
-      └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ └── filters
+      └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
 
 # Non-covering case.
 opt
@@ -872,9 +857,9 @@ inner-join (lookup abcd)
  │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
  │    ├── scan small
  │    │    └── columns: m:1(int) n:2(int)
- │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
- │         └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
- └── true [type=bool]
+ │    └── filters
+ │         └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ └── filters
 
 # Non-covering case, left join.
 opt
@@ -889,9 +874,9 @@ left-join (lookup abcd)
  │    ├── fd: (7)-->(4,5)
  │    ├── scan small
  │    │    └── columns: m:1(int) n:2(int)
- │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
- │         └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
- └── true [type=bool]
+ │    └── filters
+ │         └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ └── filters
 
 # Non-covering case, extra filter bound by index.
 opt
@@ -907,10 +892,10 @@ inner-join (lookup abcd)
  │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
  │    ├── scan small
  │    │    └── columns: m:1(int) n:2(int)
- │    └── filters [type=bool, outer=(1,2,4,5), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(4), (4)==(1)]
- │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │    └── filters
+ │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
  │         └── b > n [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
- └── true [type=bool]
+ └── filters
 
 # Non-covering case, extra filter bound by index, left join.
 opt
@@ -925,10 +910,10 @@ left-join (lookup abcd)
  │    ├── fd: (7)-->(4,5)
  │    ├── scan small
  │    │    └── columns: m:1(int) n:2(int)
- │    └── filters [type=bool, outer=(1,2,4,5), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(4), (4)==(1)]
- │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │    └── filters
+ │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
  │         └── b > n [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
- └── true [type=bool]
+ └── filters
 
 # Non-covering case, extra filter not bound by index.
 opt
@@ -944,9 +929,9 @@ inner-join (lookup abcd)
  │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
  │    ├── scan small
  │    │    └── columns: m:1(int) n:2(int)
- │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
- │         └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
- └── filters [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+ │    └── filters
+ │         └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ └── filters
       └── c > n [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 # Non-covering case, extra filter not bound by index, left join.
@@ -961,8 +946,8 @@ right-join
  │    └── columns: a:4(int) b:5(int) c:6(int)
  ├── scan small
  │    └── columns: m:1(int) n:2(int)
- └── filters [type=bool, outer=(1,2,4,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /4: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(4), (4)==(1)]
-      ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ └── filters
+      ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
       └── c > n [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 
@@ -982,9 +967,9 @@ Source expression:
    │    └── columns: a:1(int) b:2(int) c:3(int)
    ├── scan xyz
    │    └── columns: x:5(int) y:6(int) z:7(int)
-   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
-        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+   └── filters
+        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+        └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 New expression 1 of 1:
   inner-join (lookup xyz@xy)
@@ -993,9 +978,9 @@ New expression 1 of 1:
    ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
    ├── scan abc
    │    └── columns: a:1(int) b:2(int) c:3(int)
-   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
-        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+   └── filters
+        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+        └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 ================================================================================
 GenerateLookupJoins
@@ -1008,9 +993,9 @@ Source expression:
    │    └── columns: x:5(int) y:6(int) z:7(int)
    ├── scan abc
    │    └── columns: a:1(int) b:2(int) c:3(int)
-   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
-        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+   └── filters
+        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+        └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 New expression 1 of 1:
   inner-join (lookup abc@ab)
@@ -1019,9 +1004,9 @@ New expression 1 of 1:
    ├── fd: (1)==(5,6), (5)==(1,6), (6)==(1,5)
    ├── scan xyz
    │    └── columns: x:5(int) y:6(int) z:7(int)
-   └── filters [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5,6), (5)==(1,6), (6)==(1,5)]
-        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-        └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+   └── filters
+        ├── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+        └── a = y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 ----
 ----
 
@@ -1041,8 +1026,8 @@ Source expression:
    │    └── columns: a:1(int) b:2(int) c:3(int)
    ├── scan xyz
    │    └── columns: x:5(int) y:6(int) z:7(int)
-   └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-        └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+   └── filters
+        └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
 No new expressions.
 
@@ -1057,8 +1042,8 @@ Source expression:
    │    └── columns: x:5(int) y:6(int) z:7(int)
    ├── scan abc
    │    └── columns: a:1(int) b:2(int) c:3(int)
-   └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-        └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+   └── filters
+        └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
 New expression 1 of 1:
   inner-join (lookup abc@ab)
@@ -1067,8 +1052,8 @@ New expression 1 of 1:
    ├── fd: (1)==(7), (7)==(1)
    ├── scan xyz
    │    └── columns: x:5(int) y:6(int) z:7(int)
-   └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-        └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+   └── filters
+        └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 ----
 ----
 
@@ -1086,8 +1071,8 @@ Source expression:
    │    └── columns: x:5(int) y:6(int) z:7(int)
    ├── scan abc
    │    └── columns: a:1(int) b:2(int) c:3(int)
-   └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-        └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+   └── filters
+        └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
 New expression 1 of 1:
   left-join (lookup abc@ab)
@@ -1095,8 +1080,8 @@ New expression 1 of 1:
    ├── key columns: [7] = [1]
    ├── scan xyz
    │    └── columns: x:5(int) y:6(int) z:7(int)
-   └── filters [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
-        └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ])]
+   └── filters
+        └── a = z [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 ----
 ----
 
@@ -1116,8 +1101,8 @@ Source expression:
    │    └── columns: a:1(int) b:2(int) c:3(int)
    ├── scan xyz
    │    └── columns: x:5(int) y:6(int) z:7(int)
-   └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
-        └── c = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+   └── filters
+        └── c = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
 
 New expression 1 of 1:
   inner-join (lookup xyz@xy)
@@ -1126,8 +1111,8 @@ New expression 1 of 1:
    ├── fd: (3)==(5), (5)==(3)
    ├── scan abc
    │    └── columns: a:1(int) b:2(int) c:3(int)
-   └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
-        └── c = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+   └── filters
+        └── c = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
 
 ================================================================================
 GenerateLookupJoins
@@ -1140,8 +1125,8 @@ Source expression:
    │    └── columns: x:5(int) y:6(int) z:7(int)
    ├── scan abc
    │    └── columns: a:1(int) b:2(int) c:3(int)
-   └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
-        └── c = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+   └── filters
+        └── c = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
 
 No new expressions.
 ----
@@ -1161,8 +1146,8 @@ Source expression:
    │    └── columns: a:1(int) b:2(int) c:3(int)
    ├── scan xyz
    │    └── columns: x:5(int) y:6(int) z:7(int)
-   └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
-        └── c = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+   └── filters
+        └── c = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
 
 New expression 1 of 1:
   left-join (lookup xyz@xy)
@@ -1170,8 +1155,8 @@ New expression 1 of 1:
    ├── key columns: [3] = [5]
    ├── scan abc
    │    └── columns: a:1(int) b:2(int) c:3(int)
-   └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
-        └── c = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+   └── filters
+        └── c = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
 ----
 ----
 
@@ -1190,8 +1175,8 @@ Source expression:
    │    └── columns: x:5(int) y:6(int) z:7(int)
    ├── scan abc
    │    └── columns: a:1(int) b:2(int) c:3(int)
-   └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
-        └── c = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+   └── filters
+        └── c = x [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
 
 No new expressions.
 ----
@@ -1215,8 +1200,8 @@ inner-join (lookup abcd@secondary)
  ├── fd: (1)==(4), (4)==(1)
  ├── scan small
  │    └── columns: m:1(int) n:2(int)
- └── filters [type=bool, outer=(1,4,5), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /5: [/2 - ]), fd=(1)==(4), (4)==(1)]
-      ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ └── filters
+      ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
       └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
 
 # Covering case, left-join.
@@ -1228,8 +1213,8 @@ left-join (lookup abcd@secondary)
  ├── key columns: [1] = [4]
  ├── scan small
  │    └── columns: m:1(int) n:2(int)
- └── filters [type=bool, outer=(1,4,5), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /5: [/2 - ]), fd=(1)==(4), (4)==(1)]
-      ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ └── filters
+      ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
       └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
 
 # Non-covering case.
@@ -1246,10 +1231,10 @@ inner-join (lookup abcd)
  │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
  │    ├── scan small
  │    │    └── columns: m:1(int) n:2(int)
- │    └── filters [type=bool, outer=(1,4,5), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /5: [/2 - ]), fd=(1)==(4), (4)==(1)]
- │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │    └── filters
+ │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
  │         └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
- └── true [type=bool]
+ └── filters
 
 # Non-covering case, left join.
 opt
@@ -1264,10 +1249,10 @@ left-join (lookup abcd)
  │    ├── fd: (7)-->(4,5)
  │    ├── scan small
  │    │    └── columns: m:1(int) n:2(int)
- │    └── filters [type=bool, outer=(1,4,5), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /5: [/2 - ]), fd=(1)==(4), (4)==(1)]
- │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │    └── filters
+ │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
  │         └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
- └── true [type=bool]
+ └── filters
 
 # Non-covering case, extra filter bound by index.
 opt
@@ -1283,11 +1268,11 @@ inner-join (lookup abcd)
  │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
  │    ├── scan small
  │    │    └── columns: m:1(int) n:2(int)
- │    └── filters [type=bool, outer=(1,2,4,5), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /4: (/NULL - ]; /5: [/2 - ]), fd=(1)==(4), (4)==(1)]
- │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │    └── filters
+ │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
  │         ├── b > n [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
  │         └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
- └── true [type=bool]
+ └── filters
 
 # Non-covering case, extra filter bound by index, left join.
 opt
@@ -1302,11 +1287,11 @@ left-join (lookup abcd)
  │    ├── fd: (7)-->(4,5)
  │    ├── scan small
  │    │    └── columns: m:1(int) n:2(int)
- │    └── filters [type=bool, outer=(1,2,4,5), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /4: (/NULL - ]; /5: [/2 - ]), fd=(1)==(4), (4)==(1)]
- │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │    └── filters
+ │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
  │         ├── b > n [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
  │         └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
- └── true [type=bool]
+ └── filters
 
 # Non-covering case, extra filter not bound by index.
 opt
@@ -1322,10 +1307,10 @@ inner-join (lookup abcd)
  │    ├── fd: (7)-->(4,5), (1)==(4), (4)==(1)
  │    ├── scan small
  │    │    └── columns: m:1(int) n:2(int)
- │    └── filters [type=bool, outer=(1,4,5), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /5: [/2 - ]), fd=(1)==(4), (4)==(1)]
- │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │    └── filters
+ │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
  │         └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
- └── filters [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+ └── filters
       └── c > n [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
 
 # Non-covering case, extra filter not bound by index, left join.
@@ -1340,10 +1325,10 @@ right-join
  │    ├── columns: a:4(int) b:5(int!null) c:6(int)
  │    ├── scan abcd
  │    │    └── columns: a:4(int) b:5(int) c:6(int)
- │    └── filters [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
+ │    └── filters
  │         └── b > 1 [type=bool, outer=(5), constraints=(/5: [/2 - ]; tight)]
  ├── scan small
  │    └── columns: m:1(int) n:2(int)
- └── filters [type=bool, outer=(1,2,4,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /4: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(4), (4)==(1)]
-      ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ └── filters
+      ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
       └── c > n [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]

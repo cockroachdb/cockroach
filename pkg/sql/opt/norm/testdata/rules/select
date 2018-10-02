@@ -53,9 +53,9 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(2,4), constraints=(/2: (/NULL - /4]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+ └── filters
       ├── i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
-      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 opt expect=MergeSelects
 SELECT * FROM (SELECT * FROM a WHERE i>1 AND i<10) WHERE s='foo' OR k=5
@@ -68,7 +68,7 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(1,2,4), constraints=(/2: [/2 - /9])]
+ └── filters
       ├── i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
       ├── i < 10 [type=bool, outer=(2), constraints=(/2: (/NULL - /9]; tight)]
       └── (s = 'foo') OR (k = 5) [type=bool, outer=(1,4)]
@@ -87,9 +87,9 @@ project
  │    ├── fd: ()-->(3)
  │    ├── scan a
  │    │    └── columns: i:2(int) f:3(float)
- │    └── filters [type=bool, outer=(3), constraints=(/3: [/10.0 - /10.0]; tight), fd=()-->(3)]
- │         └── f = 10.0 [type=bool, outer=(3), constraints=(/3: [/10.0 - /10.0]; tight)]
- └── projections [outer=(2,3)]
+ │    └── filters
+ │         └── f = 10.0 [type=bool, outer=(3), constraints=(/3: [/10.0 - /10.0]; tight), fd=()-->(3)]
+ └── projections
       └── i + 1 [type=int, outer=(2)]
 
 # Don't push down select if it depends on computed column that can't be inlined.
@@ -105,10 +105,10 @@ select
  │    ├── side-effects
  │    ├── scan a
  │    │    └── columns: i:2(int) f:3(float)
- │    └── projections [outer=(2,3), side-effects]
+ │    └── projections
  │         └── i / 2 [type=decimal, outer=(2), side-effects]
- └── filters [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
-      └── div = 2 [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
+ └── filters
+      └── div = 2 [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
 
 # Push down some conjuncts, but not others.
 opt expect=PushSelectIntoProject
@@ -127,13 +127,13 @@ select
  │    │    ├── fd: ()-->(2,3)
  │    │    ├── scan a
  │    │    │    └── columns: i:2(int) f:3(float)
- │    │    └── filters [type=bool, outer=(2,3), constraints=(/2: [/1 - /1]; /3: [/10.0 - /10.0]; tight), fd=()-->(2,3)]
- │    │         ├── f = 10.0 [type=bool, outer=(3), constraints=(/3: [/10.0 - /10.0]; tight)]
- │    │         └── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
- │    └── projections [outer=(2,3), side-effects]
+ │    │    └── filters
+ │    │         ├── f = 10.0 [type=bool, outer=(3), constraints=(/3: [/10.0 - /10.0]; tight), fd=()-->(3)]
+ │    │         └── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ │    └── projections
  │         └── i / 2 [type=decimal, outer=(2), side-effects]
- └── filters [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
-      └── div = 2 [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight)]
+ └── filters
+      └── div = 2 [type=bool, outer=(6), constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
 
 # Detect PushSelectIntoProject and FilterUnusedSelectCols dependency cycle.
 opt
@@ -152,12 +152,12 @@ project
  │    │    ├── fd: (2,3)-->(6)
  │    │    ├── scan a
  │    │    │    └── columns: i:2(int) f:3(float)
- │    │    └── aggregations [outer=(3)]
+ │    │    └── aggregations
  │    │         └── sum [type=float, outer=(3)]
- │    │              └── variable: f [type=float, outer=(3)]
- │    └── filters [type=bool, outer=(6), constraints=(/6: [/10.0 - /10.0]; tight), fd=()-->(6)]
- │         └── sum = 10.0 [type=bool, outer=(6), constraints=(/6: [/10.0 - /10.0]; tight)]
- └── projections [outer=(3)]
+ │    │              └── variable: f [type=float]
+ │    └── filters
+ │         └── sum = 10.0 [type=bool, outer=(6), constraints=(/6: [/10.0 - /10.0]; tight), fd=()-->(6)]
+ └── projections
       └── f + 1.1 [type=float, outer=(3)]
 
 # --------------------------------------------------
@@ -175,6 +175,8 @@ select
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── left-join (merge)
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ │    ├── left ordering: +1
+ │    ├── right ordering: +6
  │    ├── key: (1,6)
  │    ├── fd: (1)-->(2-5), (6)-->(7)
  │    ├── scan a
@@ -189,12 +191,9 @@ select
  │    │    ├── key: (6)
  │    │    ├── fd: (6)-->(7)
  │    │    └── ordering: +6
- │    └── merge-on
- │         ├── left ordering: +1
- │         ├── right ordering: +6
- │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │              └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- └── filters [type=bool, outer=(6)]
+ │    └── filters
+ │         └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ └── filters
       └── (x = 6) OR (x IS NULL) [type=bool, outer=(6)]
 
 opt expect=PushSelectCondLeftIntoJoinLeftAndRight
@@ -202,6 +201,8 @@ SELECT * FROM a WHERE EXISTS (SELECT * FROM xy WHERE a.k=xy.x) AND a.k > 5
 ----
 semi-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
@@ -216,17 +217,16 @@ semi-join (merge)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters
+      └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 opt expect=PushSelectCondLeftIntoJoinLeftAndRight
 SELECT * FROM a WHERE NOT EXISTS (SELECT * FROM xy WHERE a.k=xy.x) AND a.k > 5
 ----
 anti-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
@@ -241,11 +241,8 @@ anti-join (merge)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters
+      └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # Only the filters bound by the right side are mapped and pushed down.
 opt expect=PushSelectCondRightIntoJoinLeftAndRight
@@ -270,16 +267,16 @@ select
  │    │    │    ├── constraint: /6: [/10 - ]
  │    │    │    ├── key: (6)
  │    │    │    └── fd: (6)-->(7)
- │    │    └── filters [type=bool, outer=(6,7)]
+ │    │    └── filters
  │    │         ├── (x + y) > 5 [type=bool, outer=(6,7)]
  │    │         └── (y % 2) = 0 [type=bool, outer=(7)]
- │    └── filters [type=bool, outer=(1,2,6,7), constraints=(/1: [/10 - ]; /2: (/NULL - ]; /6: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(6), (6)==(1), (2)==(7), (7)==(2)]
- │         ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- │         ├── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ │    └── filters
+ │         ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │         ├── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
  │         ├── (k + i) > 5 [type=bool, outer=(1,2)]
  │         ├── (i % 2) = 0 [type=bool, outer=(2)]
  │         └── k >= 10 [type=bool, outer=(1), constraints=(/1: [/10 - ]; tight)]
- └── filters [type=bool, outer=(2,6)]
+ └── filters
       └── ((x + i) = 6) OR (x IS NULL) [type=bool, outer=(2,6)]
 
 # --------------------------------------------------
@@ -301,10 +298,10 @@ left-join (lookup xy)
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
- │    └── filters [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight), fd=()-->(3)]
- │         └── f = 1.1 [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight)]
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    └── filters
+ │         └── f = 1.1 [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight), fd=()-->(3)]
+ └── filters
+      └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 opt expect=PushSelectIntoJoinLeft
 SELECT * FROM a LEFT JOIN xy ON a.k=xy.x
@@ -327,12 +324,12 @@ select
  │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    │    ├── key: (1)
  │    │    │    └── fd: (1)-->(2-5)
- │    │    └── filters [type=bool, outer=(3,4), constraints=(/3: [/1.1 - /1.1]), fd=()-->(3)]
- │    │         ├── f = 1.1 [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight)]
+ │    │    └── filters
+ │    │         ├── f = 1.1 [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight), fd=()-->(3)]
  │    │         └── (s = 'foo') OR (s = 'bar') [type=bool, outer=(4)]
- │    └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │         └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- └── filters [type=bool, outer=(2,7)]
+ │    └── filters
+ │         └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ └── filters
       └── (i < y) OR (y IS NULL) [type=bool, outer=(2,7)]
 
 # Pushdown constant condition.
@@ -353,9 +350,9 @@ left-join
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
- │    └── filters [type=bool, outer=(2), constraints=(/2: [/100 - /100]), fd=()-->(2)]
+ │    └── filters
  │         ├── $1 > '2000-01-01T1:00:00' [type=bool]
- │         └── i = 100 [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight)]
+ │         └── i = 100 [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight), fd=()-->(2)]
  ├── select
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── has-placeholder
@@ -365,9 +362,9 @@ left-join
  │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    ├── key: (6)
  │    │    └── fd: (6)-->(7)
- │    └── filters [type=bool]
+ │    └── filters
  │         └── $1 > '2000-01-01T1:00:00' [type=bool]
- └── true [type=bool]
+ └── filters
 
 # Don't push down conditions in case of RIGHT JOIN.
 opt
@@ -379,6 +376,8 @@ select
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── right-join (merge)
  │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ │    ├── left ordering: +1
+ │    ├── right ordering: +6
  │    ├── key: (1,6)
  │    ├── fd: (1)-->(2-5), (6)-->(7)
  │    ├── scan a
@@ -391,12 +390,9 @@ select
  │    │    ├── key: (6)
  │    │    ├── fd: (6)-->(7)
  │    │    └── ordering: +6
- │    └── merge-on
- │         ├── left ordering: +1
- │         ├── right ordering: +6
- │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │              └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- └── filters [type=bool, outer=(2)]
+ │    └── filters
+ │         └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ └── filters
       └── (i = 100) OR (i IS NULL) [type=bool, outer=(2)]
 
 # Don't push down conditions in case of FULL JOIN.
@@ -409,6 +405,8 @@ select
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── full-join (merge)
  │    ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ │    ├── left ordering: +1
+ │    ├── right ordering: +6
  │    ├── key: (1,6)
  │    ├── fd: (1)-->(2-5), (6)-->(7)
  │    ├── scan a
@@ -421,12 +419,9 @@ select
  │    │    ├── key: (6)
  │    │    ├── fd: (6)-->(7)
  │    │    └── ordering: +6
- │    └── merge-on
- │         ├── left ordering: +1
- │         ├── right ordering: +6
- │         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
- │              └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
- └── filters [type=bool, outer=(2)]
+ │    └── filters
+ │         └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ └── filters
       └── (i = 100) OR (i IS NULL) [type=bool, outer=(2)]
 
 # Push into semi-join.
@@ -435,6 +430,8 @@ SELECT * FROM a WHERE EXISTS(SELECT * FROM xy WHERE k=x) AND a.i=0
 ----
 semi-join (merge)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ ├── left ordering: +1 opt(2)
+ ├── right ordering: +6
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3-5)
  ├── select
@@ -447,18 +444,15 @@ semi-join (merge)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
  │    │    └── ordering: +1 opt(2)
- │    └── filters [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
- │         └── i = 0 [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight)]
+ │    └── filters
+ │         └── i = 0 [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
  ├── scan xy
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters
+      └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # Push into anti-join.
 opt expect=PushSelectIntoJoinLeft
@@ -466,6 +460,8 @@ SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM xy WHERE k=x) AND a.i=0
 ----
 anti-join (merge)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
+ ├── left ordering: +1 opt(2)
+ ├── right ordering: +6
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3-5)
  ├── select
@@ -478,18 +474,15 @@ anti-join (merge)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
  │    │    └── ordering: +1 opt(2)
- │    └── filters [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
- │         └── i = 0 [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight)]
+ │    └── filters
+ │         └── i = 0 [type=bool, outer=(2), constraints=(/2: [/0 - /0]; tight), fd=()-->(2)]
  ├── scan xy
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters
+      └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # --------------------------------------------------
 # PushSelectIntoJoinRight
@@ -510,10 +503,10 @@ left-join (lookup xy)
  │    │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string) j:7(jsonb)
  │    │    ├── key: (3)
  │    │    └── fd: (3)-->(4-7)
- │    └── filters [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight), fd=()-->(5)]
- │         └── f = 1.1 [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight)]
- └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-      └── x = k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ │    └── filters
+ │         └── f = 1.1 [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight), fd=()-->(5)]
+ └── filters
+      └── x = k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
 
 opt expect=PushSelectIntoJoinRight
 SELECT * FROM xy RIGHT JOIN a ON xy.x=a.k
@@ -536,12 +529,12 @@ select
  │    │    │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string) j:7(jsonb)
  │    │    │    ├── key: (3)
  │    │    │    └── fd: (3)-->(4-7)
- │    │    └── filters [type=bool, outer=(5,6), constraints=(/5: [/1.1 - /1.1]), fd=()-->(5)]
- │    │         ├── f = 1.1 [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight)]
+ │    │    └── filters
+ │    │         ├── f = 1.1 [type=bool, outer=(5), constraints=(/5: [/1.1 - /1.1]; tight), fd=()-->(5)]
  │    │         └── (s = 'foo') OR (s = 'bar') [type=bool, outer=(6)]
- │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
- │         └── x = k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
- └── filters [type=bool, outer=(2,4)]
+ │    └── filters
+ │         └── x = k [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── filters
       └── (i < y) OR (y IS NULL) [type=bool, outer=(2,4)]
 
 # Don't push down conditions in case of LEFT JOIN.
@@ -554,6 +547,8 @@ select
  ├── fd: (1)-->(2), (3)-->(4-7)
  ├── left-join (merge)
  │    ├── columns: x:1(int!null) y:2(int) k:3(int) i:4(int) f:5(float) s:6(string) j:7(jsonb)
+ │    ├── left ordering: +1
+ │    ├── right ordering: +3
  │    ├── key: (1,3)
  │    ├── fd: (1)-->(2), (3)-->(4-7)
  │    ├── scan xy
@@ -566,12 +561,9 @@ select
  │    │    ├── key: (3)
  │    │    ├── fd: (3)-->(4-7)
  │    │    └── ordering: +3
- │    └── merge-on
- │         ├── left ordering: +1
- │         ├── right ordering: +3
- │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
- │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
- └── filters [type=bool, outer=(4)]
+ │    └── filters
+ │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── filters
       └── (i = 100) OR (i IS NULL) [type=bool, outer=(4)]
 
 # Don't push down conditions in case of FULL JOIN.
@@ -584,6 +576,8 @@ select
  ├── fd: (1)-->(2), (3)-->(4-7)
  ├── full-join (merge)
  │    ├── columns: x:1(int) y:2(int) k:3(int) i:4(int) f:5(float) s:6(string) j:7(jsonb)
+ │    ├── left ordering: +1
+ │    ├── right ordering: +3
  │    ├── key: (1,3)
  │    ├── fd: (1)-->(2), (3)-->(4-7)
  │    ├── scan xy
@@ -596,12 +590,9 @@ select
  │    │    ├── key: (3)
  │    │    ├── fd: (3)-->(4-7)
  │    │    └── ordering: +3
- │    └── merge-on
- │         ├── left ordering: +1
- │         ├── right ordering: +3
- │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
- │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
- └── filters [type=bool, outer=(4)]
+ │    └── filters
+ │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ └── filters
       └── (i = 100) OR (i IS NULL) [type=bool, outer=(4)]
 
 # --------------------------------------------------
@@ -612,6 +603,8 @@ SELECT * FROM a, xy WHERE a.k=xy.x AND (a.s='foo' OR xy.y<100)
 ----
 inner-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
  ├── scan a
@@ -624,18 +617,17 @@ inner-join (merge)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(1,4,6,7), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-           └── (s = 'foo') OR (y < 100) [type=bool, outer=(4,7)]
+ └── filters
+      ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      └── (s = 'foo') OR (y < 100) [type=bool, outer=(4,7)]
 
 opt expect=MergeSelectInnerJoin
 SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE (a.s='foo' OR xy.y<100)
 ----
 inner-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
  ├── scan a
@@ -648,30 +640,9 @@ inner-join (merge)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(1,4,6,7), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-           └── (s = 'foo') OR (y < 100) [type=bool, outer=(4,7)]
-
-opt expect=MergeSelectInnerJoin
-SELECT * FROM a INNER JOIN xy ON a.k=xy.x WHERE False
-----
-inner-join
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
- ├── cardinality: [0 - 0]
- ├── key: (1,6)
- ├── fd: (1)-->(2-5), (6)-->(7)
- ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- ├── scan xy
- │    ├── columns: x:6(int!null) y:7(int)
- │    ├── key: (6)
- │    └── fd: (6)-->(7)
- └── false [type=bool]
+ └── filters
+      ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      └── (s = 'foo') OR (y < 100) [type=bool, outer=(4,7)]
 
 # Don't merge with LEFT JOIN.
 opt expect-not=MergeSelectInnerJoin
@@ -693,8 +664,8 @@ select
  │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    ├── key: (6)
  │    │    └── fd: (6)-->(7)
- │    └── true [type=bool]
- └── filters [type=bool, outer=(1,6)]
+ │    └── filters
+ └── filters
       └── (k = x) OR (x IS NULL) [type=bool, outer=(1,6)]
 
 # Don't merge with RIGHT JOIN.
@@ -717,8 +688,8 @@ select
  │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    ├── key: (6)
  │    │    └── fd: (6)-->(7)
- │    └── true [type=bool]
- └── filters [type=bool, outer=(1,6)]
+ │    └── filters
+ └── filters
       └── (k = x) OR (k IS NULL) [type=bool, outer=(1,6)]
 
 # Don't merge with FULL JOIN.
@@ -741,8 +712,8 @@ select
  │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    ├── key: (6)
  │    │    └── fd: (6)-->(7)
- │    └── true [type=bool]
- └── filters [type=bool, outer=(1,6)]
+ │    └── filters
+ └── filters
       └── ((k = x) OR (k IS NULL)) OR (x IS NULL) [type=bool, outer=(1,6)]
 
 # --------------------------------------------------
@@ -764,13 +735,13 @@ inner-join (lookup a)
  │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    ├── key: (6)
  │    │    └── fd: (6)-->(7)
- │    └── filters [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
- │         └── y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
- └── filters [type=bool, outer=(1-4,6,7), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: [/1.1 - /1.1]; /4: [/'foo' - /'foo']; /6: (/NULL - ]; /7: (/NULL - ]), fd=()-->(3,4), (1)==(6), (6)==(1)]
-      ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │    └── filters
+ │         └── y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
+ └── filters
+      ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       ├── i < y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
-      ├── f = 1.1 [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight)]
-      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+      ├── f = 1.1 [type=bool, outer=(3), constraints=(/3: [/1.1 - /1.1]; tight), fd=()-->(3)]
+      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 opt
 SELECT * FROM a, xy WHERE a.i=100 AND $1>'2000-01-01T1:00:00' AND xy.x=a.k
@@ -790,11 +761,11 @@ inner-join (lookup xy)
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
- │    └── filters [type=bool, outer=(2), constraints=(/2: [/100 - /100]), fd=()-->(2)]
+ │    └── filters
  │         ├── $1 > '2000-01-01T1:00:00' [type=bool]
- │         └── i = 100 [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight)]
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      ├── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ │         └── i = 100 [type=bool, outer=(2), constraints=(/2: [/100 - /100]; tight), fd=()-->(2)]
+ └── filters
+      ├── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       └── $1 > '2000-01-01T1:00:00' [type=bool]
 
 # --------------------------------------------------
@@ -815,12 +786,12 @@ group-by
  │    ├── fd: ()-->(2)
  │    ├── scan a
  │    │    └── columns: i:2(int)
- │    └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
- │         └── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
- └── aggregations [outer=(2)]
+ │    └── filters
+ │         └── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ └── aggregations
       ├── count-rows [type=int]
       └── const-agg [type=int, outer=(2)]
-           └── variable: i [type=int, outer=(2)]
+           └── variable: i [type=int]
 
 # Push down into GroupBy with no aggregations.
 opt expect=PushSelectIntoGroupBy
@@ -836,11 +807,11 @@ distinct-on
  │    ├── fd: ()-->(2)
  │    ├── scan a
  │    │    └── columns: i:2(int)
- │    └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
- │         └── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
- └── aggregations [outer=(2)]
+ │    └── filters
+ │         └── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+ └── aggregations
       └── const-agg [type=int, outer=(2)]
-           └── variable: i [type=int, outer=(2)]
+           └── variable: i [type=int]
 
 # Push down only conditions that do not depend on aggregations.
 opt expect=PushSelectIntoGroupBy
@@ -863,15 +834,15 @@ select
  │    │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
  │    │    │    ├── key: (1)
  │    │    │    └── fd: (1)-->(2,4)
- │    │    └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
- │    │         └── i = k [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
- │    └── aggregations [outer=(2,4)]
+ │    │    └── filters
+ │    │         └── i = k [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+ │    └── aggregations
  │         ├── max [type=string, outer=(4)]
- │         │    └── variable: s [type=string, outer=(4)]
+ │         │    └── variable: s [type=string]
  │         └── const-agg [type=int, outer=(2)]
- │              └── variable: i [type=int, outer=(2)]
- └── filters [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
-      └── max = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
+ │              └── variable: i [type=int]
+ └── filters
+      └── max = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
 
 # DistinctOn case.
 opt expect=PushSelectIntoGroupBy
@@ -886,11 +857,11 @@ distinct-on
  │    ├── columns: i:2(int!null) f:3(float!null) s:4(string)
  │    ├── scan a
  │    │    └── columns: i:2(int) f:3(float) s:4(string)
- │    └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+ │    └── filters
  │         └── i > f [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
- └── aggregations [outer=(4)]
+ └── aggregations
       └── first-agg [type=string, outer=(4)]
-           └── variable: s [type=string, outer=(4)]
+           └── variable: s [type=string]
 
 # DistinctOn case with a ConstAgg.
 opt expect=PushSelectIntoGroupBy
@@ -917,17 +888,17 @@ distinct-on
  │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float)
  │    │    │    ├── key: (1)
  │    │    │    └── fd: (1)-->(2,3)
- │    │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ │    │    └── filters
  │    │         └── k > f [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
- │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
- │         └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
- └── aggregations [outer=(2,3,6)]
+ │    └── filters
+ │         └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+ └── aggregations
       ├── first-agg [type=int, outer=(2)]
-      │    └── variable: i [type=int, outer=(2)]
+      │    └── variable: i [type=int]
       ├── first-agg [type=int, outer=(6)]
-      │    └── variable: x [type=int, outer=(6)]
+      │    └── variable: x [type=int]
       └── const-agg [type=float, outer=(3)]
-           └── variable: f [type=float, outer=(3)]
+           └── variable: f [type=float]
 
 # Do *not* push down into scalar GroupBy.
 opt expect-not=PushSelectIntoGroupBy
@@ -947,9 +918,9 @@ select
  │    ├── scan a
  │    └── aggregations
  │         └── count-rows [type=int]
- └── filters [type=bool, outer=(6), constraints=(/6: [/0 - /0]), fd=()-->(6)]
+ └── filters
       ├── $1 < '2000-01-01T10:00:00' [type=bool]
-      └── count_rows = 0 [type=bool, outer=(6), constraints=(/6: [/0 - /0]; tight)]
+      └── count_rows = 0 [type=bool, outer=(6), constraints=(/6: [/0 - /0]; tight), fd=()-->(6)]
 
 # --------------------------------------------------
 # RemoveNotNullCondition
@@ -996,7 +967,7 @@ select
  │    ├── constraint: /1: [/5 - ]
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - /99]; tight)]
+ └── filters
       ├── i < 100 [type=bool, outer=(2), constraints=(/2: (/NULL - /99]; tight)]
       └── i IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
 
@@ -1020,7 +991,7 @@ select
  │    ├── columns: k:1(int!null) i:2(int) s:4(string!null)
  │    ├── key: (1)
  │    └── fd: (1)-->(2,4)
- └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ └── filters
       └── i IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
 
 # RemoveNotNullCondition rule is not applied
@@ -1031,7 +1002,7 @@ select
  ├── columns: i:2(int!null)
  ├── scan b
  │    └── columns: i:2(int)
- └── filters [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+ └── filters
       └── i IS NOT NULL [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
 
 # RemoveNotNullCondition rule is not applied
@@ -1049,7 +1020,7 @@ project
       │    ├── columns: k:1(int!null) i:2(int)
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
-      └── filters [type=bool, outer=(1,2)]
+      └── filters
            └── (i + k) IS NOT NULL [type=bool, outer=(1,2)]
 
 # --------------------------------------------------
@@ -1065,7 +1036,9 @@ values
  ├── key: ()
  └── fd: ()-->(1)
 
-opt expect=DetectSelectContradiction
+# TODO(rytaft) range operator
+#opt expect=DetectSelectContradiction
+opt
 SELECT k FROM b WHERE i > 2 AND i < 1
 ----
 values
@@ -1082,14 +1055,14 @@ opt expect=EliminateUnionAllLeft
 SELECT k FROM
   (SELECT k FROM b)
   UNION ALL
-  (SELECT k FROM b WHERE i < 4 AND i > 10)
+  (SELECT k FROM b WHERE Null)
 ----
 project
  ├── columns: k:11(int)
  ├── scan b
  │    ├── columns: b.k:1(int!null)
  │    └── key: (1)
- └── projections [outer=(1)]
+ └── projections
       └── variable: b.k [type=int, outer=(1)]
 
 # --------------------------------------------------
@@ -1098,7 +1071,7 @@ project
 
 opt expect=EliminateUnionAllRight
 SELECT k FROM
-  (SELECT k FROM b WHERE i < 4 AND i > 10)
+  (SELECT k FROM b WHERE False)
   UNION ALL
   (SELECT k FROM b)
 ----
@@ -1107,14 +1080,14 @@ project
  ├── scan b
  │    ├── columns: b.k:6(int!null)
  │    └── key: (6)
- └── projections [outer=(6)]
+ └── projections
       └── variable: b.k [type=int, outer=(6)]
 
 opt 
 SELECT k FROM
-  (SELECT k FROM b WHERE i < 4 AND i > 10)
+  (SELECT k FROM b WHERE False)
   UNION ALL
-  (SELECT k FROM b WHERE i < 4 AND i > 10)
+  (SELECT k FROM b WHERE Null)
 ----
 project
  ├── columns: k:11(int)
@@ -1126,7 +1099,7 @@ project
  │    ├── cardinality: [0 - 0]
  │    ├── key: ()
  │    └── fd: ()-->(1)
- └── projections [outer=(1)]
+ └── projections
       └── variable: b.k [type=int, outer=(1)]
 
 opt expect=DetectSelectContradiction
@@ -1151,5 +1124,5 @@ select
  │    ├── cardinality: [0 - 0]
  │    ├── key: ()
  │    └── fd: ()-->(1-5)
- └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
-      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ └── filters
+      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]

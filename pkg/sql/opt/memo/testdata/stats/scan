@@ -49,8 +49,8 @@ select
  │    ├── stats: [rows=2000, distinct(5)=2]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
- └── filters [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
-      └── variable: b [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight)]
+ └── filters
+      └── variable: b [type=bool, outer=(5), constraints=(/5: [/true - /true]; tight), fd=()-->(5)]
 
 exec-ddl
 ALTER TABLE a INJECT STATISTICS '[
@@ -97,6 +97,7 @@ scan a
  └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
 
 # Test constrained scan.
+# TODO(rytaft) range operator
 opt
 SELECT s, x FROM a WHERE x > 0 AND x <= 100
 ----
@@ -119,6 +120,7 @@ scan a
  ├── key: (1)
  └── fd: (1)-->(3)
 
+# TODO(rytaft) range operator
 opt
 SELECT count(*), y, x FROM a WHERE x > 0 AND x <= 100 GROUP BY x, y
 ----
@@ -134,10 +136,10 @@ group-by
  │    ├── stats: [rows=150, distinct(1)=100]
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- └── aggregations [outer=(2)]
+ └── aggregations
       ├── count-rows [type=int]
       └── const-agg [type=int, outer=(2)]
-           └── variable: y [type=int, outer=(2)]
+           └── variable: y [type=int]
 
 # Test calculation of multi-column stats.
 opt

@@ -112,9 +112,9 @@ group-by
  ├── fd: (3,4)-->(6)
  ├── scan a
  │    └── columns: f:3(float) s:4(string!null)
- └── aggregations [outer=(3)]
+ └── aggregations
       └── sum [type=float, outer=(3)]
-           └── variable: f [type=float, outer=(3)]
+           └── variable: f [type=float]
 
 
 # --------------------------------------------------
@@ -199,9 +199,9 @@ project
       │         ├── columns: a.k:6(int!null) a.i:7(int!null) a.f:8(float) a.s:9(string!null) a.j:10(jsonb)
       │         ├── key: (6)
       │         └── fd: (6)-->(7-10), (7,9)-->(6,8,10), (7,8)~~>(6,9,10)
-      └── aggregations [outer=(14)]
+      └── aggregations
            └── min [type=string, outer=(14)]
-                └── variable: s [type=string, outer=(14)]
+                └── variable: s [type=string]
 
 # ScalarGroupBy case.
 opt expect=EliminateGroupByProject
@@ -225,9 +225,9 @@ scalar-group-by
  │         ├── columns: a.k:6(int!null) a.i:7(int!null) a.f:8(float) a.s:9(string!null) a.j:10(jsonb)
  │         ├── key: (6)
  │         └── fd: (6)-->(7-10), (7,9)-->(6,8,10), (7,8)~~>(6,9,10)
- └── aggregations [outer=(14)]
+ └── aggregations
       └── min [type=string, outer=(14)]
-           └── variable: s [type=string, outer=(14)]
+           └── variable: s [type=string]
 
 # DistinctOn case.
 opt expect=EliminateGroupByProject
@@ -251,9 +251,9 @@ distinct-on
  │         ├── columns: a.k:6(int!null) a.i:7(int!null) a.f:8(float) a.s:9(string!null) a.j:10(jsonb)
  │         ├── key: (6)
  │         └── fd: (6)-->(7-10), (7,9)-->(6,8,10), (7,8)~~>(6,9,10)
- └── aggregations [outer=(14)]
+ └── aggregations
       └── first-agg [type=string, outer=(14)]
-           └── variable: s [type=string, outer=(14)]
+           └── variable: s [type=string]
 
 # Don't eliminate project if it computes extra column(s).
 opt expect-not=EliminateGroupByProject
@@ -271,11 +271,11 @@ project
       │    ├── scan a@si_idx
       │    │    ├── columns: i:2(int!null) s:4(string!null)
       │    │    └── key: (2,4)
-      │    └── projections [outer=(2,4)]
+      │    └── projections
       │         └── i + 1 [type=int, outer=(2)]
-      └── aggregations [outer=(4)]
+      └── aggregations
            └── min [type=string, outer=(4)]
-                └── variable: s [type=string, outer=(4)]
+                └── variable: s [type=string]
 
 # --------------------------------------------------
 # ReduceGroupingCols
@@ -292,13 +292,13 @@ group-by
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (2,4)-->(1,3), (2,3)~~>(1,4)
- └── aggregations [outer=(2-4)]
+ └── aggregations
       ├── min [type=int, outer=(2)]
-      │    └── variable: i [type=int, outer=(2)]
+      │    └── variable: i [type=int]
       ├── const-agg [type=float, outer=(3)]
-      │    └── variable: f [type=float, outer=(3)]
+      │    └── variable: f [type=float]
       └── const-agg [type=string, outer=(4)]
-           └── variable: s [type=string, outer=(4)]
+           └── variable: s [type=string]
 
 opt expect=ReduceGroupingCols
 SELECT k, sum(DISTINCT i), f, s FROM a, xy GROUP BY s, f, k
@@ -316,15 +316,15 @@ group-by
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4), (2,4)-->(1,3), (2,3)~~>(1,4)
  │    ├── scan xy
- │    └── true [type=bool]
- └── aggregations [outer=(2-4)]
+ │    └── filters
+ └── aggregations
       ├── sum [type=decimal, outer=(2)]
-      │    └── agg-distinct [type=int, outer=(2)]
-      │         └── variable: i [type=int, outer=(2)]
+      │    └── agg-distinct [type=int]
+      │         └── variable: i [type=int]
       ├── const-agg [type=float, outer=(3)]
-      │    └── variable: f [type=float, outer=(3)]
+      │    └── variable: f [type=float]
       └── const-agg [type=string, outer=(4)]
-           └── variable: s [type=string, outer=(4)]
+           └── variable: s [type=string]
 
 # Eliminated columns are not part of projection.
 opt expect=ReduceGroupingCols
@@ -341,9 +341,9 @@ project
       │    ├── columns: i:2(int!null) f:3(float) s:4(string!null)
       │    ├── key: (2,4)
       │    └── fd: (2,4)-->(3), (2,3)~~>(4)
-      └── aggregations [outer=(3)]
+      └── aggregations
            └── min [type=float, outer=(3)]
-                └── variable: f [type=float, outer=(3)]
+                └── variable: f [type=float]
 
 # All grouping columns eliminated.
 opt expect=ReduceGroupingCols
@@ -360,11 +360,11 @@ group-by
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    └── fd: ()-->(1-3)
- └── aggregations [outer=(2,3)]
+ └── aggregations
       ├── sum [type=float, outer=(3)]
-      │    └── variable: f [type=float, outer=(3)]
+      │    └── variable: f [type=float]
       └── const-agg [type=int, outer=(2)]
-           └── variable: i [type=int, outer=(2)]
+           └── variable: i [type=int]
 
 opt expect=ReduceGroupingCols
 SELECT DISTINCT ON (k, f, s) i, f, x FROM a JOIN xy ON i=y
@@ -386,15 +386,15 @@ distinct-on
  │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    ├── key: (6)
  │    │    └── fd: (6)-->(7)
- │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
- │         └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
- └── aggregations [outer=(2,3,6)]
+ │    └── filters
+ │         └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+ └── aggregations
       ├── first-agg [type=int, outer=(2)]
-      │    └── variable: i [type=int, outer=(2)]
+      │    └── variable: i [type=int]
       ├── first-agg [type=int, outer=(6)]
-      │    └── variable: x [type=int, outer=(6)]
+      │    └── variable: x [type=int]
       └── const-agg [type=float, outer=(3)]
-           └── variable: f [type=float, outer=(3)]
+           └── variable: f [type=float]
 
 # --------------------------------------------------
 # EliminateAggDistinctForKeys
@@ -414,12 +414,12 @@ scalar-group-by
  │    ├── columns: k:1(int!null) i:2(int!null)
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- └── aggregations [outer=(1,2)]
+ └── aggregations
       ├── sum [type=decimal, outer=(1)]
-      │    └── variable: k [type=int, outer=(1)]
+      │    └── variable: k [type=int]
       └── sum [type=decimal, outer=(2)]
-           └── agg-distinct [type=int, outer=(2)]
-                └── variable: i [type=int, outer=(2)]
+           └── agg-distinct [type=int]
+                └── variable: i [type=int]
 
 # GroupBy with key argument.
 opt expect=EliminateAggDistinctForKeys
@@ -436,9 +436,9 @@ project
       │    ├── columns: k:1(int!null) i:2(int!null)
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
-      └── aggregations [outer=(1)]
+      └── aggregations
            └── sum [type=decimal, outer=(1)]
-                └── variable: k [type=int, outer=(1)]
+                └── variable: k [type=int]
 
 # GroupBy with no key.
 opt expect-not=EliminateAggDistinctForKeys
@@ -453,10 +453,10 @@ project
       ├── fd: (2)-->(4)
       ├── scan abc
       │    └── columns: a:1(int!null) b:2(int!null)
-      └── aggregations [outer=(1)]
+      └── aggregations
            └── sum [type=decimal, outer=(1)]
-                └── agg-distinct [type=int, outer=(1)]
-                     └── variable: a [type=int, outer=(1)]
+                └── agg-distinct [type=int]
+                     └── variable: a [type=int]
 
 # GroupBy with composite key formed by argument plus grouping columns.
 opt expect=EliminateAggDistinctForKeys
@@ -472,9 +472,9 @@ project
       ├── scan abc
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       │    └── key: (1-3)
-      └── aggregations [outer=(1)]
+      └── aggregations
            └── sum [type=decimal, outer=(1)]
-                └── variable: a [type=int, outer=(1)]
+                └── variable: a [type=int]
 
 # GroupBy with multiple aggregations simplified.
 opt expect=EliminateAggDistinctForKeys
@@ -491,11 +491,11 @@ project
       │    ├── columns: k:1(int!null) i:2(int!null) f:3(float)
       │    ├── key: (1)
       │    └── fd: (1)-->(2,3), (2,3)~~>(1)
-      └── aggregations [outer=(2,3)]
+      └── aggregations
            ├── sum [type=decimal, outer=(2)]
-           │    └── variable: i [type=int, outer=(2)]
+           │    └── variable: i [type=int]
            └── avg [type=float, outer=(3)]
-                └── variable: f [type=float, outer=(3)]
+                └── variable: f [type=float]
 
 # GroupBy where only some aggregations are simplified (the table has
 # keys u,v and v,w).
@@ -513,11 +513,11 @@ project
       │    ├── columns: u:1(int!null) v:2(int!null) w:3(int!null) z:4(int!null)
       │    ├── key: (2,3)
       │    └── fd: (1,2)-->(3,4), (2,3)-->(1,4)
-      └── aggregations [outer=(1,3,4)]
+      └── aggregations
            ├── sum [type=decimal, outer=(1)]
-           │    └── variable: u [type=int, outer=(1)]
+           │    └── variable: u [type=int]
            ├── std-dev [type=decimal, outer=(3)]
-           │    └── variable: w [type=int, outer=(3)]
+           │    └── variable: w [type=int]
            └── avg [type=decimal, outer=(4)]
-                └── agg-distinct [type=int, outer=(4)]
-                     └── variable: z [type=int, outer=(4)]
+                └── agg-distinct [type=int]
+                     └── variable: z [type=int]

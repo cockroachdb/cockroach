@@ -54,9 +54,9 @@ inner-join (lookup abcd)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    └── stats: [rows=10, distinct(1)=10]
- │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
- │         └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
- └── true [type=bool]
+ │    └── filters
+ │         └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ └── filters
 
 # Filter that gets pushed down on both sides, but comes back into the ON
 # condition for the lookup side.
@@ -79,11 +79,11 @@ inner-join (lookup abcd)
  │    │    ├── scan small
  │    │    │    ├── columns: m:1(int) n:2(int)
  │    │    │    └── stats: [rows=10, distinct(1)=10]
- │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/3 - ]; tight)]
+ │    │    └── filters
  │    │         └── n > 2 [type=bool, outer=(2), constraints=(/2: [/3 - ]; tight)]
- │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
- │         └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
- └── true [type=bool]
+ │    └── filters
+ │         └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ └── filters
 
 # Filter that applies to the right side and gets pulled back into the ON
 # condition.
@@ -103,10 +103,10 @@ inner-join (lookup abcd)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    └── stats: [rows=10, distinct(1)=10]
- │    └── filters [type=bool, outer=(1,4,5), constraints=(/1: (/NULL - ]; /4: (/NULL - ]; /5: [/3 - ]), fd=(1)==(4), (4)==(1)]
- │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ │    └── filters
+ │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
  │         └── b > 2 [type=bool, outer=(5), constraints=(/5: [/3 - ]; tight)]
- └── true [type=bool]
+ └── filters
 
 # Filter that can only be applied after the primary index join.
 opt
@@ -125,9 +125,9 @@ inner-join (lookup abcd)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    └── stats: [rows=10, distinct(1)=10]
- │    └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
- │         └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
- └── filters [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
+ │    └── filters
+ │         └── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ └── filters
       └── c > 2 [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
 
 # Multiple equalities.
@@ -147,10 +147,10 @@ inner-join (lookup abcd)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    └── stats: [rows=10, distinct(1)=10, distinct(2)=1]
- │    └── filters [type=bool, outer=(1,2,4,5), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(4), (4)==(1), (2)==(5), (5)==(2)]
- │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
- │         └── b = n [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
- └── filters [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
+ │    └── filters
+ │         ├── a = m [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+ │         └── b = n [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ]), fd=(2)==(5), (5)==(2)]
+ └── filters
       └── c > 2 [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
 
 exec-ddl
@@ -223,8 +223,8 @@ inner-join (lookup def)
  │    ├── stats: [rows=100, distinct(1)=100]
  │    ├── key: (1,3)
  │    └── fd: (1,3)-->(2)
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── a = f [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters
+      └── a = f [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # The filter a=e is not very selective, so we do not expect a lookup join.
 opt
@@ -232,6 +232,8 @@ SELECT * FROM abc JOIN def ON a = e
 ----
 inner-join (merge)
  ├── columns: a:1(int!null) b:2(int) c:3(int!null) d:4(int) e:5(int!null) f:6(int!null)
+ ├── left ordering: +1
+ ├── right ordering: +5
  ├── stats: [rows=10000, distinct(1)=100, distinct(5)=100]
  ├── key: (3,5,6)
  ├── fd: (1,3)-->(2), (5,6)-->(4), (1)==(5), (5)==(1)
@@ -247,8 +249,5 @@ inner-join (merge)
  │    ├── key: (5,6)
  │    ├── fd: (5,6)-->(4)
  │    └── ordering: +5
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +5
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           └── a = e [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ └── filters
+      └── a = e [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]

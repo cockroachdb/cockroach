@@ -55,7 +55,7 @@ Initial expression
         │    ├── columns: x:6(int!null) y:7(int)
         │    ├── key: (6)
         │    └── fd: (6)-->(7)
-        └── filters [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+        └── filters
              └── (k = x) AND ((i + 1) = 10) [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 ================================================================================
 NormalizeCmpPlusConst
@@ -76,9 +76,8 @@ NormalizeCmpPlusConst
          │    ├── columns: x:6(int!null) y:7(int)
          │    ├── key: (6)
          │    └── fd: (6)-->(7)
-  -      └── filters [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+         └── filters
   -           └── (k = x) AND ((i + 1) = 10) [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-  +      └── filters [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /6: (/NULL - ])]
   +           └── (k = x) AND (i = (10 - 1)) [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /6: (/NULL - ])]
 ================================================================================
 FoldBinary
@@ -99,10 +98,9 @@ FoldBinary
          │    ├── columns: x:6(int!null) y:7(int)
          │    ├── key: (6)
          │    └── fd: (6)-->(7)
-  -      └── filters [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /6: (/NULL - ])]
+         └── filters
   -           └── (k = x) AND (i = (10 - 1)) [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /6: (/NULL - ])]
-  +      └── filters [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /2: [/9 - /9]; /6: (/NULL - ]), fd=()-->(2)]
-  +           └── (k = x) AND (i = 9) [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /2: [/9 - /9]; /6: (/NULL - ])]
+  +           └── (k = x) AND (i = 9) [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /2: [/9 - /9]; /6: (/NULL - ]), fd=()-->(2)]
 ================================================================================
 SimplifyFilters
   Cost: 2170.20
@@ -123,11 +121,10 @@ SimplifyFilters
          │    ├── columns: x:6(int!null) y:7(int)
          │    ├── key: (6)
          │    └── fd: (6)-->(7)
-  -      └── filters [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /2: [/9 - /9]; /6: (/NULL - ]), fd=()-->(2)]
-  -           └── (k = x) AND (i = 9) [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /2: [/9 - /9]; /6: (/NULL - ])]
-  +      └── filters [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /2: [/9 - /9]; /6: (/NULL - ]), fd=()-->(2), (1)==(6), (6)==(1)]
-  +           ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-  +           └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight)]
+         └── filters
+  -           └── (k = x) AND (i = 9) [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /2: [/9 - /9]; /6: (/NULL - ]), fd=()-->(2)]
+  +           ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+  +           └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
 ================================================================================
 PushFilterIntoJoinLeft
   Cost: 2167.82
@@ -149,17 +146,16 @@ PushFilterIntoJoinLeft
   +      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
   +      │    │    ├── key: (1)
   +      │    │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
-  +      │    └── filters [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
-  +      │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight)]
+  +      │    └── filters
+  +      │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
          ├── scan xy
          │    ├── columns: x:6(int!null) y:7(int)
          │    ├── key: (6)
          │    └── fd: (6)-->(7)
-  -      └── filters [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /2: [/9 - /9]; /6: (/NULL - ]), fd=()-->(2), (1)==(6), (6)==(1)]
-  -           ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-  -           └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight)]
-  +      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-  +           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+         └── filters
+  -           ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+  -           └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+  +           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 ================================================================================
 PruneJoinLeftCols
   Cost: 2167.92
@@ -182,8 +178,8 @@ PruneJoinLeftCols
   -      │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
   -      │    │    ├── key: (1)
   -      │    │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
-  -      │    └── filters [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
-  -      │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight)]
+  -      │    └── filters
+  -      │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
   +      │    ├── fd: ()-->(2), (1)-->(4)
   +      │    └── select
   +      │         ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string) j:5(jsonb)
@@ -193,14 +189,14 @@ PruneJoinLeftCols
   +      │         │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
   +      │         │    ├── key: (1)
   +      │         │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
-  +      │         └── filters [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
-  +      │              └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight)]
+  +      │         └── filters
+  +      │              └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
          ├── scan xy
          │    ├── columns: x:6(int!null) y:7(int)
          │    ├── key: (6)
          │    └── fd: (6)-->(7)
-         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-              └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+         └── filters
+              └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 ================================================================================
 PruneSelectCols
   Cost: 2147.92
@@ -227,14 +223,14 @@ PruneSelectCols
          │         │    ├── key: (1)
   -      │         │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
   +      │         │    └── fd: (1)-->(2,4)
-         │         └── filters [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
-         │              └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight)]
+         │         └── filters
+         │              └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
          ├── scan xy
          │    ├── columns: x:6(int!null) y:7(int)
          │    ├── key: (6)
          │    └── fd: (6)-->(7)
-         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-              └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+         └── filters
+              └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 ================================================================================
 EliminateProject
   Cost: 2147.82
@@ -258,20 +254,20 @@ EliminateProject
   -      │         │    ├── columns: k:1(int!null) i:2(int) s:4(string)
   -      │         │    ├── key: (1)
   -      │         │    └── fd: (1)-->(2,4)
-  -      │         └── filters [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
-  -      │              └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight)]
+  -      │         └── filters
+  -      │              └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
   +      │    ├── scan a
   +      │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
   +      │    │    ├── key: (1)
   +      │    │    └── fd: (1)-->(2,4)
-  +      │    └── filters [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
-  +      │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight)]
+  +      │    └── filters
+  +      │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
          ├── scan xy
          │    ├── columns: x:6(int!null) y:7(int)
          │    ├── key: (6)
          │    └── fd: (6)-->(7)
-         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-              └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+         └── filters
+              └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 ================================================================================
 PruneJoinRightCols
   Cost: 2137.82
@@ -292,16 +288,16 @@ PruneJoinRightCols
          │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
          │    │    ├── key: (1)
          │    │    └── fd: (1)-->(2,4)
-         │    └── filters [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
-         │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight)]
+         │    └── filters
+         │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
          ├── scan xy
   -      │    ├── columns: x:6(int!null) y:7(int)
   -      │    ├── key: (6)
   -      │    └── fd: (6)-->(7)
   +      │    ├── columns: x:6(int!null)
   +      │    └── key: (6)
-         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-              └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+         └── filters
+              └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 --------------------------------------------------------------------------------
 GenerateIndexScans (no changes)
 --------------------------------------------------------------------------------
@@ -332,13 +328,13 @@ CommuteJoin
          │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
          │    │    ├── key: (1)
          │    │    └── fd: (1)-->(2,4)
-         │    └── filters [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
-         │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight)]
+         │    └── filters
+         │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
   -      ├── scan xy
   -      │    ├── columns: x:6(int!null)
   -      │    └── key: (6)
-         └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-              └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+         └── filters
+              └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 ================================================================================
 GenerateMergeJoins
   Cost: 2130.30
@@ -348,6 +344,8 @@ GenerateMergeJoins
   - └── inner-join
   + └── inner-join (merge)
          ├── columns: k:1(int!null) i:2(int!null) s:4(string) x:6(int!null)
+  +      ├── left ordering: +1 opt(2)
+  +      ├── right ordering: +6
          ├── key: (6)
          ├── fd: ()-->(2), (1)-->(4), (1)==(6), (6)==(1)
   -      ├── scan xy
@@ -364,19 +362,14 @@ GenerateMergeJoins
   -      │    │    └── fd: (1)-->(2,4)
   +      │    │    ├── fd: (1)-->(2,4)
   +      │    │    └── ordering: +1 opt(2)
-         │    └── filters [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
-         │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight)]
-  -      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-  -           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+         │    └── filters
+         │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
   +      ├── scan xy
   +      │    ├── columns: x:6(int!null)
   +      │    ├── key: (6)
   +      │    └── ordering: +6
-  +      └── merge-on
-  +           ├── left ordering: +1
-  +           ├── right ordering: +6
-  +           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-  +                └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+         └── filters
+              └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 ================================================================================
 GenerateLookupJoins
   Cost: 1140.40
@@ -386,6 +379,8 @@ GenerateLookupJoins
   - └── inner-join (merge)
   + └── inner-join (lookup xy)
          ├── columns: k:1(int!null) i:2(int!null) s:4(string) x:6(int!null)
+  -      ├── left ordering: +1 opt(2)
+  -      ├── right ordering: +6
   +      ├── key columns: [1] = [6]
          ├── key: (6)
          ├── fd: ()-->(2), (1)-->(4), (1)==(6), (6)==(1)
@@ -400,19 +395,14 @@ GenerateLookupJoins
   -      │    │    ├── fd: (1)-->(2,4)
   -      │    │    └── ordering: +1 opt(2)
   +      │    │    └── fd: (1)-->(2,4)
-         │    └── filters [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
-         │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight)]
+         │    └── filters
+         │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
   -      ├── scan xy
   -      │    ├── columns: x:6(int!null)
   -      │    ├── key: (6)
   -      │    └── ordering: +6
-  -      └── merge-on
-  -           ├── left ordering: +1
-  -           ├── right ordering: +6
-  -           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-  -                └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-  +      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-  +           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+         └── filters
+              └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 --------------------------------------------------------------------------------
 CommuteJoin (no changes)
 --------------------------------------------------------------------------------
@@ -425,6 +415,8 @@ GenerateMergeJoins (higher cost)
   + └── inner-join (merge)
          ├── columns: k:1(int!null) i:2(int!null) s:4(string) x:6(int!null)
   -      ├── key columns: [1] = [6]
+  +      ├── left ordering: +6
+  +      ├── right ordering: +1 opt(2)
          ├── key: (6)
          ├── fd: ()-->(2), (1)-->(4), (1)==(6), (6)==(1)
   +      ├── scan xy
@@ -442,15 +434,10 @@ GenerateMergeJoins (higher cost)
   -      │    │    └── fd: (1)-->(2,4)
   +      │    │    ├── fd: (1)-->(2,4)
   +      │    │    └── ordering: +1 opt(2)
-         │    └── filters [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
-         │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight)]
-  -      └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-  -           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-  +      └── merge-on
-  +           ├── left ordering: +6
-  +           ├── right ordering: +1
-  +           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-  +                └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+         │    └── filters
+         │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+         └── filters
+              └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 --------------------------------------------------------------------------------
 GenerateLookupJoinsWithFilter (higher cost)
 --------------------------------------------------------------------------------
@@ -459,6 +446,8 @@ GenerateLookupJoinsWithFilter (higher cost)
   - └── inner-join (merge)
   + └── inner-join (lookup a)
          ├── columns: k:1(int!null) i:2(int!null) s:4(string) x:6(int!null)
+  -      ├── left ordering: +6
+  -      ├── right ordering: +1 opt(2)
   +      ├── key columns: [6] = [1]
          ├── key: (6)
          ├── fd: ()-->(2), (1)-->(4), (1)==(6), (6)==(1)
@@ -476,17 +465,13 @@ GenerateLookupJoinsWithFilter (higher cost)
   -      │    │    ├── key: (1)
   -      │    │    ├── fd: (1)-->(2,4)
   -      │    │    └── ordering: +1 opt(2)
-  -      │    └── filters [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
-  -      │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight)]
-  -      └── merge-on
-  -           ├── left ordering: +6
-  -           ├── right ordering: +1
-  -           └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-  -                └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+  -      │    └── filters
+  -      │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
   +      │    └── key: (6)
-  +      └── filters [type=bool, outer=(1,2,6), constraints=(/1: (/NULL - ]; /2: [/9 - /9]; /6: (/NULL - ]), fd=()-->(2), (1)==(6), (6)==(1)]
-  +           ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-  +           └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight)]
+         └── filters
+  -           └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+  +           ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+  +           └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
 ================================================================================
 Final best expression
   Cost: 1140.40
@@ -506,10 +491,10 @@ Final best expression
         │    │    ├── columns: k:1(int!null) i:2(int) s:4(string)
         │    │    ├── key: (1)
         │    │    └── fd: (1)-->(2,4)
-        │    └── filters [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
-        │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight)]
-        └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-             └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+        │    └── filters
+        │         └── i = 9 [type=bool, outer=(2), constraints=(/2: [/9 - /9]; tight), fd=()-->(2)]
+        └── filters
+             └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # Exploration patterns with varying costs.
 optsteps
@@ -531,8 +516,8 @@ Initial expression
         │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
         │    ├── key: (1)
         │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
-        └── filters [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
-             └── (s = 'foo') AND (f > 100.0) [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight)]
+        └── filters
+             └── (s = 'foo') AND (f > 100.0) [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 ================================================================================
 SimplifyFilters
   Cost: 1110.03
@@ -549,9 +534,9 @@ SimplifyFilters
          │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
          │    ├── key: (1)
          │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
-         └── filters [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
-  -           └── (s = 'foo') AND (f > 100.0) [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight)]
-  +           ├── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+         └── filters
+  -           └── (s = 'foo') AND (f > 100.0) [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+  +           ├── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
   +           └── f > 100.0 [type=bool, outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
 ================================================================================
 PruneSelectCols
@@ -573,8 +558,8 @@ PruneSelectCols
          │    ├── key: (1)
   -      │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
   +      │    └── fd: (1)-->(3,4), (3,4)~~>(1)
-         └── filters [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
-              ├── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+         └── filters
+              ├── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
               └── f > 100.0 [type=bool, outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
 ================================================================================
 GenerateIndexScans
@@ -593,8 +578,8 @@ GenerateIndexScans
          │    ├── columns: k:1(int!null) f:3(float) s:4(string)
          │    ├── key: (1)
          │    └── fd: (1)-->(3,4), (3,4)~~>(1)
-         └── filters [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
-              ├── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+         └── filters
+              ├── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
               └── f > 100.0 [type=bool, outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
 ================================================================================
 GenerateConstrainedScans
@@ -614,11 +599,10 @@ GenerateConstrainedScans
   +      │    ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
          │    ├── key: (1)
   -      │    └── fd: (1)-->(3,4), (3,4)~~>(1)
-  -      └── filters [type=bool, outer=(3,4), constraints=(/3: [/100.00000000000001 - ]; /4: [/'foo' - /'foo']; tight), fd=()-->(4)]
-  -           ├── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
-  -           └── f > 100.0 [type=bool, outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
   +      │    └── fd: ()-->(4), (1)-->(3), (3)-->(1)
-  +      └── filters [type=bool]
+         └── filters
+  -           ├── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+  -           └── f > 100.0 [type=bool, outer=(3), constraints=(/3: [/100.00000000000001 - ]; tight)]
   +           ├── true [type=bool]
   +           └── true [type=bool]
 ================================================================================
@@ -640,7 +624,7 @@ SimplifyFilters
   -      │    ├── constraint: /-4/3: [/'foo'/100.00000000000001 - /'foo']
   -      │    ├── key: (1)
   -      │    └── fd: ()-->(4), (1)-->(3), (3)-->(1)
-  -      └── filters [type=bool]
+  -      └── filters
   -           ├── true [type=bool]
   -           └── true [type=bool]
   +      └── fd: ()-->(4), (1)-->(3), (3)-->(1)
@@ -674,7 +658,7 @@ Initial expression
    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
    │    ├── key: (1)
    │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
-   └── filters [type=bool, outer=(2)]
+   └── filters
         └── exists [type=bool, outer=(2)]
              └── select
                   ├── columns: x:6(int!null) y:7(int!null)
@@ -685,8 +669,8 @@ Initial expression
                   │    ├── columns: x:6(int!null) y:7(int)
                   │    ├── key: (6)
                   │    └── fd: (6)-->(7)
-                  └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-                       └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+                  └── filters
+                       └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 ================================================================================
 HoistSelectExists
   Cost: 2182.68
@@ -700,19 +684,6 @@ HoistSelectExists
     │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
     │    ├── key: (1)
   - │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
-  - └── filters [type=bool, outer=(2)]
-  -      └── exists [type=bool, outer=(2)]
-  -           └── select
-  -                ├── columns: x:6(int!null) y:7(int!null)
-  -                ├── outer: (2)
-  -                ├── key: (6)
-  -                ├── fd: ()-->(7)
-  -                ├── scan xy
-  -                │    ├── columns: x:6(int!null) y:7(int)
-  -                │    ├── key: (6)
-  -                │    └── fd: (6)-->(7)
-  -                └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-  -                     └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
   + │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
   + │    ├── scan a
   + │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -727,10 +698,22 @@ HoistSelectExists
   + │    │    │    ├── columns: x:6(int!null) y:7(int)
   + │    │    │    ├── key: (6)
   + │    │    │    └── fd: (6)-->(7)
-  + │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-  + │    │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
-  + │    └── true [type=bool]
-  + └── filters [type=bool]
+  + │    │    └── filters
+  + │    │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+  + │    └── filters
+    └── filters
+  -      └── exists [type=bool, outer=(2)]
+  -           └── select
+  -                ├── columns: x:6(int!null) y:7(int!null)
+  -                ├── outer: (2)
+  -                ├── key: (6)
+  -                ├── fd: ()-->(7)
+  -                ├── scan xy
+  -                │    ├── columns: x:6(int!null) y:7(int)
+  -                │    ├── key: (6)
+  -                │    └── fd: (6)-->(7)
+  -                └── filters
+  -                     └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 ================================================================================
 TryDecorrelateSelect
   Cost: 2190.00
@@ -760,13 +743,12 @@ TryDecorrelateSelect
   - │    │    │    ├── columns: x:6(int!null) y:7(int)
   - │    │    │    ├── key: (6)
   - │    │    │    └── fd: (6)-->(7)
-  - │    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-  - │    │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
-  - │    └── true [type=bool]
+  - │    │    └── filters
+  - │    │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
   + │    │    └── fd: (6)-->(7)
-  + │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-  + │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
-    └── filters [type=bool]
+    │    └── filters
+  + │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+    └── filters
 ================================================================================
 DecorrelateJoin
   Cost: 2190.00
@@ -790,33 +772,12 @@ DecorrelateJoin
     │    │    ├── columns: x:6(int!null) y:7(int)
     │    │    ├── key: (6)
     │    │    └── fd: (6)-->(7)
-    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-    │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
-    └── filters [type=bool]
-================================================================================
-EliminateEmptyFilters
-  Cost: 2190.00
-================================================================================
-   select
-    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-    ├── key: (1)
-    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
-    ├── semi-join
-    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-    │    ├── key: (1)
-    │    ├── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
-    │    ├── scan a
-    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
-    │    │    ├── key: (1)
-    │    │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
-    │    ├── scan xy
-    │    │    ├── columns: x:6(int!null) y:7(int)
-    │    │    ├── key: (6)
-    │    │    └── fd: (6)-->(7)
-    │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-    │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
-  - └── filters [type=bool]
-  + └── true [type=bool]
+    │    └── filters
+    │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+    └── filters
+--------------------------------------------------------------------------------
+EliminateEmptyFilters (no changes)
+--------------------------------------------------------------------------------
 ================================================================================
 EliminateSelect
   Cost: 2180.00
@@ -839,16 +800,15 @@ EliminateSelect
   - │    │    ├── columns: x:6(int!null) y:7(int)
   - │    │    ├── key: (6)
   - │    │    └── fd: (6)-->(7)
-  - │    └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-  - │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
-  - └── true [type=bool]
+  - │    └── filters
+  - │         └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
   + │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
   + ├── scan xy
   + │    ├── columns: x:6(int!null) y:7(int)
   + │    ├── key: (6)
   + │    └── fd: (6)-->(7)
-  + └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-  +      └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+    └── filters
+  +      └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 --------------------------------------------------------------------------------
 GenerateIndexScans (no changes)
 --------------------------------------------------------------------------------
@@ -874,8 +834,8 @@ Final best expression
    │    ├── columns: x:6(int!null) y:7(int)
    │    ├── key: (6)
    │    └── fd: (6)-->(7)
-   └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-        └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+   └── filters
+        └── y = i [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
 # Decorrelation pattern using ANY function.
 optsteps
@@ -891,7 +851,7 @@ Initial expression
    │    ├── columns: x:1(int!null) y:2(int)
    │    ├── key: (1)
    │    └── fd: (1)-->(2)
-   └── projections [outer=(1)]
+   └── projections
         └── any: eq [type=bool, outer=(1)]
              ├── project
              │    ├── columns: i:4(int)
@@ -909,8 +869,8 @@ Initial expression
              │         │    ├── columns: k:3(int!null) i:4(int) f:5(float) s:6(string) j:7(jsonb)
              │         │    ├── key: (3)
              │         │    └── fd: (3)-->(4-7), (5,6)~~>(3,4,7)
-             │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-             │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+             │         └── filters
+             │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
              └── const: 5 [type=int]
 ================================================================================
 PruneSelectCols
@@ -922,7 +882,7 @@ PruneSelectCols
     │    ├── columns: x:1(int!null) y:2(int)
     │    ├── key: (1)
     │    └── fd: (1)-->(2)
-    └── projections [outer=(1)]
+    └── projections
          └── any: eq [type=bool, outer=(1)]
               ├── project
               │    ├── columns: i:4(int)
@@ -944,8 +904,8 @@ PruneSelectCols
               │         │    ├── key: (3)
   -           │         │    └── fd: (3)-->(4-7), (5,6)~~>(3,4,7)
   +           │         │    └── fd: (3)-->(4)
-              │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-              │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+              │         └── filters
+              │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
               └── const: 5 [type=int]
 ================================================================================
 PruneScanCols
@@ -959,7 +919,7 @@ PruneScanCols
   - │    └── fd: (1)-->(2)
   + │    ├── columns: x:1(int!null)
   + │    └── key: (1)
-    └── projections [outer=(1)]
+    └── projections
          └── any: eq [type=bool, outer=(1)]
               ├── project
               │    ├── columns: i:4(int)
@@ -977,8 +937,8 @@ PruneScanCols
               │         │    ├── columns: k:3(int!null) i:4(int)
               │         │    ├── key: (3)
               │         │    └── fd: (3)-->(4)
-              │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-              │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+              │         └── filters
+              │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
               └── const: 5 [type=int]
 ================================================================================
 HoistProjectSubquery
@@ -989,27 +949,6 @@ HoistProjectSubquery
   - ├── scan xy
   - │    ├── columns: x:1(int!null)
   - │    └── key: (1)
-  - └── projections [outer=(1)]
-  -      └── any: eq [type=bool, outer=(1)]
-  -           ├── project
-  -           │    ├── columns: i:4(int)
-  -           │    ├── outer: (1)
-  -           │    ├── cardinality: [0 - 1]
-  -           │    ├── key: ()
-  -           │    ├── fd: ()-->(4)
-  -           │    └── select
-  -           │         ├── columns: k:3(int!null) i:4(int)
-  -           │         ├── outer: (1)
-  -           │         ├── cardinality: [0 - 1]
-  -           │         ├── key: ()
-  -           │         ├── fd: ()-->(3,4)
-  -           │         ├── scan a
-  -           │         │    ├── columns: k:3(int!null) i:4(int)
-  -           │         │    ├── key: (3)
-  -           │         │    └── fd: (3)-->(4)
-  -           │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  -           │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-  -           └── const: 5 [type=int]
   + ├── inner-join-apply
   + │    ├── columns: x:1(int!null) case:11(bool)
   + │    ├── key: (1)
@@ -1057,18 +996,40 @@ HoistProjectSubquery
   + │    │    │    │    │    │         │    ├── columns: k:3(int!null) i:4(int)
   + │    │    │    │    │    │         │    ├── key: (3)
   + │    │    │    │    │    │         │    └── fd: (3)-->(4)
-  + │    │    │    │    │    │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  + │    │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-  + │    │    │    │    │    └── (5 = i) IS NOT false [type=bool, outer=(4)]
-  + │    │    │    │    └── projections [outer=(4)]
+  + │    │    │    │    │    │         └── filters
+  + │    │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+  + │    │    │    │    │    └── filters
+  + │    │    │    │    │         ├── 5 = i [type=bool, outer=(4)]
+  + │    │    │    │    │         └── false [type=bool]
+  + │    │    │    │    └── projections
   + │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-  + │    │    │    └── aggregations [outer=(9)]
+  + │    │    │    └── aggregations
   + │    │    │         └── bool-or [type=bool, outer=(9)]
-  + │    │    │              └── variable: notnull [type=bool, outer=(9)]
-  + │    │    └── projections [outer=(10)]
+  + │    │    │              └── variable: notnull [type=bool]
+  + │    │    └── projections
   + │    │         └── CASE WHEN bool_or AND (5 IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-  + │    └── true [type=bool]
-  + └── projections [outer=(11)]
+  + │    └── filters
+    └── projections
+  -      └── any: eq [type=bool, outer=(1)]
+  -           ├── project
+  -           │    ├── columns: i:4(int)
+  -           │    ├── outer: (1)
+  -           │    ├── cardinality: [0 - 1]
+  -           │    ├── key: ()
+  -           │    ├── fd: ()-->(4)
+  -           │    └── select
+  -           │         ├── columns: k:3(int!null) i:4(int)
+  -           │         ├── outer: (1)
+  -           │         ├── cardinality: [0 - 1]
+  -           │         ├── key: ()
+  -           │         ├── fd: ()-->(3,4)
+  -           │         ├── scan a
+  -           │         │    ├── columns: k:3(int!null) i:4(int)
+  -           │         │    ├── key: (3)
+  -           │         │    └── fd: (3)-->(4)
+  -           │         └── filters
+  -           │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+  -           └── const: 5 [type=int]
   +      └── variable: case [type=bool, outer=(11)]
 ================================================================================
 CommuteVar
@@ -1123,19 +1084,21 @@ CommuteVar
     │    │    │    │    │    │         │    ├── columns: k:3(int!null) i:4(int)
     │    │    │    │    │    │         │    ├── key: (3)
     │    │    │    │    │    │         │    └── fd: (3)-->(4)
-    │    │    │    │    │    │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-    │    │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-  - │    │    │    │    │    └── (5 = i) IS NOT false [type=bool, outer=(4)]
-  + │    │    │    │    │    └── (i = 5) IS NOT false [type=bool, outer=(4)]
-    │    │    │    │    └── projections [outer=(4)]
+    │    │    │    │    │    │         └── filters
+    │    │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+    │    │    │    │    │    └── filters
+  - │    │    │    │    │         ├── 5 = i [type=bool, outer=(4)]
+  + │    │    │    │    │         ├── i = 5 [type=bool, outer=(4), constraints=(/4: [/5 - /5]; tight), fd=()-->(4)]
+    │    │    │    │    │         └── false [type=bool]
+    │    │    │    │    └── projections
     │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-    │    │    │    └── aggregations [outer=(9)]
+    │    │    │    └── aggregations
     │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    └── projections [outer=(10)]
+    │    │    │              └── variable: notnull [type=bool]
+    │    │    └── projections
     │    │         └── CASE WHEN bool_or AND (5 IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 EnsureSelectFilters
@@ -1190,20 +1153,21 @@ EnsureSelectFilters
     │    │    │    │    │    │         │    ├── columns: k:3(int!null) i:4(int)
     │    │    │    │    │    │         │    ├── key: (3)
     │    │    │    │    │    │         │    └── fd: (3)-->(4)
-    │    │    │    │    │    │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-    │    │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-  - │    │    │    │    │    └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  + │    │    │    │    │    └── filters [type=bool, outer=(4)]
+    │    │    │    │    │    │         └── filters
+    │    │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+    │    │    │    │    │    └── filters
+  - │    │    │    │    │         ├── i = 5 [type=bool, outer=(4), constraints=(/4: [/5 - /5]; tight), fd=()-->(4)]
+  - │    │    │    │    │         └── false [type=bool]
   + │    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-    │    │    │    │    └── projections [outer=(4)]
+    │    │    │    │    └── projections
     │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-    │    │    │    └── aggregations [outer=(9)]
+    │    │    │    └── aggregations
     │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    └── projections [outer=(10)]
+    │    │    │              └── variable: notnull [type=bool]
+    │    │    └── projections
     │    │         └── CASE WHEN bool_or AND (5 IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 PushSelectIntoProject
@@ -1259,10 +1223,6 @@ PushSelectIntoProject
     │    │    │    │    │    │         │    ├── columns: k:3(int!null) i:4(int)
   - │    │    │    │    │    │         │    ├── key: (3)
   - │    │    │    │    │    │         │    └── fd: (3)-->(4)
-  - │    │    │    │    │    │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  - │    │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-  - │    │    │    │    │    └── filters [type=bool, outer=(4)]
-  - │    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
   + │    │    │    │    │    │         │    ├── outer: (1)
   + │    │    │    │    │    │         │    ├── cardinality: [0 - 1]
   + │    │    │    │    │    │         │    ├── key: ()
@@ -1271,20 +1231,22 @@ PushSelectIntoProject
   + │    │    │    │    │    │         │    │    ├── columns: k:3(int!null) i:4(int)
   + │    │    │    │    │    │         │    │    ├── key: (3)
   + │    │    │    │    │    │         │    │    └── fd: (3)-->(4)
-  + │    │    │    │    │    │         │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  + │    │    │    │    │    │         │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-  + │    │    │    │    │    │         └── filters [type=bool, outer=(4)]
+  + │    │    │    │    │    │         │    └── filters
+  + │    │    │    │    │    │         │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+    │    │    │    │    │    │         └── filters
+  - │    │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
   + │    │    │    │    │    │              └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  + │    │    │    │    │    └── filters [type=bool]
-    │    │    │    │    └── projections [outer=(4)]
+    │    │    │    │    │    └── filters
+  - │    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
+    │    │    │    │    └── projections
     │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-    │    │    │    └── aggregations [outer=(9)]
+    │    │    │    └── aggregations
     │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    └── projections [outer=(10)]
+    │    │    │              └── variable: notnull [type=bool]
+    │    │    └── projections
     │    │         └── CASE WHEN bool_or AND (5 IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 MergeSelects
@@ -1346,93 +1308,27 @@ MergeSelects
   - │    │    │    │    │    │         │    │    ├── columns: k:3(int!null) i:4(int)
   - │    │    │    │    │    │         │    │    ├── key: (3)
   - │    │    │    │    │    │         │    │    └── fd: (3)-->(4)
-  - │    │    │    │    │    │         │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  - │    │    │    │    │    │         │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-  - │    │    │    │    │    │         └── filters [type=bool, outer=(4)]
+  - │    │    │    │    │    │         │    └── filters
+  - │    │    │    │    │    │         │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
   + │    │    │    │    │    │         │    ├── key: (3)
   + │    │    │    │    │    │         │    └── fd: (3)-->(4)
-  + │    │    │    │    │    │         └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  + │    │    │    │    │    │              ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+    │    │    │    │    │    │         └── filters
+  + │    │    │    │    │    │              ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
     │    │    │    │    │    │              └── (i = 5) IS NOT false [type=bool, outer=(4)]
-    │    │    │    │    │    └── filters [type=bool]
-    │    │    │    │    └── projections [outer=(4)]
+    │    │    │    │    │    └── filters
+    │    │    │    │    └── projections
     │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-    │    │    │    └── aggregations [outer=(9)]
+    │    │    │    └── aggregations
     │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    └── projections [outer=(10)]
+    │    │    │              └── variable: notnull [type=bool]
+    │    │    └── projections
     │    │         └── CASE WHEN bool_or AND (5 IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
-================================================================================
-EliminateEmptyFilters
-  Cost: 2152.56
-================================================================================
-   project
-    ├── columns: r:8(bool)
-    ├── inner-join-apply
-    │    ├── columns: x:1(int!null) case:11(bool)
-    │    ├── key: (1)
-    │    ├── fd: (1)-->(11)
-    │    ├── scan xy
-    │    │    ├── columns: x:1(int!null)
-    │    │    └── key: (1)
-    │    ├── project
-    │    │    ├── columns: case:11(bool)
-    │    │    ├── outer: (1)
-    │    │    ├── cardinality: [1 - 1]
-    │    │    ├── key: ()
-    │    │    ├── fd: ()-->(11)
-    │    │    ├── scalar-group-by
-    │    │    │    ├── columns: bool_or:10(bool)
-    │    │    │    ├── outer: (1)
-    │    │    │    ├── cardinality: [1 - 1]
-    │    │    │    ├── key: ()
-    │    │    │    ├── fd: ()-->(10)
-    │    │    │    ├── project
-    │    │    │    │    ├── columns: notnull:9(bool)
-    │    │    │    │    ├── outer: (1)
-    │    │    │    │    ├── cardinality: [0 - 1]
-    │    │    │    │    ├── key: ()
-    │    │    │    │    ├── fd: ()-->(9)
-    │    │    │    │    ├── select
-    │    │    │    │    │    ├── columns: i:4(int)
-    │    │    │    │    │    ├── outer: (1)
-    │    │    │    │    │    ├── cardinality: [0 - 1]
-    │    │    │    │    │    ├── key: ()
-    │    │    │    │    │    ├── fd: ()-->(4)
-    │    │    │    │    │    ├── project
-    │    │    │    │    │    │    ├── columns: i:4(int)
-    │    │    │    │    │    │    ├── outer: (1)
-    │    │    │    │    │    │    ├── cardinality: [0 - 1]
-    │    │    │    │    │    │    ├── key: ()
-    │    │    │    │    │    │    ├── fd: ()-->(4)
-    │    │    │    │    │    │    └── select
-    │    │    │    │    │    │         ├── columns: k:3(int!null) i:4(int)
-    │    │    │    │    │    │         ├── outer: (1)
-    │    │    │    │    │    │         ├── cardinality: [0 - 1]
-    │    │    │    │    │    │         ├── key: ()
-    │    │    │    │    │    │         ├── fd: ()-->(3,4)
-    │    │    │    │    │    │         ├── scan a
-    │    │    │    │    │    │         │    ├── columns: k:3(int!null) i:4(int)
-    │    │    │    │    │    │         │    ├── key: (3)
-    │    │    │    │    │    │         │    └── fd: (3)-->(4)
-    │    │    │    │    │    │         └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-    │    │    │    │    │    │              ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-    │    │    │    │    │    │              └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  - │    │    │    │    │    └── filters [type=bool]
-  + │    │    │    │    │    └── true [type=bool]
-    │    │    │    │    └── projections [outer=(4)]
-    │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-    │    │    │    └── aggregations [outer=(9)]
-    │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    └── projections [outer=(10)]
-    │    │         └── CASE WHEN bool_or AND (5 IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
-         └── variable: case [type=bool, outer=(11)]
+--------------------------------------------------------------------------------
+EliminateEmptyFilters (no changes)
+--------------------------------------------------------------------------------
 ================================================================================
 EliminateSelect
   Cost: 2152.56
@@ -1487,10 +1383,10 @@ EliminateSelect
   - │    │    │    │    │    │         │    ├── columns: k:3(int!null) i:4(int)
   - │    │    │    │    │    │         │    ├── key: (3)
   - │    │    │    │    │    │         │    └── fd: (3)-->(4)
-  - │    │    │    │    │    │         └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  - │    │    │    │    │    │              ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  - │    │    │    │    │    │         └── filters
+  - │    │    │    │    │    │              ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
   - │    │    │    │    │    │              └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  - │    │    │    │    │    └── true [type=bool]
+  - │    │    │    │    │    └── filters
   + │    │    │    │    │    └── select
   + │    │    │    │    │         ├── columns: k:3(int!null) i:4(int)
   + │    │    │    │    │         ├── outer: (1)
@@ -1501,18 +1397,18 @@ EliminateSelect
   + │    │    │    │    │         │    ├── columns: k:3(int!null) i:4(int)
   + │    │    │    │    │         │    ├── key: (3)
   + │    │    │    │    │         │    └── fd: (3)-->(4)
-  + │    │    │    │    │         └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  + │    │    │    │    │              ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  + │    │    │    │    │         └── filters
+  + │    │    │    │    │              ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
   + │    │    │    │    │              └── (i = 5) IS NOT false [type=bool, outer=(4)]
-    │    │    │    │    └── projections [outer=(4)]
+    │    │    │    │    └── projections
     │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-    │    │    │    └── aggregations [outer=(9)]
+    │    │    │    └── aggregations
     │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    └── projections [outer=(10)]
+    │    │    │              └── variable: notnull [type=bool]
+    │    │    └── projections
     │    │         └── CASE WHEN bool_or AND (5 IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 EliminateProjectProject
@@ -1563,26 +1459,26 @@ EliminateProjectProject
   - │    │    │    │    │         │    ├── columns: k:3(int!null) i:4(int)
   - │    │    │    │    │         │    ├── key: (3)
   - │    │    │    │    │         │    └── fd: (3)-->(4)
-  - │    │    │    │    │         └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  - │    │    │    │    │              ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  - │    │    │    │    │         └── filters
+  - │    │    │    │    │              ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
   - │    │    │    │    │              └── (i = 5) IS NOT false [type=bool, outer=(4)]
   + │    │    │    │    │    ├── fd: ()-->(3,4)
   + │    │    │    │    │    ├── scan a
   + │    │    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
   + │    │    │    │    │    │    ├── key: (3)
   + │    │    │    │    │    │    └── fd: (3)-->(4)
-  + │    │    │    │    │    └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  + │    │    │    │    │         ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  + │    │    │    │    │    └── filters
+  + │    │    │    │    │         ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
   + │    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-    │    │    │    │    └── projections [outer=(4)]
+    │    │    │    │    └── projections
     │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-    │    │    │    └── aggregations [outer=(9)]
+    │    │    │    └── aggregations
     │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    └── projections [outer=(10)]
+    │    │    │              └── variable: notnull [type=bool]
+    │    │    └── projections
     │    │         └── CASE WHEN bool_or AND (5 IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 FoldNonNullIsNotNull
@@ -1625,19 +1521,19 @@ FoldNonNullIsNotNull
     │    │    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
     │    │    │    │    │    │    ├── key: (3)
     │    │    │    │    │    │    └── fd: (3)-->(4)
-    │    │    │    │    │    └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-    │    │    │    │    │         ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+    │    │    │    │    │    └── filters
+    │    │    │    │    │         ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
     │    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-    │    │    │    │    └── projections [outer=(4)]
+    │    │    │    │    └── projections
     │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-    │    │    │    └── aggregations [outer=(9)]
+    │    │    │    └── aggregations
     │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    └── projections [outer=(10)]
+    │    │    │              └── variable: notnull [type=bool]
+    │    │    └── projections
   - │    │         └── CASE WHEN bool_or AND (5 IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
   + │    │         └── CASE WHEN bool_or AND true THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 SimplifyAnd
@@ -1680,19 +1576,19 @@ SimplifyAnd
     │    │    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
     │    │    │    │    │    │    ├── key: (3)
     │    │    │    │    │    │    └── fd: (3)-->(4)
-    │    │    │    │    │    └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-    │    │    │    │    │         ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+    │    │    │    │    │    └── filters
+    │    │    │    │    │         ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
     │    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-    │    │    │    │    └── projections [outer=(4)]
+    │    │    │    │    └── projections
     │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-    │    │    │    └── aggregations [outer=(9)]
+    │    │    │    └── aggregations
     │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    └── projections [outer=(10)]
+    │    │    │              └── variable: notnull [type=bool]
+    │    │    └── projections
   - │    │         └── CASE WHEN bool_or AND true THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
   + │    │         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 --------------------------------------------------------------------------------
 EliminateSingletonAndOr (no changes)
@@ -1757,15 +1653,14 @@ TryDecorrelateProject
     │    │    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
   - │    │    │    │    │    │    ├── key: (3)
   - │    │    │    │    │    │    └── fd: (3)-->(4)
-  - │    │    │    │    │    └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  - │    │    │    │    │         ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  - │    │    │    │    │    └── filters
+  - │    │    │    │    │         ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
   - │    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  - │    │    │    │    └── projections [outer=(4)]
+  - │    │    │    │    └── projections
   - │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-  - │    │    │    └── aggregations [outer=(9)]
+  - │    │    │    └── aggregations
   - │    │    │         └── bool-or [type=bool, outer=(9)]
-  - │    │    │              └── variable: notnull [type=bool, outer=(9)]
-  - │    │    └── projections [outer=(10)]
+  - │    │    │              └── variable: notnull [type=bool]
   + │    │    │    │    │    │    ├── outer: (1)
   + │    │    │    │    │    │    ├── cardinality: [0 - 1]
   + │    │    │    │    │    │    ├── key: ()
@@ -1774,19 +1669,19 @@ TryDecorrelateProject
   + │    │    │    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
   + │    │    │    │    │    │    │    ├── key: (3)
   + │    │    │    │    │    │    │    └── fd: (3)-->(4)
-  + │    │    │    │    │    │    └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  + │    │    │    │    │    │         ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  + │    │    │    │    │    │    └── filters
+  + │    │    │    │    │    │         ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
   + │    │    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  + │    │    │    │    │    └── projections [outer=(4)]
+  + │    │    │    │    │    └── projections
   + │    │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-  + │    │    │    │    └── aggregations [outer=(9)]
+  + │    │    │    │    └── aggregations
   + │    │    │    │         └── bool-or [type=bool, outer=(9)]
-  + │    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-  + │    │    │    └── true [type=bool]
-  + │    │    └── projections [outer=(1,10)]
+  + │    │    │    │              └── variable: notnull [type=bool]
+  + │    │    │    └── filters
+    │    │    └── projections
     │    │         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 TryDecorrelateScalarGroupBy
@@ -1848,10 +1743,10 @@ TryDecorrelateScalarGroupBy
     │    │    │    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
   - │    │    │    │    │    │    │    ├── key: (3)
   - │    │    │    │    │    │    │    └── fd: (3)-->(4)
-  - │    │    │    │    │    │    └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  - │    │    │    │    │    │         ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  - │    │    │    │    │    │    └── filters
+  - │    │    │    │    │    │         ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
   - │    │    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  - │    │    │    │    │    └── projections [outer=(4)]
+  - │    │    │    │    │    └── projections
   - │    │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
   + │    │    │    │    │    │    │    ├── outer: (1)
   + │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
@@ -1861,20 +1756,20 @@ TryDecorrelateScalarGroupBy
   + │    │    │    │    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
   + │    │    │    │    │    │    │    │    ├── key: (3)
   + │    │    │    │    │    │    │    │    └── fd: (3)-->(4)
-  + │    │    │    │    │    │    │    └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  + │    │    │    │    │    │    │         ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  + │    │    │    │    │    │    │    └── filters
+  + │    │    │    │    │    │    │         ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
   + │    │    │    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  + │    │    │    │    │    │    └── projections [outer=(4)]
+  + │    │    │    │    │    │    └── projections
   + │    │    │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-  + │    │    │    │    │    └── true [type=bool]
-    │    │    │    │    └── aggregations [outer=(9)]
+  + │    │    │    │    │    └── filters
+    │    │    │    │    └── aggregations
     │    │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    │    └── true [type=bool]
-    │    │    └── projections [outer=(1,10)]
+    │    │    │    │              └── variable: notnull [type=bool]
+    │    │    │    └── filters
+    │    │    └── projections
     │    │         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 TryDecorrelateProjectSelect
@@ -1923,12 +1818,12 @@ TryDecorrelateProjectSelect
   - │    │    │    │    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
   - │    │    │    │    │    │    │    │    ├── key: (3)
   - │    │    │    │    │    │    │    │    └── fd: (3)-->(4)
-  - │    │    │    │    │    │    │    └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  - │    │    │    │    │    │    │         ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  - │    │    │    │    │    │    │    └── filters
+  - │    │    │    │    │    │    │         ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
   - │    │    │    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  - │    │    │    │    │    │    └── projections [outer=(4)]
+  - │    │    │    │    │    │    └── projections
   - │    │    │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-  - │    │    │    │    │    └── true [type=bool]
+  - │    │    │    │    │    └── filters
   + │    │    │    │    │    └── left-join-apply
   + │    │    │    │    │         ├── columns: x:1(int!null) k:3(int) i:4(int) notnull:9(bool)
   + │    │    │    │    │         ├── key: (1,3)
@@ -1944,19 +1839,19 @@ TryDecorrelateProjectSelect
   + │    │    │    │    │         │    │    ├── columns: k:3(int!null) i:4(int)
   + │    │    │    │    │         │    │    ├── key: (3)
   + │    │    │    │    │         │    │    └── fd: (3)-->(4)
-  + │    │    │    │    │         │    └── projections [outer=(3,4)]
+  + │    │    │    │    │         │    └── projections
   + │    │    │    │    │         │         └── i IS NOT NULL [type=bool, outer=(4)]
-  + │    │    │    │    │         └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  + │    │    │    │    │              ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  + │    │    │    │    │         └── filters
+  + │    │    │    │    │              ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
   + │    │    │    │    │              └── (i = 5) IS NOT false [type=bool, outer=(4)]
-    │    │    │    │    └── aggregations [outer=(9)]
+    │    │    │    │    └── aggregations
     │    │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    │    └── true [type=bool]
-    │    │    └── projections [outer=(1,10)]
+    │    │    │    │              └── variable: notnull [type=bool]
+    │    │    │    └── filters
+    │    │    └── projections
     │    │         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 DecorrelateJoin
@@ -2000,19 +1895,19 @@ DecorrelateJoin
     │    │    │    │    │         │    │    ├── columns: k:3(int!null) i:4(int)
     │    │    │    │    │         │    │    ├── key: (3)
     │    │    │    │    │         │    │    └── fd: (3)-->(4)
-    │    │    │    │    │         │    └── projections [outer=(3,4)]
+    │    │    │    │    │         │    └── projections
     │    │    │    │    │         │         └── i IS NOT NULL [type=bool, outer=(4)]
-    │    │    │    │    │         └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-    │    │    │    │    │              ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+    │    │    │    │    │         └── filters
+    │    │    │    │    │              ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
     │    │    │    │    │              └── (i = 5) IS NOT false [type=bool, outer=(4)]
-    │    │    │    │    └── aggregations [outer=(9)]
+    │    │    │    │    └── aggregations
     │    │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    │    └── true [type=bool]
-    │    │    └── projections [outer=(1,10)]
+    │    │    │    │              └── variable: notnull [type=bool]
+    │    │    │    └── filters
+    │    │    └── projections
     │    │         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 PushFilterIntoJoinRight
@@ -2058,30 +1953,29 @@ PushFilterIntoJoinRight
   + │    │    │    │    │         │    │    ├── columns: notnull:9(bool) k:3(int!null) i:4(int)
     │    │    │    │    │         │    │    ├── key: (3)
   - │    │    │    │    │         │    │    └── fd: (3)-->(4)
-  - │    │    │    │    │         │    └── projections [outer=(3,4)]
+  - │    │    │    │    │         │    └── projections
   - │    │    │    │    │         │         └── i IS NOT NULL [type=bool, outer=(4)]
-  - │    │    │    │    │         └── filters [type=bool, outer=(1,3,4), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  - │    │    │    │    │              ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-  - │    │    │    │    │              └── (i = 5) IS NOT false [type=bool, outer=(4)]
   + │    │    │    │    │         │    │    ├── fd: (3)-->(4), (4)-->(9)
   + │    │    │    │    │         │    │    ├── scan a
   + │    │    │    │    │         │    │    │    ├── columns: k:3(int!null) i:4(int)
   + │    │    │    │    │         │    │    │    ├── key: (3)
   + │    │    │    │    │         │    │    │    └── fd: (3)-->(4)
-  + │    │    │    │    │         │    │    └── projections [outer=(3,4)]
+  + │    │    │    │    │         │    │    └── projections
   + │    │    │    │    │         │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-  + │    │    │    │    │         │    └── filters [type=bool, outer=(4)]
+  + │    │    │    │    │         │    └── filters
   + │    │    │    │    │         │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  + │    │    │    │    │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  + │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-    │    │    │    │    └── aggregations [outer=(9)]
+    │    │    │    │    │         └── filters
+  - │    │    │    │    │              ├── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+  - │    │    │    │    │              └── (i = 5) IS NOT false [type=bool, outer=(4)]
+  + │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+    │    │    │    │    └── aggregations
     │    │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    │    └── true [type=bool]
-    │    │    └── projections [outer=(1,10)]
+    │    │    │    │              └── variable: notnull [type=bool]
+    │    │    │    └── filters
+    │    │    └── projections
     │    │         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 PushSelectIntoProject
@@ -2133,23 +2027,22 @@ PushSelectIntoProject
   + │    │    │    │    │         │    │    │    │    ├── columns: k:3(int!null) i:4(int)
   + │    │    │    │    │         │    │    │    │    ├── key: (3)
   + │    │    │    │    │         │    │    │    │    └── fd: (3)-->(4)
-  + │    │    │    │    │         │    │    │    └── filters [type=bool, outer=(4)]
+  + │    │    │    │    │         │    │    │    └── filters
   + │    │    │    │    │         │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-    │    │    │    │    │         │    │    └── projections [outer=(3,4)]
+    │    │    │    │    │         │    │    └── projections
     │    │    │    │    │         │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-  - │    │    │    │    │         │    └── filters [type=bool, outer=(4)]
+    │    │    │    │    │         │    └── filters
   - │    │    │    │    │         │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  + │    │    │    │    │         │    └── true [type=bool]
-    │    │    │    │    │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-    │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-    │    │    │    │    └── aggregations [outer=(9)]
+    │    │    │    │    │         └── filters
+    │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+    │    │    │    │    └── aggregations
     │    │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    │    └── true [type=bool]
-    │    │    └── projections [outer=(1,10)]
+    │    │    │    │              └── variable: notnull [type=bool]
+    │    │    │    └── filters
+    │    │    └── projections
     │    │         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 EliminateSelect
@@ -2205,26 +2098,26 @@ EliminateSelect
   - │    │    │    │    │         │    │    │    │    ├── columns: k:3(int!null) i:4(int)
   - │    │    │    │    │         │    │    │    │    ├── key: (3)
   - │    │    │    │    │         │    │    │    │    └── fd: (3)-->(4)
-  - │    │    │    │    │         │    │    │    └── filters [type=bool, outer=(4)]
+  - │    │    │    │    │         │    │    │    └── filters
   - │    │    │    │    │         │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  - │    │    │    │    │         │    │    └── projections [outer=(3,4)]
+  - │    │    │    │    │         │    │    └── projections
   - │    │    │    │    │         │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-  - │    │    │    │    │         │    └── true [type=bool]
+  - │    │    │    │    │         │    └── filters
   + │    │    │    │    │         │    │    │    └── fd: (3)-->(4)
-  + │    │    │    │    │         │    │    └── filters [type=bool, outer=(4)]
+  + │    │    │    │    │         │    │    └── filters
   + │    │    │    │    │         │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  + │    │    │    │    │         │    └── projections [outer=(3,4)]
+  + │    │    │    │    │         │    └── projections
   + │    │    │    │    │         │         └── i IS NOT NULL [type=bool, outer=(4)]
-    │    │    │    │    │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-    │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-    │    │    │    │    └── aggregations [outer=(9)]
+    │    │    │    │    │         └── filters
+    │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+    │    │    │    │    └── aggregations
     │    │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    │    └── true [type=bool]
-    │    │    └── projections [outer=(1,10)]
+    │    │    │    │              └── variable: notnull [type=bool]
+    │    │    │    └── filters
+    │    │    └── projections
     │    │         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 PruneJoinRightCols
@@ -2273,9 +2166,9 @@ PruneJoinRightCols
   - │    │    │    │    │         │    │    │    ├── columns: k:3(int!null) i:4(int)
   - │    │    │    │    │         │    │    │    ├── key: (3)
   - │    │    │    │    │         │    │    │    └── fd: (3)-->(4)
-  - │    │    │    │    │         │    │    └── filters [type=bool, outer=(4)]
+  - │    │    │    │    │         │    │    └── filters
   - │    │    │    │    │         │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  - │    │    │    │    │         │    └── projections [outer=(3,4)]
+  - │    │    │    │    │         │    └── projections
   - │    │    │    │    │         │         └── i IS NOT NULL [type=bool, outer=(4)]
   + │    │    │    │    │         │    ├── fd: (3)-->(9)
   + │    │    │    │    │         │    └── project
@@ -2290,20 +2183,20 @@ PruneJoinRightCols
   + │    │    │    │    │         │         │    │    ├── columns: k:3(int!null) i:4(int)
   + │    │    │    │    │         │         │    │    ├── key: (3)
   + │    │    │    │    │         │         │    │    └── fd: (3)-->(4)
-  + │    │    │    │    │         │         │    └── filters [type=bool, outer=(4)]
+  + │    │    │    │    │         │         │    └── filters
   + │    │    │    │    │         │         │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  + │    │    │    │    │         │         └── projections [outer=(3,4)]
+  + │    │    │    │    │         │         └── projections
   + │    │    │    │    │         │              └── i IS NOT NULL [type=bool, outer=(4)]
-    │    │    │    │    │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-    │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-    │    │    │    │    └── aggregations [outer=(9)]
+    │    │    │    │    │         └── filters
+    │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+    │    │    │    │    └── aggregations
     │    │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    │    └── true [type=bool]
-    │    │    └── projections [outer=(1,10)]
+    │    │    │    │              └── variable: notnull [type=bool]
+    │    │    │    └── filters
+    │    │    └── projections
     │    │         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 PruneProjectCols
@@ -2355,20 +2248,20 @@ PruneProjectCols
     │    │    │    │    │         │         │    │    ├── columns: k:3(int!null) i:4(int)
     │    │    │    │    │         │         │    │    ├── key: (3)
     │    │    │    │    │         │         │    │    └── fd: (3)-->(4)
-    │    │    │    │    │         │         │    └── filters [type=bool, outer=(4)]
+    │    │    │    │    │         │         │    └── filters
     │    │    │    │    │         │         │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-    │    │    │    │    │         │         └── projections [outer=(3,4)]
+    │    │    │    │    │         │         └── projections
     │    │    │    │    │         │              └── i IS NOT NULL [type=bool, outer=(4)]
-    │    │    │    │    │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-    │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-    │    │    │    │    └── aggregations [outer=(9)]
+    │    │    │    │    │         └── filters
+    │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+    │    │    │    │    └── aggregations
     │    │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    │    └── true [type=bool]
-    │    │    └── projections [outer=(1,10)]
+    │    │    │    │              └── variable: notnull [type=bool]
+    │    │    │    └── filters
+    │    │    └── projections
     │    │         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 EliminateProject
@@ -2419,9 +2312,9 @@ EliminateProject
   - │    │    │    │    │         │         │    │    ├── columns: k:3(int!null) i:4(int)
   - │    │    │    │    │         │         │    │    ├── key: (3)
   - │    │    │    │    │         │         │    │    └── fd: (3)-->(4)
-  - │    │    │    │    │         │         │    └── filters [type=bool, outer=(4)]
+  - │    │    │    │    │         │         │    └── filters
   - │    │    │    │    │         │         │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  - │    │    │    │    │         │         └── projections [outer=(3,4)]
+  - │    │    │    │    │         │         └── projections
   - │    │    │    │    │         │              └── i IS NOT NULL [type=bool, outer=(4)]
   + │    │    │    │    │         │    ├── select
   + │    │    │    │    │         │    │    ├── columns: k:3(int!null) i:4(int)
@@ -2431,20 +2324,20 @@ EliminateProject
   + │    │    │    │    │         │    │    │    ├── columns: k:3(int!null) i:4(int)
   + │    │    │    │    │         │    │    │    ├── key: (3)
   + │    │    │    │    │         │    │    │    └── fd: (3)-->(4)
-  + │    │    │    │    │         │    │    └── filters [type=bool, outer=(4)]
+  + │    │    │    │    │         │    │    └── filters
   + │    │    │    │    │         │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  + │    │    │    │    │         │    └── projections [outer=(3,4)]
+  + │    │    │    │    │         │    └── projections
   + │    │    │    │    │         │         └── i IS NOT NULL [type=bool, outer=(4)]
-    │    │    │    │    │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-    │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-    │    │    │    │    └── aggregations [outer=(9)]
+    │    │    │    │    │         └── filters
+    │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+    │    │    │    │    └── aggregations
     │    │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    │    └── true [type=bool]
-    │    │    └── projections [outer=(1,10)]
+    │    │    │    │              └── variable: notnull [type=bool]
+    │    │    │    └── filters
+    │    │    └── projections
     │    │         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 EliminateGroupByProject
@@ -2490,12 +2383,12 @@ EliminateGroupByProject
   - │    │    │    │    │         │    │    │    ├── columns: k:3(int!null) i:4(int)
   - │    │    │    │    │         │    │    │    ├── key: (3)
   - │    │    │    │    │         │    │    │    └── fd: (3)-->(4)
-  - │    │    │    │    │         │    │    └── filters [type=bool, outer=(4)]
+  - │    │    │    │    │         │    │    └── filters
   - │    │    │    │    │         │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  - │    │    │    │    │         │    └── projections [outer=(3,4)]
+  - │    │    │    │    │         │    └── projections
   - │    │    │    │    │         │         └── i IS NOT NULL [type=bool, outer=(4)]
-  - │    │    │    │    │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  - │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+  - │    │    │    │    │         └── filters
+  - │    │    │    │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
   + │    │    │    │    ├── left-join
   + │    │    │    │    │    ├── columns: x:1(int!null) k:3(int) notnull:9(bool)
   + │    │    │    │    │    ├── key: (1,3)
@@ -2515,20 +2408,20 @@ EliminateGroupByProject
   + │    │    │    │    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
   + │    │    │    │    │    │    │    │    ├── key: (3)
   + │    │    │    │    │    │    │    │    └── fd: (3)-->(4)
-  + │    │    │    │    │    │    │    └── filters [type=bool, outer=(4)]
+  + │    │    │    │    │    │    │    └── filters
   + │    │    │    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  + │    │    │    │    │    │    └── projections [outer=(3,4)]
+  + │    │    │    │    │    │    └── projections
   + │    │    │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-  + │    │    │    │    │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  + │    │    │    │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-    │    │    │    │    └── aggregations [outer=(9)]
+  + │    │    │    │    │    └── filters
+  + │    │    │    │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+    │    │    │    │    └── aggregations
     │    │    │    │         └── bool-or [type=bool, outer=(9)]
-    │    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    │    └── true [type=bool]
-    │    │    └── projections [outer=(1,10)]
+    │    │    │    │              └── variable: notnull [type=bool]
+    │    │    │    └── filters
+    │    │    └── projections
     │    │         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 EliminateSelect
@@ -2588,30 +2481,30 @@ EliminateSelect
   - │    │    │    │    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
   - │    │    │    │    │    │    │    │    ├── key: (3)
   - │    │    │    │    │    │    │    │    └── fd: (3)-->(4)
-  - │    │    │    │    │    │    │    └── filters [type=bool, outer=(4)]
+  - │    │    │    │    │    │    │    └── filters
   - │    │    │    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  - │    │    │    │    │    │    └── projections [outer=(3,4)]
+  - │    │    │    │    │    │    └── projections
   - │    │    │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-  - │    │    │    │    │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  - │    │    │    │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-  - │    │    │    │    └── aggregations [outer=(9)]
+  - │    │    │    │    │    └── filters
+  - │    │    │    │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+  - │    │    │    │    └── aggregations
   - │    │    │    │         └── bool-or [type=bool, outer=(9)]
-  - │    │    │    │              └── variable: notnull [type=bool, outer=(9)]
-  - │    │    │    └── true [type=bool]
+  - │    │    │    │              └── variable: notnull [type=bool]
+  - │    │    │    └── filters
   + │    │    │    │    │    │    │    └── fd: (3)-->(4)
-  + │    │    │    │    │    │    └── filters [type=bool, outer=(4)]
+  + │    │    │    │    │    │    └── filters
   + │    │    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  + │    │    │    │    │    └── projections [outer=(3,4)]
+  + │    │    │    │    │    └── projections
   + │    │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-  + │    │    │    │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  + │    │    │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-  + │    │    │    └── aggregations [outer=(9)]
+  + │    │    │    │    └── filters
+  + │    │    │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+  + │    │    │    └── aggregations
   + │    │    │         └── bool-or [type=bool, outer=(9)]
-  + │    │    │              └── variable: notnull [type=bool, outer=(9)]
-    │    │    └── projections [outer=(1,10)]
+  + │    │    │              └── variable: notnull [type=bool]
+    │    │    └── projections
     │    │         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    │    └── true [type=bool]
-    └── projections [outer=(11)]
+    │    └── filters
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 EliminateSelect
@@ -2671,31 +2564,31 @@ EliminateSelect
   - │    │    │    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
   - │    │    │    │    │    │    │    ├── key: (3)
   - │    │    │    │    │    │    │    └── fd: (3)-->(4)
-  - │    │    │    │    │    │    └── filters [type=bool, outer=(4)]
+  - │    │    │    │    │    │    └── filters
   - │    │    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  - │    │    │    │    │    └── projections [outer=(3,4)]
+  - │    │    │    │    │    └── projections
   - │    │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-  - │    │    │    │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  - │    │    │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-  - │    │    │    └── aggregations [outer=(9)]
+  - │    │    │    │    └── filters
+  - │    │    │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+  - │    │    │    └── aggregations
   - │    │    │         └── bool-or [type=bool, outer=(9)]
-  - │    │    │              └── variable: notnull [type=bool, outer=(9)]
-  - │    │    └── projections [outer=(1,10)]
+  - │    │    │              └── variable: notnull [type=bool]
+  - │    │    └── projections
   - │    │         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-  - │    └── true [type=bool]
+  - │    └── filters
   + │    │    │    │    │    │    └── fd: (3)-->(4)
-  + │    │    │    │    │    └── filters [type=bool, outer=(4)]
+  + │    │    │    │    │    └── filters
   + │    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  + │    │    │    │    └── projections [outer=(3,4)]
+  + │    │    │    │    └── projections
   + │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-  + │    │    │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  + │    │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-  + │    │    └── aggregations [outer=(9)]
+  + │    │    │    └── filters
+  + │    │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+  + │    │    └── aggregations
   + │    │         └── bool-or [type=bool, outer=(9)]
-  + │    │              └── variable: notnull [type=bool, outer=(9)]
-  + │    └── projections [outer=(1,10)]
+  + │    │              └── variable: notnull [type=bool]
+  + │    └── projections
   + │         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    └── projections [outer=(11)]
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 PruneProjectCols
@@ -2732,19 +2625,18 @@ PruneProjectCols
     │    │    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
     │    │    │    │    │    │    ├── key: (3)
     │    │    │    │    │    │    └── fd: (3)-->(4)
-    │    │    │    │    │    └── filters [type=bool, outer=(4)]
+    │    │    │    │    │    └── filters
     │    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-    │    │    │    │    └── projections [outer=(3,4)]
+    │    │    │    │    └── projections
     │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-    │    │    │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-    │    │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-    │    │    └── aggregations [outer=(9)]
+    │    │    │    └── filters
+    │    │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+    │    │    └── aggregations
     │    │         └── bool-or [type=bool, outer=(9)]
-    │    │              └── variable: notnull [type=bool, outer=(9)]
-  - │    └── projections [outer=(1,10)]
-  + │    └── projections [outer=(10)]
+    │    │              └── variable: notnull [type=bool]
+    │    └── projections
     │         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-    └── projections [outer=(11)]
+    └── projections
          └── variable: case [type=bool, outer=(11)]
 ================================================================================
 InlineProjectInProject
@@ -2797,30 +2689,29 @@ InlineProjectInProject
   - │    │    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
   - │    │    │    │    │    │    ├── key: (3)
   - │    │    │    │    │    │    └── fd: (3)-->(4)
-  - │    │    │    │    │    └── filters [type=bool, outer=(4)]
+  - │    │    │    │    │    └── filters
   - │    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  - │    │    │    │    └── projections [outer=(3,4)]
+  - │    │    │    │    └── projections
   - │    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-  - │    │    │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  - │    │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-  - │    │    └── aggregations [outer=(9)]
+  - │    │    │    └── filters
+  - │    │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+  - │    │    └── aggregations
   - │    │         └── bool-or [type=bool, outer=(9)]
-  - │    │              └── variable: notnull [type=bool, outer=(9)]
-  - │    └── projections [outer=(10)]
+  - │    │              └── variable: notnull [type=bool]
+  - │    └── projections
   - │         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
-  - └── projections [outer=(11)]
-  -      └── variable: case [type=bool, outer=(11)]
   + │    │    │    │    │    └── fd: (3)-->(4)
-  + │    │    │    │    └── filters [type=bool, outer=(4)]
+  + │    │    │    │    └── filters
   + │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-  + │    │    │    └── projections [outer=(3,4)]
+  + │    │    │    └── projections
   + │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-  + │    │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  + │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-  + │    └── aggregations [outer=(9)]
+  + │    │    └── filters
+  + │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+  + │    └── aggregations
   + │         └── bool-or [type=bool, outer=(9)]
-  + │              └── variable: notnull [type=bool, outer=(9)]
-  + └── projections [outer=(10)]
+  + │              └── variable: notnull [type=bool]
+    └── projections
+  -      └── variable: case [type=bool, outer=(11)]
   +      └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
 --------------------------------------------------------------------------------
 GenerateIndexScans (no changes)
@@ -2861,19 +2752,19 @@ CommuteLeftJoin (higher cost)
     │    │    │    │    │    ├── columns: k:3(int!null) i:4(int)
     │    │    │    │    │    ├── key: (3)
     │    │    │    │    │    └── fd: (3)-->(4)
-    │    │    │    │    └── filters [type=bool, outer=(4)]
+    │    │    │    │    └── filters
     │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-    │    │    │    └── projections [outer=(3,4)]
+    │    │    │    └── projections
     │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
   + │    │    ├── scan xy
   + │    │    │    ├── columns: x:1(int!null)
   + │    │    │    └── key: (1)
-    │    │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-    │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-    │    └── aggregations [outer=(9)]
+    │    │    └── filters
+    │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+    │    └── aggregations
     │         └── bool-or [type=bool, outer=(9)]
-    │              └── variable: notnull [type=bool, outer=(9)]
-    └── projections [outer=(10)]
+    │              └── variable: notnull [type=bool]
+    └── projections
          └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
 ================================================================================
 GenerateMergeJoins
@@ -2889,6 +2780,8 @@ GenerateMergeJoins
   - │    ├── left-join
   + │    ├── left-join (merge)
     │    │    ├── columns: x:1(int!null) k:3(int) notnull:9(bool)
+  + │    │    ├── left ordering: +1
+  + │    │    ├── right ordering: +3
     │    │    ├── key: (1,3)
     │    │    ├── fd: (3)-->(9)
     │    │    ├── scan xy
@@ -2912,21 +2805,16 @@ GenerateMergeJoins
   - │    │    │    │    │    └── fd: (3)-->(4)
   + │    │    │    │    │    ├── fd: (3)-->(4)
   + │    │    │    │    │    └── ordering: +3
-    │    │    │    │    └── filters [type=bool, outer=(4)]
+    │    │    │    │    └── filters
     │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-    │    │    │    └── projections [outer=(3,4)]
+    │    │    │    └── projections
     │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-  - │    │    └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  - │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-  + │    │    └── merge-on
-  + │    │         ├── left ordering: +1
-  + │    │         ├── right ordering: +3
-  + │    │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-  + │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-    │    └── aggregations [outer=(9)]
+    │    │    └── filters
+    │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+    │    └── aggregations
     │         └── bool-or [type=bool, outer=(9)]
-    │              └── variable: notnull [type=bool, outer=(9)]
-    └── projections [outer=(10)]
+    │              └── variable: notnull [type=bool]
+    └── projections
          └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
 --------------------------------------------------------------------------------
 CommuteRightJoin (no changes)
@@ -2947,6 +2835,8 @@ Final best expression
    │    ├── fd: (1)-->(10)
    │    ├── left-join (merge)
    │    │    ├── columns: x:1(int!null) k:3(int) notnull:9(bool)
+   │    │    ├── left ordering: +1
+   │    │    ├── right ordering: +3
    │    │    ├── key: (1,3)
    │    │    ├── fd: (3)-->(9)
    │    │    ├── scan xy
@@ -2968,17 +2858,14 @@ Final best expression
    │    │    │    │    │    ├── key: (3)
    │    │    │    │    │    ├── fd: (3)-->(4)
    │    │    │    │    │    └── ordering: +3
-   │    │    │    │    └── filters [type=bool, outer=(4)]
+   │    │    │    │    └── filters
    │    │    │    │         └── (i = 5) IS NOT false [type=bool, outer=(4)]
-   │    │    │    └── projections [outer=(3,4)]
+   │    │    │    └── projections
    │    │    │         └── i IS NOT NULL [type=bool, outer=(4)]
-   │    │    └── merge-on
-   │    │         ├── left ordering: +1
-   │    │         ├── right ordering: +3
-   │    │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-   │    │              └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-   │    └── aggregations [outer=(9)]
+   │    │    └── filters
+   │    │         └── k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+   │    └── aggregations
    │         └── bool-or [type=bool, outer=(9)]
-   │              └── variable: notnull [type=bool, outer=(9)]
-   └── projections [outer=(10)]
+   │              └── variable: notnull [type=bool]
+   └── projections
         └── CASE WHEN bool_or THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]

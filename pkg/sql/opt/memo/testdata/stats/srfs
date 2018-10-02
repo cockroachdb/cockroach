@@ -16,19 +16,19 @@ inner-join
  │    │    ├── side-effects
  │    │    ├── stats: [rows=1000]
  │    │    ├── upper('def') [type=string]
- │    │    ├── generate_series(1, 3) [type=int, side-effects]
+ │    │    ├── generate_series(1, 3) [type=int]
  │    │    └── upper('ghi') [type=string]
  │    ├── zip
  │    │    ├── columns: upper:1(string)
  │    │    ├── stats: [rows=1]
  │    │    └── upper('abc') [type=string]
- │    └── true [type=bool]
+ │    └── filters
  ├── zip
  │    ├── columns: generate_series:5(int)
  │    ├── side-effects
  │    ├── stats: [rows=1000]
- │    └── generate_series(1, 4) [type=int, side-effects]
- └── true [type=bool]
+ │    └── generate_series(1, 4) [type=int]
+ └── filters
 
 opt
 SELECT * FROM (SELECT * FROM upper('abc') a, generate_series(1, 2) b) GROUP BY a, b
@@ -47,9 +47,9 @@ distinct-on
       │    ├── columns: generate_series:2(int)
       │    ├── side-effects
       │    ├── stats: [rows=1000, distinct(2)=100]
-      │    └── generate_series(1, 2) [type=int, side-effects]
+      │    └── generate_series(1, 2) [type=int]
       ├── zip
       │    ├── columns: upper:1(string)
       │    ├── stats: [rows=1, distinct(1)=1]
       │    └── upper('abc') [type=string]
-      └── true [type=bool]
+      └── filters

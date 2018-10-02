@@ -845,9 +845,9 @@ scalar-group-by
  │    ├── fd: ()-->(1-3)
  │    ├── prune: (1-3,9)
  │    └── interesting orderings: (+3,+2,-1)
- └── aggregations [outer=(9)]
+ └── aggregations
       └── sum [type=decimal, outer=(9)]
-           └── variable: ol_amount [type=decimal, outer=(9)]
+           └── variable: ol_amount [type=decimal]
 
 # --------------------------------------------------
 # 2.8 The Stock-Level Transaction
@@ -914,23 +914,23 @@ scalar-group-by
  │    │    ├── fd: ()-->(2,3)
  │    │    ├── prune: (5)
  │    │    └── interesting orderings: (+3,+2,-1)
- │    └── filters [type=bool, outer=(3,5,11-13), constraints=(/3: (/NULL - ]; /5: (/NULL - ]; /11: (/NULL - ]; /12: [/10 - /10]; /13: (/NULL - /14]), fd=()-->(3,12), (5)==(11), (11)==(5), (3)==(12), (12)==(3)]
- │         ├── eq [type=bool, outer=(5,11), constraints=(/5: (/NULL - ]; /11: (/NULL - ])]
- │         │    ├── variable: s_i_id [type=int, outer=(11)]
- │         │    └── variable: ol_i_id [type=int, outer=(5)]
- │         ├── eq [type=bool, outer=(3,12), constraints=(/3: (/NULL - ]; /12: (/NULL - ])]
- │         │    ├── variable: s_w_id [type=int, outer=(12)]
- │         │    └── variable: ol_w_id [type=int, outer=(3)]
- │         ├── eq [type=bool, outer=(12), constraints=(/12: [/10 - /10]; tight)]
- │         │    ├── variable: s_w_id [type=int, outer=(12)]
+ │    └── filters
+ │         ├── eq [type=bool, outer=(5,11), constraints=(/5: (/NULL - ]; /11: (/NULL - ]), fd=(5)==(11), (11)==(5)]
+ │         │    ├── variable: s_i_id [type=int]
+ │         │    └── variable: ol_i_id [type=int]
+ │         ├── eq [type=bool, outer=(3,12), constraints=(/3: (/NULL - ]; /12: (/NULL - ]), fd=(3)==(12), (12)==(3)]
+ │         │    ├── variable: s_w_id [type=int]
+ │         │    └── variable: ol_w_id [type=int]
+ │         ├── eq [type=bool, outer=(12), constraints=(/12: [/10 - /10]; tight), fd=()-->(12)]
+ │         │    ├── variable: s_w_id [type=int]
  │         │    └── const: 10 [type=int]
  │         └── lt [type=bool, outer=(13), constraints=(/13: (/NULL - /14]; tight)]
- │              ├── variable: s_quantity [type=int, outer=(13)]
+ │              ├── variable: s_quantity [type=int]
  │              └── const: 15 [type=int]
- └── aggregations [outer=(11)]
+ └── aggregations
       └── count [type=int, outer=(11)]
-           └── agg-distinct [type=int, outer=(11)]
-                └── variable: s_i_id [type=int, outer=(11)]
+           └── agg-distinct [type=int]
+                └── variable: s_i_id [type=int]
 
 # --------------------------------------------------
 # Consistency Queries
@@ -960,6 +960,8 @@ scalar-group-by
  ├── prune: (22)
  ├── inner-join (merge)
  │    ├── columns: w_id:1(int!null) w_ytd:9(decimal!null) d_w_id:11(int!null) sum:21(decimal!null)
+ │    ├── left ordering: +1
+ │    ├── right ordering: +11
  │    ├── stats: [rows=1.11111111, distinct(1)=1.11111111, distinct(11)=1.11111111]
  │    ├── cost: 126.411111
  │    ├── key: (11)
@@ -990,19 +992,16 @@ scalar-group-by
  │    │    │    ├── ordering: +11
  │    │    │    ├── prune: (11,19)
  │    │    │    └── interesting orderings: (+11)
- │    │    └── aggregations [outer=(19)]
+ │    │    └── aggregations
  │    │         └── sum [type=decimal, outer=(19)]
- │    │              └── variable: d_ytd [type=decimal, outer=(19)]
- │    └── merge-on
- │         ├── left ordering: +1
- │         ├── right ordering: +11
- │         └── filters [type=bool, outer=(1,9,11,21), constraints=(/1: (/NULL - ]; /9: (/NULL - ]; /11: (/NULL - ]; /21: (/NULL - ]), fd=(1)==(11), (11)==(1)]
- │              ├── eq [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ])]
- │              │    ├── variable: w_id [type=int, outer=(1)]
- │              │    └── variable: d_w_id [type=int, outer=(11)]
- │              └── ne [type=bool, outer=(9,21), constraints=(/9: (/NULL - ]; /21: (/NULL - ])]
- │                   ├── variable: w_ytd [type=decimal, outer=(9)]
- │                   └── variable: sum [type=decimal, outer=(21)]
+ │    │              └── variable: d_ytd [type=decimal]
+ │    └── filters
+ │         ├── eq [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+ │         │    ├── variable: w_id [type=int]
+ │         │    └── variable: d_w_id [type=int]
+ │         └── ne [type=bool, outer=(9,21), constraints=(/9: (/NULL - ]; /21: (/NULL - ])]
+ │              ├── variable: w_ytd [type=decimal]
+ │              └── variable: sum [type=decimal]
  └── aggregations
       └── count-rows [type=int]
 
@@ -1045,9 +1044,9 @@ group-by
  │    ├── ordering: +3,+2
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+3,+2,-1)
- └── aggregations [outer=(1)]
+ └── aggregations
       └── max [type=int, outer=(1)]
-           └── variable: no_o_id [type=int, outer=(1)]
+           └── variable: no_o_id [type=int]
 
 opt format=hide-qual
 SELECT max(o_id)
@@ -1073,9 +1072,9 @@ group-by
  │    ├── ordering: +3,+2
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+3,+2,-1)
- └── aggregations [outer=(1)]
+ └── aggregations
       └── max [type=int, outer=(1)]
-           └── variable: o_id [type=int, outer=(1)]
+           └── variable: o_id [type=int]
 
 opt format=hide-qual
 SELECT count(*)
@@ -1118,19 +1117,19 @@ scalar-group-by
  │    │    │    ├── key: (1-3)
  │    │    │    ├── prune: (1-3)
  │    │    │    └── interesting orderings: (+3,+2,-1)
- │    │    └── aggregations [outer=(1)]
+ │    │    └── aggregations
  │    │         ├── max [type=int, outer=(1)]
- │    │         │    └── variable: no_o_id [type=int, outer=(1)]
+ │    │         │    └── variable: no_o_id [type=int]
  │    │         ├── min [type=int, outer=(1)]
- │    │         │    └── variable: no_o_id [type=int, outer=(1)]
+ │    │         │    └── variable: no_o_id [type=int]
  │    │         └── count-rows [type=int]
- │    └── filters [type=bool, outer=(4-6)]
+ │    └── filters
  │         └── ne [type=bool, outer=(4-6)]
- │              ├── minus [type=int, outer=(4-6)]
- │              │    ├── minus [type=int, outer=(4,5)]
- │              │    │    ├── variable: max [type=int, outer=(4)]
- │              │    │    └── variable: min [type=int, outer=(5)]
- │              │    └── variable: count_rows [type=int, outer=(6)]
+ │              ├── minus [type=int]
+ │              │    ├── minus [type=int]
+ │              │    │    ├── variable: max [type=int]
+ │              │    │    └── variable: min [type=int]
+ │              │    └── variable: count_rows [type=int]
  │              └── const: -1 [type=int]
  └── aggregations
       └── count-rows [type=int]
@@ -1158,9 +1157,9 @@ group-by
  │    ├── ordering: +3,+2
  │    ├── prune: (2,3,7)
  │    └── interesting orderings: (+3,+2)
- └── aggregations [outer=(7)]
+ └── aggregations
       └── sum [type=decimal, outer=(7)]
-           └── variable: o_ol_cnt [type=int, outer=(7)]
+           └── variable: o_ol_cnt [type=int]
 
 opt format=hide-qual
 SELECT count(*)
@@ -1234,9 +1233,9 @@ except-all
            │    ├── fd: (4-6)-->(9)
            │    ├── prune: (4-6,9)
            │    └── interesting orderings: (+6,+5,-4) (+6,+5,+9,+4)
-           └── filters [type=bool, outer=(9), constraints=(/9: [/NULL - /NULL]; tight), fd=()-->(9)]
-                └── is [type=bool, outer=(9), constraints=(/9: [/NULL - /NULL]; tight)]
-                     ├── variable: o_carrier_id [type=int, outer=(9)]
+           └── filters
+                └── is [type=bool, outer=(9), constraints=(/9: [/NULL - /NULL]; tight), fd=()-->(9)]
+                     ├── variable: o_carrier_id [type=int]
                      └── null [type=unknown]
 
 opt format=hide-qual
@@ -1273,9 +1272,9 @@ except-all
  │         │    ├── fd: (1-3)-->(6)
  │         │    ├── prune: (1-3,6)
  │         │    └── interesting orderings: (+3,+2,-1) (+3,+2,+6,+1)
- │         └── filters [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
- │              └── is [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight)]
- │                   ├── variable: o_carrier_id [type=int, outer=(6)]
+ │         └── filters
+ │              └── is [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
+ │                   ├── variable: o_carrier_id [type=int]
  │                   └── null [type=unknown]
  └── scan new_order
       ├── columns: no_o_id:9(int!null) no_d_id:10(int!null) no_w_id:11(int!null)
@@ -1436,9 +1435,9 @@ scalar-group-by
  │    │    │         │    ├── fd: (1-3)-->(6)
  │    │    │         │    ├── prune: (1-3,6)
  │    │    │         │    └── interesting orderings: (+3,+2,-1) (+3,+2,+6,+1)
- │    │    │         └── filters [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
- │    │    │              └── is [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight)]
- │    │    │                   ├── variable: o_carrier_id [type=int, outer=(6)]
+ │    │    │         └── filters
+ │    │    │              └── is [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
+ │    │    │                   ├── variable: o_carrier_id [type=int]
  │    │    │                   └── null [type=unknown]
  │    │    ├── project
  │    │    │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
@@ -1459,27 +1458,27 @@ scalar-group-by
  │    │    │         │    ├── cost: 1140000
  │    │    │         │    ├── prune: (9-11,15)
  │    │    │         │    └── interesting orderings: (+11,+10,-9)
- │    │    │         └── filters [type=bool, outer=(15), constraints=(/15: [/NULL - /NULL]; tight), fd=()-->(15)]
- │    │    │              └── is [type=bool, outer=(15), constraints=(/15: [/NULL - /NULL]; tight)]
- │    │    │                   ├── variable: ol_delivery_d [type=timestamp, outer=(15)]
+ │    │    │         └── filters
+ │    │    │              └── is [type=bool, outer=(15), constraints=(/15: [/NULL - /NULL]; tight), fd=()-->(15)]
+ │    │    │                   ├── variable: ol_delivery_d [type=timestamp]
  │    │    │                   └── null [type=unknown]
- │    │    └── filters [type=bool, outer=(1-3,9-11), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ]; /9: (/NULL - ]; /10: (/NULL - ]; /11: (/NULL - ]), fd=(3)==(11), (11)==(3), (2)==(10), (10)==(2), (1)==(9), (9)==(1)]
- │    │         ├── eq [type=bool, outer=(3,11), constraints=(/3: (/NULL - ]; /11: (/NULL - ])]
- │    │         │    ├── variable: ol_w_id [type=int, outer=(11)]
- │    │         │    └── variable: o_w_id [type=int, outer=(3)]
- │    │         ├── eq [type=bool, outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ])]
- │    │         │    ├── variable: ol_d_id [type=int, outer=(10)]
- │    │         │    └── variable: o_d_id [type=int, outer=(2)]
- │    │         └── eq [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ])]
- │    │              ├── variable: ol_o_id [type=int, outer=(9)]
- │    │              └── variable: o_id [type=int, outer=(1)]
- │    └── filters [type=bool, outer=(1,9)]
+ │    │    └── filters
+ │    │         ├── eq [type=bool, outer=(3,11), constraints=(/3: (/NULL - ]; /11: (/NULL - ]), fd=(3)==(11), (11)==(3)]
+ │    │         │    ├── variable: ol_w_id [type=int]
+ │    │         │    └── variable: o_w_id [type=int]
+ │    │         ├── eq [type=bool, outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
+ │    │         │    ├── variable: ol_d_id [type=int]
+ │    │         │    └── variable: o_d_id [type=int]
+ │    │         └── eq [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+ │    │              ├── variable: ol_o_id [type=int]
+ │    │              └── variable: o_id [type=int]
+ │    └── filters
  │         └── or [type=bool, outer=(1,9)]
- │              ├── is [type=bool, outer=(9)]
- │              │    ├── variable: ol_o_id [type=int, outer=(9)]
+ │              ├── is [type=bool]
+ │              │    ├── variable: ol_o_id [type=int]
  │              │    └── null [type=unknown]
- │              └── is [type=bool, outer=(1)]
- │                   ├── variable: o_id [type=int, outer=(1)]
+ │              └── is [type=bool]
+ │                   ├── variable: o_id [type=int]
  │                   └── null [type=unknown]
  └── aggregations
       └── count-rows [type=int]

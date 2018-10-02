@@ -132,7 +132,7 @@ project
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-4,+3,+1)
- └── projections [outer=(1,2)]
+ └── projections
       └── subquery [type=int, outer=(1,2)]
            └── max1-row
                 ├── columns: x:8(int)
@@ -156,9 +156,9 @@ project
                      │    │    ├── fd: (5)-->(6,7)
                      │    │    ├── prune: (5-7)
                      │    │    └── interesting orderings: (+5)
-                     │    └── projections [outer=(1)]
+                     │    └── projections
                      │         └── variable: xyzs.x [type=int, outer=(1)]
-                     └── variable: y [type=int, outer=(2)]
+                     └── variable: y [type=int]
 
 # Test very high limit (> max uint32).
 opt

@@ -145,12 +145,12 @@ project
  │    │    │         │    ├── columns: oid:21(oid) rolname:22(name!null) rolsuper:23(bool)
  │    │    │         │    ├── scan pg_roles
  │    │    │         │    │    └── columns: oid:21(oid) rolname:22(name) rolsuper:23(bool)
- │    │    │         │    └── filters [type=bool, outer=(22), constraints=(/22: (/NULL - ])]
+ │    │    │         │    └── filters
  │    │    │         │         └── rolname = current_user() [type=bool, outer=(22), constraints=(/22: (/NULL - ])]
- │    │    │         └── projections [outer=(4,21,23)]
+ │    │    │         └── projections
  │    │    │              └── rolsuper OR (oid = usesysid) [type=bool, outer=(4,21,23)]
- │    │    └── filters [type=bool, outer=(36), constraints=(/36: [/true - /true]; tight), fd=()-->(36)]
- │    │         └── variable: ?column? [type=bool, outer=(36), constraints=(/36: [/true - /true]; tight)]
- │    └── true [type=bool]
- └── projections [outer=(2,3,5-12,19)]
+ │    │    └── filters
+ │    │         └── variable: ?column? [type=bool, outer=(36), constraints=(/36: [/true - /true]; tight), fd=()-->(36)]
+ │    └── filters
+ └── projections
       └── CASE WHEN (client_hostname IS NOT NULL) AND (client_hostname != '') THEN (client_hostname || ':') || client_port::STRING WHEN (client_addr IS NOT NULL) AND (client_addr::STRING != '') THEN (client_addr::STRING || ':') || client_port::STRING WHEN client_port = -1 THEN 'local pipe' ELSE 'localhost:' || client_port::STRING END [type=string, outer=(7-9)]

@@ -683,7 +683,7 @@ project
            │    │         ├── columns: a:1(int!null) b:2(int) c:3(int)
            │    │         ├── scan abc
            │    │         │    └── columns: a:1(int!null) b:2(int) c:3(int)
-           │    │         └── filters [type=bool]
+           │    │         └── filters
            │    │              └── false [type=bool]
            │    └── projections
            │         └── tuple [type=tuple{int, int}]
@@ -745,7 +745,7 @@ project
                           ├── columns: abc.a:1(int!null) b:2(int) c:3(int)
                           ├── scan abc
                           │    └── columns: abc.a:1(int!null) b:2(int) c:3(int)
-                          └── filters [type=bool]
+                          └── filters
                                └── false [type=bool]
 
 exec-ddl
@@ -786,7 +786,7 @@ select
  ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── scan abc
  │    └── columns: a:1(int!null) b:2(int) c:3(int)
- └── filters [type=bool]
+ └── filters
       └── eq [type=bool]
            ├── variable: a [type=int]
            └── const: 7 [type=int]
@@ -829,7 +829,7 @@ select
  ├── columns: x:1(int!null) y:2(int) z:3(int)
  ├── scan xyz
  │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
- └── filters [type=bool]
+ └── filters
       └── eq [type=bool]
            ├── variable: xyz.x [type=int]
            └── subquery [type=int]
@@ -852,7 +852,7 @@ select
  ├── columns: x:1(int!null) y:2(int) z:3(int)
  ├── scan xyz
  │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
- └── filters [type=bool]
+ └── filters
       └── eq [type=bool]
            ├── variable: xyz.x [type=int]
            └── subquery [type=int]
@@ -889,7 +889,7 @@ select
  ├── columns: k:1(int!null) v:2(string)
  ├── scan kv
  │    └── columns: kv.k:1(int!null) kv.v:2(string)
- └── filters [type=bool]
+ └── filters
       └── eq [type=bool]
            ├── variable: kv.k [type=int]
            └── subquery [type=int]
@@ -901,7 +901,7 @@ select
                                ├── columns: kv.k:3(int!null) kv.v:4(string)
                                ├── scan kv
                                │    └── columns: kv.k:3(int!null) kv.v:4(string)
-                               └── filters [type=bool]
+                               └── filters
                                     └── eq [type=bool]
                                          ├── tuple [type=tuple{int, string}]
                                          │    ├── variable: kv.k [type=int]
@@ -925,7 +925,7 @@ project
                 │    ├── columns: k:1(int!null) v:2(string)
                 │    ├── scan kv
                 │    │    └── columns: k:1(int!null) v:2(string)
-                │    └── filters [type=bool]
+                │    └── filters
                 │         └── eq [type=bool]
                 │              ├── variable: k [type=int]
                 │              └── const: 1 [type=int]
@@ -947,7 +947,7 @@ project
                 │    ├── columns: k:1(int!null) v:2(string)
                 │    ├── scan kv
                 │    │    └── columns: k:1(int!null) v:2(string)
-                │    └── filters [type=bool]
+                │    └── filters
                 │         └── eq [type=bool]
                 │              ├── variable: k [type=int]
                 │              └── const: 2 [type=int]
@@ -1039,7 +1039,7 @@ select
  ├── columns: x:1(int!null) y:2(int) z:3(int)
  ├── scan xyz
  │    └── columns: x:1(int!null) y:2(int) z:3(int)
- └── filters [type=bool]
+ └── filters
       └── lt [type=bool]
            ├── variable: x [type=int]
            └── const: 7 [type=int]
@@ -1051,7 +1051,7 @@ select
  ├── columns: foo1:1(int!null) y:2(int) z:3(int)
  ├── scan xyz
  │    └── columns: x:1(int!null) y:2(int) z:3(int)
- └── filters [type=bool]
+ └── filters
       └── lt [type=bool]
            ├── variable: x [type=int]
            └── const: 7 [type=int]
@@ -1063,7 +1063,7 @@ select
  ├── columns: foo1:1(int!null) moo2:2(int) moo3:3(int)
  ├── scan xyz
  │    └── columns: x:1(int!null) y:2(int) z:3(int)
- └── filters [type=bool]
+ └── filters
       └── lt [type=bool]
            ├── variable: x [type=int]
            └── const: 7 [type=int]
@@ -1075,7 +1075,7 @@ select
  ├── columns: foo1:1(int!null) moo2:2(int) moo3:3(int)
  ├── scan xyz
  │    └── columns: x:1(int!null) y:2(int) z:3(int)
- └── filters [type=bool]
+ └── filters
       └── lt [type=bool]
            ├── variable: x [type=int]
            └── const: 7 [type=int]
@@ -1090,7 +1090,7 @@ sort
       ├── columns: x:1(int!null) y:2(int) z:3(int)
       ├── scan xyz
       │    └── columns: x:1(int!null) y:2(int) z:3(int)
-      └── filters [type=bool]
+      └── filters
            └── lt [type=bool]
                 ├── variable: x [type=int]
                 └── const: 7 [type=int]
@@ -1110,7 +1110,7 @@ select
  │         ├── const: 4 [type=int]
  │         ├── const: 5 [type=int]
  │         └── const: 6 [type=int]
- └── filters [type=bool]
+ └── filters
       └── eq [type=bool]
            ├── variable: column1 [type=int]
            └── const: 4 [type=int]
@@ -1157,7 +1157,7 @@ project
       │         ├── const: 5 [type=int]
       │         ├── const: 6 [type=int]
       │         └── const: 10 [type=int]
-      └── filters [type=bool]
+      └── filters
            └── eq [type=bool]
                 ├── plus [type=int]
                 │    ├── variable: column1 [type=int]
@@ -1200,7 +1200,7 @@ project
       ├── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
       ├── scan xyz
       │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
-      └── filters [type=bool]
+      └── filters
            └── any: eq [type=bool]
                 ├── project
                 │    ├── columns: xyz.x:4(int!null)
@@ -1208,7 +1208,7 @@ project
                 │         ├── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
                 │         ├── scan xyz
                 │         │    └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
-                │         └── filters [type=bool]
+                │         └── filters
                 │              └── eq [type=bool]
                 │                   ├── variable: xyz.x [type=int]
                 │                   └── const: 7 [type=int]
@@ -1225,7 +1225,7 @@ limit
  │         ├── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
  │         ├── scan xyz
  │         │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
- │         └── filters [type=bool]
+ │         └── filters
  │              └── eq [type=bool]
  │                   ├── variable: xyz.x [type=int]
  │                   └── const: 7 [type=int]
@@ -1238,7 +1238,7 @@ limit
                      ├── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
                      ├── scan xyz
                      │    └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
-                     └── filters [type=bool]
+                     └── filters
                           └── eq [type=bool]
                                ├── variable: xyz.x [type=int]
                                └── const: 1 [type=int]
@@ -1265,7 +1265,7 @@ offset
                      ├── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
                      ├── scan xyz
                      │    └── columns: xyz.x:4(int!null) xyz.y:5(int) xyz.z:6(int)
-                     └── filters [type=bool]
+                     └── filters
                           └── eq [type=bool]
                                ├── variable: xyz.x [type=int]
                                └── const: 1 [type=int]
@@ -1280,7 +1280,7 @@ project
       ├── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
       ├── scan xyz
       │    └── columns: xyz.x:1(int!null) xyz.y:2(int) xyz.z:3(int)
-      └── filters [type=bool]
+      └── filters
            └── any: eq [type=bool]
                 ├── project
                 │    ├── columns: xyz.x:4(int!null)
@@ -1316,7 +1316,7 @@ project
       ├── columns: tab4.col0:1(int) tab4.col1:2(float) tab4.col3:3(int) tab4.col4:4(float) tab4.rowid:5(int!null)
       ├── scan tab4
       │    └── columns: tab4.col0:1(int) tab4.col1:2(float) tab4.col3:3(int) tab4.col4:4(float) tab4.rowid:5(int!null)
-      └── filters [type=bool]
+      └── filters
            └── or [type=bool]
                 ├── and [type=bool]
                 │    ├── le [type=bool]
@@ -1333,7 +1333,7 @@ project
                      │    │         ├── columns: tab4.col0:6(int) tab4.col1:7(float!null) tab4.col3:8(int) tab4.col4:9(float) tab4.rowid:10(int!null)
                      │    │         ├── scan tab4
                      │    │         │    └── columns: tab4.col0:6(int) tab4.col1:7(float) tab4.col3:8(int) tab4.col4:9(float) tab4.rowid:10(int!null)
-                     │    │         └── filters [type=bool]
+                     │    │         └── filters
                      │    │              └── gt [type=bool]
                      │    │                   ├── variable: tab4.col1 [type=float]
                      │    │                   └── const: 8.27 [type=float]
@@ -1479,7 +1479,7 @@ project
  │    │    └── columns: db1.public.kv.k:1(int!null) db1.public.kv.v:2(int)
  │    ├── scan kv
  │    │    └── columns: t.public.kv.k:3(int!null) t.public.kv.v:4(string)
- │    └── true [type=bool]
+ │    └── filters
  └── projections
       └── subquery [type=int]
            └── max1-row
@@ -1514,7 +1514,7 @@ project
  │    │    └── columns: db1.public.kv.k:1(int!null) db1.public.kv.v:2(int)
  │    ├── scan kv
  │    │    └── columns: t.public.kv.k:3(int!null) t.public.kv.v:4(string)
- │    └── true [type=bool]
+ │    └── filters
  └── projections
       └── subquery [type=int]
            └── max1-row
@@ -1745,7 +1745,7 @@ project
                                          │    │         └── projections
                                          │    │              ├── variable: t2.a [type=int]
                                          │    │              └── variable: t3.a [type=int]
-                                         │    └── filters [type=bool]
+                                         │    └── filters
                                          │         └── gt [type=bool]
                                          │              ├── variable: a [type=int]
                                          │              └── variable: a [type=int]
@@ -1780,7 +1780,7 @@ project
                      │    │    │         └── variable: t2.a [type=int]
                      │    │    └── aggregations
                      │    │         └── count-rows [type=int]
-                     │    └── filters [type=bool]
+                     │    └── filters
                      │         └── gt [type=bool]
                      │              ├── variable: a [type=int]
                      │              └── const: 5 [type=int]
@@ -1860,7 +1860,7 @@ select
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── scan a
  │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
- └── filters [type=bool]
+ └── filters
       └── eq [type=bool]
            ├── const: 'bar' [type=string]
            └── subquery [type=string]
@@ -1920,7 +1920,7 @@ select
  │    └── aggregations
  │         └── max [type=string]
  │              └── variable: a [type=string]
- └── filters [type=bool]
+ └── filters
       └── any: lt [type=bool]
            ├── project
            │    ├── columns: b:4(string)
@@ -2447,7 +2447,7 @@ project
       ├── columns: y:1(int[]!null) w.rowid:2(int!null)
       ├── scan w
       │    └── columns: y:1(int[]) w.rowid:2(int!null)
-      └── filters [type=bool]
+      └── filters
            └── eq [type=bool]
                 ├── variable: y [type=int[]]
                 └── coalesce [type=int[]]

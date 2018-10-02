@@ -32,7 +32,7 @@ sort
 
 # Test sort on 0 rows.
 opt
-SELECT f FROM a WHERE k < 0 AND k > 10 ORDER BY f DESC
+SELECT f FROM a WHERE false AND false ORDER BY f DESC
 ----
 values
  ├── columns: f:2(float)

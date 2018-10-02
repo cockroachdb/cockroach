@@ -28,7 +28,7 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(1,2), side-effects, constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+ └── filters
       ├── k > (i + 1) [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
       ├── i >= (k - 1) [type=bool, outer=(1,2), constraints=(/2: (/NULL - ])]
       ├── k < (i * i) [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
@@ -38,21 +38,19 @@ select
 # CommuteConstInequality
 # --------------------------------------------------
 opt expect=CommuteConstInequality
-SELECT * FROM a WHERE length('foo')+1<i+k AND length('bar')<=i*2 AND 5>i AND 'foo'>=s
+SELECT * FROM a WHERE length('foo')+1<i+k AND length('bar')<=i*2
 ----
 select
- ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(1,2,4), constraints=(/2: (/NULL - /4]; /4: (/NULL - /'foo'])]
+ └── filters
       ├── (i + k) > (length('foo') + 1) [type=bool, outer=(1,2)]
-      ├── (i * 2) >= length('bar') [type=bool, outer=(2)]
-      ├── i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
-      └── s <= 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - /'foo']; tight)]
+      └── (i * 2) >= length('bar') [type=bool, outer=(2)]
 
 # Impure function should not be considered constant.
 opt expect-not=CommuteConstInequality
@@ -67,7 +65,7 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(2), side-effects]
+ └── filters
       └── random()::INT > (i + i) [type=bool, outer=(2), side-effects]
 
 # --------------------------------------------------
@@ -94,7 +92,7 @@ select
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    └── fd: ()-->(1-5)
- └── filters [type=bool, outer=(2,3), constraints=(/2: [/7 - ])]
+ └── filters
       ├── (f + f) < 3.0 [type=bool, outer=(3)]
       ├── i <= (length('foo') - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
       ├── i > 6 [type=bool, outer=(2), constraints=(/2: [/7 - ]; tight)]
@@ -112,7 +110,7 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(4)]
+ └── filters
       └── (s::DATE + '02:00:00') = '2000-01-01 02:00:00+00:00' [type=bool, outer=(4)]
 
 # --------------------------------------------------
@@ -139,7 +137,7 @@ select
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    └── fd: ()-->(1-5)
- └── filters [type=bool, outer=(2,3), constraints=(/2: [/15 - ])]
+ └── filters
       ├── (f + f) < 7.0 [type=bool, outer=(3)]
       ├── i <= (length('foo') + 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
       ├── i > 14 [type=bool, outer=(2), constraints=(/2: [/15 - ]; tight)]
@@ -157,7 +155,7 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(4)]
+ └── filters
       └── (s::JSONB - 1) = '[1]' [type=bool, outer=(4)]
 
 # --------------------------------------------------
@@ -184,7 +182,7 @@ select
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    └── fd: ()-->(1-5)
- └── filters [type=bool, outer=(2,3), constraints=(/2: [/11 - ])]
+ └── filters
       ├── (f + f) > -3.0 [type=bool, outer=(3)]
       ├── i >= (1 - length('foo')) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
       ├── i > 10 [type=bool, outer=(2), constraints=(/2: [/11 - ]; tight)]
@@ -202,7 +200,7 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(2)]
+ └── filters
       └── ('[1, 2]' - i) = '[1]' [type=bool, outer=(2)]
 
 # --------------------------------------------------
@@ -219,10 +217,10 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(2-4), constraints=(/2: [/1 - /1]; /3: [/3.5 - /3.5]; /4: [/'foo' - /'foo']; tight), fd=()-->(2-4)]
-      ├── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
-      ├── f = 3.5 [type=bool, outer=(3), constraints=(/3: [/3.5 - /3.5]; tight)]
-      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ └── filters
+      ├── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      ├── f = 3.5 [type=bool, outer=(3), constraints=(/3: [/3.5 - /3.5]; tight), fd=()-->(3)]
+      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 # --------------------------------------------------
 # NormalizeTupleEquality, SimplifyAnd
@@ -243,9 +241,9 @@ select
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    └── fd: ()-->(1-5)
- └── filters [type=bool, outer=(2,4), constraints=(/2: [/2 - /2]; /4: [/'foo' - /'foo']; tight), fd=()-->(2,4)]
-      ├── i = 2 [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight)]
-      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ └── filters
+      ├── i = 2 [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 # --------------------------------------------------
 # FoldNullComparisonLeft, FoldNullComparisonRight
@@ -369,7 +367,7 @@ project
  │    ├── columns: k:1(int!null) i:2(int)
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- └── projections [outer=(1,2)]
+ └── projections
       ├── true [type=bool]
       ├── k IS NOT NULL [type=bool, outer=(1)]
       └── i IS NOT NULL [type=bool, outer=(2)]

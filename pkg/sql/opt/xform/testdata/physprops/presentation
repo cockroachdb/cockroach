@@ -32,7 +32,7 @@ select
  ├── columns: y:2(int!null) x:1(int!null) y2:2(int!null)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
- └── filters [type=bool]
+ └── filters
       └── y = 1 [type=bool]
 
 # Project operator.
@@ -56,7 +56,7 @@ inner-join
  │    └── columns: a.x:1(int!null) a.y:2(int)
  ├── scan b
  │    └── columns: b.x:3(int) b.y:4(float) rowid:5(int!null)
- └── true [type=bool]
+ └── filters
 
 # Groupby operator.
 opt

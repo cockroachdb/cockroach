@@ -142,6 +142,7 @@ TABLE t
 
 # Test case where one of the explorations causes construction of a scan with a
 # contradiction.
+# TODO(rytaft) range operator
 opt
 SELECT * FROM t WHERE a > 1 AND a < 2
 ----

@@ -53,6 +53,8 @@ select nodes.id,dst from nodes join edges on edges.dst=nodes.id
 ----
 inner-join (merge)
  ├── columns: id:1(int!null) dst:4(int!null)
+ ├── left ordering: +1
+ ├── right ordering: +4
  ├── fd: (1)==(4), (4)==(1)
  ├── scan nodes
  │    ├── columns: id:1(int!null)
@@ -61,11 +63,8 @@ inner-join (merge)
  ├── scan edges@edges_auto_index_fk_dst_ref_nodes
  │    ├── columns: dst:4(int!null)
  │    └── ordering: +4
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +4
-      └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
-           └── dst = id [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
+ └── filters
+      └── dst = id [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
 
 # ------------------------------------------------------------------------------
 # Github Issues 16313/16426: Ensure that STORING index is used to filter unread
@@ -156,8 +155,8 @@ project
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2,3,9)
       │         │    └── ordering: +1 opt(9)
-      │         └── filters [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
-      │              └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight)]
+      │         └── filters
+      │              └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
       └── const: 50 [type=int]
 
 # Check that forcing the index works as well.
@@ -196,8 +195,8 @@ project
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2,3,9)
       │         │    └── ordering: +1 opt(9)
-      │         └── filters [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
-      │              └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight)]
+      │         └── filters
+      │              └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
       └── const: 50 [type=int]
 
 # Use only columns covered by the index.
@@ -222,8 +221,8 @@ limit
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(9)
  │    │    └── ordering: +1 opt(9)
- │    └── filters [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
- │         └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight)]
+ │    └── filters
+ │         └── NOT read [type=bool, outer=(9), constraints=(/9: [/false - /false]; tight), fd=()-->(9)]
  └── const: 5 [type=int]
 
 # ------------------------------------------------------------------------------
@@ -383,6 +382,8 @@ group-by
  ├── fd: (12)-->(16)
  ├── inner-join (merge)
  │    ├── columns: vehicle_id:3(uuid!null) vehicles.id:9(uuid!null) owner_id:12(uuid)
+ │    ├── left ordering: +3
+ │    ├── right ordering: +9
  │    ├── fd: (3)==(9), (9)==(3)
  │    ├── scan rides@rides_vehicle_id_idx
  │    │    ├── columns: vehicle_id:3(uuid)
@@ -390,11 +391,8 @@ group-by
  │    ├── scan vehicles@vehicles_id_idx
  │    │    ├── columns: vehicles.id:9(uuid!null) owner_id:12(uuid)
  │    │    └── ordering: +9
- │    └── merge-on
- │         ├── left ordering: +3
- │         ├── right ordering: +9
- │         └── filters [type=bool, outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
- │              └── vehicles.id = vehicle_id [type=bool, outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ])]
+ │    └── filters
+ │         └── vehicles.id = vehicle_id [type=bool, outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
  └── aggregations
       └── count-rows [type=int]
 
@@ -449,9 +447,9 @@ group-by
  ├── fd: (1)-->(14)
  ├── scan data@foo
  │    └── columns: id:1(uuid) value:2(int)
- └── aggregations [outer=(2)]
+ └── aggregations
       └── sum [type=decimal, outer=(2)]
-           └── variable: value [type=int, outer=(2)]
+           └── variable: value [type=int]
 
 # ------------------------------------------------------------------------------
 # Github Issue 24297: Ensure the optimizer chooses the more selective secondary
@@ -549,7 +547,7 @@ limit
  │         │         ├── constraint: /3/5/1: [/'11cd19e4-837d-4bff-4a76-aefa0ddbec64'/'a01' - /'11cd19e4-837d-4bff-4a76-aefa0ddbec64'/'a01']
  │         │         ├── key: (1)
  │         │         └── fd: ()-->(3,5)
- │         └── filters [type=bool, outer=(4), constraints=(/4: [/1 - ]; tight)]
+ │         └── filters
  │              └── last_sync_id > 0 [type=bool, outer=(4), constraints=(/4: [/1 - ]; tight)]
  └── const: 50 [type=int]
 
@@ -736,6 +734,8 @@ scalar-group-by
  ├── fd: ()-->(28)
  ├── inner-join (merge)
  │    ├── columns: o_orderkey:1(int!null) l_orderkey:11(int!null)
+ │    ├── left ordering: +1
+ │    ├── right ordering: +11
  │    ├── fd: (1)==(11), (11)==(1)
  │    ├── scan orders@o_ok
  │    │    ├── columns: o_orderkey:1(int!null)
@@ -744,11 +744,8 @@ scalar-group-by
  │    ├── scan lineitem@l_ok
  │    │    ├── columns: l_orderkey:11(int!null)
  │    │    └── ordering: +11
- │    └── merge-on
- │         ├── left ordering: +1
- │         ├── right ordering: +11
- │         └── filters [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
- │              └── o_orderkey = l_orderkey [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ])]
- └── aggregations [outer=(11)]
+ │    └── filters
+ │         └── o_orderkey = l_orderkey [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
+ └── aggregations
       └── count [type=int, outer=(11)]
-           └── variable: l_orderkey [type=int, outer=(11)]
+           └── variable: l_orderkey [type=int]

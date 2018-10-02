@@ -61,8 +61,8 @@ limit
  │    │    ├── stats: [rows=2000, distinct(3)=10]
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │    └── filters [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
- │         └── s = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight)]
+ │    └── filters
+ │         └── s = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
  └── const: 5 [type=int]
 
 build
@@ -83,8 +83,8 @@ limit
  │    │    ├── stats: [rows=2000, distinct(3)=10]
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │    └── filters [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
- │         └── s = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight)]
+ │    └── filters
+ │         └── s = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
  └── subquery [type=int]
       └── max1-row
            ├── columns: c:5(int!null)
@@ -134,5 +134,5 @@ select
  │    │         ├── key: (1)
  │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── const: 5 [type=int]
- └── filters [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
-      └── s = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight)]
+ └── filters
+      └── s = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]

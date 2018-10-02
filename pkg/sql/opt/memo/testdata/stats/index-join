@@ -73,7 +73,7 @@ project
       │    │         ├── stats: [rows=200, distinct(3)=1]
       │    │         ├── key: (1)
       │    │         └── fd: ()-->(3)
-      │    └── filters [type=bool, outer=(1,2)]
+      │    └── filters
       │         └── (x + y) = 10 [type=bool, outer=(1,2)]
       └── aggregations
            └── count-rows [type=int]

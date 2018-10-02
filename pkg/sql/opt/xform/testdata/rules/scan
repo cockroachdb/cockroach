@@ -249,8 +249,8 @@ Source expression:
    │    ├── key: (1)
    │    ├── fd: (1)-->(2-4)
    │    └── ordering: +1 opt(4)
-   └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
-        └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+   └── filters
+        └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 New expression 1 of 2:
   scan a@s_idx

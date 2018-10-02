@@ -891,7 +891,7 @@ scalar-group-by
  │         │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.s:4(string)
  │         ├── scan kv
  │         │    └── columns: kv.k:5(int!null) kv.v:6(int) kv.w:7(int) kv.s:8(string)
- │         └── true [type=bool]
+ │         └── filters
  └── aggregations
       └── count-rows [type=int]
 
@@ -1007,7 +1007,7 @@ scalar-group-by
  │         ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │         ├── scan kv
  │         │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
- │         └── filters [type=bool]
+ │         └── filters
  │              └── gt [type=bool]
  │                   ├── variable: k [type=int]
  │                   └── const: 8 [type=int]
@@ -1106,7 +1106,7 @@ scalar-group-by
  │         ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │         ├── scan kv
  │         │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
- │         └── filters [type=bool]
+ │         └── filters
  │              └── is [type=bool]
  │                   ├── variable: s [type=string]
  │                   └── null [type=unknown]
@@ -1217,7 +1217,7 @@ project
  │    │         ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │    │         ├── scan kv
  │    │         │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
- │    │         └── filters [type=bool]
+ │    │         └── filters
  │    │              └── eq [type=bool]
  │    │                   ├── mult [type=int]
  │    │                   │    ├── variable: w [type=int]
@@ -1407,7 +1407,7 @@ scalar-group-by
  │         ├── columns: x:1(int!null) y:2(int) z:3(float)
  │         ├── scan xyz
  │         │    └── columns: x:1(int!null) y:2(int) z:3(float)
- │         └── filters [type=bool]
+ │         └── filters
  │              └── in [type=bool]
  │                   ├── variable: x [type=int]
  │                   └── tuple [type=tuple{int, int, int}]
@@ -1442,7 +1442,7 @@ scalar-group-by
  │         ├── columns: x:1(int!null) y:2(int) z:3(float)
  │         ├── scan xyz
  │         │    └── columns: x:1(int!null) y:2(int) z:3(float)
- │         └── filters [type=bool]
+ │         └── filters
  │              └── eq [type=bool]
  │                   ├── variable: x [type=int]
  │                   └── const: 1 [type=int]
@@ -1461,7 +1461,7 @@ scalar-group-by
  │         ├── columns: x:1(int!null) y:2(int) z:3(float)
  │         ├── scan xyz
  │         │    └── columns: x:1(int!null) y:2(int) z:3(float)
- │         └── filters [type=bool]
+ │         └── filters
  │              └── eq [type=bool]
  │                   ├── variable: x [type=int]
  │                   └── const: 7 [type=int]
@@ -1480,7 +1480,7 @@ scalar-group-by
  │         ├── columns: x:1(int!null) y:2(int) z:3(float)
  │         ├── scan xyz
  │         │    └── columns: x:1(int!null) y:2(int) z:3(float)
- │         └── filters [type=bool]
+ │         └── filters
  │              └── eq [type=bool]
  │                   ├── tuple [type=tuple{int, float}]
  │                   │    ├── variable: y [type=int]
@@ -1503,7 +1503,7 @@ scalar-group-by
  │         ├── columns: x:1(int!null) y:2(int) z:3(float)
  │         ├── scan xyz
  │         │    └── columns: x:1(int!null) y:2(int) z:3(float)
- │         └── filters [type=bool]
+ │         └── filters
  │              └── eq [type=bool]
  │                   ├── tuple [type=tuple{float, int}]
  │                   │    ├── variable: z [type=float]
@@ -1555,7 +1555,7 @@ scalar-group-by
  │         ├── columns: x:1(int!null) y:2(int) z:3(float)
  │         ├── scan xyz
  │         │    └── columns: x:1(int!null) y:2(int) z:3(float)
- │         └── filters [type=bool]
+ │         └── filters
  │              └── eq [type=bool]
  │                   ├── variable: x [type=int]
  │                   └── const: 10 [type=int]
@@ -1600,7 +1600,7 @@ scalar-group-by
  │         ├── columns: x:1(int!null) y:2(int) z:3(float)
  │         ├── scan xyz
  │         │    └── columns: x:1(int!null) y:2(int) z:3(float)
- │         └── filters [type=bool]
+ │         └── filters
  │              └── eq [type=bool]
  │                   ├── variable: x [type=int]
  │                   └── const: 1 [type=int]
@@ -2025,7 +2025,7 @@ project
  │    │         │    └── columns: a:1(int!null) b:2(int)
  │    │         ├── scan xy
  │    │         │    └── columns: x:3(string) y:4(string) rowid:5(int!null)
- │    │         └── true [type=bool]
+ │    │         └── filters
  │    └── aggregations
  │         └── min [type=string]
  │              └── variable: y [type=string]
@@ -2178,8 +2178,8 @@ project
  │         │    │    │    └── columns: bools.b:3(bool) bools.rowid:4(int!null)
  │         │    │    ├── scan abc
  │         │    │    │    └── columns: a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
- │         │    │    └── true [type=bool]
- │         │    └── true [type=bool]
+ │         │    │    └── filters
+ │         │    └── filters
  │         └── projections
  │              └── and [type=bool]
  │                   ├── variable: bools.b [type=bool]
@@ -2214,8 +2214,8 @@ project
  │         │    │    │    └── columns: bools.b:3(bool) bools.rowid:4(int!null)
  │         │    │    ├── scan abc
  │         │    │    │    └── columns: a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
- │         │    │    └── true [type=bool]
- │         │    └── true [type=bool]
+ │         │    │    └── filters
+ │         │    └── filters
  │         └── projections
  │              └── or [type=bool]
  │                   ├── variable: bools.b [type=bool]
@@ -2267,7 +2267,7 @@ project
  │         │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │         │    ├── scan abc
  │         │    │    └── columns: a:5(string!null) b:6(float) c:7(bool) d:8(decimal)
- │         │    └── true [type=bool]
+ │         │    └── filters
  │         └── projections
  │              └── function: concat [type=string]
  │                   ├── variable: s [type=string]
@@ -2336,7 +2336,7 @@ project
  │         │    │    └── columns: foo.bar:1(jsonb) foo.baz:2(jsonb) foo.rowid:3(int!null)
  │         │    ├── scan foo
  │         │    │    └── columns: foo.bar:4(jsonb) foo.baz:5(jsonb) foo.rowid:6(int!null)
- │         │    └── true [type=bool]
+ │         │    └── filters
  │         └── projections
  │              └── contains [type=bool]
  │                   ├── variable: foo.bar [type=jsonb]
@@ -2369,7 +2369,7 @@ project
  │         │    │    └── columns: foo.bar:1(jsonb) foo.baz:2(jsonb) foo.rowid:3(int!null)
  │         │    ├── scan foo
  │         │    │    └── columns: foo.bar:4(jsonb) foo.baz:5(jsonb) foo.rowid:6(int!null)
- │         │    └── true [type=bool]
+ │         │    └── filters
  │         └── projections
  │              └── contains [type=bool]
  │                   ├── variable: foo.bar [type=jsonb]
@@ -2406,7 +2406,7 @@ project
  │         │    │    └── columns: times.t:1(time!null)
  │         │    ├── scan times
  │         │    │    └── columns: times.t:2(time!null)
- │         │    └── true [type=bool]
+ │         │    └── filters
  │         └── projections
  │              ├── function: date_trunc [type=interval]
  │              │    ├── const: 'second' [type=string]
@@ -2595,7 +2595,7 @@ project
       │         │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
       │         ├── scan abc
       │         │    └── columns: a:5(string!null) b:6(float) c:7(bool) d:8(decimal)
-      │         └── filters [type=bool]
+      │         └── filters
       │              └── ge [type=bool]
       │                   ├── variable: k [type=int]
       │                   └── variable: d [type=decimal]

@@ -64,9 +64,9 @@ limit
  │         │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int)
  │         │    ├── key: (1)
  │         │    └── fd: (1)-->(2-5), (2,3)~~>(1,4,5)
- │         └── filters [type=bool, outer=(4,5), constraints=(/4: [/1 - /1]; /5: [/2 - /2]; tight), fd=()-->(4,5)]
- │              ├── d = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
- │              └── e = 2 [type=bool, outer=(5), constraints=(/5: [/2 - /2]; tight)]
+ │         └── filters
+ │              ├── d = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
+ │              └── e = 2 [type=bool, outer=(5), constraints=(/5: [/2 - /2]; tight), fd=()-->(5)]
  └── const: 10 [type=int]
 
 # Remove functionally dependent column that's only used in ordering.
@@ -113,11 +113,11 @@ group-by
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3), (2,3)~~>(1)
  │    └── ordering: +1
- └── aggregations [outer=(2,3)]
+ └── aggregations
       ├── array-agg [type=int[], outer=(2)]
-      │    └── variable: b [type=int, outer=(2)]
+      │    └── variable: b [type=int]
       └── const-agg [type=int, outer=(3)]
-           └── variable: c [type=int, outer=(3)]
+           └── variable: c [type=int]
 
 # ScalarGroupBy case.
 opt expect=SimplifyGroupByOrdering
@@ -134,9 +134,9 @@ scalar-group-by
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3), (2,3)~~>(1)
  │    └── ordering: +1
- └── aggregations [outer=(2)]
+ └── aggregations
       └── array-agg [type=int[], outer=(2)]
-           └── variable: b [type=int, outer=(2)]
+           └── variable: b [type=int]
 
 # DistinctOn case.
 opt expect=SimplifyGroupByOrdering
@@ -154,9 +154,9 @@ distinct-on
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3), (2,3)~~>(1)
  │    └── ordering: +2,+3,+1
- └── aggregations [outer=(1)]
+ └── aggregations
       └── first-agg [type=int, outer=(1)]
-           └── variable: a [type=int, outer=(1)]
+           └── variable: a [type=int]
 
 # --------------------------------------------------
 # SimplifyRowNumberOrdering
@@ -187,7 +187,7 @@ row-number
                 │    ├── constraint: /2/3: (/NULL - ]
                 │    ├── key: (1)
                 │    └── fd: (1)-->(2,3), (2,3)~~>(1)
-                └── filters [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+                └── filters
                      └── c IS NOT NULL [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
 
 # --------------------------------------------------
@@ -206,7 +206,7 @@ explain
       ├── scan abcde@bc
       │    ├── columns: b:2(int) c:3(int)
       │    └── ordering: +2,+3
-      └── projections [outer=(2,3)]
+      └── projections
            └── b + 1 [type=int, outer=(2)]
 
 # Regression: Explain a statement having constant column, but with no ordering.

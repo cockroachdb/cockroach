@@ -26,7 +26,7 @@ inner-join
  │    └── function: generate_series [type=int]
  │         ├── const: 1 [type=int]
  │         └── const: 2 [type=int]
- └── true [type=bool]
+ └── filters
 
 build
 SELECT * FROM pg_catalog.generate_series(1, 3)
@@ -79,7 +79,7 @@ inner-join-apply
  │    └── function: generate_series [type=int]
  │         ├── const: 3 [type=int]
  │         └── const: 4 [type=int]
- └── true [type=bool]
+ └── filters
 
 exec-ddl
 CREATE TABLE t (a string)
@@ -124,9 +124,9 @@ project
       │    │    │    └── function: generate_series [type=int]
       │    │    │         ├── const: 3 [type=int]
       │    │    │         └── const: 4 [type=int]
-      │    │    └── true [type=bool]
-      │    └── true [type=bool]
-      └── true [type=bool]
+      │    │    └── filters
+      │    └── filters
+      └── filters
 
 build
 SELECT 3 + x FROM generate_series(1,2) AS a(x)
@@ -157,7 +157,7 @@ project
  │    │    └── function: generate_series [type=int]
  │    │         ├── const: 1 [type=int]
  │    │         └── const: 3 [type=int]
- │    └── true [type=bool]
+ │    └── filters
  └── projections
       └── plus [type=int]
            ├── const: 3 [type=int]
@@ -194,7 +194,7 @@ inner-join-apply
  │         └── array: [type=string[]]
  │              ├── const: 'a' [type=string]
  │              └── const: 'b' [type=string]
- └── true [type=bool]
+ └── filters
 
 build
 SELECT unnest(ARRAY[3,4]) - 2
@@ -211,7 +211,7 @@ project
  │    │         └── array: [type=int[]]
  │    │              ├── const: 3 [type=int]
  │    │              └── const: 4 [type=int]
- │    └── true [type=bool]
+ │    └── filters
  └── projections
       └── minus [type=int]
            ├── variable: unnest [type=int]
@@ -235,7 +235,7 @@ project
  │    │         └── array: [type=int[]]
  │    │              ├── const: 2 [type=int]
  │    │              └── const: 4 [type=int]
- │    └── true [type=bool]
+ │    └── filters
  └── projections
       ├── plus [type=int]
       │    ├── const: 1 [type=int]
@@ -260,7 +260,7 @@ project
  │    │              ├── const: 'a' [type=string]
  │    │              ├── const: 'b' [type=string]
  │    │              └── const: 'c' [type=string]
- │    └── true [type=bool]
+ │    └── filters
  └── projections
       └── function: ascii [type=int]
            └── variable: unnest [type=string]
@@ -290,7 +290,7 @@ project
  │    │    └── function: generate_series [type=int]
  │    │         ├── const: 1 [type=int]
  │    │         └── const: 3 [type=int]
- │    └── true [type=bool]
+ │    └── filters
  └── projections
       └── plus [type=int]
            ├── variable: generate_series [type=int]
@@ -372,8 +372,8 @@ inner-join-apply
  │                                                                                                   │    └── function: generate_series [type=int]
  │                                                                                                   │         ├── const: 1 [type=int]
  │                                                                                                   │         └── const: 0 [type=int]
- │                                                                                                   └── true [type=bool]
- └── true [type=bool]
+ │                                                                                                   └── filters
+ └── filters
 
 # pg_get_keywords
 
@@ -389,7 +389,7 @@ sort
       ├── zip
       │    ├── columns: word:1(string) catcode:2(string) catdesc:3(string)
       │    └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
-      └── filters [type=bool]
+      └── filters
            └── in [type=bool]
                 ├── variable: word [type=string]
                 └── tuple [type=tuple{string, string, string, string}]
@@ -422,8 +422,8 @@ limit
  │    │    ├── zip
  │    │    │    ├── columns: word:3(string) catcode:4(string) catdesc:5(string)
  │    │    │    └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
- │    │    └── true [type=bool]
- │    └── true [type=bool]
+ │    │    └── filters
+ │    └── filters
  └── const: 0 [type=int]
 
 # Beware of multi-valued SRFs in render position (#19149)
@@ -441,7 +441,7 @@ limit
  │    │    ├── zip
  │    │    │    ├── columns: word:1(string) catcode:2(string) catdesc:3(string)
  │    │    │    └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
- │    │    └── true [type=bool]
+ │    │    └── filters
  │    └── projections
  │         ├── const: 'a' [type=string]
  │         ├── tuple [type=tuple{string AS word, string AS catcode, string AS catdesc}]
@@ -465,7 +465,7 @@ limit
  │    │    ├── zip
  │    │    │    ├── columns: word:1(string) catcode:2(string) catdesc:3(string)
  │    │    │    └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
- │    │    └── true [type=bool]
+ │    │    └── filters
  │    └── projections
  │         ├── const: 'a' [type=string]
  │         ├── tuple [type=tuple{string AS word, string AS catcode, string AS catdesc}]
@@ -489,7 +489,7 @@ limit
  │    │    │    └── tuple [type=tuple]
  │    │    ├── zip
  │    │    │    └── function: crdb_internal.unary_table [type=tuple]
- │    │    └── true [type=bool]
+ │    │    └── filters
  │    └── projections
  │         ├── const: 'a' [type=string]
  │         ├── tuple [type=tuple]
@@ -535,7 +535,7 @@ project
  │    │         └── array: [type=string[]]
  │    │              ├── const: 'b' [type=string]
  │    │              └── const: 'a' [type=string]
- │    └── true [type=bool]
+ │    └── filters
  └── projections
       └── tuple [type=tuple{string AS x, int AS n}]
            ├── variable: x [type=string]
@@ -584,7 +584,7 @@ project
  │    │              ├── const: 'c' [type=string]
  │    │              ├── const: 'b' [type=string]
  │    │              └── const: 'a' [type=string]
- │    └── true [type=bool]
+ │    └── filters
  └── projections
       ├── column-access: 0 [type=string]
       │    └── tuple [type=tuple{string AS x, int AS n}]
@@ -611,7 +611,7 @@ project
  │    │              ├── const: 'c' [type=string]
  │    │              ├── const: 'b' [type=string]
  │    │              └── const: 'a' [type=string]
- │    └── true [type=bool]
+ │    └── filters
  └── projections
       └── column-access: 0 [type=string]
            └── tuple [type=tuple{string AS x, int AS n}]
@@ -712,14 +712,14 @@ inner-join
  │    │    └── function: generate_series [type=int]
  │    │         ├── const: 1 [type=int]
  │    │         └── const: 3 [type=int]
- │    └── filters [type=bool]
+ │    └── filters
  │         └── true [type=bool]
  ├── zip
  │    ├── columns: generate_series:4(int)
  │    └── function: generate_series [type=int]
  │         ├── const: 1 [type=int]
  │         └── const: 4 [type=int]
- └── filters [type=bool]
+ └── filters
       └── true [type=bool]
 
 build
@@ -754,7 +754,7 @@ project
       │         │    └── variable: a [type=string]
       │         └── max [type=int]
       │              └── variable: column4 [type=int]
-      └── filters [type=bool]
+      └── filters
            └── gt [type=bool]
                 ├── variable: max [type=int]
                 └── subquery [type=int]
@@ -774,7 +774,7 @@ project
                                │         │         ├── const: 0 [type=int]
                                │         │         └── cast: INT [type=int]
                                │         │              └── variable: b [type=string]
-                               │         └── true [type=bool]
+                               │         └── filters
                                └── const: 1 [type=int]
 
 build
@@ -802,7 +802,7 @@ project
       │         │                   │    │    └── columns: t.a:3(string) t.rowid:4(int!null)
       │         │                   │    ├── scan u
       │         │                   │    │    └── columns: b:5(string) u.rowid:6(int!null)
-      │         │                   │    └── true [type=bool]
+      │         │                   │    └── filters
       │         │                   ├── zip
       │         │                   │    ├── columns: generate_subscripts:7(int)
       │         │                   │    └── function: generate_subscripts [type=int]
@@ -811,9 +811,9 @@ project
       │         │                   │              └── concat [type=string]
       │         │                   │                   ├── variable: t.a [type=string]
       │         │                   │                   └── variable: b [type=string]
-      │         │                   └── true [type=bool]
+      │         │                   └── filters
       │         └── const: 100 [type=int]
-      └── true [type=bool]
+      └── filters
 
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, j JSON, k JSON, m JSON, n JSON)
@@ -845,7 +845,7 @@ project
  │    │    ├── columns: json_array_elements:6(jsonb)
  │    │    └── function: json_array_elements [type=jsonb]
  │    │         └── variable: a.j [type=jsonb]
- │    └── true [type=bool]
+ │    └── filters
  └── projections
       ├── subquery [type=tuple{string AS key, jsonb AS value}]
       │    └── max1-row
@@ -860,7 +860,7 @@ project
       │              │    │    ├── columns: key:7(string) value:8(jsonb)
       │              │    │    └── function: jsonb_each [type=tuple{string AS key, jsonb AS value}]
       │              │    │         └── variable: a.k [type=jsonb]
-      │              │    └── true [type=bool]
+      │              │    └── filters
       │              └── projections
       │                   └── tuple [type=tuple{string AS key, jsonb AS value}]
       │                        ├── variable: key [type=string]
@@ -878,7 +878,7 @@ project
       │                   │    ├── columns: jsonb_object_keys:15(string)
       │                   │    └── function: jsonb_object_keys [type=string]
       │                   │         └── variable: a.m [type=jsonb]
-      │                   └── true [type=bool]
+      │                   └── filters
       └── subquery [type=int]
            └── max1-row
                 ├── columns: generate_series:18(int)
@@ -905,6 +905,6 @@ project
                      │         │                   │    └── function: generate_series [type=int]
                      │         │                   │         ├── variable: a.x [type=int]
                      │         │                   │         └── const: 100 [type=int]
-                     │         │                   └── true [type=bool]
+                     │         │                   └── filters
                      │         └── const: 1000 [type=int]
-                     └── true [type=bool]
+                     └── filters

@@ -42,7 +42,7 @@ project
       │    └── columns: a.x:1(int!null) a.y:2(float)
       ├── scan b
       │    └── columns: b.x:3(int) b.y:4(float) rowid:5(int!null)
-      └── true [type=bool]
+      └── filters
 
 build
 SELECT a.x, b.y FROM a, b WHERE a.x = b.x
@@ -57,8 +57,8 @@ project
       │    │    └── columns: a.x:1(int!null) a.y:2(float)
       │    ├── scan b
       │    │    └── columns: b.x:3(int) b.y:4(float) rowid:5(int!null)
-      │    └── true [type=bool]
-      └── filters [type=bool]
+      │    └── filters
+      └── filters
            └── eq [type=bool]
                 ├── variable: a.x [type=int]
                 └── variable: b.x [type=int]
@@ -80,9 +80,9 @@ project
       │    │    │    └── columns: b.x:5(int) b.y:6(float) b.rowid:7(int!null)
       │    │    ├── scan a
       │    │    │    └── columns: a.x:8(int!null) a.y:9(float)
-      │    │    └── true [type=bool]
-      │    └── true [type=bool]
-      └── filters [type=bool]
+      │    │    └── filters
+      │    └── filters
+      └── filters
            └── and [type=bool]
                 ├── eq [type=bool]
                 │    ├── variable: c.x [type=int]
@@ -129,7 +129,7 @@ inner-join
  │    └── columns: db1.public.a.x:1(int!null) db1.public.a.y:2(float) db1.public.a.z:3(string)
  ├── scan a
  │    └── columns: db2.public.a.x:4(int!null) db2.public.a.y:5(float)
- └── true [type=bool]
+ └── filters
 
 build fully-qualify-names
 SELECT * FROM a, a
@@ -150,7 +150,7 @@ inner-join
  │    └── columns: t.public.a.x:1(int!null) t.public.a.y:2(float)
  ├── scan a
  │    └── columns: t.public.a.x:3(int!null) t.public.a.y:4(float)
- └── true [type=bool]
+ └── filters
 
 build fully-qualify-names
 SELECT a.* FROM t.a, a AS a

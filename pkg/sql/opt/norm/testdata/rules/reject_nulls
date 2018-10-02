@@ -46,7 +46,7 @@ left-join
  │    ├── columns: x:5(int!null) y:6(int)
  │    ├── key: (5)
  │    └── fd: (5)-->(6)
- └── true [type=bool]
+ └── filters
 
 opt expect=RejectNullsLeftJoin
 SELECT * FROM a FULL JOIN xy ON true WHERE xy.x > 5
@@ -64,7 +64,7 @@ right-join
  │    ├── constraint: /5: [/6 - ]
  │    ├── key: (5)
  │    └── fd: (5)-->(6)
- └── true [type=bool]
+ └── filters
 
 # Inner-join operator.
 opt expect=RejectNullsLeftJoin
@@ -93,9 +93,9 @@ inner-join
  │    │    │    ├── columns: uv.u:11(int!null) uv.v:12(int)
  │    │    │    ├── key: (11)
  │    │    │    └── fd: (11)-->(12)
- │    │    └── filters [type=bool, outer=(12), constraints=(/12: [/3 - ]; tight)]
+ │    │    └── filters
  │    │         └── uv.v > 2 [type=bool, outer=(12), constraints=(/12: [/3 - ]; tight)]
- │    └── true [type=bool]
+ │    └── filters
  ├── inner-join
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) uv.u:5(int!null) uv.v:6(int)
  │    ├── key: (1)
@@ -110,8 +110,8 @@ inner-join
  │    │    ├── cardinality: [0 - 1]
  │    │    ├── key: ()
  │    │    └── fd: ()-->(5,6)
- │    └── true [type=bool]
- └── true [type=bool]
+ │    └── filters
+ └── filters
 
 # Left-join operator.
 opt expect=RejectNullsLeftJoin
@@ -119,6 +119,8 @@ SELECT * FROM a LEFT JOIN xy ON true WHERE xy.x = a.k
 ----
 inner-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int!null) y:6(int)
+ ├── left ordering: +1
+ ├── right ordering: +5
  ├── key: (5)
  ├── fd: (1)-->(2-4), (5)-->(6), (1)==(5), (5)==(1)
  ├── scan a
@@ -131,11 +133,8 @@ inner-join (merge)
  │    ├── key: (5)
  │    ├── fd: (5)-->(6)
  │    └── ordering: +5
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +5
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           └── x = k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ └── filters
+      └── x = k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 # Right-join operator.
 opt expect=RejectNullsRightJoin
@@ -153,7 +152,7 @@ inner-join
  │    ├── columns: x:5(int!null) y:6(int)
  │    ├── key: (5)
  │    └── fd: (5)-->(6)
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters
       └── k > y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Full-join operator.
@@ -173,7 +172,7 @@ inner-join
  │    ├── constraint: /5: [/6 - ]
  │    ├── key: (5)
  │    └── fd: (5)-->(6)
- └── true [type=bool]
+ └── filters
 
 # Apply operators.
 opt expect=(RejectNullsLeftJoin,RejectNullsRightJoin)
@@ -220,11 +219,11 @@ right-join
  │         │              │    ├── columns: u:7(int!null) v:8(int)
  │         │              │    ├── key: (7)
  │         │              │    └── fd: (7)-->(8)
- │         │              └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
- │         │                   └── v = k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
- │         └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
- │              └── i = u [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
- └── true [type=bool]
+ │         │              └── filters
+ │         │                   └── v = k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ │         └── filters
+ │              └── i = u [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+ └── filters
 
 # ----------------------------------------------------------
 # RejectNullsGroupBy
@@ -260,12 +259,12 @@ project
       │    │    ├── scan xy
       │    │    │    ├── columns: x:5(int!null)
       │    │    │    └── key: (5)
-      │    │    └── true [type=bool]
-      │    └── aggregations [outer=(5)]
+      │    │    └── filters
+      │    └── aggregations
       │         └── max [type=int, outer=(5)]
-      │              └── variable: x [type=int, outer=(5)]
-      └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-           └── max = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+      │              └── variable: x [type=int]
+      └── filters
+           └── max = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
 
 # Single max aggregate function without grouping columns.
 opt expect=RejectNullsGroupBy
@@ -291,12 +290,12 @@ select
  │    │    ├── scan xy
  │    │    │    ├── columns: x:5(int!null)
  │    │    │    └── key: (5)
- │    │    └── true [type=bool]
- │    └── aggregations [outer=(5)]
+ │    │    └── filters
+ │    └── aggregations
  │         └── max [type=int, outer=(5)]
- │              └── variable: x [type=int, outer=(5)]
- └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-      └── max = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+ │              └── variable: x [type=int]
+ └── filters
+      └── max = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
 
 # Multiple aggregate functions on same column.
 opt expect=RejectNullsGroupBy
@@ -328,14 +327,14 @@ project
       │    │    ├── scan xy
       │    │    │    ├── columns: x:5(int!null)
       │    │    │    └── key: (5)
-      │    │    └── true [type=bool]
-      │    └── aggregations [outer=(5)]
+      │    │    └── filters
+      │    └── aggregations
       │         ├── min [type=int, outer=(5)]
-      │         │    └── variable: x [type=int, outer=(5)]
+      │         │    └── variable: x [type=int]
       │         └── max [type=int, outer=(5)]
-      │              └── variable: x [type=int, outer=(5)]
-      └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-           └── min = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+      │              └── variable: x [type=int]
+      └── filters
+           └── min = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
 
 # Ignore ConstAgg aggregates on other columns.
 opt expect=RejectNullsGroupBy
@@ -356,6 +355,8 @@ project
       │    ├── fd: (1)-->(2-4,7)
       │    ├── inner-join (merge)
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) x:5(int!null)
+      │    │    ├── left ordering: +1
+      │    │    ├── right ordering: +5
       │    │    ├── key: (5)
       │    │    ├── fd: (1)-->(2-4), (1)==(5), (5)==(1)
       │    │    ├── scan a
@@ -367,21 +368,18 @@ project
       │    │    │    ├── columns: x:5(int!null)
       │    │    │    ├── key: (5)
       │    │    │    └── ordering: +5
-      │    │    └── merge-on
-      │    │         ├── left ordering: +1
-      │    │         ├── right ordering: +5
-      │    │         └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │    │              └── x = k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-      │    └── aggregations [outer=(2-5)]
+      │    │    └── filters
+      │    │         └── x = k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      │    └── aggregations
       │         ├── sum [type=decimal, outer=(5)]
-      │         │    └── variable: x [type=int, outer=(5)]
+      │         │    └── variable: x [type=int]
       │         ├── const-agg [type=int, outer=(2)]
-      │         │    └── variable: i [type=int, outer=(2)]
+      │         │    └── variable: i [type=int]
       │         ├── const-agg [type=float, outer=(3)]
-      │         │    └── variable: f [type=float, outer=(3)]
+      │         │    └── variable: f [type=float]
       │         └── const-agg [type=string, outer=(4)]
-      │              └── variable: s [type=string, outer=(4)]
-      └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+      │              └── variable: s [type=string]
+      └── filters
            └── i < sum [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Don't reject nulls when multiple columns are used.
@@ -416,14 +414,14 @@ project
       │    │    │    ├── columns: x:5(int!null) y:6(int)
       │    │    │    ├── key: (5)
       │    │    │    └── fd: (5)-->(6)
-      │    │    └── true [type=bool]
-      │    └── aggregations [outer=(5,6)]
+      │    │    └── filters
+      │    └── aggregations
       │         ├── min [type=int, outer=(5)]
-      │         │    └── variable: x [type=int, outer=(5)]
+      │         │    └── variable: x [type=int]
       │         └── max [type=int, outer=(6)]
-      │              └── variable: y [type=int, outer=(6)]
-      └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-           └── min = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+      │              └── variable: y [type=int]
+      └── filters
+           └── min = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
 
 # Don't reject column when count function is used (it doesn't return nil when
 # input is empty).
@@ -456,56 +454,62 @@ project
       │    │    ├── scan xy
       │    │    │    ├── columns: x:5(int!null)
       │    │    │    └── key: (5)
-      │    │    └── true [type=bool]
-      │    └── aggregations [outer=(5)]
+      │    │    └── filters
+      │    └── aggregations
       │         └── count [type=int, outer=(5)]
-      │              └── variable: x [type=int, outer=(5)]
-      └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-           └── count = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+      │              └── variable: x [type=int]
+      └── filters
+           └── count = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
 
 # ConstNotNullAgg rejects nulls (regression test for #28810).
 opt expect=RejectNullsGroupBy
-SELECT 1 FROM a AS ref_0 LEFT JOIN a AS ref_1 ON EXISTS(SELECT 1 FROM a WHERE a.s = ref_0.s)
+SELECT *
+FROM
+(
+    SELECT EXISTS(SELECT 1 FROM a WHERE a.s = ref_0.s) AS exists
+    FROM a AS ref_0
+    LEFT JOIN a AS ref_1
+    ON True
+)
+WHERE exists
 ----
 project
- ├── columns: "?column?":17(int!null)
- ├── fd: ()-->(17)
- ├── left-join-apply
- │    ├── columns: a.s:4(string) a.k:5(int) true_agg:15(bool)
- │    ├── scan a
- │    │    └── columns: a.s:4(string)
- │    ├── select
- │    │    ├── columns: a.k:5(int!null) true_agg:15(bool!null)
- │    │    ├── outer: (4)
- │    │    ├── key: (5)
- │    │    ├── fd: (5)-->(15)
- │    │    ├── group-by
- │    │    │    ├── columns: a.k:5(int!null) true_agg:15(bool)
- │    │    │    ├── grouping columns: a.k:5(int!null)
- │    │    │    ├── outer: (4)
- │    │    │    ├── key: (5)
- │    │    │    ├── fd: (5)-->(15)
- │    │    │    ├── inner-join
- │    │    │    │    ├── columns: a.k:5(int!null) a.s:12(string!null) true:14(bool!null)
- │    │    │    │    ├── outer: (4)
- │    │    │    │    ├── fd: ()-->(12,14)
+ ├── columns: exists:14(bool)
+ ├── select
+ │    ├── columns: true_agg:16(bool!null) rownum:18(int!null)
+ │    ├── key: (18)
+ │    ├── fd: (18)-->(16)
+ │    ├── group-by
+ │    │    ├── columns: true_agg:16(bool) rownum:18(int!null)
+ │    │    ├── grouping columns: rownum:18(int!null)
+ │    │    ├── key: (18)
+ │    │    ├── fd: (18)-->(16)
+ │    │    ├── inner-join
+ │    │    │    ├── columns: a.s:4(string!null) a.s:12(string!null) true:15(bool!null) rownum:18(int!null)
+ │    │    │    ├── fd: ()-->(15), (18)-->(4), (4)==(12), (12)==(4)
+ │    │    │    ├── row-number
+ │    │    │    │    ├── columns: a.s:4(string) rownum:18(int!null)
+ │    │    │    │    ├── key: (18)
+ │    │    │    │    ├── fd: (18)-->(4)
+ │    │    │    │    └── left-join
+ │    │    │    │         ├── columns: a.s:4(string)
+ │    │    │    │         ├── scan a
+ │    │    │    │         │    └── columns: a.s:4(string)
+ │    │    │    │         ├── scan a
+ │    │    │    │         └── filters
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: true:15(bool!null) a.s:12(string)
+ │    │    │    │    ├── fd: ()-->(15)
  │    │    │    │    ├── scan a
- │    │    │    │    │    ├── columns: a.k:5(int!null)
- │    │    │    │    │    └── key: (5)
- │    │    │    │    ├── project
- │    │    │    │    │    ├── columns: true:14(bool!null) a.s:12(string)
- │    │    │    │    │    ├── fd: ()-->(14)
- │    │    │    │    │    ├── scan a
- │    │    │    │    │    │    └── columns: a.s:12(string)
- │    │    │    │    │    └── projections [outer=(12)]
- │    │    │    │    │         └── true [type=bool]
- │    │    │    │    └── filters [type=bool, outer=(4,12), constraints=(/4: (/NULL - ]; /12: (/NULL - ]), fd=(4)==(12), (12)==(4)]
- │    │    │    │         └── a.s = a.s [type=bool, outer=(4,12), constraints=(/4: (/NULL - ]; /12: (/NULL - ])]
- │    │    │    └── aggregations [outer=(14)]
- │    │    │         └── const-not-null-agg [type=bool, outer=(14)]
- │    │    │              └── variable: true [type=bool, outer=(14)]
- │    │    └── filters [type=bool, outer=(15), constraints=(/15: (/NULL - ]; tight)]
- │    │         └── true_agg IS NOT NULL [type=bool, outer=(15), constraints=(/15: (/NULL - ]; tight)]
- │    └── true [type=bool]
+ │    │    │    │    │    └── columns: a.s:12(string)
+ │    │    │    │    └── projections
+ │    │    │    │         └── true [type=bool]
+ │    │    │    └── filters
+ │    │    │         └── a.s = a.s [type=bool, outer=(4,12), constraints=(/4: (/NULL - ]; /12: (/NULL - ]), fd=(4)==(12), (12)==(4)]
+ │    │    └── aggregations
+ │    │         └── const-not-null-agg [type=bool, outer=(15)]
+ │    │              └── variable: true [type=bool]
+ │    └── filters
+ │         └── true_agg IS NOT NULL [type=bool, outer=(16), constraints=(/16: (/NULL - ]; tight)]
  └── projections
-      └── const: 1 [type=int]
+      └── true_agg IS NOT NULL [type=bool, outer=(16), constraints=(/16: (/NULL - ]; tight)]

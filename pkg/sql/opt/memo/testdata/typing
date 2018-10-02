@@ -56,7 +56,7 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
- └── filters [type=bool]
+ └── filters
       └── x = $1 [type=bool]
 
 # Tuple, Projections
@@ -78,7 +78,7 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
- └── filters [type=bool]
+ └── filters
       └── (x = 1) AND (NOT ((y = 2) OR (y = 3.5))) [type=bool]
 
 # Eq, Ne
@@ -89,7 +89,7 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
- └── filters [type=bool]
+ └── filters
       └── (x = 1) AND (x != 2) [type=bool]
 
 # Le, Ge, Lt, Gt
@@ -100,7 +100,7 @@ select
  ├── columns: x:1(int!null) y:2(int!null)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
- └── filters [type=bool]
+ └── filters
       └── (((x >= 1) AND (x <= 10)) AND (y > 1)) AND (y < 10) [type=bool]
 
 # In, NotIn
@@ -111,7 +111,7 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
- └── filters [type=bool]
+ └── filters
       └── (x IN (1, 2)) AND (y NOT IN (3, 4)) [type=bool]
 
 # Like, NotLike
@@ -122,7 +122,7 @@ select
  ├── columns: x:1(string!null) z:2(decimal!null)
  ├── scan b
  │    └── columns: x:1(string!null) z:2(decimal!null)
- └── filters [type=bool]
+ └── filters
       └── (x LIKE '%foo%') AND (x NOT LIKE '%bar%') [type=bool]
 
 # ILike, INotLike
@@ -133,7 +133,7 @@ select
  ├── columns: x:1(string!null) z:2(decimal!null)
  ├── scan b
  │    └── columns: x:1(string!null) z:2(decimal!null)
- └── filters [type=bool]
+ └── filters
       └── (x ILIKE '%foo%') AND (x NOT ILIKE '%bar%') [type=bool]
 
 # RegMatch, NotRegMatch, RegIMatch, NotRegIMatch
@@ -144,7 +144,7 @@ select
  ├── columns: x:1(string!null) z:2(decimal!null)
  ├── scan b
  │    └── columns: x:1(string!null) z:2(decimal!null)
- └── filters [type=bool]
+ └── filters
       └── (((x ~ 'foo') AND (x !~ 'bar')) AND (x ~* 'foo')) AND (x !~* 'bar') [type=bool]
 
 # Is, IsNot
@@ -155,7 +155,7 @@ select
  ├── columns: x:1(int!null) y:2(int)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(int)
- └── filters [type=bool]
+ └── filters
       └── (x IS DISTINCT FROM y) AND (x IS NULL) [type=bool]
 
 # Bitand, Bitor, Bitxor
@@ -308,7 +308,7 @@ project
  ├── values
  │    └── tuple [type=tuple]
  └── projections
-      └── function: now [type=timestamptz]
+      └── now() [type=timestamptz]
 
 # Variadic function.
 build
@@ -391,14 +391,14 @@ project
  │    │    │    │    └── columns: a.x:1(int!null) y:2(int)
  │    │    │    ├── scan b
  │    │    │    │    └── columns: b.x:4(string!null) z:5(decimal!null)
- │    │    │    └── filters [type=bool]
+ │    │    │    └── filters
  │    │    │         └── y = z::INT [type=bool]
  │    │    └── aggregations
  │    │         ├── max [type=string]
  │    │         │    └── variable: b.x [type=string]
  │    │         └── const-agg [type=int]
  │    │              └── variable: y [type=int]
- │    └── filters [type=bool]
+ │    └── filters
  │         └── max > 'foo' [type=bool]
  └── projections
       └── a.x::STRING [type=string]
@@ -427,7 +427,7 @@ project
  │    │    │    ├── scan a
  │    │    │    └── projections
  │    │    │         └── true [type=bool]
- │    │    └── filters [type=bool]
+ │    │    └── filters
  │    │         └── expr < 0 [type=bool]
  │    └── aggregations
  │         └── const-not-null-agg [type=bool]

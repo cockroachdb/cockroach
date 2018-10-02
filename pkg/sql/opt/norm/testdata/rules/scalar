@@ -37,7 +37,7 @@ project
  │    ├── columns: k:1(int!null) i:2(int)
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- └── projections [outer=(1,2)]
+ └── projections
       ├── k = (i + 1) [type=bool, outer=(1,2)]
       ├── i != (2 - k) [type=bool, outer=(1,2)]
       ├── k IS NOT DISTINCT FROM (i + 1) [type=bool, outer=(1,2)]
@@ -53,16 +53,16 @@ project
 # --------------------------------------------------
 opt expect=CommuteConst
 SELECT
-    (length('foo')+1) = (i+k) AS r,
-    length('bar') <> (i*2) AS s,
+    (10+1) = (i+k) AS r,
+    10 <> (i*2) AS s,
     5 IS NOT DISTINCT FROM (1-k) AS t,
     (10::decimal+1::int) IS DISTINCT FROM k AS u,
 
     1 + f AS v,
-    (5*length('foo')) * (i*i) AS w,
+    (5*10) * (i*i) AS w,
     (100 ^ 2) & (i+i) AS x,
-    length('foo')+1 | (i+i) AS y,
-    1-length('foo') # (k^2) AS z
+    10+1 | (i+i) AS y,
+    1-10 # (k^2) AS z
 FROM a
 ----
 project
@@ -71,16 +71,16 @@ project
  │    ├── columns: k:1(int!null) i:2(int) f:3(float)
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
- └── projections [outer=(1-3)]
-      ├── (i + k) = (length('foo') + 1) [type=bool, outer=(1,2)]
-      ├── (i * 2) != length('bar') [type=bool, outer=(2)]
+ └── projections
+      ├── (i + k) = 11 [type=bool, outer=(1,2)]
+      ├── (i * 2) != 10 [type=bool, outer=(2)]
       ├── (1 - k) IS NOT DISTINCT FROM 5 [type=bool, outer=(1)]
       ├── k IS DISTINCT FROM 11 [type=bool, outer=(1)]
       ├── f + 1.0 [type=float, outer=(3)]
-      ├── (i * i) * (5 * length('foo')) [type=int, outer=(2)]
+      ├── (i * i) * 50 [type=int, outer=(2)]
       ├── (i + i) & 10000 [type=int, outer=(2)]
-      ├── (i + i) | (length('foo') + 1) [type=int, outer=(2)]
-      └── (k ^ 2) # (1 - length('foo')) [type=int, outer=(1)]
+      ├── (i + i) | 11 [type=int, outer=(2)]
+      └── (k ^ 2) # -9 [type=int, outer=(1)]
 
 # --------------------------------------------------
 # EliminateCoalesce
@@ -92,7 +92,7 @@ project
  ├── columns: coalesce:7(int)
  ├── scan a
  │    └── columns: i:2(int)
- └── projections [outer=(2)]
+ └── projections
       └── variable: i [type=int, outer=(2)]
 
 opt expect=EliminateCoalesce
@@ -126,7 +126,7 @@ project
  ├── columns: coalesce:7(string)
  ├── scan a
  │    └── columns: s:4(string)
- └── projections [outer=(4)]
+ └── projections
       └── COALESCE(s, s || 'foo') [type=string, outer=(4)]
 
 # Trailing null can't be removed.
@@ -137,7 +137,7 @@ project
  ├── columns: coalesce:7(int)
  ├── scan a
  │    └── columns: i:2(int)
- └── projections [outer=(2)]
+ └── projections
       └── COALESCE(i, NULL, NULL) [type=int, outer=(2)]
 
 opt expect=SimplifyCoalesce
@@ -164,7 +164,7 @@ project
  ├── fd: ()-->(9,10)
  ├── scan a
  │    └── columns: a.i:2(int) a.s:4(string) a.arr:6(int[])
- └── projections [outer=(2,4,6)]
+ └── projections
       ├── variable: a.i [type=int, outer=(2)]
       ├── variable: a.arr [type=int[], outer=(6)]
       ├── const: '[1, 2]' [type=jsonb]
@@ -189,7 +189,7 @@ project
  ├── fd: ()-->(13,14)
  ├── scan a
  │    └── columns: a.i:2(int) a.s:4(string) a.arr:6(int[])
- └── projections [outer=(2,4,6)]
+ └── projections
       ├── a.i::FLOAT8 [type=float, outer=(2)]
       ├── a.arr::DECIMAL[] [type=decimal[], outer=(6)]
       ├── a.s::JSONB [type=jsonb, outer=(4)]
@@ -264,7 +264,7 @@ project
  ├── fd: ()-->(7-14)
  ├── scan a
  │    └── columns: i:2(int) arr:6(int[])
- └── projections [outer=(2,6)]
+ └── projections
       ├── null [type=int]
       ├── null [type=int]
       ├── null [type=decimal]
@@ -341,7 +341,7 @@ project
  ├── columns: r:7(bool)
  ├── scan a
  │    └── columns: i:2(int)
- └── projections [outer=(2)]
+ └── projections
       └── i IN (NULL, 1, 2, 3) [type=bool, outer=(2)]
 
 opt expect=NormalizeInConst
@@ -351,7 +351,7 @@ project
  ├── columns: r:7(bool)
  ├── scan a
  │    └── columns: s:4(string)
- └── projections [outer=(4)]
+ └── projections
       └── s NOT IN (NULL, 'bar', 'foo', s || 'foo', length(s)::STRING) [type=bool, outer=(4)]
 
 # --------------------------------------------------
@@ -368,7 +368,7 @@ select
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) a.arr:6(int[])
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
- └── filters [type=bool]
+ └── filters
       └── exists [type=bool]
            └── scan a
                 ├── columns: a.k:7(int!null) a.i:8(int)
@@ -391,7 +391,7 @@ select
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) a.arr:6(int[])
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
- └── filters [type=bool]
+ └── filters
       └── exists [type=bool]
            └── scalar-group-by
                 ├── columns: max:13(string)
@@ -403,9 +403,9 @@ select
                 │    ├── cardinality: [0 - 0]
                 │    ├── key: ()
                 │    └── fd: ()-->(10)
-                └── aggregations [outer=(10)]
+                └── aggregations
                      └── max [type=string, outer=(10)]
-                          └── variable: a.s [type=string, outer=(10)]
+                          └── variable: a.s [type=string]
 
 opt expect=EliminateExistsGroupBy
 SELECT * FROM a WHERE EXISTS(SELECT DISTINCT s FROM a)
@@ -418,7 +418,7 @@ select
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) a.arr:6(int[])
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
- └── filters [type=bool]
+ └── filters
       └── exists [type=bool]
            └── scan a
                 └── columns: a.s:10(string)
@@ -434,7 +434,7 @@ select
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) a.arr:6(int[])
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
- └── filters [type=bool]
+ └── filters
       └── exists [type=bool]
            └── scan a
                 └── columns: a.i:8(int) a.s:10(string)
@@ -453,7 +453,7 @@ select
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb) a.arr:6(int[])
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
- └── filters [type=bool]
+ └── filters
       └── exists [type=bool]
            └── scan a
                 └── columns: a.i:8(int) a.s:10(string)
@@ -472,7 +472,7 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
- └── filters [type=bool, outer=(5)]
+ └── filters
       └── j @> '{"a": "b"}' [type=bool, outer=(5)]
 
 opt expect=NormalizeJSONFieldAccess
@@ -486,7 +486,7 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
- └── filters [type=bool, outer=(5)]
+ └── filters
       └── j @> '{"a": {"x": "b"}}' [type=bool, outer=(5)]
 
 # The transformation is not valid in this case.
@@ -501,7 +501,7 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
- └── filters [type=bool, outer=(5)]
+ └── filters
       └── (j->2) = '"b"' [type=bool, outer=(5)]
 
 # The transformation is not valid in this case, since j->'a' could be an array.
@@ -516,7 +516,7 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
- └── filters [type=bool, outer=(5)]
+ └── filters
       └── (j->'a') @> '"b"' [type=bool, outer=(5)]
 
 # --------------------------------------------------
@@ -534,7 +534,7 @@ select
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) arr:6(int[])
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
- └── filters [type=bool, outer=(5)]
+ └── filters
       └── j @> '{"a": {"x": "b"}}' [type=bool, outer=(5)]
 
 # --------------------------------------------------
@@ -604,7 +604,7 @@ project
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
- └── projections [outer=(1)]
+ └── projections
       └── CASE 1 WHEN k THEN 'one' ELSE 'two' END [type=string, outer=(1)]
 
 opt expect=SimplifyCaseWhenConstValue
@@ -618,7 +618,7 @@ project
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
- └── projections [outer=(1)]
+ └── projections
       └── CASE WHEN k = 1 THEN 'one' ELSE 'two' END [type=string, outer=(1)]
 
 opt expect=SimplifyCaseWhenConstValue
@@ -652,7 +652,7 @@ project
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
- └── projections [outer=(1)]
+ └── projections
       └── CASE 1 WHEN k THEN 'two' ELSE 'three' END [type=string, outer=(1)]
 
 opt expect=SimplifyCaseWhenConstValue

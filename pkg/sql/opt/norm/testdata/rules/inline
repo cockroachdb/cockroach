@@ -35,9 +35,9 @@ project
  │    ├── scan a
  │    │    ├── columns: k:1(int!null)
  │    │    └── key: (1)
- │    └── filters [type=bool, outer=(1)]
+ │    └── filters
  │         └── (k = 1) IS NULL [type=bool, outer=(1)]
- └── projections [outer=(1)]
+ └── projections
       └── k = 1 [type=bool, outer=(1)]
 
 # Inline arithmetic.
@@ -52,9 +52,9 @@ project
  │    ├── scan a
  │    │    ├── columns: k:1(int!null)
  │    │    └── key: (1)
- │    └── filters [type=bool, outer=(1)]
+ │    └── filters
  │         └── ((k * 2) + 1) > 10 [type=bool, outer=(1)]
- └── projections [outer=(1)]
+ └── projections
       └── (k * 2) + 1 [type=int, outer=(1)]
 
 # Inline boolean logic.
@@ -67,7 +67,7 @@ project
  │    ├── columns: k:1(int!null)
  │    ├── constraint: /1: [ - /1] [/6 - ]
  │    └── key: (1)
- └── projections [outer=(1)]
+ └── projections
       └── (k <= 1) OR (k > 5) [type=bool, outer=(1)]
 
 # Inline constants.
@@ -80,9 +80,9 @@ project
  │    ├── columns: f:3(float)
  │    ├── scan a
  │    │    └── columns: f:3(float)
- │    └── filters [type=bool, outer=(3)]
+ │    └── filters
  │         └── (f IS NULL) OR (f != 10.5) [type=bool, outer=(3)]
- └── projections [outer=(3)]
+ └── projections
       └── (f IS NULL) OR (f != 10.5) [type=bool, outer=(3)]
 
 # Reference the expression to inline multiple times.
@@ -95,9 +95,9 @@ project
  │    ├── columns: f:3(float)
  │    ├── scan a
  │    │    └── columns: f:3(float)
- │    └── filters [type=bool, outer=(3)]
+ │    └── filters
  │         └── (f + 1.0) = (f + 1.0) [type=bool, outer=(3)]
- └── projections [outer=(3)]
+ └── projections
       └── f + 1.0 [type=float, outer=(3)]
 
 # Use outer references in both inlined expression and in referencing expression.
@@ -115,7 +115,7 @@ semi-join
  ├── scan xy
  │    ├── columns: x:6(int!null)
  │    └── key: (6)
- └── filters [type=bool, outer=(2,6)]
+ └── filters
       └── (x - i) > (i * i) [type=bool, outer=(2,6)]
 
 exec-ddl
@@ -200,17 +200,17 @@ project
       │    └── projections
       │         ├── const: 1 [type=int]
       │         └── const: 2 [type=int]
-      └── filters [type=bool, outer=(1,2), side-effects]
+      └── filters
            └── le [type=bool, outer=(1,2), side-effects]
-                ├── case [type=int, outer=(1,2), side-effects]
+                ├── case [type=int]
                 │    ├── true [type=bool]
-                │    ├── when [type=int, outer=(1,2), side-effects]
-                │    │    ├── c1 IS NOT NULL [type=bool, outer=(2)]
-                │    │    └── function: extract [type=int, outer=(1), side-effects]
-                │    │         ├── case [type=string, outer=(1)]
+                │    ├── when [type=int]
+                │    │    ├── c1 IS NOT NULL [type=bool]
+                │    │    └── function: extract [type=int]
+                │    │         ├── case [type=string]
                 │    │         │    ├── true [type=bool]
-                │    │         │    ├── when [type=string, outer=(1)]
-                │    │         │    │    ├── exists [type=bool, outer=(1)]
+                │    │         │    ├── when [type=string]
+                │    │         │    │    ├── exists [type=bool]
                 │    │         │    │    │    └── limit
                 │    │         │    │    │         ├── columns: config_yaml:5(bytes!null)
                 │    │         │    │    │         ├── outer: (1)
@@ -220,12 +220,12 @@ project
                 │    │         │    │    │         │    ├── outer: (1)
                 │    │         │    │    │         │    ├── scan zones
                 │    │         │    │    │         │    │    └── columns: config_yaml:5(bytes!null)
-                │    │         │    │    │         │    └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+                │    │         │    │    │         │    └── filters
                 │    │         │    │    │         │         └── c0 IS NOT NULL [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
                 │    │         │    │    │         └── const: 52 [type=int]
-                │    │         │    │    └── function: version [type=string]
-                │    │         │    └── function: version [type=string]
-                │    │         └── function: current_date [type=date, side-effects]
+                │    │         │    │    └── version() [type=string]
+                │    │         │    └── version() [type=string]
+                │    │         └── current_date() [type=date]
                 │    └── const: 1 [type=int]
                 └── const: 1 [type=int]
 
@@ -241,7 +241,7 @@ project
  │    ├── columns: k:1(int!null) i:2(int)
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- └── projections [outer=(1,2)]
+ └── projections
       ├── i + 1 [type=int, outer=(2)]
       └── k = 1 [type=bool, outer=(1)]
 
@@ -255,7 +255,7 @@ project
  │    ├── columns: k:1(int!null) i:2(int) a.s:4(string)
  │    ├── key: (1)
  │    └── fd: (1)-->(2,4)
- └── projections [outer=(1,2,4)]
+ └── projections
       ├── (k + 1) + 1 [type=int, outer=(1)]
       └── (a.s || 'foo') || 'bar' [type=string, outer=(4)]
 
@@ -271,9 +271,9 @@ project
  │    ├── scan a
  │    │    ├── columns: k:1(int!null)
  │    │    └── key: (1)
- │    └── projections [outer=(1)]
+ │    └── projections
  │         └── k + 1 [type=int, outer=(1)]
- └── projections [outer=(6)]
+ └── projections
       └── expr * 2 [type=int, outer=(6)]
 
 # Uncorrelated subquery should not block inlining.
@@ -286,7 +286,7 @@ project
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
- └── projections [outer=(1)]
+ └── projections
       ├── exists [type=bool]
       │    └── scan xy
       │         ├── columns: x:7(int!null) y:8(int)
@@ -318,7 +318,7 @@ project
  │    │    │         ├── scan a
  │    │    │         │    ├── columns: k:1(int!null)
  │    │    │         │    └── key: (1)
- │    │    │         └── projections [outer=(1)]
+ │    │    │         └── projections
  │    │    │              └── k + 1 [type=int, outer=(1)]
  │    │    ├── project
  │    │    │    ├── columns: true:10(bool!null)
@@ -326,10 +326,10 @@ project
  │    │    │    ├── scan xy
  │    │    │    └── projections
  │    │    │         └── true [type=bool]
- │    │    └── filters [type=bool, outer=(6), constraints=(/6: (/NULL - /-1]; tight)]
+ │    │    └── filters
  │    │         └── expr < 0 [type=bool, outer=(6), constraints=(/6: (/NULL - /-1]; tight)]
- │    └── aggregations [outer=(10)]
+ │    └── aggregations
  │         └── const-not-null-agg [type=bool, outer=(10)]
- │              └── variable: true [type=bool, outer=(10)]
- └── projections [outer=(11)]
+ │              └── variable: true [type=bool]
+ └── projections
       └── true_agg IS NOT NULL [type=bool, outer=(11)]

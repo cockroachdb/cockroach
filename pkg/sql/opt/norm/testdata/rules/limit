@@ -108,7 +108,7 @@ project
  │    ├── limit: 5
  │    ├── key: (1)
  │    └── fd: (1)-->(3)
- └── projections [outer=(1,3)]
+ └── projections
       └── f * 2.0 [type=float, outer=(3)]
 
 opt expect=PushLimitIntoProject
@@ -126,7 +126,7 @@ project
  │    ├── key: (1)
  │    ├── fd: (1)-->(3)
  │    └── ordering: +1
- └── projections [outer=(1,3)]
+ └── projections
       └── f * 2.0 [type=float, outer=(3)]
 
 # Don't push the limit through project when the ordering is on a
@@ -154,7 +154,7 @@ limit
  │         │    ├── columns: k:1(int!null) f:3(float)
  │         │    ├── key: (1)
  │         │    └── fd: (1)-->(3)
- │         └── projections [outer=(1,3)]
+ │         └── projections
  │              └── f * 2.0 [type=float, outer=(3)]
  └── const: 5 [type=int]
 
@@ -184,7 +184,7 @@ project
  │    │         └── scan a
  │    │              └── columns: i:2(int) f:3(float)
  │    └── const: 5 [type=int]
- └── projections [outer=(3)]
+ └── projections
       └── f + 1.1 [type=float, outer=(3)]
 
 # Don't push zero limit into Scan.
@@ -236,7 +236,7 @@ project
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(3)
  │    └── const: 5 [type=int]
- └── projections [outer=(1,3)]
+ └── projections
       └── f * 2.0 [type=float, outer=(3)]
 
 opt expect=PushOffsetIntoProject
@@ -259,7 +259,7 @@ project
  │    │    ├── fd: (1)-->(3)
  │    │    └── ordering: +1
  │    └── const: 5 [type=int]
- └── projections [outer=(1,3)]
+ └── projections
       └── f * 2.0 [type=float, outer=(3)]
 
 # Don't push the offset through project when the ordering is on a
@@ -286,7 +286,7 @@ offset
  │         │    ├── columns: k:1(int!null) f:3(float)
  │         │    ├── key: (1)
  │         │    └── fd: (1)-->(3)
- │         └── projections [outer=(1,3)]
+ │         └── projections
  │              └── f * 2.0 [type=float, outer=(3)]
  └── const: 5 [type=int]
 
@@ -313,7 +313,7 @@ project
  │    │         └── scan a
  │    │              └── columns: i:2(int) f:3(float)
  │    └── const: 5 [type=int]
- └── projections [outer=(3)]
+ └── projections
       └── f + 1.1 [type=float, outer=(3)]
 
 # --------------------------------------------------
@@ -342,7 +342,7 @@ project
  │    │    │    └── fd: (1)-->(3)
  │    │    └── const: 5 [type=int]
  │    └── const: 10 [type=int]
- └── projections [outer=(1,3)]
+ └── projections
       └── f * 2.0 [type=float, outer=(3)]
 
 opt expect=(PushLimitIntoProject,PushOffsetIntoProject)
@@ -375,5 +375,5 @@ project
  │    │    │              └── columns: i:2(int) f:3(float)
  │    │    └── const: 5 [type=int]
  │    └── const: 10 [type=int]
- └── projections [outer=(3)]
+ └── projections
       └── f + 1.1 [type=float, outer=(3)]
