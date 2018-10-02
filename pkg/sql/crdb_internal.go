@@ -1767,17 +1767,18 @@ CREATE TABLE crdb_internal.zones (
 var crdbInternalGossipNodesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.gossip_nodes (
-  node_id         INT NOT NULL,
-  network         STRING NOT NULL,
-  address         STRING NOT NULL,
-  attrs           JSON NOT NULL,
-  locality        JSON NOT NULL,
-  server_version  STRING NOT NULL,
-  build_tag       STRING NOT NULL,
-  started_at      TIMESTAMP NOT NULL,
+  node_id         		INT NOT NULL,
+  network         		STRING NOT NULL,
+  address         		STRING NOT NULL,
+  advertise_address   STRING NOT NULL,
+  attrs           		JSON NOT NULL,
+  locality        		JSON NOT NULL,
+  server_version  		STRING NOT NULL,
+  build_tag       		STRING NOT NULL,
+  started_at     	 		TIMESTAMP NOT NULL,
   is_live          BOOL NOT NULL,
-  ranges          INT NOT NULL,
-  leases          INT NOT NULL
+  ranges          		INT NOT NULL,
+  leases        	  	INT NOT NULL
 )
 	`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
@@ -1851,10 +1852,16 @@ CREATE TABLE crdb_internal.gossip_nodes (
 				locality.Add(t.Key, json.FromString(t.Value))
 			}
 
+			addr, err := g.GetNodeIDAddress(d.NodeID)
+			if err != nil {
+				return err
+			}
+
 			if err := addRow(
 				tree.NewDInt(tree.DInt(d.NodeID)),
 				tree.NewDString(d.Address.NetworkField),
 				tree.NewDString(d.Address.AddressField),
+				tree.NewDString(addr.String()),
 				tree.NewDJSON(attrs.Build()),
 				tree.NewDJSON(locality.Build()),
 				tree.NewDString(d.ServerVersion.String()),

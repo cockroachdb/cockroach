@@ -543,7 +543,12 @@ func extraServerFlagInit() {
 		serverHTTPAddr = startCtx.serverListenAddr
 	}
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPAddr, serverHTTPPort)
-	serverCfg.LocalityIPAddresses = localityAdvertiseHosts
+	for i, addr := range localityAdvertiseHosts {
+		if !strings.Contains(localityAdvertiseHosts[i].Address.AddressField, ":") {
+			localityAdvertiseHosts[i].Address.AddressField = net.JoinHostPort(addr.Address.AddressField, serverAdvertisePort)
+		}
+	}
+	serverCfg.LocalityAddresses = localityAdvertiseHosts
 }
 
 func extraClientFlagInit() {

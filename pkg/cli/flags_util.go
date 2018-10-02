@@ -42,7 +42,7 @@ func (l *localityList) Type() string { return "localityList" }
 func (l *localityList) String() string {
 	string := ""
 	for _, loc := range []roachpb.LocalityAddress(*l) {
-		string += loc.LocalityTier.Key + "=" + loc.LocalityTier.Value + ":" + loc.Address.String() + ","
+		string += loc.LocalityTier.Key + "=" + loc.LocalityTier.Value + "@" + loc.Address.String() + ","
 	}
 
 	return string
