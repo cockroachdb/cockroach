@@ -1446,7 +1446,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
 		cv,
-		s.cfg.LocalityIPAddresses,
+		s.cfg.LocalityAddresses,
 		s.execCfg.DistSQLPlanner.SetNodeDesc,
 	); err != nil {
 		return err
