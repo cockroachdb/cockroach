@@ -17,87 +17,87 @@ const dataFromServer = getDataFromServer();
 // State for application use.
 
 export interface LoginState {
-    useLogin(): boolean;
-    loginEnabled(): boolean;
-    hasAccess(): boolean;
-    loggedInUser(): string;
+  useLogin(): boolean;
+  loginEnabled(): boolean;
+  hasAccess(): boolean;
+  loggedInUser(): string;
 }
 
 class LoginEnabledState {
-    apiState: LoginAPIState;
+  apiState: LoginAPIState;
 
-    constructor(state: LoginAPIState) {
-        this.apiState = state;
-    }
+  constructor(state: LoginAPIState) {
+    this.apiState = state;
+  }
 
-    useLogin(): boolean {
-        return true;
-    }
+  useLogin(): boolean {
+    return true;
+  }
 
-    loginEnabled(): boolean {
-        return true;
-    }
+  loginEnabled(): boolean {
+    return true;
+  }
 
-    hasAccess(): boolean {
-        return this.apiState.loggedInUser != null;
-    }
+  hasAccess(): boolean {
+    return this.apiState.loggedInUser != null;
+  }
 
-    loggedInUser(): string {
-        return this.apiState.loggedInUser;
-    }
+  loggedInUser(): string {
+    return this.apiState.loggedInUser;
+  }
 }
 
 class LoginDisabledState {
-    useLogin(): boolean {
-        return true;
-    }
+  useLogin(): boolean {
+    return true;
+  }
 
-    loginEnabled(): boolean {
-        return false;
-    }
+  loginEnabled(): boolean {
+    return false;
+  }
 
-    hasAccess(): boolean {
-        return true;
-    }
+  hasAccess(): boolean {
+    return true;
+  }
 
-    loggedInUser(): string {
-        return null;
-    }
+  loggedInUser(): string {
+    return null;
+  }
 }
 
 class NoLoginState {
-    useLogin(): boolean {
-        return false;
-    }
+  useLogin(): boolean {
+    return false;
+  }
 
-    loginEnabled(): boolean {
-        return false;
-    }
+  loginEnabled(): boolean {
+    return false;
+  }
 
-    hasAccess(): boolean {
-        return true;
-    }
+  hasAccess(): boolean {
+    return true;
+  }
 
-    loggedInUser(): string {
-        return null;
-    }
+  loggedInUser(): string {
+    return null;
+  }
 }
 
 // Selector
 
 export const selectLoginState = createSelector(
-    (state: AdminUIState) => state.login,
-    (login: LoginAPIState) => {
-        if (!dataFromServer.ExperimentalUseLogin) {
-            return new NoLoginState();
-        }
+  (state: AdminUIState) => state.login,
+  (login: LoginAPIState) => {
+    if (!dataFromServer.ExperimentalUseLogin) {
+      return new NoLoginState();
+    }
 
-        if (!dataFromServer.LoginEnabled) {
-            return new LoginDisabledState();
-        }
+    if (!dataFromServer.LoginEnabled) {
+      return new LoginDisabledState();
+    }
 
-        return new LoginEnabledState(login);
-    },
+    return new LoginEnabledState(login);
+  },
 );
 
 function shouldRedirect(location: Location) {
