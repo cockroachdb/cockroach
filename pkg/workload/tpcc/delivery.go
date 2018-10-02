@@ -45,14 +45,23 @@ import (
 // indicating transaction completion. The result of the deferred execution is
 // recorded into a result file.
 
-type delivery struct{}
+type delivery struct {
+	config *tpcc
+	db     *gosql.DB
+}
 
-var _ tpccTx = delivery{}
+var _ tpccTx = &delivery{}
 
-func (del delivery) run(
-	ctx context.Context, config *tpcc, db *gosql.DB, wID int,
-) (interface{}, error) {
-	atomic.AddUint64(&config.auditor.deliveryTransactions, 1)
+func createDelivery(ctx context.Context, config *tpcc, db *gosql.DB) (tpccTx, error) {
+	del := &delivery{
+		config: config,
+		db:     db,
+	}
+	return del, nil
+}
+
+func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
+	atomic.AddUint64(&del.config.auditor.deliveryTransactions, 1)
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
@@ -61,8 +70,8 @@ func (del delivery) run(
 
 	err := crdb.ExecuteTx(
 		ctx,
-		db,
-		config.txOpts,
+		del.db,
+		del.config.txOpts,
 		func(tx *gosql.Tx) error {
 			// 2.7.4.2. For each district:
 			dIDoIDPairs := make(map[int]int)
@@ -78,7 +87,7 @@ func (del delivery) run(
 					wID, dID)).Scan(&oID); err != nil {
 					// If no matching order is found, the delivery of this order is skipped.
 					if err != gosql.ErrNoRows {
-						atomic.AddUint64(&config.auditor.skippedDelivieries, 1)
+						atomic.AddUint64(&del.config.auditor.skippedDelivieries, 1)
 						return err
 					}
 					continue

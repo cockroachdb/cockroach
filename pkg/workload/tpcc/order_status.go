@@ -61,14 +61,23 @@ type customerData struct {
 	cMiddle  string
 }
 
-type orderStatus struct{}
+type orderStatus struct {
+	config *tpcc
+	db     *gosql.DB
+}
 
-var _ tpccTx = orderStatus{}
+var _ tpccTx = &orderStatus{}
 
-func (o orderStatus) run(
-	ctx context.Context, config *tpcc, db *gosql.DB, wID int,
-) (interface{}, error) {
-	atomic.AddUint64(&config.auditor.orderStatusTransactions, 1)
+func createOrderStatus(ctx context.Context, config *tpcc, db *gosql.DB) (tpccTx, error) {
+	o := &orderStatus{
+		config: config,
+		db:     db,
+	}
+	return o, nil
+}
+
+func (o *orderStatus) run(ctx context.Context, wID int) (interface{}, error) {
+	atomic.AddUint64(&o.config.auditor.orderStatusTransactions, 1)
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
@@ -80,15 +89,15 @@ func (o orderStatus) run(
 	// and 40% by number.
 	if rng.Intn(100) < 60 {
 		d.cLast = randCLast(rng)
-		atomic.AddUint64(&config.auditor.orderStatusByLastName, 1)
+		atomic.AddUint64(&o.config.auditor.orderStatusByLastName, 1)
 	} else {
 		d.cID = randCustomerID(rng)
 	}
 
 	if err := crdb.ExecuteTx(
 		ctx,
-		db,
-		config.txOpts,
+		o.db,
+		o.config.txOpts,
 		func(tx *gosql.Tx) error {
 			// 2.6.2.2 explains this entire transaction.
 
@@ -106,7 +115,7 @@ func (o orderStatus) run(
 			} else {
 				// Case 2: Pick the middle row, rounded up, from the selection by last name.
 				indexStr := "@customer_idx"
-				if config.usePostgres {
+				if o.config.usePostgres {
 					indexStr = ""
 				}
 				queryStr := fmt.Sprintf(`
