@@ -142,8 +142,8 @@ func generateZoneConfigIntrospectionValues(
 		values[3] = tree.DNull
 	} else {
 		constraints, err := yamlMarshalFlow(config.ConstraintsList{
-			Constraints:   zone.Constraints,
-			ExplicitlySet: zone.ExplicitlySetConstraints})
+			Constraints: zone.Constraints,
+			Inherited:   zone.InheritedConstraints})
 		if err != nil {
 			return err
 		}
