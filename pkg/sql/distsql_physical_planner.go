@@ -499,6 +499,10 @@ type PlanningCtx struct {
 	// keep track of whether it's valid to run a root node in a special fast path
 	// mode.
 	planDepth int
+
+	// noEvalSubqueries indicates that the plan expects any subqueries to not
+	// be replaced by evaluation. Should only be set by EXPLAIN.
+	noEvalSubqueries bool
 }
 
 var _ distsqlplan.ExprContext = &PlanningCtx{}
@@ -515,6 +519,14 @@ func (p *PlanningCtx) EvalContext() *tree.EvalContext {
 // has no remote flows.
 func (p *PlanningCtx) IsLocal() bool {
 	return p.isLocal
+}
+
+// EvaluateSubqueries returns true if this plan requires subqueries be fully
+// executed before trying to marshal. This is normally true except for in the
+// case of EXPLAIN queries, which ultimately want to describe the subquery that
+// will run, without actually running it.
+func (p *PlanningCtx) EvaluateSubqueries() bool {
+	return !p.noEvalSubqueries
 }
 
 // sanityCheckAddresses returns an error if the same address is used by two

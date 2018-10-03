@@ -29,3 +29,7 @@ func (fakeExprContext) EvalContext() *tree.EvalContext {
 func (fakeExprContext) IsLocal() bool {
 	return false
 }
+
+func (fakeExprContext) EvaluateSubqueries() bool {
+	return true
+}
