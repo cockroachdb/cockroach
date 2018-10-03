@@ -60,6 +60,7 @@ func makeStreamGroupAccumulator(
 
 func (s *streamGroupAccumulator) start(ctx context.Context) {
 	s.src.Start(ctx)
+	s.memAcc.AllocateMinimum(ctx, 1)
 }
 
 // nextGroup returns the next group from the inputs. The returned slice is not safe
@@ -117,7 +118,12 @@ func (s *streamGroupAccumulator) nextGroup(
 			n := len(s.curGroup)
 			ret := s.curGroup[:n:n]
 			s.curGroup = s.curGroup[:0]
-			s.memAcc.Clear(evalCtx.Ctx())
+
+			err := s.memAcc.ResizeTo(evalCtx.Context, int64(0))
+			if err != nil {
+				return nil, &ProducerMetadata{Err: err}
+			}
+
 			s.leftoverRow = row
 			return ret, nil
 		}

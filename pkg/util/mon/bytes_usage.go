@@ -448,8 +448,9 @@ type BoundAccount struct {
 	used int64
 	// reserved is a small buffer to amortize the cost of growing an account. It
 	// decreases as used increases (and vice-versa).
-	reserved int64
-	mon      *BytesMonitor
+	reserved     int64
+	minAllocated int64
+	mon          *BytesMonitor
 }
 
 // MakeStandaloneBudget creates a BoundAccount suitable for root
@@ -477,6 +478,15 @@ func (mm *BytesMonitor) MakeBoundAccount() BoundAccount {
 	return BoundAccount{mon: mm}
 }
 
+// AllocateMinimum allocates a minimum allocated size (reserved + used) for the
+// account. The account would not be able to Shrink() unless it has surpassed
+// this minimum allocated value.
+func (b *BoundAccount) AllocateMinimum(ctx context.Context, blocks int64) {
+	if blocks >= 0 {
+		b.minAllocated = blocks * DefaultPoolAllocationSize
+	}
+}
+
 // Clear releases all the cumulated allocations of an account at once and
 // primes it for reuse.
 func (b *BoundAccount) Clear(ctx context.Context) {
@@ -488,6 +498,7 @@ func (b *BoundAccount) Clear(ctx context.Context) {
 	b.Close(ctx)
 	b.used = 0
 	b.reserved = 0
+	b.minAllocated = 0
 }
 
 // Close releases all the cumulated allocations of an account at once.
@@ -554,7 +565,7 @@ func (b *BoundAccount) Shrink(ctx context.Context, delta int64) {
 	}
 	b.used -= delta
 	b.reserved += delta
-	if b.reserved >= b.mon.poolAllocationSize {
+	if b.allocated() > b.minAllocated && b.reserved >= b.mon.poolAllocationSize {
 		b.mon.releaseBytes(ctx, b.reserved-b.mon.poolAllocationSize)
 		b.reserved = b.mon.poolAllocationSize
 	}
