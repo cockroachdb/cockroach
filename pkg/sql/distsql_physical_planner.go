@@ -844,16 +844,20 @@ func getIndexIdx(n *scanNode) (uint32, error) {
 // corresponds to a scanNode, except for the Spans and OutputColumns.
 func initTableReaderSpec(
 	n *scanNode, planCtx *PlanningCtx, indexVarMap []int,
-) (distsqlrun.TableReaderSpec, distsqlrun.PostProcessSpec, error) {
-	s := distsqlrun.TableReaderSpec{
+) (*distsqlrun.TableReaderSpec, distsqlrun.PostProcessSpec, error) {
+	s := distsqlplan.NewTableReaderSpec()
+	*s = distsqlrun.TableReaderSpec{
 		Table:      *n.desc,
 		Reverse:    n.reverse,
 		IsCheck:    n.run.isCheck,
 		Visibility: n.colCfg.visibility.toDistSQLScanVisibility(),
+
+		// Retain the capacity of the spans slice.
+		Spans: s.Spans[:0],
 	}
 	indexIdx, err := getIndexIdx(n)
 	if err != nil {
-		return distsqlrun.TableReaderSpec{}, distsqlrun.PostProcessSpec{}, err
+		return nil, distsqlrun.PostProcessSpec{}, err
 	}
 	s.IndexIdx = indexIdx
 
@@ -866,7 +870,7 @@ func initTableReaderSpec(
 
 	filter, err := distsqlplan.MakeExpression(n.filter, planCtx, indexVarMap)
 	if err != nil {
-		return distsqlrun.TableReaderSpec{}, distsqlrun.PostProcessSpec{}, err
+		return nil, distsqlrun.PostProcessSpec{}, err
 	}
 	post := distsqlrun.PostProcessSpec{
 		Filter: filter,
@@ -1076,13 +1080,28 @@ func (dsp *DistSQLPlanner) createTableReaders(
 	stageID := p.NewStageID()
 
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
+	p.Processors = make([]distsqlplan.Processor, 0, len(spanPartitions))
 
 	returnMutations := n.colCfg.visibility == publicAndNonPublicColumns
 
 	for i, sp := range spanPartitions {
-		tr := &distsqlrun.TableReaderSpec{}
-		*tr = spec
-		tr.Spans = makeTableReaderSpans(sp.Spans)
+		var tr *distsqlrun.TableReaderSpec
+		if i == 0 {
+			// For the first span partition, we can just directly use the spec we made
+			// above.
+			tr = spec
+		} else {
+			// For the rest, we have to copy the spec into a fresh spec.
+			tr = distsqlplan.NewTableReaderSpec()
+			// Grab the Spans field of the new spec, and reuse it in case the pooled
+			// TableReaderSpec we got has pre-allocated Spans memory.
+			newSpansSlice := tr.Spans
+			*tr = *spec
+			tr.Spans = newSpansSlice
+		}
+		for j := range sp.Spans {
+			tr.Spans = append(tr.Spans, distsqlrun.TableReaderSpan{Span: sp.Spans[j]})
+		}
 
 		proc := distsqlplan.Processor{
 			Node: sp.Node,
@@ -1136,9 +1155,9 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		}
 	}
 	planToStreamColMap := make([]int, len(n.cols))
-	var descColumnIDs []sqlbase.ColumnID
-	for _, c := range n.desc.Columns {
-		descColumnIDs = append(descColumnIDs, c.ID)
+	descColumnIDs := make([]sqlbase.ColumnID, 0, len(n.desc.Columns))
+	for i := range n.desc.Columns {
+		descColumnIDs = append(descColumnIDs, n.desc.Columns[i].ID)
 	}
 	if returnMutations {
 		for _, m := range n.desc.Mutations {

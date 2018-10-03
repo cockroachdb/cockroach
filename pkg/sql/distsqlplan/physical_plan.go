@@ -810,7 +810,7 @@ func (p *PhysicalPlan) PopulateEndpoints(nodeAddresses map[roachpb.NodeID]string
 // gateway is the current node's NodeID.
 func (p *PhysicalPlan) GenerateFlowSpecs(
 	gateway roachpb.NodeID,
-) map[roachpb.NodeID]distsqlrun.FlowSpec {
+) map[roachpb.NodeID]*distsqlrun.FlowSpec {
 	// Only generate a flow ID for a remote plan because it will need to be
 	// referenced by remote nodes when connecting streams. This id generation is
 	// skipped for performance reasons on local flows.
@@ -818,15 +818,15 @@ func (p *PhysicalPlan) GenerateFlowSpecs(
 	if p.remotePlan {
 		flowID.UUID = uuid.MakeV4()
 	}
-	flows := make(map[roachpb.NodeID]distsqlrun.FlowSpec)
+	flows := make(map[roachpb.NodeID]*distsqlrun.FlowSpec, 1)
 
 	for _, proc := range p.Processors {
 		flowSpec, ok := flows[proc.Node]
 		if !ok {
-			flowSpec = distsqlrun.FlowSpec{FlowID: flowID, Gateway: gateway}
+			flowSpec = NewFlowSpec(flowID, gateway)
+			flows[proc.Node] = flowSpec
 		}
 		flowSpec.Processors = append(flowSpec.Processors, proc.Spec)
-		flows[proc.Node] = flowSpec
 	}
 	return flows
 }
