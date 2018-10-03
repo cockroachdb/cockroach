@@ -11,8 +11,14 @@ import {
   LayoutCell,
   FlattenedNode,
 } from "./tree";
+import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import { TimestampToMoment } from "src/util/convert";
+
 import { cockroach } from "src/js/protos";
 import NodeDescriptor$Properties = cockroach.roachpb.INodeDescriptor;
+import { google } from "src/js/protos";
+import ITimestamp = google.protobuf.ITimestamp;
+
 import "./replicaMatrix.styl";
 
 const DOWN_ARROW = "▼";
@@ -83,7 +89,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     return `${arrow} ${localityLabel}`;
   }
 
-  rowLabel(row: FlattenedNode<SchemaObject>): string {
+  rowLabelText(row: FlattenedNode<SchemaObject>) {
     if (row.isLeaf) {
       return row.data.tableName;
     }
@@ -92,6 +98,32 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     const label = row.data.dbName ? `DB: ${row.data.dbName}` : "Cluster";
 
     return `${arrow} ${label}`;
+  }
+
+  rowLabel(row: FlattenedNode<SchemaObject>) {
+    const text = this.rowLabelText(row);
+
+    const droppedIndicator = row.data.droppedAt
+      ? <span className="matrix__dropped-schema-object">*</span>
+      : null;
+
+    if (row.data.droppedAt) {
+      return (
+        <ToolTipWrapper
+          text={
+            <span>
+              Dropped at {TimestampToMoment(row.data.droppedAt).format()}.
+              Will eventually be garbage collected according to this schema
+              object's GC TTL.
+            </span>
+          }
+        >
+          {text} {droppedIndicator}
+        </ToolTipWrapper>
+      );
+    } else {
+      return <span>{text} {droppedIndicator}</span>;
+    }
   }
 
   render() {
@@ -110,74 +142,87 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     const flattenedCols = flatten(cols, collapsedCols, false /* includeNodes */);
 
     return (
-      <table className="matrix">
-        <thead>
-          {headerRows.map((row, idx) => (
-            <tr key={idx}>
-              {idx === 0
-                ? <th className="matrix__metric-label"># Replicas</th>
-                : <th />}
-              {row.map((col) => (
-                <th
-                  key={col.path.join("/")}
-                  colSpan={col.width}
+      <div>
+        <table className="matrix">
+          <thead>
+            {headerRows.map((row, idx) => (
+              <tr key={idx}>
+                {idx === 0
+                  ? <th className="matrix__metric-label"># Replicas</th>
+                  : <th />}
+                {row.map((col) => (
+                  <th
+                    key={col.path.join("/")}
+                    colSpan={col.width}
+                    className={classNames(
+                      "matrix__column-header",
+                      { "matrix__column-header--internal-node": !(col.isLeaf || col.isPlaceholder) },
+                    )}
+                    onClick={() => (
+                      col.isCollapsed
+                        ? this.expandCol(col.path)
+                        : this.collapseCol(col.path)
+                    )}
+                  >
+                    {this.colLabel(col)}
+                  </th>
+                ))}
+              </tr>
+            ))}
+          </thead>
+          <tbody>
+            {flattenedRows.map((row) => {
+              return (
+                <tr
+                  key={row.path.join("/")}
                   className={classNames(
-                    "matrix__column-header",
-                    { "matrix__column-header--internal-node": !(col.isLeaf || col.isPlaceholder) },
+                    "matrix__row",
+                    { "matrix__row--internal-node": !row.isLeaf },
                   )}
                   onClick={() => (
-                    col.isCollapsed
-                      ? this.expandCol(col.path)
-                      : this.collapseCol(col.path)
+                    row.isCollapsed
+                      ? this.expandRow(row.path)
+                      : this.collapseRow(row.path)
                   )}
                 >
-                  {this.colLabel(col)}
-                </th>
-              ))}
-            </tr>
-          ))}
-        </thead>
-        <tbody>
-          {flattenedRows.map((row) => {
-            return (
-              <tr
-                key={row.path.join("/")}
-                className={classNames(
-                  "matrix__row",
-                  { "matrix__row--internal-node": !row.isLeaf },
-                )}
-                onClick={() => (
-                  row.isCollapsed
-                    ? this.expandRow(row.path)
-                    : this.collapseRow(row.path)
-                )}
-              >
-                <th
-                  className={classNames(
-                    "matrix__row-header",
-                    { "matrix__row-header--internal-node": !row.isLeaf },
-                  )}
-                  style={{ paddingLeft: row.depth * ROW_TREE_INDENT_PX + ROW_LEFT_MARGIN_PX }}
-                >
-                  {this.rowLabel(row)}
-                </th>
-                {flattenedCols.map((col) => {
-                  return (
-                    <td
-                      key={col.path.join("/")}
-                      className="matrix__cell-value"
-                    >
-                      {row.isLeaf || row.isCollapsed
-                        ? emptyIfZero(sumValuesUnderPaths(rows, cols, row.path, col.path, getValue))
-                        : null}
-                    </td>
-                  );
-                })}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                  <th
+                    className={classNames(
+                      "matrix__row-header",
+                      { "matrix__row-header--internal-node": !row.isLeaf },
+                    )}
+                    style={{ paddingLeft: row.depth * ROW_TREE_INDENT_PX + ROW_LEFT_MARGIN_PX }}
+                  >
+                    {this.rowLabel(row)}
+                  </th>
+                  {flattenedCols.map((col) => {
+                    return (
+                      <td
+                        key={col.path.join("/")}
+                        className="matrix__cell-value"
+                      >
+                        {row.isLeaf || row.isCollapsed
+                          ? emptyIfZero(sumValuesUnderPaths(rows, cols, row.path, col.path, getValue))
+                          : null}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <table className="replica-matrix-key">
+          <tr>
+            <td>
+              <span className="matrix__dropped-schema-object">*</span>
+            </td>
+            <td className="replica-matrix-key__definition">
+              Indicates that this schema object was dropped. Its replicas will eventually be
+              garbage collected, according to the GC TTL setting that applies to it.
+            </td>
+          </tr>
+        </table>
+      </div>
     );
   }
 
@@ -195,4 +240,5 @@ export default ReplicaMatrix;
 export interface SchemaObject {
   dbName?: string;
   tableName?: string;
+  droppedAt?: ITimestamp;
 }

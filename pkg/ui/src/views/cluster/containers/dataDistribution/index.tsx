@@ -72,13 +72,22 @@ class DataDistribution extends React.Component<DataDistributionProps> {
     const databaseInfo = this.props.dataDistribution.database_info;
     const dbTree: TreeNode<SchemaObject> = {
       name: "Cluster",
-      data: { dbName: null, tableName: null },
+      data: {
+        dbName: null,
+        tableName: null,
+      },
       children: _.map(databaseInfo, (dbInfo, dbName) => ({
         name: dbName,
-        data: { dbName },
-        children: _.map(dbInfo.table_info, (_tableInfo, tableName) => ({
+        data: {
+          dbName,
+        },
+        children: _.map(dbInfo.table_info, (tableInfo, tableName) => ({
           name: tableName,
-          data: { dbName, tableName },
+          data: {
+            dbName,
+            tableName,
+            droppedAt: tableInfo.dropped_at,
+          },
         })),
       })),
     };
