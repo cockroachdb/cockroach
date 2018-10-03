@@ -20,6 +20,8 @@ import (
 
 	"fmt"
 
+	"sync"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -375,6 +377,12 @@ func (w *errOnlyResultWriter) IncrementRowsAffected(n int) {
 
 var _ distsqlrun.RowReceiver = &DistSQLReceiver{}
 
+var receiverSyncPool = sync.Pool{
+	New: func() interface{} {
+		return &DistSQLReceiver{}
+	},
+}
+
 // MakeDistSQLReceiver creates a DistSQLReceiver.
 //
 // ctx is the Context that the receiver will use throughput its
@@ -394,7 +402,8 @@ func MakeDistSQLReceiver(
 	tracing *SessionTracing,
 ) *DistSQLReceiver {
 	consumeCtx, cleanup := tracing.TraceExecConsume(ctx)
-	r := &DistSQLReceiver{
+	r := receiverSyncPool.Get().(*DistSQLReceiver)
+	*r = DistSQLReceiver{
 		ctx:          consumeCtx,
 		cleanup:      cleanup,
 		resultWriter: resultWriter,
@@ -423,10 +432,17 @@ func MakeDistSQLReceiver(
 	return r
 }
 
+// Release releases this DistSQLReceiver back to the pool.
+func (r *DistSQLReceiver) Release() {
+	*r = DistSQLReceiver{}
+	receiverSyncPool.Put(r)
+}
+
 // clone clones the receiver for running subqueries. Not all fields are cloned,
 // only those required for running subqueries.
 func (r *DistSQLReceiver) clone() *DistSQLReceiver {
-	return &DistSQLReceiver{
+	ret := receiverSyncPool.Get().(*DistSQLReceiver)
+	*ret = DistSQLReceiver{
 		ctx:         r.ctx,
 		cleanup:     func() {},
 		rangeCache:  r.rangeCache,
@@ -436,6 +452,7 @@ func (r *DistSQLReceiver) clone() *DistSQLReceiver {
 		stmtType:    tree.Rows,
 		tracing:     r.tracing,
 	}
+	return ret
 }
 
 // SetError provides a convenient way for a client to pass in an error, thus
