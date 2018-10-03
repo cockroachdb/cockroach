@@ -242,6 +242,23 @@ func (b *Builder) buildScalar(
 		// b.subquery.outerCols.
 		b.checkSubqueryOuterCols(s.outerCols, inGroupingContext, inScope, colRefs)
 
+	case *tree.IndirectionExpr:
+		expr := b.buildScalar(t.Expr.(tree.TypedExpr), inScope, nil, nil, colRefs)
+
+		if len(t.Indirection) != 1 {
+			panic(unimplementedf("multidimensional arrays are not supported"))
+		}
+
+		subscript := t.Indirection[0]
+		if subscript.Slice {
+			panic(unimplementedf("array slicing is not supported"))
+		}
+
+		out = b.factory.ConstructIndirection(
+			expr,
+			b.buildScalar(subscript.Begin.(tree.TypedExpr), inScope, nil, nil, colRefs),
+		)
+
 	case *tree.BinaryExpr:
 		// It's possible for an overload to be selected that expects different
 		// types than the TypedExpr arguments return:

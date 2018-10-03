@@ -553,11 +553,9 @@ render         ·         ·         (a int)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT x[1] FROM (SELECT ARRAY[1,2,3] AS x)
 ----
-render              ·         ·                                           (x int)    ·
- │                  render 0  ((x)[int[]][(1)[int]])[int]                 ·          ·
- └── render         ·         ·                                           (x int[])  x=CONST
-      │             render 0  (ARRAY[(1)[int],(2)[int],(3)[int]])[int[]]  ·          ·
-      └── emptyrow  ·         ·                                           ()         ·
+render         ·         ·         (x int)  ·
+ │             render 0  (1)[int]  ·        ·
+ └── emptyrow  ·         ·         ()       ·
 
 query T
 EXPLAIN (OPT) SELECT 1 AS r
