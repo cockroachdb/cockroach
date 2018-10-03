@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"go.etcd.io/etcd/raft"
 )
 
 const (
@@ -395,6 +396,8 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			return iQPS < jQPS
 		})
 
+		var raftStatus *raft.Status
+
 		for _, candidate := range replicas {
 			if candidate.StoreID == localDesc.StoreID {
 				continue
@@ -402,6 +405,14 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 
 			meanQPS := storeList.candidateQueriesPerSecond.mean
 			if shouldNotMoveTo(ctx, storeMap, replWithStats, candidate.StoreID, meanQPS, minQPS, maxQPS) {
+				continue
+			}
+
+			if raftStatus == nil {
+				raftStatus = getRaftStatusFn(replWithStats.repl)
+			}
+			if raftStatus == nil || len(raftStatus.Progress) == 0 || replicaIsBehind(raftStatus, candidate.ReplicaID) {
+				log.VEventf(ctx, 3, "%v is behind or this store isn't the raft leader; raftStatus: %v", candidate, raftStatus)
 				continue
 			}
 
@@ -566,7 +577,25 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 		// RelocateRange transfers the lease to the first provided target.
 		newLeaseIdx := 0
 		newLeaseQPS := math.MaxFloat64
+		var raftStatus *raft.Status
 		for i := 0; i < len(targets); i++ {
+			// Ensure we don't transfer the lease to an existing replica that is behind
+			// in processing its raft log.
+			var replicaID roachpb.ReplicaID
+			for _, replica := range desc.Replicas {
+				if replica.StoreID == targets[i].StoreID {
+					replicaID = replica.ReplicaID
+				}
+			}
+			if replicaID != 0 {
+				if raftStatus == nil {
+					raftStatus = getRaftStatusFn(replWithStats.repl)
+				}
+				if raftStatus != nil && len(raftStatus.Progress) > 0 && replicaIsBehind(raftStatus, replicaID) {
+					continue
+				}
+			}
+
 			storeDesc, ok := storeMap[targets[i].StoreID]
 			if ok && storeDesc.Capacity.QueriesPerSecond < newLeaseQPS {
 				newLeaseIdx = i
@@ -636,4 +665,8 @@ func storeListToMap(sl StoreList) map[roachpb.StoreID]*roachpb.StoreDescriptor {
 		storeMap[sl.stores[i].StoreID] = &sl.stores[i]
 	}
 	return storeMap
+}
+
+var getRaftStatusFn = func(replica *Replica) *raft.Status {
+	return replica.RaftStatus()
 }
