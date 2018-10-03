@@ -41,7 +41,7 @@ interface NodeCanvasState {
 }
 
 export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState> {
-  graphEl: SVGElement;
+  graphEl: React.RefObject<SVGSVGElement> = React.createRef();
   debouncedOnResize: () => void;
 
   constructor(props: any) {
@@ -52,7 +52,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
   }
 
   updateViewport = () => {
-    const rect = this.graphEl.getBoundingClientRect();
+    const rect = this.graphEl.current.getBoundingClientRect();
     this.setState({
       viewportSize: [rect.width, rect.height],
     });
@@ -154,7 +154,7 @@ export class NodeCanvas extends React.Component<NodeCanvasProps, NodeCanvasState
               position: "absolute",
             }}
             className="cluster-viz"
-            ref={svg => this.graphEl = svg}
+            ref={this.graphEl}
           >
             { this.renderContent(showMap) }
           </svg>
