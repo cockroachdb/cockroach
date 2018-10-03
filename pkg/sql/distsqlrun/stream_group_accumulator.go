@@ -78,6 +78,8 @@ func (s *streamGroupAccumulator) nextGroup(
 		s.leftoverRow = nil
 	}
 
+	totalSize := int64(0)
+
 	for {
 		row, meta := s.src.Next()
 		if meta != nil {
@@ -88,7 +90,10 @@ func (s *streamGroupAccumulator) nextGroup(
 			return s.curGroup, nil
 		}
 
-		if err := s.memAcc.Grow(evalCtx.Ctx(), int64(row.Size())); err != nil {
+		curSize := int64(row.Size())
+		totalSize += curSize
+
+		if err := s.memAcc.Grow(evalCtx.Ctx(), curSize); err != nil {
 			return nil, &ProducerMetadata{Err: err}
 		}
 		row = s.rowAlloc.CopyRow(row)
@@ -117,7 +122,16 @@ func (s *streamGroupAccumulator) nextGroup(
 			n := len(s.curGroup)
 			ret := s.curGroup[:n:n]
 			s.curGroup = s.curGroup[:0]
-			s.memAcc.Clear(evalCtx.Ctx())
+
+			if totalSize > s.memAcc.Allocated() {
+				err := s.memAcc.SetMinAllocated(evalCtx.Context, totalSize)
+				if err != nil {
+					return nil, &ProducerMetadata{Err: err}
+				}
+			}
+
+			s.memAcc.Empty(evalCtx.Context)
+
 			s.leftoverRow = row
 			return ret, nil
 		}

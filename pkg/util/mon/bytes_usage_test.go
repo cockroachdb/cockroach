@@ -67,7 +67,7 @@ func TestMemoryAllocations(t *testing.T) {
 				t.Errorf("account %d went negative: %d", accI, accs[accI].used)
 				fail = true
 			}
-			sum += accs[accI].allocated()
+			sum += accs[accI].Allocated()
 		}
 		if m.mu.curAllocated < 0 {
 			t.Errorf("monitor current count went negative: %d", m.mu.curAllocated)
@@ -81,7 +81,7 @@ func TestMemoryAllocations(t *testing.T) {
 			t.Errorf("monitor current budget went negative: %d", m.mu.curBudget.used)
 			fail = true
 		}
-		avail := m.mu.curBudget.allocated() + m.reserved.used
+		avail := m.mu.curBudget.Allocated() + m.reserved.used
 		if sum > avail {
 			t.Errorf("total account sum %d greater than total monitor budget %d", sum, avail)
 			fail = true
@@ -90,7 +90,7 @@ func TestMemoryAllocations(t *testing.T) {
 			t.Errorf("pool cur %d exceeds max %d", pool.mu.curAllocated, pool.reserved.used)
 			fail = true
 		}
-		if m.mu.curBudget.allocated() != pool.mu.curAllocated {
+		if m.mu.curBudget.Allocated() != pool.mu.curAllocated {
 			t.Errorf("monitor budget %d different from pool cur %d", m.mu.curBudget.used, pool.mu.curAllocated)
 			fail = true
 		}
