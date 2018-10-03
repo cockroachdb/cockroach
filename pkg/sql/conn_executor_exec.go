@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 	"time"
@@ -92,7 +93,11 @@ func (ex *connExecutor) execStmt(
 	case stateNoTxn:
 		ev, payload = ex.execStmtInNoTxnState(ctx, stmt)
 	case stateOpen:
-		ev, payload, err = ex.execStmtInOpenState(ctx, stmt, pinfo, res)
+		labels := pprof.Labels("stmt", stmt.AST.StatementTag())
+		labeledCtx := pprof.WithLabels(ctx, labels)
+		pprof.SetGoroutineLabels(labeledCtx)
+		ev, payload, err = ex.execStmtInOpenState(labeledCtx, stmt, pinfo, res)
+		pprof.SetGoroutineLabels(ctx)
 		switch ev.(type) {
 		case eventNonRetriableErr:
 			ex.server.StatementCounters.FailureCount.Inc(1)
