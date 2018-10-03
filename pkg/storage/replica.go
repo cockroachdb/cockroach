@@ -3003,6 +3003,7 @@ func (r *Replica) executeReadOnlyBatch(
 		endCmds.done(br, pErr, proposalNoRetry)
 	}()
 
+	// TODO(nvanbenschoten): Can this be moved into Replica.requestCanProceed?
 	if _, err := r.IsDestroyed(); err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -3563,13 +3564,14 @@ func (r *Replica) propose(
 	endCmds *endCmds,
 	spans *spanset.SpanSet,
 ) (_ chan proposalResult, _ func() bool, _ int64, pErr *roachpb.Error) {
-	r.mu.Lock()
+	// TODO(nvanbenschoten): Can this be moved into Replica.requestCanProceed?
+	r.mu.RLock()
 	if !r.mu.destroyStatus.IsAlive() {
 		err := r.mu.destroyStatus.err
-		r.mu.Unlock()
+		r.mu.RUnlock()
 		return nil, nil, 0, roachpb.NewError(err)
 	}
-	r.mu.Unlock()
+	r.mu.RUnlock()
 
 	rSpan, err := keys.Range(ba)
 	if err != nil {
