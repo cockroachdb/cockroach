@@ -162,7 +162,7 @@ func TestPGWire(t *testing.T) {
 					if optUser == server.TestUser {
 						// The user TestUser has not been created so authentication
 						// will fail with a valid certificate.
-						if !testutils.IsError(err, fmt.Sprintf("pq: user %s does not exist", server.TestUser)) {
+						if !testutils.IsError(err, fmt.Sprintf("pq: password authentication failed for user %s", server.TestUser)) {
 							t.Errorf("unexpected error: %v", err)
 						}
 					} else {
@@ -199,7 +199,7 @@ func TestPGWireNonexistentUser(t *testing.T) {
 		}
 
 		err := trivialQuery(pgURL)
-		if !testutils.IsError(err, fmt.Sprintf("pq: user %s does not exist", server.TestUser)) {
+		if !testutils.IsError(err, fmt.Sprintf("pq: password authentication failed for user %s", server.TestUser)) {
 			t.Errorf("unexpected error: %v", err)
 		}
 	})
@@ -1849,7 +1849,7 @@ func TestPGWireAuth(t *testing.T) {
 				Host:     net.JoinHostPort(host, port),
 				RawQuery: "sslmode=require",
 			}
-			if err := trivialQuery(unicodeUserPgURL); !testutils.IsError(err, "pq: invalid password") {
+			if err := trivialQuery(unicodeUserPgURL); !testutils.IsError(err, "pq: password authentication failed for user") {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
@@ -1883,7 +1883,7 @@ func TestPGWireAuth(t *testing.T) {
 		// Even though the correct password is supplied (empty string), this
 		// should fail because we do not support password authentication for
 		// users with empty passwords.
-		if err := trivialQuery(testUserPgURL); !testutils.IsError(err, "pq: invalid password") {
+		if err := trivialQuery(testUserPgURL); !testutils.IsError(err, "pq: password authentication failed for user") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
