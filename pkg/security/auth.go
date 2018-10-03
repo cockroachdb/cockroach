@@ -106,9 +106,14 @@ func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []b
 
 		// If the requested user has an empty password, disallow authentication.
 		if len(password) == 0 || CompareHashAndPassword(hashedPassword, password) != nil {
-			return errors.New("invalid password")
+			return errors.Errorf(ErrPasswordUserAuthFailed, requestedUser)
 		}
 
 		return nil
 	}
 }
+
+// ErrPasswordUserAuthFailed is the error template for failed password auth
+// of a user. It should be used when the password is incorrect or the user
+// does not exist.
+const ErrPasswordUserAuthFailed = "password authentication failed for user %s"
