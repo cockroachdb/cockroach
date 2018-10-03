@@ -57,7 +57,7 @@ func registerElectionAfterRestart(r *registry) {
 			// this up are working (we trigger elections eagerly, but not so
 			// eagerly that multiple elections conflict with each other).
 			start = timeutil.Now()
-			buf, err := c.RunWithBuffer(ctx, c.l, c.Node(1), `./cockroach sql --insecure -e "
+			buf, err := c.RunWithBuffer(ctx, c.l, c.Node(1), `env COCKROACH_CONNECT_TIMEOUT=120 ./cockroach sql --insecure -e "
 SET TRACING = on;
 SELECT * FROM test.kv;
 SET TRACING = off;
