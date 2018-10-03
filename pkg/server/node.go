@@ -429,13 +429,14 @@ func (n *Node) start(
 
 	n.startedAt = n.storeCfg.Clock.Now().WallTime
 	n.Descriptor = roachpb.NodeDescriptor{
-		NodeID:        nodeID,
-		Address:       util.MakeUnresolvedAddr(addr.Network(), addr.String()),
-		Attrs:         attrs,
-		Locality:      locality,
-		ServerVersion: n.storeCfg.Settings.Version.ServerVersion,
-		BuildTag:      build.GetInfo().Tag,
-		StartedAt:     n.startedAt,
+		NodeID:          nodeID,
+		Address:         util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+		Attrs:           attrs,
+		Locality:        locality,
+		LocalityAddress: localityAddress,
+		ServerVersion:   n.storeCfg.Settings.Version.ServerVersion,
+		BuildTag:        build.GetInfo().Tag,
+		StartedAt:       n.startedAt,
 	}
 	// Invoke any passed in nodeDescriptorCallback as soon as it's available, to
 	// ensure that other components (currently the DistSQLPlanner) are initialized
