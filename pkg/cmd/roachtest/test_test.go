@@ -71,7 +71,7 @@ func TestRegistryRun(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			code := r.Run(c.filters)
 			if c.expected != code {
-				t.Fatalf("expected %d, but found %d", c.expected, code)
+				t.Fatalf("expected code %d, but found code %d. Filters: %s", c.expected, code, c.filters)
 			}
 		})
 	}
