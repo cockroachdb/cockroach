@@ -1479,6 +1479,7 @@ func (s *adminServer) DataDistribution(
 		tableInfo := serverpb.DataDistributionResponse_TableInfo{
 			ReplicaCountByNodeId: make(map[roachpb.NodeID]int64),
 			ZoneConfigId:         zcID,
+			ID:                   int64(tableID),
 		}
 		dbInfo.TableInfo[*tableName] = tableInfo
 		tableInfosByTableID[tableID] = tableInfo

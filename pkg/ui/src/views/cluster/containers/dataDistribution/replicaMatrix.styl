@@ -1,3 +1,5 @@
+@require '~styl/base/palette.styl'
+
 .matrix
   background-color white
   border-collapse collapse
@@ -8,12 +10,11 @@
     border-bottom 1px solid black
 
   th, td
-    padding 5px
     border-left 1px solid lightgrey
     border-right 1px solid lightgrey
 
-  td.value
-    text-align center
+  th
+    padding 5px
 
   &__metric-label
     font-style italic
@@ -21,7 +22,7 @@
   &__row--internal-node
     cursor pointer
 
-  &__row--internal-node:hover
+  &__row--internal-node:hover th
     background-color rgb(240, 240, 240)
 
   &__row-header
@@ -39,5 +40,25 @@
   &__column-header--internal-node:hover
     background-color rgb(240, 240, 240)
 
-  &__cell-value
+  &__cell
     text-align right
+    padding 0
+
+  &__cell-value
+    padding 5px
+
+  a
+    color $link-color
+    text-decoration none
+
+.sort-state-selector
+  margin-left 5px
+
+  &__option
+    cursor pointer
+    margin-left 2px
+
+  &__option--selected
+    font-weight bold
+    color white
+    background grey

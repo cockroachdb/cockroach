@@ -1,4 +1,5 @@
 import _ from "lodash";
+import {AssocList, getAssocList} from "oss/src/views/cluster/containers/dataDistribution/assocList";
 
 export interface TreeNode<T> {
   name: string;
@@ -24,7 +25,7 @@ export function isLeaf<T>(t: TreeNode<T>): boolean {
  * Is represented as:
  *
  *    [ [             <LayoutCell for a>         ],
- *     [ <LayoutCell for b>, <LayoutCell for c> ] ]
+ *      [ <LayoutCell for b>, <LayoutCell for c> ] ]
  *
  */
 export type Layout<T> = LayoutCell<T>[][];
@@ -231,8 +232,23 @@ export interface FlattenedNode<T> {
   depth: number;
   isLeaf: boolean;
   isCollapsed: boolean;
-  data: T;
+  node: TreeNode<T>;
   path: TreePath;
+  isPaginated: boolean;
+  masterIdx: number;
+}
+
+// TODO(vilterp): this is defined somewhere else... Sortable table?
+export enum SortState {
+  ASC = "ASC",
+  DESC = "DESC",
+  NONE = "NONE",
+}
+
+export interface PaginationState {
+  path: TreePath;
+  page: number;
+  sortState: SortState;
 }
 
 /**
@@ -285,25 +301,33 @@ export interface FlattenedNode<T> {
  *
  */
 export function flatten<T>(
-  tree: TreeNode<T>,
+  tree: TreeWithSize<T>,
   collapsedPaths: TreePath[],
   includeInternalNodes: boolean,
+  paginationStates: AssocList<TreePath, PaginationState> = [],
+  pageSize: number = Number.MAX_VALUE,
+  sortBy?: (masterIndex: number) => number,
 ): FlattenedNode<T>[] {
   const output: FlattenedNode<T>[] = [];
+  recur(tree, [], 0);
 
-  visitNodes(tree, (node: TreeNode<T>, pathSoFar: TreePath): boolean => {
+  function recur(node: TreeWithSize<T>, pathSoFar: TreePath, masterIdx: number): number {
     const depth = pathSoFar.length;
 
-    if (isLeaf(node)) {
+    if (isLeaf(node.node)) {
       output.push({
         depth,
         isLeaf: true,
         isCollapsed: false,
-        data: node.data,
+        node: node.node,
         path: pathSoFar,
+        isPaginated: false,
+        masterIdx,
       });
-      return true;
+      return 1;
     }
+
+    let increase = 0;
 
     const isExpanded = !deepIncludes(collapsedPaths, pathSoFar);
     const nodeBecomesLeaf = !includeInternalNodes && !isExpanded;
@@ -312,32 +336,70 @@ export function flatten<T>(
         depth,
         isLeaf: false,
         isCollapsed: !isExpanded,
-        data: node.data,
+        node: node.node,
         path: pathSoFar,
+        isPaginated: (node.children || []).length > pageSize,
+        masterIdx,
       });
     }
+    increase++;
 
-    // Continue the traversal if this node is expanded.
-    return isExpanded;
-  });
+    // TODO: we can't be traversing the entire tree (including collapsed subtrees) to get indices here
+    // need to cache the size of each subtree or something
+    if (node.children) {
+      if (isExpanded) {
+        const paginationState = getAssocList(paginationStates, pathSoFar);
+        const page = paginationState
+          ? paginationState.page
+          : 0;
+        const offset = page * pageSize;
+
+        const sortState = paginationState ? paginationState.sortState : SortState.NONE;
+        const sortedChildren = sortChildren(node.children, sortState, sortBy);
+
+        for (let i = 0; i < offset; i++) {
+          const child = sortedChildren[i];
+          increase += child.size;
+        }
+
+        for (let i = offset; i < Math.min(sortedChildren.length, offset + pageSize); i++) {
+          const child = sortedChildren[i];
+          increase += recur(child, [...pathSoFar, child.node.name], masterIdx + increase);
+        }
+
+        for (let i = Math.min(sortedChildren.length, offset + pageSize); i < sortedChildren.length; i++) {
+          const child = sortedChildren[i];
+          increase += child.size;
+        }
+      } else {
+        increase += node.size - 1; // -1 since we already added the node itself
+      }
+    }
+
+    return increase;
+  }
 
   return output;
 }
 
-/**
- * nodeAtPath returns the node found under `root` at `path`, throwing
- * an error if nothing is found.
- */
-function nodeAtPath<T>(root: TreeNode<T>, path: TreePath): TreeNode<T> {
-  if (path.length === 0) {
-    return root;
+function sortChildren<T>(
+  children: TreeWithSize<T>[],
+  sortState: SortState,
+  sortBy?: (masterIndex: number) => number,
+): TreeWithSize<T>[] {
+  if (sortState === SortState.NONE) {
+    return children;
   }
-  const pathSegment = path[0];
-  const child = root.children.find((c) => (c.name === pathSegment));
-  if (child === undefined) {
-    throw new Error(`not found: ${path}`);
+  if (!sortBy) {
+    throw Error(`sortState ${sortState} but no sortBy provided`);
   }
-  return nodeAtPath(child, path.slice(1));
+  const sortedChildren = _.sortBy(children, (child) => {
+    return sortBy(child.masterIdx);
+  });
+  if (sortState === SortState.DESC) {
+    sortedChildren.reverse();
+  }
+  return sortedChildren;
 }
 
 /**
@@ -347,19 +409,23 @@ function nodeAtPath<T>(root: TreeNode<T>, path: TreePath): TreeNode<T> {
  * If `f` returns false, the traversal stops. Otherwise, the traversal
  * continues.
  */
-function visitNodes<T>(root: TreeNode<T>, f: (node: TreeNode<T>, path: TreePath) => boolean) {
-  function recur(node: TreeNode<T>, path: TreePath) {
-    const continueTraversal = f(node, path);
+export function visitNodes<T>(
+  root: TreeNode<T>,
+  f: (node: TreeNode<T>, path: TreePath, childIdx: number) => boolean,
+) {
+  function recur(node: TreeNode<T>, path: TreePath, childIdx: number) {
+    const continueTraversal = f(node, path, childIdx);
     if (!continueTraversal) {
       return;
     }
     if (node.children) {
-      node.children.forEach((child) => {
-        recur(child, [...path, child.name]);
-      });
+      for (let i = 0; i < node.children.length; i++) {
+        const child = node.children[i];
+        recur(child, [...path, child.name], i);
+      }
     }
   }
-  recur(root, []);
+  recur(root, [], 0);
 }
 
 /**
@@ -380,104 +446,6 @@ function expandedHeight<T>(root: TreeNode<T>, collapsedPaths: TreePath[]): numbe
 }
 
 /**
- * getLeafPathsUnderPath returns paths to all leaf nodes under the given
- * `path` in `root`.
- *
- * E.g. for the tree T =
- *
- *   a/
- *     b/
- *       c
- *       d
- *     e/
- *       f
- *       g
- *
- * getLeafPaths(T, ['a', 'b']) yields:
- *
- *   [ ['a', 'b', 'c'],
- *     ['a', 'b', 'd'] ]
- *
- */
-function getLeafPathsUnderPath<T>(root: TreeNode<T>, path: TreePath): TreePath[] {
-  const atPath = nodeAtPath(root, path);
-  const output: TreePath[] = [];
-  visitNodes(atPath, (node, subPath) => {
-    if (isLeaf(node)) {
-      output.push([...path, ...subPath]);
-    }
-    return true;
-  });
-  return output;
-}
-
-/**
- * cartProd returns all combinations of elements in `as` and `bs`.
- *
- * e.g. cartProd([1, 2], ['a', 'b'])
- * yields:
- * [
- *   {a: 1, b: 'a'},
- *   {a: 1, b: 'b'},
- *   {a: 2, b: 'a'},
- *   {a: 2, b: 'b'},
- * ]
- */
-function cartProd<A, B>(as: A[], bs: B[]): {a: A, b: B}[] {
-  const output: {a: A, b: B}[] = [];
-  as.forEach((a) => {
-    bs.forEach((b) => {
-      output.push({ a, b });
-    });
-  });
-  return output;
-}
-
-/**
- * sumValuesUnderPaths returns the sum of `getValue(R, C)`
- * for all leaf paths R under `rowPath` in `rowTree`,
- * and all leaf paths C under `colPath` in `rowTree`.
- *
- * E.g. in the matrix
- *
- *  |       |    C_1    |
- *  |       | C_2 | C_3 |
- *  |-------|-----|-----|
- *  | R_a   |     |     |
- *  |   R_b |  1  |  2  |
- *  |   R_c |  3  |  4  |
- *
- * represented by
- *
- *   rowTree = (R_a [R_b R_c])
- *   colTree = (C_1 [C_2 C_3])
- *
- * calling sumValuesUnderPath(rowTree, colTree, ['R_a'], ['C_1'], getValue)
- * sums up all the cells in the matrix, yielding 1 + 2 + 3 + 4 = 10.
- *
- * Calling sumValuesUnderPath(rowTree, colTree, ['R_a', 'R_b'], ['C_1'], getValue)
- * sums up only the cells under R_b,
- * yielding 1 + 2 = 3.
- *
- */
-export function sumValuesUnderPaths<R, C>(
-  rowTree: TreeNode<R>,
-  colTree: TreeNode<C>,
-  rowPath: TreePath,
-  colPath: TreePath,
-  getValue: (row: TreePath, col: TreePath) => number,
-): number {
-  const rowPaths = getLeafPathsUnderPath(rowTree, rowPath);
-  const colPaths = getLeafPathsUnderPath(colTree, colPath);
-  const prod = cartProd(rowPaths, colPaths);
-  let sum = 0;
-  prod.forEach((coords) => {
-    sum += getValue(coords.a, coords.b);
-  });
-  return sum;
-}
-
-/**
  * deepIncludes returns true if `array` contains `val`, doing
  * a deep equality comparison.
  */
@@ -489,10 +457,47 @@ export function deepIncludes<T>(array: T[], val: T): boolean {
  * repeat returns an array with the given element repeated `times`
  * times. Sadly, `_.repeat` only works for strings.
  */
-function repeat<T>(times: number, item: T): T[] {
+export function repeat<T>(times: number, item: T): T[] {
   const output: T[] = [];
   for (let i = 0; i < times; i++) {
     output.push(item);
   }
   return output;
+}
+
+export interface TreeWithSize<T> {
+  size: number;
+  masterIdx: number;
+  node: TreeNode<T>;
+  children?: TreeWithSize<T>[];
+}
+
+// TODO(vilterp): not store the child arrays twice...
+// maybe actually just add the size to the same struct
+export function augmentWithSize<T>(root: TreeNode<T>): TreeWithSize<T> {
+  function recur(node: TreeNode<T>, masterIdx: number): TreeWithSize<T> {
+    if (isLeaf(node)) {
+      return {
+        size: 1,
+        masterIdx,
+        node,
+      };
+    }
+
+    let size = 0;
+    const children: TreeWithSize<T>[] = [];
+    node.children.forEach((child) => {
+      const augmentedChild = recur(child, masterIdx + size);
+      size += augmentedChild.size;
+      children.push(augmentedChild);
+    });
+    return {
+      size: size + 1, // add 1 for the node itself
+      children,
+      node,
+      masterIdx,
+    };
+  }
+
+  return recur(root, 0);
 }
