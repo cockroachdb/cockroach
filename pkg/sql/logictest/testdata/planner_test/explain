@@ -110,9 +110,11 @@ drop database  ·  ·
 query TTT
 EXPLAIN SHOW JOBS
 ----
-render       ·     ·
- └── values  ·     ·
-·            size  15 columns, 0 rows
+sort              ·      ·
+ │                order  -"coalesce",-started
+ └── render       ·      ·
+      └── values  ·      ·
+·                 size   15 columns, 0 rows
 
 statement ok
 CREATE INDEX a ON foo(x)

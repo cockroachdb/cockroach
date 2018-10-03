@@ -23,9 +23,15 @@ import (
 // ShowJobs returns all the jobs.
 // Privileges: None.
 func (p *planner) ShowJobs(ctx context.Context, n *tree.ShowJobs) (planNode, error) {
+	// The query intends to present:
+	// - first all the running jobs sorted in order of start time,
+	// - then all completed jobs sorted in order of completion time.
+	// The "ORDER BY" clause below exploits the fact that all
+	// running jobs have finished = NULL.
 	return p.delegateQuery(ctx, "SHOW JOBS",
 		`SELECT job_id, job_type, description, user_name, status, running_status, created,
             started, finished, modified, fraction_completed, error, coordinator_id
-       FROM crdb_internal.jobs`,
+       FROM crdb_internal.jobs
+   ORDER BY COALESCE(finished, now()) DESC, started DESC`,
 		nil, nil)
 }
