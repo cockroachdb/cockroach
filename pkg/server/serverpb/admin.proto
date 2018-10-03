@@ -464,6 +464,7 @@ message JobsResponse {
     // form used by logical timestamps internally. This is appropriate to pass
     // to a "AS OF SYSTEM TIME" SQL statement.
     string highwater_decimal = 14;
+    string running_status = 15;
   }
 
   repeated Job jobs = 1 [(gogoproto.nullable) = false];
