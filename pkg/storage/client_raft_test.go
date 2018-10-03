@@ -3980,10 +3980,26 @@ func TestStoreRangeRemovalCompactionSuggestion(t *testing.T) {
 func TestStoreRangeWaitForApplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	var filterEnabled int32
+
 	ctx := context.Background()
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicateQueue = true
 	sc.TestingKnobs.DisableReplicaGCQueue = true
+	sc.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+		if ba.RangeID != 2 || atomic.LoadInt32(&filterEnabled) == 0 {
+			return nil
+		}
+		pErr := roachpb.NewErrorf("blocking %s in this test", ba.Summary())
+		if len(ba.Requests) != 1 {
+			return pErr
+		}
+		_, ok := ba.Requests[0].GetInner().(*roachpb.PutRequest)
+		if !ok {
+			return pErr
+		}
+		return nil
+	}
 	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.Start(t, 3)
 	defer mtc.Stop()
@@ -4003,6 +4019,9 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	atomic.StoreInt32(&filterEnabled, 1)
+
 	leaseIndex0 := repl0.LastAssignedLeaseIndex()
 
 	type target struct {
@@ -4081,6 +4100,8 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 			t.Fatalf("%d: %s", i, err)
 		}
 	}
+
+	atomic.StoreInt32(&filterEnabled, 0)
 
 	// GC the replica while a request is in progress. The request should return
 	// an error.
