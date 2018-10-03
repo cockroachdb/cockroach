@@ -125,7 +125,7 @@ func (b *Builder) buildDataSource(
 		return outScope
 
 	default:
-		panic(unimplementedf("not yet implemented: table expr: %T", texpr))
+		panic(builderError{fmt.Errorf("unknown table expr: %T", texpr)})
 	}
 }
 
