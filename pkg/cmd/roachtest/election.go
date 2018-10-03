@@ -64,7 +64,7 @@ SET TRACING = off;
 SHOW TRACE FOR SESSION;
 "`)
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("%s\n\n%s", buf, err)
 			}
 			duration = timeutil.Since(start)
 			c.l.Printf("post-restart, query took %s\n", duration)
