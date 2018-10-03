@@ -542,7 +542,10 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec) *cluster {
 
 	switch {
 	case len(nodes) == 0:
-		return nil
+		// For tests. Return the minimum that makes them happy.
+		return &cluster{
+			expiration: timeutil.Now().Add(24 * time.Hour),
+		}
 	case len(nodes) > 1:
 		// TODO(peter): Need a motivating test that has different specs per node.
 		t.Fatalf("TODO(peter): unsupported nodes spec: %v", nodes)
@@ -678,13 +681,18 @@ func (c *cluster) FetchLogs(ctx context.Context) {
 	execCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
+	if c.nodes == 0 {
+		// For tests.
+		return
+	}
 	c.status("retrieving logs")
 	_ = execCmd(execCtx, c.l, roachprod, "get", c.name, "logs",
 		filepath.Join(artifacts, teamCityNameEscape(c.t.Name()), "logs"))
 }
 
 func (c *cluster) Destroy(ctx context.Context) {
-	if c == nil {
+	if c.nodes == 0 {
+		// For tests.
 		return
 	}
 
