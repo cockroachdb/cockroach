@@ -23,6 +23,8 @@ import (
 
 	"github.com/pkg/errors"
 
+	pprof "runtime/pprof"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -92,7 +94,10 @@ func (ex *connExecutor) execStmt(
 	case stateNoTxn:
 		ev, payload = ex.execStmtInNoTxnState(ctx, stmt)
 	case stateOpen:
-		ev, payload, err = ex.execStmtInOpenState(ctx, stmt, pinfo, res)
+		labels := pprof.Labels("stmt", stmt.AST.StatementTag())
+		pprof.Do(ctx, labels, func(ctx context.Context) {
+			ev, payload, err = ex.execStmtInOpenState(ctx, stmt, pinfo, res)
+		})
 		switch ev.(type) {
 		case eventNonRetriableErr:
 			ex.server.StatementCounters.FailureCount.Inc(1)
