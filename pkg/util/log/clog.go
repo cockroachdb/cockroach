@@ -50,20 +50,19 @@ const fatalErrorPostamble = `
 
 ****************************************************************************
 
-This node experienced a fatal error (printed above this message) as a result
-of which the process is terminating.
+This node experienced a fatal error (printed above), and as a result the
+process is terminating.
 
 Fatal errors can occur due to faulty hardware (disks, memory, clocks) or a
 problem in CockroachDB. With your help, the support team at Cockroach Labs
-can help you determine the root cause, recommend next steps, and will improve
-CockroachDB based on your report.
+will try to determine the root cause, recommend next steps, and we can
+improve CockroachDB based on your report.
 
-Please consider submitting a report about this crash according to the
-instructions at
+Please submit a crash report by following the instructions here:
 
     https://github.com/cockroachdb/cockroach/issues/new/choose
 
-If you would rather not post on a public forum, instead please contact
+If you would rather not post publicly, please contact us directly at:
 
     support@cockroachlabs.com
 
