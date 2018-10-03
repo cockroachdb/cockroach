@@ -973,7 +973,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 			evalCtx.Placeholders = &planner.semaCtx.Placeholders
 			return &evalCtx
 		}
-		if !ex.server.cfg.DistSQLPlanner.PlanAndRunSubqueries(ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, distribute) {
+		if ok, _ := ex.server.cfg.DistSQLPlanner.PlanAndRunSubqueries(ctx, planner, evalCtxFactory, planner.curPlan.subqueryPlans, recv, distribute); !ok {
 			return recv.commErr
 		}
 	}

@@ -586,7 +586,8 @@ func (r *DistSQLReceiver) updateCaches(ctx context.Context, ranges []roachpb.Ran
 }
 
 // PlanAndRunSubqueries returns false if an error was encountered and sets that
-// error in the provided receiver.
+// error in the provided receiver. It also returns the PhysicalPlans that were
+// created.
 func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 	ctx context.Context,
 	planner *planner,
@@ -594,8 +595,10 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 	subqueryPlans []subquery,
 	recv *DistSQLReceiver,
 	maybeDistribute bool,
-) bool {
+) (bool, []PhysicalPlan) {
 	var subqueryMemAccount mon.BoundAccount
+
+	subqueryPhysPlans := make([]PhysicalPlan, len(subqueryPlans))
 
 	for planIdx, subqueryPlan := range subqueryPlans {
 		evalCtx := evalCtxFactory()
@@ -637,17 +640,18 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 		// that.
 		subqueryPlanCtx.ignoreClose = true
 
-		subqueryPhysPlan, err := dsp.createPlanForNode(subqueryPlanCtx, subqueryPlan.plan)
+		var err error
+		subqueryPhysPlans[planIdx], err = dsp.createPlanForNode(subqueryPlanCtx, subqueryPlan.plan)
 		if err != nil {
 			recv.SetError(err)
-			return false
+			return false, nil
 		}
-		dsp.FinalizePlan(subqueryPlanCtx, &subqueryPhysPlan)
+		dsp.FinalizePlan(subqueryPlanCtx, &subqueryPhysPlans[planIdx])
 
 		// TODO(arjun): #28264: We set up a row container, wrap it in a row
 		// receiver, and use it and serialize the results of the subquery. The type
 		// of the results stored in the container depends on the type of the subquery.
-		typ := sqlbase.ColTypeInfoFromColTypes(subqueryPhysPlan.ResultTypes)
+		typ := sqlbase.ColTypeInfoFromColTypes(subqueryPhysPlans[planIdx].ResultTypes)
 		subqueryRecv := recv.clone()
 		var rows *sqlbase.RowContainer
 		if subqueryPlan.execMode == distsqlrun.SubqueryExecModeExists {
@@ -660,14 +664,14 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 		subqueryRowReceiver := NewRowResultWriter(rows)
 		subqueryRecv.resultWriter = subqueryRowReceiver
 		subqueryPlans[planIdx].started = true
-		dsp.Run(subqueryPlanCtx, planner.txn, &subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)
+		dsp.Run(subqueryPlanCtx, planner.txn, &subqueryPhysPlans[planIdx], subqueryRecv, evalCtx, nil /* finishedSetupFn */)
 		if subqueryRecv.commErr != nil {
 			recv.SetError(subqueryRecv.commErr)
-			return false
+			return false, nil
 		}
 		if subqueryRowReceiver.Err() != nil {
 			recv.SetError(subqueryRowReceiver.Err())
-			return false
+			return false, nil
 		}
 		switch subqueryPlan.execMode {
 		case distsqlrun.SubqueryExecModeExists:
@@ -708,15 +712,15 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 				}
 			default:
 				recv.SetError(fmt.Errorf("more than one row returned by a subquery used as an expression"))
-				return false
+				return false, nil
 			}
 		default:
 			recv.SetError(fmt.Errorf("unexpected subqueryExecMode: %d", subqueryPlan.execMode))
-			return false
+			return false, nil
 		}
 	}
 
-	return true
+	return true, subqueryPhysPlans
 }
 
 // PlanAndRun generates a physical plan from a planNode tree and executes it. It
