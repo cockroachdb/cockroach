@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -858,6 +859,45 @@ func BenchmarkMergeJoiner(b *testing.B) {
 			rows := makeIntRows(inputSize, numCols)
 			leftInput := NewRepeatableRowSource(oneIntCol, rows)
 			rightInput := NewRepeatableRowSource(oneIntCol, rows)
+			b.SetBytes(int64(8 * inputSize * numCols * 2))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				m, err := newMergeJoiner(flowCtx, 0 /* processorID */, spec, leftInput, rightInput, post, disposer)
+				if err != nil {
+					b.Fatal(err)
+				}
+				m.Run(context.Background(), nil /* wg */)
+				leftInput.Reset()
+				rightInput.Reset()
+			}
+		})
+	}
+
+	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+		numRepeats := inputSize
+		b.Run(fmt.Sprintf("OneSideRepeatInputSize=%d", inputSize), func(b *testing.B) {
+			leftInput := NewRepeatableRowSource(oneIntCol, makeIntRows(inputSize, numCols))
+			rightInput := NewRepeatableRowSource(oneIntCol, makeRepeatedIntRows(numRepeats, inputSize, numCols))
+			b.SetBytes(int64(8 * inputSize * numCols * 2))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				m, err := newMergeJoiner(flowCtx, 0 /* processorID */, spec, leftInput, rightInput, post, disposer)
+				if err != nil {
+					b.Fatal(err)
+				}
+				m.Run(context.Background(), nil /* wg */)
+				leftInput.Reset()
+				rightInput.Reset()
+			}
+		})
+	}
+
+	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+		numRepeats := int(math.Sqrt(float64(inputSize)))
+		b.Run(fmt.Sprintf("BothSidesRepeatInputSize=%d", inputSize), func(b *testing.B) {
+			row := makeRepeatedIntRows(100, numRepeats, numCols)
+			leftInput := NewRepeatableRowSource(oneIntCol, row)
+			rightInput := NewRepeatableRowSource(oneIntCol, row)
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
