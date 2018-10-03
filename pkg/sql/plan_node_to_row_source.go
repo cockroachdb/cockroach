@@ -105,7 +105,25 @@ func (p *planNodeToRowSource) SetInput(ctx context.Context, input distsqlrun.Row
 	return walkPlan(ctx, p.node, planObserver{
 		replaceNode: func(ctx context.Context, nodeName string, plan planNode) (planNode, error) {
 			if plan == p.firstNotWrapped {
-				return makeRowSourceToPlanNode(input, p, planColumns(p.firstNotWrapped), p.firstNotWrapped), nil
+				cols := planColumns(p.firstNotWrapped)
+				firstOmitted := -1
+				for i := range cols {
+					if cols[i].Omitted {
+						firstOmitted = i
+						break
+					}
+				}
+				if firstOmitted >= 0 {
+					newCols := make(sqlbase.ResultColumns, 0, len(cols)-1)
+					newCols = append(newCols, cols[:firstOmitted]...)
+					for i := firstOmitted + 1; i < len(cols); i++ {
+						if !cols[i].Omitted {
+							newCols = append(newCols, cols[i])
+						}
+					}
+					cols = newCols
+				}
+				return makeRowSourceToPlanNode(input, p, cols, p.firstNotWrapped), nil
 			}
 			return nil, nil
 		},
