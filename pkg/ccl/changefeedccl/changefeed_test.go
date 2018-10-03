@@ -769,7 +769,7 @@ func TestChangefeedRetryableSinkError(t *testing.T) {
 	var failSink int64
 	failSinkHook := func() error {
 		if atomic.LoadInt64(&failSink) != 0 {
-			return retryableSinkError{cause: fmt.Errorf("synthetic retryable error")}
+			return &retryableSinkError{cause: fmt.Errorf("synthetic retryable error")}
 		}
 		return nil
 	}
