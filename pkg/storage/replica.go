@@ -58,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -92,6 +93,8 @@ const (
 )
 
 var raftLogTooLargeSize = 4 * raftLogMaxSize
+
+var testingDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", false)
 
 // TODO(irfansharif, peter): What's a good default? Too low and everything comes
 // to a grinding halt, too high and we're not really throttling anything
@@ -4645,6 +4648,9 @@ func (r *Replica) maybeTransferRaftLeader(
 func shouldReplicaQuiesce(
 	ctx context.Context, q quiescer, now hlc.Timestamp, numProposals int, livenessMap IsLiveMap,
 ) (*raft.Status, bool) {
+	if testingDisableQuiescence {
+		return nil, false
+	}
 	if numProposals != 0 {
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: %d pending commands", numProposals)
