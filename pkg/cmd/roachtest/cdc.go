@@ -38,7 +38,7 @@ func installKafka(ctx context.Context, c *cluster, kafkaNode nodeListOption) {
 
 func startKafka(ctx context.Context, c *cluster, kafkaNode nodeListOption) {
 	// This isn't necessary for the nightly tests, but it's nice for iteration.
-	c.Run(ctx, kafkaNode, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent destroy | true`)
+	c.Run(ctx, kafkaNode, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent destroy || true`)
 	c.Run(ctx, kafkaNode, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent start kafka`)
 }
 
