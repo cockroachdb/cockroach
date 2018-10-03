@@ -117,7 +117,7 @@ eexpect $prompt
 send "$argv sql --certs-dir=$certs_dir --user=eisen\r"
 eexpect "Enter password:"
 send "*****\r"
-eexpect "Error: pq: invalid password"
+eexpect "Error: pq: password authentication failed for user eisen"
 eexpect "Failed running \"sql\""
 # Check that history is scrubbed.
 send "$argv sql --certs-dir=$certs_dir\r"
