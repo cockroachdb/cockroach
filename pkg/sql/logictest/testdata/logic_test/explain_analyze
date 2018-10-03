@@ -33,14 +33,31 @@ EXPLAIN ANALYZE (DISTSQL) UPSERT INTO a VALUES(10)
 statement error EXPLAIN ANALYZE does not support RETURNING NOTHING statements
 EXPLAIN ANALYZE (DISTSQL) UPSERT INTO a VALUES(11) RETURNING NOTHING
 
-# Enable once #29350 is fixed, this fails with
-# pq: programming error: invalid index 1 for "<unknown>" when run with the
-# optimizer.
-# statement ok
-# EXPLAIN ANALYZE (DISTSQL) SELECT (SELECT 1);
+statement ok
+EXPLAIN ANALYZE (DISTSQL) SELECT (SELECT 1);
 
 statement ok
 EXPLAIN ANALYZE (DISTSQL) DELETE FROM a
 
 statement ok
 EXPLAIN ANALYZE (DISTSQL) DROP TABLE a
+
+# Tests with EXPLAIN ANALYZE and subqueries.
+
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO a VALUES(1)
+
+statement ok
+PREPARE x AS EXPLAIN ANALYZE(DISTSQL) SELECT 1 WHERE EXISTS (SELECT * FROM a WHERE a = $1) AND EXISTS (SELECT 1 WHERE EXISTS (SELECT * FROM a WHERE a = $2))
+
+statement ok
+EXECUTE x(1, 2)
+
+statement ok
+PREPARE y AS EXPLAIN ANALYZE(DISTSQL) SELECT 1 WHERE EXISTS (SELECT * FROM a WHERE a = $1) AND EXISTS (SELECT 1 WHERE EXISTS (SELECT * FROM a WHERE a = $1))
+
+statement ok
+EXECUTE x(1, 1)
