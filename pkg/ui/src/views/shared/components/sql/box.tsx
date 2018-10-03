@@ -8,23 +8,23 @@ interface SqlBoxProps {
 }
 
 export class SqlBox extends React.Component<SqlBoxProps> {
-  preNode: Node;
+  preNode: React.RefObject<HTMLPreElement> = React.createRef();
 
   shouldComponentUpdate(newProps: SqlBoxProps) {
     return newProps.value !== this.props.value;
   }
 
   componentDidMount() {
-    hljs.highlightBlock(this.preNode);
+    hljs.highlightBlock(this.preNode.current);
   }
 
   componentDidUpdate() {
-    hljs.highlightBlock(this.preNode);
+    hljs.highlightBlock(this.preNode.current);
   }
 
   render() {
     return (
-      <pre className="sql-highlight" ref={ (node) => this.preNode = node }>
+      <pre className="sql-highlight" ref={this.preNode}>
         { this.props.value }
       </pre>
     );

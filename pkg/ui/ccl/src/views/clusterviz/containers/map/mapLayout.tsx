@@ -37,7 +37,7 @@ interface MapLayoutState {
 }
 
 export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
-  gEl: any;
+  gEl: React.RefObject<SVGGElement> = React.createRef();
   zoom: d3.behavior.Zoom<any>;
   maxLatitude = 80;
 
@@ -88,7 +88,7 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
       // target zoom state. This is needed because free pan-and-zoom does not
       // update the internal animation state used by zoom.event, and will cause
       // animations after the first to have the wrong starting position.
-      d3.select(this.gEl)
+      d3.select(this.gEl.current)
         .call(this.zoom.event)
         .transition()
         .duration(750)
@@ -99,7 +99,7 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
         );
     } else {
       // Call zoom.event on the element itself, rather than a transition.
-      d3.select(this.gEl)
+      d3.select(this.gEl.current)
         .call(this.zoom
           .scale(zt.scale())
           .translate(zt.translate())
@@ -161,7 +161,7 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
   }
 
   componentDidMount() {
-    d3.select(this.gEl).call(this.zoom);
+    d3.select(this.gEl.current).call(this.zoom);
     this.rezoomToLocalities(this.state.zoomTransform);
   }
 
@@ -201,7 +201,7 @@ export class MapLayout extends React.Component<MapLayoutProps, MapLayoutState> {
     const { viewportSize } = this.props;
 
     return (
-      <g ref={el => this.gEl = el}>
+      <g ref={this.gEl}>
         <rect width={viewportSize[0]} height={viewportSize[1]} fill="#E2E5EE" />
         <WorldMap projection={projection} />
         { this.renderChildLocalities(projection) }

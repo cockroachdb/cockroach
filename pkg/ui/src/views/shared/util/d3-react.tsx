@@ -9,16 +9,16 @@ type Chart<T> = (sel: d3.Selection<T>) => void;
  */
 export default function createChartComponent<T>(containerTy: string, chart: Chart<T>) {
   return class WrappedChart extends React.Component<T> {
-    containerEl: Element;
+    containerEl: React.RefObject<Element> = React.createRef();
 
     componentDidMount() {
-      d3.select(this.containerEl)
+      d3.select(this.containerEl.current)
         .datum(this.props)
         .call(chart);
     }
 
     shouldComponentUpdate(props: T) {
-      d3.select(this.containerEl)
+      d3.select(this.containerEl.current)
         .datum(props)
         .call(chart);
 
@@ -28,7 +28,7 @@ export default function createChartComponent<T>(containerTy: string, chart: Char
     render() {
       return React.createElement(
         containerTy,
-        { ref: (el) => this.containerEl = el },
+        { ref: this.containerEl },
       );
     }
   };
