@@ -497,23 +497,23 @@ func (t *test) WorkerProgress(frac float64) {
 }
 
 func (t *test) Fatal(args ...interface{}) {
-	t.print(args...)
+	t.printAndFail(args...)
 	runtime.Goexit()
 }
 
 func (t *test) Fatalf(format string, args ...interface{}) {
-	t.printf(format, args...)
+	t.printfAndFail(format, args...)
 	runtime.Goexit()
 }
 
-func (t *test) print(args ...interface{}) {
+func (t *test) printAndFail(args ...interface{}) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.mu.output = append(t.mu.output, t.decorate(fmt.Sprint(args...))...)
 	t.mu.failed = true
 }
 
-func (t *test) printf(format string, args ...interface{}) {
+func (t *test) printfAndFail(format string, args ...interface{}) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.mu.output = append(t.mu.output, t.decorate(fmt.Sprintf(format, args...))...)
@@ -816,7 +816,7 @@ func (r *registry) runAsync(
 
 			select {
 			case <-time.After(timeout):
-				t.printf("test timed out (%s)\n", timeout)
+				t.printfAndFail("test timed out (%s)\n", timeout)
 				c.FetchLogs(ctx)
 				// NB: c.destroyed is nil for cloned clusters (i.e. in subtests).
 				if !debugEnabled && c.destroyed != nil {
