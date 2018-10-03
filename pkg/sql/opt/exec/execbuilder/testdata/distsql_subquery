@@ -1,0 +1,28 @@
+#  LogicTest: 5node-dist-opt
+
+statement ok
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)
+
+statement ok
+ALTER TABLE abc SPLIT AT VALUES ((SELECT 1))
+
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT EXISTS (SELECT * FROM abc WHERE a = 1)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyMj8FKAzEYhO8-xTKnFgKm19xaTwVxpRUvkkNIxrq4Jkv-BISy7y67OYgHocf5JpmZ_4qYAp_cFwXmDTtYhSknT5GUF9QeHMM3jFYY4lTLgq2CT5kwV5ShjITBqxsr5V5DIbC4YVwTdXfoNrrzHzV-yhYKJ8bAbLqH_fll8-5G4f586PvHLeyskGr5bZDiLoTRs7p9xYkypSj8s-L_ZKvAcGG7VFLNns85-bWmyX79t4JAKc3dNXGMzZrtfPcTAAD__-Z_a4c=
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, 2))]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyMjzFrwzAQhff-CvOmFgS1oZPGbl7a0iFL0CCkwzFxdEYnQcDovwdLQ8gQyPjek76P2xDY04-9kEAfMcAorJEdiXDcq_Zg9FfoXmEOa057bRQcR4LekOa0EDQOdskknz0UPCU7L5X41X1370PnTjmc5QOmKHBOd4okOxF0X9Trpn-SlYPQg-k52SiQn6hdI5yjo7_Irmpa_K3_auFJUluHFsbQpmLK2y0AAP__Q-RjGw==
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) SELECT a FROM abc WHERE a IN (SELECT a FROM abc WHERE a = 7)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJykkctq6zAQhvfnKcysTqkglrMTFLJJwaGJS-pd8UKxpq7AkcxIhobgdy-WFqlDekm701y--ecfHcFYhRu5RwfiGThUDDqyNTpnaUzFhly9gUgZaNP1fkxXDGpLCOIIXvsWQUApdy1uUSqkWQoMFHqp2zC2I72XdFjIXQ0Mit6LZMGhGhjY3p8mOi8bBMEH9jtV_hfV7FPVk1hvLCkkVBOhaiS_a7mw-hqpwZXVBmmWTVcvDx2K5GF5XyZPy3WerIp8AwxafPH_F_z25o508xqfP7A2v-agW3SdNQ7PLV6cnI6-UDUY7-RsTzU-kq2DTAyLwIWEQudjNYtBbkIp_PhHmF8BZ-dw9iU8n8DpUA3_3gMAAP__7-v9pQ==
+
+query T
+SELECT url FROM [EXPLAIN (DISTSQL) INSERT INTO abc (a, b, c) (SELECT a+1,b,c FROM abc)]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkD9rwzAQxfd-CvPWHsRyN01evaTFZCsaFOkIBkVnJBlagr97sTX0D7Sk473T734P3RDF89FeOUO_QsEQ5iSOc5a0RfXB4N-gW8IU56VssSE4SQx9Q5lKYGic7DnwyNZzOrQgeC52CvvZOU1Xm957e3YgjBw9J9306lFprYfjiZq-o6Z_glkJspRPSS72wtBqpfuLBHE2NE6WWJr2oL5V-U3Q_Ucwcp4lZr7rcrsaAvsL19_MsiTHL0ncrqnj887tgedc6lbVYYh1tRX8Cqs_4e4HbNaHjwAAAP__8eaguw==

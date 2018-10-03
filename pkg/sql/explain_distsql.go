@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 // explainDistSQLNode is a planNode that wraps a plan and returns
@@ -30,7 +31,8 @@ import (
 type explainDistSQLNode struct {
 	optColumnsSlot
 
-	plan planNode
+	plan          planNode
+	subqueryPlans []subquery
 
 	stmtType tree.StatementType
 
@@ -68,6 +70,42 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	planCtx.planner = params.p
 	planCtx.stmtType = n.stmtType
 	planCtx.validExtendedEvalCtx = true
+
+	if len(n.subqueryPlans) > 0 {
+		params.p.curPlan.subqueryPlans = n.subqueryPlans
+
+		// Discard rows that are returned.
+		rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+			return nil
+		})
+		execCfg := params.p.ExecCfg()
+		const stmtType = tree.Rows
+		recv := MakeDistSQLReceiver(
+			planCtx.ctx,
+			rw,
+			stmtType,
+			execCfg.RangeDescriptorCache,
+			execCfg.LeaseHolderCache,
+			params.p.txn,
+			func(ts hlc.Timestamp) {
+				_ = execCfg.Clock.Update(ts)
+			},
+			params.extendedEvalCtx.Tracing,
+		)
+
+		ok, _ := distSQLPlanner.PlanAndRunSubqueries(
+			planCtx.ctx,
+			params.p,
+			func() *extendedEvalContext { return params.extendedEvalCtx },
+			params.p.curPlan.subqueryPlans,
+			recv,
+			true,
+		)
+		if !ok {
+			return errors.New("error in planning subquery")
+		}
+
+	}
 
 	plan, err := distSQLPlanner.createPlanForNode(planCtx, n.plan)
 	if err != nil {
