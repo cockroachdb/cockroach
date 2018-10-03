@@ -1118,8 +1118,8 @@ func (s *adminServer) Jobs(
 	q := makeSQLQuery()
 	q.Append(`
       SELECT job_id, job_type, description, user_name, descriptor_ids, status,
-						 created, started, finished, modified, fraction_completed,
-						 high_water_timestamp, error
+						 running_status, created, started, finished, modified,
+						 fraction_completed, high_water_timestamp, error
         FROM crdb_internal.jobs
        WHERE true
 	`)
@@ -1148,6 +1148,7 @@ func (s *adminServer) Jobs(
 		job := &resp.Jobs[i]
 		var fractionCompletedOrNil *float32
 		var highwaterOrNil *apd.Decimal
+		var runningStatusOrNil *string
 		if err := scanner.ScanAll(
 			row,
 			&job.ID,
@@ -1156,6 +1157,7 @@ func (s *adminServer) Jobs(
 			&job.Username,
 			&job.DescriptorIDs,
 			&job.Status,
+			&runningStatusOrNil,
 			&job.Created,
 			&job.Started,
 			&job.Finished,
@@ -1177,6 +1179,9 @@ func (s *adminServer) Jobs(
 		}
 		if fractionCompletedOrNil != nil {
 			job.FractionCompleted = *fractionCompletedOrNil
+		}
+		if runningStatusOrNil != nil {
+			job.RunningStatus = *runningStatusOrNil
 		}
 	}
 
@@ -1778,6 +1783,18 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 			return errors.Errorf("source type assertion failed")
 		}
 		*d = string(s)
+
+	case **string:
+		s, ok := tree.AsDString(src)
+		if !ok {
+			if src != tree.DNull {
+				return errors.Errorf("source type assertion failed")
+			}
+			*d = nil
+			break
+		}
+		val := string(s)
+		*d = &val
 
 	case *bool:
 		s, ok := src.(*tree.DBool)
