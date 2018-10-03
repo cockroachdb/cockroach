@@ -46,9 +46,11 @@ type tpccOptions struct {
 func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 	crdbNodes := c.Range(1, c.nodes-1)
 	workloadNode := c.Node(c.nodes)
+	rampDuration := 5 * time.Minute
 	if c.isLocal() {
 		opts.Warehouses = 1
-		opts.Duration = 10 * time.Second
+		opts.Duration = 1 * time.Minute
+		rampDuration = 30 * time.Second
 	} else if !opts.ZFS {
 		c.RemountNoBarrier(ctx)
 	}
@@ -103,8 +105,8 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 		t.WorkerStatus("running tpcc")
 		cmd := fmt.Sprintf(
 			"./workload run tpcc --warehouses=%d --histograms=logs/stats.json "+
-				opts.Extra+" --duration=%s {pgurl:1-%d}",
-			opts.Warehouses, opts.Duration, c.nodes-1)
+				opts.Extra+" --ramp=%s --duration=%s {pgurl:1-%d}",
+			opts.Warehouses, rampDuration, opts.Duration, c.nodes-1)
 		c.Run(ctx, workloadNode, cmd)
 		return nil
 	})
