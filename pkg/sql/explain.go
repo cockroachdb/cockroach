@@ -46,9 +46,10 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 			return nil, err
 		}
 		return &explainDistSQLNode{
-			plan:     plan,
-			analyze:  analyze,
-			stmtType: n.Statement.StatementType(),
+			plan:          plan,
+			subqueryPlans: p.curPlan.subqueryPlans,
+			analyze:       analyze,
+			stmtType:      n.Statement.StatementType(),
 		}, nil
 
 	case tree.ExplainPlan:

@@ -17,7 +17,7 @@ package sql
 import (
 	"context"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -32,7 +32,8 @@ import (
 type explainDistSQLNode struct {
 	optColumnsSlot
 
-	plan planNode
+	plan          planNode
+	subqueryPlans []subquery
 
 	stmtType tree.StatementType
 
@@ -69,6 +70,53 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	planCtx.ignoreClose = true
 	planCtx.planner = params.p
 	planCtx.stmtType = n.stmtType
+
+	// In EXPLAIN ANALYZE mode, we need subqueries to be evaluated as normal.
+	// In EXPLAIN mode, we don't evaluate subqueries, and instead display their
+	// original text in the plan.
+	planCtx.noEvalSubqueries = !n.analyze
+
+	outerSubqueries := planCtx.planner.curPlan.subqueryPlans
+	defer func() {
+		planCtx.planner.curPlan.subqueryPlans = outerSubqueries
+	}()
+	planCtx.planner.curPlan.subqueryPlans = n.subqueryPlans
+
+	if n.analyze && len(n.subqueryPlans) > 0 {
+		// Discard rows that are returned.
+		rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
+			return nil
+		})
+		execCfg := params.p.ExecCfg()
+		recv := MakeDistSQLReceiver(
+			planCtx.ctx,
+			rw,
+			tree.Rows,
+			execCfg.RangeDescriptorCache,
+			execCfg.LeaseHolderCache,
+			params.p.txn,
+			func(ts hlc.Timestamp) {
+				_ = execCfg.Clock.Update(ts)
+			},
+			params.extendedEvalCtx.Tracing,
+		)
+		if !distSQLPlanner.PlanAndRunSubqueries(
+			planCtx.ctx,
+			params.p,
+			func() *extendedEvalContext {
+				ret := *params.extendedEvalCtx
+				return &ret
+			},
+			params.p.curPlan.subqueryPlans,
+			recv,
+			true,
+		) {
+			if err := rw.Err(); err != nil {
+				return err
+			}
+			return recv.commErr
+		}
+	}
 
 	plan, err := distSQLPlanner.createPlanForNode(planCtx, n.plan)
 	if err != nil {
