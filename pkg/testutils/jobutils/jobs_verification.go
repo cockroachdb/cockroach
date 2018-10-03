@@ -142,6 +142,7 @@ func verifySystemJob(
 	var rawDescriptorIDs pq.Int64Array
 	var actualType string
 	var statusString string
+	var runningStatus gosql.NullString
 	var runningStatusString string
 	// We have to query for the nth job created rather than filtering by ID,
 	// because job-generating SQL queries (e.g. BACKUP) do not currently return
@@ -152,8 +153,11 @@ func verifySystemJob(
 		offset,
 	).Scan(
 		&actualType, &actual.Description, &actual.Username, &rawDescriptorIDs,
-		&statusString, &runningStatusString,
+		&statusString, &runningStatus,
 	)
+	if runningStatus.Valid {
+		runningStatusString = runningStatus.String
+	}
 
 	for _, id := range rawDescriptorIDs {
 		actual.DescriptorIDs = append(actual.DescriptorIDs, sqlbase.ID(id))
