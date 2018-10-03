@@ -572,22 +572,21 @@ func makeStoreList(descriptors []roachpb.StoreDescriptor) StoreList {
 func (sl StoreList) String() string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf,
-		"  candidate: avg-ranges=%v avg-leases=%v avg-disk-usage=%v avg-queries-per-second=%v avg-writes-per-second=%v",
+		"  candidate: avg-ranges=%v avg-leases=%v avg-disk-usage=%v avg-queries-per-second=%v",
 		sl.candidateRanges.mean,
 		sl.candidateLeases.mean,
 		humanizeutil.IBytes(int64(sl.candidateLogicalBytes.mean)),
-		sl.candidateQueriesPerSecond.mean,
-		sl.candidateWritesPerSecond.mean)
+		sl.candidateQueriesPerSecond.mean)
 	if len(sl.stores) > 0 {
 		fmt.Fprintf(&buf, "\n")
 	} else {
 		fmt.Fprintf(&buf, " <no candidates>")
 	}
 	for _, desc := range sl.stores {
-		fmt.Fprintf(&buf, "  %d: ranges=%d leases=%d disk-usage=%s queries-per-second=%.2f writes-per-second=%.2f\n",
+		fmt.Fprintf(&buf, "  %d: ranges=%d leases=%d disk-usage=%s queries-per-second=%.2f\n",
 			desc.StoreID, desc.Capacity.RangeCount,
 			desc.Capacity.LeaseCount, humanizeutil.IBytes(desc.Capacity.LogicalBytes),
-			desc.Capacity.QueriesPerSecond, desc.Capacity.WritesPerSecond)
+			desc.Capacity.QueriesPerSecond)
 	}
 	return buf.String()
 }
