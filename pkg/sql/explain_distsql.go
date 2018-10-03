@@ -136,6 +136,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			},
 			newParams.extendedEvalCtx.Tracing,
 		)
+		defer recv.Release()
 		distSQLPlanner.Run(
 			planCtx, newParams.p.txn, &plan, recv, newParams.extendedEvalCtx, nil /* finishedSetupFn */)
 

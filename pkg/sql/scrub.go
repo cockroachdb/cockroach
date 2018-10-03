@@ -561,6 +561,7 @@ func scrubRunDistSQL(
 		},
 		p.extendedEvalCtx.Tracing,
 	)
+	defer recv.Release()
 
 	// Copy the evalCtx, as dsp.Run() might change it.
 	evalCtxCopy := p.extendedEvalCtx
