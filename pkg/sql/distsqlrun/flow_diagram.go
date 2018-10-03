@@ -20,7 +20,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/url"
 	"sort"
 	"strings"
@@ -480,6 +479,8 @@ type diagramProcessor struct {
 	Core    diagramCell   `json:"core"`
 	Outputs []diagramCell `json:"outputs"`
 	StageID int32         `json:"stage"`
+
+	processorID int32
 }
 
 type diagramEdge struct {
@@ -488,6 +489,18 @@ type diagramEdge struct {
 	DestProc     int      `json:"destProc"`
 	DestInput    int      `json:"destInput"`
 	Stats        []string `json:"stats,omitempty"`
+
+	streamID StreamID
+}
+
+// FlowDiagram is a plan diagram that can be made into a URL.
+type FlowDiagram interface {
+	// ToURL generates the json data for a flow diagram and a URL which encodes the
+	// diagram.
+	ToURL() (string, url.URL, error)
+
+	// AddSpans adds stats extracted from the input spans to the diagram.
+	AddSpans([]tracing.RecordedSpan)
 }
 
 type diagramData struct {
@@ -496,13 +509,32 @@ type diagramData struct {
 	Edges      []diagramEdge      `json:"edges"`
 }
 
-func generateDiagramData(
-	flows []FlowSpec,
-	nodeNames []string,
-	processorStats map[int][]string,
-	streamStats map[int][]string,
-) (diagramData, error) {
-	d := diagramData{NodeNames: nodeNames}
+var _ FlowDiagram = &diagramData{}
+
+// ToURL implements the FlowDiagram interface.
+func (d diagramData) ToURL() (string, url.URL, error) {
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(d); err != nil {
+		return "", url.URL{}, err
+	}
+	return encodeJSONToURL(buf)
+}
+
+// AddSpans implements the FlowDiagram interface.
+func (d *diagramData) AddSpans(spans []tracing.RecordedSpan) {
+	processorStats, streamStats := extractStatsFromSpans(spans)
+	for i := range d.Processors {
+		if statDetails, ok := processorStats[int(d.Processors[i].processorID)]; ok {
+			d.Processors[i].Core.Details = append(d.Processors[i].Core.Details, statDetails...)
+		}
+	}
+	for i := range d.Edges {
+		d.Edges[i].Stats = streamStats[int(d.Edges[i].streamID)]
+	}
+}
+
+func generateDiagramData(flows []FlowSpec, nodeNames []string) (FlowDiagram, error) {
+	d := &diagramData{NodeNames: nodeNames}
 
 	// inPorts maps streams to their "destination" attachment point. Only DestProc
 	// and DestInput are set in each diagramEdge value.
@@ -515,9 +547,7 @@ func generateDiagramData(
 			proc := diagramProcessor{NodeIdx: n}
 			proc.Core.Title, proc.Core.Details = p.Core.GetValue().(diagramCellType).summary()
 			proc.Core.Title += fmt.Sprintf("/%d", p.ProcessorID)
-			if statDetails, ok := processorStats[int(p.ProcessorID)]; ok {
-				proc.Core.Details = append(proc.Core.Details, statDetails...)
-			}
+			proc.processorID = p.ProcessorID
 			proc.Core.Details = append(proc.Core.Details, p.Post.summary()...)
 
 			// We need explicit synchronizers if we have multiple inputs, or if the
@@ -548,7 +578,7 @@ func generateDiagramData(
 				for _, o := range r.Streams {
 					if o.Type == StreamEndpointSpec_SYNC_RESPONSE {
 						if syncResponseNode != -1 && syncResponseNode != n {
-							return diagramData{}, errors.Errorf("multiple nodes with SyncResponse")
+							return nil, errors.Errorf("multiple nodes with SyncResponse")
 						}
 						syncResponseNode = n
 					}
@@ -593,14 +623,14 @@ func generateDiagramData(
 					edge := diagramEdge{
 						SourceProc:   pIdx,
 						SourceOutput: srcOutput,
-						Stats:        streamStats[int(o.StreamID)],
+						streamID:     o.StreamID,
 					}
 					if o.Type == StreamEndpointSpec_SYNC_RESPONSE {
 						edge.DestProc = len(d.Processors) - 1
 					} else {
 						to, ok := inPorts[o.StreamID]
 						if !ok {
-							return diagramData{}, errors.Errorf("stream %d has no destination", o.StreamID)
+							return nil, errors.Errorf("stream %d has no destination", o.StreamID)
 						}
 						edge.DestProc = to.DestProc
 						edge.DestInput = to.DestInput
@@ -615,13 +645,10 @@ func generateDiagramData(
 	return d, nil
 }
 
-// GeneratePlanDiagram generates the json data for a flow diagram. There should
-// be one FlowSpec per node. The function assumes that StreamIDs are unique
-// across all flows. If spans are provided, stats are extracted from the spans
-// and added to the plan.
-func GeneratePlanDiagram(
-	flows map[roachpb.NodeID]FlowSpec, spans []tracing.RecordedSpan, w io.Writer,
-) error {
+// GeneratePlanDiagram generates the data for a flow diagram. There should be
+// one FlowSpec per node. The function assumes that StreamIDs are unique across
+// all flows.
+func GeneratePlanDiagram(flows map[roachpb.NodeID]*FlowSpec) (FlowDiagram, error) {
 	// We sort the flows by node because we want the diagram data to be
 	// deterministic.
 	nodeIDs := make([]int, 0, len(flows))
@@ -634,36 +661,22 @@ func GeneratePlanDiagram(
 	nodeNames := make([]string, len(nodeIDs))
 	for i, nVal := range nodeIDs {
 		n := roachpb.NodeID(nVal)
-		flowSlice[i] = flows[n]
+		flowSlice[i] = *flows[n]
 		nodeNames[i] = n.String()
 	}
 
-	processorStats, streamStats := extractStatsFromSpans(spans)
-	d, err := generateDiagramData(flowSlice, nodeNames, processorStats, streamStats)
-	if err != nil {
-		return err
-	}
-	return json.NewEncoder(w).Encode(d)
+	return generateDiagramData(flowSlice, nodeNames)
 }
 
 // GeneratePlanDiagramURL generates the json data for a flow diagram and a
 // URL which encodes the diagram. There should be one FlowSpec per node. The
 // function assumes that StreamIDs are unique across all flows.
-func GeneratePlanDiagramURL(flows map[roachpb.NodeID]FlowSpec) (string, url.URL, error) {
-	return GeneratePlanDiagramURLWithSpans(flows, nil /* spans */)
-}
-
-// GeneratePlanDiagramURLWithSpans is equivalent to GeneratePlanDiagramURL when
-// called with no spans. If spans are provided, stats are extracted and added to
-// the plan.
-func GeneratePlanDiagramURLWithSpans(
-	flows map[roachpb.NodeID]FlowSpec, spans []tracing.RecordedSpan,
-) (string, url.URL, error) {
-	var json bytes.Buffer
-	if err := GeneratePlanDiagram(flows, spans, &json); err != nil {
-		return "", url.URL{}, err
+func GeneratePlanDiagramURL(flows map[roachpb.NodeID]*FlowSpec) (string, url.URL, error) {
+	d, err := GeneratePlanDiagram(flows)
+	if err != nil {
+		return "", url.URL{}, nil
 	}
-	return encodeJSONToURL(json)
+	return d.ToURL()
 }
 
 func encodeJSONToURL(json bytes.Buffer) (string, url.URL, error) {
