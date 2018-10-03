@@ -757,50 +757,8 @@ func (r *registry) runAsync(
 			}
 		}
 
-		if t.spec.Run != nil {
-			if dryrun {
-				// We've reached a leaf test. Nothing more to do.
-				return
-			}
-			timeout := time.Hour
-			defer func() {
-				c.FetchLogs(ctx)
-			}()
-
-			timeout = c.expiration.Add(-10 * time.Minute).Sub(timeutil.Now())
-			if timeout <= 0 {
-				t.spec.Skip = fmt.Sprintf("cluster expired (%s)", timeout)
-				return
-			}
-
-			if t.spec.Timeout > 0 && timeout > t.spec.Timeout {
-				timeout = t.spec.Timeout
-			}
-
-			done := make(chan struct{})
-			defer func() {
-				close(done)
-			}()
-
-			runCtx, cancel := context.WithCancel(ctx)
-
-			go func() {
-				defer cancel()
-
-				select {
-				case <-time.After(timeout):
-					t.printf("test timed out (%s)\n", timeout)
-					c.FetchLogs(ctx)
-					// NB: c.destroyed is nil for cloned clusters (i.e. in subtests).
-					if !debugEnabled && c.destroyed != nil {
-						c.Destroy(ctx)
-					}
-				case <-done:
-				}
-			}()
-
-			t.spec.Run(runCtx, t, c)
-		} else {
+		// If we have subtests, handle them here and return.
+		if t.spec.Run == nil {
 			for i := range t.spec.SubTests {
 				if t.spec.SubTests[i].matchRegex(filter) {
 					var wg sync.WaitGroup
@@ -824,7 +782,51 @@ func (r *registry) runAsync(
 					wg.Wait()
 				}
 			}
+			return
 		}
+
+		// No subtests, so this is a leaf test.
+		if dryrun {
+			return
+		}
+		timeout := time.Hour
+		defer func() {
+			c.FetchLogs(ctx)
+		}()
+
+		timeout = c.expiration.Add(-10 * time.Minute).Sub(timeutil.Now())
+		if timeout <= 0 {
+			t.spec.Skip = fmt.Sprintf("cluster expired (%s)", timeout)
+			return
+		}
+
+		if t.spec.Timeout > 0 && timeout > t.spec.Timeout {
+			timeout = t.spec.Timeout
+		}
+
+		done := make(chan struct{})
+		defer func() {
+			close(done)
+		}()
+
+		runCtx, cancel := context.WithCancel(ctx)
+
+		go func() {
+			defer cancel()
+
+			select {
+			case <-time.After(timeout):
+				t.printf("test timed out (%s)\n", timeout)
+				c.FetchLogs(ctx)
+				// NB: c.destroyed is nil for cloned clusters (i.e. in subtests).
+				if !debugEnabled && c.destroyed != nil {
+					c.Destroy(ctx)
+				}
+			case <-done:
+			}
+		}()
+
+		t.spec.Run(runCtx, t, c)
 	}()
 }
 
