@@ -78,12 +78,8 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 	// copied it from the old jepsen scripts. It's slow, so we should
 	// probably either remove it or use a new base image with more of
 	// these preinstalled.
-	//
-	// In spite of -qqy, these produce huge amounts of output, so we
-	// send it all to /dev/null. I apologize to whoever debugs this in
-	// the future if these start to fail.
-	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -qqy update > /dev/null 2>&1"`)
-	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -qqy upgrade -o Dpkg::Options::='--force-confold' > /dev/null 2>&1"`)
+	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -y update 2>&1 | sudo tee /var/log/apt-upgrade.log > /dev/null"`)
+	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -y upgrade -o Dpkg::Options::='--force-confold' 2>&1 | sudo tee -a /var/log/apt-upgrade.log > /dev/null"`)
 
 	// Install the binary on all nodes and package it as jepsen expects.
 	// TODO(bdarnell): copying the raw binary and compressing it on the
