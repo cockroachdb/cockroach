@@ -216,22 +216,6 @@ func (tc *TableCollection) getTableVersion(
 		return nil, nil, nil
 	}
 
-	// We don't go through the normal lease mechanism for system tables
-	// that are not the role members table.
-	if flags.avoidCached || testDisableTableLeases || (tn.Catalog() == sqlbase.SystemDB.Name &&
-		tn.TableName.String() != sqlbase.RoleMembersTable.Name) {
-		// TODO(vivek): Ideally we'd avoid caching for only the
-		// system.descriptor and system.lease tables, because they are
-		// used for acquiring leases, creating a chicken&egg problem.
-		// But doing so turned problematic and the tests pass only by also
-		// disabling caching of system.eventlog, system.rangelog, and
-		// system.users. For now we're sticking to disabling caching of
-		// all system descriptors except the role-members-table.
-		flags.avoidCached = true
-		phyAccessor := UncachedPhysicalAccessor{}
-		return phyAccessor.GetObjectDesc(tn, flags)
-	}
-
 	refuseFurtherLookup, dbID, err := tc.getUncommittedDatabaseID(tn.Catalog(), flags.required)
 	if refuseFurtherLookup || err != nil {
 		return nil, nil, err
@@ -248,12 +232,36 @@ func (tc *TableCollection) getTableVersion(
 		}
 	}
 
-	if refuseFurtherLookup, table, err := tc.getUncommittedTable(
-		dbID, tn, flags.required); refuseFurtherLookup || err != nil {
+	avoidCache := flags.avoidCached || testDisableTableLeases ||
+		(tn.Catalog() == sqlbase.SystemDB.Name && tn.TableName.String() != sqlbase.RoleMembersTable.Name)
+
+	if refuseFurtherLookup, table, err := tc.getUncommittedTable(dbID, tn, flags.required); refuseFurtherLookup || err != nil {
 		return nil, nil, err
 	} else if table != nil {
+		// If not forcing to resolve using KV, tables being added aren't visible.
+		if table.Adding() && !avoidCache {
+			err := errTableAdding
+			if !flags.required {
+				err = nil
+			}
+			return nil, nil, err
+		}
+
 		log.VEventf(ctx, 2, "found uncommitted table %d", table.ID)
 		return table, nil, nil
+	}
+
+	if avoidCache {
+		// TODO(vivek): Ideally we'd avoid caching for only the
+		// system.descriptor and system.lease tables, because they are
+		// used for acquiring leases, creating a chicken&egg problem.
+		// But doing so turned problematic and the tests pass only by also
+		// disabling caching of system.eventlog, system.rangelog, and
+		// system.users. For now we're sticking to disabling caching of
+		// all system descriptors except the role-members-table.
+		flags.avoidCached = true
+		phyAccessor := UncachedPhysicalAccessor{}
+		return phyAccessor.GetObjectDesc(tn, flags)
 	}
 
 	// First, look to see if we already have the table.
@@ -542,11 +550,10 @@ func (tc *TableCollection) getUncommittedTable(
 		// Do we know about a table with this name?
 		if table.Name == string(tn.TableName) &&
 			table.ParentID == dbID {
-			// Can we see this table?
-			if err = filterTableState(table); err != nil {
+			// Right state?
+			if err = filterTableState(table); err != nil && err != errTableAdding {
 				if !required {
-					// Table is being dropped or added; if it's not required here,
-					// we simply say we don't have it.
+					// If it's not required here, we simply say we don't have it.
 					err = nil
 				}
 				// The table collection knows better; the caller has to avoid
