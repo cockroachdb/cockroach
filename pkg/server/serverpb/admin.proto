@@ -541,8 +541,8 @@ message DataDistributionResponse {
 
     config.ZoneConfig config = 2 [(gogoproto.nullable) = false];
 
-    // config_yaml is the YAML representation of config.
-    string config_yaml = 3;
+    // config_sql is the SQL representation of config.
+    string config_sql = 3;
   }
 
   message TableInfo {
