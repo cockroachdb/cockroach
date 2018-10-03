@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"testing"
 
-	yaml "gopkg.in/yaml.v2"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -38,14 +36,9 @@ func (row ZoneRow) sqlRowString() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	configYAML, err := yaml.Marshal(row.Config)
-	if err != nil {
-		return nil, err
-	}
 	return []string{
 		fmt.Sprintf("%d", row.ID),
 		row.CLISpecifier,
-		string(configYAML),
 		string(configProto),
 	}, nil
 }
@@ -99,7 +92,7 @@ func VerifyZoneConfigForTarget(t testing.TB, sqlDB *SQLRunner, target string, ro
 		t.Fatal(err)
 	}
 	sqlDB.CheckQueryResults(t, fmt.Sprintf(`
-SELECT zone_id, cli_specifier, config_yaml, config_protobuf
+SELECT zone_id, cli_specifier, config_protobuf
   FROM [SHOW ZONE CONFIGURATION FOR %s]`, target),
 		[][]string{sqlRow})
 }
@@ -117,7 +110,7 @@ func VerifyAllZoneConfigs(t testing.TB, sqlDB *SQLRunner, rows ...ZoneRow) {
 		}
 	}
 	sqlDB.CheckQueryResults(t, `
-SELECT zone_id, cli_specifier, config_yaml, config_protobuf
+SELECT zone_id, cli_specifier, config_protobuf
   FROM [SHOW ALL ZONE CONFIGURATIONS]`, expected)
 }
 
