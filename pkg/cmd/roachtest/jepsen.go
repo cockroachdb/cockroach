@@ -256,10 +256,10 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 }
 
 func registerJepsen(r *registry) {
-	// We're splitting the tests arbitrarily into a number of "groups" - top level
-	// tests. We do this so that we can different groups can run in parallel (as
-	// subtests don't run concurrently with each other). We put more than one test
-	// in a group so that Jepsen's lengthy cluster initialization step can be
+	// We're splitting the tests arbitrarily into a number of "batches" - top
+	// level tests. We do this so that we can different groups can run in parallel
+	// (as subtests don't run concurrently with each other). We put more than one
+	// test in a group so that Jepsen's lengthy cluster initialization step can be
 	// amortized (the individual tests are smart enough to not do it if it has
 	// been done already).
 	//
@@ -273,7 +273,7 @@ func registerJepsen(r *registry) {
 
 	for i := range groups {
 		spec := testSpec{
-			Name:  fmt.Sprintf("jepsen-g%d", i+1),
+			Name:  fmt.Sprintf("jepsen-batch%d", i+1),
 			Nodes: nodes(6),
 		}
 
