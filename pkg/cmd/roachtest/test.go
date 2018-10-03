@@ -277,7 +277,7 @@ func (r *registry) Run(filter []string) int {
 		for j := 0; j < count; j++ {
 			for i := range tests {
 				sem <- struct{}{}
-				r.run(ctx, tests[i], filterRE, nil, func(failed bool) {
+				r.runAsync(ctx, tests[i], filterRE, nil, func(failed bool) {
 					wg.Done()
 					<-sem
 				})
@@ -497,23 +497,23 @@ func (t *test) WorkerProgress(frac float64) {
 }
 
 func (t *test) Fatal(args ...interface{}) {
-	t.print(args...)
+	t.printAndFail(args...)
 	runtime.Goexit()
 }
 
 func (t *test) Fatalf(format string, args ...interface{}) {
-	t.printf(format, args...)
+	t.printfAndFail(format, args...)
 	runtime.Goexit()
 }
 
-func (t *test) print(args ...interface{}) {
+func (t *test) printAndFail(args ...interface{}) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.mu.output = append(t.mu.output, t.decorate(fmt.Sprint(args...))...)
 	t.mu.failed = true
 }
 
-func (t *test) printf(format string, args ...interface{}) {
+func (t *test) printfAndFail(format string, args ...interface{}) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.mu.output = append(t.mu.output, t.decorate(fmt.Sprintf(format, args...))...)
@@ -597,7 +597,12 @@ func (t *test) IsBuildVersion(minVersion string) bool {
 	return !t.registry.buildVersion.LessThan(vers)
 }
 
-func (r *registry) run(
+// runAsync starts a goroutine that runs a test. If the test has subtests,
+// runAsync will be invoked recursively, but in a blocking manner.
+//
+// c is the cluster on which the test (and all subtests) will run. If nil, a new
+// cluster will be created.
+func (r *registry) runAsync(
 	ctx context.Context, spec *testSpec, filter *regexp.Regexp, c *cluster, done func(failed bool),
 ) {
 	t := &test{
@@ -752,57 +757,13 @@ func (r *registry) run(
 			}
 		}
 
-		if t.spec.Run != nil {
-			if !dryrun {
-				timeout := time.Hour
-				if c != nil {
-					defer func() {
-						c.FetchLogs(ctx)
-					}()
-
-					timeout = c.expiration.Add(-10 * time.Minute).Sub(timeutil.Now())
-					if timeout <= 0 {
-						t.spec.Skip = fmt.Sprintf("cluster expired (%s)", timeout)
-						return
-					}
-				}
-
-				if t.spec.Timeout > 0 && timeout > t.spec.Timeout {
-					timeout = t.spec.Timeout
-				}
-
-				done := make(chan struct{})
-				defer func() {
-					close(done)
-				}()
-
-				runCtx, cancel := context.WithCancel(ctx)
-
-				go func() {
-					defer cancel()
-
-					select {
-					case <-time.After(timeout):
-						t.printf("test timed out (%s)\n", timeout)
-						if c != nil {
-							c.FetchLogs(ctx)
-							// NB: c.destroyed is nil for cloned clusters (i.e. in subtests).
-							if !debugEnabled && c.destroyed != nil {
-								c.Destroy(ctx)
-							}
-						}
-					case <-done:
-					}
-				}()
-
-				t.spec.Run(runCtx, t, c)
-			}
-		} else {
+		// If we have subtests, handle them here and return.
+		if t.spec.Run == nil {
 			for i := range t.spec.SubTests {
 				if t.spec.SubTests[i].matchRegex(filter) {
 					var wg sync.WaitGroup
 					wg.Add(1)
-					r.run(ctx, &t.spec.SubTests[i], filter, c, func(failed bool) {
+					r.runAsync(ctx, &t.spec.SubTests[i], filter, c, func(failed bool) {
 						if failed {
 							// Mark the parent test as failed since one of the subtests
 							// failed.
@@ -821,7 +782,51 @@ func (r *registry) run(
 					wg.Wait()
 				}
 			}
+			return
 		}
+
+		// No subtests, so this is a leaf test.
+		if dryrun {
+			return
+		}
+		timeout := time.Hour
+		defer func() {
+			c.FetchLogs(ctx)
+		}()
+
+		timeout = c.expiration.Add(-10 * time.Minute).Sub(timeutil.Now())
+		if timeout <= 0 {
+			t.spec.Skip = fmt.Sprintf("cluster expired (%s)", timeout)
+			return
+		}
+
+		if t.spec.Timeout > 0 && timeout > t.spec.Timeout {
+			timeout = t.spec.Timeout
+		}
+
+		done := make(chan struct{})
+		defer func() {
+			close(done)
+		}()
+
+		runCtx, cancel := context.WithCancel(ctx)
+
+		go func() {
+			defer cancel()
+
+			select {
+			case <-time.After(timeout):
+				t.printfAndFail("test timed out (%s)\n", timeout)
+				c.FetchLogs(ctx)
+				// NB: c.destroyed is nil for cloned clusters (i.e. in subtests).
+				if !debugEnabled && c.destroyed != nil {
+					c.Destroy(ctx)
+				}
+			case <-done:
+			}
+		}()
+
+		t.spec.Run(runCtx, t, c)
 	}()
 }
 
