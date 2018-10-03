@@ -25,8 +25,14 @@ import {
   LayoutCell,
   FlattenedNode,
 } from "./tree";
+import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import { TimestampToMoment } from "src/util/convert";
+
 import { cockroach } from "src/js/protos";
 import NodeDescriptor$Properties = cockroach.roachpb.INodeDescriptor;
+import { google } from "src/js/protos";
+import ITimestamp = google.protobuf.ITimestamp;
+
 import "./replicaMatrix.styl";
 
 const DOWN_ARROW = "▼";
@@ -97,7 +103,7 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     return `${arrow} ${localityLabel}`;
   }
 
-  rowLabel(row: FlattenedNode<SchemaObject>): string {
+  rowLabelText(row: FlattenedNode<SchemaObject>) {
     if (row.isLeaf) {
       return row.data.tableName;
     }
@@ -106,6 +112,34 @@ class ReplicaMatrix extends Component<ReplicaMatrixProps, ReplicaMatrixState> {
     const label = row.data.dbName ? `DB: ${row.data.dbName}` : "Cluster";
 
     return `${arrow} ${label}`;
+  }
+
+  rowLabel(row: FlattenedNode<SchemaObject>) {
+    const text = this.rowLabelText(row);
+
+    const label = (
+      <span className={classNames("table-label", { "table-label--dropped": !!row.data.droppedAt })}>
+        {text}
+      </span>
+    );
+
+    if (row.data.droppedAt) {
+      return (
+        <ToolTipWrapper
+          text={
+            <span>
+              Dropped at {TimestampToMoment(row.data.droppedAt).format()}.
+              Will eventually be garbage collected according to this schema
+              object's GC TTL.
+            </span>
+          }
+        >
+          {label}
+        </ToolTipWrapper>
+      );
+    } else {
+      return label;
+    }
   }
 
   render() {
@@ -209,4 +243,5 @@ export default ReplicaMatrix;
 export interface SchemaObject {
   dbName?: string;
   tableName?: string;
+  droppedAt?: ITimestamp;
 }

@@ -86,13 +86,22 @@ class DataDistribution extends React.Component<DataDistributionProps> {
     const databaseInfo = this.props.dataDistribution.database_info;
     const dbTree: TreeNode<SchemaObject> = {
       name: "Cluster",
-      data: { dbName: null, tableName: null },
+      data: {
+        dbName: null,
+        tableName: null,
+      },
       children: _.map(databaseInfo, (dbInfo, dbName) => ({
         name: dbName,
-        data: { dbName },
-        children: _.map(dbInfo.table_info, (_tableInfo, tableName) => ({
+        data: {
+          dbName,
+        },
+        children: _.map(dbInfo.table_info, (tableInfo, tableName) => ({
           name: tableName,
-          data: { dbName, tableName },
+          data: {
+            dbName,
+            tableName,
+            droppedAt: tableInfo.dropped_at,
+          },
         })),
       })),
     };
@@ -111,6 +120,11 @@ class DataDistribution extends React.Component<DataDistributionProps> {
             </div>
           </h2>
           {this.renderZoneConfigs()}
+          <p style={{ maxWidth: 300, paddingTop: 10 }}>
+            Dropped tables appear <span className="table-label--dropped">greyed out</span>.
+            Their replicas will be garbage collected according to
+            the <code>gc.ttlseconds</code> setting in their zone configs.
+          </p>
         </div>
         <div>
           <ReplicaMatrix
