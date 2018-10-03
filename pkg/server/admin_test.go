@@ -1438,7 +1438,7 @@ func BenchmarkAdminAPIDataDistribution(b *testing.B) {
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		var resp serverpb.DataDistributionResponse
-		if err := getAdminJSONProto(firstServer, "replica_matrix", &resp); err != nil {
+		if err := getAdminJSONProto(firstServer, "data_distribution", &resp); err != nil {
 			b.Fatal(err)
 		}
 	}
