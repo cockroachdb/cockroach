@@ -216,22 +216,6 @@ func (tc *TableCollection) getTableVersion(
 		return nil, nil, nil
 	}
 
-	// We don't go through the normal lease mechanism for system tables
-	// that are not the role members table.
-	if flags.avoidCached || testDisableTableLeases || (tn.Catalog() == sqlbase.SystemDB.Name &&
-		tn.TableName.String() != sqlbase.RoleMembersTable.Name) {
-		// TODO(vivek): Ideally we'd avoid caching for only the
-		// system.descriptor and system.lease tables, because they are
-		// used for acquiring leases, creating a chicken&egg problem.
-		// But doing so turned problematic and the tests pass only by also
-		// disabling caching of system.eventlog, system.rangelog, and
-		// system.users. For now we're sticking to disabling caching of
-		// all system descriptors except the role-members-table.
-		flags.avoidCached = true
-		phyAccessor := UncachedPhysicalAccessor{}
-		return phyAccessor.GetObjectDesc(tn, flags)
-	}
-
 	refuseFurtherLookup, dbID, err := tc.getUncommittedDatabaseID(tn.Catalog(), flags.required)
 	if refuseFurtherLookup || err != nil {
 		return nil, nil, err
@@ -248,12 +232,30 @@ func (tc *TableCollection) getTableVersion(
 		}
 	}
 
-	if refuseFurtherLookup, table, err := tc.getUncommittedTable(
-		dbID, tn, flags.required); refuseFurtherLookup || err != nil {
-		return nil, nil, err
-	} else if table != nil {
+	refuseFurtherLookup, table, err := tc.getUncommittedTable(dbID, tn, flags.required)
+	if table != nil {
 		log.VEventf(ctx, 2, "found uncommitted table %d", table.ID)
 		return table, nil, nil
+	}
+
+	// We don't go through the normal lease mechanism for system tables
+	// that are not the role members table.
+	if flags.avoidCached || testDisableTableLeases || (tn.Catalog() == sqlbase.SystemDB.Name &&
+		tn.TableName.String() != sqlbase.RoleMembersTable.Name) {
+		// TODO(vivek): Ideally we'd avoid caching for only the
+		// system.descriptor and system.lease tables, because they are
+		// used for acquiring leases, creating a chicken&egg problem.
+		// But doing so turned problematic and the tests pass only by also
+		// disabling caching of system.eventlog, system.rangelog, and
+		// system.users. For now we're sticking to disabling caching of
+		// all system descriptors except the role-members-table.
+		flags.avoidCached = true
+		phyAccessor := UncachedPhysicalAccessor{}
+		return phyAccessor.GetObjectDesc(tn, flags)
+	} else if refuseFurtherLookup || err != nil {
+		// TableCollection knows to skip cache. If cache avoided,
+		// allow use of KV accessor, otherwise skip cache here.
+		return nil, nil, err
 	}
 
 	// First, look to see if we already have the table.
