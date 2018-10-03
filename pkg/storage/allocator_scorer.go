@@ -20,11 +20,11 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -71,17 +71,14 @@ type scorerOptions struct {
 
 type balanceDimensions struct {
 	ranges rangeCountStatus
-	bytes  float64
-	writes float64
 }
 
 func (bd *balanceDimensions) totalScore() float64 {
-	return float64(bd.ranges) + bd.bytes + bd.writes
+	return float64(bd.ranges)
 }
 
 func (bd balanceDimensions) String() string {
-	return fmt.Sprintf("%.2f(ranges=%d, bytes=%.2f, writes=%.2f)",
-		bd.totalScore(), int(bd.ranges), bd.bytes, bd.writes)
+	return strconv.Itoa(int(bd.ranges))
 }
 
 func (bd balanceDimensions) compactString(options scorerOptions) string {
@@ -103,10 +100,9 @@ type candidate struct {
 
 func (c candidate) String() string {
 	str := fmt.Sprintf("s%d, valid:%t, fulldisk:%t, necessary:%t, diversity:%.2f, converges:%d, "+
-		"balance:%s, rangeCount:%d, logicalBytes:%s, writesPerSecond:%.2f",
+		"balance:%s, rangeCount:%d, queriesPerSecond:%.2f",
 		c.store.StoreID, c.valid, c.fullDisk, c.necessary, c.diversityScore, c.convergesScore,
-		c.balanceScore, c.rangeCount, humanizeutil.IBytes(c.store.Capacity.LogicalBytes),
-		c.store.Capacity.WritesPerSecond)
+		c.balanceScore, c.rangeCount, c.store.Capacity.QueriesPerSecond)
 	if c.details != "" {
 		return fmt.Sprintf("%s, details:(%s)", str, c.details)
 	}
