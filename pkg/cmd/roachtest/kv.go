@@ -18,6 +18,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -161,33 +162,40 @@ func registerKVQuiescenceDead(r *registry) {
 }
 
 func registerKVSplits(r *registry) {
-	r.Add(testSpec{
-		Name:   "kv/splits/nodes=3",
-		Nodes:  nodes(4),
-		Stable: true, // DO NOT COPY to new tests
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			nodes := c.nodes - 1
-			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-			c.Start(ctx, c.Range(1, nodes),
-				startArgs("--env=COCKROACH_MEMPROF_INTERVAL=1m", "--args=--cache=256MiB"))
+	for _, quiesce := range []bool{true, false} {
+		quiesce := quiesce // for use in closure below
+		r.Add(testSpec{
+			Name:   fmt.Sprintf("kv/splits/nodes=3/quiesce=%t", quiesce),
+			Nodes:  nodes(4),
+			Stable: false, // DO NOT COPY to new tests
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				nodes := c.nodes - 1
+				c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
+				c.Put(ctx, workload, "./workload", c.Node(nodes+1))
+				c.Start(ctx, c.Range(1, nodes),
+					startArgs(
+						"--env=COCKROACH_MEMPROF_INTERVAL=1m",
+						"--env=COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!quiesce),
+						"--args=--cache=256MiB",
+					))
 
-			t.Status("running workload")
-			m := newMonitor(ctx, c, c.Range(1, nodes))
-			m.Go(func(ctx context.Context) error {
-				concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
-				splits := " --splits=" + ifLocal("2000", "500000")
-				cmd := fmt.Sprintf(
-					"./workload run kv --init --max-ops=1"+
-						concurrency+splits+
-						" {pgurl:1-%d}",
-					nodes)
-				c.Run(ctx, c.Node(nodes+1), cmd)
-				return nil
-			})
-			m.Wait()
-		},
-	})
+				t.Status("running workload")
+				m := newMonitor(ctx, c, c.Range(1, nodes))
+				m.Go(func(ctx context.Context) error {
+					concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
+					splits := " --splits=" + ifLocal("2000", "500000")
+					cmd := fmt.Sprintf(
+						"./workload run kv --init --max-ops=1"+
+							concurrency+splits+
+							" {pgurl:1-%d}",
+						nodes)
+					c.Run(ctx, c.Node(nodes+1), cmd)
+					return nil
+				})
+				m.Wait()
+			},
+		})
+	}
 }
 
 func registerKVScalability(r *registry) {
