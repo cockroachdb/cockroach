@@ -157,7 +157,7 @@ func (ls *Stores) GetReplicaForRangeID(rangeID roachpb.RangeID) (*Replica, error
 		return nil, err
 	}
 	if replica == nil {
-		return nil, roachpb.NewRangeNotFoundError(rangeID)
+		return nil, roachpb.NewRangeNotFoundError(rangeID, 0)
 	}
 	return replica, nil
 }
