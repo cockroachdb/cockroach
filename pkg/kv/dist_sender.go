@@ -1359,7 +1359,7 @@ func (ds *DistSender) sendToReplicas(
 					// cached RangeDescriptor and re-send.
 					if replicas.FindReplica(lh.StoreID) == -1 {
 						// Replace NotLeaseHolderError with RangeNotFoundError.
-						br.Error = roachpb.NewError(roachpb.NewRangeNotFoundError(rangeID))
+						br.Error = roachpb.NewError(roachpb.NewRangeNotFoundError(rangeID, curReplica.StoreID))
 						propagateError = true
 					} else {
 						// Move the new lease holder to the head of the queue for the next retry.

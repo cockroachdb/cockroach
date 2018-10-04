@@ -71,6 +71,9 @@ message RangeNotFoundError {
 
   optional int64 range_id = 1 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+  // store_id is nonzero only if the error originated on a Store.
+  optional int64 store_id = 2 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "StoreID", (gogoproto.casttype) = "StoreID"];
 }
 
 // A RangeKeyMismatchError indicates that a command was sent to a

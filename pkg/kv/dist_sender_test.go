@@ -946,7 +946,7 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 		case 0, 1:
 			err = &roachpb.NotLeaseHolderError{LeaseHolder: &roachpb.ReplicaDescriptor{NodeID: 99, StoreID: 999}}
 		case 2:
-			err = roachpb.NewRangeNotFoundError(0)
+			err = roachpb.NewRangeNotFoundError(0, 0)
 		default:
 			return args.CreateReply(), nil
 		}
