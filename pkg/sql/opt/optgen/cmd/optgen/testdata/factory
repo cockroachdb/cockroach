@@ -1018,15 +1018,15 @@ define ScalarGroupBy {
     Def   GroupByDef
 }
 
-define LookupJoin {
+define DistinctOn {
     Input Expr
     On    Expr
-    Def   LookupJoinDef
+    Def   GroupByDef
 }
 
 [Test, Normalize]
 (Select
-    $input:(LookupJoin | GroupByOps
+    $input:(DistinctOn | GroupByOps
         $expr1:*
         $expr2:*
         $private:*
@@ -1057,13 +1057,6 @@ func (_f *Factory) InternGroupByDef(val *memo.GroupByDef) memo.PrivateID {
 	return _f.mem.InternGroupByDef(val)
 }
 
-// InternLookupJoinDef adds the given value to the memo and returns an ID that
-// can be used for later lookup. If the same value was added previously,
-// this method is a no-op and returns the ID of the previous value.
-func (_f *Factory) InternLookupJoinDef(val *memo.LookupJoinDef) memo.PrivateID {
-	return _f.mem.InternLookupJoinDef(val)
-}
-
 // ConstructSelect constructs an expression for the Select operator.
 func (_f *Factory) ConstructSelect(
 	input memo.GroupID,
@@ -1078,7 +1071,7 @@ func (_f *Factory) ConstructSelect(
 	// [Test]
 	{
 		_expr := _f.mem.NormExpr(input)
-		if _expr.Operator() == opt.LookupJoinOp || _expr.IsGroupByOps() {
+		if _expr.Operator() == opt.DistinctOnOp || _expr.IsGroupByOps() {
 			expr1 := _expr.ChildGroup(_f.Memo(), 0)
 			expr2 := _expr.ChildGroup(_f.Memo(), 1)
 			private := _expr.PrivateID()
@@ -1135,19 +1128,19 @@ func (_f *Factory) ConstructScalarGroupBy(
 	return _f.onConstruct(memo.Expr(_scalarGroupByExpr))
 }
 
-// ConstructLookupJoin constructs an expression for the LookupJoin operator.
-func (_f *Factory) ConstructLookupJoin(
+// ConstructDistinctOn constructs an expression for the DistinctOn operator.
+func (_f *Factory) ConstructDistinctOn(
 	input memo.GroupID,
 	on memo.GroupID,
 	def memo.PrivateID,
 ) memo.GroupID {
-	_lookupJoinExpr := memo.MakeLookupJoinExpr(input, on, def)
-	_group := _f.mem.GroupByFingerprint(_lookupJoinExpr.Fingerprint())
+	_distinctOnExpr := memo.MakeDistinctOnExpr(input, on, def)
+	_group := _f.mem.GroupByFingerprint(_distinctOnExpr.Fingerprint())
 	if _group != 0 {
 		return _group
 	}
 
-	return _f.onConstruct(memo.Expr(_lookupJoinExpr))
+	return _f.onConstruct(memo.Expr(_distinctOnExpr))
 }
 
 func (f *Factory) assignPlaceholders(group memo.GroupID) (memo.GroupID, error) {
@@ -1191,18 +1184,18 @@ func (f *Factory) assignPlaceholders(group memo.GroupID) (memo.GroupID, error) {
 		}
 		def := scalarGroupByExpr.Def()
 		return f.ConstructScalarGroupBy(input, aggs, def), nil
-	case opt.LookupJoinOp:
-		lookupJoinExpr := expr.AsLookupJoin()
-		input, err := f.assignPlaceholders(lookupJoinExpr.Input())
+	case opt.DistinctOnOp:
+		distinctOnExpr := expr.AsDistinctOn()
+		input, err := f.assignPlaceholders(distinctOnExpr.Input())
 		if err != nil {
 			return 0, err
 		}
-		on, err := f.assignPlaceholders(lookupJoinExpr.On())
+		on, err := f.assignPlaceholders(distinctOnExpr.On())
 		if err != nil {
 			return 0, err
 		}
-		def := lookupJoinExpr.Def()
-		return f.ConstructLookupJoin(input, on, def), nil
+		def := distinctOnExpr.Def()
+		return f.ConstructDistinctOn(input, on, def), nil
 	case opt.PlaceholderOp:
 		value := expr.AsPlaceholder().Value()
 		placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)
@@ -1240,9 +1233,9 @@ func init() {
 		return f.ConstructScalarGroupBy(memo.GroupID(operands[0]), memo.GroupID(operands[1]), memo.PrivateID(operands[2]))
 	}
 
-	// LookupJoinOp
-	dynConstructLookup[opt.LookupJoinOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
-		return f.ConstructLookupJoin(memo.GroupID(operands[0]), memo.GroupID(operands[1]), memo.PrivateID(operands[2]))
+	// DistinctOnOp
+	dynConstructLookup[opt.DistinctOnOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
+		return f.ConstructDistinctOn(memo.GroupID(operands[0]), memo.GroupID(operands[1]), memo.PrivateID(operands[2]))
 	}
 
 }
