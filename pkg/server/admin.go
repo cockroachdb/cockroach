@@ -1516,7 +1516,8 @@ func (s *adminServer) DataDistribution(
 
 	// Get zone configs.
 	// TODO(vilterp): this can be done in parallel with getting table/db names and replica counts.
-	zoneConfigsQuery := `SHOW ALL ZONE CONFIGURATIONS`
+	zoneConfigsQuery := `SELECT zone_id, cli_specifier, config_sql, config_protobuf 
+    FROM crdb_internal.zones WHERE cli_specifier IS NOT NULL`
 	rows2, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
 		ctx, "admin-replica-matrix", nil /* txn */, userName, zoneConfigsQuery,
 	)
