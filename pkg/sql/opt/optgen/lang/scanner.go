@@ -145,8 +145,8 @@ func (s *Scanner) Scan() Token {
 		return s.scanWhitespace()
 	}
 
-	// If we see a letter then consume as an identifier or keyword.
-	if unicode.IsLetter(ch) {
+	// If we see a letter or underscore then consume as an identifier or keyword.
+	if unicode.IsLetter(ch) || ch == '_' {
 		s.unread()
 		return s.scanIdentifier()
 	}
@@ -358,7 +358,7 @@ func (s *Scanner) scanIdentifier() Token {
 			break
 		}
 
-		if !unicode.IsLetter(ch) && !unicode.IsDigit(ch) {
+		if !unicode.IsLetter(ch) && !unicode.IsDigit(ch) && ch != '_' {
 			s.unread()
 			break
 		}
