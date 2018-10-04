@@ -24,6 +24,7 @@ import (
 	"hash"
 	"math"
 	"math/rand"
+	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -46,7 +47,8 @@ type kv struct {
 	minBlockSizeBytes, maxBlockSizeBytes int
 	cycleLength                          int64
 	readPercent                          int
-	writeSeq, seed                       int64
+	seed                                 int64
+	writeSeq                             string
 	sequential                           bool
 	splits                               int
 	useOpt                               bool
@@ -58,8 +60,17 @@ func init() {
 
 var kvMeta = workload.Meta{
 	Name: `kv`,
-	Description: `KV reads and writes to keys spread (by default, uniformly` +
-		` at random) across the cluster`,
+	Description: `
+	KV reads and writes to keys spread (by default, uniformly	at random) across
+	the cluster.
+	--concurrency workers alternate between doing selects and upserts (according
+	to a --read-percent ratio). Each select/upsert reads/writes a batch of --batch
+	rows. The write keys are randomly generated in a deterministic fashion (or
+	sequentially if --sequential is specified). Reads select a random batch of ids
+	out of the ones previously written.
+	--write-seq can be used to incorporate data produced by a previous run into
+	the current run.
+	`,
 	Version: `1.0.0`,
 	New: func() workload.Generator {
 		g := &kv{}
@@ -67,15 +78,25 @@ var kvMeta = workload.Meta{
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`batch`: {RuntimeOnly: true},
 		}
-		g.flags.IntVar(&g.batchSize, `batch`, 1, `Number of blocks to read/insert in a single SQL statement`)
-		g.flags.IntVar(&g.minBlockSizeBytes, `min-block-bytes`, 1, `Minimum amount of raw data written with each insertion`)
-		g.flags.IntVar(&g.maxBlockSizeBytes, `max-block-bytes`, 2, `Maximum amount of raw data written with each insertion`)
-		g.flags.Int64Var(&g.cycleLength, `cycle-length`, math.MaxInt64, `Number of keys repeatedly accessed by each writer`)
-		g.flags.IntVar(&g.readPercent, `read-percent`, 0, `Percent (0-100) of operations that are reads of existing keys`)
-		g.flags.Int64Var(&g.writeSeq, `write-seq`, 0, `Initial write sequence value.`)
+		g.flags.IntVar(&g.batchSize, `batch`, 1,
+			`Number of blocks to read/insert in a single SQL statement.`)
+		g.flags.IntVar(&g.minBlockSizeBytes, `min-block-bytes`, 1,
+			`Minimum amount of raw data written with each insertion.`)
+		g.flags.IntVar(&g.maxBlockSizeBytes, `max-block-bytes`, 2,
+			`Maximum amount of raw data written with each insertion`)
+		g.flags.Int64Var(&g.cycleLength, `cycle-length`, math.MaxInt64,
+			`Number of keys repeatedly accessed by each writer through upserts.`)
+		g.flags.IntVar(&g.readPercent, `read-percent`, 0,
+			`Percent (0-100) of operations that are reads of existing keys.`)
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
-		g.flags.BoolVar(&g.sequential, `sequential`, false, `Pick keys sequentially instead of randomly.`)
-		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
+		g.flags.BoolVar(&g.sequential, `sequential`, false,
+			`Pick keys sequentially instead of randomly.`)
+		g.flags.StringVar(&g.writeSeq, `write-seq`, "",
+			`Initial write sequence value. Can be used to use the data produced by a previous run. `+
+				`It has to be of the form (R|S)<number>, where S implies that it was taken from a `+
+				`previous --sequential run and R implies a previous random run.`)
+		g.flags.IntVar(&g.splits, `splits`, 0,
+			`Number of splits to perform before starting normal operations.`)
 		g.flags.BoolVar(&g.useOpt, `use-opt`, true, `Use cost-based optimizer`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
@@ -124,6 +145,27 @@ func (w *kv) Tables() []workload.Table {
 
 // Ops implements the Opser interface.
 func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.QueryLoad, error) {
+	writeSeq := 0
+	if w.writeSeq != "" {
+		first := w.writeSeq[0]
+		if len(w.writeSeq) < 2 || (first != 'R' && first != 'S') {
+			return workload.QueryLoad{}, fmt.Errorf("--write-seq has to be of the form '(R|S)<num>'")
+		}
+		rest := w.writeSeq[1:]
+		var err error
+		writeSeq, err = strconv.Atoi(rest)
+		if err != nil {
+			return workload.QueryLoad{}, fmt.Errorf("--write-seq has to be of the form '(R|S)<num>'")
+		}
+		if first == 'R' && w.sequential {
+			return workload.QueryLoad{}, fmt.Errorf("--sequential incompatible with a Random --write-seq")
+		}
+		if first == 'S' && !w.sequential {
+			return workload.QueryLoad{}, fmt.Errorf(
+				"--sequential=false incompatible with a Sequential --write-seq")
+		}
+	}
+
 	ctx := context.Background()
 	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
@@ -167,7 +209,8 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 	writeStmtStr := buf.String()
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
-	seq := &sequence{config: w, val: w.writeSeq}
+	seq := &sequence{config: w, val: int64(writeSeq)}
+	numEmptyResults := new(int64)
 	for i := 0; i < w.connFlags.Concurrency; i++ {
 		// Give each kvOp worker its own SQL connection and prepare statements
 		// using this connection. This avoids lock contention in the sql.Rows
@@ -180,16 +223,17 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
-		writeStmt, err := db.PrepareContext(ctx, writeStmtStr)
+		writeStmt, err := conn.PrepareContext(ctx, writeStmtStr)
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
 		op := kvOp{
-			config:    w,
-			hists:     reg.GetHandle(),
-			conn:      conn,
-			readStmt:  readStmt,
-			writeStmt: writeStmt,
+			config:          w,
+			hists:           reg.GetHandle(),
+			conn:            conn,
+			readStmt:        readStmt,
+			writeStmt:       writeStmt,
+			numEmptyResults: numEmptyResults,
 		}
 		if w.sequential {
 			op.g = newSequentialGenerator(seq)
@@ -197,17 +241,19 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 			op.g = newHashGenerator(seq)
 		}
 		ql.WorkerFns = append(ql.WorkerFns, op.run)
+		ql.Close = op.close
 	}
 	return ql, nil
 }
 
 type kvOp struct {
-	config    *kv
-	hists     *workload.Histograms
-	conn      *gosql.Conn
-	readStmt  *gosql.Stmt
-	writeStmt *gosql.Stmt
-	g         keyGenerator
+	config          *kv
+	hists           *workload.Histograms
+	conn            *gosql.Conn
+	readStmt        *gosql.Stmt
+	writeStmt       *gosql.Stmt
+	g               keyGenerator
+	numEmptyResults *int64 // accessed atomically
 }
 
 func (o *kvOp) run(ctx context.Context) error {
@@ -221,7 +267,12 @@ func (o *kvOp) run(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		empty := true
 		for rows.Next() {
+			empty = false
+		}
+		if empty {
+			atomic.AddInt64(o.numEmptyResults, 1)
 		}
 		elapsed := timeutil.Since(start)
 		o.hists.Get(`read`).Record(elapsed)
@@ -239,6 +290,21 @@ func (o *kvOp) run(ctx context.Context) error {
 	elapsed := timeutil.Since(start)
 	o.hists.Get(`write`).Record(elapsed)
 	return err
+}
+
+func (o *kvOp) close(context.Context) {
+	if empty := atomic.LoadInt64(o.numEmptyResults); empty != 0 {
+		fmt.Printf("Number of reads that didn't return any results: %d.\n", empty)
+	}
+	seq := o.g.sequence()
+	var ch string
+	if o.config.sequential {
+		ch = "S"
+	} else {
+		ch = "R"
+	}
+	fmt.Printf("Highest sequence written: %d. Can be passed as --write-seq=%s%d to the next run.\n",
+		seq, ch, seq)
 }
 
 type sequence struct {
@@ -263,6 +329,7 @@ type keyGenerator interface {
 	writeKey() int64
 	readKey() int64
 	rand() *rand.Rand
+	sequence() int64
 }
 
 type hashGenerator struct {
@@ -305,6 +372,10 @@ func (g *hashGenerator) rand() *rand.Rand {
 	return g.random
 }
 
+func (g *hashGenerator) sequence() int64 {
+	return atomic.LoadInt64(&g.seq.val)
+}
+
 type sequentialGenerator struct {
 	seq    *sequence
 	random *rand.Rand
@@ -331,6 +402,10 @@ func (g *sequentialGenerator) readKey() int64 {
 
 func (g *sequentialGenerator) rand() *rand.Rand {
 	return g.random
+}
+
+func (g *sequentialGenerator) sequence() int64 {
+	return atomic.LoadInt64(&g.seq.val)
 }
 
 func randomBlock(config *kv, r *rand.Rand) []byte {
