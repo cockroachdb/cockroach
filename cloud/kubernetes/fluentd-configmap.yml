@@ -1,3 +1,9 @@
+# This ConfigMap is used to ingest logs against new resources like "k8s_container".
+# The configuration instruct Fluentd deamons to correctly parse CockroachDB logs,
+# extracting timestamp, severity and log message into the log output format for follow on output stanzas to process.
+# This is tested on Google Cloud Platform using a custom deployment of Stackdriver:
+# https://cloud.google.com/solutions/customizing-stackdriver-logs-fluentd
+
 kind: ConfigMap
 apiVersion: v1
 metadata:
@@ -7,6 +13,8 @@ metadata:
     addonmanager.kubernetes.io/mode: Reconcile
 data:
   containers.input.conf: |-
+    # Read and tail all log files on the node
+    # Match timestamp with one of the patterns, and prefix the tag with "reform".
     <source>
       @type tail
       path /var/log/containers/*.log
@@ -27,6 +35,10 @@ data:
       </pattern>
     </source>
 
+    # This filter tries to parse the log records. The follow on filters will override the values set by this filter.
+    # This is for all containers that don't match the follow on filters - effectively treat this as the 'default' case.
+    # Note: Fluentd processes the log file on every 'Filter' that matches the pattern,
+    # however Fluentd allows only one 'Match' per pattern.
     <filter reform.**>
       @type parser
       format /^(?<severity>\w)(?<time>\d{4} [^\s]*)\s+(?<pid>\d+)\s+(?<source>[^ \]]+)\] (?<log>.*)/
@@ -36,6 +48,9 @@ data:
       key_name log
     </filter>
 
+    # Reprocess the log line, this time match on particular formats.
+    # You can add your own custom format in this section.
+    # For CockroachDB, we are assigning the severity, time and log as capture groups.
     <filter reform.**>
       @type parser
       key_name log
@@ -51,6 +66,9 @@ data:
       </pattern>
     </filter>
 
+    # Match only on cockroachdb log records, so we can normalize the severity format.
+    # This is useful for output pipelines that expect certain format (like Stackdriver)
+    # After this we don't need to further process records, so we'll tag the log record with "parsed" to indicate as such.
     <match reform.var.log.containers.cockroachdb**>
       @type record_reformer
       enable_ruby true
@@ -60,12 +78,14 @@ data:
       </record>
     </match>
 
+    # After this we don't need to further process records, so we'll tag the log record with "parsed" to indicate as such.
     <match reform.**>
       @type record_reformer
       enable_ruby true
       tag parsed.${tag_suffix[1]}
     </match>
 
+    # We remove the prefix "parsed.reform.var.log.containers" and replace it with the format below
     <match parsed.**>
       @type record_reformer
       enable_ruby true
