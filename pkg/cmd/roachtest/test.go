@@ -20,9 +20,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -32,11 +32,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	version "github.com/hashicorp/go-version"
 	"github.com/petermattis/goid"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+)
+
+const (
+	GCEClusterNameLimit = 63
 )
 
 var (
@@ -121,8 +129,6 @@ func (t *testSpec) matchRegex(re *regexp.Regexp) bool {
 
 type registry struct {
 	m              map[string]*testSpec
-	clusters       map[string]string
-	out            io.Writer
 	statusInterval time.Duration
 	buildVersion   *version.Version
 
@@ -134,6 +140,11 @@ type registry struct {
 		// the registry uses for running tests. It implies skipClusterWipeOnAttach.
 		skipClusterStopOnAttach bool
 		skipClusterWipeOnAttach bool
+
+		// If set, a cluster will not be wiped before starting a (sub)test. For
+		// testing.
+		// !!! still needed?
+		skipClusterWipeOnTestStart bool
 	}
 
 	status struct {
@@ -143,14 +154,17 @@ type registry struct {
 		fail    map[*test]struct{}
 		skip    map[*test]struct{}
 	}
+	clustersMu struct {
+		syncutil.Mutex
+		clusters map[string]string
+	}
 }
 
 func newRegistry() *registry {
 	r := &registry{
-		m:        make(map[string]*testSpec),
-		clusters: make(map[string]string),
-		out:      os.Stdout,
+		m: make(map[string]*testSpec),
 	}
+	r.clustersMu.clusters = make(map[string]string)
 	r.config.skipClusterWipeOnAttach = !clusterWipe
 	return r
 }
@@ -225,21 +239,18 @@ func (r *registry) verifyValidClusterName(testName string) error {
 			gceNameRE,
 		)
 	}
-
+	r.clustersMu.Lock()
+	defer r.clustersMu.Unlock()
 	// Verify that the cluster name is not shared with an existing test.
-	if t, ok := r.clusters[teamcityClusterName]; ok {
+	if t, ok := r.clustersMu.clusters[teamcityClusterName]; ok {
 		return fmt.Errorf("test %s and test %s have equivalent nightly cluster names: %s",
 			testName, t, teamcityClusterName)
 	}
-	r.clusters[teamcityClusterName] = testName
+	r.clustersMu.clusters[teamcityClusterName] = testName
 	return nil
 }
 
 func (r *registry) prepareSpec(spec *testSpec) error {
-	if err := r.verifyValidClusterName(spec.Name); err != nil {
-		return err
-	}
-
 	if spec.Run == nil {
 		return fmt.Errorf("%s: must specify Run", spec.Name)
 	}
@@ -276,7 +287,7 @@ func (r *registry) Add(spec testSpec) {
 
 // GetTests returns all the tests that match the given regexp.
 // Skipped tests are included, and tests that don't match their minVersion spec
-// are also included but also marked as skipped.
+// are also included but marked as skipped.
 func (r *registry) GetTests(re *regexp.Regexp) []testSpec {
 	var tests []testSpec
 	for _, t := range r.m {
@@ -311,190 +322,6 @@ func (r *registry) List(filter []string) []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-// Run runs the tests that match the filter.
-//
-// Args:
-// artifactsDir: The path to the dir where log files will be put. If empty, all
-//   logging will go to stdout/stderr.
-func (r *registry) Run(filter []string, parallelism int, artifactsDir string, user string) int {
-	filterRE := makeFilterRE(filter)
-	// Find the top-level tests to run.
-	tests := r.GetTests(filterRE)
-
-	wg := &sync.WaitGroup{}
-	wg.Add(count * len(tests))
-
-	// We can't run tests in parallel on local clusters or on an existing
-	// cluster.
-	if local || clusterName != "" {
-		parallelism = 1
-	}
-	// Limit the parallelism to the number of tests. The primary effect this has
-	// is that we'll log to stdout/stderr if only one test is being run.
-	if parallelism > len(tests) {
-		parallelism = len(tests)
-	}
-
-	r.status.running = make(map[*test]struct{})
-	r.status.pass = make(map[*test]struct{})
-	r.status.fail = make(map[*test]struct{})
-	r.status.skip = make(map[*test]struct{})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go func() {
-		sem := make(chan struct{}, parallelism)
-		for j := 0; j < count; j++ {
-			for i := range tests {
-				sem <- struct{}{}
-				runNum := j + 1
-				if count == 1 {
-					runNum = 0
-				}
-				// Log to stdout/stderr if we're not running tests in parallel.
-				teeOpt := noTee
-				if parallelism == 1 {
-					teeOpt = teeToStdout
-				}
-
-				artifactsSuffix := ""
-				if runNum != 0 {
-					artifactsSuffix = "run_" + strconv.Itoa(runNum)
-				}
-				var runDir string
-				if artifactsDir != "" {
-					runDir = filepath.Join(
-						artifactsDir, teamCityNameEscape(tests[i].Name), artifactsSuffix)
-				}
-
-				r.runAsync(
-					ctx, &tests[i], filterRE, runNum, teeOpt, runDir, user, func(failed bool) {
-						wg.Done()
-						<-sem
-					})
-			}
-		}
-	}()
-
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	// Periodically output test status to give an indication of progress.
-	if r.statusInterval == 0 {
-		r.statusInterval = time.Minute
-	}
-	ticker := time.NewTicker(r.statusInterval)
-	defer ticker.Stop()
-
-	// Shut down test clusters when interrupted (for example CTRL+C).
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
-
-	for i := 1; ; i++ {
-		select {
-		case <-done:
-			r.status.Lock()
-			defer r.status.Unlock()
-			postSlackReport(r.status.pass, r.status.fail, r.status.skip)
-
-			stableFails := 0
-			for t := range r.status.fail {
-				if t.spec.Stable {
-					stableFails++
-				}
-			}
-			if stableFails > 0 {
-				fmt.Fprintln(r.out, "FAIL")
-				return 1
-			}
-			unstableFails := ""
-			if n := len(r.status.fail) - stableFails; n > 0 {
-				unstableFails = fmt.Sprintf(" (%d unstable FAIL)", n)
-			}
-			fmt.Fprintf(r.out, "PASS%s\n", unstableFails)
-			return 0
-
-		case <-ticker.C:
-			r.status.Lock()
-			runningTests := make([]*test, 0, len(r.status.running))
-			for t := range r.status.running {
-				runningTests = append(runningTests, t)
-			}
-			sort.Slice(runningTests, func(i, j int) bool {
-				return runningTests[i].Name() < runningTests[j].Name()
-			})
-			var buf bytes.Buffer
-			for _, t := range runningTests {
-				t.mu.Lock()
-				done := t.mu.done
-				var status map[int64]testStatus
-				if !done {
-					status = make(map[int64]testStatus, len(t.mu.status))
-					for k, v := range t.mu.status {
-						status[k] = v
-					}
-					if len(status) == 0 {
-						// If we have no other status messages display this unknown state.
-						status[0] = testStatus{
-							msg:  "???",
-							time: timeutil.Now(),
-						}
-					}
-				}
-				t.mu.Unlock()
-				if !done {
-					ids := make([]int64, 0, len(status))
-					for id := range status {
-						ids = append(ids, id)
-					}
-					sort.Slice(ids, func(i, j int) bool {
-						// Force the goroutine ID for the main test goroutine to sort to
-						// the front. NB: goroutine IDs are not monotonically increasing
-						// because each thread has a small cache of IDs for allocation.
-						if ids[j] == t.runnerID {
-							return false
-						}
-						if ids[i] == t.runnerID {
-							return true
-						}
-						return ids[i] < ids[j]
-					})
-
-					fmt.Fprintf(&buf, "[%4d] %s: ", i, t.Name())
-
-					for j := range ids {
-						s := status[ids[j]]
-						duration := timeutil.Now().Sub(s.time)
-						progStr := ""
-						if s.progress > 0 {
-							progStr = fmt.Sprintf("%.1f%%|", 100*s.progress)
-						}
-						if j > 0 {
-							buf.WriteString(", ")
-						}
-						fmt.Fprintf(&buf, "%s (%s%s)", s.msg, progStr,
-							time.Duration(duration.Seconds()+0.5)*time.Second)
-					}
-
-					fmt.Fprintf(&buf, "\n")
-				}
-			}
-			fmt.Fprint(r.out, buf.String())
-			r.status.Unlock()
-
-		case <-sig:
-			if !debugEnabled {
-				cancel()
-				destroyAllClusters()
-			}
-		}
-	}
 }
 
 type testStatus struct {
@@ -697,6 +524,12 @@ func (t *test) Failed() bool {
 	return failed
 }
 
+func (t *test) MarkFailed() {
+	t.mu.Lock()
+	t.mu.failed = true
+	t.mu.Unlock()
+}
+
 func (t *test) ArtifactsDir() string {
 	return t.artifactsDir
 }
@@ -717,251 +550,22 @@ func (t *test) IsBuildVersion(minVersion string) bool {
 	return !t.registry.buildVersion.LessThan(vers)
 }
 
-// runAsync starts a goroutine that runs a test.
-//
-// Args:
-// runNum: The 1-based index of this test run, if --count > 1. Otherwise (if
-// 		   there's a single run), runNum is 0.
-func (r *registry) runAsync(
-	ctx context.Context,
-	spec *testSpec,
-	filter *regexp.Regexp,
-	runNum int,
-	teeOpt teeOptType,
-	artifactsDir string,
-	user string,
-	done func(failed bool),
-) {
-	t := &test{
-		spec:         spec,
-		registry:     r,
-		artifactsDir: artifactsDir,
-	}
-	var logPath string
-	if artifactsDir != "" {
-		logPath = filepath.Join(artifactsDir, "test.log")
-	}
-	l, err := rootLogger(logPath, teeOpt)
-	FatalIfErr(t, err)
-	t.l = l
+// errTestFailureAndDebugEnabled represents a test failure when --debug was
+// specified.
+type errTestFailureAndDebugEnabled struct {
+	test        string
+	testFailure string
+}
 
-	if teamCity {
-		fmt.Printf("##teamcity[testStarted name='%s' flowId='%s']\n", t.Name(), t.Name())
-	} else {
-		var details []string
-		if !t.spec.Stable {
-			details = append(details, "unstable")
-		}
-		if t.spec.Skip != "" {
-			details = append(details, "skip")
-		}
-		var detail string
-		if len(details) > 0 {
-			detail = fmt.Sprintf(" [%s]", strings.Join(details, ","))
-		}
-		fmt.Fprintf(r.out, "=== RUN   %s%s\n", t.Name(), detail)
-	}
-	r.status.Lock()
-	r.status.running[t] = struct{}{}
-	r.status.Unlock()
+func newErrTestFailureAndDebugEnabled(test string, failure string) error {
+	return errTestFailureAndDebugEnabled{test: test, testFailure: failure}
+}
 
-	callerName := func() string {
-		// Make room for the skip PC.
-		var pc [2]uintptr
-		n := runtime.Callers(2, pc[:]) // skip + runtime.Callers + callerName
-		if n == 0 {
-			panic("zero callers found")
-		}
-		frames := runtime.CallersFrames(pc[:n])
-		frame, _ := frames.Next()
-		return frame.Function
-	}
-
-	go func() {
-		t.runner = callerName()
-		t.runnerID = goid.Get()
-
-		defer func() {
-			t.end = timeutil.Now()
-
-			if err := recover(); err != nil {
-				t.mu.Lock()
-				t.mu.failed = true
-				t.mu.output = append(t.mu.output, t.decorate(fmt.Sprint(err))...)
-				t.mu.Unlock()
-			}
-
-			t.mu.Lock()
-			t.mu.done = true
-			t.mu.Unlock()
-
-			dstr := fmt.Sprintf("%.2fs", t.duration().Seconds())
-			stability := ""
-			if !t.spec.Stable {
-				stability = "[unstable] "
-			}
-
-			if t.Failed() {
-				t.mu.Lock()
-				output := t.mu.output
-				failLoc := t.mu.failLoc
-				t.mu.Unlock()
-
-				if teamCity {
-					fmt.Fprintf(
-						r.out, "##teamcity[testFailed name='%s' details='%s' flowId='%s']\n",
-						t.Name(), teamCityEscape(string(output)), t.Name(),
-					)
-				}
-
-				fmt.Fprintf(r.out, "--- FAIL: %s %s(%s)\n%s", t.Name(), stability, dstr, output)
-				if postIssues && issues.CanPost() && t.spec.Run != nil {
-					authorEmail := getAuthorEmail(failLoc.file, failLoc.line)
-					branch := "<unknown branch>"
-					if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
-						branch = b
-					}
-					if err := issues.Post(
-						context.Background(),
-						fmt.Sprintf("roachtest: %s failed", t.Name()),
-						"roachtest", t.Name(), "The test failed on "+branch+":\n"+string(output), authorEmail,
-					); err != nil {
-						fmt.Fprintf(r.out, "failed to post issue: %s\n", err)
-					}
-				}
-			} else if t.spec.Skip == "" {
-				fmt.Fprintf(r.out, "--- PASS: %s %s(%s)\n", t.Name(), stability, dstr)
-				// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
-				// TeamCity regards the test as successful.
-			} else {
-				if teamCity {
-					fmt.Fprintf(r.out, "##teamcity[testIgnored name='%s' message='%s']\n",
-						t.Name(), t.spec.Skip)
-				}
-				fmt.Fprintf(r.out, "--- SKIP: %s (%s)\n\t%s\n", t.Name(), dstr, t.spec.Skip)
-			}
-
-			if teamCity {
-				fmt.Fprintf(r.out, "##teamcity[testFinished name='%s' flowId='%s']\n", t.Name(), t.Name())
-
-				if artifactsDir != "" {
-					escapedTestName := teamCityNameEscape(t.Name())
-					artifactsGlobPath := filepath.Join(artifactsDir, "**")
-					artifactsSpec := fmt.Sprintf("%s => %s", artifactsGlobPath, escapedTestName)
-					fmt.Fprintf(r.out, "##teamcity[publishArtifacts '%s']\n", artifactsSpec)
-				}
-			}
-
-			r.status.Lock()
-			delete(r.status.running, t)
-			// Only include tests with a Run function in the summary output.
-			if t.spec.Run != nil {
-				if t.Failed() {
-					r.status.fail[t] = struct{}{}
-				} else if t.spec.Skip == "" {
-					r.status.pass[t] = struct{}{}
-				} else {
-					r.status.skip[t] = struct{}{}
-				}
-			}
-			r.status.Unlock()
-
-			done(t.Failed())
-		}()
-
-		t.start = timeutil.Now()
-
-		if t.spec.Skip != "" {
-			return
-		}
-
-		var c *cluster
-		if clusterName == "" {
-			var name string
-			if !local {
-				name = clusterID
-				if name == "" {
-					name = fmt.Sprintf("%d", timeutil.Now().Unix())
-				}
-				name += "-" + t.Name()
-			}
-			cfg := clusterConfig{
-				name:         name,
-				nodes:        t.spec.Nodes,
-				artifactsDir: t.ArtifactsDir(),
-				localCluster: local,
-				teeOpt:       teeOpt,
-				user:         user,
-			}
-			var err error
-			c, err = newCluster(ctx, t.l, cfg)
-			FatalIfErr(t, err)
-		} else {
-			opt := attachOpt{
-				skipValidation: r.config.skipClusterValidationOnAttach,
-				skipStop:       r.config.skipClusterStopOnAttach,
-				skipWipe:       r.config.skipClusterWipeOnAttach,
-			}
-			var err error
-			c, err = attachToExistingCluster(ctx, clusterName, t.l, t.spec.Nodes, opt)
-			FatalIfErr(t, err)
-		}
-		c.setTest(t)
-
-		defer func() {
-			if !debugEnabled || !t.Failed() {
-				c.Destroy(ctx)
-			} else {
-				c.l.Printf("not destroying cluster to allow debugging\n")
-			}
-		}()
-
-		timeout := time.Hour
-		defer func() {
-			if err := c.FetchLogs(ctx); err != nil {
-				c.l.Printf("failed to download logs: %s", err)
-			}
-		}()
-
-		timeout = c.expiration.Add(-10 * time.Minute).Sub(timeutil.Now())
-		if timeout <= 0 {
-			t.spec.Skip = fmt.Sprintf("cluster expired (%s)", timeout)
-			return
-		}
-
-		if t.spec.Timeout > 0 && timeout > t.spec.Timeout {
-			timeout = t.spec.Timeout
-		}
-
-		done := make(chan struct{})
-		defer func() {
-			close(done)
-		}()
-
-		runCtx, cancel := context.WithCancel(ctx)
-		t.mu.Lock()
-		// t.Fatal() will cancel this context.
-		t.mu.cancel = cancel
-		t.mu.Unlock()
-
-		go func() {
-			defer cancel()
-
-			select {
-			case <-time.After(timeout):
-				t.printfAndFail("test timed out (%s)\n", timeout)
-				if err := c.FetchLogs(ctx); err != nil {
-					c.l.Printf("failed to download logs: %s", err)
-				}
-				if !debugEnabled {
-					c.Destroy(ctx)
-				}
-			case <-done:
-			}
-		}()
-
-		t.spec.Run(runCtx, t, c)
-	}()
+// Error implements the error interface.
+func (e errTestFailureAndDebugEnabled) Error() string {
+	return fmt.Sprintf(
+		"%s: test failure and debug enabled. Leaving cluster around for debugging: %s. Failure: %s",
+		e.test, e.testFailure)
 }
 
 // teamCityEscape escapes a string for use as <value> in a key='<value>' attribute
@@ -1007,4 +611,998 @@ func getAuthorEmail(file string, line int) string {
 		return ""
 	}
 	return string(matches[1])
+}
+
+type workerErrors struct {
+	mu struct {
+		syncutil.Mutex
+		errs []error
+	}
+}
+
+func (we *workerErrors) AddErr(err error) {
+	we.mu.Lock()
+	defer we.mu.Unlock()
+	we.mu.errs = append(we.mu.errs, err)
+}
+
+func (we *workerErrors) Err() error {
+	we.mu.Lock()
+	defer we.mu.Unlock()
+	if len(we.mu.errs) == 0 {
+		return nil
+	}
+	// TODO(andrei): Maybe we should do something other than return the first
+	// error...
+	return we.mu.errs[0]
+}
+
+type testWithCount struct {
+	spec testSpec
+	// count maintains the number of runs remaining for a test.
+	count int
+}
+
+type workPool struct {
+	// count is the total number of times each test has to run. It is constant.
+	// Not to be confused with the count inside mu.tests, which tracks remaining
+	// runs.
+	count int
+	mu    struct {
+		syncutil.Mutex
+		// tests with remaining run count.
+		tests []testWithCount
+		// clusters keeps track of how many tagged clusters there are, for each tag.
+		clusters taggedClusters
+	}
+}
+
+func newWorkPool(tests []testSpec, count int) *workPool {
+	p := &workPool{count: count}
+	p.mu.clusters = make(taggedClusters)
+	for _, spec := range tests {
+		p.mu.tests = append(p.mu.tests, testWithCount{spec: spec, count: count})
+	}
+	return p
+}
+
+// registerTestStartLocked decrements a test's remaining count and removes it
+// from the workPool if it was exhausted. It also adjusts the bookkeeping
+// related to tagged clusters inside the workPool.
+func (p *workPool) registerTestStartLocked(
+	name string, existingClusterTag string, clusterReuse bool,
+) {
+	idx := -1
+	for idx = range p.mu.tests {
+		if p.mu.tests[idx].spec.Name == name {
+			break
+		}
+	}
+	if idx == -1 {
+		log.Fatalf(context.TODO(), "failed to find test: %s", name)
+	}
+	tc := &p.mu.tests[idx]
+	tc.count--
+	spec := tc.spec
+	if tc.count == 0 {
+		// We've selected the last run for a test. Take that test out of the pool.
+		p.mu.tests = append(p.mu.tests[:idx], p.mu.tests[idx+1:]...)
+	}
+	// Adjust the tag clusters bookkeeping.
+	if clusterReuse {
+		if existingClusterTag == "" && spec.ClusterReusePolicy.policy == onlyTagged {
+			// We had an untagged cluster and we're about to tag it.
+			tag := spec.ClusterReusePolicy.tag
+			if _, ok := p.mu.clusters[tag]; ok {
+				p.mu.clusters[tag]++
+			} else {
+				p.mu.clusters[tag] = 1
+			}
+		} else if existingClusterTag != "" && spec.ClusterReusePolicy == NoReuse {
+			// We had a tagged cluster and we're about to destroy it after running this
+			// test.
+			p.mu.clusters[existingClusterTag]--
+		}
+	} else {
+		if existingClusterTag != "" {
+			// We had a tagged cluster and we're about to destroy it before running this
+			// test.
+			p.mu.clusters[existingClusterTag]--
+		}
+		tag := spec.ClusterReusePolicy.tag
+		if tag != "" {
+			// We're about to create a new tagged cluster.
+			if _, ok := p.mu.clusters[tag]; ok {
+				p.mu.clusters[tag]++
+			} else {
+				p.mu.clusters[tag] = 1
+			}
+		}
+	}
+}
+
+// findCompatibleTestsLocked returns a list of tests compatible with a cluster spec
+// and, if tag is not empty, with a tagged cluster.
+func (p *workPool) findCompatibleTestsLocked(clusterSpec []nodeSpec, tag string) []testWithCount {
+	var tests []testWithCount
+	for _, tc := range p.mu.tests {
+		if clusterCompatibleWithTest(clusterSpec, tc.spec) {
+			tests = append(tests, tc)
+		}
+	}
+	return tests
+}
+
+func clusterCompatibleWithTest(clusterSpec []nodeSpec, t testSpec) bool {
+	nodes := t.Nodes
+	if len(clusterSpec) != len(nodes) {
+		return false
+	}
+	for i := range clusterSpec {
+		l := clusterSpec[i]
+		r := nodes[i]
+		if l != r {
+			return false
+		}
+	}
+	return true
+}
+
+type testToRunRes struct {
+	// noWork is set if the work pool was empty and thus no test was selected.
+	noWork bool
+	// spec is the selected test.
+	spec testSpec
+	// runNum is run number. 1 if --count was not used.
+	runNum int
+	// canReuseCluster is true if the selected test can reuse the cluster passed
+	// to testToRun(). Will be false if noWork is set.
+	canReuseCluster bool
+
+	tc testCommitter
+}
+
+// confirm means that the test represented by the receiver will be run. The
+// respective workPool will update its bookkeeping accordingly.
+func (t *testToRunRes) confirm() {
+	t.tc.commitLocked()
+}
+
+// confirm means that the test represented by the receiver will not be run.
+// rollback is a no-op if called after a previous confirm/rollback.
+func (t *testToRunRes) rollback() {
+	t.tc.rollbackLocked()
+}
+
+type testCommitter struct {
+	p            *workPool
+	spec         testSpec
+	clusterReuse bool
+	tag          string
+}
+
+// commitLocked make the workPool account for a test run. The caller is saying
+// that it will indeed run the test that was previously returned by the
+// workPool.
+func (t *testCommitter) commitLocked() {
+	t.p.registerTestStartLocked(t.spec.Name, t.tag, t.clusterReuse)
+	t.p.mu.Unlock()
+	t.p = nil
+}
+
+// rollbackLocked is supposed to be called if a testToRunRes that was previously
+// obtained from a workPool will not be "used" - so the caller is saying that
+// it's not going to run the respective test.
+func (t *testCommitter) rollbackLocked() {
+	if t.p == nil {
+		return
+	}
+	t.p.mu.Unlock()
+	t.p = nil
+}
+
+// testToRun selects the best test to run.
+// The workPool's bookkeeping is not automatically updated to reflect that the
+// selected test will be run; the caller is under no obligation to run it (in
+// fact, the caller is expected to first check that there are enough resources
+// to run it). Instead, the workPool is kept in a locked state and:
+// ATTENTION: If a test is returned (i.e. testToRunRes.noWork is not set), the
+// caller need to call commit() or rollback() on the returned testToRunRes.
+//
+// Args:
+// spec: The spec of an existing cluster that can be reused. Nil if no such
+//   cluster.
+// tag: The tag of the existing cluster. Empty if not such cluster or the
+//   cluster isn't tagged.
+func (p *workPool) testToRun(ctx context.Context, spec []nodeSpec, tag string) testToRunRes {
+	if tag != "" && spec == nil {
+		log.Fatal(ctx, "can't specify a tag (%q) if a spec is not passed in", tag)
+	}
+
+	// Short-circuit if there's no more work.
+	p.mu.Lock()
+	if len(p.mu.tests) == 0 {
+		p.mu.Unlock()
+		return testToRunRes{noWork: true}
+	}
+	p.mu.Unlock()
+
+	if spec == nil {
+		// If we don't have a cluster, we pick the test with the highest number of
+		// runs left.
+		// TODO(andrei): We could be smarter in guessing what kind of cluster is
+		// best to allocate.
+		var candidateIdx int
+		candidateCount := 0
+		p.mu.Lock()
+		for i, t := range p.mu.tests {
+			if t.count > candidateCount {
+				candidateIdx = i
+				candidateCount = t.count
+			}
+		}
+		tc := p.mu.tests[candidateIdx]
+		runNum := p.count - tc.count + 1
+		return testToRunRes{
+			spec:            tc.spec,
+			runNum:          runNum,
+			canReuseCluster: false,
+			tc:              testCommitter{p: p, spec: tc.spec, clusterReuse: false},
+		}
+	}
+
+	// We've been given a cluster and we need to choose the best test to run on
+	// this cluster. If no test matches the cluster, we're going to call ourselves
+	// recursively, but this time by not specifying the cluster any more (and so
+	// the cluster will be thrown away).
+	// Among clusters that match the spec, we do the following:
+	// - If the cluster is already tagged, we only look at tests with the same
+	// tag.
+	// - Otherwise, we'll choose in the following order of preference:
+	// 1) tests that leave the cluster usable by anybody afterwards
+	// 2) tests that leave the cluster usable by some other tests
+	// 	2.1) within this OnlyTagged<foo> category, we'll prefer the tag with the
+	// 			 fewest existing clusters.
+	// 3) tests that leave the cluster unusable by anybody
+	//
+	// Within each of the categories, we'll give preference to tests with fewer
+	// runs.
+
+	p.mu.Lock()
+	// We're only looking at tests that match the spec and the tag (if our cluster
+	// has a tag).
+	testsWithCounts := p.findCompatibleTestsLocked(spec, tag)
+	if len(testsWithCounts) == 0 {
+		p.mu.Unlock()
+		// Throw away the cluster and look again.
+		return p.testToRun(ctx, nil /* spec */, "" /* tag */)
+	}
+
+	candidateScore := 0
+	var candidate testWithCount
+	for _, tc := range testsWithCounts {
+		score := scoreTestAgainstCluster(tc, tag, p.mu.clusters)
+		if score > candidateScore {
+			candidateScore = score
+			candidate = tc
+		}
+	}
+	runNum := p.count - candidate.count + 1
+	return testToRunRes{
+		spec:            candidate.spec,
+		runNum:          runNum,
+		canReuseCluster: true,
+		tc:              testCommitter{p: p, spec: candidate.spec, clusterReuse: true, tag: tag},
+	}
+}
+
+type taggedClusters map[string]int
+
+func scoreTestAgainstCluster(tc testWithCount, tag string, clusters taggedClusters) int {
+	t := tc.spec
+	if tag != "" && t.ClusterReusePolicy != OnlyTagged(tag) {
+		log.Fatalf(context.TODO(),
+			"incompatible test and cluster. Cluster tag: %s. Test policy: %+v",
+			tag, t.ClusterReusePolicy)
+	}
+	score := 0
+	if t.ClusterReusePolicy == Any {
+		score = 1000000
+	} else if t.ClusterReusePolicy.policy == onlyTagged {
+		score = 500000
+		if tag == "" {
+			// We have an untagged cluster and a tagged test. Within this category of
+			// tests, we prefer the tags with the fewest existing clusters.
+			score -= 1000 * clusters[t.ClusterReusePolicy.tag]
+		}
+	} else { // NoReuse policy
+		score = 0
+	}
+
+	// We prefer tests that have run fewer times (so, that have more runs left).
+	score += tc.count
+
+	return score
+}
+
+func (r *registry) Run(
+	ctx context.Context,
+	filter []string,
+	count int,
+	parallelism int,
+	cpuQuota int,
+	clusterName string,
+	local bool,
+	artifactsDir string,
+	user string,
+	debug bool,
+	stdout, stderr io.Writer,
+) int {
+	// Seed the default rand source so that different runs get different cluster
+	// IDs.
+	rand.Seed(timeutil.Now().UnixNano())
+	// If asked to use an existing cluster, attach to it.
+	if clusterName != "" && parallelism != 1 {
+		fmt.Fprintf(os.Stderr,
+			"--cluster incompatible with --parallelism. Use --parallelism=1.\n")
+		return 1
+	}
+	if local && parallelism != 1 {
+		fmt.Fprintf(os.Stderr,
+			"--local incompatible with --parallelism. Use --parallelism=1.\n")
+		return 1
+	}
+
+	// !!! to bring back:
+	// - ctrl-c handling
+	// - periodic progress output
+
+	filterRE := makeFilterRE(filter)
+	tests := r.GetTests(filterRE)
+
+	var skipped, notSkipped []testSpec
+	for _, s := range tests {
+		if s.Skip == "" {
+			notSkipped = append(notSkipped, s)
+		} else {
+			skipped = append(skipped, s)
+
+			if teamCity {
+				fmt.Fprintf(stdout, "##teamcity[testIgnored name='%s' message='%s']\n",
+					s.Name, s.Skip)
+			}
+			fmt.Fprintf(stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "0.00s", s.Skip)
+		}
+	}
+	tests = notSkipped
+
+	n := len(tests)
+	if n == 0 {
+		// NOTE: Arguably we should return an error here, or find a way to indicate
+		// that no tests have run.
+		return 0
+	}
+	if n*count < parallelism {
+		// Don't spin up more workers than necessary. This has particular
+		// implications for the common case of running a single test once: if
+		// parallelism is set to 1, we'll use teeToStdout below to get logs to
+		// stdout/stderr.
+		parallelism = n * count
+	}
+
+	r.status.running = make(map[*test]struct{})
+	r.status.pass = make(map[*test]struct{})
+	r.status.fail = make(map[*test]struct{})
+	r.status.skip = make(map[*test]struct{})
+
+	work := newWorkPool(tests, count)
+	stopper := stop.NewStopper()
+	errs := &workerErrors{}
+
+	var rg *resourceGovernor
+	if !local && clusterName == "" {
+		rg = newResourceGovernor(cpuQuota)
+	}
+
+	// Log to stdout/stderr if we're not running tests in parallel.
+	teeOpt := noTee
+	if parallelism == 1 {
+		teeOpt = teeToStdout
+	}
+
+	var l *logger
+	runnerLogPath := filepath.Join(
+		artifactsDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
+	if teeOpt == teeToStdout {
+		verboseCfg := loggerConfig{stdout: stdout, stderr: stderr}
+		var err error
+		l, err = verboseCfg.newLogger(runnerLogPath)
+		if err != nil {
+			log.Fatal(ctx, err)
+		}
+	} else {
+		verboseCfg := loggerConfig{}
+		var err error
+		l, err = verboseCfg.newLogger(runnerLogPath)
+		if err != nil {
+			log.Fatal(ctx, err)
+		}
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < parallelism; i++ {
+		i := i // Copy for closure.
+		wg.Add(1)
+		stopper.RunWorker(ctx, func(ctx context.Context) {
+			if err := r.runWorker(
+				ctx, fmt.Sprintf("w%d", i) /* name */, work, rg, clusterName, local,
+				stopper.ShouldQuiesce(), debug, artifactsDir, user, teeOpt, stdout, l,
+			); err != nil {
+				shout(ctx, l, stdout, "Worker returned with err: %s\n", err)
+				errs.AddErr(err)
+				stopper.Quiesce(ctx)
+			}
+			wg.Done()
+		})
+	}
+	wg.Wait()
+	if errs.Err() != nil {
+		shout(ctx, l, stdout, "FAIL (err: %s)\n", errs.Err())
+		return 1
+	}
+	report, success, err := r.generateReport()
+	if err != nil {
+		log.Fatal(ctx, err)
+	}
+	shout(ctx, l, stdout, report)
+	if success {
+		return 0
+	}
+	return 1
+}
+
+// runWorker runs tests in a loop until work is exhausted.
+//
+// Errors are returned in exceptional circumstances. If an error is returned,
+// resources might have leaked out of the resourceGovernor. As such, higher
+// layers are expected to not try to allocate resources any more and terminate.
+//
+// Args:
+// name: The worker's name, to be used as a prefix for log messages.
+// rg: The resourceGovernor that will be asked for resources every time a new
+//   cluster needs to be created. If nil, no resourceGovernor is consulted. Nil
+//   has to be passed when clusterName is passed.
+// clusterName: If not empty, the name of a cluster to use for all tests. This
+//   worker is presumed to have exclusive access to the cluster, since it will
+//   wipe it every after test. If the cluster is not compatible with any test,
+//   an error will be returned.
+// teeOpt: The teeing option for future test lest loggers.
+// stdout: The Writer to use for messages that need to go to stdout (e.g. the
+// 	 "=== RUN" and "--- FAIL" lines).
+// l: The logger to use for more verbose messages.
+func (r *registry) runWorker(
+	ctx context.Context,
+	name string,
+	work *workPool,
+	rg *resourceGovernor,
+	clusterName string,
+	local bool,
+	interrupt <-chan struct{},
+	debug bool,
+	artifactsDir string,
+	user string,
+	teeOpt teeOptType,
+	stdout io.Writer,
+	l *logger,
+) (retErr error) {
+	ctx = logtags.AddTag(ctx, name, nil /* value */)
+
+	var c *cluster             // The cluster currently being used.
+	var clusterSpec []nodeSpec // The spec of the current cluster.
+	var tag string             // The tag of the current cluster.
+	// Set if the current cluster needs to be destroyed after the current test.
+	var needDestroy bool
+
+	allocateCluster := func(
+		local bool,
+		existingClusterName string,
+		artifactsDir string,
+		t testSpec,
+		alloc resourceAllocation,
+	) (*cluster, error) {
+		var name string
+		if existingClusterName != "" {
+			name = existingClusterName
+		} else {
+			// If local is set, the name needs to be empty.
+			if !local {
+				rnd := rand.Intn(1000000)
+				if clusterID != "" {
+					name = fmt.Sprintf("%s-%d", clusterID, rnd)
+				} else {
+					name = strconv.Itoa(rnd)
+				}
+				name += "-" + t.Name
+				if len(name) > GCEClusterNameLimit {
+					name = name[:GCEClusterNameLimit]
+					if name[len(name)-1] == '-' {
+						name = name[:len(name)-1]
+					}
+				}
+				name = user + "-" + name
+				if err := r.verifyValidClusterName(name); err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		// Logs for creating a new cluster or attaching to a cluster go to an
+		// dedicated log file.
+		logPath := filepath.Join(
+			artifactsDir, "cluster-create", strings.Replace(name, "/", "-", -1)+".log")
+		l, err := rootLogger(logPath, teeOpt)
+		if err != nil {
+			log.Fatal(ctx, err)
+		}
+		l.PrintfCtx(ctx, "Creating cluster %s according to the spec from test: %s.\n", name, t.Name)
+
+		if existingClusterName != "" {
+			opt := attachOpt{
+				skipValidation: r.config.skipClusterValidationOnAttach,
+				skipStop:       r.config.skipClusterStopOnAttach,
+				skipWipe:       r.config.skipClusterWipeOnAttach,
+			}
+			return attachToExistingCluster(ctx, existingClusterName, l, t.Nodes, opt)
+		}
+		l.PrintfCtx(ctx, "Creating new cluster for test: %s. Cluster: %s\n", t.Name, name)
+
+		cfg := clusterConfig{
+			name:         name,
+			nodes:        t.Nodes,
+			artifactsDir: artifactsDir,
+			localCluster: local,
+			alloc:        alloc,
+		}
+		return newCluster(ctx, l, cfg)
+	}
+
+	// When this method returns we'll destroy the cluster we had at the time,
+	// unless we're exiting with errTestFailureAndDebugEnabled; in that case we
+	// want the cluster to stick around.
+	defer func() {
+		if _, ok := retErr.(errTestFailureAndDebugEnabled); !ok {
+			if c != nil {
+				c.Destroy(ctx)
+			}
+		} else {
+			log.Error(ctx, retErr.Error())
+		}
+	}()
+
+	// Loop until there's no more work in the pool, we get interrupted, or an
+	// error occurs.
+	for {
+		select {
+		case <-interrupt:
+			return
+		default:
+		}
+
+		if needDestroy {
+			c.Destroy(ctx)
+			c = nil
+			clusterSpec = nil
+			tag = ""
+			needDestroy = false
+		} else if c != nil {
+			// We wipe clusters before reusing.
+			c.Wipe(ctx)
+		}
+
+		oldCluster := c
+		var testToRun testToRunRes
+		var err error
+		testToRun, c, clusterSpec, err = r.getWork(
+			ctx, work, c, clusterSpec, tag, rg, interrupt, l,
+			func(t testSpec, alloc resourceAllocation) (*cluster, error) {
+				return allocateCluster(local, clusterName, artifactsDir, t, alloc)
+			})
+		if err != nil || testToRun.noWork {
+			return err
+		}
+
+		// If the cluster changed, reset some state.
+		if oldCluster != nil && oldCluster != c {
+			needDestroy = false
+			tag = ""
+		}
+		if testToRun.spec.ClusterReusePolicy == NoReuse {
+			needDestroy = true
+		} else if testToRun.spec.ClusterReusePolicy.policy == onlyTagged {
+			// Our cluster is now tagged.
+			tag = testToRun.spec.ClusterReusePolicy.tag
+		}
+
+		// Prepare the test's logger.
+		artifactsSuffix := "run_" + strconv.Itoa(testToRun.runNum)
+		artifactsDir := filepath.Join(
+			artifactsDir, teamCityNameEscape(testToRun.spec.Name), artifactsSuffix)
+		logPath := filepath.Join(artifactsDir, "test.log")
+		l, err := rootLogger(logPath, teeOpt)
+		if err != nil {
+			return err
+		}
+		t := &test{
+			spec:         &testToRun.spec,
+			registry:     r,
+			artifactsDir: artifactsDir,
+			l:            l,
+		}
+		// Tell the cluster that, from now on, it will be run "on behalf of this
+		// test".
+		c.setTest(t)
+
+		// Now run the test.
+		l.Printf("starting test: %s:%d", testToRun.spec.Name, testToRun.runNum)
+		err = r.runTest(ctx, t, c, artifactsDir, stdout, l)
+		if err != nil {
+			log.Errorf(ctx, "test returned error: %s: %s", t.Name(), err)
+			// Mark the test as failed if it isn't already.
+			if !t.Failed() {
+				t.printAndFail(err)
+			}
+		}
+		// If a test failed and debug was set, we bail.
+		if (err != nil || t.Failed()) && debug {
+			// TODO(andrei): Get a failure message for the t.Failed() case.
+			failureMsg := ""
+			if err != nil {
+				failureMsg = err.Error()
+			}
+			// TODO(andrei): debug is specified, so we have to leak a cluster. Does
+			// that mean that we need to stop running tests? Probably not, at least
+			// not unless we get really low on resources because of these leaks. We
+			// should implement a better policy.
+			return newErrTestFailureAndDebugEnabled(t.Name(), failureMsg)
+		}
+	}
+}
+
+// An error is returned in exceptional situations. The cluster cannot be reused
+// if an error is returned.
+//
+// Args:
+// c: The cluster on which the test will run. runTest() does not wipe or destroy
+//    the cluster.
+func (r *registry) runTest(
+	ctx context.Context, t *test, c *cluster, artifactsDir string, stdout io.Writer, l *logger,
+) error {
+	if t.spec.Skip != "" {
+		return fmt.Errorf("Can't run skipped test: %s: %s", t.Name(), t.spec.Skip)
+	}
+
+	if teamCity {
+		shout(ctx, l, stdout, "##teamcity[testStarted name='%s' flowId='%s']\n", t.Name(), t.Name())
+	} else {
+		var details []string
+		if !t.spec.Stable {
+			details = append(details, "unstable")
+		}
+		var detail string
+		if len(details) > 0 {
+			detail = fmt.Sprintf(" [%s]", strings.Join(details, ","))
+		}
+		shout(ctx, l, stdout, "=== RUN   %s%s\n", t.Name(), detail)
+	}
+
+	r.status.Lock()
+	r.status.running[t] = struct{}{}
+	r.status.Unlock()
+
+	callerName := func() string {
+		// Make room for the skip PC.
+		var pc [2]uintptr
+		n := runtime.Callers(2, pc[:]) // skip + runtime.Callers + callerName
+		if n == 0 {
+			panic("zero callers found")
+		}
+		frames := runtime.CallersFrames(pc[:n])
+		frame, _ := frames.Next()
+		return frame.Function
+	}
+
+	t.runner = callerName()
+	t.runnerID = goid.Get()
+
+	defer func() {
+		t.end = timeutil.Now()
+
+		if err := recover(); err != nil {
+			t.mu.Lock()
+			t.mu.failed = true
+			t.mu.output = append(t.mu.output, t.decorate(fmt.Sprint(err))...)
+			t.mu.Unlock()
+		}
+
+		t.mu.Lock()
+		t.mu.done = true
+		t.mu.Unlock()
+
+		dstr := fmt.Sprintf("%.2fs", t.duration().Seconds())
+		stability := ""
+		if !t.spec.Stable {
+			stability = "[unstable] "
+		}
+
+		if t.Failed() {
+			t.mu.Lock()
+			output := t.mu.output
+			failLoc := t.mu.failLoc
+			t.mu.Unlock()
+
+			if teamCity {
+				shout(ctx, l, stdout, "##teamcity[testFailed name='%s' details='%s' flowId='%s']\n",
+					t.Name(), teamCityEscape(string(output)), t.Name(),
+				)
+			}
+
+			shout(ctx, l, stdout, "--- FAIL: %s %s(%s)\n%s", t.Name(), stability, dstr, output)
+			if postIssues && issues.CanPost() && t.spec.Run != nil {
+				authorEmail := getAuthorEmail(failLoc.file, failLoc.line)
+				branch := "<unknown branch>"
+				if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
+					branch = b
+				}
+				if err := issues.Post(
+					context.Background(),
+					fmt.Sprintf("roachtest: %s failed", t.Name()),
+					"roachtest", t.Name(), "The test failed on "+branch+":\n"+string(output), authorEmail,
+				); err != nil {
+					shout(ctx, l, stdout, "failed to post issue: %s\n", err)
+				}
+			}
+		} else {
+			shout(ctx, l, stdout, "--- PASS: %s %s(%s)\n", t.Name(), stability, dstr)
+			// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
+			// TeamCity regards the test as successful.
+		}
+
+		if teamCity {
+			shout(ctx, l, stdout, "##teamcity[testFinished name='%s' flowId='%s']\n", t.Name(), t.Name())
+
+			escapedTestName := teamCityNameEscape(t.Name())
+			artifactsGlobPath := filepath.Join(artifactsDir, escapedTestName, "**")
+			artifactsSpec := fmt.Sprintf("%s => %s", artifactsGlobPath, escapedTestName)
+			shout(ctx, l, stdout, "##teamcity[publishArtifacts '%s']\n", artifactsSpec)
+		}
+
+		r.status.Lock()
+		delete(r.status.running, t)
+		// Only include tests with a Run function in the summary output.
+		if t.spec.Run != nil {
+			if t.Failed() {
+				r.status.fail[t] = struct{}{}
+			} else if t.spec.Skip == "" {
+				r.status.pass[t] = struct{}{}
+			} else {
+				r.status.skip[t] = struct{}{}
+			}
+		}
+		r.status.Unlock()
+	}()
+
+	t.start = timeutil.Now()
+
+	timeout := time.Hour
+	defer func() {
+		if err := c.FetchLogs(ctx); err != nil {
+			c.l.PrintfCtx(ctx, "failed to download logs: %s\n", err)
+		}
+	}()
+
+	timeout = c.expiration.Add(-10 * time.Minute).Sub(timeutil.Now())
+	if timeout <= 0 {
+		err := fmt.Errorf("cluster expired (%s)", timeout)
+		return err
+	}
+
+	if t.spec.Timeout > 0 && timeout > t.spec.Timeout {
+		timeout = t.spec.Timeout
+	}
+
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	t.mu.Lock()
+	// t.Fatal() will cancel this context.
+	t.mu.cancel = cancel
+	t.mu.Unlock()
+
+	// We run the actual test in a different goroutine because it might call
+	// t.Fatal() which kills the goroutine, and also because we want to enforce a
+	// timeout.
+	done := make(chan struct{})
+	go func() {
+		// t.spec.Run might panic or call runtime.GoExit() (through t.Fatal). Both
+		// of those will run this defer.
+		defer close(done)
+		t.spec.Run(runCtx, t, c)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		// We hit a timeout. We're going to mark the test as failed (which will
+		// also cancel its context). If --debug was specified, we return an error
+		// telling the caller to leave the cluster alone.
+		// Otherwise, we'll wait another 5 minutes in the hope that the test
+		// reacts either to the ctx cancelation or to the fact that it was marked
+		// as failed. If that happens, great - we return normally and so the
+		// cluster can be reused. It the test does not react to anything, then we
+		// return an error, which will cause the caller to stop everything and
+		// this destroy this cluster (as well as all the others). Since the
+		// cluster cannot be reused in this case, it'd be awkward for the caller
+		// to continue.
+
+		msg := fmt.Sprintf("test timed out (%s)", timeout)
+		t.printfAndFail("%s\n", msg)
+		if debugEnabled {
+			return newErrTestFailureAndDebugEnabled(t.Name(), msg)
+		}
+
+		select {
+		case <-done:
+		case <-time.After(5 * time.Minute):
+			return fmt.Errorf("test unresponsive after timeout")
+		}
+	}
+	return nil
+}
+
+// generateReport writes the final pass/fail line, produces a slack report if
+// configured, and return true if the run is to considered successful or false
+// otherwise.
+func (r *registry) generateReport() (string, bool, error) {
+	r.status.Lock()
+	defer r.status.Unlock()
+	postSlackReport(r.status.pass, r.status.fail, r.status.skip)
+
+	stableFails := 0
+	for t := range r.status.fail {
+		if t.spec.Stable {
+			stableFails++
+		}
+	}
+	unstableFails := len(r.status.fail) - stableFails
+	var b strings.Builder
+	var msg string
+	if stableFails > 0 {
+		msg = fmt.Sprintf("FAIL (%d stable fails, %d unstable fails)\n", stableFails, unstableFails)
+	} else {
+		msg = fmt.Sprintf("PASS (%d unstable fails)\n", unstableFails)
+	}
+	if _, err := b.WriteString(msg); err != nil {
+		return "", false, err
+	}
+	return b.String(), stableFails == 0, nil
+}
+
+// getWork selects the next test to run and creates a suitable cluster for it if
+// need be. If a new cluster needs to be created, the method blocks until there
+// are enough resources available to run it.
+// getWork takes in a cluster; if not nil, tests that can reuse it are
+// preferred. If a test that can reuse it is not found (or if there's no more
+// work), the cluster is destroyed (and so its resources are released).
+// createCluster is a cluster factory
+func (r *registry) getWork(
+	ctx context.Context,
+	work *workPool,
+	c *cluster,
+	clusterSpec []nodeSpec,
+	tag string,
+	rg *resourceGovernor,
+	interrupt <-chan struct{},
+	l *logger,
+	createCluster func(t testSpec, res resourceAllocation) (*cluster, error),
+) (_ testToRunRes, _ *cluster, _ []nodeSpec, retErr error) {
+
+	destroy := func() {
+		// TODO(andrei): The logs for this destruction go to the log of the last
+		// test passed to c.setTest(t); instead, they should go to the same file as
+		// the cluster creation logs.
+		c.Destroy(ctx)
+		c = nil
+		clusterSpec = nil
+		tag = ""
+	}
+
+	// Loop until we get resources to run a test, there's no more work in the pool
+	// or we get interrupted.
+	// NOTE: What we're doing here is quite simplistic - we first select a test to
+	// run and then block the worker until there are enough resources to run it.
+	// There might be resources to run smaller tests, and that might be beneficial
+	// (although not always - we don't want small tests to starve large tests), so
+	// more complex schemes could be useful.
+	for {
+		select {
+		case <-interrupt:
+			return testToRunRes{}, nil, nil, fmt.Errorf("interrupted")
+		default:
+		}
+
+		testToRun := work.testToRun(ctx, clusterSpec, tag)
+		if !testToRun.noWork {
+			l.PrintfCtx(ctx, "Selected test: %s run: %d\n", testToRun.spec.Name, testToRun.runNum)
+		}
+		// If we have a cluster but can't reuse it for the test we've selected,
+		// destroy it.
+		if (!testToRun.canReuseCluster) && c != nil {
+			l.PrintfCtx(ctx, "Cluster %s cannot be reused. Destroying.\n", c.name)
+			destroy()
+		}
+		if testToRun.noWork {
+			return testToRun, nil, nil, nil
+		}
+		defer func() {
+			// Make sure we dispose of testToRun properly in case of early return.
+			if retErr != nil {
+				testToRun.rollback()
+			}
+		}()
+
+		// Create a cluster, if we no longer have one.
+		if c != nil {
+			l.PrintfCtx(ctx, "Using existing cluster: %s\n", c.name)
+			testToRun.confirm()
+		} else {
+			var err error
+			var resAlloc resourceAllocation
+			// Acquire resources for the cluster we're about to create.
+			if rg != nil {
+				cpu := 0
+				for _, n := range testToRun.spec.Nodes {
+					cpu += n.Count * n.CPUs
+				}
+
+				var resLock *resourceLock
+				if rg != nil {
+					resLock = rg.Lock()
+					defer func() {
+						resLock.Unlock()
+					}()
+				}
+				resAlloc, err = resLock.AllocateCPU(cpu)
+				if err != nil {
+					return testToRunRes{}, nil, nil, err
+				}
+				first := true
+				if resAlloc == (resourceAllocation{}) {
+					if first {
+						first = false
+						l.PrintfCtx(ctx,
+							"Insufficient resources for running %s. CPUs: %d. Waiting.\n",
+							testToRun.spec.Name, cpu)
+					}
+					// We're not running this test at the moment. We'll wait for more
+					// resources and loop around.
+					testToRun.rollback()
+					resLock.Wait()
+					continue
+				}
+				resLock.Unlock()
+			}
+			testToRun.confirm()
+			c, err = createCluster(testToRun.spec, resAlloc)
+			if err != nil {
+				return testToRunRes{}, nil, nil, err
+			}
+		}
+		return testToRun, c, testToRun.spec.Nodes, nil
+	}
+}
+
+// shout logs a message both to a logger and to an io.Writer.
+func shout(ctx context.Context, l *logger, stdout io.Writer, format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	l.PrintfCtx(ctx, msg)
+	fmt.Fprint(stdout, msg)
 }

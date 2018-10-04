@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"math/rand"
 	"net"
 	"net/url"
@@ -45,6 +44,7 @@ import (
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -621,6 +621,9 @@ type cluster struct {
 	// cloned or when we attach to an existing roachprod cluster.
 	// If not set, Destroy() only wipes the cluster.
 	owned bool
+	// alloc is optionally set if owned is set. If set, it represents resources in
+	// a resourceGovernor that need to be released when the cluster is destroyed.
+	alloc resourceAllocation
 }
 
 type clusterConfig struct {
@@ -631,7 +634,7 @@ type clusterConfig struct {
 	artifactsDir string
 	localCluster bool
 	teeOpt       teeOptType
-	user         string
+	alloc        resourceAllocation
 }
 
 // newCluster creates a new roachprod cluster.
@@ -654,11 +657,9 @@ func newCluster(ctx context.Context, l *logger, cfg clusterConfig) (*cluster, er
 	var name string
 	if cfg.localCluster {
 		if cfg.name != "" {
-			log.Fatal(ctx, "can't specify name %q with local flag", cfg.name)
+			log.Fatalf(ctx, "can't specify name %q with local flag", cfg.name)
 		}
 		name = "local" // The roachprod tool understands this magic name.
-	} else {
-		name = makeClusterName(cfg.user + "-" + cfg.name)
 	}
 
 	switch {
@@ -680,6 +681,7 @@ func newCluster(ctx context.Context, l *logger, cfg clusterConfig) (*cluster, er
 		destroyed:  make(chan struct{}),
 		expiration: cfg.nodes[0].expiration(),
 		owned:      true,
+		alloc:      cfg.alloc,
 	}
 	registerCluster(c)
 
@@ -885,6 +887,7 @@ func (c *cluster) destroy(ctx context.Context) {
 			if err := execCmd(ctx, c.l, roachprod, "destroy", c.name); err != nil {
 				c.l.Errorf("%s", err)
 			}
+			c.alloc.Release()
 		} else {
 			c.status("wiping cluster")
 			if err := execCmd(ctx, c.l, roachprod, "wipe", c.name); err != nil {

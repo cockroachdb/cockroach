@@ -16,12 +16,14 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"io"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
+
+	crdblog "github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // The flags used by the internal loggers.
@@ -185,10 +187,28 @@ func (l *logger) ChildLogger(name string, opts ...loggerOption) (*logger, error)
 	return cfg.newLogger(path)
 }
 
-func (l *logger) Printf(f string, args ...interface{}) {
-	l.stdoutL.Output(2 /* calldepth */, fmt.Sprintf(f, args...))
+// PrintfCtx prints a message to the logger's stdout. The context's log tags, if
+// any, will be prepended to the message. A newline is appended if the last
+// character is not already a newline.
+func (l *logger) PrintfCtx(ctx context.Context, f string, args ...interface{}) {
+	msg := crdblog.MakeMessage(ctx, f, args)
+	l.stdoutL.Output(2 /* calldepth */, msg)
 }
 
+// Printf is like PrintfCtx, except it doesn't take a ctx and thus no log tags
+// can be passed.
+func (l *logger) Printf(f string, args ...interface{}) {
+	l.PrintfCtx(context.Background(), f, args...)
+}
+
+// ErrorfCtx is like PrintfCtx, except the logger outputs to its stderr.
+func (l *logger) ErrorfCtx(ctx context.Context, f string, args ...interface{}) {
+	msg := crdblog.MakeMessage(ctx, f, args)
+	l.stderrL.Output(2 /* calldepth */, msg)
+}
+
+// Errorf is like Errorf, except it doesn't take a ctx and thus no log tags
+// can be passed.
 func (l *logger) Errorf(f string, args ...interface{}) {
-	l.stderrL.Output(2 /* calldepth */, fmt.Sprintf(f, args...))
+	l.ErrorfCtx(context.Background(), f, args...)
 }
