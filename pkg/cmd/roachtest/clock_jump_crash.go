@@ -21,13 +21,15 @@ import (
 func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase) {
 	// Test with a single node so that the node does not crash due to MaxOffset
 	// violation when injecting offset
-	if c.nodes != 1 {
-		t.Fatalf("Expected num nodes to be 1, got: %d", c.nodes)
+	if c.spec.NodeCount != 1 {
+		t.Fatalf("Expected num nodes to be 1, got: %d", c.spec.NodeCount)
 	}
 
 	t.Status("deploying offset injector")
 	offsetInjector := newOffsetInjector(c)
-	offsetInjector.deploy(ctx)
+	if err := offsetInjector.deploy(ctx, t.l); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := c.RunE(ctx, c.Node(1), "test -x ./cockroach"); err != nil {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
@@ -35,7 +37,7 @@ func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase
 	c.Wipe(ctx)
 	c.Start(ctx, t)
 
-	db := c.Conn(ctx, c.nodes)
+	db := c.Conn(ctx, c.spec.NodeCount)
 	defer db.Close()
 	if _, err := db.Exec(
 		fmt.Sprintf(
@@ -61,8 +63,8 @@ func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase
 			c.Start(ctx, t, c.Node(1))
 		}
 	}()
-	defer offsetInjector.recover(ctx, c.nodes)
-	offsetInjector.offset(ctx, c.nodes, tc.offset)
+	defer offsetInjector.recover(ctx, c.spec.NodeCount)
+	offsetInjector.offset(ctx, c.spec.NodeCount, tc.offset)
 
 	t.Status("validating health")
 	aliveAfterOffset = isAlive(db)
@@ -78,7 +80,7 @@ type clockJumpTestCase struct {
 	aliveAfterOffset bool
 }
 
-func registerClockJumpTests(r *registry) {
+func registerClockJumpTests(r *testRegistry) {
 	testCases := []clockJumpTestCase{
 		{
 			name:             "large_forward_enabled",
@@ -121,8 +123,7 @@ func registerClockJumpTests(r *registry) {
 			Name: "clock/jump/" + tc.name,
 			// These tests muck with NTP, therefore we don't want the cluster reused
 			// by others.
-			Cluster: makeClusterSpec(
-				1, reuseTagged("offset-injector")),
+			Cluster: makeClusterSpec(1, reuseTagged("offset-injector")),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClockJump(ctx, t, c, tc)
 			},

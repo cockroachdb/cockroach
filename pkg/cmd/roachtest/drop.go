@@ -21,7 +21,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func registerDrop(r *registry) {
+func registerDrop(r *testRegistry) {
 	// TODO(tschottdorf): rearrange all tests so that their synopses are available
 	// via godoc and (some variation on) `roachtest run <testname> --help`.
 

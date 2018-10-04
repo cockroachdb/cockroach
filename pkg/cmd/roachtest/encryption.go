@@ -17,12 +17,12 @@ import (
 	"github.com/pkg/errors"
 )
 
-func registerEncryption(r *registry) {
+func registerEncryption(r *testRegistry) {
 	// Note that no workload is run in this roachtest because kv roachtest
 	// ideally runs with encryption turned on to see the performance impact and
 	// to test the correctness of encryption at rest.
 	runEncryption := func(ctx context.Context, t *test, c *cluster) {
-		nodes := c.nodes
+		nodes := c.spec.NodeCount
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Start(ctx, t, c.Range(1, nodes), startArgs("--encrypt"))
 

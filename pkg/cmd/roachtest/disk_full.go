@@ -19,20 +19,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerDiskFull(r *registry) {
+func registerDiskFull(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "disk-full",
 		MinVersion: `v2.1.0`,
 		Skip:       "https://github.com/cockroachdb/cockroach/issues/35328#issuecomment-478540195",
-		// !!! check that the cluster wipe removes the balast
-		Cluster: makeClusterSpec(5),
+		Cluster:    makeClusterSpec(5),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if c.isLocal() {
 				t.spec.Skip = "you probably don't want to fill your local disk"
 				return
 			}
 
-			nodes := c.nodes - 1
+			nodes := c.spec.NodeCount - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 			c.Start(ctx, t, c.Range(1, nodes))

@@ -78,21 +78,25 @@ func (o *sysbenchOptions) cmd() string {
 }
 
 func runSysbench(ctx context.Context, t *test, c *cluster, opts sysbenchOptions) {
-	allNodes := c.Range(1, c.nodes)
-	roachNodes := c.Range(1, c.nodes-1)
-	loadNode := c.Node(c.nodes)
+	allNodes := c.Range(1, c.spec.NodeCount)
+	roachNodes := c.Range(1, c.spec.NodeCount-1)
+	loadNode := c.Node(c.spec.NodeCount)
 
 	t.Status("installing cockroach")
 	c.Put(ctx, cockroach, "./cockroach", allNodes)
 	c.Start(ctx, t, roachNodes)
 
 	t.Status("installing haproxy")
-	c.Install(ctx, loadNode, "haproxy")
+	if err := c.Install(ctx, t.l, loadNode, "haproxy"); err != nil {
+		t.Fatal(err)
+	}
 	c.Run(ctx, loadNode, "./cockroach gen haproxy --insecure --url {pgurl:1}")
 	c.Run(ctx, loadNode, "haproxy -f haproxy.cfg -D")
 
 	t.Status("installing sysbench")
-	c.Install(ctx, loadNode, "sysbench")
+	if err := c.Install(ctx, t.l, loadNode, "sysbench"); err != nil {
+		t.Fatal(err)
+	}
 
 	m := newMonitor(ctx, c, roachNodes)
 	m.Go(func(ctx context.Context) error {
@@ -107,7 +111,7 @@ func runSysbench(ctx context.Context, t *test, c *cluster, opts sysbenchOptions)
 	m.Wait()
 }
 
-func registerSysbench(r *registry) {
+func registerSysbench(r *testRegistry) {
 	for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
 		const n = 3
 		const cpus = 16

@@ -15,9 +15,9 @@ import (
 	"fmt"
 )
 
-func registerYCSB(r *registry) {
+func registerYCSB(r *testRegistry) {
 	runYCSB := func(ctx context.Context, t *test, c *cluster, wl string, cpus int) {
-		nodes := c.nodes - 1
+		nodes := c.spec.NodeCount - 1
 
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))

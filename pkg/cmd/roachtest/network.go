@@ -84,7 +84,7 @@ insert into test.commit values(3,1000), (1,1000), (2,1000);
 select age, message from [ show trace for session ];
 `)
 
-		for i := 1; i < origC.nodes; i++ {
+		for i := 1; i < origC.spec.NodeCount; i++ {
 			if dur := c.Measure(ctx, i, `SELECT 1`); dur > latency {
 				t.Fatalf("node %d unexpectedly affected by latency: select 1 took %.2fs", i, dur.Seconds())
 			}
@@ -97,7 +97,8 @@ select age, message from [ show trace for session ];
 }
 
 func runNetworkTPCC(ctx context.Context, t *test, origC *cluster, nodes int) {
-	serverNodes, workerNode := origC.Range(1, origC.nodes-1), origC.Node(origC.nodes)
+	n := origC.spec.NodeCount
+	serverNodes, workerNode := origC.Range(1, n-1), origC.Node(n)
 	origC.Put(ctx, cockroach, "./cockroach", origC.All())
 	origC.Put(ctx, workload, "./workload", origC.All())
 
@@ -136,7 +137,7 @@ func runNetworkTPCC(ctx context.Context, t *test, origC *cluster, nodes int) {
 
 		cmd := fmt.Sprintf(
 			"./workload run tpcc --warehouses=%d --wait=false --histograms=logs/stats.json --duration=%s {pgurl:2-%d}",
-			warehouses, duration, c.nodes-1)
+			warehouses, duration, c.spec.NodeCount-1)
 		return c.RunL(ctx, tpccL, workerNode, cmd)
 	})
 
@@ -232,7 +233,7 @@ func runNetworkTPCC(ctx context.Context, t *test, origC *cluster, nodes int) {
 	m.Wait()
 }
 
-func registerNetwork(r *registry) {
+func registerNetwork(r *testRegistry) {
 	const numNodes = 4
 
 	r.Add(testSpec{

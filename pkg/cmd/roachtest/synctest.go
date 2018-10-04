@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 )
 
-func registerSyncTest(r *registry) {
+func registerSyncTest(r *testRegistry) {
 	const nemesisScript = `#!/usr/bin/env bash
 
 if [[ $1 == "on" ]]; then

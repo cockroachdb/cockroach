@@ -87,9 +87,9 @@ func runEventLog(ctx context.Context, t *test, c *cluster) {
 		if err := rows.Err(); err != nil {
 			t.Fatal(err)
 		}
-		if c.nodes != len(seenIds) {
+		if c.spec.NodeCount != len(seenIds) {
 			return fmt.Errorf("expected %d node join messages, found %d: %v",
-				c.nodes, len(seenIds), seenIds)
+				c.spec.NodeCount, len(seenIds), seenIds)
 		}
 		return nil
 	})

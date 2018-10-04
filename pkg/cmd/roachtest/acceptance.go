@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-func registerAcceptance(r *registry) {
+func registerAcceptance(r *testRegistry) {
 	testCases := []struct {
 		name       string
 		fn         func(ctx context.Context, t *test, c *cluster)
@@ -65,8 +65,6 @@ func registerAcceptance(r *registry) {
 		spec := specTemplate
 		spec.Name = specTemplate.Name + "/" + tc.name
 		spec.Run = func(ctx context.Context, t *test, c *cluster) {
-			// TODO(andrei): !!! remove this wipe once the test runner starts doing it.
-			c.Wipe(ctx)
 			tc.fn(ctx, t, c)
 		}
 		r.Add(spec)

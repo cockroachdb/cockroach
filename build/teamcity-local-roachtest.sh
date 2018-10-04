@@ -24,8 +24,9 @@ tc_start_block "Run local roachtests"
 run build/builder.sh env \
   COCKROACH_DEV_LICENSE="$COCKROACH_DEV_LICENSE" \
 	stdbuf -oL -eL \
-	./bin/roachtest run '(acceptance|kv/splits|cdc/bank)' \
+	./bin/roachtest run acceptance kv/splits cdc/bank \
   --local \
+  --parallelism=1 \
   --cockroach "cockroach" \
   --roachprod "bin/roachprod" \
   --workload "bin/workload" \
