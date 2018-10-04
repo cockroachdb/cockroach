@@ -37,6 +37,7 @@ func registerAcceptance(r *registry) {
 		// Sorted. Please keep it that way.
 		{"bank/cluster-recovery", runBankClusterRecovery},
 		{"bank/node-restart", runBankNodeRestart},
+		{"bank/zerosum", runBankNodeZeroSum},
 		{"build-info", runBuildInfo},
 		{"cli/node-status", runCLINodeStatus},
 		{"decommission", runDecommissionAcceptance},

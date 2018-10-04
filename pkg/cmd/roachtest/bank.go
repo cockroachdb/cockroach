@@ -172,12 +172,13 @@ func (s *bankState) verifyAccounts(ctx context.Context, t *test) {
 	client := &s.clients[0]
 
 	var sum int
+	var accounts uint64
 	err := retry.ForDuration(30*time.Second, func() error {
 		// Hold the read lock on the client to prevent it being restarted by
 		// chaos monkey.
 		client.RLock()
 		defer client.RUnlock()
-		err := client.db.QueryRow("SELECT sum(balance) FROM bank.accounts").Scan(&sum)
+		err := client.db.QueryRow("SELECT count(*), sum(balance) FROM bank.accounts").Scan(&accounts, &sum)
 		if err != nil && !testutils.IsSQLRetryableError(err) {
 			t.Fatal(err)
 		}
@@ -187,6 +188,10 @@ func (s *bankState) verifyAccounts(ctx context.Context, t *test) {
 		t.Fatal(err)
 	}
 	if sum != 0 {
+		t.Fatalf("the bank is not in good order, total value: %d", sum)
+	}
+
+	if accounts < bankNumAccounts {
 		t.Fatalf("the bank is not in good order, total value: %d", sum)
 	}
 }
@@ -258,6 +263,78 @@ func (s *bankState) chaosMonkey(
 		}
 
 		c.l.Printf("round %d: cluster recovered\n", curRound)
+	}
+}
+
+func (s *bankState) splitMonkey(
+	ctx context.Context,
+	d time.Duration,
+	c *cluster,
+	partitions int,
+) {
+	defer close(s.teardown)
+	r := newRand()
+	for curRound := uint64(1); !s.done(ctx); curRound++ {
+		atomic.StoreUint64(&s.monkeyIteration, curRound)
+		time.Sleep(time.Duration(rand.Float64() * float64(d)))
+
+		client := s.clients[c.All().randNode()[0]-1]
+		switch r.Intn(2) {
+		case 0:
+			zipF := accountDistribution(r)
+			key := zipF.Uint64()
+			const splitQuery = `ALTER TABLE bank.accounts SPLIT AT VALUES ($1)`
+			c.l.Printf("round %d: splitting key %v\n", curRound, key)
+			_, err := client.db.Exec(splitQuery, key)
+			if err != nil {
+				s.errChan <- err
+			}
+		case 1:
+			zipF := partitionDistribution(r, partitions)
+			partition := zipF.Uint64()
+			nodeToMoveTo := r.Intn(c.nodes) + 1
+			const zoneConfQuery = `ALTER PARTITION p%d OF TABLE bank.accounts CONFIGURE ZONE USING lease_preferences = '[[+node%d]]'`
+			finalQ := fmt.Sprintf(zoneConfQuery, partition, nodeToMoveTo)
+			c.l.Printf("round %d: setting partition lease preferences for partition %d to node %d\n",
+				curRound, partition, nodeToMoveTo)
+
+			_, err := client.db.Exec(finalQ)
+			if err != nil {
+				s.errChan <- err
+			}
+		}
+	}
+}
+
+func accountDistribution(r *rand.Rand) *rand.Zipf {
+	// We use a Zipf distribution for selecting accounts.
+	return rand.NewZipf(r, 1.1, float64(bankNumAccounts/10), uint64(bankNumAccounts-1))
+}
+
+func partitionDistribution(r *rand.Rand, partitions int) *rand.Zipf {
+	// We use a Zipf distribution for selecting partitions.
+	return rand.NewZipf(r, 1.1, float64(partitions/10), uint64(partitions-1))
+}
+
+func newRand() *rand.Rand {
+	return rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+}
+
+func partitionBank(client bankClient, partitions int) {
+	var buf bytes.Buffer
+	buf.WriteString("ALTER TABLE bank.accounts PARTITION BY RANGE (id) (\n")
+	partitionSize := int(bankNumAccounts / partitions)
+	for i := 0; i < partitions-1; i++ {
+		fmt.Fprintf(&buf, "  PARTITION p%d VALUES FROM (%d) to (%d)", i, i*partitionSize, (i+1)*partitionSize)
+		buf.WriteString(",")
+		buf.WriteString("\n")
+	}
+	fmt.Fprintf(&buf, "  PARTITION p%d VALUES FROM (%d) to (%d)", partitions-1,
+		(partitions-1)*partitionSize, bankNumAccounts)
+	buf.WriteString(")\n")
+
+	if _, err := client.db.Exec(buf.String()); err != nil {
+		panic(fmt.Sprintf("Couldn't exec %s: %s\n", buf.String(), err))
 	}
 }
 
@@ -406,5 +483,49 @@ func runBankNodeRestart(ctx context.Context, t *test, c *cluster) {
 
 	elapsed := timeutil.Since(start).Seconds()
 	count := atomic.LoadUint64(&client.count)
+	c.l.Printf("%d transfers (%.1f/sec) in %.1fs\n", count, float64(count)/elapsed, elapsed)
+}
+
+func runBankNodeZeroSum(ctx context.Context, t *test, c *cluster) {
+	c.Put(ctx, cockroach, "./cockroach")
+
+	for i := 1; i <= c.nodes; i++ {
+		c.Start(ctx, c.Node(i), startArgs(fmt.Sprintf("-a=--attrs=node%d", i)))
+	}
+
+	start := timeutil.Now()
+	s := &bankState{
+		errChan:  make(chan error, c.nodes),
+		teardown: make(chan struct{}),
+		deadline: start.Add(time.Minute),
+		clients:  make([]bankClient, c.nodes),
+	}
+	s.initBank(ctx, t, c)
+
+	for i := 0; i < c.nodes; i++ {
+		s.clients[i].Lock()
+		s.initClient(ctx, c, i+1)
+		s.clients[i].Unlock()
+		go s.transferMoney(ctx, c, i+1, bankNumAccounts, bankMaxTransfer)
+	}
+
+	partitions := 100
+	partitionBank(s.clients[0], partitions)
+
+	defer func() {
+		<-s.teardown
+	}()
+
+	go s.splitMonkey(ctx, 2*time.Second, c, partitions)
+	s.waitClientsStop(ctx, t, c, 30*time.Second)
+
+	s.verifyAccounts(ctx, t)
+
+	elapsed := timeutil.Since(start).Seconds()
+	var count uint64
+	counts := s.counts()
+	for _, c := range counts {
+		count += c
+	}
 	c.l.Printf("%d transfers (%.1f/sec) in %.1fs\n", count, float64(count)/elapsed, elapsed)
 }
