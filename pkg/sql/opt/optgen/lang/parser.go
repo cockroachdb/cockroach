@@ -425,7 +425,8 @@ func (p *Parser) parseExpr() Expr {
 		return p.parseList()
 
 	case ASTERISK:
-		return &AnyExpr{}
+		src := p.src
+		return &AnyExpr{Src: &src}
 
 	case IDENT:
 		name := NameExpr(p.s.Literal())
@@ -487,7 +488,8 @@ func (p *Parser) parseList() Expr {
 // list-child = list-any | arg
 func (p *Parser) parseListChild() Expr {
 	if p.scan() == ELLIPSES {
-		return &ListAnyExpr{}
+		src := p.src
+		return &ListAnyExpr{Src: &src}
 	}
 	p.unscan()
 	return p.parseArg()
