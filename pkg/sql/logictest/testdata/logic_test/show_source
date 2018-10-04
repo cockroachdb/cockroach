@@ -81,15 +81,15 @@ SELECT * FROM [SHOW DATABASE]
 database
 test
 
-query ITTT colnames
+query TT colnames
 SELECT * FROM [SHOW ZONE CONFIGURATIONS] LIMIT 0
 ----
-zone_id  cli_specifier  config_sql  config_protobuf
+zone_name  config_sql
 
-query ITTT colnames
+query TT colnames
 SELECT * FROM [SHOW ZONE CONFIGURATION FOR TABLE system.users] LIMIT 0
 ----
-zone_id  cli_specifier  config_sql  config_protobuf
+zone_name  config_sql
 
 query T colnames
 SELECT * FROM [SHOW DATABASES]

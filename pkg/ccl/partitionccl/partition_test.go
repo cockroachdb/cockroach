@@ -1303,7 +1303,7 @@ func TestRepartitioning(t *testing.T) {
 				for _, name := range test.new.parsed.tableDesc.PartitionNames() {
 					newPartitionNames[name] = struct{}{}
 				}
-				rows := sqlDB.QueryStr(t, "SELECT cli_specifier FROM [SHOW ALL ZONE CONFIGURATIONS] WHERE cli_specifier IS NOT NULL")
+				rows := sqlDB.QueryStr(t, "SELECT zone_name FROM [SHOW ALL ZONE CONFIGURATIONS] WHERE cli_specifier IS NOT NULL")
 				for _, row := range rows {
 					zs, err := config.ParseCLIZoneSpecifier(row[0])
 					if err != nil {

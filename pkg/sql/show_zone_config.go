@@ -39,10 +39,15 @@ type showZoneConfigNode struct {
 
 func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (planNode, error) {
 	if n.ZoneSpecifier == (tree.ZoneSpecifier{}) {
-		return p.delegateQuery(ctx, "SHOW ZONE CONFIGURATIONS",
-			`SELECT zone_id, cli_specifier, config_sql, config_protobuf
+		planRenderNode, err := p.delegateQuery(ctx, "SHOW ZONE CONFIGURATIONS",
+			`SELECT cli_specifier as zone_name, cli_specifier, config_sql
          FROM crdb_internal.zones
         WHERE cli_specifier IS NOT NULL`, nil, nil)
+		if err != nil {
+			return planRenderNode, err
+		}
+		planRenderNode.(*renderNode).columns[1].Hidden = true
+		return planRenderNode, nil
 	}
 	return &showZoneConfigNode{
 		zoneSpecifier: n.ZoneSpecifier,
@@ -51,11 +56,12 @@ func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (p
 
 // These must match crdb_internal.zones.
 var showZoneConfigNodeColumns = sqlbase.ResultColumns{
-	{Name: "zone_id", Typ: types.Int},
-	{Name: "cli_specifier", Typ: types.String},
+	{Name: "zone_id", Typ: types.Int, Hidden: true},
+	{Name: "zone_name", Typ: types.String},
+	{Name: "cli_specifier", Typ: types.String, Hidden: true},
 	{Name: "config_yaml", Typ: types.String, Hidden: true},
 	{Name: "config_sql", Typ: types.String},
-	{Name: "config_protobuf", Typ: types.Bytes},
+	{Name: "config_protobuf", Typ: types.Bytes, Hidden: true},
 }
 
 // showZoneConfigRun contains the run-time state of showZoneConfigNode
@@ -129,17 +135,18 @@ func generateZoneConfigIntrospectionValues(
 	} else {
 		values[1] = tree.NewDString(config.CLIZoneSpecifier(zs))
 	}
+	values[2] = values[1]
 
 	// Populate the YAML column.
 	yamlConfig, err := yaml.Marshal(zone)
 	if err != nil {
 		return err
 	}
-	values[2] = tree.NewDString(string(yamlConfig))
+	values[3] = tree.NewDString(string(yamlConfig))
 
 	// Populate the SQL column.
 	if zs == nil {
-		values[3] = tree.DNull
+		values[4] = tree.DNull
 	} else {
 		constraints, err := yamlMarshalFlow(config.ConstraintsList(zone.Constraints))
 		if err != nil {
@@ -162,7 +169,7 @@ func generateZoneConfigIntrospectionValues(
 		f.Printf("\tnum_replicas = %d,\n", zone.NumReplicas)
 		f.Printf("\tconstraints = %s,\n", lex.EscapeSQLString(constraints))
 		f.Printf("\tlease_preferences = %s", lex.EscapeSQLString(prefs))
-		values[3] = tree.NewDString(f.String())
+		values[4] = tree.NewDString(f.String())
 	}
 
 	// Populate the protobuf column.
@@ -170,7 +177,7 @@ func generateZoneConfigIntrospectionValues(
 	if err != nil {
 		return err
 	}
-	values[4] = tree.NewDBytes(tree.DBytes(protoConfig))
+	values[5] = tree.NewDBytes(tree.DBytes(protoConfig))
 
 	return nil
 }
