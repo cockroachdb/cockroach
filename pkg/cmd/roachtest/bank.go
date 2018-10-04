@@ -23,6 +23,7 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -70,8 +71,8 @@ UPDATE bank.accounts
 
 type bankState struct {
 	// One error sent by each client. A successful client sends a nil error.
-	errChan  chan error
-	teardown chan struct{}
+	errChan   chan error
+	waitGroup sync.WaitGroup
 	// The number of times chaos monkey has run.
 	monkeyIteration uint64
 	// Set to 1 if chaos monkey has stalled the writes.
@@ -172,12 +173,13 @@ func (s *bankState) verifyAccounts(ctx context.Context, t *test) {
 	client := &s.clients[0]
 
 	var sum int
+	var accounts uint64
 	err := retry.ForDuration(30*time.Second, func() error {
 		// Hold the read lock on the client to prevent it being restarted by
 		// chaos monkey.
 		client.RLock()
 		defer client.RUnlock()
-		err := client.db.QueryRow("SELECT sum(balance) FROM bank.accounts").Scan(&sum)
+		err := client.db.QueryRow("SELECT count(*), sum(balance) FROM bank.accounts").Scan(&accounts, &sum)
 		if err != nil && !testutils.IsSQLRetryableError(err) {
 			t.Fatal(err)
 		}
@@ -187,6 +189,10 @@ func (s *bankState) verifyAccounts(ctx context.Context, t *test) {
 		t.Fatal(err)
 	}
 	if sum != 0 {
+		t.Fatalf("the bank is not in good order, total value: %d", sum)
+	}
+
+	if accounts < bankNumAccounts {
 		t.Fatalf("the bank is not in good order, total value: %d", sum)
 	}
 }
@@ -201,7 +207,7 @@ func (s *bankState) chaosMonkey(
 	pickNodes func() []int,
 	consistentIdx int,
 ) {
-	defer close(s.teardown)
+	defer s.waitGroup.Done()
 	for curRound := uint64(1); !s.done(ctx); curRound++ {
 		atomic.StoreUint64(&s.monkeyIteration, curRound)
 
@@ -261,6 +267,73 @@ func (s *bankState) chaosMonkey(
 	}
 }
 
+func (s *bankState) splitMonkey(ctx context.Context, d time.Duration, c *cluster) {
+	defer s.waitGroup.Done()
+	r := newRand()
+	nodes := make([]string, c.nodes)
+
+	for i := 0; i < c.nodes; i++ {
+		nodes[i] = strconv.Itoa(i + 1)
+	}
+
+	for curRound := uint64(1); !s.done(ctx); curRound++ {
+		atomic.StoreUint64(&s.monkeyIteration, curRound)
+		time.Sleep(time.Duration(rand.Float64() * float64(d)))
+
+		client := &s.clients[c.All().randNode()[0]-1]
+
+		switch r.Intn(2) {
+		case 0:
+			client.RLock()
+			zipF := accountDistribution(r)
+			key := zipF.Uint64()
+			const splitQuery = `ALTER TABLE bank.accounts SPLIT AT VALUES ($1)`
+			c.l.Printf("round %d: splitting key %v\n", curRound, key)
+			_, err := client.db.Exec(splitQuery, key)
+			if err != nil && !(testutils.IsSQLRetryableError(err) || isExpectedRelocateError(err)) {
+				s.errChan <- err
+			}
+			client.RUnlock()
+		case 1:
+			for i := 0; i < len(s.clients); i++ {
+				s.clients[i].Lock()
+			}
+			zipF := accountDistribution(r)
+			key := zipF.Uint64()
+
+			rand.Shuffle(len(nodes), func(i, j int) {
+				nodes[i], nodes[j] = nodes[j], nodes[i]
+			})
+
+			const relocateQueryFormat = `ALTER TABLE bank.accounts EXPERIMENTAL_RELOCATE VALUES (ARRAY[%s], %d);`
+			relocateQuery := fmt.Sprintf(relocateQueryFormat, strings.Join(nodes[1:], ", "), key)
+			c.l.Printf("round %d: relocating key %d to nodes %s\n",
+				curRound, key, nodes[1:])
+
+			_, err := client.db.Exec(relocateQuery)
+			if err != nil && !(testutils.IsSQLRetryableError(err) || isExpectedRelocateError(err)) {
+				s.errChan <- err
+			}
+			for i := 0; i < len(s.clients); i++ {
+				s.clients[i].Unlock()
+			}
+		}
+	}
+}
+
+func isExpectedRelocateError(err error) bool {
+	return testutils.IsError(err, "(descriptor changed|unable to remove replica .* which is not present|unable to add replica .* which is already present)")
+}
+
+func accountDistribution(r *rand.Rand) *rand.Zipf {
+	// We use a Zipf distribution for selecting accounts.
+	return rand.NewZipf(r, 1.1, float64(bankNumAccounts/10), uint64(bankNumAccounts-1))
+}
+
+func newRand() *rand.Rand {
+	return rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+}
+
 // Wait until all clients have stopped.
 func (s *bankState) waitClientsStop(
 	ctx context.Context, t *test, c *cluster, stallDuration time.Duration,
@@ -271,7 +344,6 @@ func (s *bankState) waitClientsStop(
 	// Spin until all clients are shut.
 	for doneClients := 0; doneClients < len(s.clients); {
 		select {
-		case <-s.teardown:
 		case <-ctx.Done():
 			t.Fatal(ctx.Err())
 
@@ -324,10 +396,10 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 	// TODO(peter): Run for longer when !local.
 	start := timeutil.Now()
 	s := &bankState{
-		errChan:  make(chan error, c.nodes),
-		teardown: make(chan struct{}),
-		deadline: start.Add(time.Minute),
-		clients:  make([]bankClient, c.nodes),
+		errChan:   make(chan error, c.nodes),
+		waitGroup: sync.WaitGroup{},
+		deadline:  start.Add(time.Minute),
+		clients:   make([]bankClient, c.nodes),
 	}
 	s.initBank(ctx, t, c)
 
@@ -338,8 +410,9 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 		go s.transferMoney(ctx, c, i+1, bankNumAccounts, bankMaxTransfer)
 	}
 
+	s.waitGroup.Add(1)
 	defer func() {
-		<-s.teardown
+		s.waitGroup.Wait()
 	}()
 
 	// Chaos monkey.
@@ -375,20 +448,22 @@ func runBankNodeRestart(ctx context.Context, t *test, c *cluster) {
 	// TODO(peter): Run for longer when !local.
 	start := timeutil.Now()
 	s := &bankState{
-		errChan:  make(chan error, 1),
-		teardown: make(chan struct{}),
-		deadline: start.Add(time.Minute),
-		clients:  make([]bankClient, 1),
+		errChan:   make(chan error, 1),
+		waitGroup: sync.WaitGroup{},
+		deadline:  start.Add(time.Minute),
+		clients:   make([]bankClient, 1),
 	}
 	s.initBank(ctx, t, c)
 
 	clientIdx := c.nodes
 	client := &s.clients[0]
 	client.db = c.Conn(ctx, clientIdx)
+
+	s.waitGroup.Add(1)
 	go s.transferMoney(ctx, c, 1, bankNumAccounts, bankMaxTransfer)
 
 	defer func() {
-		<-s.teardown
+		s.waitGroup.Wait()
 	}()
 
 	// Chaos monkey.
@@ -406,5 +481,98 @@ func runBankNodeRestart(ctx context.Context, t *test, c *cluster) {
 
 	elapsed := timeutil.Since(start).Seconds()
 	count := atomic.LoadUint64(&client.count)
+	c.l.Printf("%d transfers (%.1f/sec) in %.1fs\n", count, float64(count)/elapsed, elapsed)
+}
+
+func runBankNodeZeroSum(ctx context.Context, t *test, c *cluster) {
+	c.Put(ctx, cockroach, "./cockroach")
+	c.Start(ctx, t)
+
+	start := timeutil.Now()
+	s := &bankState{
+		errChan:   make(chan error, c.nodes),
+		waitGroup: sync.WaitGroup{},
+		deadline:  start.Add(time.Minute),
+		clients:   make([]bankClient, c.nodes),
+	}
+	s.initBank(ctx, t, c)
+
+	for i := 0; i < c.nodes; i++ {
+		s.clients[i].Lock()
+		s.initClient(ctx, c, i+1)
+		s.clients[i].Unlock()
+		go s.transferMoney(ctx, c, i+1, bankNumAccounts, bankMaxTransfer)
+	}
+
+	s.waitGroup.Add(1)
+	defer func() {
+		s.waitGroup.Wait()
+	}()
+
+	go s.splitMonkey(ctx, 2*time.Second, c)
+	s.waitClientsStop(ctx, t, c, 30*time.Second)
+
+	s.verifyAccounts(ctx, t)
+
+	elapsed := timeutil.Since(start).Seconds()
+	var count uint64
+	counts := s.counts()
+	for _, c := range counts {
+		count += c
+	}
+	c.l.Printf("%d transfers (%.1f/sec) in %.1fs\n", count, float64(count)/elapsed, elapsed)
+}
+
+var _ = runBankZeroSumRestart
+
+func runBankZeroSumRestart(ctx context.Context, t *test, c *cluster) {
+	c.Put(ctx, cockroach, "./cockroach")
+	c.Start(ctx, t)
+
+	start := timeutil.Now()
+	s := &bankState{
+		errChan:   make(chan error, c.nodes),
+		waitGroup: sync.WaitGroup{},
+		deadline:  start.Add(time.Minute),
+		clients:   make([]bankClient, c.nodes),
+	}
+	s.initBank(ctx, t, c)
+
+	for i := 0; i < c.nodes; i++ {
+		s.clients[i].Lock()
+		s.initClient(ctx, c, i+1)
+		s.clients[i].Unlock()
+		go s.transferMoney(ctx, c, i+1, bankNumAccounts, bankMaxTransfer)
+	}
+
+	defer func() {
+		s.waitGroup.Wait()
+	}()
+
+	rnd, seed := randutil.NewPseudoRand()
+	c.l.Printf("monkey starts (seed %d)\n", seed)
+	pickNodes := func() []int {
+		nodes := rnd.Perm(c.nodes)[:rnd.Intn(c.nodes)+1]
+		for i := range nodes {
+			nodes[i]++
+		}
+		return nodes
+	}
+
+	s.waitGroup.Add(2)
+	// Starting up the goroutines that restart and do splits and lease moves.
+	go s.chaosMonkey(ctx, t, c, false, pickNodes, -1)
+	go s.splitMonkey(ctx, 2*time.Second, c)
+	s.waitClientsStop(ctx, t, c, 30*time.Second)
+
+	// Verify accounts.
+	s.verifyAccounts(ctx, t)
+
+	elapsed := timeutil.Since(start).Seconds()
+	var count uint64
+	counts := s.counts()
+	for _, c := range counts {
+		count += c
+	}
 	c.l.Printf("%d transfers (%.1f/sec) in %.1fs\n", count, float64(count)/elapsed, elapsed)
 }
