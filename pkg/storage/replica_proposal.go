@@ -528,13 +528,17 @@ func (r *Replica) handleReplicatedEvalResult(
 		r.mu.state.LeaseAppliedIndex = leaseAppliedIndex
 	}
 	needsSplitBySize := r.needsSplitBySizeRLocked()
+	needsMergeBySize := r.needsMergeBySizeRLocked()
 	r.mu.Unlock()
 
 	r.store.metrics.addMVCCStats(deltaStats)
 	rResult.Delta = enginepb.MVCCStatsDelta{}
 
-	if needsSplitBySize {
+	if r.store.splitQueue != nil && needsSplitBySize { // the boostrap store has a nil split queue
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
+	}
+	if r.store.mergeQueue != nil && needsMergeBySize { // the boostrap store has a nil merge queue
+		r.store.mergeQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
 
 	// The above are always present. The following are not always present but

@@ -6783,6 +6783,10 @@ func (r *Replica) needsSplitBySizeRLocked() bool {
 	return r.exceedsMultipleOfSplitSizeRLocked(1)
 }
 
+func (r *Replica) needsMergeBySizeRLocked() bool {
+	return r.mu.state.Stats.Total() < r.mu.zone.RangeMinBytes
+}
+
 func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) bool {
 	maxBytes := r.mu.zone.RangeMaxBytes
 	size := r.mu.state.Stats.Total()
