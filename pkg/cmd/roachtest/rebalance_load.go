@@ -27,7 +27,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func registerRebalanceLoad(r *registry) {
+func registerRebalanceLoad(r *testRegistry) {
 	// This test creates a single table for kv to use and splits the table to
 	// have one range for every node in the cluster. Because even brand new
 	// clusters start with 20+ ranges in them, the number of new ranges in kv's

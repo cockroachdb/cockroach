@@ -25,7 +25,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func registerSchemaChangeKV(r *registry) {
+func registerSchemaChangeKV(r *testRegistry) {
 	r.Add(testSpec{
 		Name:    `schemachange/mixed/kv`,
 		Cluster: makeClusterSpec(5),
@@ -288,11 +288,11 @@ func findIndexProblem(
 	return nil
 }
 
-func registerSchemaChangeIndexTPCC1000(r *registry) {
+func registerSchemaChangeIndexTPCC1000(r *testRegistry) {
 	r.Add(makeIndexAddTpccTest(makeClusterSpec(5, cpu(16)), 1000, time.Hour*2))
 }
 
-func registerSchemaChangeIndexTPCC100(r *registry) {
+func registerSchemaChangeIndexTPCC100(r *testRegistry) {
 	r.Add(makeIndexAddTpccTest(makeClusterSpec(5), 100, time.Minute*15))
 }
 
@@ -319,7 +319,7 @@ func makeIndexAddTpccTest(spec clusterSpec, warehouses int, length time.Duration
 	}
 }
 
-func registerSchemaChangeBulkIngest(r *registry) {
+func registerSchemaChangeBulkIngest(r *testRegistry) {
 	r.Add(makeSchemaChangeBulkIngestTest(5, 100000000, time.Minute*20))
 }
 

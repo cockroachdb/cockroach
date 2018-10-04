@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerKV(r *registry) {
+func registerKV(r *testRegistry) {
 	type kvOptions struct {
 		nodes       int
 		cpus        int
@@ -140,7 +140,7 @@ func registerKV(r *registry) {
 	}
 }
 
-func registerKVContention(r *registry) {
+func registerKVContention(r *testRegistry) {
 	const nodes = 4
 	r.Add(testSpec{
 		Name:    fmt.Sprintf("kv/contention/nodes=%d", nodes),
@@ -191,7 +191,7 @@ func registerKVContention(r *registry) {
 	})
 }
 
-func registerKVQuiescenceDead(r *registry) {
+func registerKVQuiescenceDead(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "kv/quiescence/nodes=3",
 		Cluster:    makeClusterSpec(4),
@@ -272,7 +272,7 @@ func registerKVQuiescenceDead(r *registry) {
 	})
 }
 
-func registerKVGracefulDraining(r *registry) {
+func registerKVGracefulDraining(r *testRegistry) {
 	r.Add(testSpec{
 		Skip:    "https://github.com/cockroachdb/cockroach/issues/33501",
 		Name:    "kv/gracefuldraining/nodes=3",
@@ -383,7 +383,7 @@ func registerKVGracefulDraining(r *registry) {
 	})
 }
 
-func registerKVSplits(r *registry) {
+func registerKVSplits(r *testRegistry) {
 	for _, item := range []struct {
 		quiesce bool
 		splits  int
@@ -436,7 +436,7 @@ func registerKVSplits(r *registry) {
 	}
 }
 
-func registerKVScalability(r *registry) {
+func registerKVScalability(r *testRegistry) {
 	runScalability := func(ctx context.Context, t *test, c *cluster, percent int) {
 		nodes := c.nodes - 1
 

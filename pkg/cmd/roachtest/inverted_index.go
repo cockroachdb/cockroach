@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerSchemaChangeInvertedIndex(r *registry) {
+func registerSchemaChangeInvertedIndex(r *testRegistry) {
 	r.Add(testSpec{
 		Name:    "schemachange/invertedindex",
 		Cluster: makeClusterSpec(5),

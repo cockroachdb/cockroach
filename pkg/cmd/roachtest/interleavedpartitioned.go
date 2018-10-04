@@ -20,7 +20,7 @@ import (
 	"fmt"
 )
 
-func registerInterleaved(r *registry) {
+func registerInterleaved(r *testRegistry) {
 	type config struct {
 		eastName        string
 		westName        string

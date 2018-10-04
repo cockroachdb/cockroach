@@ -215,7 +215,7 @@ func loadTPCHBench(
 	return err
 }
 
-func registerTPCHBenchSpec(r *registry, b tpchBenchSpec) {
+func registerTPCHBenchSpec(r *testRegistry, b tpchBenchSpec) {
 	nameParts := []string{
 		"tpchbench",
 		b.benchType.String(),
@@ -237,7 +237,7 @@ func registerTPCHBenchSpec(r *registry, b tpchBenchSpec) {
 	})
 }
 
-func registerTPCHBench(r *registry) {
+func registerTPCHBench(r *testRegistry) {
 	specs := []tpchBenchSpec{
 		{
 			Nodes:           3,

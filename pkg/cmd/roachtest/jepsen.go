@@ -62,7 +62,12 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 
 	// Install jepsen. This part is fast if the repo is already there,
 	// so do it before the initialization check for ease of iteration.
-	c.GitClone(ctx, "https://github.com/cockroachdb/jepsen", "/mnt/data1/jepsen", "tc-nightly", controller)
+	if err := c.GitClone(
+		ctx, t.l,
+		"https://github.com/cockroachdb/jepsen", "/mnt/data1/jepsen", "tc-nightly", controller,
+	); err != nil {
+		t.Fatal(err)
+	}
 
 	// Check to see if the cluster has already been initialized.
 	if err := c.RunE(ctx, c.Node(1), "test -e jepsen_initialized"); err == nil {
@@ -293,7 +298,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 }
 
 // !!!
-func registerXXX(r *registry) {
+func registerXXX(r *testRegistry) {
 	spec := testSpec{
 		Name:    "XXX",
 		Cluster: makeClusterSpec(1, reuseTagged("xxx")),
@@ -308,7 +313,7 @@ func registerXXX(r *registry) {
 	r.Add(spec)
 }
 
-func registerJepsen(r *registry) {
+func registerJepsen(r *testRegistry) {
 	// NB: the "comments" test is not included because it requires
 	// linearizability.
 	tests := []string{
@@ -322,7 +327,7 @@ func registerJepsen(r *registry) {
 			spec := testSpec{
 				Name: fmt.Sprintf("jepsen/%s/%s", testName, nemesis.name),
 				// The Jepsen tests do funky things to machines, like muck with the
-				// system clock; therefor, their clusters cannot be reused other tests
+				// system clock; therefore, their clusters cannot be reused other tests
 				// except the Jepsen ones themselves which reset all this state when
 				// they start. It is important, however, that the Jepsen tests reuses
 				// clusters because they have a lengthy setup step, but avoid doing it

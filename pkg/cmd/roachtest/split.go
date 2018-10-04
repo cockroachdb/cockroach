@@ -41,7 +41,7 @@ type splitParams struct {
 	waitDuration  time.Duration // Duration the workload should run for.
 }
 
-func registerLoadSplits(r *registry) {
+func registerLoadSplits(r *testRegistry) {
 	const numNodes = 3
 
 	r.Add(testSpec{
@@ -203,7 +203,7 @@ func runLoadSplits(ctx context.Context, t *test, c *cluster, params splitParams)
 	m.Wait()
 }
 
-func registerLargeRange(r *registry) {
+func registerLargeRange(r *testRegistry) {
 	const size = 10 << 30 // 10 GB
 	// TODO(nvanbenschoten): Snapshots currently hold the entirety of a range in
 	// memory on the receiving side. This is dangerous when we grow a range to

@@ -35,7 +35,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func registerGossip(r *registry) {
+func registerGossip(r *testRegistry) {
 	runGossipChaos := func(ctx context.Context, t *test, c *cluster) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All())

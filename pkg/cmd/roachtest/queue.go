@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerQueue(r *registry) {
+func registerQueue(r *testRegistry) {
 	// One node runs the workload generator, all other nodes host CockroachDB.
 	const numNodes = 2
 	r.Add(testSpec{

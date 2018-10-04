@@ -30,7 +30,7 @@ var psycopgReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)(?:_(?P<minor>\d
 
 // This test runs psycopg full test suite against a single cockroach node.
 
-func registerPsycopg(r *registry) {
+func registerPsycopg(r *testRegistry) {
 	runPsycopg := func(
 		ctx context.Context,
 		t *test,
@@ -75,6 +75,7 @@ func registerPsycopg(r *registry) {
 
 		if err := repeatGitCloneE(
 			ctx,
+			t.l,
 			c,
 			"https://github.com/psycopg/psycopg2.git",
 			"/mnt/data1/psycopg",

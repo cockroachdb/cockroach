@@ -25,7 +25,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func registerBackup(r *registry) {
+func registerBackup(r *testRegistry) {
 	backup2TBSpec := makeClusterSpec(10)
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("backup2TB/%s", backup2TBSpec),

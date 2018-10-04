@@ -32,7 +32,9 @@ func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase
 
 	t.Status("deploying offset injector")
 	offsetInjector := newOffsetInjector(c)
-	offsetInjector.deploy(ctx)
+	if err := offsetInjector.deploy(ctx, t.l); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := c.RunE(ctx, c.Node(1), "test -x ./cockroach"); err != nil {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
@@ -83,7 +85,7 @@ type clockJumpTestCase struct {
 	aliveAfterOffset bool
 }
 
-func registerClockJumpTests(r *registry) {
+func registerClockJumpTests(r *testRegistry) {
 	testCases := []clockJumpTestCase{
 		{
 			name:             "large_forward_enabled",

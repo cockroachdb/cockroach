@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-func registerAcceptance(r *registry) {
+func registerAcceptance(r *testRegistry) {
 	testCases := []struct {
 		name       string
 		fn         func(ctx context.Context, t *test, c *cluster)

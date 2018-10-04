@@ -27,7 +27,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func registerAllocator(r *registry) {
+func registerAllocator(r *testRegistry) {
 	runAllocator := func(ctx context.Context, t *test, c *cluster, start int, maxStdDev float64) {
 		const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup`
 		c.Put(ctx, cockroach, "./cockroach")

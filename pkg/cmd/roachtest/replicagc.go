@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerReplicaGC(r *registry) {
+func registerReplicaGC(r *testRegistry) {
 
 	r.Add(testSpec{
 		Name:    "replicagc-changed-peers/withRestart",

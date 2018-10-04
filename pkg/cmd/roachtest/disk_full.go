@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerDiskFull(r *registry) {
+func registerDiskFull(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "disk-full",
 		MinVersion: `v2.1.0`,

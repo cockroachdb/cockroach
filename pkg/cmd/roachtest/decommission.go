@@ -239,7 +239,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 	}
 }
 
-func registerDecommission(r *registry) {
+func registerDecommission(r *testRegistry) {
 	const numNodes = 4
 	duration := time.Hour
 

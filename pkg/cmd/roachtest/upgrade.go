@@ -31,7 +31,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func registerUpgrade(r *registry) {
+func registerUpgrade(r *testRegistry) {
 	runUpgrade := func(ctx context.Context, t *test, c *cluster, oldVersion string) {
 		nodes := c.nodes
 		goos := ifLocal(runtime.GOOS, "linux")
@@ -271,7 +271,7 @@ func registerUpgrade(r *registry) {
 		MinVersion: "v2.1.0",
 		Cluster:    makeClusterSpec(5),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			pred, err := r.PredecessorVersion()
+			pred, err := PredecessorVersion(r.buildVersion)
 			if err != nil {
 				t.Fatal(err)
 			}

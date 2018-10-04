@@ -20,7 +20,7 @@ import (
 	"fmt"
 )
 
-func registerYCSB(r *registry) {
+func registerYCSB(r *testRegistry) {
 	runYCSB := func(ctx context.Context, t *test, c *cluster, wl string, cpus int) {
 		nodes := c.nodes - 1
 

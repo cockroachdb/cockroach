@@ -459,7 +459,7 @@ func runCDCSchemaRegistry(ctx context.Context, t *test, c *cluster) {
 	}
 }
 
-func registerCDC(r *registry) {
+func registerCDC(r *testRegistry) {
 	useRangeFeed := true
 	if r.buildVersion.Compare(version.MustParse(`v2.2.0-0`)) < 0 {
 		// RangeFeed is not production ready in 2.1, so run the tests with the

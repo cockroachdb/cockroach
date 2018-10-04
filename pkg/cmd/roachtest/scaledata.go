@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 )
 
-func registerScaleData(r *registry) {
+func registerScaleData(r *testRegistry) {
 	// apps is a suite of Sqlapp applications designed to be used to check the
 	// consistency of a database under load. Each Sqlapp application launches a
 	// set of workers who perform database operations while another worker

@@ -32,7 +32,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func registerFollowerReads(r *registry) {
+func registerFollowerReads(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "follower-reads/nodes=3",
 		Cluster:    makeClusterSpec(3 /* nodeCount */, cpu(2), geo()),

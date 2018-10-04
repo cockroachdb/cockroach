@@ -214,7 +214,7 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 	}
 }
 
-func registerRestore(r *registry) {
+func registerRestore(r *testRegistry) {
 	for _, item := range []struct {
 		nodes   int
 		timeout time.Duration

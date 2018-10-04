@@ -198,6 +198,7 @@ func (s *Stopper) RunWorker(ctx context.Context, f func(context.Context)) {
 		defer s.Recover(ctx)
 		defer s.stop.Done()
 		f(ctx)
+		log.Infof(ctx, "!!! Stopper closure done")
 	}()
 }
 

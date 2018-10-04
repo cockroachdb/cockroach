@@ -22,7 +22,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func registerEncryption(r *registry) {
+func registerEncryption(r *testRegistry) {
 	// Note that no workload is run in this roachtest because kv roachtest
 	// ideally runs with encryption turned on to see the performance impact and
 	// to test the correctness of encryption at rest.

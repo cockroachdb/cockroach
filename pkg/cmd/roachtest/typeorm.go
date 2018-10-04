@@ -24,7 +24,7 @@ import (
 var typeORMReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
 
 // This test runs TypeORM's full test suite against a single cockroach node.
-func registerTypeORM(r *registry) {
+func registerTypeORM(r *testRegistry) {
 	runTypeORM := func(
 		ctx context.Context,
 		t *test,
@@ -92,6 +92,7 @@ func registerTypeORM(r *registry) {
 
 		if err := repeatGitCloneE(
 			ctx,
+			t.l,
 			c,
 			"https://github.com/typeorm/typeorm.git",
 			"/mnt/data1/typeorm",
