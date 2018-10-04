@@ -323,6 +323,8 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		rampDone = make(chan struct{})
 	}
 
+	workersCtx, cancelWorkers := context.WithCancel(ctx)
+	defer cancelWorkers()
 	var wg sync.WaitGroup
 	wg.Add(len(ops.WorkerFns))
 	go func() {
@@ -331,24 +333,23 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		var rampCtx context.Context
 		if rampDone != nil {
 			var cancel func()
-			rampCtx, cancel = context.WithTimeout(ctx, *ramp)
+			rampCtx, cancel = context.WithTimeout(workersCtx, *ramp)
 			defer cancel()
 		}
 
 		for i, workFn := range ops.WorkerFns {
-			i, workFn := i, workFn
-			go func() {
+			go func(i int, workFn func(context.Context) error) {
 				// If a ramp period was specified, start all of the workers
 				// gradually with a new context.
 				if rampCtx != nil {
 					rampPerWorker := *ramp / time.Duration(len(ops.WorkerFns))
 					time.Sleep(time.Duration(i) * rampPerWorker)
-					workerRun(rampCtx, errCh, nil, limiter, workFn)
+					workerRun(rampCtx, errCh, nil /* wg */, limiter, workFn)
 				}
 
 				// Start worker again, this time with the main context.
-				workerRun(ctx, errCh, &wg, limiter, workFn)
-			}()
+				workerRun(workersCtx, errCh, &wg, limiter, workFn)
+			}(i, workFn)
 		}
 
 		if rampCtx != nil {
@@ -432,6 +433,10 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			})
 
 		case <-done:
+			cancelWorkers()
+			if ops.Close != nil {
+				ops.Close(ctx)
+			}
 			const totalHeader = "\n_elapsed___errors_____ops(total)___ops/sec(cum)__avg(ms)__p50(ms)__p95(ms)__p99(ms)_pMax(ms)"
 			fmt.Println(totalHeader + `__total`)
 			startElapsed := timeutil.Since(start)

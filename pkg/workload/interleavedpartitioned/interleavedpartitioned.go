@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 
@@ -398,8 +399,7 @@ func (w *interleavedPartitioned) Ops(
 			}
 			w.currentDelete++
 
-			_, err = deleteStatement.ExecContext(ctx, w.rowsPerDelete)
-			if err != nil {
+			if _, err = deleteStatement.ExecContext(ctx, w.rowsPerDelete); err != nil {
 				return err
 			}
 			elapsed := timeutil.Since(start)
@@ -410,111 +410,105 @@ func (w *interleavedPartitioned) Ops(
 
 		if opRand < w.insertPercent {
 			start := timeutil.Now()
-
-			tx, err := db.Begin()
-			if err != nil {
-				return err
-			}
-
 			insertStatement, err := db.Prepare(insertQuery)
 			if err != nil {
 				return err
 			}
-			sessionID := w.randomSessionID(rng, w.pickLocality(rng, w.insertLocalPercent))
-			args := []interface{}{
-				sessionID,            // session_id
-				randString(rng, 100), // affiliate
-				randString(rng, 50),  // channel
-				randString(rng, 20),  // language
-				randString(rng, 20),  // status
-				randString(rng, 50),  // platform
-				randString(rng, 100), // query_id
-			}
-			_, err = tx.StmtContext(ctx, insertStatement).Exec(args...)
+			insertCustomerStatement, err := db.Prepare(insertQueryCustomers)
 			if err != nil {
 				return err
 			}
-			for i := 0; i < w.customersPerSession; i++ {
-				insertCustomerStatement, err := db.Prepare(insertQueryCustomers)
-				if err != nil {
-					return err
-				}
-				args := []interface{}{
-					sessionID,
-					randString(rng, 50),
-					randString(rng, 50),
-				}
-				_, err = tx.StmtContext(ctx, insertCustomerStatement).Exec(args...)
-				if err != nil {
-					return err
-				}
+			insertDeviceStatement, err := db.Prepare(insertQueryDevices)
+			if err != nil {
+				return err
 			}
-			for i := 0; i < w.devicesPerSession; i++ {
-				insertDeviceStatement, err := db.Prepare(insertQueryDevices)
-				if err != nil {
-					return err
-				}
-				args := []interface{}{
-					randString(rng, 100),
-					sessionID,
-					randString(rng, 50), // device_id
-					randString(rng, 50), // name
-					randString(rng, 50), // make
-					randString(rng, 50), // macaddress
-					randString(rng, 50), // model
-					randString(rng, 50), // serialno
-				}
-				_, err = tx.StmtContext(ctx, insertDeviceStatement).Exec(args...)
-				if err != nil {
-					return err
-				}
+			insertVariantStatement, err := db.Prepare(insertQueryVariants)
+			if err != nil {
+				return err
 			}
-			for i := 0; i < w.variantsPerSession; i++ {
-				insertVariantStatement, err := db.Prepare(insertQueryVariants)
-				if err != nil {
-					return err
-				}
-				args := []interface{}{
-					sessionID,
-					randString(rng, 50),
-					randString(rng, 50),
-				}
-				_, err = tx.StmtContext(ctx, insertVariantStatement).Exec(args...)
-				if err != nil {
-					return err
-				}
+			insertParameterStatement, err := db.Prepare(insertQueryParameters)
+			if err != nil {
+				return err
 			}
-			for i := 0; i < w.parametersPerSession; i++ {
-				insertParameterStatement, err := db.Prepare(insertQueryParameters)
-				if err != nil {
-					return err
-				}
-				args := []interface{}{
-					sessionID,
-					randString(rng, 50),
-					randString(rng, 50),
-				}
-				_, err = tx.StmtContext(ctx, insertParameterStatement).Exec(args...)
-				if err != nil {
-					return err
-				}
+			insertQueryStatement, err := db.Prepare(insertQueryQuery)
+			if err != nil {
+				return err
 			}
-			for i := 0; i < w.queriesPerSession; i++ {
-				insertQueryStatement, err := db.Prepare(insertQueryQuery)
-				if err != nil {
-					return err
-				}
-				args := []interface{}{
-					sessionID,
-					randString(rng, 50),
-				}
-				_, err = tx.StmtContext(ctx, insertQueryStatement).Exec(args...)
-				if err != nil {
-					return err
-				}
-			}
-			if err := tx.Commit(); err != nil {
-				return nil
+			if err := crdb.ExecuteTx(
+				context.Background(),
+				db,
+				nil, /* txopts */
+				func(tx *gosql.Tx) error {
+					sessionID := w.randomSessionID(rng, w.pickLocality(rng, w.insertLocalPercent))
+					args := []interface{}{
+						sessionID,            // session_id
+						randString(rng, 100), // affiliate
+						randString(rng, 50),  // channel
+						randString(rng, 20),  // language
+						randString(rng, 20),  // status
+						randString(rng, 50),  // platform
+						randString(rng, 100), // query_id
+					}
+					if _, err = tx.StmtContext(ctx, insertStatement).Exec(args...); err != nil {
+						return err
+					}
+					for i := 0; i < w.customersPerSession; i++ {
+						args := []interface{}{
+							sessionID,
+							randString(rng, 50),
+							randString(rng, 50),
+						}
+						if _, err = tx.StmtContext(ctx, insertCustomerStatement).Exec(args...); err != nil {
+							return err
+						}
+					}
+					for i := 0; i < w.devicesPerSession; i++ {
+						args := []interface{}{
+							randString(rng, 100),
+							sessionID,
+							randString(rng, 50), // device_id
+							randString(rng, 50), // name
+							randString(rng, 50), // make
+							randString(rng, 50), // macaddress
+							randString(rng, 50), // model
+							randString(rng, 50), // serialno
+						}
+						if _, err = tx.StmtContext(ctx, insertDeviceStatement).Exec(args...); err != nil {
+							return err
+						}
+					}
+					for i := 0; i < w.variantsPerSession; i++ {
+						args := []interface{}{
+							sessionID,
+							randString(rng, 50),
+							randString(rng, 50),
+						}
+						if _, err = tx.StmtContext(ctx, insertVariantStatement).Exec(args...); err != nil {
+							return err
+						}
+					}
+					for i := 0; i < w.parametersPerSession; i++ {
+						args := []interface{}{
+							sessionID,
+							randString(rng, 50),
+							randString(rng, 50),
+						}
+						if _, err = tx.StmtContext(ctx, insertParameterStatement).Exec(args...); err != nil {
+							return err
+						}
+					}
+					for i := 0; i < w.queriesPerSession; i++ {
+						args := []interface{}{
+							sessionID,
+							randString(rng, 50),
+						}
+						if _, err = tx.StmtContext(ctx, insertQueryStatement).Exec(args...); err != nil {
+							return err
+						}
+					}
+					return nil
+				}); err != nil {
+				return err
 			}
 			elapsed := timeutil.Since(start)
 			hists.Get(`insert`).Record(elapsed)
@@ -525,16 +519,21 @@ func (w *interleavedPartitioned) Ops(
 				sessionID,
 			}
 			start := timeutil.Now()
-			for _, query := range retrieveQueries {
-				retrieveStatement, err := db.Prepare(query)
-				if err != nil {
-					return err
-				}
-				_, err = retrieveStatement.ExecContext(ctx, args...)
+			retrieveStatements := make([]*gosql.Stmt, len(retrieveQueries))
+			for i, query := range retrieveQueries {
+				var err error
+				retrieveStatements[i], err = db.Prepare(query)
 				if err != nil {
 					return err
 				}
 			}
+
+			for i := range retrieveQueries {
+				if _, err = retrieveStatements[i].ExecContext(ctx, args...); err != nil {
+					return err
+				}
+			}
+
 			elapsed := timeutil.Since(start)
 			hists.Get(`retrieve`).Record(elapsed)
 			return nil
@@ -544,12 +543,10 @@ func (w *interleavedPartitioned) Ops(
 				sessionID,
 			}
 			start := timeutil.Now()
-			for _, query := range retrieveQueries {
-				retrieveStatement, err := db.Prepare(query)
-				if err != nil {
-					return err
-				}
-				_, err = retrieveStatement.ExecContext(ctx, retrieveArgs...)
+			retrieveStatements := make([]*gosql.Stmt, len(retrieveQueries))
+			for i, query := range retrieveQueries {
+				var err error
+				retrieveStatements[i], err = db.Prepare(query)
 				if err != nil {
 					return err
 				}
@@ -558,17 +555,26 @@ func (w *interleavedPartitioned) Ops(
 			if err != nil {
 				return err
 			}
-			if _, err = updateStatement1.ExecContext(ctx, randString(rng, 100), sessionID); err != nil {
-				return err
-			}
 			updateStatement2, err := db.Prepare(updateQuery2)
 			if err != nil {
 				return err
 			}
-			_, err = updateStatement2.ExecContext(ctx, randString(rng, 20), sessionID)
+
+			for i := range retrieveQueries {
+				if _, err = retrieveStatements[i].ExecContext(ctx, retrieveArgs...); err != nil {
+					return err
+				}
+			}
+			if _, err = updateStatement1.ExecContext(ctx, randString(rng, 100), sessionID); err != nil {
+				return err
+			}
+			if _, err = updateStatement2.ExecContext(ctx, randString(rng, 20), sessionID); err != nil {
+				return err
+			}
+
 			elapsed := timeutil.Since(start)
 			hists.Get(`updates`).Record(elapsed)
-			return err
+			return nil
 		}
 
 		return nil
