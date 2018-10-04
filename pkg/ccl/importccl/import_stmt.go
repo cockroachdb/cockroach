@@ -69,25 +69,25 @@ const (
 	pgMaxRowSize = "max_row_size"
 )
 
-var importOptionExpectValues = map[string]bool{
-	csvDelimiter: true,
-	csvComment:   true,
-	csvNullIf:    true,
-	csvSkip:      true,
+var importOptionExpectValues = map[string]sql.KVStringOptValidate{
+	csvDelimiter: sql.KVStringOptRequireValue,
+	csvComment:   sql.KVStringOptRequireValue,
+	csvNullIf:    sql.KVStringOptRequireValue,
+	csvSkip:      sql.KVStringOptRequireValue,
 
-	mysqlOutfileRowSep:   true,
-	mysqlOutfileFieldSep: true,
-	mysqlOutfileEnclose:  true,
-	mysqlOutfileEscape:   true,
+	mysqlOutfileRowSep:   sql.KVStringOptRequireValue,
+	mysqlOutfileFieldSep: sql.KVStringOptRequireValue,
+	mysqlOutfileEnclose:  sql.KVStringOptRequireValue,
+	mysqlOutfileEscape:   sql.KVStringOptRequireValue,
 
-	importOptionTransform:  true,
-	importOptionSSTSize:    true,
-	importOptionDecompress: true,
-	importOptionOversample: true,
+	importOptionTransform:  sql.KVStringOptRequireValue,
+	importOptionSSTSize:    sql.KVStringOptRequireValue,
+	importOptionDecompress: sql.KVStringOptRequireValue,
+	importOptionOversample: sql.KVStringOptRequireValue,
 
-	importOptionSkipFKs: false,
+	importOptionSkipFKs: sql.KVStringOptRequireNoValue,
 
-	pgMaxRowSize: true,
+	pgMaxRowSize: sql.KVStringOptRequireValue,
 }
 
 const (
@@ -430,7 +430,9 @@ func importJobDescription(
 			v = clean
 		}
 		opt := tree.KVOption{Key: tree.Name(k)}
-		if importOptionExpectValues[k] {
+		val := importOptionExpectValues[k] == sql.KVStringOptRequireValue
+		val = val || (importOptionExpectValues[k] == sql.KVStringOptAny && len(v) > 0)
+		if val {
 			opt.Value = tree.NewDString(v)
 		}
 		stmt.Options = append(stmt.Options, opt)
