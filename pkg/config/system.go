@@ -39,6 +39,10 @@ var (
 	// testingLargestIDHook is a function used to bypass GetLargestObjectID
 	// in tests.
 	testingLargestIDHook func(uint32) uint32
+
+	// IsDatabaseOrViewHook is a function that is used to check if a given
+	// descriptor comes from a database or a table view.
+	IsDatabaseOrViewHook func(uint32, *SystemConfig) bool
 )
 
 type zoneEntry struct {
@@ -329,6 +333,9 @@ func (s *SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RK
 	findSplitKey := func(startID, endID uint32) roachpb.RKey {
 		// endID could be smaller than startID if we don't have user tables.
 		for id := startID; id <= endID; id++ {
+			if IsDatabaseOrView(id, s) {
+				continue
+			}
 			tableKey := roachpb.RKey(keys.MakeTablePrefix(id))
 			// This logic is analogous to the well-commented static split logic above.
 			if startKey.Less(tableKey) {
