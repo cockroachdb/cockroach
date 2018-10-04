@@ -157,7 +157,7 @@ func (ls *Stores) GetReplicaForRangeID(rangeID roachpb.RangeID) (*Replica, error
 		return nil, err
 	}
 	if replica == nil {
-		return nil, roachpb.NewRangeNotFoundError(rangeID)
+		return nil, roachpb.NewRangeNotFoundError(rangeID, 0)
 	}
 	return replica, nil
 }
@@ -274,7 +274,7 @@ func (ls *Stores) LookupReplica(
 		return 0, roachpb.ReplicaDescriptor{}, err
 	}
 	if !repDescFound {
-		return 0, roachpb.ReplicaDescriptor{}, roachpb.NewRangeNotFoundError(0)
+		return 0, roachpb.ReplicaDescriptor{}, roachpb.NewRangeNotFoundError(0, 0)
 	}
 	return rangeID, repDesc, nil
 }

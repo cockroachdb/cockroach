@@ -1633,7 +1633,7 @@ func (r *Replica) getReplicaDescriptorRLocked() (roachpb.ReplicaDescriptor, erro
 	if ok {
 		return repDesc, nil
 	}
-	return roachpb.ReplicaDescriptor{}, roachpb.NewRangeNotFoundError(r.RangeID)
+	return roachpb.ReplicaDescriptor{}, roachpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID())
 }
 
 // setLastReplicaDescriptors sets the the most recently seen replica
@@ -1913,7 +1913,7 @@ func (r *Replica) Send(
 		if _, ok := pErr.GetDetail().(*roachpb.RaftGroupDeletedError); ok {
 			// This error needs to be converted appropriately so that
 			// clients will retry.
-			pErr = roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
+			pErr = roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID()))
 		}
 		log.Eventf(ctx, "replica.Send got error: %s", pErr)
 	} else {
