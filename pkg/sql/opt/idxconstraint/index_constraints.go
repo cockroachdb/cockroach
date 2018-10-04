@@ -177,6 +177,7 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 				*si, *sj = *sj, *si
 			}
 		}
+		spans.SortAndMerge(keyCtx)
 		out.Init(keyCtx, &spans)
 		return true
 	}
