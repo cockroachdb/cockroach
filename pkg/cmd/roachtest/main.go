@@ -40,7 +40,8 @@ func main() {
 			if clusterName != "" && local {
 				return fmt.Errorf("cannot specify both an existing cluster (%s) and --local", clusterName)
 			}
-			if !dryrun {
+			switch cmd.Name() {
+			case "run", "bench", "store-gen":
 				initBinaries()
 			}
 			return nil
@@ -60,12 +61,48 @@ func main() {
 	rootCmd.PersistentFlags().BoolVarP(
 		&encrypt, "encrypt", "", encrypt, "start cluster with encryption at rest turned on")
 
+	var listCmd = &cobra.Command{
+		Use:   "list [tests]",
+		Short: "list tests matching the patterns",
+		Long: `List tests that match the given name patterns.
+
+If no pattern is passed, all tests are matched.
+Use --bench to list benchmarks instead of tests.
+
+Example: roachtest list acceptance copy/bank/.*false
+`,
+		RunE: func(_ *cobra.Command, args []string) error {
+			r := newRegistry()
+			if buildTag != "" {
+				if err := r.setBuildVersion(buildTag); err != nil {
+					return err
+				}
+			} else {
+				r.loadBuildVersion()
+			}
+			if !listBench {
+				registerTests(r)
+			} else {
+				registerBenchmarks(r)
+			}
+
+			names := r.ListAll(args)
+			for _, name := range names {
+				fmt.Println(name)
+			}
+			return nil
+		},
+	}
+	listCmd.Flags().BoolVar(
+		&listBench, "bench", false, "list benchmarks instead of tests")
+
 	var runCmd = &cobra.Command{
 		Use:   "run [tests]",
 		Short: "run automated tests on cockroach cluster",
 		Long: `Run automated tests on existing or ephemeral cockroach clusters.
 
-Use 'roachtest run -n' to see a list of all tests.
+roachtest run takes a list of regex patterns and runs all the matching tests.
+If no pattern is given, all tests are run.
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
 			if count <= 0 {
@@ -95,10 +132,7 @@ Use 'roachtest run -n' to see a list of all tests.
 	var benchCmd = &cobra.Command{
 		Use:   "bench [benchmarks]",
 		Short: "run automated benchmarks on cockroach cluster",
-		Long: `Run automated benchmarks on existing or ephemeral cockroach clusters.
-
-Use 'roachtest bench -n' to see a list of all benchmarks.
-`,
+		Long:  `Run automated benchmarks on existing or ephemeral cockroach clusters.`,
 		RunE: func(_ *cobra.Command, args []string) error {
 			if count <= 0 {
 				return fmt.Errorf("--count (%d) must by greater than 0", count)
@@ -120,8 +154,6 @@ Use 'roachtest bench -n' to see a list of all benchmarks.
 			&count, "count", 1, "the number of times to run each test")
 		cmd.Flags().BoolVarP(
 			&debugEnabled, "debug", "d", debugEnabled, "don't wipe and destroy cluster if test fails")
-		cmd.Flags().BoolVarP(
-			&dryrun, "dry-run", "n", dryrun, "dry run (don't run tests)")
 		cmd.Flags().IntVarP(
 			&parallelism, "parallelism", "p", parallelism, "number of tests to run in parallel")
 		cmd.Flags().StringVar(
@@ -155,6 +187,7 @@ Cockroach cluster with existing data.
 	storeGenCmd.Flags().BoolVarP(
 		&debugEnabled, "debug", "d", debugEnabled, "don't wipe and destroy cluster if test fails")
 
+	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(benchCmd)
 	rootCmd.AddCommand(storeGenCmd)
