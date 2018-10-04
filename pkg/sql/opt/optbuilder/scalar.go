@@ -16,6 +16,7 @@ package optbuilder
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -359,16 +360,12 @@ func (b *Builder) buildScalar(
 
 			fn := comparisonOpMap[t.Operator]
 
-			if fn != nil {
-				// Most comparison ops map directly to a factory method.
-				out = fn(b.factory, left, right)
-			} else if b.AllowUnsupportedExpr {
-				out = b.factory.ConstructUnsupportedExpr(b.factory.InternTypedExpr(scalar))
-			} else {
-				// TODO(rytaft): remove this check when we are confident that
-				// all operators are included in comparisonOpMap.
-				panic(unimplementedf("unsupported comparison operator: %s", t.Operator))
+			if fn == nil {
+				panic(builderError{fmt.Errorf("unknown comparison operator: %s", t.Operator)})
 			}
+
+			// Most comparison ops map directly to a factory method.
+			out = fn(b.factory, left, right)
 		}
 
 	case *tree.DTuple:
