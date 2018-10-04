@@ -380,7 +380,7 @@ func (ts *TestServer) ExpectedInitialRangeCount() (int, error) {
 // be on the server after initial (asynchronous) splits have been completed,
 // assuming no additional information is added outside of the normal bootstrap
 // process.
-func (ts *TestServer) ExpectedInitialUserRangeCount() (int, error) {
+func (ts *TestServer) ExpectedInitialUserRangeCount() int {
 	return ExpectedInitialUserRangeCount(ts.DB())
 }
 
@@ -406,37 +406,16 @@ func ExpectedInitialRangeCount(db *client.DB) (int, error) {
 	}
 	systemTableSplits := int(maxSystemDescriptorID - keys.MaxSystemConfigDescID)
 
-	// User table splits are analogous to system table splits: they occur at every
-	// possible table boundary between the end of the system ID space
-	// (keys.MaxReservedDescID) and the user table with the maximum ID
-	// (maxUserDescriptorID), even when an ID within the span does not have an
-	// associated descriptor.
-	maxUserDescriptorID := descriptorIDs[len(descriptorIDs)-1]
-	userTableSplits := 0
-	if maxUserDescriptorID >= keys.MaxReservedDescID {
-		userTableSplits = int(maxUserDescriptorID - keys.MaxReservedDescID)
-	}
-
 	// `n` splits create `n+1` ranges.
-	return len(config.StaticSplits()) + systemTableSplits + userTableSplits + 1, nil
+	return len(config.StaticSplits()) + systemTableSplits + 1, nil
 }
 
 // ExpectedInitialUserRangeCount returns the expected number of user ranges that should
 // be on the server after initial (asynchronous) splits have been completed,
 // assuming no additional information is added outside of the normal bootstrap
 // process.
-func ExpectedInitialUserRangeCount(db *client.DB) (int, error) {
-	descriptorIDs, err := sqlmigrations.ExpectedDescriptorIDs(context.Background(), db)
-	if err != nil {
-		return 0, err
-	}
-
-	maxUserDescriptorID := descriptorIDs[len(descriptorIDs)-1]
-	userTableSplits := 0
-	if maxUserDescriptorID >= keys.MaxReservedDescID {
-		userTableSplits = int(maxUserDescriptorID - keys.MaxReservedDescID)
-	}
-	return userTableSplits + 1, nil
+func ExpectedInitialUserRangeCount(db *client.DB) int {
+	return 1
 }
 
 // WaitForInitialSplits waits for the server to complete its expected initial

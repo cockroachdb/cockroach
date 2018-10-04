@@ -1610,10 +1610,7 @@ func TestSystemZoneConfigs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedUserRanges, err := tc.Servers[0].ExpectedInitialUserRangeCount()
-	if err != nil {
-		t.Fatal(err)
-	}
+	expectedUserRanges := tc.Servers[0].ExpectedInitialUserRangeCount()
 
 	expectedSystemRanges -= expectedUserRanges
 	expectedReplicas := expectedSystemRanges*int(config.DefaultSystemZoneConfig().NumReplicas) +
