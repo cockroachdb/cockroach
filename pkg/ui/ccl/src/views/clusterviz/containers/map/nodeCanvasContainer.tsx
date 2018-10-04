@@ -73,7 +73,6 @@ class NodeCanvasContainer extends React.Component<NodeCanvasContainerProps & Nod
     return (
       <Loading
         loading={!this.props.dataExists}
-        className="loading-image loading-image__spinner-left"
         image={spinner}
         render={() => (
           <NodeCanvas

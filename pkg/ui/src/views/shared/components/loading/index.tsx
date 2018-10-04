@@ -2,7 +2,7 @@ import React from "react";
 
 interface LoadingProps {
   loading: boolean;
-  className: string;
+  className?: string;
   image: string;
   render: () => React.ReactNode;
 }
@@ -12,11 +12,12 @@ interface LoadingProps {
 // * loading prop is true.
 // *
 export default function Loading(props: LoadingProps) {
+  const className = props.className || "loading-image loading-image__spinner-left";
   const image = {
     "backgroundImage": `url(${props.image})`,
   };
   if (props.loading) {
-    return <div className={props.className} style={image} />;
+    return <div className={className} style={image} />;
   }
   return (
     <React.Fragment>
