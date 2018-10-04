@@ -62,8 +62,8 @@ const (
 	backupOptRevisionHistory = "revision_history"
 )
 
-var backupOptionExpectValues = map[string]bool{
-	backupOptRevisionHistory: false,
+var backupOptionExpectValues = map[string]sql.KVStringOptValidate{
+	backupOptRevisionHistory: sql.KVStringOptRequireNoValue,
 }
 
 // BackupCheckpointInterval is the interval at which backup progress is saved

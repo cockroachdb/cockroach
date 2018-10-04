@@ -228,13 +228,10 @@ func emitEntries(
 	}
 }
 
-// emitResolvedTimestamp emits a changefeed-level resolved timestamp to the sink
-// and checkpoints it and the span-level resolved timestamps to the job record.
-func emitResolvedTimestamp(
+// checkpointResolvedTimestamp checkpoints a changefeed-level resolved timestamp
+// to the jobs record.
+func checkpointResolvedTimestamp(
 	ctx context.Context,
-	details jobspb.ChangefeedDetails,
-	encoder Encoder,
-	sink Sink,
 	jobProgressedFn func(context.Context, jobs.HighWaterProgressedFn) error,
 	sf *spanFrontier,
 ) error {
@@ -265,19 +262,24 @@ func emitResolvedTimestamp(
 			return err
 		}
 	}
+	return nil
+}
 
-	if _, ok := details.Opts[optResolvedTimestamps]; ok {
-		payload, err := encoder.EncodeResolvedTimestamp(resolved)
-		if err != nil {
-			return err
-		}
-		// TODO(dan): Plumb a bufalloc.ByteAllocator to use here.
-		payload = append([]byte(nil), payload...)
-		// TODO(dan): Emit more fine-grained (table level) resolved
-		// timestamps.
-		if err := sink.EmitResolvedTimestamp(ctx, payload); err != nil {
-			return err
-		}
+// emitResolvedTimestamp emits a changefeed-level resolved timestamp to the
+// sink.
+func emitResolvedTimestamp(
+	ctx context.Context, encoder Encoder, sink Sink, resolved hlc.Timestamp,
+) error {
+	payload, err := encoder.EncodeResolvedTimestamp(resolved)
+	if err != nil {
+		return err
+	}
+	// TODO(dan): Plumb a bufalloc.ByteAllocator to use here.
+	payload = append([]byte(nil), payload...)
+	// TODO(dan): Emit more fine-grained (table level) resolved
+	// timestamps.
+	if err := sink.EmitResolvedTimestamp(ctx, payload); err != nil {
+		return err
 	}
 	if log.V(2) {
 		log.Infof(ctx, `resolved %s`, resolved)

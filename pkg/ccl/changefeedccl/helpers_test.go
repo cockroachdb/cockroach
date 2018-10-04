@@ -158,7 +158,7 @@ func createBenchmarkChangefeed(
 				for _, rs := range resolvedSpans {
 					if sf.Forward(rs.Span, rs.Timestamp) {
 						if err := emitResolvedTimestamp(
-							ctx, details, encoder, sink, nil, sf,
+							ctx, encoder, sink, sf.Frontier(),
 						); err != nil {
 							return err
 						}
@@ -591,37 +591,39 @@ func skipResolvedTimestamps(t *testing.T, f testfeed) {
 	}
 }
 
-func expectResolvedTimestampGreaterThan(t testing.TB, f testfeed, ts string) {
+func parseTimeToHLC(t testing.TB, s string) hlc.Timestamp {
 	t.Helper()
-	for {
-		topic, _, key, value, resolved, _ := f.Next(t)
-		if key != nil {
-			t.Fatalf(`unexpected row %s: %s -> %s`, topic, key, value)
-		}
-		if resolved == nil {
-			t.Fatal(`expected a resolved timestamp notification`)
-		}
-
-		var valueRaw struct {
-			CRDB struct {
-				Resolved string `json:"resolved"`
-			} `json:"__crdb__"`
-		}
-		if err := gojson.Unmarshal(resolved, &valueRaw); err != nil {
-			t.Fatal(err)
-		}
-		parseTimeToDecimal := func(s string) *apd.Decimal {
-			t.Helper()
-			d, _, err := apd.NewFromString(s)
-			if err != nil {
-				t.Fatal(err)
-			}
-			return d
-		}
-		if parseTimeToDecimal(valueRaw.CRDB.Resolved).Cmp(parseTimeToDecimal(ts)) > 0 {
-			break
-		}
+	d, _, err := apd.NewFromString(s)
+	if err != nil {
+		t.Fatal(err)
 	}
+	ts, err := tree.DecimalToHLC(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ts
+}
+
+func expectResolvedTimestamp(t testing.TB, f testfeed) hlc.Timestamp {
+	t.Helper()
+	topic, _, key, value, resolved, _ := f.Next(t)
+	if key != nil {
+		t.Fatalf(`unexpected row %s: %s -> %s`, topic, key, value)
+	}
+	if resolved == nil {
+		t.Fatal(`expected a resolved timestamp notification`)
+	}
+
+	var valueRaw struct {
+		CRDB struct {
+			Resolved string `json:"resolved"`
+		} `json:"__crdb__"`
+	}
+	if err := gojson.Unmarshal(resolved, &valueRaw); err != nil {
+		t.Fatal(err)
+	}
+
+	return parseTimeToHLC(t, valueRaw.CRDB.Resolved)
 }
 
 func sinklessTest(testFn func(*testing.T, *gosql.DB, testfeedFactory)) func(*testing.T) {
