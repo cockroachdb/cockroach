@@ -1676,11 +1676,16 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 
 // crdbInternalZonesTable decodes and exposes the zone configs in the
 // system.zones table.
+// The cli_specifier column is deprecated and only exists to be used
+// as a hidden field by the CLI for backwards compatibility. Use zone_name
+// instead.
 var crdbInternalZonesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.zones (
   zone_id          INT NOT NULL,
-  cli_specifier    STRING,
+  zone_name        STRING,
+  cli_specifier    STRING, -- this column is deprecated in favor of zone_name.
+                           -- It is kept for backwards compatibility with the CLI.
   config_yaml      STRING NOT NULL,
   config_sql       STRING, -- this column can be NULL if there is no specifier syntax
                            -- possible (e.g. the object was deleted).
