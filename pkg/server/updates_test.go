@@ -557,7 +557,7 @@ func TestReportUsage(t *testing.T) {
 		"diagnostics.reporting.send_crash_reports": "false",
 		"server.time_until_store_dead":             "1m30s",
 		"trace.debug.enable":                       "false",
-		"version":                                  "2.0-13",
+		"version":                                  "2.0-14",
 		"cluster.secret":                           "<redacted>",
 	} {
 		if got, ok := r.last.AlteredSettings[key]; !ok {
