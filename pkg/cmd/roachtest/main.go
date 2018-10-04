@@ -40,9 +40,7 @@ func main() {
 			if clusterName != "" && local {
 				return fmt.Errorf("cannot specify both an existing cluster (%s) and --local", clusterName)
 			}
-			if !dryrun {
-				initBinaries()
-			}
+			initBinaries()
 			return nil
 		},
 	}
@@ -59,6 +57,32 @@ func main() {
 		&workload, "workload", "", "path to workload binary to use")
 	rootCmd.PersistentFlags().BoolVarP(
 		&encrypt, "encrypt", "", encrypt, "start cluster with encryption at rest turned on")
+
+	var listCmd = &cobra.Command{
+		Use:   "list [tests]",
+		Short: "list tests matching the patterns",
+		Long: `List tests that match the given name patterns.
+
+Use 'roachtest list acceptance copy/bank/.*false'.
+`,
+		RunE: func(_ *cobra.Command, args []string) error {
+			r := newRegistry()
+			if buildTag != "" {
+				if err := r.setBuildVersion(buildTag); err != nil {
+					return err
+				}
+			} else {
+				r.loadBuildVersion()
+			}
+			registerTests(r)
+
+			names := r.ListAll(args)
+			for _, name := range names {
+				fmt.Println(name)
+			}
+			return nil
+		},
+	}
 
 	var runCmd = &cobra.Command{
 		Use:   "run [tests]",
@@ -120,8 +144,6 @@ Use 'roachtest bench -n' to see a list of all benchmarks.
 			&count, "count", 1, "the number of times to run each test")
 		cmd.Flags().BoolVarP(
 			&debugEnabled, "debug", "d", debugEnabled, "don't wipe and destroy cluster if test fails")
-		cmd.Flags().BoolVarP(
-			&dryrun, "dry-run", "n", dryrun, "dry run (don't run tests)")
 		cmd.Flags().IntVarP(
 			&parallelism, "parallelism", "p", parallelism, "number of tests to run in parallel")
 		cmd.Flags().StringVar(
@@ -155,6 +177,7 @@ Cockroach cluster with existing data.
 	storeGenCmd.Flags().BoolVarP(
 		&debugEnabled, "debug", "d", debugEnabled, "don't wipe and destroy cluster if test fails")
 
+	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(benchCmd)
 	rootCmd.AddCommand(storeGenCmd)
