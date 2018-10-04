@@ -1368,7 +1368,7 @@ func TestRemovePartitioningExpiredLicense(t *testing.T) {
 
 	expectLicenseErr := func(q string) {
 		t.Helper()
-		const expErr = "use of partitions requires an enterprise license"
+		const expErr = "use of replication zones on indexes and partitions requires an enterprise license"
 		if _, err := sqlDB.DB.Exec(q); !testutils.IsError(err, expErr) {
 			t.Fatalf("expected error %q, but got %+v", expErr, err)
 		}
