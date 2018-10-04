@@ -3094,6 +3094,9 @@ func (errorChannelTestHandler) HandleSnapshot(
 	panic("unimplemented")
 }
 
+// This test simulates a scenario where one replica has been removed from the
+// range's Raft group but it is unaware of the fact. We check that this replica
+// coming back from the dead cannot cause elections.
 func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -3173,9 +3176,10 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		StoreID:   mtc.stores[1].StoreID(),
 	}
 
-	// Create a new transport for store 0. Error responses are passed
-	// back along the same grpc stream as the request so it's ok that
-	// there are two (this one and the one actually used by the store).
+	// Create a new transport for store 0 so that we can intercept the responses.
+	// Error responses are passed back along the same grpc stream as the request
+	// so it's ok that there are two (this one and the one actually used by the
+	// store).
 	transport0 := storage.NewRaftTransport(log.AmbientContext{Tracer: mtc.storeConfig.Settings.Tracer},
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(mtc.rpcContext, gossip.AddressResolver(mtc.gossips[0])),
@@ -3185,7 +3189,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	errChan := errorChannelTestHandler(make(chan *roachpb.Error, 1))
 	transport0.Listen(mtc.stores[0].StoreID(), errChan)
 
-	// Simulate an election triggered by the removed node. Try and try again
+	// Simulate the removed node asking to trigger an election. Try and try again
 	// until we're reasonably sure the message was sent.
 	for !transport0.SendAsync(&storage.RaftMessageRequest{
 		RangeID:     rangeID,
@@ -3200,7 +3204,8 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	}) {
 	}
 
-	// The receiver of this message should return an error.
+	// The receiver of this message (i.e. replica1) should return an error telling
+	// the sender that it's no longer part of the group.
 	select {
 	case pErr := <-errChan:
 		switch pErr.GetDetail().(type) {
@@ -3209,7 +3214,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 			t.Fatalf("unexpected error type %T: %s", pErr.GetDetail(), pErr)
 		}
 	case <-time.After(45 * time.Second):
-		t.Fatal("did not get expected error")
+		t.Fatal("did not get expected ReplicaTooOldError error")
 	}
 
 	// The message should have been discarded without triggering an
