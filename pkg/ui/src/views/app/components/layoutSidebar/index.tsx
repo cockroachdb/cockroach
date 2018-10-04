@@ -17,6 +17,7 @@ import databasesIcon from "!!raw-loader!assets/sidebarIcons/databases.svg";
 import jobsIcon from "!!raw-loader!assets/sidebarIcons/jobs.svg";
 import statementsIcon from "!!raw-loader!assets/sidebarIcons/statements.svg";
 import unlockedIcon from "!!raw-loader!assets/unlocked.svg";
+import gearIcon from "!!raw-loader!assets/sidebarIcons/gear.svg";
 
 interface IconLinkProps {
   icon: string;
@@ -50,7 +51,7 @@ class IconLink extends React.Component<IconLinkProps, {}> {
       <li className={className} >
         <Link
           to={to}
-          className={classNames({ active: isActive })}
+          className={classNames("icon-link", { active: isActive })}
         >
           <div className="image-container"
                dangerouslySetInnerHTML={trustIcon(icon)}/>
@@ -117,6 +118,10 @@ const LoginIndicatorConnected = connect(
  * the page which is currently active will be highlighted.
  */
 export default class Sidebar extends React.Component {
+  static contextTypes = {
+    router: PropTypes.object,
+  };
+
   render() {
     return (
       <nav className="navigation-bar">
@@ -128,6 +133,13 @@ export default class Sidebar extends React.Component {
           <IconLink to="/jobs" icon={jobsIcon} title="Jobs" />
         </ul>
         <ul className="navigation-bar__list navigation-bar__list--bottom">
+          <li>
+            <Link to="/debug" className={classNames("debug-pages-link", { active: this.context.router.isActive("/debug") })}>
+              <div
+                dangerouslySetInnerHTML={trustIcon(gearIcon)}
+              />
+            </Link>
+          </li>
           <LoginIndicatorConnected />
           <IconLink to="/debug" icon={cockroachIcon} className="cockroach" />
         </ul>
