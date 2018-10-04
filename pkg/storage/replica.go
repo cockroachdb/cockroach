@@ -1772,7 +1772,7 @@ func (r *Replica) getReplicaDescriptorRLocked() (roachpb.ReplicaDescriptor, erro
 	if ok {
 		return repDesc, nil
 	}
-	return roachpb.ReplicaDescriptor{}, roachpb.NewRangeNotFoundError(r.RangeID)
+	return roachpb.ReplicaDescriptor{}, roachpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID())
 }
 
 func (r *Replica) getMergeCompleteCh() chan struct{} {
@@ -2047,7 +2047,7 @@ func (r *Replica) sendWithRangeID(
 		if _, ok := pErr.GetDetail().(*roachpb.RaftGroupDeletedError); ok {
 			// This error needs to be converted appropriately so that
 			// clients will retry.
-			pErr = roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID))
+			pErr = roachpb.NewError(roachpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID()))
 		}
 		log.Eventf(ctx, "replica.Send got error: %s", pErr)
 	} else {
@@ -2990,7 +2990,7 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 			// The merge committed but the left-hand replica on this store hasn't
 			// subsumed this replica yet. Mark this replica as destroyed so it
 			// doesn't serve requests when we close the mergeCompleteCh below.
-			r.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(r.RangeID), destroyReasonMergePending)
+			r.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(r.RangeID, r.store.StoreID()), destroyReasonMergePending)
 		}
 		// Unblock pending requests. If the merge committed, the requests will
 		// notice that the replica has been destroyed and return an appropriate

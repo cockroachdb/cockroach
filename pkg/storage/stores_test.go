@@ -173,7 +173,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 	if replica2 != nil {
 		t.Fatalf("expected replica to be nil; was %v", replica2)
 	}
-	expectedError := roachpb.NewRangeNotFoundError(rangeID2)
+	expectedError := roachpb.NewRangeNotFoundError(rangeID2, 0)
 	if err2.Error() != expectedError.Error() {
 		t.Fatalf("expected err to be %v; was %v", expectedError, err2)
 	}
