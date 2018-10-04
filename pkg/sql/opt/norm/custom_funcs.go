@@ -1079,6 +1079,33 @@ func (c *CustomFuncs) SimplifyWhens(condition memo.GroupID, whens memo.ListID) m
 	return c.f.ConstructCase(condition, lb.BuildList())
 }
 
+// IsEquality returns whether the private operator is EqOp.
+// This is necessary in the case of AnyScalar which does not
+// allow matching on the suboperator.
+func (c *CustomFuncs) IsEquality(id memo.PrivateID) bool {
+	return c.mem.LookupPrivate(id).(opt.Operator) == opt.EqOp
+}
+
+// IsArray returns whether the Const group is an array.
+func (c *CustomFuncs) IsArray(g memo.GroupID) bool {
+	d := c.mem.LookupPrivate(c.mem.NormExpr(g).PrivateID()).(tree.Datum)
+	_, ok := d.(*tree.DArray)
+	return ok
+}
+
+// ConvertConstArrayToTuple converts a constant ARRAY datum to the equivalent
+// homogeneous tuple, so ARRAY[1, 2, 3] becomes (1, 2, 3).
+func (c *CustomFuncs) ConvertConstArrayToTuple(g memo.GroupID) memo.GroupID {
+	d := c.mem.LookupPrivate(c.mem.NormExpr(g).PrivateID()).(*tree.DArray)
+	elems := make([]memo.GroupID, len(d.Array))
+	ts := make([]types.T, len(d.Array))
+	for i := range d.Array {
+		elems[i] = c.f.ConstructConst(c.mem.InternDatum(d.Array[i]))
+		ts[i] = d.ParamTyp
+	}
+	return c.f.ConstructTuple(c.mem.InternList(elems), c.mem.InternType(types.TTuple{Types: ts}))
+}
+
 // ----------------------------------------------------------------------
 //
 // Numeric Rules
