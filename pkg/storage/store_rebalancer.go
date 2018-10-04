@@ -180,6 +180,10 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 			case <-ticker.C:
 			}
 
+			if !sr.st.Version.IsMinSupported(cluster.VersionLoadBasedRebalancing) {
+				continue
+			}
+
 			mode := LBRebalancingMode(LoadBasedRebalancingMode.Get(&sr.st.SV))
 			if mode == LBRebalancingOff {
 				continue
