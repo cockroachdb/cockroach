@@ -37,25 +37,48 @@ type showZoneConfigNode struct {
 	run showZoneConfigRun
 }
 
+// These must match crdb_internal.zones.
+var showZoneConfigNodeColumns = sqlbase.ResultColumns{
+	{Name: "zone_id", Typ: types.Int, Hidden: true},
+	{Name: "zone_name", Typ: types.String},
+	{Name: "cli_specifier", Typ: types.String, Hidden: true},
+	{Name: "config_yaml", Typ: types.String, Hidden: true},
+	{Name: "config_sql", Typ: types.String},
+	{Name: "config_protobuf", Typ: types.Bytes, Hidden: true},
+}
+
+// These must match showZoneConfigColumns.
+const (
+	zoneIDCol int = iota
+	zoneNameCol
+	cliSpecifierCol
+	configYAMLCol
+	configSQLCol
+	configProtobufCol
+)
+
 func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (planNode, error) {
 	if n.ZoneSpecifier == (tree.ZoneSpecifier{}) {
-		return p.delegateQuery(ctx, "SHOW ZONE CONFIGURATIONS",
-			`SELECT zone_id, cli_specifier, config_sql, config_protobuf
+		planRenderNode, err := p.delegateQuery(ctx, "SHOW ZONE CONFIGURATIONS",
+			`SELECT zone_id, cli_specifier AS zone_name, cli_specifier, config_sql
          FROM crdb_internal.zones
         WHERE cli_specifier IS NOT NULL`, nil, nil)
+		if err != nil {
+			return planRenderNode, err
+		}
+
+		// Using planMutableColumns to hide the cli_specifier column,
+		// that needs to be supported for backwards compatibility with
+		// the CLI.
+		columns := planMutableColumns(planRenderNode)
+		columns[zoneIDCol].Hidden = true
+		columns[cliSpecifierCol].Hidden = true
+
+		return planRenderNode, nil
 	}
 	return &showZoneConfigNode{
 		zoneSpecifier: n.ZoneSpecifier,
 	}, nil
-}
-
-// These must match crdb_internal.zones.
-var showZoneConfigNodeColumns = sqlbase.ResultColumns{
-	{Name: "zone_id", Typ: types.Int},
-	{Name: "cli_specifier", Typ: types.String},
-	{Name: "config_yaml", Typ: types.String, Hidden: true},
-	{Name: "config_sql", Typ: types.String},
-	{Name: "config_protobuf", Typ: types.Bytes},
 }
 
 // showZoneConfigRun contains the run-time state of showZoneConfigNode
@@ -121,25 +144,26 @@ func generateZoneConfigIntrospectionValues(
 	values tree.Datums, zoneID tree.Datum, zs *tree.ZoneSpecifier, zone *config.ZoneConfig,
 ) error {
 	// Populate the ID column.
-	values[0] = zoneID
+	values[zoneIDCol] = zoneID
 
 	// Populate the specifier column.
 	if zs == nil {
-		values[1] = tree.DNull
+		values[zoneNameCol] = tree.DNull
 	} else {
-		values[1] = tree.NewDString(config.CLIZoneSpecifier(zs))
+		values[zoneNameCol] = tree.NewDString(config.CLIZoneSpecifier(zs))
 	}
+	values[cliSpecifierCol] = values[zoneNameCol]
 
 	// Populate the YAML column.
 	yamlConfig, err := yaml.Marshal(zone)
 	if err != nil {
 		return err
 	}
-	values[2] = tree.NewDString(string(yamlConfig))
+	values[configYAMLCol] = tree.NewDString(string(yamlConfig))
 
 	// Populate the SQL column.
 	if zs == nil {
-		values[3] = tree.DNull
+		values[configSQLCol] = tree.DNull
 	} else {
 		constraints, err := yamlMarshalFlow(config.ConstraintsList(zone.Constraints))
 		if err != nil {
@@ -162,7 +186,7 @@ func generateZoneConfigIntrospectionValues(
 		f.Printf("\tnum_replicas = %d,\n", zone.NumReplicas)
 		f.Printf("\tconstraints = %s,\n", lex.EscapeSQLString(constraints))
 		f.Printf("\tlease_preferences = %s", lex.EscapeSQLString(prefs))
-		values[3] = tree.NewDString(f.String())
+		values[configSQLCol] = tree.NewDString(f.String())
 	}
 
 	// Populate the protobuf column.
@@ -170,7 +194,7 @@ func generateZoneConfigIntrospectionValues(
 	if err != nil {
 		return err
 	}
-	values[4] = tree.NewDBytes(tree.DBytes(protoConfig))
+	values[configProtobufCol] = tree.NewDBytes(tree.DBytes(protoConfig))
 
 	return nil
 }

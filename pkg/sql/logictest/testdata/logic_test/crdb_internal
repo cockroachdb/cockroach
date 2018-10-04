@@ -195,10 +195,10 @@ SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name = ''
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
 
-query ITTTT colnames
+query ITTTTT colnames
 SELECT * FROM crdb_internal.zones WHERE false
 ----
-zone_id  cli_specifier  config_yaml  config_sql  config_protobuf
+zone_id  zone_name cli_specifier  config_yaml  config_sql  config_protobuf
 
 statement ok
 INSERT INTO system.zones (id, config) VALUES
