@@ -52,6 +52,15 @@ export default function Debug() {
         <title>Debug</title>
       </Helmet>
       <h1>Advanced Debugging</h1>
+      <div style={{ marginTop: 15 }}>
+        <p>
+          These pages are experimental and undocumented. If you see an issue
+          {" "}
+          <a className="debug-link" href="https://www.cockroachlabs.com/community/">
+            file an issue or contact us
+          </a>.
+        </p>
+      </div>
       <DebugTable heading="Reports">
         <DebugTableRow title="Custom Time-Series Chart">
           <DebugTableLink
