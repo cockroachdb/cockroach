@@ -69,6 +69,7 @@ const (
 	VersionBatchResponse
 	VersionCreateChangefeed
 	VersionRangeMerges
+	VersionLoadBasedRebalancing
 
 	// Add new versions here (step one of two).
 
@@ -270,6 +271,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionRangeMerges is https://github.com/cockroachdb/cockroach/pull/28865.
 		Key:     VersionRangeMerges,
 		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 12},
+	},
+	{
+		// VersionLoadBasedRebalancing is https://github.com/cockroachdb/cockroach/pull/28852.
+		Key:     VersionLoadBasedRebalancing,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 14},
 	},
 
 	// Add new versions here (step two of two).
