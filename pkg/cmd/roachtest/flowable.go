@@ -45,7 +45,7 @@ func registerFlowable(r *registry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest Flowable release is %s.", latestTag)
+		t.l.Printf("Latest Flowable release is %s.", latestTag)
 
 		if err := repeatRunE(
 			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -71,6 +71,7 @@ func registerFlowable(r *registry) {
 
 		if err := repeatGitCloneE(
 			ctx,
+			t.l,
 			c,
 			"https://github.com/flowable/flowable-engine.git",
 			"/mnt/data1/flowable-engine",

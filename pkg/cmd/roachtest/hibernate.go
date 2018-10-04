@@ -76,6 +76,7 @@ func registerHibernate(r *registry) {
 
 		if err := repeatGitCloneE(
 			ctx,
+			t.l,
 			c,
 			"https://github.com/hibernate/hibernate-orm.git",
 			"/mnt/data1/hibernate",

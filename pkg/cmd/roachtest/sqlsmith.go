@@ -50,9 +50,6 @@ func registerSQLsmith(r *registry) {
 			if ctx.Err() != nil {
 				return
 			}
-			if c.t.Failed() {
-				return
-			}
 			attempt++
 
 			c.l.Printf("attempt %d - update dependencies", attempt)
@@ -67,11 +64,12 @@ func registerSQLsmith(r *registry) {
 			}
 
 			c.l.Printf("attempt %d - cloning SQLsmith", attempt)
-			if err := c.RunE(ctx, node, `rm -rf /mnt/data1/sqlsmith`); err != nil {
+			if err := c.RunL(ctx, t.l, node, `rm -rf /mnt/data1/sqlsmith`); err != nil {
 				continue
 			}
-			if err := c.GitCloneE(
+			if err := c.GitClone(
 				ctx,
+				t.l,
 				"https://github.com/cockroachdb/sqlsmith.git",
 				"/mnt/data1/sqlsmith",
 				"cockroach",
@@ -81,13 +79,13 @@ func registerSQLsmith(r *registry) {
 			}
 
 			c.l.Printf("attempt %d - building SQLsmith", attempt)
-			if err := c.RunE(ctx, node, `cd /mnt/data1/sqlsmith/ && autoreconf -i`); err != nil {
+			if err := c.RunL(ctx, t.l, node, `cd /mnt/data1/sqlsmith/ && autoreconf -i`); err != nil {
 				continue
 			}
-			if err := c.RunE(ctx, node, `cd /mnt/data1/sqlsmith/ && ./configure`); err != nil {
+			if err := c.RunL(ctx, t.l, node, `cd /mnt/data1/sqlsmith/ && ./configure`); err != nil {
 				continue
 			}
-			if err := c.RunE(ctx, node, `cd /mnt/data1/sqlsmith/ && make`); err != nil {
+			if err := c.RunL(ctx, t.l, node, `cd /mnt/data1/sqlsmith/ && make`); err != nil {
 				continue
 			}
 

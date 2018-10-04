@@ -711,7 +711,9 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 			t.Fatal("distributed chaos benchmarking not supported")
 		}
 		t.Status("installing haproxy")
-		c.Install(ctx, loadNodes, "haproxy")
+		if err := c.Install(ctx, t.l, loadNodes, "haproxy"); err != nil {
+			t.Fatal(err)
+		}
 		c.Put(ctx, cockroach, "./cockroach", loadNodes)
 		c.Run(ctx, loadNodes, "./cockroach gen haproxy --insecure --url {pgurl:1}")
 		c.Run(ctx, loadNodes, "haproxy -f haproxy.cfg -D")
@@ -814,7 +816,11 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 						return errors.Wrapf(err, "error running tpcc load generator")
 					}
 					roachtestHistogramsPath := filepath.Join(resultsDir, fmt.Sprintf("%d.%d-stats.json", warehouses, groupIdx))
-					c.Get(ctx, histogramsPath, roachtestHistogramsPath, group.loadNodes)
+					if err := c.Get(
+						ctx, t.l, histogramsPath, roachtestHistogramsPath, group.loadNodes,
+					); err != nil {
+						t.Fatal(err)
+					}
 					snapshots, err := histogram.DecodeSnapshots(roachtestHistogramsPath)
 					if err != nil {
 						return errors.Wrapf(err, "failed to decode histogram snapshots")

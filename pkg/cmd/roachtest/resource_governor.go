@@ -102,6 +102,7 @@ type resourceLock struct {
 // calls, fail with a message that includes msg.
 func (r *resourceGovernor) Close(msg string) {
 	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.mu.closed {
 		return
 	}
@@ -109,7 +110,6 @@ func (r *resourceGovernor) Close(msg string) {
 	r.mu.closerMsg = msg
 	// Wake up everybody blocked in resourceLock.Wait().
 	r.mu.cond.Broadcast()
-	r.mu.Unlock()
 }
 
 type errGovernorClosed struct {
@@ -129,6 +129,7 @@ func newErrGovernorClosed(closerMsg string) error {
 func (r *resourceGovernor) Lock() (*resourceLock, error) {
 	r.mu.Lock() // Unlocked by ResourceLock.Unlock()/Wait().
 	if r.mu.closed {
+		r.mu.Unlock()
 		return nil, newErrGovernorClosed(r.mu.closerMsg)
 	}
 	return &resourceLock{rg: r}, nil

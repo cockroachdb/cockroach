@@ -16,10 +16,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"os"
+	"os/signal"
 	"os/user"
+	"path/filepath"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/spf13/cobra"
@@ -29,9 +33,15 @@ func main() {
 	rand.Seed(timeutil.Now().UnixNano())
 	username := os.Getenv("ROACHPROD_USER")
 	parallelism := 10
+	var cpuQuota int
 	// Path to a local dir where the test logs and artifacts collected from
 	// cluster will be placed.
 	var artifacts string
+	var clusterLifetimeOverrideS string
+	var clusterLifetimeOverride time.Duration
+	var httpPort int
+	var debugEnabled bool
+	var clusterID string
 
 	cobra.EnableCommandSorting = false
 
@@ -47,8 +57,16 @@ func main() {
 				return nil
 			}
 
+			if clusterLifetimeOverrideS != "" {
+				var err error
+				clusterLifetimeOverride, err = time.ParseDuration(clusterLifetimeOverrideS)
+				if err != nil {
+					return fmt.Errorf("invalid --cluster-lifetime-override: %s", clusterLifetimeOverrideS)
+				}
+			}
+
 			if clusterName != "" && local {
-				return fmt.Errorf("cannot specify both an existing cluster (%s) and --local", clusterName)
+				return fmt.Errorf("cannot specify both an existing cluster (%s) and --local. However, if a local cluster already exists, --clusters=local will use it.", clusterName)
 			}
 			switch cmd.Name() {
 			case "run", "bench", "store-gen":
@@ -59,7 +77,10 @@ func main() {
 	}
 
 	rootCmd.PersistentFlags().StringVarP(
-		&clusterName, "cluster", "c", "", "name of an existing cluster to use for running tests")
+		&clusterName, "cluster", "c", "",
+		"Comma-separated list of names existing cluster to use for running tests. "+
+			"If fewer than --parallelism names are specified, then the parallelism "+
+			"is capped to the number of clusters specified.")
 	rootCmd.PersistentFlags().BoolVarP(
 		&local, "local", "l", local, "run tests locally")
 	rootCmd.PersistentFlags().StringVarP(
@@ -97,7 +118,7 @@ Examples:
    roachtest list tag:weekly
 `,
 		RunE: func(_ *cobra.Command, args []string) error {
-			r := newRegistry(setBuildVersion)
+			r := newRegistry(nil /* clusterRegistry */, setBuildVersion)
 			if !listBench {
 				registerTests(r)
 			} else {
@@ -115,8 +136,9 @@ Examples:
 		&listBench, "bench", false, "list benchmarks instead of tests")
 
 	var runCmd = &cobra.Command{
-		Use:   "run [tests]",
-		Short: "run automated tests on cockroach cluster",
+		SilenceUsage: true,
+		Use:          "run [tests]",
+		Short:        "run automated tests on cockroach cluster",
 		Long: `Run automated tests on existing or ephemeral cockroach clusters.
 
 roachtest run takes a list of regex patterns and runs all the matching tests.
@@ -127,10 +149,59 @@ the test tags.
 			if count <= 0 {
 				return fmt.Errorf("--count (%d) must by greater than 0", count)
 			}
-			r := newRegistry(setBuildVersion)
+			cr := newClusterRegistry()
+			r := newRegistry(cr, setBuildVersion)
 			registerTests(r)
-			os.Exit(r.Run(args, parallelism, artifacts, getUser(username)))
-			return nil
+
+			filter := newFilter(args)
+			clusterType := roachprodCluster
+			if local {
+				clusterType = localCluster
+			}
+			opt := clustersOpt{
+				typ:                       clusterType,
+				clusterName:               clusterName,
+				cpuQuota:                  cpuQuota,
+				lifetimeOverride:          clusterLifetimeOverride,
+				keepClustersOnTestFailure: debugEnabled,
+			}
+			if err := r.runHTTPServer(httpPort, os.Stdout); err != nil {
+				return err
+			}
+
+			tests := testsToRun(r, filter)
+			n := len(tests)
+			if n*count < parallelism {
+				// Don't spin up more workers than necessary. This has particular
+				// implications for the common case of running a single test once: if
+				// parallelism is set to 1, we'll use teeToStdout below to get logs to
+				// stdout/stderr.
+				parallelism = n * count
+			}
+			l, tee := testRunnerLogger(context.Background(), parallelism, artifacts)
+			lopt := loggingOpt{
+				l:            l,
+				tee:          tee,
+				stdout:       os.Stdout,
+				stderr:       os.Stderr,
+				artifactsDir: artifacts,
+			}
+
+			// We're going to run all the workers (and thus all the tests) in a context
+			// that gets canceled when the Interrupt signal is received.
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			CtrlC(ctx, l, cancel, cr)
+			err := r.Run(
+				context.Background(), tests, count, parallelism,
+				opt, artifacts, getUser(username), lopt)
+
+			// Make sure we attempt to clean up. We run with a non-canceled ctx; the
+			// ctx above might be canceled in case a signal was received. If that's
+			// the case, we're running under a 5s timeout until the CtrlC() goroutine
+			// kills the process.
+			cr.destroyAllClusters(context.Background(), l)
+			return err
 		},
 	}
 
@@ -142,17 +213,67 @@ the test tags.
 		&teamCity, "teamcity", false, "include teamcity-specific markers in output")
 
 	var benchCmd = &cobra.Command{
-		Use:   "bench [benchmarks]",
-		Short: "run automated benchmarks on cockroach cluster",
-		Long:  `Run automated benchmarks on existing or ephemeral cockroach clusters.`,
+		SilenceUsage: true,
+		Use:          "bench [benchmarks]",
+		Short:        "run automated benchmarks on cockroach cluster",
+		Long:         `Run automated benchmarks on existing or ephemeral cockroach clusters.`,
 		RunE: func(_ *cobra.Command, args []string) error {
 			if count <= 0 {
 				return fmt.Errorf("--count (%d) must by greater than 0", count)
 			}
-			r := newRegistry(setBuildVersion)
+			cr := newClusterRegistry()
+			r := newRegistry(cr, setBuildVersion)
 			registerBenchmarks(r)
-			os.Exit(r.Run(args, parallelism, artifacts, getUser(username)))
-			return nil
+
+			filter := newFilter(args)
+			clusterType := roachprodCluster
+			if local {
+				clusterType = localCluster
+			}
+			opt := clustersOpt{
+				typ:                       clusterType,
+				clusterName:               clusterName,
+				cpuQuota:                  cpuQuota,
+				lifetimeOverride:          clusterLifetimeOverride,
+				keepClustersOnTestFailure: debugEnabled,
+			}
+			if err := r.runHTTPServer(httpPort, os.Stdout); err != nil {
+				return err
+			}
+
+			tests := testsToRun(r, filter)
+			n := len(tests)
+			if n*count < parallelism {
+				// Don't spin up more workers than necessary. This has particular
+				// implications for the common case of running a single test once: if
+				// parallelism is set to 1, we'll use teeToStdout below to get logs to
+				// stdout/stderr.
+				parallelism = n * count
+			}
+			l, tee := testRunnerLogger(context.Background(), parallelism, artifacts)
+			lopt := loggingOpt{
+				l:            l,
+				tee:          tee,
+				stdout:       os.Stdout,
+				stderr:       os.Stderr,
+				artifactsDir: artifacts,
+			}
+
+			// We're going to run all the workers (and thus all the tests) in a context
+			// that gets canceled when the Interrupt signal is received.
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			CtrlC(ctx, l, cancel, cr)
+			err := r.Run(
+				context.Background(), tests, count, parallelism, opt,
+				artifacts, getUser(username), lopt)
+
+			// Make sure we attempt to clean up. We run with a non-canceled ctx; the
+			// ctx above might be canceled in case a signal was received. If that's
+			// the case, we're running under a 5s timeout until the CtrlC() goroutine
+			// kills the process.
+			cr.destroyAllClusters(context.Background(), l)
+			return err
 		},
 	}
 
@@ -177,6 +298,18 @@ the test tags.
 			"wipe existing cluster before starting test (for use with --cluster)")
 		cmd.Flags().StringVar(
 			&zonesF, "zones", "", "Zones for the cluster (use roachprod defaults if empty)")
+		cmd.Flags().IntVar(
+			&cpuQuota, "cpu-quota", 100,
+			"The number of cloud CPUs roachtest is allowed to use at any one time.")
+		cmd.Flags().IntVar(
+			&httpPort, "port", 8080, "the port on which to ")
+		cmd.Flags().StringVar(
+			&clusterLifetimeOverrideS, "cluster-lifetime-override", "",
+			"If set, this is a duration that will "+
+				"override testSpec.Nodes[0].Lifetime for all tests. "+
+				"Useful, for example, when running a large number of tests that can "+
+				"reuse clusters and the default 12h destruction time for those clusters "+
+				"is not desirable. E.g. \"24h10m\".")
 	}
 
 	rootCmd.AddCommand(listCmd)
@@ -200,4 +333,99 @@ func getUser(userFlag string) string {
 		panic(fmt.Sprintf("user.Current: %s", err))
 	}
 	return usr.Username
+}
+
+// CtrlC spawns a goroutine that seats around waiting for SIGINT. Once the first
+// signal is received, it calls cancel(), waits 5 seconds, and then calls
+// cr.destroyAllClusters(). The expectation is that the main goroutine will
+// respond to the cancelation and return, and so the process will be dead by the
+// time the 5s elapse.
+// If a 2nd signal is received, it calls os.Exit(2).
+func CtrlC(ctx context.Context, l *logger, cancel func(), cr *clusterRegistry) {
+	// Shut down test clusters when interrupted (for example CTRL-C).
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt)
+	go func() {
+		select {
+		case <-sig:
+			shout(ctx, l, os.Stderr,
+				"Signaled received. Canceling workers and waiting up to 5s for them.")
+			// Signal r.Run() to stop.
+			cancel()
+			select {
+			case <-time.After(5 * time.Second):
+				shout(ctx, l, os.Stderr,
+					"5s elapsed. Will brutally destroy all clusters.")
+			}
+			// Make sure there are no leftover clusters.
+			destroyCh := make(chan struct{})
+			go func() {
+				// Destroy all clusters. Don't wait more than 5 min for that though.
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+				cr.destroyAllClusters(ctx, l)
+				cancel()
+				close(destroyCh)
+			}()
+			// If we get a second CTRL-C, exit immediately.
+			select {
+			case <-sig:
+				shout(ctx, l, os.Stderr, "Second SIGINT received. Quitting.")
+				os.Exit(2)
+			case <-destroyCh:
+				shout(ctx, l, os.Stderr, "Done destroying all clusters.")
+			}
+		}
+	}()
+}
+
+// testRunnerLogger returns a logger to be used by the test runner and a tee
+// option for the test logs.
+func testRunnerLogger(
+	ctx context.Context, parallelism int, artifactsDir string,
+) (*logger, teeOptType) {
+	teeOpt := noTee
+	if parallelism == 1 {
+		teeOpt = teeToStdout
+	}
+
+	var l *logger
+	runnerLogPath := filepath.Join(
+		artifactsDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
+	if teeOpt == teeToStdout {
+		verboseCfg := loggerConfig{stdout: os.Stdout, stderr: os.Stderr}
+		var err error
+		l, err = verboseCfg.newLogger(runnerLogPath)
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		verboseCfg := loggerConfig{}
+		var err error
+		l, err = verboseCfg.newLogger(runnerLogPath)
+		if err != nil {
+			panic(err)
+		}
+	}
+	shout(ctx, l, os.Stdout, "test runner logs in: %s", runnerLogPath)
+	return l, teeOpt
+}
+
+func testsToRun(r *registry, filter *testFilter) []testSpec {
+	tests := r.GetTests(filter)
+
+	var skipped, notSkipped []testSpec
+	for _, s := range tests {
+		if s.Skip == "" {
+			notSkipped = append(notSkipped, s)
+		} else {
+			skipped = append(skipped, s)
+
+			if teamCity {
+				fmt.Fprintf(os.Stdout, "##teamcity[testIgnored name='%s' message='%s']\n",
+					s.Name, s.Skip)
+			}
+			fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "0.00s", s.Skip)
+		}
+	}
+	return notSkipped
 }

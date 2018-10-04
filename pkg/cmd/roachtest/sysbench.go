@@ -92,12 +92,16 @@ func runSysbench(ctx context.Context, t *test, c *cluster, opts sysbenchOptions)
 	c.Start(ctx, t, roachNodes)
 
 	t.Status("installing haproxy")
-	c.Install(ctx, loadNode, "haproxy")
+	if err := c.Install(ctx, t.l, loadNode, "haproxy"); err != nil {
+		t.Fatal(err)
+	}
 	c.Run(ctx, loadNode, "./cockroach gen haproxy --insecure --url {pgurl:1}")
 	c.Run(ctx, loadNode, "haproxy -f haproxy.cfg -D")
 
 	t.Status("installing sysbench")
-	c.Install(ctx, loadNode, "sysbench")
+	if err := c.Install(ctx, t.l, loadNode, "sysbench"); err != nil {
+		t.Fatal(err)
+	}
 
 	m := newMonitor(ctx, c, roachNodes)
 	m.Go(func(ctx context.Context) error {

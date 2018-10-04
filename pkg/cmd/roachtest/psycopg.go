@@ -75,6 +75,7 @@ func registerPsycopg(r *registry) {
 
 		if err := repeatGitCloneE(
 			ctx,
+			t.l,
 			c,
 			"https://github.com/psycopg/psycopg2.git",
 			"/mnt/data1/psycopg",

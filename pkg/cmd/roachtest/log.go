@@ -16,12 +16,14 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"io"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
+
+	crdblog "github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // The flags used by the internal loggers.
@@ -164,9 +166,11 @@ func rootLogger(path string, teeOpt teeOptType) (*logger, error) {
 	return cfg.newLogger(path)
 }
 
+// close closes the logger. It is idempotent.
 func (l *logger) close() {
 	if l.file != nil {
 		l.file.Close()
+		l.file = nil
 	}
 }
 
@@ -212,18 +216,47 @@ func (l *logger) ChildLogger(name string, opts ...loggerOption) (*logger, error)
 	return cfg.newLogger(path)
 }
 
+// PrintfCtx prints a message to the logger's stdout. The context's log tags, if
+// any, will be prepended to the message. A newline is appended if the last
+// character is not already a newline.
+func (l *logger) PrintfCtx(ctx context.Context, f string, args ...interface{}) {
+	l.PrintfCtxDepth(ctx, 2 /* depth */, f, args...)
+}
+
+// Printf is like PrintfCtx, except it doesn't take a ctx and thus no log tags
+// can be passed.
 func (l *logger) Printf(f string, args ...interface{}) {
-	if err := l.stdoutL.Output(2 /* calldepth */, fmt.Sprintf(f, args...)); err != nil {
+	l.PrintfCtxDepth(context.Background(), 2 /* depth */, f, args...)
+}
+
+// PrintfCtxDepth is like PrintfCtx, except that it allows the caller to control
+// which stack frame is reported as the file:line in the message. depth=1 is
+// equivalent to PrintfCtx. E.g. pass 2 to ignore the caller's frame.
+func (l *logger) PrintfCtxDepth(ctx context.Context, depth int, f string, args ...interface{}) {
+	msg := crdblog.MakeMessage(ctx, f, args)
+	if err := l.stdoutL.Output(depth+1, msg); err != nil {
 		// Changing our interface to return an Error from a logging method seems too
 		// onerous. Let's just crash.
 		panic(err)
 	}
 }
 
-func (l *logger) Errorf(f string, args ...interface{}) {
-	if err := l.stderrL.Output(2 /* calldepth */, fmt.Sprintf(f, args...)); err != nil {
+// ErrorfCtx is like PrintfCtx, except the logger outputs to its stderr.
+func (l *logger) ErrorfCtx(ctx context.Context, f string, args ...interface{}) {
+	l.ErrorfCtxDepth(ctx, 2 /* depth */, f, args...)
+}
+
+func (l *logger) ErrorfCtxDepth(ctx context.Context, depth int, f string, args ...interface{}) {
+	msg := crdblog.MakeMessage(ctx, f, args)
+	if err := l.stderrL.Output(depth+1, msg); err != nil {
 		// Changing our interface to return an Error from a logging method seems too
 		// onerous. Let's just crash.
 		panic(err)
 	}
+}
+
+// Errorf is like Errorf, except it doesn't take a ctx and thus no log tags
+// can be passed.
+func (l *logger) Errorf(f string, args ...interface{}) {
+	l.ErrorfCtxDepth(context.Background(), 2 /* depth */, f, args...)
 }
