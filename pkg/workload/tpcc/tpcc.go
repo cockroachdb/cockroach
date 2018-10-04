@@ -93,6 +93,8 @@ var tpccMeta = workload.Meta{
 	Name: `tpcc`,
 	Description: `TPC-C simulates a transaction processing workload` +
 		` using a rich schema of multiple tables`,
+	// TODO(anyone): when bumping this version and regenerating fixtures, please
+	// address the TODO in PostLoad.
 	Version: `2.0.1`,
 	New: func() workload.Generator {
 		g := &tpcc{}
@@ -207,8 +209,36 @@ func (w *tpcc) Hooks() workload.Hooks {
 					`alter table stock add foreign key (s_w_id) references warehouse (w_id)`,
 					`alter table stock add foreign key (s_i_id) references item (i_id)`,
 					`alter table order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id)`,
-					`alter table order_line add foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id)`,
 				}
+
+				// TODO(anyone): Remove this check. Once fixtures are
+				// regenerated and the meta version is bumped on this workload,
+				// we won't need it anymore.
+				{
+					const q = `SELECT column_name
+						       FROM information_schema.statistics
+						       WHERE index_name = 'order_line_fk'
+						         AND seq_in_index = 2`
+					var fkCol string
+					if err := sqlDB.QueryRow(q).Scan(&fkCol); err != nil {
+						return err
+					}
+					var fkStmt string
+					switch fkCol {
+					case "ol_i_id":
+						// The corrected column. When the TODO above is addressed,
+						// this should be moved into fkStmts.
+						fkStmt = `alter table order_line add foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id)`
+					case "ol_d_id":
+						// The old, incorrect column. When the TODO above is addressed,
+						// this should be removed entirely.
+						fkStmt = `alter table order_line add foreign key (ol_supply_w_id, ol_d_id) references stock (s_w_id, s_i_id)`
+					default:
+						return errors.Errorf("unexpected column %q in order_line_fk", fkCol)
+					}
+					fkStmts = append(fkStmts, fkStmt)
+				}
+
 				for _, fkStmt := range fkStmts {
 					if _, err := sqlDB.Exec(fkStmt); err != nil {
 						// If the statement failed because the fk already exists,
