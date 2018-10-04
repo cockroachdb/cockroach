@@ -155,7 +155,7 @@ const (
 		ol_amount       decimal(6,2),
 		ol_dist_info    char(24),
 		primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number),
-		index order_line_fk (ol_supply_w_id, ol_d_id)
+		index order_line_fk (ol_supply_w_id, ol_i_id)
 	)`
 	tpccOrderLineSchemaInterleave = ` interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)`
 )

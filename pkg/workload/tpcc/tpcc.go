@@ -207,7 +207,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 					`alter table stock add foreign key (s_w_id) references warehouse (w_id)`,
 					`alter table stock add foreign key (s_i_id) references item (i_id)`,
 					`alter table order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id)`,
-					`alter table order_line add foreign key (ol_supply_w_id, ol_d_id) references stock (s_w_id, s_i_id)`,
+					`alter table order_line add foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id)`,
 				}
 				for _, fkStmt := range fkStmts {
 					if _, err := sqlDB.Exec(fkStmt); err != nil {
