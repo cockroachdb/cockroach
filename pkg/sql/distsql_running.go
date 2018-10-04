@@ -767,3 +767,15 @@ func (dsp *DistSQLPlanner) PlanAndRun(
 	dsp.FinalizePlan(planCtx, &physPlan)
 	dsp.Run(planCtx, txn, &physPlan, recv, evalCtx, nil /* finishedSetupFn */)
 }
+
+func (dsp *DistSQLPlanner) FinalizeAndRun(
+	ctx context.Context,
+	evalCtx *extendedEvalContext,
+	planCtx *PlanningCtx,
+	txn *client.Txn,
+	physPlan *PhysicalPlan,
+	recv *DistSQLReceiver,
+) {
+	dsp.FinalizePlan(planCtx, physPlan)
+	dsp.Run(planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)
+}

@@ -149,6 +149,9 @@ type planner struct {
 	// be reused for an old prepared statement after a new statement has been prepared.
 	curPlan planTop
 
+	// distSQLPlan is the distSQL physical plan.
+	distSQLPlan *PhysicalPlan
+
 	// Avoid allocations by embedding commonly used objects and visitors.
 	parser                parser.Parser
 	txCtx                 transform.ExprTransformContext
@@ -529,25 +532,25 @@ func (p *planner) prepareForDistSQLSupportCheck() {
 // and no error is returned, it is safe to fallback to a non-optimizer plan.
 func (p *planner) optionallyUseOptimizer(
 	ctx context.Context, sd sessiondata.SessionData, stmt Statement,
-) (bool, error) {
+) (bool, sqlbase.ResultColumns, error) {
 	if sd.OptimizerMode == sessiondata.OptimizerOff {
 		log.VEvent(ctx, 1, "optimizer disabled")
-		return false, nil
+		return false, nil, nil
 	}
 
 	log.VEvent(ctx, 1, "generating optimizer plan")
 
-	err := p.makeOptimizerPlan(ctx, stmt)
+	cols, err := p.makeOptimizerPlan(ctx, stmt)
 	if err == nil {
 		log.VEvent(ctx, 1, "optimizer plan succeeded")
-		return true, nil
+		return true, cols, nil
 	}
 	log.VEventf(ctx, 1, "optimizer plan failed: %v", err)
 	if canFallbackFromOpt(err, sd.OptimizerMode, stmt) {
 		log.VEvent(ctx, 1, "optimizer falls back on heuristic planner")
-		return false, nil
+		return false, nil, nil
 	}
-	return false, err
+	return false, nil, err
 }
 
 // txnModesSetter is an interface used by SQL execution to influence the current

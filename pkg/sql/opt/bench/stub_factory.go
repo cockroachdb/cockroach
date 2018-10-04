@@ -15,6 +15,7 @@
 package bench
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -39,6 +40,7 @@ func (f *stubFactory) ConstructScan(
 	hardLimit int64,
 	reverse bool,
 	reqOrdering exec.OutputOrdering,
+	reqDistSQLOrdering distsqlrun.Ordering,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }

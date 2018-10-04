@@ -213,7 +213,9 @@ func (ex *connExecutor) prepare(
 		// As of right now, the optimizer only works on SELECT statements and will
 		// fallback for all others, so this should be safe for the foreseeable
 		// future.
-		if optimizerPlanned, err := p.optionallyUseOptimizer(ctx, ex.sessionData, stmt); err != nil {
+		var optimizerPlanned bool
+		optimizerPlanned, prepared.Columns, err = p.optionallyUseOptimizer(ctx, ex.sessionData, stmt)
+		if err != nil {
 			return err
 		} else if !optimizerPlanned {
 			isCorrelated := p.curPlan.isCorrelated
@@ -225,13 +227,16 @@ func (ex *connExecutor) prepare(
 			}
 		}
 
-		if p.curPlan.plan == nil {
+		if p.curPlan.plan == nil && p.distSQLPlan == nil {
 			// The statement cannot be prepared. Nothing to do.
 			return nil
 		}
 		defer p.curPlan.close(ctx)
 
-		prepared.Columns = p.curPlan.columns()
+		if !optimizerPlanned {
+			prepared.Columns = p.curPlan.columns()
+		}
+
 		for _, c := range prepared.Columns {
 			if err := checkResultType(c.Typ); err != nil {
 				return err

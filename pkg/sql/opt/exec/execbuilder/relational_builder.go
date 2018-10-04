@@ -20,6 +20,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -220,9 +221,10 @@ func (b *Builder) constructValues(
 // (starting with outputOrdinalStart).
 func (*Builder) getColumns(
 	md *opt.Metadata, cols opt.ColSet, tableID opt.TableID,
-) (exec.ColumnOrdinalSet, opt.ColMap) {
+) (exec.ColumnOrdinalSet, opt.ColMap, opt.ColMap) {
 	needed := exec.ColumnOrdinalSet{}
 	output := opt.ColMap{}
+	distSQLOutput := opt.ColMap{}
 
 	columnCount := md.Table(tableID).ColumnCount()
 	n := 0
@@ -231,11 +233,38 @@ func (*Builder) getColumns(
 		if cols.Contains(int(colID)) {
 			needed.Add(i)
 			output.Set(int(colID), n)
+			distSQLOutput.Set(int(colID), i)
 			n++
 		}
 	}
 
-	return needed, output
+	return needed, output, distSQLOutput
+}
+
+func (b *Builder) makeDistSQLOrderingFromChoice(
+	distSQLOutput opt.ColMap, ordering *props.OrderingChoice,
+) distsqlrun.Ordering {
+	if ordering.Any() {
+		return distsqlrun.Ordering{}
+	}
+
+	result := distsqlrun.Ordering{
+		Columns: make([]distsqlrun.Ordering_Column, len(ordering.Columns)),
+	}
+	for i := range ordering.Columns {
+		ord, ok := distSQLOutput.Get(int(ordering.Columns[i].AnyID()))
+		if !ok {
+			panic(fmt.Errorf("column %d not found", ordering.Columns[i].AnyID()))
+		}
+		result.Columns[i].ColIdx = uint32(ord)
+		if ordering.Columns[i].Descending {
+			result.Columns[i].Direction = distsqlrun.Ordering_Column_DESC
+		} else {
+			result.Columns[i].Direction = distsqlrun.Ordering_Column_ASC
+		}
+	}
+
+	return result
 }
 
 func (b *Builder) makeSQLOrderingFromChoice(
@@ -291,10 +320,11 @@ func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
 		return execPlan{}, err
 	}
 
-	needed, output := b.getColumns(md, def.Cols, def.Table)
+	needed, output, distSQLOutput := b.getColumns(md, def.Cols, def.Table)
 	res := execPlan{outputCols: output}
 
 	reqOrdering := b.makeSQLOrderingFromChoice(res, &ev.Physical().Ordering)
+	reqDistSQLOrdering := b.makeDistSQLOrderingFromChoice(distSQLOutput, &ev.Physical().Ordering)
 
 	_, reverse := def.CanProvideOrdering(md, &ev.Physical().Ordering)
 
@@ -307,6 +337,7 @@ func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
 		// def.HardLimit.Reverse() was taken into account by CanProvideOrdering.
 		reverse,
 		exec.OutputOrdering(reqOrdering),
+		reqDistSQLOrdering,
 	)
 	if err != nil {
 		return execPlan{}, err
@@ -320,7 +351,7 @@ func (b *Builder) buildVirtualScan(ev memo.ExprView) (execPlan, error) {
 	md := ev.Metadata()
 	tab := md.Table(def.Table)
 
-	_, output := b.getColumns(md, def.Cols, def.Table)
+	_, output, _ := b.getColumns(md, def.Cols, def.Table)
 	res := execPlan{outputCols: output}
 
 	root, err := b.factory.ConstructVirtualScan(tab)
@@ -830,7 +861,7 @@ func (b *Builder) buildIndexJoin(ev memo.ExprView) (execPlan, error) {
 	def := ev.Private().(*memo.IndexJoinDef)
 
 	cols := def.Cols
-	needed, output := b.getColumns(md, cols, def.Table)
+	needed, output, _ := b.getColumns(md, cols, def.Table)
 	res := execPlan{outputCols: output}
 
 	// Get sort *result column* ordinals. Don't confuse these with *table column*
@@ -874,7 +905,7 @@ func (b *Builder) buildLookupJoin(ev memo.ExprView) (execPlan, error) {
 	inputProps := ev.Child(0).Logical().Relational
 	lookupCols := def.Cols.Difference(inputProps.OutputCols)
 
-	lookupOrdinals, lookupColMap := b.getColumns(md, lookupCols, def.Table)
+	lookupOrdinals, lookupColMap, _ := b.getColumns(md, lookupCols, def.Table)
 	allCols := joinOutputMap(input.outputCols, lookupColMap)
 
 	res := execPlan{outputCols: allCols}

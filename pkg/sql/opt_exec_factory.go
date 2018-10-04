@@ -70,6 +70,7 @@ func (ef *execFactory) ConstructScan(
 	hardLimit int64,
 	reverse bool,
 	reqOrdering exec.OutputOrdering,
+	reqDistSQLOrdering distsqlrun.Ordering,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc

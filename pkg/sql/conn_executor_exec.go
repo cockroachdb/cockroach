@@ -763,7 +763,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
 	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
 
-	optimizerPlanned, err := planner.optionallyUseOptimizer(ctx, ex.sessionData, stmt)
+	optimizerPlanned, cols, err := planner.optionallyUseOptimizer(ctx, ex.sessionData, stmt)
 	if !optimizerPlanned && err == nil {
 		isCorrelated := planner.curPlan.isCorrelated
 		log.VEventf(ctx, 1, "query is correlated: %v", isCorrelated)
@@ -782,8 +782,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		return nil
 	}
 
-	var cols sqlbase.ResultColumns
-	if stmt.AST.StatementType() == tree.Rows {
+	if stmt.AST.StatementType() == tree.Rows && !optimizerPlanned {
 		cols = planColumns(planner.curPlan.plan)
 	}
 	if err := ex.initStatementResult(ctx, res, stmt, cols); err != nil {
@@ -792,10 +791,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	}
 
 	ex.sessionTracing.TracePlanCheckStart(ctx)
-	distributePlan := false
+	distributePlan := planner.distSQLPlan != nil
 	// If we use the optimizer and we are in "local" mode, don't try to
 	// distribute.
-	if ex.sessionData.OptimizerMode != sessiondata.OptimizerLocal {
+	if ex.sessionData.OptimizerMode != sessiondata.OptimizerLocal && !distributePlan {
 		planner.prepareForDistSQLSupportCheck()
 		distributePlan = shouldDistributePlan(
 			ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner.curPlan.plan)
@@ -957,6 +956,13 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	defer recv.Release()
 
 	evalCtx := planner.ExtendedEvalContext()
+	if planner.distSQLPlan != nil {
+		ex.server.cfg.DistSQLPlanner.FinalizeAndRun(
+			ctx, evalCtx, ex.server.cfg.PlanningCtx, planner.txn, planner.distSQLPlan, recv,
+		)
+		return recv.commErr
+	}
+
 	var planCtx *PlanningCtx
 	if distribute {
 		planCtx = ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner.txn)
