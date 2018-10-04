@@ -19,7 +19,7 @@ var flowableReleaseTagRegex = regexp.MustCompile(`^flowable-(?P<major>\d+)\.(?P<
 
 // This test runs Flowable test suite against a single cockroach node.
 
-func registerFlowable(r *registry) {
+func registerFlowable(r *testRegistry) {
 	runFlowable := func(
 		ctx context.Context,
 		t *test,
@@ -40,7 +40,7 @@ func registerFlowable(r *registry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("Latest Flowable release is %s.", latestTag)
+		t.l.Printf("Latest Flowable release is %s.", latestTag)
 
 		if err := repeatRunE(
 			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
@@ -66,6 +66,7 @@ func registerFlowable(r *registry) {
 
 		if err := repeatGitCloneE(
 			ctx,
+			t.l,
 			c,
 			"https://github.com/flowable/flowable-engine.git",
 			"/mnt/data1/flowable-engine",

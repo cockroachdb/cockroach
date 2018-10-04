@@ -39,21 +39,35 @@ type offsetInjector struct {
 }
 
 // deploy installs ntp and downloads / compiles bumptime used to create a clock offset
-func (oi *offsetInjector) deploy(ctx context.Context) {
-	if err := oi.c.RunE(ctx, oi.c.All(), "test -x ./bumptime"); err != nil {
-		oi.c.Install(ctx, oi.c.All(), "ntp")
-		oi.c.Install(ctx, oi.c.All(), "gcc")
-		oi.c.Run(ctx, oi.c.All(), "sudo", "service", "ntp", "stop")
-		oi.c.Run(ctx,
-			oi.c.All(),
-			"curl",
-			"-kO",
-			"https://raw.githubusercontent.com/cockroachdb/jepsen/master/cockroachdb/resources/bumptime.c",
-		)
-		oi.c.Run(ctx, oi.c.All(), "gcc", "bumptime.c", "-o", "bumptime", "&&", "rm bumptime.c")
+func (oi *offsetInjector) deploy(ctx context.Context, l *logger) error {
+	if err := oi.c.RunE(ctx, oi.c.All(), "test -x ./bumptime"); err == nil {
+		return nil
 	}
 
+	if err := oi.c.Install(ctx, l, oi.c.All(), "ntp"); err != nil {
+		return err
+	}
+	if err := oi.c.Install(ctx, l, oi.c.All(), "gcc"); err != nil {
+		return err
+	}
+	if err := oi.c.RunL(ctx, l, oi.c.All(), "sudo", "service", "ntp", "stop"); err != nil {
+		return err
+	}
+	if err := oi.c.RunL(ctx, l,
+		oi.c.All(),
+		"curl",
+		"-kO",
+		"https://raw.githubusercontent.com/cockroachdb/jepsen/master/cockroachdb/resources/bumptime.c",
+	); err != nil {
+		return err
+	}
+	if err := oi.c.RunL(ctx, l,
+		oi.c.All(), "gcc", "bumptime.c", "-o", "bumptime", "&&", "rm bumptime.c",
+	); err != nil {
+		return err
+	}
 	oi.deployed = true
+	return nil
 }
 
 // offset injects a offset of s into the node with the given nodeID

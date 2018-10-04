@@ -13,17 +13,16 @@ package main
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io/ioutil"
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/kr/pretty"
 )
 
@@ -61,9 +60,24 @@ func TestMatchOrSkip(t *testing.T) {
 	}
 }
 
-func TestRegistryRun(t *testing.T) {
-	r := newRegistry()
-	r.out = ioutil.Discard
+func nilLogger() *logger {
+	lcfg := loggerConfig{
+		stdout: ioutil.Discard,
+		stderr: ioutil.Discard,
+	}
+	l, err := lcfg.newLogger("" /* path */)
+	if err != nil {
+		panic(err)
+	}
+	return l
+}
+
+func TestRunnerRun(t *testing.T) {
+	ctx := context.Background()
+	r, err := makeTestRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
 	r.Add(testSpec{
 		Name:    "pass",
 		Run:     func(ctx context.Context, t *test, c *cluster) {},
@@ -78,21 +92,40 @@ func TestRegistryRun(t *testing.T) {
 	})
 
 	testCases := []struct {
-		filters  []string
-		expected int
+		filters []string
+		expErr  string
 	}{
-		{nil, 1},
-		{[]string{"pass"}, 0},
-		{[]string{"fail"}, 1},
-		{[]string{"pass|fail"}, 1},
-		{[]string{"pass", "fail"}, 1},
-		{[]string{"notests"}, 1},
+		{nil, "some tests failed"},
+		{[]string{"pass"}, ""},
+		{[]string{"fail"}, "some tests failed"},
+		{[]string{"pass|fail"}, "some tests failed"},
+		{[]string{"pass", "fail"}, "some tests failed"},
+		{[]string{"notests"}, "no test"},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			code := r.Run(c.filters, defaultParallelism, "" /* artifactsDir */, "myuser")
-			if c.expected != code {
-				t.Fatalf("expected code %d, but found code %d. Filters: %s", c.expected, code, c.filters)
+			tests := testsToRun(ctx, r, newFilter(c.filters))
+			cr := newClusterRegistry()
+			runner := newTestRunner(cr, r.buildVersion)
+
+			lopt := loggingOpt{
+				l:            nilLogger(),
+				tee:          noTee,
+				stdout:       ioutil.Discard,
+				stderr:       ioutil.Discard,
+				artifactsDir: "",
+			}
+			copt := clustersOpt{
+				typ:                       roachprodCluster,
+				user:                      "test_user",
+				cpuQuota:                  1000,
+				keepClustersOnTestFailure: false,
+			}
+			err := runner.Run(ctx, tests, 1, /* count */
+				defaultParallelism, copt, "" /* artifactsDir */, lopt)
+
+			if !testutils.IsError(err, c.expErr) {
+				t.Fatalf("expected err: %q, but found %v. Filters: %s", c.expErr, err, c.filters)
 			}
 		})
 	}
@@ -115,166 +148,44 @@ func (b *syncedBuffer) String() string {
 	return b.buf.String()
 }
 
-func TestRegistryStatus(t *testing.T) {
+func TestRunnerTestTimeout(t *testing.T) {
+	ctx := context.Background()
+
+	cr := newClusterRegistry()
+	runner := newTestRunner(cr, version.Version{})
+
 	var buf syncedBuffer
-	waitingRE := regexp.MustCompile(`(?m)^.*status: waiting.*worker?.*worker?.*$`)
-	cleaningUpRE := regexp.MustCompile(`(?m)^.*status: cleaning up \(.*\)$`)
-
-	r := newRegistry()
-	r.out = &buf
-	r.statusInterval = 20 * time.Millisecond
-	r.Add(testSpec{
-		Name:    `status`,
-		Cluster: makeClusterSpec(0),
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			t.Status("waiting")
-			var wg sync.WaitGroup
-			for i := 0; i < 2; i++ {
-				wg.Add(1)
-				go func(i int) {
-					defer wg.Done()
-					t.WorkerStatus("worker", i)
-					defer t.WorkerStatus()
-					for i := 0.0; i < 1.0; i += 0.01 {
-						t.WorkerProgress(i)
-						time.Sleep(r.statusInterval)
-						if waitingRE.MatchString(buf.String()) {
-							break
-						}
-					}
-				}(i)
-			}
-			wg.Wait()
-			t.Status("cleaning up")
-			for i := 0.0; i < 1.0; i += 0.01 {
-				t.Progress(i)
-				time.Sleep(r.statusInterval)
-				if cleaningUpRE.MatchString(buf.String()) {
-					break
-				}
-			}
-		},
-	})
-	r.Run([]string{"status"}, defaultParallelism, "" /* artifactsDir */, "myuser")
-
-	status := buf.String()
-	if !waitingRE.MatchString(status) {
-		t.Fatalf("unable to find \"waiting\" status:\n%s", status)
+	lopt := loggingOpt{
+		l:            nilLogger(),
+		tee:          noTee,
+		stdout:       &buf,
+		stderr:       &buf,
+		artifactsDir: "",
 	}
-	if !cleaningUpRE.MatchString(status) {
-		t.Fatalf("unable to find \"cleaning up\" status:\n%s", status)
+	copt := clustersOpt{
+		typ:                       roachprodCluster,
+		user:                      "test_user",
+		cpuQuota:                  1000,
+		keepClustersOnTestFailure: false,
 	}
-	if testing.Verbose() {
-		fmt.Println(status)
-	}
-}
-
-func TestRegistryStatusUnknown(t *testing.T) {
-	var buf syncedBuffer
-	unknownRE := regexp.MustCompile(`(?m)^.*status: \?\?\? \(.*\)$`)
-
-	r := newRegistry()
-	r.out = &buf
-	r.statusInterval = 20 * time.Millisecond
-
-	r.Add(testSpec{
-		Name:    `status`,
-		Cluster: makeClusterSpec(0),
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			for i := 0; i < 100; i++ {
-				time.Sleep(r.statusInterval)
-				if unknownRE.MatchString(buf.String()) {
-					break
-				}
-			}
-		},
-	})
-	r.Run([]string{"status"}, defaultParallelism, "" /* artifactsDir */, "myuser")
-
-	status := buf.String()
-	if !unknownRE.MatchString(status) {
-		t.Fatalf("unable to find \"waiting\" status:\n%s", status)
-	}
-	if testing.Verbose() {
-		fmt.Println(status)
-	}
-}
-
-func TestRegistryRunTimeout(t *testing.T) {
-	var buf syncedBuffer
-	timeoutRE := regexp.MustCompile(`(?m)^.*test timed out \(.*\)$`)
-
-	r := newRegistry()
-	r.out = &buf
-
-	r.Add(testSpec{
+	test := testSpec{
 		Name:    `timeout`,
 		Timeout: 10 * time.Millisecond,
 		Cluster: makeClusterSpec(0),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			<-ctx.Done()
 		},
-	})
-	r.Run([]string{"timeout"}, defaultParallelism, "" /* artifactsDir */, "myuser")
+	}
+	err := runner.Run(ctx, []testSpec{test}, 1, /* count */
+		defaultParallelism, copt, "" /* artifactsDir */, lopt)
+	if !testutils.IsError(err, "some tests failed") {
+		t.Fatalf("expected error \"some tests failed\", got: %v", err)
+	}
 
 	out := buf.String()
+	timeoutRE := regexp.MustCompile(`(?m)^.*test timed out \(.*\)$`)
 	if !timeoutRE.MatchString(out) {
 		t.Fatalf("unable to find \"timed out\" message:\n%s", out)
-	}
-}
-
-func TestRegistryRunClusterExpired(t *testing.T) {
-	defer func(l bool, n string) {
-		local, clusterName = l, n
-	}(local, clusterName)
-	local, clusterName = true, "local"
-
-	var buf syncedBuffer
-	expiredRE := regexp.MustCompile(`(?m)^.*cluster expired \(.*\)$`)
-
-	r := newRegistry()
-	r.config.skipClusterValidationOnAttach = true
-	r.config.skipClusterStopOnAttach = true
-	r.out = &buf
-
-	r.Add(testSpec{
-		Name:    `expired`,
-		Cluster: makeClusterSpec(1, nodeLifetimeOption(time.Second)),
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			panic("not reached")
-		},
-	})
-	r.Run([]string{"expired"}, defaultParallelism, "" /* artifactsDir */, "myuser")
-
-	out := buf.String()
-	if !expiredRE.MatchString(out) {
-		t.Fatalf("unable to find \"cluster expired\" message:\n%s", out)
-	}
-}
-
-func TestRegistryVerifyValidClusterName(t *testing.T) {
-	testCases := []struct {
-		testNames   []string
-		expectedErr string
-	}{
-		{[]string{"hello"}, ""},
-		{[]string{"HELLO", "hello"}, "have equivalent nightly cluster names"},
-		{[]string{"hel+lo", "hel++lo"}, "have equivalent nightly cluster names"},
-		{[]string{"hello+"}, "must match regex"},
-		{[]string{strings.Repeat("y", 41)}, ""},
-		{[]string{strings.Repeat("y", 42)}, "must match regex"},
-	}
-	for _, c := range testCases {
-		t.Run("", func(t *testing.T) {
-			r := newRegistry()
-			var err error
-			for _, n := range c.testNames {
-				err = r.verifyValidClusterName(n)
-			}
-			if !testutils.IsError(err, c.expectedErr) {
-				t.Fatalf("expected %s, but found %v", c.expectedErr, err)
-			}
-		})
 	}
 }
 
@@ -322,8 +233,11 @@ func TestRegistryPrepareSpec(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			r := newRegistry()
-			err := r.prepareSpec(&c.spec)
+			r, err := makeTestRegistry()
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = r.prepareSpec(&c.spec)
 			if !testutils.IsError(err, c.expectedErr) {
 				t.Fatalf("expected %q, but found %q", c.expectedErr, err.Error())
 			}
@@ -339,21 +253,24 @@ func TestRegistryPrepareSpec(t *testing.T) {
 }
 
 func TestRegistryMinVersion(t *testing.T) {
+	ctx := context.Background()
 	testCases := []struct {
 		buildVersion string
 		expectedA    bool
 		expectedB    bool
+		expErr       string
 	}{
-		{"v1.1.0", false, false},
-		{"v2.0.0", true, false},
-		{"v2.1.0", true, true},
+		{"v1.1.0", false, false, "no test matched filters"},
+		{"v2.0.0", true, false, ""},
+		{"v2.1.0", true, true, ""},
 	}
 	for _, c := range testCases {
 		t.Run(c.buildVersion, func(t *testing.T) {
-			var buf syncedBuffer
 			var runA, runB bool
-			r := newRegistry()
-			r.out = &buf
+			r, err := makeTestRegistry()
+			if err != nil {
+				t.Fatal(err)
+			}
 			r.Add(testSpec{
 				Name:       "a",
 				MinVersion: "v2.0.0",
@@ -373,7 +290,30 @@ func TestRegistryMinVersion(t *testing.T) {
 			if err := r.setBuildVersion(c.buildVersion); err != nil {
 				t.Fatal(err)
 			}
-			r.Run(nil /* filter */, defaultParallelism, "" /* artifactsDir */, "myuser")
+			tests := testsToRun(ctx, r, newFilter(nil))
+
+			var buf syncedBuffer
+			lopt := loggingOpt{
+				l:            nilLogger(),
+				tee:          noTee,
+				stdout:       &buf,
+				stderr:       &buf,
+				artifactsDir: "",
+			}
+			copt := clustersOpt{
+				typ:                       roachprodCluster,
+				user:                      "test_user",
+				cpuQuota:                  1000,
+				keepClustersOnTestFailure: false,
+			}
+			cr := newClusterRegistry()
+			runner := newTestRunner(cr, r.buildVersion)
+			err = runner.Run(ctx, tests, 1, /* count */
+				defaultParallelism, copt, "" /* artifactsDir */, lopt)
+			if !testutils.IsError(err, c.expErr) {
+				t.Fatalf("expected err: %q, got: %v", c.expErr, err)
+			}
+
 			if c.expectedA != runA || c.expectedB != runB {
 				t.Fatalf("expected %t,%t, but got %t,%t\n%s",
 					c.expectedA, c.expectedB, runA, runB, buf.String())

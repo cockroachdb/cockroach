@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerClearRange(r *registry) {
+func registerClearRange(r *testRegistry) {
 	for _, checks := range []bool{true, false} {
 		checks := checks
 		r.Add(testSpec{

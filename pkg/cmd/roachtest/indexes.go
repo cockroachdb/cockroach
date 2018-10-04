@@ -17,7 +17,7 @@ import (
 	"strings"
 )
 
-func registerNIndexes(r *registry, secondaryIndexes int) {
+func registerNIndexes(r *testRegistry, secondaryIndexes int) {
 	const nodes = 6
 	geoZones := []string{"us-west1-b", "us-east1-b", "us-central1-a"}
 	geoZonesStr := strings.Join(geoZones, ",")
@@ -66,11 +66,11 @@ func registerNIndexes(r *registry, secondaryIndexes int) {
 	})
 }
 
-func registerIndexes(r *registry) {
+func registerIndexes(r *testRegistry) {
 	registerNIndexes(r, 2)
 }
 
-func registerIndexesBench(r *registry) {
+func registerIndexesBench(r *testRegistry) {
 	for i := 0; i <= 10; i++ {
 		registerNIndexes(r, i)
 	}

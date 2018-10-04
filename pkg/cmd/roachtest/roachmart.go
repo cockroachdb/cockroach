@@ -15,7 +15,7 @@ import (
 	"fmt"
 )
 
-func registerRoachmart(r *registry) {
+func registerRoachmart(r *testRegistry) {
 	runRoachmart := func(ctx context.Context, t *test, c *cluster, partition bool) {
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")

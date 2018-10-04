@@ -24,7 +24,7 @@ var hibernateReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d
 // This test runs hibernate-core's full test suite against a single cockroach
 // node.
 
-func registerHibernate(r *registry) {
+func registerHibernate(r *testRegistry) {
 	runHibernate := func(
 		ctx context.Context,
 		t *test,
@@ -71,6 +71,7 @@ func registerHibernate(r *registry) {
 
 		if err := repeatGitCloneE(
 			ctx,
+			t.l,
 			c,
 			"https://github.com/hibernate/hibernate-orm.git",
 			"/mnt/data1/hibernate",

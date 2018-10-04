@@ -27,7 +27,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func registerFollowerReads(r *registry) {
+func registerFollowerReads(r *testRegistry) {
 	r.Add(testSpec{
 		Name:       "follower-reads/nodes=3",
 		Cluster:    makeClusterSpec(3 /* nodeCount */, cpu(2), geo()),
@@ -55,13 +55,13 @@ func registerFollowerReads(r *registry) {
 //    time are under 10ms which implies that no WAN RPCs occurred.
 //
 func runFollowerReadsTest(ctx context.Context, t *test, c *cluster) {
-	crdbNodes := c.Range(1, c.nodes)
+	crdbNodes := c.Range(1, c.spec.NodeCount)
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
 	c.Wipe(ctx, crdbNodes)
 	c.Start(ctx, t, crdbNodes)
 
 	var conns []*gosql.DB
-	for i := 0; i < c.nodes; i++ {
+	for i := 0; i < c.spec.NodeCount; i++ {
 		conns = append(conns, c.Conn(ctx, i+1))
 		defer conns[i].Close()
 	}
@@ -160,7 +160,7 @@ func runFollowerReadsTest(ctx context.Context, t *test, c *cluster) {
 	}
 	// Verify error on immediate read.
 	g, gCtx = errgroup.WithContext(ctx)
-	for i := 1; i <= c.nodes; i++ {
+	for i := 1; i <= c.spec.NodeCount; i++ {
 		// Expect an error performing a historical read at first because the table
 		// won't have been created yet.
 		g.Go(verifySelect(gCtx, i, 0, true, 0))
@@ -188,7 +188,7 @@ func runFollowerReadsTest(ctx context.Context, t *test, c *cluster) {
 	// Perform reads at follower_timestamp() and ensure we get the expected value.
 	g, gCtx = errgroup.WithContext(ctx)
 	k, v := chooseKV()
-	for i := 1; i <= c.nodes; i++ {
+	for i := 1; i <= c.spec.NodeCount; i++ {
 		g.Go(verifySelect(gCtx, i, k, false, v))
 	}
 	if err := g.Wait(); err != nil {
@@ -216,7 +216,7 @@ func runFollowerReadsTest(ctx context.Context, t *test, c *cluster) {
 	defer cancel()
 	g, gCtx = errgroup.WithContext(timeoutCtx)
 	for i := 0; i < concurrency; i++ {
-		g.Go(doSelects(gCtx, rand.Intn(c.nodes)+1))
+		g.Go(doSelects(gCtx, rand.Intn(c.spec.NodeCount)+1))
 	}
 	start := timeutil.Now()
 	if err := g.Wait(); err != nil && timeoutCtx.Err() == nil {
@@ -300,7 +300,7 @@ const followerReadsMetric = "follower_reads_success_count"
 // getFollowerReadCounts returns a slice from node to follower read count
 // according to the metric.
 func getFollowerReadCounts(ctx context.Context, c *cluster) ([]int, error) {
-	followerReadCounts := make([]int, c.nodes)
+	followerReadCounts := make([]int, c.spec.NodeCount)
 	getFollowerReadCount := func(ctx context.Context, node int) func() error {
 		return func() error {
 			url := "http://" + c.ExternalAdminUIAddr(ctx, c.Node(node))[0] + "/_status/vars"
@@ -329,7 +329,7 @@ func getFollowerReadCounts(ctx context.Context, c *cluster) ([]int, error) {
 		}
 	}
 	g, gCtx := errgroup.WithContext(ctx)
-	for i := 1; i <= c.nodes; i++ {
+	for i := 1; i <= c.spec.NodeCount; i++ {
 		g.Go(getFollowerReadCount(gCtx, i))
 	}
 	if err := g.Wait(); err != nil {

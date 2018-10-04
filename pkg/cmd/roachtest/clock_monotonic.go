@@ -21,13 +21,15 @@ import (
 func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMonotonicityTestCase) {
 	// Test with a single node so that the node does not crash due to MaxOffset
 	// violation when introducing offset
-	if c.nodes != 1 {
-		t.Fatalf("Expected num nodes to be 1, got: %d", c.nodes)
+	if c.spec.NodeCount != 1 {
+		t.Fatalf("Expected num nodes to be 1, got: %d", c.spec.NodeCount)
 	}
 
 	t.Status("deploying offset injector")
 	offsetInjector := newOffsetInjector(c)
-	offsetInjector.deploy(ctx)
+	if err := offsetInjector.deploy(ctx, t.l); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := c.RunE(ctx, c.Node(1), "test -x ./cockroach"); err != nil {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
@@ -35,7 +37,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 	c.Wipe(ctx)
 	c.Start(ctx, t)
 
-	db := c.Conn(ctx, c.nodes)
+	db := c.Conn(ctx, c.spec.NodeCount)
 	defer db.Close()
 	if _, err := db.Exec(
 		fmt.Sprintf(`SET CLUSTER SETTING server.clock.persist_upper_bound_interval = '%v'`,
@@ -62,12 +64,12 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 		}
 		// Stop cockroach node before recovering from clock offset as this clock
 		// jump can crash the node.
-		c.Stop(ctx, c.Node(c.nodes))
+		c.Stop(ctx, c.Node(c.spec.NodeCount))
 		t.l.Printf("recovering from injected clock offset")
 
-		offsetInjector.recover(ctx, c.nodes)
+		offsetInjector.recover(ctx, c.spec.NodeCount)
 
-		c.Start(ctx, t, c.Node(c.nodes))
+		c.Start(ctx, t, c.Node(c.spec.NodeCount))
 		if !isAlive(db) {
 			t.Fatal("Node unexpectedly crashed")
 		}
@@ -75,11 +77,11 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 
 	// Inject a clock offset after stopping a node
 	t.Status("stopping cockroach")
-	c.Stop(ctx, c.Node(c.nodes))
+	c.Stop(ctx, c.Node(c.spec.NodeCount))
 	t.Status("injecting offset")
-	offsetInjector.offset(ctx, c.nodes, tc.offset)
+	offsetInjector.offset(ctx, c.spec.NodeCount, tc.offset)
 	t.Status("starting cockroach post offset")
-	c.Start(ctx, t, c.Node(c.nodes))
+	c.Start(ctx, t, c.Node(c.spec.NodeCount))
 
 	if !isAlive(db) {
 		t.Fatal("Node unexpectedly crashed")
@@ -114,7 +116,7 @@ type clockMonotonicityTestCase struct {
 	expectIncreasingWallTime bool
 }
 
-func registerClockMonotonicTests(r *registry) {
+func registerClockMonotonicTests(r *testRegistry) {
 	testCases := []clockMonotonicityTestCase{
 		{
 			name:                     "persistent",

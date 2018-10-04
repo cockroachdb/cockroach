@@ -51,12 +51,17 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 		return
 	}
 
-	controller := c.Node(c.nodes)
-	workers := c.Range(1, c.nodes-1)
+	controller := c.Node(c.spec.NodeCount)
+	workers := c.Range(1, c.spec.NodeCount-1)
 
 	// Install jepsen. This part is fast if the repo is already there,
 	// so do it before the initialization check for ease of iteration.
-	c.GitClone(ctx, "https://github.com/cockroachdb/jepsen", "/mnt/data1/jepsen", "tc-nightly", controller)
+	if err := c.GitClone(
+		ctx, t.l,
+		"https://github.com/cockroachdb/jepsen", "/mnt/data1/jepsen", "tc-nightly", controller,
+	); err != nil {
+		t.Fatal(err)
+	}
 
 	// Check to see if the cluster has already been initialized.
 	if err := c.RunE(ctx, c.Node(1), "test -e jepsen_initialized"); err == nil {
@@ -132,11 +137,11 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 func runJepsen(ctx context.Context, t *test, c *cluster, testName, nemesis string) {
 	initJepsen(ctx, t, c)
 
-	controller := c.Node(c.nodes)
+	controller := c.Node(c.spec.NodeCount)
 
 	// Get the IP addresses for all our workers.
 	var nodeFlags []string
-	for _, ip := range c.InternalIP(ctx, c.Range(1, c.nodes-1)) {
+	for _, ip := range c.InternalIP(ctx, c.Range(1, c.spec.NodeCount-1)) {
 		nodeFlags = append(nodeFlags, "-n "+ip)
 	}
 	nodesStr := strings.Join(nodeFlags, " ")
@@ -286,7 +291,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 	}
 }
 
-func registerJepsen(r *registry) {
+func registerJepsen(r *testRegistry) {
 	// NB: the "comments" test is not included because it requires
 	// linearizability.
 	tests := []string{
@@ -300,7 +305,7 @@ func registerJepsen(r *registry) {
 			spec := testSpec{
 				Name: fmt.Sprintf("jepsen/%s/%s", testName, nemesis.name),
 				// The Jepsen tests do funky things to machines, like muck with the
-				// system clock; therefor, their clusters cannot be reused other tests
+				// system clock; therefore, their clusters cannot be reused other tests
 				// except the Jepsen ones themselves which reset all this state when
 				// they start. It is important, however, that the Jepsen tests reuses
 				// clusters because they have a lengthy setup step, but avoid doing it

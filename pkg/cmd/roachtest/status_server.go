@@ -93,7 +93,7 @@ func runStatusServer(ctx context.Context, t *test, c *cluster) {
 	}
 
 	// Check local response for the every node.
-	for i := 1; i <= c.nodes; i++ {
+	for i := 1; i <= c.spec.NodeCount; i++ {
 		id := idMap[i]
 		checkNode(urlMap[i], id, id, id)
 		get(urlMap[i], "/_status/nodes")
@@ -101,7 +101,7 @@ func runStatusServer(ctx context.Context, t *test, c *cluster) {
 
 	// Proxy from the first node to the last node.
 	firstNode := 1
-	lastNode := c.nodes
+	lastNode := c.spec.NodeCount
 	firstID := idMap[firstNode]
 	lastID := idMap[lastNode]
 	checkNode(urlMap[firstNode], firstID, lastID, lastID)
