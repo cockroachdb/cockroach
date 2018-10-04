@@ -1680,6 +1680,7 @@ var crdbInternalZonesTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.zones (
   zone_id          INT NOT NULL,
+  zone_name        STRING,
   cli_specifier    STRING,
   config_yaml      STRING NOT NULL,
   config_sql       STRING, -- this column can be NULL if there is no specifier syntax
