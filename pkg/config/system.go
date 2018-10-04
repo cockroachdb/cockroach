@@ -30,6 +30,9 @@ type zoneConfigHook func(
 	sysCfg *SystemConfig, objectID uint32,
 ) (zone *ZoneConfig, placeholder *ZoneConfig, cache bool, err error)
 
+type isDatabaseOrView func(
+	objectID uint32, cfg *SystemConfig) bool
+
 var (
 	// ZoneConfigHook is a function used to lookup a zone config given a table
 	// or database ID.
@@ -39,6 +42,8 @@ var (
 	// testingLargestIDHook is a function used to bypass GetLargestObjectID
 	// in tests.
 	testingLargestIDHook func(uint32) uint32
+
+	IsDatabaseOrView isDatabaseOrView
 )
 
 type zoneEntry struct {
@@ -326,9 +331,13 @@ func (s *SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RK
 
 	// findSplitKey returns the first possible split key between the given range
 	// of IDs.
+	// This is a table descriptor. Look up its parent database zone config.
 	findSplitKey := func(startID, endID uint32) roachpb.RKey {
 		// endID could be smaller than startID if we don't have user tables.
 		for id := startID; id <= endID; id++ {
+			if IsDatabaseOrView(id, s) {
+				continue
+			}
 			tableKey := roachpb.RKey(keys.MakeTablePrefix(id))
 			// This logic is analogous to the well-commented static split logic above.
 			if startKey.Less(tableKey) {
