@@ -1114,7 +1114,7 @@ func (ds *DistSender) sendPartialBatch(
 			// they're all down, or we're using an out-of-date range
 			// descriptor. Invalidate the cache and try again with the new
 			// metadata.
-			log.Event(ctx, "evicting range descriptor on send error and backoff for re-lookup")
+			log.Eventf(ctx, "evicting range descriptor on %T and backoff for re-lookup: %+v", tErr, desc)
 			if err := evictToken.Evict(ctx); err != nil {
 				return response{pErr: roachpb.NewError(err)}
 			}
