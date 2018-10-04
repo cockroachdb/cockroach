@@ -1339,7 +1339,7 @@ func (s *statusServer) CommandQueue(
 	}
 
 	if replica == nil {
-		return nil, roachpb.NewRangeNotFoundError(rangeID)
+		return nil, roachpb.NewRangeNotFoundError(rangeID, 0)
 	}
 
 	return &serverpb.CommandQueueResponse{
