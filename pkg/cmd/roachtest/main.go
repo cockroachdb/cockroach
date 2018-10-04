@@ -16,6 +16,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/user"
@@ -25,6 +26,7 @@ import (
 
 func main() {
 	parallelism := 10
+	var cpuQuota int
 	// Path to a local dir where the test logs and artifacts collected from
 	// cluster will be placed.
 	var artifacts string
@@ -44,7 +46,7 @@ func main() {
 			}
 
 			if clusterName != "" && local {
-				return fmt.Errorf("cannot specify both an existing cluster (%s) and --local", clusterName)
+				return fmt.Errorf("Cannot specify both an existing cluster (%s) and --local. However, if a local cluster already exists, --clusters=local will use it.", clusterName)
 			}
 			switch cmd.Name() {
 			case "run", "bench", "store-gen":
@@ -55,7 +57,10 @@ func main() {
 	}
 
 	rootCmd.PersistentFlags().StringVarP(
-		&clusterName, "cluster", "c", "", "name of an existing cluster to use for running tests")
+		&clusterName, "cluster", "c", "",
+		"Comma-separated list of names existing cluster to use for running tests. "+
+			"If fewer than --parallelism names are specified, then the parallelism "+
+			"is capped to the number of clusters specified.")
 	rootCmd.PersistentFlags().BoolVarP(
 		&local, "local", "l", local, "run tests locally")
 	rootCmd.PersistentFlags().StringVarP(
@@ -134,7 +139,9 @@ If no pattern is given, all tests are run.
 				r.loadBuildVersion()
 			}
 			registerTests(r)
-			os.Exit(r.Run(args, parallelism, artifacts))
+			os.Exit(r.Run(
+				context.Background(), args, count, parallelism, cpuQuota,
+				clusterName, local, artifacts, debugEnabled))
 			return nil
 		},
 	}
@@ -156,7 +163,9 @@ If no pattern is given, all tests are run.
 			}
 			r := newRegistry()
 			registerBenchmarks(r)
-			os.Exit(r.Run(args, parallelism, artifacts))
+			os.Exit(r.Run(
+				context.Background(), args, count, parallelism, cpuQuota,
+				clusterName, local, artifacts, debugEnabled))
 			return nil
 		},
 	}
@@ -182,6 +191,9 @@ If no pattern is given, all tests are run.
 			"wipe existing cluster before starting test (for use with --cluster)")
 		cmd.Flags().StringVar(
 			&zonesF, "zones", "", "Zones for the cluster (use roachprod defaults if empty)")
+		cmd.Flags().IntVar(
+			&cpuQuota, "cpu-quota", 100,
+			"The number of cloud CPUs roachtest is allowed to use at any one time.")
 	}
 
 	var storeGenCmd = &cobra.Command{
@@ -195,8 +207,11 @@ Cockroach cluster with existing data.
 			r := newRegistry()
 			registerStoreGen(r, args)
 			// We've only registered one store generation "test" that does its own
-			// argument processing, so no need to provide any arguments to r.Run.
-			os.Exit(r.Run(nil /* filter */, parallelism, artifacts))
+			// argument processing, so no need to provide a filter.
+			// TODO(andrei): Figure out a story for the cpuQuota here.
+			os.Exit(r.Run(
+				context.Background(), nil /* filter */, 1, /* count */
+				parallelism, 100 /* cpuQuota */, clusterName, local, artifacts, debugEnabled))
 			return nil
 		},
 	}
