@@ -70,6 +70,7 @@ const (
 	VersionCreateChangefeed
 	VersionRangeMerges
 	VersionBitArrayColumns
+	VersionLoadBasedRebalancing
 
 	// Add new versions here (step one of two).
 
@@ -276,6 +277,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionBitArrayColumns is https://github.com/cockroachdb/cockroach/pull/28807.
 		Key:     VersionBitArrayColumns,
 		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 13},
+	},
+	{
+		// VersionLoadBasedRebalancing is https://github.com/cockroachdb/cockroach/pull/28852.
+		Key:     VersionLoadBasedRebalancing,
+		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 14},
 	},
 
 	// Add new versions here (step two of two).
