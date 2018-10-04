@@ -17,6 +17,7 @@ package nodedialer
 import (
 	"context"
 	"net"
+	"runtime/debug"
 	"time"
 	"unsafe"
 
@@ -101,11 +102,13 @@ func (n *Dialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (_ *grpc.Clien
 
 	addr, err := n.resolver(nodeID)
 	if err != nil {
+		log.Infof(ctx, "n%d: breaker opened\n%s", nodeID, debug.Stack())
 		breaker.Fail()
 		return nil, err
 	}
 	conn, err := n.rpcContext.GRPCDial(addr.String()).Connect(ctx)
 	if err != nil {
+		log.Infof(ctx, "n%d: breaker opened\n%s", nodeID, debug.Stack())
 		breaker.Fail()
 		return nil, err
 	}
@@ -150,7 +153,11 @@ func (n *Dialer) DialInternalClient(
 	// ConnHealth when scheduling processors, but can then see attempts to send
 	// RPCs fail when dial fails due to an open breaker. Reset the breaker here
 	// as a stop-gap before the reconciliation occurs.
-	n.getBreaker(nodeID).Reset()
+	breaker := n.getBreaker(nodeID)
+	if !breaker.Ready() {
+		log.Infof(ctx, "n%d: %s: but dialed anyways", nodeID, circuit.ErrBreakerOpen)
+	}
+	breaker.Reset()
 	if err := grpcutil.ConnectionReady(conn); err != nil {
 		return nil, nil, err
 	}
@@ -163,6 +170,9 @@ func (n *Dialer) DialInternalClient(
 func (n *Dialer) ConnHealth(nodeID roachpb.NodeID) error {
 	if n == nil || n.resolver == nil {
 		return errors.New("no node dialer configured")
+	}
+	if !n.getBreaker(nodeID).Ready() {
+		return circuit.ErrBreakerOpen
 	}
 	addr, err := n.resolver(nodeID)
 	if err != nil {
