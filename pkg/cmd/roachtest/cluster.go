@@ -66,6 +66,8 @@ var (
 	zonesF                string
 	teamCity              bool
 	testingSkipValidation bool
+	// For the "list" command: list benchmarks instead of tests.
+	listBench bool
 )
 
 func ifLocal(trueVal, falseVal string) string {
