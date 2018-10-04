@@ -608,8 +608,6 @@ type distSQLNodeHealth struct {
 }
 
 func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) error {
-	log.Infof(ctx, "n%d: checking node health", nodeID)
-
 	{
 		// NB: as of #22658, ConnHealth does not work as expected; see the
 		// comment within. We still keep this code for now because in
@@ -624,10 +622,8 @@ func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) er
 			// instead). Note: this can never happen for our nodeID (which
 			// always has its address in the nodeMap).
 			log.VEventf(ctx, 1, "marking n%d as unhealthy for this plan: %v", nodeID, err)
-			log.Infof(ctx, "n%d: node health: %v", nodeID, err)
 			return err
 		}
-		log.Infof(ctx, "n%d: node health: %v", nodeID, err)
 	}
 	{
 		live, err := h.isLive(nodeID)
@@ -635,7 +631,6 @@ func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) er
 			err = errors.New("node is not live")
 		}
 		if err != nil {
-			log.Infof(ctx, "n%d: node health: %v", nodeID, err)
 			return errors.Wrapf(err, "not using n%d due to liveness", nodeID)
 		}
 	}
@@ -649,14 +644,12 @@ func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) er
 		// written on startup, the most likely scenario is
 		// that the node is ready. We therefore return no
 		// error.
-		log.Infof(ctx, "n%d: node healthy (not draining)", nodeID)
 		return nil
 	}
 
 	if drainingInfo.Draining {
 		errMsg := fmt.Sprintf("not using n%d because it is draining", nodeID)
 		log.VEvent(ctx, 1, errMsg)
-		log.Infof(ctx, "n%d: node health: %s", nodeID, errMsg)
 		return errors.New(errMsg)
 	}
 

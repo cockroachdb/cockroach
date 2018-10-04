@@ -246,9 +246,6 @@ func (s *bankState) chaosMonkey(
 			return false
 		}
 
-		c.l.Printf("round %d: verifying accounts\n", curRound)
-		s.verifyAccounts(ctx, t)
-
 		// Sleep until at least one client is writing successfully.
 		c.l.Printf("round %d: monkey sleeping while cluster recovers...\n", curRound)
 		for !s.done(ctx) && !madeProgress() {
