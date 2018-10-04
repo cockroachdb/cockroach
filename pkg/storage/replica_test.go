@@ -8491,11 +8491,6 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 func TestReplicaShouldDropForwardedProposal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var tc testContext
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	tc.Start(t, stopper)
-
 	cmdSeen, cmdNotSeen := makeIDKey(), makeIDKey()
 	data, noData := []byte("data"), []byte("")
 
@@ -8591,28 +8586,46 @@ func TestReplicaShouldDropForwardedProposal(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
+			var tc testContext
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.TODO())
+			tc.Start(t, stopper)
 			tc.repl.mu.Lock()
 			defer tc.repl.mu.Unlock()
 
+			rg := tc.repl.mu.internalRaftGroup
 			if c.leader {
-				// Reset the remoteProposals map to only contain cmdSeen.
+				// Set the remoteProposals map to only contain cmdSeen.
 				tc.repl.mu.remoteProposals = map[storagebase.CmdIDKey]struct{}{
 					cmdSeen: {},
 				}
+				// Make sure the replica is the leader.
+				if s := rg.Status(); s.RaftState != raft.StateLeader {
+					t.Errorf("Replica not leader: %v", s)
+				}
 			} else {
-				// Clear the remoteProposals map and set the leader ID to
-				// someone else.
+				// Clear the remoteProposals map.
 				tc.repl.mu.remoteProposals = nil
-				tc.repl.mu.leaderID = tc.repl.mu.replicaID + 1
-				defer func() { tc.repl.mu.leaderID = tc.repl.mu.replicaID }()
+				// Force the replica to step down as the leader by sending it a
+				// heartbeat at a high term.
+				if err := rg.Step(raftpb.Message{
+					Type: raftpb.MsgHeartbeat,
+					Term: 999,
+				}); err != nil {
+					t.Error(err)
+				}
+				if s := rg.Status(); s.RaftState != raft.StateFollower {
+					t.Errorf("Replica not follower: %v", s)
+				}
 			}
 
 			req := &RaftMessageRequest{Message: c.msg}
 			drop := tc.repl.shouldDropForwardedProposalLocked(req)
-
 			if c.expDrop != drop {
 				t.Errorf("expected drop=%t, found %t", c.expDrop, drop)
 			}
+
+			tc.repl.maybeTrackForwardedProposalLocked(rg, req)
 			if l := len(tc.repl.mu.remoteProposals); c.expRemotePropsAfter != l {
 				t.Errorf("expected %d tracked remote proposals, found %d", c.expRemotePropsAfter, l)
 			}
