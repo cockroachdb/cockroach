@@ -207,7 +207,9 @@ func (s *bankState) chaosMonkey(
 	pickNodes func() []int,
 	consistentIdx int,
 ) {
+	s.waitGroup.Add(1)
 	defer s.waitGroup.Done()
+
 	for curRound := uint64(1); !s.done(ctx); curRound++ {
 		atomic.StoreUint64(&s.monkeyIteration, curRound)
 
@@ -268,7 +270,9 @@ func (s *bankState) chaosMonkey(
 }
 
 func (s *bankState) splitMonkey(ctx context.Context, d time.Duration, c *cluster) {
+	s.waitGroup.Add(1)
 	defer s.waitGroup.Done()
+
 	r := newRand()
 	nodes := make([]string, c.nodes)
 
@@ -396,12 +400,12 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 	// TODO(peter): Run for longer when !local.
 	start := timeutil.Now()
 	s := &bankState{
-		errChan:   make(chan error, c.nodes),
-		waitGroup: sync.WaitGroup{},
-		deadline:  start.Add(time.Minute),
-		clients:   make([]bankClient, c.nodes),
+		errChan:  make(chan error, c.nodes),
+		deadline: start.Add(time.Minute),
+		clients:  make([]bankClient, c.nodes),
 	}
 	s.initBank(ctx, t, c)
+	defer s.waitGroup.Wait()
 
 	for i := 0; i < c.nodes; i++ {
 		s.clients[i].Lock()
@@ -409,11 +413,6 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 		s.clients[i].Unlock()
 		go s.transferMoney(ctx, c, i+1, bankNumAccounts, bankMaxTransfer)
 	}
-
-	s.waitGroup.Add(1)
-	defer func() {
-		s.waitGroup.Wait()
-	}()
 
 	// Chaos monkey.
 	rnd, seed := randutil.NewPseudoRand()
@@ -448,23 +447,18 @@ func runBankNodeRestart(ctx context.Context, t *test, c *cluster) {
 	// TODO(peter): Run for longer when !local.
 	start := timeutil.Now()
 	s := &bankState{
-		errChan:   make(chan error, 1),
-		waitGroup: sync.WaitGroup{},
-		deadline:  start.Add(time.Minute),
-		clients:   make([]bankClient, 1),
+		errChan:  make(chan error, 1),
+		deadline: start.Add(time.Minute),
+		clients:  make([]bankClient, 1),
 	}
 	s.initBank(ctx, t, c)
+	defer s.waitGroup.Wait()
 
 	clientIdx := c.nodes
 	client := &s.clients[0]
 	client.db = c.Conn(ctx, clientIdx)
 
-	s.waitGroup.Add(1)
 	go s.transferMoney(ctx, c, 1, bankNumAccounts, bankMaxTransfer)
-
-	defer func() {
-		s.waitGroup.Wait()
-	}()
 
 	// Chaos monkey.
 	rnd, seed := randutil.NewPseudoRand()
@@ -490,12 +484,12 @@ func runBankNodeZeroSum(ctx context.Context, t *test, c *cluster) {
 
 	start := timeutil.Now()
 	s := &bankState{
-		errChan:   make(chan error, c.nodes),
-		waitGroup: sync.WaitGroup{},
-		deadline:  start.Add(time.Minute),
-		clients:   make([]bankClient, c.nodes),
+		errChan:  make(chan error, c.nodes),
+		deadline: start.Add(time.Minute),
+		clients:  make([]bankClient, c.nodes),
 	}
 	s.initBank(ctx, t, c)
+	defer s.waitGroup.Wait()
 
 	for i := 0; i < c.nodes; i++ {
 		s.clients[i].Lock()
@@ -503,11 +497,6 @@ func runBankNodeZeroSum(ctx context.Context, t *test, c *cluster) {
 		s.clients[i].Unlock()
 		go s.transferMoney(ctx, c, i+1, bankNumAccounts, bankMaxTransfer)
 	}
-
-	s.waitGroup.Add(1)
-	defer func() {
-		s.waitGroup.Wait()
-	}()
 
 	go s.splitMonkey(ctx, 2*time.Second, c)
 	s.waitClientsStop(ctx, t, c, 30*time.Second)
@@ -531,12 +520,12 @@ func runBankZeroSumRestart(ctx context.Context, t *test, c *cluster) {
 
 	start := timeutil.Now()
 	s := &bankState{
-		errChan:   make(chan error, c.nodes),
-		waitGroup: sync.WaitGroup{},
-		deadline:  start.Add(time.Minute),
-		clients:   make([]bankClient, c.nodes),
+		errChan:  make(chan error, c.nodes),
+		deadline: start.Add(time.Minute),
+		clients:  make([]bankClient, c.nodes),
 	}
 	s.initBank(ctx, t, c)
+	defer s.waitGroup.Wait()
 
 	for i := 0; i < c.nodes; i++ {
 		s.clients[i].Lock()
@@ -544,10 +533,6 @@ func runBankZeroSumRestart(ctx context.Context, t *test, c *cluster) {
 		s.clients[i].Unlock()
 		go s.transferMoney(ctx, c, i+1, bankNumAccounts, bankMaxTransfer)
 	}
-
-	defer func() {
-		s.waitGroup.Wait()
-	}()
 
 	rnd, seed := randutil.NewPseudoRand()
 	c.l.Printf("monkey starts (seed %d)\n", seed)
