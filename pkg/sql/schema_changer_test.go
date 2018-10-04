@@ -3248,42 +3248,60 @@ CREATE DATABASE t;
 		t.Fatal(err)
 	}
 
-	tx, err := sqlDB.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
+	// TODO(vivek): Remove this retry loop once a schema change is no longer
+	// reading txn.CommitTimestamp() to set a descriptor ModificationTime.
+	testutils.SucceedsSoon(t, func() error {
+		tx, beginErr := sqlDB.Begin()
+		if beginErr != nil {
+			t.Fatal(beginErr)
+		}
 
-	if _, err := tx.Exec(`CREATE TABLE t.testing (k INT PRIMARY KEY, v INT, INDEX foo(v));`); err != nil {
-		t.Fatal(err)
-	}
+		if _, err := tx.Exec(`CREATE TABLE t.testing (k INT PRIMARY KEY, v INT, INDEX foo(v));`); err != nil {
+			t.Fatal(err)
+		}
 
-	inserts := make([]string, maxValue+1)
-	for i := 0; i < maxValue+1; i++ {
-		inserts[i] = fmt.Sprintf(`(%d, %d)`, i, maxValue-i)
-	}
+		inserts := make([]string, maxValue+1)
+		for i := 0; i < maxValue+1; i++ {
+			inserts[i] = fmt.Sprintf(`(%d, %d)`, i, maxValue-i)
+		}
 
-	if _, err := tx.Exec(`INSERT INTO t.testing VALUES ` + strings.Join(inserts, ",")); err != nil {
-		t.Fatal(err)
-	}
+		var err error
+		defer func() {
+			if err != nil {
+				if !testutils.IsError(err, `restart transaction: HandledRetryableTxnError`) {
+					t.Fatal(err)
+				}
+				if rollbackErr := tx.Rollback(); rollbackErr != nil {
+					t.Fatal(rollbackErr)
+				}
+			}
+		}()
 
-	if _, err := tx.Exec(`ALTER TABLE t.testing RENAME TO t.test`); err != nil {
-		t.Fatal(err)
-	}
+		_, err = tx.Exec(`INSERT INTO t.testing VALUES ` + strings.Join(inserts, ","))
+		if err != nil {
+			return err
+		}
 
-	// Run schema changes that are execute Column and Index backfills.
-	if _, err := tx.Exec(`
+		_, err = tx.Exec(`ALTER TABLE t.testing RENAME TO t.test`)
+		if err != nil {
+			return err
+		}
+
+		// Run schema changes that execute Column and Index backfills.
+		_, err = tx.Exec(`
 ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 23, ADD CONSTRAINT bar UNIQUE (c)
-`); err != nil {
-		t.Fatal(err)
-	}
+`)
+		if err != nil {
+			return err
+		}
 
-	if _, err := tx.Exec(`DROP INDEX t.test@foo`); err != nil {
-		t.Fatal(err)
-	}
+		_, err = tx.Exec(`DROP INDEX t.test@foo`)
+		if err != nil {
+			return err
+		}
 
-	if err := tx.Commit(); err != nil {
-		t.Fatal(err)
-	}
+		return tx.Commit()
+	})
 
 	if err := checkTableKeyCount(context.TODO(), kvDB, 2, maxValue); err != nil {
 		t.Fatal(err)
