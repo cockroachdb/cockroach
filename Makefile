@@ -267,7 +267,7 @@ $(GITHOOKSDIR)/%: githooks/%
 endif
 
 .SECONDARY: pkg/ui/yarn.installed
-pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobufjs-cli.lock
+pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobufjs-cli.lock | bin/.submodules-initialized
 	$(NODE_RUN) -C pkg/ui yarn install --offline
 	# Prevent ProtobufJS from trying to install its own packages because a) the
 	# the feature is buggy, and b) it introduces an unnecessary dependency on NPM.
