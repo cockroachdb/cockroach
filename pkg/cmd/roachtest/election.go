@@ -17,7 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-func registerElectionAfterRestart(r *registry) {
+func registerElectionAfterRestart(r *testRegistry) {
 	r.Add(testSpec{
 		Name:    "election-after-restart",
 		Skip:    "https://github.com/cockroachdb/cockroach/issues/35047",

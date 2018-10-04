@@ -57,13 +57,13 @@ type cdcTestArgs struct {
 func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	// Skip the poller test on v19.2. After 19.2 is out, we should likely delete
 	// the test entirely.
-	if !args.rangefeed && t.registry.buildVersion.Compare(version.MustParse(`v19.1.0-0`)) > 0 {
+	if !args.rangefeed && t.buildVersion.Compare(version.MustParse(`v19.1.0-0`)) > 0 {
 		t.Skip("no poller in >= v19.2.0", "")
 	}
 
-	crdbNodes := c.Range(1, c.nodes-1)
-	workloadNode := c.Node(c.nodes)
-	kafkaNode := c.Node(c.nodes)
+	crdbNodes := c.Range(1, c.spec.NodeCount-1)
+	workloadNode := c.Node(c.spec.NodeCount)
+	kafkaNode := c.Node(c.spec.NodeCount)
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Put(ctx, workload, "./workload", workloadNode)
 	c.Start(ctx, t, crdbNodes)
@@ -237,7 +237,7 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 	// spam.
 	c.Run(ctx, c.All(), `mkdir -p logs`)
 
-	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.nodes-1), c.Node(c.nodes), c.Node(c.nodes)
+	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.spec.NodeCount-1), c.Node(c.spec.NodeCount), c.Node(c.spec.NodeCount)
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
 	c.Put(ctx, workload, "./workload", workloadNode)
 	c.Start(ctx, t, crdbNodes)
@@ -460,7 +460,7 @@ func runCDCSchemaRegistry(ctx context.Context, t *test, c *cluster) {
 	}
 }
 
-func registerCDC(r *registry) {
+func registerCDC(r *testRegistry) {
 	useRangeFeed := true
 	if r.buildVersion.Compare(version.MustParse(`v2.2.0-0`)) < 0 {
 		// RangeFeed is not production ready in 2.1, so run the tests with the

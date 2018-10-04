@@ -22,13 +22,13 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func registerHotSpotSplits(r *registry) {
+func registerHotSpotSplits(r *testRegistry) {
 	// This test sets up a cluster and runs kv on it with high concurrency and a large block size
 	// to force a large range. We then make sure that the largest range isn't larger than a threshold and
 	// that backpressure is working correctly.
 	runHotSpot := func(ctx context.Context, t *test, c *cluster, duration time.Duration, concurrency int) {
-		roachNodes := c.Range(1, c.nodes-1)
-		appNode := c.Node(c.nodes)
+		roachNodes := c.Range(1, c.spec.NodeCount-1)
+		appNode := c.Node(c.spec.NodeCount)
 
 		c.Put(ctx, cockroach, "./cockroach", roachNodes)
 		c.Start(ctx, t, roachNodes)

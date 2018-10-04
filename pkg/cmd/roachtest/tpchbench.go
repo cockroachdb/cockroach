@@ -68,8 +68,8 @@ type tpchBenchSpec struct {
 // This benchmark runs with a single load generator node running a single
 // worker.
 func runTPCHBench(ctx context.Context, t *test, c *cluster, b tpchBenchSpec) {
-	roachNodes := c.Range(1, c.nodes-1)
-	loadNode := c.Node(c.nodes)
+	roachNodes := c.Range(1, c.spec.NodeCount-1)
+	loadNode := c.Node(c.spec.NodeCount)
 
 	t.Status("copying binaries")
 	c.Put(ctx, cockroach, "./cockroach", roachNodes)
@@ -204,7 +204,7 @@ func loadTPCHBench(
 
 		// If the scale factor was smaller than the required scale factor, wipe the
 		// cluster and restore.
-		m.ExpectDeaths(int32(c.nodes))
+		m.ExpectDeaths(int32(c.spec.NodeCount))
 		c.Wipe(ctx, roachNodes)
 		c.Start(ctx, t, roachNodes)
 		m.ResetDeaths()
@@ -220,7 +220,7 @@ func loadTPCHBench(
 	return err
 }
 
-func registerTPCHBenchSpec(r *registry, b tpchBenchSpec) {
+func registerTPCHBenchSpec(r *testRegistry, b tpchBenchSpec) {
 	nameParts := []string{
 		"tpchbench",
 		b.benchType.String(),
@@ -246,7 +246,7 @@ func registerTPCHBenchSpec(r *registry, b tpchBenchSpec) {
 	})
 }
 
-func registerTPCHBench(r *registry) {
+func registerTPCHBench(r *testRegistry) {
 	specs := []tpchBenchSpec{
 		{
 			Nodes:           3,

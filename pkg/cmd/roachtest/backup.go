@@ -20,7 +20,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func registerBackup(r *registry) {
+func registerBackup(r *testRegistry) {
 	backup2TBSpec := makeClusterSpec(10)
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("backup2TB/%s", backup2TBSpec),
@@ -100,7 +100,7 @@ func registerBackup(r *registry) {
 			t.Status(`workload initialization`)
 			cmd := fmt.Sprintf(
 				"./workload init tpcc --warehouses=%d {pgurl:1-%d}",
-				warehouses, c.nodes,
+				warehouses, c.spec.NodeCount,
 			)
 			c.Run(ctx, c.Node(1), cmd)
 
@@ -122,7 +122,7 @@ func registerBackup(r *registry) {
 			go func() {
 				cmd := fmt.Sprintf(
 					"./workload run tpcc --warehouses=%d {pgurl:1-%d}",
-					warehouses, c.nodes,
+					warehouses, c.spec.NodeCount,
 				)
 
 				cmdDone <- c.RunE(ctx, c.Node(1), cmd)

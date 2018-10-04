@@ -94,8 +94,8 @@ func tpccFixturesCmd(t *test, cloud string, warehouses int, extraArgs string) st
 }
 
 func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
-	crdbNodes := c.Range(1, c.nodes-1)
-	workloadNode := c.Node(c.nodes)
+	crdbNodes := c.Range(1, c.spec.NodeCount-1)
+	workloadNode := c.Node(c.spec.NodeCount)
 	rampDuration := 5 * time.Minute
 	if c.isLocal() {
 		opts.Warehouses = 1
@@ -104,9 +104,9 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 	}
 
 	if n := len(opts.Versions); n == 0 {
-		opts.Versions = make([]string, c.nodes-1)
-	} else if n != c.nodes-1 {
-		t.Fatalf("must specify Versions for all %d nodes: %v", c.nodes-1, opts.Versions)
+		opts.Versions = make([]string, c.spec.NodeCount-1)
+	} else if n != c.spec.NodeCount-1 {
+		t.Fatalf("must specify Versions for all %d nodes: %v", c.spec.NodeCount-1, opts.Versions)
 	}
 
 	{
@@ -169,7 +169,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 		cmd := fmt.Sprintf(
 			"./workload run tpcc --warehouses=%d --histograms=logs/stats.json "+
 				opts.Extra+" --ramp=%s --duration=%s {pgurl:1-%d}",
-			opts.Warehouses, rampDuration, opts.Duration, c.nodes-1)
+			opts.Warehouses, rampDuration, opts.Duration, c.spec.NodeCount-1)
 		c.Run(ctx, workloadNode, cmd)
 		return nil
 	})
@@ -210,7 +210,7 @@ var tpccSupportedWarehouses = []struct {
 	{hardware: "gce-n5cpu16", v: version.MustParse(`v2.1.0-0`), warehouses: 1300},
 }
 
-func (r *registry) maxSupportedTPCCWarehouses(cloud string, nodes clusterSpec) int {
+func maxSupportedTPCCWarehouses(buildVersion version.Version, cloud string, nodes clusterSpec) int {
 	var v *version.Version
 	var warehouses int
 	hardware := fmt.Sprintf(`%s-%s`, cloud, &nodes)
@@ -218,7 +218,7 @@ func (r *registry) maxSupportedTPCCWarehouses(cloud string, nodes clusterSpec) i
 		if x.hardware != hardware {
 			continue
 		}
-		if r.buildVersion.AtLeast(x.v) && (v == nil || r.buildVersion.AtLeast(v)) {
+		if buildVersion.AtLeast(x.v) && (v == nil || buildVersion.AtLeast(v)) {
 			v = x.v
 			warehouses = x.warehouses
 		}
@@ -229,7 +229,7 @@ func (r *registry) maxSupportedTPCCWarehouses(cloud string, nodes clusterSpec) i
 	return warehouses
 }
 
-func registerTPCC(r *registry) {
+func registerTPCC(r *testRegistry) {
 	headroomSpec := makeClusterSpec(4, cpu(16))
 	r.Add(testSpec{
 		// w=headroom runs tpcc for a semi-extended period with some amount of
@@ -242,7 +242,7 @@ func registerTPCC(r *registry) {
 		Tags:       []string{`default`, `release_qualification`},
 		Cluster:    headroomSpec,
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			maxWarehouses := r.maxSupportedTPCCWarehouses(cloud, t.spec.Cluster)
+			maxWarehouses := maxSupportedTPCCWarehouses(r.buildVersion, cloud, t.spec.Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
 			t.l.Printf("computed headroom warehouses of %d\n", headroomWarehouses)
 			runTPCC(ctx, t, c, tpccOptions{
@@ -265,9 +265,9 @@ func registerTPCC(r *registry) {
 		Tags:    []string{`default`},
 		Cluster: mixedHeadroomSpec,
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			maxWarehouses := r.maxSupportedTPCCWarehouses(cloud, t.spec.Cluster)
+			maxWarehouses := maxSupportedTPCCWarehouses(r.buildVersion, cloud, t.spec.Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
-			oldV, err := r.PredecessorVersion()
+			oldV, err := PredecessorVersion(r.buildVersion)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -326,7 +326,7 @@ func registerTPCC(r *registry) {
 							Period:   45 * time.Second,
 							DownTime: 10 * time.Second,
 						},
-						Target:       func() nodeListOption { return c.Node(1 + rand.Intn(c.nodes-1)) },
+						Target:       func() nodeListOption { return c.Node(1 + rand.Intn(c.spec.NodeCount-1)) },
 						Stopper:      time.After(duration),
 						DrainAndQuit: false,
 					}
@@ -483,7 +483,7 @@ type tpccBenchSpec struct {
 	// change (i.e. CockroachDB gets faster!).
 	EstimatedMax int
 
-	// Tags to pass to registry.Add.
+	// Tags to pass to testRegistry.Add.
 	Tags []string
 }
 
@@ -510,7 +510,7 @@ func (s tpccBenchSpec) startOpts() []option {
 	return opts
 }
 
-func registerTPCCBenchSpec(r *registry, b tpccBenchSpec) {
+func registerTPCCBenchSpec(r *testRegistry, b tpccBenchSpec) {
 	nameParts := []string{
 		"tpccbench",
 		fmt.Sprintf("nodes=%d", b.Nodes),
@@ -689,7 +689,9 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 			t.Fatal("distributed chaos benchmarking not supported")
 		}
 		t.Status("installing haproxy")
-		c.Install(ctx, loadNodes, "haproxy")
+		if err := c.Install(ctx, t.l, loadNodes, "haproxy"); err != nil {
+			t.Fatal(err)
+		}
 		c.Run(ctx, loadNodes, "./cockroach gen haproxy --insecure --url {pgurl:1}")
 		c.Run(ctx, loadNodes, "haproxy -f haproxy.cfg -D")
 	}
@@ -791,7 +793,11 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 						return errors.Wrapf(err, "error running tpcc load generator")
 					}
 					roachtestHistogramsPath := filepath.Join(resultsDir, fmt.Sprintf("%d.%d-stats.json", warehouses, groupIdx))
-					c.Get(ctx, histogramsPath, roachtestHistogramsPath, group.loadNodes)
+					if err := c.Get(
+						ctx, t.l, histogramsPath, roachtestHistogramsPath, group.loadNodes,
+					); err != nil {
+						t.Fatal(err)
+					}
 					snapshots, err := histogram.DecodeSnapshots(roachtestHistogramsPath)
 					if err != nil {
 						return errors.Wrapf(err, "failed to decode histogram snapshots")
@@ -836,7 +842,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 	m.Wait()
 }
 
-func registerTPCCBench(r *registry) {
+func registerTPCCBench(r *testRegistry) {
 	specs := []tpccBenchSpec{
 		{
 			Nodes: 3,
