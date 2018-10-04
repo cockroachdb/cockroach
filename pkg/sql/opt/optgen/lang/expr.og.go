@@ -57,6 +57,10 @@ func (e *RootExpr) Source() *SourceLoc {
 	return e.Src
 }
 
+func (e *RootExpr) InferredType() DataType {
+	return AnyDataType
+}
+
 func (e *RootExpr) String() string {
 	var buf bytes.Buffer
 	e.Format(&buf, 0)
@@ -105,6 +109,10 @@ func (e *DefineSetExpr) Source() *SourceLoc {
 	return nil
 }
 
+func (e *DefineSetExpr) InferredType() DataType {
+	return AnyDataType
+}
+
 func (e *DefineSetExpr) String() string {
 	var buf bytes.Buffer
 	e.Format(&buf, 0)
@@ -151,6 +159,10 @@ func (e *RuleSetExpr) Visit(visit VisitFunc) Expr {
 
 func (e *RuleSetExpr) Source() *SourceLoc {
 	return nil
+}
+
+func (e *RuleSetExpr) InferredType() DataType {
+	return AnyDataType
 }
 
 func (e *RuleSetExpr) String() string {
@@ -223,6 +235,10 @@ func (e *DefineExpr) Source() *SourceLoc {
 	return e.Src
 }
 
+func (e *DefineExpr) InferredType() DataType {
+	return AnyDataType
+}
+
 func (e *DefineExpr) String() string {
 	var buf bytes.Buffer
 	e.Format(&buf, 0)
@@ -271,6 +287,10 @@ func (e *CommentsExpr) Source() *SourceLoc {
 	return nil
 }
 
+func (e *CommentsExpr) InferredType() DataType {
+	return AnyDataType
+}
+
 func (e *CommentsExpr) String() string {
 	var buf bytes.Buffer
 	e.Format(&buf, 0)
@@ -309,6 +329,10 @@ func (e *CommentExpr) Visit(visit VisitFunc) Expr {
 
 func (e *CommentExpr) Source() *SourceLoc {
 	return nil
+}
+
+func (e *CommentExpr) InferredType() DataType {
+	return StringDataType
 }
 
 func (e *CommentExpr) String() string {
@@ -359,6 +383,10 @@ func (e *TagsExpr) Source() *SourceLoc {
 	return nil
 }
 
+func (e *TagsExpr) InferredType() DataType {
+	return AnyDataType
+}
+
 func (e *TagsExpr) String() string {
 	var buf bytes.Buffer
 	e.Format(&buf, 0)
@@ -397,6 +425,10 @@ func (e *TagExpr) Visit(visit VisitFunc) Expr {
 
 func (e *TagExpr) Source() *SourceLoc {
 	return nil
+}
+
+func (e *TagExpr) InferredType() DataType {
+	return StringDataType
 }
 
 func (e *TagExpr) String() string {
@@ -445,6 +477,10 @@ func (e *DefineFieldsExpr) Visit(visit VisitFunc) Expr {
 
 func (e *DefineFieldsExpr) Source() *SourceLoc {
 	return nil
+}
+
+func (e *DefineFieldsExpr) InferredType() DataType {
+	return AnyDataType
 }
 
 func (e *DefineFieldsExpr) String() string {
@@ -505,6 +541,10 @@ func (e *DefineFieldExpr) Visit(visit VisitFunc) Expr {
 
 func (e *DefineFieldExpr) Source() *SourceLoc {
 	return e.Src
+}
+
+func (e *DefineFieldExpr) InferredType() DataType {
+	return AnyDataType
 }
 
 func (e *DefineFieldExpr) String() string {
@@ -582,6 +622,10 @@ func (e *RuleExpr) Source() *SourceLoc {
 	return e.Src
 }
 
+func (e *RuleExpr) InferredType() DataType {
+	return AnyDataType
+}
+
 func (e *RuleExpr) String() string {
 	var buf bytes.Buffer
 	e.Format(&buf, 0)
@@ -596,6 +640,7 @@ type FuncExpr struct {
 	Name Expr
 	Args SliceExpr
 	Src  *SourceLoc
+	Typ  DataType
 }
 
 func (e *FuncExpr) Op() Operator {
@@ -640,6 +685,10 @@ func (e *FuncExpr) Visit(visit VisitFunc) Expr {
 
 func (e *FuncExpr) Source() *SourceLoc {
 	return e.Src
+}
+
+func (e *FuncExpr) InferredType() DataType {
+	return e.Typ
 }
 
 func (e *FuncExpr) String() string {
@@ -690,6 +739,10 @@ func (e *NamesExpr) Source() *SourceLoc {
 	return nil
 }
 
+func (e *NamesExpr) InferredType() DataType {
+	return AnyDataType
+}
+
 func (e *NamesExpr) String() string {
 	var buf bytes.Buffer
 	e.Format(&buf, 0)
@@ -730,6 +783,10 @@ func (e *NameExpr) Source() *SourceLoc {
 	return nil
 }
 
+func (e *NameExpr) InferredType() DataType {
+	return StringDataType
+}
+
 func (e *NameExpr) String() string {
 	var buf bytes.Buffer
 	e.Format(&buf, 0)
@@ -744,6 +801,7 @@ type AndExpr struct {
 	Left  Expr
 	Right Expr
 	Src   *SourceLoc
+	Typ   DataType
 }
 
 func (e *AndExpr) Op() Operator {
@@ -790,6 +848,10 @@ func (e *AndExpr) Source() *SourceLoc {
 	return e.Src
 }
 
+func (e *AndExpr) InferredType() DataType {
+	return e.Typ
+}
+
 func (e *AndExpr) String() string {
 	var buf bytes.Buffer
 	e.Format(&buf, 0)
@@ -803,6 +865,7 @@ func (e *AndExpr) Format(buf *bytes.Buffer, level int) {
 type NotExpr struct {
 	Input Expr
 	Src   *SourceLoc
+	Typ   DataType
 }
 
 func (e *NotExpr) Op() Operator {
@@ -845,6 +908,10 @@ func (e *NotExpr) Source() *SourceLoc {
 	return e.Src
 }
 
+func (e *NotExpr) InferredType() DataType {
+	return e.Typ
+}
+
 func (e *NotExpr) String() string {
 	var buf bytes.Buffer
 	e.Format(&buf, 0)
@@ -858,6 +925,7 @@ func (e *NotExpr) Format(buf *bytes.Buffer, level int) {
 type ListExpr struct {
 	Items SliceExpr
 	Src   *SourceLoc
+	Typ   DataType
 }
 
 func (e *ListExpr) Op() Operator {
@@ -900,6 +968,10 @@ func (e *ListExpr) Source() *SourceLoc {
 	return e.Src
 }
 
+func (e *ListExpr) InferredType() DataType {
+	return e.Typ
+}
+
 func (e *ListExpr) String() string {
 	var buf bytes.Buffer
 	e.Format(&buf, 0)
@@ -911,6 +983,7 @@ func (e *ListExpr) Format(buf *bytes.Buffer, level int) {
 }
 
 type ListAnyExpr struct {
+	Src *SourceLoc
 }
 
 func (e *ListAnyExpr) Op() Operator {
@@ -938,7 +1011,11 @@ func (e *ListAnyExpr) Visit(visit VisitFunc) Expr {
 }
 
 func (e *ListAnyExpr) Source() *SourceLoc {
-	return nil
+	return e.Src
+}
+
+func (e *ListAnyExpr) InferredType() DataType {
+	return AnyDataType
 }
 
 func (e *ListAnyExpr) String() string {
@@ -955,6 +1032,7 @@ type BindExpr struct {
 	Label  StringExpr
 	Target Expr
 	Src    *SourceLoc
+	Typ    DataType
 }
 
 func (e *BindExpr) Op() Operator {
@@ -1001,6 +1079,10 @@ func (e *BindExpr) Source() *SourceLoc {
 	return e.Src
 }
 
+func (e *BindExpr) InferredType() DataType {
+	return e.Typ
+}
+
 func (e *BindExpr) String() string {
 	var buf bytes.Buffer
 	e.Format(&buf, 0)
@@ -1014,6 +1096,7 @@ func (e *BindExpr) Format(buf *bytes.Buffer, level int) {
 type RefExpr struct {
 	Label StringExpr
 	Src   *SourceLoc
+	Typ   DataType
 }
 
 func (e *RefExpr) Op() Operator {
@@ -1056,6 +1139,10 @@ func (e *RefExpr) Source() *SourceLoc {
 	return e.Src
 }
 
+func (e *RefExpr) InferredType() DataType {
+	return e.Typ
+}
+
 func (e *RefExpr) String() string {
 	var buf bytes.Buffer
 	e.Format(&buf, 0)
@@ -1067,6 +1154,8 @@ func (e *RefExpr) Format(buf *bytes.Buffer, level int) {
 }
 
 type AnyExpr struct {
+	Src *SourceLoc
+	Typ DataType
 }
 
 func (e *AnyExpr) Op() Operator {
@@ -1094,7 +1183,11 @@ func (e *AnyExpr) Visit(visit VisitFunc) Expr {
 }
 
 func (e *AnyExpr) Source() *SourceLoc {
-	return nil
+	return e.Src
+}
+
+func (e *AnyExpr) InferredType() DataType {
+	return e.Typ
 }
 
 func (e *AnyExpr) String() string {
@@ -1142,6 +1235,10 @@ func (e *SliceExpr) Source() *SourceLoc {
 	return nil
 }
 
+func (e *SliceExpr) InferredType() DataType {
+	return AnyDataType
+}
+
 func (e *SliceExpr) String() string {
 	var buf bytes.Buffer
 	e.Format(&buf, 0)
@@ -1180,6 +1277,10 @@ func (e *StringExpr) Visit(visit VisitFunc) Expr {
 
 func (e *StringExpr) Source() *SourceLoc {
 	return nil
+}
+
+func (e *StringExpr) InferredType() DataType {
+	return StringDataType
 }
 
 func (e *StringExpr) String() string {
@@ -1222,6 +1323,10 @@ func (e *NumberExpr) Source() *SourceLoc {
 	return nil
 }
 
+func (e *NumberExpr) InferredType() DataType {
+	return Int64DataType
+}
+
 func (e *NumberExpr) String() string {
 	var buf bytes.Buffer
 	e.Format(&buf, 0)
@@ -1236,6 +1341,7 @@ type CustomFuncExpr struct {
 	Name NameExpr
 	Args SliceExpr
 	Src  *SourceLoc
+	Typ  DataType
 }
 
 func (e *CustomFuncExpr) Op() Operator {
@@ -1280,6 +1386,10 @@ func (e *CustomFuncExpr) Visit(visit VisitFunc) Expr {
 
 func (e *CustomFuncExpr) Source() *SourceLoc {
 	return e.Src
+}
+
+func (e *CustomFuncExpr) InferredType() DataType {
+	return e.Typ
 }
 
 func (e *CustomFuncExpr) String() string {
