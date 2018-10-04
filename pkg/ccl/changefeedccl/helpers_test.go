@@ -158,7 +158,7 @@ func createBenchmarkChangefeed(
 				for _, rs := range resolvedSpans {
 					if sf.Forward(rs.Span, rs.Timestamp) {
 						if err := emitResolvedTimestamp(
-							ctx, details, encoder, sink, nil, sf,
+							ctx, encoder, sink, sf.Frontier(),
 						); err != nil {
 							return err
 						}

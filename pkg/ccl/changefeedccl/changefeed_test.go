@@ -188,6 +188,40 @@ func TestChangefeedTimestamps(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
+func TestChangefeedResolvedFrequency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+
+		const freq = 10 * time.Millisecond
+		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH resolved=$1`, freq.String())
+		defer foo.Close(t)
+
+		// Skip the initial row
+		if _, _, _, _, _, ok := foo.Next(t); !ok {
+			t.Fatal(`expected initial row`)
+		}
+		now := timeutil.Now()
+		// Grab the next few resolved timestamps.
+		for i := 0; i < 10; i++ {
+			if _, _, _, _, _, ok := foo.Next(t); !ok {
+				t.Fatal(`expected resolved timestamp`)
+			}
+		}
+		// Make sure the total time is more than the expected time in between
+		// two. This could be a tighter bound, but I'm worried about flakes.
+		if d := timeutil.Since(now); d < freq {
+			t.Errorf(`expected %s between resolved timestamps, but it took %s`, freq, d)
+		}
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
 func TestChangefeedSchemaChange(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -914,6 +948,11 @@ func TestChangefeedErrors(t *testing.T) {
 			`CREATE CHANGEFEED FOR foo WITH envelope=nope`,
 		); !testutils.IsError(err, `unknown envelope: nope`) {
 			t.Errorf(`expected 'unknown envelope: nope' error got: %+v`, err)
+		}
+		if _, err := sqlDB.DB.Exec(
+			`CREATE CHANGEFEED FOR foo WITH resolved='-1s'`,
+		); !testutils.IsError(err, `negative durations are not accepted: resolved='-1s'`) {
+			t.Errorf(`expected 'negative durations are not accepted' error got: %+v`, err)
 		}
 
 		if _, err := sqlDB.DB.Exec(

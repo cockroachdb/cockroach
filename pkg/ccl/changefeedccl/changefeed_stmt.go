@@ -67,7 +67,7 @@ var changefeedOptionExpectValues = map[string]bool{
 	optCursor:                  true,
 	optEnvelope:                true,
 	optFormat:                  true,
-	optResolvedTimestamps:      false,
+	optResolvedTimestamps:      true,
 	optUpdatedTimestamps:       false,
 }
 
@@ -273,6 +273,16 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		// So, if no options were specified by the user, Opts will be nil when
 		// the job gets restarted.
 		details.Opts = map[string]string{}
+	}
+
+	if r, ok := details.Opts[optResolvedTimestamps]; ok && r != `` {
+		if d, err := time.ParseDuration(r); err != nil {
+			return jobspb.ChangefeedDetails{}, err
+		} else if d < 0 {
+			return jobspb.ChangefeedDetails{}, errors.Errorf(
+				`negative durations are not accepted: %s='%s'`,
+				optResolvedTimestamps, details.Opts[optResolvedTimestamps])
+		}
 	}
 
 	switch envelopeType(details.Opts[optEnvelope]) {
