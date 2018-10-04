@@ -79,7 +79,6 @@ class ClusterVisualization extends React.Component<ClusterVisualizationProps & R
         </div>
         <Loading
           loading={!this.props.licenseDataExists}
-          className="loading-image loading-image__spinner-left"
           image={spinner}
           render={() => <NodeCanvasContent tiers={tiers} />}
         />
