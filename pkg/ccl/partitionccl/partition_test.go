@@ -1366,21 +1366,22 @@ func TestRemovePartitioningExpiredLicense(t *testing.T) {
 	// Remove the enterprise license.
 	defer utilccl.TestingDisableEnterprise()()
 
-	expectLicenseErr := func(q string) {
+	const partitionErr = "use of partitions requires an enterprise license"
+	const zoneErr = "use of replication zones on indexes or partitions requires an enterprise license"
+	expectErr := func(q string, expErr string) {
 		t.Helper()
-		const expErr = "use of partitions requires an enterprise license"
 		if _, err := sqlDB.DB.Exec(q); !testutils.IsError(err, expErr) {
 			t.Fatalf("expected error %q, but got %+v", expErr, err)
 		}
 	}
 
 	// Partitions and zone configs cannot be modified without a valid license.
-	expectLicenseErr(`ALTER TABLE t PARTITION BY LIST (a) (PARTITION p2 VALUES IN (2))`)
-	expectLicenseErr(`ALTER INDEX t@i PARTITION BY RANGE (a) (PARTITION p45 VALUES FROM (4) TO (5))`)
-	expectLicenseErr(`ALTER PARTITION p1 OF TABLE t CONFIGURE ZONE USING DEFAULT`)
-	expectLicenseErr(`ALTER PARTITION p34 OF TABLE t CONFIGURE ZONE USING DEFAULT`)
-	expectLicenseErr(`ALTER INDEX t@primary CONFIGURE ZONE USING DEFAULT`)
-	expectLicenseErr(`ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`)
+	expectErr(`ALTER TABLE t PARTITION BY LIST (a) (PARTITION p2 VALUES IN (2))`, partitionErr)
+	expectErr(`ALTER INDEX t@i PARTITION BY RANGE (a) (PARTITION p45 VALUES FROM (4) TO (5))`, partitionErr)
+	expectErr(`ALTER PARTITION p1 OF TABLE t CONFIGURE ZONE USING DEFAULT`, zoneErr)
+	expectErr(`ALTER PARTITION p34 OF TABLE t CONFIGURE ZONE USING DEFAULT`, zoneErr)
+	expectErr(`ALTER INDEX t@primary CONFIGURE ZONE USING DEFAULT`, zoneErr)
+	expectErr(`ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`, zoneErr)
 
 	// But they can be removed.
 	sqlDB.Exec(t, `ALTER TABLE t PARTITION BY NOTHING`)
@@ -1389,8 +1390,8 @@ func TestRemovePartitioningExpiredLicense(t *testing.T) {
 	sqlDB.Exec(t, `ALTER INDEX t@i CONFIGURE ZONE DISCARD`)
 
 	// Once removed, they cannot be added back.
-	expectLicenseErr(`ALTER TABLE t PARTITION BY LIST (a) (PARTITION p2 VALUES IN (2))`)
-	expectLicenseErr(`ALTER INDEX t@i PARTITION BY RANGE (a) (PARTITION p45 VALUES FROM (4) TO (5))`)
-	expectLicenseErr(`ALTER INDEX t@primary CONFIGURE ZONE USING DEFAULT`)
-	expectLicenseErr(`ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`)
+	expectErr(`ALTER TABLE t PARTITION BY LIST (a) (PARTITION p2 VALUES IN (2))`, partitionErr)
+	expectErr(`ALTER INDEX t@i PARTITION BY RANGE (a) (PARTITION p45 VALUES FROM (4) TO (5))`, partitionErr)
+	expectErr(`ALTER INDEX t@primary CONFIGURE ZONE USING DEFAULT`, zoneErr)
+	expectErr(`ALTER INDEX t@i CONFIGURE ZONE USING DEFAULT`, zoneErr)
 }
