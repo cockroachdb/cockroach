@@ -28,6 +28,8 @@ type ConnFlags struct {
 	*pflag.FlagSet
 	DBOverride  string
 	Concurrency int
+	// Method for issuing queries; see SQLRunner.
+	Method string
 }
 
 // NewConnFlags returns an initialized ConnFlags.
@@ -38,12 +40,14 @@ func NewConnFlags(genFlags *Flags) *ConnFlags {
 		`Override for the SQL database to use. If empty, defaults to the generator name`)
 	c.IntVar(&c.Concurrency, `concurrency`, 2*runtime.NumCPU(),
 		`Number of concurrent workers`)
+	c.StringVar(&c.Method, `method`, `prepare`, `SQL issue method (prepare, noprepare)`)
 	genFlags.AddFlagSet(c.FlagSet)
 	if genFlags.Meta == nil {
 		genFlags.Meta = make(map[string]FlagMeta)
 	}
 	genFlags.Meta[`db`] = FlagMeta{RuntimeOnly: true}
 	genFlags.Meta[`concurrency`] = FlagMeta{RuntimeOnly: true}
+	genFlags.Meta[`method`] = FlagMeta{RuntimeOnly: true}
 	return c
 }
 
