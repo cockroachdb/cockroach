@@ -70,6 +70,7 @@ func (cb *constraintsBuilder) buildSingleColumnConstraint(
 			spans.Append(&sp)
 		}
 		var c constraint.Constraint
+		spans.SortAndMerge(&keyCtx)
 		c.Init(&keyCtx, &spans)
 		return constraint.SingleConstraint(&c), true
 	}
