@@ -142,7 +142,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                 const used = BytesUsed(ns);
                 return <BytesBarChart used={used} usable={usable} />;
               },
-              sort: (ns) => BytesUsed(ns),
+              sort: (ns) => BytesUsed(ns) / nodeCapacityStats(ns).usable,
             },
             // Mem Usage - total memory being used on this node.
             {
@@ -152,7 +152,7 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
                 const available = FixLong(ns.total_system_memory).toNumber();
                 return <BytesBarChart used={used} usable={available} />;
               },
-              sort: (ns) => ns.metrics[MetricConstants.rss],
+              sort: (ns) => ns.metrics[MetricConstants.rss] / FixLong(ns.total_system_memory).toNumber(),
             },
             // Version - the currently running version of cockroach.
             {
