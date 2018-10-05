@@ -761,22 +761,24 @@ func (q *queryMeta) cancel() {
 	q.ctxCancel()
 }
 
-// sessionDefaults mirrors fields in Session, for restoring default
+// SessionDefaults mirrors fields in Session, for restoring default
 // configuration values in SET ... TO DEFAULT (or RESET ...) statements.
-type sessionDefaults struct {
-	applicationName string
-	database        string
-}
+type SessionDefaults map[string]string
 
 // SessionArgs contains arguments for serving a client connection.
 type SessionArgs struct {
-	Database        string
 	User            string
-	ApplicationName string
+	SessionDefaults SessionDefaults
 	// RemoteAddr is the client's address. This is nil iff this is an internal
 	// client.
 	RemoteAddr net.Addr
 }
+
+// isDefined returns true iff the SessionArgs is well-defined.
+// This method exists because SessionArgs is passed by value but it
+// matters to the functions using it whether the value was explicitly
+// specified or left empty.
+func (s SessionArgs) isDefined() bool { return len(s.User) != 0 }
 
 // SessionRegistry stores a set of all sessions on this node.
 // Use register() and deregister() to modify this registry.
@@ -1573,7 +1575,7 @@ type spanWithIndex struct {
 // see curTxnReadOnly).
 type sessionDataMutator struct {
 	data     *sessiondata.SessionData
-	defaults sessionDefaults
+	defaults SessionDefaults
 	settings *cluster.Settings
 	// curTxnReadOnly is a value to be mutated through SET transaction_read_only = ...
 	curTxnReadOnly *bool

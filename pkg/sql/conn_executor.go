@@ -20,6 +20,7 @@ import (
 	"io"
 	"math"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -33,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -387,35 +387,67 @@ func (s *Server) GetStmtStatsLastReset() time.Time {
 	return s.sqlStats.lastReset
 }
 
-// ServeConn creates a connExecutor and serves a client connection by reading
-// commands from stmtBuf.
+// SetupConn creates a connExecutor for the client connection.
+//
+// When this method returns there are no resources allocated yet that
+// need to be close()d.
 //
 // Args:
+// args: The initial session parameters. They are validated by SetupConn
+//   and an error is returned if this validation fails.
 // stmtBuf: The incoming statement for the new connExecutor.
 // clientComm: The interface through which the new connExecutor is going to
 // 	 produce results for the client.
-// reserved: An amount on memory reserved for the connection. The connExecutor
-// 	 takes ownership of this memory.
 // memMetrics: The metrics that statements executed on this connection will
 //   contribute to.
-func (s *Server) ServeConn(
+func (s *Server) SetupConn(
 	ctx context.Context,
 	args SessionArgs,
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
-	reserved mon.BoundAccount,
 	memMetrics MemoryMetrics,
-	cancel context.CancelFunc,
-) error {
-
-	ex := s.newConnExecutor(
-		ctx, sessionParams{args: &args}, stmtBuf, clientComm, s.pool, reserved, memMetrics,
+) (ConnectionHandler, error) {
+	ex, err := s.newConnExecutor(
+		ctx, sessionParams{args: args}, stmtBuf, clientComm, memMetrics,
 	)
+	return ConnectionHandler{ex}, err
+}
+
+// ConnectionHandler is the interface between the result of SetupConn
+// and the ServeConn below. It encapsulates the connExecutor and hides
+// it away from other packages.
+type ConnectionHandler struct {
+	ex *connExecutor
+}
+
+// GetStatusParam retrieves the configured value of the session
+// variable identified by varName. This is used for the initial
+// message sent to a client during a session set-up.
+func (h ConnectionHandler) GetStatusParam(ctx context.Context, varName string) string {
+	name := strings.ToLower(varName)
+	v, ok := varGen[name]
+	if !ok {
+		log.Fatalf(ctx, "programming error: status param %q must be defined session var", varName)
+		return ""
+	}
+	hasDefault, defVal := getSessionVarDefaultString(name, v, &h.ex.dataMutator)
+	if !hasDefault {
+		log.Fatalf(ctx, "programming error: status param %q must have a default value", varName)
+		return ""
+	}
+	return defVal
+}
+
+// ServeConn serves a client connection by reading commands from
+// the stmtBuf embedded in the connHandler.
+func (s *Server) ServeConn(
+	ctx context.Context, h ConnectionHandler, reserved mon.BoundAccount, cancel context.CancelFunc,
+) error {
 	defer func() {
 		r := recover()
-		ex.closeWrapper(ctx, r)
+		h.ex.closeWrapper(ctx, r)
 	}()
-	return ex.run(ctx, cancel)
+	return h.ex.run(ctx, s.pool, reserved, cancel)
 }
 
 // sessionParams groups arguments for initializing a connExecutor's session
@@ -424,39 +456,31 @@ func (s *Server) ServeConn(
 // known by pgwire (args) or by a full set of variables (e.g. coming from a
 // parent session in the case of the InternalExecutor).
 type sessionParams struct {
-	args *SessionArgs
+	args SessionArgs
 	data *sessiondata.SessionData
 }
 
-func (sp sessionParams) sessionData(
-	ctx context.Context, settings *cluster.Settings,
-) sessiondata.SessionData {
-	if (sp.args != nil && sp.data != nil) || (sp.args == nil && sp.data == nil) {
-		log.Fatalf(ctx, "exactly one of args and data has to be set")
+func (sp sessionParams) initialSessionData(
+	ctx context.Context,
+) (sessiondata.SessionData, bool, SessionDefaults) {
+	if sp.data != nil {
+		// We're constructing a child executor on behalf of a parent. This
+		// is for executing ::regproc casts or "internal" queries. In this
+		// case we want to inherit the session configuration and
+		// not reset any parameter.
+		return *sp.data, false, nil
 	}
 
-	if sp.data != nil {
-		return *sp.data
-	}
-	curDb := sp.args.Database
-	if curDb == "" {
-		curDb = sessiondata.DefaultDatabaseName
-	}
 	sd := sessiondata.SessionData{
-		ApplicationName:         sp.args.ApplicationName,
-		Database:                curDb,
-		DistSQLMode:             sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(&settings.SV)),
-		OptimizerMode:           sessiondata.OptimizerMode(OptimizerClusterMode.Get(&settings.SV)),
-		SerialNormalizationMode: sessiondata.SerialNormalizationMode(SerialNormalizationMode.Get(&settings.SV)),
-		SearchPath:              sqlbase.DefaultSearchPath,
-		User:                    sp.args.User,
-		RemoteAddr:              sp.args.RemoteAddr,
-		SequenceState:           sessiondata.NewSequenceState(),
+		User:          sp.args.User,
+		RemoteAddr:    sp.args.RemoteAddr,
+		SequenceState: sessiondata.NewSequenceState(),
 		DataConversion: sessiondata.DataConversionConfig{
 			Location: time.UTC,
 		},
 	}
-	return sd
+
+	return sd, true, sp.args.SessionDefaults
 }
 
 func (s *Server) newConnExecutor(
@@ -464,38 +488,28 @@ func (s *Server) newConnExecutor(
 	sargs sessionParams,
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
-	parentMon *mon.BytesMonitor,
-	reserved mon.BoundAccount,
 	memMetrics MemoryMetrics,
-) *connExecutor {
+) (*connExecutor, error) {
 	// Create the various monitors.
-	//
-	// Note: we pass `reserved` to sessionRootMon where it causes it to act as a
-	// buffer. This is not done for sessionMon nor state.mon: these monitors don't
-	// start with any buffer, so they'll need to ask their "parent" for memory as
-	// soon as the first allocation. This is acceptable because the session is
-	// single threaded, and the point of buffering is just to avoid contention.
+	// The session monitors are started in activate().
 	sessionRootMon := mon.MakeMonitor("session root",
 		mon.MemoryResource,
 		memMetrics.CurBytesCount,
 		memMetrics.MaxBytesHist,
 		-1, math.MaxInt64, s.cfg.Settings)
-	sessionRootMon.Start(ctx, parentMon, reserved)
 	sessionMon := mon.MakeMonitor("session",
 		mon.MemoryResource,
 		memMetrics.SessionCurBytesCount,
 		memMetrics.SessionMaxBytesHist,
 		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings)
-	sessionMon.Start(ctx, &sessionRootMon, mon.BoundAccount{})
-	// We merely prepare the txn monitor here. It is started in
-	// txnState.resetForNewSQLTxn().
+	// The txn monitor is started in txnState.resetForNewSQLTxn().
 	txnMon := mon.MakeMonitor("txn",
 		mon.MemoryResource,
 		memMetrics.TxnCurBytesCount,
 		memMetrics.TxnMaxBytesHist,
 		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings)
 
-	sd := sargs.sessionData(ctx, s.cfg.Settings)
+	sd, setFromDefaults, sessionDefaults := sargs.initialSessionData(ctx)
 
 	ex := &connExecutor{
 		server:      s,
@@ -524,26 +538,16 @@ func (s *Server) newConnExecutor(
 		},
 		parallelizeQueue: MakeParallelizeQueue(NewSpanBasedDependencyAnalyzer()),
 		memMetrics:       memMetrics,
-		appStats:         s.sqlStats.getStatsForApplication(sd.ApplicationName),
 		planner:          planner{execCfg: s.cfg},
-	}
-	ex.phaseTimes[sessionInit] = timeutil.Now()
-	ex.extraTxnState.tables = TableCollection{
-		leaseMgr:          s.cfg.LeaseManager,
-		databaseCache:     s.dbCache.getDatabaseCache(),
-		dbCacheSubscriber: s.dbCache,
-	}
-	ex.extraTxnState.txnRewindPos = -1
 
-	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
-	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
+		// ctxHolder will be reset at the start of run(). We only define
+		// it here so that an early call to close() doesn't panic.
+		ctxHolder: ctxHolder{connCtx: ctx},
+	}
 
 	ex.dataMutator = sessionDataMutator{
-		data: &ex.sessionData,
-		defaults: sessionDefaults{
-			applicationName: ex.sessionData.ApplicationName,
-			database:        ex.sessionData.Database,
-		},
+		data:           &ex.sessionData,
+		defaults:       sessionDefaults,
 		settings:       s.cfg.Settings,
 		curTxnReadOnly: &ex.state.readOnly,
 		applicationNameChanged: func(newName string) {
@@ -551,18 +555,32 @@ func (s *Server) newConnExecutor(
 			ex.applicationName.Store(newName)
 		},
 	}
-	ex.dataMutator.SetApplicationName(sd.ApplicationName)
+
+	if setFromDefaults {
+		// Initialize the session data from provided defaults. We need to do this early
+		// because other initializations below use the configured values.
+		if err := resetSessionVars(ctx, &ex.dataMutator); err != nil {
+			log.Errorf(ctx, "error setting up client session: %v", err)
+			return nil, err
+		}
+	}
+
+	ex.appStats = s.sqlStats.getStatsForApplication(sd.ApplicationName)
+
+	ex.phaseTimes[sessionInit] = timeutil.Now()
+	ex.extraTxnState.tables = TableCollection{
+		leaseMgr:          s.cfg.LeaseManager,
+		databaseCache:     s.dbCache.getDatabaseCache(),
+		dbCacheSubscriber: s.dbCache,
+	}
+	ex.extraTxnState.txnRewindPos = -1
+	ex.mu.ActiveQueries = make(map[ClusterWideID]*queryMeta)
+	ex.machine = fsm.MakeMachine(TxnStateTransitions, stateNoTxn{}, &ex.state)
+
 	ex.sessionTracing.ex = ex
 	ex.transitionCtx.sessionTracing = &ex.sessionTracing
 
-	if traceSessionEventLogEnabled.Get(&s.cfg.Settings.SV) {
-		remoteStr := "<admin>"
-		if ex.sessionData.RemoteAddr != nil {
-			remoteStr = ex.sessionData.RemoteAddr.String()
-		}
-		ex.eventLog = trace.NewEventLog(fmt.Sprintf("sql session [%s]", sd.User), remoteStr)
-	}
-	return ex
+	return ex, nil
 }
 
 // newConnExecutorWithTxn creates a connExecutor that will execute statements
@@ -570,17 +588,29 @@ func (s *Server) newConnExecutor(
 // machine, much reduced from the regular one. It cannot initiate or end
 // transactions (so, no BEGIN, COMMIT, ROLLBACK, no auto-commit, no automatic
 // retries).
+//
+// If there is no error, this function also activate()s the returned
+// executor, so the caller does not need to run the
+// activation. However this means that run() or close() must be called
+// to release resources.
 func (s *Server) newConnExecutorWithTxn(
 	ctx context.Context,
 	sargs sessionParams,
 	stmtBuf *StmtBuf,
 	clientComm ClientComm,
 	parentMon *mon.BytesMonitor,
-	reserved mon.BoundAccount,
 	memMetrics MemoryMetrics,
 	txn *client.Txn,
-) *connExecutor {
-	ex := s.newConnExecutor(ctx, sargs, stmtBuf, clientComm, parentMon, reserved, memMetrics)
+) (*connExecutor, error) {
+	ex, err := s.newConnExecutor(ctx, sargs, stmtBuf, clientComm, memMetrics)
+	if err != nil {
+		return nil, err
+	}
+
+	// The new transaction stuff below requires active monitors and traces, so
+	// we need to activate the executor now.
+	ex.activate(ctx, parentMon, mon.BoundAccount{})
+
 	// Perform some surgery on the executor - replace its state machine and
 	// initialize the state.
 	ex.machine = fsm.MakeMachine(
@@ -597,7 +627,7 @@ func (s *Server) newConnExecutorWithTxn(
 		tree.ReadWrite,
 		txn,
 		ex.transitionCtx)
-	return ex
+	return ex, nil
 }
 
 var maxStmtStatReset = settings.RegisterNonNegativeDurationSetting(
@@ -887,6 +917,10 @@ type connExecutor struct {
 	curStmt tree.Statement
 
 	sessionID ClusterWideID
+
+	// activated determines whether activate() was called already.
+	// When this is set, close() must be called to release resources.
+	activated bool
 }
 
 // ctxHolder contains a connection's context and, while session tracing is
@@ -1010,6 +1044,38 @@ func (ex *connExecutor) Ctx() context.Context {
 	return ex.state.Ctx
 }
 
+// activate engages the use of resources that must be cleaned up
+// afterwards. after activate() completes, the close() method must be
+// called.
+//
+// Args:
+// parentMon: The root monitor.
+// reserved: An amount on memory reserved for the connection. The connExecutor
+// 	 takes ownership of this memory.
+func (ex *connExecutor) activate(
+	ctx context.Context, parentMon *mon.BytesMonitor, reserved mon.BoundAccount,
+) {
+	// Note: we pass `reserved` to sessionRootMon where it causes it to act as a
+	// buffer. This is not done for sessionMon nor state.mon: these monitors don't
+	// start with any buffer, so they'll need to ask their "parent" for memory as
+	// soon as the first allocation. This is acceptable because the session is
+	// single threaded, and the point of buffering is just to avoid contention.
+	ex.mon.Start(ctx, parentMon, reserved)
+	ex.sessionMon.Start(ctx, ex.mon, mon.BoundAccount{})
+
+	// Enable the trace if configured.
+	if traceSessionEventLogEnabled.Get(&ex.server.cfg.Settings.SV) {
+		remoteStr := "<admin>"
+		if ex.sessionData.RemoteAddr != nil {
+			remoteStr = ex.sessionData.RemoteAddr.String()
+		}
+		ex.eventLog = trace.NewEventLog(
+			fmt.Sprintf("sql session [%s]", ex.sessionData.User), remoteStr)
+	}
+
+	ex.activated = true
+}
+
 // run implements the run loop for a connExecutor. Commands are read one by one
 // from the input buffer; they are executed and the resulting state transitions
 // are performed.
@@ -1044,7 +1110,15 @@ func (ex *connExecutor) Ctx() context.Context {
 // from the session registry, might be too costly - the way query cancelation
 // works is that every session is asked to cancel a given query until the right
 // one is found. That seems like a good performance trade-off.
-func (ex *connExecutor) run(ctx context.Context, onCancel context.CancelFunc) error {
+func (ex *connExecutor) run(
+	ctx context.Context,
+	parentMon *mon.BytesMonitor,
+	reserved mon.BoundAccount,
+	onCancel context.CancelFunc,
+) error {
+	if !ex.activated {
+		ex.activate(ctx, parentMon, reserved)
+	}
 	ex.ctxHolder.connCtx = ctx
 	ex.onCancelSession = onCancel
 

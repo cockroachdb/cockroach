@@ -111,7 +111,7 @@ SET application_name = 'hello'
 statement ok
 SET extra_float_digits = 0
 
-statement error set extra_float_digits: only values between -15 and 3 are supported
+statement error 123 is outside the valid range for parameter "extra_float_digits"
 SET extra_float_digits = 123
 
 statement ok
@@ -127,18 +127,18 @@ statement ok
 SET client_encoding = 'UTF8'
 
 statement ok
+SET client_encoding = 'UT! '' @#!$%%F------!@!!!8 ''   '
+
+statement ok
 SET client_encoding = 'unicode'
 
-statement error invalid value for parameter "client_encoding": "other"
+statement error unimplemented client encoding: "other"
 SET client_encoding = 'other'
 
-statement ok
+statement error parameter "server_encoding" cannot be changed
 SET server_encoding = 'UTF8'
 
-statement ok
-SET server_encoding = 'unicode'
-
-statement error invalid value for parameter "server_encoding": "other"
+statement error parameter "server_encoding" cannot be changed
 SET server_encoding = 'other'
 
 statement ok
@@ -208,10 +208,10 @@ server_version_num
 90500
 
 # Test read-only variables
-statement error parameter "max_index_keys" cannot be set
+statement error parameter "max_index_keys" cannot be changed
 SET max_index_keys = 32
 
-statement error parameter "node_id" cannot be set
+statement error parameter "node_id" cannot be changed
 SET node_id = 123
 
 query TT
@@ -273,7 +273,7 @@ SET statement_timeout = '100'
 query T
 SHOW statement_timeout
 ----
-100ms
+100
 
 # Test that composite variable names get rejected properly, especially
 # when "tracing" is used as prefix.

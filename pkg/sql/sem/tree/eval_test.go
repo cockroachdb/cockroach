@@ -1418,6 +1418,7 @@ func TestEval(t *testing.T) {
 		{`'192.168.200.95'::inet && '192.168.2.1/8'::inet`, `true`},
 		{`convert_from('\xE290A4'::bytea, 'utf8')`, `e'\U00002424'`},
 		{`convert_from('\x2424'::bytea, 'latin1')`, `'$$'`},
+		{`convert_from('\x2424'::bytea, 'l%%%$^^^&atin--%%%%#$$$%%1')`, `'$$'`},
 		{`convert_from('\xaaaa'::bytea, 'latin1')`, `e'\u00AA\u00AA'`},
 		{`convert_to('abå', 'latin1')`, `'\x6162e5'`},
 		{`convert_to('abå', 'utf8')`, `'\x6162c3a5'`},
