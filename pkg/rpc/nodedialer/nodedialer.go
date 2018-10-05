@@ -144,11 +144,19 @@ func (n *Dialer) DialInternalClient(
 	if err != nil {
 		return nil, nil, err
 	}
-	// TODO(bdarnell): Reconcile the different health checks and circuit
-	// breaker behavior in this file
+	// Check to see if the connection is in the transient failure state. This can
+	// happen if the connection already existed, but a recent heartbeat has
+	// failed and we haven't yet torn down the connection.
 	if err := grpcutil.ConnectionReady(conn); err != nil {
 		return nil, nil, err
 	}
+	// TODO(bdarnell): Reconcile the different health checks and circuit breaker
+	// behavior in this file. Note that this different behavior causes problems
+	// for higher-levels in the system. For example, DistSQL checks for
+	// ConnHealth when scheduling processors, but can then see attempts to send
+	// RPCs fail when dial fails due to an open breaker. Reset the breaker here
+	// as a stop-gap before the reconciliation occurs.
+	n.getBreaker(nodeID).Reset()
 	return ctx, roachpb.NewInternalClient(conn), nil
 }
 
@@ -158,6 +166,9 @@ func (n *Dialer) DialInternalClient(
 func (n *Dialer) ConnHealth(nodeID roachpb.NodeID) error {
 	if n == nil || n.resolver == nil {
 		return errors.New("no node dialer configured")
+	}
+	if !n.getBreaker(nodeID).Ready() {
+		return circuit.ErrBreakerOpen
 	}
 	addr, err := n.resolver(nodeID)
 	if err != nil {

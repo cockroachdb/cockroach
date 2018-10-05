@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -361,9 +360,6 @@ type ExecutorTestingKnobs struct {
 	// execution so there'll be nothing left to abort by the time the filter runs.
 	DisableAutoCommit bool
 
-	// DistSQLPlannerKnobs are testing knobs for DistSQLPlanner.
-	DistSQLPlannerKnobs DistSQLPlannerTestingKnobs
-
 	// BeforeAutoCommit is called when the Executor is about to commit the KV
 	// transaction after running a statement in an implicit transaction, allowing
 	// tests to inject errors into that commit.
@@ -376,14 +372,6 @@ type ExecutorTestingKnobs struct {
 	// optimization). This is only called when the Executor is the one doing the
 	// committing.
 	BeforeAutoCommit func(ctx context.Context, stmt string) error
-}
-
-// DistSQLPlannerTestingKnobs is used to control internals of the DistSQLPlanner
-// for testing purposes.
-type DistSQLPlannerTestingKnobs struct {
-	// If OverrideSQLHealthCheck is set, we use this callback to get the health of
-	// a node.
-	OverrideHealthCheck func(node roachpb.NodeID, addrString string) error
 }
 
 // databaseCacheHolder is a thread-safe container for a *databaseCache.

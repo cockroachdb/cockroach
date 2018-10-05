@@ -614,7 +614,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			s.gossip,
 			s.stopper,
 			s.nodeLiveness,
-			sqlExecutorTestingKnobs.DistSQLPlannerKnobs,
 			s.nodeDialer,
 		),
 
