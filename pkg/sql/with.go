@@ -137,8 +137,9 @@ func (p *planner) getCTEDataSource(tn *tree.TableName) (planDataSource, bool, er
 		return planDataSource{}, false, nil
 	}
 	// Iterate backward through the environment, most recent frame first.
-	for i := range p.curPlan.cteNameEnvironment {
-		frame := p.curPlan.cteNameEnvironment[len(p.curPlan.cteNameEnvironment)-1-i]
+	env := p.curPlan.cteNameEnvironment
+	for i := len(env) - 1; i >= 0; i-- {
+		frame := p.curPlan.cteNameEnvironment[i]
 		if cteSource, ok := frame[tn.TableName]; ok {
 			if cteSource.used {
 				// TODO(jordan): figure out how to lift this restriction.
