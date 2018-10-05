@@ -410,16 +410,20 @@ func (b *Builder) buildCTE(ctes []*tree.CTE, inScope *scope) (outScope *scope) {
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildSelect(stmt *tree.Select, inScope *scope) (outScope *scope) {
-	if stmt.With != nil {
-		inScope = b.buildCTE(stmt.With.CTEList, inScope)
-	}
-
 	wrapped := stmt.Select
 	orderBy := stmt.OrderBy
 	limit := stmt.Limit
+	with := stmt.With
 
 	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
 		stmt = s.Select
+		if stmt.With != nil {
+			if with != nil {
+				panic(builderError{pgerror.UnimplementedWithIssueError(24303,
+					"multiple WITH clauses in parentheses")})
+			}
+			with = s.Select.With
+		}
 		wrapped = stmt.Select
 		if stmt.OrderBy != nil {
 			if orderBy != nil {
@@ -437,6 +441,10 @@ func (b *Builder) buildSelect(stmt *tree.Select, inScope *scope) (outScope *scop
 			}
 			limit = stmt.Limit
 		}
+	}
+
+	if with != nil {
+		inScope = b.buildCTE(with.CTEList, inScope)
 	}
 
 	// NB: The case statements are sorted lexicographically.
