@@ -774,14 +774,18 @@ func TestPartitionSpans(t *testing.T) {
 				stopper:      stopper,
 				spanResolver: tsp,
 				gossip:       mockGossip,
-				testingKnobs: DistSQLPlannerTestingKnobs{
-					OverrideHealthCheck: func(node roachpb.NodeID, addr string) error {
+				nodeHealth: distSQLNodeHealth{
+					gossip: mockGossip,
+					connHealth: func(node roachpb.NodeID) error {
 						for _, n := range tc.deadNodes {
 							if int(node) == n {
 								return fmt.Errorf("test node is unhealthy")
 							}
 						}
 						return nil
+					},
+					isLive: func(nodeID roachpb.NodeID) (bool, error) {
+						return true, nil
 					},
 				},
 			}
@@ -954,10 +958,14 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 				stopper:      stopper,
 				spanResolver: tsp,
 				gossip:       mockGossip,
-				testingKnobs: DistSQLPlannerTestingKnobs{
-					OverrideHealthCheck: func(node roachpb.NodeID, addr string) error {
+				nodeHealth: distSQLNodeHealth{
+					gossip: mockGossip,
+					connHealth: func(roachpb.NodeID) error {
 						// All the nodes are healthy.
 						return nil
+					},
+					isLive: func(roachpb.NodeID) (bool, error) {
+						return true, nil
 					},
 				},
 			}
@@ -1045,10 +1053,14 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		stopper:      stopper,
 		spanResolver: tsp,
 		gossip:       mockGossip,
-		testingKnobs: DistSQLPlannerTestingKnobs{
-			OverrideHealthCheck: func(node roachpb.NodeID, addr string) error {
-				// All the nodes are healthy.
-				return nil
+		nodeHealth: distSQLNodeHealth{
+			gossip: mockGossip,
+			connHealth: func(node roachpb.NodeID) error {
+				_, err := mockGossip.GetNodeIDAddress(node)
+				return err
+			},
+			isLive: func(roachpb.NodeID) (bool, error) {
+				return true, nil
 			},
 		},
 	}
@@ -1119,10 +1131,10 @@ func TestCheckNodeHealth(t *testing.T) {
 		return true, nil
 	}
 
-	connHealthy := func(string) error {
+	connHealthy := func(roachpb.NodeID) error {
 		return nil
 	}
-	connUnhealthy := func(string) error {
+	connUnhealthy := func(roachpb.NodeID) error {
 		return errors.New("injected conn health error")
 	}
 	_ = connUnhealthy
@@ -1138,18 +1150,19 @@ func TestCheckNodeHealth(t *testing.T) {
 
 	for _, test := range livenessTests {
 		t.Run("liveness", func(t *testing.T) {
-			if err := checkNodeHealth(
-				context.Background(), nodeID, desc.Address.AddressField,
-				DistSQLPlannerTestingKnobs{}, /* knobs */
-				mockGossip, connHealthy, test.isLive,
-			); !testutils.IsError(err, test.exp) {
+			h := distSQLNodeHealth{
+				gossip:     mockGossip,
+				connHealth: connHealthy,
+				isLive:     test.isLive,
+			}
+			if err := h.check(context.Background(), nodeID); !testutils.IsError(err, test.exp) {
 				t.Fatalf("expected %v, got %v", test.exp, err)
 			}
 		})
 	}
 
 	connHealthTests := []struct {
-		connHealth func(string) error
+		connHealth func(roachpb.NodeID) error
 		exp        string
 	}{
 		{connHealthy, ""},
@@ -1158,14 +1171,14 @@ func TestCheckNodeHealth(t *testing.T) {
 
 	for _, test := range connHealthTests {
 		t.Run("connHealth", func(t *testing.T) {
-			if err := checkNodeHealth(
-				context.Background(), nodeID, desc.Address.AddressField,
-				DistSQLPlannerTestingKnobs{}, /* knobs */
-				mockGossip, test.connHealth, live,
-			); !testutils.IsError(err, test.exp) {
+			h := distSQLNodeHealth{
+				gossip:     mockGossip,
+				connHealth: test.connHealth,
+				isLive:     live,
+			}
+			if err := h.check(context.Background(), nodeID); !testutils.IsError(err, test.exp) {
 				t.Fatalf("expected %v, got %v", test.exp, err)
 			}
 		})
 	}
-
 }
