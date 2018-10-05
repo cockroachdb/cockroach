@@ -23,9 +23,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -525,6 +529,25 @@ func (c *tableFeed) Close(t testing.TB) {
 	c.urlCleanup()
 }
 
+func waitForSchemaChange(
+	t testing.TB, sqlDB *sqlutils.SQLRunner, stmt string, arguments ...interface{},
+) {
+	sqlDB.Exec(t, stmt, arguments...)
+	row := sqlDB.QueryRow(t, "SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1")
+	var jobID string
+	row.Scan(&jobID)
+
+	testutils.SucceedsSoon(t, func() error {
+		row := sqlDB.QueryRow(t, "SELECT status FROM [SHOW JOBS] WHERE job_id = $1", jobID)
+		var status string
+		row.Scan(&status)
+		if status != "succeeded" {
+			return fmt.Errorf("Job %s had status %s, wanted 'succeeded'", jobID, status)
+		}
+		return nil
+	})
+}
+
 func assertPayloads(t testing.TB, f testfeed, expected []string) {
 	t.Helper()
 
@@ -672,5 +695,38 @@ func enterpriseTest(testFn func(*testing.T, *gosql.DB, testfeedFactory)) func(*t
 		f := makeTable(s, db, flushCh)
 
 		testFn(t, db, f)
+	}
+}
+
+func forceTableGC(
+	t testing.TB,
+	tsi serverutils.TestServerInterface,
+	sqlDB *sqlutils.SQLRunner,
+	database, table string,
+) {
+	var stmt string
+	if database == "system" {
+		stmt = `ALTER DATABASE system CONFIGURE ZONE USING gc.ttlseconds = $1`
+	} else {
+		fmt.Sprintf(`ALTER TABLE %s.%s CONFIGURE ZONE USING gc.ttlseconds = $1`, database, table)
+	}
+	sqlDB.Exec(t, stmt, 1)
+	tblID, err := sqlutils.QueryTableID(sqlDB.DB, database, table)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tablePrefix := keys.MakeTablePrefix(tblID)
+	tableStartKey := roachpb.RKey(tablePrefix)
+	tableSpan := roachpb.RSpan{
+		Key:    tableStartKey,
+		EndKey: tableStartKey.PrefixEnd(),
+	}
+
+	ts := tsi.(*server.TestServer)
+	if err := ts.GetStores().(*storage.Stores).VisitStores(func(st *storage.Store) error {
+		return st.ManuallyGCSpan(context.Background(), tableSpan)
+	}); err != nil {
+		t.Fatal(err)
 	}
 }

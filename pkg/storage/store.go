@@ -4600,12 +4600,10 @@ func (s *Store) ManuallyEnqueue(
 	return collect(), "", nil
 }
 
-// ManuallyEnqueueSpan runs all replicas in the supplied span through the named
-// queue. This is currently intended for use in internal tests which have access
-// to the store directly.
-func (s *Store) ManuallyEnqueueSpan(
-	ctx context.Context, queueName string, span roachpb.RSpan, skipShouldQueue bool,
-) error {
+// ManuallyGCSpan runs the garbage collection process immediately on all replicas
+// in the provided span. This completely bypasses the normal GC scoring process/
+// This is only appropriate for use in tests.
+func (s *Store) ManuallyGCSpan(ctx context.Context, span roachpb.RSpan) error {
 	var outerErr error
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		desc := repl.Desc()
@@ -4613,10 +4611,18 @@ func (s *Store) ManuallyEnqueueSpan(
 			return true // continue
 		}
 
-		if _, _, err := s.ManuallyEnqueue(ctx, queueName, repl, skipShouldQueue); err != nil {
+		sysCfg := s.cfg.Gossip.GetSystemConfig()
+		if sysCfg == nil {
+			outerErr = errors.New("cannot run queue without a valid system config; make sure the cluster " +
+				"has been initialized and all nodes connected to it")
+			return false
+		}
+		now := s.Clock().Now()
+		if err := s.gcQueue.processImpl(ctx, repl, sysCfg, now); err != nil {
 			outerErr = err
 			return false
 		}
+
 		return true
 	})
 	return outerErr
