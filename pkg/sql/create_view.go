@@ -59,36 +59,6 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 		return nil, err
 	}
 
-	// Ensure that all the table names are properly qualified.  The
-	// traversal will update the NormalizableTableNames in-place, so the
-	// changes are persisted in n.AsSource. We use tree.FormatNode
-	// merely as a traversal method; its output buffer is discarded
-	// immediately after the traversal because it is not needed further.
-	var fmtErr error
-	{
-		f := tree.NewFmtCtxWithBuf(tree.FmtParsable)
-		f.WithReformatTableNames(
-			func(_ *tree.FmtCtx, t *tree.NormalizableTableName) {
-				tn, err := p.QualifyWithDatabase(ctx, t)
-				if err != nil {
-					log.Warningf(ctx, "failed to qualify table name %q with database name: %v",
-						tree.ErrString(t), err)
-					fmtErr = err
-					return
-				}
-				// Persist the database prefix expansion.
-				tn.ExplicitSchema = true
-				tn.ExplicitCatalog = true
-			},
-		)
-		f.FormatNode(n.AsSource)
-		f.Close() // We don't need the string.
-	}
-
-	if fmtErr != nil {
-		return nil, fmtErr
-	}
-
 	var planDeps planDependencies
 	var sourceColumns sqlbase.ResultColumns
 	// To avoid races with ongoing schema changes to tables that the view
@@ -99,6 +69,42 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// Ensure that all the table names pretty-print as fully qualified,
+	// so we store that in the view descriptor.
+	// The traversal will update the NormalizableTableNames in-place, so
+	// the changes are persisted in n.AsSource. We exploit the fact
+	// that semantic analysis above has populated any missing db/schema
+	// details in the table names in-place.
+	// We use tree.FormatNode merely as a traversal method; its output
+	// buffer is discarded immediately after the traversal because it is
+	// not needed further.
+	var fmtErr error
+	{
+		f := tree.NewFmtCtxWithBuf(tree.FmtParsable)
+		f.WithReformatTableNames(
+			func(_ *tree.FmtCtx, t *tree.NormalizableTableName) {
+				tn, err := t.Normalize()
+				if err != nil {
+					fmtErr = err
+					return
+				}
+				// Persist the database prefix expansion.
+				if tn.SchemaName != "" {
+					// All CTE or table aliases have no schema
+					// information. Those do not turn into explicit.
+					tn.ExplicitSchema = true
+					tn.ExplicitCatalog = true
+				}
+			},
+		)
+		f.FormatNode(n.AsSource)
+		f.Close() // We don't need the string.
+	}
+
+	if fmtErr != nil {
+		return nil, fmtErr
 	}
 
 	numColNames := len(n.ColumnNames)
