@@ -116,11 +116,11 @@ func (g *factoryGen) genConstructFuncs() {
 			g.w.write("%s", unTitle(g.md.fieldName(field)))
 		}
 
-		g.w.write(")\n")
-
 		if define.Tags.Contains("Relational") {
+			g.w.write(").FirstExpr()\n")
 			g.w.writeIndent("return _f.onConstructRelational(e)\n")
 		} else {
+			g.w.write(")\n")
 			g.w.writeIndent("return _f.onConstructScalar(e)\n")
 		}
 

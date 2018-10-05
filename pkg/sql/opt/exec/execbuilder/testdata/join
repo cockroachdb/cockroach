@@ -97,29 +97,36 @@ SELECT tree, field, description FROM [
 EXPLAIN (VERBOSE) SELECT * FROM (onecolumn CROSS JOIN twocolumn JOIN onecolumn AS a(b) ON a.b=twocolumn.x JOIN twocolumn AS c(d,e) ON a.b=c.d AND c.d=onecolumn.x) LIMIT 1
 ]
 ----
-limit                     ·         ·
- │                        count     1
- └── join                 ·         ·
-      │                   type      inner
-      │                   equality  (x) = (x)
-      │                   pred      x = x
-      ├── join            ·         ·
-      │    │              type      inner
-      │    │              equality  (x) = (x)
-      │    ├── join       ·         ·
-      │    │    │         type      cross
-      │    │    ├── scan  ·         ·
-      │    │    │         table     onecolumn@primary
-      │    │    │         spans     ALL
-      │    │    └── scan  ·         ·
-      │    │              table     twocolumn@primary
-      │    │              spans     ALL
-      │    └── scan       ·         ·
-      │                   table     onecolumn@primary
-      │                   spans     ALL
-      └── scan            ·         ·
-·                         table     twocolumn@primary
-·                         spans     ALL
+render                         ·         ·
+ │                             render 0  x
+ │                             render 1  x
+ │                             render 2  y
+ │                             render 3  x
+ │                             render 4  x
+ │                             render 5  y
+ └── limit                     ·         ·
+      │                        count     1
+      └── join                 ·         ·
+           │                   type      inner
+           │                   equality  (x) = (x)
+           │                   pred      x = x
+           ├── join            ·         ·
+           │    │              type      cross
+           │    ├── join       ·         ·
+           │    │    │         type      inner
+           │    │    │         equality  (x) = (x)
+           │    │    ├── scan  ·         ·
+           │    │    │         table     onecolumn@primary
+           │    │    │         spans     ALL
+           │    │    └── scan  ·         ·
+           │    │              table     twocolumn@primary
+           │    │              spans     ALL
+           │    └── scan       ·         ·
+           │                   table     onecolumn@primary
+           │                   spans     ALL
+           └── scan            ·         ·
+·                              table     twocolumn@primary
+·                              spans     ALL
 
 # The following queries verify that only the necessary columns are scanned.
 query TTTTT
@@ -337,88 +344,88 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 2   ·              render 12  relname
 3   join           ·          ·
 3   ·              type       inner
-3   ·              equality   (relnamespace) = (oid)
+3   ·              equality   (oid) = (attrelid)
+3   ·              pred       confrelid = oid
 4   join           ·          ·
 4   ·              type       inner
-4   ·              equality   (attrelid) = (oid)
-4   ·              pred       confrelid = oid
-5   join           ·          ·
-5   ·              type       inner
-5   ·              equality   (attnum) = (column167)
-6   virtual table  ·          ·
-6   ·              source     ·
-6   render         ·          ·
-6   ·              render 0   confkey[generate_series]
-6   ·              render 1   nspname
-6   ·              render 2   relname
-6   ·              render 3   attname
-6   ·              render 4   conname
-6   ·              render 5   condeferrable
-6   ·              render 6   condeferred
-6   ·              render 7   confrelid
-6   ·              render 8   confupdtype
-6   ·              render 9   confdeltype
-6   ·              render 10  generate_series
-6   ·              render 11  relname
+4   ·              equality   (oid) = (relnamespace)
+5   virtual table  ·          ·
+5   ·              source     ·
+5   virtual table  ·          ·
+5   ·              source     ·
+4   join           ·          ·
+4   ·              type       inner
+4   ·              equality   (attnum) = (column167)
+5   virtual table  ·          ·
+5   ·              source     ·
+5   render         ·          ·
+5   ·              render 0   confkey[generate_series]
+5   ·              render 1   nspname
+5   ·              render 2   relname
+5   ·              render 3   attname
+5   ·              render 4   conname
+5   ·              render 5   condeferrable
+5   ·              render 6   condeferred
+5   ·              render 7   confrelid
+5   ·              render 8   confupdtype
+5   ·              render 9   confdeltype
+5   ·              render 10  generate_series
+5   ·              render 11  relname
+6   join           ·          ·
+6   ·              type       inner
+6   ·              equality   (attrelid) = (oid)
+6   ·              pred       conrelid = oid
 7   join           ·          ·
 7   ·              type       inner
-7   ·              equality   (relnamespace) = (oid)
-8   join           ·          ·
-8   ·              type       inner
-8   ·              equality   (attrelid) = (oid)
-8   ·              pred       conrelid = oid
+7   ·              equality   (attnum) = (column166)
+8   virtual table  ·          ·
+8   ·              source     ·
+8   render         ·          ·
+8   ·              render 0   conkey[generate_series]
+8   ·              render 1   conname
+8   ·              render 2   condeferrable
+8   ·              render 3   condeferred
+8   ·              render 4   conrelid
+8   ·              render 5   confrelid
+8   ·              render 6   confupdtype
+8   ·              render 7   confdeltype
+8   ·              render 8   confkey
+8   ·              render 9   generate_series
+8   ·              render 10  relname
 9   join           ·          ·
-9   ·              type       inner
-9   ·              equality   (attnum) = (column166)
-10  virtual table  ·          ·
-10  ·              source     ·
-10  render         ·          ·
-10  ·              render 0   conkey[generate_series]
-10  ·              render 1   conname
-10  ·              render 2   condeferrable
-10  ·              render 3   condeferred
-10  ·              render 4   conrelid
-10  ·              render 5   confrelid
-10  ·              render 6   confupdtype
-10  ·              render 7   confdeltype
-10  ·              render 8   confkey
-10  ·              render 9   generate_series
-10  ·              render 10  relname
+9   ·              type       cross
+10  join           ·          ·
+10  ·              type       inner
+10  ·              equality   (objid) = (oid)
 11  join           ·          ·
 11  ·              type       inner
-11  ·              equality   (objid) = (oid)
-12  join           ·          ·
-12  ·              type       cross
-13  join           ·          ·
-13  ·              type       inner
-13  ·              equality   (refobjid) = (oid)
-14  filter         ·          ·
-14  ·              filter     (classid = 139623798) AND (refclassid = 1411792157)
-15  virtual table  ·          ·
-15  ·              source     ·
-14  filter         ·          ·
-14  ·              filter     relkind = 'i'
-15  virtual table  ·          ·
-15  ·              source     ·
-13  project set    ·          ·
-13  ·              render 0   generate_series(1, 32)
-14  emptyrow       ·          ·
+11  ·              equality   (refobjid) = (oid)
 12  filter         ·          ·
-12  ·              filter     contype = 'f'
+12  ·              filter     (classid = 139623798) AND (refclassid = 1411792157)
 13  virtual table  ·          ·
 13  ·              source     ·
-9   filter         ·          ·
-9   ·              filter     relname = 'orders'
-10  virtual table  ·          ·
-10  ·              source     ·
+12  filter         ·          ·
+12  ·              filter     relkind = 'i'
+13  virtual table  ·          ·
+13  ·              source     ·
+11  filter         ·          ·
+11  ·              filter     contype = 'f'
+12  virtual table  ·          ·
+12  ·              source     ·
+10  project set    ·          ·
+10  ·              render 0   generate_series(1, 32)
+11  emptyrow       ·          ·
+7   join           ·          ·
+7   ·              type       inner
+7   ·              equality   (oid) = (relnamespace)
 8   filter         ·          ·
 8   ·              filter     nspname = 'public'
 9   virtual table  ·          ·
 9   ·              source     ·
-5   virtual table  ·          ·
-5   ·              source     ·
-4   virtual table  ·          ·
-4   ·              source     ·
+8   filter         ·          ·
+8   ·              filter     relname = 'orders'
+9   virtual table  ·          ·
+9   ·              source     ·
 
 # Ensure that left joins on non-null foreign keys turn into inner joins
 statement ok

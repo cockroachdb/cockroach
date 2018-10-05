@@ -388,6 +388,13 @@ func (c *CustomFuncs) IsFilterFalse(filters memo.FiltersExpr) bool {
 	return filters.IsFalse()
 }
 
+// IsFilterTrue returns true if the filters always evaluate to true. The only
+// case that's checked is the fully normalized case, when the list contains a
+// single True condition.
+func (c *CustomFuncs) IsFilterTrue(filters memo.FiltersExpr) bool {
+	return filters.IsTrue()
+}
+
 // IsContradiction returns true if the given filter item contains a
 // contradiction constraint.
 func (c *CustomFuncs) IsContradiction(item *memo.FiltersItem) bool {

@@ -35,6 +35,37 @@
 =>
 (LeftJoin $right $left $on)
 
+# AssociateJoin applies the rule of join associativity. It converts an
+# expression like:
+#   A JOIN (B JOIN C ON B.x = C.x) ON A.y = B.y
+# to the logically equivalent expression:
+#   (A JOIN B ON A.y = B.y) JOIN C ON B.x = C.x
+# It applies as long as the outer predicate is not True (we want to avoid
+# pushing cross joins down), and the outer predicate only references one of
+# the two inner relations. (Although this rule only allows references to the
+# left inner relation, the CommuteJoin rule will effectively enable references
+# to the right inner relation as well.)
+[AssociateJoin, Explore]
+(InnerJoin
+    $left:*
+    (InnerJoin
+        $innerLeft:*
+        $innerRight:*
+        $innerOn:*
+    )
+    $on:* & ^(IsFilterTrue $on) & (FiltersBoundBy $on (OutputCols2 $left $innerLeft))
+)
+=>
+(InnerJoin
+    (InnerJoin
+        $left
+        $innerLeft
+        $on
+    )
+    $innerRight
+    $innerOn
+)
+
 # GenerateMergeJoins creates MergeJoin operators for the join, using the
 # interesting orderings property.
 [GenerateMergeJoins, Explore]

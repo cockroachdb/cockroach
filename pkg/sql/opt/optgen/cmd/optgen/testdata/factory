@@ -114,7 +114,7 @@ func (_f *Factory) ConstructSelect(
 		}
 	}
 
-	e := _f.mem.MemoizeSelect(input, filters)
+	e := _f.mem.MemoizeSelect(input, filters).FirstExpr()
 	return _f.onConstructRelational(e)
 }
 
@@ -124,7 +124,7 @@ func (_f *Factory) ConstructInnerJoin(
 	right memo.RelExpr,
 	on memo.FiltersExpr,
 ) memo.RelExpr {
-	e := _f.mem.MemoizeInnerJoin(left, right, on)
+	e := _f.mem.MemoizeInnerJoin(left, right, on).FirstExpr()
 	return _f.onConstructRelational(e)
 }
 
@@ -134,7 +134,7 @@ func (_f *Factory) ConstructInnerJoinApply(
 	right memo.RelExpr,
 	on memo.FiltersExpr,
 ) memo.RelExpr {
-	e := _f.mem.MemoizeInnerJoinApply(left, right, on)
+	e := _f.mem.MemoizeInnerJoinApply(left, right, on).FirstExpr()
 	return _f.onConstructRelational(e)
 }
 
