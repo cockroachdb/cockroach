@@ -737,7 +737,9 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 					return err
 				}
 				if desc.PrimaryIndex.ContainsColumnID(col.ID) {
-					continue
+					// If the primary index contains a stored column, we don't need to
+					// store it - it's already part of the index.
+					return fmt.Errorf("index %q already contains column %q: it's part of the primary index", index.Name, col.Name)
 				}
 				if index.ContainsColumnID(col.ID) {
 					return fmt.Errorf("index %q already contains column %q", index.Name, col.Name)
