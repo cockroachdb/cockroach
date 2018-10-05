@@ -3,7 +3,7 @@
 statement ok
 CREATE TABLE test_kv(k INT PRIMARY KEY, v INT, w DECIMAL);
   CREATE UNIQUE INDEX test_v_idx ON test_kv(v);
-  CREATE INDEX test_v_idx2 ON test_kv(v DESC) STORING(k);
+  CREATE INDEX test_v_idx2 ON test_kv(v DESC) STORING(w);
   CREATE INDEX test_v_idx3 ON test_kv(w) STORING(v);
   CREATE TABLE test_kvr1(k INT PRIMARY KEY REFERENCES test_kv(k));
   CREATE TABLE test_kvr2(k INT, v INT UNIQUE REFERENCES test_kv(k));
@@ -62,6 +62,7 @@ descriptor_id  descriptor_name  index_id  index_name       column_type  column_i
 53             test_kv          2         test_v_idx       key          2          v            ASC
 53             test_kv          3         test_v_idx2      extra        1          NULL         NULL
 53             test_kv          3         test_v_idx2      key          2          v            DESC
+53             test_kv          3         test_v_idx2      storing      3          NULL         NULL
 53             test_kv          4         test_v_idx3      composite    3          NULL         NULL
 53             test_kv          4         test_v_idx3      extra        1          NULL         NULL
 53             test_kv          4         test_v_idx3      key          3          w            ASC

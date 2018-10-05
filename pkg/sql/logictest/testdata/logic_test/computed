@@ -433,7 +433,7 @@ CREATE TABLE x (
   k INT PRIMARY KEY,
   a JSON,
   b TEXT AS (a->>'q') STORED,
-  INDEX (b) STORING (k)
+  INDEX (b)
 )
 
 statement error cannot write directly to computed column
