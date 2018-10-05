@@ -347,7 +347,7 @@ func TestInfoStoreMostDistant(t *testing.T) {
 		}
 		nodeID, hops := is.mostDistant(func(roachpb.NodeID) bool { return false })
 		if expectedNodeID != nodeID {
-			t.Errorf("%d: expected node %d; got %d", i, expectedNodeID, nodeID)
+			t.Errorf("%d: expected n%d; got %d", i, expectedNodeID, nodeID)
 		}
 		if expectedHops != hops {
 			t.Errorf("%d: expected hops %d; got %d", i, expectedHops, hops)
@@ -364,7 +364,7 @@ func TestInfoStoreMostDistant(t *testing.T) {
 		return nodeID == filteredNode
 	})
 	if nodeID != expectedNode {
-		t.Errorf("expected node %d; got %d", expectedNode, nodeID)
+		t.Errorf("expected n%d; got %d", expectedNode, nodeID)
 	}
 	if hops != expectedHops {
 		t.Errorf("expected hops %d; got %d", expectedHops, hops)
