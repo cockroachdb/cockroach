@@ -321,7 +321,7 @@ CREATE TABLE t (
   c INT,
   d INT,
   INDEX b_idx (b) STORING (c, d),
-  UNIQUE INDEX c_idx (c) STORING (a, b, d)
+  UNIQUE INDEX c_idx (c) STORING (b, d)
 )
 
 query TTBITTBB colnames
@@ -334,9 +334,9 @@ t           b_idx       true        2             c            N/A        true  
 t           b_idx       true        3             d            N/A        true     false
 t           b_idx       true        4             a            ASC        false    true
 t           c_idx       false       1             c            ASC        false    false
-t           c_idx       false       2             a            N/A        true     false
-t           c_idx       false       3             b            N/A        true     false
-t           c_idx       false       4             d            N/A        true     false
+t           c_idx       false       2             b            N/A        true     false
+t           c_idx       false       3             d            N/A        true     false
+t           c_idx       false       4             a            ASC        false    true
 
 statement ok
 INSERT INTO t VALUES (1, 2, 3, 4)
@@ -358,13 +358,13 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-fetched: /t/c_idx/3 -> /1/2/4
+fetched: /t/c_idx/3/b/d -> /2/4
 output row: [1 2 3 4]
 
 # Test index backfill for UNIQUE and non-UNIQUE indexes with STORING columns.
 
 statement ok
-CREATE INDEX d_idx ON t (d) STORING (a, b)
+CREATE INDEX d_idx ON t (d) STORING (b)
 
 statement ok
 SET tracing = on,kv,results; SELECT a, b, d FROM t@d_idx; SET tracing = off
@@ -537,7 +537,7 @@ CREATE TABLE computed (
   k INT PRIMARY KEY,
   a JSON,
   b TEXT AS (a->>'q') STORED,
-  INDEX (b) STORING (k)
+  INDEX (b)
 )
 
 query TTTTT
