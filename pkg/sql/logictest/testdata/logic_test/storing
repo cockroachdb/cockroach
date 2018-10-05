@@ -193,3 +193,23 @@ INSERT INTO t (a) VALUES (2)
 
 statement ok
 INSERT INTO t VALUES (3)
+
+# Regression test for #30984: indirectly ensure that index descriptors don't
+# get recreated every time any other schema change occurs.
+
+statement ok
+CREATE TABLE a(a INT, b INT, c INT, PRIMARY KEY(a, b))
+
+statement ok
+CREATE UNIQUE INDEX foo ON a(a) STORING(c)
+
+statement ok
+INSERT INTO a VALUES(1,2,3)
+
+statement ok
+CREATE UNIQUE INDEX ON a(a) STORING(c)
+
+query III
+SELECT * FROM a@foo
+----
+1 2 3
