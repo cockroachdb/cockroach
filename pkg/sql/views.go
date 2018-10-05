@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -89,7 +90,7 @@ func (p *planner) analyzeViewQuery(
 
 	// TODO(a-robinson): Support star expressions as soon as we can (#10028).
 	if p.curPlan.hasStar {
-		return nil, nil, fmt.Errorf("views do not currently support * expressions")
+		return nil, nil, pgerror.UnimplementedWithIssueError(10028, "views do not currently support * expressions")
 	}
 
 	return p.curPlan.deps, planColumns(sourcePlan), nil
