@@ -53,7 +53,7 @@ var _ autoCommitNode = &deleteNode{}
 //          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
 func (p *planner) Delete(
 	ctx context.Context, n *tree.Delete, desiredTypes []types.T,
-) (planNode, error) {
+) (result planNode, err error) {
 	// UX friendliness safeguard.
 	if n.Where == nil && p.SessionData().SafeUpdates {
 		return nil, pgerror.NewDangerousStatementErrorf("DELETE without WHERE clause")
@@ -65,7 +65,13 @@ func (p *planner) Delete(
 		return nil, err
 	}
 	if resetter != nil {
-		defer resetter(p)
+		defer func() {
+			cteErr := resetter(p)
+			if cteErr != nil && err == nil {
+				err = cteErr
+				result = nil
+			}
+		}()
 	}
 
 	tracing.AnnotateTrace()

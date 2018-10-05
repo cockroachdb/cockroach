@@ -54,7 +54,7 @@ var _ autoCommitNode = &updateNode{}
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 func (p *planner) Update(
 	ctx context.Context, n *tree.Update, desiredTypes []types.T,
-) (planNode, error) {
+) (result planNode, err error) {
 	// UX friendliness safeguard.
 	if n.Where == nil && p.SessionData().SafeUpdates {
 		return nil, pgerror.NewDangerousStatementErrorf("UPDATE without WHERE clause")
@@ -66,7 +66,13 @@ func (p *planner) Update(
 		return nil, err
 	}
 	if resetter != nil {
-		defer resetter(p)
+		defer func() {
+			cteErr := resetter(p)
+			if cteErr != nil && err == nil {
+				err = cteErr
+				result = nil
+			}
+		}()
 	}
 
 	tracing.AnnotateTrace()

@@ -179,7 +179,7 @@ func (p *planner) SelectClause(
 	with *tree.With,
 	desiredTypes []types.T,
 	scanVisibility scanVisibility,
-) (planNode, error) {
+) (result planNode, err error) {
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called within a subquery
 	// context.
@@ -193,7 +193,13 @@ func (p *planner) SelectClause(
 		return nil, err
 	}
 	if resetter != nil {
-		defer resetter(p)
+		defer func() {
+			cteErr := resetter(p)
+			if cteErr != nil && err == nil {
+				err = cteErr
+				result = nil
+			}
+		}()
 	}
 
 	if err := p.initFrom(ctx, r, parsed, scanVisibility); err != nil {
@@ -302,7 +308,7 @@ func (p *planner) SelectClause(
 		return nil, err
 	}
 
-	result := planNode(r)
+	result = planNode(r)
 	if groupComplex != nil {
 		// group.plan is already r.
 		result = groupComplex

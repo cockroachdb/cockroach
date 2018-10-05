@@ -60,14 +60,20 @@ var _ autoCommitNode = &insertNode{}
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *planner) Insert(
 	ctx context.Context, n *tree.Insert, desiredTypes []types.T,
-) (planNode, error) {
+) (result planNode, err error) {
 	// CTE analysis.
 	resetter, err := p.initWith(ctx, n.With)
 	if err != nil {
 		return nil, err
 	}
 	if resetter != nil {
-		defer resetter(p)
+		defer func() {
+			cteErr := resetter(p)
+			if cteErr != nil && err == nil {
+				err = cteErr
+				result = nil
+			}
+		}()
 	}
 
 	tracing.AnnotateTrace()
