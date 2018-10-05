@@ -473,15 +473,13 @@ CREATE TABLE crdb_internal.jobs (
 					}
 					modified = tsOrNull(progress.ModifiedMicros)
 
-					runningStatusStr := ""
 					if len(progress.RunningStatus) > 0 {
 						if s, ok := status.(*tree.DString); ok {
 							if jobs.Status(string(*s)) == jobs.StatusRunning {
-								runningStatusStr = progress.RunningStatus
+								runningStatus = tree.NewDString(progress.RunningStatus)
 							}
 						}
 					}
-					runningStatus = tree.NewDString(runningStatusStr)
 				}
 			}
 
