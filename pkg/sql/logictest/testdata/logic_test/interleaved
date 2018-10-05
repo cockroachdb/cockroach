@@ -316,7 +316,7 @@ CREATE TABLE t1 (id1 INT PRIMARY KEY, id2 INT, id3 INT);
 
 statement ok
 CREATE INDEX c on t1 (id2)
-   STORING (id1,id3)
+   STORING (id3)
    INTERLEAVE in PARENT t1 (id2);
 
 statement ok
