@@ -46,11 +46,11 @@ const (
 	exportOptionFileName  = "filename"
 )
 
-var exportOptionExpectValues = map[string]bool{
-	exportOptionChunkSize: true,
-	exportOptionDelimiter: true,
-	exportOptionFileName:  true,
-	exportOptionNullAs:    true,
+var exportOptionExpectValues = map[string]sql.KVStringOptValidate{
+	exportOptionChunkSize: sql.KVStringOptRequireValue,
+	exportOptionDelimiter: sql.KVStringOptRequireValue,
+	exportOptionFileName:  sql.KVStringOptRequireValue,
+	exportOptionNullAs:    sql.KVStringOptRequireValue,
 }
 
 const exportChunkSizeDefault = 100000
