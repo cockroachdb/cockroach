@@ -3234,6 +3234,18 @@ func TestSchemaChangeAfterCreateInTxn(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
+	// The schema change below can occasionally take more than
+	// 5 seconds and gets pushed by the closed timestamp mechanism
+	// in the read timestamp cache. Setting the closed timestamp
+	// target duration to a higher value.
+	// TODO(vivek): Remove the need to do this by removing the use of
+	// txn.CommitTimestamp() in schema changes.
+	if _, err := sqlDB.Exec(`
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20s'
+`); err != nil {
+		t.Fatal(err)
+	}
+
 	// A large enough value that the backfills run as part of the
 	// schema change run in many chunks.
 	var maxValue = 4001
