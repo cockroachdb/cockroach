@@ -228,15 +228,17 @@ func TestRegistryRunSubTestFailed(t *testing.T) {
 }
 
 func TestRegistryRunClusterExpired(t *testing.T) {
-	defer func(l, v bool, n string) {
-		local, testingSkipValidation, clusterName = l, v, n
-	}(local, testingSkipValidation, clusterName)
-	local, testingSkipValidation, clusterName = true, true, "local"
+	defer func(l bool, n string) {
+		local, clusterName = l, n
+	}(local, clusterName)
+	local, clusterName = true, "local"
 
 	var buf syncedBuffer
 	expiredRE := regexp.MustCompile(`(?m)^.*cluster expired \(.*\)$`)
 
 	r := newRegistry()
+	r.config.skipClusterValidationOnAttach = true
+	r.config.skipClusterStopOnAttach = true
 	r.out = &buf
 
 	r.Add(testSpec{

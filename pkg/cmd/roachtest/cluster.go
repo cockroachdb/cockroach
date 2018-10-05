@@ -53,19 +53,18 @@ var (
 	local bool
 	// Path to a local dir where the test logs and artifacts collected from
 	// cluster will be placed.
-	artifacts             string
-	cockroach             string
-	encrypt               bool
-	workload              string
-	roachprod             string
-	buildTag              string
-	clusterName           string
-	clusterID             string
-	clusterWipe           bool
-	username              = os.Getenv("ROACHPROD_USER")
-	zonesF                string
-	teamCity              bool
-	testingSkipValidation bool
+	artifacts   string
+	cockroach   string
+	encrypt     bool
+	workload    string
+	roachprod   string
+	buildTag    string
+	clusterName string
+	clusterID   string
+	clusterWipe bool
+	username    = os.Getenv("ROACHPROD_USER")
+	zonesF      string
+	teamCity    bool
 	// For the "list" command: list benchmarks instead of tests.
 	listBench bool
 )
@@ -315,12 +314,6 @@ func makeGCEClusterName(testName, id, username string) string {
 }
 
 func makeClusterName(t testI) string {
-	if clusterName != "" {
-		return clusterName
-	}
-	if local {
-		return "local"
-	}
 	if username == "" {
 		usr, err := user.Current()
 		if err != nil {
@@ -534,6 +527,15 @@ type cluster struct {
 	expiration time.Time
 }
 
+type clusterOpt bool
+
+const (
+	localCluster  clusterOpt = true
+	remoteCluster clusterOpt = false
+)
+
+// newCluster creates a new roachprod cluster.
+//
 // TODO(peter): Should set the lifetime of clusters to 2x the expected test
 // duration. The default lifetime of 12h is too long for some tests and will be
 // too short for others.
@@ -542,7 +544,7 @@ type cluster struct {
 // to figure out how to make that work with `roachprod create`. Perhaps one
 // invocation of `roachprod create` per unique node-spec. Are there guarantees
 // we're making here about the mapping of nodeSpecs to node IDs?
-func newCluster(ctx context.Context, t testI, nodes []nodeSpec) *cluster {
+func newCluster(ctx context.Context, t testI, nodes []nodeSpec, opt clusterOpt) *cluster {
 	if atomic.LoadInt32(&interrupted) == 1 {
 		t.Fatal("interrupted")
 	}
@@ -564,8 +566,15 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec) *cluster {
 		t.Fatal(err)
 	}
 
+	var name string
+	if opt == localCluster {
+		name = "local" // The roachprod tool understands this magic name.
+	} else {
+		name = makeClusterName(t)
+	}
+
 	c := &cluster{
-		name:       makeClusterName(t),
+		name:       name,
 		nodes:      nodes[0].Count,
 		status:     func(...interface{}) {},
 		t:          t,
@@ -578,71 +587,122 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec) *cluster {
 	}
 	registerCluster(c)
 
-	if c.name != clusterName {
-		sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.nodes)}
-		sargs = append(sargs, nodes[0].args()...)
-		if !local && zonesF != "" && nodes[0].Zones == "" {
-			sargs = append(sargs, "--gce-zones="+zonesF)
-		}
-
-		c.status("creating cluster")
-		if err := execCmd(ctx, l, sargs...); err != nil {
-			t.Fatal(err)
-			return nil
-		}
-	} else if !testingSkipValidation {
-		// Perform validation on the existing cluster.
-		c.status("checking that existing cluster matches spec")
-		sargs := []string{roachprod, "list", c.name, "--json"}
-		out, err := execCmdWithBuffer(ctx, l, sargs...)
-		if err != nil {
-			t.Fatal(err)
-			return nil
-		}
-
-		// jsonOutput matches the structure of the output from `roachprod list`
-		// when in json mode.
-		type jsonOutput struct {
-			Clusters map[string]struct {
-				VMs []struct {
-					MachineType string `json:"machine_type"`
-				} `json:"vms"`
-			} `json:"clusters"`
-		}
-		var details jsonOutput
-		if err := json.Unmarshal(out, &details); err != nil {
-			t.Fatal(err)
-			return nil
-		}
-
-		cDetails, ok := details.Clusters[c.name]
-		if !ok {
-			t.Fatalf("cluster %q not found", c.name)
-			return nil
-		}
-		if len(cDetails.VMs) < c.nodes {
-			t.Fatalf("cluster has %d nodes, test requires at least %d", len(cDetails.VMs), c.nodes)
-			return nil
-		}
-		if typ := nodes[0].MachineType; typ != "" {
-			for i, vm := range cDetails.VMs {
-				if vm.MachineType != typ {
-					t.Fatalf("node %d has machine type %s, test requires %s", i, vm.MachineType, typ)
-					return nil
-				}
-			}
-		}
-
-		c.status("stopping cluster")
-		c.Stop(ctx, c.All())
-		if clusterWipe {
-			c.Wipe(ctx, c.All())
-		} else {
-			l.Printf("skipping cluster wipe\n")
-		}
+	sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.nodes)}
+	sargs = append(sargs, nodes[0].args()...)
+	if !local && zonesF != "" && nodes[0].Zones == "" {
+		sargs = append(sargs, "--gce-zones="+zonesF)
 	}
+
+	c.status("creating cluster")
+	if err := execCmd(ctx, l, sargs...); err != nil {
+		t.Fatal(err)
+		return nil
+	}
+
 	c.status("running test")
 	return c
+}
+
+type attachOpt struct {
+	skipValidation bool
+	// Implies skipWipe.
+	skipStop bool
+	skipWipe bool
+}
+
+// attachToExistingCluster creates a cluster object based on machines that have
+// already been already allocated by roachprod.
+func attachToExistingCluster(
+	ctx context.Context, name string, t testI, nodes []nodeSpec, opt attachOpt,
+) *cluster {
+	if len(nodes) > 1 {
+		// TODO(peter): Need a motivating test that has different specs per node.
+		t.Fatalf("TODO(peter): unsupported nodes spec: %v", nodes)
+	}
+
+	l, err := rootLogger(t.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	c := &cluster{
+		name:       name,
+		nodes:      nodes[0].Count,
+		status:     func(...interface{}) {},
+		t:          t,
+		l:          l,
+		destroyed:  make(chan struct{}),
+		expiration: nodes[0].expiration(),
+	}
+	if impl, ok := t.(*test); ok {
+		c.status = impl.Status
+	}
+	registerCluster(c)
+
+	if !opt.skipValidation {
+		if err := c.validate(ctx, nodes, l); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if !opt.skipStop {
+		c.status("stopping cluster")
+		c.Stop(ctx, c.All())
+		if !opt.skipWipe {
+			if clusterWipe {
+				c.Wipe(ctx, c.All())
+			} else {
+				l.Printf("skipping cluster wipe\n")
+			}
+		}
+	}
+
+	c.status("running test")
+	return c
+}
+
+// validateCluster takes a cluster and checks that the reality corresponds to
+// the cluster's spec. It's intended to be used with clusters created by
+// attachToExistingCluste(); otherwise, clusters create with newCluster() are
+// know to be up to spec.
+func (c *cluster) validate(ctx context.Context, nodes []nodeSpec, l *logger) error {
+	// Perform validation on the existing cluster.
+	c.status("checking that existing cluster matches spec")
+	sargs := []string{roachprod, "list", c.name, "--json"}
+	out, err := execCmdWithBuffer(ctx, l, sargs...)
+	if err != nil {
+		return err
+	}
+
+	// jsonOutput matches the structure of the output from `roachprod list`
+	// when in json mode.
+	type jsonOutput struct {
+		Clusters map[string]struct {
+			VMs []struct {
+				MachineType string `json:"machine_type"`
+			} `json:"vms"`
+		} `json:"clusters"`
+	}
+	var details jsonOutput
+	if err := json.Unmarshal(out, &details); err != nil {
+		return err
+	}
+
+	cDetails, ok := details.Clusters[c.name]
+	if !ok {
+		return fmt.Errorf("cluster %q not found", c.name)
+	}
+	if len(cDetails.VMs) < c.nodes {
+		return fmt.Errorf("cluster has %d nodes, test requires at least %d", len(cDetails.VMs), c.nodes)
+	}
+	if typ := nodes[0].MachineType; typ != "" {
+		for i, vm := range cDetails.VMs {
+			if vm.MachineType != typ {
+				return fmt.Errorf("node %d has machine type %s, test requires %s", i, vm.MachineType, typ)
+			}
+		}
+	}
+	return nil
 }
 
 // clone creates a new cluster object that refers to the same cluster as the
