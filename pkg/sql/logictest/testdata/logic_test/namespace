@@ -104,7 +104,7 @@ ALTER INDEX public.public."primary" RENAME TO t_pk
 statement ok
 SET search_path = invalid
 
-statement error no schema has been selected to search index: "a_pk3"
+statement error schema or database was not found while searching index: "a_pk3"
 ALTER INDEX a_pk3 RENAME TO a_pk4
 
 # But qualification resolves the problem.
