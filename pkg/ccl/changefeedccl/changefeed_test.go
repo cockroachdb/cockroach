@@ -13,6 +13,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net/url"
+	"sort"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -181,7 +183,43 @@ func TestChangefeedTimestamps(t *testing.T) {
 		})
 
 		// Check that we eventually get a resolved timestamp greater than ts1.
-		expectResolvedTimestampGreaterThan(t, foo, ts1)
+		parsed := parseTimeToHLC(t, ts1)
+		for {
+			if resolved := expectResolvedTimestamp(t, foo); parsed.Less(resolved) {
+				break
+			}
+		}
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestChangefeedResolvedFrequency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+
+		const freq = 10 * time.Millisecond
+		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH resolved=$1`, freq.String())
+		defer foo.Close(t)
+
+		// We get each resolved timestamp notification once in each partition.
+		// Grab the first `2 * #partitions`, sort because we might get all from
+		// one partition first, and compare the first and last.
+		resolved := make([]hlc.Timestamp, 2*len(foo.Partitions()))
+		for i := range resolved {
+			resolved[i] = expectResolvedTimestamp(t, foo)
+		}
+		sort.Slice(resolved, func(i, j int) bool { return resolved[i].Less(resolved[j]) })
+		first, last := resolved[0], resolved[len(resolved)-1]
+		fmt.Println(resolved)
+
+		if d := last.GoTime().Sub(first.GoTime()); d < freq {
+			t.Errorf(`expected %s between resolved timestamps, but got %s`, freq, d)
+		}
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
@@ -946,6 +984,11 @@ func TestChangefeedErrors(t *testing.T) {
 			`CREATE CHANGEFEED FOR foo WITH envelope=nope`,
 		); !testutils.IsError(err, `unknown envelope: nope`) {
 			t.Errorf(`expected 'unknown envelope: nope' error got: %+v`, err)
+		}
+		if _, err := sqlDB.DB.Exec(
+			`CREATE CHANGEFEED FOR foo WITH resolved='-1s'`,
+		); !testutils.IsError(err, `negative durations are not accepted: resolved='-1s'`) {
+			t.Errorf(`expected 'negative durations are not accepted' error got: %+v`, err)
 		}
 
 		if _, err := sqlDB.DB.Exec(

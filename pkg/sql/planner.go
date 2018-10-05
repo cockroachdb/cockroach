@@ -430,28 +430,39 @@ func (p *planner) TypeAsString(e tree.Expr, op string) (func() (string, error), 
 	return fn, nil
 }
 
+// KVStringOptValidate indicates the requested validation of a TypeAsStringOpts
+// option.
+type KVStringOptValidate string
+
+// KVStringOptValidate values
+const (
+	KVStringOptAny            KVStringOptValidate = `any`
+	KVStringOptRequireNoValue KVStringOptValidate = `no-value`
+	KVStringOptRequireValue   KVStringOptValidate = `value`
+)
+
 // TypeAsStringOpts enforces (not hints) that the given expressions
 // typecheck as strings, and returns a function that can be called to
 // get the string value during (planNode).Start.
 func (p *planner) TypeAsStringOpts(
-	opts tree.KVOptions, expectValues map[string]bool,
+	opts tree.KVOptions, optValidate map[string]KVStringOptValidate,
 ) (func() (map[string]string, error), error) {
 	typed := make(map[string]tree.TypedExpr, len(opts))
 	for _, opt := range opts {
 		k := string(opt.Key)
-		takesValue, ok := expectValues[k]
+		validate, ok := optValidate[k]
 		if !ok {
 			return nil, errors.Errorf("invalid option %q", k)
 		}
 
 		if opt.Value == nil {
-			if takesValue {
+			if validate == KVStringOptRequireValue {
 				return nil, errors.Errorf("option %q requires a value", k)
 			}
 			typed[k] = nil
 			continue
 		}
-		if !takesValue {
+		if validate == KVStringOptRequireNoValue {
 			return nil, errors.Errorf("option %q does not take a value", k)
 		}
 		r, err := tree.TypeCheckAndRequire(opt.Value, &p.semaCtx, types.String, k)

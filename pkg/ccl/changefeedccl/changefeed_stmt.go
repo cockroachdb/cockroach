@@ -62,13 +62,13 @@ const (
 	sinkSchemeKafka           = `kafka`
 )
 
-var changefeedOptionExpectValues = map[string]bool{
-	optConfluentSchemaRegistry: true,
-	optCursor:                  true,
-	optEnvelope:                true,
-	optFormat:                  true,
-	optResolvedTimestamps:      false,
-	optUpdatedTimestamps:       false,
+var changefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
+	optConfluentSchemaRegistry: sql.KVStringOptRequireValue,
+	optCursor:                  sql.KVStringOptRequireValue,
+	optEnvelope:                sql.KVStringOptRequireValue,
+	optFormat:                  sql.KVStringOptRequireValue,
+	optResolvedTimestamps:      sql.KVStringOptAny,
+	optUpdatedTimestamps:       sql.KVStringOptRequireNoValue,
 }
 
 // changefeedPlanHook implements sql.PlanHookFn.
@@ -258,7 +258,7 @@ func changefeedJobDescription(
 	}
 	for k, v := range opts {
 		opt := tree.KVOption{Key: tree.Name(k)}
-		if changefeedOptionExpectValues[k] {
+		if len(v) > 0 {
 			opt.Value = tree.NewDString(v)
 		}
 		c.Options = append(c.Options, opt)
@@ -273,6 +273,16 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		// So, if no options were specified by the user, Opts will be nil when
 		// the job gets restarted.
 		details.Opts = map[string]string{}
+	}
+
+	if r, ok := details.Opts[optResolvedTimestamps]; ok && r != `` {
+		if d, err := time.ParseDuration(r); err != nil {
+			return jobspb.ChangefeedDetails{}, err
+		} else if d < 0 {
+			return jobspb.ChangefeedDetails{}, errors.Errorf(
+				`negative durations are not accepted: %s='%s'`,
+				optResolvedTimestamps, details.Opts[optResolvedTimestamps])
+		}
 	}
 
 	switch envelopeType(details.Opts[optEnvelope]) {

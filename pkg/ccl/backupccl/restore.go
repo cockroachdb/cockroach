@@ -52,10 +52,10 @@ const (
 	restoreOptSkipMissingSequences = "skip_missing_sequences"
 )
 
-var restoreOptionExpectValues = map[string]bool{
-	restoreOptIntoDB:               true,
-	restoreOptSkipMissingFKs:       false,
-	restoreOptSkipMissingSequences: false,
+var restoreOptionExpectValues = map[string]sql.KVStringOptValidate{
+	restoreOptIntoDB:               sql.KVStringOptRequireValue,
+	restoreOptSkipMissingFKs:       sql.KVStringOptRequireNoValue,
+	restoreOptSkipMissingSequences: sql.KVStringOptRequireNoValue,
 }
 
 func loadBackupDescs(
