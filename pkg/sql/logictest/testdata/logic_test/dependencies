@@ -32,7 +32,7 @@ descriptor_id  descriptor_name  column_id  column_name  column_type             
 58             test_kvi2        1          k            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
 58             test_kvi2        2          v            semantic_type:INT width:0 precision:0 visible_type:NONE       true      NULL            false
 59             test_v1          1          v            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
-61             test_v2          1          v            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
+60             test_v2          1          v            semantic_type:INT width:0 precision:0 visible_type:NONE       false     NULL            false
 
 query ITITTB colnames
 SELECT * FROM crdb_internal.table_indexes WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id
@@ -51,7 +51,7 @@ descriptor_id  descriptor_name  index_id  index_name       index_type  is_unique
 58             test_kvi2        1         primary          primary     true
 58             test_kvi2        2         test_kvi2_idx    secondary   true
 59             test_v1          0         ·                primary     false
-61             test_v2          0         ·                primary     false
+60             test_v2          0         ·                primary     false
 
 query ITITTITT colnames
 SELECT * FROM crdb_internal.index_columns WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id, column_type, column_id
@@ -89,7 +89,7 @@ descriptor_id  descriptor_name  index_id  column_id  dependson_id  dependson_typ
 57             test_kvi1        1         NULL       53            interleave      1                   NULL              SharedPrefixLen: 1
 58             test_kvi2        2         NULL       53            interleave      1                   NULL              SharedPrefixLen: 1
 59             test_v1          NULL      NULL       53            view            NULL                NULL              NULL
-61             test_v2          NULL      NULL       59            view            NULL                NULL              NULL
+60             test_v2          NULL      NULL       59            view            NULL                NULL              NULL
 
 query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, index_id, dependedonby_type, dependedonby_id, dependedonby_index_id
@@ -101,7 +101,7 @@ descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  de
 53             test_kv          1         57               interleave         1                      NULL               SharedPrefixLen: 0
 53             test_kv          1         58               interleave         2                      NULL               SharedPrefixLen: 0
 53             test_kv          2         56               fk                 2                      ·                  SharedPrefixLen: 0
-59             test_v1          NULL      61               view               0                      NULL               Columns: [1]
+59             test_v1          NULL      60               view               0                      NULL               Columns: [1]
 
 # Checks view dependencies (#17306)
 statement ok
@@ -112,13 +112,13 @@ query ITIIITITT colnames
 SELECT * FROM crdb_internal.backward_dependencies WHERE descriptor_name LIKE 'moretest_%' ORDER BY descriptor_id, index_id, dependson_type, dependson_id, dependson_index_id
 ----
 descriptor_id  descriptor_name  index_id  column_id  dependson_id  dependson_type  dependson_index_id  dependson_name  dependson_details
-64             moretest_v       NULL      NULL       62            view            NULL                NULL            NULL
+62             moretest_v       NULL      NULL       61            view            NULL                NULL            NULL
 
 query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'moretest_%' ORDER BY descriptor_id, index_id, dependedonby_type, dependedonby_id, dependedonby_index_id
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
-62             moretest_t       NULL      64               view               0                      NULL               Columns: [1 2 3]
+61             moretest_t       NULL      62               view               0                      NULL               Columns: [1 2 3]
 
 # Check sequence dependencies.
 
@@ -132,13 +132,13 @@ query ITIIITITT colnames
 SELECT * FROM crdb_internal.backward_dependencies WHERE descriptor_name LIKE 'blog_posts'
 ----
 descriptor_id  descriptor_name  index_id  column_id  dependson_id  dependson_type  dependson_index_id  dependson_name  dependson_details
-66             blog_posts       NULL      1          65            sequence        NULL                NULL            NULL
+64             blog_posts       NULL      1          63            sequence        NULL                NULL            NULL
 
 query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'blog_posts%'
 ----
 descriptor_id  descriptor_name    index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
-65             blog_posts_id_seq  NULL      66               sequence           0                      NULL               Columns: [0]
+63             blog_posts_id_seq  NULL      64               sequence           0                      NULL               Columns: [0]
 
 # Verify that we report a dependency on a column that is being mutated.
   #CREATE VIEW v AS WITH a AS (UPDATE kv SET v = 444 RETURNING k) SELECT k FROM a;
@@ -153,4 +153,4 @@ query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name = 'kv'
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
-67             kv               NULL      68               view               0                      NULL               Columns: [1 2 3]
+65             kv               NULL      66               view               0                      NULL               Columns: [1 2 3]

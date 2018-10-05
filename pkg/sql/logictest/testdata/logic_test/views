@@ -499,3 +499,29 @@ SELECT sum ("QuotedCaps15951". a) FROM "QuotedCaps15951" GROUP BY b ORDER BY b
 1
 3
 6
+
+# Regression tests for #23833
+
+statement ok
+CREATE VIEW w AS WITH a AS (SELECT 1 AS x) SELECT x FROM a
+
+query T
+SELECT create_statement FROM [SHOW CREATE w]
+----
+CREATE VIEW w (x) AS WITH a AS (SELECT 1 AS x) SELECT x FROM a
+
+statement ok
+CREATE VIEW w2 AS WITH t AS (SELECT x FROM w) SELECT x FROM t
+
+query T
+SELECT create_statement FROM [SHOW CREATE w2]
+----
+CREATE VIEW w2 (x) AS WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t
+
+statement ok
+CREATE VIEW w3 AS (WITH t AS (SELECT x FROM w) SELECT x FROM t)
+
+query T
+SELECT create_statement FROM [SHOW CREATE w3]
+----
+CREATE VIEW w3 (x) AS (WITH t AS (SELECT x FROM test.public.w) SELECT x FROM t)

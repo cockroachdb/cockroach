@@ -195,21 +195,6 @@ func (p *planner) getDataSource(
 	}
 }
 
-// QualifyWithDatabase asserts that the table with the given name
-// exists, and expands its table name with the details about its path.
-func (p *planner) QualifyWithDatabase(
-	ctx context.Context, t *tree.NormalizableTableName,
-) (*tree.TableName, error) {
-	tn, err := t.Normalize()
-	if err != nil {
-		return nil, err
-	}
-	if _, err := ResolveExistingObject(ctx, p, tn, true /*required*/, anyDescType); err != nil {
-		return nil, err
-	}
-	return tn, nil
-}
-
 func (p *planner) getTableScanByRef(
 	ctx context.Context,
 	tref *tree.TableRef,

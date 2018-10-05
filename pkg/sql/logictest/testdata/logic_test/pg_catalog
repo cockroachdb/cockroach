@@ -281,7 +281,7 @@ oid         relname       relnamespace  reltype  relowner  relam  relfilenode  r
 226054345   t3            393119649     0        NULL      NULL   0            0
 4084598993  primary       393119649     0        NULL      NULL   0            0
 4084598994  t3_a_b_idx    393119649     0        NULL      NULL   0            0
-4218730311  v1            393119649     0        NULL      NULL   0            0
+4252432642  v1            393119649     0        NULL      NULL   0            0
 
 query TIRIOBBT colnames
 SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence
@@ -369,10 +369,10 @@ attrelid    relname       attname  atttypid  attstattarget  attlen  attnum  attn
 4084598993  primary       rowid    20        0              8       1       0         -1
 4084598994  t3_a_b_idx    a        20        0              8       1       0         -1
 4084598994  t3_a_b_idx    b        20        0              8       2       0         -1
-4218730311  v1            p        701       0              8       1       0         -1
-4218730311  v1            a        20        0              8       2       0         -1
-4218730311  v1            b        20        0              8       3       0         -1
-4218730311  v1            c        20        0              8       4       0         -1
+4252432642  v1            p        701       0              8       1       0         -1
+4252432642  v1            a        20        0              8       2       0         -1
+4252432642  v1            b        20        0              8       3       0         -1
+4252432642  v1            c        20        0              8       4       0         -1
 
 query TTIBTTBB colnames
 SELECT c.relname, attname, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef
@@ -1458,8 +1458,8 @@ query OOIIIIIB colnames
 SELECT * FROM pg_catalog.pg_sequence
 ----
 seqrelid    seqtypid  seqstart  seqincrement  seqmax               seqmin  seqcache  seqcycle
-162412526   20        1         1             9223372036854775807  1       1         false
-2864600840  20        6         2             10                   5       1         false
+1978455413  20        1         1             9223372036854775807  1       1         false
+3953462681  20        6         2             10                   5       1         false
 
 statement ok
 DROP DATABASE seq
