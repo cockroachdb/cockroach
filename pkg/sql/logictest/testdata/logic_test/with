@@ -184,3 +184,57 @@ query I
 WITH t AS (SELECT 1) SELECT 2
 ----
 2
+
+# Regression tests for #24303.
+
+statement ok
+CREATE TABLE a(x INT);
+
+statement count 3
+INSERT INTO a(x)
+        (WITH b(z) AS (VALUES (1),(2),(3)) SELECT z+1 AS w FROM b)
+
+statement count 1
+INSERT INTO a(x)
+      (WITH a(z) AS (VALUES (1)) SELECT z+1 AS w FROM a);
+
+# When #24303 is fixed, the following query should succeed.
+query error unimplemented: multiple WITH clauses in parentheses
+(WITH woo AS (VALUES (1))
+    (WITH waa AS (VALUES (2))
+	   TABLE waa))
+
+
+# When #24303 is fixed, the following query should fail with
+# error "no such relation woo".
+query error unimplemented: multiple WITH clauses in parentheses
+(WITH woo AS (VALUES (1))
+    (WITH waa AS (VALUES (2))
+	   TABLE woo))
+
+statement ok
+CREATE TABLE lim(x) AS SELECT 0
+
+# This is an oddity in PostgreSQL: even though the WITH clause
+# occurs in the inside parentheses, the scope of the alias `lim`
+# extends to the outer parentheses.
+query I
+((WITH lim(x) AS (SELECT 1) SELECT 123)
+ LIMIT (
+    SELECT x FROM lim -- intuitively this should refer to the real table lim defined above
+                      -- and use LIMIT 0;
+                      -- however, postgres flattens the inner WITH and outer LIMIT
+                      -- at the same scope so the limit becomes 1.
+ ))
+----
+123
+
+# Ditto if table `lim` did not even exist.
+statement ok
+DROP TABLE lim
+
+query I
+((WITH lim(x) AS (SELECT 1) SELECT 123) LIMIT (SELECT x FROM lim))
+----
+123
+

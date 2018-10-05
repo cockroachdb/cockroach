@@ -101,6 +101,13 @@ func (p *planner) Select(
 
 	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
 		wrapped = s.Select.Select
+		if s.Select.With != nil {
+			if with != nil {
+				return nil, pgerror.UnimplementedWithIssueError(24303,
+					"multiple WITH clauses in parentheses")
+			}
+			with = s.Select.With
+		}
 		if s.Select.OrderBy != nil {
 			if orderBy != nil {
 				return nil, pgerror.NewErrorf(
