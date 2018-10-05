@@ -79,25 +79,18 @@ func (n *Dialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (_ *grpc.Clien
 		return nil, errors.New("no node dialer configured")
 	}
 	breaker := n.getBreaker(nodeID)
-	// If this is the first time connecting, or if connections have been failing repeatedly,
-	// consider logging.
-	if breaker.Successes() == 0 || breaker.ConsecFailures() > 0 {
-		defer func() {
-			if err != nil {
-				// Enforce a minimum interval between warnings for failed connections.
-				if breaker.ShouldLog() {
-					log.Warningf(ctx, "unable to connect to n%d: %s", nodeID, err)
-				}
-			} else {
-				log.Infof(ctx, "connection to n%d established", nodeID)
-			}
-		}()
-	}
 
 	if !breaker.Ready() {
 		err := errors.Wrapf(circuit.ErrBreakerOpen, "unable to dial n%d", nodeID)
 		return nil, err
 	}
+
+	defer func() {
+		// Enforce a minimum interval between warnings for failed connections.
+		if err != nil && breaker.ShouldLog() {
+			log.Infof(ctx, "unable to connect to n%d: %s", nodeID, err)
+		}
+	}()
 
 	addr, err := n.resolver(nodeID)
 	if err != nil {
