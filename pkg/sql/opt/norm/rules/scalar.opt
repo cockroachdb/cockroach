@@ -243,3 +243,41 @@
 )
 =>
 (SimplifyWhens $condition $whens)
+
+# SimplifyEqualsAnyTuple converts a scalar ANY operation to an IN comparison.
+# It transforms
+#
+#   x = ANY (...)
+#
+# to
+#
+#   x IN (...)
+#
+# Which allows scans to be constrained.
+[SimplifyEqualsAnyTuple, Normalize]
+(AnyScalar
+  $input:*
+  $tuple:(Tuple)
+  $cmp:(IsEquality $cmp)
+)
+=>
+(In
+  $input
+  $tuple
+)
+
+# SimplifyAnyScalarArray converts a scalar ANY operation on a constant ARRAY to a scalar
+# ANY operation on a tuple. In particular, this allows SimplifyEqualsAnyTuple to be
+# triggered, which allows constraints to be generated.
+[SimplifyAnyScalarArray, Normalize]
+(AnyScalar
+  $input:*
+  $ary:(Const) & (IsArray $ary)
+  $cmp:*
+)
+=>
+(AnyScalar
+  $input
+  (ConvertConstArrayToTuple $ary)
+  $cmp
+)
