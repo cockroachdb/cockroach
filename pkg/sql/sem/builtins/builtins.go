@@ -265,17 +265,17 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				str := []byte(tree.MustBeDBytes(args[0]))
-				enc := strings.ToLower(string(tree.MustBeDString(args[1])))
+				enc := CleanEncodingName(string(tree.MustBeDString(args[1])))
 				switch enc {
 				// All the following are aliases to each other in PostgreSQL.
-				case "utf8", "utf-8", "unicode", "cp65001":
+				case "utf8", "unicode", "cp65001":
 					if !utf8.Valid(str) {
 						return nil, newDecodeError("UTF8")
 					}
 					return tree.NewDString(string(str)), nil
 
 					// All the following are aliases to each other in PostgreSQL.
-				case "latin1", "latin-1", "iso88591", "iso8859-1", "iso-8859-1", "cp28591":
+				case "latin1", "iso88591", "cp28591":
 					var buf strings.Builder
 					for _, c := range str {
 						buf.WriteRune(rune(c))
@@ -296,14 +296,14 @@ var builtins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Bytes),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				str := string(tree.MustBeDString(args[0]))
-				enc := strings.ToLower(string(tree.MustBeDString(args[1])))
+				enc := CleanEncodingName(string(tree.MustBeDString(args[1])))
 				switch enc {
 				// All the following are aliases to each other in PostgreSQL.
-				case "utf8", "utf-8", "unicode", "cp65001":
+				case "utf8", "unicode", "cp65001":
 					return tree.NewDBytes(tree.DBytes([]byte(str))), nil
 
 					// All the following are aliases to each other in PostgreSQL.
-				case "latin1", "latin-1", "iso88591", "iso8859-1", "iso-8859-1", "cp28591":
+				case "latin1", "iso88591", "cp28591":
 					res := make([]byte, 0, len(str))
 					for _, c := range str {
 						if c > 255 {
@@ -4411,4 +4411,22 @@ func rpad(evalCtx *tree.EvalContext, s string, length int, fill string) (string,
 	}
 
 	return buf.String(), nil
+}
+
+// CleanEncodingName sanitizes the string meant to represent a
+// recognized encoding. This ignores any non-alphanumeric character.
+//
+// See function clean_encoding_name() in postgres' sources
+// in backend/utils/mb/encnames.c.
+func CleanEncodingName(s string) string {
+	b := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c >= 'A' && c <= 'Z' {
+			b = append(b, c-'A'+'a')
+		} else if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') {
+			b = append(b, c)
+		}
+	}
+	return string(b)
 }

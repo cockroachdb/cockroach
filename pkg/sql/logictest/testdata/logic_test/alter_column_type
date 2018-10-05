@@ -7,7 +7,15 @@ statement ok
 CREATE TABLE t (s STRING, sl STRING(5), t TIME, ts TIMESTAMP)
 
 statement ok
+SET TIME ZONE 'Europe/Amsterdam'
+
+statement ok
 INSERT INTO t VALUES ('some string', 'short', TIME '20:16:27', '2018-05-23 20:16:27.658082')
+
+query TTTT
+SELECT * FROM t
+----
+some string  short  0000-01-01 20:16:27 +0000 UTC  2018-05-23 20:16:27.658082 +0000 +0000
 
 # Not using TIMETZ until #26074 and #25224 are resolved.
 statement ok
@@ -26,7 +34,7 @@ rowid        INT          false        unique_rowid()  ·                      {
 query TTTT
 SELECT * FROM t
 ----
-some string  short  0000-01-01 20:16:27 +0000 UTC  2018-05-23 20:16:27.658082 +0000 +0000
+some string  short  0000-01-01 20:16:27 +0000 UTC  2018-05-23 22:16:27.658082 +0200 +0200
 
 statement ok
 DROP TABLE t

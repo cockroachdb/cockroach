@@ -21,7 +21,7 @@ UTF8                1
 # We filter here because optimizer will be different depending on which
 # configuration this logic test is running in.
 query TT colnames
-SELECT * FROM [SHOW ALL] WHERE variable != 'optimizer'
+SELECT * FROM [SHOW ALL] WHERE variable != 'optimizer' AND variable != 'crdb_version'
 ----
 variable                           value
 application_name                   ·
@@ -29,7 +29,7 @@ bytea_output                       hex
 client_encoding                    UTF8
 client_min_messages                notice
 database                           test
-datestyle                          ISO
+datestyle                          ISO, MDY
 default_transaction_isolation      serializable
 default_transaction_read_only      off
 distsql                            2.0-off
@@ -47,9 +47,9 @@ server_encoding                    UTF8
 server_version                     9.5.0
 server_version_num                 90500
 session_user                       root
-sql_safe_updates                   false
+sql_safe_updates                   off
 standard_conforming_strings        on
-statement_timeout                  0s
+statement_timeout                  0
 timezone                           UTC
 tracing                            off
 transaction_isolation              serializable

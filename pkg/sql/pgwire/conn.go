@@ -30,7 +30,6 @@ import (
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -215,16 +214,60 @@ func (c *conn) serveImpl(
 ) error {
 	defer func() { _ = c.conn.Close() }()
 
+	ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
+
 	// NOTE: We're going to write a few messages to the connection in this method,
 	// for the handshake. After that, all writes are done async, in the
 	// startWriter() goroutine.
 
-	for _, param := range statusReportParams {
+	sendStatusParam := func(param, value string) error {
 		c.msgBuilder.initMsg(pgwirebase.ServerMsgParameterStatus)
-		c.msgBuilder.writeTerminatedString(param.key)
-		c.msgBuilder.writeTerminatedString(param.value)
-		if err := c.msgBuilder.finishMsg(c.conn); err != nil {
+		c.msgBuilder.writeTerminatedString(param)
+		c.msgBuilder.writeTerminatedString(value)
+		return c.msgBuilder.finishMsg(c.conn)
+	}
+
+	var connHandler sql.ConnectionHandler
+	if sqlServer != nil {
+		var err error
+		connHandler, err = sqlServer.SetupConn(
+			ctx, c.sessionArgs, &c.stmtBuf, c, c.metrics.SQLMemMetrics)
+		if err != nil {
+			_ /* err */ = writeErr(err, &c.msgBuilder, c.conn)
 			return err
+		}
+
+		// Send the initial "status parameters" to the client.  This
+		// overlaps partially with session variables. The client wants to
+		// see the values that result of the combination of server-side
+		// defaults with client-provided values.
+		// For details see: https://www.postgresql.org/docs/10/static/libpq-status.html
+		for _, param := range statusReportParams {
+			value := connHandler.GetStatusParam(ctx, param)
+			if err := sendStatusParam(param, value); err != nil {
+				return err
+			}
+		}
+		// The two following status parameters have no equivalent session
+		// variable.
+		if err := sendStatusParam("session_authorization", c.sessionArgs.User); err != nil {
+			return err
+		}
+		isSuperUser := c.sessionArgs.User == security.RootUser
+		superUserVal := "off"
+		if isSuperUser {
+			superUserVal = "on"
+		}
+		if err := sendStatusParam("is_superuser", superUserVal); err != nil {
+			return err
+		}
+	} else {
+		// sqlServer == nil means we are in a local test. In this case
+		// we only need the minimum to make pgx happy.
+		for param, value := range testingStatusReportParams {
+			if err := sendStatusParam(param, value); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -235,7 +278,6 @@ func (c *conn) serveImpl(
 		return err
 	}
 
-	ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
 	ctx, cancelConn := context.WithCancel(ctx)
 	defer cancelConn() // This calms the linter that wants these callbacks to always be called.
 	var ctxCanceled bool
@@ -264,8 +306,7 @@ func (c *conn) serveImpl(
 	if sqlServer != nil {
 		wg.Add(1)
 		go func() {
-			writerErr = sqlServer.ServeConn(
-				ctx, c.sessionArgs, &c.stmtBuf, c, reserved, c.metrics.SQLMemMetrics, cancelConn)
+			writerErr = sqlServer.ServeConn(ctx, connHandler, reserved, cancelConn)
 			// TODO(andrei): Should we sometimes transmit the writerErr's to the
 			// client?
 			wg.Done()
@@ -1296,36 +1337,32 @@ func (c *conn) sendAuthPasswordRequest() (string, error) {
 	return c.readBuf.GetString()
 }
 
-// statusReportParams is a list of run-time parameters and their values, each of
-// which is to be returned as part of the status report during connection
+// statusReportParams is a list of session variables that are also
+// reported as server run-time parameters in the pgwire connection
 // initialization.
 //
 // The standard PostgreSQL status vars are listed here:
 // https://www.postgresql.org/docs/10/static/libpq-status.html
-var statusReportParams = []struct {
-	key   string
-	value string
-}{
-	{"client_encoding", "UTF8"},
-	{"server_encoding", "UTF8"},
-	{"DateStyle", "ISO"},
-	{"IntervalStyle", "postgres"},
-	// All datetime binary formats expect 64-bit integer microsecond values.
-	// This param needs to be provided to clients or some may provide 64-bit
-	// floating-point microsecond values instead, which was a legacy datetime
-	// binary format.
-	{"integer_datetimes", "on"},
-	// The latest version of the docs that was consulted during the development
-	// of this package. We specify this version to avoid having to support old
-	// code paths which various client tools fall back to if they can't
-	// determine that the server is new enough.
-	{"server_version", sql.PgServerVersion},
-	// The current CockroachDB version string.
-	{"crdb_version", build.GetInfo().Short()},
-	// If this parameter is not present, some drivers (including Python's psycopg2)
-	// will add redundant backslash escapes for compatibility with non-standard
-	// backslash handling in older versions of postgres.
-	{"standard_conforming_strings", "on"},
+var statusReportParams = []string{
+	"server_version",
+	"server_encoding",
+	"client_encoding",
+	"application_name",
+	// Note: is_superuser and session_authorization are handled
+	// specially in serveImpl().
+	"DateStyle",
+	"IntervalStyle",
+	"TimeZone",
+	"integer_datetimes",
+	"standard_conforming_strings",
+	"crdb_version", // CockroachDB extension.
+}
+
+// testingStatusReportParams is the minimum set of status parameters
+// needed to make pgx tests in the local package happy.
+var testingStatusReportParams = map[string]string{
+	"client_encoding":             "UTF8",
+	"standard_conforming_strings": "on",
 }
 
 // readTimeoutConn overloads net.Conn.Read by periodically calling
