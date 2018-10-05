@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"go.etcd.io/etcd/raft"
 )
 
 var (
@@ -133,6 +134,24 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 
 	sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)
 
+	// Rather than trying to populate every Replica with a real raft group in
+	// order to pass replicaIsBehind checks, fake out the function for getting
+	// raft status with one that always returns all replicas as up to date.
+	sr.getRaftStatusFn = func(r *Replica) *raft.Status {
+		status := &raft.Status{
+			Progress: make(map[uint64]raft.Progress),
+		}
+		status.Lead = uint64(r.ReplicaID())
+		status.Commit = 1
+		for _, replica := range r.Desc().Replicas {
+			status.Progress[uint64(replica.ReplicaID)] = raft.Progress{
+				Match: 1,
+				State: raft.ProgressStateReplicate,
+			}
+		}
+		return status
+	}
+
 	testCases := []struct {
 		storeIDs     []roachpb.StoreID
 		qps          float64
@@ -198,6 +217,24 @@ func TestChooseReplicaToRebalance(t *testing.T) {
 
 	sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)
 
+	// Rather than trying to populate every Replica with a real raft group in
+	// order to pass replicaIsBehind checks, fake out the function for getting
+	// raft status with one that always returns all replicas as up to date.
+	sr.getRaftStatusFn = func(r *Replica) *raft.Status {
+		status := &raft.Status{
+			Progress: make(map[uint64]raft.Progress),
+		}
+		status.Lead = uint64(r.ReplicaID())
+		status.Commit = 1
+		for _, replica := range r.Desc().Replicas {
+			status.Progress[uint64(replica.ReplicaID)] = raft.Progress{
+				Match: 1,
+				State: raft.ProgressStateReplicate,
+			}
+		}
+		return status
+	}
+
 	testCases := []struct {
 		storeIDs      []roachpb.StoreID
 		qps           float64
@@ -260,5 +297,85 @@ func TestChooseReplicaToRebalance(t *testing.T) {
 					tc.storeIDs, tc.qps, targetStores, tc.expectTargets)
 			}
 		})
+	}
+}
+
+func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Lots of setup boilerplate.
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
+	defer stopper.Stop(context.Background())
+	gossiputil.NewStoreGossiper(g).GossipStores(noLocalityStores, t)
+	storeList, _, _ := a.storePool.getStoreList(firstRange, storeFilterThrottled)
+	storeMap := storeListToMap(storeList)
+
+	const minQPS = 800
+	const maxQPS = 1200
+
+	localDesc := *noLocalityStores[0]
+	cfg := TestStoreConfig(nil)
+	s := createTestStoreWithoutStart(t, stopper, &cfg)
+	s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
+	rq := newReplicateQueue(s, g, a)
+	rr := newReplicaRankings()
+
+	sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr)
+
+	// Load in a range with replicas on an overfull node, a slightly underfull
+	// node, and a very underfull node.
+	loadRanges(rr, s, []testRange{{storeIDs: []roachpb.StoreID{1, 4, 5}, qps: 100}})
+	hottestRanges := rr.topQPS()
+	repl := hottestRanges[0].repl
+
+	// Set up a fake RaftStatus that indicates s5 is behind (but all other stores
+	// are caught up). We thus shouldn't transfer a lease to s5.
+	sr.getRaftStatusFn = func(r *Replica) *raft.Status {
+		status := &raft.Status{
+			Progress: make(map[uint64]raft.Progress),
+		}
+		status.Lead = uint64(r.ReplicaID())
+		status.Commit = 1
+		for _, replica := range r.Desc().Replicas {
+			match := uint64(1)
+			if replica.StoreID == roachpb.StoreID(5) {
+				match = 0
+			}
+			status.Progress[uint64(replica.ReplicaID)] = raft.Progress{
+				Match: match,
+				State: raft.ProgressStateReplicate,
+			}
+		}
+		return status
+	}
+
+	_, target, _ := sr.chooseLeaseToTransfer(
+		ctx, &hottestRanges, &localDesc, storeList, storeMap, minQPS, maxQPS)
+	expectTarget := roachpb.StoreID(4)
+	if target.StoreID != expectTarget {
+		t.Errorf("got target store s%d for range with RaftStatus %v; want s%d",
+			target.StoreID, sr.getRaftStatusFn(repl), expectTarget)
+	}
+
+	// Then do the same, but for replica rebalancing. Make s5 an existing replica
+	// that's behind, and see how a new replica is preferred as the leaseholder
+	// over it.
+	loadRanges(rr, s, []testRange{{storeIDs: []roachpb.StoreID{1, 3, 5}, qps: 100}})
+	hottestRanges = rr.topQPS()
+	repl = hottestRanges[0].repl
+
+	_, targets := sr.chooseReplicaToRebalance(
+		ctx, &hottestRanges, &localDesc, storeList, storeMap, minQPS, maxQPS)
+	expectTargets := []roachpb.ReplicationTarget{
+		{NodeID: 4, StoreID: 4}, {NodeID: 5, StoreID: 5}, {NodeID: 3, StoreID: 3},
+	}
+	if !reflect.DeepEqual(targets, expectTargets) {
+		t.Errorf("got targets %v for range with RaftStatus %v; want %v",
+			targets, sr.getRaftStatusFn(repl), expectTargets)
 	}
 }

@@ -1158,23 +1158,32 @@ func filterBehindReplicas(
 		// Raft leader. This is rare enough not to matter.
 		return nil
 	}
+	candidates := make([]roachpb.ReplicaDescriptor, 0, len(replicas))
+	for _, r := range replicas {
+		if !replicaIsBehind(raftStatus, r.ReplicaID) || r.ReplicaID == brandNewReplicaID {
+			candidates = append(candidates, r)
+		}
+	}
+	return candidates
+}
+
+func replicaIsBehind(raftStatus *raft.Status, replicaID roachpb.ReplicaID) bool {
+	if raftStatus == nil || len(raftStatus.Progress) == 0 {
+		return true
+	}
 	// NB: We use raftStatus.Commit instead of getQuorumIndex() because the
 	// latter can return a value that is less than the commit index. This is
 	// useful for Raft log truncation which sometimes wishes to keep those
 	// earlier indexes, but not appropriate for determining which nodes are
 	// behind the actual commit index of the range.
-	candidates := make([]roachpb.ReplicaDescriptor, 0, len(replicas))
-	for _, r := range replicas {
-		if progress, ok := raftStatus.Progress[uint64(r.ReplicaID)]; ok {
-			if uint64(r.ReplicaID) == raftStatus.Lead ||
-				r.ReplicaID == brandNewReplicaID ||
-				(progress.State == raft.ProgressStateReplicate &&
-					progress.Match >= raftStatus.Commit) {
-				candidates = append(candidates, r)
-			}
+	if progress, ok := raftStatus.Progress[uint64(replicaID)]; ok {
+		if uint64(replicaID) == raftStatus.Lead ||
+			(progress.State == raft.ProgressStateReplicate &&
+				progress.Match >= raftStatus.Commit) {
+			return false
 		}
 	}
-	return candidates
+	return true
 }
 
 func simulateFilterUnremovableReplicas(
