@@ -66,15 +66,44 @@ func (e cteNameEnvironment) pop() cteNameEnvironment {
 	return e[:len(e)-1]
 }
 
-func popCteNameEnvironment(p *planner) {
-	p.curPlan.cteNameEnvironment = p.curPlan.cteNameEnvironment.pop()
+func popCteNameEnvironment(p *planner) error {
+	e := p.curPlan.cteNameEnvironment
+	for alias, src := range e[len(e)-1] {
+		if !src.used {
+			seenMutation, err := containsMutations(src.plan)
+			if err != nil {
+				return err
+			}
+			if seenMutation {
+				return pgerror.UnimplementedWithIssueErrorf(24307,
+					"common table expression %q with side effects was not used in query", alias)
+			}
+		}
+	}
+	p.curPlan.cteNameEnvironment = e.pop()
+	return nil
+}
+
+func containsMutations(plan planNode) (bool, error) {
+	seenMutation := false
+	err := walkPlan(context.Background(), plan, planObserver{
+		enterNode: func(_ context.Context, _ string, node planNode) (bool, error) {
+			switch node.(type) {
+			case *insertNode, *deleteNode, *upsertNode, *updateNode:
+				seenMutation = true
+			default:
+			}
+			return true, nil
+		},
+	})
+	return seenMutation, err
 }
 
 // initWith pushes a new environment frame onto the planner's CTE name
 // environment, with all of the CTE clauses defined in the given tree.With.
 // It returns a resetter function that must be called once the enclosing scope
 // is finished resolving names, which pops the environment frame.
-func (p *planner) initWith(ctx context.Context, with *tree.With) (func(p *planner), error) {
+func (p *planner) initWith(ctx context.Context, with *tree.With) (func(p *planner) error, error) {
 	if with != nil {
 		frame := make(cteNameEnvironmentFrame)
 		p.curPlan.cteNameEnvironment = p.curPlan.cteNameEnvironment.push(frame)

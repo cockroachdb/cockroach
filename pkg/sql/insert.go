@@ -60,14 +60,23 @@ var _ autoCommitNode = &insertNode{}
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *planner) Insert(
 	ctx context.Context, n *tree.Insert, desiredTypes []types.T,
-) (planNode, error) {
+) (result planNode, resultErr error) {
 	// CTE analysis.
 	resetter, err := p.initWith(ctx, n.With)
 	if err != nil {
 		return nil, err
 	}
 	if resetter != nil {
-		defer resetter(p)
+		defer func() {
+			if cteErr := resetter(p); cteErr != nil && resultErr == nil {
+				// If no error was found in the inner planning but a CTE error
+				// is occurring during the final checks on the way back from
+				// the recursion, use that error as final error for this
+				// stage.
+				resultErr = cteErr
+				result = nil
+			}
+		}()
 	}
 
 	tracing.AnnotateTrace()
