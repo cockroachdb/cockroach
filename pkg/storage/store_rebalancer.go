@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"go.etcd.io/etcd/raft"
 )
 
 const (
@@ -124,10 +125,11 @@ const (
 // will best accomplish the store-level goals.
 type StoreRebalancer struct {
 	log.AmbientContext
-	metrics      StoreRebalancerMetrics
-	st           *cluster.Settings
-	rq           *replicateQueue
-	replRankings *replicaRankings
+	metrics         StoreRebalancerMetrics
+	st              *cluster.Settings
+	rq              *replicateQueue
+	replRankings    *replicaRankings
+	getRaftStatusFn func(replica *Replica) *raft.Status
 }
 
 // NewStoreRebalancer creates a StoreRebalancer to work in tandem with the
@@ -144,6 +146,9 @@ func NewStoreRebalancer(
 		st:             st,
 		rq:             rq,
 		replRankings:   replRankings,
+		getRaftStatusFn: func(replica *Replica) *raft.Status {
+			return replica.RaftStatus()
+		},
 	}
 	sr.AddLogTag("store-rebalancer", nil)
 	sr.rq.store.metrics.registry.AddMetricStruct(&sr.metrics)
@@ -407,6 +412,8 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			return iQPS < jQPS
 		})
 
+		var raftStatus *raft.Status
+
 		for _, candidate := range replicas {
 			if candidate.StoreID == localDesc.StoreID {
 				continue
@@ -417,11 +424,21 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 				continue
 			}
 
+			if raftStatus == nil {
+				raftStatus = sr.getRaftStatusFn(replWithStats.repl)
+			}
+			if replicaIsBehind(raftStatus, candidate.ReplicaID) {
+				log.VEventf(ctx, 3, "%v is behind or this store isn't the raft leader; raftStatus: %v",
+					candidate, raftStatus)
+				continue
+			}
+
 			zone, err := sysCfg.GetZoneConfigForKey(desc.StartKey)
 			if err != nil {
 				log.Error(ctx, err)
 				return replicaWithStats{}, roachpb.ReplicaDescriptor{}, considerForRebalance
 			}
+
 			preferred := sr.rq.allocator.preferredLeaseholders(zone, desc.Replicas)
 			if len(preferred) > 0 && !storeHasReplica(candidate.StoreID, preferred) {
 				log.VEventf(ctx, 3, "s%d not a preferred leaseholder; preferred: %v", candidate.StoreID, preferred)
@@ -593,7 +610,25 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 		// RelocateRange transfers the lease to the first provided target.
 		newLeaseIdx := 0
 		newLeaseQPS := math.MaxFloat64
+		var raftStatus *raft.Status
 		for i := 0; i < len(targets); i++ {
+			// Ensure we don't transfer the lease to an existing replica that is behind
+			// in processing its raft log.
+			var replicaID roachpb.ReplicaID
+			for _, replica := range desc.Replicas {
+				if replica.StoreID == targets[i].StoreID {
+					replicaID = replica.ReplicaID
+				}
+			}
+			if replicaID != 0 {
+				if raftStatus == nil {
+					raftStatus = sr.getRaftStatusFn(replWithStats.repl)
+				}
+				if replicaIsBehind(raftStatus, replicaID) {
+					continue
+				}
+			}
+
 			storeDesc, ok := storeMap[targets[i].StoreID]
 			if ok && storeDesc.Capacity.QueriesPerSecond < newLeaseQPS {
 				newLeaseIdx = i
