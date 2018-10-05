@@ -1346,6 +1346,10 @@ func (ds *DistSender) sendToReplicas(
 				}
 			}
 		} else {
+			// NB: This section of code may have unfortunate performance implications. If we
+			// exit the below type switch with propagateError remaining at `false`, we'll try
+			// more replicas. That may succeed and future requests might do the same thing over
+			// and over again, adding needless round-trips to the earlier replicas.
 			propagateError := false
 			switch tErr := br.Error.GetDetail().(type) {
 			case nil:
@@ -1353,6 +1357,26 @@ func (ds *DistSender) sendToReplicas(
 			case *roachpb.StoreNotFoundError, *roachpb.NodeUnavailableError:
 				// These errors are likely to be unique to the replica that reported
 				// them, so no action is required before the next retry.
+			case *roachpb.RangeNotFoundError:
+				// The store we routed to doesn't have this replica. This can happen when
+				// our descriptor is outright outdated, but it can also be caused a replica
+				// that has just been added but needs a snapshot to be caught up.
+				//
+				// Evict this replica from the lease holder cache, if applicable, and try
+				// the next replica. It is important that we do the latter, for the next
+				// retry might otherwise try the same replica again (assuming the replica is
+				// still in the descriptor), looping endlessly until the replica is caught
+				// up (which may never happen if the target range is dormant).
+				if tErr.StoreID != 0 {
+					cachedStoreID, found := ds.leaseHolderCache.Lookup(ctx, tErr.RangeID)
+					match := cachedStoreID == tErr.StoreID
+					evicting := found && match
+					log.Eventf(ctx, "evicting leaseholder s%d for r%d after RangeNotFound: %t (found=%t, match=%t)", tErr.StoreID, tErr.RangeID, evicting, found, match)
+					if evicting {
+						ds.leaseHolderCache.Update(ctx, tErr.RangeID, 0 /* evict */)
+					}
+
+				}
 			case *roachpb.NotLeaseHolderError:
 				ds.metrics.NotLeaseHolderErrCount.Inc(1)
 				if lh := tErr.LeaseHolder; lh != nil {
