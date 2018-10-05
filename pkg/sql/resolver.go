@@ -178,8 +178,8 @@ func ResolveTargetObject(
 	}
 	if !found {
 		return nil, pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
-			"no schema has been selected to create %q in",
-			tree.ErrString(tn)).SetHintf("verify that the current database and search_path are valid")
+			"cannot create %q because the target database or schema does not exist",
+			tree.ErrString(tn)).SetHintf("verify that the current database and search_path are valid and/or the target database exists")
 	}
 	if tn.Schema() != tree.PublicSchema {
 		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
@@ -432,7 +432,7 @@ func expandIndexName(
 		if !found {
 			if requireTable {
 				return nil, nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
-					"no schema has been selected to search index: %q",
+					"schema or database was not found while searching index: %q",
 					tree.ErrString(&index.Index)).SetHintf(
 					"check the current database and search_path are valid")
 			}

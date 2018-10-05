@@ -19,10 +19,11 @@ import { LocalSetting } from "src/redux/localsettings";
 import { SortSetting } from "src/views/shared/components/sortabletable";
 import { SortedTable } from "src/views/shared/components/sortedtable";
 import { LongToMoment } from "src/util/convert";
-import { BytesWithPrecision } from "src/util/format";
 import { INodeStatus, MetricConstants, BytesUsed } from "src/util/proto";
 import { FixLong } from "src/util/fixLong";
-import { Percentage } from "src/util/format";
+
+import { BytesBarChart } from "./barChart";
+import "./nodes.styl";
 
 const liveNodesSortSetting = new LocalSetting<AdminUIState, SortSetting>(
   "nodes/live_sort_setting", (s) => s.localSettings,
@@ -62,126 +63,110 @@ class LiveNodeList extends React.Component<NodeCategoryListProps, {}> {
     }
 
     return (
-      <div>
+      <div className="embedded-table">
         <section className="section section--heading">
           <h2>Live Nodes</h2>
         </section>
-        <section className="section">
-          <NodeSortedTable
-            data={statuses}
-            sortSetting={sortSetting}
-            onChangeSortSetting={(setting) => this.props.setSort(setting)}
-            columns={[
-              // Node ID column.
-              {
-                title: "ID",
-                cell: (ns) => `n${ns.desc.node_id}`,
-                sort: (ns) => ns.desc.node_id,
+        <NodeSortedTable
+          data={statuses}
+          sortSetting={sortSetting}
+          onChangeSortSetting={(setting) => this.props.setSort(setting)}
+          columns={[
+            // Node ID column.
+            {
+              title: "ID",
+              cell: (ns) => `n${ns.desc.node_id}`,
+              sort: (ns) => ns.desc.node_id,
+            },
+            // Node address column - displays the node address, links to the
+            // node-specific page for this node.
+            {
+              title: "Address",
+              cell: (ns) => {
+                const status = nodesSummary.livenessStatusByNodeID[ns.desc.node_id] || LivenessStatus.LIVE;
+                const s = livenessNomenclature(status);
+                let tooltip: string;
+                switch (status) {
+                  case LivenessStatus.LIVE:
+                    tooltip = "This node is currently healthy.";
+                    break;
+                  case LivenessStatus.DECOMMISSIONING:
+                    tooltip = "This node is currently being decommissioned.";
+                    break;
+                  default:
+                    tooltip = "This node has not recently reported as being live. " +
+                      "It may not be functioning correctly, but no automatic action has yet been taken.";
+                }
+                return (
+                  <div className="sort-table__unbounded-column">
+                    <div className={"icon-circle-filled node-status-icon node-status-icon--" + s} title={tooltip} />
+                    <Link to={`/node/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
+                  </div>
+                );
               },
-              // Node address column - displays the node address, links to the
-              // node-specific page for this node.
-              {
-                title: "Address",
-                cell: (ns) => {
-                  const status = nodesSummary.livenessStatusByNodeID[ns.desc.node_id] || LivenessStatus.LIVE;
-                  const s = livenessNomenclature(status);
-                  let tooltip: string;
-                  switch (status) {
-                    case LivenessStatus.LIVE:
-                      tooltip = "This node is currently healthy.";
-                      break;
-                    case LivenessStatus.DECOMMISSIONING:
-                      tooltip = "This node is currently being decommissioned.";
-                      break;
-                    default:
-                      tooltip = "This node has not recently reported as being live. " +
-                        "It may not be functioning correctly, but no automatic action has yet been taken.";
-                  }
-                  return (
-                    <div className="sort-table__unbounded-column">
-                      <div className={"icon-circle-filled node-status-icon node-status-icon--" + s} title={tooltip} />
-                      <Link to={`/node/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
-                    </div>
-                  );
-                },
-                sort: (ns) => ns.desc.node_id,
-                // TODO(mrtracy): Consider if there is a better way to use BEM
-                // style CSS in cases like this; it is a bit awkward to write out
-                // the entire modifier class here, but it might not be better to
-                // construct the full BEM class in the table component itself.
-                className: "sort-table__cell--link",
+              sort: (ns) => ns.desc.node_id,
+              // TODO(mrtracy): Consider if there is a better way to use BEM
+              // style CSS in cases like this; it is a bit awkward to write out
+              // the entire modifier class here, but it might not be better to
+              // construct the full BEM class in the table component itself.
+              className: "sort-table__cell--link",
+            },
+            // Started at - displays the time that the node started.
+            {
+              title: "Uptime",
+              cell: (ns) => {
+                const startTime = LongToMoment(ns.started_at);
+                return moment.duration(startTime.diff(moment())).humanize();
               },
-              // Started at - displays the time that the node started.
-              {
-                title: "Uptime",
-                cell: (ns) => {
-                  const startTime = LongToMoment(ns.started_at);
-                  return moment.duration(startTime.diff(moment())).humanize();
-                },
-                sort: (ns) => ns.started_at,
-                className: "sort-table__cell--right-aligned-stats",
+              sort: (ns) => ns.started_at,
+              className: "sort-table__cell--right-aligned-stats",
+            },
+            // Replicas - displays the total number of replicas on the node.
+            {
+              title: "Replicas",
+              cell: (ns) => ns.metrics[MetricConstants.replicas].toString(),
+              sort: (ns) => ns.metrics[MetricConstants.replicas],
+              className: "sort-table__cell--right-aligned-stat",
+            },
+            // CPUs - the number of CPUs on this node
+            {
+              title: "CPUs",
+              cell: (ns) => ns.num_cpus,
+              className: "sort-table__cell--right-aligned-stat",
+            },
+            // Used Capacity - displays the total persisted bytes maintained by the node.
+            {
+              title: "Capacity Usage",
+              cell: (ns) => {
+                const { usable } = nodeCapacityStats(ns);
+                const used = BytesUsed(ns);
+                return <BytesBarChart used={used} usable={usable} />;
               },
-              // Replicas - displays the total number of replicas on the node.
-              {
-                title: "Replicas",
-                cell: (ns) => ns.metrics[MetricConstants.replicas].toString(),
-                sort: (ns) => ns.metrics[MetricConstants.replicas],
-                className: "sort-table__cell--right-aligned-stat",
+              sort: (ns) => BytesUsed(ns) / nodeCapacityStats(ns).usable,
+            },
+            // Mem Usage - total memory being used on this node.
+            {
+              title: "Mem Usage",
+              cell: (ns) => {
+                const used = ns.metrics[MetricConstants.rss];
+                const available = FixLong(ns.total_system_memory).toNumber();
+                return <BytesBarChart used={used} usable={available} />;
               },
-              // CPUs - the number of CPUs on this node
-              {
-                title: "CPUs",
-                cell: (ns) => ns.num_cpus,
-                className: "sort-table__cell--right-aligned-stat",
-              },
-              // Used Capacity - displays the total persisted bytes maintained by the node.
-              {
-                title: "Capacity Usage",
-                cell: (ns) => {
-                  const { usable } = nodeCapacityStats(ns);
-                  const used = BytesUsed(ns);
-                  return (
-                    <span title={`Total: ${BytesWithPrecision(usable, 0)}`}>
-                      {BytesWithPrecision(used, 0)}
-                      {" "}
-                      ({Percentage(used, usable)})
-                    </span>
-                  );
-                },
-                sort: (ns) => BytesUsed(ns),
-                className: "sort-table__cell--right-aligned-stat",
-              },
-              // Mem Usage - total memory being used on this node.
-              {
-                title: "Mem Usage",
-                cell: (ns) => {
-                  const used = ns.metrics[MetricConstants.rss];
-                  const available = FixLong(ns.total_system_memory).toNumber();
-                  return (
-                    <span title={`Total: ${BytesWithPrecision(available, 0)}`}>
-                      {BytesWithPrecision(used, 0)}
-                      {" "}
-                      ({Percentage(used, available)})
-                    </span>
-                  );
-                },
-                sort: (ns) => ns.metrics[MetricConstants.rss],
-                className: "sort-table__cell--right-aligned-stat",
-              },
-              // Version - the currently running version of cockroach.
-              {
-                title: "Version",
-                cell: (ns) => ns.build_info.tag,
-                sort: (ns) => ns.build_info.tag,
-              },
-              // Logs - a link to the logs data for this node.
-              {
-                title: "Logs",
-                cell: (ns) => <Link to={`/node/${ns.desc.node_id}/logs`}>Logs</Link>,
-                className: "expand-link",
-              },
-            ]} />
-        </section>
+              sort: (ns) => ns.metrics[MetricConstants.rss] / FixLong(ns.total_system_memory).toNumber(),
+            },
+            // Version - the currently running version of cockroach.
+            {
+              title: "Version",
+              cell: (ns) => ns.build_info.tag,
+              sort: (ns) => ns.build_info.tag,
+            },
+            // Logs - a link to the logs data for this node.
+            {
+              title: "Logs",
+              cell: (ns) => <Link to={`/node/${ns.desc.node_id}/logs`}>Logs</Link>,
+              className: "expand-link",
+            },
+          ]} />
       </div>
     );
   }
@@ -208,69 +193,67 @@ class NotLiveNodeList extends React.Component<NotLiveNodeListProps, {}> {
     const statusName = _.capitalize(LivenessStatus[status]);
 
     return (
-      <div>
+      <div className="embedded-table">
         <section className="section section--heading">
           <h2>{`${statusName} Nodes`}</h2>
         </section>
-        <section className="section">
-          <NodeSortedTable
-            data={statuses}
-            sortSetting={sortSetting}
-            onChangeSortSetting={(setting) => this.props.setSort(setting)}
-            columns={[
-              // Node ID column.
-              {
-                title: "ID",
-                cell: (ns) => `n${ns.desc.node_id}`,
-                sort: (ns) => ns.desc.node_id,
+        <NodeSortedTable
+          data={statuses}
+          sortSetting={sortSetting}
+          onChangeSortSetting={(setting) => this.props.setSort(setting)}
+          columns={[
+            // Node ID column.
+            {
+              title: "ID",
+              cell: (ns) => `n${ns.desc.node_id}`,
+              sort: (ns) => ns.desc.node_id,
+            },
+            // Node address column - displays the node address, links to the
+            // node-specific page for this node.
+            {
+              title: "Address",
+              cell: (ns) => {
+                return (
+                  <div>
+                    <div
+                      className="icon-circle-filled node-status-icon node-status-icon--dead"
+                      title={
+                        "This node has not reported as live for a significant period and is considered dead. " +
+                        "The cut-off period for dead nodes is configurable as cluster setting " +
+                        "'server.time_until_store_dead'"
+                      }
+                    />
+                    <Link to={`/node/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
+                  </div>
+                );
               },
-              // Node address column - displays the node address, links to the
-              // node-specific page for this node.
-              {
-                title: "Address",
-                cell: (ns) => {
-                  return (
-                    <div>
-                      <div
-                        className="icon-circle-filled node-status-icon node-status-icon--dead"
-                        title={
-                          "This node has not reported as live for a significant period and is considered dead. " +
-                          "The cut-off period for dead nodes is configurable as cluster setting " +
-                          "'server.time_until_store_dead'"
-                        }
-                      />
-                      <Link to={`/node/${ns.desc.node_id}`}>{ns.desc.address.address_field}</Link>
-                    </div>
-                  );
-                },
-                sort: (ns) => ns.desc.node_id,
-                // TODO(mrtracy): Consider if there is a better way to use BEM
-                // style CSS in cases like this; it is a bit awkward to write out
-                // the entire modifier class here, but it might not be better to
-                // construct the full BEM class in the table component itself.
-                className: "sort-table__cell--link",
-              },
-              // Down/decommissioned since - displays how long the node has been
-              // considered dead.
-              {
-                title: `${statusName} Since`,
-                cell: (ns) => {
-                  const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
-                  if (!liveness) {
-                    return "no information";
-                  }
+              sort: (ns) => ns.desc.node_id,
+              // TODO(mrtracy): Consider if there is a better way to use BEM
+              // style CSS in cases like this; it is a bit awkward to write out
+              // the entire modifier class here, but it might not be better to
+              // construct the full BEM class in the table component itself.
+              className: "sort-table__cell--link",
+            },
+            // Down/decommissioned since - displays how long the node has been
+            // considered dead.
+            {
+              title: `${statusName} Since`,
+              cell: (ns) => {
+                const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
+                if (!liveness) {
+                  return "no information";
+                }
 
-                  const deadTime = liveness.expiration.wall_time;
-                  const deadMoment = LongToMoment(deadTime);
-                  return `${moment.duration(deadMoment.diff(moment())).humanize()} ago`;
-                },
-                sort: (ns) => {
-                  const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
-                  return liveness.expiration.wall_time;
-                },
+                const deadTime = liveness.expiration.wall_time;
+                const deadMoment = LongToMoment(deadTime);
+                return `${moment.duration(deadMoment.diff(moment())).humanize()} ago`;
               },
-            ]} />
-        </section>
+              sort: (ns) => {
+                const liveness = nodesSummary.livenessByNodeID[ns.desc.node_id];
+                return liveness.expiration.wall_time;
+              },
+            },
+          ]} />
       </div>
     );
   }
