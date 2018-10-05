@@ -74,11 +74,9 @@ type DistSQLPlanner struct {
 	st *cluster.Settings
 	// The node descriptor for the gateway node that initiated this query.
 	nodeDesc     roachpb.NodeDescriptor
-	rpcContext   *rpc.Context
 	stopper      *stop.Stopper
 	distSQLSrv   *distsqlrun.ServerImpl
 	spanResolver distsqlplan.SpanResolver
-	testingKnobs DistSQLPlannerTestingKnobs
 
 	// metadataTestTolerance is the minimum level required to plan metadata test
 	// processors.
@@ -90,10 +88,12 @@ type DistSQLPlanner struct {
 
 	// gossip handle used to check node version compatibility.
 	gossip *gossip.Gossip
-	// liveness is used to avoid planning on down nodes.
-	liveness *storage.NodeLiveness
 
 	nodeDialer *nodedialer.Dialer
+
+	// nodeHealth encapsulates the various node health checks to avoid planning
+	// on unhealthy nodes.
+	nodeHealth distSQLNodeHealth
 }
 
 const resolverPolicy = distsqlplan.BinPackingLeaseHolderChoice
@@ -135,26 +135,36 @@ func NewDistSQLPlanner(
 	gossip *gossip.Gossip,
 	stopper *stop.Stopper,
 	liveness *storage.NodeLiveness,
-	testingKnobs DistSQLPlannerTestingKnobs,
 	nodeDialer *nodedialer.Dialer,
 ) *DistSQLPlanner {
 	if liveness == nil {
 		panic("must specify liveness")
 	}
 	dsp := &DistSQLPlanner{
-		planVersion:           planVersion,
-		st:                    st,
-		nodeDesc:              nodeDesc,
-		rpcContext:            rpcCtx,
-		stopper:               stopper,
-		distSQLSrv:            distSQLSrv,
-		gossip:                gossip,
-		spanResolver:          distsqlplan.NewSpanResolver(distSender, gossip, nodeDesc, resolverPolicy),
-		liveness:              liveness,
-		testingKnobs:          testingKnobs,
+		planVersion:  planVersion,
+		st:           st,
+		nodeDesc:     nodeDesc,
+		stopper:      stopper,
+		distSQLSrv:   distSQLSrv,
+		spanResolver: distsqlplan.NewSpanResolver(distSender, gossip, nodeDesc, resolverPolicy),
+		gossip:       gossip,
+		nodeDialer:   nodeDialer,
+		nodeHealth: distSQLNodeHealth{
+			gossip:     gossip,
+			connHealth: nodeDialer.ConnHealth,
+		},
 		metadataTestTolerance: distsqlrun.NoExplain,
-		nodeDialer:            nodeDialer,
 	}
+	// NB: not all tests populate a NodeLiveness. Everything using the
+	// proper constructor NewDistSQLPlanner will, though.
+	if liveness != nil {
+		dsp.nodeHealth.isLive = liveness.IsLive
+	} else {
+		dsp.nodeHealth.isLive = func(_ roachpb.NodeID) (bool, error) {
+			return true, nil
+		}
+	}
+
 	dsp.initRunners()
 	return dsp
 }
@@ -591,40 +601,13 @@ type SpanPartition struct {
 	Spans roachpb.Spans
 }
 
-func (dsp *DistSQLPlanner) checkNodeHealth(
-	ctx context.Context, nodeID roachpb.NodeID, addr string,
-) error {
-	// NB: not all tests populate a NodeLiveness. Everything using the
-	// proper constructor NewDistSQLPlanner will, though.
-	isLive := func(_ roachpb.NodeID) (bool, error) {
-		return true, nil
-	}
-	if dsp.liveness != nil {
-		isLive = dsp.liveness.IsLive
-	}
-	return checkNodeHealth(ctx, nodeID, addr, dsp.testingKnobs, dsp.gossip, dsp.rpcContext.ConnHealth, isLive)
+type distSQLNodeHealth struct {
+	gossip     *gossip.Gossip
+	connHealth func(roachpb.NodeID) error
+	isLive     func(roachpb.NodeID) (bool, error)
 }
 
-func checkNodeHealth(
-	ctx context.Context,
-	nodeID roachpb.NodeID,
-	addr string,
-	knobs DistSQLPlannerTestingKnobs,
-	g *gossip.Gossip,
-	connHealth func(string) error,
-	isLive func(roachpb.NodeID) (bool, error),
-) error {
-	// Check if the target's node descriptor is gossiped. If it isn't, the node
-	// is definitely gone and has been for a while.
-	//
-	// TODO(tschottdorf): it's not clear that this adds anything to the liveness
-	// check below. The node descriptor TTL is an hour as of 03/2018.
-	if _, err := g.GetNodeIDAddress(nodeID); err != nil {
-		log.VEventf(ctx, 1, "not using n%d because gossip doesn't know about it. "+
-			"It might have gone away from the cluster. Gossip said: %s.", nodeID, err)
-		return err
-	}
-
+func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) error {
 	{
 		// NB: as of #22658, ConnHealth does not work as expected; see the
 		// comment within. We still keep this code for now because in
@@ -633,13 +616,7 @@ func checkNodeHealth(
 		// artifact of rpcContext's reconnection mechanism at the time of
 		// writing). This is better than having it used in 100% of cases
 		// (until the liveness check below kicks in).
-		var err error
-		if knobs.OverrideHealthCheck != nil {
-			err = knobs.OverrideHealthCheck(nodeID, addr)
-		} else {
-			err = connHealth(addr)
-		}
-
+		err := h.connHealth(nodeID)
 		if err != nil && err != rpc.ErrNotHeartbeated {
 			// This host is known to be unhealthy. Don't use it (use the gateway
 			// instead). Note: this can never happen for our nodeID (which
@@ -649,7 +626,7 @@ func checkNodeHealth(
 		}
 	}
 	{
-		live, err := isLive(nodeID)
+		live, err := h.isLive(nodeID)
 		if err == nil && !live {
 			err = errors.New("node is not live")
 		}
@@ -660,7 +637,7 @@ func checkNodeHealth(
 
 	// Check that the node is not draining.
 	drainingInfo := &distsqlrun.DistSQLDrainingInfo{}
-	if err := g.GetInfoProto(gossip.MakeDistSQLDrainingKey(nodeID), drainingInfo); err != nil {
+	if err := h.gossip.GetInfoProto(gossip.MakeDistSQLDrainingKey(nodeID), drainingInfo); err != nil {
 		// Because draining info has no expiration, an error
 		// implies that we have not yet received a node's
 		// draining information. Since this information is
@@ -757,7 +734,7 @@ func (dsp *DistSQLPlanner) PartitionSpans(
 				addr, inAddrMap := planCtx.NodeAddresses[nodeID]
 				if !inAddrMap {
 					addr = replInfo.NodeDesc.Address.String()
-					if err := dsp.checkNodeHealth(ctx, nodeID, addr); err != nil {
+					if err := dsp.nodeHealth.check(ctx, nodeID); err != nil {
 						addr = ""
 					}
 					if err == nil && addr != "" {
@@ -1028,15 +1005,14 @@ func (dsp *DistSQLPlanner) CheckNodeHealthAndVersion(
 	planCtx *PlanningCtx, desc *roachpb.NodeDescriptor,
 ) error {
 	nodeID := desc.NodeID
-	addr := desc.Address.String()
 	var err error
 
-	if err = dsp.checkNodeHealth(planCtx.ctx, nodeID, addr); err != nil {
+	if err = dsp.nodeHealth.check(planCtx.ctx, nodeID); err != nil {
 		err = errors.New("unhealthy")
 	} else if !dsp.nodeVersionIsCompatible(nodeID, dsp.planVersion) {
 		err = errors.New("incompatible version")
 	} else {
-		planCtx.NodeAddresses[nodeID] = addr
+		planCtx.NodeAddresses[nodeID] = desc.Address.String()
 	}
 	return err
 }
