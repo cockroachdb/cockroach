@@ -3,7 +3,7 @@
 statement ok
 SET DATABASE = ""
 
-statement error no schema has been selected to create "a" in
+statement error cannot create "a" because the target database or schema does not exist
 CREATE TABLE a (id INT PRIMARY KEY)
 
 statement error invalid table name: test.""
