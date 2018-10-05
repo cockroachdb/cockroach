@@ -106,7 +106,7 @@ create_stmt ::=
 	| create_ddl_stmt
 
 delete_stmt ::=
-	opt_with_clause 'DELETE' 'FROM' relation_expr_opt_alias where_clause opt_sort_clause opt_limit_clause returning_clause
+	opt_with_clause 'DELETE' 'FROM' table_name_expr_opt_alias_idx where_clause opt_sort_clause opt_limit_clause returning_clause
 
 drop_stmt ::=
 	drop_ddl_stmt
@@ -179,7 +179,7 @@ truncate_stmt ::=
 	'TRUNCATE' opt_table relation_expr_list opt_drop_behavior
 
 update_stmt ::=
-	opt_with_clause 'UPDATE' relation_expr_opt_alias 'SET' set_clause_list where_clause opt_sort_clause opt_limit_clause returning_clause
+	opt_with_clause 'UPDATE' table_name_expr_opt_alias_idx 'SET' set_clause_list where_clause opt_sort_clause opt_limit_clause returning_clause
 
 upsert_stmt ::=
 	opt_with_clause 'UPSERT' 'INTO' insert_target insert_rest returning_clause
@@ -316,10 +316,10 @@ opt_with_clause ::=
 	with_clause
 	| 
 
-relation_expr_opt_alias ::=
-	relation_expr
-	| relation_expr table_alias_name
-	| relation_expr 'AS' table_alias_name
+table_name_expr_opt_alias_idx ::=
+	table_name_expr_with_index
+	| table_name_expr_with_index table_alias_name
+	| table_name_expr_with_index 'AS' table_alias_name
 
 where_clause ::=
 	'WHERE' a_expr
@@ -902,11 +902,8 @@ create_sequence_stmt ::=
 with_clause ::=
 	'WITH' cte_list
 
-relation_expr ::=
-	table_name
-	| table_name '*'
-	| 'ONLY' table_name
-	| 'ONLY' '(' table_name ')'
+table_name_expr_with_index ::=
+	table_name opt_index_flags
 
 sort_clause ::=
 	'ORDER' 'BY' sortby_list
@@ -1066,6 +1063,12 @@ opt_partition ::=
 
 partition_name ::=
 	unrestricted_name
+
+relation_expr ::=
+	table_name
+	| table_name '*'
+	| 'ONLY' table_name
+	| 'ONLY' '(' table_name ')'
 
 set_clause ::=
 	single_set_clause
@@ -1239,6 +1242,12 @@ opt_sequence_option_list ::=
 
 cte_list ::=
 	( common_table_expr ) ( ( ',' common_table_expr ) )*
+
+opt_index_flags ::=
+	'@' index_name
+	| '@' '[' iconst64 ']'
+	| '@' '{' index_flags_param_list '}'
+	| 
 
 sortby_list ::=
 	( sortby ) ( ( ',' sortby ) )*
@@ -1560,6 +1569,12 @@ partition_by ::=
 common_table_expr ::=
 	table_alias_name opt_column_list 'AS' '(' preparable_stmt ')'
 
+iconst64 ::=
+	'ICONST'
+
+index_flags_param_list ::=
+	( index_flags_param ) ( ( ',' index_flags_param ) )*
+
 sortby ::=
 	a_expr opt_asc_desc
 	| 'PRIMARY' 'KEY' table_name opt_asc_desc
@@ -1620,9 +1635,6 @@ column_path_with_star ::=
 	| name '.' unrestricted_name '.' unrestricted_name '.' '*'
 	| name '.' unrestricted_name '.' '*'
 	| name '.' '*'
-
-iconst64 ::=
-	'ICONST'
 
 func_expr ::=
 	func_application filter_clause over_clause
@@ -1794,6 +1806,10 @@ list_partitions ::=
 range_partitions ::=
 	( range_partition ) ( ( ',' range_partition ) )*
 
+index_flags_param ::=
+	'FORCE_INDEX' '=' index_name
+	| 'NO_INDEX_JOIN'
+
 col_qualification ::=
 	'CONSTRAINT' constraint_name col_qualification_elem
 	| col_qualification_elem
@@ -1929,12 +1945,6 @@ from_list ::=
 window_definition_list ::=
 	( window_definition ) ( ( ',' window_definition ) )*
 
-opt_index_flags ::=
-	'@' index_name
-	| '@' '[' iconst64 ']'
-	| '@' '{' index_flags_param_list '}'
-	| 
-
 opt_ordinality ::=
 	'WITH' 'ORDINALITY'
 	| 
@@ -2063,9 +2073,6 @@ char_aliases ::=
 window_definition ::=
 	window_name 'AS' window_specification
 
-index_flags_param_list ::=
-	( index_flags_param ) ( ( ',' index_flags_param ) )*
-
 join_type ::=
 	'FULL' join_outer
 	| 'LEFT' join_outer
@@ -2137,10 +2144,6 @@ trim_list ::=
 	a_expr 'FROM' expr_list
 	| 'FROM' expr_list
 	| expr_list
-
-index_flags_param ::=
-	'FORCE_INDEX' '=' index_name
-	| 'NO_INDEX_JOIN'
 
 join_outer ::=
 	'OUTER'
