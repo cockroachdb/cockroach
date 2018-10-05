@@ -742,7 +742,21 @@ func (r *registry) runAsync(
 
 		if !dryrun {
 			if c == nil {
-				c = newCluster(ctx, t, t.spec.Nodes)
+				if clusterName == "" {
+					var opt clusterOpt
+					if local {
+						opt = localCluster
+					} else {
+						opt = remoteCluster
+					}
+					c = newCluster(ctx, t, t.spec.Nodes, opt)
+				} else {
+					opt := validate
+					if testingSkipValidation {
+						opt = skipValidation
+					}
+					c = attachToExistingCluster(ctx, clusterName, t, t.spec.Nodes, opt)
+				}
 				if c != nil {
 					defer func() {
 						if !debugEnabled || !t.Failed() {
