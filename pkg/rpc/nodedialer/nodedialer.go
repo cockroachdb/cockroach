@@ -149,7 +149,9 @@ func (n *Dialer) DialInternalClient(
 	// ConnHealth when scheduling processors, but can then see attempts to send
 	// RPCs fail when dial fails due to an open breaker. Reset the breaker here
 	// as a stop-gap before the reconciliation occurs.
-	n.getBreaker(nodeID).Reset()
+	if breaker := n.getBreaker(nodeID); breaker.Tripped() {
+		breaker.Reset()
+	}
 	return ctx, roachpb.NewInternalClient(conn), nil
 }
 
