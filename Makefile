@@ -809,9 +809,9 @@ testbuild:
 testshort: override TESTFLAGS += -short
 
 testrace: ## Run tests with the Go race detector enabled.
-testrace stressrace: override GOFLAGS += -race
-testrace stressrace: export GORACE := halt_on_error=1
-testrace stressrace: TESTTIMEOUT := $(RACETIMEOUT)
+testrace stressrace roachprod-stressrace: override GOFLAGS += -race
+testrace stressrace roachprod-stressrace: export GORACE := halt_on_error=1
+testrace stressrace roachprod-stressrace: TESTTIMEOUT := $(RACETIMEOUT)
 
 # Directory scans in the builder image are excruciatingly slow when running
 # Docker for Mac, so we filter out the 20k+ UI dependencies that are
@@ -838,11 +838,11 @@ stressrace: ## Run tests under stress with the race detector enabled.
 stress stressrace:
 	$(xgo) test $(GOFLAGS) -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
 
-.PHONE: roachprod-stress
-roachprod-stress: bin/roachprod-stress
+.PHONE: roachprod-stress roachprod-stressrace
+roachprod-stress roachprod-stressrace: bin/roachprod-stress
 	# The bootstrap target creates, among other things, ./bin/stress.
 	build/builder.sh make bin/.bootstrap
-	build/builder.sh make test GOFLAGS="-i -v -c -o $(notdir $(PKG)).test" PKG=$(PKG)
+	build/builder.sh make test GOFLAGS="$(GOFLAGS) -v -c -o $(notdir $(PKG)).test" PKG=$(PKG)
 	@if [ -z "$(CLUSTER)" ]; then \
 	  echo "ERROR: missing or empty CLUSTER"; \
 	else \
