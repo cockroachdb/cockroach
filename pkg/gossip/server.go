@@ -151,7 +151,7 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 
 	reply := new(Response)
 
-	for {
+	for init := true; ; init = false {
 		s.mu.Lock()
 		// Store the old ready so that if it gets replaced with a new one
 		// (once the lock is released) and is closed, we still trigger the
@@ -162,7 +162,10 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 			args.HighWaterStamps = make(map[roachpb.NodeID]int64)
 		}
 
-		if infoCount := len(delta); infoCount > 0 {
+		// Send a response if this is the first response on the connection, or if
+		// there are deltas to send. The first condition is necessary to make sure
+		// the remote node receives our high water stamps in a timely fashion.
+		if infoCount := len(delta); init || infoCount > 0 {
 			if log.V(1) {
 				log.Infof(ctx, "returning %d info(s) to n%d: %s",
 					infoCount, args.NodeID, extractKeys(delta))
