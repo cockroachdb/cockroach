@@ -39,6 +39,10 @@ var (
 	// testingLargestIDHook is a function used to bypass GetLargestObjectID
 	// in tests.
 	testingLargestIDHook func(uint32) uint32
+
+	// SplitAtIDHook is a function that is used to check if a given
+	// descriptor comes from a database or a table view.
+	SplitAtIDHook func(uint32, *SystemConfig) bool
 )
 
 type zoneEntry struct {
@@ -50,18 +54,24 @@ type zoneEntry struct {
 // entry for every system descriptor (e.g. databases, tables, zone
 // configs). It also has a map from object ID to unmarshaled zone
 // config for caching.
+// The shouldSplitCache caches information about the descriptor ID,
+// saying whether or not it should be considered for splitting at all.
+// A database descriptor or a table view descriptor are examples of IDs
+// that should not be considered for splits.
 type SystemConfig struct {
 	SystemConfigEntries
 	mu struct {
 		syncutil.RWMutex
-		cache map[uint32]zoneEntry
+		zoneCache        map[uint32]zoneEntry
+		shouldSplitCache map[uint32]bool
 	}
 }
 
 // NewSystemConfig returns an initialized instance of SystemConfig.
 func NewSystemConfig() *SystemConfig {
 	sc := &SystemConfig{}
-	sc.mu.cache = map[uint32]zoneEntry{}
+	sc.mu.zoneCache = map[uint32]zoneEntry{}
+	sc.mu.shouldSplitCache = map[uint32]bool{}
 	return sc
 }
 
@@ -233,7 +243,7 @@ func (s *SystemConfig) getZoneConfigForKey(id uint32, keySuffix []byte) (*ZoneCo
 	hook := ZoneConfigHook
 	testingLock.Unlock()
 	s.mu.RLock()
-	entry, ok := s.mu.cache[id]
+	entry, ok := s.mu.zoneCache[id]
 	s.mu.RUnlock()
 	if !ok {
 		if zone, placeholder, cache, err := hook(s, id); err != nil {
@@ -242,7 +252,7 @@ func (s *SystemConfig) getZoneConfigForKey(id uint32, keySuffix []byte) (*ZoneCo
 			entry = zoneEntry{zone: zone, placeholder: placeholder}
 			if cache {
 				s.mu.Lock()
-				s.mu.cache[id] = entry
+				s.mu.zoneCache[id] = entry
 				s.mu.Unlock()
 			}
 		}
@@ -331,7 +341,7 @@ func (s *SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RK
 		for id := startID; id <= endID; id++ {
 			tableKey := roachpb.RKey(keys.MakeTablePrefix(id))
 			// This logic is analogous to the well-commented static split logic above.
-			if startKey.Less(tableKey) {
+			if startKey.Less(tableKey) && s.shouldSplit(id) {
 				if tableKey.Less(endKey) {
 					return tableKey
 				}
@@ -390,4 +400,20 @@ func (s *SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RK
 // to zone configs.
 func (s *SystemConfig) NeedsSplit(startKey, endKey roachpb.RKey) bool {
 	return len(s.ComputeSplitKey(startKey, endKey)) > 0
+}
+
+// shouldSplit checks if the ID is eligible for a split at all.
+// It uses the internal cache to find a value, and tries to find
+// it using the hook if ID isn't found in the cache.
+func (s *SystemConfig) shouldSplit(ID uint32) bool {
+	s.mu.RLock()
+	shouldSplit, ok := s.mu.shouldSplitCache[ID]
+	s.mu.RUnlock()
+	if !ok {
+		shouldSplit = SplitAtIDHook(ID, s)
+		s.mu.Lock()
+		s.mu.shouldSplitCache[ID] = shouldSplit
+		s.mu.Unlock()
+	}
+	return shouldSplit
 }
