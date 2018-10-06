@@ -388,12 +388,15 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		jsonEnc = json.NewEncoder(jsonF)
 	}
 
+	everySecond := log.Every(time.Second)
 	for i := 0; ; {
 		select {
 		case err := <-errCh:
 			numErr++
 			if *tolerateErrors {
-				log.Error(ctx, err)
+				if everySecond.ShouldLog() {
+					log.Error(ctx, err)
+				}
 				continue
 			}
 			return err
