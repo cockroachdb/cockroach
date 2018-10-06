@@ -1,19 +1,18 @@
+import _ from "lodash";
 import React from "react";
 import Helmet from "react-helmet";
 import { withRouter, WithRouterProps } from "react-router";
 import { connect } from "react-redux";
 
 import { enqueueRange } from "src/util/api";
-import { AdminUIState } from "src/redux/state";
 import { cockroach } from "src/js/protos";
-import { getDataFromServer } from "src/util/dataFromServer";
 import Print from "src/views/reports/containers/range/print";
 
 import EnqueueRangeRequest = cockroach.server.serverpb.EnqueueRangeRequest;
 import EnqueueRangeResponse = cockroach.server.serverpb.EnqueueRangeResponse;
 
 interface EnqueueRangeProps {
-  handleEnqueueRange: (queue: string, rangeID: string, nodeID: string, skipShouldQueue: boolean) => Promise<EnqueueRangeResponse>;
+  handleEnqueueRange: (queue: string, rangeID: number, nodeID: number, skipShouldQueue: boolean) => Promise<EnqueueRangeResponse>;
 }
 
 interface EnqueueRangeState {
@@ -23,7 +22,6 @@ interface EnqueueRangeState {
   skipShouldQueue: boolean;
   response: EnqueueRangeResponse;
   error: Error;
-  // TODO: nodeID, skipShouldQueue
 }
 
 class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, EnqueueRangeState> {
@@ -34,6 +32,8 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
       rangeID: "",
       nodeID: "",
       skipShouldQueue: false,
+      response: null,
+      error: null,
     };
   }
 
@@ -60,9 +60,11 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
 
     this.props.handleEnqueueRange(
       this.state.queue,
-      this.state.rangeID,
-      this.state.nodeID,
-      this.state.skipShouldQueue
+      // These parseInts should succeed because <input type="number" />
+      // enforces numeric input. Otherwise they're NaN.
+      _.parseInt(this.state.rangeID),
+      _.parseInt(this.state.nodeID),
+      this.state.skipShouldQueue,
     ).then(
       (response) => {
         this.setState({ response: response, error: null });
@@ -127,7 +129,7 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
     return (
       <div>
         <Helmet>
-          <title>Login</title>
+          <title>Enqueue Range</title>
         </Helmet>
         <div className="content">
           <section className="section">
@@ -145,7 +147,7 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
                 />
                 <br />
                 <input
-                  type="text"
+                  type="number"
                   name="rangeID"
                   className="input-text"
                   onChange={this.handleUpdateRangeID}
@@ -154,7 +156,7 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
                 />
                 <br />
                 <input
-                  type="text"
+                  type="number"
                   name="nodeID"
                   className="input-text"
                   onChange={this.handleUpdateNodeID}
@@ -194,11 +196,11 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
 
 // tslint:disable-next-line:variable-name
 const EnqueueRangeConnected = connect(
-  (state: AdminUIState) => {
+  () => {
     return {};
   },
-  (dispatch) => ({
-    handleEnqueueRange: (queue: string, rangeID: string, nodeID: string, skipShouldQueue: boolean) => {
+  () => ({
+    handleEnqueueRange: (queue: string, rangeID: number, nodeID: number, skipShouldQueue: boolean) => {
       const req = new EnqueueRangeRequest({
         queue: queue,
         range_id: rangeID,
