@@ -1100,6 +1100,16 @@ func (c *cluster) Conn(ctx context.Context, node int) *gosql.DB {
 	return db
 }
 
+// ConnE returns a SQL connection to the specified node.
+func (c *cluster) ConnE(ctx context.Context, node int) (*gosql.DB, error) {
+	url := c.ExternalPGUrl(ctx, c.Node(node))[0]
+	db, err := gosql.Open("postgres", url)
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
 func (c *cluster) makeNodes(opts ...option) string {
 	var r nodeListOption
 	for _, o := range opts {
@@ -1114,8 +1124,11 @@ func (c *cluster) isLocal() bool {
 	return c.name == "local"
 }
 
-func getDiskUsageInByte(ctx context.Context, c *cluster, nodeIdx int) (int, error) {
-	out, err := c.RunWithBuffer(ctx, c.l, c.Node(nodeIdx), fmt.Sprint("du -sk {store-dir} | grep -oE '^[0-9]+'"))
+// getDiskUsageInBytes does what's on the tin. nodeIdx starts at one.
+func getDiskUsageInBytes(
+	ctx context.Context, c *cluster, logger *logger, nodeIdx int,
+) (int, error) {
+	out, err := c.RunWithBuffer(ctx, logger, c.Node(nodeIdx), fmt.Sprint("du -sk {store-dir} | grep -oE '^[0-9]+'"))
 	if err != nil {
 		return 0, err
 	}
