@@ -70,7 +70,9 @@ func registerVersion(r *registry) {
 			i := i     // ditto
 			m.Go(func(ctx context.Context) error {
 				cmd = fmt.Sprintf(cmd, nodes)
-				childL, err := c.l.ChildLogger("workload " + strconv.Itoa(i))
+				// Direct stderr only to disk. We expect errors from the workload as
+				// nodes are stopped and started.
+				childL, err := c.l.ChildLogger("workload"+strconv.Itoa(i), quietStderr)
 				if err != nil {
 					return err
 				}
