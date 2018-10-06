@@ -139,6 +139,13 @@ export default function Debug() {
             note="/debug/logspy?count=[count]&amp;duration=[duration]&amp;grep=[regexp]"
           />
         </DebugTableRow>
+        <DebugTableRow title="Enqueue Range">
+          <DebugTableLink
+            name="Run a range through an internal queue"
+            url="#/debug/enqueue_range"
+            note="#/debug/enqueue_range"
+          />
+        </DebugTableRow>
         <DebugTableRow title="Stopper">
           <DebugTableLink name="Active Tasks" url="/debug/stopper" />
         </DebugTableRow>
