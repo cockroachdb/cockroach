@@ -158,6 +158,9 @@ func (s *server) Gossip(stream Gossip_GossipServer) error {
 		// select below.
 		ready := s.mu.ready
 		delta := s.mu.is.delta(args.HighWaterStamps)
+		if init {
+			s.mu.is.populateMostDistantSentinels(delta)
+		}
 		if args.HighWaterStamps == nil {
 			args.HighWaterStamps = make(map[roachpb.NodeID]int64)
 		}
