@@ -172,9 +172,13 @@ func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
 
 // sendGossip sends the latest gossip to the remote server, based on
 // the remote server's notion of other nodes' high water timestamps.
-func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient) error {
+func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient, firstReq bool) error {
 	g.mu.Lock()
-	if delta := g.mu.is.delta(c.remoteHighWaterStamps); len(delta) > 0 {
+	delta := g.mu.is.delta(c.remoteHighWaterStamps)
+	if firstReq {
+		g.mu.is.populateMostDistantMarkers(delta)
+	}
+	if len(delta) > 0 {
 		// Ensure that the high water stamps for the remote server are kept up to
 		// date so that we avoid resending the same gossip infos as infos are
 		// updated locally.
@@ -361,7 +365,7 @@ func (c *client) gossip(
 	initTimer := time.NewTimer(time.Second)
 	defer initTimer.Stop()
 
-	for {
+	for count := 0; ; {
 		select {
 		case <-c.closer:
 			return nil
@@ -374,9 +378,10 @@ func (c *client) gossip(
 		case <-initTimer.C:
 			maybeRegister()
 		case <-sendGossipChan:
-			if err := c.sendGossip(g, stream); err != nil {
+			if err := c.sendGossip(g, stream, count == 0); err != nil {
 				return err
 			}
+			count++
 		}
 	}
 }

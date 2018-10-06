@@ -380,8 +380,6 @@ func TestGossipOutgoingLimitEnforced(t *testing.T) {
 func TestGossipMostDistant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skipf("demonstrates bug, doesn't currently pass")
-
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
@@ -452,6 +450,7 @@ func TestGossipMostDistant(t *testing.T) {
 			})
 
 			// Connect the network in a loop. This should halve the
+			log.Infof(context.Background(), "connecting from n%d to n%d", c.from, c.to)
 			connect(nodes[c.from], nodes[c.to])
 
 			// Wait for n1 to determine that n6 is now the most distant hops from 9
@@ -470,12 +469,10 @@ func TestGossipMostDistant(t *testing.T) {
 
 				distantNodeID, distantHops := mostDistant(g)
 				if distantNodeID == 6 && distantHops == 5 {
-					log.Infof(context.TODO(), "n%d: distantHops: %d from n%d\n%s", g.NodeID.Get(), distantHops, distantNodeID, buf.String())
 					return nil
 				}
-				err := fmt.Errorf("n%d: distantHops: %d from n%d", g.NodeID.Get(), distantHops, distantNodeID)
-				log.Infof(context.TODO(), "%v\n%s", err, buf.String())
-				return err
+				return fmt.Errorf("n%d: distantHops: %d from n%d\n%s",
+					g.NodeID.Get(), distantHops, distantNodeID, buf.String())
 			})
 		})
 	}
