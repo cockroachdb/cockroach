@@ -80,12 +80,12 @@ func TestGossipOverwriteNode(t *testing.T) {
 	if val, err := g.GetNodeDescriptor(node1.NodeID); err != nil {
 		t.Error(err)
 	} else if val.NodeID != node1.NodeID {
-		t.Errorf("expected node %d, got %+v", node1.NodeID, val)
+		t.Errorf("expected n%d, got %+v", node1.NodeID, val)
 	}
 	if val, err := g.GetNodeDescriptor(node2.NodeID); err != nil {
 		t.Error(err)
 	} else if val.NodeID != node2.NodeID {
-		t.Errorf("expected node %d, got %+v", node2.NodeID, val)
+		t.Errorf("expected n%d, got %+v", node2.NodeID, val)
 	}
 
 	// Give node3 the same address as node1, which should cause node1 to be
@@ -97,13 +97,13 @@ func TestGossipOverwriteNode(t *testing.T) {
 	if val, err := g.GetNodeDescriptor(node3.NodeID); err != nil {
 		t.Error(err)
 	} else if val.NodeID != node3.NodeID {
-		t.Errorf("expected node %d, got %+v", node3.NodeID, val)
+		t.Errorf("expected n%d, got %+v", node3.NodeID, val)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		expectedErr := "node.*has been removed from the cluster"
+		expectedErr := `n\d+ has been removed from the cluster`
 		if val, err := g.GetNodeDescriptor(node1.NodeID); !testutils.IsError(err, expectedErr) {
-			return fmt.Errorf("expected error %q fetching node %d; got error %v and node %+v",
+			return fmt.Errorf("expected error %q fetching n%d; got error %v and node %+v",
 				expectedErr, node1.NodeID, err, val)
 		}
 		return nil
@@ -153,9 +153,9 @@ func TestGossipMoveNode(t *testing.T) {
 		} else if !proto.Equal(movedNode, val) {
 			return fmt.Errorf("expected node %+v, got %+v", movedNode, val)
 		}
-		expectedErr := "node.*has been removed from the cluster"
+		expectedErr := `n\d+ has been removed from the cluster`
 		if val, err := g.GetNodeDescriptor(replacedNode.NodeID); !testutils.IsError(err, expectedErr) {
-			return fmt.Errorf("expected error %q fetching node %d; got error %v and node %+v",
+			return fmt.Errorf("expected error %q fetching n%d; got error %v and node %+v",
 				expectedErr, replacedNode.NodeID, err, val)
 		}
 		return nil
@@ -542,7 +542,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 				return nil
 			}
 		}
-		return errors.Errorf("node %d not yet connected", peerNodeID)
+		return errors.Errorf("n%d not yet connected", peerNodeID)
 	})
 
 	testutils.SucceedsSoon(t, func() error {
@@ -551,7 +551,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 				return nil
 			}
 		}
-		return errors.Errorf("node %d descriptor not yet available", peerNodeID)
+		return errors.Errorf("n%d descriptor not yet available", peerNodeID)
 	})
 
 	local.bootstrap()
@@ -562,7 +562,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		for _, peerID := range local.Outgoing() {
 			if peerID == peerNodeID {
-				return errors.Errorf("node %d still connected", peerNodeID)
+				return errors.Errorf("n%d still connected", peerNodeID)
 			}
 		}
 		return nil
@@ -578,7 +578,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 				return nil
 			}
 		}
-		return errors.Errorf("node %d not yet connected", peerNodeID)
+		return errors.Errorf("n%d not yet connected", peerNodeID)
 	})
 }
 

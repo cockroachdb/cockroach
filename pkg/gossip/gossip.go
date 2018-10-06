@@ -392,7 +392,7 @@ func (g *Gossip) SetNodeDescriptor(desc *roachpb.NodeDescriptor) error {
 	ctx := g.AnnotateCtx(context.TODO())
 	log.Infof(ctx, "NodeDescriptor set to %+v", desc)
 	if err := g.AddInfoProto(MakeNodeIDKey(desc.NodeID), desc, NodeDescriptorTTL); err != nil {
-		return errors.Errorf("node %d: couldn't gossip descriptor: %v", desc.NodeID, err)
+		return errors.Errorf("n%d: couldn't gossip descriptor: %v", desc.NodeID, err)
 	}
 	g.updateClients()
 	return nil
@@ -803,7 +803,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 			log.Errorf(ctx, "unable to update node address for removed node: %s", err)
 			return
 		}
-		log.Infof(ctx, "removed node %d from gossip", nodeID)
+		log.Infof(ctx, "removed n%d from gossip", nodeID)
 		g.removeNodeDescriptorLocked(nodeID)
 		return
 	}
@@ -841,7 +841,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 	// connect to its previous identity (as came up in issue #10266).
 	oldNodeID, ok := g.bootstrapAddrs[desc.Address]
 	if ok && oldNodeID != unknownNodeID && oldNodeID != desc.NodeID {
-		log.Infof(ctx, "removing node %d which was at same address (%s) as new node %v",
+		log.Infof(ctx, "removing n%d which was at same address (%s) as new node %v",
 			oldNodeID, desc.Address, desc)
 		g.removeNodeDescriptorLocked(oldNodeID)
 
@@ -856,7 +856,7 @@ func (g *Gossip) updateNodeAddress(key string, content roachpb.Value) {
 		key := MakeNodeIDKey(oldNodeID)
 		var emptyProto []byte
 		if err := g.addInfoLocked(key, emptyProto, NodeDescriptorTTL); err != nil {
-			log.Errorf(ctx, "failed to empty node descriptor for node %d: %s", oldNodeID, err)
+			log.Errorf(ctx, "failed to empty node descriptor for n%d: %s", oldNodeID, err)
 		}
 	}
 	// Add new address (if it's not already there) to bootstrap info and
@@ -964,13 +964,13 @@ func (g *Gossip) getNodeDescriptorLocked(nodeID roachpb.NodeID) (*roachpb.NodeDe
 		// Don't return node descriptors that are empty, because that's meant to
 		// indicate that the node has been removed from the cluster.
 		if nodeDescriptor.NodeID == 0 || nodeDescriptor.Address.IsEmpty() {
-			return nil, errors.Errorf("node %d has been removed from the cluster", nodeID)
+			return nil, errors.Errorf("n%d has been removed from the cluster", nodeID)
 		}
 
 		return nodeDescriptor, nil
 	}
 
-	return nil, errors.Errorf("unable to look up descriptor for node %d", nodeID)
+	return nil, errors.Errorf("unable to look up descriptor for n%d", nodeID)
 }
 
 // getNodeIDAddressLocked looks up the address of the node by ID. The mutex is
@@ -1253,7 +1253,7 @@ func (g *Gossip) hasOutgoingLocked(nodeID roachpb.NodeID) bool {
 		// If we don't have the address, fall back to using the outgoing nodeSet
 		// since at least it's better than nothing.
 		ctx := g.AnnotateCtx(context.TODO())
-		log.Errorf(ctx, "unable to get address for node %d: %s", nodeID, err)
+		log.Errorf(ctx, "unable to get address for n%d: %s", nodeID, err)
 		return g.outgoing.hasNode(nodeID)
 	}
 	c := g.findClient(func(c *client) bool {
@@ -1450,9 +1450,9 @@ func (g *Gossip) tightenNetwork(ctx context.Context) {
 			return
 		}
 		if nodeAddr, err := g.getNodeIDAddressLocked(distantNodeID); err != nil {
-			log.Errorf(ctx, "unable to get address for distant node %d: %s", distantNodeID, err)
+			log.Errorf(ctx, "unable to get address for n%d: %s", distantNodeID, err)
 		} else {
-			log.Infof(ctx, "starting client to distant node %d (%d > %d) to tighten network graph",
+			log.Infof(ctx, "starting client to n%d (%d > %d) to tighten network graph",
 				distantNodeID, distantHops, maxHops)
 			log.Eventf(ctx, "tightening network with new client to %s", nodeAddr)
 			g.startClientLocked(nodeAddr)

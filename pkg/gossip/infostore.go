@@ -398,7 +398,7 @@ func (is *infoStore) combine(
 		infoCopy.Hops++
 		infoCopy.PeerID = nodeID
 		if infoCopy.OrigStamp == 0 {
-			panic(errors.Errorf("combining info from node %d with 0 original timestamp", nodeID))
+			panic(errors.Errorf("combining info from n%d with 0 original timestamp", nodeID))
 		}
 		// errNotFresh errors from addInfo are ignored; they indicate that
 		// the data in *is is newer than in *delta.
