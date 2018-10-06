@@ -12,6 +12,18 @@ import "./index.styl";
 import EnqueueRangeRequest = cockroach.server.serverpb.EnqueueRangeRequest;
 import EnqueueRangeResponse = cockroach.server.serverpb.EnqueueRangeResponse;
 
+const QUEUES = [
+  "replicate",
+  "gc",
+  "merge",
+  "split",
+  "replicaGC",
+  "raftlog",
+  "raftsnapshot",
+  "consistencyChecker",
+  "timeSeriesMaintenance",
+];
+
 interface EnqueueRangeProps {
   handleEnqueueRange: (queue: string, rangeID: number, nodeID: number, skipShouldQueue: boolean) => Promise<EnqueueRangeResponse>;
 }
@@ -29,7 +41,7 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
   constructor(props: EnqueueRangeProps & WithRouterProps) {
     super(props);
     this.state = {
-      queue: "",
+      queue: QUEUES[0],
       rangeID: "",
       nodeID: "",
       skipShouldQueue: false,
@@ -150,14 +162,12 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
               <h1 className="heading">Manually enqueue range in a replica queue</h1>
               <br />
               <form onSubmit={this.handleSubmit} className="form-internal" method="post">
-                <input
-                  type="text"
-                  name="queue"
-                  className="input-text"
-                  onChange={this.handleUpdateQueue}
-                  value={this.state.queue}
-                  placeholder="Queue"
-                />
+                Queue:{" "}
+                <select onChange={this.handleUpdateQueue}>
+                  {QUEUES.map((queue) => (
+                    <option key={queue} value={queue}>{queue}</option>
+                  ))}
+                </select>
                 <br />
                 <input
                   type="number"

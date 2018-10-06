@@ -1015,6 +1015,9 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		s.raftLogQueue = newRaftLogQueue(s, s.db, s.cfg.Gossip)
 		s.raftSnapshotQueue = newRaftSnapshotQueue(s, s.cfg.Gossip)
 		s.consistencyQueue = newConsistencyQueue(s, s.cfg.Gossip)
+		// NOTE: If more queue types are added, please also add them to the list of
+		// queues on the EnqueueRange debug page as defined in
+		// pkg/ui/src/views/reports/containers/enqueueRange/index.tsx
 		s.scanner.AddQueues(
 			s.gcQueue, s.mergeQueue, s.splitQueue, s.replicateQueue, s.replicaGCQueue,
 			s.raftLogQueue, s.raftSnapshotQueue, s.consistencyQueue)
