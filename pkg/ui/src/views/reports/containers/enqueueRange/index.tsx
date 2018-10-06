@@ -7,6 +7,7 @@ import { connect } from "react-redux";
 import { enqueueRange } from "src/util/api";
 import { cockroach } from "src/js/protos";
 import Print from "src/views/reports/containers/range/print";
+import "./index.styl";
 
 import EnqueueRangeRequest = cockroach.server.serverpb.EnqueueRangeRequest;
 import EnqueueRangeResponse = cockroach.server.serverpb.EnqueueRangeResponse;
@@ -75,6 +76,35 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
     );
   }
 
+  renderNodeResponse(details: EnqueueRangeResponse.IDetails) {
+    if (details.error) {
+      return <div><b>Error:</b> {details.error}</div>;
+    }
+
+    return (
+      <table className="enqueue-range-table">
+        <thead>
+          <tr className="enqueue-range-table__row enqueue-range-table__row--header">
+            <th className="enqueue-range-table__cell enqueue-range-table__cell--header">Timestamp</th>
+            <th className="enqueue-range-table__cell enqueue-range-table__cell--header">Message</th>
+          </tr>
+        </thead>
+        <tbody>
+          {details.events.map((event) => (
+            <tr className="enqueue-range-table__row--body">
+              <td className="enqueue-range-table__cell enqueue-range-table__cell--date">
+                {Print.Timestamp(event.time)}
+              </td>
+              <td className="enqueue-range-table__cell">
+                <pre>{event.message}</pre>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+
   renderResponse() {
     const { response } = this.state;
 
@@ -85,30 +115,13 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
     return (
       <div>
         <h2>Enqueue Range Output</h2>
-        {
-          _.map(response.details, (details) => (
-            <div>
-              <h3>Node n{details.node_id}</h3>
-              <table className="enqueue-range-table">
-                <tbody>
-                  <tr className="enqueue-range-table__row enqueue-range-table__row--header">
-                    <th className="enqueue-range-table__cell enqueue-range-table__cell--header">Timestamp</th>
-                    <th className="enqueue-range-table__cell enqueue-range-table__cell--header">Message</th>
-                  </tr>
-                  {
-                    _.map(details.events, (event) => (
-                      <tr className="enqueue-range-table__row">
-                        <td className="enqueue-range-table__cell enqueue-range-table__cell--date">{Print.Timestamp(event.time)}</td>
-                        <td className="enqueue-range-table__cell">{event.message}</td>
-                      </tr>
-                    ))
-                  }
-                </tbody>
-              </table>
-            {details.error ? <div><b>Error:</b> {details.error}</div> : null}
-            </div>
-          ))
-        }
+        {response.details.map((details) => (
+          <div>
+            <h3>Node n{details.node_id}</h3>
+
+            {this.renderNodeResponse(details)}
+          </div>
+        ))}
       </div>
     );
   }
