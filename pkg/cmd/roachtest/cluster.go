@@ -102,7 +102,7 @@ func findBinary(binary, defValue string) (string, error) {
 		// look in the cockroach repo.
 		gopath := os.Getenv("GOPATH")
 		if gopath == "" {
-			return "", errors.Wrap(err, "")
+			gopath = filepath.Join(os.Getenv("HOME"), "go")
 		}
 
 		var binSuffix string
