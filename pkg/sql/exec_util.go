@@ -744,45 +744,47 @@ func (q *queryMeta) cancel() {
 	q.ctxCancel()
 }
 
-// sessionDefaults mirrors fields in Session, for restoring default
+// SessionDefaults mirrors fields in Session, for restoring default
 // configuration values in SET ... TO DEFAULT (or RESET ...) statements.
-type sessionDefaults struct {
-	applicationName string
-	database        string
-}
+type SessionDefaults map[string]string
 
 // SessionArgs contains arguments for serving a client connection.
 type SessionArgs struct {
-	Database        string
 	User            string
-	ApplicationName string
+	SessionDefaults SessionDefaults
 	// RemoteAddr is the client's address. This is nil iff this is an internal
 	// client.
 	RemoteAddr net.Addr
 }
 
+// isDefined returns true iff the SessionArgs is well-defined.
+// This method exists because SessionArgs is passed by value but it
+// matters to the functions using it whether the value was explicitly
+// specified or left empty.
+func (s SessionArgs) isDefined() bool { return len(s.User) != 0 }
+
 // SessionRegistry stores a set of all sessions on this node.
 // Use register() and deregister() to modify this registry.
 type SessionRegistry struct {
 	syncutil.Mutex
-	store map[ClusterWideID]registrySession
+	sessions map[ClusterWideID]registrySession
 }
 
-// MakeSessionRegistry creates a new SessionRegistry with an empty set
+// NewSessionRegistry creates a new SessionRegistry with an empty set
 // of sessions.
-func MakeSessionRegistry() *SessionRegistry {
-	return &SessionRegistry{store: make(map[ClusterWideID]registrySession)}
+func NewSessionRegistry() *SessionRegistry {
+	return &SessionRegistry{sessions: make(map[ClusterWideID]registrySession)}
 }
 
 func (r *SessionRegistry) register(id ClusterWideID, s registrySession) {
 	r.Lock()
-	r.store[id] = s
+	r.sessions[id] = s
 	r.Unlock()
 }
 
 func (r *SessionRegistry) deregister(id ClusterWideID) {
 	r.Lock()
-	delete(r.store, id)
+	delete(r.sessions, id)
 	r.Unlock()
 }
 
@@ -805,7 +807,7 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool,
 	r.Lock()
 	defer r.Unlock()
 
-	for _, session := range r.store {
+	for _, session := range r.sessions {
 		if !(username == security.RootUser || username == session.user()) {
 			// Skip this session.
 			continue
@@ -826,7 +828,7 @@ func (r *SessionRegistry) CancelSession(sessionIDBytes []byte, username string) 
 	r.Lock()
 	defer r.Unlock()
 
-	for id, session := range r.store {
+	for id, session := range r.sessions {
 		if !(username == security.RootUser || username == session.user()) {
 			// Skip this session.
 			continue
@@ -846,9 +848,9 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 	r.Lock()
 	defer r.Unlock()
 
-	response := make([]serverpb.Session, 0, len(r.store))
+	response := make([]serverpb.Session, 0, len(r.sessions))
 
-	for _, s := range r.store {
+	for _, s := range r.sessions {
 		response = append(response, s.serialize())
 	}
 
@@ -1549,7 +1551,7 @@ type spanWithIndex struct {
 // see curTxnReadOnly).
 type sessionDataMutator struct {
 	data     *sessiondata.SessionData
-	defaults sessionDefaults
+	defaults SessionDefaults
 	settings *cluster.Settings
 	// curTxnReadOnly is a value to be mutated through SET transaction_read_only = ...
 	curTxnReadOnly *bool

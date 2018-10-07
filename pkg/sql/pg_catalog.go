@@ -1622,6 +1622,22 @@ CREATE TABLE pg_catalog.pg_settings (
 			gen := varGen[vName]
 			value := gen.Get(&p.extendedEvalCtx)
 			valueDatum := tree.NewDString(value)
+			var bootDatum tree.Datum = tree.DNull
+			var resetDatum tree.Datum = tree.DNull
+			if gen.Set == nil && gen.RuntimeSet == nil {
+				// RESET/SET will leave the variable unchanged. Announce the
+				// current value as boot/reset value.
+				bootDatum = valueDatum
+				resetDatum = bootDatum
+			} else {
+				if gen.GlobalDefault != nil {
+					globalDefVal := gen.GlobalDefault(&p.EvalContext().Settings.SV)
+					bootDatum = tree.NewDString(globalDefVal)
+				}
+				if hasDefault, defVal := getSessionVarDefaultString(vName, gen, p.sessionDataMutator); hasDefault {
+					resetDatum = tree.NewDString(defVal)
+				}
+			}
 			if err := addRow(
 				tree.NewDString(strings.ToLower(vName)), // name
 				valueDatum,                              // setting
@@ -1635,8 +1651,8 @@ CREATE TABLE pg_catalog.pg_settings (
 				tree.DNull,                              // min_val
 				tree.DNull,                              // max_val
 				tree.DNull,                              // enumvals
-				valueDatum,                              // boot_val
-				valueDatum,                              // reset_val
+				bootDatum,                               // boot_val
+				resetDatum,                              // reset_val
 				tree.DNull,                              // sourcefile
 				tree.DNull,                              // sourceline
 				tree.DBoolFalse,                         // pending_restart
