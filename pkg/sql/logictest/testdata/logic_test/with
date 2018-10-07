@@ -143,3 +143,44 @@ WITH t AS (
     INSERT INTO x(a) VALUES(0)
 )
 SELECT * FROM t
+
+# Regression test for #24307 until CockroachDB learns how to execute
+# side effects no matter what.
+query error unimplemented: common table expression "t" with side effects was not used in query
+WITH t AS (
+   INSERT INTO x(a) VALUES(0) RETURNING a
+)
+SELECT 1
+
+query error unimplemented: common table expression "t" with side effects was not used in query
+WITH t AS (
+   SELECT * FROM (
+      WITH b AS (INSERT INTO x(a) VALUES(0) RETURNING a)
+	  TABLE b
+   )
+)
+SELECT 1
+
+query error unimplemented: common table expression "t" with side effects was not used in query
+WITH t AS (
+   DELETE FROM x RETURNING a
+)
+SELECT 1
+
+query error unimplemented: common table expression "t" with side effects was not used in query
+WITH t AS (
+   UPSERT INTO x(a) VALUES(0) RETURNING a
+)
+SELECT 1
+
+query error unimplemented: common table expression "t" with side effects was not used in query
+WITH t AS (
+   UPDATE x SET a = 0 RETURNING a
+)
+SELECT 1
+
+# however if there are no side effects, no errors are required.
+query I
+WITH t AS (SELECT 1) SELECT 2
+----
+2
