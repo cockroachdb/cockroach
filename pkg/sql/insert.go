@@ -21,6 +21,7 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -700,8 +701,22 @@ func extractInsertSource(
 	wrapped := s.Select
 	limit := s.Limit
 	orderBy := s.OrderBy
+	with := s.With
 
+	// Be careful to not unwrap expressions with a WITH clause. These
+	// need to be handled generically.
 	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
+		if s.Select.With != nil {
+			if with != nil {
+				// (WITH ... (WITH ...))
+				// Currently we are unable to nest the scopes inside ParenSelect so we
+				// must refuse the syntax so that the query does not get invalid results.
+				return nil, nil, pgerror.UnimplementedWithIssueError(24303,
+					"multiple WITH clauses in parentheses")
+			}
+			with = s.Select.With
+		}
+
 		wrapped = s.Select.Select
 		if s.Select.OrderBy != nil {
 			if orderBy != nil {
@@ -717,7 +732,7 @@ func extractInsertSource(
 		}
 	}
 
-	if orderBy == nil && limit == nil {
+	if with == nil && orderBy == nil && limit == nil {
 		values, _ := wrapped.(*tree.ValuesClause)
 		if values != nil {
 			return wrapped, &tree.ValuesClauseWithNames{ValuesClause: *values, Names: colNames}, nil
@@ -725,7 +740,7 @@ func extractInsertSource(
 		return wrapped, nil, nil
 	}
 	return &tree.ParenSelect{
-		Select: &tree.Select{Select: wrapped, OrderBy: orderBy, Limit: limit},
+		Select: &tree.Select{Select: wrapped, OrderBy: orderBy, Limit: limit, With: with},
 	}, nil, nil
 }
 
