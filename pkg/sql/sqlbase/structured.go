@@ -1737,6 +1737,11 @@ func (desc *TableDescriptor) RenameColumnDescriptor(column ColumnDescriptor, new
 				idx.ColumnNames[i] = newColName
 			}
 		}
+		for i, id := range idx.StoreColumnIDs {
+			if id == colID {
+				idx.StoreColumnNames[i] = newColName
+			}
+		}
 	}
 	renameColumnInIndex(&desc.PrimaryIndex)
 	for i := range desc.Indexes {
