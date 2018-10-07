@@ -5,7 +5,7 @@ CREATE TABLE users (
   uid    INT PRIMARY KEY,
   name  VARCHAR NOT NULL,
   title VARCHAR,
-  INDEX foo (name),
+  INDEX foo (name) STORING (title),
   UNIQUE INDEX bar (uid, name)
 )
 
@@ -78,7 +78,8 @@ SHOW INDEXES FROM users
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 users       primary     false       1             id           ASC        false    false
 users       foo         true        1             username     ASC        false    false
-users       foo         true        2             id           ASC        false    true
+users       foo         true        2             species      N/A        true     false
+users       foo         true        3             id           ASC        false    true
 users       bar         false       1             id           ASC        false    false
 users       bar         false       2             username     ASC        false    false
 
