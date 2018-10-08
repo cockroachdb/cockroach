@@ -8492,7 +8492,7 @@ func TestReplicaShouldDropForwardedProposal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	cmdSeen, cmdNotSeen := makeIDKey(), makeIDKey()
-	data, noData := []byte("data"), []byte("")
+	data := []byte("data")
 
 	testCases := []struct {
 		name                string
@@ -8501,6 +8501,30 @@ func TestReplicaShouldDropForwardedProposal(t *testing.T) {
 		expDrop             bool
 		expRemotePropsAfter int
 	}{
+		{
+			name:   "empty proposal (nil):",
+			leader: true,
+			msg: raftpb.Message{
+				Type: raftpb.MsgProp,
+				Entries: []raftpb.Entry{
+					{Type: raftpb.EntryNormal, Data: nil},
+				},
+			},
+			expDrop:             false,
+			expRemotePropsAfter: 1,
+		},
+		{
+			name:   "empty proposal (zero)",
+			leader: true,
+			msg: raftpb.Message{
+				Type: raftpb.MsgProp,
+				Entries: []raftpb.Entry{
+					{Type: raftpb.EntryNormal, Data: []byte{}},
+				},
+			},
+			expDrop:             false,
+			expRemotePropsAfter: 1,
+		},
 		{
 			name:   "new proposal",
 			leader: true,
@@ -8539,16 +8563,16 @@ func TestReplicaShouldDropForwardedProposal(t *testing.T) {
 			expRemotePropsAfter: 2,
 		},
 		{
-			name:   "empty proposal",
+			name:   "proposal with no data (not an empty proposal)",
 			leader: true,
 			msg: raftpb.Message{
 				Type: raftpb.MsgProp,
 				Entries: []raftpb.Entry{
-					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdNotSeen, noData)},
+					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdNotSeen, nil)},
 				},
 			},
 			expDrop:             false,
-			expRemotePropsAfter: 1,
+			expRemotePropsAfter: 2,
 		},
 		{
 			name:   "conf change",
