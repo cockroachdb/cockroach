@@ -342,8 +342,10 @@ func (s *sqlStats) getStmtStats(
 					data.LastErr = "scrubbed"
 				}
 
-				// Quantize the counts to avoid leaking information that way.
-				quantizeCounts(&data)
+				if scrub {
+					// Quantize the counts to avoid leaking information that way.
+					quantizeCounts(&data)
+				}
 
 				ret = append(ret, roachpb.CollectedStatementStatistics{Key: k, Stats: data})
 			}
