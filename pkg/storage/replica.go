@@ -1908,6 +1908,7 @@ func (r *Replica) State() storagebase.RangeInfo {
 	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*storagebase.ReplicaState)
 	ri.LastIndex = r.mu.lastIndex
 	ri.NumPending = uint64(len(r.mu.localProposals))
+	ri.NumRemotePending = uint64(len(r.mu.remoteProposals))
 	ri.RaftLogSize = r.mu.raftLogSize
 	ri.NumDropped = uint64(r.mu.droppedMessages)
 	if r.mu.proposalQuota != nil {
