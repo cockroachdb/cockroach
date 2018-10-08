@@ -199,17 +199,17 @@ func GetZoneConfigInTxn(
 		if placeholder != nil {
 			if subzone = placeholder.GetSubzone(uint32(index.ID), partition); subzone != nil {
 				if indexSubzone := placeholder.GetSubzone(uint32(index.ID), ""); indexSubzone != nil {
-					(&subzone.Config).InheritFromParent(indexSubzone.Config)
+					subzone.Config.InheritFromParent(indexSubzone.Config)
 				}
-				(&subzone.Config).InheritFromParent(*zone)
+				subzone.Config.InheritFromParent(*zone)
 				return placeholderID, placeholder, subzone, nil
 			}
 		} else {
 			if subzone = zone.GetSubzone(uint32(index.ID), partition); subzone != nil {
 				if indexSubzone := zone.GetSubzone(uint32(index.ID), ""); indexSubzone != nil {
-					(&subzone.Config).InheritFromParent(indexSubzone.Config)
+					subzone.Config.InheritFromParent(indexSubzone.Config)
 				}
-				(&subzone.Config).InheritFromParent(*zone)
+				subzone.Config.InheritFromParent(*zone)
 			}
 		}
 	}
