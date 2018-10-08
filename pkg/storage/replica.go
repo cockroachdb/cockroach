@@ -231,6 +231,9 @@ const (
 	destroyReasonRemovalPending
 	// The replica has been GCed.
 	destroyReasonRemoved
+	// The replica has been merged into its left-hand neighbor, but its left-hand
+	// neighbor hasn't yet subsumed it.
+	destroyReasonMergePending
 )
 
 type destroyStatus struct {
@@ -2859,8 +2862,9 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 	} else if len(intents) > 1 {
 		log.Fatalf(ctx, "MVCCGet returned an impossible number of intents (%d)", len(intents))
 	}
+	intent := intents[0]
 	val, _, err := engine.MVCCGetAsTxn(
-		ctx, r.Engine(), descKey, intents[0].Txn.Timestamp, intents[0].Txn)
+		ctx, r.Engine(), descKey, intent.Txn.Timestamp, intent.Txn)
 	if err != nil {
 		return err
 	} else if val != nil {
@@ -2886,6 +2890,7 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 
 	taskCtx := r.AnnotateCtx(context.Background())
 	err = r.store.stopper.RunAsyncTask(taskCtx, "wait-for-merge", func(ctx context.Context) {
+		var pushTxnRes *roachpb.PushTxnResponse
 		for retry := retry.Start(base.DefaultRetryOptions()); retry.Next(); {
 			// Wait for the merge transaction to complete by attempting to push it. We
 			// don't want to accidentally abort the merge transaction, so we use the
@@ -2893,38 +2898,106 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 			// roachpb.PUSH_TOUCH, though it might appear more semantically correct,
 			// returns immediately and causes us to spin hot, whereas
 			// roachpb.PUSH_ABORT efficiently blocks until the transaction completes.
-			_, pErr := client.SendWrapped(ctx, r.DB().NonTransactionalSender(), &roachpb.PushTxnRequest{
-				RequestHeader: roachpb.RequestHeader{Key: intents[0].Txn.Key},
+			res, pErr := client.SendWrapped(ctx, r.DB().NonTransactionalSender(), &roachpb.PushTxnRequest{
+				RequestHeader: roachpb.RequestHeader{Key: intent.Txn.Key},
 				PusherTxn: roachpb.Transaction{
 					TxnMeta: enginepb.TxnMeta{Priority: roachpb.MinTxnPriority},
 				},
-				PusheeTxn: intents[0].Txn,
+				PusheeTxn: intent.Txn,
 				Now:       r.Clock().Now(),
 				PushType:  roachpb.PUSH_ABORT,
 			})
 			if pErr != nil {
 				select {
 				case <-r.store.stopper.ShouldQuiesce():
-					// The server is shutting down. The error while fetching the range
-					// descriptor was probably caused by the shutdown, so ignore it.
+					// The server is shutting down. The error while pushing the
+					// transaction was probably caused by the shutdown, so ignore it.
 					return
 				default:
-					log.Warningf(ctx, "error while watching for merge to complete: %s", pErr)
+					log.Warningf(ctx, "error while watching for merge to complete: PushTxn: %s", pErr)
 					// We can't safely unblock traffic until we can prove that the merge
 					// transaction is committed or aborted. Nothing to do but try again.
 					continue
 				}
 			}
-			// Unblock pending requests. If the merge committed, the requests will
-			// notice that the replica has been destroyed and return an appropriate
-			// error. If the merge aborted, the requests will be handled normally.
-			r.mu.Lock()
-			r.mu.mergeComplete = nil
-			close(mergeCompleteCh)
-			r.mu.Unlock()
-			return
+			pushTxnRes = res.(*roachpb.PushTxnResponse)
+			break
 		}
-		log.Fatal(ctx, "unreachable")
+
+		var mergeCommitted bool
+		switch pushTxnRes.PusheeTxn.Status {
+		case roachpb.PENDING:
+			log.Fatalf(ctx, "PushTxn returned while merge transaction %s was still pending",
+				intent.Txn.ID.Short())
+		case roachpb.COMMITTED:
+			// If PushTxn claims that the transaction committed, then the transaction
+			// definitely committed.
+			mergeCommitted = true
+		case roachpb.ABORTED:
+			// If PushTxn claims that the transaction aborted, it's not a guarantee
+			// that the transaction actually aborted. It could also mean that the
+			// transaction completed, resolved its intents, and GC'd its transaction
+			// record before our PushTxn arrived. To figure out what happened, we
+			// need to look in meta2.
+			var getRes *roachpb.GetResponse
+			for retry := retry.Start(base.DefaultRetryOptions()); retry.Next(); {
+				metaKey := keys.RangeMetaKey(desc.EndKey)
+				res, pErr := client.SendWrappedWith(ctx, r.DB().NonTransactionalSender(), roachpb.Header{
+					// Use READ_UNCOMMITTED to avoid trying to resolve intents, since
+					// resolving those intents might involve sending requests to this
+					// range, and that could deadlock. See the comment on
+					// TestStoreRangeMergeConcurrentSplit for details.
+					ReadConsistency: roachpb.READ_UNCOMMITTED,
+				}, &roachpb.GetRequest{
+					RequestHeader: roachpb.RequestHeader{Key: metaKey.AsRawKey()},
+				})
+				if pErr != nil {
+					select {
+					case <-r.store.stopper.ShouldQuiesce():
+						// The server is shutting down. The error while fetching the range
+						// descriptor was probably caused by the shutdown, so ignore it.
+						return
+					default:
+						log.Warningf(ctx, "error while watching for merge to complete: Get %s: %s", metaKey, pErr)
+						// We can't safely unblock traffic until we can prove that the merge
+						// transaction is committed or aborted. Nothing to do but try again.
+						continue
+					}
+				}
+				getRes = res.(*roachpb.GetResponse)
+				break
+			}
+			if getRes.Value == nil {
+				// A range descriptor with our end key is no longer present in meta2, so
+				// the merge must have committed.
+				mergeCommitted = true
+			} else {
+				// A range descriptor with our end key is still present in meta2. The
+				// merge committed iff that range descriptor has a different range ID.
+				var meta2Desc roachpb.RangeDescriptor
+				if err := getRes.Value.GetProto(&meta2Desc); err != nil {
+					log.Fatalf(ctx, "error while watching for merge to complete: "+
+						"unmarshaling meta2 range descriptor: %s", err)
+				}
+				if meta2Desc.RangeID != r.RangeID {
+					mergeCommitted = true
+				}
+			}
+		}
+
+		r.mu.Lock()
+		if mergeCommitted && r.mu.destroyStatus.IsAlive() {
+			// The merge committed but the left-hand replica on this store hasn't
+			// subsumed this replica yet. Mark this replica as destroyed so it
+			// doesn't serve requests when we close the mergeCompleteCh below.
+			r.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(r.RangeID), destroyReasonMergePending)
+		}
+		// Unblock pending requests. If the merge committed, the requests will
+		// notice that the replica has been destroyed and return an appropriate
+		// error. If the merge aborted, the requests will be handled normally.
+		r.mu.mergeComplete = nil
+		close(mergeCompleteCh)
+		r.mu.Unlock()
 	})
 	if err == stop.ErrUnavailable {
 		// We weren't able to launch a goroutine to watch for the merge's completion

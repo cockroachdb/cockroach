@@ -515,7 +515,7 @@ func (*GetRequest) ProtoMessage()               {}
 func (*GetRequest) Descriptor() ([]byte, []int) { return fileDescriptorApi, []int{3} }
 
 // A GetResponse is the return value from the Get() method.
-// If the key doesn't exist, returns nil for Value.Bytes.
+// If the key doesn't exist, Value will be nil.
 type GetResponse struct {
 	ResponseHeader `protobuf:"bytes,1,opt,name=header,embedded=header" json:"header"`
 	Value          *Value `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
