@@ -172,9 +172,13 @@ func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
 
 // sendGossip sends the latest gossip to the remote server, based on
 // the remote server's notion of other nodes' high water timestamps.
-func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient) error {
+func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient, firstReq bool) error {
 	g.mu.Lock()
-	if delta := g.mu.is.delta(c.remoteHighWaterStamps); len(delta) > 0 {
+	delta := g.mu.is.delta(c.remoteHighWaterStamps)
+	if firstReq {
+		g.mu.is.populateMostDistantMarkers(delta)
+	}
+	if len(delta) > 0 {
 		// Ensure that the high water stamps for the remote server are kept up to
 		// date so that we avoid resending the same gossip infos as infos are
 		// updated locally.
@@ -306,13 +310,9 @@ func (c *client) gossip(
 		default:
 		}
 	}
-	// We require redundant callbacks here as the update callback is propagating
-	// gossip infos to other nodes and needs to propagate the new expiration
-	// info.
-	unregister := g.RegisterCallback(".*", updateCallback, Redundant)
-	defer unregister()
 
 	errCh := make(chan error, 1)
+	initCh := make(chan struct{}, 1)
 	// This wait group is used to allow the caller to wait until gossip
 	// processing is terminated.
 	wg.Add(1)
@@ -322,13 +322,17 @@ func (c *client) gossip(
 		errCh <- func() error {
 			var peerID roachpb.NodeID
 
-			for {
+			initCh := initCh
+			for init := true; ; init = false {
 				reply, err := stream.Recv()
 				if err != nil {
 					return err
 				}
 				if err := c.handleResponse(ctx, g, reply); err != nil {
 					return err
+				}
+				if init {
+					initCh <- struct{}{}
 				}
 				if peerID == 0 && c.peerID != 0 {
 					peerID = c.peerID
@@ -338,7 +342,32 @@ func (c *client) gossip(
 		}()
 	})
 
-	for {
+	// We attempt to defer registration of the callback until we've heard a
+	// response from the remote node which will contain the remote's high water
+	// stamps. This prevents the client from sending all of its infos to the
+	// remote (which would happen if we don't know the remote's high water
+	// stamps). Unfortunately, versions of cockroach before 2.1 did not always
+	// send a response when receiving an incoming connection, so we also start a
+	// timer and perform initialization after 1s if we haven't heard from the
+	// remote.
+	var unregister func()
+	defer func() {
+		if unregister != nil {
+			unregister()
+		}
+	}()
+	maybeRegister := func() {
+		if unregister == nil {
+			// We require redundant callbacks here as the update callback is
+			// propagating gossip infos to other nodes and needs to propagate the new
+			// expiration info.
+			unregister = g.RegisterCallback(".*", updateCallback, Redundant)
+		}
+	}
+	initTimer := time.NewTimer(time.Second)
+	defer initTimer.Stop()
+
+	for count := 0; ; {
 		select {
 		case <-c.closer:
 			return nil
@@ -346,10 +375,15 @@ func (c *client) gossip(
 			return nil
 		case err := <-errCh:
 			return err
+		case <-initCh:
+			maybeRegister()
+		case <-initTimer.C:
+			maybeRegister()
 		case <-sendGossipChan:
-			if err := c.sendGossip(g, stream); err != nil {
+			if err := c.sendGossip(g, stream, count == 0); err != nil {
 				return err
 			}
+			count++
 		}
 	}
 }
