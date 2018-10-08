@@ -126,7 +126,7 @@ message DroppedTableDetails {
 }
 
 message SchemaChangeDetails {
-  util.hlc.Timestamp read_as_of = 1 [(gogoproto.nullable) = false];
+  reserved 1;
   // A schema change can involve running multiple processors backfilling
   // or deleting data. They occasionally checkpoint Spans so that the
   // processing can resume in the event of a node failure. The spans are

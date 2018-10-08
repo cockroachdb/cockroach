@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -92,7 +93,6 @@ type SchemaChanger struct {
 	// table.DropTime.
 	dropTime int64
 
-	readAsOf       hlc.Timestamp
 	testingKnobs   *SchemaChangerTestingKnobs
 	distSQLPlanner *DistSQLPlanner
 	jobRegistry    *jobs.Registry
@@ -153,6 +153,13 @@ func isPermanentSchemaChangeError(err error) bool {
 	err = errors.Cause(err)
 
 	if grpcutil.IsClosedConnection(err) {
+		return false
+	}
+
+	// Ignore error thrown because of a read at a very old timestamp.
+	// The Backfill will grab a new timestamp to read at for the rest
+	// of the backfill.
+	if strings.Contains(err.Error(), "must be after GC threshold") {
 		return false
 	}
 
