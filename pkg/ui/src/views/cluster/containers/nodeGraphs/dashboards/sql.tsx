@@ -138,7 +138,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Service Latency: DistSQL, 99th percentile"
+      title="Service Latency: Distributed SQL, 99th percentile"
       tooltip={
         `The latency of distributed SQL statements serviced over
            10 second periods ${tooltipSelection}.`
@@ -160,7 +160,7 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Service Latency: DistSQL, 90th percentile"
+      title="Service Latency: Distributed SQL, 90th percentile"
       tooltip={
         `The latency of distributed SQL statements serviced over
            10 second periods ${tooltipSelection}.`
