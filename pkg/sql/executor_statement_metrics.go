@@ -143,10 +143,9 @@ func (ex *connExecutor) recordStatementSummary(
 			}
 			m.DistSQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
 			m.DistSQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
-		} else {
-			m.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
-			m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
 		}
+		m.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
+		m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds())
 	}
 
 	planner.statsCollector.RecordStatement(
