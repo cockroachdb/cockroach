@@ -429,26 +429,14 @@ func Example_logging() {
 	defer c.cleanup()
 
 	c.RunWithArgs([]string{`sql`, `--logtostderr=false`, `-e`, `select 1 as "1"`})
-	c.RunWithArgs([]string{`sql`, `--log-backtrace-at=foo.go:1`, `-e`, `select 1 as "1"`})
-	c.RunWithArgs([]string{`sql`, `--log-dir=`, `-e`, `select 1 as "1"`})
 	c.RunWithArgs([]string{`sql`, `--logtostderr=true`, `-e`, `select 1 as "1"`})
-	c.RunWithArgs([]string{`sql`, `--verbosity=0`, `-e`, `select 1 as "1"`})
 	c.RunWithArgs([]string{`sql`, `--vmodule=foo=1`, `-e`, `select 1 as "1"`})
 
 	// Output:
 	// sql --logtostderr=false -e select 1 as "1"
 	// 1
 	// 1
-	// sql --log-backtrace-at=foo.go:1 -e select 1 as "1"
-	// 1
-	// 1
-	// sql --log-dir= -e select 1 as "1"
-	// 1
-	// 1
 	// sql --logtostderr=true -e select 1 as "1"
-	// 1
-	// 1
-	// sql --verbosity=0 -e select 1 as "1"
 	// 1
 	// 1
 	// sql --vmodule=foo=1 -e select 1 as "1"
@@ -521,6 +509,8 @@ func Example_zone() {
 	// .default
 	// .liveness
 	// .meta
+	// .system
+	// system
 	// system.jobs
 	// zone set system --file=./testdata/zone_attrs.yaml
 	// range_min_bytes: 1048576
@@ -529,10 +519,13 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: [+zone=us-east-1a, +ssd]
+	// lease_preferences: []
+	//
 	// zone ls
 	// .default
 	// .liveness
 	// .meta
+	// .system
 	// system
 	// system.jobs
 	// zone get .liveness
@@ -541,16 +534,18 @@ func Example_zone() {
 	// range_max_bytes: 67108864
 	// gc:
 	//   ttlseconds: 600
-	// num_replicas: 1
+	// num_replicas: 5
 	// constraints: []
+	// lease_preferences: []
 	// zone get .meta
 	// .meta
 	// range_min_bytes: 1048576
 	// range_max_bytes: 67108864
 	// gc:
 	//   ttlseconds: 3600
-	// num_replicas: 1
+	// num_replicas: 5
 	// constraints: []
+	// lease_preferences: []
 	// zone get system.nonexistent
 	// pq: relation "system.public.nonexistent" does not exist
 	// zone get system.descriptor
@@ -561,6 +556,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: [+zone=us-east-1a, +ssd]
+	// lease_preferences: []
 	// zone set system.descriptor --file=./testdata/zone_attrs.yaml
 	// pq: cannot set zone configs for system config tables; try setting your config on the entire "system" database instead
 	// zone set system.namespace --file=./testdata/zone_attrs.yaml
@@ -574,6 +570,8 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: [+zone=us-east-1a, +ssd]
+	// lease_preferences: []
+	//
 	// zone get system
 	// system
 	// range_min_bytes: 1048576
@@ -582,12 +580,13 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: [+zone=us-east-1a, +ssd]
+	// lease_preferences: []
 	// zone rm system
-	// CONFIGURE ZONE 1
 	// zone ls
 	// .default
 	// .liveness
 	// .meta
+	// .system
 	// system.jobs
 	// zone rm .default
 	// pq: cannot remove default zone
@@ -598,6 +597,8 @@ func Example_zone() {
 	//   ttlseconds: 600
 	// num_replicas: 3
 	// constraints: []
+	// lease_preferences: []
+	//
 	// zone set .meta --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
@@ -605,6 +606,8 @@ func Example_zone() {
 	//   ttlseconds: 3600
 	// num_replicas: 3
 	// constraints: []
+	// lease_preferences: []
+	//
 	// zone set .system --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
@@ -612,6 +615,8 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
+	// lease_preferences: []
+	//
 	// zone set .timeseries --file=./testdata/zone_range_max_bytes.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
@@ -619,6 +624,8 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
+	// lease_preferences: []
+	//
 	// zone get .system
 	// .system
 	// range_min_bytes: 1048576
@@ -627,6 +634,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
+	// lease_preferences: []
 	// zone ls
 	// .default
 	// .liveness
@@ -641,6 +649,8 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
+	// lease_preferences: []
+	//
 	// zone get system
 	// .default
 	// range_min_bytes: 1048576
@@ -649,6 +659,7 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
+	// lease_preferences: []
 	// zone set .default --disable-replication
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
@@ -656,6 +667,8 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: []
+	// lease_preferences: []
+	//
 	// zone get system
 	// .default
 	// range_min_bytes: 1048576
@@ -664,29 +677,22 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 1
 	// constraints: []
+	// lease_preferences: []
 	// zone rm .liveness
-	// CONFIGURE ZONE 1
 	// zone rm .meta
-	// CONFIGURE ZONE 1
 	// zone rm .system
-	// CONFIGURE ZONE 1
 	// zone ls
 	// .default
 	// .timeseries
 	// system.jobs
 	// zone rm .timeseries
-	// CONFIGURE ZONE 1
 	// zone ls
 	// .default
 	// system.jobs
 	// zone rm .liveness
-	// CONFIGURE ZONE 0
 	// zone rm .meta
-	// CONFIGURE ZONE 0
 	// zone rm .system
-	// CONFIGURE ZONE 0
 	// zone rm .timeseries
-	// CONFIGURE ZONE 0
 	// zone set system.jobs@primary --file=./testdata/zone_attrs.yaml
 	// pq: setting zone configs on indexes or partitions requires a CCL binary
 	// zone set system --file=./testdata/zone_attrs_advanced.yaml
@@ -697,6 +703,7 @@ func Example_zone() {
 	// num_replicas: 3
 	// constraints: {+region=us-east-1: 1, '+zone=us-east-1a,+ssd': 1}
 	// lease_preferences: [[+region=us-east-1], [+zone=us-east-1a]]
+	//
 	// zone set system --file=./testdata/zone_attrs_experimental.yaml
 	// range_min_bytes: 1048576
 	// range_max_bytes: 134217728
@@ -705,6 +712,7 @@ func Example_zone() {
 	// num_replicas: 3
 	// constraints: {+region=us-east-1: 1, '+zone=us-east-1a,+ssd': 1}
 	// lease_preferences: [[+zone=us-east-1a]]
+	//
 	// sql -e create database t; create table t.f (x int, y int)
 	// CREATE TABLE
 	// zone set t --file=./testdata/zone_range_max_bytes.yaml
@@ -714,6 +722,8 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
+	// lease_preferences: []
+	//
 	// zone ls
 	// .default
 	// system
@@ -726,6 +736,8 @@ func Example_zone() {
 	//   ttlseconds: 90000
 	// num_replicas: 3
 	// constraints: []
+	// lease_preferences: []
+	//
 	// zone ls
 	// .default
 	// system
@@ -1796,7 +1808,6 @@ Available Commands:
 
   sql         open a sql shell
   user        get, set, list and remove users
-  zone        get, set, list and remove zones
   node        list, inspect or remove nodes
   dump        dump sql tables
 
@@ -1810,11 +1821,6 @@ Available Commands:
 
 Flags:
   -h, --help                             help for cockroach
-      --log-backtrace-at traceLocation   when logging hits line file:N, emit a stack trace (default :0)
-      --log-dir string                   if non-empty, write log files in this directory
-      --log-dir-max-size bytes           maximum combined size of all log files (default 100 MiB)
-      --log-file-max-size bytes          maximum size of each log file (default 10 MiB)
-      --log-file-verbosity Severity      minimum verbosity of messages written to the log file (default INFO)
       --logtostderr Severity[=DEFAULT]   logs at or above this threshold go to stderr (default NONE)
       --no-color                         disable standard error log colorization
 
@@ -1861,7 +1867,7 @@ Use "cockroach [command] --help" for more information about a command.
 			}
 
 			// Filter out all test flags.
-			testFlagRE := regexp.MustCompile(`--(test\.|verbosity|vmodule|rewrite)`)
+			testFlagRE := regexp.MustCompile(`--(test\.|vmodule|rewrite)`)
 			lines := strings.Split(buf.String(), "\n")
 			final := []string{}
 			for _, l := range lines {
@@ -2327,8 +2333,6 @@ writing ` + os.DevNull + `
   debug/nodes/1/ranges/18
   debug/nodes/1/ranges/19
   debug/nodes/1/ranges/20
-  debug/nodes/1/ranges/21
-  debug/nodes/1/ranges/22
   debug/reports/problemranges
   debug/schema/defaultdb@details
   debug/schema/postgres@details

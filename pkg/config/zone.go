@@ -255,8 +255,27 @@ const minRangeMaxBytes = 64 << 10 // 64 KB
 
 // defaultZoneConfig is the default zone configuration used when no custom
 // config has been specified.
-var defaultZoneConfig = ZoneConfig{
+var defaultZoneConfig = &ZoneConfig{
 	NumReplicas:   3,
+	RangeMinBytes: 1 << 20,  // 1 MB
+	RangeMaxBytes: 64 << 20, // 64 MB
+	GC: GCPolicy{
+		// Use 25 hours instead of the previous 24 to make users successful by
+		// default. Users desiring to take incremental backups every 24h may
+		// incorrectly assume that the previous default 24h was sufficient to do
+		// that. But the equation for incremental backups is:
+		// 	GC TTLSeconds >= (desired backup interval) + (time to perform incremental backup)
+		// We think most new users' incremental backups will complete within an
+		// hour, and larger clusters will have more experienced operators and will
+		// understand how to change these settings if needed.
+		TTLSeconds: 25 * 60 * 60,
+	},
+}
+
+// defaultSystemZoneConfig is the default zone configuration used when no custom
+// config has been specified for system ranges.
+var defaultSystemZoneConfig = &ZoneConfig{
+	NumReplicas:   5,
 	RangeMinBytes: 1 << 20,  // 1 MB
 	RangeMaxBytes: 64 << 20, // 64 MB
 	GC: GCPolicy{
@@ -277,7 +296,22 @@ var defaultZoneConfig = ZoneConfig{
 func DefaultZoneConfig() ZoneConfig {
 	testingLock.Lock()
 	defer testingLock.Unlock()
+	return *defaultZoneConfig
+}
+
+// DefaultZoneConfigRef returns a reference to the default zone config.
+func DefaultZoneConfigRef() *ZoneConfig {
+	testingLock.Lock()
+	defer testingLock.Unlock()
 	return defaultZoneConfig
+}
+
+// DefaultSystemZoneConfig is the default zone configuration used when no custom
+// config has been specified.
+func DefaultSystemZoneConfig() ZoneConfig {
+	testingLock.Lock()
+	defer testingLock.Unlock()
+	return *defaultSystemZoneConfig
 }
 
 // TestingSetDefaultZoneConfig is a testing-only function that changes the
@@ -285,12 +319,27 @@ func DefaultZoneConfig() ZoneConfig {
 func TestingSetDefaultZoneConfig(cfg ZoneConfig) func() {
 	testingLock.Lock()
 	oldConfig := defaultZoneConfig
-	defaultZoneConfig = cfg
+	defaultZoneConfig = &cfg
 	testingLock.Unlock()
 
 	return func() {
 		testingLock.Lock()
 		defaultZoneConfig = oldConfig
+		testingLock.Unlock()
+	}
+}
+
+// TestingSetDefaultSystemZoneConfig is a testing-only function that changes the
+// default zone config and returns a function that reverts the change.
+func TestingSetDefaultSystemZoneConfig(cfg ZoneConfig) func() {
+	testingLock.Lock()
+	oldConfig := defaultSystemZoneConfig
+	defaultSystemZoneConfig = &cfg
+	testingLock.Unlock()
+
+	return func() {
+		testingLock.Lock()
+		defaultSystemZoneConfig = oldConfig
 		testingLock.Unlock()
 	}
 }

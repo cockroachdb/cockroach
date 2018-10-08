@@ -121,21 +121,21 @@ nosort                   ·         ·     (x)                 x=CONST
 query TTTTT
 EXPLAIN (VERBOSE) SELECT 1 = (SELECT 2 AS x FROM (SELECT 3 AS s)) AS y
 ----
-root                               ·          ·                                     (y)           y=CONST
- ├── render                        ·          ·                                     (y)           y=CONST
- │    │                            render 0   @S1 = 1                               ·             ·
- │    └── emptyrow                 ·          ·                                     ()            ·
- └── subquery                      ·          ·                                     (y)           y=CONST
-      │                            id         @S1                                   ·             ·
-      │                            sql        (SELECT 2 AS x FROM (SELECT 3 AS s))  ·             ·
-      │                            exec mode  one row                               ·             ·
-      └── limit                    ·          ·                                     (x)           x=CONST
-           │                       count      2                                     ·             ·
-           └── render              ·          ·                                     (x)           x=CONST
-                │                  render 0   2                                     ·             ·
-                └── render         ·          ·                                     (s[omitted])  ·
-                     │             render 0   NULL                                  ·             ·
-                     └── emptyrow  ·          ·                                     ()            ·
+root                               ·             ·                                     (y)           y=CONST
+ ├── render                        ·             ·                                     (y)           y=CONST
+ │    │                            render 0      @S1 = 1                               ·             ·
+ │    └── emptyrow                 ·             ·                                     ()            ·
+ └── subquery                      ·             ·                                     (y)           y=CONST
+      │                            id            @S1                                   ·             ·
+      │                            original sql  (SELECT 2 AS x FROM (SELECT 3 AS s))  ·             ·
+      │                            exec mode     one row                               ·             ·
+      └── limit                    ·             ·                                     (x)           x=CONST
+           │                       count         2                                     ·             ·
+           └── render              ·             ·                                     (x)           x=CONST
+                │                  render 0      2                                     ·             ·
+                └── render         ·             ·                                     (s[omitted])  ·
+                     │             render 0      NULL                                  ·             ·
+                     └── emptyrow  ·             ·                                     ()            ·
 
 # Propagation through table scans.
 statement ok

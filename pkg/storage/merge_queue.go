@@ -131,7 +131,7 @@ func (mq *mergeQueue) enabled() bool {
 }
 
 func (mq *mergeQueue) shouldQueue(
-	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	if !mq.enabled() {
 		return false, 0
@@ -193,7 +193,7 @@ func (mq *mergeQueue) requestRangeStats(
 }
 
 func (mq *mergeQueue) process(
-	ctx context.Context, lhsRepl *Replica, sysCfg config.SystemConfig,
+	ctx context.Context, lhsRepl *Replica, sysCfg *config.SystemConfig,
 ) error {
 	if !mq.enabled() {
 		log.VEventf(ctx, 2, "skipping merge: queue has been disabled")
@@ -247,13 +247,9 @@ func (mq *mergeQueue) process(
 				break
 			}
 		}
-		// TODO(benesch): RelocateRange needs to be made more robust. It cannot
-		// currently handle certain edge cases, like multiple stores on one node. It
-		// also adds all new replicas before removing any old replicas, rather than
-		// performing interleaved adds/removes, resulting in a moment where the
-		// number of replicas is potentially double the configured replication
-		// factor.
-		if err := RelocateRange(ctx, mq.db, rhsDesc, targets); err != nil {
+		// TODO(benesch): RelocateRange can sometimes fail if it needs to move a replica
+		// from one store to another store on the same node.
+		if err := mq.store.DB().AdminRelocateRange(ctx, rhsDesc.StartKey, targets); err != nil {
 			return err
 		}
 	}
@@ -272,6 +268,11 @@ func (mq *mergeQueue) process(
 		// While range merges are unstable, be extra cautious and mark every error
 		// as purgatory-worthy.
 		return rangeMergePurgatoryError{err}
+	}
+	if testingAggressiveConsistencyChecks {
+		if err := mq.store.consistencyQueue.process(ctx, lhsRepl, sysCfg); err != nil {
+			log.Warning(ctx, err)
+		}
 	}
 	return nil
 }

@@ -139,7 +139,9 @@ func EncodeEscapedChar(
 		// Make sure this is run at least once in case ln == -1.
 		buf.Write(HexMap[entireString[currentIdx]])
 		for ri := 1; ri < ln; ri++ {
-			buf.Write(HexMap[entireString[currentIdx+ri]])
+			if currentIdx+ri < len(entireString) {
+				buf.Write(HexMap[entireString[currentIdx+ri]])
+			}
 		}
 	} else if ln == 1 {
 		// For single-byte runes, do the same as encodeSQLBytes.

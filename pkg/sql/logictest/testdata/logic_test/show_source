@@ -21,7 +21,7 @@ UTF8                1
 # We filter here because optimizer will be different depending on which
 # configuration this logic test is running in.
 query TT colnames
-SELECT * FROM [SHOW ALL] WHERE variable != 'optimizer'
+SELECT * FROM [SHOW ALL] WHERE variable != 'optimizer' AND variable != 'crdb_version'
 ----
 variable                           value
 application_name                   ·
@@ -29,10 +29,10 @@ bytea_output                       hex
 client_encoding                    UTF8
 client_min_messages                notice
 database                           test
-datestyle                          ISO
+datestyle                          ISO, MDY
 default_transaction_isolation      serializable
 default_transaction_read_only      off
-distsql                            off
+distsql                            2.0-off
 experimental_force_lookup_join     off
 experimental_force_split_at        off
 experimental_force_zigzag_join     off
@@ -47,9 +47,9 @@ server_encoding                    UTF8
 server_version                     9.5.0
 server_version_num                 90500
 session_user                       root
-sql_safe_updates                   false
+sql_safe_updates                   off
 standard_conforming_strings        on
-statement_timeout                  0s
+statement_timeout                  0
 timezone                           UTC
 tracing                            off
 transaction_isolation              serializable
@@ -61,7 +61,7 @@ query I colnames
 SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]
 ----
 sql.defaults.distsql
-0
+3
 
 query TTTT colnames
 SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE variable LIKE '%organization'
@@ -80,6 +80,16 @@ SELECT * FROM [SHOW DATABASE]
 ----
 database
 test
+
+query ITTT colnames
+SELECT * FROM [SHOW ZONE CONFIGURATIONS] LIMIT 0
+----
+zone_id  cli_specifier  config_sql  config_protobuf
+
+query ITTT colnames
+SELECT * FROM [SHOW ZONE CONFIGURATION FOR TABLE system.users] LIMIT 0
+----
+zone_id  cli_specifier  config_sql  config_protobuf
 
 query T colnames
 SELECT * FROM [SHOW DATABASES]
@@ -260,10 +270,10 @@ SELECT * FROM [SHOW COMPACT TRACE FOR SESSION] LIMIT 0
 ----
 age  message  tag  operation
 
-query ITTTTTTTTRTI colnames
+query ITTTTTTTTTRTI colnames
 SELECT * FROM [SHOW JOBS] LIMIT 0
 ----
-job_id  job_type  description  user_name  status  created  started  finished  modified  fraction_completed  error  coordinator_id
+job_id  job_type  description  user_name  status  running_status  created  started  finished  modified  fraction_completed  error  coordinator_id
 
 query TT colnames
 SELECT * FROM [SHOW SYNTAX 'select 1; select 2']

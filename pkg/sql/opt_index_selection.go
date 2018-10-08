@@ -141,11 +141,11 @@ func (p *planner) selectIndex(
 		}
 		bld := optbuilder.NewScalar(ctx, &p.semaCtx, p.EvalContext(), optimizer.Factory())
 		bld.AllowUnsupportedExpr = true
-		filterGroup, err := bld.Build(s.filter)
+		err := bld.Build(s.filter)
 		if err != nil {
 			return nil, err
 		}
-		filterExpr := memo.MakeNormExprView(optimizer.Memo(), filterGroup)
+		filterExpr := optimizer.Memo().Root()
 		for _, c := range candidates {
 			if err := c.makeIndexConstraints(
 				&optimizer, filterExpr, p.EvalContext(),
@@ -249,7 +249,7 @@ func (p *planner) selectIndex(
 		if remEv.Operator() == opt.TrueOp {
 			s.filter = nil
 		} else {
-			execBld := execbuilder.New(nil /* execFactory */, remEv)
+			execBld := execbuilder.New(nil /* execFactory */, remEv, nil /* evalCtx */)
 			s.filter, err = execBld.BuildScalar(&s.filterVars)
 			if err != nil {
 				return nil, err

@@ -70,7 +70,7 @@ func (dsp *DistSQLPlanner) createBackfiller(
 		return PhysicalPlan{}, err
 	}
 
-	spanPartitions, err := dsp.partitionSpans(planCtx, spans)
+	spanPartitions, err := dsp.PartitionSpans(planCtx, spans)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
@@ -80,13 +80,13 @@ func (dsp *DistSQLPlanner) createBackfiller(
 	for i, sp := range spanPartitions {
 		ib := &distsqlrun.BackfillerSpec{}
 		*ib = spec
-		ib.Spans = make([]distsqlrun.TableReaderSpan, len(sp.spans))
-		for j := range sp.spans {
-			ib.Spans[j].Span = sp.spans[j]
+		ib.Spans = make([]distsqlrun.TableReaderSpan, len(sp.Spans))
+		for j := range sp.Spans {
+			ib.Spans[j].Span = sp.Spans[j]
 		}
 
 		proc := distsqlplan.Processor{
-			Node: sp.node,
+			Node: sp.Node,
 			Spec: distsqlrun.ProcessorSpec{
 				Core:   distsqlrun.ProcessorCoreUnion{Backfiller: ib},
 				Output: []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},

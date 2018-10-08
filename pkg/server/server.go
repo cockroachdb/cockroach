@@ -18,9 +18,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
-	"html/template"
 	"io"
 	"io/ioutil"
 	"math"
@@ -33,7 +31,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	assetfs "github.com/elazarl/go-bindata-assetfs"
 	raven "github.com/getsentry/raven-go"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	opentracing "github.com/opentracing/opentracing-go"
@@ -42,7 +39,6 @@ import (
 
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -74,6 +70,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -82,6 +79,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
@@ -150,36 +148,38 @@ func (mux *safeServeMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type Server struct {
 	nodeIDContainer base.NodeIDContainer
 
-	cfg                Config
-	st                 *cluster.Settings
-	mux                safeServeMux
-	clock              *hlc.Clock
-	rpcContext         *rpc.Context
-	grpc               *grpc.Server
-	gossip             *gossip.Gossip
-	nodeDialer         *nodedialer.Dialer
-	nodeLiveness       *storage.NodeLiveness
-	storePool          *storage.StorePool
-	tcsFactory         *kv.TxnCoordSenderFactory
-	distSender         *kv.DistSender
-	db                 *client.DB
-	pgServer           *pgwire.Server
-	distSQLServer      *distsqlrun.ServerImpl
-	node               *Node
-	registry           *metric.Registry
-	recorder           *status.MetricsRecorder
-	runtime            *status.RuntimeStatSampler
-	admin              *adminServer
-	status             *statusServer
-	authentication     *authenticationServer
-	initServer         *initServer
-	tsDB               *ts.DB
-	tsServer           ts.Server
-	raftTransport      *storage.RaftTransport
-	stopper            *stop.Stopper
-	execCfg            *sql.ExecutorConfig
-	internalExecutor   *sql.InternalExecutor
-	leaseMgr           *sql.LeaseManager
+	cfg              Config
+	st               *cluster.Settings
+	mux              safeServeMux
+	clock            *hlc.Clock
+	rpcContext       *rpc.Context
+	grpc             *grpc.Server
+	gossip           *gossip.Gossip
+	nodeDialer       *nodedialer.Dialer
+	nodeLiveness     *storage.NodeLiveness
+	storePool        *storage.StorePool
+	tcsFactory       *kv.TxnCoordSenderFactory
+	distSender       *kv.DistSender
+	db               *client.DB
+	pgServer         *pgwire.Server
+	distSQLServer    *distsqlrun.ServerImpl
+	node             *Node
+	registry         *metric.Registry
+	recorder         *status.MetricsRecorder
+	runtime          *status.RuntimeStatSampler
+	admin            *adminServer
+	status           *statusServer
+	authentication   *authenticationServer
+	initServer       *initServer
+	tsDB             *ts.DB
+	tsServer         ts.Server
+	raftTransport    *storage.RaftTransport
+	stopper          *stop.Stopper
+	execCfg          *sql.ExecutorConfig
+	internalExecutor *sql.InternalExecutor
+	leaseMgr         *sql.LeaseManager
+	// sessionRegistry can be queried for info on running SQL sessions. It is
+	// shared between the sql.Server and the statusServer.
 	sessionRegistry    *sql.SessionRegistry
 	jobRegistry        *jobs.Registry
 	engines            Engines
@@ -483,9 +483,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	storage.RegisterPerReplicaServer(s.grpc, s.node.perReplicaServer)
 	s.node.storeCfg.ClosedTimestamp.RegisterClosedTimestampServer(s.grpc)
 
-	s.sessionRegistry = sql.MakeSessionRegistry()
+	s.sessionRegistry = sql.NewSessionRegistry()
 	s.jobRegistry = jobs.MakeRegistry(
 		s.cfg.AmbientCtx,
+		s.stopper,
 		s.clock,
 		s.db,
 		internalExecutor,
@@ -543,6 +544,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		s.gossip,
 		s.recorder,
 		s.nodeLiveness,
+		s.storePool,
 		s.rpcContext,
 		s.node.stores,
 		s.stopper,
@@ -612,7 +614,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 			s.gossip,
 			s.stopper,
 			s.nodeLiveness,
-			sqlExecutorTestingKnobs.DistSQLPlannerKnobs,
 			s.nodeDialer,
 		),
 
@@ -663,7 +664,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Now that we have a pgwire.Server (which has a sql.Server), we can close a
 	// circular dependency between the distsqlrun.Server and sql.Server and set
-	// SessionBoundInternalExecutorCtor.
+	// SessionBoundInternalExecutorFactory.
 	s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory =
 		func(
 			ctx context.Context, sessionData *sessiondata.SessionData,
@@ -1234,19 +1235,6 @@ func (s *Server) Start(ctx context.Context) error {
 	// endpoints.
 	s.mux.Handle(debug.Endpoint, debug.NewServer(s.st))
 
-	fileServer := http.FileServer(&assetfs.AssetFS{
-		Asset:     ui.Asset,
-		AssetDir:  ui.AssetDir,
-		AssetInfo: ui.AssetInfo,
-	})
-
-	// Serve UI assets. This needs to be before the gRPC handlers are registered, otherwise
-	// the `s.mux.Handle("/", ...)` would cover all URLs, allowing anonymous access.
-	maybeAuthMux := newAuthenticationMuxAllowAnonymous(
-		s.authentication, serveUIAssets(fileServer, s.cfg),
-	)
-	s.mux.Handle("/", maybeAuthMux)
-
 	// Initialize grpc-gateway mux and context in order to get the /health
 	// endpoint working even before the node has fully initialized.
 	jsonpb := &protoutil.JSONPb{
@@ -1266,11 +1254,6 @@ func (s *Server) Start(ctx context.Context) error {
 	)
 	gwCtx, gwCancel := context.WithCancel(s.AnnotateCtx(context.Background()))
 	s.stopper.AddCloser(stop.CloserFn(gwCancel))
-
-	var authHandler http.Handler = gwMux
-	if s.cfg.RequireWebSession() {
-		authHandler = newAuthenticationMux(s.authentication, authHandler)
-	}
 
 	// Setup HTTP<->gRPC handlers.
 	c1, c2 := net.Pipe()
@@ -1351,18 +1334,6 @@ func (s *Server) Start(ctx context.Context) error {
 		return errors.Wrap(err, "inspecting engines")
 	}
 
-	// Signal readiness. At this point we have bound our listening port
-	// but the server is not yet running, so any connection attempts
-	// will be queued up in the kernel. We turn on servers below, first
-	// HTTP and later pgwire. If we're in initializing mode, we don't
-	// start the pgwire server until after initialization completes, so
-	// connections to that port will continue to block until we're
-	// initialized.
-	if s.cfg.ReadyFn != nil {
-		waitForInit := len(bootstrappedEngines) > 0 || len(s.cfg.GossipBootstrapResolvers) > 0
-		s.cfg.ReadyFn(waitForInit)
-	}
-
 	// Filter the gossip bootstrap resolvers based on the listen and
 	// advertise addresses.
 	listenAddrU := util.NewUnresolvedAddr("tcp", s.cfg.Addr)
@@ -1377,6 +1348,11 @@ func (s *Server) Start(ctx context.Context) error {
 
 	var hlcUpperBoundExists bool
 	if len(bootstrappedEngines) > 0 {
+		// The cluster was already initialized.
+		if s.cfg.ReadyFn != nil {
+			s.cfg.ReadyFn(false /*waitForInit*/)
+		}
+
 		hlcUpperBound, err := storage.ReadMaxHLCUpperBound(ctx, bootstrappedEngines)
 		if err != nil {
 			log.Fatal(ctx, err)
@@ -1399,6 +1375,15 @@ func (s *Server) Start(ctx context.Context) error {
 		// empty, then this node can bootstrap a new cluster. We disallow
 		// this if this node is being started with itself specified as a
 		// --join host, because that's too likely to be operator error.
+		//
+		if s.cfg.ReadyFn != nil {
+			// TODO(knz): when CockroachDB stops auto-initializing when --join
+			// is not specified, this needs to be adjusted as well. See issue
+			// #24118 and #28495 for details.
+			//
+			s.cfg.ReadyFn(false /*waitForInit*/)
+		}
+
 		bootstrapVersion := s.cfg.Settings.Version.BootstrapVersion()
 		if s.cfg.TestingKnobs.Store != nil {
 			if storeKnobs, ok := s.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok && storeKnobs.BootstrapVersion != nil {
@@ -1410,6 +1395,9 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 		log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
 	} else {
+		if s.cfg.ReadyFn != nil {
+			s.cfg.ReadyFn(true /*waitForInit*/)
+		}
 		log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting init command.")
 
 		// Note that when we created the init server, we acquired its semaphore
@@ -1462,7 +1450,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.cfg.NodeAttributes,
 		s.cfg.Locality,
 		cv,
-		s.cfg.LocalityIPAddresses,
+		s.cfg.LocalityAddresses,
 		s.execCfg.DistSQLPlanner.SetNodeDesc,
 	); err != nil {
 		return err
@@ -1528,22 +1516,14 @@ func (s *Server) Start(ctx context.Context) error {
 		*s.db,
 		s.node.Descriptor,
 		s.execCfg.DistSQLPlanner,
+		// We're reusing the ieFactory from the distSQLServer.
+		s.distSQLServer.ServerConfig.SessionBoundInternalExecutorFactory,
 	).Start(s.stopper)
 
 	s.distSQLServer.Start()
 	s.pgServer.Start(ctx, s.stopper)
 
 	s.serveMode.set(modeOperational)
-
-	s.mux.Handle(adminPrefix, authHandler)
-	// Exempt the health check endpoint from authentication.
-	s.mux.Handle("/_admin/v1/health", gwMux)
-	s.mux.Handle(ts.URLPrefix, authHandler)
-	s.mux.Handle(statusPrefix, authHandler)
-	s.mux.Handle(loginPath, gwMux)
-	s.mux.Handle(logoutPath, authHandler)
-	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
-	log.Event(ctx, "added http endpoints")
 
 	log.Infof(ctx, "starting %s server at %s (use: %s)",
 		s.cfg.HTTPRequestScheme(), s.cfg.HTTPAddr, s.cfg.HTTPAdvertiseAddr)
@@ -1607,6 +1587,43 @@ func (s *Server) Start(ctx context.Context) error {
 	log.Info(ctx, "serving sql connections")
 	// Start servicing SQL connections.
 
+	// Serve UI assets.
+	//
+	// The authentication mux used here is created in "allow anonymous" mode so that the UI
+	// assets are served up whether or not there is a session. If there is a session, the mux
+	// adds it to the context, and it is templated into index.html so that the UI can show
+	// the username of the currently-logged-in user.
+	authenticatedUIHandler := newAuthenticationMuxAllowAnonymous(
+		s.authentication,
+		ui.Handler(ui.Config{
+			ExperimentalUseLogin: s.cfg.EnableWebSessionAuthentication,
+			LoginEnabled:         s.cfg.RequireWebSession(),
+			GetUser: func(ctx context.Context) *string {
+				if u, ok := ctx.Value(webSessionUserKey{}).(string); ok {
+					return &u
+				}
+				return nil
+			},
+		}),
+	)
+	s.mux.Handle("/", authenticatedUIHandler)
+
+	// Register gRPC-gateway endpoints used by the admin UI.
+	var authHandler http.Handler = gwMux
+	if s.cfg.RequireWebSession() {
+		authHandler = newAuthenticationMux(s.authentication, authHandler)
+	}
+
+	s.mux.Handle(adminPrefix, authHandler)
+	// Exempt the health check endpoint from authentication.
+	s.mux.Handle("/_admin/v1/health", gwMux)
+	s.mux.Handle(ts.URLPrefix, authHandler)
+	s.mux.Handle(statusPrefix, authHandler)
+	s.mux.Handle(loginPath, gwMux)
+	s.mux.Handle(logoutPath, authHandler)
+	s.mux.Handle(statusVars, http.HandlerFunc(s.status.handleVars))
+	log.Event(ctx, "added http endpoints")
+
 	// Attempt to upgrade cluster version.
 	s.startAttemptUpgrade(ctx)
 
@@ -1618,7 +1635,7 @@ func (s *Server) Start(ctx context.Context) error {
 			return
 		}
 		netutil.FatalIfUnexpected(httpServer.ServeWith(pgCtx, s.stopper, pgL, func(conn net.Conn) {
-			connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
+			connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
 			setTCPKeepAlive(connCtx, conn)
 
 			// Unless this is a simple disconnect or context timeout, report the error on
@@ -1654,7 +1671,7 @@ func (s *Server) Start(ctx context.Context) error {
 				return
 			}
 			netutil.FatalIfUnexpected(httpServer.ServeWith(pgCtx, s.stopper, unixLn, func(conn net.Conn) {
-				connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
+				connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
 				if err := s.pgServer.ServeConn(connCtx, conn); err != nil &&
 					!netutil.IsClosedConnection(err) {
 					// Report the error on this connection's context, so that we
@@ -1894,6 +1911,8 @@ func (s *Server) PGServer() *pgwire.Server {
 	return s.pgServer
 }
 
+// TODO(benesch): Use https://github.com/NYTimes/gziphandler instead.
+// gzipResponseWriter reinvents the wheel and is not as robust.
 type gzipResponseWriter struct {
 	gz gzip.Writer
 	http.ResponseWriter
@@ -1916,6 +1935,11 @@ func (w *gzipResponseWriter) Reset(rw http.ResponseWriter) {
 }
 
 func (w *gzipResponseWriter) Write(b []byte) (int, error) {
+	// The underlying http.ResponseWriter can't sniff gzipped data properly, so we
+	// do our own sniffing on the uncompressed data.
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", http.DetectContentType(b))
+	}
 	return w.gz.Write(b)
 }
 
@@ -1942,39 +1966,6 @@ func (w *gzipResponseWriter) Close() error {
 	return err
 }
 
-func serveUIAssets(fileServer http.Handler, cfg Config) http.Handler {
-	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		if request.URL.Path != "/" {
-			fileServer.ServeHTTP(writer, request)
-			return
-		}
-
-		// Construct arguments for template.
-		tmplArgs := ui.IndexHTMLArgs{
-			ExperimentalUseLogin: cfg.EnableWebSessionAuthentication,
-			LoginEnabled:         cfg.RequireWebSession(),
-			Tag:                  build.GetInfo().Tag,
-			Version:              build.VersionPrefix(),
-		}
-		loggedInUser, ok := request.Context().Value(webSessionUserKey{}).(string)
-		if ok && loggedInUser != "" {
-			tmplArgs.LoggedInUser = &loggedInUser
-		}
-
-		argsJSON, err := json.Marshal(tmplArgs)
-		if err != nil {
-			http.Error(writer, err.Error(), 500)
-		}
-
-		// Execute the template.
-		writer.Header().Add("Content-Type", "text/html")
-		if err := ui.IndexHTMLTemplate.Execute(writer, map[string]template.JS{
-			"DataFromServer": template.JS(string(argsJSON)),
-		}); err != nil {
-			wrappedErr := errors.Wrap(err, "templating index.html")
-			http.Error(writer, wrappedErr.Error(), 500)
-			log.Error(request.Context(), wrappedErr)
-			return
-		}
-	})
+func init() {
+	tracing.RegisterTagRemapping("n", "node")
 }

@@ -20,11 +20,14 @@ import (
 
 	"fmt"
 
+	"sync"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -60,6 +63,8 @@ type runnerResult struct {
 }
 
 func (req runnerRequest) run() {
+	defer distsqlplan.ReleaseSetupFlowRequest(req.flowReq)
+
 	res := runnerResult{nodeID: req.nodeID}
 
 	conn, err := req.nodeDialer.Dial(req.ctx, req.nodeID)
@@ -102,17 +107,19 @@ func (dsp *DistSQLPlanner) initRunners() {
 // Run executes a physical plan. The plan should have been finalized using
 // FinalizePlan.
 //
-// txn is the transaction in which the plan will run. If nil, the different
-// processors are expected to manage their own internal transactions.
-//
-// `finishedSetupFn`, if non-nil, is called synchronously after all the
-// processors have successfully started up.
-//
 // All errors encountered are reported to the DistSQLReceiver's resultWriter.
 // Additionally, if the error is a "communication error" (an error encountered
 // while using that resultWriter), the error is also stored in
 // DistSQLReceiver.commErr. That can be tested to see if a client session needs
 // to be closed.
+//
+// Args:
+// - txn is the transaction in which the plan will run. If nil, the different
+// processors are expected to manage their own internal transactions.
+// - evalCtx is the evaluation context in which the plan will run. It might be
+// mutated.
+// - finishedSetupFn, if non-nil, is called synchronously after all the
+// processors have successfully started up.
 func (dsp *DistSQLPlanner) Run(
 	planCtx *PlanningCtx,
 	txn *client.Txn,
@@ -127,9 +134,9 @@ func (dsp *DistSQLPlanner) Run(
 		localState   distsqlrun.LocalState
 		txnCoordMeta *roachpb.TxnCoordMeta
 	)
-	if planCtx.validExtendedEvalCtx {
-		localState.EvalContext = planCtx.EvalContext()
-	}
+	// NB: putting part of evalCtx in localState means it might be mutated down
+	// the line.
+	localState.EvalContext = &evalCtx.EvalContext
 	if planCtx.isLocal {
 		localState.IsLocal = true
 		localState.LocalProcs = plan.LocalProcessors
@@ -203,7 +210,7 @@ func (dsp *DistSQLPlanner) Run(
 			continue
 		}
 		req := setupReq
-		req.Flow = flowSpec
+		req.Flow = *flowSpec
 		runReq := runnerRequest{
 			ctx:        ctx,
 			nodeDialer: dsp.nodeDialer,
@@ -238,7 +245,8 @@ func (dsp *DistSQLPlanner) Run(
 
 	// Set up the flow on this node.
 	localReq := setupReq
-	localReq.Flow = flows[thisNodeID]
+	localReq.Flow = *flows[thisNodeID]
+	defer distsqlplan.ReleaseSetupFlowRequest(&localReq)
 	ctx, flow, err := dsp.distSQLSrv.SetupLocalSyncFlow(ctx, evalCtx.Mon, &localReq, recv, localState)
 	if err != nil {
 		recv.SetError(err)
@@ -369,6 +377,12 @@ func (w *errOnlyResultWriter) IncrementRowsAffected(n int) {
 
 var _ distsqlrun.RowReceiver = &DistSQLReceiver{}
 
+var receiverSyncPool = sync.Pool{
+	New: func() interface{} {
+		return &DistSQLReceiver{}
+	},
+}
+
 // MakeDistSQLReceiver creates a DistSQLReceiver.
 //
 // ctx is the Context that the receiver will use throughput its
@@ -388,7 +402,8 @@ func MakeDistSQLReceiver(
 	tracing *SessionTracing,
 ) *DistSQLReceiver {
 	consumeCtx, cleanup := tracing.TraceExecConsume(ctx)
-	r := &DistSQLReceiver{
+	r := receiverSyncPool.Get().(*DistSQLReceiver)
+	*r = DistSQLReceiver{
 		ctx:          consumeCtx,
 		cleanup:      cleanup,
 		resultWriter: resultWriter,
@@ -417,10 +432,17 @@ func MakeDistSQLReceiver(
 	return r
 }
 
+// Release releases this DistSQLReceiver back to the pool.
+func (r *DistSQLReceiver) Release() {
+	*r = DistSQLReceiver{}
+	receiverSyncPool.Put(r)
+}
+
 // clone clones the receiver for running subqueries. Not all fields are cloned,
 // only those required for running subqueries.
 func (r *DistSQLReceiver) clone() *DistSQLReceiver {
-	return &DistSQLReceiver{
+	ret := receiverSyncPool.Get().(*DistSQLReceiver)
+	*ret = DistSQLReceiver{
 		ctx:         r.ctx,
 		cleanup:     func() {},
 		rangeCache:  r.rangeCache,
@@ -430,6 +452,7 @@ func (r *DistSQLReceiver) clone() *DistSQLReceiver {
 		stmtType:    tree.Rows,
 		tracing:     r.tracing,
 	}
+	return ret
 }
 
 // SetError provides a convenient way for a client to pass in an error, thus
@@ -617,7 +640,7 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 
 		evalCtx.ActiveMemAcc = &subqueryMemAccount
 
-		var subqueryPlanCtx PlanningCtx
+		var subqueryPlanCtx *PlanningCtx
 		var distributeSubquery bool
 		if maybeDistribute {
 			distributeSubquery = shouldDistributePlan(
@@ -632,17 +655,16 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 		subqueryPlanCtx.isLocal = !distributeSubquery
 		subqueryPlanCtx.planner = planner
 		subqueryPlanCtx.stmtType = tree.Rows
-		subqueryPlanCtx.validExtendedEvalCtx = true
 		// Don't close the top-level plan from subqueries - someone else will handle
 		// that.
 		subqueryPlanCtx.ignoreClose = true
 
-		subqueryPhysPlan, err := dsp.createPlanForNode(&subqueryPlanCtx, subqueryPlan.plan)
+		subqueryPhysPlan, err := dsp.createPlanForNode(subqueryPlanCtx, subqueryPlan.plan)
 		if err != nil {
 			recv.SetError(err)
 			return false
 		}
-		dsp.FinalizePlan(&subqueryPlanCtx, &subqueryPhysPlan)
+		dsp.FinalizePlan(subqueryPlanCtx, &subqueryPhysPlan)
 
 		// TODO(arjun): #28264: We set up a row container, wrap it in a row
 		// receiver, and use it and serialize the results of the subquery. The type
@@ -660,7 +682,7 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 		subqueryRowReceiver := NewRowResultWriter(rows)
 		subqueryRecv.resultWriter = subqueryRowReceiver
 		subqueryPlans[planIdx].started = true
-		dsp.Run(&subqueryPlanCtx, planner.txn, &subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)
+		dsp.Run(subqueryPlanCtx, planner.txn, &subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)
 		if subqueryRecv.commErr != nil {
 			recv.SetError(subqueryRecv.commErr)
 			return false
@@ -676,8 +698,9 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 			subqueryPlans[planIdx].result = tree.MakeDBool(tree.DBool(hasRows))
 		case distsqlrun.SubqueryExecModeAllRows, distsqlrun.SubqueryExecModeAllRowsNormalized:
 			var result tree.DTuple
-			for i := 0; i < rows.Len(); i++ {
-				row := rows.At(i)
+			for rows.Len() > 0 {
+				row := rows.At(0)
+				rows.PopFirst()
 				if row.Len() == 1 {
 					// This seems hokey, but if we don't do this then the subquery expands
 					// to a tuple of tuples instead of a tuple of values and an expression

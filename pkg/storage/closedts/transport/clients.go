@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -106,7 +107,7 @@ func (pr *Clients) getOrCreateClient(nodeID roachpb.NodeID) *client {
 	// Slow path: create the client. Another inserter might race us to it.
 
 	// This allocates, so only do it when necessary.
-	ctx := log.WithLogTagStr(context.Background(), "ct-client", "")
+	ctx := logtags.AddTag(context.Background(), "ct-client", "")
 
 	cl = &client{}
 	cl.mu.requested = map[roachpb.RangeID]struct{}{}

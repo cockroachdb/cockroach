@@ -17,7 +17,7 @@ package log
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -25,17 +25,13 @@ import (
 // recently a given log message has been emitted so that it can determine
 // whether it's worth logging again.
 type EveryN struct {
-	// N is the minimum duration of time between log messages.
-	N time.Duration
-
-	syncutil.Mutex
-	lastLog time.Time
+	util.EveryN
 }
 
 // Every is a convenience constructor for an EveryN object that allows a log
 // message every n duration.
 func Every(n time.Duration) EveryN {
-	return EveryN{N: n}
+	return EveryN{EveryN: util.Every(n)}
 }
 
 // ShouldLog returns whether it's been more than N time since the last event.
@@ -48,12 +44,5 @@ func (e *EveryN) shouldLog(now time.Time) bool {
 		// Always log when high verbosity is desired.
 		return true
 	}
-	var shouldLog bool
-	e.Lock()
-	if now.Sub(e.lastLog) >= e.N {
-		shouldLog = true
-		e.lastLog = now
-	}
-	e.Unlock()
-	return shouldLog
+	return e.ShouldProcess(now)
 }

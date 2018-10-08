@@ -97,7 +97,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 
 		for ok := false; !ok; {
 			stmtReplicaCount := fmt.Sprintf(
-				`SELECT count(*) = 0 FROM crdb_internal.ranges WHERE array_position(replicas, %s) IS NULL and database = 'kv';`, targetNodeID)
+				`SELECT count(*) = 0 FROM crdb_internal.ranges WHERE array_position(replicas, %s) IS NULL and database_name = 'kv';`, targetNodeID)
 			t.Status(stmtReplicaCount)
 			if err := db.QueryRow(stmtReplicaCount).Scan(&ok); err != nil {
 				return err
@@ -120,12 +120,21 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 		"./workload run kv --max-rate 500 --tolerate-errors" + loadDuration + " {pgurl:1-%d}",
 	}
 
-	run := func(stmt string) {
+	run := func(stmtStr string) {
 		db := c.Conn(ctx, nodes)
 		defer db.Close()
-
+		stmt := fmt.Sprintf(stmtStr, "", "=")
+		// We are removing the EXPERIMENTAL keyword in 2.1. For compatibility
+		// with 2.0 clusters we still need to try with it if the
+		// syntax without EXPERIMENTAL fails.
+		// TODO(knz): Remove this in 2.2.
 		t.Status(stmt)
 		_, err := db.ExecContext(ctx, stmt)
+		if err != nil && strings.Contains(err.Error(), "syntax error") {
+			stmt = fmt.Sprintf(stmtStr, "EXPERIMENTAL", "")
+			t.Status(stmt)
+			_, err = db.ExecContext(ctx, stmt)
+		}
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -179,7 +188,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 			if err != nil {
 				return err
 			}
-			run(fmt.Sprintf(`ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE 'constraints: {"+node%d"}'`, node))
+			run(fmt.Sprintf(`ALTER RANGE default %%[1]s CONFIGURE ZONE %%[2]s 'constraints: {"+node%d"}'`, node))
 
 			if err := waitUpReplicated(id); err != nil {
 				return err
@@ -191,7 +200,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 				}
 			}
 
-			run(fmt.Sprintf(`ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE 'constraints: {"-node%d"}'`, node))
+			run(fmt.Sprintf(`ALTER RANGE default %%[1]s CONFIGURE ZONE %%[2]s 'constraints: {"-node%d"}'`, node))
 
 			if err := decom(id); err != nil {
 				return err
@@ -327,7 +336,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 			"Please verify cluster health before removing the nodes.",
 	}
 	statusHeader := []string{
-		"id", "address", "build", "started_at", "updated_at", "is_live",
+		"id", "address", "build", "started_at", "updated_at", "is_available", "is_live",
 	}
 	waitLiveDeprecated := "--wait=live is deprecated and is treated as --wait=all"
 
@@ -383,10 +392,10 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		}
 		exp := [][]string{
 			statusHeader,
-			{`1`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`2`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`3`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`4`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`1`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`2`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`3`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`4`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
 		}
 		if err := matchCSV(o, exp); err != nil {
 			t.Fatal(err)
@@ -577,9 +586,9 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 
 		exp := [][]string{
 			statusHeader,
-			{`2`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`3`, `.*`, `.*`, `.*`, `.*`, `.*`},
-			{`4`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`2`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`3`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
+			{`4`, `.*`, `.*`, `.*`, `.*`, `.*`, `.*`},
 		}
 		if err := matchCSV(o, exp); err != nil {
 			time.Sleep(time.Second)

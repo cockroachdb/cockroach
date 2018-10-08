@@ -57,7 +57,27 @@ project
 build
 SELECT ARRAY(((((VALUES (1), (2))))))[2]
 ----
-error (0A000): not yet implemented: scalar expression: *tree.IndirectionExpr
+project
+ ├── columns: array:3(int)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── indirection [type=int]
+           ├── coalesce [type=int[]]
+           │    ├── subquery [type=int[]]
+           │    │    └── scalar-group-by
+           │    │         ├── columns: array_agg:2(int[])
+           │    │         ├── values
+           │    │         │    ├── columns: column1:1(int)
+           │    │         │    ├── tuple [type=tuple{int}]
+           │    │         │    │    └── const: 1 [type=int]
+           │    │         │    └── tuple [type=tuple{int}]
+           │    │         │         └── const: 2 [type=int]
+           │    │         └── aggregations
+           │    │              └── array-agg [type=int[]]
+           │    │                   └── variable: column1 [type=int]
+           │    └── array: [type=int[]]
+           └── const: 2 [type=int]
 
 build
 SELECT 1 + (SELECT 1 a) AS r
@@ -2208,7 +2228,7 @@ FROM
 GROUP BY t2.b;
 ----
 project
- ├── columns: array:15(tuple{int}[]) array:17(tuple{int}[])
+ ├── columns: array:15(int[]) array:17(int[])
  ├── group-by
  │    ├── columns: t2.b:2(int) max:12(int)
  │    ├── grouping columns: t2.b:2(int)
@@ -2264,7 +2284,7 @@ FROM
 GROUP BY t2.a, t2.b;
 ----
 project
- ├── columns: array:23(tuple{int}[]) array:25(tuple{int}[]) array:27(tuple{int}[])
+ ├── columns: array:23(int[]) array:25(int[]) array:27(int[])
  ├── group-by
  │    ├── columns: t2.a:1(int) t2.b:2(int) max:13(int)
  │    ├── grouping columns: t2.a:1(int) t2.b:2(int)
@@ -2418,3 +2438,123 @@ project
                                │         │         └── variable: max [type=int]
                                │         └── variable: t2.a [type=int]
                                └── variable: max [type=int]
+
+exec-ddl
+CREATE TABLE v (x INT)
+----
+TABLE v
+ ├── x int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+exec-ddl
+CREATE TABLE w (y INT[])
+----
+TABLE w
+ ├── y int[]
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+# Regression test for #30191. Ensure ArrayFlatten returns correct type.
+build
+SELECT * FROM w WHERE y = ARRAY(SELECT x FROM v ORDER BY x)
+----
+project
+ ├── columns: y:1(int[]!null)
+ └── select
+      ├── columns: y:1(int[]!null) w.rowid:2(int!null)
+      ├── scan w
+      │    └── columns: y:1(int[]) w.rowid:2(int!null)
+      └── filters [type=bool]
+           └── eq [type=bool]
+                ├── variable: y [type=int[]]
+                └── coalesce [type=int[]]
+                     ├── subquery [type=int[]]
+                     │    └── scalar-group-by
+                     │         ├── columns: array_agg:5(int[])
+                     │         ├── internal-ordering: +3
+                     │         ├── sort
+                     │         │    ├── columns: x:3(int)
+                     │         │    ├── ordering: +3
+                     │         │    └── project
+                     │         │         ├── columns: x:3(int)
+                     │         │         └── scan v
+                     │         │              └── columns: x:3(int) v.rowid:4(int!null)
+                     │         └── aggregations
+                     │              └── array-agg [type=int[]]
+                     │                   └── variable: x [type=int]
+                     └── array: [type=int[]]
+
+# Regression test for #30424. Aggregate function in the WHERE subquery
+# is aggregated in the outer scope, so it's not allowed.
+build
+SELECT s FROM a WHERE (SELECT count(i) >= 100) GROUP BY s
+----
+error (42803): aggregate functions are not allowed in WHERE
+
+# Aggregate function in the WHERE subquery is aggregated in the subquery scope,
+# so it's allowed.
+build
+SELECT s FROM a WHERE (SELECT count(i) >= 100 FROM a) GROUP BY s
+----
+group-by
+ ├── columns: s:4(string)
+ ├── grouping columns: a.s:4(string)
+ └── project
+      ├── columns: a.s:4(string)
+      └── select
+           ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+           ├── scan a
+           │    └── columns: a.k:1(int!null) a.i:2(int) a.f:3(float) a.s:4(string) a.j:5(jsonb)
+           └── filters [type=bool]
+                └── subquery [type=bool]
+                     └── max1-row
+                          ├── columns: "?column?":12(bool)
+                          └── project
+                               ├── columns: "?column?":12(bool)
+                               ├── scalar-group-by
+                               │    ├── columns: count:11(int)
+                               │    ├── project
+                               │    │    ├── columns: a.i:7(int)
+                               │    │    └── scan a
+                               │    │         └── columns: a.k:6(int!null) a.i:7(int) a.f:8(float) a.s:9(string) a.j:10(jsonb)
+                               │    └── aggregations
+                               │         └── count [type=int]
+                               │              └── variable: a.i [type=int]
+                               └── projections
+                                    └── ge [type=bool]
+                                         ├── variable: count [type=int]
+                                         └── const: 100 [type=int]
+
+exec-ddl
+CREATE TABLE xyzs (x INT PRIMARY KEY, y INT, z FLOAT NOT NULL, s STRING, UNIQUE (s DESC, z));
+----
+TABLE xyzs
+ ├── x int not null
+ ├── y int
+ ├── z float not null
+ ├── s string
+ ├── INDEX primary
+ │    └── x int not null
+ └── INDEX secondary
+      ├── s string desc
+      ├── z float not null
+      └── x int not null (storing)
+
+exec-ddl
+CREATE TABLE kuv (k INT PRIMARY KEY, u FLOAT, v STRING);
+----
+TABLE kuv
+ ├── k int not null
+ ├── u float
+ ├── v string
+ └── INDEX primary
+      └── k int not null
+
+# Regression test for #29114.
+build
+SELECT * FROM xyzs WHERE (SELECT sum(x) FROM (SELECT u FROM kuv) GROUP BY u) > 100;
+----
+error (42803): aggregate functions are not allowed in WHERE

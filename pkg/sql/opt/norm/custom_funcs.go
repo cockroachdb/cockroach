@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -211,7 +210,7 @@ func (c *CustomFuncs) AnyType() memo.PrivateID {
 func (c *CustomFuncs) CanConstructBinary(op opt.Operator, left, right memo.GroupID) bool {
 	leftType := c.LookupScalar(left).Type
 	rightType := c.LookupScalar(right).Type
-	return memo.BinaryOverloadExists(opt.MinusOp, rightType, leftType)
+	return memo.BinaryOverloadExists(op, rightType, leftType)
 }
 
 // ----------------------------------------------------------------------
@@ -283,9 +282,18 @@ func (c *CustomFuncs) CandidateKey(group memo.GroupID) (key opt.ColSet, ok bool)
 	return c.LookupLogical(group).Relational.FuncDeps.Key()
 }
 
-// IsColNotNull returns true if the given column has the NotNull property.
+// IsColNotNull returns true if the given column is part of the input group's
+// set of not-null columns.
 func (c *CustomFuncs) IsColNotNull(col memo.PrivateID, input memo.GroupID) bool {
 	return c.LookupLogical(input).Relational.NotNullCols.Contains(int(c.ExtractColID(col)))
+}
+
+// IsColNotNull2 returns true if the given column is part of the left or right
+// groups' set of not-null columns.
+func (c *CustomFuncs) IsColNotNull2(col memo.PrivateID, left, right memo.GroupID) bool {
+	colID := int(c.ExtractColID(col))
+	return c.LookupLogical(left).Relational.NotNullCols.Contains(colID) ||
+		c.LookupLogical(right).Relational.NotNullCols.Contains(colID)
 }
 
 // HasOuterCols returns true if the given group has at least one outer column,
@@ -504,6 +512,36 @@ func (c *CustomFuncs) ProjectColsFromBoth(left, right memo.GroupID) memo.GroupID
 	return pb.buildProjections()
 }
 
+// ProjectColMapLeft returns a Projections operator that maps the left side columns
+// in a SetOpColMap to the output columns in it. Useful for replacing set operations
+// with simpler constructs.
+func (c *CustomFuncs) ProjectColMapLeft(colMapID memo.PrivateID) memo.GroupID {
+	colMap := c.mem.LookupPrivate(colMapID).(*memo.SetOpColMap)
+	return c.projectColMapSide(colMap.Out, colMap.Left)
+}
+
+// ProjectColMapRight returns a Projections operator that maps the right side columns
+// in a SetOpColMap to the output columns in it. Useful for replacing set operations
+// with simpler constructs.
+func (c *CustomFuncs) ProjectColMapRight(colMapID memo.PrivateID) memo.GroupID {
+	colMap := c.mem.LookupPrivate(colMapID).(*memo.SetOpColMap)
+	return c.projectColMapSide(colMap.Out, colMap.Right)
+}
+
+// projectColMapSide implements the side-agnostic logic from ProjectColMapLeft
+// and ProjectColMapRight.
+func (c *CustomFuncs) projectColMapSide(toList opt.ColList, fromList opt.ColList) memo.GroupID {
+	pb := projectionsBuilder{f: c.f}
+
+	for idx, fromCol := range fromList {
+		toCol := toList[idx]
+
+		pb.addSynthesized(c.f.ConstructVariable(c.f.InternColumnID(fromCol)), toCol)
+	}
+
+	return pb.buildProjections()
+}
+
 // ----------------------------------------------------------------------
 //
 // Select Rules
@@ -567,15 +605,6 @@ func (c *CustomFuncs) ConcatFilters(left, right memo.GroupID) memo.GroupID {
 		lb.AddItem(right)
 	}
 	return c.f.ConstructFilters(lb.BuildList())
-}
-
-// IsContradiction returns true if the given operation is False or a Filter with
-// a contradiction constraint.
-func (c *CustomFuncs) IsContradiction(filter memo.GroupID) bool {
-	if c.mem.NormOp(filter) == opt.FalseOp {
-		return true
-	}
-	return c.LookupLogical(filter).Scalar.Constraints == constraint.Contradiction
 }
 
 // ConstructEmptyValues constructs a Values expression with no rows.
@@ -930,11 +959,11 @@ func (c *CustomFuncs) SimplifyCoalesce(args memo.ListID) memo.GroupID {
 	for i := 0; i < int(args.Length-1); i++ {
 		// If item is not a constant value, then its value may turn out to be
 		// null, so no more folding. Return operands from then on.
-		item := c.mem.NormExpr(argList[i])
-		if !item.IsConstValue() {
+		if !c.IsConstValueOrTuple(argList[i]) {
 			return c.f.ConstructCoalesce(c.f.InternList(argList[i:]))
 		}
 
+		item := c.mem.NormExpr(argList[i])
 		if item.Operator() != opt.NullOp {
 			return argList[i]
 		}
@@ -969,6 +998,114 @@ func (c *CustomFuncs) FoldNullBinary(op opt.Operator, left, right memo.GroupID) 
 	return c.f.ConstructNull(c.f.InternType(memo.InferBinaryType(op, leftType, rightType)))
 }
 
+// IsJSONScalar returns if the JSON value is a number, string, true, false, or null.
+func (c *CustomFuncs) IsJSONScalar(value memo.GroupID) bool {
+	v := c.ExtractConstValue(value).(*tree.DJSON)
+	return v.JSON.Type() != json.ObjectJSONType && v.JSON.Type() != json.ArrayJSONType
+}
+
+// MakeSingleKeyJSONObject returns a JSON object with one entry, mapping key to value.
+func (c *CustomFuncs) MakeSingleKeyJSONObject(key, value memo.GroupID) memo.GroupID {
+	k := c.ExtractConstValue(key).(*tree.DString)
+	v := c.ExtractConstValue(value).(*tree.DJSON)
+
+	builder := json.NewObjectBuilder(1)
+	builder.Add(string(*k), v.JSON)
+	j := builder.Build()
+
+	return c.f.ConstructConst(c.f.InternDatum(&tree.DJSON{JSON: j}))
+}
+
+// ExtractConstValue extracts the Datum from a constant value.
+func (c *CustomFuncs) ExtractConstValue(group memo.GroupID) interface{} {
+	return c.mem.LookupPrivate(c.mem.NormExpr(group).AsConst().Value())
+}
+
+// IsConstValueEqual returns whether const1 and const2 are equal.
+func (c *CustomFuncs) IsConstValueEqual(const1, const2 memo.GroupID) bool {
+	op1 := c.mem.NormOp(const1)
+	op2 := c.mem.NormOp(const2)
+	if op1 != op2 || op1 == opt.NullOp {
+		return false
+	}
+	switch op1 {
+	case opt.TrueOp, opt.FalseOp:
+		return true
+	case opt.ConstOp:
+		datum1 := c.ExtractConstValue(const1).(tree.Datum)
+		datum2 := c.ExtractConstValue(const2).(tree.Datum)
+		return datum1.Compare(c.f.evalCtx, datum2) == 0
+	default:
+		panic(fmt.Errorf("unexpected Op type: %v", op1))
+	}
+}
+
+// SimplifyWhens removes known unreachable WHEN cases and constructs a new CASE
+// statement. Any known true condition is converted to the ELSE. If only the
+// ELSE remains, its expression is returned. condition must be a ConstValue.
+func (c *CustomFuncs) SimplifyWhens(condition memo.GroupID, whens memo.ListID) memo.GroupID {
+	lb := MakeListBuilder(c)
+	whenList := c.mem.LookupList(whens)
+	for _, item := range whenList {
+		itemExpr := c.mem.NormExpr(item)
+
+		switch itemExpr.Operator() {
+		case opt.WhenOp:
+			when := itemExpr.AsWhen()
+			nwc := c.mem.NormExpr(when.Condition())
+			if nwc.IsConstValue() {
+				if !c.IsConstValueEqual(condition, when.Condition()) {
+					// Ignore known unmatching conditions.
+					continue
+				}
+				// If this is true, we won't ever match anything else, so convert this to
+				// the ELSE (or just return it if there are no earlier items).
+				if lb.Empty() {
+					return when.Value()
+				}
+				lb.AddItem(when.Value())
+				return c.f.ConstructCase(condition, lb.BuildList())
+			}
+
+		// The ELSE value.
+		default:
+			if lb.Empty() {
+				// ELSE is the only clause (there are no WHENs), remove the CASE.
+				return item
+			}
+		}
+		lb.AddItem(item)
+	}
+	return c.f.ConstructCase(condition, lb.BuildList())
+}
+
+// IsEquality returns whether the private operator is EqOp.
+// This is necessary in the case of AnyScalar which does not
+// allow matching on the suboperator.
+func (c *CustomFuncs) IsEquality(id memo.PrivateID) bool {
+	return c.mem.LookupPrivate(id).(opt.Operator) == opt.EqOp
+}
+
+// IsArray returns whether the Const group is an array.
+func (c *CustomFuncs) IsArray(g memo.GroupID) bool {
+	d := c.mem.LookupPrivate(c.mem.NormExpr(g).PrivateID()).(tree.Datum)
+	_, ok := d.(*tree.DArray)
+	return ok
+}
+
+// ConvertConstArrayToTuple converts a constant ARRAY datum to the equivalent
+// homogeneous tuple, so ARRAY[1, 2, 3] becomes (1, 2, 3).
+func (c *CustomFuncs) ConvertConstArrayToTuple(g memo.GroupID) memo.GroupID {
+	d := c.mem.LookupPrivate(c.mem.NormExpr(g).PrivateID()).(*tree.DArray)
+	elems := make([]memo.GroupID, len(d.Array))
+	ts := make([]types.T, len(d.Array))
+	for i := range d.Array {
+		elems[i] = c.f.ConstructConst(c.mem.InternDatum(d.Array[i]))
+		ts[i] = d.ParamTyp
+	}
+	return c.f.ConstructTuple(c.mem.InternList(elems), c.mem.InternType(types.TTuple{Types: ts}))
+}
+
 // ----------------------------------------------------------------------
 //
 // Numeric Rules
@@ -1000,44 +1137,205 @@ func (c *CustomFuncs) EqualsNumber(private memo.PrivateID, value int64) bool {
 	return false
 }
 
-// CanFoldUnaryMinus checks if a constant numeric value can be negated.
-func (c *CustomFuncs) CanFoldUnaryMinus(input memo.GroupID) bool {
-	d := c.mem.LookupPrivate(c.mem.NormExpr(input).AsConst().Value()).(tree.Datum)
-	if t, ok := d.(*tree.DInt); ok {
-		return *t != math.MinInt64
+// ----------------------------------------------------------------------
+//
+// Constant Folding Rules
+//   Custom match and replace functions used with fold_constants.opt
+//   rules.
+//
+// ----------------------------------------------------------------------
+
+// IsListOfConstants returns true if elems is a list of constant values or
+// tuples.
+func (c *CustomFuncs) IsListOfConstants(elems memo.ListID) bool {
+	for _, elem := range c.mem.LookupList(elems) {
+		if !c.IsConstValueOrTuple(elem) {
+			return false
+		}
 	}
 	return true
 }
 
-// NegateNumeric applies a unary minus to a numeric value.
-func (c *CustomFuncs) NegateNumeric(input memo.GroupID) memo.GroupID {
-	ev := memo.MakeNormExprView(c.mem, input)
-	r, err := memo.EvalUnaryOp(c.f.evalCtx, opt.UnaryMinusOp, ev)
-	if err != nil {
-		panic(err)
+// FoldArray evaluates an Array expression with constant inputs. It returns the
+// array as a Const datum with type TArray.
+func (c *CustomFuncs) FoldArray(elems memo.ListID, typ memo.PrivateID) memo.GroupID {
+	elements := c.mem.LookupList(elems)
+	elementType := c.ExtractType(typ).(types.TArray).Typ
+	a := tree.NewDArray(elementType)
+	a.Array = make(tree.Datums, len(elements))
+	for i := range a.Array {
+		elem := memo.MakeNormExprView(c.mem, elements[i])
+		a.Array[i] = memo.ExtractConstDatum(elem)
+		if a.Array[i] == tree.DNull {
+			a.HasNulls = true
+		}
 	}
-	return c.f.ConstructConst(c.f.InternDatum(r))
+	return c.f.ConstructConst(c.f.InternDatum(a))
 }
 
-// ExtractConstValue extracts the Datum from a constant value.
-func (c *CustomFuncs) ExtractConstValue(group memo.GroupID) interface{} {
-	return c.mem.LookupPrivate(c.mem.NormExpr(group).AsConst().Value())
+// Succeeded returns true if the result of an operation is a valid memo group.
+func (c *CustomFuncs) Succeeded(result memo.GroupID) bool {
+	return result != 0
 }
 
-// IsJSONScalar returns if the JSON value is a number, string, true, false, or null.
-func (c *CustomFuncs) IsJSONScalar(value memo.GroupID) bool {
-	v := c.ExtractConstValue(value).(*tree.DJSON)
-	return v.JSON.Type() != json.ObjectJSONType && v.JSON.Type() != json.ArrayJSONType
+// IsConstValueOrTuple returns true if the input is a constant or a tuple of
+// constants.
+func (c *CustomFuncs) IsConstValueOrTuple(input memo.GroupID) bool {
+	ev := memo.MakeNormExprView(c.mem, input)
+	return ev.IsConstValue() || memo.MatchesTupleOfConstants(ev)
 }
 
-// MakeSingleKeyJSONObject returns a JSON object with one entry, mapping key to value.
-func (c *CustomFuncs) MakeSingleKeyJSONObject(key, value memo.GroupID) memo.GroupID {
-	k := c.ExtractConstValue(key).(*tree.DString)
-	v := c.ExtractConstValue(value).(*tree.DJSON)
+// FoldBinary evaluates a binary expression with constant inputs. It returns
+// a constant expression as long as it finds an appropriate overload function
+// for the given operator and input types, and the evaluation causes no error.
+func (c *CustomFuncs) FoldBinary(op opt.Operator, left, right memo.GroupID) memo.GroupID {
+	lEv, rEv := memo.MakeNormExprView(c.mem, left), memo.MakeNormExprView(c.mem, right)
+	lDatum, rDatum := memo.ExtractConstDatum(lEv), memo.ExtractConstDatum(rEv)
+	lType, rType := lEv.Logical().Scalar.Type, rEv.Logical().Scalar.Type
 
-	builder := json.NewObjectBuilder(1)
-	builder.Add(string(*k), v.JSON)
-	j := builder.Build()
+	o, ok := memo.FindBinaryOverload(op, lType, rType)
+	if !ok {
+		return 0
+	}
 
-	return c.f.ConstructConst(c.f.InternDatum(&tree.DJSON{JSON: j}))
+	result, err := o.Fn(c.f.evalCtx, lDatum, rDatum)
+	if err != nil {
+		return 0
+	}
+	return c.f.ConstructConstVal(result)
+}
+
+// FoldUnary evaluates a unary expression with a constant input. It returns
+// a constant expression as long as it finds an appropriate overload function
+// for the given operator and input type, and the evaluation causes no error.
+func (c *CustomFuncs) FoldUnary(op opt.Operator, input memo.GroupID) memo.GroupID {
+	ev := memo.MakeNormExprView(c.mem, input)
+	datum := memo.ExtractConstDatum(ev)
+	typ := ev.Logical().Scalar.Type
+
+	o, ok := memo.FindUnaryOverload(op, typ)
+	if !ok {
+		return 0
+	}
+
+	result, err := o.Fn(c.f.evalCtx, datum)
+	if err != nil {
+		return 0
+	}
+	return c.f.ConstructConstVal(result)
+}
+
+// isMonotonicConversion returns true if conversion of a value from FROM to
+// TO is monotonic.
+// That is, if a and b are values of type FROM, then
+//
+//   1. a = b implies a::TO = b::TO and
+//   2. a < b implies a::TO <= b::TO
+//
+// Property (1) can be violated by cases like:
+//
+//   '-0'::FLOAT = '0'::FLOAT, but '-0'::FLOAT::STRING != '0'::FLOAT::STRING
+//
+// Property (2) can be violated by cases like:
+//
+//   2 < 10, but  2::STRING > 10::STRING.
+//
+// Note that the stronger version of (2),
+//
+//   a < b implies a::TO < b::TO
+//
+// is not required, for instance this is not generally true of conversion from
+// a TIMESTAMP to a DATE, but certain such conversions can still generate spans
+// in some cases where values under FROM and TO are "the same" (such as where a
+// TIMESTAMP precisely falls on a date boundary).  We don't need this property
+// because we will subsequently check that the values can round-trip to ensure
+// that we don't lose any information by doing the conversion.
+// TODO(justin): fill this out with the complete set of such conversions.
+func isMonotonicConversion(from, to coltypes.T) bool {
+	if from == coltypes.Timestamp ||
+		from == coltypes.TimestampWithTZ ||
+		from == coltypes.Date {
+		return to == coltypes.Timestamp ||
+			to == coltypes.TimestampWithTZ ||
+			to == coltypes.Date
+	}
+
+	if from == coltypes.Int ||
+		from == coltypes.Float8 ||
+		from == coltypes.Decimal {
+		return to == coltypes.Int ||
+			to == coltypes.Float8 ||
+			to == coltypes.Decimal
+	}
+
+	return false
+}
+
+// UnifyComparison attempts to convert right to the type of left, if such a
+// conversion can round-trip and is monotonic.
+func (c *CustomFuncs) UnifyComparison(left, right memo.GroupID) memo.GroupID {
+	desiredType := c.LookupScalar(left).Type
+	originalType := c.LookupScalar(right).Type
+
+	// Don't bother if they're already the same.
+	if desiredType.Equivalent(originalType) {
+		return 0
+	}
+
+	desiredColType, err := coltypes.DatumTypeToColumnType(desiredType)
+	if err != nil {
+		return 0
+	}
+
+	originalColType, err := coltypes.DatumTypeToColumnType(originalType)
+	if err != nil {
+		return 0
+	}
+
+	if !isMonotonicConversion(originalColType, desiredColType) {
+		return 0
+	}
+
+	// Check that the datum can round-trip between the types. If this is true, it
+	// means we don't lose any information needed to generate spans, and combined
+	// with monotonicity means that it's safe to convert the RHS to the type of
+	// the LHS.
+	rightDatum := c.ExtractConstValue(right).(tree.Datum)
+
+	convertedRightDatum, err := tree.PerformCast(c.f.evalCtx, rightDatum, desiredColType)
+	if err != nil {
+		return 0
+	}
+
+	convertedBack, err := tree.PerformCast(c.f.evalCtx, convertedRightDatum, originalColType)
+	if err != nil {
+		return 0
+	}
+
+	if convertedBack.Compare(c.f.evalCtx, rightDatum) != 0 {
+		return 0
+	}
+
+	return c.f.ConstructConst(c.f.mem.InternDatum(convertedRightDatum))
+}
+
+// FoldComparison evaluates a comparison expression with constant inputs. It
+// returns a constant expression as long as it finds an appropriate overload
+// function for the given operator and input types, and the evaluation causes
+// no error.
+func (c *CustomFuncs) FoldComparison(op opt.Operator, left, right memo.GroupID) memo.GroupID {
+	lEv, rEv := memo.MakeNormExprView(c.mem, left), memo.MakeNormExprView(c.mem, right)
+	lDatum, rDatum := memo.ExtractConstDatum(lEv), memo.ExtractConstDatum(rEv)
+	lType, rType := lEv.Logical().Scalar.Type, rEv.Logical().Scalar.Type
+
+	o, ok := memo.FindComparisonOverload(op, lType, rType)
+	if !ok {
+		return 0
+	}
+
+	result, err := o.Fn(c.f.evalCtx, lDatum, rDatum)
+	if err != nil {
+		return 0
+	}
+	return c.f.ConstructConstVal(result)
 }

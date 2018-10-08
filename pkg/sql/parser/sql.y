@@ -380,6 +380,9 @@ func (u *sqlSymUnion) rangePartition() tree.RangePartition {
 func (u *sqlSymUnion) rangePartitions() []tree.RangePartition {
     return u.val.([]tree.RangePartition)
 }
+func (u *sqlSymUnion) setZoneConfig() *tree.SetZoneConfig {
+    return u.val.(*tree.SetZoneConfig)
+}
 func (u *sqlSymUnion) tuples() []*tree.Tuple {
     return u.val.([]*tree.Tuple)
 }
@@ -666,7 +669,6 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> explain_stmt
 %type <tree.Statement> prepare_stmt
 %type <tree.Statement> preparable_stmt
-%type <tree.Statement> explainable_stmt
 %type <tree.Statement> export_stmt
 %type <tree.Statement> execute_stmt
 %type <tree.Statement> deallocate_stmt
@@ -684,7 +686,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> rollback_stmt
 %type <tree.Statement> savepoint_stmt
 
-%type <tree.Statement> set_stmt
+%type <tree.Statement> preparable_set_stmt nonpreparable_set_stmt
 %type <tree.Statement> set_session_stmt
 %type <tree.Statement> set_csetting_stmt
 %type <tree.Statement> set_transaction_stmt
@@ -730,7 +732,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <[]string> opt_incremental
 %type <tree.KVOption> kv_option
-%type <[]tree.KVOption> kv_option_list opt_with_options
+%type <[]tree.KVOption> kv_option_list opt_with_options var_set_list
 %type <str> import_format
 
 %type <*tree.Select> select_no_parens
@@ -952,6 +954,8 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <str> relocate_kw ranges_kw
 
+%type <*tree.SetZoneConfig> set_zone_config
+
 %type <tree.Expr> opt_alter_column_using
 
 // Precedence: lowest to highest
@@ -1047,41 +1051,20 @@ stmt_list:
 
 stmt:
   HELPTOKEN { return helpWith(sqllex, "") }
-| alter_stmt      // help texts in sub-rule
-| backup_stmt     // EXTEND WITH HELP: BACKUP
-| cancel_stmt     // help texts in sub-rule
+| preparable_stmt  // help texts in sub-rule
 | copy_from_stmt
 | comment_stmt
-| create_stmt     // help texts in sub-rule
-| deallocate_stmt // EXTEND WITH HELP: DEALLOCATE
-| delete_stmt     // EXTEND WITH HELP: DELETE
-| discard_stmt    // EXTEND WITH HELP: DISCARD
-| drop_stmt       // help texts in sub-rule
-| execute_stmt    // EXTEND WITH HELP: EXECUTE
-| explain_stmt    // EXTEND WITH HELP: EXPLAIN
-| export_stmt     // EXTEND WITH HELP: EXPORT
-| grant_stmt      // EXTEND WITH HELP: GRANT
-| insert_stmt     // EXTEND WITH HELP: INSERT
-| import_stmt     // EXTEND WITH HELP: IMPORT
-| pause_stmt      // EXTEND WITH HELP: PAUSE JOBS
-| prepare_stmt    // EXTEND WITH HELP: PREPARE
-| restore_stmt    // EXTEND WITH HELP: RESTORE
-| resume_stmt     // EXTEND WITH HELP: RESUME JOBS
-| revoke_stmt     // EXTEND WITH HELP: REVOKE
-| savepoint_stmt  // EXTEND WITH HELP: SAVEPOINT
-| scrub_stmt      // help texts in sub-rule
-| select_stmt     // help texts in sub-rule
-  {
-    $$.val = $1.slct()
-  }
+| execute_stmt      // EXTEND WITH HELP: EXECUTE
+| deallocate_stmt   // EXTEND WITH HELP: DEALLOCATE
+| discard_stmt      // EXTEND WITH HELP: DISCARD
+| export_stmt       // EXTEND WITH HELP: EXPORT
+| grant_stmt        // EXTEND WITH HELP: GRANT
+| prepare_stmt      // EXTEND WITH HELP: PREPARE
+| revoke_stmt       // EXTEND WITH HELP: REVOKE
+| savepoint_stmt    // EXTEND WITH HELP: SAVEPOINT
 | release_stmt      // EXTEND WITH HELP: RELEASE
-| reset_stmt        // help texts in sub-rule
-| set_stmt          // help texts in sub-rule
-| show_stmt         // help texts in sub-rule
+| nonpreparable_set_stmt // help texts in sub-rule
 | transaction_stmt  // help texts in sub-rule
-| truncate_stmt     // EXTEND WITH HELP: TRUNCATE
-| update_stmt       // EXTEND WITH HELP: UPDATE
-| upsert_stmt       // EXTEND WITH HELP: UPSERT
 | /* EMPTY */
   {
     $$.val = tree.Statement(nil)
@@ -1101,7 +1084,7 @@ alter_ddl_stmt:
 | alter_view_stmt     // EXTEND WITH HELP: ALTER VIEW
 | alter_sequence_stmt // EXTEND WITH HELP: ALTER SEQUENCE
 | alter_database_stmt // EXTEND WITH HELP: ALTER DATABASE
-| alter_range_stmt
+| alter_range_stmt    // EXTEND WITH HELP: ALTER RANGE
 
 // %Help: ALTER TABLE - change the definition of a table
 // %Category: DDL
@@ -1123,12 +1106,22 @@ alter_ddl_stmt:
 //   ALTER TABLE ... SPLIT AT <selectclause>
 //   ALTER TABLE ... SCATTER [ FROM ( <exprs...> ) TO ( <exprs...> ) ]
 //   ALTER TABLE ... INJECT STATISTICS ...  (experimental)
+//   ALTER TABLE ... PARTITION BY RANGE ( <name...> ) ( <rangespec> )
+//   ALTER TABLE ... PARTITION BY LIST ( <name...> ) ( <listspec> )
+//   ALTER TABLE ... PARTITION BY NOTHING
+//   ALTER TABLE ... CONFIGURE ZONE <zoneconfig>
+//   ALTER PARTITION ... OF TABLE ... CONFIGURE ZONE <zoneconfig>
 //
 // Column qualifiers:
 //   [CONSTRAINT <constraintname>] {NULL | NOT NULL | UNIQUE | PRIMARY KEY | CHECK (<expr>) | DEFAULT <expr>}
 //   FAMILY <familyname>, CREATE [IF NOT EXISTS] FAMILY [<familyname>]
 //   REFERENCES <tablename> [( <colnames...> )]
 //   COLLATE <collationname>
+//
+// Zone configurations:
+//   DISCARD
+//   USING <var> = <expr> [, ...]
+//   { TO | = } <expr>
 //
 // %SeeAlso: WEBDOCS/alter-table.html
 alter_table_stmt:
@@ -1141,7 +1134,8 @@ alter_table_stmt:
 | alter_rename_table_stmt
 // ALTER TABLE has its error help token here because the ALTER TABLE
 // prefix is spread over multiple non-terminals.
-| ALTER TABLE error // SHOW HELP: ALTER TABLE
+| ALTER TABLE error     // SHOW HELP: ALTER TABLE
+| ALTER PARTITION error // SHOW HELP: ALTER TABLE
 
 // %Help: ALTER VIEW - change the definition of a view
 // %Category: DDL
@@ -1200,8 +1194,23 @@ alter_database_stmt:
 // prefix is spread over multiple non-terminals.
 | ALTER DATABASE error // SHOW HELP: ALTER DATABASE
 
+// %Help: ALTER RANGE - change the parameters of a range
+// %Category: DDL
+// %Text:
+// ALTER RANGE <zonename> <command>
+//
+// Commands:
+//   ALTER RANGE ... CONFIGURE ZONE <zoneconfig>
+//
+// Zone configurations:
+//   DISCARD
+//   USING <var> = <expr> [, ...]
+//   { TO | = } <expr>
+//
+// %SeeAlso: ALTER TABLE
 alter_range_stmt:
   alter_zone_range_stmt
+| ALTER RANGE error // SHOW HELP: ALTER RANGE
 
 // %Help: ALTER INDEX - change the definition of an index
 // %Category: DDL
@@ -1291,58 +1300,78 @@ alter_relocate_index_lease_stmt:
   }
 
 alter_zone_range_stmt:
-  ALTER RANGE zone_name EXPERIMENTAL CONFIGURE ZONE a_expr
+  ALTER RANGE zone_name set_zone_config
+  {
+     s := $4.setZoneConfig()
+     s.ZoneSpecifier = tree.ZoneSpecifier{NamedZone: tree.UnrestrictedName($3)}
+     $$.val = s
+  }
+
+set_zone_config:
+  CONFIGURE ZONE to_or_eq a_expr
   {
     /* SKIP DOC */
-    $$.val = &tree.SetZoneConfig{
-      ZoneSpecifier: tree.ZoneSpecifier{NamedZone: tree.UnrestrictedName($3)},
-      YAMLConfig: $7.expr(),
-    }
+    $$.val = &tree.SetZoneConfig{YAMLConfig: $4.expr()}
+  }
+| CONFIGURE ZONE USING var_set_list
+  {
+    $$.val = &tree.SetZoneConfig{Options: $4.kvOptions()}
+  }
+| CONFIGURE ZONE USING DEFAULT
+  {
+    /* SKIP DOC */
+    $$.val = &tree.SetZoneConfig{SetDefault: true}
+  }
+| CONFIGURE ZONE DISCARD
+  {
+    $$.val = &tree.SetZoneConfig{YAMLConfig: tree.DNull}
   }
 
 alter_zone_database_stmt:
-  ALTER DATABASE database_name EXPERIMENTAL CONFIGURE ZONE a_expr
+  ALTER DATABASE database_name set_zone_config
   {
-    /* SKIP DOC */
-    $$.val = &tree.SetZoneConfig{
-      ZoneSpecifier: tree.ZoneSpecifier{Database: tree.Name($3)},
-      YAMLConfig: $7.expr(),
-    }
+     s := $4.setZoneConfig()
+     s.ZoneSpecifier = tree.ZoneSpecifier{Database: tree.Name($3)}
+     $$.val = s
   }
 
 alter_zone_table_stmt:
-  ALTER TABLE table_name EXPERIMENTAL CONFIGURE ZONE a_expr
+  ALTER TABLE table_name set_zone_config
   {
-    /* SKIP DOC */
-    $$.val = &tree.SetZoneConfig{
-      ZoneSpecifier: tree.ZoneSpecifier{
-        TableOrIndex: tree.TableNameWithIndex{Table: $3.normalizableTableNameFromUnresolvedName()},
-      },
-      YAMLConfig: $7.expr(),
+    s := $4.setZoneConfig()
+    s.ZoneSpecifier = tree.ZoneSpecifier{
+       TableOrIndex: tree.TableNameWithIndex{Table: $3.normalizableTableNameFromUnresolvedName()},
     }
+    $$.val = s
   }
-| ALTER PARTITION partition_name OF TABLE table_name EXPERIMENTAL CONFIGURE ZONE a_expr
+| ALTER PARTITION partition_name OF TABLE table_name set_zone_config
   {
-    /* SKIP DOC */
-    $$.val = &tree.SetZoneConfig{
-      ZoneSpecifier: tree.ZoneSpecifier{
-        TableOrIndex: tree.TableNameWithIndex{Table: $6.normalizableTableNameFromUnresolvedName()},
-        Partition: tree.Name($3),
-      },
-      YAMLConfig: $10.expr(),
+    s := $7.setZoneConfig()
+    s.ZoneSpecifier = tree.ZoneSpecifier{
+       TableOrIndex: tree.TableNameWithIndex{Table: $6.normalizableTableNameFromUnresolvedName()},
+       Partition: tree.Name($3),
     }
+    $$.val = s
   }
 
 alter_zone_index_stmt:
-  ALTER INDEX table_name_with_index EXPERIMENTAL CONFIGURE ZONE a_expr
+  ALTER INDEX table_name_with_index set_zone_config
   {
-    /* SKIP DOC */
-    $$.val = &tree.SetZoneConfig{
-      ZoneSpecifier: tree.ZoneSpecifier{
-        TableOrIndex: $3.tableWithIdx(),
-      },
-      YAMLConfig: $7.expr(),
+    s := $4.setZoneConfig()
+	s.ZoneSpecifier = tree.ZoneSpecifier{
+       TableOrIndex: $3.tableWithIdx(),
     }
+    $$.val = s
+  }
+
+var_set_list:
+  var_name '=' var_value
+  {
+    $$.val = []tree.KVOption{tree.KVOption{Key: tree.Name(strings.Join($1.strs(), ".")), Value: $3.expr()}}
+  }
+| var_set_list ',' var_name '=' var_value
+  {
+    $$.val = append($1.kvOptions(), tree.KVOption{Key: tree.Name(strings.Join($3.strs(), ".")), Value: $5.expr()})
   }
 
 alter_scatter_stmt:
@@ -1690,7 +1719,7 @@ import_stmt:
 // %Help: EXPORT - export data to file in a distributed manner
 // %Category: CCL
 // %Text:
-// EXPORT <format> (<datafile> [WITH <option> [= value] [,...]]) FROM <query>
+// EXPORT INTO <format> (<datafile> [WITH <option> [= value] [,...]]) FROM <query>
 //
 // Formats:
 //    CSV
@@ -1773,7 +1802,10 @@ opt_with_options:
   {
     $$.val = $4.kvOptions()
   }
-| /* EMPTY */ {}
+| /* EMPTY */
+  {
+    $$.val = nil
+  }
 
 copy_from_stmt:
   COPY table_name opt_column_list FROM STDIN
@@ -2183,65 +2215,56 @@ table_name_list:
 //
 // Explainable statements:
 //     SELECT, CREATE, DROP, ALTER, INSERT, UPSERT, UPDATE, DELETE,
-//     SHOW, EXPLAIN, EXECUTE
+//     SHOW, EXPLAIN
 //
 // Plan options:
-//     TYPES, VERBOSE
+//     TYPES, VERBOSE, OPT
 //
 // %SeeAlso: WEBDOCS/explain.html
 explain_stmt:
-  EXPLAIN explainable_stmt
+  EXPLAIN preparable_stmt
   {
     $$.val = &tree.Explain{Statement: $2.stmt()}
   }
 | EXPLAIN error // SHOW HELP: EXPLAIN
-| EXPLAIN '(' explain_option_list ')' explainable_stmt
+| EXPLAIN '(' explain_option_list ')' preparable_stmt
   {
     $$.val = &tree.Explain{Options: $3.strs(), Statement: $5.stmt()}
   }
-| EXPLAIN ANALYZE '(' explain_option_list ')' explainable_stmt
+| EXPLAIN ANALYZE '(' explain_option_list ')' preparable_stmt
   {
     $$.val = &tree.Explain{Options: append($4.strs(), $2), Statement: $6.stmt()}
   }
 // This second error rule is necessary, because otherwise
-// explainable_stmt also provides "selectclause := '(' error ..." and
+// preparable_stmt also provides "selectclause := '(' error ..." and
 // cause a help text for the select clause, which will be confusing in
 // the context of EXPLAIN.
 | EXPLAIN '(' error // SHOW HELP: EXPLAIN
 
 preparable_stmt:
-  alter_user_stmt   // EXTEND WITH HELP: ALTER USER
+  alter_stmt        // help texts in sub-rule
 | backup_stmt       // EXTEND WITH HELP: BACKUP
 | cancel_stmt       // help texts in sub-rule
-| create_user_stmt  // EXTEND WITH HELP: CREATE USER
-| create_role_stmt  // EXTEND WITH HELP: CREATE ROLE
+| create_stmt       // help texts in sub-rule
 | delete_stmt       // EXTEND WITH HELP: DELETE
-| drop_role_stmt    // EXTEND WITH HELP: DROP ROLE
-| drop_user_stmt    // EXTEND WITH HELP: DROP USER
+| drop_stmt         // help texts in sub-rule
+| explain_stmt      { /* SKIP DOC */ }
 | import_stmt       // EXTEND WITH HELP: IMPORT
 | insert_stmt       // EXTEND WITH HELP: INSERT
 | pause_stmt        // EXTEND WITH HELP: PAUSE JOBS
 | reset_stmt        // help texts in sub-rule
 | restore_stmt      // EXTEND WITH HELP: RESTORE
 | resume_stmt       // EXTEND WITH HELP: RESUME JOBS
+| scrub_stmt        // help texts in sub-rule
 | select_stmt       // help texts in sub-rule
   {
     $$.val = $1.slct()
   }
-| set_session_stmt  // EXTEND WITH HELP: SET SESSION
-| set_csetting_stmt // EXTEND WITH HELP: SET CLUSTER SETTING
+| preparable_set_stmt // help texts in sub-rule
 | show_stmt         // help texts in sub-rule
+| truncate_stmt     // EXTEND WITH HELP: TRUNCATE
 | update_stmt       // EXTEND WITH HELP: UPDATE
 | upsert_stmt       // EXTEND WITH HELP: UPSERT
-
-explainable_stmt:
-  preparable_stmt
-| alter_ddl_stmt    // help texts in sub-rule
-| create_ddl_stmt   // help texts in sub-rule
-| create_stats_stmt // help texts in sub-rule
-| drop_ddl_stmt     // help texts in sub-rule
-| execute_stmt      // EXTEND WITH HELP: EXECUTE
-| explain_stmt      { /* SKIP DOC */ }
 
 explain_option_list:
   explain_option_name
@@ -2468,14 +2491,17 @@ use_stmt:
   }
 | USE error // SHOW HELP: USE
 
-// SET SESSION / SET CLUSTER SETTING / SET TRANSACTION
-set_stmt:
+// SET remainder, e.g. SET TRANSACTION
+nonpreparable_set_stmt:
+  set_transaction_stmt // EXTEND WITH HELP: SET TRANSACTION
+| set_exprs_internal   { /* SKIP DOC */ }
+| SET LOCAL error { return unimplemented(sqllex, "set local") }
+
+// SET SESSION / SET CLUSTER SETTING
+preparable_set_stmt:
   set_session_stmt     // EXTEND WITH HELP: SET SESSION
 | set_csetting_stmt    // EXTEND WITH HELP: SET CLUSTER SETTING
-| set_transaction_stmt // EXTEND WITH HELP: SET TRANSACTION
-| set_exprs_internal   { /* SKIP DOC */ }
 | use_stmt             // EXTEND WITH HELP: USE
-| SET LOCAL error { return unimplemented(sqllex, "set local") }
 
 // %Help: SCRUB - run checks against databases or tables
 // %Category: Experimental
@@ -2585,15 +2611,15 @@ scrub_option:
 // %SeeAlso: SHOW CLUSTER SETTING, RESET CLUSTER SETTING, SET SESSION,
 // WEBDOCS/cluster-settings.html
 set_csetting_stmt:
-  SET CLUSTER SETTING var_name '=' var_value
-  {
-    $$.val = &tree.SetClusterSetting{Name: strings.Join($4.strs(), "."), Value: $6.expr()}
-  }
-| SET CLUSTER SETTING var_name TO var_value
+  SET CLUSTER SETTING var_name to_or_eq var_value
   {
     $$.val = &tree.SetClusterSetting{Name: strings.Join($4.strs(), "."), Value: $6.expr()}
   }
 | SET CLUSTER error // SHOW HELP: SET CLUSTER SETTING
+
+to_or_eq:
+  '='
+| TO
 
 set_exprs_internal:
   /* SET ROW serves to accelerate parser.parseExprs().
@@ -2652,19 +2678,10 @@ set_transaction_stmt:
 | SET SESSION TRANSACTION error // SHOW HELP: SET TRANSACTION
 
 generic_set:
-  var_name TO var_list
+  var_name to_or_eq var_list
   {
     // We need to recognize the "set tracing" specially here; couldn't make "set
     // tracing" a different grammar rule because of ambiguity.
-    varName := $1.strs()
-    if len(varName) == 1 && varName[0] == "tracing" {
-      $$.val = &tree.SetTracing{Values: $3.exprs()}
-    } else {
-      $$.val = &tree.SetVar{Name: strings.Join($1.strs(), "."), Values: $3.exprs()}
-    }
-  }
-| var_name '=' var_list
-  {
     varName := $1.strs()
     if len(varName) == 1 && varName[0] == "tracing" {
       $$.val = &tree.SetTracing{Values: $3.exprs()}
@@ -3243,46 +3260,39 @@ show_roles_stmt:
 | SHOW ROLES error // SHOW HELP: SHOW ROLES
 
 show_zone_stmt:
-  EXPERIMENTAL SHOW ZONE CONFIGURATION FOR RANGE zone_name
+  SHOW ZONE CONFIGURATION FOR RANGE zone_name
   {
-    /* SKIP DOC */
-    $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{NamedZone: tree.UnrestrictedName($7)}}
+    $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{NamedZone: tree.UnrestrictedName($6)}}
   }
-| EXPERIMENTAL SHOW ZONE CONFIGURATION FOR DATABASE database_name
+| SHOW ZONE CONFIGURATION FOR DATABASE database_name
   {
-    /* SKIP DOC */
-    $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{Database: tree.Name($7)}}
+    $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{Database: tree.Name($6)}}
   }
-| EXPERIMENTAL SHOW ZONE CONFIGURATION FOR TABLE table_name opt_partition
+| SHOW ZONE CONFIGURATION FOR TABLE table_name opt_partition
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
-        TableOrIndex: tree.TableNameWithIndex{Table: $7.normalizableTableNameFromUnresolvedName() },
+        TableOrIndex: tree.TableNameWithIndex{Table: $6.normalizableTableNameFromUnresolvedName()},
     }}
   }
-| EXPERIMENTAL SHOW ZONE CONFIGURATION FOR PARTITION partition_name OF TABLE table_name
+| SHOW ZONE CONFIGURATION FOR PARTITION partition_name OF TABLE table_name
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
-        TableOrIndex: tree.TableNameWithIndex{Table: $10.normalizableTableNameFromUnresolvedName() },
-      Partition: tree.Name($7),
+      TableOrIndex: tree.TableNameWithIndex{Table: $9.normalizableTableNameFromUnresolvedName()},
+        Partition: tree.Name($6),
     }}
   }
-| EXPERIMENTAL SHOW ZONE CONFIGURATION FOR INDEX table_name_with_index
+| SHOW ZONE CONFIGURATION FOR INDEX table_name_with_index
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
-      TableOrIndex: $7.tableWithIdx(),
+      TableOrIndex: $6.tableWithIdx(),
     }}
   }
-| EXPERIMENTAL SHOW ZONE CONFIGURATIONS
+| SHOW ZONE CONFIGURATIONS
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowZoneConfig{}
   }
-| EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS
+| SHOW ALL ZONE CONFIGURATIONS
   {
-    /* SKIP DOC */
     $$.val = &tree.ShowZoneConfig{}
   }
 
@@ -5220,7 +5230,10 @@ opt_with_clause:
   {
     $$.val = $1.with()
   }
-| /* EMPTY */ {}
+| /* EMPTY */
+  {
+    $$.val = nil
+  }
 
 opt_table:
   TABLE {}
@@ -5606,7 +5619,7 @@ table_ref:
 //   will know from the unusual choice that something rather different
 //   is going on and may be pushed by the unusual syntax to
 //   investigate further in the docs.
-| '[' explainable_stmt ']' opt_ordinality opt_alias_clause
+| '[' preparable_stmt ']' opt_ordinality opt_alias_clause
   {
     $$.val = &tree.AliasedTableExpr{Expr: &tree.StatementSource{ Statement: $2.stmt() }, Ordinality: $4.bool(), As: $5.aliasClause() }
   }

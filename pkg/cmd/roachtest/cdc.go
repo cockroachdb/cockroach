@@ -23,20 +23,23 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
 func installKafka(ctx context.Context, c *cluster, kafkaNode nodeListOption) {
-	c.Run(ctx, kafkaNode, `curl https://packages.confluent.io/archive/4.0/confluent-oss-4.0.0-2.11.tar.gz | tar -xzv`)
-	c.Run(ctx, kafkaNode, `sudo apt-get update`)
-	c.Run(ctx, kafkaNode, `yes | sudo apt-get install default-jre`)
+	c.Run(ctx, kafkaNode, `curl -s https://packages.confluent.io/archive/4.0/confluent-oss-4.0.0-2.11.tar.gz | tar -xz`)
+	c.Run(ctx, kafkaNode, `sudo apt-get -q update`)
+	c.Run(ctx, kafkaNode, `yes | sudo apt-get -q install default-jre`)
 	c.Run(ctx, kafkaNode, `mkdir -p /mnt/data1/confluent`)
-
 }
 
 func startKafka(ctx context.Context, c *cluster, kafkaNode nodeListOption) {
-	c.Run(ctx, kafkaNode, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent start`)
+	// This isn't necessary for the nightly tests, but it's nice for iteration.
+	c.Run(ctx, kafkaNode, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent destroy | true`)
+	c.Run(ctx, kafkaNode, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent start kafka`)
 }
 
 func stopKafka(ctx context.Context, c *cluster, kafkaNode nodeListOption) {
@@ -67,11 +70,10 @@ func (tr *tpccWorkload) install(ctx context.Context, c *cluster) {
 	))
 }
 
-func (tr *tpccWorkload) run(ctx context.Context, c *cluster) {
+func (tr *tpccWorkload) run(ctx context.Context, c *cluster, duration string) {
 	c.Run(ctx, tr.workloadNodes, fmt.Sprintf(
-		`./workload run tpcc --warehouses=%d {pgurl%s} --duration=30m`,
-		tr.warehouseCount,
-		tr.sqlNodes,
+		`./workload run tpcc --warehouses=%d {pgurl%s} --duration=%s`,
+		tr.warehouseCount, tr.sqlNodes, duration,
 	))
 }
 
@@ -82,21 +84,23 @@ type cdcTestArgs struct {
 }
 
 func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
-	maxInitialScanAllowed, maxLatencyAllowed := 3*time.Minute, time.Minute
+	maxInitialScanAllowed, maxLatencyAllowed, duration := 3*time.Minute, time.Minute, `30m`
 	if args.initialScan {
 		maxInitialScanAllowed = 30 * time.Minute
 	}
 	if args.warehouseCount >= 1000 {
 		maxLatencyAllowed = 10 * time.Minute
+		duration = `120m`
 	}
 
+	c.RemountNoBarrier(ctx)
 	crdbNodes := c.Range(1, c.nodes-1)
 	workloadNode := c.Node(c.nodes)
 	kafkaNode := c.Node(c.nodes)
 
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
 	c.Put(ctx, workload, "./workload", workloadNode)
-	c.Start(ctx, crdbNodes, startArgs(`--args=--vmodule=poller=2`))
+	c.Start(ctx, crdbNodes, startArgs(`--args=--vmodule=changefeed=2,poller=2`))
 
 	tpcc := tpccWorkload{
 		sqlNodes:       crdbNodes,
@@ -123,7 +127,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	m := newMonitor(ctx, c, crdbNodes)
 	m.Go(func(ctx context.Context) error {
 		defer func() { close(tpccComplete) }()
-		tpcc.run(ctx, c)
+		tpcc.run(ctx, c, duration)
 		return nil
 	})
 	m.Go(func(ctx context.Context) error {
@@ -131,12 +135,6 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		if err != nil {
 			return err
 		}
-
-		var cursor string
-		if err := db.QueryRow(`SELECT cluster_logical_timestamp()`).Scan(&cursor); err != nil {
-			c.t.Fatal(err)
-		}
-		c.l.Printf("starting cursor at %s\n", cursor)
 
 		var jobID int
 		createStmt := `CREATE CHANGEFEED FOR
@@ -147,11 +145,24 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		extraArgs := []interface{}{`kafka://` + c.InternalIP(ctx, kafkaNode)[0] + `:9092`}
 		if !args.initialScan {
 			createStmt += `, cursor=$2`
-			extraArgs = append(extraArgs, cursor)
+			extraArgs = append(extraArgs, timeutil.Now().UnixNano())
 		}
 		if err = db.QueryRow(createStmt, extraArgs...).Scan(&jobID); err != nil {
 			return err
 		}
+
+		var payloadBytes []byte
+		if err = db.QueryRow(
+			`SELECT payload FROM system.jobs WHERE id = $1`, jobID,
+		).Scan(&payloadBytes); err != nil {
+			return err
+		}
+		var payload jobspb.Payload
+		if err := protoutil.Unmarshal(payloadBytes, &payload); err != nil {
+			return err
+		}
+		statementTime := payload.GetChangefeed().StatementTime.GoTime()
+		l.Printf("starting changefeed at (%d) %s\n", statementTime.UnixNano(), statementTime)
 
 		t.Status("watching changefeed")
 		for {
@@ -174,38 +185,44 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 			if status != `running` {
 				return errors.Errorf(`unexpected status: %s`, status)
 			}
-			if hwRaw.Valid {
+			var highWaterTime time.Time
+			if len(hwRaw.String) > 0 {
 				// Intentionally not using tree.DecimalToHLC to avoid the dep.
-				hwWallTime, err := strconv.ParseInt(
+				highWaterNanos, err := strconv.ParseInt(
 					hwRaw.String[:strings.IndexRune(hwRaw.String, '.')], 10, 64)
 				if err != nil {
 					return errors.Wrapf(err, "parsing [%s]", hwRaw.String)
 				}
-				if initialScanLatency == 0 {
-					initialScanLatency = timeutil.Since(timeutil.Unix(0, hwWallTime))
-					l.Printf("initial scan latency %s\n", initialScanLatency)
-					t.Status("finished initial scan")
-					continue
-				}
-				latency := timeutil.Since(timeutil.Unix(0, hwWallTime))
-				if latency < maxLatencyAllowed {
-					latencyDroppedBelowMaxAllowed = true
-				}
-				if !latencyDroppedBelowMaxAllowed {
-					// Before we have RangeFeed, the polls just get
-					// progressively smaller after the initial one. Start
-					// tracking the max latency once we seen a latency
-					// that's less than the max allowed. Verify at the end
-					// of the test that this happens at some point.
-					l.Printf("end-to-end latency %s not yet below max allowed %s\n",
-						latency, maxLatencyAllowed)
-					continue
-				}
-				if latency > maxSeenLatency {
-					maxSeenLatency = latency
-				}
-				l.Printf("end-to-end latency %s max so far %s\n", latency, maxSeenLatency)
+				highWaterTime = timeutil.Unix(0, highWaterNanos)
 			}
+
+			if highWaterTime.Before(statementTime) {
+				continue
+			} else if initialScanLatency == 0 {
+				initialScanLatency = timeutil.Since(statementTime)
+				l.Printf("initial scan latency %s\n", initialScanLatency)
+				t.Status("finished initial scan")
+				continue
+			}
+
+			latency := timeutil.Since(highWaterTime)
+			if latency < maxLatencyAllowed/2 {
+				latencyDroppedBelowMaxAllowed = true
+			}
+			if !latencyDroppedBelowMaxAllowed {
+				// Before we have RangeFeed, the polls just get
+				// progressively smaller after the initial one. Start
+				// tracking the max latency once we seen a latency
+				// that's less than the max allowed. Verify at the end
+				// of the test that this happens at some point.
+				l.Printf("end-to-end latency %s not yet below max allowed %s\n",
+					latency, maxLatencyAllowed)
+				continue
+			}
+			if latency > maxSeenLatency {
+				maxSeenLatency = latency
+			}
+			l.Printf("end-to-end latency %s max so far %s\n", latency, maxSeenLatency)
 		}
 	})
 	if args.kafkaChaos {
@@ -282,7 +299,6 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Skip:       "https://github.com/cockroachdb/cockroach/issues/29196",
 		Name:       "cdc/w=100/nodes=3/init=false/chaos=true",
 		MinVersion: "2.1.0",
 		Nodes:      nodes(4, cpu(16)),

@@ -528,13 +528,17 @@ func (r *Replica) handleReplicatedEvalResult(
 		r.mu.state.LeaseAppliedIndex = leaseAppliedIndex
 	}
 	needsSplitBySize := r.needsSplitBySizeRLocked()
+	needsMergeBySize := r.needsMergeBySizeRLocked()
 	r.mu.Unlock()
 
 	r.store.metrics.addMVCCStats(deltaStats)
 	rResult.Delta = enginepb.MVCCStatsDelta{}
 
-	if needsSplitBySize {
+	if r.store.splitQueue != nil && needsSplitBySize { // the boostrap store has a nil split queue
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
+	}
+	if r.store.mergeQueue != nil && needsMergeBySize { // the boostrap store has a nil merge queue
+		r.store.mergeQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
 
 	// The above are always present. The following are not always present but
@@ -665,15 +669,7 @@ func (r *Replica) handleReplicatedEvalResult(
 
 	if rResult.State != nil {
 		if newDesc := rResult.State.Desc; newDesc != nil {
-			if err := r.setDesc(newDesc); err != nil {
-				// Log the error. There's not much we can do because the commit may
-				// have already occurred at this point.
-				log.Fatalf(
-					ctx,
-					"failed to update range descriptor to %+v: %s",
-					newDesc, err,
-				)
-			}
+			r.setDesc(ctx, newDesc)
 			rResult.State.Desc = nil
 		}
 

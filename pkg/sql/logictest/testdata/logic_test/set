@@ -101,7 +101,7 @@ query T colnames
 SHOW distsql
 ----
 distsql
-off
+2.0-off
 
 ## Test that our no-op compatibility vars work
 
@@ -111,7 +111,7 @@ SET application_name = 'hello'
 statement ok
 SET extra_float_digits = 0
 
-statement error set extra_float_digits: only values between -15 and 3 are supported
+statement error 123 is outside the valid range for parameter "extra_float_digits"
 SET extra_float_digits = 123
 
 statement ok
@@ -127,18 +127,18 @@ statement ok
 SET client_encoding = 'UTF8'
 
 statement ok
+SET client_encoding = 'UT! '' @#!$%%F------!@!!!8 ''   '
+
+statement ok
 SET client_encoding = 'unicode'
 
-statement error invalid value for parameter "client_encoding": "other"
+statement error unimplemented client encoding: "other"
 SET client_encoding = 'other'
 
-statement ok
+statement error parameter "server_encoding" cannot be changed
 SET server_encoding = 'UTF8'
 
-statement ok
-SET server_encoding = 'unicode'
-
-statement error invalid value for parameter "server_encoding": "other"
+statement error parameter "server_encoding" cannot be changed
 SET server_encoding = 'other'
 
 statement ok
@@ -164,6 +164,12 @@ SET distsql = on
 
 statement ok
 SET distsql = off
+
+statement ok
+SET distsql = '2.0-off'
+
+statement ok
+SET distsql = '2.0-auto'
 
 statement error invalid value for parameter "distsql": "bogus"
 SET distsql = bogus
@@ -202,10 +208,10 @@ server_version_num
 90500
 
 # Test read-only variables
-statement error parameter "max_index_keys" cannot be set
+statement error parameter "max_index_keys" cannot be changed
 SET max_index_keys = 32
 
-statement error parameter "node_id" cannot be set
+statement error parameter "node_id" cannot be changed
 SET node_id = 123
 
 query TT
@@ -258,6 +264,16 @@ SELECT * FROM generate_series(1,1000000)
 # Test that statement_timeout can be set with an interval string.
 statement ok
 SET statement_timeout = '0ms'
+
+# Test that statement_timeout can be set with an interval string, defaulting to
+# milliseconds as a unit.
+statement ok
+SET statement_timeout = '100'
+
+query T
+SHOW statement_timeout
+----
+100
 
 # Test that composite variable names get rejected properly, especially
 # when "tracing" is used as prefix.

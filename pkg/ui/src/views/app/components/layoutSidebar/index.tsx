@@ -124,7 +124,7 @@ export default class Sidebar extends React.Component {
           <IconLink to="/overview" icon={homeIcon} title="Overview" activeFor="/node" />
           <IconLink to="/metrics" icon={metricsIcon} title="Metrics" />
           <IconLink to="/databases" icon={databasesIcon} title="Databases" activeFor="/database" />
-          <IconLink to="/statements" icon={statementsIcon} title="Statements" />
+          <IconLink to="/statements" icon={statementsIcon} title="Statements" activeFor="/statement" />
           <IconLink to="/jobs" icon={jobsIcon} title="Jobs" />
         </ul>
         <ul className="navigation-bar__list navigation-bar__list--bottom">

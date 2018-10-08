@@ -21,6 +21,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -42,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/pkg/errors"
 )
 
 // DistSQLPlanner is used to generate distributed plans from logical
@@ -73,11 +74,9 @@ type DistSQLPlanner struct {
 	st *cluster.Settings
 	// The node descriptor for the gateway node that initiated this query.
 	nodeDesc     roachpb.NodeDescriptor
-	rpcContext   *rpc.Context
 	stopper      *stop.Stopper
 	distSQLSrv   *distsqlrun.ServerImpl
 	spanResolver distsqlplan.SpanResolver
-	testingKnobs DistSQLPlannerTestingKnobs
 
 	// metadataTestTolerance is the minimum level required to plan metadata test
 	// processors.
@@ -89,10 +88,12 @@ type DistSQLPlanner struct {
 
 	// gossip handle used to check node version compatibility.
 	gossip *gossip.Gossip
-	// liveness is used to avoid planning on down nodes.
-	liveness *storage.NodeLiveness
 
 	nodeDialer *nodedialer.Dialer
+
+	// nodeHealth encapsulates the various node health checks to avoid planning
+	// on unhealthy nodes.
+	nodeHealth distSQLNodeHealth
 }
 
 const resolverPolicy = distsqlplan.BinPackingLeaseHolderChoice
@@ -134,26 +135,36 @@ func NewDistSQLPlanner(
 	gossip *gossip.Gossip,
 	stopper *stop.Stopper,
 	liveness *storage.NodeLiveness,
-	testingKnobs DistSQLPlannerTestingKnobs,
 	nodeDialer *nodedialer.Dialer,
 ) *DistSQLPlanner {
 	if liveness == nil {
 		panic("must specify liveness")
 	}
 	dsp := &DistSQLPlanner{
-		planVersion:           planVersion,
-		st:                    st,
-		nodeDesc:              nodeDesc,
-		rpcContext:            rpcCtx,
-		stopper:               stopper,
-		distSQLSrv:            distSQLSrv,
-		gossip:                gossip,
-		spanResolver:          distsqlplan.NewSpanResolver(distSender, gossip, nodeDesc, resolverPolicy),
-		liveness:              liveness,
-		testingKnobs:          testingKnobs,
+		planVersion:  planVersion,
+		st:           st,
+		nodeDesc:     nodeDesc,
+		stopper:      stopper,
+		distSQLSrv:   distSQLSrv,
+		spanResolver: distsqlplan.NewSpanResolver(distSender, gossip, nodeDesc, resolverPolicy),
+		gossip:       gossip,
+		nodeDialer:   nodeDialer,
+		nodeHealth: distSQLNodeHealth{
+			gossip:     gossip,
+			connHealth: nodeDialer.ConnHealth,
+		},
 		metadataTestTolerance: distsqlrun.NoExplain,
-		nodeDialer:            nodeDialer,
 	}
+	// NB: not all tests populate a NodeLiveness. Everything using the
+	// proper constructor NewDistSQLPlanner will, though.
+	if liveness != nil {
+		dsp.nodeHealth.isLive = liveness.IsLive
+	} else {
+		dsp.nodeHealth.isLive = func(_ roachpb.NodeID) (bool, error) {
+			return true, nil
+		}
+	}
+
 	dsp.initRunners()
 	return dsp
 }
@@ -171,11 +182,6 @@ func (dsp *DistSQLPlanner) SetNodeDesc(desc roachpb.NodeDescriptor) {
 // responsibility to make sure the DistSQLPlanner is not in use.
 func (dsp *DistSQLPlanner) SetSpanResolver(spanResolver distsqlplan.SpanResolver) {
 	dsp.spanResolver = spanResolver
-}
-
-// SpanResolver returns the planner's SpanResolver.
-func (dsp *DistSQLPlanner) SpanResolver() distsqlplan.SpanResolver {
-	return dsp.spanResolver
 }
 
 // distSQLExprCheckVisitor is a tree.Visitor that checks if expressions
@@ -291,6 +297,7 @@ func (dsp *DistSQLPlanner) mustWrapNode(node planNode) bool {
 	case *distinctNode:
 	case *unionNode:
 	case *valuesNode:
+	case *virtualTableNode:
 	case *createStatsNode:
 	case *projectSetNode:
 	case *unaryNode:
@@ -440,7 +447,6 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 			}
 		}
 		return canDistribute, nil
-
 	case *createStatsNode:
 		return shouldDistribute, nil
 
@@ -474,11 +480,7 @@ func (dsp *DistSQLPlanner) checkSupportForNode(node planNode) (distRecommendatio
 type PlanningCtx struct {
 	ctx             context.Context
 	ExtendedEvalCtx *extendedEvalContext
-	// validExtendedEvalCtx is set to true if a flow can use the ExtendedEvalCtx
-	// of this PlanningCtx directly, without having to instantiate a new one. This
-	// is normally false, with the main exception of the ordinary SQL executor.
-	validExtendedEvalCtx bool
-	spanIter             distsqlplan.SpanResolverIterator
+	spanIter        distsqlplan.SpanResolverIterator
 	// NodeAddresses contains addresses for all NodeIDs that are referenced by any
 	// PhysicalPlan we generate with this context.
 	// Nodes that fail a health check have empty addresses.
@@ -499,6 +501,8 @@ type PlanningCtx struct {
 	planDepth int
 }
 
+var _ distsqlplan.ExprContext = &PlanningCtx{}
+
 // EvalContext returns the associated EvalContext, or nil if there isn't one.
 func (p *PlanningCtx) EvalContext() *tree.EvalContext {
 	if p.ExtendedEvalCtx == nil {
@@ -507,14 +511,19 @@ func (p *PlanningCtx) EvalContext() *tree.EvalContext {
 	return &p.ExtendedEvalCtx.EvalContext
 }
 
+// IsLocal returns true if this PlanningCtx is being used to plan a query that
+// has no remote flows.
+func (p *PlanningCtx) IsLocal() bool {
+	return p.isLocal
+}
+
 // sanityCheckAddresses returns an error if the same address is used by two
 // nodes.
 func (p *PlanningCtx) sanityCheckAddresses() error {
 	inverted := make(map[string]roachpb.NodeID)
 	for nodeID, addr := range p.NodeAddresses {
 		if otherNodeID, ok := inverted[addr]; ok {
-			return util.UnexpectedWithIssueErrorf(
-				12876,
+			return errors.Errorf(
 				"different nodes %d and %d with the same address '%s'", nodeID, otherNodeID, addr)
 		}
 		inverted[addr] = nodeID
@@ -585,47 +594,20 @@ func identityMapInPlace(slice []int) []int {
 	return slice
 }
 
-// spanPartition is the intersection between a set of spans for a certain
+// SpanPartition is the intersection between a set of spans for a certain
 // operation (e.g table scan) and the set of ranges owned by a given node.
-type spanPartition struct {
-	node  roachpb.NodeID
-	spans roachpb.Spans
+type SpanPartition struct {
+	Node  roachpb.NodeID
+	Spans roachpb.Spans
 }
 
-func (dsp *DistSQLPlanner) checkNodeHealth(
-	ctx context.Context, nodeID roachpb.NodeID, addr string,
-) error {
-	// NB: not all tests populate a NodeLiveness. Everything using the
-	// proper constructor NewDistSQLPlanner will, though.
-	isLive := func(_ roachpb.NodeID) (bool, error) {
-		return true, nil
-	}
-	if dsp.liveness != nil {
-		isLive = dsp.liveness.IsLive
-	}
-	return checkNodeHealth(ctx, nodeID, addr, dsp.testingKnobs, dsp.gossip, dsp.rpcContext.ConnHealth, isLive)
+type distSQLNodeHealth struct {
+	gossip     *gossip.Gossip
+	connHealth func(roachpb.NodeID) error
+	isLive     func(roachpb.NodeID) (bool, error)
 }
 
-func checkNodeHealth(
-	ctx context.Context,
-	nodeID roachpb.NodeID,
-	addr string,
-	knobs DistSQLPlannerTestingKnobs,
-	g *gossip.Gossip,
-	connHealth func(string) error,
-	isLive func(roachpb.NodeID) (bool, error),
-) error {
-	// Check if the target's node descriptor is gossiped. If it isn't, the node
-	// is definitely gone and has been for a while.
-	//
-	// TODO(tschottdorf): it's not clear that this adds anything to the liveness
-	// check below. The node descriptor TTL is an hour as of 03/2018.
-	if _, err := g.GetNodeIDAddress(nodeID); err != nil {
-		log.VEventf(ctx, 1, "not using n%d because gossip doesn't know about it. "+
-			"It might have gone away from the cluster. Gossip said: %s.", nodeID, err)
-		return err
-	}
-
+func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) error {
 	{
 		// NB: as of #22658, ConnHealth does not work as expected; see the
 		// comment within. We still keep this code for now because in
@@ -634,13 +616,7 @@ func checkNodeHealth(
 		// artifact of rpcContext's reconnection mechanism at the time of
 		// writing). This is better than having it used in 100% of cases
 		// (until the liveness check below kicks in).
-		var err error
-		if knobs.OverrideHealthCheck != nil {
-			err = knobs.OverrideHealthCheck(nodeID, addr)
-		} else {
-			err = connHealth(addr)
-		}
-
+		err := h.connHealth(nodeID)
 		if err != nil && err != rpc.ErrNotHeartbeated {
 			// This host is known to be unhealthy. Don't use it (use the gateway
 			// instead). Note: this can never happen for our nodeID (which
@@ -650,7 +626,7 @@ func checkNodeHealth(
 		}
 	}
 	{
-		live, err := isLive(nodeID)
+		live, err := h.isLive(nodeID)
 		if err == nil && !live {
 			err = errors.New("node is not live")
 		}
@@ -661,7 +637,7 @@ func checkNodeHealth(
 
 	// Check that the node is not draining.
 	drainingInfo := &distsqlrun.DistSQLDrainingInfo{}
-	if err := g.GetInfoProto(gossip.MakeDistSQLDrainingKey(nodeID), drainingInfo); err != nil {
+	if err := h.gossip.GetInfoProto(gossip.MakeDistSQLDrainingKey(nodeID), drainingInfo); err != nil {
 		// Because draining info has no expiration, an error
 		// implies that we have not yet received a node's
 		// draining information. Since this information is
@@ -680,23 +656,23 @@ func checkNodeHealth(
 	return nil
 }
 
-// partitionSpans finds out which nodes are owners for ranges touching the
+// PartitionSpans finds out which nodes are owners for ranges touching the
 // given spans, and splits the spans according to owning nodes. The result is a
-// set of spanPartitions (guaranteed one for each relevant node), which form a
+// set of SpanPartitions (guaranteed one for each relevant node), which form a
 // partitioning of the spans (i.e. they are non-overlapping and their union is
 // exactly the original set of spans).
 //
-// partitionSpans does its best to not assign ranges on nodes that are known to
+// PartitionSpans does its best to not assign ranges on nodes that are known to
 // either be unhealthy or running an incompatible version. The ranges owned by
 // such nodes are assigned to the gateway.
-func (dsp *DistSQLPlanner) partitionSpans(
+func (dsp *DistSQLPlanner) PartitionSpans(
 	planCtx *PlanningCtx, spans roachpb.Spans,
-) ([]spanPartition, error) {
+) ([]SpanPartition, error) {
 	if len(spans) == 0 {
 		panic("no spans")
 	}
 	ctx := planCtx.ctx
-	partitions := make([]spanPartition, 0, 1)
+	partitions := make([]SpanPartition, 0, 1)
 	// nodeMap maps a nodeID to an index inside the partitions array.
 	nodeMap := make(map[roachpb.NodeID]int)
 	// nodeVerCompatMap maintains info about which nodes advertise DistSQL
@@ -758,7 +734,7 @@ func (dsp *DistSQLPlanner) partitionSpans(
 				addr, inAddrMap := planCtx.NodeAddresses[nodeID]
 				if !inAddrMap {
 					addr = replInfo.NodeDesc.Address.String()
-					if err := dsp.checkNodeHealth(ctx, nodeID, addr); err != nil {
+					if err := dsp.nodeHealth.check(ctx, nodeID); err != nil {
 						addr = ""
 					}
 					if err == nil && addr != "" {
@@ -787,7 +763,7 @@ func (dsp *DistSQLPlanner) partitionSpans(
 
 				if !inNodeMap {
 					partitionIdx = len(partitions)
-					partitions = append(partitions, spanPartition{node: nodeID})
+					partitions = append(partitions, SpanPartition{Node: nodeID})
 					nodeMap[nodeID] = partitionIdx
 				}
 			}
@@ -795,9 +771,9 @@ func (dsp *DistSQLPlanner) partitionSpans(
 
 			if lastNodeID == nodeID {
 				// Two consecutive ranges on the same node, merge the spans.
-				partition.spans[len(partition.spans)-1].EndKey = endKey.AsRawKey()
+				partition.Spans[len(partition.Spans)-1].EndKey = endKey.AsRawKey()
 			} else {
-				partition.spans = append(partition.spans, roachpb.Span{
+				partition.Spans = append(partition.Spans, roachpb.Span{
 					Key:    lastKey.AsRawKey(),
 					EndKey: endKey.AsRawKey(),
 				})
@@ -844,17 +820,21 @@ func getIndexIdx(n *scanNode) (uint32, error) {
 // initTableReaderSpec initializes a TableReaderSpec/PostProcessSpec that
 // corresponds to a scanNode, except for the Spans and OutputColumns.
 func initTableReaderSpec(
-	n *scanNode, evalCtx *tree.EvalContext, indexVarMap []int,
-) (distsqlrun.TableReaderSpec, distsqlrun.PostProcessSpec, error) {
-	s := distsqlrun.TableReaderSpec{
+	n *scanNode, planCtx *PlanningCtx, indexVarMap []int,
+) (*distsqlrun.TableReaderSpec, distsqlrun.PostProcessSpec, error) {
+	s := distsqlplan.NewTableReaderSpec()
+	*s = distsqlrun.TableReaderSpec{
 		Table:      *n.desc,
 		Reverse:    n.reverse,
 		IsCheck:    n.run.isCheck,
 		Visibility: n.colCfg.visibility.toDistSQLScanVisibility(),
+
+		// Retain the capacity of the spans slice.
+		Spans: s.Spans[:0],
 	}
 	indexIdx, err := getIndexIdx(n)
 	if err != nil {
-		return distsqlrun.TableReaderSpec{}, distsqlrun.PostProcessSpec{}, err
+		return nil, distsqlrun.PostProcessSpec{}, err
 	}
 	s.IndexIdx = indexIdx
 
@@ -865,9 +845,9 @@ func initTableReaderSpec(
 		return s, distsqlrun.PostProcessSpec{}, nil
 	}
 
-	filter, err := distsqlplan.MakeExpression(n.filter, evalCtx, indexVarMap)
+	filter, err := distsqlplan.MakeExpression(n.filter, planCtx, indexVarMap)
 	if err != nil {
-		return distsqlrun.TableReaderSpec{}, distsqlrun.PostProcessSpec{}, err
+		return nil, distsqlrun.PostProcessSpec{}, err
 	}
 	post := distsqlrun.PostProcessSpec{
 		Filter: filter,
@@ -1025,15 +1005,14 @@ func (dsp *DistSQLPlanner) CheckNodeHealthAndVersion(
 	planCtx *PlanningCtx, desc *roachpb.NodeDescriptor,
 ) error {
 	nodeID := desc.NodeID
-	addr := desc.Address.String()
 	var err error
 
-	if err = dsp.checkNodeHealth(planCtx.ctx, nodeID, addr); err != nil {
+	if err = dsp.nodeHealth.check(planCtx.ctx, nodeID); err != nil {
 		err = errors.New("unhealthy")
 	} else if !dsp.nodeVersionIsCompatible(nodeID, dsp.planVersion) {
 		err = errors.New("incompatible version")
 	} else {
-		planCtx.NodeAddresses[nodeID] = addr
+		planCtx.NodeAddresses[nodeID] = desc.Address.String()
 	}
 	return err
 }
@@ -1046,17 +1025,17 @@ func (dsp *DistSQLPlanner) createTableReaders(
 ) (PhysicalPlan, error) {
 
 	scanNodeToTableOrdinalMap := getScanNodeToTableOrdinalMap(n)
-	spec, post, err := initTableReaderSpec(n, planCtx.EvalContext(), scanNodeToTableOrdinalMap)
+	spec, post, err := initTableReaderSpec(n, planCtx, scanNodeToTableOrdinalMap)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
 
-	var spanPartitions []spanPartition
+	var spanPartitions []SpanPartition
 	if planCtx.isLocal {
-		spanPartitions = []spanPartition{{dsp.nodeDesc.NodeID, n.spans}}
+		spanPartitions = []SpanPartition{{dsp.nodeDesc.NodeID, n.spans}}
 	} else if n.hardLimit == 0 && n.softLimit == 0 {
 		// No limit - plan all table readers where their data live.
-		spanPartitions, err = dsp.partitionSpans(planCtx, n.spans)
+		spanPartitions, err = dsp.PartitionSpans(planCtx, n.spans)
 		if err != nil {
 			return PhysicalPlan{}, err
 		}
@@ -1070,23 +1049,38 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		if err != nil {
 			return PhysicalPlan{}, err
 		}
-		spanPartitions = []spanPartition{{nodeID, n.spans}}
+		spanPartitions = []SpanPartition{{nodeID, n.spans}}
 	}
 
 	var p PhysicalPlan
 	stageID := p.NewStageID()
 
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
+	p.Processors = make([]distsqlplan.Processor, 0, len(spanPartitions))
 
 	returnMutations := n.colCfg.visibility == publicAndNonPublicColumns
 
 	for i, sp := range spanPartitions {
-		tr := &distsqlrun.TableReaderSpec{}
-		*tr = spec
-		tr.Spans = makeTableReaderSpans(sp.spans)
+		var tr *distsqlrun.TableReaderSpec
+		if i == 0 {
+			// For the first span partition, we can just directly use the spec we made
+			// above.
+			tr = spec
+		} else {
+			// For the rest, we have to copy the spec into a fresh spec.
+			tr = distsqlplan.NewTableReaderSpec()
+			// Grab the Spans field of the new spec, and reuse it in case the pooled
+			// TableReaderSpec we got has pre-allocated Spans memory.
+			newSpansSlice := tr.Spans
+			*tr = *spec
+			tr.Spans = newSpansSlice
+		}
+		for j := range sp.Spans {
+			tr.Spans = append(tr.Spans, distsqlrun.TableReaderSpan{Span: sp.Spans[j]})
+		}
 
 		proc := distsqlplan.Processor{
-			Node: sp.node,
+			Node: sp.Node,
 			Spec: distsqlrun.ProcessorSpec{
 				Core:    distsqlrun.ProcessorCoreUnion{TableReader: tr},
 				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},
@@ -1137,9 +1131,9 @@ func (dsp *DistSQLPlanner) createTableReaders(
 		}
 	}
 	planToStreamColMap := make([]int, len(n.cols))
-	var descColumnIDs []sqlbase.ColumnID
-	for _, c := range n.desc.Columns {
-		descColumnIDs = append(descColumnIDs, c.ID)
+	descColumnIDs := make([]sqlbase.ColumnID, 0, len(n.desc.Columns))
+	for i := range n.desc.Columns {
+		descColumnIDs = append(descColumnIDs, n.desc.Columns[i].ID)
 	}
 	if returnMutations {
 		for _, m := range n.desc.Mutations {
@@ -1169,7 +1163,7 @@ func (dsp *DistSQLPlanner) createTableReaders(
 // corresponding to the render node itself. An evaluator stage is added if the
 // render node has any expressions which are not just simple column references.
 func (dsp *DistSQLPlanner) selectRenders(
-	p *PhysicalPlan, n *renderNode, evalCtx *tree.EvalContext,
+	p *PhysicalPlan, n *renderNode, planCtx *PlanningCtx,
 ) error {
 	// We want to skip any unused renders.
 	planToStreamColMap := makePlanToStreamColMap(len(n.render))
@@ -1185,7 +1179,7 @@ func (dsp *DistSQLPlanner) selectRenders(
 	if err != nil {
 		return err
 	}
-	err = p.AddRendering(renders, evalCtx, p.PlanToStreamColMap, types)
+	err = p.AddRendering(renders, planCtx, p.PlanToStreamColMap, types)
 	if err != nil {
 		return err
 	}
@@ -1282,7 +1276,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		aggregationsColumnTypes[i] = make([]sqlbase.ColumnType, len(fholder.arguments))
 		for j, argument := range fholder.arguments {
 			var err error
-			aggregations[i].Arguments[j], err = distsqlplan.MakeExpression(argument, planCtx.EvalContext(), nil)
+			aggregations[i].Arguments[j], err = distsqlplan.MakeExpression(argument, planCtx, nil)
 			if err != nil {
 				return err
 			}
@@ -1308,7 +1302,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 	var orderedGroupColSet util.FastIntSet
 	for i, idx := range n.orderedGroupCols {
 		orderedGroupCols[i] = uint32(p.PlanToStreamColMap[idx])
-		orderedGroupColSet.Add(i)
+		orderedGroupColSet.Add(idx)
 	}
 
 	// We either have a local stage on each stream followed by a final stage, or
@@ -1578,6 +1572,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		// be part of the output of the local stage for the final stage to know
 		// about them.
 		finalGroupCols := make([]uint32, len(groupCols))
+		finalOrderedGroupCols := make([]uint32, 0, len(orderedGroupCols))
 		for i, groupColIdx := range groupCols {
 			agg := distsqlrun.AggregatorSpec_Aggregation{
 				Func:   distsqlrun.AggregatorSpec_ANY_NOT_NULL,
@@ -1599,33 +1594,22 @@ func (dsp *DistSQLPlanner) addAggregators(
 				intermediateTypes = append(intermediateTypes, inputTypes[groupColIdx])
 			}
 			finalGroupCols[i] = uint32(idx)
-		}
-
-		finalOrderedGroupCols := make([]uint32, len(orderedGroupCols))
-		for i, c := range orderedGroupCols {
-			finalOrderedGroupCols[i] = finalGroupCols[c]
+			if orderedGroupColSet.Contains(n.groupCols[i]) {
+				finalOrderedGroupCols = append(finalOrderedGroupCols, uint32(idx))
+			}
 		}
 
 		// Create the merge ordering for the local stage.
 		groupColProps := planPhysicalProps(n.plan)
 		groupColProps = groupColProps.project(n.groupCols)
-		ordCols := make([]distsqlrun.Ordering_Column, 0, len(groupColProps.ordering))
-	OrderingLoop:
-		for _, o := range groupColProps.ordering {
-			for i, c := range finalGroupCols {
-				if o.ColIdx == n.groupCols[i] {
-					dir := distsqlrun.Ordering_Column_ASC
-					if o.Direction == encoding.Descending {
-						dir = distsqlrun.Ordering_Column_DESC
-					}
-					ordCols = append(ordCols, distsqlrun.Ordering_Column{
-						ColIdx:    c,
-						Direction: dir,
-					})
-					continue OrderingLoop
-				}
+		ordCols := make([]distsqlrun.Ordering_Column, len(groupColProps.ordering))
+		for i, o := range groupColProps.ordering {
+			ordCols[i].ColIdx = finalGroupCols[o.ColIdx]
+			if o.Direction == encoding.Descending {
+				ordCols[i].Direction = distsqlrun.Ordering_Column_DESC
+			} else {
+				ordCols[i].Direction = distsqlrun.Ordering_Column_ASC
 			}
-			panic("missing IDENT from local aggregations")
 		}
 
 		localAggsSpec := distsqlrun.AggregatorSpec{
@@ -1671,8 +1655,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 					mappedIdx := int(finalIdxMap[finalIdx])
 					var err error
 					renderExprs[i], err = distsqlplan.MakeExpression(
-						h.IndexedVar(mappedIdx), planCtx.EvalContext(),
-						nil /* indexVarMap */)
+						h.IndexedVar(mappedIdx), planCtx, nil /* indexVarMap */)
 					if err != nil {
 						return err
 					}
@@ -1692,7 +1675,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 						return err
 					}
 					renderExprs[i], err = distsqlplan.MakeExpression(
-						expr, planCtx.EvalContext(),
+						expr, planCtx,
 						nil /* indexVarMap */)
 					if err != nil {
 						return err
@@ -1823,7 +1806,7 @@ func (dsp *DistSQLPlanner) createPlanForIndexJoin(
 	}
 
 	filter, err := distsqlplan.MakeExpression(
-		n.table.filter, planCtx.EvalContext(), nil /* indexVarMap */)
+		n.table.filter, planCtx, nil /* indexVarMap */)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
@@ -1941,7 +1924,7 @@ func (dsp *DistSQLPlanner) createPlanForLookupJoin(
 		}
 		var err error
 		joinReaderSpec.OnExpr, err = distsqlplan.MakeExpression(
-			n.onCond, planCtx.EvalContext(), indexVarMap,
+			n.onCond, planCtx, indexVarMap,
 		)
 		if err != nil {
 			return PhysicalPlan{}, err
@@ -2129,7 +2112,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 	}
 
 	post, joinToStreamColMap := joinOutColumns(n, leftPlan.PlanToStreamColMap, rightMap)
-	onExpr, err := remapOnExpr(planCtx.EvalContext(), n, leftPlan.PlanToStreamColMap, rightMap)
+	onExpr, err := remapOnExpr(planCtx, n, leftPlan.PlanToStreamColMap, rightMap)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
@@ -2168,7 +2151,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 		var indexFilterExpr distsqlrun.Expression
 		if lookupJoinScan.origFilter != nil {
 			var err error
-			indexFilterExpr, err = distsqlplan.MakeExpression(lookupJoinScan.origFilter, planCtx.EvalContext(), nil)
+			indexFilterExpr, err = distsqlplan.MakeExpression(lookupJoinScan.origFilter, planCtx, nil)
 			if err != nil {
 				return PhysicalPlan{}, err
 			}
@@ -2318,7 +2301,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		if err != nil {
 			return PhysicalPlan{}, err
 		}
-		err = dsp.selectRenders(&plan, n, planCtx.EvalContext())
+		err = dsp.selectRenders(&plan, n, planCtx)
 		if err != nil {
 			return PhysicalPlan{}, err
 		}
@@ -2347,7 +2330,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 			return PhysicalPlan{}, err
 		}
 
-		if err := plan.AddFilter(n.filter, planCtx.EvalContext(), plan.PlanToStreamColMap); err != nil {
+		if err := plan.AddFilter(n.filter, planCtx, plan.PlanToStreamColMap); err != nil {
 			return PhysicalPlan{}, err
 		}
 
@@ -2359,7 +2342,7 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		if err := n.evalLimit(planCtx.EvalContext()); err != nil {
 			return PhysicalPlan{}, err
 		}
-		if err := plan.AddLimit(n.count, n.offset, planCtx.EvalContext(), dsp.nodeDesc.NodeID); err != nil {
+		if err := plan.AddLimit(n.count, n.offset, planCtx, dsp.nodeDesc.NodeID); err != nil {
 			return PhysicalPlan{}, err
 		}
 
@@ -2379,7 +2362,6 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		} else {
 			plan, err = dsp.createPlanForValues(planCtx, n)
 		}
-
 	case *createStatsNode:
 		plan, err = dsp.createPlanForCreateStats(planCtx, n)
 
@@ -2729,7 +2711,7 @@ func createProjectSetSpec(
 	}
 	for i, expr := range n.exprs {
 		var err error
-		spec.Exprs[i], err = distsqlplan.MakeExpression(expr, &planCtx.ExtendedEvalCtx.EvalContext, indexVarMap)
+		spec.Exprs[i], err = distsqlplan.MakeExpression(expr, planCtx, indexVarMap)
 		if err != nil {
 			return nil, err
 		}
@@ -3095,7 +3077,7 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 	}
 
 	numWindowFuncProcessed := 0
-	windowPlanState := createWindowPlanState(n, planCtx.EvalContext(), &plan)
+	windowPlanState := createWindowPlanState(n, planCtx, &plan)
 	// Each iteration of this loop adds a new stage of windowers. The steps taken:
 	// 1. find a set of unprocessed window functions that have the same PARTITION BY
 	//    clause. All of these will be computed using the single stage of windowers.
@@ -3269,7 +3251,7 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 // NewPlanningCtx returns a new PlanningCtx.
 func (dsp *DistSQLPlanner) NewPlanningCtx(
 	ctx context.Context, evalCtx *extendedEvalContext, txn *client.Txn,
-) PlanningCtx {
+) *PlanningCtx {
 	planCtx := dsp.newLocalPlanningCtx(ctx, evalCtx)
 	planCtx.spanIter = dsp.spanResolver.NewSpanResolverIterator(txn)
 	planCtx.NodeAddresses = make(map[roachpb.NodeID]string)
@@ -3281,8 +3263,8 @@ func (dsp *DistSQLPlanner) NewPlanningCtx(
 // used when the caller knows plans will only be run on one node.
 func (dsp *DistSQLPlanner) newLocalPlanningCtx(
 	ctx context.Context, evalCtx *extendedEvalContext,
-) PlanningCtx {
-	return PlanningCtx{
+) *PlanningCtx {
+	return &PlanningCtx{
 		ctx:             ctx,
 		ExtendedEvalCtx: evalCtx,
 	}

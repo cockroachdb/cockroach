@@ -82,6 +82,7 @@ var baseNodeColumnHeaders = []string{
 	"build",
 	"started_at",
 	"updated_at",
+	"is_available",
 	"is_live",
 }
 
@@ -162,9 +163,11 @@ FROM crdb_internal.gossip_liveness JOIN crdb_internal.gossip_nodes USING (node_i
                 CASE WHEN split_part(expiration,',',1)::decimal > now()::decimal
                      THEN true
                      ELSE false
-                     END AS is_live
+                     END AS is_available
          FROM crdb_internal.gossip_liveness`,
 			),
+			`SELECT node_id AS id, is_live
+         FROM crdb_internal.gossip_nodes`,
 		},
 	)
 
@@ -403,9 +406,8 @@ var recommissionNodeCmd = &cobra.Command{
 	Use:   "recommission <node id 1> [<node id 2> ...]",
 	Short: "recommissions the node(s)",
 	Long: `
-For the nodes with the supplied IDs, resets the decommissioning states.
-The target nodes must be restarted, at which point the change will take
-effect and the nodes will participate in the cluster as regular nodes.
+For the nodes with the supplied IDs, resets the decommissioning states,
+signaling the affected nodes to participate in the cluster again.
 	`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: MaybeDecorateGRPCError(runRecommissionNode),
@@ -439,11 +441,7 @@ func runRecommissionNode(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := printDecommissionStatus(*resp); err != nil {
-		return err
-	}
-	fmt.Fprintln(os.Stdout, "The affected nodes must be restarted for the change to take effect.")
-	return nil
+	return printDecommissionStatus(*resp)
 }
 
 // Sub-commands for node command.

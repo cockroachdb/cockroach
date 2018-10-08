@@ -733,7 +733,6 @@ render            ·              ·                (k)           ·
  │                render 0       k                ·             ·
  └── lookup-join  ·              ·                (column1, k)  ·
       │           type           inner            ·             ·
-      │           pred           @2 = @1          ·             ·
       ├── values  ·              ·                (column1)     ·
       │           size           1 column, 1 row  ·             ·
       │           row 0, expr 0  1                ·             ·
@@ -743,19 +742,18 @@ render            ·              ·                (k)           ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
 ----
-render          ·               ·                    (k)           ·
- │              render 0        k                    ·             ·
- └── join       ·               ·                    (k, v, k, v)  -v,+k
-      │         type            inner                ·             ·
-      │         equality        (v, k) = (v, k)      ·             ·
-      │         mergeJoinOrder  -"(v=v)",+"(k=k)"    ·             ·
-      │         pred            (k = k) AND (v = v)  ·             ·
-      ├── scan  ·               ·                    (k, v)        -v,+k
-      │         table           kv@foo               ·             ·
-      │         spans           ALL                  ·             ·
-      └── scan  ·               ·                    (k, v)        -v,+k
-·               table           kv@foo               ·             ·
-·               spans           ALL                  ·             ·
+render          ·               ·                  (k)           ·
+ │              render 0        k                  ·             ·
+ └── join       ·               ·                  (k, v, k, v)  -v,+k
+      │         type            inner              ·             ·
+      │         equality        (v, k) = (v, k)    ·             ·
+      │         mergeJoinOrder  -"(v=v)",+"(k=k)"  ·             ·
+      ├── scan  ·               ·                  (k, v)        -v,+k
+      │         table           kv@foo             ·             ·
+      │         spans           ALL                ·             ·
+      └── scan  ·               ·                  (k, v)        -v,+k
+·               table           kv@foo             ·             ·
+·               spans           ALL                ·             ·
 
 statement ok
 CREATE TABLE xyz (x INT, y INT, z INT, INDEX(z,y))

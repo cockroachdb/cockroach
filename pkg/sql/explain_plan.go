@@ -293,7 +293,9 @@ func (e *explainer) populateEntries(ctx context.Context, plan planNode, subquery
 	for i := range subqueryPlans {
 		_, _ = e.enterNode(ctx, "subquery", plan)
 		e.attr("subquery", "id", fmt.Sprintf("@S%d", i+1))
-		e.attr("subquery", "sql", subqueryPlans[i].subquery.String())
+		// This field contains the original subquery (which could have been modified
+		// by optimizer transformations).
+		e.attr("subquery", "original sql", subqueryPlans[i].subquery.String())
 		e.attr("subquery", "exec mode", distsqlrun.SubqueryExecModeNames[subqueryPlans[i].execMode])
 		if subqueryPlans[i].plan != nil {
 			_ = walkPlan(ctx, subqueryPlans[i].plan, observer)

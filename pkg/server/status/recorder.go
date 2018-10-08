@@ -381,10 +381,10 @@ func (mr *MetricsRecorder) getNetworkActivity(
 		if mr.rpcContext.RemoteClocks != nil {
 			currentAverages = mr.rpcContext.RemoteClocks.AllLatencies()
 		}
-		for nodeID, alive := range isLiveMap {
+		for nodeID, entry := range isLiveMap {
 			address, err := mr.gossip.GetNodeIDAddress(nodeID)
 			if err != nil {
-				if alive {
+				if entry.IsLive {
 					log.Warning(ctx, err.Error())
 				}
 				continue
@@ -396,7 +396,7 @@ func (mr *MetricsRecorder) getNetworkActivity(
 				na.Incoming = stats.Incoming()
 				na.Outgoing = stats.Outgoing()
 			}
-			if alive {
+			if entry.IsLive {
 				if latency, ok := currentAverages[key]; ok {
 					na.Latency = latency.Nanoseconds()
 				}
@@ -536,8 +536,6 @@ func extractValue(mtr interface{}) (float64, error) {
 	switch mtr := mtr.(type) {
 	case float64:
 		return mtr, nil
-	case *metric.CounterWithRates:
-		return float64(mtr.Count()), nil
 	case *metric.Counter:
 		return float64(mtr.Count()), nil
 	case *metric.Gauge:

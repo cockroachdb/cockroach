@@ -406,6 +406,10 @@ func (s *sortTopKProcessor) Start(ctx context.Context) context.Context {
 		row, meta := s.input.Next()
 		if meta != nil {
 			s.trailingMeta = append(s.trailingMeta, *meta)
+			if meta.Err != nil {
+				s.MoveToDraining(nil /* err */)
+				break
+			}
 			continue
 		}
 		if row == nil {
@@ -549,6 +553,9 @@ func (s *sortChunksProcessor) fill() (bool, error) {
 
 		if meta != nil {
 			s.trailingMeta = append(s.trailingMeta, *meta)
+			if meta.Err != nil {
+				return false, nil
+			}
 			continue
 		}
 		if nextChunkRow == nil {
@@ -623,11 +630,6 @@ func (s *sortChunksProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 	}
 	return nil, s.DrainHelper()
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (s *sortChunksProcessor) ConsumerDone() {
-	s.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.

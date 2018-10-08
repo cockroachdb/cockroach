@@ -82,8 +82,8 @@ func Main() {
 func commandName(args []string) string {
 	rootName := cockroachCmd.CommandPath()
 	// Ask Cobra to find the command so that flags and their arguments are
-	// ignored. The name of "cockroach --verbosity 2 start" is "start", not
-	// "--verbosity" or "2".
+	// ignored. The name of "cockroach --log-dir foo start" is "start", not
+	// "--log-dir" or "foo".
 	if cmd, _, _ := cockroachCmd.Find(os.Args[1:]); cmd != nil {
 		return strings.TrimPrefix(cmd.CommandPath(), rootName+" ")
 	}
@@ -200,5 +200,5 @@ func usageAndErr(cmd *cobra.Command, args []string) error {
 	if err := cmd.Usage(); err != nil {
 		return err
 	}
-	return fmt.Errorf("unknown sub-command: %s", strings.Join(args, " "))
+	return fmt.Errorf("unknown sub-command: %q", strings.Join(args, " "))
 }

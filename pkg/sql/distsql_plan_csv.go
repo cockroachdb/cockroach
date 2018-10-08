@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/pkg/errors"
 )
 
@@ -62,7 +64,7 @@ func PlanAndRunExport(
 	rec, err := dsp.checkSupportForNode(in)
 	planCtx.isLocal = err != nil || rec == cannotDistribute
 
-	p, err := dsp.createPlanForNode(&planCtx, in)
+	p, err := dsp.createPlanForNode(planCtx, in)
 	if err != nil {
 		return errors.Wrap(err, "constructing distSQL plan")
 	}
@@ -76,7 +78,7 @@ func PlanAndRunExport(
 	// columns filename/rows/bytes.
 	p.PlanToStreamColMap = identityMap(p.PlanToStreamColMap, len(ExportPlanResultTypes))
 
-	dsp.FinalizePlan(&planCtx, &p)
+	dsp.FinalizePlan(planCtx, &p)
 
 	recv := MakeDistSQLReceiver(
 		ctx, resultRows, tree.Rows,
@@ -84,7 +86,9 @@ func PlanAndRunExport(
 		evalCtx.Tracing,
 	)
 
-	dsp.Run(&planCtx, txn, &p, recv, evalCtx, nil /* finishedSetupFn */)
+	// Copy the evalCtx, as dsp.Run() might change it.
+	evalCtxCopy := *evalCtx
+	dsp.Run(planCtx, txn, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 	return resultRows.Err()
 }
 
@@ -179,7 +183,7 @@ func LoadCSV(
 	oversample int64,
 	makeRewriter func(map[sqlbase.ID]*sqlbase.TableDescriptor) (KeyRewriter, error),
 ) error {
-	ctx = log.WithLogTag(ctx, "import-distsql", nil)
+	ctx = logtags.AddTag(ctx, "import-distsql", nil)
 
 	dsp := phs.DistSQLPlanner()
 	evalCtx := phs.ExtendedEvalContext()
@@ -192,7 +196,7 @@ func LoadCSV(
 	// Because we're not going through the normal pathways, we have to set up
 	// the nodeID -> nodeAddress map ourselves.
 	for _, node := range resp.Nodes {
-		if err := dsp.CheckNodeHealthAndVersion(&planCtx, &node.Desc); err != nil {
+		if err := dsp.CheckNodeHealthAndVersion(planCtx, &node.Desc); err != nil {
 			continue
 		}
 	}
@@ -254,7 +258,7 @@ func LoadCSV(
 	samples := details.Samples
 	if samples == nil {
 		var err error
-		samples, err = dsp.loadCSVSamplingPlan(ctx, job, db, evalCtx, thisNode, nodes, from, splitSize, oversample, &planCtx, inputSpecs, sstSpecs)
+		samples, err = dsp.loadCSVSamplingPlan(ctx, job, db, evalCtx, thisNode, nodes, from, splitSize, oversample, planCtx, inputSpecs, sstSpecs)
 		if err != nil {
 			return err
 		}
@@ -323,6 +327,16 @@ func LoadCSV(
 
 	splits = append(splits, samples...)
 	sort.Slice(splits, func(a, b int) bool { return roachpb.Key(splits[a]).Compare(splits[b]) < 0 })
+
+	// Remove duplicates. These occur when the end span of a descriptor is the
+	// same as the start span of another.
+	origSplits := splits
+	splits = splits[:0]
+	for _, x := range origSplits {
+		if len(splits) == 0 || !bytes.Equal(x, splits[len(splits)-1]) {
+			splits = append(splits, x)
+		}
+	}
 
 	// jobSpans is a slice of split points, including table start and end keys
 	// for the table. We create router range spans then from taking each pair
@@ -450,7 +464,7 @@ func LoadCSV(
 		return err
 	}
 
-	dsp.FinalizePlan(&planCtx, &p)
+	dsp.FinalizePlan(planCtx, &p)
 
 	recv := MakeDistSQLReceiver(
 		ctx,
@@ -462,10 +476,13 @@ func LoadCSV(
 		func(ts hlc.Timestamp) {},
 		evalCtx.Tracing,
 	)
+	defer recv.Release()
 
 	defer log.VEventf(ctx, 1, "finished job %s", job.Payload().Description)
+	// Copy the evalCtx, as dsp.Run() might change it.
+	evalCtxCopy := *evalCtx
 	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		dsp.Run(&planCtx, txn, &p, recv, evalCtx, nil /* finishedSetupFn */)
+		dsp.Run(planCtx, txn, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 		return resultRows.Err()
 	})
 }
@@ -602,10 +619,13 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 		func(ts hlc.Timestamp) {},
 		evalCtx.Tracing,
 	)
+	defer recv.Release()
 	log.VEventf(ctx, 1, "begin sampling phase of job %s", job.Payload().Description)
 	// Clear the stage 2 data in case this function is ever restarted (it shouldn't be).
 	samples = nil
-	dsp.Run(planCtx, nil, &p, recv, evalCtx, nil /* finishedSetupFn */)
+	// Copy the evalCtx, as dsp.Run() might change it.
+	evalCtxCopy := *evalCtx
+	dsp.Run(planCtx, nil, &p, recv, &evalCtxCopy, nil /* finishedSetupFn */)
 	if err := rowResultWriter.Err(); err != nil {
 		return nil, err
 	}

@@ -71,7 +71,7 @@ func TestRegistryRun(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			code := r.Run(c.filters)
 			if c.expected != code {
-				t.Fatalf("expected %d, but found %d", c.expected, code)
+				t.Fatalf("expected code %d, but found code %d. Filters: %s", c.expected, code, c.filters)
 			}
 		})
 	}
@@ -199,6 +199,31 @@ func TestRegistryRunTimeout(t *testing.T) {
 	out := buf.String()
 	if !timeoutRE.MatchString(out) {
 		t.Fatalf("unable to find \"timed out\" message:\n%s", out)
+	}
+}
+
+func TestRegistryRunSubTestFailed(t *testing.T) {
+	var buf syncedBuffer
+	failedRE := regexp.MustCompile(`(?m)^.*--- FAIL: parent \(.*$`)
+
+	r := newRegistry()
+	r.out = &buf
+	r.Add(testSpec{
+		Name:   "parent",
+		Stable: true,
+		SubTests: []testSpec{{
+			Name:   "child",
+			Stable: true,
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				t.Fatal("failed")
+			},
+		}},
+	})
+
+	r.Run([]string{"."})
+	out := buf.String()
+	if !failedRE.MatchString(out) {
+		t.Fatalf("unable to find \"FAIL: parent\" message:\n%s", out)
 	}
 }
 

@@ -35,12 +35,12 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 	spans []roachpb.Span,
 	readAsOf hlc.Timestamp,
 ) (PhysicalPlan, error) {
-	spec, _, err := initTableReaderSpec(n, planCtx.EvalContext(), nil /* indexVarMap */)
+	spec, _, err := initTableReaderSpec(n, planCtx, nil /* indexVarMap */)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
 
-	spanPartitions, err := dsp.partitionSpans(planCtx, n.spans)
+	spanPartitions, err := dsp.PartitionSpans(planCtx, n.spans)
 	if err != nil {
 		return PhysicalPlan{}, err
 	}
@@ -50,14 +50,14 @@ func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 	p.ResultRouters = make([]distsqlplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		tr := &distsqlrun.TableReaderSpec{}
-		*tr = spec
-		tr.Spans = make([]distsqlrun.TableReaderSpan, len(sp.spans))
-		for j := range sp.spans {
-			tr.Spans[j].Span = sp.spans[j]
+		*tr = *spec
+		tr.Spans = make([]distsqlrun.TableReaderSpan, len(sp.Spans))
+		for j := range sp.Spans {
+			tr.Spans[j].Span = sp.Spans[j]
 		}
 
 		proc := distsqlplan.Processor{
-			Node: sp.node,
+			Node: sp.Node,
 			Spec: distsqlrun.ProcessorSpec{
 				Core:    distsqlrun.ProcessorCoreUnion{TableReader: tr},
 				Output:  []distsqlrun.OutputRouterSpec{{Type: distsqlrun.OutputRouterSpec_PASS_THROUGH}},

@@ -60,7 +60,8 @@ const rangeTableDisplayList: RangeTableRow[] = [
   { variable: "leaseHolderQPS", display: "Lease Holder QPS", compareToLeader: false },
   { variable: "keysWrittenPS", display: "Average Keys Written Per Second", compareToLeader: false },
   { variable: "approxProposalQuota", display: "Approx Proposal Quota", compareToLeader: false },
-  { variable: "pendingCommands", display: "Pending Commands", compareToLeader: false },
+  { variable: "pendingCommands", display: "Pending Local Commands", compareToLeader: false },
+  { variable: "remoteCommands", display: "Pending Remote Commands", compareToLeader: false },
   { variable: "droppedCommands", display: "Dropped Commands", compareToLeader: false },
   { variable: "truncatedIndex", display: "Truncated Index", compareToLeader: true },
   { variable: "truncatedTerm", display: "Truncated Term", compareToLeader: true },
@@ -485,6 +486,7 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
         keysWrittenPS: this.createContent(info.stats.writes_per_second.toFixed(4)),
         approxProposalQuota: raftLeader ? this.createContent(FixLong(info.state.approximate_proposal_quota)) : rangeTableEmptyContent,
         pendingCommands: this.createContent(FixLong(info.state.num_pending)),
+        remoteCommands: raftLeader ? this.createContent(FixLong(info.state.num_remote_pending)) : rangeTableEmptyContent,
         droppedCommands: this.createContent(
           FixLong(info.state.num_dropped),
           FixLong(info.state.num_dropped).greaterThan(0) ? "range-table__cell--warning" : "",

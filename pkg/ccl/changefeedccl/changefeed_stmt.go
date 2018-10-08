@@ -11,6 +11,9 @@ package changefeedccl
 import (
 	"context"
 	"sort"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -35,27 +38,37 @@ func init() {
 }
 
 type envelopeType string
+type formatType string
 
 const (
-	optCursor             = `cursor`
-	optEnvelope           = `envelope`
-	optResolvedTimestamps = `resolved`
-	optUpdatedTimestamps  = `updated`
+	optConfluentSchemaRegistry = `confluent_schema_registry`
+	optCursor                  = `cursor`
+	optEnvelope                = `envelope`
+	optFormat                  = `format`
+	optResolvedTimestamps      = `resolved`
+	optUpdatedTimestamps       = `updated`
 
 	optEnvelopeKeyOnly envelopeType = `key_only`
 	optEnvelopeRow     envelopeType = `row`
+	optEnvelopeDiff    envelopeType = `diff`
+
+	optFormatJSON formatType = `json`
+	optFormatAvro formatType = `experimental-avro`
 
 	sinkParamTopicPrefix      = `topic_prefix`
+	sinkParamSchemaTopic      = `schema_topic`
 	sinkSchemeBuffer          = ``
 	sinkSchemeExperimentalSQL = `experimental-sql`
 	sinkSchemeKafka           = `kafka`
 )
 
-var changefeedOptionExpectValues = map[string]bool{
-	optCursor:             true,
-	optEnvelope:           true,
-	optResolvedTimestamps: false,
-	optUpdatedTimestamps:  false,
+var changefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
+	optConfluentSchemaRegistry: sql.KVStringOptRequireValue,
+	optCursor:                  sql.KVStringOptRequireValue,
+	optEnvelope:                sql.KVStringOptRequireValue,
+	optFormat:                  sql.KVStringOptRequireValue,
+	optResolvedTimestamps:      sql.KVStringOptAny,
+	optUpdatedTimestamps:       sql.KVStringOptRequireNoValue,
 }
 
 // changefeedPlanHook implements sql.PlanHookFn.
@@ -245,7 +258,7 @@ func changefeedJobDescription(
 	}
 	for k, v := range opts {
 		opt := tree.KVOption{Key: tree.Name(k)}
-		if changefeedOptionExpectValues[k] {
+		if len(v) > 0 {
 			opt.Value = tree.NewDString(v)
 		}
 		c.Options = append(c.Options, opt)
@@ -262,14 +275,37 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 		details.Opts = map[string]string{}
 	}
 
+	if r, ok := details.Opts[optResolvedTimestamps]; ok && r != `` {
+		if d, err := time.ParseDuration(r); err != nil {
+			return jobspb.ChangefeedDetails{}, err
+		} else if d < 0 {
+			return jobspb.ChangefeedDetails{}, errors.Errorf(
+				`negative durations are not accepted: %s='%s'`,
+				optResolvedTimestamps, details.Opts[optResolvedTimestamps])
+		}
+	}
+
 	switch envelopeType(details.Opts[optEnvelope]) {
 	case ``, optEnvelopeRow:
 		details.Opts[optEnvelope] = string(optEnvelopeRow)
 	case optEnvelopeKeyOnly:
 		details.Opts[optEnvelope] = string(optEnvelopeKeyOnly)
+	case optEnvelopeDiff:
+		return jobspb.ChangefeedDetails{}, errors.Errorf(
+			`%s=%s is not yet supported`, optEnvelope, optEnvelopeDiff)
 	default:
 		return jobspb.ChangefeedDetails{}, errors.Errorf(
 			`unknown %s: %s`, optEnvelope, details.Opts[optEnvelope])
+	}
+
+	switch formatType(details.Opts[optFormat]) {
+	case ``, optFormatJSON:
+		details.Opts[optFormat] = string(optFormatJSON)
+	case optFormatAvro:
+		// No-op.
+	default:
+		return jobspb.ChangefeedDetails{}, errors.Errorf(
+			`unknown %s: %s`, optFormat, details.Opts[optFormat])
 	}
 
 	return details, nil
@@ -329,22 +365,55 @@ func (b *changefeedResumer) Resume(
 	details := job.Details().(jobspb.ChangefeedDetails)
 	progress := job.Progress()
 
-	// TODO(dan): This is a workaround for not being able to set an initial
-	// progress high-water when creating a job (currently only the progress
-	// details can be set). I didn't want to pick off the refactor to get this
-	// fix in, but it'd be nice to remove this hack.
-	if _, ok := details.Opts[optCursor]; ok {
-		if h := progress.GetHighWater(); h == nil || *h == (hlc.Timestamp{}) {
-			progress.Progress = &jobspb.Progress_HighWater{HighWater: &details.StatementTime}
-		}
+	// Errors encountered while emitting changes to the Sink may be transient; for
+	// example, a temporary network outage. When one of these errors occurs, we do
+	// not fail the job but rather restart the distSQL flow after a short backoff.
+	opts := retry.Options{
+		InitialBackoff: 5 * time.Millisecond,
+		Multiplier:     2,
+		MaxBackoff:     10 * time.Second,
 	}
+	var err error
+	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		// TODO(dan): This is a workaround for not being able to set an initial
+		// progress high-water when creating a job (currently only the progress
+		// details can be set). I didn't want to pick off the refactor to get this
+		// fix in, but it'd be nice to remove this hack.
+		if _, ok := details.Opts[optCursor]; ok {
+			if h := progress.GetHighWater(); h == nil || *h == (hlc.Timestamp{}) {
+				progress.Progress = &jobspb.Progress_HighWater{HighWater: &details.StatementTime}
+			}
+		}
 
-	err := distChangefeedFlow(ctx, phs, *job.ID(), details, progress, startedCh)
+		err = distChangefeedFlow(ctx, phs, *job.ID(), details, progress, startedCh)
+		if !isRetryableSinkError(err) {
+			break
+		}
+		log.Infof(ctx, `CHANGEFEED job %d encountered retryable error: %v`, *job.ID(), err)
+		// Re-load the job in order to update our progress object, which may have
+		// been updated by the changeFrontier processor since the flow started.
+		reloadedJob, phsErr := phs.ExecCfg().JobRegistry.LoadJob(ctx, *job.ID())
+		if phsErr != nil {
+			err = phsErr
+			break
+		}
+		progress = reloadedJob.Progress()
+		// startedCh is normally used to signal back to the creator of the job that
+		// the job has started; however, in this case nothing will ever receive
+		// on the channel, causing the changefeed flow to block. Replace it with
+		// a dummy channel.
+		startedCh = make(chan tree.Datums, 1)
+		if metrics, ok := phs.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
+			metrics.SinkErrorRetries.Inc(1)
+		}
+		continue
+	}
 	if err != nil {
 		log.Infof(ctx, `CHANGEFEED job %d returning with error: %v`, *job.ID(), err)
 	}
 	return err
 }
+
 func (b *changefeedResumer) OnFailOrCancel(context.Context, *client.Txn, *jobs.Job) error { return nil }
 func (b *changefeedResumer) OnSuccess(context.Context, *client.Txn, *jobs.Job) error      { return nil }
 func (b *changefeedResumer) OnTerminal(

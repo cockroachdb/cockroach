@@ -9,6 +9,12 @@
 # You will then have to approve certificate-signing requests and initialize the
 # cluster as described in the parent directory's README.md file.
 #
+# If you don't see any pods being created, it's possible that your cluster was
+# not able to meet the resource requests asked for, whether it was the amount
+# of CPU, memory, or disk or the disk type. To find information about why pods
+# haven't been created, you can run:
+#   kubectl get events
+#
 # For more information on improving CockroachDB performance in Kubernetes, see
 # our docs:
 # https://www.cockroachlabs.com/docs/stable/kubernetes-performance.html
@@ -222,7 +228,7 @@ spec:
       - name: cockroachdb
         # NOTE: Always use the most recent version of CockroachDB for the best
         # performance and reliability.
-        image: cockroachdb/cockroach:v2.0.5
+        image: cockroachdb/cockroach:v2.0.6
         imagePullPolicy: IfNotPresent
         # TODO: Change these to appropriate values for the hardware that you're running. You can see
         # the amount of allocatable resources on each of your Kubernetes nodes by running:

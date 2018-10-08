@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -98,7 +99,8 @@ type Iterator interface {
 	ComputeStats(start, end MVCCKey, nowNanos int64) (enginepb.MVCCStats, error)
 	// FindSplitKey finds a key from the given span such that the left side of
 	// the split is roughly targetSize bytes. The returned key will never be
-	// chosen from the key ranges listed in keys.NoSplitSpans.
+	// chosen from the key ranges listed in keys.NoSplitSpans and will always
+	// sort equal to or after minSplitKey.
 	FindSplitKey(start, end, minSplitKey MVCCKey, targetSize int64) (MVCCKey, error)
 	// MVCCGet retrieves the value for the key at the specified timestamp. The
 	// value is returned in batch repr format with the key being present as the
@@ -313,6 +315,13 @@ type Engine interface {
 	// the engine implementation. For RocksDB, this means using the Env responsible for the file
 	// which may handle extra logic (eg: copy encryption settings for EncryptedEnv).
 	LinkFile(oldname, newname string) error
+}
+
+// MapProvidingEngine is an Engine that also provides facilities for making a
+// sorted map that's persisted by the Engine.
+type MapProvidingEngine interface {
+	Engine
+	diskmap.Factory
 }
 
 // WithSSTables extends the Engine interface with a method to get info

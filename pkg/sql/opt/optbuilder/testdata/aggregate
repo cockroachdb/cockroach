@@ -2170,15 +2170,15 @@ project
  │         ├── columns: column9:9(bool) bools.b:3(bool)
  │         ├── inner-join
  │         │    ├── columns: bools.b:1(bool) bools.rowid:2(int!null) bools.b:3(bool) bools.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
+ │         │    ├── scan bools
+ │         │    │    └── columns: bools.b:1(bool) bools.rowid:2(int!null)
  │         │    ├── inner-join
- │         │    │    ├── columns: bools.b:1(bool) bools.rowid:2(int!null) bools.b:3(bool) bools.rowid:4(int!null)
- │         │    │    ├── scan bools
- │         │    │    │    └── columns: bools.b:1(bool) bools.rowid:2(int!null)
+ │         │    │    ├── columns: bools.b:3(bool) bools.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    ├── scan bools
  │         │    │    │    └── columns: bools.b:3(bool) bools.rowid:4(int!null)
+ │         │    │    ├── scan abc
+ │         │    │    │    └── columns: a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    └── true [type=bool]
- │         │    ├── scan abc
- │         │    │    └── columns: a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    └── true [type=bool]
  │         └── projections
  │              └── and [type=bool]
@@ -2206,15 +2206,15 @@ project
  │         ├── columns: column9:9(bool) bools.b:3(bool)
  │         ├── inner-join
  │         │    ├── columns: bools.b:1(bool) bools.rowid:2(int!null) bools.b:3(bool) bools.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
+ │         │    ├── scan bools
+ │         │    │    └── columns: bools.b:1(bool) bools.rowid:2(int!null)
  │         │    ├── inner-join
- │         │    │    ├── columns: bools.b:1(bool) bools.rowid:2(int!null) bools.b:3(bool) bools.rowid:4(int!null)
- │         │    │    ├── scan bools
- │         │    │    │    └── columns: bools.b:1(bool) bools.rowid:2(int!null)
+ │         │    │    ├── columns: bools.b:3(bool) bools.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    ├── scan bools
  │         │    │    │    └── columns: bools.b:3(bool) bools.rowid:4(int!null)
+ │         │    │    ├── scan abc
+ │         │    │    │    └── columns: a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    └── true [type=bool]
- │         │    ├── scan abc
- │         │    │    └── columns: a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    └── true [type=bool]
  │         └── projections
  │              └── or [type=bool]
@@ -2853,3 +2853,23 @@ scalar-group-by
  └── aggregations
       └── array-agg [type=int[]]
            └── variable: y [type=int]
+
+# Regression test for #30166.
+build
+SELECT array_agg(generate_series(1, 2))
+----
+scalar-group-by
+ ├── columns: array_agg:2(int[])
+ ├── inner-join-apply
+ │    ├── columns: generate_series:1(int)
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    ├── zip
+ │    │    ├── columns: generate_series:1(int)
+ │    │    └── function: generate_series [type=int]
+ │    │         ├── const: 1 [type=int]
+ │    │         └── const: 2 [type=int]
+ │    └── true [type=bool]
+ └── aggregations
+      └── array-agg [type=int[]]
+           └── variable: generate_series [type=int]

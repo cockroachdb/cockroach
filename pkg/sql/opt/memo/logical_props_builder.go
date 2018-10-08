@@ -114,9 +114,12 @@ func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) props.Logical {
 
 	// If CanHaveSideEffects is true for any child, it's true for the expression.
 	for i, n := 0, ev.ChildCount(); i < n; i++ {
-		if ev.childGroup(i).logical.CanHaveSideEffects() {
+		childLogical := ev.childGroup(i).logical
+		if childLogical.CanHaveSideEffects() {
 			logical.Relational.CanHaveSideEffects = true
-			break
+		}
+		if childLogical.HasPlaceholder() {
+			logical.Relational.HasPlaceholder = true
 		}
 	}
 
@@ -174,9 +177,9 @@ func (b *logicalPropsBuilder) buildScanProps(ev ExprView) props.Logical {
 	if def.Constraint != nil && def.Constraint.IsContradiction() {
 		relational.Cardinality = props.ZeroCardinality
 	} else if relational.FuncDeps.HasMax1Row() {
-		relational.Cardinality = relational.Cardinality.AtMost(1)
+		relational.Cardinality = relational.Cardinality.Limit(1)
 	} else if hardLimit > 0 && hardLimit < math.MaxUint32 {
-		relational.Cardinality = relational.Cardinality.AtMost(uint32(hardLimit))
+		relational.Cardinality = relational.Cardinality.Limit(uint32(hardLimit))
 	}
 
 	// Statistics
@@ -276,7 +279,7 @@ func (b *logicalPropsBuilder) buildSelectProps(ev ExprView) props.Logical {
 	if filter.Operator() == opt.FalseOp || filterProps.Constraints == constraint.Contradiction {
 		relational.Cardinality = props.ZeroCardinality
 	} else if relational.FuncDeps.HasMax1Row() {
-		relational.Cardinality = relational.Cardinality.AtMost(1)
+		relational.Cardinality = relational.Cardinality.Limit(1)
 	}
 
 	// Statistics
@@ -521,12 +524,26 @@ func (b *logicalPropsBuilder) buildJoinProps(ev ExprView) props.Logical {
 		relational.FuncDeps.ProjectCols(relational.OutputCols)
 	}
 
+	if h.lookupJoinDef != nil && !h.lookupJoinDef.Cols.Equals(relational.OutputCols) {
+		// The LookupJoin op supports projecting away some columns; apply the
+		// projection as needed.
+		if !h.lookupJoinDef.Cols.SubsetOf(relational.OutputCols) {
+			panic(fmt.Sprintf(
+				"lookup join columns %v not a subset of %v", h.lookupJoinDef.Cols, relational.OutputCols,
+			))
+		}
+		// Lookup join effectively applies a post-projection.
+		relational.OutputCols = h.lookupJoinDef.Cols
+		relational.FuncDeps.ProjectCols(relational.OutputCols)
+		relational.NotNullCols.IntersectionWith(relational.OutputCols)
+	}
+
 	// Cardinality
 	// -----------
 	// Calculate cardinality, depending on join type.
 	relational.Cardinality = b.makeJoinCardinality(leftProps.Cardinality, &h)
 	if relational.FuncDeps.HasMax1Row() {
-		relational.Cardinality = relational.Cardinality.AtMost(1)
+		relational.Cardinality = relational.Cardinality.Limit(1)
 	}
 
 	// Statistics
@@ -633,7 +650,7 @@ func (b *logicalPropsBuilder) buildGroupByProps(ev ExprView) props.Logical {
 		// will also be returned by GroupBy and DistinctOn.
 		relational.Cardinality = inputProps.Cardinality.AsLowAs(1)
 		if relational.FuncDeps.HasMax1Row() {
-			relational.Cardinality = relational.Cardinality.AtMost(1)
+			relational.Cardinality = relational.Cardinality.Limit(1)
 		}
 	}
 
@@ -823,7 +840,9 @@ func (b *logicalPropsBuilder) buildLimitProps(ev ExprView) props.Logical {
 	limitProps := limit.Logical().Scalar
 
 	constLimit := int64(math.MaxUint32)
+	haveConstLimit := false
 	if limit.Operator() == opt.ConstOp {
+		haveConstLimit = true
 		constLimit = int64(*limit.Private().(*tree.DInt))
 	}
 
@@ -864,13 +883,19 @@ func (b *logicalPropsBuilder) buildLimitProps(ev ExprView) props.Logical {
 	if constLimit <= 0 {
 		relational.Cardinality = props.ZeroCardinality
 	} else if constLimit < math.MaxUint32 {
-		relational.Cardinality = relational.Cardinality.AtMost(uint32(constLimit))
+		relational.Cardinality = relational.Cardinality.Limit(uint32(constLimit))
 	}
 
 	// Statistics
 	// ----------
 	b.sb.init(b.evalCtx, ev.Metadata())
 	b.sb.buildLimit(ev, relational)
+
+	// Side Effects
+	// ------------
+	if constLimit < 0 || !haveConstLimit {
+		relational.CanHaveSideEffects = true
+	}
 
 	return logical
 }
@@ -959,7 +984,7 @@ func (b *logicalPropsBuilder) buildMax1RowProps(ev ExprView) props.Logical {
 	// Cardinality
 	// -----------
 	// Max1Row ensures that zero or one row is returned from input.
-	relational.Cardinality = inputProps.Cardinality.AtMost(1)
+	relational.Cardinality = inputProps.Cardinality.Limit(1)
 
 	// Statistics
 	// ----------
@@ -1065,11 +1090,15 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 		// Variable introduces outer column.
 		scalar.OuterCols.Add(int(ev.Private().(opt.ColumnID)))
 		return logical
+
+	case opt.PlaceholderOp:
+		scalar.HasPlaceholder = true
+		return logical
 	}
 
-	// By default, derive OuterCols and CanHaveSideEffects from all children,
-	// both relational and scalar. Derive HasCorrelatedSubquery from scalar
-	// children.
+	// By default, derive OuterCols, HasPlaceholder, and CanHaveSideEffects from
+	// all children, both relational and scalar. Derive HasCorrelatedSubquery from
+	// scalar children.
 	for i, n := 0, ev.ChildCount(); i < n; i++ {
 		childLogical := &ev.childGroup(i).logical
 
@@ -1077,6 +1106,10 @@ func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {
 
 		if childLogical.CanHaveSideEffects() {
 			scalar.CanHaveSideEffects = true
+		}
+
+		if childLogical.HasPlaceholder() {
+			scalar.HasPlaceholder = true
 		}
 
 		if childLogical.Scalar != nil && childLogical.Scalar.HasCorrelatedSubquery {
@@ -1190,7 +1223,6 @@ func makeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 func (b *logicalPropsBuilder) makeJoinCardinality(
 	left props.Cardinality, h *joinPropsHelper,
 ) props.Cardinality {
-	var card props.Cardinality
 	switch h.joinType {
 	case opt.SemiJoinOp, opt.SemiJoinApplyOp, opt.AntiJoinOp, opt.AntiJoinApplyOp:
 		// Semi/Anti join cardinality never exceeds left input cardinality, and
@@ -1200,32 +1232,45 @@ func (b *logicalPropsBuilder) makeJoinCardinality(
 
 	// Other join types can return up to cross product of rows.
 	right := h.rightCardinality
-	card = left.Product(right)
+	innerJoinCard := left.Product(right)
 
 	// Apply filter to cardinality.
 	if !h.filterIsTrue {
 		if h.filterIsFalse {
-			card = props.ZeroCardinality
+			innerJoinCard = props.ZeroCardinality
 		} else {
-			card = card.AsLowAs(0)
+			innerJoinCard = innerJoinCard.AsLowAs(0)
 		}
 	}
 
 	// Outer joins return minimum number of rows, depending on type.
 	switch h.joinType {
-	case opt.LeftJoinOp, opt.LeftJoinApplyOp, opt.FullJoinOp, opt.FullJoinApplyOp:
-		card = card.AtLeast(left.Min)
-	}
-	switch h.joinType {
-	case opt.RightJoinOp, opt.RightJoinApplyOp, opt.FullJoinOp, opt.FullJoinApplyOp:
-		card = card.AtLeast(right.Min)
-	}
-	switch h.joinType {
-	case opt.FullJoinOp, opt.FullJoinApplyOp:
-		card = card.AsHighAs(left.Min + right.Min)
-	}
+	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
+		return innerJoinCard.AtLeast(left)
 
-	return card
+	case opt.RightJoinOp, opt.RightJoinApplyOp:
+		return innerJoinCard.AtLeast(right)
+
+	case opt.FullJoinOp, opt.FullJoinApplyOp:
+		if innerJoinCard.IsZero() {
+			// In this case, we know that each left or right row will generate an
+			// output row.
+			return left.Add(right)
+		}
+		var c props.Cardinality
+		// We get at least MAX(left.Min, right.Min) rows.
+		c.Min = left.Min
+		if c.Min < right.Min {
+			c.Min = right.Min
+		}
+		// We could get left.Max + right.Max rows (if the filter doesn't match
+		// anything). We use Add here because it handles overflow.
+		c.Max = left.Add(right).Max
+		return innerJoinCard.AtLeast(c)
+
+	default:
+		return innerJoinCard
+	}
 }
 
 func (b *logicalPropsBuilder) makeSetCardinality(
@@ -1240,7 +1285,7 @@ func (b *logicalPropsBuilder) makeSetCardinality(
 	case opt.IntersectOp, opt.IntersectAllOp:
 		// Use minimum of left and right Max cardinality.
 		card = props.Cardinality{Min: 0, Max: left.Max}
-		card = card.AtMost(right.Max)
+		card = card.Limit(right.Max)
 
 	case opt.ExceptOp, opt.ExceptAllOp:
 		// Use left Max cardinality.
@@ -1366,9 +1411,10 @@ func (h *joinPropsHelper) init(ev ExprView, evalCtx *tree.EvalContext) {
 	h.joinType = def.JoinType
 	h.lookupJoinDef = def
 
-	h.rightOutputCols = def.LookupCols
+	inputProps := ev.childGroup(0).logical.Relational
+	h.rightOutputCols = def.Cols.Difference(inputProps.OutputCols)
 	h.rightNotNullCols = tableNotNullCols(md, def.Table)
-	h.rightNotNullCols.IntersectionWith(def.LookupCols)
+	h.rightNotNullCols.IntersectionWith(h.rightOutputCols)
 	h.rightCardinality = props.AnyCardinality
 	h.rightFD.CopyFrom(makeTableFuncDep(md, def.Table))
 	h.rightFD.MakeNotNull(h.rightNotNullCols)

@@ -31,7 +31,7 @@ TABLE uv
 # RejectNullsLeftJoin + RejectNullsRightJoin
 # ----------------------------------------------------------
 
-opt
+opt expect=RejectNullsRightJoin
 SELECT * FROM a FULL JOIN xy ON true WHERE a.k IS NOT NULL
 ----
 left-join
@@ -48,7 +48,7 @@ left-join
  │    └── fd: (5)-->(6)
  └── true [type=bool]
 
-opt
+opt expect=RejectNullsLeftJoin
 SELECT * FROM a FULL JOIN xy ON true WHERE xy.x > 5
 ----
 right-join
@@ -67,7 +67,7 @@ right-join
  └── true [type=bool]
 
 # Inner-join operator.
-opt
+opt expect=RejectNullsLeftJoin
 SELECT *
 FROM (SELECT * FROM a LEFT JOIN uv ON True) AS l
 INNER JOIN (SELECT * FROM a LEFT JOIN uv ON True) AS r
@@ -114,7 +114,7 @@ inner-join
  └── true [type=bool]
 
 # Left-join operator.
-opt
+opt expect=RejectNullsLeftJoin
 SELECT * FROM a LEFT JOIN xy ON true WHERE xy.x = a.k
 ----
 inner-join (merge)
@@ -134,11 +134,10 @@ inner-join (merge)
  └── merge-on
       ├── left ordering: +1
       ├── right ordering: +5
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           └── x = k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      └── true [type=bool]
 
 # Right-join operator.
-opt
+opt expect=RejectNullsRightJoin
 SELECT * FROM a RIGHT JOIN xy ON true WHERE a.k > xy.y
 ----
 inner-join
@@ -157,7 +156,7 @@ inner-join
       └── k > y [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Full-join operator.
-opt
+opt expect=(RejectNullsLeftJoin,RejectNullsRightJoin)
 SELECT * FROM a FULL JOIN xy ON true WHERE a.k IS NOT NULL AND xy.x > 5
 ----
 inner-join
@@ -176,7 +175,7 @@ inner-join
  └── true [type=bool]
 
 # Apply operators.
-opt
+opt expect=(RejectNullsLeftJoin,RejectNullsRightJoin)
 SELECT *
 FROM (SELECT * FROM a FULL JOIN xy ON True)
 WHERE (SELECT u FROM uv WHERE v=k)=i
@@ -231,7 +230,7 @@ right-join
 # ----------------------------------------------------------
 
 # Single max aggregate function.
-opt
+opt expect=RejectNullsGroupBy
 SELECT max(x)
 FROM (SELECT k FROM a)
 LEFT JOIN (SELECT x FROM xy)
@@ -267,8 +266,48 @@ project
       └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
            └── max = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
 
+# Aggregate function with DISTINCT.
+opt expect=RejectNullsGroupBy
+SELECT sum(DISTINCT y)
+FROM (SELECT k FROM a)
+LEFT JOIN (SELECT y FROM xy)
+ON True
+GROUP BY k
+HAVING sum(DISTINCT y)=1
+----
+project
+ ├── columns: sum:7(decimal!null)
+ ├── fd: ()-->(7)
+ └── select
+      ├── columns: k:1(int!null) sum:7(decimal!null)
+      ├── key: (1)
+      ├── fd: ()-->(7)
+      ├── group-by
+      │    ├── columns: k:1(int!null) sum:7(decimal)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(7)
+      │    ├── inner-join
+      │    │    ├── columns: k:1(int!null) y:6(int!null)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1(int!null)
+      │    │    │    └── key: (1)
+      │    │    ├── select
+      │    │    │    ├── columns: y:6(int!null)
+      │    │    │    ├── scan xy
+      │    │    │    │    └── columns: y:6(int)
+      │    │    │    └── filters [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    │         └── y IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    └── true [type=bool]
+      │    └── aggregations [outer=(6)]
+      │         └── sum [type=decimal, outer=(6)]
+      │              └── agg-distinct [type=int, outer=(6)]
+      │                   └── variable: y [type=int, outer=(6)]
+      └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+           └── sum = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+
 # Single max aggregate function without grouping columns.
-opt
+opt expect=RejectNullsGroupBy
 SELECT max(x)
 FROM (SELECT k FROM a)
 LEFT JOIN (SELECT x FROM xy)
@@ -299,7 +338,7 @@ select
       └── max = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
 
 # Multiple aggregate functions on same column.
-opt
+opt expect=RejectNullsGroupBy
 SELECT min(x), max(x)
 FROM a
 LEFT JOIN xy
@@ -337,8 +376,51 @@ project
       └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
            └── min = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
 
+# Multiple aggregate functions on same column, some with DISTINCT.
+opt expect=RejectNullsGroupBy
+SELECT sum(DISTINCT y), max(y)
+FROM a
+LEFT JOIN xy
+ON True
+GROUP BY k
+HAVING max(y)=1
+----
+project
+ ├── columns: sum:7(decimal) max:8(int!null)
+ ├── fd: ()-->(8)
+ └── select
+      ├── columns: k:1(int!null) sum:7(decimal) max:8(int!null)
+      ├── key: (1)
+      ├── fd: ()-->(8), (1)-->(7)
+      ├── group-by
+      │    ├── columns: k:1(int!null) sum:7(decimal) max:8(int)
+      │    ├── grouping columns: k:1(int!null)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(7,8)
+      │    ├── inner-join
+      │    │    ├── columns: k:1(int!null) y:6(int!null)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1(int!null)
+      │    │    │    └── key: (1)
+      │    │    ├── select
+      │    │    │    ├── columns: y:6(int!null)
+      │    │    │    ├── scan xy
+      │    │    │    │    └── columns: y:6(int)
+      │    │    │    └── filters [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    │         └── y IS NOT NULL [type=bool, outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │    │    └── true [type=bool]
+      │    └── aggregations [outer=(6)]
+      │         ├── sum [type=decimal, outer=(6)]
+      │         │    └── agg-distinct [type=int, outer=(6)]
+      │         │         └── variable: y [type=int, outer=(6)]
+      │         └── max [type=int, outer=(6)]
+      │              └── variable: y [type=int, outer=(6)]
+      └── filters [type=bool, outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
+           └── max = 1 [type=bool, outer=(8), constraints=(/8: [/1 - /1]; tight)]
+
+
 # Ignore ConstAgg aggregates on other columns.
-opt
+opt expect=RejectNullsGroupBy
 SELECT * FROM a WHERE (SELECT sum(x) FROM xy WHERE x=k)>i
 ----
 project
@@ -370,8 +452,7 @@ project
       │    │    └── merge-on
       │    │         ├── left ordering: +1
       │    │         ├── right ordering: +5
-      │    │         └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │    │              └── x = k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    │         └── true [type=bool]
       │    └── aggregations [outer=(2-5)]
       │         ├── sum [type=decimal, outer=(5)]
       │         │    └── variable: x [type=int, outer=(5)]
@@ -385,7 +466,7 @@ project
            └── i < sum [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Don't reject nulls when multiple columns are used.
-opt
+opt expect-not=RejectNullsGroupBy
 SELECT min(x), max(y)
 FROM (select k from a)
 LEFT JOIN (select x, y from xy)
@@ -427,7 +508,7 @@ project
 
 # Don't reject column when count function is used (it doesn't return nil when
 # input is empty).
-opt
+opt expect-not=RejectNullsGroupBy
 SELECT count(x)
 FROM (SELECT k FROM a)
 LEFT JOIN (SELECT x FROM xy)
@@ -464,7 +545,7 @@ project
            └── count = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
 
 # ConstNotNullAgg rejects nulls (regression test for #28810).
-norm
+opt expect=RejectNullsGroupBy
 SELECT 1 FROM a AS ref_0 LEFT JOIN a AS ref_1 ON EXISTS(SELECT 1 FROM a WHERE a.s = ref_0.s)
 ----
 project

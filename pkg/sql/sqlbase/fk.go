@@ -17,6 +17,7 @@ package sqlbase
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/pkg/errors"
 
@@ -274,20 +275,13 @@ type SpanKVFetcher struct {
 // nextBatch implements the kvFetcher interface.
 func (f *SpanKVFetcher) nextBatch(
 	_ context.Context,
-) (
-	ok bool,
-	kvs []roachpb.KeyValue,
-	batchResponse []byte,
-	numKvs int64,
-	maybeNewSpan bool,
-	err error,
-) {
+) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, numKvs int64, err error) {
 	if len(f.KVs) == 0 {
-		return false, nil, nil, 0, true, nil
+		return false, nil, nil, 0, nil
 	}
 	res := f.KVs
 	f.KVs = nil
-	return true, res, nil, 0, true, nil
+	return true, res, nil, 0, nil
 }
 
 // getRangesInfo implements the kvFetcher interface.
@@ -670,20 +664,32 @@ func makeBaseFKHelper(
 		return b, err
 	}
 
+	// Check for all NULL values, since these can skip FK checking in MATCH FULL
+	// TODO(bram): add MATCH SIMPLE and fix MATCH FULL #30026
 	b.ids = make(map[ColumnID]int, len(writeIdx.ColumnIDs))
 	nulls := true
+	var missingColumns []string
 	for i, writeColID := range writeIdx.ColumnIDs[:b.prefixLen] {
 		if found, ok := colMap[writeColID]; ok {
 			b.ids[searchIdx.ColumnIDs[i]] = found
 			nulls = false
-		} else if !nulls {
-			return b, errors.Errorf("missing value for column %q in multi-part foreign key", writeIdx.ColumnNames[i])
+		} else {
+			missingColumns = append(missingColumns, writeIdx.ColumnNames[i])
 		}
 	}
 	if nulls {
 		return b, errSkipUnusedFK
 	}
-	return b, nil
+
+	switch len(missingColumns) {
+	case 0:
+		return b, nil
+	case 1:
+		return b, errors.Errorf("missing value for column %q in multi-part foreign key", missingColumns[0])
+	default:
+		sort.Strings(missingColumns)
+		return b, errors.Errorf("missing values for columns %q in multi-part foreign key", missingColumns)
+	}
 }
 
 func (f baseFKHelper) spanForValues(values tree.Datums) (roachpb.Span, error) {

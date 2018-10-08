@@ -210,10 +210,11 @@ func (sb *statisticsBuilder) colStatFromInput(
 	}
 
 	if lookupJoinDef != nil || ev.IsJoin() {
-		intersectsLeft := ev.Child(0).Logical().Relational.OutputCols.Intersects(colSet)
+		leftProps := ev.Child(0).Logical().Relational
+		intersectsLeft := leftProps.OutputCols.Intersects(colSet)
 		var intersectsRight bool
 		if lookupJoinDef != nil {
-			intersectsRight = lookupJoinDef.LookupCols.Intersects(colSet)
+			intersectsRight = lookupJoinDef.Cols.Difference(leftProps.OutputCols).Intersects(colSet)
 		} else {
 			intersectsRight = ev.Child(1).Logical().Relational.OutputCols.Intersects(colSet)
 		}
@@ -276,6 +277,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, ev ExprView) *props.Colu
 		opt.RightJoinApplyOp, opt.FullJoinApplyOp, opt.SemiJoinApplyOp, opt.AntiJoinApplyOp,
 		opt.LookupJoinOp:
 		return sb.colStatJoin(colSet, ev)
+
+	case opt.IndexJoinOp:
+		return sb.colStatIndexJoin(colSet, ev)
 
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp,
 		opt.UnionAllOp, opt.IntersectAllOp, opt.ExceptAllOp:
@@ -426,7 +430,8 @@ func (sb *statisticsBuilder) buildScan(ev ExprView, relProps *props.Relational) 
 			}
 			s.ApplySelectivity(sb.selectivityFromDistinctCounts(cols, ev, s))
 		} else {
-			s.ApplySelectivity(sb.selectivityFromUnappliedConstraints(1 /* numUnappliedConstraints */))
+			numUnappliedConjuncts := sb.numConjunctsInConstraint(def.Constraint)
+			s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 		}
 	}
 
@@ -499,7 +504,7 @@ func (sb *statisticsBuilder) buildSelect(ev ExprView, relProps *props.Relational
 
 	// Calculate distinct counts for constrained columns
 	// -------------------------------------------------
-	numUnappliedConstraints, constrainedCols := sb.applyFilter(filter, ev, relProps)
+	numUnappliedConjuncts, constrainedCols := sb.applyFilter(filter, ev, relProps)
 
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies.
@@ -512,7 +517,7 @@ func (sb *statisticsBuilder) buildSelect(ev ExprView, relProps *props.Relational
 	s.RowCount = inputStats.RowCount
 	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols, ev, s))
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, filterFD, ev, s))
-	s.ApplySelectivity(sb.selectivityFromUnappliedConstraints(numUnappliedConstraints))
+	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 
 	// Update distinct counts based on equivalencies; this should happen after
 	// selectivityFromDistinctCounts and selectivityFromEquivalencies.
@@ -526,7 +531,13 @@ func (sb *statisticsBuilder) colStatSelect(colSet opt.ColSet, ev ExprView) *prop
 	s := &relProps.Stats
 	inputStats := &ev.childGroup(0).logical.Relational.Stats
 	colStat := sb.copyColStatFromChild(colSet, ev, s)
-	colStat.ApplySelectivity(s.Selectivity, inputStats.RowCount)
+
+	// It's not safe to use s.Selectivity, because it's possible that some of the
+	// filter conditions were pushed down into the input after s.Selectivity
+	// was calculated. For example, an index scan or index join created during
+	// exploration could absorb some of the filter conditions.
+	selectivity := s.RowCount / inputStats.RowCount
+	colStat.ApplySelectivity(selectivity, inputStats.RowCount)
 	return colStat
 }
 
@@ -656,7 +667,7 @@ func (sb *statisticsBuilder) buildJoin(
 
 	// Calculate distinct counts for constrained columns in the ON conditions
 	// ----------------------------------------------------------------------
-	numUnappliedConstraints, constrainedCols := sb.applyFilter(h.filter, ev, relProps)
+	numUnappliedConjuncts, constrainedCols := sb.applyFilter(h.filter, ev, relProps)
 
 	// Try to reduce the number of columns used for selectivity
 	// calculation based on functional dependencies.
@@ -669,7 +680,7 @@ func (sb *statisticsBuilder) buildJoin(
 	s.RowCount = leftStats.RowCount * rightStats.RowCount
 	s.ApplySelectivity(sb.selectivityFromDistinctCounts(constrainedCols, ev, s))
 	s.ApplySelectivity(sb.selectivityFromEquivalencies(equivReps, &h.filterFD, ev, s))
-	s.ApplySelectivity(sb.selectivityFromUnappliedConstraints(numUnappliedConstraints))
+	s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 
 	// Update distinct counts based on equivalencies; this should happen after
 	// selectivityFromDistinctCounts and selectivityFromEquivalencies.
@@ -719,13 +730,16 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, ev ExprView) *props.
 	relProps := ev.Logical().Relational
 	s := &relProps.Stats
 	leftStats := &ev.childGroup(0).logical.Relational.Stats
-	rightStats := &ev.childGroup(1).logical.Relational.Stats
 
 	var lookupJoinDef *LookupJoinDef
+	var rightStats *props.Statistics
 	joinType := ev.Operator()
 	if joinType == opt.LookupJoinOp {
 		lookupJoinDef = ev.Private().(*LookupJoinDef)
 		joinType = lookupJoinDef.JoinType
+		rightStats = sb.makeTableStatistics(lookupJoinDef.Table)
+	} else {
+		rightStats = &ev.childGroup(1).logical.Relational.Stats
 	}
 
 	switch joinType {
@@ -741,11 +755,11 @@ func (sb *statisticsBuilder) colStatJoin(colSet opt.ColSet, ev ExprView) *props.
 		leftCols.IntersectionWith(colSet)
 		var rightCols opt.ColSet
 		if lookupJoinDef == nil {
-			rightCols = ev.Child(1).Logical().Relational.OutputCols.Copy()
+			rightCols = ev.Child(1).Logical().Relational.OutputCols.Intersection(colSet)
 		} else {
-			rightCols = lookupJoinDef.LookupCols.Copy()
+			rightCols = lookupJoinDef.Cols.Intersection(colSet)
+			rightCols.DifferenceWith(leftCols)
 		}
-		rightCols.IntersectionWith(colSet)
 
 		// Join selectivity affects the distinct counts for different columns
 		// in different ways depending on the type of join.
@@ -835,6 +849,53 @@ func (sb *statisticsBuilder) buildIndexJoin(ev ExprView, relProps *props.Relatio
 
 	s.RowCount = inputStats.RowCount
 	sb.finalizeFromCardinality(relProps)
+}
+
+func (sb *statisticsBuilder) colStatIndexJoin(
+	colSet opt.ColSet, ev ExprView,
+) *props.ColumnStatistic {
+	relProps := ev.Logical().Relational
+	s := &relProps.Stats
+
+	def := ev.Private().(*IndexJoinDef)
+	inputProps := ev.Child(0).Logical().Relational
+	inputCols := inputProps.OutputCols
+
+	colStat, _ := s.ColStats.Add(colSet)
+	colStat.DistinctCount = 1
+
+	// Some of the requested columns may be from the input index.
+	reqInputCols := colSet.Intersection(inputCols)
+	if !reqInputCols.Empty() {
+		inputColStat := sb.colStatFromChild(reqInputCols, ev, 0 /* childIdx */)
+		colStat.DistinctCount = inputColStat.DistinctCount
+	}
+
+	// Other requested columns may be from the primary index.
+	reqLookupCols := colSet.Difference(inputCols).Intersection(def.Cols)
+	if !reqLookupCols.Empty() {
+		// Make a copy of the lookup column stats so we don't modify the originals.
+		lookupColStat := *sb.colStatTable(def.Table, reqLookupCols)
+
+		// Calculate the distinct count of the lookup columns given the selectivity
+		// of any filters on the input.
+		inputStats := &inputProps.Stats
+		tableStats := sb.makeTableStatistics(def.Table)
+		selectivity := inputStats.RowCount / tableStats.RowCount
+		lookupColStat.ApplySelectivity(selectivity, tableStats.RowCount)
+
+		// Multiply the distinct counts in case colStat.DistinctCount is
+		// already populated with a statistic from the subset of columns
+		// provided by the input index. Multiplying the counts gives a worst-case
+		// estimate of the joint distinct count.
+		colStat.DistinctCount *= lookupColStat.DistinctCount
+	}
+
+	// The distinct count should be no larger than the row count.
+	if colStat.DistinctCount > s.RowCount {
+		colStat.DistinctCount = s.RowCount
+	}
+	return colStat
 }
 
 // +----------+
@@ -1165,9 +1226,12 @@ func (sb *statisticsBuilder) buildZip(ev ExprView, relProps *props.Relational) {
 		if child.Operator() == opt.FunctionOp {
 			def := child.Private().(*FuncOpDef)
 			if def.Overload.Generator != nil {
+				// Use a small row count; this allows use of lookup join in cases like
+				// using json_array_elements with a small constant array.
+				//
 				// TODO(rytaft): We may want to estimate the number of rows based on
 				// the type of generator function and its parameters.
-				s.RowCount = unknownRowCount
+				s.RowCount = 10
 				break
 			}
 		}
@@ -1328,7 +1392,7 @@ const (
 	// This is the ratio of distinct column values to number of rows, which is
 	// used in the absence of any real statistics for non-key columns.
 	// TODO(rytaft): See if there is an industry standard value for this.
-	unknownDistinctCountRatio = 0.7
+	unknownDistinctCountRatio = 0.1
 )
 
 // applyFilter uses constraints to update the distinct counts for the
@@ -1350,7 +1414,10 @@ const (
 //
 func (sb *statisticsBuilder) applyFilter(
 	filter ExprView, ev ExprView, relProps *props.Relational,
-) (numUnappliedConstraints int, constrainedCols opt.ColSet) {
+) (numUnappliedConjuncts float64, constrainedCols opt.ColSet) {
+	if filter.Operator() == opt.TrueOp {
+		return 0, opt.ColSet{}
+	}
 	constraintSet := filter.Logical().Scalar.Constraints
 	tight := filter.Logical().Scalar.TightConstraints
 
@@ -1368,12 +1435,13 @@ func (sb *statisticsBuilder) applyFilter(
 		constrainedCols.UnionWith(conjunct.Logical().Scalar.OuterCols)
 		if constraintSet != nil {
 			n := sb.applyConstraintSet(constraintSet, ev, relProps)
-			numUnappliedConstraints += n
-			if !tight && n == 0 {
-				numUnappliedConstraints++
+			if !tight && n < 1 {
+				numUnappliedConjuncts++
+			} else {
+				numUnappliedConjuncts += n
 			}
 		} else {
-			numUnappliedConstraints++
+			numUnappliedConjuncts++
 		}
 	}
 
@@ -1390,7 +1458,7 @@ func (sb *statisticsBuilder) applyFilter(
 		}
 	}
 
-	return numUnappliedConstraints, constrainedCols
+	return numUnappliedConjuncts, constrainedCols
 }
 
 func (sb *statisticsBuilder) applyConstraint(
@@ -1409,29 +1477,29 @@ func (sb *statisticsBuilder) applyConstraint(
 
 func (sb *statisticsBuilder) applyConstraintSet(
 	cs *constraint.Set, ev ExprView, relProps *props.Relational,
-) (numUnappliedConstraints int) {
+) (numUnappliedConjuncts float64) {
 	if cs.IsUnconstrained() {
-		return 0 /* numUnappliedConstraints */
+		return 0 /* numUnappliedConjuncts */
 	}
 
 	if cs == constraint.Contradiction {
 		panic("applyConstraintSet called on constraint with contradiction")
 	}
 
-	numUnappliedConstraints = 0
+	numUnappliedConjuncts = 0
 	for i := 0; i < cs.Length(); i++ {
 		applied := sb.updateDistinctCountsFromConstraint(cs.Constraint(i), ev, relProps)
 		if !applied {
 			// If a constraint cannot be applied, it may represent an
 			// inequality like x < 1. As a result, distinctCounts does not fully
 			// represent the selectivity of the constraint set.
-			// We return the number of unapplied constraints to the caller
-			// function to be used for selectivity calculation.
-			numUnappliedConstraints++
+			// We return an estimate of the number of unapplied conjuncts to the
+			// caller function to be used for selectivity calculation.
+			numUnappliedConjuncts += sb.numConjunctsInConstraint(cs.Constraint(i))
 		}
 	}
 
-	return numUnappliedConstraints
+	return numUnappliedConjuncts
 }
 
 // updateDistinctCountsFromConstraint updates the distinct count for each
@@ -1657,10 +1725,10 @@ func (sb *statisticsBuilder) selectivityFromEquivalency(
 	return selectivity
 }
 
-func (sb *statisticsBuilder) selectivityFromUnappliedConstraints(
-	numUnappliedConstraints int,
+func (sb *statisticsBuilder) selectivityFromUnappliedConjuncts(
+	numUnappliedConjuncts float64,
 ) (selectivity float64) {
-	return math.Pow(unknownFilterSelectivity, float64(numUnappliedConstraints))
+	return math.Pow(unknownFilterSelectivity, numUnappliedConjuncts)
 }
 
 // tryReduceCols is used to determine which columns to use for selectivity
@@ -1723,4 +1791,59 @@ func (sb *statisticsBuilder) isEqualityWithTwoVars(cond ExprView) bool {
 		}
 	}
 	return false
+}
+
+// numConjunctsInConstraint returns a rough estimate of the number of conjuncts
+// used to build the given constraint.
+func (sb *statisticsBuilder) numConjunctsInConstraint(
+	c *constraint.Constraint,
+) (numConjuncts float64) {
+	if c.Spans.Count() == 0 {
+		return 0 /* numConjuncts */
+	}
+
+	numConjuncts = math.MaxFloat64
+	for i := 0; i < c.Spans.Count(); i++ {
+		span := c.Spans.Get(i)
+		numSpanConjuncts := float64(0)
+		// The first start and end keys in each span are the only ones that matter
+		// for determining selectivity when we have no knowledge of the data
+		// distribution. Technically, /a/b: [/5 - ] is more selective than
+		// /a/b: [/4/5 - ], which is more selective than /a/b: [/4 - ]. But we
+		// treat them all the same, with selectivity=1/3.
+		if span.StartKey().Length() > 0 {
+			if !c.Columns.Get(0).Descending() &&
+				span.StartKey().Value(0) == tree.DNull {
+				if span.EndKey().Length() == 0 &&
+					(span.StartBoundary() == constraint.ExcludeBoundary || span.StartKey().Length() > 1) {
+					// This is a hack to ensure that x IS NOT NULL is considered less
+					// selective than other inequalities such as x > 5. Once we track
+					// null counts, we will make this more precise.
+					numSpanConjuncts += 0.1
+				}
+				// Other cases of NULL in a constraint should be ignored. For example,
+				// without knowledge of the data distribution, /a: (/NULL - /10] should
+				// have the same estimated selectivity as /a: [/10 - ].
+			} else {
+				numSpanConjuncts++
+			}
+		}
+		if span.EndKey().Length() > 0 {
+			if c.Columns.Get(0).Descending() &&
+				span.EndKey().Value(0) == tree.DNull {
+				if span.StartKey().Length() == 0 &&
+					(span.EndBoundary() == constraint.ExcludeBoundary || span.EndKey().Length() > 1) {
+					// Hack for not-null constraints (see above comment).
+					numSpanConjuncts += 0.1
+				}
+			} else {
+				numSpanConjuncts++
+			}
+		}
+		if numSpanConjuncts < numConjuncts {
+			numConjuncts = numSpanConjuncts
+		}
+	}
+
+	return numConjuncts
 }

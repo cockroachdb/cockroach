@@ -234,46 +234,46 @@ func TestLookupJoinDef(t *testing.T) {
 	}
 
 	def1 := &LookupJoinDef{
-		JoinType:   opt.InnerJoinOp,
-		Table:      0,
-		Index:      0,
-		KeyCols:    opt.ColList{10, 11},
-		LookupCols: util.MakeFastIntSet(1, 2),
+		JoinType: opt.InnerJoinOp,
+		Table:    0,
+		Index:    0,
+		KeyCols:  opt.ColList{10, 11},
+		Cols:     util.MakeFastIntSet(1, 2),
 	}
 	def2 := &LookupJoinDef{
-		JoinType:   opt.LeftJoinOp,
-		Table:      0,
-		Index:      0,
-		KeyCols:    opt.ColList{10, 11},
-		LookupCols: util.MakeFastIntSet(1, 2),
+		JoinType: opt.LeftJoinOp,
+		Table:    0,
+		Index:    0,
+		KeyCols:  opt.ColList{10, 11},
+		Cols:     util.MakeFastIntSet(1, 2),
 	}
 	def3 := &LookupJoinDef{
-		JoinType:   opt.InnerJoinOp,
-		Table:      1,
-		Index:      0,
-		KeyCols:    opt.ColList{10, 11},
-		LookupCols: util.MakeFastIntSet(1, 2),
+		JoinType: opt.InnerJoinOp,
+		Table:    1,
+		Index:    0,
+		KeyCols:  opt.ColList{10, 11},
+		Cols:     util.MakeFastIntSet(1, 2),
 	}
 	def4 := &LookupJoinDef{
-		JoinType:   opt.InnerJoinOp,
-		Table:      0,
-		Index:      1,
-		KeyCols:    opt.ColList{10, 11},
-		LookupCols: util.MakeFastIntSet(1, 2),
+		JoinType: opt.InnerJoinOp,
+		Table:    0,
+		Index:    1,
+		KeyCols:  opt.ColList{10, 11},
+		Cols:     util.MakeFastIntSet(1, 2),
 	}
 	def5 := &LookupJoinDef{
-		JoinType:   opt.InnerJoinOp,
-		Table:      0,
-		Index:      0,
-		KeyCols:    opt.ColList{10},
-		LookupCols: util.MakeFastIntSet(1, 2),
+		JoinType: opt.InnerJoinOp,
+		Table:    0,
+		Index:    0,
+		KeyCols:  opt.ColList{10},
+		Cols:     util.MakeFastIntSet(1, 2),
 	}
 	def6 := &LookupJoinDef{
-		JoinType:   opt.InnerJoinOp,
-		Table:      0,
-		Index:      0,
-		KeyCols:    opt.ColList{10, 11},
-		LookupCols: util.MakeFastIntSet(1, 2, 3),
+		JoinType: opt.InnerJoinOp,
+		Table:    0,
+		Index:    0,
+		KeyCols:  opt.ColList{10, 11},
+		Cols:     util.MakeFastIntSet(1, 2, 3),
 	}
 	testEQ(def1, def1)
 	testNE(def1, def2)
@@ -557,11 +557,52 @@ func TestInternFuncOpDef(t *testing.T) {
 	ttuple1 := types.TTuple{Types: []types.T{types.Int}}
 	ttuple2 := types.TTuple{Types: []types.T{types.Decimal}}
 	nowProps, nowOvls := builtins.GetBuiltinProperties("now")
+
+	// Same type, same overloads.
 	funcDef1 := &FuncOpDef{Name: "foo", Type: ttuple1, Properties: nowProps, Overload: &nowOvls[0]}
-	funcDef2 := &FuncOpDef{Name: "bar", Type: ttuple2, Properties: nowProps, Overload: &nowOvls[0]}
+	funcDef2 := &FuncOpDef{Name: "bar", Type: ttuple1, Properties: nowProps, Overload: &nowOvls[0]}
 	test(funcDef1, funcDef2, true)
-	funcDef3 := &FuncOpDef{Name: "bar", Type: ttuple2, Properties: nowProps, Overload: &nowOvls[1]}
+
+	// Same type, different overloads.
+	funcDef3 := &FuncOpDef{Name: "bar", Type: ttuple1, Properties: nowProps, Overload: &nowOvls[1]}
 	test(funcDef2, funcDef3, false)
+
+	// Same overload, different types.
+	funcDef4 := &FuncOpDef{Name: "bar", Type: ttuple2, Properties: nowProps, Overload: &nowOvls[1]}
+	test(funcDef3, funcDef4, false)
+}
+
+func TestInternSubqueryDef(t *testing.T) {
+	var ps privateStorage
+	ps.init()
+
+	test := func(left, right *SubqueryDef, expected bool) {
+		t.Helper()
+		leftID := ps.internSubqueryDef(left)
+		rightID := ps.internSubqueryDef(right)
+		if (leftID == rightID) != expected {
+			t.Errorf("%v == %v, expected %v, got %v", left, right, expected, !expected)
+		}
+	}
+
+	expr1 := &tree.Subquery{}
+	expr2 := &tree.Subquery{}
+
+	defs := []SubqueryDef{
+		{},
+		{OriginalExpr: expr1},
+		{OriginalExpr: expr2},
+		{Cmp: opt.LeOp},
+		{Cmp: opt.GtOp},
+		{OriginalExpr: expr1, Cmp: opt.GtOp},
+		{OriginalExpr: expr1, Cmp: opt.LeOp},
+		{OriginalExpr: expr2, Cmp: opt.GtOp},
+	}
+	for i := range defs {
+		for j := range defs {
+			test(&defs[i], &defs[j], i == j)
+		}
+	}
 }
 
 func TestInternSetOpColMap(t *testing.T) {
@@ -882,7 +923,8 @@ func TestPrivateStorageAllocations(t *testing.T) {
 		RightOrdering: props.ParseOrderingChoice("+4,+5,+6"),
 	}
 	indexJoinDef := &IndexJoinDef{Table: 1, Cols: colSet}
-	lookupJoinDef := &LookupJoinDef{Table: 1, Index: 2, KeyCols: colList, LookupCols: colSet}
+	lookupJoinDef := &LookupJoinDef{Table: 1, Index: 2, KeyCols: colList, Cols: colSet}
+	subqueryDef := &SubqueryDef{OriginalExpr: &tree.Subquery{}, Cmp: opt.LtOp}
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
 	typ := types.Int
@@ -903,6 +945,7 @@ func TestPrivateStorageAllocations(t *testing.T) {
 		ps.internMergeOnDef(mergeOnDef)
 		ps.internIndexJoinDef(indexJoinDef)
 		ps.internLookupJoinDef(lookupJoinDef)
+		ps.internSubqueryDef(subqueryDef)
 		ps.internSetOpColMap(setOpColMap)
 		ps.internDatum(datum)
 		ps.internType(typ)
@@ -942,7 +985,8 @@ func BenchmarkPrivateStorage(b *testing.B) {
 		RightOrdering: props.ParseOrderingChoice("+4,+5,+6"),
 	}
 	indexJoinDef := &IndexJoinDef{Table: 1, Cols: colSet}
-	lookupJoinDef := &LookupJoinDef{Table: 1, Index: 2, KeyCols: colList, LookupCols: colSet}
+	lookupJoinDef := &LookupJoinDef{Table: 1, Index: 2, KeyCols: colList, Cols: colSet}
+	subqueryDef := &SubqueryDef{OriginalExpr: &tree.Subquery{}, Cmp: opt.LtOp}
 	setOpColMap := &SetOpColMap{Left: colList, Right: colList, Out: colList}
 	datum := tree.NewDInt(1)
 	typ := types.Int
@@ -965,6 +1009,7 @@ func BenchmarkPrivateStorage(b *testing.B) {
 		ps.internMergeOnDef(mergeOnDef)
 		ps.internIndexJoinDef(indexJoinDef)
 		ps.internLookupJoinDef(lookupJoinDef)
+		ps.internSubqueryDef(subqueryDef)
 		ps.internSetOpColMap(setOpColMap)
 		ps.internDatum(datum)
 		ps.internType(typ)

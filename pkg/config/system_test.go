@@ -109,7 +109,7 @@ func TestGet(t *testing.T) {
 		{someKeys, "d", &cVal},
 	}
 
-	cfg := config.SystemConfig{}
+	cfg := config.NewSystemConfig()
 	for tcNum, tc := range testCases {
 		cfg.Values = tc.values
 		if val := cfg.GetValue([]byte(tc.key)); !proto.Equal(val, tc.value) {
@@ -186,7 +186,7 @@ func TestGetLargestID(t *testing.T) {
 		}, 5, 7, ""},
 	}
 
-	cfg := config.SystemConfig{}
+	cfg := config.NewSystemConfig()
 	for tcNum, tc := range testCases {
 		cfg.Values = tc.values
 		ret, err := cfg.GetLargestObjectID(tc.maxID)
@@ -255,7 +255,8 @@ func TestComputeSplitKeySystemRanges(t *testing.T) {
 		{roachpb.RKey(keys.TimeseriesPrefix.PrefixEnd()), roachpb.RKeyMax, keys.SystemConfigSplitKey},
 	}
 
-	cfg := config.SystemConfig{
+	cfg := config.NewSystemConfig()
+	cfg.SystemConfigEntries = config.SystemConfigEntries{
 		Values: sqlbase.MakeMetadataSchema().GetInitialValues(),
 	}
 	for tcNum, tc := range testCases {
@@ -359,7 +360,7 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 		{subzoneSQL, tkey(start+5, "e"), tkey(start + 6), nil},
 	}
 
-	cfg := config.SystemConfig{}
+	cfg := config.NewSystemConfig()
 	for tcNum, tc := range testCases {
 		cfg.Values = tc.values
 		splitKey := cfg.ComputeSplitKey(tc.start, tc.end)
@@ -410,14 +411,17 @@ func TestGetZoneConfigForKey(t *testing.T) {
 	defer func() {
 		config.ZoneConfigHook = originalZoneConfigHook
 	}()
-	cfg := config.SystemConfig{
+	cfg := config.NewSystemConfig()
+	cfg.SystemConfigEntries = config.SystemConfigEntries{
 		Values: sqlbase.MakeMetadataSchema().GetInitialValues(),
 	}
 	for tcNum, tc := range testCases {
 		var objectID uint32
-		config.ZoneConfigHook = func(_ config.SystemConfig, id uint32, _ []byte) (config.ZoneConfig, bool, error) {
+		config.ZoneConfigHook = func(
+			_ *config.SystemConfig, id uint32,
+		) (*config.ZoneConfig, *config.ZoneConfig, bool, error) {
 			objectID = id
-			return config.ZoneConfig{}, false, nil
+			return &config.ZoneConfig{}, nil, false, nil
 		}
 		_, err := cfg.GetZoneConfigForKey(tc.key)
 		if err != nil {

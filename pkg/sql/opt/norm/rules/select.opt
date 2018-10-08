@@ -9,21 +9,6 @@
 [EliminateSelect, Normalize]
 (Select $input:* (True)) => $input
 
-# EnsureSelectFilters adds a Filters operator to a Select's filter condition
-# if it does not already exist. This allows other rules to rely upon the
-# presence of the Filters when matching. See comment at top of bool.opt for
-# more details.
-[EnsureSelectFilters, Normalize]
-(Select
-    $input:*
-    $filter:^(Filters | And | True | False)
-)
-=>
-(Select
-    $input
-    (Filters [ $filter ])
-)
-
 # MergeSelects combines two nested Select operators into a single Select that
 # ANDs the filter conditions of the two Selects.
 [MergeSelects, Normalize]
@@ -319,12 +304,30 @@
      )
 )
 
-# DetectSelectContradiction replaces a Select with an empty Values if
-# it detects a contradiction in the filter.
-[DetectSelectContradiction, Normalize]
-(Select
-    $input:*
-    $filters:(Filters | False) & (IsContradiction $filters)
+# EliminateUnionAllLeft replaces a union all with a right side having a
+# cardinality of zero, with just the left side operand.
+[EliminateUnionAllLeft, Normalize]
+(UnionAll
+    $left:*
+    $right:* & (HasZeroRows $right)
+    $colmap:*
 )
 =>
-(ConstructEmptyValues (OutputCols $input))
+(Project
+    $left
+    (ProjectColMapLeft $colmap)
+)
+
+# EliminateUnionAllRight replaces a union all with a left side having a
+# cardinality of zero, with just the right side operand.
+[EliminateUnionAllRight, Normalize]
+(UnionAll
+    $left:* & (HasZeroRows $left)
+    $right:*
+    $colmap:*
+)
+=>
+(Project
+    $right
+    (ProjectColMapRight $colmap)
+)

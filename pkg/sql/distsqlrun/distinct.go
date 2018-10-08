@@ -204,10 +204,10 @@ func (d *Distinct) encode(appendTo []byte, row sqlbase.EncDatumRow) ([]byte, err
 }
 
 func (d *Distinct) close() {
-	// Need to close the mem accounting while the context is still valid.
-	d.memAcc.Close(d.Ctx)
-	d.InternalClose()
-	d.MemMonitor.Stop(d.Ctx)
+	if d.InternalClose() {
+		d.memAcc.Close(d.Ctx)
+		d.MemMonitor.Stop(d.Ctx)
+	}
 }
 
 // Next is part of the RowSource interface.
@@ -215,6 +215,9 @@ func (d *Distinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	for d.State == StateRunning {
 		row, meta := d.input.Next()
 		if meta != nil {
+			if meta.Err != nil {
+				d.MoveToDraining(nil /* err */)
+			}
 			return nil, meta
 		}
 		if row == nil {
@@ -282,6 +285,9 @@ func (d *SortedDistinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	for d.State == StateRunning {
 		row, meta := d.input.Next()
 		if meta != nil {
+			if meta.Err != nil {
+				d.MoveToDraining(nil /* err */)
+			}
 			return nil, meta
 		}
 		if row == nil {
@@ -305,11 +311,6 @@ func (d *SortedDistinct) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 	}
 	return nil, d.DrainHelper()
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (d *Distinct) ConsumerDone() {
-	d.input.ConsumerDone()
 }
 
 // ConsumerClosed is part of the RowSource interface.

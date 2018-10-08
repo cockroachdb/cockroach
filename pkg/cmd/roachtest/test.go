@@ -27,6 +27,7 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -42,7 +43,6 @@ var (
 	parallelism   = 10
 	count         = 1
 	debugEnabled  = false
-	dryrun        = false
 	postIssues    = true
 	clusterNameRE = regexp.MustCompile(`^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
 )
@@ -59,7 +59,12 @@ func makeFilterRE(filter []string) *regexp.Regexp {
 
 type testSpec struct {
 	Skip string // if non-empty, test will be skipped
-	Name string
+	// For subtests, Name is supposed to originally be assigned to the name of the
+	// subtest when constructing the spec and then, once added to the registry, it
+	// will automatically be expanded to contain all the parents' names. At that
+	// point, subtestName will be populated to the original value of Name.
+	Name        string
+	subtestName string
 	// The maximum duration the test is allowed to run before it is considered
 	// failed. If not specified, the default timeout is 10m before the test's
 	// associated cluster expires. The timeout is always truncated to 10m before
@@ -80,7 +85,8 @@ type testSpec struct {
 	// a top-level testSpec may contain a nodes specification. The cluster is
 	// shared by all subtests.
 	Nodes []nodeSpec
-	// A testSpec must specify only one of Run or SubTests. A SubTest should not
+	// A testSpec must specify only one of Run or SubTests. All subtests run in
+	// the same cluster, without concurrency between them. Subtest should not
 	// assume any particular state for the cluster as the SubTest may be run in
 	// isolation.
 	Run      func(ctx context.Context, t *test, c *cluster)
@@ -101,6 +107,17 @@ func (t *testSpec) matchRegex(re *regexp.Regexp) bool {
 	return false
 }
 
+func (t *testSpec) matchRegexRecursive(re *regexp.Regexp) []testSpec {
+	var res []testSpec
+	if re.MatchString(t.Name) {
+		res = append(res, *t)
+	}
+	for i := range t.SubTests {
+		res = append(res, t.SubTests[i].matchRegexRecursive(re)...)
+	}
+	return res
+}
+
 type registry struct {
 	m              map[string]*testSpec
 	clusters       map[string]string
@@ -113,6 +130,7 @@ type registry struct {
 		running map[*test]struct{}
 		pass    map[*test]struct{}
 		fail    map[*test]struct{}
+		skip    map[*test]struct{}
 	}
 }
 
@@ -169,6 +187,7 @@ func (r *registry) verifyClusterName(testName string) error {
 
 func (r *registry) prepareSpec(spec *testSpec, depth int) error {
 	if depth == 0 {
+		spec.subtestName = spec.Name
 		// Only top-level tests can create clusters, so those are the only ones for
 		// which we need to verify the cluster name.
 		if err := r.verifyClusterName(spec.Name); err != nil {
@@ -189,6 +208,7 @@ func (r *registry) prepareSpec(spec *testSpec, depth int) error {
 	}
 
 	for i := range spec.SubTests {
+		spec.SubTests[i].subtestName = spec.SubTests[i].Name
 		spec.SubTests[i].Name = spec.Name + "/" + spec.SubTests[i].Name
 		if err := r.prepareSpec(&spec.SubTests[i], depth+1); err != nil {
 			return err
@@ -221,7 +241,9 @@ func (r *registry) Add(spec testSpec) {
 	r.m[spec.Name] = &spec
 }
 
-func (r *registry) List(re *regexp.Regexp) []*testSpec {
+// ListTopLevel lists the top level tests that match re, or that have a subtests
+// that matches re.
+func (r *registry) ListTopLevel(re *regexp.Regexp) []*testSpec {
 	var results []*testSpec
 	for _, t := range r.m {
 		if t.matchRegex(re) {
@@ -235,9 +257,37 @@ func (r *registry) List(re *regexp.Regexp) []*testSpec {
 	return results
 }
 
+// ListAll lists all tests that match one of the filters. If a subtest matches
+// but a parent doesn't, only the subtest is returned. If a parent matches, all
+// subtests are returned.
+func (r *registry) ListAll(filter []string) []string {
+	filterRE := makeFilterRE(filter)
+	var tests []testSpec
+	for _, t := range r.m {
+		tests = append(tests, t.matchRegexRecursive(filterRE)...)
+	}
+	var names []string
+	for _, t := range tests {
+		if t.Skip == "" && t.minVersion != nil {
+			if r.buildVersion.LessThan(t.minVersion) {
+				t.Skip = fmt.Sprintf("build-version (%s) < min-version (%s)",
+					r.buildVersion, t.minVersion)
+			}
+		}
+		name := t.Name
+		if t.Skip != "" {
+			name += " (skipped: " + t.Skip + ")"
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 func (r *registry) Run(filter []string) int {
 	filterRE := makeFilterRE(filter)
-	tests := r.List(filterRE)
+	// Find the top-level tests to run.
+	tests := r.ListTopLevel(filterRE)
 
 	// Skip any tests for which the min-version is less than the build-version.
 	for _, t := range tests {
@@ -266,6 +316,7 @@ func (r *registry) Run(filter []string) int {
 	r.status.running = make(map[*test]struct{})
 	r.status.pass = make(map[*test]struct{})
 	r.status.fail = make(map[*test]struct{})
+	r.status.skip = make(map[*test]struct{})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -275,10 +326,15 @@ func (r *registry) Run(filter []string) int {
 		for j := 0; j < count; j++ {
 			for i := range tests {
 				sem <- struct{}{}
-				r.run(ctx, tests[i], filterRE, nil, func() {
-					wg.Done()
-					<-sem
-				})
+				runNum := j + 1
+				if count == 1 {
+					runNum = 0
+				}
+				r.runAsync(
+					ctx, tests[i], filterRE, nil /* parent */, nil /* cluster */, runNum, func(failed bool) {
+						wg.Done()
+						<-sem
+					})
 			}
 		}
 	}()
@@ -305,7 +361,7 @@ func (r *registry) Run(filter []string) int {
 		case <-done:
 			r.status.Lock()
 			defer r.status.Unlock()
-			postSlackReport(r.status.pass, r.status.fail, len(r.m)-len(tests))
+			postSlackReport(r.status.pass, r.status.fail, r.status.skip)
 
 			stableFails := 0
 			for t := range r.status.fail {
@@ -419,7 +475,11 @@ type test struct {
 	runnerID int64
 	start    time.Time
 	end      time.Time
-	mu       struct {
+	// artifactsDir is the path to the directory holding all the artifacts for
+	// this test. It will contain a test.log file, cluster logs, and
+	// subdirectories for subtests.
+	artifactsDir string
+	mu           struct {
 		syncutil.RWMutex
 		done    bool
 		failed  bool
@@ -495,23 +555,23 @@ func (t *test) WorkerProgress(frac float64) {
 }
 
 func (t *test) Fatal(args ...interface{}) {
-	t.print(args...)
+	t.printAndFail(args...)
 	runtime.Goexit()
 }
 
 func (t *test) Fatalf(format string, args ...interface{}) {
-	t.printf(format, args...)
+	t.printfAndFail(format, args...)
 	runtime.Goexit()
 }
 
-func (t *test) print(args ...interface{}) {
+func (t *test) printAndFail(args ...interface{}) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.mu.output = append(t.mu.output, t.decorate(fmt.Sprint(args...))...)
 	t.mu.failed = true
 }
 
-func (t *test) printf(format string, args ...interface{}) {
+func (t *test) printfAndFail(format string, args ...interface{}) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.mu.output = append(t.mu.output, t.decorate(fmt.Sprintf(format, args...))...)
@@ -579,6 +639,10 @@ func (t *test) Failed() bool {
 	return failed
 }
 
+func (t *test) ArtifactsDir() string {
+	return t.artifactsDir
+}
+
 // IsBuildVersion returns true if the build version is greater than or equal to
 // minVersion. This allows a test to optionally perform additional checks
 // depending on the cockroach version it is running against. Note that the
@@ -595,12 +659,41 @@ func (t *test) IsBuildVersion(minVersion string) bool {
 	return !t.registry.buildVersion.LessThan(vers)
 }
 
-func (r *registry) run(
-	ctx context.Context, spec *testSpec, filter *regexp.Regexp, c *cluster, done func(),
+// runAsync starts a goroutine that runs a test. If the test has subtests,
+// runAsync will be invoked recursively, but in a blocking manner.
+//
+// Args:
+// parent: The test's parent. Nil if the test is not a subtest.
+// c: The cluster on which the test (and all subtests) will run. If nil, a new
+//    cluster will be created.
+// runNum: The 1-based index of this test run, if --count > 1. Otherwise (if
+// 		   there's a single run), runNum is 0.
+func (r *registry) runAsync(
+	ctx context.Context,
+	spec *testSpec,
+	filter *regexp.Regexp,
+	parent *test,
+	c *cluster,
+	runNum int,
+	done func(failed bool),
 ) {
+	artifactsSuffix := ""
+	// Only roots get a "run_<n>" suffix to their artifacts dir; the subtests will
+	// write in the parent's dir.
+	if parent == nil && runNum != 0 {
+		artifactsSuffix = "run_" + strconv.Itoa(runNum)
+	}
+	parentDir := artifacts
+	if parent != nil {
+		parentDir = parent.ArtifactsDir()
+	}
+	// Each subtest gets its own subdir in the parent's artifacts dir.
+	artifactsDir := filepath.Join(parentDir, teamCityNameEscape(spec.subtestName), artifactsSuffix)
+
 	t := &test{
-		spec:     spec,
-		registry: r,
+		spec:         spec,
+		registry:     r,
+		artifactsDir: artifactsDir,
 	}
 
 	if teamCity {
@@ -653,70 +746,76 @@ func (r *registry) run(
 			t.mu.done = true
 			t.mu.Unlock()
 
-			if !dryrun {
-				dstr := fmt.Sprintf("%.2fs", t.duration().Seconds())
-				stability := ""
-				if !t.spec.Stable {
-					stability = "[unstable] "
-				}
+			dstr := fmt.Sprintf("%.2fs", t.duration().Seconds())
+			stability := ""
+			if !t.spec.Stable {
+				stability = "[unstable] "
+			}
 
-				if t.Failed() {
-					t.mu.Lock()
-					output := t.mu.output
-					failLoc := t.mu.failLoc
-					t.mu.Unlock()
-
-					if teamCity {
-						fmt.Fprintf(
-							r.out, "##teamcity[testFailed name='%s' details='%s' flowId='%s']\n",
-							t.Name(), teamCityEscape(string(output)), t.Name(),
-						)
-					}
-
-					fmt.Fprintf(r.out, "--- FAIL: %s %s(%s)\n%s", t.Name(), stability, dstr, output)
-					if postIssues && issues.CanPost() {
-						authorEmail := getAuthorEmail(failLoc.file, failLoc.line)
-						branch := "<unknown branch>"
-						if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
-							branch = b
-						}
-						if err := issues.Post(context.Background(), " on "+branch, "roachtest",
-							t.Name(), string(output), authorEmail); err != nil {
-							fmt.Fprintf(r.out, "failed to post issue: %s\n", err)
-						}
-					}
-				} else if t.spec.Skip == "" {
-					fmt.Fprintf(r.out, "--- PASS: %s %s(%s)\n", t.Name(), stability, dstr)
-					// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
-					// TeamCity regards the test as successful.
-				} else {
-					if teamCity {
-						fmt.Fprintf(r.out, "##teamcity[testIgnored name='%s' message='%s']\n",
-							t.Name(), t.spec.Skip)
-					}
-					fmt.Fprintf(r.out, "--- SKIP: %s (%s)\n\t%s\n", t.Name(), dstr, t.spec.Skip)
-				}
+			if t.Failed() {
+				t.mu.Lock()
+				output := t.mu.output
+				failLoc := t.mu.failLoc
+				t.mu.Unlock()
 
 				if teamCity {
-					fmt.Fprintf(r.out, "##teamcity[testFinished name='%s' flowId='%s']\n", t.Name(), t.Name())
-
-					escapedTestName := teamCityNameEscape(t.Name())
-					artifactsGlobPath := filepath.Join(artifacts, escapedTestName, "**")
-					artifactsSpec := fmt.Sprintf("%s => %s", artifactsGlobPath, escapedTestName)
-					fmt.Fprintf(r.out, "##teamcity[publishArtifacts '%s']\n", artifactsSpec)
+					fmt.Fprintf(
+						r.out, "##teamcity[testFailed name='%s' details='%s' flowId='%s']\n",
+						t.Name(), teamCityEscape(string(output)), t.Name(),
+					)
 				}
+
+				fmt.Fprintf(r.out, "--- FAIL: %s %s(%s)\n%s", t.Name(), stability, dstr, output)
+				if postIssues && issues.CanPost() && t.spec.Run != nil {
+					authorEmail := getAuthorEmail(failLoc.file, failLoc.line)
+					branch := "<unknown branch>"
+					if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
+						branch = b
+					}
+					if err := issues.Post(
+						context.Background(),
+						fmt.Sprintf("roachtest: %s failed", t.Name()),
+						"roachtest", t.Name(), "The test failed on "+branch+":\n"+string(output), authorEmail,
+					); err != nil {
+						fmt.Fprintf(r.out, "failed to post issue: %s\n", err)
+					}
+				}
+			} else if t.spec.Skip == "" {
+				fmt.Fprintf(r.out, "--- PASS: %s %s(%s)\n", t.Name(), stability, dstr)
+				// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
+				// TeamCity regards the test as successful.
+			} else {
+				if teamCity {
+					fmt.Fprintf(r.out, "##teamcity[testIgnored name='%s' message='%s']\n",
+						t.Name(), t.spec.Skip)
+				}
+				fmt.Fprintf(r.out, "--- SKIP: %s (%s)\n\t%s\n", t.Name(), dstr, t.spec.Skip)
+			}
+
+			if teamCity {
+				fmt.Fprintf(r.out, "##teamcity[testFinished name='%s' flowId='%s']\n", t.Name(), t.Name())
+
+				escapedTestName := teamCityNameEscape(t.Name())
+				artifactsGlobPath := filepath.Join(artifacts, escapedTestName, "**")
+				artifactsSpec := fmt.Sprintf("%s => %s", artifactsGlobPath, escapedTestName)
+				fmt.Fprintf(r.out, "##teamcity[publishArtifacts '%s']\n", artifactsSpec)
 			}
 
 			r.status.Lock()
 			delete(r.status.running, t)
-			if t.Failed() {
-				r.status.fail[t] = struct{}{}
-			} else {
-				r.status.pass[t] = struct{}{}
+			// Only include tests with a Run function in the summary output.
+			if t.spec.Run != nil {
+				if t.Failed() {
+					r.status.fail[t] = struct{}{}
+				} else if t.spec.Skip == "" {
+					r.status.pass[t] = struct{}{}
+				} else {
+					r.status.skip[t] = struct{}{}
+				}
 			}
 			r.status.Unlock()
 
-			done()
+			done(t.Failed())
 		}()
 
 		t.start = timeutil.Now()
@@ -725,80 +824,93 @@ func (r *registry) run(
 			return
 		}
 
-		if !dryrun {
-			if c == nil {
-				c = newCluster(ctx, t, t.spec.Nodes)
-				if c != nil {
-					defer func() {
-						if !debugEnabled || !t.Failed() {
-							c.Destroy(ctx)
-						} else {
-							c.l.Printf("not destroying cluster to allow debugging\n")
-						}
-					}()
-				}
-			} else {
-				c = c.clone(t)
-			}
-		}
-
-		if t.spec.Run != nil {
-			if !dryrun {
-				timeout := time.Hour
-				if c != nil {
-					defer func() {
-						c.FetchLogs(ctx)
-					}()
-
-					timeout = c.expiration.Add(-10 * time.Minute).Sub(timeutil.Now())
-					if timeout <= 0 {
-						t.spec.Skip = fmt.Sprintf("cluster expired (%s)", timeout)
-						return
-					}
-				}
-
-				if t.spec.Timeout > 0 && timeout > t.spec.Timeout {
-					timeout = t.spec.Timeout
-				}
-
-				done := make(chan struct{})
+		if c == nil {
+			c = newCluster(ctx, t, t.spec.Nodes)
+			if c != nil {
 				defer func() {
-					close(done)
-				}()
-
-				runCtx, cancel := context.WithCancel(ctx)
-
-				go func() {
-					defer cancel()
-
-					select {
-					case <-time.After(timeout):
-						t.printf("test timed out (%s)", timeout)
-						if c != nil {
-							c.FetchLogs(ctx)
-							// NB: c.destroyed is nil for cloned clusters (i.e. in subtests).
-							if !debugEnabled && c.destroyed != nil {
-								c.Destroy(ctx)
-							}
-						}
-					case <-done:
+					if !debugEnabled || !t.Failed() {
+						c.Destroy(ctx)
+					} else {
+						c.l.Printf("not destroying cluster to allow debugging\n")
 					}
 				}()
-
-				t.spec.Run(runCtx, t, c)
 			}
 		} else {
+			c = c.clone(t)
+		}
+
+		// If we have subtests, handle them here and return.
+		if t.spec.Run == nil {
 			for i := range t.spec.SubTests {
 				if t.spec.SubTests[i].matchRegex(filter) {
 					var wg sync.WaitGroup
 					wg.Add(1)
-					r.run(ctx, &t.spec.SubTests[i], filter, c, func() {
+					r.runAsync(ctx, &t.spec.SubTests[i], filter, t, c, runNum, func(failed bool) {
+						if failed {
+							// Mark the parent test as failed since one of the subtests
+							// failed.
+							t.mu.Lock()
+							t.mu.failed = true
+							t.mu.Unlock()
+						}
+						if failed && debugEnabled {
+							// The test failed and debugging is enabled. Don't try to stumble
+							// forward running another test or subtest, just exit
+							// immediately.
+							os.Exit(1)
+						}
 						wg.Done()
 					})
 					wg.Wait()
 				}
 			}
+			return
 		}
+
+		// No subtests, so this is a leaf test.
+
+		timeout := time.Hour
+		defer func() {
+			if err := c.FetchLogs(ctx); err != nil {
+				c.l.Printf("failed to download logs: %s", err)
+			}
+		}()
+
+		timeout = c.expiration.Add(-10 * time.Minute).Sub(timeutil.Now())
+		if timeout <= 0 {
+			t.spec.Skip = fmt.Sprintf("cluster expired (%s)", timeout)
+			return
+		}
+
+		if t.spec.Timeout > 0 && timeout > t.spec.Timeout {
+			timeout = t.spec.Timeout
+		}
+
+		done := make(chan struct{})
+		defer func() {
+			close(done)
+		}()
+
+		runCtx, cancel := context.WithCancel(ctx)
+
+		go func() {
+			defer cancel()
+
+			select {
+			case <-time.After(timeout):
+				t.printfAndFail("test timed out (%s)\n", timeout)
+				if err := c.FetchLogs(ctx); err != nil {
+					c.l.Printf("failed to download logs: %s", err)
+				}
+				// NB: c.destroyed is nil for cloned clusters (i.e. in subtests).
+				if !debugEnabled && c.destroyed != nil {
+					c.Destroy(ctx)
+				}
+			case <-done:
+			}
+		}()
+
+		t.spec.Run(runCtx, t, c)
 	}()
 }
 

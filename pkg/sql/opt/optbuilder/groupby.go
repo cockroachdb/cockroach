@@ -232,6 +232,9 @@ func (b *Builder) buildAggregation(
 	b.buildProjectionList(fromScope, projectionsScope)
 	b.buildOrderBy(fromScope, projectionsScope, orderByScope)
 	b.buildDistinctOnArgs(fromScope, projectionsScope, distinctOnScope)
+	if len(fromScope.srfs) > 0 {
+		fromScope.group = b.constructProjectSet(fromScope.group, fromScope.srfs)
+	}
 
 	aggInfos := aggOutScope.groupby.aggs
 
@@ -511,4 +514,11 @@ var aggOpLookup = map[string]opt.Operator{
 	"xor_agg":    opt.XorAggOp,
 	"json_agg":   opt.JsonAggOp,
 	"jsonb_agg":  opt.JsonbAggOp,
+}
+
+func newGroupingError(name *tree.Name) error {
+	return pgerror.NewErrorf(pgerror.CodeGroupingError,
+		"column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function",
+		tree.ErrString(name),
+	)
 }

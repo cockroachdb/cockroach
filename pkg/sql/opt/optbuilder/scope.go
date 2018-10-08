@@ -69,9 +69,26 @@ type scope struct {
 	// cross join between the input and a Zip of all the srfs in this slice.
 	srfs []*srf
 
+	// ctes contains the CTEs which were created at this scope. This set
+	// is not exhaustive because expressions can reference CTEs from parent
+	// scopes.
+	ctes map[string]*cteSource
+
 	// context is the current context in the SQL query (e.g., "SELECT" or
 	// "HAVING"). It is used for error messages.
 	context string
+}
+
+// cteSource represents a CTE in the given query.
+type cteSource struct {
+	name  tree.AliasClause
+	cols  []scopeColumn
+	group memo.GroupID
+
+	// used tracks if this CTE has been referenced.  We are currently limited
+	// to only having a single reference to a given CTE, so if this is set then
+	// this CTE has already been referenced and may not be referenced again.
+	used bool
 }
 
 // groupByStrSet is a set of stringified GROUP BY expressions that map to the
@@ -203,8 +220,8 @@ func (s *scope) makeOrderingChoice() props.OrderingChoice {
 
 // makePhysicalProps constructs physical properties using the columns in the
 // scope for presentation and s.ordering for required ordering.
-func (s *scope) makePhysicalProps() props.Physical {
-	p := props.Physical{}
+func (s *scope) makePhysicalProps() *props.Physical {
+	p := &props.Physical{}
 
 	if len(s.cols) > 0 {
 		p.Presentation = make(props.Presentation, 0, len(s.cols))
@@ -236,6 +253,27 @@ func (s *scope) walkExprTree(expr tree.Expr) tree.Expr {
 	expr, _ = tree.WalkExpr(s, expr)
 	s.builder.semaCtx.IVarContainer = s
 	return expr
+}
+
+// resolveCTE looks up a CTE name in this and the parent scopes, returning nil
+// if it's not found.
+func (s *scope) resolveCTE(name *tree.TableName) *cteSource {
+	var nameStr string
+	seenCTEs := false
+	for s != nil {
+		if s.ctes != nil {
+			// Only compute the stringified name if we see any CTEs.
+			if !seenCTEs {
+				nameStr = name.String()
+				seenCTEs = true
+			}
+			if cte, ok := s.ctes[nameStr]; ok {
+				return cte
+			}
+		}
+		s = s.parent
+	}
+	return nil
 }
 
 // resolveType converts the given expr to a tree.TypedExpr. As part of the
@@ -760,7 +798,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		if sub, ok := t.Subquery.(*tree.Subquery); ok {
 			// Copy the ArrayFlatten expression so that the tree isn't mutated.
 			copy := *t
-			copy.Subquery = s.replaceSubquery(sub, true /* multi-row */, 1 /* desired-columns */)
+			copy.Subquery = s.replaceSubquery(sub, false /* wrapInTuple */, 1 /* desiredColumns */)
 			expr = &copy
 		}
 
@@ -775,7 +813,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 			if sub, ok := t.Right.(*tree.Subquery); ok {
 				// Copy the Comparison expression so that the tree isn't mutated.
 				copy := *t
-				copy.Right = s.replaceSubquery(sub, true /* multi-row */, -1 /* desired-columns */)
+				copy.Right = s.replaceSubquery(sub, true /* wrapInTuple */, -1 /* desiredColumns */)
 				expr = &copy
 			}
 		}
@@ -787,9 +825,9 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		}
 
 		if t.Exists {
-			expr = s.replaceSubquery(t, true /* multi-row */, -1 /* desired-columns */)
+			expr = s.replaceSubquery(t, true /* wrapInTuple */, -1 /* desiredColumns */)
 		} else {
-			expr = s.replaceSubquery(t, false /* multi-row */, s.columns /* desired-columns */)
+			expr = s.replaceSubquery(t, false /* wrapInTuple */, s.columns /* desiredColumns */)
 		}
 	}
 
@@ -855,7 +893,7 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 // the variables referenced by the aggregate (or the current scope if the
 // aggregate references no variables). The aggOutScope.groupby.aggs slice is
 // used later by the Builder to build aggregations in the aggregation scope.
-func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition) *aggregateInfo {
+func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition) tree.Expr {
 	if f.Filter != nil {
 		panic(unimplementedf("aggregates with FILTER are not supported yet"))
 	}
@@ -868,13 +906,17 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 	defer s.builder.semaCtx.Properties.Restore(s.builder.semaCtx.Properties)
 
 	s.builder.semaCtx.Properties.Require(s.context,
-		tree.RejectNestedAggregates|tree.RejectWindowApplications|tree.RejectGenerators)
+		tree.RejectNestedAggregates|tree.RejectWindowApplications)
 
 	expr := f.Walk(s)
 	typedFunc, err := tree.TypeCheck(expr, s.builder.semaCtx, types.Any)
 	if err != nil {
 		panic(builderError{err})
 	}
+	if typedFunc == tree.DNull {
+		return tree.DNull
+	}
+
 	f = typedFunc.(*tree.FuncExpr)
 
 	funcDef := memo.FuncOpDef{
@@ -939,13 +981,17 @@ func (s *scope) replaceCount(
 	return f, def
 }
 
-// Replace a raw subquery node with a typed subquery. multiRow specifies
-// whether the subquery is occurring in a single-row or multi-row
-// context. desiredColumns specifies the desired number of columns for the
+// Replace a raw subquery node with a typed subquery. wrapInTuple specifies
+// whether the return type of the subquery should be wrapped in a tuple.
+// wrapInTuple is true for subqueries that may return multiple rows in
+// comparison expressions (e.g., IN, ANY, ALL) and EXISTS expressions.
+// desiredColumns specifies the desired number of columns for the
 // subquery. Specifying -1 for desiredColumns allows the subquery to return any
 // number of columns and is used when the normal type checking machinery will
 // verify that the correct number of columns is returned.
-func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumns int) *subquery {
+func (s *scope) replaceSubquery(
+	sub *tree.Subquery, wrapInTuple bool, desiredColumns int,
+) *subquery {
 	if s.replaceSRFs {
 		// We need to save and restore the previous value of the replaceSRFs field in
 		// case we are recursively called within a subquery context.
@@ -954,8 +1000,8 @@ func (s *scope) replaceSubquery(sub *tree.Subquery, multiRow bool, desiredColumn
 	}
 
 	subq := subquery{
-		multiRow: multiRow,
-		expr:     sub,
+		Subquery:    sub,
+		wrapInTuple: wrapInTuple,
 	}
 
 	// Save and restore the previous value of s.builder.subquery in case we are

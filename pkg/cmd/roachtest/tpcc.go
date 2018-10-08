@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"strconv"
 	"strings"
 	"time"
@@ -34,45 +35,140 @@ import (
 	"github.com/cockroachdb/ttycolor"
 )
 
-func registerTPCC(r *registry) {
-	runTPCC := func(ctx context.Context, t *test, c *cluster, warehouses int, extra string) {
-		if !c.isLocal() {
-			c.RemountNoBarrier(ctx)
-		}
+type tpccOptions struct {
+	Warehouses int
+	Extra      string
+	Chaos      func() Chaos // for late binding of stopper
+	Duration   time.Duration
+	ZFS        bool
+}
 
-		nodes := c.nodes - 1
-		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-		c.Start(ctx, c.Range(1, nodes))
-
-		t.Status("running workload")
-		m := newMonitor(ctx, c, c.Range(1, nodes))
-		m.Go(func(ctx context.Context) error {
-			duration := " --duration=" + ifLocal("10s", "10m")
-			cmd := fmt.Sprintf(
-				"./workload run tpcc --init --warehouses=%d --histograms=logs/stats.json"+
-					extra+duration+" {pgurl:1-%d}",
-				warehouses, nodes)
-			c.Run(ctx, c.Node(nodes+1), cmd)
-			return nil
-		})
-		m.Wait()
+func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
+	crdbNodes := c.Range(1, c.nodes-1)
+	workloadNode := c.Node(c.nodes)
+	rampDuration := 5 * time.Minute
+	if c.isLocal() {
+		opts.Warehouses = 1
+		opts.Duration = 1 * time.Minute
+		rampDuration = 30 * time.Second
+	} else if !opts.ZFS {
+		c.RemountNoBarrier(ctx)
 	}
 
+	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
+	c.Put(ctx, workload, "./workload", workloadNode)
+
+	t.Status("loading fixture")
+	fixtureWarehouses := -1
+	for _, w := range []int{1, 10, 100, 1000, 2000, 5000, 10000} {
+		if w >= opts.Warehouses {
+			fixtureWarehouses = w
+			break
+		}
+	}
+	if fixtureWarehouses == -1 {
+		t.Fatalf("could not find fixture big enough for %d warehouses", opts.Warehouses)
+	}
+
+	func() {
+		db := c.Conn(ctx, 1)
+		defer db.Close()
+		if opts.ZFS {
+			if err := c.RunE(ctx, c.Node(1), "test -d /mnt/data1/.zfs/snapshot/pristine"); err != nil {
+				// Use ZFS so the initial store dumps can be instantly rolled back to their
+				// pristine state. Useful for iterating quickly on the test, especially when
+				// used in a repro.
+				c.Reformat(ctx, crdbNodes, "zfs")
+
+				t.Status("loading dataset")
+				c.Start(ctx, crdbNodes)
+				cmd := fmt.Sprintf(
+					"./workload fixtures load tpcc --warehouses=%d {pgurl:1}", fixtureWarehouses)
+				c.Run(ctx, workloadNode, cmd)
+				c.Stop(ctx, crdbNodes)
+
+				c.Run(ctx, crdbNodes, "test -e /sbin/zfs && sudo zfs snapshot data1@pristine")
+			}
+			t.Status(`restoring store dumps`)
+			c.Run(ctx, crdbNodes, "sudo zfs rollback data1@pristine")
+			c.Start(ctx, crdbNodes)
+		} else {
+			c.Start(ctx, crdbNodes)
+			c.Run(ctx, workloadNode, fmt.Sprintf(
+				`./workload fixtures load tpcc --warehouses=%d {pgurl:1}`, fixtureWarehouses,
+			))
+		}
+	}()
+	t.Status("waiting")
+	m := newMonitor(ctx, c, crdbNodes)
+	m.Go(func(ctx context.Context) error {
+		t.WorkerStatus("running tpcc")
+		cmd := fmt.Sprintf(
+			"./workload run tpcc --warehouses=%d --histograms=logs/stats.json "+
+				opts.Extra+" --ramp=%s --duration=%s {pgurl:1-%d}",
+			opts.Warehouses, rampDuration, opts.Duration, c.nodes-1)
+		c.Run(ctx, workloadNode, cmd)
+		return nil
+	})
+	if opts.Chaos != nil {
+		chaos := opts.Chaos()
+		m.Go(chaos.Runner(c, m))
+	}
+	m.Wait()
+}
+
+func registerTPCC(r *registry) {
 	r.Add(testSpec{
-		Name:   "tpcc/w=1/nodes=3",
-		Nodes:  nodes(4),
-		Stable: true, // DO NOT COPY to new tests
+		Name: "tpcc/nodes=3/w=max",
+		// TODO(dan): Instead of MinVersion, adjust the warehouses below to
+		// match our expectation for the max tpcc warehouses that previous
+		// releases will support on this hardware.
+		MinVersion: "2.1.0",
+		Nodes:      nodes(4, cpu(16)),
+		Stable:     false,
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runTPCC(ctx, t, c, 1, " --wait=false")
+			warehouses := 1400
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses: warehouses, Duration: 120 * time.Minute,
+			})
 		},
 	})
 	r.Add(testSpec{
-		Name:   "tpmc/w=1/nodes=3",
-		Nodes:  nodes(4),
-		Stable: true, // DO NOT COPY to new tests
+		Name:   "tpcc-nowait/nodes=3/w=1",
+		Nodes:  nodes(4, cpu(16)),
+		Stable: false,
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			runTPCC(ctx, t, c, 1, "")
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses: 1,
+				Duration:   10 * time.Minute,
+				Extra:      "--wait=false",
+			})
+		},
+	})
+
+	r.Add(testSpec{
+		Name:   "tpcc/w=100/nodes=3/chaos=true",
+		Nodes:  nodes(4),
+		Stable: false,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			duration := 30 * time.Minute
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses: 100,
+				Duration:   duration,
+				Extra:      "--wait=false --tolerate-errors",
+				Chaos: func() Chaos {
+					return Chaos{
+						Timer: Periodic{
+							Period:   45 * time.Second,
+							DownTime: 10 * time.Second,
+						},
+						Target:       func() nodeListOption { return c.Node(1 + rand.Intn(c.nodes-1)) },
+						Stopper:      time.After(duration),
+						DrainAndQuit: false,
+					}
+				},
+				ZFS: false, // change to true during debugging/development
+			})
 		},
 	})
 

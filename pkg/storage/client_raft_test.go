@@ -32,6 +32,7 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -42,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1366,7 +1368,7 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 func TestStoreRangeCorruptionChangeReplicas(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	const numReplicas = 3
+	const numReplicas = 5
 	const extraStores = 3
 
 	ctx := context.Background()
@@ -2506,14 +2508,26 @@ func TestRaftRemoveRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	mtc := &multiTestContext{}
 	defer mtc.Stop()
-	mtc.Start(t, 10)
-
 	const rangeID = roachpb.RangeID(1)
-	// Up-replicate to a bunch of nodes which stresses a condition where a
-	// replica created via a preemptive snapshot receives a message for a
-	// previous incarnation of the replica (i.e. has a smaller replica ID) that
-	// existed on the same store.
-	mtc.replicateRange(rangeID, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+
+	if !util.RaceEnabled {
+		mtc.Start(t, 10)
+		// Up-replicate to a bunch of nodes which stresses a condition where a
+		// replica created via a preemptive snapshot receives a message for a
+		// previous incarnation of the replica (i.e. has a smaller replica ID) that
+		// existed on the same store.
+		mtc.replicateRange(rangeID, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+	} else {
+		// In race builds, running 10 nodes needs more than 1 full CPU
+		// (due to background gossip and heartbeat overhead), so it can't
+		// keep up when run under stress with one process per CPU. Run a
+		// reduced version of this test in race builds. This isn't as
+		// likely to reproduce the preemptive-snapshot race described in
+		// the previous comment, but will still have a chance to do so, or
+		// to find other races.
+		mtc.Start(t, 3)
+		mtc.replicateRange(rangeID, 1, 2)
+	}
 
 	for i := 0; i < 10; i++ {
 		mtc.unreplicateRange(rangeID, 2)
@@ -2788,7 +2802,7 @@ func TestStoreRangeMoveDecommissioning(t *testing.T) {
 	sc.TestingKnobs.DisableReplicaRebalancing = true
 	mtc := &multiTestContext{storeConfig: &sc}
 	defer mtc.Stop()
-	mtc.Start(t, 4)
+	mtc.Start(t, 6)
 	mtc.initGossipNetwork()
 
 	// Replicate the range to 2 more stores. Note that there are 4 stores in the
@@ -2815,8 +2829,8 @@ func TestStoreRangeMoveDecommissioning(t *testing.T) {
 		// Wait for a replacement replica for the decommissioning node to be added
 		// and the replica on the decommissioning node to be removed.
 		curReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
-		if len(curReplicas) != 3 {
-			return errors.Errorf("expected 3 replicas, got %v", curReplicas)
+		if len(curReplicas) != 5 {
+			return errors.Errorf("expected 5 replicas, got %v", curReplicas)
 		}
 		if reflect.DeepEqual(origReplicas, curReplicas) {
 			return errors.Errorf("expected replica to be moved, but found them to be same as original %v", origReplicas)
@@ -2840,64 +2854,76 @@ func TestStoreRangeRemoveDead(t *testing.T) {
 	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.timeUntilStoreDead = storage.TestTimeUntilStoreDead
 	defer mtc.Stop()
-	mtc.Start(t, 4)
 
-	// Replicate the range to 2 more stores. Note that there are 4 stores in the
-	// cluster leaving an extra store available as a replication target once the
-	// replica on the dead node is removed.
-	replica := mtc.stores[0].LookupReplica(roachpb.RKeyMin)
-	mtc.replicateRange(replica.RangeID, 1, 3)
+	zone := config.DefaultSystemZoneConfig()
+	mtc.Start(t, int(zone.NumReplicas+1))
 
-	origReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
-
-	for _, s := range mtc.stores {
-		if err := s.GossipStore(context.Background(), false /* useCached */); err != nil {
-			t.Fatal(err)
+	var nonDeadStores []*storage.Store
+	for i, s := range mtc.stores {
+		if i == 1 {
+			// Skip the dead store.
+			continue
 		}
+		nonDeadStores = append(nonDeadStores, s)
 	}
 
-	rangeDesc := getRangeMetadata(roachpb.RKeyMin, mtc, t)
-	if e, a := 3, len(rangeDesc.Replicas); e != a {
-		t.Fatalf("expected %d replicas, only found %d, rangeDesc: %+v", e, a, rangeDesc)
-	}
+	// Create a goroutine to gossip store capacity info periodically.
+	go func() {
+		tickerDur := storage.TestTimeUntilStoreDead / 2
+		ticker := time.NewTicker(tickerDur)
+		defer ticker.Stop()
 
-	// This can't use SucceedsSoon as using the backoff mechanic won't work
-	// as it requires a specific cadence of re-gossiping the alive stores to
-	// maintain their alive status.
-	tickerDur := storage.TestTimeUntilStoreDead / 2
-	ticker := time.NewTicker(tickerDur)
-	defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				mtc.manualClock.Increment(int64(tickerDur))
 
-	maxTime := 5 * time.Second
-	maxTimeout := time.After(maxTime)
-
-	for {
-		// Wait for the replica on the dead node to be removed and the replacement
-		// added.
-		curReplicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
-		if len(curReplicas) == 3 && !reflect.DeepEqual(origReplicas, curReplicas) {
-			break
-		}
-
-		select {
-		case <-maxTimeout:
-			t.Fatalf("Failed to remove the dead replica within %s", maxTime)
-		case <-ticker.C:
-			mtc.manualClock.Increment(int64(tickerDur))
-
-			// Keep gossiping the alive stores.
-			for _, s := range mtc.stores[:3] {
-				if err := s.GossipStore(context.Background(), false /* useCached */); err != nil {
-					t.Fatal(err)
+				// Keep gossiping the stores, excepting the dead store.
+				for _, s := range nonDeadStores {
+					if err := s.GossipStore(context.Background(), false /* useCached */); err != nil {
+						panic(err)
+					}
 				}
-			}
+				// Force the repair queues on all alive stores to run.
+				for _, s := range nonDeadStores {
+					s.ForceReplicationScanAndProcess()
+				}
 
-			// Force the repair queues on all alive stores to run.
-			for _, s := range mtc.stores[:3] {
-				s.ForceReplicationScanAndProcess()
+			case <-mtc.stoppers[0].ShouldStop():
+				return
 			}
 		}
-	}
+	}()
+
+	// Wait for up-replication.
+	testutils.SucceedsSoon(t, func() error {
+		replicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
+		if len(replicas) == int(zone.NumReplicas) {
+			return nil
+		}
+		return errors.Errorf("expected %d replicas; have %+v", zone.NumReplicas, replicas)
+	})
+
+	// Stop a store which will be rebalanced away from. We can't use the very first
+	// one since getRangeMetadata is hard-coded to query that one, so we'll use the
+	// one after that.
+	deadStoreID := mtc.stores[1].StoreID() // 2
+	mtc.stopStore(1)
+	// The mtc asks us to restart this store before stopping the mtc.
+	defer mtc.restartStoreWithoutHeartbeat(1)
+
+	testutils.SucceedsSoon(t, func() error {
+		replicas := getRangeMetadata(roachpb.RKeyMin, mtc, t).Replicas
+		if len(replicas) != int(zone.NumReplicas) {
+			return errors.Errorf("expected %d replicas; have %+v", zone.NumReplicas, replicas)
+		}
+		for _, r := range replicas {
+			if r.StoreID == deadStoreID {
+				return errors.Errorf("expected store %d to be replaced; have %+v", r.StoreID, replicas)
+			}
+		}
+		return nil
+	})
 }
 
 // TestReplicateRogueRemovedNode ensures that a rogue removed node
@@ -3068,6 +3094,9 @@ func (errorChannelTestHandler) HandleSnapshot(
 	panic("unimplemented")
 }
 
+// This test simulates a scenario where one replica has been removed from the
+// range's Raft group but it is unaware of the fact. We check that this replica
+// coming back from the dead cannot cause elections.
 func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -3147,9 +3176,10 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		StoreID:   mtc.stores[1].StoreID(),
 	}
 
-	// Create a new transport for store 0. Error responses are passed
-	// back along the same grpc stream as the request so it's ok that
-	// there are two (this one and the one actually used by the store).
+	// Create a new transport for store 0 so that we can intercept the responses.
+	// Error responses are passed back along the same grpc stream as the request
+	// so it's ok that there are two (this one and the one actually used by the
+	// store).
 	transport0 := storage.NewRaftTransport(log.AmbientContext{Tracer: mtc.storeConfig.Settings.Tracer},
 		cluster.MakeTestingClusterSettings(),
 		nodedialer.New(mtc.rpcContext, gossip.AddressResolver(mtc.gossips[0])),
@@ -3159,8 +3189,9 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	errChan := errorChannelTestHandler(make(chan *roachpb.Error, 1))
 	transport0.Listen(mtc.stores[0].StoreID(), errChan)
 
-	// Simulate an election triggered by the removed node.
-	transport0.SendAsync(&storage.RaftMessageRequest{
+	// Simulate the removed node asking to trigger an election. Try and try again
+	// until we're reasonably sure the message was sent.
+	for !transport0.SendAsync(&storage.RaftMessageRequest{
 		RangeID:     rangeID,
 		ToReplica:   replica1,
 		FromReplica: replica0,
@@ -3170,9 +3201,11 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 			Type: raftpb.MsgVote,
 			Term: term + 1,
 		},
-	})
+	}) {
+	}
 
-	// The receiver of this message should return an error.
+	// The receiver of this message (i.e. replica1) should return an error telling
+	// the sender that it's no longer part of the group.
 	select {
 	case pErr := <-errChan:
 		switch pErr.GetDetail().(type) {
@@ -3180,8 +3213,8 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		default:
 			t.Fatalf("unexpected error type %T: %s", pErr.GetDetail(), pErr)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("did not get expected error")
+	case <-time.After(45 * time.Second):
+		t.Fatal("did not get expected ReplicaTooOldError error")
 	}
 
 	// The message should have been discarded without triggering an
@@ -3952,10 +3985,26 @@ func TestStoreRangeRemovalCompactionSuggestion(t *testing.T) {
 func TestStoreRangeWaitForApplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	var filterEnabled int32
+
 	ctx := context.Background()
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicateQueue = true
 	sc.TestingKnobs.DisableReplicaGCQueue = true
+	sc.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+		if ba.RangeID != 2 || atomic.LoadInt32(&filterEnabled) == 0 {
+			return nil
+		}
+		pErr := roachpb.NewErrorf("blocking %s in this test", ba.Summary())
+		if len(ba.Requests) != 1 {
+			return pErr
+		}
+		_, ok := ba.Requests[0].GetInner().(*roachpb.PutRequest)
+		if !ok {
+			return pErr
+		}
+		return nil
+	}
 	mtc := &multiTestContext{storeConfig: &sc}
 	mtc.Start(t, 3)
 	defer mtc.Stop()
@@ -3975,6 +4024,9 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	atomic.StoreInt32(&filterEnabled, 1)
+
 	leaseIndex0 := repl0.LastAssignedLeaseIndex()
 
 	type target struct {
@@ -4053,6 +4105,8 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 			t.Fatalf("%d: %s", i, err)
 		}
 	}
+
+	atomic.StoreInt32(&filterEnabled, 0)
 
 	// GC the replica while a request is in progress. The request should return
 	// an error.

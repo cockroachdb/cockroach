@@ -22,6 +22,7 @@ import (
 	"net/url"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -36,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -120,9 +121,11 @@ var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	"default distributed SQL execution mode",
 	"auto",
 	map[int64]string{
-		int64(sessiondata.DistSQLOff):  "off",
-		int64(sessiondata.DistSQLAuto): "auto",
-		int64(sessiondata.DistSQLOn):   "on",
+		int64(sessiondata.DistSQLOff):       "off",
+		int64(sessiondata.DistSQLAuto):      "auto",
+		int64(sessiondata.DistSQLOn):        "on",
+		int64(sessiondata.DistSQL2Dot0Auto): "2.0-auto",
+		int64(sessiondata.DistSQL2Dot0Off):  "2.0-off",
 	},
 )
 
@@ -357,9 +360,6 @@ type ExecutorTestingKnobs struct {
 	// execution so there'll be nothing left to abort by the time the filter runs.
 	DisableAutoCommit bool
 
-	// DistSQLPlannerKnobs are testing knobs for DistSQLPlanner.
-	DistSQLPlannerKnobs DistSQLPlannerTestingKnobs
-
 	// BeforeAutoCommit is called when the Executor is about to commit the KV
 	// transaction after running a statement in an implicit transaction, allowing
 	// tests to inject errors into that commit.
@@ -372,14 +372,6 @@ type ExecutorTestingKnobs struct {
 	// optimization). This is only called when the Executor is the one doing the
 	// committing.
 	BeforeAutoCommit func(ctx context.Context, stmt string) error
-}
-
-// DistSQLPlannerTestingKnobs is used to control internals of the DistSQLPlanner
-// for testing purposes.
-type DistSQLPlannerTestingKnobs struct {
-	// If OverrideSQLHealthCheck is set, we use this callback to get the health of
-	// a node.
-	OverrideHealthCheck func(node roachpb.NodeID, addrString string) error
 }
 
 // databaseCacheHolder is a thread-safe container for a *databaseCache.
@@ -432,7 +424,7 @@ var _ dbCacheSubscriber = &databaseCacheHolder{}
 
 // updateSystemConfig is called whenever a new system config gossip entry is
 // received.
-func (dc *databaseCacheHolder) updateSystemConfig(cfg config.SystemConfig) {
+func (dc *databaseCacheHolder) updateSystemConfig(cfg *config.SystemConfig) {
 	dc.mu.Lock()
 	dc.mu.c = newDatabaseCache(cfg)
 	dc.mu.cv.Broadcast()
@@ -477,13 +469,29 @@ func countRowsAffected(params runParams, p planNode) (int, error) {
 	return count, err
 }
 
+// shouldUseDistSQL returns true if the combination of mode and distribution
+// requirement given by shouldDistributeGivenRecAndMode requires that the
+// distSQL engine should be used.
+// This is always true unless the mode is set to 2.0-auto or 2.0-off.
+// 2.0-auto causes the distribution recommendation to control whether distsql is
+// used at all, and 2.0-off causes distsql to never be used regardless of the
+// recommendation.
+func shouldUseDistSQL(distributePlan bool, mode sessiondata.DistSQLExecMode) bool {
+	if mode == sessiondata.DistSQL2Dot0Off {
+		return false
+	} else if mode == sessiondata.DistSQL2Dot0Auto {
+		return distributePlan
+	}
+	return true
+}
+
 func shouldDistributeGivenRecAndMode(
 	rec distRecommendation, mode sessiondata.DistSQLExecMode,
 ) bool {
 	switch mode {
-	case sessiondata.DistSQLOff:
+	case sessiondata.DistSQLOff, sessiondata.DistSQL2Dot0Off:
 		return false
-	case sessiondata.DistSQLAuto:
+	case sessiondata.DistSQLAuto, sessiondata.DistSQL2Dot0Auto:
 		return rec == shouldDistribute
 	case sessiondata.DistSQLOn, sessiondata.DistSQLAlways:
 		return rec != cannotDistribute
@@ -741,45 +749,47 @@ func (q *queryMeta) cancel() {
 	q.ctxCancel()
 }
 
-// sessionDefaults mirrors fields in Session, for restoring default
+// SessionDefaults mirrors fields in Session, for restoring default
 // configuration values in SET ... TO DEFAULT (or RESET ...) statements.
-type sessionDefaults struct {
-	applicationName string
-	database        string
-}
+type SessionDefaults map[string]string
 
 // SessionArgs contains arguments for serving a client connection.
 type SessionArgs struct {
-	Database        string
 	User            string
-	ApplicationName string
+	SessionDefaults SessionDefaults
 	// RemoteAddr is the client's address. This is nil iff this is an internal
 	// client.
 	RemoteAddr net.Addr
 }
 
+// isDefined returns true iff the SessionArgs is well-defined.
+// This method exists because SessionArgs is passed by value but it
+// matters to the functions using it whether the value was explicitly
+// specified or left empty.
+func (s SessionArgs) isDefined() bool { return len(s.User) != 0 }
+
 // SessionRegistry stores a set of all sessions on this node.
 // Use register() and deregister() to modify this registry.
 type SessionRegistry struct {
 	syncutil.Mutex
-	store map[ClusterWideID]registrySession
+	sessions map[ClusterWideID]registrySession
 }
 
-// MakeSessionRegistry creates a new SessionRegistry with an empty set
+// NewSessionRegistry creates a new SessionRegistry with an empty set
 // of sessions.
-func MakeSessionRegistry() *SessionRegistry {
-	return &SessionRegistry{store: make(map[ClusterWideID]registrySession)}
+func NewSessionRegistry() *SessionRegistry {
+	return &SessionRegistry{sessions: make(map[ClusterWideID]registrySession)}
 }
 
 func (r *SessionRegistry) register(id ClusterWideID, s registrySession) {
 	r.Lock()
-	r.store[id] = s
+	r.sessions[id] = s
 	r.Unlock()
 }
 
 func (r *SessionRegistry) deregister(id ClusterWideID) {
 	r.Lock()
-	delete(r.store, id)
+	delete(r.sessions, id)
 	r.Unlock()
 }
 
@@ -802,7 +812,7 @@ func (r *SessionRegistry) CancelQuery(queryIDStr string, username string) (bool,
 	r.Lock()
 	defer r.Unlock()
 
-	for _, session := range r.store {
+	for _, session := range r.sessions {
 		if !(username == security.RootUser || username == session.user()) {
 			// Skip this session.
 			continue
@@ -823,7 +833,7 @@ func (r *SessionRegistry) CancelSession(sessionIDBytes []byte, username string) 
 	r.Lock()
 	defer r.Unlock()
 
-	for id, session := range r.store {
+	for id, session := range r.sessions {
 		if !(username == security.RootUser || username == session.user()) {
 			// Skip this session.
 			continue
@@ -843,9 +853,9 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 	r.Lock()
 	defer r.Unlock()
 
-	response := make([]serverpb.Session, 0, len(r.store))
+	response := make([]serverpb.Session, 0, len(r.sessions))
 
-	for _, s := range r.store {
+	for _, s := range r.sessions {
 		response = append(response, s.serialize())
 	}
 
@@ -888,10 +898,16 @@ func (scc *schemaChangerCollection) reset() {
 //
 // The list of closures is cleared after (attempting) execution.
 func (scc *schemaChangerCollection) execSchemaChanges(
-	ctx context.Context, cfg *ExecutorConfig, tracing *SessionTracing,
+	ctx context.Context,
+	cfg *ExecutorConfig,
+	tracing *SessionTracing,
+	ieFactory sqlutil.SessionBoundInternalExecutorFactory,
 ) error {
-	if cfg.SchemaChangerTestingKnobs.SyncFilter != nil && (len(scc.schemaChangers) > 0) {
-		cfg.SchemaChangerTestingKnobs.SyncFilter(TestingSchemaChangerCollection{scc})
+	if len(scc.schemaChangers) == 0 {
+		return nil
+	}
+	if fn := cfg.SchemaChangerTestingKnobs.SyncFilter; fn != nil {
+		fn(TestingSchemaChangerCollection{scc})
 	}
 	// Execute any schema changes that were scheduled, in the order of the
 	// statements that scheduled them.
@@ -902,12 +918,21 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 		sc.distSQLPlanner = cfg.DistSQLPlanner
 		sc.settings = cfg.Settings
 		for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
-			evalCtx := createSchemaChangeEvalCtx(cfg.Clock.Now(), tracing)
+			evalCtx := createSchemaChangeEvalCtx(ctx, cfg.Clock.Now(), tracing, ieFactory)
 			if err := sc.exec(ctx, true /* inSession */, &evalCtx); err != nil {
+				if onError := cfg.SchemaChangerTestingKnobs.OnError; onError != nil {
+					onError(err)
+				}
 				if shouldLogSchemaChangeError(err) {
 					log.Warningf(ctx, "error executing schema change: %s", err)
 				}
-				if err == sqlbase.ErrDescriptorNotFound {
+
+				if err == sqlbase.ErrDescriptorNotFound || err == ctx.Err() {
+					// 1. If the descriptor is dropped while the schema change
+					// is executing, the schema change is considered completed.
+					// 2. If the context is canceled the schema changer quits here
+					// letting the asynchronous code path complete the schema
+					// change.
 				} else if isPermanentSchemaChangeError(err) {
 					// All constraint violations can be reported; we report it as the result
 					// corresponding to the statement that enqueued this changer.
@@ -1089,13 +1114,24 @@ func (st *SessionTracing) StartTracing(
 
 	opName := "session recording"
 	var sp opentracing.Span
-	if parentSp := opentracing.SpanFromContext(st.ex.ctxHolder.connCtx); parentSp != nil {
+	connCtx := st.ex.ctxHolder.connCtx
+
+	// TODO(andrei): use tracing.EnsureChildSpan() or something more efficient
+	// than StartSpan(). The problem is that the current interface doesn't allow
+	// the Recordable option to be passed.
+	if parentSp := opentracing.SpanFromContext(connCtx); parentSp != nil {
 		// Create a child span while recording.
 		sp = parentSp.Tracer().StartSpan(
-			opName, opentracing.ChildOf(parentSp.Context()), tracing.Recordable)
+			opName,
+			opentracing.ChildOf(parentSp.Context()), tracing.Recordable,
+			tracing.LogTagsFromCtx(connCtx),
+		)
 	} else {
 		// Create a root span while recording.
-		sp = st.ex.server.cfg.AmbientCtx.Tracer.StartSpan(opName, tracing.Recordable)
+		sp = st.ex.server.cfg.AmbientCtx.Tracer.StartSpan(
+			opName, tracing.Recordable,
+			tracing.LogTagsFromCtx(connCtx),
+		)
 	}
 	tracing.StartRecording(sp, recType)
 	st.connSpan = sp
@@ -1453,6 +1489,7 @@ func getMessagesForSubtrace(
 		}
 		spanStartMsgs = append(spanStartMsgs, fmt.Sprintf("%s: %s", name, value))
 	}
+	sort.Strings(spanStartMsgs[1:])
 
 	// This message holds all the spanStartMsgs and marks the beginning of the
 	// span, to indicate the start time and duration of the span.
@@ -1526,7 +1563,7 @@ type spanWithIndex struct {
 // see curTxnReadOnly).
 type sessionDataMutator struct {
 	data     *sessiondata.SessionData
-	defaults sessionDefaults
+	defaults SessionDefaults
 	settings *cluster.Settings
 	// curTxnReadOnly is a value to be mutated through SET transaction_read_only = ...
 	curTxnReadOnly *bool

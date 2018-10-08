@@ -27,6 +27,7 @@
 [Scalar]
 define Subquery {
     Input Expr
+    Def   SubqueryDef
 }
 
 # Any is a SQL operator that applies a comparison to every row of an input
@@ -53,7 +54,7 @@ define Subquery {
 define Any {
     Input  Expr
     Scalar Expr
-    Cmp    Operator
+    Def    SubqueryDef
 }
 
 # Variable is the typed scalar value of a column in the query. The private
@@ -163,6 +164,7 @@ define MergeOn {
 [Scalar]
 define Exists {
     Input Expr
+    Def   SubqueryDef
 }
 
 # Filters is a boolean And operator that only appears as the Filters child of
@@ -348,6 +350,8 @@ define JsonSomeExists {
    Right Expr
 }
 
+# AnyScalar is the form of ANY which refers to an ANY operation on a
+# tuple or array, as opposed to Any which operates on a subquery.
 [Scalar]
 define AnyScalar {
    Left  Expr
@@ -519,6 +523,15 @@ define When {
 define Array {
     Elems ExprList
     Typ   Type
+}
+
+# Indirection is a subscripting expression of the form <expr>[<index>].
+# Input must be an Array type and Index must be an int. Multiple indirections
+# and slicing are not supported.
+[Scalar]
+define Indirection {
+    Input Expr
+    Index Expr
 }
 
 # Function invokes a builtin SQL function like CONCAT or NOW, passing the given

@@ -132,7 +132,7 @@ func (sc *SchemaChanger) runBackfill(
 	}
 	version := tableDesc.Version
 
-	log.VEventf(ctx, 0, "Running backfill for %q, v=%d, m=%d",
+	log.Infof(ctx, "Running backfill for %q, v=%d, m=%d",
 		tableDesc.Name, tableDesc.Version, sc.mutationID)
 
 	needColumnBackfill := false
@@ -438,15 +438,16 @@ func (sc *SchemaChanger) distBackfill(
 				},
 				evalCtx.Tracing,
 			)
+			defer recv.Release()
 			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, evalCtx, txn)
 			plan, err := sc.distSQLPlanner.createBackfiller(
-				&planCtx, backfillType, *tableDesc, duration, chunkSize, spans, otherTableDescs, sc.readAsOf,
+				planCtx, backfillType, *tableDesc, duration, chunkSize, spans, otherTableDescs, sc.readAsOf,
 			)
 			if err != nil {
 				return err
 			}
 			sc.distSQLPlanner.Run(
-				&planCtx,
+				planCtx,
 				nil, /* txn - the processors manage their own transactions */
 				&plan, recv, evalCtx,
 				nil, /* finishedSetupFn */
@@ -590,7 +591,9 @@ func runSchemaChangesInTxn(
 			}
 
 		}
-		tableDesc.MakeMutationComplete(m)
+		if err := tableDesc.MakeMutationComplete(m); err != nil {
+			return err
+		}
 	}
 	tableDesc.Mutations = nil
 

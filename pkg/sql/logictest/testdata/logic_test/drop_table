@@ -25,6 +25,11 @@ SELECT * FROM a
 statement ok
 DROP TABLE a
 
+query TT
+SELECT status, running_status FROM [SHOW JOBS]
+----
+running  waiting for GC TTL
+
 query T
 SHOW TABLES FROM test
 ----

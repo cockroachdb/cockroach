@@ -33,14 +33,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -137,7 +138,7 @@ type ServerConfig struct {
 
 	// TempStorage is used by some DistSQL processors to store rows when the
 	// working set is larger than can be stored in memory.
-	TempStorage engine.Engine
+	TempStorage diskmap.Factory
 	// DiskMonitor is used to monitor temporary storage disk usage. Actual disk
 	// space used will be a small multiple (~1.1) of this because of RocksDB
 	// space amplification.
@@ -165,9 +166,7 @@ type ServerConfig struct {
 	// SessionBoundInternalExecutorFactory is used to construct session-bound
 	// executors. The idea is that a higher-layer binds some of the arguments
 	// required, so that users of ServerConfig don't have to care about them.
-	SessionBoundInternalExecutorFactory func(
-		ctx context.Context, sessionData *sessiondata.SessionData,
-	) sqlutil.InternalExecutor
+	SessionBoundInternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
 }
 
 // ServerImpl implements the server for the distributed SQL APIs.
@@ -297,11 +296,20 @@ func (ds *ServerImpl) setupFlow(
 	const opName = "flow"
 	var sp opentracing.Span
 	if parentSpan == nil {
-		sp = ds.Tracer.StartSpan(opName)
+		sp = ds.Tracer.(*tracing.Tracer).StartRootSpan(
+			opName, logtags.FromContext(ctx), tracing.NonRecordableSpan)
 	} else {
 		// We use FollowsFrom because the flow's span outlives the SetupFlow request.
-		sp = ds.Tracer.StartSpan(opName, opentracing.FollowsFrom(parentSpan.Context()))
+		// TODO(andrei): We should use something more efficient than StartSpan; we
+		// should use AmbientContext.AnnotateCtxWithSpan() but that interface
+		// doesn't currently support FollowsFrom relationships.
+		sp = ds.Tracer.StartSpan(
+			opName,
+			opentracing.FollowsFrom(parentSpan.Context()),
+			tracing.LogTagsFromCtx(ctx),
+		)
 	}
+	// sp will be Finish()ed by Flow.Cleanup().
 	ctx = opentracing.ContextWithSpan(ctx, sp)
 
 	// The monitor and account opened here are closed in Flow.Cleanup().
@@ -380,8 +388,8 @@ func (ds *ServerImpl) setupFlow(
 			},
 		}
 
-		evalPlanner := &dummyEvalPlanner{}
-		sequence := &dummySequenceOperators{}
+		evalPlanner := &sqlbase.DummyEvalPlanner{}
+		sequence := &sqlbase.DummySequenceOperators{}
 		evalCtx = &tree.EvalContext{
 			Settings:     ds.ServerConfig.Settings,
 			SessionData:  sd,
@@ -430,6 +438,7 @@ func (ds *ServerImpl) setupFlow(
 		diskMonitor:    ds.DiskMonitor,
 		JobRegistry:    ds.ServerConfig.JobRegistry,
 		traceKV:        req.TraceKV,
+		local:          localState.IsLocal,
 	}
 	f := newFlow(flowCtx, ds.flowRegistry, syncFlowConsumer, localState.LocalProcs)
 	if err := f.setup(ctx, &req.Flow); err != nil {
@@ -439,7 +448,7 @@ func (ds *ServerImpl) setupFlow(
 		return ctx, nil, err
 	}
 	if !f.isLocal() {
-		flowCtx.AddLogTagStr("f", f.id.Short())
+		flowCtx.AddLogTag("f", f.id.Short())
 		flowCtx.AnnotateCtx(ctx)
 	}
 	return ctx, f, nil
@@ -613,6 +622,9 @@ type TestingKnobs struct {
 	// DeterministicStats overrides stats which don't have reliable values, like
 	// stall time and bytes sent. It replaces them with a zero value.
 	DeterministicStats bool
+
+	// Changefeed contains testing knobs specific to the changefeed system.
+	Changefeed base.ModuleTestingKnobs
 }
 
 // MetadataTestLevel represents the types of queries where metadata test
@@ -631,89 +643,6 @@ const (
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*TestingKnobs) ModuleTestingKnobs() {}
-
-var errEvalPlanner = errors.New("cannot backfill such evaluated expression")
-
-// Implements the tree.EvalPlanner interface by returning errors.
-type dummyEvalPlanner struct {
-}
-
-var _ tree.EvalPlanner = &dummyEvalPlanner{}
-
-// Implements the tree.EvalDatabase interface.
-func (ep *dummyEvalPlanner) ParseQualifiedTableName(
-	ctx context.Context, sql string,
-) (*tree.TableName, error) {
-	return nil, errEvalPlanner
-}
-
-// Implements the tree.EvalDatabase interface.
-func (ep *dummyEvalPlanner) LookupSchema(
-	ctx context.Context, dbName, scName string,
-) (bool, tree.SchemaMeta, error) {
-	return false, nil, errEvalPlanner
-}
-
-// Implements the tree.EvalDatabase interface.
-func (ep *dummyEvalPlanner) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
-	return errEvalPlanner
-}
-
-// Implements the tree.EvalPlanner interface.
-func (ep *dummyEvalPlanner) ParseType(sql string) (coltypes.CastTargetType, error) {
-	return nil, errEvalPlanner
-}
-
-// Implements the tree.EvalPlanner interface.
-func (ep *dummyEvalPlanner) EvalSubquery(expr *tree.Subquery) (tree.Datum, error) {
-	return nil, errEvalPlanner
-}
-
-var errSequenceOperators = errors.New("cannot backfill such sequence operation")
-
-// Implements the tree.SequenceOperators interface by returning errors.
-type dummySequenceOperators struct {
-}
-
-// Implements the tree.EvalDatabase interface.
-func (so *dummySequenceOperators) ParseQualifiedTableName(
-	ctx context.Context, sql string,
-) (*tree.TableName, error) {
-	return nil, errSequenceOperators
-}
-
-// Implements the tree.EvalDatabase interface.
-func (so *dummySequenceOperators) ResolveTableName(ctx context.Context, tn *tree.TableName) error {
-	return errSequenceOperators
-}
-
-// Implements the tree.EvalDatabase interface.
-func (so *dummySequenceOperators) LookupSchema(
-	ctx context.Context, dbName, scName string,
-) (bool, tree.SchemaMeta, error) {
-	return false, nil, errSequenceOperators
-}
-
-// Implements the tree.SequenceOperators interface.
-func (so *dummySequenceOperators) IncrementSequence(
-	ctx context.Context, seqName *tree.TableName,
-) (int64, error) {
-	return 0, errSequenceOperators
-}
-
-// Implements the tree.SequenceOperators interface.
-func (so *dummySequenceOperators) GetLatestValueInSessionForSequence(
-	ctx context.Context, seqName *tree.TableName,
-) (int64, error) {
-	return 0, errSequenceOperators
-}
-
-// Implements the tree.SequenceOperators interface.
-func (so *dummySequenceOperators) SetSequenceValue(
-	ctx context.Context, seqName *tree.TableName, newVal int64, isCalled bool,
-) error {
-	return errSequenceOperators
-}
 
 // lazyInternalExecutor is a tree.SessionBoundInternalExecutor that initializes
 // itself only on the first call to QueryRow.

@@ -67,7 +67,7 @@ func GetWindowFunctionInfo(
 			"function is neither an aggregate nor a window function",
 		)
 	}
-	_, builtins := builtins.GetBuiltinProperties(strings.ToLower(funcStr))
+	props, builtins := builtins.GetBuiltinProperties(strings.ToLower(funcStr))
 	for _, b := range builtins {
 		types := b.Types.Types()
 		if len(types) != len(inputTypes) {
@@ -76,6 +76,9 @@ func GetWindowFunctionInfo(
 		match := true
 		for i, t := range types {
 			if !datumTypes[i].Equivalent(t) {
+				if props.NullableArgs && datumTypes[i].IsAmbiguous() {
+					continue
+				}
 				match = false
 				break
 			}
@@ -276,11 +279,6 @@ func (w *windower) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	return nil, w.DrainHelper()
 }
 
-// ConsumerDone is part of the RowSource interface.
-func (w *windower) ConsumerDone() {
-	w.MoveToDraining(nil /* err */)
-}
-
 // ConsumerClosed is part of the RowSource interface.
 func (w *windower) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
@@ -288,13 +286,14 @@ func (w *windower) ConsumerClosed() {
 }
 
 func (w *windower) close() {
-	// Need to close the mem accounting while the context is still valid.
-	w.accumulationAcc.Close(w.Ctx)
-	w.decodingAcc.Close(w.Ctx)
-	w.resultsAcc.Close(w.Ctx)
-	w.partitionsAcc.Close(w.Ctx)
-	w.InternalClose()
-	w.MemMonitor.Stop(w.Ctx)
+	if w.InternalClose() {
+		w.encodedPartitions = nil
+		w.accumulationAcc.Close(w.Ctx)
+		w.decodingAcc.Close(w.Ctx)
+		w.resultsAcc.Close(w.Ctx)
+		w.partitionsAcc.Close(w.Ctx)
+		w.MemMonitor.Stop(w.Ctx)
+	}
 }
 
 // accumulateRows continually reads rows from the input and accumulates them
@@ -339,7 +338,15 @@ func (w *windower) accumulateRows() (windowerState, sqlbase.EncDatumRow, *Produc
 					return windowerStateUnknown, nil, w.DrainHelper()
 				}
 			}
-			w.encodedPartitions[string(w.scratch)] = append(w.encodedPartitions[string(w.scratch)], w.rowAlloc.CopyRow(row))
+			encodedPartition := w.encodedPartitions[string(w.scratch)]
+			if encodedPartition == nil {
+				// Account for the new memory we'll use to store the partition in the map.
+				if err := w.accumulationAcc.Grow(w.Ctx, int64(len(w.scratch))); err != nil {
+					w.MoveToDraining(nil /* err */)
+					return windowerStateUnknown, nil, meta
+				}
+			}
+			w.encodedPartitions[string(w.scratch)] = append(encodedPartition, w.rowAlloc.CopyRow(row))
 		}
 	}
 

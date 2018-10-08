@@ -116,12 +116,11 @@ CREATE CHANGEFEED <name> FOR DATABASE db INTO <...>
     specified as the host and port.
     - `?kafka_topic_prefix=<...>` A string to prepend to the topic names used by
       this changefeed.
-    - `?kafka_schema_topic=<...>` A Kafka topic to emit all schema changes to.
+    - `?schema_topic=<...>` A Kafka topic to emit all schema changes to.
     - `?confluent_schema_registry=<address>` The address of a schema registry
       instance. Only allowed with the avro format. When unspecified, no schema
       registry is used.
-  - `experimental_table:///` A [SQL table sink] in the same CockroachDB cluster.
-    - TODO options
+  - `experimental-sql:///` A [SQL table sink] in the same CockroachDB cluster.
 - `WITH <...>`
   - `WITH envelope=<...>` Records have a key and a value. The key is always set
     to the primary key of the changed row and the value’s contents are

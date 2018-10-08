@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -1419,6 +1418,7 @@ func TestEval(t *testing.T) {
 		{`'192.168.200.95'::inet && '192.168.2.1/8'::inet`, `true`},
 		{`convert_from('\xE290A4'::bytea, 'utf8')`, `e'\U00002424'`},
 		{`convert_from('\x2424'::bytea, 'latin1')`, `'$$'`},
+		{`convert_from('\x2424'::bytea, 'l%%%$^^^&atin--%%%%#$$$%%1')`, `'$$'`},
 		{`convert_from('\xaaaa'::bytea, 'latin1')`, `e'\u00AA\u00AA'`},
 		{`convert_to('abå', 'latin1')`, `'\x6162e5'`},
 		{`convert_to('abå', 'utf8')`, `'\x6162c3a5'`},
@@ -1488,13 +1488,12 @@ func optBuildScalar(evalCtx *tree.EvalContext, e tree.TypedExpr) (tree.TypedExpr
 	o.Init(evalCtx)
 	b := optbuilder.NewScalar(context.TODO(), &tree.SemaContext{}, evalCtx, o.Factory())
 	b.AllowUnsupportedExpr = true
-	group, err := b.Build(e)
-	if err != nil {
+	if err := b.Build(e); err != nil {
 		return nil, err
 	}
-	ev := o.Optimize(group, &props.Physical{})
+	ev := o.Optimize()
 
-	bld := execbuilder.New(nil /* factory */, ev)
+	bld := execbuilder.New(nil /* factory */, ev, evalCtx)
 	ivh := tree.MakeIndexedVarHelper(nil /* container */, 0)
 
 	expr, err := bld.BuildScalar(&ivh)

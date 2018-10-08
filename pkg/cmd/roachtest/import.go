@@ -35,7 +35,14 @@ func registerImportTPCC(r *registry) {
 
 		t.Status("running workload")
 		m := newMonitor(ctx, c)
+		dul := NewDiskUsageLogger(c)
+		m.Go(dul.Runner)
+		hc := NewHealthChecker(c, c.All())
+		m.Go(hc.Runner)
+
 		m.Go(func(ctx context.Context) error {
+			defer dul.Done()
+			defer hc.Done()
 			cmd := fmt.Sprintf(
 				`./workload fixtures make tpcc --warehouses=%d --csv-server='http://localhost:8081' `+
 					`--gcs-bucket-override=%s --gcs-prefix-override=%s`,
@@ -47,19 +54,20 @@ func registerImportTPCC(r *registry) {
 	}
 
 	const warehouses = 1000
-	const numNodes = 4
-	r.Add(testSpec{
-		Name:    fmt.Sprintf("import/tpcc/warehouses=%d/nodes=%d", warehouses, numNodes),
-		Nodes:   nodes(numNodes),
-		Timeout: 5 * time.Hour,
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			runImportTPCC(ctx, t, c, warehouses)
-		},
-	})
+	for _, numNodes := range []int{4, 32} {
+		r.Add(testSpec{
+			Name:    fmt.Sprintf("import/tpcc/warehouses=%d/nodes=%d", warehouses, numNodes),
+			Nodes:   nodes(numNodes),
+			Timeout: 5 * time.Hour,
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				runImportTPCC(ctx, t, c, warehouses)
+			},
+		})
+	}
 }
 
 func registerImportTPCH(r *registry) {
-	for _, n := range []int{4, 8} {
+	for _, n := range []int{4, 8, 32} {
 		r.Add(testSpec{
 			Name:   fmt.Sprintf(`import/tpch/nodes=%d`, n),
 			Nodes:  nodes(n),
@@ -74,8 +82,18 @@ func registerImportTPCH(r *registry) {
 				`); err != nil {
 					t.Fatal(err)
 				}
-				t.Status(`running import`)
-				if _, err := conn.Exec(`
+				m := newMonitor(ctx, c)
+				dul := NewDiskUsageLogger(c)
+				m.Go(dul.Runner)
+				hc := NewHealthChecker(c, c.All())
+				m.Go(hc.Runner)
+
+				m.Go(func(ctx context.Context) error {
+					defer dul.Done()
+					defer hc.Done()
+					t.WorkerStatus(`running import`)
+					defer t.WorkerStatus()
+					_, err := conn.Exec(`
 				IMPORT TABLE csv.lineitem
 				CREATE USING 'gs://cockroach-fixtures/tpch-csv/schema/lineitem.sql'
 				CSV DATA (
@@ -88,9 +106,12 @@ func registerImportTPCH(r *registry) {
 				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.7',
 				'gs://cockroach-fixtures/tpch-csv/sf-100/lineitem.tbl.8'
 				) WITH  delimiter='|'
-			`); err != nil {
-					t.Fatal(err)
-				}
+			`)
+					return err
+				})
+
+				t.Status("waiting")
+				m.Wait()
 			},
 		})
 	}

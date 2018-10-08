@@ -15,7 +15,6 @@
 package cli
 
 import (
-	"context"
 	gohex "encoding/hex"
 	"fmt"
 	"math"
@@ -43,7 +42,7 @@ func (l *localityList) Type() string { return "localityList" }
 func (l *localityList) String() string {
 	string := ""
 	for _, loc := range []roachpb.LocalityAddress(*l) {
-		string += loc.LocalityTier.Key + "=" + loc.LocalityTier.Value + ":" + loc.Address.String() + ","
+		string += loc.LocalityTier.Key + "=" + loc.LocalityTier.Value + "@" + loc.Address.String() + ","
 	}
 
 	return string
@@ -172,7 +171,7 @@ func (k *mvccKey) Set(value string) error {
 		if err != nil {
 			return err
 		}
-		newK, err := engine.DecodeKey(b)
+		newK, err := engine.DecodeMVCCKey(b)
 		if err != nil {
 			encoded := gohex.EncodeToString(engine.EncodeKey(engine.MakeMVCCMetadataKey(roachpb.Key(b))))
 			return errors.Wrapf(err, "perhaps this is just a hex-encoded key; you need an "+
@@ -387,7 +386,7 @@ type percentResolverFunc func(percent int) (int64, error)
 // memoryPercentResolver turns a percent into the respective fraction of the
 // system's internal memory.
 func memoryPercentResolver(percent int) (int64, error) {
-	sizeBytes, err := status.GetTotalMemory(context.TODO())
+	sizeBytes, _, err := status.GetTotalMemoryWithoutLogging()
 	if err != nil {
 		return 0, err
 	}

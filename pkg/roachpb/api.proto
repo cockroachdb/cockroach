@@ -120,7 +120,7 @@ message GetRequest {
 }
 
 // A GetResponse is the return value from the Get() method.
-// If the key doesn't exist, returns nil for Value.Bytes.
+// If the key doesn't exist, Value will be nil.
 message GetResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   Value value = 2;
@@ -619,6 +619,21 @@ message AdminChangeReplicasResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 }
 
+// An AdminRelocateRangeRequest is the argument to the AdminRelocateRange()
+// method. Relocates the replicas for a range to the specified target stores.
+// The first store in the list of targets becomes the new leaseholder.
+message AdminRelocateRangeRequest {
+  option (gogoproto.equal) = true;
+
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  repeated ReplicationTarget targets = 2 [(gogoproto.nullable) = false];
+  // TODO(a-robinson): Add "reason"/"details" string fields?
+}
+
+message AdminRelocateRangeResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
 // A HeartbeatTxnRequest is arguments to the HeartbeatTxn()
 // method. It's sent by transaction coordinators to let the system
 // know that the transaction is still ongoing. Note that this
@@ -1106,6 +1121,11 @@ message ExportRequest {
 
   // Return the exported SST data in the response.
   bool return_sst = 5 [(gogoproto.customname) = "ReturnSST"];
+  // OmitChecksum, if true, will skip checksumming the sst and leave the
+  // `Sha512` field empty in the response. During a rolling upgrade to 2.1, it
+  // may still be set if the request is served by an old node, but since the
+  // caller has declare they're not going to use it, that's okay.
+  bool omit_checksum = 6;
 }
 
 message BulkOpSummary {
@@ -1344,6 +1364,7 @@ message RequestUnion {
     AdminMergeRequest admin_merge = 11;
     AdminTransferLeaseRequest admin_transfer_lease = 29;
     AdminChangeReplicasRequest admin_change_replicas = 35;
+    AdminRelocateRangeRequest admin_relocate_range = 45;
     HeartbeatTxnRequest heartbeat_txn = 12;
     GCRequest gc = 13;
     PushTxnRequest push_txn = 14;
@@ -1392,6 +1413,7 @@ message ResponseUnion {
     AdminMergeResponse admin_merge = 11;
     AdminTransferLeaseResponse admin_transfer_lease = 29;
     AdminChangeReplicasResponse admin_change_replicas = 35;
+    AdminRelocateRangeResponse admin_relocate_range = 45;
     HeartbeatTxnResponse heartbeat_txn = 12;
     GCResponse gc = 13;
     PushTxnResponse push_txn = 14;

@@ -80,6 +80,9 @@ TESTFLAGS :=
 ## Extra flags to pass to `stress` during `make stress`.
 STRESSFLAGS :=
 
+## Cluster to use for `make roachprod-stress`
+CLUSTER :=
+
 DUPLFLAGS    := -t 100
 GOFLAGS      :=
 TAGS         :=
@@ -264,7 +267,7 @@ $(GITHOOKSDIR)/%: githooks/%
 endif
 
 .SECONDARY: pkg/ui/yarn.installed
-pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobufjs-cli.lock
+pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobufjs-cli.lock | bin/.submodules-initialized
 	$(NODE_RUN) -C pkg/ui yarn install --offline
 	# Prevent ProtobufJS from trying to install its own packages because a) the
 	# the feature is buggy, and b) it introduces an unnecessary dependency on NPM.
@@ -283,10 +286,12 @@ pkg/ui/yarn.installed: pkg/ui/package.json pkg/ui/yarn.lock pkg/ui/yarn.protobuf
 # change.
 bin/.bootstrap: $(GITHOOKS) Gopkg.lock | bin/.submodules-initialized
 	@$(GO_INSTALL) -v \
-		./vendor/github.com/golang/dep/cmd/dep \
 		./vendor/github.com/client9/misspell/cmd/misspell \
 		./vendor/github.com/cockroachdb/crlfmt \
+		./vendor/github.com/cockroachdb/gostdlib/cmd/gofmt \
+		./vendor/github.com/cockroachdb/gostdlib/x/tools/cmd/goimports \
 		./vendor/github.com/cockroachdb/stress \
+		./vendor/github.com/golang/dep/cmd/dep \
 		./vendor/github.com/golang/lint/golint \
 		./vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
 		./vendor/github.com/jteeuwen/go-bindata/go-bindata \
@@ -295,7 +300,6 @@ bin/.bootstrap: $(GITHOOKS) Gopkg.lock | bin/.submodules-initialized
 		./vendor/github.com/mibk/dupl \
 		./vendor/github.com/wadey/gocovmerge \
 		./vendor/golang.org/x/perf/cmd/benchstat \
-		./vendor/golang.org/x/tools/cmd/goimports \
 		./vendor/golang.org/x/tools/cmd/goyacc \
 		./vendor/golang.org/x/tools/cmd/stringer
 	touch $@
@@ -495,13 +499,13 @@ $(CGO_FLAGS_FILES): Makefile
 # Flags needed to make cryptopp to runtime detection of AES cpu instruction sets.
 # pclmul and ssse3 need to be defined for the overall AES switch but are only used
 # in GCM mode (not currently in use by cockroach).
-AES_FLAGS := -maes -mpclmul -mssse3
+$(CRYPTOPP_DIR)/Makefile: aes := $(if $(findstring x86_64,$(TARGET_TRIPLE)),-maes -mpclmul -mssse3)
 $(CRYPTOPP_DIR)/Makefile: $(C_DEPS_DIR)/cryptopp-rebuild | bin/.submodules-initialized
 	rm -rf $(CRYPTOPP_DIR)
 	mkdir -p $(CRYPTOPP_DIR)
 	@# NOTE: If you change the CMake flags below, bump the version in
 	@# $(C_DEPS_DIR)/cryptopp-rebuild. See above for rationale.
-	cd $(CRYPTOPP_DIR) && CFLAGS+=" $(AES_FLAGS)" && CXXFLAGS+=" $(AES_FLAGS)" cmake $(xcmake-flags) $(CRYPTOPP_SRC_DIR) \
+	cd $(CRYPTOPP_DIR) && CFLAGS+=" $(aes)" && CXXFLAGS+=" $(aes)" cmake $(xcmake-flags) $(CRYPTOPP_SRC_DIR) \
 	  -DCMAKE_BUILD_TYPE=Release
 
 $(JEMALLOC_SRC_DIR)/configure.ac: | bin/.submodules-initialized
@@ -805,9 +809,9 @@ testbuild:
 testshort: override TESTFLAGS += -short
 
 testrace: ## Run tests with the Go race detector enabled.
-testrace stressrace: override GOFLAGS += -race
-testrace stressrace: export GORACE := halt_on_error=1
-testrace stressrace: TESTTIMEOUT := $(RACETIMEOUT)
+testrace stressrace roachprod-stressrace: override GOFLAGS += -race
+testrace stressrace roachprod-stressrace: export GORACE := halt_on_error=1
+testrace stressrace roachprod-stressrace: TESTTIMEOUT := $(RACETIMEOUT)
 
 # Directory scans in the builder image are excruciatingly slow when running
 # Docker for Mac, so we filter out the 20k+ UI dependencies that are
@@ -833,6 +837,18 @@ stress: ## Run tests under stress.
 stressrace: ## Run tests under stress with the race detector enabled.
 stress stressrace:
 	$(xgo) test $(GOFLAGS) -exec 'stress $(STRESSFLAGS)' -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' -run "$(TESTS)" -timeout 0 $(PKG) $(filter-out -v,$(TESTFLAGS)) -v -args -test.timeout $(TESTTIMEOUT)
+
+.PHONE: roachprod-stress roachprod-stressrace
+roachprod-stress roachprod-stressrace: bin/roachprod-stress
+	# The bootstrap target creates, among other things, ./bin/stress.
+	build/builder.sh make bin/.bootstrap
+	build/builder.sh make test GOFLAGS="$(GOFLAGS) -v -c -o $(notdir $(PKG)).test" PKG=$(PKG)
+	@if [ -z "$(CLUSTER)" ]; then \
+	  echo "ERROR: missing or empty CLUSTER"; \
+	else \
+	  bin/roachprod-stress $(CLUSTER) $(STRESSFLAGS) ./$(notdir $(PKG)).test \
+	    -test.run "$(TESTS)" $(filter-out -v,$(TESTFLAGS)) -test.v -test.timeout $(TESTTIMEOUT); \
+	fi
 
 testlogic: testbaselogic testplannerlogic testoptlogic
 
@@ -1371,6 +1387,7 @@ bins = \
   bin/publish-artifacts \
   bin/optgen \
   bin/returncheck \
+  bin/roachprod-stress \
   bin/roachtest \
   bin/teamcity-trigger \
   bin/uptodate \

@@ -107,6 +107,11 @@ func (ev ExprView) Operator() opt.Operator {
 	return ev.op
 }
 
+// Memo returns the Memo structure over which the ExprView operates.
+func (ev ExprView) Memo() *Memo {
+	return ev.mem
+}
+
 // Logical returns the set of logical properties that this expression provides.
 func (ev ExprView) Logical() *props.Logical {
 	return &ev.mem.group(ev.group).logical
@@ -199,8 +204,7 @@ func (ev ExprView) Replace(evalCtx *tree.EvalContext, replace ReplaceChildFunc) 
 	}
 	existingExpr := ev.mem.NormExpr(ev.group)
 	newExpr := existingExpr.Replace(ev.mem, replace)
-	newGroup := ev.mem.MemoizeNormExpr(evalCtx, newExpr)
-	return MakeNormExprView(ev.mem, newGroup)
+	return ev.mem.MemoizeNormExpr(evalCtx, newExpr)
 }
 
 func (ev ExprView) childGroup(nth int) *group {
@@ -209,10 +213,6 @@ func (ev ExprView) childGroup(nth int) *group {
 
 func (ev ExprView) bestExpr() *BestExpr {
 	return ev.mem.group(ev.group).bestExpr(ev.best)
-}
-
-func (ev ExprView) bestExprID() BestExprID {
-	return BestExprID{group: ev.group, ordinal: ev.best}
 }
 
 // --------------------------------------------------------------------

@@ -28,10 +28,12 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 
@@ -49,13 +51,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
-// https://golang.org/cl/38533 and https://golang.org/cl/91115 changed the
-// validation message.
 func wrongArgCountString(want, got int) string {
-	if strings.HasPrefix(runtime.Version(), "go1.10") {
-		return fmt.Sprintf("sql: expected %d arguments, got %d", want, got)
-	}
-	return fmt.Sprintf("sql: statement expects %d inputs; got %d", want, got)
+	return fmt.Sprintf("sql: expected %d arguments, got %d", want, got)
 }
 
 func trivialQuery(pgURL url.URL) error {
@@ -168,7 +165,7 @@ func TestPGWire(t *testing.T) {
 					if optUser == server.TestUser {
 						// The user TestUser has not been created so authentication
 						// will fail with a valid certificate.
-						if !testutils.IsError(err, fmt.Sprintf("pq: user %s does not exist", server.TestUser)) {
+						if !testutils.IsError(err, fmt.Sprintf("pq: password authentication failed for user %s", server.TestUser)) {
 							t.Errorf("unexpected error: %v", err)
 						}
 					} else {
@@ -205,7 +202,7 @@ func TestPGWireNonexistentUser(t *testing.T) {
 		}
 
 		err := trivialQuery(pgURL)
-		if !testutils.IsError(err, fmt.Sprintf("pq: user %s does not exist", server.TestUser)) {
+		if !testutils.IsError(err, fmt.Sprintf("pq: password authentication failed for user %s", server.TestUser)) {
 			t.Errorf("unexpected error: %v", err)
 		}
 	})
@@ -951,9 +948,23 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(`1101`).Results(`1101`),
 			baseTest.SetArgs(`1101001`).Results(`1101001`),
 		}},
-
 		{"SELECT $1::INT[]", []preparedQueryTest{
 			baseTest.SetArgs(pq.Array([]int64{10})).Results(pq.Array([]int64{10})),
+		}},
+		{"EXPERIMENTAL SCRUB TABLE system.locations", []preparedQueryTest{
+			baseTest.SetArgs(),
+		}},
+		{"ALTER RANGE liveness CONFIGURE ZONE = $1", []preparedQueryTest{
+			baseTest.SetArgs("num_replicas: 1"),
+		}},
+		{"ALTER RANGE liveness CONFIGURE ZONE USING num_replicas = $1", []preparedQueryTest{
+			baseTest.SetArgs(1),
+		}},
+		{"ALTER RANGE liveness CONFIGURE ZONE = $1", []preparedQueryTest{
+			baseTest.SetArgs(gosql.NullString{}),
+		}},
+		{"TRUNCATE TABLE d.str", []preparedQueryTest{
+			baseTest.SetArgs(),
 		}},
 
 		// TODO(nvanbenschoten): Same class of limitation as that in logic_test/typing:
@@ -1448,6 +1459,72 @@ func TestPGPrepareNameQual(t *testing.T) {
 	}
 }
 
+// TestPGPrepareInvalidate ensures that changing table schema triggers recompile
+// of a prepared query.
+func TestPGPrepareInvalidate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.TODO())
+
+	pgURL, cleanupFn := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
+	defer cleanupFn()
+
+	db, err := gosql.Open("postgres", pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	testCases := []struct {
+		stmt    string
+		prep    bool
+		numCols int
+	}{
+		{
+			stmt: `CREATE DATABASE IF NOT EXISTS testing`,
+		},
+		{
+			stmt: `CREATE TABLE IF NOT EXISTS ab (a INT PRIMARY KEY, b INT)`,
+		},
+		{
+			stmt:    `INSERT INTO ab (a, b) VALUES (1, 10)`,
+			prep:    true,
+			numCols: 2,
+		},
+		{
+			stmt:    `ALTER TABLE ab ADD COLUMN c INT`,
+			numCols: 3,
+		},
+		{
+			stmt:    `ALTER TABLE ab DROP COLUMN c`,
+			numCols: 2,
+		},
+	}
+
+	var prep *gosql.Stmt
+	for _, tc := range testCases {
+		if _, err = db.Exec(tc.stmt); err != nil {
+			t.Fatal(err)
+		}
+
+		// Create the prepared statement.
+		if tc.prep {
+			if prep, err = db.Prepare(`SELECT * FROM ab WHERE b=10`); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		if prep != nil {
+			rows, _ := prep.Query()
+			defer rows.Close()
+			cols, _ := rows.Columns()
+			if len(cols) != tc.numCols {
+				t.Fatalf("expected %d cols, got %d cols", tc.numCols, len(cols))
+			}
+		}
+	}
+}
+
 // A DDL should return "CommandComplete", not "EmptyQuery" Response.
 func TestCmdCompleteVsEmptyStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -1775,7 +1852,7 @@ func TestPGWireAuth(t *testing.T) {
 				Host:     net.JoinHostPort(host, port),
 				RawQuery: "sslmode=require",
 			}
-			if err := trivialQuery(unicodeUserPgURL); !testutils.IsError(err, "pq: invalid password") {
+			if err := trivialQuery(unicodeUserPgURL); !testutils.IsError(err, "pq: password authentication failed for user") {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
@@ -1809,7 +1886,7 @@ func TestPGWireAuth(t *testing.T) {
 		// Even though the correct password is supplied (empty string), this
 		// should fail because we do not support password authentication for
 		// users with empty passwords.
-		if err := trivialQuery(testUserPgURL); !testutils.IsError(err, "pq: invalid password") {
+		if err := trivialQuery(testUserPgURL); !testutils.IsError(err, "pq: password authentication failed for user") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1910,3 +1987,121 @@ func TestPGWireTooManyArguments(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestSessionParameters(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params := base.TestServerArgs{Insecure: true}
+	s, _, _ := serverutils.StartServer(t, params)
+
+	ctx := context.TODO()
+	defer s.Stopper().Stop(ctx)
+
+	host, ports, _ := net.SplitHostPort(s.ServingAddr())
+	port, _ := strconv.Atoi(ports)
+
+	connCfg := pgx.ConnConfig{
+		Host:      host,
+		Port:      uint16(port),
+		User:      security.RootUser,
+		TLSConfig: nil, // insecure
+		Logger:    pgxTestLogger{},
+	}
+
+	testData := []struct {
+		varName        string
+		val            string
+		expectedStatus bool
+		expectedSet    bool
+		expectedErr    string
+	}{
+		// Unknown parameters are tolerated without error (a warning will be logged).
+		{"foo", "bar", false, false, ``},
+		// Known parameters are checked to actually be set, even session vars which
+		// are not valid server status params can be set.
+		{"extra_float_digits", "3", false, true, ``},
+		{"extra_float_digits", "-3", false, true, ``},
+		{"distsql", "off", false, true, ``},
+		{"distsql", "auto", false, true, ``},
+		// Case does not matter to set, but the server will reply with special cased
+		// variables.
+		{"timezone", "Europe/Paris", false, true, ``},
+		{"TimeZone", "Europe/Amsterdam", true, true, ``},
+		{"datestyle", "ISO, MDY", false, true, ``},
+		{"DateStyle", "ISO, MDY", true, true, ``},
+		// Known parameters that definitely cannot be set will cause an error.
+		{"server_version", "bar", false, false, `parameter "server_version" cannot be changed.*55P02`},
+		// Erroneous values are also rejected.
+		{"extra_float_digits", "42", false, false, `42 is outside the valid range for parameter "extra_float_digits".*22023`},
+		{"datestyle", "woo", false, false, `invalid value for parameter "DateStyle".*22023`},
+	}
+
+	for _, test := range testData {
+		t.Run(test.varName+"="+test.val, func(t *testing.T) {
+			cfg := connCfg
+			cfg.RuntimeParams = map[string]string{test.varName: test.val}
+			db, err := pgx.Connect(cfg)
+			t.Logf("conn error: %v", err)
+			if !testutils.IsError(err, test.expectedErr) {
+				t.Fatalf("expected %q, got %v", test.expectedErr, err)
+			}
+			if err != nil {
+				return
+			}
+			defer func() { _ = db.Close() }()
+
+			for k, v := range db.RuntimeParams {
+				t.Logf("received runtime param %s = %q", k, v)
+			}
+
+			// If the session var is also a valid status param, then check
+			// the requested value was processed.
+			if test.expectedStatus {
+				serverVal := db.RuntimeParams[test.varName]
+				if serverVal != test.val {
+					t.Fatalf("initial server status %v: got %q, expected %q",
+						test.varName, serverVal, test.val)
+				}
+			}
+
+			// Check the value also inside the session.
+			rows, err := db.Query("SHOW " + test.varName)
+			if err != nil {
+				// Check that the value was not expected to be settable.
+				// (The set was ignored).
+				if !test.expectedSet && strings.Contains(err.Error(), "unrecognized configuration parameter") {
+					return
+				}
+				t.Fatal(err)
+			}
+			// Check that the value set was the value sent by the client.
+			if !rows.Next() {
+				t.Fatal("too short")
+			}
+			if err := rows.Err(); err != nil {
+				t.Fatal(err)
+			}
+			var gotVal string
+			if err := rows.Scan(&gotVal); err != nil {
+				t.Fatal(err)
+			}
+			if rows.Next() {
+				_ = rows.Scan(&gotVal)
+				t.Fatalf("expected no more rows, got %v", gotVal)
+			}
+			t.Logf("server says %s = %q", test.varName, gotVal)
+			if gotVal != test.val {
+				t.Fatalf("expected %q, got %q", test.val, gotVal)
+			}
+		})
+	}
+}
+
+type pgxTestLogger struct{}
+
+func (l pgxTestLogger) Log(level pgx.LogLevel, msg string, data map[string]interface{}) {
+	log.Infof(context.TODO(), "pgx log [%s] %s - %s", level, msg, data)
+}
+
+// pgxTestLogger implements pgx.Logger.
+var _ pgx.Logger = pgxTestLogger{}

@@ -28,6 +28,7 @@ const (
 type replicaWithStats struct {
 	repl *Replica
 	qps  float64
+	// TODO(a-robinson): Include writes-per-second and logicalBytes of storage?
 }
 
 // replicaRankings maintains top-k orderings of the replicas in a store along

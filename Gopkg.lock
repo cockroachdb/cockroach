@@ -118,11 +118,12 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:7cd501539a6126e82ab5835d3ae2b0d996f9c426dda4856bfb975ce72894fc87"
+  digest = "1:b20392f0a4ea88031e44e6a13c8566da8ece9ce834a9fb70768e0518db0fe003"
   name = "github.com/abourget/teamcity"
   packages = ["."]
   pruneopts = "UT"
-  revision = "e241104394f91bf4e65048f9ea5d0c0f3c25b35e"
+  revision = "8ca25c33eb11b24ed691f5f8fc4ca869ef970017"
+  source = "https://github.com/cockroachdb/teamcity"
 
 [[projects]]
   branch = "master"
@@ -293,19 +294,34 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:568184e644ca0114e16fa472037e18bb23a8c0668f9da12f3d2b059e0c548637"
+  digest = "1:5a75ff130630f57609ffca00d6a76dc31bb50ad6a03809848e0f9e13add31987"
   name = "github.com/cockroachdb/cockroach-go"
   packages = ["crdb"]
   pruneopts = "UT"
-  revision = "59c0560478b705bf9bd12f9252224a0fad7c87df"
+  revision = "e0a95dfd547cc9c3ebaaba1a12c2afe4bf621ac5"
 
 [[projects]]
   branch = "master"
-  digest = "1:1e8d6557dd2e9cd72f8a89b1de79f931bee40791119b1d75a70f887e1faea8a8"
+  digest = "1:5c1a738aa52effccd91c780b1514727c347eed563a50bdae35ca9036b910f6bc"
   name = "github.com/cockroachdb/crlfmt"
   packages = ["."]
   pruneopts = "UT"
-  revision = "5895607e5ea790fcbb640260129a12d277b34e46"
+  revision = "ac589b2ed7aaa9410beb9963400c47898216a45e"
+
+[[projects]]
+  branch = "master"
+  digest = "1:8e61a301e4c18b3fc0f3612b78fc0f3aed960bfa8d211e459e87062f9d1f6ce0"
+  name = "github.com/cockroachdb/gostdlib"
+  packages = [
+    "cmd/gofmt",
+    "go/format",
+    "go/printer",
+    "x/tools/cmd/goimports",
+    "x/tools/imports",
+    "x/tools/internal/fastwalk",
+  ]
+  pruneopts = "UT"
+  revision = "2ba3d6f3048c93f59bfdb444b285875a8753d567"
 
 [[projects]]
   branch = "master"
@@ -585,7 +601,8 @@
   revision = "11a7a839e723aa293cccdc353b394dbfce7c131e"
 
 [[projects]]
-  digest = "1:5376fe6ba8b3f1d54401ccdc2a26da4f3cd3c20831fd6bf1448cde10c394a535"
+  branch = "master"
+  digest = "1:c4a33776db6799b4b76d373662939dbab8aacb0ee5ff97cc40f3941eebf40e35"
   name = "github.com/golang/dep"
   packages = [
     ".",
@@ -608,8 +625,7 @@
     "internal/importers/vndr",
   ]
   pruneopts = "UT"
-  revision = "224a564abe296670b692fe08bb63a3e4c4ad7978"
-  version = "v0.5.0"
+  revision = "bbe56e5e9a2596e258cc3fcd24c2153c7b252cb8"
 
 [[projects]]
   branch = "master"
@@ -792,7 +808,7 @@
   version = "v1.0"
 
 [[projects]]
-  digest = "1:e63f5794be681edd5050b092768bc8b15912aa513e4acfd3083e32a9ea895360"
+  digest = "1:8dfbec76b4834d96c37ba4c4969fc47c9a15e67c5a7eecfa031fbe67dab50429"
   name = "github.com/jackc/pgx"
   packages = [
     ".",
@@ -803,8 +819,8 @@
     "pgtype",
   ]
   pruneopts = "UT"
-  revision = "da3231b0b66e2e74cdb779f1d46c5e958ba8be27"
-  version = "v3.1.0"
+  revision = "89f1e6ac7276b61d885db5e5aed6fcbedd1c7e31"
+  version = "v3.2.0"
 
 [[projects]]
   digest = "1:dcb3e2ad17349c0cc89ffc16692d05195e6a67b4924fe81760fba9a307a7271d"
@@ -925,6 +941,14 @@
   pruneopts = "UT"
   revision = "ba38bae1f0ec1ece9092d35bbecbb497ee344cbc"
   version = "v0.15.0"
+
+[[projects]]
+  digest = "1:b22c26daf3e7af2e1bf09da50ab9bc6d7744d7b8c0cba6502e40d2e6163283bc"
+  name = "github.com/linkedin/goavro"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "9e3ffbc22b459192a7090bfd06433b24be086370"
+  version = "v2.6.0"
 
 [[projects]]
   branch = "master"
@@ -1260,6 +1284,14 @@
   version = "v2.18.06"
 
 [[projects]]
+  branch = "master"
+  digest = "1:99c6a6dab47067c9b898e8c8b13d130c6ab4ffbcc4b7cc6236c2cd0b1e344f5b"
+  name = "github.com/shirou/w32"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "bb4de0191aa41b5507caa14b0650cdbddcd9280b"
+
+[[projects]]
   digest = "1:5f2aaa360f48d1711795bd88c7e45a38f86cf81e4bc01453d20983baa67e2d51"
   name = "github.com/sirupsen/logrus"
   packages = ["."]
@@ -1307,14 +1339,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:6ed3bd1e5b150f6454b5163a451e4f2efa4d915541f202d5fa42dc4a5c326dcc"
+  digest = "1:2750995dfc0b02de879216bf6cab6e57c494df4048e58543fc3798bf6aefe44d"
   name = "go.etcd.io/etcd"
   packages = [
     "raft",
     "raft/raftpb",
   ]
   pruneopts = "UT"
-  revision = "1df1ddff4361ed7f2c0f33571923511889a115ce"
+  revision = "f32bc507658e287a69d89e0e1a4d083a01d9da3e"
 
 [[projects]]
   digest = "1:f163a34487229f36dfdb298191d8e17c0e3e6a899aa2cddb020f2ac61ca364ab"
@@ -1451,10 +1483,9 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:f220e3515f6c728e636a70daf8a063f9665edcc995a36d1a6de001977274a2b0"
+  digest = "1:08224af962b4f6706598f999d43460f5c6a1080f033c586631d99d7ea8e5654f"
   name = "golang.org/x/tools"
   packages = [
-    "cmd/goimports",
     "cmd/goyacc",
     "cmd/stringer",
     "container/intsets",
@@ -1465,7 +1496,6 @@
     "go/gcimporter15",
     "go/loader",
     "go/types/typeutil",
-    "imports",
   ]
   pruneopts = "UT"
   revision = "90b807ada4cc7ab5d1409d637b1f3beb5a776be7"
@@ -1632,6 +1662,8 @@
     "github.com/cockroachdb/cmux",
     "github.com/cockroachdb/cockroach-go/crdb",
     "github.com/cockroachdb/crlfmt",
+    "github.com/cockroachdb/gostdlib/cmd/gofmt",
+    "github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",
     "github.com/cockroachdb/returncheck",
     "github.com/cockroachdb/stress",
     "github.com/cockroachdb/ttycolor",
@@ -1688,6 +1720,7 @@
     "github.com/lib/pq",
     "github.com/lib/pq/oid",
     "github.com/lightstep/lightstep-tracer-go",
+    "github.com/linkedin/goavro",
     "github.com/lufia/iostat",
     "github.com/marusama/semaphore",
     "github.com/mattn/go-isatty",
@@ -1743,7 +1776,6 @@
     "golang.org/x/text/language",
     "golang.org/x/text/unicode/norm",
     "golang.org/x/time/rate",
-    "golang.org/x/tools/cmd/goimports",
     "golang.org/x/tools/cmd/goyacc",
     "golang.org/x/tools/cmd/stringer",
     "golang.org/x/tools/container/intsets",

@@ -42,8 +42,8 @@ ALTER TABLE a INJECT STATISTICS '[
 ]'
 ----
 
-# In order to actually create new logical props for the lookup join, we
-# need to call ConstructLookupJoin, which only happens when where is a
+# In order to actually create new logical props for the index join, we
+# need to call ConstructIndexJoin, which only happens when there is a
 # remaining filter.
 opt
 SELECT count(*) FROM (SELECT * FROM a WHERE s = 'foo' AND x + y = 10) GROUP BY s, y
@@ -77,3 +77,76 @@ project
       │         └── (x + y) = 10 [type=bool, outer=(1,2)]
       └── aggregations
            └── count-rows [type=int]
+
+opt colstat=1 colstat=2 colstat=3 colstat=4 colstat=(1,2,3)
+SELECT * FROM a WHERE s = 'foo' AND x + y = 10
+----
+select
+ ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
+ ├── stats: [rows=66.6666667, distinct(1)=66.6666667, distinct(2)=52.9461341, distinct(3)=1, distinct(4)=60.3661899, distinct(1-3)=66.6666667]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
+ ├── index-join a
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=200, distinct(1)=200, distinct(2)=87.8423345, distinct(4)=130.264312, distinct(1-3)=200]
+ │    ├── key: (1)
+ │    ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1), (3,4)~~>(1,2)
+ │    └── scan a@secondary
+ │         ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
+ │         ├── constraint: /-3/4: [/'foo' - /'foo']
+ │         ├── stats: [rows=200, distinct(1)=200, distinct(3)=1, distinct(4)=130.264312, distinct(1,3)=200]
+ │         ├── key: (1)
+ │         └── fd: ()-->(3), (1)-->(4), (4)-->(1)
+ └── filters [type=bool, outer=(1,2)]
+      └── (x + y) = 10 [type=bool, outer=(1,2)]
+
+opt colstat=1 colstat=2 colstat=3 colstat=(1,2,3)
+SELECT * FROM a WHERE s = 'foo'
+----
+index-join a
+ ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
+ ├── stats: [rows=200, distinct(1)=200, distinct(2)=87.8423345, distinct(3)=1, distinct(1-3)=200]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
+ └── scan a@secondary
+      ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
+      ├── constraint: /-3/4: [/'foo' - /'foo']
+      ├── stats: [rows=200, distinct(1)=200, distinct(3)=1, distinct(1,3)=200]
+      ├── key: (1)
+      └── fd: ()-->(3), (1)-->(4), (4)-->(1)
+
+# Note that the row count of the index join does not match the row count of
+# the scan, because the index join's row count was carried over from the
+# normalized SELECT expression in its memo group (see next test case).
+# In order to fix the row count, we need more precise constraint calculation
+# for filters.
+opt colstat=1 colstat=2 colstat=3 colstat=(2,3) colstat=(1,2,3)
+SELECT * FROM a WHERE s = 'foo' OR s = 'bar'
+----
+index-join a
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── stats: [rows=666.666667, distinct(1)=400, distinct(2)=98.8470785, distinct(3)=2, distinct(2,3)=197.694157, distinct(1-3)=666.666667]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ └── scan a@secondary
+      ├── columns: x:1(int!null) s:3(string!null) d:4(decimal!null)
+      ├── constraint: /-3/4: [/'foo' - /'foo'] [/'bar' - /'bar']
+      ├── stats: [rows=400, distinct(1)=400, distinct(3)=2, distinct(1,3)=400]
+      ├── key: (1)
+      └── fd: (1)-->(3,4), (3,4)-->(1)
+
+norm
+SELECT * FROM a WHERE s = 'foo' OR s = 'bar'
+----
+select
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── stats: [rows=666.666667]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=2000]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ └── filters [type=bool, outer=(3)]
+      └── (s = 'foo') OR (s = 'bar') [type=bool, outer=(3)]

@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -84,7 +85,7 @@ func NewProvider(cfg *Config) *Provider {
 // component, which would make the interfaces a little cleaner. Decide whether
 // it's worth it during testing.
 func (p *Provider) Start() {
-	p.cfg.Stopper.RunWorker(log.WithLogTagStr(context.Background(), "ct-closer", ""), p.runCloser)
+	p.cfg.Stopper.RunWorker(logtags.AddTag(context.Background(), "ct-closer", nil), p.runCloser)
 }
 
 func (p *Provider) drain() {

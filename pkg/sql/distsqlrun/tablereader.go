@@ -20,6 +20,8 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
+	"sync"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -37,6 +39,8 @@ type tableReader struct {
 	spans     roachpb.Spans
 	limitHint int64
 
+	ignoreMisplannedRanges bool
+
 	// input is really the fetcher below, possibly wrapped in a stats generator.
 	input RowSource
 	// fetcher is the underlying RowFetcher, should only be used for
@@ -50,6 +54,12 @@ var _ RowSource = &tableReader{}
 
 const tableReaderProcName = "table reader"
 
+var trPool = sync.Pool{
+	New: func() interface{} {
+		return &tableReader{}
+	},
+}
+
 // newTableReader creates a tableReader.
 func newTableReader(
 	flowCtx *FlowCtx,
@@ -62,7 +72,7 @@ func newTableReader(
 		return nil, errors.Errorf("attempting to create a tableReader with uninitialized NodeID")
 	}
 
-	tr := &tableReader{}
+	tr := trPool.Get().(*tableReader)
 
 	tr.limitHint = limitHint(spec.LimitHint, post)
 
@@ -76,6 +86,7 @@ func newTableReader(
 		}
 	}
 	types := spec.Table.ColumnTypesWithMutations(returnMutations)
+	tr.ignoreMisplannedRanges = flowCtx.local
 	if err := tr.Init(
 		tr,
 		post,
@@ -106,7 +117,12 @@ func newTableReader(
 		return nil, err
 	}
 
-	tr.spans = make(roachpb.Spans, len(spec.Spans))
+	nSpans := len(spec.Spans)
+	if cap(tr.spans) >= nSpans {
+		tr.spans = tr.spans[:nSpans]
+	} else {
+		tr.spans = make(roachpb.Spans, nSpans)
+	}
 	for i, s := range spec.Spans {
 		tr.spans[i] = s.Span
 	}
@@ -199,9 +215,11 @@ func initRowFetcher(
 
 func (tr *tableReader) generateTrailingMeta(ctx context.Context) []ProducerMetadata {
 	var trailingMeta []ProducerMetadata
-	ranges := misplannedRanges(tr.Ctx, tr.fetcher.GetRangeInfo(), tr.flowCtx.nodeID)
-	if ranges != nil {
-		trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
+	if !tr.ignoreMisplannedRanges {
+		ranges := misplannedRanges(tr.Ctx, tr.fetcher.GetRangeInfo(), tr.flowCtx.nodeID)
+		if ranges != nil {
+			trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
+		}
 	}
 	if meta := getTxnCoordMeta(ctx, tr.flowCtx.txn); meta != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{TxnCoordMeta: meta})
@@ -236,12 +254,27 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 	return ctx
 }
 
+// Release releases this tableReader back to the pool.
+func (tr *tableReader) Release() {
+	tr.ProcessorBase.Reset()
+	tr.fetcher.Reset()
+	*tr = tableReader{
+		ProcessorBase: tr.ProcessorBase,
+		fetcher:       tr.fetcher,
+		spans:         tr.spans[:0],
+	}
+	trPool.Put(tr)
+}
+
 // Next is part of the RowSource interface.
 func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	for tr.State == StateRunning {
 		row, meta := tr.input.Next()
 
 		if meta != nil {
+			if meta.Err != nil {
+				tr.MoveToDraining(nil /* err */)
+			}
 			return nil, meta
 		}
 		if row == nil {
@@ -254,11 +287,6 @@ func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 	}
 	return nil, tr.DrainHelper()
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (tr *tableReader) ConsumerDone() {
-	tr.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.

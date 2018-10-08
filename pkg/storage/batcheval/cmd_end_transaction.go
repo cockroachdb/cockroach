@@ -33,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
 
@@ -196,7 +198,7 @@ func evalEndTransaction(
 	// not suffered regression.
 	switch reply.Txn.Status {
 	case roachpb.COMMITTED:
-		return result.Result{}, roachpb.NewTransactionStatusError("already committed")
+		return result.Result{}, roachpb.NewTransactionCommittedStatusError()
 
 	case roachpb.ABORTED:
 		if !args.Commit {
@@ -404,7 +406,7 @@ func IsEndTransactionTriggeringRetryError(
 // be safely committed with a forwarded timestamp. This requires that
 // the transaction's timestamp has not leaked and that the transaction
 // has encountered no spans which require refreshing at the forwarded
-// timestamp. If either of those conditions are true, a cient-side
+// timestamp. If either of those conditions are true, a client-side
 // retry is required.
 func canForwardSerializableTimestamp(txn *roachpb.Transaction, noRefreshSpans bool) bool {
 	return !txn.OrigTimestampWasObserved && noRefreshSpans
@@ -490,10 +492,7 @@ func resolveLocalIntents(
 			}
 			return nil
 		}(); err != nil {
-			// TODO(tschottdorf): any legitimate reason for this to happen?
-			// Figure that out and if not, should still be ReplicaCorruption
-			// and not a panic.
-			panic(fmt.Sprintf("error resolving intent at %s on end transaction [%s]: %s", span, txn.Status, err))
+			log.Fatalf(ctx, "error resolving intent at %s on end transaction [%s]: %s", span, txn.Status, err)
 		}
 	}
 	// If the poison arg is set, make sure to set the abort span entry.
@@ -764,7 +763,10 @@ func splitTrigger(
 ) (enginepb.MVCCStats, result.Result, error) {
 	// TODO(tschottdorf): should have an incoming context from the corresponding
 	// EndTransaction, but the plumbing has not been done yet.
-	sp := rec.Tracer().StartSpan("split")
+	// TODO(andrei): should this span be a child of the ctx's (if any)?
+	sp := rec.Tracer().(*tracing.Tracer).StartRootSpan(
+		"split", logtags.FromContext(ctx), tracing.NonRecordableSpan,
+	)
 	defer sp.Finish()
 	desc := rec.Desc()
 	if !bytes.Equal(desc.StartKey, split.LeftDesc.StartKey) ||

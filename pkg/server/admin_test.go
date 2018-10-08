@@ -313,7 +313,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	}
 
 	// Verify Descriptor ID.
-	path, err := ts.admin.queryDescriptorIDPath(ctx, sql.SessionArgs{User: security.RootUser}, []string{testdb})
+	path, err := ts.admin.queryDescriptorIDPath(ctx, security.RootUser, []string{testdb})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -508,9 +508,8 @@ func TestAdminAPITableDetails(t *testing.T) {
 			}
 
 			// Verify Descriptor ID.
-			path, err := ts.admin.queryDescriptorIDPath(
-				ctx, sql.SessionArgs{User: security.RootUser}, []string{tc.dbName, tc.tblName},
-			)
+			path, err := ts.admin.queryDescriptorIDPath(ctx,
+				security.RootUser, []string{tc.dbName, tc.tblName})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -601,9 +600,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 
 	// Get ID path for table. This will be an array of three IDs, containing the ID of the root namespace,
 	// the database, and the table (in that order).
-	idPath, err := ts.admin.queryDescriptorIDPath(
-		ctx, sql.SessionArgs{User: security.RootUser}, []string{"test", "tbl"},
-	)
+	idPath, err := ts.admin.queryDescriptorIDPath(ctx, security.RootUser, []string{"test", "tbl"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1323,8 +1320,6 @@ func TestAdminAPIFullRangeLog(t *testing.T) {
 func TestAdminAPIDataDistribution(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("#24802")
-
 	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
@@ -1381,7 +1376,7 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	// Wait for the new tables' ranges to be created and replicated.
 	testutils.SucceedsSoon(t, func() error {
 		var resp serverpb.DataDistributionResponse
-		if err := getAdminJSONProto(firstServer, "replica_matrix", &resp); err != nil {
+		if err := getAdminJSONProto(firstServer, "data_distribution", &resp); err != nil {
 			t.Fatal(err)
 		}
 
@@ -1393,50 +1388,6 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 		// Don't test anything about the zone configs for now; just verify that something is there.
 		if len(resp.ZoneConfigs) == 0 {
 			return fmt.Errorf("no zone configs returned")
-		}
-
-		return nil
-	})
-
-	// Add a zone config.
-	sqlDB.Exec(t, `ALTER TABLE roachblog.posts EXPERIMENTAL CONFIGURE ZONE 'num_replicas: 1'`)
-
-	expectedNewZoneConfigID := int64(51)
-	sqlDB.CheckQueryResults(
-		t,
-		`SELECT zone_id
-		FROM [EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS]
-		WHERE cli_specifier = 'roachblog.posts'`,
-		[][]string{
-			{fmt.Sprintf("%d", expectedNewZoneConfigID)},
-		},
-	)
-
-	// Verify that we see the zone config and its effects.
-	testutils.SucceedsSoon(t, func() error {
-		var resp serverpb.DataDistributionResponse
-		if err := getAdminJSONProto(firstServer, "replica_matrix", &resp); err != nil {
-			t.Fatal(err)
-		}
-
-		postsTableInfo := resp.DatabaseInfo["roachblog"].TableInfo["posts"]
-
-		// Verify that the TableInfo for roachblog.posts points at the new zone config.
-		if postsTableInfo.ZoneConfigId != expectedNewZoneConfigID {
-			t.Fatalf(
-				"expected roachblog.posts to have zone config id %d; had %d",
-				expectedNewZoneConfigID, postsTableInfo.ZoneConfigId,
-			)
-		}
-
-		// Verify that the num_replicas setting has taken effect.
-		numPostsReplicas := int64(0)
-		for _, count := range postsTableInfo.ReplicaCountByNodeId {
-			numPostsReplicas += count
-		}
-
-		if numPostsReplicas != 1 {
-			return fmt.Errorf("expected 1 replica; got %d", numPostsReplicas)
 		}
 
 		return nil
@@ -1514,6 +1465,8 @@ func TestEnqueueRange(t *testing.T) {
 		{0, "consistencyChecker", realRangeID, allReplicas, leaseholder},
 		{0, "TIMESERIESmaintenance", realRangeID, allReplicas, leaseholder},
 		{1, "raftlog", realRangeID, leaseholder, leaseholder},
+		{2, "raftlog", realRangeID, leaseholder, 1},
+		{3, "raftlog", realRangeID, leaseholder, 1},
 		// Error cases
 		{0, "gv", realRangeID, allReplicas, none},
 		{0, "GC", fakeRangeID, allReplicas, none},

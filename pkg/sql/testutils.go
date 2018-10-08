@@ -120,6 +120,7 @@ func (dsp *DistSQLPlanner) Exec(
 		},
 		p.ExtendedEvalContext().Tracing,
 	)
+	defer recv.Release()
 
 	evalCtx := p.ExtendedEvalContext()
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, p.txn)
@@ -127,6 +128,6 @@ func (dsp *DistSQLPlanner) Exec(
 	planCtx.planner = p
 	planCtx.stmtType = recv.stmtType
 
-	dsp.PlanAndRun(ctx, evalCtx, &planCtx, p.txn, p.curPlan.plan, recv)
+	dsp.PlanAndRun(ctx, evalCtx, planCtx, p.txn, p.curPlan.plan, recv)
 	return rw.Err()
 }

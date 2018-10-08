@@ -400,8 +400,7 @@ func (tc *TableCollection) waitForCacheToDropDatabases(ctx context.Context) {
 		tc.dbCacheSubscriber.waitForCacheState(
 			func(dc *databaseCache) bool {
 				// Resolve the database name from the database cache.
-				dbID, err := dc.getDatabaseID(ctx,
-					tc.leaseMgr.execCfg.DB.Txn, uc.name, false /*required*/)
+				dbID, err := dc.getCachedDatabaseID(ctx, uc.name)
 				if err != nil || dbID == 0 {
 					// dbID can still be 0 if required is false and
 					// the database is not found. Swallowing error here
@@ -418,6 +417,10 @@ func (tc *TableCollection) waitForCacheToDropDatabases(ctx context.Context) {
 				return dbID > uc.id
 			})
 	}
+}
+
+func (tc *TableCollection) hasUncommittedTables() bool {
+	return len(tc.uncommittedTables) > 0
 }
 
 func (tc *TableCollection) addUncommittedTable(desc sqlbase.TableDescriptor) {
@@ -631,6 +634,64 @@ func (p *planner) createSchemaChangeJob(
 	tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
 		MutationID: mutationID, JobID: *job.ID()})
 	return mutationID, nil
+}
+
+// createDropTablesJob creates a schema change job in the system.jobs table.
+// The identifiers of the newly-created job are written in the table descriptor.
+//
+// The job creation is done within the planner's txn. This is important - if the`
+// txn ends up rolling back, the job needs to go away.
+func (p *planner) createDropTablesJob(
+	ctx context.Context,
+	tableDescs []*sqlbase.TableDescriptor,
+	droppedDetails []jobspb.DroppedTableDetails,
+	stmt string,
+	drainNames bool,
+) (int64, error) {
+
+	if len(tableDescs) == 0 {
+		return 0, nil
+	}
+
+	descriptorIDs := make([]sqlbase.ID, 0, len(tableDescs))
+
+	for _, tableDesc := range tableDescs {
+		descriptorIDs = append(descriptorIDs, tableDesc.ID)
+	}
+
+	detailStatus := jobspb.Status_DRAINING_NAMES
+	if !drainNames {
+		detailStatus = jobspb.Status_WAIT_FOR_GC_INTERVAL
+	}
+	for _, droppedDetail := range droppedDetails {
+		droppedDetail.Status = detailStatus
+	}
+
+	runningStatus := jobs.RunningStatusDrainingNames
+	if !drainNames {
+		runningStatus = jobs.RunningStatusWaitingGC
+	}
+	jobRecord := jobs.Record{
+		Description:   stmt,
+		Username:      p.User(),
+		DescriptorIDs: descriptorIDs,
+		Details:       jobspb.SchemaChangeDetails{DroppedTables: droppedDetails},
+		Progress:      jobspb.SchemaChangeProgress{},
+		RunningStatus: runningStatus,
+	}
+	job := p.ExecCfg().JobRegistry.NewJob(jobRecord)
+	if err := job.WithTxn(p.txn).Created(ctx); err != nil {
+		return 0, err
+	}
+
+	if err := job.WithTxn(p.txn).Started(ctx); err != nil {
+		return 0, err
+	}
+
+	for _, tableDesc := range tableDescs {
+		tableDesc.DropJobID = *job.ID()
+	}
+	return *job.ID(), nil
 }
 
 // queueSchemaChange queues up a schema changer to process an outstanding

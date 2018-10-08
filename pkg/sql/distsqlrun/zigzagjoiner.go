@@ -417,7 +417,7 @@ func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int
 }
 
 func (z *zigzagJoiner) close() {
-	if !z.closed {
+	if z.InternalClose() {
 		log.VEventf(z.Ctx, 2, "exiting zigzag joiner run")
 	}
 }
@@ -875,10 +875,6 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		return outRow, nil
 	}
 	return nil, z.DrainHelper()
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (z *zigzagJoiner) ConsumerDone() {
 }
 
 // ConsumerClosed is part of the RowSource interface.

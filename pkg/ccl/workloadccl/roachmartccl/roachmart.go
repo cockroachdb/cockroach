@@ -139,9 +139,19 @@ func (m *roachmart) Hooks() workload.Hooks {
 				return nil
 			}
 			for _, z := range zones {
-				_, err := db.Exec(fmt.Sprintf(
-					"ALTER PARTITION %[1]q OF TABLE users EXPERIMENTAL CONFIGURE ZONE 'constraints: [+zone=%[1]s]'",
-					z))
+				// We are removing the EXPERIMENTAL keyword in 2.1. For compatibility
+				// with 2.0 clusters we still need to try with it if the
+				// syntax without EXPERIMENTAL fails.
+				// TODO(knz): Remove this in 2.2.
+				makeStmt := func(s string) string {
+					return fmt.Sprintf(s, fmt.Sprintf("%q", z), fmt.Sprintf("'constraints: [+zone=%s]'", z))
+				}
+				stmt := makeStmt("ALTER PARTITION %[1]s OF TABLE users CONFIGURE ZONE = %[2]s")
+				_, err := db.Exec(stmt)
+				if err != nil && strings.Contains(err.Error(), "syntax error") {
+					stmt = makeStmt("ALTER PARTITION %[1]s OF TABLE users EXPERIMENTAL CONFIGURE ZONE %[2]s")
+					_, err = db.Exec(stmt)
+				}
 				if err != nil {
 					return err
 				}

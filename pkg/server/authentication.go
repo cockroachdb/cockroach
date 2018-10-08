@@ -139,7 +139,7 @@ func (s *authenticationServer) UserLogin(
 		ID:     id,
 		Secret: secret,
 	}
-	cookie, err := encodeSessionCookie(cookieValue)
+	cookie, err := EncodeSessionCookie(cookieValue)
 	if err != nil {
 		return nil, apiInternalError(ctx, err)
 	}
@@ -248,7 +248,8 @@ WHERE id = $1`
 	}
 
 	hasher := sha256.New()
-	hashedCookieSecret := hasher.Sum(cookie.Secret)
+	_, _ = hasher.Write(cookie.Secret)
+	hashedCookieSecret := hasher.Sum(nil)
 	if !bytes.Equal(hashedSecret, hashedCookieSecret) {
 		return false, "", nil
 	}
@@ -286,7 +287,8 @@ func (s *authenticationServer) newAuthSession(
 	}
 
 	hasher := sha256.New()
-	hashedSecret := hasher.Sum(secret)
+	_, _ = hasher.Write(secret)
+	hashedSecret := hasher.Sum(nil)
 	expiration := s.server.clock.PhysicalTime().Add(webSessionTimeout.Get(&s.server.st.SV))
 
 	insertSessionStmt := `
@@ -327,6 +329,13 @@ type authenticationMux struct {
 	server *authenticationServer
 	inner  http.Handler
 
+	// allowAnonymous, if true, indicates that the authentication mux should
+	// call its inner HTTP handler even if the request doesn't have a valid
+	// session. If there is a valid session, the mux calls its inner handler
+	// with a context containing the username and session ID.
+	//
+	// If allowAnonymous is false, the mux returns an error if there is no
+	// valid session.
 	allowAnonymous bool
 }
 
@@ -356,22 +365,21 @@ const webSessionIDKeyStr = "webSessionID"
 
 func (am *authenticationMux) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	username, cookie, err := am.getSession(w, req)
-	if err != nil && !am.allowAnonymous {
+	if err == nil {
+		ctx := req.Context()
+		ctx = context.WithValue(ctx, webSessionUserKey{}, username)
+		ctx = context.WithValue(ctx, webSessionIDKey{}, cookie.ID)
+		req = req.WithContext(ctx)
+	} else if !am.allowAnonymous {
 		log.Infof(req.Context(), "Web session error: %s", err)
 		http.Error(w, "a valid authentication cookie is required", http.StatusUnauthorized)
 		return
 	}
-
-	newCtx := context.WithValue(req.Context(), webSessionUserKey{}, username)
-	if cookie != nil {
-		newCtx = context.WithValue(newCtx, webSessionIDKey{}, cookie.ID)
-	}
-	newReq := req.WithContext(newCtx)
-
-	am.inner.ServeHTTP(w, newReq)
+	am.inner.ServeHTTP(w, req)
 }
 
-func encodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, error) {
+// EncodeSessionCookie encodes a SessionCookie proto into an http.Cookie.
+func EncodeSessionCookie(sessionCookie *serverpb.SessionCookie) (*http.Cookie, error) {
 	cookieValueBytes, err := protoutil.Marshal(sessionCookie)
 	if err != nil {
 		return nil, errors.Wrap(err, "session cookie could not be encoded")

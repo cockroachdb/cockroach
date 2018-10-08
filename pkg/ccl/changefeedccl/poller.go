@@ -120,7 +120,13 @@ func (p *poller) Run(ctx context.Context) error {
 			}
 		}
 
-		nextHighWater := p.clock.Now()
+		var nextHighWater hlc.Timestamp
+		if p.highWater == (hlc.Timestamp{}) {
+			nextHighWater = p.details.StatementTime
+		} else {
+			nextHighWater = p.clock.Now()
+		}
+
 		log.VEventf(ctx, 1, `changefeed poll [%s,%s): %s`,
 			p.highWater, nextHighWater, time.Duration(nextHighWater.WallTime-p.highWater.WallTime))
 
@@ -193,6 +199,7 @@ func (p *poller) Run(ctx context.Context) error {
 					StartTime:     p.highWater,
 					MVCCFilter:    roachpb.MVCCFilter_All,
 					ReturnSST:     true,
+					OmitChecksum:  true,
 				}
 				if req.StartTime == (hlc.Timestamp{}) {
 					req.MVCCFilter = roachpb.MVCCFilter_Latest
@@ -208,12 +215,20 @@ func (p *poller) Run(ctx context.Context) error {
 					return errors.Wrapf(
 						pErr.GoError(), `fetching changes for [%s,%s)`, span.Key, span.EndKey)
 				}
+				startTime = timeutil.Now()
 				for _, file := range res.(*roachpb.ExportResponse).Files {
 					if err := p.slurpSST(ctx, file.SST); err != nil {
 						return err
 					}
 				}
-				return p.buf.AddResolved(ctx, span, nextHighWater)
+				if err := p.buf.AddResolved(ctx, span, nextHighWater); err != nil {
+					return err
+				}
+				if log.V(2) {
+					log.Infof(ctx, `finished buffering [%s,%s) took %s`,
+						span.Key, span.EndKey, timeutil.Since(startTime))
+				}
+				return nil
 			})
 		}
 		if err := g.Wait(); err != nil {
@@ -359,6 +374,7 @@ func (p *poller) runUsingRangefeeds(ctx context.Context) error {
 						StartTime:     hlc.Timestamp{},
 						MVCCFilter:    roachpb.MVCCFilter_Latest,
 						ReturnSST:     true,
+						OmitChecksum:  true,
 					}
 					startTime := timeutil.Now()
 					res, pErr := client.SendWrappedWith(ctx, sender, header, req)
@@ -453,10 +469,9 @@ func allRangeDescriptors(ctx context.Context, txn *client.Txn) ([]roachpb.RangeD
 // clusterNodeCount returns the approximate number of nodes in the cluster.
 func clusterNodeCount(g *gossip.Gossip) int {
 	var nodes int
-	for k := range g.GetInfoStatus().Infos {
-		if gossip.IsNodeIDKey(k) {
-			nodes++
-		}
-	}
+	_ = g.IterateInfos(gossip.KeyNodeIDPrefix, func(_ string, _ gossip.Info) error {
+		nodes++
+		return nil
+	})
 	return nodes
 }

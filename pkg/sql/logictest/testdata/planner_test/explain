@@ -110,9 +110,11 @@ drop database  ·  ·
 query TTT
 EXPLAIN SHOW JOBS
 ----
-render       ·     ·
- └── values  ·     ·
-·            size  14 columns, 0 rows
+sort              ·      ·
+ │                order  -"coalesce",-started
+ └── render       ·      ·
+      └── values  ·      ·
+·                 size   15 columns, 0 rows
 
 statement ok
 CREATE INDEX a ON foo(x)
@@ -159,7 +161,7 @@ sort                   ·      ·
  └── render            ·      ·
       └── filter       ·      ·
            └── values  ·      ·
-·                      size   6 columns, 90 rows
+·                      size   6 columns, 91 rows
 
 query TTT
 EXPLAIN SHOW DATABASE
@@ -167,7 +169,7 @@ EXPLAIN SHOW DATABASE
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 33 rows
+·                 size  2 columns, 34 rows
 
 query TTT
 EXPLAIN SHOW TIME ZONE
@@ -175,7 +177,7 @@ EXPLAIN SHOW TIME ZONE
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 33 rows
+·                 size  2 columns, 34 rows
 
 query TTT
 EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
@@ -183,7 +185,7 @@ EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 33 rows
+·                 size  2 columns, 34 rows
 
 query TTT
 EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
@@ -191,7 +193,7 @@ EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 33 rows
+·                 size  2 columns, 34 rows
 
 query TTT
 EXPLAIN SHOW TRANSACTION PRIORITY
@@ -199,7 +201,7 @@ EXPLAIN SHOW TRANSACTION PRIORITY
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 33 rows
+·                 size  2 columns, 34 rows
 
 query TTT
 EXPLAIN SHOW COLUMNS FROM foo
@@ -224,7 +226,7 @@ sort                                       ·            ·
                      ├── render            ·            ·
                      │    └── filter       ·            ·
                      │         └── values  ·            ·
-                     │                     size         20 columns, 913 rows
+                     │                     size         20 columns, 926 rows
                      └── render            ·            ·
                           └── filter       ·            ·
                                └── values  ·            ·
@@ -238,7 +240,7 @@ sort                   ·      ·
  └── render            ·      ·
       └── filter       ·      ·
            └── values  ·      ·
-·                      size   8 columns, 575 rows
+·                      size   8 columns, 580 rows
 
 
 query TTT
@@ -260,7 +262,7 @@ sort                             ·         ·
            │                     equality  (relnamespace, oid) = (oid, conrelid)
            ├── filter            ·         ·
            │    └── values       ·         ·
-           │                     size      27 columns, 92 rows
+           │                     size      27 columns, 93 rows
            └── join              ·         ·
                 │                type      cross
                 ├── filter       ·         ·
@@ -378,37 +380,6 @@ SELECT tree, field, description FROM [EXPLAIN (VERBOSE) SELECT DISTINCT v FROM t
 limit                ·         ·
  │                   count     1
  │                   offset    1
- └── distinct        ·         ·
-      └── render     ·         ·
-           │         render 0  test.public.t.v
-           └── scan  ·         ·
-·                    table     t@primary
-·                    spans     ALL
-
-# Ensure EXPLAIN EXECUTE works properly
-
-statement ok
-PREPARE x AS SELECT DISTINCT v from t LIMIT $1
-
-query TTT
-SELECT tree, field, description FROM [EXPLAIN (VERBOSE) EXECUTE x(3)]
-----
-limit                ·         ·
- │                   count     3
- └── distinct        ·         ·
-      └── render     ·         ·
-           │         render 0  test.public.t.v
-           └── scan  ·         ·
-·                    table     t@primary
-·                    spans     ALL
-
-query TTT
-SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) SELECT * FROM [EXECUTE x(3)]
-]
-----
-limit                ·         ·
- │                   count     3
  └── distinct        ·         ·
       └── render     ·         ·
            │         render 0  test.public.t.v

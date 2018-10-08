@@ -704,10 +704,13 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 
 	// Populate IDs.
 	for _, index := range indexes {
-		if index.ID == 0 {
-			index.ID = desc.NextIndexID
-			desc.NextIndexID++
+		if index.ID != 0 {
+			// This index has already been populated. Nothing to do.
+			continue
 		}
+		index.ID = desc.NextIndexID
+		desc.NextIndexID++
+
 		for j, colName := range index.ColumnNames {
 			if len(index.ColumnIDs) <= j {
 				index.ColumnIDs = append(index.ColumnIDs, 0)
@@ -737,10 +740,16 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 					return err
 				}
 				if desc.PrimaryIndex.ContainsColumnID(col.ID) {
-					continue
+					// If the primary index contains a stored column, we don't need to
+					// store it - it's already part of the index.
+					return pgerror.NewErrorf(
+						pgerror.CodeDuplicateColumnError, "index %q already contains column %q", index.Name, col.Name).
+						SetDetailf("column %q is part of the primary index and therefore implicit in all indexes", col.Name)
 				}
 				if index.ContainsColumnID(col.ID) {
-					return fmt.Errorf("index %q already contains column %q", index.Name, col.Name)
+					return pgerror.NewErrorf(
+						pgerror.CodeDuplicateColumnError,
+						"index %q already contains column %q", index.Name, col.Name)
 				}
 				if indexHasOldStoredColumns {
 					index.ExtraColumnIDs = append(index.ExtraColumnIDs, col.ID)
@@ -1045,12 +1054,6 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 	}
 
 	if desc.IsSequence() {
-		if st != nil && st.Version.HasBeenInitialized() {
-			if err := st.Version.CheckVersion(cluster.Version2_0, "sequences"); err != nil {
-				return err
-			}
-		}
-
 		return nil
 	}
 
@@ -1116,19 +1119,7 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 		}
 	}
 
-	if st != nil && st.Version.HasBeenInitialized() {
-		if !st.Version.IsMinSupported(cluster.Version2_0) {
-			for _, def := range desc.Columns {
-				if def.Type.SemanticType == ColumnType_JSONB {
-					return fmt.Errorf("cluster version does not support JSONB (required: %s)",
-						cluster.VersionByKey(cluster.Version2_0))
-				}
-				if def.ComputeExpr != nil {
-					return fmt.Errorf("cluster version does not support computed columns (required: %s)",
-						cluster.VersionByKey(cluster.Version2_0))
-				}
-			}
-		}
+	if st != nil && st.Version.IsInitialized() {
 		if !st.Version.IsMinSupported(cluster.VersionBitArrayColumns) {
 			for _, def := range desc.Columns {
 				if def.Type.SemanticType == ColumnType_BIT {
@@ -1749,6 +1740,11 @@ func (desc *TableDescriptor) RenameColumnDescriptor(column ColumnDescriptor, new
 				idx.ColumnNames[i] = newColName
 			}
 		}
+		for i, id := range idx.StoreColumnIDs {
+			if id == colID {
+				idx.StoreColumnNames[i] = newColName
+			}
+		}
 	}
 	renameColumnInIndex(&desc.PrimaryIndex)
 	for i := range desc.Indexes {
@@ -2002,7 +1998,7 @@ func (desc *TableDescriptor) IsInterleaved() bool {
 }
 
 // MakeMutationComplete updates the descriptor upon completion of a mutation.
-func (desc *TableDescriptor) MakeMutationComplete(m DescriptorMutation) {
+func (desc *TableDescriptor) MakeMutationComplete(m DescriptorMutation) error {
 	switch m.Direction {
 	case DescriptorMutation_ADD:
 		switch t := m.Descriptor_.(type) {
@@ -2011,7 +2007,7 @@ func (desc *TableDescriptor) MakeMutationComplete(m DescriptorMutation) {
 
 		case *DescriptorMutation_Index:
 			if err := desc.AddIndex(*t.Index, false); err != nil {
-				panic(err)
+				return err
 			}
 		}
 
@@ -2023,6 +2019,7 @@ func (desc *TableDescriptor) MakeMutationComplete(m DescriptorMutation) {
 		// Nothing else to be done. The column/index was already removed from the
 		// set of column/index descriptors at mutation creation time.
 	}
+	return nil
 }
 
 // AddColumnMutation adds a column mutation to desc.Mutations.

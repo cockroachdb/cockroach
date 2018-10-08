@@ -34,13 +34,13 @@ func (r *ReplicaPlaceholder) Desc() *roachpb.RangeDescriptor {
 	return &r.rangeDesc
 }
 
-func (r *ReplicaPlaceholder) endKey() roachpb.RKey {
-	return r.Desc().EndKey
+func (r *ReplicaPlaceholder) startKey() roachpb.RKey {
+	return r.Desc().StartKey
 }
 
 // Less implements the btree.Item interface.
 func (r *ReplicaPlaceholder) Less(i btree.Item) bool {
-	return r.Desc().EndKey.Less(i.(rangeKeyItem).endKey())
+	return r.Desc().StartKey.Less(i.(rangeKeyItem).startKey())
 }
 
 func (r *ReplicaPlaceholder) String() string {

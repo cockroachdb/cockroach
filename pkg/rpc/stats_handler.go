@@ -16,7 +16,6 @@ package rpc
 
 import (
 	"context"
-	"net"
 	"sync/atomic"
 
 	"golang.org/x/sync/syncmap"
@@ -131,16 +130,17 @@ func (sh *StatsHandler) TagRPC(ctx context.Context, rti *stats.RPCTagInfo) conte
 // to key into our stats map in order to properly update incoming
 // and outgoing throughput for the implicated remote node.
 func (sh *StatsHandler) HandleRPC(ctx context.Context, rpcStats stats.RPCStats) {
-	remoteAddr, ok := ctx.Value(remoteAddrKey{}).(net.Addr)
+	remoteAddr, ok := ctx.Value(remoteAddrKey{}).(string)
 	if !ok {
 		log.Warningf(ctx, "unable to record stats (%+v); remote addr not found in context", rpcStats)
+		return
 	}
 	// There is a race here, but it's meaningless in practice. Worst
 	// case is we fail to record a handful of observations. We do
 	// this to avoid creating a new Stats object on every invocation.
-	value, ok := sh.stats.Load(remoteAddr.String())
+	value, ok := sh.stats.Load(remoteAddr)
 	if !ok {
-		value, _ = sh.stats.LoadOrStore(remoteAddr.String(), &Stats{})
+		value, _ = sh.stats.LoadOrStore(remoteAddr, &Stats{})
 	}
 	value.(*Stats).record(rpcStats)
 }
@@ -151,7 +151,7 @@ func (sh *StatsHandler) HandleRPC(ctx context.Context, rpcStats stats.RPCStats) 
 // ConnTagInfo, and use that to properly update the Stats object
 // belonging to that remote address.
 func (sh *StatsHandler) TagConn(ctx context.Context, cti *stats.ConnTagInfo) context.Context {
-	return context.WithValue(ctx, remoteAddrKey{}, cti.RemoteAddr)
+	return context.WithValue(ctx, remoteAddrKey{}, cti.RemoteAddr.String())
 }
 
 // HandleConn implements the grpc.stats.Handler interface. This

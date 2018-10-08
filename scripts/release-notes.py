@@ -313,10 +313,6 @@ def collect_authors(commit):
 
 def extract_release_notes(pr, title, commit):
     authors = collect_authors(commit)
-    if norelnote.search(commit.message) is not None:
-        # Explicitly no release note. Nothing to do.
-        # Just report the author(s).
-        return None, authors
 
     msglines = commit.message.split('\n')
     curnote = []
@@ -748,6 +744,7 @@ if len(notified_authors) > 0:
         for person in notified_authors:
             print("-", person, end='')
             if person in firsttime_contributors:
+                annot = ""
                 if person in crdb_folk:
                     annot = ", CockroachDB team member"
                 print(" (first-time contributor%s)" % annot, end='')

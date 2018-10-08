@@ -116,7 +116,7 @@ func TestConn(t *testing.T) {
 
 	// Now we'll expect to receive the commands corresponding to the operations in
 	// client().
-	rd := sql.MakeStmtBufReader(conn.stmtBuf)
+	rd := sql.MakeStmtBufReader(&conn.stmtBuf)
 	expectExecStmt(ctx, t, "SELECT 1", &rd, conn, queryStringComplete)
 	expectSync(ctx, t, &rd)
 	expectExecStmt(ctx, t, "SELECT 2", &rd, conn, queryStringComplete)
@@ -182,30 +182,36 @@ func TestConn(t *testing.T) {
 // processPgxStartup processes the first few queries that the pgx driver
 // automatically sends on a new connection that has been established.
 func processPgxStartup(ctx context.Context, s serverutils.TestServerInterface, c *conn) error {
-	rd := sql.MakeStmtBufReader(c.stmtBuf)
+	rd := sql.MakeStmtBufReader(&c.stmtBuf)
 
 	for {
 		cmd, err := rd.CurCmd()
 		if err != nil {
+			log.Errorf(ctx, "CurCmd error: %v", err)
 			return err
 		}
 
 		if _, ok := cmd.(sql.Sync); ok {
+			log.Infof(ctx, "advancing Sync")
 			rd.AdvanceOne()
 			continue
 		}
 
 		exec, ok := cmd.(sql.ExecStmt)
 		if !ok {
+			log.Infof(ctx, "stop wait at: %v", cmd)
 			return nil
 		}
 		query := exec.Stmt.String()
 		if !strings.HasPrefix(query, "SELECT t.oid") {
+			log.Infof(ctx, "stop wait at query: %s", query)
 			return nil
 		}
 		if err := execQuery(ctx, query, s, c); err != nil {
+			log.Errorf(ctx, "execQuery %s error: %v", query, err)
 			return err
 		}
+		log.Infof(ctx, "executed query: %s", query)
 		rd.AdvanceOne()
 	}
 }
@@ -234,9 +240,10 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 	}
 	conn, err := pgx.Connect(
 		pgx.ConnConfig{
-			Host: host,
-			Port: uint16(port),
-			User: "root",
+			Logger: pgxTestLogger{},
+			Host:   host,
+			Port:   uint16(port),
+			User:   "root",
 			// Setting this so that the queries sent by pgx to initialize the
 			// connection are not using prepared statements. That simplifies the
 			// scaffolding of the test.
@@ -246,7 +253,6 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 	if err != nil {
 		return err
 	}
-	conn.SetLogger(pgxTestLogger{})
 
 	if _, err := conn.Exec("select 1"); err != nil {
 		return err

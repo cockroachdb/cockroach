@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // MatchedRuleFunc defines the callback function for the NotifyOnMatchedRule
@@ -98,18 +98,13 @@ type Factory struct {
 	// temporary results that are accumulated before constructing a new
 	// Projections operator.
 	scratchColList opt.ColList
-
-	// skipSanityChecks disables the checks performed by checkExpr. This is
-	// needed in cases where we might construct not-fully-normalized expressions,
-	// such as in optsteps.
-	skipSanityChecks bool
 }
 
 // Init initializes a Factory structure with a new, blank memo structure inside.
 // This must be called before the factory can be used (or reused).
 func (f *Factory) Init(evalCtx *tree.EvalContext) {
 	f.evalCtx = evalCtx
-	f.mem.Init()
+	f.mem.Init(evalCtx)
 	f.funcs.Init(f)
 	f.matchedRule = nil
 	f.appliedRule = nil
@@ -121,12 +116,6 @@ func (f *Factory) Init(evalCtx *tree.EvalContext) {
 // are applied).
 func (f *Factory) DisableOptimizations() {
 	f.NotifyOnMatchedRule(func(opt.RuleName) bool { return false })
-}
-
-// SkipSanityChecks disables the checkExpr validation checks on expressions
-// produced by this factory.
-func (f *Factory) SkipSanityChecks() {
-	f.skipSanityChecks = true
 }
 
 // NotifyOnMatchedRule sets a callback function which is invoked each time a
@@ -168,25 +157,67 @@ func (f *Factory) InternList(items []memo.GroupID) memo.ListID {
 	return f.mem.InternList(items)
 }
 
+// AssignPlaceholders is used just before execution of a prepared Memo. It walks
+// the tree, replacing any placeholder it finds with its assigned value. This
+// will trigger the rebuild of that node's ancestors, as well as triggering
+// additional normalization rules that can substantially rewrite the tree. Once
+// all placeholders are assigned, the exploration phase can begin.
+func (f *Factory) AssignPlaceholders() error {
+	root, err := f.assignPlaceholders(f.Memo().RootGroup())
+	if err != nil {
+		return err
+	}
+	f.Memo().SetRoot(root, f.Memo().RootProps())
+	return nil
+}
+
 // onConstruct is called as a final step by each factory construction method,
 // so that any custom manual pattern matching/replacement code can be run.
 func (f *Factory) onConstruct(e memo.Expr) memo.GroupID {
-	group := f.mem.MemoizeNormExpr(f.evalCtx, e)
+	ev := f.mem.MemoizeNormExpr(f.evalCtx, e)
 
-	// RaceEnabled ensures that checks are run on every change (as part of make
-	// testrace) while keeping the check code out of non-test builds.
-	if util.RaceEnabled && !f.skipSanityChecks {
-		f.checkExpr(memo.MakeNormExprView(&f.mem, group))
+	// [SimplifyZeroCardinalityGroup]
+	// SimplifyZeroCardinalityGroup replaces a group with [0 - 0] cardinality
+	// with an empty values expression. It is placed here because it depends on
+	// the logical properties of the group in question.
+	if ev.IsRelational() && e.Operator() != opt.ValuesOp {
+		relational := ev.Logical().Relational
+		if relational.Cardinality.IsZero() && !relational.CanHaveSideEffects {
+			if f.matchedRule == nil || f.matchedRule(opt.SimplifyZeroCardinalityGroup) {
+				g := f.funcs.ConstructEmptyValues(f.funcs.OutputCols(ev.Group()))
+				if f.appliedRule != nil {
+					f.appliedRule(opt.SimplifyZeroCardinalityGroup, g, 0, 0)
+				}
+				return g
+			}
+		}
 	}
-	return group
+
+	return ev.Group()
 }
 
 // ----------------------------------------------------------------------
 //
-// Projection construction functions
-//   General helper functions to construct Projections.
+// Convenience construction methods.
 //
 // ----------------------------------------------------------------------
+
+// ConstructConstVal constructs one of the constant value operators from the
+// given datum value. While most constants are represented with Const, there are
+// special-case operators for True, False, and Null, to make matching easier.
+func (f *Factory) ConstructConstVal(d tree.Datum) memo.GroupID {
+	if d == tree.DNull {
+		return f.ConstructNull(f.InternType(types.Unknown))
+	}
+	if boolVal, ok := d.(*tree.DBool); ok {
+		// Map True/False datums to True/False operator.
+		if *boolVal {
+			return f.ConstructTrue()
+		}
+		return f.ConstructFalse()
+	}
+	return f.ConstructConst(f.InternDatum(d))
+}
 
 // ConstructSimpleProject is a convenience wrapper for calling
 // ConstructProject when there are no synthesized columns.

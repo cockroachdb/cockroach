@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 )
 
 func TestStdFlagToPflag(t *testing.T) {
@@ -39,6 +40,13 @@ func TestStdFlagToPflag(t *testing.T) {
 	cf := cockroachCmd.PersistentFlags()
 	flag.VisitAll(func(f *flag.Flag) {
 		if strings.HasPrefix(f.Name, "test.") {
+			return
+		}
+		switch f.Name {
+		case logflags.LogDirName,
+			logflags.LogFileMaxSizeName,
+			logflags.LogFilesCombinedMaxSizeName,
+			logflags.LogFileVerbosityThresholdName:
 			return
 		}
 		if pf := cf.Lookup(f.Name); pf == nil {
@@ -399,8 +407,9 @@ func TestServerConnSettings(t *testing.T) {
 		{[]string{"start", "--advertise-addr", "192.168.0.111", "--port", "12345"}, ":12345", "192.168.0.111:12345", "[]"},
 		{[]string{"start", "--advertise-addr", "192.168.0.111", "--advertise-port", "12345"}, ":" + base.DefaultPort, "192.168.0.111:12345", "[]"},
 		{[]string{"start", "--advertise-addr", "192.168.0.111", "--port", "54321", "--advertise-port", "12345"}, ":54321", "192.168.0.111:12345", "[]"},
-		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@235.0.0.5"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "[{{tcp 235.0.0.5} zone=1}]"},
-		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@235.0.0.5,zone=2@123.0.0.5"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "[{{tcp 235.0.0.5} zone=1} {{tcp 123.0.0.5} zone=2}]"},
+		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@235.0.0.5"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "[{{tcp 235.0.0.5:26257} zone=1}]"},
+		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@235.0.0.5,zone=2@123.0.0.5"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "[{{tcp 235.0.0.5:26257} zone=1} {{tcp 123.0.0.5:26257} zone=2}]"},
+		{[]string{"start", "--host", "127.0.0.1", "--locality-advertise-addr", "zone=1@235.0.0.5:1234"}, "127.0.0.1:" + base.DefaultPort, "127.0.0.1:" + base.DefaultPort, "[{{tcp 235.0.0.5:1234} zone=1}]"},
 	}
 
 	for i, td := range testData {
@@ -419,9 +428,9 @@ func TestServerConnSettings(t *testing.T) {
 				t.Errorf("%d. serverCfg.AdvertiseAddr expected '%s', but got '%s'. td.args was '%#v'.",
 					i, td.expectedAdvertiseAddr, serverCfg.AdvertiseAddr, td.args)
 			}
-			if td.expLocalityAdvertiseAddr != fmt.Sprintf("%s", serverCfg.LocalityIPAddresses) {
+			if td.expLocalityAdvertiseAddr != fmt.Sprintf("%s", serverCfg.LocalityAddresses) {
 				t.Errorf("%d. serverCfg.expLocalityAdvertiseAddr expected '%s', but got '%s'. td.args was '%#v'.",
-					i, td.expLocalityAdvertiseAddr, serverCfg.LocalityIPAddresses, td.args)
+					i, td.expLocalityAdvertiseAddr, serverCfg.LocalityAddresses, td.args)
 			}
 		})
 	}

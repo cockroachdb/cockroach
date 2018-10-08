@@ -57,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -285,12 +286,12 @@ func (tc *testContext) initConfigs(realRange bool, t testing.TB) error {
 	// Put an empty system config into gossip so that gossip callbacks get
 	// run. We're using a fake config, but it's hooked into SystemConfig.
 	if err := tc.gossip.AddInfoProto(gossip.KeySystemConfig,
-		&config.SystemConfig{}, 0); err != nil {
+		&config.SystemConfigEntries{}, 0); err != nil {
 		return err
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if _, ok := tc.gossip.GetSystemConfig(); !ok {
+		if cfg := tc.gossip.GetSystemConfig(); cfg == nil {
 			return errors.Errorf("expected system config to be set")
 		}
 		return nil
@@ -331,7 +332,7 @@ func (tc *testContext) addBogusReplicaToRangeDesc(
 		return roachpb.ReplicaDescriptor{}, err
 	}
 
-	tc.repl.setDescWithoutProcessUpdate(&newDesc)
+	tc.repl.setDesc(ctx, &newDesc)
 	tc.repl.raftMu.Lock()
 	tc.repl.mu.Lock()
 	tc.repl.assertStateLocked(ctx, tc.engine)
@@ -386,11 +387,14 @@ func createReplicaSets(replicaNumbers []roachpb.StoreID) []roachpb.ReplicaDescri
 // transactional batch can be committed as an atomic write.
 func TestIsOnePhaseCommit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	txnReqs := []roachpb.RequestUnion{
-		{Value: &roachpb.RequestUnion_BeginTransaction{BeginTransaction: &roachpb.BeginTransactionRequest{}}},
-		{Value: &roachpb.RequestUnion_Put{Put: &roachpb.PutRequest{}}},
-		{Value: &roachpb.RequestUnion_EndTransaction{EndTransaction: &roachpb.EndTransactionRequest{}}},
-	}
+	txnReqs := make([]roachpb.RequestUnion, 3)
+	txnReqs[0].MustSetInner(&roachpb.BeginTransactionRequest{})
+	txnReqs[1].MustSetInner(&roachpb.PutRequest{})
+	txnReqs[2].MustSetInner(&roachpb.EndTransactionRequest{})
+	txnReqsNoRefresh := make([]roachpb.RequestUnion, 3)
+	txnReqsNoRefresh[0].MustSetInner(&roachpb.BeginTransactionRequest{})
+	txnReqsNoRefresh[1].MustSetInner(&roachpb.PutRequest{})
+	txnReqsNoRefresh[2].MustSetInner(&roachpb.EndTransactionRequest{NoRefreshSpans: true})
 	testCases := []struct {
 		bu      []roachpb.RequestUnion
 		isTxn   bool
@@ -413,6 +417,14 @@ func TestIsOnePhaseCommit(t *testing.T) {
 		{txnReqs, true, false, true, enginepb.SNAPSHOT, false},
 		{txnReqs, true, true, true, enginepb.SERIALIZABLE, false},
 		{txnReqs, true, true, true, enginepb.SNAPSHOT, false},
+		{txnReqsNoRefresh, true, false, false, enginepb.SERIALIZABLE, true},
+		{txnReqsNoRefresh, true, false, false, enginepb.SNAPSHOT, true},
+		{txnReqsNoRefresh, true, true, false, enginepb.SERIALIZABLE, true},
+		{txnReqsNoRefresh, true, true, false, enginepb.SNAPSHOT, false},
+		{txnReqsNoRefresh, true, false, true, enginepb.SERIALIZABLE, true},
+		{txnReqsNoRefresh, true, false, true, enginepb.SNAPSHOT, false},
+		{txnReqsNoRefresh, true, true, true, enginepb.SERIALIZABLE, true},
+		{txnReqsNoRefresh, true, true, true, enginepb.SNAPSHOT, false},
 	}
 
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
@@ -1076,7 +1088,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 
 	// If this actually failed, we would have gossiped from MVCCPutProto.
 	// Unlikely, but why not check.
-	if cfg, ok := tc.gossip.GetSystemConfig(); ok {
+	if cfg := tc.gossip.GetSystemConfig(); cfg != nil {
 		if nv := len(cfg.Values); nv == 1 && cfg.Values[nv-1].Key.Equal(key) {
 			t.Errorf("unexpected gossip of system config: %s", cfg)
 		}
@@ -1114,8 +1126,8 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		cfg, ok := tc.gossip.GetSystemConfig()
-		if !ok {
+		cfg := tc.gossip.GetSystemConfig()
+		if cfg == nil {
 			return errors.Errorf("expected system config to be set")
 		}
 		numValues := len(cfg.Values)
@@ -1325,7 +1337,7 @@ func TestReplicaGossipAllConfigs(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
-	if _, ok := tc.gossip.GetSystemConfig(); !ok {
+	if cfg := tc.gossip.GetSystemConfig(); cfg == nil {
 		t.Fatal("config not set")
 	}
 }
@@ -1389,8 +1401,8 @@ func TestReplicaNoGossipConfig(t *testing.T) {
 		txn.Writing = true
 
 		// System config is not gossiped.
-		cfg, ok := tc.gossip.GetSystemConfig()
-		if !ok {
+		cfg := tc.gossip.GetSystemConfig()
+		if cfg == nil {
 			t.Fatal("config not set")
 		}
 		if len(cfg.Values) != 0 {
@@ -1449,7 +1461,7 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	// Fetch the raw gossip info. GetSystemConfig is based on callbacks at
 	// modification time. But we're checking for _not_ gossiped, so there should
 	// be no callbacks. Easier to check the raw info.
-	var cfg config.SystemConfig
+	var cfg config.SystemConfigEntries
 	err := tc.gossip.GetInfoProto(gossip.KeySystemConfig, &cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -3369,6 +3381,103 @@ func TestReplicaCommandQueueSplitDeclaresWrites(t *testing.T) {
 	}
 }
 
+// TestReplicaCommandQueuePrereqDebugSummary tests the debug summary logged
+// about a request's prerequisites when entering the command queue.
+func TestReplicaCommandQueuePrereqDebugSummary(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var ba1, ba2, ba3 roachpb.BatchRequest
+	txn := newTransaction("test", []byte("k"), 1, enginepb.SERIALIZABLE, nil)
+	bt, _ := beginTxnArgs([]byte("k"), txn)
+	put := putArgs([]byte("k"), []byte("v"))
+	et, _ := endTxnArgs(txn, true)
+	ba1.Add(&bt)
+	ba2.Add(&put, &put, &put)
+	ba3.Add(&bt, &put, &et)
+	cmdForBatch := func(ba *roachpb.BatchRequest) *cmd {
+		return &cmd{debugInfo: ba}
+	}
+
+	testCases := []struct {
+		prereqs prereqCmdSet
+		expect  string
+	}{
+		{
+			prereqs: prereqCmdSet{
+				/* SpanReadOnly */ {
+					/* SpanGlobal */ {},
+					/* SpanLocal */ {},
+				},
+				/* SpanReadWrite */ {
+					/* SpanGlobal */ {},
+					/* SpanLocal */ {},
+				},
+			},
+			expect: "no prereqs",
+		},
+		{
+			prereqs: prereqCmdSet{
+				/* SpanReadOnly */ {
+					/* SpanGlobal */ {},
+					/* SpanLocal */ {},
+				},
+				/* SpanReadWrite */ {
+					/* SpanGlobal */ {cmdForBatch(&ba3)},
+					/* SpanLocal */ {},
+				},
+			},
+			expect: "{write/global: [1 Put, 1 BeginTxn, 1 EndTxn]}",
+		},
+		{
+			prereqs: prereqCmdSet{
+				/* SpanReadOnly */ {
+					/* SpanGlobal */ {cmdForBatch(&ba1)},
+					/* SpanLocal */ {cmdForBatch(&ba1)},
+				},
+				/* SpanReadWrite */ {
+					/* SpanGlobal */ {cmdForBatch(&ba2)},
+					/* SpanLocal */ {cmdForBatch(&ba3)},
+				},
+			},
+			expect: "{read/global: [1 BeginTxn]} {read/local: [1 BeginTxn]} {write/global: [3 Put]} {write/local: [1 Put, 1 BeginTxn, 1 EndTxn]}",
+		},
+		{
+			prereqs: prereqCmdSet{
+				/* SpanReadOnly */ {
+					/* SpanGlobal */ {},
+					/* SpanLocal */ {cmdForBatch(&ba1)},
+				},
+				/* SpanReadWrite */ {
+					/* SpanGlobal */ {},
+					/* SpanLocal */ {cmdForBatch(&ba1), cmdForBatch(&ba2), cmdForBatch(&ba3), cmdForBatch(&ba1)},
+				},
+			},
+			expect: "{read/local: [1 BeginTxn]} {write/local: [1 BeginTxn], [3 Put], [1 Put, 1 BeginTxn, 1 EndTxn], [1 BeginTxn]}",
+		},
+		{
+			prereqs: prereqCmdSet{
+				/* SpanReadOnly */ {
+					/* SpanGlobal */ {},
+					/* SpanLocal */ {cmdForBatch(&ba1)},
+				},
+				/* SpanReadWrite */ {
+					/* SpanGlobal */ {},
+					/* SpanLocal */ {cmdForBatch(&ba1), cmdForBatch(&ba2), cmdForBatch(&ba3), cmdForBatch(&ba1), cmdForBatch(&ba2), cmdForBatch(&ba3)},
+				},
+			},
+			expect: "{read/local: [1 BeginTxn]} {write/local: [1 BeginTxn], [3 Put], [1 Put, 1 BeginTxn, 1 EndTxn], [1 BeginTxn], [3 Put], ...}",
+		},
+	}
+	for _, test := range testCases {
+		t.Run(test.expect, func(t *testing.T) {
+			s := prereqDebugSummary(test.prereqs)
+			if s != test.expect {
+				t.Errorf("expected %q for %+v, found %q", test.expect, test.prereqs, s)
+			}
+		})
+	}
+}
+
 func SendWrapped(
 	ctx context.Context, sender client.Sender, header roachpb.Header, args roachpb.Request,
 ) (roachpb.Response, roachpb.BatchResponse_Header, *roachpb.Error) {
@@ -4926,7 +5035,7 @@ func TestEndTransactionDirectGC(t *testing.T) {
 			defer stopper.Stop(context.TODO())
 			tc.Start(t, stopper)
 
-			ctx := log.WithLogTag(context.Background(), "testcase", i)
+			ctx := logtags.AddTag(context.Background(), "testcase", i)
 
 			rightRepl, txn := setupResolutionTest(t, tc, testKey, splitKey, false /* generate AbortSpan entry */)
 
@@ -7035,9 +7144,10 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 
 func TestReplicaDestroy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	tc := testContext{}
 	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
+	defer stopper.Stop(ctx)
 	tc.Start(t, stopper)
 
 	repl, err := tc.store.GetReplica(1)
@@ -7056,18 +7166,16 @@ func TestReplicaDestroy(t *testing.T) {
 		}
 	}
 
-	if err := repl.setDesc(newDesc); err != nil {
-		t.Fatal(err)
-	}
+	repl.setDesc(ctx, newDesc)
 	expectedErr := "replica descriptor's ID has changed"
-	if err := tc.store.removeReplicaImpl(context.Background(), tc.repl, origDesc.NextReplicaID, RemoveOptions{
+	if err := tc.store.removeReplicaImpl(ctx, tc.repl, origDesc.NextReplicaID, RemoveOptions{
 		DestroyData: true,
 	}); !testutils.IsError(err, expectedErr) {
 		t.Fatalf("expected error %q but got %v", expectedErr, err)
 	}
 
 	// Now try a fresh descriptor and succeed.
-	if err := tc.store.removeReplicaImpl(context.Background(), tc.repl, repl.Desc().NextReplicaID, RemoveOptions{
+	if err := tc.store.removeReplicaImpl(ctx, tc.repl, repl.Desc().NextReplicaID, RemoveOptions{
 		DestroyData: true,
 	}); err != nil {
 		t.Fatal(err)
@@ -7195,8 +7303,8 @@ func TestEntries(t *testing.T) {
 		}},
 		// Case 5: Get a single entry from cache.
 		{lo: indexes[5], hi: indexes[6], expResultCount: 1, expCacheCount: 1, setup: nil},
-		// Case 6: Use MaxUint64 instead of 0 for maxBytes.
-		{lo: indexes[5], hi: indexes[9], maxBytes: math.MaxUint64, expResultCount: 4, expCacheCount: 4, setup: nil},
+		// Case 6: Get range without size limitation. (Like case 4, without truncating).
+		{lo: indexes[5], hi: indexes[9], expResultCount: 4, expCacheCount: 4, setup: nil},
 		// Case 7: maxBytes is set low so only a single value should be
 		// returned.
 		{lo: indexes[5], hi: indexes[9], maxBytes: 1, expResultCount: 1, expCacheCount: 1, setup: nil},
@@ -7242,7 +7350,10 @@ func TestEntries(t *testing.T) {
 		if tc.setup != nil {
 			tc.setup()
 		}
-		cacheEntries, _, _ := repl.store.raftEntryCache.getEntries(nil, rangeID, tc.lo, tc.hi, tc.maxBytes)
+		if tc.maxBytes == 0 {
+			tc.maxBytes = math.MaxUint64
+		}
+		cacheEntries, _, _, hitLimit := repl.store.raftEntryCache.getEntries(nil, rangeID, tc.lo, tc.hi, tc.maxBytes)
 		if len(cacheEntries) != tc.expCacheCount {
 			t.Errorf("%d: expected cache count %d, got %d", i, tc.expCacheCount, len(cacheEntries))
 		}
@@ -7258,12 +7369,17 @@ func TestEntries(t *testing.T) {
 		}
 		if len(ents) != tc.expResultCount {
 			t.Errorf("%d: expected %d entries, got %d", i, tc.expResultCount, len(ents))
+		} else if tc.expResultCount > 0 {
+			expHitLimit := ents[len(ents)-1].Index < tc.hi-1
+			if hitLimit != expHitLimit {
+				t.Errorf("%d: unexpected hit limit: %t", i, hitLimit)
+			}
 		}
 	}
 
 	// Case 23: Lo must be less than or equal to hi.
 	repl.mu.Lock()
-	if _, err := repl.raftEntriesLocked(indexes[9], indexes[5], 0); err == nil {
+	if _, err := repl.raftEntriesLocked(indexes[9], indexes[5], math.MaxUint64); err == nil {
 		t.Errorf("23: error expected, got none")
 	}
 	repl.mu.Unlock()
@@ -7276,21 +7392,34 @@ func TestEntries(t *testing.T) {
 
 	repl.mu.Lock()
 	defer repl.mu.Unlock()
-	if _, err := repl.raftEntriesLocked(indexes[5], indexes[9], 0); err == nil {
+	if _, err := repl.raftEntriesLocked(indexes[5], indexes[9], math.MaxUint64); err == nil {
 		t.Errorf("24: error expected, got none")
 	}
 
-	// Case 25: don't hit the gap due to maxBytes.
-	ents, err := repl.raftEntriesLocked(indexes[5], indexes[9], 1)
-	if err != nil {
-		t.Errorf("25: expected no error, got %s", err)
+	// Case 25a: don't hit the gap due to maxBytes, cache populated.
+	{
+		ents, err := repl.raftEntriesLocked(indexes[5], indexes[9], 1)
+		if err != nil {
+			t.Errorf("25: expected no error, got %s", err)
+		}
+		if len(ents) != 1 {
+			t.Errorf("25: expected 1 entry, got %d", len(ents))
+		}
 	}
-	if len(ents) != 1 {
-		t.Errorf("25: expected 1 entry, got %d", len(ents))
+	// Case 25b: don't hit the gap due to maxBytes, cache cleared.
+	{
+		repl.store.raftEntryCache.delEntries(rangeID, indexes[5], indexes[5]+1)
+		ents, err := repl.raftEntriesLocked(indexes[5], indexes[9], 1)
+		if err != nil {
+			t.Errorf("25: expected no error, got %s", err)
+		}
+		if len(ents) != 1 {
+			t.Errorf("25: expected 1 entry, got %d", len(ents))
+		}
 	}
 
 	// Case 26: don't hit the gap due to truncation.
-	if _, err := repl.raftEntriesLocked(indexes[4], indexes[9], 0); err != raft.ErrCompacted {
+	if _, err := repl.raftEntriesLocked(indexes[4], indexes[9], math.MaxUint64); err != raft.ErrCompacted {
 		t.Errorf("26: expected error %s , got %s", raft.ErrCompacted, err)
 	}
 }
@@ -7829,7 +7958,10 @@ func TestReplicaIDChangePending(t *testing.T) {
 	repl.mu.Lock()
 	repl.mu.submitProposalFn = func(p *ProposalData) error {
 		if p.Request.Timestamp == magicTS {
-			commandProposed <- struct{}{}
+			select {
+			case commandProposed <- struct{}{}:
+			default:
+			}
 		}
 		return nil
 	}
@@ -8356,6 +8488,151 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 	}
 }
 
+func TestReplicaShouldDropForwardedProposal(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	cmdSeen, cmdNotSeen := makeIDKey(), makeIDKey()
+	data, noData := []byte("data"), []byte("")
+
+	testCases := []struct {
+		name                string
+		leader              bool
+		msg                 raftpb.Message
+		expDrop             bool
+		expRemotePropsAfter int
+	}{
+		{
+			name:   "new proposal",
+			leader: true,
+			msg: raftpb.Message{
+				Type: raftpb.MsgProp,
+				Entries: []raftpb.Entry{
+					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdNotSeen, data)},
+				},
+			},
+			expDrop:             false,
+			expRemotePropsAfter: 2,
+		},
+		{
+			name:   "duplicate proposal",
+			leader: true,
+			msg: raftpb.Message{
+				Type: raftpb.MsgProp,
+				Entries: []raftpb.Entry{
+					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdSeen, data)},
+				},
+			},
+			expDrop:             true,
+			expRemotePropsAfter: 1,
+		},
+		{
+			name:   "partially new proposal",
+			leader: true,
+			msg: raftpb.Message{
+				Type: raftpb.MsgProp,
+				Entries: []raftpb.Entry{
+					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdNotSeen, data)},
+					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdSeen, data)},
+				},
+			},
+			expDrop:             false,
+			expRemotePropsAfter: 2,
+		},
+		{
+			name:   "empty proposal",
+			leader: true,
+			msg: raftpb.Message{
+				Type: raftpb.MsgProp,
+				Entries: []raftpb.Entry{
+					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdNotSeen, noData)},
+				},
+			},
+			expDrop:             false,
+			expRemotePropsAfter: 1,
+		},
+		{
+			name:   "conf change",
+			leader: true,
+			msg: raftpb.Message{
+				Type: raftpb.MsgProp,
+				Entries: []raftpb.Entry{
+					{Type: raftpb.EntryConfChange, Data: encodeRaftCommandV1(cmdNotSeen, data)},
+				},
+			},
+			expDrop:             false,
+			expRemotePropsAfter: 1,
+		},
+		{
+			name:   "non proposal",
+			leader: true,
+			msg: raftpb.Message{
+				Type: raftpb.MsgApp,
+			},
+			expDrop:             false,
+			expRemotePropsAfter: 1,
+		},
+		{
+			name:   "not leader",
+			leader: false,
+			msg: raftpb.Message{
+				Type: raftpb.MsgProp,
+				Entries: []raftpb.Entry{
+					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdNotSeen, data)},
+				},
+			},
+			expDrop:             false,
+			expRemotePropsAfter: 0,
+		},
+	}
+	for _, c := range testCases {
+		t.Run(c.name, func(t *testing.T) {
+			var tc testContext
+			stopper := stop.NewStopper()
+			defer stopper.Stop(context.TODO())
+			tc.Start(t, stopper)
+			tc.repl.mu.Lock()
+			defer tc.repl.mu.Unlock()
+
+			rg := tc.repl.mu.internalRaftGroup
+			if c.leader {
+				// Set the remoteProposals map to only contain cmdSeen.
+				tc.repl.mu.remoteProposals = map[storagebase.CmdIDKey]struct{}{
+					cmdSeen: {},
+				}
+				// Make sure the replica is the leader.
+				if s := rg.Status(); s.RaftState != raft.StateLeader {
+					t.Errorf("Replica not leader: %v", s)
+				}
+			} else {
+				// Clear the remoteProposals map.
+				tc.repl.mu.remoteProposals = nil
+				// Force the replica to step down as the leader by sending it a
+				// heartbeat at a high term.
+				if err := rg.Step(raftpb.Message{
+					Type: raftpb.MsgHeartbeat,
+					Term: 999,
+				}); err != nil {
+					t.Error(err)
+				}
+				if s := rg.Status(); s.RaftState != raft.StateFollower {
+					t.Errorf("Replica not follower: %v", s)
+				}
+			}
+
+			req := &RaftMessageRequest{Message: c.msg}
+			drop := tc.repl.shouldDropForwardedProposalLocked(req)
+			if c.expDrop != drop {
+				t.Errorf("expected drop=%t, found %t", c.expDrop, drop)
+			}
+
+			tc.repl.maybeTrackForwardedProposalLocked(rg, req)
+			if l := len(tc.repl.mu.remoteProposals); c.expRemotePropsAfter != l {
+				t.Errorf("expected %d tracked remote proposals, found %d", c.expRemotePropsAfter, l)
+			}
+		})
+	}
+}
+
 // checkValue asserts that the value for a key is the expected one.
 // The function will attempt to resolve the intent present on the key, if any.
 func checkValue(ctx context.Context, tc *testContext, key []byte, expectedVal []byte) error {
@@ -8802,20 +9079,26 @@ func TestReplicaMetrics(t *testing.T) {
 		}
 		return d
 	}
-	live := func(ids ...roachpb.NodeID) map[roachpb.NodeID]bool {
-		m := make(map[roachpb.NodeID]bool)
+	live := func(ids ...roachpb.NodeID) IsLiveMap {
+		m := IsLiveMap{}
 		for _, id := range ids {
-			m[id] = true
+			m[id] = IsLiveMapEntry{IsLive: true}
 		}
 		return m
 	}
+
+	var tc testContext
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	cfg := TestStoreConfig(nil)
+	tc.StartWithStoreConfig(t, stopper, cfg)
 
 	testCases := []struct {
 		replicas    int32
 		storeID     roachpb.StoreID
 		desc        roachpb.RangeDescriptor
 		raftStatus  *raft.Status
-		liveness    map[roachpb.NodeID]bool
+		liveness    IsLiveMap
 		raftLogSize int64
 		expected    ReplicaMetrics
 	}{
@@ -8998,6 +9281,7 @@ func TestReplicaMetrics(t *testing.T) {
 				RaftLogTooLarge: true,
 			}},
 	}
+
 	for i, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			zoneConfig := config.ZoneConfig{NumReplicas: c.replicas}
@@ -9008,9 +9292,10 @@ func TestReplicaMetrics(t *testing.T) {
 			c.expected.Quiescent = i%2 == 0
 			c.expected.Ticking = !c.expected.Quiescent
 			metrics := calcReplicaMetrics(
-				context.Background(), hlc.Timestamp{}, config.SystemConfig{},
-				c.liveness, &c.desc, c.raftStatus, LeaseStatus{},
-				c.storeID, c.expected.Quiescent, c.expected.Ticking, CommandQueueMetrics{}, CommandQueueMetrics{}, c.raftLogSize)
+				context.Background(), hlc.Timestamp{}, &zoneConfig,
+				c.liveness, 0, &c.desc, c.raftStatus, LeaseStatus{},
+				c.storeID, c.expected.Quiescent, c.expected.Ticking,
+				CommandQueueMetrics{}, CommandQueueMetrics{}, c.raftLogSize)
 			if c.expected != metrics {
 				t.Fatalf("unexpected metrics:\n%s", pretty.Diff(c.expected, metrics))
 			}
@@ -9538,7 +9823,7 @@ type testQuiescer struct {
 	lastIndex      uint64
 	raftReady      bool
 	ownsValidLease bool
-	livenessMap    map[roachpb.NodeID]bool
+	livenessMap    IsLiveMap
 }
 
 func (q *testQuiescer) descRLocked() *roachpb.RangeDescriptor {
@@ -9605,10 +9890,10 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 				lastIndex:      logIndex,
 				raftReady:      false,
 				ownsValidLease: true,
-				livenessMap: map[roachpb.NodeID]bool{
-					1: true,
-					2: true,
-					3: true,
+				livenessMap: IsLiveMap{
+					1: {IsLive: true},
+					2: {IsLive: true},
+					3: {IsLive: true},
 				},
 			}
 			q = transform(q)
@@ -9689,7 +9974,7 @@ func TestShouldReplicaQuiesce(t *testing.T) {
 	// the replica is on a non-live node.
 	for _, i := range []uint64{1, 2, 3} {
 		test(true, func(q *testQuiescer) *testQuiescer {
-			q.livenessMap[roachpb.NodeID(i)] = false
+			q.livenessMap[roachpb.NodeID(i)] = IsLiveMapEntry{IsLive: false}
 			q.status.Progress[i] = raft.Progress{Match: invalidIndex}
 			return q
 		})
@@ -9805,7 +10090,7 @@ func TestConsistenctQueueErrorFromCheckConsistency(t *testing.T) {
 
 	for i := 0; i < 2; i++ {
 		// Do this twice because it used to deadlock. See #25456.
-		sysCfg, _ := tc.store.Gossip().GetSystemConfig()
+		sysCfg := tc.store.Gossip().GetSystemConfig()
 		if err := tc.store.consistencyQueue.process(ctx, tc.repl, sysCfg); !testutils.IsError(err, "boom") {
 			t.Fatal(err)
 		}
@@ -9903,6 +10188,19 @@ func TestReplicaLocalRetries(t *testing.T) {
 				return
 			},
 			expTSCUpdateKeys: []string{"b-iput"},
+		},
+		{
+			name: "serializable push without retry",
+			setupFn: func() (hlc.Timestamp, error) {
+				return get("a")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba.Timestamp = ts.Prev()
+				expTS = ts.Next()
+				put := putArgs(roachpb.Key("a"), []byte("put2"))
+				ba.Add(&put)
+				return
+			},
 		},
 		// Non-1PC serializable txn cput will fail with write too old error.
 		{
@@ -10060,6 +10358,26 @@ func TestReplicaLocalRetries(t *testing.T) {
 				return
 			},
 			expTSCUpdateKeys: []string{"h"},
+		},
+		// Serializable 1PC transaction will commit with forwarded timestamp
+		// using the 1PC path if no refresh spans.
+		{
+			name: "serializable commit with forwarded timestamp on 1PC txn",
+			setupFn: func() (hlc.Timestamp, error) {
+				return get("a")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba roachpb.BatchRequest, expTS hlc.Timestamp) {
+				ba.Txn = newTxn("a", ts.Prev())
+				expTS = ts.Next()
+				bt, _ := beginTxnArgs(ba.Txn.Key, ba.Txn)
+				cput := putArgs(ba.Txn.Key, []byte("put"))
+				et, _ := endTxnArgs(ba.Txn, true /* commit */)
+				et.Require1PC = true     // don't allow this to bypass the 1PC optimization
+				et.NoRefreshSpans = true // necessary to indicate local retry is possible
+				ba.Add(&bt, &cput, &et)
+				assignSeqNumsForReqs(ba.Txn, &bt, &cput, &et)
+				return
+			},
 		},
 		// Serializable transaction will commit with WriteTooOld flag if no refresh spans.
 		{

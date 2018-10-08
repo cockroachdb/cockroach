@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/dustin/go-humanize"
+	humanize "github.com/dustin/go-humanize"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
 )
@@ -81,10 +81,15 @@ func runLargeRangeSplits(ctx context.Context, t *test, c *cluster, size int) {
 
 		t.Status("increasing range_max_bytes")
 		setRangeMaxBytes := func(maxBytes int) {
-			stmtZone := fmt.Sprintf(`ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE '
-range_max_bytes: %d
-'`, maxBytes)
-			if _, err := db.Exec(stmtZone); err != nil {
+			stmtZone := fmt.Sprintf("ALTER RANGE default CONFIGURE ZONE USING range_max_bytes = %d", maxBytes)
+			_, err := db.Exec(stmtZone)
+			if err != nil && strings.Contains(err.Error(), "syntax error") {
+				// Pre-2.1 was EXPERIMENTAL.
+				// TODO(knz): Remove this in 2.2.
+				stmtZone = fmt.Sprintf("ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE '\nrange_max_bytes: %d\n'", maxBytes)
+				_, err = db.Exec(stmtZone)
+			}
+			if err != nil {
 				t.Fatalf("failed to set range_max_bytes: %v", err)
 			}
 		}

@@ -988,7 +988,7 @@ func TestStoreZoneUpdateAndRangeSplit(t *testing.T) {
 	config.TestingSetZoneConfig(descID, config.ZoneConfig{RangeMaxBytes: maxBytes})
 
 	// Trigger gossip callback.
-	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
+	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfigEntries{}, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1048,7 +1048,7 @@ func TestStoreRangeSplitWithMaxBytesUpdate(t *testing.T) {
 	config.TestingSetZoneConfig(descID, config.ZoneConfig{RangeMaxBytes: maxBytes})
 
 	// Trigger gossip callback.
-	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfig{}, 0); err != nil {
+	if err := store.Gossip().AddInfoProto(gossip.KeySystemConfig, &config.SystemConfigEntries{}, 0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2534,6 +2534,12 @@ func TestUnsplittableRange(t *testing.T) {
 			TTLSeconds: int32(ttl.Seconds()),
 		},
 	})()
+	defer config.TestingSetDefaultSystemZoneConfig(config.ZoneConfig{
+		RangeMaxBytes: maxBytes,
+		GC: config.GCPolicy{
+			TTLSeconds: int32(ttl.Seconds()),
+		},
+	})()
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
@@ -2934,6 +2940,7 @@ func TestStoreSplitRangeLookupRace(t *testing.T) {
 	// scan for key "k" after it has scanned over the first meta2 range but not
 	// the second.
 	blockRangeLookups := make(chan struct{})
+	blockedRangeLookups := int32(0)
 	rangeLookupIsBlocked := make(chan struct{}, 1)
 	unblockRangeLookups := make(chan struct{})
 	respFilter := func(ba roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
@@ -2944,6 +2951,7 @@ func TestStoreSplitRangeLookupRace(t *testing.T) {
 
 				select {
 				case rangeLookupIsBlocked <- struct{}{}:
+					atomic.AddInt32(&blockedRangeLookups, 1)
 				default:
 				}
 				<-unblockRangeLookups
@@ -2994,9 +3002,16 @@ func TestStoreSplitRangeLookupRace(t *testing.T) {
 	rangeLookupErr := make(chan error)
 	go func() {
 		close(blockRangeLookups)
-		s.DistSender().RangeDescriptorCache().Clear()
 
-		_, err := s.DB().Get(context.Background(), lookupKey)
+		// Loop until at-least one range lookup is triggered and blocked.
+		// This accommodates for races with in-flight range lookups.
+		var err error
+		for atomic.LoadInt32(&blockedRangeLookups) == 0 && err == nil {
+			// Clear the RangeDescriptorCache to trigger a range lookup when the
+			// lookupKey is next accessed. Then immediately access lookupKey.
+			s.DistSender().RangeDescriptorCache().Clear()
+			_, err = s.DB().Get(context.Background(), lookupKey)
+		}
 		rangeLookupErr <- err
 	}()
 
@@ -3005,7 +3020,12 @@ func TestStoreSplitRangeLookupRace(t *testing.T) {
 	// second range [/meta2/n,/meta2/z). Then split at key "m". Finally, let the
 	// range lookup finish. The lookup will fail because it won't get consistent
 	// results but will eventually succeed after retrying.
-	<-rangeLookupIsBlocked
+	select {
+	case <-rangeLookupIsBlocked:
+	case err := <-rangeLookupErr:
+		// Unexpected early return.
+		t.Fatalf("unexpected range lookup error %v", err)
+	}
 	mustSplit(roachpb.Key("m"))
 	close(unblockRangeLookups)
 
@@ -3096,6 +3116,19 @@ func TestRangeLookupAsyncResolveIntent(t *testing.T) {
 	//
 	// Note that 'a' < 'e'.
 	if _, err := store.DB().Get(ctx, key); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Verify that replicas don't temporrily disappear from the replicas map during
+// the splits. See #29144.
+func TestStoreSplitDisappearingReplicas(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	store, _ := createTestStore(t, stopper)
+	go storage.WatchForDisappearingReplicas(t, store)
+	if err := server.WaitForInitialSplits(store.DB()); err != nil {
 		t.Fatal(err)
 	}
 }

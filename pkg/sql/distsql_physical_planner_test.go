@@ -641,7 +641,7 @@ func TestPartitionSpans(t *testing.T) {
 
 		gatewayNode int
 
-		// spans to be passed to partitionSpans
+		// spans to be passed to PartitionSpans
 		spans [][2]string
 
 		// expected result: a map of node to list of spans.
@@ -774,14 +774,18 @@ func TestPartitionSpans(t *testing.T) {
 				stopper:      stopper,
 				spanResolver: tsp,
 				gossip:       mockGossip,
-				testingKnobs: DistSQLPlannerTestingKnobs{
-					OverrideHealthCheck: func(node roachpb.NodeID, addr string) error {
+				nodeHealth: distSQLNodeHealth{
+					gossip: mockGossip,
+					connHealth: func(node roachpb.NodeID) error {
 						for _, n := range tc.deadNodes {
 							if int(node) == n {
 								return fmt.Errorf("test node is unhealthy")
 							}
 						}
 						return nil
+					},
+					isLive: func(nodeID roachpb.NodeID) (bool, error) {
+						return true, nil
 					},
 				},
 			}
@@ -792,21 +796,21 @@ func TestPartitionSpans(t *testing.T) {
 				spans = append(spans, roachpb.Span{Key: roachpb.Key(s[0]), EndKey: roachpb.Key(s[1])})
 			}
 
-			partitions, err := dsp.partitionSpans(&planCtx, spans)
+			partitions, err := dsp.PartitionSpans(planCtx, spans)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			resMap := make(map[int][][2]string)
 			for _, p := range partitions {
-				if _, ok := resMap[int(p.node)]; ok {
+				if _, ok := resMap[int(p.Node)]; ok {
 					t.Fatalf("node %d shows up in multiple partitions", p)
 				}
 				var spans [][2]string
-				for _, s := range p.spans {
+				for _, s := range p.Spans {
 					spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
 				}
-				resMap[int(p.node)] = spans
+				resMap[int(p.Node)] = spans
 			}
 
 			if !reflect.DeepEqual(resMap, tc.partitions) {
@@ -954,30 +958,34 @@ func TestPartitionSpansSkipsIncompatibleNodes(t *testing.T) {
 				stopper:      stopper,
 				spanResolver: tsp,
 				gossip:       mockGossip,
-				testingKnobs: DistSQLPlannerTestingKnobs{
-					OverrideHealthCheck: func(node roachpb.NodeID, addr string) error {
+				nodeHealth: distSQLNodeHealth{
+					gossip: mockGossip,
+					connHealth: func(roachpb.NodeID) error {
 						// All the nodes are healthy.
 						return nil
+					},
+					isLive: func(roachpb.NodeID) (bool, error) {
+						return true, nil
 					},
 				},
 			}
 
 			planCtx := dsp.NewPlanningCtx(context.Background(), nil /* evalCtx */, nil /* txn */)
-			partitions, err := dsp.partitionSpans(&planCtx, roachpb.Spans{span})
+			partitions, err := dsp.PartitionSpans(planCtx, roachpb.Spans{span})
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			resMap := make(map[roachpb.NodeID][][2]string)
 			for _, p := range partitions {
-				if _, ok := resMap[p.node]; ok {
+				if _, ok := resMap[p.Node]; ok {
 					t.Fatalf("node %d shows up in multiple partitions", p)
 				}
 				var spans [][2]string
-				for _, s := range p.spans {
+				for _, s := range p.Spans {
 					spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
 				}
-				resMap[p.node] = spans
+				resMap[p.Node] = spans
 			}
 
 			if !reflect.DeepEqual(resMap, tc.partitions) {
@@ -1045,30 +1053,34 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		stopper:      stopper,
 		spanResolver: tsp,
 		gossip:       mockGossip,
-		testingKnobs: DistSQLPlannerTestingKnobs{
-			OverrideHealthCheck: func(node roachpb.NodeID, addr string) error {
-				// All the nodes are healthy.
-				return nil
+		nodeHealth: distSQLNodeHealth{
+			gossip: mockGossip,
+			connHealth: func(node roachpb.NodeID) error {
+				_, err := mockGossip.GetNodeIDAddress(node)
+				return err
+			},
+			isLive: func(roachpb.NodeID) (bool, error) {
+				return true, nil
 			},
 		},
 	}
 
 	planCtx := dsp.NewPlanningCtx(context.Background(), nil /* evalCtx */, nil /* txn */)
-	partitions, err := dsp.partitionSpans(&planCtx, roachpb.Spans{span})
+	partitions, err := dsp.PartitionSpans(planCtx, roachpb.Spans{span})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	resMap := make(map[roachpb.NodeID][][2]string)
 	for _, p := range partitions {
-		if _, ok := resMap[p.node]; ok {
+		if _, ok := resMap[p.Node]; ok {
 			t.Fatalf("node %d shows up in multiple partitions", p)
 		}
 		var spans [][2]string
-		for _, s := range p.spans {
+		for _, s := range p.Spans {
 			spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
 		}
-		resMap[p.node] = spans
+		resMap[p.Node] = spans
 	}
 
 	expectedPartitions :=
@@ -1119,10 +1131,10 @@ func TestCheckNodeHealth(t *testing.T) {
 		return true, nil
 	}
 
-	connHealthy := func(string) error {
+	connHealthy := func(roachpb.NodeID) error {
 		return nil
 	}
-	connUnhealthy := func(string) error {
+	connUnhealthy := func(roachpb.NodeID) error {
 		return errors.New("injected conn health error")
 	}
 	_ = connUnhealthy
@@ -1138,18 +1150,19 @@ func TestCheckNodeHealth(t *testing.T) {
 
 	for _, test := range livenessTests {
 		t.Run("liveness", func(t *testing.T) {
-			if err := checkNodeHealth(
-				context.Background(), nodeID, desc.Address.AddressField,
-				DistSQLPlannerTestingKnobs{}, /* knobs */
-				mockGossip, connHealthy, test.isLive,
-			); !testutils.IsError(err, test.exp) {
+			h := distSQLNodeHealth{
+				gossip:     mockGossip,
+				connHealth: connHealthy,
+				isLive:     test.isLive,
+			}
+			if err := h.check(context.Background(), nodeID); !testutils.IsError(err, test.exp) {
 				t.Fatalf("expected %v, got %v", test.exp, err)
 			}
 		})
 	}
 
 	connHealthTests := []struct {
-		connHealth func(string) error
+		connHealth func(roachpb.NodeID) error
 		exp        string
 	}{
 		{connHealthy, ""},
@@ -1158,14 +1171,14 @@ func TestCheckNodeHealth(t *testing.T) {
 
 	for _, test := range connHealthTests {
 		t.Run("connHealth", func(t *testing.T) {
-			if err := checkNodeHealth(
-				context.Background(), nodeID, desc.Address.AddressField,
-				DistSQLPlannerTestingKnobs{}, /* knobs */
-				mockGossip, test.connHealth, live,
-			); !testutils.IsError(err, test.exp) {
+			h := distSQLNodeHealth{
+				gossip:     mockGossip,
+				connHealth: test.connHealth,
+				isLive:     live,
+			}
+			if err := h.check(context.Background(), nodeID); !testutils.IsError(err, test.exp) {
 				t.Fatalf("expected %v, got %v", test.exp, err)
 			}
 		})
 	}
-
 }

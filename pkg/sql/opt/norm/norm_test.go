@@ -81,7 +81,7 @@ func TestRuleFoldNullInEmpty(t *testing.T) {
 func TestRuleBinaryAssumption(t *testing.T) {
 	fn := func(op opt.Operator) {
 		for _, overload := range tree.BinOps[opt.BinaryOpReverseMap[op]] {
-			binOp := overload.(tree.BinOp)
+			binOp := overload.(*tree.BinOp)
 			if !memo.BinaryOverloadExists(op, binOp.RightType, binOp.LeftType) {
 				t.Errorf("could not find inverse for overload: %+v", op)
 			}

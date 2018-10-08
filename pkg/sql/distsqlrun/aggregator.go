@@ -21,7 +21,6 @@ import (
 
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -57,7 +56,7 @@ func GetAggregateInfo(
 		datumTypes[i] = inputTypes[i].ToDatumType()
 	}
 
-	_, builtins := builtins.GetBuiltinProperties(strings.ToLower(fn.String()))
+	props, builtins := builtins.GetBuiltinProperties(strings.ToLower(fn.String()))
 	for _, b := range builtins {
 		types := b.Types.Types()
 		if len(types) != len(inputTypes) {
@@ -66,6 +65,9 @@ func GetAggregateInfo(
 		match := true
 		for i, t := range types {
 			if !datumTypes[i].Equivalent(t) {
+				if props.NullableArgs && datumTypes[i].IsAmbiguous() {
+					continue
+				}
 				match = false
 				break
 			}
@@ -205,22 +207,17 @@ func (ag *aggregatorBase) init(
 
 		arguments := make(tree.Datums, len(aggInfo.Arguments))
 		for j, argument := range aggInfo.Arguments {
-			expr, err := parser.ParseExpr(argument.Expr)
-			if err != nil {
-				return err
+			h := exprHelper{}
+			// Pass nil types and row - there are no variables in these expressions.
+			if err := h.init(argument, nil /* types */, flowCtx.EvalCtx); err != nil {
+				return errors.Wrap(err, argument.String())
 			}
-			typedExpr, err := tree.TypeCheck(expr, &tree.SemaContext{}, types.Any)
+			d, err := h.eval(nil /* row */)
 			if err != nil {
-				return errors.Wrap(err, expr.String())
+				return errors.Wrap(err, argument.String())
 			}
-			argTypes[len(aggInfo.ColIdx)+j], err = sqlbase.DatumTypeToColumnType(typedExpr.ResolvedType())
-			if err != nil {
-				return errors.Wrap(err, expr.String())
-			}
-			arguments[j], err = typedExpr.Eval(ag.evalCtx)
-			if err != nil {
-				return errors.Wrap(err, expr.String())
-			}
+			argTypes[len(aggInfo.ColIdx)+j], err = sqlbase.DatumTypeToColumnType(d.ResolvedType())
+			arguments[j] = d
 		}
 
 		aggConstructor, retType, err := GetAggregateInfo(aggInfo.Func, argTypes...)
@@ -332,6 +329,13 @@ func newAggregator(
 	post *PostProcessSpec,
 	output RowReceiver,
 ) (Processor, error) {
+	if len(spec.GroupCols) == 0 &&
+		len(spec.Aggregations) == 1 &&
+		spec.Aggregations[0].FilterColIdx == nil &&
+		spec.Aggregations[0].Func == AggregatorSpec_COUNT_ROWS &&
+		!spec.Aggregations[0].Distinct {
+		return newCountAggregator(flowCtx, processorID, input, post, output)
+	}
 	if len(spec.OrderedGroupCols) == len(spec.GroupCols) {
 		return newOrderedAggregator(flowCtx, processorID, spec, input, post, output)
 	}
@@ -454,7 +458,11 @@ func (ag *aggregatorBase) matchLastOrdGroupCols(row sqlbase.EncDatumRow) (bool, 
 // into intermediary aggregate results. If it encounters metadata, the metadata
 // is immediately returned. Subsequent calls of this function will resume row
 // accumulation.
-func (ag *hashAggregator) accumulateRows() (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata) {
+func (ag *hashAggregator) accumulateRows() (
+	aggregatorState,
+	sqlbase.EncDatumRow,
+	*ProducerMetadata,
+) {
 	for {
 		row, meta := ag.input.Next()
 		if meta != nil {
@@ -513,7 +521,11 @@ func (ag *hashAggregator) accumulateRows() (aggregatorState, sqlbase.EncDatumRow
 // into intermediary aggregate results. If it encounters metadata, the metadata
 // is immediately returned. Subsequent calls of this function will resume row
 // accumulation.
-func (ag *orderedAggregator) accumulateRows() (aggregatorState, sqlbase.EncDatumRow, *ProducerMetadata) {
+func (ag *orderedAggregator) accumulateRows() (
+	aggregatorState,
+	sqlbase.EncDatumRow,
+	*ProducerMetadata,
+) {
 	for {
 		row, meta := ag.input.Next()
 		if meta != nil {
@@ -716,11 +728,6 @@ func (ag *orderedAggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		return row, meta
 	}
 	return nil, ag.DrainHelper()
-}
-
-// ConsumerDone is part of the RowSource interface.
-func (ag *aggregatorBase) ConsumerDone() {
-	ag.MoveToDraining(nil /* err */)
 }
 
 // ConsumerClosed is part of the RowSource interface.

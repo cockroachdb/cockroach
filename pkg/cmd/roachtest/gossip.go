@@ -28,6 +28,7 @@ import (
 	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -306,20 +307,55 @@ func runGossipRestartNodeOne(ctx context.Context, t *test, c *cluster) {
 	db := c.Conn(ctx, 1)
 	defer db.Close()
 
-	run := func(stmt string) {
+	run := func(stmtStr string) {
+		stmt := fmt.Sprintf(stmtStr, "", "=")
 		c.l.Printf("%s\n", stmt)
-		if _, err := db.ExecContext(ctx, stmt); err != nil {
+		_, err := db.ExecContext(ctx, stmt)
+		if err != nil && strings.Contains(err.Error(), "syntax error") {
+			// Pre-2.1 was EXPERIMENTAL.
+			// TODO(knz): Remove this in 2.2.
+			stmt = fmt.Sprintf(stmtStr, "EXPERIMENTAL", "")
+			c.l.Printf("%s\n", stmt)
+			_, err = db.ExecContext(ctx, stmt)
+		}
+		if err != nil {
 			t.Fatal(err)
 		}
 	}
 
+	// Wait for gossip to propagate - otherwise attempting to set zone
+	// constraints can fail with an error about how the constraint doesn't match
+	// any nodes in the cluster (#30220).
+	var lastNodeCount int
+	if err := retry.ForDuration(30*time.Second, func() error {
+		const query = `SELECT count(*) FROM crdb_internal.gossip_nodes`
+		var count int
+		if err := db.QueryRow(query).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count <= 1 {
+			err := errors.Errorf("node 1 still only knows about %d node%s",
+				count, util.Pluralize(int64(count)))
+			if count != lastNodeCount {
+				lastNodeCount = count
+				c.l.Printf("%s\n", err)
+			}
+			return err
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
 	// Evacuate all of the ranges off node 1 with zone config constraints. See
 	// the racks setting specified when the cluster was started.
-	run(`ALTER RANGE default EXPERIMENTAL CONFIGURE ZONE 'constraints: {"-rack=0"}'`)
-	run(`ALTER RANGE meta EXPERIMENTAL CONFIGURE ZONE 'constraints: {"-rack=0"}'`)
-	run(`ALTER RANGE liveness EXPERIMENTAL CONFIGURE ZONE 'constraints: {"-rack=0"}'`)
+	run(`ALTER RANGE default %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
+	run(`ALTER RANGE system %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
+	run(`ALTER DATABASE system %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
+	run(`ALTER RANGE meta %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
+	run(`ALTER RANGE liveness %[1]s CONFIGURE ZONE %[2]s 'constraints: {"-rack=0"}'`)
 
-	var lastCount int
+	var lastReplCount int
 	if err := retry.ForDuration(2*time.Minute, func() error {
 		const query = `
 SELECT count(replicas)
@@ -332,8 +368,8 @@ SELECT count(replicas)
 		}
 		if count > 0 {
 			err := errors.Errorf("node 1 still has %d replicas", count)
-			if count != lastCount {
-				lastCount = count
+			if count != lastReplCount {
+				lastReplCount = count
 				c.l.Printf("%s\n", err)
 			}
 			return err
@@ -393,4 +429,56 @@ SELECT count(replicas)
 	}
 
 	g.checkConnectedAndFunctional(ctx, t, c)
+}
+
+func runCheckLocalityIPAddress(ctx context.Context, t *test, c *cluster) {
+	c.Put(ctx, cockroach, "./cockroach")
+
+	externalIP := c.ExternalIP(ctx, c.Range(1, c.nodes))
+
+	for i := 1; i <= c.nodes; i++ {
+		if local {
+			externalIP[i-1] = "localhost"
+		}
+		extAddr := externalIP[i-1]
+
+		c.Start(ctx, c.Node(i), startArgs("--racks=1",
+			fmt.Sprintf("--args=--locality-advertise-addr=rack=0@%s", extAddr)))
+	}
+
+	rowCount := 0
+
+	for i := 1; i <= c.nodes; i++ {
+		db := c.Conn(ctx, 1)
+		defer db.Close()
+
+		rows, err := db.Query(
+			`SELECT node_id, advertise_address FROM crdb_internal.gossip_nodes`,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		for rows.Next() {
+			rowCount++
+			var nodeID int
+			var advertiseAddress string
+			if err := rows.Scan(&nodeID, &advertiseAddress); err != nil {
+				t.Fatal(err)
+			}
+
+			if local {
+				if !strings.Contains(advertiseAddress, "localhost") {
+					t.Fatal("Expected connect address to contain localhost")
+				}
+			} else if c.ExternalAddr(ctx, c.Node(nodeID))[0] != advertiseAddress {
+				t.Fatalf("Connection address is %s but expected %s",
+					advertiseAddress, c.ExternalAddr(ctx, c.Node(nodeID))[0])
+			}
+		}
+	}
+	if rowCount <= 0 {
+		t.Fatal("No results for " +
+			"SELECT node_id, advertise_address FROM crdb_internal.gossip_nodes")
+	}
 }

@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -42,10 +42,9 @@ type kvFetcher interface {
 	// nextBatch returns the next batch of rows. Returns false in the first
 	// parameter if there are no more keys in the scan. May return either a slice
 	// of KeyValues or a batchResponse, numKvs pair, depending on the server
-	// version - both must be handled by calling code. maybeNewSpan is true if
-	// if it was possible that the kv pairs returned were from a new span.
+	// version - both must be handled by calling code.
 	nextBatch(ctx context.Context) (ok bool, kvs []roachpb.KeyValue,
-		batchResponse []byte, numKvs int64, maybeNewSpan bool, err error)
+		batchResponse []byte, numKvs int64, err error)
 	getRangesInfo() []roachpb.RangeInfo
 }
 
@@ -193,9 +192,6 @@ type RowFetcher struct {
 	// id pair at the start of the key.
 	knownPrefixLength int
 
-	// Used to save whether or not the next batch is from a new span in `nextKV`.
-	maybeNewSpan bool
-
 	// returnRangeInfo, if set, causes the underlying kvFetcher to return
 	// information about the ranges descriptors/leases uses in servicing the
 	// requests. This has some cost, so it's only enabled by DistSQL when this
@@ -239,6 +235,16 @@ type RowFetcher struct {
 	alloc *DatumAlloc
 }
 
+// Reset resets this RowFetcher, preserving the memory capacity that was used
+// for the tables slice, and the slices within each of the tableInfo objects
+// within tables. This permits reuse of this objects without forcing total
+// reallocation of all of those slice fields.
+func (rf *RowFetcher) Reset() {
+	*rf = RowFetcher{
+		tables: rf.tables[:0],
+	}
+}
+
 // Init sets up a RowFetcher for a given table and index. If we are using a
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
@@ -253,15 +259,25 @@ func (rf *RowFetcher) Init(
 	rf.reverse = reverse
 	rf.returnRangeInfo = returnRangeInfo
 	rf.alloc = alloc
-	rf.allEquivSignatures = make(map[string]int, len(tables))
 	rf.isCheck = isCheck
 
 	// We must always decode the index key if we need to distinguish between
 	// rows from more than one table.
-	rf.mustDecodeIndexKey = len(tables) >= 2
+	nTables := len(tables)
+	multipleTables := nTables >= 2
+	rf.mustDecodeIndexKey = multipleTables
+	if multipleTables {
+		rf.allEquivSignatures = make(map[string]int, len(tables))
+	}
 
-	rf.tables = make([]tableInfo, 0, len(tables))
+	if cap(rf.tables) >= nTables {
+		rf.tables = rf.tables[:nTables]
+	} else {
+		rf.tables = make([]tableInfo, nTables)
+	}
 	for tableIdx, tableArgs := range tables {
+		oldTable := rf.tables[tableIdx]
+
 		table := tableInfo{
 			spans:            tableArgs.Spans,
 			desc:             tableArgs.Desc,
@@ -269,12 +285,18 @@ func (rf *RowFetcher) Init(
 			index:            tableArgs.Index,
 			isSecondaryIndex: tableArgs.IsSecondaryIndex,
 			cols:             tableArgs.Cols,
-			row:              make([]EncDatum, len(tableArgs.Cols)),
-			decodedRow:       make([]tree.Datum, len(tableArgs.Cols)),
+			row:              make(EncDatumRow, len(tableArgs.Cols)),
+			decodedRow:       make(tree.Datums, len(tableArgs.Cols)),
+
+			// These slice fields might get re-allocated below, so reslice them from
+			// the old table here in case they've got enough capacity already.
+			indexColIdx: oldTable.indexColIdx[:0],
+			keyVals:     oldTable.keyVals[:0],
+			extraVals:   oldTable.extraVals[:0],
 		}
 
 		var err error
-		if len(tables) > 1 {
+		if multipleTables {
 			// We produce references to every signature's reference.
 			equivSignatures, err := TableEquivSignatures(table.desc, table.index)
 			if err != nil {
@@ -320,7 +342,12 @@ func (rf *RowFetcher) Init(
 
 		table.neededValueColsByIdx = tableArgs.ValNeededForCol.Copy()
 		neededIndexCols := 0
-		table.indexColIdx = make([]int, len(indexColumnIDs))
+		nIndexCols := len(indexColumnIDs)
+		if cap(table.indexColIdx) >= nIndexCols {
+			table.indexColIdx = table.indexColIdx[:nIndexCols]
+		} else {
+			table.indexColIdx = make([]int, nIndexCols)
+		}
 		for i, id := range indexColumnIDs {
 			colIdx, ok := table.colIdxMap[id]
 			if ok {
@@ -366,7 +393,11 @@ func (rf *RowFetcher) Init(
 		if err != nil {
 			return err
 		}
-		table.keyVals = make([]EncDatum, len(indexColumnIDs))
+		if cap(table.keyVals) >= nIndexCols {
+			table.keyVals = table.keyVals[:nIndexCols]
+		} else {
+			table.keyVals = make([]EncDatum, nIndexCols)
+		}
 
 		if hasExtraCols(&table) {
 			// Unique secondary indexes have a value that is the
@@ -375,7 +406,12 @@ func (rf *RowFetcher) Init(
 			// values. If this ever changes, we'll probably have to
 			// figure out the directions here too.
 			table.extraTypes, err = GetColumnTypes(table.desc, table.index.ExtraColumnIDs)
-			table.extraVals = make([]EncDatum, len(table.index.ExtraColumnIDs))
+			nExtraColumns := len(table.index.ExtraColumnIDs)
+			if cap(table.extraVals) >= nExtraColumns {
+				table.extraVals = table.extraVals[:nExtraColumns]
+			} else {
+				table.extraVals = make([]EncDatum, nExtraColumns)
+			}
 			if err != nil {
 				return err
 			}
@@ -387,7 +423,7 @@ func (rf *RowFetcher) Init(
 			rf.maxKeysPerRow = keysPerRow
 		}
 
-		rf.tables = append(rf.tables, table)
+		rf.tables[tableIdx] = table
 	}
 
 	if len(tables) == 1 {
@@ -454,47 +490,40 @@ func (rf *RowFetcher) StartScanFrom(ctx context.Context, f kvFetcher) error {
 // Pops off the first kv stored in rf.kvs. If none are found attempts to fetch
 // the next batch until there are no more kvs to fetch.
 // Returns whether or not there are more kvs to fetch, the kv that was fetched,
-// whether or not the kv was from a maybeNewSpan, and any errors that may have
-// occurred.
-func (rf *RowFetcher) nextKV(
-	ctx context.Context,
-) (ok bool, kv roachpb.KeyValue, newSpan bool, err error) {
+// and any errors that may have occurred.
+func (rf *RowFetcher) nextKV(ctx context.Context) (ok bool, kv roachpb.KeyValue, err error) {
 	if len(rf.kvs) != 0 {
 		kv = rf.kvs[0]
 		rf.kvs = rf.kvs[1:]
-		newSpan = rf.maybeNewSpan
-		rf.maybeNewSpan = false
-		return true, kv, newSpan, nil
+		return true, kv, nil
 	}
 	if rf.batchNumKvs > 0 {
 		rf.batchNumKvs--
-		var key engine.MVCCKey
+		var key []byte
 		var rawBytes []byte
 		var err error
-		newSpan = rf.maybeNewSpan
-		rf.maybeNewSpan = false
-		key, rawBytes, rf.batchResponse, err = engine.MVCCScanDecodeKeyValue(rf.batchResponse)
+		key, _, rawBytes, rf.batchResponse, err = enginepb.ScanDecodeKeyValue(rf.batchResponse)
 		if err != nil {
-			return false, kv, false, err
+			return false, kv, err
 		}
 		return true, roachpb.KeyValue{
-			Key: key.Key,
+			Key: key,
 			Value: roachpb.Value{
 				RawBytes: rawBytes,
 			},
-		}, newSpan, nil
+		}, nil
 	}
 
 	var numKeys int64
-	ok, rf.kvs, rf.batchResponse, numKeys, rf.maybeNewSpan, err = rf.kvFetcher.nextBatch(ctx)
+	ok, rf.kvs, rf.batchResponse, numKeys, err = rf.kvFetcher.nextBatch(ctx)
 	if rf.batchResponse != nil {
 		rf.batchNumKvs = numKeys
 	}
 	if err != nil {
-		return ok, kv, false, err
+		return ok, kv, err
 	}
 	if !ok {
-		return false, kv, false, nil
+		return false, kv, nil
 	}
 	return rf.nextKV(ctx)
 }
@@ -505,8 +534,7 @@ func (rf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	var ok bool
 
 	for {
-		var maybeNewSpan bool
-		ok, rf.kv, maybeNewSpan, err = rf.nextKV(ctx)
+		ok, rf.kv, err = rf.nextKV(ctx)
 		if err != nil {
 			return false, err
 		}
@@ -569,10 +597,6 @@ func (rf *RowFetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 		case rf.rowReadyTable != rf.currentTable:
 			// For rowFetchers with more than one table, if the table changes the row
 			// is done.
-			rowDone = true
-		case maybeNewSpan:
-			// If the kvFetcher reports that a maybeNewSpan was fetched, then the last
-			// span should be finished so that row is complete.
 			rowDone = true
 		default:
 			rowDone = false
@@ -1243,7 +1267,9 @@ func (rf *RowFetcher) finalizeRow() error {
 			return nil
 		}
 		if table.neededCols.Contains(int(table.cols[i].ID)) && table.row[i].IsUnset() {
-			if !table.cols[i].Nullable {
+			// If the row was deleted, we'll be missing any non-primary key
+			// columns, including nullable ones, but this is expected.
+			if !table.cols[i].Nullable && !table.rowIsDeleted {
 				var indexColValues []string
 				for _, idx := range table.indexColIdx {
 					if idx != -1 {

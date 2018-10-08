@@ -304,6 +304,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 
 		stmt.AST = ps.Statement
+		stmt.Prepared = ex.tryReusePreparedState(ps.PreparedStatement)
 		stmt.ExpectedTypes = ps.Columns
 		stmt.AnonymizedStr = ps.AnonymizedStr
 		res.ResetStmtType(ps.Statement)
@@ -617,9 +618,6 @@ func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, 
 //
 // Args:
 // queryDone: A cleanup function to be called when the execution is done.
-//
-// TODO(nvanbenschoten): We do not currently support parallelizing distributed SQL
-// queries, so this method can only be used with local SQL.
 func (ex *connExecutor) execStmtInParallel(
 	ctx context.Context,
 	stmt Statement,
@@ -646,6 +644,15 @@ func (ex *connExecutor) execStmtInParallel(
 		cols = planColumns(planner.curPlan.plan)
 	}
 
+	distributePlan := false
+	// If we use the optimizer and we are in "local" mode, don't try to
+	// distribute.
+	if ex.sessionData.OptimizerMode != sessiondata.OptimizerLocal {
+		planner.prepareForDistSQLSupportCheck()
+		distributePlan = shouldDistributePlan(
+			ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner.curPlan.plan)
+	}
+
 	ex.mu.Lock()
 	queryMeta, ok := ex.mu.ActiveQueries[stmt.queryID]
 	if !ok {
@@ -653,7 +660,7 @@ func (ex *connExecutor) execStmtInParallel(
 		panic(fmt.Sprintf("query %d not in registry", stmt.queryID))
 	}
 	queryMeta.phase = executing
-	queryMeta.isDistributed = false
+	queryMeta.isDistributed = distributePlan
 	ex.mu.Unlock()
 
 	if err := ex.parallelizeQueue.Add(params, func() error {
@@ -674,13 +681,20 @@ func (ex *connExecutor) execStmtInParallel(
 		}
 
 		planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
-		ex.sessionTracing.TraceExecStart(ctx, "local-parallel")
-		err := ex.execWithLocalEngine(ctx, planner, stmt.AST.StatementType(), res)
+
+		shouldUseDistSQL := shouldUseDistSQL(distributePlan, ex.sessionData.DistSQLMode)
+		if shouldUseDistSQL {
+			ex.sessionTracing.TraceExecStart(ctx, "distributed-parallel")
+			err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
+		} else {
+			ex.sessionTracing.TraceExecStart(ctx, "local-parallel")
+			err = ex.execWithLocalEngine(ctx, planner, stmt.AST.StatementType(), res)
+		}
 		ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
 		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
 
 		ex.recordStatementSummary(
-			planner, stmt, false /* distSQLUsed*/, false /* optUsed */, ex.extraTxnState.autoRetryCounter,
+			planner, stmt, distributePlan, false /* optUsed */, ex.extraTxnState.autoRetryCounter,
 			res.RowsAffected(), err, &ex.server.EngineMetrics,
 		)
 		if ex.server.cfg.TestingKnobs.AfterExecute != nil {
@@ -804,7 +818,9 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	queryMeta.isDistributed = distributePlan
 	ex.mu.Unlock()
 
-	if ex.sessionData.DistSQLMode != sessiondata.DistSQLOff {
+	shouldUseDistSQL := shouldUseDistSQL(distributePlan, ex.sessionData.DistSQLMode)
+
+	if shouldUseDistSQL {
 		ex.sessionTracing.TraceExecStart(ctx, "distributed")
 		err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
 	} else {
@@ -938,9 +954,10 @@ func (ex *connExecutor) execWithDistSQLEngine(
 		},
 		&ex.sessionTracing,
 	)
+	defer recv.Release()
 
 	evalCtx := planner.ExtendedEvalContext()
-	var planCtx PlanningCtx
+	var planCtx *PlanningCtx
 	if distribute {
 		planCtx = ex.server.cfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, planner.txn)
 	} else {
@@ -949,7 +966,6 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	planCtx.isLocal = !distribute
 	planCtx.planner = planner
 	planCtx.stmtType = recv.stmtType
-	planCtx.validExtendedEvalCtx = true
 
 	if len(planner.curPlan.subqueryPlans) != 0 {
 		evalCtxFactory := func() *extendedEvalContext {
@@ -965,7 +981,7 @@ func (ex *connExecutor) execWithDistSQLEngine(
 	// We pass in whether or not we wanted to distribute this plan, which tells
 	// the planner whether or not to plan remote table readers.
 	ex.server.cfg.DistSQLPlanner.PlanAndRun(
-		ctx, evalCtx, &planCtx, planner.txn, planner.curPlan.plan, recv)
+		ctx, evalCtx, planCtx, planner.txn, planner.curPlan.plan, recv)
 	return recv.commErr
 }
 

@@ -48,7 +48,7 @@
 # operand is a constant, replaces with that constant. Note that ConstValue
 # matches nulls as well as other constants.
 [SimplifyCoalesce, Normalize]
-(Coalesce $args:[ (ConstValue) ... ]) => (SimplifyCoalesce $args)
+(Coalesce $args:[ $arg:* & (IsConstValueOrTuple $arg) ... ]) => (SimplifyCoalesce $args)
 
 # EliminateCast discards the cast operator if its input already has a type
 # that's equivalent to the desired static type.
@@ -139,11 +139,25 @@
 =>
 (Null (BoolType))
 
+# UnifyComparisonTypes takes a mixed-type comparison between a non-constant and
+# a constant and, if appropriate, converts the constant to the type of the
+# non-constant to allow constraints to be generated.
+[UnifyComparisonTypes, Normalize]
+(Comparison
+    $left:(Variable)
+    $right:(Const) & (Succeeded $result:(UnifyComparison $left $right))
+)
+=>
+((OpName)
+    $left
+    $result
+)
+
 # EliminateExistsProject discards a Project input to the Exists operator. The
 # Project operator never changes the row cardinality of its input, and row
 # cardinality is the only thing that Exists cares about, so Project is a no-op.
 [EliminateExistsProject, Normalize]
-(Exists (Project $input:*)) => (Exists $input)
+(Exists (Project $input:*) $def:*) => (Exists $input $def)
 
 # EliminateExistsGroupBy discards a non-scalar GroupBy input to the Exists
 # operator. While non-scalar GroupBy (or DistinctOn) can change row cardinality,
@@ -151,7 +165,7 @@
 # input is empty, then it returns the empty set. Therefore, it's a no-op for
 # Exists.
 [EliminateExistsGroupBy, Normalize]
-(Exists (GroupBy | DistinctOn $input:*)) => (Exists $input)
+(Exists (GroupBy | DistinctOn $input:*) $def:*) => (Exists $input $def)
 
 # NormalizeJSONFieldAccess transforms field access into a containment with a
 # simpler LHS. This allows inverted index constraints to be generated in some
@@ -204,4 +218,66 @@
 (Contains
   $val
   (MakeSingleKeyJSONObject $key $right)
+)
+
+# SimplifyCaseWhenConstValue removes branches known to not match. Any
+# branch known to match is used as the ELSE and further WHEN conditions
+# are skipped. If all WHEN conditions have been removed, the ELSE
+# expression is used.
+# This transforms
+#
+#   CASE WHEN v THEN 1 WHEN false THEN a WHEN true THEN b ELSE c END
+#
+# to
+#
+#   CASE WHEN v THEN 1 ELSE b END
+#
+[SimplifyCaseWhenConstValue, Normalize]
+(Case
+  $condition:(ConstValue)
+  $whens:[
+    ...
+    (When (ConstValue))
+    ...
+  ]
+)
+=>
+(SimplifyWhens $condition $whens)
+
+# SimplifyEqualsAnyTuple converts a scalar ANY operation to an IN comparison.
+# It transforms
+#
+#   x = ANY (...)
+#
+# to
+#
+#   x IN (...)
+#
+# Which allows scans to be constrained.
+[SimplifyEqualsAnyTuple, Normalize]
+(AnyScalar
+  $input:*
+  $tuple:(Tuple)
+  $cmp:(IsEquality $cmp)
+)
+=>
+(In
+  $input
+  $tuple
+)
+
+# SimplifyAnyScalarArray converts a scalar ANY operation on a constant ARRAY to a scalar
+# ANY operation on a tuple. In particular, this allows SimplifyEqualsAnyTuple to be
+# triggered, which allows constraints to be generated.
+[SimplifyAnyScalarArray, Normalize]
+(AnyScalar
+  $input:*
+  $ary:(Const) & (IsArray $ary)
+  $cmp:*
+)
+=>
+(AnyScalar
+  $input
+  (ConvertConstArrayToTuple $ary)
+  $cmp
 )

@@ -92,7 +92,7 @@ func TestGetStatsFromConstraint(t *testing.T) {
 	}
 
 	var mem Memo
-	mem.Init()
+	mem.Init(&evalCtx)
 	tab := catalog.Table(tree.NewUnqualifiedTableName("sel"))
 	tabID := mem.Metadata().AddTable(tab)
 
@@ -112,11 +112,11 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		// Make the scan.
 		def := &ScanOpDef{Table: tabID, Cols: cols}
 		scan := MakeScanExpr(mem.InternScanOpDef(def))
-		scanGroup := mem.MemoizeNormExpr(&evalCtx, Expr(scan))
+		scanGroup := mem.MemoizeNormExpr(&evalCtx, Expr(scan)).Group()
 
 		// Make the filter.
 		filter := MakeTrueExpr()
-		filterGroup := mem.MemoizeNormExpr(&evalCtx, Expr(filter))
+		filterGroup := mem.MemoizeNormExpr(&evalCtx, Expr(filter)).Group()
 
 		// Make the select.
 		sel := MakeSelectExpr(scanGroup, filterGroup)
@@ -127,12 +127,12 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		s.Init(relProps)
 
 		// Calculate distinct counts.
-		numUnappliedConstraints := sb.applyConstraintSet(cs, ev, relProps)
+		numUnappliedConjuncts := sb.applyConstraintSet(cs, ev, relProps)
 
 		// Calculate row count and selectivity.
 		s.RowCount = mem.GroupProperties(scanGroup).Relational.Stats.RowCount
 		s.ApplySelectivity(sb.selectivityFromDistinctCounts(cols, ev, s))
-		s.ApplySelectivity(sb.selectivityFromUnappliedConstraints(numUnappliedConstraints))
+		s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 
 		// Check if the statistics match the expected value.
 		testStats(t, s, expectedStats, expectedSelectivity)

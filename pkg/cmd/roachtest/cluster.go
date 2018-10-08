@@ -50,7 +50,9 @@ import (
 )
 
 var (
-	local                 bool
+	local bool
+	// Path to a local dir where the test logs and artifacts collected from
+	// cluster will be placed.
 	artifacts             string
 	cockroach             string
 	encrypt               bool
@@ -64,6 +66,8 @@ var (
 	zonesF                string
 	teamCity              bool
 	testingSkipValidation bool
+	// For the "list" command: list benchmarks instead of tests.
+	listBench bool
 )
 
 func ifLocal(trueVal, falseVal string) string {
@@ -102,7 +106,7 @@ func findBinary(binary, defValue string) (string, error) {
 		// look in the cockroach repo.
 		gopath := os.Getenv("GOPATH")
 		if gopath == "" {
-			return "", errors.Wrap(err, "")
+			gopath = filepath.Join(os.Getenv("HOME"), "go")
 		}
 
 		var binSuffix string
@@ -336,6 +340,9 @@ type testI interface {
 	Fatal(args ...interface{})
 	Fatalf(format string, args ...interface{})
 	Failed() bool
+	// Path to a directory where the test is supposed to store its log and other
+	// artifacts.
+	ArtifactsDir() string
 }
 
 // TODO(tschottdorf): Consider using a more idiomatic approach in which options
@@ -515,9 +522,8 @@ func nodes(count int, opts ...createOption) []nodeSpec {
 // starting and stopping a cockroach cluster on a subset of those machines, and
 // running load generators and other operations on the machines.
 //
-// A cluster is intended to be used only by a single test. Sharing of a cluster
-// between a test and a subtest is current disallowed (see cluster.assertT). A
-// cluster is safe for concurrent use by multiple goroutines.
+// A cluster is intended to be shared between all the subtests under a root.
+// A cluster is safe for concurrent use by multiple goroutines.
 type cluster struct {
 	name       string
 	nodes      int
@@ -543,13 +549,17 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec) *cluster {
 
 	switch {
 	case len(nodes) == 0:
-		return nil
+		// For tests. Return the minimum that makes them happy.
+		return &cluster{
+			expiration: timeutil.Now().Add(24 * time.Hour),
+		}
 	case len(nodes) > 1:
 		// TODO(peter): Need a motivating test that has different specs per node.
 		t.Fatalf("TODO(peter): unsupported nodes spec: %v", nodes)
 	}
 
-	l, err := rootLogger(t.Name())
+	logPath := filepath.Join(t.ArtifactsDir(), "test.log")
+	l, err := rootLogger(logPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -638,7 +648,8 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec) *cluster {
 // clone creates a new cluster object that refers to the same cluster as the
 // receiver, but is associated with the specified test.
 func (c *cluster) clone(t *test) *cluster {
-	l, err := rootLogger(t.Name())
+	logPath := filepath.Join(t.ArtifactsDir(), "test.log")
+	l, err := rootLogger(logPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -674,18 +685,32 @@ func (c *cluster) Node(i int) nodeListOption {
 	return c.Range(i, i)
 }
 
-func (c *cluster) FetchLogs(ctx context.Context) {
+// FetchLogs downloads the logs from the cluster using `roachprod get`.
+// The logs will be placed in the test's artifacts dir.
+func (c *cluster) FetchLogs(ctx context.Context) error {
+	if c.nodes == 0 {
+		// For tests.
+		return nil
+	}
+
+	c.l.Printf("fetching logs\n")
+	c.status("fetching logs")
+
 	// Don't hang forever if we can't fetch the logs.
 	execCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	c.status("retrieving logs")
-	_ = execCmd(execCtx, c.l, roachprod, "get", c.name, "logs",
-		filepath.Join(artifacts, teamCityNameEscape(c.t.Name()), "logs"))
+	path := filepath.Join(c.t.ArtifactsDir(), "logs")
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+
+	return execCmd(execCtx, c.l, roachprod, "get", c.name, "logs" /* src */, path /* dest */)
 }
 
 func (c *cluster) Destroy(ctx context.Context) {
-	if c == nil {
+	if c.nodes == 0 {
+		// For tests.
 		return
 	}
 
@@ -825,13 +850,6 @@ func (c *cluster) Start(ctx context.Context, opts ...option) {
 	args = append(args, c.makeNodes(opts...))
 	if encrypt && !argExists(args, "--encrypt") {
 		args = append(args, "--encrypt")
-	}
-	if local {
-		// This avoids annoying firewall prompts on macos.
-		// NB: we have to use the deprecated --host flag here
-		// (and not --listen-addr) until we don't run any mixed
-		// version tests involving v2.0 any more.
-		args = append(args, "--args", "--host=127.0.0.1")
 	}
 	if err := execCmd(ctx, c.l, args...); err != nil {
 		c.t.Fatal(err)
@@ -1100,6 +1118,16 @@ func (c *cluster) Conn(ctx context.Context, node int) *gosql.DB {
 	return db
 }
 
+// ConnE returns a SQL connection to the specified node.
+func (c *cluster) ConnE(ctx context.Context, node int) (*gosql.DB, error) {
+	url := c.ExternalPGUrl(ctx, c.Node(node))[0]
+	db, err := gosql.Open("postgres", url)
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
 func (c *cluster) makeNodes(opts ...option) string {
 	var r nodeListOption
 	for _, o := range opts {
@@ -1114,8 +1142,11 @@ func (c *cluster) isLocal() bool {
 	return c.name == "local"
 }
 
-func getDiskUsageInByte(ctx context.Context, c *cluster, nodeIdx int) (int, error) {
-	out, err := c.RunWithBuffer(ctx, c.l, c.Node(nodeIdx), fmt.Sprint("du -sk {store-dir} | grep -oE '^[0-9]+'"))
+// getDiskUsageInBytes does what's on the tin. nodeIdx starts at one.
+func getDiskUsageInBytes(
+	ctx context.Context, c *cluster, logger *logger, nodeIdx int,
+) (int, error) {
+	out, err := c.RunWithBuffer(ctx, logger, c.Node(nodeIdx), fmt.Sprint("du -sk {store-dir} | grep -oE '^[0-9]+'"))
 	if err != nil {
 		return 0, err
 	}
@@ -1229,7 +1260,7 @@ func (m *monitor) Wait() {
 }
 
 func (m *monitor) wait(args ...string) error {
-	// It is surprisingly difficult to get the cancelation semantics exactly
+	// It is surprisingly difficult to get the cancellation semantics exactly
 	// right. We need to watch for the "workers" group (m.g) to finish, or for
 	// the monitor command to emit an unexpected node failure, or for the monitor
 	// command itself to exit. We want to capture whichever error happens first
@@ -1243,12 +1274,12 @@ func (m *monitor) wait(args ...string) error {
 	//   })
 	//
 	// Now consider what happens when an error is returned. Before the error
-	// reaches the errgroup, we invoke the cancelation closure which can cause
+	// reaches the errgroup, we invoke the cancellation closure which can cause
 	// the other goroutines to wake up and perhaps race and set the errgroup
 	// error first.
 	//
 	// The solution is to implement our own errgroup mechanism here which allows
-	// us to set the error before performing the cancelation.
+	// us to set the error before performing the cancellation.
 
 	var errOnce sync.Once
 	var err error

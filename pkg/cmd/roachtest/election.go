@@ -57,8 +57,15 @@ func registerElectionAfterRestart(r *registry) {
 			// this up are working (we trigger elections eagerly, but not so
 			// eagerly that multiple elections conflict with each other).
 			start = timeutil.Now()
-			c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-        SELECT * FROM test.kv"`)
+			buf, err := c.RunWithBuffer(ctx, c.l, c.Node(1), `./cockroach sql --insecure -e "
+SET TRACING = on;
+SELECT * FROM test.kv;
+SET TRACING = off;
+SHOW TRACE FOR SESSION;
+"`)
+			if err != nil {
+				t.Fatal(err)
+			}
 			duration = timeutil.Since(start)
 			c.l.Printf("post-restart, query took %s\n", duration)
 			if expected := 15 * time.Second; duration > expected {
@@ -69,6 +76,7 @@ func registerElectionAfterRestart(r *registry) {
 				// elections to fail (the biggest one as I write this is
 				// #26448), so we must use a generous timeout here. We may be
 				// able to tighten the bounds as we make more improvements.
+				c.l.Printf("%s\n", buf)
 				t.Fatalf("expected query to succeed in less than %s, took %s", expected, duration)
 			}
 		},

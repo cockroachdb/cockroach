@@ -391,9 +391,11 @@ example [::1]:8080 or [fe80::f6f2:::]:8080.`,
 		Description: `
 List of ports to advertise to other CockroachDB nodes for intra-cluster
 communication for some locality. This should be specified as a commma
-separated list of locality@address. For example:
+separated list of locality@address. Addresses can also include ports.
+For example:
 <PRE>
 "region=us-west@127.0.0.1,datacenter=us-west-1b@127.0.0.1"
+"region=us-west@127.0.0.1:26257,datacenter=us-west-1b@127.0.0.1:26258"
 </PRE>
 `,
 	}
@@ -482,24 +484,9 @@ a public network without combining it with --listen-addr.`,
 	}
 
 	CertsDir = FlagInfo{
-		Name:   "certs-dir",
-		EnvVar: "COCKROACH_CERTS_DIR",
-		Description: `
-The path to the directory containing SSL certificates and keys.
-<PRE>
-
-Cockroach looks for certificates and keys inside the directory using the
-following naming scheme:
-
-  - CA certificate and key: ca.crt, ca.key
-  - Server certificate and key: node.crt, node.key
-  - Client certificate and key: client.<user>.crt, client.<user>.key
-
-When running client commands, the user can be specified with the --user flag.
-</PRE>
-
-Keys have a minimum permission requirement of 0700 (rwx------). This restriction can be
-disabled by setting the environment variable COCKROACH_SKIP_KEY_PERMISSION_CHECK to true.`,
+		Name:        "certs-dir",
+		EnvVar:      "COCKROACH_CERTS_DIR",
+		Description: `Path to the directory containing SSL certificates and keys.`,
 	}
 
 	// Server version of the certs directory flag, cannot be set through environment.
@@ -794,5 +781,34 @@ in the history of the cluster.`,
 	SQLFmtAlign = FlagInfo{
 		Name:        "align",
 		Description: `Align the output.`,
+	}
+
+	LogDir = FlagInfo{
+		Name: "log-dir",
+		Description: `
+If non-empty, write log files in this directory. If empty, write log files to
+<store-dir>/logs where <store-dir> is the directory of the first on disk store.
+`,
+	}
+
+	LogDirMaxSize = FlagInfo{
+		Name: "log-dir-max-size",
+		Description: `
+Maximum combined size of all log files.
+`,
+	}
+
+	LogFileMaxSize = FlagInfo{
+		Name: "log-file-max-size",
+		Description: `
+Maximum size of each log file.
+`,
+	}
+
+	LogFileVerbosity = FlagInfo{
+		Name: "log-file-verbosity",
+		Description: `
+Minimum verbosity of messages written to the log file.
+`,
 	}
 )

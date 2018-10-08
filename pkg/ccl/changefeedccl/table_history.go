@@ -237,6 +237,7 @@ func fetchTableDescriptorVersions(
 		StartTime:     startTS,
 		MVCCFilter:    roachpb.MVCCFilter_All,
 		ReturnSST:     true,
+		OmitChecksum:  true,
 	}
 	res, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 	if log.V(2) {
@@ -287,8 +288,6 @@ func fetchTableDescriptorVersions(
 					return err
 				}
 				if tableDesc := desc.GetTable(); tableDesc != nil {
-					// WIP
-					log.Infof(ctx, "%s %d %s", desc.GetName(), tableDesc.Version, it.UnsafeKey().Timestamp)
 					tableDescs = append(tableDescs, tableDesc)
 				}
 			}

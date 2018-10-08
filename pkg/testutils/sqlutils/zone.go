@@ -19,14 +19,12 @@ import (
 	"fmt"
 	"testing"
 
-	yaml "gopkg.in/yaml.v2"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-// ZoneRow represents a row returned by EXPERIMENTAL SHOW ZONE CONFIGURATION.
+// ZoneRow represents a row returned by SHOW ZONE CONFIGURATION.
 type ZoneRow struct {
 	ID           uint32
 	CLISpecifier string
@@ -38,14 +36,9 @@ func (row ZoneRow) sqlRowString() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	configYAML, err := yaml.Marshal(row.Config)
-	if err != nil {
-		return nil, err
-	}
 	return []string{
 		fmt.Sprintf("%d", row.ID),
 		row.CLISpecifier,
-		string(configYAML),
 		string(configProto),
 	}, nil
 }
@@ -62,20 +55,20 @@ func RemoveAllZoneConfigs(t testing.TB, sqlDB *SQLRunner) {
 			// The default zone cannot be removed.
 			continue
 		}
-		sqlDB.Exec(t, fmt.Sprintf("ALTER %s EXPERIMENTAL CONFIGURE ZONE NULL", &zs))
+		sqlDB.Exec(t, fmt.Sprintf("ALTER %s CONFIGURE ZONE DISCARD", &zs))
 	}
 }
 
 // DeleteZoneConfig deletes the specified zone config through the SQL interface.
 func DeleteZoneConfig(t testing.TB, sqlDB *SQLRunner, target string) {
 	t.Helper()
-	sqlDB.Exec(t, fmt.Sprintf("ALTER %s EXPERIMENTAL CONFIGURE ZONE NULL", target))
+	sqlDB.Exec(t, fmt.Sprintf("ALTER %s CONFIGURE ZONE DISCARD", target))
 }
 
 // SetZoneConfig updates the specified zone config through the SQL interface.
 func SetZoneConfig(t testing.TB, sqlDB *SQLRunner, target string, config string) {
 	t.Helper()
-	sqlDB.Exec(t, fmt.Sprintf("ALTER %s EXPERIMENTAL CONFIGURE ZONE %s",
+	sqlDB.Exec(t, fmt.Sprintf("ALTER %s CONFIGURE ZONE = %s",
 		target, lex.EscapeSQLString(config)))
 }
 
@@ -83,7 +76,7 @@ func SetZoneConfig(t testing.TB, sqlDB *SQLRunner, target string, config string)
 // using the provided transaction.
 func TxnSetZoneConfig(t testing.TB, sqlDB *SQLRunner, txn *gosql.Tx, target string, config string) {
 	t.Helper()
-	_, err := txn.Exec(fmt.Sprintf("ALTER %s EXPERIMENTAL CONFIGURE ZONE %s",
+	_, err := txn.Exec(fmt.Sprintf("ALTER %s CONFIGURE ZONE = %s",
 		target, lex.EscapeSQLString(config)))
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +91,9 @@ func VerifyZoneConfigForTarget(t testing.TB, sqlDB *SQLRunner, target string, ro
 	if err != nil {
 		t.Fatal(err)
 	}
-	sqlDB.CheckQueryResults(t, fmt.Sprintf("EXPERIMENTAL SHOW ZONE CONFIGURATION FOR %s", target),
+	sqlDB.CheckQueryResults(t, fmt.Sprintf(`
+SELECT zone_id, cli_specifier, config_protobuf
+  FROM [SHOW ZONE CONFIGURATION FOR %s]`, target),
 		[][]string{sqlRow})
 }
 
@@ -114,7 +109,9 @@ func VerifyAllZoneConfigs(t testing.TB, sqlDB *SQLRunner, rows ...ZoneRow) {
 			t.Fatal(err)
 		}
 	}
-	sqlDB.CheckQueryResults(t, "EXPERIMENTAL SHOW ALL ZONE CONFIGURATIONS", expected)
+	sqlDB.CheckQueryResults(t, `
+SELECT zone_id, cli_specifier, config_protobuf
+  FROM [SHOW ALL ZONE CONFIGURATIONS]`, expected)
 }
 
 // ZoneConfigExists returns whether a zone config with the provided cliSpecifier

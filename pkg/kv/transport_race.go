@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"math/rand"
+	"reflect"
 	"sync/atomic"
 	"time"
 
@@ -59,6 +60,18 @@ type raceTransport struct {
 func (tr raceTransport) SendNext(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, error) {
+	// Make a copy of the requests slice, and shallow copies of the requests.
+	// The caller is allowed to mutate the request after the call returns. Since
+	// this transport has no way of checking who's doing mutations (the client -
+	// which is allowed, or the server - which is not). So, for now, we exclude
+	// the slice and the requests from any checks, since those are the parts that
+	// the client currently mutates.
+	requestsCopy := make([]roachpb.RequestUnion, len(ba.Requests))
+	for i, ru := range ba.Requests {
+		// ru is a RequestUnion interface, so we need some hoops to dereference it.
+		requestsCopy[i] = reflect.Indirect(reflect.ValueOf(ru)).Interface().(roachpb.RequestUnion)
+	}
+	ba.Requests = requestsCopy
 	select {
 	// We have a shallow copy here and so the top level scalar fields can't
 	// really race, but making more copies doesn't make anything more
@@ -74,8 +87,17 @@ func (tr raceTransport) SendNext(
 // intercepts all BatchRequests, reading them asynchronously in a tight loop.
 // This allows the race detector to catch any mutations of a batch passed to the
 // transport. The dealio is that batches passed to the transport are immutable -
-// neither the client nor the server are allowed to mutate anything and this
-// transport makes sure they don't. See client.Sender() for more.
+// the server is not allowed to mutate anything and this transport makes sure
+// they don't. See client.Sender() for more.
+//
+// NOTE(andrei): We don't like this transport very much. It's slow, preventing
+// us from running clusters with race binaries and, the way it's written, it
+// prevents both the client and the server from mutating the BatchRequest. But
+// only the server is prohibited (according to the client.Sender interface). In
+// fact, we'd like to have the client reuse these requests and mutate them.
+// Instead of this transport, we should find other mechanisms ensuring that:
+// a) the server doesn't hold on to any memory, and
+// b) the server doesn't mutate the request
 func GRPCTransportFactory(
 	opts SendOptions, nodeDialer *nodedialer.Dialer, replicas ReplicaSlice,
 ) (Transport, error) {

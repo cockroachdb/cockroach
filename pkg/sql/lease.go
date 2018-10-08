@@ -1170,9 +1170,9 @@ type LeaseManagerTestingKnobs struct {
 	// refreshed. Careful when using this to block for too long - you can block
 	// all the gossip users in the system. If it returns an error the gossip
 	// update is ignored.
-	GossipUpdateEvent func(config.SystemConfig) error
+	GossipUpdateEvent func(*config.SystemConfig) error
 	// A callback called after the leases are refreshed as a result of a gossip update.
-	TestingLeasesRefreshedEvent func(config.SystemConfig)
+	TestingLeasesRefreshedEvent func(*config.SystemConfig)
 
 	LeaseStoreTestingKnobs LeaseStoreTestingKnobs
 }
@@ -1626,7 +1626,7 @@ func (m *LeaseManager) RefreshLeases(s *stop.Stopper, db *client.DB, g *gossip.G
 		for {
 			select {
 			case <-gossipUpdateC:
-				cfg, _ := g.GetSystemConfig()
+				cfg := g.GetSystemConfig()
 				if m.testingKnobs.GossipUpdateEvent != nil {
 					if err := m.testingKnobs.GossipUpdateEvent(cfg); err != nil {
 						break
@@ -1692,19 +1692,21 @@ var tableLeaseRefreshLimit = settings.RegisterIntSetting(
 // TODO(vivek): Remove once epoch based table leases are implemented.
 func (m *LeaseManager) PeriodicallyRefreshSomeLeases() {
 	m.stopper.RunWorker(context.Background(), func(ctx context.Context) {
-		tickDuration := m.leaseDuration / 2
-		if tickDuration <= 0 {
+		if m.leaseDuration <= 0 {
 			return
 		}
-		ticker := time.NewTicker(tickDuration)
-		tickChan := ticker.C
-		defer ticker.Stop()
+		refreshTimer := timeutil.NewTimer()
+		defer refreshTimer.Stop()
+		refreshTimer.Reset(m.LeaseStore.jitteredLeaseDuration() / 2)
 		for {
 			select {
 			case <-m.stopper.ShouldQuiesce():
 				return
 
-			case <-tickChan:
+			case <-refreshTimer.C:
+				refreshTimer.Read = true
+				refreshTimer.Reset(m.LeaseStore.jitteredLeaseDuration() / 2)
+
 				m.refreshSomeLeases(ctx)
 			}
 		}

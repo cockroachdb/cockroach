@@ -17,6 +17,7 @@ package sql_test
 import (
 	"context"
 	gosql "database/sql"
+	"database/sql/driver"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -2456,8 +2457,6 @@ func TestSecondaryIndexWithOldStoringEncoding(t *testing.T) {
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer server.Stopper().Stop(context.TODO())
 
-	// TODO(knz): We need to disable distributed execution because KV
-	// tracing does not (yet) distribute.
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE d;
 CREATE TABLE d.t (
@@ -2467,7 +2466,6 @@ CREATE TABLE d.t (
   INDEX i (a) STORING (b),
   UNIQUE INDEX u (a) STORING (b)
 );
-SET distsql = off;
 `); err != nil {
 		t.Fatal(err)
 	}
@@ -2836,6 +2834,18 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	if !droppedDesc.Dropped() {
 		t.Fatalf("bad state = %s", droppedDesc.State)
 	}
+
+	// Job still running, waiting for GC.
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.RunningStatusWaitingGC, jobs.Record{
+		Username:    security.RootUser,
+		Description: "TRUNCATE TABLE t.test",
+		DescriptorIDs: sqlbase.IDs{
+			tableDesc.ID,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Test that a table truncation completes properly.
@@ -2880,13 +2890,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
 	// Add a zone config.
-	cfg := config.DefaultZoneConfig()
-	cfg.GC.TTLSeconds = 0 // Set TTL so the data is deleted immediately
-	buf, err := protoutil.Marshal(&cfg)
+	var cfg config.ZoneConfig
+	cfg, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := sqlDB.Exec(`INSERT INTO system.zones VALUES ($1, $2)`, tableDesc.ID, buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2965,6 +2971,18 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 		t.Fatal(err)
 	} else if e := 1; len(kvs) != e {
 		t.Fatalf("expected %d key value pairs, but got %d", e, len(kvs))
+	}
+
+	// Ensure that the job is marked as succeeded.
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
+		Username:    security.RootUser,
+		Description: "TRUNCATE TABLE t.test",
+		DescriptorIDs: sqlbase.IDs{
+			tableDesc.ID,
+		},
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -3215,6 +3233,18 @@ func TestSchemaChangeAfterCreateInTxn(t *testing.T) {
 	params, _ := tests.CreateTestServerParams()
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
+
+	// The schema change below can occasionally take more than
+	// 5 seconds and gets pushed by the closed timestamp mechanism
+	// in the read timestamp cache. Setting the closed timestamp
+	// target duration to a higher value.
+	// TODO(vivek): Remove the need to do this by removing the use of
+	// txn.CommitTimestamp() in schema changes.
+	if _, err := sqlDB.Exec(`
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '20s'
+`); err != nil {
+		t.Fatal(err)
+	}
 
 	// A large enough value that the backfills run as part of the
 	// schema change run in many chunks.
@@ -3473,5 +3503,203 @@ func TestCancelSchemaChange(t *testing.T) {
 	eCount := maxValue + 1
 	if eCount != count {
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
+	}
+}
+
+// This test checks that when a transaction containing schema changes
+// needs to be retried it gets retried internal to cockroach. This test
+// currently fails because a schema changeg transaction is not retried.
+func TestSchemaChangeRetryError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const numNodes = 3
+
+	params, _ := tests.CreateTestServerParams()
+
+	tc := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs:      params,
+		})
+	defer tc.Stopper().Stop(context.TODO())
+	sqlDB := tc.ServerConn(0)
+
+	if _, err := sqlDB.Exec(`
+ CREATE DATABASE t;
+ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+ `); err != nil {
+		t.Fatal(err)
+	}
+
+	// The timestamp of the transaction is initialized.
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	otherSQLDB := tc.ServerConn(1)
+
+	// Read schema on another node that picks a later timestamp.
+	rows, err := otherSQLDB.Query("SELECT * FROM t.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows.Close()
+
+	if _, err := tx.Exec(`
+		CREATE TABLE t.another (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+		`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := tx.Exec(`
+		CREATE UNIQUE INDEX vidx ON t.test (v);
+		`); err != nil {
+		t.Fatal(err)
+	}
+
+	// TODO(vivek): fix #17698. The transaction should get retried
+	// without returning this error to the user.
+	if err := tx.Commit(); !testutils.IsError(err,
+		`restart transaction: HandledRetryableTxnError: TransactionRetryError: retry txn \(RETRY_SERIALIZABLE\)`,
+	) {
+		t.Fatalf("err = %+v", err)
+	}
+}
+
+// TestCancelSchemaChangeContext tests that a canceled context on
+// the session with a schema change after the schema change transaction
+// has committed will not indefinitely retry executing the post schema
+// execution transactions using a canceled context. The schema
+// change will give up and ultimately be executed to completion through
+// the asynchronous schema changer.
+func TestCancelSchemaChangeContext(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const maxValue = 100
+	notifyBackfill := make(chan struct{})
+	cancelSessionDone := make(chan struct{})
+
+	params, _ := tests.CreateTestServerParams()
+	seenContextCancel := false
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeBackfill: func() error {
+				if notify := notifyBackfill; notify != nil {
+					notifyBackfill = nil
+					close(notify)
+					<-cancelSessionDone
+				}
+				return nil
+			},
+			OnError: func(err error) {
+				if err == context.Canceled && !seenContextCancel {
+					seenContextCancel = true
+					return
+				}
+				t.Errorf("saw unexpected error: %+v", err)
+			},
+		},
+	}
+	s, db, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `
+		CREATE DATABASE t;
+		CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+	`)
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(db, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.TODO()
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	notification := notifyBackfill
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ctx := context.TODO()
+		// When using db.Exec(), CANCEL SESSION below will result in the
+		// database client retrying the request on another connection.
+		// Use a connection here so when the session gets canceled; a
+		// connection failure is returned.
+		// TODO(vivek): It's likely we need to vendor lib/pq#422 and check
+		// that this is unnecessary.
+		conn, err := db.Conn(ctx)
+		if err != nil {
+			t.Error(err)
+		}
+		if _, err := conn.ExecContext(
+			ctx, `CREATE INDEX foo ON t.public.test (v)`); err != driver.ErrBadConn {
+			t.Errorf("unexpected err = %+v", err)
+		}
+	}()
+
+	<-notification
+
+	if _, err := db.Exec(`
+CANCEL SESSIONS (SELECT session_id FROM [SHOW SESSIONS] WHERE last_active_query LIKE 'CREATE INDEX%')
+`); err != nil {
+		t.Error(err)
+	}
+
+	close(cancelSessionDone)
+
+	wg.Wait()
+
+	if !seenContextCancel {
+		t.Fatal("didnt see context cancel error")
+	}
+}
+
+func TestSchemaChangeGRPCError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const maxValue = 100
+	params, _ := tests.CreateTestServerParams()
+	seenNodeUnavailable := false
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeBackfill: func() error {
+				if !seenNodeUnavailable {
+					seenNodeUnavailable = true
+					return errors.Errorf("node unavailable")
+				}
+				return nil
+			},
+		},
+	}
+	s, db, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `
+		CREATE DATABASE t;
+		CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+	`)
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(db, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.TODO()
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(`CREATE INDEX foo ON t.public.test (v)`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := checkTableKeyCount(ctx, kvDB, 2, maxValue); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -34,6 +34,17 @@ import (
 // index, even if it meant adding a hidden unique rowid column.
 const PrimaryIndex = 0
 
+// Fingerprint uniquely identifies a catalog data source. If the schema of the
+// data source changes in any way, then the fingerprint must also change. This
+// enables cached data sources (or other data structures dependent on the data
+// sources) to be invalidated when their schema changes.
+//
+// For sqlbase data sources, the fingerprint is simply the concatenation of the
+// 32-bit descriptor ID and version fields. The version is incremented each time
+// a change to a table/view/sequence occurs, including changes to any associated
+// indexes.
+type Fingerprint uint64
+
 // Catalog is an interface to a database catalog, exposing only the information
 // needed by the query optimizer.
 type Catalog interface {
@@ -52,6 +63,11 @@ type Catalog interface {
 // DataSource is an interface to a database object that provides rows, like a
 // table, a view, or a sequence.
 type DataSource interface {
+	// Fingerprint uniquely identifies this data source. If the schema of this
+	// data source changes, then so will the value of this fingerprint. If two
+	// data sources have the same fingerprint, then they are identical.
+	Fingerprint() Fingerprint
+
 	// Name returns the fully normalized, fully qualified, and fully resolved
 	// name of the data source. The ExplicitCatalog and ExplicitSchema fields
 	// will always be true, since all parts of the name are always specified.
@@ -71,6 +87,9 @@ type Table interface {
 	// constructs its rows "on the fly" when it's queried. An example is the
 	// information_schema tables.
 	IsVirtualTable() bool
+
+	// InternalID returns the table's globally-unique ID.
+	InternalID() uint64
 
 	// ColumnCount returns the number of columns in the table.
 	ColumnCount() int
@@ -167,6 +186,9 @@ type Index interface {
 	// when the query contains a numeric index reference.
 	InternalID() uint64
 
+	// Table returns a reference to the table this index is based on.
+	Table() Table
+
 	// IsInverted returns true if this is a JSON inverted index.
 	IsInverted() bool
 
@@ -233,6 +255,11 @@ type Index interface {
 	// Column returns the ith IndexColumn within the index definition, where
 	// i < ColumnCount.
 	Column(i int) IndexColumn
+
+	// ForeignKey returns a ForeignKeyReference if this index is part
+	// of an outbound foreign key relation. Returns false for the second
+	// return value if there is no foreign key reference on this index.
+	ForeignKey() (ForeignKeyReference, bool)
 }
 
 // TableStatistic is an interface to a table statistic. Each statistic is
@@ -264,9 +291,24 @@ type TableStatistic interface {
 	// TODO(radu): add Histogram().
 }
 
+// ForeignKeyReference is a struct representing an outbound foreign key reference.
+// It has accessors for table and index IDs, as well as the prefix length.
+type ForeignKeyReference struct {
+	// Table contains the referenced table's internal ID.
+	TableID uint64
+
+	// Index contains the ID of the index that represents the
+	// destination table's side of the foreign key relation.
+	IndexID uint64
+
+	// PrefixLen contains the length of columns that form the foreign key
+	// relation in the current and destination indexes.
+	PrefixLen int32
+}
+
 // FormatCatalogTable nicely formats a catalog table using a treeprinter for
 // debugging and testing.
-func FormatCatalogTable(tab Table, tp treeprinter.Node) {
+func FormatCatalogTable(cat Catalog, tab Table, tp treeprinter.Node) {
 	child := tp.Childf("TABLE %s", tab.Name().TableName)
 
 	var buf bytes.Buffer
@@ -278,6 +320,14 @@ func FormatCatalogTable(tab Table, tp treeprinter.Node) {
 
 	for i := 0; i < tab.IndexCount(); i++ {
 		formatCatalogIndex(tab.Index(i), i == PrimaryIndex, child)
+	}
+
+	for i := 0; i < tab.IndexCount(); i++ {
+		fkRef, ok := tab.Index(i).ForeignKey()
+
+		if ok {
+			formatCatalogFKRef(cat, tab, tab.Index(i), fkRef, child)
+		}
 	}
 }
 
@@ -312,6 +362,50 @@ func formatCatalogIndex(idx Index, isPrimary bool, tp treeprinter.Node) {
 
 		child.Child(buf.String())
 	}
+}
+
+// formatColPrefix returns a string representation of the first prefixLen columns of idx.
+func formatColPrefix(idx Index, prefixLen int) string {
+	var buf bytes.Buffer
+	buf.WriteByte('(')
+	for i := 0; i < prefixLen; i++ {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		colName := idx.Column(i).Column.ColName()
+		buf.WriteString(colName.String())
+	}
+	buf.WriteByte(')')
+
+	return buf.String()
+}
+
+// formatCatalogFKRef nicely formats a catalog foreign key reference using a
+// treeprinter for debugging and testing.
+func formatCatalogFKRef(
+	cat Catalog, tab Table, idx Index, fkRef ForeignKeyReference, tp treeprinter.Node,
+) {
+	ds, err := cat.ResolveDataSourceByID(context.TODO(), int64(fkRef.TableID))
+	if err != nil {
+		panic(err)
+	}
+
+	fkTable := ds.(Table)
+
+	var fkIndex Index
+	for j, cnt := 0, fkTable.IndexCount(); j < cnt; j++ {
+		if fkTable.Index(j).InternalID() == fkRef.IndexID {
+			fkIndex = fkTable.Index(j)
+			break
+		}
+	}
+
+	tp.Childf(
+		"FOREIGN KEY %s REFERENCES %v %s",
+		formatColPrefix(idx, int(fkRef.PrefixLen)),
+		ds.Name(),
+		formatColPrefix(fkIndex, int(fkRef.PrefixLen)),
+	)
 }
 
 func formatColumn(col Column, buf *bytes.Buffer) {

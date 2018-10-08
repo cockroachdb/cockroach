@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -93,7 +92,7 @@ func makeSpans(
 		index: index,
 	}
 	var o xform.Optimizer
-	o.Init(nil /* evalCtx */)
+	o.Init(p.EvalContext())
 	for _, c := range desc.Columns {
 		o.Memo().Metadata().AddColumn(c.Name, c.Type.ToDatumType())
 	}
@@ -101,11 +100,11 @@ func makeSpans(
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	bld := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, o.Factory())
 	bld.AllowUnsupportedExpr = true
-	filterGroup, err := bld.Build(expr)
+	err := bld.Build(expr)
 	if err != nil {
 		t.Fatal(err)
 	}
-	filterExpr := memo.MakeNormExprView(o.Memo(), filterGroup)
+	filterExpr := o.Memo().Root()
 	err = c.makeIndexConstraints(&o, filterExpr, p.EvalContext())
 	if err != nil {
 		t.Fatal(err)

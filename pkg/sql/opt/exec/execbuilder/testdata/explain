@@ -3,16 +3,14 @@
 query TTT colnames
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE FALSE
 ----
-tree         field  description
-render       ·      ·
- └── norows  ·      ·
+tree    field  description
+norows  ·      ·
 
 query TTT colnames
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE NULL
 ----
-tree         field  description
-render       ·      ·
- └── norows  ·      ·
+tree    field  description
+norows  ·      ·
 
 query TTT colnames
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE TRUE
@@ -103,9 +101,11 @@ drop database  ·  ·
 query TTT
 EXPLAIN SHOW JOBS
 ----
-render       ·     ·
- └── values  ·     ·
-·            size  14 columns, 0 rows
+sort              ·      ·
+ │                order  -"coalesce",-started
+ └── render       ·      ·
+      └── values  ·      ·
+·                 size   15 columns, 0 rows
 
 statement ok
 CREATE INDEX a ON foo(x)
@@ -152,7 +152,7 @@ sort                   ·      ·
  └── render            ·      ·
       └── filter       ·      ·
            └── values  ·      ·
-·                      size   6 columns, 90 rows
+·                      size   6 columns, 91 rows
 
 query TTT
 EXPLAIN SHOW DATABASE
@@ -160,7 +160,7 @@ EXPLAIN SHOW DATABASE
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 33 rows
+·                 size  2 columns, 34 rows
 
 query TTT
 EXPLAIN SHOW TIME ZONE
@@ -168,7 +168,7 @@ EXPLAIN SHOW TIME ZONE
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 33 rows
+·                 size  2 columns, 34 rows
 
 query TTT
 EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
@@ -176,7 +176,7 @@ EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 33 rows
+·                 size  2 columns, 34 rows
 
 query TTT
 EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
@@ -184,7 +184,7 @@ EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 33 rows
+·                 size  2 columns, 34 rows
 
 query TTT
 EXPLAIN SHOW TRANSACTION PRIORITY
@@ -192,7 +192,7 @@ EXPLAIN SHOW TRANSACTION PRIORITY
 render            ·     ·
  └── filter       ·     ·
       └── values  ·     ·
-·                 size  2 columns, 33 rows
+·                 size  2 columns, 34 rows
 
 query TTT
 EXPLAIN SHOW COLUMNS FROM foo
@@ -217,7 +217,7 @@ sort                                       ·            ·
                      ├── render            ·            ·
                      │    └── filter       ·            ·
                      │         └── values  ·            ·
-                     │                     size         20 columns, 913 rows
+                     │                     size         20 columns, 926 rows
                      └── render            ·            ·
                           └── filter       ·            ·
                                └── values  ·            ·
@@ -231,7 +231,7 @@ sort                   ·      ·
  └── render            ·      ·
       └── filter       ·      ·
            └── values  ·      ·
-·                      size   8 columns, 575 rows
+·                      size   8 columns, 580 rows
 
 
 query TTT
@@ -253,7 +253,7 @@ sort                             ·         ·
            │                     equality  (relnamespace, oid) = (oid, conrelid)
            ├── filter            ·         ·
            │    └── values       ·         ·
-           │                     size      27 columns, 92 rows
+           │                     size      27 columns, 93 rows
            └── join              ·         ·
                 │                type      cross
                 ├── filter       ·         ·
@@ -377,37 +377,6 @@ limit           ·            ·
 ·               table        t@primary
 ·               spans        ALL
 
-# Ensure EXPLAIN EXECUTE works properly
-
-statement ok
-PREPARE x AS SELECT DISTINCT v from t LIMIT $1
-
-query TTT
-SELECT tree, field, description FROM [EXPLAIN (VERBOSE) EXECUTE x(3)]
-----
-limit                ·         ·
- │                   count     3
- └── distinct        ·         ·
-      └── render     ·         ·
-           │         render 0  test.public.t.v
-           └── scan  ·         ·
-·                    table     t@primary
-·                    spans     ALL
-
-query TTT
-SELECT tree, field, description FROM [
-EXPLAIN (VERBOSE) SELECT * FROM [EXECUTE x(3)]
-]
-----
-limit                ·         ·
- │                   count     3
- └── distinct        ·         ·
-      └── render     ·         ·
-           │         render 0  test.public.t.v
-           └── scan  ·         ·
-·                    table     t@primary
-·                    spans     ALL
-
 statement ok
 CREATE TABLE tc (a INT, b INT, INDEX c(a))
 
@@ -487,15 +456,10 @@ values  ·              ·                  (column1 int, column2 int, column3 i
 query TTTTT
 EXPLAIN (TYPES) SELECT 2*count(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND count(k)>1
 ----
-render                 ·            ·                               (z int, v int)        ·
- │                     render 0     ((agg0)[int] * (2)[int])[int]   ·                     ·
- │                     render 1     (agg1)[int]                     ·                     ·
- └── filter            ·            ·                               (agg0 int, agg1 int)  ·
-      │                filter       ((agg0)[int] > (1)[int])[bool]  ·                     ·
-      └── group        ·            ·                               (agg0 int, agg1 int)  ·
-           │           aggregate 0  count(k)                        ·                     ·
-           │           aggregate 1  any_not_null(v)                 ·                     ·
-           └── norows  ·            ·                               (k int, v int)        ·
+render       ·         ·         (z int, v int)  ·
+ │           render 0  (z)[int]  ·               ·
+ │           render 1  (v)[int]  ·               ·
+ └── norows  ·         ·         (v int, z int)  ·
 
 query TTTTT
 EXPLAIN (TYPES) DELETE FROM t WHERE v > 1
@@ -583,19 +547,17 @@ scan  ·       ·                                                               
 query TTTTT
 EXPLAIN (TYPES) SELECT abs(2-3) AS a
 ----
-render         ·         ·                      (a int)  ·
- │             render 0  (abs((-1)[int]))[int]  ·        ·
- └── emptyrow  ·         ·                      ()       ·
+render         ·         ·         (a int)  ·
+ │             render 0  (1)[int]  ·        ·
+ └── emptyrow  ·         ·         ()       ·
 
 # Check array subscripts (#13811)
 query TTTTT
 EXPLAIN (TYPES) SELECT x[1] FROM (SELECT ARRAY[1,2,3] AS x)
 ----
-render              ·         ·                                           (x int)    ·
- │                  render 0  ((x)[int[]][(1)[int]])[int]                 ·          ·
- └── render         ·         ·                                           (x int[])  x=CONST
-      │             render 0  (ARRAY[(1)[int],(2)[int],(3)[int]])[int[]]  ·          ·
-      └── emptyrow  ·         ·                                           ()         ·
+render         ·         ·         (x int)  ·
+ │             render 0  (1)[int]  ·        ·
+ └── emptyrow  ·         ·         ()       ·
 
 query T
 EXPLAIN (OPT) SELECT 1 AS r

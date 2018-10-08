@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -47,6 +48,8 @@ type changeAggregator struct {
 	// tableHistUpdaterDoneCh is closed when the tableHistUpdater exits.
 	tableHistUpdaterDoneCh chan struct{}
 
+	// encoder is the Encoder to use for key and value serialization.
+	encoder Encoder
 	// sink is the Sink to write rows to. Resolved timestamps are never written
 	// by changeAggregator.
 	sink Sink
@@ -97,52 +100,27 @@ func newChangeAggregatorProcessor(
 		return nil, err
 	}
 
-	initialHighWater := hlc.Timestamp{WallTime: -1}
-	var spans []roachpb.Span
-	for _, watch := range spec.Watches {
-		spans = append(spans, watch.Span)
-		if initialHighWater.WallTime == -1 || watch.InitialResolved.Less(initialHighWater) {
-			initialHighWater = watch.InitialResolved
-		}
-	}
-
 	var err error
-	if ca.sink, err = getSink(spec.Feed.SinkURI, spec.Feed.Targets); err != nil {
+	if ca.encoder, err = getEncoder(ca.spec.Feed.Opts); err != nil {
 		return nil, err
 	}
-	if b, ok := ca.sink.(*bufferSink); ok {
-		ca.changedRowBuf = &b.buf
+
+	// Due to the possibility of leaked goroutines, it is not safe to start a sink
+	// in this method because there is no guarantee that the TrailingMetaCallback
+	// method will ever be called (this can happen, for example, if an error
+	// occurs during flow setup).  However, we still want to ensure that the user
+	// has not made any obvious errors when specifying the sink in the CREATE
+	// CHANGEFEED statement. Therefore, we create a "canary" sink, which will be
+	// immediately closed, only to check for errors.
+	{
+		canarySink, err := getSink(spec.Feed.SinkURI, spec.Feed.Opts, spec.Feed.Targets)
+		if err != nil {
+			return nil, err
+		}
+		if err := canarySink.Close(); err != nil {
+			return nil, err
+		}
 	}
-	// The job registry has a set of metrics used to monitor the various jobs it
-	// runs. They're all stored as the `metric.Struct` interface because of
-	// dependency cycles.
-	metrics := flowCtx.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
-	ca.sink = makeMetricsSink(metrics, ca.sink)
-
-	buf := makeBuffer()
-	ca.poller = makePoller(
-		flowCtx.Settings, flowCtx.ClientDB, flowCtx.ClientDB.Clock(), flowCtx.Gossip, spans,
-		spec.Feed, initialHighWater, buf)
-
-	leaseMgr := flowCtx.LeaseManager.(*sql.LeaseManager)
-	tableHist := makeTableHistory(func(desc *sqlbase.TableDescriptor) error {
-		// NB: Each new `tableDesc.Version` is initially written with an mvcc
-		// timestamp equal to its `ModificationTime`. It might later update that
-		// `Version` with backfill progress, but we only validate a table
-		// descriptor through its `ModificationTime` before using it, so this
-		// validation function can't depend on anything that changes after a new
-		// `Version` of a table desc is written.
-		return validateChangefeedTable(spec.Feed.Targets, desc)
-	}, initialHighWater)
-	ca.tableHistUpdater = &tableHistoryUpdater{
-		settings: flowCtx.Settings,
-		db:       flowCtx.ClientDB,
-		targets:  spec.Feed.Targets,
-		m:        tableHist,
-	}
-	rowsFn := kvsToRows(leaseMgr, tableHist, spec.Feed, buf.Get)
-
-	ca.tickFn = emitEntries(spec.Feed, ca.sink, rowsFn)
 
 	return ca, nil
 }
@@ -154,9 +132,73 @@ func (ca *changeAggregator) OutputTypes() []sqlbase.ColumnType {
 // Start is part of the RowSource interface.
 func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	ctx, ca.cancel = context.WithCancel(ctx)
+	// StartInternal called at the beginning of the function because there are
+	// early returns if errors are detected.
+	ctx = ca.StartInternal(ctx, changeAggregatorProcName)
 
-	// Give errCh enough buffer for both of these, but only the first one is
-	// ever used.
+	var err error
+	if ca.sink, err = getSink(
+		ca.spec.Feed.SinkURI, ca.spec.Feed.Opts, ca.spec.Feed.Targets,
+	); err != nil {
+		// Early abort in the case that there is an error creating the sink.
+		ca.MoveToDraining(err)
+		ca.cancel()
+		return ctx
+	}
+
+	// This is the correct point to set up certain hooks depending on the sink
+	// type.
+	if b, ok := ca.sink.(*bufferSink); ok {
+		ca.changedRowBuf = &b.buf
+	}
+
+	initialHighWater := hlc.Timestamp{WallTime: -1}
+	var spans []roachpb.Span
+	for _, watch := range ca.spec.Watches {
+		spans = append(spans, watch.Span)
+		if initialHighWater.WallTime == -1 || watch.InitialResolved.Less(initialHighWater) {
+			initialHighWater = watch.InitialResolved
+		}
+	}
+
+	// The job registry has a set of metrics used to monitor the various jobs it
+	// runs. They're all stored as the `metric.Struct` interface because of
+	// dependency cycles.
+	metrics := ca.flowCtx.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
+	ca.sink = makeMetricsSink(metrics, ca.sink)
+
+	buf := makeBuffer()
+	ca.poller = makePoller(
+		ca.flowCtx.Settings, ca.flowCtx.ClientDB, ca.flowCtx.ClientDB.Clock(), ca.flowCtx.Gossip,
+		spans, ca.spec.Feed, initialHighWater, buf,
+	)
+
+	leaseMgr := ca.flowCtx.LeaseManager.(*sql.LeaseManager)
+	tableHist := makeTableHistory(func(desc *sqlbase.TableDescriptor) error {
+		// NB: Each new `tableDesc.Version` is initially written with an mvcc
+		// timestamp equal to its `ModificationTime`. It might later update that
+		// `Version` with backfill progress, but we only validate a table
+		// descriptor through its `ModificationTime` before using it, so this
+		// validation function can't depend on anything that changes after a new
+		// `Version` of a table desc is written.
+		return validateChangefeedTable(ca.spec.Feed.Targets, desc)
+	}, initialHighWater)
+	ca.tableHistUpdater = &tableHistoryUpdater{
+		settings: ca.flowCtx.Settings,
+		db:       ca.flowCtx.ClientDB,
+		targets:  ca.spec.Feed.Targets,
+		m:        tableHist,
+	}
+	rowsFn := kvsToRows(leaseMgr, tableHist, ca.spec.Feed, buf.Get)
+
+	var knobs TestingKnobs
+	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
+		knobs = *cfKnobs
+	}
+	ca.tickFn = emitEntries(ca.spec.Feed, ca.encoder, ca.sink, rowsFn, knobs)
+
+	// Give errCh enough buffer both possible errors from supporting goroutines,
+	// but only the first one is ever used.
 	ca.errCh = make(chan error, 2)
 	ca.pollerDoneCh = make(chan struct{})
 	go func(ctx context.Context) {
@@ -177,21 +219,35 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 		ca.cancel()
 	}(ctx)
 
-	ctx = ca.StartInternal(ctx, changeAggregatorProcName)
 	return ctx
 }
 
+// close has two purposes: to synchronize on the completion of the helper
+// goroutines created by the Start method, and to clean up any resources used by
+// the processor. Due to the fact that this method may be called even if the
+// processor did not finish completion, there is an excessive amount of nil
+// checking.
 func (ca *changeAggregator) close() {
-	// Wait for the poller and tableHistUpdater to finish shutting down.
-	<-ca.pollerDoneCh
-	<-ca.tableHistUpdaterDoneCh
-	if err := ca.sink.Close(); err != nil {
-		log.Warningf(ca.Ctx, `error closing sink. goroutines may have leaked: %v`, err)
+	if ca.InternalClose() {
+		// Shut down the poller and tableHistUpdater if they weren't already.
+		if ca.cancel != nil {
+			ca.cancel()
+		}
+		// Wait for the poller and tableHistUpdater to finish shutting down.
+		if ca.pollerDoneCh != nil {
+			<-ca.pollerDoneCh
+		}
+		if ca.tableHistUpdaterDoneCh != nil {
+			<-ca.tableHistUpdaterDoneCh
+		}
+		if ca.sink != nil {
+			if err := ca.sink.Close(); err != nil {
+				log.Warningf(ca.Ctx, `error closing sink. goroutines may have leaked: %v`, err)
+			}
+		}
+		ca.memAcc.Close(ca.Ctx)
+		ca.MemMonitor.Stop(ca.Ctx)
 	}
-	// Need to close the mem accounting while the context is still valid.
-	ca.memAcc.Close(ca.Ctx)
-	ca.InternalClose()
-	ca.MemMonitor.Stop(ca.Ctx)
 }
 
 // Next is part of the RowSource interface.
@@ -256,6 +312,11 @@ func (ca *changeAggregator) ConsumerClosed() {
 	ca.InternalClose()
 }
 
+const (
+	emitAllResolved = 0
+	emitNoResolved  = -1
+)
+
 type changeFrontier struct {
 	distsqlrun.ProcessorBase
 
@@ -270,9 +331,17 @@ type changeFrontier struct {
 	// sf contains the current resolved timestamp high-water for the tracked
 	// span set.
 	sf *spanFrontier
+	// encoder is the Encoder to use for resolved timestamp serialization.
+	encoder Encoder
 	// sink is the Sink to write resolved timestamps to. Rows are never written
 	// by changeFrontier.
 	sink Sink
+	// freqEmitResolved, if >= 0, is a lower bound on the duration between
+	// resolved timestamp emits.
+	freqEmitResolved time.Duration
+	// lastEmitResolved is the last time a resolved timestamp was emitted.
+	lastEmitResolved time.Time
+
 	// jobProgressedFn, if non-nil, is called to checkpoint the changefeed's
 	// progress in the corresponding system job entry.
 	jobProgressedFn func(context.Context, jobs.HighWaterProgressedFn) error
@@ -327,25 +396,33 @@ func newChangeFrontierProcessor(
 		return nil, err
 	}
 
+	if r, ok := cf.spec.Feed.Opts[optResolvedTimestamps]; ok {
+		var err error
+		if r == `` {
+			// Empty means emit them as often as we have them.
+			cf.freqEmitResolved = emitAllResolved
+		} else if cf.freqEmitResolved, err = time.ParseDuration(r); err != nil {
+			return nil, err
+		}
+	} else {
+		cf.freqEmitResolved = emitNoResolved
+	}
+
 	var err error
-	if cf.sink, err = getSink(spec.Feed.SinkURI, spec.Feed.Targets); err != nil {
+	if cf.encoder, err = getEncoder(spec.Feed.Opts); err != nil {
 		return nil, err
 	}
-	if b, ok := cf.sink.(*bufferSink); ok {
-		cf.resolvedBuf = &b.buf
-	}
-	// The job registry has a set of metrics used to monitor the various jobs it
-	// runs. They're all stored as the `metric.Struct` interface because of
-	// dependency cycles.
-	cf.metrics = flowCtx.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
-	cf.sink = makeMetricsSink(cf.metrics, cf.sink)
 
-	if spec.JobID != 0 {
-		job, err := flowCtx.JobRegistry.LoadJob(ctx, spec.JobID)
+	// See comment in newChangeAggregatorProcessor for details on the use of canary
+	// sinks.
+	{
+		canarySink, err := getSink(spec.Feed.SinkURI, spec.Feed.Opts, spec.Feed.Targets)
 		if err != nil {
 			return nil, err
 		}
-		cf.jobProgressedFn = job.HighWaterProgressed
+		if err := canarySink.Close(); err != nil {
+			return nil, err
+		}
 	}
 
 	return cf, nil
@@ -358,7 +435,37 @@ func (cf *changeFrontier) OutputTypes() []sqlbase.ColumnType {
 // Start is part of the RowSource interface.
 func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	cf.input.Start(ctx)
+
+	// StartInternal called at the beginning of the function because there are
+	// early returns if errors are detected.
 	ctx = cf.StartInternal(ctx, changeFrontierProcName)
+
+	var err error
+	if cf.sink, err = getSink(
+		cf.spec.Feed.SinkURI, cf.spec.Feed.Opts, cf.spec.Feed.Targets,
+	); err != nil {
+		cf.MoveToDraining(err)
+		return ctx
+	}
+
+	if b, ok := cf.sink.(*bufferSink); ok {
+		cf.resolvedBuf = &b.buf
+	}
+
+	// The job registry has a set of metrics used to monitor the various jobs it
+	// runs. They're all stored as the `metric.Struct` interface because of
+	// dependency cycles.
+	cf.metrics = cf.flowCtx.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
+	cf.sink = makeMetricsSink(cf.metrics, cf.sink)
+
+	if cf.spec.JobID != 0 {
+		job, err := cf.flowCtx.JobRegistry.LoadJob(ctx, cf.spec.JobID)
+		if err != nil {
+			cf.MoveToDraining(err)
+			return ctx
+		}
+		cf.jobProgressedFn = job.HighWaterProgressed
+	}
 
 	cf.metrics.mu.Lock()
 	cf.metricsID = cf.metrics.mu.id
@@ -382,13 +489,15 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 }
 
 func (cf *changeFrontier) close() {
-	if err := cf.sink.Close(); err != nil {
-		log.Warningf(cf.Ctx, `error closing sink. goroutines may have leaked: %v`, err)
+	if cf.InternalClose() {
+		if cf.sink != nil {
+			if err := cf.sink.Close(); err != nil {
+				log.Warningf(cf.Ctx, `error closing sink. goroutines may have leaked: %v`, err)
+			}
+		}
+		cf.memAcc.Close(cf.Ctx)
+		cf.MemMonitor.Stop(cf.Ctx)
 	}
-	// Need to close the mem accounting while the context is still valid.
-	cf.memAcc.Close(cf.Ctx)
-	cf.InternalClose()
-	cf.MemMonitor.Stop(cf.Ctx)
 }
 
 // Next is part of the RowSource interface.
@@ -442,15 +551,23 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 		return errors.Wrapf(err, `unmarshalling resolved span: %x`, raw)
 	}
 	if cf.sf.Forward(resolved.Span, resolved.Timestamp) {
+		newResolved := cf.sf.Frontier()
 		cf.metrics.mu.Lock()
 		if cf.metricsID != -1 {
-			cf.metrics.mu.resolved[cf.metricsID] = cf.sf.Frontier()
+			cf.metrics.mu.resolved[cf.metricsID] = newResolved
 		}
 		cf.metrics.mu.Unlock()
-		if err := emitResolvedTimestamp(
-			cf.Ctx, cf.spec.Feed, cf.sink, cf.jobProgressedFn, cf.sf,
-		); err != nil {
+		if err := checkpointResolvedTimestamp(cf.Ctx, cf.jobProgressedFn, cf.sf); err != nil {
 			return err
+		}
+		sinceEmitted := newResolved.GoTime().Sub(cf.lastEmitResolved)
+		if cf.freqEmitResolved != emitNoResolved && sinceEmitted >= cf.freqEmitResolved {
+			// Keeping this after the checkpointResolvedTimestamp call will avoid
+			// some duplicates if a restart happens.
+			if err := emitResolvedTimestamp(cf.Ctx, cf.encoder, cf.sink, newResolved); err != nil {
+				return err
+			}
+			cf.lastEmitResolved = newResolved.GoTime()
 		}
 	}
 	return nil

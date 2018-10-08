@@ -676,8 +676,7 @@ var specs = []stmtSpec{
 		name:   "explain_stmt",
 		inline: []string{"explain_option_list"},
 		replace: map[string]string{
-			"'ANALYZE'":           "",
-			"explain_option_name": "( | 'EXPRS' | 'METADATA' | 'QUALIFY' | 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' )",
+			"explain_option_name": "( 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' )",
 		},
 	},
 	{
@@ -743,7 +742,15 @@ var specs = []stmtSpec{
 		name:   "index_def",
 		inline: []string{"opt_storing", "storing", "index_params", "opt_name"},
 	},
-	{name: "import_table", stmt: "import_stmt"},
+	{
+		name: "import_table",
+		stmt: "import_stmt",
+		replace: map[string]string{
+			"string_or_placeholder": "file_location",
+		},
+		inline: []string{"opt_with_options"},
+		unlink: []string{"import_format", "file_location", "file_location_list"},
+	},
 	{
 		name:    "insert_stmt",
 		inline:  []string{"insert_target", "insert_rest", "returning_clause", "insert_column_list", "insert_column_item", "target_list", "opt_with_clause", "with_clause", "cte_list"},
@@ -960,8 +967,8 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "set_var",
-		stmt:   "set_stmt",
-		inline: []string{"set_session_stmt", "set_rest_more", "generic_set", "var_list"},
+		stmt:   "preparable_set_stmt",
+		inline: []string{"set_session_stmt", "set_rest_more", "generic_set", "var_list", "to_or_eq"},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile(`'SET' . 'TRANSACTION'`),
 			regexp.MustCompile(`'SET' 'TRANSACTION'`),
@@ -977,13 +984,13 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "set_cluster_setting",
-		stmt:   "set_stmt",
-		inline: []string{"set_csetting_stmt", "generic_set", "var_list"},
+		stmt:   "preparable_set_stmt",
+		inline: []string{"set_csetting_stmt", "generic_set", "var_list", "to_or_eq"},
 		match: []*regexp.Regexp{
 			regexp.MustCompile("'SET' 'CLUSTER'"),
 		},
 	},
-	{name: "set_transaction", stmt: "set_stmt", inline: []string{"set_transaction_stmt", "transaction_mode_list", "transaction_iso_level", "transaction_user_priority", "iso_level", "user_priority"}, match: []*regexp.Regexp{regexp.MustCompile("'SET' 'TRANSACTION'")}, exclude: []*regexp.Regexp{regexp.MustCompile("'READ'")}, replace: map[string]string{"'ISOLATION' 'LEVEL'": "'ISOLATION LEVEL'"}},
+	{name: "set_transaction", stmt: "nonpreparable_set_stmt", inline: []string{"set_transaction_stmt", "transaction_mode_list", "transaction_iso_level", "transaction_user_priority", "iso_level", "user_priority"}, match: []*regexp.Regexp{regexp.MustCompile("'SET' 'TRANSACTION'")}, exclude: []*regexp.Regexp{regexp.MustCompile("'READ'")}, replace: map[string]string{"'ISOLATION' 'LEVEL'": "'ISOLATION LEVEL'"}},
 	{
 		name: "show_var",
 		stmt: "show_stmt",

@@ -1428,7 +1428,7 @@ func setupSafeUpdates(cmd *cobra.Command, conn *sqlConn) {
 // by the server.
 func (c *cliState) tryEnableCheckSyntax() {
 	if err := c.conn.Exec("SHOW SYNTAX 'SHOW SYNTAX ''1'';'", nil); err != nil {
-		fmt.Fprintf(stderr, "warning: cannot enable check_syntax: %v", err)
+		fmt.Fprintf(stderr, "warning: cannot enable check_syntax: %v\n", err)
 	} else {
 		c.checkSyntax = true
 	}

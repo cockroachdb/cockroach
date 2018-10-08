@@ -61,9 +61,7 @@ var _ flag.Value = &atomicBool{}
 const (
 	LogToStderrName               = "logtostderr"
 	NoColorName                   = "no-color"
-	VerbosityName                 = "verbosity"
 	VModuleName                   = "vmodule"
-	LogBacktraceAtName            = "log-backtrace-at"
 	LogDirName                    = "log-dir"
 	NoRedirectStderrName          = "no-redirect-stderr"
 	ShowLogsName                  = "show-logs"
@@ -79,14 +77,12 @@ func InitFlags(
 	logDir flag.Value,
 	showLogs *bool,
 	nocolor *bool,
-	verbosity, vmodule, traceLocation flag.Value,
+	vmodule flag.Value,
 	logFileMaxSize, logFilesCombinedMaxSize *int64,
 ) {
 	flag.BoolVar(nocolor, NoColorName, *nocolor, "disable standard error log colorization")
 	flag.BoolVar(noRedirectStderr, NoRedirectStderrName, *noRedirectStderr, "disable redirect of stderr to the log file")
-	flag.Var(verbosity, VerbosityName, "log level for V logs (significantly increases log output)")
 	flag.Var(vmodule, VModuleName, "comma-separated list of pattern=N settings for file-filtered logging (significantly hurts performance)")
-	flag.Var(traceLocation, LogBacktraceAtName, "when logging hits line file:N, emit a stack trace")
 	flag.Var(logDir, LogDirName, "if non-empty, write log files in this directory")
 	flag.BoolVar(showLogs, ShowLogsName, *showLogs, "print logs instead of saving them in files")
 	flag.Var(humanizeutil.NewBytesValue(logFileMaxSize), LogFileMaxSizeName, "maximum size of each log file")

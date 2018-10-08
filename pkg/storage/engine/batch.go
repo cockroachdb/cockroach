@@ -18,6 +18,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
@@ -313,48 +314,11 @@ func EncodeKey(key MVCCKey) []byte {
 	return dbKey
 }
 
-// SplitMVCCKey returns the key and timestamp components of an encoded MVCC key. This
-// decoding must match engine/db.cc:SplitKey().
-func SplitMVCCKey(mvccKey []byte) (key []byte, ts []byte, ok bool) {
-	if len(mvccKey) == 0 {
-		return nil, nil, false
-	}
-	tsLen := int(mvccKey[len(mvccKey)-1])
-	keyPartEnd := len(mvccKey) - 1 - tsLen
-	if keyPartEnd < 0 {
-		return nil, nil, false
-	}
-
-	key = mvccKey[:keyPartEnd]
-	if tsLen > 0 {
-		ts = mvccKey[keyPartEnd+1 : len(mvccKey)-1]
-	}
-	return key, ts, true
-}
-
-// DecodeKey decodes an engine.MVCCKey from its serialized representation. This
+// DecodeMVCCKey decodes an engine.MVCCKey from its serialized representation. This
 // decoding must match engine/db.cc:DecodeKey().
-func DecodeKey(encodedKey []byte) (MVCCKey, error) {
-	key, ts, ok := SplitMVCCKey(encodedKey)
-	if !ok {
-		return MVCCKey{}, errors.Errorf("invalid encoded mvcc key: %x", encodedKey)
-	}
-
-	mvccKey := MVCCKey{Key: key}
-	switch len(ts) {
-	case 0:
-		// No-op.
-	case 8:
-		mvccKey.Timestamp.WallTime = int64(binary.BigEndian.Uint64(ts[0:8]))
-	case 12:
-		mvccKey.Timestamp.WallTime = int64(binary.BigEndian.Uint64(ts[0:8]))
-		mvccKey.Timestamp.Logical = int32(binary.BigEndian.Uint32(ts[8:12]))
-	default:
-		return MVCCKey{}, errors.Errorf(
-			"invalid encoded mvcc key: %x bad timestamp %x", encodedKey, ts)
-	}
-
-	return mvccKey, nil
+func DecodeMVCCKey(encodedKey []byte) (MVCCKey, error) {
+	k, ts, err := enginepb.DecodeKey(encodedKey)
+	return MVCCKey{k, ts}, err
 }
 
 // Decode the header of RocksDB batch repr, returning both the count of the
@@ -460,7 +424,8 @@ func (r *RocksDBBatchReader) Key() []byte {
 
 // MVCCKey returns the MVCC key of the current batch entry.
 func (r *RocksDBBatchReader) MVCCKey() (MVCCKey, error) {
-	return DecodeKey(r.key)
+	k, ts, err := enginepb.DecodeKey(r.Key())
+	return MVCCKey{k, ts}, err
 }
 
 // Value returns the value of the current batch entry. Value panics if the

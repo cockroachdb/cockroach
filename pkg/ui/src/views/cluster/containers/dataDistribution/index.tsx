@@ -44,8 +44,8 @@ class DataDistribution extends React.Component<DataDistributionProps> {
           {this.props.sortedZoneConfigs.map((zoneConfig) => (
             <li key={zoneConfig.cli_specifier} className="zone-config">
               <h3>{zoneConfig.cli_specifier}</h3>
-              <pre className="zone-config__raw-yaml">
-                {zoneConfig.config_yaml}
+              <pre className="zone-config__raw-sql">
+                {zoneConfig.config_sql}
               </pre>
             </li>
           ))}

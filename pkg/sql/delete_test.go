@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS child_with_index(
 	PRIMARY KEY (pid, child_id),
 	FOREIGN KEY (pid) REFERENCES parent(id),
 	UNIQUE (other_field)
-) INTERLEAVE IN PARENT parent(pid); CREATE INDEX ON child_with_index (other_field) STORING (child_id)
+) INTERLEAVE IN PARENT parent(pid); CREATE INDEX ON child_with_index (other_field)
 `,
 	}
 

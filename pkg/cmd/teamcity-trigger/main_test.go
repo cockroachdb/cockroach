@@ -21,11 +21,8 @@ import (
 
 func TestRunTC(t *testing.T) {
 	count := 0
-	runTC([]string{"master"}, func(buildID, branch string, opts map[string]string) {
+	runTC(func(buildID string, opts map[string]string) {
 		count++
-		if branch != "master" {
-			t.Errorf("unexpected branch %q", branch)
-		}
 		if pkg, ok := opts["env.PKG"]; ok {
 			if strings.Contains(pkg, "/vendor/") {
 				t.Errorf("unexpected package %s", pkg)

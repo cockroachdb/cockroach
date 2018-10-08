@@ -549,8 +549,8 @@ func (nl *NodeLiveness) Heartbeat(ctx context.Context, liveness *Liveness) error
 func (nl *NodeLiveness) heartbeatInternal(
 	ctx context.Context, liveness *Liveness, incrementEpoch bool,
 ) error {
-	ctx, finish := tracing.EnsureChildSpan(ctx, nl.ambientCtx.Tracer, "liveness heartbeat")
-	defer finish()
+	ctx, sp := tracing.EnsureChildSpan(ctx, nl.ambientCtx.Tracer, "liveness heartbeat")
+	defer sp.Finish()
 	defer func(start time.Time) {
 		dur := timeutil.Now().Sub(start)
 		nl.metrics.HeartbeatLatency.RecordValue(dur.Nanoseconds())
@@ -640,13 +640,23 @@ func (nl *NodeLiveness) Self() (*Liveness, error) {
 	return nl.getLivenessLocked(nl.gossip.NodeID.Get())
 }
 
+// IsLiveMapEntry encapsulates data about current liveness for a
+// node.
+type IsLiveMapEntry struct {
+	IsLive bool
+	Epoch  int64
+}
+
+// IsLiveMap is a type alias for a map from NodeID to IsLiveMapEntry.
+type IsLiveMap map[roachpb.NodeID]IsLiveMapEntry
+
 // GetIsLiveMap returns a map of nodeID to boolean liveness status of
 // each node. This excludes nodes that were removed completely (dead +
 // decommissioning).
-func (nl *NodeLiveness) GetIsLiveMap() map[roachpb.NodeID]bool {
+func (nl *NodeLiveness) GetIsLiveMap() IsLiveMap {
 	nl.mu.Lock()
 	defer nl.mu.Unlock()
-	lMap := map[roachpb.NodeID]bool{}
+	lMap := IsLiveMap{}
 	now := nl.clock.Now()
 	maxOffset := nl.clock.MaxOffset()
 	for nID, l := range nl.mu.nodes {
@@ -655,7 +665,10 @@ func (nl *NodeLiveness) GetIsLiveMap() map[roachpb.NodeID]bool {
 			// This is a node that was completely removed. Skip over it.
 			continue
 		}
-		lMap[nID] = isLive
+		lMap[nID] = IsLiveMapEntry{
+			IsLive: isLive,
+			Epoch:  l.Epoch,
+		}
 	}
 	return lMap
 }

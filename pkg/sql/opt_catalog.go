@@ -68,22 +68,16 @@ func (oc *optCatalog) ResolveDataSource(
 func (oc *optCatalog) ResolveDataSourceByID(
 	ctx context.Context, dataSourceID int64,
 ) (opt.DataSource, error) {
-	// ResolveDataSourceByID skips the descriptor cache. This is unlike the
-	// heuristic planner which attempts to get the table from a cache unless
-	// forced to skip the cache. See sql/data_source.go:getTableDescByID() for
-	// original implementation.
-	desc, err := sqlbase.GetTableDescFromID(ctx, oc.resolver.Txn(), sqlbase.ID(dataSourceID))
 
-	if err != nil {
-		if err == sqlbase.ErrDescriptorNotFound {
+	tableLookup, err := oc.resolver.LookupTableByID(ctx, sqlbase.ID(dataSourceID))
+
+	if err != nil || tableLookup.IsAdding {
+		if err == sqlbase.ErrDescriptorNotFound || tableLookup.IsAdding {
 			return nil, sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: dataSourceID})
 		}
 		return nil, err
 	}
-
-	if err := filterTableState(desc); err != nil {
-		return nil, err
-	}
+	desc := tableLookup.Table
 
 	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, oc.resolver.Txn(), desc.ParentID)
 	if err != nil {
@@ -148,6 +142,11 @@ func newOptView(cat *optCatalog, desc *sqlbase.TableDescriptor, name *tree.Table
 	return ov
 }
 
+// Fingerprint is part of the opt.DataSource interface.
+func (ov *optView) Fingerprint() opt.Fingerprint {
+	return opt.Fingerprint(ov.desc.ID)<<32 | opt.Fingerprint(ov.desc.Version)
+}
+
 // Name is part of the opt.View interface.
 func (ov *optView) Name() *tree.TableName {
 	return &ov.name
@@ -200,14 +199,19 @@ func newOptSequence(
 	return ot
 }
 
+// Fingerprint is part of the opt.DataSource interface.
+func (os *optSequence) Fingerprint() opt.Fingerprint {
+	return opt.Fingerprint(os.desc.ID)<<32 | opt.Fingerprint(os.desc.Version)
+}
+
 // Name is part of the opt.DataSource interface.
-func (ot *optSequence) Name() *tree.TableName {
-	return &ot.name
+func (os *optSequence) Name() *tree.TableName {
+	return &os.name
 }
 
 // CheckPrivilege is part of the opt.DataSource interface.
-func (ot *optSequence) CheckPrivilege(ctx context.Context, priv privilege.Kind) error {
-	return ot.cat.resolver.CheckPrivilege(ctx, ot.desc, priv)
+func (os *optSequence) CheckPrivilege(ctx context.Context, priv privilege.Kind) error {
+	return os.cat.resolver.CheckPrivilege(ctx, os.desc, priv)
 }
 
 // optTable is a wrapper around sqlbase.TableDescriptor that caches index
@@ -250,6 +254,11 @@ func newOptTable(cat *optCatalog, desc *sqlbase.TableDescriptor, name *tree.Tabl
 	return ot
 }
 
+// Fingerprint is part of the opt.DataSource interface.
+func (ot *optTable) Fingerprint() opt.Fingerprint {
+	return opt.Fingerprint(ot.desc.ID)<<32 | opt.Fingerprint(ot.desc.Version)
+}
+
 // Name is part of the opt.DataSource interface.
 func (ot *optTable) Name() *tree.TableName {
 	return &ot.name
@@ -258,6 +267,11 @@ func (ot *optTable) Name() *tree.TableName {
 // CheckPrivilege is part of the opt.DataSource interface.
 func (ot *optTable) CheckPrivilege(ctx context.Context, priv privilege.Kind) error {
 	return ot.cat.resolver.CheckPrivilege(ctx, ot.desc, priv)
+}
+
+// InternalID is part of the opt.Table interface.
+func (ot *optTable) InternalID() uint64 {
+	return uint64(ot.desc.ID)
 }
 
 // IsVirtualTable is part of the opt.Table interface.
@@ -381,6 +395,10 @@ type optIndex struct {
 	numCols       int
 	numKeyCols    int
 	numLaxKeyCols int
+
+	// foreignKey stores IDs of another table and one of its indexes,
+	// if this index is part of an outbound foreign key relation.
+	foreignKey opt.ForeignKeyReference
 }
 
 var _ opt.Index = &optIndex{}
@@ -442,6 +460,12 @@ func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor) {
 		oi.numLaxKeyCols = len(desc.ColumnIDs) + len(desc.ExtraColumnIDs)
 		oi.numKeyCols = oi.numLaxKeyCols
 	}
+
+	if desc.ForeignKey.IsSet() {
+		oi.foreignKey.TableID = uint64(desc.ForeignKey.Table)
+		oi.foreignKey.IndexID = uint64(desc.ForeignKey.Index)
+		oi.foreignKey.PrefixLen = desc.ForeignKey.SharedPrefixLen
+	}
 }
 
 // IdxName is part of the opt.Index interface.
@@ -496,6 +520,22 @@ func (oi *optIndex) Column(i int) opt.IndexColumn {
 	i -= length
 	ord, _ := oi.tab.lookupColumnOrdinal(oi.storedCols[i])
 	return opt.IndexColumn{Column: oi.tab.Column(ord), Ordinal: ord}
+}
+
+// ForeignKey is part of the opt.Index interface.
+func (oi *optIndex) ForeignKey() (opt.ForeignKeyReference, bool) {
+	desc := oi.desc
+	if desc.ForeignKey.IsSet() {
+		oi.foreignKey.TableID = uint64(desc.ForeignKey.Table)
+		oi.foreignKey.IndexID = uint64(desc.ForeignKey.Index)
+		oi.foreignKey.PrefixLen = desc.ForeignKey.SharedPrefixLen
+	}
+	return oi.foreignKey, oi.desc.ForeignKey.IsSet()
+}
+
+// Table is part of the opt.Index interface.
+func (oi *optIndex) Table() opt.Table {
+	return oi.tab
 }
 
 type optTableStat struct {

@@ -195,7 +195,6 @@ render                ·               ·                    (b, a, c, d, a, c, 
       │               type            inner                ·                         ·
       │               equality        (b) = (b)            ·                         ·
       │               mergeJoinOrder  +"(b=b)"             ·                         ·
-      │               pred            b = b                ·                         ·
       ├── index-join  ·               ·                    (a, b, c, d)              ·
       │    ├── scan   ·               ·                    (a, b, c)                 ·
       │    │          table           t@bc                 ·                         ·
@@ -390,8 +389,6 @@ output row: [1 2]
 fetched: /t/ab/5/6 -> NULL
 output row: [5 6]
 
-# TODO(radu): we don't fold the constants to "a = 3" so we don't generate index
-# constraints.
 statement ok
 SET tracing = on,kv,results; SELECT * FROM t@ab WHERE a + 1 = 4; SET tracing = off
 
@@ -399,10 +396,8 @@ query T
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
-fetched: /t/ab/1/2 -> NULL
 fetched: /t/ab/3/4 -> NULL
 output row: [3 4]
-fetched: /t/ab/5/6 -> NULL
 
 query TTT
 EXPLAIN SELECT * FROM t WHERE a = 1 AND false
@@ -764,15 +759,16 @@ AND   f1.resource_key IN ('ts', 'ts2', 'ts3')
 GROUP BY resource_key
 ORDER BY total DESC
 ----
-sort            ·            ·
- │              order        -total
- └── group      ·            ·
-      │         aggregate 0  resource_key
-      │         aggregate 1  count(resource_key)
-      │         group by     @2
-      └── scan  ·            ·
-·               table        favorites@favorites_glob_fav_idx
-·               spans        /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"/PrefixEnd
+sort                 ·            ·
+ │                   order        -total
+ └── group           ·            ·
+      │              aggregate 0  resource_key
+      │              aggregate 1  count(resource_key)
+      │              group by     @1
+      └── render     ·            ·
+           └── scan  ·            ·
+·                    table        favorites@favorites_glob_fav_idx
+·                    spans        /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"/PrefixEnd
 
 query TI rowsort
 SELECT
@@ -1330,13 +1326,13 @@ statement ok
 CREATE TABLE t3 (k INT PRIMARY KEY, v INT, w INT, INDEX v(v))
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT w FROM t3 WHERE v > 0 AND v < 100 ORDER BY v
+EXPLAIN (VERBOSE) SELECT w FROM t3 WHERE v > 0 AND v < 10 ORDER BY v
 ----
 render           ·         ·           (w)     ·
  │               render 0  w           ·       ·
  └── index-join  ·         ·           (v, w)  +v
       ├── scan   ·         ·           (k, v)  +v
       │          table     t3@v        ·       ·
-      │          spans     /1-/100     ·       ·
+      │          spans     /1-/10      ·       ·
       └── scan   ·         ·           (v, w)  ·
 ·                table     t3@primary  ·       ·

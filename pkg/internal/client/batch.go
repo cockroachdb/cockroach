@@ -243,14 +243,15 @@ func (b *Batch) fillResults(ctx context.Context) {
 						reply, args)
 				}
 
-				// Nothing to do for all methods below as they do not generate
-				// any rows.
+			// Nothing to do for all methods below as they do not generate
+			// any rows.
 			case *roachpb.BeginTransactionRequest:
 			case *roachpb.EndTransactionRequest:
 			case *roachpb.AdminMergeRequest:
 			case *roachpb.AdminSplitRequest:
 			case *roachpb.AdminTransferLeaseRequest:
 			case *roachpb.AdminChangeReplicasRequest:
+			case *roachpb.AdminRelocateRangeRequest:
 			case *roachpb.HeartbeatTxnRequest:
 			case *roachpb.GCRequest:
 			case *roachpb.LeaseInfoRequest:
@@ -631,6 +632,24 @@ func (b *Batch) adminChangeReplicas(
 		},
 		ChangeType: changeType,
 		Targets:    targets,
+	}
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+}
+
+// adminRelocateRange is only exported on DB. It is here for symmetry with the
+// other operations.
+func (b *Batch) adminRelocateRange(key interface{}, targets []roachpb.ReplicationTarget) {
+	k, err := marshalKey(key)
+	if err != nil {
+		b.initResult(0, 0, notRaw, err)
+		return
+	}
+	req := &roachpb.AdminRelocateRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: k,
+		},
+		Targets: targets,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)

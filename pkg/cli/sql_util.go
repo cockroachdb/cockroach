@@ -187,6 +187,9 @@ func (c *sqlConn) checkServerMetadata() error {
 	}
 
 	newServerVersion, newClusterID, err := c.getServerMetadata()
+	if err == driver.ErrBadConn {
+		return err
+	}
 	if err != nil {
 		// It is not an error that the server version cannot be retrieved.
 		fmt.Fprintf(stderr, "warning: unable to retrieve the server's version: %s\n", err)
@@ -587,6 +590,50 @@ func runQuery(conn *sqlConn, fn queryFunc, showMoreChars bool) ([]string, [][]st
 
 	defer func() { _ = rows.Close() }()
 	return sqlRowsToStrings(rows, showMoreChars)
+}
+
+// runQueryRaw takes a 'query' with optional 'parameters'.
+// It returns the result rows as strings with minimal changes (no escaping, etc).
+func runQueryRaw(conn *sqlConn, fn queryFunc) (cols []string, results [][]string, err error) {
+	rows, err := fn(conn)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	defer func() {
+		rowsErr := rows.Close()
+		if err != nil {
+			err = errors.Wrapf(rowsErr, "error after row-wise error: %v", err)
+		}
+	}()
+	cols = rows.Columns()
+	vals := make([]driver.Value, len(cols))
+	for {
+		err := rows.Next(vals)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return cols, results, err
+		}
+		rowStrings := make([]string, len(cols))
+		for i, v := range vals {
+			switch t := v.(type) {
+			case nil:
+				rowStrings[i] = "NULL"
+			case string:
+				rowStrings[i] = t
+			case []byte:
+				rowStrings[i] = string(t)
+			case time.Time:
+				rowStrings[i] = t.Format(tree.TimestampOutputFormat)
+			default:
+				rowStrings[i] = fmt.Sprintf("%v", t)
+			}
+		}
+		results = append(results, rowStrings)
+	}
+	return cols, results, nil
 }
 
 // handleCopyError ensures the user is properly informed when they issue

@@ -78,12 +78,8 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 	// copied it from the old jepsen scripts. It's slow, so we should
 	// probably either remove it or use a new base image with more of
 	// these preinstalled.
-	//
-	// In spite of -qqy, these produce huge amounts of output, so we
-	// send it all to /dev/null. I apologize to whoever debugs this in
-	// the future if these start to fail.
-	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -qqy update > /dev/null 2>&1"`)
-	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -qqy upgrade -o Dpkg::Options::='--force-confold' > /dev/null 2>&1"`)
+	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -y update 2>&1 | sudo tee /var/log/apt-upgrade.log > /dev/null"`)
+	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -y upgrade -o Dpkg::Options::='--force-confold' 2>&1 | sudo tee -a /var/log/apt-upgrade.log > /dev/null"`)
 
 	// Install the binary on all nodes and package it as jepsen expects.
 	// TODO(bdarnell): copying the raw binary and compressing it on the
@@ -260,6 +256,13 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 }
 
 func registerJepsen(r *registry) {
+	// We're splitting the tests arbitrarily into a number of "batches" - top
+	// level tests. We do this so that we can different groups can run in parallel
+	// (as subtests don't run concurrently with each other). We put more than one
+	// test in a group so that Jepsen's lengthy cluster initialization step can be
+	// amortized (the individual tests are smart enough to not do it if it has
+	// been done already).
+	//
 	// NB: the "comments" test is not included because it requires
 	// linearizability.
 	groups := [][]string{
@@ -270,7 +273,7 @@ func registerJepsen(r *registry) {
 
 	for i := range groups {
 		spec := testSpec{
-			Name:  fmt.Sprintf("jepsen/%d", i+1),
+			Name:  fmt.Sprintf("jepsen-batch%d", i+1),
 			Nodes: nodes(6),
 		}
 

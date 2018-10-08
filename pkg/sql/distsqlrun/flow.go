@@ -31,7 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -108,7 +108,7 @@ type FlowCtx struct {
 	// working set is larger than can be stored in memory.
 	// This is not supposed to be used as a general engine.Engine and thus
 	// one should sparingly use the set of features offered by it.
-	TempStorage engine.Engine
+	TempStorage diskmap.Factory
 	// diskMonitor is used to monitor temporary storage disk usage.
 	diskMonitor *mon.BytesMonitor
 
@@ -117,6 +117,9 @@ type FlowCtx struct {
 
 	// traceKV is true if KV tracing was requested by the session.
 	traceKV bool
+
+	// local is true if this flow is being run as part of a local-only query.
+	local bool
 }
 
 // NewEvalCtx returns a modifiable copy of the FlowCtx's EvalContext.
@@ -129,6 +132,11 @@ type FlowCtx struct {
 func (ctx *FlowCtx) NewEvalCtx() *tree.EvalContext {
 	evalCtx := *ctx.EvalCtx
 	return &evalCtx
+}
+
+// TestingKnobs returns the distsql testing knobs for this flow context.
+func (ctx *FlowCtx) TestingKnobs() TestingKnobs {
+	return ctx.testingKnobs
 }
 
 type flowStatus int
@@ -333,28 +341,25 @@ func (f *Flow) makeProcessor(
 	if len(ps.Output) != 1 {
 		return nil, errors.Errorf("only single-output processors supported")
 	}
-	outputs := make([]RowReceiver, len(ps.Output))
-	for i := range ps.Output {
-		spec := &ps.Output[i]
-		if spec.Type == OutputRouterSpec_PASS_THROUGH {
-			// There is no entity that corresponds to a pass-through router - we just
-			// use its output stream directly.
-			if len(spec.Streams) != 1 {
-				return nil, errors.Errorf("expected one stream for passthrough router")
-			}
-			var err error
-			outputs[i], err = f.setupOutboundStream(spec.Streams[0])
-			if err != nil {
-				return nil, err
-			}
-			continue
+	var output RowReceiver
+	spec := &ps.Output[0]
+	if spec.Type == OutputRouterSpec_PASS_THROUGH {
+		// There is no entity that corresponds to a pass-through router - we just
+		// use its output stream directly.
+		if len(spec.Streams) != 1 {
+			return nil, errors.Errorf("expected one stream for passthrough router")
 		}
-
+		var err error
+		output, err = f.setupOutboundStream(spec.Streams[0])
+		if err != nil {
+			return nil, err
+		}
+	} else {
 		r, err := f.setupRouter(spec)
 		if err != nil {
 			return nil, err
 		}
-		outputs[i] = r
+		output = r
 		f.startables = append(f.startables, r)
 	}
 
@@ -365,10 +370,9 @@ func (f *Flow) makeProcessor(
 	// upstreams, though, which means that copyingRowReceivers are only used on
 	// non-fused processors like the output routers.
 
-	for i := range outputs {
-		outputs[i] = &copyingRowReceiver{RowReceiver: outputs[i]}
-	}
+	output = &copyingRowReceiver{RowReceiver: output}
 
+	outputs := []RowReceiver{output}
 	proc, err := newProcessor(ctx, &f.FlowCtx, ps.ProcessorID, &ps.Core, &ps.Post, inputs, outputs, f.localProcessors)
 	if err != nil {
 		return nil, err
@@ -376,18 +380,16 @@ func (f *Flow) makeProcessor(
 
 	// Initialize any routers (the setupRouter case above) and outboxes.
 	types := proc.OutputTypes()
-	for _, o := range outputs {
-		rowRecv := o.(*copyingRowReceiver).RowReceiver
-		clearer, ok := rowRecv.(*accountClearingRowReceiver)
-		if ok {
-			rowRecv = clearer.RowReceiver
-		}
-		switch o := rowRecv.(type) {
-		case router:
-			o.init(ctx, &f.FlowCtx, types)
-		case *outbox:
-			o.init(types)
-		}
+	rowRecv := output.(*copyingRowReceiver).RowReceiver
+	clearer, ok := rowRecv.(*accountClearingRowReceiver)
+	if ok {
+		rowRecv = clearer.RowReceiver
+	}
+	switch o := rowRecv.(type) {
+	case router:
+		o.init(ctx, &f.FlowCtx, types)
+	case *outbox:
+		o.init(types)
 	}
 	return proc, nil
 }
@@ -618,6 +620,14 @@ func (f *Flow) Wait() {
 	}
 }
 
+// Releasable is an interface for objects than can be Released back into a
+// memory pool when finished.
+type Releasable interface {
+	// Release allows this object to be returned to a memory pool. Objects must
+	// not be used after Release is called.
+	Release()
+}
+
 // Cleanup should be called when the flow completes (after all processors and
 // mailboxes exited).
 func (f *Flow) Cleanup(ctx context.Context) {
@@ -627,6 +637,11 @@ func (f *Flow) Cleanup(ctx context.Context) {
 	// This closes the account and monitor opened in ServerImpl.setupFlow.
 	f.EvalCtx.ActiveMemAcc.Close(ctx)
 	f.EvalCtx.Stop(ctx)
+	for _, p := range f.processors {
+		if d, ok := p.(Releasable); ok {
+			d.Release()
+		}
+	}
 	if log.V(1) {
 		log.Infof(ctx, "cleaning up")
 	}

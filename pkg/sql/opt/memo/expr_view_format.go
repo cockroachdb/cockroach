@@ -241,8 +241,12 @@ func (ev ExprView) formatRelational(f *ExprFmtCtx, tp treeprinter.Node) {
 				tp.Childf("cardinality: %s", logProps.Relational.Cardinality)
 			}
 		}
+
 		if logProps.Relational.CanHaveSideEffects {
 			tp.Child("side-effects")
+		}
+		if logProps.Relational.HasPlaceholder {
+			tp.Child("has-placeholder")
 		}
 	}
 
@@ -386,6 +390,14 @@ func (ev ExprView) formatScalarPrivate(f *ExprFmtCtx, private interface{}) {
 		// The private data of these ops was already used to print the output
 		// columns for their containing op (Project or GroupBy), so no need to
 		// print again.
+		private = nil
+
+	case opt.AnyOp:
+		// We don't want to show the OriginalExpr; just show Cmp.
+		private = private.(*SubqueryDef).Cmp
+
+	case opt.SubqueryOp, opt.ExistsOp:
+		// We don't want to show the OriginalExpr.
 		private = nil
 	}
 
