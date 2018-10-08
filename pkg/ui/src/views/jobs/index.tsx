@@ -192,8 +192,9 @@ interface JobsTableProps {
 const titleTooltip = (
   <span>
     Some jobs can be paused or canceled through SQL. For details, view the docs
-    on the <a href={docsURL.pauseJob}><code>PAUSE JOB</code></a> and <a
-    href={docsURL.cancelJob}><code>CANCEL JOB</code></a> statements.
+    on the <a href={docsURL.pauseJob} target="_blank"><code>PAUSE JOB</code></a>
+    and <a href={docsURL.cancelJob} target="_blank"><code>CANCEL JOB</code></a>
+    statements.
   </span>
 );
 
