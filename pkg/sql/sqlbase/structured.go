@@ -704,10 +704,13 @@ func (desc *TableDescriptor) allocateIndexIDs(columnNames map[string]ColumnID) e
 
 	// Populate IDs.
 	for _, index := range indexes {
-		if index.ID == 0 {
-			index.ID = desc.NextIndexID
-			desc.NextIndexID++
+		if index.ID != 0 {
+			// This index has already been populated. Nothing to do.
+			continue
 		}
+		index.ID = desc.NextIndexID
+		desc.NextIndexID++
+
 		for j, colName := range index.ColumnNames {
 			if len(index.ColumnIDs) <= j {
 				index.ColumnIDs = append(index.ColumnIDs, 0)
