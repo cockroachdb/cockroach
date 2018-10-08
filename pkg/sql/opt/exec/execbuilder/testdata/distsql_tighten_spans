@@ -155,40 +155,45 @@ scan  ·      ·
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= 3 AND b <= 3
 ----
-scan  ·      ·
-·     table  p1@primary
-·     spans  -/3/3/#
+scan  ·       ·
+·     table   p1@primary
+·     spans   -/3/3/#
+·     filter  b <= 3
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= 3 AND b < 4
 ----
-scan  ·      ·
-·     table  p1@primary
-·     spans  -/3/3/#
+scan  ·       ·
+·     table   p1@primary
+·     spans   -/3/3/#
+·     filter  b < 4
 
 # Mixed bounds.
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a >= 2 AND b <= 3
 ----
-scan  ·      ·
-·     table  p1@primary
-·     spans  /2-
+scan  ·       ·
+·     table   p1@primary
+·     spans   /2-
+·     filter  b <= 3
 
 # Edge cases.
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= 0 AND b <= 0
 ----
-scan  ·      ·
-·     table  p1@primary
-·     spans  -/0/0/#
+scan  ·       ·
+·     table   p1@primary
+·     spans   -/0/0/#
+·     filter  b <= 0
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a <= -1 AND b <= -1
 ----
-scan  ·      ·
-·     table  p1@primary
-·     spans  -/-1/-1/#
+scan  ·       ·
+·     table   p1@primary
+·     spans   -/-1/-1/#
+·     filter  b <= -1
 
 query TTT
 EXPLAIN SELECT * FROM p1 WHERE a = 1 AND b <= -9223372036854775808
@@ -219,9 +224,10 @@ scan  ·      ·
 query TTT
 EXPLAIN SELECT * FROM c1 WHERE a <= 3 AND b <= 3
 ----
-scan  ·      ·
-·     table  c1@primary
-·     spans  -/3/3/#/54/1/#
+scan  ·       ·
+·     table   c1@primary
+·     spans   -/3/3/#/54/1/#
+·     filter  b <= 3
 
 # Table p2 with interleaved index.
 
@@ -252,36 +258,40 @@ scan  ·      ·
 query TTT
 EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d >= 2
 ----
-scan  ·      ·
-·     table  p2@p2_id
-·     spans  /1/#/55/2/2-
+scan  ·       ·
+·     table   p2@p2_id
+·     spans   /1/#/55/2/2-
+·     filter  d >= 2
 
 # Upper bound (i <= 6 AND d <= 5)
 
 query TTT
 EXPLAIN SELECT * FROM p2@p2_id WHERE i <= 6 AND d <= 5
 ----
-scan  ·      ·
-·     table  p2@p2_id
-·     spans  -/6/#/55/2/6
+scan  ·       ·
+·     table   p2@p2_id
+·     spans   -/6/#/55/2/6
+·     filter  d <= 5
 
 # IS NULL
 
 query TTT
 EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NULL
 ----
-scan  ·      ·
-·     table  p2@p2_id
-·     spans  /1/#/55/2/NULL-
+scan  ·       ·
+·     table   p2@p2_id
+·     spans   /1/#/55/2/NULL-
+·     filter  d IS NULL
 
 # IS NOT NULL
 
 query TTT
 EXPLAIN SELECT * FROM p2@p2_id WHERE i >= 1 AND d IS NOT NULL
 ----
-scan  ·      ·
-·     table  p2@p2_id
-·     spans  /1/#/55/2/!NULL-
+scan  ·       ·
+·     table   p2@p2_id
+·     spans   /1/#/55/2/!NULL-
+·     filter  d IS NOT NULL
 
 # String table
 

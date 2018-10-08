@@ -10,5 +10,6 @@ query TTT
 EXPLAIN SELECT * FROM system.information_schema.tables WHERE table_name='foo'
 ----
 filter              ·       ·
+ │                  filter  table_name = 'foo'
  └── virtual table  ·       ·
 ·                   source  ·
