@@ -3143,7 +3143,7 @@ INSERT INTO t.test (k, v) VALUES (1, 99), (2, 99);
 }
 
 // TestIndexBackfillAfterGC verifies that if a GC is done after an index
-// backfill has started, it will error instead of spin forever.
+// backfill has started, it will move past the error and complete.
 func TestIndexBackfillAfterGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -3180,13 +3180,18 @@ func TestIndexBackfillAfterGC(t *testing.T) {
 	tc = serverutils.StartTestCluster(t, 1, base.TestClusterArgs{ServerArgs: params})
 	defer tc.Stopper().Stop(context.TODO())
 	db := tc.ServerConn(0)
+	kvDB := tc.Server(0).DB()
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	sqlDB.Exec(t, `CREATE DATABASE t`)
 	sqlDB.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'))`)
 	sqlDB.Exec(t, `INSERT INTO t.test VALUES (1, 1)`)
-	if _, err := db.Exec(`CREATE UNIQUE INDEX foo ON t.test (v)`); !testutils.IsError(err, `batch timestamp .* must be after GC threshold`) {
-		t.Fatalf("unexpected: %v", err)
+	if _, err := db.Exec(`CREATE UNIQUE INDEX foo ON t.test (v)`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := checkTableKeyCount(context.TODO(), kvDB, 2, 0); err != nil {
+		t.Fatal(err)
 	}
 }
 

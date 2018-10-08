@@ -23,7 +23,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
@@ -350,6 +349,7 @@ func (sc *SchemaChanger) distBackfill(
 	origNRanges := -1
 	origFractionCompleted := sc.job.FractionCompleted()
 	fractionLeft := 1 - origFractionCompleted
+	readAsOf := sc.clock.Now()
 	for {
 		var spans []roachpb.Span
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -441,7 +441,7 @@ func (sc *SchemaChanger) distBackfill(
 			defer recv.Release()
 			planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, evalCtx, txn)
 			plan, err := sc.distSQLPlanner.createBackfiller(
-				planCtx, backfillType, *tableDesc, duration, chunkSize, spans, otherTableDescs, sc.readAsOf,
+				planCtx, backfillType, *tableDesc, duration, chunkSize, spans, otherTableDescs, readAsOf,
 			)
 			if err != nil {
 				return err
@@ -466,31 +466,6 @@ func (sc *SchemaChanger) backfillIndexes(
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
 ) error {
-	// Pick a read timestamp for our index backfill, or reuse the previously
-	// stored one.
-	if details := sc.job.Details().(jobspb.SchemaChangeDetails); details.ReadAsOf == (hlc.Timestamp{}) {
-		// Update the job details to reflect a new read-as-of timestamp.
-		var job *jobs.Job
-		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			var err error
-			job, err = sc.jobRegistry.LoadJobWithTxn(ctx, *sc.job.ID(), txn)
-			if err != nil {
-				return err
-			}
-			details := job.Details().(jobspb.SchemaChangeDetails)
-			details.ReadAsOf = sc.clock.Now()
-			if err := job.WithTxn(txn).SetDetails(ctx, details); err != nil {
-				return errors.Wrapf(err, "failed to store readAsOf on job %d", *sc.job.ID())
-			}
-			job.WithTxn(nil)
-			return nil
-		}); err != nil {
-			return err
-		}
-		sc.job = job
-	}
-	sc.readAsOf = sc.job.Details().(jobspb.SchemaChangeDetails).ReadAsOf
-
 	if fn := sc.testingKnobs.RunBeforeIndexBackfill; fn != nil {
 		fn()
 	}
