@@ -139,7 +139,7 @@ type ZoneConfig struct {
 	// field with num_replicas set to 0.
 	Constraints []Constraints `protobuf:"bytes,6,rep,name=constraints" json:"constraints" yaml:"constraints,flow"`
 	// InheritedContraints specifies if the value in the Constraints field was
-	// populated by the user explicitly and not inherited from the zone's parent.
+	// inherited from the zone's parent or specified explicitly by the user.
 	InheritedConstraints bool `protobuf:"varint,10,opt,name=inherited_constraints,json=inheritedConstraints" json:"inherited_constraints"`
 	// LeasePreference stores information about where the user would prefer for
 	// range leases to be placed. Leases are allowed to be placed elsewhere if
@@ -150,7 +150,7 @@ type ZoneConfig struct {
 	// replica of a range matches will take priority.
 	LeasePreferences []LeasePreference `protobuf:"bytes,9,rep,name=lease_preferences,json=leasePreferences" json:"lease_preferences" yaml:"lease_preferences,flow"`
 	// InheritedLeasePreferences specifies if the value in the LeasePreferences field
-	// was populated by the user explicitly or inherited from the zone's parent.
+	// was inherited from the zone's parent or specified explicitly by the user.
 	InheritedLeasePreferences bool `protobuf:"varint,11,opt,name=inherited_lease_preferences,json=inheritedLeasePreferences" json:"inherited_lease_preferences"`
 	// Subzones stores config overrides for "subzones", each of which represents
 	// either a SQL table index or a partition of a SQL table index. Subzones are

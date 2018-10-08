@@ -436,7 +436,7 @@ func (s *SystemConfig) ComputeSplitKey(startKey, endKey roachpb.RKey) roachpb.RK
 	return findSplitKey(startID, endID)
 }
 
-// NeedsSplit returns whether the range [startKy, endKey) needs a split due
+// NeedsSplit returns whether the range [startKey, endKey) needs a split due
 // to zone configs.
 func (s *SystemConfig) NeedsSplit(startKey, endKey roachpb.RKey) bool {
 	return len(s.ComputeSplitKey(startKey, endKey)) > 0
