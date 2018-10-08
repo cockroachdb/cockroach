@@ -56,6 +56,10 @@ type projectSetProcessor struct {
 	// either the SRF or the scalar expressions are fully consumed and
 	// thus also whether NULLs should be emitted instead.
 	done []bool
+
+	// emitCount is used to track the number of rows that have been
+	// emitted from Next().
+	emitCount int64
 }
 
 var _ Processor = &projectSetProcessor{}
@@ -212,7 +216,19 @@ func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err erro
 
 // Next is part of the RowSource interface.
 func (ps *projectSetProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+	const cancelCheckCount = 10000
+
 	for ps.State == StateRunning {
+
+		// Occasionally check for cancellation.
+		ps.emitCount++
+		if ps.emitCount%cancelCheckCount == 0 {
+			if err := ps.Ctx.Err(); err != nil {
+				ps.MoveToDraining(err)
+				return nil, ps.DrainHelper()
+			}
+		}
+
 		// Start of a new row of input?
 		if !ps.inputRowReady {
 			// Read the row from the source.
