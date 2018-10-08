@@ -69,27 +69,30 @@ count                ·      ·
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 7 ORDER BY v
 ----
-count                ·      ·
- └── delete          ·      ·
-      │              from   unindexed
-      └── nosort     ·      ·
-           │         order  +v
-           └── scan  ·      ·
-·                    table  unindexed@primary
-·                    spans  ALL
+count                ·       ·
+ └── delete          ·       ·
+      │              from    unindexed
+      └── nosort     ·       ·
+           │         order   +v
+           └── scan  ·       ·
+·                    table   unindexed@primary
+·                    spans   ALL
+·                    filter  v = 7
 
 # Check DELETE with LIMIT clause (MySQL extension)
 query TTT
 EXPLAIN DELETE FROM unindexed WHERE v = 5 LIMIT 10
 ----
-count                     ·      ·
- └── delete               ·      ·
-      │                   from   unindexed
-      └── limit           ·      ·
-           └── render     ·      ·
-                └── scan  ·      ·
-·                         table  unindexed@primary
-·                         spans  ALL
+count                     ·       ·
+ └── delete               ·       ·
+      │                   from    unindexed
+      └── limit           ·       ·
+           │              count   10
+           └── render     ·       ·
+                └── scan  ·       ·
+·                         table   unindexed@primary
+·                         spans   ALL
+·                         filter  v = 5
 
 query TTT
 EXPLAIN DELETE FROM indexed WHERE value = 5 LIMIT 10
@@ -98,6 +101,7 @@ count                     ·      ·
  └── delete               ·      ·
       │                   from   indexed
       └── limit           ·      ·
+           │              count  10
            └── render     ·      ·
                 └── scan  ·      ·
 ·                         table  indexed@indexed_value_idx
@@ -111,6 +115,7 @@ count                     ·      ·
  └── delete               ·      ·
       │                   from   indexed
       └── limit           ·      ·
+           │              count  10
            └── render     ·      ·
                 └── scan  ·      ·
 ·                         table  indexed@primary
@@ -125,6 +130,7 @@ render                          ·      ·
       └── delete                ·      ·
            │                    from   indexed
            └── limit            ·      ·
+                │               count  10
                 └── index-join  ·      ·
                      ├── scan   ·      ·
                      │          table  indexed@indexed_value_idx

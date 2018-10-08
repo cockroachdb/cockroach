@@ -11,9 +11,10 @@ PREPARE change_index AS SELECT * FROM [EXPLAIN SELECT * FROM ab WHERE b=10]
 query TTT
 EXECUTE change_index
 ----
-scan  ·      ·
-·     table  ab@primary
-·     spans  ALL
+scan  ·       ·
+·     table   ab@primary
+·     spans   ALL
+·     filter  b = 10
 
 statement ok
 CREATE INDEX bindex ON ab (b)
@@ -31,6 +32,7 @@ DROP INDEX bindex
 query TTT
 EXECUTE change_index
 ----
-scan  ·      ·
-·     table  ab@primary
-·     spans  ALL
+scan  ·       ·
+·     table   ab@primary
+·     spans   ALL
+·     filter  b = 10

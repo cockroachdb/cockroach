@@ -21,6 +21,7 @@ root                          ·             ·
       │                       original sql  (SELECT 42)
       │                       exec mode     one row
       └── limit               ·             ·
+           │                  count         2
            └── render         ·             ·
                 └── emptyrow  ·             ·
 
@@ -38,6 +39,7 @@ root                      ·             ·
       │                   original sql  EXISTS (SELECT a FROM abc)
       │                   exec mode     exists
       └── limit           ·             ·
+           │              count         1
            └── render     ·             ·
                 └── scan  ·             ·
 ·                         table         abc@primary
@@ -119,6 +121,7 @@ root                          ·             ·
       │                       original sql  (SELECT 2)
       │                       exec mode     one row
       └── limit               ·             ·
+           │                  count         2
            └── render         ·             ·
                 └── emptyrow  ·             ·
 
@@ -139,6 +142,7 @@ root                 ·             ·
  │    └── scan       ·             ·
  │                   table         tab4@primary
  │                   spans         ALL
+ │                   filter        ((col0 <= 0) AND (col4 <= 5.38)) OR ((((col4 IN @S1) AND (col3 <= 5)) AND (col3 >= 7)) AND (col3 <= 9))
  └── subquery        ·             ·
       │              id            @S1
       │              original sql  (SELECT col1 FROM tab4 WHERE col1 > 8.27)
@@ -147,3 +151,4 @@ root                 ·             ·
            └── scan  ·             ·
 ·                    table         tab4@primary
 ·                    spans         ALL
+·                    filter        col1 > 8.27

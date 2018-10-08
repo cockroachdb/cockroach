@@ -340,7 +340,7 @@ var orderingFunctions = map[string]struct{}{
 
 func containsOrderingFunction(ctx context.Context, plan planNode) bool {
 	sawOrderingFn := false
-	po := planObserver{expr: func(_, _ string, n int, expr tree.Expr) {
+	po := planObserver{expr: func(_ observeVerbosity, _, _ string, n int, expr tree.Expr) {
 		if f, ok := expr.(*tree.FuncExpr); ok {
 			if _, ok := orderingFunctions[f.Func.String()]; ok {
 				sawOrderingFn = true

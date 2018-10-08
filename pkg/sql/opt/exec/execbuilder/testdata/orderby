@@ -30,6 +30,7 @@ query TTT
 EXPLAIN SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
 limit           ·      ·
+ │              count  2
  └── sort       ·      ·
       │         order  +b
       └── scan  ·      ·
@@ -238,12 +239,13 @@ render                ·      ·
 query TTT
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 ORDER BY b, a, d
 ----
-render          ·      ·
- └── sort       ·      ·
-      │         order  +b,+a,+d
-      └── scan  ·      ·
-·               table  abc@primary
-·               spans  ALL
+render          ·       ·
+ └── sort       ·       ·
+      │         order   +b,+a,+d
+      └── scan  ·       ·
+·               table   abc@primary
+·               spans   ALL
+·               filter  b > 10
 
 query III
 SELECT a, b, c FROM abc WHERE b > 4 ORDER BY b, a, d
