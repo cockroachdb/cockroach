@@ -1214,9 +1214,11 @@ render          ·               ·
       ├── scan  ·               ·
       │         table           abcdef@primary
       │         spans           /1/2/6/9-
+      │         filter          (((a, b) > (1, 2)) OR (((a = 1) AND (b = 2)) AND (c < 6))) OR ((((a = 1) AND (b = 2)) AND (c = 6)) AND (d > 8))
       └── scan  ·               ·
 ·               table           abg@primary
 ·               spans           /1/2-
+·               filter          (((a, b) > (1, 2)) OR ((a = 1) AND (b = 2))) OR ((a = 1) AND (b = 2))
 
 # Regression tests for mixed-type equality columns (#22514).
 statement ok

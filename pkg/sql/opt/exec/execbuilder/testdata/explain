@@ -147,52 +147,58 @@ distinct               ·          ·
 query TTT
 EXPLAIN SHOW TABLES
 ----
-sort                   ·      ·
- │                     order  +table_schema,+table_name
- └── render            ·      ·
-      └── filter       ·      ·
-           └── values  ·      ·
-·                      size   6 columns, 91 rows
+sort                   ·       ·
+ │                     order   +table_schema,+table_name
+ └── render            ·       ·
+      └── filter       ·       ·
+           │           filter  table_schema = 'public'
+           └── values  ·       ·
+·                      size    6 columns, 91 rows
 
 query TTT
 EXPLAIN SHOW DATABASE
 ----
-render            ·     ·
- └── filter       ·     ·
-      └── values  ·     ·
-·                 size  2 columns, 34 rows
+render            ·       ·
+ └── filter       ·       ·
+      │           filter  variable = 'database'
+      └── values  ·       ·
+·                 size    2 columns, 34 rows
 
 query TTT
 EXPLAIN SHOW TIME ZONE
 ----
-render            ·     ·
- └── filter       ·     ·
-      └── values  ·     ·
-·                 size  2 columns, 34 rows
+render            ·       ·
+ └── filter       ·       ·
+      │           filter  variable = 'timezone'
+      └── values  ·       ·
+·                 size    2 columns, 34 rows
 
 query TTT
 EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
-render            ·     ·
- └── filter       ·     ·
-      └── values  ·     ·
-·                 size  2 columns, 34 rows
+render            ·       ·
+ └── filter       ·       ·
+      │           filter  variable = 'default_transaction_isolation'
+      └── values  ·       ·
+·                 size    2 columns, 34 rows
 
 query TTT
 EXPLAIN SHOW TRANSACTION ISOLATION LEVEL
 ----
-render            ·     ·
- └── filter       ·     ·
-      └── values  ·     ·
-·                 size  2 columns, 34 rows
+render            ·       ·
+ └── filter       ·       ·
+      │           filter  variable = 'transaction_isolation'
+      └── values  ·       ·
+·                 size    2 columns, 34 rows
 
 query TTT
 EXPLAIN SHOW TRANSACTION PRIORITY
 ----
-render            ·     ·
- └── filter       ·     ·
-      └── values  ·     ·
-·                 size  2 columns, 34 rows
+render            ·       ·
+ └── filter       ·       ·
+      │           filter  variable = 'transaction_priority'
+      └── values  ·       ·
+·                 size    2 columns, 34 rows
 
 query TTT
 EXPLAIN SHOW COLUMNS FROM foo
@@ -216,31 +222,35 @@ sort                                       ·            ·
                      │                     equality     (column_name) = (column_name)
                      ├── render            ·            ·
                      │    └── filter       ·            ·
+                     │         │           filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
                      │         └── values  ·            ·
                      │                     size         20 columns, 927 rows
                      └── render            ·            ·
                           └── filter       ·            ·
+                               │           filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
                                └── values  ·            ·
 ·                                          size         13 columns, 3 rows
 
 query TTT
 EXPLAIN SHOW GRANTS ON foo
 ----
-sort                   ·      ·
- │                     order  +database_name,+schema_name,+table_name,+grantee,+privilege_type
- └── render            ·      ·
-      └── filter       ·      ·
-           └── values  ·      ·
-·                      size   8 columns, 580 rows
+sort                   ·       ·
+ │                     order   +database_name,+schema_name,+table_name,+grantee,+privilege_type
+ └── render            ·       ·
+      └── filter       ·       ·
+           │           filter  (table_catalog, table_schema, table_name) IN (('test', 'public', 'foo'),)
+           └── values  ·       ·
+·                      size    8 columns, 580 rows
 
 
 query TTT
 EXPLAIN SHOW INDEX FROM foo
 ----
-render            ·     ·
- └── filter       ·     ·
-      └── values  ·     ·
-·                 size  13 columns, 3 rows
+render            ·       ·
+ └── filter       ·       ·
+      │           filter  ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+      └── values  ·       ·
+·                 size    13 columns, 3 rows
 
 query TTT
 EXPLAIN SHOW CONSTRAINTS FROM foo
@@ -252,11 +262,13 @@ sort                             ·         ·
            │                     type      inner
            │                     equality  (relnamespace, oid) = (oid, conrelid)
            ├── filter            ·         ·
+           │    │                filter    relname = 'foo'
            │    └── values       ·         ·
            │                     size      27 columns, 93 rows
            └── join              ·         ·
                 │                type      cross
                 ├── filter       ·         ·
+                │    │           filter    nspname = 'public'
                 │    └── values  ·         ·
                 │                size      4 columns, 4 rows
                 └── values       ·         ·
@@ -265,10 +277,11 @@ sort                             ·         ·
 query TTT
 EXPLAIN SHOW USERS
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  users@primary
-·          spans  ALL
+render     ·       ·
+ └── scan  ·       ·
+·          table   users@primary
+·          spans   ALL
+·          filter  "isRole" = false
 
 # EXPLAIN selecting from a sequence.
 statement ok

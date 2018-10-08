@@ -322,12 +322,12 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION]
 ----
 fetched: /abc/foo/'three' -> /3
 fetched: /abc/foo/'two' -> /2
+fetched: /abc/primary/3/'three' -> NULL
+fetched: /abc/primary/2/'two' -> NULL
 fetched: /abc/primary/1/'one' -> NULL
-fetched: /abc/primary/2/'two' -> NULL
-fetched: /abc/primary/2/'two' -> NULL
-fetched: /abc/primary/3/'three' -> NULL
-fetched: /abc/primary/3/'three' -> NULL
 output row: [1 'one' NULL]
+fetched: /abc/primary/2/'two' -> NULL
+fetched: /abc/primary/3/'three' -> NULL
 
 statement ok
 SET tracing = on,kv,results; SELECT * FROM ab WHERE a > 1 INTERSECT SELECT * FROM ab WHERE b > 1; SET tracing = off
