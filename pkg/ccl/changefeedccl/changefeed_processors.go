@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -311,6 +312,11 @@ func (ca *changeAggregator) ConsumerClosed() {
 	ca.InternalClose()
 }
 
+const (
+	emitAllResolved = 0
+	emitNoResolved  = -1
+)
+
 type changeFrontier struct {
 	distsqlrun.ProcessorBase
 
@@ -330,6 +336,11 @@ type changeFrontier struct {
 	// sink is the Sink to write resolved timestamps to. Rows are never written
 	// by changeFrontier.
 	sink Sink
+	// freqEmitResolved, if >= 0, is a lower bound on the duration between
+	// resolved timestamp emits.
+	freqEmitResolved time.Duration
+	// lastEmitResolved is the last time a resolved timestamp was emitted.
+	lastEmitResolved time.Time
 
 	// jobProgressedFn, if non-nil, is called to checkpoint the changefeed's
 	// progress in the corresponding system job entry.
@@ -383,6 +394,18 @@ func newChangeFrontierProcessor(
 		},
 	); err != nil {
 		return nil, err
+	}
+
+	if r, ok := cf.spec.Feed.Opts[optResolvedTimestamps]; ok {
+		var err error
+		if r == `` {
+			// Empty means emit them as often as we have them.
+			cf.freqEmitResolved = emitAllResolved
+		} else if cf.freqEmitResolved, err = time.ParseDuration(r); err != nil {
+			return nil, err
+		}
+	} else {
+		cf.freqEmitResolved = emitNoResolved
 	}
 
 	var err error
@@ -528,15 +551,23 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 		return errors.Wrapf(err, `unmarshalling resolved span: %x`, raw)
 	}
 	if cf.sf.Forward(resolved.Span, resolved.Timestamp) {
+		newResolved := cf.sf.Frontier()
 		cf.metrics.mu.Lock()
 		if cf.metricsID != -1 {
-			cf.metrics.mu.resolved[cf.metricsID] = cf.sf.Frontier()
+			cf.metrics.mu.resolved[cf.metricsID] = newResolved
 		}
 		cf.metrics.mu.Unlock()
-		if err := emitResolvedTimestamp(
-			cf.Ctx, cf.spec.Feed, cf.encoder, cf.sink, cf.jobProgressedFn, cf.sf,
-		); err != nil {
+		if err := checkpointResolvedTimestamp(cf.Ctx, cf.jobProgressedFn, cf.sf); err != nil {
 			return err
+		}
+		sinceEmitted := newResolved.GoTime().Sub(cf.lastEmitResolved)
+		if cf.freqEmitResolved != emitNoResolved && sinceEmitted >= cf.freqEmitResolved {
+			// Keeping this after the checkpointResolvedTimestamp call will avoid
+			// some duplicates if a restart happens.
+			if err := emitResolvedTimestamp(cf.Ctx, cf.encoder, cf.sink, newResolved); err != nil {
+				return err
+			}
+			cf.lastEmitResolved = newResolved.GoTime()
 		}
 	}
 	return nil
