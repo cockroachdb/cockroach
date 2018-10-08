@@ -329,6 +329,13 @@ func newAggregator(
 	post *PostProcessSpec,
 	output RowReceiver,
 ) (Processor, error) {
+	if len(spec.GroupCols) == 0 &&
+		len(spec.Aggregations) == 1 &&
+		spec.Aggregations[0].FilterColIdx == nil &&
+		spec.Aggregations[0].Func == AggregatorSpec_COUNT_ROWS &&
+		!spec.Aggregations[0].Distinct {
+		return newCountAggregator(flowCtx, processorID, input, post, output)
+	}
 	if len(spec.OrderedGroupCols) == len(spec.GroupCols) {
 		return newOrderedAggregator(flowCtx, processorID, spec, input, post, output)
 	}
