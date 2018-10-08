@@ -292,7 +292,8 @@ WHERE id = $1`
 
 	// Verify hashed secret matches original secret
 	hasher := sha256.New()
-	hashedSecret := hasher.Sum(origSecret)
+	_, _ = hasher.Write(origSecret)
+	hashedSecret := hasher.Sum(nil)
 	if !bytes.Equal(sessHashedSecret, hashedSecret) {
 		t.Fatalf("hashed value of secret: \n%#v\ncomputed as: \n%#v\nwanted: \n%#v", origSecret, hashedSecret, sessHashedSecret)
 	}
@@ -492,7 +493,8 @@ func TestAuthenticationAPIUserLogin(t *testing.T) {
 	}
 
 	hasher := sha256.New()
-	hashedSecret := hasher.Sum(sessionCookie.Secret)
+	_, _ = hasher.Write(sessionCookie.Secret)
+	hashedSecret := hasher.Sum(nil)
 	if a, e := sessHashedSecret, hashedSecret; !bytes.Equal(a, e) {
 		t.Fatalf(
 			"session secret hash was %v, wanted %v (derived from original secret %v)",
