@@ -125,6 +125,16 @@ type registry struct {
 	statusInterval time.Duration
 	buildVersion   *version.Version
 
+	config struct {
+		// skipClusterValidationOnAttach skips validation on existing clusters that
+		// the registry uses for running tests.
+		skipClusterValidationOnAttach bool
+		// skipClusterStopOnAttach skips stopping existing clusters that
+		// the registry uses for running tests. It implies skipClusterWipeOnAttach.
+		skipClusterStopOnAttach bool
+		skipClusterWipeOnAttach bool
+	}
+
 	status struct {
 		syncutil.Mutex
 		running map[*test]struct{}
@@ -135,11 +145,13 @@ type registry struct {
 }
 
 func newRegistry() *registry {
-	return &registry{
+	r := &registry{
 		m:        make(map[string]*testSpec),
 		clusters: make(map[string]string),
 		out:      os.Stdout,
 	}
+	r.config.skipClusterWipeOnAttach = !clusterWipe
+	return r
 }
 
 func (r *registry) setBuildVersion(buildTag string) error {
@@ -825,7 +837,20 @@ func (r *registry) runAsync(
 		}
 
 		if c == nil {
-			c = newCluster(ctx, t, t.spec.Nodes)
+			if clusterName == "" {
+				opt := remoteCluster
+				if local {
+					opt = localCluster
+				}
+				c = newCluster(ctx, t, t.spec.Nodes, opt)
+			} else {
+				opt := attachOpt{
+					skipValidation: r.config.skipClusterValidationOnAttach,
+					skipStop:       r.config.skipClusterStopOnAttach,
+					skipWipe:       r.config.skipClusterWipeOnAttach,
+				}
+				c = attachToExistingCluster(ctx, clusterName, t, t.spec.Nodes, opt)
+			}
 			if c != nil {
 				defer func() {
 					if !debugEnabled || !t.Failed() {
