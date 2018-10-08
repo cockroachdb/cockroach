@@ -111,7 +111,8 @@ func VerifyAllZoneConfigs(t testing.TB, sqlDB *SQLRunner, rows ...ZoneRow) {
 	}
 	sqlDB.CheckQueryResults(t, `
 SELECT zone_id, cli_specifier, config_protobuf
-  FROM [SHOW ALL ZONE CONFIGURATIONS]`, expected)
+  FROM crdb_internal.zones
+  WHERE cli_specifier IS NOT NULL`, expected)
 }
 
 // ZoneConfigExists returns whether a zone config with the provided cliSpecifier

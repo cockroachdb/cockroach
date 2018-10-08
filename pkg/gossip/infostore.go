@@ -432,6 +432,20 @@ func (is *infoStore) delta(highWaterTimestamps map[roachpb.NodeID]int64) map[str
 	return infos
 }
 
+// populateMostDistantMarkers adds the node ID infos to the infos map. The node
+// ID infos are used as markers in the mostDistant calculation and need to be
+// propagated regardless of high water stamps.
+func (is *infoStore) populateMostDistantMarkers(infos map[string]*Info) {
+	if err := is.visitInfos(func(key string, i *Info) error {
+		if IsNodeIDKey(key) {
+			infos[key] = i
+		}
+		return nil
+	}, true /* deleteExpired */); err != nil {
+		panic(err)
+	}
+}
+
 // mostDistant returns the most distant gossip node known to the store
 // as well as the number of hops to reach it.
 //
