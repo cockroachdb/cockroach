@@ -57,10 +57,18 @@ func TestClusterNodes(t *testing.T) {
 	}
 }
 
+type testWrapper struct {
+	*testing.T
+}
+
+func (t testWrapper) ArtifactsDir() string {
+	return ""
+}
+
 func TestClusterMonitor(t *testing.T) {
 	logger := &logger{stdout: os.Stdout, stderr: os.Stderr}
 	t.Run(`success`, func(t *testing.T) {
-		c := &cluster{t: t, l: logger}
+		c := &cluster{t: testWrapper{t}, l: logger}
 		m := newMonitor(context.Background(), c)
 		m.Go(func(context.Context) error { return nil })
 		if err := m.wait(`echo`, `1`); err != nil {
@@ -69,7 +77,7 @@ func TestClusterMonitor(t *testing.T) {
 	})
 
 	t.Run(`dead`, func(t *testing.T) {
-		c := &cluster{t: t, l: logger}
+		c := &cluster{t: testWrapper{t}, l: logger}
 		m := newMonitor(context.Background(), c)
 		m.Go(func(ctx context.Context) error {
 			<-ctx.Done()
@@ -85,7 +93,7 @@ func TestClusterMonitor(t *testing.T) {
 	})
 
 	t.Run(`worker-fail`, func(t *testing.T) {
-		c := &cluster{t: t, l: logger}
+		c := &cluster{t: testWrapper{t}, l: logger}
 		m := newMonitor(context.Background(), c)
 		m.Go(func(context.Context) error {
 			return errors.New(`worker-fail`)
@@ -103,7 +111,7 @@ func TestClusterMonitor(t *testing.T) {
 	})
 
 	t.Run(`wait-fail`, func(t *testing.T) {
-		c := &cluster{t: t, l: logger}
+		c := &cluster{t: testWrapper{t}, l: logger}
 		m := newMonitor(context.Background(), c)
 		m.Go(func(ctx context.Context) error {
 			<-ctx.Done()
@@ -123,7 +131,7 @@ func TestClusterMonitor(t *testing.T) {
 	})
 
 	t.Run(`wait-ok`, func(t *testing.T) {
-		c := &cluster{t: t, l: logger}
+		c := &cluster{t: testWrapper{t}, l: logger}
 		m := newMonitor(context.Background(), c)
 		m.Go(func(ctx context.Context) error {
 			<-ctx.Done()
@@ -145,7 +153,7 @@ func TestClusterMonitor(t *testing.T) {
 	// them finish pretty soon (think stress testing). As a matter of fact, `make test` waits
 	// for these child goroutines to finish (so these tests take seconds).
 	t.Run(`worker-fd-error`, func(t *testing.T) {
-		c := &cluster{t: t, l: logger}
+		c := &cluster{t: testWrapper{t}, l: logger}
 		m := newMonitor(context.Background(), c)
 		m.Go(func(ctx context.Context) error {
 			defer func() {
@@ -172,7 +180,7 @@ hi
 		}
 	})
 	t.Run(`worker-fd-fatal`, func(t *testing.T) {
-		c := &cluster{t: t, l: logger}
+		c := &cluster{t: testWrapper{t}, l: logger}
 		m := newMonitor(context.Background(), c)
 		m.Go(func(ctx context.Context) error {
 			err := execCmd(ctx, logger, "/bin/bash", "-c", "echo foo && sleep 3& wait")
