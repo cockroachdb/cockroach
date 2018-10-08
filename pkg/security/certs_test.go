@@ -423,7 +423,7 @@ func TestUseSplitCACerts(t *testing.T) {
 		expectedError            string
 	}{
 		// Success, but "node" is not a sql user.
-		{"node", security.EmbeddedCACert, "client.node", "pq: user node does not exist"},
+		{"node", security.EmbeddedCACert, "client.node", "pq: password authentication failed for user node"},
 		// Success!
 		{"root", security.EmbeddedCACert, "client.root", ""},
 		// Bad server CA: can't verify server certificate.
@@ -541,7 +541,7 @@ func TestUseWrongSplitCACerts(t *testing.T) {
 		// Certificate signed by wrong client CA.
 		{"root", security.EmbeddedCACert, "client.root", "tls: bad certificate"},
 		// Success! The node certificate still contains "CN=node" and is signed by ca.crt.
-		{"node", security.EmbeddedCACert, "node", "pq: user node does not exist"},
+		{"node", security.EmbeddedCACert, "node", "pq: password authentication failed for user node"},
 	}
 
 	for i, tc := range testCases {

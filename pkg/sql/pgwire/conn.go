@@ -1262,7 +1262,6 @@ func (r *pgwireReader) ReadByte() (byte, error) {
 // point the sql.Session does not exist yet! If need exists to access the
 // database to look up authentication data, use the internal executor.
 func (c *conn) handleAuthentication(ctx context.Context, insecure bool) error {
-
 	sendError := func(err error) error {
 		_ /* err */ = writeErr(err, &c.msgBuilder, c.conn)
 		return err
@@ -1277,7 +1276,7 @@ func (c *conn) handleAuthentication(ctx context.Context, insecure bool) error {
 		return sendError(err)
 	}
 	if !exists {
-		return sendError(errors.Errorf("user %s does not exist", c.sessionArgs.User))
+		return sendError(errors.Errorf(security.ErrPasswordUserAuthFailed, c.sessionArgs.User))
 	}
 
 	if tlsConn, ok := c.conn.(*tls.Conn); ok {
