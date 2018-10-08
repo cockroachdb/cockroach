@@ -37,6 +37,7 @@ import (
 
 type tpccOptions struct {
 	Warehouses int
+	Init       bool // insted of using fixture
 	Extra      string
 	Chaos      func() Chaos // for late binding of stopper
 	Duration   time.Duration
@@ -58,16 +59,22 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
 	c.Put(ctx, workload, "./workload", workloadNode)
 
-	t.Status("loading fixture")
-	fixtureWarehouses := -1
-	for _, w := range []int{1, 10, 100, 1000, 2000, 5000, 10000} {
-		if w >= opts.Warehouses {
-			fixtureWarehouses = w
-			break
+	t.Status("loading dataset")
+	loadCmd := "init"
+	loadWarehouses := opts.Warehouses
+	if !opts.Init {
+		loadCmd = "fixtures load"
+		fixtureWarehouses := -1
+		for _, w := range []int{1, 10, 100, 1000, 2000, 5000, 10000} {
+			if w >= opts.Warehouses {
+				fixtureWarehouses = w
+				break
+			}
 		}
-	}
-	if fixtureWarehouses == -1 {
-		t.Fatalf("could not find fixture big enough for %d warehouses", opts.Warehouses)
+		if fixtureWarehouses == -1 {
+			t.Fatalf("could not find fixture big enough for %d warehouses", opts.Warehouses)
+		}
+		loadWarehouses = fixtureWarehouses
 	}
 
 	func() {
@@ -83,7 +90,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 				t.Status("loading dataset")
 				c.Start(ctx, crdbNodes)
 				cmd := fmt.Sprintf(
-					"./workload fixtures load tpcc --warehouses=%d {pgurl:1}", fixtureWarehouses)
+					"./workload %s tpcc --warehouses=%d {pgurl:1}", loadCmd, loadWarehouses)
 				c.Run(ctx, workloadNode, cmd)
 				c.Stop(ctx, crdbNodes)
 
@@ -95,7 +102,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 		} else {
 			c.Start(ctx, crdbNodes)
 			c.Run(ctx, workloadNode, fmt.Sprintf(
-				`./workload fixtures load tpcc --warehouses=%d {pgurl:1}`, fixtureWarehouses,
+				`./workload %s tpcc --warehouses=%d {pgurl:1}`, loadCmd, loadWarehouses,
 			))
 		}
 	}()
@@ -105,7 +112,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 		t.WorkerStatus("running tpcc")
 		cmd := fmt.Sprintf(
 			"./workload run tpcc --warehouses=%d --histograms=logs/stats.json "+
-				opts.Extra+" --ramp=%s --duration=%s {pgurl:1-%d}",
+				opts.Extra+" --split --ramp=%s --duration=%s {pgurl:1-%d}",
 			opts.Warehouses, rampDuration, opts.Duration, c.nodes-1)
 		c.Run(ctx, workloadNode, cmd)
 		return nil
@@ -142,6 +149,19 @@ func registerTPCC(r *registry) {
 				Warehouses: 1,
 				Duration:   10 * time.Minute,
 				Extra:      "--wait=false",
+			})
+		},
+	})
+	r.Add(testSpec{
+		Name:       "tpcc/nodes=3/w=1000/init",
+		MinVersion: "2.1.0",
+		Nodes:      nodes(4, cpu(16)),
+		Stable:     false,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses: 1000,
+				Init:       true,
+				Duration:   30 * time.Minute,
 			})
 		},
 	})
