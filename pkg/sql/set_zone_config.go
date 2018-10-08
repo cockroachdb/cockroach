@@ -428,12 +428,17 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		}
 	}
 
-	// Write the partial zone configutation.
-	// TODO(ridwanmsharif): If cluster version is below 2.2, just write the complete
-	// zone config instead of the partial. That should be enough for backwards compatibility
+	// If cluster version is below 2.2, just write the complete zone
+	// config instead of the partial for backwards compatibility reasons.
+	// Otherwise write the partial zone configutation.
 	hasNewSubzones := !deleteZone && index != nil
+	execConfig := params.extendedEvalCtx.ExecCfg
+	zoneToWrite := partialZone
+	if !execConfig.Settings.Version.IsMinSupported(cluster.VersionCascadingZoneConfigs) {
+		zoneToWrite = completeZone
+	}
 	n.run.numAffected, err = writeZoneConfig(params.ctx, params.p.txn,
-		targetID, table, partialZone, params.extendedEvalCtx.ExecCfg, hasNewSubzones)
+		targetID, table, zoneToWrite, execConfig, hasNewSubzones)
 	if err != nil {
 		return err
 	}
