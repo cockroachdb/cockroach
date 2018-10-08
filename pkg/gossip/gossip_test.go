@@ -80,12 +80,12 @@ func TestGossipOverwriteNode(t *testing.T) {
 	if val, err := g.GetNodeDescriptor(node1.NodeID); err != nil {
 		t.Error(err)
 	} else if val.NodeID != node1.NodeID {
-		t.Errorf("expected node %d, got %+v", node1.NodeID, val)
+		t.Errorf("expected n%d, got %+v", node1.NodeID, val)
 	}
 	if val, err := g.GetNodeDescriptor(node2.NodeID); err != nil {
 		t.Error(err)
 	} else if val.NodeID != node2.NodeID {
-		t.Errorf("expected node %d, got %+v", node2.NodeID, val)
+		t.Errorf("expected n%d, got %+v", node2.NodeID, val)
 	}
 
 	// Give node3 the same address as node1, which should cause node1 to be
@@ -97,13 +97,13 @@ func TestGossipOverwriteNode(t *testing.T) {
 	if val, err := g.GetNodeDescriptor(node3.NodeID); err != nil {
 		t.Error(err)
 	} else if val.NodeID != node3.NodeID {
-		t.Errorf("expected node %d, got %+v", node3.NodeID, val)
+		t.Errorf("expected n%d, got %+v", node3.NodeID, val)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		expectedErr := "node.*has been removed from the cluster"
+		expectedErr := `n\d+ has been removed from the cluster`
 		if val, err := g.GetNodeDescriptor(node1.NodeID); !testutils.IsError(err, expectedErr) {
-			return fmt.Errorf("expected error %q fetching node %d; got error %v and node %+v",
+			return fmt.Errorf("expected error %q fetching n%d; got error %v and node %+v",
 				expectedErr, node1.NodeID, err, val)
 		}
 		return nil
@@ -153,9 +153,9 @@ func TestGossipMoveNode(t *testing.T) {
 		} else if !proto.Equal(movedNode, val) {
 			return fmt.Errorf("expected node %+v, got %+v", movedNode, val)
 		}
-		expectedErr := "node.*has been removed from the cluster"
+		expectedErr := `n\d+ has been removed from the cluster`
 		if val, err := g.GetNodeDescriptor(replacedNode.NodeID); !testutils.IsError(err, expectedErr) {
-			return fmt.Errorf("expected error %q fetching node %d; got error %v and node %+v",
+			return fmt.Errorf("expected error %q fetching n%d; got error %v and node %+v",
 				expectedErr, replacedNode.NodeID, err, val)
 		}
 		return nil
@@ -377,6 +377,108 @@ func TestGossipOutgoingLimitEnforced(t *testing.T) {
 	local.clientsMu.Unlock()
 }
 
+func TestGossipMostDistant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	connect := func(from, to *Gossip) {
+		to.mu.Lock()
+		addr := to.mu.is.NodeAddr
+		to.mu.Unlock()
+		from.mu.Lock()
+		from.startClientLocked(&addr)
+		from.mu.Unlock()
+	}
+
+	mostDistant := func(g *Gossip) (roachpb.NodeID, uint32) {
+		g.mu.Lock()
+		distantNodeID, distantHops := g.mu.is.mostDistant(func(roachpb.NodeID) bool {
+			return false
+		})
+		g.mu.Unlock()
+		return distantNodeID, distantHops
+	}
+
+	const n = 10
+	testCases := []struct {
+		from, to int
+	}{
+		{0, n - 1}, // n1 connects to n10
+		{n - 1, 0}, // n10 connects to n1
+	}
+
+	for _, c := range testCases {
+		t.Run("", func(t *testing.T) {
+
+			// Set up a gossip network of 10 nodes connected in a single line:
+			//
+			//   1 <- 2 <- 3 <- 4 <- 5 <- 6 <- 7 <- 8 <- 9 <- 10
+			nodes := make([]*Gossip, n)
+			for i := range nodes {
+				nodes[i] = startGossip(roachpb.NodeID(i+1), stopper, t, metric.NewRegistry())
+				if i == 0 {
+					continue
+				}
+				connect(nodes[i], nodes[i-1])
+			}
+
+			// Wait for n1 to determine that n10 is the most distant node.
+			testutils.SucceedsSoon(t, func() error {
+				g := nodes[0]
+				distantNodeID, distantHops := mostDistant(g)
+				if distantNodeID == 10 && distantHops == 9 {
+					return nil
+				}
+				return fmt.Errorf("n%d: distantHops: %d from n%d", g.NodeID.Get(), distantHops, distantNodeID)
+			})
+			// Wait for the infos to be fully propagated.
+			testutils.SucceedsSoon(t, func() error {
+				infosCount := func(g *Gossip) int {
+					g.mu.Lock()
+					defer g.mu.Unlock()
+					return len(g.mu.is.Infos)
+				}
+				count := infosCount(nodes[0])
+				for _, g := range nodes[1:] {
+					if tmp := infosCount(g); tmp != count {
+						return fmt.Errorf("unexpected info count: %d != %d", tmp, count)
+					}
+				}
+				return nil
+			})
+
+			// Connect the network in a loop. This will cut the distance to the most
+			// distant node in half.
+			log.Infof(context.Background(), "connecting from n%d to n%d", c.from, c.to)
+			connect(nodes[c.from], nodes[c.to])
+
+			// Wait for n1 to determine that n6 is now the most distant hops from 9
+			// to 5 and change the most distant node to n6.
+			testutils.SucceedsSoon(t, func() error {
+				g := nodes[0]
+				g.mu.Lock()
+				var buf bytes.Buffer
+				_ = g.mu.is.visitInfos(func(key string, i *Info) error {
+					if i.NodeID != 1 && IsNodeIDKey(key) {
+						fmt.Fprintf(&buf, "n%d: hops=%d\n", i.NodeID, i.Hops)
+					}
+					return nil
+				}, true /* deleteExpired */)
+				g.mu.Unlock()
+
+				distantNodeID, distantHops := mostDistant(g)
+				if distantNodeID == 6 && distantHops == 5 {
+					return nil
+				}
+				return fmt.Errorf("n%d: distantHops: %d from n%d\n%s",
+					g.NodeID.Get(), distantHops, distantNodeID, buf.String())
+			})
+		})
+	}
+}
+
 // TestGossipNoForwardSelf verifies that when a Gossip instance is full, it
 // redirects clients elsewhere (in particular not to itself).
 //
@@ -542,7 +644,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 				return nil
 			}
 		}
-		return errors.Errorf("node %d not yet connected", peerNodeID)
+		return errors.Errorf("n%d not yet connected", peerNodeID)
 	})
 
 	testutils.SucceedsSoon(t, func() error {
@@ -551,7 +653,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 				return nil
 			}
 		}
-		return errors.Errorf("node %d descriptor not yet available", peerNodeID)
+		return errors.Errorf("n%d descriptor not yet available", peerNodeID)
 	})
 
 	local.bootstrap()
@@ -562,7 +664,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		for _, peerID := range local.Outgoing() {
 			if peerID == peerNodeID {
-				return errors.Errorf("node %d still connected", peerNodeID)
+				return errors.Errorf("n%d still connected", peerNodeID)
 			}
 		}
 		return nil
@@ -578,7 +680,7 @@ func TestGossipOrphanedStallDetection(t *testing.T) {
 				return nil
 			}
 		}
-		return errors.Errorf("node %d not yet connected", peerNodeID)
+		return errors.Errorf("n%d not yet connected", peerNodeID)
 	})
 }
 

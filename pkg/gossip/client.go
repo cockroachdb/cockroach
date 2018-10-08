@@ -131,7 +131,7 @@ func (c *client) startLocked(
 			if !grpcutil.IsClosedConnection(err) {
 				g.mu.RLock()
 				if c.peerID != 0 {
-					log.Infof(ctx, "closing client to node %d (%s): %s", c.peerID, c.addr, err)
+					log.Infof(ctx, "closing client to n%d (%s): %s", c.peerID, c.addr, err)
 				} else {
 					log.Infof(ctx, "closing client to %s: %s", c.addr, err)
 				}
@@ -172,9 +172,13 @@ func (c *client) requestGossip(g *Gossip, stream Gossip_GossipClient) error {
 
 // sendGossip sends the latest gossip to the remote server, based on
 // the remote server's notion of other nodes' high water timestamps.
-func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient) error {
+func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient, firstReq bool) error {
 	g.mu.Lock()
-	if delta := g.mu.is.delta(c.remoteHighWaterStamps); len(delta) > 0 {
+	delta := g.mu.is.delta(c.remoteHighWaterStamps)
+	if firstReq {
+		g.mu.is.populateMostDistantMarkers(delta)
+	}
+	if len(delta) > 0 {
 		// Ensure that the high water stamps for the remote server are kept up to
 		// date so that we avoid resending the same gossip infos as infos are
 		// updated locally.
@@ -200,7 +204,7 @@ func (c *client) sendGossip(g *Gossip, stream Gossip_GossipClient) error {
 		if log.V(1) {
 			ctx := c.AnnotateCtx(stream.Context())
 			if c.peerID != 0 {
-				log.Infof(ctx, "sending %s to node %d (%s)", extractKeys(args.Delta), c.peerID, c.addr)
+				log.Infof(ctx, "sending %s to n%d (%s)", extractKeys(args.Delta), c.peerID, c.addr)
 			} else {
 				log.Infof(ctx, "sending %s to %s", extractKeys(args.Delta), c.addr)
 			}
@@ -230,11 +234,11 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 	if reply.Delta != nil {
 		freshCount, err := g.mu.is.combine(reply.Delta, reply.NodeID)
 		if err != nil {
-			log.Warningf(ctx, "failed to fully combine delta from node %d: %s", reply.NodeID, err)
+			log.Warningf(ctx, "failed to fully combine delta from n%d: %s", reply.NodeID, err)
 		}
 		if infoCount := len(reply.Delta); infoCount > 0 {
 			if log.V(1) {
-				log.Infof(ctx, "received %s from node %d (%d fresh)", extractKeys(reply.Delta), reply.NodeID, freshCount)
+				log.Infof(ctx, "received %s from n%d (%d fresh)", extractKeys(reply.Delta), reply.NodeID, freshCount)
 			}
 		}
 		g.maybeTightenLocked()
@@ -254,17 +258,20 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 	// Handle remote forwarding.
 	if reply.AlternateAddr != nil {
 		if g.hasIncomingLocked(reply.AlternateNodeID) || g.hasOutgoingLocked(reply.AlternateNodeID) {
-			return errors.Errorf("received forward from node %d to %d (%s); already have active connection, skipping",
+			return errors.Errorf(
+				"received forward from n%d to n%d (%s); already have active connection, skipping",
 				reply.NodeID, reply.AlternateNodeID, reply.AlternateAddr)
 		}
 		// We try to resolve the address, but don't actually use the result.
 		// The certificates (if any) may only be valid for the unresolved
 		// address.
 		if _, err := reply.AlternateAddr.Resolve(); err != nil {
-			return errors.Errorf("unable to resolve alternate address %s for node %d: %s", reply.AlternateAddr, reply.AlternateNodeID, err)
+			return errors.Errorf("unable to resolve alternate address %s for n%d: %s",
+				reply.AlternateAddr, reply.AlternateNodeID, err)
 		}
 		c.forwardAddr = reply.AlternateAddr
-		return errors.Errorf("received forward from node %d to %d (%s)", reply.NodeID, reply.AlternateNodeID, reply.AlternateAddr)
+		return errors.Errorf("received forward from n%d to %d (%s)",
+			reply.NodeID, reply.AlternateNodeID, reply.AlternateAddr)
 	}
 
 	// Check whether we're connected at this point.
@@ -274,11 +281,11 @@ func (c *client) handleResponse(ctx context.Context, g *Gossip, reply *Response)
 	// being done by an incoming client, either because an outgoing
 	// matches an incoming or the client is connecting to itself.
 	if nodeID := g.NodeID.Get(); nodeID == c.peerID {
-		return errors.Errorf("stopping outgoing client to node %d (%s); loopback connection", c.peerID, c.addr)
+		return errors.Errorf("stopping outgoing client to n%d (%s); loopback connection", c.peerID, c.addr)
 	} else if g.hasIncomingLocked(c.peerID) && nodeID > c.peerID {
 		// To avoid mutual shutdown, we only shutdown our client if our
 		// node ID is higher than the peer's.
-		return errors.Errorf("stopping outgoing client to node %d (%s); already have incoming", c.peerID, c.addr)
+		return errors.Errorf("stopping outgoing client to n%d (%s); already have incoming", c.peerID, c.addr)
 	}
 
 	return nil
@@ -303,13 +310,9 @@ func (c *client) gossip(
 		default:
 		}
 	}
-	// We require redundant callbacks here as the update callback is propagating
-	// gossip infos to other nodes and needs to propagate the new expiration
-	// info.
-	unregister := g.RegisterCallback(".*", updateCallback, Redundant)
-	defer unregister()
 
 	errCh := make(chan error, 1)
+	initCh := make(chan struct{}, 1)
 	// This wait group is used to allow the caller to wait until gossip
 	// processing is terminated.
 	wg.Add(1)
@@ -319,13 +322,17 @@ func (c *client) gossip(
 		errCh <- func() error {
 			var peerID roachpb.NodeID
 
-			for {
+			initCh := initCh
+			for init := true; ; init = false {
 				reply, err := stream.Recv()
 				if err != nil {
 					return err
 				}
 				if err := c.handleResponse(ctx, g, reply); err != nil {
 					return err
+				}
+				if init {
+					initCh <- struct{}{}
 				}
 				if peerID == 0 && c.peerID != 0 {
 					peerID = c.peerID
@@ -335,7 +342,32 @@ func (c *client) gossip(
 		}()
 	})
 
-	for {
+	// We attempt to defer registration of the callback until we've heard a
+	// response from the remote node which will contain the remote's high water
+	// stamps. This prevents the client from sending all of its infos to the
+	// remote (which would happen if we don't know the remote's high water
+	// stamps). Unfortunately, versions of cockroach before 2.1 did not always
+	// send a response when receiving an incoming connection, so we also start a
+	// timer and perform initialization after 1s if we haven't heard from the
+	// remote.
+	var unregister func()
+	defer func() {
+		if unregister != nil {
+			unregister()
+		}
+	}()
+	maybeRegister := func() {
+		if unregister == nil {
+			// We require redundant callbacks here as the update callback is
+			// propagating gossip infos to other nodes and needs to propagate the new
+			// expiration info.
+			unregister = g.RegisterCallback(".*", updateCallback, Redundant)
+		}
+	}
+	initTimer := time.NewTimer(time.Second)
+	defer initTimer.Stop()
+
+	for count := 0; ; {
 		select {
 		case <-c.closer:
 			return nil
@@ -343,10 +375,15 @@ func (c *client) gossip(
 			return nil
 		case err := <-errCh:
 			return err
+		case <-initCh:
+			maybeRegister()
+		case <-initTimer.C:
+			maybeRegister()
 		case <-sendGossipChan:
-			if err := c.sendGossip(g, stream); err != nil {
+			if err := c.sendGossip(g, stream, count == 0); err != nil {
 				return err
 			}
+			count++
 		}
 	}
 }
