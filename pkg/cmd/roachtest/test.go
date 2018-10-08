@@ -27,6 +27,7 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -59,7 +60,12 @@ func makeFilterRE(filter []string) *regexp.Regexp {
 
 type testSpec struct {
 	Skip string // if non-empty, test will be skipped
-	Name string
+	// For subtests, Name is supposed to originally be assigned to the name of the
+	// subtest when constructing the spec and then, once added to the registry, it
+	// will automatically be expanded to contain all the parents' names. At that
+	// point, subtestName will be populated to the original value of Name.
+	Name        string
+	subtestName string
 	// The maximum duration the test is allowed to run before it is considered
 	// failed. If not specified, the default timeout is 10m before the test's
 	// associated cluster expires. The timeout is always truncated to 10m before
@@ -80,7 +86,8 @@ type testSpec struct {
 	// a top-level testSpec may contain a nodes specification. The cluster is
 	// shared by all subtests.
 	Nodes []nodeSpec
-	// A testSpec must specify only one of Run or SubTests. A SubTest should not
+	// A testSpec must specify only one of Run or SubTests. All subtests run in
+	// the same cluster, without concurrency between them. Subtest should not
 	// assume any particular state for the cluster as the SubTest may be run in
 	// isolation.
 	Run      func(ctx context.Context, t *test, c *cluster)
@@ -170,6 +177,7 @@ func (r *registry) verifyClusterName(testName string) error {
 
 func (r *registry) prepareSpec(spec *testSpec, depth int) error {
 	if depth == 0 {
+		spec.subtestName = spec.Name
 		// Only top-level tests can create clusters, so those are the only ones for
 		// which we need to verify the cluster name.
 		if err := r.verifyClusterName(spec.Name); err != nil {
@@ -190,6 +198,7 @@ func (r *registry) prepareSpec(spec *testSpec, depth int) error {
 	}
 
 	for i := range spec.SubTests {
+		spec.SubTests[i].subtestName = spec.SubTests[i].Name
 		spec.SubTests[i].Name = spec.Name + "/" + spec.SubTests[i].Name
 		if err := r.prepareSpec(&spec.SubTests[i], depth+1); err != nil {
 			return err
@@ -238,6 +247,7 @@ func (r *registry) List(re *regexp.Regexp) []*testSpec {
 
 func (r *registry) Run(filter []string) int {
 	filterRE := makeFilterRE(filter)
+	// Find the top-level tests to run.
 	tests := r.List(filterRE)
 
 	// Skip any tests for which the min-version is less than the build-version.
@@ -277,10 +287,15 @@ func (r *registry) Run(filter []string) int {
 		for j := 0; j < count; j++ {
 			for i := range tests {
 				sem <- struct{}{}
-				r.runAsync(ctx, tests[i], filterRE, nil, func(failed bool) {
-					wg.Done()
-					<-sem
-				})
+				runNum := j + 1
+				if count == 1 {
+					runNum = 0
+				}
+				r.runAsync(
+					ctx, tests[i], filterRE, nil /* parent */, nil /* cluster */, runNum, func(failed bool) {
+						wg.Done()
+						<-sem
+					})
 			}
 		}
 	}()
@@ -421,7 +436,11 @@ type test struct {
 	runnerID int64
 	start    time.Time
 	end      time.Time
-	mu       struct {
+	// artifactsDir is the path to the directory holding all the artifacts for
+	// this test. It will contain a test.log file, cluster logs, and
+	// subdirectories for subtests.
+	artifactsDir string
+	mu           struct {
 		syncutil.RWMutex
 		done    bool
 		failed  bool
@@ -581,6 +600,10 @@ func (t *test) Failed() bool {
 	return failed
 }
 
+func (t *test) ArtifactsDir() string {
+	return t.artifactsDir
+}
+
 // IsBuildVersion returns true if the build version is greater than or equal to
 // minVersion. This allows a test to optionally perform additional checks
 // depending on the cockroach version it is running against. Note that the
@@ -600,14 +623,38 @@ func (t *test) IsBuildVersion(minVersion string) bool {
 // runAsync starts a goroutine that runs a test. If the test has subtests,
 // runAsync will be invoked recursively, but in a blocking manner.
 //
-// c is the cluster on which the test (and all subtests) will run. If nil, a new
-// cluster will be created.
+// Args:
+// parent: The test's parent. Nil if the test is not a subtest.
+// c: The cluster on which the test (and all subtests) will run. If nil, a new
+//    cluster will be created.
+// runNum: The 1-based index of this test run, if --count > 1. Otherwise (if
+// 		   there's a single run), runNum is 0.
 func (r *registry) runAsync(
-	ctx context.Context, spec *testSpec, filter *regexp.Regexp, c *cluster, done func(failed bool),
+	ctx context.Context,
+	spec *testSpec,
+	filter *regexp.Regexp,
+	parent *test,
+	c *cluster,
+	runNum int,
+	done func(failed bool),
 ) {
+	artifactsSuffix := ""
+	// Only roots get a "run_<n>" suffix to their artifacts dir; the subtests will
+	// write in the parent's dir.
+	if parent == nil && runNum != 0 {
+		artifactsSuffix = "run_" + strconv.Itoa(runNum)
+	}
+	parentDir := artifacts
+	if parent != nil {
+		parentDir = parent.ArtifactsDir()
+	}
+	// Each subtest gets its own subdir in the parent's artifacts dir.
+	artifactsDir := filepath.Join(parentDir, teamCityNameEscape(spec.subtestName), artifactsSuffix)
+
 	t := &test{
-		spec:     spec,
-		registry: r,
+		spec:         spec,
+		registry:     r,
+		artifactsDir: artifactsDir,
 	}
 
 	if teamCity {
@@ -763,7 +810,7 @@ func (r *registry) runAsync(
 				if t.spec.SubTests[i].matchRegex(filter) {
 					var wg sync.WaitGroup
 					wg.Add(1)
-					r.runAsync(ctx, &t.spec.SubTests[i], filter, c, func(failed bool) {
+					r.runAsync(ctx, &t.spec.SubTests[i], filter, t, c, runNum, func(failed bool) {
 						if failed {
 							// Mark the parent test as failed since one of the subtests
 							// failed.
@@ -791,7 +838,9 @@ func (r *registry) runAsync(
 		}
 		timeout := time.Hour
 		defer func() {
-			c.FetchLogs(ctx)
+			if err := c.FetchLogs(ctx); err != nil {
+				c.l.Printf("failed to download logs: %s", err)
+			}
 		}()
 
 		timeout = c.expiration.Add(-10 * time.Minute).Sub(timeutil.Now())
@@ -817,7 +866,9 @@ func (r *registry) runAsync(
 			select {
 			case <-time.After(timeout):
 				t.printfAndFail("test timed out (%s)\n", timeout)
-				c.FetchLogs(ctx)
+				if err := c.FetchLogs(ctx); err != nil {
+					c.l.Printf("failed to download logs: %s", err)
+				}
 				// NB: c.destroyed is nil for cloned clusters (i.e. in subtests).
 				if !debugEnabled && c.destroyed != nil {
 					c.Destroy(ctx)
