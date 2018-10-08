@@ -116,7 +116,7 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
                 <span className="sql-keyword">;</span>
               </pre>
               <p className="aside">
-                <a href={docsURL.adminUILogin} className="login-docs-link">
+                <a href={docsURL.adminUILogin} className="login-docs-link" target="_blank">
                   <span className="login-docs-link__icon" dangerouslySetInnerHTML={trustIcon(docsIcon)} />
                   <span className="login-docs-link__text">Read more about configuring login</span>
                 </a>
