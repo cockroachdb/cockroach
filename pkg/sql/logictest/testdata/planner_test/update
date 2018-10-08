@@ -214,6 +214,7 @@ count                     ·      ·
       │                   set    v
       └── render          ·      ·
            └── limit      ·      ·
+                │         count  1
                 └── scan  ·      ·
 ·                         table  kv@primary
 ·                         spans  -/2/#

@@ -134,16 +134,18 @@ scan  ·       ·          (a, b)  a!=NULL; key(a)
 query TTT
 EXPLAIN SELECT * from d where b @> '{"a": []}' ORDER BY a;
 ----
-scan  ·      ·
-·     table  d@primary
-·     spans  ALL
+scan  ·       ·
+·     table   d@primary
+·     spans   ALL
+·     filter  b @> '{"a": []}'
 
 query TTT
 EXPLAIN SELECT * from d where b @> '{"a": {}}' ORDER BY a;
 ----
-scan  ·      ·
-·     table  d@primary
-·     spans  ALL
+scan  ·       ·
+·     table   d@primary
+·     spans   ALL
+·     filter  b @> '{"a": {}}'
 
 ## Multi-path contains queries
 
