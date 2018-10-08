@@ -677,7 +677,19 @@ var specs = []stmtSpec{
 		inline: []string{"explain_option_list"},
 		replace: map[string]string{
 			"explain_option_name": "( 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' )",
+			"preparable_stmt":     "explainable_stmt",
 		},
+		exclude: []*regexp.Regexp{regexp.MustCompile("'ANALYZE'")},
+	},
+	{
+		name:  "explain_analyze_stmt",
+		stmt:  "explain_stmt",
+		match: []*regexp.Regexp{regexp.MustCompile("ANALYZE")},
+		replace: map[string]string{
+			"explain_option_list": "'DISTSQL'",
+			"preparable_stmt":     "explainable_stmt",
+		},
+		unlink: []string{"'DISTSQL'"},
 	},
 	{
 		name: "export_stmt",

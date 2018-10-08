@@ -1,0 +1,2 @@
+explain_stmt ::=
+	'EXPLAIN' 'ANALYZE' '(' 'DISTSQL' ')' explainable_stmt
