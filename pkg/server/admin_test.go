@@ -1465,6 +1465,8 @@ func TestEnqueueRange(t *testing.T) {
 		{0, "consistencyChecker", realRangeID, allReplicas, leaseholder},
 		{0, "TIMESERIESmaintenance", realRangeID, allReplicas, leaseholder},
 		{1, "raftlog", realRangeID, leaseholder, leaseholder},
+		{2, "raftlog", realRangeID, leaseholder, 1},
+		{3, "raftlog", realRangeID, leaseholder, 1},
 		// Error cases
 		{0, "gv", realRangeID, allReplicas, none},
 		{0, "GC", fakeRangeID, allReplicas, none},

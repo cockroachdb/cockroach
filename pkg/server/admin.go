@@ -1567,18 +1567,16 @@ func (s *adminServer) EnqueueRange(
 	}
 
 	// If the request is targeted at this node, serve it directly. Otherwise,
-	// forward it to the appropriate node(s).
+	// forward it to the appropriate node(s). If no node was specified, forward
+	// it to all nodes.
 	if req.NodeID == s.server.NodeID() {
 		return s.enqueueRangeLocal(ctx, req)
-	}
-
-	isLiveMap := s.server.nodeLiveness.GetIsLiveMap()
-
-	// If a specific NodeID was requested, then shrink down isLiveMap to contain
-	// only it, since we choose which nodes to send the request to based on
-	// what's in isLiveMap.
-	if req.NodeID > 0 {
-		isLiveMap = storage.IsLiveMap{req.NodeID: isLiveMap[req.NodeID]}
+	} else if req.NodeID != 0 {
+		admin, err := s.dialNode(ctx, req.NodeID)
+		if err != nil {
+			return nil, err
+		}
+		return admin.EnqueueRange(ctx, req)
 	}
 
 	response := &serverpb.EnqueueRangeResponse{}
