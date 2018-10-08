@@ -38,6 +38,7 @@ import Certificates from "src/views/reports/containers/certificates";
 import CommandQueue from "src/views/reports/containers/commandQueue";
 import CustomChart from "src/views/reports/containers/customChart";
 import Debug from "src/views/reports/containers/debug";
+import EnqueueRange from "src/views/reports/containers/enqueueRange";
 import ProblemRanges from "src/views/reports/containers/problemRanges";
 import Localities from "src/views/reports/containers/localities";
 import Network from "src/views/reports/containers/network";
@@ -134,8 +135,9 @@ ReactDOM.render(
         { /* debug pages */ }
         <Route path="debug">
           <IndexRoute component={Debug} />
-          <Route path="redux" component={ReduxDebug} />
-          <Route path="chart" component={CustomChart} />
+          <Route path="redux" component={ ReduxDebug } />
+          <Route path="chart" component={ CustomChart } />
+          <Route path="enqueue_range" component={ EnqueueRange } />
         </Route>
         <Route path="raft" component={ Raft }>
           <IndexRedirect to="ranges" />
