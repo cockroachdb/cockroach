@@ -4882,22 +4882,8 @@ func (r *Replica) quiesceAndNotifyLocked(ctx context.Context, status *raft.Statu
 			Commit: commit,
 		}
 
-		if r.maybeCoalesceHeartbeat(ctx, msg, toReplica, fromReplica, quiesce) {
-			continue
-		}
-
-		req := &RaftMessageRequest{
-			RangeID:     r.RangeID,
-			ToReplica:   toReplica,
-			FromReplica: fromReplica,
-			Message:     msg,
-			Quiesce:     quiesce,
-		}
-		if !r.sendRaftMessageRequest(ctx, req) {
-			r.unquiesceLocked()
-			r.mu.droppedMessages++
-			r.mu.internalRaftGroup.ReportUnreachable(id)
-			return false
+		if !r.maybeCoalesceHeartbeat(ctx, msg, toReplica, fromReplica, quiesce) {
+			log.Fatalf(ctx, "failed to coalesce known heartbeat: %v", msg)
 		}
 	}
 	return true
