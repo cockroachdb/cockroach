@@ -680,6 +680,15 @@ var specs = []stmtSpec{
 		},
 	},
 	{
+		name:  "explain_analyze_stmt",
+		stmt:  "explain_stmt",
+		match: []*regexp.Regexp{regexp.MustCompile("ANALYZE")},
+		replace: map[string]string{
+			"explain_option_list": "'DISTSQL'",
+		},
+		unlink: []string{"'DISTSQL'"},
+	},
+	{
 		name: "export_stmt",
 		replace: map[string]string{
 			"import_data_format":    "CSV",
