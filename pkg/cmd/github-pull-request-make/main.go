@@ -260,8 +260,14 @@ func main() {
 			log.Fatal(err)
 		}
 		if len(pkgs) > 0 {
-			// 5 minutes total seems OK.
+			// 5 minutes total seems OK, but at least a minute per test.
 			duration := (5 * time.Minute) / time.Duration(len(pkgs))
+			if duration < time.Minute {
+				duration = time.Minute
+			}
+			// Use a timeout shorter than the duration so that hanging tests don't
+			// get a free pass.
+			timeout := (3 * duration) / 4
 			for name, pkg := range pkgs {
 				tests := "-"
 				if len(pkg.tests) > 0 {
@@ -273,6 +279,7 @@ func main() {
 					target,
 					fmt.Sprintf("PKG=./%s", name),
 					fmt.Sprintf("TESTS=%s", tests),
+					fmt.Sprintf("TESTTIMEOUT=%s", timeout),
 					fmt.Sprintf("STRESSFLAGS=-stderr -maxfails 1 -maxtime %s", duration),
 				)
 				cmd.Env = append(os.Environ(), "COCKROACH_NIGHTLY_STRESS=true")
