@@ -38,17 +38,14 @@ interface EnqueueRangeState {
 }
 
 class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, EnqueueRangeState> {
-  constructor(props: EnqueueRangeProps & WithRouterProps) {
-    super(props);
-    this.state = {
-      queue: QUEUES[0],
-      rangeID: "",
-      nodeID: "",
-      skipShouldQueue: false,
-      response: null,
-      error: null,
-    };
-  }
+  state: EnqueueRangeState = {
+    queue: QUEUES[0],
+    rangeID: "",
+    nodeID: "",
+    skipShouldQueue: false,
+    response: null,
+    error: null,
+  };
 
   handleUpdateQueue = (evt: React.FormEvent<{ value: string }>) => {
     this.setState({
@@ -90,7 +87,7 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
 
   renderNodeResponse(details: EnqueueRangeResponse.IDetails) {
     if (details.error) {
-      return <div><b>Error:</b> {details.error}</div>;
+      return <React.Fragment><b>Error:</b> {details.error}</React.Fragment>;
     }
 
     return (
@@ -125,7 +122,7 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
     }
 
     return (
-      <div>
+      <React.Fragment>
         <h2>Enqueue Range Output</h2>
         {response.details.map((details) => (
           <div>
@@ -134,7 +131,7 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
             {this.renderNodeResponse(details)}
           </div>
         ))}
-      </div>
+      </React.Fragment>
     );
   }
 
@@ -146,13 +143,13 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
     }
 
     return (
-      <div>Error running EnqueueRange: { error.message }</div>
+      <React.Fragment>Error running EnqueueRange: { error.message }</React.Fragment>
     );
   }
 
   render() {
     return (
-      <div>
+      <React.Fragment>
         <Helmet>
           <title>Enqueue Range</title>
         </Helmet>
@@ -162,39 +159,47 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
               <h1 className="heading">Manually enqueue range in a replica queue</h1>
               <br />
               <form onSubmit={this.handleSubmit} className="form-internal" method="post">
-                Queue:{" "}
-                <select onChange={this.handleUpdateQueue}>
-                  {QUEUES.map((queue) => (
-                    <option key={queue} value={queue}>{queue}</option>
-                  ))}
-                </select>
-                <br />
-                <input
-                  type="number"
-                  name="rangeID"
-                  className="input-text"
-                  onChange={this.handleUpdateRangeID}
-                  value={this.state.rangeID}
-                  placeholder="RangeID"
-                />
-                <br />
-                <input
-                  type="number"
-                  name="nodeID"
-                  className="input-text"
-                  onChange={this.handleUpdateNodeID}
-                  value={this.state.nodeID}
-                  placeholder="NodeID (optional)"
-                />
+                <label>
+                  Queue:{" "}
+                  <select onChange={this.handleUpdateQueue}>
+                    {QUEUES.map((queue) => (
+                      <option key={queue} value={queue}>{queue}</option>
+                    ))}
+                  </select>
+                </label>
                 <br />
                 <label>
+                  RangeID:{" "}
+                  <input
+                    type="number"
+                    name="rangeID"
+                    className="input-text"
+                    onChange={this.handleUpdateRangeID}
+                    value={this.state.rangeID}
+                    placeholder="RangeID"
+                  />
+                </label>
+                <br />
+                <label>
+                  NodeID:{" "}
+                  <input
+                    type="number"
+                    name="nodeID"
+                    className="input-text"
+                    onChange={this.handleUpdateNodeID}
+                    value={this.state.nodeID}
+                    placeholder="NodeID (optional)"
+                  />
+                </label>
+                <br />
+                <label>
+                  SkipShouldQueue:{" "}
                   <input
                     type="checkbox"
                     checked={this.state.skipShouldQueue}
                     name="skipShouldQueue"
                     onChange={() => this.setState({ skipShouldQueue: !this.state.skipShouldQueue })}
                   />
-                  SkipShouldQueue
                 </label>
                 <br />
                 <input
@@ -206,13 +211,11 @@ class EnqueueRange extends React.Component<EnqueueRangeProps & WithRouterProps, 
             </div>
           </section>
         </div>
-        <div>
-          <section className="section">
-            {this.renderResponse()}
-            {this.renderError()}
-          </section>
-        </div>
-      </div>
+        <section className="section">
+          {this.renderResponse()}
+          {this.renderError()}
+        </section>
+      </React.Fragment>
     );
   }
 }
