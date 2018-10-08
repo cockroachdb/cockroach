@@ -382,11 +382,6 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 			t.Fatalf("unable to read store ident: %s", err)
 		}
 
-		// Try to get 1st range--non-existent.
-		if _, err := store.GetReplica(1); err == nil {
-			t.Error("expected error fetching non-existent range")
-		}
-
 		// Bootstrap first range.
 		if err := store.BootstrapRange(nil, cfg.Settings.Version.ServerVersion); err != nil {
 			t.Errorf("failure to create first range: %s", err)
