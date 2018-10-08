@@ -1,0 +1,273 @@
+exec-ddl
+CREATE TABLE x(a INT)
+----
+TABLE x
+ ├── a int
+ ├── rowid int not null (hidden)
+ └── INDEX primary
+      └── rowid int not null (hidden)
+
+# Verify with optsteps that a spool is introduced and subsequently eliminated.
+optsteps
+WITH t AS (SELECT a, rowid FROM x)
+  SELECT a, rowid FROM t
+----
+================================================================================
+Initial expression
+  Cost: 1040.00
+================================================================================
+  spool
+   ├── columns: a:1(int) rowid:2(int!null)
+   ├── key: (2)
+   ├── fd: (2)-->(1)
+   └── scan x
+        ├── columns: a:1(int) rowid:2(int!null)
+        ├── key: (2)
+        └── fd: (2)-->(1)
+================================================================================
+EliminateSpool
+  Cost: 1040.00
+================================================================================
+  -spool
+  +scan x
+    ├── columns: a:1(int) rowid:2(int!null)
+    ├── key: (2)
+  - ├── fd: (2)-->(1)
+  - └── scan x
+  -      ├── columns: a:1(int) rowid:2(int!null)
+  -      ├── key: (2)
+  -      └── fd: (2)-->(1)
+  + └── fd: (2)-->(1)
+--------------------------------------------------------------------------------
+GenerateIndexScans (no changes)
+--------------------------------------------------------------------------------
+================================================================================
+Final best expression
+  Cost: 1040.00
+================================================================================
+  scan x
+   ├── columns: a:1(int) rowid:2(int!null)
+   ├── key: (2)
+   └── fd: (2)-->(1)
+
+# We can't eliminate spool in the presence of side effects.
+
+norm expect-not=EliminateSpool
+WITH t AS (SELECT a/0 FROM x)
+  SELECT * FROM t LIMIT 0
+----
+limit
+ ├── columns: "?column?":3(decimal)
+ ├── cardinality: [0 - 0]
+ ├── side-effects
+ ├── key: ()
+ ├── fd: ()-->(3)
+ ├── spool
+ │    ├── columns: "?column?":3(decimal)
+ │    ├── side-effects
+ │    └── project
+ │         ├── columns: "?column?":3(decimal)
+ │         ├── side-effects
+ │         ├── scan x
+ │         │    └── columns: a:1(int)
+ │         └── projections [outer=(1), side-effects]
+ │              └── a / 0 [type=decimal, outer=(1), side-effects]
+ └── const: 0 [type=int]
+
+# --------------------------------------------------
+# EliminateRootSpool
+# --------------------------------------------------
+
+norm expect=EliminateRootSpool
+WITH t AS (SELECT a/0 FROM x)
+  SELECT * FROM t
+----
+project
+ ├── columns: "?column?":3(decimal)
+ ├── side-effects
+ ├── scan x
+ │    └── columns: a:1(int)
+ └── projections [outer=(1), side-effects]
+      └── a / 0 [type=decimal, outer=(1), side-effects]
+
+norm expect-not=EliminateRootSpool
+WITH t AS (SELECT a/0 FROM x)
+  SELECT * FROM t LIMIT 0
+----
+limit
+ ├── columns: "?column?":3(decimal)
+ ├── cardinality: [0 - 0]
+ ├── side-effects
+ ├── key: ()
+ ├── fd: ()-->(3)
+ ├── spool
+ │    ├── columns: "?column?":3(decimal)
+ │    ├── side-effects
+ │    └── project
+ │         ├── columns: "?column?":3(decimal)
+ │         ├── side-effects
+ │         ├── scan x
+ │         │    └── columns: a:1(int)
+ │         └── projections [outer=(1), side-effects]
+ │              └── a / 0 [type=decimal, outer=(1), side-effects]
+ └── const: 0 [type=int]
+
+# --------------------------------------------------
+# PullSpoolAboveSelect
+# --------------------------------------------------
+
+norm expect=PullSpoolAboveSelect
+WITH
+    t1 AS (SELECT a/0 AS b FROM x)
+SELECT * FROM t1 WHERE b = 3 LIMIT 0
+----
+limit
+ ├── columns: b:3(decimal!null)
+ ├── cardinality: [0 - 0]
+ ├── side-effects
+ ├── key: ()
+ ├── fd: ()-->(3)
+ ├── spool
+ │    ├── columns: b:3(decimal!null)
+ │    ├── side-effects
+ │    ├── fd: ()-->(3)
+ │    └── select
+ │         ├── columns: b:3(decimal!null)
+ │         ├── side-effects
+ │         ├── fd: ()-->(3)
+ │         ├── project
+ │         │    ├── columns: b:3(decimal)
+ │         │    ├── side-effects
+ │         │    ├── scan x
+ │         │    │    └── columns: a:1(int)
+ │         │    └── projections [outer=(1), side-effects]
+ │         │         └── a / 0 [type=decimal, outer=(1), side-effects]
+ │         └── filters [type=bool, outer=(3), constraints=(/3: [/3 - /3]; tight), fd=()-->(3)]
+ │              └── b = 3 [type=bool, outer=(3), constraints=(/3: [/3 - /3]; tight)]
+ └── const: 0 [type=int]
+
+# --------------------------------------------------
+# PullSpoolAboveJoinLeft
+# --------------------------------------------------
+
+norm expect=PullSpoolAboveJoinLeft
+WITH
+    t1 AS (SELECT a/0 AS b FROM x)
+SELECT * FROM t1 NATURAL JOIN (VALUES (1)) LIMIT 0
+----
+limit
+ ├── columns: b:3(decimal) column1:4(int)
+ ├── cardinality: [0 - 0]
+ ├── side-effects
+ ├── key: ()
+ ├── fd: ()-->(3,4)
+ ├── spool
+ │    ├── columns: b:3(decimal) column1:4(int)
+ │    ├── side-effects
+ │    ├── fd: ()-->(4)
+ │    └── inner-join
+ │         ├── columns: b:3(decimal) column1:4(int)
+ │         ├── side-effects
+ │         ├── fd: ()-->(4)
+ │         ├── project
+ │         │    ├── columns: b:3(decimal)
+ │         │    ├── side-effects
+ │         │    ├── scan x
+ │         │    │    └── columns: a:1(int)
+ │         │    └── projections [outer=(1), side-effects]
+ │         │         └── a / 0 [type=decimal, outer=(1), side-effects]
+ │         ├── values
+ │         │    ├── columns: column1:4(int)
+ │         │    ├── cardinality: [1 - 1]
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(4)
+ │         │    └── (1,) [type=tuple{int}]
+ │         └── true [type=bool]
+ └── const: 0 [type=int]
+
+# --------------------------------------------------
+# PullSpoolAboveJoinRight
+# --------------------------------------------------
+
+norm expect=PullSpoolAboveJoinRight
+WITH
+    t1 AS (SELECT a/0 AS b FROM x)
+SELECT * FROM (VALUES (1)) NATURAL JOIN t1 LIMIT 0
+----
+limit
+ ├── columns: column1:4(int) b:3(decimal)
+ ├── cardinality: [0 - 0]
+ ├── side-effects
+ ├── key: ()
+ ├── fd: ()-->(3,4)
+ ├── spool
+ │    ├── columns: b:3(decimal) column1:4(int)
+ │    ├── side-effects
+ │    ├── fd: ()-->(4)
+ │    └── inner-join
+ │         ├── columns: b:3(decimal) column1:4(int)
+ │         ├── side-effects
+ │         ├── fd: ()-->(4)
+ │         ├── values
+ │         │    ├── columns: column1:4(int)
+ │         │    ├── cardinality: [1 - 1]
+ │         │    ├── key: ()
+ │         │    ├── fd: ()-->(4)
+ │         │    └── (1,) [type=tuple{int}]
+ │         ├── project
+ │         │    ├── columns: b:3(decimal)
+ │         │    ├── side-effects
+ │         │    ├── scan x
+ │         │    │    └── columns: a:1(int)
+ │         │    └── projections [outer=(1), side-effects]
+ │         │         └── a / 0 [type=decimal, outer=(1), side-effects]
+ │         └── true [type=bool]
+ └── const: 0 [type=int]
+
+# --------------------------------------------------
+# EliminateSpoolSpool
+# --------------------------------------------------
+
+norm expect=EliminateSpoolSpool
+WITH
+    t1 AS (SELECT a/0 AS b FROM x),
+    t2 AS (SELECT a/0 AS b FROM x)
+SELECT * FROM t1 NATURAL JOIN t2 LIMIT 0
+----
+project
+ ├── columns: b:3(decimal!null)
+ ├── cardinality: [0 - 0]
+ ├── side-effects
+ ├── key: ()
+ ├── fd: ()-->(3)
+ └── limit
+      ├── columns: b:3(decimal!null) b:6(decimal!null)
+      ├── cardinality: [0 - 0]
+      ├── side-effects
+      ├── key: ()
+      ├── fd: ()-->(3,6)
+      ├── spool
+      │    ├── columns: b:3(decimal!null) b:6(decimal!null)
+      │    ├── side-effects
+      │    ├── fd: (3)==(6), (6)==(3)
+      │    └── inner-join
+      │         ├── columns: b:3(decimal!null) b:6(decimal!null)
+      │         ├── side-effects
+      │         ├── fd: (3)==(6), (6)==(3)
+      │         ├── project
+      │         │    ├── columns: b:3(decimal)
+      │         │    ├── side-effects
+      │         │    ├── scan x
+      │         │    │    └── columns: x.a:1(int)
+      │         │    └── projections [outer=(1), side-effects]
+      │         │         └── x.a / 0 [type=decimal, outer=(1), side-effects]
+      │         ├── project
+      │         │    ├── columns: b:6(decimal)
+      │         │    ├── side-effects
+      │         │    ├── scan x
+      │         │    │    └── columns: x.a:4(int)
+      │         │    └── projections [outer=(4), side-effects]
+      │         │         └── x.a / 0 [type=decimal, outer=(4), side-effects]
+      │         └── filters [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
+      │              └── b = b [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ])]
+      └── const: 0 [type=int]

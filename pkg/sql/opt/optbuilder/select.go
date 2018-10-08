@@ -75,9 +75,7 @@ func (b *Builder) buildDataSource(
 
 			outScope = inScope.push()
 
-			// TODO(justin): once we support mutations here, we will want to include a
-			// spool operation.
-			outScope.group = cte.group
+			outScope.group = b.factory.ConstructSpool(cte.group)
 			outScope.cols = cte.cols
 			return outScope
 		}

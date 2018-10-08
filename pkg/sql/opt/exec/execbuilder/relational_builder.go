@@ -145,6 +145,9 @@ func (b *Builder) buildRelational(ev memo.ExprView) (execPlan, error) {
 	case opt.ZipOp:
 		ep, err = b.buildZip(ev)
 
+	case opt.SpoolOp:
+		ep, err = b.buildSpool(ev)
+
 	default:
 		if ev.IsJoinNonApply() {
 			ep, err = b.buildHashJoin(ev)
@@ -978,6 +981,23 @@ func (b *Builder) buildZip(ev memo.ExprView) (execPlan, error) {
 	ep := execPlan{root: node}
 	ep.outputCols = outputCols
 	return ep, nil
+}
+
+func (b *Builder) buildSpool(ev memo.ExprView) (execPlan, error) {
+	input, err := b.buildRelational(ev.Child(0))
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	node, err := b.factory.ConstructSpool(input.root)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	return execPlan{
+		root:       node,
+		outputCols: input.outputCols,
+	}, nil
 }
 
 func (b *Builder) buildProjectSet(ev memo.ExprView) (execPlan, error) {

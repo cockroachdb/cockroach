@@ -178,6 +178,9 @@ type Factory interface {
 		n Node, exprs tree.TypedExprs, zipCols sqlbase.ResultColumns, numColsPerGen []int,
 	) (Node, error)
 
+	// ConstructSpool returns the input wrapped in a spooling node.
+	ConstructSpool(n Node) (Node, error)
+
 	// RenameColumns modifies the column names of a node.
 	RenameColumns(input Node, colNames []string) (Node, error)
 

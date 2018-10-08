@@ -1,0 +1,80 @@
+# =============================================================================
+# spool.opt contains normalization rules for the Spool operator.
+# =============================================================================
+
+# EliminateSpool removes a Spool which provably has no effect. It should be at the top
+# of this file so we don't push a Spool around when we could just eliminate it
+# immediately.
+[EliminateSpool, Normalize]
+(Spool
+    $input:* & ^(CanHaveSideEffects $input)
+)
+=>
+$input
+
+# EliminateSpoolSpool flattens composed spools into a single Spool.
+[EliminateSpoolSpool, Normalize]
+(Spool
+    (Spool
+        $input:*
+    )
+)
+=>
+(Spool
+    $input
+)
+
+# PullSpoolAboveSelect attempts to pull a Spool up higher so that
+# it can either eventually reach the root and be eliminated by
+# EliminateRootSpool or be combined with another Spool.
+[PullSpoolAboveSelect, Normalize]
+(Select
+    (Spool $input:*)
+    $filter:*
+)
+=>
+(Spool
+    (Select
+        $input
+        $filter
+    )
+)
+
+# PullSpoolAboveJoinLeft attempts to pull a Spool up higher so that
+# it can either eventually reach the root and be eliminated by
+# EliminateRootSpool or be combined with another Spool.
+[PullSpoolAboveJoinLeft, Normalize]
+(Join
+    (Spool $left:*)
+    $right:*
+    $on:*
+)
+=>
+(Spool
+    ((OpName)
+        $left
+        $right
+        $on
+    )
+)
+
+# PullSpoolAboveJoinRight attempts to pull a Spool up higher so that
+# it can either eventually reach the root and be eliminated by
+# EliminateRootSpool or be combined with another Spool.
+[PullSpoolAboveJoinRight, Normalize]
+(Join
+    $left:*
+    (Spool $right:*)
+    $on:*
+)
+=>
+(Spool
+    ((OpName)
+        $left
+        $right
+        $on
+    )
+)
+
+# TODO(justin): figure out what other operators it is legal to pull a Spool
+# above. It's certainly not legal for Limit.
