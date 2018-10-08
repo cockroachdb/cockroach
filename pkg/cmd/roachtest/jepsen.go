@@ -74,12 +74,18 @@ func initJepsen(ctx context.Context, t *test, c *cluster) {
 		c.Run(ctx, c.Node(1), "touch jepsen_initialized")
 	}()
 
+	// Roachprod collects this directory by default. If we fail early,
+	// this is the only log collection that is done. Otherwise, we
+	// perform a second log collection in this test that varies
+	// depending on whether the test passed or not.
+	c.Run(ctx, c.All(), "mkdir", "-p", "logs")
+
 	// TODO(bdarnell): Does this blanket apt update matter? I just
 	// copied it from the old jepsen scripts. It's slow, so we should
 	// probably either remove it or use a new base image with more of
 	// these preinstalled.
-	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -y update 2>&1 | sudo tee /var/log/apt-upgrade.log > /dev/null"`)
-	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -y upgrade -o Dpkg::Options::='--force-confold' 2>&1 | sudo tee -a /var/log/apt-upgrade.log > /dev/null"`)
+	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -y update > logs/apt-upgrade.log 2>&1"`)
+	c.Run(ctx, c.All(), "sh", "-c", `"sudo apt-get -y upgrade -o Dpkg::Options::='--force-confold' > logs/apt-upgrade.log 2>&1"`)
 
 	// Install the binary on all nodes and package it as jepsen expects.
 	// TODO(bdarnell): copying the raw binary and compressing it on the
