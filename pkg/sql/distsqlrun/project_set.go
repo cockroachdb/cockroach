@@ -213,6 +213,12 @@ func (ps *projectSetProcessor) nextGeneratorValues() (newValAvail bool, err erro
 // Next is part of the RowSource interface.
 func (ps *projectSetProcessor) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	for ps.State == StateRunning {
+		// Make sure we haven't been canceled.
+		if err := ps.Ctx.Err(); err != nil {
+			ps.MoveToDraining(err)
+			return nil, ps.DrainHelper()
+		}
+
 		// Start of a new row of input?
 		if !ps.inputRowReady {
 			// Read the row from the source.

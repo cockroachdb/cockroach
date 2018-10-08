@@ -870,3 +870,16 @@ rows affected: 1
 
 statement ok
 DROP SEQUENCE sv
+
+# Check that generators can be interrupted by statement timeouts.
+subtest generator_timeout
+
+statement ok
+SET statement_timeout = 1
+
+statement error pq: query execution canceled due to statement timeout
+select * from generate_series(1,10000000) where generate_series = 0;
+
+# Clean up
+statement ok
+SET statement_timeout = 0
