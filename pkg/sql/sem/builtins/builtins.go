@@ -1441,8 +1441,9 @@ CockroachDB supports the following flags:
 			},
 			Info: "Returns a unique ID used by CockroachDB to generate unique row IDs if a " +
 				"Primary Key isn't defined for the table. The value is a combination of the " +
-				" insert timestamp and the ID of the node executing the statement, which " +
-				" guarantees this combination is globally unique.",
+				"insert timestamp and the ID of the node executing the statement, which " +
+				"guarantees this combination is globally unique. However, there can be " +
+				"gaps and the order is not completely guaranteed.",
 		},
 	),
 
