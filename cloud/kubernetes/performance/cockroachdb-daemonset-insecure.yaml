@@ -122,6 +122,9 @@ spec:
         volumeMounts:
         - name: datadir
           mountPath: /cockroach/cockroach-data
+        env:
+        - name: COCKROACH_CHANNEL
+          value: kubernetes-insecure
         command:
           - "/bin/bash"
           - "-ecx"

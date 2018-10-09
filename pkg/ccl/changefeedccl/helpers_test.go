@@ -23,9 +23,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -525,6 +528,25 @@ func (c *tableFeed) Close(t testing.TB) {
 	c.urlCleanup()
 }
 
+func waitForSchemaChange(
+	t testing.TB, sqlDB *sqlutils.SQLRunner, stmt string, arguments ...interface{},
+) {
+	sqlDB.Exec(t, stmt, arguments...)
+	row := sqlDB.QueryRow(t, "SELECT job_id FROM [SHOW JOBS] ORDER BY created DESC LIMIT 1")
+	var jobID string
+	row.Scan(&jobID)
+
+	testutils.SucceedsSoon(t, func() error {
+		row := sqlDB.QueryRow(t, "SELECT status FROM [SHOW JOBS] WHERE job_id = $1", jobID)
+		var status string
+		row.Scan(&status)
+		if status != "succeeded" {
+			return fmt.Errorf("Job %s had status %s, wanted 'succeeded'", jobID, status)
+		}
+		return nil
+	})
+}
+
 func assertPayloads(t testing.TB, f testfeed, expected []string) {
 	t.Helper()
 
@@ -672,5 +694,30 @@ func enterpriseTest(testFn func(*testing.T, *gosql.DB, testfeedFactory)) func(*t
 		f := makeTable(s, db, flushCh)
 
 		testFn(t, db, f)
+	}
+}
+
+func forceTableGC(
+	t testing.TB,
+	tsi serverutils.TestServerInterface,
+	sqlDB *sqlutils.SQLRunner,
+	database, table string,
+) {
+	t.Helper()
+	tblID, err := sqlutils.QueryTableID(sqlDB.DB, database, table)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tblKey := roachpb.Key(keys.MakeTablePrefix(tblID))
+	gcr := roachpb.GCRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    tblKey,
+			EndKey: tblKey.PrefixEnd(),
+		},
+		Threshold: tsi.Clock().Now(),
+	}
+	if _, err := client.SendWrapped(context.Background(), tsi.DistSender(), &gcr); err != nil {
+		t.Fatal(err)
 	}
 }

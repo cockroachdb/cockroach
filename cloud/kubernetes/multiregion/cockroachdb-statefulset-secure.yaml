@@ -192,7 +192,7 @@ spec:
           mountPath: /cockroach/cockroach-certs
         env:
         - name: COCKROACH_CHANNEL
-          value: kubernetes-secure
+          value: kubernetes-multiregion
         command:
           - "/bin/bash"
           - "-ecx"

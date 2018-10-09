@@ -361,6 +361,7 @@ func (p *planner) initiateDropTable(
 	}
 
 	// Mark all jobs scheduled for schema changes as successful.
+	jobIDs := make(map[int64]struct{})
 	var id sqlbase.MutationID
 	for _, m := range tableDesc.Mutations {
 		if id != m.MutationID {
@@ -369,13 +370,20 @@ func (p *planner) initiateDropTable(
 			if err != nil {
 				return err
 			}
-			job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
-			if err != nil {
-				return err
-			}
-			if err := job.WithTxn(p.txn).Succeeded(ctx, jobs.NoopFn); err != nil {
-				return errors.Wrapf(err, "failed to mark job %d as as successful", jobID)
-			}
+			jobIDs[jobID] = struct{}{}
+		}
+	}
+	for _, gcm := range tableDesc.GCMutations {
+		jobIDs[gcm.JobID] = struct{}{}
+	}
+	for jobID := range jobIDs {
+		job, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.txn)
+		if err != nil {
+			return err
+		}
+
+		if err := job.WithTxn(p.txn).Succeeded(ctx, jobs.NoopFn); err != nil {
+			return errors.Wrapf(err, "failed to mark job %d as as successful", jobID)
 		}
 	}
 
