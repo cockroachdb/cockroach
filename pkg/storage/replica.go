@@ -4849,17 +4849,6 @@ func (r *Replica) quiesceAndNotifyLocked(ctx context.Context, status *raft.Statu
 		if roachpb.ReplicaID(id) == r.mu.replicaID {
 			continue
 		}
-		// In common operation, we only quiesce when all followers are
-		// up-to-date. However, when we quiesce in the presence of dead
-		// nodes, a follower which is behind but considered dead may not
-		// have the log entry referenced by status.Commit and would
-		// explode if it were told to commit up to that point. So if
-		// prog.Match for a replica is not up to date with status.Commit,
-		// assume the replica is considered dead and skip the quiesce
-		// heartbeat.
-		if prog.Match < status.Commit {
-			continue
-		}
 		toReplica, toErr := r.getReplicaDescriptorByIDRLocked(
 			roachpb.ReplicaID(id), r.mu.lastFromReplica)
 		if toErr != nil {
@@ -4869,30 +4858,32 @@ func (r *Replica) quiesceAndNotifyLocked(ctx context.Context, status *raft.Statu
 			r.unquiesceLocked()
 			return false
 		}
+
+		// Attach the commit as min(prog.Match, status.Commit). This is exactly
+		// the same as what raft.sendHeartbeat does. See the comment there for
+		// an explanation.
+		//
+		// If the follower is behind, we don't tell it that we're quiescing.
+		// This ensures that if the follower receives the heartbeat then it will
+		// unquiesce the Range and be caught up by the leader. Remember that we
+		// only allow Ranges to quiesce with straggling Replicas if we believe
+		// those Replicas are on dead nodes.
+		commit := status.Commit
+		quiesce := true
+		if prog.Match < status.Commit {
+			commit = prog.Match
+			quiesce = false
+		}
 		msg := raftpb.Message{
 			From:   uint64(r.mu.replicaID),
 			To:     id,
 			Type:   raftpb.MsgHeartbeat,
 			Term:   status.Term,
-			Commit: status.Commit,
+			Commit: commit,
 		}
 
-		if r.maybeCoalesceHeartbeat(ctx, msg, toReplica, fromReplica, true) {
-			continue
-		}
-
-		req := &RaftMessageRequest{
-			RangeID:     r.RangeID,
-			ToReplica:   toReplica,
-			FromReplica: fromReplica,
-			Message:     msg,
-			Quiesce:     true,
-		}
-		if !r.sendRaftMessageRequest(ctx, req) {
-			r.unquiesceLocked()
-			r.mu.droppedMessages++
-			r.mu.internalRaftGroup.ReportUnreachable(id)
-			return false
+		if !r.maybeCoalesceHeartbeat(ctx, msg, toReplica, fromReplica, quiesce) {
+			log.Fatalf(ctx, "failed to coalesce known heartbeat: %v", msg)
 		}
 	}
 	return true
