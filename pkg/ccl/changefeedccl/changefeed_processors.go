@@ -115,6 +115,11 @@ func newChangeAggregatorProcessor(
 	{
 		canarySink, err := getSink(spec.Feed.SinkURI, spec.Feed.Opts, spec.Feed.Targets)
 		if err != nil {
+			// In this context, we don't want to retry even retryable errors from the
+			// sync. Unwrap any retryable errors encountered.
+			if rErr, ok := err.(*retryableSinkError); ok {
+				return nil, rErr.cause
+			}
 			return nil, err
 		}
 		if err := canarySink.Close(); err != nil {
@@ -418,6 +423,11 @@ func newChangeFrontierProcessor(
 	{
 		canarySink, err := getSink(spec.Feed.SinkURI, spec.Feed.Opts, spec.Feed.Targets)
 		if err != nil {
+			// In this context, we don't want to retry even retryable errors from the
+			// sync. Unwrap any retryable errors encountered.
+			if rErr, ok := err.(*retryableSinkError); ok {
+				return nil, rErr.cause
+			}
 			return nil, err
 		}
 		if err := canarySink.Close(); err != nil {
