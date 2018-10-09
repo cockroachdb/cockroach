@@ -65,7 +65,7 @@ func runDiskUsage(t *test, c *cluster, duration time.Duration, tc diskUsageTestC
 	ctx := context.Background()
 	c.Put(ctx, workload, "./workload", c.Node(numNodes))
 	c.Put(ctx, cockroach, "./cockroach", c.All())
-	c.Start(ctx, c.All())
+	c.Start(ctx, t, c.All())
 
 	loadDuration := " --duration=" + (duration / 2).String()
 

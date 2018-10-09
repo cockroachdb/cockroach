@@ -38,7 +38,7 @@ func registerHibernate(r *registry) {
 		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, cockroach, "./cockroach", c.All())
-		c.Start(ctx, c.All())
+		c.Start(ctx, t, c.All())
 
 		t.Status("cloning hibernate and installing prerequisites")
 		c.Run(ctx, node, `rm -rf /mnt/data1/hibernate`)
