@@ -11,22 +11,26 @@ package changefeedccl
 import (
 	"context"
 	gosql "database/sql"
+	gojson "encoding/json"
 	"fmt"
 	"net/url"
 	"sort"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -162,8 +166,10 @@ func TestChangefeedTimestamps(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		beforeFeed := tree.TimestampToDecimal(f.Server().Clock().Now())
 		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH updated, resolved`)
 		defer foo.Close(t)
+		afterFeed := tree.TimestampToDecimal(f.Server().Clock().Now())
 
 		var ts1 string
 		if err := crdb.ExecuteTx(ctx, sqlDB.DB, nil /* txopts */, func(tx *gosql.Tx) error {
@@ -174,8 +180,47 @@ func TestChangefeedTimestamps(t *testing.T) {
 			t.Fatal(err)
 		}
 
+		// TODO(mtracy): Find a way to get the statement time of a feed. Without the
+		// exact timestamp, we are forced to parse and compare the feed results to
+		// our sentinel before and after timestamps, which is significantly more
+		// complicated.
+		var k, v []byte
+		for {
+			var ok bool
+			_, _, k, v, _, ok = foo.Next(t)
+			if !ok {
+				t.Fatal("unexpected end of feed")
+			}
+			if k != nil {
+				break
+			}
+		}
+
+		if a, e := string(k), "[0]"; a != e {
+			t.Errorf("got key %s, wanted %s", a, e)
+		}
+		var out map[string]interface{}
+		if err := gojson.Unmarshal(v, &out); err != nil {
+			t.Fatal(err)
+		}
+		if a, e := out["a"].(float64), float64(0); a != e {
+			t.Fatalf("column a got value %f, wanted %f", a, e)
+		}
+		tsStr := out["__crdb__"].(map[string]interface{})["updated"].(string)
+		tsApd, _, err := apd.NewFromString(tsStr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if beforeFeed.Cmp(tsApd) > 0 {
+			t.Fatalf("ts %s was before lower bound %s", tsApd, beforeFeed)
+		}
+		if afterFeed.Cmp(tsApd) < 0 {
+			t.Fatalf("ts %s was after upper bound %s", tsApd, afterFeed)
+		}
+
+		// Assert the remaining key using assertPayloads, since we know the exact
+		// timestamp expected.
 		assertPayloads(t, foo, []string{
-			`foo: [0]->{"__crdb__": {"updated": "` + ts0 + `"}, "a": 0}`,
 			`foo: [1]->{"__crdb__": {"updated": "` + ts1 + `"}, "a": 1}`,
 		})
 
@@ -223,12 +268,15 @@ func TestChangefeedResolvedFrequency(t *testing.T) {
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
 
-func TestChangefeedSchemaChange(t *testing.T) {
+// Test how Changefeeds react to schema changes that do not require a backfill
+// operation.
+func TestChangefeedSchemaChangeNoBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 
+		// Schema changes that predate the changefeed.
 		t.Run(`historical`, func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE historical (a INT PRIMARY KEY, b STRING DEFAULT 'before')`)
 			var start string
@@ -265,54 +313,6 @@ func TestChangefeedSchemaChange(t *testing.T) {
 			})
 		})
 
-		t.Run(`add column not null`, func(t *testing.T) {
-			sqlDB.Exec(t, `CREATE TABLE add_column_notnull (a INT PRIMARY KEY)`)
-			addColumnNotNull := f.Feed(t, `CREATE CHANGEFEED FOR add_column_notnull WITH resolved`)
-			defer addColumnNotNull.Close(t)
-			sqlDB.Exec(t, `ALTER TABLE add_column_notnull ADD COLUMN b STRING NOT NULL`)
-			sqlDB.Exec(t, `INSERT INTO add_column_notnull VALUES (2, '2')`)
-			skipResolvedTimestamps(t, addColumnNotNull)
-			if err := addColumnNotNull.Err(); !testutils.IsError(err, `tables being backfilled`) {
-				t.Fatalf(`expected "tables being backfilled" error got: %+v`, err)
-			}
-		})
-
-		t.Run(`add column with default`, func(t *testing.T) {
-			sqlDB.Exec(t, `CREATE TABLE add_column_def (a INT PRIMARY KEY)`)
-			sqlDB.Exec(t, `INSERT INTO add_column_def VALUES (1)`)
-			addColumnDef := f.Feed(t, `CREATE CHANGEFEED FOR add_column_def`)
-			defer addColumnDef.Close(t)
-			assertPayloads(t, addColumnDef, []string{
-				`add_column_def: [1]->{"a": 1}`,
-			})
-			sqlDB.Exec(t, `ALTER TABLE add_column_def ADD COLUMN b STRING DEFAULT 'd'`)
-			sqlDB.Exec(t, `INSERT INTO add_column_def VALUES (2, '2')`)
-			if _, _, _, _, _, ok := addColumnDef.Next(t); ok {
-				t.Fatal(`unexpected row`)
-			}
-			if err := addColumnDef.Err(); !testutils.IsError(err, `tables being backfilled`) {
-				t.Fatalf(`expected "tables being backfilled" error got: %+v`, err)
-			}
-		})
-
-		t.Run(`add column computed`, func(t *testing.T) {
-			sqlDB.Exec(t, `CREATE TABLE add_col_comp (a INT PRIMARY KEY, b INT AS (a + 5) STORED)`)
-			sqlDB.Exec(t, `INSERT INTO add_col_comp VALUES (1)`)
-			addColComp := f.Feed(t, `CREATE CHANGEFEED FOR add_col_comp`)
-			defer addColComp.Close(t)
-			assertPayloads(t, addColComp, []string{
-				`add_col_comp: [1]->{"a": 1, "b": 6}`,
-			})
-			sqlDB.Exec(t, `ALTER TABLE add_col_comp ADD COLUMN c INT AS (a + 10) STORED`)
-			sqlDB.Exec(t, `INSERT INTO add_col_comp (a) VALUES (2)`)
-			if _, _, _, _, _, ok := addColComp.Next(t); ok {
-				t.Fatal(`unexpected row`)
-			}
-			if err := addColComp.Err(); !testutils.IsError(err, `tables being backfilled`) {
-				t.Fatalf(`expected "tables being backfilled" error got: %+v`, err)
-			}
-		})
-
 		t.Run(`rename column`, func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE rename_column (a INT PRIMARY KEY, b STRING)`)
 			sqlDB.Exec(t, `INSERT INTO rename_column VALUES (1, '1')`)
@@ -326,24 +326,6 @@ func TestChangefeedSchemaChange(t *testing.T) {
 			})
 		})
 
-		t.Run(`drop column`, func(t *testing.T) {
-			sqlDB.Exec(t, `CREATE TABLE drop_column (a INT PRIMARY KEY, b STRING)`)
-			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (1, '1')`)
-			dropColumn := f.Feed(t, `CREATE CHANGEFEED FOR drop_column`)
-			defer dropColumn.Close(t)
-			assertPayloads(t, dropColumn, []string{
-				`drop_column: [1]->{"a": 1, "b": "1"}`,
-			})
-			sqlDB.Exec(t, `ALTER TABLE drop_column DROP COLUMN b`)
-			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (2)`)
-			if _, _, _, _, _, ok := dropColumn.Next(t); ok {
-				t.Fatal(`unexpected row`)
-			}
-			if err := dropColumn.Err(); !testutils.IsError(err, `tables being backfilled`) {
-				t.Fatalf(`expected "tables being backfilled" error got: %+v`, err)
-			}
-		})
-
 		t.Run(`add default`, func(t *testing.T) {
 			sqlDB.Exec(t, `CREATE TABLE add_default (a INT PRIMARY KEY, b STRING)`)
 			sqlDB.Exec(t, `INSERT INTO add_default (a, b) VALUES (1, '1')`)
@@ -354,20 +336,6 @@ func TestChangefeedSchemaChange(t *testing.T) {
 			assertPayloads(t, addDefault, []string{
 				`add_default: [1]->{"a": 1, "b": "1"}`,
 				`add_default: [2]->{"a": 2, "b": "d"}`,
-			})
-		})
-
-		t.Run(`alter default`, func(t *testing.T) {
-			sqlDB.Exec(
-				t, `CREATE TABLE alter_default (a INT PRIMARY KEY, b STRING DEFAULT 'before')`)
-			sqlDB.Exec(t, `INSERT INTO alter_default (a) VALUES (1)`)
-			alterDefault := f.Feed(t, `CREATE CHANGEFEED FOR alter_default`)
-			defer alterDefault.Close(t)
-			sqlDB.Exec(t, `ALTER TABLE alter_default ALTER COLUMN b SET DEFAULT 'after'`)
-			sqlDB.Exec(t, `INSERT INTO alter_default (a) VALUES (2)`)
-			assertPayloads(t, alterDefault, []string{
-				`alter_default: [1]->{"a": 1, "b": "before"}`,
-				`alter_default: [2]->{"a": 2, "b": "after"}`,
 			})
 		})
 
@@ -440,6 +408,224 @@ func TestChangefeedSchemaChange(t *testing.T) {
 			assertPayloads(t, unique, []string{
 				`unique: [1]->{"a": 1, "b": "1"}`,
 				`unique: [2]->{"a": 2, "b": "2"}`,
+			})
+		})
+
+		t.Run(`alter default`, func(t *testing.T) {
+			sqlDB.Exec(
+				t, `CREATE TABLE alter_default (a INT PRIMARY KEY, b STRING DEFAULT 'before')`)
+			sqlDB.Exec(t, `INSERT INTO alter_default (a) VALUES (1)`)
+			alterDefault := f.Feed(t, `CREATE CHANGEFEED FOR alter_default`)
+			defer alterDefault.Close(t)
+			sqlDB.Exec(t, `ALTER TABLE alter_default ALTER COLUMN b SET DEFAULT 'after'`)
+			sqlDB.Exec(t, `INSERT INTO alter_default (a) VALUES (2)`)
+			assertPayloads(t, alterDefault, []string{
+				`alter_default: [1]->{"a": 1, "b": "before"}`,
+				`alter_default: [2]->{"a": 2, "b": "after"}`,
+			})
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestChangefeedSchemaChangeNoAllowBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	t.Skip("TODO(mrtracy): Re-enable when allow-backfill option is added.")
+
+	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		t.Run(`add column not null`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE add_column_notnull (a INT PRIMARY KEY)`)
+			addColumnNotNull := f.Feed(t, `CREATE CHANGEFEED FOR add_column_notnull WITH resolved`)
+			defer addColumnNotNull.Close(t)
+			sqlDB.Exec(t, `ALTER TABLE add_column_notnull ADD COLUMN b STRING NOT NULL`)
+			sqlDB.Exec(t, `INSERT INTO add_column_notnull VALUES (2, '2')`)
+			skipResolvedTimestamps(t, addColumnNotNull)
+			if err := addColumnNotNull.Err(); !testutils.IsError(err, `tables being backfilled`) {
+				t.Fatalf(`expected "tables being backfilled" error got: %+v`, err)
+			}
+		})
+
+		t.Run(`add column with default`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE add_column_def (a INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `INSERT INTO add_column_def VALUES (1)`)
+			addColumnDef := f.Feed(t, `CREATE CHANGEFEED FOR add_column_def`)
+			defer addColumnDef.Close(t)
+			assertPayloads(t, addColumnDef, []string{
+				`add_column_def: [1]->{"a": 1}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE add_column_def ADD COLUMN b STRING DEFAULT 'd'`)
+			sqlDB.Exec(t, `INSERT INTO add_column_def VALUES (2, '2')`)
+			if _, _, _, _, _, ok := addColumnDef.Next(t); ok {
+				t.Fatal(`unexpected row`)
+			}
+			if err := addColumnDef.Err(); !testutils.IsError(err, `tables being backfilled`) {
+				t.Fatalf(`expected "tables being backfilled" error got: %+v`, err)
+			}
+		})
+
+		t.Run(`add column computed`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE add_col_comp (a INT PRIMARY KEY, b INT AS (a + 5) STORED)`)
+			sqlDB.Exec(t, `INSERT INTO add_col_comp VALUES (1)`)
+			addColComp := f.Feed(t, `CREATE CHANGEFEED FOR add_col_comp`)
+			defer addColComp.Close(t)
+			assertPayloads(t, addColComp, []string{
+				`add_col_comp: [1]->{"a": 1, "b": 6}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE add_col_comp ADD COLUMN c INT AS (a + 10) STORED`)
+			sqlDB.Exec(t, `INSERT INTO add_col_comp (a) VALUES (2)`)
+			if _, _, _, _, _, ok := addColComp.Next(t); ok {
+				t.Fatal(`unexpected row`)
+			}
+			if err := addColComp.Err(); !testutils.IsError(err, `tables being backfilled`) {
+				t.Fatalf(`expected "tables being backfilled" error got: %+v`, err)
+			}
+		})
+
+		t.Run(`drop column`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE drop_column (a INT PRIMARY KEY, b STRING)`)
+			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (1, '1')`)
+			dropColumn := f.Feed(t, `CREATE CHANGEFEED FOR drop_column`)
+			defer dropColumn.Close(t)
+			assertPayloads(t, dropColumn, []string{
+				`drop_column: [1]->{"a": 1, "b": "1"}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE drop_column DROP COLUMN b`)
+			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (2)`)
+			if _, _, _, _, _, ok := dropColumn.Next(t); ok {
+				t.Fatal(`unexpected row`)
+			}
+			if err := dropColumn.Err(); !testutils.IsError(err, `tables being backfilled`) {
+				t.Fatalf(`expected "tables being backfilled" error got: %+v`, err)
+			}
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+// Test schema changes that require a backfill when the backfill option is
+// allowed.
+func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		t.Run(`add column with default`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE add_column_def (a INT PRIMARY KEY)`)
+			sqlDB.Exec(t, `INSERT INTO add_column_def VALUES (1)`)
+			sqlDB.Exec(t, `INSERT INTO add_column_def VALUES (2)`)
+			addColumnDef := f.Feed(t, `CREATE CHANGEFEED FOR add_column_def`)
+			defer addColumnDef.Close(t)
+			assertPayloads(t, addColumnDef, []string{
+				`add_column_def: [1]->{"a": 1}`,
+				`add_column_def: [2]->{"a": 2}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE add_column_def ADD COLUMN b STRING DEFAULT 'd'`)
+			assertPayloads(t, addColumnDef, []string{
+				`add_column_def: [1]->{"a": 1}`,
+				`add_column_def: [2]->{"a": 2}`,
+				`add_column_def: [1]->{"a": 1, "b": "d"}`,
+				`add_column_def: [2]->{"a": 2, "b": "d"}`,
+			})
+		})
+
+		t.Run(`add column computed`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE add_col_comp (a INT PRIMARY KEY, b INT AS (a + 5) STORED)`)
+			sqlDB.Exec(t, `INSERT INTO add_col_comp VALUES (1)`)
+			sqlDB.Exec(t, `INSERT INTO add_col_comp (a) VALUES (2)`)
+			addColComp := f.Feed(t, `CREATE CHANGEFEED FOR add_col_comp`)
+			defer addColComp.Close(t)
+			assertPayloads(t, addColComp, []string{
+				`add_col_comp: [1]->{"a": 1, "b": 6}`,
+				`add_col_comp: [2]->{"a": 2, "b": 7}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE add_col_comp ADD COLUMN c INT AS (a + 10) STORED`)
+			assertPayloads(t, addColComp, []string{
+				`add_col_comp: [1]->{"a": 1, "b": 6}`,
+				`add_col_comp: [2]->{"a": 2, "b": 7}`,
+				`add_col_comp: [1]->{"a": 1, "b": 6, "c": 11}`,
+				`add_col_comp: [2]->{"a": 2, "b": 7, "c": 12}`,
+			})
+		})
+
+		t.Run(`drop column`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE drop_column (a INT PRIMARY KEY, b STRING)`)
+			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (1, '1')`)
+			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (2, '2')`)
+			dropColumn := f.Feed(t, `CREATE CHANGEFEED FOR drop_column`)
+			defer dropColumn.Close(t)
+			assertPayloads(t, dropColumn, []string{
+				`drop_column: [1]->{"a": 1, "b": "1"}`,
+				`drop_column: [2]->{"a": 2, "b": "2"}`,
+			})
+			sqlDB.Exec(t, `ALTER TABLE drop_column DROP COLUMN b`)
+			sqlDB.Exec(t, `INSERT INTO drop_column VALUES (3)`)
+			// Dropped columns are immediately invisible.
+			assertPayloads(t, dropColumn, []string{
+				`drop_column: [1]->{"a": 1}`,
+				`drop_column: [2]->{"a": 2}`,
+				`drop_column: [3]->{"a": 3}`,
+				`drop_column: [1]->{"a": 1}`,
+				`drop_column: [2]->{"a": 2}`,
+			})
+		})
+
+		t.Run(`multiple alters`, func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE TABLE multiple_alters (a INT PRIMARY KEY, b STRING)`)
+			sqlDB.Exec(t, `INSERT INTO multiple_alters VALUES (1, '1')`)
+			sqlDB.Exec(t, `INSERT INTO multiple_alters VALUES (2, '2')`)
+
+			// Set up a hook to pause the changfeed on the next emit.
+			var wg sync.WaitGroup
+			waitSinkHook := func() error {
+				wg.Wait()
+				return nil
+			}
+			knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
+				DistSQL.(*distsqlrun.TestingKnobs).
+				Changefeed.(*TestingKnobs)
+			knobs.BeforeEmitRow = waitSinkHook
+
+			multipleAlters := f.Feed(t, `CREATE CHANGEFEED FOR multiple_alters`)
+			defer multipleAlters.Close(t)
+			assertPayloads(t, multipleAlters, []string{
+				`multiple_alters: [1]->{"a": 1, "b": "1"}`,
+				`multiple_alters: [2]->{"a": 2, "b": "2"}`,
+			})
+
+			// Wait on the next emit, queue up three ALTERs. The next poll process
+			// will see all of them at once.
+			wg.Add(1)
+			waitForSchemaChange(t, sqlDB, `ALTER TABLE multiple_alters DROP COLUMN b`)
+			waitForSchemaChange(t, sqlDB, `ALTER TABLE multiple_alters ADD COLUMN c STRING DEFAULT 'cee'`)
+			waitForSchemaChange(t, sqlDB, `ALTER TABLE multiple_alters ADD COLUMN d STRING DEFAULT 'dee'`)
+			wg.Done()
+
+			assertPayloads(t, multipleAlters, []string{
+				// Backfill no-ops for DROP. Dropped columns are immediately invisible.
+				`multiple_alters: [1]->{"a": 1}`,
+				`multiple_alters: [2]->{"a": 2}`,
+				// Scan output for DROP
+				`multiple_alters: [1]->{"a": 1}`,
+				`multiple_alters: [2]->{"a": 2}`,
+				// Backfill no-ops for column C
+				`multiple_alters: [1]->{"a": 1}`,
+				`multiple_alters: [2]->{"a": 2}`,
+				// Scan output for column C
+				`multiple_alters: [1]->{"a": 1, "c": "cee"}`,
+				`multiple_alters: [2]->{"a": 2, "c": "cee"}`,
+				// Backfill no-ops for column D (C schema change is complete)
+				`multiple_alters: [1]->{"a": 1, "c": "cee"}`,
+				`multiple_alters: [2]->{"a": 2, "c": "cee"}`,
+				// Scan output for column C
+				`multiple_alters: [1]->{"a": 1, "c": "cee", "d": "dee"}`,
+				`multiple_alters: [2]->{"a": 2, "c": "cee", "d": "dee"}`,
 			})
 		})
 	}

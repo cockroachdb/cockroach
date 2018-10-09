@@ -349,9 +349,10 @@ func validateChangefeedTable(
 		return errors.Errorf(`"%s" was renamed to "%s"`, t.StatementTimeName, tableDesc.Name)
 	}
 
-	if tableDesc.HasColumnBackfillMutation() {
-		return errors.Errorf(`CHANGEFEEDs cannot operate on tables being backfilled`)
-	}
+	// TODO(mrtracy): re-enable this when allow-backfill option is added.
+	// if tableDesc.HasColumnBackfillMutation() {
+	// 	return errors.Errorf(`CHANGEFEEDs cannot operate on tables being backfilled`)
+	// }
 
 	return nil
 }

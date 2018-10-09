@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync/atomic"
 	"time"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -30,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
@@ -40,15 +43,33 @@ import (
 // Each poll (ie set of ExportRequests) are rate limited to be no more often
 // than the `changefeed.experimental_poll_interval` setting.
 type poller struct {
-	settings *cluster.Settings
-	db       *client.DB
-	clock    *hlc.Clock
-	gossip   *gossip.Gossip
-	spans    []roachpb.Span
-	details  jobspb.ChangefeedDetails
-	buf      *buffer
+	settings  *cluster.Settings
+	db        *client.DB
+	clock     *hlc.Clock
+	gossip    *gossip.Gossip
+	spans     []roachpb.Span
+	details   jobspb.ChangefeedDetails
+	buf       *buffer
+	tableHist *tableHistory
+	leaseMgr  *sql.LeaseManager
 
-	highWater hlc.Timestamp
+	mu struct {
+		syncutil.Mutex
+		// highWater timestamp for exports processed by this poller so far.
+		highWater hlc.Timestamp
+		// scanBoundaries represent timestamps where the changefeed output process
+		// should pause and output a scan of *all keys* of the watched spans at the
+		// given timestamp. There are currently two situations where this occurs:
+		// the initial scan of the table when starting a new Changefeed, and when
+		// a backfilling schema change is marked as completed. This collection must
+		// be kept in sorted order (by timestamp ascending).
+		scanBoundaries []hlc.Timestamp
+		// previousTableVersion is a map from tableID to the most recent version
+		// of the table descriptor seen by the poller. This is needed to determine
+		// when a backilling mutation has successfully completed - this can only
+		// be determining by comparing a version to the previous version.
+		previousTableVersion map[sqlbase.ID]*sqlbase.TableDescriptor
+	}
 }
 
 func makePoller(
@@ -60,37 +81,31 @@ func makePoller(
 	details jobspb.ChangefeedDetails,
 	highWater hlc.Timestamp,
 	buf *buffer,
+	leaseMgr *sql.LeaseManager,
 ) *poller {
-	return &poller{
-		settings:  settings,
-		db:        db,
-		clock:     clock,
-		gossip:    gossip,
-		highWater: highWater,
-		spans:     spans,
-		details:   details,
-		buf:       buf,
-	}
-}
+	p := &poller{
+		settings: settings,
+		db:       db,
+		clock:    clock,
+		gossip:   gossip,
 
-func fetchSpansForTargets(
-	ctx context.Context, db *client.DB, targets jobspb.ChangefeedTargets, ts hlc.Timestamp,
-) ([]roachpb.Span, error) {
-	var spans []roachpb.Span
-	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		spans = nil
-		txn.SetFixedTimestamp(ctx, ts)
-		// Note that all targets are currently guaranteed to be tables.
-		for tableID := range targets {
-			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
-			if err != nil {
-				return err
-			}
-			spans = append(spans, tableDesc.PrimaryIndexSpan())
-		}
-		return nil
-	})
-	return spans, err
+		spans:    spans,
+		details:  details,
+		buf:      buf,
+		leaseMgr: leaseMgr,
+	}
+	p.mu.previousTableVersion = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+	// If no highWater is specified, set the highwater to the statement time
+	// and add a scanBoundary at the statement time to trigger an immediate output
+	// of the full table.
+	if highWater == (hlc.Timestamp{}) {
+		p.mu.highWater = details.StatementTime
+		p.mu.scanBoundaries = append(p.mu.scanBoundaries, details.StatementTime)
+	} else {
+		p.mu.highWater = highWater
+	}
+	p.tableHist = makeTableHistory(p.validateTable, highWater)
+	return p
 }
 
 // Run repeatedly polls and inserts changed kvs and resolved timestamps into a
@@ -103,14 +118,14 @@ func fetchSpansForTargets(
 // number are inflight or being inserted into the buffer. Finally, after each
 // poll completes, a resolved timestamp notification is added to the buffer.
 func (p *poller) Run(ctx context.Context) error {
-	if storage.RangefeedEnabled.Get(&p.settings.SV) {
-		return p.runUsingRangefeeds(ctx)
-	}
-
-	sender := p.db.NonTransactionalSender()
 	for {
+		// Wait for polling interval
+		p.mu.Lock()
+		lastHighwater := p.mu.highWater
+		p.mu.Unlock()
+
 		pollDuration := changefeedPollInterval.Get(&p.settings.SV)
-		pollDuration = pollDuration - timeutil.Since(timeutil.Unix(0, p.highWater.WallTime))
+		pollDuration = pollDuration - timeutil.Since(timeutil.Unix(0, lastHighwater.WallTime))
 		if pollDuration > 0 {
 			log.VEventf(ctx, 1, `sleeping for %s`, pollDuration)
 			select {
@@ -120,134 +135,376 @@ func (p *poller) Run(ctx context.Context) error {
 			}
 		}
 
-		var nextHighWater hlc.Timestamp
-		if p.highWater == (hlc.Timestamp{}) {
-			nextHighWater = p.details.StatementTime
-		} else {
-			nextHighWater = p.clock.Now()
-		}
+		nextHighWater := p.clock.Now()
 
-		log.VEventf(ctx, 1, `changefeed poll [%s,%s): %s`,
-			p.highWater, nextHighWater, time.Duration(nextHighWater.WallTime-p.highWater.WallTime))
-
-		var ranges []roachpb.RangeDescriptor
-		if err := p.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			var err error
-			ranges, err = allRangeDescriptors(ctx, txn)
+		// Ingest table descriptors up to the next prospective highwater.
+		if err := p.updateTableHistory(ctx, nextHighWater); err != nil {
 			return err
-		}); err != nil {
-			return errors.Wrap(err, "fetching range descriptors")
 		}
 
-		type spanMarker struct{}
-		type rangeMarker struct{}
-
-		var spanCovering intervalccl.Covering
-		for _, span := range p.spans {
-			spanCovering = append(spanCovering, intervalccl.Range{
-				Start:   []byte(span.Key),
-				End:     []byte(span.EndKey),
-				Payload: spanMarker{},
-			})
-		}
-
-		var rangeCovering intervalccl.Covering
-		for _, rangeDesc := range ranges {
-			rangeCovering = append(rangeCovering, intervalccl.Range{
-				Start:   []byte(rangeDesc.StartKey),
-				End:     []byte(rangeDesc.EndKey),
-				Payload: rangeMarker{},
-			})
-		}
-
-		chunks := intervalccl.OverlapCoveringMerge(
-			[]intervalccl.Covering{spanCovering, rangeCovering},
-		)
-
-		var requests []roachpb.Span
-		for _, chunk := range chunks {
-			if _, ok := chunk.Payload.([]interface{})[0].(spanMarker); !ok {
-				continue
+		// Determine if we are at a scanBoundary, and trigger a full scan if needed.
+		isFullScan := false
+		p.mu.Lock()
+		if len(p.mu.scanBoundaries) > 0 {
+			if p.mu.scanBoundaries[0].Equal(lastHighwater) {
+				// Perform a full scan of the latest value of all keys as of the
+				// boundary timestamp and consume the boundary.
+				isFullScan = true
+				nextHighWater = lastHighwater
+				p.mu.scanBoundaries = p.mu.scanBoundaries[1:]
+			} else if p.mu.scanBoundaries[0].Less(nextHighWater) {
+				// If we aren't currently at a scan boundary, but the next highwater
+				// would bring us past the scan boundary, set nextHighWater to the
+				// scan boundary. This will cause us to capture all changes up to the
+				// scan boundary, then consume the boundary on the next iteration.
+				nextHighWater = p.mu.scanBoundaries[0]
 			}
-			requests = append(requests, roachpb.Span{Key: chunk.Start, EndKey: chunk.End})
+		}
+		p.mu.Unlock()
+
+		if !isFullScan {
+			log.VEventf(ctx, 1, `changefeed poll [%s,%s): %s`,
+				lastHighwater, nextHighWater, time.Duration(nextHighWater.WallTime-lastHighwater.WallTime))
+		} else {
+			log.VEventf(ctx, 1, `changefeed poll full scan @ %s`, nextHighWater)
 		}
 
-		maxConcurrentExports := clusterNodeCount(p.gossip) *
-			int(storage.ExportRequestsLimit.Get(&p.settings.SV))
-		exportsSem := make(chan struct{}, maxConcurrentExports)
+		spans, err := getSpansToProcess(ctx, p.db, p.spans)
+		if err != nil {
+			return err
+		}
 
-		var atomicFinished int64
+		if err := p.exportSpansParallel(ctx, spans, lastHighwater, nextHighWater, isFullScan); err != nil {
+			return err
+		}
+		p.mu.Lock()
+		p.mu.highWater = nextHighWater
+		p.mu.Unlock()
+	}
+}
 
+// RunUsingRangeFeeds performs the same task as the normal Run method, but uses
+// the experimental Rangefeed system to capture changes rather than the
+// poll-and-export method.  Note
+func (p *poller) RunUsingRangefeeds(ctx context.Context) error {
+	// Start polling tablehistory, which must be done concurrently with
+	// the individual rangefeed routines.
+	g := ctxgroup.WithContext(ctx)
+	g.GoCtx(p.pollTableHistory)
+	g.GoCtx(p.rangefeedImpl)
+	return g.Wait()
+}
+
+var errBoundaryReached = errors.New("scan boundary reached")
+
+func (p *poller) rangefeedImpl(ctx context.Context) error {
+	for {
+		p.mu.Lock()
+		lastHighwater := p.mu.highWater
+		p.mu.Unlock()
+		if err := p.tableHist.WaitForTS(ctx, lastHighwater); err != nil {
+			return err
+		}
+
+		spans, err := getSpansToProcess(ctx, p.db, p.spans)
+		if err != nil {
+			return err
+		}
+
+		// Perform a full scan if necessary - either an initial scan or a backfill
+		// Full scans are still performed using an Export operation..
+		var scanTime hlc.Timestamp
+		p.mu.Lock()
+		if len(p.mu.scanBoundaries) > 0 && p.mu.scanBoundaries[0].Equal(p.mu.highWater) {
+			// Perform a full scan of the latest value of all keys as of the
+			// boundary timestamp and consume the boundary.
+			scanTime = p.mu.scanBoundaries[0]
+			p.mu.scanBoundaries = p.mu.scanBoundaries[1:]
+		}
+		p.mu.Unlock()
+		if scanTime != (hlc.Timestamp{}) {
+			if err := p.exportSpansParallel(
+				ctx, spans, scanTime, scanTime, true, /* fullScan */
+			); err != nil {
+				return err
+			}
+		}
+
+		// Start rangefeeds, exit polling if we hit a resolved timestamp beyond
+		// the next scan boundary.
+
+		// TODO(nvanbenschoten): This is horrible.
+		sender := p.db.NonTransactionalSender()
+		ds := sender.(*client.CrossRangeTxnWrapperSender).Wrapped().(*kv.DistSender)
 		g := ctxgroup.WithContext(ctx)
-		for _, span := range requests {
-			span := span
+		eventC := make(chan *roachpb.RangeFeedEvent, 128)
 
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case exportsSem <- struct{}{}:
+		// Maintain a local spanfrontier to tell when all the component rangefeeds
+		// being watched have reached the Scan boundary.
+		// TODO(mrtracy): The alternative to this would be to maintain two
+		// goroutines for each span (the current arrangement is one goroutine per
+		// span and one multiplexing goroutine that outputs to the buffer). This
+		// alternative would allow us to stop the individual rangefeeds earlier and
+		// avoid the need for a span frontier, but would also introduce a different
+		// contention pattern and use additional goroutines. it's not clear which
+		// solution is best without targeted performance testing, so we're choosing
+		// the faster-to-implement solution for now.
+		frontier := makeSpanFrontier(spans...)
+
+		for _, span := range p.spans {
+			req := &roachpb.RangeFeedRequest{
+				Header: roachpb.Header{
+					Timestamp: lastHighwater,
+				},
+				Span: span,
+			}
+			frontier.Forward(span, lastHighwater)
+			g.GoCtx(func(ctx context.Context) error {
+				return ds.RangeFeed(ctx, req, eventC).GoError()
+			})
+		}
+		g.GoCtx(func(ctx context.Context) error {
+			for {
+				select {
+				case e := <-eventC:
+					switch t := e.GetValue().(type) {
+					case *roachpb.RangeFeedValue:
+						// TODO(mrtracy): This appears to be backpressuring Raft. Find a way
+						// to resolve this (likely buffering per #28669).
+						if err := p.tableHist.WaitForTS(ctx, t.Value.Timestamp); err != nil {
+							return err
+						}
+						pastBoundary := false
+						p.mu.Lock()
+						if len(p.mu.scanBoundaries) > 0 && p.mu.scanBoundaries[0].Less(t.Value.Timestamp) {
+							// Ignore feed results beyond the next boundary; they will be retrieved when
+							// the feeds are restarted after the scan.
+							pastBoundary = true
+						}
+						p.mu.Unlock()
+						if pastBoundary {
+							continue
+						}
+						kv := roachpb.KeyValue{Key: t.Key, Value: t.Value}
+						if err := p.buf.AddKV(ctx, kv, hlc.Timestamp{}); err != nil {
+							return err
+						}
+					case *roachpb.RangeFeedCheckpoint:
+						resolvedTS := t.ResolvedTS
+						boundaryBreak := false
+						p.mu.Lock()
+						if len(p.mu.scanBoundaries) > 0 && p.mu.scanBoundaries[0].Less(resolvedTS) {
+							boundaryBreak = true
+							resolvedTS = p.mu.scanBoundaries[0]
+						}
+						p.mu.Unlock()
+						if err := p.buf.AddResolved(ctx, t.Span, resolvedTS); err != nil {
+							return err
+						}
+						if boundaryBreak {
+							frontier.Forward(t.Span, resolvedTS)
+							if frontier.Frontier() == resolvedTS {
+								// All component rangefeeds are now at the boundary.
+								// Break out of the ctxgroup by returning a sentinel error.
+								return errBoundaryReached
+							}
+						}
+					default:
+						log.Fatalf(ctx, "unexpected RangeFeedEvent variant %v", t)
+					}
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+		})
+		// TODO(mrtracy): We are currently tearing down the entire rangefeed set
+		// in order to perform a scan; however, with some sort of buffering present
+		// (#28669) its likely that we could do this without having to destroy
+		// and recreate the rangefeeds.
+		if err := g.Wait(); err != nil && err != errBoundaryReached {
+			return err
+		}
+
+		p.mu.Lock()
+		p.mu.highWater = p.mu.scanBoundaries[0]
+		p.mu.Unlock()
+	}
+}
+
+func getSpansToProcess(
+	ctx context.Context, db *client.DB, targetSpans []roachpb.Span,
+) ([]roachpb.Span, error) {
+	var ranges []roachpb.RangeDescriptor
+	if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		var err error
+		ranges, err = allRangeDescriptors(ctx, txn)
+		return err
+	}); err != nil {
+		return nil, errors.Wrap(err, "fetching range descriptors")
+	}
+
+	type spanMarker struct{}
+	type rangeMarker struct{}
+
+	var spanCovering intervalccl.Covering
+	for _, span := range targetSpans {
+		spanCovering = append(spanCovering, intervalccl.Range{
+			Start:   []byte(span.Key),
+			End:     []byte(span.EndKey),
+			Payload: spanMarker{},
+		})
+	}
+
+	var rangeCovering intervalccl.Covering
+	for _, rangeDesc := range ranges {
+		rangeCovering = append(rangeCovering, intervalccl.Range{
+			Start:   []byte(rangeDesc.StartKey),
+			End:     []byte(rangeDesc.EndKey),
+			Payload: rangeMarker{},
+		})
+	}
+
+	chunks := intervalccl.OverlapCoveringMerge(
+		[]intervalccl.Covering{spanCovering, rangeCovering},
+	)
+
+	var requests []roachpb.Span
+	for _, chunk := range chunks {
+		if _, ok := chunk.Payload.([]interface{})[0].(spanMarker); !ok {
+			continue
+		}
+		requests = append(requests, roachpb.Span{Key: chunk.Start, EndKey: chunk.End})
+	}
+	return requests, nil
+}
+
+func (p *poller) exportSpansParallel(
+	ctx context.Context, spans []roachpb.Span, start, end hlc.Timestamp, isFullScan bool,
+) error {
+	sender := p.db.NonTransactionalSender()
+
+	// Export requests for the various watched spans are executed in parallel,
+	// with a semaphore-enforced limit based on a cluster setting.
+	maxConcurrentExports := clusterNodeCount(p.gossip) *
+		int(storage.ExportRequestsLimit.Get(&p.settings.SV))
+	exportsSem := make(chan struct{}, maxConcurrentExports)
+	g := ctxgroup.WithContext(ctx)
+
+	// atomicFinished is used only to enhance debugging messages.
+	var atomicFinished int64
+
+	for _, span := range spans {
+		span := span
+
+		// Wait for our sempahore.
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case exportsSem <- struct{}{}:
+		}
+
+		g.GoCtx(func(ctx context.Context) error {
+			defer func() { <-exportsSem }()
+			if log.V(2) {
+				log.Infof(ctx, `sending ExportRequest [%s,%s)`, span.Key, span.EndKey)
 			}
 
-			g.GoCtx(func(ctx context.Context) error {
-				defer func() { <-exportsSem }()
-				if log.V(2) {
-					log.Infof(ctx, `sending ExportRequest [%s,%s)`, span.Key, span.EndKey)
-				}
-				header := roachpb.Header{Timestamp: nextHighWater}
-				req := &roachpb.ExportRequest{
-					RequestHeader: roachpb.RequestHeaderFromSpan(span),
-					StartTime:     p.highWater,
-					MVCCFilter:    roachpb.MVCCFilter_All,
-					ReturnSST:     true,
-					OmitChecksum:  true,
-				}
-				if req.StartTime == (hlc.Timestamp{}) {
-					req.MVCCFilter = roachpb.MVCCFilter_Latest
-				}
-				startTime := timeutil.Now()
-				res, pErr := client.SendWrappedWith(ctx, sender, header, req)
-				finished := atomic.AddInt64(&atomicFinished, 1)
-				if log.V(2) {
-					log.Infof(ctx, `finished ExportRequest [%s,%s) %d of %d took %s`,
-						span.Key, span.EndKey, finished, len(requests), timeutil.Since(startTime))
-				}
-				if pErr != nil {
-					return errors.Wrapf(
-						pErr.GoError(), `fetching changes for [%s,%s)`, span.Key, span.EndKey)
-				}
-				startTime = timeutil.Now()
-				for _, file := range res.(*roachpb.ExportResponse).Files {
-					if err := p.slurpSST(ctx, file.SST); err != nil {
-						return err
-					}
-				}
-				if err := p.buf.AddResolved(ctx, span, nextHighWater); err != nil {
+			stopwatchStart := timeutil.Now()
+			exported, pErr := exportSpan(ctx, span, sender, start, end, isFullScan)
+			finished := atomic.AddInt64(&atomicFinished, 1)
+			if log.V(2) {
+				log.Infof(ctx, `finished ExportRequest [%s,%s) %d of %d took %s`,
+					span.Key, span.EndKey, finished, len(spans), timeutil.Since(stopwatchStart))
+			}
+			if pErr != nil {
+				return errors.Wrapf(
+					pErr.GoError(), `fetching changes for [%s,%s)`, span.Key, span.EndKey,
+				)
+			}
+
+			// When outputting a full scan, we want to use the schema at the scan
+			// timestamp, not the schema at the value timestamp.
+			var schemaTimestamp hlc.Timestamp
+			if isFullScan {
+				schemaTimestamp = end
+			}
+			stopwatchStart = timeutil.Now()
+			for _, file := range exported.(*roachpb.ExportResponse).Files {
+				if err := p.slurpSST(ctx, file.SST, schemaTimestamp); err != nil {
 					return err
 				}
-				if log.V(2) {
-					log.Infof(ctx, `finished buffering [%s,%s) took %s`,
-						span.Key, span.EndKey, timeutil.Since(startTime))
-				}
-				return nil
-			})
-		}
-		if err := g.Wait(); err != nil {
-			return err
+			}
+			if err := p.buf.AddResolved(ctx, span, end); err != nil {
+				return err
+			}
+
+			if log.V(2) {
+				log.Infof(ctx, `finished buffering [%s,%s) took %s`,
+					span.Key, span.EndKey, timeutil.Since(stopwatchStart))
+			}
+			return nil
+		})
+	}
+	return g.Wait()
+}
+
+func exportSpan(
+	ctx context.Context,
+	span roachpb.Span,
+	sender client.Sender,
+	start, end hlc.Timestamp,
+	fullScan bool,
+) (roachpb.Response, *roachpb.Error) {
+	header := roachpb.Header{Timestamp: end}
+	req := &roachpb.ExportRequest{
+		RequestHeader: roachpb.RequestHeaderFromSpan(span),
+		StartTime:     start,
+		MVCCFilter:    roachpb.MVCCFilter_All,
+		ReturnSST:     true,
+		OmitChecksum:  true,
+	}
+	if fullScan {
+		req.MVCCFilter = roachpb.MVCCFilter_Latest
+		req.StartTime = hlc.Timestamp{}
+	}
+	return client.SendWrappedWith(ctx, sender, header, req)
+}
+
+func (p *poller) updateTableHistory(ctx context.Context, endTS hlc.Timestamp) error {
+	startTS := p.tableHist.HighWater()
+	if !startTS.Less(endTS) {
+		return nil
+	}
+	descs, err := fetchTableDescriptorVersions(ctx, p.db, startTS, endTS, p.details.Targets)
+	if err != nil {
+		return err
+	}
+	return p.tableHist.IngestDescriptors(ctx, startTS, endTS, descs)
+}
+
+func (p *poller) pollTableHistory(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(changefeedPollInterval.Get(&p.settings.SV)):
 		}
 
-		p.highWater = nextHighWater
+		if err := p.updateTableHistory(ctx, p.clock.Now()); err != nil {
+			return err
+		}
 	}
 }
 
 // slurpSST iterates an encoded sst and inserts the contained kvs into the
 // buffer.
-func (p *poller) slurpSST(ctx context.Context, sst []byte) error {
+func (p *poller) slurpSST(ctx context.Context, sst []byte, schemaTimestamp hlc.Timestamp) error {
 	var previousKey roachpb.Key
 	var kvs []roachpb.KeyValue
 	slurpKVs := func() error {
 		sort.Sort(byValueTimestamp(kvs))
 		for _, kv := range kvs {
-			if err := p.buf.AddKV(ctx, kv); err != nil {
+			if err := p.buf.AddKV(ctx, kv, schemaTimestamp); err != nil {
 				return err
 			}
 		}
@@ -295,154 +552,6 @@ func (p *poller) slurpSST(ctx context.Context, sst []byte) error {
 	return slurpKVs()
 }
 
-// TODO(nvanbenschoten): this should probably be a whole different type that
-// shares a common interface with poller.
-func (p *poller) runUsingRangefeeds(ctx context.Context) error {
-	g := ctxgroup.WithContext(ctx)
-	sender := p.db.NonTransactionalSender()
-	if p.highWater == (hlc.Timestamp{}) {
-		// TODO(nvanbenschoten/danhhz): This should be replaced by a series of
-		// ScanRequests and this structure should be completely reworked. Right
-		// now it's copied verbatim from above.
-		var ranges []roachpb.RangeDescriptor
-		if err := p.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-			txn.SetFixedTimestamp(ctx, p.details.StatementTime)
-			var err error
-			ranges, err = allRangeDescriptors(ctx, txn)
-			return err
-		}); err != nil {
-			return errors.Wrap(err, "fetching range descriptors")
-		}
-
-		type spanMarker struct{}
-		type rangeMarker struct{}
-
-		var spanCovering intervalccl.Covering
-		for _, span := range p.spans {
-			spanCovering = append(spanCovering, intervalccl.Range{
-				Start:   []byte(span.Key),
-				End:     []byte(span.EndKey),
-				Payload: spanMarker{},
-			})
-		}
-
-		var rangeCovering intervalccl.Covering
-		for _, rangeDesc := range ranges {
-			rangeCovering = append(rangeCovering, intervalccl.Range{
-				Start:   []byte(rangeDesc.StartKey),
-				End:     []byte(rangeDesc.EndKey),
-				Payload: rangeMarker{},
-			})
-		}
-
-		chunks := intervalccl.OverlapCoveringMerge(
-			[]intervalccl.Covering{spanCovering, rangeCovering},
-		)
-
-		var requests []roachpb.Span
-		for _, chunk := range chunks {
-			if _, ok := chunk.Payload.([]interface{})[0].(spanMarker); !ok {
-				continue
-			}
-			requests = append(requests, roachpb.Span{Key: chunk.Start, EndKey: chunk.End})
-		}
-
-		g.GoCtx(func(ctx context.Context) error {
-			maxConcurrentExports := clusterNodeCount(p.gossip) *
-				int(storage.ExportRequestsLimit.Get(&p.settings.SV))
-			exportsSem := make(chan struct{}, maxConcurrentExports)
-
-			var atomicFinished int64
-
-			for _, span := range requests {
-				span := span
-
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case exportsSem <- struct{}{}:
-				}
-
-				g.GoCtx(func(ctx context.Context) error {
-					defer func() { <-exportsSem }()
-					if log.V(2) {
-						log.Infof(ctx, `sending ExportRequest [%s,%s)`, span.Key, span.EndKey)
-					}
-					header := roachpb.Header{Timestamp: p.details.StatementTime}
-					req := &roachpb.ExportRequest{
-						RequestHeader: roachpb.RequestHeaderFromSpan(span),
-						StartTime:     hlc.Timestamp{},
-						MVCCFilter:    roachpb.MVCCFilter_Latest,
-						ReturnSST:     true,
-						OmitChecksum:  true,
-					}
-					startTime := timeutil.Now()
-					res, pErr := client.SendWrappedWith(ctx, sender, header, req)
-					finished := atomic.AddInt64(&atomicFinished, 1)
-					if log.V(2) {
-						log.Infof(ctx, `finished ExportRequest [%s,%s) %d of %d took %s`,
-							span.Key, span.EndKey, finished, len(requests), timeutil.Since(startTime))
-					}
-					if pErr != nil {
-						return errors.Wrapf(
-							pErr.GoError(), `fetching changes for [%s,%s)`, span.Key, span.EndKey)
-					}
-					for _, file := range res.(*roachpb.ExportResponse).Files {
-						if err := p.slurpSST(ctx, file.SST); err != nil {
-							return err
-						}
-					}
-					return p.buf.AddResolved(ctx, span, p.details.StatementTime)
-				})
-			}
-			return nil
-		})
-	}
-
-	rangeFeedTS := p.details.StatementTime
-	if rangeFeedTS.Less(p.highWater) {
-		rangeFeedTS = p.highWater
-	}
-
-	// TODO(nvanbenschoten): This is horrible.
-	ds := sender.(*client.CrossRangeTxnWrapperSender).Wrapped().(*kv.DistSender)
-	eventC := make(chan *roachpb.RangeFeedEvent, 128)
-	for _, span := range p.spans {
-		req := &roachpb.RangeFeedRequest{
-			Header: roachpb.Header{
-				Timestamp: rangeFeedTS,
-			},
-			Span: span,
-		}
-		g.GoCtx(func(ctx context.Context) error {
-			return ds.RangeFeed(ctx, req, eventC).GoError()
-		})
-	}
-	g.GoCtx(func(ctx context.Context) error {
-		for {
-			select {
-			case e := <-eventC:
-				switch t := e.GetValue().(type) {
-				case *roachpb.RangeFeedValue:
-					kv := roachpb.KeyValue{Key: t.Key, Value: t.Value}
-					if err := p.buf.AddKV(ctx, kv); err != nil {
-						return err
-					}
-				case *roachpb.RangeFeedCheckpoint:
-					if err := p.buf.AddResolved(ctx, t.Span, t.ResolvedTS); err != nil {
-						return err
-					}
-				default:
-					log.Fatalf(ctx, "unexpected RangeFeedEvent variant %v", t)
-				}
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
-	})
-	return g.Wait()
-}
-
 type byValueTimestamp []roachpb.KeyValue
 
 func (b byValueTimestamp) Len() int      { return len(b) }
@@ -474,4 +583,64 @@ func clusterNodeCount(g *gossip.Gossip) int {
 		return nil
 	})
 	return nodes
+}
+
+func (p *poller) validateTable(ctx context.Context, desc *sqlbase.TableDescriptor) error {
+	if err := validateChangefeedTable(p.details.Targets, desc); err != nil {
+		return err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if lastVersion, ok := p.mu.previousTableVersion[desc.ID]; ok {
+		if desc.ModificationTime.Less(lastVersion.ModificationTime) {
+			return nil
+		}
+		if lastVersion.HasColumnBackfillMutation() && !desc.HasColumnBackfillMutation() {
+			boundaryTime := desc.GetModificationTime()
+			if boundaryTime.Less(p.mu.highWater) {
+				return fmt.Errorf(
+					"error: detected table ID %d backfill completed at %s earlier than highwater timestamp %s",
+					desc.ID,
+					boundaryTime,
+					p.mu.highWater,
+				)
+			}
+			p.mu.scanBoundaries = append(p.mu.scanBoundaries, boundaryTime)
+			sort.Slice(p.mu.scanBoundaries, func(i, j int) bool {
+				return p.mu.scanBoundaries[i].Less(p.mu.scanBoundaries[j])
+			})
+			// To avoid race conditions with the lease manager, at this point we force
+			// the manager to acquire the freshest descriptor of this table from the
+			// store. In normal operation, the lease manager returns the newest
+			// descriptor it knows about for the timestamp, assuming it's still
+			// allowed; without this explicit load, the lease manager might therefore
+			// return the previous version of the table, which is still technically
+			// allowed by the schema change system.
+			if err := p.leaseMgr.AcquireFreshestFromStore(ctx, desc.ID); err != nil {
+				return err
+			}
+		}
+	}
+	p.mu.previousTableVersion[desc.ID] = desc
+	return nil
+}
+
+func fetchSpansForTargets(
+	ctx context.Context, db *client.DB, targets jobspb.ChangefeedTargets, ts hlc.Timestamp,
+) ([]roachpb.Span, error) {
+	var spans []roachpb.Span
+	err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		spans = nil
+		txn.SetFixedTimestamp(ctx, ts)
+		// Note that all targets are currently guaranteed to be tables.
+		for tableID := range targets {
+			tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
+			if err != nil {
+				return err
+			}
+			spans = append(spans, tableDesc.PrimaryIndexSpan())
+		}
+		return nil
+	})
+	return spans, err
 }

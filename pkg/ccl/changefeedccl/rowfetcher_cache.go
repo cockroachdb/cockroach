@@ -25,18 +25,16 @@ import (
 // StartScanFrom can be used to turn that key (or all the keys making up the
 // column families of one row) into a row.
 type rowFetcherCache struct {
-	leaseMgr  *sql.LeaseManager
-	tableHist *tableHistory
-	fetchers  map[*sqlbase.TableDescriptor]*sqlbase.RowFetcher
+	leaseMgr *sql.LeaseManager
+	fetchers map[*sqlbase.TableDescriptor]*sqlbase.RowFetcher
 
 	a sqlbase.DatumAlloc
 }
 
-func newRowFetcherCache(leaseMgr *sql.LeaseManager, tableHist *tableHistory) *rowFetcherCache {
+func newRowFetcherCache(leaseMgr *sql.LeaseManager) *rowFetcherCache {
 	return &rowFetcherCache{
-		leaseMgr:  leaseMgr,
-		tableHist: tableHist,
-		fetchers:  make(map[*sqlbase.TableDescriptor]*sqlbase.RowFetcher),
+		leaseMgr: leaseMgr,
+		fetchers: make(map[*sqlbase.TableDescriptor]*sqlbase.RowFetcher),
 	}
 }
 
@@ -77,13 +75,6 @@ func (c *rowFetcherCache) TableDescForKey(
 		key = remaining
 	}
 
-	// Leasing invariant: each new `tableDesc.Version` of a descriptor is
-	// initially written with an mvcc timestamp equal to its modification time.
-	// It might be updated later with backfill progress, but (critically) the
-	// `validateFn` we passed to `tableHist` doesn't care about this.
-	if err := c.tableHist.WaitForTS(ctx, tableDesc.ModificationTime); err != nil {
-		return nil, err
-	}
 	return tableDesc, nil
 }
 
