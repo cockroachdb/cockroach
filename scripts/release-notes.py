@@ -108,6 +108,7 @@ crdb_folk = set([
     "Rebecca Taft",
     "Rich Loveland",
     "Richard Wu",
+    "Ridwan Sharif",
     "Sean Loiselle",
     "Solon Gordon",
     "Spencer Kimball",
@@ -330,6 +331,15 @@ def extract_release_notes(pr, title, commit):
         m = fixannot.search(line)
         if m is not None:
             # Fix/Close etc. Ignore.
+            continue
+
+        m = norelnote.search(line)
+        if m is not None:
+            # Release note: None
+            #
+            # Remember we found a note (so the commit is not marked as "missing
+            # a release note"), but we won't collect it.
+            foundnote = True
             continue
 
         m = relnote.search(line)
