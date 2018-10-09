@@ -21,6 +21,7 @@ import (
 	"github.com/Shopify/sarama"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -174,11 +175,13 @@ func getKafkaSink(
 	var err error
 	sink.client, err = sarama.NewClient(strings.Split(bootstrapServers, `,`), config)
 	if err != nil {
-		return nil, errors.Wrapf(err, `connecting to kafka: %s`, bootstrapServers)
+		err = errors.Wrapf(err, `connecting to kafka: %s`, bootstrapServers)
+		return nil, &retryableSinkError{cause: err}
 	}
 	sink.producer, err = sarama.NewAsyncProducerFromClient(sink.client)
 	if err != nil {
-		return nil, errors.Wrapf(err, `connecting to kafka: %s`, bootstrapServers)
+		err = errors.Wrapf(err, `connecting to kafka: %s`, bootstrapServers)
+		return nil, &retryableSinkError{cause: err}
 	}
 
 	sink.start()
@@ -263,6 +266,9 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 	s.mu.Unlock()
 
 	if immediateFlush {
+		if _, ok := flushErr.(*sarama.ProducerError); ok {
+			flushErr = &retryableSinkError{cause: flushErr}
+		}
 		return flushErr
 	}
 
@@ -562,21 +568,34 @@ type causer interface {
 	Cause() error
 }
 
+// String and regex used to match retryable sink errors when they have been
+// "flattened" into a pgerror.
+const retryableSinkErrorString = "retryable sink error"
+
 // retryableSinkError should be used by sinks to wrap any error which may
 // be retried.
 type retryableSinkError struct {
 	cause error
 }
 
-func (e retryableSinkError) Error() string { return e.cause.Error() }
-func (e retryableSinkError) Cause() error  { return e.cause }
+func (e retryableSinkError) Error() string {
+	return fmt.Sprintf(retryableSinkErrorString+": %s", e.cause.Error())
+}
+func (e retryableSinkError) Cause() error { return e.cause }
 
 // isRetryableSinkError returns true if the supplied error, or any of its parent
 // causes, is a retryableSinkError.
 func isRetryableSinkError(err error) bool {
 	for {
-		if _, ok := err.(retryableSinkError); ok {
+		if _, ok := err.(*retryableSinkError); ok {
 			return true
+		}
+		// TODO(mrtracy): This pathway, which occurs when the retryable error is
+		// detected on a non-local node of the distsql flow, is only currently
+		// being tested with a roachtest, which is expensive. See if it can be
+		// tested via a unit test,
+		if _, ok := err.(*pgerror.Error); ok {
+			return strings.Contains(err.Error(), retryableSinkErrorString)
 		}
 		if e, ok := err.(causer); ok {
 			err = e.Cause()
