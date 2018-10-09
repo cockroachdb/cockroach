@@ -372,7 +372,11 @@ func (ds *DistSender) getNodeDescriptor() *roachpb.NodeDescriptor {
 // The replicas are assumed to be ordered by preference, with closer
 // ones (i.e. expected lowest latency) first.
 func (ds *DistSender) sendRPC(
-	ctx context.Context, rangeID roachpb.RangeID, replicas ReplicaSlice, ba roachpb.BatchRequest,
+	ctx context.Context,
+	rangeID roachpb.RangeID,
+	replicas ReplicaSlice,
+	ba roachpb.BatchRequest,
+	leaseHolder leaseHolderInfo,
 ) (*roachpb.BatchResponse, error) {
 	if len(replicas) == 0 {
 		return nil, roachpb.NewSendError(
@@ -384,7 +388,7 @@ func (ds *DistSender) sendRPC(
 	tracing.AnnotateTrace()
 	defer tracing.AnnotateTrace()
 
-	return ds.sendToReplicas(ctx, SendOptions{metrics: &ds.metrics}, rangeID, replicas, ba, ds.nodeDialer)
+	return ds.sendToReplicas(ctx, SendOptions{metrics: &ds.metrics}, rangeID, replicas, ba, ds.nodeDialer, leaseHolder)
 }
 
 // CountRanges returns the number of ranges that encompass the given key span.
@@ -426,6 +430,13 @@ func (ds *DistSender) getDescriptor(
 	return desc, returnToken, nil
 }
 
+type leaseHolderInfo struct {
+	// needsLeaseHolder is set when the corresponding batch needs to be served by the leaseholder.
+	needsLeaseHolder bool
+	// info is the ReplicaInfo belonging to the cached leaseholder, if any.
+	info ReplicaInfo
+}
+
 // sendSingleRange gathers and rearranges the replicas, and makes an RPC call.
 func (ds *DistSender) sendSingleRange(
 	ctx context.Context, ba roachpb.BatchRequest, desc *roachpb.RangeDescriptor,
@@ -435,16 +446,17 @@ func (ds *DistSender) sendSingleRange(
 
 	// If this request needs to go to a lease holder and we know who that is, move
 	// it to the front.
-	var knowLeaseholder bool
+	var leaseHolder leaseHolderInfo
 	if !ba.IsReadOnly() || ba.ReadConsistency.RequiresReadLease() {
+		leaseHolder.needsLeaseHolder = true
 		if storeID, ok := ds.leaseHolderCache.Lookup(ctx, desc.RangeID); ok {
 			if i := replicas.FindReplica(storeID); i >= 0 {
 				replicas.MoveToFront(i)
-				knowLeaseholder = true
+				leaseHolder.info = replicas[0]
 			}
 		}
 	}
-	if !knowLeaseholder {
+	if (leaseHolder.info == ReplicaInfo{}) {
 		// Rearrange the replicas so that they're ordered in expectation of
 		// request latency.
 		var latencyFn LatencyFunc
@@ -454,7 +466,7 @@ func (ds *DistSender) sendSingleRange(
 		replicas.OptimizeReplicaOrder(ds.getNodeDescriptor(), latencyFn)
 	}
 
-	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba)
+	br, err := ds.sendRPC(ctx, desc.RangeID, replicas, ba, leaseHolder)
 	if err != nil {
 		log.VErrEvent(ctx, 2, err.Error())
 		return nil, roachpb.NewError(err)
@@ -1286,6 +1298,7 @@ func (ds *DistSender) sendToReplicas(
 	replicas ReplicaSlice,
 	ba roachpb.BatchRequest,
 	nodeDialer *nodedialer.Dialer,
+	leaseHolder leaseHolderInfo,
 ) (*roachpb.BatchResponse, error) {
 	var ambiguousError error
 	var haveCommit bool
@@ -1353,6 +1366,14 @@ func (ds *DistSender) sendToReplicas(
 			propagateError := false
 			switch tErr := br.Error.GetDetail().(type) {
 			case nil:
+				// When a request that we know could only succeed on the leaseholder comes
+				// back as successful, make sure the leaseholder cache reflects this
+				// replica. In steady state, this should almost never be the case, and so we
+				// gate the update on whether the response comes from a node that we didn't
+				// know held the lease.
+				if leaseHolder.needsLeaseHolder && leaseHolder.info.ReplicaDescriptor != curReplica {
+					ds.leaseHolderCache.Update(ctx, rangeID, curReplica.StoreID)
+				}
 				return br, nil
 			case *roachpb.StoreNotFoundError, *roachpb.NodeUnavailableError:
 				// These errors are likely to be unique to the replica that reported
@@ -1362,24 +1383,17 @@ func (ds *DistSender) sendToReplicas(
 				// our descriptor is outright outdated, but it can also be caused by a
 				// replica that has just been added but needs a snapshot to be caught up.
 				//
-				// Evict this replica from the lease holder cache, if applicable, and try
-				// the next replica. It is important that we do the latter, for the next
-				// retry might otherwise try the same replica again (assuming the replica is
-				// still in the descriptor), looping endlessly until the replica is caught
-				// up (which may never happen if the target range is dormant).
-				if tErr.StoreID != 0 {
-					cachedStoreID, found := ds.leaseHolderCache.Lookup(ctx, tErr.RangeID)
-					evicting := found && cachedStoreID == tErr.StoreID
-					if evicting {
-						log.Eventf(ctx, "evicting leaseholder s%d for r%d after RangeNotFoundError", tErr.StoreID, tErr.RangeID)
-						ds.leaseHolderCache.Update(ctx, tErr.RangeID, 0 /* evict */)
-					}
-
-				}
+				// We'll try other replicas which typically gives us the leaseholder, either
+				// via the NotLeaseHolderError or nil error paths, both of which update the
+				// leaseholder cache.
 			case *roachpb.NotLeaseHolderError:
 				ds.metrics.NotLeaseHolderErrCount.Inc(1)
 				if lh := tErr.LeaseHolder; lh != nil {
-					// If the replica we contacted knows the new lease holder, update the cache.
+					// Update the leaseholder cache. Note that we're going to update this again
+					// after having successfully contact the leaseholder (assuming we have it in
+					// the range descriptor), but that's OK - this kind of error should be rare
+					// but when it happens, we want to populate the cache with something useful
+					// ASAP without waiting for another round trip.
 					ds.leaseHolderCache.Update(ctx, rangeID, lh.StoreID)
 
 					// If the implicated leaseholder is not a known replica, return a SendError
