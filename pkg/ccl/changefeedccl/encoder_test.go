@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -128,13 +129,46 @@ func TestAvroEncoder(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'bar'), (2, NULL)`)
 
-		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH format=$1, confluent_schema_registry=$2`, optFormatAvro, reg.server.URL)
+		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH format=$1, confluent_schema_registry=$2`,
+			optFormatAvro, reg.server.URL)
 		defer foo.Close(t)
 
 		assertPayloadsAvro(t, reg, foo, []string{
 			`foo: {"a": 1}->{"a": 1, "b": "bar"}`,
 			`foo: {"a": 2}->{"a": 2, "b": null}`,
 		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestAvroSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		reg := makeTestSchemaRegistry()
+		defer reg.Close()
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+
+		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH format=$1, confluent_schema_registry=$2`,
+			optFormatAvro, reg.server.URL)
+		defer foo.Close(t)
+		assertPayloadsAvro(t, reg, foo, []string{
+			`foo: {"a": 1}->{"a": 1}`,
+		})
+
+		sqlDB.Exec(t, `ALTER TABLE foo ADD COLUMN b UUID`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (2, gen_random_uuid())`)
+		if _, _, _, _, _, ok := foo.Next(t); ok {
+			t.Fatal(`unexpected row`)
+		}
+		if err := foo.Err(); !testutils.IsError(err, `type UUID not yet supported with avro`) {
+			t.Fatalf(`expected "type UUID not yet supported with avro" error got: %+v`, err)
+		}
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
