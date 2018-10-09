@@ -47,7 +47,7 @@ type tableHistoryWaiter struct {
 // less (or equal) to either the high-water or the error timestamp. In the
 // latter case, it returns the error.
 type tableHistory struct {
-	validateFn func(*sqlbase.TableDescriptor) error
+	validateFn func(context.Context, *sqlbase.TableDescriptor) error
 
 	mu struct {
 		syncutil.Mutex
@@ -69,7 +69,7 @@ type tableHistory struct {
 // makeTableHistory creates tableHistory with the given initial high-water and
 // invariant check function. It is expected that `validateFn` is deterministic.
 func makeTableHistory(
-	validateFn func(*sqlbase.TableDescriptor) error, initialHighWater hlc.Timestamp,
+	validateFn func(context.Context, *sqlbase.TableDescriptor) error, initialHighWater hlc.Timestamp,
 ) *tableHistory {
 	m := &tableHistory{validateFn: validateFn}
 	m.mu.highWater = initialHighWater
@@ -134,14 +134,14 @@ func (m *tableHistory) WaitForTS(ctx context.Context, ts hlc.Timestamp) error {
 // required that the descriptors represent a transactional kv read between the
 // two given timestamps.
 func (m *tableHistory) IngestDescriptors(
-	startTS, endTS hlc.Timestamp, descs []*sqlbase.TableDescriptor,
+	ctx context.Context, startTS, endTS hlc.Timestamp, descs []*sqlbase.TableDescriptor,
 ) error {
 	sort.Slice(descs, func(i, j int) bool {
 		return descs[i].ModificationTime.Less(descs[j].ModificationTime)
 	})
 	var validateErr error
 	for _, desc := range descs {
-		if err := m.validateFn(desc); validateErr == nil {
+		if err := m.validateFn(ctx, desc); validateErr == nil {
 			validateErr = err
 		}
 	}
@@ -213,7 +213,7 @@ func (u *tableHistoryUpdater) PollTableDescs(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if err := u.m.IngestDescriptors(startTS, endTS, descs); err != nil {
+		if err := u.m.IngestDescriptors(ctx, startTS, endTS, descs); err != nil {
 			return err
 		}
 	}
