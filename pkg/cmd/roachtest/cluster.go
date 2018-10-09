@@ -548,9 +548,9 @@ const (
 // to figure out how to make that work with `roachprod create`. Perhaps one
 // invocation of `roachprod create` per unique node-spec. Are there guarantees
 // we're making here about the mapping of nodeSpecs to node IDs?
-func newCluster(ctx context.Context, t testI, nodes []nodeSpec, opt clusterOpt) *cluster {
+func newCluster(ctx context.Context, t testI, nodes []nodeSpec, opt clusterOpt) (*cluster, error) {
 	if atomic.LoadInt32(&interrupted) == 1 {
-		t.Fatal("interrupted")
+		return nil, fmt.Errorf("newCluster interrupted")
 	}
 
 	switch {
@@ -558,16 +558,16 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec, opt clusterOpt) 
 		// For tests. Return the minimum that makes them happy.
 		return &cluster{
 			expiration: timeutil.Now().Add(24 * time.Hour),
-		}
+		}, nil
 	case len(nodes) > 1:
 		// TODO(peter): Need a motivating test that has different specs per node.
-		t.Fatalf("TODO(peter): unsupported nodes spec: %v", nodes)
+		return nil, fmt.Errorf("TODO(peter): unsupported nodes spec: %v", nodes)
 	}
 
 	logPath := filepath.Join(t.ArtifactsDir(), "test.log")
 	l, err := rootLogger(logPath)
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 
 	var name string
@@ -600,12 +600,11 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec, opt clusterOpt) 
 
 	c.status("creating cluster")
 	if err := execCmd(ctx, l, sargs...); err != nil {
-		t.Fatal(err)
-		return nil
+		return nil, err
 	}
 
 	c.status("running test")
-	return c
+	return c, nil
 }
 
 type attachOpt struct {
