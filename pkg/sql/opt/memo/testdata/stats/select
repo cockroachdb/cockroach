@@ -83,16 +83,16 @@ SELECT * FROM b WHERE x = 1 AND z = 2 AND rowid >= 5 AND rowid <= 8
 ----
 project
  ├── columns: x:1(int!null) z:2(int!null)
- ├── stats: [rows=8e-06]
+ ├── stats: [rows=0.00222222222]
  ├── fd: ()-->(1,2)
  └── select
       ├── columns: x:1(int!null) z:2(int!null) rowid:3(int!null)
-      ├── stats: [rows=8e-06, distinct(1)=8e-06, distinct(2)=8e-06, distinct(3)=8e-06]
+      ├── stats: [rows=0.00222222222, distinct(1)=0.00222222222, distinct(2)=0.00222222222]
       ├── key: (3)
       ├── fd: ()-->(1,2)
       ├── scan b
       │    ├── columns: x:1(int) z:2(int!null) rowid:3(int!null)
-      │    ├── stats: [rows=10000, distinct(1)=5000, distinct(2)=100, distinct(3)=10000]
+      │    ├── stats: [rows=10000, distinct(1)=5000, distinct(2)=100]
       │    ├── key: (3)
       │    └── fd: (3)-->(1,2)
       └── filters
@@ -160,19 +160,19 @@ SELECT sum(x) FROM b WHERE x > 1000 AND x <= 2000 GROUP BY z
 ----
 project
  ├── columns: sum:4(decimal)
- ├── stats: [rows=100]
+ ├── stats: [rows=99.9992331]
  └── group-by
       ├── columns: z:2(int!null) sum:4(decimal)
       ├── grouping columns: z:2(int!null)
-      ├── stats: [rows=100, distinct(2)=100]
+      ├── stats: [rows=99.9992331, distinct(2)=99.9992331]
       ├── key: (2)
       ├── fd: (2)-->(4)
       ├── select
       │    ├── columns: x:1(int!null) z:2(int!null)
-      │    ├── stats: [rows=2000, distinct(1)=1000, distinct(2)=100]
+      │    ├── stats: [rows=1111.11111, distinct(2)=99.9992331]
       │    ├── scan b
       │    │    ├── columns: x:1(int) z:2(int!null)
-      │    │    └── stats: [rows=10000, distinct(1)=5000, distinct(2)=100]
+      │    │    └── stats: [rows=10000, distinct(2)=100]
       │    └── filters
       │         ├── x > 1000 [type=bool, outer=(1), constraints=(/1: [/1001 - ]; tight)]
       │         └── x <= 2000 [type=bool, outer=(1), constraints=(/1: (/NULL - /2000]; tight)]
@@ -235,12 +235,37 @@ SELECT pk FROM tab0 WHERE
   (col0 = 1 OR col0 IN (SELECT col3 FROM tab0)) AND
   (col0 = 1 OR col0 IN (SELECT col3 FROM tab0))
 ----
-values
- ├── columns: pk:1(int)
- ├── cardinality: [0 - 0]
- ├── stats: [rows=0]
- ├── key: ()
- └── fd: ()-->(1)
+project
+ ├── columns: pk:1(int!null)
+ ├── stats: [rows=1.11111111]
+ ├── key: (1)
+ └── select
+      ├── columns: tab0.pk:1(int!null) tab0.col0:2(int!null)
+      ├── stats: [rows=1.11111111, distinct(2)=1]
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── scan tab0
+      │    ├── columns: tab0.pk:1(int!null) tab0.col0:2(int)
+      │    ├── stats: [rows=1000, distinct(2)=100]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           ├── tab0.col0 = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+           ├── tab0.col0 = 2 [type=bool, outer=(2), constraints=(/2: [/2 - /2]; tight), fd=()-->(2)]
+           ├── or [type=bool, outer=(2)]
+           │    ├── tab0.col0 = 1 [type=bool]
+           │    └── any: eq [type=bool]
+           │         ├── scan tab0
+           │         │    ├── columns: tab0.col3:12(int)
+           │         │    └── stats: [rows=1000]
+           │         └── variable: tab0.col0 [type=int]
+           └── or [type=bool, outer=(2)]
+                ├── tab0.col0 = 1 [type=bool]
+                └── any: eq [type=bool]
+                     ├── scan tab0
+                     │    ├── columns: tab0.col3:19(int)
+                     │    └── stats: [rows=1000]
+                     └── variable: tab0.col0 [type=int]
 
 
 exec-ddl
@@ -352,12 +377,12 @@ SELECT * FROM district WHERE d_id > 1 AND d_id < 10 AND d_w_id=10 AND d_name='bo
 ----
 select
  ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string!null)
- ├── stats: [rows=0.08, distinct(1)=0.08, distinct(2)=0.08, distinct(3)=0.08]
+ ├── stats: [rows=0.0111111111, distinct(2)=0.0111111111, distinct(3)=0.0111111111]
  ├── key: (1)
  ├── fd: ()-->(2,3)
  ├── scan district
  │    ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_name:3(string)
- │    ├── stats: [rows=100, distinct(1)=10, distinct(2)=10, distinct(3)=100]
+ │    ├── stats: [rows=100, distinct(2)=10, distinct(3)=100]
  │    ├── key: (1,2)
  │    └── fd: (1,2)-->(3)
  └── filters
@@ -584,11 +609,11 @@ SELECT * FROM c WHERE x >= 0 AND x < 100
 ----
 select
  ├── columns: x:1(int!null) z:2(int!null)
- ├── stats: [rows=100, distinct(1)=100]
+ ├── stats: [rows=111.111111]
  ├── fd: (1)-->(2)
  ├── scan c
  │    ├── columns: x:1(int) z:2(int!null)
- │    ├── stats: [rows=1000, distinct(1)=1000]
+ │    ├── stats: [rows=1000]
  │    └── fd: (1)~~>(2)
  └── filters
       ├── x >= 0 [type=bool, outer=(1), constraints=(/1: [/0 - ]; tight)]

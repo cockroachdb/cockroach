@@ -110,28 +110,21 @@ func TestGetStatsFromConstraint(t *testing.T) {
 		sb.init(&evalCtx, mem.Metadata())
 
 		// Make the scan.
-		def := &ScanOpDef{Table: tabID, Cols: cols}
-		scan := MakeScanExpr(mem.InternScanOpDef(def))
-		scanGroup := mem.MemoizeNormExpr(&evalCtx, Expr(scan)).Group()
-
-		// Make the filter.
-		filter := MakeTrueExpr()
-		filterGroup := mem.MemoizeNormExpr(&evalCtx, Expr(filter)).Group()
+		scan := mem.MemoizeScan(&ScanPrivate{Table: tabID, Cols: cols})
 
 		// Make the select.
-		sel := MakeSelectExpr(scanGroup, filterGroup)
-		selGroup := mem.newGroup(Expr(sel))
-		ev := MakeNormExprView(&mem, selGroup.id)
+		sel := mem.MemoizeSelect(scan, TrueFilter)
+
 		relProps := &props.Relational{Cardinality: props.AnyCardinality}
 		s := &relProps.Stats
 		s.Init(relProps)
 
 		// Calculate distinct counts.
-		numUnappliedConstraints := sb.applyConstraintSet(cs, ev, relProps)
+		numUnappliedConstraints := sb.applyConstraintSet(cs, sel, relProps)
 
 		// Calculate row count and selectivity.
-		s.RowCount = mem.GroupProperties(scanGroup).Relational.Stats.RowCount
-		s.ApplySelectivity(sb.selectivityFromDistinctCounts(cols, ev, s))
+		s.RowCount = scan.Relational().Stats.RowCount
+		s.ApplySelectivity(sb.selectivityFromDistinctCounts(cols, sel, s))
 		s.ApplySelectivity(sb.selectivityFromUnappliedConstraints(numUnappliedConstraints))
 
 		// Check if the statistics match the expected value.

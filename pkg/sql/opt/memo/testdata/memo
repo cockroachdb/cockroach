@@ -129,51 +129,45 @@ WHERE a.y>1 AND a.x::string=b.x
 ORDER BY y
 LIMIT 10
 ----
-memo (optimized, ~17KB)
- ├── G1: (project G2 G3)
- │    ├── "[presentation: y:2,x:3,c:5] [ordering: +2]"
- │    │    ├── best: (project G2="[ordering: +2]" G3)
- │    │    └── cost: 41568.95
- │    └── ""
- │         ├── best: (project G2 G3)
+memo (optimized, ~9KB)
+ ├── G1: (project G2 G3 y x)
+ │    └── [presentation: y:2,x:3,c:5] [ordering: +2]
+ │         ├── best: (project G2="[ordering: +2]" G3 y x)
  │         └── cost: 41568.95
  ├── G2: (limit G4 G5 ordering=+2)
- │    ├── ""
- │    │    ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
- │    │    └── cost: 41568.75
- │    └── "[ordering: +2]"
+ │    └── [ordering: +2]
  │         ├── best: (limit G4="[ordering: +2]" G5 ordering=+2)
  │         └── cost: 41568.75
- ├── G3: (projections G6 y x)
- ├── G4: (inner-join G8 G7 G9) (inner-join G7 G8 G9)
- │    ├── ""
- │    │    ├── best: (inner-join G7 G8 G9)
- │    │    └── cost: 3209.44
- │    └── "[ordering: +2]"
- │         ├── best: (sort G4)
- │         └── cost: 41568.65
+ ├── G3: (projections G6)
+ ├── G4: (inner-join G7 G8 G9) (inner-join G8 G7 G9)
+ │    ├── [ordering: +2]
+ │    │    ├── best: (sort G4)
+ │    │    └── cost: 41568.65
+ │    └── []
+ │         ├── best: (inner-join G8 G7 G9)
+ │         └── cost: 3209.44
  ├── G5: (const 10)
- ├── G6: (plus G16 G17)
- ├── G7: (scan b,cols=(3))
- │    └── ""
+ ├── G6: (plus G10 G11)
+ ├── G7: (select G12 G13)
+ │    └── []
+ │         ├── best: (select G12 G13)
+ │         └── cost: 1050.00
+ ├── G8: (scan b,cols=(3))
+ │    └── []
  │         ├── best: (scan b,cols=(3))
  │         └── cost: 1030.00
- ├── G8: (select G10 G11)
- │    └── ""
- │         ├── best: (select G10 G11)
- │         └── cost: 1050.00
- ├── G9: (filters G12)
- ├── G10: (scan a)
- │    └── ""
+ ├── G9: (filters G14)
+ ├── G10: (variable y)
+ ├── G11: (const 1)
+ ├── G12: (scan a)
+ │    └── []
  │         ├── best: (scan a)
  │         └── cost: 1040.00
- ├── G11: (filters G13)
- ├── G12: (eq G14 G15)
- ├── G13: (gt G16 G17)
- ├── G14: (variable b.x)
- ├── G15: (cast G18 STRING)
- ├── G16: (variable y)
- ├── G17: (const 1)
+ ├── G13: (filters G15)
+ ├── G14: (eq G16 G17)
+ ├── G15: (gt G10 G11)
+ ├── G16: (variable b.x)
+ ├── G17: (cast G18 STRING)
  └── G18: (variable a.x)
 
 # Test interning of expressions.
@@ -182,103 +176,102 @@ SELECT 1 AS a, 1+z AS b, left(x, 10)::TIMESTAMP AS c, left(x, 10)::TIMESTAMPTZ A
 FROM b
 WHERE z=1 AND concat(x, 'foo', x)=concat(x, 'foo', x)
 ----
-memo (optimized, ~12KB)
+memo (optimized, ~3KB)
  ├── G1: (project G2 G3)
- │    └── "[presentation: a:3,b:4,c:5,d:6]"
+ │    └── [presentation: a:3,b:4,c:5,d:6]
  │         ├── best: (project G2 G3)
  │         └── cost: 1050.17
  ├── G2: (select G4 G5)
- │    └── ""
+ │    └── []
  │         ├── best: (select G4 G5)
  │         └── cost: 1050.00
  ├── G3: (projections G6 G7 G8 G9)
  ├── G4: (scan b)
- │    └── ""
+ │    └── []
  │         ├── best: (scan b)
  │         └── cost: 1040.00
  ├── G5: (filters G10 G11)
  ├── G6: (const 1)
- ├── G7: (plus G13 G14)
- ├── G8: (cast G12 TIMESTAMP)
- ├── G9: (cast G12 TIMESTAMPTZ)
- ├── G10: (eq G13 G14)
+ ├── G7: (plus G12 G13)
+ ├── G8: (cast G14 TIMESTAMP)
+ ├── G9: (cast G14 TIMESTAMPTZ)
+ ├── G10: (eq G12 G13)
  ├── G11: (eq G15 G15)
- ├── G12: (function G18 G16 left)
- ├── G13: (variable z)
- ├── G14: (const 1)
- ├── G15: (function G18 G17 G18 concat)
- ├── G16: (const 10)
- ├── G17: (const 'foo')
- └── G18: (variable x)
+ ├── G12: (variable z)
+ ├── G13: (const 1)
+ ├── G14: (function G16 left)
+ ├── G15: (function G17 concat)
+ ├── G16: (scalar-list G18 G19)
+ ├── G17: (scalar-list G18 G20 G18)
+ ├── G18: (variable x)
+ ├── G19: (const 10)
+ └── G20: (const 'foo')
 
 # Test topological sorting
 memo
 SELECT x FROM a WHERE x = 1 AND x+y = 1
 ----
-memo (optimized, ~9KB)
- ├── G1: (project G2 G3)
- │    └── "[presentation: x:1]"
- │         ├── best: (project G2 G3)
+memo (optimized, ~4KB)
+ ├── G1: (project G2 G3 x)
+ │    └── [presentation: x:1]
+ │         ├── best: (project G2 G3 x)
  │         └── cost: 1.05
  ├── G2: (select G4 G5) (select G6 G7)
- │    └── ""
+ │    └── []
  │         ├── best: (select G6 G7)
  │         └── cost: 1.05
- ├── G3: (projections x)
+ ├── G3: (projections)
  ├── G4: (scan a)
- │    └── ""
- │         ├── best: (scan a)
- │         └── cost: 1040.00
  ├── G5: (filters G8 G9)
  ├── G6: (scan a,constrained)
- │    └── ""
+ │    └── []
  │         ├── best: (scan a,constrained)
  │         └── cost: 1.04
  ├── G7: (filters G9)
- ├── G8: (eq G12 G11)
- ├── G9: (eq G10 G11)
- ├── G10: (plus G12 G13)
+ ├── G8: (eq G10 G11)
+ ├── G9: (eq G12 G11)
+ ├── G10: (variable x)
  ├── G11: (const 1)
- ├── G12: (variable x)
+ ├── G12: (plus G10 G13)
  └── G13: (variable y)
 
 memo 
 SELECT x, y FROM a UNION SELECT x+1, y+1 FROM a
 ----
-memo (optimized, ~6KB)
+memo (optimized, ~3KB)
  ├── G1: (union G2 G3)
- │    └── "[presentation: x:7,y:8]"
+ │    └── [presentation: x:7,y:8]
  │         ├── best: (union G2 G3)
  │         └── cost: 2150.00
  ├── G2: (scan a)
- │    └── ""
+ │    └── []
  │         ├── best: (scan a)
  │         └── cost: 1040.00
  ├── G3: (project G4 G5)
- │    └── ""
+ │    └── []
  │         ├── best: (project G4 G5)
  │         └── cost: 1070.00
  ├── G4: (scan a)
- │    └── ""
+ │    └── []
  │         ├── best: (scan a)
  │         └── cost: 1040.00
  ├── G5: (projections G6 G7)
- ├── G6: (plus G8 G10)
- ├── G7: (plus G9 G10)
+ ├── G6: (plus G8 G9)
+ ├── G7: (plus G10 G9)
  ├── G8: (variable a.x)
- ├── G9: (variable a.y)
- └── G10: (const 1)
+ ├── G9: (const 1)
+ └── G10: (variable a.y)
 
 memo
 SELECT array_agg(x) FROM (SELECT * FROM a)
 ----
-memo (optimized, ~4KB)
+memo (optimized, ~2KB)
  ├── G1: (scalar-group-by G2 G3 cols=())
- │    └── "[presentation: array_agg:3]"
+ │    └── [presentation: array_agg:3]
  │         ├── best: (scalar-group-by G2 G3 cols=())
  │         └── cost: 1040.01
  ├── G2: (scan a,cols=(1))
- │    └── ""
+ │    └── []
  │         ├── best: (scan a,cols=(1))
  │         └── cost: 1030.00
  ├── G3: (aggregations G4)
@@ -288,18 +281,18 @@ memo (optimized, ~4KB)
 memo
 SELECT array_agg(x) FROM (SELECT * FROM a) GROUP BY y
 ----
-memo (optimized, ~4KB)
- ├── G1: (project G2 G3)
- │    └── "[presentation: array_agg:3]"
- │         ├── best: (project G2 G3)
+memo (optimized, ~2KB)
+ ├── G1: (project G2 G3 array_agg)
+ │    └── [presentation: array_agg:3]
+ │         ├── best: (project G2 G3 array_agg)
  │         └── cost: 1062.00
  ├── G2: (group-by G4 G5 cols=(2))
- │    └── ""
+ │    └── []
  │         ├── best: (group-by G4 G5 cols=(2))
  │         └── cost: 1061.00
- ├── G3: (projections array_agg)
+ ├── G3: (projections)
  ├── G4: (scan a)
- │    └── ""
+ │    └── []
  │         ├── best: (scan a)
  │         └── cost: 1040.00
  ├── G5: (aggregations G6)
@@ -309,18 +302,18 @@ memo (optimized, ~4KB)
 memo
 SELECT array_agg(x) FROM (SELECT * FROM a ORDER BY y)
 ----
-memo (optimized, ~3KB)
+memo (optimized, ~1KB)
  ├── G1: (scalar-group-by G2 G3 cols=(),ordering=+2)
- │    └── "[presentation: array_agg:3]"
+ │    └── [presentation: array_agg:3]
  │         ├── best: (scalar-group-by G2="[ordering: +2]" G3 cols=(),ordering=+2)
  │         └── cost: 1259.33
  ├── G2: (scan a)
- │    ├── ""
- │    │    ├── best: (scan a)
- │    │    └── cost: 1040.00
- │    └── "[ordering: +2]"
- │         ├── best: (sort G2)
- │         └── cost: 1249.32
+ │    ├── [ordering: +2]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1249.32
+ │    └── []
+ │         ├── best: (scan a)
+ │         └── cost: 1040.00
  ├── G3: (aggregations G4)
  ├── G4: (array-agg G5)
  └── G5: (variable x)
@@ -328,38 +321,40 @@ memo (optimized, ~3KB)
 memo
 SELECT DISTINCT field FROM [EXPLAIN SELECT 123 AS k]
 ----
-memo (optimized, ~6KB)
+memo (optimized, ~4KB)
  ├── G1: (distinct-on G2 G3 cols=(3))
- │    └── "[presentation: field:3]"
+ │    └── [presentation: field:3]
  │         ├── best: (distinct-on G2 G3 cols=(3))
  │         └── cost: 0.03
  ├── G2: (explain G4 [presentation: k:1])
- │    └── ""
+ │    └── []
  │         ├── best: (explain G4="[presentation: k:1]" [presentation: k:1])
  │         └── cost: 0.03
  ├── G3: (aggregations)
  ├── G4: (project G5 G6)
- │    └── "[presentation: k:1]"
+ │    └── [presentation: k:1]
  │         ├── best: (project G5 G6)
  │         └── cost: 0.03
  ├── G5: (values G7)
- │    └── ""
+ │    └── []
  │         ├── best: (values G7)
  │         └── cost: 0.01
  ├── G6: (projections G8)
- ├── G7: (tuple)
- └── G8: (const 123)
+ ├── G7: (scalar-list G9)
+ ├── G8: (const 123)
+ ├── G9: (tuple G10)
+ └── G10: (scalar-list)
 
 memo
 SELECT DISTINCT tag FROM [SHOW TRACE FOR SESSION]
 ----
-memo (optimized, ~3KB)
+memo (optimized, ~2KB)
  ├── G1: (distinct-on G2 G3 cols=(4))
- │    └── "[presentation: tag:4]"
+ │    └── [presentation: tag:4]
  │         ├── best: (distinct-on G2 G3 cols=(4))
  │         └── cost: 0.00
  ├── G2: (show-trace-for-session &{TRACE false [1 2 3 4 5 6 7]})
- │    └── ""
+ │    └── []
  │         ├── best: (show-trace-for-session &{TRACE false [1 2 3 4 5 6 7]})
  │         └── cost: 0.00
  └── G3: (aggregations)

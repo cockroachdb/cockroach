@@ -104,7 +104,7 @@ SELECT s, x FROM a WHERE x > 0 AND x <= 100
 scan a
  ├── columns: s:3(string) x:1(int!null)
  ├── constraint: /1: [/1 - /100]
- ├── stats: [rows=150, distinct(1)=100]
+ ├── stats: [rows=333.333333]
  ├── key: (1)
  └── fd: (1)-->(3)
 
@@ -127,13 +127,13 @@ SELECT count(*), y, x FROM a WHERE x > 0 AND x <= 100 GROUP BY x, y
 group-by
  ├── columns: count:6(int) y:2(int) x:1(int!null)
  ├── grouping columns: x:1(int!null)
- ├── stats: [rows=100, distinct(1)=100]
+ ├── stats: [rows=323.895037, distinct(1)=323.895037]
  ├── key: (1)
  ├── fd: (1)-->(2,6)
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── constraint: /1: [/1 - /100]
- │    ├── stats: [rows=150, distinct(1)=100]
+ │    ├── stats: [rows=333.333333, distinct(1)=323.895037]
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── aggregations

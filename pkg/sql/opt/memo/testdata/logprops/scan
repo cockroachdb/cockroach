@@ -146,9 +146,16 @@ TABLE t
 opt
 SELECT * FROM t WHERE a > 1 AND a < 2
 ----
-values
- ├── columns: a:1(int) b:2(string) c:3(int) d:4(string)
- ├── cardinality: [0 - 0]
- ├── key: ()
- ├── fd: ()-->(1-4)
- └── prune: (1-4)
+index-join t
+ ├── columns: a:1(int!null) b:2(string!null) c:3(int) d:4(string)
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(3,4)
+ ├── prune: (2-4)
+ ├── interesting orderings: (+1,+2) (+2) (-1,+2)
+ └── scan t@a_desc
+      ├── columns: a:1(int!null) b:2(string!null)
+      ├── constraint: /-1/2: contradiction
+      ├── cardinality: [0 - 0]
+      ├── key: (1,2)
+      ├── prune: (1,2)
+      └── interesting orderings: (+1,+2) (+2) (-1,+2)
