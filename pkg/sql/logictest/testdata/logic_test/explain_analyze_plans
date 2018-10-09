@@ -35,6 +35,30 @@ ALTER TABLE kw EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 
 # Verify that EXPLAIN ANALYZE (DISTSQL) annotates plans with collected
 # statistics.
 
+# Verify data placement.
+query TTITI colnames
+SHOW EXPERIMENTAL_RANGES FROM TABLE kv
+----
+start_key  end_key  range_id  replicas  lease_holder
+NULL       /1       1         {1}       1
+/1         /2       2         {1}       1
+/2         /3       3         {2}       2
+/3         /4       4         {3}       3
+/4         /5       5         {4}       4
+/5         NULL     6         {5}       5
+
+# Verify data placement.
+query TTITI colnames
+SHOW EXPERIMENTAL_RANGES FROM TABLE kw
+----
+start_key  end_key  range_id  replicas  lease_holder
+NULL       /1       6         {5}       5
+/1         /2       7         {1}       1
+/2         /3       8         {2}       2
+/3         /4       9         {3}       3
+/4         /5       10        {4}       4
+/5         NULL     11        {5}       5
+
 # This query verifies stat collection for the tableReader, mergeJoiner, and
 # aggregator.
 query T
