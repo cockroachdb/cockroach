@@ -29,19 +29,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -855,7 +850,7 @@ CREATE TABLE t.foo (v INT);
 }
 
 // Test that a transaction created way in the past will use the correct
-// table descriptor and will thus obey the modififcation time of the
+// table descriptor and will thus obey the modification time of the
 // table descriptor.
 func TestTxnObeysTableModificationTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -876,9 +871,6 @@ INSERT INTO t.kv VALUES ('a', 'b');
 		t.Fatal(err)
 	}
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv")
-	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
-		t.Fatal(err)
-	}
 
 	// A read-write transaction that uses the old version of the descriptor.
 	txReadWrite, err := sqlDB.Begin()
@@ -972,54 +964,81 @@ INSERT INTO t.kv VALUES ('a', 'b');
 	}
 
 	// Test the deadline exceeded error with a CREATE/DROP INDEX.
-	schemaChanges := []struct{ sql string }{
-		{`CREATE INDEX foo ON t.public.kv (v)`},
-		{`DROP INDEX t.public.kv@foo`},
+	txWrite, err = sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	txUpdate, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	for i, change := range schemaChanges {
+	// Modify the table descriptor.
+	if _, err := sqlDB.Exec(`CREATE INDEX foo ON t.kv (v)`); err != nil {
+		t.Fatal(err)
+	}
 
-		txWrite, err := sqlDB.Begin()
-		if err != nil {
-			t.Fatal(err)
-		}
-		txUpdate, err := sqlDB.Begin()
-		if err != nil {
-			t.Fatal(err)
-		}
+	// This INSERT will cause the transaction to be pushed transparently,
+	// which will be detected when we attempt to Commit() below only because
+	// a deadline has been set.
+	if _, err := txWrite.Exec(`INSERT INTO t.kv VALUES ('c', 'd');`); err != nil {
+		t.Fatal(err)
+	}
 
-		// Modify the table descriptor.
-		if _, err := sqlDB.Exec(change.sql); err != nil {
-			t.Fatal(err)
-		}
-		testutils.SucceedsSoon(t, func() error {
-			return jobutils.VerifySystemJob(t, sqlutils.MakeSQLRunner(sqlDB), i+1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
-				Username:    security.RootUser,
-				Description: change.sql,
-				DescriptorIDs: sqlbase.IDs{
-					tableDesc.ID,
-				},
-			})
-		})
+	if err := txWrite.Commit(); !testutils.IsError(err, deadlineError) {
+		t.Fatalf("err = %v", err)
+	}
 
-		// This INSERT will cause the transaction to be pushed transparently,
-		// which will be detected when we attempt to Commit() below only because
-		// a deadline has been set.
-		if _, err := txWrite.Exec(`INSERT INTO t.kv VALUES ('c', 'd');`); err != nil {
-			t.Fatal(err)
-		}
+	if _, err := txUpdate.Exec(`UPDATE t.kv SET v = 'c' WHERE k = 'a';`); err != nil {
+		t.Fatal(err)
+	}
 
-		if err := txWrite.Commit(); !testutils.IsError(err, deadlineError) {
-			t.Fatalf("err = %v", err)
-		}
+	if err := txUpdate.Commit(); !testutils.IsError(err, deadlineError) {
+		t.Fatalf("err = %v", err)
+	}
 
-		if _, err := txUpdate.Exec(`UPDATE t.kv SET v = 'c' WHERE k = 'a';`); err != nil {
-			t.Fatal(err)
-		}
+	txWrite, err = sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	txUpdate, err = sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	txRead, err = sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		if err := txUpdate.Commit(); !testutils.IsError(err, deadlineError) {
-			t.Fatalf("err = %v", err)
+	// Modify the table descriptor.
+	if _, err := sqlDB.Exec(`DROP INDEX t.kv@foo`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := txWrite.Exec(`INSERT INTO t.kv VALUES ('c', 'd');`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := txWrite.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Allow async schema change waiting for GC to complete (when dropping an
+	// index) and clear the index keys.
+	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		if tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "kv"); len(tableDesc.GCMutations) != 0 {
+			return errors.Errorf("%d gc mutations remaining", len(tableDesc.GCMutations))
 		}
+		return nil
+	})
+
+	gcThresholdErr := `batch timestamp \d+.\d+,\d+ must be after GC threshold \d+.\d+,\d+`
+	if _, err := txUpdate.Exec(`UPDATE t.kv SET v = 'c' WHERE k = 'a';`); !testutils.IsError(err, gcThresholdErr) {
+		t.Fatalf("err = %v", err)
 	}
 }
 

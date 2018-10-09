@@ -258,6 +258,7 @@ func (td *tableDeleter) deleteIndex(
 	limit int64,
 	autoCommit autoCommitOpt,
 	traceKV bool,
+	allowClearRange bool,
 ) (roachpb.Span, error) {
 	if idx.IsInterleaved() {
 		if log.V(2) {
@@ -265,7 +266,7 @@ func (td *tableDeleter) deleteIndex(
 		}
 		return td.deleteIndexScan(ctx, idx, resume, limit, autoCommit, traceKV)
 	}
-	return td.deleteIndexFast(ctx, idx, resume, limit, autoCommit, traceKV)
+	return td.deleteIndexFast(ctx, idx, resume, limit, autoCommit, traceKV, allowClearRange)
 }
 
 func (td *tableDeleter) deleteIndexFast(
@@ -275,25 +276,46 @@ func (td *tableDeleter) deleteIndexFast(
 	limit int64,
 	autoCommit autoCommitOpt,
 	traceKV bool,
+	allowClearRange bool,
 ) (roachpb.Span, error) {
 	if resume.Key == nil {
 		resume = td.rd.Helper.TableDesc.IndexSpan(idx.ID)
 	}
 
-	if traceKV {
-		log.VEventf(ctx, 2, "DelRange %s - %s", resume.Key, resume.EndKey)
+	if !allowClearRange {
+		if traceKV {
+			log.VEventf(ctx, 2, "DelRange %s - %s", resume.Key, resume.EndKey)
+		}
+		td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
+		td.b.Header.MaxSpanRequestKeys = limit
+		if _, err := td.finalize(ctx, autoCommit, traceKV); err != nil {
+			return resume, err
+		}
+		if l := len(td.b.Results); l != 1 {
+			panic(fmt.Sprintf("%d results returned, expected 1", l))
+		}
+		return td.b.Results[0].ResumeSpan, nil
 	}
-	// TODO(vivekmenezes): adapt index deletion to use the same GC
-	// deadline / ClearRange fast path that table deletion uses.
-	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
-	td.b.Header.MaxSpanRequestKeys = limit
+
+	if traceKV {
+		log.VEventf(ctx, 2, "ClearRange %s - %s", resume.Key, resume.EndKey)
+	}
+	// ClearRange cannot be run in a transaction, so create a
+	// non-transactional batch to send the request.
+	b := &client.Batch{}
+	b.AddRawRequest(&roachpb.ClearRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    resume.Key,
+			EndKey: resume.EndKey,
+		},
+	})
+	if err := td.txn.DB().Run(ctx, b); err != nil {
+		return resume, err
+	}
 	if _, err := td.finalize(ctx, autoCommit, traceKV); err != nil {
 		return resume, err
 	}
-	if l := len(td.b.Results); l != 1 {
-		panic(fmt.Sprintf("%d results returned, expected 1", l))
-	}
-	return td.b.Results[0].ResumeSpan, nil
+	return roachpb.Span{}, nil
 }
 
 func (td *tableDeleter) deleteIndexScan(

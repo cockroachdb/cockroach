@@ -261,6 +261,7 @@ func (sc *SchemaChanger) truncateIndexes(
 					chunkSize,
 					noAutoCommit,
 					false, /* traceKV */
+					true,  /* allowClearRange */
 				)
 				done = resume.Key == nil
 				return err
@@ -667,7 +668,7 @@ func indexTruncateInTxn(
 			return err
 		}
 		sp, err = td.deleteIndex(
-			ctx, idx, sp, indexTruncateChunkSize, noAutoCommit, traceKV,
+			ctx, idx, sp, indexTruncateChunkSize, noAutoCommit, traceKV, false, /* allowClearRange */
 		)
 		if err != nil {
 			return err
