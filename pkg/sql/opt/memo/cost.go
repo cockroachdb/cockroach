@@ -19,13 +19,13 @@ import (
 )
 
 // Cost is the best-effort approximation of the actual cost of executing a
-// particular expression tree.
+// particular operator tree.
 // TODO: Need more details about what one "unit" of cost means.
 type Cost float64
 
-// MaxCost is the maximum possible estimated cost. It's used as the
-// starting value of an uninitialized best expression, so that any other
-// expression will have a lower cost.
+// MaxCost is the maximum possible estimated cost. It's used to suppress memo
+// group members during testing, by setting their cost so high that any other
+// member will have a lower cost.
 var MaxCost = Cost(math.Inf(+1))
 
 // Less returns true if this cost is lower than the given cost.
