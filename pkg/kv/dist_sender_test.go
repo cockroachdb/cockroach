@@ -539,14 +539,18 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 		_ ReplicaSlice,
 		args roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, error) {
+		reply := &roachpb.BatchResponse{}
 		if first {
-			reply := &roachpb.BatchResponse{}
 			reply.Error = roachpb.NewError(
 				&roachpb.NotLeaseHolderError{LeaseHolder: &leaseHolder})
 			first = false
 			return reply, nil
 		}
-		return args.CreateReply(), nil
+		// Return an error to avoid activating a code path that would
+		// populate the leaseholder cache from the successful response.
+		// That's not what this test wants to test.
+		reply.Error = roachpb.NewErrorf("boom")
+		return reply, nil
 	}
 
 	cfg := DistSenderConfig{
@@ -560,8 +564,8 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 	ds := NewDistSender(cfg, g)
 	v := roachpb.MakeValueFromString("value")
 	put := roachpb.NewPut(roachpb.Key("a"), v)
-	if _, err := client.SendWrapped(context.Background(), ds, put); err != nil {
-		t.Errorf("put encountered error: %s", err)
+	if _, pErr := client.SendWrapped(context.Background(), ds, put); !testutils.IsPError(pErr, "boom") {
+		t.Fatalf("unexpected error: %v", pErr)
 	}
 	if first {
 		t.Errorf("The command did not retry")
@@ -656,8 +660,10 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 		t.Errorf("contacted n1: %t, contacted n2: %t", contacted1, contacted2)
 	}
 
-	if storeID, ok := ds.LeaseHolderCache().Lookup(ctx, roachpb.RangeID(1)); ok {
-		t.Fatalf("expected no lease holder for r1, but got s%d", storeID)
+	if storeID, ok := ds.LeaseHolderCache().Lookup(ctx, roachpb.RangeID(1)); !ok {
+		t.Fatalf("expected new leaseholder to be cached")
+	} else if exp := roachpb.StoreID(2); storeID != exp {
+		t.Fatalf("expected lease holder for r1 to be cached as s%d, but got s%d", exp, storeID)
 	}
 }
 
@@ -1315,6 +1321,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 	)
 
 	seen := map[roachpb.ReplicaID]struct{}{}
+	var leaseholderStoreID roachpb.StoreID
 	var ds *DistSender
 	var testFn simpleSendFn = func(
 		_ context.Context,
@@ -1336,6 +1343,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 			br.Error = roachpb.NewError(roachpb.NewRangeNotFoundError(ba.RangeID, ba.Replica.StoreID))
 			return br, nil
 		}
+		leaseholderStoreID = ba.Replica.StoreID
 		return br, nil
 	}
 	cfg := DistSenderConfig{
@@ -1352,8 +1360,10 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if storeID, found := ds.leaseHolderCache.Lookup(context.Background(), roachpb.RangeID(1)); found {
-		t.Fatalf("unexpected cached leaseholder s%d", storeID)
+	if storeID, found := ds.leaseHolderCache.Lookup(context.Background(), roachpb.RangeID(1)); !found {
+		t.Fatal("expected a cached leaseholder")
+	} else if storeID != leaseholderStoreID {
+		t.Fatalf("unexpected cached leaseholder s%d, expected s%d", storeID, leaseholderStoreID)
 	}
 }
 
