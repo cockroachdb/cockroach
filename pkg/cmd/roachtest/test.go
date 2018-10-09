@@ -576,6 +576,13 @@ func (t *test) Fatalf(format string, args ...interface{}) {
 	runtime.Goexit()
 }
 
+// FatalIfErr calls t.Fatal() if err != nil.
+func FatalIfErr(t *test, err error) {
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func (t *test) printAndFail(args ...interface{}) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
