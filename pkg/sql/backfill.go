@@ -255,14 +255,19 @@ func (sc *SchemaChanger) truncateIndexes(
 				if err := td.init(txn, nil /* *tree.EvalContext */); err != nil {
 					return err
 				}
-				resume, err = td.deleteIndex(
-					ctx,
-					&desc,
-					resumeAt,
-					chunkSize,
-					noAutoCommit,
-					false, /* traceKV */
-				)
+				if !sc.canClearRangeForDrop(&desc) {
+					resume, err = td.deleteIndex(
+						ctx,
+						&desc,
+						resumeAt,
+						chunkSize,
+						noAutoCommit,
+						false, /* traceKV */
+					)
+				} else {
+					err = td.clearIndex(ctx, &desc)
+					resume = roachpb.Span{}
+				}
 				done = resume.Key == nil
 				return err
 			}); err != nil {
