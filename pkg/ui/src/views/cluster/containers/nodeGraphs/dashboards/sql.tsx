@@ -138,50 +138,6 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
-      title="Service Latency: DistSQL, 99th percentile"
-      tooltip={
-        `The latency of distributed SQL statements serviced over
-           10 second periods ${tooltipSelection}.`
-      }
-    >
-      <Axis units={AxisUnits.Duration} label="latency">
-        {
-          _.map(nodeIDs, (node) => (
-            <Metric
-              key={node}
-              name="cr.node.sql.distsql.service.latency-p99"
-              title={nodeDisplayName(nodesSummary, node)}
-              sources={[node]}
-              downsampleMax
-            />
-          ))
-        }
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
-      title="Service Latency: DistSQL, 90th percentile"
-      tooltip={
-        `The latency of distributed SQL statements serviced over
-           10 second periods ${tooltipSelection}.`
-      }
-    >
-      <Axis units={AxisUnits.Duration} label="latency">
-        {
-          _.map(nodeIDs, (node) => (
-            <Metric
-              key={node}
-              name="cr.node.sql.distsql.service.latency-p90"
-              title={nodeDisplayName(nodesSummary, node)}
-              sources={[node]}
-              downsampleMax
-            />
-          ))
-        }
-      </Axis>
-    </LineGraph>,
-
-    <LineGraph
       title="Execution Latency: 99th percentile"
       tooltip={
         `The 99th percentile of latency between query requests and responses over a
