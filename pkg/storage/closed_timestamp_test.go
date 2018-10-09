@@ -73,7 +73,7 @@ CREATE TABLE cttest.kv (id INT PRIMARY KEY, value STRING);
 	var numReplicas int
 	testutils.SucceedsSoon(t, func() error {
 		if err := db0.QueryRow(
-			`SELECT range_id, start_key, array_length(replicas, 1) FROM crdb_internal.ranges WHERE "table" = 'kv' AND "database" = 'cttest'`,
+			`SELECT range_id, start_key, array_length(replicas, 1) FROM crdb_internal.ranges WHERE table_name = 'kv' AND database_name = 'cttest'`,
 		).Scan(&rangeID, &startKey, &numReplicas); err != nil {
 			return err
 		}

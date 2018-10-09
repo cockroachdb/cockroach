@@ -1536,9 +1536,9 @@ CREATE TABLE crdb_internal.ranges (
   start_pretty STRING NOT NULL,
   end_key      BYTES NOT NULL,
   end_pretty   STRING NOT NULL,
-  database     STRING NOT NULL,
-  "table"      STRING NOT NULL,
-  "index"      STRING NOT NULL,
+  database_name     STRING NOT NULL,
+  table_name      STRING NOT NULL,
+  index_name      STRING NOT NULL,
   replicas     INT[] NOT NULL,
   lease_holder INT NOT NULL
 )

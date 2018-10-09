@@ -99,7 +99,7 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 		// it'll still slow you down every time the method returned below is called.
 		if true {
 			if err := conn.QueryRow(
-				`SELECT to_hex(start_key) FROM crdb_internal.ranges WHERE "database" = 'bank' AND "table" = 'bank' ORDER BY start_key ASC LIMIT 1`,
+				`SELECT to_hex(start_key) FROM crdb_internal.ranges WHERE database_name = 'bank' AND table_name = 'bank' ORDER BY start_key ASC LIMIT 1`,
 			).Scan(&startHex); err != nil {
 				t.Fatal(err)
 			}
