@@ -19,134 +19,183 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // CheckExpr does sanity checking on an Expr. This code is called in testrace
 // builds (which gives us test/CI coverage but elides this code in regular
 // builds).
-// This method does not assume that the expression has been fully normalized.
-func (m *Memo) CheckExpr(eid ExprID) {
-	expr := m.Expr(eid)
+//
+// This function does not assume that the expression has been fully normalized.
+func (m *Memo) checkExpr(e opt.Expr) {
+	// RaceEnabled ensures that checks are run on every PR (as part of make
+	// testrace) while keeping the check code out of non-test builds.
+	if !util.RaceEnabled {
+		return
+	}
 
-	// Check logical properties.
-	logical := m.GroupProperties(eid.Group)
-	logical.Verify()
+	// Check properties.
+	switch t := e.(type) {
+	case RelExpr:
+		t.Relational().Verify()
 
-	switch expr.Operator() {
-	case opt.ScanOp:
-		def := expr.Private(m).(*ScanOpDef)
-		if def.Flags.NoIndexJoin && def.Flags.ForceIndex {
+		// If the expression was added to an existing group, cross-check its
+		// properties against the properties of the group. Skip this check if the
+		// operator is known to not have code for building logical props.
+		if t != t.FirstExpr() && t.Op() != opt.MergeJoinOp {
+			var relProps props.Relational
+			m.logPropsBuilder.buildProps(t, &relProps)
+			t.Relational().VerifyAgainst(&relProps)
+		}
+
+	case ScalarPropsExpr:
+		t.ScalarProps(m).Verify()
+	}
+
+	// Check operator-specific fields.
+	switch t := e.(type) {
+	case *ScanExpr:
+		if t.Flags.NoIndexJoin && t.Flags.ForceIndex {
 			panic("NoIndexJoin and ForceIndex set")
 		}
 
-	case opt.ProjectionsOp:
-		// Check that we aren't passing through columns in projection expressions.
-		n := expr.ChildCount()
-		def := expr.Private(m).(*ProjectionsOpDef)
-		colList := def.SynthesizedCols
-		if len(colList) != n {
-			panic(fmt.Sprintf("%d projections but %d columns", n, len(colList)))
-		}
-		for i := 0; i < n; i++ {
-			child := m.NormExpr(expr.ChildGroup(m, i))
-			if child.Operator() == opt.VariableOp {
-				if child.Private(m).(opt.ColumnID) == colList[i] {
-					panic(fmt.Sprintf("projection passes through column %d", colList[i]))
+	case *ProjectExpr:
+		for _, item := range t.Projections {
+			// Check that list items are not nested.
+			if opt.IsListItemOp(item.Element) {
+				panic("projections list item cannot contain another list item")
+			}
+
+			// Check that column id is set.
+			if item.Col == 0 {
+				panic("projections column cannot have id of 0")
+			}
+
+			// Check that column is not both passthrough and synthesized.
+			if t.Passthrough.Contains(int(item.Col)) {
+				panic(fmt.Sprintf("both passthrough and synthesized have column %d", item.Col))
+			}
+
+			// Check that columns aren't passed through in projection expressions.
+			if v, ok := item.Element.(*VariableExpr); ok {
+				if v.Col == item.Col {
+					panic(fmt.Sprintf("projection passes through column %d", item.Col))
 				}
 			}
 		}
 
-	case opt.AggregationsOp:
-		// Check that we don't have any bare variables as aggregations.
-		n := expr.ChildCount()
-		colList := expr.Private(m).(opt.ColList)
-		if len(colList) != n {
-			panic(fmt.Sprintf("%d aggregations but %d columns", n, len(colList)))
+	case *SelectExpr:
+		checkFilters(t.Filters)
+
+	case *AggregationsExpr:
+		var checkAggs func(scalar opt.ScalarExpr)
+		checkAggs = func(scalar opt.ScalarExpr) {
+			switch scalar.Op() {
+			case opt.AggDistinctOp:
+				checkAggs(scalar.Child(0).(opt.ScalarExpr))
+
+			case opt.VariableOp:
+
+			default:
+				if !opt.IsAggregateOp(scalar) {
+					panic(fmt.Sprintf("aggregate contains illegal op: %s", scalar.Op()))
+				}
+			}
 		}
-		for i := 0; i < n; i++ {
-			child := m.NormExpr(expr.ChildGroup(m, i))
-			if child.Operator() == opt.VariableOp {
+		for _, item := range *t {
+			// Check that aggregations only contain aggregates and variables.
+			checkAggs(item.Agg)
+
+			// Check that column id is set.
+			if item.Col == 0 {
+				panic("aggregations column cannot have id of 0")
+			}
+
+			// Check that we don't have any bare variables as aggregations.
+			if item.Agg.Op() == opt.VariableOp {
 				panic("aggregation contains bare variable")
 			}
 		}
 
-	case opt.DistinctOnOp:
-		// Aggregates can be only FirstAgg or ConstAgg.
-		agg := m.NormExpr(expr.ChildGroup(m, 1))
-		for i, n := 0, agg.ChildCount(); i < n; i++ {
-			childOp := m.NormExpr(agg.ChildGroup(m, i)).Operator()
-			if childOp != opt.FirstAggOp && childOp != opt.ConstAggOp {
-				panic(fmt.Sprintf("distinct-on contains %s", childOp))
+	case *DistinctOnExpr:
+		// Check that aggregates can be only FirstAgg or ConstAgg.
+		for _, item := range t.Aggregations {
+			switch item.Agg.Op() {
+			case opt.FirstAggOp, opt.ConstAggOp:
+
+			default:
+				panic(fmt.Sprintf("distinct-on contains %s", item.Agg.Op()))
 			}
 		}
 
-	case opt.GroupByOp, opt.ScalarGroupByOp:
-		// Aggregates cannot be FirstAgg.
-		agg := m.NormExpr(expr.ChildGroup(m, 1))
-		for i, n := 0, agg.ChildCount(); i < n; i++ {
-			childOp := m.NormExpr(agg.ChildGroup(m, i)).Operator()
-			if childOp == opt.FirstAggOp {
-				panic(fmt.Sprintf("group-by contains %s", childOp))
+	case *GroupByExpr, *ScalarGroupByExpr:
+		// Check that aggregates cannot be FirstAgg.
+		for _, item := range *t.Child(1).(*AggregationsExpr) {
+			switch item.Agg.Op() {
+			case opt.FirstAggOp:
+				panic(fmt.Sprintf("group-by contains %s", item.Agg.Op()))
 			}
 		}
 
-	case opt.IndexJoinOp:
-		def := expr.Private(m).(*IndexJoinDef)
-		if def.Cols.Empty() {
+	case *IndexJoinExpr:
+		if t.Cols.Empty() {
 			panic(fmt.Sprintf("index join with no columns"))
 		}
 
-	case opt.LookupJoinOp:
-		def := expr.Private(m).(*LookupJoinDef)
-		inputProps := m.GroupProperties(expr.AsLookupJoin().Input()).Relational
-		if len(def.KeyCols) == 0 {
+	case *LookupJoinExpr:
+		if len(t.KeyCols) == 0 {
 			panic(fmt.Sprintf("lookup join with no key columns"))
 		}
-		if def.Cols.SubsetOf(inputProps.OutputCols) {
+		if t.Cols.Empty() {
+			panic(fmt.Sprintf("lookup join with no output columns"))
+		}
+		if t.Cols.SubsetOf(t.Input.Relational().OutputCols) {
 			panic(fmt.Sprintf("lookup join with no lookup columns"))
 		}
 
-	case opt.SelectOp:
-		filter := m.NormExpr(expr.AsSelect().Filter())
-		switch filter.Operator() {
-		case opt.FiltersOp, opt.TrueOp, opt.FalseOp:
-		default:
-			panic(fmt.Sprintf("select contains %s", filter.Operator()))
+	default:
+		if !opt.IsListOp(e) {
+			for i := 0; i < e.ChildCount(); i++ {
+				child := e.Child(i)
+				if opt.IsListItemOp(child) {
+					panic(fmt.Sprintf("non-list op contains item op: %s", child.Op()))
+				}
+			}
 		}
 
-	default:
-		if expr.IsJoin() {
-			on := m.NormExpr(expr.ChildGroup(m, 2))
-			switch on.Operator() {
-			case opt.FiltersOp, opt.TrueOp, opt.FalseOp:
-			default:
-				panic(fmt.Sprintf("join contains %s", on.Operator()))
-			}
+		if opt.IsJoinOp(e) {
+			checkFilters(*e.Child(2).(*FiltersExpr))
 		}
 	}
 
-	m.checkExprOrdering(expr)
+	// Check orderings within operators.
+	checkExprOrdering(e)
 }
 
 // checkExprOrdering runs checks on orderings stored inside operators.
-func (m *Memo) checkExprOrdering(expr *Expr) {
+func checkExprOrdering(e opt.Expr) {
 	// Verify that orderings stored in operators only refer to columns produced by
 	// their input.
-	var ordering *props.OrderingChoice
-	switch expr.Operator() {
-	case opt.LimitOp, opt.OffsetOp:
-		ordering = expr.Private(m).(*props.OrderingChoice)
-	case opt.RowNumberOp:
-		ordering = &expr.Private(m).(*RowNumberDef).Ordering
-	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp:
-		ordering = &expr.Private(m).(*GroupByDef).Ordering
+	var ordering props.OrderingChoice
+	switch t := e.Private().(type) {
+	case *props.OrderingChoice:
+		ordering = *t
+	case *RowNumberPrivate:
+		ordering = t.Ordering
+	case GroupingPrivate:
+		ordering = t.Ordering
 	default:
 		return
 	}
-	outCols := m.GroupProperties(expr.ChildGroup(m, 0)).Relational.OutputCols
-	if !ordering.SubsetOfCols(outCols) {
-		panic(fmt.Sprintf(
-			"invalid ordering %v (op: %s, outcols: %v)", ordering, expr.Operator(), outCols,
-		))
+	if outCols := e.(RelExpr).Relational().OutputCols; !ordering.SubsetOfCols(outCols) {
+		panic(fmt.Sprintf("invalid ordering %v (op: %s, outcols: %v)", ordering, e.Op(), outCols))
+	}
+}
+
+func checkFilters(filters FiltersExpr) {
+	for _, item := range filters {
+		if opt.IsListItemOp(item.Condition) {
+			panic("filters list item cannot contain another list item")
+		}
 	}
 }
