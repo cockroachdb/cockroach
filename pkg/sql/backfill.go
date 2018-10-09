@@ -255,7 +255,11 @@ func (sc *SchemaChanger) truncateIndexes(
 				if err := td.init(txn, nil /* *tree.EvalContext */); err != nil {
 					return err
 				}
-				resume, err = td.deleteIndex(
+				removeData := td.clearIndex
+				if !sc.canClearRangeForDrop(&desc) {
+					removeData = td.deleteIndex
+				}
+				resume, err = removeData(
 					ctx,
 					&desc,
 					resumeAt,
