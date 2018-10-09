@@ -91,7 +91,7 @@ func (fit *fakeSpanResolverIterator) Seek(
 			fit.err = err
 			return
 		}
-		if !splitKey.Equal(lastKey) {
+		if !splitKey.Equal(lastKey) && span.ContainsKey(splitKey) {
 			splitKeys = append(splitKeys, splitKey)
 			lastKey = splitKey
 		}

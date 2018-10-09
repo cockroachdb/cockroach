@@ -109,6 +109,9 @@ type scanNode struct {
 
 	// Set when the scanNode is crated via the exec factory.
 	createdByOpt bool
+
+	// Indicates if this scan is the source for a delete node.
+	isDeleteSource bool
 }
 
 // scanVisibility represents which table columns should be included in a scan.
