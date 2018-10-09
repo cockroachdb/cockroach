@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
 )
@@ -77,14 +78,65 @@ type newOrderData struct {
 
 var errSimulated = errors.New("simulated user error")
 
-type newOrder struct{}
+type newOrder struct {
+	config *tpcc
+	db     *gosql.DB
+	sr     workload.SQLRunner
 
-var _ tpccTx = newOrder{}
+	updateDistrict     workload.StmtHandle
+	selectWarehouseTax workload.StmtHandle
+	selectCustomerInfo workload.StmtHandle
+	insertOrder        workload.StmtHandle
+	insertNewOrder     workload.StmtHandle
+}
 
-func (n newOrder) run(
-	ctx context.Context, config *tpcc, db *gosql.DB, wID int,
-) (interface{}, error) {
-	atomic.AddUint64(&config.auditor.newOrderTransactions, 1)
+var _ tpccTx = &newOrder{}
+
+func createNewOrder(ctx context.Context, config *tpcc, db *gosql.DB) (tpccTx, error) {
+	n := &newOrder{
+		config: config,
+		db:     db,
+	}
+
+	// Select the district tax rate and next available order number, bumping it.
+	n.updateDistrict = n.sr.Define(`
+		UPDATE district
+		SET d_next_o_id = d_next_o_id + 1
+		WHERE d_w_id = $1 AND d_id = $2
+		RETURNING d_tax, d_next_o_id`,
+	)
+
+	// Select the warehouse tax rate.
+	n.selectWarehouseTax = n.sr.Define(`
+		SELECT w_tax FROM warehouse WHERE w_id = $1`,
+	)
+
+	// Select the customer's discount, last name and credit.
+	n.selectCustomerInfo = n.sr.Define(`
+		SELECT c_discount, c_last, c_credit
+		FROM customer
+		WHERE c_w_id = $1 AND c_d_id = $2 AND c_id = $3`,
+	)
+
+	n.insertOrder = n.sr.Define(`
+		INSERT INTO "order" (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+	)
+
+	n.insertNewOrder = n.sr.Define(`
+		INSERT INTO new_order (no_o_id, no_d_id, no_w_id) 
+		VALUES ($1, $2, $3)`,
+	)
+
+	if err := n.sr.Init(ctx, db, config.connFlags); err != nil {
+		return nil, err
+	}
+
+	return n, nil
+}
+
+func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
+	atomic.AddUint64(&n.config.auditor.newOrderTransactions, 1)
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
@@ -96,10 +148,10 @@ func (n newOrder) run(
 	}
 	d.items = make([]orderItem, d.oOlCnt)
 
-	config.auditor.Lock()
-	config.auditor.orderLinesFreq[d.oOlCnt]++
-	config.auditor.Unlock()
-	atomic.AddUint64(&config.auditor.totalOrderLines, uint64(d.oOlCnt))
+	n.config.auditor.Lock()
+	n.config.auditor.orderLinesFreq[d.oOlCnt]++
+	n.config.auditor.Unlock()
+	atomic.AddUint64(&n.config.auditor.totalOrderLines, uint64(d.oOlCnt))
 
 	// itemIDs tracks the item ids in the order so that we can prevent adding
 	// multiple items with the same ID. This would not make sense because each
@@ -136,17 +188,17 @@ func (n newOrder) run(
 		// 2.4.1.5.2: 1% of the time, an item is supplied from a remote warehouse.
 		item.remoteWarehouse = rand.Intn(100) == 0
 		item.olSupplyWID = wID
-		if item.remoteWarehouse && config.warehouses > 1 {
+		if item.remoteWarehouse && n.config.warehouses > 1 {
 			allLocal = 0
 			// To avoid picking the local warehouse again, randomly choose among n-1
 			// warehouses and swap in the nth if necessary.
-			item.olSupplyWID = rand.Intn(config.warehouses - 1)
+			item.olSupplyWID = rand.Intn(n.config.warehouses - 1)
 			if item.olSupplyWID == wID {
-				item.olSupplyWID = config.warehouses - 1
+				item.olSupplyWID = n.config.warehouses - 1
 			}
-			config.auditor.Lock()
-			config.auditor.orderLineRemoteWarehouseFreq[item.olSupplyWID]++
-			config.auditor.Unlock()
+			n.config.auditor.Lock()
+			n.config.auditor.orderLineRemoteWarehouseFreq[item.olSupplyWID]++
+			n.config.auditor.Unlock()
 		} else {
 			item.olSupplyWID = wID
 		}
@@ -162,36 +214,28 @@ func (n newOrder) run(
 
 	err := crdb.ExecuteTx(
 		ctx,
-		db,
-		config.txOpts,
+		n.db,
+		n.config.txOpts,
 		func(tx *gosql.Tx) error {
 			// Select the district tax rate and next available order number, bumping it.
 			var dNextOID int
-			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
-				UPDATE district
-				SET d_next_o_id = d_next_o_id + 1
-				WHERE d_w_id = %[1]d AND d_id = %[2]d
-				RETURNING d_tax, d_next_o_id`,
-				d.wID, d.dID),
+			if err := n.updateDistrict.QueryRow(
+				ctx, tx, d.wID, d.dID,
 			).Scan(&d.dTax, &dNextOID); err != nil {
 				return err
 			}
 			d.oID = dNextOID - 1
 
 			// Select the warehouse tax rate.
-			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
-				SELECT w_tax FROM warehouse WHERE w_id = %[1]d`,
-				wID),
+			if err := n.selectWarehouseTax.QueryRow(
+				ctx, tx, wID,
 			).Scan(&d.wTax); err != nil {
 				return err
 			}
 
 			// Select the customer's discount, last name and credit.
-			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
-				SELECT c_discount, c_last, c_credit
-				FROM customer
-				WHERE c_w_id = %[1]d AND c_d_id = %[2]d AND c_id = %[3]d`,
-				d.wID, d.dID, d.cID),
+			if err := n.selectCustomerInfo.QueryRow(
+				ctx, tx, d.wID, d.dID, d.cID,
 			).Scan(&d.cDiscount, &d.cLast, &d.cCredit); err != nil {
 				return err
 			}
@@ -228,7 +272,7 @@ func (n newOrder) run(
 						// can't find the item. The spec requires us to actually go
 						// to the database for this, even though we know earlier
 						// that the item has an invalid number.
-						atomic.AddUint64(&config.auditor.newOrderRollbacks, 1)
+						atomic.AddUint64(&n.config.auditor.newOrderRollbacks, 1)
 						return errSimulated
 					}
 					return errors.New("missing item row")
@@ -315,18 +359,15 @@ func (n newOrder) run(
 			rows.Close()
 
 			// Insert row into the orders and new orders table.
-			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
-				INSERT INTO "order" (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local)
-				VALUES (%[1]d, %[2]d, %[3]d, %[4]d, '%[5]s', %[6]d, %[7]d)`,
-				d.oID, d.dID, d.wID, d.cID, d.oEntryD.Format("2006-01-02 15:04:05"),
-				d.oOlCnt, allLocal),
+			if _, err := n.insertOrder.Exec(
+				ctx, tx,
+				d.oID, d.dID, d.wID, d.cID, d.oEntryD.Format("2006-01-02 15:04:05"), d.oOlCnt, allLocal,
 			); err != nil {
 				return err
 			}
-			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
-				INSERT INTO new_order (no_o_id, no_d_id, no_w_id) 
-				VALUES (%[1]d, %[2]d, %[3]d)`,
-				d.oID, d.dID, d.wID)); err != nil {
+			if _, err := n.insertNewOrder.Exec(
+				ctx, tx, d.oID, d.dID, d.wID,
+			); err != nil {
 				return err
 			}
 

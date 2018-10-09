@@ -35,7 +35,8 @@ import (
 )
 
 type tpcc struct {
-	flags workload.Flags
+	flags     workload.Flags
+	connFlags *workload.ConnFlags
 
 	seed             int64
 	warehouses       int
@@ -49,8 +50,8 @@ type tpcc struct {
 	fks        bool
 	dbOverride string
 
-	txs []tx
-	// deck contains indexes into the txs slice.
+	txInfos []txInfo
+	// deck contains indexes into the txInfos slice.
 	deck []int
 
 	auditor *auditor
@@ -140,6 +141,7 @@ var tpccMeta = workload.Meta{
 		g.flags.StringSliceVar(&g.zones, "zones", []string{}, "Zones for partitioning, the number of zones should match the number of partitions and the zones used to start cockroach.")
 
 		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
+		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
 }
@@ -474,16 +476,12 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		p := (warehouse * w.partitions) / w.activeWarehouses
 		dbs := partitionDBs[p]
 		db := dbs[warehouse%len(dbs)]
-		worker := &worker{
-			config:    w,
-			hists:     reg.GetHandle(),
-			idx:       workerIdx,
-			db:        db,
-			warehouse: warehouse + startWarehouse,
-			deckPerm:  make([]int, len(w.deck)),
-			permIdx:   len(w.deck),
+		worker, err := newWorker(
+			context.TODO(), w, db, reg.GetHandle(), workerIdx, warehouse+startWarehouse,
+		)
+		if err != nil {
+			return workload.QueryLoad{}, err
 		}
-		copy(worker.deckPerm, w.deck)
 
 		ql.WorkerFns = append(ql.WorkerFns, worker.run)
 	}
