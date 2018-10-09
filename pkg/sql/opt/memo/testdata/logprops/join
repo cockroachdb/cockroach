@@ -1032,7 +1032,7 @@ SELECT * FROM (VALUES (NULL), (NULL)) a FULL JOIN (VALUES (NULL), (NULL)) b ON a
 ----
 full-join
  ├── columns: column1:1(unknown) column1:2(unknown)
- ├── cardinality: [4 - 4]
+ ├── cardinality: [2 - 4]
  ├── prune: (1,2)
  ├── reject-nulls: (1,2)
  ├── values
@@ -1052,7 +1052,7 @@ full-join
  │    └── tuple [type=tuple{unknown}]
  │         └── null [type=unknown]
  └── filters
-      └── null [type=unknown, constraints=(contradiction; tight)]
+      └── null [type=bool, constraints=(contradiction; tight)]
 
 # Calculate full-join cardinality of one input with unknown cardinality.
 build

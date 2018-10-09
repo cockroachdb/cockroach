@@ -343,7 +343,7 @@ semi-join
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan b
  │    ├── columns: b.x:5(int) z:6(int!null)
- │    └── stats: [rows=10000, distinct(5)=500]
+ │    └── stats: [rows=10000]
  └── filters
       └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
@@ -363,7 +363,7 @@ anti-join
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan b
  │    ├── columns: b.x:5(int) z:6(int!null)
- │    └── stats: [rows=10000, distinct(5)=500]
+ │    └── stats: [rows=10000]
  └── filters
       └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
@@ -397,12 +397,12 @@ inner-join
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(5), (5)==(1)
  ├── select
  │    ├── columns: a.x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=3737.5, distinct(1)=3737.5, distinct(2)=299]
+ │    ├── stats: [rows=555.555556, distinct(1)=555.555556]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── scan a
  │    │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    │    ├── stats: [rows=5000, distinct(1)=5000, distinct(2)=400]
+ │    │    ├── stats: [rows=5000, distinct(1)=5000]
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── filters
@@ -442,7 +442,7 @@ project
       │    │    └── fd: (1)-->(2)
       │    ├── scan b
       │    │    ├── columns: b.x:5(int) z:6(int!null)
-      │    │    └── stats: [rows=10000, distinct(5)=500]
+      │    │    └── stats: [rows=10000]
       │    └── filters
       │         ├── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │         └── (y + z) = 5 [type=bool, outer=(2,6)]
@@ -476,7 +476,7 @@ project
       │    │    └── fd: (1)-->(2)
       │    ├── scan b
       │    │    ├── columns: b.x:5(int) z:6(int!null)
-      │    │    └── stats: [rows=10000, distinct(5)=500]
+      │    │    └── stats: [rows=10000]
       │    └── filters
       │         ├── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │         └── (y + z) = 5 [type=bool, outer=(2,6)]

@@ -643,10 +643,29 @@ func TestFuncDeps_AddFrom(t *testing.T) {
 	testColsAreStrictKey(t, abcde, util.MakeFastIntSet(1), true)
 }
 
+func TestFuncDeps_AddEquivFrom(t *testing.T) {
+	// CREATE TABLE abcde (a INT PRIMARY KEY, b INT, c INT, d INT, e INT)
+	// CREATE TABLE mnpq (m INT, n INT, p INT, q INT, PRIMARY KEY (m, n))
+	// SELECT * FROM abcde, mnpq WHERE a=m AND b=n
+	product := makeAbcdeFD(t)
+	mnpq := makeMnpqFD(t)
+	product.MakeProduct(mnpq)
+	product.AddEquivalency(1, 10)
+	verifyFD(t, product, "(10,11): (1)-->(2-5), (2,3)~~>(1,4,5), (10,11)-->(12,13), (1)==(10), (10)==(1)")
+
+	var equiv props.FuncDepSet
+	equiv.AddEquivFrom(product)
+	verifyFD(t, &equiv, "(1)==(10), (10)==(1)")
+
+	product.AddEquivalency(2, 11)
+	equiv.ProjectCols(opt.ColSet{})
+	equiv.AddEquivFrom(product)
+	verifyFD(t, &equiv, "(1)==(10), (10)==(1), (2)==(11), (11)==(2)")
+}
+
 func TestFuncDeps_MakeProduct(t *testing.T) {
 	// Union dependencies and removed columns and keys:
 	//   CREATE TABLE abcde (a INT PRIMARY KEY, b INT, c INT, d INT, e INT)
-	//   CREATE UNIQUE INDEX ON abcde (b, c)
 	//   CREATE TABLE mnpq (m INT, n INT, p INT, q INT, PRIMARY KEY (m, n))
 	//   SELECT * FROM (SELECT a, b, c FROM abcde WHERE d=e), (SELECT m, n FROM mnpq WHERE p=q)
 	product := makeAbcdeFD(t)
