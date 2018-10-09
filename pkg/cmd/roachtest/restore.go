@@ -18,6 +18,7 @@ package main
 import (
 	"bytes"
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -114,9 +115,13 @@ func (hc *HealthChecker) Runner(ctx context.Context) (err error) {
 		}
 		var rr gossipAlerts
 		for rows.Next() {
-			var a gossipAlert
-			if err := rows.Scan(&a.NodeID, &a.StoreID, &a.Category, &a.Description, &a.Value); err != nil {
+			a := gossipAlert{StoreID: -1}
+			var storeID gosql.NullInt64
+			if err := rows.Scan(&a.NodeID, &storeID, &a.Category, &a.Description, &a.Value); err != nil {
 				return err
+			}
+			if storeID.Valid {
+				a.StoreID = int(storeID.Int64)
 			}
 			rr = append(rr, a)
 		}
