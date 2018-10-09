@@ -829,6 +829,31 @@ message TableDescriptor {
   // The job id for a drop job is the id in the system.jobs table of the
   // dropping of this table.
   optional int64 drop_job_id = 32 [(gogoproto.nullable) = false, (gogoproto.customname) = "DropJobID"];
+
+  message GCDescriptorMutation {
+    optional int64 index_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "IndexID",
+                                (gogoproto.casttype) = "IndexID"];
+
+    optional int64 drop_time = 2 [(gogoproto.nullable) = false];
+
+    // The job id for a mutation job is the id in the system.jobs table of the
+    // schema change job executing the mutation referenced by mutation_id.
+    optional int64 job_id = 3 [(gogoproto.nullable) = false,
+                              (gogoproto.customname) = "JobID"];
+  }
+
+  // The schema elements that have been dropped and whose underlying
+  // data needs to be gc-ed. These schema elements have already transitioned
+  // through the drop state machine when they were in the above mutations
+  // list, and can be safely deleted. The names for these schema elements
+  // can be reused. This list is separate because mutations can
+  // lie in this list for a long time (gc deadline) and should not block
+  // the execution of other schema changes on the table.
+  //
+  // TODO(vivekmenezes): This is currently only used by the non-interleaved drop
+  // index case. Also use for dropped interleaved indexes and columns.
+  repeated GCDescriptorMutation gc_mutations = 33 [(gogoproto.nullable) = false,
+                                                  (gogoproto.customname) = "GCMutations"];
 }
 
 // DatabaseDescriptor represents a namespace (aka database) and is stored

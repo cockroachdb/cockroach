@@ -68,14 +68,14 @@ statement error duplicate key value \(c\)=\(1\) violates unique constraint "bar"
 ALTER TABLE t ADD CONSTRAINT bar UNIQUE (c)
 
 # Test that rollback was successful
-query TTTTRT
-SELECT job_type, regexp_replace(description, 'JOB \d+', 'JOB ...'), user_name, status, fraction_completed::decimal(10,2), error
+query TTTTTRT
+SELECT job_type, regexp_replace(description, 'JOB \d+', 'JOB ...'), user_name, status, running_status, fraction_completed::decimal(10,2), error
 FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE  ROLL BACK JOB ...: ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  succeeded  1.00  ·
-SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)            root  failed     0.00  duplicate key value (c)=(1) violates unique constraint "bar"
+SCHEMA CHANGE  ROLL BACK JOB ...: ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)  root  running  waiting for GC TTL  0.00  ·
+SCHEMA CHANGE  ALTER TABLE test.public.t ADD CONSTRAINT bar UNIQUE (c)                     root  failed   NULL                0.00  duplicate key value (c)=(1) violates unique constraint "bar"
 
 query IIII colnames,rowsort
 SELECT * FROM t
@@ -178,13 +178,13 @@ ALTER TABLE t DROP CONSTRAINT foo
 statement ok
 DROP INDEX foo CASCADE
 
-query TTTTRT
-SELECT job_type, description, user_name, status, fraction_completed, error
+query TTTTTRT
+SELECT job_type, description, user_name, status, running_status, fraction_completed, error
 FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 1
 ----
-SCHEMA CHANGE  DROP INDEX test.public.t@foo CASCADE root  succeeded  1  ·
+SCHEMA CHANGE  DROP INDEX test.public.t@foo CASCADE  root  running  waiting for GC TTL  0  ·
 
 query TTBITTBB colnames
 SHOW INDEXES FROM t
@@ -261,13 +261,13 @@ INSERT INTO t (a, d, x, y, z) VALUES (33, 34, DECIMAL '2.0', DECIMAL '2.1', DECI
 statement ok
 DROP INDEX t@t_f_idx
 
-query TTTTRT
-SELECT job_type, description, user_name, status, fraction_completed, error
+query TTTTTRT
+SELECT job_type, description, user_name, status, running_status, fraction_completed, error
 FROM crdb_internal.jobs
 ORDER BY created DESC
 LIMIT 1
 ----
-SCHEMA CHANGE  DROP INDEX test.public.t@t_f_idx  root  succeeded  1  ·
+SCHEMA CHANGE  DROP INDEX test.public.t@t_f_idx  root  running  waiting for GC TTL  0  ·
 
 statement ok
 ALTER TABLE t DROP COLUMN f
