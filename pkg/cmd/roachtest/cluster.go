@@ -525,6 +525,10 @@ type cluster struct {
 	l          *logger
 	destroyed  chan struct{}
 	expiration time.Time
+	// owned is set if this instance is responsible for destroying the roachprod
+	// cluster. It is set when a new cluster is created, but not when one is
+	// cloned or when we attach to an existing roachprod cluster.
+	owned bool
 }
 
 type clusterOpt bool
@@ -581,6 +585,7 @@ func newCluster(ctx context.Context, t testI, nodes []nodeSpec, opt clusterOpt) 
 		l:          l,
 		destroyed:  make(chan struct{}),
 		expiration: nodes[0].expiration(),
+		owned:      true,
 	}
 	if impl, ok := t.(*test); ok {
 		c.status = impl.Status
@@ -634,6 +639,8 @@ func attachToExistingCluster(
 		l:          l,
 		destroyed:  make(chan struct{}),
 		expiration: nodes[0].expiration(),
+		// If we're attaching to an existing cluster, we're not going to destoy it.
+		owned: false,
 	}
 	if impl, ok := t.(*test); ok {
 		c.status = impl.Status
@@ -721,6 +728,8 @@ func (c *cluster) clone(t *test) *cluster {
 		t:          t,
 		l:          l,
 		expiration: c.expiration,
+		// This cloned cluster is not taking ownership. The parent retains it.
+		owned: false,
 	}
 }
 
@@ -793,7 +802,7 @@ func (c *cluster) destroy(ctx context.Context) {
 	defer close(c.destroyed)
 
 	if clusterWipe {
-		if c.name != clusterName {
+		if c.owned {
 			c.status("destroying cluster")
 			if err := execCmd(ctx, c.l, roachprod, "destroy", c.name); err != nil {
 				c.l.Errorf("%s", err)
