@@ -128,7 +128,8 @@ func GetFixture(
 ) (Fixture, error) {
 	var fixture Fixture
 	var err error
-	for r := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 10}); ; r.Next() {
+	var notFound bool
+	for r := retry.StartWithCtx(ctx, retry.Options{MaxRetries: 10}); r.Next(); {
 		err = func() error {
 			b := gcs.Bucket(config.GCSBucket)
 			if config.BillingProject != `` {
@@ -138,6 +139,7 @@ func GetFixture(
 			fixtureFolder := generatorToGCSFolder(config, gen)
 			_, err := b.Objects(ctx, &storage.Query{Prefix: fixtureFolder, Delimiter: `/`}).Next()
 			if err == iterator.Done {
+				notFound = true
 				return errors.Errorf(`fixture not found: %s`, fixtureFolder)
 			} else if err != nil {
 				return err
@@ -159,7 +161,7 @@ func GetFixture(
 			}
 			return nil
 		}()
-		if err == nil {
+		if err == nil || notFound {
 			break
 		}
 	}
