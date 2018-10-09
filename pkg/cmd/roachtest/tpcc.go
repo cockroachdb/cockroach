@@ -81,7 +81,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 				c.Reformat(ctx, crdbNodes, "zfs")
 
 				t.Status("loading dataset")
-				c.Start(ctx, crdbNodes)
+				c.Start(ctx, t, crdbNodes)
 				cmd := fmt.Sprintf(
 					"./workload fixtures load tpcc --warehouses=%d {pgurl:1}", fixtureWarehouses)
 				c.Run(ctx, workloadNode, cmd)
@@ -91,9 +91,9 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 			}
 			t.Status(`restoring store dumps`)
 			c.Run(ctx, crdbNodes, "sudo zfs rollback data1@pristine")
-			c.Start(ctx, crdbNodes)
+			c.Start(ctx, t, crdbNodes)
 		} else {
-			c.Start(ctx, crdbNodes)
+			c.Start(ctx, t, crdbNodes)
 			c.Run(ctx, workloadNode, fmt.Sprintf(
 				`./workload fixtures load tpcc --warehouses=%d {pgurl:1}`, fixtureWarehouses,
 			))
@@ -339,7 +339,7 @@ func registerTPCCBenchSpec(r *registry, b tpccBenchSpec) {
 // function is idempotent and first checks whether a compatible dataset exists,
 // performing an expensive dataset restore only if it doesn't.
 func loadTPCCBench(
-	ctx context.Context, c *cluster, b tpccBenchSpec, roachNodes, loadNode nodeListOption,
+	ctx context.Context, t *test, c *cluster, b tpccBenchSpec, roachNodes, loadNode nodeListOption,
 ) error {
 	db := c.Conn(ctx, 1)
 	defer db.Close()
@@ -363,7 +363,7 @@ func loadTPCCBench(
 		// If the dataset exists but is not large enough, wipe the cluster
 		// before restoring.
 		c.Wipe(ctx, roachNodes)
-		c.Start(ctx, append(b.startOpts(), roachNodes)...)
+		c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
 	} else if pqErr, ok := err.(*pq.Error); !ok ||
 		string(pqErr.Code) != pgerror.CodeInvalidCatalogNameError {
 		return err
@@ -482,7 +482,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 
 	c.Put(ctx, cockroach, "./cockroach", roachNodes)
 	c.Put(ctx, workload, "./workload", loadNodes)
-	c.Start(ctx, append(b.startOpts(), roachNodes)...)
+	c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
 
 	useHAProxy := b.Chaos
 	if useHAProxy {
@@ -499,7 +499,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 	m := newMonitor(ctx, c, roachNodes)
 	m.Go(func(ctx context.Context) error {
 		t.Status("setting up dataset")
-		err := loadTPCCBench(ctx, c, b, roachNodes, c.Node(loadNodes[0]))
+		err := loadTPCCBench(ctx, t, c, b, roachNodes, c.Node(loadNodes[0]))
 		if err != nil {
 			return err
 		}
@@ -515,7 +515,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 			// inter-trial interactions.
 			m.ExpectDeaths(int32(len(roachNodes)))
 			c.Stop(ctx, roachNodes)
-			c.Start(ctx, append(b.startOpts(), roachNodes)...)
+			c.Start(ctx, t, append(b.startOpts(), roachNodes)...)
 			time.Sleep(10 * time.Second)
 
 			// Set up the load generation configuration.

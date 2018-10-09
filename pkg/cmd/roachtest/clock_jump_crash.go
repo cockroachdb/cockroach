@@ -38,7 +38,7 @@ func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 	}
 	c.Wipe(ctx)
-	c.Start(ctx)
+	c.Start(ctx, t)
 
 	db := c.Conn(ctx, c.nodes)
 	defer db.Close()

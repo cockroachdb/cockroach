@@ -38,7 +38,7 @@ import (
 func registerGossip(r *registry) {
 	runGossipChaos := func(ctx context.Context, t *test, c *cluster) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
-		c.Start(ctx, c.All(), startArgs("--sequential"))
+		c.Start(ctx, t, c.All(), startArgs("--sequential"))
 
 		gossipNetwork := func(node int) string {
 			const query = `
@@ -114,7 +114,7 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 			deadNode = nodes.randNode()[0]
 			c.Stop(ctx, c.Node(deadNode))
 			waitForGossip()
-			c.Start(ctx, c.Node(deadNode))
+			c.Start(ctx, t, c.Node(deadNode))
 		}
 	}
 
@@ -247,7 +247,7 @@ func (g *gossipUtil) checkConnectedAndFunctional(ctx context.Context, t *test, c
 
 func runGossipPeerings(ctx context.Context, t *test, c *cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx)
+	c.Start(ctx, t)
 
 	// Repeatedly restart a random node and verify that all of the nodes are
 	// seeing the gossiped values.
@@ -271,13 +271,13 @@ func runGossipPeerings(ctx context.Context, t *test, c *cluster) {
 		node := c.All().randNode()
 		c.l.Printf("%d: restarting node %d\n", i, node[0])
 		c.Stop(ctx, node)
-		c.Start(ctx, node)
+		c.Start(ctx, t, node)
 	}
 }
 
 func runGossipRestart(ctx context.Context, t *test, c *cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx)
+	c.Start(ctx, t)
 
 	// Repeatedly stop and restart a cluster and verify that we can perform basic
 	// operations. This is stressing the gossiping of the first range descriptor
@@ -295,14 +295,14 @@ func runGossipRestart(ctx context.Context, t *test, c *cluster) {
 		c.Stop(ctx)
 
 		c.l.Printf("%d: restarting all nodes\n", i)
-		c.Start(ctx)
+		c.Start(ctx, t)
 	}
 }
 
 func runGossipRestartNodeOne(ctx context.Context, t *test, c *cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
 	// Reduce the scan max idle time to speed up evacuation of node 1.
-	c.Start(ctx, racks(c.nodes), startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms"))
+	c.Start(ctx, t, racks(c.nodes), startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms"))
 
 	db := c.Conn(ctx, 1)
 	defer db.Close()
@@ -397,7 +397,7 @@ SELECT count(replicas)
 	// Restart the other nodes. These nodes won't be able to talk to node 1 until
 	// node 1 talks to it (they have out of date address info). Node 1 needs
 	// incoming gossip info in order to determine where range 1 is.
-	c.Start(ctx, c.Range(2, c.nodes))
+	c.Start(ctx, t, c.Range(2, c.nodes))
 
 	// We need to override DB connection creation to use the correct port for
 	// node 1. This is more complicated than it should be and a limitation of the
@@ -442,7 +442,7 @@ func runCheckLocalityIPAddress(ctx context.Context, t *test, c *cluster) {
 		}
 		extAddr := externalIP[i-1]
 
-		c.Start(ctx, c.Node(i), startArgs("--racks=1",
+		c.Start(ctx, t, c.Node(i), startArgs("--racks=1",
 			fmt.Sprintf("--args=--locality-advertise-addr=rack=0@%s", extAddr)))
 	}
 
