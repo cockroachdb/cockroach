@@ -12,8 +12,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/cockroachdb/apd"
 
 	"github.com/stretchr/testify/require"
 
@@ -129,19 +133,39 @@ func avroSchemaToColDesc(
 		}
 	}
 
-	switch schemaType {
-	case avroSchemaLong:
-		colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
-	case avroSchemaString:
-		colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING}
-	case avroSchemaBoolean:
-		colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}
-	case avroSchemaBytes:
-		colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
-	case avroSchemaDouble:
-		colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT}
+	switch t := schemaType.(type) {
+	case string:
+		switch t {
+		case avroSchemaLong:
+			colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+		case avroSchemaString:
+			colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING}
+		case avroSchemaBoolean:
+			colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}
+		case avroSchemaBytes:
+			colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
+		case avroSchemaDouble:
+			colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT}
+		default:
+			return nil, errors.Errorf(`unknown schema type: %s`, t)
+		}
+	case map[string]interface{}:
+		switch t[`logicalType`] {
+		case `timestamp-micros`:
+			colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_TIMESTAMP}
+		case `decimal`:
+			colDesc.Type = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}
+			if p, ok := t[`precision`]; ok {
+				colDesc.Type.Precision = int32(p.(float64))
+			}
+			if s, ok := t[`scale`]; ok {
+				colDesc.Type.Width = int32(s.(float64))
+			}
+		default:
+			return nil, errors.Errorf(`unknown logical type: %s`, t[`logicalType`])
+		}
 	default:
-		return nil, errors.Errorf(`unknown schema type: %s`, schemaType)
+		return nil, errors.Errorf(`unknown schema type: %T %s`, schemaType, schemaType)
 	}
 	return colDesc, nil
 }
@@ -170,10 +194,8 @@ func TestAvroSchema(t *testing.T) {
 	// Generate a test for each column type with a random datum of that type.
 	for semTypeID, semTypeName := range sqlbase.ColumnType_SemanticType_name {
 		typ := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_SemanticType(semTypeID)}
-		colType := semTypeName
 		switch typ.SemanticType {
-		case sqlbase.ColumnType_DECIMAL, sqlbase.ColumnType_DATE, sqlbase.ColumnType_TIMESTAMP,
-			sqlbase.ColumnType_INTERVAL, sqlbase.ColumnType_TIMESTAMPTZ,
+		case sqlbase.ColumnType_DATE, sqlbase.ColumnType_INTERVAL, sqlbase.ColumnType_TIMESTAMPTZ,
 			sqlbase.ColumnType_COLLATEDSTRING, sqlbase.ColumnType_NAME, sqlbase.ColumnType_OID,
 			sqlbase.ColumnType_UUID, sqlbase.ColumnType_ARRAY, sqlbase.ColumnType_INET,
 			sqlbase.ColumnType_TIME, sqlbase.ColumnType_JSONB, sqlbase.ColumnType_BIT,
@@ -188,13 +210,29 @@ func TestAvroSchema(t *testing.T) {
 			// correct thing to do is skip this one.
 			continue
 		}
+		switch typ.SemanticType {
+		case sqlbase.ColumnType_TIMESTAMP:
+			// Truncate to millisecond instead of microsecond because of a bug
+			// in the avro lib's deserialization code. The serialization seems
+			// to be fine and we only use deserialization for testing, so we
+			// should patch the bug but it's not currently affecting changefeed
+			// correctness.
+			t := datum.(*tree.DTimestamp).Time.Truncate(time.Millisecond)
+			datum = tree.MakeDTimestamp(t, time.Microsecond)
+		case sqlbase.ColumnType_DECIMAL:
+			// TODO(dan): Make RandDatum respect Precision and Width instead.
+			typ.Precision = rng.Int31n(10) + 1
+			typ.Width = rng.Int31n(typ.Precision + 1)
+			coeff := rng.Int63n(int64(math.Pow10(int(typ.Precision))))
+			datum = &tree.DDecimal{Decimal: *apd.New(coeff, -typ.Width)}
+		}
 		serializedDatum := tree.Serialize(datum)
 		// schema is used in a fmt.Sprintf to fill in the table name, so we have
 		// to escape any stray %s.
 		escapedDatum := strings.Replace(serializedDatum, `%`, `%%`, -1)
 		randTypeTest := test{
 			name:   semTypeName,
-			schema: fmt.Sprintf(`(a %s PRIMARY KEY)`, colType),
+			schema: fmt.Sprintf(`(a %s PRIMARY KEY)`, typ.SQLString()),
 			values: fmt.Sprintf(`(%s)`, escapedDatum),
 		}
 		tests = append(tests, randTypeTest)
@@ -342,4 +380,53 @@ func TestAvroMigration(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDecimalRatRoundtrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	t.Run(`table`, func(t *testing.T) {
+		tests := []struct {
+			scale int32
+			dec   *apd.Decimal
+		}{
+			{0, apd.New(0, 0)},
+			{0, apd.New(1, 0)},
+			{0, apd.New(-1, 0)},
+			{0, apd.New(123, 0)},
+			{1, apd.New(0, -1)},
+			{1, apd.New(1, -1)},
+			{1, apd.New(123, -1)},
+			{5, apd.New(1, -5)},
+		}
+		for d, test := range tests {
+			rat, err := decimalToRat(*test.dec, test.scale)
+			require.NoError(t, err)
+			roundtrip := ratToDecimal(rat, test.scale)
+			if test.dec.CmpTotal(&roundtrip) != 0 {
+				t.Errorf(`%d: %s != %s`, d, test.dec, &roundtrip)
+			}
+		}
+	})
+	t.Run(`error`, func(t *testing.T) {
+		_, err := decimalToRat(*apd.New(1, -2), 1)
+		require.EqualError(t, err, "0.01 will not roundtrip at scale 1")
+		_, err = decimalToRat(*apd.New(1, -1), 2)
+		require.EqualError(t, err, "0.1 will not roundtrip at scale 2")
+		_, err = decimalToRat(apd.Decimal{Form: apd.Infinite}, 0)
+		require.EqualError(t, err, "cannot convert Infinite form decimal")
+	})
+	t.Run(`rand`, func(t *testing.T) {
+		rng, _ := randutil.NewPseudoRand()
+		precision := rng.Int31n(10) + 1
+		scale := rng.Int31n(precision + 1)
+		coeff := rng.Int63n(int64(math.Pow10(int(precision))))
+		dec := apd.New(coeff, -scale)
+		rat, err := decimalToRat(*dec, scale)
+		require.NoError(t, err)
+		roundtrip := ratToDecimal(rat, scale)
+		if dec.CmpTotal(&roundtrip) != 0 {
+			t.Errorf(`%s != %s`, dec, &roundtrip)
+		}
+	})
 }

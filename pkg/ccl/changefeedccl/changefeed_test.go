@@ -1041,6 +1041,25 @@ func TestChangefeedErrors(t *testing.T) {
 			t.Errorf(`expected '"information_schema.tables" does not exist' error got: %+v`, err)
 		}
 
+		// TODO(dan): These two tests shouldn't need initial data in the table
+		// to pass.
+		sqlDB.Exec(t, `CREATE TABLE dec (a DECIMAL PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO dec VALUES (1.0)`)
+		if _, err := sqlDB.DB.Exec(
+			`CREATE CHANGEFEED FOR dec WITH format=$1, confluent_schema_registry=$2`,
+			optFormatAvro, `bar`,
+		); !testutils.IsError(err, `pq: column a: decimal with no precision`) {
+			t.Errorf(`expected 'pq: column a: decimal with no precision' error got: %+v`, err)
+		}
+		sqlDB.Exec(t, `CREATE TABLE "uuid" (a UUID PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO "uuid" VALUES (gen_random_uuid())`)
+		if _, err := sqlDB.DB.Exec(
+			`CREATE CHANGEFEED FOR "uuid" WITH format=$1, confluent_schema_registry=$2`,
+			optFormatAvro, `bar`,
+		); !testutils.IsError(err, `pq: column a: type UUID not yet supported with avro`) {
+			t.Errorf(`expected 'pq: column a: type UUID' error got: %+v`, err)
+		}
+
 		// Check that confluent_schema_registry is only accepted if format is
 		// avro.
 		s := f.Server()
