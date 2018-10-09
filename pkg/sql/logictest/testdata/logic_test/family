@@ -37,6 +37,13 @@ SELECT * FROM abcd
 1 2 3 4
 5 6 7 8
 
+# Test point lookup, which triggers an optimization for only scanning one
+# column family.
+query I
+SELECT c FROM abcd WHERE a = 1
+----
+3
+
 query I
 SELECT count(*) FROM abcd
 ----
@@ -80,6 +87,30 @@ query IIII
 SELECT * FROM abcd WHERE a = 1
 ----
 1 NULL NULL NULL
+
+# Test updating a NULL family
+statement ok
+INSERT INTO abcd (a) VALUES (2)
+
+query IIII
+SELECT * FROM abcd WHERE a = 2
+----
+2 NULL NULL NULL
+
+statement ok
+UPDATE abcd SET d = 5 WHERE a = 2
+
+query IIII
+SELECT * FROM abcd WHERE a = 2
+----
+2 NULL NULL 5
+
+statement ok
+DELETE FROM abcd WHERE a = 2
+
+query IIII
+SELECT * FROM abcd WHERE a = 2
+----
 
 statement ok
 ALTER TABLE abcd ADD e STRING FAMILY f1

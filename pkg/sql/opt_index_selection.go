@@ -21,9 +21,11 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -99,7 +101,7 @@ func (p *planner) selectIndex(
 		// No where-clause, no ordering, and no specified index.
 		s.initOrdering(0 /* exactPrefix */, p.EvalContext())
 		var err error
-		s.spans, err = unconstrainedSpans(s.desc, s.index)
+		s.spans, err = unconstrainedSpans(s.desc, s.index, s.isDeleteSource)
 		if err != nil {
 			return nil, errors.Wrapf(err, "table ID = %d, index ID = %d", s.desc.ID, s.index.ID)
 		}
@@ -229,7 +231,8 @@ func (p *planner) selectIndex(
 	s.run.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
 
 	var err error
-	s.spans, err = spansFromConstraint(s.desc, c.index, c.ic.Constraint())
+	s.spans, err = spansFromConstraint(
+		s.desc, c.index, c.ic.Constraint(), s.valNeededForCol, s.isDeleteSource)
 	if err != nil {
 		return nil, errors.Wrapf(
 			err, "constraint = %s, table ID = %d, index ID = %d",
@@ -493,9 +496,9 @@ func (v *indexInfo) makeIndexConstraints(
 }
 
 func unconstrainedSpans(
-	tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+	tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor, forDelete bool,
 ) (roachpb.Spans, error) {
-	return spansFromConstraint(tableDesc, index, nil)
+	return spansFromConstraint(tableDesc, index, nil, exec.ColumnOrdinalSet{}, forDelete)
 }
 
 // spansFromConstraint converts the spans in a Constraint to roachpb.Spans.
@@ -503,7 +506,11 @@ func unconstrainedSpans(
 // interstices are pieces of the key that need to be inserted after each column
 // (for interleavings).
 func spansFromConstraint(
-	tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor, c *constraint.Constraint,
+	tableDesc *sqlbase.TableDescriptor,
+	index *sqlbase.IndexDescriptor,
+	c *constraint.Constraint,
+	needed exec.ColumnOrdinalSet,
+	forDelete bool,
 ) (roachpb.Spans, error) {
 	interstices := make([][]byte, len(index.ColumnDirections)+len(index.ExtraColumnIDs)+1)
 	interstices[0] = sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID)
@@ -527,22 +534,25 @@ func spansFromConstraint(
 			encoding.EncodeUvarintAscending(interstices[sharedPrefixLen], uint64(index.ID))
 	}
 
+	var spans roachpb.Spans
+	var err error
 	if c == nil || c.IsUnconstrained() {
 		// Encode a full span.
-		sp, err := spanFromConstraintSpan(tableDesc, index, &constraint.UnconstrainedSpan, interstices)
+		spans, err = appendSpansFromConstraintSpan(
+			spans, tableDesc, index, &constraint.UnconstrainedSpan, interstices, needed, forDelete)
 		if err != nil {
 			return nil, err
 		}
-		return roachpb.Spans{sp}, nil
+		return spans, nil
 	}
 
-	spans := make(roachpb.Spans, c.Spans.Count())
-	for i := range spans {
-		s, err := spanFromConstraintSpan(tableDesc, index, c.Spans.Get(i), interstices)
+	spans = make(roachpb.Spans, 0, c.Spans.Count())
+	for i := 0; i < c.Spans.Count(); i++ {
+		spans, err = appendSpansFromConstraintSpan(
+			spans, tableDesc, index, c.Spans.Get(i), interstices, needed, forDelete)
 		if err != nil {
 			return nil, err
 		}
-		spans[i] = s
 	}
 	return spans, nil
 }
@@ -590,19 +600,26 @@ func encodeConstraintKey(
 	return key, nil
 }
 
-// spanFromConstraintSpan converts a constraint.Span to a roachpb.Span.
-func spanFromConstraintSpan(
+// appendSpansFromConstraintSpan converts a constraint.Span to one or more
+// roachpb.Spans and appends them to the provided spans. It appends multiple
+// spans in the case that multiple, non-adjacent column families should be
+// scanned. The forDelete parameter indicates whether these spans will be used
+// for row deletion.
+func appendSpansFromConstraintSpan(
+	spans roachpb.Spans,
 	tableDesc *sqlbase.TableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	cs *constraint.Span,
 	interstices [][]byte,
-) (roachpb.Span, error) {
+	needed exec.ColumnOrdinalSet,
+	forDelete bool,
+) (roachpb.Spans, error) {
 	var s roachpb.Span
 	var err error
 	// Encode each logical part of the start key.
 	s.Key, err = encodeConstraintKey(index, cs.StartKey(), interstices)
 	if err != nil {
-		return roachpb.Span{}, err
+		return nil, err
 	}
 	if cs.StartBoundary() == constraint.IncludeBoundary {
 		s.Key = append(s.Key, interstices[cs.StartKey().Length()]...)
@@ -613,9 +630,38 @@ func spanFromConstraintSpan(
 	// Encode each logical part of the end key.
 	s.EndKey, err = encodeConstraintKey(index, cs.EndKey(), interstices)
 	if err != nil {
-		return roachpb.Span{}, err
+		return nil, err
 	}
 	s.EndKey = append(s.EndKey, interstices[cs.EndKey().Length()]...)
+
+	// Optimization: for single row lookups on a table with multiple column
+	// families, only scan the relevant column families. This is disabled for
+	// deletions to ensure that the entire row is deleted.
+	if !forDelete &&
+		needed.Len() > 0 &&
+		index.ID == tableDesc.PrimaryIndex.ID &&
+		len(tableDesc.Families) > 1 &&
+		cs.StartKey().Length() == len(tableDesc.PrimaryIndex.ColumnIDs) &&
+		s.Key.Equal(s.EndKey) {
+		neededFamilyIDs := neededColumnFamilyIDs(tableDesc, needed)
+		if len(neededFamilyIDs) < len(tableDesc.Families) {
+			for i, familyID := range neededFamilyIDs {
+				var span roachpb.Span
+				span.Key = make(roachpb.Key, len(s.Key))
+				copy(span.Key, s.Key)
+				span.Key = keys.MakeFamilyKey(span.Key, uint32(familyID))
+				span.EndKey = span.Key.PrefixEnd()
+				if i > 0 && familyID == neededFamilyIDs[i-1]+1 {
+					// This column family is adjacent to the previous one. We can merge
+					// the two spans into one.
+					spans[len(spans)-1].EndKey = span.EndKey
+				} else {
+					spans = append(spans, span)
+				}
+			}
+			return spans, nil
+		}
+	}
 
 	// We tighten the end key to prevent reading interleaved children after the
 	// last parent key. If cs.End.Inclusive is true, we also advance the key as
@@ -623,8 +669,31 @@ func spanFromConstraintSpan(
 	endInclusive := cs.EndBoundary() == constraint.IncludeBoundary
 	s.EndKey, err = sqlbase.AdjustEndKeyForInterleave(tableDesc, index, s.EndKey, endInclusive)
 	if err != nil {
-		return roachpb.Span{}, err
+		return nil, err
+	}
+	return append(spans, s), nil
+}
+
+func neededColumnFamilyIDs(
+	tableDesc *sqlbase.TableDescriptor, neededCols exec.ColumnOrdinalSet,
+) []sqlbase.FamilyID {
+	colIdxMap := tableDesc.ColumnIdxMap()
+
+	var needed []sqlbase.FamilyID
+	for _, family := range tableDesc.Families {
+		for _, columnID := range family.ColumnIDs {
+			columnOrdinal := colIdxMap[columnID]
+			if neededCols.Contains(columnOrdinal) {
+				needed = append(needed, family.ID)
+				break
+			}
+		}
 	}
 
-	return s, nil
+	// TODO(solon): There is a further optimization possible here: if there is at
+	// least one non-nullable column in the needed column families, we can
+	// potentially omit the primary family, since the primary keys are encoded
+	// in all families. (Note that composite datums are an exception.)
+
+	return needed
 }
