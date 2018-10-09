@@ -766,7 +766,7 @@ func TestChangefeedRetryableSinkError(t *testing.T) {
 	var failSink int64
 	failSinkHook := func() error {
 		if atomic.LoadInt64(&failSink) != 0 {
-			return retryableSinkError{cause: fmt.Errorf("synthetic retryable error")}
+			return &retryableSinkError{cause: fmt.Errorf("synthetic retryable error")}
 		}
 		return nil
 	}
@@ -801,14 +801,14 @@ func TestChangefeedRetryableSinkError(t *testing.T) {
 
 	// Insert initial rows into bank table.
 	for i := 0; i < 50; i++ {
-		sqlDB.Exec(t, `INSERT INTO d.foo VALUES($1, $2)`, i, fmt.Sprintf("value %d", i))
+		sqlDB.Exec(t, `INSERT INTO foo VALUES($1, $2)`, i, fmt.Sprintf("value %d", i))
 	}
 	// Set SQL Sink to return a retryable error.
 	atomic.StoreInt64(&failSink, 1)
 
 	// Insert set of rows while sink if failing.
 	for i := 50; i < 100; i++ {
-		sqlDB.Exec(t, `INSERT INTO d.foo VALUES($1, $2)`, i, fmt.Sprintf("value %d", i))
+		sqlDB.Exec(t, `INSERT INTO foo VALUES($1, $2)`, i, fmt.Sprintf("value %d", i))
 	}
 
 	// Verify that sink is failing requests.
@@ -822,7 +822,7 @@ func TestChangefeedRetryableSinkError(t *testing.T) {
 	})
 	atomic.StoreInt64(&failSink, 0)
 	for i := 100; i < 150; i++ {
-		sqlDB.Exec(t, `INSERT INTO d.foo VALUES($1, $2)`, i, fmt.Sprintf("value %d", i))
+		sqlDB.Exec(t, `INSERT INTO foo VALUES($1, $2)`, i, fmt.Sprintf("value %d", i))
 	}
 
 	validator := Validators{
@@ -856,6 +856,158 @@ func TestChangefeedRetryableSinkError(t *testing.T) {
 	}
 
 	sqlDB.Exec(t, `CANCEL JOB $1`, jobID)
+}
+
+// TestChangefeedDataTTL ensures that changefeeds fail with an error in the case
+// where the feed has fallen behind the GC TTL of the table data.
+func TestChangefeedDataTTL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		// Set a very simple channel-based, wait-and-resume function as the
+		// BeforeEmitRow hook.
+		var shouldWait int32
+		wait := make(chan struct{})
+		resume := make(chan struct{})
+		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
+			DistSQL.(*distsqlrun.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+		knobs.BeforeEmitRow = func() error {
+			if atomic.LoadInt32(&shouldWait) == 0 {
+				return nil
+			}
+			wait <- struct{}{}
+			<-resume
+			return nil
+		}
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		// Create the data table; it will only contain a single row with multiple
+		// versions.
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		counter := 0
+		upsertRow := func() {
+			counter++
+			sqlDB.Exec(t, `UPSERT INTO foo (a, b) VALUES (1, $1)`, fmt.Sprintf("version %d", counter))
+		}
+
+		// Create the initial version of the row and the changefeed itself. The initial
+		// version is necessary to prevent CREATE CHANGEFEED itself from hanging.
+		upsertRow()
+		dataExpiredRows := f.Feed(t, "CREATE CHANGEFEED FOR TABLE foo")
+		defer dataExpiredRows.Close(t)
+
+		// Set up our emit trap and update the row, which will allow us to "pause" the
+		// changefeed in order to force a GC.
+		atomic.StoreInt32(&shouldWait, 1)
+		upsertRow()
+		<-wait
+
+		// Upsert two additional versions. One of these will be deleted by the GC
+		// process before changefeed polling is resumed.
+		upsertRow()
+		upsertRow()
+
+		// Force a GC of the table. This should cause both older versions of the
+		// table to be deleted, with the middle version being lost to the changefeed.
+		forceTableGC(t, f.Server(), sqlDB, "d", "foo")
+
+		// Resume our changefeed normally.
+		atomic.StoreInt32(&shouldWait, 0)
+		resume <- struct{}{}
+
+		// Verify that the third call to Next() returns an error (the first is the
+		// initial row, the second is the first change. The third should detect the
+		// GC interval mismatch).
+		_, _, _, _, _, _ = dataExpiredRows.Next(t)
+		_, _, _, _, _, _ = dataExpiredRows.Next(t)
+		_, _, _, _, _, _ = dataExpiredRows.Next(t)
+		if err := dataExpiredRows.Err(); !testutils.IsError(err, `must be after replica GC threshold`) {
+			t.Errorf(`expected "must be after replica GC threshold" error got: %+v`, err)
+		}
+	}
+
+	t.Run("sinkless", enterpriseTest(testFn))
+	t.Run("enterprise", enterpriseTest(testFn))
+}
+
+// TestChangefeedSchemaTTL ensures that changefeeds fail with an error in the case
+// where the feed has fallen behind the GC TTL of the table's schema.
+func TestChangefeedSchemaTTL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		// Set a very simple channel-based, wait-and-resume function as the
+		// BeforeEmitRow hook.
+		var shouldWait int32
+		wait := make(chan struct{})
+		resume := make(chan struct{})
+		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
+			DistSQL.(*distsqlrun.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+		knobs.BeforeEmitRow = func() error {
+			if atomic.LoadInt32(&shouldWait) == 0 {
+				return nil
+			}
+			wait <- struct{}{}
+			<-resume
+			return nil
+		}
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+
+		// Create the data table; it will only contain a single row with multiple
+		// versions.
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		counter := 0
+		upsertRow := func() {
+			counter++
+			sqlDB.Exec(t, `UPSERT INTO foo (a, b) VALUES (1, $1)`, fmt.Sprintf("version %d", counter))
+		}
+
+		// Create the initial version of the row and the changefeed itself. The initial
+		// version is necessary to prevent CREATE CHANGEFEED itself from hanging.
+		upsertRow()
+		dataExpiredRows := f.Feed(t, "CREATE CHANGEFEED FOR TABLE foo")
+		defer dataExpiredRows.Close(t)
+
+		// Set up our emit trap and update the row, which will allow us to "pause" the
+		// changefeed in order to force a GC.
+		atomic.StoreInt32(&shouldWait, 1)
+		upsertRow()
+		<-wait
+
+		// Upsert two additional versions. One of these will be deleted by the GC
+		// process before changefeed polling is resumed.
+		waitForSchemaChange(t, sqlDB, "ALTER TABLE foo ADD COLUMN c STRING")
+		upsertRow()
+		waitForSchemaChange(t, sqlDB, "ALTER TABLE foo ADD COLUMN d STRING")
+		upsertRow()
+
+		// Force a GC of the table. This should cause both older versions of the
+		// table to be deleted, with the middle version being lost to the changefeed.
+		forceTableGC(t, f.Server(), sqlDB, "system", "descriptor")
+
+		// Resume our changefeed normally.
+		atomic.StoreInt32(&shouldWait, 0)
+		resume <- struct{}{}
+
+		// Verify that the third call to Next() returns an error (the first is the
+		// initial row, the second is the first change. The third should detect the
+		// GC interval mismatch).
+		_, _, _, _, _, _ = dataExpiredRows.Next(t)
+		_, _, _, _, _, _ = dataExpiredRows.Next(t)
+		_, _, _, _, _, _ = dataExpiredRows.Next(t)
+		if err := dataExpiredRows.Err(); !testutils.IsError(err, `GC threshold`) {
+			t.Errorf(`expected "GC threshold" error got: %+v`, err)
+		}
+	}
+
+	t.Run("sinkless", enterpriseTest(testFn))
+	t.Run("enterprise", enterpriseTest(testFn))
 }
 
 func TestChangefeedErrors(t *testing.T) {
