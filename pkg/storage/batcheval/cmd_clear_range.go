@@ -47,6 +47,9 @@ func declareKeysClearRange(
 	// We look up the range descriptor key to check whether the span
 	// is equal to the entire range for fast stats updating.
 	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+	// Add the GC threshold key, as this is updated as part of clearing a
+	// range of data.
+	spans.Add(spanset.SpanReadWrite, roachpb.Span{Key: keys.RangeLastGCKey(header.RangeID)})
 }
 
 // ClearRange wipes all MVCC versions of keys covered by the specified
@@ -54,7 +57,8 @@ func declareKeysClearRange(
 //
 // Note that "correct" use of this command is only possible for key
 // spans consisting of user data that we know is not being written to
-// or queried any more, such as after a DROP or TRUNCATE table.
+// or queried any more, such as after a DROP or TRUNCATE table, or
+// DROP index.
 func ClearRange(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {
@@ -75,6 +79,20 @@ func ClearRange(
 		return result.Result{}, err
 	}
 	cArgs.Stats.Subtract(statsDelta)
+
+	// Forward the range's GC threshold to the wall clock's now() in order
+	// to be newer than any previous write, and to disallow reads at earlier
+	// timestamps which will be invalid after deleting all existing keys
+	// in the span.
+	gcThreshold := cArgs.EvalCtx.GetGCThreshold()
+	gcThreshold.Forward(cArgs.EvalCtx.Clock().Now())
+	pd.Replicated.State = &storagebase.ReplicaState{
+		GCThreshold: &gcThreshold,
+	}
+	stateLoader := MakeStateLoader(cArgs.EvalCtx)
+	if err := stateLoader.SetGCThreshold(ctx, batch, cArgs.Stats, &gcThreshold); err != nil {
+		return result.Result{}, err
+	}
 
 	// If the total size of data to be cleared is less than
 	// clearRangeBytesThreshold, clear the individual values manually,

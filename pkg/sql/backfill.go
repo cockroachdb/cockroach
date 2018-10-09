@@ -254,7 +254,7 @@ func (sc *SchemaChanger) truncateIndexes(
 				if err := td.init(txn, nil /* *tree.EvalContext */); err != nil {
 					return err
 				}
-				resume, err = td.deleteIndex(
+				resume, err = td.clearIndex(
 					ctx,
 					&desc,
 					resumeAt,
