@@ -29,7 +29,7 @@ func registerEncryption(r *registry) {
 	runEncryption := func(ctx context.Context, t *test, c *cluster) {
 		nodes := c.nodes
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Start(ctx, c.Range(1, nodes), startArgs("--encrypt"))
+		c.Start(ctx, t, c.Range(1, nodes), startArgs("--encrypt"))
 
 		// Check that /_status/stores/local endpoint has encryption status.
 		for _, addr := range c.InternalAdminUIAddr(ctx, c.Range(1, nodes)) {
@@ -54,7 +54,7 @@ func registerEncryption(r *registry) {
 		}
 
 		// Restart node with encryption turned on to verify old key works.
-		c.Start(ctx, c.Range(1, nodes), startArgs("--encrypt"))
+		c.Start(ctx, t, c.Range(1, nodes), startArgs("--encrypt"))
 
 		testCLIGenKey := func(size int) error {
 			// Generate encryption store key through `./cockroach gen encryption-key -s=size aes-size.key`.

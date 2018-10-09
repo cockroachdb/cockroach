@@ -101,7 +101,7 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 			}
 			l.Printf("restarting %v after %s of downtime\n", target, downTime)
 			t.Reset(period)
-			c.Start(ctx, target)
+			c.Start(ctx, c.t.(*test), target)
 		}
 	}
 }

@@ -78,7 +78,7 @@ func runSqlapp(ctx context.Context, t *test, c *cluster, app, flags string, dur 
 
 	c.Put(ctx, b, app, appNode)
 	c.Put(ctx, cockroach, "./cockroach", roachNodes)
-	c.Start(ctx, roachNodes)
+	c.Start(ctx, t, roachNodes)
 
 	// TODO(nvanbenschoten): We are currently running these consistency checks with
 	// basic chaos. We should also run them in more chaotic environments which
