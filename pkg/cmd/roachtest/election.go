@@ -30,7 +30,9 @@ func registerElectionAfterRestart(r *registry) {
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			t.Status("starting up")
 			c.Put(ctx, cockroach, "./cockroach")
-			c.Start(ctx)
+			if err := c.Start(ctx); err != nil {
+				t.Fatal(err)
+			}
 
 			t.Status("creating table and splits")
 			c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
@@ -48,7 +50,9 @@ func registerElectionAfterRestart(r *registry) {
 
 			t.Status("restarting")
 			c.Stop(ctx)
-			c.Start(ctx)
+			if err := c.Start(ctx); err != nil {
+				t.Fatal(err)
+			}
 
 			// Each of the 100 ranges in this table must elect a leader for
 			// this query to complete. In naive raft, each of these

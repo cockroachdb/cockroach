@@ -99,7 +99,11 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
 	c.Put(ctx, workload, "./workload", workloadNode)
-	c.Start(ctx, crdbNodes, startArgs(`--args=--vmodule=changefeed=2,poller=2`))
+	if err := c.Start(
+		ctx, crdbNodes, startArgs(`--args=--vmodule=changefeed=2,poller=2`),
+	); err != nil {
+		t.Fatal(err)
+	}
 
 	tpcc := tpccWorkload{
 		sqlNodes:       crdbNodes,

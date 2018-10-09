@@ -25,7 +25,9 @@ import (
 
 func runBuildInfo(ctx context.Context, t *test, c *cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx)
+	if err := c.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
 
 	var details serverpb.DetailsResponse
 	url := `http://` + c.ExternalAdminUIAddr(ctx, c.Node(1))[0] + `/_status/details/local`

@@ -30,7 +30,9 @@ func registerYCSB(r *registry) {
 
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-		c.Start(ctx, c.Range(1, nodes))
+		if err := c.Start(ctx, c.Range(1, nodes)); err != nil {
+			t.Fatal(err)
+		}
 
 		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))

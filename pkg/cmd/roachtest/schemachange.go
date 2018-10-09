@@ -36,7 +36,9 @@ func registerSchemaChange(r *registry) {
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Put(ctx, workload, "./workload")
 
-			c.Start(ctx, c.All())
+			if err := c.Start(ctx, c.All()); err != nil {
+				t.Fatal(err)
+			}
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 

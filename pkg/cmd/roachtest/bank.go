@@ -221,7 +221,9 @@ func (s *bankState) chaosMonkey(
 			}
 			c.l.Printf("round %d: restarting %d\n", curRound, i)
 			c.Stop(ctx, c.Node(i))
-			c.Start(ctx, c.Node(i))
+			if err := c.Start(ctx, c.Node(i)); err != nil {
+				t.Fatal(err)
+			}
 			if stopClients {
 				// Reinitialize the client talking to the restarted node.
 				s.initClient(ctx, c, i)
@@ -319,7 +321,9 @@ func (s *bankState) waitClientsStop(
 
 func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx)
+	if err := c.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
 
 	// TODO(peter): Run for longer when !local.
 	start := timeutil.Now()
@@ -370,7 +374,9 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 
 func runBankNodeRestart(ctx context.Context, t *test, c *cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx)
+	if err := c.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
 
 	// TODO(peter): Run for longer when !local.
 	start := timeutil.Now()

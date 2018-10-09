@@ -37,7 +37,10 @@ func registerDrop(r *registry) {
 	runDrop := func(ctx context.Context, t *test, c *cluster, warehouses, nodes int, initDiskSpace int) {
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Range(1, nodes))
-		c.Start(ctx, c.Range(1, nodes), startArgs("-e", "COCKROACH_MEMPROF_INTERVAL=15s"))
+		args := startArgs("-e", "COCKROACH_MEMPROF_INTERVAL=15s")
+		if err := c.Start(ctx, c.Range(1, nodes), args); err != nil {
+			t.Fatal(err)
+		}
 
 		m := newMonitor(ctx, c, c.Range(1, nodes))
 		m.Go(func(ctx context.Context) error {

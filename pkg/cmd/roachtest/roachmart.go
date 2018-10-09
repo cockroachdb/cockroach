@@ -24,7 +24,9 @@ func registerRoachmart(r *registry) {
 	runRoachmart := func(ctx context.Context, t *test, c *cluster, partition bool) {
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")
-		c.Start(ctx)
+		if err := c.Start(ctx); err != nil {
+			t.Fatal(err)
+		}
 
 		// TODO(benesch): avoid hardcoding this list.
 		nodes := []struct {

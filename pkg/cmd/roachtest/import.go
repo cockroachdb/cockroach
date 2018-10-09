@@ -30,7 +30,9 @@ func registerImportTPCC(r *registry) {
 		c.Put(ctx, cockroach, "./cockroach")
 		c.Put(ctx, workload, "./workload")
 		t.Status("starting csv servers")
-		c.Start(ctx)
+		if err := c.Start(ctx); err != nil {
+			t.Fatal(err)
+		}
 		c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 		t.Status("running workload")
@@ -74,7 +76,9 @@ func registerImportTPCH(r *registry) {
 			Stable: true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				c.Put(ctx, cockroach, "./cockroach")
-				c.Start(ctx)
+				if err := c.Start(ctx); err != nil {
+					t.Fatal(err)
+				}
 				conn := c.Conn(ctx, 1)
 				if _, err := conn.Exec(`
 					CREATE DATABASE csv;

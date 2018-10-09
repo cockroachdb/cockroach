@@ -64,12 +64,17 @@ func runClearRange(ctx context.Context, t *test, c *cluster, aggressiveChecks bo
 	if aggressiveChecks {
 		// Run with an env var that runs a synchronous consistency check after each rebalance and merge.
 		// This slows down merges, so it might hide some races.
-		c.Start(ctx, startArgs(
+		args := startArgs(
 			"--env=COCKROACH_CONSISTENCY_AGGRESSIVE=true",
 			"--env=COCKROACH_FATAL_ON_STATS_MISMATCH=true",
-		))
+		)
+		if err := c.Start(ctx, args); err != nil {
+			t.Fatal(err)
+		}
 	} else {
-		c.Start(ctx)
+		if err := c.Start(ctx); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Also restore a much smaller table. We'll use it to run queries against

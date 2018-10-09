@@ -24,7 +24,9 @@ func registerDebug(r *registry) {
 	runDebug := func(ctx context.Context, t *test, c *cluster) {
 		nodes := c.nodes
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Start(ctx, c.Range(1, nodes))
+		if err := c.Start(ctx, c.Range(1, nodes)); err != nil {
+			t.Fatal(err)
+		}
 		db := c.Conn(ctx, nodes)
 
 		// Run debug zip command against a node, produce a zip file, extract it, and
@@ -94,7 +96,9 @@ func registerDebugHeap(r *registry) {
 	runDebug := func(ctx context.Context, t *test, c *cluster) {
 		nodes := c.nodes
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Start(ctx, c.Range(1, nodes))
+		if err := c.Start(ctx, c.Range(1, nodes)); err != nil {
+			t.Fatal(err)
+		}
 		db := c.Conn(ctx, nodes)
 
 		// Run debug zip command against a node, produce a zip file, extract it, and

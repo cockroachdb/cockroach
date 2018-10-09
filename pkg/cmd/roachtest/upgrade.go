@@ -48,7 +48,9 @@ func registerUpgrade(r *registry) {
 		c.Put(ctx, b, "./cockroach", c.Range(1, nodes))
 		// Force disable encryption.
 		// TODO(mberhault): allow it once oldVersion >= 2.1.
-		c.Start(ctx, c.Range(1, nodes), startArgsDontEncrypt)
+		if err := c.Start(ctx, c.Range(1, nodes), startArgsDontEncrypt); err != nil {
+			t.Fatal(err)
+		}
 
 		const stageDuration = 30 * time.Second
 		const timeUntilStoreDead = 90 * time.Second
@@ -140,7 +142,9 @@ func registerUpgrade(r *registry) {
 				t.Fatal(err)
 			}
 			c.Put(ctx, cockroach, "./cockroach", c.Node(i))
-			c.Start(ctx, c.Node(i), startArgsDontEncrypt)
+			if err := c.Start(ctx, c.Node(i), startArgsDontEncrypt); err != nil {
+				t.Fatal(err)
+			}
 			if err := sleep(stageDuration); err != nil {
 				t.Fatal(err)
 			}
@@ -162,7 +166,9 @@ func registerUpgrade(r *registry) {
 			t.Fatal(err)
 		}
 		c.Put(ctx, cockroach, "./cockroach", c.Node(nodes))
-		c.Start(ctx, c.Node(nodes), startArgsDontEncrypt)
+		if err := c.Start(ctx, c.Node(nodes), startArgsDontEncrypt); err != nil {
+			t.Fatal(err)
+		}
 		if err := sleep(stageDuration); err != nil {
 			t.Fatal(err)
 		}
@@ -203,7 +209,9 @@ func registerUpgrade(r *registry) {
 		}
 
 		// Restart the previously stopped node.
-		c.Start(ctx, c.Node(nodes-1), startArgsDontEncrypt)
+		if err := c.Start(ctx, c.Node(nodes-1), startArgsDontEncrypt); err != nil {
+			t.Fatal(err)
+		}
 		if err := sleep(stageDuration); err != nil {
 			t.Fatal(err)
 		}
@@ -340,7 +348,9 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 				for _, node := range nodes {
 					c.l.Printf("%s: upgrading node %d\n", newVersion, node)
 					c.Stop(ctx, c.Node(node))
-					c.Start(ctx, c.Node(node), args)
+					if err := c.Start(ctx, c.Node(node), args); err != nil {
+						t.Fatal(err)
+					}
 
 					checkNode(node, newVersion)
 
@@ -514,7 +524,9 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 	// Hack to skip initializing settings which doesn't work on very old versions
 	// of cockroach.
 	c.Run(ctx, c.Node(1), "mkdir -p {store-dir} && touch {store-dir}/settings-initialized")
-	c.Start(ctx, nodes, args)
+	if err := c.Start(ctx, nodes, args); err != nil {
+		t.Fatal(err)
+	}
 
 	func() {
 		// Create a bunch of tables, over the batch size on which some migrations

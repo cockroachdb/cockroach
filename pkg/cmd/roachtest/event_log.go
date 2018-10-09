@@ -34,7 +34,9 @@ func runEventLog(ctx context.Context, t *test, c *cluster) {
 	}
 
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx)
+	if err := c.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
 
 	// Verify that "node joined" and "node restart" events are recorded whenever
 	// a node starts and contacts the cluster.
@@ -104,7 +106,9 @@ func runEventLog(ctx context.Context, t *test, c *cluster) {
 
 	// Stop and Start Node 3, and verify the node restart message.
 	c.Stop(ctx, c.Node(3))
-	c.Start(ctx, c.Node(3))
+	if err := c.Start(ctx, c.Node(3)); err != nil {
+		t.Fatal(err)
+	}
 
 	err = retry.ForDuration(10*time.Second, func() error {
 		// Query all node restart events. There should only be one.

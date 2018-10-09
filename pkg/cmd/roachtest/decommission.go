@@ -55,10 +55,14 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 	c.Put(ctx, cockroach, "./cockroach", c.All())
 
 	for i := 1; i <= numDecom; i++ {
-		c.Start(ctx, c.Node(i), startArgs(fmt.Sprintf("-a=--attrs=node%d", i)))
+		if err := c.Start(ctx, c.Node(i), startArgs(fmt.Sprintf("-a=--attrs=node%d", i))); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	c.Start(ctx, c.Range(numDecom+1, nodes))
+	if err := c.Start(ctx, c.Range(numDecom+1, nodes)); err != nil {
+		t.Fatal(err)
+	}
 	c.Run(ctx, c.Node(nodes), `./workload init kv --drop`)
 
 	waitReplicatedAwayFrom := func(downNodeID string) error {
@@ -223,8 +227,11 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 			db := c.Conn(ctx, 1)
 			defer db.Close()
 
-			c.Start(ctx, c.Node(node), startArgs(fmt.Sprintf("-a=--join %s --attrs=node%d",
-				c.InternalAddr(ctx, c.Node(nodes))[0], node)))
+			args := startArgs(fmt.Sprintf("-a=--join %s --attrs=node%d",
+				c.InternalAddr(ctx, c.Node(nodes))[0], node))
+			if err := c.Start(ctx, c.Node(node), args); err != nil {
+				t.Fatal(err)
+			}
 		}
 		// TODO(tschottdorf): run some ui sanity checks about decommissioned nodes
 		// having disappeared. Verify that the workloads don't dip their qps or
@@ -257,7 +264,9 @@ func registerDecommission(r *registry) {
 func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	args := startArgs("--sequential", "--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx, args)
+	if err := c.Start(ctx, args); err != nil {
+		t.Fatal(err)
+	}
 
 	execCLI := func(
 		ctx context.Context,
@@ -469,7 +478,9 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 
 		// Bring the node back up. It's still decommissioned, so it won't be of much use.
 		c.Stop(ctx, c.Node(3))
-		c.Start(ctx, c.Node(3), args)
+		if err := c.Start(ctx, c.Node(3), args); err != nil {
+			t.Fatal(err)
+		}
 
 		// Recommission. Welcome back!
 		if _, err = decommission(ctx, 2, c.Node(3), "recommission"); err != nil {
@@ -491,7 +502,9 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		if strings.Split(o, "\n")[1] != waitLiveDeprecated {
 			t.Fatal("missing deprecate message for --wait=live")
 		}
-		c.Start(ctx, c.Node(1), args)
+		if err := c.Start(ctx, c.Node(1), args); err != nil {
+			t.Fatal(err)
+		}
 		// Run a second time to wait until the replicas have all been GC'ed.
 		// Note that we specify "all" because even though the first node is
 		// now running, it may not be live by the time the command runs.

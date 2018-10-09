@@ -42,7 +42,9 @@ func registerCancel(r *registry) {
 		queries []string, warehouses int, useDistsql bool) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Put(ctx, workload, "./workload", c.All())
-		c.Start(ctx, c.All())
+		if err := c.Start(ctx, c.All()); err != nil {
+			t.Fatal(err)
+		}
 
 		m := newMonitor(ctx, c, c.All())
 		m.Go(func(ctx context.Context) error {

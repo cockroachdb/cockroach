@@ -81,7 +81,9 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 				c.Reformat(ctx, crdbNodes, "zfs")
 
 				t.Status("loading dataset")
-				c.Start(ctx, crdbNodes)
+				if err := c.Start(ctx, crdbNodes); err != nil {
+					t.Fatal(err)
+				}
 				cmd := fmt.Sprintf(
 					"./workload fixtures load tpcc --warehouses=%d {pgurl:1}", fixtureWarehouses)
 				c.Run(ctx, workloadNode, cmd)
@@ -91,9 +93,13 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 			}
 			t.Status(`restoring store dumps`)
 			c.Run(ctx, crdbNodes, "sudo zfs rollback data1@pristine")
-			c.Start(ctx, crdbNodes)
+			if err := c.Start(ctx, crdbNodes); err != nil {
+				t.Fatal(err)
+			}
 		} else {
-			c.Start(ctx, crdbNodes)
+			if err := c.Start(ctx, crdbNodes); err != nil {
+				t.Fatal(err)
+			}
 			c.Run(ctx, workloadNode, fmt.Sprintf(
 				`./workload fixtures load tpcc --warehouses=%d {pgurl:1}`, fixtureWarehouses,
 			))
@@ -363,7 +369,9 @@ func loadTPCCBench(
 		// If the dataset exists but is not large enough, wipe the cluster
 		// before restoring.
 		c.Wipe(ctx, roachNodes)
-		c.Start(ctx, append(b.startOpts(), roachNodes)...)
+		if err := c.Start(ctx, append(b.startOpts(), roachNodes)...); err != nil {
+			c.t.Fatal(err)
+		}
 	} else if pqErr, ok := err.(*pq.Error); !ok ||
 		string(pqErr.Code) != pgerror.CodeInvalidCatalogNameError {
 		return err
@@ -482,7 +490,9 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 
 	c.Put(ctx, cockroach, "./cockroach", roachNodes)
 	c.Put(ctx, workload, "./workload", loadNodes)
-	c.Start(ctx, append(b.startOpts(), roachNodes)...)
+	if err := c.Start(ctx, append(b.startOpts(), roachNodes)...); err != nil {
+		t.Fatal(err)
+	}
 
 	useHAProxy := b.Chaos
 	if useHAProxy {
@@ -515,7 +525,9 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 			// inter-trial interactions.
 			m.ExpectDeaths(int32(len(roachNodes)))
 			c.Stop(ctx, roachNodes)
-			c.Start(ctx, append(b.startOpts(), roachNodes)...)
+			if err := c.Start(ctx, append(b.startOpts(), roachNodes)...); err != nil {
+				t.Fatal(err)
+			}
 			time.Sleep(10 * time.Second)
 
 			// Set up the load generation configuration.

@@ -34,7 +34,9 @@ func registerAllocator(r *registry) {
 
 		// Start the first `start` nodes and restore the fixture
 		args := startArgs("--args=--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
-		c.Start(ctx, c.Range(1, start), args)
+		if err := c.Start(ctx, c.Range(1, start), args); err != nil {
+			t.Fatal(err)
+		}
 		db := c.Conn(ctx, 1)
 		defer db.Close()
 
@@ -49,7 +51,9 @@ func registerAllocator(r *registry) {
 		m.Wait()
 
 		// Start the remaining nodes to kick off upreplication/rebalancing.
-		c.Start(ctx, c.Range(start+1, c.nodes), args)
+		if err := c.Start(ctx, c.Range(start+1, c.nodes), args); err != nil {
+			t.Fatal(err)
+		}
 
 		c.Run(ctx, c.Node(1), `./workload init kv --drop`)
 		for node := 1; node <= c.nodes; node++ {

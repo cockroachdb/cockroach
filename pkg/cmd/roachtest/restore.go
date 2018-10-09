@@ -212,7 +212,9 @@ func registerRestore(r *registry) {
 			Stable: true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				c.Put(ctx, cockroach, "./cockroach")
-				c.Start(ctx)
+				if err := c.Start(ctx); err != nil {
+					t.Fatal(err)
+				}
 				m := newMonitor(ctx, c)
 
 				// Run the disk usage logger in the monitor to guarantee its

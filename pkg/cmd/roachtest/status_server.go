@@ -29,7 +29,9 @@ import (
 
 func runStatusServer(ctx context.Context, t *test, c *cluster) {
 	c.Put(ctx, cockroach, "./cockroach")
-	c.Start(ctx)
+	if err := c.Start(ctx); err != nil {
+		t.Fatal(err)
+	}
 
 	// Get the ids for each node.
 	idMap := make(map[int]roachpb.NodeID)
