@@ -212,28 +212,20 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 	seq := &sequence{config: w, val: int64(writeSeq)}
 	numEmptyResults := new(int64)
 	for i := 0; i < w.connFlags.Concurrency; i++ {
-		// Give each kvOp worker its own SQL connection and prepare statements
-		// using this connection. This avoids lock contention in the sql.Rows
-		// objects they produce.
+		// Give each kvOp worker its own SQL connection.
 		conn, err := db.Conn(ctx)
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
-		readStmt, err := conn.PrepareContext(ctx, readStmtStr)
-		if err != nil {
-			return workload.QueryLoad{}, err
-		}
-		writeStmt, err := conn.PrepareContext(ctx, writeStmtStr)
-		if err != nil {
-			return workload.QueryLoad{}, err
-		}
-		op := kvOp{
+		op := &kvOp{
 			config:          w,
 			hists:           reg.GetHandle(),
-			conn:            conn,
-			readStmt:        readStmt,
-			writeStmt:       writeStmt,
 			numEmptyResults: numEmptyResults,
+		}
+		op.readStmt = op.sr.Define(readStmtStr)
+		op.writeStmt = op.sr.Define(writeStmtStr)
+		if err := op.sr.Init(ctx, conn, w.connFlags); err != nil {
+			return workload.QueryLoad{}, err
 		}
 		if w.sequential {
 			op.g = newSequentialGenerator(seq)
@@ -249,9 +241,9 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 type kvOp struct {
 	config          *kv
 	hists           *workload.Histograms
-	conn            *gosql.Conn
-	readStmt        *gosql.Stmt
-	writeStmt       *gosql.Stmt
+	sr              workload.SQLRunner
+	readStmt        workload.StmtHandle
+	writeStmt       workload.StmtHandle
 	g               keyGenerator
 	numEmptyResults *int64 // accessed atomically
 }
@@ -263,7 +255,7 @@ func (o *kvOp) run(ctx context.Context) error {
 			args[i] = o.g.readKey()
 		}
 		start := timeutil.Now()
-		rows, err := o.readStmt.QueryContext(ctx, args...)
+		rows, err := o.readStmt.Query(ctx, args...)
 		if err != nil {
 			return err
 		}
@@ -286,7 +278,7 @@ func (o *kvOp) run(ctx context.Context) error {
 		args[j+1] = randomBlock(o.config, o.g.rand())
 	}
 	start := timeutil.Now()
-	_, err := o.writeStmt.ExecContext(ctx, args...)
+	_, err := o.writeStmt.Exec(ctx, args...)
 	elapsed := timeutil.Since(start)
 	o.hists.Get(`write`).Record(elapsed)
 	return err
