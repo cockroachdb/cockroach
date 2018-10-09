@@ -620,7 +620,8 @@ func attachToExistingCluster(
 		t.Fatalf("TODO(peter): unsupported nodes spec: %v", nodes)
 	}
 
-	l, err := rootLogger(t.Name())
+	logPath := filepath.Join(t.ArtifactsDir(), "test.log")
+	l, err := rootLogger(logPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -663,7 +664,7 @@ func attachToExistingCluster(
 
 // validateCluster takes a cluster and checks that the reality corresponds to
 // the cluster's spec. It's intended to be used with clusters created by
-// attachToExistingCluste(); otherwise, clusters create with newCluster() are
+// attachToExistingCluster(); otherwise, clusters create with newCluster() are
 // know to be up to spec.
 func (c *cluster) validate(ctx context.Context, nodes []nodeSpec, l *logger) error {
 	// Perform validation on the existing cluster.
