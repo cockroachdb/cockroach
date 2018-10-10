@@ -237,4 +237,3 @@ query I
 ((WITH lim(x) AS (SELECT 1) SELECT 123) LIMIT (SELECT x FROM lim))
 ----
 123
-

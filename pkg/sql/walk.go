@@ -26,6 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
+type observeVerbosity int
+
+const (
+	observeMetadata observeVerbosity = iota
+	observeAlways
+)
+
 // planObserver is the interface to implement by components that need
 // to visit a planNode tree.
 // Used mainly by EXPLAIN, but also for the collector of back-references
@@ -41,7 +48,7 @@ type planObserver struct {
 	enterNode func(ctx context.Context, nodeName string, plan planNode) (bool, error)
 
 	// expr is invoked for each expression field in each node.
-	expr func(nodeName, fieldName string, n int, expr tree.Expr)
+	expr func(verbosity observeVerbosity, nodeName, fieldName string, n int, expr tree.Expr)
 
 	// attr is invoked for non-expression metadata in each node.
 	attr func(nodeName, fieldName, attr string)
@@ -158,7 +165,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 					if v.observer.attr != nil {
 						fieldName = fmt.Sprintf("row %d, expr", i)
 					}
-					v.expr(name, fieldName, j, expr)
+					v.metadataExpr(name, fieldName, j, expr)
 				}
 			}
 		}
@@ -196,7 +203,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *renderNode:
 		if v.observer.expr != nil {
 			for i, r := range n.render {
-				v.expr(name, "render", i, r)
+				v.metadataExpr(name, "render", i, r)
 			}
 		}
 		n.source.plan = v.visit(n.source.plan)
@@ -351,10 +358,10 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *windowNode:
 		if v.observer.expr != nil {
 			for i, agg := range n.funcs {
-				v.expr(name, "window", i, agg.expr)
+				v.metadataExpr(name, "window", i, agg.expr)
 			}
 			for i, rexpr := range n.windowRender {
-				v.expr(name, "render", i, rexpr)
+				v.metadataExpr(name, "render", i, rexpr)
 			}
 		}
 		n.plan = v.visit(n.plan)
@@ -386,10 +393,10 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 
 		if v.observer.expr != nil {
 			for i, dexpr := range n.run.defaultExprs {
-				v.expr(name, "default", i, dexpr)
+				v.metadataExpr(name, "default", i, dexpr)
 			}
 			for i, cexpr := range n.run.checkHelper.Exprs {
-				v.expr(name, "check", i, cexpr)
+				v.metadataExpr(name, "check", i, cexpr)
 			}
 		}
 		n.source = v.visit(n.source)
@@ -411,13 +418,13 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 
 		if v.observer.expr != nil {
 			for i, dexpr := range n.run.defaultExprs {
-				v.expr(name, "default", i, dexpr)
+				v.metadataExpr(name, "default", i, dexpr)
 			}
 			for i, cexpr := range n.run.checkHelper.Exprs {
-				v.expr(name, "check", i, cexpr)
+				v.metadataExpr(name, "check", i, cexpr)
 			}
 			n.run.tw.walkExprs(func(d string, i int, e tree.TypedExpr) {
-				v.expr(name, d, i, e)
+				v.metadataExpr(name, d, i, e)
 			})
 		}
 		n.source = v.visit(n.source)
@@ -438,10 +445,10 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		}
 		if v.observer.expr != nil {
 			for i, cexpr := range n.run.computeExprs {
-				v.expr(name, "computed", i, cexpr)
+				v.metadataExpr(name, "computed", i, cexpr)
 			}
 			for i, cexpr := range n.run.checkHelper.Exprs {
-				v.expr(name, "check", i, cexpr)
+				v.metadataExpr(name, "check", i, cexpr)
 			}
 		}
 		// An updater has no sub-expressions, so nothing special to do here.
@@ -473,13 +480,13 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *setVarNode:
 		if v.observer.expr != nil {
 			for i, texpr := range n.typedValues {
-				v.expr(name, "value", i, texpr)
+				v.metadataExpr(name, "value", i, texpr)
 			}
 		}
 
 	case *setClusterSettingNode:
 		if v.observer.expr != nil && n.value != nil {
-			v.expr(name, "value", -1, n.value)
+			v.metadataExpr(name, "value", -1, n.value)
 		}
 
 	case *delayedNode:
@@ -522,13 +529,13 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 
 	case *setZoneConfigNode:
 		if v.observer.expr != nil {
-			v.observer.expr(name, "yaml", -1, n.yamlConfig)
+			v.metadataExpr(name, "yaml", -1, n.yamlConfig)
 		}
 
 	case *projectSetNode:
 		if v.observer.expr != nil {
 			for i, texpr := range n.exprs {
-				v.observer.expr(name, "render", i, texpr)
+				v.metadataExpr(name, "render", i, texpr)
 			}
 		}
 		n.source = v.visit(n.source)
@@ -541,7 +548,16 @@ func (v *planVisitor) expr(nodeName string, fieldName string, n int, expr tree.E
 	if v.err != nil {
 		return
 	}
-	v.observer.expr(nodeName, fieldName, n, expr)
+	v.observer.expr(observeAlways, nodeName, fieldName, n, expr)
+}
+
+// metadata wraps observer.expr() and provides it with the current node's
+// name, with verbosity = metadata.
+func (v *planVisitor) metadataExpr(nodeName string, fieldName string, n int, expr tree.Expr) {
+	if v.err != nil {
+		return
+	}
+	v.observer.expr(observeMetadata, nodeName, fieldName, n, expr)
 }
 
 // nodeName returns the name of the given planNode as string.  The

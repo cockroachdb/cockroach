@@ -31,6 +31,7 @@ query TTT
 EXPLAIN SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
 limit                ·         ·
+ │                   count     2
  └── sort            ·         ·
       │              order     +b
       │              strategy  top 2
@@ -70,6 +71,7 @@ query TTT
 EXPLAIN SELECT b FROM t ORDER BY a LIMIT 1
 ----
 limit                ·      ·
+ │                   count  1
  └── nosort          ·      ·
       │              order  +a
       └── render     ·      ·

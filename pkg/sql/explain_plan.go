@@ -180,7 +180,7 @@ type explainEntry struct {
 type explainFlags struct {
 	// showMetadata indicates whether the output has separate columns for the
 	// schema signature and ordering information of the intermediate
-	// nodes (also, whether the plan prints expressions embedded inside the node).
+	// nodes.
 	showMetadata bool
 
 	// qualifyNames determines whether column names in expressions
@@ -300,7 +300,7 @@ func (e *explainer) populateEntries(ctx context.Context, plan planNode, subquery
 		if subqueryPlans[i].plan != nil {
 			_ = walkPlan(ctx, subqueryPlans[i].plan, observer)
 		} else if subqueryPlans[i].started {
-			e.expr("subquery", "result", -1, subqueryPlans[i].result)
+			e.expr(observeAlways, "subquery", "result", -1, subqueryPlans[i].result)
 		}
 		_ = e.leaveNode("subquery", subqueryPlans[i].plan)
 	}
@@ -350,8 +350,11 @@ func (e *explainer) observer() planObserver {
 }
 
 // expr implements the planObserver interface.
-func (e *explainer) expr(nodeName, fieldName string, n int, expr tree.Expr) {
-	if e.showMetadata && expr != nil {
+func (e *explainer) expr(v observeVerbosity, nodeName, fieldName string, n int, expr tree.Expr) {
+	if expr != nil {
+		if !e.showMetadata && v == observeMetadata {
+			return
+		}
 		if nodeName == "join" {
 			qualifySave := e.fmtFlags
 			e.fmtFlags.SetFlags(tree.FmtShowTableAliases)
