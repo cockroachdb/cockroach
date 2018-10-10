@@ -80,7 +80,7 @@ func (sn scriptNemesis) Off() error {
 
 func runDebugSyncTest(cmd *cobra.Command, args []string) error {
 	// TODO(tschottdorf): make this a flag.
-	duration := 2 * time.Minute
+	duration := 10 * time.Minute
 
 	ctx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()
@@ -204,7 +204,10 @@ func runSyncer(
 			}
 		default:
 			b := db.NewBatch()
-			b.Put(k, v)
+			if err := b.Put(k, v); err != nil {
+				seq--
+				return seq, err
+			}
 			if err := b.Commit(true /* sync */); err != nil {
 				seq--
 				return seq, err
@@ -240,5 +243,4 @@ func runSyncer(
 		default:
 		}
 	}
-	panic("unreachable")
 }
