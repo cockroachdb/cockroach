@@ -47,13 +47,12 @@ func (c *CustomFuncs) Init(e *explorer) {
 //
 // ----------------------------------------------------------------------
 
-// IsCanonicalScan returns true if the given ScanOpDef is an original unaltered
-// primary index Scan operator (i.e. unconstrained and not limited).
-func (c *CustomFuncs) IsCanonicalScan(def memo.PrivateID) bool {
-	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
-	return scanOpDef.Index == opt.PrimaryIndex &&
-		scanOpDef.Constraint == nil &&
-		scanOpDef.HardLimit == 0
+// IsCanonicalScan returns true if the given ScanPrivate is an original
+// unaltered primary index Scan operator (i.e. unconstrained and not limited).
+func (c *CustomFuncs) IsCanonicalScan(scan *memo.ScanPrivate) bool {
+	return scan.Index == opt.PrimaryIndex &&
+		scan.Constraint == nil &&
+		scan.HardLimit == 0
 }
 
 // GenerateIndexScans enumerates all secondary indexes on the given Scan
@@ -67,13 +66,10 @@ func (c *CustomFuncs) IsCanonicalScan(def memo.PrivateID) bool {
 //       Index joins are only lower cost when their input does not include all
 //       rows from the table. See ConstrainScans and LimitScans for cases where
 //       index joins are introduced into the memo.
-func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
-	c.e.exprs = c.e.exprs[:0]
-	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
-
+func (c *CustomFuncs) GenerateIndexScans(grp memo.RelExpr, scanPrivate *memo.ScanPrivate) {
 	// Iterate over all secondary indexes.
 	var iter scanIndexIter
-	iter.init(c.e.mem, scanOpDef)
+	iter.init(c.e.mem, scanPrivate)
 	for iter.next() {
 		// Skip primary index.
 		if iter.indexOrdinal == opt.PrimaryIndex {
@@ -83,10 +79,9 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 		// If the secondary index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
 		if iter.isCovering() {
-			newDef := *scanOpDef
-			newDef.Index = iter.indexOrdinal
-			indexScan := memo.MakeScanExpr(c.e.mem.InternScanOpDef(&newDef))
-			c.e.exprs = append(c.e.exprs, memo.Expr(indexScan))
+			scan := memo.ScanExpr{ScanPrivate: *scanPrivate}
+			scan.Index = iter.indexOrdinal
+			c.e.mem.AddScanToGroup(&scan, grp)
 			continue
 		}
 
@@ -94,26 +89,24 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 		// operator that provides the columns missing from the index. Note that
 		// if ForceIndex=true, scanIndexIter only returns the one index that is
 		// being forced, so no need to check that here.
-		if !scanOpDef.Flags.ForceIndex {
+		if !scanPrivate.Flags.ForceIndex {
 			continue
 		}
 
 		var sb indexScanBuilder
-		sb.init(c, scanOpDef.Table)
+		sb.init(c, scanPrivate.Table)
 
 		// Scan whatever columns we need which are available from the index, plus
 		// the PK columns.
-		newDef := *scanOpDef
-		newDef.Index = iter.indexOrdinal
-		newDef.Cols = iter.indexCols().Intersection(scanOpDef.Cols)
-		newDef.Cols.UnionWith(sb.primaryKeyCols())
-		sb.setScan(c.e.f.InternScanOpDef(&newDef))
+		newScanPrivate := *scanPrivate
+		newScanPrivate.Index = iter.indexOrdinal
+		newScanPrivate.Cols = iter.indexCols().Intersection(scanPrivate.Cols)
+		newScanPrivate.Cols.UnionWith(sb.primaryKeyCols())
+		sb.setScan(&newScanPrivate)
 
-		sb.addIndexJoin(scanOpDef.Cols)
-		c.e.exprs = append(c.e.exprs, sb.build())
+		sb.addIndexJoin(scanPrivate.Cols)
+		sb.build(grp)
 	}
-
-	return c.e.exprs
 }
 
 // ----------------------------------------------------------------------
@@ -182,74 +175,68 @@ func (c *CustomFuncs) GenerateIndexScans(def memo.PrivateID) []memo.Expr {
 //      )
 //
 func (c *CustomFuncs) GenerateConstrainedScans(
-	scanDef memo.PrivateID, filter memo.GroupID,
-) []memo.Expr {
-	c.e.exprs = c.e.exprs[:0]
-	scanOpDef := c.e.mem.LookupPrivate(scanDef).(*memo.ScanOpDef)
-
+	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
+) {
 	var sb indexScanBuilder
-	sb.init(c, scanOpDef.Table)
+	sb.init(c, scanPrivate.Table)
 
 	// Iterate over all indexes.
 	var iter scanIndexIter
-	iter.init(c.e.mem, scanOpDef)
+	iter.init(c.e.mem, scanPrivate)
 	for iter.next() {
 		// Check whether the filter can constrain the index.
 		constraint, remaining, ok := c.tryConstrainIndex(
-			filter, scanOpDef.Table, iter.indexOrdinal, false /* isInverted */)
+			filters, scanPrivate.Table, iter.indexOrdinal, false /* isInverted */)
 		if !ok {
 			continue
 		}
 
-		// Construct new constrained ScanOpDef.
-		newDef := *scanOpDef
-		newDef.Index = iter.indexOrdinal
-		newDef.Constraint = constraint
+		// Construct new constrained ScanPrivate.
+		newScanPrivate := *scanPrivate
+		newScanPrivate.Index = iter.indexOrdinal
+		newScanPrivate.Constraint = constraint
 
 		// If the alternate index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
 		if iter.isCovering() {
-			sb.setScan(c.e.f.InternScanOpDef(&newDef))
+			sb.setScan(&newScanPrivate)
 
-			// If there is a remaining filter, then the constrained Scan operator
+			// If there are remaining filters, then the constrained Scan operator
 			// will be created in a new group, and a Select operator will be added
 			// to the same group as the original operator.
 			sb.addSelect(remaining)
-			c.e.exprs = append(c.e.exprs, sb.build())
+			sb.build(grp)
 			continue
 		}
 
 		// Otherwise, construct an IndexJoin operator that provides the columns
 		// missing from the index.
-		if scanOpDef.Flags.NoIndexJoin {
+		if scanPrivate.Flags.NoIndexJoin {
 			continue
 		}
 
 		// Scan whatever columns we need which are available from the index, plus
 		// the PK columns.
-		newDef.Cols = iter.indexCols().Intersection(scanOpDef.Cols)
-		newDef.Cols.UnionWith(sb.primaryKeyCols())
-		sb.setScan(c.e.f.InternScanOpDef(&newDef))
+		newScanPrivate.Cols = iter.indexCols().Intersection(scanPrivate.Cols)
+		newScanPrivate.Cols.UnionWith(sb.primaryKeyCols())
+		sb.setScan(&newScanPrivate)
 
 		// If remaining filter exists, split it into one part that can be pushed
 		// below the IndexJoin, and one part that needs to stay above.
-		remaining = sb.addSelectAfterSplit(remaining, newDef.Cols)
-		sb.addIndexJoin(scanOpDef.Cols)
+		remaining = sb.addSelectAfterSplit(remaining, newScanPrivate.Cols)
+		sb.addIndexJoin(scanPrivate.Cols)
 		sb.addSelect(remaining)
 
-		c.e.exprs = append(c.e.exprs, sb.build())
+		sb.build(grp)
 	}
-
-	return c.e.exprs
 }
 
 // HasInvertedIndexes returns true if at least one inverted index is defined on
 // the Scan operator's table.
-func (c *CustomFuncs) HasInvertedIndexes(def memo.PrivateID) bool {
+func (c *CustomFuncs) HasInvertedIndexes(scanPrivate *memo.ScanPrivate) bool {
 	// Don't bother matching unless there's an inverted index.
-	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
 	var iter scanIndexIter
-	iter.init(c.e.mem, scanOpDef)
+	iter.init(c.e.mem, scanPrivate)
 	return iter.nextInverted()
 }
 
@@ -262,52 +249,47 @@ func (c *CustomFuncs) HasInvertedIndexes(def memo.PrivateID) bool {
 // constrained is that we cannot treat an inverted index in the same way as a
 // regular index, since it does not actually contain the indexed column.
 func (c *CustomFuncs) GenerateInvertedIndexScans(
-	def memo.PrivateID, filter memo.GroupID,
-) []memo.Expr {
-	c.e.exprs = c.e.exprs[:0]
-	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
-
+	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, filters memo.FiltersExpr,
+) {
 	var sb indexScanBuilder
-	sb.init(c, scanOpDef.Table)
+	sb.init(c, scanPrivate.Table)
 
 	// Iterate over all inverted indexes.
 	var iter scanIndexIter
-	iter.init(c.e.mem, scanOpDef)
+	iter.init(c.e.mem, scanPrivate)
 	for iter.nextInverted() {
 		// Check whether the filter can constrain the index.
 		constraint, remaining, ok := c.tryConstrainIndex(
-			filter, scanOpDef.Table, iter.indexOrdinal, true /* isInverted */)
+			filters, scanPrivate.Table, iter.indexOrdinal, true /* isInverted */)
 		if !ok {
 			continue
 		}
 
 		// Construct new ScanOpDef with the new index and constraint.
-		newDef := *scanOpDef
-		newDef.Index = iter.indexOrdinal
-		newDef.Constraint = constraint
+		newScanPrivate := *scanPrivate
+		newScanPrivate.Index = iter.indexOrdinal
+		newScanPrivate.Constraint = constraint
 
 		// Though the index is marked as containing the JSONB column being
 		// indexed, it doesn't actually, and it's only valid to extract the
 		// primary key columns from it.
-		newDef.Cols = sb.primaryKeyCols()
+		newScanPrivate.Cols = sb.primaryKeyCols()
 
 		// The Scan operator always goes in a new group, since it's always nested
 		// underneath the IndexJoin. The IndexJoin may also go into its own group,
 		// if there's a remaining filter above it.
 		// TODO(justin): We might not need to do an index join in order to get the
 		// correct columns, but it's difficult to tell at this point.
-		sb.setScan(c.e.mem.InternScanOpDef(&newDef))
+		sb.setScan(&newScanPrivate)
 
 		// If remaining filter exists, split it into one part that can be pushed
 		// below the IndexJoin, and one part that needs to stay above.
-		remaining = sb.addSelectAfterSplit(remaining, newDef.Cols)
-		sb.addIndexJoin(scanOpDef.Cols)
+		remaining = sb.addSelectAfterSplit(remaining, newScanPrivate.Cols)
+		sb.addIndexJoin(scanPrivate.Cols)
 		sb.addSelect(remaining)
 
-		c.e.exprs = append(c.e.exprs, sb.build())
+		sb.build(grp)
 	}
-
-	return c.e.exprs
 }
 
 // tryConstrainIndex tries to derive a constraint for the given index from the
@@ -315,11 +297,11 @@ func (c *CustomFuncs) GenerateInvertedIndexScans(
 // filter remaining after extracting the constraint. If no constraint can be
 // derived, then tryConstrainIndex returns ok = false.
 func (c *CustomFuncs) tryConstrainIndex(
-	filter memo.GroupID, tabID opt.TableID, indexOrd int, isInverted bool,
-) (constraint *constraint.Constraint, remainingFilter memo.GroupID, ok bool) {
+	filters memo.FiltersExpr, tabID opt.TableID, indexOrd int, isInverted bool,
+) (constraint *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
 	// Start with fast check to rule out indexes that cannot be constrained.
-	if !isInverted && !c.canMaybeConstrainIndex(filter, tabID, indexOrd) {
-		return nil, 0, false
+	if !isInverted && !c.canMaybeConstrainIndex(filters, tabID, indexOrd) {
+		return nil, nil, false
 	}
 
 	// Fill out data structures needed to initialize the idxconstraint library.
@@ -342,18 +324,14 @@ func (c *CustomFuncs) tryConstrainIndex(
 
 	// Generate index constraints.
 	var ic idxconstraint.Instance
-	ev := memo.MakeNormExprView(c.e.mem, filter)
-	ic.Init(ev, columns, notNullCols, isInverted, c.e.evalCtx, c.e.f)
+	ic.Init(filters, columns, notNullCols, isInverted, c.e.evalCtx, c.e.f)
 	constraint = ic.Constraint()
 	if constraint.IsUnconstrained() {
-		return nil, 0, false
+		return nil, nil, false
 	}
 
 	// Return 0 if no remaining filter.
-	remaining := ic.RemainingFilter()
-	if c.e.mem.NormOp(remaining) == opt.TrueOp {
-		remaining = 0
-	}
+	remaining := ic.RemainingFilters()
 
 	// Make copy of constraint so that idxconstraint instance is not referenced.
 	copy := *constraint
@@ -369,24 +347,30 @@ func (c *CustomFuncs) tryConstrainIndex(
 //      then no constraint can be generated.
 //
 func (c *CustomFuncs) canMaybeConstrainIndex(
-	filter memo.GroupID, tabID opt.TableID, indexOrd int,
+	filters memo.FiltersExpr, tabID opt.TableID, indexOrd int,
 ) bool {
 	md := c.e.mem.Metadata()
 	index := md.Table(tabID).Index(indexOrd)
 
-	// If the filter does not involve the first index column, we won't be able to
-	// generate a constraint.
-	firstIndexCol := tabID.ColumnID(index.Column(0).Ordinal)
-	filterProps := c.LookupLogical(filter).Scalar
-	if !filterProps.OuterCols.Contains(int(firstIndexCol)) {
-		return false
-	}
+	for i := range filters {
+		filterProps := filters[i].ScalarProps(c.e.mem)
 
-	// If the constraints are tight, check if there is a constraint that starts
-	// with the first index column. If the constraints are not tight, it's
-	// possible that index constraints can still be generated (that code currently
-	// supports more expressions).
-	if filterProps.TightConstraints {
+		// If the filter involves the first index column, then the index can
+		// possibly be constrained.
+		firstIndexCol := tabID.ColumnID(index.Column(0).Ordinal)
+		if filterProps.OuterCols.Contains(int(firstIndexCol)) {
+			return true
+		}
+
+		// If the constraints are not tight, then the index can possibly be
+		// constrained, because index constraint generation supports more
+		// expressions than filter constraint generation.
+		if !filterProps.TightConstraints {
+			return true
+		}
+
+		// If any constraint involves the first index column, then the index can
+		// possibly be constrained.
 		cset := filterProps.Constraints
 		for i := 0; i < cset.Length(); i++ {
 			firstCol := cset.Constraint(i).Columns.Get(0).ID()
@@ -394,10 +378,9 @@ func (c *CustomFuncs) canMaybeConstrainIndex(
 				return true
 			}
 		}
-		// None of the constraints start with firstIndexCol.
-		return false
 	}
-	return true
+
+	return false
 }
 
 // ----------------------------------------------------------------------
@@ -408,24 +391,24 @@ func (c *CustomFuncs) canMaybeConstrainIndex(
 // ----------------------------------------------------------------------
 
 // IsPositiveLimit is true if the given limit value is greater than zero.
-func (c *CustomFuncs) IsPositiveLimit(limit memo.PrivateID) bool {
-	limitVal := int64(*c.e.mem.LookupPrivate(limit).(*tree.DInt))
+func (c *CustomFuncs) IsPositiveLimit(limit tree.Datum) bool {
+	limitVal := int64(*limit.(*tree.DInt))
 	return limitVal > 0
 }
 
-// LimitScanDef constructs a new ScanOpDef private value that is based on the
-// given ScanOpDef. The new def's HardLimit is set to the given limit, which
-// must be a constant int datum value. The other fields are inherited from the
-// existing def.
-func (c *CustomFuncs) LimitScanDef(def, limit, ordering memo.PrivateID) memo.PrivateID {
+// LimitScanPrivate constructs a new ScanPrivate value that is based on the
+// given ScanPrivate. The new private's HardLimit is set to the given limit,
+// which must be a constant int datum value. The other fields are inherited from
+// the existing private.
+func (c *CustomFuncs) LimitScanPrivate(
+	scanPrivate *memo.ScanPrivate, limit tree.Datum, ordering props.OrderingChoice,
+) *memo.ScanPrivate {
 	// Determine the scan direction necessary to provide the required ordering.
-	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
-	required := c.e.mem.LookupPrivate(ordering).(*props.OrderingChoice)
-	_, reverse := scanOpDef.CanProvideOrdering(c.e.mem.Metadata(), required)
+	_, reverse := scanPrivate.CanProvideOrdering(c.e.mem.Metadata(), &ordering)
 
-	defCopy := *scanOpDef
-	defCopy.HardLimit = memo.MakeScanLimit(int64(*c.e.mem.LookupPrivate(limit).(*tree.DInt)), reverse)
-	return c.e.mem.InternScanOpDef(&defCopy)
+	newScanPrivate := *scanPrivate
+	newScanPrivate.HardLimit = memo.MakeScanLimit(int64(*limit.(*tree.DInt)), reverse)
+	return &newScanPrivate
 }
 
 // CanLimitConstrainedScan returns true if the given scan has already been
@@ -435,23 +418,23 @@ func (c *CustomFuncs) LimitScanDef(def, limit, ordering memo.PrivateID) memo.Pri
 //
 // NOTE: Limiting unconstrained scans is done by the PushLimitIntoScan rule,
 //       since that can require IndexJoin operators to be generated.
-func (c *CustomFuncs) CanLimitConstrainedScan(def, ordering memo.PrivateID) bool {
-	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
-	if scanOpDef.HardLimit != 0 {
+func (c *CustomFuncs) CanLimitConstrainedScan(
+	scanPrivate *memo.ScanPrivate, ordering props.OrderingChoice,
+) bool {
+	if scanPrivate.HardLimit != 0 {
 		// Don't push limit into scan if scan is already limited. This would
 		// usually only happen when normalizations haven't run, as otherwise
 		// redundant Limit operators would be discarded.
 		return false
 	}
 
-	if scanOpDef.Constraint == nil {
+	if scanPrivate.Constraint == nil {
 		// This is not a constrained scan, so skip it. The PushLimitIntoScan rule
 		// is responsible for limited unconstrained scans.
 		return false
 	}
 
-	required := c.e.mem.LookupPrivate(ordering).(*props.OrderingChoice)
-	ok, _ := scanOpDef.CanProvideOrdering(c.e.mem.Metadata(), required)
+	ok, _ := scanPrivate.CanProvideOrdering(c.e.mem.Metadata(), &ordering)
 	return ok
 }
 
@@ -464,59 +447,57 @@ func (c *CustomFuncs) CanLimitConstrainedScan(def, ordering memo.PrivateID) bool
 // For a secondary index that "covers" the columns needed by the scan, a single
 // limited Scan operator is created. For a non-covering index, an IndexJoin is
 // constructed to add missing columns to the limited Scan.
-func (c *CustomFuncs) GenerateLimitedScans(def, limit, ordering memo.PrivateID) []memo.Expr {
-	c.e.exprs = c.e.exprs[:0]
-	scanOpDef := c.e.mem.LookupPrivate(def).(*memo.ScanOpDef)
-	required := c.e.mem.LookupPrivate(ordering).(*props.OrderingChoice)
-	limitVal := int64(*c.e.mem.LookupPrivate(limit).(*tree.DInt))
+func (c *CustomFuncs) GenerateLimitedScans(
+	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, limit tree.Datum, ordering props.OrderingChoice,
+) {
+	limitVal := int64(*limit.(*tree.DInt))
 
 	var sb indexScanBuilder
-	sb.init(c, scanOpDef.Table)
+	sb.init(c, scanPrivate.Table)
 
 	// Iterate over all indexes, looking for those that can be limited.
 	var iter scanIndexIter
-	iter.init(c.e.mem, scanOpDef)
+	iter.init(c.e.mem, scanPrivate)
 	for iter.next() {
-		newDef := *scanOpDef
-		newDef.Index = iter.indexOrdinal
+		newScanPrivate := *scanPrivate
+		newScanPrivate.Index = iter.indexOrdinal
 
 		// If the alternate index does not conform to the ordering, then skip it.
 		// If reverse=true, then the scan needs to be in reverse order to match
 		// the required ordering.
-		ok, reverse := newDef.CanProvideOrdering(c.e.mem.Metadata(), required)
+		ok, reverse := newScanPrivate.CanProvideOrdering(c.e.mem.Metadata(), &ordering)
 		if !ok {
 			continue
 		}
-		newDef.HardLimit = memo.MakeScanLimit(limitVal, reverse)
+		newScanPrivate.HardLimit = memo.MakeScanLimit(limitVal, reverse)
 
 		// If the alternate index includes the set of needed columns, then construct
 		// a new Scan operator using that index.
 		if iter.isCovering() {
-			sb.setScan(c.e.f.InternScanOpDef(&newDef))
-			c.e.exprs = append(c.e.exprs, sb.build())
+			sb.setScan(&newScanPrivate)
+			sb.build(grp)
 			continue
 		}
 
 		// Otherwise, try to construct an IndexJoin operator that provides the
 		// columns missing from the index.
-		if scanOpDef.Flags.NoIndexJoin {
+		if scanPrivate.Flags.NoIndexJoin {
 			continue
 		}
 
 		// Scan whatever columns we need which are available from the index, plus
 		// the PK columns.
-		newDef.Cols = iter.indexCols().Intersection(scanOpDef.Cols)
-		newDef.Cols.UnionWith(sb.primaryKeyCols())
-		sb.setScan(c.e.f.InternScanOpDef(&newDef))
+		newScanPrivate.Cols = iter.indexCols().Intersection(scanPrivate.Cols)
+		newScanPrivate.Cols.UnionWith(sb.primaryKeyCols())
+		sb.setScan(&newScanPrivate)
 
 		// The Scan operator will go into its own group (because it projects a
 		// different set of columns), and the IndexJoin operator will be added to
 		// the same group as the original Limit operator.
-		sb.addIndexJoin(scanOpDef.Cols)
-		c.e.exprs = append(c.e.exprs, sb.build())
-	}
+		sb.addIndexJoin(scanPrivate.Cols)
 
-	return c.e.exprs
+		sb.build(grp)
+	}
 }
 
 // ----------------------------------------------------------------------
@@ -528,27 +509,24 @@ func (c *CustomFuncs) GenerateLimitedScans(def, limit, ordering memo.PrivateID) 
 
 // GenerateMergeJoins spawns MergeJoinOps, based on any interesting orderings.
 func (c *CustomFuncs) GenerateMergeJoins(
-	originalOp opt.Operator, left memo.GroupID, right memo.GroupID, on memo.GroupID,
-) []memo.Expr {
-	c.e.exprs = c.e.exprs[:0]
-	leftProps := c.e.mem.GroupProperties(left).Relational
-	rightProps := c.e.mem.GroupProperties(right).Relational
+	grp memo.RelExpr, originalOp opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr,
+) {
+	leftProps := left.Relational()
+	rightProps := right.Relational()
 
-	onExpr := memo.MakeNormExprView(c.e.mem, on)
-
-	leftEq, rightEq := harvestEqualityColumns(leftProps.OutputCols, rightProps.OutputCols, onExpr)
+	leftEq, rightEq := harvestEqualityColumns(leftProps.OutputCols, rightProps.OutputCols, on)
 	n := len(leftEq)
 	if n == 0 {
-		return nil
+		return
 	}
 
 	// We generate MergeJoin expressions based on interesting orderings from the
 	// left side. The CommuteJoin rule will ensure that we actually try both
 	// sides.
-	leftOrders := DeriveInterestingOrderings(memo.MakeNormExprView(c.e.mem, left)).Copy()
+	leftOrders := DeriveInterestingOrderings(left).Copy()
 	leftOrders.RestrictToCols(leftEq.ToSet())
 	if len(leftOrders) == 0 {
-		return nil
+		return
 	}
 
 	var colToEq util.FastIntMap
@@ -557,7 +535,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 		colToEq.Set(int(rightEq[i]), i)
 	}
 
-	var remainingFilter memo.GroupID
+	var remainingFilters memo.FiltersExpr
 
 	for _, o := range leftOrders {
 		if len(o) < n {
@@ -567,27 +545,10 @@ func (c *CustomFuncs) GenerateMergeJoins(
 			// sort. This would not useful now since we don't support streaming sorts.
 			continue
 		}
-		def := memo.MergeOnDef{JoinType: originalOp}
-		def.LeftEq = make(opt.Ordering, n)
-		def.RightEq = make(opt.Ordering, n)
-		def.LeftOrdering.Columns = make([]props.OrderingColumnChoice, 0, n)
-		def.RightOrdering.Columns = make([]props.OrderingColumnChoice, 0, n)
-		for i := 0; i < n; i++ {
-			eqIdx, _ := colToEq.Get(int(o[i].ID()))
-			l, r, descending := leftEq[eqIdx], rightEq[eqIdx], o[i].Descending()
-			def.LeftEq[i] = opt.MakeOrderingColumn(l, descending)
-			def.RightEq[i] = opt.MakeOrderingColumn(r, descending)
-			def.LeftOrdering.AppendCol(l, descending)
-			def.RightOrdering.AppendCol(r, descending)
-		}
 
-		// Simplify the orderings with the corresponding FD sets.
-		def.LeftOrdering.Simplify(&c.e.mem.GroupProperties(left).Relational.FuncDeps)
-		def.RightOrdering.Simplify(&c.e.mem.GroupProperties(right).Relational.FuncDeps)
-
-		if remainingFilter == 0 {
-			remainingFilter = c.remainingJoinFilter(
-				onExpr,
+		if remainingFilters == nil {
+			remainingFilters = c.remainingJoinFilters(
+				on,
 				func(a, b opt.ColumnID) bool {
 					for i := range leftEq {
 						if (a == leftEq[i] && b == rightEq[i]) ||
@@ -600,26 +561,37 @@ func (c *CustomFuncs) GenerateMergeJoins(
 			)
 		}
 
-		mergeOn := c.e.f.ConstructMergeOn(remainingFilter, c.e.mem.InternMergeOnDef(&def))
-		// Create a merge join expression in the same group.
-		mergeJoin := memo.MakeMergeJoinExpr(left, right, mergeOn)
-		c.e.exprs = append(c.e.exprs, memo.Expr(mergeJoin))
-	}
+		merge := memo.MergeJoinExpr{Left: left, Right: right, On: remainingFilters}
+		merge.JoinType = originalOp
+		merge.LeftEq = make(opt.Ordering, n)
+		merge.RightEq = make(opt.Ordering, n)
+		merge.LeftOrdering.Columns = make([]props.OrderingColumnChoice, 0, n)
+		merge.RightOrdering.Columns = make([]props.OrderingColumnChoice, 0, n)
+		for i := 0; i < n; i++ {
+			eqIdx, _ := colToEq.Get(int(o[i].ID()))
+			l, r, descending := leftEq[eqIdx], rightEq[eqIdx], o[i].Descending()
+			merge.LeftEq[i] = opt.MakeOrderingColumn(l, descending)
+			merge.RightEq[i] = opt.MakeOrderingColumn(r, descending)
+			merge.LeftOrdering.AppendCol(l, descending)
+			merge.RightOrdering.AppendCol(r, descending)
+		}
 
-	return c.e.exprs
+		// Simplify the orderings with the corresponding FD sets.
+		merge.LeftOrdering.Simplify(&leftProps.FuncDeps)
+		merge.RightOrdering.Simplify(&rightProps.FuncDeps)
+
+		c.e.mem.AddMergeJoinToGroup(&merge, grp)
+	}
 }
 
 // harvestEqualityColumns returns a list of pairs of columns (one from the left
 // side, one from the right side) which are constrained to be equal.
 func harvestEqualityColumns(
-	leftCols, rightCols opt.ColSet, on memo.ExprView,
+	leftCols, rightCols opt.ColSet, on memo.FiltersExpr,
 ) (leftEq opt.ColList, rightEq opt.ColList) {
-	if on.Operator() != opt.FiltersOp {
-		return nil, nil
-	}
-	for i, n := 0, on.ChildCount(); i < n; i++ {
-		e := on.Child(i)
-		ok, left, right := isJoinEquality(leftCols, rightCols, e)
+	for i := range on {
+		condition := on[i].Condition
+		ok, left, right := isJoinEquality(leftCols, rightCols, condition)
 		if !ok {
 			continue
 		}
@@ -642,27 +614,35 @@ func harvestEqualityColumns(
 }
 
 func isJoinEquality(
-	leftCols, rightCols opt.ColSet, expr memo.ExprView,
+	leftCols, rightCols opt.ColSet, condition opt.ScalarExpr,
 ) (ok bool, left, right opt.ColumnID) {
-	if expr.Operator() != opt.EqOp {
+	eq, ok := condition.(*memo.EqExpr)
+	if !ok {
 		return false, 0, 0
 	}
-	lhs, rhs := expr.Child(0), expr.Child(1)
-	if lhs.Operator() != opt.VariableOp || rhs.Operator() != opt.VariableOp {
+
+	lvar, ok := eq.Left.(*memo.VariableExpr)
+	if !ok {
 		return false, 0, 0
 	}
+
+	rvar, ok := eq.Right.(*memo.VariableExpr)
+	if !ok {
+		return false, 0, 0
+	}
+
 	// Don't allow mixed types (see #22519).
-	if !lhs.Logical().Scalar.Type.Equivalent(rhs.Logical().Scalar.Type) {
+	if !lvar.DataType().Equivalent(rvar.DataType()) {
 		return false, 0, 0
 	}
-	lhsCol := lhs.Private().(opt.ColumnID)
-	rhsCol := rhs.Private().(opt.ColumnID)
-	if leftCols.Contains(int(lhsCol)) && rightCols.Contains(int(rhsCol)) {
-		return true, lhsCol, rhsCol
+
+	if leftCols.Contains(int(lvar.Col)) && rightCols.Contains(int(rvar.Col)) {
+		return true, lvar.Col, rvar.Col
 	}
-	if leftCols.Contains(int(rhsCol)) && rightCols.Contains(int(lhsCol)) {
-		return true, rhsCol, lhsCol
+	if leftCols.Contains(int(rvar.Col)) && rightCols.Contains(int(lvar.Col)) {
+		return true, rvar.Col, lvar.Col
 	}
+
 	return false, 0, 0
 }
 
@@ -709,52 +689,52 @@ func isJoinEquality(
 //     no overlap.
 //
 func (c *CustomFuncs) GenerateLookupJoins(
-	joinType opt.Operator, input memo.GroupID, scanDefID memo.PrivateID, on memo.GroupID,
-) []memo.Expr {
-	c.e.exprs = c.e.exprs[:0]
-	scanDef := c.e.mem.LookupPrivate(scanDefID).(*memo.ScanOpDef)
-	inputProps := c.e.mem.GroupProperties(input).Relational
-	onExpr := memo.MakeNormExprView(c.e.mem, on)
+	grp memo.RelExpr,
+	joinType opt.Operator,
+	input memo.RelExpr,
+	scanPrivate *memo.ScanPrivate,
+	on memo.FiltersExpr,
+) {
+	inputProps := input.Relational()
 
-	leftEq, rightEq := harvestEqualityColumns(inputProps.OutputCols, scanDef.Cols, onExpr)
+	leftEq, rightEq := harvestEqualityColumns(inputProps.OutputCols, scanPrivate.Cols, on)
 	n := len(leftEq)
 	if n == 0 {
-		return nil
+		return
 	}
 
 	var pkCols opt.ColList
 
 	var iter scanIndexIter
-	iter.init(c.e.mem, scanDef)
+	iter.init(c.e.mem, scanPrivate)
 	for iter.next() {
 		// Check if the first column in the index has an equality constraint.
-		firstIdxCol := scanDef.Table.ColumnID(iter.index.Column(0).Ordinal)
+		firstIdxCol := scanPrivate.Table.ColumnID(iter.index.Column(0).Ordinal)
 		if _, ok := rightEq.Find(firstIdxCol); !ok {
 			continue
 		}
 
-		lookupJoinDef := memo.LookupJoinDef{
-			JoinType: joinType,
-			Table:    scanDef.Table,
-			Index:    iter.indexOrdinal,
-		}
+		lookupJoin := memo.LookupJoinExpr{Input: input, On: on}
+		lookupJoin.JoinType = joinType
+		lookupJoin.Table = scanPrivate.Table
+		lookupJoin.Index = iter.indexOrdinal
 
 		// Find the longest prefix of index key columns that are equality columns.
 		numIndexKeyCols := iter.index.LaxKeyColumnCount()
-		lookupJoinDef.KeyCols = make(opt.ColList, 0, numIndexKeyCols)
+		lookupJoin.KeyCols = make(opt.ColList, 0, numIndexKeyCols)
 		for j := 0; j < numIndexKeyCols; j++ {
-			idxCol := scanDef.Table.ColumnID(iter.index.Column(j).Ordinal)
+			idxCol := scanPrivate.Table.ColumnID(iter.index.Column(j).Ordinal)
 			eqIdx, ok := rightEq.Find(idxCol)
 			if !ok {
 				break
 			}
-			lookupJoinDef.KeyCols = append(lookupJoinDef.KeyCols, leftEq[eqIdx])
+			lookupJoin.KeyCols = append(lookupJoin.KeyCols, leftEq[eqIdx])
 		}
 
-		lookupJoinOn := c.remainingJoinFilter(
-			onExpr,
+		lookupJoin.On = c.remainingJoinFilters(
+			on,
 			func(a, b opt.ColumnID) bool {
-				for i, leftCol := range lookupJoinDef.KeyCols {
+				for i, leftCol := range lookupJoin.KeyCols {
 					var otherCol opt.ColumnID
 					if a == leftCol {
 						otherCol = b
@@ -763,7 +743,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 					} else {
 						continue
 					}
-					if otherCol == scanDef.Table.ColumnID(iter.index.Column(i).Ordinal) {
+					if otherCol == scanPrivate.Table.ColumnID(iter.index.Column(i).Ordinal) {
 						return true
 					}
 				}
@@ -773,18 +753,13 @@ func (c *CustomFuncs) GenerateLookupJoins(
 
 		if iter.isCovering() {
 			// Case 1 (see function comment).
-			lookupJoinDef.Cols = scanDef.Cols.Union(inputProps.OutputCols)
-			lookupJoin := memo.MakeLookupJoinExpr(
-				input,
-				lookupJoinOn,
-				c.e.mem.InternLookupJoinDef(&lookupJoinDef),
-			)
-			c.e.exprs = append(c.e.exprs, memo.Expr(lookupJoin))
+			lookupJoin.Cols = scanPrivate.Cols.Union(inputProps.OutputCols)
+			c.e.mem.AddLookupJoinToGroup(&lookupJoin, grp)
 			continue
 		}
 
 		// Case 2 (see function comment).
-		if scanDef.Flags.NoIndexJoin {
+		if scanPrivate.Flags.NoIndexJoin {
 			continue
 		}
 
@@ -792,32 +767,32 @@ func (c *CustomFuncs) GenerateLookupJoins(
 			pkIndex := iter.tab.Index(opt.PrimaryIndex)
 			pkCols = make(opt.ColList, pkIndex.KeyColumnCount())
 			for i := range pkCols {
-				pkCols[i] = scanDef.Table.ColumnID(pkIndex.Column(i).Ordinal)
+				pkCols[i] = scanPrivate.Table.ColumnID(pkIndex.Column(i).Ordinal)
 			}
 		}
 
 		// The lower LookupJoin must return all PK columns (they are needed as key
 		// columns for the index join).
 		indexCols := iter.indexCols()
-		lookupJoinDef.Cols = scanDef.Cols.Intersection(indexCols)
+		lookupJoin.Cols = scanPrivate.Cols.Intersection(indexCols)
 		for i := range pkCols {
-			lookupJoinDef.Cols.Add(int(pkCols[i]))
+			lookupJoin.Cols.Add(int(pkCols[i]))
 		}
-		lookupJoinDef.Cols.UnionWith(inputProps.OutputCols)
+		lookupJoin.Cols.UnionWith(inputProps.OutputCols)
 
-		var indexJoinOn memo.GroupID
+		var indexJoin memo.LookupJoinExpr
 
 		// onCols are the columns that the ON condition in the (lower) lookup join
 		// can refer to: input columns, or columns available in the index.
 		onCols := indexCols.Union(inputProps.OutputCols)
-		if c.IsBoundBy(lookupJoinOn, onCols) {
+		if c.FiltersBoundBy(lookupJoin.On, onCols) {
 			// The ON condition refers only to the columns available in the index.
 			//
 			// For LeftJoin, both LookupJoins perform a LeftJoin. A null-extended row
 			// from the lower LookupJoin will not have any matches in the top
 			// LookupJoin (it has NULLs on key columns) and will get null-extended
 			// there as well.
-			indexJoinOn = c.e.f.ConstructTrue()
+			indexJoin.On = memo.TrueFilter
 		} else {
 			// ON has some conditions that are bound by the columns in the index (at
 			// the very least, the equality conditions we used for KeyCols), and some
@@ -835,33 +810,25 @@ func (c *CustomFuncs) GenerateLookupJoins(
 				// ColumnIDs on both sides of the index join.
 				continue
 			}
-			conditions := c.e.mem.NormExpr(lookupJoinOn).AsFilters().Conditions()
-			lookupJoinOn = c.e.f.ConstructFilters(c.ExtractBoundConditions(conditions, onCols))
-			indexJoinOn = c.e.f.ConstructFilters(c.ExtractUnboundConditions(conditions, onCols))
+			conditions := lookupJoin.On
+			lookupJoin.On = c.ExtractBoundConditions(conditions, onCols)
+			indexJoin.On = c.ExtractUnboundConditions(conditions, onCols)
 		}
 
-		indexJoinDef := memo.LookupJoinDef{
-			JoinType: joinType,
-			Table:    scanDef.Table,
-			Index:    opt.PrimaryIndex,
-			KeyCols:  pkCols,
-			Cols:     scanDef.Cols.Union(inputProps.OutputCols),
-		}
+		indexJoin.Input = c.e.f.ConstructLookupJoin(
+			lookupJoin.Input,
+			lookupJoin.On,
+			&lookupJoin.LookupJoinPrivate,
+		)
+		indexJoin.JoinType = joinType
+		indexJoin.Table = scanPrivate.Table
+		indexJoin.Index = opt.PrimaryIndex
+		indexJoin.KeyCols = pkCols
+		indexJoin.Cols = scanPrivate.Cols.Union(inputProps.OutputCols)
 
 		// Create the LookupJoin for the index join in the same group.
-		indexJoin := memo.MakeLookupJoinExpr(
-			c.e.f.ConstructLookupJoin(
-				input,
-				lookupJoinOn,
-				c.e.mem.InternLookupJoinDef(&lookupJoinDef),
-			),
-			indexJoinOn,
-			c.e.f.InternLookupJoinDef(&indexJoinDef),
-		)
-		c.e.exprs = append(c.e.exprs, memo.Expr(indexJoin))
+		c.e.mem.AddLookupJoinToGroup(&indexJoin, grp)
 	}
-
-	return c.e.exprs
 }
 
 // ----------------------------------------------------------------------
@@ -876,16 +843,16 @@ func (c *CustomFuncs) GenerateLookupJoins(
 // (MIN/MAX) operator. This function was originally created to be used
 // with the Replace(Min|Max)WithLimit exploration rules.
 func (c *CustomFuncs) MakeOrderingChoiceFromColumn(
-	op opt.Operator, col memo.PrivateID,
-) memo.PrivateID {
+	op opt.Operator, col opt.ColumnID,
+) props.OrderingChoice {
 	oc := props.OrderingChoice{}
 	switch op {
 	case opt.MinOp:
-		oc.AppendCol(c.ExtractColID(col), false /* descending */)
+		oc.AppendCol(col, false /* descending */)
 	case opt.MaxOp:
-		oc.AppendCol(c.ExtractColID(col), true /* descending */)
+		oc.AppendCol(col, true /* descending */)
 	}
-	return c.e.f.InternOrderingChoice(&oc)
+	return oc
 }
 
 // scanIndexIter is a helper struct that supports iteration over the indexes
@@ -899,17 +866,17 @@ func (c *CustomFuncs) MakeOrderingChoiceFromColumn(
 //
 type scanIndexIter struct {
 	mem          *memo.Memo
-	scanOpDef    *memo.ScanOpDef
+	scanPrivate  *memo.ScanPrivate
 	tab          opt.Table
 	indexOrdinal int
 	index        opt.Index
 	cols         opt.ColSet
 }
 
-func (it *scanIndexIter) init(mem *memo.Memo, scanOpDef *memo.ScanOpDef) {
+func (it *scanIndexIter) init(mem *memo.Memo, scanPrivate *memo.ScanPrivate) {
 	it.mem = mem
-	it.scanOpDef = scanOpDef
-	it.tab = mem.Metadata().Table(scanOpDef.Table)
+	it.scanPrivate = scanPrivate
+	it.tab = mem.Metadata().Table(scanPrivate.Table)
 	it.indexOrdinal = -1
 	it.index = nil
 }
@@ -931,7 +898,7 @@ func (it *scanIndexIter) next() bool {
 		if it.index.IsInverted() {
 			continue
 		}
-		if it.scanOpDef.Flags.ForceIndex && it.scanOpDef.Flags.Index != it.indexOrdinal {
+		if it.scanPrivate.Flags.ForceIndex && it.scanPrivate.Flags.Index != it.indexOrdinal {
 			// If we are forcing a specific index, ignore the others.
 			continue
 		}
@@ -956,7 +923,7 @@ func (it *scanIndexIter) nextInverted() bool {
 		if !it.index.IsInverted() {
 			continue
 		}
-		if it.scanOpDef.Flags.ForceIndex && it.scanOpDef.Flags.Index != it.indexOrdinal {
+		if it.scanPrivate.Flags.ForceIndex && it.scanPrivate.Flags.Index != it.indexOrdinal {
 			// If we are forcing a specific index, ignore the others.
 			continue
 		}
@@ -968,7 +935,7 @@ func (it *scanIndexIter) nextInverted() bool {
 // indexCols returns the set of columns contained in the current index.
 func (it *scanIndexIter) indexCols() opt.ColSet {
 	if it.cols.Empty() {
-		it.cols = it.mem.Metadata().IndexColumns(it.scanOpDef.Table, it.indexOrdinal)
+		it.cols = it.mem.Metadata().IndexColumns(it.scanPrivate.Table, it.indexOrdinal)
 	}
 	return it.cols
 }
@@ -976,36 +943,28 @@ func (it *scanIndexIter) indexCols() opt.ColSet {
 // isCovering returns true if the current index contains all columns projected
 // by the Scan operator.
 func (it *scanIndexIter) isCovering() bool {
-	return it.scanOpDef.Cols.SubsetOf(it.indexCols())
+	return it.scanPrivate.Cols.SubsetOf(it.indexCols())
 }
 
 // remainingJoinFilter calculates the remaining ON condition after removing
 // equalities that are handled separately (for merge and lookup joins). The
 // given function determines if an equality is redundant.
-// The result is TrueOp if there are no remaining conditions.
-func (c *CustomFuncs) remainingJoinFilter(
-	on memo.ExprView, removeEquality func(a, b opt.ColumnID) bool,
-) memo.GroupID {
-	if on.Operator() != opt.FiltersOp {
-		return on.Group()
-	}
-	lb := norm.MakeListBuilder(&c.CustomFuncs)
-	for i, n := 0, on.ChildCount(); i < n; i++ {
-		child := on.Child(i)
-		if child.Operator() == opt.EqOp {
-			l, r := child.Child(0), child.Child(1)
-			if l.Operator() == opt.VariableOp && r.Operator() == opt.VariableOp {
-				lCol := l.Private().(opt.ColumnID)
-				rCol := r.Private().(opt.ColumnID)
-				if removeEquality(lCol, rCol) {
-					continue
+// The result is empty if there are no remaining conditions.
+func (c *CustomFuncs) remainingJoinFilters(
+	on memo.FiltersExpr, removeEquality func(a, b opt.ColumnID) bool,
+) memo.FiltersExpr {
+	newFilters := make(memo.FiltersExpr, 0, len(on))
+	for i := range on {
+		if eq, ok := on[i].Condition.(*memo.EqExpr); ok {
+			if leftVar, ok := eq.Left.(*memo.VariableExpr); ok {
+				if rightVar, ok := eq.Right.(*memo.VariableExpr); ok {
+					if removeEquality(leftVar.Col, rightVar.Col) {
+						continue
+					}
 				}
 			}
 		}
-		lb.AddItem(child.Group())
+		newFilters = append(newFilters, on[i])
 	}
-	if lb.Empty() {
-		return c.e.f.ConstructTrue()
-	}
-	return c.e.f.ConstructFilters(lb.BuildList())
+	return newFilters
 }
