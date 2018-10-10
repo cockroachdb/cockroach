@@ -21,7 +21,6 @@ import { Link, RouterState } from "react-router";
 import { createSelector } from "reselect";
 
 import Loading from "src/views/shared/components/loading";
-import spinner from "assets/spinner.gif";
 import { refreshStatements } from "src/redux/apiReducers";
 import { nodeDisplayNameByIDSelector } from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
@@ -182,7 +181,6 @@ class StatementDetails extends React.Component<StatementDetailsProps, StatementD
           <Loading
             loading={_.isNil(this.props.statement)}
             className="loading-image loading-image__spinner"
-            image={spinner}
             render={this.renderContent}
           />
         </section>

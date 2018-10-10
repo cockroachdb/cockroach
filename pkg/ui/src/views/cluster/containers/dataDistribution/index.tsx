@@ -19,7 +19,6 @@ import { connect } from "react-redux";
 import Helmet from "react-helmet";
 
 import Loading from "src/views/shared/components/loading";
-import spinner from "assets/spinner.gif";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import * as docsURL from "src/util/docs";
 import { FixLong } from "src/util/fixLong";
@@ -173,7 +172,6 @@ class DataDistributionPage extends React.Component<DataDistributionPageProps> {
           <Loading
             className="loading-image loading-image__spinner-left"
             loading={!this.props.dataDistribution || !this.props.localityTree}
-            image={spinner}
             render={() => (
               <DataDistribution
                 localityTree={this.props.localityTree}

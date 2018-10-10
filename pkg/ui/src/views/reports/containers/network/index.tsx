@@ -34,8 +34,6 @@ import {
 } from "src/views/reports/components/nodeFilterList";
 import Loading from "src/views/shared/components/loading";
 
-import spinner from "assets/spinner.gif";
-
 interface NetworkOwnProps {
   nodesSummary: NodesSummary;
   refreshNodes: typeof refreshNodes;
@@ -459,7 +457,6 @@ class Network extends React.Component<NetworkProps, {}> {
         <Loading
           loading={!contentAvailable(nodesSummary)}
           className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
-          image={spinner}
           render={() => (
             <div>
               <NodeFilterList nodeIDs={filters.nodeIDs} localityRegex={filters.localityRegex} />
