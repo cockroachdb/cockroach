@@ -16,7 +16,10 @@ import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 
+import InfoBox from "src/views/shared/components/infoBox";
 import LicenseType from "src/views/shared/components/licenseType";
+
+const COMMUNITY_URL = "https://www.cockroachlabs.com/community/";
 
 function DebugTableLink(props: { name: string, url: string, note?: string }) {
   return (
@@ -66,6 +69,14 @@ export default function Debug() {
         <title>Debug</title>
       </Helmet>
       <h1>Advanced Debugging</h1>
+      <InfoBox>
+        <p>
+          The following pages are meant for advanced monitoring and troubleshooting.
+          Note that the pages are experimental and undocumented. If you find an issue,
+          let us know through{" "}
+          <a href={ COMMUNITY_URL }>these channels.</a>
+        </p>
+      </InfoBox>
       <DebugTable heading="Reports">
         <DebugTableRow title="Custom Time-Series Chart">
           <DebugTableLink
