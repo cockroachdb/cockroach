@@ -14,19 +14,14 @@
 
 import React from "react";
 
-import "./licenseType.styl";
+import "./infoBox.styl";
 
-/**
- * LicenseType is an indicator showing the current build license.
- */
-export default class LicenseType extends React.Component<{}, {}> {
+export default class InfoBox extends React.Component {
   render() {
     return (
-      <h3>
-        <span className="license-type__label">License type:</span>
-        {" "}
-        <span className="license-type__license">OSS</span>
-      </h3>
+      <div className="info-box">
+        { this.props.children }
+      </div>
     );
   }
 }

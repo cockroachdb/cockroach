@@ -16,7 +16,13 @@ import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 
+import InfoBox from "src/views/shared/components/infoBox";
 import LicenseType from "src/views/shared/components/licenseType";
+import { PanelSection, PanelTitle, PanelPair, Panel } from "src/views/shared/components/panelSection";
+
+import "./debug.styl";
+
+const COMMUNITY_URL = "https://www.cockroachlabs.com/community/";
 
 function DebugTableLink(props: { name: string, url: string, note?: string }) {
   return (
@@ -59,6 +65,20 @@ function DebugTable(props: { heading: string, children?: React.ReactNode }) {
   );
 }
 
+function DebugPanelLink(props: { name: string, url: string,  note: string }) {
+  return (
+    <PanelPair>
+      <Panel>
+        <a href={ props.url }>{ props.name }</a>
+        <p>{ props.note }</p>
+      </Panel>
+      <Panel>
+        <div className="debug-url"><div>{ props.url }</div></div>
+      </Panel>
+    </PanelPair>
+  );
+}
+
 export default function Debug() {
   return (
     <div className="section">
@@ -66,13 +86,55 @@ export default function Debug() {
         <title>Debug</title>
       </Helmet>
       <h1>Advanced Debugging</h1>
-      <DebugTable heading="Reports">
-        <DebugTableRow title="Custom Time-Series Chart">
-          <DebugTableLink
-            name="Customizable chart of time series metrics"
-            url="#/debug/chart"
-          />
-        </DebugTableRow>
+      <div className="debug-header">
+        <InfoBox>
+          <p>
+            The following pages are meant for advanced monitoring and troubleshooting.
+            Note that these pages are experimental and undocumented. If you find an issue,
+            let us know through{" "}
+            <a href={ COMMUNITY_URL }>these channels.</a>
+          </p>
+        </InfoBox>
+
+        <div className="debug-header__license-type">
+          <LicenseType />
+        </div>
+      </div>
+      <PanelSection>
+        <PanelTitle>Reports</PanelTitle>
+        <DebugPanelLink
+          name="Custom Time Series Chart"
+          url="#/debug/chart"
+          note="Create a custom chart of time series data."
+        />
+        <DebugPanelLink
+          name="Problem Ranges"
+          url="#/reports/problemranges"
+          note="View ranges in your cluster that are unavailable, underreplicated, slow, or have other problems."
+        />
+        <DebugPanelLink
+          name="Network Latency"
+          url="#/reports/network"
+          note="Check latencies between all nodes in your cluster."
+        />
+        <DebugPanelLink
+          name="Data Distribution and Zone Configs"
+          url="#/data-distribution"
+          note="View the distribution of table data across nodes and verify zone configuration."
+        />
+        <PanelTitle>Configuration</PanelTitle>
+        <DebugPanelLink
+          name="Cluster Settings"
+          url="#/reports/settings"
+          note="View all cluster settings."
+        />
+        <DebugPanelLink
+          name="Localities"
+          url="#/reports/localities"
+          note="Check node localities for your cluster."
+        />
+      </PanelSection>
+      <DebugTable heading="Even More Advanced Debugging">
         <DebugTableRow title="Node Diagnostics">
           <DebugTableLink name="All Nodes" url="#/reports/nodes" />
           <DebugTableLink
@@ -94,15 +156,7 @@ export default function Debug() {
             note="#/reports/stores/[node_id]"
           />
         </DebugTableRow>
-        <DebugTableRow title="Localities & Distribution">
-          <DebugTableLink name="Locality Tree" url="#/reports/localities" />
-          <DebugTableLink
-            name="Data distribution matrix & zone configs"
-            url="#/data-distribution"
-          />
-        </DebugTableRow>
         <DebugTableRow title="Network">
-          <DebugTableLink name="Latency (on all nodes)" url="#/reports/network" />
           <DebugTableLink
             name="Latency filtered by node IDs"
             url="#/reports/network?node_ids=1,2"
@@ -114,9 +168,6 @@ export default function Debug() {
             note="#/reports/network?locality=[regex]"
           />
         </DebugTableRow>
-        <DebugTableRow title="Settings">
-          <DebugTableLink name="Cluster Settings" url="#/reports/settings" />
-        </DebugTableRow>
         <DebugTableRow title="Security">
           <DebugTableLink name="Certificates on this node" url="#/reports/certificates/local" />
           <DebugTableLink
@@ -126,7 +177,6 @@ export default function Debug() {
           />
         </DebugTableRow>
         <DebugTableRow title="Problem Ranges">
-          <DebugTableLink name="All Problem Ranges" url="#/reports/problemranges" />
           <DebugTableLink
             name="Problem Ranges on a specific node"
             url="#/reports/problemranges/local"
@@ -287,7 +337,6 @@ export default function Debug() {
           />
         </DebugTableRow>
       </DebugTable>
-      <LicenseType />
     </div>
   );
 }

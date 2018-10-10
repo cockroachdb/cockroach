@@ -12,21 +12,21 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-import React from "react";
+@require "~styl/base/palette.styl"
 
-import "./licenseType.styl";
+.debug-url
+  margin-right 200px
 
-/**
- * LicenseType is an indicator showing the current build license.
- */
-export default class LicenseType extends React.Component<{}, {}> {
-  render() {
-    return (
-      <h3>
-        <span className="license-type__label">License type:</span>
-        {" "}
-        <span className="license-type__license">OSS</span>
-      </h3>
-    );
-  }
-}
+  div
+    background-color $background-color
+    border-radius 3px
+    padding 8px 20px 6px 10px
+    min-width 200px
+
+.debug-header
+  position relative
+
+.debug-header__license-type
+  position absolute
+  top 0
+  right 0
