@@ -311,6 +311,19 @@ func makeRandIntRows(rng *rand.Rand, numRows int, numCols int) sqlbase.EncDatumR
 	return rows
 }
 
+// makeRepeatedIntRows constructs a numRows x numCols table where blocks of n
+// consecutive rows have the same value.
+func makeRepeatedIntRows(n int, numRows int, numCols int) sqlbase.EncDatumRows {
+	rows := make(sqlbase.EncDatumRows, numRows)
+	for i := range rows {
+		rows[i] = make(sqlbase.EncDatumRow, numCols)
+		for j := 0; j < numCols; j++ {
+			rows[i][j] = intEncDatum(i/n + j)
+		}
+	}
+	return rows
+}
+
 // runProcessorTest instantiates a processor with the provided spec, runs it
 // with the given inputs, and asserts that the outputted rows are as expected.
 func runProcessorTest(
