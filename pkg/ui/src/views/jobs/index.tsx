@@ -33,8 +33,6 @@ import { SortSetting } from "src/views/shared/components/sortabletable";
 import { ColumnDescriptor, SortedTable } from "src/views/shared/components/sortedtable";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
-import spinner from "assets/spinner.gif";
-
 type Job = protos.cockroach.server.serverpb.JobsResponse.Job;
 
 type JobType = protos.cockroach.sql.jobs.jobspb.Type;
@@ -309,7 +307,6 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
       <Loading
         loading={_.isNil(this.props.jobs)}
         className="loading-image loading-image__spinner"
-        image={spinner}
         render={this.renderTable}
       />
     </div>;

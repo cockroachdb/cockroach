@@ -23,8 +23,6 @@ import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import Loading from "src/views/shared/components/loading";
 
-import spinner from "assets/spinner.gif";
-
 interface SettingsOwnProps {
   settings: CachedDataReducerState<protos.cockroach.server.serverpb.SettingsResponse>;
   refreshSettings: typeof refreshSettings;
@@ -100,7 +98,6 @@ class Settings extends React.Component<SettingsProps, {}> {
         <Loading
           loading={!this.props.settings.data}
           className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
-          image={spinner}
           render={() => (
             <div>
               <p>Note that some settings have been redacted for security purposes.</p>

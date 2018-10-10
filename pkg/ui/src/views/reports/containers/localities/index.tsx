@@ -17,7 +17,6 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 
-import spinner from "assets/spinner.gif";
 import { refreshNodes, refreshLocations } from "src/redux/apiReducers";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { selectLocalityTree, LocalityTier, LocalityTree } from "src/redux/localities";
@@ -112,8 +111,6 @@ class Localities extends React.Component<LocalitiesProps, {}> {
         <section className="section"><h1>Localities</h1></section>
         <Loading
           loading={ !this.props.localityStatus.data || !this.props.locationStatus.data }
-          className="loading-image loading-image__spinner-left"
-          image={ spinner }
           render={() => (
             <section className="section">
               <table className="locality-table">

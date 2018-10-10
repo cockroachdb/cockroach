@@ -1341,7 +1341,7 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 	// Verify that we see their replicas in the DataDistribution response, evenly spread
 	// across the test cluster's three nodes.
 
-	expectedResp := map[string]serverpb.DataDistributionResponse_DatabaseInfo{
+	expectedDatabaseInfo := map[string]serverpb.DataDistributionResponse_DatabaseInfo{
 		"roachblog": {
 			TableInfo: map[string]serverpb.DataDistributionResponse_TableInfo{
 				"posts": {
@@ -1381,8 +1381,8 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 		}
 
 		delete(resp.DatabaseInfo, "system") // delete results for system database.
-		if !reflect.DeepEqual(resp.DatabaseInfo, expectedResp) {
-			return fmt.Errorf("expected %v; got %v", expectedResp, resp.DatabaseInfo)
+		if !reflect.DeepEqual(resp.DatabaseInfo, expectedDatabaseInfo) {
+			return fmt.Errorf("expected %v; got %v", expectedDatabaseInfo, resp.DatabaseInfo)
 		}
 
 		// Don't test anything about the zone configs for now; just verify that something is there.
@@ -1392,6 +1392,26 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 
 		return nil
 	})
+
+	// Verify that the request still works after a table has been dropped,
+	// and that dropped_at is set on the dropped table.
+	sqlDB.Exec(t, `DROP TABLE roachblog.comments`)
+
+	var resp serverpb.DataDistributionResponse
+	if err := getAdminJSONProto(firstServer, "data_distribution", &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.DatabaseInfo["roachblog"].TableInfo["comments"].DroppedAt == nil {
+		t.Fatal("expected roachblog.comments to have dropped_at set but it's nil")
+	}
+
+	// Verify that the request still works after a database has been dropped.
+	sqlDB.Exec(t, `DROP DATABASE roachblog CASCADE`)
+
+	if err := getAdminJSONProto(firstServer, "data_distribution", &resp); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func BenchmarkAdminAPIDataDistribution(b *testing.B) {
@@ -1418,7 +1438,7 @@ func BenchmarkAdminAPIDataDistribution(b *testing.B) {
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		var resp serverpb.DataDistributionResponse
-		if err := getAdminJSONProto(firstServer, "replica_matrix", &resp); err != nil {
+		if err := getAdminJSONProto(firstServer, "data_distribution", &resp); err != nil {
 			b.Fatal(err)
 		}
 	}
