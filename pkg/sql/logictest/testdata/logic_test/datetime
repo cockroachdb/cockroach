@@ -1186,3 +1186,9 @@ query T
 SELECT date_trunc('month', "date") AS date_trunc_month_created_at FROM "topics";
 ----
 2017-12-01 00:00:00 +0000 UTC
+
+# Spot-check date math.
+query T
+SELECT '2016-01-31'::TIMESTAMP + '1 month';
+----
+2016-02-29 00:00:00 +0000 +0000

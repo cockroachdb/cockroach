@@ -25,6 +25,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/pkg/errors"
 	"golang.org/x/net/trace"
 
@@ -510,6 +512,14 @@ func (s *Server) newConnExecutor(
 		-1 /* increment */, noteworthyMemoryUsageBytes, s.cfg.Settings)
 
 	sd, setFromDefaults, sessionDefaults := sargs.initialSessionData(ctx)
+
+	// This is a hack to enable 2.1 -> 2.2 migration with consistent
+	// date-math semantics. See https://github.com/cockroachdb/cockroach/issues/30976.
+	if s.cfg.Settings.Version.IsMinSupported(cluster.VersionPostgreSQLDurationMath) {
+		sd.DurationAdditionMode = duration.AdditionModeCompatible
+	} else {
+		sd.DurationAdditionMode = duration.AdditionModeLegacy
+	}
 
 	ex := &connExecutor{
 		server:      s,
