@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
@@ -31,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 )
 
@@ -111,8 +111,9 @@ func TestBuilder(t *testing.T) {
 				if err != nil {
 					return fmt.Sprintf("error: %s\n", strings.TrimSpace(err.Error()))
 				}
-				exprView := o.Optimize()
-				return exprView.FormatString(tester.Flags.ExprFormat)
+				f := memo.MakeExprFmtCtx(tester.Flags.ExprFormat, o.Memo())
+				f.FormatExpr(o.Memo().RootExpr())
+				return f.Buffer.String()
 
 			default:
 				return tester.RunCommand(t, d)
