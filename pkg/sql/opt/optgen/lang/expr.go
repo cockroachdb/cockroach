@@ -85,6 +85,30 @@ type Expr interface {
 	//   newExpr := oldExpr.Visit(myVisitFunc)
 	Visit(visit VisitFunc) Expr
 
+	// InferredType describes the kind of data that will be returned when this
+	// expression is evaluated. Type inference rules work top-down and bottom-
+	// up to establish the type. For example:
+	//
+	//   define Select {
+	//     Input  Node
+	//     Filter Node
+	//   }
+	//
+	//   define True {}
+	//
+	//   (Select $input:* $filter:(True)) => $input
+	//
+	// The type of the $input binding and ref would be inferred as Node, since
+	// that's as specific as can be inferred. The type of $filter would be
+	// inferred as TrueOp, since a more specific type than Node is possible to
+	// infer in this case.
+	//
+	// The compiler uses this information to ensure that every match pattern has
+	// a statically known set of ops it can match, and that every replace pattern
+	// has a statically known set of ops it can construct. Code generators can
+	// also use this information to generate strongly-typed code.
+	InferredType() DataType
+
 	// Source returns the original source location of the expression, including
 	// file name, line number, and column position. If the source location is
 	// not available, then Source returns nil.
@@ -170,6 +194,24 @@ func (e RuleSetExpr) Sort(less func(left, right *RuleExpr) bool) {
 	sort.SliceStable(e, func(i, j int) bool {
 		return less(e[i], e[j])
 	})
+}
+
+// HasDynamicName returns true if this is a construction function which can
+// construct several different operators; which it constructs is not known until
+// runtime. For example:
+//
+//   (Select $input:(Left | InnerJoin $left:* $right:* $on))
+//   =>
+//   ((OpName $input) $left $right $on)
+//
+// The replace pattern uses a constructor function that dynamically constructs
+// either a Left or InnerJoin operator.
+func (e *FuncExpr) HasDynamicName() bool {
+	switch e.Name.(type) {
+	case *NameExpr, *NamesExpr:
+		return false
+	}
+	return true
 }
 
 // SingleName returns the name of the function when there is exactly one choice.
@@ -267,7 +309,12 @@ func formatExpr(e Expr, buf *bytes.Buffer, level int) {
 			e.Child(i).Format(buf, level)
 		}
 
-		if src != nil {
+		typ := e.InferredType()
+		if typ != nil && typ != AnyDataType {
+			buf.WriteString(fmt.Sprintf(" Typ=%s", e.InferredType()))
+		}
+
+		if src != nil && e.ChildCount() != 0 {
 			buf.WriteString(fmt.Sprintf(" Src=<%s>", src))
 		}
 
@@ -291,7 +338,13 @@ func formatExpr(e Expr, buf *bytes.Buffer, level int) {
 			buf.WriteByte('\n')
 		}
 
-		if src != nil {
+		typ := e.InferredType()
+		if typ != nil && typ != AnyDataType {
+			writeIndent(buf, level)
+			buf.WriteString(fmt.Sprintf("Typ=%s\n", e.InferredType()))
+		}
+
+		if src != nil && e.ChildCount() != 0 {
 			writeIndent(buf, level)
 			buf.WriteString(fmt.Sprintf("Src=<%s>\n", src))
 		}

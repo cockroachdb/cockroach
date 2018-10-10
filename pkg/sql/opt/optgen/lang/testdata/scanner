@@ -2,7 +2,7 @@
 # Simple identifiers, strings, numbers, comments
 #
 scan
-foo define f123 "hello world" 1 0045 foo# comment ()[]
+foo define f123 "hello world" 1 0045 foo _ _123foo# comment ()[]
 ----
 (IDENT foo)
 (WHITESPACE  )
@@ -17,6 +17,10 @@ foo define f123 "hello world" 1 0045 foo# comment ()[]
 (NUMBER 0045)
 (WHITESPACE  )
 (IDENT foo)
+(WHITESPACE  )
+(IDENT _)
+(WHITESPACE  )
+(IDENT _123foo)
 (COMMENT # comment ()[])
 
 #
