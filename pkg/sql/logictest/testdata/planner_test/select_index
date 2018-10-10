@@ -424,50 +424,56 @@ CREATE TABLE t (
 query TTT
 EXPLAIN SELECT a FROM t WHERE c > 1
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  t@bc
-·          spans  ALL
+render     ·       ·
+ └── scan  ·       ·
+·          table   t@bc
+·          spans   ALL
+·          filter  c > 1
 
 query TTT
 EXPLAIN SELECT a FROM t WHERE c < 1 AND b < 5
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  t@bc
-·          spans  /!NULL-/4/1
+render     ·       ·
+ └── scan  ·       ·
+·          table   t@bc
+·          spans   /!NULL-/4/1
+·          filter  c < 1
 
 query TTT
 EXPLAIN SELECT a FROM t WHERE c > 1.0
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  t@bc
-·          spans  ALL
+render     ·       ·
+ └── scan  ·       ·
+·          table   t@bc
+·          spans   ALL
+·          filter  c > 1
 
 query TTT
 EXPLAIN SELECT a FROM t WHERE c < 1.0
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  t@bc
-·          spans  ALL
+render     ·       ·
+ └── scan  ·       ·
+·          table   t@bc
+·          spans   ALL
+·          filter  c < 1
 
 query TTT
 EXPLAIN SELECT a FROM t WHERE c > 1.0 AND b < 5
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  t@bc
-·          spans  /!NULL-/5
+render     ·       ·
+ └── scan  ·       ·
+·          table   t@bc
+·          spans   /!NULL-/5
+·          filter  c > 1
 
 query TTT
 EXPLAIN SELECT a FROM t WHERE b < 5.0 AND c < 1
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  t@bc
-·          spans  /!NULL-/4/1
+render     ·       ·
+ └── scan  ·       ·
+·          table   t@bc
+·          spans   /!NULL-/4/1
+·          filter  c < 1
 
 query TTT
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5, 1)
@@ -488,10 +494,11 @@ render     ·      ·
 query TTT
 EXPLAIN SELECT a FROM t WHERE (b, c) = (5.1, 1)
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  t@bc
-·          spans  /!NULL-
+render     ·       ·
+ └── scan  ·       ·
+·          table   t@bc
+·          spans   /!NULL-
+·          filter  (b = 5.1) AND (c = 1)
 
 # Note the span is reversed because of #20203.
 query TTT
@@ -539,10 +546,11 @@ CREATE TABLE ab (
 query TTT
 EXPLAIN SELECT i, s FROM ab WHERE (i, s) < (1, 'c')
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  ab@primary
-·          spans  ALL
+render     ·       ·
+ └── scan  ·       ·
+·          table   ab@primary
+·          spans   ALL
+·          filter  (i, s) < (1, 'c')
 
 statement ok
 CREATE INDEX baz ON ab (i, s)
@@ -550,10 +558,11 @@ CREATE INDEX baz ON ab (i, s)
 query TTT
 EXPLAIN SELECT i, s FROM ab@baz WHERE (i, s) < (1, 'c')
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  ab@baz
-·          spans  /!NULL-/1/"c"
+render     ·       ·
+ └── scan  ·       ·
+·          table   ab@baz
+·          spans   /!NULL-/1/"c"
+·          filter  (i, s) < (1, 'c')
 
 # Check that primary key definitions can indicate index ordering,
 # and this information is subsequently used during index selection
@@ -571,6 +580,7 @@ query TTT
 EXPLAIN SELECT a FROM abz ORDER BY a DESC LIMIT 1
 ----
 limit           ·      ·
+ │              count  1
  └── render     ·      ·
       └── scan  ·      ·
 ·               table  abz@primary
@@ -581,6 +591,7 @@ query TTT
 EXPLAIN SELECT c FROM abz ORDER BY c DESC LIMIT 1
 ----
 limit           ·      ·
+ │              count  1
  └── render     ·      ·
       └── scan  ·      ·
 ·               table  abz@abz_c_b_key
@@ -625,6 +636,7 @@ query TTT
 EXPLAIN SELECT * FROM test2 WHERE k <= '100' ORDER BY k DESC LIMIT 20
 ----
 limit              ·      ·
+ │                 count  20
  └── index-join    ·      ·
       ├── revscan  ·      ·
       │            table  test2@test2_k_key
@@ -1001,11 +1013,11 @@ output row: [5 6 7 8]
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM noncover WHERE c > 0 ORDER BY c DESC
 ----
-index-join    ·      ·          (a, b, c, d)                             c!=NULL; key(c); -c
- ├── revscan  ·      ·          (a, b[omitted], c[omitted], d[omitted])  c!=NULL; key(c); -c
+index-join    ·      ·                 (a, b, c, d)                             c!=NULL; key(c); -c
+ ├── revscan  ·      ·                 (a, b[omitted], c[omitted], d[omitted])  c!=NULL; key(c); -c
  │            table  noncover@c        ·                                        ·
- │            spans  /1-        ·                                        ·
- └── scan     ·      ·          (a, b, c, d)                             ·
+ │            spans  /1-               ·                                        ·
+ └── scan     ·      ·                 (a, b, c, d)                             ·
 ·             table  noncover@primary  ·                                        ·
 
 query TTT
@@ -1021,12 +1033,13 @@ index-join  ·      ·
 query TTT
 EXPLAIN SELECT * FROM noncover WHERE c > 0 AND d = 8
 ----
-index-join  ·      ·
- ├── scan   ·      ·
- │          table  noncover@c
- │          spans  /1-
- └── scan   ·      ·
-·           table  noncover@primary
+index-join  ·       ·
+ ├── scan   ·       ·
+ │          table   noncover@c
+ │          spans   /1-
+ └── scan   ·       ·
+·           table   noncover@primary
+·           filter  d = 8
 
 # The following testcases verify that when we have a small limit, we prefer an
 # order-matching index.
@@ -1044,6 +1057,7 @@ query TTT
 EXPLAIN SELECT * FROM noncover ORDER BY c LIMIT 5
 ----
 limit            ·      ·
+ │               count  5
  └── index-join  ·      ·
       ├── scan   ·      ·
       │          table  noncover@c
@@ -1246,11 +1260,11 @@ output row: [9 3 3 '33']
 query TTTTT
 EXPLAIN (VERBOSE) SELECT a FROM t2 WHERE b = 2 OR ((b BETWEEN 2 AND 1) AND ((s != 'a') OR (s = 'a')))
 ----
-render           ·         ·                (a)                                      a!=NULL
- │               render 0  test.public.t2.a ·                                        ·
- └── index-join  ·         ·                (a, b[omitted], c[omitted], s[omitted])  b=CONST; a!=NULL; weak-key(a,c)
-      ├── scan   ·         ·                (a, b[omitted], c[omitted], s[omitted])  b=CONST; a!=NULL; weak-key(a,c)
-      │          table     t2@bc            ·                                        ·
-      │          spans     /2-/3            ·                                        ·
-      └── scan   ·         ·                (a, b[omitted], c[omitted], s[omitted])  ·
-·                table     t2@primary       ·                                        ·
+render           ·         ·                 (a)                                      a!=NULL
+ │               render 0  test.public.t2.a  ·                                        ·
+ └── index-join  ·         ·                 (a, b[omitted], c[omitted], s[omitted])  b=CONST; a!=NULL; weak-key(a,c)
+      ├── scan   ·         ·                 (a, b[omitted], c[omitted], s[omitted])  b=CONST; a!=NULL; weak-key(a,c)
+      │          table     t2@bc             ·                                        ·
+      │          spans     /2-/3             ·                                        ·
+      └── scan   ·         ·                 (a, b[omitted], c[omitted], s[omitted])  ·
+·                table     t2@primary        ·                                        ·

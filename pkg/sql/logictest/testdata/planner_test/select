@@ -346,10 +346,11 @@ render     ·      ·
 query TTT
 EXPLAIN SELECT * FROM dec2 WHERE isnan(d)
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  dec2@dec2_d_idx
-·          spans  ALL
+render     ·       ·
+ └── scan  ·       ·
+·          table   dec2@dec2_d_idx
+·          spans   ALL
+·          filter  isnan(d)
 
 # ------------------------------------------------------------------------------
 # Verify that lookups for Float NaN use indices when possible:
@@ -379,7 +380,8 @@ render     ·      ·
 query TTT
 EXPLAIN SELECT * FROM flt WHERE isnan(f)
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  flt@flt_f_key
-·          spans  ALL
+render     ·       ·
+ └── scan  ·       ·
+·          table   flt@flt_f_key
+·          spans   ALL
+·          filter  isnan(f)

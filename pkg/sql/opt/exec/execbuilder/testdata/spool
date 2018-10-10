@@ -9,6 +9,7 @@ EXPLAIN WITH a AS (INSERT INTO t VALUES (2) RETURNING x)
         SELECT * FROM a LIMIT 1
 ----
 limit                       ·      ·
+ │                          count  1
  └── spool                  ·      ·
       │                     limit  1
       └── run               ·      ·
@@ -22,6 +23,7 @@ EXPLAIN WITH a AS (DELETE FROM t RETURNING x)
         SELECT * FROM a LIMIT 1
 ----
 limit                     ·      ·
+ │                        count  1
  └── spool                ·      ·
       │                   limit  1
       └── run             ·      ·
@@ -37,6 +39,7 @@ EXPLAIN WITH a AS (UPDATE t SET x = x + 1 RETURNING x)
         SELECT * FROM a LIMIT 1
 ----
 limit                          ·      ·
+ │                             count  1
  └── spool                     ·      ·
       │                        limit  1
       └── run                  ·      ·
@@ -53,6 +56,7 @@ EXPLAIN WITH a AS (UPSERT INTO t VALUES (2) RETURNING x)
         SELECT * FROM a LIMIT 1
 ----
 limit                       ·      ·
+ │                          count  1
  └── spool                  ·      ·
       │                     limit  1
       └── run               ·      ·
@@ -66,6 +70,7 @@ query TTT
 EXPLAIN SELECT * FROM [INSERT INTO t VALUES (2) RETURNING x] LIMIT 1
 ----
 limit                       ·      ·
+ │                          count  1
  └── spool                  ·      ·
       │                     limit  1
       └── run               ·      ·
@@ -78,6 +83,7 @@ query TTT
 EXPLAIN SELECT * FROM [DELETE FROM t RETURNING x] LIMIT 1
 ----
 limit                     ·      ·
+ │                        count  1
  └── spool                ·      ·
       │                   limit  1
       └── run             ·      ·
@@ -91,6 +97,7 @@ query TTT
 EXPLAIN SELECT * FROM [UPDATE t SET x = x + 1 RETURNING x] LIMIT 1
 ----
 limit                          ·      ·
+ │                             count  1
  └── spool                     ·      ·
       │                        limit  1
       └── run                  ·      ·
@@ -106,6 +113,7 @@ query TTT
 EXPLAIN SELECT * FROM [UPSERT INTO t VALUES (2) RETURNING x] LIMIT 1
 ----
 limit                       ·      ·
+ │                          count  1
  └── spool                  ·      ·
       │                     limit  1
       └── run               ·      ·
@@ -150,6 +158,7 @@ EXPLAIN WITH a AS (INSERT INTO t VALUES(2) RETURNING x),
         SELECT * FROM b LIMIT 1
 ----
 limit                                      ·      ·
+ │                                         count  1
  └── spool                                 ·      ·
       │                                    limit  1
       └── run                              ·      ·
@@ -192,25 +201,28 @@ count                                 ·     ·
 query TTT
 EXPLAIN SELECT * FROM [INSERT INTO t VALUES (1) RETURNING x+10] WHERE @1 < 3 LIMIT 10
 ----
-limit                                 ·      ·
- └── spool                            ·      ·
-      │                               limit  10
-      └── filter                      ·      ·
-           └── render                 ·      ·
-                └── run               ·      ·
-                     └── insert       ·      ·
-                          │           into   t(x)
-                          └── values  ·      ·
-·                                     size   1 column, 1 row
+limit                                 ·       ·
+ │                                    count   10
+ └── spool                            ·       ·
+      │                               limit   10
+      └── filter                      ·       ·
+           │                          filter  "?column?" < 3
+           └── render                 ·       ·
+                └── run               ·       ·
+                     └── insert       ·       ·
+                          │           into    t(x)
+                          └── values  ·       ·
+·                                     size    1 column, 1 row
 
 # Check that a pulled up spool gets elided at the top level.
 query TTT
 EXPLAIN SELECT * FROM [INSERT INTO t VALUES (1) RETURNING x+10] WHERE @1 < 3
 ----
-filter                      ·     ·
- └── render                 ·     ·
-      └── run               ·     ·
-           └── insert       ·     ·
-                │           into  t(x)
-                └── values  ·     ·
-·                           size  1 column, 1 row
+filter                      ·       ·
+ │                          filter  "?column?" < 3
+ └── render                 ·       ·
+      └── run               ·       ·
+           └── insert       ·       ·
+                │           into    t(x)
+                └── values  ·       ·
+·                           size    1 column, 1 row
