@@ -151,13 +151,7 @@ export default class Sidebar extends React.Component {
           <IconLink to="/jobs" icon={jobsIcon} title="Jobs" />
         </ul>
         <ul className="navigation-bar__list navigation-bar__list--bottom">
-          <li>
-            <Link to="/debug" className={classNames("debug-pages-link", { active: this.context.router.isActive("/debug") })}>
-              <div
-                dangerouslySetInnerHTML={trustIcon(gearIcon)}
-              />
-            </Link>
-          </li>
+          <IconLink to="/debug" icon={gearIcon} className="normal debug-pages-link" activeFor={["/reports", "/data-distribution", "/raft"]} />
           <LoginIndicatorConnected />
           <IconLink to="/debug" icon={cockroachIcon} className="cockroach" />
         </ul>
