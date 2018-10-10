@@ -33,19 +33,20 @@ func init() {
 // should be considered for a split at all. If it is a database
 // or a view table descriptor, it should not be considered.
 func SplitAtIDHook(id uint32, cfg *config.SystemConfig) bool {
-	descVal := cfg.GetValue(MakeDescMetadataKey(ID(id)))
-	if descVal != nil {
-		var desc Descriptor
-		if err := descVal.GetProto(&desc); err != nil {
+	descVal := cfg.GetDesc(MakeDescMetadataKey(ID(id)))
+	if descVal == nil {
+		return false
+	}
+	var desc Descriptor
+	if err := descVal.GetProto(&desc); err != nil {
+		return false
+	}
+	if dbDesc := desc.GetDatabase(); dbDesc != nil {
+		return false
+	}
+	if tableDesc := desc.GetTable(); tableDesc != nil {
+		if viewStr := tableDesc.GetViewQuery(); viewStr != "" {
 			return false
-		}
-		if dbDesc := desc.GetDatabase(); dbDesc != nil {
-			return false
-		}
-		if tableDesc := desc.GetTable(); tableDesc != nil {
-			if viewStr := tableDesc.GetViewQuery(); viewStr != "" {
-				return false
-			}
 		}
 	}
 	return true
