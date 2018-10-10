@@ -869,8 +869,15 @@ func TestBackfillErrors(t *testing.T) {
 	const numNodes, chunkSize, maxValue = 5, 100, 4000
 	params, _ := tests.CreateTestServerParams()
 
+	var enableAsyncSchemaChanges uint32
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			AsyncExecNotification: func() error {
+				if enable := atomic.LoadUint32(&enableAsyncSchemaChanges); enable == 0 {
+					return errors.New("async schema changes are disabled")
+				}
+				return nil
+			},
 			AsyncExecQuickly:  true,
 			BackfillChunkSize: chunkSize,
 		},
@@ -893,10 +900,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	// Add a zone config for the table.
-	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
-		t.Fatal(err)
-	}
 
 	// Bulk insert.
 	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
@@ -935,6 +938,12 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 CREATE UNIQUE INDEX vidx ON t.test (v);
 `); !testutils.IsError(err, `duplicate key value \(v\)=\(1\) violates unique constraint "vidx"`) {
 		t.Fatalf("got err=%s", err)
+	}
+
+	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
+	// Add a zone config for the table.
+	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
+		t.Fatal(err)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
@@ -3506,14 +3515,6 @@ func TestCancelSchemaChange(t *testing.T) {
 		idx++
 	}
 
-	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
-	if _, err := addImmediateGCZoneConfig(db, tableDesc.ID); err != nil {
-		t.Fatal(err)
-	}
-	testutils.SucceedsSoon(t, func() error {
-		return checkTableKeyCount(ctx, kvDB, 3, maxValue)
-	})
-
 	// Verify that the index foo over v is consistent, and that column x has
 	// been backfilled properly.
 	rows, err := db.Query(`SELECT v, x from t.test@foo`)
@@ -3544,6 +3545,15 @@ func TestCancelSchemaChange(t *testing.T) {
 	if eCount != count {
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
+
+	// Verify that the data from the canceled CREATE INDEX is cleaned up.
+	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
+	if _, err := addImmediateGCZoneConfig(db, tableDesc.ID); err != nil {
+		t.Fatal(err)
+	}
+	testutils.SucceedsSoon(t, func() error {
+		return checkTableKeyCount(ctx, kvDB, 3, maxValue)
+	})
 }
 
 // This test checks that when a transaction containing schema changes
