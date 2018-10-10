@@ -96,6 +96,7 @@ $subnav-underline-height = 3px
       a
         display inline
         padding 0
+        text-decoration none
 
         &:hover
           color $link-color
@@ -103,9 +104,8 @@ $subnav-underline-height = 3px
     &.active
       background-color $navbar-bg
 
-    a
+    .icon-link
       width 100%
-      height 80px
       padding 20px 0
       display block
       color inherit
@@ -120,6 +120,13 @@ $subnav-underline-height = 3px
         width 100%
         text-align center
         letter-spacing 1px
+
+    &.debug-pages-link
+      path
+        stroke $tooltip-color
+
+      .icon-link
+        padding-bottom 0
 
 .nav-container
   padding 0 3rem 1rem
