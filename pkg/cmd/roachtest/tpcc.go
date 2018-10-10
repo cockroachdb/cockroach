@@ -201,9 +201,9 @@ const (
 func (d tpccBenchDistribution) zones() []string {
 	switch d {
 	case singleZone:
-		return []string{"us-east1-b"}
+		return []string{"us-central1-a"}
 	case multiZone:
-		return []string{"us-east1-b", "us-east1-c", "us-east1-d"}
+		return []string{"us-central1-a", "us-central1-b", "us-central1-c"}
 	case multiRegion:
 		return []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
 	default:
