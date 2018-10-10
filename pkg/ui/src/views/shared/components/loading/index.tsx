@@ -14,23 +14,27 @@
 
 import React from "react";
 
+import spinner from "assets/spinner.gif";
+
 interface LoadingProps {
   loading: boolean;
-  className: string;
-  image: string;
+  className?: string;
+  image?: string;
   render: () => React.ReactNode;
 }
 
-// *
-// * Loading will display a background image instead of the content if the
-// * loading prop is true.
-// *
+/**
+ * Loading will display a background image instead of the content if the
+ * loading prop is true.
+ */
 export default function Loading(props: LoadingProps) {
+  const className = props.className || "loading-image loading-image__spinner-left";
+  const imageURL = props.image || spinner;
   const image = {
-    "backgroundImage": `url(${props.image})`,
+    "backgroundImage": `url(${imageURL})`,
   };
   if (props.loading) {
-    return <div className={props.className} style={image} />;
+    return <div className={className} style={image} />;
   }
   return (
     <React.Fragment>

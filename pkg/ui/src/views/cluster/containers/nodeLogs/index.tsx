@@ -30,7 +30,6 @@ import { currentNode } from "src/views/cluster/containers/nodeOverview";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { getDisplayName } from "src/redux/nodes";
 import Loading from "src/views/shared/components/loading";
-import spinner from "assets/spinner.gif";
 import "./logs.styl";
 
 interface LogProps {
@@ -122,8 +121,6 @@ class Logs extends React.Component<LogProps & RouterState, {}> {
         <section className="section">
           <Loading
             loading={ !this.props.logs.data }
-            className="loading-image loading-image__spinner-left"
-            image={ spinner }
             render={() => content}
           />
         </section>

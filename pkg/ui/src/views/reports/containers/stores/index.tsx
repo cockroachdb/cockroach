@@ -26,8 +26,6 @@ import { nodeIDAttr } from "src/util/constants";
 import EncryptionStatus from "src/views/reports/containers/stores/encryption";
 import Loading from "src/views/shared/components/loading";
 
-import spinner from "assets/spinner.gif";
-
 interface StoresOwnProps {
   stores: protos.cockroach.server.serverpb.IStoreDetails[];
   loading: boolean;
@@ -127,7 +125,6 @@ class Stores extends React.Component<StoresProps, {}> {
         <Loading
           loading={this.props.loading}
           className="loading-image loading-image__spinner"
-          image={spinner}
           render={this.renderContent}
         />
       </div>

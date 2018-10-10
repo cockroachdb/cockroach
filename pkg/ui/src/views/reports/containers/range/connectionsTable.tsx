@@ -20,8 +20,6 @@ import * as protos from "src/js/protos";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import Loading from "src/views/shared/components/loading";
 
-import spinner from "assets/spinner.gif";
-
 interface ConnectionsTableProps {
   range: CachedDataReducerState<protos.cockroach.server.serverpb.RangeResponse>;
 }
@@ -43,8 +41,6 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
       <h2>Connections {viaNodeID}</h2>
       <Loading
         loading={!range || range.inFlight}
-        className="loading-image loading-image__spinner-left"
-        image={spinner}
         render={() => (
           <table className="connections-table">
             <tbody>

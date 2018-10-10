@@ -28,8 +28,6 @@ import Print from "src/views/reports/containers/range/print";
 import Loading from "src/views/shared/components/loading";
 import CommandQueueViz from "src/views/reports/containers/commandQueue/commandQueueViz";
 
-import spinner from "assets/spinner.gif";
-
 interface CommandQueueOwnProps {
   commandQueue: CachedDataReducerState<protos.cockroach.server.serverpb.CommandQueueResponse>;
   refreshCommandQueue: typeof refreshCommandQueue;
@@ -122,8 +120,6 @@ class CommandQueue extends React.Component<CommandQueueProps, {}> {
         </h1>
         <Loading
           loading={!this.props.commandQueue || this.props.commandQueue.inFlight}
-          className="loading-image loading-image__spinner-left"
-          image={spinner}
           render={this.renderReportBody}
         />
       </div>

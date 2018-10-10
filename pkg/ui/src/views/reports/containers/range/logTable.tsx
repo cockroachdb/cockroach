@@ -22,8 +22,6 @@ import Print from "src/views/reports/containers/range/print";
 import Loading from "src/views/shared/components/loading";
 import { TimestampToMoment } from "src/util/convert";
 
-import spinner from "assets/spinner.gif";
-
 interface LogTableProps {
   rangeID: Long;
   log: CachedDataReducerState<protos.cockroach.server.serverpb.RangeLogResponse>;
@@ -115,8 +113,6 @@ export default class LogTable extends React.Component<LogTableProps, {}> {
         <h2>Range Log</h2>
         <Loading
           loading={!log || log.inFlight}
-          className="loading-image loading-image__spinner-left"
-          image={spinner}
           render={() => (
             <table className="log-table">
               <tbody>

@@ -16,7 +16,6 @@ import TimeScaleDropdown from "src/views/cluster/containers/timescale";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 import swapByLicense from "src/views/shared/containers/licenseSwap";
 import { parseLocalityRoute } from "src/util/localities";
-import spinner from "assets/spinner.gif";
 import Loading from "src/views/shared/components/loading";
 import { connect } from "react-redux";
 import { AdminUIState } from "src/redux/state";
@@ -79,8 +78,6 @@ class ClusterVisualization extends React.Component<ClusterVisualizationProps & R
         </div>
         <Loading
           loading={!this.props.licenseDataExists}
-          className="loading-image loading-image__spinner-left"
-          image={spinner}
           render={() => <NodeCanvasContent tiers={tiers} />}
         />
       </div>

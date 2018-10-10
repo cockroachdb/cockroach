@@ -30,7 +30,6 @@ import { CLUSTERVIZ_ROOT } from "src/routes/visualization";
 import { getLocality } from "src/util/localities";
 import Loading from "src/views/shared/components/loading";
 import { NodeCanvas } from "./nodeCanvas";
-import spinner from "assets/spinner.gif";
 
 type Liveness = cockroach.storage.Liveness;
 
@@ -73,8 +72,6 @@ class NodeCanvasContainer extends React.Component<NodeCanvasContainerProps & Nod
     return (
       <Loading
         loading={!this.props.dataExists}
-        className="loading-image loading-image__spinner-left"
-        image={spinner}
         render={() => (
           <NodeCanvas
             localityTree={currentLocality}

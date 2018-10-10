@@ -1422,7 +1422,7 @@ func (s *adminServer) DataDistribution(
 	// and deleted tables (as opposed to e.g. information_schema) because we are interested
 	// in the data for all ranges, not just ranges for visible tables.
 	userName := s.getUser(req)
-	tablesQuery := `SELECT name, table_id, database_name, parent_id FROM "".crdb_internal.tables`
+	tablesQuery := `SELECT name, table_id, database_name, drop_time FROM "".crdb_internal.tables`
 	rows1, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
 		ctx, "admin-replica-matrix", nil /* txn */, userName, tablesQuery,
 	)
@@ -1438,6 +1438,13 @@ func (s *adminServer) DataDistribution(
 		tableID := uint64(tree.MustBeDInt(row[1]))
 		dbName := (*string)(row[2].(*tree.DString))
 
+		// Look at whether it was dropped.
+		var droppedAtTime *time.Time
+		droppedAtDatum, ok := row[3].(*tree.DTimestamp)
+		if ok {
+			droppedAtTime = &droppedAtDatum.Time
+		}
+
 		// Insert database if it doesn't exist.
 		dbInfo, ok := resp.DatabaseInfo[*dbName]
 		if !ok {
@@ -1448,30 +1455,35 @@ func (s *adminServer) DataDistribution(
 		}
 
 		// Get zone config for table.
-		zoneConfigQuery := fmt.Sprintf(
-			`SELECT zone_id, cli_specifier FROM [SHOW ZONE CONFIGURATION FOR TABLE %s.%s]`,
-			(*tree.Name)(dbName), (*tree.Name)(tableName),
-		)
-		rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
-			ctx, "admin-replica-matrix", nil /* txn */, userName, zoneConfigQuery,
-		)
-		if err != nil {
-			return nil, s.serverError(err)
-		}
+		zcID := int64(0)
 
-		if len(rows) != 1 {
-			return nil, s.serverError(fmt.Errorf(
-				"could not get zone config for table %s; %d rows returned", *tableName, len(rows),
-			))
-		}
+		if droppedAtTime == nil {
+			// TODO(vilterp): figure out a way to get zone configs for tables that are dropped
+			zoneConfigQuery := fmt.Sprintf(
+				`SELECT zone_id, cli_specifier FROM [SHOW ZONE CONFIGURATION FOR TABLE %s.%s]`,
+				(*tree.Name)(dbName), (*tree.Name)(tableName),
+			)
+			rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
+				ctx, "admin-replica-matrix", nil /* txn */, userName, zoneConfigQuery,
+			)
+			if err != nil {
+				return nil, s.serverError(err)
+			}
 
-		zcRow := rows[0]
-		zcID := int64(tree.MustBeDInt(zcRow[0]))
+			if len(rows) != 1 {
+				return nil, s.serverError(fmt.Errorf(
+					"could not get zone config for table %s; %d rows returned", *tableName, len(rows),
+				))
+			}
+			zcRow := rows[0]
+			zcID = int64(tree.MustBeDInt(zcRow[0]))
+		}
 
 		// Insert table.
 		tableInfo := serverpb.DataDistributionResponse_TableInfo{
 			ReplicaCountByNodeId: make(map[roachpb.NodeID]int64),
 			ZoneConfigId:         zcID,
+			DroppedAt:            droppedAtTime,
 		}
 		dbInfo.TableInfo[*tableName] = tableInfo
 		tableInfosByTableID[tableID] = tableInfo
