@@ -31,7 +31,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/debug"
-	"github.com/cockroachdb/cockroach/pkg/cli/synctest"
+	"github.com/cockroachdb/cockroach/pkg/cli/syncbench"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -99,9 +99,23 @@ func parseRangeID(arg string) (roachpb.RangeID, error) {
 	return roachpb.RangeID(rangeIDInt), nil
 }
 
+// OpenEngineOptions tunes the behavior of OpenEngine.
+type OpenEngineOptions struct {
+	ReadOnly  bool
+	MustExist bool
+}
+
 // OpenExistingStore opens the rocksdb engine rooted at 'dir'.
 // If 'readOnly' is true, opens the store in read-only mode.
 func OpenExistingStore(dir string, stopper *stop.Stopper, readOnly bool) (*engine.RocksDB, error) {
+	return OpenEngine(dir, stopper, OpenEngineOptions{ReadOnly: readOnly, MustExist: true})
+}
+
+// OpenEngine opens the RocksDB engine at 'dir'. Depending on the supplied options,
+// an empty engine might be initialized.
+func OpenEngine(
+	dir string, stopper *stop.Stopper, opts OpenEngineOptions,
+) (*engine.RocksDB, error) {
 	cache := engine.NewRocksDBCache(server.DefaultCacheSize)
 	defer cache.Release()
 	maxOpenFiles, err := server.SetOpenFileLimitForOneStore()
@@ -113,8 +127,8 @@ func OpenExistingStore(dir string, stopper *stop.Stopper, readOnly bool) (*engin
 		Settings:     serverCfg.Settings,
 		Dir:          dir,
 		MaxOpenFiles: maxOpenFiles,
-		MustExist:    true,
-		ReadOnly:     readOnly,
+		MustExist:    opts.MustExist,
+		ReadOnly:     opts.ReadOnly,
 	}
 
 	if PopulateRocksDBConfigHook != nil {
@@ -1011,28 +1025,28 @@ func runTimeSeriesDump(cmd *cobra.Command, args []string) error {
 	}
 }
 
-var debugSyncTestCmd = &cobra.Command{
-	Use:   "synctest [directory]",
+var debugSyncBenchCmd = &cobra.Command{
+	Use:   "syncbench [directory]",
 	Short: "Run a performance test for WAL sync speed",
 	Long: `
 `,
 	Args:   cobra.MaximumNArgs(1),
 	Hidden: true,
-	RunE:   MaybeDecorateGRPCError(runDebugSyncTest),
+	RunE:   MaybeDecorateGRPCError(runDebugSyncBench),
 }
 
-var syncTestOpts = synctest.Options{
+var syncBenchOpts = syncbench.Options{
 	Concurrency: 1,
 	Duration:    10 * time.Second,
 	LogOnly:     true,
 }
 
-func runDebugSyncTest(cmd *cobra.Command, args []string) error {
-	syncTestOpts.Dir = "./testdb"
+func runDebugSyncBench(cmd *cobra.Command, args []string) error {
+	syncBenchOpts.Dir = "./testdb"
 	if len(args) == 1 {
-		syncTestOpts.Dir = args[0]
+		syncBenchOpts.Dir = args[0]
 	}
-	return synctest.Run(syncTestOpts)
+	return syncbench.Run(syncBenchOpts)
 }
 
 var debugUnsafeRemoveDeadReplicasCmd = &cobra.Command{
@@ -1207,12 +1221,12 @@ func removeDeadReplicas(
 func init() {
 	DebugCmd.AddCommand(debugCmds...)
 
-	f := debugSyncTestCmd.Flags()
-	f.IntVarP(&syncTestOpts.Concurrency, "concurrency", "c", syncTestOpts.Concurrency,
+	f := debugSyncBenchCmd.Flags()
+	f.IntVarP(&syncBenchOpts.Concurrency, "concurrency", "c", syncBenchOpts.Concurrency,
 		"number of concurrent writers")
-	f.DurationVarP(&syncTestOpts.Duration, "duration", "d", syncTestOpts.Duration,
+	f.DurationVarP(&syncBenchOpts.Duration, "duration", "d", syncBenchOpts.Duration,
 		"duration to run the test for")
-	f.BoolVarP(&syncTestOpts.LogOnly, "log-only", "l", syncTestOpts.LogOnly,
+	f.BoolVarP(&syncBenchOpts.LogOnly, "log-only", "l", syncBenchOpts.LogOnly,
 		"only write to the WAL, not to sstables")
 
 	f = debugUnsafeRemoveDeadReplicasCmd.Flags()
@@ -1243,6 +1257,7 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugSSTDumpCmd,
 	debugGossipValuesCmd,
 	debugTimeSeriesDumpCmd,
+	debugSyncBenchCmd,
 	debugSyncTestCmd,
 	debugUnsafeRemoveDeadReplicasCmd,
 	debugEnvCmd,

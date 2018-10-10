@@ -274,7 +274,7 @@ func genMysqlTestdata(t *testing.T, dump func()) {
 
 				dt      DATETIME NOT NULL DEFAULT '2000-01-01 00:00:00',
 				d       DATE,
-				ts      TIMESTAMP,
+				ts      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 				t       TIME,
 				-- TODO(dt): fix parser: for YEAR's length option
 				-- y       YEAR,
