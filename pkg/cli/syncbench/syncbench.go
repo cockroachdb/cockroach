@@ -127,6 +127,9 @@ type Options struct {
 }
 
 // Run a test of writing synchronously to the RocksDB WAL.
+//
+// TODO(tschottdorf): this should receive a RocksDB instance so that the caller
+// in cli can use OpenEngine (which in turn allows to use encryption, etc).
 func Run(opts Options) error {
 	// Check if the directory exists.
 	_, err := os.Stat(opts.Dir)
