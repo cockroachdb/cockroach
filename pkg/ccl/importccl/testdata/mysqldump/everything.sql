@@ -1,13 +1,13 @@
--- MySQL dump 10.13  Distrib 5.7.23, for osx10.14 (x86_64)
+-- MySQL dump 10.13  Distrib 8.0.12, for osx10.14 (x86_64)
 --
 -- Host: localhost    Database: cockroachtestdata
 -- ------------------------------------------------------
--- Server version	5.7.23
+-- Server version	8.0.12
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
 /*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;
-/*!40101 SET NAMES utf8 */;
+ SET NAMES utf8mb4 ;
 /*!40103 SET @OLD_TIME_ZONE=@@TIME_ZONE */;
 /*!40103 SET TIME_ZONE='+00:00' */;
 /*!40014 SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0 */;
@@ -21,7 +21,7 @@
 
 DROP TABLE IF EXISTS `everything`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!40101 SET character_set_client = utf8 */;
+ SET character_set_client = utf8mb4 ;
 CREATE TABLE `everything` (
   `i` int(11) NOT NULL,
   `c` char(10) NOT NULL,
@@ -61,7 +61,7 @@ CREATE TABLE `everything` (
 
 LOCK TABLES `everything` WRITE;
 /*!40000 ALTER TABLE `everything` DISABLE KEYS */;
-INSERT INTO `everything` VALUES (1,'c','this is s\'s default value',NULL,'Small',_binary 'bin\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',NULL,NULL,'2000-01-01 00:00:00',NULL,'2018-10-09 22:55:39',NULL,NULL,NULL,-12.345,-2,NULL,5,NULL,NULL,NULL,-1.5,NULL,NULL,NULL,NULL,NULL,'{\"a\": \"b\", \"c\": {\"d\": [\"e\", 11, null]}}'),(2,'c2','this is s\'s default value',NULL,'Large',_binary 'bin2\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',NULL,NULL,'2000-01-01 00:00:00',NULL,'2018-10-09 22:55:39',NULL,NULL,NULL,12.345,3,NULL,5,NULL,NULL,NULL,1.2,NULL,NULL,NULL,NULL,NULL,'{}');
+INSERT INTO `everything` VALUES (1,'c','this is s\'s default value',NULL,'Small',_binary 'bin\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',NULL,NULL,'2000-01-01 00:00:00',NULL,'2018-10-10 15:04:47',NULL,NULL,NULL,-12.345,-2,NULL,5,NULL,NULL,NULL,-1.5,NULL,NULL,NULL,NULL,NULL,'{\"a\": \"b\", \"c\": {\"d\": [\"e\", 11, null]}}'),(2,'c2','this is s\'s default value',NULL,'Large',_binary 'bin2\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',NULL,NULL,'2000-01-01 00:00:00',NULL,'2018-10-10 15:04:47',NULL,NULL,NULL,12.345,3,NULL,5,NULL,NULL,NULL,1.2,NULL,NULL,NULL,NULL,NULL,'{}');
 /*!40000 ALTER TABLE `everything` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -74,4 +74,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2018-10-09 22:55:39
+-- Dump completed on 2018-10-10 15:04:47
