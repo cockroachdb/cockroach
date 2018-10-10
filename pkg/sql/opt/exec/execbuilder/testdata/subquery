@@ -22,6 +22,7 @@ root                          ·             ·
       │                       original sql  (SELECT 42)
       │                       exec mode     one row
       └── limit               ·             ·
+           │                  count         2
            └── render         ·             ·
                 └── emptyrow  ·             ·
 
