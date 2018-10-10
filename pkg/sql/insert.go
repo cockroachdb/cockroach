@@ -182,13 +182,13 @@ func (p *planner) Insert(
 	}
 
 	// Now create the source data plan. For this we need an AST and as
-	// list of desired types. The AST comes from the Rows operand, the
-	// desired types from the inserted columns.
+	// list of required types. The AST comes from the Rows operand, the
+	// required types from the inserted columns.
 
 	// Analyze the expressions for column information and typing.
-	desiredTypesFromSelect := make([]types.T, len(insertCols))
+	requiredTypesFromSelect := make([]types.T, len(insertCols))
 	for i, col := range insertCols {
-		desiredTypesFromSelect[i] = col.Type.ToDatumType()
+		requiredTypesFromSelect[i] = col.Type.ToDatumType()
 	}
 
 	// Extract the AST for the data source.
@@ -229,21 +229,32 @@ func (p *planner) Insert(
 	// Ready to create the plan for the data source; do it.
 	// This performs type checking on source expressions, collecting
 	// types for placeholders in the process.
-	rows, err := p.newPlan(ctx, insertRows, desiredTypesFromSelect)
+	rows, err := p.newPlan(ctx, insertRows, requiredTypesFromSelect)
 	if err != nil {
 		return nil, err
 	}
 
+	srcCols := planColumns(rows)
 	if !arityChecked {
 		// If the insert source was not a VALUES clause, then we have not
 		// already verified the arity of the operand is correct.
 		// Do it now.
-		numExprs := len(planColumns(rows))
+		numExprs := len(srcCols)
 		if err := checkNumExprs(numExprs, numInputColumns, n.Columns != nil); err != nil {
 			return nil, err
 		}
 		if numExprs > maxInsertIdx {
 			return nil, sqlbase.CannotWriteToComputedColError(insertCols[maxInsertIdx])
+		}
+	}
+
+	// The required types may not have been matched exactly by the planning.
+	// While this may be OK if the results were geared toward a client,
+	// for INSERT/UPSERT we must have a direct match.
+	for i, srcCol := range srcCols {
+		if err := sqlbase.CheckDatumTypeFitsColumnType(
+			insertCols[i], srcCol.Typ, &p.semaCtx.Placeholders); err != nil {
+			return nil, err
 		}
 	}
 

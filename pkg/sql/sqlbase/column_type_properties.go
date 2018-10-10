@@ -718,26 +718,36 @@ func (c *ColumnType) elementColumnType() *ColumnType {
 	return &result
 }
 
-// CheckColumnType verifies that a given value is compatible
-// with the type requested by the column. If the value is a
-// placeholder, the type of the placeholder gets populated.
-func CheckColumnType(col ColumnDescriptor, typ types.T, pmap *tree.PlaceholderInfo) error {
+// CheckDatumTypeFitsColumnType verifies that a given scalar value
+// type is valid to be stored in a column of the given column type. If
+// the scalar value is a placeholder, the type of the placeholder gets
+// populated. NULL values are considered to fit every target type.
+//
+// For the purpose of this analysis, column type aliases are not
+// considered to be different (eg. TEXT and VARCHAR will fit the same
+// scalar type String).
+//
+// This is used by the UPDATE, INSERT and UPSERT code.
+func CheckDatumTypeFitsColumnType(
+	col ColumnDescriptor, typ types.T, pmap *tree.PlaceholderInfo,
+) error {
 	if typ == types.Unknown {
 		return nil
 	}
-
 	// If the value is a placeholder, then the column check above has
 	// populated 'colTyp' with a type to assign to it.
 	colTyp := col.Type.ToDatumType()
 	if p, pok := typ.(types.TPlaceholder); pok {
 		if err := pmap.SetType(p.Name, colTyp); err != nil {
-			return fmt.Errorf("cannot infer type for placeholder %s from column %q: %s",
-				p.Name, col.Name, err)
+			return pgerror.NewErrorf(pgerror.CodeIndeterminateDatatypeError,
+				"cannot infer type for placeholder %s from column %q: %s",
+				p.Name, tree.ErrNameString(&col.Name), err)
 		}
 	} else if !typ.Equivalent(colTyp) {
 		// Not a placeholder; check that the value cast has succeeded.
-		return fmt.Errorf("value type %s doesn't match type %s of column %q",
-			typ, col.Type.SemanticType, col.Name)
+		return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+			"value type %s doesn't match type %s of column %q",
+			typ, col.Type.SQLString(), tree.ErrNameString(&col.Name))
 	}
 	return nil
 }
