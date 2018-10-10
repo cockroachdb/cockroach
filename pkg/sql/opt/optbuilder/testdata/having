@@ -27,7 +27,7 @@ project
  │    │    └── project
  │    │         └── scan kv
  │    │              └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
- │    └── filters [type=bool]
+ │    └── filters
  │         └── true [type=bool]
  └── projections
       └── const: 3 [type=int]
@@ -46,7 +46,7 @@ select
  │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │    └── aggregations
  │         └── count-rows [type=int]
- └── filters [type=bool]
+ └── filters
       └── gt [type=bool]
            ├── variable: count_rows [type=int]
            └── const: 1 [type=int]
@@ -67,7 +67,7 @@ select
  │         │    └── variable: k [type=int]
  │         └── min [type=int]
  │              └── variable: v [type=int]
- └── filters [type=bool]
+ └── filters
       └── gt [type=bool]
            ├── variable: min [type=int]
            └── const: 2 [type=int]
@@ -92,7 +92,7 @@ project
       │         │    └── variable: v [type=int]
       │         └── max [type=int]
       │              └── variable: v [type=int]
-      └── filters [type=bool]
+      └── filters
            └── gt [type=bool]
                 ├── variable: max [type=int]
                 └── const: 2 [type=int]
@@ -143,7 +143,7 @@ select
  │    │              └── variable: w [type=int]
  │    └── aggregations
  │         └── count-rows [type=int]
- └── filters [type=bool]
+ └── filters
       └── gt [type=bool]
            ├── variable: column6 [type=int]
            └── const: 5 [type=int]
@@ -171,7 +171,7 @@ project
       │    └── aggregations
       │         └── max [type=int]
       │              └── variable: v [type=int]
-      └── filters [type=bool]
+      └── filters
            └── gt [type=bool]
                 ├── variable: v [type=int]
                 └── const: 5 [type=int]
@@ -196,7 +196,7 @@ project
       │    └── aggregations
       │         └── sum [type=decimal]
       │              └── variable: w [type=int]
-      └── filters [type=bool]
+      └── filters
            └── like [type=bool]
                 ├── variable: column6 [type=string]
                 └── const: 'test%' [type=string]
@@ -221,7 +221,7 @@ project
       │    └── aggregations
       │         └── sum [type=decimal]
       │              └── variable: w [type=int]
-      └── filters [type=bool]
+      └── filters
            └── in [type=bool]
                 ├── variable: sum [type=decimal]
                 └── tuple [type=tuple{decimal, decimal, decimal}]
@@ -247,7 +247,7 @@ project
       │              └── mult [type=int]
       │                   ├── variable: t.public.kv.k [type=int]
       │                   └── variable: t.public.kv.w [type=int]
-      └── filters [type=bool]
+      └── filters
            └── gt [type=bool]
                 ├── variable: column5 [type=int]
                 └── const: 5 [type=int]
@@ -277,7 +277,7 @@ select
  │         │    └── variable: t.public.kv.s [type=string]
  │         └── count [type=int]
  │              └── variable: column6 [type=string]
- └── filters [type=bool]
+ └── filters
       └── gt [type=bool]
            ├── variable: count [type=int]
            └── const: 1 [type=int]
@@ -303,7 +303,7 @@ sort
            │    └── aggregations
            │         └── sum [type=decimal]
            │              └── variable: k [type=int]
-           └── filters [type=bool]
+           └── filters
                 └── eq [type=bool]
                      ├── variable: sum [type=decimal]
                      └── const: 10 [type=decimal]
@@ -330,7 +330,7 @@ sort
            │         │    └── variable: k [type=int]
            │         └── max [type=int]
            │              └── variable: k [type=int]
-           └── filters [type=bool]
+           └── filters
                 └── gt [type=bool]
                      ├── variable: max [type=int]
                      └── const: 10 [type=int]
@@ -355,7 +355,7 @@ sort
            │    └── aggregations
            │         └── sum [type=decimal]
            │              └── variable: k [type=int]
-           └── filters [type=bool]
+           └── filters
                 └── gt [type=bool]
                      ├── variable: v [type=int]
                      └── const: 10 [type=int]
@@ -380,7 +380,7 @@ sort
            │    └── aggregations
            │         └── max [type=int]
            │              └── variable: k [type=int]
-           └── filters [type=bool]
+           └── filters
                 └── gt [type=bool]
                      ├── variable: max [type=int]
                      └── const: 10 [type=int]
@@ -405,7 +405,7 @@ sort
            │    └── aggregations
            │         └── max [type=int]
            │              └── variable: k [type=int]
-           └── filters [type=bool]
+           └── filters
                 └── gt [type=bool]
                      ├── variable: max [type=int]
                      └── const: 10 [type=int]

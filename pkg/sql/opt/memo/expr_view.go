@@ -231,7 +231,7 @@ func (ev ExprView) String() string {
 func (ev ExprView) FormatString(flags ExprFmtFlags) string {
 	f := MakeExprFmtCtx(&bytes.Buffer{}, flags, ev.mem)
 	tp := treeprinter.New()
-	ev.format(&f, tp)
+	ev.format(&f, tp, false /* showProps */)
 	return tp.String()
 }
 

@@ -178,7 +178,7 @@ project
       │    ├── constraint: /2/1: [/1 - /1]
       │    ├── key: (1)
       │    └── fd: ()-->(2)
-      └── filters [type=bool, outer=(1,2)]
+      └── filters
            └── (k + u) = 1 [type=bool, outer=(1,2)]
 
 memo
@@ -230,8 +230,8 @@ project
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    └── fd: ()-->(1-3)
-      └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-           └── u = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+      └── filters
+           └── u = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
 
 memo
 SELECT k FROM a WHERE u = 1 AND v = 5
@@ -284,8 +284,8 @@ project
       │    ├── constraint: /2/1: (/NULL - ]
       │    ├── key: (1)
       │    └── fd: (1)-->(2,3), (3)~~>(1,2)
-      └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
-           └── u = v [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
+      └── filters
+           └── u = v [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
 
 # Don't push constraint into already limited scan.
 opt
@@ -306,8 +306,8 @@ project
       │    ├── limit: 1
       │    ├── key: ()
       │    └── fd: ()-->(1,2)
-      └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
-           └── k = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
+      └── filters
+           └── k = 1 [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
 
 # Constraint + index-join, with no remainder filter.
 opt
@@ -358,7 +358,7 @@ select
  │    ├── columns: k:1(int!null) u:2(int) v:3(int) j:4(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3)~~>(1,2,4)
- └── filters [type=bool, outer=(3), constraints=(/3: [/2 - ]; tight)]
+ └── filters
       └── v > 1 [type=bool, outer=(3), constraints=(/3: [/2 - ]; tight)]
 
 opt
@@ -377,7 +377,7 @@ index-join b
       │    ├── constraint: /3: [/1 - /10]
       │    ├── key: (1)
       │    └── fd: (1)-->(3), (3)-->(1)
-      └── filters [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
+      └── filters
            └── k > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
 
 memo
@@ -437,8 +437,8 @@ Source expression:
         │    ├── columns: k:1(int!null) u:2(int)
         │    ├── key: (1)
         │    └── fd: (1)-->(2)
-        └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-             └── u = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+        └── filters
+             └── u = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
 
 New expression 1 of 1:
   project
@@ -469,7 +469,7 @@ select
  │         ├── constraint: /3: [/1 - /10]
  │         ├── key: (1)
  │         └── fd: (1)-->(3), (3)-->(1)
- └── filters [type=bool, outer=(1,2)]
+ └── filters
       └── (k + u) = 1 [type=bool, outer=(1,2)]
 
 memo
@@ -524,9 +524,9 @@ select
  │         │    ├── constraint: /3: [/1 - /10]
  │         │    ├── key: (1)
  │         │    └── fd: (1)-->(3), (3)-->(1)
- │         └── filters [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
+ │         └── filters
  │              └── k > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
- └── filters [type=bool, outer=(1,2)]
+ └── filters
       └── (k + u) = 1 [type=bool, outer=(1,2)]
 
 memo
@@ -590,7 +590,7 @@ select
  │         ├── constraint: /2/1: [/1/2 - /8/9]
  │         ├── key: (1)
  │         └── fd: (1)-->(2)
- └── filters [type=bool, outer=(1-3), constraints=(/2/1/3: [/1/2/4 - /8/9/9]; tight)]
+ └── filters
       ├── (u, k, v) > (1, 2, 3) [type=bool, outer=(1-3), constraints=(/2/1/3: [/1/2/4 - ]; tight)]
       └── (u, k, v) < (8, 9, 10) [type=bool, outer=(1-3), constraints=(/2/1/3: (/NULL - /8/9/9]; tight)]
 
@@ -669,7 +669,7 @@ project
       │         ├── columns: k:1(int!null)
       │         ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
       │         └── key: (1)
-      └── filters [type=bool, outer=(4)]
+      └── filters
            └── j @> '{"a": "b", "c": "d"}' [type=bool, outer=(4)]
 
 # Query requiring an index join with no remaining filter.
@@ -730,7 +730,7 @@ select
  │         ├── columns: k:1(int!null)
  │         ├── constraint: /4/1: [/'{"a": "b"}' - /'{"a": "b"}']
  │         └── key: (1)
- └── filters [type=bool, outer=(4)]
+ └── filters
       └── j @> '{"a": "b", "c": "d"}' [type=bool, outer=(4)]
 
 opt
@@ -748,5 +748,5 @@ select
  │         ├── columns: k:1(int!null)
  │         ├── constraint: /4/1: [/'{"a": {"b": "c"}}' - /'{"a": {"b": "c"}}']
  │         └── key: (1)
- └── filters [type=bool, outer=(4)]
+ └── filters
       └── j @> '{"a": {"b": "c", "d": "e"}, "f": "g"}' [type=bool, outer=(4)]

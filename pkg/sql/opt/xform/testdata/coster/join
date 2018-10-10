@@ -48,10 +48,10 @@ project
       │    │    ├── cost: 1060
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(4)
-      │    └── filters [type=bool, outer=(4), constraints=(/4: [/1.0 - /1.0]; tight), fd=()-->(4)]
-      │         └── d = 1.0 [type=bool, outer=(4), constraints=(/4: [/1.0 - /1.0]; tight)]
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           └── k = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    └── filters
+      │         └── d = 1.0 [type=bool, outer=(4), constraints=(/4: [/1.0 - /1.0]; tight), fd=()-->(4)]
+      └── filters
+           └── k = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 exec-ddl
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX c_idx (c))

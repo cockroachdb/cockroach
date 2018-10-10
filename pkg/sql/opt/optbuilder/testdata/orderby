@@ -263,7 +263,7 @@ sort
            ├── columns: a:1(int!null) b:2(int!null) c:3(bool)
            ├── scan t
            │    └── columns: a:1(int!null) b:2(int) c:3(bool)
-           └── filters [type=bool]
+           └── filters
                 └── eq [type=bool]
                      ├── variable: b [type=int]
                      └── const: 7 [type=int]
@@ -291,7 +291,7 @@ sort
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(bool)
       │    ├── scan t
       │    │    └── columns: a:1(int!null) b:2(int) c:3(bool)
-      │    └── filters [type=bool]
+      │    └── filters
       │         └── eq [type=bool]
       │              ├── variable: b [type=int]
       │              └── const: 7 [type=int]
@@ -719,7 +719,7 @@ sort
            ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
            ├── scan abc
            │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
-           └── filters [type=bool]
+           └── filters
                 └── eq [type=bool]
                      ├── variable: b [type=int]
                      └── const: 2 [type=int]
@@ -736,7 +736,7 @@ sort
            ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
            ├── scan abc
            │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
-           └── filters [type=bool]
+           └── filters
                 └── eq [type=bool]
                      ├── variable: b [type=int]
                      └── const: 2 [type=int]
@@ -755,7 +755,7 @@ sort
                 ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
                 ├── scan abc
                 │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
-                └── filters [type=bool]
+                └── filters
                      └── eq [type=bool]
                           ├── variable: a [type=int]
                           └── const: 1 [type=int]

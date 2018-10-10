@@ -26,7 +26,7 @@ project
  ├── columns: r:6(int) s:7(int) t:8(float) u:9(float) v:10(decimal) w:11(decimal)
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal)
- └── projections [outer=(2-4)]
+ └── projections
       ├── i + i [type=int, outer=(2)]
       ├── i + i [type=int, outer=(2)]
       ├── f + f [type=float, outer=(3)]
@@ -50,7 +50,7 @@ project
  ├── columns: r:6(int) s:7(float) t:8(decimal)
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal)
- └── projections [outer=(2-4)]
+ └── projections
       ├── i + i [type=int, outer=(2)]
       ├── f + f [type=float, outer=(3)]
       └── d + d [type=decimal, outer=(4)]
@@ -71,7 +71,7 @@ project
  ├── columns: r:6(int) s:7(int) t:8(float) u:9(float) v:10(decimal) w:11(decimal)
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal)
- └── projections [outer=(2-4)]
+ └── projections
       ├── i + i [type=int, outer=(2)]
       ├── i + i [type=int, outer=(2)]
       ├── f + f [type=float, outer=(3)]
@@ -94,7 +94,7 @@ project
  ├── columns: r:6(decimal) s:7(float) t:8(decimal)
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal)
- └── projections [outer=(2-4)]
+ └── projections
       ├── variable: i [type=int, outer=(2)]
       ├── variable: f [type=float, outer=(3)]
       └── variable: d [type=decimal, outer=(4)]
@@ -113,7 +113,7 @@ project
  ├── columns: r:6(float) s:7(decimal) t:8(interval)
  ├── scan a
  │    └── columns: i:2(int) f:3(float) d:4(decimal) a.t:5(time)
- └── projections [outer=(2-5)]
+ └── projections
       ├── f - f [type=float, outer=(3)]
       ├── i - d [type=decimal, outer=(2,4)]
       └── a.t - a.t [type=interval, outer=(5)]
@@ -128,5 +128,5 @@ project
  ├── columns: r:6(int)
  ├── scan a
  │    └── columns: i:2(int)
- └── projections [outer=(2)]
+ └── projections
       └── variable: i [type=int, outer=(2)]

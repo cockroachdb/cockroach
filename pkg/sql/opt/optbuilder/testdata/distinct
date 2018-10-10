@@ -207,7 +207,7 @@ distinct-on
            ├── columns: x:1(int!null) y:2(int) z:3(float)
            ├── scan xyz
            │    └── columns: x:1(int!null) y:2(int) z:3(float)
-           └── filters [type=bool]
+           └── filters
                 └── gt [type=bool]
                      ├── variable: x [type=int]
                      └── const: 0 [type=int]
@@ -224,7 +224,7 @@ distinct-on
            ├── columns: x:1(int!null) y:2(int) z:3(float)
            ├── scan xyz
            │    └── columns: x:1(int!null) y:2(int) z:3(float)
-           └── filters [type=bool]
+           └── filters
                 └── gt [type=bool]
                      ├── variable: x [type=int]
                      └── const: 0 [type=int]
@@ -307,7 +307,7 @@ distinct-on
       │    │    └── aggregations
       │    │         └── max [type=float]
       │    │              └── variable: z [type=float]
-      │    └── filters [type=bool]
+      │    └── filters
       │         └── gt [type=bool]
       │              ├── variable: y [type=int]
       │              └── const: 4 [type=int]

@@ -32,11 +32,11 @@ project
       │         ├── columns: y.a:1(int!null) y.rowid:2(int!null)
       │         ├── scan y
       │         │    └── columns: y.a:1(int) y.rowid:2(int!null)
-      │         └── filters [type=bool]
+      │         └── filters
       │              └── lt [type=bool]
       │                   ├── variable: y.a [type=int]
       │                   └── const: 3 [type=int]
-      └── filters [type=bool]
+      └── filters
            └── eq [type=bool]
                 ├── variable: x.a [type=int]
                 └── variable: y.a [type=int]
@@ -51,7 +51,7 @@ project
       ├── columns: a:1(int!null) rowid:2(int!null)
       ├── scan y
       │    └── columns: a:1(int) rowid:2(int!null)
-      └── filters [type=bool]
+      └── filters
            └── lt [type=bool]
                 ├── variable: a [type=int]
                 └── const: 3 [type=int]
@@ -71,11 +71,11 @@ select
  │         ├── columns: a:1(int!null) rowid:2(int!null)
  │         ├── scan y
  │         │    └── columns: a:1(int) rowid:2(int!null)
- │         └── filters [type=bool]
+ │         └── filters
  │              └── lt [type=bool]
  │                   ├── variable: a [type=int]
  │                   └── const: 3 [type=int]
- └── filters [type=bool]
+ └── filters
       └── gt [type=bool]
            ├── variable: a [type=int]
            └── const: 1 [type=int]
@@ -97,15 +97,15 @@ select
  │    │         ├── columns: a:1(int!null) rowid:2(int!null)
  │    │         ├── scan y
  │    │         │    └── columns: a:1(int) rowid:2(int!null)
- │    │         └── filters [type=bool]
+ │    │         └── filters
  │    │              └── lt [type=bool]
  │    │                   ├── variable: a [type=int]
  │    │                   └── const: 3 [type=int]
- │    └── filters [type=bool]
+ │    └── filters
  │         └── gt [type=bool]
  │              ├── variable: a [type=int]
  │              └── const: 1 [type=int]
- └── filters [type=bool]
+ └── filters
       └── eq [type=bool]
            ├── variable: a [type=int]
            └── const: 2 [type=int]
@@ -130,11 +130,11 @@ project
       │    │         ├── columns: y.a:1(int!null) y.rowid:2(int!null)
       │    │         ├── scan y
       │    │         │    └── columns: y.a:1(int) y.rowid:2(int!null)
-      │    │         └── filters [type=bool]
+      │    │         └── filters
       │    │              └── lt [type=bool]
       │    │                   ├── variable: y.a [type=int]
       │    │                   └── const: 3 [type=int]
-      │    └── filters [type=bool]
+      │    └── filters
       │         └── lt [type=bool]
       │              ├── variable: y.a [type=int]
       │              └── const: 4 [type=int]
@@ -146,15 +146,15 @@ project
       │    │         ├── columns: y.a:3(int!null) y.rowid:4(int!null)
       │    │         ├── scan y
       │    │         │    └── columns: y.a:3(int) y.rowid:4(int!null)
-      │    │         └── filters [type=bool]
+      │    │         └── filters
       │    │              └── gt [type=bool]
       │    │                   ├── variable: y.a [type=int]
       │    │                   └── const: 1 [type=int]
-      │    └── filters [type=bool]
+      │    └── filters
       │         └── gt [type=bool]
       │              ├── variable: y.a [type=int]
       │              └── const: 3 [type=int]
-      └── filters [type=bool]
+      └── filters
            └── eq [type=bool]
                 ├── variable: y.a [type=int]
                 └── variable: y.a [type=int]
@@ -207,13 +207,13 @@ project
       │         │    ├── columns: x.a:1(int)
       │         │    └── scan x
       │         │         └── columns: x.a:1(int) x.rowid:2(int!null)
-      │         └── filters [type=bool]
+      │         └── filters
       │              └── eq [type=bool]
       │                   ├── variable: x.a [type=int]
       │                   └── variable: x.a [type=int]
       ├── scan x
       │    └── columns: x.a:5(int) x.rowid:6(int!null)
-      └── filters [type=bool]
+      └── filters
            └── eq [type=bool]
                 ├── variable: x.a [type=int]
                 └── variable: x.a [type=int]
@@ -267,7 +267,7 @@ project
       ├── columns: y.a:3(int) y.rowid:4(int!null)
       ├── scan y
       │    └── columns: y.a:3(int) y.rowid:4(int!null)
-      └── filters [type=bool]
+      └── filters
            └── any: eq [type=bool]
                 ├── project
                 │    ├── columns: x.a:1(int)
@@ -285,7 +285,7 @@ project
       ├── columns: y.a:3(int) y.rowid:4(int!null)
       ├── scan y
       │    └── columns: y.a:3(int) y.rowid:4(int!null)
-      └── filters [type=bool]
+      └── filters
            └── any: eq [type=bool]
                 ├── project
                 │    ├── columns: x.a:1(int)
@@ -304,7 +304,7 @@ project
       ├── columns: x.a:1(int) x.rowid:2(int!null)
       ├── scan x
       │    └── columns: x.a:1(int) x.rowid:2(int!null)
-      └── filters [type=bool]
+      └── filters
            └── any: eq [type=bool]
                 ├── project
                 │    ├── columns: y.a:3(int!null)
@@ -312,7 +312,7 @@ project
                 │         ├── columns: y.a:3(int!null) y.rowid:4(int!null)
                 │         ├── scan y
                 │         │    └── columns: y.a:3(int) y.rowid:4(int!null)
-                │         └── filters [type=bool]
+                │         └── filters
                 │              └── lt [type=bool]
                 │                   ├── variable: y.a [type=int]
                 │                   └── const: 3 [type=int]
@@ -338,7 +338,7 @@ project
                      │         ├── columns: y.a:3(int!null) y.rowid:4(int!null)
                      │         ├── scan y
                      │         │    └── columns: y.a:3(int) y.rowid:4(int!null)
-                     │         └── filters [type=bool]
+                     │         └── filters
                      │              └── eq [type=bool]
                      │                   ├── variable: x.a [type=int]
                      │                   └── variable: y.a [type=int]

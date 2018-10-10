@@ -53,8 +53,8 @@ inner-join (lookup abcd)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    └── prune: (1,2)
- │    └── true [type=bool]
- └── true [type=bool]
+ │    └── filters (true)
+ └── filters (true)
 
 # Filter that gets pushed down on both sides, but comes back into the ON
 # condition for the lookup side.
@@ -76,12 +76,12 @@ inner-join (lookup abcd)
  │    │    ├── scan small
  │    │    │    ├── columns: m:1(int) n:2(int)
  │    │    │    └── prune: (1,2)
- │    │    └── filters [type=bool, outer=(2), constraints=(/2: [/3 - ]; tight)]
+ │    │    └── filters
  │    │         └── gt [type=bool, outer=(2), constraints=(/2: [/3 - ]; tight)]
- │    │              ├── variable: n [type=int, outer=(2)]
+ │    │              ├── variable: n [type=int]
  │    │              └── const: 2 [type=int]
- │    └── true [type=bool]
- └── true [type=bool]
+ │    └── filters (true)
+ └── filters (true)
 
 # Filter that applies to the right side and gets pulled back into the ON
 # condition.
@@ -100,11 +100,11 @@ inner-join (lookup abcd)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    └── prune: (1,2)
- │    └── filters [type=bool, outer=(5), constraints=(/5: [/3 - ]; tight)]
+ │    └── filters
  │         └── gt [type=bool, outer=(5), constraints=(/5: [/3 - ]; tight)]
- │              ├── variable: b [type=int, outer=(5)]
+ │              ├── variable: b [type=int]
  │              └── const: 2 [type=int]
- └── true [type=bool]
+ └── filters (true)
 
 # Filter that can only be applied after the primary index join.
 opt
@@ -122,10 +122,10 @@ inner-join (lookup abcd)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    └── prune: (1,2)
- │    └── true [type=bool]
- └── filters [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
+ │    └── filters (true)
+ └── filters
       └── gt [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
-           ├── variable: c [type=int, outer=(6)]
+           ├── variable: c [type=int]
            └── const: 2 [type=int]
 
 # Multiple equalities.
@@ -143,8 +143,8 @@ inner-join (lookup abcd)
  │    ├── scan small
  │    │    ├── columns: m:1(int) n:2(int)
  │    │    └── prune: (1,2)
- │    └── true [type=bool]
- └── filters [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
+ │    └── filters (true)
+ └── filters
       └── gt [type=bool, outer=(6), constraints=(/6: [/3 - ]; tight)]
-           ├── variable: c [type=int, outer=(6)]
+           ├── variable: c [type=int]
            └── const: 2 [type=int]

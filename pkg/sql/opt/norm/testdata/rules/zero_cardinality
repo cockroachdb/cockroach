@@ -99,6 +99,6 @@ select
  │    ├── scan b
  │    │    ├── columns: k:1(int!null)
  │    │    └── key: (1)
- │    └── projections [outer=(1), side-effects]
+ │    └── projections
  │         └── CASE WHEN k < 0 THEN 3 / 0 ELSE 3 END [type=decimal, outer=(1), side-effects]
- └── false [type=bool]
+ └── false
