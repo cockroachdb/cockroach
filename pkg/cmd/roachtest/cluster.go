@@ -905,6 +905,10 @@ func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 	if atomic.LoadInt32(&interrupted) == 1 {
 		return fmt.Errorf("cluster.Start() interrupted")
 	}
+	// If the test failed (indicated by a canceled ctx), short-circuit.
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	c.status("starting cluster")
 	defer c.status()
 	args := []string{
@@ -921,10 +925,6 @@ func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 
 // Start is like StartE() except it takes a test and, on error, calls t.Fatal().
 func (c *cluster) Start(ctx context.Context, t *test, opts ...option) {
-	if t.Failed() {
-		// If the test has failed, don't try to limp along.
-		return
-	}
 	FatalIfErr(t, c.StartE(ctx, opts...))
 }
 
