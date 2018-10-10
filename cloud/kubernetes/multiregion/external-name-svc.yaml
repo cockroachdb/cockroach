@@ -13,6 +13,11 @@
 # After completing these steps, you should be able to access the cockroachdb
 # cluster at the name `cockroachdb-public` in the default Kubernetes namespace
 # (or at the name `cockroachdb-public.default` from any namespace).
+#
+# Note that the ServiceAccount and roles defined below are only needed for
+# accessing the Secret containing the root client certificate. If you are
+# managing client certificates (or passwords) some other way, you can do away
+# with everything in this file other than the Service.
 kind: Service
 apiVersion: v1
 metadata:
