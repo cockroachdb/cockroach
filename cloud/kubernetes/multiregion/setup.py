@@ -88,9 +88,14 @@ check_call([cockroach_path, 'cert', 'create-ca', '--certs-dir', certs_dir, '--ca
 check_call([cockroach_path, 'cert', 'create-client', 'root', '--certs-dir', certs_dir, '--ca-key', ca_key_dir+'/ca.key'])
 
 # For each cluster, create secrets containing the node and client certificates.
+# Note that we create the root client certificate in both the zone namespace
+# and the default namespace so that it's easier for clients in the default
+# namespace to use without additional steps.
+#
 # Also create a load balancer to each cluster's DNS pods.
 for zone, context in contexts.items():
     check_call(['kubectl', 'create', 'namespace', zone, '--context', context])
+    check_call(['kubectl', 'create', 'secret', 'generic', 'cockroachdb.client.root', '--from-file', certs_dir, '--context', context])
     check_call(['kubectl', 'create', 'secret', 'generic', 'cockroachdb.client.root', '--namespace', zone, '--from-file', certs_dir, '--context', context])
     check_call([cockroach_path, 'cert', 'create-node', '--certs-dir', certs_dir, '--ca-key', ca_key_dir+'/ca.key', 'localhost', '127.0.0.1', 'cockroachdb-public', 'cockroachdb-public.default' 'cockroachdb-public.'+zone, 'cockroachdb-public.%s.svc.cluster.local' % (zone), '*.cockroachdb', '*.cockroachdb.'+zone, '*.cockroachdb.%s.svc.cluster.local' % (zone)])
     check_call(['kubectl', 'create', 'secret', 'generic', 'cockroachdb.node', '--namespace', zone, '--from-file', certs_dir, '--context', context])
@@ -137,6 +142,13 @@ data:
 """ % (json.dumps(remote_dns_ips)))
     check_call(['kubectl', 'apply', '-f', config_filename, '--namespace', 'kube-system', '--context', context])
     check_call(['kubectl', 'delete', 'pods', '-l', 'k8s-app=kube-dns', '--namespace', 'kube-system', '--context', context])
+
+# Create a cockroachdb-public service in the default namespace in each cluster.
+for zone, context in contexts.items():
+    yaml_file = '%s/external-name-svc-%s.yaml' % (generated_files_dir, zone)
+    with open(yaml_file, 'w') as f:
+        check_call(['sed', 's/YOUR_ZONE_HERE/%s/g' % (zone), 'external-name-svc.yaml'], stdout=f)
+    check_call(['kubectl', 'apply', '-f', yaml_file, '--context', context])
 
 # Generate the join string to be used.
 join_addrs = []
