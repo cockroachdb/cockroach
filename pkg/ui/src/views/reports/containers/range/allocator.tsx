@@ -21,8 +21,6 @@ import { REMOTE_DEBUGGING_ERROR_TEXT } from "src/util/constants";
 import Print from "src/views/reports/containers/range/print";
 import Loading from "src/views/shared/components/loading";
 
-import spinner from "assets/spinner.gif";
-
 interface AllocatorOutputProps {
   allocator: CachedDataReducerState<protos.cockroach.server.serverpb.AllocatorRangeResponse>;
 }
@@ -71,8 +69,6 @@ export default class AllocatorOutput extends React.Component<AllocatorOutputProp
         <h2>Simulated Allocator Output{fromNodeID}</h2>
         <Loading
           loading={!allocator || allocator.inFlight}
-          className="loading-image loading-image__spinner-left"
-          image={spinner}
           render={() => (
             <table className="allocator-table">
               <tbody>

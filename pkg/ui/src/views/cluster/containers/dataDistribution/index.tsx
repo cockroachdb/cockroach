@@ -19,7 +19,6 @@ import { connect } from "react-redux";
 import Helmet from "react-helmet";
 
 import Loading from "src/views/shared/components/loading";
-import spinner from "assets/spinner.gif";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 import * as docsURL from "src/util/docs";
 import { FixLong } from "src/util/fixLong";
@@ -57,7 +56,6 @@ class DataDistribution extends React.Component<DataDistributionProps> {
         <ul>
           {this.props.sortedZoneConfigs.map((zoneConfig) => (
             <li key={zoneConfig.cli_specifier} className="zone-config">
-              <h3>{zoneConfig.cli_specifier}</h3>
               <pre className="zone-config__raw-sql">
                 {zoneConfig.config_sql}
               </pre>
@@ -86,13 +84,22 @@ class DataDistribution extends React.Component<DataDistributionProps> {
     const databaseInfo = this.props.dataDistribution.database_info;
     const dbTree: TreeNode<SchemaObject> = {
       name: "Cluster",
-      data: { dbName: null, tableName: null },
+      data: {
+        dbName: null,
+        tableName: null,
+      },
       children: _.map(databaseInfo, (dbInfo, dbName) => ({
         name: dbName,
-        data: { dbName },
-        children: _.map(dbInfo.table_info, (_tableInfo, tableName) => ({
+        data: {
+          dbName,
+        },
+        children: _.map(dbInfo.table_info, (tableInfo, tableName) => ({
           name: tableName,
-          data: { dbName, tableName },
+          data: {
+            dbName,
+            tableName,
+            droppedAt: tableInfo.dropped_at,
+          },
         })),
       })),
     };
@@ -111,6 +118,11 @@ class DataDistribution extends React.Component<DataDistributionProps> {
             </div>
           </h2>
           {this.renderZoneConfigs()}
+          <p style={{ maxWidth: 300, paddingTop: 10 }}>
+            Dropped tables appear <span className="table-label--dropped">greyed out</span>.
+            Their replicas will be garbage collected according to
+            the <code>gc.ttlseconds</code> setting in their zone configs.
+          </p>
         </div>
         <div>
           <ReplicaMatrix
@@ -160,7 +172,6 @@ class DataDistributionPage extends React.Component<DataDistributionPageProps> {
           <Loading
             className="loading-image loading-image__spinner-left"
             loading={!this.props.dataDistribution || !this.props.localityTree}
-            image={spinner}
             render={() => (
               <DataDistribution
                 localityTree={this.props.localityTree}
