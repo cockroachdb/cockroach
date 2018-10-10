@@ -300,22 +300,13 @@ func TestSorter(t *testing.T) {
 
 						evalCtx := tree.MakeTestingEvalContext(st)
 						defer evalCtx.Stop(ctx)
-						diskMonitor := mon.MakeMonitor(
-							"test-disk",
-							mon.DiskResource,
-							nil, /* curCount */
-							nil, /* maxHist */
-							-1,  /* increment: use default block size */
-							math.MaxInt64,
-							st,
-						)
-						diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+						diskMonitor := makeTestDiskMonitor(ctx, st)
 						defer diskMonitor.Stop(ctx)
 						flowCtx := FlowCtx{
 							EvalCtx:     &evalCtx,
 							Settings:    cluster.MakeTestingClusterSettings(),
 							TempStorage: tempEngine,
-							diskMonitor: &diskMonitor,
+							diskMonitor: diskMonitor,
 						}
 						// Override the default memory limit. This will result in using
 						// a memory row container which will hit this limit and fall
@@ -386,18 +377,18 @@ var twoColOrdering = convertToSpecOrdering(sqlbase.ColumnOrdering{
 
 // BenchmarkSortAll times how long it takes to sort an input of varying length.
 func BenchmarkSortAll(b *testing.B) {
-	if testing.Short() {
-		b.Skip("TODO: Fix benchmark")
-	}
 	const numCols = 2
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
+	diskMonitor := makeTestDiskMonitor(ctx, st)
+	defer diskMonitor.Stop(ctx)
 	flowCtx := FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Settings:    st,
+		EvalCtx:     &evalCtx,
+		diskMonitor: diskMonitor,
 	}
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -426,18 +417,18 @@ func BenchmarkSortAll(b *testing.B) {
 // BenchmarkSortLimit times how long it takes to sort a fixed size input with
 // varying limits.
 func BenchmarkSortLimit(b *testing.B) {
-	if testing.Short() {
-		b.Skip("TODO: fix benchmark")
-	}
 	const numCols = 2
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
+	diskMonitor := makeTestDiskMonitor(ctx, st)
+	defer diskMonitor.Stop(ctx)
 	flowCtx := FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Settings:    st,
+		EvalCtx:     &evalCtx,
+		diskMonitor: diskMonitor,
 	}
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -470,18 +461,18 @@ func BenchmarkSortLimit(b *testing.B) {
 // BenchmarkSortChunks times how long it takes to sort an input which is already
 // sorted on a prefix.
 func BenchmarkSortChunks(b *testing.B) {
-	if testing.Short() {
-		b.Skip("TODO: fix benchmark")
-	}
 	const numCols = 2
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
+	diskMonitor := makeTestDiskMonitor(ctx, st)
+	defer diskMonitor.Stop(ctx)
 	flowCtx := FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Settings:    st,
+		EvalCtx:     &evalCtx,
+		diskMonitor: diskMonitor,
 	}
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
@@ -512,4 +503,18 @@ func BenchmarkSortChunks(b *testing.B) {
 			})
 		}
 	}
+}
+
+func makeTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
+	diskMonitor := mon.MakeMonitor(
+		"test-disk",
+		mon.DiskResource,
+		nil, /* curCount */
+		nil, /* maxHist */
+		-1,  /* increment: use default block size */
+		math.MaxInt64,
+		st,
+	)
+	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	return &diskMonitor
 }
