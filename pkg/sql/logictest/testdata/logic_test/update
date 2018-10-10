@@ -383,3 +383,32 @@ query IIII rowsort
 SELECT * FROM tu
 ----
 1 NULL NULL NULL
+
+subtest contraint_check_validation_ordering
+
+# Verification of column constraints vs CHECK handling. The column
+# constraint verification must take place first.
+#
+# This test requires that the error message for a CHECK constraint
+# validation error be different than a column validation error. So we
+# test the former first, as a sanity check.
+statement ok
+CREATE TABLE tn(x INT NULL CHECK(x IS NOT NULL), y CHAR(4) CHECK(length(y) < 4));
+  INSERT INTO tn(x, y) VALUES (123, 'abc');
+
+statement error failed to satisfy CHECK constraint
+UPDATE tn SET x = NULL
+
+statement error failed to satisfy CHECK constraint
+UPDATE tn SET y = 'abcd'
+
+# Now we test that the column validation occurs before the CHECK constraint.
+statement ok
+CREATE TABLE tn2(x INT NOT NULL CHECK(x IS NOT NULL), y CHAR(3) CHECK(length(y) < 4));
+  INSERT INTO tn2(x, y) VALUES (123, 'abc');
+
+statement error null value in column "x" violates not-null constraint
+UPDATE tn2 SET x = NULL
+
+statement error value too long for type CHAR\(3\)
+UPDATE tn2 SET y = 'abcd'
