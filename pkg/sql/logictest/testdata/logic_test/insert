@@ -124,13 +124,13 @@ INSERT INTO kv4 (int, bool) VALUES (3, 'a')
 statement ok
 INSERT INTO kv4 (int, bool) VALUES (3, true)
 
-statement error value type int doesn't match type STRING of column "char"
+statement error value type int doesn't match type CHAR of column "char"
 INSERT INTO kv4 (int, char) VALUES (4, 1)
 
 statement ok
 INSERT INTO kv4 (int, char) VALUES (4, 'a')
 
-statement error value type int doesn't match type FLOAT of column "float"
+statement error value type int doesn't match type FLOAT8 of column "float"
 INSERT INTO kv4 (int, float) VALUES (5, 1::INT)
 
 statement ok
@@ -521,3 +521,11 @@ INSERT INTO sw(f) VALUES ('abcd')
 
 statement error value too long for type STRING\(3\) COLLATE en \(column "fc"\)
 INSERT INTO sw(fc) VALUES ('abcd' COLLATE en)
+
+subtest regression_26742
+
+statement ok
+CREATE TABLE ct(x INT, derived INT AS (x+1) STORED)
+
+statement error value type string doesn't match type INT of column "x"
+INSERT INTO ct(x) SELECT c FROM sw
