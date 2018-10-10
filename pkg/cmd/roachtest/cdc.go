@@ -48,12 +48,11 @@ func stopKafka(ctx context.Context, c *cluster, kafkaNode nodeListOption) {
 
 // stopFeeds cancels any running feeds on the cluster. Not necessary for the
 // nightly, but nice for development.
-func stopFeeds(db *gosql.DB, c *cluster) {
-	if _, err := db.Exec(`CANCEL JOBS (
+func stopFeeds(db *gosql.DB, c *cluster) error {
+	_, err := db.Exec(`CANCEL JOBS (
 			SELECT job_id FROM [SHOW JOBS] WHERE status = 'running'
-		)`); err != nil {
-		c.t.Fatal(err)
-	}
+		)`)
+	return err
 }
 
 type tpccWorkload struct {
@@ -114,7 +113,11 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	installKafka(ctx, c, kafkaNode)
 	startKafka(ctx, c, kafkaNode)
 	db := c.Conn(ctx, 1)
-	defer stopFeeds(db, c)
+	defer func() {
+		if err := stopFeeds(db, c); err != nil {
+			t.Fatal(err)
+		}
+	}()
 	if _, err := db.Exec(`SET CLUSTER SETTING trace.debug.enable = true`); err != nil {
 		c.t.Fatal(err)
 	}
