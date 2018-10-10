@@ -388,9 +388,9 @@ invocations, or lists. Here is an example:
 
 Dynamic Construction
 
-Sometimes the name of a constructed node can be one of several choices, and may
-not even be known at compile-time. The built-in "OpName" function can be used
-to dynamically construct the right kind of node. For example:
+Sometimes the name of a constructed node can be one of several choices. The
+built-in "OpName" function can be used to dynamically construct the right kind
+of node. For example:
 
   [NormalizeVar]
   (Eq | Ne
@@ -454,6 +454,45 @@ name is passed as a parameter to two functions in this example:
   =>
   (ConstructBinary Minus $right $left)
 
+Type Inference
+
+Expressions in both the match and replace patterns are assigned a data type
+that describes the kind of data that will be returned by the expression. These
+types are inferred using a combination of top-down and bottom-up type inference
+rules. For example:
+
+  define Select {
+    Input  Expr
+    Filter Expr
+  }
+
+  (Select $input:(LeftJoin | RightJoin) $filter:*) => $input
+
+The type of $input is inferred as "LeftJoin | RightJoin" by bubbling up the type
+of the bound expression. That type is propagated to the $input reference in the
+replace pattern. By contrast, the type of the * expression is inferred to be
+"Expr" using a top-down type inference rule, since the second argument to the
+Select operator is known to have type "Expr".
+
+When multiple types are inferred for an expression using different type
+inference rules, the more restrictive type is assigned to the expression. For
+example:
+
+  (Select $input:* & (LeftJoin)) => $input
+
+Here, the left input to the And expression was inferred to have type "Expr" and
+the right input to have type "LeftJoin". Since "LeftJoin" is the more
+restrictive type, the And expression and the $input binding are typed as
+"LeftJoin".
+
+Type inference detects and reports type contradictions, which occur when
+multiple incompatible types are inferred for an expression. For example:
+
+  (Select $input:(InnerJoin) & (LeftJoin)) => $input
+
+Because the input cannot be both an InnerJoin and a LeftJoin, Optgen reports a
+type contradiction error.
+
 Syntax
 
 This section describes the Optgen language syntax in a variant of extended
@@ -495,7 +534,7 @@ represented as single-quoted strings above:
 
   STRING     = " [^"\n]* "
   NUMBER     = UnicodeDigit+
-  IDENT      = UnicodeLetter (UnicodeLetter | UnicodeNumber)*
+  IDENT      = (UnicodeLetter | '_') (UnicodeLetter | '_' | UnicodeNumber)*
   COMMENT    = '#' .* \n
   WHITESPACE = UnicodeSpace+
 
