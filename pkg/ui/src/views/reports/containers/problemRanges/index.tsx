@@ -28,8 +28,6 @@ import { FixLong } from "src/util/fixLong";
 import ConnectionsTable from "src/views/reports/containers/problemRanges/connectionsTable";
 import Loading from "src/views/shared/components/loading";
 
-import spinner from "assets/spinner.gif";
-
 type NodeProblems$Properties = protos.cockroach.server.serverpb.ProblemRangesResponse.INodeProblems;
 
 interface ProblemRangesOwnProps {
@@ -201,7 +199,6 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
         <Loading
           loading={isLoading(this.props.problemRanges)}
           className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
-          image={spinner}
           render={() => (
             <div>
               {this.renderReportBody()}

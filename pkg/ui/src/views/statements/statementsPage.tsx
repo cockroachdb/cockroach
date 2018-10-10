@@ -19,7 +19,6 @@ import { connect } from "react-redux";
 import { RouteComponentProps } from "react-router";
 import { createSelector } from "reselect";
 
-import spinner from "assets/spinner.gif";
 import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { AdminUIState } from "src/redux/state";
 import { PrintTime } from "src/views/reports/containers/range/print";
@@ -159,7 +158,6 @@ class StatementsPage extends React.Component<StatementsPageProps & RouteProps, S
         <Loading
           loading={_.isNil(this.props.statements)}
           className="loading-image loading-image__spinner"
-          image={spinner}
           render={this.renderStatements}
         />
       </React.Fragment>
