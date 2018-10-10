@@ -35,11 +35,11 @@ func TestCoster(t *testing.T) {
 	)
 }
 
-// TestPhysicalPropsFactory files can be run separately like this:
+// TestPhysicalProps files can be run separately like this:
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/ordering"
 //   make test PKG=./pkg/sql/opt/xform TESTS="TestPhysicalPropsFactory/presentation"
 //   ...
-func TestPhysicalPropsFactory(t *testing.T) {
+func TestPhysicalProps(t *testing.T) {
 	runDataDrivenTest(t, "testdata/physprops/", memo.ExprFmtHideAll)
 }
 
