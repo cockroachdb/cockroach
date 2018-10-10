@@ -26,6 +26,8 @@ generated_files_dir = './generated'
 # other resources we created that weren't in that namespace
 for zone, context in contexts.items():
     call(['kubectl', 'delete', 'namespace', zone, '--context', context])
+    call(['kubectl', 'delete', 'secret', 'cockroachdb.client.root', '--context', context])
+    call(['kubectl', 'delete', '-f', 'external-name-svc.yaml', '--context', context])
     call(['kubectl', 'delete', '-f', 'dns-lb.yaml', '--context', context])
     call(['kubectl', 'delete', 'configmap', 'kube-dns', '--namespace', 'kube-system', '--context', context])
     # Restart the DNS pods to clear out our stub-domains configuration.
