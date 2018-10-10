@@ -439,18 +439,27 @@ CREATE INDEX foo ON t.test (v)
 	}
 }
 
-// checkTableKeyCount returns the number of KVs in the DB, the multiple should be the
-// number of columns.
-func checkTableKeyCount(ctx context.Context, kvDB *client.DB, multiple int, maxValue int) error {
+func getTableKeyCount(ctx context.Context, kvDB *client.DB) (int, error) {
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	tablePrefix := roachpb.Key(keys.MakeTablePrefix(uint32(tableDesc.ID)))
 	tableEnd := tablePrefix.PrefixEnd()
-	if kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0); err != nil {
+	kvs, err := kvDB.Scan(ctx, tablePrefix, tableEnd, 0)
+	return len(kvs), err
+}
+
+func checkTableKeyCountExact(ctx context.Context, kvDB *client.DB, e int) error {
+	if count, err := getTableKeyCount(ctx, kvDB); err != nil {
 		return err
-	} else if e := multiple * (maxValue + 1); len(kvs) != e {
-		return errors.Errorf("expected %d key value pairs, but got %d", e, len(kvs))
+	} else if count != e {
+		return errors.Errorf("expected %d key value pairs, but got %d", e, count)
 	}
 	return nil
+}
+
+// checkTableKeyCount returns the number of KVs in the DB, the multiple should be the
+// number of columns.
+func checkTableKeyCount(ctx context.Context, kvDB *client.DB, multiple int, maxValue int) error {
+	return checkTableKeyCountExact(ctx, kvDB, multiple*(maxValue+1))
 }
 
 // Run a particular schema change and run some OLTP operations in parallel, as
@@ -871,8 +880,8 @@ func TestBackfillErrors(t *testing.T) {
 
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
-			AsyncExecQuickly:  true,
-			BackfillChunkSize: chunkSize,
+			AsyncExecNotification: asyncSchemaChangerDisabled,
+			BackfillChunkSize:     chunkSize,
 		},
 	}
 
@@ -893,10 +902,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	// Add a zone config for the table.
-	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
-		t.Fatal(err)
-	}
 
 	// Bulk insert.
 	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
@@ -937,9 +942,15 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		t.Fatalf("got err=%s", err)
 	}
 
-	testutils.SucceedsSoon(t, func() error {
-		return checkTableKeyCount(ctx, kvDB, 1, maxValue)
-	})
+	// Index backfill errors at a non-deterministic chunk and the garbage
+	// keys remain because the async schema changer for the rollback stays
+	// disabled in order to assert the next errors. Therefore we do not check
+	// the keycount from this operation and just check that the next failed
+	// operations do not add more.
+	keyCount, err := getTableKeyCount(ctx, kvDB)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if _, err := sqlDB.Exec(`
 	   ALTER TABLE t.test ADD COLUMN p DECIMAL NOT NULL DEFAULT (DECIMAL '1-3');
@@ -947,7 +958,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		t.Fatalf("got err=%s", err)
 	}
 
-	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+	if err := checkTableKeyCountExact(ctx, kvDB, keyCount); err != nil {
 		t.Fatal(err)
 	}
 
@@ -957,7 +968,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		t.Fatalf("got err=%s", err)
 	}
 
-	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+	if err := checkTableKeyCountExact(ctx, kvDB, keyCount); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -1794,6 +1805,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
 		if len(tableDesc.Mutations) > 0 {
 			return errors.Errorf("%d mutations remaining", len(tableDesc.Mutations))
+		}
+		if len(tableDesc.GCMutations) > 0 {
+			return errors.Errorf("%d gc mutations remaining", len(tableDesc.GCMutations))
 		}
 
 		// Verify that t.public.test has the expected data. Read the table data while
@@ -3506,14 +3520,6 @@ func TestCancelSchemaChange(t *testing.T) {
 		idx++
 	}
 
-	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
-	if _, err := addImmediateGCZoneConfig(db, tableDesc.ID); err != nil {
-		t.Fatal(err)
-	}
-	testutils.SucceedsSoon(t, func() error {
-		return checkTableKeyCount(ctx, kvDB, 3, maxValue)
-	})
-
 	// Verify that the index foo over v is consistent, and that column x has
 	// been backfilled properly.
 	rows, err := db.Query(`SELECT v, x from t.test@foo`)
@@ -3544,6 +3550,15 @@ func TestCancelSchemaChange(t *testing.T) {
 	if eCount != count {
 		t.Fatalf("read the wrong number of rows: e = %d, v = %d", eCount, count)
 	}
+
+	// Verify that the data from the canceled CREATE INDEX is cleaned up.
+	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
+	if _, err := addImmediateGCZoneConfig(db, tableDesc.ID); err != nil {
+		t.Fatal(err)
+	}
+	testutils.SucceedsSoon(t, func() error {
+		return checkTableKeyCount(ctx, kvDB, 3, maxValue)
+	})
 }
 
 // This test checks that when a transaction containing schema changes
