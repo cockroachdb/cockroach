@@ -181,10 +181,12 @@ func (md *Metadata) Init() {
 	md.deps = md.deps[:0]
 }
 
-// InitFrom initializes the metadata with a copy of the provided metadata. This
-// metadata can then be modified independent of the copied metadata.
-func (md *Metadata) InitFrom(from *Metadata) {
-	md.Init()
+// AddMetadata initializes the metadata with a copy of the provided metadata.
+// This metadata can then be modified independent of the copied metadata.
+func (md *Metadata) AddMetadata(from *Metadata) {
+	if len(md.cols) != 0 || len(md.tables) != 0 || len(md.deps) != 0 {
+		panic("AddMetadata not supported when destination metadata is not empty")
+	}
 	md.cols = append(md.cols, from.cols...)
 	md.tables = append(md.tables, from.tables...)
 	md.deps = append(md.deps, from.deps...)

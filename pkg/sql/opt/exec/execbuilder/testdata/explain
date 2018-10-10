@@ -465,14 +465,23 @@ values  ·              ·                  (column1 int, column2 int, column3 i
 ·       row 1, expr 1  (5)[int]           ·                                        ·
 ·       row 1, expr 2  (6)[int]           ·                                        ·
 
-
+# TODO(rytaft): range operator needed to detect contradiction
 query TTTTT
 EXPLAIN (TYPES) SELECT 2*count(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v<2 AND count(k)>1
 ----
-render       ·         ·         (z int, v int)  ·
- │           render 0  (z)[int]  ·               ·
- │           render 1  (v)[int]  ·               ·
- └── norows  ·         ·         (v int, z int)  ·
+render               ·            ·                                                                          (z int, v int)     ·
+ │                   render 0     ((agg0)[int] * (2)[int])[int]                                              ·                  ·
+ │                   render 1     (v)[int]                                                                   ·                  ·
+ └── filter          ·            ·                                                                          (v int, agg0 int)  ·
+      │              filter       ((agg0)[int] > (1)[int])[bool]                                             ·                  ·
+      └── group      ·            ·                                                                          (v int, agg0 int)  ·
+           │         aggregate 0  v                                                                          ·                  ·
+           │         aggregate 1  count(k)                                                                   ·                  ·
+           │         group by     @2                                                                         ·                  ·
+           └── scan  ·            ·                                                                          (k int, v int)     ·
+·                    table        t@primary                                                                  ·                  ·
+·                    spans        ALL                                                                        ·                  ·
+·                    filter       ((((v)[int] > (123)[int])[bool]) AND (((v)[int] < (2)[int])[bool]))[bool]  ·                  ·
 
 query TTTTT
 EXPLAIN (TYPES) DELETE FROM t WHERE v > 1

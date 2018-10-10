@@ -15,6 +15,7 @@
 package execbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -22,10 +23,11 @@ import (
 )
 
 // Builder constructs a tree of execution nodes (exec.Node) from an optimized
-// expression tree (memo.ExprView).
+// expression tree (opt.Expr).
 type Builder struct {
 	factory            exec.Factory
-	ev                 memo.ExprView
+	mem                *memo.Memo
+	e                  opt.Expr
 	evalCtx            *tree.EvalContext
 	fastIsConstVisitor fastIsConstVisitor
 
@@ -38,25 +40,26 @@ type Builder struct {
 // New constructs an instance of the execution node builder using the
 // given factory to construct nodes. The Build method will build the execution
 // node tree from the given optimized expression tree.
-func New(factory exec.Factory, ev memo.ExprView, evalCtx *tree.EvalContext) *Builder {
-	return &Builder{factory: factory, ev: ev, evalCtx: evalCtx}
+func New(factory exec.Factory, mem *memo.Memo, e opt.Expr, evalCtx *tree.EvalContext) *Builder {
+	return &Builder{factory: factory, mem: mem, e: e, evalCtx: evalCtx}
 }
 
 // Build constructs the execution node tree and returns its root node if no
 // error occurred.
 func (b *Builder) Build() (exec.Plan, error) {
-	root, err := b.build(b.ev)
+	root, err := b.build(b.e)
 	if err != nil {
 		return nil, err
 	}
 	return b.factory.ConstructPlan(root, b.subqueries)
 }
 
-func (b *Builder) build(ev memo.ExprView) (exec.Node, error) {
-	if !ev.IsRelational() && !ev.IsEnforcer() {
-		return nil, errors.Errorf("building execution for non-relational operator %s", ev.Operator())
+func (b *Builder) build(e opt.Expr) (exec.Node, error) {
+	rel, ok := e.(memo.RelExpr)
+	if !ok {
+		return nil, errors.Errorf("building execution for non-relational operator %s", e.Op())
 	}
-	plan, err := b.buildRelational(ev)
+	plan, err := b.buildRelational(rel)
 	if err != nil {
 		return nil, err
 	}
@@ -66,11 +69,15 @@ func (b *Builder) build(ev memo.ExprView) (exec.Node, error) {
 // BuildScalar converts a scalar expression to a TypedExpr. Variables are mapped
 // according to the IndexedVarHelper.
 func (b *Builder) BuildScalar(ivh *tree.IndexedVarHelper) (tree.TypedExpr, error) {
+	scalar, ok := b.e.(opt.ScalarExpr)
+	if !ok {
+		return nil, errors.Errorf("BuildScalar cannot be called for non-scalar operator %s", b.e.Op())
+	}
 	ctx := buildScalarCtx{ivh: *ivh}
 	for i := 0; i < ivh.NumVars(); i++ {
 		ctx.ivarMap.Set(i+1, i)
 	}
-	return b.buildScalar(&ctx, b.ev)
+	return b.buildScalar(&ctx, scalar)
 }
 
 func (b *Builder) decorrelationError() error {

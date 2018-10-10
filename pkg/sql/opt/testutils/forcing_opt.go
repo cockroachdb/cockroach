@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // forcingOptimizer is a wrapper around an Optimizer which adds low-level
@@ -27,6 +26,8 @@ import (
 // part of the final expression.
 type forcingOptimizer struct {
 	o xform.Optimizer
+
+	coster forcingCoster
 
 	// remaining is the number of "unused" steps remaining.
 	remaining int
@@ -41,18 +42,15 @@ type forcingOptimizer struct {
 	// exploration rule.
 	lastApplied opt.RuleName
 
-	// lastAppliedGroup is the group where the last rule was applied (for both
-	// normalization and exploration rules).
-	lastAppliedGroup memo.GroupID
+	// lastAppliedSource is the expression matched by an exploration rule, or is
+	// nil for a normalization rule.
+	lastAppliedSource opt.Expr
 
-	// The following fields are only valid if lastApplied is an exploration rule:
-	//  - lastExploreSourceExpr is the ordinal of the expression on which the last
-	//    explore rule ran.
-	//  - lastExploreNewExprs is the set of expression ordinals that were added by
-	//    the rule (can be empty).
-	// All expressions are in lastAppliedGroup.
-	lastExploreSourceExpr memo.ExprOrdinal
-	lastExploreNewExprs   util.FastIntSet
+	// lastAppliedTarget is the new expression constructed by a normalization or
+	// exploration rule. For an exploration rule, it can be nil if no expressions
+	// were constructed, or can have additional expressions beyond the first that
+	// are accessible via NextExpr links.
+	lastAppliedTarget opt.Expr
 }
 
 // newForcingOptimizer creates a forcing optimizer that stops applying any rules
@@ -66,6 +64,8 @@ func newForcingOptimizer(
 		lastMatched: opt.InvalidRuleName,
 	}
 	fo.o.Init(&tester.evalCtx)
+	fo.coster.Init(&fo.o)
+	fo.o.SetCoster(&fo.coster)
 
 	fo.o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		if ignoreNormRules && ruleName.IsNormalize() {
@@ -82,23 +82,13 @@ func newForcingOptimizer(
 	// Hook the AppliedRule notification in order to track the portion of the
 	// expression tree affected by each transformation rule.
 	fo.o.NotifyOnAppliedRule(
-		func(ruleName opt.RuleName, group memo.GroupID, expr memo.ExprOrdinal, added int) {
+		func(ruleName opt.RuleName, source, target opt.Expr) {
 			if ignoreNormRules && ruleName.IsNormalize() {
 				return
 			}
 			fo.lastApplied = ruleName
-			fo.lastAppliedGroup = group
-
-			if ruleName.IsExplore() {
-				// This was an exploration rule. Record the expression on which the rule
-				// was applied and the set of expressions that were generated.
-				fo.lastExploreSourceExpr = expr
-				fo.lastExploreNewExprs = util.FastIntSet{}
-				if added > 0 {
-					exprCount := fo.o.Memo().ExprCount(group)
-					fo.lastExploreNewExprs.AddRange(exprCount-added, exprCount-1)
-				}
-			}
+			fo.lastAppliedSource = source
+			fo.lastAppliedTarget = target
 		},
 	)
 
@@ -108,117 +98,71 @@ func newForcingOptimizer(
 	return fo, nil
 }
 
-func (fo *forcingOptimizer) optimize() memo.ExprView {
+func (fo *forcingOptimizer) Optimize() opt.Expr {
 	return fo.o.Optimize()
 }
 
-// restrictToExprs sets up the optimizer to restrict the result to only those
-// containing one of the given expressions (all in the same group).
-//
-// mem is the resulting Memo obtained from another instance of forcingOptimizer, with
-// the same configuration.
-//
-// exprs is a set of ExprOrdinals (in the given group).
-func (fo *forcingOptimizer) restrictToExprs(
-	mem *memo.Memo, group memo.GroupID, exprs util.FastIntSet,
-) {
-	coster := newForcingCoster(fo.o.Coster())
-
-	restrictToGroup(coster, mem, mem.RootGroup(), group)
-
-	for e := 0; e < mem.ExprCount(group); e++ {
-		if !exprs.Contains(e) {
-			coster.SuppressExpr(memo.ExprID{Group: group, Expr: memo.ExprOrdinal(e)})
-		}
-	}
-
-	fo.o.SetCoster(coster)
+// LookupPath returns the path of the given node.
+func (fo *forcingOptimizer) LookupPath(target opt.Expr) exprPath {
+	return fo.coster.cache.lookupPath(fo.o.Memo().RootExpr(), target)
 }
 
-// restrictToGroup is a convenience variant of restrictToExprs when all
-// expressions in a group are to be retained.
-func (fo *forcingOptimizer) restrictToGroup(mem *memo.Memo, group memo.GroupID) {
-	coster := newForcingCoster(fo.o.Coster())
-
-	restrictToGroup(coster, mem, mem.RootGroup(), group)
-	fo.o.SetCoster(coster)
+// RestrictToExpr sets up the optimizer to restrict the result to only those
+// expression trees which include the given expression path.
+func (fo *forcingOptimizer) RestrictToExpr(path exprPath) {
+	fo.coster.AddAllowedPath(path)
 }
 
-// restrictToGroup walks the memo and adds expressions which need to be
-// suppressed to the forcingCoster so that the optimization result must contain
-// an expression in the given target group.
-//
-// restrictToGroup does this by recursively traversing the memo, starting at the
-// root group. If a group expression is not an ancestor of the target group,
-// then it is suppressed. If it is an ancestor, then restrictExprs recurses on
-// any child group that is an ancestor.
-//
-// Must be called before optimize().
-func restrictToGroup(coster *forcingCoster, mem *memo.Memo, group, target memo.GroupID) {
-	if group == target {
-		return
-	}
-
-	for e := 0; e < mem.ExprCount(group); e++ {
-		eid := memo.ExprID{Group: group, Expr: memo.ExprOrdinal(e)}
-		found := false
-		expr := mem.Expr(eid)
-		for g := 0; g < expr.ChildCount(); g++ {
-			child := expr.ChildGroup(mem, g)
-			if isGroupReachable(mem, child, target) {
-				restrictToGroup(coster, mem, child, target)
-				found = true
-			}
-		}
-
-		if !found {
-			coster.SuppressExpr(eid)
-		}
-	}
-}
-
-// isGroupReachable returns true if the target group can be "reached" from the
-// given group; in other words, if the given group is the target group or one of
-// its ancestor groups.
-func isGroupReachable(mem *memo.Memo, group, target memo.GroupID) bool {
-	if group == target {
-		return true
-	}
-
-	for e := 0; e < mem.ExprCount(group); e++ {
-		eid := memo.ExprID{Group: group, Expr: memo.ExprOrdinal(e)}
-		expr := mem.Expr(eid)
-		for g := 0; g < expr.ChildCount(); g++ {
-			if isGroupReachable(mem, expr.ChildGroup(mem, g), target) {
-				return true
-			}
-		}
-	}
-
-	return false
+// RestrictToGroup sets up the optimizer to restrict the result to only those
+// expression trees which include the given expression path, or other expression
+// paths in the same group.
+func (fo *forcingOptimizer) RestrictToGroup(path exprPath) {
+	// Since the path points to an expression, remove the last path in order to
+	// allow any children from the expression's group.
+	fo.coster.AddAllowedPath(path.truncateLastStep())
 }
 
 // forcingCoster implements the xform.Coster interface so that it can suppress
 // expressions in the memo that can't be part of the output tree.
 type forcingCoster struct {
-	inner      xform.Coster
-	suppressed map[memo.ExprID]bool
+	o       *xform.Optimizer
+	inner   xform.Coster
+	allowed []exprPath
+	cache   pathCache
 }
 
-func newForcingCoster(inner xform.Coster) *forcingCoster {
-	return &forcingCoster{inner: inner, suppressed: make(map[memo.ExprID]bool)}
+func (fc *forcingCoster) Init(o *xform.Optimizer) {
+	fc.o = o
+	fc.inner = o.Coster()
 }
 
-func (fc *forcingCoster) SuppressExpr(eid memo.ExprID) {
-	fc.suppressed[eid] = true
+// AddAllowedPath adds an allowed path to the coster. Any expressions which do
+// not fall along an allowed path are suppressed by the coster.
+func (fc *forcingCoster) AddAllowedPath(path exprPath) {
+	fc.allowed = append(fc.allowed, path)
 }
 
 // ComputeCost is part of the xform.Coster interface.
-func (fc *forcingCoster) ComputeCost(candidate *memo.BestExpr, logical *props.Logical) memo.Cost {
-	if fc.suppressed[candidate.Expr()] {
-		// Suppressed expressions get assigned MaxCost so that they never have
-		// the lowest cost.
-		return memo.MaxCost
+func (fc *forcingCoster) ComputeCost(e memo.RelExpr, required *props.Physical) memo.Cost {
+	// If no allowed paths have been added, allow all expressions.
+	if len(fc.allowed) != 0 {
+		// Derive the path of the expression in the tree.
+		path := fc.cache.lookupPath(fc.o.Memo().RootExpr(), e)
+
+		// If none of the paths allow the expression, suppress it.
+		suppress := true
+		for _, restricted := range fc.allowed {
+			if !path.isSuppressedBy(restricted) {
+				suppress = false
+				break
+			}
+		}
+		if suppress {
+			// Suppressed expressions get assigned MaxCost so that they never have
+			// the lowest cost.
+			return memo.MaxCost
+		}
 	}
-	return fc.inner.ComputeCost(candidate, logical)
+
+	return fc.inner.ComputeCost(e, required)
 }
