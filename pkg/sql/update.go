@@ -716,7 +716,7 @@ func (ts tupleSlot) extractValues(row tree.Datums) tree.Datums {
 func (ts tupleSlot) checkColumnTypes(row []tree.TypedExpr, pmap *tree.PlaceholderInfo) error {
 	renderedResult := row[ts.sourceIndex]
 	for i, typ := range renderedResult.ResolvedType().(types.TTuple).Types {
-		if err := sqlbase.CheckColumnType(ts.columns[i], typ, pmap); err != nil {
+		if err := sqlbase.CheckDatumTypeFitsColumnType(ts.columns[i], typ, pmap); err != nil {
 			return err
 		}
 	}
@@ -735,7 +735,7 @@ func (ss scalarSlot) extractValues(row tree.Datums) tree.Datums {
 func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr, pmap *tree.PlaceholderInfo) error {
 	renderedResult := row[ss.sourceIndex]
 	typ := renderedResult.ResolvedType()
-	return sqlbase.CheckColumnType(ss.column, typ, pmap)
+	return sqlbase.CheckDatumTypeFitsColumnType(ss.column, typ, pmap)
 }
 
 // addOrMergeExpr inserts an Expr into a renderNode, attempting to reuse

@@ -132,6 +132,11 @@ func GetPGCause(err error) (*Error, bool) {
 	}
 }
 
+// NewAssertionErrorf creates an internal error.
+func NewAssertionErrorf(format string, args ...interface{}) error {
+	return NewErrorWithDepthf(1, CodeInternalError, "programming error: "+format, args...)
+}
+
 // UnimplementedWithIssueErrorf constructs an error with the formatted message
 // and a link to the passed issue. Recorded as "#<issue>" in tracking.
 func UnimplementedWithIssueErrorf(issue int, format string, args ...interface{}) error {
