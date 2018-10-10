@@ -138,10 +138,10 @@ project
  │    │    │    ├── columns: pg_namespace.oid:33(oid) nspname:34(name!null)
  │    │    │    ├── scan pg_namespace
  │    │    │    │    └── columns: pg_namespace.oid:33(oid) nspname:34(name!null)
- │    │    │    └── filters [type=bool, outer=(34), constraints=(/34: (/NULL - /'pg_catalog') [/e'pg_catalog\x00' - ]; tight)]
+ │    │    │    └── filters
  │    │    │         └── nspname != 'pg_catalog' [type=bool, outer=(34), constraints=(/34: (/NULL - /'pg_catalog') [/e'pg_catalog\x00' - ]; tight)]
- │    │    └── filters [type=bool, outer=(3,33), constraints=(/3: (/NULL - ]; /33: (/NULL - ]), fd=(3)==(33), (33)==(3)]
- │    │         └── pg_type.typnamespace = pg_namespace.oid [type=bool, outer=(3,33), constraints=(/3: (/NULL - ]; /33: (/NULL - ])]
+ │    │    └── filters
+ │    │         └── pg_type.typnamespace = pg_namespace.oid [type=bool, outer=(3,33), constraints=(/3: (/NULL - ]; /33: (/NULL - ]), fd=(3)==(33), (33)==(3)]
  │    ├── max1-row
  │    │    ├── columns: case:70(string)
  │    │    ├── outer: (25)
@@ -157,12 +157,12 @@ project
  │    │         │    ├── fd: ()-->(38)
  │    │         │    ├── scan pg_type
  │    │         │    │    └── columns: pg_type.oid:38(oid) pg_type.typname:39(name!null)
- │    │         │    └── filters [type=bool, outer=(25,38), constraints=(/25: (/NULL - ]; /38: (/NULL - ]), fd=(25)==(38), (38)==(25)]
- │    │         │         └── pg_type.oid = pg_type.typbasetype [type=bool, outer=(25,38), constraints=(/25: (/NULL - ]; /38: (/NULL - ])]
- │    │         └── projections [outer=(39)]
+ │    │         │    └── filters
+ │    │         │         └── pg_type.oid = pg_type.typbasetype [type=bool, outer=(25,38), constraints=(/25: (/NULL - ]; /38: (/NULL - ]), fd=(25)==(38), (38)==(25)]
+ │    │         └── projections
  │    │              └── CASE WHEN pg_type.typname = 'pgType' THEN 'sqlType' ELSE 'OTHER' END [type=string, outer=(39)]
- │    └── true [type=bool]
- └── projections [outer=(1,2,7,34,70)]
+ │    └── filters
+ └── projections
       ├── null [type=unknown]
       ├── CASE WHEN pg_type.typtype = 'c' THEN 'STRUCT' ELSE 'DISTINCT' END [type=string, outer=(7)]
       ├── obj_description(pg_type.oid, 'pg_type') [type=string, outer=(1)]

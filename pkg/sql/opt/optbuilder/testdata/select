@@ -108,7 +108,7 @@ select
  ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── scan abc
  │    └── columns: a:1(int!null) b:2(int) c:3(int)
- └── filters [type=bool]
+ └── filters
       └── null [type=unknown]
 
 build
@@ -118,7 +118,7 @@ select
  ├── columns: a:1(int!null) b:2(int) c:3(int)
  ├── scan abc
  │    └── columns: a:1(int!null) b:2(int) c:3(int)
- └── filters [type=bool]
+ └── filters
       └── null [type=unknown]
 
 build
@@ -166,7 +166,7 @@ project
       ├── columns: a:1(int!null) b:2(int) c:3(int)
       ├── scan abc
       │    └── columns: a:1(int!null) b:2(int) c:3(int)
-      └── filters [type=bool]
+      └── filters
            └── case [type=bool]
                 ├── true [type=bool]
                 ├── when [type=bool]
@@ -298,7 +298,7 @@ project
       ├── columns: k:1(string!null) v:2(string)
       ├── scan kv
       │    └── columns: k:1(string!null) v:2(string)
-      └── filters [type=bool]
+      └── filters
            └── eq [type=bool]
                 ├── variable: k [type=string]
                 └── const: 'a' [type=string]
@@ -312,7 +312,7 @@ project
       ├── columns: k:1(string!null) v:2(string)
       ├── scan kv
       │    └── columns: k:1(string!null) v:2(string)
-      └── filters [type=bool]
+      └── filters
            └── eq [type=bool]
                 ├── variable: k [type=string]
                 └── const: 'a' [type=string]
@@ -771,7 +771,7 @@ project
            │    │    ├── columns: column1:1(int)
            │    │    └── tuple [type=tuple{int}]
            │    │         └── const: 1 [type=int]
-           │    └── filters [type=bool]
+           │    └── filters
            │         └── gt [type=bool]
            │              ├── variable: column1 [type=int]
            │              └── const: 1 [type=int]
@@ -796,7 +796,7 @@ project
            │    │    │    └── tuple [type=tuple{int, int}]
            │    │    │         ├── const: 1 [type=int]
            │    │    │         └── const: 1 [type=int]
-           │    │    └── filters [type=bool]
+           │    │    └── filters
            │    │         └── gt [type=bool]
            │    │              ├── variable: column1 [type=int]
            │    │              └── const: 1 [type=int]
@@ -825,7 +825,7 @@ project
                 │    │    ├── columns: column1:1(int)
                 │    │    └── tuple [type=tuple{int}]
                 │    │         └── const: 1 [type=int]
-                │    └── filters [type=bool]
+                │    └── filters
                 │         └── gt [type=bool]
                 │              ├── variable: column1 [type=int]
                 │              └── const: 1 [type=int]
@@ -851,7 +851,7 @@ project
                 │    │    │    └── tuple [type=tuple{int, int}]
                 │    │    │         ├── const: 1 [type=int]
                 │    │    │         └── const: 1 [type=int]
-                │    │    └── filters [type=bool]
+                │    │    └── filters
                 │    │         └── gt [type=bool]
                 │    │              ├── variable: column1 [type=int]
                 │    │              └── const: 1 [type=int]
@@ -880,7 +880,7 @@ project
                 │    │    ├── columns: column1:1(int)
                 │    │    └── tuple [type=tuple{int}]
                 │    │         └── const: 1 [type=int]
-                │    └── filters [type=bool]
+                │    └── filters
                 │         └── gt [type=bool]
                 │              ├── variable: column1 [type=int]
                 │              └── const: 1 [type=int]
@@ -906,7 +906,7 @@ project
                 │    │    │    └── tuple [type=tuple{int, int}]
                 │    │    │         ├── const: 1 [type=int]
                 │    │    │         └── const: 1 [type=int]
-                │    │    └── filters [type=bool]
+                │    │    └── filters
                 │    │         └── gt [type=bool]
                 │    │              ├── variable: column1 [type=int]
                 │    │              └── const: 1 [type=int]
@@ -935,7 +935,7 @@ project
                 │    │    ├── columns: column1:1(int)
                 │    │    └── tuple [type=tuple{int}]
                 │    │         └── const: 1 [type=int]
-                │    └── filters [type=bool]
+                │    └── filters
                 │         └── gt [type=bool]
                 │              ├── variable: column1 [type=int]
                 │              └── const: 1 [type=int]
@@ -961,7 +961,7 @@ project
                 │    │    │    └── tuple [type=tuple{int, int}]
                 │    │    │         ├── const: 1 [type=int]
                 │    │    │         └── const: 1 [type=int]
-                │    │    └── filters [type=bool]
+                │    │    └── filters
                 │    │         └── gt [type=bool]
                 │    │              ├── variable: column1 [type=int]
                 │    │              └── const: 1 [type=int]
@@ -996,7 +996,7 @@ select
  ├── columns: x:1(int!null) y:2(float)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(float)
- └── filters [type=bool]
+ └── filters
       └── gt [type=bool]
            ├── variable: x [type=int]
            └── const: 10 [type=int]
@@ -1008,7 +1008,7 @@ select
  ├── columns: x:1(int!null) y:2(float)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(float)
- └── filters [type=bool]
+ └── filters
       └── and [type=bool]
            ├── gt [type=bool]
            │    ├── variable: x [type=int]
@@ -1028,7 +1028,7 @@ select
  ├── columns: x:1(int!null) y:2(float)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(float)
- └── filters [type=bool]
+ └── filters
       └── in [type=bool]
            ├── variable: x [type=int]
            └── tuple [type=tuple{int, int, int}]
@@ -1060,7 +1060,7 @@ select
  ├── columns: x:1(int!null) y:2(float)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(float)
- └── filters [type=bool]
+ └── filters
       └── cast: BOOL [type=bool]
            └── gt [type=bool]
                 ├── variable: x [type=int]
@@ -1078,7 +1078,7 @@ select
  ├── columns: x:1(int!null) y:2(float)
  ├── scan a
  │    └── columns: x:1(int!null) y:2(float)
- └── filters [type=bool]
+ └── filters
       └── eq [type=bool]
            ├── variable: x [type=int]
            └── placeholder: $1 [type=int]

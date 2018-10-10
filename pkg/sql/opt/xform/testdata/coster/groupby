@@ -25,8 +25,8 @@ group-by
  │    ├── cost: 1070
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
- └── aggregations [outer=(1)]
+ └── aggregations
       ├── max [type=int, outer=(1)]
-      │    └── variable: k [type=int, outer=(1)]
+      │    └── variable: k [type=int]
       └── min [type=int, outer=(1)]
-           └── variable: k [type=int, outer=(1)]
+           └── variable: k [type=int]

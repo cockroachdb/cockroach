@@ -48,17 +48,17 @@ project
       │    ├── fd: ()-->(2)
       │    ├── virtual-scan system.information_schema.schemata
       │    │    └── columns: catalog_name:1(string) schema_name:2(string) default_character_set_name:3(string) sql_path:4(string)
-      │    └── filters [type=bool, outer=(2), constraints=(/2: [/'public' - /'public']; tight), fd=()-->(2)]
-      │         └── eq [type=bool, outer=(2), constraints=(/2: [/'public' - /'public']; tight)]
-      │              ├── variable: schema_name [type=string, outer=(2)]
+      │    └── filters
+      │         └── eq [type=bool, outer=(2), constraints=(/2: [/'public' - /'public']; tight), fd=()-->(2)]
+      │              ├── variable: schema_name [type=string]
       │              └── const: 'public' [type=string]
       ├── virtual-scan system.information_schema.tables
       │    └── columns: table_catalog:5(string) table_schema:6(string) table_name:7(string) table_type:8(string) is_insertable_into:9(string) version:10(int)
-      └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ])]
+      └── filters
            └── and [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ])]
-                ├── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-                │    ├── variable: catalog_name [type=string, outer=(1)]
-                │    └── variable: table_catalog [type=string, outer=(5)]
-                └── eq [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
-                     ├── variable: schema_name [type=string, outer=(2)]
-                     └── variable: table_schema [type=string, outer=(6)]
+                ├── eq [type=bool]
+                │    ├── variable: catalog_name [type=string]
+                │    └── variable: table_catalog [type=string]
+                └── eq [type=bool]
+                     ├── variable: schema_name [type=string]
+                     └── variable: table_schema [type=string]

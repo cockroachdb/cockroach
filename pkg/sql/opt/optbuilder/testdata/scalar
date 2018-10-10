@@ -830,7 +830,7 @@ project
            │         │    ├── columns: a:2(int!null)
            │         │    ├── scan x
            │         │    │    └── columns: a:2(int!null)
-           │         │    └── filters [type=bool]
+           │         │    └── filters
            │         │         └── eq [type=bool]
            │         │              ├── variable: a [type=int]
            │         │              └── variable: b [type=int]
@@ -935,7 +935,7 @@ project
            │         │         │    └── function: generate_series [type=int]
            │         │         │         ├── const: 1 [type=int]
            │         │         │         └── const: 100 [type=int]
-           │         │         └── true [type=bool]
+           │         │         └── filters
            │         └── aggregations
            │              └── array-agg [type=int[]]
            │                   └── variable: generate_series [type=int]

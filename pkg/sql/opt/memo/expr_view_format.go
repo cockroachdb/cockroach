@@ -27,7 +27,7 @@ import (
 
 // ExprFmtInterceptor is a callback that can be set to a custom formatting
 // function. If the function returns true, the normal formatting code is bypassed.
-var ExprFmtInterceptor func(f *ExprFmtCtx, tp treeprinter.Node, ev ExprView) bool
+var ExprFmtInterceptor func(f *ExprFmtCtx, tp treeprinter.Node, ev ExprView, showAllProps bool) bool
 
 // ExprFmtFlags controls which properties of the expression are shown in
 // formatted output.
@@ -97,12 +97,12 @@ func (f *ExprFmtCtx) HasFlags(subset ExprFmtFlags) bool {
 
 // format constructs a treeprinter view of this expression for testing and
 // debugging. The given flags control which properties are added.
-func (ev ExprView) format(f *ExprFmtCtx, tp treeprinter.Node) {
-	if ExprFmtInterceptor != nil && ExprFmtInterceptor(f, tp, ev) {
+func (ev ExprView) format(f *ExprFmtCtx, tp treeprinter.Node, showAllProps bool) {
+	if ExprFmtInterceptor != nil && ExprFmtInterceptor(f, tp, ev, showAllProps) {
 		return
 	}
 	if ev.IsScalar() {
-		ev.formatScalar(f, tp)
+		ev.formatScalar(f, tp, showAllProps)
 	} else {
 		ev.formatRelational(f, tp)
 	}
@@ -229,6 +229,11 @@ func (ev ExprView) formatRelational(f *ExprFmtCtx, tp treeprinter.Node) {
 			idxCols[i] = def.Table.ColumnID(idx.Column(i).Ordinal)
 		}
 		tp.Childf("key columns: %v = %v", def.KeyCols, idxCols)
+
+	case opt.MergeJoinOp:
+		mergeOn := ev.Child(2).Private().(*MergeOnDef)
+		tp.Childf("left ordering: %v", mergeOn.LeftEq)
+		tp.Childf("right ordering: %v", mergeOn.RightEq)
 	}
 
 	if !f.HasFlags(ExprFmtHideMiscProps) {
@@ -291,11 +296,84 @@ func (ev ExprView) formatRelational(f *ExprFmtCtx, tp treeprinter.Node) {
 	}
 
 	for i, n := 0, ev.ChildCount(); i < n; i++ {
-		ev.Child(i).format(f, tp)
+		child := ev.Child(i)
+		if (ev.op == opt.SelectOp && i == 1) ||
+			(ev.IsJoin() && i == 2) ||
+			(ev.op == opt.LookupJoinOp && i == 1) ||
+			(ev.op == opt.MergeJoinOp && i == 2) {
+
+			if ev.op == opt.MergeJoinOp {
+				child = child.Child(0)
+			}
+
+			if child.op == opt.FalseOp || child.op == opt.NullOp {
+				tp.Childf("%v", child.op)
+				continue
+			}
+			tpChild := tp.Child("filters")
+			if child.op == opt.TrueOp {
+				continue
+			}
+			for i2, n2 := 0, child.ChildCount(); i2 < n2; i2++ {
+				conjunct := child.Child(i2)
+				scalar := conjunct.Logical().Scalar
+
+				// Constraints
+				// -----------
+				cb := constraintsBuilder{md: conjunct.Metadata(), evalCtx: conjunct.mem.logPropsBuilder.evalCtx}
+				scalar.Constraints, scalar.TightConstraints = cb.buildConstraints(conjunct)
+				if scalar.Constraints.IsUnconstrained() {
+					scalar.Constraints, scalar.TightConstraints = nil, false
+				}
+
+				// Functional Dependencies
+				// -----------------------
+				// Add constant columns. No need to add not null columns, because they
+				// are only relevant if there are lax FDs that can be made strict.
+				if scalar.Constraints != nil {
+					constCols := scalar.Constraints.ExtractConstCols(conjunct.mem.logPropsBuilder.evalCtx)
+					scalar.FuncDeps.AddConstants(constCols)
+				}
+
+				// Check for filter conjuncts of the form: x = y.
+				if conjunct.Operator() == opt.EqOp {
+					left := conjunct.Child(0)
+					right := conjunct.Child(1)
+					if left.Operator() == opt.VariableOp && right.Operator() == opt.VariableOp {
+						colLeft := left.Private().(opt.ColumnID)
+						colRight := right.Private().(opt.ColumnID)
+						scalar.FuncDeps.AddEquivalency(colLeft, colRight)
+					}
+				}
+
+				conjunct.format(f, tpChild, true /* showAllProps */)
+			}
+			continue
+		} else if ev.op == opt.ProjectOp && i == 1 {
+			if child.ChildCount() == 0 {
+				continue
+			}
+			tpChild := tp.Child("projections")
+			for i2, n2 := 0, child.ChildCount(); i2 < n2; i2++ {
+				child.Child(i2).format(f, tpChild, true /* showAllProps */)
+			}
+			continue
+		} else if (ev.op == opt.GroupByOp || ev.op == opt.ScalarGroupByOp || ev.op == opt.DistinctOnOp) && i == 1 {
+			if child.ChildCount() == 0 {
+				continue
+			}
+			tpChild := tp.Child("aggregations")
+			for i2, n2 := 0, child.ChildCount(); i2 < n2; i2++ {
+				child.Child(i2).format(f, tpChild, true /* showAllProps */)
+			}
+			continue
+		}
+
+		child.format(f, tp, false /* showAllProps */)
 	}
 }
 
-func (ev ExprView) formatScalar(f *ExprFmtCtx, tp treeprinter.Node) {
+func (ev ExprView) formatScalar(f *ExprFmtCtx, tp treeprinter.Node, showAllProps bool) {
 	// Omit empty ProjectionsOp and AggregationsOp.
 	if (ev.op == opt.ProjectionsOp || ev.op == opt.AggregationsOp) &&
 		ev.ChildCount() == 0 {
@@ -309,21 +387,20 @@ func (ev ExprView) formatScalar(f *ExprFmtCtx, tp treeprinter.Node) {
 	} else {
 		f.Buffer.Reset()
 		fmt.Fprintf(f.Buffer, "%v", ev.op)
-
 		ev.formatScalarPrivate(f, ev.Private())
-		ev.FormatScalarProps(f)
+		ev.FormatScalarProps(f, showAllProps)
 		tp = tp.Child(f.Buffer.String())
 	}
 	for i, n := 0, ev.ChildCount(); i < n; i++ {
 		child := ev.Child(i)
-		child.format(f, tp)
+		child.format(f, tp, false /* showAllProps */)
 	}
 }
 
 // FormatScalarProps writes out a string representation of the scalar
 // properties (with a preceding space); for example:
 //  " [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]"
-func (ev ExprView) FormatScalarProps(f *ExprFmtCtx) {
+func (ev ExprView) FormatScalarProps(f *ExprFmtCtx, showAllProps bool) {
 	// Don't panic if scalar properties don't yet exist when printing
 	// expression.
 	scalar := ev.Logical().Scalar
@@ -342,36 +419,39 @@ func (ev ExprView) FormatScalarProps(f *ExprFmtCtx) {
 		}
 
 		switch ev.Operator() {
-		case opt.ProjectionsOp, opt.AggregationsOp:
+		case opt.ProjectionsOp, opt.AggregationsOp, opt.FiltersOp:
 			// Don't show the type of these ops because they are simply tuple
 			// types of their children's types, and the types of children are
 			// already listed.
+			return
 
 		default:
 			writeProp("type=%s", scalar.Type)
 		}
 
-		if !f.HasFlags(ExprFmtHideMiscProps) {
-			if !scalar.OuterCols.Empty() {
-				writeProp("outer=%s", scalar.OuterCols)
-			}
-			if scalar.CanHaveSideEffects {
-				writeProp("side-effects")
-			}
-		}
-
-		if !f.HasFlags(ExprFmtHideConstraints) {
-			if scalar.Constraints != nil && !scalar.Constraints.IsUnconstrained() {
-				writeProp("constraints=(%s", scalar.Constraints)
-				if scalar.TightConstraints {
-					f.Buffer.WriteString("; tight")
+		if showAllProps {
+			if !f.HasFlags(ExprFmtHideMiscProps) {
+				if !scalar.OuterCols.Empty() {
+					writeProp("outer=%s", scalar.OuterCols)
 				}
-				f.Buffer.WriteString(")")
+				if scalar.CanHaveSideEffects {
+					writeProp("side-effects")
+				}
 			}
-		}
 
-		if !f.HasFlags(ExprFmtHideFuncDeps) && !scalar.FuncDeps.Empty() {
-			writeProp("fd=%s", scalar.FuncDeps)
+			if !f.HasFlags(ExprFmtHideConstraints) {
+				if scalar.Constraints != nil && !scalar.Constraints.IsUnconstrained() {
+					writeProp("constraints=(%s", scalar.Constraints)
+					if scalar.TightConstraints {
+						f.Buffer.WriteString("; tight")
+					}
+					f.Buffer.WriteString(")")
+				}
+			}
+
+			if !f.HasFlags(ExprFmtHideFuncDeps) && !scalar.FuncDeps.Empty() {
+				writeProp("fd=%s", scalar.FuncDeps)
+			}
 		}
 
 		if !first {

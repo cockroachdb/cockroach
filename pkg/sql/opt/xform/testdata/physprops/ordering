@@ -103,7 +103,7 @@ select
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
  │    └── ordering: +1,-2
- └── filters [type=bool]
+ └── filters
       └── x > y [type=bool]
 
 # Pass through ordering to scan operator that can't support it.
@@ -117,7 +117,7 @@ sort
       ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
       ├── scan a
       │    └── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
-      └── filters [type=bool]
+      └── filters
            └── x > y [type=bool]
 
 # --------------------------------------------------
@@ -182,7 +182,7 @@ project
  │    ├── scan a
  │    │    ├── columns: x:1(int!null) y:2(float!null)
  │    │    └── ordering: +1,-2
- │    └── filters [type=bool]
+ │    └── filters
  │         └── x > y [type=bool]
  └── projections
       └── x - 1 [type=int]
@@ -233,7 +233,7 @@ sort
            ├── columns: x:1(int!null) y:2(float!null) z:3(decimal)
            ├── scan a
            │    └── columns: x:1(int!null) y:2(float!null) z:3(decimal)
-           └── filters [type=bool]
+           └── filters
                 └── x > y [type=bool]
 
 memo
@@ -571,6 +571,8 @@ SELECT * FROM abc JOIN xyz ON a=x ORDER BY a
 ----
 inner-join (merge)
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── left ordering: +1
+ ├── right ordering: +4
  ├── ordering: +(1|4)
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -578,16 +580,15 @@ inner-join (merge)
  ├── scan xyz
  │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
  │    └── ordering: +4
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +4
-      └── true [type=bool]
+ └── filters
 
 opt
 SELECT * FROM abc JOIN xyz ON a=x ORDER BY x
 ----
 inner-join (merge)
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── left ordering: +1
+ ├── right ordering: +4
  ├── ordering: +(1|4)
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -595,10 +596,7 @@ inner-join (merge)
  ├── scan xyz
  │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
  │    └── ordering: +4
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +4
-      └── true [type=bool]
+ └── filters
 
 # A left join guarantees an ordering on the left side.
 opt
@@ -606,6 +604,8 @@ SELECT * FROM abc LEFT JOIN xyz ON a=x ORDER BY a
 ----
 left-join (merge)
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int) y:5(int) z:6(int)
+ ├── left ordering: +1
+ ├── right ordering: +4
  ├── ordering: +1
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -613,10 +613,7 @@ left-join (merge)
  ├── scan xyz
  │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
  │    └── ordering: +4
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +4
-      └── true [type=bool]
+ └── filters
 
 # A left join doesn't guarantee an ordering on x (some rows will have NULLs).
 opt
@@ -627,16 +624,15 @@ sort
  ├── ordering: +4
  └── left-join (merge)
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int) y:5(int) z:6(int)
+      ├── left ordering: +1
+      ├── right ordering: +4
       ├── scan abc
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       │    └── ordering: +1
       ├── scan xyz
       │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
       │    └── ordering: +4
-      └── merge-on
-           ├── left ordering: +1
-           ├── right ordering: +4
-           └── true [type=bool]
+      └── filters
 
 # A right join doesn't guarantee an ordering on a (some rows will have NULLs).
 opt
@@ -647,22 +643,23 @@ sort
  ├── ordering: +1
  └── right-join (merge)
       ├── columns: a:1(int) b:2(int) c:3(int) x:4(int!null) y:5(int!null) z:6(int!null)
+      ├── left ordering: +1
+      ├── right ordering: +4
       ├── scan abc
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       │    └── ordering: +1
       ├── scan xyz
       │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
       │    └── ordering: +4
-      └── merge-on
-           ├── left ordering: +1
-           ├── right ordering: +4
-           └── true [type=bool]
+      └── filters
 
 opt
 SELECT * FROM abc RIGHT JOIN xyz ON a=x ORDER BY x
 ----
 right-join (merge)
  ├── columns: a:1(int) b:2(int) c:3(int) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── left ordering: +1
+ ├── right ordering: +4
  ├── ordering: +4
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -670,10 +667,7 @@ right-join (merge)
  ├── scan xyz
  │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
  │    └── ordering: +4
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +4
-      └── true [type=bool]
+ └── filters
 
 opt
 SELECT * FROM abc FULL OUTER JOIN xyz ON a=x ORDER BY a
@@ -683,22 +677,23 @@ sort
  ├── ordering: +1
  └── full-join (merge)
       ├── columns: a:1(int) b:2(int) c:3(int) x:4(int) y:5(int) z:6(int)
+      ├── left ordering: +1
+      ├── right ordering: +4
       ├── scan abc
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       │    └── ordering: +1
       ├── scan xyz
       │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
       │    └── ordering: +4
-      └── merge-on
-           ├── left ordering: +1
-           ├── right ordering: +4
-           └── true [type=bool]
+      └── filters
 
 opt
 SELECT * FROM abc JOIN xyz ON a=x AND b=y ORDER BY a
 ----
 inner-join (merge)
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── left ordering: +1,+2
+ ├── right ordering: +4,+5
  ├── ordering: +(1|4)
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -706,16 +701,15 @@ inner-join (merge)
  ├── scan xyz
  │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
  │    └── ordering: +4,+5
- └── merge-on
-      ├── left ordering: +1,+2
-      ├── right ordering: +4,+5
-      └── true [type=bool]
+ └── filters
 
 opt
 SELECT * FROM abc JOIN xyz ON a=x AND b=y ORDER BY a, b
 ----
 inner-join (merge)
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── left ordering: +1,+2
+ ├── right ordering: +4,+5
  ├── ordering: +(1|4),+(2|5)
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -723,16 +717,15 @@ inner-join (merge)
  ├── scan xyz
  │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
  │    └── ordering: +4,+5
- └── merge-on
-      ├── left ordering: +1,+2
-      ├── right ordering: +4,+5
-      └── true [type=bool]
+ └── filters
 
 opt
 SELECT * FROM abc JOIN xyz ON a=x AND b=y ORDER BY a, y
 ----
 inner-join (merge)
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── left ordering: +1,+2
+ ├── right ordering: +4,+5
  ├── ordering: +(1|4),+(2|5)
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -740,10 +733,7 @@ inner-join (merge)
  ├── scan xyz
  │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
  │    └── ordering: +4,+5
- └── merge-on
-      ├── left ordering: +1,+2
-      ├── right ordering: +4,+5
-      └── true [type=bool]
+ └── filters
 
 # --------------------------------------------------
 # Limit / Offset
@@ -773,7 +763,7 @@ limit
  │    ├── scan abc
  │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  │    │    └── ordering: +1,+2
- │    └── filters [type=bool]
+ │    └── filters
  │         └── c < (a + b) [type=bool]
  └── const: 10 [type=int]
 
@@ -818,7 +808,7 @@ sort
       │    ├── scan abc
       │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       │    │    └── ordering: +1,+2
-      │    └── filters [type=bool]
+      │    └── filters
       │         └── c < (a + b) [type=bool]
       └── const: 10 [type=int]
 
@@ -861,7 +851,7 @@ limit
  │    ├── scan abc
  │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  │    │    └── ordering: +1,+2
- │    └── filters [type=bool]
+ │    └── filters
  │         └── c < (a + b) [type=bool]
  └── const: 10 [type=int]
 
@@ -901,7 +891,7 @@ limit
  │    ├── scan abc
  │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  │    │    └── ordering: +1,+2,+3
- │    └── filters [type=bool]
+ │    └── filters
  │         └── c < (a + b) [type=bool]
  └── const: 10 [type=int]
 

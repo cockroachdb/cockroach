@@ -33,9 +33,9 @@ select
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1)
- └── filters [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
-      └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight)]
-           ├── variable: x [type=int, outer=(1)]
+ └── filters
+      └── eq [type=bool, outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+           ├── variable: x [type=int]
            └── const: 1 [type=int]
 
 build
@@ -65,11 +65,11 @@ select
  │    │    ├── fd: (3)-->(4,5)
  │    │    ├── prune: (3-5)
  │    │    └── interesting orderings: (+3)
- │    └── true [type=bool]
- └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-      └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-           ├── variable: x [type=int, outer=(1)]
-           └── variable: k [type=int, outer=(3)]
+ │    └── filters
+ └── filters
+      └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+           ├── variable: x [type=int]
+           └── variable: k [type=int]
 
 # Propagate outer columns.
 build
@@ -86,7 +86,7 @@ select
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1)
- └── filters [type=bool, outer=(1,2)]
+ └── filters
       └── exists [type=bool, outer=(1,2)]
            └── select
                 ├── columns: k:3(int!null) u:4(float) v:5(string)
@@ -110,14 +110,14 @@ select
                 │    │    ├── fd: (3)-->(4,5)
                 │    │    ├── prune: (3-5)
                 │    │    └── interesting orderings: (+3)
-                │    └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
-                │         └── eq [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
-                │              ├── variable: k [type=int, outer=(3)]
-                │              └── variable: y [type=int, outer=(2)]
-                └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-                     └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-                          ├── variable: k [type=int, outer=(3)]
-                          └── variable: x [type=int, outer=(1)]
+                │    └── filters
+                │         └── eq [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
+                │              ├── variable: k [type=int]
+                │              └── variable: y [type=int]
+                └── filters
+                     └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+                          ├── variable: k [type=int]
+                          └── variable: x [type=int]
 
 # Reduce min cardinality.
 build
@@ -143,9 +143,9 @@ select
  │    │         └── interesting orderings: (+1)
  │    └── aggregations
  │         └── count-rows [type=int]
- └── filters [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
-      └── eq [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight)]
-           ├── variable: count_rows [type=int, outer=(3)]
+ └── filters
+      └── eq [type=bool, outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
+           ├── variable: count_rows [type=int]
            └── const: 5 [type=int]
 
 build
@@ -194,7 +194,7 @@ project
       │    ├── fd: (5)-->(1-4)
       │    ├── prune: (1-5)
       │    └── interesting orderings: (+5)
-      └── filters [type=bool]
+      └── filters
            └── true [type=bool]
 
 build
@@ -215,9 +215,9 @@ project
       │    ├── fd: (5)-->(1-4)
       │    ├── prune: (1-5)
       │    └── interesting orderings: (+5)
-      └── filters [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
+      └── filters
            └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
-                ├── variable: c [type=int, outer=(3)]
+                ├── variable: c [type=int]
                 └── null [type=unknown]
 
 build
@@ -239,10 +239,10 @@ project
       │    ├── fd: (5)-->(1-4)
       │    ├── prune: (1-5)
       │    └── interesting orderings: (+5)
-      └── filters [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ]), fd=(3)==(4), (4)==(3)]
-           └── eq [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ])]
-                ├── variable: c [type=int, outer=(3)]
-                └── variable: d [type=int, outer=(4)]
+      └── filters
+           └── eq [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ]), fd=(3)==(4), (4)==(3)]
+                ├── variable: c [type=int]
+                └── variable: d [type=int]
 
 build
 SELECT * FROM abcd WHERE a > c
@@ -262,10 +262,10 @@ project
       │    ├── fd: (5)-->(1-4)
       │    ├── prune: (1-5)
       │    └── interesting orderings: (+5)
-      └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+      └── filters
            └── gt [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
-                ├── variable: a [type=int, outer=(1)]
-                └── variable: c [type=int, outer=(3)]
+                ├── variable: a [type=int]
+                └── variable: c [type=int]
 
 build
 SELECT * FROM (SELECT * FROM abcd WHERE a = c) WHERE b < d
@@ -290,14 +290,14 @@ select
  │         │    ├── fd: (5)-->(1-4)
  │         │    ├── prune: (1-5)
  │         │    └── interesting orderings: (+5)
- │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
- │              └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
- │                   ├── variable: a [type=int, outer=(1)]
- │                   └── variable: c [type=int, outer=(3)]
- └── filters [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ])]
+ │         └── filters
+ │              └── eq [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
+ │                   ├── variable: a [type=int]
+ │                   └── variable: c [type=int]
+ └── filters
       └── lt [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ])]
-           ├── variable: b [type=int, outer=(2)]
-           └── variable: d [type=int, outer=(4)]
+           ├── variable: b [type=int]
+           └── variable: d [type=int]
 
 # Test outer column in select filter that is part of a not-null constraint.
 build
@@ -318,9 +318,9 @@ project
       │    ├── fd: (5)-->(1-4)
       │    ├── prune: (1-5)
       │    └── interesting orderings: (+5)
-      └── filters [type=bool, outer=(2)]
+      └── filters
            └── gt [type=bool, outer=(2)]
-                ├── subquery [type=int, outer=(2)]
+                ├── subquery [type=int]
                 │    └── max1-row
                 │         ├── columns: count_rows:8(int)
                 │         ├── outer: (2)
@@ -349,10 +349,10 @@ project
                 │              │         │    ├── fd: (6)-->(7)
                 │              │         │    ├── prune: (6,7)
                 │              │         │    └── interesting orderings: (+6)
-                │              │         └── filters [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
-                │              │              └── eq [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
-                │              │                   ├── variable: y [type=int, outer=(7)]
-                │              │                   └── variable: b [type=int, outer=(2)]
+                │              │         └── filters
+                │              │              └── eq [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+                │              │                   ├── variable: y [type=int]
+                │              │                   └── variable: b [type=int]
                 │              └── aggregations
                 │                   └── count-rows [type=int]
                 └── const: 0 [type=int]
