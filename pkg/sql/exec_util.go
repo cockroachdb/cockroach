@@ -115,6 +115,18 @@ var OptimizerClusterMode = settings.RegisterEnumSetting(
 	},
 )
 
+// DurationAdditionMode controls the cluster default for time+duration math.
+var DurationAdditionMode = settings.RegisterEnumSetting(
+	"sql.defaults.duration_addition_mode",
+	"default mode for time+duration math",
+	duration.AdditionModeAuto.String(),
+	map[int64]string{
+		int64(duration.AdditionModeAuto):       duration.AdditionModeAuto.String(),
+		int64(duration.AdditionModeLegacy):     duration.AdditionModeLegacy.String(),
+		int64(duration.AdditionModeCompatible): duration.AdditionModeCompatible.String(),
+	},
+)
+
 // DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
 var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	"sql.defaults.distsql",
@@ -1642,6 +1654,10 @@ func (m *sessionDataMutator) SetReadOnly(val bool) {
 
 func (m *sessionDataMutator) SetStmtTimeout(timeout time.Duration) {
 	m.data.StmtTimeout = timeout
+}
+
+func (m *sessionDataMutator) SetDurationAdditionMode(mode duration.AdditionMode) {
+	m.data.DurationAdditionMode = mode
 }
 
 // RecordLatestSequenceValue records that value to which the session incremented

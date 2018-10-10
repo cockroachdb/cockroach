@@ -206,7 +206,7 @@ func mustParseDDate(t *testing.T, s string) tree.Datum {
 	return d
 }
 func mustParseDTimestamp(t *testing.T, s string) tree.Datum {
-	d, err := tree.ParseDTimestamp(s, time.Millisecond)
+	d, err := tree.ParseDTimestamp(nil, s, time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}

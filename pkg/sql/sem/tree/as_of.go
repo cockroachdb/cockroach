@@ -57,7 +57,7 @@ func EvalAsOfTimestamp(
 		s := string(*d)
 		// Allow nanosecond precision because the timestamp is only used by the
 		// system and won't be returned to the user over pgwire.
-		if dt, err := ParseDTimestamp(s, time.Nanosecond); err == nil {
+		if dt, err := ParseDTimestamp(evalCtx, s, time.Nanosecond); err == nil {
 			ts.WallTime = dt.Time.UnixNano()
 			break
 		}
@@ -68,7 +68,7 @@ func EvalAsOfTimestamp(
 		}
 		// Attempt to parse as an interval.
 		if iv, err := ParseDInterval(s); err == nil {
-			ts.WallTime = duration.Add(evalCtx.GetStmtTimestamp(), iv.Duration).UnixNano()
+			ts.WallTime = duration.Add(evalCtx, evalCtx.GetStmtTimestamp(), iv.Duration).UnixNano()
 			break
 		}
 		convErr = errors.Errorf("AS OF SYSTEM TIME: value is neither timestamp, decimal, nor interval")
@@ -77,7 +77,7 @@ func EvalAsOfTimestamp(
 	case *DDecimal:
 		ts, convErr = DecimalToHLC(&d.Decimal)
 	case *DInterval:
-		ts.WallTime = duration.Add(evalCtx.GetStmtTimestamp(), d.Duration).UnixNano()
+		ts.WallTime = duration.Add(evalCtx, evalCtx.GetStmtTimestamp(), d.Duration).UnixNano()
 	default:
 		convErr = errors.Errorf("AS OF SYSTEM TIME: expected timestamp, decimal, or interval, got %s (%T)", d.ResolvedType(), d)
 	}

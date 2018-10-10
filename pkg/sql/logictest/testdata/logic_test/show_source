@@ -33,6 +33,7 @@ datestyle                          ISO, MDY
 default_transaction_isolation      serializable
 default_transaction_read_only      off
 distsql                            2.0-off
+duration_addition_mode             compatible
 experimental_force_lookup_join     off
 experimental_force_split_at        off
 experimental_force_zigzag_join     off

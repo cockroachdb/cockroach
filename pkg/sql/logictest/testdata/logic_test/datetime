@@ -1186,3 +1186,49 @@ query T
 SELECT date_trunc('month', "date") AS date_trunc_month_created_at FROM "topics";
 ----
 2017-12-01 00:00:00 +0000 UTC
+
+# Check variations on date math.
+query T
+SHOW SESSION duration_addition_mode
+----
+compatible
+
+query T
+SELECT '2016-01-31'::TIMESTAMP + '1 month';
+----
+2016-02-29 00:00:00 +0000 +0000
+
+statement ok
+SET duration_addition_mode=legacy;
+
+query T
+SELECT '2016-01-31'::TIMESTAMP + '1 month';
+----
+2016-03-02 00:00:00 +0000 +0000
+
+statement ok
+RESET SESSION duration_addition_mode;
+
+# Verify reset
+query T
+SHOW SESSION duration_addition_mode
+----
+compatible
+
+# Verify that "auto" is the default driving the reset behavior.
+query I
+SHOW CLUSTER SETTING sql.defaults.duration_addition_mode;
+----
+0
+
+# Force cluster-wide setting to golang
+statement ok
+SET CLUSTER SETTING sql.defaults.duration_addition_mode=1;
+
+statement ok
+RESET SESSION duration_addition_mode;
+
+query T
+SHOW SESSION duration_addition_mode
+----
+legacy
