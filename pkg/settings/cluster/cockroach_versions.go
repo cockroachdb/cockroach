@@ -71,6 +71,7 @@ const (
 	VersionRangeMerges
 	VersionBitArrayColumns
 	VersionLoadBasedRebalancing
+	VersionPostgreSQLDurationMath
 
 	// Add new versions here (step one of two).
 
@@ -282,6 +283,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionLoadBasedRebalancing is https://github.com/cockroachdb/cockroach/pull/28852.
 		Key:     VersionLoadBasedRebalancing,
 		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 14},
+	},
+	{
+		// VersionPostgreSQLDurationMath is https://github.com/cockroachdb/cockroach/pull/31146.
+		Key:     VersionPostgreSQLDurationMath,
+		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 1},
 	},
 
 	// Add new versions here (step two of two).

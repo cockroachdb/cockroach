@@ -25,12 +25,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -270,6 +272,37 @@ var varGen = map[string]sessionVar{
 		},
 		GlobalDefault: func(sv *settings.Values) string {
 			return sessiondata.DistSQLExecMode(DistSQLClusterExecMode.Get(sv)).String()
+		},
+	},
+
+	// CockroachDB extension.
+	`duration_addition_mode`: {
+		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
+			mode, ok := duration.AdditionModeFromString(s)
+			if !ok {
+				return newVarValueError(`duration_addition_mode`, s,
+					duration.AdditionModeAuto.String(),
+					duration.AdditionModeLegacy.String(),
+					duration.AdditionModeCompatible.String())
+			}
+			// We'll see the auto setting from sessions initiated by older clients,
+			// so we can choose based on the running cluster version.
+			if mode == duration.AdditionModeAuto {
+				if m.settings.Version.IsMinSupported(cluster.VersionPostgreSQLDurationMath) {
+					mode = duration.AdditionModeCompatible
+				} else {
+					mode = duration.AdditionModeLegacy
+				}
+			}
+			m.SetDurationAdditionMode(mode)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext) string {
+			ret := evalCtx.SessionData.DurationAdditionMode.String()
+			return ret
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return duration.AdditionMode(DurationAdditionMode.Get(sv)).String()
 		},
 	},
 
