@@ -20,6 +20,8 @@ import (
 	"math"
 	"math/bits"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -440,17 +442,23 @@ func (mm *BytesMonitor) AllocBytes() int64 {
 // an account to the monitor. This allows each client to release all the bytes
 // at once when it completes its work. Internally, BoundAccount amortizes
 // allocations from whichever BoundAccount it is associated with by allocating
-// additional memory and parceling it out (see BoundAccount.reserved).
+// additional memory and parceling it out (see BoundAccount.reserved). The
+// amount of additional memory is determined by the value of
+// BoundAccount.minAllocated wherein BoundAccount.reserved + BoundAccount.used
+// >= BoundAccount.minAllocated. By default, BoundAccount.minAllocated is set to
+// 0.
 //
-// See the comments in bytes_usage.go for a fuller picture of how these accounts
-// are used in CockroachDB.
+// See the comments in bytes_usage.go for a fuller
+// picture of how these accounts are used in CockroachDB.
 type BoundAccount struct {
 	used int64
 	// reserved is a small buffer to amortize the cost of growing an account. It
 	// decreases as used increases (and vice-versa).
 	reserved int64
-	// minAllocated is a minimum allocated bytes size that the account reach
-	// before being able to release bytes.
+
+	// minAllocated specifies the minimum total allocated size (used + reserved
+	// bytes) of an account. The BoundAccount.reserved buffer will hold onto the
+	// unused memory.
 	minAllocated int64
 	mon          *BytesMonitor
 }
@@ -471,8 +479,8 @@ func (b BoundAccount) Monitor() *BytesMonitor {
 	return b.mon
 }
 
-// Allocated returns the total number of bytes which this account is using or
-// reserving
+// Allocated returns the total number of bytes which is currently used or
+// reserved by this account.
 func (b BoundAccount) Allocated() int64 {
 	return b.used + b.reserved
 }
@@ -482,28 +490,35 @@ func (mm *BytesMonitor) MakeBoundAccount() BoundAccount {
 	return BoundAccount{mon: mm}
 }
 
-// SetMinAllocated allocates a minimum Allocated size (reserved + used) for the
-// account. The account would not be able to Shrink() unless it has surpassed
-// this minimum Allocated value.
-func (b *BoundAccount) SetMinAllocated(ctx context.Context, size int64) error {
-	if size < 0 {
-		panic(fmt.Sprintf("%s: cannot set bound account min allocated to a negative value",
-			b.mon.name))
+// SetMinAllocated allocates a minimum allocated size (BoundAccount.reserved +
+// BoundAccount.used) for the account. If the new minSize is greater than the
+// current allocated size, the difference will be requested from the
+// BytesMonitor and added to BoundAccount.reserved. Otherwise, if the new
+// minSize is less than the current allocated size, the extra
+// BoundAccount.reserved bytes will be released to a minimum of
+// poolAllocationSize.
+func (b *BoundAccount) SetMinAllocated(ctx context.Context, minSize int64) error {
+	if minSize < 0 {
+		return pgerror.NewErrorf(pgerror.CodeInternalError, "programming error: cannot set BoundAccount.minAllocated to a negative value")
 	}
-	b.minAllocated = b.mon.roundSize(size)
+	b.minAllocated = b.mon.roundSize(minSize)
 
 	if b.Allocated() < b.minAllocated {
+		// Reserve additional memory from the BytesMonitor in order to satisfy
+		// allocated = minAllocated (reserved = minAllocated - used).
 		minExtra := b.mon.roundSize(b.minAllocated - b.Allocated())
 		if err := b.mon.reserveBytes(ctx, minExtra); err != nil {
 			return err
 		}
 		b.reserved += minExtra
 	} else {
+		// Release extra memory from the reserved buffer while maintaining that
+		// reserved = max(poolAllocationSize, minAllocated - used).
 		var released int64
-		if b.used < b.minAllocated {
+		if b.minAllocated-b.used > b.mon.poolAllocationSize {
 			released = b.Allocated() - b.minAllocated
 		} else {
-			released = b.reserved - b.Monitor().poolAllocationSize
+			released = b.reserved - b.mon.poolAllocationSize
 		}
 		b.mon.releaseBytes(ctx, released)
 		b.reserved -= released
@@ -512,14 +527,22 @@ func (b *BoundAccount) SetMinAllocated(ctx context.Context, size int64) error {
 	return nil
 }
 
-// Empty shrinks the account to use 0 bytes, while maintaining the minAllocated
-// size.
+// Empty shrinks the account to use 0 bytes, while maintaining that the reserved
+// bytes is equal to max(poolAllocationSize, minAllocated).
 func (b *BoundAccount) Empty(ctx context.Context) {
 	b.reserved += b.used
 	b.used = 0
-	if b.Allocated() > b.minAllocated && b.reserved > b.mon.poolAllocationSize {
-		b.mon.releaseBytes(ctx, b.reserved-b.mon.poolAllocationSize)
-		b.reserved = b.mon.poolAllocationSize
+
+	var released int64
+	if b.minAllocated > b.mon.poolAllocationSize {
+		released = b.reserved - b.minAllocated
+	} else {
+		released = b.reserved - b.mon.poolAllocationSize
+	}
+
+	if released > 0 {
+		b.mon.releaseBytes(ctx, released)
+		b.reserved -= released
 	}
 }
 
@@ -594,6 +617,9 @@ func (b *BoundAccount) Grow(ctx context.Context, x int64) error {
 }
 
 // Shrink releases part of the cumulated allocations by the specified size.
+// Bytes are then released from the reserved buffer while maintaining that a
+// minimum of poolAllocationSize is reserved and a minimum of minAllocated is
+// allocated.
 func (b *BoundAccount) Shrink(ctx context.Context, delta int64) {
 	if b.used < delta {
 		panic(fmt.Sprintf("%s: no bytes in account to release, current %d, free %d",
@@ -601,9 +627,17 @@ func (b *BoundAccount) Shrink(ctx context.Context, delta int64) {
 	}
 	b.used -= delta
 	b.reserved += delta
-	if b.Allocated() > b.minAllocated && b.reserved > b.mon.poolAllocationSize {
-		b.mon.releaseBytes(ctx, b.reserved-b.mon.poolAllocationSize)
-		b.reserved = b.mon.poolAllocationSize
+
+	var released int64
+	if b.minAllocated-b.used > b.mon.poolAllocationSize {
+		released = b.Allocated() - b.minAllocated
+	} else {
+		released = b.reserved - b.mon.poolAllocationSize
+	}
+
+	if released > 0 {
+		b.mon.releaseBytes(ctx, released)
+		b.reserved -= released
 	}
 }
 
@@ -658,10 +692,6 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 // releaseBytes releases bytes previously successfully registered via
 // reserveBytes().
 func (mm *BytesMonitor) releaseBytes(ctx context.Context, sz int64) {
-	if sz == 0 {
-		return
-	}
-
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
 	if mm.mu.curAllocated < sz {

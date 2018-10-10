@@ -76,6 +76,7 @@ crdb_folk = set([
     "Andrew Couch",
     "Andrew Kimball",
     "Andy Woods",
+    "Angela Chang",
     "Arjun Narayan",
     "Ben Darnell",
     "Bob Vawter",
