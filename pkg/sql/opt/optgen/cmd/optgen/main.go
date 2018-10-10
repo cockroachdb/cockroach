@@ -196,6 +196,8 @@ func (g *optgen) run(args ...string) bool {
 func (g *optgen) validate(compiled *lang.CompiledExpr) []error {
 	var errors []error
 
+	md := newMetadata(compiled, "")
+
 	for _, rule := range compiled.Rules {
 		if !rule.Tags.Contains("Normalize") && !rule.Tags.Contains("Explore") {
 			format := "%s rule is missing \"Normalize\" or \"Explore\" tag"
@@ -205,16 +207,16 @@ func (g *optgen) validate(compiled *lang.CompiledExpr) []error {
 		}
 	}
 
-	for _, define := range compiled.Defines {
+	for _, define := range compiled.Defines.WithoutTag("Private") {
 		// Ensure that fields are defined in the following order:
+		//
 		//   Expr*
-		//   ExprList?
 		//   Private?
 		//
 		// That is, there can be zero or more expression-typed fields, followed
-		// by zero or one list-typed field, followed by zero or one private field.
+		// by zero or one private field.
 		for i, field := range define.Fields {
-			if isPrivateType(string(field.Type)) {
+			if !md.typeOf(field).isExpr {
 				if i != len(define.Fields)-1 {
 					format := "private field '%s' is not the last field in '%s'"
 					err := fmt.Errorf(format, field.Name, define.Name)
@@ -223,23 +225,29 @@ func (g *optgen) validate(compiled *lang.CompiledExpr) []error {
 					break
 				}
 			}
+		}
+	}
 
-			if isListType(string(field.Type)) {
-				index := len(define.Fields) - 1
-				if privateField(define) != nil {
-					index--
-				}
-
-				if i != index {
-					format := "list field '%s' is not the last non-private field in '%s'"
-					err := fmt.Errorf(format, field.Name, define.Name)
-					err = addErrorSource(err, field.Source())
-					errors = append(errors, err)
+	var visitRules func(e lang.Expr) lang.Expr
+	visitRules = func(e lang.Expr) lang.Expr {
+		switch t := e.(type) {
+		case *lang.ListExpr:
+			// Ensure that data type references a List operator.
+			if extType, ok := t.Typ.(*lang.ExternalDataType); ok {
+				if typ := md.lookupType(extType.Name); typ.listItemType != nil {
 					break
 				}
 			}
+
+			err := fmt.Errorf("list operator type could not be determined")
+			err = addErrorSource(err, t.Source())
+			errors = append(errors, err)
 		}
+
+		return e.Visit(visitRules)
 	}
+
+	visitRules(&compiled.Rules)
 
 	return errors
 }

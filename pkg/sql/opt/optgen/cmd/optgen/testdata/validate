@@ -15,37 +15,14 @@ test.opt:3:1: Name rule is missing "Normalize" or "Explore" tag
 #
 optgen compile test.opt
 define Op {
-    Private Type
-    Other   Expr
+    Private DatumType
+    Other   Node
 }
 
 define Op2 {
-    Private  Type
-    Private2 Type
+    Private  DatumType
+    Private2 DatumType
 }
 ----
 test.opt:2:5: private field 'Private' is not the last field in 'Op'
 test.opt:7:5: private field 'Private' is not the last field in 'Op2'
-
-#
-# Ensure that there is only one list field in define, and that it is the last
-# field.
-#
-optgen compile test.opt
-define Op {
-    List    ExprList
-    Private Type
-}
-
-define Op2 {
-    List  ExprList
-    Input Expr
-}
-
-define Op3 {
-    List  ExprList
-    List2 ExprList
-}
-----
-test.opt:7:5: list field 'List' is not the last non-private field in 'Op2'
-test.opt:12:5: list field 'List' is not the last non-private field in 'Op3'
