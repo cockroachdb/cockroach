@@ -83,7 +83,7 @@ func testingZoneConfigHook(_ *SystemConfig, id uint32) (*ZoneConfig, *ZoneConfig
 	testingLock.Lock()
 	defer testingLock.Unlock()
 	if zone, ok := testingZoneConfig[id]; ok {
-		return &zone, nil, false, nil
+		return &zone, nil, true, nil
 	}
-	return nil, nil, false, nil
+	return nil, nil, true, nil
 }

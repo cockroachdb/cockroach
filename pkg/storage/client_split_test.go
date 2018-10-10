@@ -1227,6 +1227,7 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 	store, _ := createTestStore(t, stopper)
 
 	userTableMax := keys.MinUserDescID + 4
+	var exceptions []int
 	schema := sqlbase.MakeMetadataSchema()
 	// Write table descriptors for the tables in the metadata schema as well as
 	// five dummy user tables. This does two things:
@@ -1278,9 +1279,18 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 			)
 		}
 		for i := keys.MinUserDescID; i <= userTableMax; i++ {
-			expKeys = append(expKeys,
-				testutils.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(uint32(i))),
-			)
+			shouldAddKey := true
+			for _, id := range exceptions {
+				if i == id {
+					shouldAddKey = false
+					break
+				}
+			}
+			if shouldAddKey {
+				expKeys = append(expKeys,
+					testutils.MakeKey(keys.Meta2Prefix, keys.MakeTablePrefix(uint32(i))),
+				)
+			}
 		}
 		expKeys = append(expKeys, testutils.MakeKey(keys.Meta2Prefix, roachpb.RKeyMax))
 
@@ -1304,12 +1314,13 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 
 	// Write another, disjoint (+3) descriptor for a user table.
 	userTableMax += 3
+	exceptions = []int{userTableMax - 1, userTableMax - 2}
 	if err := store.DB().Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
 		}
-		// This time, only write the last table descriptor. Splits still occur for
-		// every intervening ID. We don't care about the value, just the key.
+		// This time, only write the last table descriptor. Splits only occur for
+		// the descriptor we add. We don't care about the value, just the key.
 		k := sqlbase.MakeDescMetadataKey(sqlbase.ID(userTableMax))
 		return txn.Put(ctx, k, &sqlbase.TableDescriptor{})
 	}); err != nil {

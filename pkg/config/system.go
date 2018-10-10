@@ -98,6 +98,26 @@ func (s *SystemConfig) Equal(other *SystemConfigEntries) bool {
 	return true
 }
 
+// GetDesc looks for the descriptor value for an ID, if a zone is created in
+// a test without creating a Descriptor, a dummy descriptor is returned.
+func (s *SystemConfig) GetDesc(key roachpb.Key, id uint32) *roachpb.Value {
+	getVal := s.GetValue(key)
+	if getVal != nil {
+		return getVal
+	}
+	testingLock.Lock()
+	_, ok := testingZoneConfig[id]
+	testingLock.Unlock()
+
+	if ok {
+		// Getting here outside tests is impossible.
+		val := &roachpb.Value{}
+		val.SetBytes(nil)
+		return val
+	}
+	return nil
+}
+
 // GetValue searches the kv list for 'key' and returns its
 // roachpb.Value if found.
 func (s *SystemConfig) GetValue(key roachpb.Key) *roachpb.Value {
