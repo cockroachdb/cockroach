@@ -23,12 +23,12 @@ import (
 
 // constructDistinct wraps inScope.group in a DistinctOn operator corresponding
 // to a SELECT DISTINCT statement.
-func (b *Builder) constructDistinct(inScope *scope) memo.GroupID {
+func (b *Builder) constructDistinct(inScope *scope) memo.RelExpr {
 	// We are doing a distinct along all the projected columns.
-	var def memo.GroupByDef
+	var private memo.GroupingPrivate
 	for i := range inScope.cols {
 		if !inScope.cols[i].hidden {
-			def.GroupingCols.Add(int(inScope.cols[i].id))
+			private.GroupingCols.Add(int(inScope.cols[i].id))
 		}
 	}
 
@@ -37,7 +37,7 @@ func (b *Builder) constructDistinct(inScope *scope) memo.GroupID {
 	//   SELECT DISTINCT a FROM t ORDER BY b
 	// Note: this behavior is consistent with PostgreSQL.
 	for _, col := range inScope.ordering {
-		if !def.GroupingCols.Contains(int(col.ID())) {
+		if !private.GroupingCols.Contains(int(col.ID())) {
 			panic(builderError{pgerror.NewErrorf(
 				pgerror.CodeInvalidColumnReferenceError,
 				"for SELECT DISTINCT, ORDER BY expressions must appear in select list",
@@ -48,12 +48,8 @@ func (b *Builder) constructDistinct(inScope *scope) memo.GroupID {
 	// We don't set def.Ordering. Because the ordering can only refer to projected
 	// columns, it does not affect the results; it doesn't need to be required of
 	// the DistinctOn input.
-
-	return b.factory.ConstructDistinctOn(
-		inScope.group,
-		b.factory.ConstructAggregations(memo.EmptyList, b.factory.InternColList(nil)),
-		b.factory.InternGroupByDef(&def),
-	)
+	input := inScope.expr.(memo.RelExpr)
+	return b.factory.ConstructDistinctOn(input, memo.EmptyAggregationsExpr, &private)
 }
 
 // buildDistinctOn builds a set of memo groups that represent a DISTINCT ON
@@ -96,13 +92,12 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 		}
 	}
 
-	def := memo.GroupByDef{
-		GroupingCols: distinctOnCols.Copy(),
-	}
+	private := memo.GroupingPrivate{GroupingCols: distinctOnCols.Copy()}
+
 	// The ordering is used for intra-group ordering. Ordering with respect to the
 	// DISTINCT ON columns doesn't affect intra-group ordering, so we add these
 	// columns as optional.
-	def.Ordering.FromOrderingWithOptCols(inScope.ordering, distinctOnCols)
+	private.Ordering.FromOrderingWithOptCols(inScope.ordering, distinctOnCols)
 
 	// Set up a new scope for the output of DISTINCT ON. This scope differs from
 	// the input scope in that it doesn't have "extra" ORDER BY columns, e.g.
@@ -141,29 +136,23 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 		}
 	}
 
-	aggCols := make(opt.ColList, 0, len(inScope.cols))
-	aggGroups := make([]memo.GroupID, 0, len(inScope.cols))
+	aggs := make(memo.AggregationsExpr, 0, len(inScope.cols))
+
 	// Build FirstAgg for all visible columns except the DistinctOnCols
 	// (and eliminate duplicates).
 	excluded := distinctOnCols.Copy()
 	for i := range outScope.cols {
 		if id := outScope.cols[i].id; !excluded.Contains(int(id)) {
 			excluded.Add(int(id))
-			aggCols = append(aggCols, id)
-			aggGroups = append(aggGroups, b.factory.ConstructFirstAgg(
-				b.factory.ConstructVariable(b.factory.InternColumnID(id)),
-			))
+			aggs = append(aggs, memo.AggregationsItem{
+				Agg:        b.factory.ConstructFirstAgg(b.factory.ConstructVariable(id)),
+				ColPrivate: memo.ColPrivate{Col: id},
+			})
 		}
 	}
 
-	outScope.group = b.factory.ConstructDistinctOn(
-		inScope.group,
-		b.factory.ConstructAggregations(
-			b.factory.InternList(aggGroups),
-			b.factory.InternColList(aggCols),
-		),
-		b.factory.InternGroupByDef(&def),
-	)
+	input := inScope.expr.(memo.RelExpr)
+	outScope.expr = b.factory.ConstructDistinctOn(input, aggs, &private)
 	return outScope
 }
 

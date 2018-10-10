@@ -28,43 +28,37 @@ import (
 func (b *Builder) constructProjectForScope(inScope, projectionsScope *scope) {
 	// Don't add an unnecessary "pass through" project.
 	if projectionsScope.hasSameColumns(inScope) {
-		projectionsScope.group = inScope.group
+		projectionsScope.expr = inScope.expr
 	} else {
-		projectionsScope.group = b.constructProject(
-			inScope.group, append(projectionsScope.cols, projectionsScope.extraCols...),
+		projectionsScope.expr = b.constructProject(
+			inScope.expr.(memo.RelExpr),
+			append(projectionsScope.cols, projectionsScope.extraCols...),
 		)
 	}
 }
 
-func (b *Builder) constructProject(input memo.GroupID, cols []scopeColumn) memo.GroupID {
-	def := memo.ProjectionsOpDef{
-		SynthesizedCols: make(opt.ColList, 0, len(cols)),
-	}
-
-	groupList := make([]memo.GroupID, 0, len(cols))
+func (b *Builder) constructProject(input memo.RelExpr, cols []scopeColumn) memo.RelExpr {
+	var passthrough opt.ColSet
+	projections := make(memo.ProjectionsExpr, 0, len(cols))
 
 	// Deduplicate the columns; we only need to project each column once.
 	colSet := opt.ColSet{}
 	for i := range cols {
-		id, group := cols[i].id, cols[i].group
+		id, scalar := cols[i].id, cols[i].scalar
 		if !colSet.Contains(int(id)) {
-			if group == 0 {
-				def.PassthroughCols.Add(int(id))
+			if scalar == nil {
+				passthrough.Add(int(id))
 			} else {
-				def.SynthesizedCols = append(def.SynthesizedCols, id)
-				groupList = append(groupList, group)
+				projections = append(projections, memo.ProjectionsItem{
+					Element:    scalar,
+					ColPrivate: memo.ColPrivate{Col: id},
+				})
 			}
 			colSet.Add(int(id))
 		}
 	}
 
-	return b.factory.ConstructProject(
-		input,
-		b.factory.ConstructProjections(
-			b.factory.InternList(groupList),
-			b.factory.InternProjectionsOpDef(&def),
-		),
-	)
+	return b.factory.ConstructProject(input, projections, passthrough)
 }
 
 // analyzeProjectionList analyzes the given list of select expressions, and
@@ -186,21 +180,21 @@ func (b *Builder) getColName(expr tree.SelectExpr) string {
 // See Builder.buildStmt for a description of the remaining input and return
 // values.
 func (b *Builder) finishBuildScalar(
-	texpr tree.TypedExpr, group memo.GroupID, inScope, outScope *scope, outCol *scopeColumn,
-) (out memo.GroupID) {
+	texpr tree.TypedExpr, scalar opt.ScalarExpr, inScope, outScope *scope, outCol *scopeColumn,
+) (out opt.ScalarExpr) {
 	if outScope == nil {
-		return group
+		return scalar
 	}
 
 	// Avoid synthesizing a new column if possible.
 	if col := outScope.findExistingCol(texpr); col != nil && col != outCol {
 		outCol.id = col.id
-		outCol.group = group
-		return group
+		outCol.scalar = scalar
+		return scalar
 	}
 
-	b.populateSynthesizedColumn(outCol, group)
-	return group
+	b.populateSynthesizedColumn(outCol, scalar)
+	return scalar
 }
 
 // finishBuildScalarRef constructs a reference to the given column. If outScope
@@ -222,8 +216,9 @@ func (b *Builder) finishBuildScalar(
 // values.
 func (b *Builder) finishBuildScalarRef(
 	col *scopeColumn, inScope, outScope *scope, outCol *scopeColumn, colRefs *opt.ColSet,
-) (out memo.GroupID) {
+) (out opt.ScalarExpr) {
 	isOuterColumn := inScope == nil || inScope.isOuterColumn(col.id)
+
 	// Remember whether the query was correlated for later.
 	b.IsCorrelated = b.IsCorrelated || isOuterColumn
 
@@ -238,7 +233,7 @@ func (b *Builder) finishBuildScalarRef(
 	// If this is not a projection context, then wrap the column reference with
 	// a Variable expression that can be embedded in outer expression(s).
 	if outScope == nil {
-		return b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
+		return b.factory.ConstructVariable(col.id)
 	}
 
 	// Outer columns must be wrapped in a variable expression and assigned a new
@@ -250,7 +245,7 @@ func (b *Builder) finishBuildScalarRef(
 			if outCol.name == "" {
 				outCol.name = col.name
 			}
-			group := b.factory.ConstructVariable(b.factory.InternColumnID(col.id))
+			group := b.factory.ConstructVariable(col.id)
 			b.populateSynthesizedColumn(outCol, group)
 			return group
 		}
@@ -260,5 +255,5 @@ func (b *Builder) finishBuildScalarRef(
 
 	// Project the column.
 	b.projectColumn(outCol, col)
-	return outCol.group
+	return outCol.scalar
 }
