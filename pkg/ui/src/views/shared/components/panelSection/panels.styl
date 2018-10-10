@@ -14,22 +14,31 @@
 
 @require "~styl/base/palette.styl"
 
-.info-box
-  margin-top 20px
-  padding 10px
-  padding-left 26px
-  background-color $info-box-fill-color
-  border-left 5px solid $info-box-border-color
-  max-width 560px
-
-  h1, h2, h3, h4, h5
-    font-weight bold
-    color $info-box-heading-color
-
-  p
-    margin-top 10px
-    color $body-color
+.panel-section
+  margin 18px 0
+  width 100%
+  border-collapse collapse
 
   a
-    text-decoration none
     color $link-color
+    text-decoration none
+
+  p
+    color $body-color
+
+.panel-title, .panel
+  background-color white 
+
+th + th, td + td
+  border-left 2px solid $background-color
+
+tr + tr
+  border-top 2px solid $background-color
+
+.panel-title
+  text-align left
+  padding 14px 0 14px 32px
+  font-size 20px
+
+.panel
+  padding 16px 60px 18px 32px

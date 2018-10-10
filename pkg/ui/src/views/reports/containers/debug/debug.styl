@@ -14,22 +14,19 @@
 
 @require "~styl/base/palette.styl"
 
-.info-box
-  margin-top 20px
-  padding 10px
-  padding-left 26px
-  background-color $info-box-fill-color
-  border-left 5px solid $info-box-border-color
-  max-width 560px
+.debug-url
+  margin-right 200px
 
-  h1, h2, h3, h4, h5
-    font-weight bold
-    color $info-box-heading-color
+  div
+    background-color $background-color
+    border-radius 3px
+    padding 8px 20px 6px 10px
+    min-width 200px
 
-  p
-    margin-top 10px
-    color $body-color
+.debug-header
+  position relative
 
-  a
-    text-decoration none
-    color $link-color
+.debug-header__license-type
+  position absolute
+  top 0
+  right 0
