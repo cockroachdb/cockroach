@@ -6,8 +6,8 @@
 # Array with a Const datum with type TArray.
 [FoldArray, Normalize]
 (Array
-  $elems:* & (IsListOfConstants $elems)
-  $typ:*
+    $elems:* & (IsListOfConstants $elems)
+    $typ:*
 )
 =>
 (FoldArray $elems $typ)
@@ -27,8 +27,10 @@
 # can run first.
 [FoldBinary, Normalize, LowPriority]
 (Binary
-  $left:* & (IsConstValueOrTuple $left)
-  $right:* & (IsConstValueOrTuple $right) & (Succeeded $result:(FoldBinary (OpName) $left $right))
+    $left:* & (IsConstValueOrTuple $left)
+    $right:* &
+        (IsConstValueOrTuple $right) &
+        (Succeeded $result:(FoldBinary (OpName) $left $right))
 )
 =>
 $result
@@ -41,7 +43,9 @@ $result
 # can run first.
 [FoldUnary, Normalize, LowPriority]
 (Unary
-  $input:* & (IsConstValueOrTuple $input) & (Succeeded $result:(FoldUnary (OpName) $input))
+    $input:* &
+        (IsConstValueOrTuple $input) &
+        (Succeeded $result:(FoldUnary (OpName) $input))
 )
 =>
 $result
@@ -54,8 +58,10 @@ $result
 # can run first.
 [FoldComparison, Normalize, LowPriority]
 (Comparison
-  $left:* & (IsConstValueOrTuple $left)
-  $right:* & (IsConstValueOrTuple $right) & (Succeeded $result:(FoldComparison (OpName) $left $right))
+    $left:* & (IsConstValueOrTuple $left)
+    $right:* &
+        (IsConstValueOrTuple $right) &
+        (Succeeded $result:(FoldComparison (OpName) $left $right))
 )
 =>
 $result

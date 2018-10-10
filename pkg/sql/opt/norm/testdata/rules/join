@@ -88,6 +88,55 @@ inner-join
       └── (s = 'foo') OR (y < 10) [type=bool, outer=(4,7)]
 
 # --------------------------------------------------
+# DetectJoinContradiction
+# --------------------------------------------------
+
+opt expect=DetectJoinContradiction
+SELECT * FROM a INNER JOIN b ON k IN ()
+----
+values
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-7)
+
+opt expect=DetectJoinContradiction
+SELECT * FROM a LEFT JOIN b ON i=5 AND k IN () AND s='foo'
+----
+left-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2-7), ()~~>(6,7)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── values
+ │    ├── columns: x:6(int) y:7(int)
+ │    ├── cardinality: [0 - 0]
+ │    ├── key: ()
+ │    └── fd: ()-->(6,7)
+ └── filters (true)
+
+opt expect=DetectJoinContradiction
+SELECT * FROM a FULL JOIN b ON i=5 AND k IN () AND s='foo'
+----
+full-join
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── key: (1,6)
+ ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan b
+ │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7)
+ └── filters
+      └── false [type=bool]
+
+# --------------------------------------------------
 # PushFilterIntoJoinLeft
 # --------------------------------------------------
 opt expect=PushFilterIntoJoinLeft
@@ -408,7 +457,7 @@ inner-join (lookup b)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
  │    └── filters
- │         ├── (f + k::FLOAT8) > 5.0 [type=bool, outer=(1,3)]
+ │         ├── (f + i::FLOAT8) > 5.0 [type=bool, outer=(2,3)]
  │         └── (s || k::STRING) = 'foo1' [type=bool, outer=(1,4)]
  └── filters
       ├── i = x [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
@@ -769,7 +818,7 @@ project
       │    └── filters (true)
       └── filters
            ├── k = b.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           └── (b.x * i) = ?column? [type=bool, outer=(2,6,10)]
+           └── ?column? = (b.x * i) [type=bool, outer=(2,6,10), constraints=(/10: (/NULL - ])]
 
 # Ensure that we do not map filters for types with composite key encoding.
 opt expect-not=(MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
@@ -2133,7 +2182,7 @@ project
 
 # Multiple extractable equalities.
 opt expect=ExtractJoinEqualities
-SELECT * FROM xy JOIN uv ON x+y=u AND x=u+v AND x+1=u+2
+SELECT * FROM xy JOIN uv ON x+y=u AND x=u+v AND x*y+1=u*v+2
 ----
 project
  ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
@@ -2142,29 +2191,29 @@ project
  └── inner-join
       ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) column5:5(int!null) column6:6(int!null) column7:7(int!null) column8:8(int!null)
       ├── key: (1)
-      ├── fd: (1)-->(2,7), (1,2)-->(5), (3)-->(4,8), (3,4)-->(6), (3)==(5), (5)==(3), (1)==(6), (6)==(1), (7)==(8), (8)==(7)
+      ├── fd: (1)-->(2), (1,2)-->(5,7), (3)-->(4), (3,4)-->(6,8), (3)==(5), (5)==(3), (1)==(6), (6)==(1), (7)==(8), (8)==(7)
       ├── project
-      │    ├── columns: column5:5(int) column7:7(int) x:1(int!null) y:2(int)
+      │    ├── columns: column7:7(int) column5:5(int) x:1(int!null) y:2(int)
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2,7), (1,2)-->(5)
+      │    ├── fd: (1)-->(2), (1,2)-->(5,7)
       │    ├── scan xy
       │    │    ├── columns: x:1(int!null) y:2(int)
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2)
       │    └── projections
-      │         ├── x + y [type=int, outer=(1,2)]
-      │         └── x + 1 [type=int, outer=(1)]
+      │         ├── (x * y) + 1 [type=int, outer=(1,2)]
+      │         └── x + y [type=int, outer=(1,2)]
       ├── project
-      │    ├── columns: column6:6(int) column8:8(int) u:3(int!null) v:4(int)
+      │    ├── columns: column8:8(int) column6:6(int) u:3(int!null) v:4(int)
       │    ├── key: (3)
-      │    ├── fd: (3)-->(4,8), (3,4)-->(6)
+      │    ├── fd: (3)-->(4), (3,4)-->(6,8)
       │    ├── scan uv
       │    │    ├── columns: u:3(int!null) v:4(int)
       │    │    ├── key: (3)
       │    │    └── fd: (3)-->(4)
       │    └── projections
-      │         ├── u + v [type=int, outer=(3,4)]
-      │         └── u + 2 [type=int, outer=(3)]
+      │         ├── (u * v) + 2 [type=int, outer=(3,4)]
+      │         └── u + v [type=int, outer=(3,4)]
       └── filters
            ├── column5 = u [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
            ├── x = column6 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
