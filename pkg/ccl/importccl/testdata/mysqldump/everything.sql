@@ -1,8 +1,8 @@
--- MySQL dump 10.13  Distrib 5.7.22, for osx10.13 (x86_64)
+-- MySQL dump 10.13  Distrib 5.7.23, for osx10.14 (x86_64)
 --
 -- Host: localhost    Database: cockroachtestdata
 -- ------------------------------------------------------
--- Server version	5.7.22
+-- Server version	5.7.23
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
@@ -61,7 +61,7 @@ CREATE TABLE `everything` (
 
 LOCK TABLES `everything` WRITE;
 /*!40000 ALTER TABLE `everything` DISABLE KEYS */;
-INSERT INTO `everything` VALUES (1,'c','this is s\'s default value',NULL,'Small','bin\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',NULL,NULL,'2000-01-01 00:00:00',NULL,'2018-08-30 18:27:40',NULL,NULL,NULL,-12.345,-2,NULL,5,NULL,NULL,NULL,-1.5,NULL,NULL,NULL,NULL,NULL,'{\"a\": \"b\", \"c\": {\"d\": [\"e\", 11, null]}}'),(2,'c2','this is s\'s default value',NULL,'Large','bin2\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',NULL,NULL,'2000-01-01 00:00:00',NULL,'2018-08-30 18:27:40',NULL,NULL,NULL,12.345,3,NULL,5,NULL,NULL,NULL,1.2,NULL,NULL,NULL,NULL,NULL,'{}');
+INSERT INTO `everything` VALUES (1,'c','this is s\'s default value',NULL,'Small',_binary 'bin\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',NULL,NULL,'2000-01-01 00:00:00',NULL,'2018-10-09 22:55:39',NULL,NULL,NULL,-12.345,-2,NULL,5,NULL,NULL,NULL,-1.5,NULL,NULL,NULL,NULL,NULL,'{\"a\": \"b\", \"c\": {\"d\": [\"e\", 11, null]}}'),(2,'c2','this is s\'s default value',NULL,'Large',_binary 'bin2\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0',NULL,NULL,'2000-01-01 00:00:00',NULL,'2018-10-09 22:55:39',NULL,NULL,NULL,12.345,3,NULL,5,NULL,NULL,NULL,1.2,NULL,NULL,NULL,NULL,NULL,'{}');
 /*!40000 ALTER TABLE `everything` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
@@ -74,4 +74,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2018-08-30 18:27:40
+-- Dump completed on 2018-10-09 22:55:39
