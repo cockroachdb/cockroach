@@ -61,12 +61,10 @@ class IconLink extends React.Component<IconLinkProps, {}> {
     const router = this.context.router;
     const linkRoutes = [to].concat(activeFor);
     const isActive = _.some(linkRoutes, (route) => router.isActive(route, false));
+    const linkClassName = classNames("icon-link", { active: isActive });
     return (
       <li className={className} >
-        <Link
-          to={to}
-          className={classNames("icon-link", { active: isActive })}
-        >
+        <Link to={to} className={linkClassName}>
           <div className="image-container"
                dangerouslySetInnerHTML={trustIcon(icon)}/>
           <div>{title}</div>
