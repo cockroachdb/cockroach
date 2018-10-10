@@ -2032,12 +2032,19 @@ func testMergeWatcher(t *testing.T, injectFailures bool) {
 	}
 	mtc.transferLease(ctx, rhsDesc.RangeID, 0, 2)
 
-	// Block Raft traffic to the LHS replica on store2, by holding its raftMu, so
-	// that its LHS isn't aware there's a merge in progress.
+	// After the LHS replica on store2 processes the split, block Raft traffic to
+	// it by holding its raftMu, so that it isn't aware there's a merge in
+	// progress.
 	lhsRepl2, err := store2.GetReplica(lhsDesc.RangeID)
 	if err != nil {
 		t.Fatal(err)
 	}
+	testutils.SucceedsSoon(t, func() error {
+		if !lhsRepl2.Desc().Equal(lhsDesc) {
+			return errors.New("store2 has not processed split")
+		}
+		return nil
+	})
 	lhsRepl2.RaftLock()
 
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())

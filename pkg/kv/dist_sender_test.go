@@ -541,14 +541,18 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 		_ ReplicaSlice,
 		args roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, error) {
+		reply := &roachpb.BatchResponse{}
 		if first {
-			reply := &roachpb.BatchResponse{}
 			reply.Error = roachpb.NewError(
 				&roachpb.NotLeaseHolderError{LeaseHolder: &leaseHolder})
 			first = false
 			return reply, nil
 		}
-		return args.CreateReply(), nil
+		// Return an error to avoid activating a code path that would
+		// populate the leaseholder cache from the successful response.
+		// That's not what this test wants to test.
+		reply.Error = roachpb.NewErrorf("boom")
+		return reply, nil
 	}
 
 	cfg := DistSenderConfig{
@@ -563,8 +567,8 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 	ds := NewDistSender(cfg, g)
 	v := roachpb.MakeValueFromString("value")
 	put := roachpb.NewPut(roachpb.Key("a"), v)
-	if _, err := client.SendWrapped(context.Background(), ds, put); err != nil {
-		t.Errorf("put encountered error: %s", err)
+	if _, pErr := client.SendWrapped(context.Background(), ds, put); !testutils.IsPError(pErr, "boom") {
+		t.Fatalf("unexpected error: %v", pErr)
 	}
 	if first {
 		t.Errorf("The command did not retry")
@@ -660,8 +664,10 @@ func TestDistSenderDownNodeEvictLeaseholder(t *testing.T) {
 		t.Errorf("contacted n1: %t, contacted n2: %t", contacted1, contacted2)
 	}
 
-	if storeID, ok := ds.LeaseHolderCache().Lookup(ctx, roachpb.RangeID(1)); ok {
-		t.Fatalf("expected no lease holder for r1, but got s%d", storeID)
+	if storeID, ok := ds.LeaseHolderCache().Lookup(ctx, roachpb.RangeID(1)); !ok {
+		t.Fatalf("expected new leaseholder to be cached")
+	} else if exp := roachpb.StoreID(2); storeID != exp {
+		t.Fatalf("expected lease holder for r1 to be cached as s%d, but got s%d", exp, storeID)
 	}
 }
 
@@ -953,7 +959,7 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 		case 0, 1:
 			err = &roachpb.NotLeaseHolderError{LeaseHolder: &roachpb.ReplicaDescriptor{NodeID: 99, StoreID: 999}}
 		case 2:
-			err = roachpb.NewRangeNotFoundError(0)
+			err = roachpb.NewRangeNotFoundError(0, 0)
 		default:
 			return args.CreateReply(), nil
 		}
@@ -1281,6 +1287,94 @@ func TestSendRPCRetry(t *testing.T) {
 	}
 	if l := len(sr.(*roachpb.ScanResponse).Rows); l != 1 {
 		t.Fatalf("expected 1 row; got %d", l)
+	}
+}
+
+// This test reproduces the main problem in:
+// https://github.com/cockroachdb/cockroach/issues/30613.
+// by verifying that if a RangeNotFoundError is returned from a Replica,
+// the next Replica is tried.
+func TestSendRPCRangeNotFoundError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	g, clock := makeGossip(t, stopper)
+	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Fill RangeDescriptor with three replicas.
+	var descriptor = roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("z"),
+	}
+	for i := 1; i <= 3; i++ {
+		addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d", i))
+		nd := &roachpb.NodeDescriptor{
+			NodeID:  roachpb.NodeID(i),
+			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+		}
+		if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(i)), nd, time.Hour); err != nil {
+			t.Fatal(err)
+		}
+
+		descriptor.Replicas = append(descriptor.Replicas, roachpb.ReplicaDescriptor{
+			NodeID:    roachpb.NodeID(i),
+			StoreID:   roachpb.StoreID(i),
+			ReplicaID: roachpb.ReplicaID(i),
+		})
+	}
+	descDB := mockRangeDescriptorDBForDescs(
+		testMetaRangeDescriptor,
+		descriptor,
+	)
+
+	seen := map[roachpb.ReplicaID]struct{}{}
+	var leaseholderStoreID roachpb.StoreID
+	var ds *DistSender
+	var testFn simpleSendFn = func(
+		_ context.Context,
+		_ SendOptions,
+		_ ReplicaSlice,
+		ba roachpb.BatchRequest,
+	) (*roachpb.BatchResponse, error) {
+		br := ba.CreateReply()
+		if _, ok := seen[ba.Replica.ReplicaID]; ok {
+			br.Error = roachpb.NewErrorf("visited replica %+v twice", ba.Replica)
+			return br, nil
+		}
+		seen[ba.Replica.ReplicaID] = struct{}{}
+		if len(seen) <= 2 {
+			if len(seen) == 1 {
+				// Add to the leaseholder cache to verify that the response evicts it.
+				ds.leaseHolderCache.Update(context.Background(), ba.RangeID, ba.Replica.StoreID)
+			}
+			br.Error = roachpb.NewError(roachpb.NewRangeNotFoundError(ba.RangeID, ba.Replica.StoreID))
+			return br, nil
+		}
+		leaseholderStoreID = ba.Replica.StoreID
+		return br, nil
+	}
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      clock,
+		TestingKnobs: ClientTestingKnobs{
+			TransportFactory: adaptSimpleTransport(testFn),
+		},
+		RangeDescriptorDB: descDB,
+	}
+	ds = NewDistSender(cfg, g)
+	get := roachpb.NewGet(roachpb.Key("b"))
+	_, err := client.SendWrapped(context.Background(), ds, get)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if storeID, found := ds.leaseHolderCache.Lookup(context.Background(), roachpb.RangeID(1)); !found {
+		t.Fatal("expected a cached leaseholder")
+	} else if storeID != leaseholderStoreID {
+		t.Fatalf("unexpected cached leaseholder s%d, expected s%d", storeID, leaseholderStoreID)
 	}
 }
 

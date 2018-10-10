@@ -101,6 +101,13 @@ func (ba *BatchRequest) IsReadOnly() bool {
 	return len(ba.Requests) > 0 && !ba.hasFlag(isWrite|isAdmin)
 }
 
+// RequiresLeaseHolder returns true if the request can only be served by the
+// leaseholders of the ranges it addresses.
+func (ba *BatchRequest) RequiresLeaseHolder() bool {
+	return !ba.IsReadOnly() || ba.Header.ReadConsistency.RequiresReadLease()
+
+}
+
 // IsReverse returns true iff the BatchRequest contains a reverse request.
 func (ba *BatchRequest) IsReverse() bool {
 	return ba.hasFlag(isReverse)
