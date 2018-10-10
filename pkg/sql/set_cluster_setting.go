@@ -171,7 +171,7 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 	}
 	errNotReady := errors.New("setting updated but timed out waiting to read new value")
 	var observed string
-	err := retry.ForDuration(1*time.Second, func() error {
+	err := retry.ForDuration(10*time.Second, func() error {
 		observed = n.setting.Encoded(&execCfg.Settings.SV)
 		if observed != expectedEncodedValue {
 			return errNotReady
