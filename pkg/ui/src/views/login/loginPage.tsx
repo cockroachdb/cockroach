@@ -23,6 +23,7 @@ import { AdminUIState } from "src/redux/state";
 import { getDataFromServer } from "src/util/dataFromServer";
 import * as docsURL from "src/util/docs";
 import { trustIcon } from "src/util/trust";
+import InfoBox from "src/views/shared/components/infoBox";
 
 import logo from "assets/crdb.png";
 import docsIcon from "!!raw-loader!assets/docs.svg";
@@ -116,8 +117,8 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
                 on secure clusters.
               </p>
             </div>
-            <div className="login-note-box">
-              <div className="login-note-box__heading">Note:</div>
+            <InfoBox>
+              <h4 className="login-note-box__heading">Note:</h4>
               <p className="login-note-box__blurb">
                 Create a user with this SQL command:
               </p>
@@ -135,7 +136,7 @@ class LoginPage extends React.Component<LoginPageProps & WithRouterProps, LoginP
                   <span className="login-docs-link__text">Read more about configuring login</span>
                 </a>
               </p>
-            </div>
+            </InfoBox>
           </section>
           <section className="section login-page__form">
             <p className="version">
