@@ -407,9 +407,9 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	var prepMemo *memo.Memo
 	inPreparePhase := p.EvalContext().PrepareOnly
 	if stmt.Prepared != nil {
-		// Don't use memo if it was never prepared, typically because of fallback
-		// to the heuristic planner.
-		if inPreparePhase || stmt.Prepared.Memo.RootGroup() != 0 {
+		// Only use memo if it was actually prepared. It may not have been in case
+		// of fallback to the heuristic planner.
+		if inPreparePhase || stmt.Prepared.Memo.RootExpr() != nil {
 			prepMemo = &stmt.Prepared.Memo
 		}
 	}
@@ -436,17 +436,17 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 				p.optimizer.Optimize()
 			}
 
-			// Update the prepared memo.
-			prepMemo.InitFrom(f.Memo())
+			// Detach the prepared memo from the factory and transfer its ownership
+			// to the prepared statement.
+			p.optimizer.DetachMemo(prepMemo)
 		}
 	}
 
 	// If in the PREPARE phase, construct a dummy plan that has correct output
 	// columns. Only output columns and placeholder types are needed.
 	if inPreparePhase {
-		mem := f.Memo()
-		md := mem.Metadata()
-		physical := mem.LookupPhysicalProps(mem.RootProps())
+		md := prepMemo.Metadata()
+		physical := prepMemo.RootProps()
 		resultCols := make(sqlbase.ResultColumns, len(physical.Presentation))
 		for i, col := range physical.Presentation {
 			resultCols[i].Name = col.Label
@@ -458,26 +458,28 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 
 	// This is the EXECUTE phase, so finish optimization by assigning any
 	// remaining placeholders and applying exploration rules.
-	var ev memo.ExprView
+	var execMemo *memo.Memo
 	if prepMemo == nil {
-		ev = p.optimizer.Optimize()
+		p.optimizer.Optimize()
+		execMemo = f.Memo()
 	} else {
 		if prepMemo.HasPlaceholders() {
-			// Assign placeholders in the prepared memo.
-			f.Memo().InitFrom(prepMemo)
-			err := f.AssignPlaceholders()
-			if err != nil {
+			// Reinitialize the optimizer and construct a new memo that is copied
+			// from the prepared memo, but with placeholders assigned.
+			if err := p.optimizer.Factory().AssignPlaceholders(prepMemo); err != nil {
 				return err
 			}
-			ev = p.optimizer.Optimize()
+			p.optimizer.Optimize()
+			execMemo = f.Memo()
 		} else {
-			ev = prepMemo.Root()
+			execMemo = prepMemo
 		}
 	}
 
 	// Build the plan tree and store it in planner.curPlan.
+	root := execMemo.RootExpr()
 	execFactory := makeExecFactory(p)
-	plan, err := execbuilder.New(&execFactory, ev, p.EvalContext()).Build()
+	plan, err := execbuilder.New(&execFactory, execMemo, root, p.EvalContext()).Build()
 	if err != nil {
 		return err
 	}
