@@ -33,10 +33,6 @@ type sorterBase struct {
 	input    RowSource
 	ordering sqlbase.ColumnOrdering
 	matchLen uint32
-	// count is the maximum number of rows that the sorter will push to the
-	// ProcOutputHelper. 0 if the sorter should sort and push all the rows from
-	// the input.
-	count int64
 
 	rows sortableRowContainer
 	i    rowIterator
@@ -56,13 +52,6 @@ func (s *sorterBase) init(
 	matchLen uint32,
 	opts ProcStateOpts,
 ) error {
-	count := int64(0)
-	if post.Limit != 0 {
-		// The sorter needs to produce Offset + Limit rows. The ProcOutputHelper
-		// will discard the first Offset ones.
-		count = int64(post.Limit) + int64(post.Offset)
-	}
-
 	ctx := flowCtx.EvalCtx.Ctx()
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		input = NewInputStatCollector(input)
@@ -116,7 +105,6 @@ func (s *sorterBase) init(
 	s.input = input
 	s.ordering = ordering
 	s.matchLen = matchLen
-	s.count = count
 	return nil
 }
 
@@ -209,7 +197,7 @@ func newSorter(
 	output RowReceiver,
 ) (Processor, error) {
 	count := int64(0)
-	if post.Limit != 0 {
+	if post.Limit != 0 && post.Filter.Empty() {
 		// The sorter needs to produce Offset + Limit rows. The ProcOutputHelper
 		// will discard the first Offset ones.
 		count = int64(post.Limit) + int64(post.Offset)
