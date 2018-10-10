@@ -147,10 +147,11 @@ func (p *planner) selectIndex(
 		if err != nil {
 			return nil, err
 		}
-		filterExpr := optimizer.Memo().Root()
+		filters := memo.FiltersExpr{{Condition: optimizer.Memo().RootExpr().(opt.ScalarExpr)}}
+		filters = optimizer.Factory().CustomFuncs().SimplifyFilters(filters)
 		for _, c := range candidates {
 			if err := c.makeIndexConstraints(
-				&optimizer, filterExpr, p.EvalContext(),
+				&optimizer, filters, p.EvalContext(),
 			); err != nil {
 				return nil, err
 			}
@@ -247,12 +248,11 @@ func (p *planner) selectIndex(
 
 	s.origFilter = s.filter
 	if s.filter != nil {
-		remGroup := c.ic.RemainingFilter()
-		remEv := memo.MakeNormExprView(optimizer.Memo(), remGroup)
-		if remEv.Operator() == opt.TrueOp {
+		rem := c.ic.RemainingFilters()
+		if rem.IsTrue() {
 			s.filter = nil
 		} else {
-			execBld := execbuilder.New(nil /* execFactory */, remEv, nil /* evalCtx */)
+			execBld := execbuilder.New(nil /* execFactory */, optimizer.Memo(), &rem, nil /* evalCtx */)
 			s.filter, err = execBld.BuildScalar(&s.filterVars)
 			if err != nil {
 				return nil, err
@@ -415,7 +415,7 @@ func (v indexInfoByCost) Sort() {
 // constraints. Initializes v.ic, as well as v.exactPrefix and v.cost (with a
 // baseline cost for the index).
 func (v *indexInfo) makeIndexConstraints(
-	optimizer *xform.Optimizer, filter memo.ExprView, evalCtx *tree.EvalContext,
+	optimizer *xform.Optimizer, filters memo.FiltersExpr, evalCtx *tree.EvalContext,
 ) error {
 	numIndexCols := len(v.index.ColumnIDs)
 
@@ -465,7 +465,7 @@ func (v *indexInfo) makeIndexConstraints(
 			notNullCols.Add(idx + 1)
 		}
 	}
-	v.ic.Init(filter, columns, notNullCols, isInverted, evalCtx, optimizer.Factory())
+	v.ic.Init(filters, columns, notNullCols, isInverted, evalCtx, optimizer.Factory())
 	idxConstraint := v.ic.Constraint()
 	if idxConstraint.IsUnconstrained() {
 		// The index isn't being restricted at all, bump the cost significantly to

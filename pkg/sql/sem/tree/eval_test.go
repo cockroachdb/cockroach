@@ -1499,9 +1499,8 @@ func optBuildScalar(evalCtx *tree.EvalContext, e tree.TypedExpr) (tree.TypedExpr
 	if err := b.Build(e); err != nil {
 		return nil, err
 	}
-	ev := o.Optimize()
 
-	bld := execbuilder.New(nil /* factory */, ev, evalCtx)
+	bld := execbuilder.New(nil /* factory */, o.Memo(), o.Memo().RootExpr(), evalCtx)
 	ivh := tree.MakeIndexedVarHelper(nil /* container */, 0)
 
 	expr, err := bld.BuildScalar(&ivh)
