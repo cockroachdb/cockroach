@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 )
 
@@ -61,17 +60,13 @@ func TestRuleFoldNullInEmpty(t *testing.T) {
 	var f norm.Factory
 	f.Init(&evalCtx)
 
-	null := f.ConstructNull(f.InternType(types.Unknown))
-	empty := f.ConstructTuple(memo.EmptyList, f.InternType(memo.EmptyTupleType))
-	in := f.ConstructIn(null, empty)
-	ev := memo.MakeNormExprView(f.Memo(), in)
-	if ev.Operator() != opt.FalseOp {
+	in := f.ConstructIn(memo.NullSingleton, memo.EmptyTuple)
+	if in.Op() != opt.FalseOp {
 		t.Errorf("expected NULL IN () to fold to False")
 	}
 
-	notIn := f.ConstructNotIn(null, empty)
-	ev = memo.MakeNormExprView(f.Memo(), notIn)
-	if ev.Operator() != opt.TrueOp {
+	notIn := f.ConstructNotIn(memo.NullSingleton, memo.EmptyTuple)
+	if notIn.Op() != opt.TrueOp {
 		t.Errorf("expected NULL NOT IN () to fold to True")
 	}
 }

@@ -34,74 +34,45 @@ TABLE c
 
 
 # --------------------------------------------------
-# EliminateEmptyFilters
+# NormalizeNestedAnds
 # --------------------------------------------------
-opt
-SELECT * FROM a WHERE True AND True
-----
-scan a
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── key: (1)
- └── fd: (1)-->(2-5)
 
-# --------------------------------------------------
-# EliminateEmptyOr
-# --------------------------------------------------
-opt
-SELECT False OR False AS r
+opt expect=NormalizeNestedAnds
+SELECT a AND (b AND (c AND (d AND e))) FROM c
 ----
 project
- ├── columns: r:1(bool!null)
- ├── cardinality: [1 - 1]
- ├── key: ()
- ├── fd: ()-->(1)
- ├── values
- │    ├── cardinality: [1 - 1]
- │    ├── key: ()
- │    └── tuple [type=tuple]
+ ├── columns: "?column?":7(bool)
+ ├── scan c
+ │    └── columns: a:1(bool) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
  └── projections
-      └── false [type=bool]
+      └── (((a AND b) AND c) AND d) AND e [type=bool, outer=(1-5)]
 
-# --------------------------------------------------
-# EliminateSingletonAndOr
-# --------------------------------------------------
-opt
-SELECT (i=5 OR False) AND (s<'foo' AND True) AS r FROM a
+opt expect=NormalizeNestedAnds
+SELECT (a AND b) AND (c AND (d OR e)) FROM c
 ----
 project
- ├── columns: r:6(bool)
- ├── scan a
- │    └── columns: i:2(int) s:4(string)
+ ├── columns: "?column?":7(bool)
+ ├── scan c
+ │    └── columns: a:1(bool) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
  └── projections
-      └── (i = 5) AND (s < 'foo') [type=bool, outer=(2,4)]
+      └── ((a AND b) AND c) AND (d OR e) [type=bool, outer=(1-5)]
 
-# --------------------------------------------------
-# SimplifyAnd
-# --------------------------------------------------
-
-# Replace with False if any operand is false.
-opt
-SELECT k=1 AND False AND f=3.5 AS r FROM a
+# Already normalized.
+opt expect-not=NormalizeNestedAnds
+SELECT a AND b AND c FROM c
 ----
 project
- ├── columns: r:6(bool!null)
- ├── fd: ()-->(6)
- ├── scan a
+ ├── columns: "?column?":7(bool)
+ ├── scan c
+ │    └── columns: a:1(bool) b:2(bool) c:3(bool)
  └── projections
-      └── false [type=bool]
+      └── (a AND b) AND c [type=bool, outer=(1-3)]
 
-opt
-SELECT False AND s='foo' AS r FROM a
-----
-project
- ├── columns: r:6(bool!null)
- ├── fd: ()-->(6)
- ├── scan a
- └── projections
-      └── false [type=bool]
+# --------------------------------------------------
+# SimplifyTrueAnd + SimplifyAndTrue
+# --------------------------------------------------
 
-# Discard True operands.
-opt
+opt expect=SimplifyTrueAnd
 SELECT true AND k=1 AS r FROM a
 ----
 project
@@ -112,8 +83,19 @@ project
  └── projections
       └── k = 1 [type=bool, outer=(1)]
 
-opt
-SELECT k=1 AND i=2 AND true AS r FROM a
+opt expect=SimplifyAndTrue
+SELECT k=1 AND true AS r FROM a
+----
+project
+ ├── columns: r:6(bool)
+ ├── scan a
+ │    ├── columns: k:1(int!null)
+ │    └── key: (1)
+ └── projections
+      └── k = 1 [type=bool, outer=(1)]
+
+opt expect=(SimplifyTrueAnd,SimplifyAndTrue)
+SELECT true AND k=1 AND true AND i=2 AS r FROM a
 ----
 project
  ├── columns: r:6(bool)
@@ -125,34 +107,54 @@ project
       └── (k = 1) AND (i = 2) [type=bool, outer=(1,2)]
 
 # No conditions left after rule.
-opt
-SELECT * FROM a WHERE true AND true
+opt expect=SimplifyTrueAnd
+SELECT * FROM a WHERE true AND (true AND true)
 ----
 scan a
  ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  ├── key: (1)
  └── fd: (1)-->(2-5)
 
-# Flatten nested And operands.
-opt
-SELECT (k>1 AND k<5) AND (f=3.5 AND s='foo') AS r FROM a
+# --------------------------------------------------
+# SimplifyFalseAnd + SimplifyAndFalse
+# --------------------------------------------------
+
+opt expect=SimplifyFalseAnd
+SELECT false AND s='foo' AS r FROM a
 ----
 project
- ├── columns: r:6(bool)
+ ├── columns: r:6(bool!null)
+ ├── fd: ()-->(6)
  ├── scan a
- │    ├── columns: k:1(int!null) f:3(float) s:4(string)
- │    ├── key: (1)
- │    └── fd: (1)-->(3,4)
  └── projections
-      └── (((k > 1) AND (k < 5)) AND (f = 3.5)) AND (s = 'foo') [type=bool, outer=(1,3,4)]
+      └── false [type=bool]
+
+opt expect=SimplifyAndFalse
+SELECT s='foo' AND false AS r FROM a
+----
+project
+ ├── columns: r:6(bool!null)
+ ├── fd: ()-->(6)
+ ├── scan a
+ └── projections
+      └── false [type=bool]
+
+opt expect=(SimplifyAndFalse,SimplifyFalseAnd)
+SELECT k=1 AND false AND (f=3.5 AND false) AS r FROM a
+----
+project
+ ├── columns: r:6(bool!null)
+ ├── fd: ()-->(6)
+ ├── scan a
+ └── projections
+      └── false [type=bool]
 
 # --------------------------------------------------
-# SimplifyOr
+# SimplifyTrueOr + SimplifyOrTrue
 # --------------------------------------------------
 
-# Replace with True if any operand is True.
-opt
-SELECT k=1 OR (i=2 OR True) AS r FROM a
+opt expect=SimplifyTrueOr
+SELECT true OR s='foo' AS r FROM a
 ----
 project
  ├── columns: r:6(bool!null)
@@ -161,8 +163,8 @@ project
  └── projections
       └── true [type=bool]
 
-opt
-SELECT k=1 OR True OR f=3.5 AS r FROM a
+opt expect=SimplifyOrTrue
+SELECT s='foo' OR true AS r FROM a
 ----
 project
  ├── columns: r:6(bool!null)
@@ -171,8 +173,21 @@ project
  └── projections
       └── true [type=bool]
 
-# Discard False operands.
-opt
+opt expect=(SimplifyTrueOr,SimplifyOrTrue)
+SELECT k=1 OR true OR (true OR f=3.5) AS r FROM a
+----
+project
+ ├── columns: r:6(bool!null)
+ ├── fd: ()-->(6)
+ ├── scan a
+ └── projections
+      └── true [type=bool]
+
+# --------------------------------------------------
+# SimplifyFalseOr + SimplifyOrFalse
+# --------------------------------------------------
+
+opt expect=SimplifyFalseOr
 SELECT false OR k=1 AS r FROM a
 ----
 project
@@ -183,23 +198,32 @@ project
  └── projections
       └── k = 1 [type=bool, outer=(1)]
 
-opt
-SELECT * FROM a WHERE k=1 OR i=2 OR false
+opt expect=SimplifyOrFalse
+SELECT k=1 OR false AS r FROM a
 ----
-select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── key: (1)
- ├── fd: (1)-->(2-5)
+project
+ ├── columns: r:6(bool)
  ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ │    ├── columns: k:1(int!null)
+ │    └── key: (1)
+ └── projections
+      └── k = 1 [type=bool, outer=(1)]
+
+opt expect=(SimplifyFalseOr,SimplifyOrFalse)
+SELECT (false OR k=1) OR (i=2 OR false) AS r FROM a
+----
+project
+ ├── columns: r:6(bool)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int)
  │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters
+ │    └── fd: (1)-->(2)
+ └── projections
       └── (k = 1) OR (i = 2) [type=bool, outer=(1,2)]
 
 # No conditions left after rule.
-opt
-SELECT * FROM a WHERE false OR false
+opt expect=SimplifyFalseOr
+SELECT * FROM a WHERE false OR false OR false
 ----
 values
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -207,25 +231,10 @@ values
  ├── key: ()
  └── fd: ()-->(1-5)
 
-# Flatten nested Or operands.
-opt
-SELECT * FROM a WHERE (k=1 OR i=2) OR (f=3.5 OR s='foo')
-----
-select
- ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── key: (1)
- ├── fd: (1)-->(2-5)
- ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    ├── key: (1)
- │    └── fd: (1)-->(2-5)
- └── filters
-      └── (((k = 1) OR (i = 2)) OR (f = 3.5)) OR (s = 'foo') [type=bool, outer=(1-4)]
-
 # --------------------------------------------------
 # SimplifyAnd + SimplifyOr
 # --------------------------------------------------
-opt
+opt expect=(SimplifyOrFalse,SimplifyFalseOr,SimplifyAndTrue)
 SELECT (k=1 OR false) AND (false OR k=2 OR false) AND true AS r FROM a
 ----
 project
@@ -236,53 +245,10 @@ project
  └── projections
       └── (k = 1) AND (k = 2) [type=bool, outer=(1)]
 
-# Use parentheses to make and/or tree right-heavy instead of left-heavy.
-opt
-SELECT (k=1 OR (i=2 OR f=3.5)) AND (s='foo' AND s<>'bar') AS r FROM a
-----
-project
- ├── columns: r:6(bool)
- ├── scan a
- │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
- │    ├── key: (1)
- │    └── fd: (1)-->(2-4)
- └── projections
-      └── ((((k = 1) OR (i = 2)) OR (f = 3.5)) AND (s = 'foo')) AND (s != 'bar') [type=bool, outer=(1-4)]
-
-# --------------------------------------------------
-# SimplifyFilters
-# --------------------------------------------------
-opt expect=SimplifyFilters
-SELECT * FROM a WHERE Null
-----
-values
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── cardinality: [0 - 0]
- ├── key: ()
- └── fd: ()-->(1-5)
-
-opt expect=SimplifyFilters
-SELECT * FROM a INNER JOIN b ON NULL
-----
-values
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) z:7(int)
- ├── cardinality: [0 - 0]
- ├── key: ()
- └── fd: ()-->(1-7)
-
-opt expect=SimplifyFilters
-SELECT * FROM a WHERE i=1 AND Null
-----
-values
- ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb)
- ├── cardinality: [0 - 0]
- ├── key: ()
- └── fd: ()-->(1-5)
-
 # --------------------------------------------------
 # FoldNullAndOr
 # --------------------------------------------------
-opt
+opt expect=FoldNullAndOr
 SELECT null and null AS r FROM a
 ----
 project
@@ -292,7 +258,7 @@ project
  └── projections
       └── null [type=bool]
 
-opt
+opt expect=FoldNullAndOr
 SELECT null or null AS r FROM a
 ----
 project
@@ -302,7 +268,7 @@ project
  └── projections
       └── null [type=bool]
 
-opt
+opt expect=FoldNullAndOr
 SELECT null or (null and null and null) or null AS r FROM a
 ----
 project
@@ -313,7 +279,7 @@ project
       └── null [type=bool]
 
 # Don't fold.
-opt
+opt expect-not=FoldNullAndOr
 SELECT (null or k=1) AS r, (null and k=1) AS s FROM a
 ----
 project
@@ -350,7 +316,7 @@ project
 # --------------------------------------------------
 
 # Equality and inequality comparisons.
-opt
+opt expect=NegateComparison
 SELECT * FROM a WHERE NOT(i=1) AND NOT(f<>i) AND NOT(i>k) AND NOT(i>=f) AND NOT(f<1) AND NOT(i<=1)
 ----
 select
@@ -370,7 +336,7 @@ select
       └── i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
 
 # IN and IS comparisons.
-opt
+opt expect=NegateComparison
 SELECT *
 FROM a
 WHERE NOT(i IN (1,2)) AND NOT(f NOT IN (3,4)) AND NOT(f IS NULL) AND NOT(s IS NOT NULL)
@@ -390,7 +356,7 @@ select
       └── s IS NULL [type=bool, outer=(4), constraints=(/4: [/NULL - /NULL]; tight), fd=()-->(4)]
 
 # Like comparisons.
-opt
+opt expect=NegateComparison
 SELECT *
 FROM a
 WHERE NOT(s LIKE 'foo') AND NOT(s NOT LIKE 'foo') AND NOT(s ILIKE 'foo') AND NOT(s NOT ILIKE 'foo')
@@ -410,7 +376,7 @@ select
       └── s ILIKE 'foo' [type=bool, outer=(4)]
 
 # SimilarTo comparisons.
-opt
+opt expect=NegateComparison
 SELECT * FROM a WHERE NOT(s SIMILAR TO 'foo') AND NOT(s NOT SIMILAR TO 'foo')
 ----
 select
@@ -426,7 +392,7 @@ select
       └── s SIMILAR TO 'foo' [type=bool, outer=(4)]
 
 # RegMatch comparisons.
-opt
+opt expect=NegateComparison
 SELECT * FROM a WHERE NOT(s ~ 'foo') AND NOT(s !~ 'foo') AND NOT(s ~* 'foo') AND NOT (s !~* 'foo')
 ----
 select
@@ -443,7 +409,7 @@ select
       ├── s !~* 'foo' [type=bool, outer=(4)]
       └── s ~* 'foo' [type=bool, outer=(4)]
 
-opt
+opt expect-not=NegateComparison
 SELECT * FROM a WHERE
   NOT('[1, 2]' @> j) AND NOT(j <@ '[3, 4]') AND
   NOT(j ? 'foo') AND
@@ -468,7 +434,7 @@ select
 # --------------------------------------------------
 # EliminateNot
 # --------------------------------------------------
-opt
+opt expect=EliminateNot
 SELECT * FROM c WHERE NOT(NOT(a))
 ----
 select
@@ -482,7 +448,7 @@ select
 # --------------------------------------------------
 # NegateAnd + NegateComparison
 # --------------------------------------------------
-opt
+opt expect=(NegateAnd,NegateComparison)
 SELECT * FROM a WHERE NOT (k >= i AND i < f)
 ----
 select
@@ -496,7 +462,7 @@ select
  └── filters
       └── (k < i) OR (i >= f) [type=bool, outer=(1-3)]
 
-opt
+opt expect=(NegateAnd,NegateComparison)
 SELECT * FROM a WHERE NOT (k >= i AND i < f AND (i > 5 AND i < 10 AND f > 1))
 ----
 select
@@ -514,7 +480,7 @@ select
 # --------------------------------------------------
 # NegateOr + NegateComparison
 # --------------------------------------------------
-opt
+opt expect=(NegateOr,NegateComparison)
 SELECT * FROM a WHERE NOT (k >= i OR i < f OR k + i < f)
 ----
 select
@@ -530,7 +496,7 @@ select
       ├── i >= f [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
       └── f <= (k + i) [type=bool, outer=(1-3), constraints=(/3: (/NULL - ])]
 
-opt
+opt expect=(NegateOr,NegateComparison)
 SELECT * FROM a WHERE NOT (k >= i OR i < f OR (i > 10 OR i < 5 OR f > 1))
 ----
 select
@@ -551,7 +517,7 @@ select
 # --------------------------------------------------
 # NegateAnd + NegateOr + NegateComparison
 # --------------------------------------------------
-opt
+opt expect=(NegateAnd,NegateOr,NegateComparison)
 SELECT * FROM a WHERE NOT ((k >= i OR i < f) AND (i > 5 OR f > 1))
 ----
 select
@@ -565,7 +531,7 @@ select
  └── filters
       └── ((k < i) AND (i >= f)) OR ((i <= 5) AND (f <= 1.0)) [type=bool, outer=(1-3)]
 
-opt
+opt expect=(NegateAnd,NegateOr,NegateComparison)
 SELECT * FROM a WHERE NOT ((k >= i AND i < f) OR (i > 5 AND f > 1))
 ----
 select
@@ -581,9 +547,9 @@ select
       └── (i <= 5) OR (f <= 1.0) [type=bool, outer=(2,3)]
 
 # --------------------------------------------------
-# ExtractRedundantClause + ExtractRedundantSubclause
+# ExtractRedundantConjunct
 # --------------------------------------------------
-opt
+opt expect=(ExtractRedundantConjunct)
 SELECT b OR b FROM c
 ----
 project
@@ -593,7 +559,7 @@ project
  └── projections
       └── variable: b [type=bool, outer=(2)]
 
-opt
+opt expect=(ExtractRedundantConjunct)
 SELECT a OR (a AND b) OR (a AND c) FROM c
 ----
 project
@@ -603,7 +569,7 @@ project
  └── projections
       └── variable: a [type=bool, outer=(1)]
 
-opt
+opt expect=(ExtractRedundantConjunct)
 SELECT (a AND b) OR a OR (a AND c) FROM c
 ----
 project
@@ -613,7 +579,7 @@ project
  └── projections
       └── variable: a [type=bool, outer=(1)]
 
-opt
+opt expect=(ExtractRedundantConjunct)
 SELECT (a AND b) OR (b AND a) FROM c
 ----
 project
@@ -621,9 +587,9 @@ project
  ├── scan c
  │    └── columns: a:1(bool) b:2(bool)
  └── projections
-      └── a AND b [type=bool, outer=(1,2)]
+      └── b AND a [type=bool, outer=(1,2)]
 
-opt
+opt expect=(ExtractRedundantConjunct)
 SELECT (a AND b) OR (c AND a) FROM c
 ----
 project
@@ -633,7 +599,7 @@ project
  └── projections
       └── a AND (b OR c) [type=bool, outer=(1-3)]
 
-opt
+opt expect=(ExtractRedundantConjunct)
 SELECT * FROM c WHERE (a AND b) OR (a AND b AND c) OR (b AND a)
 ----
 select
@@ -645,8 +611,8 @@ select
       ├── variable: a [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
       └── variable: b [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
 
-opt
-SELECT * FROM c WHERE (b AND a AND c) OR (d AND e AND a)
+opt expect=(ExtractRedundantConjunct)
+SELECT * FROM c WHERE (b AND (a AND c)) OR (d AND (e AND a))
 ----
 select
  ├── columns: a:1(bool!null) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
@@ -657,7 +623,19 @@ select
       ├── variable: a [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
       └── (b AND c) OR (d AND e) [type=bool, outer=(2-5)]
 
-opt
+opt expect=(ExtractRedundantConjunct)
+SELECT * FROM c WHERE (b AND a) OR (c AND (a AND e) OR (e AND a AND d))
+----
+select
+ ├── columns: a:1(bool!null) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
+ ├── fd: ()-->(1)
+ ├── scan c
+ │    └── columns: a:1(bool) b:2(bool) c:3(bool) d:4(bool) e:5(bool)
+ └── filters
+      ├── variable: a [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
+      └── b OR (e AND (c OR d)) [type=bool, outer=(2-5)]
+
+opt expect=(ExtractRedundantConjunct)
 SELECT * FROM a WHERE ((k > 5) AND (i < 2) AND (i > 0)) OR ((k > 5) AND (i < 2) AND (s = 'foo'))
 ----
 select
@@ -673,7 +651,7 @@ select
       ├── i < 2 [type=bool, outer=(2), constraints=(/2: (/NULL - /1]; tight)]
       └── (i > 0) OR (s = 'foo') [type=bool, outer=(2,4)]
 
-opt
+opt expect=(ExtractRedundantConjunct)
 SELECT * FROM a WHERE (k > 5) OR ((k > 5) AND (i < 2) AND (s = 'foo'))
 ----
 scan a
@@ -683,7 +661,7 @@ scan a
  └── fd: (1)-->(2-5)
 
 # Works with nulls too.
-opt
+opt expect=(ExtractRedundantConjunct)
 SELECT null or (null and k=1) AS r FROM a
 ----
 project
@@ -693,7 +671,7 @@ project
  └── projections
       └── null [type=unknown]
 
-opt
+opt expect=(ExtractRedundantConjunct)
 SELECT (null and k=2) or (null and k=1) AS r FROM a
 ----
 project
@@ -705,7 +683,7 @@ project
       └── NULL AND ((k = 2) OR (k = 1)) [type=bool, outer=(1)]
 
 # Check that we don't match non-redundant cases.
-opt
+opt expect-not=(ExtractRedundantConjunct)
 SELECT a OR b OR b FROM c
 ----
 project
@@ -715,7 +693,7 @@ project
  └── projections
       └── (a OR b) OR b [type=bool, outer=(1,2)]
 
-opt
+opt expect-not=(ExtractRedundantConjunct)
 SELECT (a AND b) OR (a OR c) FROM c
 ----
 project
@@ -723,9 +701,9 @@ project
  ├── scan c
  │    └── columns: a:1(bool) b:2(bool) c:3(bool)
  └── projections
-      └── ((a AND b) OR a) OR c [type=bool, outer=(1-3)]
+      └── (a AND b) OR (a OR c) [type=bool, outer=(1-3)]
 
-opt
+opt expect-not=(ExtractRedundantConjunct)
 SELECT (a AND b) OR (NOT a AND c) FROM c
 ----
 project

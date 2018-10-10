@@ -23,89 +23,85 @@ import (
 // RejectNullCols returns the set of columns that are candidates for NULL
 // rejection filter pushdown. See the Relational.Rule.RejectNullCols comment for
 // more details.
-func (c *CustomFuncs) RejectNullCols(group memo.GroupID) opt.ColSet {
-	return DeriveRejectNullCols(memo.MakeNormExprView(c.mem, group))
+func (c *CustomFuncs) RejectNullCols(in memo.RelExpr) opt.ColSet {
+	return DeriveRejectNullCols(in)
 }
 
 // HasNullRejectingFilter returns true if the filter causes some of the columns
 // in nullRejectCols to be non-null. For example, if nullRejectCols = (x, z),
 // filters such as x < 5, x = y, and z IS NOT NULL all satisfy this property.
-func (c *CustomFuncs) HasNullRejectingFilter(filter memo.GroupID, nullRejectCols opt.ColSet) bool {
-	filterConstraints := c.LookupLogical(filter).Scalar.Constraints
-	if filterConstraints == nil {
-		return false
-	}
+func (c *CustomFuncs) HasNullRejectingFilter(
+	filters memo.FiltersExpr, nullRejectCols opt.ColSet,
+) bool {
+	for i := range filters {
+		constraints := filters[i].ScalarProps(c.mem).Constraints
+		if constraints == nil {
+			continue
+		}
 
-	notNullFilterCols := filterConstraints.ExtractNotNullCols(c.f.evalCtx)
-	return notNullFilterCols.Intersects(nullRejectCols)
-}
-
-// NullRejectAggVar returns the Variable input of the aggregate functions that
-// produce rejectNullCols. These aggregations must have the same column as input.
-// See deriveGroupByRejectNullCols method for more details.
-func (c *CustomFuncs) NullRejectAggVar(aggs memo.GroupID, rejectNullCols opt.ColSet) memo.GroupID {
-	aggsExpr := c.mem.NormExpr(aggs).AsAggregations()
-	aggsColList := c.mem.LookupPrivate(aggsExpr.Cols()).(opt.ColList)
-	aggsElems := c.mem.LookupList(aggsExpr.Aggs())
-
-	var result memo.GroupID
-	for i, colID := range aggsColList {
-		if rejectNullCols.Contains(int(colID)) {
-			aggExpr := memo.MakeNormExprView(c.mem, aggsElems[i])
-			v := memo.ExtractVarFromAggInput(aggExpr.Child(0)).Group()
-			if result == 0 {
-				result = v
-			} else if result != v {
-				panic("rejected null cols don't have the same input")
-			}
+		notNullFilterCols := constraints.ExtractNotNullCols(c.f.evalCtx)
+		if notNullFilterCols.Intersects(nullRejectCols) {
+			return true
 		}
 	}
+	return false
+}
 
-	if result == 0 {
-		panic("no aggregations found")
+// NullRejectAggVar scans through the list of aggregate functions and returns
+// the Variable input of the first aggregate that is not ConstAgg. Such an
+// aggregate must exist, since this is only called if at least one eligible
+// null-rejection column was identified by the deriveGroupByRejectNullCols
+// method (see its comment for more details).
+func (c *CustomFuncs) NullRejectAggVar(
+	aggs memo.AggregationsExpr, nullRejectCols opt.ColSet,
+) *memo.VariableExpr {
+	for i := range aggs {
+		if nullRejectCols.Contains(int(aggs[i].Col)) {
+			return memo.ExtractVarFromAggInput(aggs[i].Agg.Child(0).(opt.ScalarExpr))
+		}
 	}
-	return result
+	panic("expected aggregation not found")
 }
 
 // DeriveRejectNullCols returns the set of columns that are candidates for NULL
 // rejection filter pushdown. See the Relational.Rule.RejectNullCols comment for
 // more details.
-func DeriveRejectNullCols(ev memo.ExprView) opt.ColSet {
+func DeriveRejectNullCols(in memo.RelExpr) opt.ColSet {
 	// Lazily calculate and store the RejectNullCols value.
-	relational := ev.Logical().Relational
-	if relational.IsAvailable(props.RejectNullCols) {
-		return relational.Rule.RejectNullCols
+	relProps := in.Relational()
+	if relProps.IsAvailable(props.RejectNullCols) {
+		return relProps.Rule.RejectNullCols
 	}
-	relational.SetAvailable(props.RejectNullCols)
+	relProps.SetAvailable(props.RejectNullCols)
 
 	// TODO(andyk): Add other operators to make null rejection more comprehensive.
-	switch ev.Operator() {
+	switch in.Op() {
 	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
 		// Pass through null-rejecting columns from both inputs.
-		relational.Rule.RejectNullCols = DeriveRejectNullCols(ev.Child(0))
-		relational.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(ev.Child(1)))
+		relProps.Rule.RejectNullCols = DeriveRejectNullCols(in.Child(0).(memo.RelExpr))
+		relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(1).(memo.RelExpr)))
 
 	case opt.LeftJoinOp, opt.LeftJoinApplyOp:
 		// Pass through null-rejection columns from left input, and request null-
 		// rejection on right columns.
-		relational.Rule.RejectNullCols = DeriveRejectNullCols(ev.Child(0))
-		relational.Rule.RejectNullCols.UnionWith(ev.Child(1).Logical().Relational.OutputCols)
+		relProps.Rule.RejectNullCols = DeriveRejectNullCols(in.Child(0).(memo.RelExpr))
+		relProps.Rule.RejectNullCols.UnionWith(in.Child(1).(memo.RelExpr).Relational().OutputCols)
 
 	case opt.RightJoinOp, opt.RightJoinApplyOp:
 		// Pass through null-rejection columns from right input, and request null-
 		// rejection on left columns.
-		relational.Rule.RejectNullCols = ev.Child(0).Logical().Relational.OutputCols
-		relational.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(ev.Child(1)))
+		relProps.Rule.RejectNullCols = in.Child(0).(memo.RelExpr).Relational().OutputCols
+		relProps.Rule.RejectNullCols.UnionWith(DeriveRejectNullCols(in.Child(1).(memo.RelExpr)))
 
 	case opt.FullJoinOp, opt.FullJoinApplyOp:
 		// Request null-rejection on all output columns.
-		relational.Rule.RejectNullCols = relational.OutputCols
+		relProps.Rule.RejectNullCols = relProps.OutputCols
 
 	case opt.GroupByOp, opt.ScalarGroupByOp:
-		relational.Rule.RejectNullCols = deriveGroupByRejectNullCols(ev)
+		relProps.Rule.RejectNullCols = deriveGroupByRejectNullCols(in)
 	}
 
-	return relational.Rule.RejectNullCols
+	return relProps.Rule.RejectNullCols
 }
 
 // deriveGroupByRejectNullCols returns the set of GroupBy columns that are
@@ -125,16 +121,15 @@ func DeriveRejectNullCols(ev memo.ExprView) opt.ColSet {
 //      ignored because all rows in each group must have the same value for this
 //      column, so it doesn't matter which rows are filtered.
 //
-func deriveGroupByRejectNullCols(ev memo.ExprView) opt.ColSet {
-	input := ev.Child(0)
-	aggs := ev.Child(1)
-	aggColList := aggs.Private().(opt.ColList)
+func deriveGroupByRejectNullCols(in memo.RelExpr) opt.ColSet {
+	input := in.Child(0).(memo.RelExpr)
+	aggs := *in.Child(1).(*memo.AggregationsExpr)
 
 	var rejectNullCols opt.ColSet
 	var savedInColID opt.ColumnID
-	for i, n := 0, aggs.ChildCount(); i < n; i++ {
-		agg := aggs.Child(i)
-		aggOp := agg.Operator()
+	for i := range aggs {
+		agg := aggs[i].Agg
+		aggOp := agg.Op()
 
 		if aggOp == opt.ConstAggOp {
 			continue
@@ -165,7 +160,7 @@ func deriveGroupByRejectNullCols(ev memo.ExprView) opt.ColSet {
 		// Can possibly reject column, but keep searching, since if
 		// multiple columns are used by aggregate functions, then nulls
 		// can't be rejected on any column.
-		rejectNullCols.Add(int(aggColList[i]))
+		rejectNullCols.Add(int(aggs[i].Col))
 	}
 	return rejectNullCols
 }
