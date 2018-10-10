@@ -414,3 +414,24 @@ UPDATE tn2 SET x = NULL
 
 statement error value too long for type CHAR\(3\)
 UPDATE tn2 SET y = 'abcd'
+
+subtest fk_contraint_check_validation_ordering
+
+# Verify that column constraints and CHECK handling occur before
+# foreign key validation.
+statement ok
+CREATE TABLE src(x VARCHAR PRIMARY KEY);
+  INSERT INTO src(x) VALUES ('abc');
+  CREATE TABLE derived(x CHAR(3) REFERENCES src(x),
+                       y VARCHAR CHECK(length(y) < 4) REFERENCES src(x));
+  INSERT INTO derived(x, y) VALUES ('abc', 'abc')
+
+# Sanity check that the FK constraints gets actually validated
+statement error foreign key violation
+UPDATE derived SET x = 'xxx'
+
+statement error value too long for type CHAR\(3\)
+UPDATE derived SET x = 'abcd'
+
+statement error failed to satisfy CHECK constraint
+UPDATE derived SET y = 'abcd'

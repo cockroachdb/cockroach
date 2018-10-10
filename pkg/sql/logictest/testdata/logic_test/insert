@@ -564,3 +564,23 @@ INSERT INTO tn2(x) VALUES (NULL)
 
 statement error value too long for type CHAR\(3\)
 INSERT INTO tn2(x, y) VALUES (123, 'abcd')
+
+subtest fk_contraint_check_validation_ordering
+
+# Verify that column constraints and CHECK handling occur before
+# foreign key validation.
+statement ok
+CREATE TABLE src(x VARCHAR PRIMARY KEY);
+  INSERT INTO src(x) VALUES ('abc');
+  CREATE TABLE derived(x CHAR(3) REFERENCES src(x),
+                       y VARCHAR CHECK(length(y) < 4) REFERENCES src(x))
+
+# Sanity check that the FK constraints gets actually validated
+statement error foreign key violation
+INSERT INTO derived(x) VALUES('xxx')
+
+statement error value too long for type CHAR\(3\)
+INSERT INTO derived(x) VALUES('abcd')
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO derived(y) VALUES('abcd')
