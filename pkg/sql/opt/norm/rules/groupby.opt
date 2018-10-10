@@ -7,11 +7,11 @@
 [ConvertGroupByToDistinct, Normalize]
 (GroupBy
     $input:*
-    $aggregations:* & (HasNoCols $aggregations)
-    $def:*
+    $aggregations:[]
+    $groupingPrivate:*
 )
 =>
-(DistinctOn $input $aggregations $def)
+(DistinctOn $input $aggregations $groupingPrivate)
 
 # EliminateDistinct discards a DistinctOn operator that is eliminating duplicate
 # rows by using grouping columns that are statically known to form a strong key.
@@ -21,7 +21,7 @@
 (DistinctOn
     $input:*
     *
-    $def:* & (GroupingColsAreKey $def $input)
+    $groupingPrivate:* & (GroupingColsAreKey $groupingPrivate $input)
 )
 =>
 $input
@@ -31,15 +31,15 @@ $input
 # something the GroupBy operators can do on their own.
 [EliminateGroupByProject, Normalize]
 (GroupBy | ScalarGroupBy | DistinctOn
-    $input:(Project $innerInput:*) & (HasSubsetCols $input $innerInput)
+    $input:(Project $innerInput:*) & (ColsAreSubset (OutputCols $input) (OutputCols $innerInput))
     $aggregations:*
-    $def:*
+    $groupingPrivate:*
 )
 =>
 ((OpName)
     $innerInput
     $aggregations
-    $def
+    $groupingPrivate
 )
 
 # ReduceGroupingCols eliminates redundant grouping columns from the GroupBy
@@ -53,13 +53,13 @@ $input
 (GroupBy | DistinctOn
     $input:*
     $aggregations:*
-    $def:* & (CanReduceGroupingCols $input $def)
+    $groupingPrivate:* & (CanReduceGroupingCols $input $groupingPrivate)
 )
 =>
 ((OpName)
     $input
-    (AppendReducedGroupingCols $input $aggregations $def)
-    (ReduceGroupingCols $input $def)
+    (AppendReducedGroupingCols $input $aggregations $groupingPrivate)
+    (ReduceGroupingCols $input $groupingPrivate)
 )
 
 # EliminateAggDistinctForKeys eliminates unnecessary AggDistinct modifiers when
@@ -68,11 +68,11 @@ $input
 (GroupBy | ScalarGroupBy
     $input:*
     $aggregations:*
-    $def:* & (CanRemoveAggDistinctForKeys $aggregations $def $input)
+    $groupingPrivate:* & (CanRemoveAggDistinctForKeys $aggregations $groupingPrivate $input)
 )
 =>
 ((OpName)
     $input
-    (RemoveAggDistinctForKeys $aggregations $def $input)
-    $def
+    (RemoveAggDistinctForKeys $aggregations $groupingPrivate $input)
+    $groupingPrivate
 )
