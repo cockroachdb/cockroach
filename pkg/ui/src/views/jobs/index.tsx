@@ -120,7 +120,13 @@ class JobStatusCell extends React.Component<{ job: Job }, {}> {
     const percent = this.props.job.fraction_completed * 100;
     return (
       <div>
-        <Line percent={percent} strokeWidth={10} trailWidth={10} className="jobs-table__progress-bar" />
+        <Line
+          percent={percent}
+          strokeWidth={10}
+          trailWidth={10}
+          className="jobs-table__progress-bar"
+          strokeColor={"#3A7DE1"}
+        />
         <span title={percent.toFixed(3) + "%"}>{percent.toFixed(1) + "%"}</span>
       </div>
     );
