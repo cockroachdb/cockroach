@@ -39,9 +39,9 @@ select
  ├── scan t
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── prune: (1-3)
- └── filters [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
-      └── is [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight)]
-           ├── variable: a [type=int, outer=(1)]
+ └── filters
+      └── is [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
+           ├── variable: a [type=int]
            └── null [type=unknown]
 
 opt
@@ -53,9 +53,9 @@ select
  ├── scan t
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── prune: (1-3)
- └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+ └── filters
       └── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
-           ├── variable: a [type=int, outer=(1)]
+           ├── variable: a [type=int]
            └── null [type=unknown]
 
 opt
@@ -68,12 +68,12 @@ select
  ├── scan t
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── prune: (1-3)
- └── filters [type=bool, outer=(2,3), constraints=(/2: [/NULL - /NULL]; /3: [/NULL - /NULL]; tight), fd=()-->(2,3)]
-      ├── is [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL]; tight)]
-      │    ├── variable: b [type=bool, outer=(2)]
+ └── filters
+      ├── is [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL]; tight), fd=()-->(2)]
+      │    ├── variable: b [type=bool]
       │    └── null [type=unknown]
-      └── is [type=bool, outer=(3), constraints=(/3: [/NULL - /NULL]; tight)]
-           ├── variable: c [type=string, outer=(3)]
+      └── is [type=bool, outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
+           ├── variable: c [type=string]
            └── null [type=unknown]
 
 opt
@@ -85,12 +85,12 @@ select
  ├── scan t
  │    ├── columns: a:1(int) b:2(bool) c:3(string)
  │    └── prune: (1-3)
- └── filters [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]; tight)]
+ └── filters
       ├── is-not [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
-      │    ├── variable: b [type=bool, outer=(2)]
+      │    ├── variable: b [type=bool]
       │    └── null [type=unknown]
       └── is-not [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
-           ├── variable: c [type=string, outer=(3)]
+           ├── variable: c [type=string]
            └── null [type=unknown]
 
 exec-ddl
@@ -115,11 +115,11 @@ select
  ├── scan xy
  │    ├── columns: x:1(int) y:2(int)
  │    └── prune: (1,2)
- └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
+ └── filters
       └── gt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ])]
-           ├── variable: x [type=int, outer=(1)]
-           └── function: abs [type=int, outer=(2)]
-                └── variable: y [type=int, outer=(2)]
+           ├── variable: x [type=int]
+           └── function: abs [type=int]
+                └── variable: y [type=int]
 
 # Test that we get a not-NULL constraint on x.
 opt
@@ -131,13 +131,13 @@ select
  ├── scan xy
  │    ├── columns: x:1(int) y:2(int)
  │    └── prune: (1,2)
- └── filters [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
+ └── filters
       └── gt [type=bool, outer=(1), constraints=(/1: (/NULL - ])]
-           ├── variable: x [type=int, outer=(1)]
-           └── cast: INT [type=int, outer=(1)]
-                └── function: sin [type=float, outer=(1)]
-                     └── cast: FLOAT8 [type=float, outer=(1)]
-                          └── variable: x [type=int, outer=(1)]
+           ├── variable: x [type=int]
+           └── cast: INT [type=int]
+                └── function: sin [type=float]
+                     └── cast: FLOAT8 [type=float]
+                          └── variable: x [type=int]
 
 # Test that we get a not-NULL constraint on x and y.
 opt
@@ -148,10 +148,10 @@ select
  ├── scan xy
  │    ├── columns: x:1(int) y:2(int)
  │    └── prune: (1,2)
- └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+ └── filters
       └── gt [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
-           ├── variable: x [type=int, outer=(1)]
-           └── variable: y [type=int, outer=(2)]
+           ├── variable: x [type=int]
+           └── variable: y [type=int]
 
 # Test that we get a not-NULL constraint on x and y.
 opt
@@ -163,7 +163,7 @@ select
  ├── scan xy
  │    ├── columns: x:1(int) y:2(int)
  │    └── prune: (1,2)
- └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
-      └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
-           ├── variable: x [type=int, outer=(1)]
-           └── variable: y [type=int, outer=(2)]
+ └── filters
+      └── eq [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
+           ├── variable: x [type=int]
+           └── variable: y [type=int]

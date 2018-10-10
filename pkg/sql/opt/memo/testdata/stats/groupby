@@ -90,9 +90,9 @@ project
       │         ├── stats: [rows=2000, distinct(1)=2000]
       │         ├── key: (1)
       │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
-      └── aggregations [outer=(2)]
+      └── aggregations
            └── max [type=int, outer=(2)]
-                └── variable: y [type=int, outer=(2)]
+                └── variable: y [type=int]
 
 # Group by non-key.
 build
@@ -112,9 +112,9 @@ group-by
  │         ├── stats: [rows=2000, distinct(2)=400]
  │         ├── key: (1)
  │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
- └── aggregations [outer=(3)]
+ └── aggregations
       └── sum [type=float, outer=(3)]
-           └── variable: z [type=float, outer=(3)]
+           └── variable: z [type=float]
 
 build
 SELECT max(x) FROM a GROUP BY y, z, s
@@ -133,9 +133,9 @@ project
       │    ├── stats: [rows=2000, distinct(2-4)=600]
       │    ├── key: (1)
       │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
-      └── aggregations [outer=(1)]
+      └── aggregations
            └── max [type=int, outer=(1)]
-                └── variable: x [type=int, outer=(1)]
+                └── variable: x [type=int]
 
 build
 SELECT min(x) FROM a GROUP BY y, z
@@ -159,9 +159,9 @@ project
       │         ├── stats: [rows=2000, distinct(2,3)=2000]
       │         ├── key: (1)
       │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
-      └── aggregations [outer=(1)]
+      └── aggregations
            └── min [type=int, outer=(1)]
-                └── variable: x [type=int, outer=(1)]
+                └── variable: x [type=int]
 
 build
 SELECT max(x) FROM a GROUP BY y, z, s HAVING s IN ('a', 'b')
@@ -185,10 +185,10 @@ project
       │    │    ├── stats: [rows=2000, distinct(4)=10, distinct(2-4)=600]
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
-      │    └── aggregations [outer=(1)]
+      │    └── aggregations
       │         └── max [type=int, outer=(1)]
-      │              └── variable: x [type=int, outer=(1)]
-      └── filters [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
+      │              └── variable: x [type=int]
+      └── filters
            └── s IN ('a', 'b') [type=bool, outer=(4), constraints=(/4: [/'a' - /'a'] [/'b' - /'b']; tight)]
 
 # Estimate the distinct count for an aggregate column.
@@ -216,11 +216,11 @@ select
  │    │         ├── stats: [rows=2000, distinct(4)=10]
  │    │         ├── key: (1)
  │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │    └── aggregations [outer=(1)]
+ │    └── aggregations
  │         └── sum [type=decimal, outer=(1)]
- │              └── variable: x [type=int, outer=(1)]
- └── filters [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
-      └── sum = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight)]
+ │              └── variable: x [type=int]
+ └── filters
+      └── sum = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
 
 # Scalar GroupBy.
 build
@@ -246,10 +246,10 @@ select
  │    │         ├── stats: [rows=2000]
  │    │         ├── key: (1)
  │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │    └── aggregations [outer=(2,3)]
+ │    └── aggregations
  │         ├── max [type=int, outer=(2)]
- │         │    └── variable: y [type=int, outer=(2)]
+ │         │    └── variable: y [type=int]
  │         └── sum [type=float, outer=(3)]
- │              └── variable: z [type=float, outer=(3)]
- └── filters [type=bool, outer=(6), constraints=(/6: [/5.0 - /5.0]; tight), fd=()-->(6)]
-      └── sum = 5.0 [type=bool, outer=(6), constraints=(/6: [/5.0 - /5.0]; tight)]
+ │              └── variable: z [type=float]
+ └── filters
+      └── sum = 5.0 [type=bool, outer=(6), constraints=(/6: [/5.0 - /5.0]; tight), fd=()-->(6)]
