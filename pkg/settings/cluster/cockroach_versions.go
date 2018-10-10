@@ -71,6 +71,7 @@ const (
 	VersionRangeMerges
 	VersionBitArrayColumns
 	VersionLoadBasedRebalancing
+	Version2_1
 
 	// Add new versions here (step one of two).
 
@@ -282,6 +283,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionLoadBasedRebalancing is https://github.com/cockroachdb/cockroach/pull/28852.
 		Key:     VersionLoadBasedRebalancing,
 		Version: roachpb.Version{Major: 2, Minor: 0, Unstable: 14},
+	},
+	{
+		// Version2_1 is CockroachDB v2.1. It's used for all v2.1.x patch releases.
+		Key:     Version2_1,
+		Version: roachpb.Version{Major: 2, Minor: 1},
 	},
 
 	// Add new versions here (step two of two).
