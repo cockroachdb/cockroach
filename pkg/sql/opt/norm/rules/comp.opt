@@ -19,8 +19,8 @@
 # commute operands.
 [CommuteConstInequality, Normalize]
 (Le | Lt | Ge | Gt
-    $left:* & (OnlyConstants $left)
-    $right:* & ^(OnlyConstants $right)
+    $left:(ConstValue)
+    $right:^(ConstValue)
 )
 =>
 (CommuteInequality (OpName) $left $right)
@@ -43,10 +43,10 @@
 [NormalizeCmpPlusConst, Normalize]
 (Eq | Ge | Gt | Le | Lt
     (Plus
-        $leftLeft:* & ^(OnlyConstants $leftLeft)
-        $leftRight:* & (OnlyConstants $leftRight)
+        $leftLeft:^(ConstValue)
+        $leftRight:(ConstValue)
     )
-    $right:* & (OnlyConstants $right) & (CanConstructBinary Minus $right $leftRight)
+    $right:(ConstValue) & (CanConstructBinary Minus $right $leftRight)
 )
 =>
 ((OpName)
@@ -67,10 +67,10 @@
 [NormalizeCmpMinusConst, Normalize]
 (Eq | Ge | Gt | Le | Lt
     (Minus
-        $leftLeft:* & ^(OnlyConstants $leftLeft)
-        $leftRight:* & (OnlyConstants $leftRight)
+        $leftLeft:^(ConstValue)
+        $leftRight:(ConstValue)
     )
-    $right:* & (OnlyConstants $right) & (CanConstructBinary Plus $right $leftRight)
+    $right:(ConstValue) & (CanConstructBinary Plus $right $leftRight)
 )
 =>
 ((OpName)
@@ -92,10 +92,10 @@
 [NormalizeCmpConstMinus, Normalize]
 (Eq | Ge | Gt | Le | Lt
     (Minus
-        $leftLeft:* & (OnlyConstants $leftLeft)
-        $leftRight:* & ^(OnlyConstants $leftRight)
+        $leftLeft:(ConstValue)
+        $leftRight:^(ConstValue)
     )
-    $right:* & (OnlyConstants $right) & (CanConstructBinary Minus $leftLeft $right)
+    $right:(ConstValue) & (CanConstructBinary Minus $leftLeft $right)
 )
 =>
 ((OpName)

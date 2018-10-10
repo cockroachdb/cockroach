@@ -39,7 +39,7 @@ select
 # CommuteConstInequality
 # --------------------------------------------------
 opt expect=CommuteConstInequality
-SELECT * FROM a WHERE length('foo')+1<i+k AND length('bar')<=i*2 AND 5>i AND 'foo'>=s
+SELECT * FROM a WHERE 5+1<i+k AND 5*5/3<=i*2 AND 5>i AND 'foo'>=s
 ----
 select
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb) d:6(date)
@@ -50,10 +50,26 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      ├── (i + k) > (length('foo') + 1) [type=bool, outer=(1,2)]
-      ├── (i * 2) >= length('bar') [type=bool, outer=(2)]
+      ├── (i + k) > 6 [type=bool, outer=(1,2)]
+      ├── (i * 2) >= 8.3333333333333333333 [type=bool, outer=(2)]
       ├── i < 5 [type=bool, outer=(2), constraints=(/2: (/NULL - /4]; tight)]
       └── s <= 'foo' [type=bool, outer=(4), constraints=(/4: (/NULL - /'foo']; tight)]
+
+# TODO(andyk): Constant fold functions
+opt expect-not=CommuteConstInequality
+SELECT * FROM a WHERE length('foo')+1<i+k AND length('bar')<=i*2
+----
+select
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
+ ├── key: (1)
+ ├── fd: (1)-->(2-6)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) d:6(date)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-6)
+ └── filters
+      ├── (length('foo') + 1) < (i + k) [type=bool, outer=(1,2)]
+      └── length('bar') <= (i * 2) [type=bool, outer=(2)]
 
 # Impure function should not be considered constant.
 opt expect-not=CommuteConstInequality
@@ -97,7 +113,7 @@ select
  │    └── fd: ()-->(1-6)
  └── filters
       ├── (f + f) < 3.0 [type=bool, outer=(3)]
-      ├── i <= (length('foo') - 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      ├── (i + 1) <= length('foo') [type=bool, outer=(2)]
       ├── i > 6 [type=bool, outer=(2), constraints=(/2: [/7 - ]; tight)]
       └── i::INTERVAL >= '1h' [type=bool, outer=(2)]
 
@@ -143,7 +159,7 @@ select
  │    └── fd: ()-->(1-6)
  └── filters
       ├── (f + f) < 7.0 [type=bool, outer=(3)]
-      ├── i <= (length('foo') + 1) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      ├── (i - 1) <= length('foo') [type=bool, outer=(2)]
       ├── i > 14 [type=bool, outer=(2), constraints=(/2: [/15 - ]; tight)]
       ├── (f + i::FLOAT8) >= 110.0 [type=bool, outer=(2,3)]
       └── d >= '2018-09-30' [type=bool, outer=(6), constraints=(/6: [/'2018-09-30' - ]; tight)]
@@ -189,7 +205,7 @@ select
  │    └── fd: ()-->(1-6)
  └── filters
       ├── (f + f) > -3.0 [type=bool, outer=(3)]
-      ├── i >= (1 - length('foo')) [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
+      ├── (1 - i) <= length('foo') [type=bool, outer=(2)]
       ├── i > 10 [type=bool, outer=(2), constraints=(/2: [/11 - ]; tight)]
       └── (f + i::FLOAT8) <= -90.0 [type=bool, outer=(2,3)]
 
@@ -228,11 +244,11 @@ select
       └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 # --------------------------------------------------
-# NormalizeTupleEquality, SimplifyAnd
+# NormalizeTupleEquality, NormalizeNestedAnds
 # --------------------------------------------------
 
 # Nested tuples.
-opt expect=(NormalizeTupleEquality,SimplifyAnd)
+opt expect=(NormalizeTupleEquality,NormalizeNestedAnds)
 SELECT * FROM a WHERE (1, (2, 'foo')) = (k, (i, s))
 ----
 select

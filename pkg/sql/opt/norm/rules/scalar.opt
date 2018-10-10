@@ -34,8 +34,8 @@
 # patterns can rely on this normal form and only handle one combination.
 [CommuteConst, Normalize]
 (Eq | Ne | Is | IsNot | Plus | Mult | Bitand | Bitor | Bitxor
-    $left:* & (OnlyConstants $left)
-    $right:* & ^(OnlyConstants $right)
+    $left:(ConstValue)
+    $right:^(ConstValue)
 )
 =>
 ((OpName) $right $left)
@@ -123,7 +123,7 @@
 [NormalizeInConst, Normalize]
 (In | NotIn
     $left:*
-    $right:(Tuple $elems:*) & ^(IsSortedUniqueList $elems)
+    $right:(Tuple $elems:*) & (NeedSortedUniqueList $elems)
 )
 =>
 ((OpName) $left (Tuple (ConstructSortedUniqueList $elems)))
@@ -157,7 +157,7 @@
 # Project operator never changes the row cardinality of its input, and row
 # cardinality is the only thing that Exists cares about, so Project is a no-op.
 [EliminateExistsProject, Normalize]
-(Exists (Project $input:*) $def:*) => (Exists $input $def)
+(Exists (Project $input:*) $subqueryPrivate:*) => (Exists $input $subqueryPrivate)
 
 # EliminateExistsGroupBy discards a non-scalar GroupBy input to the Exists
 # operator. While non-scalar GroupBy (or DistinctOn) can change row cardinality,
@@ -165,7 +165,7 @@
 # input is empty, then it returns the empty set. Therefore, it's a no-op for
 # Exists.
 [EliminateExistsGroupBy, Normalize]
-(Exists (GroupBy | DistinctOn $input:*) $def:*) => (Exists $input $def)
+(Exists (GroupBy | DistinctOn $input:*) $subqueryPrivate:*) => (Exists $input $subqueryPrivate)
 
 # NormalizeJSONFieldAccess transforms field access into a containment with a
 # simpler LHS. This allows inverted index constraints to be generated in some
@@ -183,11 +183,11 @@
 #
 [NormalizeJSONFieldAccess, Normalize]
 (Eq
-  (FetchVal
-    $val:*
-    $key:(Const) & (IsString $key)
-  )
-  $right:(Const)
+    (FetchVal
+        $val:*
+        $key:(Const) & (IsString $key)
+    )
+    $right:(Const)
 )
 =>
 (Contains
@@ -208,16 +208,16 @@
 #
 [NormalizeJSONContains, Normalize]
 (Contains
-  (FetchVal
-    $val:*
-    $key:(Const) & (IsString $key)
-  )
-  $right:(Const) & ^(IsJSONScalar $right)
+    (FetchVal
+        $val:*
+        $key:(Const) & (IsString $key)
+    )
+    $right:(Const) & ^(IsJSONScalar $right)
 )
 =>
 (Contains
-  $val
-  (MakeSingleKeyJSONObject $key $right)
+    $val
+    (MakeSingleKeyJSONObject $key $right)
 )
 
 # SimplifyCaseWhenConstValue removes branches known to not match. Any
@@ -234,15 +234,16 @@
 #
 [SimplifyCaseWhenConstValue, Normalize]
 (Case
-  $condition:(ConstValue)
-  $whens:[
-    ...
-    (When (ConstValue))
-    ...
-  ]
+    $condition:(ConstValue)
+    $whens:[
+        ...
+        (When (ConstValue))
+        ...
+    ]
+    $orElse:*
 )
 =>
-(SimplifyWhens $condition $whens)
+(SimplifyWhens $condition $whens $orElse)
 
 # SimplifyEqualsAnyTuple converts a scalar ANY operation to an IN comparison.
 # It transforms
@@ -256,14 +257,14 @@
 # Which allows scans to be constrained.
 [SimplifyEqualsAnyTuple, Normalize]
 (AnyScalar
-  $input:*
-  $tuple:(Tuple)
-  $cmp:(IsEquality $cmp)
+    $input:*
+    $tuple:(Tuple)
+    $cmp:* & (OpsAreSame $cmp Eq)
 )
 =>
 (In
-  $input
-  $tuple
+    $input
+    $tuple
 )
 
 # SimplifyAnyScalarArray converts a scalar ANY operation on a constant ARRAY to a scalar
@@ -271,13 +272,13 @@
 # triggered, which allows constraints to be generated.
 [SimplifyAnyScalarArray, Normalize]
 (AnyScalar
-  $input:*
-  $ary:(Const) & (IsArray $ary)
-  $cmp:*
+    $input:*
+    $ary:(Const) & (IsConstArray $ary)
+    $cmp:*
 )
 =>
 (AnyScalar
-  $input
-  (ConvertConstArrayToTuple $ary)
-  $cmp
+    $input
+    (ConvertConstArrayToTuple $ary)
+    $cmp
 )

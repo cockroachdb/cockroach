@@ -233,17 +233,17 @@ project
 # InlineProjectInProject
 # --------------------------------------------------
 opt expect=InlineProjectInProject
-SELECT expr, i+1 AS r FROM (SELECT k=1 AS expr, i FROM a)
+SELECT NOT(expr), i+1 AS r FROM (SELECT k=1 AS expr, i FROM a)
 ----
 project
- ├── columns: expr:6(bool) r:7(int)
+ ├── columns: "?column?":7(bool) r:8(int)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int)
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── projections
-      ├── i + 1 [type=int, outer=(2)]
-      └── k = 1 [type=bool, outer=(1)]
+      ├── k != 1 [type=bool, outer=(1)]
+      └── i + 1 [type=int, outer=(2)]
 
 # Inline multiple expressions.
 opt expect=InlineProjectInProject

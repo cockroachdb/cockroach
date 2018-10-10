@@ -35,105 +35,138 @@
 # the outer project.
 [PruneProjectCols, Normalize]
 (Project
-    (Project
-        $innerInput:*
-        $innerProjections:*
-    )
-    $projections:* & (CanPruneCols $innerProjections (NeededCols $projections))
+    $project:(Project)
+    $projections:*
+    $passthrough:* &
+        (CanPruneCols
+            $project
+            $needed:(UnionCols (ProjectionOuterCols $projections) $passthrough)
+        )
 )
 =>
 (Project
-    (Project
-        $innerInput
-        (PruneCols $innerProjections (NeededCols $projections))
-    )
+    (PruneCols $project $needed)
     $projections
+    $passthrough
 )
 
 # PruneScanCols discards Scan operator columns that are never used. The needed
-#  columns are pushed down into the Scan's opt.ScanOpDef private.
+# columns are pushed down into the Scan's opt.ScanOpDef private.
 [PruneScanCols, Normalize]
 (Project
     $input:(Scan)
-    $projections:* & (CanPruneCols $input (NeededCols $projections))
+    $projections:*
+    $passthrough:* &
+        (CanPruneCols
+            $input
+            $needed:(UnionCols (ProjectionOuterCols $projections) $passthrough)
+        )
 )
 =>
 (Project
-    (PruneCols $input (NeededCols $projections))
+    (PruneCols $input $needed)
     $projections
+    $passthrough
 )
 
 # PruneSelectCols discards Select input columns that are never used.
 #
-# While the PruneCols property should prevent this rule (which pushes Project
-# below Select) from cycling with the PushSelectIntoProject rule (which pushes
-# Select below Project), the DetectCycle flag is used anyway. This will prevent
-# cycles if existing or new bugs do not populate PruneCols correctly, and the
-# pushed-down Project doesn't get merged into another operator at the end of its
-# journey downwards.
-[PruneSelectCols, Normalize, DetectCycle]
+# The PruneCols property should prevent this rule (which pushes Project below
+# Select) from cycling with the PushSelectIntoProject rule (which pushes Select
+# below Project).
+[PruneSelectCols, Normalize]
 (Project
     (Select
         $input:*
-        $filter:*
+        $filters:*
     )
-    $projections:* & (CanPruneCols $input (NeededCols2 $projections $filter))
+    $projections:*
+    $passthrough:* &
+        (CanPruneCols
+            $input
+            $needed:(UnionCols3
+                (FilterOuterCols $filters)
+                (ProjectionOuterCols $projections)
+                $passthrough
+            )
+        )
 )
 =>
 (Project
     (Select
-        (PruneCols $input (NeededCols2 $projections $filter))
-        $filter
+        (PruneCols $input $needed)
+        $filters
     )
     $projections
+    $passthrough
 )
 
 # PruneLimitCols discards Limit input columns that are never used.
 #
-# This rule includes a DetectCycle tag for a similar reason to PruneSelectCols,
-# which is to prevent a cycle with the PushLimitIntoProject rule in case of a
-# bug in building the PruneCols property.
-[PruneLimitCols, Normalize, DetectCycle]
+# The PruneCols property should prevent this rule (which pushes Project below
+# Limit) from cycling with the PushLimitIntoProject rule (which pushes Limit
+# below Project).
+[PruneLimitCols, Normalize]
 (Project
     (Limit
         $input:*
         $limit:*
         $ordering:*
     )
-    $projections:* & (CanPruneCols $input (NeededColsLimit $projections $ordering))
+    $projections:*
+    $passthrough:* &
+        (CanPruneCols
+            $input
+            $needed:(UnionCols3
+                (OrderingCols $ordering)
+                (ProjectionOuterCols $projections)
+                $passthrough
+            )
+        )
 )
 =>
 (Project
     (Limit
-        $newInput:(PruneCols $input (NeededColsLimit $projections $ordering))
+        (PruneCols $input $needed)
         $limit
-        (PruneOrdering $newInput $ordering)
+        (PruneOrdering $ordering $needed)
     )
     $projections
+    $passthrough
 )
 
 # PruneOffsetCols discards Offset input columns that are never used.
 #
-# This rule includes a DetectCycle tag for a similar reason to PruneSelectCols,
-# which is to prevent a cycle with the PushLimitIntoProject rule in case of a
-# bug in building the PruneCols property.
-[PruneOffsetCols, Normalize, DetectCycle]
+# The PruneCols property should prevent this rule (which pushes Project below
+# Offset) from cycling with the PushOffsetIntoProject rule (which pushes Offset
+# below Project).
+[PruneOffsetCols, Normalize]
 (Project
     (Offset
         $input:*
         $offset:*
         $ordering:*
     )
-    $projections:* & (CanPruneCols $input (NeededColsLimit $projections $ordering))
+    $projections:*
+    $passthrough:* &
+        (CanPruneCols
+            $input
+            $needed:(UnionCols3
+                (OrderingCols $ordering)
+                (ProjectionOuterCols $projections)
+                $passthrough
+            )
+        )
 )
 =>
 (Project
     (Offset
-        $newInput:(PruneCols $input (NeededColsLimit $projections $ordering))
+        (PruneCols $input $needed)
         $offset
-        (PruneOrdering $newInput $ordering)
+        (PruneOrdering $ordering $needed)
     )
     $projections
+    $passthrough
 )
 
 # PruneJoinLeftCols discards columns on the left side of a join that are never
@@ -145,41 +178,62 @@
         $right:*
         $on:*
     )
-    $projections:* & (CanPruneCols $left (NeededCols3 $projections $right $on))
+    $projections:*
+    $passthrough:* &
+        (CanPruneCols
+            $left
+            $needed:(UnionCols4
+                (OuterCols $right)
+                (FilterOuterCols $on)
+                (ProjectionOuterCols $projections)
+                $passthrough
+            )
+        )
 )
 =>
 (Project
     ((OpName $input)
-        (PruneCols $left (NeededCols3 $projections $right $on))
+        (PruneCols $left $needed)
         $right
         $on
     )
     $projections
+    $passthrough
 )
 
 # PruneJoinRightCols discards columns on the right side of a join that are never
 # used.
 #
-# This rule includes a DetectCycle tag for a similar reason to PruneSelectCols,
-# which is to prevent a cycle with the TryDecorrelateProject rule in case of a
-# bug in building the PruneCols property.
-[PruneJoinRightCols, Normalize, DetectCycle]
+# The PruneCols property should prevent this rule (which pushes Project below
+# Join) from cycling with the TryDecorrelateProject rule (which pushes Join
+# below Project).
+[PruneJoinRightCols, Normalize]
 (Project
     $input:(Join
         $left:*
         $right:*
         $on:*
     )
-    $projections:* & (CanPruneCols $right (NeededCols2 $projections $on))
+    $projections:*
+    $passthrough:* &
+        (CanPruneCols
+            $right
+            $needed:(UnionCols3
+                (FilterOuterCols $on)
+                (ProjectionOuterCols $projections)
+                $passthrough
+            )
+        )
 )
 =>
 (Project
     ((OpName $input)
         $left
-        (PruneCols $right (NeededCols2 $projections $on))
+        (PruneCols $right $needed)
         $on
     )
     $projections
+    $passthrough
 )
 
 # PruneAggCols discards aggregation columns in a GroupBy that are never used.
@@ -188,18 +242,24 @@
     $input:(GroupBy | ScalarGroupBy | DistinctOn
         $innerInput:*
         $aggregations:*
-        $def:*
+        $groupingPrivate:*
     )
-    $projections:* & (CanPruneCols $aggregations (NeededCols $projections))
+    $projections:*
+    $passthrough:* &
+        (CanPruneAggCols
+            $aggregations
+            $needed:(UnionCols (ProjectionOuterCols $projections) $passthrough)
+        )
 )
 =>
 (Project
     ((OpName $input)
         $innerInput
-        (PruneCols $aggregations (NeededCols $projections))
-        $def
+        (PruneAggCols $aggregations $needed)
+        $groupingPrivate
     )
     $projections
+    $passthrough
 )
 
 # PruneGroupByCols discards GroupBy input columns that are never used.
@@ -207,40 +267,63 @@
 (GroupBy | DistinctOn
     $input:*
     $aggregations:*
-    $def:* & (CanPruneCols $input (NeededColsGroupBy $aggregations $def))
+    $groupingPrivate:* &
+        (CanPruneCols
+            $input
+            $needed:(UnionCols
+                (AggregationOuterCols $aggregations)
+                (NeededColsGrouping $groupingPrivate)
+            )
+        )
 )
 =>
 ((OpName)
-    $newInput:(PruneCols $input (NeededColsGroupBy $aggregations $def))
+    (PruneCols $input $needed)
     $aggregations
-    (PruneOrderingGroupBy $newInput $def)
+    (PruneOrderingGroupBy $groupingPrivate $needed)
 )
 
 # PruneValuesCols discards Values columns that are never used.
 [PruneValuesCols, Normalize]
 (Project
     $input:(Values)
-    $projections:* & (CanPruneCols $input (NeededCols $projections))
+    $projections:*
+    $passthrough:* &
+        (CanPruneCols
+            $input
+            $needed:(UnionCols (ProjectionOuterCols $projections) $passthrough)
+        )
 )
 =>
 (Project
-    (PruneCols $input (NeededCols $projections))
+    (PruneCols $input $needed)
     $projections
+    $passthrough
 )
 
 # PruneRowNumberCols discards RowNumber input columns that are never used.
 [PruneRowNumberCols, Normalize]
 (Project
-    (RowNumber $input:* $def:*)
-    $projections:* & (CanPruneCols $input (NeededColsRowNumber $projections $def))
+    (RowNumber $input:* $rowNumberPrivate:*)
+    $projections:*
+    $passthrough:* &
+        (CanPruneCols
+            $input
+            $needed:(UnionCols3
+                (NeededColsRowNumber $rowNumberPrivate)
+                (ProjectionOuterCols $projections)
+                $passthrough
+            )
+        )
 )
 =>
 (Project
     (RowNumber
-        $newInput:(PruneCols $input (NeededColsRowNumber $projections $def))
-        (PruneOrderingRowNumber $newInput $def)
+        (PruneCols $input $needed)
+        (PruneOrderingRowNumber $rowNumberPrivate $needed)
     )
     $projections
+    $passthrough
 )
 
 # PruneExplainCols discards Explain input columns that are never used by its
@@ -248,10 +331,10 @@
 [PruneExplainCols, Normalize]
 (Explain
     $input:*
-    $def:* & (CanPruneCols $input (NeededColsExplain $def))
+    $explainPrivate:* & (CanPruneCols $input $needed:(NeededColsExplain $explainPrivate))
 )
 =>
 (Explain
-    (PruneCols $input (NeededColsExplain $def))
-    $def
+    (PruneCols $input $needed)
+    $explainPrivate
 )

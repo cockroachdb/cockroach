@@ -63,7 +63,7 @@
         $right:*
         $on:*
     )
-    $filter:(Filters) & (HasNullRejectingFilter $filter (OutputCols $right))
+    $filters:* & (HasNullRejectingFilter $filters (OutputCols $right))
 )
 =>
 (Select
@@ -73,7 +73,7 @@
         $right
         $on
     )
-    $filter
+    $filters
 )
 
 # RejectNullsRightJoin is symmetric with RejectNullsLeftJoin. It reduces a
@@ -89,7 +89,7 @@
         $right:*
         $on:*
     )
-    $filter:(Filters) & (HasNullRejectingFilter $filter (OutputCols $left))
+    $filters:* & (HasNullRejectingFilter $filters (OutputCols $left))
 )
 =>
 (Select
@@ -99,7 +99,7 @@
         $right
         $on
     )
-    $filter
+    $filters
 )
 
 # RejectNullsGroupBy pushes a "col IS NOT NULL" null-rejecting filter below the
@@ -128,19 +128,19 @@
     $input:(GroupBy | ScalarGroupBy
         $innerInput:*
         $aggregations:*
-        $def:*
+        $groupingPrivate:*
     )
-    $filter:(Filters) & (HasNullRejectingFilter $filter $rejectCols:(RejectNullCols $input))
+    $filters:* & (HasNullRejectingFilter $filters $rejectCols:(RejectNullCols $input))
 )
 =>
 (Select
     ((OpName $input)
         (Select
             $innerInput
-            (Filters [(IsNot (NullRejectAggVar $aggregations $rejectCols) (Null (AnyType)))])
+            [ (FiltersItem (IsNot (NullRejectAggVar $aggregations $rejectCols) (Null (AnyType)))) ]
         )
         $aggregations
-        $def
+        $groupingPrivate
     )
-    $filter
+    $filters
 )

@@ -19,88 +19,90 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 )
 
-// HasDuplicateRefs returns true if the target scalar expression references any
-// outer column more than one time, or if it has correlated subqueries. For
-// example:
+// HasDuplicateRefs returns true if the target projection expressions or
+// passthrough columns reference any outer column more than one time, or if the
+// projection expressions contain a correlated subquery. For example:
 //
 //   SELECT x+1, x+2, y FROM a
 //
-// HasDuplicateRefs would be true for the Projections expression, since the x
-// column is referenced twice.
+// HasDuplicateRefs would be true, since the x column is referenced twice.
 //
 // Correlated subqueries are disallowed since it introduces additional
-// complexity for a case that's not important for inlining (correlated
-// subqueries are hoisted to a higher context anyway).
-func (c *CustomFuncs) HasDuplicateRefs(target memo.GroupID) bool {
-	// Don't bother traversing the expression tree if there is a correlated
-	// subquery.
-	scalar := c.LookupScalar(target)
-	if scalar.HasCorrelatedSubquery {
-		return true
-	}
+// complexity for a case that's not too important for inlining.
+func (c *CustomFuncs) HasDuplicateRefs(
+	projections memo.ProjectionsExpr, passthrough opt.ColSet,
+) bool {
+	// Start with copy of passthrough columns, as they each count as a ref.
+	refs := passthrough.Copy()
+	for i := range projections {
+		item := &projections[i]
+		if item.ScalarProps(c.mem).HasCorrelatedSubquery {
+			// Don't traverse the expression tree if there is a correlated subquery.
+			return true
+		}
 
-	var refs opt.ColSet
+		// When a column reference is found, add it to the refs set. If the set
+		// already contains a reference to that column, then there is a duplicate.
+		// findDupRefs returns true if the subtree contains at least one duplicate.
+		var findDupRefs func(e opt.Expr) bool
+		findDupRefs = func(e opt.Expr) bool {
+			switch t := e.(type) {
+			case *memo.VariableExpr:
+				// Count Variable references.
+				if refs.Contains(int(t.Col)) {
+					return true
+				}
+				refs.Add(int(t.Col))
+				return false
 
-	// When a column reference is found, add it to the refs set. If the set
-	// already contains a reference to that column, then there is a duplicate.
-	// findDupRefs returns true if the subtree contains at least one duplicate.
-	var findDupRefs func(group memo.GroupID) bool
-	findDupRefs = func(group memo.GroupID) bool {
-		expr := c.f.mem.NormExpr(group)
-		if !expr.IsScalar() {
-			// We know that this is not a correlated subquery since
-			// scalar.HasCorrelatedSubquery was already checked above.
-			// Uncorrelated subqueries never have references.
+			case memo.RelExpr:
+				// We know that this is not a correlated subquery since
+				// HasCorrelatedSubquery was already checked above. Uncorrelated
+				// subqueries never have references.
+				return false
+			}
+
+			for i, n := 0, e.ChildCount(); i < n; i++ {
+				if findDupRefs(e.Child(i)) {
+					return true
+				}
+			}
 			return false
 		}
 
-		switch expr.Operator() {
-		case opt.VariableOp:
-			// Count Variable references.
-			colID := c.ExtractColID(expr.AsVariable().Col())
-			if refs.Contains(int(colID)) {
-				return true
-			}
-			refs.Add(int(colID))
-			return false
-
-		case opt.ProjectionsOp:
-			// Process the pass-through columns, in addition to the children.
-			def := c.ExtractProjectionsOpDef(expr.AsProjections().Def())
-			if def.PassthroughCols.Intersects(refs) {
-				return true
-			}
-			refs.UnionWith(def.PassthroughCols)
+		if findDupRefs(item.Element) {
+			return true
 		}
-
-		for i := 0; i < expr.ChildCount(); i++ {
-			if findDupRefs(expr.ChildGroup(c.mem, i)) {
-				return true
-			}
-		}
-		return false
 	}
+	return false
+}
 
-	return findDupRefs(target)
+// CanInlineProjections returns true if all projection expressions can be
+// inlined. See CanInline for details.
+func (c *CustomFuncs) CanInlineProjections(projections memo.ProjectionsExpr) bool {
+	for i := range projections {
+		if !c.CanInline(projections[i].Element) {
+			return false
+		}
+	}
+	return true
 }
 
 // CanInline returns true if the given expression consists only of "simple"
 // operators like Variable, Const, Eq, and Plus. These operators are assumed to
 // be relatively inexpensive to evaluate, and therefore potentially evaluating
 // them multiple times is not a big concern.
-func (c *CustomFuncs) CanInline(group memo.GroupID) bool {
-	expr := c.f.mem.NormExpr(group)
-	switch expr.Operator() {
-	case opt.ProjectionsOp,
-		opt.AndOp, opt.OrOp, opt.NotOp, opt.TrueOp, opt.FalseOp,
+func (c *CustomFuncs) CanInline(scalar opt.ScalarExpr) bool {
+	switch scalar.Op() {
+	case opt.AndOp, opt.OrOp, opt.NotOp, opt.TrueOp, opt.FalseOp,
 		opt.EqOp, opt.NeOp, opt.LeOp, opt.LtOp, opt.GeOp, opt.GtOp,
 		opt.IsOp, opt.IsNotOp, opt.InOp, opt.NotInOp,
 		opt.VariableOp, opt.ConstOp, opt.NullOp,
 		opt.PlusOp, opt.MinusOp, opt.MultOp:
 
 		// Recursively verify that children are also inlinable.
-		for i := 0; i < expr.ChildCount(); i++ {
-			if !c.CanInline(expr.ChildGroup(c.mem, i)) {
+		for i, n := 0, scalar.ChildCount(); i < n; i++ {
+			if !c.CanInline(scalar.Child(i).(opt.ScalarExpr)) {
 				return false
 			}
 		}
@@ -109,68 +111,79 @@ func (c *CustomFuncs) CanInline(group memo.GroupID) bool {
 	return false
 }
 
-// InlineProjections searches the target scalar expression for any references to
-// columns in the projections expression. Target variable references are
-// replaced by the inlined projection expression.
-func (c *CustomFuncs) InlineProjections(target, projections memo.GroupID) memo.GroupID {
-	projectionsExpr := c.f.mem.NormExpr(projections).AsProjections()
-	projectionsElems := c.f.mem.LookupList(projectionsExpr.Elems())
-	projectionsDef := c.ExtractProjectionsOpDef(projectionsExpr.Def())
+// InlineSelectProject searches the filter conditions for any variable
+// references to columns from the given projections expression. Each variable is
+// replaced by the corresponding inlined projection expression.
+func (c *CustomFuncs) InlineSelectProject(
+	filters memo.FiltersExpr, projections memo.ProjectionsExpr,
+) memo.FiltersExpr {
+	newFilters := make(memo.FiltersExpr, len(filters))
+	for i := range filters {
+		item := &filters[i]
+		newFilters[i].Condition = c.inlineProjections(item.Condition, projections).(opt.ScalarExpr)
+	}
+	return newFilters
+}
 
-	// Recursively walk the tree looking for references to projection expressions
-	// that need to be replaced.
-	var replace memo.ReplaceChildFunc
-	replace = func(child memo.GroupID) memo.GroupID {
-		expr := c.f.mem.NormExpr(child)
-		if !expr.IsScalar() {
-			if !c.OuterCols(child).Empty() {
+// InlineProjectProject searches the projection expressions for any variable
+// references to columns from the given input (which must be a Project
+// operator). Each variable is replaced by the corresponding inlined projection
+// expression.
+func (c *CustomFuncs) InlineProjectProject(
+	input memo.RelExpr, projections memo.ProjectionsExpr, passthrough opt.ColSet,
+) memo.RelExpr {
+	innerProject := input.(*memo.ProjectExpr)
+	innerProjections := innerProject.Projections
+
+	newProjections := make(memo.ProjectionsExpr, len(projections))
+	for i := range projections {
+		item := &projections[i]
+		newItem := &newProjections[i]
+		newItem.Element = c.inlineProjections(item.Element, innerProjections).(opt.ScalarExpr)
+		newItem.Col = item.Col
+	}
+
+	// Add any outer passthrough columns that refer to inner synthesized columns.
+	newPassthrough := passthrough
+	if !newPassthrough.Empty() {
+		for i := range innerProjections {
+			item := &innerProjections[i]
+			if newPassthrough.Contains(int(item.Col)) {
+				newProjections = append(newProjections, *item)
+				newPassthrough.Remove(int(item.Col))
+			}
+		}
+	}
+
+	return c.f.ConstructProject(innerProject.Input, newProjections, newPassthrough)
+}
+
+// Recursively walk the tree looking for references to projection expressions
+// that need to be replaced.
+func (c *CustomFuncs) inlineProjections(e opt.Expr, projections memo.ProjectionsExpr) opt.Expr {
+	var replace ReconstructFunc
+	replace = func(e opt.Expr) opt.Expr {
+		switch t := e.(type) {
+		case *memo.VariableExpr:
+			for i := range projections {
+				if projections[i].Col == t.Col {
+					return projections[i].Element
+				}
+			}
+			return t
+
+		case memo.RelExpr:
+			if !c.OuterCols(t).Empty() {
 				// Should have prevented this in HasDuplicateRefs/HasCorrelatedSubquery.
 				panic("cannot inline references within correlated subqueries")
 			}
-			return child
+
+			// No projections references possible, since there are no outer cols.
+			return t
 		}
 
-		switch expr.Operator() {
-		case opt.VariableOp:
-			varColID := c.ExtractColID(expr.AsVariable().Col())
-			for i, id := range projectionsDef.SynthesizedCols {
-				if varColID == id {
-					return projectionsElems[i]
-				}
-			}
-			return child
-
-		case opt.ProjectionsOp:
-			pb := projectionsBuilder{f: c.f}
-			targetProjections := expr.AsProjections()
-			targetDef := c.ExtractProjectionsOpDef(targetProjections.Def())
-			targetPassthroughCols := targetDef.PassthroughCols
-			targetSynthesizedCols := targetDef.SynthesizedCols
-			targetElems := c.f.mem.LookupList(targetProjections.Elems())
-
-			// Start by inlining any references within synthesized columns.
-			for i, elem := range targetElems {
-				pb.addSynthesized(replace(elem), targetSynthesizedCols[i])
-			}
-
-			// Now inline any references within passthrough columns. Do this by
-			// iterating over the underlying projection's synthesized columns,
-			// looking for any that are passed through.
-			for i, id := range projectionsDef.SynthesizedCols {
-				if targetPassthroughCols.Contains(int(id)) {
-					pb.addSynthesized(projectionsElems[i], id)
-				}
-			}
-
-			// Finally, add any passthrough columns that are also passthrough
-			// columns in the underlying projection.
-			pb.addPassthroughCols(targetPassthroughCols.Intersection(projectionsDef.PassthroughCols))
-
-			return pb.buildProjections()
-		}
-
-		return c.f.DynamicConstruct(expr.Operator(), expr.ReplaceOperands(c.mem, replace))
+		return c.f.Reconstruct(e, replace)
 	}
 
-	return replace(target)
+	return replace(e)
 }
