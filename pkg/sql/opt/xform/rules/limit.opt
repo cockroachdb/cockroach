@@ -11,12 +11,12 @@
 # a Limit operator.
 [GenerateLimitedScans, Explore]
 (Limit
-    (Scan $def:* & (IsCanonicalScan $def))
+    (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
     (Const $limit:* & (IsPositiveLimit $limit))
     $ordering:*
 )
 =>
-(GenerateLimitedScans $def $limit $ordering)
+(GenerateLimitedScans $scanPrivate $limit $ordering)
 
 # PushLimitIntoConstrainedScan constructs a new Scan operator that adds a hard
 # row limit to an existing Scan operator that already has a constraint
@@ -24,12 +24,12 @@
 # always applies the limit after any constraint.
 [PushLimitIntoConstrainedScan, Explore]
 (Limit
-    (Scan $def:*)
+    (Scan $scanPrivate:*)
     (Const $limit:* & (IsPositiveLimit $limit))
-    $ordering:* & (CanLimitConstrainedScan $def $ordering)
+    $ordering:* & (CanLimitConstrainedScan $scanPrivate $ordering)
 )
 =>
-(Scan (LimitScanDef $def $limit $ordering))
+(Scan (LimitScanPrivate $scanPrivate $limit $ordering))
 
 # PushLimitIntoIndexJoin pushes a limit through an index join and constructs a
 # new Scan operator that incorporates it. Since index lookup can be expensive,
@@ -39,14 +39,14 @@
 [PushLimitIntoIndexJoin, Explore]
 (Limit
     (IndexJoin
-      (Scan $scanDef:*)
-      $indexJoinDef:*
+      (Scan $scanPrivate:*)
+      $indexJoinPrivate:*
     )
     (Const $limit:* & (IsPositiveLimit $limit))
-    $ordering:* & (CanLimitConstrainedScan $scanDef $ordering)
+    $ordering:* & (CanLimitConstrainedScan $scanPrivate $ordering)
 )
 =>
 (IndexJoin
-  (Scan (LimitScanDef $scanDef $limit $ordering))
-  $indexJoinDef
+  (Scan (LimitScanPrivate $scanPrivate $limit $ordering))
+  $indexJoinPrivate
 )

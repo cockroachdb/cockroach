@@ -21,35 +21,35 @@ import (
 )
 
 // DeriveInterestingOrderings calculates and returns the
-// props.Logical.Rule.InterestingOrderings property of a relational operator.
-func DeriveInterestingOrderings(ev memo.ExprView) opt.OrderingSet {
-	l := ev.Logical().Relational
+// Relational.Rule.InterestingOrderings property of a relational operator.
+func DeriveInterestingOrderings(e memo.RelExpr) opt.OrderingSet {
+	l := e.Relational()
 	if l.IsAvailable(props.InterestingOrderings) {
 		return l.Rule.InterestingOrderings
 	}
 	l.SetAvailable(props.InterestingOrderings)
 
 	var res opt.OrderingSet
-	switch ev.Operator() {
+	switch e.Op() {
 	case opt.ScanOp:
-		res = interestingOrderingsForScan(ev)
+		res = interestingOrderingsForScan(e.(*memo.ScanExpr))
 
 	case opt.SelectOp, opt.IndexJoinOp, opt.LookupJoinOp:
 		// Pass through child orderings.
-		res = DeriveInterestingOrderings(ev.Child(0))
+		res = DeriveInterestingOrderings(e.Child(0).(memo.RelExpr))
 
 	case opt.ProjectOp:
-		res = interestingOrderingsForProject(ev)
+		res = interestingOrderingsForProject(e.(*memo.ProjectExpr))
 
 	case opt.GroupByOp, opt.ScalarGroupByOp:
-		res = interestingOrderingsForGroupBy(ev)
+		res = interestingOrderingsForGroupBy(e)
 
 	case opt.LimitOp, opt.OffsetOp:
-		res = interestingOrderingsForLimit(ev)
+		res = interestingOrderingsForLimit(e)
 
 	default:
-		if ev.IsJoin() {
-			res = interestingOrderingsForJoin(ev)
+		if opt.IsJoinOp(e) {
+			res = interestingOrderingsForJoin(e)
 			break
 		}
 
@@ -60,10 +60,9 @@ func DeriveInterestingOrderings(ev memo.ExprView) opt.OrderingSet {
 	return res
 }
 
-func interestingOrderingsForScan(ev memo.ExprView) opt.OrderingSet {
-	def := ev.Private().(*memo.ScanOpDef)
-	md := ev.Metadata()
-	tab := md.Table(def.Table)
+func interestingOrderingsForScan(scan *memo.ScanExpr) opt.OrderingSet {
+	md := scan.Memo().Metadata()
+	tab := md.Table(scan.Table)
 	ord := make(opt.OrderingSet, 0, tab.IndexCount())
 	for i := 0; i < tab.IndexCount(); i++ {
 		index := tab.Index(i)
@@ -74,8 +73,8 @@ func interestingOrderingsForScan(ev memo.ExprView) opt.OrderingSet {
 		var o opt.Ordering
 		for j := 0; j < numIndexCols; j++ {
 			indexCol := index.Column(j)
-			colID := def.Table.ColumnID(indexCol.Ordinal)
-			if !def.Cols.Contains(int(colID)) {
+			colID := scan.Table.ColumnID(indexCol.Ordinal)
+			if !scan.Cols.Contains(int(colID)) {
 				break
 			}
 			if o == nil {
@@ -90,24 +89,23 @@ func interestingOrderingsForScan(ev memo.ExprView) opt.OrderingSet {
 	return ord
 }
 
-func interestingOrderingsForProject(ev memo.ExprView) opt.OrderingSet {
-	inOrd := DeriveInterestingOrderings(ev.Child(0))
-	passthroughCols := ev.Child(1).Private().(*memo.ProjectionsOpDef).PassthroughCols
+func interestingOrderingsForProject(prj *memo.ProjectExpr) opt.OrderingSet {
+	inOrd := DeriveInterestingOrderings(prj.Input)
 	res := inOrd.Copy()
-	res.RestrictToCols(passthroughCols)
+	res.RestrictToCols(prj.Passthrough)
 	return res
 }
 
-func interestingOrderingsForGroupBy(ev memo.ExprView) opt.OrderingSet {
-	def := ev.Private().(*memo.GroupByDef)
-	if def.GroupingCols.Empty() {
+func interestingOrderingsForGroupBy(rel memo.RelExpr) opt.OrderingSet {
+	private := rel.Private().(*memo.GroupingPrivate)
+	if private.GroupingCols.Empty() {
 		// This is a scalar group-by, returning a single row.
 		return nil
 	}
 
-	res := DeriveInterestingOrderings(ev.Child(0)).Copy()
-	if !def.Ordering.Any() {
-		ordering := def.Ordering.ToOrdering()
+	res := DeriveInterestingOrderings(rel.Child(0).(memo.RelExpr)).Copy()
+	if !private.Ordering.Any() {
+		ordering := private.Ordering.ToOrdering()
 		res.RestrictToPrefix(ordering)
 		if len(res) == 0 {
 			res.Add(ordering)
@@ -115,13 +113,13 @@ func interestingOrderingsForGroupBy(ev memo.ExprView) opt.OrderingSet {
 	}
 
 	// We can only keep orderings on grouping columns.
-	res.RestrictToCols(def.GroupingCols)
+	res.RestrictToCols(private.GroupingCols)
 	return res
 }
 
-func interestingOrderingsForLimit(ev memo.ExprView) opt.OrderingSet {
-	res := DeriveInterestingOrderings(ev.Child(0))
-	ord := ev.Private().(*props.OrderingChoice).ToOrdering()
+func interestingOrderingsForLimit(rel memo.RelExpr) opt.OrderingSet {
+	res := DeriveInterestingOrderings(rel.Child(0).(memo.RelExpr))
+	ord := rel.Private().(*props.OrderingChoice).ToOrdering()
 	if ord.Empty() {
 		return res
 	}
@@ -133,16 +131,16 @@ func interestingOrderingsForLimit(ev memo.ExprView) opt.OrderingSet {
 	return res
 }
 
-func interestingOrderingsForJoin(ev memo.ExprView) opt.OrderingSet {
-	if ev.Operator() == opt.SemiJoinOp || ev.Operator() == opt.AntiJoinOp {
+func interestingOrderingsForJoin(rel memo.RelExpr) opt.OrderingSet {
+	if rel.Op() == opt.SemiJoinOp || rel.Op() == opt.AntiJoinOp {
 		// TODO(radu): perhaps take into account right-side interesting orderings on
 		// equality columns.
-		return DeriveInterestingOrderings(ev.Child(0))
+		return DeriveInterestingOrderings(rel.Child(0).(memo.RelExpr))
 	}
 	// For a join, we could conceivably preserve the order of one side (even with
 	// hash-join, depending on which side we store).
-	ordLeft := DeriveInterestingOrderings(ev.Child(0))
-	ordRight := DeriveInterestingOrderings(ev.Child(1))
+	ordLeft := DeriveInterestingOrderings(rel.Child(0).(memo.RelExpr))
+	ordRight := DeriveInterestingOrderings(rel.Child(1).(memo.RelExpr))
 	ord := make(opt.OrderingSet, 0, len(ordLeft)+len(ordRight))
 	ord = append(ord, ordLeft...)
 	ord = append(ord, ordRight...)

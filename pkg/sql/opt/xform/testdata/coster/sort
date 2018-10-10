@@ -38,6 +38,5 @@ values
  ├── columns: f:2(float)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
- ├── cost: 0
  ├── key: ()
  └── fd: ()-->(2)
