@@ -671,7 +671,7 @@ func ensureVersion(
 		return nil
 	}
 
-	if err := m.acquireFreshestFromStore(ctx, tableID); err != nil {
+	if err := m.AcquireFreshestFromStore(ctx, tableID); err != nil {
 		return err
 	}
 
@@ -821,11 +821,11 @@ func (m *LeaseManager) insertTableVersions(tableID sqlbase.ID, versions []*table
 	}
 }
 
-// acquireFreshestFromStoreLocked acquires a new lease from the store and
+// AcquireFreshestFromStore acquires a new lease from the store and
 // inserts it into the active set. It guarantees that the lease returned is
 // the one acquired after the call is made. Use this if the lease we want to
 // get needs to see some descriptor updates that we know happened recently.
-func (m *LeaseManager) acquireFreshestFromStore(ctx context.Context, tableID sqlbase.ID) error {
+func (m *LeaseManager) AcquireFreshestFromStore(ctx context.Context, tableID sqlbase.ID) error {
 	// Create tableState if needed.
 	_ = m.findTableState(tableID, true /* create */)
 	// We need to acquire a lease on a "fresh" descriptor, meaning that joining
@@ -1453,7 +1453,7 @@ func (m *LeaseManager) AcquireByName(
 		if err := m.Release(table); err != nil {
 			log.Warningf(ctx, "error releasing lease: %s", err)
 		}
-		if err := m.acquireFreshestFromStore(ctx, tableID); err != nil {
+		if err := m.AcquireFreshestFromStore(ctx, tableID); err != nil {
 			return nil, hlc.Timestamp{}, err
 		}
 		table, expiration, err = m.Acquire(ctx, timestamp, tableID)

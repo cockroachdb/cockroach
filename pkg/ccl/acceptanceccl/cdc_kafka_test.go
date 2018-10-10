@@ -156,7 +156,8 @@ func testBank(ctx context.Context, t *testing.T, c *cluster.DockerCluster, k *do
 	var numResolved, rowsSinceResolved int
 	v := changefeedccl.Validators{
 		changefeedccl.NewOrderValidator(`Bank_bank`),
-		changefeedccl.NewFingerprintValidator(sqlDB.DB, `bank`, `fprint`, partitions),
+		// TODO(mrtracy): Disabled by #30902. Re-enabling is tracked by #31110.
+		// changefeedccl.NewFingerprintValidator(sqlDB.DB, `bank`, `fprint`, partitions),
 	}
 	sqlDB.Exec(t, `CREATE TABLE fprint (id INT PRIMARY KEY, balance INT, payload STRING)`)
 	for {
