@@ -120,7 +120,9 @@ class JobStatusCell extends React.Component<{ job: Job }, {}> {
     const percent = this.props.job.fraction_completed * 100;
     return (
       <div>
-        {this.props.job.running_status ? <div>{this.props.job.running_status}</div> : null}
+        {this.props.job.running_status
+          ? <div className="jobs-table__running-status">{this.props.job.running_status}</div>
+          : null}
         <Line
           percent={percent}
           strokeWidth={10}
