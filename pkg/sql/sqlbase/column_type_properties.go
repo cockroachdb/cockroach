@@ -616,7 +616,7 @@ func ColumnTypesToDatumTypes(colTypes []ColumnType) []types.T {
 // CheckValueWidth checks that the width (for strings, byte arrays,
 // and bit strings) and scale (for decimals) of the value fits the
 // specified column type. Used by INSERT and UPDATE.
-func CheckValueWidth(typ ColumnType, val tree.Datum, name string) error {
+func CheckValueWidth(typ ColumnType, val tree.Datum, name *string) error {
 	switch typ.SemanticType {
 	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
 		var sv string
@@ -627,8 +627,9 @@ func CheckValueWidth(typ ColumnType, val tree.Datum, name string) error {
 		}
 
 		if typ.Width > 0 && utf8.RuneCountInString(sv) > int(typ.Width) {
-			return fmt.Errorf("value too long for type %s (column %q)",
-				typ.SQLString(), name)
+			return pgerror.NewErrorf(pgerror.CodeStringDataRightTruncationError,
+				"value too long for type %s (column %q)",
+				typ.SQLString(), tree.ErrNameString(name))
 		}
 	case ColumnType_INT:
 		if v, ok := tree.AsDInt(val); ok {
@@ -639,14 +640,17 @@ func CheckValueWidth(typ ColumnType, val tree.Datum, name string) error {
 				// We're performing bounds checks inline with Go's implementation of min and max ints in Math.go.
 				shifted := v >> width
 				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-					return fmt.Errorf("integer out of range for type %s (column %q)", typ.VisibleType, name)
+					return pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError,
+						"integer out of range for type %s (column %q)",
+						typ.VisibleType, tree.ErrNameString(name))
 				}
 			}
 		}
 	case ColumnType_DECIMAL:
 		if v, ok := val.(*tree.DDecimal); ok {
 			if err := tree.LimitDecimalWidth(&v.Decimal, int(typ.Precision), int(typ.Width)); err != nil {
-				return errors.Wrapf(err, "type %s (column %q)", typ.SQLString(), name)
+				return errors.Wrapf(err, "type %s (column %q)",
+					typ.SQLString(), tree.ErrNameString(name))
 			}
 		}
 	case ColumnType_ARRAY:
