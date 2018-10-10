@@ -286,27 +286,25 @@ select
 build
 SELECT sum(k) AS mk FROM kv GROUP BY v HAVING sum(k)=10 ORDER BY mk
 ----
-sort
+project
  ├── columns: mk:5(decimal!null)
  ├── ordering: +5
- └── project
-      ├── columns: sum:5(decimal!null)
-      └── select
-           ├── columns: v:2(int) sum:5(decimal!null)
-           ├── group-by
-           │    ├── columns: v:2(int) sum:5(decimal)
-           │    ├── grouping columns: v:2(int)
-           │    ├── project
-           │    │    ├── columns: k:1(int!null) v:2(int)
-           │    │    └── scan kv
-           │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
-           │    └── aggregations
-           │         └── sum [type=decimal]
-           │              └── variable: k [type=int]
-           └── filters
-                └── eq [type=bool]
-                     ├── variable: sum [type=decimal]
-                     └── const: 10 [type=decimal]
+ └── select
+      ├── columns: v:2(int) sum:5(decimal!null)
+      ├── group-by
+      │    ├── columns: v:2(int) sum:5(decimal)
+      │    ├── grouping columns: v:2(int)
+      │    ├── project
+      │    │    ├── columns: k:1(int!null) v:2(int)
+      │    │    └── scan kv
+      │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+      │    └── aggregations
+      │         └── sum [type=decimal]
+      │              └── variable: k [type=int]
+      └── filters
+           └── eq [type=bool]
+                ├── variable: sum [type=decimal]
+                └── const: 10 [type=decimal]
 
 build
 SELECT sum(k) AS mk FROM kv GROUP BY v HAVING max(k) > 10 ORDER BY mk

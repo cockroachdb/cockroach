@@ -109,7 +109,7 @@ select
  ├── scan abc
  │    └── columns: a:1(int!null) b:2(int) c:3(int)
  └── filters
-      └── null [type=unknown]
+      └── null [type=bool]
 
 build
 SELECT * FROM abc WHERE a = NULL
@@ -119,7 +119,7 @@ select
  ├── scan abc
  │    └── columns: a:1(int!null) b:2(int) c:3(int)
  └── filters
-      └── null [type=unknown]
+      └── null [type=bool]
 
 build
 SELECT *,* FROM abc

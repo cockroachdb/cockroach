@@ -2797,22 +2797,20 @@ project
 build
 SELECT 123 r FROM kv ORDER BY max(v)
 ----
-sort
+project
  ├── columns: r:6(int!null)
  ├── ordering: +5
- └── project
-      ├── columns: r:6(int!null) max:5(int)
-      ├── scalar-group-by
-      │    ├── columns: max:5(int)
-      │    ├── project
-      │    │    ├── columns: v:2(int)
-      │    │    └── scan kv
-      │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
-      │    └── aggregations
-      │         └── max [type=int]
-      │              └── variable: v [type=int]
-      └── projections
-           └── const: 123 [type=int]
+ ├── scalar-group-by
+ │    ├── columns: max:5(int)
+ │    ├── project
+ │    │    ├── columns: v:2(int)
+ │    │    └── scan kv
+ │    │         └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
+ │    └── aggregations
+ │         └── max [type=int]
+ │              └── variable: v [type=int]
+ └── projections
+      └── const: 123 [type=int]
 
 # Check that ordering columns are projected correctly.
 build

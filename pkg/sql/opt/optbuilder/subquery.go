@@ -32,8 +32,8 @@ type subquery struct {
 	// cols contains the output columns of the subquery.
 	cols []scopeColumn
 
-	// group is the top level memo GroupID of the subquery.
-	group memo.GroupID
+	// node is the top level memo node of the subquery.
+	node memo.RelExpr
 
 	// ordering is the ordering requested by the subquery.
 	// It is only consulted in certain cases, however (such as the
@@ -173,8 +173,8 @@ func (s *subquery) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 // original columns: tuple{col1, col2...}.
 func (b *Builder) buildSubqueryProjection(
 	s *subquery, inScope *scope,
-) (out memo.GroupID, outScope *scope) {
-	out = s.group
+) (out memo.RelExpr, outScope *scope) {
+	out = s.node
 	outScope = inScope.replace()
 
 	switch len(s.cols) {
@@ -189,18 +189,18 @@ func (b *Builder) buildSubqueryProjection(
 		// col1, col2... from the subquery becomes tuple{col1, col2...} in the
 		// projection.
 		cols := make(tree.Exprs, len(s.cols))
-		colGroups := make([]memo.GroupID, len(s.cols))
+		els := make(memo.ScalarListExpr, len(s.cols))
 		typ := types.TTuple{
 			Types: make([]types.T, len(s.cols)),
 		}
 		for i := range s.cols {
 			cols[i] = &s.cols[i]
 			typ.Types[i] = s.cols[i].ResolvedType()
-			colGroups[i] = b.factory.ConstructVariable(b.factory.InternColumnID(s.cols[i].id))
+			els[i] = b.factory.ConstructVariable(s.cols[i].id)
 		}
 
 		texpr := tree.NewTypedTuple(typ, cols)
-		tup := b.factory.ConstructTuple(b.factory.InternList(colGroups), b.factory.InternType(typ))
+		tup := b.factory.ConstructTuple(els, typ)
 		col := b.synthesizeColumn(outScope, "", texpr.ResolvedType(), texpr, tup)
 		out = b.constructProject(out, []scopeColumn{*col})
 	}
@@ -216,20 +216,21 @@ func (b *Builder) buildSubqueryProjection(
 // return values.
 func (b *Builder) buildSingleRowSubquery(
 	s *subquery, inScope *scope,
-) (out memo.GroupID, outScope *scope) {
-	def := b.factory.InternSubqueryDef(&memo.SubqueryDef{OriginalExpr: s.Subquery})
+) (out opt.ScalarExpr, outScope *scope) {
+	subqueryPrivate := memo.SubqueryPrivate{OriginalExpr: s.Subquery}
 	if s.Exists {
-		return b.factory.ConstructExists(s.group, def), inScope
+		return b.factory.ConstructExists(s.node, &subqueryPrivate), inScope
 	}
 
-	out, outScope = b.buildSubqueryProjection(s, inScope)
+	var input memo.RelExpr
+	input, outScope = b.buildSubqueryProjection(s, inScope)
 
 	// Wrap the subquery in a Max1Row operator to enforce that it should return
 	// at most one row. Max1Row may be removed by the optimizer later if it can
 	// prove statically that the subquery always returns at most one row.
-	out = b.factory.ConstructMax1Row(out)
+	input = b.factory.ConstructMax1Row(input)
 
-	out = b.factory.ConstructSubquery(out, def)
+	out = b.factory.ConstructSubquery(input, &subqueryPrivate)
 	return out, outScope
 }
 
@@ -255,9 +256,10 @@ func (b *Builder) buildSingleRowSubquery(
 //
 func (b *Builder) buildMultiRowSubquery(
 	c *tree.ComparisonExpr, inScope *scope, colRefs *opt.ColSet,
-) (out memo.GroupID, outScope *scope) {
+) (out opt.ScalarExpr, outScope *scope) {
+	var input memo.RelExpr
 	s := c.Right.(*subquery)
-	out, outScope = b.buildSubqueryProjection(s, inScope)
+	input, outScope = b.buildSubqueryProjection(s, inScope)
 
 	scalar := b.buildScalar(c.TypedLeft(), inScope, nil, nil, colRefs)
 	outScope = outScope.replace()
@@ -283,14 +285,10 @@ func (b *Builder) buildMultiRowSubquery(
 	}
 
 	// Construct the outer Any(...) operator.
-	out = b.factory.ConstructAny(
-		out,
-		scalar,
-		b.factory.InternSubqueryDef(&memo.SubqueryDef{
-			OriginalExpr: s.Subquery,
-			Cmp:          cmp,
-		}),
-	)
+	out = b.factory.ConstructAny(input, scalar, &memo.SubqueryPrivate{
+		Cmp:          cmp,
+		OriginalExpr: s.Subquery,
+	})
 	switch c.Operator {
 	case tree.NotIn, tree.All:
 		// NOT Any(...)

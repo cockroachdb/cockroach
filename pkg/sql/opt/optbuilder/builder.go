@@ -142,8 +142,8 @@ func (b *Builder) Build() (err error) {
 	// Build the memo, and call SetRoot on the memo to indicate the root group
 	// and physical properties.
 	outScope := b.buildStmt(b.stmt, b.allocScope())
-	physical := b.factory.Memo().InternPhysicalProps(outScope.makePhysicalProps())
-	b.factory.Memo().SetRoot(outScope.group, physical)
+	physical := outScope.makePhysicalProps()
+	b.factory.Memo().SetRoot(outScope.expr, physical)
 	return nil
 }
 

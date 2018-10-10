@@ -29,74 +29,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-type unaryFactoryFunc func(f *norm.Factory, input memo.GroupID) memo.GroupID
-type binaryFactoryFunc func(f *norm.Factory, left, right memo.GroupID) memo.GroupID
-
 func checkArrayElementType(t types.T) error {
 	if !types.IsValidArrayElementType(t) {
 		return pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
 			"arrays of %s not allowed", t)
 	}
 	return nil
-}
-
-// Map from tree.ComparisonOperator to Factory constructor function.
-var comparisonOpMap = [tree.NumComparisonOperators]binaryFactoryFunc{
-	tree.EQ:                (*norm.Factory).ConstructEq,
-	tree.LT:                (*norm.Factory).ConstructLt,
-	tree.GT:                (*norm.Factory).ConstructGt,
-	tree.LE:                (*norm.Factory).ConstructLe,
-	tree.GE:                (*norm.Factory).ConstructGe,
-	tree.NE:                (*norm.Factory).ConstructNe,
-	tree.In:                (*norm.Factory).ConstructIn,
-	tree.NotIn:             (*norm.Factory).ConstructNotIn,
-	tree.Like:              (*norm.Factory).ConstructLike,
-	tree.NotLike:           (*norm.Factory).ConstructNotLike,
-	tree.ILike:             (*norm.Factory).ConstructILike,
-	tree.NotILike:          (*norm.Factory).ConstructNotILike,
-	tree.SimilarTo:         (*norm.Factory).ConstructSimilarTo,
-	tree.NotSimilarTo:      (*norm.Factory).ConstructNotSimilarTo,
-	tree.RegMatch:          (*norm.Factory).ConstructRegMatch,
-	tree.NotRegMatch:       (*norm.Factory).ConstructNotRegMatch,
-	tree.RegIMatch:         (*norm.Factory).ConstructRegIMatch,
-	tree.NotRegIMatch:      (*norm.Factory).ConstructNotRegIMatch,
-	tree.IsDistinctFrom:    (*norm.Factory).ConstructIsNot,
-	tree.IsNotDistinctFrom: (*norm.Factory).ConstructIs,
-	tree.Contains:          (*norm.Factory).ConstructContains,
-	tree.ContainedBy: func(f *norm.Factory, left, right memo.GroupID) memo.GroupID {
-		// This is just syntatic sugar that reverses the operands.
-		return f.ConstructContains(right, left)
-	},
-	tree.JSONExists:     (*norm.Factory).ConstructJsonExists,
-	tree.JSONAllExists:  (*norm.Factory).ConstructJsonAllExists,
-	tree.JSONSomeExists: (*norm.Factory).ConstructJsonSomeExists,
-}
-
-// Map from tree.BinaryOperator to Factory constructor function.
-var binaryOpMap = [tree.NumBinaryOperators]binaryFactoryFunc{
-	tree.Bitand:            (*norm.Factory).ConstructBitand,
-	tree.Bitor:             (*norm.Factory).ConstructBitor,
-	tree.Bitxor:            (*norm.Factory).ConstructBitxor,
-	tree.Plus:              (*norm.Factory).ConstructPlus,
-	tree.Minus:             (*norm.Factory).ConstructMinus,
-	tree.Mult:              (*norm.Factory).ConstructMult,
-	tree.Div:               (*norm.Factory).ConstructDiv,
-	tree.FloorDiv:          (*norm.Factory).ConstructFloorDiv,
-	tree.Mod:               (*norm.Factory).ConstructMod,
-	tree.Pow:               (*norm.Factory).ConstructPow,
-	tree.Concat:            (*norm.Factory).ConstructConcat,
-	tree.LShift:            (*norm.Factory).ConstructLShift,
-	tree.RShift:            (*norm.Factory).ConstructRShift,
-	tree.JSONFetchText:     (*norm.Factory).ConstructFetchText,
-	tree.JSONFetchVal:      (*norm.Factory).ConstructFetchVal,
-	tree.JSONFetchValPath:  (*norm.Factory).ConstructFetchValPath,
-	tree.JSONFetchTextPath: (*norm.Factory).ConstructFetchTextPath,
-}
-
-// Map from tree.UnaryOperator to Factory constructor function.
-var unaryOpMap = [tree.NumUnaryOperators]unaryFactoryFunc{
-	tree.UnaryMinus:      (*norm.Factory).ConstructUnaryMinus,
-	tree.UnaryComplement: (*norm.Factory).ConstructUnaryComplement,
 }
 
 // buildScalar builds a set of memo groups that represent the given scalar
@@ -113,7 +51,7 @@ var unaryOpMap = [tree.NumUnaryOperators]unaryFactoryFunc{
 // values.
 func (b *Builder) buildScalar(
 	scalar tree.TypedExpr, inScope, outScope *scope, outCol *scopeColumn, colRefs *opt.ColSet,
-) (out memo.GroupID) {
+) (out opt.ScalarExpr) {
 	// If we are in a grouping context and this expression corresponds to a
 	// GROUP BY expression, return a reference to the GROUP BY column.
 	// Note that GROUP BY columns cannot be reused inside an aggregate input
@@ -153,11 +91,10 @@ func (b *Builder) buildScalar(
 	case *tree.AndExpr:
 		left := b.buildScalar(t.TypedLeft(), inScope, nil, nil, colRefs)
 		right := b.buildScalar(t.TypedRight(), inScope, nil, nil, colRefs)
-		conditions := b.factory.InternList([]memo.GroupID{left, right})
-		out = b.factory.ConstructAnd(conditions)
+		out = b.factory.ConstructAnd(left, right)
 
 	case *tree.Array:
-		els := make([]memo.GroupID, len(t.Exprs))
+		els := make(memo.ScalarListExpr, len(t.Exprs))
 		arrayType := t.ResolvedType()
 		elementType := arrayType.(types.TArray).Typ
 		if err := checkArrayElementType(elementType); err != nil {
@@ -167,12 +104,11 @@ func (b *Builder) buildScalar(
 			texpr := t.Exprs[i].(tree.TypedExpr)
 			els[i] = b.buildScalar(texpr, inScope, nil, nil, colRefs)
 		}
-		elements := b.factory.InternList(els)
-		out = b.factory.ConstructArray(elements, b.factory.InternType(arrayType))
+		out = b.factory.ConstructArray(els, arrayType)
 
 	case *tree.ArrayFlatten:
 		if b.AllowUnsupportedExpr {
-			out = b.factory.ConstructUnsupportedExpr(b.factory.InternTypedExpr(scalar))
+			out = b.factory.ConstructUnsupportedExpr(t)
 			break
 		}
 
@@ -209,35 +145,27 @@ func (b *Builder) buildScalar(
 			types.TArray{Typ: elemType},
 		)
 
-		typID := b.factory.InternType(types.TArray{Typ: elemType})
-
 		var oc props.OrderingChoice
 		oc.FromOrdering(s.ordering)
 
-		out = b.factory.ConstructCoalesce(b.factory.InternList([]memo.GroupID{
+		out = b.factory.ConstructCoalesce(memo.ScalarListExpr{
 			b.factory.ConstructSubquery(
 				// A ScalarGroupBy always returns exactly one row, so there's no need
 				// for a Max1Row here.
 				b.factory.ConstructScalarGroupBy(
-					s.group,
-					b.factory.ConstructAggregations(
-						b.factory.InternList([]memo.GroupID{
-							b.factory.ConstructArrayAgg(
-								b.factory.ConstructVariable(
-									b.factory.InternColumnID(aggInputColID),
-								),
-							),
-						}),
-						b.factory.InternColList(opt.ColList{aggColID}),
-					),
-					b.factory.InternGroupByDef(&memo.GroupByDef{
-						Ordering: oc,
-					}),
+					s.node,
+					memo.AggregationsExpr{{
+						Agg: b.factory.ConstructArrayAgg(
+							b.factory.ConstructVariable(aggInputColID),
+						),
+						ColPrivate: memo.ColPrivate{Col: aggColID},
+					}},
+					&memo.GroupingPrivate{Ordering: oc},
 				),
-				b.factory.InternSubqueryDef(&memo.SubqueryDef{OriginalExpr: s.Subquery}),
+				&memo.SubqueryPrivate{OriginalExpr: s.Subquery},
 			),
-			b.factory.ConstructArray(memo.EmptyList, typID),
-		}))
+			b.factory.ConstructArray(memo.EmptyScalarListExpr, types.TArray{Typ: elemType}),
+		})
 
 		// Perform correctness checks on the outer cols, update colRefs and
 		// b.subquery.outerCols.
@@ -272,24 +200,24 @@ func (b *Builder) buildScalar(
 		// select the right overload. The solution is to wrap any mismatched
 		// arguments with a CastExpr that preserves the static type.
 
-		fn := binaryOpMap[t.Operator]
 		left, _ := tree.ReType(t.TypedLeft(), t.ResolvedBinOp().LeftType)
 		right, _ := tree.ReType(t.TypedRight(), t.ResolvedBinOp().RightType)
-		out = fn(b.factory,
+		out = b.constructBinary(t.Operator,
 			b.buildScalar(left, inScope, nil, nil, colRefs),
 			b.buildScalar(right, inScope, nil, nil, colRefs),
+			t.ResolvedType(),
 		)
 
 	case *tree.CaseExpr:
-		var input memo.GroupID
+		var input opt.ScalarExpr
 		if t.Expr != nil {
 			texpr := t.Expr.(tree.TypedExpr)
 			input = b.buildScalar(texpr, inScope, nil, nil, colRefs)
 		} else {
-			input = b.factory.ConstructTrue()
+			input = memo.TrueSingleton
 		}
 
-		whens := make([]memo.GroupID, 0, len(t.Whens)+1)
+		whens := make(memo.ScalarListExpr, 0, len(t.Whens)+1)
 		for i := range t.Whens {
 			texpr := t.Whens[i].Cond.(tree.TypedExpr)
 			cond := b.buildScalar(texpr, inScope, nil, nil, colRefs)
@@ -298,51 +226,30 @@ func (b *Builder) buildScalar(
 			whens = append(whens, b.factory.ConstructWhen(cond, val))
 		}
 		// Add the ELSE expression to the end of whens as a raw scalar expression.
+		var orElse opt.ScalarExpr
 		if t.Else != nil {
 			texpr := t.Else.(tree.TypedExpr)
-			elseExpr := b.buildScalar(texpr, inScope, nil, nil, colRefs)
-			whens = append(whens, elseExpr)
+			orElse = b.buildScalar(texpr, inScope, nil, nil, colRefs)
 		} else {
-			whens = append(whens, b.factory.ConstructConstVal(tree.DNull))
+			orElse = memo.NullSingleton
 		}
-		out = b.factory.ConstructCase(input, b.factory.InternList(whens))
-
-	case *tree.IfExpr:
-		cond := b.buildScalar(t.Cond.(tree.TypedExpr), inScope, nil, nil, colRefs)
-		tru := b.buildScalar(t.True.(tree.TypedExpr), inScope, nil, nil, colRefs)
-		els := b.buildScalar(t.Else.(tree.TypedExpr), inScope, nil, nil, colRefs)
-		whens := []memo.GroupID{
-			b.factory.ConstructWhen(b.factory.ConstructTrue(), tru),
-			els,
-		}
-		out = b.factory.ConstructCase(cond, b.factory.InternList(whens))
-
-	case *tree.NullIfExpr:
-		e1 := b.buildScalar(t.Expr1.(tree.TypedExpr), inScope, nil, nil, colRefs)
-		e2 := b.buildScalar(t.Expr2.(tree.TypedExpr), inScope, nil, nil, colRefs)
-		whens := []memo.GroupID{
-			b.factory.ConstructWhen(e2, b.factory.ConstructConstVal(tree.DNull)),
-			e1,
-		}
-		out = b.factory.ConstructCase(e1, b.factory.InternList(whens))
+		out = b.factory.ConstructCase(input, whens, orElse)
 
 	case *tree.CastExpr:
 		texpr := t.Expr.(tree.TypedExpr)
 		arg := b.buildScalar(texpr, inScope, nil, nil, colRefs)
-		out = b.factory.ConstructCast(arg, b.factory.InternColType(t.Type.(coltypes.T)))
+		out = b.factory.ConstructCast(arg, t.Type.(coltypes.T))
 
 	case *tree.CoalesceExpr:
-		args := make([]memo.GroupID, len(t.Exprs))
+		args := make(memo.ScalarListExpr, len(t.Exprs))
 		for i := range args {
 			args[i] = b.buildScalar(t.TypedExprAt(i), inScope, nil, nil, colRefs)
 		}
-		out = b.factory.ConstructCoalesce(b.factory.InternList(args))
+		out = b.factory.ConstructCoalesce(args)
 
 	case *tree.ColumnAccessExpr:
 		input := b.buildScalar(t.Expr.(tree.TypedExpr), inScope, nil, nil, colRefs)
-		out = b.factory.ConstructColumnAccess(
-			input, b.factory.InternTupleOrdinal(memo.TupleOrdinal(t.ColIndex)),
-		)
+		out = b.factory.ConstructColumnAccess(input, memo.TupleOrdinal(t.ColIndex))
 
 	case *tree.ComparisonExpr:
 		if sub, ok := t.Right.(*subquery); ok && sub.wrapInTuple {
@@ -357,42 +264,47 @@ func (b *Builder) buildScalar(
 		} else {
 			left := b.buildScalar(t.TypedLeft(), inScope, nil, nil, colRefs)
 			right := b.buildScalar(t.TypedRight(), inScope, nil, nil, colRefs)
-
-			fn := comparisonOpMap[t.Operator]
-
-			if fn == nil {
-				panic(builderError{fmt.Errorf("unknown comparison operator: %s", t.Operator)})
-			}
-
-			// Most comparison ops map directly to a factory method.
-			out = fn(b.factory, left, right)
+			out = b.constructComparison(t.Operator, left, right)
 		}
 
 	case *tree.DTuple:
-		list := make([]memo.GroupID, len(t.D))
+		els := make(memo.ScalarListExpr, len(t.D))
 		for i := range t.D {
-			list[i] = b.buildScalar(t.D[i], inScope, nil, nil, colRefs)
+			els[i] = b.buildScalar(t.D[i], inScope, nil, nil, colRefs)
 		}
-		out = b.factory.ConstructTuple(b.factory.InternList(list), b.factory.InternType(t.ResolvedType()))
+		out = b.factory.ConstructTuple(els, t.ResolvedType())
 
 	case *tree.FuncExpr:
 		return b.buildFunction(t, inScope, outScope, outCol, colRefs)
+
+	case *tree.IfExpr:
+		input := b.buildScalar(t.Cond.(tree.TypedExpr), inScope, nil, nil, colRefs)
+		ifTrue := b.buildScalar(t.True.(tree.TypedExpr), inScope, nil, nil, colRefs)
+		whens := memo.ScalarListExpr{b.factory.ConstructWhen(memo.TrueSingleton, ifTrue)}
+		orElse := b.buildScalar(t.Else.(tree.TypedExpr), inScope, nil, nil, colRefs)
+		out = b.factory.ConstructCase(input, whens, orElse)
 
 	case *tree.IndexedVar:
 		if t.Idx < 0 || t.Idx >= len(inScope.cols) {
 			panic(builderError{pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
 				"invalid column ordinal: @%d", t.Idx+1)})
 		}
-		out = b.factory.ConstructVariable(b.factory.InternColumnID(inScope.cols[t.Idx].id))
+		out = b.factory.ConstructVariable(inScope.cols[t.Idx].id)
 
 	case *tree.NotExpr:
-		out = b.factory.ConstructNot(b.buildScalar(t.TypedInnerExpr(), inScope, nil, nil, colRefs))
+		input := b.buildScalar(t.TypedInnerExpr(), inScope, nil, nil, colRefs)
+		out = b.factory.ConstructNot(input)
+
+	case *tree.NullIfExpr:
+		input := b.buildScalar(t.Expr1.(tree.TypedExpr), inScope, nil, nil, colRefs)
+		cond := b.buildScalar(t.Expr2.(tree.TypedExpr), inScope, nil, nil, colRefs)
+		whens := memo.ScalarListExpr{b.factory.ConstructWhen(cond, memo.NullSingleton)}
+		out = b.factory.ConstructCase(input, whens, input)
 
 	case *tree.OrExpr:
 		left := b.buildScalar(t.TypedLeft(), inScope, nil, nil, colRefs)
 		right := b.buildScalar(t.TypedRight(), inScope, nil, nil, colRefs)
-		conditions := b.factory.InternList([]memo.GroupID{left, right})
-		out = b.factory.ConstructOr(conditions)
+		out = b.factory.ConstructOr(left, right)
 
 	case *tree.ParenExpr:
 		// Treat ParenExpr as if it wasn't present.
@@ -407,7 +319,7 @@ func (b *Builder) buildScalar(
 			}
 			out = b.factory.ConstructConstVal(d)
 		} else {
-			out = b.factory.ConstructPlaceholder(b.factory.InternTypedExpr(t))
+			out = b.factory.ConstructPlaceholder(t)
 		}
 
 	case *tree.RangeCond:
@@ -426,11 +338,11 @@ func (b *Builder) buildScalar(
 			}
 			return b.finishBuildScalarRef(&t.cols[0], inScope, outScope, outCol, colRefs)
 		}
-		list := make([]memo.GroupID, len(t.cols))
+		els := make(memo.ScalarListExpr, len(t.cols))
 		for i := range t.cols {
-			list[i] = b.buildScalar(&t.cols[i], inScope, nil, nil, colRefs)
+			els[i] = b.buildScalar(&t.cols[i], inScope, nil, nil, colRefs)
 		}
-		out = b.factory.ConstructTuple(b.factory.InternList(list), b.factory.InternType(t.ResolvedType()))
+		out = b.factory.ConstructTuple(els, t.ResolvedType())
 
 	case *subquery:
 		out, _ = b.buildSingleRowSubquery(t, inScope)
@@ -439,15 +351,15 @@ func (b *Builder) buildScalar(
 		b.checkSubqueryOuterCols(t.outerCols, inGroupingContext, inScope, colRefs)
 
 	case *tree.Tuple:
-		list := make([]memo.GroupID, len(t.Exprs))
+		els := make(memo.ScalarListExpr, len(t.Exprs))
 		for i := range t.Exprs {
-			list[i] = b.buildScalar(t.Exprs[i].(tree.TypedExpr), inScope, nil, nil, colRefs)
+			els[i] = b.buildScalar(t.Exprs[i].(tree.TypedExpr), inScope, nil, nil, colRefs)
 		}
-		out = b.factory.ConstructTuple(b.factory.InternList(list), b.factory.InternType(t.ResolvedType()))
+		out = b.factory.ConstructTuple(els, t.ResolvedType())
 
 	case *tree.UnaryExpr:
 		out = b.buildScalar(t.TypedInnerExpr(), inScope, nil, nil, colRefs)
-		out = unaryOpMap[t.Operator](b.factory, out)
+		out = b.constructUnary(t.Operator, out, t.ResolvedType())
 
 	case *tree.IsOfTypeExpr:
 		// IsOfTypeExpr is a little strange because its value can be determined
@@ -477,7 +389,7 @@ func (b *Builder) buildScalar(
 
 	default:
 		if b.AllowUnsupportedExpr {
-			out = b.factory.ConstructUnsupportedExpr(b.factory.InternTypedExpr(scalar))
+			out = b.factory.ConstructUnsupportedExpr(scalar)
 		} else {
 			panic(unimplementedf("not yet implemented: scalar expression: %T", scalar))
 		}
@@ -492,7 +404,7 @@ func (b *Builder) hasSubOperator(t *tree.ComparisonExpr) bool {
 
 func (b *Builder) buildAnyScalar(
 	t *tree.ComparisonExpr, inScope *scope, colRefs *opt.ColSet,
-) memo.GroupID {
+) opt.ScalarExpr {
 	left := b.buildScalar(t.TypedLeft(), inScope, nil, nil, colRefs)
 	right := b.buildScalar(t.TypedRight(), inScope, nil, nil, colRefs)
 
@@ -502,12 +414,7 @@ func (b *Builder) buildAnyScalar(
 		subop = opt.NegateOpMap[subop]
 	}
 
-	out := b.factory.ConstructAnyScalar(
-		left,
-		right,
-		b.factory.InternOperator(subop),
-	)
-
+	out := b.factory.ConstructAnyScalar(left, right, subop)
 	if t.Operator == tree.All {
 		out = b.factory.ConstructNot(out)
 	}
@@ -529,7 +436,7 @@ func (b *Builder) buildAnyScalar(
 // return values.
 func (b *Builder) buildFunction(
 	f *tree.FuncExpr, inScope, outScope *scope, outCol *scopeColumn, colRefs *opt.ColSet,
-) (out memo.GroupID) {
+) (out opt.ScalarExpr) {
 	if f.WindowDef != nil {
 		if inScope.groupby.inAgg {
 			panic(builderError{sqlbase.NewWindowInAggError()})
@@ -542,26 +449,22 @@ func (b *Builder) buildFunction(
 		panic(builderError{err})
 	}
 
-	funcDef := memo.FuncOpDef{
-		Name:       def.Name,
-		Type:       f.ResolvedType(),
-		Properties: &def.FunctionProperties,
-		Overload:   f.ResolvedOverload(),
-	}
-
 	if isAggregate(def) {
 		panic("aggregate function should have been replaced")
 	}
 
-	argList := make([]memo.GroupID, len(f.Exprs))
+	args := make(memo.ScalarListExpr, len(f.Exprs))
 	for i, pexpr := range f.Exprs {
-		argList[i] = b.buildScalar(pexpr.(tree.TypedExpr), inScope, nil, nil, colRefs)
+		args[i] = b.buildScalar(pexpr.(tree.TypedExpr), inScope, nil, nil, colRefs)
 	}
 
 	// Construct a private FuncOpDef that refers to a resolved function overload.
-	out = b.factory.ConstructFunction(
-		b.factory.InternList(argList), b.factory.InternFuncOpDef(&funcDef),
-	)
+	out = b.factory.ConstructFunction(args, &memo.FunctionPrivate{
+		Name:       def.Name,
+		Typ:        f.ResolvedType(),
+		Properties: &def.FunctionProperties,
+		Overload:   f.ResolvedOverload(),
+	})
 
 	if isGenerator(def) {
 		columns := len(def.ReturnLabels)
@@ -581,28 +484,22 @@ func (b *Builder) buildFunction(
 // push down the negation).
 // TODO(radu): this doesn't work when the expressions have side-effects.
 func (b *Builder) buildRangeCond(
-	not bool, symmetric bool, input, from, to memo.GroupID,
-) memo.GroupID {
+	not bool, symmetric bool, input, from, to opt.ScalarExpr,
+) opt.ScalarExpr {
 	// Build "input >= from AND input <= to".
 	out := b.factory.ConstructAnd(
-		b.factory.InternList([]memo.GroupID{
-			b.factory.ConstructGe(input, from),
-			b.factory.ConstructLe(input, to),
-		}),
+		b.factory.ConstructGe(input, from),
+		b.factory.ConstructLe(input, to),
 	)
 
 	if symmetric {
 		// Build "(input >= from AND input <= to) OR (input >= to AND input <= from)".
 		lhs := out
 		rhs := b.factory.ConstructAnd(
-			b.factory.InternList([]memo.GroupID{
-				b.factory.ConstructGe(input, to),
-				b.factory.ConstructLe(input, from),
-			}),
+			b.factory.ConstructGe(input, to),
+			b.factory.ConstructLe(input, from),
 		)
-		out = b.factory.ConstructOr(
-			b.factory.InternList([]memo.GroupID{lhs, rhs}),
-		)
+		out = b.factory.ConstructOr(lhs, rhs)
 	}
 
 	if not {
@@ -668,6 +565,119 @@ func (b *Builder) checkSubqueryOuterCols(
 	}
 }
 
+func (b *Builder) constructComparison(
+	cmp tree.ComparisonOperator, left, right opt.ScalarExpr,
+) opt.ScalarExpr {
+	switch cmp {
+	case tree.EQ:
+		return b.factory.ConstructEq(left, right)
+	case tree.LT:
+		return b.factory.ConstructLt(left, right)
+	case tree.GT:
+		return b.factory.ConstructGt(left, right)
+	case tree.LE:
+		return b.factory.ConstructLe(left, right)
+	case tree.GE:
+		return b.factory.ConstructGe(left, right)
+	case tree.NE:
+		return b.factory.ConstructNe(left, right)
+	case tree.In:
+		return b.factory.ConstructIn(left, right)
+	case tree.NotIn:
+		return b.factory.ConstructNotIn(left, right)
+	case tree.Like:
+		return b.factory.ConstructLike(left, right)
+	case tree.NotLike:
+		return b.factory.ConstructNotLike(left, right)
+	case tree.ILike:
+		return b.factory.ConstructILike(left, right)
+	case tree.NotILike:
+		return b.factory.ConstructNotILike(left, right)
+	case tree.SimilarTo:
+		return b.factory.ConstructSimilarTo(left, right)
+	case tree.NotSimilarTo:
+		return b.factory.ConstructNotSimilarTo(left, right)
+	case tree.RegMatch:
+		return b.factory.ConstructRegMatch(left, right)
+	case tree.NotRegMatch:
+		return b.factory.ConstructNotRegMatch(left, right)
+	case tree.RegIMatch:
+		return b.factory.ConstructRegIMatch(left, right)
+	case tree.NotRegIMatch:
+		return b.factory.ConstructNotRegIMatch(left, right)
+	case tree.IsDistinctFrom:
+		return b.factory.ConstructIsNot(left, right)
+	case tree.IsNotDistinctFrom:
+		return b.factory.ConstructIs(left, right)
+	case tree.Contains:
+		return b.factory.ConstructContains(left, right)
+	case tree.ContainedBy:
+		// This is just syntatic sugar that reverses the operands.
+		return b.factory.ConstructContains(right, left)
+	case tree.JSONExists:
+		return b.factory.ConstructJsonExists(left, right)
+	case tree.JSONAllExists:
+		return b.factory.ConstructJsonAllExists(left, right)
+	case tree.JSONSomeExists:
+		return b.factory.ConstructJsonSomeExists(left, right)
+	}
+	panic(fmt.Sprintf("unhandled comparison operator: %s", cmp))
+}
+
+func (b *Builder) constructBinary(
+	bin tree.BinaryOperator, left, right opt.ScalarExpr, typ types.T,
+) opt.ScalarExpr {
+	switch bin {
+	case tree.Bitand:
+		return b.factory.ConstructBitand(left, right)
+	case tree.Bitor:
+		return b.factory.ConstructBitor(left, right)
+	case tree.Bitxor:
+		return b.factory.ConstructBitxor(left, right)
+	case tree.Plus:
+		return b.factory.ConstructPlus(left, right)
+	case tree.Minus:
+		return b.factory.ConstructMinus(left, right)
+	case tree.Mult:
+		return b.factory.ConstructMult(left, right)
+	case tree.Div:
+		return b.factory.ConstructDiv(left, right)
+	case tree.FloorDiv:
+		return b.factory.ConstructFloorDiv(left, right)
+	case tree.Mod:
+		return b.factory.ConstructMod(left, right)
+	case tree.Pow:
+		return b.factory.ConstructPow(left, right)
+	case tree.Concat:
+		return b.factory.ConstructConcat(left, right)
+	case tree.LShift:
+		return b.factory.ConstructLShift(left, right)
+	case tree.RShift:
+		return b.factory.ConstructRShift(left, right)
+	case tree.JSONFetchText:
+		return b.factory.ConstructFetchText(left, right)
+	case tree.JSONFetchVal:
+		return b.factory.ConstructFetchVal(left, right)
+	case tree.JSONFetchValPath:
+		return b.factory.ConstructFetchValPath(left, right)
+	case tree.JSONFetchTextPath:
+		return b.factory.ConstructFetchTextPath(left, right)
+	}
+	panic(fmt.Sprintf("unhandled binary operator: %s", bin))
+}
+
+func (b *Builder) constructUnary(
+	un tree.UnaryOperator, input opt.ScalarExpr, typ types.T,
+) opt.ScalarExpr {
+	switch un {
+	case tree.UnaryMinus:
+		return b.factory.ConstructUnaryMinus(input)
+	case tree.UnaryComplement:
+		return b.factory.ConstructUnaryComplement(input)
+	}
+	panic(fmt.Sprintf("unhandled unary operator: %s", un))
+}
+
 // ScalarBuilder is a specialized variant of Builder that can be used to create
 // a scalar from a TypedExpr. This is used to build scalar expressions for
 // testing. It is also used temporarily to interface with the old planning code.
@@ -727,7 +737,7 @@ func (sb *ScalarBuilder) Build(expr tree.TypedExpr) (err error) {
 		}
 	}()
 
-	group := sb.buildScalar(expr, &sb.scope, nil, nil, nil)
-	sb.factory.Memo().SetRoot(group, memo.MinPhysPropsID)
+	scalar := sb.buildScalar(expr, &sb.scope, nil, nil, nil)
+	sb.factory.Memo().SetScalarRoot(scalar)
 	return nil
 }

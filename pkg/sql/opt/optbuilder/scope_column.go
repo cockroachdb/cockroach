@@ -18,7 +18,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -43,10 +42,9 @@ type scopeColumn struct {
 	// This field is only used for ordering columns.
 	descending bool
 
-	// group is the GroupID of the scalar expression associated with this column.
-	// group is 0 for columns that are just passed through from an inner scope
-	// and for table columns.
-	group memo.GroupID
+	// scalar is the scalar expression associated with this column. If it is nil,
+	// then the column is a passthrough from an inner scope or a table column.
+	scalar opt.ScalarExpr
 
 	// expr is the AST expression that this column refers to, if any.
 	// expr is nil if the column does not refer to an expression.
