@@ -31,7 +31,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/debug"
-	"github.com/cockroachdb/cockroach/pkg/cli/synctest"
+	"github.com/cockroachdb/cockroach/pkg/cli/syncbench"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -1011,28 +1011,28 @@ func runTimeSeriesDump(cmd *cobra.Command, args []string) error {
 	}
 }
 
-var debugSyncTestCmd = &cobra.Command{
-	Use:   "synctest [directory]",
+var debugSyncBenchCmd = &cobra.Command{
+	Use:   "syncbench [directory]",
 	Short: "Run a performance test for WAL sync speed",
 	Long: `
 `,
 	Args:   cobra.MaximumNArgs(1),
 	Hidden: true,
-	RunE:   MaybeDecorateGRPCError(runDebugSyncTest),
+	RunE:   MaybeDecorateGRPCError(runDebugSyncBench),
 }
 
-var syncTestOpts = synctest.Options{
+var syncBenchOpts = syncbench.Options{
 	Concurrency: 1,
 	Duration:    10 * time.Second,
 	LogOnly:     true,
 }
 
-func runDebugSyncTest(cmd *cobra.Command, args []string) error {
-	syncTestOpts.Dir = "./testdb"
+func runDebugSyncBench(cmd *cobra.Command, args []string) error {
+	syncBenchOpts.Dir = "./testdb"
 	if len(args) == 1 {
-		syncTestOpts.Dir = args[0]
+		syncBenchOpts.Dir = args[0]
 	}
-	return synctest.Run(syncTestOpts)
+	return syncbench.Run(syncBenchOpts)
 }
 
 var debugUnsafeRemoveDeadReplicasCmd = &cobra.Command{
@@ -1207,12 +1207,12 @@ func removeDeadReplicas(
 func init() {
 	DebugCmd.AddCommand(debugCmds...)
 
-	f := debugSyncTestCmd.Flags()
-	f.IntVarP(&syncTestOpts.Concurrency, "concurrency", "c", syncTestOpts.Concurrency,
+	f := debugSyncBenchCmd.Flags()
+	f.IntVarP(&syncBenchOpts.Concurrency, "concurrency", "c", syncBenchOpts.Concurrency,
 		"number of concurrent writers")
-	f.DurationVarP(&syncTestOpts.Duration, "duration", "d", syncTestOpts.Duration,
+	f.DurationVarP(&syncBenchOpts.Duration, "duration", "d", syncBenchOpts.Duration,
 		"duration to run the test for")
-	f.BoolVarP(&syncTestOpts.LogOnly, "log-only", "l", syncTestOpts.LogOnly,
+	f.BoolVarP(&syncBenchOpts.LogOnly, "log-only", "l", syncBenchOpts.LogOnly,
 		"only write to the WAL, not to sstables")
 
 	f = debugUnsafeRemoveDeadReplicasCmd.Flags()
@@ -1243,7 +1243,7 @@ var debugCmds = append(DebugCmdsForRocksDB,
 	debugSSTDumpCmd,
 	debugGossipValuesCmd,
 	debugTimeSeriesDumpCmd,
-	debugSyncTestCmd,
+	debugSyncBenchCmd,
 	debugUnsafeRemoveDeadReplicasCmd,
 	debugEnvCmd,
 	debugZipCmd,
