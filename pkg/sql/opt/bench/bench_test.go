@@ -332,7 +332,7 @@ type harness struct {
 	ctx       context.Context
 	semaCtx   tree.SemaContext
 	evalCtx   tree.EvalContext
-	prepMemo  *memo.Memo
+	prepMemo  memo.Memo
 	cat       *testcat.Catalog
 	optimizer xform.Optimizer
 
@@ -390,7 +390,7 @@ func (h *harness) runForProfiling(
 				h.runUsingServer(t)
 
 			default:
-				h.runUsingAPI(t, bmType)
+				h.runUsingAPI(t, bmType, query.prepare)
 			}
 		}
 	}
@@ -410,7 +410,7 @@ func (h *harness) runForBenchmark(b *testing.B, bmType BenchmarkType, query benc
 
 		default:
 			for i := 0; i < b.N; i++ {
-				h.runUsingAPI(b, bmType)
+				h.runUsingAPI(b, bmType, query.prepare)
 			}
 		}
 	})
@@ -473,7 +473,7 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 	h.ctx = context.Background()
 	h.semaCtx = tree.MakeSemaContext(false /* privileged */)
 	h.evalCtx = tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	h.prepMemo = nil
+	h.prepMemo = memo.Memo{}
 	h.cat = nil
 	h.optimizer = xform.Optimizer{}
 
@@ -491,15 +491,14 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 		// it (if it doesn't have placeholders), and cache the resulting memo so that
 		// it can be used during execution.
 		if len(h.query.args) > 0 {
-			h.runUsingAPI(tb, Normalize)
+			h.runUsingAPI(tb, Normalize, false /* usePrepared */)
 		} else {
-			h.runUsingAPI(tb, Explore)
+			h.runUsingAPI(tb, Explore, false /* usePrepared */)
 		}
-		h.prepMemo = &memo.Memo{}
-		h.prepMemo.InitFrom(h.optimizer.Memo())
+		h.optimizer.DetachMemo(&h.prepMemo)
 	} else {
 		// Run optbuilder to infer any placeholder types.
-		h.runUsingAPI(tb, OptBuild)
+		h.runUsingAPI(tb, OptBuild, false /* usePrepared */)
 	}
 
 	// Construct placeholder values.
@@ -529,10 +528,10 @@ func (h *harness) prepareUsingAPI(tb testing.TB) {
 	h.evalCtx.Placeholders = &h.semaCtx.Placeholders
 }
 
-func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType) {
+func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType, usePrepared bool) {
 	var stmt tree.Statement
 	var err error
-	if h.prepMemo == nil {
+	if !usePrepared {
 		stmt, err = parser.ParseOne(h.query.query)
 		if err != nil {
 			tb.Fatalf("%v", err)
@@ -548,35 +547,34 @@ func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType) {
 		h.optimizer.DisableOptimizations()
 	}
 
-	if h.prepMemo == nil {
+	if !usePrepared {
 		bld := optbuilder.New(h.ctx, &h.semaCtx, &h.evalCtx, h.cat, h.optimizer.Factory(), stmt)
 		if err = bld.Build(); err != nil {
 			tb.Fatalf("%v", err)
 		}
 	} else if h.prepMemo.HasPlaceholders() {
-		h.optimizer.Memo().InitFrom(h.prepMemo)
-		if err = h.optimizer.Factory().AssignPlaceholders(); err != nil {
-			tb.Fatalf("%v", err)
-		}
+		_ = h.optimizer.Factory().AssignPlaceholders(&h.prepMemo)
 	}
 
 	if bmType == OptBuild || bmType == Normalize {
 		return
 	}
 
-	var ev memo.ExprView
-	if h.prepMemo != nil && !h.prepMemo.HasPlaceholders() {
-		ev = h.prepMemo.Root()
+	var execMemo *memo.Memo
+	if usePrepared && !h.prepMemo.HasPlaceholders() {
+		execMemo = &h.prepMemo
 	} else {
-		ev = h.optimizer.Optimize()
+		h.optimizer.Optimize()
+		execMemo = h.optimizer.Memo()
 	}
 
 	if bmType == Explore {
 		return
 	}
 
+	root := execMemo.RootExpr()
 	execFactory := stubFactory{}
-	if _, err = execbuilder.New(&execFactory, ev, &h.evalCtx).Build(); err != nil {
+	if _, err = execbuilder.New(&execFactory, execMemo, root, &h.evalCtx).Build(); err != nil {
 		tb.Fatalf("%v", err)
 	}
 }

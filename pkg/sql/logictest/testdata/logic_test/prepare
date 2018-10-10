@@ -451,6 +451,32 @@ EXECUTE aggprep(20)
 ----
 21
 
+# Test placeholder in subquery, where the placeholder will be constant folded
+# and then used to select an index.
+statement ok
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT);
+CREATE TABLE xyz (x INT PRIMARY KEY, y INT, z INT, INDEX(y));
+INSERT INTO abc (a, b, c) VALUES (1, 10, 100);
+INSERT INTO xyz (x, y, z) VALUES (1, 5, 50);
+INSERT INTO xyz (x, y, z) VALUES (2, 6, 60);
+
+statement ok
+PREPARE subqueryprep AS SELECT * FROM abc WHERE EXISTS(SELECT * FROM xyz WHERE y IN ($1 + 1))
+
+query III
+EXECUTE subqueryprep(4)
+----
+1  10  100
+
+query III
+EXECUTE subqueryprep(5)
+----
+1  10  100
+
+query III
+EXECUTE subqueryprep(6)
+----
+
 #
 # Test prepared statements that rely on context, and ensure they are invalidated
 # when that context changes.
