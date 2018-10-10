@@ -8,7 +8,8 @@
 [EliminateProject, Normalize]
 (Project
     $input:*
-    $projections:(Projections []) & (HasSameCols $input $projections)
+    $projections:[]
+    $passthrough:* & (ColsAreEqual $passthrough (OutputCols $input))
 )
 =>
 $input
@@ -18,11 +19,13 @@ $input
 # something the outer Project operator can do on its own.
 [EliminateProjectProject, Normalize]
 (Project
-    $input:(Project $innerInput:* (Projections []))
+    $input:(Project $innerInput:* [])
     $projections:*
+    $passthrough:*
 )
 =>
 (Project
     $innerInput
     $projections
+    $passthrough
 )

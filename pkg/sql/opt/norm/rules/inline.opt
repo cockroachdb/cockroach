@@ -33,17 +33,19 @@
 (Select
     (Project
         $input:*
-        $projections:* & (CanInline $projections)
+        $projections:* & (CanInlineProjections $projections)
+        $passthrough:*
     )
-    $filter:* & ^(HasCorrelatedSubquery $filter)
+    $filters:* & ^(FilterHasCorrelatedSubquery $filters)
 )
 =>
 (Project
     (Select
         $input
-        (InlineProjections $filter $projections)
+        (InlineSelectProject $filters $projections)
     )
     $projections
+    $passthrough
 )
 
 # InlineProjectInProject folds an inner Project operator into an outer Project
@@ -62,11 +64,9 @@
 #
 [InlineProjectInProject, Normalize, LowPriority]
 (Project
-    $input:(Project $innerInput:* $innerProjections:*)
-    $projections:* & ^(HasDuplicateRefs $projections)
+    $input:(Project)
+    $projections:*
+    $passthrough:* & ^(HasDuplicateRefs $projections $passthrough)
 )
 =>
-(Project
-    $innerInput
-    (InlineProjections $projections $innerProjections)
-)
+(InlineProjectProject $input $projections $passthrough)

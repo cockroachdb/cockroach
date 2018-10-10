@@ -512,4 +512,4 @@ project
  │    └── filters
  │         └── true_agg IS NOT NULL [type=bool, outer=(16), constraints=(/16: (/NULL - ]; tight)]
  └── projections
-      └── true_agg IS NOT NULL [type=bool, outer=(16), constraints=(/16: (/NULL - ]; tight)]
+      └── true_agg IS NOT NULL [type=bool, outer=(16)]

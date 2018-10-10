@@ -35,8 +35,8 @@ import (
 // right join when it can be proved that the right side of the join always
 // produces at least one row for every row on the left.
 func (c *CustomFuncs) ConstructNonLeftJoin(
-	joinOp opt.Operator, left, right, on memo.GroupID,
-) memo.GroupID {
+	joinOp opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr,
+) memo.RelExpr {
 	switch joinOp {
 	case opt.LeftJoinOp:
 		return c.f.ConstructInnerJoin(left, right, on)
@@ -54,8 +54,8 @@ func (c *CustomFuncs) ConstructNonLeftJoin(
 // left join when it can be proved that the left side of the join always
 // produces at least one row for every row on the right.
 func (c *CustomFuncs) ConstructNonRightJoin(
-	joinOp opt.Operator, left, right, on memo.GroupID,
-) memo.GroupID {
+	joinOp opt.Operator, left, right memo.RelExpr, on memo.FiltersExpr,
+) memo.RelExpr {
 	switch joinOp {
 	case opt.RightJoinOp:
 		return c.f.ConstructInnerJoin(left, right, on)
@@ -90,22 +90,23 @@ func (c *CustomFuncs) ConstructNonRightJoin(
 // dst is (Scan a).
 //
 // If src has a correlated subquery, CanMap returns false.
-func (c *CustomFuncs) CanMap(filters, src, dst memo.GroupID) bool {
-	// Fast path if src is already bound by dst.
+func (c *CustomFuncs) CanMap(
+	filters memo.FiltersExpr, src *memo.FiltersItem, dst memo.RelExpr,
+) bool {
+	// Fast path if condition is already bound by input.
 	if c.IsBoundBy(src, c.OutputCols(dst)) {
 		return true
 	}
 
-	if c.HasHoistableSubquery(src) {
+	scalarProps := src.ScalarProps(c.mem)
+	if scalarProps.HasCorrelatedSubquery {
 		return false
 	}
 
-	fd := c.LookupLogical(filters).Scalar.FuncDeps
-
 	// For CanMap to be true, each column in src must map to at least one column
 	// in dst.
-	for i, ok := c.OuterCols(src).Next(0); ok; i, ok = c.OuterCols(src).Next(i + 1) {
-		eqCols := c.GetEquivColsWithEquivType(opt.ColumnID(i), &fd)
+	for i, ok := scalarProps.OuterCols.Next(0); ok; i, ok = scalarProps.OuterCols.Next(i + 1) {
+		eqCols := c.GetEquivColsWithEquivType(opt.ColumnID(i), filters)
 		if !eqCols.Intersects(c.OutputCols(dst)) {
 			return false
 		}
@@ -133,19 +134,20 @@ func (c *CustomFuncs) CanMap(filters, src, dst memo.GroupID) bool {
 // If Map is called with src as a.x + b.y = 5 and dst as (Scan b), it returns
 // b.x + b.y = 5. Map should not be called with the equality predicate
 // a.x = b.x, because it would just return the tautology b.x = b.x.
-func (c *CustomFuncs) Map(filters, src, dst memo.GroupID) memo.GroupID {
+func (c *CustomFuncs) Map(
+	filters memo.FiltersExpr, src *memo.FiltersItem, dst memo.RelExpr,
+) opt.ScalarExpr {
 	// Fast path if src is already bound by dst.
 	if c.IsBoundBy(src, c.OutputCols(dst)) {
-		return src
+		return src.Condition
 	}
-
-	fd := c.LookupLogical(filters).Scalar.FuncDeps
 
 	// Map each column in src to one column in dst. We choose an arbitrary column
 	// (the one with the smallest ColumnID) if there are multiple choices.
 	var colMap util.FastIntMap
-	c.OuterCols(src).ForEach(func(srcCol int) {
-		eqCols := c.GetEquivColsWithEquivType(opt.ColumnID(srcCol), &fd)
+	outerCols := src.ScalarProps(c.mem).OuterCols
+	for srcCol, ok := outerCols.Next(0); ok; srcCol, ok = outerCols.Next(srcCol + 1) {
+		eqCols := c.GetEquivColsWithEquivType(opt.ColumnID(srcCol), filters)
 		eqCols.IntersectionWith(c.OutputCols(dst))
 		if eqCols.Contains(srcCol) {
 			colMap.Set(srcCol, srcCol)
@@ -154,40 +156,35 @@ func (c *CustomFuncs) Map(filters, src, dst memo.GroupID) memo.GroupID {
 			if !ok {
 				panic(fmt.Errorf(
 					"Map called on src that cannot be mapped to dst. src:\n%s\ndst:\n%s",
-					memo.MakeNormExprView(c.mem, src).FormatString(memo.ExprFmtHideScalars),
-					memo.MakeNormExprView(c.mem, dst).FormatString(memo.ExprFmtHideScalars),
+					src, dst,
 				))
 			}
 			colMap.Set(srcCol, dstCol)
 		}
-	})
+	}
 
 	// Recursively walk the scalar sub-tree looking for references to columns
 	// that need to be replaced.
-	var replace memo.ReplaceChildFunc
-	replace = func(child memo.GroupID) memo.GroupID {
-		expr := c.mem.NormExpr(child)
-
-		switch expr.Operator() {
-		case opt.VariableOp:
-			varColID := c.ExtractColID(expr.AsVariable().Col())
-			outCol, _ := colMap.Get(int(varColID))
-			if int(varColID) == outCol {
+	var replace ReconstructFunc
+	replace = func(nd opt.Expr) opt.Expr {
+		switch t := nd.(type) {
+		case *memo.VariableExpr:
+			outCol, _ := colMap.Get(int(t.Col))
+			if int(t.Col) == outCol {
 				// Avoid constructing a new variable if possible.
-				return child
+				return nd
 			}
-			return c.f.ConstructVariable(c.f.InternColumnID(opt.ColumnID(outCol)))
+			return c.f.ConstructVariable(opt.ColumnID(outCol))
 
-		case opt.SubqueryOp, opt.ExistsOp, opt.AnyOp:
+		case *memo.SubqueryExpr, *memo.ExistsExpr, *memo.AnyExpr:
 			// There are no correlated subqueries, so we don't need to recurse here.
-			return child
+			return nd
 		}
 
-		ev := memo.MakeNormExprView(c.mem, child)
-		return ev.Replace(c.f.evalCtx, replace).Group()
+		return c.f.Reconstruct(nd, replace)
 	}
 
-	return replace(src)
+	return replace(src.Condition).(opt.ScalarExpr)
 }
 
 // GetEquivColsWithEquivType uses the given FuncDepSet to find columns that are
@@ -217,7 +214,9 @@ func (c *CustomFuncs) Map(filters, src, dst memo.GroupID) memo.GroupID {
 //
 // TODO(rytaft): In the future, we may want to allow the mapping if the
 // filter involves a comparison operator, such as x < 5.
-func (c *CustomFuncs) GetEquivColsWithEquivType(col opt.ColumnID, fd *props.FuncDepSet) opt.ColSet {
+func (c *CustomFuncs) GetEquivColsWithEquivType(
+	col opt.ColumnID, filters memo.FiltersExpr,
+) opt.ColSet {
 	var res opt.ColSet
 	colType := c.f.Metadata().ColumnType(col)
 
@@ -228,10 +227,15 @@ func (c *CustomFuncs) GetEquivColsWithEquivType(col opt.ColumnID, fd *props.Func
 		return res
 	}
 
-	eqCols := fd.ComputeEquivClosure(util.MakeFastIntSet(int(col)))
+	// Compute all equivalent columns.
+	eqCols := util.MakeFastIntSet(int(col))
+	for i := range filters {
+		eqCols = filters[i].ScalarProps(c.mem).FuncDeps.ComputeEquivClosure(eqCols)
+	}
+
 	eqCols.ForEach(func(i int) {
-		eqColType := c.f.Metadata().ColumnType(opt.ColumnID(i))
 		// Only include columns that have the same type as col.
+		eqColType := c.f.Metadata().ColumnType(opt.ColumnID(i))
 		if colType.Equivalent(eqColType) {
 			res.Add(i)
 		}
@@ -260,7 +264,9 @@ func (c *CustomFuncs) GetEquivColsWithEquivType(col opt.ColumnID, fd *props.Func
 //      a foreign key on the left equality table, and the right equality columns
 //      to the corresponding referenced columns in the right equality table.
 //
-func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(left, right, filters memo.GroupID) bool {
+func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
+	left, right memo.RelExpr, filters memo.FiltersExpr,
+) bool {
 	unfilteredCols := c.deriveUnfilteredCols(right)
 	if unfilteredCols.Empty() {
 		// Condition #3: right input has no columns which contain values from
@@ -268,33 +274,28 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(left, right, filters memo.Grou
 		return false
 	}
 
-	filtersExpr := c.mem.NormExpr(filters).AsFilters()
-	if filtersExpr == nil {
-		return false
-	}
-
-	leftCols := c.LookupLogical(left).Relational.NotNullCols
-	rightCols := c.LookupLogical(right).Relational.NotNullCols
+	leftCols := left.Relational().NotNullCols
+	rightCols := right.Relational().NotNullCols
 
 	md := c.f.Metadata()
 
 	var leftTab, rightTab opt.Table
-	for _, condition := range c.mem.LookupList(filtersExpr.Conditions()) {
-		eqExpr := c.mem.NormExpr(condition).AsEq()
-		if eqExpr == nil {
+	for i := range filters {
+		eq, _ := filters[i].Condition.(*memo.EqExpr)
+		if eq == nil {
 			// Condition #1: conjunct is not an equality comparison.
 			return false
 		}
 
-		leftVarExpr := c.mem.NormExpr(eqExpr.Left()).AsVariable()
-		rightVarExpr := c.mem.NormExpr(eqExpr.Right()).AsVariable()
-		if leftVarExpr == nil || rightVarExpr == nil {
+		leftVar, _ := eq.Left.(*memo.VariableExpr)
+		rightVar, _ := eq.Right.(*memo.VariableExpr)
+		if leftVar == nil || rightVar == nil {
 			// Condition #1: conjunct does not compare two columns.
 			return false
 		}
 
-		leftCol := c.ExtractColID(leftVarExpr.Col())
-		rightCol := c.ExtractColID(rightVarExpr.Col())
+		leftCol := leftVar.Col
+		rightCol := rightVar.Col
 
 		// Normalize leftCol to come from leftCols.
 		if !leftCols.Contains(int(leftCol)) {
@@ -343,18 +344,18 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(left, right, filters memo.Grou
 	return true
 }
 
-// deriveUnfilteredCols returns the subset of the given group's output columns
-// that have values for every row in their owner table. In other words, columns
-// from tables that have had none of their rows filtered (but it's OK if rows
-// have been duplicated).
+// deriveUnfilteredCols returns the subset of the given input expression's
+// output columns that have values for every row in their owner table. In other
+// words, columns from tables that have had none of their rows filtered (but
+// it's OK if rows have been duplicated).
 //
 // deriveUnfilteredCols recursively derives the property, and populates the
 // props.Relational.Rule.UnfilteredCols field as it goes to make future calls
 // faster.
-func (c *CustomFuncs) deriveUnfilteredCols(group memo.GroupID) opt.ColSet {
+func (c *CustomFuncs) deriveUnfilteredCols(in memo.RelExpr) opt.ColSet {
 	// If the UnfilteredCols property has already been derived, return it
 	// immediately.
-	relational := c.LookupLogical(group).Relational
+	relational := in.Relational()
 	if relational.IsAvailable(props.UnfilteredCols) {
 		return relational.Rule.UnfilteredCols
 	}
@@ -362,27 +363,25 @@ func (c *CustomFuncs) deriveUnfilteredCols(group memo.GroupID) opt.ColSet {
 
 	// Derive the UnfilteredCols property now.
 	// TODO(andyk): Could add other cases, such as outer joins and union.
-	expr := c.mem.NormExpr(group)
-	switch expr.Operator() {
-	case opt.ScanOp:
+	switch t := in.(type) {
+	case *memo.ScanExpr:
 		// All un-limited, unconstrained output columns are unfiltered columns.
-		def := expr.Private(c.mem).(*memo.ScanOpDef)
-		if def.HardLimit == 0 && def.Constraint == nil {
+		if t.HardLimit == 0 && t.Constraint == nil {
 			relational.Rule.UnfilteredCols = relational.OutputCols
 		}
 
-	case opt.ProjectOp:
+	case *memo.ProjectExpr:
 		// Project never filters rows, so it passes through unfiltered columns.
-		unfilteredCols := c.deriveUnfilteredCols(expr.ChildGroup(c.mem, 0))
+		unfilteredCols := c.deriveUnfilteredCols(t.Input)
 		relational.Rule.UnfilteredCols = unfilteredCols.Intersection(relational.OutputCols)
 
-	case opt.InnerJoinOp, opt.InnerJoinApplyOp:
-		left := expr.ChildGroup(c.mem, 0)
-		right := expr.ChildGroup(c.mem, 1)
-		on := expr.ChildGroup(c.mem, 2)
+	case *memo.InnerJoinExpr, *memo.InnerJoinApplyExpr:
+		left := t.Child(0).(memo.RelExpr)
+		right := t.Child(1).(memo.RelExpr)
+		on := *t.Child(2).(*memo.FiltersExpr)
 
 		// Cross join always preserves left/right rows.
-		isCrossJoin := c.mem.NormOp(on) == opt.TrueOp
+		isCrossJoin := on.IsTrue()
 
 		// Inner joins may preserve left/right rows, according to
 		// JoinFiltersMatchAllLeftRows conditions.

@@ -25,117 +25,155 @@ import (
 // checkExpr does sanity checking on an Expr. This code is called from
 // onConstruct in testrace builds (which gives us test/CI coverage but elides
 // this code in regular builds).
-func (f *Factory) checkExpr(ev memo.ExprView) {
-	// Check logical properties.
-	ev.Logical().Verify()
+func (f *Factory) checkExpr(e opt.Expr) {
+	// Check properties.
+	switch t := e.(type) {
+	case memo.RelExpr:
+		t.Relational().Verify()
 
-	switch ev.Operator() {
-	case opt.ScanOp:
-		def := ev.Private().(*memo.ScanOpDef)
-		if def.Flags.NoIndexJoin && def.Flags.ForceIndex {
+	case memo.ScalarPropsExpr:
+		t.ScalarProps(f.Memo()).Verify()
+	}
+
+	switch t := e.(type) {
+	case *memo.ScanExpr:
+		if t.Flags.NoIndexJoin && t.Flags.ForceIndex {
 			panic("NoIndexJoin and ForceIndex set")
 		}
 
-	case opt.ProjectionsOp:
-		// Check that we aren't passing through columns in projection expressions.
-		n := ev.ChildCount()
-		def := ev.Private().(*memo.ProjectionsOpDef)
-		colList := def.SynthesizedCols
-		if len(colList) != n {
-			panic(fmt.Sprintf("%d projections but %d columns", n, len(colList)))
-		}
-		for i := 0; i < n; i++ {
-			if child := ev.Child(i); child.Operator() == opt.VariableOp {
-				if child.Private().(opt.ColumnID) == colList[i] {
-					panic(fmt.Sprintf("projection passes through column %d", colList[i]))
+	case *memo.ProjectExpr:
+		for _, item := range t.Projections {
+			// Check that list items are not nested.
+			if opt.IsListItemOp(item.Element) {
+				panic("projections list item cannot contain another list item")
+			}
+
+			// Check that column id is set.
+			if item.Col == 0 {
+				panic("projections column cannot have id of 0")
+			}
+
+			// Check that column is not both passthrough and synthesized.
+			if t.Passthrough.Contains(int(item.Col)) {
+				panic(fmt.Sprintf("both passthrough and synthesized have column %d", item.Col))
+			}
+
+			// Check that columns aren't passed through in projection expressions.
+			if v, ok := item.Element.(*memo.VariableExpr); ok {
+				if v.Col == item.Col {
+					panic(fmt.Sprintf("projection passes through column %d", item.Col))
 				}
 			}
 		}
 
-	case opt.AggregationsOp:
-		// Check that we don't have any bare variables as aggregations.
-		n := ev.ChildCount()
-		colList := ev.Private().(opt.ColList)
-		if len(colList) != n {
-			panic(fmt.Sprintf("%d aggregations but %d columns", n, len(colList)))
+	case *memo.SelectExpr:
+		f.checkFilters(t.Filters)
+
+	case *memo.AggregationsExpr:
+		var checkAggs func(scalar opt.ScalarExpr)
+		checkAggs = func(scalar opt.ScalarExpr) {
+			switch scalar.Op() {
+			case opt.AggDistinctOp:
+				checkAggs(scalar.Child(0).(opt.ScalarExpr))
+
+			case opt.VariableOp:
+
+			default:
+				if !opt.IsAggregateOp(scalar) {
+					panic(fmt.Sprintf("aggregate contains illegal op: %s", scalar.Op()))
+				}
+			}
 		}
-		for i := 0; i < n; i++ {
-			if child := ev.Child(i); child.Operator() == opt.VariableOp {
+		for _, item := range *t {
+			// Check that aggregations only contain aggregates and variables.
+			checkAggs(item.Agg)
+
+			// Check that column id is set.
+			if item.Col == 0 {
+				panic("aggregations column cannot have id of 0")
+			}
+
+			// Check that we don't have any bare variables as aggregations.
+			if item.Agg.Op() == opt.VariableOp {
 				panic("aggregation contains bare variable")
 			}
 		}
 
-	case opt.DistinctOnOp:
-		// Aggregates can be only FirstAgg or ConstAgg.
-		agg := ev.Child(1)
-		for i, n := 0, agg.ChildCount(); i < n; i++ {
-			if childOp := agg.Child(i).Operator(); childOp != opt.FirstAggOp && childOp != opt.ConstAggOp {
-				panic(fmt.Sprintf("distinct-on contains %s", childOp))
+	case *memo.DistinctOnExpr:
+		// Check that aggregates can be only FirstAgg or ConstAgg.
+		for _, item := range t.Aggregations {
+			switch item.Agg.Op() {
+			case opt.FirstAggOp, opt.ConstAggOp:
+
+			default:
+				panic(fmt.Sprintf("distinct-on contains %s", item.Agg.Op()))
 			}
 		}
 
-	case opt.GroupByOp, opt.ScalarGroupByOp:
-		// Aggregates cannot be FirstAgg.
-		agg := ev.Child(1)
-		for i, n := 0, agg.ChildCount(); i < n; i++ {
-			if childOp := agg.Child(i).Operator(); childOp == opt.FirstAggOp {
-				panic(fmt.Sprintf("group-by contains %s", childOp))
+	case *memo.GroupByExpr, *memo.ScalarGroupByExpr:
+		// Check that aggregates cannot be FirstAgg.
+		for _, item := range *t.Child(1).(*memo.AggregationsExpr) {
+			switch item.Agg.Op() {
+			case opt.FirstAggOp:
+				panic(fmt.Sprintf("group-by contains %s", item.Agg.Op()))
 			}
 		}
 
-	case opt.IndexJoinOp:
-		def := ev.Private().(*memo.IndexJoinDef)
-		if def.Cols.Empty() {
+	case *memo.IndexJoinExpr:
+		if t.Cols.Empty() {
 			panic(fmt.Sprintf("index join with no columns"))
 		}
 
-	case opt.LookupJoinOp:
-		def := ev.Private().(*memo.LookupJoinDef)
-		if len(def.KeyCols) == 0 {
+	case *memo.LookupJoinExpr:
+		if len(t.KeyCols) == 0 {
 			panic(fmt.Sprintf("lookup join with no key columns"))
 		}
-		if def.LookupCols.Empty() {
+		if t.LookupCols.Empty() {
 			panic(fmt.Sprintf("lookup join with no lookup columns"))
 		}
 
-	case opt.SelectOp:
-		filter := ev.Child(1)
-		switch filter.Operator() {
-		case opt.FiltersOp:
-		default:
-			panic(fmt.Sprintf("select contains %s", filter.Operator()))
+	default:
+		if !opt.IsListOp(e) {
+			for i := 0; i < e.ChildCount(); i++ {
+				child := e.Child(i)
+				if opt.IsListItemOp(child) {
+					panic(fmt.Sprintf("non-list op contains item op: %s", child.Op()))
+				}
+			}
 		}
 
-	default:
-		if ev.IsJoin() {
-			on := ev.Child(2)
-			switch on.Operator() {
-			case opt.FiltersOp, opt.TrueOp, opt.FalseOp:
-			default:
-				panic(fmt.Sprintf("join contains %s", on.Operator()))
-			}
+		if opt.IsJoinOp(e) {
+			f.checkFilters(*e.Child(2).(*memo.FiltersExpr))
 		}
 	}
 
-	f.checkExprOrdering(ev)
+	f.checkExprOrdering(e)
 }
 
 // checkExprOrdering runs checks on orderings stored inside operators.
-func (f *Factory) checkExprOrdering(ev memo.ExprView) {
+func (f *Factory) checkExprOrdering(e opt.Expr) {
 	// Verify that orderings stored in operators only refer to columns produced by
 	// their input.
-	var ordering *props.OrderingChoice
-	switch ev.Operator() {
-	case opt.LimitOp, opt.OffsetOp:
-		ordering = ev.Private().(*props.OrderingChoice)
-	case opt.RowNumberOp:
-		ordering = &ev.Private().(*memo.RowNumberDef).Ordering
-	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp:
-		ordering = &ev.Private().(*memo.GroupByDef).Ordering
+	var ordering props.OrderingChoice
+	switch t := e.Private().(type) {
+	case *props.OrderingChoice:
+		ordering = *t
+	case *memo.RowNumberPrivate:
+		ordering = t.Ordering
+	case memo.GroupingPrivate:
+		ordering = t.Ordering
 	default:
 		return
 	}
-	if outCols := ev.Child(0).Logical().Relational.OutputCols; !ordering.SubsetOfCols(outCols) {
-		panic(fmt.Sprintf("invalid ordering %v (op: %s, outcols: %v)", ordering, ev.Operator(), outCols))
+	if outCols := e.(memo.RelExpr).Relational().OutputCols; !ordering.SubsetOfCols(outCols) {
+		panic(fmt.Sprintf("invalid ordering %v (op: %s, outcols: %v)", ordering, e.Op(), outCols))
+	}
+}
+
+func (f *Factory) checkFilters(filters memo.FiltersExpr) {
+	for _, item := range filters {
+		if opt.IsListItemOp(item.Condition) {
+			panic("filters list item cannot contain another list item")
+		}
 	}
 }

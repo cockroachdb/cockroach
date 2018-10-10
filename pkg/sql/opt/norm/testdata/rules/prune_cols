@@ -848,42 +848,35 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── inner-join-apply
-      ├── columns: k:1(int!null) i:2(int) r:7(int!null)
+      ├── columns: k:1(int!null) i:2(int) r:7(int)
       ├── key: (1)
-      ├── fd: (1)-->(2,7)
+      ├── fd: ()-->(7), (1)-->(2)
       ├── scan a
       │    ├── columns: k:1(int!null) i:2(int)
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
-      ├── select
-      │    ├── columns: r:7(int!null)
+      ├── max1-row
+      │    ├── columns: r:7(int)
       │    ├── outer: (1)
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(7)
-      │    ├── max1-row
-      │    │    ├── columns: r:7(int)
-      │    │    ├── outer: (1)
-      │    │    ├── cardinality: [0 - 1]
-      │    │    ├── key: ()
-      │    │    ├── fd: ()-->(7)
-      │    │    └── project
-      │    │         ├── columns: r:7(int)
-      │    │         ├── outer: (1)
-      │    │         ├── fd: ()-->(7)
-      │    │         ├── select
-      │    │         │    ├── columns: y:6(int!null)
-      │    │         │    ├── outer: (1)
-      │    │         │    ├── fd: ()-->(6)
-      │    │         │    ├── scan xy
-      │    │         │    │    └── columns: y:6(int)
-      │    │         │    └── filters
-      │    │         │         └── y = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      │    │         └── projections
-      │    │              └── k + 1 [type=int, outer=(1)]
-      │    └── filters
-      │         └── r = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+      │    └── project
+      │         ├── columns: r:7(int)
+      │         ├── outer: (1)
+      │         ├── fd: ()-->(7)
+      │         ├── select
+      │         │    ├── columns: y:6(int!null)
+      │         │    ├── outer: (1)
+      │         │    ├── fd: ()-->(6)
+      │         │    ├── scan xy
+      │         │    │    └── columns: y:6(int)
+      │         │    └── filters
+      │         │         └── y = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      │         └── projections
+      │              └── k + 1 [type=int, outer=(1)]
       └── filters
+           └── r = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
 
 # SemiJoin operator.
 opt expect=PruneJoinLeftCols

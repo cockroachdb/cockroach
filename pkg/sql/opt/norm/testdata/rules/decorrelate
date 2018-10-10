@@ -141,33 +141,26 @@ semi-join-apply
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── select
+ ├── limit
  │    ├── columns: x:6(int!null) y:7(int!null)
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(6,7)
- │    ├── limit
+ │    ├── select
  │    │    ├── columns: x:6(int!null) y:7(int!null)
  │    │    ├── outer: (1)
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(6,7)
- │    │    ├── select
- │    │    │    ├── columns: x:6(int!null) y:7(int!null)
- │    │    │    ├── outer: (1)
+ │    │    ├── key: (6)
+ │    │    ├── fd: ()-->(7)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    │    ├── key: (6)
- │    │    │    ├── fd: ()-->(7)
- │    │    │    ├── scan xy
- │    │    │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    │    │    ├── key: (6)
- │    │    │    │    └── fd: (6)-->(7)
- │    │    │    └── filters
- │    │    │         └── y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
- │    │    └── const: 1 [type=int]
- │    └── filters
- │         └── y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
+ │    │    │    └── fd: (6)-->(7)
+ │    │    └── filters
+ │    │         └── y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+ │    └── const: 1 [type=int]
  └── filters
+      └── y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
 
 # Same as previous, but using anti-join.
 opt expect=TryDecorrelateSelect
@@ -181,33 +174,26 @@ anti-join-apply
  │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- ├── select
+ ├── limit
  │    ├── columns: x:6(int!null) y:7(int!null)
  │    ├── outer: (1)
  │    ├── cardinality: [0 - 1]
  │    ├── key: ()
  │    ├── fd: ()-->(6,7)
- │    ├── limit
+ │    ├── select
  │    │    ├── columns: x:6(int!null) y:7(int!null)
  │    │    ├── outer: (1)
- │    │    ├── cardinality: [0 - 1]
- │    │    ├── key: ()
- │    │    ├── fd: ()-->(6,7)
- │    │    ├── select
- │    │    │    ├── columns: x:6(int!null) y:7(int!null)
- │    │    │    ├── outer: (1)
+ │    │    ├── key: (6)
+ │    │    ├── fd: ()-->(7)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    │    ├── key: (6)
- │    │    │    ├── fd: ()-->(7)
- │    │    │    ├── scan xy
- │    │    │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    │    │    ├── key: (6)
- │    │    │    │    └── fd: (6)-->(7)
- │    │    │    └── filters
- │    │    │         └── y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
- │    │    └── const: 1 [type=int]
- │    └── filters
- │         └── y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
+ │    │    │    └── fd: (6)-->(7)
+ │    │    └── filters
+ │    │         └── y = k [type=bool, outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
+ │    └── const: 1 [type=int]
  └── filters
+      └── y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
 
 # Decorrelate Select with reference to outer column and no limit.
 opt expect=TryDecorrelateSelect
@@ -370,13 +356,13 @@ project
  ├── key: ()
  ├── fd: ()-->(1-5)
  └── inner-join (lookup a)
-      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+      ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int!null)
       ├── key columns: [6] = [1]
       ├── cardinality: [0 - 1]
       ├── key: ()
       ├── fd: ()-->(1-7)
       ├── select
-      │    ├── columns: x:6(int!null) y:7(int)
+      │    ├── columns: x:6(int!null) y:7(int!null)
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
       │    ├── fd: ()-->(6,7)
@@ -386,7 +372,7 @@ project
       │    │    ├── key: ()
       │    │    └── fd: ()-->(6,7)
       │    └── filters
-      │         └── (y + 1) > 10 [type=bool, outer=(7)]
+      │         └── y > 9 [type=bool, outer=(7), constraints=(/7: [/10 - ]; tight)]
       └── filters
            └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
@@ -797,7 +783,7 @@ WHERE EXISTS
 semi-join (merge)
  ├── columns: k:1(int!null)
  ├── left ordering: +1
- ├── right ordering: +(6|8)
+ ├── right ordering: +6
  ├── key: (1)
  ├── scan a
  │    ├── columns: k:1(int!null)
@@ -836,7 +822,7 @@ WHERE NOT EXISTS
 anti-join (merge)
  ├── columns: k:1(int!null)
  ├── left ordering: +1
- ├── right ordering: +(6|8)
+ ├── right ordering: +6
  ├── key: (1)
  ├── scan a
  │    ├── columns: k:1(int!null)
@@ -890,7 +876,7 @@ project
       │    ├── left-join (merge)
       │    │    ├── columns: k:1(int!null) x:6(int) u:8(int)
       │    │    ├── left ordering: +1
-      │    │    ├── right ordering: +(6|8)
+      │    │    ├── right ordering: +6
       │    │    ├── key: (1,8)
       │    │    ├── fd: (6)==(8), (8)==(6)
       │    │    ├── scan a
@@ -1807,40 +1793,34 @@ project
       │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
       │    │    │    ├── key: (1)
       │    │    │    └── fd: (1)-->(2-5)
-      │    │    ├── select
+      │    │    ├── group-by
       │    │    │    ├── columns: x:6(int!null) y:7(int) max:10(int)
+      │    │    │    ├── grouping columns: x:6(int!null)
       │    │    │    ├── outer: (1)
       │    │    │    ├── key: (6)
-      │    │    │    ├── fd: ()-->(10), (6)-->(7)
-      │    │    │    ├── group-by
-      │    │    │    │    ├── columns: x:6(int!null) y:7(int) max:10(int)
-      │    │    │    │    ├── grouping columns: x:6(int!null)
+      │    │    │    ├── fd: (6)-->(7,10)
+      │    │    │    ├── left-join
+      │    │    │    │    ├── columns: x:6(int!null) y:7(int) u:8(int) v:9(int)
       │    │    │    │    ├── outer: (1)
-      │    │    │    │    ├── key: (6)
-      │    │    │    │    ├── fd: (6)-->(7,10)
-      │    │    │    │    ├── left-join
-      │    │    │    │    │    ├── columns: x:6(int!null) y:7(int) u:8(int) v:9(int)
-      │    │    │    │    │    ├── outer: (1)
-      │    │    │    │    │    ├── key: (6,8)
-      │    │    │    │    │    ├── fd: (6)-->(7), (8)-->(9)
-      │    │    │    │    │    ├── scan xy
-      │    │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
-      │    │    │    │    │    │    ├── key: (6)
-      │    │    │    │    │    │    └── fd: (6)-->(7)
-      │    │    │    │    │    ├── scan uv
-      │    │    │    │    │    │    ├── columns: u:8(int!null) v:9(int)
-      │    │    │    │    │    │    ├── key: (8)
-      │    │    │    │    │    │    └── fd: (8)-->(9)
-      │    │    │    │    │    └── filters
-      │    │    │    │    │         └── u = k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-      │    │    │    │    └── aggregations
-      │    │    │    │         ├── max [type=int, outer=(9)]
-      │    │    │    │         │    └── variable: v [type=int]
-      │    │    │    │         └── const-agg [type=int, outer=(7)]
-      │    │    │    │              └── variable: y [type=int]
-      │    │    │    └── filters
-      │    │    │         └── max IS NULL [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
+      │    │    │    │    ├── key: (6,8)
+      │    │    │    │    ├── fd: (6)-->(7), (8)-->(9)
+      │    │    │    │    ├── scan xy
+      │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
+      │    │    │    │    │    ├── key: (6)
+      │    │    │    │    │    └── fd: (6)-->(7)
+      │    │    │    │    ├── scan uv
+      │    │    │    │    │    ├── columns: u:8(int!null) v:9(int)
+      │    │    │    │    │    ├── key: (8)
+      │    │    │    │    │    └── fd: (8)-->(9)
+      │    │    │    │    └── filters
+      │    │    │    │         └── u = k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+      │    │    │    └── aggregations
+      │    │    │         ├── max [type=int, outer=(9)]
+      │    │    │         │    └── variable: v [type=int]
+      │    │    │         └── const-agg [type=int, outer=(7)]
+      │    │    │              └── variable: y [type=int]
       │    │    └── filters
+      │    │         └── max IS NULL [type=bool, outer=(10), constraints=(/10: [/NULL - /NULL]; tight), fd=()-->(10)]
       │    └── aggregations
       │         ├── max [type=int, outer=(7)]
       │         │    └── variable: y [type=int]
@@ -2484,7 +2464,7 @@ SELECT * FROM a WHERE s='foo' AND EXISTS(SELECT * FROM xy WHERE x=k) AND i>1
 ----
 semi-join (merge)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
- ├── left ordering: +1 opt(4)
+ ├── left ordering: +1
  ├── right ordering: +6
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3,5)
@@ -2625,7 +2605,7 @@ SELECT * FROM a WHERE s='foo' AND NOT EXISTS(SELECT * FROM xy WHERE x=k) AND i>1
 ----
 anti-join (merge)
  ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null) j:5(jsonb)
- ├── left ordering: +1 opt(4)
+ ├── left ordering: +1
  ├── right ordering: +6
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3,5)
@@ -2799,8 +2779,8 @@ project
       │    ├── fd: ()-->(1-5,7)
       │    ├── left-join (merge)
       │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb) xy.y:7(int)
-      │    │    ├── left ordering: 
-      │    │    ├── right ordering: 
+      │    │    ├── left ordering: +1
+      │    │    ├── right ordering: +7
       │    │    ├── fd: ()-->(1-5), ()~~>(7)
       │    │    ├── select
       │    │    │    ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
@@ -3657,27 +3637,36 @@ project
  │    │    │    │    ├── cardinality: [1 - 1]
  │    │    │    │    ├── key: ()
  │    │    │    │    ├── fd: ()-->(10)
- │    │    │    │    ├── right-join
- │    │    │    │    │    ├── columns: x:6(int) true:9(bool)
+ │    │    │    │    ├── left-join
+ │    │    │    │    │    ├── columns: true:9(bool)
  │    │    │    │    │    ├── outer: (1)
- │    │    │    │    │    ├── cardinality: [1 - ]
- │    │    │    │    │    ├── key: (6)
- │    │    │    │    │    ├── fd: ()~~>(9), (6)-->(9)
- │    │    │    │    │    ├── project
- │    │    │    │    │    │    ├── columns: true:9(bool!null) x:6(int!null)
- │    │    │    │    │    │    ├── key: (6)
- │    │    │    │    │    │    ├── fd: ()-->(9)
- │    │    │    │    │    │    ├── scan xy
- │    │    │    │    │    │    │    ├── columns: x:6(int!null)
- │    │    │    │    │    │    │    └── key: (6)
- │    │    │    │    │    │    └── projections
- │    │    │    │    │    │         └── true [type=bool]
+ │    │    │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    ├── fd: ()-->(9)
  │    │    │    │    │    ├── values
  │    │    │    │    │    │    ├── cardinality: [1 - 1]
  │    │    │    │    │    │    ├── key: ()
  │    │    │    │    │    │    └── tuple [type=tuple]
+ │    │    │    │    │    ├── project
+ │    │    │    │    │    │    ├── columns: true:9(bool!null)
+ │    │    │    │    │    │    ├── outer: (1)
+ │    │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    │    ├── fd: ()-->(9)
+ │    │    │    │    │    │    ├── select
+ │    │    │    │    │    │    │    ├── columns: x:6(int!null)
+ │    │    │    │    │    │    │    ├── outer: (1)
+ │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    │    │    ├── fd: ()-->(6)
+ │    │    │    │    │    │    │    ├── scan xy
+ │    │    │    │    │    │    │    │    ├── columns: x:6(int!null)
+ │    │    │    │    │    │    │    │    └── key: (6)
+ │    │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │    │         └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+ │    │    │    │    │    │    └── projections
+ │    │    │    │    │    │         └── true [type=bool]
  │    │    │    │    │    └── filters
- │    │    │    │    │         └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │    │    │    └── aggregations
  │    │    │    │         └── const-not-null-agg [type=bool, outer=(9)]
  │    │    │    │              └── variable: true [type=bool]
@@ -3726,34 +3715,38 @@ project
  │    │    │    │    ├── cardinality: [1 - 1]
  │    │    │    │    ├── key: ()
  │    │    │    │    ├── fd: ()-->(10)
- │    │    │    │    ├── right-join
- │    │    │    │    │    ├── columns: x:6(int) notnull:9(bool)
+ │    │    │    │    ├── left-join
+ │    │    │    │    │    ├── columns: notnull:9(bool)
  │    │    │    │    │    ├── outer: (1)
- │    │    │    │    │    ├── cardinality: [1 - ]
- │    │    │    │    │    ├── key: (6)
- │    │    │    │    │    ├── fd: (6)-->(9)
+ │    │    │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    ├── fd: ()-->(9)
+ │    │    │    │    │    ├── values
+ │    │    │    │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    │    └── tuple [type=tuple]
  │    │    │    │    │    ├── project
- │    │    │    │    │    │    ├── columns: notnull:9(bool) x:6(int!null)
- │    │    │    │    │    │    ├── key: (6)
- │    │    │    │    │    │    ├── fd: (6)-->(9)
+ │    │    │    │    │    │    ├── columns: notnull:9(bool)
+ │    │    │    │    │    │    ├── outer: (1)
+ │    │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    │    ├── fd: ()-->(9)
  │    │    │    │    │    │    ├── select
  │    │    │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
- │    │    │    │    │    │    │    ├── key: (6)
- │    │    │    │    │    │    │    ├── fd: (6)-->(7)
+ │    │    │    │    │    │    │    ├── outer: (1)
+ │    │    │    │    │    │    │    ├── cardinality: [0 - 1]
+ │    │    │    │    │    │    │    ├── key: ()
+ │    │    │    │    │    │    │    ├── fd: ()-->(6,7)
  │    │    │    │    │    │    │    ├── scan xy
  │    │    │    │    │    │    │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    │    │    │    │    │    │    ├── key: (6)
  │    │    │    │    │    │    │    │    └── fd: (6)-->(7)
  │    │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │    │         ├── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │    │    │    │    │    │         └── (y = 5) IS NOT false [type=bool, outer=(7)]
  │    │    │    │    │    │    └── projections
  │    │    │    │    │    │         └── y IS NOT NULL [type=bool, outer=(7)]
- │    │    │    │    │    ├── values
- │    │    │    │    │    │    ├── cardinality: [1 - 1]
- │    │    │    │    │    │    ├── key: ()
- │    │    │    │    │    │    └── tuple [type=tuple]
  │    │    │    │    │    └── filters
- │    │    │    │    │         └── x = k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
  │    │    │    │    └── aggregations
  │    │    │    │         └── bool-or [type=bool, outer=(9)]
  │    │    │    │              └── variable: notnull [type=bool]
@@ -3961,9 +3954,9 @@ project
       └── ((x, n) AS x, n) [type=tuple{int AS x, int AS n}, outer=(11,12)]
 
 # --------------------------------------------------
-# NormalizeAnyFilter
+# NormalizeSelectAnyFilter + NormalizeJoinAnyFilter
 # --------------------------------------------------
-opt expect=NormalizeAnyFilter
+opt expect=NormalizeSelectAnyFilter
 SELECT * FROM a WHERE i IN (SELECT y FROM xy)
 ----
 semi-join
@@ -3980,7 +3973,7 @@ semi-join
       └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
 # Any is one of several conjuncts.
-opt expect=NormalizeAnyFilter
+opt expect=NormalizeSelectAnyFilter
 SELECT * FROM a WHERE k=10 AND i < ANY(SELECT y FROM xy) AND s='foo'
 ----
 semi-join
@@ -4007,7 +4000,7 @@ semi-join
       └── i < y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Multiple ANY conjuncts.
-opt expect=NormalizeAnyFilter
+opt expect=NormalizeSelectAnyFilter
 SELECT * FROM a WHERE i < ANY(SELECT y FROM xy) AND s = ANY(SELECT y::string FROM xy)
 ----
 semi-join
@@ -4036,7 +4029,7 @@ semi-join
       └── i < xy.y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
 
 # Don't hoist uncorrelated ANY (but rewrite it to EXISTS).
-opt expect=NormalizeAnyFilter
+opt expect=NormalizeSelectAnyFilter
 SELECT * FROM a WHERE 5 IN (SELECT y FROM xy)
 ----
 select
@@ -4058,7 +4051,7 @@ select
                      └── y = 5 [type=bool, outer=(7), constraints=(/7: [/5 - /5]; tight), fd=()-->(7)]
 
 # ANY in Join On condition.
-opt expect=NormalizeAnyFilter
+opt expect=NormalizeJoinAnyFilter
 SELECT * FROM a INNER JOIN xy ON i IN (SELECT v FROM uv) AND k=x
 ----
 inner-join
@@ -4085,9 +4078,9 @@ inner-join
       └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # --------------------------------------------------
-# NormalizeNotAnyFilter
+# NormalizeSelectNotAnyFilter + NormalizeJoinNotAnyFilter
 # --------------------------------------------------
-opt expect=NormalizeNotAnyFilter
+opt expect=NormalizeSelectNotAnyFilter
 SELECT * FROM a WHERE i NOT IN (SELECT y FROM xy)
 ----
 anti-join
@@ -4105,7 +4098,7 @@ anti-join
 
 # NOT ANY is one of several conjuncts. Note that i > ALL(...) gets mapped to
 # NOT i <= ANY(...) by optbuilder.
-opt expect=NormalizeNotAnyFilter
+opt expect=NormalizeSelectNotAnyFilter
 SELECT * FROM a WHERE k > 1 AND k < 5 AND i > ALL(SELECT y FROM xy)
 ----
 anti-join
@@ -4123,7 +4116,7 @@ anti-join
       └── (i <= y) IS NOT false [type=bool, outer=(2,7)]
 
 # Multiple NOT ANY conjuncts.
-opt expect=NormalizeNotAnyFilter
+opt expect=NormalizeSelectNotAnyFilter
 SELECT * FROM a WHERE i < ALL(SELECT y FROM xy) AND s <> ALL(SELECT y::string FROM xy)
 ----
 anti-join
@@ -4152,7 +4145,7 @@ anti-join
       └── (i >= xy.y) IS NOT false [type=bool, outer=(2,7)]
 
 # Don't hoist uncorrelated NOT ANY (but rewrite it to NOT EXISTS).
-opt expect=NormalizeNotAnyFilter
+opt expect=NormalizeSelectNotAnyFilter
 SELECT * FROM a WHERE 5 NOT IN (SELECT y FROM xy)
 ----
 select
@@ -4174,7 +4167,7 @@ select
                           └── (y = 5) IS NOT false [type=bool, outer=(7)]
 
 # NOT ANY in Join On condition.
-opt expect=NormalizeNotAnyFilter
+opt expect=NormalizeJoinNotAnyFilter
 SELECT * FROM a INNER JOIN xy ON i NOT IN (SELECT v FROM uv) AND k=x
 ----
 inner-join
@@ -4201,9 +4194,9 @@ inner-join
       └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 # --------------------------------------------------
-# NormalizeAnyFilter + NormalizeNotAnyFilter
+# NormalizeSelectAnyFilter + NormalizeSelectNotAnyFilter
 # --------------------------------------------------
-opt expect=(NormalizeAnyFilter,NormalizeNotAnyFilter)
+opt expect=(NormalizeSelectAnyFilter,NormalizeSelectNotAnyFilter)
 SELECT * FROM a WHERE i = ANY(SELECT y FROM xy) AND s <> ALL(SELECT y::string FROM xy)
 ----
 semi-join

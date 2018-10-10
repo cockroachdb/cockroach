@@ -53,7 +53,7 @@ project
  │    │    ├── columns: k:1(int!null)
  │    │    └── key: (1)
  │    └── filters
- │         └── ((k * 2) + 1) > 10 [type=bool, outer=(1)]
+ │         └── (k * 2) > 9 [type=bool, outer=(1)]
  └── projections
       └── (k * 2) + 1 [type=int, outer=(1)]
 
