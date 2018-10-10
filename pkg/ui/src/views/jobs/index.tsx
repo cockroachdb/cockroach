@@ -121,7 +121,13 @@ class JobStatusCell extends React.Component<{ job: Job }, {}> {
     return (
       <div>
         {this.props.job.running_status ? <div>{this.props.job.running_status}</div> : null}
-        <Line percent={percent} strokeWidth={10} trailWidth={10} className="jobs-table__progress-bar" />
+        <Line
+          percent={percent}
+          strokeWidth={10}
+          trailWidth={10}
+          className="jobs-table__progress-bar"
+          strokeColor={"#3A7DE1"}
+        />
         <span title={percent.toFixed(3) + "%"}>{percent.toFixed(1) + "%"}</span>
       </div>
     );
