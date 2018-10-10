@@ -16,13 +16,22 @@ import _ from "lodash";
 import React from "react";
 import { Helmet } from "react-helmet";
 
+import { customChartPage } from "src/util/docs";
 import LicenseType from "src/views/shared/components/licenseType";
 
-function DebugTableLink(props: { name: string, url: string, note?: string }) {
+interface DebugTableLinkProps {
+  name: string;
+  url: string;
+  note?: string;
+  desc?: React.ReactNode;
+}
+
+function DebugTableLink(props: DebugTableLinkProps) {
   return (
     <tr className="debug-inner-table__row">
       <td className="debug-inner-table__cell">
         <a className="debug-link" href={props.url}>{props.name}</a>
+        {props.desc ? <p>{props.desc}</p> : null}
       </td>
       <td className="debug-inner-table__cell--notes">
         {_.isNil(props.note) ? props.url : props.note}
@@ -59,6 +68,8 @@ function DebugTable(props: { heading: string, children?: React.ReactNode }) {
   );
 }
 
+const COMMUNITY_LINK = "https://www.cockroachlabs.com/community/";
+
 export default function Debug() {
   return (
     <div className="section">
@@ -66,11 +77,25 @@ export default function Debug() {
         <title>Debug</title>
       </Helmet>
       <h1>Advanced Debugging</h1>
+      <div style={{ marginTop: 15 }}>
+        <p>
+          The following pages are meant for advanced monitoring and troubleshooting.
+          Note that these are experimental and subject to change.
+          If you find an issue, please let us know through
+          {" "}
+          <a className="debug-link" href={COMMUNITY_LINK} target="_blank">these channels</a>.
+        </p>
+      </div>
       <DebugTable heading="Reports">
         <DebugTableRow title="Custom Time-Series Chart">
           <DebugTableLink
             name="Customizable chart of time series metrics"
             url="#/debug/chart"
+            desc={
+              <React.Fragment>
+                Create a <a href={customChartPage}>custom chart</a> of time series data.
+              </React.Fragment>
+            }
           />
         </DebugTableRow>
         <DebugTableRow title="Node Diagnostics">
@@ -95,14 +120,23 @@ export default function Debug() {
           />
         </DebugTableRow>
         <DebugTableRow title="Localities & Distribution">
-          <DebugTableLink name="Locality Tree" url="#/reports/localities" />
+          <DebugTableLink
+            name="Locality Tree"
+            url="#/reports/localities"
+            desc="Check node localities for your cluster."
+          />
           <DebugTableLink
             name="Data distribution matrix & zone configs"
             url="#/data-distribution"
+            desc="View data distribution of tables across nodes and verify zone configurations."
           />
         </DebugTableRow>
         <DebugTableRow title="Network">
-          <DebugTableLink name="Latency (on all nodes)" url="#/reports/network" />
+          <DebugTableLink
+            name="Latency (on all nodes)"
+            url="#/reports/network"
+            desc="Check latencies between all nodes in your cluster."
+          />
           <DebugTableLink
             name="Latency filtered by node IDs"
             url="#/reports/network?node_ids=1,2"
@@ -115,7 +149,11 @@ export default function Debug() {
           />
         </DebugTableRow>
         <DebugTableRow title="Settings">
-          <DebugTableLink name="Cluster Settings" url="#/reports/settings" />
+          <DebugTableLink
+            name="Cluster Settings"
+            url="#/reports/settings"
+            desc="View all cluster settings."
+          />
         </DebugTableRow>
         <DebugTableRow title="Security">
           <DebugTableLink name="Certificates on this node" url="#/reports/certificates/local" />
@@ -126,7 +164,11 @@ export default function Debug() {
           />
         </DebugTableRow>
         <DebugTableRow title="Problem Ranges">
-          <DebugTableLink name="All Problem Ranges" url="#/reports/problemranges" />
+          <DebugTableLink
+            name="All Problem Ranges"
+            url="#/reports/problemranges"
+            desc="View unavailable, underreplicated, and slow ranges in your cluster."
+          />
           <DebugTableLink
             name="Problem Ranges on a specific node"
             url="#/reports/problemranges/local"
