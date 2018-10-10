@@ -636,8 +636,10 @@ func (l *leaseTransferTest) forceLeaseExtension(storeIdx int, lease roachpb.Leas
 		// attempt fails because it's already been renewed. This used to work
 		// before we compared the proposer's lease with the actual lease because
 		// the renewed lease still encompassed the previous request.
-		if _, ok := err.(*roachpb.NotLeaseHolderError); ok {
-			err = nil
+		if typedErr, ok := err.(*roachpb.NotLeaseHolderError); ok {
+			if typedErr.Replica == *typedErr.LeaseHolder {
+				err = nil
+			}
 		}
 	}
 	return err
