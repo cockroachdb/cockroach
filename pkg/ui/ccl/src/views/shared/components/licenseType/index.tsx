@@ -15,7 +15,9 @@ class CCLLicenseType extends React.Component<{}, {}> {
   render() {
     return (
       <div>
-        <h3>License type: CCL</h3>
+        <span className="license-type__label">License type:</span>
+        {" "}
+        <span className="license-type__license">CCL</span>
       </div>
     );
   }

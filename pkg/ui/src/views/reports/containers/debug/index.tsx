@@ -86,14 +86,20 @@ export default function Debug() {
         <title>Debug</title>
       </Helmet>
       <h1>Advanced Debugging</h1>
-      <InfoBox>
-        <p>
-          The following pages are meant for advanced monitoring and troubleshooting.
-          Note that these pages are experimental and undocumented. If you find an issue,
-          let us know through{" "}
-          <a href={ COMMUNITY_URL }>these channels.</a>
-        </p>
-      </InfoBox>
+      <div className="debug-header">
+        <InfoBox>
+          <p>
+            The following pages are meant for advanced monitoring and troubleshooting.
+            Note that these pages are experimental and undocumented. If you find an issue,
+            let us know through{" "}
+            <a href={ COMMUNITY_URL }>these channels.</a>
+          </p>
+        </InfoBox>
+
+        <div className="debug-header__license-type">
+          <LicenseType />
+        </div>
+      </div>
       <PanelSection>
         <PanelTitle>Reports</PanelTitle>
         <DebugPanelLink
@@ -331,7 +337,6 @@ export default function Debug() {
           />
         </DebugTableRow>
       </DebugTable>
-      <LicenseType />
     </div>
   );
 }
