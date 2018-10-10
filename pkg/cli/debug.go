@@ -99,9 +99,21 @@ func parseRangeID(arg string) (roachpb.RangeID, error) {
 	return roachpb.RangeID(rangeIDInt), nil
 }
 
+// OpenEngineOptions tunes the behavior of OpenEngine.
+type OpenEngineOptions struct {
+	ReadOnly  bool
+	MustExist bool
+}
+
 // OpenExistingStore opens the rocksdb engine rooted at 'dir'.
 // If 'readOnly' is true, opens the store in read-only mode.
 func OpenExistingStore(dir string, stopper *stop.Stopper, readOnly bool) (*engine.RocksDB, error) {
+	return OpenEngine(dir, stopper, OpenEngineOptions{ReadOnly: readOnly, MustExist: true})
+}
+
+// OpenEngine opens the RocksDB engine at 'dir'. Depending on the supplied options,
+// an empty engine might be initialized.
+func OpenEngine(dir string, stopper *stop.Stopper, opts OpenEngineOptions) (*engine.RocksDB, error) {
 	cache := engine.NewRocksDBCache(server.DefaultCacheSize)
 	defer cache.Release()
 	maxOpenFiles, err := server.SetOpenFileLimitForOneStore()
@@ -113,8 +125,8 @@ func OpenExistingStore(dir string, stopper *stop.Stopper, readOnly bool) (*engin
 		Settings:     serverCfg.Settings,
 		Dir:          dir,
 		MaxOpenFiles: maxOpenFiles,
-		MustExist:    true,
-		ReadOnly:     readOnly,
+		MustExist:    opts.MustExist,
+		ReadOnly:     opts.ReadOnly,
 	}
 
 	if PopulateRocksDBConfigHook != nil {
