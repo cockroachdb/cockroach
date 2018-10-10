@@ -31,12 +31,12 @@ func init() {
 // fmtInterceptor is a function suitable for memo.ExprFmtInterceptor. It detects
 // if an expression tree contains only scalar expressions; if so, it tries to
 // execbuild them and print the SQL expressions.
-func fmtInterceptor(f *memo.ExprFmtCtx, tp treeprinter.Node, ev memo.ExprView) bool {
+func fmtInterceptor(f *memo.ExprFmtCtx, tp treeprinter.Node, ev memo.ExprView, showAllProps bool) bool {
 	if !f.HasFlags(memo.ExprFmtHideScalars) || !onlyScalars(ev) {
 		return false
 	}
 
-	if ev.ChildCount() == 0 {
+	if ev.ChildCount() == 0 && ev.Operator() != opt.FunctionOp {
 		// Don't use this code on leaves.
 		return false
 	}
@@ -63,7 +63,7 @@ func fmtInterceptor(f *memo.ExprFmtCtx, tp treeprinter.Node, ev memo.ExprView) b
 		ctx.WriteString(label)
 	})
 	expr.Format(&fmtCtx)
-	ev.FormatScalarProps(f)
+	ev.FormatScalarProps(f, showAllProps)
 	tp.Child(f.Buffer.String())
 	return true
 }

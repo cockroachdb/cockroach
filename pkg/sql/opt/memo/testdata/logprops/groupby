@@ -51,10 +51,10 @@ project
  │    │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    │         ├── prune: (1-4)
  │    │         └── interesting orderings: (+1) (-4,+3,+1)
- │    └── aggregations [outer=(3)]
+ │    └── aggregations
  │         └── sum [type=float, outer=(3)]
- │              └── variable: z [type=float, outer=(3)]
- └── projections [outer=(1,2,5)]
+ │              └── variable: z [type=float]
+ └── projections
       └── false [type=bool]
 
 # Scalar groupby.
@@ -79,11 +79,11 @@ scalar-group-by
  │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │         ├── prune: (1-4)
  │         └── interesting orderings: (+1) (-4,+3,+1)
- └── aggregations [outer=(1,2)]
+ └── aggregations
       ├── sum [type=decimal, outer=(1)]
-      │    └── variable: x [type=int, outer=(1)]
+      │    └── variable: x [type=int]
       └── max [type=int, outer=(2)]
-           └── variable: y [type=int, outer=(2)]
+           └── variable: y [type=int]
 
 # Group by unique index columns.
 build
@@ -131,9 +131,9 @@ project
       │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
       │         ├── prune: (1-4)
       │         └── interesting orderings: (+1) (-4,+3,+1)
-      └── aggregations [outer=(3)]
+      └── aggregations
            └── sum [type=float, outer=(3)]
-                └── variable: z [type=float, outer=(3)]
+                └── variable: z [type=float]
 
 # Group by column that is subset of unique index.
 build
@@ -155,9 +155,9 @@ group-by
  │         ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │         ├── prune: (1-4)
  │         └── interesting orderings: (+1) (-4,+3,+1)
- └── aggregations [outer=(4)]
+ └── aggregations
       └── max [type=string, outer=(4)]
-           └── variable: s [type=string, outer=(4)]
+           └── variable: s [type=string]
 
 # Group by all columns.
 build
@@ -202,12 +202,12 @@ project
  │    │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    │    │    ├── prune: (1-4)
  │    │    │    └── interesting orderings: (+1) (-4,+3,+1)
- │    │    └── projections [outer=(1,2)]
+ │    │    └── projections
  │    │         └── variable: xyzs.x [type=int, outer=(1)]
- │    └── aggregations [outer=(9)]
+ │    └── aggregations
  │         └── sum [type=decimal, outer=(9)]
- │              └── variable: x [type=int, outer=(9)]
- └── projections [outer=(2,10)]
+ │              └── variable: x [type=int]
+ └── projections
       └── subquery [type=decimal, outer=(2,10)]
            └── max1-row
                 ├── columns: sum:11(decimal)
@@ -240,9 +240,9 @@ project
                      │              │    ├── fd: (5)-->(6,7)
                      │              │    ├── prune: (5-7)
                      │              │    └── interesting orderings: (+5)
-                     │              └── projections [outer=(2,6)]
+                     │              └── projections
                      │                   └── variable: xyzs.y [type=int, outer=(2)]
-                     └── projections [outer=(10)]
+                     └── projections
                           └── variable: sum [type=decimal, outer=(10)]
 
 # Calculate groupby cardinality.
@@ -285,8 +285,8 @@ group-by
  │    ├── fd: ()-->(1,3)
  │    ├── prune: (3)
  │    └── interesting orderings: (+1)
- └── aggregations [outer=(1,3)]
+ └── aggregations
       ├── count [type=int, outer=(3)]
-      │    └── variable: z [type=float, outer=(3)]
+      │    └── variable: z [type=float]
       └── const-agg [type=int, outer=(1)]
-           └── variable: x [type=int, outer=(1)]
+           └── variable: x [type=int]

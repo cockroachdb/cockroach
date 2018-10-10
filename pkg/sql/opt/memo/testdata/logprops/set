@@ -67,9 +67,9 @@ intersect
       │    ├── fd: (5)-->(3,4)
       │    ├── prune: (3-5)
       │    └── interesting orderings: (+5)
-      └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
-           └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
-                ├── variable: u [type=int, outer=(3)]
+      └── filters
+           └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+                ├── variable: u [type=int]
                 └── const: 1 [type=int]
 
 build
@@ -102,9 +102,9 @@ except
            │    ├── fd: (5)-->(3,4)
            │    ├── prune: (3-5)
            │    └── interesting orderings: (+5)
-           └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
-                └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
-                     ├── variable: u [type=int, outer=(3)]
+           └── filters
+                └── eq [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
+                     ├── variable: u [type=int]
                      └── const: 1 [type=int]
 
 # Propagate outer columns.
@@ -122,9 +122,9 @@ select
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1)
- └── filters [type=bool, outer=(1,2)]
+ └── filters
       └── eq [type=bool, outer=(1,2)]
-           ├── subquery [type=tuple{int, int}, outer=(1,2)]
+           ├── subquery [type=tuple{int, int}]
            │    └── max1-row
            │         ├── columns: column13:13(tuple{int, int})
            │         ├── outer: (1,2)
@@ -152,7 +152,7 @@ select
            │              │    │    │    ├── fd: (5)-->(3,4)
            │              │    │    │    ├── prune: (3-5)
            │              │    │    │    └── interesting orderings: (+5)
-           │              │    │    └── projections [outer=(1,3)]
+           │              │    │    └── projections
            │              │    │         └── variable: xy.x [type=int, outer=(1)]
            │              │    └── project
            │              │         ├── columns: y:10(int) uv.v:8(int!null)
@@ -165,12 +165,12 @@ select
            │              │         │    ├── fd: (9)-->(7,8)
            │              │         │    ├── prune: (7-9)
            │              │         │    └── interesting orderings: (+9)
-           │              │         └── projections [outer=(2,8)]
+           │              │         └── projections
            │              │              └── variable: xy.y [type=int, outer=(2)]
-           │              └── projections [outer=(11,12)]
+           │              └── projections
            │                   └── tuple [type=tuple{int, int}, outer=(11,12)]
-           │                        ├── variable: x [type=int, outer=(11)]
-           │                        └── variable: u [type=int, outer=(12)]
+           │                        ├── variable: x [type=int]
+           │                        └── variable: u [type=int]
            └── tuple [type=tuple{int, int}]
                 ├── const: 1 [type=int]
                 └── const: 2 [type=int]

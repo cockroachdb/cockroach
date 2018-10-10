@@ -73,7 +73,7 @@ project
       │    │         ├── stats: [rows=200, distinct(3)=1]
       │    │         ├── key: (1)
       │    │         └── fd: ()-->(3)
-      │    └── filters [type=bool, outer=(1,2)]
+      │    └── filters
       │         └── (x + y) = 10 [type=bool, outer=(1,2)]
       └── aggregations
            └── count-rows [type=int]
@@ -97,7 +97,7 @@ select
  │         ├── stats: [rows=200, distinct(1)=200, distinct(3)=1, distinct(4)=130.264312, distinct(1,3)=200]
  │         ├── key: (1)
  │         └── fd: ()-->(3), (1)-->(4), (4)-->(1)
- └── filters [type=bool, outer=(1,2)]
+ └── filters
       └── (x + y) = 10 [type=bool, outer=(1,2)]
 
 opt colstat=1 colstat=2 colstat=3 colstat=(1,2,3)
@@ -148,5 +148,5 @@ select
  │    ├── stats: [rows=2000]
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
- └── filters [type=bool, outer=(3)]
+ └── filters
       └── (s = 'foo') OR (s = 'bar') [type=bool, outer=(3)]
