@@ -1421,3 +1421,49 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 	// Only the enterprise version uses jobs.
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
+
+func TestManyChangefeedsOneTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'v0')`)
+
+		foo1 := f.Feed(t, `CREATE CHANGEFEED FOR foo`)
+		defer foo1.Close(t)
+		foo2 := f.Feed(t, `CREATE CHANGEFEED FOR foo`)
+		defer foo2.Close(t)
+		foo3 := f.Feed(t, `CREATE CHANGEFEED FOR foo`)
+		defer foo3.Close(t)
+
+		assertPayloads(t, foo1, []string{
+			`foo: [0]->{"a": 0, "b": "v0"}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'v1')`)
+		assertPayloads(t, foo1, []string{
+			`foo: [1]->{"a": 1, "b": "v1"}`,
+		})
+		assertPayloads(t, foo2, []string{
+			`foo: [0]->{"a": 0, "b": "v0"}`,
+			`foo: [1]->{"a": 1, "b": "v1"}`,
+		})
+
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'v2')`)
+		assertPayloads(t, foo1, []string{
+			`foo: [0]->{"a": 0, "b": "v2"}`,
+		})
+		assertPayloads(t, foo2, []string{
+			`foo: [0]->{"a": 0, "b": "v2"}`,
+		})
+		assertPayloads(t, foo3, []string{
+			`foo: [0]->{"a": 0, "b": "v0"}`,
+			`foo: [0]->{"a": 0, "b": "v2"}`,
+			`foo: [1]->{"a": 1, "b": "v1"}`,
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
