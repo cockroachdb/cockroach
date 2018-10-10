@@ -25,23 +25,25 @@ import (
 // CanReduceGroupingCols is true if the given GroupBy operator has one or more
 // redundant grouping columns. A grouping column is redundant if it is
 // functionally determined by the other grouping columns.
-func (c *CustomFuncs) CanReduceGroupingCols(input memo.GroupID, def memo.PrivateID) bool {
-	groupingCols := c.f.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols
-	fdset := c.LookupLogical(input).Relational.FuncDeps
-	return !fdset.ReduceCols(groupingCols).Equals(groupingCols)
+func (c *CustomFuncs) CanReduceGroupingCols(
+	input memo.RelExpr, private *memo.GroupingPrivate,
+) bool {
+	fdset := input.Relational().FuncDeps
+	return !fdset.ReduceCols(private.GroupingCols).Equals(private.GroupingCols)
 }
 
 // ReduceGroupingCols constructs a new GroupByDef private, based on an existing
 // definition. The new GroupByDef will not retain any grouping column that is
 // functionally determined by other grouping columns. CanReduceGroupingCols
 // should be called before calling this method, to ensure it has work to do.
-func (c *CustomFuncs) ReduceGroupingCols(input memo.GroupID, def memo.PrivateID) memo.PrivateID {
-	groupByDef := c.f.mem.LookupPrivate(def).(*memo.GroupByDef)
-	fdset := c.LookupLogical(input).Relational.FuncDeps
-	return c.f.mem.InternGroupByDef(&memo.GroupByDef{
-		GroupingCols: fdset.ReduceCols(groupByDef.GroupingCols),
-		Ordering:     groupByDef.Ordering,
-	})
+func (c *CustomFuncs) ReduceGroupingCols(
+	input memo.RelExpr, private *memo.GroupingPrivate,
+) *memo.GroupingPrivate {
+	fdset := input.Relational().FuncDeps
+	return &memo.GroupingPrivate{
+		GroupingCols: fdset.ReduceCols(private.GroupingCols),
+		Ordering:     private.Ordering,
+	}
 }
 
 // AppendReducedGroupingCols will take columns discarded by ReduceGroupingCols
@@ -50,11 +52,10 @@ func (c *CustomFuncs) ReduceGroupingCols(input memo.GroupID, def memo.PrivateID)
 // Aggregations operator containing the combined set of existing aggregate
 // functions and the new ConstAgg aggregate functions.
 func (c *CustomFuncs) AppendReducedGroupingCols(
-	input, aggs memo.GroupID, def memo.PrivateID,
-) memo.GroupID {
-	groupingCols := c.f.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols
-	fdset := c.LookupLogical(input).Relational.FuncDeps
-	appendCols := groupingCols.Difference(fdset.ReduceCols(groupingCols))
+	input memo.RelExpr, aggs memo.AggregationsExpr, private *memo.GroupingPrivate,
+) memo.AggregationsExpr {
+	fdset := input.Relational().FuncDeps
+	appendCols := private.GroupingCols.Difference(fdset.ReduceCols(private.GroupingCols))
 	return c.AppendAggCols(aggs, opt.ConstAggOp, appendCols)
 }
 
@@ -63,20 +64,12 @@ func (c *CustomFuncs) AppendReducedGroupingCols(
 // aggregate functions, one for each column in the given set. The new functions
 // are of the given aggregate operator type.
 func (c *CustomFuncs) AppendAggCols(
-	aggs memo.GroupID, aggOp opt.Operator, cols opt.ColSet,
-) memo.GroupID {
-	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
-	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
-	aggsColList := c.ExtractColList(aggsExpr.Cols())
-
-	outElems := make([]memo.GroupID, len(aggsElems)+cols.Len())
-	copy(outElems, aggsElems)
-	outColList := make(opt.ColList, len(outElems))
-	copy(outColList, aggsColList)
-
-	c.makeAggCols(aggOp, cols, outElems[len(aggsElems):], outColList[len(aggsElems):])
-
-	return c.f.ConstructAggregations(c.f.InternList(outElems), c.f.InternColList(outColList))
+	aggs memo.AggregationsExpr, aggOp opt.Operator, cols opt.ColSet,
+) memo.AggregationsExpr {
+	outAggs := make(memo.AggregationsExpr, len(aggs)+cols.Len())
+	copy(outAggs, aggs)
+	c.makeAggCols(aggOp, cols, outAggs[len(aggs):])
+	return outAggs
 }
 
 // AppendAggCols2 constructs a new Aggregations operator containing the
@@ -84,24 +77,22 @@ func (c *CustomFuncs) AppendAggCols(
 // additional set of aggregate functions, one for each column in the given set.
 // The new functions are of the given aggregate operator type.
 func (c *CustomFuncs) AppendAggCols2(
-	aggs memo.GroupID, aggOp opt.Operator, cols opt.ColSet, aggOp2 opt.Operator, cols2 opt.ColSet,
-) memo.GroupID {
-	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
-	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
-	aggsColList := c.ExtractColList(aggsExpr.Cols())
-
+	aggs memo.AggregationsExpr,
+	aggOp opt.Operator,
+	cols opt.ColSet,
+	aggOp2 opt.Operator,
+	cols2 opt.ColSet,
+) memo.AggregationsExpr {
 	colsLen := cols.Len()
-	outElems := make([]memo.GroupID, len(aggsElems)+colsLen+cols2.Len())
-	copy(outElems, aggsElems)
-	outColList := make(opt.ColList, len(outElems))
-	copy(outColList, aggsColList)
+	outAggs := make(memo.AggregationsExpr, len(aggs)+colsLen+cols2.Len())
+	copy(outAggs, aggs)
 
-	offset := len(aggsElems)
-	c.makeAggCols(aggOp, cols, outElems[offset:], outColList[offset:])
+	offset := len(aggs)
+	c.makeAggCols(aggOp, cols, outAggs[offset:])
 	offset += colsLen
-	c.makeAggCols(aggOp2, cols2, outElems[offset:], outColList[offset:])
+	c.makeAggCols(aggOp2, cols2, outAggs[offset:])
 
-	return c.f.ConstructAggregations(c.f.InternList(outElems), c.f.InternColList(outColList))
+	return outAggs
 }
 
 // makeAggCols is a helper method that constructs a new aggregate function of
@@ -116,14 +107,14 @@ func (c *CustomFuncs) AppendAggCols2(
 //   outColList[1] = 2
 //
 func (c *CustomFuncs) makeAggCols(
-	aggOp opt.Operator, cols opt.ColSet, outElems []memo.GroupID, outColList opt.ColList,
+	aggOp opt.Operator, cols opt.ColSet, outAggs memo.AggregationsExpr,
 ) {
 	// Append aggregate functions wrapping a Variable reference to each column.
 	i := 0
 	for id, ok := cols.Next(0); ok; id, ok = cols.Next(id + 1) {
-		varExpr := c.f.ConstructVariable(c.f.mem.InternColumnID(opt.ColumnID(id)))
+		varExpr := c.f.ConstructVariable(opt.ColumnID(id))
 
-		var outAgg memo.GroupID
+		var outAgg opt.ScalarExpr
 		switch aggOp {
 		case opt.ConstAggOp:
 			outAgg = c.f.ConstructConstAgg(varExpr)
@@ -138,8 +129,8 @@ func (c *CustomFuncs) makeAggCols(
 			panic(fmt.Sprintf("unrecognized aggregate operator type: %v", aggOp))
 		}
 
-		outElems[i] = outAgg
-		outColList[i] = opt.ColumnID(id)
+		outAggs[i].Agg = outAgg
+		outAggs[i].Col = opt.ColumnID(id)
 		i++
 	}
 }
@@ -149,19 +140,16 @@ func (c *CustomFuncs) makeAggCols(
 // grouping columns form a key. In this case, the respective AggDistinct can be
 // removed.
 func (c *CustomFuncs) CanRemoveAggDistinctForKeys(
-	aggs memo.GroupID, def memo.PrivateID, input memo.GroupID,
+	aggs memo.AggregationsExpr, private *memo.GroupingPrivate, input memo.RelExpr,
 ) bool {
-	inputFDs := &c.LookupLogical(input).Relational.FuncDeps
+	inputFDs := &input.Relational().FuncDeps
 	if _, hasKey := inputFDs.Key(); !hasKey {
 		// Fast-path for the case when the input has no keys.
 		return false
 	}
 
-	groupingCols := c.f.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols
-	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
-	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
-	for _, agg := range aggsElems {
-		if ok, _ := c.hasRemovableAggDistinct(agg, groupingCols, inputFDs); ok {
+	for i := range aggs {
+		if ok, _ := c.hasRemovableAggDistinct(aggs[i].Agg, private.GroupingCols, inputFDs); ok {
 			return true
 		}
 	}
@@ -172,54 +160,54 @@ func (c *CustomFuncs) CanRemoveAggDistinctForKeys(
 // the input column together with the grouping columns form a key. Returns the
 // new Aggregation expression.
 func (c *CustomFuncs) RemoveAggDistinctForKeys(
-	aggs memo.GroupID, def memo.PrivateID, input memo.GroupID,
-) memo.GroupID {
-	inputFDs := &c.LookupLogical(input).Relational.FuncDeps
-	groupingCols := c.f.mem.LookupPrivate(def).(*memo.GroupByDef).GroupingCols
-	aggsExpr := c.f.mem.NormExpr(aggs).AsAggregations()
-	aggsElems := c.f.mem.LookupList(aggsExpr.Aggs())
+	aggs memo.AggregationsExpr, private *memo.GroupingPrivate, input memo.RelExpr,
+) memo.AggregationsExpr {
+	inputFDs := &input.Relational().FuncDeps
 
-	newAggElems := make([]memo.GroupID, len(aggsElems))
-	for i, agg := range aggsElems {
-		if ok, aggDistinctInput := c.hasRemovableAggDistinct(agg, groupingCols, inputFDs); ok {
+	newAggs := make(memo.AggregationsExpr, len(aggs))
+	for i := range aggs {
+		item := &aggs[i]
+		if ok, v := c.hasRemovableAggDistinct(item.Agg, private.GroupingCols, inputFDs); ok {
 			// Remove AggDistinct. We rely on the fact that AggDistinct must be
 			// directly "under" the Aggregate.
 			// TODO(radu): this will need to be revisited when we add more modifiers.
-			aggExpr := c.f.mem.NormExpr(agg)
-			newAggElems[i] = c.f.DynamicConstruct(
-				aggExpr.Operator(),
-				memo.DynamicOperands{memo.DynamicID(aggDistinctInput)},
-			)
+			newAggs[i].Agg = c.f.DynamicConstruct(item.Agg.Op(), v).(opt.ScalarExpr)
+			newAggs[i].Col = aggs[i].Col
 		} else {
-			newAggElems[i] = agg
+			newAggs[i] = *item
 		}
 	}
 
-	return c.f.ConstructAggregations(c.f.InternList(newAggElems), aggsExpr.Cols())
+	return newAggs
 }
 
 // hasRemovableAggDistinct is called with an aggregation element and returns
 // true if the aggregation has AggDistinct and the grouping columns along with
 // the aggregation input column form a key in the input (in which case
 // AggDistinct can be elided).
-// On success, the input group to AggDistinct is also returned.
+// On success, the input expression to AggDistinct is also returned.
 func (c *CustomFuncs) hasRemovableAggDistinct(
-	aggregation memo.GroupID, groupingCols opt.ColSet, inputFDs *props.FuncDepSet,
-) (ok bool, aggDistinctInput memo.GroupID) {
-	aggExpr := c.f.mem.NormExpr(aggregation)
-	if aggExpr.ChildCount() == 1 {
-		argExpr := c.f.mem.NormExpr(aggExpr.ChildGroup(c.mem, 0))
-		if argExpr.Operator() == opt.AggDistinctOp {
-			aggDistinctInput := argExpr.ChildGroup(c.mem, 0)
-			v := c.f.mem.NormExpr(aggDistinctInput)
-			if v.Operator() == opt.VariableOp {
-				cols := groupingCols.Copy()
-				cols.Add(int(v.Private(c.mem).(opt.ColumnID)))
-				if inputFDs.ColsAreStrictKey(cols) {
-					return true, aggDistinctInput
-				}
-			}
-		}
+	agg opt.ScalarExpr, groupingCols opt.ColSet, inputFDs *props.FuncDepSet,
+) (ok bool, aggDistinctVar *memo.VariableExpr) {
+	if agg.ChildCount() != 1 {
+		return false, nil
 	}
-	return false, 0
+
+	distinct, ok := agg.Child(0).(*memo.AggDistinctExpr)
+	if !ok {
+		return false, nil
+	}
+
+	v, ok := distinct.Input.(*memo.VariableExpr)
+	if !ok {
+		return false, nil
+	}
+
+	cols := groupingCols.Copy()
+	cols.Add(int(v.Col))
+	if !inputFDs.ColsAreStrictKey(cols) {
+		return false, nil
+	}
+
+	return true, v
 }

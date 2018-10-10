@@ -19,14 +19,15 @@ $input
 # to minimize the number of rows that other operators need to process.
 [PushLimitIntoProject, Normalize]
 (Limit
-    (Project $input:* $projections:*)
+    (Project $input:* $projections:* $passthrough:*)
     $limit:*
     $ordering:* & (HasColsInOrdering $input $ordering)
 )
 =>
 (Project
-    (Limit $input $limit (PruneOrdering $input $ordering))
+    (Limit $input $limit (PruneOrdering $ordering (OutputCols $input)))
     $projections
+    $passthrough
 )
 
 # PushOffsetIntoProject pushes the Offset operator into its Project input. It is
@@ -34,12 +35,13 @@ $input
 # order to minimize the number of rows that other operators need to process.
 [PushOffsetIntoProject, Normalize]
 (Offset
-    (Project $input:* $projections:*)
+    (Project $input:* $projections:* $passthrough:*)
     $offset:*
     $ordering:* & (HasColsInOrdering $input $ordering)
 )
 =>
 (Project
-    (Offset $input $offset (PruneOrdering $input $ordering))
+    (Offset $input $offset (PruneOrdering $ordering (OutputCols $input)))
     $projections
+    $passthrough
 )
