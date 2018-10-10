@@ -98,6 +98,37 @@ func (s *SystemConfig) Equal(other *SystemConfigEntries) bool {
 	return true
 }
 
+// GetDesc looks for the descriptor value for an ID, if a zone is created in
+// a test without creating a Descriptor, a dummy descriptor is returned.
+func (s *SystemConfig) GetDesc(key roachpb.Key) *roachpb.Value {
+	if getVal := s.GetValue(key); getVal != nil {
+		return getVal
+	}
+
+	id, err := keys.DecodeDescMetadataID(key)
+	if err != nil {
+		// No ID found for key. No roachpb.Value corresponds to this key.
+		return nil
+	}
+
+	testingLock.Lock()
+	_, ok := testingZoneConfig[uint32(id)]
+	testingLock.Unlock()
+
+	if ok {
+		// A test installed a zone config for this ID, but no descriptor.
+		// Synthesize an empty descriptor to force split to occur, or else the
+		// one config won't apply to ny ranges. Most tests that use
+		// TestingSetZoneConfig are too low-level to create tables and zone
+		// configs through proper channels.
+		//
+		// Getting here outside tests is impossible.
+		val := roachpb.MakeValueFromBytes(nil)
+		return &val
+	}
+	return nil
+}
+
 // GetValue searches the kv list for 'key' and returns its
 // roachpb.Value if found.
 func (s *SystemConfig) GetValue(key roachpb.Key) *roachpb.Value {
@@ -410,7 +441,12 @@ func (s *SystemConfig) shouldSplit(ID uint32) bool {
 	shouldSplit, ok := s.mu.shouldSplitCache[ID]
 	s.mu.RUnlock()
 	if !ok {
-		shouldSplit = SplitAtIDHook(ID, s)
+		// Check if the descriptor ID is not one of the reserved
+		// IDs that refer to ranges but not any actual descriptors.
+		shouldSplit = true
+		if ID >= keys.MinUserDescID {
+			shouldSplit = SplitAtIDHook(ID, s)
+		}
 		s.mu.Lock()
 		s.mu.shouldSplitCache[ID] = shouldSplit
 		s.mu.Unlock()
