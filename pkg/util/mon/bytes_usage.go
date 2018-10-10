@@ -477,6 +477,18 @@ func (mm *BytesMonitor) MakeBoundAccount() BoundAccount {
 	return BoundAccount{mon: mm}
 }
 
+// Empty shrinks the account to use 0 bytes. Previously used memory is returned
+// to the reserved buffer, which is subsequently released such that at most
+// poolAllocationSize is reserved.
+func (b *BoundAccount) Empty(ctx context.Context) {
+	b.reserved += b.used
+	b.used = 0
+	if b.reserved > b.mon.poolAllocationSize {
+		b.mon.releaseBytes(ctx, b.reserved-b.mon.poolAllocationSize)
+		b.reserved = b.mon.poolAllocationSize
+	}
+}
+
 // Clear releases all the cumulated allocations of an account at once and
 // primes it for reuse.
 func (b *BoundAccount) Clear(ctx context.Context) {
@@ -554,7 +566,7 @@ func (b *BoundAccount) Shrink(ctx context.Context, delta int64) {
 	}
 	b.used -= delta
 	b.reserved += delta
-	if b.reserved >= b.mon.poolAllocationSize {
+	if b.reserved > b.mon.poolAllocationSize {
 		b.mon.releaseBytes(ctx, b.reserved-b.mon.poolAllocationSize)
 		b.reserved = b.mon.poolAllocationSize
 	}
