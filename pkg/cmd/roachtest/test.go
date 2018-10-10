@@ -296,7 +296,7 @@ func (r *registry) ListAll(filter []string) []string {
 	return names
 }
 
-func (r *registry) Run(filter []string) int {
+func (r *registry) Run(filter []string, parallelism int) int {
 	filterRE := makeFilterRE(filter)
 	// Find the top-level tests to run.
 	tests := r.ListTopLevel(filterRE)
