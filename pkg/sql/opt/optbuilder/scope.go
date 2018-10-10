@@ -52,8 +52,8 @@ type scope struct {
 	// which don't appear in cols.
 	extraCols []scopeColumn
 
-	// group is the memo.GroupID of the relational operator built with this scope.
-	group memo.GroupID
+	// node is the SQL node built with this scope.
+	node memo.RelExpr
 
 	// Desired number of columns for subqueries found during name resolution and
 	// type checking. This only applies to the top-level subqueries that are
@@ -124,7 +124,7 @@ func (s *scope) appendColumnsFromScope(src *scope) {
 	// We want to reset the groups, as these become pass-through columns in the
 	// new scope.
 	for i := l; i < len(s.cols); i++ {
-		s.cols[i].group = 0
+		s.cols[i].scalar = nil
 	}
 }
 
@@ -136,7 +136,7 @@ func (s *scope) appendColumns(cols []scopeColumn) {
 	// We want to reset the groups, as these become pass-through columns in the
 	// new scope.
 	for i := l; i < len(s.cols); i++ {
-		s.cols[i].group = 0
+		s.cols[i].scalar = nil
 	}
 }
 
@@ -172,7 +172,7 @@ func (s *scope) copyOrdering(src *scope) {
 			col := *src.getColumn(ordCol.ID())
 			// We want to reset the group, as this becomes a pass-through column in
 			// the new scope.
-			col.group = 0
+			col.scalar = nil
 			s.extraCols = append(s.extraCols, col)
 		}
 	}
@@ -400,20 +400,22 @@ func (s *scope) findAggregate(agg aggregateInfo) *scopeColumn {
 	}
 
 	for i, a := range s.groupby.aggs {
-		// Find an existing aggregate that has the same function and the same
-		// arguments.
-		if a.def == agg.def && a.distinct == agg.distinct && len(a.args) == len(agg.args) {
-			match := true
-			for j, arg := range a.args {
-				if arg != agg.args[j] {
-					match = false
-					break
+		// Find an existing aggregate that uses the same function overload.
+		if a.def.Overload == agg.def.Overload && a.distinct == agg.distinct {
+			// Now check that the arguments are identical.
+			if len(a.args) == len(agg.args) {
+				match := true
+				for j, arg := range a.args {
+					if arg != agg.args[j] {
+						match = false
+						break
+					}
 				}
-			}
-			if match {
-				// Aggregate already exists, so return information about the
-				// existing column that computes it.
-				return &s.getAggregateCols()[i]
+				if match {
+					// Aggregate already exists, so return information about the
+					// existing column that computes it.
+					return &s.getAggregateCols()[i]
+				}
 			}
 		}
 	}
@@ -834,7 +836,7 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf 
 	srf := &srf{
 		FuncExpr: typedFunc.(*tree.FuncExpr),
 		cols:     srfScope.cols,
-		group:    out,
+		fn:       out,
 	}
 	s.srfs = append(s.srfs, srf)
 
@@ -881,14 +883,13 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 
 	f = typedFunc.(*tree.FuncExpr)
 
-	funcDef := memo.FuncOpDef{
+	private := memo.FunctionPrivate{
 		Name:       def.Name,
-		Type:       f.ResolvedType(),
 		Properties: &def.FunctionProperties,
 		Overload:   f.ResolvedOverload(),
 	}
 
-	return s.builder.buildAggregateFunction(f, funcDef, s)
+	return s.builder.buildAggregateFunction(f, &private, s)
 }
 
 // replaceCount replaces count(*) with count_rows().
@@ -996,12 +997,12 @@ func (s *scope) replaceSubquery(
 		// We need to add a projection to remove the extra columns.
 		projScope := outScope.push()
 		projScope.appendColumnsFromScope(outScope)
-		projScope.group = s.builder.constructProject(outScope.group, projScope.cols)
+		projScope.node = s.builder.constructProject(outScope.node.(memo.RelExpr), projScope.cols)
 		outScope = projScope
 	}
 
 	subq.cols = outScope.cols
-	subq.group = outScope.group
+	subq.node = outScope.node.(memo.RelExpr)
 	subq.ordering = outScope.ordering
 	return &subq
 }

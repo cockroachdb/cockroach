@@ -177,8 +177,7 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 		if scope.isAnonymousTable() && noColNameSpecified {
 			// SRFs and scalar functions used as a data source are always wrapped in
 			// a Zip operation.
-			ev := memo.MakeNormExprView(b.factory.Memo(), scope.group)
-			if ev.Operator() == opt.ZipOp && ev.Logical().Relational.OutputCols.Len() == 1 {
+			if zip, ok := scope.node.(*memo.ZipExpr); ok && zip.Relational().OutputCols.Len() == 1 {
 				colAlias = tree.NameList{as.Alias}
 			}
 		}
@@ -286,13 +285,13 @@ func (b *Builder) buildScan(
 		if indexFlags != nil {
 			panic(builderError{errors.Errorf("index flags not allowed with virtual tables")})
 		}
-		def := memo.VirtualScanOpDef{Table: tabID, Cols: tabColIDs}
-		outScope.group = b.factory.ConstructVirtualScan(b.factory.InternVirtualScanOpDef(&def))
+		private := memo.VirtualScanPrivate{Table: tabID, Cols: tabColIDs}
+		outScope.node = b.factory.ConstructVirtualScan(&private)
 	} else {
-		def := memo.ScanOpDef{Table: tabID, Cols: tabColIDs}
+		private := memo.ScanPrivate{Table: tabID, Cols: tabColIDs}
 
 		if indexFlags != nil {
-			def.Flags.NoIndexJoin = indexFlags.NoIndexJoin
+			private.Flags.NoIndexJoin = indexFlags.NoIndexJoin
 			if indexFlags.Index != "" || indexFlags.IndexID != 0 {
 				idx := -1
 				for i := 0; i < tab.IndexCount(); i++ {
@@ -311,12 +310,12 @@ func (b *Builder) buildScan(
 					}
 					panic(builderError{err})
 				}
-				def.Flags.ForceIndex = true
-				def.Flags.Index = idx
+				private.Flags.ForceIndex = true
+				private.Flags.Index = idx
 			}
 		}
 
-		outScope.group = b.factory.ConstructScan(b.factory.InternScanOpDef(&def))
+		outScope.node = b.factory.ConstructScan(&private)
 	}
 	return outScope
 }
@@ -328,18 +327,16 @@ func (b *Builder) buildScan(
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope *scope) {
-	col := b.synthesizeColumn(inScope, colName, types.Int, nil, 0)
+	col := b.synthesizeColumn(inScope, colName, types.Int, nil, nil /* scalar */)
 
 	// See https://www.cockroachlabs.com/docs/stable/query-order.html#order-preservation
 	// for the semantics around WITH ORDINALITY and ordering.
 
-	inScope.group = b.factory.ConstructRowNumber(
-		inScope.group,
-		b.factory.InternRowNumberDef(&memo.RowNumberDef{
-			Ordering: inScope.makeOrderingChoice(),
-			ColID:    col.id,
-		}),
-	)
+	input := inScope.node.(memo.RelExpr)
+	inScope.node = b.factory.ConstructRowNumber(input, &memo.RowNumberPrivate{
+		Ordering: inScope.makeOrderingChoice(),
+		ColID:    col.id,
+	})
 
 	return inScope
 }
@@ -454,7 +451,7 @@ func (b *Builder) buildSelectClause(
 	}
 
 	if len(fromScope.srfs) > 0 {
-		outScope.group = b.constructProjectSet(outScope.group, fromScope.srfs)
+		outScope.node = b.constructProjectSet(outScope.node.(memo.RelExpr), fromScope.srfs)
 	}
 
 	// Construct the projection.
@@ -463,7 +460,7 @@ func (b *Builder) buildSelectClause(
 
 	if sel.Distinct {
 		if projectionsScope.distinctOnCols.Empty() {
-			outScope.group = b.constructDistinct(outScope)
+			outScope.node = b.constructDistinct(outScope)
 		} else {
 			outScope = b.buildDistinctOn(projectionsScope.distinctOnCols, outScope)
 		}
@@ -488,14 +485,8 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 	if len(from.Tables) > 0 {
 		outScope = b.buildFromTables(from.Tables, inScope)
 	} else {
-		rows := []memo.GroupID{b.factory.ConstructTuple(
-			b.factory.InternList(nil), b.factory.InternType(memo.EmptyTupleType),
-		)}
 		outScope = inScope.push()
-		outScope.group = b.factory.ConstructValues(
-			b.factory.InternList(rows),
-			b.factory.InternColList(opt.ColList{}),
-		)
+		outScope.node = b.factory.ConstructValues(memo.ScalarListWithEmptyTuple, opt.ColList{})
 	}
 
 	if where != nil {
@@ -510,9 +501,12 @@ func (b *Builder) buildFrom(from *tree.From, where *tree.Where, inScope *scope) 
 		texpr := outScope.resolveAndRequireType(where.Expr, types.Bool)
 
 		filter := b.buildScalar(texpr, outScope, nil, nil, nil)
+
 		// Wrap the filter in a FiltersOp.
-		filter = b.factory.ConstructFilters(b.factory.InternList([]memo.GroupID{filter}))
-		outScope.group = b.factory.ConstructSelect(outScope.group, filter)
+		outScope.node = b.factory.ConstructSelect(
+			outScope.node.(memo.RelExpr),
+			memo.FiltersExpr{{Condition: filter}},
+		)
 	}
 
 	return outScope
@@ -545,9 +539,10 @@ func (b *Builder) buildFromTables(tables tree.TableExprs, inScope *scope) (outSc
 	b.validateJoinTableNames(outScope, tableScope)
 
 	outScope.appendColumnsFromScope(tableScope)
-	outScope.group = b.factory.ConstructInnerJoin(
-		outScope.group, tableScope.group, b.factory.ConstructTrue(),
-	)
+
+	left := outScope.node.(memo.RelExpr)
+	right := tableScope.node.(memo.RelExpr)
+	outScope.node = b.factory.ConstructInnerJoin(left, right, memo.TrueFilter)
 	return outScope
 }
 
