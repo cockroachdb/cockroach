@@ -616,6 +616,24 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		params.EvalContext().PopIVarContainer()
 	}
 
+	// Verify the schema constraints. For consistency with INSERT/UPSERT
+	// and compatibility with PostgreSQL, we must do this before
+	// processing the CHECK constraints.
+	for i, val := range u.run.updateValues {
+		col := &u.run.tu.ru.UpdateCols[i]
+		if val == tree.DNull {
+			// Verify no NULL makes it to a nullable column.
+			if !col.Nullable {
+				return sqlbase.NewNonNullViolationError(col.Name)
+			}
+		} else {
+			// Verify that the data width matches the column constraint.
+			if err := sqlbase.CheckValueWidth(col.Type, val, &col.Name); err != nil {
+				return err
+			}
+		}
+	}
+
 	// Run the CHECK constraints, if any.
 	// TODO(justin): we have actually constructed the whole row at this point and
 	// thus should be able to avoid loading it separately like this now.
@@ -630,22 +648,6 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		}
 		if err := u.run.checkHelper.Check(params.EvalContext()); err != nil {
 			return err
-		}
-	}
-
-	// Verify the schema constraints.
-	for i, val := range u.run.updateValues {
-		col := &u.run.tu.ru.UpdateCols[i]
-		if val == tree.DNull {
-			// Verify no NULL makes it to a nullable column.
-			if !col.Nullable {
-				return sqlbase.NewNonNullViolationError(col.Name)
-			}
-		} else {
-			// Verify that the data width matches the column constraint.
-			if err := sqlbase.CheckValueWidth(col.Type, val, &col.Name); err != nil {
-				return err
-			}
 		}
 	}
 
