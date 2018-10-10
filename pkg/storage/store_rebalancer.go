@@ -17,6 +17,7 @@ package storage
 import (
 	"context"
 	"math"
+	"math/rand"
 	"sort"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"go.etcd.io/etcd/raft"
 )
 
@@ -173,8 +175,9 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 	// Start a goroutine that watches and proactively renews certain
 	// expiration-based leases.
 	stopper.RunWorker(ctx, func(ctx context.Context) {
-		ticker := time.NewTicker(storeRebalancerTimerDuration)
-		defer ticker.Stop()
+		timer := timeutil.NewTimer()
+		defer timer.Stop()
+		timer.Reset(jitteredInterval(storeRebalancerTimerDuration))
 		for {
 			// Wait out the first tick before doing anything since the store is still
 			// starting up and we might as well wait for some qps/wps stats to
@@ -182,7 +185,9 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 			select {
 			case <-stopper.ShouldQuiesce():
 				return
-			case <-ticker.C:
+			case <-timer.C:
+				timer.Read = true
+				timer.Reset(jitteredInterval(storeRebalancerTimerDuration))
 			}
 
 			if !sr.st.Version.IsMinSupported(cluster.VersionLoadBasedRebalancing) {
@@ -674,4 +679,10 @@ func storeListToMap(sl StoreList) map[roachpb.StoreID]*roachpb.StoreDescriptor {
 		storeMap[sl.stores[i].StoreID] = &sl.stores[i]
 	}
 	return storeMap
+}
+
+// jitteredInterval returns a randomly jittered (+/-25%) duration
+// from checkInterval.
+func jitteredInterval(interval time.Duration) time.Duration {
+	return time.Duration(float64(interval) * (0.75 + 0.5*rand.Float64()))
 }
