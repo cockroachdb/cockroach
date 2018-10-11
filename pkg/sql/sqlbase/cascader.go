@@ -58,7 +58,7 @@ func makeDeleteCascader(
 	alloc *DatumAlloc,
 ) (*cascader, error) {
 	if evalCtx == nil {
-		return nil, pgerror.NewError(pgerror.CodeInternalError, "programming error: evalContext is nil")
+		return nil, pgerror.NewAssertionErrorf("evalContext is nil")
 	}
 	var required bool
 Outer:
@@ -66,9 +66,7 @@ Outer:
 		for _, ref := range referencedIndex.ReferencedBy {
 			referencingTable, ok := tablesByID[ref.Table]
 			if !ok {
-				return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-					"programming error: could not find table:%d in table descriptor map", ref.Table,
-				)
+				return nil, pgerror.NewAssertionErrorf("could not find table:%d in table descriptor map", ref.Table)
 			}
 			if referencingTable.IsAdding {
 				// We can assume that a table being added but not yet public is empty,
@@ -117,7 +115,7 @@ func makeUpdateCascader(
 	alloc *DatumAlloc,
 ) (*cascader, error) {
 	if evalCtx == nil {
-		return nil, pgerror.NewError(pgerror.CodeInternalError, "programming error: evalContext is nil")
+		return nil, pgerror.NewAssertionErrorf("evalContext is nil")
 	}
 	var required bool
 	colIDs := make(map[ColumnID]struct{})
@@ -139,9 +137,7 @@ Outer:
 		for _, ref := range referencedIndex.ReferencedBy {
 			referencingTable, ok := tablesByID[ref.Table]
 			if !ok {
-				return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-					"programming error: could not find table:%d in table descriptor map", ref.Table,
-				)
+				return nil, pgerror.NewAssertionErrorf("could not find table:%d in table descriptor map", ref.Table)
 			}
 			if referencingTable.IsAdding {
 				// We can assume that a table being added but not yet public is empty,
@@ -364,8 +360,7 @@ func (c *cascader) addRowDeleter(table *TableDescriptor) (RowDeleter, RowFetcher
 	if rowDeleter, exists := c.rowDeleters[table.ID]; exists {
 		rowFetcher, existsFetcher := c.deleterRowFetchers[table.ID]
 		if !existsFetcher {
-			return RowDeleter{}, RowFetcher{}, pgerror.NewErrorf(pgerror.CodeInternalError,
-				"programming error: no corresponding row fetcher for the row deleter for table: (%d)%s",
+			return RowDeleter{}, RowFetcher{}, pgerror.NewAssertionErrorf("no corresponding row fetcher for the row deleter for table: (%d)%s",
 				table.ID, table.Name,
 			)
 		}
@@ -422,8 +417,7 @@ func (c *cascader) addRowUpdater(table *TableDescriptor) (RowUpdater, RowFetcher
 	if existsUpdater {
 		rowFetcher, existsFetcher := c.updaterRowFetchers[table.ID]
 		if !existsFetcher {
-			return RowUpdater{}, RowFetcher{}, pgerror.NewErrorf(pgerror.CodeInternalError,
-				"programming error: no corresponding row fetcher for the row updater for table: (%d)%s",
+			return RowUpdater{}, RowFetcher{}, pgerror.NewAssertionErrorf("no corresponding row fetcher for the row updater for table: (%d)%s",
 				table.ID, table.Name,
 			)
 		}
@@ -839,8 +833,7 @@ func (c *cascader) updateRows(
 							updateRow[rowIndex] = rowToUpdate[fetchRowIndex]
 							continue
 						}
-						return nil, nil, nil, 0, pgerror.NewErrorf(pgerror.CodeInternalError,
-							"could find find colID %d in either updated columns or the fetched row",
+						return nil, nil, nil, 0, pgerror.NewAssertionErrorf("could find find colID %d in either updated columns or the fetched row",
 							colID,
 						)
 					}
@@ -857,8 +850,7 @@ func (c *cascader) updateRows(
 							updateRow[rowIndex] = rowToUpdate[fetchRowIndex]
 							continue
 						}
-						return nil, nil, nil, 0, pgerror.NewErrorf(pgerror.CodeInternalError,
-							"could find find colID %d in either the index columns or the fetched row",
+						return nil, nil, nil, 0, pgerror.NewAssertionErrorf("could find find colID %d in either the index columns or the fetched row",
 							colID,
 						)
 					}
@@ -999,9 +991,7 @@ func (c *cascader) cascadeAll(
 			for _, ref := range referencedIndex.ReferencedBy {
 				referencingTable, ok := c.tablesByID[ref.Table]
 				if !ok {
-					return pgerror.NewErrorf(pgerror.CodeInternalError,
-						"programming error: could not find table:%d in table descriptor map", ref.Table,
-					)
+					return pgerror.NewAssertionErrorf("could not find table:%d in table descriptor map", ref.Table)
 				}
 				if referencingTable.IsAdding {
 					// We can assume that a table being added but not yet public is empty,
@@ -1112,9 +1102,7 @@ func (c *cascader) cascadeAll(
 		}
 		rowDeleter, exists := c.rowDeleters[tableID]
 		if !exists {
-			return pgerror.NewErrorf(pgerror.CodeInternalError,
-				"programming error: could not find row deleter for table %d", tableID,
-			)
+			return pgerror.NewAssertionErrorf("could not find row deleter for table %d", tableID)
 		}
 		for deletedRows.Len() > 0 {
 			if err := rowDeleter.Fks.addAllIdxChecks(ctx, deletedRows.At(0)); err != nil {
@@ -1137,9 +1125,7 @@ func (c *cascader) cascadeAll(
 		// Fetch the original and updated rows for the updater.
 		originalRows, originalRowsExists := c.originalRows[tableID]
 		if !originalRowsExists {
-			return pgerror.NewErrorf(pgerror.CodeInternalError,
-				"programming error: could not find original rows for table %d", tableID,
-			)
+			return pgerror.NewAssertionErrorf("could not find original rows for table %d", tableID)
 		}
 		totalRows := originalRows.Len()
 		if totalRows == 0 {
@@ -1148,14 +1134,11 @@ func (c *cascader) cascadeAll(
 
 		updatedRows, updatedRowsExists := c.updatedRows[tableID]
 		if !updatedRowsExists {
-			return pgerror.NewErrorf(pgerror.CodeInternalError,
-				"programming error: could not find updated rows for table %d", tableID,
-			)
+			return pgerror.NewAssertionErrorf("could not find updated rows for table %d", tableID)
 		}
 
 		if totalRows != updatedRows.Len() {
-			return pgerror.NewErrorf(pgerror.CodeInternalError,
-				"programming error: original rows length:%d not equal to updated rows length:%d for table %d",
+			return pgerror.NewAssertionErrorf("original rows length:%d not equal to updated rows length:%d for table %d",
 				totalRows, updatedRows.Len(), tableID,
 			)
 		}

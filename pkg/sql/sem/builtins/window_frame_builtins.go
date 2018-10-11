@@ -166,7 +166,7 @@ func (w *slidingWindowSumFunc) removeAllBefore(
 		case *tree.DInterval:
 			err = w.agg.Add(ctx, &tree.DInterval{Duration: duration.Duration{}.Sub(v.Duration)})
 		default:
-			err = pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected value %v", v)
+			err = pgerror.NewAssertionErrorf("unexpected value %v", v)
 		}
 		if err != nil {
 			return err
@@ -261,7 +261,7 @@ func (w *avgWindowFunc) Compute(
 		_, err := tree.DecimalCtx.Quo(&avg.Decimal, &dd.Decimal, count)
 		return &avg, err
 	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected SUM result type: %s", t)
+		return nil, pgerror.NewAssertionErrorf("unexpected SUM result type: %s", t)
 	}
 }
 

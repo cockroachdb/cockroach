@@ -322,8 +322,7 @@ func DecodeRawBytesToByteArray(data string, be sessiondata.BytesEncodeFormat) ([
 		return base64.StdEncoding.DecodeString(data)
 
 	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"programming error: unhandled format: %s", be)
+		return nil, pgerror.NewAssertionErrorf("unhandled format: %s", be)
 	}
 }
 

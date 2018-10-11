@@ -85,8 +85,7 @@ func (p *planner) ProjectSet(
 	exprs ...tree.Expr,
 ) (planDataSource, error) {
 	if len(exprs) == 0 {
-		return planDataSource{}, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"programming error: ProjectSet invoked with no projected expression")
+		return planDataSource{}, pgerror.NewAssertionErrorf("ProjectSet invoked with no projected expression")
 	}
 
 	srcCols := sourceInfo.SourceColumns

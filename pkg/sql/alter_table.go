@@ -572,14 +572,14 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableInjectStats:
 			sd, ok := n.statsData[i]
 			if !ok {
-				return errors.Errorf("programming error: missing stats data")
+				return pgerror.NewAssertionErrorf("missing stats data")
 			}
 			if err := injectTableStats(params, n.tableDesc, sd); err != nil {
 				return err
 			}
 
 		default:
-			return fmt.Errorf("unsupported alter command: %T", cmd)
+			return pgerror.NewAssertionErrorf("unsupported alter command: %T", cmd)
 		}
 	}
 	// Were some changes made?

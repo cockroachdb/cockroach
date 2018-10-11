@@ -197,11 +197,13 @@ var errInvalidDbPrefix = pgerror.NewError(pgerror.CodeUndefinedObjectError,
 	"cannot access virtual schema in anonymous database",
 ).SetHintf("verify that the current database is set")
 
-var errInvalidVirtualSchema = pgerror.NewError(pgerror.CodeInternalError,
-	"programming error: virtualSchema cannot have both the populate and generator functions defined",
-)
+func newInvalidVirtualSchemaError() error {
+	return pgerror.NewAssertionErrorf("virtualSchema cannot have both the populate and generator functions defined")
+}
 
-var errInvalidVirtualDefEntry = pgerror.NewError(pgerror.CodeInternalError, "programming error: virtualDefEntry.virtualDef must be a virtualSchemaTable")
+func newInvalidVirtualDefEntryError() error {
+	return pgerror.NewAssertionErrorf("virtualDefEntry.virtualDef must be a virtualSchemaTable")
+}
 
 // getPlanInfo returns the column metadata and a constructor for a new
 // valuesNode for the virtual table. We use deferred construction here
@@ -238,7 +240,7 @@ func (e virtualDefEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConst
 			}
 
 			if def.generator != nil && def.populate != nil {
-				return nil, errInvalidVirtualSchema
+				return nil, newInvalidVirtualSchemaError()
 			}
 
 			if def.generator != nil {
@@ -275,7 +277,7 @@ func (e virtualDefEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConst
 
 			return v, nil
 		default:
-			return nil, errInvalidVirtualDefEntry
+			return nil, newInvalidVirtualDefEntryError()
 		}
 	}
 

@@ -49,10 +49,7 @@ func (dsp *DistSQLPlanner) tryCreatePlanForInterleavedJoin(
 	// We know they are scan nodes from useInterleaveJoin, but we add
 	// this check to prevent future panics.
 	if !leftOk || !rightOk {
-		return PhysicalPlan{}, false, pgerror.NewErrorf(
-			pgerror.CodeInternalError,
-			"left and right children of join node must be scan nodes to execute an interleaved join",
-		)
+		return PhysicalPlan{}, false, pgerror.NewAssertionErrorf("left and right children of join node must be scan nodes to execute an interleaved join")
 	}
 
 	// We iterate through each table and collate their metadata for
