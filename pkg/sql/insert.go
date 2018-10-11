@@ -128,6 +128,11 @@ func (p *planner) Insert(
 	if n.DefaultValues() {
 		// No target column, select all columns in the table, including
 		// hidden columns; these may have defaults too.
+		//
+		// Although this races with the backfill in case of UPSERT we do
+		// not care: the backfill is also inserting defaults, and we do
+		// not provide guarantees about the evaluation order of default
+		// expressions.
 		insertCols = desc.Columns
 		// Add mutation columns.
 		if len(desc.Mutations) > 0 {
