@@ -116,7 +116,7 @@ func (e *Expression) Empty() bool {
 func (e Expression) String() string {
 	if e.LocalExpr != nil {
 		buf := bytes.Buffer{}
-		ctx := ExprFmtCtxBase(&buf, &tree.EvalContext{})
+		ctx := tree.MakeFmtCtx(&buf, tree.FmtCheckEquivalence)
 		ctx.FormatNode(e.LocalExpr)
 		return ctx.String()
 	} else if e.Expr != "" {
