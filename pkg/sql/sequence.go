@@ -358,8 +358,7 @@ func removeSequenceDependencies(
 			}
 		}
 		if refIdx == -1 {
-			return pgerror.NewError(
-				pgerror.CodeInternalError, "couldn't find reference from sequence to this column")
+			return pgerror.NewAssertionErrorf("couldn't find reference from sequence to this column")
 		}
 		seqDesc.DependedOnBy = append(seqDesc.DependedOnBy[:refIdx], seqDesc.DependedOnBy[refIdx+1:]...)
 		if err := params.p.writeSchemaChange(params.ctx, &seqDesc, sqlbase.InvalidMutationID); err != nil {

@@ -89,7 +89,7 @@ func runShowSyntax(
 
 		pqErr, ok := pgerror.GetPGCause(err)
 		if !ok {
-			return pgerror.NewErrorf(pgerror.CodeInternalError, "unknown parser error: %v", err)
+			return pgerror.NewAssertionErrorf("unknown parser error: %v", err)
 		}
 		if err := report(ctx, "error", pqErr.Message); err != nil {
 			return err

@@ -686,8 +686,7 @@ func EncodeInvertedIndexKeys(
 	keyPrefix []byte,
 ) (key [][]byte, err error) {
 	if len(index.ColumnIDs) > 1 {
-		return nil, pgerror.NewError(pgerror.CodeInternalError,
-			"trying to apply inverted index to more than one column")
+		return nil, pgerror.NewAssertionErrorf("trying to apply inverted index to more than one column")
 	}
 
 	var val tree.Datum
@@ -712,7 +711,7 @@ func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, e
 	case *tree.DJSON:
 		return json.EncodeInvertedIndexKeys(inKey, (t.JSON))
 	}
-	return nil, pgerror.NewError(pgerror.CodeInternalError, "trying to apply inverted index to non JSON type")
+	return nil, pgerror.NewAssertionErrorf("trying to apply inverted index to non JSON type")
 }
 
 // EncodeSecondaryIndex encodes key/values for a secondary

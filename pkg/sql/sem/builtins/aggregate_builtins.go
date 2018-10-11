@@ -573,7 +573,7 @@ func (a *avgAggregate) Result() (tree.Datum, error) {
 		_, err := tree.DecimalCtx.Quo(&t.Decimal, &t.Decimal, count)
 		return t, err
 	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected SUM result type: %s", t)
+		return nil, pgerror.NewAssertionErrorf("unexpected SUM result type: %s", t)
 	}
 }
 

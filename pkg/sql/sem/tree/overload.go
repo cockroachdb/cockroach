@@ -390,7 +390,7 @@ func typeCheckOverloadedExprs(
 	ctx *SemaContext, desired types.T, overloads []overloadImpl, inBinOp bool, exprs ...Expr,
 ) ([]TypedExpr, []overloadImpl, error) {
 	if len(overloads) > math.MaxUint8 {
-		return nil, nil, pgerror.NewErrorf(pgerror.CodeInternalError, "too many overloads (%d > 255)", len(overloads))
+		return nil, nil, pgerror.NewAssertionErrorf("too many overloads (%d > 255)", len(overloads))
 	}
 
 	var s typeCheckOverloadState
@@ -773,8 +773,7 @@ func checkReturn(
 			if err != nil {
 				return s.typedExprs, nil, true, errors.Wrap(err, "error type checking constant value")
 			} else if des != nil && !typ.ResolvedType().Equivalent(des) {
-				panic(pgerror.NewErrorf(
-					pgerror.CodeInternalError, "desired constant value type %s but set type %s", des, typ.ResolvedType()))
+				panic(pgerror.NewAssertionErrorf("desired constant value type %s but set type %s", des, typ.ResolvedType()))
 			}
 			s.typedExprs[i] = typ
 		}
