@@ -340,3 +340,119 @@ func TestMVCCIterateTimeBound(t *testing.T) {
 		})
 	}
 }
+
+func TestMVCCIncrementalIteratorIntentStraddlesSStables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Create a DB containing 2 keys, a and b, where b has an intent. We use the
+	// regular MVCCPut operation to generate these keys, which we'll later be
+	// copying into manually created sstables.
+	ctx := context.Background()
+	db1 := engine.NewInMem(roachpb.Attributes{}, 10<<20 /* 10 MB */)
+	defer db1.Close()
+
+	put := func(key, value string, ts int64, txn *roachpb.Transaction) {
+		v := roachpb.MakeValueFromString(value)
+		if err := engine.MVCCPut(
+			ctx, db1, nil, roachpb.Key(key), hlc.Timestamp{WallTime: ts}, v, txn,
+		); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	put("a", "a value", 1, nil)
+	put("b", "b value", 2, &roachpb.Transaction{
+		TxnMeta: enginepb.TxnMeta{
+			Key:       roachpb.Key("b"),
+			ID:        uuid.MakeV4(),
+			Epoch:     1,
+			Timestamp: hlc.Timestamp{WallTime: 2},
+		},
+	})
+
+	// Create a second DB in which we'll create a specific SSTable structure: the
+	// first SSTable contains 2 KVs where the first is a regular versioned key
+	// and the second is the MVCC metadata entry (i.e. an intent). The next
+	// SSTable contains the provisional value for the intent. The effect is that
+	// the metadata entry is separated from the entry it is metadata for.
+	//
+	//   SSTable 1:
+	//     a@1
+	//     b@<meta>
+	//
+	//   SSTable 2:
+	//     b@2
+	db2 := engine.NewInMem(roachpb.Attributes{}, 10<<20 /* 10 MB */)
+	defer db2.Close()
+
+	ingest := func(it engine.Iterator, count int) {
+		sst, err := engine.MakeRocksDBSstFileWriter()
+		if err != nil {
+			t.Fatal(sst)
+		}
+		defer sst.Close()
+
+		for i := 0; i < count; i++ {
+			ok, err := it.Valid()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !ok {
+				t.Fatal("expected key")
+			}
+			if err := sst.Add(engine.MVCCKeyValue{Key: it.Key(), Value: it.Value()}); err != nil {
+				t.Fatal(err)
+			}
+			it.Next()
+		}
+		sstContents, err := sst.Finish()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := db2.WriteFile(`ingest`, sstContents); err != nil {
+			t.Fatal(err)
+		}
+		if err := db2.IngestExternalFiles(ctx, []string{`ingest`}, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	{
+		// Iterate over the entries in the first DB, ingesting them into SSTables
+		// in the second DB.
+		it := db1.NewIterator(engine.IterOptions{
+			UpperBound: keys.MaxKey,
+		})
+		it.Seek(engine.MVCCKey{Key: keys.MinKey})
+		ingest(it, 2)
+		ingest(it, 1)
+		it.Close()
+	}
+
+	{
+		// Use an incremental iterator to simulate an incremental backup from (1,
+		// 2]. Note that incremental iterators are exclusive on the start time and
+		// inclusive on the end time. The expectation is that we'll see a write
+		// intent error.
+		it := NewMVCCIncrementalIterator(db2, IterOptions{
+			StartTime:  hlc.Timestamp{WallTime: 1},
+			EndTime:    hlc.Timestamp{WallTime: 2},
+			UpperBound: keys.MaxKey,
+		})
+		defer it.Close()
+		for it.Seek(engine.MVCCKey{Key: keys.MinKey}); ; it.Next() {
+			ok, err := it.Valid()
+			if err != nil {
+				if _, ok = err.(*roachpb.WriteIntentError); ok {
+					// This is the write intent error we were expecting.
+					return
+				}
+				t.Fatalf("%T: %s", err, err)
+			}
+			if !ok {
+				break
+			}
+		}
+		t.Fatalf("expected write intent error, but found success")
+	}
+}
