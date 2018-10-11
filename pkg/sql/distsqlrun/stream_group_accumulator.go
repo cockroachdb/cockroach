@@ -44,8 +44,7 @@ type streamGroupAccumulator struct {
 
 	rowAlloc sqlbase.EncDatumRowAlloc
 
-	memAcc          mon.BoundAccount
-	minAllocatedSet bool
+	memAcc mon.BoundAccount
 }
 
 func makeStreamGroupAccumulator(
@@ -118,17 +117,7 @@ func (s *streamGroupAccumulator) nextGroup(
 			n := len(s.curGroup)
 			ret := s.curGroup[:n:n]
 			s.curGroup = s.curGroup[:0]
-
-			if !s.minAllocatedSet {
-				err := s.memAcc.SetMinAllocated(evalCtx.Context, int64(row.Size()))
-				if err != nil {
-					return nil, &ProducerMetadata{Err: err}
-				}
-				s.minAllocatedSet = true
-			}
-
-			s.memAcc.Empty(evalCtx.Context)
-
+			s.memAcc.Empty(evalCtx.Ctx())
 			s.leftoverRow = row
 			return ret, nil
 		}

@@ -449,10 +449,7 @@ type BoundAccount struct {
 	// reserved is a small buffer to amortize the cost of growing an account. It
 	// decreases as used increases (and vice-versa).
 	reserved int64
-	// minAllocated is a minimum allocated bytes size that the account reach
-	// before being able to release bytes.
-	minAllocated int64
-	mon          *BytesMonitor
+	mon      *BytesMonitor
 }
 
 // MakeStandaloneBudget creates a BoundAccount suitable for root
@@ -471,9 +468,7 @@ func (b BoundAccount) Monitor() *BytesMonitor {
 	return b.mon
 }
 
-// Allocated returns the total number of bytes which this account is using or
-// reserving
-func (b BoundAccount) Allocated() int64 {
+func (b BoundAccount) allocated() int64 {
 	return b.used + b.reserved
 }
 
@@ -482,42 +477,13 @@ func (mm *BytesMonitor) MakeBoundAccount() BoundAccount {
 	return BoundAccount{mon: mm}
 }
 
-// SetMinAllocated allocates a minimum Allocated size (reserved + used) for the
-// account. The account would not be able to Shrink() unless it has surpassed
-// this minimum Allocated value.
-func (b *BoundAccount) SetMinAllocated(ctx context.Context, size int64) error {
-	if size < 0 {
-		panic(fmt.Sprintf("%s: cannot set bound account min allocated to a negative value",
-			b.mon.name))
-	}
-	b.minAllocated = b.mon.roundSize(size)
-
-	if b.Allocated() < b.minAllocated {
-		minExtra := b.mon.roundSize(b.minAllocated - b.Allocated())
-		if err := b.mon.reserveBytes(ctx, minExtra); err != nil {
-			return err
-		}
-		b.reserved += minExtra
-	} else {
-		var released int64
-		if b.used < b.minAllocated {
-			released = b.Allocated() - b.minAllocated
-		} else {
-			released = b.reserved - b.Monitor().poolAllocationSize
-		}
-		b.mon.releaseBytes(ctx, released)
-		b.reserved -= released
-	}
-
-	return nil
-}
-
-// Empty shrinks the account to use 0 bytes, while maintaining the minAllocated
-// size.
+// Empty shrinks the account to use 0 bytes. Previously used memory is returned
+// to the reserved buffer, which is subsequently released such that at most
+// poolAllocationSize is reserved.
 func (b *BoundAccount) Empty(ctx context.Context) {
 	b.reserved += b.used
 	b.used = 0
-	if b.Allocated() > b.minAllocated && b.reserved > b.mon.poolAllocationSize {
+	if b.reserved > b.mon.poolAllocationSize {
 		b.mon.releaseBytes(ctx, b.reserved-b.mon.poolAllocationSize)
 		b.reserved = b.mon.poolAllocationSize
 	}
@@ -534,7 +500,6 @@ func (b *BoundAccount) Clear(ctx context.Context) {
 	b.Close(ctx)
 	b.used = 0
 	b.reserved = 0
-	b.minAllocated = 0
 }
 
 // Close releases all the cumulated allocations of an account at once.
@@ -544,7 +509,7 @@ func (b *BoundAccount) Close(ctx context.Context) {
 		// monitor -- "bytes out of the aether". This needs not be closed.
 		return
 	}
-	if a := b.Allocated(); a > 0 {
+	if a := b.allocated(); a > 0 {
 		b.mon.releaseBytes(ctx, a)
 	}
 }
@@ -601,7 +566,7 @@ func (b *BoundAccount) Shrink(ctx context.Context, delta int64) {
 	}
 	b.used -= delta
 	b.reserved += delta
-	if b.Allocated() > b.minAllocated && b.reserved > b.mon.poolAllocationSize {
+	if b.reserved > b.mon.poolAllocationSize {
 		b.mon.releaseBytes(ctx, b.reserved-b.mon.poolAllocationSize)
 		b.reserved = b.mon.poolAllocationSize
 	}
@@ -658,10 +623,6 @@ func (mm *BytesMonitor) reserveBytes(ctx context.Context, x int64) error {
 // releaseBytes releases bytes previously successfully registered via
 // reserveBytes().
 func (mm *BytesMonitor) releaseBytes(ctx context.Context, sz int64) {
-	if sz == 0 {
-		return
-	}
-
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
 	if mm.mu.curAllocated < sz {
@@ -716,7 +677,7 @@ func (mm *BytesMonitor) roundSize(sz int64) int64 {
 func (mm *BytesMonitor) releaseBudget(ctx context.Context) {
 	// NB: mm.mu need not be locked here, as this is only called from StopMonitor().
 	if log.V(2) {
-		log.Infof(ctx, "%s: releasing %d bytes to the pool", mm.name, mm.mu.curBudget.Allocated())
+		log.Infof(ctx, "%s: releasing %d bytes to the pool", mm.name, mm.mu.curBudget.allocated())
 	}
 	mm.mu.curBudget.Clear(ctx)
 }
