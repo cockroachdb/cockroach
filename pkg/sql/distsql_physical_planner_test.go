@@ -337,6 +337,12 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Ensure that the range cache is populated (see #31235).
+	_, err = db0.Exec(`SHOW EXPERIMENTAL_RANGES FROM TABLE "right"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// Run everything in a transaction, so we're bound on a connection on which we
 	// force DistSQL.
 	txn, err := db3.BeginTx(context.TODO(), nil /* opts */)
@@ -418,6 +424,8 @@ func TestDistSQLDeadHosts(t *testing.T) {
 			i+1, (i+1)%5+1, (i+2)%5+1, n*i/5,
 		))
 	}
+
+	r.Exec(t, "SHOW EXPERIMENTAL_RANGES FROM TABLE t")
 
 	r.Exec(t, fmt.Sprintf("INSERT INTO t SELECT i, i*i FROM generate_series(1, %d) AS g(i)", n))
 
@@ -506,6 +514,9 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 			tc.Server(1).GetFirstStoreID(),
 		),
 	)
+
+	// Ensure that the range cache is populated (see #31235).
+	r.Exec(t, "SHOW EXPERIMENTAL_RANGES FROM TABLE nums")
 
 	const query = "SELECT count(*) FROM NUMS"
 	expectPlan := func(expectedPlan [][]string) {
