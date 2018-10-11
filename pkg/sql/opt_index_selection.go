@@ -584,9 +584,7 @@ func encodeConstraintKey(
 				return nil, err
 			}
 			if len(keys) > 1 {
-				err := pgerror.NewError(
-					pgerror.CodeInternalError, "trying to use multiple keys in index lookup",
-				)
+				err := pgerror.NewAssertionErrorf("trying to use multiple keys in index lookup")
 				return nil, err
 			}
 			key = keys[0]

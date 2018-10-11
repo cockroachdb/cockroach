@@ -312,6 +312,11 @@ func TestReportUsage(t *testing.T) {
 		) {
 			t.Fatal(err)
 		}
+		if _, err := db.Exec(`SELECT crdb_internal.force_assertion_error('woo')`); !testutils.IsError(
+			err, "internal error",
+		) {
+			t.Fatal(err)
+		}
 		// pass args to force a prepare/exec path as that may differ.
 		if _, err := db.Exec(`SELECT 1::INTERVAL(1), $1`, 1); !testutils.IsError(
 			err, "unimplemented",
@@ -502,7 +507,7 @@ func TestReportUsage(t *testing.T) {
 		}
 	}
 
-	if expected, actual := 5, len(r.last.ErrorCounts); expected != actual {
+	if expected, actual := 7, len(r.last.ErrorCounts); expected != actual {
 		t.Fatalf("expected %d error codes counts in report, got %d (%v)", expected, actual, r.last.ErrorCounts)
 	}
 
@@ -516,13 +521,22 @@ func TestReportUsage(t *testing.T) {
 			break
 		}
 	}
+	// Ditto for the stack trace on internal errors.
+	for k := range r.last.ErrorCounts {
+		if strings.HasPrefix(k, "internalerror-") {
+			r.last.ErrorCounts["internalerror-"] = r.last.ErrorCounts[k]
+			delete(r.last.ErrorCounts, k)
+			break
+		}
+	}
 
 	for code, expected := range map[string]int64{
 		pgerror.CodeSyntaxError:              10,
 		pgerror.CodeFeatureNotSupportedError: 30,
 		pgerror.CodeDivisionByZeroError:      20,
-		"blah":        10,
-		"builtins.go": 10,
+		"blah":           10,
+		"builtins.go":    10,
+		"internalerror-": 10,
 	} {
 		if actual := r.last.ErrorCounts[code]; expected != actual {
 			t.Fatalf(
@@ -662,6 +676,7 @@ func TestReportUsage(t *testing.T) {
 		`[true,false,false] SELECT (_, _, __more2__) = (SELECT _, _, _, _ FROM _ LIMIT _)`,
 		`[true,false,true] SELECT _ / $1`,
 		`[true,false,true] SELECT _ / _`,
+		`[true,false,true] SELECT crdb_internal.force_assertion_error(_)`,
 		`[true,false,true] SELECT crdb_internal.force_error(_, $1)`,
 		`[true,true,false] SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
 		`[true,true,false] SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
@@ -705,6 +720,7 @@ func TestReportUsage(t *testing.T) {
 			`SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
 			`SELECT _ / $1`,
 			`SELECT _ / _`,
+			`SELECT crdb_internal.force_assertion_error(_)`,
 			`SELECT crdb_internal.force_error(_, $1)`,
 			`SET CLUSTER SETTING "server.time_until_store_dead" = _`,
 			`SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,

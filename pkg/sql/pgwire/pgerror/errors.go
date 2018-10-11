@@ -17,6 +17,7 @@ package pgerror
 import (
 	"bytes"
 	"fmt"
+	"runtime"
 	"strings"
 
 	"github.com/lib/pq"
@@ -130,6 +131,51 @@ func GetPGCause(err error) (*Error, bool) {
 	default:
 		return nil, false
 	}
+}
+
+const assertionErrorHint = `You have encountered an unexpected error inside CockroachDB.
+
+Please check https://github.com/cockroachdb/cockroach/issues to check
+whether this problem is already tracked. If you cannot find it there,
+please report the error with details at:
+
+    https://github.com/cockroachdb/cockroach/issues/new/choose
+
+If you would rather not post publicly, please contact us directly at:
+
+    support@cockroachlabs.com
+
+The Cockroach Labs team appreciates your feedback.
+`
+
+// NewAssertionErrorf creates an internal error.
+func NewAssertionErrorf(format string, args ...interface{}) error {
+	err := NewErrorWithDepthf(1, CodeInternalError, "internal error: "+format, args...)
+	err.InternalCommand = captureTrace()
+	err.Detail = err.InternalCommand
+	err.Hint = assertionErrorHint
+	return err
+}
+
+func captureTrace() string {
+	var pc [50]uintptr
+	n := runtime.Callers(3, pc[:])
+	frames := runtime.CallersFrames(pc[:n])
+	var buf bytes.Buffer
+	sep := ""
+	for {
+		frame, more := frames.Next()
+		if !more {
+			break
+		}
+		file := frame.File
+		if index := strings.LastIndexByte(file, '/'); index >= 0 {
+			file = file[index+1:]
+		}
+		fmt.Fprintf(&buf, "%s%s:%d", sep, file, frame.Line)
+		sep = ","
+	}
+	return buf.String()
 }
 
 // UnimplementedWithIssueErrorf constructs an error with the formatted message
