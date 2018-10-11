@@ -166,9 +166,10 @@ func (p *planner) Update(
 	// Ensure that the columns being updated are not computed.
 	// We do this check as early as possible to avoid doing
 	// unnecessary work below in case there's an error.
-	// TODO(justin): this is incorrect: we should allow this, but then it should
-	// error unless we both have a VALUES clause and every value being "inserted"
-	// into a computed column is DEFAULT. See #22434.
+	//
+	// TODO(justin): this is too restrictive. It should
+	// be possible to allow UPDATE foo SET x = DEFAULT
+	// when x is a computed column. See #22434.
 	if err := checkHasNoComputedCols(updateCols); err != nil {
 		return nil, err
 	}
@@ -826,7 +827,7 @@ func fillDefault(expr tree.Expr, index int, defaultExprs []tree.TypedExpr) tree.
 func checkHasNoComputedCols(cols []sqlbase.ColumnDescriptor) error {
 	for i := range cols {
 		if cols[i].IsComputed() {
-			return sqlbase.CannotWriteToComputedColError(cols[i])
+			return sqlbase.CannotWriteToComputedColError(&cols[i])
 		}
 	}
 	return nil
