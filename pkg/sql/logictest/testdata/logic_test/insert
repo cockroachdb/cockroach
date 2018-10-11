@@ -131,13 +131,13 @@ INSERT INTO kv4 (int, bool) VALUES (3, 'a')
 statement ok
 INSERT INTO kv4 (int, bool) VALUES (3, true)
 
-statement error value type int doesn't match type STRING of column "char"
+statement error value type int doesn't match type CHAR of column "char"
 INSERT INTO kv4 (int, char) VALUES (4, 1)
 
 statement ok
 INSERT INTO kv4 (int, char) VALUES (4, 'a')
 
-statement error value type int doesn't match type FLOAT of column "float"
+statement error value type int doesn't match type FLOAT8 of column "float"
 INSERT INTO kv4 (int, float) VALUES (5, 1::INT)
 
 statement ok
@@ -529,3 +529,76 @@ INSERT INTO sw(f) VALUES ('abcd')
 
 statement error value too long for type STRING\(3\) COLLATE en \(column "fc"\)
 INSERT INTO sw(fc) VALUES ('abcd' COLLATE en)
+
+subtest regression_26742
+
+statement ok
+CREATE TABLE ct(x INT, derived INT AS (x+1) STORED)
+
+statement error value type string doesn't match type INT of column "x"
+INSERT INTO ct(x) SELECT c FROM sw
+
+subtest contraint_check_validation_ordering
+
+# Verification of column constraints vs CHECK handling. The column
+# constraint verification must take place first.
+#
+# This test requires that the error message for a CHECK constraint
+# validation error be different than a column validation error. So we
+# test the former first, as a sanity check.
+statement ok
+CREATE TABLE tn(x INT NULL CHECK(x IS NOT NULL), y CHAR(4) CHECK(length(y) < 4));
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO tn(x) VALUES (NULL)
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO tn(y) VALUES ('abcd')
+
+# Now we test that the column validation occurs before the CHECK constraint.
+statement ok
+CREATE TABLE tn2(x INT NOT NULL CHECK(x IS NOT NULL), y CHAR(3) CHECK(length(y) < 4));
+
+statement error null value in column "x" violates not-null constraint
+INSERT INTO tn2(x) VALUES (NULL)
+
+statement error value too long for type CHAR\(3\)
+INSERT INTO tn2(x, y) VALUES (123, 'abcd')
+
+subtest fk_contraint_check_validation_ordering
+
+# Verify that column constraints and CHECK handling occur before
+# foreign key validation.
+statement ok
+CREATE TABLE src(x VARCHAR PRIMARY KEY);
+  INSERT INTO src(x) VALUES ('abc');
+  CREATE TABLE derived(x CHAR(3) REFERENCES src(x),
+                       y VARCHAR CHECK(length(y) < 4) REFERENCES src(x))
+
+# Sanity check that the FK constraints gets actually validated
+statement error foreign key violation
+INSERT INTO derived(x) VALUES('xxx')
+
+statement error value too long for type CHAR\(3\)
+INSERT INTO derived(x) VALUES('abcd')
+
+statement error failed to satisfy CHECK constraint
+INSERT INTO derived(y) VALUES('abcd')
+
+subtest regression_29494
+
+statement ok
+CREATE TABLE t29494(x INT); BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+# Check that the new column is not visible
+query T
+SELECT create_statement FROM [SHOW CREATE t29494]
+----
+CREATE TABLE t29494 (
+   x INT NULL,
+   FAMILY "primary" (x, rowid)
+)
+
+# Check that the new column is not usable in RETURNING
+statement error column "y" does not exist
+INSERT INTO t29494(x) VALUES (123) RETURNING y

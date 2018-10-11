@@ -795,7 +795,7 @@ SELECT * FROM a
 {"hello"}
 {"goodbye"}
 
-statement error locale of collated string array being inserted \(fr\) doesn't match locale of column type \(en\)
+statement error value type collatedstring{fr}\[\] doesn't match type STRING COLLATE en\[\] of column "b"
 INSERT INTO a VALUES (ARRAY['hello' COLLATE fr])
 
 statement ok
@@ -826,7 +826,7 @@ CREATE TABLE a (b STRING[])
 statement ok
 INSERT INTO a VALUES (ARRAY['foo'])
 
-statement error type of array contents collatedstring{en} doesn't match column type STRING
+statement error value type collatedstring{en}\[\] doesn't match type STRING\[\] of column "b"
 INSERT INTO a VALUES (ARRAY['foo' COLLATE en])
 
 statement ok

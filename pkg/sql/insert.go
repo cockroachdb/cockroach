@@ -128,6 +128,11 @@ func (p *planner) Insert(
 	if n.DefaultValues() {
 		// No target column, select all columns in the table, including
 		// hidden columns; these may have defaults too.
+		//
+		// Although this races with the backfill in case of UPSERT we do
+		// not care: the backfill is also inserting defaults, and we do
+		// not provide guarantees about the evaluation order of default
+		// expressions.
 		insertCols = desc.Columns
 		// Add mutation columns.
 		if len(desc.Mutations) > 0 {
@@ -182,16 +187,17 @@ func (p *planner) Insert(
 	}
 
 	// Now create the source data plan. For this we need an AST and as
-	// list of desired types. The AST comes from the Rows operand, the
-	// desired types from the inserted columns.
+	// list of required types. The AST comes from the Rows operand, the
+	// required types from the inserted columns.
 
 	// Analyze the expressions for column information and typing.
-	desiredTypesFromSelect := make([]types.T, len(insertCols))
+	requiredTypesFromSelect := make([]types.T, len(insertCols))
 	for i, col := range insertCols {
-		desiredTypesFromSelect[i] = col.Type.ToDatumType()
+		requiredTypesFromSelect[i] = col.Type.ToDatumType()
 	}
 
 	// Extract the AST for the data source.
+	isUpsert := n.OnConflict.IsUpsertAlias()
 	var insertRows tree.SelectStatement
 	arityChecked := false
 	colNames := make(tree.NameList, len(insertCols))
@@ -210,11 +216,14 @@ func (p *planner) Insert(
 				// Check to make sure the values clause doesn't have too many or
 				// too few expressions in each tuple.
 				numExprs := len(values.Rows[0])
-				if err := checkNumExprs(numExprs, numInputColumns, n.Columns != nil); err != nil {
+				if err := checkNumExprs(isUpsert, numExprs, numInputColumns, n.Columns != nil); err != nil {
 					return nil, err
 				}
 				if numExprs > maxInsertIdx {
-					return nil, sqlbase.CannotWriteToComputedColError(insertCols[maxInsertIdx])
+					// TODO(justin): this is too restrictive. It should
+					// be possible to allow INSERT INTO (x) VALUES (DEFAULT)
+					// if x is a computed column. See #22434.
+					return nil, sqlbase.CannotWriteToComputedColError(&insertCols[maxInsertIdx])
 				}
 				arityChecked = true
 			}
@@ -229,21 +238,32 @@ func (p *planner) Insert(
 	// Ready to create the plan for the data source; do it.
 	// This performs type checking on source expressions, collecting
 	// types for placeholders in the process.
-	rows, err := p.newPlan(ctx, insertRows, desiredTypesFromSelect)
+	rows, err := p.newPlan(ctx, insertRows, requiredTypesFromSelect)
 	if err != nil {
 		return nil, err
 	}
 
+	srcCols := planColumns(rows)
 	if !arityChecked {
 		// If the insert source was not a VALUES clause, then we have not
 		// already verified the arity of the operand is correct.
 		// Do it now.
-		numExprs := len(planColumns(rows))
-		if err := checkNumExprs(numExprs, numInputColumns, n.Columns != nil); err != nil {
+		numExprs := len(srcCols)
+		if err := checkNumExprs(isUpsert, numExprs, numInputColumns, n.Columns != nil); err != nil {
 			return nil, err
 		}
 		if numExprs > maxInsertIdx {
-			return nil, sqlbase.CannotWriteToComputedColError(insertCols[maxInsertIdx])
+			return nil, sqlbase.CannotWriteToComputedColError(&insertCols[maxInsertIdx])
+		}
+	}
+
+	// The required types may not have been matched exactly by the planning.
+	// While this may be OK if the results were geared toward a client,
+	// for INSERT/UPSERT we must have a direct match.
+	for i, srcCol := range srcCols {
+		if err := sqlbase.CheckDatumTypeFitsColumnType(
+			insertCols[i], srcCol.Typ, &p.semaCtx.Placeholders); err != nil {
+			return nil, err
 		}
 	}
 
@@ -641,7 +661,7 @@ func GenerateInsertRow(
 	// Ensure that the values honor the specified column widths.
 	for i := range rowVals {
 		if err := sqlbase.CheckValueWidth(
-			insertCols[i].Type, rowVals[i], insertCols[i].Name); err != nil {
+			insertCols[i].Type, rowVals[i], &insertCols[i].Name); err != nil {
 			return nil, err
 		}
 	}
@@ -832,7 +852,7 @@ func fillDefaults(
 	return ret, nil
 }
 
-func checkNumExprs(numExprs, numCols int, specifiedTargets bool) error {
+func checkNumExprs(isUpsert bool, numExprs, numCols int, specifiedTargets bool) error {
 	// It is ok to be missing exprs if !specifiedTargets, because the missing
 	// columns will be filled in by DEFAULT expressions.
 	extraExprs := numExprs > numCols
@@ -842,8 +862,13 @@ func checkNumExprs(numExprs, numCols int, specifiedTargets bool) error {
 		if missingExprs {
 			more, less = less, more
 		}
-		return errors.Errorf("INSERT has more %s than %s, %d expressions for %d targets",
-			more, less, numExprs, numCols)
+		kw := "INSERT"
+		if isUpsert {
+			kw = "UPSERT"
+		}
+		return pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"%s has more %s than %s, %d expressions for %d targets",
+			kw, more, less, numExprs, numCols)
 	}
 	return nil
 }

@@ -640,7 +640,7 @@ func ColumnTypesToDatumTypes(colTypes []ColumnType) []types.T {
 // CheckValueWidth checks that the width (for strings, byte arrays,
 // and bit strings) and scale (for decimals) of the value fits the
 // specified column type. Used by INSERT and UPDATE.
-func CheckValueWidth(typ ColumnType, val tree.Datum, name string) error {
+func CheckValueWidth(typ ColumnType, val tree.Datum, name *string) error {
 	switch typ.SemanticType {
 	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
 		var sv string
@@ -651,8 +651,9 @@ func CheckValueWidth(typ ColumnType, val tree.Datum, name string) error {
 		}
 
 		if typ.Width > 0 && utf8.RuneCountInString(sv) > int(typ.Width) {
-			return fmt.Errorf("value too long for type %s (column %q)",
-				typ.SQLString(), name)
+			return pgerror.NewErrorf(pgerror.CodeStringDataRightTruncationError,
+				"value too long for type %s (column %q)",
+				typ.SQLString(), tree.ErrNameString(name))
 		}
 	case ColumnType_INT:
 		if v, ok := tree.AsDInt(val); ok {
@@ -663,7 +664,9 @@ func CheckValueWidth(typ ColumnType, val tree.Datum, name string) error {
 				// We're performing bounds checks inline with Go's implementation of min and max ints in Math.go.
 				shifted := v >> width
 				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
-					return fmt.Errorf("integer out of range for type %s (column %q)", typ.VisibleType, name)
+					return pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError,
+						"integer out of range for type %s (column %q)",
+						typ.VisibleType, tree.ErrNameString(name))
 				}
 			}
 		}
@@ -674,11 +677,13 @@ func CheckValueWidth(typ ColumnType, val tree.Datum, name string) error {
 				switch typ.VisibleType {
 				case ColumnType_VARBIT:
 					if bitLen > uint(typ.Width) {
-						return fmt.Errorf("bit string length %d too large for type %s", bitLen, typ.SQLString())
+						return pgerror.NewErrorf(pgerror.CodeStringDataRightTruncationError,
+							"bit string length %d too large for type %s", bitLen, typ.SQLString())
 					}
 				default:
 					if bitLen != uint(typ.Width) {
-						return fmt.Errorf("bit string length %d does not match type %s", bitLen, typ.SQLString())
+						return pgerror.NewErrorf(pgerror.CodeStringDataLengthMismatchError,
+							"bit string length %d does not match type %s", bitLen, typ.SQLString())
 					}
 				}
 			}
@@ -686,7 +691,8 @@ func CheckValueWidth(typ ColumnType, val tree.Datum, name string) error {
 	case ColumnType_DECIMAL:
 		if v, ok := val.(*tree.DDecimal); ok {
 			if err := tree.LimitDecimalWidth(&v.Decimal, int(typ.Precision), int(typ.Width)); err != nil {
-				return errors.Wrapf(err, "type %s (column %q)", typ.SQLString(), name)
+				return errors.Wrapf(err, "type %s (column %q)",
+					typ.SQLString(), tree.ErrNameString(name))
 			}
 		}
 	case ColumnType_ARRAY:
@@ -718,26 +724,36 @@ func (c *ColumnType) elementColumnType() *ColumnType {
 	return &result
 }
 
-// CheckColumnType verifies that a given value is compatible
-// with the type requested by the column. If the value is a
-// placeholder, the type of the placeholder gets populated.
-func CheckColumnType(col ColumnDescriptor, typ types.T, pmap *tree.PlaceholderInfo) error {
+// CheckDatumTypeFitsColumnType verifies that a given scalar value
+// type is valid to be stored in a column of the given column type. If
+// the scalar value is a placeholder, the type of the placeholder gets
+// populated. NULL values are considered to fit every target type.
+//
+// For the purpose of this analysis, column type aliases are not
+// considered to be different (eg. TEXT and VARCHAR will fit the same
+// scalar type String).
+//
+// This is used by the UPDATE, INSERT and UPSERT code.
+func CheckDatumTypeFitsColumnType(
+	col ColumnDescriptor, typ types.T, pmap *tree.PlaceholderInfo,
+) error {
 	if typ == types.Unknown {
 		return nil
 	}
-
 	// If the value is a placeholder, then the column check above has
 	// populated 'colTyp' with a type to assign to it.
 	colTyp := col.Type.ToDatumType()
 	if p, pok := typ.(types.TPlaceholder); pok {
 		if err := pmap.SetType(p.Name, colTyp); err != nil {
-			return fmt.Errorf("cannot infer type for placeholder %s from column %q: %s",
-				p.Name, col.Name, err)
+			return pgerror.NewErrorf(pgerror.CodeIndeterminateDatatypeError,
+				"cannot infer type for placeholder %s from column %q: %s",
+				p.Name, tree.ErrNameString(&col.Name), err)
 		}
 	} else if !typ.Equivalent(colTyp) {
 		// Not a placeholder; check that the value cast has succeeded.
-		return fmt.Errorf("value type %s doesn't match type %s of column %q",
-			typ, col.Type.SemanticType, col.Name)
+		return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+			"value type %s doesn't match type %s of column %q",
+			typ, col.Type.SQLString(), tree.ErrNameString(&col.Name))
 	}
 	return nil
 }
