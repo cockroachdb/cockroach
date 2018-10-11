@@ -140,6 +140,12 @@ func (p *planner) newUpsertNode(
 			return nil, err
 		}
 
+		// Ensure that the user cannot include computed columns
+		// in the list of columns explicitly updated.
+		if err := checkHasNoComputedCols(updateCols); err != nil {
+			return nil, err
+		}
+
 		// We also need to include any computed columns in the set of UpdateCols.
 		// They can't have been set explicitly so there's no chance of
 		// double-including a computed column.

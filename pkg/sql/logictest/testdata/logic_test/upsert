@@ -641,3 +641,20 @@ ROLLBACK; BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
 
 statement error column "y" does not exist
 INSERT INTO t29494(x) VALUES (123) ON CONFLICT(rowid) DO UPDATE SET x = 400 RETURNING y
+
+statement ok
+ROLLBACK
+
+# Regression test for #31255
+
+statement ok
+CREATE TABLE tc(x INT PRIMARY KEY, y INT AS (x+1) STORED)
+
+statement error cannot write directly to computed column "y"
+INSERT INTO tc(x) VALUES (1) ON CONFLICT(x) DO UPDATE SET y = 123
+
+statement error cannot write directly to computed column "y"
+UPSERT INTO tc(x,y) VALUES (1,2)
+
+statement error cannot write directly to computed column "y"
+UPSERT INTO tc VALUES (1,2)
