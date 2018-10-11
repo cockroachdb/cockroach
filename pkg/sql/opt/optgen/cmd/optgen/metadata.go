@@ -139,7 +139,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 	// Add all types used in Optgen defines here.
 	md.types = map[string]*typeDef{
 		"RelExpr":        {fullName: "memo.RelExpr", isExpr: true, isPointer: true},
-		"Node":           {fullName: "opt.Expr", isExpr: true, isPointer: true},
+		"Expr":           {fullName: "opt.Expr", isExpr: true, isPointer: true},
 		"ScalarExpr":     {fullName: "opt.ScalarExpr", isExpr: true, isPointer: true},
 		"Operator":       {fullName: "opt.Operator", passByVal: true},
 		"ColumnID":       {fullName: "opt.ColumnID", passByVal: true},
@@ -193,7 +193,8 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 	}
 
 	// 1. Associate each DefineField with its type.
-	// 2. Link list types to the types of their list items.
+	// 2. Link list types to the types of their list items. A list item type has
+	//    the same name as its list parent + the "Item" prefix.
 	for _, define := range compiled.Defines {
 		// Associate each DefineField with its type.
 		for _, field := range define.Fields {
@@ -245,7 +246,20 @@ func (m *metadata) lookupType(friendlyName string) *typeDef {
 
 // fieldName maps the Optgen field name to the corresponding Go field name. In
 // particular, fields named "_" are mapped to the name of a Go embedded field,
-// which is equal to the field's type name.
+// which is equal to the field's type name:
+//
+//   define Scan {
+//     _ ScanPrivate
+//   }
+//   =>
+//   type ScanExpr struct {
+//	   ScanPrivate
+//     ...
+//   }
+//
+// Note that the field's type name is always a simple alphanumeric identifier
+// with no package specified (that's only specified in the fullName field of the
+// typeDef).
 func (m *metadata) fieldName(field *lang.DefineFieldExpr) string {
 	if field.Name == "_" {
 		return string(field.Type)
@@ -266,7 +280,7 @@ func (m *metadata) fieldName(field *lang.DefineFieldExpr) string {
 // The Input and Projections fields are children, but the Passthrough field is
 // a private field and will not be returned.
 func (m *metadata) childFields(define *lang.DefineExpr) lang.DefineFieldsExpr {
-	// Skip until non-node field is found.
+	// Skip until non-expression field is found.
 	n := 0
 	for _, field := range define.Fields {
 		typ := m.typeOf(field)
@@ -290,7 +304,7 @@ func (m *metadata) childFields(define *lang.DefineExpr) lang.DefineFieldsExpr {
 // The Passthrough field is the private field. If no private field exists for
 // the operator, then privateField returns nil.
 func (m *metadata) privateField(define *lang.DefineExpr) *lang.DefineFieldExpr {
-	// Skip until non-node field is found.
+	// Skip until non-expression field is found.
 	n := 0
 	for _, field := range define.Fields {
 		typ := m.typeOf(field)

@@ -7,15 +7,17 @@ define And {
 define True {}
 
 define Join {
-    Left  Expr
-    Right Expr
+    Left  RelExpr
+    Right RelExpr
 }
 
-[EliminateEmptyAnd, Normalize]
-(And $conditions:[]) => (True)
+[SimplifyTrueAnd, Normalize]
+(And (True) $right:*) => $right
 
-[EliminateSingletonAnd, Normalize]
-(And $conditions:[ $item:* ]) => $item
+[NormalizeNestedAnds, Normalize]
+(And $left:* (And $innerLeft:* $innerRight:*))
+=>
+(And (ConcatLeftDeepAnds $left $innerLeft) $innerRight)
 
 [CommuteJoin, Explore]
 (Join $r:* $s:*) => (Join $s $r)
@@ -31,8 +33,8 @@ const (
 	// ------------------------------------------------------------
 	// Normalize Rule Names
 	// ------------------------------------------------------------
-	EliminateEmptyAnd
-	EliminateSingletonAnd
+	SimplifyTrueAnd
+	NormalizeNestedAnds
 
 	// startExploreRule tracks the number of normalization rules;
 	// all rules greater than this value are exploration rules.
