@@ -43,18 +43,15 @@ type subquery struct {
 // retrieve the Datum result of a subquery.
 func (p *planner) EvalSubquery(expr *tree.Subquery) (result tree.Datum, err error) {
 	if expr.Idx == 0 {
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"programming error: subquery %q was not processed, analyzeSubqueries not called?", expr)
+		return nil, pgerror.NewAssertionErrorf("subquery %q was not processed, analyzeSubqueries not called?", expr)
 	}
 	if expr.Idx < 0 || expr.Idx-1 >= len(p.curPlan.subqueryPlans) {
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"programming error: invalid index %d for %q", expr.Idx, expr)
+		return nil, pgerror.NewAssertionErrorf("invalid index %d for %q", expr.Idx, expr)
 	}
 
 	s := &p.curPlan.subqueryPlans[expr.Idx-1]
 	if !s.started {
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"programming error: subquery %d (%q) not started prior to evaluation", expr.Idx, expr)
+		return nil, pgerror.NewAssertionErrorf("subquery %d (%q) not started prior to evaluation", expr.Idx, expr)
 	}
 	return s.result, nil
 }
@@ -68,8 +65,7 @@ func (p *planTop) evalSubqueries(params runParams) error {
 		}
 
 		if !sq.expanded {
-			return pgerror.NewErrorf(pgerror.CodeInternalError,
-				"programming error: subquery %d (%q) was not expanded properly", i+1, sq.subquery)
+			return pgerror.NewAssertionErrorf("subquery %d (%q) was not expanded properly", i+1, sq.subquery)
 		}
 
 		if log.V(2) {
