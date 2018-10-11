@@ -38,8 +38,9 @@ func (node *Import) Format(ctx *FmtCtx) {
 			ctx.WriteString(" FROM ")
 		}
 		ctx.WriteString(node.FileFormat)
-		ctx.WriteString(" ")
+		ctx.WriteString(" (")
 		ctx.FormatNode(&node.Files)
+		ctx.WriteByte(')')
 	} else {
 		ctx.WriteString("TABLE ")
 		ctx.FormatNode(&node.Table)
