@@ -17,11 +17,12 @@ package distsqlrun
 import (
 	"context"
 
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -133,7 +134,7 @@ func newJoinReader(
 	output RowReceiver,
 ) (*joinReader, error) {
 	if spec.Visibility != ScanVisibility_PUBLIC {
-		return nil, errors.Errorf("internal error: joinReader specified with visibility %+v", spec.Visibility)
+		return nil, pgerror.NewAssertionErrorf("joinReader specified with visibility %+v", spec.Visibility)
 	}
 
 	jr := &joinReader{

@@ -441,7 +441,7 @@ func (p *planner) rewriteIndexOrderings(
 			for _, id := range idxDesc.ExtraColumnIDs {
 				col, err := desc.FindColumnByID(id)
 				if err != nil {
-					return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "column with ID %d not found", id)
+					return nil, pgerror.NewAssertionErrorf("column with ID %d not found", id)
 				}
 
 				newOrderBy = append(newOrderBy, &tree.Order{

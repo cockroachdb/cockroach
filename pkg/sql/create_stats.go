@@ -73,8 +73,7 @@ func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (pl
 }
 
 func (*createStatsNode) Next(runParams) (bool, error) {
-	return false, pgerror.NewErrorf(pgerror.CodeInternalError,
-		"programming error: createStatsNode cannot be executed locally")
+	return false, pgerror.NewAssertionErrorf("createStatsNode cannot be executed locally")
 }
 func (*createStatsNode) Close(context.Context) {}
 func (*createStatsNode) Values() tree.Datums   { return nil }

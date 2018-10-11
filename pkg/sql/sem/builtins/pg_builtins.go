@@ -215,7 +215,7 @@ func makePGGetIndexDef(argTypes tree.ArgTypes) tree.Overload {
 				return tree.NewDString(""), nil
 			}
 			if len(r) > 1 {
-				return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "programming error: pg_get_indexdef query has more than 1 result row: %+v", r)
+				return nil, pgerror.NewAssertionErrorf("pg_get_indexdef query has more than 1 result row: %+v", r)
 			}
 			return r[0], nil
 		},

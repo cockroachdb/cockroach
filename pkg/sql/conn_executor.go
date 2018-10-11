@@ -260,6 +260,8 @@ type Server struct {
 		syncutil.Mutex
 		// Error returned by code.
 		codes map[string]int64
+		// Internal / assertion errors.
+		traces map[string]int64
 		// Attempts to use unimplemented features.
 		unimplemented map[string]int64
 	}
@@ -310,8 +312,10 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.PeriodicallyClearStmtStats(ctx, stopper)
 }
 
-// recordError takes an error and increments the corresponding count for its
-// error code, and, if it is an unimplemented error, the count for that feature.
+// recordError takes an error and increments the corresponding count
+// for its error code, and, if it is an unimplemented or internal
+// error, the count for that feature or the internal error's shortened
+// stack trace.
 func (s *Server) recordError(err error) {
 	if err == nil {
 		return
@@ -324,12 +328,20 @@ func (s *Server) recordError(err error) {
 	if pgErr, ok := pgerror.GetPGCause(err); ok {
 		s.errorCounts.codes[pgErr.Code]++
 
-		if pgErr.Code == pgerror.CodeFeatureNotSupportedError {
+		switch pgErr.Code {
+		case pgerror.CodeFeatureNotSupportedError:
 			if feature := pgErr.InternalCommand; feature != "" {
 				if s.errorCounts.unimplemented == nil {
 					s.errorCounts.unimplemented = make(map[string]int64)
 				}
 				s.errorCounts.unimplemented[feature]++
+			}
+		case pgerror.CodeInternalError:
+			if trace := pgErr.InternalCommand; trace != "" {
+				if s.errorCounts.traces == nil {
+					s.errorCounts.traces = make(map[string]int64)
+				}
+				s.errorCounts.traces[trace]++
 			}
 		}
 	} else {
@@ -344,13 +356,16 @@ func (s *Server) recordError(err error) {
 
 // FillErrorCounts fills the passed map with the server's current
 // counts of how often individual unimplemented features have been encountered.
-func (s *Server) FillErrorCounts(codes, unimplemented map[string]int64) {
+func (s *Server) FillErrorCounts(codes, unimplemented, traces map[string]int64) {
 	s.errorCounts.Lock()
 	for k, v := range s.errorCounts.codes {
 		codes[k] = v
 	}
 	for k, v := range s.errorCounts.unimplemented {
 		unimplemented[k] = v
+	}
+	for k, v := range s.errorCounts.traces {
+		traces[k] = v
 	}
 	s.errorCounts.Unlock()
 }
@@ -360,6 +375,7 @@ func (s *Server) ResetErrorCounts() {
 	s.errorCounts.Lock()
 	s.errorCounts.codes = make(map[string]int64, len(s.errorCounts.codes))
 	s.errorCounts.unimplemented = make(map[string]int64, len(s.errorCounts.unimplemented))
+	s.errorCounts.traces = make(map[string]int64, len(s.errorCounts.traces))
 	s.errorCounts.Unlock()
 }
 

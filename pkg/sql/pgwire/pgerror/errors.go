@@ -17,6 +17,7 @@ package pgerror
 import (
 	"bytes"
 	"fmt"
+	"runtime"
 	"strings"
 
 	"github.com/lib/pq"
@@ -130,6 +131,39 @@ func GetPGCause(err error) (*Error, bool) {
 	default:
 		return nil, false
 	}
+}
+
+// NewAssertionErrorf creates an internal error.
+func NewAssertionErrorf(format string, args ...interface{}) error {
+	err := NewErrorWithDepthf(1, CodeInternalError, "programming error: "+format, args...)
+	err.InternalCommand = captureTrace()
+	err.Detail = err.InternalCommand
+	err.Hint = "You have encountered an error inside CockroachDB.\n\n" +
+		"Don't worry! Your data is likely safe.\n" +
+		"Please report this error with details at:\n\t https://github.com/cockroachdb/cockroach/issues/new/choose\nor\n\t support@cockroachlabs.com.\n\n" +
+		"Thank you!"
+	return err
+}
+
+func captureTrace() string {
+	var pc [50]uintptr
+	n := runtime.Callers(3, pc[:])
+	frames := runtime.CallersFrames(pc[:n])
+	var buf bytes.Buffer
+	sep := ""
+	for {
+		frame, more := frames.Next()
+		if !more {
+			break
+		}
+		file := frame.File
+		if index := strings.LastIndexByte(file, '/'); index >= 0 {
+			file = file[index+1:]
+		}
+		fmt.Fprintf(&buf, "%s%s:%d", sep, file, frame.Line)
+		sep = ","
+	}
+	return buf.String()
 }
 
 // UnimplementedWithIssueErrorf constructs an error with the formatted message

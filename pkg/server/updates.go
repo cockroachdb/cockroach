@@ -334,6 +334,7 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 
 	info.ErrorCounts = make(map[string]int64)
 	info.UnimplementedErrors = make(map[string]int64)
+	info.ErrorTraceCounts = make(map[string]int64)
 
 	// Read the system.settings table to determine the settings for which we have
 	// explicitly set values -- the in-memory SV has the set and default values
@@ -377,7 +378,11 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 	}
 
 	info.SqlStats = s.pgServer.SQLServer.GetScrubbedStmtStats()
-	s.pgServer.SQLServer.FillErrorCounts(info.ErrorCounts, info.UnimplementedErrors)
+	s.pgServer.SQLServer.FillErrorCounts(
+		info.ErrorCounts,
+		info.UnimplementedErrors,
+		info.ErrorTraceCounts,
+	)
 	return &info
 }
 

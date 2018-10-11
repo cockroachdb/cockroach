@@ -32,6 +32,7 @@ message DiagnosticReport {
   map<string, int64> error_counts = 7;
   map<int64, config.ZoneConfig> zone_configs = 8 [(gogoproto.nullable) = false];
   map<string, int32> feature_usage = 9 [(gogoproto.nullable) = false];
+  map<string, int64> error_trace_counts = 10;
 }
 
 message NodeInfo {

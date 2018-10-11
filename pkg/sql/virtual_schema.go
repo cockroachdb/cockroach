@@ -197,11 +197,10 @@ var errInvalidDbPrefix = pgerror.NewError(pgerror.CodeUndefinedObjectError,
 	"cannot access virtual schema in anonymous database",
 ).SetHintf("verify that the current database is set")
 
-var errInvalidVirtualSchema = pgerror.NewError(pgerror.CodeInternalError,
-	"programming error: virtualSchema cannot have both the populate and generator functions defined",
+var errInvalidVirtualSchema = pgerror.NewAssertionErrorf("virtualSchema cannot have both the populate and generator functions defined",
 )
 
-var errInvalidVirtualDefEntry = pgerror.NewError(pgerror.CodeInternalError, "programming error: virtualDefEntry.virtualDef must be a virtualSchemaTable")
+var errInvalidVirtualDefEntry = pgerror.NewAssertionErrorf("virtualDefEntry.virtualDef must be a virtualSchemaTable")
 
 // getPlanInfo returns the column metadata and a constructor for a new
 // valuesNode for the virtual table. We use deferred construction here

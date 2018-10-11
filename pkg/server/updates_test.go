@@ -312,6 +312,11 @@ func TestReportUsage(t *testing.T) {
 		) {
 			t.Fatal(err)
 		}
+		if _, err := db.Exec(`SELECT crdb_internal.force_assertion_error('woo')`); !testutils.IsError(
+			err, "programming error",
+		) {
+			t.Fatal(err)
+		}
 		// pass args to force a prepare/exec path as that may differ.
 		if _, err := db.Exec(`SELECT 1::INTERVAL(1), $1`, 1); !testutils.IsError(
 			err, "unimplemented",
@@ -502,7 +507,7 @@ func TestReportUsage(t *testing.T) {
 		}
 	}
 
-	if expected, actual := 5, len(r.last.ErrorCounts); expected != actual {
+	if expected, actual := 6, len(r.last.ErrorCounts); expected != actual {
 		t.Fatalf("expected %d error codes counts in report, got %d (%v)", expected, actual, r.last.ErrorCounts)
 	}
 
@@ -534,6 +539,10 @@ func TestReportUsage(t *testing.T) {
 
 	if expected, actual := 3, len(r.last.UnimplementedErrors); expected != actual {
 		t.Fatalf("expected %d unimplemented feature errors, got %d", expected, actual)
+	}
+
+	if expected, actual := 1, len(r.last.ErrorTraceCounts); expected != actual {
+		t.Fatalf("expected %d internal errors, got %d", expected, actual)
 	}
 
 	for _, feat := range []string{"alter table rename constraint", "simple_type const_interval", "#9148"} {
@@ -662,6 +671,7 @@ func TestReportUsage(t *testing.T) {
 		`[true,false,false] SELECT (_, _, __more2__) = (SELECT _, _, _, _ FROM _ LIMIT _)`,
 		`[true,false,true] SELECT _ / $1`,
 		`[true,false,true] SELECT _ / _`,
+		`[true,false,true] SELECT crdb_internal.force_assertion_error(_)`,
 		`[true,false,true] SELECT crdb_internal.force_error(_, $1)`,
 		`[true,true,false] SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
 		`[true,true,false] SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
@@ -705,6 +715,7 @@ func TestReportUsage(t *testing.T) {
 			`SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
 			`SELECT _ / $1`,
 			`SELECT _ / _`,
+			`SELECT crdb_internal.force_assertion_error(_)`,
 			`SELECT crdb_internal.force_error(_, $1)`,
 			`SET CLUSTER SETTING "server.time_until_store_dead" = _`,
 			`SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
