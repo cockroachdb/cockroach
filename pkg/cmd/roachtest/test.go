@@ -184,7 +184,7 @@ func (r *registry) loadBuildVersion() {
 func (r *registry) verifyClusterName(testName string) error {
 	// TeamCity build IDs are currently 6 digits, but we use 7 here for a bit of
 	// breathing room.
-	name := makeGCEClusterName(testName, "xxxxxxx", "teamcity")
+	name := makeGCEClusterName("teamcity-" + testName)
 	if !clusterNameRE.MatchString(name) {
 		return fmt.Errorf("cluster name '%s' must match regex '%s'",
 			name, clusterNameRE)
@@ -856,12 +856,22 @@ func (r *registry) runAsync(
 
 		if c == nil {
 			if clusterName == "" {
-				opt := remoteCluster
-				if local {
-					opt = localCluster
+				var name string
+				if !local {
+					name = clusterID
+					if name == "" {
+						name = fmt.Sprintf("%d", timeutil.Now().Unix())
+					}
+					name += "-" + t.Name()
+				}
+				cfg := clusterConfig{
+					name:         name,
+					nodes:        t.spec.Nodes,
+					artifactsDir: t.ArtifactsDir(),
+					localCluster: local,
 				}
 				var err error
-				c, err = newCluster(ctx, t, t.spec.Nodes, opt)
+				c, err = newCluster(ctx, cfg)
 				FatalIfErr(t, err)
 			} else {
 				opt := attachOpt{
@@ -869,8 +879,11 @@ func (r *registry) runAsync(
 					skipStop:       r.config.skipClusterStopOnAttach,
 					skipWipe:       r.config.skipClusterWipeOnAttach,
 				}
-				c = attachToExistingCluster(ctx, clusterName, t, t.spec.Nodes, opt)
+				var err error
+				c, err = attachToExistingCluster(ctx, clusterName, t.ArtifactsDir(), t.spec.Nodes, opt)
+				FatalIfErr(t, err)
 			}
+			c.setTest(t)
 			if c != nil {
 				defer func() {
 					if !debugEnabled || !t.Failed() {

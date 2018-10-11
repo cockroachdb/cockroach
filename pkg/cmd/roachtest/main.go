@@ -18,6 +18,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/user"
 
 	"github.com/spf13/cobra"
 )
@@ -53,7 +54,9 @@ func main() {
 	rootCmd.PersistentFlags().BoolVarP(
 		&local, "local", "l", local, "run tests locally")
 	rootCmd.PersistentFlags().StringVarP(
-		&username, "user", "u", username, "username to run under, detect if blank")
+		&username, "user", "u", username,
+		"Username to use as a cluster name prefix. "+
+			"If blank, the current OS user is detected and specified.")
 	rootCmd.PersistentFlags().StringVar(
 		&cockroach, "cockroach", "", "path to cockroach binary to use")
 	rootCmd.PersistentFlags().StringVar(
@@ -108,6 +111,15 @@ If no pattern is given, all tests are run.
 			if count <= 0 {
 				return fmt.Errorf("--count (%d) must by greater than 0", count)
 			}
+
+			if username == "" {
+				usr, err := user.Current()
+				if err != nil {
+					panic(fmt.Sprintf("user.Current: %s", err))
+				}
+				username = usr.Username
+			}
+
 			r := newRegistry()
 			if buildTag != "" {
 				if err := r.setBuildVersion(buildTag); err != nil {
