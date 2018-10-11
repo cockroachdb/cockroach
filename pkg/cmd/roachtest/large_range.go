@@ -72,7 +72,7 @@ func runLargeRangeSplits(ctx context.Context, t *test, c *cluster, size int) {
 
 	c.Put(ctx, cockroach, "./cockroach", c.All())
 	c.Put(ctx, workload, "./workload", c.All())
-	c.Start(ctx, c.All())
+	c.Start(ctx, t, c.All())
 
 	m := newMonitor(ctx, c, c.All())
 	m.Go(func(ctx context.Context) error {

@@ -898,16 +898,16 @@ func roachprodArgs(opts []option) []string {
 	return args
 }
 
-// Start cockroach nodes on a subset of the cluster. The nodes parameter can
-// either be a specific node, empty (to indicate all nodes), or a pair of nodes
-// indicating a range.
-func (c *cluster) Start(ctx context.Context, opts ...option) {
-	if c.t.Failed() {
-		// If the test has failed, don't try to limp along.
-		return
-	}
+// StartE starts cockroach nodes on a subset of the cluster. The nodes parameter
+// can either be a specific node, empty (to indicate all nodes), or a pair of
+// nodes indicating a range.
+func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 	if atomic.LoadInt32(&interrupted) == 1 {
-		c.t.Fatal("interrupted")
+		return fmt.Errorf("cluster.Start() interrupted")
+	}
+	// If the test failed (indicated by a canceled ctx), short-circuit.
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 	c.status("starting cluster")
 	defer c.status()
@@ -920,9 +920,12 @@ func (c *cluster) Start(ctx context.Context, opts ...option) {
 	if encrypt && !argExists(args, "--encrypt") {
 		args = append(args, "--encrypt")
 	}
-	if err := execCmd(ctx, c.l, args...); err != nil {
-		c.t.Fatal(err)
-	}
+	return execCmd(ctx, c.l, args...)
+}
+
+// Start is like StartE() except it takes a test and, on error, calls t.Fatal().
+func (c *cluster) Start(ctx context.Context, t *test, opts ...option) {
+	FatalIfErr(t, c.StartE(ctx, opts...))
 }
 
 func argExists(args []string, target string) bool {

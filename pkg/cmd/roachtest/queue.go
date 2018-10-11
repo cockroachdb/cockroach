@@ -44,7 +44,7 @@ func runQueue(ctx context.Context, t *test, c *cluster) {
 	// Distribute programs to the correct nodes and start CockroachDB.
 	c.Put(ctx, cockroach, "./cockroach", c.Range(1, dbNodeCount))
 	c.Put(ctx, workload, "./workload", c.Node(workloadNode))
-	c.Start(ctx, c.Range(1, dbNodeCount))
+	c.Start(ctx, t, c.Range(1, dbNodeCount))
 
 	runQueueWorkload := func(duration time.Duration, initTables bool) {
 		m := newMonitor(ctx, c, c.Range(1, dbNodeCount))

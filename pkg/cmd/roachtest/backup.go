@@ -44,7 +44,7 @@ func registerBackup(r *registry) {
 			}
 
 			c.Put(ctx, cockroach, "./cockroach")
-			c.Start(ctx)
+			c.Start(ctx, t)
 			m := newMonitor(ctx, c)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`running backup`)
@@ -67,7 +67,7 @@ func registerBackup(r *registry) {
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Put(ctx, workload, "./workload")
-			c.Start(ctx)
+			c.Start(ctx, t)
 			conn := c.Conn(ctx, 1)
 
 			duration := 5 * time.Minute

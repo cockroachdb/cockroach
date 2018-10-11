@@ -493,8 +493,13 @@ type test struct {
 	artifactsDir string
 	mu           struct {
 		syncutil.RWMutex
-		done    bool
-		failed  bool
+		done   bool
+		failed bool
+		// cancel, if set, is called from the t.Fatal() family of functions when the
+		// test is being marked as failed (i.e. when the failed field above is also
+		// set). This is used to cancel the context passed to t.spec.Run(), so async
+		// test goroutines can be notified.
+		cancel  func()
 		failLoc struct {
 			file string
 			line int
@@ -588,6 +593,9 @@ func (t *test) printAndFail(args ...interface{}) {
 	defer t.mu.Unlock()
 	t.mu.output = append(t.mu.output, t.decorate(fmt.Sprint(args...))...)
 	t.mu.failed = true
+	if t.mu.cancel != nil {
+		t.mu.cancel()
+	}
 }
 
 func (t *test) printfAndFail(format string, args ...interface{}) {
@@ -595,6 +603,9 @@ func (t *test) printfAndFail(format string, args ...interface{}) {
 	defer t.mu.Unlock()
 	t.mu.output = append(t.mu.output, t.decorate(fmt.Sprintf(format, args...))...)
 	t.mu.failed = true
+	if t.mu.cancel != nil {
+		t.mu.cancel()
+	}
 }
 
 func (t *test) decorate(s string) string {
@@ -926,6 +937,10 @@ func (r *registry) runAsync(
 		}()
 
 		runCtx, cancel := context.WithCancel(ctx)
+		t.mu.Lock()
+		// t.Fatal() will cancel this context.
+		t.mu.cancel = cancel
+		t.mu.Unlock()
 
 		go func() {
 			defer cancel()

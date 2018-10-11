@@ -37,7 +37,7 @@ func registerHotSpotSplits(r *registry) {
 		appNode := c.Node(c.nodes)
 
 		c.Put(ctx, cockroach, "./cockroach", roachNodes)
-		c.Start(ctx, roachNodes)
+		c.Start(ctx, t, roachNodes)
 
 		c.Put(ctx, workload, "./workload", appNode)
 		c.Run(ctx, appNode, `./workload init kv --drop {pgurl:1}`)
