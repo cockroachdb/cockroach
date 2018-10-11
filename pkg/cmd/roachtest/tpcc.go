@@ -531,10 +531,9 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 
 				// Kill one node at a time.
 				ch := Chaos{
-					Timer:        Periodic{Period: 90 * time.Second, DownTime: 1 * time.Second},
-					Target:       roachNodes.randNode,
-					Stopper:      loadDone,
-					DrainAndQuit: true,
+					Timer:   Periodic{Period: 90 * time.Second, DownTime: 5 * time.Second},
+					Target:  roachNodes.randNode,
+					Stopper: loadDone,
 				}
 				m.Go(ch.Runner(c, m))
 			}
@@ -705,8 +704,8 @@ func registerTPCCBench(r *registry) {
 			CPUs:  16,
 			Chaos: true,
 
-			LoadWarehouses: 5000,
-			EstimatedMax:   500,
+			LoadWarehouses: 2000,
+			EstimatedMax:   1000,
 			// TODO(nvanbenschoten): Need to regenerate.
 			// StoreDirVersion: "2.0-5",
 		},
