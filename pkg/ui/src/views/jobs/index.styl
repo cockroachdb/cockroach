@@ -1,0 +1,58 @@
+@require '~styl/base/palette.styl'
+
+.jobs-page
+  display flex
+  flex-flow column
+  height 100%
+
+.no-results
+  display flex
+  align-items center
+  justify-content center
+  height 100%
+
+
+.jobs-table
+  h3
+    color $headings-color
+
+  &__row
+    &--paused .rc-progress-line-path
+      stroke $tooltip-color
+
+    &--failed
+      & + &  // Match two adjacent failed rows.
+        border-top 1px solid $table-border-color
+
+  &__progress-bar
+    padding-right .7em
+    width 120px
+
+  &__duration
+    font-style italic
+
+  &__status, &__running-status
+    text-transform capitalize
+
+  .job-detail
+    max-width 1000px
+    white-space pre-wrap
+    padding 5px
+    margin-top 5px
+    margin-bottom 10px
+    border 1px solid $button-border-color
+    border-radius 4px
+    background-color white
+    color $headings-color
+
+  &__cell--description
+    overflow hidden
+    text-overflow ellipsis
+    white-space nowrap
+    font-family Inconsolata-Regular
+    max-width 500px
+    word-wrap break-word
+
+  &__status-icon
+    display inline-block
+    margin-right 7px
