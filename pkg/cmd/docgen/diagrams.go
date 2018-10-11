@@ -751,7 +751,7 @@ var specs = []stmtSpec{
 		replace: map[string]string{
 			"string_or_placeholder": "file_location",
 		},
-		inline: []string{"opt_with_options"},
+		inline: []string{"opt_with_options", "opt_data"},
 		unlink: []string{"import_format", "file_location", "file_location_list"},
 	},
 	{
