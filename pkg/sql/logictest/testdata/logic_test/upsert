@@ -616,3 +616,28 @@ UPSERT INTO tn2(x) VALUES (NULL)
 
 statement error value too long for type CHAR\(3\)
 UPSERT INTO tn2(x, y) VALUES (123, 'abcd')
+
+# Regression tests for #29494
+
+statement ok
+CREATE TABLE t29494(x INT); BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+# Check that the new column is not visible
+query T
+SELECT create_statement FROM [SHOW CREATE t29494]
+----
+CREATE TABLE t29494 (
+   x INT NULL,
+   FAMILY "primary" (x, rowid)
+)
+
+# Check that the new column is not usable in RETURNING
+statement error column "y" does not exist
+UPSERT INTO t29494(x) VALUES (123) RETURNING y
+
+# Ditto for INSERT ON CONFLICT
+statement ok
+ROLLBACK; BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+statement error column "y" does not exist
+INSERT INTO t29494(x) VALUES (123) ON CONFLICT(rowid) DO UPDATE SET x = 400 RETURNING y

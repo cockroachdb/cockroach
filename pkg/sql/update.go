@@ -266,9 +266,24 @@ func (p *planner) Update(
 	// Capture the columns of the source, prior to the insertion of
 	// extra renders. This will be the input for RETURNING, if any, and
 	// this must not see the additional renders added below.
+	// It also must not see the additional columns captured in FetchCols
+	// but which were not in requestedCols.
 	var columns sqlbase.ResultColumns
 	if rowsNeeded {
 		columns = planColumns(rows)
+		// If rowsNeeded is set, we have requested from the source above
+		// all the columns from the descriptor. However, to ensure that
+		// modified rows include all columns, the construction of the
+		// source has used publicAndNonVivible columns so the source may
+		// contain additional columns for every newly added column not yet
+		// visible.
+		// We do not want these to be available for RETURNING below.
+		//
+		// MakeRowUpdater guarantees that the first columns of the source
+		// are those specified in requestedCols, which, in the case where
+		// rowsNeeded is true, is also desc.Columns. So we can truncate to
+		// the length of that to only see public columns.
+		columns = columns[:len(desc.Columns)]
 	}
 
 	for _, setExpr := range setExprs {

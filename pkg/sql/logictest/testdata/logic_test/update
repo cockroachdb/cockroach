@@ -427,3 +427,36 @@ UPDATE derived SET x = 'abcd'
 
 statement error failed to satisfy CHECK constraint
 UPDATE derived SET y = 'abcd'
+
+# Regression tests for #29494
+statement ok
+CREATE TABLE t29494(x INT); BEGIN; ALTER TABLE t29494 ADD COLUMN y INT
+
+# Check that the new column is not visible
+query T
+SELECT create_statement FROM [SHOW CREATE t29494]
+----
+CREATE TABLE t29494 (
+   x INT NULL,
+   FAMILY "primary" (x, rowid)
+)
+
+# Check that the new column is not usable in RETURNING
+statement error column "y" does not exist
+UPDATE t29494 SET x = 123 RETURNING y
+
+# Check the new column is not assignable. We need to restart
+# the txn because the error above trashed it.
+statement ok
+ROLLBACK; BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+statement error column "y" does not exist
+UPDATE t29494 SET y = 123
+
+# Check the new column is not usable in assignments. We need to
+# restart the txn because the error above trashed it.
+statement ok
+ROLLBACK; BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+statement error column "y" is being backfilled
+UPDATE t29494 SET x = y
