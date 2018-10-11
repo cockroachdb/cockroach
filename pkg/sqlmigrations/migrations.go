@@ -367,7 +367,7 @@ func (m *Manager) EnsureMigrations(ctx context.Context) error {
 		if err == nil {
 			break
 		}
-		log.Errorf(ctx, "failed attempt to acquire migration lease: %s", err)
+		log.Infof(ctx, "failed attempt to acquire migration lease: %s", err)
 	}
 	if err != nil {
 		return errors.Wrapf(err, "failed to acquire lease for running necessary migrations")
