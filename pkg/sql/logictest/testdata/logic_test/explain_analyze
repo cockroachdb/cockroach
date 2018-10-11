@@ -11,6 +11,10 @@ EXPLAIN ANALYZE (DISTSQL) CREATE INDEX ON a(a)
 statement ok
 EXPLAIN ANALYZE (DISTSQL) INSERT INTO a VALUES (1)
 
+# Verify that EXPLAIN ANALYZE works without the DISTSQL option.
+statement ok
+EXPLAIN ANALYZE SELECT * FROM a
+
 # Make sure failures are okay.
 statement error duplicate
 EXPLAIN ANALYZE (DISTSQL) INSERT INTO a VALUES (1)
