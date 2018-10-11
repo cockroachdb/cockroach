@@ -120,8 +120,7 @@ func (n *scrubNode) startExec(params runParams) error {
 			return err
 		}
 	default:
-		return pgerror.NewErrorf(pgerror.CodeInternalError,
-			"unexpected SCRUB type received, got: %v", n.n.Typ)
+		return pgerror.NewAssertionErrorf("unexpected SCRUB type received, got: %v", n.n.Typ)
 	}
 	return nil
 }

@@ -2792,6 +2792,22 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"crdb_internal.force_assertion_error": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+			Impure:   true,
+		},
+		tree.Overload{
+			Types:      tree.ArgTypes{{"msg", types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				msg := string(*args[0].(*tree.DString))
+				return nil, pgerror.NewAssertionErrorf("%s", msg)
+			},
+			Info: "This function is used only by CockroachDB's developers for testing purposes.",
+		},
+	),
+
 	"crdb_internal.force_panic": makeBuiltin(
 		tree.FunctionProperties{
 			Category:   categorySystemInfo,
@@ -3287,7 +3303,7 @@ var jsonTypeOfImpl = tree.Overload{
 		case json.ObjectJSONType:
 			return jsonObjectDString, nil
 		}
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected JSON type %d", t)
+		return nil, pgerror.NewAssertionErrorf("unexpected JSON type %d", t)
 	},
 	Info: "Returns the type of the outermost JSON value as a text string.",
 }
@@ -4328,7 +4344,7 @@ func asJSONBuildObjectKey(d tree.Datum) (string, error) {
 	case *tree.DBool, *tree.DInt, *tree.DFloat, *tree.DDecimal, *tree.DTimestamp, *tree.DTimestampTZ, *tree.DDate, *tree.DUuid, *tree.DInterval, *tree.DBytes, *tree.DIPAddr, *tree.DOid, *tree.DTime:
 		return tree.AsStringWithFlags(d, tree.FmtBareStrings), nil
 	default:
-		return "", pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for key value", d)
+		return "", pgerror.NewAssertionErrorf("unexpected type %T for key value", d)
 	}
 }
 
@@ -4337,7 +4353,7 @@ func asJSONObjectKey(d tree.Datum) (string, error) {
 	case *tree.DString:
 		return string(*t), nil
 	default:
-		return "", pgerror.NewErrorf(pgerror.CodeInternalError, "unexpected type %T for asJSONObjectKey", d)
+		return "", pgerror.NewAssertionErrorf("unexpected type %T for asJSONObjectKey", d)
 	}
 }
 

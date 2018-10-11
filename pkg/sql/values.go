@@ -62,7 +62,7 @@ func (p *planner) Values(
 	case *tree.ValuesClause:
 		n = t
 	default:
-		log.Fatalf(ctx, "programming error. unhandled case in values: %T %v", origN, origN)
+		return nil, pgerror.NewAssertionErrorf("unhandled case in values: %T %v", origN, origN)
 	}
 
 	if len(n.Rows) == 0 {

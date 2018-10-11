@@ -312,6 +312,11 @@ func TestReportUsage(t *testing.T) {
 		) {
 			t.Fatal(err)
 		}
+		if _, err := db.Exec(`SELECT crdb_internal.force_assertion_error('woo')`); !testutils.IsError(
+			err, "internal error",
+		) {
+			t.Fatal(err)
+		}
 		// pass args to force a prepare/exec path as that may differ.
 		if _, err := db.Exec(`SELECT 1::INTERVAL(1), $1`, 1); !testutils.IsError(
 			err, "unimplemented",
@@ -487,13 +492,26 @@ func TestReportUsage(t *testing.T) {
 		}
 	}
 
-	if expected, actual := 3, len(r.last.FeatureUsage); expected != actual {
+	// This test would be infuriating if it had to be updated on every
+	// edit to the Go code that changed the line number of the trace
+	// produced by force_assertion_error, so just scrub the trace
+	// here.
+	for k := range r.last.FeatureUsage {
+		if strings.HasPrefix(k, "internalerror.") {
+			r.last.FeatureUsage["internalerror."] = r.last.FeatureUsage[k]
+			delete(r.last.FeatureUsage, k)
+			break
+		}
+	}
+
+	if expected, actual := 4, len(r.last.FeatureUsage); expected != actual {
 		t.Fatalf("expected %d feature usage counts, got %d: %v", expected, actual, r.last.FeatureUsage)
 	}
 	for key, expected := range map[string]int32{
-		"test.a": 1,
-		"test.b": 2,
-		"test.c": 3,
+		"test.a":         1,
+		"test.b":         2,
+		"test.c":         3,
+		"internalerror.": 10,
 	} {
 		if got, ok := r.last.FeatureUsage[key]; !ok {
 			t.Fatalf("expected report of feature %q", key)
@@ -502,11 +520,11 @@ func TestReportUsage(t *testing.T) {
 		}
 	}
 
-	if expected, actual := 5, len(r.last.ErrorCounts); expected != actual {
+	if expected, actual := 6, len(r.last.ErrorCounts); expected != actual {
 		t.Fatalf("expected %d error codes counts in report, got %d (%v)", expected, actual, r.last.ErrorCounts)
 	}
 
-	// this test would be infuriating if it had to be updated on every edit to
+	// This test would be infuriating if it had to be updated on every edit to
 	// builtins.go that changed the line number of force_error, so just scrub the
 	// line number here.
 	for k := range r.last.ErrorCounts {
@@ -662,6 +680,7 @@ func TestReportUsage(t *testing.T) {
 		`[true,false,false] SELECT (_, _, __more2__) = (SELECT _, _, _, _ FROM _ LIMIT _)`,
 		`[true,false,true] SELECT _ / $1`,
 		`[true,false,true] SELECT _ / _`,
+		`[true,false,true] SELECT crdb_internal.force_assertion_error(_)`,
 		`[true,false,true] SELECT crdb_internal.force_error(_, $1)`,
 		`[true,true,false] SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
 		`[true,true,false] SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
@@ -705,6 +724,7 @@ func TestReportUsage(t *testing.T) {
 			`SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
 			`SELECT _ / $1`,
 			`SELECT _ / _`,
+			`SELECT crdb_internal.force_assertion_error(_)`,
 			`SELECT crdb_internal.force_error(_, $1)`,
 			`SET CLUSTER SETTING "server.time_until_store_dead" = _`,
 			`SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,

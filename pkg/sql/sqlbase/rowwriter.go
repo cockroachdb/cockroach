@@ -417,8 +417,7 @@ func prepareInsertOrUpdateBatch(
 		var lastColID ColumnID
 		familySortedColumnIDs, ok := helper.sortedColumnFamily(family.ID)
 		if !ok {
-			return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-				"programming error: invalid family sorted column id map")
+			return nil, pgerror.NewAssertionErrorf("invalid family sorted column id map")
 		}
 		for _, colID := range familySortedColumnIDs {
 			idx, ok := valColIDMapping[colID]
@@ -436,8 +435,7 @@ func prepareInsertOrUpdateBatch(
 			col := updatedCols[idx]
 
 			if lastColID > col.ID {
-				return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-					"programming error: cannot write column id %d after %d", col.ID, lastColID)
+				return nil, pgerror.NewAssertionErrorf("cannot write column id %d after %d", col.ID, lastColID)
 			}
 			colIDDiff := col.ID - lastColID
 			lastColID = col.ID
