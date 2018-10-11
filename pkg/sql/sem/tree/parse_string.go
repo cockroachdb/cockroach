@@ -46,7 +46,7 @@ func ParseStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 		default:
 			d, err = parseStringAs(t, s, evalCtx)
 			if d == nil && err == nil {
-				return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unknown type %s (%T)", t, t)
+				return nil, pgerror.NewAssertionErrorf("unknown type %s (%T)", t, t)
 			}
 		}
 	}

@@ -66,8 +66,7 @@ func (n *cancelSessionsNode) Next(params runParams) (bool, error) {
 	statusServer := params.extendedEvalCtx.StatusServer
 	sessionIDString, ok := tree.AsDString(datum)
 	if !ok {
-		return false, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"programming error: %q: expected *DString, found %T", datum, datum)
+		return false, pgerror.NewAssertionErrorf("%q: expected *DString, found %T", datum, datum)
 	}
 
 	sessionID, err := StringToClusterWideID(string(sessionIDString))

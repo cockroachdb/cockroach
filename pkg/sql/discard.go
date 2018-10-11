@@ -39,8 +39,7 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 		// DEALLOCATE ALL
 		p.preparedStatements.DeleteAll(ctx)
 	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"unknown mode for DISCARD: %d", s.Mode)
+		return nil, pgerror.NewAssertionErrorf("unknown mode for DISCARD: %d", s.Mode)
 	}
 	return newZeroNode(nil /* columns */), nil
 }

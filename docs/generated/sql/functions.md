@@ -929,6 +929,8 @@ may increase either contention or retry errors, or both.</p>
 </span></td></tr>
 <tr><td><code>crdb_internal.cluster_id() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns the cluster ID.</p>
 </span></td></tr>
+<tr><td><code>crdb_internal.force_assertion_error(msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
+</span></td></tr>
 <tr><td><code>crdb_internal.force_error(errorCode: <a href="string.html">string</a>, msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td></tr>
 <tr><td><code>crdb_internal.force_log_fatal(msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>

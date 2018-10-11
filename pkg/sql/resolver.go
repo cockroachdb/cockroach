@@ -418,8 +418,7 @@ func expandIndexName(
 
 		// Just an assertion: if we got there, there cannot be a value in index.Index yet.
 		if index.Index != "" {
-			return nil, nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-				"programmer error: not-searched index name found already qualified: %s@%s", tn, index.Index)
+			return nil, nil, pgerror.NewAssertionErrorf("programmer error: not-searched index name found already qualified: %s@%s", tn, index.Index)
 		}
 
 		index.Index = tree.UnrestrictedName(tn.TableName)

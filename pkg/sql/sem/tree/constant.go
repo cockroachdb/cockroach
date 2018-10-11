@@ -319,8 +319,7 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 		oid.semanticType = coltypes.OidTypeToColType(typ)
 		return oid, nil
 	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"could not resolve %T %v into a %T", expr, expr, typ)
+		return nil, pgerror.NewAssertionErrorf("could not resolve %T %v into a %T", expr, expr, typ)
 	}
 }
 
@@ -483,8 +482,7 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 			expr.resString = DString(expr.s)
 			return &expr.resString, nil
 		}
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"programming error: attempt to type byte array literal to %T", typ)
+		return nil, pgerror.NewAssertionErrorf("attempt to type byte array literal to %T", typ)
 	}
 
 	// Typing a string literal constant into some value type.
@@ -501,8 +499,7 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 
 	datum, err := parseStringAs(typ, expr.s, ctx)
 	if datum == nil && err == nil {
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"could not resolve %T %v into a %T", expr, expr, typ)
+		return nil, pgerror.NewAssertionErrorf("could not resolve %T %v into a %T", expr, expr, typ)
 	}
 	return datum, err
 }

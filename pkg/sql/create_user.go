@@ -132,8 +132,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	} else if n.run.rowsAffected != 1 {
-		return errors.Errorf(
-			"programming error: %d rows affected by user creation; expected exactly one row affected",
+		return pgerror.NewAssertionErrorf("%d rows affected by user creation; expected exactly one row affected",
 			n.run.rowsAffected,
 		)
 	}

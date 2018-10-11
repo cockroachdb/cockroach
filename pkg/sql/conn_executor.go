@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -310,8 +311,10 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.PeriodicallyClearStmtStats(ctx, stopper)
 }
 
-// recordError takes an error and increments the corresponding count for its
-// error code, and, if it is an unimplemented error, the count for that feature.
+// recordError takes an error and increments the corresponding count
+// for its error code, and, if it is an unimplemented or internal
+// error, the count for that feature or the internal error's shortened
+// stack trace.
 func (s *Server) recordError(err error) {
 	if err == nil {
 		return
@@ -324,12 +327,17 @@ func (s *Server) recordError(err error) {
 	if pgErr, ok := pgerror.GetPGCause(err); ok {
 		s.errorCounts.codes[pgErr.Code]++
 
-		if pgErr.Code == pgerror.CodeFeatureNotSupportedError {
+		switch pgErr.Code {
+		case pgerror.CodeFeatureNotSupportedError:
 			if feature := pgErr.InternalCommand; feature != "" {
 				if s.errorCounts.unimplemented == nil {
 					s.errorCounts.unimplemented = make(map[string]int64)
 				}
 				s.errorCounts.unimplemented[feature]++
+			}
+		case pgerror.CodeInternalError:
+			if trace := pgErr.InternalCommand; trace != "" {
+				telemetry.Count("internalerror." + trace)
 			}
 		}
 	} else {

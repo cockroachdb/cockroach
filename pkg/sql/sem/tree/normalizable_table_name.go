@@ -60,8 +60,8 @@ func (nt *NormalizableTableName) Normalize() (*TableName, error) {
 		nt.TableNameReference = &tn
 		return &tn, nil
 	default:
-		return nil, pgerror.NewErrorWithDepthf(1, pgerror.CodeInternalError,
-			"programming error: unsupported table name reference: %+v (%T)",
+		return nil, pgerror.NewAssertionErrorf(
+			"unsupported table name reference: %+v (%T)",
 			nt.TableNameReference, nt.TableNameReference)
 	}
 }

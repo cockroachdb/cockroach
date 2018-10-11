@@ -179,8 +179,9 @@ func makeGeneratorOverload(
 	return makeGeneratorOverloadWithReturnType(in, tree.FixedReturnType(ret), g, info)
 }
 
-var errUnsuitableUseOfGenerator = pgerror.NewErrorf(pgerror.CodeInternalError,
-	"programming error: generator functions cannot be evaluated as scalars")
+func newUnsuitableUseOfGeneratorError() error {
+	return pgerror.NewAssertionErrorf("generator functions cannot be evaluated as scalars")
+}
 
 func makeGeneratorOverloadWithReturnType(
 	in tree.ArgTypes, retType tree.ReturnTyper, g tree.GeneratorFactory, info string,
@@ -190,7 +191,7 @@ func makeGeneratorOverloadWithReturnType(
 		ReturnType: retType,
 		Generator:  g,
 		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-			return nil, errUnsuitableUseOfGenerator
+			return nil, newUnsuitableUseOfGeneratorError()
 		},
 		Info: info,
 	}

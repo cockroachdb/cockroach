@@ -657,8 +657,7 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 						var err error
 						arguments[i-1], err = t.Exprs[i].(tree.TypedExpr).Eval(evalContext)
 						if err != nil {
-							v.err = pgerror.NewErrorf(pgerror.CodeInternalError,
-								"programming error: can't evaluate %s - %v", t.Exprs[i].String(), err)
+							v.err = pgerror.NewAssertionErrorf("can't evaluate %s - %v", t.Exprs[i].String(), err)
 							return false, expr
 						}
 					}
