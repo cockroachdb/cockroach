@@ -1667,10 +1667,12 @@ import_format:
 // %Help: IMPORT - load data from file in a distributed manner
 // %Category: CCL
 // %Text:
+// -- Import both schema and table data:
 // IMPORT [ TABLE <tablename> FROM ]
-//        <format> ( <datafile> )
+//        <format> <datafile>
 //        [ WITH <option> [= <value>] [, ...] ]
 //
+// -- Import using specific schema, use only table data from external file:
 // IMPORT TABLE <tablename>
 //        { ( <elements> ) | CREATE USING <schemafile> }
 //        <format>
@@ -1696,6 +1698,7 @@ import_format:
 import_stmt:
  IMPORT import_format '(' string_or_placeholder ')' opt_with_options
   {
+    /* SKIP DOC */
     $$.val = &tree.Import{Bundle: true, FileFormat: $2, Files: tree.Exprs{$4.expr()}, Options: $6.kvOptions()}
   }
 | IMPORT import_format string_or_placeholder opt_with_options
@@ -1704,6 +1707,7 @@ import_stmt:
   }
 | IMPORT TABLE table_name FROM import_format '(' string_or_placeholder ')' opt_with_options
   {
+    /* SKIP DOC */
     $$.val = &tree.Import{Bundle: true, Table: $3.normalizableTableNameFromUnresolvedName(), FileFormat: $5, Files: tree.Exprs{$7.expr()}, Options: $9.kvOptions()}
   }
 | IMPORT TABLE table_name FROM import_format string_or_placeholder opt_with_options
@@ -1719,7 +1723,6 @@ import_stmt:
     $$.val = &tree.Import{Table: $3.normalizableTableNameFromUnresolvedName(), CreateDefs: $5.tblDefs(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
   }
 | IMPORT error // SHOW HELP: IMPORT
-
 
 // %Help: EXPORT - export data to file in a distributed manner
 // %Category: CCL
