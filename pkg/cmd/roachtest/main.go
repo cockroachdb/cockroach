@@ -117,7 +117,7 @@ If no pattern is given, all tests are run.
 				r.loadBuildVersion()
 			}
 			registerTests(r)
-			os.Exit(r.Run(args))
+			os.Exit(r.Run(args, parallelism))
 			return nil
 		},
 	}
@@ -139,7 +139,7 @@ If no pattern is given, all tests are run.
 			}
 			r := newRegistry()
 			registerBenchmarks(r)
-			os.Exit(r.Run(args))
+			os.Exit(r.Run(args, parallelism))
 			return nil
 		},
 	}
@@ -177,7 +177,7 @@ Cockroach cluster with existing data.
 			registerStoreGen(r, args)
 			// We've only registered one store generation "test" that does its own
 			// argument processing, so no need to provide any arguments to r.Run.
-			os.Exit(r.Run(nil /* filter */))
+			os.Exit(r.Run(nil /* filter */, parallelism))
 			return nil
 		},
 	}
