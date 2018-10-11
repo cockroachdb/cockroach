@@ -1,0 +1,5 @@
+alter_zone_table_stmt ::=
+	'ALTER' 'TABLE' table_name 'CONFIGURE' 'ZONE' 'USING' var_name '=' var_value ( ( ',' var_name '=' var_value ) )*
+	| 'ALTER' 'TABLE' table_name 'CONFIGURE' 'ZONE' 'DISCARD'
+	| 'ALTER' 'PARTITION' partition_name 'OF' 'TABLE' table_name 'CONFIGURE' 'ZONE' 'USING' var_name '=' var_value ( ( ',' var_name '=' var_value ) )*
+	| 'ALTER' 'PARTITION' partition_name 'OF' 'TABLE' table_name 'CONFIGURE' 'ZONE' 'DISCARD'
