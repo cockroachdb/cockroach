@@ -1938,7 +1938,7 @@ func checkForMissingZone(t time.Time, parseLoc *time.Location) error {
 
 // ParseDTimestamp parses and returns the *DTimestamp Datum value represented by
 // the provided string in UTC, or an error if parsing is unsuccessful.
-func ParseDTimestamp(s string, precision time.Duration) (*DTimestamp, error) {
+func ParseDTimestamp(ctx duration.Context, s string, precision time.Duration) (*DTimestamp, error) {
 	// `ParseInLocation` uses the location provided both for resolving an explicit
 	// abbreviated zone as well as for the default zone if not specified
 	// explicitly. For non-'WITH TIME ZONE' strings (which this is used to parse),
@@ -1951,7 +1951,7 @@ func ParseDTimestamp(s string, precision time.Duration) (*DTimestamp, error) {
 	}
 	// Truncate the timezone. DTimestamp doesn't carry its timezone around.
 	_, offset := t.Zone()
-	t = duration.Add(t, duration.FromInt64(int64(offset))).UTC()
+	t = duration.Add(ctx, t, duration.FromInt64(int64(offset))).UTC()
 	return MakeDTimestamp(t, precision), nil
 }
 
@@ -2161,7 +2161,7 @@ func (d *DTimestampTZ) Size() uintptr {
 //             '2012-01-01 12:00:00'.
 func (d *DTimestampTZ) stripTimeZone(ctx *EvalContext) *DTimestamp {
 	_, locOffset := d.Time.In(ctx.GetLocation()).Zone()
-	newTime := duration.Add(d.Time.UTC(), duration.FromInt64(int64(locOffset)))
+	newTime := duration.Add(ctx, d.Time.UTC(), duration.FromInt64(int64(locOffset)))
 	return MakeDTimestamp(newTime, time.Microsecond)
 }
 

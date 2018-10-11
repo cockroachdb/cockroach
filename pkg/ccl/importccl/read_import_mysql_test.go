@@ -282,7 +282,7 @@ func TestMysqlValueToDatum(t *testing.T) {
 		return d
 	}
 	ts := func(s string) tree.Datum {
-		d, err := tree.ParseDTimestamp(s, time.Microsecond)
+		d, err := tree.ParseDTimestamp(nil, s, time.Microsecond)
 		if err != nil {
 			t.Fatal(err)
 		}

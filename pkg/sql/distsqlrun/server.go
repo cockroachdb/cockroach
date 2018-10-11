@@ -19,6 +19,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
@@ -77,7 +78,7 @@ type DistSQLVersion uint32
 //
 // ATTENTION: When updating these fields, add to version_history.txt explaining
 // what changed.
-const Version DistSQLVersion = 21
+const Version DistSQLVersion = 22
 
 // MinAcceptedVersion is the oldest version that the server is
 // compatible with; see above.
@@ -381,6 +382,12 @@ func (ds *ServerImpl) setupFlow(
 				BytesEncodeFormat: be,
 				ExtraFloatDigits:  int(req.EvalContext.ExtraFloatDigits),
 			},
+		}
+		// Enable better compatibility with PostgreSQL date math.
+		if req.Version >= 22 {
+			sd.DurationAdditionMode = duration.AdditionModeCompatible
+		} else {
+			sd.DurationAdditionMode = duration.AdditionModeLegacy
 		}
 		ie := &lazyInternalExecutor{
 			newInternalExecutor: func() tree.SessionBoundInternalExecutor {

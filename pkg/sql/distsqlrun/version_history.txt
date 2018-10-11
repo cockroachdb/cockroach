@@ -86,3 +86,6 @@
       that they are compatible. We decided it was safer to bump the min
       version to prevent possible bugs at the cost of performance during
       the upgrade.
+- Version: 22 (MinAcceptedVersion: 21)
+    - Change date math to better align with PostgreSQL:
+      https://github.com/cockroachdb/cockroach/pull/31146

@@ -555,7 +555,7 @@ func TestParseDTimestamp(t *testing.T) {
 			time.FixedZone("", 0))},
 	}
 	for _, td := range testData {
-		actual, err := tree.ParseDTimestamp(td.str, time.Nanosecond)
+		actual, err := tree.ParseDTimestamp(nil, td.str, time.Nanosecond)
 		if err != nil {
 			t.Errorf("unexpected error while parsing TIMESTAMP %s: %s", td.str, err)
 			continue
