@@ -490,7 +490,7 @@ var _ opt.TableStatistic = &TableStat{}
 
 // CreatedAt is part of the opt.TableStatistic interface.
 func (ts *TableStat) CreatedAt() time.Time {
-	d, err := tree.ParseDTimestamp(ts.js.CreatedAt, time.Microsecond)
+	d, err := tree.ParseDTimestamp(nil, ts.js.CreatedAt, time.Microsecond)
 	if err != nil {
 		panic(err)
 	}
