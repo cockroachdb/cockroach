@@ -24,6 +24,7 @@ import (
 // column type.
 type T int
 
+//go:generate stringer -type=T
 const (
 	// Bool is a column of type bool
 	Bool T = iota

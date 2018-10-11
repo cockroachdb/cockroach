@@ -44,6 +44,7 @@ define VALID_VARS
   C_LIBS_OSS
   DOCGEN_TARGETS
   DUPLFLAGS
+  EXECGEN_TARGETS
   EXTRA_XCMAKE_FLAGS
   EXTRA_XCONFIGURE_FLAGS
   FILES
@@ -156,6 +157,7 @@ define VALID_VARS
   cmake-flags
   configure-flags
   cyan
+  execgen-package
   go-targets
   go-targets-ccl
   have-defs
