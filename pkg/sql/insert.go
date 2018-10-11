@@ -197,6 +197,7 @@ func (p *planner) Insert(
 	}
 
 	// Extract the AST for the data source.
+	isUpsert := n.OnConflict.IsUpsertAlias()
 	var insertRows tree.SelectStatement
 	arityChecked := false
 	colNames := make(tree.NameList, len(insertCols))
@@ -215,7 +216,7 @@ func (p *planner) Insert(
 				// Check to make sure the values clause doesn't have too many or
 				// too few expressions in each tuple.
 				numExprs := len(values.Rows[0])
-				if err := checkNumExprs(numExprs, numInputColumns, n.Columns != nil); err != nil {
+				if err := checkNumExprs(isUpsert, numExprs, numInputColumns, n.Columns != nil); err != nil {
 					return nil, err
 				}
 				if numExprs > maxInsertIdx {
@@ -248,7 +249,7 @@ func (p *planner) Insert(
 		// already verified the arity of the operand is correct.
 		// Do it now.
 		numExprs := len(srcCols)
-		if err := checkNumExprs(numExprs, numInputColumns, n.Columns != nil); err != nil {
+		if err := checkNumExprs(isUpsert, numExprs, numInputColumns, n.Columns != nil); err != nil {
 			return nil, err
 		}
 		if numExprs > maxInsertIdx {
@@ -851,7 +852,7 @@ func fillDefaults(
 	return ret, nil
 }
 
-func checkNumExprs(numExprs, numCols int, specifiedTargets bool) error {
+func checkNumExprs(isUpsert bool, numExprs, numCols int, specifiedTargets bool) error {
 	// It is ok to be missing exprs if !specifiedTargets, because the missing
 	// columns will be filled in by DEFAULT expressions.
 	extraExprs := numExprs > numCols
@@ -861,8 +862,13 @@ func checkNumExprs(numExprs, numCols int, specifiedTargets bool) error {
 		if missingExprs {
 			more, less = less, more
 		}
-		return errors.Errorf("INSERT has more %s than %s, %d expressions for %d targets",
-			more, less, numExprs, numCols)
+		kw := "INSERT"
+		if isUpsert {
+			kw = "UPSERT"
+		}
+		return pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"%s has more %s than %s, %d expressions for %d targets",
+			kw, more, less, numExprs, numCols)
 	}
 	return nil
 }
