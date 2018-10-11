@@ -485,29 +485,14 @@ func TestShowQueries(t *testing.T) {
 
 	execKnobs := &sql.ExecutorTestingKnobs{}
 
-	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{
-				UseDatabase: "test",
-				Knobs: base.TestingKnobs{
-					SQLExecutor: execKnobs,
-				},
-			},
-		})
-	defer tc.Stopper().Stop(context.TODO())
-
-	conn1 = tc.ServerConn(0)
-	conn2 = tc.ServerConn(1)
-	sqlutils.CreateTable(t, conn1, tableName, "num INT", 0, nil)
-
 	found := false
 	var failure error
+
 	execKnobs.StatementFilter = func(ctx context.Context, stmt string, err error) {
 		if stmt == selectStmt {
 			found = true
 			const showQuery = "SELECT node_id, (now() - start)::FLOAT8, query FROM [SHOW CLUSTER QUERIES]"
-			const showVersionQuery = "SHOW CLUSTER SETTING VERSION"
+			const showVersionQuery = "SHOW CLUSTER SETTING version"
 
 			rows, err := conn1.Query(showQuery)
 			if err != nil {
@@ -561,6 +546,22 @@ func TestShowQueries(t *testing.T) {
 			}
 		}
 	}
+
+	tc := serverutils.StartTestCluster(t, 2, /* numNodes */
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs: base.TestServerArgs{
+				UseDatabase: "test",
+				Knobs: base.TestingKnobs{
+					SQLExecutor: execKnobs,
+				},
+			},
+		})
+	defer tc.Stopper().Stop(context.TODO())
+
+	conn1 = tc.ServerConn(0)
+	conn2 = tc.ServerConn(1)
+	sqlutils.CreateTable(t, conn1, tableName, "num INT", 0, nil)
 
 	if _, err := conn2.Exec(selectStmt); err != nil {
 		t.Fatal(err)
