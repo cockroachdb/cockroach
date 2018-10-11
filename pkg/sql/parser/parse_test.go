@@ -1743,6 +1743,14 @@ func TestParse2(t *testing.T) {
 		{`DROP ROLE IF EXISTS foo, bar`,
 			`DROP ROLE IF EXISTS 'foo', 'bar'`},
 
+		// Backward-compat, deprecated IMPORT syntax
+		{`IMPORT PGDUMP ('nodelocal:///foo/bar') WITH temp = 'path/to/temp'`,
+			`IMPORT PGDUMP 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`,
+		},
+		{`IMPORT TABLE foo FROM PGDUMPCREATE ('nodelocal:///foo/bar') WITH temp = 'path/to/temp'`,
+			`IMPORT TABLE foo FROM PGDUMPCREATE 'nodelocal:///foo/bar' WITH temp = 'path/to/temp'`,
+		},
+
 		// Clarify the ambiguity between "ON ROLE" (RBAC) and "ON ROLE"
 		// (regular table named "role").
 		{`SHOW GRANTS ON role`, `SHOW GRANTS ON ROLE`},
