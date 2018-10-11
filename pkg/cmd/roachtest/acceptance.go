@@ -37,6 +37,10 @@ func registerAcceptance(r *registry) {
 		// Sorted. Please keep it that way.
 		{"bank/cluster-recovery", runBankClusterRecovery},
 		{"bank/node-restart", runBankNodeRestart},
+		{"bank/zerosum-splits", runBankNodeZeroSum},
+		//TODO(masha) This is flaking for same reasons as bank/node-restart
+		// enable after #30064 is fixed.
+		//{"bank/zerosum-restart", runBankZeroSumRestart},
 		{"build-info", runBuildInfo},
 		{"cli/node-status", runCLINodeStatus},
 		{"decommission", runDecommissionAcceptance},
