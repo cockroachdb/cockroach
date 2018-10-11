@@ -183,3 +183,21 @@ query I
 SELECT count(*) FROM [DELETE FROM unindexed LIMIT 5 RETURNING v]
 ----
 1
+
+subtest regression_29494
+
+statement ok
+CREATE TABLE t29494(x INT); BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+# Check that the new column is not visible
+query T
+SELECT create_statement FROM [SHOW CREATE t29494]
+----
+CREATE TABLE t29494 (
+   x INT NULL,
+   FAMILY "primary" (x, rowid)
+)
+
+# Check that the new column is not usable in RETURNING
+statement error column "y" does not exist
+DELETE FROM t29494 RETURNING y

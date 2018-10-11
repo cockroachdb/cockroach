@@ -576,3 +576,21 @@ INSERT INTO derived(x) VALUES('abcd')
 
 statement error failed to satisfy CHECK constraint
 INSERT INTO derived(y) VALUES('abcd')
+
+subtest regression_29494
+
+statement ok
+CREATE TABLE t29494(x INT); BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+# Check that the new column is not visible
+query T
+SELECT create_statement FROM [SHOW CREATE t29494]
+----
+CREATE TABLE t29494 (
+   x INT NULL,
+   FAMILY "primary" (x, rowid)
+)
+
+# Check that the new column is not usable in RETURNING
+statement error column "y" does not exist
+INSERT INTO t29494(x) VALUES (123) RETURNING y
