@@ -135,6 +135,11 @@ message SchemaChangeDetails {
   // mutation list containing mutations for the same mutationID.
   repeated ResumeSpanList resume_span_list = 2 [(gogoproto.nullable) = false];
   repeated DroppedTableDetails dropped_tables = 3 [(gogoproto.nullable) = false];
+  // The descriptor ID of the dropped database which created this job.
+  uint32 dropped_database_id = 4 [
+    (gogoproto.customname) = "DroppedDatabaseID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+  ];
 }
 
 message SchemaChangeProgress {

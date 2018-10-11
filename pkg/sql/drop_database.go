@@ -130,8 +130,13 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 		tableDescs = append(tableDescs, toDel.desc)
 	}
 
-	_, err := p.createDropTablesJob(ctx, tableDescs, droppedTableDetails, tree.AsStringWithFlags(n.n,
-		tree.FmtAlwaysQualifyTableNames), true /* drainNames */)
+	jobID, err := p.createDropTablesJob(
+		ctx,
+		tableDescs,
+		droppedTableDetails,
+		tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames),
+		true, /* drainNames */
+		n.dbDesc.ID)
 	if err != nil {
 		return err
 	}
@@ -157,18 +162,25 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	}
 
 	_ /* zoneKey */, nameKey, descKey := getKeysForDatabaseDescriptor(n.dbDesc)
-	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(n.dbDesc.ID))
 
 	b := &client.Batch{}
 	if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
 		log.VEventf(ctx, 2, "Del %s", descKey)
 		log.VEventf(ctx, 2, "Del %s", nameKey)
-		log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
 	}
 	b.Del(descKey)
 	b.Del(nameKey)
-	// Delete the zone config entry for this database.
-	b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
+
+	// No job was created because no tables were dropped, so zone config can be
+	// immediately removed.
+	if jobID == 0 {
+		zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(n.dbDesc.ID))
+		if p.ExtendedEvalContext().Tracing.KVTracingEnabled() {
+			log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
+		}
+		// Delete the zone config entry for this database.
+		b.DelRange(zoneKeyPrefix, zoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
+	}
 
 	p.Tables().addUncommittedDatabase(n.dbDesc.Name, n.dbDesc.ID, dbDropped)
 
