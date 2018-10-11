@@ -3346,7 +3346,7 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 		} else if array, ok := AsDArray(right); ok {
 			datums = array.Array
 		} else {
-			return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled right expression %s", right)
+			return nil, pgerror.NewAssertionErrorf("unhandled right expression %s", right)
 		}
 		return evalDatumsCmp(ctx, op, expr.SubOperator, expr.fn, left, datums)
 	}
@@ -3369,8 +3369,7 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 // ValueGenerator for use by set projections.
 func (expr *FuncExpr) EvalArgsAndGetGenerator(ctx *EvalContext) (ValueGenerator, error) {
 	if expr.fn == nil || expr.fnProps.Class != GeneratorClass {
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"programming error: cannot call EvalArgsAndGetGenerator() on non-aggregate function: %q", ErrString(expr))
+		return nil, pgerror.NewAssertionErrorf("cannot call EvalArgsAndGetGenerator() on non-aggregate function: %q", ErrString(expr))
 	}
 	nullArg, args, err := expr.evalArgs(ctx)
 	if err != nil || nullArg {
@@ -3572,7 +3571,7 @@ func (expr *ParenExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (expr *RangeCond) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
+	return nil, pgerror.NewAssertionErrorf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
@@ -3598,32 +3597,32 @@ func (expr *UnaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (expr DefaultVal) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
+	return nil, pgerror.NewAssertionErrorf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr UnqualifiedStar) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
+	return nil, pgerror.NewAssertionErrorf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *UnresolvedName) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
+	return nil, pgerror.NewAssertionErrorf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *AllColumnsSelector) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
+	return nil, pgerror.NewAssertionErrorf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *TupleStar) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
+	return nil, pgerror.NewAssertionErrorf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *ColumnItem) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unhandled type %T", expr)
+	return nil, pgerror.NewAssertionErrorf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
@@ -3643,8 +3642,7 @@ func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
 func arrayOfType(typ types.T) (*DArray, error) {
 	arrayTyp, ok := typ.(types.TArray)
 	if !ok {
-		return nil, pgerror.NewErrorf(
-			pgerror.CodeInternalError, "array node type (%v) is not types.TArray", typ)
+		return nil, pgerror.NewAssertionErrorf("array node type (%v) is not types.TArray", typ)
 	}
 	if !types.IsValidArrayElementType(arrayTyp.Typ) {
 		return nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "arrays of %s not allowed", arrayTyp.Typ)
@@ -3690,8 +3688,7 @@ func (t *ArrayFlatten) Eval(ctx *EvalContext) (Datum, error) {
 
 	tuple, ok := d.(*DTuple)
 	if !ok {
-		return nil, pgerror.NewErrorf(
-			pgerror.CodeInternalError, "array subquery result (%v) is not DTuple", d)
+		return nil, pgerror.NewAssertionErrorf("array subquery result (%v) is not DTuple", d)
 	}
 	array.Array = tuple.D
 	return array, nil
@@ -3814,7 +3811,7 @@ func (t *Placeholder) Eval(ctx *EvalContext) (Datum, error) {
 	typ, typed := ctx.Placeholders.Type(t.Name, false)
 	if !typed {
 		// All placeholders should be typed at this point.
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "missing type for placeholder %s", t.Name)
+		return nil, pgerror.NewAssertionErrorf("missing type for placeholder %s", t.Name)
 	}
 	if !e.ResolvedType().Equivalent(typ) {
 		// This happens when we overrode the placeholder's type during type

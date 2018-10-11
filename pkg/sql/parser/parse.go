@@ -93,8 +93,7 @@ func ParseOne(sql string) (tree.Statement, error) {
 		return nil, err
 	}
 	if len(stmts) != 1 {
-		return nil, pgerror.NewErrorf(
-			pgerror.CodeInternalError, "expected 1 statement, but found %d", len(stmts))
+		return nil, pgerror.NewAssertionErrorf("expected 1 statement, but found %d", len(stmts))
 	}
 	return stmts[0], nil
 }
@@ -109,8 +108,7 @@ func ParseTableNameWithIndex(sql string) (tree.TableNameWithIndex, error) {
 	}
 	rename, ok := stmt.(*tree.RenameIndex)
 	if !ok {
-		return tree.TableNameWithIndex{}, pgerror.NewErrorf(
-			pgerror.CodeInternalError, "expected an ALTER INDEX statement, but found %T", stmt)
+		return tree.TableNameWithIndex{}, pgerror.NewAssertionErrorf("expected an ALTER INDEX statement, but found %T", stmt)
 	}
 	return *rename.Index, nil
 }
@@ -125,8 +123,7 @@ func ParseTableName(sql string) (*tree.TableName, error) {
 	}
 	rename, ok := stmt.(*tree.RenameTable)
 	if !ok {
-		return nil, pgerror.NewErrorf(
-			pgerror.CodeInternalError, "expected an ALTER TABLE statement, but found %T", stmt)
+		return nil, pgerror.NewAssertionErrorf("expected an ALTER TABLE statement, but found %T", stmt)
 	}
 	return rename.Name.Normalize()
 }
@@ -139,7 +136,7 @@ func parseExprs(exprs []string) (tree.Exprs, error) {
 	}
 	set, ok := stmt.(*tree.SetVar)
 	if !ok {
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "expected a SET statement, but found %T", stmt)
+		return nil, pgerror.NewAssertionErrorf("expected a SET statement, but found %T", stmt)
 	}
 	return set.Values, nil
 }
@@ -159,7 +156,7 @@ func ParseExpr(sql string) (tree.Expr, error) {
 		return nil, err
 	}
 	if len(exprs) != 1 {
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "expected 1 expression, found %d", len(exprs))
+		return nil, pgerror.NewAssertionErrorf("expected 1 expression, found %d", len(exprs))
 	}
 	return exprs[0], nil
 }
@@ -173,7 +170,7 @@ func ParseType(sql string) (coltypes.CastTargetType, error) {
 
 	cast, ok := expr.(*tree.CastExpr)
 	if !ok {
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "expected a tree.CastExpr, but found %T", expr)
+		return nil, pgerror.NewAssertionErrorf("expected a tree.CastExpr, but found %T", expr)
 	}
 
 	return cast.Type, nil

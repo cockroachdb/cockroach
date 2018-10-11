@@ -377,7 +377,10 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 	}
 
 	info.SqlStats = s.pgServer.SQLServer.GetScrubbedStmtStats()
-	s.pgServer.SQLServer.FillErrorCounts(info.ErrorCounts, info.UnimplementedErrors)
+	s.pgServer.SQLServer.FillErrorCounts(
+		info.ErrorCounts,
+		info.UnimplementedErrors,
+	)
 	return &info
 }
 

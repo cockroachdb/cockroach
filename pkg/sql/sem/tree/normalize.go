@@ -793,7 +793,7 @@ func invertComparisonOp(op ComparisonOperator) (ComparisonOperator, error) {
 	case LT:
 		return GT, nil
 	default:
-		return op, pgerror.NewErrorf(pgerror.CodeInternalError, "internal error: unable to invert: %s", op)
+		return op, pgerror.NewAssertionErrorf("unable to invert: %s", op)
 	}
 }
 

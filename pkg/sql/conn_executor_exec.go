@@ -1186,8 +1186,7 @@ func (ex *connExecutor) runObserverStatement(
 		ex.runSetTracing(ctx, sqlStmt, res)
 		return nil
 	default:
-		res.SetError(pgerror.NewErrorf(pgerror.CodeInternalError,
-			"programming error: unrecognized observer statement type %T", stmt.AST))
+		res.SetError(pgerror.NewAssertionErrorf("unrecognized observer statement type %T", stmt.AST))
 		return nil
 	}
 }

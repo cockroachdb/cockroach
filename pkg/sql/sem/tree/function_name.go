@@ -59,8 +59,7 @@ func (fn *ResolvableFunctionReference) Resolve(
 		fn.FunctionReference = fd
 		return fd, nil
 	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError,
-			"programming error: unknown function name type: %+v (%T)",
+		return nil, pgerror.NewAssertionErrorf("unknown function name type: %+v (%T)",
 			fn.FunctionReference, fn.FunctionReference,
 		)
 	}
