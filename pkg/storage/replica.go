@@ -2323,7 +2323,7 @@ func (r *Replica) beginCmds(
 		// out early if we can.
 		if err := ctx.Err(); err != nil {
 			log.VEventf(ctx, 2, "%s before command queue: %s", err, ba.Summary())
-			return nil, err
+			return nil, errors.Wrap(err, "aborted before command queue")
 		}
 
 		// Get the requested timestamp for a given scope. This is used for
@@ -2418,7 +2418,7 @@ func (r *Replica) beginCmds(
 						// which will notice that our prereqs slice was not empty when we stopped
 						// pending and will adopt our prerequisites in turn.
 						r.removeCmdsFromCommandQueue(newCmds)
-						return nil, err
+						return nil, errors.Wrap(err, "aborted while in command queue")
 					case <-r.store.stopper.ShouldQuiesce():
 						// While shutting down, commands may have been added to the
 						// command queue that will never finish.
@@ -3659,7 +3659,7 @@ func (r *Replica) propose(
 	if err := ctx.Err(); err != nil {
 		errStr := fmt.Sprintf("%s before proposing: %s", err, ba.Summary())
 		log.Warning(ctx, errStr)
-		return nil, nil, 0, roachpb.NewError(err)
+		return nil, nil, 0, roachpb.NewError(errors.Wrap(err, "aborted before proposing"))
 	}
 
 	// Only need to check that the request is in bounds at proposal time,
