@@ -691,12 +691,10 @@ func (ef *execFactory) ConstructExplain(
 
 	switch options.Mode {
 	case tree.ExplainDistSQL:
-		if len(p.subqueryPlans) > 0 {
-			return nil, fmt.Errorf("subqueries not supported yet")
-		}
 		return &explainDistSQLNode{
-			plan:    p.plan,
-			analyze: analyzeSet,
+			plan:          p.plan,
+			subqueryPlans: p.subqueryPlans,
+			analyze:       analyzeSet,
 		}, nil
 
 	case tree.ExplainPlan:

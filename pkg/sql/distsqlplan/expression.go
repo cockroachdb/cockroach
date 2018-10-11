@@ -36,6 +36,10 @@ type ExprContext interface {
 
 	// IsLocal returns true if the current plan is local.
 	IsLocal() bool
+
+	// EvaluateSubqueries returns true if subqueries should be evaluated before
+	// creating the distsqlrun.Expression.
+	EvaluateSubqueries() bool
 }
 
 type ivarRemapper struct {
@@ -83,9 +87,12 @@ func MakeExpression(
 		evalCtx: evalCtx,
 	}
 
-	exprWithoutSubqueries, _ := tree.WalkExpr(subqueryVisitor, expr)
-	if subqueryVisitor.err != nil {
-		return distsqlrun.Expression{}, subqueryVisitor.err
+	outExpr := expr.(tree.Expr)
+	if ctx.EvaluateSubqueries() {
+		outExpr, _ = tree.WalkExpr(subqueryVisitor, expr)
+		if subqueryVisitor.err != nil {
+			return distsqlrun.Expression{}, subqueryVisitor.err
+		}
 	}
 	// We format the expression using the IndexedVar and Placeholder formatting interceptors.
 	var buf bytes.Buffer
@@ -101,9 +108,9 @@ func MakeExpression(
 			},
 		)
 	}
-	fmtCtx.FormatNode(exprWithoutSubqueries)
+	fmtCtx.FormatNode(outExpr)
 	if log.V(1) {
-		log.Infof(evalCtx.Ctx(), "Expr %s:\n%s", buf.String(), tree.ExprDebugString(exprWithoutSubqueries))
+		log.Infof(evalCtx.Ctx(), "Expr %s:\n%s", buf.String(), tree.ExprDebugString(outExpr))
 	}
 	return distsqlrun.Expression{Expr: buf.String()}, nil
 }

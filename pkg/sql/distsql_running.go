@@ -618,127 +618,146 @@ func (dsp *DistSQLPlanner) PlanAndRunSubqueries(
 	recv *DistSQLReceiver,
 	maybeDistribute bool,
 ) bool {
-	var subqueryMemAccount mon.BoundAccount
-
 	for planIdx, subqueryPlan := range subqueryPlans {
-		evalCtx := evalCtxFactory()
-
-		subqueryMonitor := mon.MakeMonitor(
-			"subquery",
-			mon.MemoryResource,
-			dsp.distSQLSrv.Metrics.CurBytesCount,
-			dsp.distSQLSrv.Metrics.MaxBytesHist,
-			-1, /* use default block size */
-			noteworthyMemoryUsageBytes,
-			dsp.distSQLSrv.Settings,
-		)
-		subqueryMonitor.Start(ctx, evalCtx.Mon, mon.BoundAccount{})
-		defer subqueryMonitor.Stop(ctx)
-
-		subqueryMemAccount = subqueryMonitor.MakeBoundAccount()
-		defer subqueryMemAccount.Close(ctx)
-
-		evalCtx.ActiveMemAcc = &subqueryMemAccount
-
-		var subqueryPlanCtx *PlanningCtx
-		var distributeSubquery bool
-		if maybeDistribute {
-			distributeSubquery = shouldDistributePlan(
-				ctx, planner.SessionData().DistSQLMode, dsp, subqueryPlan.plan)
-		}
-		if distributeSubquery {
-			subqueryPlanCtx = dsp.NewPlanningCtx(ctx, evalCtx, planner.txn)
-		} else {
-			subqueryPlanCtx = dsp.newLocalPlanningCtx(ctx, evalCtx)
-		}
-
-		subqueryPlanCtx.isLocal = !distributeSubquery
-		subqueryPlanCtx.planner = planner
-		subqueryPlanCtx.stmtType = tree.Rows
-		// Don't close the top-level plan from subqueries - someone else will handle
-		// that.
-		subqueryPlanCtx.ignoreClose = true
-
-		subqueryPhysPlan, err := dsp.createPlanForNode(subqueryPlanCtx, subqueryPlan.plan)
-		if err != nil {
+		if err := dsp.planAndRunSubquery(
+			ctx,
+			planIdx,
+			subqueryPlan,
+			planner,
+			evalCtxFactory,
+			subqueryPlans,
+			recv,
+			maybeDistribute,
+		); err != nil {
 			recv.SetError(err)
-			return false
-		}
-		dsp.FinalizePlan(subqueryPlanCtx, &subqueryPhysPlan)
-
-		// TODO(arjun): #28264: We set up a row container, wrap it in a row
-		// receiver, and use it and serialize the results of the subquery. The type
-		// of the results stored in the container depends on the type of the subquery.
-		typ := sqlbase.ColTypeInfoFromColTypes(subqueryPhysPlan.ResultTypes)
-		subqueryRecv := recv.clone()
-		var rows *sqlbase.RowContainer
-		if subqueryPlan.execMode == distsqlrun.SubqueryExecModeExists {
-			subqueryRecv.noColsRequired = true
-			typ = sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{})
-		}
-		rows = sqlbase.NewRowContainer(subqueryMemAccount, typ, 0)
-		defer rows.Close(evalCtx.Ctx())
-
-		subqueryRowReceiver := NewRowResultWriter(rows)
-		subqueryRecv.resultWriter = subqueryRowReceiver
-		subqueryPlans[planIdx].started = true
-		dsp.Run(subqueryPlanCtx, planner.txn, &subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)
-		if subqueryRecv.commErr != nil {
-			recv.SetError(subqueryRecv.commErr)
-			return false
-		}
-		if subqueryRowReceiver.Err() != nil {
-			recv.SetError(subqueryRowReceiver.Err())
-			return false
-		}
-		switch subqueryPlan.execMode {
-		case distsqlrun.SubqueryExecModeExists:
-			// For EXISTS expressions, all we want to know if there is at least one row.
-			hasRows := rows.Len() != 0
-			subqueryPlans[planIdx].result = tree.MakeDBool(tree.DBool(hasRows))
-		case distsqlrun.SubqueryExecModeAllRows, distsqlrun.SubqueryExecModeAllRowsNormalized:
-			var result tree.DTuple
-			for rows.Len() > 0 {
-				row := rows.At(0)
-				rows.PopFirst()
-				if row.Len() == 1 {
-					// This seems hokey, but if we don't do this then the subquery expands
-					// to a tuple of tuples instead of a tuple of values and an expression
-					// like "k IN (SELECT foo FROM bar)" will fail because we're comparing
-					// a single value against a tuple.
-					result.D = append(result.D, row[0])
-				} else {
-					result.D = append(result.D, &tree.DTuple{D: row})
-				}
-			}
-
-			if subqueryPlan.execMode == distsqlrun.SubqueryExecModeAllRowsNormalized {
-				result.Normalize(&evalCtx.EvalContext)
-			}
-			subqueryPlans[planIdx].result = &result
-		case distsqlrun.SubqueryExecModeOneRow:
-			switch rows.Len() {
-			case 0:
-				subqueryPlans[planIdx].result = tree.DNull
-			case 1:
-				row := rows.At(0)
-				switch row.Len() {
-				case 1:
-					subqueryPlans[planIdx].result = row[0]
-				default:
-					subqueryPlans[planIdx].result = &tree.DTuple{D: rows.At(0)}
-				}
-			default:
-				recv.SetError(fmt.Errorf("more than one row returned by a subquery used as an expression"))
-				return false
-			}
-		default:
-			recv.SetError(fmt.Errorf("unexpected subqueryExecMode: %d", subqueryPlan.execMode))
 			return false
 		}
 	}
 
 	return true
+}
+
+func (dsp *DistSQLPlanner) planAndRunSubquery(
+	ctx context.Context,
+	planIdx int,
+	subqueryPlan subquery,
+	planner *planner,
+	evalCtxFactory func() *extendedEvalContext,
+	subqueryPlans []subquery,
+	recv *DistSQLReceiver,
+	maybeDistribute bool,
+) error {
+	evalCtx := evalCtxFactory()
+
+	subqueryMonitor := mon.MakeMonitor(
+		"subquery",
+		mon.MemoryResource,
+		dsp.distSQLSrv.Metrics.CurBytesCount,
+		dsp.distSQLSrv.Metrics.MaxBytesHist,
+		-1, /* use default block size */
+		noteworthyMemoryUsageBytes,
+		dsp.distSQLSrv.Settings,
+	)
+	subqueryMonitor.Start(ctx, evalCtx.Mon, mon.BoundAccount{})
+	defer subqueryMonitor.Stop(ctx)
+
+	subqueryMemAccount := subqueryMonitor.MakeBoundAccount()
+	defer subqueryMemAccount.Close(ctx)
+
+	evalCtx.ActiveMemAcc = &subqueryMemAccount
+
+	var subqueryPlanCtx *PlanningCtx
+	var distributeSubquery bool
+	if maybeDistribute {
+		distributeSubquery = shouldDistributePlan(
+			ctx, planner.SessionData().DistSQLMode, dsp, subqueryPlan.plan)
+	}
+	if distributeSubquery {
+		subqueryPlanCtx = dsp.NewPlanningCtx(ctx, evalCtx, planner.txn)
+	} else {
+		subqueryPlanCtx = dsp.newLocalPlanningCtx(ctx, evalCtx)
+	}
+
+	subqueryPlanCtx.isLocal = !distributeSubquery
+	subqueryPlanCtx.planner = planner
+	subqueryPlanCtx.stmtType = tree.Rows
+	// Don't close the top-level plan from subqueries - someone else will handle
+	// that.
+	subqueryPlanCtx.ignoreClose = true
+
+	subqueryPhysPlan, err := dsp.createPlanForNode(subqueryPlanCtx, subqueryPlan.plan)
+	if err != nil {
+		return err
+	}
+	dsp.FinalizePlan(subqueryPlanCtx, &subqueryPhysPlan)
+
+	// TODO(arjun): #28264: We set up a row container, wrap it in a row
+	// receiver, and use it and serialize the results of the subquery. The type
+	// of the results stored in the container depends on the type of the subquery.
+	typ := sqlbase.ColTypeInfoFromColTypes(subqueryPhysPlan.ResultTypes)
+	subqueryRecv := recv.clone()
+	var rows *sqlbase.RowContainer
+	if subqueryPlan.execMode == distsqlrun.SubqueryExecModeExists {
+		subqueryRecv.noColsRequired = true
+		typ = sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{})
+	}
+	rows = sqlbase.NewRowContainer(subqueryMemAccount, typ, 0)
+	defer rows.Close(evalCtx.Ctx())
+
+	subqueryRowReceiver := NewRowResultWriter(rows)
+	subqueryRecv.resultWriter = subqueryRowReceiver
+	subqueryPlans[planIdx].started = true
+	dsp.Run(subqueryPlanCtx, planner.txn, &subqueryPhysPlan, subqueryRecv, evalCtx, nil /* finishedSetupFn */)
+	if subqueryRecv.commErr != nil {
+		return subqueryRecv.commErr
+	}
+	if err := subqueryRowReceiver.Err(); err != nil {
+		return err
+	}
+	switch subqueryPlan.execMode {
+	case distsqlrun.SubqueryExecModeExists:
+		// For EXISTS expressions, all we want to know if there is at least one row.
+		hasRows := rows.Len() != 0
+		subqueryPlans[planIdx].result = tree.MakeDBool(tree.DBool(hasRows))
+	case distsqlrun.SubqueryExecModeAllRows, distsqlrun.SubqueryExecModeAllRowsNormalized:
+		var result tree.DTuple
+		for rows.Len() > 0 {
+			row := rows.At(0)
+			rows.PopFirst()
+			if row.Len() == 1 {
+				// This seems hokey, but if we don't do this then the subquery expands
+				// to a tuple of tuples instead of a tuple of values and an expression
+				// like "k IN (SELECT foo FROM bar)" will fail because we're comparing
+				// a single value against a tuple.
+				result.D = append(result.D, row[0])
+			} else {
+				result.D = append(result.D, &tree.DTuple{D: row})
+			}
+		}
+
+		if subqueryPlan.execMode == distsqlrun.SubqueryExecModeAllRowsNormalized {
+			result.Normalize(&evalCtx.EvalContext)
+		}
+		subqueryPlans[planIdx].result = &result
+	case distsqlrun.SubqueryExecModeOneRow:
+		switch rows.Len() {
+		case 0:
+			subqueryPlans[planIdx].result = tree.DNull
+		case 1:
+			row := rows.At(0)
+			switch row.Len() {
+			case 1:
+				subqueryPlans[planIdx].result = row[0]
+			default:
+				subqueryPlans[planIdx].result = &tree.DTuple{D: rows.At(0)}
+			}
+		default:
+			return fmt.Errorf("more than one row returned by a subquery used as an expression")
+		}
+	default:
+		return fmt.Errorf("unexpected subqueryExecMode: %d", subqueryPlan.execMode)
+	}
+	return nil
 }
 
 // PlanAndRun generates a physical plan from a planNode tree and executes it. It
