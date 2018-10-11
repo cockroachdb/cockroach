@@ -2212,6 +2212,7 @@ table_name_list:
 // EXPLAIN <statement>
 // EXPLAIN ([PLAN ,] <planoptions...> ) <statement>
 // EXPLAIN [ANALYZE] (DISTSQL) <statement>
+// EXPLAIN ANALYZE [(DISTSQL)] <statement>
 //
 // Explainable statements:
 //     SELECT, CREATE, DROP, ALTER, INSERT, UPSERT, UPDATE, DELETE,
@@ -2230,6 +2231,10 @@ explain_stmt:
 | EXPLAIN '(' explain_option_list ')' preparable_stmt
   {
     $$.val = &tree.Explain{Options: $3.strs(), Statement: $5.stmt()}
+  }
+| EXPLAIN ANALYZE preparable_stmt
+  {
+    $$.val = &tree.Explain{Options: []string{"DISTSQL", $2}, Statement: $3.stmt()}
   }
 | EXPLAIN ANALYZE '(' explain_option_list ')' preparable_stmt
   {
