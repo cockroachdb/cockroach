@@ -160,8 +160,12 @@ func TestStatementReuses(t *testing.T) {
 	t.Run("WITH (cte)", func(t *testing.T) {
 		for _, test := range testData {
 			t.Run(test, func(t *testing.T) {
-				rows, err := db.Query("EXPLAIN WITH a AS (" + test + ") SELECT 1")
+				rows, err := db.Query("EXPLAIN WITH a AS (" + test + ") TABLE a")
 				if err != nil {
+					if testutils.IsError(err, "does not have a RETURNING clause") {
+						// This error is acceptable and does not constitute a test failure.
+						return
+					}
 					t.Fatal(err)
 				}
 				defer rows.Close()

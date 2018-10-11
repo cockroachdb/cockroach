@@ -66,6 +66,22 @@ func (b *Builder) buildDataSource(
 			panic(builderError{err})
 		}
 
+		// CTEs take precedence over other data sources.
+		if cte := inScope.resolveCTE(tn); cte != nil {
+			if cte.used {
+				panic(builderError{fmt.Errorf("unsupported multiple use of CTE clause %q", tn)})
+			}
+			cte.used = true
+
+			outScope = inScope.push()
+
+			// TODO(justin): once we support mutations here, we will want to include a
+			// spool operation.
+			outScope.group = cte.group
+			outScope.cols = cte.cols
+			return outScope
+		}
+
 		ds := b.resolveDataSource(tn)
 		switch t := ds.(type) {
 		case opt.Table:
@@ -109,7 +125,7 @@ func (b *Builder) buildDataSource(
 		return outScope
 
 	default:
-		panic(unimplementedf("not yet implemented: table expr: %T", texpr))
+		panic(builderError{fmt.Errorf("unknown table expr: %T", texpr)})
 	}
 }
 
@@ -344,22 +360,73 @@ func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope 
 	return inScope
 }
 
+func (b *Builder) buildCTE(ctes []*tree.CTE, inScope *scope) (outScope *scope) {
+	outScope = inScope.push()
+
+	outScope.ctes = make(map[string]*cteSource)
+	for i := range ctes {
+		cteScope := b.buildStmt(ctes[i].Stmt, outScope)
+		cols := cteScope.cols
+		name := ctes[i].Name.Alias
+
+		if _, ok := outScope.ctes[name.String()]; ok {
+			panic(builderError{
+				fmt.Errorf("WITH query name %s specified more than once", ctes[i].Name.Alias),
+			})
+		}
+
+		// Names for the output columns can optionally be specified.
+		if ctes[i].Name.Cols != nil {
+			if len(cteScope.cols) != len(ctes[i].Name.Cols) {
+				panic(builderError{
+					fmt.Errorf(
+						"source %q has %d columns available but %d columns specified",
+						name, len(cteScope.cols), len(ctes[i].Name.Cols),
+					),
+				})
+			}
+
+			cols = make([]scopeColumn, len(cteScope.cols))
+			tableName := tree.MakeUnqualifiedTableName(ctes[i].Name.Alias)
+			copy(cols, cteScope.cols)
+			for j := range cols {
+				cols[j].name = ctes[i].Name.Cols[j]
+				cols[j].table = tableName
+			}
+		}
+		outScope.ctes[ctes[i].Name.Alias.String()] = &cteSource{
+			name:  ctes[i].Name,
+			cols:  cols,
+			group: cteScope.group,
+		}
+	}
+
+	return outScope
+}
+
 // buildSelect builds a set of memo groups that represent the given select
 // statement.
 //
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildSelect(stmt *tree.Select, inScope *scope) (outScope *scope) {
-	if stmt.With != nil {
-		panic(unimplementedf("with clause not supported"))
-	}
-
 	wrapped := stmt.Select
 	orderBy := stmt.OrderBy
 	limit := stmt.Limit
+	with := stmt.With
 
 	for s, ok := wrapped.(*tree.ParenSelect); ok; s, ok = wrapped.(*tree.ParenSelect) {
 		stmt = s.Select
+		if stmt.With != nil {
+			if with != nil {
+				// (WITH ... (WITH ...))
+				// Currently we are unable to nest the scopes inside ParenSelect so we
+				// must refuse the syntax so that the query does not get invalid results.
+				panic(builderError{pgerror.UnimplementedWithIssueError(24303,
+					"multiple WITH clauses in parentheses")})
+			}
+			with = s.Select.With
+		}
 		wrapped = stmt.Select
 		if stmt.OrderBy != nil {
 			if orderBy != nil {
@@ -377,6 +444,10 @@ func (b *Builder) buildSelect(stmt *tree.Select, inScope *scope) (outScope *scop
 			}
 			limit = stmt.Limit
 		}
+	}
+
+	if with != nil {
+		inScope = b.buildCTE(with.CTEList, inScope)
 	}
 
 	// NB: The case statements are sorted lexicographically.
