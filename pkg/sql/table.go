@@ -645,6 +645,7 @@ func (p *planner) createSchemaChangeJob(
 
 // createDropTablesJob creates a schema change job in the system.jobs table.
 // The identifiers of the newly-created job are written in the table descriptor.
+// If no job is created (no tables were dropped), a job ID of 0 is returned.
 //
 // The job creation is done within the planner's txn. This is important - if the`
 // txn ends up rolling back, the job needs to go away.
@@ -654,6 +655,7 @@ func (p *planner) createDropTablesJob(
 	droppedDetails []jobspb.DroppedTableDetails,
 	stmt string,
 	drainNames bool,
+	droppedDatabaseID sqlbase.ID,
 ) (int64, error) {
 
 	if len(tableDescs) == 0 {
@@ -682,7 +684,7 @@ func (p *planner) createDropTablesJob(
 		Description:   stmt,
 		Username:      p.User(),
 		DescriptorIDs: descriptorIDs,
-		Details:       jobspb.SchemaChangeDetails{DroppedTables: droppedDetails},
+		Details:       jobspb.SchemaChangeDetails{DroppedTables: droppedDetails, DroppedDatabaseID: droppedDatabaseID},
 		Progress:      jobspb.SchemaChangeProgress{},
 		RunningStatus: runningStatus,
 	}

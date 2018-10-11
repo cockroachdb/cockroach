@@ -363,7 +363,26 @@ func (sc *SchemaChanger) DropTableDesc(
 		}
 
 		if tableDesc.GetDropJobID() != 0 {
-			if err := sc.updateDropTableJob(ctx, txn, tableDesc.GetDropJobID(), tableDesc.ID, jobspb.Status_DONE); err != nil {
+			if err := sc.updateDropTableJob(
+				ctx,
+				txn,
+				tableDesc.GetDropJobID(),
+				tableDesc.ID,
+				jobspb.Status_DONE,
+				func(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
+					// Delete the zone config entry for the dropped database associated
+					// with the job, if it exists.
+					details := job.Details().(jobspb.SchemaChangeDetails)
+					if details.DroppedDatabaseID == sqlbase.InvalidID {
+						return nil
+					}
+					dbZoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(details.DroppedDatabaseID))
+					if traceKV {
+						log.VEventf(ctx, 2, "DelRange %s", zoneKeyPrefix)
+					}
+					b.DelRange(dbZoneKeyPrefix, dbZoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
+					return nil
+				}); err != nil {
 				return errors.Wrapf(err, "failed to update job %d", tableDesc.GetDropJobID())
 			}
 		}
@@ -610,7 +629,12 @@ func (sc *SchemaChanger) maybeGCMutations(
 }
 
 func (sc *SchemaChanger) updateDropTableJob(
-	ctx context.Context, txn *client.Txn, jobID int64, tableID sqlbase.ID, status jobspb.Status,
+	ctx context.Context,
+	txn *client.Txn,
+	jobID int64,
+	tableID sqlbase.ID,
+	status jobspb.Status,
+	onSuccess func(context.Context, *client.Txn, *jobs.Job) error,
 ) error {
 	job, err := sc.jobRegistry.LoadJobWithTxn(ctx, jobID, txn)
 	if err != nil {
@@ -642,7 +666,7 @@ func (sc *SchemaChanger) updateDropTableJob(
 	case jobspb.Status_ROCKSDB_COMPACTION:
 		runningStatus = jobs.RunningStatusCompaction
 	case jobspb.Status_DONE:
-		return job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn)
+		return job.WithTxn(txn).Succeeded(ctx, onSuccess)
 	default:
 		return errors.Errorf("unexpected dropped table status %d", lowestStatus)
 	}
@@ -700,7 +724,7 @@ func (sc *SchemaChanger) drainNames(
 			}
 
 			if dropJobID != 0 {
-				if err := sc.updateDropTableJob(ctx, txn, dropJobID, sc.tableID, jobspb.Status_WAIT_FOR_GC_INTERVAL); err != nil {
+				if err := sc.updateDropTableJob(ctx, txn, dropJobID, sc.tableID, jobspb.Status_WAIT_FOR_GC_INTERVAL, jobs.NoopFn); err != nil {
 					return err
 				}
 			}
