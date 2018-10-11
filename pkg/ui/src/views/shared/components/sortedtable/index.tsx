@@ -14,9 +14,12 @@
 
 import React from "react";
 import _ from "lodash";
+import * as Long from "long";
+import { Moment } from "moment";
 import { createSelector } from "reselect";
 
 import { SortableTable, SortableColumn, SortSetting } from "src/views/shared/components/sortabletable";
+import { ExpandableConfig } from "src/views/shared/components/sortabletable";
 
 /**
  * ColumnDescriptor is used to describe metadata about an individual column
@@ -30,7 +33,9 @@ export interface ColumnDescriptor<T> {
   // Function which returns a value that can be used to sort the collection of
   // objects. This will be used to sort the table according to the data in
   // this column.
-  sort?: (obj: T) => any;
+  // TODO(vilterp): using an "Ordered" typeclass here would be nice;
+  // not sure how to do that in TypeScript.
+  sort?: (obj: T) => string | number | Long | Moment;
   // Function that generates a "rollup" value for this column from all objects
   // in a collection. This is used to display an appropriate "total" value for
   // each column.
@@ -59,6 +64,22 @@ interface SortedTableProps<T> {
   className?: string;
   // A function that returns the class to apply to a given row.
   rowClass?: (obj: T) => string;
+
+  // expandableConfig, if provided, makes each row in the table "expandable",
+  // i.e. each row has an expand/collapse arrow on its left, and renders
+  // a full-width area below it when expanded.
+  expandableConfig?: {
+    // expandedContent returns the content for a row's full-width expanded
+    // section, given the object that row represents.
+    expandedContent: (obj: T) => React.ReactNode;
+    // expansionKey returns a key used to uniquely identify a row for the
+    // purposes of tracking whether it's expanded or not.
+    expansionKey: (obj: T) => string;
+  };
+}
+
+interface SortedTableState {
+  expandedRows: Set<string>;
 }
 
 /**
@@ -72,7 +93,7 @@ interface SortedTableProps<T> {
  * SortedTable should be preferred over the lower-level SortableTable when
  * all data rows to be displayed are available locally on the client side.
  */
-export class SortedTable<T> extends React.Component<SortedTableProps<T>, {}> {
+export class SortedTable<T> extends React.Component<SortedTableProps<T>, SortedTableState> {
   static defaultProps: Partial<SortedTableProps<any>> = {
     rowClass: (_obj: any) => "",
   };
@@ -94,7 +115,7 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, {}> {
     (props: SortedTableProps<T>) => props.data,
     (props: SortedTableProps<T>) => props.sortSetting,
     (props: SortedTableProps<T>) => props.columns,
-    (data: T[], sortSetting: SortSetting, columns: ColumnDescriptor<T>[]) => {
+    (data: T[], sortSetting: SortSetting, columns: ColumnDescriptor<T>[]): T[] => {
       if (!sortSetting) {
         return data;
       }
@@ -134,16 +155,66 @@ export class SortedTable<T> extends React.Component<SortedTableProps<T>, {}> {
     },
   );
 
+  // TODO(vilterp): use a LocalSetting instead so the expansion state
+  // will persist if the user navigates to a different page and back.
+  state: SortedTableState = {
+    expandedRows: new Set<string>(),
+  };
+
+  getItemAt(rowIndex: number): T {
+    const sorted = this.sorted(this.props);
+    return sorted[rowIndex];
+  }
+
+  getKeyAt(rowIndex: number): string {
+    return this.props.expandableConfig.expansionKey(this.getItemAt((rowIndex)));
+  }
+
+  onChangeExpansion = (rowIndex: number, expanded: boolean) => {
+    const key = this.getKeyAt(rowIndex);
+    const expandedRows = this.state.expandedRows;
+    if (expanded) {
+      expandedRows.add(key);
+    } else {
+      expandedRows.delete(key);
+    }
+    this.setState({
+      expandedRows: expandedRows,
+    });
+  }
+
+  rowIsExpanded = (rowIndex: number): boolean => {
+    const key = this.getKeyAt(rowIndex);
+    return this.state.expandedRows.has(key);
+  }
+
+  expandedContent = (rowIndex: number): React.ReactNode => {
+    const item = this.getItemAt(rowIndex);
+    return this.props.expandableConfig.expandedContent(item);
+  }
+
   render() {
     const { data, sortSetting, onChangeSortSetting } = this.props;
+
+    let expandableConfig: ExpandableConfig = null;
+    if (this.props.expandableConfig) {
+      expandableConfig = {
+        expandedContent: this.expandedContent,
+        rowIsExpanded: this.rowIsExpanded,
+        onChangeExpansion: this.onChangeExpansion,
+      };
+    }
+
     if (data) {
       return (
-        <SortableTable count={data.length}
+        <SortableTable
+          count={data.length}
           sortSetting={sortSetting}
           onChangeSortSetting={onChangeSortSetting}
           columns={this.columns(this.props)}
           rowClass={this.rowClass(this.props)}
           className={this.props.className}
+          expandableConfig={expandableConfig}
         />
       );
     }
