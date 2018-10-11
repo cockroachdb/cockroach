@@ -1827,6 +1827,7 @@ func TestParse2(t *testing.T) {
 		{`ALTER TABLE a DROP b`, `ALTER TABLE a DROP COLUMN b`},
 		{`ALTER TABLE a ALTER b DROP NOT NULL`, `ALTER TABLE a ALTER COLUMN b DROP NOT NULL`},
 		{`ALTER TABLE a ALTER b TYPE INT`, `ALTER TABLE a ALTER COLUMN b SET DATA TYPE INT`},
+		{`EXPLAIN ANALYZE SELECT 1`, `EXPLAIN ANALYZE (DISTSQL) SELECT 1`},
 	}
 	for _, d := range testData {
 		stmts, err := parser.Parse(d.sql)
