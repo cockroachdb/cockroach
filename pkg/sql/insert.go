@@ -214,7 +214,10 @@ func (p *planner) Insert(
 					return nil, err
 				}
 				if numExprs > maxInsertIdx {
-					return nil, sqlbase.CannotWriteToComputedColError(insertCols[maxInsertIdx])
+					// TODO(justin): this is too restrictive. It should
+					// be possible to allow INSERT INTO (x) VALUES (DEFAULT)
+					// if x is a computed column. See #22434.
+					return nil, sqlbase.CannotWriteToComputedColError(&insertCols[maxInsertIdx])
 				}
 				arityChecked = true
 			}
@@ -244,7 +247,7 @@ func (p *planner) Insert(
 			return nil, err
 		}
 		if numExprs > maxInsertIdx {
-			return nil, sqlbase.CannotWriteToComputedColError(insertCols[maxInsertIdx])
+			return nil, sqlbase.CannotWriteToComputedColError(&insertCols[maxInsertIdx])
 		}
 	}
 
