@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -46,50 +47,53 @@ func (p *planner) showStateMachineSetting(
 	retryCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 	tBegin := timeutil.Now()
+
 	// The (slight ab)use of WithMaxAttempts achieves convenient context cancellation.
 	if err := retry.WithMaxAttempts(retryCtx, retry.Options{}, math.MaxInt32, func() error {
-		datums, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
-			ctx, "read-setting",
-			p.txn,
-			"SELECT value FROM system.settings WHERE name = $1", name,
-		)
-		if err != nil {
-			return err
-		}
-		var prevRawVal []byte
-		if len(datums) != 0 {
-			dStr, ok := datums[0].(*tree.DString)
-			if !ok {
-				return errors.New("the existing value is not a string")
+		return p.execCfg.DB.Txn(retryCtx, func(ctx context.Context, txn *client.Txn) error {
+			datums, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
+				ctx, "read-setting",
+				txn,
+				"SELECT value FROM system.settings WHERE name = $1", name,
+			)
+			if err != nil {
+				return err
 			}
-			prevRawVal = []byte(string(*dStr))
-		}
-		// Note that if no entry is found, we pretend that an entry
-		// exists which is the version used for the running binary. This
-		// may not be 100.00% correct, but it will do. The input is
-		// checked more thoroughly when a user tries to change the
-		// value, and the corresponding sql migration that makes sure
-		// the above select finds something usually runs pretty quickly
-		// when the cluster is bootstrapped.
-		kvRawVal, kvObj, err := s.Validate(&st.SV, prevRawVal, nil)
-		if err != nil {
-			return errors.Errorf("unable to read existing value: %s", err)
-		}
+			var prevRawVal []byte
+			if len(datums) != 0 {
+				dStr, ok := datums[0].(*tree.DString)
+				if !ok {
+					return errors.New("the existing value is not a string")
+				}
+				prevRawVal = []byte(string(*dStr))
+			}
+			// Note that if no entry is found, we pretend that an entry
+			// exists which is the version used for the running binary. This
+			// may not be 100.00% correct, but it will do. The input is
+			// checked more thoroughly when a user tries to change the
+			// value, and the corresponding sql migration that makes sure
+			// the above select finds something usually runs pretty quickly
+			// when the cluster is bootstrapped.
+			kvRawVal, kvObj, err := s.Validate(&st.SV, prevRawVal, nil)
+			if err != nil {
+				return errors.Errorf("unable to read existing value: %s", err)
+			}
 
-		// NB: if there is no persisted cluster version yet, this will match
-		// kvRawVal (which is taken from `st.SV` in this case too).
-		gossipRawVal := []byte(s.Get(&st.SV))
+			// NB: if there is no persisted cluster version yet, this will match
+			// kvRawVal (which is taken from `st.SV` in this case too).
+			gossipRawVal := []byte(s.Get(&st.SV))
 
-		_, gossipObj, err := s.Validate(&st.SV, gossipRawVal, nil)
-		if err != nil {
-			gossipObj = fmt.Sprintf("<error: %s>", err)
-		}
-		if !bytes.Equal(gossipRawVal, kvRawVal) {
-			return errors.Errorf("value differs between gossip (%v) and KV (%v); try again later (%v after %s)", gossipObj, kvObj, retryCtx.Err(), timeutil.Since(tBegin))
-		}
+			_, gossipObj, err := s.Validate(&st.SV, gossipRawVal, nil)
+			if err != nil {
+				gossipObj = fmt.Sprintf("<error: %s>", err)
+			}
+			if !bytes.Equal(gossipRawVal, kvRawVal) {
+				return errors.Errorf("value differs between gossip (%v) and KV (%v); try again later (%v after %s)", gossipObj, kvObj, retryCtx.Err(), timeutil.Since(tBegin))
+			}
 
-		d = tree.NewDString(kvObj.(fmt.Stringer).String())
-		return nil
+			d = tree.NewDString(kvObj.(fmt.Stringer).String())
+			return nil
+		})
 	}); err != nil {
 		return nil, err
 	}
