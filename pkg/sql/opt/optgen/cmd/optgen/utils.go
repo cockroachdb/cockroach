@@ -24,148 +24,41 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
 )
 
+func title(name string) string {
+	rune, size := utf8.DecodeRuneInString(name)
+	return fmt.Sprintf("%c%s", unicode.ToUpper(rune), name[size:])
+}
+
 func unTitle(name string) string {
 	rune, size := utf8.DecodeRuneInString(name)
 	return fmt.Sprintf("%c%s", unicode.ToLower(rune), name[size:])
 }
 
-func mapType(typ string) string {
-	switch typ {
-	case "Expr":
-		return "GroupID"
-
-	case "ExprList":
-		return "ListID"
-
-	default:
-		return "PrivateID"
-	}
+// isExportedField is true if the name of a define field starts with an upper-
+// case letter.
+func isExportedField(field *lang.DefineFieldExpr) bool {
+	return unicode.IsUpper(rune(field.Name[0]))
 }
 
-func mapPrivateType(typ string) string {
-	switch typ {
-	case "ColumnID":
-		return "opt.ColumnID"
-	case "ColSet":
-		return "opt.ColSet"
-	case "ColList":
-		return "opt.ColList"
-	case "Operator":
-		return "opt.Operator"
-	case "Ordering":
-		return "opt.Ordering"
-	case "OrderingChoice":
-		return "*props.OrderingChoice"
-	case "FuncOpDef":
-		return "*memo.FuncOpDef"
-	case "ProjectionsOpDef":
-		return "*memo.ProjectionsOpDef"
-	case "ScanOpDef":
-		return "*memo.ScanOpDef"
-	case "VirtualScanOpDef":
-		return "*memo.VirtualScanOpDef"
-	case "GroupByDef":
-		return "*memo.GroupByDef"
-	case "IndexJoinDef":
-		return "*memo.IndexJoinDef"
-	case "LookupJoinDef":
-		return "*memo.LookupJoinDef"
-	case "RowNumberDef":
-		return "*memo.RowNumberDef"
-	case "SetOpColMap":
-		return "*memo.SetOpColMap"
-	case "ExplainOpDef":
-		return "*memo.ExplainOpDef"
-	case "ShowTraceOpDef":
-		return "*memo.ShowTraceOpDef"
-	case "MergeOnDef":
-		return "*memo.MergeOnDef"
-	case "SubqueryDef":
-		return "*memo.SubqueryDef"
-	case "TupleOrdinal":
-		return "memo.TupleOrdinal"
-	case "Datum":
-		return "tree.Datum"
-	case "Type":
-		return "types.T"
-	case "ColType":
-		return "coltypes.T"
-	case "TypedExpr":
-		return "tree.TypedExpr"
-	default:
-		panic(fmt.Sprintf("unrecognized private type: %s", typ))
-	}
+// isEmbeddedField is true if the name of a define field is "_". All such fields
+// are generated as Go embedded structs.
+func isEmbeddedField(field *lang.DefineFieldExpr) bool {
+	return field.Name == "_"
 }
 
-// isListType returns true if the given type is ExprList. An expression may
-// have at most one field with a list type.
-func isListType(typ string) bool {
-	return typ == "ExprList"
-}
-
-// isPrivateType returns true if the given type is anything besides Expr or
-// ExprList. An expression may have at most one field with a private type.
-func isPrivateType(typ string) bool {
-	return typ != "Expr" && typ != "ExprList"
-}
-
-// listField returns the field definition expression for the given define's
-// list field, or nil if it does not have a list field.
-func listField(d *lang.DefineExpr) *lang.DefineFieldExpr {
-	// If list-typed field is present, it will be the last field, or the second
-	// to last field if a private field is present.
-	index := len(d.Fields) - 1
-	if privateField(d) != nil {
-		index--
-	}
-
-	if index < 0 {
-		return nil
-	}
-
-	defineField := d.Fields[index]
-	if isListType(string(defineField.Type)) {
-		return defineField
-	}
-
-	return nil
-}
-
-// privateField returns the field definition expression for the given define's
-// private field, or nil if it does not have a private field.
-func privateField(d *lang.DefineExpr) *lang.DefineFieldExpr {
-	// If private is present, it will be the last field.
-	index := len(d.Fields) - 1
-	if index < 0 {
-		return nil
-	}
-
-	defineField := d.Fields[index]
-	if isPrivateType(string(defineField.Type)) {
-		return defineField
-	}
-
-	return nil
-}
-
-// getUniquePrivateTypes returns a list of the distinct private value types used
-// in the given set of define expressions. These are used to generating methods
-// to intern private values.
-func getUniquePrivateTypes(defines lang.DefineSetExpr) []string {
-	var types []string
-	unique := make(map[lang.StringExpr]bool)
-
-	for _, define := range defines {
-		defineField := privateField(define)
-		if defineField != nil {
-			if !unique[defineField.Type] {
-				types = append(types, string(defineField.Type))
-				unique[defineField.Type] = true
-			}
+// expandFields returns all fields from the given define, with the fields of any
+// embedded structs recursively expanded into a flat list.
+func expandFields(compiled *lang.CompiledExpr, define *lang.DefineExpr) lang.DefineFieldsExpr {
+	var fields lang.DefineFieldsExpr
+	for _, field := range define.Fields {
+		if isEmbeddedField(field) {
+			embedded := expandFields(compiled, compiled.LookupDefine(string(field.Type)))
+			fields = append(fields, embedded...)
+		} else {
+			fields = append(fields, field)
 		}
 	}
-
-	return types
+	return fields
 }
 
 // generateDefineComments is a helper function that generates a block of

@@ -139,7 +139,8 @@ func (g *optgen) run(args ...string) bool {
 		errors = compiler.Errors()
 	} else {
 		// Do additional validation checks.
-		errors = g.validate(compiled)
+		var v validator
+		errors = v.validate(compiled)
 	}
 
 	if errors != nil {
@@ -187,61 +188,6 @@ func (g *optgen) run(args ...string) bool {
 		return false
 	}
 	return true
-}
-
-// validate performs additional checks on the compiled Optgen expression. In
-// particular, it checks the order and types of the fields in define
-// expressions. The Optgen language itself allows any field order and types, so
-// the compiler does not do these checks.
-func (g *optgen) validate(compiled *lang.CompiledExpr) []error {
-	var errors []error
-
-	for _, rule := range compiled.Rules {
-		if !rule.Tags.Contains("Normalize") && !rule.Tags.Contains("Explore") {
-			format := "%s rule is missing \"Normalize\" or \"Explore\" tag"
-			err := fmt.Errorf(format, rule.Name)
-			err = addErrorSource(err, rule.Source())
-			errors = append(errors, err)
-		}
-	}
-
-	for _, define := range compiled.Defines {
-		// Ensure that fields are defined in the following order:
-		//   Expr*
-		//   ExprList?
-		//   Private?
-		//
-		// That is, there can be zero or more expression-typed fields, followed
-		// by zero or one list-typed field, followed by zero or one private field.
-		for i, field := range define.Fields {
-			if isPrivateType(string(field.Type)) {
-				if i != len(define.Fields)-1 {
-					format := "private field '%s' is not the last field in '%s'"
-					err := fmt.Errorf(format, field.Name, define.Name)
-					err = addErrorSource(err, field.Source())
-					errors = append(errors, err)
-					break
-				}
-			}
-
-			if isListType(string(field.Type)) {
-				index := len(define.Fields) - 1
-				if privateField(define) != nil {
-					index--
-				}
-
-				if i != index {
-					format := "list field '%s' is not the last non-private field in '%s'"
-					err := fmt.Errorf(format, field.Name, define.Name)
-					err = addErrorSource(err, field.Source())
-					errors = append(errors, err)
-					break
-				}
-			}
-		}
-	}
-
-	return errors
 }
 
 func (g *optgen) generate(compiled *lang.CompiledExpr, genFunc genFunc) error {
@@ -326,8 +272,4 @@ func (g *optgen) usage() {
 
 func (g *optgen) reportError(err error) {
 	fmt.Fprintf(g.stdErr, "ERROR: %v\n", err)
-}
-
-func addErrorSource(err error, src *lang.SourceLoc) error {
-	return fmt.Errorf("%s: %s", src, err)
 }

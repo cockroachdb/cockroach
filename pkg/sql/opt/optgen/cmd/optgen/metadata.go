@@ -139,7 +139,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 	// Add all types used in Optgen defines here.
 	md.types = map[string]*typeDef{
 		"RelExpr":        {fullName: "memo.RelExpr", isExpr: true, isPointer: true},
-		"Node":           {fullName: "opt.Expr", isExpr: true, isPointer: true},
+		"Expr":           {fullName: "opt.Expr", isExpr: true, isPointer: true},
 		"ScalarExpr":     {fullName: "opt.ScalarExpr", isExpr: true, isPointer: true},
 		"Operator":       {fullName: "opt.Operator", passByVal: true},
 		"ColumnID":       {fullName: "opt.ColumnID", passByVal: true},
