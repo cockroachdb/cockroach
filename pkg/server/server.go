@@ -1683,6 +1683,8 @@ func (s *Server) Start(ctx context.Context) error {
 		})
 	}
 
+	s.startSystemLogsGC(ctx)
+
 	// Record that this node joined the cluster in the event log. Since this
 	// executes a SQL query, this must be done after the SQL layer is ready.
 	s.node.recordJoinEvent()
