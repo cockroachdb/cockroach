@@ -356,7 +356,7 @@ func (rdc *RangeDescriptorCache) lookupRangeDescriptorInternal(
 	select {
 	case res = <-resC:
 	case <-ctxDone:
-		return nil, nil, ctx.Err()
+		return nil, nil, errors.Wrap(ctx.Err(), "aborted during range descriptor lookup")
 	}
 
 	if res.Shared {

@@ -189,7 +189,7 @@ func (gt *grpcTransport) sendBatch(
 	// detect this pretty quickly, but the first check of the context
 	// in the local server comes pretty late)
 	if ctx.Err() != nil {
-		return nil, ctx.Err()
+		return nil, errors.Wrap(ctx.Err(), "aborted before batch send")
 	}
 
 	gt.opts.metrics.SentCount.Inc(1)
