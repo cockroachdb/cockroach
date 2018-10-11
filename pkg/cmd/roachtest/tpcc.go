@@ -410,27 +410,22 @@ func loadTPCCBench(
 		panic("unexpected")
 	}
 
-	// Split and scatter the tables. Set duration to 1ms so that the load
-	// generation doesn't actually run.
-	cmd = fmt.Sprintf("ulimit -n 32768; "+
-		"./workload run tpcc --warehouses=%d --split --scatter %s "+
-		"--duration=3m --tolerate-errors {pgurl:1}", b.LoadWarehouses, partArgs)
-	if out, err := c.RunWithBuffer(ctx, c.l, loadNode, cmd); err != nil {
-		return errors.Wrapf(err, "failed with output %q", string(out))
-	}
-
 	c.l.Printf("waiting %v for rebalancing\n", rebalanceWait)
 	_, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='64MiB'`)
 	if err != nil {
 		return err
 	}
 
-	// TODO(nvanbenschoten): we should find a way to make this reactive and
-	// wait until no zone constraints are being violated.
-	select {
-	case <-time.After(rebalanceWait):
-	case <-ctx.Done():
-		return ctx.Err()
+	// Split and scatter the tables. Run 1/10th of the expected load in the
+	// desired distribution by dropping the worker count. This should allow
+	// for load-based rebalancing to help distribute load. Optionally pass
+	// some load configuration-specific flags.
+	cmd = fmt.Sprintf("ulimit -n 32768; "+
+		"./workload run tpcc --warehouses=%d --workers=%d --split --scatter "+
+		"--duration=%d --tolerate-errors %s {pgurl%s}",
+		b.LoadWarehouses, b.LoadWarehouses, rebalanceWait, partArgs, roachNodes)
+	if out, err := c.RunWithBuffer(ctx, c.l, loadNode, cmd); err != nil {
+		return errors.Wrapf(err, "failed with output %q", string(out))
 	}
 
 	_, err = db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2MiB'`)
