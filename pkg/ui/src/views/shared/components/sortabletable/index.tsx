@@ -66,6 +66,21 @@ interface TableProps {
   className?: string;
   // A function that returns the class to apply to a given row.
   rowClass?: (rowIndex: number) => string;
+  // expandableConfig, if provided, makes each row in the table "expandable",
+  // i.e. each row has an expand/collapse arrow on its left, and renders
+  // a full-width area below it when expanded.
+  expandableConfig?: ExpandableConfig;
+}
+
+export interface ExpandableConfig {
+  // Called when the expand toggle is clicked. If this prop is not supplied,
+  // the table is not expandable and the expansion control is not shown.
+  onChangeExpansion: (rowIndex: number, expanded: boolean) => void;
+  // Given a row index, return whether that row is expanded.
+  rowIsExpanded: (rowIndex: number) => boolean;
+  // If a row is expanded, this function is called to get the content for the
+  // full-width expanded section.
+  expandedContent: (rowIndex: number) => React.ReactNode;
 }
 
 /**
@@ -77,7 +92,7 @@ interface TableProps {
  * SortableTable can indicate this to higher-level components through the
  * 'onChangeSortSetting' callback property.
  */
-export class SortableTable extends React.Component<TableProps, {}> {
+export class SortableTable extends React.Component<TableProps> {
   static defaultProps: TableProps = {
     count: 0,
     columns: [],
@@ -110,50 +125,105 @@ export class SortableTable extends React.Component<TableProps, {}> {
     });
   }
 
-  render() {
-    const { sortSetting, columns } = this.props;
-    return <table className={classNames("sort-table", this.props.className)}>
-      <thead>
-        <tr className="sort-table__row sort-table__row--header">
-          {_.map(columns, (c: SortableColumn, colIndex: number) => {
-            const classes = ["sort-table__cell"];
-            let onClick: (e: any) => void = undefined;
+  expansionControl(expanded: boolean) {
+    const content = expanded ? "▼" : "▶";
+    return (
+      <td className="sort-table__cell sort-table__cell__expansion-control">
+        <div>
+          {content}
+        </div>
+      </td>
+    );
+  }
 
-            if (!_.isUndefined(c.sortKey)) {
-              classes.push("sort-table__cell--sortable");
-              onClick = () => {
-                this.clickSort(c.sortKey);
-              };
-              if (c.sortKey === sortSetting.sortKey) {
-                if (sortSetting.ascending) {
-                  classes.push(" sort-table__cell--ascending");
-                } else {
-                  classes.push("sort-table__cell--descending");
+  renderRow = (rowIndex: number) => {
+    const { columns, expandableConfig } = this.props;
+
+    const classes = classNames(
+      "sort-table__row",
+      "sort-table__row--body",
+      this.props.rowClass(rowIndex),
+      { "sort-table__row--expandable": !!expandableConfig },
+    );
+    const expanded = expandableConfig && expandableConfig.rowIsExpanded(rowIndex);
+    const onClickExpand = expandableConfig && expandableConfig.onChangeExpansion;
+    const output = [
+      <tr
+        key={rowIndex}
+        className={classes}
+        onClick={() => onClickExpand(rowIndex, !expanded)}
+      >
+        {expandableConfig ? this.expansionControl(expanded) : null}
+        {_.map(columns, (c: SortableColumn, colIndex: number) => {
+          return (
+            <td className={classNames("sort-table__cell", c.className)} key={colIndex}>
+              {c.cell(rowIndex)}
+            </td>
+          );
+        })
+        }
+      </tr>,
+    ];
+    if (expandableConfig && expandableConfig.rowIsExpanded(rowIndex)) {
+      const expandedAreaClasses = classNames(
+        "sort-table__row",
+        "sort-table__row--body",
+        "sort-table__row--expanded-area",
+      );
+      output.push(
+        // Add a zero-height empty row so that the expanded area will have the same background
+        // color as the row it's expanded from, since the CSS causes row colors to alternate.
+        <tr className={classes} />,
+        <tr className={expandedAreaClasses}>
+          <td />
+          <td
+            className="sort-table__cell"
+            colSpan={columns.length}
+          >
+            {expandableConfig.expandedContent(rowIndex)}
+          </td>
+        </tr>,
+      );
+    }
+    return output;
+  }
+
+  render() {
+    const { sortSetting, columns, expandableConfig } = this.props;
+    return (
+      <table className={classNames("sort-table", this.props.className)}>
+        <thead>
+          <tr className="sort-table__row sort-table__row--header">
+            {expandableConfig ? <th className="sort-table__cell" /> : null}
+            {_.map(columns, (c: SortableColumn, colIndex: number) => {
+              const classes = ["sort-table__cell"];
+              let onClick: (e: any) => void = undefined;
+
+              if (!_.isUndefined(c.sortKey)) {
+                classes.push("sort-table__cell--sortable");
+                onClick = () => {
+                  this.clickSort(c.sortKey);
+                };
+                if (c.sortKey === sortSetting.sortKey) {
+                  if (sortSetting.ascending) {
+                    classes.push(" sort-table__cell--ascending");
+                  } else {
+                    classes.push("sort-table__cell--descending");
+                  }
                 }
               }
-            }
-            return <th className={classNames(classes)} key={colIndex} onClick={onClick}>{c.title}</th>;
-          })}
-        </tr>
-      </thead>
-      <tbody>
-        {_.times(this.props.count, (rowIndex) => {
-          const classes = classNames(
-            "sort-table__row",
-            "sort-table__row--body",
-            this.props.rowClass(rowIndex),
-          );
-          return (
-            <tr key={rowIndex} className={classes}>
-              {
-                _.map(columns, (c: SortableColumn, colIndex: number) => {
-                  return <td className={classNames("sort-table__cell", c.className)} key={colIndex}>{c.cell(rowIndex)}</td>;
-                })
-              }
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>;
+              return (
+                <th className={classNames(classes)} key={colIndex} onClick={onClick}>
+                  {c.title}
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {_.times(this.props.count, this.renderRow)}
+        </tbody>
+      </table>
+    );
   }
 }

@@ -16,6 +16,7 @@
 
 declare module "rc-progress" {
   export interface LineProps {
+    strokeColor?: string;
     strokeWidth?: number;
     trailWidth?: number;
     className?: string;
