@@ -67,7 +67,7 @@ func TestMemoryAllocations(t *testing.T) {
 				t.Errorf("account %d went negative: %d", accI, accs[accI].used)
 				fail = true
 			}
-			sum += accs[accI].Allocated()
+			sum += accs[accI].allocated()
 		}
 		if m.mu.curAllocated < 0 {
 			t.Errorf("monitor current count went negative: %d", m.mu.curAllocated)
@@ -81,7 +81,7 @@ func TestMemoryAllocations(t *testing.T) {
 			t.Errorf("monitor current budget went negative: %d", m.mu.curBudget.used)
 			fail = true
 		}
-		avail := m.mu.curBudget.Allocated() + m.reserved.used
+		avail := m.mu.curBudget.allocated() + m.reserved.used
 		if sum > avail {
 			t.Errorf("total account sum %d greater than total monitor budget %d", sum, avail)
 			fail = true
@@ -90,7 +90,7 @@ func TestMemoryAllocations(t *testing.T) {
 			t.Errorf("pool cur %d exceeds max %d", pool.mu.curAllocated, pool.reserved.used)
 			fail = true
 		}
-		if m.mu.curBudget.Allocated() != pool.mu.curAllocated {
+		if m.mu.curBudget.allocated() != pool.mu.curAllocated {
 			t.Errorf("monitor budget %d different from pool cur %d", m.mu.curBudget.used, pool.mu.curAllocated)
 			fail = true
 		}
@@ -261,90 +261,6 @@ func TestBoundAccount(t *testing.T) {
 
 	if err := a2.Resize(ctx, a2.used, 40); err != nil {
 		t.Fatalf("monitor refused reset + allocation: %v", err)
-	}
-
-	a1.Clear(ctx)
-	a2.Clear(ctx)
-
-	if err := a1.Grow(ctx, 20); err != nil {
-		t.Fatalf("monitor refused allocation: %v", err)
-	}
-
-	if err := a2.Grow(ctx, 10); err != nil {
-		t.Fatalf("monitor refused allocation: %v", err)
-	}
-
-	if err := a1.SetMinAllocated(ctx, 60); err != nil {
-		t.Fatalf("monitor refused min allocation: %v", err)
-	}
-
-	if !(a1.reserved == 40 && a1.used == 20) {
-		t.Fatalf("bound account incorrect min allocation: used %d and reserved %d", a1.used, a1.reserved)
-	}
-
-	if err := a2.Grow(ctx, 31); err == nil {
-		t.Fatalf("monitor accepted excessive allocation")
-	}
-
-	a1.Shrink(ctx, 10)
-
-	if err := a2.Grow(ctx, 31); err == nil {
-		t.Fatalf("monitor accepted excessive allocation")
-	}
-
-	a1.Empty(ctx)
-
-	if !(a1.used == 0 && a1.reserved == 60) {
-		t.Fatalf("bound account incorrect empty: used %d and reserved %d", a1.used, a1.reserved)
-	}
-
-	if err := a2.Grow(ctx, 31); err == nil {
-		t.Fatalf("monitor accepted excessive allocation")
-	}
-
-	if err := a1.SetMinAllocated(ctx, 50); err != nil {
-		t.Fatalf("monitor refused min allocation: %v", err)
-	}
-
-	if !(a1.used == 0 && a1.reserved == 50) {
-		t.Fatalf("bound account incorrect min allocation: used %d and reserved %d", a1.used, a1.reserved)
-	}
-
-	if err := a1.Resize(ctx, 0, 20); err != nil {
-		t.Fatalf("monitor refused allocation: %v", err)
-	}
-
-	if err := a2.ResizeTo(ctx, 50); err != nil {
-		t.Fatalf("monitor refused allocation: %v", err)
-	}
-
-	if err := a1.SetMinAllocated(ctx, 20); err != nil {
-		t.Fatalf("monitor refused min allocation: %v", err)
-	}
-
-	if !(a1.used == 20 && a1.reserved == 1) {
-		t.Fatalf("bound account incorrect min allocation: used %d and reserved %d", a1.used, a1.reserved)
-	}
-
-	if err := a2.ResizeTo(ctx, 79); err != nil {
-		t.Fatalf("monitor refused allocation: %v", err)
-	}
-
-	a1.Clear(ctx)
-	a2.Clear(ctx)
-
-	if err := a1.Grow(ctx, 70); err != nil {
-		t.Fatalf("monitor refused allocation: %v", err)
-	}
-
-	a1.Shrink(ctx, 10)
-
-	if !(a1.used == 60 && a1.reserved == 1) {
-		t.Fatalf("bound account incorrect shrink: used %d and reserved %d", a1.used, a1.reserved)
-	}
-
-	if err := a2.Grow(ctx, 39); err != nil {
-		t.Fatalf("monitor refused allocation: %v", err)
 	}
 
 	a1.Close(ctx)
