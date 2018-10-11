@@ -38,7 +38,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 	}
 	c.Wipe(ctx)
-	c.Start(ctx)
+	c.Start(ctx, t)
 
 	db := c.Conn(ctx, c.nodes)
 	defer db.Close()
@@ -68,7 +68,7 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 	t.Status("injecting offset")
 	offsetInjector.offset(ctx, c.nodes, tc.offset)
 	t.Status("starting cockroach post offset")
-	c.Start(ctx, c.Node(c.nodes))
+	c.Start(ctx, t, c.Node(c.nodes))
 
 	if !isAlive(db) {
 		t.Fatal("Node unexpectedly crashed")

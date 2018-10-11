@@ -32,7 +32,7 @@ func registerKV(r *registry) {
 		nodes := c.nodes - 1
 		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-		c.Start(ctx, c.Range(1, nodes), encryption)
+		c.Start(ctx, t, c.Range(1, nodes), encryption)
 
 		t.Status("running workload")
 		m := newMonitor(ctx, c, c.Range(1, nodes))
@@ -90,7 +90,7 @@ func registerKVQuiescenceDead(r *registry) {
 			nodes := c.nodes - 1
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-			c.Start(ctx, c.Range(1, nodes))
+			c.Start(ctx, t, c.Range(1, nodes))
 
 			run := func(cmd string, lastDown bool) {
 				n := nodes
@@ -172,7 +172,7 @@ func registerKVSplits(r *registry) {
 				nodes := c.nodes - 1
 				c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 				c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-				c.Start(ctx, c.Range(1, nodes),
+				c.Start(ctx, t, c.Range(1, nodes),
 					startArgs(
 						"--env=COCKROACH_MEMPROF_INTERVAL=1m",
 						"--env=COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!quiesce),
@@ -212,7 +212,7 @@ func registerKVScalability(r *registry) {
 		const maxPerNodeConcurrency = 64
 		for i := nodes; i <= nodes*maxPerNodeConcurrency; i += nodes {
 			c.Wipe(ctx, c.Range(1, nodes))
-			c.Start(ctx, c.Range(1, nodes))
+			c.Start(ctx, t, c.Range(1, nodes))
 
 			t.Status("running workload")
 			m := newMonitor(ctx, c, c.Range(1, nodes))
