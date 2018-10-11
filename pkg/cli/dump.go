@@ -209,7 +209,7 @@ func getDumpMetadata(
 		clusterTS = string(vals[0].([]byte))
 	} else {
 		// Validate the timestamp. This prevents SQL injection.
-		if _, err := tree.ParseDTimestamp(asOf, time.Nanosecond); err != nil {
+		if _, err := tree.ParseDTimestamp(nil, asOf, time.Nanosecond); err != nil {
 			return nil, "", err
 		}
 		clusterTS = asOf

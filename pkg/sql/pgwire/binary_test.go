@@ -112,7 +112,7 @@ func TestBinaryDecimal(t *testing.T) {
 func TestBinaryTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testBinaryDatumType(t, "timestamp", func(val string) tree.Datum {
-		ts, err := tree.ParseDTimestamp(val, time.Microsecond)
+		ts, err := tree.ParseDTimestamp(nil, val, time.Microsecond)
 		if err != nil {
 			t.Fatal(err)
 		}

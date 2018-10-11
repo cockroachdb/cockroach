@@ -73,14 +73,14 @@ var _ locationContext = &SemaContext{}
 
 // parseStringAs parses s as type t for simple types. Bytes, arrays, collated
 // strings are not handled. nil, nil is returned if t is not a supported type.
-func parseStringAs(t types.T, s string, ctx locationContext) (Datum, error) {
+func parseStringAs(t types.T, s string, loc locationContext) (Datum, error) {
 	switch t {
 	case types.BitArray:
 		return ParseDBitArray(s)
 	case types.Bool:
 		return ParseDBool(s)
 	case types.Date:
-		return ParseDDate(s, ctx.GetLocation())
+		return ParseDDate(s, loc.GetLocation())
 	case types.Decimal:
 		return ParseDDecimal(s)
 	case types.Float:
@@ -98,9 +98,10 @@ func parseStringAs(t types.T, s string, ctx locationContext) (Datum, error) {
 	case types.Time:
 		return ParseDTime(s)
 	case types.Timestamp:
-		return ParseDTimestamp(s, time.Microsecond)
+		eCtx, _ := loc.(*EvalContext)
+		return ParseDTimestamp(eCtx, s, time.Microsecond)
 	case types.TimestampTZ:
-		return ParseDTimestampTZ(s, ctx.GetLocation(), time.Microsecond)
+		return ParseDTimestampTZ(s, loc.GetLocation(), time.Microsecond)
 	case types.UUID:
 		return ParseDUuidFromString(s)
 	default:
