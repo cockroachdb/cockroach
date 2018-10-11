@@ -416,14 +416,12 @@ func loadTPCCBench(
 		return err
 	}
 
-	// Split and scatter the tables. Run 1/10th of the expected load in the
-	// desired distribution by dropping the worker count. This should allow
-	// for load-based rebalancing to help distribute load. Optionally pass
-	// some load configuration-specific flags.
-	cmd = fmt.Sprintf("ulimit -n 32768; "+
-		"./workload run tpcc --warehouses=%d --workers=%d --split --scatter "+
-		"--duration=%s --tolerate-errors %s {pgurl%s}",
-		b.LoadWarehouses, b.LoadWarehouses, rebalanceWait, partArgs, roachNodes)
+	// Split and scatter the tables. Ramp up to the expected load in the desired
+	// distribution. This should allow for load-based rebalancing to help
+	// distribute load. Optionally pass some load configuration-specific flags.
+	cmd = fmt.Sprintf("./workload run tpcc --warehouses=%d --split --scatter "+
+		"--ramp=%s --duration=1ms --tolerate-errors %s {pgurl%s}",
+		b.LoadWarehouses, rebalanceWait, partArgs, roachNodes)
 	if out, err := c.RunWithBuffer(ctx, c.l, loadNode, cmd); err != nil {
 		return errors.Wrapf(err, "failed with output %q", string(out))
 	}
@@ -568,8 +566,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 
 					t.Status(fmt.Sprintf("running benchmark, warehouses=%d", warehouses))
 
-					cmd := fmt.Sprintf("ulimit -n 32768; "+
-						"./workload run tpcc --warehouses=%d --active-warehouses=%d "+
+					cmd := fmt.Sprintf("./workload run tpcc --warehouses=%d --active-warehouses=%d "+
 						"--tolerate-errors --ramp=%s --duration=%s%s {pgurl%s}",
 						b.LoadWarehouses, activeWarehouses, rampDur,
 						loadDur, extraFlags, sqlGateways)
