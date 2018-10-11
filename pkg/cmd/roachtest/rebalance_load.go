@@ -44,7 +44,12 @@ func registerRebalanceLoad(r *registry) {
 	// kv.allocator.stat_based_rebalancing.enabled set to true, while it should
 	// usually (but not always fail) with it set to false.
 	rebalanceLoadRun := func(
-		ctx context.Context, t *test, c *cluster, rebalanceMode string, duration time.Duration, concurrency int,
+		ctx context.Context,
+		t *test,
+		c *cluster,
+		rebalanceMode string,
+		maxDuration time.Duration,
+		concurrency int,
 	) {
 		roachNodes := c.Range(1, c.nodes-1)
 		appNode := c.Node(c.nodes)
@@ -60,6 +65,11 @@ func registerRebalanceLoad(r *registry) {
 		var m *errgroup.Group // see comment in version.go
 		m, ctx = errgroup.WithContext(ctx)
 
+		// Enable us to exit out of workload early when we achieve the desired
+		// lease balance. This drastically shortens the duration of the test in the
+		// common case.
+		ctx, cancel := context.WithCancel(ctx)
+
 		m.Go(func() error {
 			c.l.Printf("starting load generator\n")
 
@@ -70,10 +80,17 @@ func registerRebalanceLoad(r *registry) {
 			defer quietL.close()
 
 			splits := len(roachNodes) - 1 // n-1 splits => n ranges => 1 lease per node
-			return c.RunL(ctx, quietL, appNode, fmt.Sprintf(
+			err = c.RunL(ctx, quietL, appNode, fmt.Sprintf(
 				"./workload run kv --read-percent=95 --splits=%d --tolerate-errors --concurrency=%d "+
-					"--duration=%s {pgurl:1-%d}",
-				splits, concurrency, duration.String(), len(roachNodes)))
+					"--duration=%v {pgurl:1-%d}",
+				splits, concurrency, maxDuration, len(roachNodes)))
+			if ctx.Err() == context.Canceled {
+				// We got canceled either because lease balance was achieved or the
+				// other worker hit an error. In either case, it's not this worker's
+				// fault.
+				return nil
+			}
+			return err
 		})
 
 		m.Go(func() error {
@@ -88,11 +105,12 @@ func registerRebalanceLoad(r *registry) {
 				return err
 			}
 
-			for tBegin := timeutil.Now(); timeutil.Since(tBegin) <= duration; {
+			for tBegin := timeutil.Now(); timeutil.Since(tBegin) <= maxDuration; {
 				if done, err := isLoadEvenlyDistributed(c.l, db, len(roachNodes)); err != nil {
 					return err
 				} else if done {
 					t.Status("successfully achieved lease balance; waiting for kv to finish running")
+					cancel()
 					return nil
 				}
 
