@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
+// TODO(benesch): Don't reinvent the key encoding here.
+
 func plainKV(k, v string) roachpb.KeyValue {
 	return kv([]byte(k), []byte(v))
 }
@@ -50,7 +52,7 @@ func sqlKV(tableID uint32, indexID, descriptorID uint64) roachpb.KeyValue {
 }
 
 func descriptor(descriptorID uint64) roachpb.KeyValue {
-	return sqlKV(uint32(keys.DescriptorTableID), 1, descriptorID)
+	return kv(sqlbase.MakeDescMetadataKey(sqlbase.ID(descriptorID)), nil)
 }
 
 func zoneConfig(descriptorID uint32, spans ...config.SubzoneSpan) roachpb.KeyValue {
@@ -358,6 +360,10 @@ func TestComputeSplitKeyTableIDs(t *testing.T) {
 		{subzoneSQL, tkey(start+5, "c"), tkey(start + 6), tkey(start+5, "d")},
 		{subzoneSQL, tkey(start+5, "d"), tkey(start + 6), tkey(start+5, "e")},
 		{subzoneSQL, tkey(start+5, "e"), tkey(start + 6), nil},
+
+		// Testing that no splits are required for IDs that
+		// that do not map to descriptors.
+		{userSQL, tkey(start + 1), tkey(start + 5), nil},
 	}
 
 	cfg := config.NewSystemConfig()
