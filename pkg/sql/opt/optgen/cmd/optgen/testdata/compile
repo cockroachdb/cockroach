@@ -53,7 +53,7 @@ define Not {
 #
 optgen compile all
 define Gt {
-    left Expr
+    left  Expr
     right Expr
 }
 ----

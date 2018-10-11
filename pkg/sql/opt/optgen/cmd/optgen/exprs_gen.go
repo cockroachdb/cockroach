@@ -17,264 +17,741 @@ package main
 import (
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
 )
 
-// exprsGen generates the memo expression structs used by the optimizer, as
-// well as lookup tables used to implement the ExprView methods.
+// exprsGen generates the memo expression structs used by the optimizer, as well
+// as memoization and interning methods.
 type exprsGen struct {
 	compiled *lang.CompiledExpr
+	md       *metadata
 	w        io.Writer
 }
 
 func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.compiled = compiled
+	g.md = newMetadata(compiled, "memo")
 	g.w = w
 
 	fmt.Fprintf(g.w, "package memo\n\n")
 
 	fmt.Fprintf(g.w, "import (\n")
+	fmt.Fprintf(g.w, "  \"fmt\"\n")
+	fmt.Fprintf(g.w, "  \"unsafe\"\n")
+	fmt.Fprintf(g.w, "\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/coltypes\"\n")
+	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt/props\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/sem/tree\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/sem/types\"\n")
 	fmt.Fprintf(g.w, ")\n\n")
 
-	g.genLayoutTable()
-	g.genTagLookup()
-	g.genIsTag()
+	for _, define := range g.compiled.Defines {
+		g.genExprDef(define)
+	}
 
-	// Skip enforcers, since they are not memoized.
-	for _, define := range g.compiled.Defines.WithoutTag("Enforcer") {
-		g.genExprType(define)
+	g.genMemoizeFuncs()
+	g.genAddToGroupFuncs()
+	g.genInternFuncs()
+	g.genBuildPropsFunc()
+}
+
+// genExprDef generates an expression's type definition and its methods.
+func (g *exprsGen) genExprDef(define *lang.DefineExpr) {
+	opTyp := g.md.typeOf(define)
+
+	// Generate comment for the expression struct.
+	generateDefineComments(g.w, define, opTyp.name)
+
+	// Generate the struct and methods.
+	if define.Tags.Contains("List") {
+		listItemTyp := opTyp.listItemType
+		fmt.Fprintf(g.w, "type %s []%s\n\n", opTyp.name, listItemTyp.name)
+		fmt.Fprintf(g.w, "var Empty%s = %s{}\n\n", opTyp.name, opTyp.name)
+		g.genListExprFuncs(define)
+	} else if define.Tags.Contains("Enforcer") {
+		g.genExprStruct(define)
+		g.genEnforcerFuncs(define)
+	} else if define.Tags.Contains("Private") {
+		g.genPrivateStruct(define)
+	} else {
+		g.genExprStruct(define)
 		g.genExprFuncs(define)
 	}
 
-	g.genMemoFuncs()
-	g.genMakeExpr()
+	// Generate the expression's group struct and methods
+	g.genExprGroupDef(define)
 }
 
-// genLayoutTable generates the layout table; see opLayout.
-func (g *exprsGen) genLayoutTable() {
-	fmt.Fprintf(g.w, "var opLayoutTable = [...]opLayout{\n")
-	fmt.Fprintf(g.w, "  opt.UnknownOp: 0xFF, // will cause a crash if used\n")
-	for _, define := range g.compiled.Defines {
-		var count, listVal, privVal int
-
-		count = len(define.Fields)
-		if privateField(define) != nil {
-			privVal = count
-			count--
-		}
-		list := listField(define)
-		if list != nil {
-			listVal = count
-			if privVal != 0 {
-				// The list takes two slots; adjust the private position.
-				privVal++
-			}
-			count--
-		}
-		fmt.Fprintf(
-			g.w, "  opt.%sOp: makeOpLayout(%d /*base*/, %d /*list*/, %d /*priv*/),\n",
-			define.Name, count, listVal, privVal,
-		)
-	}
-	fmt.Fprintf(g.w, "}\n\n")
-}
-
-// genTagLookup generates a lookup table used to implement the ExprView IsXXX
-// methods for each different define tag. These methods indicate whether the
-// expression is associated with that particular tag.
-func (g *exprsGen) genTagLookup() {
-	for _, tag := range g.compiled.DefineTags {
-		fmt.Fprintf(g.w, "var is%sLookup = [...]bool{\n", tag)
-		fmt.Fprintf(g.w, "  opt.UnknownOp: false,\n\n")
-
-		for _, define := range g.compiled.Defines {
-			fmt.Fprintf(g.w, "  opt.%sOp: %v,\n", define.Name, define.Tags.Contains(tag))
-		}
-
-		fmt.Fprintf(g.w, "}\n\n")
-	}
-}
-
-// genIsTag generates IsXXX tag methods on ExprView and Expr for every unique
-// tag.
-func (g *exprsGen) genIsTag() {
-	for _, tag := range g.compiled.DefineTags {
-		fmt.Fprintf(g.w, "func (ev ExprView) Is%s() bool {\n", tag)
-		fmt.Fprintf(g.w, "  return is%sLookup[ev.op]\n", tag)
-		fmt.Fprintf(g.w, "}\n\n")
-	}
-
-	for _, tag := range g.compiled.DefineTags {
-		fmt.Fprintf(g.w, "func (e *Expr) Is%s() bool {\n", tag)
-		fmt.Fprintf(g.w, "  return is%sLookup[e.op]\n", tag)
-		fmt.Fprintf(g.w, "}\n\n")
-	}
-}
-
-// genExprType generates the type definition for the expression, as well as a
-// constructor function.
-func (g *exprsGen) genExprType(define *lang.DefineExpr) {
-	opType := fmt.Sprintf("%sOp", define.Name)
-	exprType := fmt.Sprintf("%sExpr", define.Name)
-
-	// Generate comment for the expression type.
-	generateDefineComments(g.w, define, exprType)
-
-	// Generate the expression type.
-	fmt.Fprintf(g.w, "type %s Expr\n\n", exprType)
-
-	// Generate a strongly-typed constructor function for the type.
-	fmt.Fprintf(g.w, "func Make%s(", exprType)
-	for i, field := range define.Fields {
-		if i != 0 {
-			fmt.Fprint(g.w, ", ")
-		}
-		fmt.Fprintf(g.w, "%s %s", unTitle(string(field.Name)), mapType(string(field.Type)))
-	}
-	fmt.Fprintf(g.w, ") %s {\n", exprType)
-	fmt.Fprintf(g.w, "  return %s{op: opt.%s, state: exprState{", exprType, opType)
-
-	for i, field := range define.Fields {
-		fieldName := unTitle(string(field.Name))
-
-		if i != 0 {
-			fmt.Fprintf(g.w, ", ")
-		}
-
-		if isListType(string(field.Type)) {
-			fmt.Fprintf(g.w, "%s.Offset, %s.Length", fieldName, fieldName)
-		} else {
-			fmt.Fprintf(g.w, "uint32(%s)", fieldName)
-		}
-	}
-
-	fmt.Fprint(g.w, "}}\n")
-	fmt.Fprint(g.w, "}\n\n")
-}
-
-// genExprFuncs generates the expression's accessor functions, one for each
-// field in the type.
-func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
-	opType := fmt.Sprintf("%sOp", define.Name)
-	exprType := fmt.Sprintf("%sExpr", define.Name)
-
-	// Generate the strongly-typed accessor methods.
-	stateIndex := 0
-	for _, field := range define.Fields {
-		fieldType := mapType(string(field.Type))
-
-		fmt.Fprintf(g.w, "func (e *%s) %s() %s {\n", exprType, field.Name, fieldType)
-		if isListType(string(field.Type)) {
-			format := "  return ListID{Offset: e.state[%d], Length: e.state[%d]}\n"
-			fmt.Fprintf(g.w, format, stateIndex, stateIndex+1)
-			stateIndex += 2
-		} else if isPrivateType(string(field.Type)) {
-			fmt.Fprintf(g.w, "  return PrivateID(e.state[%d])\n", stateIndex)
-			stateIndex++
-		} else {
-			fmt.Fprintf(g.w, "  return GroupID(e.state[%d])\n", stateIndex)
-			stateIndex++
-		}
-		fmt.Fprintf(g.w, "}\n\n")
-	}
-
-	// Generate the fingerprint method.
-	fmt.Fprintf(g.w, "func (e *%s) Fingerprint() Fingerprint {\n", exprType)
-	fmt.Fprintf(g.w, "  return Fingerprint(*e)\n")
-	fmt.Fprintf(g.w, "}\n\n")
-
-	// Generate a conversion method from Expr to the more specialized
-	// expression type.
-	fmt.Fprintf(g.w, "func (e *Expr) As%s() *%s {\n", define.Name, exprType)
-	fmt.Fprintf(g.w, "  if e.op != opt.%s {\n", opType)
-	fmt.Fprintf(g.w, "    return nil\n")
-	fmt.Fprintf(g.w, "  }\n")
-
-	fmt.Fprintf(g.w, "  return (*%s)(e)\n", exprType)
-	fmt.Fprintf(g.w, "}\n\n")
-}
-
-// genMemoFuncs generates methods on the memo.
-func (g *exprsGen) genMemoFuncs() {
-	for _, typ := range getUniquePrivateTypes(g.compiled.Defines) {
-		// Remove memo package qualifier from types.
-		goType := strings.Replace(mapPrivateType(typ), "memo.", "", -1)
-
-		fmt.Fprintf(g.w, "// Intern%s adds the given value to the memo and returns an ID that\n", typ)
-		fmt.Fprintf(g.w, "// can be used for later lookup. If the same value was added previously, \n")
-		fmt.Fprintf(g.w, "// this method is a no-op and returns the ID of the previous value.\n")
-		fmt.Fprintf(g.w, "func (m *Memo) Intern%s(val %s) PrivateID {\n", typ, goType)
-		fmt.Fprintf(g.w, "return m.privateStorage.intern%s(val)", typ)
-		fmt.Fprintf(g.w, "}\n\n")
-	}
-}
-
-// genMakeExpr generates the MakeExpr method, which constructs expressions from
-// a dynamic type and arguments. The code looks similar to this:
+// genExprGroupDef generates the group struct definition for a relational
+// expression, plus its methods:
 //
-//   type makeExprFunc func(operands DynamicOperands) Expr
-//
-//   var makeExprLookup [opt.NumOperators]makeExprFunc
-//
-//   func init() {
-//     // ScanOp
-//     makeExprLookup[opt.ScanOp] = func(operands DynamicOperands) Expr {
-//       return Expr(MakeScanExpr(PrivateID(operands[0])))
-//     }
-//
-//     // SelectOp
-//     makeExprLookup[opt.SelectOp] = func(operands DynamicOperands) Expr {
-//       return Expr(MakeSelectExpr(GroupID(operands[0]), GroupID(operands[1])))
-//     }
-//
-//     ... code for other ops ...
+//   type selectGroup struct {
+//     mem   *Memo
+//     rel   props.Relational
+//     phys  *props.Physical
+//     cst   Cost
+//     first SelectExpr
 //   }
 //
-func (g *exprsGen) genMakeExpr() {
-	funcType := "func(operands DynamicOperands) Expr"
-	fmt.Fprintf(g.w, "type makeExprFunc %s\n", funcType)
-
-	fmt.Fprintf(g.w, "var makeExprLookup [opt.NumOperators]makeExprFunc\n\n")
-
-	fmt.Fprintf(g.w, "func init() {\n")
-	fmt.Fprintf(g.w, "  // UnknownOp\n")
-	fmt.Fprintf(g.w, "  makeExprLookup[opt.UnknownOp] = %s {\n", funcType)
-	fmt.Fprintf(g.w, "    panic(\"op type not initialized\")\n")
-	fmt.Fprintf(g.w, "  }\n\n")
-
-	for _, define := range g.compiled.Defines.WithoutTag("Enforcer") {
-		fmt.Fprintf(g.w, "  // %sOp\n", define.Name)
-		fmt.Fprintf(g.w, "  makeExprLookup[opt.%sOp] = %s {\n", define.Name, funcType)
-
-		fmt.Fprintf(g.w, "    return Expr(Make%sExpr(", define.Name)
-		for i, field := range define.Fields {
-			if i != 0 {
-				fmt.Fprintf(g.w, ", ")
-			}
-
-			if isListType(string(field.Type)) {
-				fmt.Fprintf(g.w, "operands[%d].ListID()", i)
-			} else if isPrivateType(string(field.Type)) {
-				fmt.Fprintf(g.w, "PrivateID(operands[%d])", i)
-			} else {
-				fmt.Fprintf(g.w, "GroupID(operands[%d])", i)
-			}
-		}
-		fmt.Fprintf(g.w, "))\n")
-
-		fmt.Fprintf(g.w, "  }\n\n")
+func (g *exprsGen) genExprGroupDef(define *lang.DefineExpr) {
+	if !define.Tags.Contains("Relational") {
+		return
 	}
 
+	structType := fmt.Sprintf("%sExpr", define.Name)
+	groupStructType := fmt.Sprintf("%sGroup", unTitle(string(define.Name)))
+
+	// Generate the type definition.
+	fmt.Fprintf(g.w, "type %s struct {\n", groupStructType)
+	fmt.Fprintf(g.w, "  mem *Memo\n")
+	fmt.Fprintf(g.w, "  rel props.Relational\n")
+	fmt.Fprintf(g.w, "  phys *props.Physical\n")
+	fmt.Fprintf(g.w, "  cst Cost\n")
+	fmt.Fprintf(g.w, "  first %s\n", structType)
+	fmt.Fprintf(g.w, "}\n\n")
+	fmt.Fprintf(g.w, "var _ exprGroup = &%s{}\n\n", groupStructType)
+
+	// Generate the memo method.
+	fmt.Fprintf(g.w, "func (g *%s) memo() *Memo {\n", groupStructType)
+	fmt.Fprintf(g.w, "  return g.mem\n")
 	fmt.Fprintf(g.w, "}\n\n")
 
-	fmt.Fprintf(g.w, "func MakeExpr(op opt.Operator, operands DynamicOperands) Expr {\n")
-	fmt.Fprintf(g.w, "  return makeExprLookup[op](operands)\n")
-	fmt.Fprintf(g.w, "}\n")
+	// Generate the relational method.
+	fmt.Fprintf(g.w, "func (g *%s) relational() *props.Relational {\n", groupStructType)
+	fmt.Fprintf(g.w, "  return &g.rel\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the physical method.
+	fmt.Fprintf(g.w, "func (g *%s) physical() *props.Physical {\n", groupStructType)
+	fmt.Fprintf(g.w, "  return g.phys\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the firstExpr method.
+	fmt.Fprintf(g.w, "func (g *%s) firstExpr() RelExpr {\n", groupStructType)
+	fmt.Fprintf(g.w, "  return &g.first\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the cost method.
+	fmt.Fprintf(g.w, "func (g *%s) cost() Cost {\n", groupStructType)
+	fmt.Fprintf(g.w, "  return g.cst\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the setBestProps method.
+	fmt.Fprintf(g.w, "func (g *%s) setBestProps(physical *props.Physical, cost Cost) {\n", groupStructType)
+	fmt.Fprintf(g.w, "  g.phys = physical\n")
+	fmt.Fprintf(g.w, "  g.cst = cost\n")
+	fmt.Fprintf(g.w, "}\n\n")
+}
+
+// genPrivateStruct generates the struct for a define tagged as Private:
+//
+//  type FunctionPrivate struct {
+//    Name       string
+//    Typ        types.T
+//    Properties *tree.FunctionProperties
+//    Overload   *tree.Overload
+//  }
+//
+func (g *exprsGen) genPrivateStruct(define *lang.DefineExpr) {
+	privTyp := g.md.typeOf(define)
+
+	fmt.Fprintf(g.w, "type %s struct {\n", privTyp.name)
+	for _, field := range define.Fields {
+		fmt.Fprintf(g.w, "  %s %s\n", field.Name, g.md.typeOf(field).name)
+	}
+	fmt.Fprintf(g.w, "}\n\n")
+}
+
+// genExprStruct generates the struct type definition for an expression:
+//
+//   type SelectExpr struct {
+//     Input   RelExpr
+//     Filters FiltersExpr
+//
+//     grp  exprGroup
+//     next RelExpr
+//   }
+//
+func (g *exprsGen) genExprStruct(define *lang.DefineExpr) {
+	opTyp := g.md.typeOf(define)
+
+	fmt.Fprintf(g.w, "type %s struct {\n", opTyp.name)
+
+	// Generate child fields.
+	for _, field := range define.Fields {
+		// If field's name is "_", then use Go embedding syntax.
+		if isEmbeddedField(field) {
+			fmt.Fprintf(g.w, "  %s\n", g.md.typeOf(field).name)
+		} else {
+			fieldName := g.md.fieldName(field)
+			fmt.Fprintf(g.w, "  %s %s\n", fieldName, g.md.typeOf(field).name)
+		}
+	}
+
+	if define.Tags.Contains("Scalar") {
+		fmt.Fprintf(g.w, "\n")
+		if g.needsDataTypeField(define) {
+			fmt.Fprintf(g.w, "  Typ types.T\n")
+		}
+	} else if define.Tags.Contains("Enforcer") {
+		fmt.Fprintf(g.w, "  Input RelExpr\n")
+		fmt.Fprintf(g.w, "  phys  *props.Physical\n")
+		fmt.Fprintf(g.w, "  cst   Cost\n")
+	} else {
+		fmt.Fprintf(g.w, "\n")
+		fmt.Fprintf(g.w, "  grp  exprGroup\n")
+		fmt.Fprintf(g.w, "  next RelExpr\n")
+	}
+	fmt.Fprintf(g.w, "}\n\n")
+}
+
+// genExprFuncs generates the methods for an expression, including those from
+// the Expr, RelExpr, and ScalarExpr interfaces.
+func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
+	opTyp := g.md.typeOf(define)
+	childFields := g.md.childFields(define)
+	privateField := g.md.privateField(define)
+
+	if define.Tags.Contains("Scalar") {
+		fmt.Fprintf(g.w, "var _ opt.ScalarExpr = &%s{}\n\n", opTyp.name)
+	} else {
+		fmt.Fprintf(g.w, "var _ RelExpr = &%s{}\n\n", opTyp.name)
+	}
+
+	// Generate the Op method.
+	fmt.Fprintf(g.w, "func (e *%s) Op() opt.Operator {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  return opt.%sOp\n", define.Name)
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the ChildCount method.
+	fmt.Fprintf(g.w, "func (e *%s) ChildCount() int {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  return %d\n", len(childFields))
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the Child method.
+	fmt.Fprintf(g.w, "func (e *%s) Child(nth int) opt.Expr {\n", opTyp.name)
+	if len(childFields) > 0 {
+		fmt.Fprintf(g.w, "  switch nth {\n")
+		n := 0
+		for _, field := range childFields {
+			fieldName := g.md.fieldName(field)
+
+			fmt.Fprintf(g.w, "  case %d:\n", n)
+			if g.md.typeOf(field).isPointer {
+				fmt.Fprintf(g.w, "    return e.%s\n", fieldName)
+			} else {
+				fmt.Fprintf(g.w, "    return &e.%s\n", fieldName)
+			}
+			n++
+		}
+		fmt.Fprintf(g.w, "  }\n")
+	}
+	fmt.Fprintf(g.w, "  panic(\"child index out of range\")\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the Private method.
+	fmt.Fprintf(g.w, "func (e *%s) Private() interface{} {\n", opTyp.name)
+	if privateField != nil {
+		fieldName := g.md.fieldName(privateField)
+
+		if g.md.typeOf(privateField).isPointer {
+			fmt.Fprintf(g.w, "  return e.%s\n", fieldName)
+		} else {
+			fmt.Fprintf(g.w, "  return &e.%s\n", fieldName)
+		}
+	} else {
+		fmt.Fprintf(g.w, "  return nil\n")
+	}
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the String method.
+	fmt.Fprintf(g.w, "func (e *%s) String() string {\n", opTyp.name)
+	if define.Tags.Contains("Scalar") {
+		fmt.Fprintf(g.w, "  f := MakeExprFmtCtx(ExprFmtHideQualifications, nil)\n")
+	} else {
+		fmt.Fprintf(g.w, "  f := MakeExprFmtCtx(ExprFmtHideQualifications, e.Memo())\n")
+	}
+	fmt.Fprintf(g.w, "  f.FormatExpr(e)\n")
+	fmt.Fprintf(g.w, "  return f.Buffer.String()\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the SetChild method.
+	fmt.Fprintf(g.w, "func (e *%s) SetChild(nth int, child opt.Expr) {\n", opTyp.name)
+	if len(childFields) > 0 {
+		fmt.Fprintf(g.w, "  switch nth {\n")
+		n := 0
+		for _, field := range childFields {
+			fieldTyp := g.md.typeOf(field)
+			fieldName := g.md.fieldName(field)
+
+			fmt.Fprintf(g.w, "  case %d:\n", n)
+			if fieldTyp.isPointer {
+				fmt.Fprintf(g.w, "    e.%s = child.(%s)\n", fieldName, fieldTyp.name)
+			} else {
+				fmt.Fprintf(g.w, "    e.%s = *child.(*%s)\n", fieldName, fieldTyp.name)
+			}
+			fmt.Fprintf(g.w, "    return\n")
+			n++
+		}
+		fmt.Fprintf(g.w, "  }\n")
+	}
+	fmt.Fprintf(g.w, "  panic(\"child index out of range\")\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	if define.Tags.Contains("Scalar") {
+		// Generate the DataType method.
+		fmt.Fprintf(g.w, "func (e *%s) DataType() types.T {\n", opTyp.name)
+		dataType := g.constDataType(define)
+		if dataType != "" {
+			fmt.Fprintf(g.w, "  return %s\n", dataType)
+		} else {
+			fmt.Fprintf(g.w, "  return e.Typ\n")
+		}
+		fmt.Fprintf(g.w, "}\n\n")
+
+		// Generate the ScalarProps method.
+		if name := g.scalarPropsFieldName(define); name != "" {
+			fmt.Fprintf(g.w, "func (e *%s) ScalarProps(mem *Memo) *props.Scalar {\n", opTyp.name)
+			fmt.Fprintf(g.w, "  if !e.scalar.Populated {\n")
+			fmt.Fprintf(g.w, "    mem.logPropsBuilder.build%sProps(e, &e.%s)\n", define.Name, name)
+			fmt.Fprintf(g.w, "  }\n")
+			fmt.Fprintf(g.w, "  return &e.%s\n", name)
+			fmt.Fprintf(g.w, "}\n\n")
+		}
+	} else {
+		// Generate the Memo method.
+		fmt.Fprintf(g.w, "func (e *%s) Memo() *Memo {\n", opTyp.name)
+		fmt.Fprintf(g.w, "  return e.grp.memo()\n")
+		fmt.Fprintf(g.w, "}\n\n")
+
+		// Generate the Relational method.
+		fmt.Fprintf(g.w, "func (e *%s) Relational() *props.Relational {\n", opTyp.name)
+		fmt.Fprintf(g.w, "  return e.grp.relational()\n")
+		fmt.Fprintf(g.w, "}\n\n")
+
+		// Generate the FirstExpr method.
+		fmt.Fprintf(g.w, "func (e *%s) FirstExpr() RelExpr {\n", opTyp.name)
+		fmt.Fprintf(g.w, "  return e.grp.firstExpr()\n")
+		fmt.Fprintf(g.w, "}\n\n")
+
+		// Generate the NextExpr method.
+		fmt.Fprintf(g.w, "func (e *%s) NextExpr() RelExpr {\n", opTyp.name)
+		fmt.Fprintf(g.w, "  return e.next\n")
+		fmt.Fprintf(g.w, "}\n\n")
+
+		// Generate the Physical method.
+		fmt.Fprintf(g.w, "func (e *%s) Physical() *props.Physical {\n", opTyp.name)
+		fmt.Fprintf(g.w, "  return e.grp.physical()\n")
+		fmt.Fprintf(g.w, "}\n\n")
+
+		// Generate the Cost method.
+		fmt.Fprintf(g.w, "func (e *%s) Cost() Cost {\n", opTyp.name)
+		fmt.Fprintf(g.w, "  return e.grp.cost()\n")
+		fmt.Fprintf(g.w, "}\n\n")
+
+		// Generate the group method.
+		fmt.Fprintf(g.w, "func (e *%s) group() exprGroup {\n", opTyp.name)
+		fmt.Fprintf(g.w, "  return e.grp\n")
+		fmt.Fprintf(g.w, "}\n\n")
+
+		// Generate the setNext method.
+		fmt.Fprintf(g.w, "func (e *%s) setNext(member RelExpr) {\n", opTyp.name)
+		fmt.Fprintf(g.w, "  if e.next != nil {\n")
+		fmt.Fprintf(g.w, "    panic(fmt.Sprintf(\"expression already has its next defined: %%s\", e))\n")
+		fmt.Fprintf(g.w, "  }\n")
+		fmt.Fprintf(g.w, "  e.next = member\n")
+		fmt.Fprintf(g.w, "}\n\n")
+
+		// Generate the setGroup method.
+		fmt.Fprintf(g.w, "func (e *%s) setGroup(member RelExpr) {\n", opTyp.name)
+		fmt.Fprintf(g.w, "  if e.grp != nil {\n")
+		fmt.Fprintf(g.w, "    panic(fmt.Sprintf(\"expression is already in a group: %%s\", e))\n")
+		fmt.Fprintf(g.w, "  }\n")
+		fmt.Fprintf(g.w, "  e.grp = member.group()\n")
+		fmt.Fprintf(g.w, "  LastGroupMember(member).setNext(e)\n")
+		fmt.Fprintf(g.w, "}\n\n")
+	}
+}
+
+// genEnforcerFuncs generates the methods for an enforcer operator, including
+// those from the Expr and RelExpr interfaces.
+func (g *exprsGen) genEnforcerFuncs(define *lang.DefineExpr) {
+	opTyp := g.md.typeOf(define)
+
+	// Generate the Op method.
+	fmt.Fprintf(g.w, "func (e *%s) Op() opt.Operator {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  return opt.%sOp\n", define.Name)
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the ChildCount method.
+	fmt.Fprintf(g.w, "func (e *%s) ChildCount() int {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  return 1\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the Child method.
+	fmt.Fprintf(g.w, "func (e *%s) Child(nth int) opt.Expr {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  if nth == 0 {\n")
+	fmt.Fprintf(g.w, "    return e.Input\n")
+	fmt.Fprintf(g.w, "  }\n")
+	fmt.Fprintf(g.w, "  panic(\"child index out of range\")\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the Private method.
+	fmt.Fprintf(g.w, "func (e *%s) Private() interface{} {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  return nil\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the String method.
+	fmt.Fprintf(g.w, "func (e *%s) String() string {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  f := MakeExprFmtCtx(ExprFmtHideQualifications, e.Memo())\n")
+	fmt.Fprintf(g.w, "  f.FormatExpr(e)\n")
+	fmt.Fprintf(g.w, "  return f.Buffer.String()\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the SetChild method.
+	fmt.Fprintf(g.w, "func (e *%s) SetChild(nth int, child opt.Expr) {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  if nth == 0 {\n")
+	fmt.Fprintf(g.w, "    e.Input = child.(RelExpr)\n")
+	fmt.Fprintf(g.w, "    return\n")
+	fmt.Fprintf(g.w, "  }\n")
+	fmt.Fprintf(g.w, "  panic(\"child index out of range\")\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the Memo method.
+	fmt.Fprintf(g.w, "func (e *%s) Memo() *Memo {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  return e.Input.Memo()\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the Relational method.
+	fmt.Fprintf(g.w, "func (e *%s) Relational() *props.Relational {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  return e.Input.Relational()\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the FirstExpr method.
+	fmt.Fprintf(g.w, "func (e *%s) FirstExpr() RelExpr {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  return e.Input.FirstExpr()\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the NextExpr method.
+	fmt.Fprintf(g.w, "func (e *%s) NextExpr() RelExpr {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  return nil\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the Physical method.
+	fmt.Fprintf(g.w, "func (e *%s) Physical() *props.Physical {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  return e.phys\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the Cost method.
+	fmt.Fprintf(g.w, "func (e *%s) Cost() Cost {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  return e.cst\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the group method.
+	fmt.Fprintf(g.w, "func (e *%s) group() exprGroup {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  return e.Input.group()\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the setNext method.
+	fmt.Fprintf(g.w, "func (e *%s) setNext(member RelExpr) {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  panic(\"setNext cannot be called on enforcers\")\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the setGroup method.
+	fmt.Fprintf(g.w, "func (e *%s) setGroup(member exprGroup) {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  panic(\"setGroup cannot be called on enforcers\")\n")
+	fmt.Fprintf(g.w, "}\n\n")
+}
+
+// genListExprFuncs generates the methods for a list expression, including those
+// from the Expr and ScalarExpr interfaces.
+func (g *exprsGen) genListExprFuncs(define *lang.DefineExpr) {
+	if define.Tags.Contains("Relational") {
+		panic("relational list operators are not supported; use scalar list child instead")
+	}
+
+	opTyp := g.md.typeOf(define)
+	fmt.Fprintf(g.w, "var _ opt.ScalarExpr = &%s{}\n\n", opTyp.name)
+
+	// Generate the Op method.
+	fmt.Fprintf(g.w, "func (e *%s) Op() opt.Operator {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  return opt.%sOp\n", define.Name)
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the ChildCount method.
+	fmt.Fprintf(g.w, "func (e *%s) ChildCount() int {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  return len(*e)\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the Child method.
+	fmt.Fprintf(g.w, "func (e *%s) Child(nth int) opt.Expr {\n", opTyp.name)
+	if opTyp.listItemType.isPointer {
+		fmt.Fprintf(g.w, "  return (*e)[nth]\n")
+	} else {
+		fmt.Fprintf(g.w, "  return &(*e)[nth]\n")
+	}
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the Private method.
+	fmt.Fprintf(g.w, "func (e *%s) Private() interface{} {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  return nil\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the String method.
+	fmt.Fprintf(g.w, "func (e *%s) String() string {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  f := MakeExprFmtCtx(ExprFmtHideQualifications, nil)\n")
+	fmt.Fprintf(g.w, "  f.FormatExpr(e)\n")
+	fmt.Fprintf(g.w, "  return f.Buffer.String()\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the SetChild method.
+	fmt.Fprintf(g.w, "func (e *%s) SetChild(nth int, child opt.Expr) {\n", opTyp.name)
+	if opTyp.listItemType.isPointer {
+		fmt.Fprintf(g.w, "  (*e)[nth] = child.(%s)\n", opTyp.listItemType.name)
+	} else {
+		fmt.Fprintf(g.w, "  (*e)[nth] = *child.(*%s)\n", opTyp.listItemType.name)
+	}
+	fmt.Fprintf(g.w, "}\n\n")
+
+	// Generate the DataType method.
+	fmt.Fprintf(g.w, "func (e *%s) DataType() types.T {\n", opTyp.name)
+	fmt.Fprintf(g.w, "  return types.Any\n")
+	fmt.Fprintf(g.w, "}\n\n")
+}
+
+// genMemoizeFuncs generates Memoize methods on the memo. The Memoize methods
+// check whether the expression is already part of the memo; if not, a new memo
+// group is created for the expression.
+func (g *exprsGen) genMemoizeFuncs() {
+	defines := g.compiled.Defines.
+		WithoutTag("Enforcer").
+		WithoutTag("List").
+		WithoutTag("ListItem").
+		WithoutTag("Private")
+
+	for _, define := range defines {
+		opTyp := g.md.typeOf(define)
+
+		fmt.Fprintf(g.w, "func (m *Memo) Memoize%s(\n", define.Name)
+		for _, field := range define.Fields {
+			fieldTyp := g.md.typeOf(field)
+			fieldName := g.md.fieldName(field)
+			fmt.Fprintf(g.w, "  %s %s,\n", unTitle(fieldName), fieldTyp.asParam())
+		}
+		fmt.Fprintf(g.w, ") *%s {\n", opTyp.name)
+
+		if len(define.Fields) == 0 {
+			fmt.Fprintf(g.w, "  return %sSingleton\n", define.Name)
+			fmt.Fprintf(g.w, "}\n\n")
+			continue
+		}
+
+		// Construct a new expression and add it to the interning map.
+		if define.Tags.Contains("Scalar") {
+			fmt.Fprintf(g.w, "  const size = int64(unsafe.Sizeof(%s{}))\n", opTyp.name)
+			fmt.Fprintf(g.w, "  e := &%s{\n", opTyp.name)
+		} else {
+			groupName := fmt.Sprintf("%sGroup", unTitle(string(define.Name)))
+			fmt.Fprintf(g.w, "  const size = int64(unsafe.Sizeof(%s{}))\n", groupName)
+			fmt.Fprintf(g.w, "  grp := &%s{mem: m, first: %s{\n", groupName, opTyp.name)
+		}
+
+		for _, field := range define.Fields {
+			fieldTyp := g.md.typeOf(field)
+			fieldName := g.md.fieldName(field)
+
+			if fieldTyp.passByVal {
+				fmt.Fprintf(g.w, "   %s: %s,\n", fieldName, unTitle(fieldName))
+			} else {
+				fmt.Fprintf(g.w, "   %s: *%s,\n", fieldName, unTitle(fieldName))
+			}
+		}
+
+		if define.Tags.Contains("Scalar") {
+			fmt.Fprintf(g.w, "  }\n")
+			if g.needsDataTypeField(define) {
+				fmt.Fprintf(g.w, "  e.Typ = InferType(m, e)\n")
+			}
+			fmt.Fprintf(g.w, "  interned := m.interner.Intern%s(e)\n", define.Name)
+		} else {
+			fmt.Fprintf(g.w, "  }}\n")
+			fmt.Fprintf(g.w, "  e := &grp.first\n")
+			fmt.Fprintf(g.w, "  e.grp = grp\n")
+			fmt.Fprintf(g.w, "  interned := m.interner.Intern%s(e)\n", define.Name)
+		}
+
+		// Build relational props, track memory usage, and check consistency if
+		// expression was not already interned.
+		fmt.Fprintf(g.w, "  if interned == e {\n")
+		if !define.Tags.Contains("Scalar") {
+			fmt.Fprintf(g.w, "  m.logPropsBuilder.build%sProps(e, &grp.rel)\n", define.Name)
+		}
+		fmt.Fprintf(g.w, "    m.memEstimate += size\n")
+		fmt.Fprintf(g.w, "    m.checkExpr(e)\n")
+		fmt.Fprintf(g.w, "  }\n")
+		fmt.Fprintf(g.w, "  return interned\n")
+
+		fmt.Fprintf(g.w, "}\n\n")
+	}
+}
+
+// genAddToGroupFuncs generates AddToGroup methods on the memo.
+func (g *exprsGen) genAddToGroupFuncs() {
+	defines := g.compiled.Defines.WithTag("Relational").WithoutTag("List").WithoutTag("ListItem")
+	for _, define := range defines {
+		opTyp := g.md.typeOf(define)
+
+		fmt.Fprintf(g.w, "func (m *Memo) Add%sToGroup(e *%s, grp RelExpr) *%s {\n",
+			define.Name, opTyp.name, opTyp.name)
+		fmt.Fprintf(g.w, "  const size = int64(unsafe.Sizeof(%s{}))\n", opTyp.name)
+		fmt.Fprintf(g.w, "  interned := m.interner.Intern%s(e)\n", define.Name)
+		fmt.Fprintf(g.w, "  if interned == e {\n")
+		fmt.Fprintf(g.w, "    e.setGroup(grp)\n")
+		fmt.Fprintf(g.w, "    m.memEstimate += size\n")
+		fmt.Fprintf(g.w, "    m.checkExpr(e)\n")
+		fmt.Fprintf(g.w, "  } else if interned.group() != grp.group() {\n")
+		fmt.Fprintf(g.w, "    panic(fmt.Sprintf(\"%%s expression cannot be added to multiple groups: %%s\", e.Op(), e))\n")
+		fmt.Fprintf(g.w, "  }\n")
+		fmt.Fprintf(g.w, "  return interned\n")
+		fmt.Fprintf(g.w, "}\n\n")
+	}
+}
+
+// genInternFuncs generates methods on the interner.
+func (g *exprsGen) genInternFuncs() {
+	fmt.Fprintf(g.w, "func (in *interner) InternExpr(e opt.Expr) opt.Expr {\n")
+	fmt.Fprintf(g.w, "  switch t := e.(type) {\n")
+	for _, define := range g.compiled.Defines.WithoutTag("Enforcer").WithoutTag("Private") {
+		opTyp := g.md.typeOf(define)
+		fmt.Fprintf(g.w, "  case *%s:\n", opTyp.name)
+		fmt.Fprintf(g.w, "    return in.Intern%s(t)\n", define.Name)
+	}
+	fmt.Fprintf(g.w, "  default:\n")
+	fmt.Fprintf(g.w, "    panic(fmt.Sprintf(\"unhandled op: %%s\", e.Op()))\n")
+	fmt.Fprintf(g.w, "  }\n")
+	fmt.Fprintf(g.w, "}\n\n")
+
+	for _, define := range g.compiled.Defines.WithoutTag("Enforcer").WithoutTag("Private") {
+		opTyp := g.md.typeOf(define)
+
+		fmt.Fprintf(g.w, "func (in *interner) Intern%s(val *%s) *%s {\n",
+			define.Name, opTyp.name, opTyp.name)
+
+		fmt.Fprintf(g.w, "  in.hasher.Init()\n")
+
+		// Generate code to compute hash.
+		fmt.Fprintf(g.w, "  in.hasher.HashOperator(opt.%sOp)\n", define.Name)
+		if opTyp.listItemType != nil {
+			fmt.Fprintf(g.w, "  in.hasher.Hash%s(*val)\n", title(opTyp.friendlyName))
+		} else {
+			for _, field := range expandFields(g.compiled, define) {
+				fieldName := g.md.fieldName(field)
+
+				if !isExportedField(field) {
+					continue
+				}
+				fieldTyp := g.md.typeOf(field)
+				fmt.Fprintf(g.w, "  in.hasher.Hash%s(val.%s)\n", title(fieldTyp.friendlyName), fieldName)
+			}
+		}
+		fmt.Fprintf(g.w, "\n")
+
+		// Generate code to check for existing item with same hash.
+		fmt.Fprintf(g.w, "  in.cache.Start(in.hasher.hash)\n")
+		fmt.Fprintf(g.w, "  for in.cache.Next() {\n")
+		fmt.Fprintf(g.w, "    if existing, ok := in.cache.Item().(*%s); ok {\n", opTyp.name)
+
+		// Generate code to check expression equality when there's an existing item.
+		first := true
+		if opTyp.listItemType != nil {
+			first = false
+			fmt.Fprintf(g.w, "  if in.hasher.Is%sEqual(*val, *existing)", title(opTyp.friendlyName))
+		} else {
+			for _, field := range expandFields(g.compiled, define) {
+				fieldName := g.md.fieldName(field)
+
+				if !isExportedField(field) {
+					continue
+				}
+				if !first {
+					fmt.Fprintf(g.w, " && \n        ")
+				} else {
+					fmt.Fprintf(g.w, "      if ")
+					first = false
+				}
+
+				fieldTyp := g.md.typeOf(field)
+				fmt.Fprintf(g.w, "in.hasher.Is%sEqual(val.%s, existing.%s)",
+					title(fieldTyp.friendlyName), fieldName, fieldName)
+			}
+		}
+
+		if !first {
+			fmt.Fprintf(g.w, " {\n")
+			fmt.Fprintf(g.w, "        return existing\n")
+			fmt.Fprintf(g.w, "      }\n")
+		} else {
+			// Handle expressions with no children.
+			fmt.Fprintf(g.w, "      return existing\n")
+		}
+		fmt.Fprintf(g.w, "    }\n")
+		fmt.Fprintf(g.w, "  }\n\n")
+
+		// Generate code to add expression to the cache.
+		fmt.Fprintf(g.w, "  in.cache.Add(val)\n")
+		fmt.Fprintf(g.w, "  return val\n")
+		fmt.Fprintf(g.w, "}\n\n")
+	}
+}
+
+// genBuildPropsFunc generates a buildProps method for logicalPropsBuilder that
+// dispatches to the strongly-typed buildXXXProps methods from a RelExpr.
+func (g *exprsGen) genBuildPropsFunc() {
+	fmt.Fprintf(g.w, "func (b *logicalPropsBuilder) buildProps(e RelExpr, rel *props.Relational) {\n")
+	fmt.Fprintf(g.w, "  switch t := e.(type) {\n")
+
+	for _, define := range g.compiled.Defines.WithTag("Relational") {
+		opTyp := g.md.typeOf(define)
+		fmt.Fprintf(g.w, "  case *%s:\n", opTyp.name)
+		fmt.Fprintf(g.w, "    b.build%sProps(t, rel)\n", define.Name)
+	}
+	fmt.Fprintf(g.w, "  default:\n")
+	fmt.Fprintf(g.w, "    panic(fmt.Sprintf(\"unhandled type: %%s\", t.Op()))\n")
+
+	fmt.Fprintf(g.w, "  }\n")
+	fmt.Fprintf(g.w, "}\n\n")
+}
+
+func (g *exprsGen) scalarPropsFieldName(define *lang.DefineExpr) string {
+	for _, field := range expandFields(g.compiled, define) {
+		if field.Type == "ScalarProps" {
+			return string(field.Name)
+		}
+	}
+	return ""
+}
+
+func (g *exprsGen) needsDataTypeField(define *lang.DefineExpr) bool {
+	for _, field := range expandFields(g.compiled, define) {
+		if field.Name == "Typ" && field.Type == "DatumType" {
+			return false
+		}
+	}
+	return g.constDataType(define) == ""
+}
+
+func (g *exprsGen) constDataType(define *lang.DefineExpr) string {
+	switch define.Name {
+	case "Exists", "Any", "AnyScalar":
+		return "types.Bool"
+	case "CountRows":
+		return "types.Int"
+	}
+	if define.Tags.Contains("Comparison") || define.Tags.Contains("Boolean") {
+		return "types.Bool"
+	}
+	return ""
 }
