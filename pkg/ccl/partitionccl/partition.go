@@ -96,7 +96,7 @@ func valueEncodePartitionTuple(
 		if err != nil {
 			return nil, errors.Wrap(err, typedExpr.String())
 		}
-		if err := sqlbase.CheckColumnType(cols[i], datum.ResolvedType(), nil); err != nil {
+		if err := sqlbase.CheckDatumTypeFitsColumnType(cols[i], datum.ResolvedType(), nil); err != nil {
 			return nil, err
 		}
 		value, err = sqlbase.EncodeTableValue(

@@ -304,7 +304,7 @@ CREATE INDEX allidx ON t.test (k, v);
 					} else {
 						_, err = sqlDB.Exec(`INSERT INTO t.test VALUES ('b', 'y', 'i')`)
 					}
-					if !testutils.IsError(err, "INSERT has more expressions than target columns, 3 expressions for 2 targets") {
+					if !testutils.IsError(err, "(IN|UP)SERT has more expressions than target columns, 3 expressions for 2 targets") {
 						t.Fatal(err)
 					}
 
@@ -385,7 +385,7 @@ CREATE INDEX allidx ON t.test (k, v);
 					// Updating column "i" for a row fails.
 					if useUpsert {
 						_, err := sqlDB.Exec(`UPSERT INTO t.test VALUES ('a', 'u', 'u')`)
-						if !testutils.IsError(err, `INSERT has more expressions than target columns, 3 expressions for 2 targets`) {
+						if !testutils.IsError(err, `UPSERT has more expressions than target columns, 3 expressions for 2 targets`) {
 							t.Fatal(err)
 						}
 					} else {
@@ -721,7 +721,7 @@ CREATE INDEX allidx ON t.test (k, v);
 				// Updating column "i" for a row fails.
 				if useUpsert {
 					_, err := sqlDB.Exec(`UPSERT INTO t.test VALUES ('a', 'u', 'u')`)
-					if !testutils.IsError(err, `INSERT has more expressions than target columns, 3 expressions for 2 targets`) {
+					if !testutils.IsError(err, `UPSERT has more expressions than target columns, 3 expressions for 2 targets`) {
 						t.Error(err)
 					}
 				} else {

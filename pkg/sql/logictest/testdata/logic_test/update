@@ -385,3 +385,87 @@ query IIII rowsort
 SELECT * FROM tu
 ----
 1 NULL NULL NULL
+
+subtest contraint_check_validation_ordering
+
+# Verification of column constraints vs CHECK handling. The column
+# constraint verification must take place first.
+#
+# This test requires that the error message for a CHECK constraint
+# validation error be different than a column validation error. So we
+# test the former first, as a sanity check.
+statement ok
+CREATE TABLE tn(x INT NULL CHECK(x IS NOT NULL), y CHAR(4) CHECK(length(y) < 4));
+  INSERT INTO tn(x, y) VALUES (123, 'abc');
+
+statement error failed to satisfy CHECK constraint
+UPDATE tn SET x = NULL
+
+statement error failed to satisfy CHECK constraint
+UPDATE tn SET y = 'abcd'
+
+# Now we test that the column validation occurs before the CHECK constraint.
+statement ok
+CREATE TABLE tn2(x INT NOT NULL CHECK(x IS NOT NULL), y CHAR(3) CHECK(length(y) < 4));
+  INSERT INTO tn2(x, y) VALUES (123, 'abc');
+
+statement error null value in column "x" violates not-null constraint
+UPDATE tn2 SET x = NULL
+
+statement error value too long for type CHAR\(3\)
+UPDATE tn2 SET y = 'abcd'
+
+subtest fk_contraint_check_validation_ordering
+
+# Verify that column constraints and CHECK handling occur before
+# foreign key validation.
+statement ok
+CREATE TABLE src(x VARCHAR PRIMARY KEY);
+  INSERT INTO src(x) VALUES ('abc');
+  CREATE TABLE derived(x CHAR(3) REFERENCES src(x),
+                       y VARCHAR CHECK(length(y) < 4) REFERENCES src(x));
+  INSERT INTO derived(x, y) VALUES ('abc', 'abc')
+
+# Sanity check that the FK constraints gets actually validated
+statement error foreign key violation
+UPDATE derived SET x = 'xxx'
+
+statement error value too long for type CHAR\(3\)
+UPDATE derived SET x = 'abcd'
+
+statement error failed to satisfy CHECK constraint
+UPDATE derived SET y = 'abcd'
+
+subtest regression_29494
+
+statement ok
+CREATE TABLE t29494(x INT); BEGIN; ALTER TABLE t29494 ADD COLUMN y INT
+
+# Check that the new column is not visible
+query T
+SELECT create_statement FROM [SHOW CREATE t29494]
+----
+CREATE TABLE t29494 (
+   x INT NULL,
+   FAMILY "primary" (x, rowid)
+)
+
+# Check that the new column is not usable in RETURNING
+statement error column "y" does not exist
+UPDATE t29494 SET x = 123 RETURNING y
+
+# Check the new column is not assignable. We need to restart
+# the txn because the error above trashed it.
+statement ok
+ROLLBACK; BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+statement error column "y" does not exist
+UPDATE t29494 SET y = 123
+
+# Check the new column is not usable in assignments. We need to
+# restart the txn because the error above trashed it.
+statement ok
+ROLLBACK; BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+statement error column "y" is being backfilled
+UPDATE t29494 SET x = y
