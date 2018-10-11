@@ -1,2 +1,3 @@
 explain_stmt ::=
-	'EXPLAIN' 'ANALYZE' '(' 'DISTSQL' ')' explainable_stmt
+	'EXPLAIN' 'ANALYZE' explainable_stmt
+	| 'EXPLAIN' 'ANALYZE' '(' 'DISTSQL' ')' explainable_stmt
