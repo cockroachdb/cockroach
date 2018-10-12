@@ -27,6 +27,8 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/pkg/errors"
 
@@ -151,7 +153,7 @@ func (s *Store) LogReplicaChangeTest(
 	changeType roachpb.ReplicaChangeType,
 	replica roachpb.ReplicaDescriptor,
 	desc roachpb.RangeDescriptor,
-	reason RangeLogEventReason,
+	reason storagepb.RangeLogEventReason,
 	details string,
 ) error {
 	return s.logChange(ctx, txn, changeType, replica, desc, reason, details)
@@ -273,8 +275,8 @@ func NewTestStorePool(cfg StoreConfig) *StorePool {
 		cfg.Settings,
 		cfg.Gossip,
 		cfg.Clock,
-		func(roachpb.NodeID, time.Time, time.Duration) NodeLivenessStatus {
-			return NodeLivenessStatus_LIVE
+		func(roachpb.NodeID, time.Time, time.Duration) storagepb.NodeLivenessStatus {
+			return storagepb.NodeLivenessStatus_LIVE
 		},
 		/* deterministic */ false,
 	)
@@ -550,13 +552,13 @@ func (r *Replica) UnquiesceAndWakeLeader() {
 }
 
 func (nl *NodeLiveness) SetDrainingInternal(
-	ctx context.Context, liveness *Liveness, drain bool,
+	ctx context.Context, liveness *storagepb.Liveness, drain bool,
 ) error {
 	return nl.setDrainingInternal(ctx, liveness, drain)
 }
 
 func (nl *NodeLiveness) SetDecommissioningInternal(
-	ctx context.Context, nodeID roachpb.NodeID, liveness *Liveness, decommission bool,
+	ctx context.Context, nodeID roachpb.NodeID, liveness *storagepb.Liveness, decommission bool,
 ) (changeCommitted bool, err error) {
 	return nl.setDecommissioningInternal(ctx, nodeID, liveness, decommission)
 }

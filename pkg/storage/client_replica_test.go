@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -1578,7 +1580,7 @@ func TestDrainRangeRejection(t *testing.T) {
 			StoreID: mtc.idents[drainingIdx].StoreID,
 		},
 		repl.Desc(),
-		storage.ReasonRangeUnderReplicated,
+		storagepb.ReasonRangeUnderReplicated,
 		"",
 	); !testutils.IsError(err, "store is draining") {
 		t.Fatalf("unexpected error: %v", err)

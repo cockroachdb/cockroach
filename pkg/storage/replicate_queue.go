@@ -21,6 +21,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 
@@ -353,7 +355,7 @@ func (rq *replicateQueue) processOneChange(
 			newReplica,
 			desc,
 			SnapshotRequest_RECOVERY,
-			ReasonRangeUnderReplicated,
+			storagepb.ReasonRangeUnderReplicated,
 			details,
 			dryRun,
 		); err != nil {
@@ -412,7 +414,7 @@ func (rq *replicateQueue) processOneChange(
 				StoreID: removeReplica.StoreID,
 			}
 			if err := rq.removeReplica(
-				ctx, repl, target, desc, ReasonRangeOverReplicated, details, dryRun,
+				ctx, repl, target, desc, storagepb.ReasonRangeOverReplicated, details, dryRun,
 			); err != nil {
 				return false, err
 			}
@@ -456,7 +458,7 @@ func (rq *replicateQueue) processOneChange(
 				StoreID: decommissioningReplica.StoreID,
 			}
 			if err := rq.removeReplica(
-				ctx, repl, target, desc, ReasonStoreDecommissioning, "", dryRun,
+				ctx, repl, target, desc, storagepb.ReasonStoreDecommissioning, "", dryRun,
 			); err != nil {
 				return false, err
 			}
@@ -475,7 +477,7 @@ func (rq *replicateQueue) processOneChange(
 			StoreID: deadReplica.StoreID,
 		}
 		if err := rq.removeReplica(
-			ctx, repl, target, desc, ReasonStoreDead, "", dryRun,
+			ctx, repl, target, desc, storagepb.ReasonStoreDead, "", dryRun,
 		); err != nil {
 			return false, err
 		}
@@ -503,7 +505,7 @@ func (rq *replicateQueue) processOneChange(
 					rebalanceReplica,
 					desc,
 					SnapshotRequest_REBALANCE,
-					ReasonRebalance,
+					storagepb.ReasonRebalance,
 					details,
 					dryRun,
 				); err != nil {
@@ -606,7 +608,7 @@ func (rq *replicateQueue) addReplica(
 	target roachpb.ReplicationTarget,
 	desc *roachpb.RangeDescriptor,
 	priority SnapshotRequest_Priority,
-	reason RangeLogEventReason,
+	reason storagepb.RangeLogEventReason,
 	details string,
 	dryRun bool,
 ) error {
@@ -626,7 +628,7 @@ func (rq *replicateQueue) removeReplica(
 	repl *Replica,
 	target roachpb.ReplicationTarget,
 	desc *roachpb.RangeDescriptor,
-	reason RangeLogEventReason,
+	reason storagepb.RangeLogEventReason,
 	details string,
 	dryRun bool,
 ) error {

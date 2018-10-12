@@ -24,6 +24,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
@@ -856,7 +858,7 @@ func (s *adminServer) RangeLog(
 	}
 	scanner := makeResultScanner(cols)
 	for _, row := range rows {
-		var event storage.RangeLogEvent
+		var event storagepb.RangeLogEvent
 		var ts time.Time
 		if err := scanner.ScanIndex(row, 0, &ts); err != nil {
 			return nil, errors.Wrap(err, fmt.Sprintf("Timestamp didn't parse correctly: %s", row[0].String()))
@@ -876,8 +878,8 @@ func (s *adminServer) RangeLog(
 		if err := scanner.ScanIndex(row, 3, &eventTypeString); err != nil {
 			return nil, errors.Wrap(err, fmt.Sprintf("EventType didn't parse correctly: %s", row[3].String()))
 		}
-		if eventType, ok := storage.RangeLogEventType_value[eventTypeString]; ok {
-			event.EventType = storage.RangeLogEventType(eventType)
+		if eventType, ok := storagepb.RangeLogEventType_value[eventTypeString]; ok {
+			event.EventType = storagepb.RangeLogEventType(eventType)
 		} else {
 			return nil, errors.Errorf("EventType didn't parse correctly: %s", eventTypeString)
 		}

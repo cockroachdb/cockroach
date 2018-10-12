@@ -20,6 +20,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -192,12 +194,12 @@ func TestStoreGossipSystemData(t *testing.T) {
 		systemConfig := mtc.gossips[0].GetSystemConfig()
 		return systemConfig
 	}
-	getNodeLiveness := func() storage.Liveness {
-		var liveness storage.Liveness
+	getNodeLiveness := func() storagepb.Liveness {
+		var liveness storagepb.Liveness
 		if err := mtc.gossips[0].GetInfoProto(gossip.MakeNodeLivenessKey(1), &liveness); err == nil {
 			return liveness
 		}
-		return storage.Liveness{}
+		return storagepb.Liveness{}
 	}
 
 	// Clear the system-config and node liveness gossip data. This is necessary
@@ -207,14 +209,14 @@ func TestStoreGossipSystemData(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := mtc.gossips[0].AddInfoProto(
-		gossip.MakeNodeLivenessKey(1), &storage.Liveness{}, 0); err != nil {
+		gossip.MakeNodeLivenessKey(1), &storagepb.Liveness{}, 0); err != nil {
 		t.Fatal(err)
 	}
 	testutils.SucceedsSoon(t, func() error {
 		if !reflect.DeepEqual(getSystemConfig(), config.NewSystemConfig()) {
 			return errors.New("system config not empty")
 		}
-		if getNodeLiveness() != (storage.Liveness{}) {
+		if getNodeLiveness() != (storagepb.Liveness{}) {
 			return errors.New("node liveness not empty")
 		}
 		return nil
@@ -227,7 +229,7 @@ func TestStoreGossipSystemData(t *testing.T) {
 		if reflect.DeepEqual(getSystemConfig(), config.NewSystemConfig()) {
 			return errors.New("system config not gossiped")
 		}
-		if getNodeLiveness() == (storage.Liveness{}) {
+		if getNodeLiveness() == (storagepb.Liveness{}) {
 			return errors.New("node liveness not gossiped")
 		}
 		return nil

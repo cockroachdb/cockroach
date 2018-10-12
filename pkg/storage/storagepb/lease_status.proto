@@ -14,10 +14,10 @@
 
 syntax = "proto3";
 package cockroach.storage;
-option go_package = "storage";
+option go_package = "storagepb";
 
 import "roachpb/data.proto";
-import "storage/liveness.proto";
+import "storage/storagepb/liveness.proto";
 import "util/hlc/timestamp.proto";
 
 import "gogoproto/gogo.proto";
