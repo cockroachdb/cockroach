@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -71,7 +72,7 @@ type joinReader struct {
 	// to get rows from the fetcher. This enables the joinReader to wrap the
 	// fetcherInput with a stat collector when necessary.
 	fetcherInput   RowSource
-	fetcher        sqlbase.RowFetcher
+	fetcher        row.Fetcher
 	indexKeyPrefix []byte
 	alloc          sqlbase.DatumAlloc
 	rowAlloc       sqlbase.EncDatumRowAlloc
@@ -94,7 +95,7 @@ type joinReader struct {
 	// primaryFetcherInput wraps primaryFetcher in a RowSource implementation for
 	// the same reason that fetcher is wrapped.
 	primaryFetcherInput RowSource
-	primaryFetcher      *sqlbase.RowFetcher
+	primaryFetcher      *row.Fetcher
 	primaryColumnTypes  []sqlbase.ColumnType
 	primaryKeyPrefix    []byte
 
@@ -208,7 +209,7 @@ func newJoinReader(
 		// secondary index, then do a second lookup on the primary index to get the
 		// needed output columns.
 		neededIndexColumns = getIndexColSet(&jr.desc.PrimaryIndex, jr.colIdxMap)
-		jr.primaryFetcher = &sqlbase.RowFetcher{}
+		jr.primaryFetcher = &row.Fetcher{}
 		_, _, err = initRowFetcher(
 			jr.primaryFetcher, &jr.desc, 0 /* indexIdx */, jr.colIdxMap, false, /* reverse */
 			jr.neededRightCols(), false /* isCheck */, &jr.alloc,
@@ -223,7 +224,7 @@ func newJoinReader(
 		}
 		jr.primaryKeyPrefix = sqlbase.MakeIndexKeyPrefix(&jr.desc, jr.desc.PrimaryIndex.ID)
 
-		jr.primaryFetcherInput = &rowFetcherWrapper{RowFetcher: jr.primaryFetcher}
+		jr.primaryFetcherInput = &rowFetcherWrapper{Fetcher: jr.primaryFetcher}
 		if collectingStats {
 			jr.primaryFetcherInput = NewInputStatCollector(jr.primaryFetcherInput)
 		}
@@ -236,7 +237,7 @@ func newJoinReader(
 	if err != nil {
 		return nil, err
 	}
-	jr.fetcherInput = &rowFetcherWrapper{RowFetcher: &jr.fetcher}
+	jr.fetcherInput = &rowFetcherWrapper{Fetcher: &jr.fetcher}
 	if collectingStats {
 		jr.input = NewInputStatCollector(jr.input)
 		jr.fetcherInput = NewInputStatCollector(jr.fetcherInput)

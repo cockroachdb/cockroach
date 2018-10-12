@@ -12,13 +12,15 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sqlbase_test
+package row_test
 
 import (
 	"context"
 	"fmt"
 	"reflect"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -78,7 +80,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 
 	parentDesc := sqlbase.GetTableDescriptor(kvDB, `d`, `parent`)
 	childDesc := sqlbase.GetTableDescriptor(kvDB, `d`, `child`)
-	var args []sqlbase.RowFetcherTableArgs
+	var args []row.FetcherTableArgs
 	for _, desc := range []*sqlbase.TableDescriptor{parentDesc, childDesc} {
 		colIdxMap := make(map[sqlbase.ColumnID]int)
 		var valNeededForCol util.FastIntSet
@@ -86,7 +88,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 			colIdxMap[col.ID] = colIdx
 			valNeededForCol.Add(colIdx)
 		}
-		args = append(args, sqlbase.RowFetcherTableArgs{
+		args = append(args, row.FetcherTableArgs{
 			Spans:            desc.AllIndexSpans(),
 			Desc:             desc,
 			Index:            &desc.PrimaryIndex,
@@ -96,7 +98,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 			ValNeededForCol:  valNeededForCol,
 		})
 	}
-	var rf sqlbase.RowFetcher
+	var rf row.Fetcher
 	if err := rf.Init(
 		false /* reverse */, false /* returnRangeInfo */, true /* isCheck */, &sqlbase.DatumAlloc{},
 		args...,
@@ -113,7 +115,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 			log.Info(ctx, kv.Key, kv.Value.Timestamp, kv.Value.PrettyPrint())
 		}
 
-		if err := rf.StartScanFrom(ctx, &sqlbase.SpanKVFetcher{KVs: kvs}); err != nil {
+		if err := rf.StartScanFrom(ctx, &row.SpanKVFetcher{KVs: kvs}); err != nil {
 			t.Fatal(err)
 		}
 		var rows []rowWithMVCCMetadata

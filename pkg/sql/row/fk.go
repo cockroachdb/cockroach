@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sqlbase
+package row
 
 import (
 	"context"
@@ -26,40 +26,41 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // TableLookupsByID maps table IDs to looked up descriptors or, for tables that
 // exist but are not yet public/leasable, entries with just the IsAdding flag.
-type TableLookupsByID map[ID]TableLookup
+type TableLookupsByID map[sqlbase.ID]TableLookup
 
 // TableLookup is the value type of TableLookupsByID: An optional table
 // descriptor, populated when the table is public/leasable, and an IsAdding
 // flag.
 // This also includes an optional CheckHelper for the table.
 type TableLookup struct {
-	Table       *TableDescriptor
+	Table       *sqlbase.TableDescriptor
 	IsAdding    bool
-	CheckHelper *CheckHelper
+	CheckHelper *sqlbase.CheckHelper
 }
 
 // TableLookupFunction is the function type used by TablesNeededForFKs that will
 // perform the actual lookup.
-type TableLookupFunction func(context.Context, ID) (TableLookup, error)
+type TableLookupFunction func(context.Context, sqlbase.ID) (TableLookup, error)
 
 // NoLookup can be used to not perform any lookups during a TablesNeededForFKs
 // function call.
-func NoLookup(_ context.Context, _ ID) (TableLookup, error) {
+func NoLookup(_ context.Context, _ sqlbase.ID) (TableLookup, error) {
 	return TableLookup{}, nil
 }
 
 // CheckPrivilegeFunction is the function type used by TablesNeededForFKs that will
 // check the privileges of the current user to access specific tables.
-type CheckPrivilegeFunction func(context.Context, DescriptorProto, privilege.Kind) error
+type CheckPrivilegeFunction func(context.Context, sqlbase.DescriptorProto, privilege.Kind) error
 
 // NoCheckPrivilege can be used to not perform any privilege checks during a
 // TablesNeededForFKs function call.
-func NoCheckPrivilege(_ context.Context, _ DescriptorProto, _ privilege.Kind) error {
+func NoCheckPrivilege(_ context.Context, _ sqlbase.DescriptorProto, _ privilege.Kind) error {
 	return nil
 }
 
@@ -82,23 +83,25 @@ type tableLookupQueueElement struct {
 
 type tableLookupQueue struct {
 	queue          []tableLookupQueueElement
-	alreadyChecked map[ID]map[FKCheck]struct{}
+	alreadyChecked map[sqlbase.ID]map[FKCheck]struct{}
 	tableLookups   TableLookupsByID
 	lookup         TableLookupFunction
 	checkPrivilege CheckPrivilegeFunction
-	analyzeExpr    AnalyzeExprFunction
+	analyzeExpr    sqlbase.AnalyzeExprFunction
 }
 
-func (tl *TableLookup) addCheckHelper(ctx context.Context, analyzeExpr AnalyzeExprFunction) error {
+func (tl *TableLookup) addCheckHelper(
+	ctx context.Context, analyzeExpr sqlbase.AnalyzeExprFunction,
+) error {
 	if analyzeExpr == nil {
 		return nil
 	}
 	tableName := tree.MakeUnqualifiedTableName(tree.Name(tl.Table.Name))
-	tl.CheckHelper = &CheckHelper{}
+	tl.CheckHelper = &sqlbase.CheckHelper{}
 	return tl.CheckHelper.Init(ctx, analyzeExpr, &tableName, tl.Table)
 }
 
-func (q *tableLookupQueue) getTable(ctx context.Context, tableID ID) (TableLookup, error) {
+func (q *tableLookupQueue) getTable(ctx context.Context, tableID sqlbase.ID) (TableLookup, error) {
 	if tableLookup, exists := q.tableLookups[tableID]; exists {
 		return tableLookup, nil
 	}
@@ -118,7 +121,7 @@ func (q *tableLookupQueue) getTable(ctx context.Context, tableID ID) (TableLooku
 	return tableLookup, nil
 }
 
-func (q *tableLookupQueue) enqueue(ctx context.Context, tableID ID, usage FKCheck) error {
+func (q *tableLookupQueue) enqueue(ctx context.Context, tableID sqlbase.ID, usage FKCheck) error {
 	// Lookup the table.
 	tableLookup, err := q.getTable(ctx, tableID)
 	if err != nil {
@@ -176,15 +179,15 @@ func (q *tableLookupQueue) dequeue() (TableLookup, FKCheck, bool) {
 // CheckHelpers are required.
 func TablesNeededForFKs(
 	ctx context.Context,
-	table TableDescriptor,
+	table sqlbase.TableDescriptor,
 	usage FKCheck,
 	lookup TableLookupFunction,
 	checkPrivilege CheckPrivilegeFunction,
-	analyzeExpr AnalyzeExprFunction,
+	analyzeExpr sqlbase.AnalyzeExprFunction,
 ) (TableLookupsByID, error) {
 	queue := tableLookupQueue{
 		tableLookups:   make(TableLookupsByID),
-		alreadyChecked: make(map[ID]map[FKCheck]struct{}),
+		alreadyChecked: make(map[sqlbase.ID]map[FKCheck]struct{}),
 		lookup:         lookup,
 		checkPrivilege: checkPrivilege,
 		analyzeExpr:    analyzeExpr,
@@ -238,9 +241,9 @@ func TablesNeededForFKs(
 					if curUsage == CheckDeletes {
 						var nextUsage FKCheck
 						switch referencedIdx.ForeignKey.OnDelete {
-						case ForeignKeyReference_CASCADE:
+						case sqlbase.ForeignKeyReference_CASCADE:
 							nextUsage = CheckDeletes
-						case ForeignKeyReference_SET_DEFAULT, ForeignKeyReference_SET_NULL:
+						case sqlbase.ForeignKeyReference_SET_DEFAULT, sqlbase.ForeignKeyReference_SET_NULL:
 							nextUsage = CheckUpdates
 						default:
 							// There is no need to check any other relationships.
@@ -251,9 +254,9 @@ func TablesNeededForFKs(
 						}
 					} else {
 						// curUsage == CheckUpdates
-						if referencedIdx.ForeignKey.OnUpdate == ForeignKeyReference_CASCADE ||
-							referencedIdx.ForeignKey.OnUpdate == ForeignKeyReference_SET_DEFAULT ||
-							referencedIdx.ForeignKey.OnUpdate == ForeignKeyReference_SET_NULL {
+						if referencedIdx.ForeignKey.OnUpdate == sqlbase.ForeignKeyReference_CASCADE ||
+							referencedIdx.ForeignKey.OnUpdate == sqlbase.ForeignKeyReference_SET_DEFAULT ||
+							referencedIdx.ForeignKey.OnUpdate == sqlbase.ForeignKeyReference_SET_NULL {
 							if err := queue.enqueue(
 								ctx, referencedTableLookup.Table.ID, CheckUpdates,
 							); err != nil {
@@ -389,7 +392,7 @@ type fkInsertHelper struct {
 	// each index. These slices will have at most one entry, since there can be
 	// at most one outgoing foreign key per index. We use this data structure
 	// instead of a one-to-one map for consistency with the other insert helpers.
-	fks map[IndexID][]baseFKHelper
+	fks map[sqlbase.IndexID][]baseFKHelper
 
 	checker *fkBatchChecker
 }
@@ -398,10 +401,10 @@ var errSkipUnusedFK = errors.New("no columns involved in FK included in writer")
 
 func makeFKInsertHelper(
 	txn *client.Txn,
-	table TableDescriptor,
+	table sqlbase.TableDescriptor,
 	otherTables TableLookupsByID,
-	colMap map[ColumnID]int,
-	alloc *DatumAlloc,
+	colMap map[sqlbase.ColumnID]int,
+	alloc *sqlbase.DatumAlloc,
 ) (fkInsertHelper, error) {
 	h := fkInsertHelper{
 		checker: &fkBatchChecker{
@@ -418,7 +421,7 @@ func makeFKInsertHelper(
 				return h, err
 			}
 			if h.fks == nil {
-				h.fks = make(map[IndexID][]baseFKHelper)
+				h.fks = make(map[sqlbase.IndexID][]baseFKHelper)
 			}
 			h.fks[idx.ID] = append(h.fks[idx.ID], fk)
 		}
@@ -451,8 +454,8 @@ func (h fkInsertHelper) CollectSpansForValues(values tree.Datums) (roachpb.Spans
 func checkIdx(
 	ctx context.Context,
 	checker *fkBatchChecker,
-	fks map[IndexID][]baseFKHelper,
-	idx IndexID,
+	fks map[sqlbase.IndexID][]baseFKHelper,
+	idx sqlbase.IndexID,
 	row tree.Datums,
 ) error {
 	for i, fk := range fks[idx] {
@@ -478,19 +481,19 @@ func checkIdx(
 }
 
 type fkDeleteHelper struct {
-	fks         map[IndexID][]baseFKHelper
+	fks         map[sqlbase.IndexID][]baseFKHelper
 	otherTables TableLookupsByID
-	alloc       *DatumAlloc
+	alloc       *sqlbase.DatumAlloc
 
 	checker *fkBatchChecker
 }
 
 func makeFKDeleteHelper(
 	txn *client.Txn,
-	table TableDescriptor,
+	table sqlbase.TableDescriptor,
 	otherTables TableLookupsByID,
-	colMap map[ColumnID]int,
-	alloc *DatumAlloc,
+	colMap map[sqlbase.ColumnID]int,
+	alloc *sqlbase.DatumAlloc,
 ) (fkDeleteHelper, error) {
 	h := fkDeleteHelper{
 		otherTables: otherTables,
@@ -514,7 +517,7 @@ func makeFKDeleteHelper(
 				return fkDeleteHelper{}, err
 			}
 			if h.fks == nil {
-				h.fks = make(map[IndexID][]baseFKHelper)
+				h.fks = make(map[sqlbase.IndexID][]baseFKHelper)
 			}
 			h.fks[idx.ID] = append(h.fks[idx.ID], fk)
 		}
@@ -548,20 +551,20 @@ type fkUpdateHelper struct {
 	inbound  fkDeleteHelper // Check old values are not referenced.
 	outbound fkInsertHelper // Check rows referenced by new values still exist.
 
-	indexIDsToCheck map[IndexID]struct{} // List of Index IDs to check
+	indexIDsToCheck map[sqlbase.IndexID]struct{} // List of Index IDs to check
 
 	checker *fkBatchChecker
 }
 
 func makeFKUpdateHelper(
 	txn *client.Txn,
-	table TableDescriptor,
+	table sqlbase.TableDescriptor,
 	otherTables TableLookupsByID,
-	colMap map[ColumnID]int,
-	alloc *DatumAlloc,
+	colMap map[sqlbase.ColumnID]int,
+	alloc *sqlbase.DatumAlloc,
 ) (fkUpdateHelper, error) {
 	ret := fkUpdateHelper{
-		indexIDsToCheck: make(map[IndexID]struct{}),
+		indexIDsToCheck: make(map[sqlbase.IndexID]struct{}),
 	}
 	var err error
 	if ret.inbound, err = makeFKDeleteHelper(txn, table, otherTables, colMap, alloc); err != nil {
@@ -573,8 +576,10 @@ func makeFKUpdateHelper(
 	return ret, err
 }
 
-func (fks fkUpdateHelper) addCheckForIndex(indexID IndexID, descriptorType IndexDescriptor_Type) {
-	if descriptorType == IndexDescriptor_FORWARD {
+func (fks fkUpdateHelper) addCheckForIndex(
+	indexID sqlbase.IndexID, descriptorType sqlbase.IndexDescriptor_Type,
+) {
+	if descriptorType == sqlbase.IndexDescriptor_FORWARD {
 		fks.indexIDsToCheck[indexID] = struct{}{}
 	}
 }
@@ -619,30 +624,30 @@ func (fks fkUpdateHelper) CollectSpansForValues(values tree.Datums) (roachpb.Spa
 
 type baseFKHelper struct {
 	txn          *client.Txn
-	rf           RowFetcher
-	searchTable  *TableDescriptor // the table being searched (for err msg)
-	searchIdx    *IndexDescriptor // the index that must (not) contain a value
+	rf           Fetcher
+	searchTable  *sqlbase.TableDescriptor // the table being searched (for err msg)
+	searchIdx    *sqlbase.IndexDescriptor // the index that must (not) contain a value
 	prefixLen    int
-	writeIdx     IndexDescriptor  // the index we want to modify
-	searchPrefix []byte           // prefix of keys in searchIdx
-	ids          map[ColumnID]int // col IDs
-	dir          FKCheck          // direction of check
+	writeIdx     sqlbase.IndexDescriptor  // the index we want to modify
+	searchPrefix []byte                   // prefix of keys in searchIdx
+	ids          map[sqlbase.ColumnID]int // col IDs
+	dir          FKCheck                  // direction of check
 }
 
 func makeBaseFKHelper(
 	txn *client.Txn,
 	otherTables TableLookupsByID,
-	writeIdx IndexDescriptor,
-	ref ForeignKeyReference,
-	colMap map[ColumnID]int,
-	alloc *DatumAlloc,
+	writeIdx sqlbase.IndexDescriptor,
+	ref sqlbase.ForeignKeyReference,
+	colMap map[sqlbase.ColumnID]int,
+	alloc *sqlbase.DatumAlloc,
 	dir FKCheck,
 ) (baseFKHelper, error) {
 	b := baseFKHelper{txn: txn, writeIdx: writeIdx, searchTable: otherTables[ref.Table].Table, dir: dir}
 	if b.searchTable == nil {
 		return b, errors.Errorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
 	}
-	b.searchPrefix = MakeIndexKeyPrefix(b.searchTable, ref.Index)
+	b.searchPrefix = sqlbase.MakeIndexKeyPrefix(b.searchTable, ref.Index)
 	searchIdx, err := b.searchTable.FindIndexByID(ref.Index)
 	if err != nil {
 		return b, err
@@ -652,7 +657,7 @@ func makeBaseFKHelper(
 		b.prefixLen = len(writeIdx.ColumnIDs)
 	}
 	b.searchIdx = searchIdx
-	tableArgs := RowFetcherTableArgs{
+	tableArgs := FetcherTableArgs{
 		Desc:             b.searchTable,
 		Index:            b.searchIdx,
 		ColIdxMap:        b.searchTable.ColumnIdxMap(),
@@ -666,7 +671,7 @@ func makeBaseFKHelper(
 
 	// Check for all NULL values, since these can skip FK checking in MATCH FULL
 	// TODO(bram): add MATCH SIMPLE and fix MATCH FULL #30026
-	b.ids = make(map[ColumnID]int, len(writeIdx.ColumnIDs))
+	b.ids = make(map[sqlbase.ColumnID]int, len(writeIdx.ColumnIDs))
 	nulls := true
 	var missingColumns []string
 	for i, writeColID := range writeIdx.ColumnIDs[:b.prefixLen] {
@@ -695,7 +700,7 @@ func makeBaseFKHelper(
 func (f baseFKHelper) spanForValues(values tree.Datums) (roachpb.Span, error) {
 	var key roachpb.Key
 	if values != nil {
-		keyBytes, _, err := EncodePartialIndexKey(
+		keyBytes, _, err := sqlbase.EncodePartialIndexKey(
 			f.searchTable, f.searchIdx, f.prefixLen, f.ids, values, f.searchPrefix)
 		if err != nil {
 			return roachpb.Span{}, err
@@ -722,7 +727,7 @@ var _ FkSpanCollector = fkInsertHelper{}
 var _ FkSpanCollector = fkDeleteHelper{}
 var _ FkSpanCollector = fkUpdateHelper{}
 
-func collectSpansWithFKMap(fks map[IndexID][]baseFKHelper) roachpb.Spans {
+func collectSpansWithFKMap(fks map[sqlbase.IndexID][]baseFKHelper) roachpb.Spans {
 	var reads roachpb.Spans
 	for idx := range fks {
 		for _, fk := range fks[idx] {
@@ -733,7 +738,7 @@ func collectSpansWithFKMap(fks map[IndexID][]baseFKHelper) roachpb.Spans {
 }
 
 func collectSpansForValuesWithFKMap(
-	fks map[IndexID][]baseFKHelper, values tree.Datums,
+	fks map[sqlbase.IndexID][]baseFKHelper, values tree.Datums,
 ) (roachpb.Spans, error) {
 	var reads roachpb.Spans
 	for idx := range fks {

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -97,7 +98,7 @@ func Load(
 
 	var currentCmd bytes.Buffer
 	scanner := bufio.NewReader(r)
-	var ri sqlbase.RowInserter
+	var ri row.Inserter
 	var defaultExprs []tree.TypedExpr
 	var cols []sqlbase.ColumnDescriptor
 	var tableDesc *sqlbase.TableDescriptor
@@ -181,7 +182,7 @@ func Load(
 				}
 			}
 
-			ri, err = sqlbase.MakeRowInserter(nil, tableDesc, nil, tableDesc.Columns,
+			ri, err = row.MakeInserter(nil, tableDesc, nil, tableDesc.Columns,
 				true, &sqlbase.DatumAlloc{})
 			if err != nil {
 				return backupccl.BackupDescriptor{}, errors.Wrap(err, "make row inserter")
@@ -256,7 +257,7 @@ func insertStmtToKVs(
 	defaultExprs []tree.TypedExpr,
 	cols []sqlbase.ColumnDescriptor,
 	evalCtx tree.EvalContext,
-	ri sqlbase.RowInserter,
+	ri row.Inserter,
 	stmt *tree.Insert,
 	f func(roachpb.KeyValue),
 ) error {
@@ -293,10 +294,10 @@ func insertStmtToKVs(
 		Cols:    tableDesc.Columns,
 	}
 	for _, tuple := range values.Rows {
-		row := make([]tree.Datum, len(tuple))
+		insertRow := make([]tree.Datum, len(tuple))
 		for i, expr := range tuple {
 			if expr == tree.DNull {
-				row[i] = tree.DNull
+				insertRow[i] = tree.DNull
 				continue
 			}
 			c, ok := expr.(tree.Constant)
@@ -304,7 +305,7 @@ func insertStmtToKVs(
 				return errors.Errorf("unsupported expr: %q", expr)
 			}
 			var err error
-			row[i], err = c.ResolveAsType(nil, tableDesc.Columns[i].Type.ToDatumType())
+			insertRow[i], err = c.ResolveAsType(nil, tableDesc.Columns[i].Type.ToDatumType())
 			if err != nil {
 				return err
 			}
@@ -314,16 +315,16 @@ func insertStmtToKVs(
 		var computeExprs []tree.TypedExpr
 		var computedCols []sqlbase.ColumnDescriptor
 
-		row, err := sql.GenerateInsertRow(
-			defaultExprs, computeExprs, cols, computedCols, evalCtx, tableDesc, row, &computedIVarContainer,
+		insertRow, err := sql.GenerateInsertRow(
+			defaultExprs, computeExprs, cols, computedCols, evalCtx, tableDesc, insertRow, &computedIVarContainer,
 		)
 		if err != nil {
-			return errors.Wrapf(err, "process insert %q", row)
+			return errors.Wrapf(err, "process insert %q", insertRow)
 		}
 		// TODO(bram): Is the checking of FKs here required? If not, turning them
 		// off may provide a speed boost.
-		if err := ri.InsertRow(ctx, b, row, true, sqlbase.CheckFKs, false /* traceKV */); err != nil {
-			return errors.Wrapf(err, "insert %q", row)
+		if err := ri.InsertRow(ctx, b, insertRow, true, row.CheckFKs, false /* traceKV */); err != nil {
+			return errors.Wrapf(err, "insert %q", insertRow)
 		}
 	}
 	return nil

@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -326,7 +327,7 @@ func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
 // zigzagJoinerInfo contains all the information that needs to be
 // stored for each side of the join.
 type zigzagJoinerInfo struct {
-	fetcher sqlbase.RowFetcher
+	fetcher row.Fetcher
 	alloc   *sqlbase.DatumAlloc
 	table   *sqlbase.TableDescriptor
 	index   *sqlbase.IndexDescriptor
@@ -390,7 +391,7 @@ func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int
 	// Setup the RowContainers.
 	info.container.Reset()
 
-	// Setup the RowFetcher.
+	// Setup the Fetcher.
 	_, _, err := initRowFetcher(
 		&(info.fetcher),
 		info.table,

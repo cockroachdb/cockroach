@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -50,7 +51,7 @@ func (p *planner) newUpsertNode(
 	ctx context.Context,
 	n *tree.Insert,
 	desc *sqlbase.TableDescriptor,
-	ri sqlbase.RowInserter,
+	ri row.Inserter,
 	tn, alias *tree.TableName,
 	sourceRows planNode,
 	needRows bool,
@@ -58,7 +59,7 @@ func (p *planner) newUpsertNode(
 	defaultExprs []tree.TypedExpr,
 	computeExprs []tree.TypedExpr,
 	computedCols []sqlbase.ColumnDescriptor,
-	fkTables sqlbase.TableLookupsByID,
+	fkTables row.TableLookupsByID,
 	desiredTypes []types.T,
 ) (res batchedPlanNode, err error) {
 	// Extract the index that will detect upsert conflicts
@@ -657,7 +658,7 @@ func (p *planner) newUpsertHelper(
 	// column IDs to row datum positions is straightforward.
 	helper.ccIvarContainer = sqlbase.RowIndexedVarContainer{
 		Cols:    tableDesc.Columns,
-		Mapping: sqlbase.ColIDtoRowIndexFromCols(tableDesc.Columns),
+		Mapping: row.ColIDtoRowIndexFromCols(tableDesc.Columns),
 	}
 
 	return helper, nil
