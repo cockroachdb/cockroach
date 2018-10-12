@@ -27,9 +27,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
-
-	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -39,7 +36,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -511,8 +510,8 @@ func SetMockAddSSTable() (undo func()) {
 		args := cArgs.Args.(*roachpb.AddSSTableRequest)
 
 		return result.Result{
-			Replicated: storagebase.ReplicatedEvalResult{
-				AddSSTable: &storagebase.ReplicatedEvalResult_AddSSTable{
+			Replicated: storagepb.ReplicatedEvalResult{
+				AddSSTable: &storagepb.ReplicatedEvalResult_AddSSTable{
 					Data:  args.Data,
 					CRC32: util.CRC32(args.Data),
 				},

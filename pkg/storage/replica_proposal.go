@@ -24,7 +24,7 @@ import (
 	"unsafe"
 
 	"github.com/kr/pretty"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"golang.org/x/time/rate"
@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -68,7 +69,7 @@ type ProposalData struct {
 
 	// command is serialized and proposed to raft. In the event of
 	// reproposals its MaxLeaseIndex field is mutated.
-	command *storagebase.RaftCommand
+	command *storagepb.RaftCommand
 
 	// endCmds.finish is called after command execution to update the timestamp cache &
 	// command queue.
@@ -142,7 +143,7 @@ func (r *Replica) gcOldChecksumEntriesLocked(now time.Time) {
 	}
 }
 
-func (r *Replica) computeChecksumPostApply(ctx context.Context, cc storagebase.ComputeChecksum) {
+func (r *Replica) computeChecksumPostApply(ctx context.Context, cc storagepb.ComputeChecksum) {
 	stopper := r.store.Stopper()
 	now := timeutil.Now()
 	r.mu.Lock()
@@ -370,7 +371,7 @@ func addSSTablePreApply(
 	eng engine.Engine,
 	sideloaded sideloadStorage,
 	term, index uint64,
-	sst storagebase.ReplicatedEvalResult_AddSSTable,
+	sst storagepb.ReplicatedEvalResult_AddSSTable,
 	limiter *rate.Limiter,
 ) bool {
 	checksum := util.CRC32(sst.Data)
@@ -497,7 +498,7 @@ func (r *Replica) maybeTransferRaftLeadership(ctx context.Context, target roachp
 
 func (r *Replica) handleReplicatedEvalResult(
 	ctx context.Context,
-	rResult storagebase.ReplicatedEvalResult,
+	rResult storagepb.ReplicatedEvalResult,
 	raftAppliedIndex, leaseAppliedIndex uint64,
 ) (shouldAssert bool) {
 	// Fields for which no action is taken in this method are zeroed so that
@@ -594,7 +595,7 @@ func (r *Replica) handleReplicatedEvalResult(
 			r.mu.Unlock()
 		}
 
-		if (*rResult.State == storagebase.ReplicaState{}) {
+		if (*rResult.State == storagepb.ReplicaState{}) {
 			rResult.State = nil
 		}
 	}
@@ -640,7 +641,7 @@ func (r *Replica) handleReplicatedEvalResult(
 	// The rest of the actions are "nontrivial" and may have large effects on the
 	// in-memory and on-disk ReplicaStates. If any of these actions are present,
 	// we want to assert that these two states do not diverge.
-	shouldAssert = !rResult.Equal(storagebase.ReplicatedEvalResult{})
+	shouldAssert = !rResult.Equal(storagepb.ReplicatedEvalResult{})
 
 	// Process Split or Merge. This needs to happen after stats update because
 	// of the ContainsEstimates hack.
@@ -703,7 +704,7 @@ func (r *Replica) handleReplicatedEvalResult(
 			rResult.State.UsingAppliedStateKey = false
 		}
 
-		if (*rResult.State == storagebase.ReplicaState{}) {
+		if (*rResult.State == storagepb.ReplicaState{}) {
 			rResult.State = nil
 		}
 	}
@@ -728,8 +729,8 @@ func (r *Replica) handleReplicatedEvalResult(
 		rResult.ComputeChecksum = nil
 	}
 
-	if !rResult.Equal(storagebase.ReplicatedEvalResult{}) {
-		log.Fatalf(ctx, "unhandled field in ReplicatedEvalResult: %s", pretty.Diff(rResult, storagebase.ReplicatedEvalResult{}))
+	if !rResult.Equal(storagepb.ReplicatedEvalResult{}) {
+		log.Fatalf(ctx, "unhandled field in ReplicatedEvalResult: %s", pretty.Diff(rResult, storagepb.ReplicatedEvalResult{}))
 	}
 	return shouldAssert
 }
@@ -816,7 +817,7 @@ func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult result.Loca
 func (r *Replica) handleEvalResultRaftMuLocked(
 	ctx context.Context,
 	lResult *result.LocalResult,
-	rResult storagebase.ReplicatedEvalResult,
+	rResult storagepb.ReplicatedEvalResult,
 	raftAppliedIndex, leaseAppliedIndex uint64,
 ) {
 	shouldAssert := r.handleReplicatedEvalResult(ctx, rResult, raftAppliedIndex, leaseAppliedIndex)

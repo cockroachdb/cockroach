@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
@@ -67,14 +68,14 @@ func (r *Replica) maybeSideloadEntriesRaftMuLocked(
 ) (_ []raftpb.Entry, sideloadedEntriesSize int64, _ error) {
 	// TODO(tschottdorf): allocating this closure could be expensive. If so make
 	// it a method on Replica.
-	maybeRaftCommand := func(cmdID storagebase.CmdIDKey) (storagebase.RaftCommand, bool) {
+	maybeRaftCommand := func(cmdID storagebase.CmdIDKey) (storagepb.RaftCommand, bool) {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		cmd, ok := r.mu.localProposals[cmdID]
 		if ok {
 			return *cmd.command, true
 		}
-		return storagebase.RaftCommand{}, false
+		return storagepb.RaftCommand{}, false
 	}
 	return maybeSideloadEntriesImpl(ctx, entriesToAppend, r.raftMu.sideloaded, maybeRaftCommand)
 }
@@ -89,7 +90,7 @@ func maybeSideloadEntriesImpl(
 	ctx context.Context,
 	entriesToAppend []raftpb.Entry,
 	sideloaded sideloadStorage,
-	maybeRaftCommand func(storagebase.CmdIDKey) (storagebase.RaftCommand, bool),
+	maybeRaftCommand func(storagebase.CmdIDKey) (storagepb.RaftCommand, bool),
 ) (_ []raftpb.Entry, sideloadedEntriesSize int64, _ error) {
 
 	cow := false
@@ -202,7 +203,7 @@ func maybeInlineSideloadedRaftCommand(
 	// Out of luck, for whatever reason the inlined proposal isn't in the cache.
 	cmdID, data := DecodeRaftCommand(ent.Data)
 
-	var command storagebase.RaftCommand
+	var command storagepb.RaftCommand
 	if err := protoutil.Unmarshal(data, &command); err != nil {
 		return nil, err
 	}
@@ -239,7 +240,7 @@ func assertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) 
 		return
 	}
 
-	var command storagebase.RaftCommand
+	var command storagepb.RaftCommand
 	_, data := DecodeRaftCommand(ent.Data)
 	if err := protoutil.Unmarshal(data, &command); err != nil {
 		log.Fatal(ctx, err)

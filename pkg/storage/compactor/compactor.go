@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
@@ -172,18 +172,18 @@ func (c *Compactor) Start(ctx context.Context, stopper *stop.Stopper) {
 // aggregatedCompaction is a utility struct that holds information
 // about aggregated suggested compactions.
 type aggregatedCompaction struct {
-	storagebase.SuggestedCompaction
-	suggestions []storagebase.SuggestedCompaction
+	storagepb.SuggestedCompaction
+	suggestions []storagepb.SuggestedCompaction
 	startIdx    int
 	total       int
 }
 
 func initAggregatedCompaction(
-	startIdx, total int, sc storagebase.SuggestedCompaction,
+	startIdx, total int, sc storagepb.SuggestedCompaction,
 ) aggregatedCompaction {
 	return aggregatedCompaction{
 		SuggestedCompaction: sc,
-		suggestions:         []storagebase.SuggestedCompaction{sc},
+		suggestions:         []storagepb.SuggestedCompaction{sc},
 		startIdx:            startIdx,
 		total:               total,
 	}
@@ -290,7 +290,7 @@ func (c *Compactor) processSuggestions(ctx context.Context) (bool, error) {
 // fetchSuggestions loads the persisted suggested compactions from the store.
 func (c *Compactor) fetchSuggestions(
 	ctx context.Context,
-) (suggestions []storagebase.SuggestedCompaction, totalBytes int64, err error) {
+) (suggestions []storagepb.SuggestedCompaction, totalBytes int64, err error) {
 	dataIter := c.eng.NewIterator(engine.IterOptions{
 		UpperBound: roachpb.KeyMax, // refined before every seek
 	})
@@ -303,7 +303,7 @@ func (c *Compactor) fetchSuggestions(
 		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMin},
 		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMax},
 		func(kv engine.MVCCKeyValue) (bool, error) {
-			var sc storagebase.SuggestedCompaction
+			var sc storagepb.SuggestedCompaction
 			var err error
 			sc.StartKey, sc.EndKey, err = keys.DecodeStoreSuggestedCompactionKey(kv.Key.Key)
 			if err != nil {
@@ -434,7 +434,7 @@ func (c *Compactor) aggregateCompaction(
 	ctx context.Context,
 	ssti engine.SSTableInfosByLevel,
 	aggr *aggregatedCompaction,
-	sc storagebase.SuggestedCompaction,
+	sc storagepb.SuggestedCompaction,
 ) (done bool) {
 	// Don't bother aggregating more once we reach threshold bytes.
 	if aggr.Bytes >= c.thresholdBytes() {
@@ -471,7 +471,7 @@ func (c *Compactor) examineQueue(ctx context.Context) (int64, error) {
 		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMin},
 		engine.MVCCKey{Key: keys.LocalStoreSuggestedCompactionsMax},
 		func(kv engine.MVCCKeyValue) (bool, error) {
-			var c storagebase.Compaction
+			var c storagepb.Compaction
 			if err := protoutil.Unmarshal(kv.Value, &c); err != nil {
 				return false, err
 			}
@@ -487,12 +487,12 @@ func (c *Compactor) examineQueue(ctx context.Context) (int64, error) {
 
 // Suggest writes the specified compaction to persistent storage and
 // pings the processing goroutine.
-func (c *Compactor) Suggest(ctx context.Context, sc storagebase.SuggestedCompaction) {
+func (c *Compactor) Suggest(ctx context.Context, sc storagepb.SuggestedCompaction) {
 	log.VEventf(ctx, 2, "suggested compaction from %s - %s: %+v", sc.StartKey, sc.EndKey, sc.Compaction)
 
 	// Check whether a suggested compaction already exists for this key span.
 	key := keys.StoreSuggestedCompactionKey(sc.StartKey, sc.EndKey)
-	var existing storagebase.Compaction
+	var existing storagepb.Compaction
 	//lint:ignore SA1019 historical usage of deprecated c.eng.GetProto is OK
 	ok, _, _, err := c.eng.GetProto(engine.MVCCKey{Key: key}, &existing)
 	if err != nil {

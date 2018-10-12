@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -271,9 +271,7 @@ func (r *Replica) disconnectRangefeedWithReasonRaftMuLocked(
 // handleLogicalOpLogRaftMuLocked passes the logical op log to the active
 // rangefeed, if one is running. No-op if a rangefeed is not active. Requires
 // raftMu to be locked.
-func (r *Replica) handleLogicalOpLogRaftMuLocked(
-	ctx context.Context, ops *storagebase.LogicalOpLog,
-) {
+func (r *Replica) handleLogicalOpLogRaftMuLocked(ctx context.Context, ops *storagepb.LogicalOpLog) {
 	if r.raftMu.rangefeed == nil {
 		return
 	}

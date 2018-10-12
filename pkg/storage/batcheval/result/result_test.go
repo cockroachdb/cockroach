@@ -18,7 +18,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -41,14 +41,14 @@ func TestEvalResultIsZero(t *testing.T) {
 			case *LocalResult:
 				f.GossipFirstRange = true
 				defer func() { f.GossipFirstRange = false }()
-			case *storagebase.ReplicatedEvalResult:
+			case *storagepb.ReplicatedEvalResult:
 				f.IsLeaseRequest = true
 				defer func() { f.IsLeaseRequest = false }()
-			case **storagebase.WriteBatch:
-				*f = new(storagebase.WriteBatch)
+			case **storagepb.WriteBatch:
+				*f = new(storagepb.WriteBatch)
 				defer func() { *f = nil }()
-			case **storagebase.LogicalOpLog:
-				*f = new(storagebase.LogicalOpLog)
+			case **storagepb.LogicalOpLog:
+				*f = new(storagepb.LogicalOpLog)
 				defer func() { *f = nil }()
 			default:
 				tf := v.Type().Field(i)
