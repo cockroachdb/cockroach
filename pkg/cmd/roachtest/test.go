@@ -492,6 +492,8 @@ type testStatus struct {
 type test struct {
 	spec     *testSpec
 	registry *registry
+	// l is the logger that the test will use for its output.
+	l        *logger
 	runner   string
 	runnerID int64
 	start    time.Time
@@ -520,6 +522,10 @@ type test struct {
 
 func (t *test) Name() string {
 	return t.spec.Name
+}
+
+func (t *test) logger() *logger {
+	return t.l
 }
 
 func (t *test) status(id int64, args ...interface{}) {
@@ -735,6 +741,10 @@ func (r *registry) runAsync(
 		registry:     r,
 		artifactsDir: artifactsDir,
 	}
+	logPath := filepath.Join(artifactsDir, "test.log")
+	l, err := rootLogger(logPath, teeOpt)
+	FatalIfErr(t, err)
+	t.l = l
 
 	if teamCity {
 		fmt.Printf("##teamcity[testStarted name='%s' flowId='%s']\n", t.Name(), t.Name())
@@ -882,7 +892,7 @@ func (r *registry) runAsync(
 					teeOpt:       teeOpt,
 				}
 				var err error
-				c, err = newCluster(ctx, cfg)
+				c, err = newCluster(ctx, t.l, cfg)
 				FatalIfErr(t, err)
 			} else {
 				opt := attachOpt{
@@ -891,10 +901,9 @@ func (r *registry) runAsync(
 					skipWipe:       r.config.skipClusterWipeOnAttach,
 				}
 				var err error
-				c, err = attachToExistingCluster(ctx, clusterName, t.ArtifactsDir(), t.spec.Nodes, opt)
+				c, err = attachToExistingCluster(ctx, clusterName, t.l, t.spec.Nodes, opt)
 				FatalIfErr(t, err)
 			}
-			c.setTest(t)
 			if c != nil {
 				defer func() {
 					if !debugEnabled || !t.Failed() {
@@ -905,8 +914,9 @@ func (r *registry) runAsync(
 				}()
 			}
 		} else {
-			c = c.clone(t, teeOpt)
+			c = c.clone()
 		}
+		c.setTest(t)
 
 		// If we have subtests, handle them here and return.
 		if t.spec.Run == nil {
