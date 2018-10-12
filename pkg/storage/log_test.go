@@ -21,6 +21,8 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
 	_ "github.com/lib/pq"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -100,7 +102,7 @@ func TestLogSplits(t *testing.T) {
 		if !infoStr.Valid {
 			t.Errorf("info not recorded for split of range %d", rangeID)
 		}
-		var info storage.RangeLogEvent_Info
+		var info storagepb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 			t.Errorf("error unmarshalling info string for split of range %d: %s", rangeID, err)
 			continue
@@ -218,7 +220,7 @@ func TestLogMerges(t *testing.T) {
 		if !infoStr.Valid {
 			t.Errorf("info not recorded for merge of range %d", rangeID)
 		}
-		var info storage.RangeLogEvent_Info
+		var info storagepb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 			t.Errorf("error unmarshalling info string for merge of range %d: %s", rangeID, err)
 			continue
@@ -274,11 +276,11 @@ func TestLogRebalances(t *testing.T) {
 			t.Errorf("range removes %d != expected %d", a, e)
 		}
 	}
-	logEvent(roachpb.ADD_REPLICA, storage.ReasonRangeUnderReplicated)
+	logEvent(roachpb.ADD_REPLICA, storagepb.reasonrangeUnderReplicated)
 	checkMetrics(1 /*add*/, 0 /*remove*/)
-	logEvent(roachpb.ADD_REPLICA, storage.ReasonRangeUnderReplicated)
+	logEvent(roachpb.ADD_REPLICA, storagepb.reasonrangeUnderReplicated)
 	checkMetrics(2 /*adds*/, 0 /*remove*/)
-	logEvent(roachpb.REMOVE_REPLICA, storage.ReasonRangeOverReplicated)
+	logEvent(roachpb.REMOVE_REPLICA, storagepb.reasonrangeOverReplicated)
 	checkMetrics(2 /*adds*/, 1 /*remove*/)
 
 	// Open a SQL connection to verify that the events have been logged.
@@ -315,7 +317,7 @@ func TestLogRebalances(t *testing.T) {
 		if !infoStr.Valid {
 			t.Errorf("info not recorded for add replica of range %d", rangeID)
 		}
-		var info storage.RangeLogEvent_Info
+		var info storagepb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 			t.Errorf("error unmarshalling info string for add replica %d: %s", rangeID, err)
 			continue
@@ -327,7 +329,7 @@ func TestLogRebalances(t *testing.T) {
 			t.Errorf("recorded wrong updated replica %s for add replica of range %d, expected %s",
 				a, rangeID, e)
 		}
-		if a, e := info.Reason, storage.ReasonRangeUnderReplicated; a != e {
+		if a, e := info.Reason, storagepb.reasonrangeUnderReplicated; a != e {
 			t.Errorf("recorded wrong reason %s for add replica of range %d, expected %s",
 				a, rangeID, e)
 		}
@@ -367,7 +369,7 @@ func TestLogRebalances(t *testing.T) {
 		if !infoStr.Valid {
 			t.Errorf("info not recorded for remove replica of range %d", rangeID)
 		}
-		var info storage.RangeLogEvent_Info
+		var info storagepb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 			t.Errorf("error unmarshalling info string for remove replica %d: %s", rangeID, err)
 			continue
@@ -379,7 +381,7 @@ func TestLogRebalances(t *testing.T) {
 			t.Errorf("recorded wrong updated replica %s for remove replica of range %d, expected %s",
 				a, rangeID, e)
 		}
-		if a, e := info.Reason, storage.ReasonRangeOverReplicated; a != e {
+		if a, e := info.Reason, storagepb.reasonrangeOverReplicated; a != e {
 			t.Errorf("recorded wrong reason %s for add replica of range %d, expected %s",
 				a, rangeID, e)
 		}

@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -173,7 +175,7 @@ func TestReplicateQueueUpReplicate(t *testing.T) {
 	})
 
 	if err := verifyRangeLog(
-		tc.Conns[0], storage.RangeLogEventType_add, storage.ReasonRangeUnderReplicated,
+		tc.Conns[0], storage.RangeLogEventType_add, storagepb.reasonrangeUnderReplicated,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +260,7 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 	})
 
 	if err := verifyRangeLog(
-		tc.Conns[0], storage.RangeLogEventType_remove, storage.ReasonRangeOverReplicated,
+		tc.Conns[0], storage.RangeLogEventType_remove, storagepb.reasonrangeOverReplicated,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -280,7 +282,7 @@ func verifyRangeLog(
 		if err := rows.Scan(&infoStr); err != nil {
 			return err
 		}
-		var info storage.RangeLogEvent_Info
+		var info storagepb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr), &info); err != nil {
 			return errors.Errorf("error unmarshalling info string %q: %s", infoStr, err)
 		}

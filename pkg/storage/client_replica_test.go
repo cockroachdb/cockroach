@@ -1578,7 +1578,7 @@ func TestDrainRangeRejection(t *testing.T) {
 			StoreID: mtc.idents[drainingIdx].StoreID,
 		},
 		repl.Desc(),
-		storage.ReasonRangeUnderReplicated,
+		storagepb.reasonrangeUnderReplicated,
 		"",
 	); !testutils.IsError(err, "store is draining") {
 		t.Fatalf("unexpected error: %v", err)

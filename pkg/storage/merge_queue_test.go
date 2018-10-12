@@ -18,11 +18,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -38,7 +38,7 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 	testCtx.Start(t, stopper)
 
 	mq := newMergeQueue(testCtx.store, testCtx.store.DB(), testCtx.gossip)
-	MergeQueueEnabled.Override(&testCtx.store.ClusterSettings().SV, true)
+	storagebase.MergeQueueEnabled.Override(&testCtx.store.ClusterSettings().SV, true)
 
 	tableKey := func(i uint32) []byte {
 		return keys.MakeTablePrefix(keys.MaxReservedDescID + i)
