@@ -150,6 +150,12 @@ func (m *mysqldumpReader) readFile(
 	return nil
 }
 
+const (
+	zeroDate = "0000-00-00"
+	zeroYear = "0000"
+	zeroTime = "0000-00-00 00:00:00"
+)
+
 // mysqlValueToDatum attempts to convert a value, as parsed from a mysqldump
 // INSERT statement, in to a Cockroach Datum of type `desired`. The MySQL parser
 // does not parse the values themselves to Go primitivies, rather leaving the
@@ -168,7 +174,22 @@ func mysqlValueToDatum(
 	case *mysql.SQLVal:
 		switch v.Type {
 		case mysql.StrVal:
-			return tree.ParseStringAs(desired, string(v.Val), evalContext)
+			s := string(v.Val)
+			// https://github.com/cockroachdb/cockroach/issues/29298
+
+			if strings.HasPrefix(s, zeroYear) {
+				switch desired {
+				case types.TimestampTZ, types.Timestamp:
+					if s == zeroTime {
+						return tree.DNull, nil
+					}
+				case types.Date:
+					if s == zeroDate {
+						return tree.DNull, nil
+					}
+				}
+			}
+			return tree.ParseStringAs(desired, s, evalContext)
 		case mysql.IntVal:
 			return tree.ParseStringAs(desired, string(v.Val), evalContext)
 		case mysql.FloatVal:
@@ -183,25 +204,30 @@ func mysqlValueToDatum(
 		}
 
 	case *mysql.UnaryExpr:
-		if v.Operator != "-" {
-			return nil, errors.Errorf("unexpected operator: %q", v.Operator)
-		}
-		parsed, err := mysqlValueToDatum(v.Expr, desired, evalContext)
-		if err != nil {
-			return nil, err
-		}
-		switch i := parsed.(type) {
-		case *tree.DInt:
-			return tree.NewDInt(-*i), nil
-		case *tree.DFloat:
-			return tree.NewDFloat(-*i), nil
-		case *tree.DDecimal:
-			dec := &i.Decimal
-			dd := &tree.DDecimal{}
-			dd.Decimal.Neg(dec)
-			return dd, nil
+		switch v.Operator {
+		case "-":
+			parsed, err := mysqlValueToDatum(v.Expr, desired, evalContext)
+			if err != nil {
+				return nil, err
+			}
+			switch i := parsed.(type) {
+			case *tree.DInt:
+				return tree.NewDInt(-*i), nil
+			case *tree.DFloat:
+				return tree.NewDFloat(-*i), nil
+			case *tree.DDecimal:
+				dec := &i.Decimal
+				dd := &tree.DDecimal{}
+				dd.Decimal.Neg(dec)
+				return dd, nil
+			default:
+				return nil, errors.Errorf("unsupported negation of %T", i)
+			}
+		case "_binary", "_binary ":
+			// TODO(dt): do we want to use this hint to change our decoding logic?
+			return mysqlValueToDatum(v.Expr, desired, evalContext)
 		default:
-			return nil, errors.Errorf("unsupported negation of %T", i)
+			return nil, errors.Errorf("unexpected operator: %q", v.Operator)
 		}
 
 	case *mysql.NullVal:
@@ -556,12 +582,21 @@ func mysqlColToCockroach(
 
 	case mysqltypes.Date:
 		def.Type = coltypes.Date
+		if col.Default != nil && bytes.Equal(col.Default.Val, []byte(zeroDate)) {
+			col.Default = nil
+		}
 	case mysqltypes.Time:
 		def.Type = coltypes.Time
 	case mysqltypes.Timestamp:
 		def.Type = coltypes.TimestampWithTZ
+		if col.Default != nil && bytes.Equal(col.Default.Val, []byte(zeroTime)) {
+			col.Default = nil
+		}
 	case mysqltypes.Datetime:
 		def.Type = coltypes.TimestampWithTZ
+		if col.Default != nil && bytes.Equal(col.Default.Val, []byte(zeroTime)) {
+			col.Default = nil
+		}
 	case mysqltypes.Year:
 		def.Type = coltypes.Int2
 
