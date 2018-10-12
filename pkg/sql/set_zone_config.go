@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
 
@@ -51,14 +52,25 @@ var supportedZoneConfigOptions = map[tree.Name]struct {
 	requiredType types.T
 	setter       func(*config.ZoneConfig, tree.Datum)
 }{
-	"range_min_bytes": {types.Int, func(c *config.ZoneConfig, d tree.Datum) { c.RangeMinBytes = int64(tree.MustBeDInt(d)) }},
-	"range_max_bytes": {types.Int, func(c *config.ZoneConfig, d tree.Datum) { c.RangeMaxBytes = int64(tree.MustBeDInt(d)) }},
-	"num_replicas":    {types.Int, func(c *config.ZoneConfig, d tree.Datum) { c.NumReplicas = int32(tree.MustBeDInt(d)) }},
-	"gc.ttlseconds":   {types.Int, func(c *config.ZoneConfig, d tree.Datum) { c.GC.TTLSeconds = int32(tree.MustBeDInt(d)) }},
-	"constraints": {types.String, func(c *config.ZoneConfig, d tree.Datum) {
-		loadYAML((*config.ConstraintsList)(&c.Constraints), string(tree.MustBeDString(d)))
+	"range_min_bytes": {types.Int, func(c *config.ZoneConfig, d tree.Datum) { c.RangeMinBytes = proto.Int64(int64(tree.MustBeDInt(d))) }},
+	"range_max_bytes": {types.Int, func(c *config.ZoneConfig, d tree.Datum) { c.RangeMaxBytes = proto.Int64(int64(tree.MustBeDInt(d))) }},
+	"num_replicas":    {types.Int, func(c *config.ZoneConfig, d tree.Datum) { c.NumReplicas = proto.Int32(int32(tree.MustBeDInt(d))) }},
+	"gc.ttlseconds": {types.Int, func(c *config.ZoneConfig, d tree.Datum) {
+		c.GC = &config.GCPolicy{TTLSeconds: int32(tree.MustBeDInt(d))}
 	}},
-	"lease_preferences": {types.String, func(c *config.ZoneConfig, d tree.Datum) { loadYAML(&c.LeasePreferences, string(tree.MustBeDString(d))) }},
+	"constraints": {types.String, func(c *config.ZoneConfig, d tree.Datum) {
+		constraintsList := config.ConstraintsList{
+			Constraints: c.Constraints,
+			Inherited:   c.InheritedConstraints,
+		}
+		loadYAML(&constraintsList, string(tree.MustBeDString(d)))
+		c.Constraints = constraintsList.Constraints
+		c.InheritedConstraints = false
+	}},
+	"lease_preferences": {types.String, func(c *config.ZoneConfig, d tree.Datum) {
+		loadYAML(&c.LeasePreferences, string(tree.MustBeDString(d)))
+		c.InheritedLeasePreferences = false
+	}},
 }
 
 // zoneOptionKeys contains the keys from suportedZoneConfigOptions in
@@ -146,6 +158,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	var yamlConfig string
 	var setters []func(c *config.ZoneConfig)
 	deleteZone := false
+	subzonePlaceholder := false
 
 	// Evaluate the configuration input.
 	if n.yamlConfig != nil {
@@ -230,6 +243,28 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		return err
 	}
 
+	// Retrieve the partial zone configuration
+	partialZone, err := getZoneConfigRaw(params.ctx, params.p.txn, targetID)
+	if err != nil {
+		return err
+	}
+
+	// No zone was found. Possibly a SubzonePlaceholder dependig on the index.
+	if partialZone == nil {
+		partialZone = config.NewZoneConfig()
+		if index != nil {
+			subzonePlaceholder = true
+		}
+	}
+
+	var partialSubzone *config.Subzone
+	if index != nil {
+		partialSubzone = partialZone.GetSubzone(uint32(index.ID), partition)
+		if partialSubzone == nil {
+			partialSubzone = &config.Subzone{Config: *config.NewZoneConfig()}
+		}
+	}
+
 	// Retrieve the zone configuration.
 	//
 	// If the statement was USING DEFAULT, we want to ignore the zone
@@ -237,7 +272,9 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	// default (whichever applies -- a database if targetID is a table,
 	// default if targetID is a database, etc.). For this, we use the last
 	// parameter getInheritedDefault to GetZoneConfigInTxn().
-	_, zone, subzone, err := GetZoneConfigInTxn(params.ctx, params.p.txn,
+	// These zones are only used for validations. The merged zone is will
+	// not be written.
+	_, completeZone, completeSubzone, err := GetZoneConfigInTxn(params.ctx, params.p.txn,
 		uint32(targetID), index, partition, n.setDefault)
 
 	if err == errNoZoneConfigApplies {
@@ -248,21 +285,23 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// ranges (liveness, meta, etc.), and did not have a zone config
 		// already.
 		defZone := config.DefaultZoneConfig()
-		zone = &defZone
+		completeZone = &defZone
 	} else if err != nil {
 		return err
 	}
 
 	if deleteZone {
 		if index != nil {
-			didDelete := zone.DeleteSubzone(uint32(index.ID), partition)
+			didDelete := completeZone.DeleteSubzone(uint32(index.ID), partition)
+			_ = partialZone.DeleteSubzone(uint32(index.ID), partition)
 			if !didDelete {
 				// If we didn't do any work, return early. We'd otherwise perform an
 				// update that would make it look like one row was affected.
 				return nil
 			}
 		} else {
-			zone.DeleteTableConfig()
+			completeZone.DeleteTableConfig()
+			partialZone.DeleteTableConfig()
 		}
 	} else {
 		// Validate the user input.
@@ -273,11 +312,27 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		}
 
 		// Determine where to load the configuration.
-		newZone := *zone
-		if subzone != nil {
-			newZone = subzone.Config
+		newZone := *completeZone
+		if completeSubzone != nil {
+			newZone = completeSubzone.Config
 		}
 
+		// Determine where to load the partial configuration.
+		// finalZone is where the new changes are unmarshalled onto.
+		// It must be a fresh ZoneConfig if a new subzone is being created.
+		// If an existing subzone is being modified, finalZone is overridden.
+		finalZone := *partialZone
+		if partialSubzone != nil {
+			finalZone = partialSubzone.Config
+		}
+
+		// ALTER RANGE default USING DEFAULT sets the default to the in
+		// memory default value.
+		if n.setDefault && keys.RootNamespaceID == uint32(targetID) {
+			finalZone = config.DefaultZoneConfig()
+		} else if n.setDefault {
+			finalZone = *config.NewZoneConfig()
+		}
 		// Load settings from YAML. If there was no YAML (e.g. because the
 		// query specified CONFIGURE ZONE USING), the YAML string will be
 		// empty, in which case the unmarshaling will be a no-op. This is
@@ -285,6 +340,12 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		if err := yaml.UnmarshalStrict([]byte(yamlConfig), &newZone); err != nil {
 			return fmt.Errorf("could not parse zone config: %v", err)
 		}
+
+		// Load settings from YAML into the partial zone as well.
+		if err := yaml.UnmarshalStrict([]byte(yamlConfig), &finalZone); err != nil {
+			return fmt.Errorf("could not parse zone config: %v", err)
+		}
+
 		// Load settings from var = val assignments. If there were no such
 		// settings, (e.g. because the query specified CONFIGURE ZONE = or
 		// USING DEFAULT), the setter slice will be empty and this will be
@@ -303,7 +364,9 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 						}
 					}
 				}()
+
 				setter(&newZone)
+				setter(&finalZone)
 				return nil
 			}(); err != nil {
 				return err
@@ -322,32 +385,60 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// Are we operating on an index?
 		if index == nil {
 			// No: the final zone config is the one we just processed.
-			zone = &newZone
+			completeZone = &newZone
+			partialZone = &finalZone
 		} else {
 			// If the zone config for targetID was a subzone placeholder, it'll have
 			// been skipped over by GetZoneConfigInTxn. We need to load it regardless
 			// to avoid blowing away other subzones.
-			zone, err = getZoneConfigRaw(params.ctx, params.p.txn, targetID)
+
+			// TODO(ridwanmsharif): How is this supposed to change? getZoneConfigRaw
+			// gives no guarantees about completeness. Some work might need to happen
+			// here to complete the missing fields. The reason is because we don't know
+			// here if a zone is a placeholder or not. Can we do a GetConfigInTxn here?
+			// And if it is a placeholder, we use getZoneConfigRaw to create one.
+			completeZone, err = getZoneConfigRaw(params.ctx, params.p.txn, targetID)
 			if err != nil {
 				return err
+			} else if completeZone == nil {
+				completeZone = config.NewZoneConfig()
 			}
-			zone.SetSubzone(config.Subzone{
+			completeZone.SetSubzone(config.Subzone{
 				IndexID:       uint32(index.ID),
 				PartitionName: partition,
 				Config:        newZone,
 			})
+
+			// The partial zone might just be empty. If so,
+			// replace it with a SubzonePlaceholder.
+			if subzonePlaceholder {
+				partialZone.DeleteTableConfig()
+			}
+
+			partialZone.SetSubzone(config.Subzone{
+				IndexID:       uint32(index.ID),
+				PartitionName: partition,
+				Config:        finalZone,
+			})
 		}
 
-		// Finally revalidate everything.
-		if err := zone.Validate(); err != nil {
+		// Finally revalidate everything. Validate only the completeZone config.
+		if err := completeZone.Validate(); err != nil {
 			return fmt.Errorf("could not validate zone config: %s", err)
 		}
 	}
 
-	// Write the new zone configuration.
+	// If cluster version is below 2.2, just write the complete zone
+	// config instead of the partial for backwards compatibility reasons.
+	// Otherwise write the partial zone configutation.
 	hasNewSubzones := !deleteZone && index != nil
+	execConfig := params.extendedEvalCtx.ExecCfg
+	zoneToWrite := partialZone
+	if !execConfig.Settings.Version.IsMinSupported(cluster.VersionCascadingZoneConfigs) {
+		zoneToWrite = completeZone
+	}
 	n.run.numAffected, err = writeZoneConfig(params.ctx, params.p.txn,
-		targetID, table, zone, params.extendedEvalCtx.ExecCfg, hasNewSubzones)
+		targetID, table, zoneToWrite, execConfig, hasNewSubzones)
 	if err != nil {
 		return err
 	}
@@ -483,6 +574,9 @@ func writeZoneConfig(
 		if err != nil {
 			return 0, err
 		}
+	} else {
+		// To keep the Subzone and SubzoneSpan arrays consistent
+		zone.SubzoneSpans = nil
 	}
 	if len(zone.Constraints) > 1 || (len(zone.Constraints) == 1 && zone.Constraints[0].NumReplicas != 0) {
 		st := execCfg.Settings
@@ -514,7 +608,7 @@ func writeZoneConfig(
 
 // getZoneConfigRaw looks up the zone config with the given ID. Unlike
 // getZoneConfig, it does not attempt to ascend the zone config hierarchy. If no
-// zone config exists for the given ID, it returns an empty zone config.
+// zone config exists for the given ID, it returns nil.
 func getZoneConfigRaw(
 	ctx context.Context, txn *client.Txn, id sqlbase.ID,
 ) (*config.ZoneConfig, error) {
@@ -523,7 +617,7 @@ func getZoneConfigRaw(
 		return nil, err
 	}
 	if kv.Value == nil {
-		return &config.ZoneConfig{}, nil
+		return nil, nil
 	}
 	var zone config.ZoneConfig
 	if err := kv.ValueProto(&zone); err != nil {
@@ -547,6 +641,8 @@ func removeIndexZoneConfigs(
 	zone, err := getZoneConfigRaw(ctx, txn, tableID)
 	if err != nil {
 		return err
+	} else if zone == nil {
+		zone = config.NewZoneConfig()
 	}
 
 	for _, indexDesc := range indexDescs {

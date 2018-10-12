@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -256,10 +258,10 @@ const minRangeMaxBytes = 64 << 10 // 64 KB
 // defaultZoneConfig is the default zone configuration used when no custom
 // config has been specified.
 var defaultZoneConfig = &ZoneConfig{
-	NumReplicas:   3,
-	RangeMinBytes: 1 << 20,  // 1 MB
-	RangeMaxBytes: 64 << 20, // 64 MB
-	GC: GCPolicy{
+	NumReplicas:   proto.Int32(3),
+	RangeMinBytes: proto.Int64(1 << 20),  // 1 MB
+	RangeMaxBytes: proto.Int64(64 << 20), // 64 MB
+	GC: &GCPolicy{
 		// Use 25 hours instead of the previous 24 to make users successful by
 		// default. Users desiring to take incremental backups every 24h may
 		// incorrectly assume that the previous default 24h was sufficient to do
@@ -275,10 +277,10 @@ var defaultZoneConfig = &ZoneConfig{
 // defaultSystemZoneConfig is the default zone configuration used when no custom
 // config has been specified for system ranges.
 var defaultSystemZoneConfig = &ZoneConfig{
-	NumReplicas:   5,
-	RangeMinBytes: 1 << 20,  // 1 MB
-	RangeMaxBytes: 64 << 20, // 64 MB
-	GC: GCPolicy{
+	NumReplicas:   proto.Int32(5),
+	RangeMinBytes: proto.Int64(1 << 20),  // 1 MB
+	RangeMaxBytes: proto.Int64(64 << 20), // 64 MB
+	GC: &GCPolicy{
 		// Use 25 hours instead of the previous 24 to make users successful by
 		// default. Users desiring to take incremental backups every 24h may
 		// incorrectly assume that the previous default 24h was sufficient to do
@@ -291,12 +293,34 @@ var defaultSystemZoneConfig = &ZoneConfig{
 	},
 }
 
+// NewZoneConfig is the zone configuration used when no custom
+// config has been specified.
+func NewZoneConfig() *ZoneConfig {
+	return &ZoneConfig{
+		InheritedConstraints:      true,
+		InheritedLeasePreferences: true,
+	}
+}
+
+// EmptyCompleteZoneConfig is the zone configuration where
+// all fields are set but set to their respective zero values.
+func EmptyCompleteZoneConfig() *ZoneConfig {
+	return &ZoneConfig{
+		NumReplicas:               proto.Int32(0),
+		RangeMinBytes:             proto.Int64(0),
+		RangeMaxBytes:             proto.Int64(0),
+		GC:                        &GCPolicy{TTLSeconds: 0},
+		InheritedConstraints:      true,
+		InheritedLeasePreferences: true,
+	}
+}
+
 // DefaultZoneConfig is the default zone configuration used when no custom
 // config has been specified.
 func DefaultZoneConfig() ZoneConfig {
 	testingLock.Lock()
 	defer testingLock.Unlock()
-	return *defaultZoneConfig
+	return *protoutil.Clone(defaultZoneConfig).(*ZoneConfig)
 }
 
 // DefaultZoneConfigRef returns a reference to the default zone config.
@@ -311,7 +335,7 @@ func DefaultZoneConfigRef() *ZoneConfig {
 func DefaultSystemZoneConfig() ZoneConfig {
 	testingLock.Lock()
 	defer testingLock.Unlock()
-	return *defaultSystemZoneConfig
+	return *protoutil.Clone(defaultSystemZoneConfig).(*ZoneConfig)
 }
 
 // TestingSetDefaultZoneConfig is a testing-only function that changes the
@@ -344,6 +368,13 @@ func TestingSetDefaultSystemZoneConfig(cfg ZoneConfig) func() {
 	}
 }
 
+// IsComplete returns whether all the fields are set.
+func (z *ZoneConfig) IsComplete() bool {
+	return ((z.NumReplicas != nil) && (z.RangeMinBytes != nil) &&
+		(z.RangeMaxBytes != nil) && (z.GC != nil) &&
+		(!z.InheritedConstraints) && (!z.InheritedLeasePreferences))
+}
+
 // Validate returns an error if the ZoneConfig specifies a known-dangerous or
 // disallowed configuration.
 func (z *ZoneConfig) Validate() error {
@@ -353,36 +384,38 @@ func (z *ZoneConfig) Validate() error {
 		}
 	}
 
-	switch {
-	case z.NumReplicas < 0:
-		return fmt.Errorf("at least one replica is required")
-	case z.NumReplicas == 0:
-		if len(z.Subzones) > 0 {
-			// NumReplicas == 0 is allowed when this ZoneConfig is a subzone
-			// placeholder. See IsSubzonePlaceholder.
-			return nil
+	if z.NumReplicas != nil {
+		switch {
+		case *z.NumReplicas < 0:
+			return fmt.Errorf("at least one replica is required")
+		case *z.NumReplicas == 0:
+			if len(z.Subzones) > 0 {
+				// NumReplicas == 0 is allowed when this ZoneConfig is a subzone
+				// placeholder. See IsSubzonePlaceholder.
+				return nil
+			}
+			return fmt.Errorf("at least one replica is required")
+		case *z.NumReplicas == 2:
+			return fmt.Errorf("at least 3 replicas are required for multi-replica configurations")
 		}
-		return fmt.Errorf("at least one replica is required")
-	case z.NumReplicas == 2:
-		return fmt.Errorf("at least 3 replicas are required for multi-replica configurations")
 	}
 
-	if z.RangeMaxBytes < minRangeMaxBytes {
+	if z.RangeMaxBytes != nil && *z.RangeMaxBytes < minRangeMaxBytes {
 		return fmt.Errorf("RangeMaxBytes %d less than minimum allowed %d",
-			z.RangeMaxBytes, minRangeMaxBytes)
+			*z.RangeMaxBytes, minRangeMaxBytes)
 	}
 
-	if z.RangeMinBytes < 0 {
-		return fmt.Errorf("RangeMinBytes %d less than minimum allowed 0", z.RangeMinBytes)
+	if z.RangeMinBytes != nil && *z.RangeMinBytes < 0 {
+		return fmt.Errorf("RangeMinBytes %d less than minimum allowed 0", *z.RangeMinBytes)
 	}
-	if z.RangeMinBytes >= z.RangeMaxBytes {
+	if z.RangeMinBytes != nil && z.RangeMaxBytes != nil && *z.RangeMinBytes >= *z.RangeMaxBytes {
 		return fmt.Errorf("RangeMinBytes %d is greater than or equal to RangeMaxBytes %d",
-			z.RangeMinBytes, z.RangeMaxBytes)
+			*z.RangeMinBytes, *z.RangeMaxBytes)
 	}
 
 	// Reserve the value 0 to potentially have some special meaning in the future,
 	// such as to disable GC.
-	if z.GC.TTLSeconds < 1 {
+	if z.GC != nil && z.GC.TTLSeconds < 1 {
 		return fmt.Errorf("GC.TTLSeconds %d less than minimum allowed 1", z.GC.TTLSeconds)
 	}
 
@@ -408,16 +441,16 @@ func (z *ZoneConfig) Validate() error {
 			for _, constraint := range constraints.Constraints {
 				// TODO(a-robinson): Relax this constraint to allow prohibited replicas,
 				// as discussed on #23014.
-				if constraint.Type != Constraint_REQUIRED && constraints.NumReplicas != z.NumReplicas {
+				if constraint.Type != Constraint_REQUIRED && z.NumReplicas != nil && constraints.NumReplicas != *z.NumReplicas {
 					return fmt.Errorf(
 						"only required constraints (prefixed with a '+') can be applied to a subset of replicas")
 				}
 			}
 		}
-		if numConstrainedRepls > int64(z.NumReplicas) {
+		if z.NumReplicas != nil && numConstrainedRepls > int64(*z.NumReplicas) {
 			return fmt.Errorf("the number of replicas specified in constraints (%d) cannot be greater "+
 				"than the number of replicas configured for the zone (%d)",
-				numConstrainedRepls, z.NumReplicas)
+				numConstrainedRepls, *z.NumReplicas)
 		}
 	}
 
@@ -434,6 +467,43 @@ func (z *ZoneConfig) Validate() error {
 	}
 
 	return nil
+}
+
+// InheritFromParent hydrates a zones missing fields from its parent.
+func (z *ZoneConfig) InheritFromParent(parent ZoneConfig) {
+	if z.NumReplicas == nil {
+		if parent.NumReplicas != nil {
+			z.NumReplicas = proto.Int32(*parent.NumReplicas)
+		}
+	}
+	if z.RangeMinBytes == nil {
+		if parent.RangeMinBytes != nil {
+			z.RangeMinBytes = proto.Int64(*parent.RangeMinBytes)
+		}
+	}
+	if z.RangeMaxBytes == nil {
+		if parent.RangeMaxBytes != nil {
+			z.RangeMaxBytes = proto.Int64(*parent.RangeMaxBytes)
+		}
+	}
+	if z.GC == nil {
+		if parent.GC != nil {
+			tempGC := *parent.GC
+			z.GC = &tempGC
+		}
+	}
+	if z.InheritedConstraints {
+		if !parent.InheritedConstraints {
+			z.Constraints = parent.Constraints
+			z.InheritedConstraints = false
+		}
+	}
+	if z.InheritedLeasePreferences {
+		if !parent.InheritedLeasePreferences {
+			z.LeasePreferences = parent.LeasePreferences
+			z.InheritedLeasePreferences = false
+		}
+	}
 }
 
 // StoreMatchesConstraint returns whether a store matches the given constraint.
@@ -476,6 +546,8 @@ func storeHasConstraint(store roachpb.StoreDescriptor, c Constraint) bool {
 // method on non-table ZoneConfigs.
 func (z *ZoneConfig) DeleteTableConfig() {
 	*z = ZoneConfig{
+		// Have to set NumReplicas to 0 so it is recognized as a placeholder.
+		NumReplicas:  proto.Int32(0),
 		Subzones:     z.Subzones,
 		SubzoneSpans: z.SubzoneSpans,
 	}
@@ -489,7 +561,7 @@ func (z *ZoneConfig) IsSubzonePlaceholder() bool {
 	// A ZoneConfig with zero replicas is otherwise invalid, so we repurpose it to
 	// indicate that a ZoneConfig is a placeholder for subzones rather than
 	// introducing a dedicated IsPlaceholder flag.
-	return z.NumReplicas == 0
+	return z.NumReplicas != nil && *z.NumReplicas == 0
 }
 
 // GetSubzone returns the most specific Subzone that applies to the specified
@@ -499,7 +571,8 @@ func (z *ZoneConfig) IsSubzonePlaceholder() bool {
 func (z *ZoneConfig) GetSubzone(indexID uint32, partition string) *Subzone {
 	for _, s := range z.Subzones {
 		if s.IndexID == indexID && s.PartitionName == partition {
-			return &s
+			copySubzone := s
+			return &copySubzone
 		}
 	}
 	if partition != "" {
@@ -517,7 +590,8 @@ func (z ZoneConfig) GetSubzoneForKeySuffix(keySuffix []byte) *Subzone {
 		// directly to keySuffix. An unset EndKey implies Key.PrefixEnd().
 		if (s.Key.Compare(keySuffix) <= 0) &&
 			((s.EndKey == nil && bytes.HasPrefix(keySuffix, s.Key)) || s.EndKey.Compare(keySuffix) > 0) {
-			return &z.Subzones[s.SubzoneIndex]
+			copySubzone := z.Subzones[s.SubzoneIndex]
+			return &copySubzone
 		}
 	}
 	return nil
