@@ -26,7 +26,8 @@ func registerTests(r *registry) {
 	registerCancel(r)
 	registerCDC(r)
 	registerClearRange(r)
-	registerClock(r)
+	registerClockJumpTests(r)
+	registerClockMonotonicTests(r)
 	registerCopy(r)
 	registerDecommission(r)
 	registerDiskFull(r)
@@ -76,6 +77,7 @@ func registerTests(r *registry) {
 	registerVersion(r)
 	registerYCSB(r)
 	registerTPCHBench(r)
+	registerXXX(r) // !!!
 }
 
 func registerBenchmarks(r *registry) {
