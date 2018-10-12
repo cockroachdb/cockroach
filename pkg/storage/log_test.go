@@ -21,6 +21,8 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
 	_ "github.com/lib/pq"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -29,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -46,7 +47,7 @@ func TestLogSplits(t *testing.T) {
 		var count int
 		err := db.QueryRowContext(ctx,
 			`SELECT count(*) FROM system.rangelog WHERE "eventType" = $1`,
-			storage.RangeLogEventType_split.String()).Scan(&count)
+			storagepb.RangeLogEventType_split.String()).Scan(&count)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -77,7 +78,7 @@ func TestLogSplits(t *testing.T) {
 	// are logged correctly)
 	rows, err := db.QueryContext(ctx,
 		`SELECT "rangeID", "otherRangeID", info FROM system.rangelog WHERE "eventType" = $1`,
-		storage.RangeLogEventType_split.String(),
+		storagepb.RangeLogEventType_split.String(),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -100,7 +101,7 @@ func TestLogSplits(t *testing.T) {
 		if !infoStr.Valid {
 			t.Errorf("info not recorded for split of range %d", rangeID)
 		}
-		var info storage.RangeLogEvent_Info
+		var info storagepb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 			t.Errorf("error unmarshalling info string for split of range %d: %s", rangeID, err)
 			continue
@@ -161,7 +162,7 @@ func TestLogMerges(t *testing.T) {
 		var count int
 		err := db.QueryRowContext(ctx,
 			`SELECT count(*) FROM system.rangelog WHERE "eventType" = $1`,
-			storage.RangeLogEventType_merge.String()).Scan(&count)
+			storagepb.RangeLogEventType_merge.String()).Scan(&count)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -196,7 +197,7 @@ func TestLogMerges(t *testing.T) {
 
 	rows, err := db.QueryContext(ctx,
 		`SELECT "rangeID", "otherRangeID", info FROM system.rangelog WHERE "eventType" = $1`,
-		storage.RangeLogEventType_merge.String(),
+		storagepb.RangeLogEventType_merge.String(),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -218,7 +219,7 @@ func TestLogMerges(t *testing.T) {
 		if !infoStr.Valid {
 			t.Errorf("info not recorded for merge of range %d", rangeID)
 		}
-		var info storage.RangeLogEvent_Info
+		var info storagepb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 			t.Errorf("error unmarshalling info string for merge of range %d: %s", rangeID, err)
 			continue
@@ -259,7 +260,7 @@ func TestLogRebalances(t *testing.T) {
 
 	// Log several fake events using the store.
 	const details = "test"
-	logEvent := func(changeType roachpb.ReplicaChangeType, reason storage.RangeLogEventReason) {
+	logEvent := func(changeType roachpb.ReplicaChangeType, reason storagepb.RangeLogEventReason) {
 		if err := db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			return store.LogReplicaChangeTest(ctx, txn, changeType, desc.Replicas[0], *desc, reason, details)
 		}); err != nil {
@@ -274,11 +275,11 @@ func TestLogRebalances(t *testing.T) {
 			t.Errorf("range removes %d != expected %d", a, e)
 		}
 	}
-	logEvent(roachpb.ADD_REPLICA, storage.ReasonRangeUnderReplicated)
+	logEvent(roachpb.ADD_REPLICA, storagepb.ReasonRangeUnderReplicated)
 	checkMetrics(1 /*add*/, 0 /*remove*/)
-	logEvent(roachpb.ADD_REPLICA, storage.ReasonRangeUnderReplicated)
+	logEvent(roachpb.ADD_REPLICA, storagepb.ReasonRangeUnderReplicated)
 	checkMetrics(2 /*adds*/, 0 /*remove*/)
-	logEvent(roachpb.REMOVE_REPLICA, storage.ReasonRangeOverReplicated)
+	logEvent(roachpb.REMOVE_REPLICA, storagepb.ReasonRangeOverReplicated)
 	checkMetrics(2 /*adds*/, 1 /*remove*/)
 
 	// Open a SQL connection to verify that the events have been logged.
@@ -294,7 +295,7 @@ func TestLogRebalances(t *testing.T) {
 	// verify that two add replica events have been logged.
 	rows, err := sqlDB.QueryContext(ctx,
 		`SELECT "rangeID", info FROM system.rangelog WHERE "eventType" = $1`,
-		storage.RangeLogEventType_add.String(),
+		storagepb.RangeLogEventType_add.String(),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -315,7 +316,7 @@ func TestLogRebalances(t *testing.T) {
 		if !infoStr.Valid {
 			t.Errorf("info not recorded for add replica of range %d", rangeID)
 		}
-		var info storage.RangeLogEvent_Info
+		var info storagepb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 			t.Errorf("error unmarshalling info string for add replica %d: %s", rangeID, err)
 			continue
@@ -327,7 +328,7 @@ func TestLogRebalances(t *testing.T) {
 			t.Errorf("recorded wrong updated replica %s for add replica of range %d, expected %s",
 				a, rangeID, e)
 		}
-		if a, e := info.Reason, storage.ReasonRangeUnderReplicated; a != e {
+		if a, e := info.Reason, storagepb.ReasonRangeUnderReplicated; a != e {
 			t.Errorf("recorded wrong reason %s for add replica of range %d, expected %s",
 				a, rangeID, e)
 		}
@@ -346,7 +347,7 @@ func TestLogRebalances(t *testing.T) {
 	// verify that one remove replica event was logged.
 	rows, err = sqlDB.QueryContext(ctx,
 		`SELECT "rangeID", info FROM system.rangelog WHERE "eventType" = $1`,
-		storage.RangeLogEventType_remove.String(),
+		storagepb.RangeLogEventType_remove.String(),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -367,7 +368,7 @@ func TestLogRebalances(t *testing.T) {
 		if !infoStr.Valid {
 			t.Errorf("info not recorded for remove replica of range %d", rangeID)
 		}
-		var info storage.RangeLogEvent_Info
+		var info storagepb.RangeLogEvent_Info
 		if err := json.Unmarshal([]byte(infoStr.String), &info); err != nil {
 			t.Errorf("error unmarshalling info string for remove replica %d: %s", rangeID, err)
 			continue
@@ -379,7 +380,7 @@ func TestLogRebalances(t *testing.T) {
 			t.Errorf("recorded wrong updated replica %s for remove replica of range %d, expected %s",
 				a, rangeID, e)
 		}
-		if a, e := info.Reason, storage.ReasonRangeOverReplicated; a != e {
+		if a, e := info.Reason, storagepb.ReasonRangeOverReplicated; a != e {
 			t.Errorf("recorded wrong reason %s for add replica of range %d, expected %s",
 				a, rangeID, e)
 		}

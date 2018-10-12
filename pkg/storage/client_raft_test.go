@@ -258,7 +258,7 @@ func TestReplicateRange(t *testing.T) {
 			StoreID: mtc.stores[1].Ident.StoreID,
 		},
 		repl.Desc(),
-		storage.ReasonRangeUnderReplicated,
+		storagepb.ReasonRangeUnderReplicated,
 		"",
 	); err != nil {
 		t.Fatal(err)
@@ -340,7 +340,7 @@ func TestRestoreReplicas(t *testing.T) {
 			StoreID: mtc.stores[1].Ident.StoreID,
 		},
 		firstRng.Desc(),
-		storage.ReasonRangeUnderReplicated,
+		storagepb.ReasonRangeUnderReplicated,
 		"",
 	); err != nil {
 		t.Fatal(err)
@@ -444,7 +444,7 @@ func TestFailedReplicaChange(t *testing.T) {
 			StoreID: mtc.stores[1].Ident.StoreID,
 		},
 		repl.Desc(),
-		storage.ReasonRangeUnderReplicated,
+		storagepb.ReasonRangeUnderReplicated,
 		"",
 	); !testutils.IsError(err, "boom") {
 		t.Fatalf("did not get expected error: %v", err)
@@ -472,7 +472,7 @@ func TestFailedReplicaChange(t *testing.T) {
 			StoreID: mtc.stores[1].Ident.StoreID,
 		},
 		repl.Desc(),
-		storage.ReasonRangeUnderReplicated,
+		storagepb.ReasonRangeUnderReplicated,
 		"",
 	); err != nil {
 		t.Fatal(err)
@@ -540,7 +540,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 			StoreID: mtc.stores[1].Ident.StoreID,
 		},
 		repl.Desc(),
-		storage.ReasonRangeUnderReplicated,
+		storagepb.ReasonRangeUnderReplicated,
 		"",
 	); err != nil {
 		t.Fatal(err)
@@ -977,7 +977,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 				StoreID: mtc.stores[2].Ident.StoreID,
 			},
 			&desc,
-			storage.ReasonRangeUnderReplicated,
+			storagepb.ReasonRangeUnderReplicated,
 			"",
 		)
 	}
@@ -1554,7 +1554,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 				StoreID: mtc.stores[storeNum].Ident.StoreID,
 			},
 			desc,
-			storage.ReasonRangeUnderReplicated,
+			storagepb.ReasonRangeUnderReplicated,
 			"",
 		)
 	}
@@ -2576,7 +2576,7 @@ func TestRemovePlaceholderRace(t *testing.T) {
 						StoreID: mtc.stores[1].Ident.StoreID,
 					},
 					repl.Desc(),
-					storage.ReasonUnknown,
+					storagepb.ReasonUnknown,
 					"",
 				); err != nil {
 					if storage.IsSnapshotError(err) {
@@ -2679,7 +2679,7 @@ func TestReplicaGCRace(t *testing.T) {
 			StoreID: toStore.Ident.StoreID,
 		},
 		repl.Desc(),
-		storage.ReasonRangeUnderReplicated,
+		storagepb.ReasonRangeUnderReplicated,
 		"",
 	); err != nil {
 		t.Fatal(err)
@@ -2737,7 +2737,7 @@ func TestReplicaGCRace(t *testing.T) {
 			StoreID: toStore.Ident.StoreID,
 		},
 		repl.Desc(),
-		storage.ReasonRangeOverReplicated,
+		storagepb.ReasonRangeOverReplicated,
 		"",
 	); err != nil {
 		t.Fatal(err)
@@ -3648,7 +3648,7 @@ func TestFailedPreemptiveSnapshot(t *testing.T) {
 		roachpb.ADD_REPLICA,
 		roachpb.ReplicationTarget{NodeID: 3, StoreID: 3},
 		rep.Desc(),
-		storage.ReasonRangeUnderReplicated,
+		storagepb.ReasonRangeUnderReplicated,
 		"",
 	); !testutils.IsError(err, expErr) {
 		t.Fatalf("expected %s; got %v", expErr, err)
@@ -3952,7 +3952,7 @@ func TestStoreRangeRemovalCompactionSuggestion(t *testing.T) {
 			StoreID: deleteStore.Ident.StoreID,
 		},
 		repl.Desc(),
-		storage.ReasonRebalance,
+		storagepb.ReasonRebalance,
 		"",
 	); err != nil {
 		t.Fatal(err)

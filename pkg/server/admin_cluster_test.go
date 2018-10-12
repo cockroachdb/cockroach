@@ -19,12 +19,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
@@ -161,7 +162,7 @@ func TestLivenessAPI(t *testing.T) {
 		if a, e := len(resp.Livenesses), tc.NumServers(); a != e {
 			return errors.Errorf("found %d liveness records, wanted %d", a, e)
 		}
-		livenessMap := make(map[roachpb.NodeID]storage.Liveness)
+		livenessMap := make(map[roachpb.NodeID]storagepb.Liveness)
 		for _, l := range resp.Livenesses {
 			livenessMap[l.NodeID] = l
 		}
@@ -183,7 +184,7 @@ func TestLivenessAPI(t *testing.T) {
 			if !ok {
 				return errors.Errorf("found no liveness status for node %d", s.NodeID())
 			}
-			if a, e := status, storage.NodeLivenessStatus_LIVE; a != e {
+			if a, e := status, storagepb.NodeLivenessStatus_LIVE; a != e {
 				return errors.Errorf(
 					"liveness status for node %s was %s, wanted %s", s.NodeID(), a, e,
 				)
