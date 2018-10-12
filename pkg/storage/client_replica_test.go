@@ -1153,8 +1153,8 @@ func TestLeaseExtensionNotBlockedByRead(t *testing.T) {
 	srv, _, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				Store: &storage.StoreTestingKnobs{
-					EvalKnobs: batcheval.TestingKnobs{
+				Store: &storagebase.StoreTestingKnobs{
+					EvalKnobs: storagebase.BatchEvalTestingKnobs{
 						TestingEvalFilter: cmdFilter,
 					},
 				},
@@ -1351,8 +1351,8 @@ func TestErrorHandlingForNonKVCommand(t *testing.T) {
 	srv, _, _ := serverutils.StartServer(t,
 		base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				Store: &storage.StoreTestingKnobs{
-					EvalKnobs: batcheval.TestingKnobs{
+				Store: &storagebase.StoreTestingKnobs{
+					EvalKnobs: storagebase.BatchEvalTestingKnobs{
 						TestingEvalFilter: cmdFilter,
 					},
 				},

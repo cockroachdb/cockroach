@@ -16,8 +16,7 @@ package tests
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 )
 
 // CreateTestServerParams creates a set of params suitable for SQL tests.
@@ -29,8 +28,8 @@ func CreateTestServerParams() (base.TestServerArgs, *CommandFilters) {
 	var cmdFilters CommandFilters
 	cmdFilters.AppendFilter(CheckEndTransactionTrigger, true)
 	params := base.TestServerArgs{}
-	params.Knobs.Store = &storage.StoreTestingKnobs{
-		EvalKnobs: batcheval.TestingKnobs{
+	params.Knobs.Store = &storagebase.StoreTestingKnobs{
+		EvalKnobs: storagebase.BatchEvalTestingKnobs{
 			TestingEvalFilter: cmdFilters.RunFilters,
 		},
 	}

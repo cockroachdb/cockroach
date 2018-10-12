@@ -25,8 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -53,8 +51,8 @@ func TestUpsertFastPath(t *testing.T) {
 	}
 
 	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{Store: &storage.StoreTestingKnobs{
-			EvalKnobs: batcheval.TestingKnobs{
+		Knobs: base.TestingKnobs{Store: &storagebase.StoreTestingKnobs{
+			EvalKnobs: storagebase.BatchEvalTestingKnobs{
 				TestingEvalFilter: filter,
 			},
 		}},

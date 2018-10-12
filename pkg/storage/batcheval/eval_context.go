@@ -18,7 +18,9 @@ import (
 	"context"
 	"fmt"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+
+	"github.com/opentracing/opentracing-go"
 	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -44,7 +46,7 @@ type Limiters struct {
 type EvalContext interface {
 	fmt.Stringer
 	ClusterSettings() *cluster.Settings
-	EvalKnobs() TestingKnobs
+	EvalKnobs() storagebase.BatchEvalTestingKnobs
 
 	// TODO(tschottdorf): available through ClusterSettings().
 	Tracer() opentracing.Tracer

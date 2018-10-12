@@ -40,8 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ui"
@@ -133,7 +133,7 @@ func TestServerStartClock(t *testing.T) {
 	// which would allow the physical clock to catch up to the pushed one.
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storage.StoreTestingKnobs{
+			Store: &storagebase.StoreTestingKnobs{
 				MaxOffset: time.Second,
 			},
 		},
@@ -316,7 +316,7 @@ func TestMultiRangeScanDeleteRange(t *testing.T) {
 
 	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storage.StoreTestingKnobs{
+			Store: &storagebase.StoreTestingKnobs{
 				// Prevent the merge queue from immediately discarding our splits.
 				DisableMergeQueue: true,
 			},
@@ -419,7 +419,7 @@ func TestMultiRangeScanWithMaxResults(t *testing.T) {
 			ctx := context.Background()
 			s, _, db := serverutils.StartServer(t, base.TestServerArgs{
 				Knobs: base.TestingKnobs{
-					Store: &storage.StoreTestingKnobs{
+					Store: &storagebase.StoreTestingKnobs{
 						// Prevent the merge queue from immediately discarding our splits.
 						DisableMergeQueue: true,
 					},

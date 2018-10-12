@@ -88,7 +88,7 @@ func (r *Replica) CheckConsistency(
 			result.Replica, expResponse.Checksum, result.Response.Checksum)
 		if expResponse.Snapshot != nil && result.Response.Snapshot != nil {
 			diff := diffRange(expResponse.Snapshot, result.Response.Snapshot)
-			if report := r.store.cfg.TestingKnobs.BadChecksumReportDiff; report != nil {
+			if report := r.store.cfg.ConsistencyTestingKnobs.BadChecksumReportDiff; report != nil {
 				report(*r.store.Ident, diff)
 			}
 			buf.WriteByte('\n')
@@ -138,7 +138,7 @@ func (r *Replica) CheckConsistency(
 	}
 
 	logFunc := log.Fatalf
-	if p := r.store.TestingKnobs().BadChecksumPanic; p != nil {
+	if p := r.store.cfg.ConsistencyTestingKnobs.BadChecksumPanic; p != nil {
 		if !args.WithDiff {
 			// We'll call this recursively with WithDiff==true; let's let that call
 			// be the one to trigger the handler.

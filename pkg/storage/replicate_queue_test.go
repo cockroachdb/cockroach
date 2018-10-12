@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -49,7 +50,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
 				Knobs: base.TestingKnobs{
-					Store: &storage.StoreTestingKnobs{
+					Store: &storagebase.StoreTestingKnobs{
 						// Prevent the merge queue from immediately discarding our splits.
 						DisableMergeQueue: true,
 					},
@@ -194,7 +195,7 @@ func TestReplicateQueueDownReplicate(t *testing.T) {
 				ScanMinIdleTime: time.Millisecond,
 				ScanMaxIdleTime: time.Millisecond,
 				Knobs: base.TestingKnobs{
-					Store: &storage.StoreTestingKnobs{
+					Store: &storagebase.StoreTestingKnobs{
 						// Prevent the merge queue from immediately discarding our splits.
 						DisableMergeQueue: true,
 					},

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -195,7 +196,7 @@ func checkServerArgsForCluster(
 		return errors.Errorf("can't set individual server stoppers when starting a cluster")
 	}
 	if args.Knobs.Store != nil {
-		storeKnobs := args.Knobs.Store.(*storage.StoreTestingKnobs)
+		storeKnobs := args.Knobs.Store.(*storagebase.StoreTestingKnobs)
 		if storeKnobs.DisableSplitQueue || storeKnobs.DisableReplicateQueue {
 			return errors.Errorf("can't disable an individual server's queues when starting a cluster; " +
 				"the cluster controls replication")
@@ -239,9 +240,9 @@ func (tc *TestCluster) doAddServer(t testing.TB, serverArgs base.TestServerArgs)
 	}
 	serverArgs.Stopper = stop.NewStopper()
 	if tc.replicationMode == base.ReplicationManual {
-		var stkCopy storage.StoreTestingKnobs
+		var stkCopy storagebase.StoreTestingKnobs
 		if stk := serverArgs.Knobs.Store; stk != nil {
-			stkCopy = *stk.(*storage.StoreTestingKnobs)
+			stkCopy = *stk.(*storagebase.StoreTestingKnobs)
 		}
 		stkCopy.DisableSplitQueue = true
 		stkCopy.DisableMergeQueue = true

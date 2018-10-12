@@ -39,8 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1298,8 +1296,8 @@ func TestReacquireLeaseOnRestart(t *testing.T) {
 
 	var clockUpdate int32
 	testKey := []byte("test_key")
-	storeTestingKnobs := &storage.StoreTestingKnobs{
-		EvalKnobs: batcheval.TestingKnobs{
+	storeTestingKnobs := &storagebase.StoreTestingKnobs{
+		EvalKnobs: storagebase.BatchEvalTestingKnobs{
 			TestingEvalFilter: cmdFilters.RunFilters,
 		},
 		DisableMaxOffsetCheck: true,
@@ -1395,8 +1393,8 @@ func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
 	var cmdFilters tests.CommandFilters
 	cmdFilters.AppendFilter(tests.CheckEndTransactionTrigger, true)
 	testKey := []byte("test_key")
-	testingKnobs := &storage.StoreTestingKnobs{
-		EvalKnobs: batcheval.TestingKnobs{
+	testingKnobs := &storagebase.StoreTestingKnobs{
+		EvalKnobs: storagebase.BatchEvalTestingKnobs{
 			TestingEvalFilter: cmdFilters.RunFilters,
 		},
 	}
@@ -1469,8 +1467,8 @@ func TestDistSQLRetryableError(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "test",
 				Knobs: base.TestingKnobs{
-					Store: &storage.StoreTestingKnobs{
-						EvalKnobs: batcheval.TestingKnobs{
+					Store: &storagebase.StoreTestingKnobs{
+						EvalKnobs: storagebase.BatchEvalTestingKnobs{
 							TestingEvalFilter: func(fArgs storagebase.FilterArgs) *roachpb.Error {
 								_, ok := fArgs.Req.(*roachpb.ScanRequest)
 								if ok && fArgs.Req.Header().Key.Equal(targetKey) && fArgs.Hdr.Txn.Epoch == 0 {

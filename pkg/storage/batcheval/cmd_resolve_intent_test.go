@@ -20,7 +20,9 @@ import (
 	"strings"
 	"testing"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+
+	"github.com/opentracing/opentracing-go"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -51,7 +53,7 @@ func (m *mockEvalCtx) String() string {
 func (m *mockEvalCtx) ClusterSettings() *cluster.Settings {
 	return m.clusterSettings
 }
-func (m *mockEvalCtx) EvalKnobs() TestingKnobs {
+func (m *mockEvalCtx) EvalKnobs() storagebase.BatchEvalTestingKnobs {
 	panic("unimplemented")
 }
 func (m *mockEvalCtx) Tracer() opentracing.Tracer {
