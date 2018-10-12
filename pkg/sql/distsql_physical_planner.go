@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -118,6 +117,12 @@ var planMergeJoins = settings.RegisterBoolSetting(
 	true,
 )
 
+// livenessProvider provides just the methods of storage.NodeLiveness that the
+// DistSQLPlanner needs, to avoid importing all of storage.
+type livenessProvider interface {
+	IsLive(roachpb.NodeID) (bool, error)
+}
+
 // NewDistSQLPlanner initializes a DistSQLPlanner.
 //
 // nodeDesc is the descriptor of the node on which this planner runs. It is used
@@ -134,7 +139,7 @@ func NewDistSQLPlanner(
 	distSender *kv.DistSender,
 	gossip *gossip.Gossip,
 	stopper *stop.Stopper,
-	liveness *storage.NodeLiveness,
+	liveness livenessProvider,
 	nodeDialer *nodedialer.Dialer,
 ) *DistSQLPlanner {
 	if liveness == nil {
