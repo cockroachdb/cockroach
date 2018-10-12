@@ -12,9 +12,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -29,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/kr/pretty"
+	mysql "vitess.io/vitess/go/vt/sqlparser"
 )
 
 var testEvalCtx = &tree.EvalContext{
@@ -264,5 +268,46 @@ func compareTables(t *testing.T, expected, got *sqlbase.TableDescriptor) {
 	}
 	if !bytes.Equal(expectedBytes, gotBytes) {
 		t.Fatalf("expected\n%+v\n, got\n%+v\ndiff: %v", expected, got, pretty.Diff(expected, got))
+	}
+}
+
+func TestMysqlValueToDatum(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	date := func(s string) tree.Datum {
+		d, err := tree.ParseDDate(s, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	ts := func(s string) tree.Datum {
+		d, err := tree.ParseDTimestamp(s, time.Microsecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	tests := []struct {
+		raw  mysql.Expr
+		typ  types.T
+		want tree.Datum
+	}{
+		{raw: mysql.NewStrVal([]byte("0000-00-00")), typ: types.Date, want: tree.DNull},
+		{raw: mysql.NewStrVal([]byte("2010-01-01")), typ: types.Date, want: date("2010-01-01")},
+		{raw: mysql.NewStrVal([]byte("0000-00-00 00:00:00")), typ: types.Timestamp, want: tree.DNull},
+		{raw: mysql.NewStrVal([]byte("2010-01-01 00:00:00")), typ: types.Timestamp, want: ts("2010-01-01 00:00:00")},
+	}
+	evalContext := tree.NewTestingEvalContext(nil)
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("%v", tc.raw), func(t *testing.T) {
+			got, err := mysqlValueToDatum(tc.raw, tc.typ, evalContext)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("got %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
