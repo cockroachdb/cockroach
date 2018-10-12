@@ -114,7 +114,7 @@ func registerInterleaved(r *registry) {
 
 		runLocality := func(name string, node nodeListOption, cmd string) {
 			m.Go(func(ctx context.Context) error {
-				l, err := c.l.ChildLogger(name)
+				l, err := t.l.ChildLogger(name)
 				if err != nil {
 					t.Fatal(err)
 				}

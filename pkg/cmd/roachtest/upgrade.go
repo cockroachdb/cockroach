@@ -329,7 +329,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 	binaryVersionUpgrade := func(newVersion string, nodes nodeListOption) versionStep {
 		return versionStep{
 			run: func() {
-				c.l.Printf("%s: binary\n", newVersion)
+				t.l.Printf("%s: binary\n", newVersion)
 				args := uploadVersion(newVersion)
 
 				// Restart nodes in a random order; otherwise node 1 would be running all
@@ -338,7 +338,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 					nodes[i], nodes[j] = nodes[j], nodes[i]
 				})
 				for _, node := range nodes {
-					c.l.Printf("%s: upgrading node %d\n", newVersion, node)
+					t.l.Printf("%s: upgrading node %d\n", newVersion, node)
 					c.Stop(ctx, c.Node(node))
 					c.Start(ctx, t, c.Node(node), args)
 
@@ -360,7 +360,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 		return versionStep{
 			clusterVersion: newVersion,
 			run: func() {
-				c.l.Printf("%s: cluster\n", newVersion)
+				t.l.Printf("%s: cluster\n", newVersion)
 
 				// hasShowSettingBug is true when we're working around
 				// https://github.com/cockroachdb/cockroach/issues/22796.
@@ -384,7 +384,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 						db := c.Conn(ctx, node)
 						defer db.Close()
 
-						c.l.Printf("%s: upgrading cluster version (node %d)\n", newVersion, node)
+						t.l.Printf("%s: upgrading cluster version (node %d)\n", newVersion, node)
 						if _, err := db.Exec(fmt.Sprintf(`SET CLUSTER SETTING version = '%s'`, newVersion)); err != nil {
 							t.Fatal(err)
 						}
@@ -392,7 +392,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 				}
 
 				if hasShowSettingBug {
-					c.l.Printf("%s: using workaround for upgrade\n", newVersion)
+					t.l.Printf("%s: using workaround for upgrade\n", newVersion)
 				}
 
 				for i := 1; i < c.nodes; i++ {
@@ -423,7 +423,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 					}
 				}
 
-				c.l.Printf("%s: cluster is upgraded\n", newVersion)
+				t.l.Printf("%s: cluster is upgraded\n", newVersion)
 
 				// TODO(nvanbenschoten): add upgrade qualification step.
 				time.Sleep(1 * time.Second)
@@ -501,12 +501,12 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 			if err == nil {
 				t.Fatalf("expected %s to fail on cluster version %s", f.name, cv)
 			}
-			c.l.Printf("%s: %s fails expected\n", cv, f.name)
+			t.l.Printf("%s: %s fails expected\n", cv, f.name)
 		} else {
 			if err != nil {
 				t.Fatalf("expected %s to succeed on cluster version %s, got %s", f.name, cv, err)
 			}
-			c.l.Printf("%s: %s works as expected\n", cv, f.name)
+			t.l.Printf("%s: %s works as expected\n", cv, f.name)
 		}
 	}
 

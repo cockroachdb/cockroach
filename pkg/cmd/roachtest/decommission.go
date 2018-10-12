@@ -138,7 +138,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("run: %s\n", stmt)
+		t.l.Printf("run: %s\n", stmt)
 	}
 
 	var m *errgroup.Group // see comment in version.go
@@ -149,7 +149,7 @@ func runDecommission(t *test, c *cluster, nodes int, duration time.Duration) {
 
 		cmd = fmt.Sprintf(cmd, nodes)
 		m.Go(func() error {
-			quietL, err := c.l.ChildLogger("kv-"+strconv.Itoa(i), quietStdout)
+			quietL, err := t.l.ChildLogger("kv-"+strconv.Itoa(i), quietStdout)
 			if err != nil {
 				return err
 			}
@@ -247,7 +247,7 @@ func registerDecommission(r *registry) {
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if local {
 				duration = 3 * time.Minute
-				c.l.Printf("running with duration=%s in local mode\n", duration)
+				t.l.Printf("running with duration=%s in local mode\n", duration)
 			}
 			runDecommission(t, c, numNodes, duration)
 		},
@@ -268,8 +268,8 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		args = append(args, extraArgs...)
 		args = append(args, "--insecure")
 		args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
-		buf, err := c.RunWithBuffer(ctx, c.l, c.Node(runNode), args...)
-		c.l.Printf("%s\n", buf)
+		buf, err := c.RunWithBuffer(ctx, t.l, c.Node(runNode), args...)
+		t.l.Printf("%s\n", buf)
 		return string(buf), err
 	}
 
@@ -340,7 +340,7 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 	}
 	waitLiveDeprecated := "--wait=live is deprecated and is treated as --wait=all"
 
-	c.l.Printf("decommissioning first node from the second, polling the status manually\n")
+	t.l.Printf("decommissioning first node from the second, polling the status manually\n")
 	retryOpts := retry.Options{
 		InitialBackoff: time.Second,
 		MaxBackoff:     5 * time.Second,
@@ -402,12 +402,12 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		}
 	}
 
-	c.l.Printf("recommissioning first node (from third node)\n")
+	t.l.Printf("recommissioning first node (from third node)\n")
 	if _, err := decommission(ctx, 3, c.Node(1), "recommission"); err != nil {
 		t.Fatalf("recommission failed: %v", err)
 	}
 
-	c.l.Printf("decommissioning second node from third, using --wait=all\n")
+	t.l.Printf("decommissioning second node from third, using --wait=all\n")
 	{
 		o, err := decommission(ctx, 3, c.Node(2),
 			"decommission", "--wait", "all", "--format", "csv")
@@ -425,12 +425,12 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		}
 	}
 
-	c.l.Printf("recommissioning second node from itself\n")
+	t.l.Printf("recommissioning second node from itself\n")
 	if _, err := decommission(ctx, 2, c.Node(2), "recommission"); err != nil {
 		t.Fatalf("recommission failed: %v", err)
 	}
 
-	c.l.Printf("decommissioning third node via `quit --decommission`\n")
+	t.l.Printf("decommissioning third node via `quit --decommission`\n")
 	func() {
 		// This should not take longer than five minutes, and if it does, it's
 		// likely stuck forever and we want to see the output.
@@ -441,14 +441,14 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 				t.Fatalf("quit --decommission failed: %s", err)
 			}
 			// TODO(tschottdorf): grep the process output for the string announcing success?
-			c.l.Errorf("WARNING: ignoring error on quit --decommission: %s\n", err)
+			t.l.Errorf("WARNING: ignoring error on quit --decommission: %s\n", err)
 		}
 	}()
 
 	// Now that the third node is down and decommissioned, decommissioning it
 	// again should be a no-op. We do it from node one but as always it doesn't
 	// matter.
-	c.l.Printf("checking that other nodes see node three as successfully decommissioned\n")
+	t.l.Printf("checking that other nodes see node three as successfully decommissioned\n")
 	{
 		o, err := decommission(ctx, 2, c.Node(3),
 			"decommission", "--format", "csv") // wait=all is implied
@@ -479,9 +479,9 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 
 	// Kill the first node and verify that we can decommission it while it's down,
 	// bringing it back up to verify that its replicas still get removed.
-	c.l.Printf("intentionally killing first node\n")
+	t.l.Printf("intentionally killing first node\n")
 	c.Stop(ctx, c.Node(1))
-	c.l.Printf("decommission first node, starting with it down but restarting it for verification\n")
+	t.l.Printf("decommission first node, starting with it down but restarting it for verification\n")
 	{
 		o, err := decommission(ctx, 2, c.Node(1),
 			"decommission", "--wait", "live")
@@ -524,13 +524,13 @@ func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
 		}
 	}()
 
-	c.l.Printf("intentionally killing first node\n")
+	t.l.Printf("intentionally killing first node\n")
 	c.Stop(ctx, c.Node(1))
 	// It is being decommissioned in absentia, meaning that its replicas are
 	// being removed due to deadness. We can't see that reflected in the output
 	// since the current mechanism gets its replica counts from what the node
 	// reports about itself, so our assertion here is somewhat weak.
-	c.l.Printf("decommission first node in absentia using --wait=live\n")
+	t.l.Printf("decommission first node in absentia using --wait=live\n")
 	{
 		o, err := decommission(ctx, 3, c.Node(1),
 			"decommission", "--wait", "live", "--format", "csv")
@@ -617,7 +617,7 @@ WHERE "eventType" IN ($1, $2) ORDER BY timestamp`,
 			"node_decommissioned", "node_recommissioned",
 		)
 		if err != nil {
-			c.l.Printf("retrying: %v\n", err)
+			t.l.Printf("retrying: %v\n", err)
 			return err
 		}
 		defer rows.Close()
