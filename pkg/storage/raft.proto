@@ -18,7 +18,7 @@ option go_package = "storage";
 
 import "roachpb/errors.proto";
 import "roachpb/metadata.proto";
-import "storage/storagebase/state.proto";
+import "storage/storagepb/state.proto";
 import "etcd/raft/raftpb/raft.proto";
 import "gogoproto/gogo.proto";
 
@@ -127,7 +127,7 @@ message SnapshotRequest {
     // field which holds the updated descriptor after the new replica
     // has been added while ReplicaState.Desc holds the descriptor
     // before the new replica has been added.
-    optional storagebase.ReplicaState state = 5 [(gogoproto.nullable) = false];
+    optional storagepb.ReplicaState state = 5 [(gogoproto.nullable) = false];
 
     // The inner raft message is of type MsgSnap, and its snapshot data contains a UUID.
     optional RaftMessageRequest raft_message_request = 2 [(gogoproto.nullable) = false];
@@ -179,7 +179,7 @@ message ConfChangeContext {
       (gogoproto.customname) = "CommandID"];
 
   // Payload is the application-level command (i.e. an encoded
-  // storagebase.RaftCommand).
+  // storagepb.RaftCommand).
   optional bytes payload = 2;
 
   // Replica contains full details about the replica being added or removed.

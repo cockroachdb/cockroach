@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -55,7 +55,7 @@ func WriteInitialReplicaState(
 ) (enginepb.MVCCStats, error) {
 	rsl := Make(st, desc.RangeID)
 
-	var s storagebase.ReplicaState
+	var s storagepb.ReplicaState
 	s.TruncatedState = &roachpb.RaftTruncatedState{
 		Term:  raftInitialLogTerm,
 		Index: raftInitialLogIndex,

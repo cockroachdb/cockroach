@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
@@ -48,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -2777,7 +2779,7 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 	// replica tombstone for the range requires that a new replica have an ID
 	// greater than 1.
 	snapHeader := &SnapshotRequest_Header{
-		State: storagebase.ReplicaState{Desc: repl1.Desc()},
+		State: storagepb.ReplicaState{Desc: repl1.Desc()},
 		RaftMessageRequest: RaftMessageRequest{
 			RangeID: 1,
 			ToReplica: roachpb.ReplicaDescriptor{
@@ -2802,7 +2804,7 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 	if err := s.processRaftSnapshotRequest(ctx, snapHeader,
 		IncomingSnapshot{
 			SnapUUID: uuid.MakeV4(),
-			State:    &storagebase.ReplicaState{Desc: repl1.Desc()},
+			State:    &storagepb.ReplicaState{Desc: repl1.Desc()},
 		}); !testutils.IsPError(err, expected) {
 		t.Fatalf("expected %s, but found %v", expected, err)
 	}
@@ -2862,7 +2864,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	// because the Raft log index and term are less than the hard state written
 	// above.
 	req := &SnapshotRequest_Header{
-		State: storagebase.ReplicaState{Desc: repl1.Desc()},
+		State: storagepb.ReplicaState{Desc: repl1.Desc()},
 		RaftMessageRequest: RaftMessageRequest{
 			RangeID: 1,
 			ToReplica: roachpb.ReplicaDescriptor{
@@ -2890,7 +2892,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	if err := s.processRaftSnapshotRequest(ctx, req,
 		IncomingSnapshot{
 			SnapUUID: uuid.MakeV4(),
-			State:    &storagebase.ReplicaState{Desc: repl1.Desc()},
+			State:    &storagepb.ReplicaState{Desc: repl1.Desc()},
 		}); err != nil {
 		t.Fatal(err)
 	}
@@ -3051,7 +3053,7 @@ func TestSendSnapshotThrottling(t *testing.T) {
 
 	header := SnapshotRequest_Header{
 		CanDecline: true,
-		State: storagebase.ReplicaState{
+		State: storagepb.ReplicaState{
 			Desc: &roachpb.RangeDescriptor{RangeID: 1},
 		},
 	}

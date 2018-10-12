@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -54,7 +55,7 @@ func entryEq(l, r raftpb.Entry) error {
 	}
 	_, lData := DecodeRaftCommand(l.Data)
 	_, rData := DecodeRaftCommand(r.Data)
-	var lc, rc storagebase.RaftCommand
+	var lc, rc storagepb.RaftCommand
 	if err := protoutil.Unmarshal(lData, &lc); err != nil {
 		return errors.Wrap(err, "unmarshalling LHS")
 	}
@@ -68,10 +69,10 @@ func entryEq(l, r raftpb.Entry) error {
 }
 
 func mkEnt(
-	v raftCommandEncodingVersion, index, term uint64, as *storagebase.ReplicatedEvalResult_AddSSTable,
+	v raftCommandEncodingVersion, index, term uint64, as *storagepb.ReplicatedEvalResult_AddSSTable,
 ) raftpb.Entry {
 	cmdIDKey := strings.Repeat("x", raftCommandIDLen)
-	var cmd storagebase.RaftCommand
+	var cmd storagepb.RaftCommand
 	cmd.ReplicatedEvalResult.AddSSTable = as
 	b, err := protoutil.Marshal(&cmd)
 	if err != nil {
@@ -375,11 +376,11 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 		expTrace string
 	}
 
-	sstFat := storagebase.ReplicatedEvalResult_AddSSTable{
+	sstFat := storagepb.ReplicatedEvalResult_AddSSTable{
 		Data:  []byte("foo"),
 		CRC32: 0, // not checked
 	}
-	sstThin := storagebase.ReplicatedEvalResult_AddSSTable{
+	sstThin := storagepb.ReplicatedEvalResult_AddSSTable{
 		CRC32: 0, // not checked
 	}
 
@@ -481,7 +482,7 @@ func TestRaftSSTableSideloadingInflight(t *testing.T) {
 	// We'll set things up so that while sideloading this entry, there
 	// unmarshaled one is already in memory (so the payload here won't even be
 	// looked at).
-	preEnts := []raftpb.Entry{mkEnt(raftVersionSideloaded, 7, 1, &storagebase.ReplicatedEvalResult_AddSSTable{
+	preEnts := []raftpb.Entry{mkEnt(raftVersionSideloaded, 7, 1, &storagepb.ReplicatedEvalResult_AddSSTable{
 		Data:  []byte("not the payload you're looking for"),
 		CRC32: 0, // not checked
 	})}
@@ -489,11 +490,11 @@ func TestRaftSSTableSideloadingInflight(t *testing.T) {
 	origBytes := []byte("compare me")
 
 	// Pretend there's an inflight command that actually has an SSTable in it.
-	var pendingCmd storagebase.RaftCommand
-	pendingCmd.ReplicatedEvalResult.AddSSTable = &storagebase.ReplicatedEvalResult_AddSSTable{
+	var pendingCmd storagepb.RaftCommand
+	pendingCmd.ReplicatedEvalResult.AddSSTable = &storagepb.ReplicatedEvalResult_AddSSTable{
 		Data: origBytes, CRC32: 0, // not checked
 	}
-	maybeCmd := func(cmdID storagebase.CmdIDKey) (storagebase.RaftCommand, bool) {
+	maybeCmd := func(cmdID storagebase.CmdIDKey) (storagepb.RaftCommand, bool) {
 		return pendingCmd, true
 	}
 
@@ -527,11 +528,11 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	noCmd := func(storagebase.CmdIDKey) (cmd storagebase.RaftCommand, ok bool) {
+	noCmd := func(storagebase.CmdIDKey) (cmd storagepb.RaftCommand, ok bool) {
 		return
 	}
 
-	addSST := storagebase.ReplicatedEvalResult_AddSSTable{
+	addSST := storagepb.ReplicatedEvalResult_AddSSTable{
 		Data: []byte("foo"), CRC32: 0, // not checked
 	}
 
@@ -794,7 +795,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 		}
 
 		var ent raftpb.Entry
-		var cmd storagebase.RaftCommand
+		var cmd storagepb.RaftCommand
 		var finalEnt raftpb.Entry
 		for _, entryBytes := range mockSender.logEntries {
 			if err := protoutil.Unmarshal(entryBytes, &ent); err != nil {

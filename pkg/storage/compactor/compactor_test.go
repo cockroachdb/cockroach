@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -117,7 +117,7 @@ func TestCompactorThresholds(t *testing.T) {
 	nowNanos := timeutil.Now().UnixNano()
 	testCases := []struct {
 		name              string
-		suggestions       []storagebase.SuggestedCompaction
+		suggestions       []storagepb.SuggestedCompaction
 		logicalBytes      int64 // logical byte count to return with store capacity
 		availableBytes    int64 // available byte count to return with store capacity
 		expBytesCompacted int64
@@ -127,10 +127,10 @@ func TestCompactorThresholds(t *testing.T) {
 		// Single suggestion under all thresholds.
 		{
 			name: "single suggestion under all thresholds",
-			suggestions: []storagebase.SuggestedCompaction{
+			suggestions: []storagepb.SuggestedCompaction{
 				{
 					StartKey: key("a"), EndKey: key("b"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default() - 1,
 						SuggestedAtNanos: nowNanos,
 					},
@@ -147,10 +147,10 @@ func TestCompactorThresholds(t *testing.T) {
 		// Single suggestion which is over absolute bytes threshold should compact.
 		{
 			name: "single suggestion over absolute threshold",
-			suggestions: []storagebase.SuggestedCompaction{
+			suggestions: []storagepb.SuggestedCompaction{
 				{
 					StartKey: key("a"), EndKey: key("b"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default(),
 						SuggestedAtNanos: nowNanos,
 					},
@@ -167,10 +167,10 @@ func TestCompactorThresholds(t *testing.T) {
 		// trigger a compaction if the span contains keys.
 		{
 			name: "outdated single suggestion over absolute threshold",
-			suggestions: []storagebase.SuggestedCompaction{
+			suggestions: []storagepb.SuggestedCompaction{
 				{
 					StartKey: key("0"), EndKey: key("9"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default(),
 						SuggestedAtNanos: nowNanos,
 					},
@@ -187,10 +187,10 @@ func TestCompactorThresholds(t *testing.T) {
 		// Single suggestion over the fractional threshold.
 		{
 			name: "single suggestion over fractional threshold",
-			suggestions: []storagebase.SuggestedCompaction{
+			suggestions: []storagepb.SuggestedCompaction{
 				{
 					StartKey: key("a"), EndKey: key("b"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            int64(fractionUsedThresh),
 						SuggestedAtNanos: nowNanos,
 					},
@@ -206,10 +206,10 @@ func TestCompactorThresholds(t *testing.T) {
 		// Single suggestion over the fractional bytes available threshold.
 		{
 			name: "single suggestion over fractional bytes available threshold",
-			suggestions: []storagebase.SuggestedCompaction{
+			suggestions: []storagepb.SuggestedCompaction{
 				{
 					StartKey: key("a"), EndKey: key("b"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            int64(fractionAvailableThresh),
 						SuggestedAtNanos: nowNanos,
 					},
@@ -225,17 +225,17 @@ func TestCompactorThresholds(t *testing.T) {
 		// Double suggestion which in aggregate exceed absolute bytes threshold.
 		{
 			name: "double suggestion over absolute threshold",
-			suggestions: []storagebase.SuggestedCompaction{
+			suggestions: []storagepb.SuggestedCompaction{
 				{
 					StartKey: key("a"), EndKey: key("b"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default() / 2,
 						SuggestedAtNanos: nowNanos,
 					},
 				},
 				{
 					StartKey: key("b"), EndKey: key("c"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default() - (thresholdBytes.Default() / 2),
 						SuggestedAtNanos: nowNanos,
 					},
@@ -251,17 +251,17 @@ func TestCompactorThresholds(t *testing.T) {
 		// Double suggestion to same span.
 		{
 			name: "double suggestion to same span over absolute threshold",
-			suggestions: []storagebase.SuggestedCompaction{
+			suggestions: []storagepb.SuggestedCompaction{
 				{
 					StartKey: key("a"), EndKey: key("b"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default() / 2,
 						SuggestedAtNanos: nowNanos,
 					},
 				},
 				{
 					StartKey: key("a"), EndKey: key("b"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default() - (thresholdBytes.Default() / 2),
 						SuggestedAtNanos: nowNanos,
 					},
@@ -277,17 +277,17 @@ func TestCompactorThresholds(t *testing.T) {
 		// Double suggestion overlapping.
 		{
 			name: "double suggestion overlapping over absolute threshold",
-			suggestions: []storagebase.SuggestedCompaction{
+			suggestions: []storagepb.SuggestedCompaction{
 				{
 					StartKey: key("a"), EndKey: key("c"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default() / 2,
 						SuggestedAtNanos: nowNanos,
 					},
 				},
 				{
 					StartKey: key("b"), EndKey: key("d"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default() - (thresholdBytes.Default() / 2),
 						SuggestedAtNanos: nowNanos,
 					},
@@ -303,17 +303,17 @@ func TestCompactorThresholds(t *testing.T) {
 		// Double suggestion which in aggregate exceeds fractional bytes threshold.
 		{
 			name: "double suggestion over fractional threshold",
-			suggestions: []storagebase.SuggestedCompaction{
+			suggestions: []storagepb.SuggestedCompaction{
 				{
 					StartKey: key("a"), EndKey: key("b"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            int64(fractionUsedThresh / 2),
 						SuggestedAtNanos: nowNanos,
 					},
 				},
 				{
 					StartKey: key("b"), EndKey: key("c"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            int64(fractionUsedThresh) - int64(fractionUsedThresh/2),
 						SuggestedAtNanos: nowNanos,
 					},
@@ -329,10 +329,10 @@ func TestCompactorThresholds(t *testing.T) {
 		// Double suggestion without excessive gap.
 		{
 			name: "double suggestion without excessive gap",
-			suggestions: []storagebase.SuggestedCompaction{
+			suggestions: []storagepb.SuggestedCompaction{
 				{
 					StartKey: key("a"), EndKey: key("b"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default() / 2,
 						SuggestedAtNanos: nowNanos,
 					},
@@ -340,7 +340,7 @@ func TestCompactorThresholds(t *testing.T) {
 				// There are only two sstables between ("b", "e") at the max level.
 				{
 					StartKey: key("e"), EndKey: key("f"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default() - (thresholdBytes.Default() / 2),
 						SuggestedAtNanos: nowNanos,
 					},
@@ -364,17 +364,17 @@ func TestCompactorThresholds(t *testing.T) {
 		// aggregator is very careful not to jump gaps that span too many SSTs.
 		{
 			name: "double suggestion over gap with live keys",
-			suggestions: []storagebase.SuggestedCompaction{
+			suggestions: []storagepb.SuggestedCompaction{
 				{
 					StartKey: key("0"), EndKey: key("4"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default() / 2,
 						SuggestedAtNanos: nowNanos,
 					},
 				},
 				{
 					StartKey: key("6"), EndKey: key("9"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default() - (thresholdBytes.Default() / 2),
 						SuggestedAtNanos: nowNanos,
 					},
@@ -390,10 +390,10 @@ func TestCompactorThresholds(t *testing.T) {
 		// Double suggestion with excessive gap.
 		{
 			name: "double suggestion with excessive gap",
-			suggestions: []storagebase.SuggestedCompaction{
+			suggestions: []storagepb.SuggestedCompaction{
 				{
 					StartKey: key("a"), EndKey: key("b"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default() / 2,
 						SuggestedAtNanos: nowNanos,
 					},
@@ -401,7 +401,7 @@ func TestCompactorThresholds(t *testing.T) {
 				// There are three sstables between ("b", "h0") at the max level.
 				{
 					StartKey: key("h0"), EndKey: key("i"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default() - (thresholdBytes.Default() / 2),
 						SuggestedAtNanos: nowNanos,
 					},
@@ -419,10 +419,10 @@ func TestCompactorThresholds(t *testing.T) {
 		// Double suggestion with excessive gap, but both over absolute threshold.
 		{
 			name: "double suggestion with excessive gap but both over threshold",
-			suggestions: []storagebase.SuggestedCompaction{
+			suggestions: []storagepb.SuggestedCompaction{
 				{
 					StartKey: key("a"), EndKey: key("b"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default(),
 						SuggestedAtNanos: nowNanos,
 					},
@@ -430,7 +430,7 @@ func TestCompactorThresholds(t *testing.T) {
 				// There are three sstables between ("b", "h0") at the max level.
 				{
 					StartKey: key("h0"), EndKey: key("i"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default(),
 						SuggestedAtNanos: nowNanos,
 					},
@@ -447,10 +447,10 @@ func TestCompactorThresholds(t *testing.T) {
 		// Double suggestion with excessive gap, with just one over absolute threshold.
 		{
 			name: "double suggestion with excessive gap but one over threshold",
-			suggestions: []storagebase.SuggestedCompaction{
+			suggestions: []storagepb.SuggestedCompaction{
 				{
 					StartKey: key("a"), EndKey: key("b"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default(),
 						SuggestedAtNanos: nowNanos,
 					},
@@ -458,7 +458,7 @@ func TestCompactorThresholds(t *testing.T) {
 				// There are three sstables between ("b", "h0") at the max level.
 				{
 					StartKey: key("h0"), EndKey: key("i"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default() - 1,
 						SuggestedAtNanos: nowNanos,
 					},
@@ -477,31 +477,31 @@ func TestCompactorThresholds(t *testing.T) {
 		// Quadruple suggestion which can be aggregated into a single compaction.
 		{
 			name: "quadruple suggestion which aggregates",
-			suggestions: []storagebase.SuggestedCompaction{
+			suggestions: []storagepb.SuggestedCompaction{
 				{
 					StartKey: key("a"), EndKey: key("b"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default() / 4,
 						SuggestedAtNanos: nowNanos,
 					},
 				},
 				{
 					StartKey: key("e"), EndKey: key("f0"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default() / 4,
 						SuggestedAtNanos: nowNanos,
 					},
 				},
 				{
 					StartKey: key("g"), EndKey: key("q"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default() / 4,
 						SuggestedAtNanos: nowNanos,
 					},
 				},
 				{
 					StartKey: key("y"), EndKey: key("zzz"),
-					Compaction: storagebase.Compaction{
+					Compaction: storagepb.Compaction{
 						Bytes:            thresholdBytes.Default() - 3*(thresholdBytes.Default()/4),
 						SuggestedAtNanos: nowNanos,
 					},
@@ -635,9 +635,9 @@ func TestCompactorProcessingInitialization(t *testing.T) {
 	// Add a suggested compaction -- this won't get processed by this
 	// compactor for an hour.
 	minInterval.Override(&compactor.st.SV, time.Hour)
-	compactor.Suggest(context.Background(), storagebase.SuggestedCompaction{
+	compactor.Suggest(context.Background(), storagepb.SuggestedCompaction{
 		StartKey: key("a"), EndKey: key("b"),
-		Compaction: storagebase.Compaction{
+		Compaction: storagepb.Compaction{
 			Bytes:            thresholdBytes.Default(),
 			SuggestedAtNanos: timeutil.Now().UnixNano(),
 		},
@@ -687,9 +687,9 @@ func TestCompactorCleansUpOldRecords(t *testing.T) {
 
 	// Add a suggested compaction that won't get processed because it's
 	// not over any of the thresholds.
-	compactor.Suggest(context.Background(), storagebase.SuggestedCompaction{
+	compactor.Suggest(context.Background(), storagepb.SuggestedCompaction{
 		StartKey: key("a"), EndKey: key("b"),
-		Compaction: storagebase.Compaction{
+		Compaction: storagepb.Compaction{
 			Bytes:            thresholdBytes.Default() - 1,
 			SuggestedAtNanos: timeutil.Now().UnixNano(),
 		},
@@ -736,9 +736,9 @@ func TestCompactorDisabled(t *testing.T) {
 	thresholdBytesUsedFraction.Override(&compactor.st.SV, 0.0)               // disable
 	defer cleanup()
 
-	compactor.Suggest(context.Background(), storagebase.SuggestedCompaction{
+	compactor.Suggest(context.Background(), storagepb.SuggestedCompaction{
 		StartKey: key("a"), EndKey: key("b"),
-		Compaction: storagebase.Compaction{
+		Compaction: storagepb.Compaction{
 			// Suggest so little that this suggestion plus the one below stays below
 			// the threshold. Otherwise this test gets racy and difficult to fix
 			// without remodeling the compactor.
@@ -749,12 +749,12 @@ func TestCompactorDisabled(t *testing.T) {
 
 	enabled.Override(&compactor.st.SV, false)
 
-	compactor.Suggest(context.Background(), storagebase.SuggestedCompaction{
+	compactor.Suggest(context.Background(), storagepb.SuggestedCompaction{
 		// Note that we don't reuse the same interval above or we hit another race,
 		// in which the compactor discards the first suggestion and wipes out the
 		// second one with it, without incrementing the discarded metric.
 		StartKey: key("b"), EndKey: key("c"),
-		Compaction: storagebase.Compaction{
+		Compaction: storagepb.Compaction{
 			Bytes:            threshold / 3,
 			SuggestedAtNanos: timeutil.Now().UnixNano(),
 		},

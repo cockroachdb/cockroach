@@ -30,8 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
-
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
@@ -54,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -770,12 +769,12 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 	invalidLease.Sequence++
 	invalidLease.Replica.StoreID += 12345
 
-	raftCmd := storagebase.RaftCommand{
+	raftCmd := storagepb.RaftCommand{
 		ProposerLeaseSequence: lease.Sequence,
 		ProposerReplica:       invalidLease.Replica,
-		ReplicatedEvalResult: storagebase.ReplicatedEvalResult{
+		ReplicatedEvalResult: storagepb.ReplicatedEvalResult{
 			IsLeaseRequest: true,
-			State: &storagebase.ReplicaState{
+			State: &storagepb.ReplicaState{
 				Lease: &invalidLease,
 			},
 		},
