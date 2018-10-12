@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
+	"github.com/gogo/protobuf/proto"
 )
 
 func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, string, func()) {
@@ -49,7 +50,9 @@ func setupExportableBank(t *testing.T, nodes, rows int) (*sqlutils.SQLRunner, st
 		t.Fatal(err)
 	}
 	last := uint32(v.ValueInt())
-	config.TestingSetZoneConfig(last+1, config.ZoneConfig{RangeMaxBytes: 5000})
+	zoneConfig := config.DefaultZoneConfig()
+	zoneConfig.RangeMaxBytes = proto.Int64(5000)
+	config.TestingSetZoneConfig(last+1, zoneConfig)
 	if err := workload.Split(ctx, db.DB, wk.Tables()[0], 1 /* concurrency */); err != nil {
 		t.Fatal(err)
 	}

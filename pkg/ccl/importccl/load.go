@@ -55,7 +55,7 @@ func Load(
 	tempPrefix string,
 ) (backupccl.BackupDescriptor, error) {
 	if loadChunkBytes == 0 {
-		loadChunkBytes = config.DefaultZoneConfig().RangeMaxBytes / 2
+		loadChunkBytes = *config.DefaultZoneConfig().RangeMaxBytes / 2
 	}
 
 	var txCtx transform.ExprTransformContext

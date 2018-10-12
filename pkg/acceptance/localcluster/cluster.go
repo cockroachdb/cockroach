@@ -34,6 +34,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	// Import postgres driver.
 	_ "github.com/lib/pq"
@@ -375,8 +376,8 @@ func (c *Cluster) isReplicated() (bool, string) {
 // UpdateZoneConfig updates the default zone config for the cluster.
 func (c *Cluster) UpdateZoneConfig(rangeMinBytes, rangeMaxBytes int64) {
 	zone := config.DefaultZoneConfig()
-	zone.RangeMinBytes = rangeMinBytes
-	zone.RangeMaxBytes = rangeMaxBytes
+	zone.RangeMinBytes = proto.Int64(rangeMinBytes)
+	zone.RangeMaxBytes = proto.Int64(rangeMaxBytes)
 
 	buf, err := protoutil.Marshal(&zone)
 	if err != nil {

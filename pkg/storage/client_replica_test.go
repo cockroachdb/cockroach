@@ -1613,9 +1613,8 @@ func TestSystemZoneConfigs(t *testing.T) {
 	expectedUserRanges := tc.Servers[0].ExpectedInitialUserRangeCount()
 
 	expectedSystemRanges -= expectedUserRanges
-	expectedReplicas := expectedSystemRanges*int(config.DefaultSystemZoneConfig().NumReplicas) +
-		expectedUserRanges*int(config.DefaultZoneConfig().NumReplicas)
-
+	expectedReplicas := expectedSystemRanges*int(*config.DefaultSystemZoneConfig().NumReplicas) +
+		expectedUserRanges*int(*config.DefaultZoneConfig().NumReplicas)
 	waitForReplicas := func() error {
 		var conflictingID roachpb.RangeID
 		replicas := make(map[roachpb.RangeID]int)

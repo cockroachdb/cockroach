@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	yaml "gopkg.in/yaml.v2"
 
@@ -180,7 +181,8 @@ func (t *partitioningTest) parse() error {
 		if err := yaml.UnmarshalStrict([]byte("["+constraints+"]"), &parsedConstraints); err != nil {
 			return errors.Wrapf(err, "parsing constraints: %s", constraints)
 		}
-		subzone.Config.Constraints = ([]config.Constraints)(parsedConstraints)
+		subzone.Config.Constraints = parsedConstraints.Constraints
+		subzone.Config.InheritedConstraints = parsedConstraints.Inherited
 
 		t.parsed.subzones = append(t.parsed.subzones, subzone)
 	}
@@ -1097,7 +1099,7 @@ func verifyScansOnNode(db *gosql.DB, query string, node string) error {
 
 func setupPartitioningTestCluster(ctx context.Context, t testing.TB) (*sqlutils.SQLRunner, func()) {
 	cfg := config.DefaultZoneConfig()
-	cfg.NumReplicas = 1
+	cfg.NumReplicas = proto.Int32(1)
 	resetZoneConfig := config.TestingSetDefaultZoneConfig(cfg)
 
 	tsArgs := func(attr string) base.TestServerArgs {

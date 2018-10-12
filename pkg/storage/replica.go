@@ -1233,14 +1233,14 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 func (r *Replica) GetMinBytes() int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.zone.RangeMinBytes
+	return *r.mu.zone.RangeMinBytes
 }
 
 // GetMaxBytes gets the replica's maximum byte threshold.
 func (r *Replica) GetMaxBytes() int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.mu.zone.RangeMaxBytes
+	return *r.mu.zone.RangeMaxBytes
 }
 
 // SetZoneConfig sets the replica's zone config.
@@ -1917,7 +1917,7 @@ func (r *Replica) State() storagebase.RangeInfo {
 	if r.mu.proposalQuota != nil {
 		ri.ApproximateProposalQuota = r.mu.proposalQuota.approximateQuota()
 	}
-	ri.RangeMaxBytes = r.mu.zone.RangeMaxBytes
+	ri.RangeMaxBytes = *r.mu.zone.RangeMaxBytes
 	return ri
 }
 
@@ -6875,11 +6875,11 @@ func (r *Replica) needsSplitBySizeRLocked() bool {
 }
 
 func (r *Replica) needsMergeBySizeRLocked() bool {
-	return r.mu.state.Stats.Total() < r.mu.zone.RangeMinBytes
+	return r.mu.state.Stats.Total() < *r.mu.zone.RangeMinBytes
 }
 
 func (r *Replica) exceedsMultipleOfSplitSizeRLocked(mult float64) bool {
-	maxBytes := r.mu.zone.RangeMaxBytes
+	maxBytes := *r.mu.zone.RangeMaxBytes
 	size := r.mu.state.Stats.Total()
 	return maxBytes > 0 && float64(size) > float64(maxBytes)*mult
 }
@@ -7019,7 +7019,7 @@ func calcReplicaMetrics(
 	m.Ticking = ticking
 
 	m.RangeCounter, m.Unavailable, m.Underreplicated =
-		calcRangeCounter(storeID, desc, livenessMap, zone.NumReplicas, availableNodes)
+		calcRangeCounter(storeID, desc, livenessMap, *zone.NumReplicas, availableNodes)
 
 	// The raft leader computes the number of raft entries that replicas are
 	// behind.

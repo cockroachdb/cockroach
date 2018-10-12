@@ -311,7 +311,7 @@ func (rq *replicateQueue) processOneChange(
 		}
 
 		availableNodes := rq.allocator.storePool.AvailableNodeCount()
-		need := GetNeededReplicas(zone.NumReplicas, availableNodes)
+		need := GetNeededReplicas(*zone.NumReplicas, availableNodes)
 		willHave := len(desc.Replicas) + 1
 
 		// Only up-replicate if there are suitable allocation targets such

@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/gogo/protobuf/proto"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -44,8 +45,8 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 		return keys.MakeTablePrefix(keys.MaxReservedDescID + i)
 	}
 
-	config.TestingSetZoneConfig(keys.MaxReservedDescID+1, config.ZoneConfig{})
-	config.TestingSetZoneConfig(keys.MaxReservedDescID+2, config.ZoneConfig{})
+	config.TestingSetZoneConfig(keys.MaxReservedDescID+1, *config.NewZoneConfig())
+	config.TestingSetZoneConfig(keys.MaxReservedDescID+2, *config.NewZoneConfig())
 
 	type testCase struct {
 		startKey, endKey []byte
@@ -152,7 +153,9 @@ func TestMergeQueueShouldQueue(t *testing.T) {
 			repl := &Replica{}
 			repl.mu.state.Desc = &roachpb.RangeDescriptor{StartKey: tc.startKey, EndKey: tc.endKey}
 			repl.mu.state.Stats = &enginepb.MVCCStats{KeyBytes: tc.bytes}
-			repl.SetZoneConfig(&config.ZoneConfig{RangeMinBytes: tc.minBytes})
+			zoneConfig := config.DefaultZoneConfig()
+			zoneConfig.RangeMinBytes = proto.Int64(tc.minBytes)
+			repl.SetZoneConfig(&zoneConfig)
 			shouldQ, priority := mq.shouldQueue(ctx, hlc.Timestamp{}, repl, config.NewSystemConfig())
 			if tc.expShouldQ != shouldQ {
 				t.Errorf("incorrect shouldQ: expected %v but got %v", tc.expShouldQ, shouldQ)

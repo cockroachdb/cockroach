@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 )
 
@@ -35,7 +36,7 @@ func TestShowTraceReplica(t *testing.T) {
 	const numNodes = 4
 
 	cfg := config.DefaultZoneConfig()
-	cfg.NumReplicas = 1
+	cfg.NumReplicas = proto.Int32(1)
 	defer config.TestingSetDefaultZoneConfig(cfg)()
 	defer config.TestingSetDefaultSystemZoneConfig(cfg)()
 

@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
+	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -899,7 +900,9 @@ func TestBackupRestoreControlJob(t *testing.T) {
 			t.Fatal(err)
 		}
 		last := uint32(v.ValueInt())
-		config.TestingSetZoneConfig(last+1, config.ZoneConfig{RangeMaxBytes: 5000})
+		zoneConfig := config.DefaultZoneConfig()
+		zoneConfig.RangeMaxBytes = proto.Int64(5000)
+		config.TestingSetZoneConfig(last+1, zoneConfig)
 	}
 	const numAccounts = 1000
 	_, _, outerDB, _, cleanup := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, init, params)

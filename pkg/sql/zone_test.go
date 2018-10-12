@@ -42,7 +42,9 @@ func TestValidSetShowZones(t *testing.T) {
 	yamlDefault := fmt.Sprintf("gc: {ttlseconds: %d}", config.DefaultZoneConfig().GC.TTLSeconds)
 	yamlOverride := "gc: {ttlseconds: 42}"
 	zoneOverride := config.DefaultZoneConfig()
-	zoneOverride.GC.TTLSeconds = 42
+	zoneOverride.GC = &config.GCPolicy{TTLSeconds: 42}
+	partialZoneOverride := *config.NewZoneConfig()
+	partialZoneOverride.GC = &config.GCPolicy{TTLSeconds: 42}
 
 	defaultRow := sqlutils.ZoneRow{
 		ID:           keys.RootNamespaceID,
@@ -81,6 +83,34 @@ func TestValidSetShowZones(t *testing.T) {
 		Config:       zoneOverride,
 	}
 
+	// Partially filled config rows
+	partialMetaRow := sqlutils.ZoneRow{
+		ID:           keys.MetaRangesID,
+		CLISpecifier: ".meta",
+		Config:       partialZoneOverride,
+	}
+	partialSystemRow := sqlutils.ZoneRow{
+		ID:           keys.SystemDatabaseID,
+		CLISpecifier: "system",
+		Config:       partialZoneOverride,
+	}
+	partialJobsRow := sqlutils.ZoneRow{
+		ID:           keys.JobsTableID,
+		CLISpecifier: "system.jobs",
+		Config:       partialZoneOverride,
+	}
+	dbDescID = uint32(keys.MinNonPredefinedUserDescID)
+	partialDbRow := sqlutils.ZoneRow{
+		ID:           dbDescID,
+		CLISpecifier: "d",
+		Config:       partialZoneOverride,
+	}
+	partialTableRow := sqlutils.ZoneRow{
+		ID:           dbDescID + 1,
+		CLISpecifier: "d.t",
+		Config:       partialZoneOverride,
+	}
+
 	// Remove stock zone configs installed at cluster bootstrap. Otherwise this
 	// test breaks whenever these stock zone configs are adjusted.
 	sqlutils.RemoveAllZoneConfigs(t, sqlDB)
@@ -97,7 +127,7 @@ func TestValidSetShowZones(t *testing.T) {
 	// Ensure a database zone config applies to that database and its tables, and
 	// no other zones.
 	sqlutils.SetZoneConfig(t, sqlDB, "DATABASE d", yamlOverride)
-	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, dbRow)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, partialDbRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE meta", defaultRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE system", defaultRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE system.lease", defaultRow)
@@ -106,7 +136,7 @@ func TestValidSetShowZones(t *testing.T) {
 
 	// Ensure a table zone config applies to that table and no others.
 	sqlutils.SetZoneConfig(t, sqlDB, "TABLE d.t", yamlOverride)
-	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, dbRow, tableRow)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, partialDbRow, partialTableRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE meta", defaultRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE system", defaultRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE system.lease", defaultRow)
@@ -115,7 +145,7 @@ func TestValidSetShowZones(t *testing.T) {
 
 	// Ensure a named zone config applies to that named zone and no others.
 	sqlutils.SetZoneConfig(t, sqlDB, "RANGE meta", yamlOverride)
-	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, metaRow, dbRow, tableRow)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, partialMetaRow, partialDbRow, partialTableRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE meta", metaRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE system", defaultRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE system.lease", defaultRow)
@@ -125,7 +155,7 @@ func TestValidSetShowZones(t *testing.T) {
 	// Ensure updating the default zone propagates to zones without an override,
 	// but not to those with overrides.
 	sqlutils.SetZoneConfig(t, sqlDB, "RANGE default", yamlOverride)
-	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, metaRow, dbRow, tableRow)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, partialMetaRow, partialDbRow, partialTableRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "RANGE meta", metaRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE system", defaultOverrideRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE system.lease", defaultOverrideRow)
@@ -135,13 +165,13 @@ func TestValidSetShowZones(t *testing.T) {
 	// Ensure deleting a database deletes only the database zone, and not the
 	// table zone.
 	sqlutils.DeleteZoneConfig(t, sqlDB, "DATABASE d")
-	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, metaRow, tableRow)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, partialMetaRow, partialTableRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE d", defaultOverrideRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", tableRow)
 
 	// Ensure deleting a table zone works.
 	sqlutils.DeleteZoneConfig(t, sqlDB, "TABLE d.t")
-	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, metaRow)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, partialMetaRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE d.t", defaultOverrideRow)
 
 	// Ensure deleting a named zone works.
@@ -168,7 +198,7 @@ func TestValidSetShowZones(t *testing.T) {
 	// Ensure the system database zone can be configured, even though zones on
 	// config tables are disallowed.
 	sqlutils.SetZoneConfig(t, sqlDB, "DATABASE system", yamlOverride)
-	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, systemRow)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, partialSystemRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "DATABASE system", systemRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE system.namespace", systemRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE system.jobs", systemRow)
@@ -176,7 +206,7 @@ func TestValidSetShowZones(t *testing.T) {
 	// Ensure zones for non-config tables in the system database can be
 	// configured.
 	sqlutils.SetZoneConfig(t, sqlDB, "TABLE system.jobs", yamlOverride)
-	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, systemRow, jobsRow)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultRow, partialSystemRow, partialJobsRow)
 	sqlutils.VerifyZoneConfigForTarget(t, sqlDB, "TABLE system.jobs", jobsRow)
 
 	// Verify that the session database is respected.
@@ -208,7 +238,7 @@ func TestValidSetShowZones(t *testing.T) {
 	if !testutils.IsError(err, `relation "d.t" does not exist`) {
 		t.Errorf("expected SHOW ZONE CONFIGURATION to fail on dropped table, but got %q", err)
 	}
-	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, systemRow, jobsRow)
+	sqlutils.VerifyAllZoneConfigs(t, sqlDB, defaultOverrideRow, partialSystemRow, partialJobsRow)
 }
 
 func TestInvalidSetShowZones(t *testing.T) {

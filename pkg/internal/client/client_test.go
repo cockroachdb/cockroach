@@ -412,10 +412,10 @@ func TestClientGetAndPutProto(t *testing.T) {
 	db := createTestClient(t, s)
 
 	zoneConfig := config.ZoneConfig{
-		NumReplicas:   2,
+		NumReplicas:   proto.Int32(2),
 		Constraints:   []config.Constraints{{Constraints: []config.Constraint{{Value: "mem"}}}},
-		RangeMinBytes: 1 << 10, // 1k
-		RangeMaxBytes: 1 << 18, // 256k
+		RangeMinBytes: proto.Int64(1 << 10), // 1k
+		RangeMaxBytes: proto.Int64(1 << 18), // 256k
 	}
 
 	key := roachpb.Key(testUser + "/zone-config")

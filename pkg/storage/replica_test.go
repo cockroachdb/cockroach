@@ -9284,7 +9284,8 @@ func TestReplicaMetrics(t *testing.T) {
 
 	for i, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			zoneConfig := config.ZoneConfig{NumReplicas: c.replicas}
+			zoneConfig := config.DefaultZoneConfig()
+			zoneConfig.NumReplicas = proto.Int32(c.replicas)
 			defer config.TestingSetDefaultZoneConfig(zoneConfig)()
 
 			// Alternate between quiescent and non-quiescent replicas to test the

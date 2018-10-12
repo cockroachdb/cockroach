@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
@@ -1468,18 +1469,18 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 		expMaxBytes int64
 	}{
 		{store.LookupReplica(roachpb.RKeyMin),
-			config.DefaultZoneConfig().RangeMaxBytes},
+			*config.DefaultZoneConfig().RangeMaxBytes},
 		{splitTestRange(store, roachpb.RKeyMin, keys.MakeTablePrefix(baseID), t),
 			1 << 20},
 		{splitTestRange(store, keys.MakeTablePrefix(baseID), keys.MakeTablePrefix(baseID+1), t),
-			config.DefaultZoneConfig().RangeMaxBytes},
+			*config.DefaultZoneConfig().RangeMaxBytes},
 		{splitTestRange(store, keys.MakeTablePrefix(baseID+1), keys.MakeTablePrefix(baseID+2), t),
 			2 << 20},
 	}
 
 	// Set zone configs.
-	config.TestingSetZoneConfig(baseID, config.ZoneConfig{RangeMaxBytes: 1 << 20})
-	config.TestingSetZoneConfig(baseID+2, config.ZoneConfig{RangeMaxBytes: 2 << 20})
+	config.TestingSetZoneConfig(baseID, config.ZoneConfig{RangeMaxBytes: proto.Int64(1 << 20)})
+	config.TestingSetZoneConfig(baseID+2, config.ZoneConfig{RangeMaxBytes: proto.Int64(2 << 20)})
 
 	// Despite faking the zone configs, we still need to have a system config
 	// entry so that the store picks up the new zone configs. This new system

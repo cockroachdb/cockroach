@@ -607,7 +607,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 
 	// Apply zone configuration to database and check again.
 	dbZone := config.ZoneConfig{
-		RangeMinBytes: 456,
+		RangeMinBytes: proto.Int64(456),
 	}
 	setZone(dbZone, idPath[1])
 	verifyDbZone(dbZone, serverpb.ZoneConfigurationLevel_DATABASE)
@@ -615,7 +615,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 
 	// Apply zone configuration to table and check again.
 	tblZone := config.ZoneConfig{
-		RangeMinBytes: 789,
+		RangeMinBytes: proto.Int64(789),
 	}
 	setZone(tblZone, idPath[2])
 	verifyDbZone(dbZone, serverpb.ZoneConfigurationLevel_DATABASE)

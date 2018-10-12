@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strings"
 
+	proto "github.com/gogo/protobuf/proto"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -68,7 +69,10 @@ func (c *Constraints) UnmarshalYAML(unmarshal func(interface{}) error) error {
 
 // ConstraintsList is an alias for a slice of Constraints that can be
 // properly marshaled to/from YAML.
-type ConstraintsList []Constraints
+type ConstraintsList struct {
+	Constraints []Constraints
+	Inherited   bool
+}
 
 var _ yaml.Marshaler = ConstraintsList{}
 var _ yaml.Unmarshaler = &ConstraintsList{}
@@ -85,12 +89,12 @@ var _ yaml.Unmarshaler = &ConstraintsList{}
 func (c ConstraintsList) MarshalYAML() (interface{}, error) {
 	// If per-replica Constraints aren't in use, marshal everything into a list
 	// for compatibility with pre-2.0-style configs.
-	if len(c) == 0 {
+	if c.Inherited || len(c.Constraints) == 0 {
 		return []string{}, nil
 	}
-	if len(c) == 1 && c[0].NumReplicas == 0 {
-		short := make([]string, len(c[0].Constraints))
-		for i, constraint := range c[0].Constraints {
+	if len(c.Constraints) == 1 && c.Constraints[0].NumReplicas == 0 {
+		short := make([]string, len(c.Constraints[0].Constraints))
+		for i, constraint := range c.Constraints[0].Constraints {
 			short[i] = constraint.String()
 		}
 		return short, nil
@@ -98,7 +102,7 @@ func (c ConstraintsList) MarshalYAML() (interface{}, error) {
 
 	// Otherwise, convert into a map from Constraints to NumReplicas.
 	constraintsMap := make(map[string]int32)
-	for _, constraints := range c {
+	for _, constraints := range c.Constraints {
 		short := make([]string, len(constraints.Constraints))
 		for i, constraint := range constraints.Constraints {
 			short[i] = constraint.String()
@@ -114,6 +118,7 @@ func (c *ConstraintsList) UnmarshalYAML(unmarshal func(interface{}) error) error
 	// unmarshaling the legacy Constraints format, which is just a list of
 	// strings.
 	var strs []string
+	c.Inherited = true
 	if err := unmarshal(&strs); err == nil {
 		constraints := make([]Constraint, len(strs))
 		for i, short := range strs {
@@ -122,14 +127,16 @@ func (c *ConstraintsList) UnmarshalYAML(unmarshal func(interface{}) error) error
 			}
 		}
 		if len(constraints) == 0 {
-			*c = []Constraints{}
+			c.Constraints = []Constraints{}
+			c.Inherited = false
 		} else {
-			*c = []Constraints{
+			c.Constraints = []Constraints{
 				{
 					Constraints: constraints,
 					NumReplicas: 0,
 				},
 			}
+			c.Inherited = false
 		}
 		return nil
 	}
@@ -180,7 +187,8 @@ func (c *ConstraintsList) UnmarshalYAML(unmarshal func(interface{}) error) error
 		return constraintsList[i].NumReplicas < constraintsList[j].NumReplicas
 	})
 
-	*c = constraintsList
+	c.Constraints = constraintsList
+	c.Inherited = false
 	return nil
 }
 
@@ -193,10 +201,10 @@ func (c *ConstraintsList) UnmarshalYAML(unmarshal func(interface{}) error) error
 //
 // TODO(a-robinson,v2.2): Remove the experimental_lease_preferences field.
 type marshalableZoneConfig struct {
-	RangeMinBytes                int64             `json:"range_min_bytes" yaml:"range_min_bytes"`
-	RangeMaxBytes                int64             `json:"range_max_bytes" yaml:"range_max_bytes"`
-	GC                           GCPolicy          `json:"gc"`
-	NumReplicas                  int32             `json:"num_replicas" yaml:"num_replicas"`
+	RangeMinBytes                *int64            `json:"range_min_bytes" yaml:"range_min_bytes"`
+	RangeMaxBytes                *int64            `json:"range_max_bytes" yaml:"range_max_bytes"`
+	GC                           *GCPolicy         `json:"gc"`
+	NumReplicas                  *int32            `json:"num_replicas" yaml:"num_replicas"`
 	Constraints                  ConstraintsList   `json:"constraints" yaml:"constraints,flow"`
 	LeasePreferences             []LeasePreference `json:"lease_preferences" yaml:"lease_preferences,flow"`
 	ExperimentalLeasePreferences []LeasePreference `json:"experimental_lease_preferences" yaml:"experimental_lease_preferences,flow,omitempty"`
@@ -206,14 +214,23 @@ type marshalableZoneConfig struct {
 
 func zoneConfigToMarshalable(c ZoneConfig) marshalableZoneConfig {
 	var m marshalableZoneConfig
-	m.RangeMinBytes = c.RangeMinBytes
-	m.RangeMaxBytes = c.RangeMaxBytes
-	m.GC = c.GC
-	if c.NumReplicas != 0 {
-		m.NumReplicas = c.NumReplicas
+	if c.RangeMinBytes != nil {
+		m.RangeMinBytes = proto.Int64(*c.RangeMinBytes)
 	}
-	m.Constraints = ConstraintsList(c.Constraints)
-	m.LeasePreferences = c.LeasePreferences
+	if c.RangeMaxBytes != nil {
+		m.RangeMaxBytes = proto.Int64(*c.RangeMaxBytes)
+	}
+	if c.GC != nil {
+		tempGC := *c.GC
+		m.GC = &tempGC
+	}
+	if c.NumReplicas != nil && *c.NumReplicas != 0 {
+		m.NumReplicas = proto.Int32(*c.NumReplicas)
+	}
+	m.Constraints = ConstraintsList{c.Constraints, c.InheritedConstraints}
+	if !c.InheritedLeasePreferences {
+		m.LeasePreferences = c.LeasePreferences
+	}
 	// We intentionally do not round-trip ExperimentalLeasePreferences. We never
 	// want to return yaml containing it.
 	m.Subzones = c.Subzones
@@ -221,14 +238,29 @@ func zoneConfigToMarshalable(c ZoneConfig) marshalableZoneConfig {
 	return m
 }
 
-func zoneConfigFromMarshalable(m marshalableZoneConfig) ZoneConfig {
-	var c ZoneConfig
-	c.RangeMinBytes = m.RangeMinBytes
-	c.RangeMaxBytes = m.RangeMaxBytes
-	c.GC = m.GC
-	c.NumReplicas = m.NumReplicas
-	c.Constraints = []Constraints(m.Constraints)
-	c.LeasePreferences = m.LeasePreferences
+// zoneConfigFromMarshalable returns a ZoneConfig from the marshaled struct
+// NOTE: The config passed in the parameter is used so we can determine keep
+// the original value of the InheritedLeasePreferences field in the output.
+func zoneConfigFromMarshalable(m marshalableZoneConfig, c ZoneConfig) ZoneConfig {
+	if m.RangeMinBytes != nil {
+		c.RangeMinBytes = proto.Int64(*m.RangeMinBytes)
+	}
+	if m.RangeMaxBytes != nil {
+		c.RangeMaxBytes = proto.Int64(*m.RangeMaxBytes)
+	}
+	if m.GC != nil {
+		tempGC := *m.GC
+		c.GC = &tempGC
+	}
+	if m.NumReplicas != nil {
+		c.NumReplicas = proto.Int32(*m.NumReplicas)
+	}
+	c.Constraints = m.Constraints.Constraints
+	c.InheritedConstraints = m.Constraints.Inherited
+	if m.LeasePreferences != nil {
+		c.LeasePreferences = m.LeasePreferences
+	}
+
 	// Prefer a provided m.ExperimentalLeasePreferences value over whatever is in
 	// m.LeasePreferences, since we know that m.ExperimentalLeasePreferences can
 	// only possibly come from the user-specified input, whereas
@@ -236,6 +268,10 @@ func zoneConfigFromMarshalable(m marshalableZoneConfig) ZoneConfig {
 	// internal storage that the user is now trying to overwrite.
 	if m.ExperimentalLeasePreferences != nil {
 		c.LeasePreferences = m.ExperimentalLeasePreferences
+	}
+
+	if m.LeasePreferences != nil || m.ExperimentalLeasePreferences != nil {
+		c.InheritedLeasePreferences = false
 	}
 	c.Subzones = m.Subzones
 	c.SubzoneSpans = m.SubzoneSpans
@@ -259,6 +295,6 @@ func (c *ZoneConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	if err := unmarshal(&aux); err != nil {
 		return err
 	}
-	*c = zoneConfigFromMarshalable(aux)
+	*c = zoneConfigFromMarshalable(aux, *c)
 	return nil
 }
