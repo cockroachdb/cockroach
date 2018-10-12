@@ -156,7 +156,7 @@ func registerKVQuiescenceDead(r *registry) {
 					qpsAllUp, qpsOneDown, actFrac, minFrac,
 				)
 			}
-			c.l.Printf("QPS went from %.2f to %2.f with one node down\n", qpsAllUp, qpsOneDown)
+			t.l.Printf("QPS went from %.2f to %2.f with one node down\n", qpsAllUp, qpsOneDown)
 		},
 	})
 }
@@ -222,7 +222,7 @@ func registerKVScalability(r *registry) {
 					" {pgurl:1-%d}",
 					percent, nodes)
 
-				l, err := c.l.ChildLogger(fmt.Sprint(i))
+				l, err := t.l.ChildLogger(fmt.Sprint(i))
 				if err != nil {
 					t.Fatal(err)
 				}
