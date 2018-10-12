@@ -31,6 +31,7 @@ const (
 	SimplifyRootOrdering
 	PruneRootCols
 	SimplifyZeroCardinalityGroup
+	EliminateRootSpool
 
 	// NumManualRules tracks the number of manually-defined rules.
 	NumManualRuleNames

@@ -650,6 +650,11 @@ func (ef *execFactory) ConstructProjectSet(
 	return p, nil
 }
 
+// ConstructSpool is part of the exec.Factory interface.
+func (ef *execFactory) ConstructSpool(input exec.Node) (exec.Node, error) {
+	return &spoolNode{source: asDataSource(input).plan}, nil
+}
+
 // ConstructPlan is part of the exec.Factory interface.
 func (ef *execFactory) ConstructPlan(
 	root exec.Node, subqueries []exec.Subquery,

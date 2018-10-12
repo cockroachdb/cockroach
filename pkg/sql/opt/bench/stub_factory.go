@@ -148,6 +148,10 @@ func (f *stubFactory) ConstructProjectSet(
 	return struct{}{}, nil
 }
 
+func (f *stubFactory) ConstructSpool(input exec.Node) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
 func (f *stubFactory) RenameColumns(input exec.Node, colNames []string) (exec.Node, error) {
 	return struct{}{}, nil
 }

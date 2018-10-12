@@ -484,3 +484,12 @@ define Zip {
     Funcs ExprList
     Cols  ColList
 }
+
+# Spool represents a relational spool. It passes through its input unchanged,
+# but guarantees that its entire input will be exhausted no matter what.  This
+# is important in the presence of expressions with side-effects (in particular,
+# mutations).
+[Relational]
+define Spool {
+    Input Expr
+}

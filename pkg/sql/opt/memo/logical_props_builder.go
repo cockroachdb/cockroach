@@ -108,6 +108,9 @@ func (b *logicalPropsBuilder) buildRelationalProps(ev ExprView) props.Logical {
 	case opt.ZipOp:
 		logical = b.buildZipProps(ev)
 
+	case opt.SpoolOp:
+		logical = b.buildSpoolProps(ev)
+
 	default:
 		panic(fmt.Sprintf("unrecognized relational expression type: %v", ev.op))
 	}
@@ -1078,6 +1081,14 @@ func (b *logicalPropsBuilder) buildZipProps(ev ExprView) props.Logical {
 	b.sb.buildZip(ev, relational)
 
 	return logical
+}
+
+func (b *logicalPropsBuilder) buildSpoolProps(ev ExprView) props.Logical {
+	// Spool's props are identical to its input.
+	// TODO(justin): though I think we might actually be able to claim that a
+	// Spool "doesn't" have side-effects even if its input does, since they'll
+	// get executed regardless, and the Spool itself can be a pure result set?
+	return b.buildRelationalProps(ev.Child(0))
 }
 
 func (b *logicalPropsBuilder) buildScalarProps(ev ExprView) props.Logical {

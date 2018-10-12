@@ -303,6 +303,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, ev ExprView) *props.Colu
 	case opt.ZipOp:
 		return sb.colStatZip(colSet, ev)
 
+	case opt.SpoolOp:
+		return sb.colStat(colSet, ev.Child(0))
+
 	case opt.ExplainOp, opt.ShowTraceForSessionOp:
 		relProps := ev.Logical().Relational
 		return sb.colStatLeaf(colSet, &relProps.Stats, &relProps.FuncDeps)

@@ -1,0 +1,52 @@
+# LogicTest: local-opt
+
+statement ok
+CREATE TABLE x(a INT)
+
+query TTTTT
+EXPLAIN (VERBOSE)
+  WITH t AS (SELECT a/0 FROM x WHERE a < 3)
+    SELECT * FROM x NATURAL JOIN t
+----
+render                    ·         ·           (a, "?column?")                 ·
+ │                        render 0  a           ·                               ·
+ │                        render 1  "?column?"  ·                               ·
+ └── spool                ·         ·           (a, rowid[hidden], "?column?")  ·
+      └── join            ·         ·           (a, rowid[hidden], "?column?")  ·
+           │              type      cross       ·                               ·
+           ├── scan       ·         ·           (a, rowid[hidden])              ·
+           │              table     x@primary   ·                               ·
+           │              spans     ALL         ·                               ·
+           └── render     ·         ·           ("?column?")                    ·
+                │         render 0  a / 0       ·                               ·
+                └── scan  ·         ·           (a)                             ·
+·                         table     x@primary   ·                               ·
+·                         spans     ALL         ·                               ·
+·                         filter    a < 3       ·                               ·
+
+query TTTTT
+EXPLAIN (VERBOSE)
+WITH t AS (SELECT a/0 FROM x)
+  SELECT * FROM t LIMIT 0
+----
+limit                ·         ·          ("?column?")  ·
+ │                   count     0          ·             ·
+ └── spool           ·         ·          ("?column?")  ·
+      └── render     ·         ·          ("?column?")  ·
+           │         render 0  a / 0      ·             ·
+           └── scan  ·         ·          (a)           ·
+·                    table     x@primary  ·             ·
+·                    spans     ALL        ·             ·
+
+# Chaining multiple CTEs.
+query TTTTT
+EXPLAIN (VERBOSE)
+  WITH
+      t1 AS (SELECT a FROM x WHERE a < 3),
+      t2 AS (SELECT * FROM t1 WHERE a > 1)
+  SELECT * FROM t2
+----
+scan  ·       ·                    (a)  ·
+·     table   x@primary            ·    ·
+·     spans   ALL                  ·    ·
+·     filter  (a < 3) AND (a > 1)  ·    ·

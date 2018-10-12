@@ -204,7 +204,6 @@ query error unimplemented: multiple WITH clauses in parentheses
     (WITH waa AS (VALUES (2))
 	   TABLE waa))
 
-
 # When #24303 is fixed, the following query should fail with
 # error "no such relation woo".
 query error unimplemented: multiple WITH clauses in parentheses

@@ -600,6 +600,21 @@ func (o *Optimizer) optimizeRootWithProps() {
 			}
 		}
 	}
+
+	// [EliminateRootSpool]
+	// The root of a plan naturally spools, and thus an explicit spool node
+	// can be eliminated.
+	expr := o.mem.NormExpr(root)
+	if expr.Operator() == opt.SpoolOp {
+		if o.matchedRule == nil || o.matchedRule(opt.EliminateRootSpool) {
+			root = expr.AsSpool().Input()
+			o.mem.SetRoot(root, o.mem.InternPhysicalProps(rootProps))
+
+			if o.appliedRule != nil {
+				o.appliedRule(opt.EliminateRootSpool, root, 0, 0)
+			}
+		}
+	}
 }
 
 // optStateKey associates optState with a group that is being optimized with

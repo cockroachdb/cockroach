@@ -309,6 +309,13 @@ func (c *CustomFuncs) HasOuterCols(group memo.GroupID) bool {
 	return !c.OuterCols(group).Empty()
 }
 
+// CanHaveSideEffects returns true if the group can possible have side
+// effects.
+func (c *CustomFuncs) CanHaveSideEffects(group memo.GroupID) bool {
+	relational := c.LookupRelational(group)
+	return relational.CanHaveSideEffects
+}
+
 // OnlyConstants returns true if the scalar expression is a "constant
 // expression tree", meaning that it will always evaluate to the same result.
 // See the CommuteConst pattern comment for more details.

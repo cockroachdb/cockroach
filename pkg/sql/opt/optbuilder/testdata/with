@@ -26,16 +26,18 @@ project
       ├── columns: y.a:1(int!null) x.a:3(int!null) x.rowid:4(int!null)
       ├── scan x
       │    └── columns: x.a:3(int) x.rowid:4(int!null)
-      ├── project
+      ├── spool
       │    ├── columns: y.a:1(int!null)
-      │    └── select
-      │         ├── columns: y.a:1(int!null) y.rowid:2(int!null)
-      │         ├── scan y
-      │         │    └── columns: y.a:1(int) y.rowid:2(int!null)
-      │         └── filters [type=bool]
-      │              └── lt [type=bool]
-      │                   ├── variable: y.a [type=int]
-      │                   └── const: 3 [type=int]
+      │    └── project
+      │         ├── columns: y.a:1(int!null)
+      │         └── select
+      │              ├── columns: y.a:1(int!null) y.rowid:2(int!null)
+      │              ├── scan y
+      │              │    └── columns: y.a:1(int) y.rowid:2(int!null)
+      │              └── filters [type=bool]
+      │                   └── lt [type=bool]
+      │                        ├── variable: y.a [type=int]
+      │                        └── const: 3 [type=int]
       └── filters [type=bool]
            └── eq [type=bool]
                 ├── variable: x.a [type=int]
@@ -45,16 +47,18 @@ build
 WITH t AS (SELECT a FROM y WHERE a < 3)
   SELECT * FROM t
 ----
-project
+spool
  ├── columns: a:1(int!null)
- └── select
-      ├── columns: a:1(int!null) rowid:2(int!null)
-      ├── scan y
-      │    └── columns: a:1(int) rowid:2(int!null)
-      └── filters [type=bool]
-           └── lt [type=bool]
-                ├── variable: a [type=int]
-                └── const: 3 [type=int]
+ └── project
+      ├── columns: a:1(int!null)
+      └── select
+           ├── columns: a:1(int!null) rowid:2(int!null)
+           ├── scan y
+           │    └── columns: a:1(int) rowid:2(int!null)
+           └── filters [type=bool]
+                └── lt [type=bool]
+                     ├── variable: a [type=int]
+                     └── const: 3 [type=int]
 
 # Chaining multiple CTEs.
 build
@@ -63,22 +67,26 @@ WITH
     t2 AS (SELECT * FROM t1 WHERE a > 1)
 SELECT * FROM t2
 ----
-select
+spool
  ├── columns: a:1(int!null)
- ├── project
- │    ├── columns: a:1(int!null)
- │    └── select
- │         ├── columns: a:1(int!null) rowid:2(int!null)
- │         ├── scan y
- │         │    └── columns: a:1(int) rowid:2(int!null)
- │         └── filters [type=bool]
- │              └── lt [type=bool]
- │                   ├── variable: a [type=int]
- │                   └── const: 3 [type=int]
- └── filters [type=bool]
-      └── gt [type=bool]
-           ├── variable: a [type=int]
-           └── const: 1 [type=int]
+ └── select
+      ├── columns: a:1(int!null)
+      ├── spool
+      │    ├── columns: a:1(int!null)
+      │    └── project
+      │         ├── columns: a:1(int!null)
+      │         └── select
+      │              ├── columns: a:1(int!null) rowid:2(int!null)
+      │              ├── scan y
+      │              │    └── columns: a:1(int) rowid:2(int!null)
+      │              └── filters [type=bool]
+      │                   └── lt [type=bool]
+      │                        ├── variable: a [type=int]
+      │                        └── const: 3 [type=int]
+      └── filters [type=bool]
+           └── gt [type=bool]
+                ├── variable: a [type=int]
+                └── const: 1 [type=int]
 
 build
 WITH
@@ -87,28 +95,34 @@ WITH
     t3 AS (SELECT * FROM t2 WHERE a = 2)
 SELECT * FROM t3
 ----
-select
+spool
  ├── columns: a:1(int!null)
- ├── select
- │    ├── columns: a:1(int!null)
- │    ├── project
- │    │    ├── columns: a:1(int!null)
- │    │    └── select
- │    │         ├── columns: a:1(int!null) rowid:2(int!null)
- │    │         ├── scan y
- │    │         │    └── columns: a:1(int) rowid:2(int!null)
- │    │         └── filters [type=bool]
- │    │              └── lt [type=bool]
- │    │                   ├── variable: a [type=int]
- │    │                   └── const: 3 [type=int]
- │    └── filters [type=bool]
- │         └── gt [type=bool]
- │              ├── variable: a [type=int]
- │              └── const: 1 [type=int]
- └── filters [type=bool]
-      └── eq [type=bool]
-           ├── variable: a [type=int]
-           └── const: 2 [type=int]
+ └── select
+      ├── columns: a:1(int!null)
+      ├── spool
+      │    ├── columns: a:1(int!null)
+      │    └── select
+      │         ├── columns: a:1(int!null)
+      │         ├── spool
+      │         │    ├── columns: a:1(int!null)
+      │         │    └── project
+      │         │         ├── columns: a:1(int!null)
+      │         │         └── select
+      │         │              ├── columns: a:1(int!null) rowid:2(int!null)
+      │         │              ├── scan y
+      │         │              │    └── columns: a:1(int) rowid:2(int!null)
+      │         │              └── filters [type=bool]
+      │         │                   └── lt [type=bool]
+      │         │                        ├── variable: a [type=int]
+      │         │                        └── const: 3 [type=int]
+      │         └── filters [type=bool]
+      │              └── gt [type=bool]
+      │                   ├── variable: a [type=int]
+      │                   └── const: 1 [type=int]
+      └── filters [type=bool]
+           └── eq [type=bool]
+                ├── variable: a [type=int]
+                └── const: 2 [type=int]
 
 build
 WITH
@@ -122,38 +136,46 @@ project
  ├── columns: a:1(int!null)
  └── inner-join
       ├── columns: y.a:1(int!null) y.a:3(int!null)
-      ├── select
+      ├── spool
       │    ├── columns: y.a:1(int!null)
-      │    ├── project
-      │    │    ├── columns: y.a:1(int!null)
-      │    │    └── select
-      │    │         ├── columns: y.a:1(int!null) y.rowid:2(int!null)
-      │    │         ├── scan y
-      │    │         │    └── columns: y.a:1(int) y.rowid:2(int!null)
-      │    │         └── filters [type=bool]
-      │    │              └── lt [type=bool]
-      │    │                   ├── variable: y.a [type=int]
-      │    │                   └── const: 3 [type=int]
-      │    └── filters [type=bool]
-      │         └── lt [type=bool]
-      │              ├── variable: y.a [type=int]
-      │              └── const: 4 [type=int]
-      ├── select
+      │    └── select
+      │         ├── columns: y.a:1(int!null)
+      │         ├── spool
+      │         │    ├── columns: y.a:1(int!null)
+      │         │    └── project
+      │         │         ├── columns: y.a:1(int!null)
+      │         │         └── select
+      │         │              ├── columns: y.a:1(int!null) y.rowid:2(int!null)
+      │         │              ├── scan y
+      │         │              │    └── columns: y.a:1(int) y.rowid:2(int!null)
+      │         │              └── filters [type=bool]
+      │         │                   └── lt [type=bool]
+      │         │                        ├── variable: y.a [type=int]
+      │         │                        └── const: 3 [type=int]
+      │         └── filters [type=bool]
+      │              └── lt [type=bool]
+      │                   ├── variable: y.a [type=int]
+      │                   └── const: 4 [type=int]
+      ├── spool
       │    ├── columns: y.a:3(int!null)
-      │    ├── project
-      │    │    ├── columns: y.a:3(int!null)
-      │    │    └── select
-      │    │         ├── columns: y.a:3(int!null) y.rowid:4(int!null)
-      │    │         ├── scan y
-      │    │         │    └── columns: y.a:3(int) y.rowid:4(int!null)
-      │    │         └── filters [type=bool]
-      │    │              └── gt [type=bool]
-      │    │                   ├── variable: y.a [type=int]
-      │    │                   └── const: 1 [type=int]
-      │    └── filters [type=bool]
-      │         └── gt [type=bool]
-      │              ├── variable: y.a [type=int]
-      │              └── const: 3 [type=int]
+      │    └── select
+      │         ├── columns: y.a:3(int!null)
+      │         ├── spool
+      │         │    ├── columns: y.a:3(int!null)
+      │         │    └── project
+      │         │         ├── columns: y.a:3(int!null)
+      │         │         └── select
+      │         │              ├── columns: y.a:3(int!null) y.rowid:4(int!null)
+      │         │              ├── scan y
+      │         │              │    └── columns: y.a:3(int) y.rowid:4(int!null)
+      │         │              └── filters [type=bool]
+      │         │                   └── gt [type=bool]
+      │         │                        ├── variable: y.a [type=int]
+      │         │                        └── const: 1 [type=int]
+      │         └── filters [type=bool]
+      │              └── gt [type=bool]
+      │                   ├── variable: y.a [type=int]
+      │                   └── const: 3 [type=int]
       └── filters [type=bool]
            └── eq [type=bool]
                 ├── variable: y.a [type=int]
@@ -163,12 +185,14 @@ project
 build
 WITH t AS (SELECT true) SELECT * FROM (WITH t AS (SELECT false) SELECT * FROM t)
 ----
-project
+spool
  ├── columns: bool:2(bool!null)
- ├── values
- │    └── tuple [type=tuple]
- └── projections
-      └── false [type=bool]
+ └── project
+      ├── columns: bool:2(bool!null)
+      ├── values
+      │    └── tuple [type=tuple]
+      └── projections
+           └── false [type=bool]
 
 build
 WITH
@@ -197,20 +221,24 @@ project
  ├── columns: a:3(int!null)
  └── inner-join
       ├── columns: x.a:3(int!null) x.a:5(int!null) x.rowid:6(int!null)
-      ├── project
+      ├── spool
       │    ├── columns: x.a:3(int!null)
-      │    └── inner-join
-      │         ├── columns: x.a:1(int!null) x.a:3(int!null) x.rowid:4(int!null)
-      │         ├── scan x
-      │         │    └── columns: x.a:3(int) x.rowid:4(int!null)
-      │         ├── project
-      │         │    ├── columns: x.a:1(int)
-      │         │    └── scan x
-      │         │         └── columns: x.a:1(int) x.rowid:2(int!null)
-      │         └── filters [type=bool]
-      │              └── eq [type=bool]
-      │                   ├── variable: x.a [type=int]
-      │                   └── variable: x.a [type=int]
+      │    └── project
+      │         ├── columns: x.a:3(int!null)
+      │         └── inner-join
+      │              ├── columns: x.a:1(int!null) x.a:3(int!null) x.rowid:4(int!null)
+      │              ├── scan x
+      │              │    └── columns: x.a:3(int) x.rowid:4(int!null)
+      │              ├── spool
+      │              │    ├── columns: x.a:1(int)
+      │              │    └── project
+      │              │         ├── columns: x.a:1(int)
+      │              │         └── scan x
+      │              │              └── columns: x.a:1(int) x.rowid:2(int!null)
+      │              └── filters [type=bool]
+      │                   └── eq [type=bool]
+      │                        ├── variable: x.a [type=int]
+      │                        └── variable: x.a [type=int]
       ├── scan x
       │    └── columns: x.a:5(int) x.rowid:6(int!null)
       └── filters [type=bool]
@@ -228,34 +256,40 @@ build
 WITH t(x) AS (SELECT a FROM x)
   SELECT x FROM (SELECT x FROM t)
 ----
-project
+spool
  ├── columns: x:1(int)
- └── scan x
-      └── columns: a:1(int) rowid:2(int!null)
+ └── project
+      ├── columns: a:1(int)
+      └── scan x
+           └── columns: a:1(int) rowid:2(int!null)
 
 build
 WITH t(a, b) AS (SELECT true a, false b)
   SELECT a, b FROM t
 ----
-project
+spool
  ├── columns: a:1(bool!null) b:2(bool!null)
- ├── values
- │    └── tuple [type=tuple]
- └── projections
-      ├── true [type=bool]
-      └── false [type=bool]
+ └── project
+      ├── columns: a:1(bool!null) b:2(bool!null)
+      ├── values
+      │    └── tuple [type=tuple]
+      └── projections
+           ├── true [type=bool]
+           └── false [type=bool]
 
 build
 WITH t(b, a) AS (SELECT true a, false b)
   SELECT a, b FROM t
 ----
-project
+spool
  ├── columns: a:2(bool!null) b:1(bool!null)
- ├── values
- │    └── tuple [type=tuple]
- └── projections
-      ├── true [type=bool]
-      └── false [type=bool]
+ └── project
+      ├── columns: a:1(bool!null) b:2(bool!null)
+      ├── values
+      │    └── tuple [type=tuple]
+      └── projections
+           ├── true [type=bool]
+           └── false [type=bool]
 
 build
 WITH t AS (SELECT a FROM x)
@@ -269,10 +303,12 @@ project
       │    └── columns: y.a:3(int) y.rowid:4(int!null)
       └── filters [type=bool]
            └── any: eq [type=bool]
-                ├── project
+                ├── spool
                 │    ├── columns: x.a:1(int)
-                │    └── scan x
-                │         └── columns: x.a:1(int) x.rowid:2(int!null)
+                │    └── project
+                │         ├── columns: x.a:1(int)
+                │         └── scan x
+                │              └── columns: x.a:1(int) x.rowid:2(int!null)
                 └── variable: y.a [type=int]
 
 build
@@ -287,10 +323,12 @@ project
       │    └── columns: y.a:3(int) y.rowid:4(int!null)
       └── filters [type=bool]
            └── any: eq [type=bool]
-                ├── project
+                ├── spool
                 │    ├── columns: x.a:1(int)
-                │    └── scan x
-                │         └── columns: x.a:1(int) x.rowid:2(int!null)
+                │    └── project
+                │         ├── columns: x.a:1(int)
+                │         └── scan x
+                │              └── columns: x.a:1(int) x.rowid:2(int!null)
                 └── variable: y.a [type=int]
 
 # Using a subquery inside a CTE
@@ -306,16 +344,18 @@ project
       │    └── columns: x.a:1(int) x.rowid:2(int!null)
       └── filters [type=bool]
            └── any: eq [type=bool]
-                ├── project
+                ├── spool
                 │    ├── columns: y.a:3(int!null)
-                │    └── select
-                │         ├── columns: y.a:3(int!null) y.rowid:4(int!null)
-                │         ├── scan y
-                │         │    └── columns: y.a:3(int) y.rowid:4(int!null)
-                │         └── filters [type=bool]
-                │              └── lt [type=bool]
-                │                   ├── variable: y.a [type=int]
-                │                   └── const: 3 [type=int]
+                │    └── project
+                │         ├── columns: y.a:3(int!null)
+                │         └── select
+                │              ├── columns: y.a:3(int!null) y.rowid:4(int!null)
+                │              ├── scan y
+                │              │    └── columns: y.a:3(int) y.rowid:4(int!null)
+                │              └── filters [type=bool]
+                │                   └── lt [type=bool]
+                │                        ├── variable: y.a [type=int]
+                │                        └── const: 3 [type=int]
                 └── variable: x.a [type=int]
 
 # Using a correlated subquery inside a CTE
@@ -332,26 +372,30 @@ project
                 ├── columns: y.a:3(int!null)
                 └── limit
                      ├── columns: y.a:3(int!null)
-                     ├── project
+                     ├── spool
                      │    ├── columns: y.a:3(int!null)
-                     │    └── select
-                     │         ├── columns: y.a:3(int!null) y.rowid:4(int!null)
-                     │         ├── scan y
-                     │         │    └── columns: y.a:3(int) y.rowid:4(int!null)
-                     │         └── filters [type=bool]
-                     │              └── eq [type=bool]
-                     │                   ├── variable: x.a [type=int]
-                     │                   └── variable: y.a [type=int]
+                     │    └── project
+                     │         ├── columns: y.a:3(int!null)
+                     │         └── select
+                     │              ├── columns: y.a:3(int!null) y.rowid:4(int!null)
+                     │              ├── scan y
+                     │              │    └── columns: y.a:3(int) y.rowid:4(int!null)
+                     │              └── filters [type=bool]
+                     │                   └── eq [type=bool]
+                     │                        ├── variable: x.a [type=int]
+                     │                        └── variable: y.a [type=int]
                      └── const: 1 [type=int]
 
 # Rename columns
 build
 WITH t(b) AS (SELECT a FROM x) SELECT b, t.b FROM t
 ----
-project
+spool
  ├── columns: b:1(int) b:1(int)
- └── scan x
-      └── columns: a:1(int) rowid:2(int!null)
+ └── project
+      ├── columns: a:1(int)
+      └── scan x
+           └── columns: a:1(int) rowid:2(int!null)
 
 build
 WITH t(b, c) AS (SELECT a FROM x) SELECT b, t.b FROM t
@@ -370,18 +414,22 @@ WITH t(x) AS (WITH t(x) AS (SELECT 1) SELECT x * 10 FROM t) SELECT x + 2 FROM t
 ----
 project
  ├── columns: "?column?":3(int)
- ├── project
+ ├── spool
  │    ├── columns: "?column?":2(int)
- │    ├── project
- │    │    ├── columns: "?column?":1(int!null)
- │    │    ├── values
- │    │    │    └── tuple [type=tuple]
- │    │    └── projections
- │    │         └── const: 1 [type=int]
- │    └── projections
- │         └── mult [type=int]
- │              ├── variable: ?column? [type=int]
- │              └── const: 10 [type=int]
+ │    └── project
+ │         ├── columns: "?column?":2(int)
+ │         ├── spool
+ │         │    ├── columns: "?column?":1(int!null)
+ │         │    └── project
+ │         │         ├── columns: "?column?":1(int!null)
+ │         │         ├── values
+ │         │         │    └── tuple [type=tuple]
+ │         │         └── projections
+ │         │              └── const: 1 [type=int]
+ │         └── projections
+ │              └── mult [type=int]
+ │                   ├── variable: ?column? [type=int]
+ │                   └── const: 10 [type=int]
  └── projections
       └── plus [type=int]
            ├── variable: ?column? [type=int]
