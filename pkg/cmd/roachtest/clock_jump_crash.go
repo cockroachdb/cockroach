@@ -78,7 +78,7 @@ type clockJumpTestCase struct {
 	aliveAfterOffset bool
 }
 
-func makeClockJumpTests() testSpec {
+func registerClockJumpTests(r *registry) {
 	testCases := []clockJumpTestCase{
 		{
 			name:             "large_forward_enabled",
@@ -115,30 +115,18 @@ func makeClockJumpTests() testSpec {
 		},
 	}
 
-	spec := testSpec{
-		Name: "jump",
-	}
-
 	for i := range testCases {
 		tc := testCases[i]
-		spec.SubTests = append(spec.SubTests, testSpec{
-			Name: tc.name,
+		spec := testSpec{
+			Name: "clock/jump/" + tc.name,
+			// These tests muck with NTP, therefore we don't want the cluster reused
+			// by others.
+			Cluster: makeClusterSpec(
+				1, reuseTagged("offset-injector")),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClockJump(ctx, t, c, tc)
 			},
-		})
+		}
+		r.Add(spec)
 	}
-
-	return spec
-}
-
-func registerClock(r *registry) {
-	r.Add(testSpec{
-		Name:    "clock",
-		Cluster: makeClusterSpec(1),
-		SubTests: []testSpec{
-			makeClockJumpTests(),
-			makeClockMonotonicTests(),
-		},
-	})
 }

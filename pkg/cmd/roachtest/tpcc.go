@@ -41,7 +41,13 @@ type tpccOptions struct {
 	Chaos      func() Chaos                // for late binding of stopper
 	During     func(context.Context) error // for running a function during the test
 	Duration   time.Duration
-	ZFS        bool
+
+	// ZFS, if set, will make the cluster use a ZFS volume.
+	// Be careful with ClusterReusePolicy when using this.
+	//
+	// TODO(andrei): move this to the test's cluster spec.
+	ZFS bool
+
 	// The CockroachDB versions to deploy. The first one indicates the first node,
 	// etc. To use the main binary, specify "". When Versions is nil, it defaults
 	// to "" for all nodes. When it is specified, len(Versions) needs to match the
