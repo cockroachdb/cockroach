@@ -46,7 +46,7 @@ var ScrubTypes = []sqlbase.ColumnType{
 type scrubTableReader struct {
 	tableReader
 	tableDesc sqlbase.TableDescriptor
-	// fetcherResultToColIdx maps RowFetcher results to the column index in
+	// fetcherResultToColIdx maps Fetcher results to the column index in
 	// the TableDescriptor. This is only initialized and used during scrub
 	// physical checks.
 	fetcherResultToColIdx []int
@@ -92,7 +92,7 @@ func newScrubTableReader(
 		nil, /* memMonitor */
 		ProcStateOpts{
 			// We don't pass tr.input as an inputToDrain; tr.input is just an adapter
-			// on top of a RowFetcher; draining doesn't apply to it. Moreover, Andrei
+			// on top of a Fetcher; draining doesn't apply to it. Moreover, Andrei
 			// doesn't trust that the adapter will do the right thing on a Next() call
 			// after it had previously returned an error.
 			InputsToDrain:        nil,

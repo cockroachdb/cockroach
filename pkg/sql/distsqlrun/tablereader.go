@@ -16,13 +16,13 @@ package distsqlrun
 
 import (
 	"context"
+	"sync"
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
-	"sync"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -43,9 +43,9 @@ type tableReader struct {
 
 	// input is really the fetcher below, possibly wrapped in a stats generator.
 	input RowSource
-	// fetcher is the underlying RowFetcher, should only be used for
+	// fetcher is the underlying Fetcher, should only be used for
 	// initialization, call input.Next() to retrieve rows once initialized.
-	fetcher sqlbase.RowFetcher
+	fetcher row.Fetcher
 	alloc   sqlbase.DatumAlloc
 }
 
@@ -97,7 +97,7 @@ func newTableReader(
 		nil, /* memMonitor */
 		ProcStateOpts{
 			// We don't pass tr.input as an inputToDrain; tr.input is just an adapter
-			// on top of a RowFetcher; draining doesn't apply to it. Moreover, Andrei
+			// on top of a Fetcher; draining doesn't apply to it. Moreover, Andrei
 			// doesn't trust that the adapter will do the right thing on a Next() call
 			// after it had previously returned an error.
 			InputsToDrain:        nil,
@@ -126,7 +126,7 @@ func newTableReader(
 	for i, s := range spec.Spans {
 		tr.spans[i] = s.Span
 	}
-	tr.input = &rowFetcherWrapper{RowFetcher: &tr.fetcher}
+	tr.input = &rowFetcherWrapper{Fetcher: &tr.fetcher}
 
 	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
 		tr.input = NewInputStatCollector(tr.input)
@@ -137,10 +137,10 @@ func newTableReader(
 }
 
 // rowFetcherWrapper is used only by a tableReader to wrap calls to
-// RowFetcher.NextRow() in a RowSource implementation.
+// Fetcher.NextRow() in a RowSource implementation.
 type rowFetcherWrapper struct {
 	ctx context.Context
-	*sqlbase.RowFetcher
+	*row.Fetcher
 }
 
 var _ RowSource = &rowFetcherWrapper{}
@@ -151,7 +151,7 @@ func (w *rowFetcherWrapper) Start(ctx context.Context) context.Context {
 	return ctx
 }
 
-// Next() calls NextRow() on the underlying RowFetcher. If the returned
+// Next() calls NextRow() on the underlying Fetcher. If the returned
 // ProducerMetadata is not nil, only its Err field will be set.
 func (w *rowFetcherWrapper) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	row, _, _, err := w.NextRow(w.ctx)
@@ -165,7 +165,7 @@ func (w rowFetcherWrapper) ConsumerDone()                     {}
 func (w rowFetcherWrapper) ConsumerClosed()                   {}
 
 func initRowFetcher(
-	fetcher *sqlbase.RowFetcher,
+	fetcher *row.Fetcher,
 	desc *sqlbase.TableDescriptor,
 	indexIdx int,
 	colIdxMap map[sqlbase.ColumnID]int,
@@ -196,7 +196,7 @@ func initRowFetcher(
 			}
 		}
 	}
-	tableArgs := sqlbase.RowFetcherTableArgs{
+	tableArgs := row.FetcherTableArgs{
 		Desc:             desc,
 		Index:            index,
 		ColIdxMap:        colIdxMap,

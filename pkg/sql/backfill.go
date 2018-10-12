@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -216,7 +217,7 @@ func (sc *SchemaChanger) truncateIndexes(
 	alloc := &sqlbase.DatumAlloc{}
 	for _, desc := range dropped {
 		var resume roachpb.Span
-		for row, done := int64(0), false; !done; row += chunkSize {
+		for rowIdx, done := int64(0), false; !done; rowIdx += chunkSize {
 			// First extend the schema change lease.
 			if err := sc.ExtendLease(ctx, lease); err != nil {
 				return err
@@ -225,7 +226,7 @@ func (sc *SchemaChanger) truncateIndexes(
 			resumeAt := resume
 			if log.V(2) {
 				log.Infof(ctx, "drop index (%d, %d) at row: %d, span: %s",
-					sc.tableID, sc.mutationID, row, resume)
+					sc.tableID, sc.mutationID, rowIdx, resume)
 			}
 			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 				if fn := sc.execCfg.DistSQLRunTestingKnobs.RunBeforeBackfillChunk; fn != nil {
@@ -244,8 +245,8 @@ func (sc *SchemaChanger) truncateIndexes(
 					return err
 				}
 
-				rd, err := sqlbase.MakeRowDeleter(
-					txn, tableDesc, nil, nil, sqlbase.SkipFKs, nil /* *tree.EvalContext */, alloc,
+				rd, err := row.MakeDeleter(
+					txn, tableDesc, nil, nil, row.SkipFKs, nil /* *tree.EvalContext */, alloc,
 				)
 				if err != nil {
 					return err
@@ -400,12 +401,12 @@ func (sc *SchemaChanger) distBackfill(
 			// backfiller processor.
 			var otherTableDescs []sqlbase.TableDescriptor
 			if backfillType == columnBackfill {
-				fkTables, err := sqlbase.TablesNeededForFKs(
+				fkTables, err := row.TablesNeededForFKs(
 					ctx,
 					*tableDesc,
-					sqlbase.CheckUpdates,
-					sqlbase.NoLookup,
-					sqlbase.NoCheckPrivilege,
+					row.CheckUpdates,
+					row.NoLookup,
+					row.NoCheckPrivilege,
 					nil, /* AnalyzeExprFunction */
 				)
 				if err != nil {
@@ -592,12 +593,12 @@ func columnBackfillInTxn(
 	// otherTableDescs contains any other table descriptors required by the
 	// backfiller processor.
 	var otherTableDescs []sqlbase.TableDescriptor
-	fkTables, err := sqlbase.TablesNeededForFKs(
+	fkTables, err := row.TablesNeededForFKs(
 		ctx,
 		*tableDesc,
-		sqlbase.CheckUpdates,
-		sqlbase.NoLookup,
-		sqlbase.NoCheckPrivilege,
+		row.CheckUpdates,
+		row.NoLookup,
+		row.NoCheckPrivilege,
 		nil, /* AnalyzeExprFunction */
 	)
 	if err != nil {
@@ -656,8 +657,8 @@ func indexTruncateInTxn(
 	idx := tableDesc.Mutations[0].GetIndex()
 	var sp roachpb.Span
 	for done := false; !done; done = sp.Key == nil {
-		rd, err := sqlbase.MakeRowDeleter(
-			txn, tableDesc, nil, nil, sqlbase.SkipFKs, nil /* *tree.EvalContext */, alloc,
+		rd, err := row.MakeDeleter(
+			txn, tableDesc, nil, nil, row.SkipFKs, nil /* *tree.EvalContext */, alloc,
 		)
 		if err != nil {
 			return err

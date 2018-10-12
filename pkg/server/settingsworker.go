@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -34,7 +35,7 @@ func (s *Server) refreshSettings() {
 
 	a := &sqlbase.DatumAlloc{}
 	settingsTablePrefix := keys.MakeTablePrefix(uint32(tbl.ID))
-	colIdxMap := sqlbase.ColIDtoRowIndexFromCols(tbl.Columns)
+	colIdxMap := row.ColIDtoRowIndexFromCols(tbl.Columns)
 
 	processKV := func(ctx context.Context, kv roachpb.KeyValue, u settings.Updater) error {
 		if !bytes.HasPrefix(kv.Key, settingsTablePrefix) {

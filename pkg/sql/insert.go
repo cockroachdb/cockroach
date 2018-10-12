@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -105,13 +106,13 @@ func (p *planner) Insert(
 	}
 
 	// Determine what are the foreign key tables that are involved in the update.
-	var fkCheckType sqlbase.FKCheck
+	var fkCheckType row.FKCheck
 	if n.OnConflict == nil || n.OnConflict.DoNothing {
-		fkCheckType = sqlbase.CheckInserts
+		fkCheckType = row.CheckInserts
 	} else {
-		fkCheckType = sqlbase.CheckUpdates
+		fkCheckType = row.CheckUpdates
 	}
-	fkTables, err := sqlbase.TablesNeededForFKs(
+	fkTables, err := row.TablesNeededForFKs(
 		ctx,
 		*desc,
 		fkCheckType,
@@ -268,8 +269,8 @@ func (p *planner) Insert(
 	}
 
 	// Create the table insert, which does the bulk of the work.
-	ri, err := sqlbase.MakeRowInserter(p.txn, desc, fkTables, insertCols,
-		sqlbase.CheckFKs, &p.alloc)
+	ri, err := row.MakeInserter(p.txn, desc, fkTables, insertCols,
+		row.CheckFKs, &p.alloc)
 	if err != nil {
 		return nil, err
 	}
