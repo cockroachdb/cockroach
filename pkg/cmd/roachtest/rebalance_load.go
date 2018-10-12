@@ -121,7 +121,7 @@ func registerRebalanceLoad(r *registry) {
 				concurrency = 32
 				fmt.Printf("lowering concurrency to %d in local testing\n", concurrency)
 			}
-			rebalanceLoadRun(ctx, t, c, "leases", 2*time.Minute, concurrency)
+			rebalanceLoadRun(ctx, t, c, "leases", 3*time.Minute, concurrency)
 		},
 	})
 	r.Add(testSpec{
