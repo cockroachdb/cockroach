@@ -511,8 +511,8 @@ func SetMockAddSSTable() (undo func()) {
 		args := cArgs.Args.(*roachpb.AddSSTableRequest)
 
 		return result.Result{
-			Replicated: storagebase.ReplicatedEvalResult{
-				AddSSTable: &storagebase.ReplicatedEvalResult_AddSSTable{
+			Replicated: storagepb.ReplicatedEvalResult{
+				AddSSTable: &storagepb.ReplicatedEvalResult_AddSSTable{
 					Data:  args.Data,
 					CRC32: util.CRC32(args.Data),
 				},

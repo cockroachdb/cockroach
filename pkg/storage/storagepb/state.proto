@@ -13,8 +13,8 @@
 // permissions and limitations under the License.
 
 syntax = "proto3";
-package cockroach.storage.storagebase;
-option go_package = "storagebase";
+package cockroach.storage.storagepb;
+option go_package = "storagepb";
 
 import "storage/engine/enginepb/mvcc.proto";
 import "roachpb/internal_raft.proto";

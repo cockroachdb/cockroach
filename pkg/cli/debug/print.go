@@ -21,12 +21,13 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -99,7 +100,7 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 	if ent.Type == raftpb.EntryNormal {
 		if len(ent.Data) > 0 {
 			_, cmdData := storage.DecodeRaftCommand(ent.Data)
-			var cmd storagebase.RaftCommand
+			var cmd storagepb.RaftCommand
 			if err := protoutil.Unmarshal(cmdData, &cmd); err != nil {
 				return "", err
 			}
@@ -123,7 +124,7 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 		if err := protoutil.Unmarshal(cc.Context, &ctx); err != nil {
 			return "", err
 		}
-		var cmd storagebase.ReplicatedEvalResult
+		var cmd storagepb.ReplicatedEvalResult
 		if err := protoutil.Unmarshal(ctx.Payload, &cmd); err != nil {
 			return "", err
 		}

@@ -8,11 +8,26 @@
 		storage/storagepb/lease_status.proto
 		storage/storagepb/liveness.proto
 		storage/storagepb/log.proto
+		storage/storagepb/proposer_kv.proto
+		storage/storagepb/state.proto
 
 	It has these top-level messages:
 		LeaseStatus
 		Liveness
 		RangeLogEvent
+		Split
+		Merge
+		ChangeReplicas
+		ComputeChecksum
+		Compaction
+		SuggestedCompaction
+		ReplicatedEvalResult
+		WriteBatch
+		LogicalOpLog
+		RaftCommand
+		ReplicaState
+		RangeInfo
+		CommandQueuesSnapshot
 */
 package storagepb
 

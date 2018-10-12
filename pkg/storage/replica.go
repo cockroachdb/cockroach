@@ -32,7 +32,7 @@ import (
 
 	"github.com/google/btree"
 	"github.com/kr/pretty"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -348,7 +348,7 @@ type Replica struct {
 		// the closing of the channel.
 		mergeComplete chan struct{}
 		// The state of the Raft state machine.
-		state storagebase.ReplicaState
+		state storagepb.ReplicaState
 		// Counter used for assigning lease indexes for proposals.
 		lastAssignedLeaseIndex uint64
 		// Last index/term persisted to the raft log (not necessarily
@@ -826,10 +826,10 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCS
 	// TODO(benesch): we would ideally atomically suggest the compaction with
 	// the deletion of the data itself.
 	desc := r.Desc()
-	r.store.compactor.Suggest(ctx, storagebase.SuggestedCompaction{
+	r.store.compactor.Suggest(ctx, storagepb.SuggestedCompaction{
 		StartKey: roachpb.Key(desc.StartKey),
 		EndKey:   roachpb.Key(desc.EndKey),
-		Compaction: storagebase.Compaction{
+		Compaction: storagepb.Compaction{
 			Bytes:            ms.Total(),
 			SuggestedAtNanos: timeutil.Now().UnixNano(),
 		},
@@ -1911,11 +1911,11 @@ func (r *Replica) raftStatusRLocked() *raft.Status {
 
 // State returns a copy of the internal state of the Replica, along with some
 // auxiliary information.
-func (r *Replica) State() storagebase.RangeInfo {
+func (r *Replica) State() storagepb.RangeInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	var ri storagebase.RangeInfo
-	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*storagebase.ReplicaState)
+	var ri storagepb.RangeInfo
+	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*storagepb.ReplicaState)
 	ri.LastIndex = r.mu.lastIndex
 	ri.NumPending = uint64(len(r.mu.localProposals))
 	ri.NumRemotePending = uint64(len(r.mu.remoteProposals))
@@ -3429,7 +3429,7 @@ func (r *Replica) requestToProposal(
 	}
 
 	if needConsensus {
-		proposal.command = &storagebase.RaftCommand{
+		proposal.command = &storagepb.RaftCommand{
 			ReplicatedEvalResult: res.Replicated,
 			WriteBatch:           res.WriteBatch,
 			LogicalOpLog:         res.LogicalOpLog,
@@ -3526,13 +3526,13 @@ func (r *Replica) evaluateProposal(
 	//    used to enforce a linearization of all reads and writes.
 	needConsensus := !batch.Empty() ||
 		ms != (enginepb.MVCCStats{}) ||
-		!res.Replicated.Equal(storagebase.ReplicatedEvalResult{}) ||
+		!res.Replicated.Equal(storagepb.ReplicatedEvalResult{}) ||
 		r.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset
 
 	if needConsensus {
 		// Set the proposal's WriteBatch, which is the serialized representation of
 		// the proposals effect on RocksDB.
-		res.WriteBatch = &storagebase.WriteBatch{
+		res.WriteBatch = &storagepb.WriteBatch{
 			Data: batch.Repr(),
 		}
 
@@ -3572,7 +3572,7 @@ func (r *Replica) evaluateProposal(
 		if !usingAppliedStateKey &&
 			r.ClusterSettings().Version.IsMinSupported(cluster.VersionRangeAppliedStateKey) {
 			if res.Replicated.State == nil {
-				res.Replicated.State = &storagebase.ReplicaState{}
+				res.Replicated.State = &storagepb.ReplicaState{}
 			}
 			res.Replicated.State.UsingAppliedStateKey = true
 		}
@@ -4432,7 +4432,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			}
 
 			var commandID storagebase.CmdIDKey
-			var command storagebase.RaftCommand
+			var command storagepb.RaftCommand
 
 			// Process committed entries. etcd raft occasionally adds a nil entry
 			// (our own commands are never empty). This happens in two situations:
@@ -4496,7 +4496,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 				return stats, expl, errors.Wrap(err, expl)
 
 			}
-			var command storagebase.RaftCommand
+			var command storagepb.RaftCommand
 			if err := protoutil.Unmarshal(ccCtx.Payload, &command); err != nil {
 				const expl = "while unmarshaling RaftCommand"
 				return stats, expl, errors.Wrap(err, expl)
@@ -5231,7 +5231,7 @@ func (r *Replica) reportSnapshotStatus(ctx context.Context, to roachpb.ReplicaID
 func (r *Replica) checkForcedErrLocked(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
-	raftCmd storagebase.RaftCommand,
+	raftCmd storagepb.RaftCommand,
 	proposal *ProposalData,
 	proposedLocally bool,
 ) (uint64, proposalRetryReason, *roachpb.Error) {
@@ -5386,7 +5386,7 @@ func (r *Replica) processRaftCommand(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
 	term, raftIndex uint64,
-	raftCmd storagebase.RaftCommand,
+	raftCmd storagepb.RaftCommand,
 ) (changedRepl bool) {
 	if raftIndex == 0 {
 		log.Fatalf(ctx, "processRaftCommand requires a non-zero index")
@@ -5471,7 +5471,7 @@ func (r *Replica) processRaftCommand(
 	}
 
 	var response proposalResult
-	var writeBatch *storagebase.WriteBatch
+	var writeBatch *storagepb.WriteBatch
 	{
 		if filter := r.store.cfg.TestingKnobs.TestingApplyFilter; forcedErr == nil && filter != nil {
 			forcedErr = filter(storagebase.ApplyFilterArgs{
@@ -5484,7 +5484,7 @@ func (r *Replica) processRaftCommand(
 
 		if forcedErr != nil {
 			// Apply an empty entry.
-			raftCmd.ReplicatedEvalResult = storagebase.ReplicatedEvalResult{}
+			raftCmd.ReplicatedEvalResult = storagepb.ReplicatedEvalResult{}
 			raftCmd.WriteBatch = nil
 			raftCmd.LogicalOpLog = nil
 		}
@@ -5748,8 +5748,8 @@ func (r *Replica) maybeAcquireSnapshotMergeLock(
 // which will release any lock acquired (or nil) and use the result of
 // applying the command to perform any necessary cleanup.
 func (r *Replica) maybeAcquireSplitMergeLock(
-	ctx context.Context, raftCmd storagebase.RaftCommand,
-) (func(storagebase.ReplicatedEvalResult), error) {
+	ctx context.Context, raftCmd storagepb.RaftCommand,
+) (func(storagepb.ReplicatedEvalResult), error) {
 	if split := raftCmd.ReplicatedEvalResult.Split; split != nil {
 		return r.acquireSplitLock(ctx, &split.SplitTrigger)
 	} else if merge := raftCmd.ReplicatedEvalResult.Merge; merge != nil {
@@ -5760,7 +5760,7 @@ func (r *Replica) maybeAcquireSplitMergeLock(
 
 func (r *Replica) acquireSplitLock(
 	ctx context.Context, split *roachpb.SplitTrigger,
-) (func(storagebase.ReplicatedEvalResult), error) {
+) (func(storagepb.ReplicatedEvalResult), error) {
 	rightRng, created, err := r.store.getOrCreateReplica(ctx, split.RightDesc.RangeID, 0, nil)
 	if err != nil {
 		return nil, err
@@ -5777,7 +5777,7 @@ func (r *Replica) acquireSplitLock(
 	// commands that have reproposals interacting with retries (i.e. we don't
 	// treat splits differently).
 
-	return func(rResult storagebase.ReplicatedEvalResult) {
+	return func(rResult storagepb.ReplicatedEvalResult) {
 		if rResult.Split == nil && created && !rightRng.IsInitialized() {
 			// An error occurred during processing of the split and the RHS is still
 			// uninitialized. Mark the RHS destroyed and remove it from the replica's
@@ -5803,7 +5803,7 @@ func (r *Replica) acquireSplitLock(
 
 func (r *Replica) acquireMergeLock(
 	ctx context.Context, merge *roachpb.MergeTrigger,
-) (func(storagebase.ReplicatedEvalResult), error) {
+) (func(storagepb.ReplicatedEvalResult), error) {
 	// The merge lock is the right-hand replica's raftMu. The right-hand replica
 	// is required to exist on this store. Otherwise, an incoming snapshot could
 	// create the right-hand replica before the merge trigger has a chance to
@@ -5821,7 +5821,7 @@ func (r *Replica) acquireMergeLock(
 		log.Fatalf(ctx, "RHS of merge %s <- %s not present on store; found %s in place of the RHS",
 			merge.LeftDesc, merge.RightDesc, rightDesc)
 	}
-	return func(storagebase.ReplicatedEvalResult) {
+	return func(storagepb.ReplicatedEvalResult) {
 		rightRepl.raftMu.Unlock()
 	}, nil
 }
@@ -5833,9 +5833,9 @@ func (r *Replica) acquireMergeLock(
 func (r *Replica) applyRaftCommand(
 	ctx context.Context,
 	idKey storagebase.CmdIDKey,
-	rResult storagebase.ReplicatedEvalResult,
+	rResult storagepb.ReplicatedEvalResult,
 	raftAppliedIndex, leaseAppliedIndex uint64,
-	writeBatch *storagebase.WriteBatch,
+	writeBatch *storagepb.WriteBatch,
 ) (enginepb.MVCCStats, error) {
 	if raftAppliedIndex <= 0 {
 		return enginepb.MVCCStats{}, errors.New("raft command index is <= 0")
@@ -6210,7 +6210,7 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 			continue
 		}
 		if opLogger != nil {
-			res.LogicalOpLog = &storagebase.LogicalOpLog{
+			res.LogicalOpLog = &storagepb.LogicalOpLog{
 				Ops: opLogger.LogicalOps(),
 			}
 		}
@@ -7148,12 +7148,12 @@ func EnableLeaseHistory(maxEntries int) func() {
 
 // GetCommandQueueSnapshot returns a snapshot of the command queue state for
 // this replica.
-func (r *Replica) GetCommandQueueSnapshot() storagebase.CommandQueuesSnapshot {
+func (r *Replica) GetCommandQueueSnapshot() storagepb.CommandQueuesSnapshot {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	r.cmdQMu.Lock()
 	defer r.cmdQMu.Unlock()
-	return storagebase.CommandQueuesSnapshot{
+	return storagepb.CommandQueuesSnapshot{
 		Timestamp:   r.store.Clock().Now(),
 		LocalScope:  r.cmdQMu.queues[spanset.SpanLocal].GetSnapshot(),
 		GlobalScope: r.cmdQMu.queues[spanset.SpanGlobal].GetSnapshot(),

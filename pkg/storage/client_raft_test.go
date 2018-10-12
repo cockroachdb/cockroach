@@ -27,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -839,7 +841,7 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 	header := storage.SnapshotRequest_Header{
 		CanDecline: true,
 		RangeSize:  100,
-		State:      storagebase.ReplicaState{Desc: rep.Desc()},
+		State:      storagepb.ReplicaState{Desc: rep.Desc()},
 	}
 	// Cause this stream to return an error as soon as we ask it for something.
 	// This injects an error into HandleSnapshotStream when we try to send the
@@ -2611,7 +2613,7 @@ func (ncc *noConfChangeTestHandler) HandleRaftRequest(
 			if err := protoutil.Unmarshal(cc.Context, &ccCtx); err != nil {
 				panic(err)
 			}
-			var command storagebase.RaftCommand
+			var command storagepb.RaftCommand
 			if err := protoutil.Unmarshal(ccCtx.Payload, &command); err != nil {
 				panic(err)
 			}

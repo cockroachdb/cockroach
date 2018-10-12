@@ -21,6 +21,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -454,7 +456,7 @@ type OutgoingSnapshot struct {
 	// The complete range iterator for the snapshot to stream.
 	Iter *rditer.ReplicaDataIterator
 	// The replica state within the snapshot.
-	State storagebase.ReplicaState
+	State storagepb.ReplicaState
 	// Allows access the the original Replica's sideloaded storage. Note that
 	// this isn't a snapshot of the sideloaded storage congruent with EngineSnap
 	// or RaftSnap -- a log truncation could have removed files from the
@@ -482,7 +484,7 @@ type IncomingSnapshot struct {
 	// The Raft log entries for this snapshot.
 	LogEntries [][]byte
 	// The replica state at the time the snapshot was generated (never nil).
-	State    *storagebase.ReplicaState
+	State    *storagepb.ReplicaState
 	snapType string
 }
 

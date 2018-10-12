@@ -770,12 +770,12 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 	invalidLease.Sequence++
 	invalidLease.Replica.StoreID += 12345
 
-	raftCmd := storagebase.RaftCommand{
+	raftCmd := storagepb.RaftCommand{
 		ProposerLeaseSequence: lease.Sequence,
 		ProposerReplica:       invalidLease.Replica,
-		ReplicatedEvalResult: storagebase.ReplicatedEvalResult{
+		ReplicatedEvalResult: storagepb.ReplicatedEvalResult{
 			IsLeaseRequest: true,
-			State: &storagebase.ReplicaState{
+			State: &storagepb.ReplicaState{
 				Lease: &invalidLease,
 			},
 		},
