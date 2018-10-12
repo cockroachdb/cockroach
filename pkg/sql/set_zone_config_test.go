@@ -21,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 func TestValidateZoneAttrsAndLocalities(t *testing.T) {
@@ -57,8 +57,8 @@ func TestValidateZoneAttrsAndLocalities(t *testing.T) {
 
 	nodes := &serverpb.NodesResponse{}
 	for _, store := range stores {
-		nodes.Nodes = append(nodes.Nodes, status.NodeStatus{
-			StoreStatuses: []status.StoreStatus{
+		nodes.Nodes = append(nodes.Nodes, statuspb.NodeStatus{
+			StoreStatuses: []statuspb.StoreStatus{
 				{
 					Desc: roachpb.StoreDescriptor{
 						Attrs: roachpb.Attributes{

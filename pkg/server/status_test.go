@@ -40,7 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -408,7 +408,7 @@ func TestNodeStatusResponse(t *testing.T) {
 	// Now fetch each one individually. Loop through the nodeStatuses to use the
 	// ids only.
 	for _, oldNodeStatus := range nodeStatuses {
-		nodeStatus := status.NodeStatus{}
+		nodeStatus := statuspb.NodeStatus{}
 		if err := getStatusJSONProto(s, "nodes/"+oldNodeStatus.Desc.NodeID.String(), &nodeStatus); err != nil {
 			t.Fatal(err)
 		}

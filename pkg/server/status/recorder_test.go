@@ -30,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -70,7 +71,7 @@ func (a byStoreID) Less(i, j int) bool {
 var _ sort.Interface = byStoreID{}
 
 // byStoreDescID is a slice of storage.StoreStatus
-type byStoreDescID []StoreStatus
+type byStoreDescID []statuspb.StoreStatus
 
 // implement sort.Interface for byStoreDescID.
 func (a byStoreDescID) Len() int      { return len(a) }
@@ -325,13 +326,13 @@ func TestMetricsRecorder(t *testing.T) {
 	// ========================================
 	// Verify node summary generation
 	// ========================================
-	expectedNodeSummary := &NodeStatus{
+	expectedNodeSummary := &statuspb.NodeStatus{
 		Desc:      nodeDesc,
 		BuildInfo: build.GetInfo(),
 		StartedAt: 50,
 		UpdatedAt: 100,
 		Metrics:   expectedNodeSummaryMetrics,
-		StoreStatuses: []StoreStatus{
+		StoreStatuses: []statuspb.StoreStatus{
 			{
 				Desc:    storeDesc1,
 				Metrics: expectedStoreSummaryMetrics,

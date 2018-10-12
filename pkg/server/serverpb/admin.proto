@@ -22,6 +22,7 @@ import "server/serverpb/status.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/liveness.proto";
 import "storage/log.proto";
+
 import "util/metric/metric.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
