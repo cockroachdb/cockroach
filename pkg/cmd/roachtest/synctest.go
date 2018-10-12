@@ -35,7 +35,8 @@ fi
 	r.Add(testSpec{
 		Name:       "synctest",
 		MinVersion: `v2.2.0`,
-		Cluster:    makeClusterSpec(1),
+		// This test sets up a custom file system; we don't want the cluster reused.
+		Cluster:     makeClusterSpec(1, NoReuse),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			n := c.Node(1)
 			tmpDir, err := ioutil.TempDir("", "synctest")
