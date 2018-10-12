@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -371,8 +372,8 @@ func (mr *MetricsRecorder) GetMetricsMetadata() map[string]metric.Metadata {
 // latency. Throughputs are stored as bytes, and latencies as nanos.
 func (mr *MetricsRecorder) getNetworkActivity(
 	ctx context.Context,
-) map[roachpb.NodeID]NodeStatus_NetworkActivity {
-	activity := make(map[roachpb.NodeID]NodeStatus_NetworkActivity)
+) map[roachpb.NodeID]statuspb.NodeStatus_NetworkActivity {
+	activity := make(map[roachpb.NodeID]statuspb.NodeStatus_NetworkActivity)
 	if mr.nodeLiveness != nil && mr.gossip != nil {
 		isLiveMap := mr.nodeLiveness.GetIsLiveMap()
 
@@ -389,7 +390,7 @@ func (mr *MetricsRecorder) getNetworkActivity(
 				}
 				continue
 			}
-			na := NodeStatus_NetworkActivity{}
+			na := statuspb.NodeStatus_NetworkActivity{}
 			key := address.String()
 			if tp, ok := throughputMap.Load(key); ok {
 				stats := tp.(*rpc.Stats)
@@ -410,7 +411,7 @@ func (mr *MetricsRecorder) getNetworkActivity(
 // GenerateNodeStatus returns a status summary message for the node. The summary
 // includes the recent values of metrics for both the node and all of its
 // component stores. When the node isn't initialized yet, nil is returned.
-func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *NodeStatus {
+func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.NodeStatus {
 	activity := mr.getNetworkActivity(ctx)
 
 	mr.mu.RLock()
@@ -436,12 +437,12 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *NodeStatus {
 	}
 
 	// Generate a node status with no store data.
-	nodeStat := &NodeStatus{
+	nodeStat := &statuspb.NodeStatus{
 		Desc:              mr.mu.desc,
 		BuildInfo:         build.GetInfo(),
 		UpdatedAt:         now,
 		StartedAt:         mr.mu.startedAt,
-		StoreStatuses:     make([]StoreStatus, 0, lastSummaryCount),
+		StoreStatuses:     make([]statuspb.StoreStatus, 0, lastSummaryCount),
 		Metrics:           make(map[string]float64, lastNodeMetricCount),
 		Args:              os.Args,
 		Env:               envutil.GetEnvVarsUsed(),
@@ -477,7 +478,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *NodeStatus {
 			continue
 		}
 
-		nodeStat.StoreStatuses = append(nodeStat.StoreStatuses, StoreStatus{
+		nodeStat.StoreStatuses = append(nodeStat.StoreStatuses, statuspb.StoreStatus{
 			Desc:    *descriptor,
 			Metrics: storeMetrics,
 		})
@@ -497,7 +498,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *NodeStatus {
 
 // WriteNodeStatus writes the supplied summary to the given client.
 func (mr *MetricsRecorder) WriteNodeStatus(
-	ctx context.Context, db *client.DB, nodeStatus NodeStatus,
+	ctx context.Context, db *client.DB, nodeStatus statuspb.NodeStatus,
 ) error {
 	mr.writeSummaryMu.Lock()
 	defer mr.writeSummaryMu.Unlock()
