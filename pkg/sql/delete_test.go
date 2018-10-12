@@ -22,6 +22,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -119,20 +120,20 @@ CREATE TABLE IF NOT EXISTS child_with_index(
 				}
 			}
 
-			lookup := func(ctx context.Context, tableID sqlbase.ID) (sqlbase.TableLookup, error) {
+			lookup := func(ctx context.Context, tableID sqlbase.ID) (row.TableLookup, error) {
 				table, exists := tablesByID[tableID]
 				if !exists {
-					return sqlbase.TableLookup{}, errors.Errorf("Could not lookup table:%d", tableID)
+					return row.TableLookup{}, errors.Errorf("Could not lookup table:%d", tableID)
 				}
-				return sqlbase.TableLookup{Table: table}, nil
+				return row.TableLookup{Table: table}, nil
 			}
 
-			fkTables, err := sqlbase.TablesNeededForFKs(
+			fkTables, err := row.TablesNeededForFKs(
 				context.TODO(),
 				*pd,
-				sqlbase.CheckDeletes,
+				row.CheckDeletes,
 				lookup,
-				sqlbase.NoCheckPrivilege,
+				row.NoCheckPrivilege,
 				nil, /* AnalyzeExprFunction */
 			)
 			if err != nil {

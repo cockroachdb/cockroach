@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -363,10 +364,8 @@ func (r fkResolver) LookupSchema(
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) LookupTableByID(
-	ctx context.Context, id sqlbase.ID,
-) (sqlbase.TableLookup, error) {
-	return sqlbase.TableLookup{}, errSchemaResolver
+func (r fkResolver) LookupTableByID(ctx context.Context, id sqlbase.ID) (row.TableLookup, error) {
+	return row.TableLookup{}, errSchemaResolver
 }
 
 const csvDatabaseName = "csv"

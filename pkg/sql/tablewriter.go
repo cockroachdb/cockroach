@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -76,7 +77,7 @@ type tableWriter interface {
 	tableDesc() *sqlbase.TableDescriptor
 
 	// fkSpanCollector returns the FkSpanCollector for the tableWriter.
-	fkSpanCollector() sqlbase.FkSpanCollector
+	fkSpanCollector() row.FkSpanCollector
 
 	// close frees all resources held by the tableWriter.
 	close(context.Context)
@@ -139,7 +140,7 @@ func (tb *tableWriterBase) flushAndStartNewBatch(
 	ctx context.Context, tableDesc *sqlbase.TableDescriptor,
 ) error {
 	if err := tb.txn.Run(ctx, tb.b); err != nil {
-		return sqlbase.ConvertBatchError(ctx, tableDesc, tb.b)
+		return row.ConvertBatchError(ctx, tableDesc, tb.b)
 	}
 	tb.b = tb.txn.NewBatch()
 	tb.batchSize = 0
@@ -163,7 +164,7 @@ func (tb *tableWriterBase) finalize(
 	}
 
 	if err != nil {
-		return sqlbase.ConvertBatchError(ctx, tableDesc, tb.b)
+		return row.ConvertBatchError(ctx, tableDesc, tb.b)
 	}
 	return nil
 }

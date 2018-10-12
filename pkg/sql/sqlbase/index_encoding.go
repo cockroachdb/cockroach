@@ -467,63 +467,6 @@ func DecodeIndexKeyWithoutTableIDIndexIDPrefix(
 	return key, true, nil
 }
 
-// consumeIndexKeyWithoutTableIDIndexIDPrefix consumes an index key that's
-// already pre-stripped of its table ID index ID prefix, up to nCols columns,
-// returning the number of bytes consumed. For example, given an input key
-// with values (6,7,8,9) such as /Table/60/1/6/7/#/61/1/8/9, stripping 3 columns
-// from this key would eat all but the final, 4th column 9 in this example,
-// producing /Table/60/1/6/7/#/61/1/8. If nCols was 2, instead, the result
-// would include the trailing table ID index ID pair, since that's a more
-// precise key: /Table/60/1/6/7/#/61/1.
-func consumeIndexKeyWithoutTableIDIndexIDPrefix(
-	index *IndexDescriptor, nCols int, key []byte,
-) (int, error) {
-	origKeyLen := len(key)
-	consumedCols := 0
-	for _, ancestor := range index.Interleave.Ancestors {
-		length := int(ancestor.SharedPrefixLen)
-		// Skip up to length values.
-		for j := 0; j < length; j++ {
-			if consumedCols == nCols {
-				// We're done early, in the middle of an interleave.
-				return origKeyLen - len(key), nil
-			}
-			l, err := encoding.PeekLength(key)
-			if err != nil {
-				return 0, err
-			}
-			key = key[l:]
-			consumedCols++
-		}
-		var ok bool
-		key, ok = encoding.DecodeIfInterleavedSentinel(key)
-		if !ok {
-			return 0, errors.New("unexpected lack of sentinel key")
-		}
-
-		// Skip the TableID/IndexID pair for each ancestor except for the
-		// first, which has already been skipped in our input.
-		for j := 0; j < 2; j++ {
-			idLen, err := encoding.PeekLength(key)
-			if err != nil {
-				return 0, err
-			}
-			key = key[idLen:]
-		}
-	}
-
-	// Decode the remaining values in the key, in the final interleave.
-	for ; consumedCols < nCols; consumedCols++ {
-		l, err := encoding.PeekLength(key)
-		if err != nil {
-			return 0, err
-		}
-		key = key[l:]
-	}
-
-	return origKeyLen - len(key), nil
-}
-
 // DecodeKeyVals decodes the values that are part of the key. The decoded
 // values are stored in the vals. If this slice is nil, the direction
 // used will default to encoding.Ascending.

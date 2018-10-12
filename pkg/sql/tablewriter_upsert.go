@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -30,7 +31,7 @@ import (
 type tableUpserterBase struct {
 	tableWriterBase
 
-	ri    sqlbase.RowInserter
+	ri    row.Inserter
 	alloc *sqlbase.DatumAlloc
 
 	// Should we collect the rows for a RETURNING clause?
@@ -180,7 +181,7 @@ func (tu *tableUpserterBase) makeResultFromRow(
 }
 
 // fkSpanCollector is part of the tableWriter interface.
-func (tu *tableUpserterBase) fkSpanCollector() sqlbase.FkSpanCollector {
+func (tu *tableUpserterBase) fkSpanCollector() row.FkSpanCollector {
 	return tu.ri.Fks
 }
 
@@ -248,12 +249,12 @@ type tableUpserter struct {
 	updateValues tree.Datums
 
 	// Set by init.
-	fkTables              sqlbase.TableLookupsByID // for fk checks in update case
-	ru                    sqlbase.RowUpdater
+	fkTables              row.TableLookupsByID // for fk checks in update case
+	ru                    row.Updater
 	updateColIDtoRowIndex map[sqlbase.ColumnID]int
 	fetchCols             []sqlbase.ColumnDescriptor
 	fetchColIDtoRowIndex  map[sqlbase.ColumnID]int
-	fetcher               sqlbase.RowFetcher
+	fetcher               row.Fetcher
 }
 
 // init is part of the tableWriter interface.
@@ -273,15 +274,15 @@ func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error 
 
 	if len(tu.updateCols) == 0 {
 		tu.fetchCols = requestedCols
-		tu.fetchColIDtoRowIndex = sqlbase.ColIDtoRowIndexFromCols(requestedCols)
+		tu.fetchColIDtoRowIndex = row.ColIDtoRowIndexFromCols(requestedCols)
 	} else {
-		tu.ru, err = sqlbase.MakeRowUpdater(
+		tu.ru, err = row.MakeUpdater(
 			txn,
 			tableDesc,
 			tu.fkTables,
 			tu.updateCols,
 			requestedCols,
-			sqlbase.RowUpdaterDefault,
+			row.UpdaterDefault,
 			evalCtx,
 			tu.alloc,
 		)
@@ -306,7 +307,7 @@ func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error 
 		}
 	}
 
-	tableArgs := sqlbase.RowFetcherTableArgs{
+	tableArgs := row.FetcherTableArgs{
 		Desc:            tableDesc,
 		Index:           &tableDesc.PrimaryIndex,
 		ColIdxMap:       tu.fetchColIDtoRowIndex,
@@ -542,7 +543,7 @@ func (tu *tableUpserter) updateConflictingRow(
 	// containing the updated values for every column in the
 	// table. This is useful for RETURNING, which we collect below.
 	updatedRow, err := tu.ru.UpdateRow(
-		ctx, b, conflictingRowValues, updateValues, sqlbase.CheckFKs, traceKV,
+		ctx, b, conflictingRowValues, updateValues, row.CheckFKs, traceKV,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -634,7 +635,7 @@ func (tu *tableUpserter) insertNonConflictingRow(
 ) (resultRow tree.Datums, newExistingRows []tree.Datums, err error) {
 	// Perform the insert proper.
 	if err := tu.ri.InsertRow(
-		ctx, b, insertRow, false /* ignoreConflicts */, sqlbase.CheckFKs, traceKV); err != nil {
+		ctx, b, insertRow, false /* ignoreConflicts */, row.CheckFKs, traceKV); err != nil {
 		return nil, nil, err
 	}
 

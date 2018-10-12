@@ -20,6 +20,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -63,7 +64,7 @@ type interleavedReaderJoiner struct {
 	allSpans  roachpb.Spans
 	limitHint int64
 
-	fetcher sqlbase.RowFetcher
+	fetcher row.Fetcher
 	alloc   sqlbase.DatumAlloc
 
 	// TODO(richardwu): If we need to buffer more than 1 ancestor row for
@@ -296,7 +297,7 @@ func newInterleavedReaderJoiner(
 
 	tables := make([]tableInfo, len(spec.Tables))
 	// We need to take spans from all tables and merge them together
-	// for RowFetcher.
+	// for Fetcher.
 	allSpans := make(roachpb.Spans, 0, len(spec.Tables))
 
 	// We need to figure out which table is the ancestor.
@@ -389,7 +390,7 @@ func newInterleavedReaderJoiner(
 func (irj *interleavedReaderJoiner) initRowFetcher(
 	tables []InterleavedReaderJoinerSpec_Table, reverseScan bool, alloc *sqlbase.DatumAlloc,
 ) error {
-	args := make([]sqlbase.RowFetcherTableArgs, len(tables))
+	args := make([]row.FetcherTableArgs, len(tables))
 
 	for i, table := range tables {
 		desc := table.Desc

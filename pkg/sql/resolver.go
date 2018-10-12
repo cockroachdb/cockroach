@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -43,7 +44,7 @@ type SchemaResolver interface {
 	CurrentSearchPath() sessiondata.SearchPath
 	CommonLookupFlags(ctx context.Context, required bool) CommonLookupFlags
 	ObjectLookupFlags(ctx context.Context, required bool) ObjectLookupFlags
-	LookupTableByID(ctx context.Context, id sqlbase.ID) (sqlbase.TableLookup, error)
+	LookupTableByID(ctx context.Context, id sqlbase.ID) (row.TableLookup, error)
 }
 
 var _ SchemaResolver = &planner{}

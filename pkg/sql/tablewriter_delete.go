@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -33,7 +34,7 @@ import (
 type tableDeleter struct {
 	tableWriterBase
 
-	rd    sqlbase.RowDeleter
+	rd    row.Deleter
 	alloc *sqlbase.DatumAlloc
 }
 
@@ -65,7 +66,7 @@ func (td *tableDeleter) row(
 	ctx context.Context, values tree.Datums, traceKV bool,
 ) (tree.Datums, error) {
 	td.batchSize++
-	return nil, td.rd.DeleteRow(ctx, td.b, values, sqlbase.CheckFKs, traceKV)
+	return nil, td.rd.DeleteRow(ctx, td.b, values, row.CheckFKs, traceKV)
 }
 
 // fastPathAvailable returns true if the fastDelete optimization can be used.
@@ -202,8 +203,8 @@ func (td *tableDeleter) deleteAllRowsScan(
 		valNeededForCol.Add(idx)
 	}
 
-	var rf sqlbase.RowFetcher
-	tableArgs := sqlbase.RowFetcherTableArgs{
+	var rf row.Fetcher
+	tableArgs := row.FetcherTableArgs{
 		Desc:            td.rd.Helper.TableDesc,
 		Index:           &td.rd.Helper.TableDesc.PrimaryIndex,
 		ColIdxMap:       td.rd.FetchColIDtoRowIndex,
@@ -313,8 +314,8 @@ func (td *tableDeleter) deleteIndexScan(
 		valNeededForCol.Add(idx)
 	}
 
-	var rf sqlbase.RowFetcher
-	tableArgs := sqlbase.RowFetcherTableArgs{
+	var rf row.Fetcher
+	tableArgs := row.FetcherTableArgs{
 		Desc:            td.rd.Helper.TableDesc,
 		Index:           &td.rd.Helper.TableDesc.PrimaryIndex,
 		ColIdxMap:       td.rd.FetchColIDtoRowIndex,
@@ -356,7 +357,7 @@ func (td *tableDeleter) tableDesc() *sqlbase.TableDescriptor {
 	return td.rd.Helper.TableDesc
 }
 
-func (td *tableDeleter) fkSpanCollector() sqlbase.FkSpanCollector {
+func (td *tableDeleter) fkSpanCollector() row.FkSpanCollector {
 	return td.rd.Fks
 }
 

@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -25,7 +26,7 @@ import (
 // tableUpdater handles writing kvs and forming table rows for updates.
 type tableUpdater struct {
 	tableWriterBase
-	ru sqlbase.RowUpdater
+	ru row.Updater
 }
 
 // init is part of the tableWriter interface.
@@ -47,7 +48,7 @@ func (tu *tableUpdater) rowForUpdate(
 	ctx context.Context, oldValues, updateValues tree.Datums, traceKV bool,
 ) (tree.Datums, error) {
 	tu.batchSize++
-	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, sqlbase.CheckFKs, traceKV)
+	return tu.ru.UpdateRow(ctx, tu.b, oldValues, updateValues, row.CheckFKs, traceKV)
 }
 
 // atBatchEnd is part of the extendedTableWriter interface.
@@ -71,7 +72,7 @@ func (tu *tableUpdater) tableDesc() *sqlbase.TableDescriptor {
 }
 
 // fkSpanCollector is part of the tableWriter interface.
-func (tu *tableUpdater) fkSpanCollector() sqlbase.FkSpanCollector {
+func (tu *tableUpdater) fkSpanCollector() row.FkSpanCollector {
 	return tu.ru.Fks
 }
 

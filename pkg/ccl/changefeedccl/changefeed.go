@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -71,7 +72,7 @@ func kvsToRows(
 ) func(context.Context) ([]emitEntry, error) {
 	rfCache := newRowFetcherCache(leaseMgr)
 
-	var kvs sqlbase.SpanKVFetcher
+	var kvs row.SpanKVFetcher
 	appendEmitEntryForKV := func(
 		ctx context.Context, output []emitEntry, kv roachpb.KeyValue, schemaTimestamp hlc.Timestamp,
 	) ([]emitEntry, error) {
