@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -42,7 +42,7 @@ func TestManualReplication(t *testing.T) {
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "t",
 				Knobs: base.TestingKnobs{
-					Store: &storage.StoreTestingKnobs{
+					Store: &storagebase.StoreTestingKnobs{
 						// Prevent the merge queue from immediately discarding our splits.
 						DisableMergeQueue: true,
 					},

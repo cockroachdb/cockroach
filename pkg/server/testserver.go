@@ -26,7 +26,7 @@ import (
 
 	"github.com/cenk/backoff"
 	"github.com/pkg/errors"
-	circuit "github.com/rubyist/circuitbreaker"
+	"github.com/rubyist/circuitbreaker"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -125,7 +126,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.RetryOptions = params.RetryOptions
 	cfg.Locality = params.Locality
 	if knobs := params.Knobs.Store; knobs != nil {
-		if mo := knobs.(*storage.StoreTestingKnobs).MaxOffset; mo != 0 {
+		if mo := knobs.(*storagebase.StoreTestingKnobs).MaxOffset; mo != 0 {
 			cfg.MaxOffset = MaxOffsetType(mo)
 		}
 	}
@@ -201,9 +202,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	}
 
 	if cfg.TestingKnobs.Store == nil {
-		cfg.TestingKnobs.Store = &storage.StoreTestingKnobs{}
+		cfg.TestingKnobs.Store = &storagebase.StoreTestingKnobs{}
 	}
-	cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs).SkipMinSizeCheck = true
+	cfg.TestingKnobs.Store.(*storagebase.StoreTestingKnobs).SkipMinSizeCheck = true
 
 	if params.ConnResultsBufferBytes != 0 {
 		cfg.ConnResultsBufferBytes = params.ConnResultsBufferBytes
@@ -356,7 +357,7 @@ func (ts *TestServer) Start(params base.TestServerArgs) error {
 	// If enabled, wait for initial splits to complete before returning control.
 	// If initial splits do not complete, the server is stopped before
 	// returning.
-	if stk, ok := ts.cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs); ok &&
+	if stk, ok := ts.cfg.TestingKnobs.Store.(*storagebase.StoreTestingKnobs); ok &&
 		stk.DisableSplitQueue {
 		return nil
 	}

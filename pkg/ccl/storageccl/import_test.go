@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -200,8 +199,8 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 	// AmbiguousResultError. Import should be resilient to this.
 	const initialAmbiguousSubReqs = 3
 	remainingAmbiguousSubReqs := int64(initialAmbiguousSubReqs)
-	knobs := base.TestingKnobs{Store: &storage.StoreTestingKnobs{
-		EvalKnobs: batcheval.TestingKnobs{
+	knobs := base.TestingKnobs{Store: &storagebase.StoreTestingKnobs{
+		EvalKnobs: storagebase.BatchEvalTestingKnobs{
 			TestingEvalFilter: func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 				switch filterArgs.Req.(type) {
 				case *roachpb.WriteBatchRequest, *roachpb.AddSSTableRequest:

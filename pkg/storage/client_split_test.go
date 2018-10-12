@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
-	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
@@ -1578,8 +1577,8 @@ func TestStoreSplitTimestampCacheDifferentLeaseHolder(t *testing.T) {
 
 	var args base.TestClusterArgs
 	args.ReplicationMode = base.ReplicationManual
-	args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
-		EvalKnobs: batcheval.TestingKnobs{
+	args.ServerArgs.Knobs.Store = &storagebase.StoreTestingKnobs{
+		EvalKnobs: storagebase.BatchEvalTestingKnobs{
 			TestingEvalFilter: filter,
 		},
 	}
@@ -1761,7 +1760,7 @@ func TestStoreSplitOnRemovedReplica(t *testing.T) {
 
 	var args base.TestClusterArgs
 	args.ReplicationMode = base.ReplicationManual
-	args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+	args.ServerArgs.Knobs.Store = &storagebase.StoreTestingKnobs{
 		TestingRequestFilter: filter,
 	}
 
@@ -1850,7 +1849,7 @@ func TestStoreSplitFailsAfterMaxRetries(t *testing.T) {
 
 	var args base.TestClusterArgs
 	args.ReplicationMode = base.ReplicationManual
-	args.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+	args.ServerArgs.Knobs.Store = &storagebase.StoreTestingKnobs{
 		TestingRequestFilter: filter,
 	}
 
@@ -2839,7 +2838,7 @@ func TestRangeLookupAfterMeta2Split(t *testing.T) {
 	ctx := context.Background()
 	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storage.StoreTestingKnobs{
+			Store: &storagebase.StoreTestingKnobs{
 				DisableMergeQueue: true,
 			},
 		},
@@ -2967,7 +2966,7 @@ func TestStoreSplitRangeLookupRace(t *testing.T) {
 
 	srv, _, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storage.StoreTestingKnobs{
+			Store: &storagebase.StoreTestingKnobs{
 				DisableSplitQueue:         true,
 				DisableMergeQueue:         true,
 				ForceSyncIntentResolution: true,
