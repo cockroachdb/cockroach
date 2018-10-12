@@ -12,25 +12,15 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 )
 
 func registerAcceptance(r *registry) {
-	// The acceptance tests all share a cluster and run sequentially. In
-	// local mode the acceptance tests should be configured to run within a
-	// minute or so as these tests are run on every merge to master.
-
 	testCases := []struct {
-		name string
-		fn   func(ctx context.Context, t *test, c *cluster)
-		skip string
-		// roachtest needs to be taught about MinVersion for subtests.
-		// See https://github.com/cockroachdb/cockroach/issues/36752.
-		//
-		// minVersion string
+		name       string
+		fn         func(ctx context.Context, t *test, c *cluster)
+		skip       string
+		minVersion string
 	}{
 		// Sorted. Please keep it that way.
 		{name: "bank/cluster-recovery", fn: runBankClusterRecovery},
@@ -53,16 +43,11 @@ func registerAcceptance(r *registry) {
 		{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
 		{name: "rapid-restart", fn: runRapidRestart},
 		{name: "status-server", fn: runStatusServer},
-		{
-			name: "version-upgrade",
-			fn:   runVersionUpgrade,
-			// NB: this is hacked back in below.
-			// minVersion: "v19.2.0",
-		},
+		{name: "version-upgrade", fn: runVersionUpgrade, minVersion: "v19.1.0"},
 	}
 	tags := []string{"default", "quick"}
 	const numNodes = 4
-	spec := testSpec{
+	specTemplate := testSpec{
 		// NB: teamcity-post-failures.py relies on the acceptance tests
 		// being named acceptance/<testname> and will avoid posting a
 		// blank issue for the "acceptance" parent test. Make sure to
@@ -70,26 +55,20 @@ func registerAcceptance(r *registry) {
 		// this naming scheme ever change (or issues such as #33519)
 		// will be posted.
 		Name:    "acceptance",
+		Timeout: 10 * time.Minute,
 		Tags:    tags,
 		Cluster: makeClusterSpec(numNodes),
 	}
 
 	for _, tc := range testCases {
-		tc := tc
-		minV := "v19.2.0-0"
-		if tc.name == "version-upgrade" && !r.buildVersion.AtLeast(version.MustParse(minV)) {
-			tc.skip = fmt.Sprintf("skipped on %s (want at least %s)", r.buildVersion, minV)
+		tc := tc // copy for closure
+		spec := specTemplate
+		spec.Name = specTemplate.Name + "/" + tc.name
+		spec.Run = func(ctx context.Context, t *test, c *cluster) {
+			// TODO(andrei): !!! remove this wipe once the test runner starts doing it.
+			c.Wipe(ctx)
+			tc.fn(ctx, t, c)
 		}
-		spec.SubTests = append(spec.SubTests, testSpec{
-			Skip:    tc.skip,
-			Name:    tc.name,
-			Timeout: 10 * time.Minute,
-			Tags:    tags,
-			Run: func(ctx context.Context, t *test, c *cluster) {
-				c.Wipe(ctx)
-				tc.fn(ctx, t, c)
-			},
-		})
+		r.Add(spec)
 	}
-	r.Add(spec)
 }

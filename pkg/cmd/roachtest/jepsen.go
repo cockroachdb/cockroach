@@ -287,44 +287,31 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 }
 
 func registerJepsen(r *registry) {
-	// We're splitting the tests arbitrarily into a number of "batches" - top
-	// level tests. We do this so that we can different groups can run in parallel
-	// (as subtests don't run concurrently with each other). We put more than one
-	// test in a group so that Jepsen's lengthy cluster initialization step can be
-	// amortized (the individual tests are smart enough to not do it if it has
-	// been done already).
-	//
 	// NB: the "comments" test is not included because it requires
 	// linearizability.
-	// NB: the "multi-register" test takes about twice as long as the other
-	// tests, so it is included the group of two.
-	groups := [][]string{
-		{"bank", "bank-multitable", "g2"},
-		{"register", "sequential", "sets"},
-		{"multi-register", "monotonic"},
-	}
-
-	for i := range groups {
-		spec := testSpec{
-			Name:    fmt.Sprintf("jepsen-batch%d", i+1),
-			Cluster: makeClusterSpec(6),
-		}
-
-		for _, testName := range groups[i] {
-			testName := testName
-			sub := testSpec{Name: testName}
-			for _, nemesis := range jepsenNemeses {
-				nemesis := nemesis
-				sub.SubTests = append(sub.SubTests, testSpec{
-					Name: nemesis.name,
-					Run: func(ctx context.Context, t *test, c *cluster) {
-						runJepsen(ctx, t, c, testName, nemesis.config)
-					},
-				})
+	tests := []string{
+		"bank", "bank-multitable", "g2",
+		"monotonic", "register", "sequential",
+		"sets", "multi-register"}
+	for _, testName := range tests {
+		testName := testName
+		for _, nemesis := range jepsenNemeses {
+			nemesis := nemesis // copy for closure
+			spec := testSpec{
+				Name: fmt.Sprintf("jepsen/%s/%s", testName, nemesis.name),
+				// The Jepsen tests do funky things to machines, like muck with the
+				// system clock; therefor, their clusters cannot be reused other tests
+				// except the Jepsen ones themselves which reset all this state when
+				// they start. It is important, however, that the Jepsen tests reuses
+				// clusters because they have a lengthy setup step, but avoid doing it
+				// if they detect that the machines have already been properly
+				// initialized.
+				Cluster: makeClusterSpec(6, reuseTagged("jepsen")),
+				Run: func(ctx context.Context, t *test, c *cluster) {
+					runJepsen(ctx, t, c, testName, nemesis.config)
+				},
 			}
-			spec.SubTests = append(spec.SubTests, sub)
+			r.Add(spec)
 		}
-
-		r.Add(spec)
 	}
 }

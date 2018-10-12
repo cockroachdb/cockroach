@@ -65,15 +65,16 @@ func TestRegistryRun(t *testing.T) {
 	r := newRegistry()
 	r.out = ioutil.Discard
 	r.Add(testSpec{
-		Name: "pass",
-		Run: func(ctx context.Context, t *test, c *cluster) {
-		},
+		Name:    "pass",
+		Run:     func(ctx context.Context, t *test, c *cluster) {},
+		Cluster: makeClusterSpec(0),
 	})
 	r.Add(testSpec{
 		Name: "fail",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			t.Fatal("failed")
 		},
+		Cluster: makeClusterSpec(0),
 	})
 
 	testCases := []struct {
@@ -123,7 +124,8 @@ func TestRegistryStatus(t *testing.T) {
 	r.out = &buf
 	r.statusInterval = 20 * time.Millisecond
 	r.Add(testSpec{
-		Name: `status`,
+		Name:    `status`,
+		Cluster: makeClusterSpec(0),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			t.Status("waiting")
 			var wg sync.WaitGroup
@@ -176,7 +178,8 @@ func TestRegistryStatusUnknown(t *testing.T) {
 	r.statusInterval = 20 * time.Millisecond
 
 	r.Add(testSpec{
-		Name: `status`,
+		Name:    `status`,
+		Cluster: makeClusterSpec(0),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			for i := 0; i < 100; i++ {
 				time.Sleep(r.statusInterval)
@@ -207,6 +210,7 @@ func TestRegistryRunTimeout(t *testing.T) {
 	r.Add(testSpec{
 		Name:    `timeout`,
 		Timeout: 10 * time.Millisecond,
+		Cluster: makeClusterSpec(0),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			<-ctx.Done()
 		},
@@ -216,49 +220,6 @@ func TestRegistryRunTimeout(t *testing.T) {
 	out := buf.String()
 	if !timeoutRE.MatchString(out) {
 		t.Fatalf("unable to find \"timed out\" message:\n%s", out)
-	}
-}
-
-func TestRegistryRunSubTestFailed(t *testing.T) {
-	var buf syncedBuffer
-	failedRE := regexp.MustCompile(`(?m)^.*--- FAIL: parent \(.*$`)
-
-	r := newRegistry()
-	r.out = &buf
-	r.Add(testSpec{
-		Name: "parent",
-		SubTests: []testSpec{{
-			Name: "child",
-			Run: func(ctx context.Context, t *test, c *cluster) {
-				t.Fatal("failed")
-			},
-		}},
-	})
-
-	r.Run([]string{"."}, defaultParallelism, "" /* artifactsDir */, "myuser")
-	out := buf.String()
-	if !failedRE.MatchString(out) {
-		t.Fatalf("unable to find \"FAIL: parent\" message:\n%s", out)
-	}
-}
-
-func TestRegistryRunNoTests(t *testing.T) {
-	var buf syncedBuffer
-	failedRE := regexp.MustCompile(`(?m)^warning: no tests to run \[notest\]\nFAIL$`)
-
-	r := newRegistry()
-	r.out = &buf
-	r.Add(testSpec{
-		Name: "some-test",
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			t.Fatal("failed")
-		},
-	})
-
-	r.Run([]string{"notest"}, defaultParallelism, "" /* artifactsDir */, "myuser")
-	out := buf.String()
-	if !failedRE.MatchString(out) {
-		t.Fatalf("unable to find \"warning: no tests to run\" message:\n%s", out)
 	}
 }
 
@@ -320,13 +281,8 @@ func TestRegistryVerifyValidClusterName(t *testing.T) {
 func TestRegistryPrepareSpec(t *testing.T) {
 	dummyRun := func(context.Context, *test, *cluster) {}
 
-	var listTests func(t *testSpec) []string
-	listTests = func(t *testSpec) []string {
-		r := []string{t.Name}
-		for i := range t.SubTests {
-			r = append(r, listTests(&t.SubTests[i])...)
-		}
-		return r
+	var listTests = func(t *testSpec) []string {
+		return []string{t.Name}
 	}
 
 	testCases := []struct {
@@ -336,77 +292,19 @@ func TestRegistryPrepareSpec(t *testing.T) {
 	}{
 		{
 			testSpec{
-				Name: "a",
-				Run:  dummyRun,
+				Name:    "a",
+				Run:     dummyRun,
+				Cluster: makeClusterSpec(0),
 			},
 			"",
 			[]string{"a"},
-		},
-		{
-			testSpec{
-				Name: "a",
-				SubTests: []testSpec{{
-					Name: "b",
-					Run:  dummyRun,
-				}},
-			},
-			"",
-			[]string{"a", "a/b"},
-		},
-		{
-			testSpec{
-				Name: "a",
-				Run:  dummyRun,
-				SubTests: []testSpec{{
-					Name: "b",
-					Run:  dummyRun,
-				}},
-			},
-			"a: must specify only one of Run or SubTests",
-			nil,
-		},
-		{
-			testSpec{
-				Name: "a",
-				SubTests: []testSpec{{
-					Name: "b",
-				}},
-			},
-			"a/b: must specify only one of Run or SubTests",
-			nil,
-		},
-		{
-			testSpec{
-				Name: "a",
-				SubTests: []testSpec{{
-					Name: "b",
-					Run:  dummyRun,
-					SubTests: []testSpec{{
-						Name: "c",
-						Run:  dummyRun,
-					}},
-				}},
-			},
-			"b: must specify only one of Run or SubTests",
-			nil,
-		},
-		{
-			testSpec{
-				Name: "a",
-				SubTests: []testSpec{{
-					Name:    "b",
-					Cluster: makeClusterSpec(1),
-					Run:     dummyRun,
-				}},
-			},
-			"a/b: subtest may not provide cluster specification",
-			nil,
 		},
 		{
 			testSpec{
 				Name:       "a",
 				MinVersion: "v2.1.0",
 				Run:        dummyRun,
+				Cluster:    makeClusterSpec(0),
 			},
 			"",
 			[]string{"a"},
@@ -414,38 +312,18 @@ func TestRegistryPrepareSpec(t *testing.T) {
 		{
 			testSpec{
 				Name:       "a",
-				MinVersion: "v2.1.0-foo",
-				Run:        dummyRun,
-			},
-			regexp.QuoteMeta(`invalid version v2.1.0-foo, cannot specify a prerelease (-xxx)`),
-			nil,
-		},
-		{
-			testSpec{
-				Name:       "a",
 				MinVersion: "foo",
 				Run:        dummyRun,
+				Cluster:    makeClusterSpec(0),
 			},
 			"a: unable to parse min-version: invalid version string 'foo'",
-			nil,
-		},
-		{
-			testSpec{
-				Name:    "a",
-				Timeout: time.Second,
-				SubTests: []testSpec{{
-					Name: "b",
-					Run:  dummyRun,
-				}},
-			},
-			"a: timeouts only apply to tests specifying Run",
 			nil,
 		},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			r := newRegistry()
-			err := r.prepareSpec(&c.spec, 0)
+			err := r.prepareSpec(&c.spec)
 			if !testutils.IsError(err, c.expectedErr) {
 				t.Fatalf("expected %q, but found %q", c.expectedErr, err.Error())
 			}
@@ -479,6 +357,7 @@ func TestRegistryMinVersion(t *testing.T) {
 			r.Add(testSpec{
 				Name:       "a",
 				MinVersion: "v2.0.0",
+				Cluster:    makeClusterSpec(0),
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runA = true
 				},
@@ -486,6 +365,7 @@ func TestRegistryMinVersion(t *testing.T) {
 			r.Add(testSpec{
 				Name:       "b",
 				MinVersion: "v2.1.0",
+				Cluster:    makeClusterSpec(0),
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runB = true
 				},

@@ -114,7 +114,7 @@ type clockMonotonicityTestCase struct {
 	expectIncreasingWallTime bool
 }
 
-func makeClockMonotonicTests() testSpec {
+func registerClockMonotonicTests(r *registry) {
 	testCases := []clockMonotonicityTestCase{
 		{
 			name:                     "persistent",
@@ -124,19 +124,17 @@ func makeClockMonotonicTests() testSpec {
 		},
 	}
 
-	spec := testSpec{
-		Name: "monotonic",
-	}
-
 	for i := range testCases {
 		tc := testCases[i]
-		spec.SubTests = append(spec.SubTests, testSpec{
-			Name: tc.name,
+		spec := testSpec{
+			Name: "clock/monotonic/" + tc.name,
+			// These tests muck with NTP, therefor we don't want the cluster reused by
+			// others.
+			Cluster: makeClusterSpec(1, reuseTagged("offset-injector")),
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClockMonotonicity(ctx, t, c, tc)
 			},
-		})
+		}
+		r.Add(spec)
 	}
-
-	return spec
 }
