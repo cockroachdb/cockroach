@@ -28,6 +28,25 @@ class TimeBoundTblPropCollector : public rocksdb::TablePropertiesCollector {
   const char* Name() const override { return "TimeBoundTblPropCollector"; }
 
   rocksdb::Status Finish(rocksdb::UserCollectedProperties* properties) override {
+    if (!last_value_.empty()) {
+      // Check to see if an intent was the last key in the SSTable. If
+      // it was, we need to extract the timestamp from the intent and
+      // update the bounds to include that timestamp.
+      cockroach::storage::engine::enginepb::MVCCMetadata meta;
+      if (!meta.ParseFromArray(last_value_.data(), last_value_.size())) {
+        // We're unable to parse the MVCCMetadata. Fail open by not
+        // setting the min/max timestamp properties.
+        return rocksdb::Status::OK();
+      }
+      if (meta.has_txn()) {
+        // We have an intent, use the intent's timestamp to update the
+        // timestamp bounds.
+        std::string ts;
+        EncodeTimestamp(ts, meta.timestamp().wall_time(), meta.timestamp().logical());
+        UpdateBounds(ts);
+      }
+    }
+
     *properties = rocksdb::UserCollectedProperties{
         {"crdb.ts.min", ts_min_},
         {"crdb.ts.max", ts_max_},
@@ -40,15 +59,18 @@ class TimeBoundTblPropCollector : public rocksdb::TablePropertiesCollector {
                              uint64_t file_size) override {
     rocksdb::Slice unused;
     rocksdb::Slice ts;
-    if (SplitKey(user_key, &unused, &ts) && !ts.empty()) {
-      ts.remove_prefix(1);  // The NUL prefix.
-      if (ts_max_.empty() || ts.compare(ts_max_) > 0) {
-        ts_max_.assign(ts.data(), ts.size());
-      }
-      if (ts_min_.empty() || ts.compare(ts_min_) < 0) {
-        ts_min_.assign(ts.data(), ts.size());
-      }
+    if (!SplitKey(user_key, &unused, &ts)) {
+      return rocksdb::Status::OK();
     }
+
+    if (!ts.empty()) {
+      last_value_.clear();
+      ts.remove_prefix(1);  // The NUL prefix.
+      UpdateBounds(ts);
+      return rocksdb::Status::OK();
+    }
+
+    last_value_.assign(value.data(), value.size());
     return rocksdb::Status::OK();
   }
 
@@ -57,8 +79,19 @@ class TimeBoundTblPropCollector : public rocksdb::TablePropertiesCollector {
   }
 
  private:
+  void UpdateBounds(rocksdb::Slice ts) {
+    if (ts_max_.empty() || ts.compare(ts_max_) > 0) {
+      ts_max_.assign(ts.data(), ts.size());
+    }
+    if (ts_min_.empty() || ts.compare(ts_min_) < 0) {
+      ts_min_.assign(ts.data(), ts.size());
+    }
+  }
+
+ private:
   std::string ts_min_;
   std::string ts_max_;
+  std::string last_value_;
 };
 
 class TimeBoundTblPropCollectorFactory : public rocksdb::TablePropertiesCollectorFactory {
