@@ -18,6 +18,14 @@ INSERT INTO t VALUES
   ('2015-08-25 04:45:45.53453', '2015-08-25', '2h45m2s234ms'),
   ('2015-08-29 23:10:09.98763', '2015-08-29', '234h45m2s234ms')
 
+# Spot-check date math.
+query T
+SELECT b + '6 month' from t order by a desc
+----
+2016-02-29 00:00:00 +0000 UTC
+2016-02-29 00:00:00 +0000 UTC
+2016-02-25 00:00:00 +0000 UTC
+
 query TTT
 SELECT * FROM t WHERE a = '2015-08-25 04:45:45.53453+01:00'::timestamp
 ----
