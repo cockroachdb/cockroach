@@ -193,7 +193,7 @@ func runClusterInit(ctx context.Context, t *test, c *cluster) {
 				args = append(args, "--insecure")
 				args = append(args, fmt.Sprintf("--port={pgport:%d}", runNode))
 				buf, err := c.RunWithBuffer(ctx, c.l, c.Node(runNode), args...)
-				c.l.Printf("%s\n", buf)
+				t.l.Printf("%s\n", buf)
 				return string(buf), err
 			}
 

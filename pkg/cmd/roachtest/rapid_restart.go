@@ -75,7 +75,7 @@ func runRapidRestart(ctx context.Context, t *test, c *cluster) {
 				case <-time.After(10 * time.Second):
 					// We likely ended up killing before the process spawned.
 					// Loop around.
-					c.l.Printf("no exit status yet, killing again")
+					t.l.Printf("no exit status yet, killing again")
 				}
 			}
 			cause := errors.Cause(err)
@@ -109,6 +109,6 @@ func runRapidRestart(ctx context.Context, t *test, c *cluster) {
 			}
 		}
 
-		c.l.Printf("%d OK\n", j)
+		t.l.Printf("%d OK\n", j)
 	}
 }

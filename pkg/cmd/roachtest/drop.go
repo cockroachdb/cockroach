@@ -86,12 +86,12 @@ func registerDrop(r *registry) {
 			}
 
 			for j := 1; j <= nodes; j++ {
-				size, err := getDiskUsageInBytes(ctx, c, c.l, j)
+				size, err := getDiskUsageInBytes(ctx, c, t.l, j)
 				if err != nil {
 					return err
 				}
 
-				c.l.Printf("Node %d space used: %s\n", j, humanizeutil.IBytes(int64(size)))
+				t.l.Printf("Node %d space used: %s\n", j, humanizeutil.IBytes(int64(size)))
 
 				// Return if the size of the directory is less than 100mb
 				if size < initDiskSpace {
@@ -127,13 +127,13 @@ func registerDrop(r *registry) {
 				sizeReport = ""
 				allNodesSpaceCleared = true
 				for j := 1; j <= nodes; j++ {
-					size, err := getDiskUsageInBytes(ctx, c, c.l, j)
+					size, err := getDiskUsageInBytes(ctx, c, t.l, j)
 					if err != nil {
 						return err
 					}
 
 					nodeSpaceUsed := fmt.Sprintf("Node %d space after deletion used: %s\n", j, humanizeutil.IBytes(int64(size)))
-					c.l.Printf(nodeSpaceUsed)
+					t.l.Printf(nodeSpaceUsed)
 
 					// Return if the size of the directory is less than 100mb
 					if size > maxSizeBytes {
