@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -42,14 +43,6 @@ const (
 	// onto the left-hand range, even when the ranges are collocated. This is
 	// expensive, so limit to one merge at a time.
 	mergeQueueConcurrency = 1
-)
-
-// MergeQueueEnabled is a setting that controls whether the merge queue is
-// enabled.
-var MergeQueueEnabled = settings.RegisterBoolSetting(
-	"kv.range_merge.queue_enabled",
-	"whether the automatic merge queue is enabled",
-	false,
 )
 
 // MergeQueueInterval is a setting that controls how often the merge queue waits
@@ -127,7 +120,7 @@ func newMergeQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *mergeQue
 
 func (mq *mergeQueue) enabled() bool {
 	st := mq.store.ClusterSettings()
-	return st.Version.IsMinSupported(cluster.VersionRangeMerges) && MergeQueueEnabled.Get(&st.SV)
+	return st.Version.IsMinSupported(cluster.VersionRangeMerges) && storagebase.MergeQueueEnabled.Get(&st.SV)
 }
 
 func (mq *mergeQueue) shouldQueue(
