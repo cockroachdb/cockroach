@@ -22,22 +22,15 @@ import (
 
 func registerInterleaved(r *registry) {
 	type config struct {
-		eastName             string
-		westName             string
-		centralName          string
-		sessions             int
-		customersPerSession  int
-		devicesPerSession    int
-		variantsPerSession   int
-		parametersPerSession int
-		queriesPerSession    int
-		insertPercent        int
-		insertLocalPercent   int
-		retrievePercent      int
-		retrieveLocalPercent int
-		updatePercent        int
-		updateLocalPercent   int
-		rowsPerDelete        int
+		eastName        string
+		westName        string
+		centralName     string
+		initSessions    int
+		insertPercent   int
+		retrievePercent int
+		updatePercent   int
+		localPercent    int
+		rowsPerDelete   int
 	}
 
 	runInterleaved := func(
@@ -46,71 +39,74 @@ func registerInterleaved(r *registry) {
 		c *cluster,
 		config config,
 	) {
-		nodes := c.nodes
-		c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
-		c.Put(ctx, workload, "./workload", c.Range(1, nodes))
-		c.Start(ctx, t, c.Range(1, nodes))
+		cockroachWest := c.Range(1, 3)
+		workloadWest := c.Node(4)
+		cockroachEast := c.Range(5, 7)
+		workloadEast := c.Node(8)
+		cockroachCentral := c.Range(9, 11)
+		workloadCentral := c.Node(12)
 
-		zones := fmt.Sprintf(" --east-zone-name %s --west-zone-name %s --central-zone-name %s ",
+		cockroachNodes := cockroachWest.merge(cockroachEast.merge(cockroachCentral))
+		workloadNodes := workloadWest.merge(workloadEast.merge(workloadCentral))
+
+		c.l.Printf("cockroach nodes: %s", cockroachNodes.String()[1:])
+		c.l.Printf("workload nodes: %s", workloadNodes.String()[1:])
+
+		c.Put(ctx, cockroach, "./cockroach", c.All())
+		c.Put(ctx, workload, "./workload", c.All())
+		c.Start(ctx, t, cockroachNodes)
+
+		zones := fmt.Sprintf("--east-zone-name %s --west-zone-name %s --central-zone-name %s",
 			config.eastName, config.westName, config.centralName)
-		cmdInit := "./workload init interleavedpartitioned" + zones +
-			"--local=false --drop --locality east --sessions 0"
+
+		cmdInit := fmt.Sprintf("./workload init interleavedpartitioned %s --drop "+
+			"--locality east --init-sessions %d",
+			zones,
+			config.initSessions,
+		)
 
 		t.Status("initializing workload")
-		c.Run(ctx, c.Node(1), cmdInit)
+
+		// Always init on an east node.
+		c.Run(ctx, cockroachEast.randNode(), cmdInit)
 
 		duration := " --duration " + ifLocal("10s", "10m")
 		histograms := " --histograms logs/stats.json"
 
-		cmdEast := fmt.Sprintf(
-			"./workload run interleavedpartitioned"+zones+
-				"--local=false --customers-per-session %d --devices-per-session %d "+
-				"--variants-per-session %d --parameters-per-session %d --queries-per-session %d "+
-				"--insert-percent %d --insert-local-percent %d --retrieve-percent %d "+
-				"--retrieve-local-percent %d --update-percent %d --update-local-percent %d"+
-				duration+histograms+" {pgurl:4-6}",
-			config.customersPerSession,
-			config.devicesPerSession,
-			config.variantsPerSession,
-			config.parametersPerSession,
-			config.queriesPerSession,
-			config.insertPercent,
-			config.insertLocalPercent,
-			config.retrievePercent,
-			config.retrieveLocalPercent,
-			config.updatePercent,
-			config.updateLocalPercent,
-		)
-
-		cmdWest := fmt.Sprintf(
-			"./workload run interleavedpartitioned"+zones+
-				"--local=false --customers-per-session %d --devices-per-session %d "+
-				"--variants-per-session %d --parameters-per-session %d --queries-per-session %d "+
-				"--insert-percent %d --insert-local-percent %d --retrieve-percent %d "+
-				"--retrieve-local-percent %d --update-percent %d --update-local-percent %d"+
-				duration+histograms+" {pgurl:1-3}",
-			config.customersPerSession,
-			config.devicesPerSession,
-			config.variantsPerSession,
-			config.parametersPerSession,
-			config.queriesPerSession,
-			config.insertPercent,
-			config.insertLocalPercent,
-			config.retrievePercent,
-			config.retrieveLocalPercent,
-			config.updatePercent,
-			config.updateLocalPercent,
-		)
+		createCmd := func(locality string, cockroachNodes nodeListOption) string {
+			return fmt.Sprintf(
+				"./workload run interleavedpartitioned %s --locality %s "+
+					"--insert-percent %d --insert-local-percent %d "+
+					"--retrieve-percent %d --retrieve-local-percent %d "+
+					"--update-percent %d --update-local-percent %d "+
+					"%s %s {pgurl%s}",
+				zones,
+				locality,
+				config.insertPercent,
+				config.localPercent,
+				config.retrievePercent,
+				config.localPercent,
+				config.updatePercent,
+				config.localPercent,
+				duration,
+				histograms,
+				cockroachNodes,
+			)
+		}
 
 		cmdCentral := fmt.Sprintf(
-			"./workload run interleavedpartitioned"+zones+
-				"--local=false --deletes --rows-per-delete %d"+
-				duration+histograms+" {pgurl:8}",
+			"./workload run interleavedpartitioned %s "+
+				"--locality central --rows-per-delete %d "+
+				"%s %s {pgurl%s}",
+			zones,
 			config.rowsPerDelete,
+			duration,
+			histograms,
+			cockroachCentral,
 		)
 
 		t.Status("running workload")
-		m := newMonitor(ctx, c)
+		m := newMonitor(ctx, c, cockroachNodes)
 
 		runLocality := func(name string, node nodeListOption, cmd string) {
 			m.Go(func(ctx context.Context) error {
@@ -123,36 +119,28 @@ func registerInterleaved(r *registry) {
 			})
 		}
 
-		runLocality("west", c.Node(1), cmdWest)
-		runLocality("east", c.Node(4), cmdEast)
-		runLocality("central", c.Node(7), cmdCentral)
+		runLocality("west", workloadWest, createCmd("west", cockroachWest))
+		runLocality("east", workloadEast, createCmd("east", cockroachEast))
+		runLocality("central", workloadCentral, cmdCentral)
 
 		m.Wait()
 	}
 
 	r.Add(testSpec{
 		Name:   "interleavedpartitioned",
-		Nodes:  nodes(9, geo(), zones("us-west1-b,us-east4-b,us-central1-a")),
+		Nodes:  nodes(12, geo(), zones("us-west1-b,us-east4-b,us-central1-a")),
 		Stable: false,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runInterleaved(ctx, t, c,
 				config{
-					eastName:             `us-east4-b`,
-					westName:             `us-west1-b`,
-					centralName:          `us-central1-a`,
-					sessions:             10000,
-					customersPerSession:  2,
-					devicesPerSession:    2,
-					variantsPerSession:   5,
-					parametersPerSession: 1,
-					queriesPerSession:    1,
-					insertPercent:        80,
-					insertLocalPercent:   100,
-					retrievePercent:      10,
-					retrieveLocalPercent: 100,
-					updatePercent:        10,
-					updateLocalPercent:   100,
-					rowsPerDelete:        20,
+					eastName:        `us-east4-b`,
+					westName:        `us-west1-b`,
+					centralName:     `us-central1-a`,
+					initSessions:    1000,
+					insertPercent:   80,
+					retrievePercent: 10,
+					updatePercent:   10,
+					rowsPerDelete:   20,
 				},
 			)
 		},
