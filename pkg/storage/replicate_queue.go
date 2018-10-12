@@ -578,24 +578,25 @@ func (rq *replicateQueue) findTargetAndTransferLease(
 		return false, nil
 	}
 
-	err := rq.transferLease(ctx, repl, target)
+	avgQPS, qpsMeasurementDur := repl.leaseholderStats.avgQPS()
+	if qpsMeasurementDur < MinStatsDuration {
+		avgQPS = 0
+	}
+	err := rq.transferLease(ctx, repl, target, avgQPS)
 	return err == nil, err
 }
 
 func (rq *replicateQueue) transferLease(
-	ctx context.Context, repl *Replica, target roachpb.ReplicaDescriptor,
+	ctx context.Context, repl *Replica, target roachpb.ReplicaDescriptor, rangeQPS float64,
 ) error {
 	rq.metrics.TransferLeaseCount.Inc(1)
 	log.VEventf(ctx, 1, "transferring lease to s%d", target.StoreID)
-	avgQPS, qpsMeasurementDur := repl.leaseholderStats.avgQPS()
 	if err := repl.AdminTransferLease(ctx, target.StoreID); err != nil {
 		return errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, target.StoreID)
 	}
 	rq.lastLeaseTransfer.Store(timeutil.Now())
-	if qpsMeasurementDur >= MinStatsDuration {
-		rq.allocator.storePool.updateLocalStoresAfterLeaseTransfer(
-			repl.store.StoreID(), target.StoreID, avgQPS)
-	}
+	rq.allocator.storePool.updateLocalStoresAfterLeaseTransfer(
+		repl.store.StoreID(), target.StoreID, rangeQPS)
 	return nil
 }
 
