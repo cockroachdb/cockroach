@@ -27,7 +27,7 @@ import {
   allNodesHaveLocality,
 } from "./localities";
 import { cockroach } from "src/js/protos";
-type INodeStatus = cockroach.server.status.INodeStatus;
+type INodeStatus = cockroach.server.status.statuspb.INodeStatus;
 
 describe("parseLocalityRoute", function() {
   describe("with an empty route", function() {
