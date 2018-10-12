@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -54,7 +55,7 @@ type LocalTestCluster struct {
 	Gossip                   *gossip.Gossip
 	Eng                      engine.Engine
 	Store                    *storage.Store
-	StoreTestingKnobs        *storage.StoreTestingKnobs
+	StoreTestingKnobs        *storagebase.StoreTestingKnobs
 	DBContext                *client.DBContext
 	DB                       *client.DB
 	Stores                   *storage.Stores

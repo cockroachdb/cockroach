@@ -30,7 +30,7 @@ import (
 
 	"github.com/google/btree"
 	"github.com/kr/pretty"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -638,9 +638,6 @@ func (r *Replica) maybeCampaignOnWakeLocked(ctx context.Context) {
 		log.VEventf(ctx, 3, "campaigning")
 		if err := r.mu.internalRaftGroup.Campaign(); err != nil {
 			log.VEventf(ctx, 1, "failed to campaign: %s", err)
-		}
-		if fn := r.store.cfg.TestingKnobs.OnCampaign; fn != nil {
-			fn(r)
 		}
 	}
 }
@@ -1634,7 +1631,7 @@ func (r *Replica) StoreID() roachpb.StoreID {
 }
 
 // EvalKnobs returns the EvalContext's Knobs.
-func (r *Replica) EvalKnobs() batcheval.TestingKnobs {
+func (r *Replica) EvalKnobs() storagebase.BatchEvalTestingKnobs {
 	return r.store.cfg.TestingKnobs.EvalKnobs
 }
 
@@ -6219,7 +6216,7 @@ func (r *Replica) evaluateWriteBatchWithLocalRetries(
 // serializable and the commit timestamp has been forwarded, or (3) the
 // transaction exceeded its deadline, or (4) the testing knobs disallow optional
 // one phase commits and the BatchRequest does not require one phase commit.
-func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
+func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *storagebase.StoreTestingKnobs) bool {
 	if ba.Txn == nil {
 		return false
 	}

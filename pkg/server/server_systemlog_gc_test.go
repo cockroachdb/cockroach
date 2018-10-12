@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -189,7 +190,7 @@ func TestLogGCTrigger(t *testing.T) {
 	}
 
 	gcDone := make(chan struct{})
-	storeKnobs := &storage.StoreTestingKnobs{
+	storeKnobs := &storagebase.StoreTestingKnobs{
 		SystemLogsGCGCDone: gcDone,
 		SystemLogsGCPeriod: time.Nanosecond,
 	}

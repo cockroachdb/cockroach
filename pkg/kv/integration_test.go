@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -87,7 +87,7 @@ func TestDelayedBeginRetryable(t *testing.T) {
 		// - a Put("c"), at which point we trigger the pusher
 		// - a rollback, at which point we unblock the Begin.
 		Knobs: base.TestingKnobs{
-			Store: &storage.StoreTestingKnobs{
+			Store: &storagebase.StoreTestingKnobs{
 				// We're going to perform manual splits.
 				DisableMergeQueue: true,
 				// We use TestingRequestFilter (as opposed to some other filter) in
