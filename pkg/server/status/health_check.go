@@ -143,7 +143,9 @@ func NewHealthChecker(trackedMetrics map[string]threshold) *HealthChecker {
 }
 
 // CheckHealth performs a (cheap) health check.
-func (h *HealthChecker) CheckHealth(ctx context.Context, nodeStatus statuspb.NodeStatus) statuspb.HealthCheckResult {
+func (h *HealthChecker) CheckHealth(
+	ctx context.Context, nodeStatus statuspb.NodeStatus,
+) statuspb.HealthCheckResult {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	// Gauges that trigger alerts when nonzero.
