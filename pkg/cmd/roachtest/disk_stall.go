@@ -38,8 +38,9 @@ func registerDiskStalledDetection(r *registry) {
 					"disk-stalled/log=%t,data=%t",
 					affectsLogDir, affectsDataDir,
 				),
-				MinVersion: `v2.2.0`,
-				Nodes:      nodes(1),
+				MinVersion:         `v2.2.0`,
+				Nodes:              nodes(1),
+				ClusterReusePolicy: Any,
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runDiskStalledDetection(ctx, t, c, affectsLogDir, affectsDataDir)
 				},

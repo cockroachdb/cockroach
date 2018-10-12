@@ -316,9 +316,10 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 
 func registerCDC(r *registry) {
 	r.Add(testSpec{
-		Name:       "cdc/tpcc-1000",
-		MinVersion: "v2.1.0",
-		Nodes:      nodes(4, cpu(16)),
+		Name:               "cdc/w=1000/nodes=3/init=false",
+		MinVersion:         "v2.1.0",
+		Nodes:              nodes(4, cpu(16)),
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -332,9 +333,10 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/initial-scan",
-		MinVersion: "v2.1.0",
-		Nodes:      nodes(4, cpu(16)),
+		Name:               "cdc/w=100/nodes=3/init=true",
+		MinVersion:         "v2.1.0",
+		Nodes:              nodes(4, cpu(16)),
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -348,26 +350,10 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/rangefeed",
-		MinVersion: "v2.2.0",
-		Nodes:      nodes(4, cpu(16)),
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				workloadType:             tpccWorkloadType,
-				tpccWarehouseCount:       100,
-				workloadDuration:         "30m",
-				initialScan:              false,
-				rangefeed:                true,
-				kafkaChaos:               false,
-				targetInitialScanLatency: 30 * time.Minute,
-				targetSteadyLatency:      2 * time.Minute,
-			})
-		},
-	})
-	r.Add(testSpec{
-		Name:       "cdc/sink-chaos",
-		MinVersion: "v2.1.0",
-		Nodes:      nodes(4, cpu(16)),
+		Name:               "cdc/w=100/nodes=3/init=false/chaos=true",
+		MinVersion:         "v2.1.0",
+		Nodes:              nodes(4, cpu(16)),
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -381,9 +367,10 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/crdb-chaos",
-		MinVersion: "v2.1.0",
-		Nodes:      nodes(4, cpu(16)),
+		Name:               "cdc/crdb-chaos",
+		MinVersion:         "v2.1.0",
+		Nodes:              nodes(4, cpu(16)),
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -403,7 +390,8 @@ func registerCDC(r *registry) {
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
 		// of this test. Look into it.
-		Nodes: nodes(4, cpu(16)),
+		Nodes:              nodes(4, cpu(16)),
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             ledgerWorkloadType,
@@ -424,9 +412,10 @@ func registerCDC(r *registry) {
 	// enterprise license checks, there currently isn't a good way to do that
 	// without potentially leaking secrets.
 	r.Add(testSpec{
-		Name:       "cdc/bank",
-		MinVersion: "v2.1.0",
-		Nodes:      nodes(4),
+		Name:               "cdc/bank",
+		MinVersion:         "v2.1.0",
+		Nodes:              nodes(4),
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runCDCBank(ctx, t, c)
 		},

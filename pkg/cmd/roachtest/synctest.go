@@ -36,6 +36,8 @@ fi
 		Name:       "synctest",
 		MinVersion: `v2.2.0`,
 		Nodes:      nodes(1),
+		// This test sets up a custom file system; we don't want the cluster reused.
+		ClusterReusePolicy: NoReuse,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			n := c.Node(1)
 			tmpDir, err := ioutil.TempDir("", "synctest")

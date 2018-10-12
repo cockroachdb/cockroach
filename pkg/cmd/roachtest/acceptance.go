@@ -21,14 +21,6 @@ import (
 )
 
 func registerAcceptance(r *registry) {
-	// The acceptance tests all share a cluster and run sequentially. In
-	// local mode the acceptance tests should be configured to run within a
-	// minute or so as these tests are run on every merge to master.
-
-	// NB: zerosum-restart is skipped due to generating various errors during
-	// its rebalances. See the comment on:
-	_ = isExpectedRelocateError
-
 	testCases := []struct {
 		name string
 		fn   func(ctx context.Context, t *test, c *cluster)
@@ -37,6 +29,8 @@ func registerAcceptance(r *registry) {
 		{"bank/cluster-recovery", runBankClusterRecovery},
 		{"bank/node-restart", runBankNodeRestart},
 		{"bank/zerosum-splits", runBankNodeZeroSum},
+		// NB: zerosum-restart is skipped due to generating various errors during
+		// its rebalances. See the comment on: isExpectedRelocateError
 		// {"bank/zerosum-restart", runBankZeroSumRestart},
 		{"build-info", runBuildInfo},
 		{"cli/node-status", runCLINodeStatus},
@@ -53,29 +47,29 @@ func registerAcceptance(r *registry) {
 	}
 	tags := []string{"default", "quick"}
 	const numNodes = 4
-	spec := testSpec{
+	specTemplate := testSpec{
 		// NB: teamcity-post-failures.py relies on the acceptance tests
 		// being named acceptance/<testname> and will avoid posting a
 		// blank issue for the "acceptance" parent test. Make sure to
 		// teach that script (if it's still used at that point) should
 		// this naming scheme ever change (or issues such as #33519)
 		// will be posted.
-		Name:  "acceptance",
-		Tags:  tags,
-		Nodes: nodes(numNodes),
+		Name:               "acceptance",
+		Timeout:            10 * time.Minute,
+		Tags:               tags,
+		Nodes:              nodes(numNodes),
+		ClusterReusePolicy: Any,
 	}
 
 	for _, tc := range testCases {
-		tc := tc
-		spec.SubTests = append(spec.SubTests, testSpec{
-			Name:    tc.name,
-			Timeout: 10 * time.Minute,
-			Tags:    tags,
-			Run: func(ctx context.Context, t *test, c *cluster) {
-				c.Wipe(ctx)
-				tc.fn(ctx, t, c)
-			},
-		})
+		tc := tc // copy for closure
+		spec := specTemplate
+		spec.Name = specTemplate.Name + "/" + tc.name
+		spec.Run = func(ctx context.Context, t *test, c *cluster) {
+			// TODO(andrei): !!! remove this wipe once the test runner starts doing it.
+			c.Wipe(ctx)
+			tc.fn(ctx, t, c)
+		}
+		r.Add(spec)
 	}
-	r.Add(spec)
 }

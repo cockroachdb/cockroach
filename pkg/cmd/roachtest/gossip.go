@@ -119,8 +119,9 @@ SELECT string_agg(source_id::TEXT || ':' || target_id::TEXT, ',')
 	}
 
 	r.Add(testSpec{
-		Name:  fmt.Sprintf("gossip/chaos/nodes=9"),
-		Nodes: nodes(9),
+		Name:               fmt.Sprintf("gossip/chaos/nodes=9"),
+		Nodes:              nodes(9),
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runGossipChaos(ctx, t, c)
 		},

@@ -29,6 +29,8 @@ func registerDiskFull(r *registry) {
 		Name:       "disk-full",
 		MinVersion: `v2.1.0`,
 		Nodes:      nodes(5),
+		// !!! check that the cluster wipe removes the balast
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if c.isLocal() {
 				t.spec.Skip = "you probably don't want to fill your local disk"

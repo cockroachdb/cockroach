@@ -104,7 +104,7 @@ Examples:
 				registerBenchmarks(r)
 			}
 
-			names := r.ListAll(args)
+			names := r.List(args)
 			for _, name := range names {
 				fmt.Println(name)
 			}

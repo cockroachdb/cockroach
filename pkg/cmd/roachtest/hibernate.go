@@ -290,8 +290,9 @@ echo "ext {
 	}
 
 	r.Add(testSpec{
-		Name:  "hibernate",
-		Nodes: nodes(1),
+		Name:               "hibernate",
+		Nodes:              nodes(1),
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runHibernate(ctx, t, c)
 		},

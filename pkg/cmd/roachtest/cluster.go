@@ -41,6 +41,7 @@ import (
 	"github.com/armon/circbuf"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+
 	// "postgres" gosql driver
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -622,7 +623,6 @@ func nodes(count int, opts ...createOption) []nodeSpec {
 // starting and stopping a cockroach cluster on a subset of those machines, and
 // running load generators and other operations on the machines.
 //
-// A cluster is intended to be shared between all the subtests under a root.
 // A cluster is safe for concurrent use by multiple goroutines.
 type cluster struct {
 	name   string
@@ -634,8 +634,7 @@ type cluster struct {
 	// This is generally set to the current test's logger.
 	l *logger
 	// destroyed is used to coordinate between different goroutines that want to
-	// destroy a cluster. It is nil when the cluster should not be destroyed (i.e.
-	// when Destroy() should not be called).
+	// destroy a cluster.
 	destroyed  chan struct{}
 	expiration time.Time
 	// owned is set if this instance is responsible for `roachprod destroy`ing the
@@ -837,22 +836,6 @@ func (c *cluster) validate(ctx context.Context, nodes []nodeSpec, l *logger) err
 		}
 	}
 	return nil
-}
-
-// clone creates a non-owned handle on the same cluster.
-//
-// NOTE: If the cloning has been done for a subtest, setTest() needs to be
-// called on the returned cluster.
-//
-// TODO(andrei): Get rid of the funky concept of cloning once we implement a
-// more principled aproach to wiping and destroying cluster.
-func (c *cluster) clone() *cluster {
-	cpy := *c
-	// This cloned cluster is not taking ownership. The parent retains it.
-	cpy.owned = false
-	cpy.encryptDefault = encrypt.asBool()
-	cpy.destroyed = nil
-	return &cpy
 }
 
 // All returns a node list containing all of the nodes in the cluster.
@@ -1223,6 +1206,13 @@ func (c *cluster) RunWithBuffer(
 }
 
 // RemountNoBarrier remounts the cluster's local SSDs with the nobarrier option.
+//
+// NOTE: Be careful about the ClusterReusePolicy of tests that use. We don't
+// want unsuspecting tests reusing a no-barrier cluster. If this is the only
+// sketchy thing that a test is doing and otherwise the cluster would be safe
+// for reuse, RemountNoBarrierClusterReusePolicy can be used so that the cluster
+// can at least be reused by other similar tests.
+// TODO(andrei): Should all the roachtests clusters be no-barrier?
 func (c *cluster) RemountNoBarrier(ctx context.Context) {
 	c.Run(ctx, c.All(),
 		"sudo", "umount", "/mnt/data1", ";",

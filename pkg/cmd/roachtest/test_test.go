@@ -70,12 +70,32 @@ func TestRegistryRun(t *testing.T) {
 	r := newRegistry()
 	r.out = ioutil.Discard
 	r.Add(testSpec{
+<<<<<<< HEAD
 		Name: "pass",
+=======
+		Name:               "pass",
+		Stable:             true,
+		ClusterReusePolicy: Any,
+>>>>>>> cf68f4919d... roachtest: eliminate the concept of subtests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 		},
 	})
 	r.Add(testSpec{
+<<<<<<< HEAD
 		Name: "fail",
+=======
+		Name:               "fail",
+		Stable:             true,
+		ClusterReusePolicy: Any,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			t.Fatal("failed")
+		},
+	})
+	r.Add(testSpec{
+		Name:               "fail-unstable",
+		Stable:             false,
+		ClusterReusePolicy: Any,
+>>>>>>> cf68f4919d... roachtest: eliminate the concept of subtests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			t.Fatal("failed")
 		},
@@ -128,7 +148,13 @@ func TestRegistryStatus(t *testing.T) {
 	r.out = &buf
 	r.statusInterval = 20 * time.Millisecond
 	r.Add(testSpec{
+<<<<<<< HEAD
 		Name: `status`,
+=======
+		Name:               `status`,
+		Stable:             true,
+		ClusterReusePolicy: Any,
+>>>>>>> cf68f4919d... roachtest: eliminate the concept of subtests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			t.Status("waiting")
 			var wg sync.WaitGroup
@@ -181,7 +207,13 @@ func TestRegistryStatusUnknown(t *testing.T) {
 	r.statusInterval = 20 * time.Millisecond
 
 	r.Add(testSpec{
+<<<<<<< HEAD
 		Name: `status`,
+=======
+		Name:               `status`,
+		Stable:             true,
+		ClusterReusePolicy: Any,
+>>>>>>> cf68f4919d... roachtest: eliminate the concept of subtests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			for i := 0; i < 100; i++ {
 				time.Sleep(r.statusInterval)
@@ -210,8 +242,15 @@ func TestRegistryRunTimeout(t *testing.T) {
 	r.out = &buf
 
 	r.Add(testSpec{
+<<<<<<< HEAD
 		Name:    `timeout`,
 		Timeout: 10 * time.Millisecond,
+=======
+		Name:               `timeout`,
+		Timeout:            10 * time.Millisecond,
+		Stable:             true,
+		ClusterReusePolicy: Any,
+>>>>>>> cf68f4919d... roachtest: eliminate the concept of subtests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			<-ctx.Done()
 		},
@@ -224,6 +263,7 @@ func TestRegistryRunTimeout(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 func TestRegistryRunSubTestFailed(t *testing.T) {
 	var buf syncedBuffer
 	failedRE := regexp.MustCompile(`(?m)^.*--- FAIL: parent \(.*$`)
@@ -267,6 +307,8 @@ func TestRegistryRunNoTests(t *testing.T) {
 	}
 }
 
+=======
+>>>>>>> cf68f4919d... roachtest: eliminate the concept of subtests
 func TestRegistryRunClusterExpired(t *testing.T) {
 	defer func(l bool, n string) {
 		local, clusterName = l, n
@@ -282,8 +324,15 @@ func TestRegistryRunClusterExpired(t *testing.T) {
 	r.out = &buf
 
 	r.Add(testSpec{
+<<<<<<< HEAD
 		Name:  `expired`,
 		Nodes: nodes(1, nodeLifetimeOption(time.Second)),
+=======
+		Name:               `expired`,
+		Stable:             true,
+		Nodes:              nodes(1, nodeLifetimeOption(time.Second)),
+		ClusterReusePolicy: Any,
+>>>>>>> cf68f4919d... roachtest: eliminate the concept of subtests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			panic("not reached")
 		},
@@ -325,13 +374,8 @@ func TestRegistryVerifyValidClusterName(t *testing.T) {
 func TestRegistryPrepareSpec(t *testing.T) {
 	dummyRun := func(context.Context, *test, *cluster) {}
 
-	var listTests func(t *testSpec) []string
-	listTests = func(t *testSpec) []string {
-		r := []string{t.Name}
-		for i := range t.SubTests {
-			r = append(r, listTests(&t.SubTests[i])...)
-		}
-		return r
+	var listTests = func(t *testSpec) []string {
+		return []string{t.Name}
 	}
 
 	testCases := []struct {
@@ -341,83 +385,26 @@ func TestRegistryPrepareSpec(t *testing.T) {
 	}{
 		{
 			testSpec{
-				Name: "a",
-				Run:  dummyRun,
+				Name:               "a",
+				ClusterReusePolicy: Any,
+				Run:                dummyRun,
 			},
 			"",
 			[]string{"a"},
 		},
 		{
 			testSpec{
-				Name: "a",
-				SubTests: []testSpec{{
-					Name: "b",
-					Run:  dummyRun,
-				}},
-			},
-			"",
-			[]string{"a", "a/b"},
-		},
-		{
-			testSpec{
-				Name: "a",
-				Run:  dummyRun,
-				SubTests: []testSpec{{
-					Name: "b",
-					Run:  dummyRun,
-				}},
-			},
-			"a: must specify only one of Run or SubTests",
-			nil,
-		},
-		{
-			testSpec{
-				Name: "a",
-				SubTests: []testSpec{{
-					Name: "b",
-				}},
-			},
-			"a/b: must specify only one of Run or SubTests",
-			nil,
-		},
-		{
-			testSpec{
-				Name: "a",
-				SubTests: []testSpec{{
-					Name: "b",
-					Run:  dummyRun,
-					SubTests: []testSpec{{
-						Name: "c",
-						Run:  dummyRun,
-					}},
-				}},
-			},
-			"b: must specify only one of Run or SubTests",
-			nil,
-		},
-		{
-			testSpec{
-				Name: "a",
-				SubTests: []testSpec{{
-					Name:  "b",
-					Nodes: nodes(1),
-					Run:   dummyRun,
-				}},
-			},
-			"a/b: subtest may not provide cluster specification",
-			nil,
-		},
-		{
-			testSpec{
-				Name:       "a",
-				MinVersion: "v2.1.0",
-				Run:        dummyRun,
+				Name:               "a",
+				MinVersion:         "v2.1.0",
+				ClusterReusePolicy: Any,
+				Run:                dummyRun,
 			},
 			"",
 			[]string{"a"},
 		},
 		{
 			testSpec{
+<<<<<<< HEAD
 				Name:       "a",
 				MinVersion: "v2.1.0-foo",
 				Run:        dummyRun,
@@ -430,27 +417,21 @@ func TestRegistryPrepareSpec(t *testing.T) {
 				Name:       "a",
 				MinVersion: "foo",
 				Run:        dummyRun,
+=======
+				Name:               "a",
+				MinVersion:         "foo",
+				ClusterReusePolicy: Any,
+				Run:                dummyRun,
+>>>>>>> cf68f4919d... roachtest: eliminate the concept of subtests
 			},
 			"a: unable to parse min-version: invalid version string 'foo'",
-			nil,
-		},
-		{
-			testSpec{
-				Name:    "a",
-				Timeout: time.Second,
-				SubTests: []testSpec{{
-					Name: "b",
-					Run:  dummyRun,
-				}},
-			},
-			"a: timeouts only apply to tests specifying Run",
 			nil,
 		},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			r := newRegistry()
-			err := r.prepareSpec(&c.spec, 0)
+			err := r.prepareSpec(&c.spec)
 			if !testutils.IsError(err, c.expectedErr) {
 				t.Fatalf("expected %q, but found %q", c.expectedErr, err.Error())
 			}
@@ -482,15 +463,27 @@ func TestRegistryMinVersion(t *testing.T) {
 			r := newRegistry()
 			r.out = &buf
 			r.Add(testSpec{
+<<<<<<< HEAD
 				Name:       "a",
 				MinVersion: "v2.0.0",
+=======
+				Name:               "a",
+				MinVersion:         "2.0.0",
+				ClusterReusePolicy: Any,
+>>>>>>> cf68f4919d... roachtest: eliminate the concept of subtests
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runA = true
 				},
 			})
 			r.Add(testSpec{
+<<<<<<< HEAD
 				Name:       "b",
 				MinVersion: "v2.1.0",
+=======
+				Name:               "b",
+				MinVersion:         "2.1.0",
+				ClusterReusePolicy: Any,
+>>>>>>> cf68f4919d... roachtest: eliminate the concept of subtests
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runB = true
 				},

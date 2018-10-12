@@ -32,8 +32,9 @@ import (
 
 func registerSchemaChangeKV(r *registry) {
 	r.Add(testSpec{
-		Name:  `schemachange/mixed/kv`,
-		Nodes: nodes(5),
+		Name:               `schemachange/kv`,
+		Nodes:              nodes(5),
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup`
 
@@ -303,9 +304,10 @@ func registerSchemaChangeIndexTPCC100(r *registry) {
 
 func makeIndexAddTpccTest(numNodes, warehouses int, length time.Duration) testSpec {
 	return testSpec{
-		Name:    fmt.Sprintf("schemachange/index/tpcc-%d", warehouses),
-		Nodes:   nodes(numNodes),
-		Timeout: length * 2,
+		Name:               fmt.Sprintf("schemachange/index/tpcc-%d", warehouses),
+		Nodes:              nodes(numNodes),
+		Timeout:            length * 2,
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
