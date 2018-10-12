@@ -35,10 +35,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -111,8 +111,8 @@ func TestHealthCheck(t *testing.T) {
 	{
 		summary := *recorder.GenerateNodeStatus(ctx)
 		result := recorder.CheckHealth(ctx, summary)
-		expAlerts := []status.HealthAlert{
-			{StoreID: 1, Category: status.HealthAlert_METRICS, Description: "ranges.unavailable", Value: 100.0},
+		expAlerts := []statuspb.HealthAlert{
+			{StoreID: 1, Category: statuspb.HealthAlert_METRICS, Description: "ranges.unavailable", Value: 100.0},
 		}
 		if !reflect.DeepEqual(expAlerts, result.Alerts) {
 			t.Fatalf("expected %+v, got %+v", expAlerts, result.Alerts)

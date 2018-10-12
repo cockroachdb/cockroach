@@ -34,11 +34,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/syncbench"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -952,7 +952,7 @@ func parseGossipValues(gossipInfo *gossip.InfoStatus) (string, error) {
 			}
 			output = append(output, fmt.Sprintf("%q: %+v", key, deadReplicas))
 		} else if strings.HasPrefix(key, gossip.KeyNodeHealthAlertPrefix) {
-			var healthAlert status.HealthCheckResult
+			var healthAlert statuspb.HealthCheckResult
 			if err := protoutil.Unmarshal(bytes, &healthAlert); err != nil {
 				return "", errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
