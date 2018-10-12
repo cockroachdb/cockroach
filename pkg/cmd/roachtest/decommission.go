@@ -241,9 +241,10 @@ func registerDecommission(r *registry) {
 	duration := time.Hour
 
 	r.Add(testSpec{
-		Name:   fmt.Sprintf("decommission/nodes=%d/duration=%s", numNodes, duration),
-		Nodes:  nodes(numNodes),
-		Stable: true, // DO NOT COPY to new tests
+		Name:               fmt.Sprintf("decommission/nodes=%d/duration=%s", numNodes, duration),
+		Nodes:              nodes(numNodes),
+		Stable:             true, // DO NOT COPY to new tests
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if local {
 				duration = 3 * time.Minute

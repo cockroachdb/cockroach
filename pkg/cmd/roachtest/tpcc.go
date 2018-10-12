@@ -122,14 +122,19 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 }
 
 func registerTPCC(r *registry) {
+	// TPCC clusters cannot be reused because the tests do RemountNoBarrier.
+	// We don't even use RemountNoBarrierClusterReusePolicy because they sometimes
+	// use ZFS.
+	clusterReusePolicy := NoReuse
 	r.Add(testSpec{
 		Name: "tpcc/nodes=3/w=max",
 		// TODO(dan): Instead of MinVersion, adjust the warehouses below to
 		// match our expectation for the max tpcc warehouses that previous
 		// releases will support on this hardware.
-		MinVersion: "2.1.0",
-		Nodes:      nodes(4, cpu(16)),
-		Stable:     false,
+		MinVersion:         "2.1.0",
+		Nodes:              nodes(4, cpu(16)),
+		Stable:             false,
+		ClusterReusePolicy: clusterReusePolicy,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			warehouses := 1400
 			runTPCC(ctx, t, c, tpccOptions{
@@ -138,9 +143,10 @@ func registerTPCC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:   "tpcc-nowait/nodes=3/w=1",
-		Nodes:  nodes(4, cpu(16)),
-		Stable: false,
+		Name:               "tpcc-nowait/nodes=3/w=1",
+		Nodes:              nodes(4, cpu(16)),
+		Stable:             false,
+		ClusterReusePolicy: clusterReusePolicy,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: 1,
@@ -151,9 +157,10 @@ func registerTPCC(r *registry) {
 	})
 
 	r.Add(testSpec{
-		Name:   "tpcc/w=100/nodes=3/chaos=true",
-		Nodes:  nodes(4),
-		Stable: false,
+		Name:               "tpcc/w=100/nodes=3/chaos=true",
+		Nodes:              nodes(4),
+		ClusterReusePolicy: clusterReusePolicy,
+		Stable:             false,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			duration := 30 * time.Minute
 			runTPCC(ctx, t, c, tpccOptions{
@@ -339,6 +346,8 @@ func registerTPCCBenchSpec(r *registry, b tpccBenchSpec) {
 		Name:   name,
 		Nodes:  nodes,
 		Stable: true, // DO NOT COPY to new tests
+		// TPCC clusters cannot be reused because the tests do RemountNoBarrier.
+		ClusterReusePolicy: NoReuse,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCCBench(ctx, t, c, b)
 		},

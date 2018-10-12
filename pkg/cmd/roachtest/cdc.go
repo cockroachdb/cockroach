@@ -159,10 +159,11 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 
 func registerCDC(r *registry) {
 	r.Add(testSpec{
-		Name:       "cdc/w=1000/nodes=3/init=false",
-		MinVersion: "2.1.0",
-		Nodes:      nodes(4, cpu(16)),
-		Stable:     false,
+		Name:               "cdc/w=1000/nodes=3/init=false",
+		MinVersion:         "2.1.0",
+		Nodes:              nodes(4, cpu(16)),
+		Stable:             false,
+		ClusterReusePolicy: RemountNoBarrierClusterReusePolicy,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -176,10 +177,11 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/w=100/nodes=3/init=true",
-		MinVersion: "2.1.0",
-		Nodes:      nodes(4, cpu(16)),
-		Stable:     false,
+		Name:               "cdc/w=100/nodes=3/init=true",
+		MinVersion:         "2.1.0",
+		Nodes:              nodes(4, cpu(16)),
+		Stable:             false,
+		ClusterReusePolicy: RemountNoBarrierClusterReusePolicy,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -193,10 +195,11 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/w=100/nodes=3/init=false/chaos=true",
-		MinVersion: "2.1.0",
-		Nodes:      nodes(4, cpu(16)),
-		Stable:     false,
+		Name:               "cdc/w=100/nodes=3/init=false/chaos=true",
+		MinVersion:         "2.1.0",
+		Nodes:              nodes(4, cpu(16)),
+		Stable:             false,
+		ClusterReusePolicy: RemountNoBarrierClusterReusePolicy,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             tpccWorkloadType,
@@ -218,8 +221,9 @@ func registerCDC(r *registry) {
 		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
 		// but this cannot be allocated without some sort of configuration outside
 		// of this test. Look into it.
-		Nodes:  nodes(4, cpu(16)),
-		Stable: false,
+		Nodes:              nodes(4, cpu(16)),
+		Stable:             false,
+		ClusterReusePolicy: RemountNoBarrierClusterReusePolicy,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
 				workloadType:             ledgerWorkloadType,

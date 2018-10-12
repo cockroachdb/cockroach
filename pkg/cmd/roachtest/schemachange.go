@@ -27,9 +27,10 @@ import (
 
 func registerSchemaChangeKV(r *registry) {
 	r.Add(testSpec{
-		Name:   `schemachange/kv`,
-		Nodes:  nodes(5),
-		Stable: true, // DO NOT COPY to new tests
+		Name:               `schemachange/kv`,
+		Nodes:              nodes(5),
+		Stable:             true, // DO NOT COPY to new tests
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup`
 
@@ -293,9 +294,10 @@ func registerSchemaChangeTPCC(r *registry) {
 	warehouses := 1000
 	numNodes := 5
 	r.Add(testSpec{
-		Name:    fmt.Sprintf("schemachange/tpcc/warehouses=%d/nodes=%d", warehouses, numNodes),
-		Nodes:   nodes(numNodes),
-		Timeout: 4 * time.Hour,
+		Name:               fmt.Sprintf("schemachange/tpcc/warehouses=%d/nodes=%d", warehouses, numNodes),
+		Nodes:              nodes(numNodes),
+		Timeout:            4 * time.Hour,
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
