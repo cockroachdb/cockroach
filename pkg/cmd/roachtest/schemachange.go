@@ -27,9 +27,10 @@ import (
 
 func registerSchemaChange(r *registry) {
 	r.Add(testSpec{
-		Name:   `schemachange`,
-		Nodes:  nodes(5),
-		Stable: true, // DO NOT COPY to new tests
+		Name:               `schemachange`,
+		Nodes:              nodes(5),
+		Stable:             true, // DO NOT COPY to new tests
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			const fixturePath = `gs://cockroach-fixtures/workload/tpch/scalefactor=10/backup`
 

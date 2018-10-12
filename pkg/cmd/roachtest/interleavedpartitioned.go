@@ -131,9 +131,10 @@ func registerInterleaved(r *registry) {
 	}
 
 	r.Add(testSpec{
-		Name:   "interleavedpartitioned",
-		Nodes:  nodes(9, geo(), zones("us-west1-b,us-east4-b,us-central1-a")),
-		Stable: false,
+		Name:               "interleavedpartitioned",
+		Nodes:              nodes(9, geo(), zones("us-west1-b,us-east4-b,us-central1-a")),
+		Stable:             false,
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runInterleaved(ctx, t, c,
 				config{

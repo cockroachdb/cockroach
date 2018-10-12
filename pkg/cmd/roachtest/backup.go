@@ -27,9 +27,10 @@ import (
 
 func registerBackup(r *registry) {
 	r.Add(testSpec{
-		Name:   `backup2TB`,
-		Nodes:  nodes(10),
-		Stable: true, // DO NOT COPY to new tests
+		Name:               `backup2TB`,
+		Nodes:              nodes(10),
+		Stable:             true, // DO NOT COPY to new tests
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			nodes := c.nodes
 
@@ -60,10 +61,11 @@ func registerBackup(r *registry) {
 	// and incremental after more time. It then restores the two backups and
 	// verifies them with a fingerprint.
 	r.Add(testSpec{
-		Name:    `backupTPCC`,
-		Nodes:   nodes(3),
-		Stable:  false,
-		Timeout: 1 * time.Hour,
+		Name:               `backupTPCC`,
+		Nodes:              nodes(3),
+		Stable:             false,
+		Timeout:            1 * time.Hour,
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Put(ctx, workload, "./workload")

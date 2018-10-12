@@ -207,9 +207,10 @@ func registerHibernate(r *registry) {
 	}
 
 	r.Add(testSpec{
-		Name:   "hibernate",
-		Nodes:  nodes(1),
-		Stable: false,
+		Name:               "hibernate",
+		Nodes:              nodes(1),
+		Stable:             false,
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runHibernate(ctx, t, c)
 		},

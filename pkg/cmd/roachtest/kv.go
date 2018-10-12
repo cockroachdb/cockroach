@@ -63,10 +63,11 @@ func registerKV(r *registry) {
 					minVersion = "2.1.0"
 				}
 				r.Add(testSpec{
-					Name:       fmt.Sprintf("kv%d/encrypt=%t/nodes=%d", p, e, n),
-					MinVersion: minVersion,
-					Nodes:      nodes(n+1, cpu(8)),
-					Stable:     true, // DO NOT COPY to new tests
+					Name:               fmt.Sprintf("kv%d/encrypt=%t/nodes=%d", p, e, n),
+					MinVersion:         minVersion,
+					Nodes:              nodes(n+1, cpu(8)),
+					Stable:             true, // DO NOT COPY to new tests
+					ClusterReusePolicy: RemountNoBarrierClusterReusePolicy,
 					Run: func(ctx context.Context, t *test, c *cluster) {
 						runKV(ctx, t, c, p, startArgs(fmt.Sprintf("--encrypt=%t", e)))
 					},
@@ -78,10 +79,11 @@ func registerKV(r *registry) {
 
 func registerKVQuiescenceDead(r *registry) {
 	r.Add(testSpec{
-		Name:       "kv/quiescence/nodes=3",
-		Nodes:      nodes(4),
-		MinVersion: "2.1.0",
-		Stable:     false, // added 6/7/2018
+		Name:               "kv/quiescence/nodes=3",
+		Nodes:              nodes(4),
+		MinVersion:         "2.1.0",
+		Stable:             false, // added 6/7/2018
+		ClusterReusePolicy: RemountNoBarrierClusterReusePolicy,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if !c.isLocal() {
 				c.RemountNoBarrier(ctx)
@@ -165,9 +167,10 @@ func registerKVSplits(r *registry) {
 	for _, quiesce := range []bool{true, false} {
 		quiesce := quiesce // for use in closure below
 		r.Add(testSpec{
-			Name:   fmt.Sprintf("kv/splits/nodes=3/quiesce=%t", quiesce),
-			Nodes:  nodes(4),
-			Stable: false, // DO NOT COPY to new tests
+			Name:               fmt.Sprintf("kv/splits/nodes=3/quiesce=%t", quiesce),
+			Nodes:              nodes(4),
+			Stable:             false, // DO NOT COPY to new tests
+			ClusterReusePolicy: Any,
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				nodes := c.nodes - 1
 				c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
@@ -239,8 +242,9 @@ func registerKVScalability(r *registry) {
 		for _, p := range []int{0, 95} {
 			p := p
 			r.Add(testSpec{
-				Name:  fmt.Sprintf("kv%d/scale/nodes=6", p),
-				Nodes: nodes(7, cpu(8)),
+				Name:               fmt.Sprintf("kv%d/scale/nodes=6", p),
+				Nodes:              nodes(7, cpu(8)),
+				ClusterReusePolicy: RemountNoBarrierClusterReusePolicy,
 				Run: func(ctx context.Context, t *test, c *cluster) {
 					runScalability(ctx, t, c, p)
 				},

@@ -38,10 +38,11 @@ func registerLargeRange(r *registry) {
 	const numNodes = 3
 
 	r.Add(testSpec{
-		Name:    fmt.Sprintf("largerange/splits/size=%s,nodes=%d", bytesStr(size), numNodes),
-		Nodes:   nodes(numNodes),
-		Timeout: 5 * time.Hour,
-		Stable:  true, // DO NOT COPY to new tests
+		Name:               fmt.Sprintf("largerange/splits/size=%s,nodes=%d", bytesStr(size), numNodes),
+		Nodes:              nodes(numNodes),
+		Timeout:            5 * time.Hour,
+		Stable:             true, // DO NOT COPY to new tests
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runLargeRangeSplits(ctx, t, c, size)
 		},

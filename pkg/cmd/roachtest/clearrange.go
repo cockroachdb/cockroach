@@ -29,7 +29,11 @@ func registerClearRange(r *registry) {
 			Name:       fmt.Sprintf(`clearrange/checks=%t`, checks),
 			MinVersion: `v2.1.0`,
 			Nodes:      nodes(10),
-			Stable:     true, // DO NOT COPY to new tests
+			// This test reformats a drive to ZFS, so we don't want it reused.
+			// TODO(andrei): Can the test itself reuse the cluster (under --count=2)?
+			// In other words, would a OnlyTagged("clearrange") policy be good?
+			ClusterReusePolicy: NoReuse,
+			Stable:             true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runClearRange(ctx, t, c, checks)
 			},

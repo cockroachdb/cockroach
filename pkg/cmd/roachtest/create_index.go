@@ -27,9 +27,10 @@ func registerCreateIndexTPCC(r *registry) {
 	warehouses := 1000
 	numNodes := 5
 	r.Add(testSpec{
-		Name:    fmt.Sprintf("createindex/tpcc/warehouses=%d/nodes=%d", warehouses, numNodes),
-		Nodes:   nodes(numNodes),
-		Timeout: 3 * time.Hour,
+		Name:               fmt.Sprintf("createindex/tpcc/warehouses=%d/nodes=%d", warehouses, numNodes),
+		Nodes:              nodes(numNodes),
+		Timeout:            3 * time.Hour,
+		ClusterReusePolicy: Any,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
