@@ -41,7 +41,11 @@ type tpccOptions struct {
 	Chaos      func() Chaos                // for late binding of stopper
 	During     func(context.Context) error // for running a function during the test
 	Duration   time.Duration
-	ZFS        bool
+	// ZFS, if set, will make the cluster use a ZFS volume.
+	// Be careful with ClusterReusePolicy when using this.
+	//
+	// TODO(andrei): move this to the test's cluster spec.
+	ZFS bool
 }
 
 // tpccFixturesCmd generates the command string to load tpcc data for the
@@ -389,6 +393,8 @@ func registerTPCCBenchSpec(r *registry, b tpccBenchSpec) {
 		Name:       name,
 		Nodes:      nodes,
 		MinVersion: maybeMinVersionForFixturesImport(cloud),
+		// TPCC clusters cannot be reused because the tests do RemountNoBarrier.
+		ClusterReusePolicy: NoReuse,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCCBench(ctx, t, c, b)
 		},

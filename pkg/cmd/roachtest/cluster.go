@@ -506,17 +506,19 @@ func (n nodeListOption) String() string {
 type testClusterSpec struct {
 	NodeCount int
 	// CPUs is the number of CPUs per node.
-	CPUs     int
-	Zones    string
-	Geo      bool
-	Lifetime time.Duration
+	CPUs        int
+	Zones       string
+	Geo         bool
+	Lifetime    time.Duration
+	ReusePolicy clusterReusePolicy
 }
 
 func makeTestClusterSpec(nodeCount int, opts ...createOption) testClusterSpec {
 	spec := testClusterSpec{
-		NodeCount: nodeCount,
+		NodeCount:   nodeCount,
+		CPUs:        4,   // might be overridden by opts
+		ReusePolicy: Any, // might be overridden by opts
 	}
-	cpu(4).apply(&spec)
 	for _, o := range opts {
 		o.apply(&spec)
 	}
@@ -621,11 +623,56 @@ func (o nodeLifetimeOption) apply(spec *testClusterSpec) {
 	spec.Lifetime = time.Duration(o)
 }
 
+// clusterReusePolicy indicates what clusters a particular test can run on and
+// who (if anybody) can reuse the cluster reuse the cluster after the test has
+// finished running (either passing or failing). See the individual policies for
+// details.
+//
+// Note that clean clusters (freshly-created clusters or cluster on which a test
+// with the Any policy ran) are accepted by all policies.
+// Note that not all combinations of "what cluster can I accept" and "how am I
+// soiling this cluster" can be expressed. For example, there's no way to
+// express that I'll accept a cluster that was tagged a certain way but after me
+// nobody else can reuse the cluster at all.
+//
+// NOTE that only tests whose cluster spec matches can ever run on the same
+// cluster, regardless of this policy.
+type clusterReusePolicy struct {
+	policy reusePolicy
+	// Only for the onlyTagged policy.
+	tag string
+}
+
+func (o clusterReusePolicy) apply(spec *testClusterSpec) {
+	spec.policy = o
+}
+
+// NoReuse means that only clean clusters are accepted and the cluster cannot be
+// reused afterwards.
+var NoReuse = ClusterReusePolicy{policy: noReuse}
+
+// Any means that only clean clusters are accepted and the cluster can be used
+// by any other test (i.e. the cluster remains "clean").
+var Any = ClusterReusePolicy{policy: any}
+
+// OnlyTagged means that clusters left over by similarly-tagged tests are
+// accepted in addition to clean cluster and, regardless of how the cluster
+// started up, it will be tagged with the given tag at the end (so only
+// similarly-tagged tests can use it afterwards).
+//
+// The idea is that a tag identifies a particular way in which a test is soiled,
+// since it's common for groups of tests to mess clusters up in similar ways and
+// to also be able to reset the cluster when the test starts. It's like a virus
+// - if you carry it, you infect a clean host and can otherwise intermingle with
+// other hosts that are already infected.
+func OnlyTagged(tag string) ClusterReusePolicy {
+	return ClusterReusePolicy{policy: onlyTagged, tag: tag}
+}
+
 // cluster provides an interface for interacting with a set of machines,
 // starting and stopping a cockroach cluster on a subset of those machines, and
 // running load generators and other operations on the machines.
 //
-// A cluster is intended to be shared between all the subtests under a root.
 // A cluster is safe for concurrent use by multiple goroutines.
 type cluster struct {
 	name   string
@@ -637,8 +684,7 @@ type cluster struct {
 	// This is generally set to the current test's logger.
 	l *logger
 	// destroyed is used to coordinate between different goroutines that want to
-	// destroy a cluster. It is nil when the cluster should not be destroyed (i.e.
-	// when Destroy() should not be called).
+	// destroy a cluster.
 	destroyed  chan struct{}
 	expiration time.Time
 	// owned is set if this instance is responsible for `roachprod destroy`ing the
@@ -829,22 +875,6 @@ func (c *cluster) validate(ctx context.Context, nodes testClusterSpec, l *logger
 		}
 	}
 	return nil
-}
-
-// clone creates a non-owned handle on the same cluster.
-//
-// NOTE: If the cloning has been done for a subtest, setTest() needs to be
-// called on the returned cluster.
-//
-// TODO(andrei): Get rid of the funky concept of cloning once we implement a
-// more principled aproach to wiping and destroying cluster.
-func (c *cluster) clone() *cluster {
-	cpy := *c
-	// This cloned cluster is not taking ownership. The parent retains it.
-	cpy.owned = false
-	cpy.encryptDefault = encrypt.asBool()
-	cpy.destroyed = nil
-	return &cpy
 }
 
 // All returns a node list containing all of the nodes in the cluster.
@@ -1249,6 +1279,13 @@ func (c *cluster) RunWithBuffer(
 }
 
 // RemountNoBarrier remounts the cluster's local SSDs with the nobarrier option.
+//
+// NOTE: Be careful about the ClusterReusePolicy of tests that use. We don't
+// want unsuspecting tests reusing a no-barrier cluster. If this is the only
+// sketchy thing that a test is doing and otherwise the cluster would be safe
+// for reuse, RemountNoBarrierClusterReusePolicy can be used so that the cluster
+// can at least be reused by other similar tests.
+// TODO(andrei): Should all the roachtests clusters be no-barrier?
 func (c *cluster) RemountNoBarrier(ctx context.Context) {
 	c.Run(ctx, c.All(),
 		"sudo", "umount", "/mnt/data1", ";",

@@ -207,9 +207,16 @@ func registerLargeRange(r *registry) {
 	const numNodes = 3
 
 	r.Add(testSpec{
+<<<<<<< HEAD
 		Name:    fmt.Sprintf("splits/largerange/size=%s,nodes=%d", bytesStr(size), numNodes),
 		Nodes:   makeTestClusterSpec(numNodes),
 		Timeout: 5 * time.Hour,
+=======
+		Name:               fmt.Sprintf("splits/largerange/size=%s,nodes=%d", bytesStr(size), numNodes),
+		Nodes:              nodes(numNodes),
+		Timeout:            5 * time.Hour,
+		ClusterReusePolicy: Any,
+>>>>>>> 9f5432714d... roachtest: eliminate the concept of subtests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runLargeRangeSplits(ctx, t, c, size)
 		},

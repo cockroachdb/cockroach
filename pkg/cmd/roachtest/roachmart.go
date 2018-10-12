@@ -74,8 +74,14 @@ func registerRoachmart(r *registry) {
 	for _, v := range []bool{true, false} {
 		v := v
 		r.Add(testSpec{
+<<<<<<< HEAD
 			Name:  fmt.Sprintf("roachmart/partition=%v", v),
 			Nodes: makeTestClusterSpec(9, geo(), zones("us-central1-b,us-west1-b,europe-west2-b")),
+=======
+			Name:               fmt.Sprintf("roachmart/partition=%v", v),
+			Nodes:              nodes(9, geo(), zones("us-central1-b,us-west1-b,europe-west2-b")),
+			ClusterReusePolicy: Any,
+>>>>>>> 9f5432714d... roachtest: eliminate the concept of subtests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runRoachmart(ctx, t, c, v)
 			},

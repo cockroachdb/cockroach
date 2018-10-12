@@ -57,8 +57,14 @@ func registerYCSB(r *registry) {
 
 		wl := wl
 		r.Add(testSpec{
+<<<<<<< HEAD
 			Name:  fmt.Sprintf("ycsb/%s/nodes=3", wl),
 			Nodes: makeTestClusterSpec(4, cpu(8)),
+=======
+			Name:               fmt.Sprintf("ycsb/%s/nodes=3", wl),
+			Nodes:              nodes(4, cpu(8)),
+			ClusterReusePolicy: Any,
+>>>>>>> 9f5432714d... roachtest: eliminate the concept of subtests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runYCSB(ctx, t, c, wl)
 			},

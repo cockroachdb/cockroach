@@ -223,9 +223,16 @@ func registerRestore(r *registry) {
 		{32, 3 * time.Hour},
 	} {
 		r.Add(testSpec{
+<<<<<<< HEAD
 			Name:    fmt.Sprintf("restore2TB/nodes=%d", item.nodes),
 			Nodes:   makeTestClusterSpec(item.nodes),
 			Timeout: item.timeout,
+=======
+			Name:               fmt.Sprintf("restore2TB/nodes=%d", item.nodes),
+			Nodes:              nodes(item.nodes),
+			Timeout:            item.timeout,
+			ClusterReusePolicy: Any,
+>>>>>>> 9f5432714d... roachtest: eliminate the concept of subtests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				c.Put(ctx, cockroach, "./cockroach")
 				c.Start(ctx, t)
