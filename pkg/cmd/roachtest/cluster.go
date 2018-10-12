@@ -55,6 +55,7 @@ var (
 	// cluster will be placed.
 	artifacts   string
 	cockroach   string
+	cloud       = "gce"
 	encrypt     bool
 	workload    string
 	roachprod   string
@@ -328,6 +329,99 @@ func makeClusterName(t testI) string {
 	return makeGCEClusterName(t.Name(), id, username)
 }
 
+func machineTypeToCPUs(s string) int {
+	{
+		// GCE machine types.
+		var v int
+		if _, err := fmt.Sscanf(s, "n1-standard-%d", &v); err == nil {
+			return v
+		}
+		if _, err := fmt.Sscanf(s, "n1-highcpu-%d", &v); err == nil {
+			return v
+		}
+		if _, err := fmt.Sscanf(s, "n1-highmem-%d", &v); err == nil {
+			return v
+		}
+	}
+
+	// AWS machine types. Yeah, there is probably something more algorithmic that
+	// could be done here, but does it matter?
+	switch s {
+	case "m5.large":
+		return 2
+	case "m5.xlarge":
+		return 4
+	case "m5.2xlarge":
+		return 8
+	case "m5.4xlarge":
+		return 16
+	case "m5.12xlarge":
+		return 48
+	case "m5.24xlarge":
+		return 96
+
+	case "m5d.large":
+		return 2
+	case "m5d.xlarge":
+		return 4
+	case "m5d.2xlarge":
+		return 8
+	case "m5d.4xlarge":
+		return 16
+	case "m5d.12xlarge":
+		return 48
+	case "m5d.24xlarge":
+		return 96
+
+	case "i3.large":
+		return 2
+	case "i3.xlarge":
+		return 4
+	case "i3.2xlarge":
+		return 8
+	case "i3.4xlarge":
+		return 16
+	case "i3.8xlarge":
+		return 32
+	case "i3.16xlarge":
+		return 64
+	case "i3.metal":
+		return 72
+	}
+
+	fmt.Fprintf(os.Stderr, "unknown machine type: %s\n", s)
+	os.Exit(1)
+	return -1
+}
+
+func awsMachineType(cpus int) string {
+	switch {
+	case cpus <= 2:
+		return "m5d.large"
+	case cpus <= 4:
+		return "m5d.xlarge"
+	case cpus <= 8:
+		return "m5d.2xlarge"
+	case cpus <= 16:
+		return "m5d.4xlarge"
+	case cpus <= 48:
+		return "m5d.12xlarge"
+	default:
+		return "m5d.24xlarge"
+	}
+}
+
+func gceMachineType(cpus int) string {
+	// TODO(peter): This is awkward: below 16 cpus, use n1-standard so that the
+	// machines have a decent amount of RAM. We could use customer machine
+	// configurations, but the rules for the amount of RAM per CPU need to be
+	// determined (you can't request any arbitrary amount of RAM).
+	if cpus < 16 {
+		return fmt.Sprintf("n1-standard-%d", cpus)
+	}
+	return fmt.Sprintf("n1-highcpu-%d", cpus)
+}
+
 type testI interface {
 	Name() string
 	Fatal(args ...interface{})
@@ -409,18 +503,37 @@ func (n nodeListOption) String() string {
 }
 
 type nodeSpec struct {
-	Count       int
-	CPUs        int
-	MachineType string
-	Zones       string
-	Geo         bool
-	Lifetime    time.Duration
+	Count    int
+	CPUs     int
+	Zones    string
+	Geo      bool
+	Lifetime time.Duration
 }
 
 func (s *nodeSpec) args() []string {
 	var args []string
-	if s.MachineType != "" {
-		args = append(args, "--gce-machine-type="+s.MachineType)
+
+	switch cloud {
+	case "aws":
+		if s.Zones != "" {
+			fmt.Fprintf(os.Stderr, "zones spec not yet supported on AWS: %s\n", s.Zones)
+			os.Exit(1)
+		}
+		if s.Geo {
+			fmt.Fprintf(os.Stderr, "geo-distributed clusters not yet supported on AWS\n")
+			os.Exit(1)
+		}
+
+		args = append(args, "--clouds=aws")
+	}
+
+	if !local && s.CPUs != 0 {
+		switch cloud {
+		case "aws":
+			args = append(args, "--aws-machine-type-ssd="+awsMachineType(s.CPUs))
+		case "gce":
+			args = append(args, "--gce-machine-type="+gceMachineType(s.CPUs))
+		}
 	}
 	if s.Zones != "" {
 		args = append(args, "--gce-zones="+s.Zones)
@@ -450,17 +563,6 @@ type nodeCPUOption int
 
 func (o nodeCPUOption) apply(spec *nodeSpec) {
 	spec.CPUs = int(o)
-	if !local {
-		// TODO(peter): This is awkward: below 16 cpus, use n1-standard so that the
-		// machines have a decent amount of RAM. We could use customer machine
-		// configurations, but the rules for the amount of RAM per CPU need to be
-		// determined (you can't request any arbitrary amount of RAM).
-		if spec.CPUs < 16 {
-			spec.MachineType = fmt.Sprintf("n1-standard-%d", spec.CPUs)
-		} else {
-			spec.MachineType = fmt.Sprintf("n1-highcpu-%d", spec.CPUs)
-		}
-	}
 }
 
 // cpu is a node option which requests nodes with the specified number of CPUs.
@@ -702,10 +804,11 @@ func (c *cluster) validate(ctx context.Context, nodes []nodeSpec, l *logger) err
 	if len(cDetails.VMs) < c.nodes {
 		return fmt.Errorf("cluster has %d nodes, test requires at least %d", len(cDetails.VMs), c.nodes)
 	}
-	if typ := nodes[0].MachineType; typ != "" {
+	if cpus := nodes[0].CPUs; cpus != 0 {
 		for i, vm := range cDetails.VMs {
-			if vm.MachineType != typ {
-				return fmt.Errorf("node %d has machine type %s, test requires %s", i, vm.MachineType, typ)
+			vmCPUs := machineTypeToCPUs(vm.MachineType)
+			if vmCPUs < cpus {
+				return fmt.Errorf("node %d has %d CPUs, test requires %d", i, vmCPUs, cpus)
 			}
 		}
 	}
@@ -1050,7 +1153,7 @@ func (c *cluster) RemountNoBarrier(ctx context.Context) {
 	c.Run(ctx, c.All(),
 		"sudo", "umount", "/mnt/data1", ";",
 		"sudo", "mount", "-o", "discard,defaults,nobarrier",
-		"/dev/disk/by-id/google-local-ssd-0", "/mnt/data1")
+		"$(awk '/\\/mnt\\/data1/ {print $1}' /etc/mtab)", "/mnt/data1")
 }
 
 // pgURL returns the Postgres endpoint for the specified node. It accepts a flag
