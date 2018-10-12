@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 )
 
 // SessionData contains session parameters. They are all user-configurable.
@@ -76,6 +77,9 @@ type SessionData struct {
 	SequenceState *SequenceState
 	// DataConversion gives access to the data conversion configuration.
 	DataConversion DataConversionConfig
+	// DurationAdditionMode enables math compatibility options to be enabled.
+	// TODO(bob): Remove this once the 2.2 release branch is cut.
+	DurationAdditionMode duration.AdditionMode
 }
 
 // DataConversionConfig contains the parameters that influence

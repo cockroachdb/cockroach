@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
@@ -257,6 +258,7 @@ var keywordNames = func() []string {
 // seriesValueGenerator supports the execution of generate_series()
 // with integer bounds.
 type seriesValueGenerator struct {
+	ctx                                 *tree.EvalContext
 	origStart, value, start, stop, step interface{}
 	nextOK                              bool
 	genType                             types.T
@@ -295,8 +297,9 @@ func seriesGenIntValue(s *seriesValueGenerator) tree.Datums {
 	return tree.Datums{tree.NewDInt(tree.DInt(s.value.(int64)))}
 }
 
+// seriesTSNext performs calendar-aware math.
 func seriesTSNext(s *seriesValueGenerator) (bool, error) {
-	step := s.step.(time.Duration)
+	step := s.step.(duration.Duration)
 	start := s.start.(time.Time)
 	stop := s.stop.(time.Time)
 
@@ -304,15 +307,16 @@ func seriesTSNext(s *seriesValueGenerator) (bool, error) {
 		return false, nil
 	}
 
-	if step < 0 && (start.Before(stop)) {
+	stepForward := step.Compare(duration.Duration{}) > 0
+	if !stepForward && (start.Before(stop)) {
 		return false, nil
 	}
-	if step > 0 && (stop.Before(start)) {
+	if stepForward && (stop.Before(start)) {
 		return false, nil
 	}
 
 	s.value = start
-	s.start = start.Add(step)
+	s.start = duration.Add(s.ctx, start, step)
 	return true, nil
 }
 
@@ -320,7 +324,7 @@ func seriesGenTSValue(s *seriesValueGenerator) tree.Datums {
 	return tree.Datums{tree.MakeDTimestamp(s.value.(time.Time), time.Microsecond)}
 }
 
-func makeSeriesGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
+func makeSeriesGenerator(ctx *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
 	start := int64(tree.MustBeDInt(args[0]))
 	stop := int64(tree.MustBeDInt(args[1]))
 	step := int64(1)
@@ -331,6 +335,7 @@ func makeSeriesGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGener
 		return nil, errStepCannotBeZero
 	}
 	return &seriesValueGenerator{
+		ctx:       ctx,
 		origStart: start,
 		stop:      stop,
 		step:      step,
@@ -340,16 +345,17 @@ func makeSeriesGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGener
 	}, nil
 }
 
-func makeTSSeriesGenerator(_ *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
+func makeTSSeriesGenerator(ctx *tree.EvalContext, args tree.Datums) (tree.ValueGenerator, error) {
 	start := args[0].(*tree.DTimestamp).Time
 	stop := args[1].(*tree.DTimestamp).Time
-	step := time.Duration(args[2].(*tree.DInterval).Nanos) * time.Nanosecond
+	step := args[2].(*tree.DInterval).Duration
 
-	if step == 0 {
+	if step.Compare(duration.Duration{}) == 0 {
 		return nil, errStepCannotBeZero
 	}
 
 	return &seriesValueGenerator{
+		ctx:       ctx,
 		origStart: start,
 		stop:      stop,
 		step:      step,
