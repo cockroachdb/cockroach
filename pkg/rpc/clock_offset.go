@@ -20,13 +20,14 @@ import (
 	"time"
 
 	"github.com/VividCortex/ewma"
+	"github.com/montanaflynn/stats"
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/montanaflynn/stats"
-	"github.com/pkg/errors"
 )
 
 // RemoteClockMetrics is the collection of metrics for the clock monitor.

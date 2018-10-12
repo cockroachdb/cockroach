@@ -20,14 +20,15 @@ import (
 	"strconv"
 	"unsafe"
 
+	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
 )
 
 func (ex *connExecutor) execPrepare(

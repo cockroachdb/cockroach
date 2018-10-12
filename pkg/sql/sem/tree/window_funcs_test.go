@@ -17,9 +17,7 @@ package tree
 import (
 	"context"
 	"testing"
-
 	"math/rand"
-
 	"bytes"
 	"fmt"
 

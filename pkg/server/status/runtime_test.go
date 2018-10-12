@@ -18,8 +18,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/shirou/gopsutil/net"
+
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestSumDiskCounters(t *testing.T) {

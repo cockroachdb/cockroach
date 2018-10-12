@@ -20,14 +20,15 @@ import (
 	"strings"
 	"testing"
 
+	"go.etcd.io/etcd/raft/raftpb"
+	"golang.org/x/time/rate"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"go.etcd.io/etcd/raft/raftpb"
-	"golang.org/x/time/rate"
 )
 
 func TestSnapshotRaftLogLimit(t *testing.T) {

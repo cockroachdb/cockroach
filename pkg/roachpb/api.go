@@ -20,8 +20,9 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 // UserPriority is a custom type for transaction's user priority.

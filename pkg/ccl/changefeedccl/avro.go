@@ -14,11 +14,12 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/linkedin/goavro"
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/linkedin/goavro"
-	"github.com/pkg/errors"
 )
 
 // avroSchemaType is one of the set of avro primitive types.

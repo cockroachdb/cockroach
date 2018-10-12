@@ -16,13 +16,9 @@ package distsqlrun
 
 import (
 	"testing"
-
 	"context"
-
 	"fmt"
-
 	"sort"
-
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"

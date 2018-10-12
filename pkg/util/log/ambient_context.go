@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"golang.org/x/net/trace"
-
 	opentracing "github.com/opentracing/opentracing-go"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"

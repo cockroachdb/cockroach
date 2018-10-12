@@ -14,9 +14,7 @@
 
 package main
 
-import (
-	"fmt"
-)
+import "fmt"
 
 // uniquifier generates a unique variable name from an input string by
 // appending an incrementing counter in case of collisions with previously

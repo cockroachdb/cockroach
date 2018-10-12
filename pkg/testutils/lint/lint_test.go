@@ -30,7 +30,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/ghemawat/stream"
 	"github.com/kisielk/gotool"
 	"github.com/pkg/errors"
@@ -40,6 +39,8 @@ import (
 	"honnef.co/go/tools/simple"
 	"honnef.co/go/tools/staticcheck"
 	"honnef.co/go/tools/unused"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 )
 
 const cockroachDB = "github.com/cockroachdb/cockroach"

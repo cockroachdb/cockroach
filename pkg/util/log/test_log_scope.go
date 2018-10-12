@@ -21,8 +21,9 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 )
 
 // TestLogScope represents the lifetime of a logging output.  It

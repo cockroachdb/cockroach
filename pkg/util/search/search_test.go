@@ -18,8 +18,9 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 const pass = true

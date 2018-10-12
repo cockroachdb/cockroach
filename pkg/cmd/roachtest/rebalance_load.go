@@ -23,8 +23,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func registerRebalanceLoad(r *registry) {

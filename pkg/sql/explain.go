@@ -18,8 +18,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // Explain executes the explain statement, providing debugging and analysis

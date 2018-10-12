@@ -20,9 +20,10 @@ import (
 	"io"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/petermattis/goid"
+
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
 func init() {

@@ -17,10 +17,11 @@ package sql
 import (
 	"strings"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
 )
 
 type windowPlanState struct {

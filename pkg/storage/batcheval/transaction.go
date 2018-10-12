@@ -18,10 +18,11 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/pkg/errors"
 )
 
 // ErrTransactionUnsupported is returned when a non-transactional command is

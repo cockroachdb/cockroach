@@ -21,9 +21,7 @@
 
 package sqlbase
 
-import (
-	"sort"
-)
+import "sort"
 
 // The next few sorting functions are largely unmodified
 // from the GO standard library implementation, save for occasional

@@ -21,7 +21,6 @@ import (
 	"os"
 
 	"github.com/pkg/errors"
-
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/crypto/ssh/terminal"
 )

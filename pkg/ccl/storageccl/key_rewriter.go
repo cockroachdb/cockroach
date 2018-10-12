@@ -11,12 +11,13 @@ package storageccl
 import (
 	"bytes"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/pkg/errors"
 )
 
 // prefixRewrite holds information for a single []byte replacement of a prefix.

@@ -17,8 +17,9 @@ package main
 import (
 	"os"
 
-	"github.com/cockroachdb/returncheck"
 	"github.com/kisielk/gotool"
+
+	"github.com/cockroachdb/returncheck"
 )
 
 func main() {

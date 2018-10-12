@@ -26,14 +26,14 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
 	runtimepprof "runtime/pprof"
 
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/google/pprof/driver"
 	"github.com/google/pprof/profile"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
+
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // A Server serves up the pprof web ui. A request to /<profiletype>

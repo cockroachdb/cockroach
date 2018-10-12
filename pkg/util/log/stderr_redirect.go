@@ -14,9 +14,7 @@
 
 package log
 
-import (
-	"os"
-)
+import "os"
 
 // OrigStderr points to the original stderr stream.
 var OrigStderr = func() *os.File {

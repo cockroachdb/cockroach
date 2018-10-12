@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"math"
 	"reflect"
-
 	"sort"
 
 	"github.com/cockroachdb/apd"

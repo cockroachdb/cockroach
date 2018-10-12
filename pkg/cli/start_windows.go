@@ -14,9 +14,7 @@
 
 package cli
 
-import (
-	"os"
-)
+import "os"
 
 // drainSignals are the signals that will cause the server to drain and exit.
 var drainSignals = []os.Signal{os.Interrupt}

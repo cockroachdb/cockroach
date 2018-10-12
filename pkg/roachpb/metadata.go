@@ -21,9 +21,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 )
 
 // NodeID is a custom type for a cockroach node ID. (not a raft node ID)

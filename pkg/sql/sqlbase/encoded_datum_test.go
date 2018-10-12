@@ -17,9 +17,7 @@ package sqlbase
 import (
 	"context"
 	"testing"
-
 	"unsafe"
-
 	"time"
 
 	"github.com/cockroachdb/apd"

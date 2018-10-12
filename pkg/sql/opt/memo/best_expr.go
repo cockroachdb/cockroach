@@ -14,9 +14,7 @@
 
 package memo
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/opt"
 
 // BestExprID uniquely identifies a BestExpr stored in the memo by pairing the
 // ID of its group with the ordinal position of the BestExpr within that group.

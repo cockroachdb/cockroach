@@ -17,9 +17,7 @@ package sql_test
 import (
 	"context"
 	"testing"
-
 	"time"
-
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"

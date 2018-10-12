@@ -20,14 +20,14 @@ import (
 	"io"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/pkg/errors"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/transport"
+
+	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 )
 
 // ErrCannotReuseClientConn is returned when a failed connection is

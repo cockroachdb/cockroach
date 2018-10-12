@@ -20,8 +20,9 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // Options provides reusable configuration of Retry objects.

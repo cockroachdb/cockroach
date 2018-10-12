@@ -19,15 +19,14 @@ import (
 	gosql "database/sql"
 	"math/rand"
 	"sync/atomic"
-
 	"context"
-
 	"fmt"
 	"strings"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
 
 // 2.7 The Delivery Transaction

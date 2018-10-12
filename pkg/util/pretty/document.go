@@ -34,9 +34,7 @@
 //
 package pretty
 
-import (
-	"fmt"
-)
+import "fmt"
 
 // Doc represents a document as described by the type "DOC" in the
 // referenced paper. This is the abstract representation constructed

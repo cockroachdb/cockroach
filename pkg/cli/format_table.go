@@ -25,12 +25,13 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/olekukonko/tablewriter"
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/olekukonko/tablewriter"
-	"github.com/pkg/errors"
 )
 
 // rowStrIter is an iterator interface for the printQueryOutput function. It is

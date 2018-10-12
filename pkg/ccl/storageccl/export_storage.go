@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"google.golang.org/api/option"
-
 	gcs "cloud.google.com/go/storage"
 	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
 	"github.com/aws/aws-sdk-go/aws"

@@ -64,7 +64,6 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	circuit "github.com/rubyist/circuitbreaker"

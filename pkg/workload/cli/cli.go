@@ -18,8 +18,9 @@ package cli
 import (
 	"os"
 
-	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/spf13/cobra"
+
+	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
 // WorkloadCmd returns a new command that can serve as the root of the workload

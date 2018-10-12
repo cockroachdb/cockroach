@@ -23,16 +23,16 @@ import (
 	"net/url"
 	"sort"
 	"strings"
-
 	"strconv"
+
+	humanize "github.com/dustin/go-humanize"
+	"github.com/gogo/protobuf/types"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	humanize "github.com/dustin/go-humanize"
-	"github.com/gogo/protobuf/types"
-	"github.com/pkg/errors"
 )
 
 type diagramCellType interface {

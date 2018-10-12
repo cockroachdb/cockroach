@@ -20,10 +20,9 @@ import (
 	"fmt"
 	"math/rand"
 	"unicode"
+	"sort"
 
 	"github.com/pkg/errors"
-
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"

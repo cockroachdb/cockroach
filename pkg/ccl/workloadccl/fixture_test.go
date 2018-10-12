@@ -17,15 +17,15 @@ import (
 	"testing"
 
 	"cloud.google.com/go/storage"
+	"github.com/spf13/pflag"
+	"golang.org/x/oauth2/google"
+	"google.golang.org/api/option"
+
 	_ "github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/workload"
-	"github.com/spf13/pflag"
-	"golang.org/x/oauth2/google"
-	"google.golang.org/api/option"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"

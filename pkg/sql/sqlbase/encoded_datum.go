@@ -17,12 +17,12 @@ package sqlbase
 import (
 	"bytes"
 	"fmt"
-
 	"unsafe"
+
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/pkg/errors"
 )
 
 // EncodingDirToDatumEncoding returns an equivalent DatumEncoding for the given

@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-
 	gosql "database/sql"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"

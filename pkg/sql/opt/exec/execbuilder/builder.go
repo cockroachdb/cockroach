@@ -15,10 +15,11 @@
 package execbuilder
 
 import (
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/pkg/errors"
 )
 
 // Builder constructs a tree of execution nodes (exec.Node) from an optimized

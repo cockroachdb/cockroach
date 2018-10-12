@@ -20,8 +20,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // showTraceReplicaNode is a planNode that wraps another node and uses session

@@ -23,16 +23,13 @@ import (
 	"net/http/pprof"
 	"strings"
 
-	// Register the net/trace endpoint with http.DefaultServeMux.
-
-	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
 	"golang.org/x/net/trace"
 	"google.golang.org/grpc/metadata"
-
 	"github.com/pkg/errors"
 	"github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
 
+	"github.com/cockroachdb/cockroach/pkg/server/debug/pprofui"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"

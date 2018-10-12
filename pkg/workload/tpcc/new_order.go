@@ -22,15 +22,14 @@ import (
 	"sort"
 	"strings"
 	"time"
-
 	"context"
-
 	"sync/atomic"
+
+	"github.com/lib/pq"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/lib/pq"
-	"github.com/pkg/errors"
 )
 
 // From the TPCC spec, section 2.4:

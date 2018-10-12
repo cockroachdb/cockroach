@@ -17,11 +17,12 @@ package sqlbase
 import (
 	"fmt"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
-	"github.com/pkg/errors"
 )
 
 // PartitionSpecialValCode identifies a special value.

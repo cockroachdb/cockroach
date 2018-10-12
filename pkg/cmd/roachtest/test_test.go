@@ -27,9 +27,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kr/pretty"
+
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/kr/pretty"
 )
 
 const defaultParallelism = 10

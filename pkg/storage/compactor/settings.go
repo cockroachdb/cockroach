@@ -17,8 +17,9 @@ package compactor
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/settings"
 )
 
 func init() {

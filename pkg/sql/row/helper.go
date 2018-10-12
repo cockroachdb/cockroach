@@ -17,10 +17,11 @@ package row
 import (
 	"sort"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/pkg/errors"
 )
 
 // rowHelper has the common methods for table row manipulations.

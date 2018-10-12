@@ -21,9 +21,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/petermattis/goid"
+
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/petermattis/goid"
 )
 
 func TestShouldPrint(t *testing.T) {

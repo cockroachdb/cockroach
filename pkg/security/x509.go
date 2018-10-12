@@ -23,8 +23,9 @@ import (
 	"net"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // Utility to generate x509 certificates, both CA and not.

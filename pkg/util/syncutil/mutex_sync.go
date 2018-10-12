@@ -17,9 +17,7 @@
 
 package syncutil
 
-import (
-	"sync"
-)
+import "sync"
 
 // A Mutex is a mutual exclusion lock.
 type Mutex struct {

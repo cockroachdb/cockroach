@@ -15,8 +15,9 @@
 package distsqlrun
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // StreamDecoder converts a sequence of ProducerMessage to rows and metadata

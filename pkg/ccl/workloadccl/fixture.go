@@ -22,15 +22,16 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/pkg/errors"
+	"github.com/spf13/pflag"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/api/iterator"
+
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
-	"github.com/pkg/errors"
-	"github.com/spf13/pflag"
-	"golang.org/x/sync/errgroup"
-	"google.golang.org/api/iterator"
 )
 
 const (

@@ -18,8 +18,9 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/gogo/protobuf/proto"
+
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 var verbotenKinds = [...]reflect.Kind{

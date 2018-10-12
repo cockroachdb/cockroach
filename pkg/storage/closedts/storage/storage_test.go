@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-
 	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

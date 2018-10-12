@@ -37,13 +37,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/petermattis/goid"
+
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/ttycolor"
-	"github.com/petermattis/goid"
 )
 
 const fatalErrorPostamble = `

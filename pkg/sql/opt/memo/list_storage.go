@@ -14,9 +14,7 @@
 
 package memo
 
-import (
-	"unsafe"
-)
+import "unsafe"
 
 // ListID identifies a variable-sized list used by a memo expression and stored
 // by the memo. The ID consists of an offset into the memo's lists slice, plus

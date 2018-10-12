@@ -21,9 +21,9 @@ import (
 	"strings"
 
 	"github.com/lib/pq"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
-	"github.com/pkg/errors"
 )
 
 var _ error = &Error{}

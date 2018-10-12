@@ -30,6 +30,11 @@ import (
 	"strconv"
 	"strings"
 
+	readline "github.com/knz/go-libedit"
+	"github.com/lib/pq"
+	isatty "github.com/mattn/go-isatty"
+	"github.com/spf13/cobra"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -39,10 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	readline "github.com/knz/go-libedit"
-	"github.com/lib/pq"
-	isatty "github.com/mattn/go-isatty"
-	"github.com/spf13/cobra"
 )
 
 const (

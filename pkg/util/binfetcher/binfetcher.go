@@ -27,8 +27,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Options are the options to Download().

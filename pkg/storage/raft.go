@@ -20,9 +20,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // init installs an adapter to use clog for log messages from raft which

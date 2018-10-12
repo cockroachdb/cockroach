@@ -14,9 +14,7 @@
 
 package json
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-)
+import "github.com/cockroachdb/cockroach/pkg/util/encoding"
 
 const nullTag = 0x00000000
 const stringTag = 0x10000000

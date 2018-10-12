@@ -17,8 +17,9 @@ package tracing
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 )
 
 // LogTagsOption is a StartSpanOption that uses log tags to populate the span tags.

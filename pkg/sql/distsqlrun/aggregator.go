@@ -18,8 +18,10 @@ import (
 	"context"
 	"strings"
 	"unsafe"
-
 	"fmt"
+
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -30,8 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // GetAggregateInfo returns the aggregate constructor and the return type for

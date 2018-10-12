@@ -19,9 +19,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/pkg/errors"
 	"github.com/satori/go.uuid"
+
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 )
 
 // UUID is a thin wrapper around "github.com/satori/go.uuid".UUID that can be

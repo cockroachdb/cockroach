@@ -20,11 +20,11 @@ import (
 	gojson "encoding/json"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
 	"golang.org/x/text/language"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"

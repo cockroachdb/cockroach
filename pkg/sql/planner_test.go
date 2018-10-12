@@ -16,7 +16,6 @@ package sql
 
 import (
 	"testing"
-
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"

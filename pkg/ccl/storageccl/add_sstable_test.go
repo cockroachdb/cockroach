@@ -20,6 +20,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kr/pretty"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -34,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/kr/pretty"
 )
 
 func singleKVSSTable(key engine.MVCCKey, value []byte) ([]byte, error) {

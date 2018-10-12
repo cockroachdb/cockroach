@@ -16,9 +16,7 @@ package engine
 
 import "C"
 
-import (
-	"unsafe"
-)
+import "unsafe"
 
 func nonZeroingMakeByteSlice(len int) []byte {
 	ptr := mallocgc(uintptr(len), nil, false)

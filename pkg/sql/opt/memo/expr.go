@@ -14,9 +14,7 @@
 
 package memo
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/opt"
 
 // ExprOrdinal is the ordinal position of an expression within its memo group.
 // Each group stores one or more logically equivalent expressions. The 0th

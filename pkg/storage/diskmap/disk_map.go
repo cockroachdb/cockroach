@@ -14,9 +14,7 @@
 
 package diskmap
 
-import (
-	"context"
-)
+import "context"
 
 // Factory is an interface that can produce SortedDiskMaps.
 type Factory interface {

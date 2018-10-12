@@ -19,11 +19,12 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/kr/pretty"
+
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/kr/pretty"
 )
 
 // initialStats are the stats for a Replica which has been created through

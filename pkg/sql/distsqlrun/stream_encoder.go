@@ -17,8 +17,9 @@ package distsqlrun
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // StreamEncoder converts EncDatum rows into a sequence of ProducerMessage.

@@ -9,10 +9,11 @@
 package cliccl
 
 import (
+	"github.com/spf13/cobra"
+
 	"github.com/cockroachdb/cockroach/pkg/ccl/baseccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/cliccl/cliflagsccl"
 	"github.com/cockroachdb/cockroach/pkg/cli"
-	"github.com/spf13/cobra"
 )
 
 // This does not define a `start` command, only modifications to the existing command

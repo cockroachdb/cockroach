@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-
 	// Import to set ZoneConfigHook.
 	_ "github.com/cockroachdb/cockroach/pkg/sql"
 )

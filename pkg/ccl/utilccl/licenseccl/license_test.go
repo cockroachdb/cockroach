@@ -11,7 +11,6 @@ package licenseccl
 import (
 	"testing"
 	"time"
-
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils"

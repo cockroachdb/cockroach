@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"go.etcd.io/etcd/raft/raftpb"
+
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -29,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"go.etcd.io/etcd/raft/raftpb"
 )
 
 // PrintKeyValue attempts to pretty-print the specified MVCCKeyValue to

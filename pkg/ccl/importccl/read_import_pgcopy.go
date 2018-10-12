@@ -17,11 +17,12 @@ import (
 	"strconv"
 	"unicode"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
-	"github.com/pkg/errors"
 )
 
 // defaultScanBuffer is the default max row size of the PGCOPY and PGDUMP

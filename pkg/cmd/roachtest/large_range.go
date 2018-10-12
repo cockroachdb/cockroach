@@ -21,10 +21,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	humanize "github.com/dustin/go-humanize"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 func registerLargeRange(r *registry) {

@@ -19,11 +19,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
-
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	_ "github.com/lib/pq"
+
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 )
 
 func registerDrop(r *registry) {

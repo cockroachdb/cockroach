@@ -30,6 +30,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gogo/protobuf/jsonpb"
+	"github.com/kr/pretty"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+	"go.etcd.io/etcd/raft/raftpb"
+
 	"github.com/cockroachdb/cockroach/pkg/cli/debug"
 	"github.com/cockroachdb/cockroach/pkg/cli/syncbench"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -56,11 +62,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/gogo/protobuf/jsonpb"
-	"github.com/kr/pretty"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
-	"go.etcd.io/etcd/raft/raftpb"
 )
 
 var debugKeysCmd = &cobra.Command{

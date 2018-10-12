@@ -32,11 +32,12 @@ import (
 	"sync"
 	"time"
 
+	version "github.com/hashicorp/go-version"
+	"github.com/petermattis/goid"
+
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	version "github.com/hashicorp/go-version"
-	"github.com/petermattis/goid"
 )
 
 var (

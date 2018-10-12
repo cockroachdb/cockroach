@@ -19,12 +19,12 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
 	"time"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/stretchr/testify/assert"
 )
 
 type rssVal struct {

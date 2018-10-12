@@ -18,13 +18,12 @@ import (
 	"context"
 	"io"
 	"time"
+	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
-	"sync"
-
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"

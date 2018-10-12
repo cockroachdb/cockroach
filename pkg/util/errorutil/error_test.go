@@ -14,9 +14,7 @@
 
 package errorutil
 
-import (
-	"testing"
-)
+import "testing"
 
 func TestUnexpectedWithIssueErrorf(t *testing.T) {
 	err := UnexpectedWithIssueErrorf(1234, "args: %d %s %f", 1, "two", 3.0)

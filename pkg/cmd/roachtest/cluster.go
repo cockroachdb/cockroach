@@ -40,7 +40,6 @@ import (
 
 	// "postgres" gosql driver
 	_ "github.com/lib/pq"
-
 	"github.com/armon/circbuf"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"

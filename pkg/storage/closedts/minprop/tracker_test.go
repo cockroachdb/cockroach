@@ -21,15 +21,15 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/kr/pretty"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-
-	"github.com/kr/pretty"
-	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 func TestTrackerClosure(t *testing.T) {

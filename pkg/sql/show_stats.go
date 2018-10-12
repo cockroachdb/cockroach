@@ -18,12 +18,13 @@ import (
 	"context"
 	encjson "encoding/json"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	"github.com/pkg/errors"
 )
 
 var showTableStatsColumns = sqlbase.ResultColumns{

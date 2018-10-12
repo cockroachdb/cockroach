@@ -20,12 +20,10 @@ import (
 	"math/rand"
 	"sync/atomic"
 	"time"
+	"context"
+	"fmt"
 
 	"github.com/pkg/errors"
-
-	"context"
-
-	"fmt"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"

@@ -21,6 +21,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kr/pretty"
+	mysql "vitess.io/vitess/go/vt/sqlparser"
+
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,8 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/kr/pretty"
-	mysql "vitess.io/vitess/go/vt/sqlparser"
 )
 
 var testEvalCtx = &tree.EvalContext{

@@ -14,9 +14,7 @@
 
 package scrub
 
-import (
-	"fmt"
-)
+import "fmt"
 
 const (
 	// MissingIndexEntryError occurs when a primary k/v is missing a

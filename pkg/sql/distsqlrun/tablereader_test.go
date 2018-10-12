@@ -21,6 +21,9 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/gogo/protobuf/types"
+	opentracing "github.com/opentracing/opentracing-go"
+
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -33,8 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/gogo/protobuf/types"
-	opentracing "github.com/opentracing/opentracing-go"
 )
 
 func TestTableReader(t *testing.T) {

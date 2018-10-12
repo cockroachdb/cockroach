@@ -18,7 +18,6 @@ import (
 	"context"
 	"math"
 	"testing"
-
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"

@@ -18,8 +18,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func TestSucceedsSoon(t *testing.T) {

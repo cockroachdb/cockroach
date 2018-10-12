@@ -17,7 +17,6 @@ package distsqlrun
 import (
 	"context"
 	"testing"
-
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"

@@ -27,8 +27,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 const (

@@ -19,7 +19,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
-
 	"context"
 
 	"github.com/cockroachdb/cockroach-go/crdb"

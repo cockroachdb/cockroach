@@ -23,9 +23,7 @@
 
 package interval
 
-import (
-	"github.com/biogo/store/llrb"
-)
+import "github.com/biogo/store/llrb"
 
 // Operation LLRBMode of the underlying LLRB tree.
 const (

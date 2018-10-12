@@ -22,7 +22,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cockroachdb/cockroach/pkg/workload"
-
 	// Register the relevant examples
 	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
 )

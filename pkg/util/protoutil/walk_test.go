@@ -14,9 +14,7 @@
 
 package protoutil
 
-import (
-	"testing"
-)
+import "testing"
 
 type C struct {
 	Target *int `cockroachdb:"randnullable"`

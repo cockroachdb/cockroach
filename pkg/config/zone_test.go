@@ -20,11 +20,12 @@ import (
 	"reflect"
 	"testing"
 
+	proto "github.com/gogo/protobuf/proto"
+	yaml "gopkg.in/yaml.v2"
+
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	proto "github.com/gogo/protobuf/proto"
-	yaml "gopkg.in/yaml.v2"
 )
 
 func TestZoneConfigValidate(t *testing.T) {

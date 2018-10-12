@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
-
 	"github.com/backtrace-labs/go-bcd"
 
 	"github.com/cockroachdb/cockroach/pkg/build"

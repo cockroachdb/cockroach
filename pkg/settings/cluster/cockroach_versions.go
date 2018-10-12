@@ -14,9 +14,7 @@
 
 package cluster
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-)
+import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 // VersionKey is a unique identifier for a version of CockroachDB.
 type VersionKey int

@@ -19,7 +19,6 @@ import (
 	math "math"
 	"math/rand"
 	"testing"
-
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"

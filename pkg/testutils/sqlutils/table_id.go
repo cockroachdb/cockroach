@@ -14,9 +14,7 @@
 
 package sqlutils
 
-import (
-	gosql "database/sql"
-)
+import gosql "database/sql"
 
 // QueryDatabaseID returns the database ID of the specified database using the
 // system.namespace table.

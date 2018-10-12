@@ -21,11 +21,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
+
 	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
 )
 
 func defaultContainerConfig() container.Config {

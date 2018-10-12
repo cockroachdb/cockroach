@@ -18,12 +18,13 @@ import (
 	"context"
 	"testing"
 
+	yaml "gopkg.in/yaml.v2"
+
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	yaml "gopkg.in/yaml.v2"
 )
 
 func TestValidateZoneAttrsAndLocalities(t *testing.T) {

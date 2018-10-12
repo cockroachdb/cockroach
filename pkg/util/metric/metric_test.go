@@ -22,9 +22,10 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 	"github.com/kr/pretty"
 	prometheusgo "github.com/prometheus/client_model/go"
+
+	_ "github.com/cockroachdb/cockroach/pkg/util/log" // for flags
 )
 
 func testMarshal(t *testing.T, m json.Marshaler, exp string) {

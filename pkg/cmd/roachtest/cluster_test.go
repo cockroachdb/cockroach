@@ -24,8 +24,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
 func TestClusterNodes(t *testing.T) {

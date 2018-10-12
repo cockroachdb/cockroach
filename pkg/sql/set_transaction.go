@@ -14,9 +14,7 @@
 
 package sql
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
 // SetTransaction sets a transaction's isolation level, priority and ro/rw state
 func (p *planner) SetTransaction(n *tree.SetTransaction) (planNode, error) {

@@ -23,6 +23,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kr/pretty"
+	"github.com/lib/pq"
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,9 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/kr/pretty"
-	"github.com/lib/pq"
-	"github.com/pkg/errors"
 )
 
 // WaitForJob waits for the specified job ID to terminate.

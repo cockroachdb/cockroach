@@ -21,15 +21,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/opentracing/opentracing-go"
+	grpc "google.golang.org/grpc"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
-
-	grpc "google.golang.org/grpc"
 )
 
 const outboxBufRows = 16

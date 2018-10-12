@@ -20,10 +20,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kr/pretty"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/kr/pretty"
 )
 
 func floatsEqual(x, y float64) bool {

@@ -23,10 +23,11 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"golang.org/x/sync/errgroup"
 )
 
 func runClusterInit(ctx context.Context, t *test, c *cluster) {

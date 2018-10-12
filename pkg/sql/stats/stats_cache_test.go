@@ -17,12 +17,11 @@ package stats
 import (
 	"context"
 	"testing"
-
 	"time"
-
 	"reflect"
-
 	"sort"
+
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -34,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/pkg/errors"
 )
 
 func insertTableStat(

@@ -23,8 +23,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/acceptance/cluster"
 )
 
 // LocalCluster implements cluster.Cluster.

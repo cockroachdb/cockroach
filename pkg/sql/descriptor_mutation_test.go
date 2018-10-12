@@ -19,7 +19,6 @@ import (
 	gosql "database/sql"
 	"math/rand"
 	"testing"
-
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"

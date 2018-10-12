@@ -14,9 +14,7 @@
 
 package norm
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 
 // ListBuilder is a helper class that efficiently builds memo lists by always
 // reusing a "scratch" slice to hold temporary results. The reusable slice

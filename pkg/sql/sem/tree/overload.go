@@ -19,9 +19,10 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/pkg/errors"
 )
 
 // Overload is one of the overloads of a built-in function.

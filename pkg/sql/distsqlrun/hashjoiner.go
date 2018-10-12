@@ -17,8 +17,10 @@ package distsqlrun
 import (
 	"context"
 	"fmt"
-
 	"math/rand"
+
+	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -26,8 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // hashJoinerInitialBufferSize controls the size of the initial buffering phase

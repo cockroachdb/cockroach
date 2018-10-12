@@ -27,8 +27,9 @@ import (
 	"os"
 
 	"github.com/abourget/teamcity"
-	"github.com/cockroachdb/cockroach/pkg/cmd/cmdutil"
 	"github.com/kisielk/gotool"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/cmdutil"
 )
 
 func main() {

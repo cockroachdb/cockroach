@@ -19,8 +19,9 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	version "github.com/hashicorp/go-version"
+
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 )
 
 // const char* compilerVersion() {

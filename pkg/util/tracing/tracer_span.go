@@ -21,13 +21,13 @@ import (
 	"time"
 
 	"golang.org/x/net/trace"
-
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	proto "github.com/gogo/protobuf/proto"
 	"github.com/gogo/protobuf/types"
 	opentracing "github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/pkg/errors"
+
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // spanMeta stores span information that is common to span and spanContext.

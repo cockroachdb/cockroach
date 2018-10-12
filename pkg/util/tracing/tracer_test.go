@@ -17,9 +17,10 @@ package tracing
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	lightstep "github.com/lightstep/lightstep-tracer-go"
 	opentracing "github.com/opentracing/opentracing-go"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 )
 
 func TestTracerRecording(t *testing.T) {

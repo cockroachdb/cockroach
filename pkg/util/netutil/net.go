@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-
 	"golang.org/x/net/http2"
 
 	"github.com/cockroachdb/cmux"

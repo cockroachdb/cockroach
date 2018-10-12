@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
@@ -28,8 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/transport"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-
-	"google.golang.org/grpc"
 )
 
 // Config is a container that holds references to all of the components required

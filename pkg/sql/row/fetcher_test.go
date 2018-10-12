@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/base"

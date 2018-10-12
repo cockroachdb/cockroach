@@ -14,9 +14,7 @@
 
 package memo
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/opt"
 
 // DynamicID is used when dynamically creating expressions using the MakeXXXExpr
 // methods, as well as the normalizing factory's DynamicConstruct method. Each

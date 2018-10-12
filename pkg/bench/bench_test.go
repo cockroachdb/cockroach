@@ -24,11 +24,10 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"strconv"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
-
-	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"

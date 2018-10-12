@@ -23,12 +23,11 @@ import (
 	"reflect"
 	"strings"
 	"unicode"
+	"bytes"
 
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 	"golang.org/x/text/collate"
-
-	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"

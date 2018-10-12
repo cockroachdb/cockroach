@@ -21,10 +21,11 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/pkg/errors"
 )
 
 type dummy struct {

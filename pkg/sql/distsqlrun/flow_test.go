@@ -17,7 +17,6 @@ package distsqlrun_test
 import (
 	"context"
 	"testing"
-
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"

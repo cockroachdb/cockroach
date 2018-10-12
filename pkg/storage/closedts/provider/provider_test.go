@@ -23,6 +23,8 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -36,8 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
 )
 
 func TestProviderSubscribeNotify(t *testing.T) {

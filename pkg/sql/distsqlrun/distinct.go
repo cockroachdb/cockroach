@@ -17,7 +17,6 @@ package distsqlrun
 import (
 	"context"
 	"sync"
-
 	"fmt"
 
 	opentracing "github.com/opentracing/opentracing-go"

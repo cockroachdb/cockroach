@@ -26,6 +26,7 @@ import (
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/syncmap"
+	"github.com/kr/pretty"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -41,7 +42,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/kr/pretty"
 )
 
 // makeTS creates a new hybrid logical timestamp.

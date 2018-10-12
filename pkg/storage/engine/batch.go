@@ -18,9 +18,10 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/pkg/errors"
 )
 
 // BatchType represents the type of an entry in an encoded RocksDB batch.

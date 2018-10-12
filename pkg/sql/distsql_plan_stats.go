@@ -15,10 +15,11 @@
 package sql
 
 import (
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/pkg/errors"
 )
 
 type requestedStat struct {

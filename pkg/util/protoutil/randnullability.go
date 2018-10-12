@@ -20,10 +20,11 @@ import (
 	"reflect"
 	"strings"
 
+	"golang.org/x/sync/syncmap"
+
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"golang.org/x/sync/syncmap"
 )
 
 func hookVisitor(v reflect.Value, hook func(v reflect.Value, i int)) {

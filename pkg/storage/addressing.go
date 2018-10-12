@@ -17,10 +17,11 @@ package storage
 import (
 	"bytes"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/pkg/errors"
 )
 
 type metaAction func(*client.Batch, roachpb.Key, *roachpb.RangeDescriptor)

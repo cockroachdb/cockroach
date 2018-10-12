@@ -21,9 +21,10 @@ import (
 	"os/exec"
 	"time"
 
+	"github.com/pkg/errors"
+
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
 
 func runRapidRestart(ctx context.Context, t *test, c *cluster) {
