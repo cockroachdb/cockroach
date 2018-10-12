@@ -52,7 +52,7 @@ func registerVersion(r *registry) {
 		stageDuration := 10 * time.Minute
 		buffer := 10 * time.Minute
 		if local {
-			c.l.Printf("local mode: speeding up test\n")
+			t.l.Printf("local mode: speeding up test\n")
 			stageDuration = 10 * time.Second
 			buffer = time.Minute
 		}
@@ -72,7 +72,7 @@ func registerVersion(r *registry) {
 				cmd = fmt.Sprintf(cmd, nodes)
 				// Direct stderr only to disk. We expect errors from the workload as
 				// nodes are stopped and started.
-				childL, err := c.l.ChildLogger("workload"+strconv.Itoa(i), quietStderr)
+				childL, err := t.l.ChildLogger("workload"+strconv.Itoa(i), quietStderr)
 				if err != nil {
 					return err
 				}
@@ -81,7 +81,7 @@ func registerVersion(r *registry) {
 		}
 
 		m.Go(func(ctx context.Context) error {
-			l, err := c.l.ChildLogger("upgrader")
+			l, err := t.l.ChildLogger("upgrader")
 			if err != nil {
 				return err
 			}

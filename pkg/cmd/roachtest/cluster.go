@@ -616,12 +616,16 @@ type cluster struct {
 	// l is the logger used to log various cluster operations.
 	// DEPRECATED for use outside of cluster methods: Use a test's t.l instead.
 	// This is generally set to the current test's logger.
-	l          *logger
+	l *logger
+	// destroyed is used to coordinate between different goroutines that want to
+	// destroy a cluster. It is nil when the cluster should not be destroyed (i.e.
+	// when Destroy() should not be called).
 	destroyed  chan struct{}
 	expiration time.Time
-	// owned is set if this instance is responsible for destroying the roachprod
+	// owned is set if this instance is responsible for `roachprod destroy`ing the
 	// cluster. It is set when a new cluster is created, but not when one is
 	// cloned or when we attach to an existing roachprod cluster.
+	// If not set, Destroy() only wipes the cluster.
 	owned bool
 }
 
@@ -825,6 +829,7 @@ func (c *cluster) clone() *cluster {
 	cpy := *c
 	// This cloned cluster is not taking ownership. The parent retains it.
 	cpy.owned = false
+	cpy.destroyed = nil
 	return &cpy
 }
 

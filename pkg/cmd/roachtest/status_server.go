@@ -64,7 +64,7 @@ func runStatusServer(ctx context.Context, t *test, c *cluster) {
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("could not GET %s - statuscode: %d - body: %s", url, resp.StatusCode, body)
 		}
-		c.l.Printf("OK response from %s\n", url)
+		t.l.Printf("OK response from %s\n", url)
 		return body
 	}
 
