@@ -15,14 +15,12 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
+	"regexp"
 	"strings"
 	"text/template"
-
-	"regexp"
-
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"

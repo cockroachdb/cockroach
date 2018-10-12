@@ -29,10 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-
-	"golang.org/x/text/language"
-
 	"github.com/pkg/errors"
+	"golang.org/x/text/language"
 )
 
 // CreateDatabase represents a CREATE DATABASE statement.

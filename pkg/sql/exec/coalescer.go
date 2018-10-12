@@ -14,9 +14,7 @@
 
 package exec
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 
 // coalescerOp consumes the input operator and coalesces the resulting batches
 // to return full batches of ColBatchSize.

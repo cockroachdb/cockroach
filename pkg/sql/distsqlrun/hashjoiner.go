@@ -17,7 +17,6 @@ package distsqlrun
 import (
 	"context"
 	"fmt"
-
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"

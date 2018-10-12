@@ -17,10 +17,9 @@ package main
 import (
 	"io"
 	"io/ioutil"
+	"regexp"
 	"strings"
 	"text/template"
-
-	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )

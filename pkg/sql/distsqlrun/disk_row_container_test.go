@@ -16,11 +16,10 @@ package distsqlrun
 
 import (
 	"context"
+	"fmt"
 	math "math"
 	"math/rand"
 	"testing"
-
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"

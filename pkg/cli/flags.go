@@ -17,20 +17,19 @@ package cli
 import (
 	"flag"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"net"
 	"strings"
 	"time"
-
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // special global variables used by flag variable definitions below.

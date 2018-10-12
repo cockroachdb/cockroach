@@ -39,9 +39,8 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/oauth2"
-
 	"github.com/google/go-github/github"
+	"golang.org/x/oauth2"
 )
 
 const githubAPITokenEnv = "GITHUB_API_TOKEN"

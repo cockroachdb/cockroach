@@ -26,7 +26,6 @@ import (
 	"unsafe"
 
 	"github.com/andy-kimball/arenaskl"
-
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"

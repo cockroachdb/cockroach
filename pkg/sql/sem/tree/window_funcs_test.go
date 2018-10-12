@@ -15,13 +15,11 @@
 package tree
 
 import (
-	"context"
-	"testing"
-
-	"math/rand"
-
 	"bytes"
+	"context"
 	"fmt"
+	"math/rand"
+	"testing"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"

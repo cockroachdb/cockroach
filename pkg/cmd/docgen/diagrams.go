@@ -27,11 +27,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
-
 	"github.com/cockroachdb/cockroach/pkg/cmd/docgen/extract"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 )
 
 func init() {

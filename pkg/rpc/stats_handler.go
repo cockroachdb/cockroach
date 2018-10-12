@@ -18,10 +18,9 @@ import (
 	"context"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc/stats"
-
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type remoteAddrKey struct{}

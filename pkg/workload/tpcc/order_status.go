@@ -16,20 +16,17 @@
 package tpcc
 
 import (
+	"context"
+	"fmt"
 	"math/rand"
 	"sync/atomic"
 	"time"
 
-	"github.com/jackc/pgx/pgtype"
-	"github.com/pkg/errors"
-
-	"context"
-
-	"fmt"
-
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/jackc/pgx/pgtype"
+	"github.com/pkg/errors"
 )
 
 // From the TPCC spec, section 2.6:

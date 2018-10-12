@@ -14,9 +14,7 @@
 
 package logtags
 
-import (
-	"context"
-)
+import "context"
 
 // contextLogTagsKey is an empty type for the handle associated with the log
 // tags (*Buffer) value (see context.Value).

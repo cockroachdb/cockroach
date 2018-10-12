@@ -14,9 +14,7 @@
 
 package tree
 
-import (
-	"fmt"
-)
+import "fmt"
 
 // Table patterns are used by e.g. GRANT statements, to designate
 // zero, one or more table names.  For example:

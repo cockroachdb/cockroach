@@ -14,9 +14,7 @@
 
 package exec
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 
 // ColBatch is the type that columnar operators receive and produce. It
 // represents a set of column vectors (partial data columns) as well as

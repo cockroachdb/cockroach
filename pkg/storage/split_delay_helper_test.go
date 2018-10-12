@@ -19,12 +19,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"go.etcd.io/etcd/raft"
-
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/assert"
+	"go.etcd.io/etcd/raft"
 )
 
 type testSplitDelayHelper struct {

@@ -26,17 +26,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/aws/aws-sdk-go/aws/credentials"
-	"github.com/spf13/pflag"
-	"golang.org/x/oauth2/google"
-
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/bank"
+	"github.com/spf13/pflag"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2/google"
 )
 
 func appendPath(t *testing.T, s, add string) string {

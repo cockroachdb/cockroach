@@ -20,10 +20,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/lib/pq"
-
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/lib/pq"
 	"github.com/pkg/errors"
 )
 

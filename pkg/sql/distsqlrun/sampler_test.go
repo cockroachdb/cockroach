@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/axiomhq/hyperloglog"
-
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"

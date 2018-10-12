@@ -22,15 +22,14 @@ import (
 	"strings"
 
 	"cloud.google.com/go/storage"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-	"google.golang.org/api/option"
-
 	"github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	workloadcli "github.com/cockroachdb/cockroach/pkg/workload/cli"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"google.golang.org/api/option"
 )
 
 var useast1bFixtures = workloadccl.FixtureConfig{

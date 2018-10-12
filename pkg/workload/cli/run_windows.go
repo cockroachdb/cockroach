@@ -17,9 +17,7 @@
 
 package cli
 
-import (
-	"os"
-)
+import "os"
 
 // exitSignals are the signals that will cause workload to exit.
 var exitSignals = []os.Signal{os.Interrupt}

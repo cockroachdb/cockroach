@@ -14,9 +14,7 @@
 
 package tree
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 
 // VarName occurs inside scalar expressions.
 //

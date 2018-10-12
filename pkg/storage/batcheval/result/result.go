@@ -18,12 +18,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kr/pretty"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/kr/pretty"
+	"github.com/pkg/errors"
 )
 
 // LocalResult is data belonging to an evaluated command that is

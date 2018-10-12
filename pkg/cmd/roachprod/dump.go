@@ -15,9 +15,7 @@
 
 package main
 
-import (
-	"fmt"
-)
+import "fmt"
 
 func dump(dirs []string) error {
 	switch n := len(dirs); n {

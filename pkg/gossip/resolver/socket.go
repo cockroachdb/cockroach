@@ -17,9 +17,8 @@ package resolver
 import (
 	"net"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/pkg/errors"
 )
 
 // socketResolver represents the different types of socket-based

@@ -16,7 +16,6 @@ package sql
 
 import (
 	"context"
-
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"

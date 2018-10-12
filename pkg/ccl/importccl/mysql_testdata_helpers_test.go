@@ -19,11 +19,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	_ "github.com/go-sql-driver/mysql"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 // This can be toggled to re-write the `testdata`. Requires local mysql

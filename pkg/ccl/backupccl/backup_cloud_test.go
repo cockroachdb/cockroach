@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws/credentials"
-
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"

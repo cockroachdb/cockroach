@@ -35,9 +35,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/cmd/internal/issues"
+	"github.com/pkg/errors"
 )
 
 const (

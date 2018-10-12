@@ -14,9 +14,7 @@
 
 package cluster
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-)
+import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 // IsActiveVersion returns true if the features of the supplied version are active at the running
 // version.

@@ -14,9 +14,7 @@
 
 package constraint
 
-import (
-	"bytes"
-)
+import "bytes"
 
 // SpanBoundary specifies whether a span endpoint is inclusive or exclusive of
 // its start or end key. An inclusive boundary is represented as '[' and an

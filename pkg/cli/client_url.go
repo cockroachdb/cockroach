@@ -22,11 +22,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
-
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 )
 
 // This file implements the parsing of the client --url flag.

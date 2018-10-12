@@ -25,14 +25,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pkg/errors"
-	"golang.org/x/sys/unix"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/pkg/errors"
+	"golang.org/x/sys/unix"
 )
 
 // TestRotateCerts tests certs rotation in the server.

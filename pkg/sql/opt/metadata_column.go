@@ -14,9 +14,7 @@
 
 package opt
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/util"
-)
+import "github.com/cockroachdb/cockroach/pkg/util"
 
 // ColumnID uniquely identifies the usage of a column within the scope of a
 // query. ColumnID 0 is reserved to mean "unknown column". See the comment for

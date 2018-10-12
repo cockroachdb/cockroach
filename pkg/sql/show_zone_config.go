@@ -19,8 +19,6 @@ import (
 	"context"
 	"strings"
 
-	yaml "gopkg.in/yaml.v2"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -28,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	yaml "gopkg.in/yaml.v2"
 )
 
 type showZoneConfigNode struct {

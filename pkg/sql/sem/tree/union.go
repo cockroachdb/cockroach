@@ -23,9 +23,7 @@
 
 package tree
 
-import (
-	"fmt"
-)
+import "fmt"
 
 // UnionClause represents a UNION statement.
 type UnionClause struct {

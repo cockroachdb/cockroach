@@ -20,10 +20,9 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/pkg/errors"
-
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
 const (

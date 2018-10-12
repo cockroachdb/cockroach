@@ -31,9 +31,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/petermattis/goid"
-
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/petermattis/goid"
 )
 
 // interestingGoroutines returns all goroutines we care about for the purpose
