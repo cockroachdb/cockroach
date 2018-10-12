@@ -21,10 +21,13 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+
 	"go.etcd.io/etcd/raft/raftpb"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -112,9 +115,9 @@ var belowRaftGoldenProtos = map[reflect.Type]fixture{
 		emptySum:     5524024218313206949,
 		populatedSum: 12732942749596030124,
 	},
-	reflect.TypeOf(&storage.Liveness{}): {
+	reflect.TypeOf(&storagepb.Liveness{}): {
 		populatedConstructor: func(r *rand.Rand) protoutil.Message {
-			return storage.NewPopulatedLiveness(r, false)
+			return storagebase.NewPopulatedLiveness(r, false)
 		},
 		emptySum:     892800390935990883,
 		populatedSum: 16231745342114354146,
