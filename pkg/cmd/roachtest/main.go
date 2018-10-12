@@ -149,6 +149,8 @@ If no pattern is given, all tests are run.
 		cmd.Flags().StringVar(
 			&artifacts, "artifacts", "artifacts", "path to artifacts directory")
 		cmd.Flags().StringVar(
+			&cloud, "cloud", cloud, "cloud provider to use (aws or gce)")
+		cmd.Flags().StringVar(
 			&clusterID, "cluster-id", "", "an identifier to use in the test cluster's name")
 		cmd.Flags().IntVar(
 			&count, "count", 1, "the number of times to run each test")
