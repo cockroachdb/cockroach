@@ -27,7 +27,7 @@ import (
 	"sync"
 	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/apd"
@@ -40,7 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
@@ -274,6 +274,12 @@ type NodeInfo struct {
 	PGURL     func(*url.Userinfo) (*url.URL, error)
 }
 
+// nodeStatusGenerator is a limited portion of the status.MetricsRecorder
+// struct, to avoid having to import all of status in sql.
+type nodeStatusGenerator interface {
+	GenerateNodeStatus(ctx context.Context) *statuspb.NodeStatus
+}
+
 // An ExecutorConfig encompasses the auxiliary objects and configuration
 // required to create an executor.
 // All fields holding a pointer or an interface are required to create
@@ -290,7 +296,7 @@ type ExecutorConfig struct {
 	Clock            *hlc.Clock
 	DistSQLSrv       *distsqlrun.ServerImpl
 	StatusServer     serverpb.StatusServer
-	MetricsRecorder  *status.MetricsRecorder
+	MetricsRecorder  nodeStatusGenerator
 	SessionRegistry  *SessionRegistry
 	JobRegistry      *jobs.Registry
 	VirtualSchemas   *VirtualSchemaHolder
