@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -81,16 +82,16 @@ var TimeUntilStoreDead = settings.RegisterValidatedDurationSetting(
 
 // A NodeLivenessFunc accepts a node ID, current time and threshold before
 // a node is considered dead and returns whether or not the node is live.
-type NodeLivenessFunc func(roachpb.NodeID, time.Time, time.Duration) NodeLivenessStatus
+type NodeLivenessFunc func(roachpb.NodeID, time.Time, time.Duration) storagepb.NodeLivenessStatus
 
 // MakeStorePoolNodeLivenessFunc returns a function which determines
 // the status of a node based on information provided by the specified
 // NodeLiveness.
 func MakeStorePoolNodeLivenessFunc(nodeLiveness *NodeLiveness) NodeLivenessFunc {
-	return func(nodeID roachpb.NodeID, now time.Time, threshold time.Duration) NodeLivenessStatus {
+	return func(nodeID roachpb.NodeID, now time.Time, threshold time.Duration) storagepb.NodeLivenessStatus {
 		liveness, err := nodeLiveness.GetLiveness(nodeID)
 		if err != nil {
-			return NodeLivenessStatus_UNAVAILABLE
+			return storagepb.NodeLivenessStatus_UNAVAILABLE
 		}
 		return liveness.LivenessStatus(now, threshold, nodeLiveness.clock.MaxOffset())
 	}
@@ -159,11 +160,11 @@ func (sd *storeDetail) status(
 	// Even if the store has been updated via gossip, we still rely on
 	// the node liveness to determine whether it is considered live.
 	switch nl(sd.desc.Node.NodeID, now, threshold) {
-	case NodeLivenessStatus_DEAD, NodeLivenessStatus_DECOMMISSIONED:
+	case storagepb.NodeLivenessStatus_DEAD, storagepb.NodeLivenessStatus_DECOMMISSIONED:
 		return storeStatusDead
-	case NodeLivenessStatus_DECOMMISSIONING:
+	case storagepb.NodeLivenessStatus_DECOMMISSIONING:
 		return storeStatusDecommissioning
-	case NodeLivenessStatus_UNKNOWN, NodeLivenessStatus_UNAVAILABLE:
+	case storagepb.NodeLivenessStatus_UNKNOWN, storagepb.NodeLivenessStatus_UNAVAILABLE:
 		return storeStatusUnknown
 	}
 

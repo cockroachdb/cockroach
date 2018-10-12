@@ -14,7 +14,7 @@
 
 syntax = "proto3";
 package cockroach.storage;
-option go_package = "storage";
+option go_package = "storagepb";
 
 import "util/hlc/legacy_timestamp.proto";
 import "gogoproto/gogo.proto";
