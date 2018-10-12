@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -193,11 +194,11 @@ type scanRun struct {
 	// only true when running SCRUB commands.
 	isCheck bool
 
-	fetcher sqlbase.RowFetcher
+	fetcher row.Fetcher
 }
 
 func (n *scanNode) startExec(params runParams) error {
-	tableArgs := sqlbase.RowFetcherTableArgs{
+	tableArgs := row.FetcherTableArgs{
 		Desc:             n.desc,
 		Index:            n.index,
 		ColIdxMap:        n.colIdxMap,

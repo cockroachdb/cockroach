@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -40,7 +41,7 @@ type indexJoiner struct {
 	// to get rows from the fetcher. This enables the indexJoiner to wrap the
 	// fetcherInput with a stat collector when necessary.
 	fetcherInput RowSource
-	fetcher      sqlbase.RowFetcher
+	fetcher      row.Fetcher
 	// fetcherReady indicates that we have started an index scan and there are
 	// potentially more rows to retrieve.
 	fetcherReady bool
@@ -112,7 +113,7 @@ func newIndexJoiner(
 	); err != nil {
 		return nil, err
 	}
-	ij.fetcherInput = &rowFetcherWrapper{RowFetcher: &ij.fetcher}
+	ij.fetcherInput = &rowFetcherWrapper{Fetcher: &ij.fetcher}
 
 	if sp := opentracing.SpanFromContext(flowCtx.EvalCtx.Ctx()); sp != nil && tracing.IsRecording(sp) {
 		// Enable stats collection.

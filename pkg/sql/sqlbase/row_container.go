@@ -120,7 +120,9 @@ func (ti ColTypeInfo) Type(idx int) types.T {
 	return ti.colTypes[idx].ToDatumType()
 }
 
-func makeColTypeInfo(
+// MakeColTypeInfo returns a ColTypeInfo initialized from the given
+// TableDescriptor and map from column ID to row index.
+func MakeColTypeInfo(
 	tableDesc *TableDescriptor, colIDToRowIndex map[ColumnID]int,
 ) (ColTypeInfo, error) {
 	colTypeInfo := ColTypeInfo{

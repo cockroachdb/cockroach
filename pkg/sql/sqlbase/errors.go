@@ -15,15 +15,9 @@
 package sqlbase
 
 import (
-	"context"
-	"fmt"
-	"strings"
-
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // Cockroach error extensions:
@@ -74,21 +68,6 @@ func NewTransactionCommittedError() error {
 // NewNonNullViolationError creates an error for a violation of a non-NULL constraint.
 func NewNonNullViolationError(columnName string) error {
 	return pgerror.NewErrorf(pgerror.CodeNotNullViolationError, "null value in column %q violates not-null constraint", columnName)
-}
-
-// NewUniquenessConstraintViolationError creates an error that represents a
-// violation of a UNIQUE constraint.
-func NewUniquenessConstraintViolationError(index *IndexDescriptor, vals []tree.Datum) error {
-	valStrs := make([]string, 0, len(vals))
-	for _, val := range vals {
-		valStrs = append(valStrs, val.String())
-	}
-
-	return pgerror.NewErrorf(pgerror.CodeUniqueViolationError,
-		"duplicate key value (%s)=(%s) violates unique constraint %q",
-		strings.Join(index.ColumnNames, ","),
-		strings.Join(valStrs, ","),
-		index.Name)
 }
 
 // IsUniquenessConstraintViolationError returns true if the error is for a
@@ -244,97 +223,4 @@ func errHasCode(err error, code ...string) bool {
 		}
 	}
 	return false
-}
-
-// singleKVFetcher is a kvFetcher that returns a single kv.
-type singleKVFetcher struct {
-	kvs  [1]roachpb.KeyValue
-	done bool
-}
-
-// nextBatch implements the kvFetcher interface.
-func (f *singleKVFetcher) nextBatch(
-	_ context.Context,
-) (ok bool, kvs []roachpb.KeyValue, batchResponse []byte, numKvs int64, err error) {
-	if f.done {
-		return false, nil, nil, 0, nil
-	}
-	f.done = true
-	return true, f.kvs[:], nil, 0, nil
-}
-
-// getRangesInfo implements the kvFetcher interface.
-func (f *singleKVFetcher) getRangesInfo() []roachpb.RangeInfo {
-	panic("getRangesInfo() called on singleKVFetcher")
-}
-
-// ConvertBatchError returns a user friendly constraint violation error.
-func ConvertBatchError(ctx context.Context, tableDesc *TableDescriptor, b *client.Batch) error {
-	origPErr := b.MustPErr()
-	if origPErr.Index == nil {
-		return origPErr.GoError()
-	}
-	j := origPErr.Index.Index
-	if j >= int32(len(b.Results)) {
-		panic(fmt.Sprintf("index %d outside of results: %+v", j, b.Results))
-	}
-	result := b.Results[j]
-	if cErr, ok := origPErr.GetDetail().(*roachpb.ConditionFailedError); ok && len(result.Rows) > 0 {
-		key := result.Rows[0].Key
-		// TODO(dan): There's too much internal knowledge of the sql table
-		// encoding here (and this callsite is the only reason
-		// DecodeIndexKeyPrefix is exported). Refactor this bit out.
-		indexID, _, err := DecodeIndexKeyPrefix(tableDesc, key)
-		if err != nil {
-			return err
-		}
-		index, err := tableDesc.FindIndexByID(indexID)
-		if err != nil {
-			return err
-		}
-		var rf RowFetcher
-
-		var valNeededForCol util.FastIntSet
-		valNeededForCol.AddRange(0, len(index.ColumnIDs)-1)
-
-		colIdxMap := make(map[ColumnID]int, len(index.ColumnIDs))
-		cols := make([]ColumnDescriptor, len(index.ColumnIDs))
-		for i, colID := range index.ColumnIDs {
-			colIdxMap[colID] = i
-			col, err := tableDesc.FindColumnByID(colID)
-			if err != nil {
-				return err
-			}
-			cols[i] = *col
-		}
-
-		tableArgs := RowFetcherTableArgs{
-			Desc:             tableDesc,
-			Index:            index,
-			ColIdxMap:        colIdxMap,
-			IsSecondaryIndex: indexID != tableDesc.PrimaryIndex.ID,
-			Cols:             cols,
-			ValNeededForCol:  valNeededForCol,
-		}
-		if err := rf.Init(
-			false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, &DatumAlloc{}, tableArgs,
-		); err != nil {
-			return err
-		}
-		f := singleKVFetcher{kvs: [1]roachpb.KeyValue{{Key: key}}}
-		if cErr.ActualValue != nil {
-			f.kvs[0].Value = *cErr.ActualValue
-		}
-		// Use the RowFetcher to decode the single kv pair above by passing in
-		// this singleKVFetcher implementation, which doesn't actually hit KV.
-		if err := rf.StartScanFrom(ctx, &f); err != nil {
-			return err
-		}
-		datums, _, _, err := rf.NextRowDecoded(ctx)
-		if err != nil {
-			return err
-		}
-		return NewUniquenessConstraintViolationError(index, datums)
-	}
-	return origPErr.GoError()
 }

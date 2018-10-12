@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -214,8 +215,8 @@ func (n *createTableNode) startExec(params runParams) error {
 
 		// Instantiate a row inserter and table writer. It has a 1-1
 		// mapping to the definitions in the descriptor.
-		ri, err := sqlbase.MakeRowInserter(
-			params.p.txn, &desc, nil, desc.Columns, sqlbase.SkipFKs, &params.p.alloc)
+		ri, err := row.MakeInserter(
+			params.p.txn, &desc, nil, desc.Columns, row.SkipFKs, &params.p.alloc)
 		if err != nil {
 			return err
 		}

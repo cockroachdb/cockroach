@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -395,17 +396,17 @@ func (p *planner) ResolveTableName(ctx context.Context, tn *tree.TableName) erro
 // TableCollection.getTableVersionByID for how it's used.
 func (p *planner) LookupTableByID(
 	ctx context.Context, tableID sqlbase.ID,
-) (sqlbase.TableLookup, error) {
+) (row.TableLookup, error) {
 	flags := ObjectLookupFlags{
 		CommonLookupFlags{txn: p.txn, avoidCached: p.avoidCachedDescriptors}}
 	table, err := p.Tables().getTableVersionByID(ctx, tableID, flags)
 	if err != nil {
 		if err == errTableAdding {
-			return sqlbase.TableLookup{IsAdding: true}, nil
+			return row.TableLookup{IsAdding: true}, nil
 		}
-		return sqlbase.TableLookup{}, err
+		return row.TableLookup{}, err
 	}
-	return sqlbase.TableLookup{Table: table}, nil
+	return row.TableLookup{Table: table}, nil
 }
 
 // TypeAsString enforces (not hints) that the given expression typechecks as a

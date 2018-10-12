@@ -295,7 +295,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 }
 
 // Test that a scan with a limit doesn't touch more ranges than necessary (i.e.
-// we properly set the limit on the underlying RowFetcher/KVFetcher).
+// we properly set the limit on the underlying Fetcher/KVFetcher).
 func TestLimitScans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()

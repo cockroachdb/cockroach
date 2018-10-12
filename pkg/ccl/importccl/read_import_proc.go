@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -200,7 +201,7 @@ type rowConverter struct {
 
 	// The rest of these are derived from tableDesc, just cached here.
 	hidden                int
-	ri                    sqlbase.RowInserter
+	ri                    row.Inserter
 	evalCtx               *tree.EvalContext
 	cols                  []sqlbase.ColumnDescriptor
 	visibleCols           []sqlbase.ColumnDescriptor
@@ -220,7 +221,7 @@ func newRowConverter(
 		evalCtx:   evalCtx,
 	}
 
-	ri, err := sqlbase.MakeRowInserter(nil /* txn */, tableDesc, nil, /* fkTables */
+	ri, err := row.MakeInserter(nil /* txn */, tableDesc, nil, /* fkTables */
 		tableDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
 	if err != nil {
 		return nil, errors.Wrap(err, "make row inserter")
@@ -293,7 +294,7 @@ func (c *rowConverter) row(ctx context.Context, fileIndex int32, rowIndex int64)
 	var computeExprs []tree.TypedExpr
 	var computedCols []sqlbase.ColumnDescriptor
 
-	row, err := sql.GenerateInsertRow(
+	insertRow, err := sql.GenerateInsertRow(
 		c.defaultExprs, computeExprs, c.cols, computedCols, *c.evalCtx, c.tableDesc, c.datums, &c.computedIVarContainer)
 	if err != nil {
 		return errors.Wrapf(err, "generate insert row")
@@ -304,9 +305,9 @@ func (c *rowConverter) row(ctx context.Context, fileIndex int32, rowIndex int64)
 			kv.Value.InitChecksum(kv.Key)
 			c.kvBatch = append(c.kvBatch, kv)
 		}),
-		row,
+		insertRow,
 		true, /* ignoreConflicts */
-		sqlbase.SkipFKs,
+		row.SkipFKs,
 		false, /* traceKV */
 	); err != nil {
 		return errors.Wrapf(err, "insert row")

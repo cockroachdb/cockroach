@@ -18,8 +18,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // fastTableUpserter implements the fast path for an upsert. See
@@ -44,12 +44,12 @@ func (tu *fastTableUpserter) init(txn *client.Txn, _ *tree.EvalContext) error {
 
 // row is part of the tableWriter interface.
 func (tu *fastTableUpserter) row(
-	ctx context.Context, row tree.Datums, traceKV bool,
+	ctx context.Context, d tree.Datums, traceKV bool,
 ) (tree.Datums, error) {
 	tu.batchSize++
 	// Use the fast path, ignore conflicts.
 	return nil, tu.ri.InsertRow(
-		ctx, tu.b, row, true /* ignoreConflicts */, sqlbase.CheckFKs, traceKV)
+		ctx, tu.b, d, true /* ignoreConflicts */, row.CheckFKs, traceKV)
 }
 
 // batchedCount is part of the batchedTableWriter interface.

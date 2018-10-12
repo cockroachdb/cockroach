@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sqlbase
+package row
 
 import (
 	"bytes"
@@ -26,21 +26,22 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type testTables struct {
 	nextID       ID
-	tablesByID   map[ID]*TableDescriptor
-	tablesByName map[string]*TableDescriptor
+	tablesByID   map[ID]*sqlbase.TableDescriptor
+	tablesByName map[string]*sqlbase.TableDescriptor
 }
 
 func (t *testTables) createTestTable(name string) ID {
-	table := &TableDescriptor{
+	table := &sqlbase.TableDescriptor{
 		Name:        name,
 		ID:          t.nextID,
-		NextIndexID: IndexID(1), // This must be 1 to avoid clashing with a primary index.
+		NextIndexID: sqlbase.IndexID(1), // This must be 1 to avoid clashing with a primary index.
 	}
 	t.tablesByID[table.ID] = table
 	t.tablesByName[table.Name] = table
@@ -51,8 +52,8 @@ func (t *testTables) createTestTable(name string) ID {
 func (t *testTables) createForeignKeyReference(
 	referencingID ID,
 	referencedID ID,
-	onDelete ForeignKeyReference_Action,
-	onUpdate ForeignKeyReference_Action,
+	onDelete sqlbase.ForeignKeyReference_Action,
+	onUpdate sqlbase.ForeignKeyReference_Action,
 ) error {
 	// Get the tables
 	referencing, exists := t.tablesByID[referencingID]
@@ -66,9 +67,9 @@ func (t *testTables) createForeignKeyReference(
 	// Create an index on both tables.
 	referencedIndexID := referenced.NextIndexID
 	referencingIndexID := referencing.NextIndexID
-	referencedIndex := IndexDescriptor{
+	referencedIndex := sqlbase.IndexDescriptor{
 		ID: referencedIndexID,
-		ReferencedBy: []ForeignKeyReference{
+		ReferencedBy: []sqlbase.ForeignKeyReference{
 			{
 				Table: referencingID,
 				Index: referencingIndexID,
@@ -77,9 +78,9 @@ func (t *testTables) createForeignKeyReference(
 	}
 	referenced.Indexes = append(referenced.Indexes, referencedIndex)
 
-	referencingIndex := IndexDescriptor{
+	referencingIndex := sqlbase.IndexDescriptor{
 		ID: referencingIndexID,
-		ForeignKey: ForeignKeyReference{
+		ForeignKey: sqlbase.ForeignKeyReference{
 			Table:    referencedID,
 			OnDelete: onDelete,
 			OnUpdate: onUpdate,
@@ -98,8 +99,8 @@ func (t *testTables) createForeignKeyReference(
 func TestTablesNeededForFKs(t *testing.T) {
 	tables := testTables{
 		nextID:       ID(1),
-		tablesByID:   make(map[ID]*TableDescriptor),
-		tablesByName: make(map[string]*TableDescriptor),
+		tablesByID:   make(map[ID]*sqlbase.TableDescriptor),
+		tablesByName: make(map[string]*sqlbase.TableDescriptor),
 	}
 
 	// First setup the table we will be testing against.
@@ -111,19 +112,19 @@ func TestTablesNeededForFKs(t *testing.T) {
 
 	// For all possible combinations of relationships for foreign keys, create a
 	// table that X references, and one that references X.
-	for deleteNum, deleteName := range ForeignKeyReference_Action_name {
-		for updateNum, updateName := range ForeignKeyReference_Action_name {
+	for deleteNum, deleteName := range sqlbase.ForeignKeyReference_Action_name {
+		for updateNum, updateName := range sqlbase.ForeignKeyReference_Action_name {
 			subName := fmt.Sprintf("OnDelete%s OnUpdate%s", deleteName, updateName)
 			referencedByX := tables.createTestTable(fmt.Sprintf("X Referenced - %s", subName))
 			if err := tables.createForeignKeyReference(
-				xID, referencedByX, ForeignKeyReference_Action(deleteNum), ForeignKeyReference_Action(updateNum),
+				xID, referencedByX, sqlbase.ForeignKeyReference_Action(deleteNum), sqlbase.ForeignKeyReference_Action(updateNum),
 			); err != nil {
 				t.Fatalf("could not add index: %s", err)
 			}
 
 			referencingX := tables.createTestTable(fmt.Sprintf("Referencing X - %s", subName))
 			if err := tables.createForeignKeyReference(
-				referencingX, xID, ForeignKeyReference_Action(deleteNum), ForeignKeyReference_Action(updateNum),
+				referencingX, xID, sqlbase.ForeignKeyReference_Action(deleteNum), sqlbase.ForeignKeyReference_Action(updateNum),
 			); err != nil {
 				t.Fatalf("could not add index: %s", err)
 			}
@@ -136,29 +137,29 @@ func TestTablesNeededForFKs(t *testing.T) {
 			// To go even further, create another set of tables for all possible
 			// foreign key relationships that reference the table that is referencing
 			// X. This will ensure that we bound the tree walking algorithm correctly.
-			for deleteNum2, deleteName2 := range ForeignKeyReference_Action_name {
-				for updateNum2, updateName2 := range ForeignKeyReference_Action_name {
+			for deleteNum2, deleteName2 := range sqlbase.ForeignKeyReference_Action_name {
+				for updateNum2, updateName2 := range sqlbase.ForeignKeyReference_Action_name {
 					//if deleteNum2 != int32(ForeignKeyReference_CASCADE) || updateNum2 != int32(ForeignKeyReference_CASCADE) {
 					//	continue
 					//}
 					subName2 := fmt.Sprintf("Referencing %d - OnDelete%s OnUpdated%s", referencingX, deleteName2, updateName2)
 					referencing2 := tables.createTestTable(subName2)
 					if err := tables.createForeignKeyReference(
-						referencing2, referencingX, ForeignKeyReference_Action(deleteNum2), ForeignKeyReference_Action(updateNum2),
+						referencing2, referencingX, sqlbase.ForeignKeyReference_Action(deleteNum2), sqlbase.ForeignKeyReference_Action(updateNum2),
 					); err != nil {
 						t.Fatalf("could not add index: %s", err)
 					}
 
 					// Only fetch the next level of tables if a cascade can occur through
 					// the first level.
-					if deleteNum == int32(ForeignKeyReference_CASCADE) ||
-						deleteNum == int32(ForeignKeyReference_SET_DEFAULT) ||
-						deleteNum == int32(ForeignKeyReference_SET_NULL) {
+					if deleteNum == int32(sqlbase.ForeignKeyReference_CASCADE) ||
+						deleteNum == int32(sqlbase.ForeignKeyReference_SET_DEFAULT) ||
+						deleteNum == int32(sqlbase.ForeignKeyReference_SET_NULL) {
 						expectedDeleteIDs = append(expectedDeleteIDs, referencing2)
 					}
-					if updateNum == int32(ForeignKeyReference_CASCADE) ||
-						updateNum == int32(ForeignKeyReference_SET_DEFAULT) ||
-						updateNum == int32(ForeignKeyReference_SET_NULL) {
+					if updateNum == int32(sqlbase.ForeignKeyReference_CASCADE) ||
+						updateNum == int32(sqlbase.ForeignKeyReference_SET_DEFAULT) ||
+						updateNum == int32(sqlbase.ForeignKeyReference_SET_NULL) {
 						expectedUpdateIDs = append(expectedUpdateIDs, referencing2)
 					}
 				}

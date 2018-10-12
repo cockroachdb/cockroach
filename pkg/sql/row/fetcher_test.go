@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sqlbase
+package row
 
 import (
 	"context"
@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -34,17 +35,17 @@ import (
 )
 
 type initFetcherArgs struct {
-	tableDesc       *TableDescriptor
+	tableDesc       *sqlbase.TableDescriptor
 	indexIdx        int
 	valNeededForCol util.FastIntSet
 	spans           roachpb.Spans
 }
 
-func makeFetcherArgs(entries []initFetcherArgs) []RowFetcherTableArgs {
-	fetcherArgs := make([]RowFetcherTableArgs, len(entries))
+func makeFetcherArgs(entries []initFetcherArgs) []FetcherTableArgs {
+	fetcherArgs := make([]FetcherTableArgs, len(entries))
 
 	for i, entry := range entries {
-		var index *IndexDescriptor
+		var index *sqlbase.IndexDescriptor
 		var isSecondaryIndex bool
 
 		if entry.indexIdx > 0 {
@@ -54,7 +55,7 @@ func makeFetcherArgs(entries []initFetcherArgs) []RowFetcherTableArgs {
 			index = &entry.tableDesc.PrimaryIndex
 		}
 
-		fetcherArgs[i] = RowFetcherTableArgs{
+		fetcherArgs[i] = FetcherTableArgs{
 			Spans:            entry.spans,
 			Desc:             entry.tableDesc,
 			Index:            index,
@@ -68,9 +69,9 @@ func makeFetcherArgs(entries []initFetcherArgs) []RowFetcherTableArgs {
 }
 
 func initFetcher(
-	entries []initFetcherArgs, reverseScan bool, alloc *DatumAlloc,
-) (fetcher *RowFetcher, err error) {
-	fetcher = &RowFetcher{}
+	entries []initFetcherArgs, reverseScan bool, alloc *sqlbase.DatumAlloc,
+) (fetcher *Fetcher, err error) {
+	fetcher = &Fetcher{}
 
 	fetcherArgs := makeFetcherArgs(entries)
 
@@ -137,12 +138,12 @@ func TestNextRowSingle(t *testing.T) {
 		)
 	}
 
-	alloc := &DatumAlloc{}
+	alloc := &sqlbase.DatumAlloc{}
 
 	// We try to read rows from each table.
 	for tableName, table := range tables {
 		t.Run(tableName, func(t *testing.T) {
-			tableDesc := GetTableDescriptor(kvDB, sqlutils.TestDB, tableName)
+			tableDesc := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, tableName)
 
 			var valNeededForCol util.FastIntSet
 			valNeededForCol.AddRange(0, table.nCols-1)
@@ -257,12 +258,12 @@ func TestNextRowBatchLimiting(t *testing.T) {
 		)
 	}
 
-	alloc := &DatumAlloc{}
+	alloc := &sqlbase.DatumAlloc{}
 
 	// We try to read rows from each table.
 	for tableName, table := range tables {
 		t.Run(tableName, func(t *testing.T) {
-			tableDesc := GetTableDescriptor(kvDB, sqlutils.TestDB, tableName)
+			tableDesc := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, tableName)
 
 			var valNeededForCol util.FastIntSet
 			valNeededForCol.AddRange(0, table.nCols-1)
@@ -372,9 +373,9 @@ INDEX(c)
 		),
 	)
 
-	alloc := &DatumAlloc{}
+	alloc := &sqlbase.DatumAlloc{}
 
-	tableDesc := GetTableDescriptor(kvDB, sqlutils.TestDB, tableName)
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, tableName)
 
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, table.nCols-1)
@@ -537,11 +538,11 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 		table.nRows += nNulls
 	}
 
-	alloc := &DatumAlloc{}
+	alloc := &sqlbase.DatumAlloc{}
 	// We try to read rows from each index.
 	for tableName, table := range tables {
 		t.Run(tableName, func(t *testing.T) {
-			tableDesc := GetTableDescriptor(kvDB, sqlutils.TestDB, tableName)
+			tableDesc := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, tableName)
 
 			var valNeededForCol util.FastIntSet
 			valNeededForCol.AddRange(0, table.nVals-1)
@@ -867,7 +868,7 @@ func TestNextRowInterleaved(t *testing.T) {
 		}
 	}
 
-	alloc := &DatumAlloc{}
+	alloc := &sqlbase.DatumAlloc{}
 	// Retrieve rows from every non-empty subset of the tables/indexes.
 	for _, idxs := range generateIdxSubsets(len(interleaveEntries)-1, nil) {
 		// Initialize our subset of tables/indexes.
@@ -893,8 +894,8 @@ func TestNextRowInterleaved(t *testing.T) {
 			// RowFetcher.
 			idLookups := make(map[uint64]*fetcherEntryArgs, len(entries))
 			for i, entry := range entries {
-				tableDesc := GetTableDescriptor(kvDB, sqlutils.TestDB, entry.tableName)
-				var indexID IndexID
+				tableDesc := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, entry.tableName)
+				var indexID sqlbase.IndexID
 				if entry.indexIdx == 0 {
 					indexID = tableDesc.PrimaryIndex.ID
 				} else {
@@ -1012,7 +1013,7 @@ func TestRowFetcherReset(t *testing.T) {
 		0,
 		sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(1)),
 	)
-	tableDesc := GetTableDescriptor(kvDB, sqlutils.TestDB, "foo")
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, sqlutils.TestDB, "foo")
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, 1)
 	args := []initFetcherArgs{
@@ -1022,7 +1023,7 @@ func TestRowFetcherReset(t *testing.T) {
 			valNeededForCol: valNeededForCol,
 		},
 	}
-	da := DatumAlloc{}
+	da := sqlbase.DatumAlloc{}
 	fetcher, err := initFetcher(args, false, &da)
 	if err != nil {
 		t.Fatal(err)
@@ -1053,6 +1054,6 @@ func TestRowFetcherReset(t *testing.T) {
 
 }
 
-func idLookupKey(tableID ID, indexID IndexID) uint64 {
+func idLookupKey(tableID ID, indexID sqlbase.IndexID) uint64 {
 	return (uint64(tableID) << 32) | uint64(indexID)
 }
