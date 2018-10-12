@@ -779,7 +779,7 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 
 	serverArgs := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storage.StoreTestingKnobs{
+			Store: &storagebase.StoreTestingKnobs{
 				// Disable replica rebalancing to ensure that the liveness range
 				// does not get out of the first node (we'll be shutting down nodes).
 				DisableReplicaRebalancing: true,

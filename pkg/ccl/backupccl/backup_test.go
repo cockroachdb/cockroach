@@ -45,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -533,7 +533,7 @@ func checkInProgressBackupRestore(
 	// assert the progress of the job.
 	var allowResponse chan struct{}
 	params := base.TestClusterArgs{}
-	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+	params.ServerArgs.Knobs.Store = &storagebase.StoreTestingKnobs{
 		TestingResponseFilter: func(ba roachpb.BatchRequest, br *roachpb.BatchResponse) *roachpb.Error {
 			for _, ru := range br.Responses {
 				switch ru.GetInner().(type) {
@@ -887,7 +887,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	// enough that it will generate more than one export or import response.
 	var allowResponse chan struct{}
 	params := base.TestClusterArgs{ServerArgs: serverArgs}
-	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+	params.ServerArgs.Knobs.Store = &storagebase.StoreTestingKnobs{
 		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
 	}
 

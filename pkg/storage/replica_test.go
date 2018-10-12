@@ -439,7 +439,7 @@ func TestIsOnePhaseCommit(t *testing.T) {
 				ba.Txn.Timestamp = ba.Txn.OrigTimestamp.Add(1, 0)
 			}
 		}
-		if is1PC := isOnePhaseCommit(ba, &StoreTestingKnobs{}); is1PC != c.exp1PC {
+		if is1PC := isOnePhaseCommit(ba, &storagebase.StoreTestingKnobs{}); is1PC != c.exp1PC {
 			t.Errorf("%d: expected 1pc=%t; got %t", i, c.exp1PC, is1PC)
 		}
 	}
@@ -9595,7 +9595,7 @@ func TestCommandTooLarge(t *testing.T) {
 func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	var storeKnobs StoreTestingKnobs
+	var storeKnobs storagebase.StoreTestingKnobs
 	var filterActive int32
 	key := roachpb.Key("a")
 	rkey, err := keys.Addr(key)
@@ -10078,7 +10078,7 @@ func TestConsistenctQueueErrorFromCheckConsistency(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	cfg := TestStoreConfig(nil)
-	cfg.TestingKnobs = StoreTestingKnobs{
+	cfg.TestingKnobs = storagebase.StoreTestingKnobs{
 		TestingRequestFilter: func(ba roachpb.BatchRequest) *roachpb.Error {
 			if _, ok := ba.GetArg(roachpb.ComputeChecksum); ok {
 				return roachpb.NewErrorf("boom")

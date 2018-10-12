@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -288,7 +287,7 @@ func TestErrorOnRollback(t *testing.T) {
 	// We're going to inject an error into our EndTransaction.
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storage.StoreTestingKnobs{
+			Store: &storagebase.StoreTestingKnobs{
 				TestingProposalFilter: func(fArgs storagebase.ProposalFilterArgs) *roachpb.Error {
 					if !fArgs.Req.IsSingleRequest() {
 						return nil

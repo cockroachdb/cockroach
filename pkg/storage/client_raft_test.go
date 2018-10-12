@@ -1011,7 +1011,7 @@ func TestRefreshPendingCommands(t *testing.T) {
 	// possible for node 3 to propose the RequestLease command and have that
 	// command executed by the other nodes but to never see the execution locally
 	// because it is caught up by applying a snapshot.
-	testCases := map[string]storage.StoreTestingKnobs{
+	testCases := map[string]storagebase.StoreTestingKnobs{
 		"reasonSnapshotApplied": {
 			DisableRefreshReasonNewLeader: true,
 			DisableRefreshReasonTicks:     true,

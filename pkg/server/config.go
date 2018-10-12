@@ -31,8 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -436,7 +436,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	log.Event(ctx, "initializing engines")
 
 	skipSizeCheck := cfg.TestingKnobs.Store != nil &&
-		cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs).SkipMinSizeCheck
+		cfg.TestingKnobs.Store.(*storagebase.StoreTestingKnobs).SkipMinSizeCheck
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
 		var sizeInBytes = spec.Size.InBytes
