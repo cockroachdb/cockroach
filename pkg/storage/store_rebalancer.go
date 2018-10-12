@@ -252,7 +252,9 @@ func (sr *StoreRebalancer) rebalanceStore(
 		log.VEventf(ctx, 1, "transferring r%d (%.2f qps) to s%d to better balance load",
 			replWithStats.repl.RangeID, replWithStats.qps, target.StoreID)
 		replCtx, cancel := context.WithTimeout(replWithStats.repl.AnnotateCtx(ctx), sr.rq.processTimeout)
-		if err := sr.rq.transferLease(replCtx, replWithStats.repl, target); err != nil {
+		if err := sr.rq.transferLease(
+			replCtx, replWithStats.repl, target, replWithStats.qps,
+		); err != nil {
 			cancel()
 			log.Errorf(replCtx, "unable to transfer lease to s%d: %v", target.StoreID, err)
 			continue
@@ -532,6 +534,8 @@ func (sr *StoreRebalancer) chooseReplicaToRebalance(
 
 		// Then pick out which new stores to add the remaining replicas to.
 		rangeInfo := rangeInfoForRepl(replWithStats.repl, desc)
+		// Make sure to use the same qps measurement throughout everything we do.
+		rangeInfo.QueriesPerSecond = replWithStats.qps
 		options := sr.rq.allocator.scorerOptions()
 		options.qpsRebalanceThreshold = qpsRebalanceThreshold.Get(&sr.st.SV)
 		for len(targets) < desiredReplicas {
