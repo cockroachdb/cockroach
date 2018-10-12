@@ -21,18 +21,16 @@ import (
 	"math/rand"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 
-	_ "github.com/go-sql-driver/mysql"
-	_ "github.com/lib/pq"
-
-	"strconv"
-
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/lib/pq"
 )
 
 func runBenchmarkSelect1(b *testing.B, db *gosql.DB) {

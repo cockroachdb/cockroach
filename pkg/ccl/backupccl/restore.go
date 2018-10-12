@@ -15,9 +15,6 @@ import (
 	"sort"
 	"sync/atomic"
 
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/ccl/gossipccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -42,6 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 )
 
 // TableRewriteMap maps old table IDs to new table and parent IDs.

@@ -15,11 +15,10 @@
 package ipaddr
 
 import (
+	"math"
 	"net"
 	"strings"
 	"testing"
-
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 )

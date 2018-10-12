@@ -17,7 +17,6 @@ package distsqlrun
 import (
 	"container/list"
 	"context"
-
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"

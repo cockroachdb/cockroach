@@ -22,12 +22,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/petermattis/goid"
-	"google.golang.org/grpc/grpclog"
-
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/petermattis/goid"
+	"google.golang.org/grpc/grpclog"
 )
 
 func init() {

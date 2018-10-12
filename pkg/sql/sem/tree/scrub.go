@@ -14,9 +14,7 @@
 
 package tree
 
-import (
-	"fmt"
-)
+import "fmt"
 
 // ScrubType describes the SCRUB statement operation.
 type ScrubType int

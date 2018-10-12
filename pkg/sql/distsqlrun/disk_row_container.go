@@ -17,13 +17,12 @@ package distsqlrun
 import (
 	"context"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/pkg/errors"
 )
 
 // diskRowContainer is a sortableRowContainer that stores rows on disk according

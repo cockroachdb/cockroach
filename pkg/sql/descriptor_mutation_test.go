@@ -17,10 +17,9 @@ package sql_test
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"math/rand"
 	"testing"
-
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"

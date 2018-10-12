@@ -23,11 +23,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/kr/pretty"
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
-	"golang.org/x/time/rate"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -42,6 +37,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/kr/pretty"
+	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
+	"golang.org/x/time/rate"
 )
 
 // ProposalData is data about a command which allows it to be

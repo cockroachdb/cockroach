@@ -20,13 +20,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/btree"
-	"github.com/stretchr/testify/require"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/google/btree"
+	"github.com/stretchr/testify/require"
 )
 
 // mockLockedSender implements the lockedSender interface and provides a way to

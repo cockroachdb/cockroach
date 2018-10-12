@@ -25,10 +25,6 @@ import (
 	"unicode/utf8"
 	"unsafe"
 
-	"github.com/lib/pq"
-	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,6 +33,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+	"github.com/lib/pq"
+	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
 )
 
 const secondsInDay = 24 * 60 * 60

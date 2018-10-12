@@ -18,9 +18,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -37,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 )
 
 // StreamID identifies a stream; it may be local to a flow or it may cross

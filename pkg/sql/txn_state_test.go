@@ -21,15 +21,14 @@ import (
 	"testing"
 	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	// We dot-import fsm to use common names such as fsm.True/False.
+	. "github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,9 +36,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-
-	// We dot-import fsm to use common names such as fsm.True/False.
-	. "github.com/cockroachdb/cockroach/pkg/util/fsm"
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 )
 
 var noRewindExpected = CmdPos(-1)

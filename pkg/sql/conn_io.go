@@ -21,15 +21,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
 )
 
 // This file contains utils and interfaces used by a connExecutor to communicate

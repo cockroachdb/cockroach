@@ -16,12 +16,10 @@ package tests_test
 
 import (
 	"context"
-	"fmt"
-	"testing"
-
 	gosql "database/sql"
-
+	"fmt"
 	"math/rand"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"

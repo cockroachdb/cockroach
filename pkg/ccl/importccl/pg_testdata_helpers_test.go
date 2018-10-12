@@ -21,11 +21,10 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	_ "github.com/lib/pq"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	_ "github.com/lib/pq"
 )
 
 var rewritePostgresTestData = envutil.EnvOrDefaultBool("COCKROACH_REWRITE_POSTGRES_TESTDATA", false)

@@ -21,9 +21,6 @@ import (
 	"unsafe"
 
 	circuit "github.com/cockroachdb/circuitbreaker"
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
@@ -32,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/pkg/errors"
+	"google.golang.org/grpc"
 )
 
 // No more than one failure to connect to a given node will be logged in the given interval.

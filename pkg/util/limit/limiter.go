@@ -17,9 +17,8 @@ package limit
 import (
 	"context"
 
-	"github.com/marusama/semaphore"
-
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/marusama/semaphore"
 )
 
 // ConcurrentRequestLimiter wraps a simple semaphore, adding a tracing span when

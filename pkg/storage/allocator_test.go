@@ -26,12 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
-
-	"github.com/olekukonko/tablewriter"
-	"github.com/pkg/errors"
-	"go.etcd.io/etcd/raft"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -50,6 +44,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/gogo/protobuf/proto"
+	"github.com/olekukonko/tablewriter"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
 )
 
 const firstRange = roachpb.RangeID(1)

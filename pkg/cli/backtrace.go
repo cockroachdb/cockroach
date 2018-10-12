@@ -23,13 +23,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/backtrace-labs/go-bcd"
-
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"golang.org/x/sys/unix"
 )
 
 // Currently disabled as backtrace appears to be obscuring problems when test

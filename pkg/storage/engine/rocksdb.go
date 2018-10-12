@@ -31,10 +31,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/dustin/go-humanize"
-	"github.com/elastic/gosigar"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -49,6 +45,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/dustin/go-humanize"
+	"github.com/elastic/gosigar"
+	"github.com/pkg/errors"
 )
 
 // TODO(tamird): why does rocksdb not link jemalloc,snappy statically?

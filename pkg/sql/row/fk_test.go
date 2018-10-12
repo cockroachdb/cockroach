@@ -22,13 +22,12 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/kr/pretty"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/kr/pretty"
+	"github.com/pkg/errors"
 )
 
 type testTables struct {

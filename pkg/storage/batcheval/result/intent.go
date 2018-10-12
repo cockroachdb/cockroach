@@ -14,9 +14,7 @@
 
 package result
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-)
+import "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 // IntentsWithArg contains a request and the intents it discovered.
 type IntentsWithArg struct {

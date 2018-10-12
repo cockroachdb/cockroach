@@ -26,14 +26,13 @@ import (
 	"time"
 	"unsafe"
 
-	"golang.org/x/net/trace"
-
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"golang.org/x/net/trace"
 )
 
 // Snowball is set as Baggage on traces which are used for snowball tracing.

@@ -17,16 +17,16 @@ package systembench
 import (
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"golang.org/x/sync/errgroup"
 	"os"
 	"os/signal"
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/codahale/hdrhistogram"
+	"golang.org/x/sync/errgroup"
 )
 
 const (

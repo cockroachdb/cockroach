@@ -18,14 +18,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
-
 	_ "github.com/cockroachdb/cockroach/pkg/keys" // hook up pretty printer
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 var (

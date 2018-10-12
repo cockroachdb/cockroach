@@ -25,10 +25,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/pkg/errors"
-	"go.etcd.io/etcd/raft/raftpb"
-	"google.golang.org/grpc"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -38,6 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft/raftpb"
+	"google.golang.org/grpc"
 )
 
 const (

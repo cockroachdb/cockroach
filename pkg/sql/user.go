@@ -17,11 +17,10 @@ package sql
 import (
 	"context"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 // GetUserHashedPassword returns the hashedPassword for the given username if

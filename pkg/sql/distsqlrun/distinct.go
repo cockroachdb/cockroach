@@ -16,11 +16,8 @@ package distsqlrun
 
 import (
 	"context"
-	"sync"
-
 	"fmt"
-
-	opentracing "github.com/opentracing/opentracing-go"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -29,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // Distinct is the physical processor implementation of the DISTINCT relational operator.

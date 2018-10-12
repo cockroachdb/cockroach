@@ -21,9 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
-	"go.etcd.io/etcd/raft"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -33,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
 )
 
 const (

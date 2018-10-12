@@ -19,15 +19,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gogo/protobuf/proto"
-	"github.com/kr/pretty"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
 )
 
 func TestInitialKeys(t *testing.T) {

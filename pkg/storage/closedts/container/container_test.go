@@ -21,10 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kr/pretty"
-	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
@@ -37,6 +33,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/kr/pretty"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 type LateBoundDialer struct {

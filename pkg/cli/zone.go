@@ -22,11 +22,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/spf13/cobra"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/spf13/cobra"
 )
 
 type runQueryRawFn func(q string, parameters ...driver.Value) ([]string, [][]string, error)

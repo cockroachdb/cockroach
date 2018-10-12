@@ -25,9 +25,6 @@ import (
 	"strings"
 	"time"
 
-	raven "github.com/getsentry/raven-go"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -35,6 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	raven "github.com/getsentry/raven-go"
+	"github.com/pkg/errors"
 )
 
 var (

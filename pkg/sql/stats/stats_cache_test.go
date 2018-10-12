@@ -16,13 +16,10 @@ package stats
 
 import (
 	"context"
-	"testing"
-
-	"time"
-
 	"reflect"
-
 	"sort"
+	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"

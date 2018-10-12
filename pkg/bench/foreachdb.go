@@ -25,12 +25,11 @@ import (
 	"strings"
 	"testing"
 
-	_ "github.com/go-sql-driver/mysql" // registers the MySQL driver to gosql
-	_ "github.com/lib/pq"              // registers the pg driver to gosql
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	_ "github.com/go-sql-driver/mysql" // registers the MySQL driver to gosql
+	_ "github.com/lib/pq"              // registers the pg driver to gosql
 )
 
 func benchmarkCockroach(b *testing.B, f func(b *testing.B, db *gosql.DB)) {

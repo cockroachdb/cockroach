@@ -22,9 +22,6 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/lib/pq"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -32,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/lib/pq"
+	"github.com/pkg/errors"
 )
 
 // Test that abruptly closing a pgwire connection releases all leases held by

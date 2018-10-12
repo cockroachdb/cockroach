@@ -18,13 +18,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -246,8 +245,7 @@ func (n *createViewNode) makeViewTableDesc(
 func MakeViewTableDesc(
 	n *tree.CreateView,
 	resultColumns sqlbase.ResultColumns,
-	parentID,
-	id sqlbase.ID,
+	parentID, id sqlbase.ID,
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
 	semaCtx *tree.SemaContext,

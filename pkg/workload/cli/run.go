@@ -31,16 +31,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"golang.org/x/time/rate"
-
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
-
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"golang.org/x/time/rate"
 )
 
 var runFlags = pflag.NewFlagSet(`run`, pflag.ContinueOnError)

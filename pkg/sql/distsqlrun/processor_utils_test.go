@@ -15,15 +15,11 @@
 package distsqlrun
 
 import (
-	"testing"
-
 	"context"
-
 	"fmt"
-
 	"sort"
-
 	"strings"
+	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"

@@ -31,8 +31,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -46,9 +44,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-
 	// register some workloads for TestWorkload
 	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
+	"github.com/pkg/errors"
 )
 
 type cliTest struct {

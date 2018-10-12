@@ -38,15 +38,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	// "postgres" gosql driver
-	_ "github.com/lib/pq"
-
 	"github.com/armon/circbuf"
-	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
-
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	// "postgres" gosql driver
+	_ "github.com/lib/pq"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 var (

@@ -18,13 +18,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/pkg/errors"
 )
 
 func TestEagerReplication(t *testing.T) {

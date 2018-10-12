@@ -20,8 +20,6 @@ import (
 	"net"
 	"time"
 
-	"google.golang.org/grpc"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
@@ -36,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"google.golang.org/grpc"
 )
 
 // Node represents a node used in a Network. It includes information

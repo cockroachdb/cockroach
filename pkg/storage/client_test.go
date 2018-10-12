@@ -35,11 +35,6 @@ import (
 
 	"github.com/cenkalti/backoff"
 	circuit "github.com/cockroachdb/circuitbreaker"
-	"github.com/kr/pretty"
-	"github.com/pkg/errors"
-	"go.etcd.io/etcd/raft"
-	"google.golang.org/grpc"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
@@ -66,6 +61,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/kr/pretty"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/raft"
+	"google.golang.org/grpc"
 )
 
 // createTestStore creates a test store using an in-memory

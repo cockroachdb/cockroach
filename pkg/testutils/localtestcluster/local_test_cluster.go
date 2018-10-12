@@ -19,8 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/opentracing/opentracing-go"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -34,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/opentracing/opentracing-go"
 )
 
 // A LocalTestCluster encapsulates an in-memory instantiation of a

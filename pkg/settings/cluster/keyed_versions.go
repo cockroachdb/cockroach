@@ -17,10 +17,9 @@ package cluster
 import (
 	"context"
 
-	"github.com/kr/pretty"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/kr/pretty"
 )
 
 // keyedVersion associates a key to a version.

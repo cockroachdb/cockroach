@@ -22,9 +22,8 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
-	"strings"
-
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

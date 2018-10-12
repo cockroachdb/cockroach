@@ -25,9 +25,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/pkg/errors"
-	"golang.org/x/net/trace"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -53,6 +50,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
+	"golang.org/x/net/trace"
 )
 
 // noteworthyMemoryUsageBytes is the minimum size tracked by a

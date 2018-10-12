@@ -22,9 +22,8 @@ import (
 	"strconv"
 	"time"
 
-	_ "github.com/lib/pq"
-
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
+	_ "github.com/lib/pq"
 )
 
 func registerVersion(r *registry) {

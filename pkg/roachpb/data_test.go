@@ -24,8 +24,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kr/pretty"
-
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
@@ -37,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/kr/pretty"
 )
 
 func makeTS(walltime int64, logical int32) hlc.Timestamp {

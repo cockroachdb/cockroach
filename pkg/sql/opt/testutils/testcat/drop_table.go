@@ -14,9 +14,7 @@
 
 package testcat
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
 // DropTable is a partial implementation of the DROP TABLE statement.
 func (tc *Catalog) DropTable(stmt *tree.DropTable) {

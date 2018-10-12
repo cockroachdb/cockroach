@@ -14,9 +14,7 @@
 
 package testutils
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-)
+import "github.com/cockroachdb/cockroach/pkg/util/envutil"
 
 var stress = envutil.EnvOrDefaultBool("COCKROACH_NIGHTLY_STRESS", false)
 

@@ -23,9 +23,7 @@
 
 package tree
 
-import (
-	"fmt"
-)
+import "fmt"
 
 // Instructions for creating new types: If a type needs to satisfy an
 // interface, declare that function along with that interface. This

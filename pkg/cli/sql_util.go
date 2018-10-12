@@ -28,10 +28,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
-	version "github.com/hashicorp/go-version"
-	"github.com/lib/pq"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -41,6 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	version "github.com/hashicorp/go-version"
+	"github.com/lib/pq"
+	"github.com/pkg/errors"
 )
 
 type sqlConnI interface {

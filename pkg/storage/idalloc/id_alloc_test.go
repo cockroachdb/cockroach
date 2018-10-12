@@ -20,11 +20,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	// Import to set ZoneConfigHook.
+	_ "github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/idalloc"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -32,9 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-
-	// Import to set ZoneConfigHook.
-	_ "github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/pkg/errors"
 )
 
 // newTestAllocator creates and returns a new idalloc.Allocator, backed by a

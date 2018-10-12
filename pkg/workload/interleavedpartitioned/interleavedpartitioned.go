@@ -24,13 +24,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
-	"github.com/pkg/errors"
-	"github.com/spf13/pflag"
-
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/pkg/errors"
+	"github.com/spf13/pflag"
 )
 
 const (

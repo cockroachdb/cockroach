@@ -25,9 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/gossip/resolver"
@@ -53,6 +50,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
+	"google.golang.org/grpc"
 )
 
 // createTestNode creates an rpc server using the specified address,

@@ -16,7 +16,6 @@ package batcheval
 
 import (
 	"context"
-
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"

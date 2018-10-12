@@ -21,9 +21,6 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/kr/pretty"
-	"github.com/stretchr/testify/require"
-
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -33,6 +30,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 )
 
 // assertEq compares the given ms and expMS and errors when they don't match. It

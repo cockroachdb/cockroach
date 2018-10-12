@@ -14,9 +14,7 @@
 
 package systembench
 
-import (
-	"context"
-)
+import "context"
 
 // worker represents a single worker process generating load.
 type worker interface {

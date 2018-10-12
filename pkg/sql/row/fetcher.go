@@ -20,8 +20,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -32,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 // debugRowFetch can be used to turn on some low-level debugging logs. We use
@@ -244,8 +243,7 @@ func (rf *Fetcher) Reset() {
 // non-primary index, tables.ValNeededForCol can only refer to columns in the
 // index.
 func (rf *Fetcher) Init(
-	reverse,
-	returnRangeInfo bool,
+	reverse, returnRangeInfo bool,
 	isCheck bool,
 	alloc *sqlbase.DatumAlloc,
 	tables ...FetcherTableArgs,

@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/transport"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-
 	"google.golang.org/grpc"
 )
 

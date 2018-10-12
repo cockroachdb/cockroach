@@ -23,12 +23,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
-
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 )
 
 const (
