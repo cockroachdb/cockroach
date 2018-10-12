@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -97,10 +98,10 @@ func (p *planner) Delete(
 	}
 
 	// Determine what are the foreign key tables that are involved in the deletion.
-	fkTables, err := sqlbase.TablesNeededForFKs(
+	fkTables, err := row.TablesNeededForFKs(
 		ctx,
 		*desc,
-		sqlbase.CheckDeletes,
+		row.CheckDeletes,
 		p.LookupTableByID,
 		p.CheckPrivilege,
 		p.analyzeExpr,
@@ -128,8 +129,8 @@ func (p *planner) Delete(
 	}
 
 	// Create the table deleter, which does the bulk of the work.
-	rd, err := sqlbase.MakeRowDeleter(
-		p.txn, desc, fkTables, requestedCols, sqlbase.CheckFKs, p.EvalContext(), &p.alloc,
+	rd, err := row.MakeDeleter(
+		p.txn, desc, fkTables, requestedCols, row.CheckFKs, p.EvalContext(), &p.alloc,
 	)
 	if err != nil {
 		return nil, err
@@ -355,7 +356,7 @@ func (d *deleteNode) FastPathResults() (int, bool) {
 	return d.run.rowCount, d.run.fastPath
 }
 
-func canDeleteFastInterleaved(table TableDescriptor, fkTables sqlbase.TableLookupsByID) bool {
+func canDeleteFastInterleaved(table TableDescriptor, fkTables row.TableLookupsByID) bool {
 	// If there are no interleaved tables then don't take the fast path.
 	// This avoids superfluous use of DelRange in cases where there isn't as much of a performance boost.
 	hasInterleaved := false

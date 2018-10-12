@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -98,10 +99,10 @@ func (p *planner) Update(
 	}
 
 	// Determine what are the foreign key tables that are involved in the update.
-	fkTables, err := sqlbase.TablesNeededForFKs(
+	fkTables, err := row.TablesNeededForFKs(
 		ctx,
 		*desc,
-		sqlbase.CheckUpdates,
+		row.CheckUpdates,
 		p.LookupTableByID,
 		p.CheckPrivilege,
 		p.analyzeExpr,
@@ -206,16 +207,16 @@ func (p *planner) Update(
 	}
 
 	// Create the table updater, which does the bulk of the work.
-	// As a result of MakeRowUpdater, ru.FetchCols include all the
+	// As a result of MakeUpdater, ru.FetchCols include all the
 	// columns in the table descriptor + any columns currently in the
 	// process of being added.
-	ru, err := sqlbase.MakeRowUpdater(
+	ru, err := row.MakeUpdater(
 		p.txn,
 		desc,
 		fkTables,
 		updateCols,
 		requestedCols,
-		sqlbase.RowUpdaterDefault,
+		row.UpdaterDefault,
 		p.EvalContext(),
 		&p.alloc,
 	)
@@ -280,7 +281,7 @@ func (p *planner) Update(
 		// visible.
 		// We do not want these to be available for RETURNING below.
 		//
-		// MakeRowUpdater guarantees that the first columns of the source
+		// MakeUpdater guarantees that the first columns of the source
 		// are those specified in requestedCols, which, in the case where
 		// rowsNeeded is true, is also desc.Columns. So we can truncate to
 		// the length of that to only see public columns.

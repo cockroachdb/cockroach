@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -21,12 +22,12 @@ import (
 
 // rowFetcherCache maintains a cache of single table RowFetchers. Given a key
 // with an mvcc timestamp, it retrieves the correct TableDescriptor for that key
-// and returns a RowFetcher initialized with that table. This RowFetcher's
+// and returns a Fetcher initialized with that table. This Fetcher's
 // StartScanFrom can be used to turn that key (or all the keys making up the
 // column families of one row) into a row.
 type rowFetcherCache struct {
 	leaseMgr *sql.LeaseManager
-	fetchers map[*sqlbase.TableDescriptor]*sqlbase.RowFetcher
+	fetchers map[*sqlbase.TableDescriptor]*row.Fetcher
 
 	a sqlbase.DatumAlloc
 }
@@ -34,7 +35,7 @@ type rowFetcherCache struct {
 func newRowFetcherCache(leaseMgr *sql.LeaseManager) *rowFetcherCache {
 	return &rowFetcherCache{
 		leaseMgr: leaseMgr,
-		fetchers: make(map[*sqlbase.TableDescriptor]*sqlbase.RowFetcher),
+		fetchers: make(map[*sqlbase.TableDescriptor]*row.Fetcher),
 	}
 }
 
@@ -80,7 +81,7 @@ func (c *rowFetcherCache) TableDescForKey(
 
 func (c *rowFetcherCache) RowFetcherForTableDesc(
 	tableDesc *sqlbase.TableDescriptor,
-) (*sqlbase.RowFetcher, error) {
+) (*row.Fetcher, error) {
 	if rf, ok := c.fetchers[tableDesc]; ok {
 		return rf, nil
 	}
@@ -93,10 +94,10 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 		valNeededForCol.Add(colIdx)
 	}
 
-	var rf sqlbase.RowFetcher
+	var rf row.Fetcher
 	if err := rf.Init(
 		false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, &c.a,
-		sqlbase.RowFetcherTableArgs{
+		row.FetcherTableArgs{
 			Spans:            tableDesc.AllIndexSpans(),
 			Desc:             tableDesc,
 			Index:            &tableDesc.PrimaryIndex,

@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -47,7 +48,7 @@ func IndexMutationFilter(m sqlbase.DescriptorMutation) bool {
 
 // backfiller is common to a ColumnBackfiller or an IndexBackfiller.
 type backfiller struct {
-	fetcher sqlbase.RowFetcher
+	fetcher row.Fetcher
 	alloc   sqlbase.DatumAlloc
 }
 
@@ -113,7 +114,7 @@ func (cb *ColumnBackfiller) Init(evalCtx *tree.EvalContext, desc sqlbase.TableDe
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, len(desc.Columns)-1)
 
-	tableArgs := sqlbase.RowFetcherTableArgs{
+	tableArgs := row.FetcherTableArgs{
 		Desc:            &desc,
 		Index:           &desc.PrimaryIndex,
 		ColIdxMap:       desc.ColumnIdxMap(),
@@ -137,12 +138,12 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	alsoCommit bool,
 	traceKV bool,
 ) (roachpb.Key, error) {
-	fkTables, _ := sqlbase.TablesNeededForFKs(
+	fkTables, _ := row.TablesNeededForFKs(
 		ctx,
 		tableDesc,
-		sqlbase.CheckUpdates,
-		sqlbase.NoLookup,
-		sqlbase.NoCheckPrivilege,
+		row.CheckUpdates,
+		row.NoLookup,
+		row.NoCheckPrivilege,
 		nil, /* AnalyzeExprFunction */
 	)
 	for i, fkTableDesc := range otherTables {
@@ -166,13 +167,13 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	requestedCols := make([]sqlbase.ColumnDescriptor, 0, len(tableDesc.Columns)+len(cb.added))
 	requestedCols = append(requestedCols, tableDesc.Columns...)
 	requestedCols = append(requestedCols, cb.added...)
-	ru, err := sqlbase.MakeRowUpdater(
+	ru, err := row.MakeUpdater(
 		txn,
 		&tableDesc,
 		fkTables,
 		cb.updateCols,
 		requestedCols,
-		sqlbase.RowUpdaterOnlyColumns,
+		row.UpdaterOnlyColumns,
 		cb.evalCtx,
 		&cb.alloc,
 	)
@@ -243,7 +244,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 			}
 		}
 		if _, err := ru.UpdateRow(
-			ctx, b, oldValues, updateValues, sqlbase.CheckFKs, traceKV,
+			ctx, b, oldValues, updateValues, row.CheckFKs, traceKV,
 		); err != nil {
 			return roachpb.Key{}, err
 		}
@@ -279,7 +280,7 @@ func ConvertBackfillError(
 			return errors.Wrap(err, "backfill error")
 		}
 	}
-	return sqlbase.ConvertBatchError(ctx, desc, b)
+	return row.ConvertBatchError(ctx, desc, b)
 }
 
 // IndexBackfiller is capable of backfilling all the added index.
@@ -335,7 +336,7 @@ func (ib *IndexBackfiller) Init(desc sqlbase.TableDescriptor) error {
 		ib.colIdxMap[c.ID] = i
 	}
 
-	tableArgs := sqlbase.RowFetcherTableArgs{
+	tableArgs := row.FetcherTableArgs{
 		Desc:            &desc,
 		Index:           &desc.PrimaryIndex,
 		ColIdxMap:       ib.colIdxMap,
