@@ -880,7 +880,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Expr> rowsfrom_item
 %type <tree.TableExpr> joined_table
 %type <*tree.UnresolvedName> relation_expr
-%type <tree.TableExpr> relation_expr_opt_alias
+%type <tree.TableExpr> table_name_expr_opt_alias_idx table_name_expr_with_index
 %type <tree.SelectExpr> target_elem
 %type <*tree.UpdateExpr> single_set_clause
 %type <tree.AsOfClause> as_of_clause opt_as_of_clause
@@ -960,7 +960,7 @@ func newNameFromStr(s string) *tree.Name {
 
 // Precedence: lowest to highest
 %nonassoc  VALUES              // see value_clause
-%nonassoc  SET                 // see relation_expr_opt_alias
+%nonassoc  SET                 // see table_name_expr_opt_alias_idx
 %left      UNION EXCEPT
 %left      INTERSECT
 %left      OR
@@ -2030,7 +2030,7 @@ opt_changefeed_sink:
 //               [RETURNING <exprs...>]
 // %SeeAlso: WEBDOCS/delete.html
 delete_stmt:
-  opt_with_clause DELETE FROM relation_expr_opt_alias where_clause opt_sort_clause opt_limit_clause returning_clause
+  opt_with_clause DELETE FROM table_name_expr_opt_alias_idx where_clause opt_sort_clause opt_limit_clause returning_clause
   {
     $$.val = &tree.Delete{
       With: $1.with(),
@@ -4906,7 +4906,7 @@ returning_clause:
 //        [RETURNING <exprs...>]
 // %SeeAlso: INSERT, UPSERT, DELETE, WEBDOCS/update.html
 update_stmt:
-  opt_with_clause UPDATE relation_expr_opt_alias
+  opt_with_clause UPDATE table_name_expr_opt_alias_idx
     SET set_clause_list update_from_clause where_clause opt_sort_clause opt_limit_clause returning_clause
   {
     $$.val = &tree.Update{
@@ -5812,21 +5812,34 @@ relation_expr_list:
 // further ahead whether the first "set" is an alias or the UPDATE's SET
 // keyword. Since "set" is allowed as a column name both interpretations are
 // feasible. We resolve the shift/reduce conflict by giving the first
-// relation_expr_opt_alias production a higher precedence than the SET token
+// table_name_expr_opt_alias_idx production a higher precedence than the SET token
 // has, causing the parser to prefer to reduce, in effect assuming that the SET
 // is not an alias.
-relation_expr_opt_alias:
-  relation_expr %prec UMINUS
+table_name_expr_opt_alias_idx:
+  table_name_expr_with_index %prec UMINUS
   {
-    $$.val = $1.newNormalizableTableNameFromUnresolvedName()
+     $$.val = $1.tblExpr()
   }
-| relation_expr table_alias_name
+| table_name_expr_with_index table_alias_name
   {
-    $$.val = &tree.AliasedTableExpr{Expr: $1.newNormalizableTableNameFromUnresolvedName(), As: tree.AliasClause{Alias: tree.Name($2)}}
+     alias := $1.tblExpr().(*tree.AliasedTableExpr)
+     alias.As = tree.AliasClause{Alias: tree.Name($2)}
+     $$.val = alias
   }
-| relation_expr AS table_alias_name
+| table_name_expr_with_index AS table_alias_name
   {
-    $$.val = &tree.AliasedTableExpr{Expr: $1.newNormalizableTableNameFromUnresolvedName(), As: tree.AliasClause{Alias: tree.Name($3)}}
+     alias := $1.tblExpr().(*tree.AliasedTableExpr)
+     alias.As = tree.AliasClause{Alias: tree.Name($3)}
+     $$.val = alias
+  }
+
+table_name_expr_with_index:
+  table_name opt_index_flags
+  {
+    $$.val = &tree.AliasedTableExpr{
+      Expr: $1.newNormalizableTableNameFromUnresolvedName(),
+      IndexFlags: $2.indexFlags(),
+    }
   }
 
 where_clause:

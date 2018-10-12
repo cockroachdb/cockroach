@@ -442,11 +442,16 @@ func (p *planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.
 		n = ate.Expr
 		// It's okay to ignore the As columns here, as they're not permitted in
 		// DML aliases where this function is used.
-		alias = tree.NewUnqualifiedTableName(ate.As.Alias)
+		if ate.As.Alias != "" {
+			alias = tree.NewUnqualifiedTableName(ate.As.Alias)
+		}
 	}
 	table, ok := n.(*tree.NormalizableTableName)
 	if !ok {
-		return nil, nil, errors.Errorf("TODO(pmattis): unsupported FROM: %s", n)
+		return nil, nil, pgerror.Unimplemented(
+			"complex table expression in UPDATE/DELETE",
+			"cannot use a complex table name with DELETE/UPDATE", n,
+		)
 	}
 	tn, err := table.Normalize()
 	if err != nil {

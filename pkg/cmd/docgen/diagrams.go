@@ -553,7 +553,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "delete_stmt",
-		inline: []string{"opt_with_clause", "with_clause", "cte_list", "relation_expr_opt_alias", "where_clause", "returning_clause", "opt_sort_clause", "opt_limit_clause"},
+		inline: []string{"opt_with_clause", "with_clause", "cte_list", "table_name_expr_opt_alias_idx", "table_name_expr_with_index", "where_clause", "returning_clause", "opt_sort_clause", "opt_limit_clause"},
 		replace: map[string]string{
 			"relation_expr": "table_name",
 		},
@@ -1149,7 +1149,8 @@ var specs = []stmtSpec{
 			"opt_with_clause",
 			"with_clause",
 			"cte_list",
-			"relation_expr_opt_alias",
+			"table_name_expr_opt_alias_idx",
+			"table_name_expr_with_index",
 			"set_clause_list",
 			"set_clause",
 			"single_set_clause",
