@@ -23,13 +23,12 @@ import (
 	"testing"
 	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -56,7 +55,7 @@ func TestHeartbeatFindsOutAboutAbortedTransaction(t *testing.T) {
 	key2 := roachpb.Key("b")
 	s, _, origDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Store: &storage.StoreTestingKnobs{
+			Store: &storagebase.StoreTestingKnobs{
 				TestingProposalFilter: func(args storagebase.ProposalFilterArgs) *roachpb.Error {
 					// We'll eventually expect to see an EndTransaction(commit=false) with
 					// the right intents.

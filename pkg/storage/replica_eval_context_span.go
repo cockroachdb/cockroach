@@ -17,7 +17,7 @@ package storage
 import (
 	"context"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -49,7 +49,7 @@ func (rec *SpanSetReplicaEvalContext) AbortSpan() *abortspan.AbortSpan {
 }
 
 // EvalKnobs returns the batch evaluation Knobs.
-func (rec *SpanSetReplicaEvalContext) EvalKnobs() batcheval.TestingKnobs {
+func (rec *SpanSetReplicaEvalContext) EvalKnobs() storagebase.BatchEvalTestingKnobs {
 	return rec.i.EvalKnobs()
 }
 
