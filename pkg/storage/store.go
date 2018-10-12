@@ -2122,7 +2122,7 @@ func (s *Store) GetReplica(rangeID roachpb.RangeID) (*Replica, error) {
 	if value, ok := s.mu.replicas.Load(int64(rangeID)); ok {
 		return (*Replica)(value), nil
 	}
-	return nil, roachpb.NewRangeNotFoundError(rangeID)
+	return nil, roachpb.NewRangeNotFoundError(rangeID, s.StoreID())
 }
 
 // LookupReplica looks up the replica that contains the specified key. It
@@ -2768,7 +2768,7 @@ func (s *Store) removeReplicaImpl(
 	rep.mu.Lock()
 	rep.cancelPendingCommandsLocked()
 	rep.mu.internalRaftGroup = nil
-	rep.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(rep.RangeID), destroyReasonRemoved)
+	rep.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(rep.RangeID, rep.store.StoreID()), destroyReasonRemoved)
 	rep.mu.Unlock()
 	rep.readOnlyCmdMu.Unlock()
 
@@ -3789,7 +3789,8 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 			// could be re-added with a higher replicaID, in which this error is
 			// cleared in setReplicaIDRaftMuLockedMuLocked.
 			if repl.mu.destroyStatus.IsAlive() {
-				repl.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(repl.RangeID), destroyReasonRemovalPending)
+				storeID := repl.store.StoreID()
+				repl.mu.destroyStatus.Set(roachpb.NewRangeNotFoundError(repl.RangeID, storeID), destroyReasonRemovalPending)
 			}
 			repl.mu.Unlock()
 
