@@ -33,8 +33,82 @@ const (
 	pgCatalogName         = sessiondata.PgCatalogName
 )
 
+// informationSchema lists all the table definitions for
+// information_schema.
 var informationSchema = virtualSchema{
 	name: informationSchemaName,
+	allTableNames: buildStringSet(
+		// Generated with:
+		// select distinct '"'||table_name||'",' from information_schema.tables
+		//    where table_schema='information_schema' order by table_name;
+		"_pg_foreign_data_wrappers",
+		"_pg_foreign_servers",
+		"_pg_foreign_table_columns",
+		"_pg_foreign_tables",
+		"_pg_user_mappings",
+		"administrable_role_authorizations",
+		"applicable_roles",
+		"attributes",
+		"character_sets",
+		"check_constraint_routine_usage",
+		"check_constraints",
+		"collation_character_set_applicability",
+		"collations",
+		"column_domain_usage",
+		"column_options",
+		"column_privileges",
+		"column_udt_usage",
+		"columns",
+		"constraint_column_usage",
+		"constraint_table_usage",
+		"data_type_privileges",
+		"domain_constraints",
+		"domain_udt_usage",
+		"domains",
+		"element_types",
+		"enabled_roles",
+		"foreign_data_wrapper_options",
+		"foreign_data_wrappers",
+		"foreign_server_options",
+		"foreign_servers",
+		"foreign_table_options",
+		"foreign_tables",
+		"information_schema_catalog_name",
+		"key_column_usage",
+		"parameters",
+		"referential_constraints",
+		"role_column_grants",
+		"role_routine_grants",
+		"role_table_grants",
+		"role_udt_grants",
+		"role_usage_grants",
+		"routine_privileges",
+		"routines",
+		"schemata",
+		"sequences",
+		"sql_features",
+		"sql_implementation_info",
+		"sql_languages",
+		"sql_packages",
+		"sql_parts",
+		"sql_sizing",
+		"sql_sizing_profiles",
+		"table_constraints",
+		"table_privileges",
+		"tables",
+		"transforms",
+		"triggered_update_columns",
+		"triggers",
+		"udt_privileges",
+		"usage_privileges",
+		"user_defined_types",
+		"user_mapping_options",
+		"user_mappings",
+		"view_column_usage",
+		"view_routine_usage",
+		"view_table_usage",
+		"views",
+	),
 	tableDefs: []virtualSchemaDef{
 		informationSchemaAdministrableRoleAuthorizations,
 		informationSchemaApplicableRoles,
@@ -59,6 +133,14 @@ var informationSchema = virtualSchema{
 	},
 	tableValidator:             validateInformationSchemaTable,
 	validWithNoDatabaseContext: true,
+}
+
+func buildStringSet(ss ...string) map[string]struct{} {
+	m := map[string]struct{}{}
+	for _, s := range ss {
+		m[s] = struct{}{}
+	}
+	return m
 }
 
 var (
