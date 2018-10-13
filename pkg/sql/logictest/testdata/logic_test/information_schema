@@ -217,6 +217,7 @@ crdb_internal       cluster_queries
 crdb_internal       cluster_sessions
 crdb_internal       cluster_settings
 crdb_internal       create_statements
+crdb_internal       feature_usage
 crdb_internal       forward_dependencies
 crdb_internal       gossip_alerts
 crdb_internal       gossip_liveness
@@ -342,6 +343,7 @@ cluster_queries
 cluster_sessions
 cluster_settings
 create_statements
+feature_usage
 forward_dependencies
 gossip_alerts
 gossip_liveness
@@ -474,6 +476,7 @@ system         crdb_internal       cluster_queries                    SYSTEM VIE
 system         crdb_internal       cluster_sessions                   SYSTEM VIEW  NO                  1
 system         crdb_internal       cluster_settings                   SYSTEM VIEW  NO                  1
 system         crdb_internal       create_statements                  SYSTEM VIEW  NO                  1
+system         crdb_internal       feature_usage                      SYSTEM VIEW  NO                  1
 system         crdb_internal       forward_dependencies               SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_alerts                      SYSTEM VIEW  NO                  1
 system         crdb_internal       gossip_liveness                    SYSTEM VIEW  NO                  1
@@ -1042,6 +1045,7 @@ NULL     public   system         crdb_internal       cluster_queries            
 NULL     public   system         crdb_internal       cluster_sessions                   SELECT          NULL          NULL
 NULL     public   system         crdb_internal       cluster_settings                   SELECT          NULL          NULL
 NULL     public   system         crdb_internal       create_statements                  SELECT          NULL          NULL
+NULL     public   system         crdb_internal       feature_usage                      SELECT          NULL          NULL
 NULL     public   system         crdb_internal       forward_dependencies               SELECT          NULL          NULL
 NULL     public   system         crdb_internal       gossip_alerts                      SELECT          NULL          NULL
 NULL     public   system         crdb_internal       gossip_liveness                    SELECT          NULL          NULL
@@ -1265,6 +1269,7 @@ NULL     public   system         crdb_internal       cluster_queries            
 NULL     public   system         crdb_internal       cluster_sessions                   SELECT          NULL          NULL
 NULL     public   system         crdb_internal       cluster_settings                   SELECT          NULL          NULL
 NULL     public   system         crdb_internal       create_statements                  SELECT          NULL          NULL
+NULL     public   system         crdb_internal       feature_usage                      SELECT          NULL          NULL
 NULL     public   system         crdb_internal       forward_dependencies               SELECT          NULL          NULL
 NULL     public   system         crdb_internal       gossip_alerts                      SELECT          NULL          NULL
 NULL     public   system         crdb_internal       gossip_liveness                    SELECT          NULL          NULL

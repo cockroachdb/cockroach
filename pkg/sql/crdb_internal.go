@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -60,6 +61,7 @@ var crdbInternal = virtualSchema{
 		crdbInternalClusterSessionsTable,
 		crdbInternalClusterSettingsTable,
 		crdbInternalCreateStmtsTable,
+		crdbInternalFeatureUsage,
 		crdbInternalForwardDependenciesTable,
 		crdbInternalGossipNodesTable,
 		crdbInternalGossipAlertsTable,
@@ -1429,6 +1431,27 @@ CREATE TABLE crdb_internal.backward_dependencies (
 				}
 				return nil
 			})
+	},
+}
+
+// crdbInternalFeatureUsage exposes the telemetry counters.
+var crdbInternalFeatureUsage = virtualSchemaTable{
+	schema: `
+CREATE TABLE crdb_internal.feature_usage (
+  feature_name          STRING NOT NULL,
+  usage_count           INT NOT NULL
+)
+`,
+	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		for feature, count := range telemetry.GetFeatureCounts() {
+			if err := addRow(
+				tree.NewDString(feature),
+				tree.NewDInt(tree.DInt(int64(count))),
+			); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }
 
