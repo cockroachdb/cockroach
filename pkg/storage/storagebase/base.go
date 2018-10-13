@@ -22,7 +22,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+)
+
+// MergeQueueEnabled is a setting that controls whether the merge queue is
+// enabled.
+var MergeQueueEnabled = settings.RegisterBoolSetting(
+	"kv.range_merge.queue_enabled",
+	"whether the automatic merge queue is enabled",
+	false,
 )
 
 // TxnCleanupThreshold is the threshold after which a transaction is
