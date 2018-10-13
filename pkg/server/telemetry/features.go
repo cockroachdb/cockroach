@@ -90,6 +90,19 @@ var counters struct {
 	m map[string]Counter
 }
 
+// GetFeatureCounts returns the current feature usage counts. Used for
+// inspection via SQL. They are not quantized! Thus not suitable for
+// reporting.
+func GetFeatureCounts() map[string]int32 {
+	counters.RLock()
+	m := make(map[string]int32, len(counters.m))
+	for k, cnt := range counters.m {
+		m[k] = atomic.LoadInt32(cnt)
+	}
+	counters.RUnlock()
+	return m
+}
+
 // GetAndResetFeatureCounts returns the current feature usage counts and resets
 // the counts for all features back to 0. If `quantize` is true, the returned
 // counts are quantized to just order of magnitude using the `Bucket10` helper.
