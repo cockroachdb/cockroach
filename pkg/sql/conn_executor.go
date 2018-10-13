@@ -256,14 +256,6 @@ type Server struct {
 	// dbCache is a cache for database descriptors, maintained through Gossip
 	// updates.
 	dbCache *databaseCacheHolder
-
-	errorCounts struct {
-		syncutil.Mutex
-		// Error returned by code.
-		codes map[string]int64
-		// Attempts to use unimplemented features.
-		unimplemented map[string]int64
-	}
 }
 
 // NewServer creates a new Server. Start() needs to be called before the Server
@@ -319,21 +311,14 @@ func (s *Server) recordError(err error) {
 	if err == nil {
 		return
 	}
-	s.errorCounts.Lock()
-	if s.errorCounts.codes == nil {
-		s.errorCounts.codes = make(map[string]int64)
-	}
 
 	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		s.errorCounts.codes[pgErr.Code]++
+		telemetry.Count("errorcodes." + pgErr.Code)
 
 		switch pgErr.Code {
 		case pgerror.CodeFeatureNotSupportedError:
 			if feature := pgErr.InternalCommand; feature != "" {
-				if s.errorCounts.unimplemented == nil {
-					s.errorCounts.unimplemented = make(map[string]int64)
-				}
-				s.errorCounts.unimplemented[feature]++
+				telemetry.Count("unimplemented." + feature)
 			}
 		case pgerror.CodeInternalError:
 			if trace := pgErr.InternalCommand; trace != "" {
@@ -345,30 +330,8 @@ func (s *Server) recordError(err error) {
 		if typ == "" {
 			typ = "unknown"
 		}
-		s.errorCounts.codes[typ]++
+		telemetry.Count("othererror." + typ)
 	}
-	s.errorCounts.Unlock()
-}
-
-// FillErrorCounts fills the passed map with the server's current
-// counts of how often individual unimplemented features have been encountered.
-func (s *Server) FillErrorCounts(codes, unimplemented map[string]int64) {
-	s.errorCounts.Lock()
-	for k, v := range s.errorCounts.codes {
-		codes[k] = v
-	}
-	for k, v := range s.errorCounts.unimplemented {
-		unimplemented[k] = v
-	}
-	s.errorCounts.Unlock()
-}
-
-// ResetErrorCounts resets the counts of error types seen.
-func (s *Server) ResetErrorCounts() {
-	s.errorCounts.Lock()
-	s.errorCounts.codes = make(map[string]int64, len(s.errorCounts.codes))
-	s.errorCounts.unimplemented = make(map[string]int64, len(s.errorCounts.unimplemented))
-	s.errorCounts.Unlock()
 }
 
 // ResetStatementStats resets the executor's collected statement statistics.
