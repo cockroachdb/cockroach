@@ -95,9 +95,9 @@ var counters struct {
 // counts are quantized to just order of magnitude using the `Bucket10` helper.
 func GetAndResetFeatureCounts(quantize bool) map[string]int32 {
 	counters.RLock()
-	m := make(map[string]int32, approxFeatureCount)
-	for k := range counters.m {
-		val := atomic.SwapInt32(counters.m[k], 0)
+	m := make(map[string]int32, len(counters.m))
+	for k, cnt := range counters.m {
+		val := atomic.SwapInt32(cnt, 0)
 		if val != 0 {
 			m[k] = val
 		}
