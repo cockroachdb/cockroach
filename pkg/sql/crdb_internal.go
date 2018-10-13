@@ -24,6 +24,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -34,13 +36,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -1918,7 +1919,7 @@ CREATE TABLE crdb_internal.gossip_liveness (
 		g := p.ExecCfg().Gossip
 
 		type nodeInfo struct {
-			liveness  storage.Liveness
+			liveness  storagepb.Liveness
 			updatedAt int64
 		}
 
@@ -1929,7 +1930,7 @@ CREATE TABLE crdb_internal.gossip_liveness (
 				return errors.Wrapf(err, "failed to extract bytes for key %q", key)
 			}
 
-			var l storage.Liveness
+			var l storagepb.Liveness
 			if err := protoutil.Unmarshal(bytes, &l); err != nil {
 				return errors.Wrapf(err, "failed to parse value for key %q", key)
 			}
@@ -1984,7 +1985,7 @@ CREATE TABLE crdb_internal.gossip_alerts (
 
 		type resultWithNodeID struct {
 			roachpb.NodeID
-			status.HealthCheckResult
+			statuspb.HealthCheckResult
 		}
 		var results []resultWithNodeID
 		if err := g.IterateInfos(gossip.KeyNodeHealthAlertPrefix, func(key string, i gossip.Info) error {
@@ -1993,7 +1994,7 @@ CREATE TABLE crdb_internal.gossip_alerts (
 				return errors.Wrapf(err, "failed to extract bytes for key %q", key)
 			}
 
-			var d status.HealthCheckResult
+			var d statuspb.HealthCheckResult
 			if err := protoutil.Unmarshal(bytes, &d); err != nil {
 				return errors.Wrapf(err, "failed to parse value for key %q", key)
 			}

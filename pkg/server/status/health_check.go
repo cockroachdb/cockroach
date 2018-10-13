@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -142,11 +143,13 @@ func NewHealthChecker(trackedMetrics map[string]threshold) *HealthChecker {
 }
 
 // CheckHealth performs a (cheap) health check.
-func (h *HealthChecker) CheckHealth(ctx context.Context, nodeStatus NodeStatus) HealthCheckResult {
+func (h *HealthChecker) CheckHealth(
+	ctx context.Context, nodeStatus statuspb.NodeStatus,
+) statuspb.HealthCheckResult {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	// Gauges that trigger alerts when nonzero.
-	var alerts []HealthAlert
+	var alerts []statuspb.HealthAlert
 
 	m := map[roachpb.StoreID]map[string]float64{
 		0: nodeStatus.Metrics,
@@ -159,14 +162,14 @@ func (h *HealthChecker) CheckHealth(ctx context.Context, nodeStatus NodeStatus) 
 
 	for storeID, storeDiff := range diffs {
 		for name, value := range storeDiff {
-			alerts = append(alerts, HealthAlert{
+			alerts = append(alerts, statuspb.HealthAlert{
 				StoreID:     storeID,
-				Category:    HealthAlert_METRICS,
+				Category:    statuspb.HealthAlert_METRICS,
 				Description: name,
 				Value:       value,
 			})
 		}
 	}
 
-	return HealthCheckResult{Alerts: alerts}
+	return statuspb.HealthCheckResult{Alerts: alerts}
 }

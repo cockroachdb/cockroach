@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 )
 
 // TxnCleanupThreshold is the threshold after which a transaction is
@@ -49,14 +50,14 @@ type FilterArgs struct {
 // ProposalFilterArgs groups the arguments to ReplicaProposalFilter.
 type ProposalFilterArgs struct {
 	Ctx   context.Context
-	Cmd   RaftCommand
+	Cmd   storagepb.RaftCommand
 	CmdID CmdIDKey
 	Req   roachpb.BatchRequest
 }
 
 // ApplyFilterArgs groups the arguments to a ReplicaApplyFilter.
 type ApplyFilterArgs struct {
-	ReplicatedEvalResult
+	storagepb.ReplicatedEvalResult
 	CmdID   CmdIDKey
 	RangeID roachpb.RangeID
 	StoreID roachpb.StoreID

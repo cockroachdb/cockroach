@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
@@ -977,7 +978,7 @@ func splitTrigger(
 	var pd result.Result
 	// This makes sure that no reads are happening in parallel; see #3148.
 	pd.Replicated.BlockReads = true
-	pd.Replicated.Split = &storagebase.Split{
+	pd.Replicated.Split = &storagepb.Split{
 		SplitTrigger: *split,
 		RHSDelta:     rightDeltaMS,
 	}
@@ -1033,7 +1034,7 @@ func mergeTrigger(
 
 	var pd result.Result
 	pd.Replicated.BlockReads = true
-	pd.Replicated.Merge = &storagebase.Merge{
+	pd.Replicated.Merge = &storagepb.Merge{
 		MergeTrigger: *merge,
 	}
 	return pd, nil
@@ -1068,10 +1069,10 @@ func changeReplicasTrigger(
 	cpy.NextReplicaID = change.NextReplicaID
 	// TODO(tschottdorf): duplication of Desc with the trigger below, should
 	// likely remove it from the trigger.
-	pd.Replicated.State = &storagebase.ReplicaState{
+	pd.Replicated.State = &storagepb.ReplicaState{
 		Desc: &cpy,
 	}
-	pd.Replicated.ChangeReplicas = &storagebase.ChangeReplicas{
+	pd.Replicated.ChangeReplicas = &storagepb.ChangeReplicas{
 		ChangeReplicasTrigger: *change,
 	}
 

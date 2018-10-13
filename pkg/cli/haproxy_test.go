@@ -20,7 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -29,11 +29,11 @@ func TestNodeStatusToNodeInfoConversion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
-		input    []status.NodeStatus
+		input    []statuspb.NodeStatus
 		expected []haProxyNodeInfo
 	}{
 		{
-			[]status.NodeStatus{
+			[]statuspb.NodeStatus{
 				{
 					Desc: roachpb.NodeDescriptor{
 						NodeID: 1,
@@ -54,7 +54,7 @@ func TestNodeStatusToNodeInfoConversion(t *testing.T) {
 			},
 		},
 		{
-			[]status.NodeStatus{
+			[]statuspb.NodeStatus{
 				{
 					Args: []string{"--unwanted", "--http-port=1234"},
 				},
@@ -78,7 +78,7 @@ func TestNodeStatusToNodeInfoConversion(t *testing.T) {
 			},
 		},
 		{
-			[]status.NodeStatus{
+			[]statuspb.NodeStatus{
 				{
 					Args: []string{"--http-port", "5678", "--unwanted"},
 				},
@@ -90,7 +90,7 @@ func TestNodeStatusToNodeInfoConversion(t *testing.T) {
 			},
 		},
 		{
-			[]status.NodeStatus{
+			[]statuspb.NodeStatus{
 				{
 					// We shouldn't see this, because the flag needs an argument on startup,
 					// but check that we fall back to the default port.

@@ -21,10 +21,10 @@ import "gossip/gossip.proto";
 import "roachpb/app_stats.proto";
 import "roachpb/data.proto";
 import "server/diagnosticspb/diagnostics.proto";
-import "server/status/status.proto";
+import "server/status/statuspb/status.proto";
 import "storage/engine/enginepb/mvcc.proto";
-import "storage/lease_status.proto";
-import "storage/storagebase/state.proto";
+import "storage/storagepb/lease_status.proto";
+import "storage/storagepb/state.proto";
 import "util/log/log.proto";
 import "util/unresolved_addr.proto";
 
@@ -100,7 +100,7 @@ message DetailsResponse {
 message NodesRequest {}
 
 message NodesResponse {
-  repeated status.NodeStatus nodes = 1 [ (gogoproto.nullable) = false ];
+  repeated server.status.statuspb.NodeStatus nodes = 1 [ (gogoproto.nullable) = false ];
 }
 
 message NodeRequest {
@@ -174,7 +174,7 @@ message CommandQueueMetrics {
 message RangeInfo {
   PrettySpan span = 1 [ (gogoproto.nullable) = false ];
   RaftState raft_state = 2 [ (gogoproto.nullable) = false ];
-  storage.storagebase.RangeInfo state = 4 [ (gogoproto.nullable) = false ];
+  storage.storagepb.RangeInfo state = 4 [ (gogoproto.nullable) = false ];
   int32 source_node_id = 5 [
     (gogoproto.customname) = "SourceNodeID",
     (gogoproto.casttype) =
@@ -614,7 +614,7 @@ message RangeResponse {
 message CommandQueueRequest { int64 range_id = 1; }
 
 message CommandQueueResponse {
-  storage.storagebase.CommandQueuesSnapshot snapshot = 1
+  storage.storagepb.CommandQueuesSnapshot snapshot = 1
       [ (gogoproto.nullable) = false ];
 }
 
@@ -698,7 +698,7 @@ service Status {
       get : "/_status/nodes"
     };
   }
-  rpc Node(NodeRequest) returns (status.NodeStatus) {
+  rpc Node(NodeRequest) returns (server.status.statuspb.NodeStatus) {
     option (google.api.http) = {
       get : "/_status/nodes/{node_id}"
     };

@@ -17,6 +17,8 @@ package storage
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -24,8 +26,8 @@ import (
 func TestShouldReplaceLiveness(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	l := func(epo int64, expiration hlc.Timestamp, draining, decom bool) Liveness {
-		return Liveness{
+	l := func(epo int64, expiration hlc.Timestamp, draining, decom bool) storagepb.Liveness {
+		return storagepb.Liveness{
 			Epoch:           epo,
 			Expiration:      hlc.LegacyTimestamp(expiration),
 			Draining:        draining,
@@ -39,12 +41,12 @@ func TestShouldReplaceLiveness(t *testing.T) {
 	now := hlc.Timestamp{WallTime: 12345}
 
 	for _, test := range []struct {
-		old, new Liveness
+		old, new storagepb.Liveness
 		exp      bool
 	}{
 		{
 			// Epoch update only.
-			Liveness{},
+			storagepb.Liveness{},
 			l(1, hlc.Timestamp{}, false, false),
 			yes,
 		},

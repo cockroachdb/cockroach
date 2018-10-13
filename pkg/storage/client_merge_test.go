@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -1869,7 +1870,7 @@ func TestStoreRangeMergeReadoptedBothFollowers(t *testing.T) {
 			err := lhsRepl0.ChangeReplicas(ctx, roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
 				NodeID:  store2.Ident.NodeID,
 				StoreID: store2.Ident.StoreID,
-			}, lhsRepl0.Desc(), storage.ReasonUnknown, t.Name())
+			}, lhsRepl0.Desc(), storagepb.ReasonUnknown, t.Name())
 			if !testutils.IsError(err, "store busy applying snapshots") {
 				return err
 			}

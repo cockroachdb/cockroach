@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -112,7 +112,7 @@ func GC(
 	// keys unless we have to (to allow the GC queue to batch requests more
 	// efficiently), and we must honor what we declare.
 
-	var replState storagebase.ReplicaState
+	var replState storagepb.ReplicaState
 	if newThreshold != (hlc.Timestamp{}) {
 		replState.GCThreshold = &newThreshold
 		if err := stateLoader.SetGCThreshold(ctx, batch, cArgs.Stats, &newThreshold); err != nil {
@@ -130,7 +130,7 @@ func GC(
 	// Only set ReplicatedEvalResult.ReplicaState if at least one of the GC keys
 	// was written. Leaving the field nil to signify that no changes to the
 	// Replica state occurred allows replicas to perform less work beneath Raft.
-	if replState != (storagebase.ReplicaState{}) {
+	if replState != (storagepb.ReplicaState{}) {
 		pd.Replicated.State = &replState
 	}
 	return pd, nil

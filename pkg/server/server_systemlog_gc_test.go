@@ -26,8 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -79,7 +79,7 @@ func TestLogGC(t *testing.T) {
 					txn.OrigTimestamp().GoTime(),
 					testRangeID,
 					1, // storeID
-					storage.RangeLogEventType_add,
+					storagepb.RangeLogEventType_add,
 				)
 				return err
 			}))
