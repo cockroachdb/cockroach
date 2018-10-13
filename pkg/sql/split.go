@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 )
 
 type splitNode struct {
@@ -106,7 +106,7 @@ func (n *splitNode) startExec(params runParams) error {
 	// because of gossip inconsistency, or it could change halfway through the
 	// SPLIT AT's execution. It is, however, likely to prevent user error and
 	// confusion in the common case.
-	if !n.force && storage.MergeQueueEnabled.Get(&params.p.ExecCfg().Settings.SV) {
+	if !n.force && storagebase.MergeQueueEnabled.Get(&params.p.ExecCfg().Settings.SV) {
 		return errors.New("splits would be immediately discarded by merge queue; " +
 			"disable the merge queue first by running 'SET CLUSTER SETTING kv.range_merge.queue_enabled = false'")
 	}
