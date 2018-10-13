@@ -166,6 +166,13 @@ func (s *Scanner) UnimplementedWithIssue(issue int) {
 	s.lastError.hint = fmt.Sprintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
 }
 
+// UnimplementedWithIssueDetail wraps Error, setting lastUnimplementedError.
+func (s *Scanner) UnimplementedWithIssueDetail(issue int, detail string) {
+	s.Error("unimplemented")
+	s.lastError.unimplementedFeature = fmt.Sprintf("#%d.%s", issue, detail)
+	s.lastError.hint = fmt.Sprintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
+}
+
 func (s *Scanner) Error(e string) {
 	s.initLastErr()
 	if s.lastTok.id == ERROR {

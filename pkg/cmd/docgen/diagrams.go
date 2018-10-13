@@ -446,7 +446,7 @@ var specs = []stmtSpec{
 	{
 		name:    "create_index_stmt",
 		inline:  []string{"opt_unique", "opt_storing", "storing", "opt_name", "index_params", "index_elem", "opt_asc_desc"},
-		replace: map[string]string{"opt_using_gin_btree": ""},
+		replace: map[string]string{"opt_using_gin_btree": "", "a_expr": "column_name"},
 		exclude: []*regexp.Regexp{regexp.MustCompile("'CREATE' 'INVERTED'")},
 	},
 	{
@@ -455,6 +455,7 @@ var specs = []stmtSpec{
 		match:  []*regexp.Regexp{regexp.MustCompile("'INTERLEAVE'")},
 		inline: []string{"opt_unique", "opt_storing", "opt_interleave"},
 		replace: map[string]string{
+			"a_expr":                               "column_name",
 			" opt_index_name":                      "",
 			" opt_partition_by":                    "",
 			" opt_using_gin_btree":                 "",
@@ -494,7 +495,8 @@ var specs = []stmtSpec{
 		inline: []string{"opt_column_list"},
 	},
 	{
-		name: "create_role_stmt",
+		name:   "create_role_stmt",
+		inline: []string{"role_or_group"},
 		replace: map[string]string{
 			"string_or_placeholder": "name",
 		},
