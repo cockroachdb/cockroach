@@ -554,7 +554,10 @@ func TestReportUsage(t *testing.T) {
 		t.Fatalf("expected %d unimplemented feature errors, got %d", expected, actual)
 	}
 
-	for _, feat := range []string{"alter table rename constraint", "simple_type const_interval", "#9148"} {
+	for _, feat := range []string{
+		"syntax.alter table rename constraint",
+		"syntax.interval with precision",
+		"#9148"} {
 		if expected, actual := int64(10), r.last.UnimplementedErrors[feat]; expected != actual {
 			t.Fatalf(
 				"unexpected %d hits to unimplemented %q, got %d from %v",
