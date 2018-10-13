@@ -13,14 +13,14 @@
 // permissions and limitations under the License.
 
 syntax = "proto3";
-package cockroach.storage.storagebase;
-option go_package = "storagebase";
+package cockroach.storage.storagepb;
+option go_package = "storagepb";
 
 import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/engine/enginepb/mvcc3.proto";
-import "storage/storagebase/state.proto";
+import "storage/storagepb/state.proto";
 import "util/hlc/timestamp.proto";
 
 import "gogoproto/gogo.proto";
@@ -121,7 +121,7 @@ message ReplicatedEvalResult {
   // the comment on the ReplicaState message, this field is sparsely populated
   // and any field set overwrites the corresponding field in the state, perhaps
   // with additional side effects (for instance on a descriptor update).
-  storage.storagebase.ReplicaState state = 2;
+  storage.storagepb.ReplicaState state = 2;
   Split split = 3;
   Merge merge = 4;
   reserved 5;

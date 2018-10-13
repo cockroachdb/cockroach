@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -115,7 +115,7 @@ func TruncateLog(
 	}
 
 	var pd result.Result
-	pd.Replicated.State = &storagebase.ReplicaState{
+	pd.Replicated.State = &storagepb.ReplicaState{
 		TruncatedState: tState,
 	}
 	pd.Replicated.RaftLogDelta = ms.SysBytes

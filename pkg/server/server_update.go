@@ -19,10 +19,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
@@ -114,8 +115,8 @@ func (s *Server) upgradeStatus(ctx context.Context) (bool, error) {
 
 	var newVersion string
 	for nodeID, st := range nodesWithLiveness {
-		if st.LivenessStatus != storage.NodeLivenessStatus_LIVE &&
-			st.LivenessStatus != storage.NodeLivenessStatus_DECOMMISSIONING {
+		if st.LivenessStatus != storagepb.NodeLivenessStatus_LIVE &&
+			st.LivenessStatus != storagepb.NodeLivenessStatus_DECOMMISSIONING {
 			return false, errors.Errorf("node %d not running (%s), cannot determine version",
 				nodeID, st.LivenessStatus)
 		}

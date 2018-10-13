@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -768,12 +769,12 @@ func TestLeaseReplicaNotInDesc(t *testing.T) {
 	invalidLease.Sequence++
 	invalidLease.Replica.StoreID += 12345
 
-	raftCmd := storagebase.RaftCommand{
+	raftCmd := storagepb.RaftCommand{
 		ProposerLeaseSequence: lease.Sequence,
 		ProposerReplica:       invalidLease.Replica,
-		ReplicatedEvalResult: storagebase.ReplicatedEvalResult{
+		ReplicatedEvalResult: storagepb.ReplicatedEvalResult{
 			IsLeaseRequest: true,
-			State: &storagebase.ReplicaState{
+			State: &storagepb.ReplicaState{
 				Lease: &invalidLease,
 			},
 		},
@@ -825,7 +826,7 @@ func hasLease(repl *Replica, timestamp hlc.Timestamp) (owned bool, expired bool)
 	repl.mu.Lock()
 	defer repl.mu.Unlock()
 	status := repl.leaseStatus(*repl.mu.state.Lease, timestamp, repl.mu.minLeaseProposedTS)
-	return repl.mu.state.Lease.OwnedBy(repl.store.StoreID()), status.State != LeaseState_VALID
+	return repl.mu.state.Lease.OwnedBy(repl.store.StoreID()), status.State != storagepb.LeaseState_VALID
 }
 
 func TestReplicaLease(t *testing.T) {
@@ -1449,7 +1450,7 @@ func TestReplicaNoGossipFromNonLeader(t *testing.T) {
 	// Increment the clock's timestamp to expire the range lease.
 	tc.manualClock.Set(leaseExpiry(tc.repl))
 	lease, _ := tc.repl.GetLease()
-	if tc.repl.leaseStatus(lease, tc.Clock().Now(), hlc.Timestamp{}).State != LeaseState_EXPIRED {
+	if tc.repl.leaseStatus(lease, tc.Clock().Now(), hlc.Timestamp{}).State != storagepb.LeaseState_EXPIRED {
 		t.Fatal("range lease should have been expired")
 	}
 
@@ -6667,7 +6668,7 @@ func TestChangeReplicasDuplicateError(t *testing.T) {
 			StoreID: 9999,
 		},
 		tc.repl.Desc(),
-		ReasonRebalance,
+		storagepb.ReasonRebalance,
 		"",
 	); err == nil || !strings.Contains(err.Error(), "node already has a replica") {
 		t.Fatalf("must not be able to add second replica to same node (err=%s)", err)
@@ -9294,7 +9295,7 @@ func TestReplicaMetrics(t *testing.T) {
 			c.expected.Ticking = !c.expected.Quiescent
 			metrics := calcReplicaMetrics(
 				context.Background(), hlc.Timestamp{}, &zoneConfig,
-				c.liveness, 0, &c.desc, c.raftStatus, LeaseStatus{},
+				c.liveness, 0, &c.desc, c.raftStatus, storagepb.LeaseStatus{},
 				c.storeID, c.expected.Quiescent, c.expected.Ticking,
 				CommandQueueMetrics{}, CommandQueueMetrics{}, c.raftLogSize)
 			if c.expected != metrics {
@@ -10807,28 +10808,28 @@ func TestReplicaShouldCampaignOnWake(t *testing.T) {
 	}
 
 	tests := []struct {
-		leaseStatus LeaseStatus
+		leaseStatus storagepb.LeaseStatus
 		lease       roachpb.Lease
 		raftStatus  raft.Status
 		exp         bool
 	}{
-		{LeaseStatus{State: LeaseState_VALID}, myLease, followerWithoutLeader, true},
-		{LeaseStatus{State: LeaseState_VALID}, otherLease, followerWithoutLeader, false},
-		{LeaseStatus{State: LeaseState_VALID}, myLease, followerWithLeader, false},
-		{LeaseStatus{State: LeaseState_VALID}, otherLease, followerWithLeader, false},
-		{LeaseStatus{State: LeaseState_VALID}, myLease, candidate, false},
-		{LeaseStatus{State: LeaseState_VALID}, otherLease, candidate, false},
-		{LeaseStatus{State: LeaseState_VALID}, myLease, leader, false},
-		{LeaseStatus{State: LeaseState_VALID}, otherLease, leader, false},
+		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, myLease, followerWithoutLeader, true},
+		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, otherLease, followerWithoutLeader, false},
+		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, myLease, followerWithLeader, false},
+		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, otherLease, followerWithLeader, false},
+		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, myLease, candidate, false},
+		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, otherLease, candidate, false},
+		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, myLease, leader, false},
+		{storagepb.LeaseStatus{State: storagepb.LeaseState_VALID}, otherLease, leader, false},
 
-		{LeaseStatus{State: LeaseState_EXPIRED}, myLease, followerWithoutLeader, true},
-		{LeaseStatus{State: LeaseState_EXPIRED}, otherLease, followerWithoutLeader, true},
-		{LeaseStatus{State: LeaseState_EXPIRED}, myLease, followerWithLeader, false},
-		{LeaseStatus{State: LeaseState_EXPIRED}, otherLease, followerWithLeader, false},
-		{LeaseStatus{State: LeaseState_EXPIRED}, myLease, candidate, false},
-		{LeaseStatus{State: LeaseState_EXPIRED}, otherLease, candidate, false},
-		{LeaseStatus{State: LeaseState_EXPIRED}, myLease, leader, false},
-		{LeaseStatus{State: LeaseState_EXPIRED}, otherLease, leader, false},
+		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, myLease, followerWithoutLeader, true},
+		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, otherLease, followerWithoutLeader, true},
+		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, myLease, followerWithLeader, false},
+		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, otherLease, followerWithLeader, false},
+		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, myLease, candidate, false},
+		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, otherLease, candidate, false},
+		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, myLease, leader, false},
+		{storagepb.LeaseStatus{State: storagepb.LeaseState_EXPIRED}, otherLease, leader, false},
 	}
 
 	for i, test := range tests {

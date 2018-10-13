@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -258,7 +259,7 @@ func TestReplicateRange(t *testing.T) {
 			StoreID: mtc.stores[1].Ident.StoreID,
 		},
 		repl.Desc(),
-		storage.ReasonRangeUnderReplicated,
+		storagepb.ReasonRangeUnderReplicated,
 		"",
 	); err != nil {
 		t.Fatal(err)
@@ -340,7 +341,7 @@ func TestRestoreReplicas(t *testing.T) {
 			StoreID: mtc.stores[1].Ident.StoreID,
 		},
 		firstRng.Desc(),
-		storage.ReasonRangeUnderReplicated,
+		storagepb.ReasonRangeUnderReplicated,
 		"",
 	); err != nil {
 		t.Fatal(err)
@@ -444,7 +445,7 @@ func TestFailedReplicaChange(t *testing.T) {
 			StoreID: mtc.stores[1].Ident.StoreID,
 		},
 		repl.Desc(),
-		storage.ReasonRangeUnderReplicated,
+		storagepb.ReasonRangeUnderReplicated,
 		"",
 	); !testutils.IsError(err, "boom") {
 		t.Fatalf("did not get expected error: %v", err)
@@ -472,7 +473,7 @@ func TestFailedReplicaChange(t *testing.T) {
 			StoreID: mtc.stores[1].Ident.StoreID,
 		},
 		repl.Desc(),
-		storage.ReasonRangeUnderReplicated,
+		storagepb.ReasonRangeUnderReplicated,
 		"",
 	); err != nil {
 		t.Fatal(err)
@@ -540,7 +541,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 			StoreID: mtc.stores[1].Ident.StoreID,
 		},
 		repl.Desc(),
-		storage.ReasonRangeUnderReplicated,
+		storagepb.ReasonRangeUnderReplicated,
 		"",
 	); err != nil {
 		t.Fatal(err)
@@ -839,7 +840,7 @@ func TestFailedSnapshotFillsReservation(t *testing.T) {
 	header := storage.SnapshotRequest_Header{
 		CanDecline: true,
 		RangeSize:  100,
-		State:      storagebase.ReplicaState{Desc: rep.Desc()},
+		State:      storagepb.ReplicaState{Desc: rep.Desc()},
 	}
 	// Cause this stream to return an error as soon as we ask it for something.
 	// This injects an error into HandleSnapshotStream when we try to send the
@@ -977,7 +978,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 				StoreID: mtc.stores[2].Ident.StoreID,
 			},
 			&desc,
-			storage.ReasonRangeUnderReplicated,
+			storagepb.ReasonRangeUnderReplicated,
 			"",
 		)
 	}
@@ -1554,7 +1555,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 				StoreID: mtc.stores[storeNum].Ident.StoreID,
 			},
 			desc,
-			storage.ReasonRangeUnderReplicated,
+			storagepb.ReasonRangeUnderReplicated,
 			"",
 		)
 	}
@@ -2576,7 +2577,7 @@ func TestRemovePlaceholderRace(t *testing.T) {
 						StoreID: mtc.stores[1].Ident.StoreID,
 					},
 					repl.Desc(),
-					storage.ReasonUnknown,
+					storagepb.ReasonUnknown,
 					"",
 				); err != nil {
 					if storage.IsSnapshotError(err) {
@@ -2611,7 +2612,7 @@ func (ncc *noConfChangeTestHandler) HandleRaftRequest(
 			if err := protoutil.Unmarshal(cc.Context, &ccCtx); err != nil {
 				panic(err)
 			}
-			var command storagebase.RaftCommand
+			var command storagepb.RaftCommand
 			if err := protoutil.Unmarshal(ccCtx.Payload, &command); err != nil {
 				panic(err)
 			}
@@ -2679,7 +2680,7 @@ func TestReplicaGCRace(t *testing.T) {
 			StoreID: toStore.Ident.StoreID,
 		},
 		repl.Desc(),
-		storage.ReasonRangeUnderReplicated,
+		storagepb.ReasonRangeUnderReplicated,
 		"",
 	); err != nil {
 		t.Fatal(err)
@@ -2737,7 +2738,7 @@ func TestReplicaGCRace(t *testing.T) {
 			StoreID: toStore.Ident.StoreID,
 		},
 		repl.Desc(),
-		storage.ReasonRangeOverReplicated,
+		storagepb.ReasonRangeOverReplicated,
 		"",
 	); err != nil {
 		t.Fatal(err)
@@ -3648,7 +3649,7 @@ func TestFailedPreemptiveSnapshot(t *testing.T) {
 		roachpb.ADD_REPLICA,
 		roachpb.ReplicationTarget{NodeID: 3, StoreID: 3},
 		rep.Desc(),
-		storage.ReasonRangeUnderReplicated,
+		storagepb.ReasonRangeUnderReplicated,
 		"",
 	); !testutils.IsError(err, expErr) {
 		t.Fatalf("expected %s; got %v", expErr, err)
@@ -3952,7 +3953,7 @@ func TestStoreRangeRemovalCompactionSuggestion(t *testing.T) {
 			StoreID: deleteStore.Ident.StoreID,
 		},
 		repl.Desc(),
-		storage.ReasonRebalance,
+		storagepb.ReasonRebalance,
 		"",
 	); err != nil {
 		t.Fatal(err)

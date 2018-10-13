@@ -20,7 +20,9 @@ import (
 	"strings"
 	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -32,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -55,8 +56,8 @@ var (
 // NodeLiveness is the subset of storage.NodeLiveness's interface needed
 // by Registry.
 type NodeLiveness interface {
-	Self() (*storage.Liveness, error)
-	GetLivenesses() []storage.Liveness
+	Self() (*storagepb.Liveness, error)
+	GetLivenesses() []storagepb.Liveness
 }
 
 // Registry creates Jobs and manages their leases and cancelation.

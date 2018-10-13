@@ -22,6 +22,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft/raftpb"
 
@@ -699,7 +701,7 @@ func (r *Replica) ChangeReplicas(
 	changeType roachpb.ReplicaChangeType,
 	target roachpb.ReplicationTarget,
 	desc *roachpb.RangeDescriptor,
-	reason RangeLogEventReason,
+	reason storagepb.RangeLogEventReason,
 	details string,
 ) error {
 	return r.changeReplicas(ctx, changeType, target, desc, SnapshotRequest_REBALANCE, reason, details)
@@ -711,7 +713,7 @@ func (r *Replica) changeReplicas(
 	target roachpb.ReplicationTarget,
 	desc *roachpb.RangeDescriptor,
 	priority SnapshotRequest_Priority,
-	reason RangeLogEventReason,
+	reason storagepb.RangeLogEventReason,
 	details string,
 ) error {
 	repDesc := roachpb.ReplicaDescriptor{

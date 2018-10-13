@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/container"
@@ -427,13 +428,13 @@ func TestCorruptedClusterID(t *testing.T) {
 // And that UpdatedAt has increased.
 // The latest actual stats are returned.
 func compareNodeStatus(
-	t *testing.T, ts *TestServer, expectedNodeStatus *status.NodeStatus, testNumber int,
-) *status.NodeStatus {
+	t *testing.T, ts *TestServer, expectedNodeStatus *statuspb.NodeStatus, testNumber int,
+) *statuspb.NodeStatus {
 	// ========================================
 	// Read NodeStatus from server and validate top-level fields.
 	// ========================================
 	nodeStatusKey := keys.NodeStatusKey(ts.node.Descriptor.NodeID)
-	nodeStatus := &status.NodeStatus{}
+	nodeStatus := &statuspb.NodeStatus{}
 	if err := ts.db.GetProto(context.TODO(), nodeStatusKey, nodeStatus); err != nil {
 		t.Fatalf("%d: failure getting node status: %s", testNumber, err)
 	}
@@ -446,8 +447,8 @@ func compareNodeStatus(
 	// ========================================
 	// Ensure all expected stores are represented in the node status.
 	// ========================================
-	storesToMap := func(ns *status.NodeStatus) map[roachpb.StoreID]status.StoreStatus {
-		strMap := make(map[roachpb.StoreID]status.StoreStatus, len(ns.StoreStatuses))
+	storesToMap := func(ns *statuspb.NodeStatus) map[roachpb.StoreID]statuspb.StoreStatus {
+		strMap := make(map[roachpb.StoreID]statuspb.StoreStatus, len(ns.StoreStatuses))
 		for _, str := range ns.StoreStatuses {
 			strMap[str.Desc.StoreID] = str
 		}
@@ -592,7 +593,7 @@ func TestNodeStatusWritten(t *testing.T) {
 	// Construct an initial expectation for NodeStatus to compare to the first
 	// status produced by the server.
 	// ========================================
-	expectedNodeStatus := &status.NodeStatus{
+	expectedNodeStatus := &statuspb.NodeStatus{
 		Desc:      ts.node.Descriptor,
 		StartedAt: 0,
 		UpdatedAt: 0,
@@ -602,7 +603,7 @@ func TestNodeStatusWritten(t *testing.T) {
 		},
 	}
 
-	expectedStoreStatuses := make(map[roachpb.StoreID]status.StoreStatus)
+	expectedStoreStatuses := make(map[roachpb.StoreID]statuspb.StoreStatus)
 	if err := ts.node.stores.VisitStores(func(s *storage.Store) error {
 		desc, err := s.Descriptor(false /* useCached */)
 		if err != nil {
@@ -612,7 +613,7 @@ func TestNodeStatusWritten(t *testing.T) {
 		if s.StoreID() == roachpb.StoreID(1) {
 			expectedReplicas = initialRanges
 		}
-		stat := status.StoreStatus{
+		stat := statuspb.StoreStatus{
 			Desc: *desc,
 			Metrics: map[string]float64{
 				"replicas":              float64(expectedReplicas),

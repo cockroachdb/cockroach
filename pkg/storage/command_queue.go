@@ -23,7 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -912,7 +912,7 @@ func (cq *CommandQueue) metrics() CommandQueueMetrics {
 }
 
 // CommandQueueSnapshot is a map from command ids to commands.
-type CommandQueueSnapshot map[int64]storagebase.CommandQueuesSnapshot_Command
+type CommandQueueSnapshot map[int64]storagepb.CommandQueuesSnapshot_Command
 
 // GetSnapshot returns a snapshot of this command queue's state.
 func (cq *CommandQueue) GetSnapshot() CommandQueueSnapshot {
@@ -945,7 +945,7 @@ func (cqs CommandQueueSnapshot) addCommand(command cmd) {
 		return
 	}
 
-	commandProto := storagebase.CommandQueuesSnapshot_Command{
+	commandProto := storagepb.CommandQueuesSnapshot_Command{
 		Id:        command.id,
 		Readonly:  command.readOnly,
 		Timestamp: command.timestamp,

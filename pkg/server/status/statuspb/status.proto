@@ -13,8 +13,8 @@
 // permissions and limitations under the License.
 
 syntax = "proto3";
-package cockroach.server.status;
-option go_package = "status";
+package cockroach.server.status.statuspb;
+option go_package = "statuspb";
 
 import "roachpb/metadata.proto";
 import "build/info.proto";

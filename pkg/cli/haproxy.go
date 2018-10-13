@@ -33,7 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 )
 
 var haProxyPath string
@@ -71,7 +71,7 @@ type haProxyNodeInfo struct {
 	Locality  roachpb.Locality
 }
 
-func nodeStatusesToNodeInfos(statuses []status.NodeStatus) []haProxyNodeInfo {
+func nodeStatusesToNodeInfos(statuses []statuspb.NodeStatus) []haProxyNodeInfo {
 	fs := pflag.NewFlagSet("haproxy", pflag.ContinueOnError)
 
 	httpAddr := ""

@@ -21,7 +21,9 @@ import (
 	"fmt"
 	"time"
 
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -145,7 +147,7 @@ func (p *pendingLeaseRequest) RequestPending() (roachpb.Lease, bool) {
 func (p *pendingLeaseRequest) InitOrJoinRequest(
 	ctx context.Context,
 	nextLeaseHolder roachpb.ReplicaDescriptor,
-	status LeaseStatus,
+	status storagepb.LeaseStatus,
 	startKey roachpb.Key,
 	transfer bool,
 ) *leaseRequestHandle {
@@ -234,7 +236,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 	parentCtx context.Context,
 	nextLeaseHolder roachpb.ReplicaDescriptor,
 	reqLease roachpb.Lease,
-	status LeaseStatus,
+	status storagepb.LeaseStatus,
 	leaseReq roachpb.Request,
 ) error {
 	const opName = "request range lease"
@@ -281,7 +283,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 			// prior owner. Note we only do this if the previous lease was
 			// epoch-based.
 			var pErr *roachpb.Error
-			if reqLease.Type() == roachpb.LeaseEpoch && status.State == LeaseState_EXPIRED &&
+			if reqLease.Type() == roachpb.LeaseEpoch && status.State == storagepb.LeaseState_EXPIRED &&
 				status.Lease.Type() == roachpb.LeaseEpoch {
 				var err error
 				// If this replica is previous & next lease holder, manually heartbeat to become live.
@@ -457,8 +459,8 @@ func (p *pendingLeaseRequest) newResolvedHandle(pErr *roachpb.Error) *leaseReque
 // * the client fails to read their own write.
 func (r *Replica) leaseStatus(
 	lease roachpb.Lease, timestamp, minProposedTS hlc.Timestamp,
-) LeaseStatus {
-	status := LeaseStatus{Timestamp: timestamp, Lease: lease}
+) storagepb.LeaseStatus {
+	status := storagepb.LeaseStatus{Timestamp: timestamp, Lease: lease}
 	var expiration hlc.Timestamp
 	if lease.Type() == roachpb.LeaseExpiration {
 		expiration = lease.GetExpiration()
@@ -474,11 +476,11 @@ func (r *Replica) leaseStatus(
 					log.Warningf(context.TODO(), "can't determine lease status due to node liveness error: %s", err)
 				}
 			}
-			status.State = LeaseState_ERROR
+			status.State = storagepb.LeaseState_ERROR
 			return status
 		}
 		if status.Liveness.Epoch > lease.Epoch {
-			status.State = LeaseState_EXPIRED
+			status.State = storagepb.LeaseState_EXPIRED
 			return status
 		}
 		expiration = hlc.Timestamp(status.Liveness.Expiration)
@@ -490,17 +492,17 @@ func (r *Replica) leaseStatus(
 	}
 	stasis := expiration.Add(-int64(maxOffset), 0)
 	if timestamp.Less(stasis) {
-		status.State = LeaseState_VALID
+		status.State = storagepb.LeaseState_VALID
 		// If the replica owns the lease, additional verify that the lease's
 		// proposed timestamp is not earlier than the min proposed timestamp.
 		if lease.Replica.StoreID == r.store.StoreID() &&
 			lease.ProposedTS != nil && lease.ProposedTS.Less(minProposedTS) {
-			status.State = LeaseState_PROSCRIBED
+			status.State = storagepb.LeaseState_PROSCRIBED
 		}
 	} else if timestamp.Less(expiration) {
-		status.State = LeaseState_STASIS
+		status.State = storagepb.LeaseState_STASIS
 	} else {
-		status.State = LeaseState_EXPIRED
+		status.State = storagepb.LeaseState_EXPIRED
 	}
 	return status
 }
@@ -529,7 +531,9 @@ func (r *Replica) requiresExpiringLeaseRLocked() bool {
 // for a time interval containing the requested timestamp.
 // If a transfer is in progress, a NotLeaseHolderError directing to the recipient is
 // sent on the returned chan.
-func (r *Replica) requestLeaseLocked(ctx context.Context, status LeaseStatus) *leaseRequestHandle {
+func (r *Replica) requestLeaseLocked(
+	ctx context.Context, status storagepb.LeaseStatus,
+) *leaseRequestHandle {
 	if r.store.TestingKnobs().LeaseRequestEvent != nil {
 		r.store.TestingKnobs().LeaseRequestEvent(status.Timestamp)
 	}

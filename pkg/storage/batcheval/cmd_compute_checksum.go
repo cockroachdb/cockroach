@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -64,7 +64,7 @@ func ComputeChecksum(
 	reply.ChecksumID = uuid.MakeV4()
 
 	var pd result.Result
-	pd.Replicated.ComputeChecksum = &storagebase.ComputeChecksum{
+	pd.Replicated.ComputeChecksum = &storagepb.ComputeChecksum{
 		ChecksumID:   reply.ChecksumID,
 		SaveSnapshot: args.Snapshot,
 	}

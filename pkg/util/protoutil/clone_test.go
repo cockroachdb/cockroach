@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
@@ -51,7 +51,7 @@ func TestCloneProto(t *testing.T) {
 		{&sqlbase.IndexDescriptor{}, false},
 		{&roachpb.SplitTrigger{}, false},
 		{&roachpb.Value{}, false},
-		{&storagebase.ReplicaState{}, false},
+		{&storagepb.ReplicaState{}, false},
 		{&roachpb.RangeDescriptor{}, false},
 		{&sqlbase.PartitioningDescriptor{}, false},
 	}

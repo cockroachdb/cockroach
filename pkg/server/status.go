@@ -35,6 +35,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
@@ -55,7 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -919,7 +921,7 @@ func (s *statusServer) Nodes(
 	rows := b.Results[0].Rows
 
 	resp := serverpb.NodesResponse{
-		Nodes: make([]status.NodeStatus, len(rows)),
+		Nodes: make([]statuspb.NodeStatus, len(rows)),
 	}
 	for i, row := range rows {
 		if err := row.ValueProto(&resp.Nodes[i]); err != nil {
@@ -946,7 +948,7 @@ func (s *statusServer) NodesWithLiveness(
 	for _, node := range nodes.Nodes {
 		nodeID := node.Desc.NodeID
 		livenessStatus := statusMap[nodeID]
-		if livenessStatus == storage.NodeLivenessStatus_DECOMMISSIONED {
+		if livenessStatus == storagepb.NodeLivenessStatus_DECOMMISSIONED {
 			// Skip over removed nodes.
 			continue
 		}
@@ -960,14 +962,14 @@ func (s *statusServer) NodesWithLiveness(
 
 // NodeStatusWithLiveness combines a NodeStatus with a NodeLivenessStatus.
 type NodeStatusWithLiveness struct {
-	status.NodeStatus
-	LivenessStatus storage.NodeLivenessStatus
+	statuspb.NodeStatus
+	LivenessStatus storagepb.NodeLivenessStatus
 }
 
 // handleNodeStatus handles GET requests for a single node's status.
 func (s *statusServer) Node(
 	ctx context.Context, req *serverpb.NodeRequest,
-) (*status.NodeStatus, error) {
+) (*statuspb.NodeStatus, error) {
 	ctx = propagateGatewayMetadata(ctx)
 	ctx = s.AnnotateCtx(ctx)
 	nodeID, _, err := s.parseNodeID(req.NodeId)
@@ -983,7 +985,7 @@ func (s *statusServer) Node(
 		return nil, grpcstatus.Errorf(codes.Internal, err.Error())
 	}
 
-	var nodeStatus status.NodeStatus
+	var nodeStatus statuspb.NodeStatus
 	if err := b.Results[0].Rows[0].ValueProto(&nodeStatus); err != nil {
 		err = errors.Errorf("could not unmarshal NodeStatus from %s: %s", key, err)
 		log.Error(ctx, err)

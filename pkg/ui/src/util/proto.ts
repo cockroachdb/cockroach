@@ -16,7 +16,7 @@ import _ from "lodash";
 
 import * as protos from "src/js/protos";
 
-export type INodeStatus = protos.cockroach.server.status.INodeStatus;
+export type INodeStatus = protos.cockroach.server.status.statuspb.INodeStatus;
 const nodeStatus: INodeStatus = null;
 export type StatusMetrics = typeof nodeStatus.metrics;
 
