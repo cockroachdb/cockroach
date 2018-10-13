@@ -591,3 +591,86 @@ true
 
 statement ok
 DROP TABLE example
+
+subtest contraint_check_validation_ordering
+
+# Verification of column constraints vs CHECK handling. The column
+# constraint verification must take place first.
+#
+# This test requires that the error message for a CHECK constraint
+# validation error be different than a column validation error. So we
+# test the former first, as a sanity check.
+statement ok
+CREATE TABLE tn(x INT NULL CHECK(x IS NOT NULL), y CHAR(4) CHECK(length(y) < 4));
+
+statement error failed to satisfy CHECK constraint
+UPSERT INTO tn(x) VALUES (NULL)
+
+statement error failed to satisfy CHECK constraint
+UPSERT INTO tn(y) VALUES ('abcd')
+
+# Now we test that the column validation occurs before the CHECK constraint.
+statement ok
+CREATE TABLE tn2(x INT NOT NULL CHECK(x IS NOT NULL), y CHAR(3) CHECK(length(y) < 4));
+
+statement error null value in column "x" violates not-null constraint
+UPSERT INTO tn2(x) VALUES (NULL)
+
+statement error value too long for type CHAR\(3\)
+UPSERT INTO tn2(x, y) VALUES (123, 'abcd')
+
+subtest regression_29494
+
+statement ok
+CREATE TABLE t29494(x INT); BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+# Check that the new column is not visible
+query T
+SELECT create_statement FROM [SHOW CREATE t29494]
+----
+CREATE TABLE t29494 (
+   x INT NULL,
+   FAMILY "primary" (x, rowid)
+)
+
+# Check that the new column is not usable in RETURNING
+statement error column "y" does not exist
+UPSERT INTO t29494(x) VALUES (123) RETURNING y
+
+# Ditto for INSERT ON CONFLICT
+statement ok
+ROLLBACK; BEGIN; ALTER TABLE t29494 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+statement error column "y" does not exist
+INSERT INTO t29494(x) VALUES (123) ON CONFLICT(rowid) DO UPDATE SET x = 400 RETURNING y
+
+statement ok
+ROLLBACK
+
+subtest regression_31255
+
+statement ok
+CREATE TABLE tc(x INT PRIMARY KEY, y INT AS (x+1) STORED)
+
+statement error cannot write directly to computed column "y"
+INSERT INTO tc(x) VALUES (1) ON CONFLICT(x) DO UPDATE SET y = 123
+
+statement error cannot write directly to computed column "y"
+UPSERT INTO tc(x,y) VALUES (1,2)
+
+statement error cannot write directly to computed column "y"
+UPSERT INTO tc VALUES (1,2)
+
+subtest regression_29497
+
+statement ok
+CREATE TABLE t29497(x INT PRIMARY KEY); BEGIN; ALTER TABLE t29497 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+statement error UPSERT has more expressions than target columns
+UPSERT INTO t29497 VALUES (1, 2)
+
+statement ok
+ROLLBACK; BEGIN; ALTER TABLE t29497 ADD COLUMN y INT NOT NULL DEFAULT 123
+
+statement error column "y" does not exist
+INSERT INTO t29497(x) VALUES (1) ON CONFLICT (x) DO UPDATE SET y = 456

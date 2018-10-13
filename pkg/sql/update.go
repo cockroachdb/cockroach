@@ -166,9 +166,10 @@ func (p *planner) Update(
 	// Ensure that the columns being updated are not computed.
 	// We do this check as early as possible to avoid doing
 	// unnecessary work below in case there's an error.
-	// TODO(justin): this is incorrect: we should allow this, but then it should
-	// error unless we both have a VALUES clause and every value being "inserted"
-	// into a computed column is DEFAULT. See #22434.
+	//
+	// TODO(justin): this is too restrictive. It should
+	// be possible to allow UPDATE foo SET x = DEFAULT
+	// when x is a computed column. See #22434.
 	if err := checkHasNoComputedCols(updateCols); err != nil {
 		return nil, err
 	}
@@ -266,9 +267,24 @@ func (p *planner) Update(
 	// Capture the columns of the source, prior to the insertion of
 	// extra renders. This will be the input for RETURNING, if any, and
 	// this must not see the additional renders added below.
+	// It also must not see the additional columns captured in FetchCols
+	// but which were not in requestedCols.
 	var columns sqlbase.ResultColumns
 	if rowsNeeded {
 		columns = planColumns(rows)
+		// If rowsNeeded is set, we have requested from the source above
+		// all the columns from the descriptor. However, to ensure that
+		// modified rows include all columns, the construction of the
+		// source has used publicAndNonVivible columns so the source may
+		// contain additional columns for every newly added column not yet
+		// visible.
+		// We do not want these to be available for RETURNING below.
+		//
+		// MakeRowUpdater guarantees that the first columns of the source
+		// are those specified in requestedCols, which, in the case where
+		// rowsNeeded is true, is also desc.Columns. So we can truncate to
+		// the length of that to only see public columns.
+		columns = columns[:len(desc.Columns)]
 	}
 
 	for _, setExpr := range setExprs {
@@ -616,6 +632,24 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		params.EvalContext().PopIVarContainer()
 	}
 
+	// Verify the schema constraints. For consistency with INSERT/UPSERT
+	// and compatibility with PostgreSQL, we must do this before
+	// processing the CHECK constraints.
+	for i, val := range u.run.updateValues {
+		col := &u.run.tu.ru.UpdateCols[i]
+		if val == tree.DNull {
+			// Verify no NULL makes it to a nullable column.
+			if !col.Nullable {
+				return sqlbase.NewNonNullViolationError(col.Name)
+			}
+		} else {
+			// Verify that the data width matches the column constraint.
+			if err := sqlbase.CheckValueWidth(col.Type, val, &col.Name); err != nil {
+				return err
+			}
+		}
+	}
+
 	// Run the CHECK constraints, if any.
 	// TODO(justin): we have actually constructed the whole row at this point and
 	// thus should be able to avoid loading it separately like this now.
@@ -630,22 +664,6 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		}
 		if err := u.run.checkHelper.Check(params.EvalContext()); err != nil {
 			return err
-		}
-	}
-
-	// Verify the schema constraints.
-	for i, val := range u.run.updateValues {
-		col := &u.run.tu.ru.UpdateCols[i]
-		if val == tree.DNull {
-			// Verify no NULL makes it to a nullable column.
-			if !col.Nullable {
-				return sqlbase.NewNonNullViolationError(col.Name)
-			}
-		} else {
-			// Verify that the data width matches the column constraint.
-			if err := sqlbase.CheckValueWidth(col.Type, val, col.Name); err != nil {
-				return err
-			}
 		}
 	}
 
@@ -716,7 +734,7 @@ func (ts tupleSlot) extractValues(row tree.Datums) tree.Datums {
 func (ts tupleSlot) checkColumnTypes(row []tree.TypedExpr, pmap *tree.PlaceholderInfo) error {
 	renderedResult := row[ts.sourceIndex]
 	for i, typ := range renderedResult.ResolvedType().(types.TTuple).Types {
-		if err := sqlbase.CheckColumnType(ts.columns[i], typ, pmap); err != nil {
+		if err := sqlbase.CheckDatumTypeFitsColumnType(ts.columns[i], typ, pmap); err != nil {
 			return err
 		}
 	}
@@ -735,7 +753,7 @@ func (ss scalarSlot) extractValues(row tree.Datums) tree.Datums {
 func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr, pmap *tree.PlaceholderInfo) error {
 	renderedResult := row[ss.sourceIndex]
 	typ := renderedResult.ResolvedType()
-	return sqlbase.CheckColumnType(ss.column, typ, pmap)
+	return sqlbase.CheckDatumTypeFitsColumnType(ss.column, typ, pmap)
 }
 
 // addOrMergeExpr inserts an Expr into a renderNode, attempting to reuse
@@ -809,7 +827,7 @@ func fillDefault(expr tree.Expr, index int, defaultExprs []tree.TypedExpr) tree.
 func checkHasNoComputedCols(cols []sqlbase.ColumnDescriptor) error {
 	for i := range cols {
 		if cols[i].IsComputed() {
-			return sqlbase.CannotWriteToComputedColError(cols[i])
+			return sqlbase.CannotWriteToComputedColError(&cols[i])
 		}
 	}
 	return nil

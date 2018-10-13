@@ -517,8 +517,8 @@ const (
 // that will be passed to UpdateRow.
 //
 // The returned RowUpdater contains a FetchCols field that defines the
-// expectation of which values are passed as oldValues to UpdateRow. Any column
-// passed in requestedCols will be included in FetchCols.
+// expectation of which values are passed as oldValues to UpdateRow. All the columns
+// passed in requestedCols will be included in FetchCols at the beginning.
 func MakeRowUpdater(
 	txn *client.Txn,
 	tableDesc *TableDescriptor,

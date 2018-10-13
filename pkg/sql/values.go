@@ -54,11 +54,9 @@ func (p *planner) Values(
 
 	// If we have names, extract them.
 	var n *tree.ValuesClause
-	var names tree.NameList
 	switch t := origN.(type) {
 	case *tree.ValuesClauseWithNames:
 		n = &t.ValuesClause
-		names = t.Names
 	case *tree.ValuesClause:
 		n = t
 	default:
@@ -108,25 +106,6 @@ func (p *planner) Values(
 			}
 
 			typ := typedExpr.ResolvedType()
-			if names != nil && (!(typ.Equivalent(desired) || typ == types.Unknown)) {
-				var colName tree.Name
-				if len(names) > i {
-					colName = names[i]
-				} else {
-					colName = "unknown"
-				}
-				desiredColTyp, err := sqlbase.DatumTypeToColumnType(desired)
-				if err != nil {
-					return nil, err
-				}
-				err = sqlbase.CheckColumnValueType(typ, desiredColTyp, string(colName))
-				if err != nil {
-					return nil, err
-				}
-				// For some reason we didn't detect a new error. Return a fresh one.
-				return nil, sqlbase.NewMismatchedTypeError(typ, desiredColTyp.SemanticType, string(colName))
-			}
-
 			if num == 0 {
 				v.columns = append(v.columns, sqlbase.ResultColumn{Name: "column" + strconv.Itoa(i+1), Typ: typ})
 			} else if v.columns[i].Typ == types.Unknown {
