@@ -15,6 +15,7 @@
 package parser_test
 
 import (
+	"fmt"
 	"go/constant"
 	"reflect"
 	"regexp"
@@ -2195,48 +2196,6 @@ SELECT 'f'::"blah"
             ^
 `,
 		},
-		{
-			`INSERT INTO foo(a, a.b) VALUES (1,2)`,
-			`unimplemented at or near "b"
-INSERT INTO foo(a, a.b) VALUES (1,2)
-                     ^
-HINT: See: https://github.com/cockroachdb/cockroach/issues/8318`,
-		},
-		{
-			`UPSERT INTO foo(a, a.b) VALUES (1,2)`,
-			`unimplemented at or near "b"
-UPSERT INTO foo(a, a.b) VALUES (1,2)
-                     ^
-HINT: See: https://github.com/cockroachdb/cockroach/issues/8318`,
-		},
-		{
-			`UPDATE foo SET (a, a.b) = (1, 2)`,
-			`unimplemented at or near "b"
-UPDATE foo SET (a, a.b) = (1, 2)
-                     ^
-HINT: See: https://github.com/cockroachdb/cockroach/issues/8318`,
-		},
-		{
-			`UPDATE foo SET a.b = 1`,
-			`unimplemented at or near "b"
-UPDATE foo SET a.b = 1
-                 ^
-HINT: See: https://github.com/cockroachdb/cockroach/issues/8318`,
-		},
-		{
-			`SELECT * FROM ab, LATERAL (SELECT * FROM kv)`,
-			`unimplemented at or near "EOF"
-SELECT * FROM ab, LATERAL (SELECT * FROM kv)
-                                            ^
-HINT: See: https://github.com/cockroachdb/cockroach/issues/24560`,
-		},
-		{
-			`SELECT * FROM ab, LATERAL foo(a)`,
-			`unimplemented at or near "EOF"
-SELECT * FROM ab, LATERAL foo(a)
-                                ^
-HINT: See: https://github.com/cockroachdb/cockroach/issues/24560`,
-		},
 		// Ensure that the support for ON ROLE <namelist> doesn't leak
 		// where it should not be recognized.
 		{
@@ -2266,13 +2225,6 @@ HINT: try \h BACKUP`,
 RESTORE ROLE foo, bar FROM 'baz'
              ^
 HINT: try \h RESTORE`,
-		},
-		{
-			`SELECT max(a ORDER BY b) FROM ab`,
-			`unimplemented at or near ")"
-SELECT max(a ORDER BY b) FROM ab
-                       ^
-HINT: See: https://github.com/cockroachdb/cockroach/issues/23620`,
 		},
 		{
 			`SELECT avg(1) OVER (ROWS UNBOUNDED FOLLOWING) FROM t`,
@@ -2576,6 +2528,192 @@ func TestParsePrecedence(t *testing.T) {
 				t.Fatalf("%s: expected %s, but found %s", d.sql, d.expected, expr)
 			}
 		})
+	}
+}
+
+func TestUnimplementedSyntax(t *testing.T) {
+	testData := []struct {
+		sql      string
+		issue    int
+		expected string
+	}{
+		{`ALTER TABLE a ALTER CONSTRAINT foo`, 0, `alter constraint`},
+		{`ALTER TABLE a ALTER b SET NOT NULL`, 28751, ``},
+		{`ALTER TABLE a RENAME CONSTRAINT b TO c`, 0, `alter table rename constraint`},
+
+		{`COMMENT ON COLUMN a.b IS 'a'`, 19472, `column`},
+		{`COMMENT ON DATABASE a IS 'b'`, 19472, ``},
+		{`COMMENT ON TABLE foo IS 'a'`, 19472, `table`},
+
+		{`CREATE AGGREGATE a`, 0, `create aggregate`},
+		{`CREATE CAST a`, 0, `create cast`},
+		{`CREATE CONSTRAINT TRIGGER a`, 28296, `create constraint`},
+		{`CREATE CONVERSION a`, 0, `create conversion`},
+		{`CREATE DEFAULT CONVERSION a`, 0, `create def conv`},
+		{`CREATE EXTENSION a`, 0, `create extension a`},
+		{`CREATE FOREIGN DATA WRAPPER a`, 0, `create fdw`},
+		{`CREATE FOREIGN TABLE a`, 0, `create foreign table`},
+		{`CREATE FUNCTION a`, 17511, `create`},
+		{`CREATE OR REPLACE FUNCTION a`, 17511, `create`},
+		{`CREATE LANGUAGE a`, 17511, `create language a`},
+		{`CREATE MATERIALIZED VIEW a`, 24747, ``},
+		{`CREATE OPERATOR a`, 0, `create operator`},
+		{`CREATE PUBLICATION a`, 0, `create publication`},
+		{`CREATE RULE a`, 0, `create rule`},
+		{`CREATE SERVER a`, 0, `create server`},
+		{`CREATE SUBSCRIPTION a`, 0, `create subscription`},
+		{`CREATE TEXT SEARCH a`, 7821, `create text`},
+		{`CREATE TRIGGER a`, 28296, `create`},
+
+		{`DROP AGGREGATE a`, 0, `drop aggregate`},
+		{`DROP CAST a`, 0, `drop cast`},
+		{`DROP COLLATION a`, 0, `drop collation`},
+		{`DROP CONVERSION a`, 0, `drop conversion`},
+		{`DROP DOMAIN a`, 27796, `drop`},
+		{`DROP EXTENSION a`, 0, `drop extension a`},
+		{`DROP FOREIGN TABLE a`, 0, `drop foreign table`},
+		{`DROP FOREIGN DATA WRAPPER a`, 0, `drop fdw`},
+		{`DROP FUNCTION a`, 17511, `drop `},
+		{`DROP LANGUAGE a`, 17511, `drop language a`},
+		{`DROP OPERATOR a`, 0, `drop operator`},
+		{`DROP PUBLICATION a`, 0, `drop publication`},
+		{`DROP RULE a`, 0, `drop rule`},
+		{`DROP SERVER a`, 0, `drop server`},
+		{`DROP SUBSCRIPTION a`, 0, `drop subscription`},
+		{`DROP TEXT SEARCH a`, 7821, `drop text`},
+		{`DROP TRIGGER a`, 28296, `drop`},
+		{`DROP TYPE a`, 27793, `drop type`},
+
+		{`DISCARD PLANS`, 0, `discard plans`},
+		{`DISCARD SEQUENCES`, 0, `discard sequences`},
+		{`DISCARD TEMP`, 0, `discard temp`},
+		{`DISCARD TEMPORARY`, 0, `discard temp`},
+
+		{`SET CONSTRAINTS foo`, 0, `set constraints`},
+		{`SET LOCAL foo = bar`, 0, `set local`},
+		{`SET foo FROM CURRENT`, 0, `set from current`},
+
+		{`CREATE TEMP TABLE a(b INT)`, 5807, ``},
+		{`CREATE UNLOGGED TABLE a(b INT)`, 0, `create unlogged`},
+		{`CREATE TEMP VIEW a AS SELECT b`, 5807, ``},
+		{`CREATE TEMP SEQUENCE a`, 5807, ``},
+
+		{`CREATE TABLE a(b INT AS (123) VIRTUAL)`, 0, `virtual computed columns`},
+		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH FULL`, 0, `references match full`},
+		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH PARTIAL`, 0, `references match partial`},
+		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH SIMPLE`, 0, `references match simple`},
+
+		{`CREATE SEQUENCE a AS DOUBLE PRECISION`, 25110, `FLOAT8`},
+		{`CREATE SEQUENCE a OWNED BY b`, 26382, ``},
+
+		{`CREATE OR REPLACE VIEW a AS SELECT b`, 24897, ``},
+		{`CREATE RECURSIVE VIEW a AS SELECT b`, 0, `create recursive view`},
+
+		{`CREATE TYPE a AS (b)`, 27792, ``},
+		{`CREATE TYPE a AS ENUM (b)`, 24873, ``},
+		{`CREATE TYPE a AS RANGE b`, 27791, ``},
+		{`CREATE TYPE a (b)`, 27793, `base`},
+		{`CREATE TYPE a`, 27793, `shell`},
+		{`CREATE DOMAIN a`, 27796, `create`},
+
+		{`CREATE INDEX a ON b(c) WHERE d > 0`, 9683, ``},
+		{`CREATE INDEX a ON b USING HASH (c)`, 0, `index using hash`},
+		{`CREATE INDEX a ON b USING GIST (c)`, 0, `index using gist`},
+		{`CREATE INDEX a ON b USING SPGIST (c)`, 0, `index using spgist`},
+		{`CREATE INDEX a ON b USING BRIN (c)`, 0, `index using brin`},
+
+		{`CREATE INDEX a ON b(c + d)`, 9682, ``},
+		{`CREATE INDEX a ON b(c[d])`, 9682, ``},
+		{`CREATE INDEX a ON b(foo(c))`, 9682, ``},
+
+		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 8318, ``},
+		{`INSERT INTO foo VALUES (1,2) ON CONFLICT ON CONSTRAINT a DO NOTHING`, 0, `on conflict on constraint`},
+
+		{`SELECT * FROM ab, LATERAL (SELECT * FROM kv)`, 24560, `select`},
+		{`SELECT * FROM ab, LATERAL foo(a)`, 24560, `srf`},
+		{`SELECT max(a ORDER BY b) FROM ab`, 23620, ``},
+
+		{`SELECT * FROM a FOR UPDATE`, 6583, ``},
+		{`SELECT * FROM ROWS FROM (a(b) AS (d))`, 0, `ROWS FROM with col_def_list`},
+
+		{`SELECT 'a'::INTERVAL SECOND`, 0, `interval with unit qualifier`},
+		{`SELECT 'a'::INTERVAL(123)`, 0, `interval with precision`},
+		{`SELECT 'a'::INTERVAL SECOND(123)`, 0, `interval second with precision`},
+		{`SELECT 123 AT TIME ZONE 'b'`, 0, `at tz`},
+		{`SELECT (a,b) OVERLAPS (c,d)`, 0, `overlaps`},
+		{`SELECT UNIQUE (SELECT b)`, 0, `UNIQUE predicate`},
+		{`SELECT a(b) 'c'`, 0, `func const`},
+		{`SELECT INTERVAL(3) 'a'`, 0, `expr_const const_interval`},
+		{`SELECT GROUPING (a,b,c)`, 0, `d_expr grouping`},
+		{`SELECT a(VARIADIC b)`, 0, `variadic`},
+		{`SELECT a(b, c, VARIADIC b)`, 0, `variadic`},
+		{`SELECT COLLATION FOR (a)`, 0, `func_expr_common_subexpr collation for`},
+		{`SELECT CURRENT_TIME`, 26097, `current_time`},
+		{`SELECT CURRENT_TIME()`, 26097, `current_time`},
+		{`SELECT TREAT (a AS INT)`, 0, `treat`},
+		{`SELECT a(b) WITHIN GROUP (ORDER BY c)`, 0, `within group`},
+
+		{`CREATE TABLE a(b BOX)`, 21286, `box`},
+		{`CREATE TABLE a(b CIDR)`, 18846, `cidr`},
+		{`CREATE TABLE a(b CIRCLE)`, 21286, `circle`},
+		{`CREATE TABLE a(b LINE)`, 21286, `line`},
+		{`CREATE TABLE a(b LSEG)`, 21286, `lseg`},
+		{`CREATE TABLE a(b MACADDR)`, 0, `macaddr`},
+		{`CREATE TABLE a(b MACADDR8)`, 0, `macaddr8`},
+		{`CREATE TABLE a(b MONEY)`, 0, `money`},
+		{`CREATE TABLE a(b PATH)`, 21286, `path`},
+		{`CREATE TABLE a(b PG_LSN)`, 0, `pg_lsn`},
+		{`CREATE TABLE a(b POINT)`, 21286, `point`},
+		{`CREATE TABLE a(b POLYGON)`, 21286, `polygon`},
+		{`CREATE TABLE a(b TSQUERY)`, 7821, `tsquery`},
+		{`CREATE TABLE a(b TSVECTOR)`, 7821, `tsvector`},
+		{`CREATE TABLE a(b TXID_SNAPSHOT)`, 0, `txid_snapshot`},
+		{`CREATE TABLE a(b XML)`, 0, `xml`},
+		{`CREATE TABLE a(b TIMETZ)`, 26097, `type`},
+
+		{`WITH RECURSIVE a AS (TABLE b) SELECT c`, 21085, ``},
+
+		{`UPDATE foo SET (a, a.b) = (1, 2)`, 8318, ``},
+		{`UPDATE foo SET a.b = 1`, 8318, ``},
+		{`UPDATE foo SET x = y FROM a, b`, 7841, ``},
+		{`UPDATE Foo SET x.y = z`, 8318, ``},
+
+		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 8318, ``},
+	}
+	for _, d := range testData {
+		_, err := parser.Parse(d.sql)
+		if err == nil {
+			t.Errorf("%s: expected error, got nil", d.sql)
+			continue
+		}
+		pgerr, ok := pgerror.GetPGCause(err)
+		if !ok {
+			t.Errorf("%s: unknown err type: %T", d.sql, err)
+			continue
+		}
+		if !strings.HasPrefix(pgerr.Message, "unimplemented") {
+			t.Errorf("%s: expected unimplemented at start of message, got %q", d.sql, pgerr.Message)
+		}
+		if pgerr.InternalCommand == "" {
+			t.Errorf("%s: expected internal command set", d.sql)
+		} else {
+			if !strings.HasPrefix(pgerr.InternalCommand, "syntax.") {
+				t.Errorf("%s: expected 'syntax.' at start of internal command, got %q", d.sql, pgerr.InternalCommand)
+			}
+			if !strings.Contains(pgerr.InternalCommand, d.expected) {
+				t.Errorf("%s: expected %q in internal command, got %q", d.sql, d.expected, pgerr.InternalCommand)
+			}
+		}
+		if d.issue != 0 {
+			exp := fmt.Sprintf("syntax.#%d", d.issue)
+			if !strings.HasPrefix(pgerr.InternalCommand, exp) {
+				t.Errorf("%s: expected %q at start of internal command, got %q", d.sql, exp, pgerr.InternalCommand)
+			}
+			exp2 := fmt.Sprintf("issues/%d", d.issue)
+			if !strings.HasSuffix(pgerr.Hint, exp2) {
+				t.Errorf("%s: expected %q at end of hint, got %q", d.sql, exp2, pgerr.Hint)
+			}
+		}
 	}
 }
 

@@ -171,10 +171,37 @@ func init() {
 }
 
 // TypeForNonKeywordTypeName returns the column type for the string name of a
-// type, if one exists.
-func TypeForNonKeywordTypeName(name string) (T, error) {
-	if typ, ok := typNameLiterals[name]; ok {
-		return typ, nil
+// type, if one exists. The third return value indicates:
+// 0 if no error or the type is not known in postgres.
+// -1 if the type is known in postgres.
+// >0 for a github issue number.
+func TypeForNonKeywordTypeName(name string) (T, bool, int) {
+	t, ok := typNameLiterals[name]
+	if ok {
+		return t, ok, 0
 	}
-	return nil, pgerror.NewError(pgerror.CodeUndefinedObjectError, "type does not exist")
+	return nil, false, postgresPredefinedTypeIssues[name]
+}
+
+// The following map must include all types predefined in PostgreSQL
+// that are also not yet defined in CockroachDB and link them to
+// github issues. It is also possible, but not necessary, to include
+// PostgreSQL types that are already implemented in CockroachDB.
+var postgresPredefinedTypeIssues = map[string]int{
+	"box":           21286,
+	"cidr":          18846,
+	"circle":        21286,
+	"line":          21286,
+	"lseg":          21286,
+	"macaddr":       -1,
+	"macaddr8":      -1,
+	"money":         -1,
+	"path":          21286,
+	"pg_lsn":        -1,
+	"point":         21286,
+	"polygon":       21286,
+	"tsquery":       7821,
+	"tsvector":      7821,
+	"txid_snapshot": -1,
+	"xml":           -1,
 }
