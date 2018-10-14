@@ -417,13 +417,6 @@ func BenchmarkTableReader(b *testing.B) {
 	evalCtx := tree.MakeTestingEvalContext(s.ClusterSettings())
 	defer evalCtx.Stop(ctx)
 
-	flowCtx := FlowCtx{
-		EvalCtx:  &evalCtx,
-		Settings: s.ClusterSettings(),
-		txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
-		nodeID:   s.NodeID(),
-	}
-
 	const numCols = 2
 	for _, numRows := range []int{1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		tableName := fmt.Sprintf("t%d", numRows)
@@ -434,6 +427,13 @@ func BenchmarkTableReader(b *testing.B) {
 			sqlutils.ToRowFn(sqlutils.RowIdxFn, sqlutils.RowModuloFn(42)),
 		)
 		tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", tableName)
+		flowCtx := FlowCtx{
+			EvalCtx:  &evalCtx,
+			Settings: s.ClusterSettings(),
+			txn:      client.NewTxn(ctx, s.DB(), s.NodeID(), client.RootTxn),
+			nodeID:   s.NodeID(),
+		}
+
 		b.Run(fmt.Sprintf("rows=%d", numRows), func(b *testing.B) {
 			spec := TableReaderSpec{
 				Table: *tableDesc,
@@ -449,6 +449,7 @@ func BenchmarkTableReader(b *testing.B) {
 					b.Fatal(err)
 				}
 				tr.Start(ctx)
+				count := 0
 				for {
 					row, meta := tr.Next()
 					if meta != nil && meta.TxnCoordMeta == nil {
@@ -457,6 +458,10 @@ func BenchmarkTableReader(b *testing.B) {
 					if row == nil {
 						break
 					}
+					count++
+				}
+				if count != numRows {
+					b.Fatalf("found %d rows, expected %d", count, numRows)
 				}
 			}
 		})
