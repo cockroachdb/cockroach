@@ -24,6 +24,8 @@ import (
 )
 
 func main() {
+	parallelism := 10
+
 	cobra.EnableCommandSorting = false
 
 	var rootCmd = &cobra.Command{
