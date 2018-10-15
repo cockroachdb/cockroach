@@ -115,6 +115,9 @@ func (p *planner) groupBy(
 	if n.Having == nil && len(n.GroupBy) == 0 && !r.renderProps.SeenAggregate {
 		return nil, nil, nil
 	}
+	if n.Having != nil && len(n.From.Tables) == 0 {
+		return nil, nil, pgerror.UnimplementedWithIssueError(26349, "HAVING clause without FROM")
+	}
 
 	groupByExprs := make([]tree.Expr, len(n.GroupBy))
 
