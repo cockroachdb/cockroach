@@ -167,14 +167,15 @@ func newRaftConfig(
 	strg raft.Storage, id uint64, appliedIndex uint64, storeCfg StoreConfig, logger raft.Logger,
 ) *raft.Config {
 	return &raft.Config{
-		ID:              id,
-		Applied:         appliedIndex,
-		ElectionTick:    storeCfg.RaftElectionTimeoutTicks,
-		HeartbeatTick:   storeCfg.RaftHeartbeatIntervalTicks,
-		MaxSizePerMsg:   storeCfg.RaftMaxSizePerMsg,
-		MaxInflightMsgs: storeCfg.RaftMaxInflightMsgs,
-		Storage:         strg,
-		Logger:          logger,
+		ID:                        id,
+		Applied:                   appliedIndex,
+		ElectionTick:              storeCfg.RaftElectionTimeoutTicks,
+		HeartbeatTick:             storeCfg.RaftHeartbeatIntervalTicks,
+		MaxUncommittedEntriesSize: storeCfg.RaftMaxUncommittedEntriesSize,
+		MaxSizePerMsg:             storeCfg.RaftMaxSizePerMsg,
+		MaxInflightMsgs:           storeCfg.RaftMaxInflightMsgs,
+		Storage:                   strg,
+		Logger:                    logger,
 
 		PreVote: true,
 	}
