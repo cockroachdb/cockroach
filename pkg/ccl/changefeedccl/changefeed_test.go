@@ -1250,125 +1250,137 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 func TestChangefeedErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
 
-		if _, err := sqlDB.DB.Exec(
-			`CREATE CHANGEFEED FOR foo WITH format=nope`,
-		); !testutils.IsError(err, `unknown format: nope`) {
-			t.Errorf(`expected 'unknown format: nope' error got: %+v`, err)
-		}
-
-		if _, err := sqlDB.DB.Exec(
-			`CREATE CHANGEFEED FOR foo WITH envelope=diff`,
-		); !testutils.IsError(err, `envelope=diff is not yet supported`) {
-			t.Errorf(`expected 'envelope=diff is not yet supported' error got: %+v`, err)
-		}
-		if _, err := sqlDB.DB.Exec(
-			`CREATE CHANGEFEED FOR foo WITH envelope=nope`,
-		); !testutils.IsError(err, `unknown envelope: nope`) {
-			t.Errorf(`expected 'unknown envelope: nope' error got: %+v`, err)
-		}
-		if _, err := sqlDB.DB.Exec(
-			`CREATE CHANGEFEED FOR foo WITH resolved='-1s'`,
-		); !testutils.IsError(err, `negative durations are not accepted: resolved='-1s'`) {
-			t.Errorf(`expected 'negative durations are not accepted' error got: %+v`, err)
-		}
-		if _, err := sqlDB.DB.Exec(
-			`CREATE CHANGEFEED FOR foo WITH cursor=$1`, timeutil.Now().Add(time.Hour),
-		); !testutils.IsError(err, `cannot specify timestamp in the future`) {
-			t.Errorf(`expected 'cannot specify timestamp in the future' error got: %+v`, err)
-		}
-
-		if _, err := sqlDB.DB.Exec(
-			`CREATE CHANGEFEED FOR foo INTO ''`,
-		); !testutils.IsError(err, `omit the SINK clause`) {
-			t.Errorf(`expected 'omit the SINK clause' error got: %+v`, err)
-		}
-		if _, err := sqlDB.DB.Exec(
-			`CREATE CHANGEFEED FOR foo INTO $1`, ``,
-		); !testutils.IsError(err, `omit the SINK clause`) {
-			t.Errorf(`expected 'omit the SINK clause' error got: %+v`, err)
-		}
-
-		enableEnterprise := utilccl.TestingDisableEnterprise()
-		if _, err := sqlDB.DB.Exec(
-			`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope`,
-		); !testutils.IsError(err, `CHANGEFEED requires an enterprise license`) {
-			t.Errorf(`expected 'CHANGEFEED requires an enterprise license' error got: %+v`, err)
-		}
-		enableEnterprise()
-
-		// Watching system.jobs would create a cycle, since the resolved timestamp
-		// high-water mark is saved in it.
-		if _, err := sqlDB.DB.Exec(
-			`CREATE CHANGEFEED FOR system.jobs`,
-		); !testutils.IsError(err, `not supported on system tables`) {
-			t.Errorf(`expected 'not supported on system tables' error got: %+v`, err)
-		}
-		if _, err := sqlDB.DB.Exec(
-			`CREATE CHANGEFEED FOR bar`,
-		); !testutils.IsError(err, `table "bar" does not exist`) {
-			t.Errorf(`expected 'table "bar" does not exist' error got: %+v`, err)
-		}
-		sqlDB.Exec(t, `CREATE SEQUENCE seq`)
-		if _, err := sqlDB.DB.Exec(
-			`CREATE CHANGEFEED FOR seq`,
-		); !testutils.IsError(err, `CHANGEFEED cannot target sequences: seq`) {
-			t.Errorf(`expected 'CHANGEFEED cannot target sequences: seq' error got: %+v`, err)
-		}
-		sqlDB.Exec(t, `CREATE VIEW vw AS SELECT a, b FROM foo`)
-		if _, err := sqlDB.DB.Exec(
-			`CREATE CHANGEFEED FOR vw`,
-		); !testutils.IsError(err, `CHANGEFEED cannot target views: vw`) {
-			t.Errorf(`expected 'CHANGEFEED cannot target views: vw' error got: %+v`, err)
-		}
-		// Backup has the same bad error message #28170.
-		if _, err := sqlDB.DB.Exec(
-			`CREATE CHANGEFEED FOR information_schema.tables`,
-		); !testutils.IsError(err, `"information_schema.tables" does not exist`) {
-			t.Errorf(`expected '"information_schema.tables" does not exist' error got: %+v`, err)
-		}
-
-		// TODO(dan): These two tests shouldn't need initial data in the table
-		// to pass.
-		sqlDB.Exec(t, `CREATE TABLE dec (a DECIMAL PRIMARY KEY)`)
-		sqlDB.Exec(t, `INSERT INTO dec VALUES (1.0)`)
-		if _, err := sqlDB.DB.Exec(
-			`CREATE CHANGEFEED FOR dec WITH format=$1, confluent_schema_registry=$2`,
-			optFormatAvro, `bar`,
-		); !testutils.IsError(err, `pq: column a: decimal with no precision`) {
-			t.Errorf(`expected 'pq: column a: decimal with no precision' error got: %+v`, err)
-		}
-		sqlDB.Exec(t, `CREATE TABLE "uuid" (a UUID PRIMARY KEY)`)
-		sqlDB.Exec(t, `INSERT INTO "uuid" VALUES (gen_random_uuid())`)
-		if _, err := sqlDB.DB.Exec(
-			`CREATE CHANGEFEED FOR "uuid" WITH format=$1, confluent_schema_registry=$2`,
-			optFormatAvro, `bar`,
-		); !testutils.IsError(err, `pq: column a: type UUID not yet supported with avro`) {
-			t.Errorf(`expected 'pq: column a: type UUID' error got: %+v`, err)
-		}
-
-		// Check that confluent_schema_registry is only accepted if format is
-		// avro.
-		s := f.Server()
-		sink, cleanup := sqlutils.PGUrl(t, s.ServingAddr(), t.Name(), url.User(security.RootUser))
-		defer cleanup()
-		sink.Scheme = sinkSchemeExperimentalSQL
-		sink.Path = `d`
-		q := sink.Query()
-		q.Set(optConfluentSchemaRegistry, `foo`)
-		sink.RawQuery = q.Encode()
-		if _, err := sqlDB.DB.Exec(
-			`CREATE CHANGEFEED FOR foo INTO $1`, sink.String(),
-		); !testutils.IsError(err, `unknown sink query parameter: confluent_schema_registry`) {
-			t.Errorf(`expected "unknown sink query parameter: confluent_schema_registry" error got: %v`, err)
-		}
+	if _, err := db.Exec(
+		`CREATE CHANGEFEED FOR foo WITH format=nope`,
+	); !testutils.IsError(err, `unknown format: nope`) {
+		t.Errorf(`expected 'unknown format: nope' error got: %+v`, err)
 	}
 
-	t.Run(`sinkless`, sinklessTest(testFn))
-	t.Run(`enterprise`, enterpriseTest(testFn))
+	if _, err := db.Exec(
+		`CREATE CHANGEFEED FOR foo WITH envelope=diff`,
+	); !testutils.IsError(err, `envelope=diff is not yet supported`) {
+		t.Errorf(`expected 'envelope=diff is not yet supported' error got: %+v`, err)
+	}
+	if _, err := db.Exec(
+		`CREATE CHANGEFEED FOR foo WITH envelope=nope`,
+	); !testutils.IsError(err, `unknown envelope: nope`) {
+		t.Errorf(`expected 'unknown envelope: nope' error got: %+v`, err)
+	}
+	if _, err := db.Exec(
+		`CREATE CHANGEFEED FOR foo WITH resolved='-1s'`,
+	); !testutils.IsError(err, `negative durations are not accepted: resolved='-1s'`) {
+		t.Errorf(`expected 'negative durations are not accepted' error got: %+v`, err)
+	}
+	if _, err := db.Exec(
+		`CREATE CHANGEFEED FOR foo WITH cursor=$1`, timeutil.Now().Add(time.Hour),
+	); !testutils.IsError(err, `cannot specify timestamp in the future`) {
+		t.Errorf(`expected 'cannot specify timestamp in the future' error got: %+v`, err)
+	}
+
+	if _, err := db.Exec(
+		`CREATE CHANGEFEED FOR foo INTO ''`,
+	); !testutils.IsError(err, `omit the SINK clause`) {
+		t.Errorf(`expected 'omit the SINK clause' error got: %+v`, err)
+	}
+	if _, err := db.Exec(
+		`CREATE CHANGEFEED FOR foo INTO $1`, ``,
+	); !testutils.IsError(err, `omit the SINK clause`) {
+		t.Errorf(`expected 'omit the SINK clause' error got: %+v`, err)
+	}
+
+	enableEnterprise := utilccl.TestingDisableEnterprise()
+	if _, err := db.Exec(
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope`,
+	); !testutils.IsError(err, `CHANGEFEED requires an enterprise license`) {
+		t.Errorf(`expected 'CHANGEFEED requires an enterprise license' error got: %+v`, err)
+	}
+	enableEnterprise()
+
+	// Watching system.jobs would create a cycle, since the resolved timestamp
+	// high-water mark is saved in it.
+	if _, err := db.Exec(
+		`CREATE CHANGEFEED FOR system.jobs`,
+	); !testutils.IsError(err, `not supported on system tables`) {
+		t.Errorf(`expected 'not supported on system tables' error got: %+v`, err)
+	}
+	if _, err := db.Exec(
+		`CREATE CHANGEFEED FOR bar`,
+	); !testutils.IsError(err, `table "bar" does not exist`) {
+		t.Errorf(`expected 'table "bar" does not exist' error got: %+v`, err)
+	}
+	sqlDB.Exec(t, `CREATE SEQUENCE seq`)
+	if _, err := db.Exec(
+		`CREATE CHANGEFEED FOR seq`,
+	); !testutils.IsError(err, `CHANGEFEED cannot target sequences: seq`) {
+		t.Errorf(`expected 'CHANGEFEED cannot target sequences: seq' error got: %+v`, err)
+	}
+	sqlDB.Exec(t, `CREATE VIEW vw AS SELECT a, b FROM foo`)
+	if _, err := db.Exec(
+		`CREATE CHANGEFEED FOR vw`,
+	); !testutils.IsError(err, `CHANGEFEED cannot target views: vw`) {
+		t.Errorf(`expected 'CHANGEFEED cannot target views: vw' error got: %+v`, err)
+	}
+	// Backup has the same bad error message #28170.
+	if _, err := db.Exec(
+		`CREATE CHANGEFEED FOR information_schema.tables`,
+	); !testutils.IsError(err, `"information_schema.tables" does not exist`) {
+		t.Errorf(`expected '"information_schema.tables" does not exist' error got: %+v`, err)
+	}
+
+	// TODO(dan): These two tests shouldn't need initial data in the table
+	// to pass.
+	sqlDB.Exec(t, `CREATE TABLE dec (a DECIMAL PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO dec VALUES (1.0)`)
+	if _, err := db.Exec(
+		`CREATE CHANGEFEED FOR dec WITH format=$1, confluent_schema_registry=$2`,
+		optFormatAvro, `bar`,
+	); !testutils.IsError(err, `pq: column a: decimal with no precision`) {
+		t.Errorf(`expected 'pq: column a: decimal with no precision' error got: %+v`, err)
+	}
+	sqlDB.Exec(t, `CREATE TABLE "uuid" (a UUID PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO "uuid" VALUES (gen_random_uuid())`)
+	if _, err := db.Exec(
+		`CREATE CHANGEFEED FOR "uuid" WITH format=$1, confluent_schema_registry=$2`,
+		optFormatAvro, `bar`,
+	); !testutils.IsError(err, `pq: column a: type UUID not yet supported with avro`) {
+		t.Errorf(`expected 'pq: column a: type UUID' error got: %+v`, err)
+	}
+
+	// Check that confluent_schema_registry is only accepted if format is avro.
+	if _, err := sqlDB.DB.Exec(
+		`CREATE CHANGEFEED FOR foo INTO $1`, `experimental-sql://d/?confluent_schema_registry=foo`,
+	); !testutils.IsError(err, `unknown sink query parameter: confluent_schema_registry`) {
+		t.Errorf(`expected 'unknown sink query parameter: confluent_schema_registry' error got: %+v`, err)
+	}
+
+	// Check unavailable kafka.
+	if _, err := db.Exec(
+		`CREATE CHANGEFEED FOR foo INTO 'kafka://nope'`,
+	); !testutils.IsError(err, `client has run out of available brokers`) {
+		t.Errorf(`expected 'client has run out of available brokers' error got: %+v`, err)
+	}
+
+	// kafka_topic_prefix was referenced by an old version of the RFC, it's
+	// "topic_prefix" now.
+	if _, err := db.Exec(
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?kafka_topic_prefix=foo`,
+	); !testutils.IsError(err, `unknown sink query parameter: kafka_topic_prefix`) {
+		t.Errorf(`expected 'unknown sink query parameter: kafka_topic_prefix' error got: %+v`, err)
+	}
+
+	// schema_topic will be implemented but isn't yet.
+	if _, err := db.Exec(
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?schema_topic=foo`,
+	); !testutils.IsError(err, `schema_topic is not yet supported`) {
+		t.Errorf(`expected 'schema_topic is not yet supported' error got: %+v`, err)
+	}
 }
 
 func TestChangefeedPermissions(t *testing.T) {
