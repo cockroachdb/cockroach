@@ -186,7 +186,6 @@ index-constraints vars=(int, int) index=(@1, @2)
 @1 = 1 AND @2 IS OF (INT)
 ----
 [/1 - /1]
-Remaining filter: @2 IS OF (INT)
 
 # This testcase exposed an issue around extending spans. We don't normalize the
 # expression so we have a hierarchy of ANDs (which requires a more complex path
