@@ -73,6 +73,7 @@ const (
 	VersionLoadBasedRebalancing
 	Version2_1
 	VersionCascadingZoneConfigs
+	VersionLoadSplits
 
 	// Add new versions here (step one of two).
 
@@ -294,6 +295,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionCascadingZoneConfigs is https://github.com/cockroachdb/cockroach/pull/30611.
 		Key:     VersionCascadingZoneConfigs,
 		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 1},
+	},
+	{
+		// VersionLoadSplits is https://github.com/cockroachdb/cockroach/pull/31413.
+		Key:     VersionLoadSplits,
+		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 2},
 	},
 
 	// Add new versions here (step two of two).

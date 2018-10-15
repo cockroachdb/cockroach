@@ -1502,6 +1502,11 @@ func (s Span) ContainsKey(key Key) bool {
 	return bytes.Compare(key, s.Key) >= 0 && bytes.Compare(key, s.EndKey) < 0
 }
 
+// ProperlyContainsKey returns whether the span properly contains the given key.
+func (s Span) ProperlyContainsKey(key Key) bool {
+	return bytes.Compare(key, s.Key) > 0 && bytes.Compare(key, s.EndKey) < 0
+}
+
 // AsRange returns the Span as an interval.Range.
 func (s Span) AsRange() interval.Range {
 	startKey := s.Key
