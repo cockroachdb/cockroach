@@ -17,6 +17,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/coreos/etcd/raft"
@@ -76,8 +77,7 @@ func (r *replicaRaftStorage) InitialState() (raftpb.HardState, raftpb.ConfState,
 
 // Entries implements the raft.Storage interface. Note that maxBytes is advisory
 // and this method will always return at least one entry even if it exceeds
-// maxBytes. Passing maxBytes equal to zero disables size checking. Sideloaded
-// proposals count towards maxBytes with their payloads inlined.
+// maxBytes. Sideloaded proposals count towards maxBytes with their payloads inlined.
 func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, error) {
 	readonly := r.store.Engine().NewReadOnly()
 	defer readonly.Close()
@@ -114,10 +114,11 @@ func entries(
 	}
 	ents := make([]raftpb.Entry, 0, n)
 
-	ents, size, hitIndex := eCache.getEntries(ents, rangeID, lo, hi, maxBytes)
+	ents, size, hitIndex, exceededMaxBytes := eCache.getEntries(ents, rangeID, lo, hi, maxBytes)
+
 	// Return results if the correct number of results came back or if
 	// we ran into the max bytes limit.
-	if uint64(len(ents)) == hi-lo || (maxBytes > 0 && size > maxBytes) {
+	if uint64(len(ents)) == hi-lo || exceededMaxBytes {
 		return ents, nil
 	}
 
@@ -130,7 +131,6 @@ func entries(
 	canCache := true
 
 	var ent raftpb.Entry
-	exceededMaxBytes := false
 	scanFunc := func(kv roachpb.KeyValue) (bool, error) {
 		if err := kv.Value.GetProto(&ent); err != nil {
 			return false, err
@@ -158,9 +158,13 @@ func entries(
 
 		// Note that we track the size of proposals with payloads inlined.
 		size += uint64(ent.Size())
-
+		if size > maxBytes {
+			exceededMaxBytes = true
+			if len(ents) > 0 {
+				return exceededMaxBytes, nil
+			}
+		}
 		ents = append(ents, ent)
-		exceededMaxBytes = maxBytes > 0 && size > maxBytes
 		return exceededMaxBytes, nil
 	}
 
@@ -274,7 +278,7 @@ func term(
 ) (uint64, error) {
 	// entries() accepts a `nil` sideloaded storage and will skip inlining of
 	// sideloaded entries. We only need the term, so this is what we do.
-	ents, err := entries(ctx, rsl, eng, rangeID, eCache, nil /* sideloaded */, i, i+1, 0)
+	ents, err := entries(ctx, rsl, eng, rangeID, eCache, nil /* sideloaded */, i, i+1, math.MaxUint64 /* maxBytes */)
 	if err == raft.ErrCompacted {
 		ts, err := rsl.LoadTruncatedState(ctx, eng)
 		if err != nil {
