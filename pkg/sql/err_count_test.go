@@ -18,7 +18,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -32,21 +32,14 @@ func TestErrorCounts(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
-	sqlServer := s.(*server.TestServer).PGServer().SQLServer
-
-	codes := make(map[string]int64)
-	unimplemented := make(map[string]int64)
-
-	sqlServer.FillErrorCounts(codes, unimplemented)
-	count1 := codes[pgerror.CodeSyntaxError]
+	count1 := telemetry.GetFeatureCounts()["errorcodes."+pgerror.CodeSyntaxError]
 
 	_, err := db.Query("SELECT 1+")
 	if err == nil {
 		t.Fatal("expected error, got no error")
 	}
 
-	sqlServer.FillErrorCounts(codes, unimplemented)
-	count2 := codes[pgerror.CodeSyntaxError]
+	count2 := telemetry.GetFeatureCounts()["errorcodes."+pgerror.CodeSyntaxError]
 
 	if count2-count1 != 1 {
 		t.Fatalf("expected 1 syntax error, got %d", count2-count1)
@@ -62,8 +55,7 @@ func TestErrorCounts(t *testing.T) {
 	}
 	rows.Close()
 
-	sqlServer.FillErrorCounts(codes, unimplemented)
-	count3 := codes[pgerror.CodeSyntaxError]
+	count3 := telemetry.GetFeatureCounts()["errorcodes."+pgerror.CodeSyntaxError]
 
 	if count3-count2 != 1 {
 		t.Fatalf("expected 1 syntax error, got %d", count3-count2)
