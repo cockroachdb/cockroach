@@ -288,7 +288,6 @@ func (s *Server) maybeReportDiagnostics(
 		s.reportDiagnostics(ctx, running)
 	}
 	s.pgServer.SQLServer.ResetStatementStats(ctx)
-	s.pgServer.SQLServer.ResetErrorCounts()
 
 	return scheduled.Add(diagnosticReportFrequency.Get(&s.st.SV))
 }
@@ -333,9 +332,6 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 
 	info.FeatureUsage = telemetry.GetAndResetFeatureCounts(true /* quantize */)
 
-	info.ErrorCounts = make(map[string]int64)
-	info.UnimplementedErrors = make(map[string]int64)
-
 	// Read the system.settings table to determine the settings for which we have
 	// explicitly set values -- the in-memory SV has the set and default values
 	// flattened for quick reads, but we'd rather only report the non-defaults.
@@ -378,10 +374,6 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 	}
 
 	info.SqlStats = s.pgServer.SQLServer.GetScrubbedStmtStats()
-	s.pgServer.SQLServer.FillErrorCounts(
-		info.ErrorCounts,
-		info.UnimplementedErrors,
-	)
 	return &info
 }
 

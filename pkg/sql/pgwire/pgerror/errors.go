@@ -194,6 +194,21 @@ func UnimplementedWithIssueError(issue int, msg string) error {
 	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
 }
 
+const unimplementedErrorHint = `This feature is not yet implemented in CockroachDB.
+
+Please check https://github.com/cockroachdb/cockroach/issues to check
+whether this feature is already tracked. If you cannot find it there,
+please report this error with reproduction steps at:
+
+    https://github.com/cockroachdb/cockroach/issues/new/choose
+
+If you would rather not post publicly, please contact us directly at:
+
+    support@cockroachlabs.com
+
+The Cockroach Labs team appreciates your feedback.
+`
+
 // Unimplemented constructs an unimplemented feature error.
 //
 // `feature` is used for tracking, and is not included when the error printed.
@@ -206,5 +221,6 @@ func Unimplemented(feature, msg string, args ...interface{}) *Error {
 func UnimplementedWithDepth(depth int, feature, msg string, args ...interface{}) *Error {
 	err := NewErrorWithDepthf(depth+1, CodeFeatureNotSupportedError, msg, args...)
 	err.InternalCommand = feature
+	err.Hint = unimplementedErrorHint
 	return err
 }

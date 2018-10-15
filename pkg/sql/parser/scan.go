@@ -202,6 +202,7 @@ func (s *Scanner) Error(e string) {
 	fmt.Fprintf(&buf, "%s^", strings.Repeat(" ", s.lastTok.pos-j))
 	s.lastError.detail = buf.String()
 	s.lastError.unimplementedFeature = ""
+	s.lastError.hint = ""
 }
 
 // SetHelp marks the "last error" field in the Scanner to become a
