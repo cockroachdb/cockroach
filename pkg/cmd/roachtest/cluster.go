@@ -23,12 +23,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net"
 	"net/url"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -306,27 +306,15 @@ func execCmdWithBuffer(ctx context.Context, l *logger, args ...string) ([]byte, 
 	return out, nil
 }
 
-func makeGCEClusterName(testName, id, username string) string {
-	name := fmt.Sprintf("%s-%s-%s", username, id, testName)
+func makeGCEClusterName(name string) string {
 	name = strings.ToLower(name)
 	name = regexp.MustCompile(`[^-a-z0-9]+`).ReplaceAllString(name, "-")
 	name = regexp.MustCompile(`-+`).ReplaceAllString(name, "-")
 	return name
 }
 
-func makeClusterName(t testI) string {
-	if username == "" {
-		usr, err := user.Current()
-		if err != nil {
-			panic(fmt.Sprintf("user.Current: %s", err))
-		}
-		username = usr.Username
-	}
-	id := clusterID
-	if id == "" {
-		id = fmt.Sprintf("%d", timeutil.Now().Unix())
-	}
-	return makeGCEClusterName(t.Name(), id, username)
+func makeClusterName(name string) string {
+	return makeGCEClusterName(name)
 }
 
 func machineTypeToCPUs(s string) int {
@@ -633,14 +621,17 @@ type cluster struct {
 	owned bool
 }
 
-type clusterOpt bool
-
-const (
-	localCluster  clusterOpt = true
-	remoteCluster clusterOpt = false
-)
+type clusterConfig struct {
+	// name must be empty if localCluster is specified.
+	name         string
+	nodes        []nodeSpec
+	artifactsDir string
+	localCluster bool
+}
 
 // newCluster creates a new roachprod cluster.
+//
+// NOTE: setTest() needs to be called before a test can use this cluster.
 //
 // TODO(peter): Should set the lifetime of clusters to 2x the expected test
 // duration. The default lifetime of 12h is too long for some tests and will be
@@ -650,53 +641,52 @@ const (
 // to figure out how to make that work with `roachprod create`. Perhaps one
 // invocation of `roachprod create` per unique node-spec. Are there guarantees
 // we're making here about the mapping of nodeSpecs to node IDs?
-func newCluster(ctx context.Context, t testI, nodes []nodeSpec, opt clusterOpt) (*cluster, error) {
+func newCluster(ctx context.Context, cfg clusterConfig) (*cluster, error) {
 	if atomic.LoadInt32(&interrupted) == 1 {
 		return nil, fmt.Errorf("newCluster interrupted")
 	}
 
+	var name string
+	if cfg.localCluster {
+		if cfg.name != "" {
+			log.Fatal(ctx, "can't specify name %q with local flag", cfg.name)
+		}
+		name = "local" // The roachprod tool understands this magic name.
+	} else {
+		name = makeClusterName(username + "-" + cfg.name)
+	}
+
 	switch {
-	case len(nodes) == 0:
+	case len(cfg.nodes) == 0:
 		// For tests. Return the minimum that makes them happy.
 		return &cluster{
 			expiration: timeutil.Now().Add(24 * time.Hour),
 		}, nil
-	case len(nodes) > 1:
+	case len(cfg.nodes) > 1:
 		// TODO(peter): Need a motivating test that has different specs per node.
-		return nil, fmt.Errorf("TODO(peter): unsupported nodes spec: %v", nodes)
+		return nil, fmt.Errorf("TODO(peter): unsupported nodes spec: %v", cfg.nodes)
 	}
 
-	logPath := filepath.Join(t.ArtifactsDir(), "test.log")
+	logPath := filepath.Join(cfg.artifactsDir, "test.log")
 	l, err := rootLogger(logPath)
 	if err != nil {
 		return nil, err
 	}
 
-	var name string
-	if opt == localCluster {
-		name = "local" // The roachprod tool understands this magic name.
-	} else {
-		name = makeClusterName(t)
-	}
-
 	c := &cluster{
 		name:       name,
-		nodes:      nodes[0].Count,
+		nodes:      cfg.nodes[0].Count,
 		status:     func(...interface{}) {},
-		t:          t,
 		l:          l,
 		destroyed:  make(chan struct{}),
-		expiration: nodes[0].expiration(),
+		expiration: cfg.nodes[0].expiration(),
 		owned:      true,
-	}
-	if impl, ok := t.(*test); ok {
-		c.status = impl.Status
 	}
 	registerCluster(c)
 
 	sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.nodes)}
-	sargs = append(sargs, nodes[0].args()...)
-	if !local && zonesF != "" && nodes[0].Zones == "" {
+	sargs = append(sargs, cfg.nodes[0].args()...)
+	if !local && zonesF != "" && cfg.nodes[0].Zones == "" {
 		sargs = append(sargs, "--gce-zones="+zonesF)
 	}
 
@@ -718,39 +708,37 @@ type attachOpt struct {
 
 // attachToExistingCluster creates a cluster object based on machines that have
 // already been already allocated by roachprod.
+//
+// NOTE: setTest() needs to be called before a test can use this cluster.
 func attachToExistingCluster(
-	ctx context.Context, name string, t testI, nodes []nodeSpec, opt attachOpt,
-) *cluster {
+	ctx context.Context, name string, artifactsDir string, nodes []nodeSpec, opt attachOpt,
+) (*cluster, error) {
 	if len(nodes) > 1 {
 		// TODO(peter): Need a motivating test that has different specs per node.
-		t.Fatalf("TODO(peter): unsupported nodes spec: %v", nodes)
+		return nil, fmt.Errorf("TODO(peter): unsupported nodes spec: %v", nodes)
 	}
 
-	logPath := filepath.Join(t.ArtifactsDir(), "test.log")
+	logPath := filepath.Join(artifactsDir, "test.log")
 	l, err := rootLogger(logPath)
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
 
 	c := &cluster{
 		name:       name,
 		nodes:      nodes[0].Count,
 		status:     func(...interface{}) {},
-		t:          t,
 		l:          l,
 		destroyed:  make(chan struct{}),
 		expiration: nodes[0].expiration(),
 		// If we're attaching to an existing cluster, we're not going to destoy it.
 		owned: false,
 	}
-	if impl, ok := t.(*test); ok {
-		c.status = impl.Status
-	}
 	registerCluster(c)
 
 	if !opt.skipValidation {
 		if err := c.validate(ctx, nodes, l); err != nil {
-			t.Fatal(err)
+			return nil, err
 		}
 	}
 
@@ -767,7 +755,17 @@ func attachToExistingCluster(
 	}
 
 	c.status("running test")
-	return c
+	return c, nil
+}
+
+// setTest prepares c for being used on behalf of t.
+//
+// TODO(andrei): Get rid of c.t and of this method.
+func (c *cluster) setTest(t testI) {
+	c.t = t
+	if impl, ok := t.(*test); ok {
+		c.status = impl.Status
+	}
 }
 
 // validateCluster takes a cluster and checks that the reality corresponds to
