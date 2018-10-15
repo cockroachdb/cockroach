@@ -627,6 +627,8 @@ type clusterConfig struct {
 	nodes        []nodeSpec
 	artifactsDir string
 	localCluster bool
+	// If set, output from c.l will be teed to stdout/stderr.
+	teeToStdout bool
 }
 
 // newCluster creates a new roachprod cluster.
@@ -668,7 +670,11 @@ func newCluster(ctx context.Context, cfg clusterConfig) (*cluster, error) {
 	}
 
 	logPath := filepath.Join(cfg.artifactsDir, "test.log")
-	l, err := rootLogger(logPath)
+	teeOpt := noTee
+	if cfg.teeToStdout {
+		teeOpt = teeToStdout
+	}
+	l, err := rootLogger(logPath, teeOpt)
 	if err != nil {
 		return nil, err
 	}
@@ -700,6 +706,9 @@ func newCluster(ctx context.Context, cfg clusterConfig) (*cluster, error) {
 }
 
 type attachOpt struct {
+	// If set, the c.l will output to stdout/stderr.
+	teeToStdout bool
+
 	skipValidation bool
 	// Implies skipWipe.
 	skipStop bool
@@ -719,7 +728,11 @@ func attachToExistingCluster(
 	}
 
 	logPath := filepath.Join(artifactsDir, "test.log")
-	l, err := rootLogger(logPath)
+	teeOpt := noTee
+	if opt.teeToStdout {
+		teeOpt = teeToStdout
+	}
+	l, err := rootLogger(logPath, teeOpt)
 	if err != nil {
 		return nil, err
 	}
@@ -817,7 +830,12 @@ func (c *cluster) validate(ctx context.Context, nodes []nodeSpec, l *logger) err
 // receiver, but is associated with the specified test.
 func (c *cluster) clone(t *test) *cluster {
 	logPath := filepath.Join(t.ArtifactsDir(), "test.log")
-	l, err := rootLogger(logPath)
+	// If the parent outputs to stdout/stderr, so will we.
+	teeOpt := noTee
+	if c.l.stdout == os.Stdout {
+		teeOpt = teeToStdout
+	}
+	l, err := rootLogger(logPath, teeOpt)
 	if err != nil {
 		t.Fatal(err)
 	}

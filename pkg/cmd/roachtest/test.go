@@ -869,6 +869,7 @@ func (r *registry) runAsync(
 					nodes:        t.spec.Nodes,
 					artifactsDir: t.ArtifactsDir(),
 					localCluster: local,
+					teeToStdout:  parallelism == 1,
 				}
 				var err error
 				c, err = newCluster(ctx, cfg)
