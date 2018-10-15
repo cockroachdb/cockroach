@@ -939,11 +939,14 @@ func (c *cluster) Put(ctx context.Context, src, dest string, opts ...option) {
 	}
 }
 
-// GitClone clones a git repo from src into dest and checks out
-// origin's version of the given branch. The src, dest, and branch
-// arguments must not contain shell special characters.
-func (c *cluster) GitClone(ctx context.Context, src, dest, branch string, node nodeListOption) {
-	c.Run(ctx, node, "bash", "-e", "-c", fmt.Sprintf(`'
+// GitCloneE clones a git repo from src into dest and checks out origin's
+// version of the given branch. The src, dest, and branch arguments must not
+// contain shell special characters. GitCloneE unlike GitClone returns an
+// error.
+func (c *cluster) GitCloneE(
+	ctx context.Context, src, dest, branch string, node nodeListOption,
+) error {
+	return c.RunE(ctx, node, "bash", "-e", "-c", fmt.Sprintf(`'
 if ! test -d %s; then
   git clone -b %s --depth 1 %s %s
 else
@@ -955,6 +958,15 @@ fi
 		branch, src, dest,
 		dest,
 		branch))
+}
+
+// GitClone clones a git repo from src into dest and checks out origin's
+// version of the given branch. The src, dest, and branch arguments must not
+// contain shell special characters.
+func (c *cluster) GitClone(ctx context.Context, src, dest, branch string, node nodeListOption) {
+	if err := c.GitCloneE(ctx, src, dest, branch, node); err != nil {
+		c.t.Fatal(err)
+	}
 }
 
 // startArgs specifies extra arguments that are passed to `roachprod` during `c.Start`.
