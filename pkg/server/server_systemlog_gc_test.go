@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -36,7 +35,7 @@ import (
 func TestLogGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	a := assert.New(t)
-	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	ts := s.(*TestServer)
 	ctx := context.Background()
 	defer s.Stopper().Stop(ctx)
@@ -55,51 +54,42 @@ func TestLogGC(t *testing.T) {
 		return count
 	}
 
-	rangeLogMaxTS := func() time.Time {
-		var time time.Time
-		err := db.QueryRowContext(ctx,
-			`SELECT timestamp FROM system.rangelog WHERE "rangeID" = $1 ORDER by timestamp DESC LIMIT 1`,
-			testRangeID,
-		).Scan(&time)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return time
-	}
-
-	logEvents := func(count int) {
+	logEvents := func(count int, timestamp time.Time) {
 		for i := 0; i < count; i++ {
-			a.NoError(kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-				_, err := db.Exec(
-					`INSERT INTO system.rangelog (
+			_, err := db.Exec(
+				`INSERT INTO system.rangelog (
              timestamp, "rangeID", "storeID", "eventType"
            ) VALUES (
              $1, $2, $3, $4
           )`,
-					txn.OrigTimestamp().GoTime(),
-					testRangeID,
-					1, // storeID
-					storagepb.RangeLogEventType_add,
-				)
-				return err
-			}))
+				timestamp,
+				testRangeID,
+				1, // storeID
+				storagepb.RangeLogEventType_add,
+			)
+			a.NoError(err)
 		}
 	}
+	maxTS1 := timeutil.Now()
+	maxTS2 := maxTS1.Add(time.Second)
+	maxTS3 := maxTS2.Add(time.Second)
+	maxTS4 := maxTS3.Add(time.Second)
+	maxTS5 := maxTS4.Add(time.Hour)
+	maxTS6 := maxTS5.Add(time.Hour)
 
 	// Assert 0 rows before inserting any events.
 	a.Equal(0, rangeLogRowCount())
 	// Insert 100 events with timestamp of up to maxTS1.
-	logEvents(100)
+	logEvents(100, maxTS1)
 	a.Equal(100, rangeLogRowCount())
-	maxTS1 := rangeLogMaxTS()
-	// Insert 50 events with timestamp of up to maxTS2.
-	logEvents(50)
+	// Insert 1 event with timestamp of up to maxTS2.
+	logEvents(1, maxTS2)
+	// Insert 49 event with timestamp of up to maxTS3.
+	logEvents(49, maxTS3)
 	a.Equal(150, rangeLogRowCount())
-	maxTS2 := rangeLogMaxTS()
-	// Insert 25 events with timestamp of up to maxTS3.
-	logEvents(25)
+	// Insert 25 events with timestamp of up to maxTS4.
+	logEvents(25, maxTS4)
 	a.Equal(175, rangeLogRowCount())
-	maxTS3 := rangeLogMaxTS()
 
 	// GC up to maxTS1.
 	tm, rowsGCd, err := ts.GCSystemLog(ctx, table, timeutil.Unix(0, 0), maxTS1)
@@ -116,36 +106,34 @@ func TestLogGC(t *testing.T) {
 	a.Equal(74, rangeLogRowCount())
 
 	// GC upto maxTS2.
-	tm, rowsGCd, err = ts.GCSystemLog(ctx, table, maxTS1, maxTS2)
+	tm, rowsGCd, err = ts.GCSystemLog(ctx, table, maxTS1, maxTS3)
 	a.NoError(err)
-	a.Equal(maxTS2, tm)
+	a.Equal(maxTS3, tm)
 	a.True(rowsGCd >= 49, "Expected rowsGCd >= 49, found %d", rowsGCd)
 	a.Equal(25, rangeLogRowCount())
 	// Insert 2000 more events.
-	logEvents(2000)
+	logEvents(2000, maxTS5)
 	a.Equal(2025, rangeLogRowCount())
 
-	// GC up to maxTS3.
-	tm, rowsGCd, err = ts.GCSystemLog(ctx, table, maxTS2, maxTS3)
+	// GC up to maxTS4.
+	tm, rowsGCd, err = ts.GCSystemLog(ctx, table, maxTS2, maxTS4)
 	a.NoError(err)
-	a.Equal(maxTS3, tm)
+	a.Equal(maxTS4, tm)
 	a.True(rowsGCd >= 25, "Expected rowsGCd >= 25, found %d", rowsGCd)
 	a.Equal(2000, rangeLogRowCount())
 
 	// GC everything.
-	maxTS4 := rangeLogMaxTS()
-	tm, rowsGCd, err = ts.GCSystemLog(ctx, table, maxTS3, maxTS4)
+	tm, rowsGCd, err = ts.GCSystemLog(ctx, table, maxTS4, maxTS5)
 	a.NoError(err)
-	a.Equal(maxTS4, tm)
+	a.Equal(maxTS5, tm)
 	a.True(rowsGCd >= 2000, "Expected rowsGCd >= 2000, found %d", rowsGCd)
 	a.Equal(0, rangeLogRowCount())
 
 	// Ensure no errors when lowerBound > upperBound.
-	logEvents(5)
-	maxTS5 := rangeLogMaxTS()
-	tm, rowsGCd, err = ts.GCSystemLog(ctx, table, maxTS5.Add(time.Hour), maxTS5)
+	logEvents(5, maxTS6)
+	tm, rowsGCd, err = ts.GCSystemLog(ctx, table, maxTS6.Add(time.Hour), maxTS6)
 	a.NoError(err)
-	a.Equal(maxTS5, tm)
+	a.Equal(maxTS6, tm)
 	a.Equal(int64(0), rowsGCd)
 	a.Equal(5, rangeLogRowCount())
 }
