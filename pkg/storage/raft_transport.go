@@ -29,6 +29,7 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 	"google.golang.org/grpc"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -615,6 +616,7 @@ func (t *RaftTransport) startProcessNewQueue(
 // for closing the OutgoingSnapshot.
 func (t *RaftTransport) SendSnapshot(
 	ctx context.Context,
+	raftCfg *base.RaftConfig,
 	storePool *StorePool,
 	header SnapshotRequest_Header,
 	snap *OutgoingSnapshot,
@@ -640,5 +642,5 @@ func (t *RaftTransport) SendSnapshot(
 			log.Warningf(ctx, "failed to close snapshot stream: %s", err)
 		}
 	}()
-	return sendSnapshot(ctx, t.st, stream, storePool, header, snap, newBatch, sent)
+	return sendSnapshot(ctx, raftCfg, t.st, stream, storePool, header, snap, newBatch, sent)
 }
