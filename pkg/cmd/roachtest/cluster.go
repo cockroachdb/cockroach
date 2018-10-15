@@ -744,10 +744,15 @@ func attachToExistingCluster(
 
 	if !opt.skipStop {
 		c.status("stopping cluster")
-		c.Stop(ctx, c.All())
+		c.All()
+		if err := c.StopE(ctx, c.All()); err != nil {
+			return nil, err
+		}
 		if !opt.skipWipe {
 			if clusterWipe {
-				c.Wipe(ctx, c.All())
+				if err := c.WipeE(ctx, c.All()); err != nil {
+					return nil, err
+				}
 			} else {
 				l.Printf("skipping cluster wipe\n")
 			}
@@ -1038,14 +1043,28 @@ func argExists(args []string, target string) bool {
 	return false
 }
 
-// Stop cockroach nodes running on a subset of the cluster. See cluster.Start()
+// StopE cockroach nodes running on a subset of the cluster. See cluster.Start()
 // for a description of the nodes parameter.
+func (c *cluster) StopE(ctx context.Context, opts ...option) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return c.stopImpl(ctx, opts...)
+}
+
+// Stop is like StopE, except instead of returning an error, it does
+// c.t.Fatal(). c.t needs to be set.
 func (c *cluster) Stop(ctx context.Context, opts ...option) {
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
 	}
+	if err := c.stopImpl(ctx, opts...); err != nil {
+		c.t.Fatal(err)
+	}
+}
 
+func (c *cluster) stopImpl(ctx context.Context, opts ...option) error {
 	args := []string{
 		roachprod,
 		"stop",
@@ -1053,32 +1072,45 @@ func (c *cluster) Stop(ctx context.Context, opts ...option) {
 	args = append(args, roachprodArgs(opts)...)
 	args = append(args, c.makeNodes(opts...))
 	if atomic.LoadInt32(&interrupted) == 1 {
-		c.t.Fatal("interrupted")
+		return fmt.Errorf("interrupted")
 	}
 	c.status("stopping cluster")
 	defer c.status()
-	err := execCmd(ctx, c.l, args...)
-	if err != nil {
-		c.t.Fatal(err)
-	}
+	return execCmd(ctx, c.l, args...)
 }
 
-// Wipe a subset of the nodes in a cluster. See cluster.Start() for a
+// WipeE wipes a subset of the nodes in a cluster. See cluster.Start() for a
 // description of the nodes parameter.
+func (c *cluster) WipeE(ctx context.Context, opts ...option) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return c.wipeImpl(ctx, opts...)
+}
+
+// Wipe is like WipeE, except instead of returning an error, it does
+// c.t.Fatal(). c.t needs to be set.
 func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
 	}
+	if err := c.wipeImpl(ctx, opts...); err != nil {
+		c.t.Fatal(err)
+	}
+}
+
+func (c *cluster) wipeImpl(ctx context.Context, opts ...option) error {
 	if atomic.LoadInt32(&interrupted) == 1 {
-		c.t.Fatal("interrupted")
+		return fmt.Errorf("interrupted")
 	}
 	c.status("wiping cluster")
 	defer c.status()
 	err := execCmd(ctx, c.l, roachprod, "wipe", c.makeNodes(opts...))
 	if err != nil {
-		c.t.Fatal(err)
+		return err
 	}
+	return nil
 }
 
 // Run a command on the specified node.
