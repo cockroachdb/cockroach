@@ -782,6 +782,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 		mockSender := &mockSender{}
 		if err := sendSnapshot(
 			ctx,
+			&tc.store.cfg.RaftConfig,
 			tc.store.cfg.Settings,
 			mockSender,
 			&fakeStorePool{},
@@ -903,6 +904,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 		mockSender := &mockSender{}
 		err = sendSnapshot(
 			ctx,
+			&tc.store.cfg.RaftConfig,
 			tc.store.cfg.Settings,
 			mockSender,
 			&fakeStorePool{},
