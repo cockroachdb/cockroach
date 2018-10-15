@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -994,8 +995,10 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 	})
 }
 
-// TestStoreRangeMergeConcurrentSplit (occasionally) reproduces a race where a
-// concurrent merge and split could deadlock.
+// TestStoreRangeMergeSplitRace_MergeWins (occasionally) reproduces a race where
+// a concurrent merge and split could deadlock. It exercises the case where the
+// merge commits and the split aborts. See the SplitWins variant of this test
+// for the inverse case.
 //
 // The bug works like this. A merge of adjacent ranges P and Q and a split of Q
 // execute concurrently, though the merge executes with an earlier timestamp.
@@ -1032,7 +1035,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 // scheduler to occasionally strike the right interleaving. At the time of
 // writing, the test would reliably reproduce the bug in about 50 runs (about
 // ten seconds of stress on an eight core laptop).
-func TestStoreRangeMergeConcurrentSplit(t *testing.T) {
+func TestStoreRangeMergeSplitRace_MergeWins(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -1064,6 +1067,104 @@ func TestStoreRangeMergeConcurrentSplit(t *testing.T) {
 
 	if err := <-splitErrCh; err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestStoreRangeMergeSplitRace_SplitWins reproduces a race where a concurrent
+// merge and split could deadlock. It exercises the case where the split commits
+// and the merge aborts. See the MergeWins variant of this test for the inverse
+// case.
+//
+// The bug works like this. A merge of adjacent ranges P and Q and a split of Q
+// execute concurrently, though the merge executes with an earlier timestamp.
+// First, the merge transaction writes an intent to update P's local range
+// descriptor. Then it reads Q's local range descriptor to verify that Q hasn't
+// changed since the decision to merge was made.
+//
+// Next, the split transaction runs from start to finish, updating Q's local
+// descriptor and its associated meta2 record. Notably, the split transaction
+// does not encounter any intents from the merge transaction, since the merge
+// transaction's only intent so far is on P's local range descriptor, and so the
+// split transaction can happily commit.
+//
+// The merge transaction then continues, writing an intent on Q's local
+// descriptor. Since the merge transaction is executing at an earlier timestamp
+// than the split transaction, the intent is written "under" the updated
+// descriptor written by the split transaction.
+//
+// In the past, the merge transaction would simply push its commit timestamp
+// forward and proceed, even though, upon committing, it would discover that it
+// was forbidden from committing with a pushed timestamp and abort instead. (For
+// why merge transactions cannot forward their commit timestamps, see the
+// discussion on the retry loop within AdminMerge.) This was problematic. Before
+// the doomed merge transaction attempted to commit, it would send a Subsume
+// request, launching a merge watcher goroutine on Q. This watcher goroutine
+// could incorrectly think that the merge transaction committed. Why? To
+// determine whether a merge has truly aborted, the watcher goroutine sends a
+// Get(/Meta2/QEndKey) request with a read uncommitted isolation level. If the
+// Get request returns either nil or a descriptor for a different range, the
+// merge is assumed to have committed. In this case, unfortunately, QEndKey is
+// the Q's end key post-split. After all, the split has committed and updated
+// Q's in-memory descriptor. The split transactions intents are cleaned up
+// asynchronously, however, and since the watcher goroutine is not performing a
+// consistent read it will not wait for the intents to be cleaned up. So
+// Get(/Meta2/QEndKey) might return nil, in which case the watcher goroutine
+// will incorrectly infer that the merge committed. (Note that the watcher
+// goroutine can't perform a consistent read, as that would look up the
+// transaction record on Q and deadlock, since Q is blocked for merging.)
+//
+// The bug was fixed by updating Q's local descriptor with a conditional put
+// instead of a put. This forces the merge transaction to fail early if writing
+// the intent would require forwarding the commit timestamp. In other words,
+// this ensures that the merge watcher goroutine is never launched if the RHS
+// local descriptor is updated while the merge transaction is executing.
+func TestStoreRangeMergeSplitRace_SplitWins(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+
+	var distSender *kv.DistSender
+	var launchSplit int64
+	done := make(chan struct{})
+	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+		for _, req := range ba.Requests {
+			if bt := req.GetBeginTransaction(); bt != nil &&
+				bt.Key.Equal(keys.RangeDescriptorKey(roachpb.RKeyMin)) &&
+				atomic.CompareAndSwapInt64(&launchSplit, 1, 0) {
+				_, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(roachpb.Key("c")))
+				return pErr
+			}
+			if ri := req.GetResolveIntent(); ri != nil &&
+				ri.Key.Equal(keys.RangeMetaKey(roachpb.RKey("c")).AsRawKey()) &&
+				ri.Status == roachpb.COMMITTED {
+				// Don't allow resolution of the split transaction's meta2 intent until
+				// the test finishes. This ensures that the merge watcher goroutine
+				// sees a nil value when it performs its meta2 lookup, as described in
+				// the comment on this test.
+				<-done
+			}
+		}
+		return nil
+	}
+
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+	defer close(done)
+	distSender = mtc.distSenders[0]
+
+	lhsDesc, _, err := createSplitRanges(ctx, mtc.Store(0))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	atomic.StoreInt64(&launchSplit, 1)
+	mergeArgs := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	_, pErr := client.SendWrapped(ctx, distSender, mergeArgs)
+	if pErr != nil && !testutils.IsPError(pErr, "range changed during merge") {
+		t.Fatal(pErr)
 	}
 }
 
