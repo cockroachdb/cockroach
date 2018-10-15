@@ -90,13 +90,21 @@ Create a ballast file to fill the store directory up to a given amount
 // It must do nothing in OSS code.
 var PopulateRocksDBConfigHook func(*engine.RocksDBConfig) error
 
-func parseRangeID(arg string) (roachpb.RangeID, error) {
-	rangeIDInt, err := strconv.ParseInt(arg, 10, 64)
+func parsePositiveInt(arg string) (int64, error) {
+	i, err := strconv.ParseInt(arg, 10, 64)
 	if err != nil {
 		return 0, err
 	}
-	if rangeIDInt < 1 {
-		return 0, fmt.Errorf("illegal RangeID: %d", rangeIDInt)
+	if i < 1 {
+		return 0, fmt.Errorf("illegal val: %d < 1", i)
+	}
+	return i, nil
+}
+
+func parseRangeID(arg string) (roachpb.RangeID, error) {
+	rangeIDInt, err := parsePositiveInt(arg)
+	if err != nil {
+		return 0, err
 	}
 	return roachpb.RangeID(rangeIDInt), nil
 }
@@ -448,7 +456,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 }
 
 var debugGCCmd = &cobra.Command{
-	Use:   "estimate-gc <directory> [range id]",
+	Use:   "estimate-gc <directory> [range id] [ttl-in-seconds]",
 	Short: "find out what a GC run would do",
 	Long: `
 Sets up (but does not run) a GC collection cycle, giving insight into how much
@@ -457,7 +465,7 @@ work would be done (assuming all intent resolution and pushes succeed).
 Without a RangeID specified on the command line, runs the analysis for all
 ranges individually.
 
-Uses a hard-coded GC policy with a 24 hour TTL for old versions.
+Uses a configurable GC policy, with a default 24 hour TTL, for old versions.
 `,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: MaybeDecorateGRPCError(runDebugGCCmd),
@@ -468,7 +476,18 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop(context.Background())
 
 	var rangeID roachpb.RangeID
-	if len(args) == 2 {
+	gcTTLInSeconds := int64((24 * time.Hour).Seconds())
+	switch len(args) {
+	case 3:
+		var err error
+		if rangeID, err = parseRangeID(args[1]); err != nil {
+			return errors.Wrapf(err, "unable to parse %v as range ID", args[1])
+		}
+		if gcTTLInSeconds, err = parsePositiveInt(args[2]); err != nil {
+			return errors.Wrapf(err, "unable to parse %v as TTL", args[2])
+		}
+
+	case 2:
 		var err error
 		if rangeID, err = parseRangeID(args[1]); err != nil {
 			return err
@@ -519,7 +538,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 			&desc,
 			snap,
 			hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
-			config.GCPolicy{TTLSeconds: 24 * 60 * 60 /* 1 day */},
+			config.GCPolicy{TTLSeconds: int32(gcTTLInSeconds)},
 			storage.NoopGCer{},
 			func(_ context.Context, _ []roachpb.Intent) error { return nil },
 			func(_ context.Context, _ *roachpb.Transaction, _ []roachpb.Intent) error { return nil },
