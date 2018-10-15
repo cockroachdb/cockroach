@@ -133,22 +133,20 @@ func adaptLegacyTransport(fn rpcSendFn) TransportFactory {
 		replicas ReplicaSlice,
 		args roachpb.BatchRequest,
 	) (Transport, error) {
-		return &legacyTransportAdapter{fn, opts, rpcContext, replicas, args, false}, nil
+		return &legacyTransportAdapter{fn, opts, rpcContext, replicas, replicas, args}, nil
 	}
 }
 
 type legacyTransportAdapter struct {
-	fn         rpcSendFn
-	opts       SendOptions
-	rpcContext *rpc.Context
-	replicas   ReplicaSlice
-	args       roachpb.BatchRequest
-
-	called bool
+	fn                     rpcSendFn
+	opts                   SendOptions
+	rpcContext             *rpc.Context
+	replicas, origReplicas ReplicaSlice
+	args                   roachpb.BatchRequest
 }
 
 func (l *legacyTransportAdapter) IsExhausted() bool {
-	return l.called
+	return len(l.replicas) == 0
 }
 
 func (l *legacyTransportAdapter) GetPending() []roachpb.ReplicaDescriptor {
@@ -156,8 +154,9 @@ func (l *legacyTransportAdapter) GetPending() []roachpb.ReplicaDescriptor {
 }
 
 func (l *legacyTransportAdapter) SendNext(ctx context.Context, done chan<- BatchCall) {
-	l.called = true
-	br, err := l.fn(ctx, l.opts, l.replicas, l.args, l.rpcContext)
+	l.args.Replica = l.replicas[0].ReplicaDescriptor
+	l.replicas = l.replicas[1:]
+	br, err := l.fn(ctx, l.opts, l.origReplicas, l.args, l.rpcContext)
 	done <- BatchCall{
 		Reply: br,
 		Err:   err,
@@ -854,7 +853,7 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 		case 0, 1:
 			err = &roachpb.NotLeaseHolderError{LeaseHolder: &roachpb.ReplicaDescriptor{NodeID: 99, StoreID: 999}}
 		case 2:
-			err = roachpb.NewRangeNotFoundError(0)
+			err = roachpb.NewRangeNotFoundError(0, 0)
 		default:
 			return args.CreateReply(), nil
 		}
@@ -1181,6 +1180,91 @@ func TestSendRPCRetry(t *testing.T) {
 	}
 	if l := len(sr.(*roachpb.ScanResponse).Rows); l != 1 {
 		t.Fatalf("expected 1 row; got %d", l)
+	}
+}
+
+// This test reproduces the main problem in:
+// https://github.com/cockroachdb/cockroach/issues/30613.
+// by verifying that if a RangeNotFoundError is returned from a Replica,
+// the next Replica is tried.
+func TestSendRPCRangeNotFoundError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+
+	g, clock := makeGossip(t, stopper)
+	if err := g.SetNodeDescriptor(&roachpb.NodeDescriptor{NodeID: 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Fill RangeDescriptor with three replicas.
+	var descriptor = roachpb.RangeDescriptor{
+		RangeID:  1,
+		StartKey: roachpb.RKey("a"),
+		EndKey:   roachpb.RKey("z"),
+	}
+	for i := 1; i <= 3; i++ {
+		addr := util.MakeUnresolvedAddr("tcp", fmt.Sprintf("node%d", i))
+		nd := &roachpb.NodeDescriptor{
+			NodeID:  roachpb.NodeID(i),
+			Address: util.MakeUnresolvedAddr(addr.Network(), addr.String()),
+		}
+		if err := g.AddInfoProto(gossip.MakeNodeIDKey(roachpb.NodeID(i)), nd, time.Hour); err != nil {
+			t.Fatal(err)
+		}
+
+		descriptor.Replicas = append(descriptor.Replicas, roachpb.ReplicaDescriptor{
+			NodeID:    roachpb.NodeID(i),
+			StoreID:   roachpb.StoreID(i),
+			ReplicaID: roachpb.ReplicaID(i),
+		})
+	}
+	descDB := mockRangeDescriptorDBForDescs(
+		testMetaRangeDescriptor,
+		descriptor,
+	)
+
+	seen := map[roachpb.ReplicaID]struct{}{}
+	var ds *DistSender
+	var testFn rpcSendFn = func(
+		_ context.Context,
+		_ SendOptions,
+		_ ReplicaSlice,
+		ba roachpb.BatchRequest,
+		_ *rpc.Context,
+	) (*roachpb.BatchResponse, error) {
+		br := ba.CreateReply()
+		if _, ok := seen[ba.Replica.ReplicaID]; ok {
+			br.Error = roachpb.NewErrorf("visited replica %+v twice", ba.Replica)
+			return br, nil
+		}
+		seen[ba.Replica.ReplicaID] = struct{}{}
+		if len(seen) <= 2 {
+			if len(seen) == 1 {
+				// Add to the leaseholder cache to verify that the response evicts it.
+				ds.leaseHolderCache.Update(context.Background(), ba.RangeID, ba.Replica.StoreID)
+			}
+			br.Error = roachpb.NewError(roachpb.NewRangeNotFoundError(ba.RangeID, ba.Replica.StoreID))
+			return br, nil
+		}
+		return br, nil
+	}
+	cfg := DistSenderConfig{
+		AmbientCtx: log.AmbientContext{Tracer: tracing.NewTracer()},
+		Clock:      clock,
+		TestingKnobs: DistSenderTestingKnobs{
+			TransportFactory: adaptLegacyTransport(testFn),
+		},
+		RangeDescriptorDB: descDB,
+	}
+	ds = NewDistSender(cfg, g)
+	get := roachpb.NewGet(roachpb.Key("b"))
+	_, err := client.SendWrapped(context.Background(), ds, get)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if storeID, found := ds.leaseHolderCache.Lookup(context.Background(), roachpb.RangeID(1)); found {
+		t.Fatalf("unexpected cached leaseholder s%d", storeID)
 	}
 }
 

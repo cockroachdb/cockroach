@@ -1097,7 +1097,7 @@ func (ds *DistSender) sendPartialBatch(
 			// they're all down, or we're using an out-of-date range
 			// descriptor. Invalidate the cache and try again with the new
 			// metadata.
-			log.Event(ctx, "evicting range descriptor on send error and backoff for re-lookup")
+			log.VEventf(ctx, 1, "evicting range descriptor on %T and backoff for re-lookup: %+v", tErr, desc)
 			if err := evictToken.Evict(ctx); err != nil {
 				return response{pErr: roachpb.NewError(err)}
 			}
@@ -1289,7 +1289,8 @@ func (ds *DistSender) sendToReplicas(
 	}
 	// Must be buffered because tests have blocking SendNext implementations.
 	done := make(chan BatchCall, 1)
-	log.VEventf(ctx, 2, "r%d: sending batch %s to %s", rangeID, args.Summary(), transport.NextReplica())
+	curReplica := transport.NextReplica()
+	log.VEventf(ctx, 2, "r%d: sending batch %s to %s", rangeID, args.Summary(), curReplica)
 	transport.SendNext(ctx, done)
 
 	// Wait for completions. This loop will retry operations that fail
@@ -1329,6 +1330,10 @@ func (ds *DistSender) sendToReplicas(
 				}
 				log.VErrEventf(ctx, 2, "RPC error: %s", err)
 			} else {
+				// NB: This section of code may have unfortunate performance implications. If we
+				// exit the below type switch with propagateError remaining at `false`, we'll try
+				// more replicas. That may succeed and future requests might do the same thing over
+				// and over again, adding needless round-trips to the earlier replicas.
 				propagateError := false
 				switch tErr := call.Reply.Error.GetDetail().(type) {
 				case nil:
@@ -1336,18 +1341,37 @@ func (ds *DistSender) sendToReplicas(
 				case *roachpb.StoreNotFoundError, *roachpb.NodeUnavailableError:
 					// These errors are likely to be unique to the replica that reported
 					// them, so no action is required before the next retry.
+				case *roachpb.RangeNotFoundError:
+					// The store we routed to doesn't have this replica. This can happen when
+					// our descriptor is outright outdated, but it can also be caused by a
+					// replica that has just been added but needs a snapshot to be caught up.
+					//
+					// Evict this replica from the lease holder cache, if applicable, and try
+					// the next replica. It is important that we do the latter, for the next
+					// retry might otherwise try the same replica again (assuming the replica is
+					// still in the descriptor), looping endlessly until the replica is caught
+					// up (which may never happen if the target range is dormant).
+					if tErr.StoreID != 0 {
+						cachedStoreID, found := ds.leaseHolderCache.Lookup(ctx, tErr.RangeID)
+						evicting := found && cachedStoreID == tErr.StoreID
+						if evicting {
+							log.Eventf(ctx, "evicting leaseholder s%d for r%d after RangeNotFoundError", tErr.StoreID, tErr.RangeID)
+							ds.leaseHolderCache.Update(ctx, tErr.RangeID, 0 /* evict */)
+						}
+
+					}
 				case *roachpb.NotLeaseHolderError:
 					ds.metrics.NotLeaseHolderErrCount.Inc(1)
 					if lh := tErr.LeaseHolder; lh != nil {
 						// If the replica we contacted knows the new lease holder, update the cache.
 						ds.leaseHolderCache.Update(ctx, rangeID, lh.StoreID)
 
-						// If the implicated leaseholder is not a known replica,
-						// return a RangeNotFoundError to signal eviction of the
-						// cached RangeDescriptor and re-send.
+						// If the implicated leaseholder is not a known replica, return a SendError
+						// to signal eviction of the cached RangeDescriptor and re-send.
 						if replicas.FindReplica(lh.StoreID) == -1 {
-							// Replace NotLeaseHolderError with RangeNotFoundError.
-							call.Reply.Error = roachpb.NewError(roachpb.NewRangeNotFoundError(rangeID))
+							call.Reply.Error = roachpb.NewError(roachpb.NewSendError(fmt.Sprintf(
+								"leaseholder s%d (via %+v) not in cached replicas %v", lh.StoreID, curReplica, replicas,
+							)))
 							propagateError = true
 						} else {
 							// Move the new lease holder to the head of the queue for the next retry.

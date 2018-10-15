@@ -257,10 +257,12 @@ func (s *SendError) message(_ *Error) string {
 
 var _ ErrorDetailInterface = &SendError{}
 
-// NewRangeNotFoundError initializes a new RangeNotFoundError.
-func NewRangeNotFoundError(rangeID RangeID) *RangeNotFoundError {
+// NewRangeNotFoundError initializes a new RangeNotFoundError for the given RangeID and, optionally,
+// a StoreID.
+func NewRangeNotFoundError(rangeID RangeID, storeID StoreID) *RangeNotFoundError {
 	return &RangeNotFoundError{
 		RangeID: rangeID,
+		StoreID: storeID,
 	}
 }
 
@@ -269,7 +271,11 @@ func (e *RangeNotFoundError) Error() string {
 }
 
 func (e *RangeNotFoundError) message(_ *Error) string {
-	return fmt.Sprintf("r%d was not found", e.RangeID)
+	msg := fmt.Sprintf("r%d was not found", e.RangeID)
+	if e.StoreID != 0 {
+		msg += fmt.Sprintf(" on s%d", e.StoreID)
+	}
+	return msg
 }
 
 var _ ErrorDetailInterface = &RangeNotFoundError{}
