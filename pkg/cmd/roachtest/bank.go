@@ -63,7 +63,7 @@ UPDATE bank.accounts
 	_, err := client.db.Exec(update, from, to, amount)
 	if err == nil {
 		// Do all increments under the read lock so that grabbing a write lock in
-		// chaosMonkey below guarantees no more increments could be incoming.
+		// startChaosMonkey below guarantees no more increments could be incoming.
 		atomic.AddUint64(&client.count, 1)
 	}
 	return err
@@ -147,6 +147,7 @@ CREATE TABLE bank.accounts (
 func (s *bankState) transferMoney(
 	ctx context.Context, c *cluster, idx, numAccounts, maxTransfer int,
 ) {
+	defer c.l.Printf("client %d shutting down\n", idx)
 	client := &s.clients[idx-1]
 	for !s.done(ctx) {
 		if err := client.transferMoney(numAccounts, maxTransfer); err != nil {
@@ -154,11 +155,10 @@ func (s *bankState) transferMoney(
 			if !testutils.IsSQLRetryableError(err) {
 				// Report the err and terminate.
 				s.errChan <- err
-				break
+				return
 			}
 		}
 	}
-	c.l.Printf("client %d shutting down\n", idx)
 	s.errChan <- nil
 }
 
@@ -197,9 +197,9 @@ func (s *bankState) verifyAccounts(ctx context.Context, t *test) {
 	}
 }
 
-// chaosMonkey picks a set of nodes and restarts them. If stopClients is set
+// startChaosMonkey picks a set of nodes and restarts them. If stopClients is set
 // all the clients are locked before the nodes are restarted.
-func (s *bankState) chaosMonkey(
+func (s *bankState) startChaosMonkey(
 	ctx context.Context,
 	t *test,
 	c *cluster,
@@ -207,122 +207,145 @@ func (s *bankState) chaosMonkey(
 	pickNodes func() []int,
 	consistentIdx int,
 ) {
-	defer s.waitGroup.Done()
-	for curRound := uint64(1); !s.done(ctx); curRound++ {
-		atomic.StoreUint64(&s.monkeyIteration, curRound)
+	s.waitGroup.Add(1)
+	go func() {
+		defer s.waitGroup.Done()
 
-		// Pick nodes to be restarted.
-		nodes := pickNodes()
-
-		if stopClients {
-			// Prevent all clients from writing while nodes are being restarted.
-			for i := 0; i < len(s.clients); i++ {
-				s.clients[i].Lock()
+		// Don't begin the chaos monkey until all nodes are serving SQL connections.
+		// This ensures that we don't test cluster initialization under chaos.
+		for i := 1; i <= c.nodes; i++ {
+			db := c.Conn(ctx, i)
+			var res int
+			err := db.QueryRowContext(ctx, `SELECT 1`).Scan(&res)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = db.Close()
+			if err != nil {
+				t.Fatal(err)
 			}
 		}
-		c.l.Printf("round %d: restarting nodes %v\n", curRound, nodes)
-		for _, i := range nodes {
-			if s.done(ctx) {
-				break
-			}
-			c.l.Printf("round %d: restarting %d\n", curRound, i)
-			c.Stop(ctx, c.Node(i))
-			c.Start(ctx, t, c.Node(i))
+
+		for curRound := uint64(1); !s.done(ctx); curRound++ {
+			atomic.StoreUint64(&s.monkeyIteration, curRound)
+
+			// Pick nodes to be restarted.
+			nodes := pickNodes()
+
 			if stopClients {
-				// Reinitialize the client talking to the restarted node.
-				s.initClient(ctx, c, i)
-			}
-		}
-		if stopClients {
-			for i := 0; i < len(s.clients); i++ {
-				s.clients[i].Unlock()
-			}
-		}
-
-		preCount := s.counts()
-
-		madeProgress := func() bool {
-			newCounts := s.counts()
-			for i := range newCounts {
-				if newCounts[i] > preCount[i] {
-					c.l.Printf("round %d: progress made by client %d\n", curRound, i)
-					return true
+				// Prevent all clients from writing while nodes are being restarted.
+				for i := 0; i < len(s.clients); i++ {
+					s.clients[i].Lock()
 				}
 			}
-			return false
-		}
+			c.l.Printf("round %d: restarting nodes %v\n", curRound, nodes)
+			for _, i := range nodes {
+				if s.done(ctx) {
+					break
+				}
+				c.l.Printf("round %d: restarting %d\n", curRound, i)
+				c.Stop(ctx, c.Node(i))
+				c.Start(ctx, t, c.Node(i))
+				if stopClients {
+					// Reinitialize the client talking to the restarted node.
+					s.initClient(ctx, c, i)
+				}
+			}
+			if stopClients {
+				for i := 0; i < len(s.clients); i++ {
+					s.clients[i].Unlock()
+				}
+			}
 
-		// Sleep until at least one client is writing successfully.
-		c.l.Printf("round %d: monkey sleeping while cluster recovers...\n", curRound)
-		for !s.done(ctx) && !madeProgress() {
-			time.Sleep(time.Second)
-		}
-		if s.done(ctx) {
-			c.l.Printf("round %d: not waiting for recovery due to signal that we're done\n",
-				curRound)
-			return
-		}
+			preCount := s.counts()
 
-		c.l.Printf("round %d: cluster recovered\n", curRound)
-	}
+			madeProgress := func() bool {
+				newCounts := s.counts()
+				for i := range newCounts {
+					if newCounts[i] > preCount[i] {
+						c.l.Printf("round %d: progress made by client %d\n", curRound, i)
+						return true
+					}
+				}
+				return false
+			}
+
+			// Sleep until at least one client is writing successfully.
+			c.l.Printf("round %d: monkey sleeping while cluster recovers...\n", curRound)
+			for !s.done(ctx) && !madeProgress() {
+				time.Sleep(time.Second)
+			}
+			if s.done(ctx) {
+				c.l.Printf("round %d: not waiting for recovery due to signal that we're done\n",
+					curRound)
+				return
+			}
+
+			c.l.Printf("round %d: cluster recovered\n", curRound)
+		}
+	}()
 }
 
-func (s *bankState) splitMonkey(ctx context.Context, d time.Duration, c *cluster) {
-	defer s.waitGroup.Done()
-	r := newRand()
-	nodes := make([]string, c.nodes)
+func (s *bankState) startSplitMonkey(ctx context.Context, d time.Duration, c *cluster) {
+	s.waitGroup.Add(1)
+	go func() {
+		defer s.waitGroup.Done()
 
-	for i := 0; i < c.nodes; i++ {
-		nodes[i] = strconv.Itoa(i + 1)
-	}
+		r := newRand()
+		nodes := make([]string, c.nodes)
 
-	for curRound := uint64(1); !s.done(ctx); curRound++ {
-		atomic.StoreUint64(&s.monkeyIteration, curRound)
-		time.Sleep(time.Duration(rand.Float64() * float64(d)))
+		for i := 0; i < c.nodes; i++ {
+			nodes[i] = strconv.Itoa(i + 1)
+		}
 
-		client := &s.clients[c.All().randNode()[0]-1]
+		for curRound := uint64(1); !s.done(ctx); curRound++ {
+			atomic.StoreUint64(&s.monkeyIteration, curRound)
+			time.Sleep(time.Duration(rand.Float64() * float64(d)))
 
-		switch r.Intn(2) {
-		case 0:
-			client.RLock()
-			zipF := accountDistribution(r)
-			key := zipF.Uint64()
-			const splitQuery = `ALTER TABLE bank.accounts SPLIT AT VALUES ($1)`
-			c.l.Printf("round %d: splitting key %v\n", curRound, key)
-			_, err := client.db.Exec(`SET experimental_force_split_at = true`)
-			if err != nil && !testutils.IsSQLRetryableError(err) {
-				s.errChan <- err
-			}
-			_, err = client.db.Exec(splitQuery, key)
-			if err != nil && !(testutils.IsSQLRetryableError(err) || isExpectedRelocateError(err)) {
-				s.errChan <- err
-			}
-			client.RUnlock()
-		case 1:
-			for i := 0; i < len(s.clients); i++ {
-				s.clients[i].Lock()
-			}
-			zipF := accountDistribution(r)
-			key := zipF.Uint64()
+			client := &s.clients[c.All().randNode()[0]-1]
 
-			rand.Shuffle(len(nodes), func(i, j int) {
-				nodes[i], nodes[j] = nodes[j], nodes[i]
-			})
+			switch r.Intn(2) {
+			case 0:
+				client.RLock()
+				zipF := accountDistribution(r)
+				key := zipF.Uint64()
+				const splitQuery = `ALTER TABLE bank.accounts SPLIT AT VALUES ($1)`
+				c.l.Printf("round %d: splitting key %v\n", curRound, key)
+				_, err := client.db.Exec(`SET experimental_force_split_at = true`)
+				if err != nil && !testutils.IsSQLRetryableError(err) {
+					s.errChan <- err
+				}
+				_, err = client.db.Exec(splitQuery, key)
+				if err != nil && !(testutils.IsSQLRetryableError(err) || isExpectedRelocateError(err)) {
+					s.errChan <- err
+				}
+				client.RUnlock()
+			case 1:
+				for i := 0; i < len(s.clients); i++ {
+					s.clients[i].Lock()
+				}
+				zipF := accountDistribution(r)
+				key := zipF.Uint64()
 
-			const relocateQueryFormat = `ALTER TABLE bank.accounts EXPERIMENTAL_RELOCATE VALUES (ARRAY[%s], %d);`
-			relocateQuery := fmt.Sprintf(relocateQueryFormat, strings.Join(nodes[1:], ", "), key)
-			c.l.Printf("round %d: relocating key %d to nodes %s\n",
-				curRound, key, nodes[1:])
+				rand.Shuffle(len(nodes), func(i, j int) {
+					nodes[i], nodes[j] = nodes[j], nodes[i]
+				})
 
-			_, err := client.db.Exec(relocateQuery)
-			if err != nil && !(testutils.IsSQLRetryableError(err) || isExpectedRelocateError(err)) {
-				s.errChan <- err
-			}
-			for i := 0; i < len(s.clients); i++ {
-				s.clients[i].Unlock()
+				const relocateQueryFormat = `ALTER TABLE bank.accounts EXPERIMENTAL_RELOCATE VALUES (ARRAY[%s], %d);`
+				relocateQuery := fmt.Sprintf(relocateQueryFormat, strings.Join(nodes[1:], ", "), key)
+				c.l.Printf("round %d: relocating key %d to nodes %s\n",
+					curRound, key, nodes[1:])
+
+				_, err := client.db.Exec(relocateQuery)
+				if err != nil && !(testutils.IsSQLRetryableError(err) || isExpectedRelocateError(err)) {
+					s.errChan <- err
+				}
+				for i := 0; i < len(s.clients); i++ {
+					s.clients[i].Unlock()
+				}
 			}
 		}
-	}
+	}()
 }
 
 func isExpectedRelocateError(err error) bool {
@@ -400,12 +423,12 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 	// TODO(peter): Run for longer when !local.
 	start := timeutil.Now()
 	s := &bankState{
-		errChan:   make(chan error, c.nodes),
-		waitGroup: sync.WaitGroup{},
-		deadline:  start.Add(time.Minute),
-		clients:   make([]bankClient, c.nodes),
+		errChan:  make(chan error, c.nodes),
+		deadline: start.Add(time.Minute),
+		clients:  make([]bankClient, c.nodes),
 	}
 	s.initBank(ctx, t, c)
+	defer s.waitGroup.Wait()
 
 	for i := 0; i < c.nodes; i++ {
 		s.clients[i].Lock()
@@ -413,11 +436,6 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 		s.clients[i].Unlock()
 		go s.transferMoney(ctx, c, i+1, bankNumAccounts, bankMaxTransfer)
 	}
-
-	s.waitGroup.Add(1)
-	defer func() {
-		s.waitGroup.Wait()
-	}()
 
 	// Chaos monkey.
 	rnd, seed := randutil.NewPseudoRand()
@@ -429,7 +447,7 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 		}
 		return nodes
 	}
-	go s.chaosMonkey(ctx, t, c, true, pickNodes, -1)
+	s.startChaosMonkey(ctx, t, c, true, pickNodes, -1)
 
 	s.waitClientsStop(ctx, t, c, 30*time.Second)
 
@@ -452,23 +470,18 @@ func runBankNodeRestart(ctx context.Context, t *test, c *cluster) {
 	// TODO(peter): Run for longer when !local.
 	start := timeutil.Now()
 	s := &bankState{
-		errChan:   make(chan error, 1),
-		waitGroup: sync.WaitGroup{},
-		deadline:  start.Add(time.Minute),
-		clients:   make([]bankClient, 1),
+		errChan:  make(chan error, 1),
+		deadline: start.Add(time.Minute),
+		clients:  make([]bankClient, 1),
 	}
 	s.initBank(ctx, t, c)
+	defer s.waitGroup.Wait()
 
 	clientIdx := c.nodes
 	client := &s.clients[0]
 	client.db = c.Conn(ctx, clientIdx)
 
-	s.waitGroup.Add(1)
 	go s.transferMoney(ctx, c, 1, bankNumAccounts, bankMaxTransfer)
-
-	defer func() {
-		s.waitGroup.Wait()
-	}()
 
 	// Chaos monkey.
 	rnd, seed := randutil.NewPseudoRand()
@@ -476,7 +489,7 @@ func runBankNodeRestart(ctx context.Context, t *test, c *cluster) {
 	pickNodes := func() []int {
 		return []int{1 + rnd.Intn(clientIdx)}
 	}
-	go s.chaosMonkey(ctx, t, c, false, pickNodes, clientIdx)
+	s.startChaosMonkey(ctx, t, c, false, pickNodes, clientIdx)
 
 	s.waitClientsStop(ctx, t, c, 30*time.Second)
 
@@ -494,12 +507,12 @@ func runBankNodeZeroSum(ctx context.Context, t *test, c *cluster) {
 
 	start := timeutil.Now()
 	s := &bankState{
-		errChan:   make(chan error, c.nodes),
-		waitGroup: sync.WaitGroup{},
-		deadline:  start.Add(time.Minute),
-		clients:   make([]bankClient, c.nodes),
+		errChan:  make(chan error, c.nodes),
+		deadline: start.Add(time.Minute),
+		clients:  make([]bankClient, c.nodes),
 	}
 	s.initBank(ctx, t, c)
+	defer s.waitGroup.Wait()
 
 	for i := 0; i < c.nodes; i++ {
 		s.clients[i].Lock()
@@ -508,12 +521,7 @@ func runBankNodeZeroSum(ctx context.Context, t *test, c *cluster) {
 		go s.transferMoney(ctx, c, i+1, bankNumAccounts, bankMaxTransfer)
 	}
 
-	s.waitGroup.Add(1)
-	defer func() {
-		s.waitGroup.Wait()
-	}()
-
-	go s.splitMonkey(ctx, 2*time.Second, c)
+	s.startSplitMonkey(ctx, 2*time.Second, c)
 	s.waitClientsStop(ctx, t, c, 30*time.Second)
 
 	s.verifyAccounts(ctx, t)
@@ -535,12 +543,12 @@ func runBankZeroSumRestart(ctx context.Context, t *test, c *cluster) {
 
 	start := timeutil.Now()
 	s := &bankState{
-		errChan:   make(chan error, c.nodes),
-		waitGroup: sync.WaitGroup{},
-		deadline:  start.Add(time.Minute),
-		clients:   make([]bankClient, c.nodes),
+		errChan:  make(chan error, c.nodes),
+		deadline: start.Add(time.Minute),
+		clients:  make([]bankClient, c.nodes),
 	}
 	s.initBank(ctx, t, c)
+	defer s.waitGroup.Wait()
 
 	for i := 0; i < c.nodes; i++ {
 		s.clients[i].Lock()
@@ -548,10 +556,6 @@ func runBankZeroSumRestart(ctx context.Context, t *test, c *cluster) {
 		s.clients[i].Unlock()
 		go s.transferMoney(ctx, c, i+1, bankNumAccounts, bankMaxTransfer)
 	}
-
-	defer func() {
-		s.waitGroup.Wait()
-	}()
 
 	rnd, seed := randutil.NewPseudoRand()
 	c.l.Printf("monkey starts (seed %d)\n", seed)
@@ -563,10 +567,9 @@ func runBankZeroSumRestart(ctx context.Context, t *test, c *cluster) {
 		return nodes
 	}
 
-	s.waitGroup.Add(2)
 	// Starting up the goroutines that restart and do splits and lease moves.
-	go s.chaosMonkey(ctx, t, c, false, pickNodes, -1)
-	go s.splitMonkey(ctx, 2*time.Second, c)
+	s.startChaosMonkey(ctx, t, c, false, pickNodes, -1)
+	s.startSplitMonkey(ctx, 2*time.Second, c)
 	s.waitClientsStop(ctx, t, c, 30*time.Second)
 
 	// Verify accounts.
