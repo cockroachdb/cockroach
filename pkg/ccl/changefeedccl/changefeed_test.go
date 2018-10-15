@@ -1467,3 +1467,28 @@ func TestManyChangefeedsOneTable(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
+
+func TestUnspecifiedPrimaryKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT)`)
+		var id0 int
+		sqlDB.QueryRow(t, `INSERT INTO foo VALUES (0) RETURNING rowid`).Scan(&id0)
+
+		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo`)
+		defer foo.Close(t)
+
+		var id1 int
+		sqlDB.QueryRow(t, `INSERT INTO foo VALUES (1) RETURNING rowid`).Scan(&id1)
+
+		assertPayloads(t, foo, []string{
+			fmt.Sprintf(`foo: [%d]->{"a": 0, "rowid": %d}`, id0, id0),
+			fmt.Sprintf(`foo: [%d]->{"a": 1, "rowid": %d}`, id1, id1),
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
