@@ -17,8 +17,6 @@ package storage
 import (
 	"context"
 
-	"github.com/opentracing/opentracing-go"
-
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -31,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 // SpanSetReplicaEvalContext is a testing-only implementation of
@@ -142,6 +141,11 @@ func (rec SpanSetReplicaEvalContext) GetMVCCStats() enginepb.MVCCStats {
 	// the MVCCStats key. This means that the key is not included in SpanSet
 	// declarations, so there's nothing to assert here.
 	return rec.i.GetMVCCStats()
+}
+
+// GetQPS returns the Replica's queries/s request rate.
+func (rec SpanSetReplicaEvalContext) GetQPS() float64 {
+	return rec.i.GetQPS()
 }
 
 // GetGCThreshold returns the GC threshold of the Range, typically updated when
