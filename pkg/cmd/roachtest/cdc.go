@@ -19,8 +19,13 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strconv"
+	"strings"
+	"sync/atomic"
 	"time"
 
+	"github.com/Shopify/sarama"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -59,11 +64,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	if _, err := db.Exec(`SET CLUSTER SETTING trace.debug.enable = true`); err != nil {
 		c.t.Fatal(err)
 	}
-	defer func() {
-		if err := stopFeeds(db, c); err != nil {
-			t.Fatal(err)
-		}
-	}()
+	defer stopFeeds(db)
 
 	t.Status("installing kafka")
 	kafka := kafkaManager{
@@ -157,6 +158,119 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	verifier.assertValid(t)
 }
 
+func runCDCBank(ctx context.Context, t *test, c *cluster) {
+	// Make the logs dir on every node to work around the `roachprod get logs`
+	// spam.
+	c.Run(ctx, c.All(), `mkdir logs`)
+
+	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.nodes-1), c.Node(c.nodes), c.Node(c.nodes)
+	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
+	c.Put(ctx, workload, "./workload", workloadNode)
+	c.Start(ctx, t, crdbNodes)
+	kafka := kafkaManager{
+		c:     c,
+		nodes: kafkaNode,
+	}
+	kafka.install(ctx)
+	kafka.start(ctx)
+	defer kafka.stop(ctx)
+
+	c.Run(ctx, workloadNode, `./workload init bank {pgurl:0}`)
+	db := c.Conn(ctx, 1)
+	defer stopFeeds(db)
+
+	if _, err := db.Exec(
+		`SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`,
+	); err != nil {
+		t.Fatal(err)
+	}
+	var jobID string
+	if err := db.QueryRow(
+		`CREATE CHANGEFEED FOR bank.bank INTO $1 WITH updated, resolved`, kafka.sinkURL(ctx),
+	).Scan(&jobID); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Status("running workload")
+	workloadCtx, workloadCancel := context.WithCancel(ctx)
+	m := newMonitor(workloadCtx, c, crdbNodes)
+	var doneAtomic int64
+	m.Go(func(ctx context.Context) error {
+		err := c.RunE(ctx, workloadNode, `./workload run bank {pgurl:0}`)
+		if atomic.LoadInt64(&doneAtomic) > 0 {
+			return nil
+		}
+		return err
+	})
+	m.Go(func(ctx context.Context) error {
+		defer workloadCancel()
+		l, err := t.l.ChildLogger(`changefeed`)
+		if err != nil {
+			return err
+		}
+		defer l.close()
+
+		tc, err := kafka.consumer(ctx, `bank`)
+		if err != nil {
+			return err
+		}
+		defer tc.Close()
+
+		// TODO(dan): Force multiple partitions and re-enable this check. It
+		// used to be the only thing that verified our correctness with multiple
+		// partitions but TestValidations/enterprise also does that now, so this
+		// isn't a big deal.
+		//
+		// if len(tc.partitions) <= 1 {
+		//  return errors.New("test requires at least 2 partitions to be interesting")
+		// }
+
+		const requestedResolved = 100
+		var numResolved, rowsSinceResolved int
+		v := changefeedccl.Validators{
+			changefeedccl.NewOrderValidator(`bank`),
+			// TODO(mrtracy): Disabled by #30902. Re-enabling is tracked by #31110.
+			// changefeedccl.NewFingerprintValidator(sqlDB.DB, `bank`, `fprint`, tc.partitions),
+		}
+		if _, err := db.Exec(
+			`CREATE TABLE fprint (id INT PRIMARY KEY, balance INT, payload STRING)`,
+		); err != nil {
+			return err
+		}
+
+		for {
+			m := tc.Next(ctx)
+			updated, resolved, err := changefeedccl.ParseJSONValueTimestamps(m.Value)
+			if err != nil {
+				return err
+			}
+
+			partitionStr := strconv.Itoa(int(m.Partition))
+			if len(m.Key) > 0 {
+				v.NoteRow(partitionStr, string(m.Key), string(m.Value), updated)
+				rowsSinceResolved++
+			} else {
+				if err := v.NoteResolved(partitionStr, resolved); err != nil {
+					return err
+				}
+				if rowsSinceResolved > 0 {
+					numResolved++
+					if numResolved > requestedResolved {
+						atomic.StoreInt64(&doneAtomic, 1)
+						break
+					}
+				}
+				rowsSinceResolved = 0
+			}
+		}
+		if failures := v.Failures(); len(failures) > 0 {
+			return errors.New(strings.Join(failures, "\n"))
+		}
+		return nil
+	})
+	m.Wait()
+}
+
 func registerCDC(r *registry) {
 	r.Add(testSpec{
 		Name:       "cdc/w=1000/nodes=3/init=false",
@@ -231,6 +345,27 @@ func registerCDC(r *registry) {
 			})
 		},
 	})
+	// TODO(dan): This currently gets its own cluster during the nightly
+	// acceptance tests. Decide whether it's safe to share with the one made for
+	// "acceptance/*".
+	//
+	// TODO(dan): Ideally, these would run on every PR, but because of
+	// enterprise license checks, there currently isn't a good way to do that
+	// without potentially leaking secrets.
+	r.Add(testSpec{
+		Name:       "cdc",
+		MinVersion: "2.1.0",
+		Nodes:      nodes(4),
+		Stable:     true, // DO NOT COPY to new tests
+		SubTests: []testSpec{{
+			Name:   `bank`,
+			Stable: true, // DO NOT COPY to new tests
+			Run: func(ctx context.Context, t *test, c *cluster) {
+				c.Wipe(ctx)
+				runCDCBank(ctx, t, c)
+			},
+		}},
+	})
 }
 
 type kafkaManager struct {
@@ -238,21 +373,38 @@ type kafkaManager struct {
 	nodes nodeListOption
 }
 
+func (k kafkaManager) basePath() string {
+	if k.c.isLocal() {
+		return `/tmp/confluent`
+	}
+	return `/mnt/data1/confluent`
+}
+
 func (k kafkaManager) install(ctx context.Context) {
-	k.c.Run(ctx, k.nodes, `curl -s https://packages.confluent.io/archive/4.0/confluent-oss-4.0.0-2.11.tar.gz | tar -xz`)
-	k.c.Run(ctx, k.nodes, `sudo apt-get -q update`)
-	k.c.Run(ctx, k.nodes, `yes | sudo apt-get -q install default-jre`)
-	k.c.Run(ctx, k.nodes, `mkdir -p /mnt/data1/confluent`)
+	folder := k.basePath()
+	k.c.Run(ctx, k.nodes, `mkdir -p `+folder)
+	k.c.Run(ctx, k.nodes, `curl -s https://packages.confluent.io/archive/4.0/confluent-oss-4.0.0-2.11.tar.gz | tar -xz -C `+folder)
+	if !k.c.isLocal() {
+		k.c.Run(ctx, k.nodes, `sudo apt-get -q update`)
+		k.c.Run(ctx, k.nodes, `yes | sudo apt-get -q install default-jre`)
+	}
 }
 
 func (k kafkaManager) start(ctx context.Context) {
+	folder := k.basePath()
 	// This isn't necessary for the nightly tests, but it's nice for iteration.
-	k.c.Run(ctx, k.nodes, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent destroy || true`)
-	k.c.Run(ctx, k.nodes, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent start kafka`)
+	k.c.Run(ctx, k.nodes, `CONFLUENT_CURRENT=`+folder+` `+folder+`/confluent-4.0.0/bin/confluent destroy || true`)
+	k.restart(ctx)
+}
+
+func (k kafkaManager) restart(ctx context.Context) {
+	folder := k.basePath()
+	k.c.Run(ctx, k.nodes, `CONFLUENT_CURRENT=`+folder+` `+folder+`/confluent-4.0.0/bin/confluent start kafka`)
 }
 
 func (k kafkaManager) stop(ctx context.Context) {
-	k.c.Run(ctx, k.nodes, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent stop`)
+	folder := k.basePath()
+	k.c.Run(ctx, k.nodes, `CONFLUENT_CURRENT=`+folder+` `+folder+`/confluent-4.0.0/bin/confluent stop`)
 }
 
 func (k kafkaManager) chaosLoop(
@@ -278,12 +430,34 @@ func (k kafkaManager) chaosLoop(
 		case <-time.After(downTime):
 		}
 
-		k.start(ctx)
+		k.restart(ctx)
 	}
 }
 
 func (k kafkaManager) sinkURL(ctx context.Context) string {
 	return `kafka://` + k.c.InternalIP(ctx, k.nodes)[0] + `:9092`
+}
+
+func (k kafkaManager) consumer(ctx context.Context, topic string) (*topicConsumer, error) {
+	kafkaAddrs := []string{k.c.InternalIP(ctx, k.nodes)[0] + `:9092`}
+	config := sarama.NewConfig()
+	// I was seeing "error processing FetchRequest: kafka: error decoding
+	// packet: unknown magic byte (2)" errors which
+	// https://github.com/Shopify/sarama/issues/962 identifies as the
+	// consumer's fetch size being less than the "max.message.bytes" that
+	// kafka is configured with. Kafka notes that this is required in
+	// https://kafka.apache.org/documentation.html#upgrade_11_message_format
+	config.Consumer.Fetch.Default = 1000012
+	consumer, err := sarama.NewConsumer(kafkaAddrs, config)
+	if err != nil {
+		return nil, err
+	}
+	tc, err := makeTopicConsumer(consumer, `bank`)
+	if err != nil {
+		_ = consumer.Close()
+		return nil, err
+	}
+	return tc, nil
 }
 
 type tpccWorkload struct {
@@ -460,9 +634,68 @@ func getChangefeedInfo(db *gosql.DB, jobID int) (changefeedInfo, error) {
 
 // stopFeeds cancels any running feeds on the cluster. Not necessary for the
 // nightly, but nice for development.
-func stopFeeds(db *gosql.DB, c *cluster) error {
-	_, err := db.Exec(`CANCEL JOBS (
+func stopFeeds(db *gosql.DB) {
+	_, _ = db.Exec(`CANCEL JOBS (
 			SELECT job_id FROM [SHOW JOBS] WHERE status = 'running'
 		)`)
-	return err
+}
+
+type topicConsumer struct {
+	sarama.Consumer
+
+	topic              string
+	partitions         []string
+	partitionConsumers []sarama.PartitionConsumer
+}
+
+func makeTopicConsumer(c sarama.Consumer, topic string) (*topicConsumer, error) {
+	t := &topicConsumer{Consumer: c, topic: topic}
+	partitions, err := t.Partitions(t.topic)
+	if err != nil {
+		return nil, err
+	}
+	for _, partition := range partitions {
+		t.partitions = append(t.partitions, strconv.Itoa(int(partition)))
+		pc, err := t.ConsumePartition(topic, partition, sarama.OffsetOldest)
+		if err != nil {
+			return nil, err
+		}
+		t.partitionConsumers = append(t.partitionConsumers, pc)
+	}
+	return t, nil
+}
+
+func (c *topicConsumer) tryNextMessage(ctx context.Context) *sarama.ConsumerMessage {
+	for _, pc := range c.partitionConsumers {
+		select {
+		case <-ctx.Done():
+			return nil
+		case m := <-pc.Messages():
+			return m
+		default:
+		}
+	}
+	return nil
+}
+
+func (c *topicConsumer) Next(ctx context.Context) *sarama.ConsumerMessage {
+	m := c.tryNextMessage(ctx)
+	for ; m == nil; m = c.tryNextMessage(ctx) {
+		if ctx.Err() != nil {
+			return nil
+		}
+	}
+	return m
+}
+
+func (c *topicConsumer) Close() {
+	for _, pc := range c.partitionConsumers {
+		pc.AsyncClose()
+		// Drain the messages and errors as required by AsyncClose.
+		for range pc.Messages() {
+		}
+		for range pc.Errors() {
+		}
+	}
+	_ = c.Consumer.Close()
 }

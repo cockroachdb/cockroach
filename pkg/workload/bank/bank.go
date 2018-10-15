@@ -162,7 +162,7 @@ func (b *bank) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 	updateStmt, err := db.Prepare(`
 		UPDATE bank
 		SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
-		WHERE id IN ($1, $2) AND (SELECT balance >= $3 FROM bank WHERE id = $1)
+		WHERE id IN ($1, $2)
 	`)
 	if err != nil {
 		return workload.QueryLoad{}, err
