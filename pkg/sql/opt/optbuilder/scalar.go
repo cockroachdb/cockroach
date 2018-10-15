@@ -449,6 +449,26 @@ func (b *Builder) buildScalar(
 		out = b.buildScalar(t.TypedInnerExpr(), inScope, nil, nil, colRefs)
 		out = unaryOpMap[t.Operator](b.factory, out)
 
+	case *tree.IsOfTypeExpr:
+		// IsOfTypeExpr is a little strange because its value can be determined
+		// statically just from the type of the expression.
+		actualType := t.Expr.(tree.TypedExpr).ResolvedType()
+
+		found := false
+		for _, typ := range t.Types {
+			wantTyp := coltypes.CastTargetToDatumType(typ)
+			if actualType.Equivalent(wantTyp) {
+				found = true
+				break
+			}
+		}
+
+		if found != t.Not {
+			out = b.factory.ConstructTrue()
+		} else {
+			out = b.factory.ConstructFalse()
+		}
+
 	// NB: this is the exception to the sorting of the case statements. The
 	// tree.Datum case needs to occur after *tree.Placeholder which implements
 	// Datum.
