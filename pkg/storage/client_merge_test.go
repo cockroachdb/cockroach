@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -2656,6 +2657,7 @@ func TestMergeQueue(t *testing.T) {
 		verifyUnmerged(t)
 
 		// Once the maximum size threshold is increased, the merge can occur.
+		zone = *protoutil.Clone(&zone).(*config.ZoneConfig)
 		*zone.RangeMaxBytes += 1
 		setZones(zone)
 		store.ForceMergeScanAndProcess()
