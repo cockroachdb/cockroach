@@ -193,10 +193,16 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
   }
 
   contentTimestamp(timestamp: protos.cockroach.util.hlc.ITimestamp): RangeTableCellContent {
+    if (_.isNil(timestamp) || _.isNil(timestamp.wall_time)) {
+      return {
+        value: ["no timestamp"],
+        className: ["range-table__cell--warning"],
+      };
+    }
     const humanized = Print.Timestamp(timestamp);
     return {
       value: [humanized],
-      title: [humanized, timestamp.wall_time.toString()],
+      title: [humanized, FixLong(timestamp.wall_time).toString()],
     };
   }
 
