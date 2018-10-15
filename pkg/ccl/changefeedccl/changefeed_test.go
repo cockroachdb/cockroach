@@ -15,18 +15,21 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
@@ -36,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -132,17 +136,64 @@ func TestChangefeedCursor(t *testing.T) {
 	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+
+		// To make sure that these timestamps are after 'before' and before
+		// 'after', throw a couple sleeps around them. We round timestamps to
+		// Microsecond granularity for Postgres compatibility, so make the
+		// sleeps 10x that.
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'before')`)
-		var ts string
-		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts)
+		time.Sleep(10 * time.Microsecond)
+
+		var tsLogical string
+		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&tsLogical)
+		var tsClock time.Time
+		sqlDB.QueryRow(t, `SELECT clock_timestamp()`).Scan(&tsClock)
+
+		time.Sleep(10 * time.Microsecond)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (2, 'after')`)
 
-		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, ts)
-		defer foo.Close(t)
-
-		assertPayloads(t, foo, []string{
+		fooLogical := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, tsLogical)
+		defer fooLogical.Close(t)
+		assertPayloads(t, fooLogical, []string{
 			`foo: [2]->{"a": 2, "b": "after"}`,
 		})
+
+		fooTime := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, tsClock)
+		defer fooTime.Close(t)
+		assertPayloads(t, fooTime, []string{
+			`foo: [2]->{"a": 2, "b": "after"}`,
+		})
+
+		fooNanos := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, tsClock.UnixNano())
+		defer fooNanos.Close(t)
+		assertPayloads(t, fooNanos, []string{
+			`foo: [2]->{"a": 2, "b": "after"}`,
+		})
+
+		nanosStr := strconv.FormatInt(tsClock.UnixNano(), 10)
+		fooNanosStr := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, nanosStr)
+		defer fooNanosStr.Close(t)
+		assertPayloads(t, fooNanosStr, []string{
+			`foo: [2]->{"a": 2, "b": "after"}`,
+		})
+
+		timeStr := tsClock.Format(`2006-01-02 15:04:05.999999`)
+		fooString := f.Feed(t, `CREATE CHANGEFEED FOR foo WITH cursor=$1`, timeStr)
+		defer fooString.Close(t)
+		assertPayloads(t, fooString, []string{
+			`foo: [2]->{"a": 2, "b": "after"}`,
+		})
+
+		// Check that the cursor is properly hooked up to the job statement
+		// time. The sinkless tests currently don't have a way to get the
+		// statement timestamp, so only verify this for enterprise.
+		if e, ok := fooLogical.(*tableFeed); ok {
+			var bytes []byte
+			sqlDB.QueryRow(t, `SELECT payload FROM system.jobs WHERE id=$1`, e.jobID).Scan(&bytes)
+			var payload jobspb.Payload
+			require.NoError(t, protoutil.Unmarshal(bytes, &payload))
+			require.Equal(t, parseTimeToHLC(t, tsLogical), payload.GetChangefeed().StatementTime)
+		}
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
@@ -1224,6 +1275,11 @@ func TestChangefeedErrors(t *testing.T) {
 		); !testutils.IsError(err, `negative durations are not accepted: resolved='-1s'`) {
 			t.Errorf(`expected 'negative durations are not accepted' error got: %+v`, err)
 		}
+		if _, err := sqlDB.DB.Exec(
+			`CREATE CHANGEFEED FOR foo WITH cursor=$1`, timeutil.Now().Add(time.Hour),
+		); !testutils.IsError(err, `cannot specify timestamp in the future`) {
+			t.Errorf(`expected 'cannot specify timestamp in the future' error got: %+v`, err)
+		}
 
 		if _, err := sqlDB.DB.Exec(
 			`CREATE CHANGEFEED FOR foo INTO ''`,
@@ -1419,5 +1475,76 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 	}
 
 	// Only the enterprise version uses jobs.
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestManyChangefeedsOneTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'v0')`)
+
+		foo1 := f.Feed(t, `CREATE CHANGEFEED FOR foo`)
+		defer foo1.Close(t)
+		foo2 := f.Feed(t, `CREATE CHANGEFEED FOR foo`)
+		defer foo2.Close(t)
+		foo3 := f.Feed(t, `CREATE CHANGEFEED FOR foo`)
+		defer foo3.Close(t)
+
+		assertPayloads(t, foo1, []string{
+			`foo: [0]->{"a": 0, "b": "v0"}`,
+		})
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'v1')`)
+		assertPayloads(t, foo1, []string{
+			`foo: [1]->{"a": 1, "b": "v1"}`,
+		})
+		assertPayloads(t, foo2, []string{
+			`foo: [0]->{"a": 0, "b": "v0"}`,
+			`foo: [1]->{"a": 1, "b": "v1"}`,
+		})
+
+		sqlDB.Exec(t, `UPSERT INTO foo VALUES (0, 'v2')`)
+		assertPayloads(t, foo1, []string{
+			`foo: [0]->{"a": 0, "b": "v2"}`,
+		})
+		assertPayloads(t, foo2, []string{
+			`foo: [0]->{"a": 0, "b": "v2"}`,
+		})
+		assertPayloads(t, foo3, []string{
+			`foo: [0]->{"a": 0, "b": "v0"}`,
+			`foo: [0]->{"a": 0, "b": "v2"}`,
+			`foo: [1]->{"a": 1, "b": "v1"}`,
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
+}
+
+func TestUnspecifiedPrimaryKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f testfeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT)`)
+		var id0 int
+		sqlDB.QueryRow(t, `INSERT INTO foo VALUES (0) RETURNING rowid`).Scan(&id0)
+
+		foo := f.Feed(t, `CREATE CHANGEFEED FOR foo`)
+		defer foo.Close(t)
+
+		var id1 int
+		sqlDB.QueryRow(t, `INSERT INTO foo VALUES (1) RETURNING rowid`).Scan(&id1)
+
+		assertPayloads(t, foo, []string{
+			fmt.Sprintf(`foo: [%d]->{"a": 0, "rowid": %d}`, id0, id0),
+			fmt.Sprintf(`foo: [%d]->{"a": 1, "rowid": %d}`, id1, id1),
+		})
+	}
+
+	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 }
