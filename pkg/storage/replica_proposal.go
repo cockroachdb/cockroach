@@ -535,10 +535,10 @@ func (r *Replica) handleReplicatedEvalResult(
 	r.store.metrics.addMVCCStats(deltaStats)
 	rResult.Delta = enginepb.MVCCStatsDelta{}
 
-	if r.store.splitQueue != nil && needsSplitBySize { // the boostrap store has a nil split queue
+	if r.store.splitQueue != nil && needsSplitBySize { // the bootstrap store has a nil split queue
 		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
-	if r.store.mergeQueue != nil && needsMergeBySize { // the boostrap store has a nil merge queue
+	if r.store.mergeQueue != nil && needsMergeBySize { // the bootstrap store has a nil merge queue
 		r.store.mergeQueue.MaybeAdd(r, r.store.Clock().Now())
 	}
 
