@@ -53,7 +53,7 @@ func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
 	return rpc.NewContext(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
 		&base.Config{Insecure: true},
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond),
 		stopper,
 		&cluster.MakeTestingClusterSettings().Version,
 	)

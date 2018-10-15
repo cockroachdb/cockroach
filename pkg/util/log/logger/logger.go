@@ -12,11 +12,12 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-// package logger defines a common logging interface.
+// Package logger defines a common logging interface.
 package logger
 
 import "context"
 
+// Log defines a logger.
 type Log interface {
 	// Fatalf logs to the INFO, WARNING, ERROR, and FATAL logs and calls os.Exit.
 	Fatalf(ctx context.Context, format string, args ...interface{})

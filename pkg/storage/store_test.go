@@ -199,7 +199,7 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 
 func createTestStore(t testing.TB, stopper *stop.Stopper) (*Store, *hlc.ManualClock) {
 	manual := hlc.NewManualClock(123)
-	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	cfg := TestStoreConfig(hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond))
 	store := createTestStoreWithConfig(t, stopper, &cfg)
 	return store, manual
 }
@@ -357,7 +357,7 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// We need a fixed clock to avoid LastUpdateNanos drifting on us.
-	cfg := TestStoreConfig(hlc.NewClock(func() int64 { return 123 }, time.Nanosecond))
+	cfg := TestStoreConfig(hlc.NewClock(log.Logger, func() int64 { return 123 }, time.Nanosecond))
 	stopper := stop.NewStopper()
 	ctx := context.TODO()
 	defer stopper.Stop(ctx)
@@ -1102,7 +1102,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 	for _, test := range testCases {
 		func() {
 			manual := hlc.NewManualClock(123)
-			cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+			cfg := TestStoreConfig(hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond))
 			cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 				func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 					if bytes.Equal(filterArgs.Req.Header().Key, badKey) {
@@ -1514,7 +1514,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	manual := hlc.NewManualClock(123)
-	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	cfg := TestStoreConfig(hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			pr, ok := filterArgs.Req.(*roachpb.PushTxnRequest)
@@ -2412,7 +2412,7 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 
 	var resolveCount int32
 	manual := hlc.NewManualClock(123)
-	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	cfg := TestStoreConfig(hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if _, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest); ok {

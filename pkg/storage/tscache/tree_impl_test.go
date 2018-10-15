@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // TestTreeImplEviction verifies the eviction of timestamp cache entries after
@@ -28,7 +29,7 @@ import (
 func TestTreeImplEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 	tc := newTreeImpl(clock)
 	defer tc.clear(clock.Now())
 
@@ -55,7 +56,7 @@ func TestTreeImplEviction(t *testing.T) {
 func TestTreeImplNoEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 	tc := newTreeImpl(clock)
 	defer tc.clear(clock.Now())
 

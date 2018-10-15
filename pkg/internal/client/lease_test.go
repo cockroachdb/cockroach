@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 const (
@@ -42,7 +43,7 @@ func TestAcquireAndRelease(t *testing.T) {
 
 	ctx := context.Background()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 	lm := client.NewLeaseManager(db, clock, client.LeaseManagerOptions{ClientID: clientID1})
 
 	l, err := lm.AcquireLease(ctx, leaseKey)
@@ -72,7 +73,7 @@ func TestReacquireLease(t *testing.T) {
 
 	ctx := context.Background()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 	lm := client.NewLeaseManager(db, clock, client.LeaseManagerOptions{ClientID: clientID1})
 
 	if _, err := lm.AcquireLease(ctx, leaseKey); err != nil {
@@ -98,7 +99,7 @@ func TestExtendLease(t *testing.T) {
 
 	ctx := context.Background()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 	lm := client.NewLeaseManager(db, clock, client.LeaseManagerOptions{ClientID: clientID1})
 
 	l, err := lm.AcquireLease(ctx, leaseKey)
@@ -137,9 +138,9 @@ func TestLeasesMultipleClients(t *testing.T) {
 
 	ctx := context.Background()
 	manual1 := hlc.NewManualClock(123)
-	clock1 := hlc.NewClock(manual1.UnixNano, time.Nanosecond)
+	clock1 := hlc.NewClock(log.Logger, manual1.UnixNano, time.Nanosecond)
 	manual2 := hlc.NewManualClock(123)
-	clock2 := hlc.NewClock(manual2.UnixNano, time.Nanosecond)
+	clock2 := hlc.NewClock(log.Logger, manual2.UnixNano, time.Nanosecond)
 	lm1 := client.NewLeaseManager(db, clock1, client.LeaseManagerOptions{ClientID: clientID1})
 	lm2 := client.NewLeaseManager(db, clock2, client.LeaseManagerOptions{ClientID: clientID2})
 

@@ -805,7 +805,7 @@ func TestReadConsistencyTypes(t *testing.T) {
 					return ba.CreateReply(), nil
 				})
 
-			clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+			clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 			db := client.NewDB(testutils.MakeAmbientCtx(), factory, clock)
 			ctx := context.TODO()
 
@@ -942,7 +942,7 @@ func TestNodeIDAndObservedTimestamps(t *testing.T) {
 			return ba.CreateReply(), nil
 		})
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	dbCtx := client.DefaultDBContext()
 	dbCtx.NodeID = &base.NodeIDContainer{}
 	db := client.NewDBWithContext(testutils.MakeAmbientCtx(), factory, clock, dbCtx)

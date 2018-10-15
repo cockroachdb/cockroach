@@ -40,7 +40,7 @@ func newStores(ambientCtx log.AmbientContext, clock *hlc.Clock) *Stores {
 
 func TestStoresAddStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ls := newStores(log.AmbientContext{Tracer: tracing.NewTracer()}, hlc.NewClock(hlc.UnixNano, time.Nanosecond))
+	ls := newStores(log.AmbientContext{Tracer: tracing.NewTracer()}, hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond))
 	store := Store{
 		Ident: &roachpb.StoreIdent{StoreID: 123},
 	}
@@ -55,7 +55,7 @@ func TestStoresAddStore(t *testing.T) {
 
 func TestStoresRemoveStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ls := newStores(log.AmbientContext{Tracer: tracing.NewTracer()}, hlc.NewClock(hlc.UnixNano, time.Nanosecond))
+	ls := newStores(log.AmbientContext{Tracer: tracing.NewTracer()}, hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond))
 
 	storeID := roachpb.StoreID(89)
 
@@ -70,7 +70,7 @@ func TestStoresRemoveStore(t *testing.T) {
 
 func TestStoresGetStoreCount(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ls := newStores(log.AmbientContext{Tracer: tracing.NewTracer()}, hlc.NewClock(hlc.UnixNano, time.Nanosecond))
+	ls := newStores(log.AmbientContext{Tracer: tracing.NewTracer()}, hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond))
 	if ls.GetStoreCount() != 0 {
 		t.Errorf("expected 0 stores in new local sender")
 	}
@@ -86,7 +86,7 @@ func TestStoresGetStoreCount(t *testing.T) {
 
 func TestStoresVisitStores(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ls := newStores(log.AmbientContext{Tracer: tracing.NewTracer()}, hlc.NewClock(hlc.UnixNano, time.Nanosecond))
+	ls := newStores(log.AmbientContext{Tracer: tracing.NewTracer()}, hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond))
 	numStores := 10
 	for i := 0; i < numStores; i++ {
 		ls.AddStore(&Store{Ident: &roachpb.StoreIdent{StoreID: roachpb.StoreID(i)}})
@@ -117,7 +117,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 
 	ls := newStores(log.AmbientContext{}, clock)
 	numStores := 10
@@ -181,7 +181,7 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 
 func TestStoresGetStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ls := newStores(log.AmbientContext{Tracer: tracing.NewTracer()}, hlc.NewClock(hlc.UnixNano, time.Nanosecond))
+	ls := newStores(log.AmbientContext{Tracer: tracing.NewTracer()}, hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond))
 	store := Store{Ident: &roachpb.StoreIdent{StoreID: 1}}
 	replica := roachpb.ReplicaDescriptor{StoreID: store.Ident.StoreID}
 	s, pErr := ls.GetStore(replica.StoreID)
@@ -207,7 +207,7 @@ var storeIDAlloc roachpb.StoreID
 func createStores(count int, t *testing.T) (*hlc.ManualClock, []*Store, *Stores, *stop.Stopper) {
 	stopper := stop.NewStopper()
 	manual := hlc.NewManualClock(123)
-	cfg := TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	cfg := TestStoreConfig(hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond))
 	ls := newStores(log.AmbientContext{Tracer: tracing.NewTracer()}, cfg.Clock)
 
 	// Create two stores with ranges we care about.

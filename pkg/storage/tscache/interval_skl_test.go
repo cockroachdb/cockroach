@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
@@ -846,7 +847,7 @@ func TestIntervalSklFill2(t *testing.T) {
 // by the floor timestamp.
 func TestIntervalSklMinRetentionWindow(t *testing.T) {
 	manual := hlc.NewManualClock(200)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 
 	const minRet = 500
 	s := newIntervalSkl(clock, minRet, 1500, makeSklMetrics())
@@ -920,7 +921,7 @@ func TestIntervalSklConcurrency(t *testing.T) {
 			// good for simulating real conditions while the latter is good for
 			// testing timestamp collisions.
 			testutils.RunTrueAndFalse(t, "useClock", func(t *testing.T, useClock bool) {
-				clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+				clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 				s := newIntervalSkl(clock, 0 /* minRet */, tc.pageSize, makeSklMetrics())
 				if tc.minPages != 0 {
 					s.setMinPages(tc.minPages)
@@ -1017,7 +1018,7 @@ func TestIntervalSklConcurrentVsSequential(t *testing.T) {
 	// collisions.
 	testutils.RunTrueAndFalse(t, "useClock", func(t *testing.T, useClock bool) {
 		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
-		clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+		clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 
 		const smallPageSize = 32 * 1024 // 32 KB
 		const retainForever = math.MaxInt64
@@ -1169,7 +1170,7 @@ func BenchmarkIntervalSklAdd(b *testing.B) {
 	const max = 500000000 // max size of range
 	const txnID = "123"
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Millisecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Millisecond)
 	s := newIntervalSkl(clock, MinRetentionWindow, defaultSklPageSize, makeSklMetrics())
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
@@ -1194,7 +1195,7 @@ func BenchmarkIntervalSklAddAndLookup(b *testing.B) {
 	const data = 500000    // number of ranges
 	const txnID = "123"
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Millisecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Millisecond)
 	s := newIntervalSkl(clock, MinRetentionWindow, defaultSklPageSize, makeSklMetrics())
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 

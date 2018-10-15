@@ -80,7 +80,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	jobs.LeniencySetting.Override(&s.ClusterSettings().SV, 0)
 
 	db := s.DB()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	nodeLiveness := jobs.NewFakeNodeLiveness(4)
 	newRegistry := func(id roachpb.NodeID) *jobs.Registry {
 		const cancelInterval = time.Duration(math.MaxInt64)

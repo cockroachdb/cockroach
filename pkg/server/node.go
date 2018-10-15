@@ -210,7 +210,7 @@ func bootstrapCluster(
 	// Make sure that the store config has a valid clock and that it doesn't
 	// try to use gossip, since that can introduce race conditions.
 	if cfg.Clock == nil {
-		cfg.Clock = hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+		cfg.Clock = hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	}
 	cfg.Gossip = nil
 	cfg.TestingKnobs = storagebase.StoreTestingKnobs{}

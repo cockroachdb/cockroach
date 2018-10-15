@@ -42,7 +42,7 @@ func TestRegistryCancelation(t *testing.T) {
 	var db *client.DB
 	// Insulate this test from wall time.
 	mClock := hlc.NewManualClock(hlc.UnixNano())
-	clock := hlc.NewClock(mClock.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, mClock.UnixNano, time.Nanosecond)
 	registry := MakeRegistry(
 		log.AmbientContext{}, stopper, clock, db, nil /* ex */, FakeNodeID, cluster.NoSettings,
 		FakePHS)

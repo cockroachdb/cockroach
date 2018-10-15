@@ -24,7 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
@@ -47,6 +47,7 @@ import (
 //
 // See NewClock for details.
 type Clock struct {
+	log           logger.Log
 	physicalClock func() int64
 
 	// The maximal offset of the HLC's wall time from the underlying physical
@@ -121,7 +122,7 @@ func (m *ManualClock) Set(nanos int64) {
 
 // UnixNano returns the local machine's physical nanosecond
 // unix epoch timestamp as a convenience to create a HLC via
-// c := hlc.NewClock(hlc.UnixNano, ...).
+// c := hlc.NewClock(log.Logger, hlc.UnixNano, ...).
 func UnixNano() int64 {
 	return timeutil.Now().UnixNano()
 }
@@ -134,8 +135,9 @@ func UnixNano() int64 {
 //
 // A value of 0 for maxOffset means that clock skew checking, if performed on
 // this clock by RemoteClockMonitor, is disabled.
-func NewClock(physicalClock func() int64, maxOffset time.Duration) *Clock {
+func NewClock(log logger.Log, physicalClock func() int64, maxOffset time.Duration) *Clock {
 	return &Clock{
+		log:           log,
 		physicalClock: physicalClock,
 		maxOffset:     maxOffset,
 	}
@@ -228,13 +230,13 @@ func (c *Clock) getPhysicalClockLocked() int64 {
 		interval := c.mu.lastPhysicalTime - newTime
 		if interval > int64(c.maxOffset/10) {
 			c.mu.monotonicityErrorsCount++
-			log.Warningf(context.TODO(), "backward time jump detected (%f seconds)", float64(-interval)/1e9)
+			c.log.Warningf(context.TODO(), "backward time jump detected (%f seconds)", float64(-interval)/1e9)
 		}
 
 		if c.mu.forwardClockJumpCheckEnabled {
 			toleratedForwardClockJump := c.toleratedForwardClockJump()
 			if int64(toleratedForwardClockJump) <= -interval {
-				log.Fatalf(
+				c.log.Fatalf(
 					context.TODO(),
 					"detected forward time jump of %f seconds is not allowed with tolerance of %f seconds",
 					float64(-interval)/1e9,
@@ -274,7 +276,7 @@ func (c *Clock) Now() Timestamp {
 func (c *Clock) enforceWallTimeWithinBoundLocked() {
 	// WallTime should not cross the upper bound (if WallTimeUpperBound is set)
 	if c.mu.wallTimeUpperBound != 0 && c.mu.timestamp.WallTime > c.mu.wallTimeUpperBound {
-		log.Fatalf(
+		c.log.Fatalf(
 			context.TODO(),
 			"wall time %d is not allowed to be greater than upper bound of %d.",
 			c.mu.timestamp.WallTime,
@@ -309,7 +311,7 @@ func (c *Clock) Update(rt Timestamp) Timestamp {
 	defer c.mu.Unlock()
 	updateT, err := c.updateLocked(rt, true)
 	if err != nil {
-		log.Warningf(context.TODO(), "%s - updating anyway", err)
+		c.log.Warningf(context.TODO(), "%s - updating anyway", err)
 	}
 	return updateT
 }

@@ -203,7 +203,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		panic(errors.New("no tracer set in AmbientCtx"))
 	}
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Duration(cfg.MaxOffset))
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Duration(cfg.MaxOffset))
 	s := &Server{
 		st:       st,
 		clock:    clock,

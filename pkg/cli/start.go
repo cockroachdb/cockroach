@@ -1107,7 +1107,7 @@ func getClientGRPCConn(ctx context.Context) (*grpc.ClientConn, *hlc.Clock, func(
 	// 0 to disable max offset checks; this RPC context is not a member of the
 	// cluster, so there's no need to enforce that its max offset is the same
 	// as that of nodes in the cluster.
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, 0)
 	stopper := stop.NewStopper()
 	rpcContext := rpc.NewContext(
 		log.AmbientContext{Tracer: serverCfg.Settings.Tracer},

@@ -86,7 +86,7 @@ func TestHeartbeatCB(t *testing.T) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop(context.TODO())
 
-		clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
+		clock := hlc.NewClock(log.Logger, timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
 		serverCtx := newTestContext(clock, stopper)
 		serverCtx.rpcCompression = compression
 		s := newTestServer(t, serverCtx)
@@ -149,7 +149,7 @@ func TestInternalServerAddress(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	// Can't be zero because that'd be an empty offset.
-	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
 
 	serverCtx := newTestContext(clock, stopper)
 	serverCtx.Config.Addr = "127.0.0.1:9999"
@@ -173,7 +173,7 @@ func TestHeartbeatHealth(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	// Can't be zero because that'd be an empty offset.
-	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
 
 	serverCtx := newTestContext(clock, stopper)
 	s := newTestServer(t, serverCtx)
@@ -329,7 +329,7 @@ func TestHeartbeatHealthTransport(t *testing.T) {
 	ctx := context.Background()
 
 	// Can't be zero because that'd be an empty offset.
-	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
 
 	serverCtx := newTestContext(clock, stopper)
 	// newTestServer with a custom listener.
@@ -509,7 +509,7 @@ func TestOffsetMeasurement(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	serverTime := timeutil.Unix(0, 20)
-	serverClock := hlc.NewClock(serverTime.UnixNano, time.Nanosecond)
+	serverClock := hlc.NewClock(log.Logger, serverTime.UnixNano, time.Nanosecond)
 	serverCtx := newTestContext(serverClock, stopper)
 	s := newTestServer(t, serverCtx)
 	RegisterHeartbeatServer(s, &HeartbeatService{
@@ -527,7 +527,7 @@ func TestOffsetMeasurement(t *testing.T) {
 
 	// Create a client clock that is behind the server clock.
 	clientAdvancing := AdvancingClock{time: timeutil.Unix(0, 10)}
-	clientClock := hlc.NewClock(clientAdvancing.UnixNano, time.Nanosecond)
+	clientClock := hlc.NewClock(log.Logger, clientAdvancing.UnixNano, time.Nanosecond)
 	clientCtx := newTestContext(clientClock, stopper)
 	// Make the interval shorter to speed up the test.
 	clientCtx.heartbeatInterval = 1 * time.Millisecond
@@ -572,7 +572,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	// Can't be zero because that'd be an empty offset.
-	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
 
 	serverCtx := newTestContext(clock, stopper)
 	s := newTestServer(t, serverCtx)
@@ -673,7 +673,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 	}
 
 	for i := range nodeCtxs {
-		clock := hlc.NewClock(start.Add(nodeCtxs[i].offset).UnixNano, maxOffset)
+		clock := hlc.NewClock(log.Logger, start.Add(nodeCtxs[i].offset).UnixNano, maxOffset)
 		nodeCtxs[i].errChan = make(chan error, 1)
 		nodeCtxs[i].ctx = newTestContext(clock, stopper)
 		nodeCtxs[i].ctx.heartbeatInterval = maxOffset
@@ -818,7 +818,7 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 			defer cancel()
 
 			// Construct server with server-side keepalive.
-			clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
+			clock := hlc.NewClock(log.Logger, timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
 			serverCtx := newTestContext(clock, stopper)
 			s := newTestServer(t, serverCtx, grpc.KeepaliveParams(sKeepalive))
 
@@ -976,7 +976,7 @@ func TestClusterIDMismatch(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
-	clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
 	serverCtx := newTestContext(clock, stopper)
 	serverCtx.ClusterID.Set(context.TODO(), uuid.MakeV4())
 	s := newTestServer(t, serverCtx)
@@ -1046,7 +1046,7 @@ func TestVersionCheckBidirectional(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.TODO())
 
-			clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
+			clock := hlc.NewClock(log.Logger, timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
 			serverCtx := newTestContext(clock, stopper)
 			serverCtx.ClusterID.Set(context.TODO(), uuid.MakeV4())
 			if err := setVersion(serverCtx, td.serverVersion); err != nil {
@@ -1092,7 +1092,7 @@ func BenchmarkGRPCDial(b *testing.B) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 
-	clock := hlc.NewClock(hlc.UnixNano, 250*time.Millisecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, 250*time.Millisecond)
 	ctx := newTestContext(clock, stopper)
 
 	s := newTestServer(b, ctx)

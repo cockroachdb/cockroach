@@ -17,6 +17,7 @@ package status
 import (
 	"context"
 	"io/ioutil"
+	"log"
 	"os"
 	"reflect"
 	"runtime"
@@ -153,7 +154,7 @@ func TestMetricsRecorder(t *testing.T) {
 	}
 	manual := hlc.NewManualClock(100)
 	st := cluster.MakeTestingClusterSettings()
-	recorder := NewMetricsRecorder(hlc.NewClock(manual.UnixNano, time.Nanosecond), nil, nil, nil, st)
+	recorder := NewMetricsRecorder(hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond), nil, nil, nil, st)
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)
 	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258")

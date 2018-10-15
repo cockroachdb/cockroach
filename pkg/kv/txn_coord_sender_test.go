@@ -779,7 +779,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			stopper := stop.NewStopper()
 
 			manual := hlc.NewManualClock(origTS.WallTime)
-			clock := hlc.NewClock(manual.UnixNano, 20*time.Nanosecond)
+			clock := hlc.NewClock(log.Logger, manual.UnixNano, 20*time.Nanosecond)
 
 			var senderFn client.SenderFunc = func(
 				_ context.Context, ba roachpb.BatchRequest,
@@ -913,7 +913,7 @@ func TestTxnCoordSenderErrorWithIntent(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, 20*time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, 20*time.Nanosecond)
 
 	testCases := []struct {
 		roachpb.Error
@@ -969,7 +969,7 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 
 	var expectedIntents []roachpb.Span
 
@@ -1288,7 +1288,7 @@ func TestTxnDurations(t *testing.T) {
 func TestAbortTransactionOnCommitErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 
 	testCases := []struct {
 		err        error
@@ -1432,7 +1432,7 @@ func (s *mockSender) Send(
 func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -1498,7 +1498,7 @@ func TestRollbackErrorStopsHeartbeat(t *testing.T) {
 func TestOnePCErrorTracking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -1584,7 +1584,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 func TestIntentTrackingBeforeBeginTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -1635,7 +1635,7 @@ func TestIntentTrackingBeforeBeginTransaction(t *testing.T) {
 func TestCommitReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -1688,7 +1688,7 @@ func TestCommitReadOnlyTransaction(t *testing.T) {
 func TestCommitMutatingTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -1777,7 +1777,7 @@ func TestCommitMutatingTransaction(t *testing.T) {
 func TestTxnInsertBeginTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -1829,7 +1829,7 @@ func TestTxnInsertBeginTransaction(t *testing.T) {
 func TestBeginTransactionErrorIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -1884,7 +1884,7 @@ func getOneErr(runErr error, b *client.Batch) error {
 func TestAbortReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -1924,7 +1924,7 @@ func TestAbortReadOnlyTransaction(t *testing.T) {
 func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -1984,7 +1984,7 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -2052,7 +2052,7 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 func TestSequenceNumbers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -2107,7 +2107,7 @@ func TestSequenceNumbers(t *testing.T) {
 func TestConcurrentTxnRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -2165,7 +2165,7 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -2229,7 +2229,7 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	sender := &mockSender{}
 	stopper := stop.NewStopper()
@@ -2360,7 +2360,7 @@ func TestAnchorKey(t *testing.T) {
 
 	ctx := context.Background()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)

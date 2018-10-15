@@ -752,7 +752,7 @@ func TestAllocatorRebalance(t *testing.T) {
 func TestAllocatorRebalanceTarget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 	stopper, g, _, a, _ := createTestAllocator( /* deterministic */ false)
 	defer stopper.Stop(context.Background())
 	// We make 5 stores in this test -- 3 in the same datacenter, and 1 each in
@@ -3685,7 +3685,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 		return localities[nodeID]
 	}
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 
 	// Set up four different load distributions. Record a bunch of requests to
 	// the unknown node 99 in evenlyBalanced to verify that requests from
@@ -5396,7 +5396,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 
 	// Model a set of stores in a cluster doing rebalancing, with ranges being
 	// randomly added occasionally.
@@ -5532,7 +5532,7 @@ func Example_rebalancing() {
 	defer stopper.Stop(context.TODO())
 
 	st := cluster.MakeTestingClusterSettings()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 
 	// Model a set of stores in a cluster,
 	// adding / rebalancing ranges of random sizes.

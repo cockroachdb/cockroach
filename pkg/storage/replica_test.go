@@ -158,7 +158,7 @@ func (tc *testContext) Clock() *hlc.Clock {
 // entire keyspace.
 func (tc *testContext) Start(t testing.TB, stopper *stop.Stopper) {
 	tc.manualClock = hlc.NewManualClock(123)
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	cfg := TestStoreConfig(hlc.NewClock(log.Logger, tc.manualClock.UnixNano, time.Nanosecond))
 	tc.StartWithStoreConfig(t, stopper, cfg)
 }
 
@@ -428,7 +428,7 @@ func TestIsOnePhaseCommit(t *testing.T) {
 		{txnReqsNoRefresh, true, true, true, enginepb.SNAPSHOT, false},
 	}
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	for i, c := range testCases {
 		ba := roachpb.BatchRequest{Requests: c.bu}
 		if c.isTxn {
@@ -503,7 +503,7 @@ func TestReplicaReadConsistency(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	cfg := TestStoreConfig(hlc.NewClock(log.Logger, tc.manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
@@ -583,7 +583,7 @@ func TestReplicaReadConsistency(t *testing.T) {
 func TestBehaviorDuringLeaseTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, 100*time.Millisecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, 100*time.Millisecond)
 	tc := testContext{manualClock: manual}
 	tsc := TestStoreConfig(clock)
 	var leaseAcquisitionTrap atomic.Value
@@ -727,7 +727,7 @@ func TestApplyCmdLeaseError(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	cfg := TestStoreConfig(hlc.NewClock(log.Logger, tc.manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
@@ -835,7 +835,7 @@ func TestReplicaLease(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	tc.manualClock = hlc.NewManualClock(123)
-	tsc := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	tsc := TestStoreConfig(hlc.NewClock(log.Logger, tc.manualClock.UnixNano, time.Nanosecond))
 	tsc.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tc.StartWithStoreConfig(t, stopper, tsc)
 	secondReplica, err := tc.addBogusReplicaToRangeDesc(context.TODO())
@@ -914,7 +914,7 @@ func TestReplicaNotLeaseHolderError(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	cfg := TestStoreConfig(hlc.NewClock(log.Logger, tc.manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
@@ -1070,7 +1070,7 @@ func TestReplicaGossipConfigsOnLease(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	cfg := TestStoreConfig(hlc.NewClock(log.Logger, tc.manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
@@ -1156,7 +1156,7 @@ func TestReplicaTSCacheLowWaterOnLease(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	cfg := TestStoreConfig(hlc.NewClock(log.Logger, tc.manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
@@ -1241,7 +1241,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	tc := testContext{manualClock: hlc.NewManualClock(123)}
-	cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+	cfg := TestStoreConfig(hlc.NewClock(log.Logger, tc.manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DisableAutomaticLeaseRenewal = true
 	tc.StartWithStoreConfig(t, stopper, cfg)
 
@@ -1974,7 +1974,7 @@ func TestLeaseConcurrent(t *testing.T) {
 		defer stopper.Stop(context.TODO())
 
 		tc := testContext{manualClock: hlc.NewManualClock(123)}
-		cfg := TestStoreConfig(hlc.NewClock(tc.manualClock.UnixNano, time.Nanosecond))
+		cfg := TestStoreConfig(hlc.NewClock(log.Logger, tc.manualClock.UnixNano, time.Nanosecond))
 		// Disable reasonNewLeader and reasonNewLeaderOrConfigChange proposal
 		// refreshes so that our lease proposal does not risk being rejected
 		// with an AmbiguousResultError.

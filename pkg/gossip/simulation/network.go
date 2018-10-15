@@ -75,7 +75,7 @@ func NewNetwork(stopper *stop.Stopper, nodeCount int, createResolvers bool) *Net
 	n.rpcContext = rpc.NewContext(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
 		&base.Config{Insecure: true},
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond),
 		n.Stopper,
 		&cluster.MakeTestingClusterSettings().Version,
 	)

@@ -106,7 +106,7 @@ func TestStoreSplitAbortSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	manualClock := hlc.NewManualClock(2400 * time.Hour.Nanoseconds())
-	clock := hlc.NewClock(manualClock.UnixNano, time.Millisecond)
+	clock := hlc.NewClock(log.Logger, manualClock.UnixNano, time.Millisecond)
 	storeCfg := storage.TestStoreConfig(clock)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
@@ -663,7 +663,7 @@ func TestStoreRangeSplitIdempotency(t *testing.T) {
 func TestStoreRangeSplitStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
-	storeCfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	storeCfg := storage.TestStoreConfig(hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond))
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	stopper := stop.NewStopper()
@@ -864,7 +864,7 @@ func TestStoreEmptyRangeSnapshotSize(t *testing.T) {
 func TestStoreRangeSplitStatsWithMerges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
-	storeCfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	storeCfg := storage.TestStoreConfig(hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond))
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
@@ -2226,7 +2226,7 @@ func TestStoreSplitBeginTxnPushMetaIntentRace(t *testing.T) {
 	wroteMeta2 := make(chan struct{}, 1)
 
 	manual := hlc.NewManualClock(123)
-	storeCfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	storeCfg := storage.TestStoreConfig(hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond))
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableMergeQueue = true
 	storeCfg.TestingKnobs.EvalKnobs.TestingEvalFilter = func(filterArgs storagebase.FilterArgs) *roachpb.Error {
@@ -2551,7 +2551,7 @@ func TestUnsplittableRange(t *testing.T) {
 
 	manual := hlc.NewManualClock(123)
 	splitQueuePurgatoryChan := make(chan time.Time, 1)
-	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	cfg := storage.TestStoreConfig(hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.SplitQueuePurgatoryChan = splitQueuePurgatoryChan
 	cfg.TestingKnobs.DisableMergeQueue = true
 	store := createTestStoreWithConfig(t, stopper, cfg)
@@ -2733,7 +2733,7 @@ func TestStoreCapacityAfterSplit(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	manualClock := hlc.NewManualClock(123)
-	cfg := storage.TestStoreConfig(hlc.NewClock(manualClock.UnixNano, time.Nanosecond))
+	cfg := storage.TestStoreConfig(hlc.NewClock(log.Logger, manualClock.UnixNano, time.Nanosecond))
 	cfg.TestingKnobs.DisableSplitQueue = true
 	cfg.TestingKnobs.DisableMergeQueue = true
 	s := createTestStoreWithConfig(t, stopper, cfg)

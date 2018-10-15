@@ -2135,7 +2135,7 @@ func TestMVCCConditionalPut(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.NewManualClock(123).UnixNano, time.Nanosecond)
 
 	err := MVCCConditionalPut(context.Background(), engine, nil, testKey1, clock.Now(), value1, &value2, nil)
 	if err == nil {
@@ -2229,7 +2229,7 @@ func TestMVCCConditionalPutWithTxn(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.NewManualClock(123).UnixNano, time.Nanosecond)
 
 	// Write value1.
 	txn := *txn1
@@ -2359,7 +2359,7 @@ func TestMVCCInitPutWithTxn(t *testing.T) {
 	engine := createTestEngine()
 	defer engine.Close()
 
-	clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.NewManualClock(123).UnixNano, time.Nanosecond)
 
 	txn := *txn1
 	txn.Sequence++

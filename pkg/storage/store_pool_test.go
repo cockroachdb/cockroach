@@ -102,7 +102,7 @@ func createTestStorePool(
 ) (*stop.Stopper, *gossip.Gossip, *hlc.ManualClock, *StorePool, *mockNodeLiveness) {
 	stopper := stop.NewStopper()
 	mc := hlc.NewManualClock(123)
-	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, mc.UnixNano, time.Nanosecond)
 	st := cluster.MakeTestingClusterSettings()
 	rpcContext := rpc.NewContext(
 		log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, clock, stopper,
@@ -435,7 +435,7 @@ func TestStoreListFilter(t *testing.T) {
 func TestStorePoolUpdateLocalStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 	// We're going to manually mark stores dead in this test.
 	stopper, g, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false /* deterministic */, storagepb.NodeLivenessStatus_DEAD)
@@ -558,7 +558,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 	stopper, _, _, sp, _ := createTestStorePool(
 		TestTimeUntilStoreDead, false /* deterministic */, storagepb.NodeLivenessStatus_DEAD)
 	defer stopper.Stop(context.TODO())

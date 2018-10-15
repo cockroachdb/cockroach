@@ -135,7 +135,7 @@ var ExportRequestsLimit = settings.RegisterIntSetting(
 // TestStoreConfig has some fields initialized with values relevant in tests.
 func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	if clock == nil {
-		clock = hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+		clock = hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	}
 	st := cluster.MakeTestingClusterSettings()
 	sc := StoreConfig{

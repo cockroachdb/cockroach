@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type wrappedBatch struct {
@@ -108,7 +109,7 @@ func TestCmdClearRangeBytesThreshold(t *testing.T) {
 			h.RangeID = desc.RangeID
 
 			cArgs := CommandArgs{Header: h}
-			cArgs.EvalCtx = &mockEvalCtx{desc: &desc, clock: hlc.NewClock(hlc.UnixNano, time.Nanosecond), stats: stats}
+			cArgs.EvalCtx = &mockEvalCtx{desc: &desc, clock: hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond), stats: stats}
 			cArgs.Args = &roachpb.ClearRangeRequest{
 				RequestHeader: roachpb.RequestHeader{
 					Key:    startKey,
