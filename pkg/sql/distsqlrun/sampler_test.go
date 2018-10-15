@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/axiomhq/hyperloglog"
@@ -93,27 +94,39 @@ func TestSampler(t *testing.T) {
 	// We run many samplings and record the frequencies.
 	numRows := 100
 	numSamples := 20
-	numRuns := 1000
+	minRuns := 200
+	maxRuns := 5000
 	delta := 0.5
 
 	freq := make([]int, numRows)
-	for r := 0; r < numRuns; r++ {
-		for _, v := range runSampler(t, numRows, numSamples) {
-			freq[v]++
+	var err error
+	// Instead of doing maxRuns and checking at the end, we do minRuns at a time
+	// and exit early. This speeds up the test.
+	for r := 0; r < maxRuns; r += minRuns {
+		for i := 0; i < minRuns; i++ {
+			for _, v := range runSampler(t, numRows, numSamples) {
+				freq[v]++
+			}
+		}
+
+		// The expected frequency of each row is f = numRuns * (numSamples / numRows).
+		f := float64(r) * float64(numSamples) / float64(numRows)
+
+		// Verify that no frequency is outside of the range (f / (1+delta), f * (1+delta));
+		// the probability of a given row violating this is subject to the Chernoff
+		// bound which decreases exponentially (with exponent f).
+		err = nil
+		for i := range freq {
+			if float64(freq[i]) < f/(1+delta) || float64(freq[i]) > f*(1+delta) {
+				err = fmt.Errorf("frequency %d out of bound (expected value %f)", freq[i], f)
+				break
+			}
+		}
+		if err == nil {
+			return
 		}
 	}
-
-	// The expected frequency of each row is f = numRuns * (numSamples / numRows).
-	f := float64(numRuns) * float64(numSamples) / float64(numRows)
-
-	// Verify that no frequency is outside of the range (f / (1+delta), f * (1+delta));
-	// the probability of a given row violating this is subject to the Chernoff
-	// bound which decreases exponentially (with exponent f).
-	for i := range freq {
-		if float64(freq[i]) < f/(1+delta) || float64(freq[i]) > f*(1+delta) {
-			t.Errorf("frequency %d out of bound (expected value %f)", freq[i], f)
-		}
-	}
+	t.Error(err)
 }
 
 func TestSamplerSketch(t *testing.T) {
