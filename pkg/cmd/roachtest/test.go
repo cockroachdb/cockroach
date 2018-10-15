@@ -181,10 +181,14 @@ func (r *registry) loadBuildVersion() {
 	}
 }
 
+// verifyClusterName verifies that the test name can be turned into a cluster
+// name when run by TeamCity. Outside of TeamCity runs, depending on the user
+// running it and the "cluster id" component of a cluster name, the name might
+// be too long when running in different configurations.
 func (r *registry) verifyClusterName(testName string) error {
 	// TeamCity build IDs are currently 6 digits, but we use 7 here for a bit of
 	// breathing room.
-	name := makeGCEClusterName("teamcity-" + testName)
+	name := makeGCEClusterName("teamcity-1234567-" + testName)
 	if !clusterNameRE.MatchString(name) {
 		return fmt.Errorf("cluster name '%s' must match regex '%s'",
 			name, clusterNameRE)
