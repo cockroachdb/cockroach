@@ -2452,19 +2452,30 @@ func TestMergeQueue(t *testing.T) {
 
 	split := func(t *testing.T, key roachpb.Key) {
 		t.Helper()
-		if _, err := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), adminSplitArgs(key)); err != nil {
-			t.Fatal(err)
+		if _, pErr := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), adminSplitArgs(key)); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	clearRange := func(t *testing.T, start, end roachpb.RKey) {
+		if _, pErr := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), &roachpb.ClearRangeRequest{
+			RequestHeader: roachpb.RequestHeader{Key: start.AsRawKey(), EndKey: end.AsRawKey()},
+		}); pErr != nil {
+			t.Fatal(pErr)
 		}
 	}
 
 	// Create two empty ranges, a - b and b - c, by splitting at a, b, and c.
-	split(t, roachpb.Key("a"))
-	split(t, roachpb.Key("b"))
-	split(t, roachpb.Key("c"))
-	lhs := func() *storage.Replica { return store.LookupReplica(roachpb.RKey("a")) }
-	rhs := func() *storage.Replica { return store.LookupReplica(roachpb.RKey("b")) }
-	lhsDesc := lhs().Desc()
-	rhsDesc := rhs().Desc()
+	lhsStartKey := roachpb.RKey("a")
+	rhsStartKey := roachpb.RKey("b")
+	rhsEndKey := roachpb.RKey("c")
+	for _, k := range []roachpb.RKey{lhsStartKey, rhsStartKey, rhsEndKey} {
+		split(t, k.AsRawKey())
+	}
+	lhs := func() *storage.Replica { return store.LookupReplica(lhsStartKey) }
+	rhs := func() *storage.Replica { return store.LookupReplica(rhsStartKey) }
+
+	defaultZone := config.DefaultZoneConfig()
 
 	// setThresholds simulates a zone config update that updates the ranges'
 	// minimum and maximum sizes.
@@ -2473,72 +2484,57 @@ func TestMergeQueue(t *testing.T) {
 		rhs().SetByteThresholds(minBytes, maxBytes)
 	}
 
-	defaultZone := config.DefaultZoneConfig()
+	rng, _ := randutil.NewPseudoRand()
+	randBytes := randutil.RandBytes(rng, int(config.DefaultZoneConfig().RangeMinBytes))
 
 	reset := func(t *testing.T) {
 		t.Helper()
-		split(t, roachpb.Key("b"))
-		_, pErr := client.SendWrapped(ctx, store.DB().NonTransactionalSender(), &roachpb.ClearRangeRequest{
-			RequestHeader: roachpb.RequestHeader{
-				Key:    roachpb.Key("a"),
-				EndKey: roachpb.Key("c"),
-			},
-		})
-		if pErr != nil {
-			t.Fatal(pErr)
+		clearRange(t, lhsStartKey, rhsEndKey)
+		for _, k := range []roachpb.RKey{lhsStartKey, rhsStartKey} {
+			if err := store.DB().Put(ctx, k, randBytes); err != nil {
+				t.Fatal(err)
+			}
 		}
 		setThresholds(defaultZone.RangeMinBytes, defaultZone.RangeMaxBytes)
+		store.ForceMergeScanAndProcess() // drain any merges that might already be queued
+		split(t, roachpb.Key("b"))
 	}
 
 	verifyMerged := func(t *testing.T) {
 		t.Helper()
-		repl := store.LookupReplica(rhsDesc.StartKey)
-		if !repl.Desc().StartKey.Equal(lhsDesc.StartKey) {
+		repl := store.LookupReplica(rhsStartKey)
+		if !repl.Desc().StartKey.Equal(lhsStartKey) {
 			t.Fatalf("ranges unexpectedly unmerged")
 		}
 	}
 
 	verifyUnmerged := func(t *testing.T) {
 		t.Helper()
-		repl := store.LookupReplica(rhsDesc.StartKey)
-		if repl.Desc().StartKey.Equal(lhsDesc.StartKey) {
+		repl := store.LookupReplica(rhsStartKey)
+		if repl.Desc().StartKey.Equal(lhsStartKey) {
 			t.Fatalf("ranges unexpectedly merged")
 		}
 	}
 
+	t.Run("sanity", func(t *testing.T) {
+		// Check that ranges are not trivially merged after reset.
+		reset(t)
+		store.ForceMergeScanAndProcess()
+		verifyUnmerged(t)
+		reset(t)
+		store.ForceMergeScanAndProcess()
+		verifyUnmerged(t)
+	})
+
 	t.Run("both-empty", func(t *testing.T) {
 		reset(t)
+		clearRange(t, lhsStartKey, rhsEndKey)
 		store.ForceMergeScanAndProcess()
 		verifyMerged(t)
 	})
 
-	rng, _ := randutil.NewPseudoRand()
-
-	t.Run("rhs-replica-threshold", func(t *testing.T) {
+	t.Run("lhs-undersize", func(t *testing.T) {
 		reset(t)
-
-		bytes := randutil.RandBytes(rng, int(defaultZone.RangeMinBytes))
-		if err := store.DB().Put(ctx, "b-key", bytes); err != nil {
-			t.Fatal(err)
-		}
-		store.ForceMergeScanAndProcess()
-		verifyUnmerged(t)
-
-		setThresholds(defaultZone.RangeMinBytes*2, defaultZone.RangeMaxBytes)
-		store.ForceMergeScanAndProcess()
-		verifyMerged(t)
-	})
-
-	t.Run("lhs-replica-threshold", func(t *testing.T) {
-		reset(t)
-
-		bytes := randutil.RandBytes(rng, int(defaultZone.RangeMinBytes))
-		if err := store.DB().Put(ctx, "a-key", bytes); err != nil {
-			t.Fatal(err)
-		}
-		store.ForceMergeScanAndProcess()
-		verifyUnmerged(t)
-
 		setThresholds(defaultZone.RangeMinBytes*2, defaultZone.RangeMaxBytes)
 		store.ForceMergeScanAndProcess()
 		verifyMerged(t)
@@ -2549,27 +2545,25 @@ func TestMergeQueue(t *testing.T) {
 
 		// The ranges are individually beneath the minimum size threshold, but
 		// together they'll exceed the maximum size threshold.
-		setThresholds(200, 200)
-		bytes := randutil.RandBytes(rng, 100)
-		if err := store.DB().Put(ctx, "a-key", bytes); err != nil {
-			t.Fatal(err)
-		}
-		if err := store.DB().Put(ctx, "b-key", bytes); err != nil {
-			t.Fatal(err)
-		}
+		minSize := lhs().GetMVCCStats().Total() + 1
+		maxSize := lhs().GetMVCCStats().Total()*2 - 1
+		setThresholds(minSize, maxSize)
 		store.ForceMergeScanAndProcess()
 		verifyUnmerged(t)
 
-		setThresholds(200, 400)
+		// Once the maximum size threshold is increased, the merge can occur.
+		setThresholds(minSize, maxSize+1)
 		store.ForceMergeScanAndProcess()
 		verifyMerged(t)
 	})
 
 	t.Run("non-collocated", func(t *testing.T) {
 		reset(t)
-		mtc.replicateRange(rhs().Desc().RangeID, 1)
-		mtc.transferLease(ctx, rhs().Desc().RangeID, 0, 1)
-		mtc.unreplicateRange(rhs().Desc().RangeID, 0)
+		verifyUnmerged(t)
+		mtc.replicateRange(rhs().RangeID, 1)
+		mtc.transferLease(ctx, rhs().RangeID, 0, 1)
+		mtc.unreplicateRange(rhs().RangeID, 0)
+		clearRange(t, lhsStartKey, rhsEndKey)
 		store.ForceMergeScanAndProcess()
 		verifyMerged(t)
 	})
