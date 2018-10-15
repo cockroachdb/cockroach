@@ -200,11 +200,6 @@ func CreateDocker(
 	}
 }
 
-// Client returns the underlying docker client.
-func (l *DockerCluster) Client() client.APIClient {
-	return l.client
-}
-
 func (l *DockerCluster) expectEvent(c *Container, msgs ...string) {
 	for index, ctr := range l.Nodes {
 		if c.id != ctr.id {
@@ -253,37 +248,6 @@ func (l *DockerCluster) OneShot(
 		return err
 	}
 	return l.oneshot.Wait(ctx, container.WaitConditionNotRunning)
-}
-
-// SidecarContainer runs a container in the same bridge network as the
-// CockroachDB nodes.
-func (l *DockerCluster) SidecarContainer(
-	ctx context.Context, cfg container.Config, portMap map[string]string,
-) (*Container, error) {
-	if err := pullImage(ctx, l, cfg.Image, types.ImagePullOptions{}); err != nil {
-		return nil, err
-	}
-	portBindings := nat.PortMap{}
-	for from, to := range portMap {
-		portBindings[nat.Port(from+`/tcp`)] = []nat.PortBinding{{HostPort: to}}
-	}
-	hostConfig := &container.HostConfig{
-		NetworkMode: container.NetworkMode(l.networkID),
-		// Disable DNS search under the host machine's domain. This can catch
-		// upstream wildcard DNS matching and result in odd behavior.
-		DNSSearch:    []string{"."},
-		PortBindings: portBindings,
-	}
-	containerName := fmt.Sprintf(`%s-%s`, cfg.Hostname, l.clusterID)
-	resp, err := l.client.ContainerCreate(ctx, &cfg, hostConfig, nil, containerName)
-	if err != nil {
-		return nil, err
-	}
-	return &Container{
-		id:      resp.ID,
-		name:    containerName,
-		cluster: l,
-	}, nil
 }
 
 // stopOnPanic is invoked as a deferred function in Start in order to attempt
