@@ -1341,6 +1341,9 @@ message RangeStatsResponse {
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "MVCCStats"
   ];
+
+  // RequestRate is the rate of request/ns for the range.
+  double request_rate = 3;
 }
 
 // A RequestUnion contains exactly one of the requests.

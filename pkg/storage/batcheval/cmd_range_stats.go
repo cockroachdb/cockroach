@@ -32,5 +32,6 @@ func RangeStats(
 ) (result.Result, error) {
 	reply := resp.(*roachpb.RangeStatsResponse)
 	reply.MVCCStats = cArgs.EvalCtx.GetMVCCStats()
+	reply.RequestRate = cArgs.EvalCtx.GetReqRate()
 	return result.Result{}, nil
 }

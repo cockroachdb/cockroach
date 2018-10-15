@@ -167,22 +167,23 @@ var _ purgatoryError = rangeMergePurgatoryError{}
 
 func (mq *mergeQueue) requestRangeStats(
 	ctx context.Context, key roachpb.Key,
-) (roachpb.RangeDescriptor, enginepb.MVCCStats, error) {
+) (roachpb.RangeDescriptor, enginepb.MVCCStats, float64, error) {
 	res, pErr := client.SendWrappedWith(ctx, mq.db.NonTransactionalSender(), roachpb.Header{
 		ReturnRangeInfo: true,
 	}, &roachpb.RangeStatsRequest{
 		RequestHeader: roachpb.RequestHeader{Key: key},
 	})
 	if pErr != nil {
-		return roachpb.RangeDescriptor{}, enginepb.MVCCStats{}, pErr.GoError()
+		return roachpb.RangeDescriptor{}, enginepb.MVCCStats{}, 0, pErr.GoError()
 	}
 	rangeInfos := res.Header().RangeInfos
 	if len(rangeInfos) != 1 {
-		return roachpb.RangeDescriptor{}, enginepb.MVCCStats{}, fmt.Errorf(
+		return roachpb.RangeDescriptor{}, enginepb.MVCCStats{}, 0, fmt.Errorf(
 			"mergeQueue.requestRangeStats: response had %d range infos but exactly one was expected",
 			len(rangeInfos))
 	}
-	return rangeInfos[0].Desc, res.(*roachpb.RangeStatsResponse).MVCCStats, nil
+	return rangeInfos[0].Desc, res.(*roachpb.RangeStatsResponse).MVCCStats,
+		res.(*roachpb.RangeStatsResponse).RequestRate, nil
 }
 
 func (mq *mergeQueue) process(
@@ -202,10 +203,13 @@ func (mq *mergeQueue) process(
 	}
 
 	lhsDesc := lhsRepl.Desc()
-	rhsDesc, rhsStats, err := mq.requestRangeStats(ctx, lhsDesc.EndKey.AsRawKey())
+	lhsReqRate := lhsRepl.GetReqRate()
+	timeSinceLastReq := time.Duration(lhsRepl.store.Clock().PhysicalNow() - lhsRepl.GetLastRequestNanos())
+	rhsDesc, rhsStats, rhsReqRate, err := mq.requestRangeStats(ctx, lhsDesc.EndKey.AsRawKey())
 	if err != nil {
 		return err
 	}
+	log.Infof(ctx, "DEBUG(ridwanmsharif): Requested range QPS from lease holder: %v", rhsReqRate*1e9)
 	if rhsStats.Total() >= minBytes {
 		log.VEventf(ctx, 2, "skipping merge: RHS meets minimum size threshold %d with %d bytes",
 			minBytes, lhsStats.Total())
@@ -218,9 +222,18 @@ func (mq *mergeQueue) process(
 	}
 	mergedStats := lhsStats
 	mergedStats.Add(rhsStats)
-	if ok, _ := shouldSplitRange(mergedDesc, mergedStats, lhsRepl.GetMaxBytes(), sysCfg); ok {
-		log.VEventf(ctx, 2, "skipping merge: merged range %s would need to be split (estimated size: %d)",
-			mergedDesc, mergedStats.Total())
+	var mergedReqRate float64
+	// Consider the mergedReqRate only if the last request is recent. If no request has been
+	// found for over 10 seconds, the merge queue should feel free to merge the ranges.
+	if lhsRepl.SplitByLoadEnabled() && timeSinceLastReq <= (10*time.Second) {
+		mergedReqRate = lhsReqRate + rhsReqRate
+		log.Infof(ctx, "DEBUG(ridwanmsharif): Considering load based splitting: (Left range QPS: %v, Right range QPS: %v)",
+			lhsReqRate*1e9, rhsReqRate*1e9)
+	}
+	if ok, _ := shouldSplitRange(mergedDesc, mergedStats, mergedReqRate,
+		lhsRepl.SplitByLoadRateThreshold(), lhsRepl.GetMaxBytes(), sysCfg); ok {
+		log.VEventf(ctx, 2, "skipping merge: merged range %s would need to be split (estimated size, estimated QPS: %d, %v)",
+			mergedDesc, mergedStats.Total(), mergedReqRate*1e9)
 		return nil
 	}
 
