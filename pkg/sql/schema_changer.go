@@ -700,15 +700,6 @@ func (sc *SchemaChanger) drainNames(
 			if sc.testingKnobs.OldNamesDrainedNotification != nil {
 				sc.testingKnobs.OldNamesDrainedNotification()
 			}
-			// Check that another schema change didn't run during the
-			// drain phase. This ensures that we don't reclaim old names
-			// here without explicitly going through a drain phase for the
-			// names. On seeing a need to increment the version return an
-			// error, so that sc.exec() is reexecuted and increments the
-			// version before coming back here to correctly drain the names.
-			if desc.UpVersion {
-				return errSchemaChangeDuringDrain
-			}
 			// Free up the old name(s) for reuse.
 			namesToReclaim = desc.DrainingNames
 			desc.DrainingNames = nil
@@ -767,7 +758,7 @@ func (sc *SchemaChanger) exec(
 		}
 	}()
 
-	notFirst, err := sc.notFirstInLine(ctx)
+	tableDesc, notFirst, err := sc.notFirstInLine(ctx)
 	if err != nil {
 		return err
 	}
@@ -775,13 +766,6 @@ func (sc *SchemaChanger) exec(
 		return errSchemaChangeNotFirstInLine
 	}
 
-	// Increment the version and unset tableDescriptor.UpVersion.
-	desc, err := sc.MaybeIncrementVersion(ctx)
-	if err != nil {
-		return err
-	}
-
-	tableDesc := desc.GetTable()
 	if tableDesc.HasDrainingNames() {
 		if err := sc.drainNames(ctx, &lease); err != nil {
 			return err
@@ -882,22 +866,6 @@ func (sc *SchemaChanger) rollbackSchemaChange(
 		log.Warningf(ctx, "error purging mutation: %s, after error: %s", errPurge, err)
 	}
 	return nil
-}
-
-// MaybeIncrementVersion increments the version if needed.
-// If the version is to be incremented, it also assures that all nodes are on
-// the current (pre-increment) version of the descriptor.
-// Returns the (potentially updated) descriptor.
-func (sc *SchemaChanger) MaybeIncrementVersion(ctx context.Context) (*sqlbase.Descriptor, error) {
-	return sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.TableDescriptor) error {
-		if !desc.UpVersion {
-			// Return error so that Publish() doesn't increment the version.
-			return errDidntUpdateDescriptor
-		}
-		desc.UpVersion = false
-		// Publish() will increment the version.
-		return nil
-	}, nil)
 }
 
 // RunStateMachineBeforeBackfill moves the state machine forward
@@ -1065,11 +1033,15 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.Descriptor, error) 
 
 // notFirstInLine returns true whenever the schema change has been queued
 // up for execution after another schema change.
-func (sc *SchemaChanger) notFirstInLine(ctx context.Context) (bool, error) {
+func (sc *SchemaChanger) notFirstInLine(
+	ctx context.Context,
+) (*sqlbase.TableDescriptor, bool, error) {
 	var notFirst bool
+	var desc *sqlbase.TableDescriptor
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		notFirst = false
-		desc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		var err error
+		desc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
 		if err != nil {
 			return err
 		}
@@ -1081,7 +1053,7 @@ func (sc *SchemaChanger) notFirstInLine(ctx context.Context) (bool, error) {
 		}
 		return nil
 	})
-	return notFirst, err
+	return desc, notFirst, err
 }
 
 // runStateMachineAndBackfill runs the schema change state machine followed by
@@ -1709,12 +1681,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						}
 
 						// Keep track of outstanding schema changes.
-						// If all schema change commands always set UpVersion, why
-						// check for the presence of mutations?
-						// A schema change execution might fail soon after
-						// unsetting UpVersion, and we still want to process
-						// outstanding mutations.
-						pendingChanges := table.UpVersion || table.Adding() ||
+						pendingChanges := table.Adding() ||
 							table.HasDrainingNames() || len(table.Mutations) > 0
 						if pendingChanges {
 							if log.V(2) {
