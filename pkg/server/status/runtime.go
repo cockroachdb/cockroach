@@ -550,7 +550,7 @@ func getSummedDiskCounters(ctx context.Context) (diskStats, error) {
 }
 
 func getSummedNetStats(ctx context.Context) (net.IOCountersStat, error) {
-	netCounters, err := net.IOCountersWithContext(ctx, true /* idk what this bool means */)
+	netCounters, err := net.IOCountersWithContext(ctx, true /* per NIC */)
 	if err != nil {
 		return net.IOCountersStat{}, err
 	}
