@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/nlopes/slack"
 )
@@ -96,8 +97,18 @@ func postSlackReport(pass, fail, skip map[*test]struct{}) {
 	if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
 		branch = b
 	}
-	message := fmt.Sprintf("%s: %d passed, %d failed, %d skipped",
-		branch, len(stablePass), len(stableFail), len(skipped))
+
+	var prefix string
+	switch {
+	case cloud != "":
+		prefix = strings.ToUpper(cloud)
+	case local:
+		prefix = "LOCAL"
+	default:
+		prefix = "GCE"
+	}
+	message := fmt.Sprintf("[%s] %s: %d passed, %d failed, %d skipped",
+		prefix, branch, len(stablePass), len(stableFail), len(skipped))
 
 	{
 		status := "good"
