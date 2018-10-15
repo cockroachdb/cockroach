@@ -128,7 +128,7 @@ func GenerateBNF(addr string) (ebnf []byte, err error) {
 	for _, p := range t.Productions {
 		var impl [][]yacc.Item
 		for _, e := range p.Expressions {
-			if strings.Contains(e.Command, "unimplemented") {
+			if strings.Contains(e.Command, "unimplemented") && !strings.Contains(e.Command, "FORCE DOC") {
 				continue
 			}
 			if strings.Contains(e.Command, "SKIP DOC") {

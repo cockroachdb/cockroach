@@ -49,7 +49,7 @@ func (p *Parser) parseWithDepth(depth int, sql string) (stmts tree.StatementList
 	if p.parserImpl.Parse(&p.scanner) != 0 {
 		var err *pgerror.Error
 		if feat := p.scanner.lastError.unimplementedFeature; feat != "" {
-			err = pgerror.UnimplementedWithDepth(depth+1, feat, p.scanner.lastError.msg)
+			err = pgerror.UnimplementedWithDepth(depth+1, "syntax."+feat, p.scanner.lastError.msg)
 		} else {
 			err = pgerror.NewErrorWithDepth(depth+1, pgerror.CodeSyntaxError, p.scanner.lastError.msg)
 		}

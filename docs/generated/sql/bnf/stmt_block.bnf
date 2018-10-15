@@ -300,8 +300,8 @@ create_user_stmt ::=
 	| 'CREATE' 'USER' 'IF' 'NOT' 'EXISTS' string_or_placeholder opt_password
 
 create_role_stmt ::=
-	'CREATE' 'ROLE' string_or_placeholder
-	| 'CREATE' 'ROLE' 'IF' 'NOT' 'EXISTS' string_or_placeholder
+	'CREATE' role_or_group string_or_placeholder
+	| 'CREATE' role_or_group 'IF' 'NOT' 'EXISTS' string_or_placeholder
 
 create_ddl_stmt ::=
 	create_changefeed_stmt
@@ -519,6 +519,7 @@ unreserved_keyword ::=
 	| 'ACTION'
 	| 'ADD'
 	| 'ADMIN'
+	| 'AGGREGATE'
 	| 'ALTER'
 	| 'AT'
 	| 'BACKUP'
@@ -526,7 +527,6 @@ unreserved_keyword ::=
 	| 'BIGSERIAL'
 	| 'BLOB'
 	| 'BOOL'
-	| 'BTREE'
 	| 'BY'
 	| 'BYTEA'
 	| 'BYTES'
@@ -545,6 +545,7 @@ unreserved_keyword ::=
 	| 'CONFIGURATIONS'
 	| 'CONFIGURE'
 	| 'CONSTRAINTS'
+	| 'CONVERSION'
 	| 'COPY'
 	| 'COVERING'
 	| 'CUBE'
@@ -573,6 +574,7 @@ unreserved_keyword ::=
 	| 'EXPERIMENTAL_REPLICA'
 	| 'EXPLAIN'
 	| 'EXPORT'
+	| 'EXTENSION'
 	| 'FILES'
 	| 'FILTER'
 	| 'FIRST'
@@ -580,7 +582,8 @@ unreserved_keyword ::=
 	| 'FLOAT8'
 	| 'FOLLOWING'
 	| 'FORCE_INDEX'
-	| 'GIN'
+	| 'FUNCTION'
+	| 'GLOBAL'
 	| 'GRANTS'
 	| 'GROUPS'
 	| 'HIGH'
@@ -608,6 +611,7 @@ unreserved_keyword ::=
 	| 'KEY'
 	| 'KEYS'
 	| 'KV'
+	| 'LANGUAGE'
 	| 'LC_COLLATE'
 	| 'LC_CTYPE'
 	| 'LEASE'
@@ -617,6 +621,7 @@ unreserved_keyword ::=
 	| 'LOCAL'
 	| 'LOW'
 	| 'MATCH'
+	| 'MATERIALIZED'
 	| 'MINUTE'
 	| 'MONTH'
 	| 'NAMES'
@@ -630,6 +635,7 @@ unreserved_keyword ::=
 	| 'OFF'
 	| 'OID'
 	| 'OIDVECTOR'
+	| 'OPERATOR'
 	| 'OPTION'
 	| 'OPTIONS'
 	| 'ORDINALITY'
@@ -645,6 +651,7 @@ unreserved_keyword ::=
 	| 'PRECEDING'
 	| 'PREPARE'
 	| 'PRIORITY'
+	| 'PUBLICATION'
 	| 'QUERIES'
 	| 'QUERY'
 	| 'RANGE'
@@ -660,6 +667,7 @@ unreserved_keyword ::=
 	| 'RELEASE'
 	| 'RENAME'
 	| 'REPEATABLE'
+	| 'REPLACE'
 	| 'RESET'
 	| 'RESTORE'
 	| 'RESTRICT'
@@ -670,6 +678,7 @@ unreserved_keyword ::=
 	| 'ROLLBACK'
 	| 'ROLLUP'
 	| 'ROWS'
+	| 'RULE'
 	| 'SETTING'
 	| 'SETTINGS'
 	| 'STATUS'
@@ -685,6 +694,7 @@ unreserved_keyword ::=
 	| 'SERIAL2'
 	| 'SERIAL4'
 	| 'SERIAL8'
+	| 'SERVER'
 	| 'SEQUENCE'
 	| 'SEQUENCES'
 	| 'SESSION'
@@ -704,6 +714,7 @@ unreserved_keyword ::=
 	| 'STRICT'
 	| 'STRING'
 	| 'SPLIT'
+	| 'SUBSCRIPTION'
 	| 'SYNTAX'
 	| 'SYSTEM'
 	| 'TABLES'
@@ -716,11 +727,14 @@ unreserved_keyword ::=
 	| 'TIMESTAMPTZ'
 	| 'TRACE'
 	| 'TRANSACTION'
+	| 'TRIGGER'
 	| 'TRUNCATE'
+	| 'TRUSTED'
 	| 'TYPE'
 	| 'UNBOUNDED'
 	| 'UNCOMMITTED'
 	| 'UNKNOWN'
+	| 'UNLOGGED'
 	| 'UPDATE'
 	| 'UPSERT'
 	| 'UUID'
@@ -870,6 +884,9 @@ alter_user_password_stmt ::=
 opt_password ::=
 	opt_with 'PASSWORD' string_or_placeholder
 	| 
+
+role_or_group ::=
+	'ROLE'
 
 create_changefeed_stmt ::=
 	'CREATE' 'CHANGEFEED' 'FOR' changefeed_targets opt_changefeed_sink opt_with_options
@@ -1204,8 +1221,7 @@ opt_index_name ::=
 	opt_name
 
 opt_using_gin_btree ::=
-	'USING' 'GIN'
-	| 'USING' 'BTREE'
+	'USING' name
 	| 
 
 index_params ::=
@@ -1333,7 +1349,7 @@ simple_typename ::=
 	const_typename
 	| bit_with_length
 	| character_with_length
-	| const_interval opt_interval
+	| const_interval
 
 opt_array_bounds ::=
 	'[' ']'
@@ -1555,7 +1571,7 @@ opt_name ::=
 	| 
 
 index_elem ::=
-	column_name opt_asc_desc
+	a_expr opt_asc_desc
 
 storing ::=
 	'COVERING'
@@ -1676,22 +1692,6 @@ character_with_length ::=
 
 const_interval ::=
 	'INTERVAL'
-
-opt_interval ::=
-	'YEAR'
-	| 'MONTH'
-	| 'DAY'
-	| 'HOUR'
-	| 'MINUTE'
-	| interval_second
-	| 'YEAR' 'TO' 'MONTH'
-	| 'DAY' 'TO' 'HOUR'
-	| 'DAY' 'TO' 'MINUTE'
-	| 'DAY' 'TO' interval_second
-	| 'HOUR' 'TO' 'MINUTE'
-	| 'HOUR' 'TO' interval_second
-	| 'MINUTE' 'TO' interval_second
-	| 
 
 tuple1_ambiguous_values ::=
 	a_expr
@@ -1867,6 +1867,10 @@ const_json ::=
 	'JSON'
 	| 'JSONB'
 
+opt_interval ::=
+	interval_qualifier
+	| 
+
 column_path ::=
 	name
 	| prefixed_column_path
@@ -1935,9 +1939,6 @@ character_base ::=
 	| char_aliases 'VARYING'
 	| 'VARCHAR'
 	| 'STRING'
-
-interval_second ::=
-	'SECOND'
 
 from_list ::=
 	( table_ref ) ( ( ',' table_ref ) )*
@@ -2030,6 +2031,21 @@ opt_numeric_modifiers ::=
 	| '(' iconst64 ',' iconst64 ')'
 	| 
 
+interval_qualifier ::=
+	'YEAR'
+	| 'MONTH'
+	| 'DAY'
+	| 'HOUR'
+	| 'MINUTE'
+	| interval_second
+	| 'YEAR' 'TO' 'MONTH'
+	| 'DAY' 'TO' 'HOUR'
+	| 'DAY' 'TO' 'MINUTE'
+	| 'DAY' 'TO' interval_second
+	| 'HOUR' 'TO' 'MINUTE'
+	| 'HOUR' 'TO' interval_second
+	| 'MINUTE' 'TO' interval_second
+
 prefixed_column_path ::=
 	name '.' unrestricted_name
 	| name '.' unrestricted_name '.' unrestricted_name
@@ -2100,6 +2116,9 @@ reference_action ::=
 	| 'CASCADE'
 	| 'SET' 'NULL'
 	| 'SET' 'DEFAULT'
+
+interval_second ::=
+	'SECOND'
 
 type_function_name ::=
 	'identifier'
