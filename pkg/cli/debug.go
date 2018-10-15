@@ -448,7 +448,7 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 }
 
 var debugGCCmd = &cobra.Command{
-	Use:   "estimate-gc <directory> [range id]",
+	Use:   "estimate-gc <directory> [range id] [ttl-in-seconds]",
 	Short: "find out what a GC run would do",
 	Long: `
 Sets up (but does not run) a GC collection cycle, giving insight into how much
@@ -457,7 +457,7 @@ work would be done (assuming all intent resolution and pushes succeed).
 Without a RangeID specified on the command line, runs the analysis for all
 ranges individually.
 
-Uses a hard-coded GC policy with a 24 hour TTL for old versions.
+Uses a hard-coded GC policy, with a default 24 hour TTL, for old versions.
 `,
 	Args: cobra.RangeArgs(1, 2),
 	RunE: MaybeDecorateGRPCError(runDebugGCCmd),
@@ -468,7 +468,19 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 	defer stopper.Stop(context.Background())
 
 	var rangeID roachpb.RangeID
-	if len(args) == 2 {
+	var gcTtlInSeconds int32 = 24 * 60 * 60 /* 1 day */
+	switch len(args) {
+	case 3:
+		var err error
+		if rangeID, err = parseRangeID(args[1]); err != nil {
+			return err
+		}
+		if gcTtlInSecondRangeID, err := parseRangeID(args[2]); err != nil {
+			return err
+		} else {
+			gcTtlInSeconds = int32(gcTtlInSecondRangeID)
+		}
+	case 2:
 		var err error
 		if rangeID, err = parseRangeID(args[1]); err != nil {
 			return err
@@ -519,7 +531,7 @@ func runDebugGCCmd(cmd *cobra.Command, args []string) error {
 			&desc,
 			snap,
 			hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
-			config.GCPolicy{TTLSeconds: 24 * 60 * 60 /* 1 day */},
+			config.GCPolicy{TTLSeconds: gcTtlInSeconds},
 			storage.NoopGCer{},
 			func(_ context.Context, _ []roachpb.Intent) error { return nil },
 			func(_ context.Context, _ *roachpb.Transaction, _ []roachpb.Intent) error { return nil },
