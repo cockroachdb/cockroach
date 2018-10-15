@@ -1341,6 +1341,9 @@ message RangeStatsResponse {
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "MVCCStats"
   ];
+
+  // QueriesPerSecond is the rate of request/s or QPS for the range.
+  double queries_per_second = 3;
 }
 
 // A RequestUnion contains exactly one of the requests.

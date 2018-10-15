@@ -32,6 +32,8 @@
 <tr><td><code>kv.range.backpressure_range_size_multiplier</code></td><td>float</td><td><code>2</code></td><td>multiple of range_max_bytes that a range is allowed to grow to without splitting before writes to that range are blocked, or 0 to disable</td></tr>
 <tr><td><code>kv.range_descriptor_cache.size</code></td><td>integer</td><td><code>1000000</code></td><td>maximum number of entries in the range descriptor and leaseholder caches</td></tr>
 <tr><td><code>kv.range_merge.queue_enabled</code></td><td>boolean</td><td><code>true</code></td><td>whether the automatic merge queue is enabled</td></tr>
+<tr><td><code>kv.range_split.by_load_enabled</code></td><td>boolean</td><td><code>false</code></td><td>allow automatic splits of ranges based on where load is concentrated.</td></tr>
+<tr><td><code>kv.range_split.load_qps_threshold</code></td><td>integer</td><td><code>200</code></td><td>the QPS over which, the range becomes a candidate for load based splitting.</td></tr>
 <tr><td><code>kv.rangefeed.enabled</code></td><td>boolean</td><td><code>false</code></td><td>if set, rangefeed registration is enabled</td></tr>
 <tr><td><code>kv.snapshot_rebalance.max_rate</code></td><td>byte size</td><td><code>2.0 MiB</code></td><td>the rate limit (bytes/sec) to use for rebalance snapshots</td></tr>
 <tr><td><code>kv.snapshot_recovery.max_rate</code></td><td>byte size</td><td><code>8.0 MiB</code></td><td>the rate limit (bytes/sec) to use for recovery snapshots</td></tr>
@@ -81,6 +83,6 @@
 <tr><td><code>trace.debug.enable</code></td><td>boolean</td><td><code>false</code></td><td>if set, traces for recent requests can be seen in the /debug page</td></tr>
 <tr><td><code>trace.lightstep.token</code></td><td>string</td><td><code></code></td><td>if set, traces go to Lightstep using this token</td></tr>
 <tr><td><code>trace.zipkin.collector</code></td><td>string</td><td><code></code></td><td>if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set.</td></tr>
-<tr><td><code>version</code></td><td>custom validation</td><td><code>2.1-1</code></td><td>set the active cluster version in the format '<major>.<minor>'.</td></tr>
+<tr><td><code>version</code></td><td>custom validation</td><td><code>2.1-2</code></td><td>set the active cluster version in the format '<major>.<minor>'.</td></tr>
 </tbody>
 </table>
