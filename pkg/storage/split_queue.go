@@ -87,7 +87,12 @@ func newSplitQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *splitQue
 }
 
 func shouldSplitRange(
-	desc *roachpb.RangeDescriptor, ms enginepb.MVCCStats, maxBytes int64, sysCfg *config.SystemConfig,
+	desc *roachpb.RangeDescriptor,
+	ms enginepb.MVCCStats,
+	reqRate float64,
+	splitByLoadQPSThreshold float64,
+	maxBytes int64,
+	sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
 	if sysCfg.NeedsSplit(desc.StartKey, desc.EndKey) {
 		// Set priority to 1 in the event the range is split by zone configs.
@@ -101,6 +106,12 @@ func shouldSplitRange(
 		priority += ratio
 		shouldQ = true
 	}
+
+	// Check if the request rate is higher than the QPS threshold.
+	if reqRate >= splitByLoadQPSThreshold {
+		priority += reqRate / splitByLoadQPSThreshold
+		shouldQ = true
+	}
 	return
 }
 
@@ -110,7 +121,21 @@ func shouldSplitRange(
 func (sq *splitQueue) shouldQueue(
 	ctx context.Context, now hlc.Timestamp, repl *Replica, sysCfg *config.SystemConfig,
 ) (shouldQ bool, priority float64) {
-	shouldQ, priority = shouldSplitRange(repl.Desc(), repl.GetMVCCStats(), repl.GetMaxBytes(), sysCfg)
+	shouldQ, priority = shouldSplitRange(repl.Desc(), repl.GetMVCCStats(),
+		0, /* Don't check for load based splitting yet. */
+		repl.SplitByLoadQPSThreshold(), repl.GetMaxBytes(), sysCfg)
+
+	// If there's a split-by-load for this range, split if the range
+	// exceeds the minimum size in bytes.
+	if !shouldQ && repl.SplitByLoadEnabled() {
+		repl.splitMu.Lock()
+		defer repl.splitMu.Unlock()
+		if splitByLoad, _ := repl.splitMu.splitFinder.Key(); splitByLoad {
+			priority++
+			shouldQ = true
+		}
+	}
+
 	return shouldQ, priority
 }
 
@@ -144,8 +169,8 @@ func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg *config.Sy
 func (sq *splitQueue) processAttempt(
 	ctx context.Context, r *Replica, sysCfg *config.SystemConfig,
 ) error {
-	// First handle case of splitting due to zone config maps.
 	desc := r.Desc()
+	// First handle the case of splitting due to zone config maps.
 	if splitKey := sysCfg.ComputeSplitKey(desc.StartKey, desc.EndKey); splitKey != nil {
 		if _, err := r.adminSplitWithDescriptor(
 			ctx,
@@ -174,6 +199,35 @@ func (sq *splitQueue) processAttempt(
 			desc,
 		)
 		return err
+	}
+
+	// If the cluster setting for load based splitting
+	// is disabled, splitFinder is nil and this becomes a
+	// no-op.
+	r.splitMu.Lock()
+	splitByLoad, splitByLoadKey := r.splitMu.splitFinder.Key()
+	if splitByLoad {
+		r.splitMu.splitFinder = nil
+	}
+	r.splitMu.Unlock()
+	if splitByLoad {
+		log.Eventf(ctx, "splitting based on load")
+		log.Warningf(ctx, "splitting based on load")
+		log.Infof(ctx, "initiating a split based on load at key %q", splitByLoadKey)
+		if _, pErr := r.adminSplitWithDescriptor(
+			ctx,
+			roachpb.AdminSplitRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key: splitByLoadKey,
+				},
+				SplitKey: splitByLoadKey,
+			},
+			desc,
+		); pErr != nil {
+			return errors.Wrapf(pErr, "unable to split %s at key %q", r, splitByLoadKey)
+		}
+		r.splitMu.splitFinder = nil
+		return nil
 	}
 	return nil
 }

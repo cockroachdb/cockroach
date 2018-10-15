@@ -123,6 +123,25 @@ func (ss *SpanSet) GetSpans(access SpanAccess, scope SpanScope) []roachpb.Span {
 	return ss.spans[access][scope]
 }
 
+// BoundarySpan returns a span containing all the spans with the given params.
+func (ss *SpanSet) BoundarySpan(access SpanAccess, scope SpanScope) *roachpb.Span {
+	spans := ss.GetSpans(access, scope)
+	if len(spans) == 0 {
+		return nil
+	}
+	smallestKey := spans[0].Key
+	largestKey := spans[0].EndKey
+	for _, span := range spans {
+		if bytes.Compare(span.Key, smallestKey) < 0 {
+			smallestKey = span.Key
+		}
+		if bytes.Compare(span.EndKey, largestKey) > 0 {
+			largestKey = span.EndKey
+		}
+	}
+	return &roachpb.Span{Key: smallestKey, EndKey: largestKey}
+}
+
 // AssertAllowed calls checkAllowed and fatals if the access is not allowed.
 func (ss *SpanSet) AssertAllowed(access SpanAccess, span roachpb.Span) {
 	if err := ss.CheckAllowed(access, span); err != nil {

@@ -21,8 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
-
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -43,6 +42,7 @@ type mockEvalCtx struct {
 	desc            *roachpb.RangeDescriptor
 	clock           *hlc.Clock
 	stats           enginepb.MVCCStats
+	qps             float64
 	abortSpan       *abortspan.AbortSpan
 	gcThreshold     hlc.Timestamp
 }
@@ -106,6 +106,9 @@ func (m *mockEvalCtx) ContainsKey(key roachpb.Key) bool {
 }
 func (m *mockEvalCtx) GetMVCCStats() enginepb.MVCCStats {
 	return m.stats
+}
+func (m *mockEvalCtx) GetSplitQPS() float64 {
+	return m.qps
 }
 func (m *mockEvalCtx) GetGCThreshold() hlc.Timestamp {
 	return m.gcThreshold
