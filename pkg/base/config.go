@@ -446,6 +446,23 @@ type RaftConfig struct {
 	// performing log truncations.
 	RaftLogMaxSize int64
 
+	// RaftProposalQuota controls the maximum aggregate size of Raft commands
+	// that a leader is allowed to propose concurrently.
+	//
+	// By default, the quota is set to a fraction of the RaftLogMaxSize. In
+	// doing so, we ensure all replicas have sufficiently up to date logs so
+	// that when the log gets truncated, the followers do not need
+	// non-preemptive snapshots. Changing this deserves care. Too low and
+	// everything comes to a grinding halt, too high and we're not really
+	// throttling anything (we'll still generate snapshots).
+	RaftProposalQuota int64
+
+	// RaftMaxUncommittedEntriesSize controls how large the uncommitted tail of
+	// the Raft log can grow. The limit is meant to provide protection against
+	// unbounded Raft log growth when quorum is lost and entries stop being
+	// committed but continue to be proposed.
+	RaftMaxUncommittedEntriesSize uint64
+
 	// RaftMaxSizePerMsg controls how many Raft log entries the leader will send to
 	// followers in a single MsgApp.
 	RaftMaxSizePerMsg uint64
@@ -473,6 +490,18 @@ func (cfg *RaftConfig) SetDefaults() {
 	}
 	if cfg.RaftLogMaxSize == 0 {
 		cfg.RaftLogMaxSize = defaultRaftLogMaxSize
+	}
+	if cfg.RaftProposalQuota == 0 {
+		// By default, set this to a fraction of RaftLogMaxSize. See comment
+		// above for the tradeoffs of setting this higher or lower.
+		cfg.RaftProposalQuota = cfg.RaftLogMaxSize / 4
+	}
+	if cfg.RaftMaxUncommittedEntriesSize == 0 {
+		// By default, set this to twice the RaftProposalQuota. The logic here
+		// is that the quotaPool should be responsible for throttling proposals
+		// in all cases except for unbounded Raft re-proposals because it queues
+		// efficiently instead of dropping proposals on the floor indiscriminately.
+		cfg.RaftMaxUncommittedEntriesSize = uint64(2 * cfg.RaftProposalQuota)
 	}
 	if cfg.RaftMaxSizePerMsg == 0 {
 		cfg.RaftMaxSizePerMsg = uint64(defaultRaftMaxSizePerMsg)
