@@ -310,7 +310,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		{
 			b := txn.NewBatch()
 			leftDescKey := keys.RangeDescriptorKey(leftDesc.StartKey)
-			if err := updateRangeDescriptor(b, leftDescKey, desc, leftDesc); err != nil {
+			if err := updateRangeDescriptor(b, leftDescKey, desc, &leftDesc); err != nil {
 				return err
 			}
 			// Commit this batch first to ensure that the transaction record
@@ -345,7 +345,7 @@ func (r *Replica) adminSplitWithDescriptor(
 
 		// Create range descriptor for right hand side of the split.
 		rightDescKey := keys.RangeDescriptorKey(rightDesc.StartKey)
-		if err := updateRangeDescriptor(b, rightDescKey, nil, *rightDesc); err != nil {
+		if err := updateRangeDescriptor(b, rightDescKey, nil, rightDesc); err != nil {
 			return err
 		}
 
@@ -455,7 +455,7 @@ func (r *Replica) AdminMerge(
 		{
 			b := txn.NewBatch()
 			leftDescKey := keys.RangeDescriptorKey(updatedLeftDesc.StartKey)
-			if err := updateRangeDescriptor(b, leftDescKey, origLeftDesc, updatedLeftDesc); err != nil {
+			if err := updateRangeDescriptor(b, leftDescKey, origLeftDesc, &updatedLeftDesc); err != nil {
 				return err
 			}
 			// Commit this batch on its own to ensure that the transaction record
@@ -503,7 +503,9 @@ func (r *Replica) AdminMerge(
 		}
 
 		// Remove the range descriptor for the deleted range.
-		b.Del(rightDescKey)
+		if err := updateRangeDescriptor(b, rightDescKey, &rightDesc, nil); err != nil {
+			return err
+		}
 
 		// Send off this batch, ensuring that intents are placed on both the local
 		// copy and meta2's copy of the right-hand side range descriptor before we
@@ -819,7 +821,7 @@ func (r *Replica) changeReplicas(
 
 			// Important: the range descriptor must be the first thing touched in the transaction
 			// so the transaction record is co-located with the range being modified.
-			if err := updateRangeDescriptor(b, descKey, desc, updatedDesc); err != nil {
+			if err := updateRangeDescriptor(b, descKey, desc, &updatedDesc); err != nil {
 				return err
 			}
 
@@ -990,14 +992,22 @@ func updateRangeDescriptor(
 	b *client.Batch,
 	descKey roachpb.Key,
 	oldDesc *roachpb.RangeDescriptor,
-	newDesc roachpb.RangeDescriptor,
+	newDesc *roachpb.RangeDescriptor,
 ) error {
-	if err := newDesc.Validate(); err != nil {
-		return err
-	}
 	// This is subtle: []byte(nil) != interface{}(nil). A []byte(nil) refers to
 	// an empty value. An interface{}(nil) refers to a non-existent value. So
-	// we're careful to construct an interface{}(nil) when oldDesc is nil.
+	// we're careful to construct interface{}(nil)s when newDesc/oldDesc are nil.
+	var newValue interface{}
+	if newDesc != nil {
+		if err := newDesc.Validate(); err != nil {
+			return err
+		}
+		newBytes, err := protoutil.Marshal(newDesc)
+		if err != nil {
+			return err
+		}
+		newValue = newBytes
+	}
 	var oldValue interface{}
 	if oldDesc != nil {
 		oldBytes, err := protoutil.Marshal(oldDesc)
@@ -1005,10 +1015,6 @@ func updateRangeDescriptor(
 			return err
 		}
 		oldValue = oldBytes
-	}
-	newValue, err := protoutil.Marshal(&newDesc)
-	if err != nil {
-		return err
 	}
 	b.CPut(descKey, newValue, oldValue)
 	return nil
