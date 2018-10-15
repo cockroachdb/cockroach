@@ -1474,7 +1474,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	const chunkSize = 200
-	var enableAsyncSchemaChanges uint32 = 1
+	var enableAsyncSchemaChanges uint32
 	var attempts int32
 	// attempt 1: write the first chunk of the index.
 	// attempt 2: write the second chunk and hit a unique constraint
@@ -1541,6 +1541,15 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
+	// The index doesn't exist
+	if _, err := sqlDB.Query(
+		`SELECT v from t.test@foo`,
+	); !testutils.IsError(err, "index .* not found") {
+		t.Fatal(err)
+	}
+
+	// Allow async schema change purge to attempt backfill and error.
+	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
 		t.Fatal(err)
@@ -1554,13 +1563,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		}
 		return nil
 	})
-
-	// The index doesn't exist
-	if _, err := sqlDB.Query(
-		`SELECT v from t.test@foo`,
-	); !testutils.IsError(err, "index .* not found") {
-		t.Fatal(err)
-	}
 
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
