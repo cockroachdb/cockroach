@@ -1463,7 +1463,9 @@ func TestStoreSetRangesMaxBytes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	store, _ := createTestStore(t, stopper)
+	cfg := TestStoreConfig(nil)
+	cfg.TestingKnobs.DisableMergeQueue = true
+	store := createTestStoreWithConfig(t, stopper, &cfg)
 
 	baseID := uint32(keys.MinUserDescID)
 	testData := []struct {
