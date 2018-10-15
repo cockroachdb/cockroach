@@ -428,6 +428,7 @@ ORDER BY name
 ----
 cluster.secret
 diagnostics.reporting.enabled
+kv.range_merge.queue_enabled
 trace.debug.enable
 version
 
@@ -441,6 +442,7 @@ WHERE name NOT IN ('version', 'sql.defaults.distsql', 'cluster.secret')
 ORDER BY name
 ----
 diagnostics.reporting.enabled  true
+kv.range_merge.queue_enabled   false
 somesetting                    somevalue
 trace.debug.enable             false
 
