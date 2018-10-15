@@ -2656,7 +2656,7 @@ func TestMergeQueue(t *testing.T) {
 		verifyUnmerged(t)
 
 		// Once the maximum size threshold is increased, the merge can occur.
-		*zone.RangeMaxBytes += 1
+		zone.RangeMaxBytes = proto.Int64(*zone.RangeMaxBytes + 1)
 		setZones(zone)
 		store.ForceMergeScanAndProcess()
 		verifyMerged(t)
