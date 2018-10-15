@@ -172,16 +172,22 @@ func registerTPCC(r *registry) {
 		},
 	})
 
-	// Run a single tpccbench spec in CI.
+	// Run a few representative tpccbench specs in CI.
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 3,
 		CPUs:  4,
-		// TODO(m-schneider): enable when geo-distributed benchmarking is supported.
-		// Chaos: true,
-		// Geo: true,
 
 		LoadWarehouses: 1000,
 		EstimatedMax:   300,
+	})
+	registerTPCCBenchSpec(r, tpccBenchSpec{
+		Nodes:      9,
+		CPUs:       4,
+		Chaos:      true,
+		LoadConfig: singlePartitionedLoadgen,
+
+		LoadWarehouses: 2000,
+		EstimatedMax:   600,
 	})
 }
 
