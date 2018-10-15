@@ -95,11 +95,11 @@ var counters struct {
 // reporting.
 func GetFeatureCounts() map[string]int32 {
 	counters.RLock()
+	defer counters.RUnlock()
 	m := make(map[string]int32, len(counters.m))
 	for k, cnt := range counters.m {
 		m[k] = atomic.LoadInt32(cnt)
 	}
-	counters.RUnlock()
 	return m
 }
 
