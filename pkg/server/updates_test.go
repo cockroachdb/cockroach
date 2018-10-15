@@ -296,6 +296,12 @@ func TestReportUsage(t *testing.T) {
 		) {
 			t.Fatal(err)
 		}
+		// If the vtable ever gets supported, change to pick one that is not supported yet.
+		if _, err := db.Exec(`SELECT * FROM pg_catalog.pg_stat_wal_receiver`); !testutils.IsError(
+			err, "virtual schema table not implemented",
+		) {
+			t.Fatal(err)
+		}
 		if _, err := db.Exec(`SELECT 2/0`); !testutils.IsError(
 			err, "division by zero",
 		) {
@@ -516,6 +522,7 @@ func TestReportUsage(t *testing.T) {
 		"test.b": 2,
 		"test.c": 3,
 
+		"unimplemented.pg_catalog.pg_stat_wal_receiver":      10,
 		"unimplemented.syntax.alter table rename constraint": 10,
 		"unimplemented.syntax.interval with precision":       10,
 		"unimplemented.#9148":                                10,
