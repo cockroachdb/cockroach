@@ -219,46 +219,8 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 
 	// Read table descriptor for version.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-
 	expectedVersion := tableDesc.Version
 	ctx := context.TODO()
-
-	desc, err := changer.MaybeIncrementVersion(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tableDesc = desc.GetTable()
-	newVersion := tableDesc.Version
-	if newVersion != expectedVersion {
-		t.Fatalf("bad version; e = %d, v = %d", expectedVersion, newVersion)
-	}
-
-	// Check that MaybeIncrementVersion increments the version
-	// correctly.
-	expectedVersion++
-	tableDesc.UpVersion = true
-	if err := kvDB.Put(
-		ctx,
-		sqlbase.MakeDescMetadataKey(tableDesc.ID),
-		sqlbase.WrapDescriptor(tableDesc),
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	desc, err = changer.MaybeIncrementVersion(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tableDesc = desc.GetTable()
-	savedTableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	newVersion = tableDesc.Version
-	if newVersion != expectedVersion {
-		t.Fatalf("bad version in returned desc; e = %d, v = %d", expectedVersion, newVersion)
-	}
-	newVersion = savedTableDesc.Version
-	if newVersion != expectedVersion {
-		t.Fatalf("bad version in saved desc; e = %d, v = %d", expectedVersion, newVersion)
-	}
 
 	// Check that RunStateMachineBeforeBackfill doesn't do anything
 	// if there are no mutations queued.
@@ -267,7 +229,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	}
 
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	newVersion = tableDesc.Version
+	newVersion := tableDesc.Version
 	if newVersion != expectedVersion {
 		t.Fatalf("bad version; e = %d, v = %d", expectedVersion, newVersion)
 	}
