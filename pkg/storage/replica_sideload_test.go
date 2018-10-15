@@ -823,7 +823,7 @@ func TestRaftSSTableSideloadingSnapshot(t *testing.T) {
 			if len(entries) != 1 {
 				t.Fatalf("no or too many entries returned from cache: %+v", entries)
 			}
-			ents, _, _ := tc.store.raftEntryCache.getEntries(nil, tc.repl.RangeID, sideloadedIndex, sideloadedIndex+1, 1<<20)
+			ents, _, _, _ := tc.store.raftEntryCache.getEntries(nil, tc.repl.RangeID, sideloadedIndex, sideloadedIndex+1, 1<<20)
 			if withSS {
 				// We passed the sideload storage, so we expect to get our
 				// inlined index back from the cache.

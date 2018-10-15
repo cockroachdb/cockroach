@@ -137,15 +137,16 @@ func (rec *raftEntryCache) getTerm(rangeID roachpb.RangeID, index uint64) (uint6
 // getEntries returns entries between [lo, hi) for specified range.
 // If any entries are returned for the specified indexes, they will
 // start with index lo and proceed sequentially without gaps until
-// 1) all entries exclusive of hi are fetched, 2) > maxBytes of
-// entries data is fetched, or 3) a cache miss occurs.
+// 1) all entries exclusive of hi are fetched, 2) fetching another entry
+// would add up to more than maxBytes of data, or 3) a cache miss occurs.
+// The returned size reflects the size of the returned entries.
 func (rec *raftEntryCache) getEntries(
 	ents []raftpb.Entry, rangeID roachpb.RangeID, lo, hi, maxBytes uint64,
-) ([]raftpb.Entry, uint64, uint64) {
+) (_ []raftpb.Entry, size uint64, nextIndex uint64, exceededMaxBytes bool) {
 	rec.Lock()
 	defer rec.Unlock()
 	var bytes uint64
-	nextIndex := lo
+	nextIndex = lo
 
 	rec.fromKey = entryCacheKey{RangeID: rangeID, Index: lo}
 	rec.toKey = entryCacheKey{RangeID: rangeID, Index: hi}
@@ -155,16 +156,20 @@ func (rec *raftEntryCache) getEntries(
 			return true
 		}
 		ent := v.(*raftpb.Entry)
-		ents = append(ents, *ent)
-		bytes += uint64(ent.Size())
-		nextIndex++
-		if maxBytes > 0 && bytes > maxBytes {
-			return true
+		size := uint64(ent.Size())
+		if bytes+size > maxBytes {
+			exceededMaxBytes = true
+			if len(ents) > 0 {
+				return true
+			}
 		}
-		return false
+		nextIndex++
+		bytes += size
+		ents = append(ents, *ent)
+		return exceededMaxBytes
 	}, &rec.fromKey, &rec.toKey)
 
-	return ents, bytes, nextIndex
+	return ents, bytes, nextIndex, exceededMaxBytes
 }
 
 // delEntries deletes entries between [lo, hi) for specified range.
