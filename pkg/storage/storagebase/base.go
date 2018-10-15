@@ -31,7 +31,7 @@ import (
 var MergeQueueEnabled = settings.RegisterBoolSetting(
 	"kv.range_merge.queue_enabled",
 	"whether the automatic merge queue is enabled",
-	false,
+	true,
 )
 
 // TxnCleanupThreshold is the threshold after which a transaction is
