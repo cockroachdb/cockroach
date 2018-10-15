@@ -211,6 +211,21 @@ func (s *bankState) startChaosMonkey(
 	go func() {
 		defer s.waitGroup.Done()
 
+		// Don't begin the chaos monkey until all nodes are serving SQL connections.
+		// This ensures that we don't test cluster initialization under chaos.
+		for i := 1; i <= c.nodes; i++ {
+			db := c.Conn(ctx, i)
+			var res int
+			err := db.QueryRowContext(ctx, `SELECT 1`).Scan(&res)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = db.Close()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+
 		for curRound := uint64(1); !s.done(ctx); curRound++ {
 			atomic.StoreUint64(&s.monkeyIteration, curRound)
 
