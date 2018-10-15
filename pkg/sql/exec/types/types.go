@@ -25,13 +25,21 @@ import (
 type T int
 
 const (
+	// Bool is a column of type bool
 	Bool T = iota
+	// Bytes is a column of type []byte
 	Bytes
+	// Int8 is a column of type int8
 	Int8
+	// Int16 is a column of type int16
 	Int16
+	// Int32 is a column of type int32
 	Int32
+	// Int64 is a column of type int64
 	Int64
+	// Float32 is a column of type float32
 	Float32
+	// Float64 is a column of type float64
 	Float64
 
 	// Unhandled is a temporary value that represents an unhandled type.
