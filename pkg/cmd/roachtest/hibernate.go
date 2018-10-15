@@ -21,6 +21,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 // This test runs hibernate-core's full test suite against an single cockroach
@@ -41,28 +44,89 @@ func registerHibernate(r *registry) {
 		c.Start(ctx, t, c.All())
 
 		t.Status("cloning hibernate and installing prerequisites")
-		c.Run(ctx, node, `rm -rf /mnt/data1/hibernate`)
-		c.GitClone(ctx,
-			"https://github.com/hibernate/hibernate-orm.git", "/mnt/data1/hibernate", "5.3.6", node,
-		)
-		c.Run(ctx, node, `sudo apt-get -q update`)
-		c.Run(ctx, node, `sudo apt-get -qy install default-jre openjdk-8-jdk-headless gradle`)
+		opts := retry.Options{
+			InitialBackoff: 10 * time.Second,
+			Multiplier:     2,
+			MaxBackoff:     5 * time.Minute,
+		}
+		for attempt, r := 0, retry.StartWithCtx(ctx, opts); r.Next(); {
+			if ctx.Err() != nil {
+				return
+			}
+			if c.t.Failed() {
+				return
+			}
+			attempt++
 
-		// In order to get Hibernate's test suite to connect to cockroach, we have
-		// to create a dbBundle as it not possible to specify the individual
-		// properties. So here we just steamroll the file with our own config.
-		c.Run(ctx, node, `echo "ext {
-					db = project.hasProperty('db') ? project.getProperty('db') : 'h2'
-					dbBundle = [
-									cockroach : [
-													'db.dialect' : 'org.hibernate.dialect.PostgreSQL95Dialect',
-													'jdbc.driver': 'org.postgresql.Driver',
-													'jdbc.user'  : 'root',
-													'jdbc.pass'  : '',
-													'jdbc.url'   : 'jdbc:postgresql://localhost:26257/defaultdb?sslmode=disable'
-									],
-					]
-		}" > /mnt/data1/hibernate/gradle/databases.gradle`)
+			c.l.Printf("attempt %d - update dependencies", attempt)
+			if err := c.RunE(ctx, node, `sudo apt-get -q update`); err != nil {
+				continue
+			}
+			if err := c.RunE(
+				ctx, node, `sudo apt-get -qy install default-jre openjdk-8-jdk-headless gradle`,
+			); err != nil {
+				continue
+			}
+
+			c.l.Printf("attempt %d - cloning hibernate", attempt)
+			if err := c.RunE(ctx, node, `rm -rf /mnt/data1/hibernate`); err != nil {
+				continue
+			}
+			if err := c.GitCloneE(
+				ctx,
+				"https://github.com/hibernate/hibernate-orm.git",
+				"/mnt/data1/hibernate",
+				"5.3.6",
+				node,
+			); err != nil {
+				continue
+			}
+
+			// In order to get Hibernate's test suite to connect to cockroach, we have
+			// to create a dbBundle as it not possible to specify the individual
+			// properties. So here we just steamroll the file with our own config.
+			if err := c.RunE(ctx, node, `
+echo "ext {
+  db = project.hasProperty('db') ? project.getProperty('db') : 'h2'
+    dbBundle = [
+     cockroach : [
+       'db.dialect' : 'org.hibernate.dialect.PostgreSQL95Dialect',
+       'jdbc.driver': 'org.postgresql.Driver',
+       'jdbc.user'  : 'root',
+       'jdbc.pass'  : '',
+       'jdbc.url'   : 'jdbc:postgresql://localhost:26257/defaultdb?sslmode=disable'
+     ],
+    ]
+}" > /mnt/data1/hibernate/gradle/databases.gradle`,
+			); err != nil {
+				continue
+			}
+
+			break
+		}
+
+		t.Status("building hibernate (without tests)")
+		for attempt, r := 0, retry.StartWithCtx(ctx, opts); r.Next(); {
+			if ctx.Err() != nil {
+				return
+			}
+			if c.t.Failed() {
+				return
+			}
+			attempt++
+			c.l.Printf("attempt %d - building hibernate", attempt)
+			// Build hibernate and run a single test, this step involves some
+			// downloading, so it needs a retry loop as well. Just building was not
+			// enough as the test libraries are not downloaded unless at least a
+			// single test is invoked.
+			if err := c.RunE(
+				ctx, node, `cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroach `+
+					`--tests org.hibernate.jdbc.util.BasicFormatterTest.*`,
+			); err != nil {
+				continue
+			}
+			break
+		}
 
 		t.Status("running hibernate test suite, will take at least 3 hours")
 		// When testing, it is helpful to run only a subset of the tests. To do so
