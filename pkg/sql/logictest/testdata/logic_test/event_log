@@ -346,6 +346,7 @@ ORDER BY "timestamp"
 ----
 0  1  {"SettingName":"diagnostics.reporting.enabled","Value":"true","User":"root"}
 0  1  {"SettingName":"trace.debug.enable","Value":"false","User":"root"}
+0  1  {"SettingName":"kv.range_merge.queue_enabled","Value":"false","User":"root"}
 0  1  {"SettingName":"kv.allocator.load_based_lease_rebalancing.enabled","Value":"false","User":"root"}
 0  1  {"SettingName":"kv.allocator.load_based_lease_rebalancing.enabled","Value":"DEFAULT","User":"root"}
 0  1  {"SettingName":"cluster.organization","Value":"'some string'","User":"root"}
