@@ -67,6 +67,7 @@ type ycsb struct {
 	splits      int
 
 	workload                                   string
+	distribution                               string
 	readFreq, insertFreq, updateFreq, scanFreq float32
 }
 
@@ -90,6 +91,8 @@ var ycsbMeta = workload.Meta{
 		g.flags.BoolVar(&g.json, `json`, false, `Use JSONB rather than relational data`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
 		g.flags.StringVar(&g.workload, `workload`, `B`, `Workload type. Choose from A-F.`)
+		g.flags.StringVar(&g.distribution, `request-distribution`, `zipfian`, `Distribution for random number generator [zipfian, uniform].`)
+
 		// TODO(dan): g.flags.Uint64Var(&g.maxWrites, `max-writes`,
 		//     7*24*3600*1500,  // 7 days at 5% writes and 30k ops/s
 		//     `Maximum number of writes to perform before halting. This is required for `+
@@ -232,8 +235,18 @@ func (g *ycsb) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 	}
 
 	zipfRng := rand.New(rand.NewSource(g.seed))
-	zipfR, err := NewZipfGenerator(
-		zipfRng, zipfIMin, defaultIMax, defaultTheta, false /* verbose */)
+	var randGen randGenerator
+
+	switch strings.ToLower(g.distribution) {
+	case "zipfian":
+		randGen, err = NewZipfGenerator(
+			zipfRng, zipfIMin, defaultIMax, defaultTheta, false /* verbose */)
+	case "uniform":
+		randGen, err = NewUniformGenerator(zipfRng, uint64(g.initialRows))
+	default:
+		return workload.QueryLoad{}, errors.Errorf("Unknown distribution: %s", g.distribution)
+	}
+
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for i := 0; i < g.connFlags.Concurrency; i++ {
 		rng := rand.New(rand.NewSource(g.seed + int64(i)))
@@ -247,13 +260,19 @@ func (g *ycsb) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 			readStmt:    readStmt,
 			insertStmt:  insertStmt,
 			updateStmts: updateStmts,
-			zipfR:       zipfR,
+			randGen:     randGen,
 			rng:         rng,
 			hashFunc:    fnv.New64(),
 		}
 		ql.WorkerFns = append(ql.WorkerFns, w.run)
 	}
 	return ql, nil
+}
+
+type randGenerator interface {
+	Uint64() uint64
+	IMaxHead() uint64
+	IncrementIMax() error
 }
 
 type ycsbWorker struct {
@@ -266,8 +285,8 @@ type ycsbWorker struct {
 	// be parametrized. In JSON mode it's a single statement.
 	updateStmts []*gosql.Stmt
 
-	zipfR    *ZipfGenerator // used to generate random keys
-	rng      *rand.Rand     // used to generate random strings for the values
+	randGen  randGenerator // used to generate random keys
+	rng      *rand.Rand    // used to generate random strings for the values
 	hashFunc hash.Hash64
 	hashBuf  [8]byte
 }
@@ -333,7 +352,9 @@ func (yw *ycsbWorker) nextReadKey() string {
 	// for the number of rows growing over time. See the YCSB paper/code for how
 	// this should work. (Basically repeatedly drawing from the distribution until
 	// a sufficiently low value is chosen, but with some complications.)
-	rownum := yw.hashKey(yw.zipfR.Uint64()) % uint64(yw.config.initialRows)
+
+	// TODO(arjun): Look into why this was being hashed twice before.
+	rownum := yw.randGen.Uint64() % uint64(yw.config.initialRows)
 	return yw.buildKeyName(rownum)
 }
 
@@ -341,7 +362,7 @@ func (yw *ycsbWorker) nextInsertKey() string {
 	// TODO: This logic is no longer valid now that we are using a large YCSB
 	// distribution and modding the samples. To properly support INSERTS, we need
 	// to maintain a separate rownum counter.
-	rownum := yw.zipfR.IMaxHead()
+	rownum := yw.randGen.IMaxHead()
 	return yw.buildKeyName(rownum)
 }
 
@@ -367,7 +388,7 @@ func (yw *ycsbWorker) insertRow(ctx context.Context, key string, increment bool)
 	}
 
 	if increment {
-		if err := yw.zipfR.IncrementIMax(); err != nil {
+		if err := yw.randGen.IncrementIMax(); err != nil {
 			return err
 		}
 	}
