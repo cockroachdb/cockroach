@@ -115,6 +115,14 @@ var OptimizerClusterMode = settings.RegisterEnumSetting(
 	},
 )
 
+// VectorizeClusterMode controls the cluster default for when automatic
+// vectorization is enabled.
+var VectorizeClusterMode = settings.RegisterBoolSetting(
+	"sql.defaults.experimental_vectorize",
+	"default experimental_vectorize mode",
+	false,
+)
+
 // DistSQLClusterExecMode controls the cluster default for when DistSQL is used.
 var DistSQLClusterExecMode = settings.RegisterEnumSetting(
 	"sql.defaults.distsql",
@@ -508,7 +516,10 @@ func shouldDistributeGivenRecAndMode(
 // shouldDistributePlan determines whether we should distribute the
 // given logical plan, based on the session settings.
 func shouldDistributePlan(
-	ctx context.Context, distSQLMode sessiondata.DistSQLExecMode, dp *DistSQLPlanner, plan planNode,
+	ctx context.Context,
+	distSQLMode sessiondata.DistSQLExecMode,
+	dp *DistSQLPlanner,
+	plan planNode,
 ) bool {
 	if distSQLMode == sessiondata.DistSQLOff {
 		return false
@@ -1620,6 +1631,10 @@ func (m *sessionDataMutator) SetForceSplitAt(val bool) {
 
 func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {
 	m.data.ZigzagJoinEnabled = val
+}
+
+func (m *sessionDataMutator) SetVectorize(val bool) {
+	m.data.Vectorize = val
 }
 
 func (m *sessionDataMutator) SetOptimizerMode(val sessiondata.OptimizerMode) {
