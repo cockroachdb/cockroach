@@ -9272,7 +9272,7 @@ func TestReplicaMetrics(t *testing.T) {
 				Underreplicated: false,
 			}},
 		// The leader of a 1-replica range is up and raft log is too large.
-		{1, 1, desc(1), status(1, progress(2)), live(1), 5 * raftLogMaxSize,
+		{1, 1, desc(1), status(1, progress(2)), live(1), 5 * cfg.RaftLogMaxSize,
 			ReplicaMetrics{
 				Leader:          true,
 				RangeCounter:    true,
@@ -9294,7 +9294,7 @@ func TestReplicaMetrics(t *testing.T) {
 			c.expected.Quiescent = i%2 == 0
 			c.expected.Ticking = !c.expected.Quiescent
 			metrics := calcReplicaMetrics(
-				context.Background(), hlc.Timestamp{}, &zoneConfig,
+				context.Background(), hlc.Timestamp{}, &cfg.RaftConfig, &zoneConfig,
 				c.liveness, 0, &c.desc, c.raftStatus, storagepb.LeaseStatus{},
 				c.storeID, c.expected.Quiescent, c.expected.Ticking,
 				CommandQueueMetrics{}, CommandQueueMetrics{}, c.raftLogSize)
