@@ -57,7 +57,7 @@ type testContext struct {
 
 func makeTestContext() testContext {
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 	factory := client.MakeMockTxnSenderFactory(
 		func(context.Context, *roachpb.Transaction, roachpb.BatchRequest,
 		) (*roachpb.BatchResponse, *roachpb.Error) {

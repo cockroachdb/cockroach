@@ -62,7 +62,7 @@ func TestSendToOneClient(t *testing.T) {
 	rpcContext := rpc.NewContext(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
 		testutils.NewNodeTestBaseContext(),
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond),
 		stopper,
 		&cluster.MakeTestingClusterSettings().Version,
 	)
@@ -132,7 +132,7 @@ func TestComplexScenarios(t *testing.T) {
 	nodeContext := rpc.NewContext(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
 		testutils.NewNodeTestBaseContext(),
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond),
 		stopper,
 		&cluster.MakeTestingClusterSettings().Version,
 	)

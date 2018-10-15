@@ -1132,7 +1132,7 @@ func runDebugUnsafeRemoveDeadReplicas(cmd *cobra.Command, args []string) error {
 func removeDeadReplicas(
 	db engine.Engine, deadStoreIDs map[roachpb.StoreID]struct{},
 ) (engine.Batch, error) {
-	clock := hlc.NewClock(hlc.UnixNano, 0)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, 0)
 
 	ctx := context.Background()
 

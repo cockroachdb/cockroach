@@ -43,7 +43,7 @@ var (
 func TestTxnSnowballTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(nil), clock)
 	tracer := tracing.NewTracer()
 	ctx, sp, err := tracing.StartSnowballTrace(context.Background(), tracer, "test-txn")
@@ -145,7 +145,7 @@ func TestInitPut(t *testing.T) {
 	// This test is mostly an excuse to exercise otherwise unused code.
 	// TODO(vivekmenezes): update test or remove when InitPut is being
 	// considered sufficiently tested and this path exercised.
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	db := NewDB(
 		testutils.MakeAmbientCtx(),
 		newTestTxnFactory(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -165,7 +165,7 @@ func TestInitPut(t *testing.T) {
 // transactional client.
 func TestTransactionConfig(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	dbCtx := DefaultDBContext()
 	dbCtx.UserPriority = 101
 	db := NewDBWithContext(
@@ -187,7 +187,7 @@ func TestTransactionConfig(t *testing.T) {
 // ended a second time at completion of retryable func.
 func TestCommitTransactionOnce(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	count := 0
 	db := NewDB(
 		testutils.MakeAmbientCtx(),
@@ -211,7 +211,7 @@ func TestCommitTransactionOnce(t *testing.T) {
 // upon failed invocation of the retryable func.
 func TestAbortMutatingTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	var calls []roachpb.Method
 	db := NewDB(
 		testutils.MakeAmbientCtx(),
@@ -245,7 +245,7 @@ func TestAbortMutatingTransaction(t *testing.T) {
 // test a TxnCoordSender instead.
 func TestRunTransactionRetryOnErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	testCases := []struct {
 		err   error
 		retry bool // Expect retry?
@@ -321,7 +321,7 @@ func TestTransactionStatus(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(nil), clock)
 	for _, write := range []bool{true, false} {
 		for _, commit := range []bool{true, false} {
@@ -358,7 +358,7 @@ func TestCommitInBatchWrongTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(nil), clock)
 	txn := NewTxn(ctx, db, 0 /* gatewayNodeID */, RootTxn)
 
@@ -379,7 +379,7 @@ func TestSetPriority(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	var expected roachpb.UserPriority
 	db := NewDB(
 		testutils.MakeAmbientCtx(),
@@ -420,7 +420,7 @@ func TestSetPriority(t *testing.T) {
 // be retried.
 func TestWrongTxnRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(nil), clock)
 
 	var retries int
@@ -445,7 +445,7 @@ func TestWrongTxnRetry(t *testing.T) {
 
 func TestBatchMixRawRequest(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond)
 	db := NewDB(testutils.MakeAmbientCtx(), newTestTxnFactory(nil), clock)
 
 	b := &Batch{}
@@ -461,7 +461,7 @@ func TestUpdateDeadlineMaybe(t *testing.T) {
 	ctx := context.Background()
 
 	mc := hlc.NewManualClock(1)
-	clock := hlc.NewClock(mc.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, mc.UnixNano, time.Nanosecond)
 	db := NewDB(
 		testutils.MakeAmbientCtx(),
 		MakeMockTxnSenderFactory(

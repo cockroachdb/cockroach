@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -96,7 +97,7 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Can't be zero because that'd be an empty offset.
-	clock := hlc.NewClock(timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, timeutil.Unix(0, 1).UnixNano, time.Nanosecond)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 

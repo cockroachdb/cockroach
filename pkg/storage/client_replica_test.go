@@ -64,7 +64,7 @@ func TestRangeCommandClockUpdate(t *testing.T) {
 	var clocks []*hlc.Clock
 	for i := 0; i < numNodes; i++ {
 		manuals = append(manuals, hlc.NewManualClock(1))
-		clocks = append(clocks, hlc.NewClock(manuals[i].UnixNano, 100*time.Millisecond))
+		clocks = append(clocks, hlc.NewClock(log.Logger, manuals[i].UnixNano, 100*time.Millisecond))
 	}
 	mtc := &multiTestContext{clocks: clocks}
 	defer mtc.Stop()
@@ -113,7 +113,7 @@ func TestRejectFutureCommand(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	manual := hlc.NewManualClock(123)
-	clock := hlc.NewClock(manual.UnixNano, 100*time.Millisecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, 100*time.Millisecond)
 	mtc := &multiTestContext{clock: clock}
 	defer mtc.Stop()
 	mtc.Start(t, 1)
@@ -201,7 +201,7 @@ func TestTxnPutOutOfOrder(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	manual := hlc.NewManualClock(123)
-	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	cfg := storage.TestStoreConfig(hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond))
 	// Splits can cause our chosen key to end up on a range other than range 1,
 	// and trying to handle that complicates the test without providing any
 	// added benefit.
@@ -891,9 +891,9 @@ func TestRangeLimitTxnMaxTimestamp(t *testing.T) {
 	keyA := roachpb.Key("a")
 	// Create a new clock for node2 to allow drift between the two wall clocks.
 	manual1 := hlc.NewManualClock(100) // node1 clock is @t=100
-	clock1 := hlc.NewClock(manual1.UnixNano, 250*time.Nanosecond)
+	clock1 := hlc.NewClock(log.Logger, manual1.UnixNano, 250*time.Nanosecond)
 	manual2 := hlc.NewManualClock(98) // node2 clock is @t=98
-	clock2 := hlc.NewClock(manual2.UnixNano, 250*time.Nanosecond)
+	clock2 := hlc.NewClock(log.Logger, manual2.UnixNano, 250*time.Nanosecond)
 	mtc.clocks = []*hlc.Clock{clock1, clock2}
 
 	// Start a transaction using node2 as a gateway.

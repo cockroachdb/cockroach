@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -174,7 +175,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 			t.Fatalf("%+v", err)
 		}
 		defer sst.Close()
-		ts := hlc.NewClock(hlc.UnixNano, time.Nanosecond).Now()
+		ts := hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond).Now()
 		value := roachpb.MakeValueFromString("bar")
 		for _, idx := range offsets {
 			key := keys[idx]

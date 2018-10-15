@@ -72,7 +72,7 @@ import (
 // engine.
 func createTestStore(t testing.TB, stopper *stop.Stopper) (*storage.Store, *hlc.ManualClock) {
 	manual := hlc.NewManualClock(123)
-	cfg := storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond))
+	cfg := storage.TestStoreConfig(hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond))
 	store := createTestStoreWithConfig(t, stopper, cfg)
 	return store, manual
 }
@@ -269,7 +269,7 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 		m.manualClock = hlc.NewManualClock(123)
 	}
 	if m.clock == nil {
-		m.clock = hlc.NewClock(m.manualClock.UnixNano, time.Nanosecond)
+		m.clock = hlc.NewClock(log.Logger, m.manualClock.UnixNano, time.Nanosecond)
 	}
 	if m.transportStopper == nil {
 		m.transportStopper = stop.NewStopper()

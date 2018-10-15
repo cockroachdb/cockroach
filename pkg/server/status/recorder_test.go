@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -153,7 +154,7 @@ func TestMetricsRecorder(t *testing.T) {
 	}
 	manual := hlc.NewManualClock(100)
 	st := cluster.MakeTestingClusterSettings()
-	recorder := NewMetricsRecorder(hlc.NewClock(manual.UnixNano, time.Nanosecond), nil, nil, nil, st)
+	recorder := NewMetricsRecorder(hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond), nil, nil, nil, st)
 	recorder.AddStore(store1)
 	recorder.AddStore(store2)
 	recorder.AddNode(reg1, nodeDesc, 50, "foo:26257", "foo:26258")

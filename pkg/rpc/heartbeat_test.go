@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -48,7 +49,7 @@ func TestRemoteOffsetString(t *testing.T) {
 func TestHeartbeatReply(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(5)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 	version := &cluster.MakeTestingClusterSettings().Version
 	heartbeat := &HeartbeatService{
 		clock:              clock,
@@ -110,7 +111,7 @@ func (mhs *ManualHeartbeatService) Ping(
 func TestManualHeartbeat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	manual := hlc.NewManualClock(5)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 	version := &cluster.MakeTestingClusterSettings().Version
 	manualHeartbeat := &ManualHeartbeatService{
 		clock:              clock,
@@ -164,7 +165,7 @@ func TestClockOffsetMismatch(t *testing.T) {
 
 	ctx := context.Background()
 
-	clock := hlc.NewClock(hlc.UnixNano, 250*time.Millisecond)
+	clock := hlc.NewClock(log.Logger, hlc.UnixNano, 250*time.Millisecond)
 	hs := &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
@@ -200,7 +201,7 @@ func TestClusterIDCompare(t *testing.T) {
 	}
 
 	manual := hlc.NewManualClock(5)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 	version := &cluster.MakeTestingClusterSettings().Version
 	heartbeat := &HeartbeatService{
 		clock:              clock,
@@ -260,7 +261,7 @@ func TestVersionCheck(t *testing.T) {
 	}
 
 	manual := hlc.NewManualClock(5)
-	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 	heartbeat := &HeartbeatService{
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),

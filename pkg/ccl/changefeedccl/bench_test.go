@@ -75,7 +75,7 @@ func BenchmarkChangefeedTicks(b *testing.B) {
 		// wait for each batch to come out of the feed before advancing the
 		// timestamp.
 		var feedTimeIdx int
-		feedClock := hlc.NewClock(func() int64 {
+		feedClock := hlc.NewClock(log.Logger, func() int64 {
 			if feedTimeIdx < len(timestamps) {
 				feedTimeIdx++
 				return timestamps[feedTimeIdx-1].UnixNano()

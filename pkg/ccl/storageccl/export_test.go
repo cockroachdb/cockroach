@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestExportCmd(t *testing.T) {
@@ -95,7 +96,7 @@ func TestExportCmd(t *testing.T) {
 	}
 	exportAndSlurp := func(t *testing.T, start hlc.Timestamp) ExportAndSlurpResult {
 		var ret ExportAndSlurpResult
-		ret.end = hlc.NewClock(hlc.UnixNano, time.Nanosecond).Now()
+		ret.end = hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond).Now()
 		ret.mvccLatestFiles, ret.mvccLatestKVs = exportAndSlurpOne(t, start, roachpb.MVCCFilter_Latest)
 		ret.mvccAllFiles, ret.mvccAllKVs = exportAndSlurpOne(t, start, roachpb.MVCCFilter_All)
 		return ret

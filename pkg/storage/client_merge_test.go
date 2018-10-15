@@ -537,7 +537,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 		return nil
 	}
 	for i := 0; i < 4; i++ {
-		clock := hlc.NewClock(hlc.NewManualClock(123).UnixNano, time.Millisecond /* maxOffset */)
+		clock := hlc.NewClock(log.Logger, hlc.NewManualClock(123).UnixNano, time.Millisecond /* maxOffset */)
 		mtc.clocks = append(mtc.clocks, clock)
 	}
 	mtc.Start(t, 4)

@@ -998,7 +998,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 				roachpb.NewReverseScan(roachpb.Key("a"), roachpb.Key("c")),
 			} {
 				manual := hlc.NewManualClock(ts[0].WallTime + 1)
-				clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+				clock := hlc.NewClock(log.Logger, manual.UnixNano, time.Nanosecond)
 				ds := kv.NewDistSender(
 					kv.DistSenderConfig{
 						AmbientCtx: log.AmbientContext{Tracer: s.ClusterSettings().Tracer},

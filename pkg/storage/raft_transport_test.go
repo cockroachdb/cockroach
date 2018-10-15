@@ -115,7 +115,7 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 	rttc.nodeRPCContext = rpc.NewContext(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
 		testutils.NewNodeTestBaseContext(),
-		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
+		hlc.NewClock(log.Logger, hlc.UnixNano, time.Nanosecond),
 		rttc.stopper,
 		&cluster.MakeTestingClusterSettings().Version,
 	)

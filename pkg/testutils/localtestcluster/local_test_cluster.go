@@ -86,7 +86,7 @@ type InitFactoryFn func(
 // to shutdown the server after the test completes.
 func (ltc *LocalTestCluster) Start(t testing.TB, baseCtx *base.Config, initFactory InitFactoryFn) {
 	ltc.Manual = hlc.NewManualClock(123)
-	ltc.Clock = hlc.NewClock(ltc.Manual.UnixNano, 50*time.Millisecond)
+	ltc.Clock = hlc.NewClock(log.Logger, ltc.Manual.UnixNano, 50*time.Millisecond)
 	cfg := storage.TestStoreConfig(ltc.Clock)
 	ltc.Cfg = cfg
 	ambient := log.AmbientContext{Tracer: cfg.Settings.Tracer}
