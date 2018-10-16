@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -300,7 +301,7 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 	// Reinitialize.
 	p.curPlan = planTop{AST: stmt.AST}
 
-	log.VEvent(ctx, 1, "heuristic planner starts")
+	log.VEvent(ctx, 2, "heuristic planner starts")
 
 	var err error
 	p.curPlan.plan, err = p.newPlan(ctx, stmt.AST, nil /*desiredTypes*/)
@@ -329,7 +330,7 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 		return err
 	}
 
-	log.VEvent(ctx, 1, "heuristic planner optimizes plan")
+	log.VEvent(ctx, 2, "heuristic planner optimizes plan")
 
 	needed := allColumns(p.curPlan.plan)
 	p.curPlan.plan, err = p.optimizePlan(ctx, p.curPlan.plan, needed)
@@ -338,7 +339,7 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 		return err
 	}
 
-	log.VEvent(ctx, 1, "heuristic planner optimizes subqueries")
+	log.VEvent(ctx, 2, "heuristic planner optimizes subqueries")
 
 	// Now do the same work for all sub-queries.
 	for i := range p.curPlan.subqueryPlans {
@@ -386,6 +387,14 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	// potential reuse of versions. To avoid these issues, we prevent saving a
 	// memo (for prepare) or reusing a saved memo (for execute).
 	noMemoReuse := p.Tables().hasUncommittedTables()
+	useCache := !noMemoReuse && queryCacheEnabled.Get(&p.execCfg.Settings.SV)
+	cacheLog := func(msg string) {
+		if log.V(1) {
+			log.Infof(ctx, "%s: %s", msg, stmt.SQL)
+		} else {
+			log.Event(ctx, msg)
+		}
+	}
 
 	// We have three distinct code paths:
 	//   1. Prepare
@@ -422,35 +431,45 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	}
 
 	var execMemo *memo.Memo
+	var err error
 	if stmt.Prepared != nil && stmt.Prepared.Memo != nil && !noMemoReuse {
 		// 2. We are executing a previously prepared statement.
 
 		// If the prepared memo has been invalidated by schema or other changes,
 		// re-prepare it.
 		if stmt.Prepared.Memo.IsStale(ctx, p.EvalContext(), &catalog) {
-			var err error
 			stmt.Prepared.Memo, err = p.prepareMemo(ctx, &catalog, stmt)
 			if err != nil {
 				return err
 			}
 		}
 
-		if preparedMemo := stmt.Prepared.Memo; preparedMemo.HasPlaceholders() {
-			// Finish optimization by assigning any remaining placeholders and
-			// applying exploration rules. Reinitialize the optimizer and construct a
-			// new memo that is copied from the prepared memo, but with placeholders
-			// assigned.
-			if err := f.AssignPlaceholders(preparedMemo); err != nil {
-				return err
+		execMemo, err = p.reuseMemo(stmt.Prepared.Memo)
+	} else if useCache {
+		// Consult the query cache.
+		cachedData, ok := p.execCfg.QueryCache.Find(stmt.SQL)
+		if ok {
+			cacheLog("query cache hit")
+			if cachedData.Memo.IsStale(ctx, p.EvalContext(), &catalog) {
+				cachedData.Memo, err = p.prepareMemo(ctx, &catalog, stmt)
+				if err != nil {
+					return err
+				}
+				// Update the plan in the cache.
+				p.execCfg.QueryCache.Add(&cachedData)
+				cacheLog("query cache updated")
 			}
-			p.optimizer.Optimize()
-			execMemo = f.Memo()
+			execMemo, err = p.reuseMemo(cachedData.Memo)
 		} else {
-			// If there are no placeholders, the query was already fully optimized
-			// (see prepareMemo).
-			execMemo = preparedMemo
+			cacheLog("query cache miss")
 		}
-	} else {
+	}
+
+	if err != nil {
+		return err
+	}
+
+	if execMemo == nil {
 		// 3. We are executing a statement that was not prepared, we fell back to
 		// the heuristic planner during prepare, or this transaction is changing a
 		// schema.
@@ -462,6 +481,19 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		}
 		p.optimizer.Optimize()
 		execMemo = f.Memo()
+
+		// If this statement doesn't have placeholders, add it to the cache. Note
+		// that non-prepared statements from pgwire clients cannot have
+		// placeholders.
+		if useCache && !bld.HadPlaceholders {
+			execMemo = p.optimizer.DetachMemo()
+			cachedData := querycache.CachedData{
+				SQL:  stmt.SQL,
+				Memo: execMemo,
+			}
+			p.execCfg.QueryCache.Add(&cachedData)
+			cacheLog("query cache add")
+		}
 	}
 
 	// Build the plan tree and store it in planner.curPlan.
@@ -518,6 +550,24 @@ func (p *planner) prepareMemo(
 	// to the prepared statement. DetachMemo will re-initialize the optimizer
 	// to an empty memo.
 	return p.optimizer.DetachMemo(), nil
+}
+
+func (p *planner) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) {
+	if !cachedMemo.HasPlaceholders() {
+		// If there are no placeholders, the query was already fully optimized
+		// (see prepareMemo).
+		return cachedMemo, nil
+	}
+	f := p.optimizer.Factory()
+	// Finish optimization by assigning any remaining placeholders and
+	// applying exploration rules. Reinitialize the optimizer and construct a
+	// new memo that is copied from the prepared memo, but with placeholders
+	// assigned.
+	if err := f.AssignPlaceholders(cachedMemo); err != nil {
+		return nil, err
+	}
+	p.optimizer.Optimize()
+	return f.Memo(), nil
 }
 
 // hideHiddenColumn ensures that if the plan is returning some hidden
