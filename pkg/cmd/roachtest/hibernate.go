@@ -97,7 +97,7 @@ func registerHibernate(r *registry) {
 
 		// Load the list of all test results files and parse them individually.
 		// Files are here: /mnt/data1/hibernate/hibernate-core/target/test-results/test
-		output, err := c.RunWithBuffer(ctx, c.l, node,
+		output, err := c.RunWithBuffer(ctx, t.l, node,
 			`ls /mnt/data1/hibernate/hibernate-core/target/test-results/test/*.xml`,
 		)
 		if err != nil {
@@ -115,11 +115,11 @@ func registerHibernate(r *registry) {
 		for i, file := range files {
 			file = strings.TrimSpace(file)
 			if len(file) == 0 {
-				c.l.Printf("Skipping %d of %d: %s\n", i, len(files), file)
+				t.l.Printf("Skipping %d of %d: %s\n", i, len(files), file)
 				continue
 			}
-			c.l.Printf("Parsing %d of %d: %s\n", i, len(files), file)
-			fileOutput, err := c.RunWithBuffer(ctx, c.l, node, `cat `+file)
+			t.l.Printf("Parsing %d of %d: %s\n", i, len(files), file)
+			fileOutput, err := c.RunWithBuffer(ctx, t.l, node, `cat `+file)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -171,31 +171,31 @@ func registerHibernate(r *registry) {
 			if !ok {
 				t.Fatalf("can't find %s in test result list", test)
 			}
-			c.l.Printf("%s\n", result)
+			t.l.Printf("%s\n", result)
 		}
 
-		c.l.Printf("------------------------\n")
-		c.l.Printf("%d Total Test Run\n",
+		t.l.Printf("------------------------\n")
+		t.l.Printf("%d Total Test Run\n",
 			passExpectedCount+passUnexpectedCount+failExpectedCount+failUnexpectedCount,
 		)
-		c.l.Printf("%d tests passed\n", passUnexpectedCount+passExpectedCount)
-		c.l.Printf("%d tests failed\n", failUnexpectedCount+failExpectedCount)
-		c.l.Printf("%d tests passed unexpectedly\n", passUnexpectedCount)
-		c.l.Printf("%d tests failed unexpectedly\n", failUnexpectedCount)
-		c.l.Printf("%d tests expected failed, but not run \n", notRunCount)
-		c.l.Printf("For a full summary, look at artifacts/hibernate/logs/logs/report/index.html\n")
-		c.l.Printf("------------------------\n")
+		t.l.Printf("%d tests passed\n", passUnexpectedCount+passExpectedCount)
+		t.l.Printf("%d tests failed\n", failUnexpectedCount+failExpectedCount)
+		t.l.Printf("%d tests passed unexpectedly\n", passUnexpectedCount)
+		t.l.Printf("%d tests failed unexpectedly\n", failUnexpectedCount)
+		t.l.Printf("%d tests expected failed, but not run \n", notRunCount)
+		t.l.Printf("For a full summary, look at artifacts/hibernate/logs/logs/report/index.html\n")
+		t.l.Printf("------------------------\n")
 
 		if failUnexpectedCount > 0 || passUnexpectedCount > 0 || notRunCount > 0 {
 			// Create a new hibernate_blacklist so we can easily update this test.
 			sort.Strings(currentFailures)
-			c.l.Printf("Here is new hibernate blacklist that can be used to update the test:\n\n")
-			c.l.Printf("var hibernateBlackList = []string{\n")
+			t.l.Printf("Here is new hibernate blacklist that can be used to update the test:\n\n")
+			t.l.Printf("var hibernateBlackList = []string{\n")
 			for _, test := range currentFailures {
-				c.l.Printf("\"%s\",\n", test)
+				t.l.Printf("\"%s\",\n", test)
 			}
-			c.l.Printf("}\n\n")
-			c.l.Printf("------------------------\n")
+			t.l.Printf("}\n\n")
+			t.l.Printf("------------------------\n")
 			t.Fatalf("\n"+
 				"%d tests failed unexpectedly\n"+
 				"%d tests passed unexpectedly\n"+

@@ -57,19 +57,19 @@ func registerSchemaChange(r *registry) {
 				// but we can't put it in monitor as-is because the test deadlocks.
 				go func() {
 					const cmd = `./workload run kv --tolerate-errors --min-block-bytes=8 --max-block-bytes=128 --db=test`
-					l, err := c.l.ChildLogger(fmt.Sprintf(`kv-%d`, node))
+					l, err := t.l.ChildLogger(fmt.Sprintf(`kv-%d`, node))
 					if err != nil {
 						t.Fatal(err)
 					}
 					defer l.close()
-					_ = execCmd(ctx, c.l, roachprod, "ssh", c.makeNodes(c.Node(node)), "--", cmd)
+					_ = execCmd(ctx, t.l, roachprod, "ssh", c.makeNodes(c.Node(node)), "--", cmd)
 				}()
 			}
 
 			m = newMonitor(ctx, c, c.All())
 			m.Go(func(ctx context.Context) error {
 				t.Status("running schema change tests")
-				return waitForSchemaChanges(ctx, c.l, db)
+				return waitForSchemaChanges(ctx, t.l, db)
 			})
 			m.Wait()
 		},

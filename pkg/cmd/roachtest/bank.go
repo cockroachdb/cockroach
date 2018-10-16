@@ -145,7 +145,7 @@ CREATE TABLE bank.accounts (
 
 // Continuously transfers money until done().
 func (s *bankState) transferMoney(
-	ctx context.Context, c *cluster, idx, numAccounts, maxTransfer int,
+	ctx context.Context, l *logger, c *cluster, idx, numAccounts, maxTransfer int,
 ) {
 	defer c.l.Printf("client %d shutting down\n", idx)
 	client := &s.clients[idx-1]
@@ -238,12 +238,12 @@ func (s *bankState) startChaosMonkey(
 					s.clients[i].Lock()
 				}
 			}
-			c.l.Printf("round %d: restarting nodes %v\n", curRound, nodes)
+			t.l.Printf("round %d: restarting nodes %v\n", curRound, nodes)
 			for _, i := range nodes {
 				if s.done(ctx) {
 					break
 				}
-				c.l.Printf("round %d: restarting %d\n", curRound, i)
+				t.l.Printf("round %d: restarting %d\n", curRound, i)
 				c.Stop(ctx, c.Node(i))
 				c.Start(ctx, t, c.Node(i))
 				if stopClients {
@@ -263,7 +263,7 @@ func (s *bankState) startChaosMonkey(
 				newCounts := s.counts()
 				for i := range newCounts {
 					if newCounts[i] > preCount[i] {
-						c.l.Printf("round %d: progress made by client %d\n", curRound, i)
+						t.l.Printf("round %d: progress made by client %d\n", curRound, i)
 						return true
 					}
 				}
@@ -281,7 +281,7 @@ func (s *bankState) startChaosMonkey(
 				return
 			}
 
-			c.l.Printf("round %d: cluster recovered\n", curRound)
+			t.l.Printf("round %d: cluster recovered\n", curRound)
 		}
 	}()
 }
@@ -405,7 +405,7 @@ func (s *bankState) waitClientsStop(
 			}
 			// This just stops the logs from being a bit too spammy.
 			if newOutput != prevOutput {
-				c.l.Printf("%s\n", newOutput)
+				t.l.Printf("%s\n", newOutput)
 				prevOutput = newOutput
 			}
 		}
@@ -430,12 +430,12 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 		s.clients[i].Lock()
 		s.initClient(ctx, c, i+1)
 		s.clients[i].Unlock()
-		go s.transferMoney(ctx, c, i+1, bankNumAccounts, bankMaxTransfer)
+		go s.transferMoney(ctx, t.l, c, i+1, bankNumAccounts, bankMaxTransfer)
 	}
 
 	// Chaos monkey.
 	rnd, seed := randutil.NewPseudoRand()
-	c.l.Printf("monkey starts (seed %d)\n", seed)
+	t.l.Printf("monkey starts (seed %d)\n", seed)
 	pickNodes := func() []int {
 		nodes := rnd.Perm(c.nodes)[:rnd.Intn(c.nodes)+1]
 		for i := range nodes {
@@ -456,7 +456,7 @@ func runBankClusterRecovery(ctx context.Context, t *test, c *cluster) {
 	for _, c := range counts {
 		count += c
 	}
-	c.l.Printf("%d transfers (%.1f/sec) in %.1fs\n", count, float64(count)/elapsed, elapsed)
+	t.l.Printf("%d transfers (%.1f/sec) in %.1fs\n", count, float64(count)/elapsed, elapsed)
 }
 
 func runBankNodeRestart(ctx context.Context, t *test, c *cluster) {
@@ -477,11 +477,11 @@ func runBankNodeRestart(ctx context.Context, t *test, c *cluster) {
 	client := &s.clients[0]
 	client.db = c.Conn(ctx, clientIdx)
 
-	go s.transferMoney(ctx, c, 1, bankNumAccounts, bankMaxTransfer)
+	go s.transferMoney(ctx, t.l, c, 1, bankNumAccounts, bankMaxTransfer)
 
 	// Chaos monkey.
 	rnd, seed := randutil.NewPseudoRand()
-	c.l.Printf("monkey starts (seed %d)\n", seed)
+	t.l.Printf("monkey starts (seed %d)\n", seed)
 	pickNodes := func() []int {
 		return []int{1 + rnd.Intn(clientIdx)}
 	}
@@ -494,7 +494,7 @@ func runBankNodeRestart(ctx context.Context, t *test, c *cluster) {
 
 	elapsed := timeutil.Since(start).Seconds()
 	count := atomic.LoadUint64(&client.count)
-	c.l.Printf("%d transfers (%.1f/sec) in %.1fs\n", count, float64(count)/elapsed, elapsed)
+	t.l.Printf("%d transfers (%.1f/sec) in %.1fs\n", count, float64(count)/elapsed, elapsed)
 }
 
 func runBankNodeZeroSum(ctx context.Context, t *test, c *cluster) {
@@ -514,7 +514,7 @@ func runBankNodeZeroSum(ctx context.Context, t *test, c *cluster) {
 		s.clients[i].Lock()
 		s.initClient(ctx, c, i+1)
 		s.clients[i].Unlock()
-		go s.transferMoney(ctx, c, i+1, bankNumAccounts, bankMaxTransfer)
+		go s.transferMoney(ctx, t.l, c, i+1, bankNumAccounts, bankMaxTransfer)
 	}
 
 	s.startSplitMonkey(ctx, 2*time.Second, c)
@@ -550,7 +550,7 @@ func runBankZeroSumRestart(ctx context.Context, t *test, c *cluster) {
 		s.clients[i].Lock()
 		s.initClient(ctx, c, i+1)
 		s.clients[i].Unlock()
-		go s.transferMoney(ctx, c, i+1, bankNumAccounts, bankMaxTransfer)
+		go s.transferMoney(ctx, t.l, c, i+1, bankNumAccounts, bankMaxTransfer)
 	}
 
 	rnd, seed := randutil.NewPseudoRand()
