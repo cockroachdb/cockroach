@@ -50,10 +50,7 @@ import (
 )
 
 var (
-	local bool
-	// Path to a local dir where the test logs and artifacts collected from
-	// cluster will be placed.
-	artifacts   string
+	local       bool
 	cockroach   string
 	cloud       = "gce"
 	encrypt     bool
@@ -631,8 +628,9 @@ type cluster struct {
 
 type clusterConfig struct {
 	// name must be empty if localCluster is specified.
-	name         string
-	nodes        []nodeSpec
+	name  string
+	nodes []nodeSpec
+	// artifactsDir is the path where log file will be stored.
 	artifactsDir string
 	localCluster bool
 	teeOpt       teeOptType

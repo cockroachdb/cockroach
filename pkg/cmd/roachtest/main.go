@@ -25,6 +25,9 @@ import (
 
 func main() {
 	parallelism := 10
+	// Path to a local dir where the test logs and artifacts collected from
+	// cluster will be placed.
+	var artifacts string
 
 	cobra.EnableCommandSorting = false
 
@@ -131,7 +134,7 @@ If no pattern is given, all tests are run.
 				r.loadBuildVersion()
 			}
 			registerTests(r)
-			os.Exit(r.Run(args, parallelism))
+			os.Exit(r.Run(args, parallelism, artifacts))
 			return nil
 		},
 	}
@@ -153,7 +156,7 @@ If no pattern is given, all tests are run.
 			}
 			r := newRegistry()
 			registerBenchmarks(r)
-			os.Exit(r.Run(args, parallelism))
+			os.Exit(r.Run(args, parallelism, artifacts))
 			return nil
 		},
 	}
@@ -193,7 +196,7 @@ Cockroach cluster with existing data.
 			registerStoreGen(r, args)
 			// We've only registered one store generation "test" that does its own
 			// argument processing, so no need to provide any arguments to r.Run.
-			os.Exit(r.Run(nil /* filter */, parallelism))
+			os.Exit(r.Run(nil /* filter */, parallelism, artifacts))
 			return nil
 		},
 	}
