@@ -67,11 +67,19 @@ func registerImportTPCC(r *registry) {
 }
 
 func registerImportTPCH(r *registry) {
-	for _, n := range []int{4, 8, 32} {
+	for _, item := range []struct {
+		nodes   int
+		timeout time.Duration
+	}{
+		{4, 6 * time.Hour},
+		{8, 4 * time.Hour},
+		{32, 3 * time.Hour},
+	} {
 		r.Add(testSpec{
-			Name:   fmt.Sprintf(`import/tpch/nodes=%d`, n),
-			Nodes:  nodes(n),
-			Stable: true, // DO NOT COPY to new tests
+			Name:    fmt.Sprintf(`import/tpch/nodes=%d`, item.nodes),
+			Nodes:   nodes(item.nodes),
+			Timeout: item.timeout,
+			Stable:  true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				c.Put(ctx, cockroach, "./cockroach")
 				c.Start(ctx, t)

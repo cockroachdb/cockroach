@@ -210,11 +210,18 @@ func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
 }
 
 func registerRestore(r *registry) {
-	for _, nodeCount := range []int{10, 32} {
+	for _, item := range []struct {
+		nodes   int
+		timeout time.Duration
+	}{
+		{10, 6 * time.Hour},
+		{32, 3 * time.Hour},
+	} {
 		r.Add(testSpec{
-			Name:   fmt.Sprintf("restore2TB/nodes=%d", nodeCount),
-			Nodes:  nodes(nodeCount),
-			Stable: true, // DO NOT COPY to new tests
+			Name:    fmt.Sprintf("restore2TB/nodes=%d", item.nodes),
+			Nodes:   nodes(item.nodes),
+			Timeout: item.timeout,
+			Stable:  true, // DO NOT COPY to new tests
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				c.Put(ctx, cockroach, "./cockroach")
 				c.Start(ctx, t)
