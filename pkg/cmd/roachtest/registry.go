@@ -28,6 +28,7 @@ func registerTests(r *registry) {
 	registerClearRange(r)
 	registerClock(r)
 	registerCopy(r)
+	registerCreateIndexTPCC(r)
 	registerDebug(r)
 	registerDebugHeap(r)
 	registerDecommission(r)

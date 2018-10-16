@@ -38,7 +38,8 @@ import (
 type tpccOptions struct {
 	Warehouses int
 	Extra      string
-	Chaos      func() Chaos // for late binding of stopper
+	Chaos      func() Chaos                // for late binding of stopper
+	During     func(context.Context) error // for running a function during the test
 	Duration   time.Duration
 	ZFS        bool
 }
@@ -113,6 +114,9 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 	if opts.Chaos != nil {
 		chaos := opts.Chaos()
 		m.Go(chaos.Runner(c, m))
+	}
+	if opts.During != nil {
+		m.Go(opts.During)
 	}
 	m.Wait()
 }
