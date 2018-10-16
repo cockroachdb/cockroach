@@ -101,28 +101,6 @@ func newChangeAggregatorProcessor(
 		return nil, err
 	}
 
-	// Due to the possibility of leaked goroutines, it is not safe to start a sink
-	// in this method because there is no guarantee that the TrailingMetaCallback
-	// method will ever be called (this can happen, for example, if an error
-	// occurs during flow setup).  However, we still want to ensure that the user
-	// has not made any obvious errors when specifying the sink in the CREATE
-	// CHANGEFEED statement. Therefore, we create a "canary" sink, which will be
-	// immediately closed, only to check for errors.
-	{
-		canarySink, err := getSink(spec.Feed.SinkURI, spec.Feed.Opts, spec.Feed.Targets)
-		if err != nil {
-			// In this context, we don't want to retry even retryable errors from the
-			// sync. Unwrap any retryable errors encountered.
-			if rErr, ok := err.(*retryableSinkError); ok {
-				return nil, rErr.cause
-			}
-			return nil, err
-		}
-		if err := canarySink.Close(); err != nil {
-			return nil, err
-		}
-	}
-
 	return ca, nil
 }
 
@@ -389,23 +367,6 @@ func newChangeFrontierProcessor(
 	var err error
 	if cf.encoder, err = getEncoder(spec.Feed.Opts); err != nil {
 		return nil, err
-	}
-
-	// See comment in newChangeAggregatorProcessor for details on the use of canary
-	// sinks.
-	{
-		canarySink, err := getSink(spec.Feed.SinkURI, spec.Feed.Opts, spec.Feed.Targets)
-		if err != nil {
-			// In this context, we don't want to retry even retryable errors from the
-			// sync. Unwrap any retryable errors encountered.
-			if rErr, ok := err.(*retryableSinkError); ok {
-				return nil, rErr.cause
-			}
-			return nil, err
-		}
-		if err := canarySink.Close(); err != nil {
-			return nil, err
-		}
 	}
 
 	return cf, nil
