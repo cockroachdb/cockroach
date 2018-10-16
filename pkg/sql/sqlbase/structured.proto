@@ -574,8 +574,7 @@ message TableDescriptor {
   // particular version increment.
   optional uint32 version = 5 [(gogoproto.nullable) = false, (gogoproto.casttype) = "DescriptorVersion"];
 
-  // Do not use. On the path to deprecation.
-  optional bool up_version = 6 [(gogoproto.nullable) = false];
+  reserved 6;
 
   // Last modification time of the table descriptor.
   optional util.hlc.Timestamp modification_time = 7 [(gogoproto.nullable) = false];
