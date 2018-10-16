@@ -3,7 +3,7 @@
 set -euo pipefail
 
 image=cockroachdb/builder
-version=20180813-101406
+version=20181015-212512
 
 function init() {
   docker build --tag="${image}" "$(dirname "${0}")/builder"
