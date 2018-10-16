@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -39,7 +40,17 @@ func TestScatterRandomizeLeases(t *testing.T) {
 	}
 
 	const numHosts = 3
-	tc := serverutils.StartTestCluster(t, numHosts, base.TestClusterArgs{})
+
+	// Prevent the merge queue from immediately discarding our splits. This is
+	// more foolproof than changing the cluster setting because the cluster
+	// setting change has to be propagated to all nodes via gossip so there's
+	// still a small chance that a non-gateway node will try a merge after we
+	// change the setting.
+	var testClusterArgs base.TestClusterArgs
+	testClusterArgs.ServerArgs.Knobs.Store = &storagebase.StoreTestingKnobs{
+		DisableMergeQueue: true,
+	}
+	tc := serverutils.StartTestCluster(t, numHosts, testClusterArgs)
 	defer tc.Stopper().Stop(context.TODO())
 
 	sqlutils.CreateTable(
@@ -51,7 +62,8 @@ func TestScatterRandomizeLeases(t *testing.T) {
 
 	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 
-	// Prevent the merge queue from immediately discarding our splits.
+	// Even though we disabled merges via the store testing knob, we must also
+	// disable the setting in order for manual splits to be allowed.
 	r.Exec(t, "SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
 
 	// Introduce 99 splits to get 100 ranges.
