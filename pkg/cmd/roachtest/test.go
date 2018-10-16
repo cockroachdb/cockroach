@@ -40,7 +40,6 @@ import (
 )
 
 var (
-	parallelism   = 10
 	count         = 1
 	debugEnabled  = false
 	postIssues    = true
@@ -346,8 +345,14 @@ func (r *registry) Run(filter []string, parallelism int) int {
 				if count == 1 {
 					runNum = 0
 				}
+				// Log to stdout/stderr if we're not running tests in parallel.
+				teeOpt := noTee
+				if parallelism == 1 {
+					teeOpt = teeToStdout
+				}
 				r.runAsync(
-					ctx, tests[i], filterRE, nil /* parent */, nil /* cluster */, runNum, func(failed bool) {
+					ctx, tests[i], filterRE, nil /* parent */, nil, /* cluster */
+					runNum, teeOpt, func(failed bool) {
 						wg.Done()
 						<-sem
 					})
@@ -709,6 +714,7 @@ func (r *registry) runAsync(
 	parent *test,
 	c *cluster,
 	runNum int,
+	teeOpt teeOptType,
 	done func(failed bool),
 ) {
 	artifactsSuffix := ""
@@ -873,6 +879,7 @@ func (r *registry) runAsync(
 					nodes:        t.spec.Nodes,
 					artifactsDir: t.ArtifactsDir(),
 					localCluster: local,
+					teeOpt:       teeOpt,
 				}
 				var err error
 				c, err = newCluster(ctx, cfg)
@@ -898,7 +905,7 @@ func (r *registry) runAsync(
 				}()
 			}
 		} else {
-			c = c.clone(t)
+			c = c.clone(t, teeOpt)
 		}
 
 		// If we have subtests, handle them here and return.
@@ -907,22 +914,23 @@ func (r *registry) runAsync(
 				if t.spec.SubTests[i].matchRegex(filter) {
 					var wg sync.WaitGroup
 					wg.Add(1)
-					r.runAsync(ctx, &t.spec.SubTests[i], filter, t, c, runNum, func(failed bool) {
-						if failed {
-							// Mark the parent test as failed since one of the subtests
-							// failed.
-							t.mu.Lock()
-							t.mu.failed = true
-							t.mu.Unlock()
-						}
-						if failed && debugEnabled {
-							// The test failed and debugging is enabled. Don't try to stumble
-							// forward running another test or subtest, just exit
-							// immediately.
-							os.Exit(1)
-						}
-						wg.Done()
-					})
+					r.runAsync(ctx, &t.spec.SubTests[i], filter, t, c,
+						runNum, teeOpt, func(failed bool) {
+							if failed {
+								// Mark the parent test as failed since one of the subtests
+								// failed.
+								t.mu.Lock()
+								t.mu.failed = true
+								t.mu.Unlock()
+							}
+							if failed && debugEnabled {
+								// The test failed and debugging is enabled. Don't try to stumble
+								// forward running another test or subtest, just exit
+								// immediately.
+								os.Exit(1)
+							}
+							wg.Done()
+						})
 					wg.Wait()
 				}
 			}
