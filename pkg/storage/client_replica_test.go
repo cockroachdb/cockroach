@@ -1680,8 +1680,9 @@ func TestClearRange(t *testing.T) {
 
 	ctx := context.Background()
 	stopper := stop.NewStopper()
+	manual := hlc.NewManualClock(1)
 	defer stopper.Stop(ctx)
-	store := createTestStoreWithConfig(t, stopper, storage.TestStoreConfig(nil))
+	store := createTestStoreWithConfig(t, stopper, storage.TestStoreConfig(hlc.NewClock(manual.UnixNano, time.Nanosecond)))
 
 	clearRange := func(start, end roachpb.Key) {
 		t.Helper()
@@ -1712,6 +1713,21 @@ func TestClearRange(t *testing.T) {
 		}
 	}
 
+	verifyGCThreshold := func(prefix roachpb.Key, ns int64) {
+		t.Helper()
+		rKey, err := keys.Addr(prefix)
+		if err != nil {
+			t.Fatal(err)
+		}
+		repl := store.LookupReplica(rKey)
+		if repl == nil {
+			t.Fatalf("replica for key %s not found", rKey)
+		}
+		if thresh := repl.GetGCThreshold().WallTime; thresh != ns {
+			t.Fatalf("expected gc threshold %d, got %d", ns, thresh)
+		}
+	}
+
 	rng, _ := randutil.NewPseudoRand()
 
 	// Write four keys with values small enough to use individual deletions
@@ -1734,13 +1750,17 @@ func TestClearRange(t *testing.T) {
 	verifyKeysWithPrefix(sm, []roachpb.Key{sm1, sm2, sm3})
 	verifyKeysWithPrefix(lg, []roachpb.Key{lg1, lg2, lg3})
 
+	manual.Set(123)
+
 	// Verify that a ClearRange request from [sm1, sm3) removes sm1 and sm2.
 	clearRange(sm1, sm3)
 	verifyKeysWithPrefix(sm, []roachpb.Key{sm3})
+	verifyGCThreshold(sm, manual.UnixNano())
 
 	// Verify that a ClearRange request from [lg1, lg3) removes lg1 and lg2.
 	clearRange(lg1, lg3)
 	verifyKeysWithPrefix(lg, []roachpb.Key{lg3})
+	verifyGCThreshold(lg, manual.UnixNano())
 
 	// Verify that only the large ClearRange request used a range deletion
 	// tombstone by checking for the presence of a suggested compaction.
