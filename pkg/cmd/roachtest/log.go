@@ -106,10 +106,16 @@ func (cfg *loggerConfig) newLogger(path string) (*logger, error) {
 	}, nil
 }
 
-func rootLogger(path string) (*logger, error) {
+type teeOptType bool
+
+const (
+	teeToStdout teeOptType = true
+	noTee       teeOptType = false
+)
+
+func rootLogger(path string, teeOpt teeOptType) (*logger, error) {
 	var stdout, stderr io.Writer
-	// Log to stdout/stderr if we're not running tests in parallel.
-	if parallelism == 1 {
+	if teeOpt == teeToStdout {
 		stdout = os.Stdout
 		stderr = os.Stderr
 	}
