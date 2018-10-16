@@ -197,6 +197,7 @@ RUN curl -fsSL https://deb.nodesource.com/gpgkey/nodesource.gpg.key | apt-key ad
 # google-cloud-sdk - roachprod acceptance tests
 # yarn - ui
 # chrome - ui
+# unzip - for installing awscli
 RUN apt-get install -y --no-install-recommends \
     ccache \
     google-cloud-sdk \
@@ -207,7 +208,15 @@ RUN apt-get install -y --no-install-recommends \
     openjdk-8-jre \
     openssh-client \
     yarn \
-    google-chrome-stable
+    google-chrome-stable \
+    unzip
+
+# awscli - roachtests
+# NB: we don't use apt-get because we need an up to date version of awscli
+RUN curl -fsSL "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip" -o "awscli-bundle.zip" && \
+  unzip awscli-bundle.zip && \
+  ./awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws && \
+  rm -rf awscli-bundle.zip awscli-bundle
 
 ENV PATH /opt/backtrace/bin:$PATH
 
