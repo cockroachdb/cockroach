@@ -3642,7 +3642,7 @@ func (expr *IsOfTypeExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 	for _, t := range expr.Types {
 		wantTyp := coltypes.CastTargetToDatumType(t)
-		if datumTyp.FamilyEqual(wantTyp) {
+		if datumTyp.Equivalent(wantTyp) {
 			return MakeDBool(DBool(!expr.Not)), nil
 		}
 	}
