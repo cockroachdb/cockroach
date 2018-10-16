@@ -188,7 +188,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 "`, nodesStr, testName, nemesis))
 	}()
 
-	outputDir := filepath.Join(artifacts, t.Name())
+	outputDir := t.ArtifactsDir()
 	if err := os.MkdirAll(outputDir, 0777); err != nil {
 		t.Fatal(err)
 	}
