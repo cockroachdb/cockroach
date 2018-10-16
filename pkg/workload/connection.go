@@ -40,7 +40,7 @@ func NewConnFlags(genFlags *Flags) *ConnFlags {
 		`Override for the SQL database to use. If empty, defaults to the generator name`)
 	c.IntVar(&c.Concurrency, `concurrency`, 2*runtime.NumCPU(),
 		`Number of concurrent workers`)
-	c.StringVar(&c.Method, `method`, `prepare`, `SQL issue method (prepare, noprepare)`)
+	c.StringVar(&c.Method, `method`, `prepare`, `SQL issue method (prepare, noprepare, simple)`)
 	genFlags.AddFlagSet(c.FlagSet)
 	if genFlags.Meta == nil {
 		genFlags.Meta = make(map[string]FlagMeta)

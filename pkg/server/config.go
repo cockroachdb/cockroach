@@ -75,6 +75,8 @@ const (
 	recommendedNetworkFileDescriptors = 5000
 
 	defaultSQLTableStatCacheSize = 256
+
+	defaultSQLQueryCacheSize = 1024 * 1024
 )
 
 var productionSettingsWebpage = fmt.Sprintf(
@@ -168,6 +170,9 @@ type Config struct {
 	// SQLTableStatCacheSize is the size (number of tables) of the table
 	// statistics cache.
 	SQLTableStatCacheSize int
+
+	// SQLQueryCacheSize is the memory size (in bytes) of the query plan cache.
+	SQLQueryCacheSize int
 
 	// HeapProfileDirName is the directory name for heap profiles using
 	// heapprofiler.
@@ -327,6 +332,7 @@ func MakeConfig(ctx context.Context, st *cluster.Settings) Config {
 		CacheSize:                      DefaultCacheSize,
 		SQLMemoryPoolSize:              defaultSQLMemoryPoolSize,
 		SQLTableStatCacheSize:          defaultSQLTableStatCacheSize,
+		SQLQueryCacheSize:              defaultSQLQueryCacheSize,
 		ScanInterval:                   defaultScanInterval,
 		ScanMinIdleTime:                defaultScanMinIdleTime,
 		ScanMaxIdleTime:                defaultScanMaxIdleTime,
