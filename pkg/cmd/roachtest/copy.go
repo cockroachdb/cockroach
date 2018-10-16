@@ -121,7 +121,7 @@ func registerCopy(r *registry) {
 			}
 
 			rc := rangeCount()
-			c.l.Printf("range count after copy = %d\n", rc)
+			t.l.Printf("range count after copy = %d\n", rc)
 			highExp := (rows * rowEstimate) / (32 << 20 /* 32MB */)
 			lowExp := (rows * rowEstimate) / (64 << 20 /* 64MB */)
 			if rc > highExp || rc < lowExp {

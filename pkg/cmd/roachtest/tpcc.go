@@ -357,7 +357,7 @@ func loadTPCCBench(
 	// Check if the dataset already exists and is already large enough to
 	// accommodate this benchmarking. If so, we can skip the fixture RESTORE.
 	if _, err := db.ExecContext(ctx, `USE tpcc`); err == nil {
-		c.l.Printf("found existing tpcc database\n")
+		t.l.Printf("found existing tpcc database\n")
 
 		var curWarehouses int
 		if err := db.QueryRowContext(ctx,
@@ -381,9 +381,9 @@ func loadTPCCBench(
 
 	// If the fixture has a corresponding store dump, use it.
 	if b.StoreDirVersion != "" {
-		c.l.Printf("ingesting existing tpcc store dump\n")
+		t.l.Printf("ingesting existing tpcc store dump\n")
 
-		urlBase, err := c.RunWithBuffer(ctx, c.l, c.Node(loadNode[0]),
+		urlBase, err := c.RunWithBuffer(ctx, t.l, c.Node(loadNode[0]),
 			fmt.Sprintf(`./workload fixtures url tpcc --warehouses=%d`, b.LoadWarehouses))
 		if err != nil {
 			return err
@@ -395,7 +395,7 @@ func loadTPCCBench(
 	}
 
 	// Load the corresponding fixture.
-	c.l.Printf("restoring tpcc fixture\n")
+	t.l.Printf("restoring tpcc fixture\n")
 	cmd := fmt.Sprintf(
 		"./workload fixtures load tpcc --checks=false --warehouses=%d {pgurl:1}", b.LoadWarehouses)
 	if err := c.RunE(ctx, loadNode, cmd); err != nil {
@@ -406,13 +406,13 @@ func loadTPCCBench(
 	rebalanceWait := time.Duration(b.LoadWarehouses/100) * time.Minute
 	switch b.LoadConfig {
 	case singleLoadgen:
-		c.l.Printf("splitting and scattering\n")
+		t.l.Printf("splitting and scattering\n")
 	case singlePartitionedLoadgen:
-		c.l.Printf("splitting, scattering, and partitioning\n")
+		t.l.Printf("splitting, scattering, and partitioning\n")
 		partArgs = fmt.Sprintf(`--partitions=%d`, b.partitions())
 		rebalanceWait = time.Duration(b.LoadWarehouses/50) * time.Minute
 	case multiLoadgen:
-		c.l.Printf("splitting, scattering, and partitioning\n")
+		t.l.Printf("splitting, scattering, and partitioning\n")
 		partArgs = fmt.Sprintf(`--partitions=%d --zones="%s" --partition-affinity=0`,
 			b.partitions(), strings.Join(b.Distribution.zones(), ","))
 		rebalanceWait = time.Duration(b.LoadWarehouses/20) * time.Minute
@@ -420,7 +420,7 @@ func loadTPCCBench(
 		panic("unexpected")
 	}
 
-	c.l.Printf("waiting %v for rebalancing\n", rebalanceWait)
+	t.l.Printf("waiting %v for rebalancing\n", rebalanceWait)
 	_, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='64MiB'`)
 	if err != nil {
 		return err
@@ -580,7 +580,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 						"--tolerate-errors --ramp=%s --duration=%s%s {pgurl%s}",
 						b.LoadWarehouses, activeWarehouses, rampDur,
 						loadDur, extraFlags, sqlGateways)
-					out, err := c.RunWithBuffer(ctx, c.l, group.loadNodes, cmd)
+					out, err := c.RunWithBuffer(ctx, t.l, group.loadNodes, cmd)
 					loadDone <- timeutil.Now()
 					if err != nil {
 						return errors.Wrapf(err, "error running tpcc load generator:\n\n%s\n", out)
@@ -598,7 +598,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 						}
 					}
 					headerLine, statsLine := lines[0], lines[1]
-					c.l.Printf("%s\n%s\n", headerLine, statsLine)
+					t.l.Printf("%s\n%s\n", headerLine, statsLine)
 
 					// Parse tpmC value from stats line.
 					fields := strings.Fields(statsLine)
@@ -646,7 +646,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 				ttycolor.Stdout(ttycolor.Red)
 				passStr = "FAIL"
 			}
-			c.l.Printf("--- %s: tpcc %d resulted in %.1f tpmC (%.1f%% of max tpmC)\n\n",
+			t.l.Printf("--- %s: tpcc %d resulted in %.1f tpmC (%.1f%% of max tpmC)\n\n",
 				passStr, warehouses, tpmC, tpmCRatio*100)
 			ttycolor.Stdout(ttycolor.Reset)
 
@@ -657,7 +657,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		}
 
 		ttycolor.Stdout(ttycolor.Green)
-		c.l.Printf("------\nMAX WAREHOUSES = %d\n------\n\n", res)
+		t.l.Printf("------\nMAX WAREHOUSES = %d\n------\n\n", res)
 		ttycolor.Stdout(ttycolor.Reset)
 		return nil
 	})

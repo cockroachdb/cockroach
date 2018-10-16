@@ -134,7 +134,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		return nil
 	})
 	m.Go(func(ctx context.Context) error {
-		l, err := c.l.ChildLogger(`changefeed`)
+		l, err := t.l.ChildLogger(`changefeed`)
 		if err != nil {
 			return err
 		}

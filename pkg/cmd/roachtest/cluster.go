@@ -50,10 +50,7 @@ import (
 )
 
 var (
-	local bool
-	// Path to a local dir where the test logs and artifacts collected from
-	// cluster will be placed.
-	artifacts   string
+	local       bool
 	cockroach   string
 	cloud       = "gce"
 	encrypt     bool
@@ -418,6 +415,7 @@ type testI interface {
 	// Path to a directory where the test is supposed to store its log and other
 	// artifacts.
 	ArtifactsDir() string
+	logger() *logger
 }
 
 // TODO(tschottdorf): Consider using a more idiomatic approach in which options
@@ -608,23 +606,31 @@ func nodes(count int, opts ...createOption) []nodeSpec {
 // A cluster is intended to be shared between all the subtests under a root.
 // A cluster is safe for concurrent use by multiple goroutines.
 type cluster struct {
-	name       string
-	nodes      int
-	status     func(...interface{})
-	t          testI
-	l          *logger
+	name   string
+	nodes  int
+	status func(...interface{})
+	t      testI
+	// l is the logger used to log various cluster operations.
+	// DEPRECATED for use outside of cluster methods: Use a test's t.l instead.
+	// This is generally set to the current test's logger.
+	l *logger
+	// destroyed is used to coordinate between different goroutines that want to
+	// destroy a cluster. It is nil when the cluster should not be destroyed (i.e.
+	// when Destroy() should not be called).
 	destroyed  chan struct{}
 	expiration time.Time
-	// owned is set if this instance is responsible for destroying the roachprod
+	// owned is set if this instance is responsible for `roachprod destroy`ing the
 	// cluster. It is set when a new cluster is created, but not when one is
 	// cloned or when we attach to an existing roachprod cluster.
+	// If not set, Destroy() only wipes the cluster.
 	owned bool
 }
 
 type clusterConfig struct {
 	// name must be empty if localCluster is specified.
-	name         string
-	nodes        []nodeSpec
+	name  string
+	nodes []nodeSpec
+	// artifactsDir is the path where log file will be stored.
 	artifactsDir string
 	localCluster bool
 	teeOpt       teeOptType
@@ -642,7 +648,7 @@ type clusterConfig struct {
 // to figure out how to make that work with `roachprod create`. Perhaps one
 // invocation of `roachprod create` per unique node-spec. Are there guarantees
 // we're making here about the mapping of nodeSpecs to node IDs?
-func newCluster(ctx context.Context, cfg clusterConfig) (*cluster, error) {
+func newCluster(ctx context.Context, l *logger, cfg clusterConfig) (*cluster, error) {
 	if atomic.LoadInt32(&interrupted) == 1 {
 		return nil, fmt.Errorf("newCluster interrupted")
 	}
@@ -666,12 +672,6 @@ func newCluster(ctx context.Context, cfg clusterConfig) (*cluster, error) {
 	case len(cfg.nodes) > 1:
 		// TODO(peter): Need a motivating test that has different specs per node.
 		return nil, fmt.Errorf("TODO(peter): unsupported nodes spec: %v", cfg.nodes)
-	}
-
-	logPath := filepath.Join(cfg.artifactsDir, "test.log")
-	l, err := rootLogger(logPath, cfg.teeOpt)
-	if err != nil {
-		return nil, err
 	}
 
 	c := &cluster{
@@ -701,9 +701,6 @@ func newCluster(ctx context.Context, cfg clusterConfig) (*cluster, error) {
 }
 
 type attachOpt struct {
-	// If set, the c.l will output to stdout/stderr.
-	teeToStdout bool
-
 	skipValidation bool
 	// Implies skipWipe.
 	skipStop bool
@@ -715,21 +712,11 @@ type attachOpt struct {
 //
 // NOTE: setTest() needs to be called before a test can use this cluster.
 func attachToExistingCluster(
-	ctx context.Context, name string, artifactsDir string, nodes []nodeSpec, opt attachOpt,
+	ctx context.Context, name string, l *logger, nodes []nodeSpec, opt attachOpt,
 ) (*cluster, error) {
 	if len(nodes) > 1 {
 		// TODO(peter): Need a motivating test that has different specs per node.
 		return nil, fmt.Errorf("TODO(peter): unsupported nodes spec: %v", nodes)
-	}
-
-	logPath := filepath.Join(artifactsDir, "test.log")
-	teeOpt := noTee
-	if opt.teeToStdout {
-		teeOpt = teeToStdout
-	}
-	l, err := rootLogger(logPath, teeOpt)
-	if err != nil {
-		return nil, err
 	}
 
 	c := &cluster{
@@ -772,9 +759,10 @@ func attachToExistingCluster(
 
 // setTest prepares c for being used on behalf of t.
 //
-// TODO(andrei): Get rid of c.t and of this method.
+// TODO(andrei): Get rid of c.t, c.l and of this method.
 func (c *cluster) setTest(t testI) {
 	c.t = t
+	c.l = t.logger()
 	if impl, ok := t.(*test); ok {
 		c.status = impl.Status
 	}
@@ -825,24 +813,19 @@ func (c *cluster) validate(ctx context.Context, nodes []nodeSpec, l *logger) err
 	return nil
 }
 
-// clone creates a new cluster object that refers to the same cluster as the
-// receiver, but is associated with the specified test.
-func (c *cluster) clone(t *test, teeOpt teeOptType) *cluster {
-	logPath := filepath.Join(t.ArtifactsDir(), "test.log")
-	l, err := rootLogger(logPath, teeOpt)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return &cluster{
-		name:       c.name,
-		nodes:      c.nodes,
-		status:     t.Status,
-		t:          t,
-		l:          l,
-		expiration: c.expiration,
-		// This cloned cluster is not taking ownership. The parent retains it.
-		owned: false,
-	}
+// clone creates a non-owned handle on the same cluster.
+//
+// NOTE: If the cloning has been done for a subtest, setTest() needs to be
+// called on the returned cluster.
+//
+// TODO(andrei): Get rid of the funky concept of cloning once we implement a
+// more principled aproach to wiping and destroying cluster.
+func (c *cluster) clone() *cluster {
+	cpy := *c
+	// This cloned cluster is not taking ownership. The parent retains it.
+	cpy.owned = false
+	cpy.destroyed = nil
+	return &cpy
 }
 
 // All returns a node list containing all of the nodes in the cluster.

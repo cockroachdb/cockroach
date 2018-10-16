@@ -65,6 +65,10 @@ func (t testWrapper) ArtifactsDir() string {
 	return ""
 }
 
+func (t testWrapper) logger() *logger {
+	return nil
+}
+
 func TestClusterMonitor(t *testing.T) {
 	logger := &logger{stdout: os.Stdout, stderr: os.Stderr}
 	t.Run(`success`, func(t *testing.T) {

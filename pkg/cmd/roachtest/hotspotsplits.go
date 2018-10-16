@@ -46,9 +46,9 @@ func registerHotSpotSplits(r *registry) {
 		m, ctx = errgroup.WithContext(ctx)
 
 		m.Go(func() error {
-			c.l.Printf("starting load generator\n")
+			t.l.Printf("starting load generator\n")
 
-			quietL, err := c.l.ChildLogger("kv-0", quietStdout)
+			quietL, err := t.l.ChildLogger("kv-0", quietStdout)
 			if err != nil {
 				return err
 			}

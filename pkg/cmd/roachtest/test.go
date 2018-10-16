@@ -299,7 +299,12 @@ func (r *registry) ListAll(filter []string) []string {
 	return names
 }
 
-func (r *registry) Run(filter []string, parallelism int) int {
+// Run runs the tests that match the filter.
+//
+// Args:
+// artifactsDir: The path to the dir where log files will be put. If empty, all
+//   logging will go to stdout/stderr.
+func (r *registry) Run(filter []string, parallelism int, artifactsDir string) int {
 	filterRE := makeFilterRE(filter)
 	// Find the top-level tests to run.
 	tests := r.ListTopLevel(filterRE)
@@ -350,9 +355,20 @@ func (r *registry) Run(filter []string, parallelism int) int {
 				if parallelism == 1 {
 					teeOpt = teeToStdout
 				}
+
+				artifactsSuffix := ""
+				if runNum != 0 {
+					artifactsSuffix = "run_" + strconv.Itoa(runNum)
+				}
+				var runDir string
+				if artifactsDir != "" {
+					runDir = filepath.Join(
+						artifactsDir, teamCityNameEscape(tests[i].subtestName), artifactsSuffix)
+				}
+
 				r.runAsync(
 					ctx, tests[i], filterRE, nil /* parent */, nil, /* cluster */
-					runNum, teeOpt, func(failed bool) {
+					runNum, teeOpt, runDir, func(failed bool) {
 						wg.Done()
 						<-sem
 					})
@@ -492,6 +508,8 @@ type testStatus struct {
 type test struct {
 	spec     *testSpec
 	registry *registry
+	// l is the logger that the test will use for its output.
+	l        *logger
 	runner   string
 	runnerID int64
 	start    time.Time
@@ -520,6 +538,10 @@ type test struct {
 
 func (t *test) Name() string {
 	return t.spec.Name
+}
+
+func (t *test) logger() *logger {
+	return t.l
 }
 
 func (t *test) status(id int64, args ...interface{}) {
@@ -715,26 +737,21 @@ func (r *registry) runAsync(
 	c *cluster,
 	runNum int,
 	teeOpt teeOptType,
+	artifactsDir string,
 	done func(failed bool),
 ) {
-	artifactsSuffix := ""
-	// Only roots get a "run_<n>" suffix to their artifacts dir; the subtests will
-	// write in the parent's dir.
-	if parent == nil && runNum != 0 {
-		artifactsSuffix = "run_" + strconv.Itoa(runNum)
-	}
-	parentDir := artifacts
-	if parent != nil {
-		parentDir = parent.ArtifactsDir()
-	}
-	// Each subtest gets its own subdir in the parent's artifacts dir.
-	artifactsDir := filepath.Join(parentDir, teamCityNameEscape(spec.subtestName), artifactsSuffix)
-
 	t := &test{
 		spec:         spec,
 		registry:     r,
 		artifactsDir: artifactsDir,
 	}
+	var logPath string
+	if artifactsDir != "" {
+		logPath = filepath.Join(artifactsDir, "test.log")
+	}
+	l, err := rootLogger(logPath, teeOpt)
+	FatalIfErr(t, err)
+	t.l = l
 
 	if teamCity {
 		fmt.Printf("##teamcity[testStarted name='%s' flowId='%s']\n", t.Name(), t.Name())
@@ -835,10 +852,12 @@ func (r *registry) runAsync(
 			if teamCity {
 				fmt.Fprintf(r.out, "##teamcity[testFinished name='%s' flowId='%s']\n", t.Name(), t.Name())
 
-				escapedTestName := teamCityNameEscape(t.Name())
-				artifactsGlobPath := filepath.Join(artifacts, escapedTestName, "**")
-				artifactsSpec := fmt.Sprintf("%s => %s", artifactsGlobPath, escapedTestName)
-				fmt.Fprintf(r.out, "##teamcity[publishArtifacts '%s']\n", artifactsSpec)
+				if artifactsDir != "" {
+					escapedTestName := teamCityNameEscape(t.Name())
+					artifactsGlobPath := filepath.Join(artifactsDir, escapedTestName, "**")
+					artifactsSpec := fmt.Sprintf("%s => %s", artifactsGlobPath, escapedTestName)
+					fmt.Fprintf(r.out, "##teamcity[publishArtifacts '%s']\n", artifactsSpec)
+				}
 			}
 
 			r.status.Lock()
@@ -882,7 +901,7 @@ func (r *registry) runAsync(
 					teeOpt:       teeOpt,
 				}
 				var err error
-				c, err = newCluster(ctx, cfg)
+				c, err = newCluster(ctx, t.l, cfg)
 				FatalIfErr(t, err)
 			} else {
 				opt := attachOpt{
@@ -891,10 +910,9 @@ func (r *registry) runAsync(
 					skipWipe:       r.config.skipClusterWipeOnAttach,
 				}
 				var err error
-				c, err = attachToExistingCluster(ctx, clusterName, t.ArtifactsDir(), t.spec.Nodes, opt)
+				c, err = attachToExistingCluster(ctx, clusterName, t.l, t.spec.Nodes, opt)
 				FatalIfErr(t, err)
 			}
-			c.setTest(t)
 			if c != nil {
 				defer func() {
 					if !debugEnabled || !t.Failed() {
@@ -905,17 +923,26 @@ func (r *registry) runAsync(
 				}()
 			}
 		} else {
-			c = c.clone(t, teeOpt)
+			c = c.clone()
 		}
+		c.setTest(t)
 
 		// If we have subtests, handle them here and return.
 		if t.spec.Run == nil {
 			for i := range t.spec.SubTests {
-				if t.spec.SubTests[i].matchRegex(filter) {
+				childSpec := t.spec.SubTests[i]
+				if childSpec.matchRegex(filter) {
 					var wg sync.WaitGroup
 					wg.Add(1)
-					r.runAsync(ctx, &t.spec.SubTests[i], filter, t, c,
-						runNum, teeOpt, func(failed bool) {
+
+					// Each subtest gets its own subdir in the parent's artifacts dir.
+					var childDir string
+					if t.ArtifactsDir() != "" {
+						childDir = filepath.Join(t.ArtifactsDir(), teamCityNameEscape(childSpec.subtestName))
+					}
+
+					r.runAsync(ctx, &childSpec, filter, t, c,
+						runNum, teeOpt, childDir, func(failed bool) {
 							if failed {
 								// Mark the parent test as failed since one of the subtests
 								// failed.
