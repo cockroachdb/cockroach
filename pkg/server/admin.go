@@ -1414,7 +1414,7 @@ func (s *adminServer) DataDistribution(
 ) (*serverpb.DataDistributionResponse, error) {
 	resp := &serverpb.DataDistributionResponse{
 		DatabaseInfo: make(map[string]serverpb.DataDistributionResponse_DatabaseInfo),
-		ZoneConfigs:  make(map[int64]serverpb.DataDistributionResponse_ZoneConfig),
+		ZoneConfigs:  make(map[string]serverpb.DataDistributionResponse_ZoneConfig),
 	}
 
 	// Get ids and names for databases and tables.
@@ -1535,8 +1535,11 @@ func (s *adminServer) DataDistribution(
 
 	// Get zone configs.
 	// TODO(vilterp): this can be done in parallel with getting table/db names and replica counts.
-	zoneConfigsQuery := `SELECT zone_id, cli_specifier, config_sql, config_protobuf 
-    FROM crdb_internal.zones WHERE cli_specifier IS NOT NULL`
+	zoneConfigsQuery := `
+		SELECT zone_name, config_sql, config_protobuf 
+		FROM crdb_internal.zones
+		WHERE zone_name IS NOT NULL
+	`
 	rows2, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
 		ctx, "admin-replica-matrix", nil /* txn */, userName, zoneConfigsQuery,
 	)
@@ -1545,19 +1548,18 @@ func (s *adminServer) DataDistribution(
 	}
 
 	for _, row := range rows2 {
-		zcID := int64(tree.MustBeDInt(row[0]))
-		zcCliSpecifier := string(tree.MustBeDString(row[1]))
-		zcSQL := tree.MustBeDString(row[2])
-		zcBytes := tree.MustBeDBytes(row[3])
+		zoneName := string(tree.MustBeDString(row[0]))
+		zcSQL := tree.MustBeDString(row[1])
+		zcBytes := tree.MustBeDBytes(row[2])
 		var zcProto config.ZoneConfig
 		if err := protoutil.Unmarshal([]byte(zcBytes), &zcProto); err != nil {
 			return nil, s.serverError(err)
 		}
 
-		resp.ZoneConfigs[zcID] = serverpb.DataDistributionResponse_ZoneConfig{
-			CliSpecifier: zcCliSpecifier,
-			Config:       zcProto,
-			ConfigSQL:    string(zcSQL),
+		resp.ZoneConfigs[zoneName] = serverpb.DataDistributionResponse_ZoneConfig{
+			ZoneName:  zoneName,
+			Config:    zcProto,
+			ConfigSQL: string(zcSQL),
 		}
 	}
 
