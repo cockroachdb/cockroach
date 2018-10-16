@@ -683,7 +683,7 @@ func upgradeDescsWithFn(
 							return err
 						} else if upgraded {
 							// It's safe to ignore the DROP state here and
-							// unconditionally set UpVersion. For proof, see
+							// unconditionally increment the version. For proof, see
 							// TestDropTableWhileUpgradingFormat.
 							//
 							// In fact, it's of the utmost importance that this migration
