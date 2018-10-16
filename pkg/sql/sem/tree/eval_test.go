@@ -785,6 +785,14 @@ func TestEval(t *testing.T) {
 		{`'hello' IS OF (BYTES)`, `false`},
 		{`b'hello' IS OF (STRING)`, `false`},
 		{`b'hello' IS OF (BYTES)`, `true`},
+		{`ARRAY['hello']::STRING[] IS OF (STRING[])`, `true`},
+		{`ARRAY['hello']::STRING[] IS OF (INT[])`, `false`},
+		{`3::INT2 IS OF (INT2)`, `true`},
+
+		// TODO(justin): these are currently incorrect, see #31404.
+		{`3 IS OF (INT2)`, `true`},
+		{`3::INT4 IS OF (INT2)`, `true`},
+
 		{`'2012-09-21'::date IS OF (DATE)`, `true`},
 		{`'12:00:00'::time IS OF (TIME)`, `true`},
 		{`'2010-09-28 12:00:00.1'::timestamp IS OF (TIMESTAMP)`, `true`},
