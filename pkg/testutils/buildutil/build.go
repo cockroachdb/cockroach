@@ -52,7 +52,6 @@ func VerifyNoImports(
 		if err != nil {
 			t.Fatal(err)
 		}
-
 		for _, imp := range pkg.Imports {
 			for _, forbidden := range forbiddenPkgs {
 				if forbidden == imp {
@@ -67,7 +66,7 @@ func VerifyNoImports(
 				}
 			}
 			for _, prefix := range forbiddenPrefixes {
-				if strings.HasPrefix(path, prefix) {
+				if strings.HasPrefix(imp, prefix) {
 					return errors.Errorf("%s imports %s which has prefix %s, which is forbidden", short(path), short(imp), prefix)
 				}
 			}
