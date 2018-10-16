@@ -309,13 +309,9 @@ func (s *bankState) startSplitMonkey(ctx context.Context, d time.Duration, c *cl
 				client.RLock()
 				zipF := accountDistribution(r)
 				key := zipF.Uint64()
-				const splitQuery = `ALTER TABLE bank.accounts SPLIT AT VALUES ($1)`
 				c.l.Printf("round %d: splitting key %v\n", curRound, key)
-				_, err := client.db.Exec(`SET experimental_force_split_at = true`)
-				if err != nil && !testutils.IsSQLRetryableError(err) {
-					s.errChan <- err
-				}
-				_, err = client.db.Exec(splitQuery, key)
+				_, err := client.db.Exec(fmt.Sprintf(
+					`SET experimental_force_split_at = true; ALTER TABLE bank.accounts SPLIT AT VALUES (%d)`, key))
 				if err != nil && !(testutils.IsSQLRetryableError(err) || isExpectedRelocateError(err)) {
 					s.errChan <- err
 				}
