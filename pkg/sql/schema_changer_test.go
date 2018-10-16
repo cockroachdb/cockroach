@@ -1701,10 +1701,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	// Add a zone config for the table.
-	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
-		t.Fatal(err)
-	}
 
 	testCases := []struct {
 		sql    string
@@ -1758,46 +1754,39 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatalf("e = %d, v = %d", e, len(tableDesc.Mutations))
 	}
 
-	// Enable async schema change processing.
+	// Enable async schema change processing for purged schema changes.
 	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
 
-	// Wait until all the mutations have been processed.
-	var rows *gosql.Rows
 	expectedCols := []string{"k", "b", "d"}
+	// Wait until all the mutations have been processed.
 	testutils.SucceedsSoon(t, func() error {
-		// Read table descriptor.
 		tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
 		if len(tableDesc.Mutations) > 0 {
 			return errors.Errorf("%d mutations remaining", len(tableDesc.Mutations))
 		}
-		if len(tableDesc.GCMutations) > 0 {
-			return errors.Errorf("%d gc mutations remaining", len(tableDesc.GCMutations))
-		}
-
-		// Verify that t.public.test has the expected data. Read the table data while
-		// ensuring that the correct table lease is in use.
-		var err error
-		rows, err = sqlDB.Query(`SELECT * from t.test`)
-		if err != nil {
-			t.Fatal(err)
-		}
-		cols, err := rows.Columns()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Ensure that sql is using the correct table lease.
-		if len(cols) != len(expectedCols) {
-			defer rows.Close()
-			return errors.Errorf("incorrect columns: %v, expected: %v", cols, expectedCols)
-		}
-		if cols[0] != expectedCols[0] || cols[1] != expectedCols[1] {
-			t.Fatalf("incorrect columns: %v", cols)
-		}
 		return nil
 	})
 
+	// Verify that t.public.test has the expected data. Read the table data while
+	// ensuring that the correct table lease is in use.
+	rows, err := sqlDB.Query(`SELECT * from t.test`)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer rows.Close()
+	cols, err := rows.Columns()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure that sql is using the correct table lease.
+	if len(cols) != len(expectedCols) {
+		t.Fatalf("incorrect columns: %v, expected: %v", cols, expectedCols)
+	}
+	if cols[0] != expectedCols[0] || cols[1] != expectedCols[1] {
+		t.Fatalf("incorrect columns: %v", cols)
+	}
+
 	// rows contains the data; verify that it's the right data.
 	vals := make([]interface{}, len(expectedCols))
 	for i := range vals {
@@ -1847,7 +1836,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	// Check that the index on b eventually goes live even though a schema
 	// change in front of it in the queue got purged.
-	rows, err := sqlDB.Query(`SELECT * from t.test@test_b_key`)
+	rows, err = sqlDB.Query(`SELECT * from t.test@test_b_key`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1867,14 +1856,27 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal("SELECT over index 'foo' works")
 	}
 
+	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add immediate GC TTL to allow index creation purge to complete.
+	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+		if len(tableDesc.GCMutations) > 0 {
+			return errors.Errorf("%d gc mutations remaining", len(tableDesc.GCMutations))
+		}
+		return nil
+	})
+
 	ctx := context.TODO()
 
 	// Check that the number of k-v pairs is accurate.
 	if err := checkTableKeyCount(ctx, kvDB, 3, maxValue); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
