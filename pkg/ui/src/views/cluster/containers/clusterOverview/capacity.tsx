@@ -35,7 +35,7 @@ function capacityChart() {
 
   const margin = {
     top: 12,
-    right: 35,
+    right: 20,
     bottom: 25,
     left: 20,
   };
@@ -71,6 +71,11 @@ function capacityChart() {
   }
 
   return function chart(svg: d3.Selection<CapacityChartProps>) {
+    const rect = (svg.node().parentNode as HTMLElement).getBoundingClientRect();
+    size.width = rect.width;
+
+    scale.range([0, size.width]);
+
     svg
       .attr("width", size.width + margin.left + margin.right)
       .attr("height", size.height + margin.top + margin.bottom);
