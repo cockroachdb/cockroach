@@ -754,6 +754,35 @@ func (bq *baseQueue) processReplica(queueCtx context.Context, repl *Replica) err
 	return nil
 }
 
+type benigner interface {
+	Benign()
+}
+
+type benignError struct {
+	error
+}
+
+var _ benigner = benignError{}
+
+func (benignError) Benign() {}
+
+func isBenign(err error) bool {
+	type causer interface {
+		Cause() error
+	}
+	for err != nil {
+		if _, ok := err.(benigner); ok {
+			return true
+		}
+		cause, ok := err.(causer)
+		if !ok {
+			return false
+		}
+		err = cause.Cause()
+	}
+	return false
+}
+
 // finishProcessingReplica handles the completion of a replica process attempt.
 // It removes the replica from the replica set and may re-enqueue the replica or
 // add it to purgatory.
@@ -775,8 +804,12 @@ func (bq *baseQueue) finishProcessingReplica(
 
 	// Handle failures.
 	if err != nil {
-		// Increment failures metric to capture all error.
-		bq.failures.Inc(1)
+		benign := isBenign(err)
+
+		// Increment failures metric to capture all non-benign errors.
+		if !benign {
+			bq.failures.Inc(1)
+		}
 
 		// Determine whether a failure is a purgatory error. If it is, add
 		// the failing replica to purgatory. Note that even if the item was
@@ -787,8 +820,10 @@ func (bq *baseQueue) finishProcessingReplica(
 			return
 		}
 
-		// If not a purgatory error, log.
-		log.Error(ctx, err)
+		// If not a benign or purgatory error, log.
+		if !benign {
+			log.Error(ctx, err)
+		}
 	}
 
 	// Maybe add replica back into queue, if requested.

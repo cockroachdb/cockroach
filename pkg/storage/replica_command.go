@@ -376,7 +376,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		// ConditionFailedError in the error detail so that the command can be
 		// retried.
 		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
-			err = errors.Wrap(err, msg)
+			err = &benignError{errors.New(msg)}
 		}
 		return reply, errors.Wrapf(err, "split at key %s failed", splitKey)
 	}
@@ -584,7 +584,10 @@ func (r *Replica) AdminMerge(
 }
 
 func waitForApplication(
-	ctx context.Context, dialer *nodedialer.Dialer, desc roachpb.RangeDescriptor, leaseIndex uint64,
+	ctx context.Context,
+	dialer *nodedialer.Dialer,
+	desc roachpb.RangeDescriptor,
+	leaseIndex uint64,
 ) error {
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
@@ -876,7 +879,7 @@ func (r *Replica) changeReplicas(
 	}); err != nil {
 		log.Event(ctx, err.Error())
 		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
-			return errors.Wrapf(err, "change replicas of r%d failed: %s", rangeID, msg)
+			err = &benignError{errors.New(msg)}
 		}
 		return errors.Wrapf(err, "change replicas of r%d failed", rangeID)
 	}
