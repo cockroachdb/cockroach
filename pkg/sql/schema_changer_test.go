@@ -3724,3 +3724,72 @@ func TestSchemaChangeGRPCError(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestBlockedSchemaChange tests whether a schema change that
+// has no data backfill processing will be blocked by a schema
+// change that is holding the schema change lease while backfill
+// processing.
+func TestBlockedSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const maxValue = 100
+	notifyBackfill := make(chan struct{})
+	tableRenameDone := make(chan struct{})
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeBackfill: func() error {
+				if notify := notifyBackfill; notify != nil {
+					notifyBackfill = nil
+					close(notify)
+					<-tableRenameDone
+				}
+				return nil
+			},
+		},
+	}
+	s, db, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `
+		CREATE DATABASE t;
+		CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+	`)
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(db, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.TODO()
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	notification := notifyBackfill
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if _, err := db.Exec(`CREATE INDEX foo ON t.public.test (v)`); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	<-notification
+
+	if _, err := db.Exec(`ALTER TABLE t.test RENAME TO t.newtest`); err != nil {
+		t.Fatal(err)
+	}
+
+	close(tableRenameDone)
+
+	if _, err := db.Query(`SELECT x from t.test`); !testutils.IsError(err, `relation "t.test" does not exist`) {
+		t.Fatalf("err = %+v", err)
+	}
+
+	wg.Wait()
+}
