@@ -52,7 +52,6 @@ type SQLRunner struct {
 
 	// The fields below are set by Init.
 	initialized bool
-	name        string
 	method      method
 	mcp         *MultiConnPool
 }
@@ -85,9 +84,8 @@ func (sr *SQLRunner) Define(sql string) StmtHandle {
 // Init initializes the runner; must be called after calls to Define and before
 // the StmtHandles are used.
 //
-// The name of the runner is used for naming prepared statements. Multiple
-// workers that use the same set of defined queries can and should use the same
-// name.
+// The name is used for naming prepared statements. Multiple workers that use
+// the same set of defined queries can and should use the same name.
 //
 // The way we issue queries is set by flags.Method:
 //
@@ -112,7 +110,6 @@ func (sr *SQLRunner) Init(
 	if sr.initialized {
 		panic("already initialized")
 	}
-	sr.name = name
 
 	var ok bool
 	sr.method, ok = stringToMethod[strings.ToLower(flags.Method)]
@@ -179,6 +176,28 @@ func (h StmtHandle) Exec(ctx context.Context, args ...interface{}) (pgx.CommandT
 	}
 }
 
+// ExecTx executes a query that doesn't return rows, inside a transaction.
+//
+// See pgx.Conn.Exec.
+func (h StmtHandle) ExecTx(
+	ctx context.Context, tx *pgx.Tx, args ...interface{},
+) (pgx.CommandTag, error) {
+	h.check()
+	switch h.s.sr.method {
+	case prepare:
+		return tx.ExecEx(ctx, h.s.prepared.Name, nil /* options */, args...)
+
+	case noprepare:
+		return tx.ExecEx(ctx, h.s.sql, nil /* options */, args...)
+
+	case simple:
+		return tx.ExecEx(ctx, h.s.sql, simpleProtocolOpt, args...)
+
+	default:
+		panic("invalid method")
+	}
+}
+
 // Query executes a query that returns rows.
 //
 // See pgx.Conn.Query.
@@ -200,6 +219,28 @@ func (h StmtHandle) Query(ctx context.Context, args ...interface{}) (*pgx.Rows, 
 	}
 }
 
+// QueryTx executes a query that returns rows, inside a transaction.
+//
+// See pgx.Tx.Query.
+func (h StmtHandle) QueryTx(
+	ctx context.Context, tx *pgx.Tx, args ...interface{},
+) (*pgx.Rows, error) {
+	h.check()
+	switch h.s.sr.method {
+	case prepare:
+		return tx.QueryEx(ctx, h.s.prepared.Name, nil /* options */, args...)
+
+	case noprepare:
+		return tx.QueryEx(ctx, h.s.sql, nil /* options */, args...)
+
+	case simple:
+		return tx.QueryEx(ctx, h.s.sql, simpleProtocolOpt, args...)
+
+	default:
+		panic("invalid method")
+	}
+}
+
 // QueryRow executes a query that is expected to return at most one row.
 //
 // See pgx.Conn.QueryRow.
@@ -215,6 +256,27 @@ func (h StmtHandle) QueryRow(ctx context.Context, args ...interface{}) *pgx.Row 
 
 	case simple:
 		return p.QueryRowEx(ctx, h.s.sql, simpleProtocolOpt, args...)
+
+	default:
+		panic("invalid method")
+	}
+}
+
+// QueryRowTx executes a query that is expected to return at most one row,
+// inside a transaction.
+//
+// See pgx.Conn.QueryRow.
+func (h StmtHandle) QueryRowTx(ctx context.Context, tx *pgx.Tx, args ...interface{}) *pgx.Row {
+	h.check()
+	switch h.s.sr.method {
+	case prepare:
+		return tx.QueryRowEx(ctx, h.s.prepared.Name, nil /* options */, args...)
+
+	case noprepare:
+		return tx.QueryRowEx(ctx, h.s.sql, nil /* options */, args...)
+
+	case simple:
+		return tx.QueryRowEx(ctx, h.s.sql, simpleProtocolOpt, args...)
 
 	default:
 		panic("invalid method")

@@ -17,8 +17,10 @@ package workload
 
 import (
 	"context"
+	gosql "database/sql"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/jackc/pgx"
 	"golang.org/x/sync/errgroup"
 )
@@ -81,6 +83,9 @@ func NewMultiConnPool(maxTotalConnections int, urls ...string) (*MultiConnPool, 
 
 // Get returns one of the pools, in round-robin manner.
 func (m *MultiConnPool) Get() *pgx.ConnPool {
+	if len(m.Pools) == 1 {
+		return m.Pools[0]
+	}
 	i := atomic.AddUint32(&m.counter, 1) - 1
 	return m.Pools[i%uint32(len(m.Pools))]
 }
@@ -107,4 +112,29 @@ func (m *MultiConnPool) Close() {
 	for _, p := range m.Pools {
 		p.Close()
 	}
+}
+
+// PgxTx is a thin wrapper that implements the crdb.Tx interface, allowing pgx
+// transactions to be used with ExecuteInTx.
+type PgxTx pgx.Tx
+
+var _ crdb.Tx = &PgxTx{}
+
+// ExecContext is part of the crdb.Tx interface.
+func (tx *PgxTx) ExecContext(
+	ctx context.Context, sql string, args ...interface{},
+) (gosql.Result, error) {
+	_, err := (*pgx.Tx)(tx).ExecEx(ctx, sql, nil /* QueryExOptions */, args...)
+	// crdb.ExecuteInTx doesn't actually care about the Result, just the error.
+	return nil, err
+}
+
+// Commit is part of the crdb.Tx interface.
+func (tx *PgxTx) Commit() error {
+	return (*pgx.Tx)(tx).Commit()
+}
+
+// Rollback is part of the crdb.Tx interface.
+func (tx *PgxTx) Rollback() error {
+	return (*pgx.Tx)(tx).Rollback()
 }

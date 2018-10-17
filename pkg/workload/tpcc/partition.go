@@ -17,19 +17,19 @@ package tpcc
 
 import (
 	"bytes"
-	gosql "database/sql"
 	"encoding/binary"
 	"fmt"
 	"math"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/jackc/pgx"
 )
 
 // configureZone sets up zone configs for previously created partitions. By default it adds constraints
 // in terms of racks, but if the zones flag is passed into tpcc, it will set the constraints based on the
 // geographic zones provided.
-func configureZone(db *gosql.DB, table, partition string, constraint int, zones []string) {
+func configureZone(db *pgx.ConnPool, table, partition string, constraint int, zones []string) {
 	var constraints string
 	if len(zones) > 0 {
 		constraints = fmt.Sprintf("[+zone=%s]", zones[constraint])
@@ -54,7 +54,7 @@ func configureZone(db *gosql.DB, table, partition string, constraint int, zones 
 	}
 }
 
-func partitionWarehouse(db *gosql.DB, wIDs []int, partitions int, zones []string) {
+func partitionWarehouse(db *pgx.ConnPool, wIDs []int, partitions int, zones []string) {
 	var buf bytes.Buffer
 	buf.WriteString("ALTER TABLE warehouse PARTITION BY RANGE (w_id) (\n")
 	for i := 0; i < partitions; i++ {
@@ -74,7 +74,7 @@ func partitionWarehouse(db *gosql.DB, wIDs []int, partitions int, zones []string
 	}
 }
 
-func partitionDistrict(db *gosql.DB, wIDs []int, partitions int, zones []string) {
+func partitionDistrict(db *pgx.ConnPool, wIDs []int, partitions int, zones []string) {
 	var buf bytes.Buffer
 	buf.WriteString("ALTER TABLE district PARTITION BY RANGE (d_w_id) (\n")
 	for i := 0; i < partitions; i++ {
@@ -94,7 +94,7 @@ func partitionDistrict(db *gosql.DB, wIDs []int, partitions int, zones []string)
 	}
 }
 
-func partitionNewOrder(db *gosql.DB, wIDs []int, partitions int, zones []string) {
+func partitionNewOrder(db *pgx.ConnPool, wIDs []int, partitions int, zones []string) {
 	var buf bytes.Buffer
 	buf.WriteString("ALTER TABLE new_order PARTITION BY RANGE (no_w_id) (\n")
 	for i := 0; i < partitions; i++ {
@@ -114,7 +114,7 @@ func partitionNewOrder(db *gosql.DB, wIDs []int, partitions int, zones []string)
 	}
 }
 
-func partitionOrder(db *gosql.DB, wIDs []int, partitions int, zones []string) {
+func partitionOrder(db *pgx.ConnPool, wIDs []int, partitions int, zones []string) {
 	targets := []string{
 		`TABLE "order"`,
 		`INDEX "order"@order_idx`,
@@ -144,7 +144,7 @@ func partitionOrder(db *gosql.DB, wIDs []int, partitions int, zones []string) {
 	}
 }
 
-func partitionOrderLine(db *gosql.DB, wIDs []int, partitions int, zones []string) {
+func partitionOrderLine(db *pgx.ConnPool, wIDs []int, partitions int, zones []string) {
 	data := []struct {
 		target string
 		column string
@@ -176,7 +176,7 @@ func partitionOrderLine(db *gosql.DB, wIDs []int, partitions int, zones []string
 	}
 }
 
-func partitionStock(db *gosql.DB, wIDs []int, partitions int, zones []string) {
+func partitionStock(db *pgx.ConnPool, wIDs []int, partitions int, zones []string) {
 	var buf bytes.Buffer
 	buf.WriteString("ALTER TABLE stock PARTITION BY RANGE (s_w_id) (\n")
 	for i := 0; i < partitions; i++ {
@@ -219,7 +219,7 @@ func partitionStock(db *gosql.DB, wIDs []int, partitions int, zones []string) {
 	}
 }
 
-func partitionCustomer(db *gosql.DB, wIDs []int, partitions int, zones []string) {
+func partitionCustomer(db *pgx.ConnPool, wIDs []int, partitions int, zones []string) {
 	targets := []string{
 		`TABLE customer`,
 		`INDEX customer@customer_idx`,
@@ -248,7 +248,7 @@ func partitionCustomer(db *gosql.DB, wIDs []int, partitions int, zones []string)
 	}
 }
 
-func partitionHistory(db *gosql.DB, wIDs []int, partitions int, zones []string) {
+func partitionHistory(db *pgx.ConnPool, wIDs []int, partitions int, zones []string) {
 	const maxVal = math.MaxUint64
 	temp := make([]byte, 16)
 	rowids := make([]uuid.UUID, partitions+1)
@@ -313,7 +313,7 @@ func partitionHistory(db *gosql.DB, wIDs []int, partitions int, zones []string) 
 	}
 }
 
-func partitionItem(db *gosql.DB, partitions int, zones []string) {
+func partitionItem(db *pgx.ConnPool, partitions int, zones []string) {
 	const nItems = 100000
 	iIDs := make([]int, partitions+1)
 	for i := 0; i < partitions; i++ {
@@ -340,7 +340,7 @@ func partitionItem(db *gosql.DB, partitions int, zones []string) {
 	}
 }
 
-func partitionTables(db *gosql.DB, warehouses, partitions int, zones []string) {
+func partitionTables(db *pgx.ConnPool, warehouses, partitions int, zones []string) {
 	wIDs := make([]int, partitions+1)
 	for i := 0; i < partitions; i++ {
 		wIDs[i] = i * (warehouses / partitions)
@@ -358,7 +358,7 @@ func partitionTables(db *gosql.DB, warehouses, partitions int, zones []string) {
 	partitionItem(db, partitions, zones)
 }
 
-func isTableAlreadyPartitioned(db *gosql.DB) (bool, error) {
+func isTableAlreadyPartitioned(db *pgx.ConnPool) (bool, error) {
 	var count int
 	if err := db.QueryRow(
 		// Check for the existence of a partition named p0, which indicates that the
