@@ -26,17 +26,36 @@ export default function createChartComponent<T>(containerTy: string, chart: Char
     containerEl: React.RefObject<Element> = React.createRef();
 
     componentDidMount() {
-      d3.select(this.containerEl.current)
-        .datum(this.props)
-        .call(chart);
+      this.redraw();
+      this.addResizeHandler();
+    }
+
+    componentWillUnmount() {
+      this.removeResizeHandler();
     }
 
     shouldComponentUpdate(props: T) {
+      this.redraw(props);
+
+      return false;
+    }
+
+    redraw(props: T = this.props) {
       d3.select(this.containerEl.current)
         .datum(props)
         .call(chart);
+    }
 
-      return false;
+    handleResize = () => {
+      this.redraw();
+    }
+
+    addResizeHandler() {
+      window.addEventListener("resize", this.handleResize);
+    }
+
+    removeResizeHandler() {
+      window.removeEventListener("resize", this.handleResize);
     }
 
     render() {
