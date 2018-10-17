@@ -400,9 +400,5 @@ func ratToDecimal(rat big.Rat, scale int32) apd.Decimal {
 	sf := denom.Div(exp, denom)
 	coeff := num.Mul(num, sf)
 	dec := apd.NewWithBigInt(coeff, -scale)
-	if dec.Coeff.Sign() < 0 {
-		dec.Coeff.Neg(&dec.Coeff)
-		dec.Negative = true
-	}
 	return *dec
 }
