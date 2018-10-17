@@ -676,8 +676,11 @@ func prettyPrintInvertedIndexKey(b []byte) (string, []byte, error) {
 	}
 }
 
-// unsafeConvertStringToBytes converts a string to a byte array to be used with string encoding functions.
-func unsafeConvertStringToBytes(s string) []byte {
+// UnsafeConvertStringToBytes converts a string to a byte array to be used with
+// string encoding functions. Note that the output byte array should not be
+// modified if the input string is expected to be used again - doing so could
+// violate Go semantics.
+func UnsafeConvertStringToBytes(s string) []byte {
 	if len(s) == 0 {
 		return nil
 	}
@@ -706,7 +709,7 @@ func EncodeStringAscending(b []byte, s string) []byte {
 func encodeStringAscendingWithTerminatorAndPrefix(
 	b []byte, s string, terminator byte, prefix byte,
 ) []byte {
-	unsafeString := unsafeConvertStringToBytes(s)
+	unsafeString := UnsafeConvertStringToBytes(s)
 	return encodeBytesAscendingWithTerminatorAndPrefix(b, unsafeString, terminator, prefix)
 }
 
@@ -715,7 +718,7 @@ func encodeStringAscendingWithTerminatorAndPrefix(
 // while at the same time giving us a sentinel to identify JSON keys. The end parameter is used
 // to determine if this is the last key in a a JSON path. If it is we don't add a separator after it.
 func EncodeJSONKeyStringAscending(b []byte, s string, end bool) []byte {
-	str := unsafeConvertStringToBytes(s)
+	str := UnsafeConvertStringToBytes(s)
 
 	if end {
 		return encodeBytesAscendingWithoutTerminatorOrPrefix(b, str)
