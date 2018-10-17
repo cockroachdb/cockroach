@@ -79,21 +79,11 @@ type avroSchemaRecord struct {
 	alloc            sqlbase.DatumAlloc
 }
 
-func avroEscapeName(name string) string {
-	// TODO(dan): Name escaping.
-	return name
-}
-
-func avroUnescapeName(name string) string {
-	// TODO(dan): Name escaping.
-	return name
-}
-
 // columnDescToAvroSchema converts a column descriptor into its corresponding
 // avro field schema.
 func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField, error) {
 	schema := &avroSchemaField{
-		Name: avroEscapeName(colDesc.Name),
+		Name: SQLNameToAvroName(colDesc.Name),
 		typ:  colDesc.Type,
 	}
 
@@ -221,7 +211,7 @@ func indexToAvroSchema(
 	tableDesc *sqlbase.TableDescriptor, indexDesc *sqlbase.IndexDescriptor,
 ) (*avroSchemaRecord, error) {
 	schema := &avroSchemaRecord{
-		Name:             avroEscapeName(tableDesc.Name),
+		Name:             SQLNameToAvroName(tableDesc.Name),
 		SchemaType:       `record`,
 		fieldIdxByName:   make(map[string]int),
 		colIdxByFieldIdx: make(map[int]int),
@@ -256,7 +246,7 @@ func indexToAvroSchema(
 // record schema. The fields are kept in the same order as `tableDesc.Columns`.
 func tableToAvroSchema(tableDesc *sqlbase.TableDescriptor) (*avroSchemaRecord, error) {
 	schema := &avroSchemaRecord{
-		Name:             avroEscapeName(tableDesc.Name),
+		Name:             SQLNameToAvroName(tableDesc.Name),
 		SchemaType:       `record`,
 		fieldIdxByName:   make(map[string]int),
 		colIdxByFieldIdx: make(map[int]int),
