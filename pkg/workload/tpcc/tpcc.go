@@ -30,12 +30,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )
 
 type tpcc struct {
-	flags workload.Flags
+	flags     workload.Flags
+	connFlags *workload.ConnFlags
 
 	seed             int64
 	warehouses       int
@@ -49,8 +51,8 @@ type tpcc struct {
 	fks        bool
 	dbOverride string
 
-	txs []tx
-	// deck contains indexes into the txs slice.
+	txInfos []txInfo
+	// deck contains indexes into the txInfos slice.
 	deck []int
 
 	auditor *auditor
@@ -66,7 +68,7 @@ type tpcc struct {
 
 	usePostgres  bool
 	serializable bool
-	txOpts       *gosql.TxOptions
+	txOpts       *pgx.TxOptions
 
 	expensiveChecks bool
 
@@ -140,6 +142,7 @@ var tpccMeta = workload.Meta{
 		g.flags.StringSliceVar(&g.zones, "zones", []string{}, "Zones for partitioning, the number of zones should match the number of partitions and the zones used to start cockroach.")
 
 		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
+		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
 }
@@ -166,7 +169,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 				w.workers = w.activeWarehouses * numWorkersPerWarehouse
 			}
 			if w.doWaits && w.workers != w.activeWarehouses*numWorkersPerWarehouse {
-				return errors.Errorf(`--waits=true and --warehouses=%d requires --workers=%d`,
+				return errors.Errorf(`--wait=true and --warehouses=%d requires --workers=%d`,
 					w.activeWarehouses, w.warehouses*numWorkersPerWarehouse)
 			}
 
@@ -191,7 +194,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 			}
 
 			if w.serializable {
-				w.txOpts = &gosql.TxOptions{Isolation: gosql.LevelSerializable}
+				w.txOpts = &pgx.TxOptions{IsoLevel: pgx.Serializable}
 			}
 
 			w.auditor = newAuditor(w.warehouses)
@@ -405,31 +408,33 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 	w.usePostgres = parsedURL.Port() == "5432"
 
 	nConns := w.activeWarehouses / len(urls)
-	dbs := make([]*gosql.DB, len(urls))
+
+	// We can't use a single MultiConnPool because we want to implement partition
+	// affinity. Instead we have one MultiConnPool per server (we use
+	// MultiConnPool in order to use SQLRunner, but it's otherwise equivalent to a
+	// pgx.ConnPool).
+	dbs := make([]*workload.MultiConnPool, len(urls))
 	for i, url := range urls {
-		dbs[i], err = gosql.Open(`postgres`, url)
+		dbs[i], err = workload.NewMultiConnPool(nConns, url)
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
-		// Allow a maximum of concurrency+1 connections to the database.
-		dbs[i].SetMaxOpenConns(nConns)
-		dbs[i].SetMaxIdleConns(nConns)
 	}
 
 	// We're adding this check here because repartitioning a table can take
 	// upwards of 10 minutes so if a cluster is already set up correctly we won't
 	// do this operation again.
-	alreadyPartitioned, err := isTableAlreadyPartitioned(dbs[0])
+	alreadyPartitioned, err := isTableAlreadyPartitioned(dbs[0].Get())
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
 
 	if !alreadyPartitioned {
 		if w.split {
-			splitTables(dbs[0], w.warehouses)
+			splitTables(dbs[0].Get(), w.warehouses)
 
 			if w.partitions > 0 {
-				partitionTables(dbs[0], w.warehouses, w.partitions, w.zones)
+				partitionTables(dbs[0].Get(), w.warehouses, w.partitions, w.zones)
 			}
 		}
 	} else {
@@ -437,7 +442,7 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 	}
 
 	if w.scatter {
-		scatterRanges(dbs[0])
+		scatterRanges(dbs[0].Get())
 	}
 
 	// If no partitions were specified, pretend there is a single partition
@@ -447,7 +452,7 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 	}
 	// Assign each DB connection pool to a partition. This assumes that dbs[i] is
 	// a machine that holds partition "i % *partitions".
-	partitionDBs := make([][]*gosql.DB, w.partitions)
+	partitionDBs := make([][]*workload.MultiConnPool, w.partitions)
 	if w.affinityPartition == -1 {
 		for i, db := range dbs {
 			p := i % w.partitions
@@ -474,16 +479,12 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		p := (warehouse * w.partitions) / w.activeWarehouses
 		dbs := partitionDBs[p]
 		db := dbs[warehouse%len(dbs)]
-		worker := &worker{
-			config:    w,
-			hists:     reg.GetHandle(),
-			idx:       workerIdx,
-			db:        db,
-			warehouse: warehouse + startWarehouse,
-			deckPerm:  make([]int, len(w.deck)),
-			permIdx:   len(w.deck),
+		worker, err := newWorker(
+			context.TODO(), w, db, reg.GetHandle(), workerIdx, warehouse+startWarehouse,
+		)
+		if err != nil {
+			return workload.QueryLoad{}, err
 		}
-		copy(worker.deckPerm, w.deck)
 
 		ql.WorkerFns = append(ql.WorkerFns, worker.run)
 	}

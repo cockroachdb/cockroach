@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
 )
 
@@ -45,40 +46,69 @@ import (
 // indicating transaction completion. The result of the deferred execution is
 // recorded into a result file.
 
-type delivery struct{}
+type delivery struct {
+	config *tpcc
+	mcp    *workload.MultiConnPool
+	sr     workload.SQLRunner
 
-var _ tpccTx = delivery{}
+	selectNewOrder workload.StmtHandle
+	sumAmount      workload.StmtHandle
+}
 
-func (del delivery) run(
-	ctx context.Context, config *tpcc, db *gosql.DB, wID int,
-) (interface{}, error) {
-	atomic.AddUint64(&config.auditor.deliveryTransactions, 1)
+var _ tpccTx = &delivery{}
+
+func createDelivery(
+	ctx context.Context, config *tpcc, mcp *workload.MultiConnPool,
+) (tpccTx, error) {
+	del := &delivery{
+		config: config,
+		mcp:    mcp,
+	}
+
+	del.selectNewOrder = del.sr.Define(`
+		SELECT no_o_id
+		FROM new_order
+		WHERE no_w_id = $1 AND no_d_id = $2
+		ORDER BY no_o_id ASC
+		LIMIT 1`,
+	)
+
+	del.sumAmount = del.sr.Define(`
+		SELECT sum(ol_amount) FROM order_line
+		WHERE ol_w_id = $1 AND ol_d_id = $2 AND ol_o_id = $3`,
+	)
+
+	if err := del.sr.Init(ctx, "delivery", mcp, config.connFlags); err != nil {
+		return nil, err
+	}
+
+	return del, nil
+}
+
+func (del *delivery) run(ctx context.Context, wID int) (interface{}, error) {
+	atomic.AddUint64(&del.config.auditor.deliveryTransactions, 1)
 
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	oCarrierID := rng.Intn(10) + 1
 	olDeliveryD := timeutil.Now()
 
-	err := crdb.ExecuteTx(
-		ctx,
-		db,
-		config.txOpts,
-		func(tx *gosql.Tx) error {
+	tx, err := del.mcp.Get().BeginEx(ctx, del.config.txOpts)
+	if err != nil {
+		return nil, err
+	}
+	err = crdb.ExecuteInTx(
+		ctx, (*workload.PgxTx)(tx),
+		func() error {
 			// 2.7.4.2. For each district:
 			dIDoIDPairs := make(map[int]int)
 			dIDolTotalPairs := make(map[int]float64)
 			for dID := 1; dID <= 10; dID++ {
 				var oID int
-				if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
-					SELECT no_o_id
-					FROM new_order
-					WHERE no_w_id = %d AND no_d_id = %d
-					ORDER BY no_o_id ASC
-					LIMIT 1`,
-					wID, dID)).Scan(&oID); err != nil {
+				if err := del.selectNewOrder.QueryRowTx(ctx, tx, wID, dID).Scan(&oID); err != nil {
 					// If no matching order is found, the delivery of this order is skipped.
 					if err != gosql.ErrNoRows {
-						atomic.AddUint64(&config.auditor.skippedDelivieries, 1)
+						atomic.AddUint64(&del.config.auditor.skippedDelivieries, 1)
 						return err
 					}
 					continue
@@ -86,22 +116,26 @@ func (del delivery) run(
 				dIDoIDPairs[dID] = oID
 
 				var olTotal float64
-				if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
-						SELECT sum(ol_amount) FROM order_line
-						WHERE ol_w_id = %d AND ol_d_id = %d AND ol_o_id = %d`,
-					wID, dID, oID)).Scan(&olTotal); err != nil {
+				if err := del.sumAmount.QueryRowTx(
+					ctx, tx, wID, dID, oID,
+				).Scan(&olTotal); err != nil {
 					return err
 				}
 				dIDolTotalPairs[dID] = olTotal
 			}
 			dIDoIDPairsStr := makeInTuples(dIDoIDPairs)
 
-			rows, err := tx.QueryContext(ctx, fmt.Sprintf(`
+			rows, err := tx.QueryEx(
+				ctx,
+				fmt.Sprintf(`
 					UPDATE "order"
 					SET o_carrier_id = %d
 					WHERE o_w_id = %d AND (o_d_id, o_id) IN (%s)
 					RETURNING o_d_id, o_c_id`,
-				oCarrierID, wID, dIDoIDPairsStr))
+					oCarrierID, wID, dIDoIDPairsStr,
+				),
+				nil, /* options */
+			)
 			if err != nil {
 				return err
 			}
@@ -125,25 +159,41 @@ func (del delivery) run(
 			dIDcIDPairsStr := makeInTuples(dIDcIDPairs)
 			dIDToOlTotalStr := makeWhereCases(dIDolTotalPairs)
 
-			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
-				UPDATE customer
-				SET c_delivery_cnt = c_delivery_cnt + 1,
-					c_balance = c_balance + CASE c_d_id %s END
-				WHERE c_w_id = %d AND (c_d_id, c_id) IN (%s)`,
-				dIDToOlTotalStr, wID, dIDcIDPairsStr)); err != nil {
+			if _, err := tx.ExecEx(
+				ctx,
+				fmt.Sprintf(`
+					UPDATE customer
+					SET c_delivery_cnt = c_delivery_cnt + 1,
+						c_balance = c_balance + CASE c_d_id %s END
+					WHERE c_w_id = %d AND (c_d_id, c_id) IN (%s)`,
+					dIDToOlTotalStr, wID, dIDcIDPairsStr,
+				),
+				nil, /* options */
+			); err != nil {
 				return err
 			}
-			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
-				DELETE FROM new_order
-				WHERE no_w_id = %d AND (no_d_id, no_o_id) IN (%s)`,
-				wID, dIDoIDPairsStr)); err != nil {
+			if _, err := tx.ExecEx(
+				ctx,
+				fmt.Sprintf(`
+					DELETE FROM new_order
+					WHERE no_w_id = %d AND (no_d_id, no_o_id) IN (%s)`,
+					wID, dIDoIDPairsStr,
+				),
+				nil, /* options */
+			); err != nil {
 				return err
 			}
-			_, err = tx.ExecContext(ctx, fmt.Sprintf(`
-				UPDATE order_line
-				SET ol_delivery_d = '%s'
-				WHERE ol_w_id = %d AND (ol_d_id, ol_o_id) IN (%s)`,
-				olDeliveryD.Format("2006-01-02 15:04:05"), wID, dIDoIDPairsStr))
+
+			_, err = tx.ExecEx(
+				ctx,
+				fmt.Sprintf(`
+					UPDATE order_line
+					SET ol_delivery_d = '%s'
+					WHERE ol_w_id = %d AND (ol_d_id, ol_o_id) IN (%s)`,
+					olDeliveryD.Format("2006-01-02 15:04:05"), wID, dIDoIDPairsStr,
+				),
+				nil, /* options */
+			)
 			return err
 		})
 	return nil, err

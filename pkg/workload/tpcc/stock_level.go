@@ -16,14 +16,13 @@
 package tpcc
 
 import (
-	gosql "database/sql"
-	"fmt"
 	"math/rand"
 
 	"context"
 
 	"github.com/cockroachdb/cockroach-go/crdb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
 // 2.8 The Stock-Level Transaction
@@ -47,13 +46,56 @@ type stockLevelData struct {
 	lowStock  int
 }
 
-type stockLevel struct{}
+type stockLevel struct {
+	config *tpcc
+	mcp    *workload.MultiConnPool
+	sr     workload.SQLRunner
 
-var _ tpccTx = stockLevel{}
+	selectDNextOID    workload.StmtHandle
+	countRecentlySold workload.StmtHandle
+}
 
-func (s stockLevel) run(
-	ctx context.Context, config *tpcc, db *gosql.DB, wID int,
-) (interface{}, error) {
+var _ tpccTx = &stockLevel{}
+
+func createStockLevel(
+	ctx context.Context, config *tpcc, mcp *workload.MultiConnPool,
+) (tpccTx, error) {
+	s := &stockLevel{
+		config: config,
+		mcp:    mcp,
+	}
+
+	s.selectDNextOID = s.sr.Define(`
+		SELECT d_next_o_id
+		FROM district
+		WHERE d_w_id = $1 AND d_id = $2`,
+	)
+
+	// Count the number of recently sold items that have a stock level below
+	// the threshold.
+	// TODO(radu): we use count(DISTINCT s_i_id) because DISTINCT inside
+	// aggregates was not supported by the optimizer. This can be cleaned up.
+	s.countRecentlySold = s.sr.Define(`
+		SELECT count(*) FROM (
+			SELECT DISTINCT s_i_id
+			FROM order_line
+			JOIN stock
+			ON s_i_id=ol_i_id AND s_w_id=ol_w_id
+			WHERE ol_w_id = $1
+				AND ol_d_id = $2
+				AND ol_o_id BETWEEN $3 - 20 AND $3 - 1
+				AND s_quantity < $4
+		)`,
+	)
+
+	if err := s.sr.Init(ctx, "stock-level", mcp, config.connFlags); err != nil {
+		return nil, err
+	}
+
+	return s, nil
+}
+
+func (s *stockLevel) run(ctx context.Context, wID int) (interface{}, error) {
 	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 	// 2.8.1.2: The threshold of minimum quantity in stock is selected at random
@@ -63,11 +105,13 @@ func (s stockLevel) run(
 		dID:       rng.Intn(10) + 1,
 	}
 
-	if err := crdb.ExecuteTx(
-		ctx,
-		db,
-		config.txOpts,
-		func(tx *gosql.Tx) error {
+	tx, err := s.mcp.Get().BeginEx(ctx, s.config.txOpts)
+	if err != nil {
+		return nil, err
+	}
+	if err := crdb.ExecuteInTx(
+		ctx, (*workload.PgxTx)(tx),
+		func() error {
 			// This is the only join in the application, so we don't need to worry about
 			// this setting persisting incorrectly across queries.
 			// Note that this is not needed (and doesn't do anything) when the
@@ -78,31 +122,16 @@ func (s stockLevel) run(
 			}
 
 			var dNextOID int
-			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
-				SELECT d_next_o_id
-				FROM district
-				WHERE d_w_id = %[1]d AND d_id = %[2]d`,
-				wID, d.dID),
+			if err := s.selectDNextOID.QueryRowTx(
+				ctx, tx, wID, d.dID,
 			).Scan(&dNextOID); err != nil {
 				return err
 			}
 
 			// Count the number of recently sold items that have a stock level below
 			// the threshold.
-			// Note: we don't use count(DISTINCT s_i_id) because DISTINCT inside
-			// aggregates is not yet supported by the optimizer.
-			return tx.QueryRowContext(ctx, fmt.Sprintf(`
-			  SELECT count(*) FROM (
-			  	SELECT DISTINCT s_i_id
-			  	FROM order_line
-			  	JOIN stock
-			  	ON s_i_id=ol_i_id AND s_w_id=ol_w_id
-			  	WHERE ol_w_id = %[1]d
-			  	  AND ol_d_id = %[2]d
-			  	  AND ol_o_id BETWEEN %[3]d - 20 AND %[3]d - 1
-			  	  AND s_quantity < %[4]d
-			  )`,
-				wID, d.dID, dNextOID, d.threshold),
+			return s.countRecentlySold.QueryRowTx(
+				ctx, tx, wID, d.dID, dNextOID, d.threshold,
 			).Scan(&d.lowStock)
 		}); err != nil {
 		return nil, err
