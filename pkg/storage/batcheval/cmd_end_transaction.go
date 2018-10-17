@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -50,7 +51,10 @@ func init() {
 }
 
 func declareKeysEndTransaction(
-	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
+	desc roachpb.RangeDescriptor,
+	header roachpb.Header,
+	req roachpb.Request,
+	spans *spanset.SpanSet,
 ) {
 	declareKeysWriteTransaction(desc, header, req, spans)
 	et := req.(*roachpb.EndTransactionRequest)
@@ -450,6 +454,11 @@ func resolveLocalIntents(
 
 	var externalIntents []roachpb.Span
 	var resolveAllowance int64 = intentResolutionBatchSize
+	if args.InternalCommitTrigger != nil {
+		// If this is a system transaction (such as a split or merge), don't enforce the resolve allowance.
+		// These transactions rely on having their intents resolved synchronously.
+		resolveAllowance = math.MaxInt64
+	}
 	for _, span := range args.IntentSpans {
 		if err := func() error {
 			if resolveAllowance == 0 {
@@ -1041,7 +1050,10 @@ func mergeTrigger(
 }
 
 func changeReplicasTrigger(
-	ctx context.Context, rec EvalContext, batch engine.Batch, change *roachpb.ChangeReplicasTrigger,
+	ctx context.Context,
+	rec EvalContext,
+	batch engine.Batch,
+	change *roachpb.ChangeReplicasTrigger,
 ) result.Result {
 	var pd result.Result
 	// After a successful replica addition or removal check to see if the
