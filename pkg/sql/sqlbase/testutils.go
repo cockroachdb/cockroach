@@ -92,9 +92,8 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 		return tree.NewDFloat(tree.DFloat(rng.NormFloat64()))
 	case ColumnType_DECIMAL:
 		d := &tree.DDecimal{}
-		d.Decimal.SetExponent(int32(rng.Intn(40) - 20))
 		// int64(rng.Uint64()) to get negative numbers, too
-		d.Decimal.SetCoefficient(int64(rng.Uint64()))
+		d.Decimal.SetFinite(int64(rng.Uint64()), int32(rng.Intn(40)-20))
 		return d
 	case ColumnType_DATE:
 		return tree.NewDDate(tree.DDate(rng.Intn(10000)))

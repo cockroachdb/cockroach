@@ -255,7 +255,7 @@ func (w *avgWindowFunc) Compute(
 		return &avg, err
 	case *tree.DInt:
 		dd := tree.DDecimal{}
-		dd.SetCoefficient(int64(*t))
+		dd.SetFinite(int64(*t), 0)
 		var avg tree.DDecimal
 		count := apd.New(int64(frameSize), 0)
 		_, err := tree.DecimalCtx.Quo(&avg.Decimal, &dd.Decimal, count)

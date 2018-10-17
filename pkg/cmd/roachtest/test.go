@@ -854,7 +854,7 @@ func (r *registry) runAsync(
 
 				if artifactsDir != "" {
 					escapedTestName := teamCityNameEscape(t.Name())
-					artifactsGlobPath := filepath.Join(artifactsDir, escapedTestName, "**")
+					artifactsGlobPath := filepath.Join(artifactsDir, "**")
 					artifactsSpec := fmt.Sprintf("%s => %s", artifactsGlobPath, escapedTestName)
 					fmt.Fprintf(r.out, "##teamcity[publishArtifacts '%s']\n", artifactsSpec)
 				}

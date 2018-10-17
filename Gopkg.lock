@@ -277,12 +277,12 @@
   version = "v0.3.0"
 
 [[projects]]
-  digest = "1:947b332573d77e4c1b8b30e54c2d16eb322c03c37036ceb0101d518ff36a8039"
+  digest = "1:8cf9e7bbf5685bb8acdeec86512ad0bfa0ae8eb68dad6aaaa003862a3ae23c06"
   name = "github.com/cockroachdb/apd"
   packages = ["."]
   pruneopts = "UT"
-  revision = "9c2ab8efc9ac66bf4bb79ab6bed4dcd0c709d1b9"
-  version = "v1.1.0"
+  revision = "bced77f817b446cc6f6453d6cab5891e43f9ba17"
+  version = "v2.0.0"
 
 [[projects]]
   branch = "master"
@@ -1710,6 +1710,7 @@
     "github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc",
     "github.com/hashicorp/go-version",
     "github.com/jackc/pgx",
+    "github.com/jackc/pgx/pgtype",
     "github.com/jteeuwen/go-bindata/go-bindata",
     "github.com/kisielk/errcheck",
     "github.com/kisielk/gotool",
