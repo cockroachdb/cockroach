@@ -19,8 +19,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -29,21 +27,427 @@ import (
 	"github.com/pkg/errors"
 )
 
-func installKafka(ctx context.Context, c *cluster, kafkaNode nodeListOption) {
-	c.Run(ctx, kafkaNode, `curl -s https://packages.confluent.io/archive/4.0/confluent-oss-4.0.0-2.11.tar.gz | tar -xz`)
-	c.Run(ctx, kafkaNode, `sudo apt-get -q update`)
-	c.Run(ctx, kafkaNode, `yes | sudo apt-get -q install default-jre`)
-	c.Run(ctx, kafkaNode, `mkdir -p /mnt/data1/confluent`)
+type workloadType string
+
+const (
+	tpccWorkloadType   workloadType = "tpcc"
+	ledgerWorkloadType workloadType = "ledger"
+)
+
+type cdcTestArgs struct {
+	workloadType       workloadType
+	tpccWarehouseCount int
+	workloadDuration   string
+	initialScan        bool
+	kafkaChaos         bool
+
+	targetInitialScanLatency time.Duration
+	targetSteadyLatency      time.Duration
 }
 
-func startKafka(ctx context.Context, c *cluster, kafkaNode nodeListOption) {
+func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
+	c.RemountNoBarrier(ctx)
+
+	crdbNodes := c.Range(1, c.nodes-1)
+	workloadNode := c.Node(c.nodes)
+	kafkaNode := c.Node(c.nodes)
+	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
+	c.Put(ctx, workload, "./workload", workloadNode)
+	c.Start(ctx, t, crdbNodes, startArgs(`--args=--vmodule=changefeed=2,poller=2`))
+
+	db := c.Conn(ctx, 1)
+	if _, err := db.Exec(`SET CLUSTER SETTING trace.debug.enable = true`); err != nil {
+		c.t.Fatal(err)
+	}
+	defer func() {
+		if err := stopFeeds(db, c); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	t.Status("installing kafka")
+	kafka := kafkaManager{
+		c:     c,
+		nodes: kafkaNode,
+	}
+	kafka.install(ctx)
+	kafka.start(ctx)
+
+	m := newMonitor(ctx, c, crdbNodes)
+	workloadCompleteCh := make(chan struct{}, 1)
+
+	if args.workloadType == tpccWorkloadType {
+		t.Status("installing TPCC")
+		tpcc := tpccWorkload{
+			sqlNodes:           crdbNodes,
+			workloadNodes:      workloadNode,
+			tpccWarehouseCount: args.tpccWarehouseCount,
+		}
+		tpcc.install(ctx, c)
+
+		t.Status("initiating workload")
+		m.Go(func(ctx context.Context) error {
+			defer func() { close(workloadCompleteCh) }()
+			tpcc.run(ctx, c, args.workloadDuration)
+			return nil
+		})
+	} else {
+		t.Status("installing Ledger Workload")
+		lw := ledgerWorkload{
+			sqlNodes:      crdbNodes,
+			workloadNodes: workloadNode,
+		}
+		lw.install(ctx, c)
+
+		t.Status("initiating workload")
+		m.Go(func(ctx context.Context) error {
+			defer func() { close(workloadCompleteCh) }()
+			lw.run(ctx, c, args.workloadDuration)
+			return nil
+		})
+	}
+
+	verifier := latencyVerifier{
+		targetInitialScanLatency: args.targetInitialScanLatency,
+		targetSteadyLatency:      args.targetSteadyLatency,
+	}
+	m.Go(func(ctx context.Context) error {
+		l, err := t.l.ChildLogger(`changefeed`)
+		if err != nil {
+			return err
+		}
+
+		var targets string
+		if args.workloadType == tpccWorkloadType {
+			targets = `tpcc.warehouse, tpcc.district, tpcc.customer, tpcc.history,
+			tpcc.order, tpcc.new_order, tpcc.item, tpcc.stock,
+			tpcc.order_line`
+		} else {
+			targets = `ledger.customer, ledger.transaction, ledger.entry, ledger.session`
+		}
+		jobID, err := createChangefeed(db, targets, kafka.sinkURL(ctx), args.initialScan)
+		if err != nil {
+			return err
+		}
+
+		info, err := getChangefeedInfo(db, jobID)
+		if err != nil {
+			return err
+		}
+		verifier.statementTime = info.statementTime
+		l.Printf("started changefeed at (%d) %s\n", verifier.statementTime.UnixNano(), verifier.statementTime)
+		t.Status("watching changefeed")
+		return verifier.pollLatency(ctx, db, jobID, time.Second, workloadCompleteCh)
+	})
+
+	if args.kafkaChaos {
+		m.Go(func(ctx context.Context) error {
+			period, downTime := 2*time.Minute, 20*time.Second
+			return kafka.chaosLoop(ctx, period, downTime, workloadCompleteCh)
+		})
+	}
+	m.Wait()
+
+	verifier.assertValid(t)
+}
+
+func registerCDC(r *registry) {
+	r.Add(testSpec{
+		Name:       "cdc/tpcc/w=1000/nodes=3/init=false",
+		MinVersion: "2.1.0",
+		Nodes:      nodes(4, cpu(16)),
+		Stable:     false,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			cdcBasicTest(ctx, t, c, cdcTestArgs{
+				workloadType:             tpccWorkloadType,
+				tpccWarehouseCount:       1000,
+				workloadDuration:         "120m",
+				initialScan:              false,
+				kafkaChaos:               false,
+				targetInitialScanLatency: 3 * time.Minute,
+				targetSteadyLatency:      10 * time.Minute,
+			})
+		},
+	})
+	r.Add(testSpec{
+		Name:       "cdc/tpcc/w=100/nodes=3/init=true",
+		MinVersion: "2.1.0",
+		Nodes:      nodes(4, cpu(16)),
+		Stable:     false,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			cdcBasicTest(ctx, t, c, cdcTestArgs{
+				workloadType:             tpccWorkloadType,
+				tpccWarehouseCount:       100,
+				workloadDuration:         "30m",
+				initialScan:              true,
+				kafkaChaos:               false,
+				targetInitialScanLatency: 30 * time.Minute,
+				targetSteadyLatency:      time.Minute,
+			})
+		},
+	})
+	r.Add(testSpec{
+		Name:       "cdc/tpcc/w=100/nodes=3/init=false/chaos=true",
+		MinVersion: "2.1.0",
+		Nodes:      nodes(4, cpu(16)),
+		Stable:     false,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			cdcBasicTest(ctx, t, c, cdcTestArgs{
+				workloadType:             tpccWorkloadType,
+				tpccWarehouseCount:       100,
+				workloadDuration:         "30m",
+				initialScan:              false,
+				kafkaChaos:               true,
+				targetInitialScanLatency: 3 * time.Minute,
+				targetSteadyLatency:      5 * time.Minute,
+			})
+		},
+	})
+	// TODO(mrtracy): This workload was designed with a certain tx/s load in mind,
+	// but the load level is not currently being requested or enforced. Add the
+	// necessary code to reach this level (575 tx/s).
+	r.Add(testSpec{
+		Name:       "cdc/ledger/nodes=3/init=true",
+		MinVersion: "2.1.0",
+		// TODO(mrtracy): This workload is designed to be running on a 20CPU nodes,
+		// but this cannot be allocated without some sort of configuration outside
+		// of this test. Look into it.
+		Nodes:  nodes(4, cpu(16)),
+		Stable: false,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			cdcBasicTest(ctx, t, c, cdcTestArgs{
+				workloadType:             ledgerWorkloadType,
+				workloadDuration:         "30m",
+				initialScan:              true,
+				kafkaChaos:               false,
+				targetInitialScanLatency: 30 * time.Minute,
+				targetSteadyLatency:      time.Minute,
+			})
+		},
+	})
+}
+
+type kafkaManager struct {
+	c     *cluster
+	nodes nodeListOption
+}
+
+func (k kafkaManager) install(ctx context.Context) {
+	k.c.Run(ctx, k.nodes, `curl -s https://packages.confluent.io/archive/4.0/confluent-oss-4.0.0-2.11.tar.gz | tar -xz`)
+	k.c.Run(ctx, k.nodes, `sudo apt-get -q update`)
+	k.c.Run(ctx, k.nodes, `yes | sudo apt-get -q install default-jre`)
+	k.c.Run(ctx, k.nodes, `mkdir -p /mnt/data1/confluent`)
+}
+
+func (k kafkaManager) start(ctx context.Context) {
 	// This isn't necessary for the nightly tests, but it's nice for iteration.
-	c.Run(ctx, kafkaNode, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent destroy || true`)
-	c.Run(ctx, kafkaNode, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent start kafka`)
+	k.c.Run(ctx, k.nodes, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent destroy || true`)
+	k.c.Run(ctx, k.nodes, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent start kafka`)
 }
 
-func stopKafka(ctx context.Context, c *cluster, kafkaNode nodeListOption) {
-	c.Run(ctx, kafkaNode, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent stop`)
+func (k kafkaManager) stop(ctx context.Context) {
+	k.c.Run(ctx, k.nodes, `CONFLUENT_CURRENT=/mnt/data1/confluent ./confluent-4.0.0/bin/confluent stop`)
+}
+
+func (k kafkaManager) chaosLoop(
+	ctx context.Context, period, downTime time.Duration, stopper chan struct{},
+) error {
+	t := time.NewTicker(period)
+	for {
+		select {
+		case <-stopper:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.C:
+		}
+
+		k.stop(ctx)
+
+		select {
+		case <-stopper:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(downTime):
+		}
+
+		k.start(ctx)
+	}
+}
+
+func (k kafkaManager) sinkURL(ctx context.Context) string {
+	return `kafka://` + k.c.InternalIP(ctx, k.nodes)[0] + `:9092`
+}
+
+type tpccWorkload struct {
+	workloadNodes      nodeListOption
+	sqlNodes           nodeListOption
+	tpccWarehouseCount int
+}
+
+func (tw *tpccWorkload) install(ctx context.Context, c *cluster) {
+	c.Run(ctx, tw.workloadNodes, fmt.Sprintf(
+		`./workload fixtures load tpcc --warehouses=%d --checks=false {pgurl%s}`,
+		tw.tpccWarehouseCount,
+		tw.sqlNodes.randNode(),
+	))
+}
+
+func (tw *tpccWorkload) run(ctx context.Context, c *cluster, workloadDuration string) {
+	c.Run(ctx, tw.workloadNodes, fmt.Sprintf(
+		`./workload run tpcc --warehouses=%d {pgurl%s} --duration=%s`,
+		tw.tpccWarehouseCount, tw.sqlNodes, workloadDuration,
+	))
+}
+
+type ledgerWorkload struct {
+	workloadNodes nodeListOption
+	sqlNodes      nodeListOption
+}
+
+func (lw *ledgerWorkload) install(ctx context.Context, c *cluster) {
+	c.Run(ctx, lw.workloadNodes.randNode(), fmt.Sprintf(
+		`./workload init ledger {pgurl%s}`,
+		lw.sqlNodes.randNode(),
+	))
+}
+
+func (lw *ledgerWorkload) run(ctx context.Context, c *cluster, workloadDuration string) {
+	c.Run(ctx, lw.workloadNodes, fmt.Sprintf(
+		`./workload run ledger --mix=balance=0,withdrawal=50,deposit=50,reversal=0 {pgurl%s} --duration=%s`,
+		lw.sqlNodes,
+		workloadDuration,
+	))
+}
+
+type latencyVerifier struct {
+	statementTime            time.Time
+	targetSteadyLatency      time.Duration
+	targetInitialScanLatency time.Duration
+
+	initialScanLatency   time.Duration
+	maxSeenSteadyLatency time.Duration
+	latencyBecameSteady  bool
+}
+
+func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
+	if highwaterTime.Before(lv.statementTime) {
+		return
+	}
+	if lv.initialScanLatency == 0 {
+		lv.initialScanLatency = timeutil.Since(lv.statementTime)
+		// l.Printf("initial scan latency %s\n", initialScanLatency)
+		return
+	}
+
+	latency := timeutil.Since(highwaterTime)
+	if latency < lv.targetSteadyLatency/2 {
+		lv.latencyBecameSteady = true
+	}
+	if !lv.latencyBecameSteady {
+		// Before we have RangeFeed, the polls just get
+		// progressively smaller after the initial one. Start
+		// tracking the max latency once we seen a latency
+		// that's less than the max allowed. Verify at the end
+		// of the test that this happens at some point.
+		// l.Printf("end-to-end latency %s not yet below max allowed %s\n",
+		// 	latency, maxLatencyAllowed)
+		return
+	}
+	if latency > lv.maxSeenSteadyLatency {
+		lv.maxSeenSteadyLatency = latency
+	}
+	// l.Printf("end-to-end latency %s max so far %s\n", latency, lv.maxSeenSteadyLatency)
+}
+
+func (lv *latencyVerifier) pollLatency(
+	ctx context.Context, db *gosql.DB, jobID int, interval time.Duration, stopper chan struct{},
+) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-stopper:
+			return nil
+		case <-time.After(time.Second):
+		}
+
+		info, err := getChangefeedInfo(db, jobID)
+		if err != nil {
+			return err
+		}
+		if info.status != `running` {
+			return errors.Errorf(`unexpected status: %s`, info.status)
+		}
+		lv.noteHighwater(info.highwaterTime)
+	}
+}
+
+func (lv *latencyVerifier) assertValid(t *test) {
+	if lv.initialScanLatency == 0 {
+		t.Fatalf("initial scan did not complete")
+	}
+	if lv.initialScanLatency > lv.targetInitialScanLatency {
+		t.Fatalf("initial scan latency was more than target: %s vs %s",
+			lv.initialScanLatency, lv.targetInitialScanLatency)
+	}
+	if !lv.latencyBecameSteady {
+		t.Fatalf("latency never dropped to acceptable steady level: %s", lv.targetSteadyLatency)
+	}
+	if lv.maxSeenSteadyLatency > lv.targetSteadyLatency {
+		t.Fatalf("max latency was more than allowed: %s vs %s",
+			lv.maxSeenSteadyLatency, lv.targetSteadyLatency)
+	}
+}
+
+func createChangefeed(db *gosql.DB, targets, sinkURL string, initialScan bool) (int, error) {
+	var jobID int
+	createStmt := fmt.Sprintf(`CREATE CHANGEFEED FOR %s INTO $1 WITH resolved`, targets)
+	extraArgs := []interface{}{sinkURL}
+	if !initialScan {
+		createStmt += `, cursor=$2`
+		extraArgs = append(extraArgs, timeutil.Now().UnixNano())
+	}
+	if err := db.QueryRow(createStmt, extraArgs...).Scan(&jobID); err != nil {
+		return 0, err
+	}
+	return jobID, nil
+}
+
+type changefeedInfo struct {
+	status        string
+	statementTime time.Time
+	highwaterTime time.Time
+}
+
+func getChangefeedInfo(db *gosql.DB, jobID int) (changefeedInfo, error) {
+	var status string
+	var payloadBytes []byte
+	var progressBytes []byte
+	if err := db.QueryRow(
+		`SELECT status, payload, progress FROM system.jobs WHERE id = $1`, jobID,
+	).Scan(&status, &payloadBytes, &progressBytes); err != nil {
+		return changefeedInfo{}, err
+	}
+	var payload jobspb.Payload
+	if err := protoutil.Unmarshal(payloadBytes, &payload); err != nil {
+		return changefeedInfo{}, err
+	}
+	var progress jobspb.Progress
+	if err := protoutil.Unmarshal(progressBytes, &progress); err != nil {
+		return changefeedInfo{}, err
+	}
+	var highwaterTime time.Time
+	highwater := progress.GetHighWater()
+	if highwater != nil {
+		highwaterTime = highwater.GoTime()
+	}
+	return changefeedInfo{
+		status:        status,
+		statementTime: payload.GetChangefeed().StatementTime.GoTime(),
+		highwaterTime: highwaterTime,
+	}, nil
 }
 
 // stopFeeds cancels any running feeds on the cluster. Not necessary for the
@@ -53,265 +457,4 @@ func stopFeeds(db *gosql.DB, c *cluster) error {
 			SELECT job_id FROM [SHOW JOBS] WHERE status = 'running'
 		)`)
 	return err
-}
-
-type tpccWorkload struct {
-	workloadNodes  nodeListOption
-	sqlNodes       nodeListOption
-	warehouseCount int
-}
-
-func (tr *tpccWorkload) install(ctx context.Context, c *cluster) {
-	c.Run(ctx, tr.workloadNodes, fmt.Sprintf(
-		`./workload fixtures load tpcc --warehouses=%d --checks=false {pgurl%s}`,
-		tr.warehouseCount,
-		tr.sqlNodes.randNode(),
-	))
-}
-
-func (tr *tpccWorkload) run(ctx context.Context, c *cluster, duration string) {
-	c.Run(ctx, tr.workloadNodes, fmt.Sprintf(
-		`./workload run tpcc --warehouses=%d {pgurl%s} --duration=%s`,
-		tr.warehouseCount, tr.sqlNodes, duration,
-	))
-}
-
-type cdcTestArgs struct {
-	warehouseCount int
-	initialScan    bool
-	kafkaChaos     bool
-}
-
-func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
-	maxInitialScanAllowed, maxLatencyAllowed, duration := 3*time.Minute, time.Minute, `30m`
-	if args.initialScan {
-		maxInitialScanAllowed = 30 * time.Minute
-	}
-	if args.warehouseCount >= 1000 {
-		maxLatencyAllowed = 10 * time.Minute
-		duration = `120m`
-	}
-
-	c.RemountNoBarrier(ctx)
-	crdbNodes := c.Range(1, c.nodes-1)
-	workloadNode := c.Node(c.nodes)
-	kafkaNode := c.Node(c.nodes)
-
-	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
-	c.Put(ctx, workload, "./workload", workloadNode)
-	c.Start(ctx, t, crdbNodes, startArgs(`--args=--vmodule=changefeed=2,poller=2`))
-
-	tpcc := tpccWorkload{
-		sqlNodes:       crdbNodes,
-		workloadNodes:  workloadNode,
-		warehouseCount: args.warehouseCount,
-	}
-
-	t.Status("loading initial data")
-	tpcc.install(ctx, c)
-	t.Status("installing kafka")
-	installKafka(ctx, c, kafkaNode)
-	startKafka(ctx, c, kafkaNode)
-	db := c.Conn(ctx, 1)
-	defer func() {
-		if err := stopFeeds(db, c); err != nil {
-			t.Fatal(err)
-		}
-	}()
-	if _, err := db.Exec(`SET CLUSTER SETTING trace.debug.enable = true`); err != nil {
-		c.t.Fatal(err)
-	}
-
-	tpccComplete := make(chan struct{}, 1)
-	var initialScanLatency, maxSeenLatency time.Duration
-	latencyDroppedBelowMaxAllowed := false
-
-	t.Status("running workload")
-	m := newMonitor(ctx, c, crdbNodes)
-	m.Go(func(ctx context.Context) error {
-		defer func() { close(tpccComplete) }()
-		tpcc.run(ctx, c, duration)
-		return nil
-	})
-	m.Go(func(ctx context.Context) error {
-		l, err := t.l.ChildLogger(`changefeed`)
-		if err != nil {
-			return err
-		}
-
-		var jobID int
-		createStmt := `CREATE CHANGEFEED FOR
-			tpcc.warehouse, tpcc.district, tpcc.customer, tpcc.history,
-			tpcc.order, tpcc.new_order, tpcc.item, tpcc.stock,
-			tpcc.order_line
-		INTO $1 WITH resolved`
-		extraArgs := []interface{}{`kafka://` + c.InternalIP(ctx, kafkaNode)[0] + `:9092`}
-		if !args.initialScan {
-			createStmt += `, cursor=$2`
-			extraArgs = append(extraArgs, timeutil.Now().UnixNano())
-		}
-		if err = db.QueryRow(createStmt, extraArgs...).Scan(&jobID); err != nil {
-			return err
-		}
-
-		var payloadBytes []byte
-		if err = db.QueryRow(
-			`SELECT payload FROM system.jobs WHERE id = $1`, jobID,
-		).Scan(&payloadBytes); err != nil {
-			return err
-		}
-		var payload jobspb.Payload
-		if err := protoutil.Unmarshal(payloadBytes, &payload); err != nil {
-			return err
-		}
-		statementTime := payload.GetChangefeed().StatementTime.GoTime()
-		l.Printf("starting changefeed at (%d) %s\n", statementTime.UnixNano(), statementTime)
-
-		t.Status("watching changefeed")
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-tpccComplete:
-				return nil
-			case <-time.After(time.Second):
-			}
-
-			var status string
-			var hwRaw gosql.NullString
-			if err := db.QueryRow(
-				`SELECT status, high_water_timestamp FROM crdb_internal.jobs WHERE job_id = $1`,
-				jobID,
-			).Scan(&status, &hwRaw); err != nil {
-				return err
-			}
-			if status != `running` {
-				return errors.Errorf(`unexpected status: %s`, status)
-			}
-			var highWaterTime time.Time
-			if len(hwRaw.String) > 0 {
-				// Intentionally not using tree.DecimalToHLC to avoid the dep.
-				highWaterNanos, err := strconv.ParseInt(
-					hwRaw.String[:strings.IndexRune(hwRaw.String, '.')], 10, 64)
-				if err != nil {
-					return errors.Wrapf(err, "parsing [%s]", hwRaw.String)
-				}
-				highWaterTime = timeutil.Unix(0, highWaterNanos)
-			}
-
-			if highWaterTime.Before(statementTime) {
-				continue
-			} else if initialScanLatency == 0 {
-				initialScanLatency = timeutil.Since(statementTime)
-				l.Printf("initial scan latency %s\n", initialScanLatency)
-				t.Status("finished initial scan")
-				continue
-			}
-
-			latency := timeutil.Since(highWaterTime)
-			if latency < maxLatencyAllowed/2 {
-				latencyDroppedBelowMaxAllowed = true
-			}
-			if !latencyDroppedBelowMaxAllowed {
-				// Before we have RangeFeed, the polls just get
-				// progressively smaller after the initial one. Start
-				// tracking the max latency once we seen a latency
-				// that's less than the max allowed. Verify at the end
-				// of the test that this happens at some point.
-				l.Printf("end-to-end latency %s not yet below max allowed %s\n",
-					latency, maxLatencyAllowed)
-				continue
-			}
-			if latency > maxSeenLatency {
-				maxSeenLatency = latency
-			}
-			l.Printf("end-to-end latency %s max so far %s\n", latency, maxSeenLatency)
-		}
-	})
-	if args.kafkaChaos {
-		m.Go(func(ctx context.Context) error {
-			period, downTime := 2*time.Minute, 20*time.Second
-			t := time.NewTicker(period)
-			for {
-				select {
-				case <-tpccComplete:
-					return nil
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-t.C:
-				}
-
-				stopKafka(ctx, c, kafkaNode)
-
-				select {
-				case <-tpccComplete:
-					return nil
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-time.After(downTime):
-				}
-
-				startKafka(ctx, c, kafkaNode)
-			}
-		})
-	}
-	m.Wait()
-
-	if initialScanLatency == 0 {
-		t.Fatalf("initial scan did not complete")
-	}
-	if initialScanLatency > maxInitialScanAllowed {
-		t.Fatalf("initial scan latency was more than allowed: %s vs %s",
-			initialScanLatency, maxInitialScanAllowed)
-	}
-	if !latencyDroppedBelowMaxAllowed {
-		t.Fatalf("latency never dropped below max allowed: %s", maxLatencyAllowed)
-	}
-	// Do not verify max-seen latency in chaos tests.
-	if !args.kafkaChaos && maxSeenLatency > maxLatencyAllowed {
-		t.Fatalf("max latency was more than allowed: %s vs %s",
-			maxSeenLatency, maxLatencyAllowed)
-	}
-}
-
-func registerCDC(r *registry) {
-	r.Add(testSpec{
-		Name:       "cdc/w=1000/nodes=3/init=false",
-		MinVersion: "2.1.0",
-		Nodes:      nodes(4, cpu(16)),
-		Stable:     false,
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				warehouseCount: 1000,
-				initialScan:    false,
-				kafkaChaos:     false,
-			})
-		},
-	})
-	r.Add(testSpec{
-		Name:       "cdc/w=100/nodes=3/init=true",
-		MinVersion: "2.1.0",
-		Nodes:      nodes(4, cpu(16)),
-		Stable:     false,
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				warehouseCount: 100,
-				initialScan:    true,
-				kafkaChaos:     false,
-			})
-		},
-	})
-	r.Add(testSpec{
-		Name:       "cdc/w=100/nodes=3/init=false/chaos=true",
-		MinVersion: "2.1.0",
-		Nodes:      nodes(4, cpu(16)),
-		Stable:     false,
-		Run: func(ctx context.Context, t *test, c *cluster) {
-			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				warehouseCount: 100,
-				initialScan:    false,
-				kafkaChaos:     true,
-			})
-		},
-	})
 }
