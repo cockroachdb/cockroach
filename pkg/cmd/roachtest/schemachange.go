@@ -25,9 +25,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-func registerSchemaChange(r *registry) {
+func registerSchemaChangeKV(r *registry) {
 	r.Add(testSpec{
-		Name:   `schemachange`,
+		Name:   `schemachange/kv`,
 		Nodes:  nodes(5),
 		Stable: true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
