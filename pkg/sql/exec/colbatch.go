@@ -14,6 +14,10 @@
 
 package exec
 
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+)
+
 // ColBatch is the type that columnar operators receive and produce. It
 // represents a set of column vectors (partial data columns) as well as
 // metadata about a batch, like the selection vector (which rows in the column
@@ -21,6 +25,8 @@ package exec
 type ColBatch interface {
 	// Length returns the number of values in the columns in the batch.
 	Length() uint16
+	// SetLength sets the number of values in the columns in the batch.
+	SetLength(uint16)
 	// ColVec returns the ith ColVec in this batch.
 	ColVec(i int) ColVec
 	// Selection, if not nil, returns the selection vector on this batch: a
@@ -29,7 +35,25 @@ type ColBatch interface {
 	Selection() []uint16
 }
 
-var _ ColBatch = memBatch{}
+var _ ColBatch = &memBatch{}
+
+// ColBatchSize is the maximum number of tuples that fit in a column batch.
+// TODO(jordan): tune
+const ColBatchSize = 1024
+
+// NewMemBatch allocates a new in-memory ColBatch.
+// TODO(jordan): pool these allocations.
+func NewMemBatch(types ...types.T) ColBatch {
+	b := &memBatch{}
+	b.b = make([]ColVec, len(types))
+
+	for i, t := range types {
+		b.b[i] = newMemColumn(t, ColBatchSize)
+	}
+	b.sel = make([]uint16, ColBatchSize)
+
+	return b
+}
 
 type memBatch struct {
 	// length of batch or sel in tuples
@@ -42,17 +66,21 @@ type memBatch struct {
 	sel []uint16
 }
 
-func (m memBatch) Length() uint16 {
+func (m *memBatch) Length() uint16 {
 	return m.n
 }
 
-func (m memBatch) ColVec(i int) ColVec {
+func (m *memBatch) ColVec(i int) ColVec {
 	return m.b[i]
 }
 
-func (m memBatch) Selection() []uint16 {
+func (m *memBatch) Selection() []uint16 {
 	if !m.useSel {
 		return nil
 	}
 	return m.sel
+}
+
+func (m *memBatch) SetLength(n uint16) {
+	m.n = n
 }
