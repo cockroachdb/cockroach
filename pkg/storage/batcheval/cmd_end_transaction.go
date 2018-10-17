@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -450,6 +451,11 @@ func resolveLocalIntents(
 
 	var externalIntents []roachpb.Span
 	var resolveAllowance int64 = intentResolutionBatchSize
+	if args.InternalCommitTrigger != nil {
+		// If this is a system transaction (such as a split or merge), don't enforce the resolve allowance.
+		// These transactions rely on having their intents resolved synchronously.
+		resolveAllowance = math.MaxInt64
+	}
 	for _, span := range args.IntentSpans {
 		if err := func() error {
 			if resolveAllowance == 0 {
