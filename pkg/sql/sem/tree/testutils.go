@@ -51,9 +51,8 @@ func SampleDatum(t types.T) Datum {
 		return &f
 	case types.Decimal:
 		d := &DDecimal{}
-		d.Decimal.SetExponent(6)
 		// int64(rng.Uint64()) to get negative numbers, too
-		d.Decimal.SetCoefficient(3)
+		d.Decimal.SetFinite(3, 6)
 		return d
 	case types.String:
 		return NewDString("Carl")

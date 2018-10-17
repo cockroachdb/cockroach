@@ -440,7 +440,7 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 				if _, ok := alloc.dd.Coeff.SetString(decString, 10); !ok {
 					return nil, errors.Errorf("could not parse string %q as decimal", decString)
 				}
-				alloc.dd.SetExponent(-int32(Dscale))
+				alloc.dd.Exponent = -int32(Dscale)
 			}
 
 			switch alloc.pgNum.Sign {
