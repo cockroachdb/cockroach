@@ -264,11 +264,11 @@ To repro, try:
 ` + "```" + `
 # Don't forget to check out a clean suitable branch and experiment with the
 # stress invocation until the desired results present themselves. For example,
-# using stressrace instead of stress and passing the '-p' stressflag which
+# using stress instead of stressrace and passing the '-p' stressflag which
 # controls concurrency.
 ./scripts/gceworker.sh start && ./scripts/gceworker.sh mosh
 cd ~/go/src/github.com/cockroachdb/cockroach && \
-make stress TESTS=%[5]s PKG=%[4]s TESTTIMEOUT=5m STRESSFLAGS='-stderr=false -maxtime 20m -timeout 10m'
+make stressrace TESTS=%[5]s PKG=%[4]s TESTTIMEOUT=5m STRESSFLAGS='-maxtime 20m -timeout 10m' 2>&1 | tee /tmp/stress.log
 ` + "```" + `
 
 Failed test: %[3]s`
