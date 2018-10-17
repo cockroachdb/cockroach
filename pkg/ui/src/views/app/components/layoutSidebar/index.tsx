@@ -102,15 +102,13 @@ function LoginIndicator({ loginState, handleLogout }: LoginIndicatorProps) {
   return (
     <li className="login-indicator">
       <Link to={LOGOUT_PAGE} onClick={handleLogout}>
-        <div>
-          <div
-            className="login-indicator__initial"
-            title={`Signed in as ${user}`}
-          >
-            {user[0]}
-          </div>
-          Log Out
+        <div
+          className="login-indicator__initial"
+          title={`Signed in as ${user}`}
+        >
+          {user[0]}
         </div>
+        <div>Log Out</div>
       </Link>
     </li>
   );
