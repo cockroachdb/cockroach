@@ -90,7 +90,6 @@ message RangeInfo {
   // The highest (and last) index in the Raft log.
   uint64 last_index = 2;
   uint64 num_pending = 3;
-  uint64 num_remote_pending = 9;
   reserved 4; // previously last verification timestamp for verify queue.
   uint64 num_dropped = 5;
   // raft_log_size may be initially inaccurate after a server restart.
@@ -100,6 +99,7 @@ message RangeInfo {
   int64 approximate_proposal_quota = 7;
   // The max size the range can grow to before it will be split.
   int64 range_max_bytes = 8;
+  reserved 9;
 }
 
 // CommandQueueSnapshot is a snapshot of the command queue graph for rendering

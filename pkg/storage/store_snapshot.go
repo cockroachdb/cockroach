@@ -24,6 +24,7 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 	"golang.org/x/time/rate"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -98,7 +99,8 @@ func assertStrategy(
 // kvBatchSnapshotStrategy is an implementation of snapshotStrategy that streams
 // batches of KV pairs in the BatchRepr format.
 type kvBatchSnapshotStrategy struct {
-	status string
+	raftCfg *base.RaftConfig
+	status  string
 
 	// Fields used when sending snapshots.
 	batchSize int64
@@ -228,7 +230,8 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		if err == nil {
 			logEntries = append(logEntries, bytes)
 			raftLogBytes += int64(len(bytes))
-			if snap.snapType == snapTypePreemptive && raftLogBytes > 4*raftLogMaxSize {
+			if snap.snapType == snapTypePreemptive &&
+				raftLogBytes > 4*kvSS.raftCfg.RaftLogTruncationThreshold {
 				// If the raft log is too large, abort the snapshot instead of
 				// potentially running out of memory. However, if this is a
 				// raft-initiated snapshot (instead of a preemptive one), we
@@ -492,7 +495,9 @@ func (s *Store) receiveSnapshot(
 	var ss snapshotStrategy
 	switch header.Strategy {
 	case SnapshotRequest_KV_BATCH:
-		ss = &kvBatchSnapshotStrategy{}
+		ss = &kvBatchSnapshotStrategy{
+			raftCfg: &s.cfg.RaftConfig,
+		}
 	default:
 		return sendSnapshotError(stream,
 			errors.Errorf("%s,r%d: unknown snapshot strategy: %s",
@@ -568,6 +573,7 @@ func (e *errMustRetrySnapshotDueToTruncation) Error() string {
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
 	ctx context.Context,
+	raftCfg *base.RaftConfig,
 	st *cluster.Settings,
 	stream outgoingSnapshotStream,
 	storePool SnapshotStorePool,
@@ -635,6 +641,7 @@ func sendSnapshot(
 	switch header.Strategy {
 	case SnapshotRequest_KV_BATCH:
 		ss = &kvBatchSnapshotStrategy{
+			raftCfg:   raftCfg,
 			batchSize: batchSize,
 			limiter:   limiter,
 			newBatch:  newBatch,
