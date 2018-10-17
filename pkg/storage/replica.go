@@ -4444,6 +4444,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	const expl = "during advance"
 	if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.Advance(rd)
+
+		// If the Raft group still has more to process then we immediately
+		// re-enqueue it for another round of processing. This is possible if
+		// the group's committed entries were paginated due to size limitations
+		// and we didn't apply all of them in this pass.
+		if raftGroup.HasReady() {
+			r.store.enqueueRaftUpdateCheck(r.RangeID)
+		}
 		return true, nil
 	}); err != nil {
 		return stats, expl, errors.Wrap(err, expl)
