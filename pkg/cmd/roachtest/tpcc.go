@@ -738,6 +738,32 @@ func registerTPCCBench(r *registry) {
 			LoadWarehouses: 50000,
 			EstimatedMax:   40000,
 		},
+
+		// See https://github.com/cockroachdb/cockroach/issues/31409 for the next three specs.
+		{
+			Nodes: 6,
+			CPUs:  16,
+
+			LoadWarehouses: 5000,
+			EstimatedMax:   3000,
+			LoadConfig:     singlePartitionedLoadgen,
+		},
+		{
+			Nodes: 12,
+			CPUs:  16,
+
+			LoadWarehouses: 10000,
+			EstimatedMax:   6000,
+			LoadConfig:     singlePartitionedLoadgen,
+		},
+		{
+			Nodes: 24,
+			CPUs:  16,
+
+			LoadWarehouses: 20000,
+			EstimatedMax:   12000,
+			LoadConfig:     singlePartitionedLoadgen,
+		},
 	}
 
 	for _, b := range specs {
