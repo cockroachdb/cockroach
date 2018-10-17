@@ -875,14 +875,14 @@ func fromMap(v map[string]interface{}) (JSON, error) {
 // FromInt returns a JSON value given a int.
 func FromInt(v int) JSON {
 	dec := apd.Decimal{}
-	dec.SetCoefficient(int64(v))
+	dec.SetFinite(int64(v), 0)
 	return jsonNumber(dec)
 }
 
 // FromInt64 returns a JSON value given a int64.
 func FromInt64(v int64) JSON {
 	dec := apd.Decimal{}
-	dec.SetCoefficient(v)
+	dec.SetFinite(v, 0)
 	return jsonNumber(dec)
 }
 

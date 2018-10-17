@@ -2254,7 +2254,7 @@ may increase either contention or retry errors, or both.`,
 			"negative."),
 		decimalOverload1(func(x *apd.Decimal) (tree.Datum, error) {
 			d := &tree.DDecimal{}
-			d.Decimal.SetCoefficient(int64(x.Sign()))
+			d.Decimal.SetFinite(int64(x.Sign()), 0)
 			return d, nil
 		}, "Determines the sign of `val`: **1** for positive; **0** for 0 values; **-1** for "+
 			"negative."),
