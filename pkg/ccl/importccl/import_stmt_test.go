@@ -2361,12 +2361,18 @@ func TestImportPgDump(t *testing.T) {
 					"a_seq", `CREATE SEQUENCE a_seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1`,
 				}})
 				sqlDB.CheckQueryResults(t, `select last_value from a_seq`, [][]string{{"7"}})
-				sqlDB.Exec(t, `INSERT INTO seqtable (b) VALUES (70)`)
 				sqlDB.CheckQueryResults(t,
 					`SELECT * FROM seqtable ORDER BY a`,
-					sqlDB.QueryStr(t, `select a+1, a*10 from generate_series(0, 7) a`),
+					sqlDB.QueryStr(t, `select a+1, a*10 from generate_series(0, 6) a`),
 				)
-				sqlDB.CheckQueryResults(t, `select last_value from a_seq`, [][]string{{"8"}})
+				sqlDB.CheckQueryResults(t, `select last_value from a_seq`, [][]string{{"7"}})
+				// This can sometimes retry, so the next value might not be 8.
+				sqlDB.Exec(t, `INSERT INTO seqtable (b) VALUES (70)`)
+				sqlDB.CheckQueryResults(t, `select last_value >= 8 from a_seq`, [][]string{{"true"}})
+				sqlDB.CheckQueryResults(t,
+					`SELECT b FROM seqtable WHERE a = (SELECT last_value FROM a_seq)`,
+					[][]string{{"70"}},
+				)
 			}
 		})
 	}
