@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1498,7 +1499,6 @@ func BenchmarkConvertRecord(b *testing.B) {
 // work as intended on import jobs.
 func TestImportControlJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skipf("#24658")
 
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
@@ -1530,9 +1530,23 @@ func TestImportControlJob(t *testing.T) {
 	t.Run("cancel", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE DATABASE cancelimport`)
 
+		var once sync.Once
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == "GET" {
-				<-allowResponse
+				// The following code correctly (I hope) handles both the case where, after
+				// the CANCEL JOB is issued, the second stage of the IMPORT (the shuffle,
+				// after the sampling) may or may not be started. If it was started, then a
+				// second GET request is done. The once here will cause that request to not
+				// block. The draining for loop below will cause jobutils.RunJob's second send
+				// on allowResponse to succeed (which it does after issuing the CANCEL JOB).
+				once.Do(func() {
+					<-allowResponse
+				})
+				go func() {
+					for range allowResponse {
+					}
+				}()
+
 				_, _ = w.Write([]byte(r.URL.Path[1:]))
 			}
 		}))
