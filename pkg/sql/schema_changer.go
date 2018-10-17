@@ -471,59 +471,77 @@ func (sc *SchemaChanger) truncateTable(
 	return nil
 }
 
-// maybe Add/Drop a table depending on the state of a table descriptor.
-// This method returns true if the table is deleted.
-func (sc *SchemaChanger) maybeAddDrop(
-	ctx context.Context,
-	inSession bool,
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	table *sqlbase.TableDescriptor,
-	evalCtx *extendedEvalContext,
-) (bool, error) {
-	if table.Dropped() {
-		if err := sc.ExtendLease(ctx, lease); err != nil {
-			return false, err
-		}
-
-		if inSession {
-			return false, nil
-		}
-
-		// This can happen if a change other than the drop originally
-		// scheduled the changer for this table. If that's the case,
-		// we still need to wait for the deadline to expire.
-		if table.DropTime != 0 {
-			var timeRemaining time.Duration
-			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-				timeRemaining = 0
-				_, zoneCfg, _, err := GetZoneConfigInTxn(ctx, txn, uint32(table.ID),
-					&sqlbase.IndexDescriptor{}, "", false /* getInheritedDefault */)
-				if err != nil {
-					return err
-				}
-				deadline := table.DropTime + int64(zoneCfg.GC.TTLSeconds)*time.Second.Nanoseconds()
-				timeRemaining = timeutil.Since(timeutil.Unix(0, deadline))
-				return nil
-			}); err != nil {
-				return false, err
-			}
-			if timeRemaining < 0 {
-				return false, errNotHitGCTTLDeadline
-			}
-		}
-		// Do all the hard work of deleting the table data and the table ID.
-		if err := sc.truncateTable(ctx, lease, table, evalCtx); err != nil {
-			return false, err
-		}
-
-		return true, sc.DropTableDesc(ctx, table, false /* traceKV */)
+// maybe Drop a table. Return nil if successfully dropped.
+func (sc *SchemaChanger) maybeDropTable(
+	ctx context.Context, inSession bool, table *sqlbase.TableDescriptor, evalCtx *extendedEvalContext,
+) error {
+	if !table.Dropped() || inSession {
+		return nil
 	}
 
+	// This can happen if a change other than the drop originally
+	// scheduled the changer for this table. If that's the case,
+	// we still need to wait for the deadline to expire.
+	if table.DropTime != 0 {
+		var timeRemaining time.Duration
+		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			timeRemaining = 0
+			_, zoneCfg, _, err := GetZoneConfigInTxn(ctx, txn, uint32(table.ID),
+				&sqlbase.IndexDescriptor{}, "", false /* getInheritedDefault */)
+			if err != nil {
+				return err
+			}
+			deadline := table.DropTime + int64(zoneCfg.GC.TTLSeconds)*time.Second.Nanoseconds()
+			timeRemaining = timeutil.Since(timeutil.Unix(0, deadline))
+			return nil
+		}); err != nil {
+			return err
+		}
+		if timeRemaining < 0 {
+			return errNotHitGCTTLDeadline
+		}
+	}
+
+	// Acquire lease.
+	lease, err := sc.AcquireLease(ctx)
+	if err != nil {
+		return err
+	}
+	needRelease := true
+	// Always try to release lease.
+	defer func() {
+		// If the schema changer deleted the descriptor, there's no longer a lease to be
+		// released.
+		if !needRelease {
+			return
+		}
+		if err := sc.ReleaseLease(ctx, lease); err != nil {
+			log.Warning(ctx, err)
+		}
+	}()
+
+	// Do all the hard work of deleting the table data and the table ID.
+	if err := sc.truncateTable(ctx, &lease, table, evalCtx); err != nil {
+		return err
+	}
+
+	if err := sc.DropTableDesc(ctx, table, false /* traceKV */); err != nil {
+		return err
+	}
+	// The descriptor was deleted.
+	needRelease = false
+	return nil
+}
+
+// maybe make a table PUBLIC if it's in the ADD state.
+func (sc *SchemaChanger) maybeMakeAddTablePublic(
+	ctx context.Context, table *sqlbase.TableDescriptor,
+) error {
 	if table.Adding() {
 		for _, idx := range table.AllNonDropIndexes() {
 			if idx.ForeignKey.IsSet() {
 				if err := sc.waitToUpdateLeases(ctx, idx.ForeignKey.Table); err != nil {
-					return false, err
+					return err
 				}
 			}
 		}
@@ -532,23 +550,23 @@ func (sc *SchemaChanger) maybeAddDrop(
 			ctx,
 			table.ID,
 			func(tbl *sqlbase.TableDescriptor) error {
+				if !tbl.Adding() {
+					return errDidntUpdateDescriptor
+				}
 				tbl.State = sqlbase.TableDescriptor_PUBLIC
 				return nil
 			},
 			func(txn *client.Txn) error { return nil },
 		); err != nil {
-			return false, err
+			return err
 		}
 	}
 
-	return false, nil
+	return nil
 }
 
 func (sc *SchemaChanger) maybeGCMutations(
-	ctx context.Context,
-	inSession bool,
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	table *sqlbase.TableDescriptor,
+	ctx context.Context, inSession bool, table *sqlbase.TableDescriptor,
 ) error {
 	if inSession || len(table.GCMutations) == 0 || len(sc.dropIndexTimes) == 0 {
 		return nil
@@ -557,10 +575,6 @@ func (sc *SchemaChanger) maybeGCMutations(
 	// Don't perform GC work if there are non-GC mutations waiting.
 	if len(table.Mutations) > 0 {
 		return nil
-	}
-
-	if err := sc.ExtendLease(ctx, lease); err != nil {
-		return err
 	}
 
 	// Find dropped index with earliest GC deadline.
@@ -593,11 +607,23 @@ func (sc *SchemaChanger) maybeGCMutations(
 		return nil
 	}
 
-	if err := sc.truncateIndexes(ctx, lease, table.Version, []sqlbase.IndexDescriptor{{ID: mutation.IndexID}}); err != nil {
+	// Acquire lease.
+	lease, err := sc.AcquireLease(ctx)
+	if err != nil {
+		return err
+	}
+	// Always try to release lease.
+	defer func() {
+		if err := sc.ReleaseLease(ctx, lease); err != nil {
+			log.Warning(ctx, err)
+		}
+	}()
+
+	if err := sc.truncateIndexes(ctx, &lease, table.Version, []sqlbase.IndexDescriptor{{ID: mutation.IndexID}}); err != nil {
 		return err
 	}
 
-	_, err := sc.leaseMgr.Publish(
+	_, err = sc.leaseMgr.Publish(
 		ctx,
 		table.ID,
 		func(tbl *sqlbase.TableDescriptor) error {
@@ -681,13 +707,7 @@ func (sc *SchemaChanger) updateDropTableJob(
 }
 
 // Drain old names from the cluster.
-func (sc *SchemaChanger) drainNames(
-	ctx context.Context, lease *sqlbase.TableDescriptor_SchemaChangeLease,
-) error {
-	if err := sc.ExtendLease(ctx, lease); err != nil {
-		return err
-	}
-
+func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 	// Publish a new version with all the names drained after everyone
 	// has seen the version with the new name. All the draining names
 	// can be reused henceforth.
@@ -740,23 +760,6 @@ func (sc *SchemaChanger) exec(
 		log.Infof(ctx, "exec pending schema change; table: %d, mutation: %d",
 			sc.tableID, sc.mutationID)
 	}
-	// Acquire lease.
-	lease, err := sc.AcquireLease(ctx)
-	if err != nil {
-		return err
-	}
-	needRelease := true
-	// Always try to release lease.
-	defer func() {
-		// If the schema changer deleted the descriptor, there's no longer a lease to be
-		// released.
-		if !needRelease {
-			return
-		}
-		if err := sc.ReleaseLease(ctx, lease); err != nil {
-			log.Warning(ctx, err)
-		}
-	}()
 
 	tableDesc, notFirst, err := sc.notFirstInLine(ctx)
 	if err != nil {
@@ -767,35 +770,50 @@ func (sc *SchemaChanger) exec(
 	}
 
 	if tableDesc.HasDrainingNames() {
-		if err := sc.drainNames(ctx, &lease); err != nil {
+		if err := sc.drainNames(ctx); err != nil {
 			return err
 		}
 	}
 
-	if err := sc.maybeGCMutations(ctx, inSession, &lease, tableDesc); err != nil {
+	// Delete dropped table data if possible.
+	if err := sc.maybeDropTable(ctx, inSession, tableDesc, evalCtx); err != nil {
 		return err
 	}
 
-	if drop, err := sc.maybeAddDrop(ctx, inSession, &lease, tableDesc, evalCtx); err != nil {
+	if err := sc.maybeMakeAddTablePublic(ctx, tableDesc); err != nil {
 		return err
-	} else if drop {
-		needRelease = false
-		return nil
+	}
+
+	if err := sc.maybeGCMutations(ctx, inSession, tableDesc); err != nil {
+		return err
 	}
 
 	// Wait for the schema change to propagate to all nodes after this function
 	// returns, so that the new schema is live everywhere. This is not needed for
 	// correctness but is done to make the UI experience/tests predictable.
-	defer func() {
+	waitToUpdateLeases := func() {
 		if err := sc.waitToUpdateLeases(ctx, sc.tableID); err != nil {
 			log.Warning(ctx, err)
 		}
-	}()
+	}
 
 	if sc.mutationID == sqlbase.InvalidMutationID {
 		// Nothing more to do.
+		waitToUpdateLeases()
 		return nil
 	}
+
+	// Acquire lease.
+	lease, err := sc.AcquireLease(ctx)
+	if err != nil {
+		return err
+	}
+	// Always try to release lease.
+	defer func() {
+		if err := sc.ReleaseLease(ctx, lease); err != nil {
+			log.Warning(ctx, err)
+		}
+	}()
 
 	// Find our job.
 	foundJobID := false
@@ -823,8 +841,7 @@ func (sc *SchemaChanger) exec(
 		}
 	}
 
-	// Another transaction might set the up_version bit again,
-	// but we're no longer responsible for taking care of that.
+	defer waitToUpdateLeases()
 
 	// Run through mutation state machine and backfill.
 	err = sc.runStateMachineAndBackfill(ctx, &lease, evalCtx)
