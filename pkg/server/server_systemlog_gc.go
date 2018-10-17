@@ -45,7 +45,7 @@ var (
 				"Should not be lowered below 24 hours",
 			systemLogGCPeriod,
 		),
-		30*24*time.Hour, // 30 days
+		0, // disabled
 	)
 
 	// eventLogTTL is the TTL for rows in system.eventlog. If non zero, event log
@@ -57,7 +57,7 @@ var (
 				"Should not be lowered below 24 hours",
 			systemLogGCPeriod,
 		),
-		90*24*time.Hour, // 90 days
+		0, // disabled
 	)
 )
 
