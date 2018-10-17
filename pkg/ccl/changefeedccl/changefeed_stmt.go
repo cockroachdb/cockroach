@@ -211,6 +211,26 @@ func changefeedPlanHook(
 			return err
 		}
 
+		// In the case where a user is executing a CREATE CHANGEFEED and is still
+		// waiting for the statement to return, we take the opportunity to ensure
+		// that the user has not made any obvious errors when specifying the sink in
+		// the CREATE CHANGEFEED statement. To do this, we create a "canary" sink,
+		// which will be immediately closed, only to check for errors.
+		{
+			canarySink, err := getSink(sinkURI, opts, targets)
+			if err != nil {
+				// In this context, we don't want to retry even retryable errors from the
+				// sync. Unwrap any retryable errors encountered.
+				if rErr, ok := err.(*retryableSinkError); ok {
+					return rErr.cause
+				}
+				return err
+			}
+			if err := canarySink.Close(); err != nil {
+				return err
+			}
+		}
+
 		// Make a channel for runChangefeedFlow to signal once everything has
 		// been setup okay. This intentionally abuses what would normally be
 		// hooked up to resultsCh to avoid a bunch of extra plumbing.
