@@ -237,28 +237,18 @@ func (rgcq *replicaGCQueue) process(
 		}); err != nil {
 			return err
 		}
-	} else if currentMember {
-		// This store is a current member of a different range that overlaps with
-		// this one. This situation can only happen when we are a current member
-		// of the range that subsumed this one, but our replica of the subsuming
-		// range has not yet applied the merge trigger. This replica must be
-		// preserved so it can be subsumed.
-		if log.V(1) {
-			log.Infof(ctx, "range merged away; allowing merge trigger on LHS to subsume it")
-		}
 	} else {
-		// This case is tricky. This range has been merged away, and this store is
-		// not a member of the current range. It is likely that we can GC this
-		// replica, but we need to be careful. If this store has a replica of the
-		// subsuming range that has not yet applied the merge trigger, we must not
-		// GC this replica.
+		// This case is tricky. This range has been merged away, so it is likely
+		// that we can GC this replica, but we need to be careful. If this store has
+		// a replica of the subsuming range that has not yet applied the merge
+		// trigger, we must not GC this replica.
 		//
 		// We can't just ask our local left neighbor whether it has an unapplied
 		// merge, as if it's a slow follower it might not have learned about the
-		// merge yet! What we can do, though, is check whether the generation of
-		// our local left neighbor matches the generation of its meta2 descriptor.
-		// If it is generationally up-to-date, it has applied all splits and
-		// merges, and it is thus safe to remove this replica.
+		// merge yet! What we can do, though, is check whether the generation of our
+		// local left neighbor matches the generation of its meta2 descriptor. If it
+		// is generationally up-to-date, it has applied all splits and merges, and
+		// it is thus safe to remove this replica.
 		leftRepl := repl.store.lookupPrecedingReplica(desc.StartKey)
 		if leftRepl != nil {
 			leftDesc := leftRepl.Desc()
@@ -272,7 +262,8 @@ func (rgcq *replicaGCQueue) process(
 			}
 			if leftReplyDesc := rs[0]; !leftDesc.Equal(leftReplyDesc) {
 				if log.V(1) {
-					log.Infof(ctx, "left neighbor not up-to-date; cannot safely GC range yet")
+					log.Infof(ctx, "left neighbor %s not up-to-date with meta descriptor %s; cannot safely GC range yet",
+						leftDesc, leftReplyDesc)
 				}
 				return nil
 			}
