@@ -503,17 +503,21 @@ func TestDistSQLDrainingHosts(t *testing.T) {
 	r := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	r.DB.SetMaxOpenConns(1)
 
-	r.Exec(t, "SET DISTSQL = ON")
 	// Force the query to be distributed.
-	r.Exec(
-		t,
-		fmt.Sprintf(`
-			ALTER TABLE nums SPLIT AT VALUES (1);
-			ALTER TABLE nums EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 1);
-		`,
-			tc.Server(1).GetFirstStoreID(),
-		),
-	)
+	r.Exec(t, "SET DISTSQL = ON")
+
+	// Shortly after starting a cluster, the first server's StorePool may not be
+	// fully initialized and ready to do rebalancing yet, so wrap this in a
+	// SucceedsSoon.
+	testutils.SucceedsSoon(t, func() error {
+		_, err := r.DB.Exec(
+			fmt.Sprintf(`ALTER TABLE nums SPLIT AT VALUES (1);
+									 ALTER TABLE nums EXPERIMENTAL_RELOCATE VALUES (ARRAY[%d], 1);`,
+				tc.Server(1).GetFirstStoreID(),
+			),
+		)
+		return err
+	})
 
 	// Ensure that the range cache is populated (see #31235).
 	r.Exec(t, "SHOW EXPERIMENTAL_RANGES FROM TABLE nums")
