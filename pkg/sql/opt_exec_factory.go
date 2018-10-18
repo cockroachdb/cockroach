@@ -69,8 +69,13 @@ func (ef *execFactory) ConstructScan(
 	indexConstraint *constraint.Constraint,
 	hardLimit int64,
 	reverse bool,
+	allPointSpans bool,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
+
+	// TODO(jordan): do something with this.
+	fmt.Printf("allPointSpans=%v\n", allPointSpans)
+
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
 	// Create a scanNode.
