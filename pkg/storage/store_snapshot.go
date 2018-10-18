@@ -433,24 +433,10 @@ func (s *Store) canApplySnapshotLocked(
 			log.Warning(ctx, errors.Wrapf(
 				err, "unable to look up overlapping replica on %s", exReplica))
 		} else {
-			inactive := func(r *Replica) bool {
-				if r.RaftStatus() == nil {
-					return true
-				}
-				lease, pendingLease := r.GetLease()
-				now := s.Clock().Now()
-				return !r.IsLeaseValid(lease, now) &&
-					(pendingLease == (roachpb.Lease{}) || !r.IsLeaseValid(pendingLease, now))
-			}
-
-			// If the existing range shows no signs of recent activity, give it a GC
-			// run.
-			if inactive(exReplica) {
-				if _, err := s.replicaGCQueue.Add(exReplica, replicaGCPriorityCandidate); err != nil {
-					log.Errorf(ctx, "%s: unable to add replica to GC queue: %s", exReplica, err)
-				} else {
-					msg += "; initiated GC:"
-				}
+			if _, err := s.replicaGCQueue.Add(exReplica, replicaGCPriorityCandidate); err != nil {
+				log.Errorf(ctx, "%s: unable to add replica to GC queue: %s", exReplica, err)
+			} else {
+				msg += "; initiated GC:"
 			}
 		}
 		return nil, errors.Errorf("%s %v", msg, exReplica) // exReplica can be nil
