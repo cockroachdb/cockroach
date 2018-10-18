@@ -113,7 +113,7 @@ var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 )
 
 // importRequestsLimit limits concurrent import requests.
-var importRequestsLimit = settings.RegisterIntSetting(
+var importRequestsLimit = settings.RegisterPositiveIntSetting(
 	"kv.bulk_io_write.concurrent_import_requests",
 	"number of import requests a store will handle concurrently before queuing",
 	1,
@@ -126,7 +126,7 @@ var importRequestsLimit = settings.RegisterIntSetting(
 // by a guessing - it could be improved by more measured heuristics. Exported
 // here since we check it in in the caller to limit generated requests as well
 // to prevent excessive queuing.
-var ExportRequestsLimit = settings.RegisterIntSetting(
+var ExportRequestsLimit = settings.RegisterPositiveIntSetting(
 	"kv.bulk_io_write.concurrent_export_requests",
 	"number of export requests a store will handle concurrently before queuing",
 	5,
