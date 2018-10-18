@@ -283,7 +283,12 @@ func (b *Builder) indexConstraintAllPointSpans(scan *memo.ScanExpr) bool {
 	for i := 0; i < numCols; i++ {
 		indexCols.Add(int(c.Columns.Get(i).ID()))
 	}
-	if !scan.Relational().FuncDeps.ColsAreStrictKey(indexCols) {
+	rel := scan.Relational()
+	// The index columns form a strict key if they're already a strict key by
+	// themselves or if the cols form a weak key and they're all non-null.
+	strictKey := rel.FuncDeps.ColsAreStrictKey(indexCols)
+	weakKeyNonNull := rel.FuncDeps.ColsAreLaxKey(indexCols) && indexCols.SubsetOf(rel.NotNullCols)
+	if !strictKey && !weakKeyNonNull {
 		return false
 	}
 

@@ -1096,6 +1096,8 @@ func (dsp *DistSQLPlanner) createTableReaders(
 			tr.Spans = append(tr.Spans, distsqlrun.TableReaderSpan{Span: sp.Spans[j]})
 		}
 
+		tr.AllPointSpans = n.allPointSpans
+
 		proc := distsqlplan.Processor{
 			Node: sp.Node,
 			Spec: distsqlrun.ProcessorSpec{

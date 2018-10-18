@@ -231,13 +231,15 @@ func (p *planner) selectIndex(
 	s.specifiedIndex = nil
 	s.run.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
 
+	constraint := c.ic.Constraint()
+
 	var err error
 	s.spans, err = spansFromConstraint(
-		s.desc, c.index, c.ic.Constraint(), s.valNeededForCol, s.isDeleteSource)
+		s.desc, c.index, constraint, s.valNeededForCol, s.isDeleteSource)
 	if err != nil {
 		return nil, errors.Wrapf(
 			err, "constraint = %s, table ID = %d, index ID = %d",
-			c.ic.Constraint(), s.desc.ID, s.index.ID,
+			constraint, s.desc.ID, s.index.ID,
 		)
 	}
 
@@ -262,6 +264,7 @@ func (p *planner) selectIndex(
 	s.filterVars.Rebind(s.filter, true, false)
 
 	s.reverse = c.reverse
+	s.allPointSpans = allPointSpans(constraint, c.desc, c.index, p.EvalContext())
 
 	var plan planNode
 	if c.covering {
@@ -285,6 +288,55 @@ func (p *planner) selectIndex(
 	}
 
 	return plan, nil
+}
+
+// allPointSpans returns true if the constraint only contains spans that can
+// return at most one row apiece. This is a duplicate of the method
+// Builder.indexConstraintAllPointSpans in the execbuilder package - this exists
+// so that the heuristic planner, which plans mutations, can still detect this
+// condition.
+func allPointSpans(
+	c *constraint.Constraint, t *sqlbase.TableDescriptor, i *sqlbase.IndexDescriptor, evalCtx *tree.EvalContext,
+) bool {
+	if c == nil || c.IsContradiction() || c.IsUnconstrained() {
+		return false
+	}
+	if !i.Unique {
+		return false
+	}
+	// We have point spans when both of the following are satisfied:
+	//  1. The index is unique.
+	//  2. All indexed columns are not null.
+	//  2. All spans have equal start and end keys and cover all the columns of
+	//     the index.
+	numCols := c.Columns.Count()
+	if numCols < len(i.ColumnIDs) {
+		// Not all cols specified.
+		return false
+	}
+
+	var indexCols opt.ColSet
+	for _, id := range i.ColumnIDs {
+		col, err := t.FindColumnByID(id)
+		if err != nil {
+			return false
+		}
+		if col.Nullable {
+			return false
+		}
+		indexCols.Add(int(id))
+	}
+
+	for i := 0; i < numCols; i++ {
+		if !indexCols.Contains(int(c.Columns.Get(i))) {
+			return false
+		}
+	}
+
+	// Check if the longest prefix of columns for which all the spans have the
+	// same start and end values covers all columns.
+	prefix := c.Prefix(evalCtx)
+	return prefix == numCols
 }
 
 type indexInfo struct {
