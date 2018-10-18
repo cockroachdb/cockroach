@@ -20,6 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // Constraint specifies the possible set of values that one or more columns
@@ -563,4 +565,70 @@ func (c *Constraint) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {
 	// All spans constrain col to be not-null.
 	res.Add(int(col.ID()))
 	return res
+}
+
+// CalculateMaxResults returns a non-zero integer indicating the maximum number
+// of results that can be read from indexCols by using c.Spans. The indexCols
+// are assumed to form at least a weak key.
+// If 0 is returned, the maximum number of results could not be deduced.
+// We can calculate the maximum number of results when both of the following
+// are satisfied:
+//  1. The index columns form a weak key (assumption), and the spans do not
+//     specify any nulls.
+//  2. All spans cover all the columns of the index and have equal start and
+//     end keys up to but not necessarily including the last column.
+// TODO(asubiotto): The only reason to extract this is that both the heuristic
+// planner and optimizer need this logic, due to the heuristic planner planning
+// mutations. Once the optimizer plans mutations, this method can go away.
+func (c *Constraint) CalculateMaxResults(
+	evalCtx *tree.EvalContext, indexCols util.FastIntSet, notNullCols util.FastIntSet,
+) uint64 {
+	// Ensure that if we have nullable columns, we are only reading non-null
+	// values, given that a unique index allows an arbitrary number of duplicate
+	// entries if they have NULLs.
+	if !indexCols.SubsetOf(notNullCols.Union(c.ExtractNotNullCols(evalCtx))) {
+		return 0
+	}
+
+	numCols := c.Columns.Count()
+
+	// Check if the longest prefix of columns for which all the spans have the
+	// same start and end values covers all columns.
+	prefix := c.Prefix(evalCtx)
+	distinctVals := uint64(1)
+	if prefix < numCols-1 {
+		return 0
+	} else if prefix == numCols-1 {
+		// If the prefix does not include the last column, calculate the number of
+		// distinct values possible in the span. This is only supported for int
+		// types.
+		for i := 0; i < c.Spans.Count(); i++ {
+			sp := c.Spans.Get(i)
+			start := sp.StartKey()
+			end := sp.EndKey()
+
+			// Ensure that the keys specify the last column.
+			if start.Length() != numCols || end.Length() != numCols {
+				return 0
+			}
+
+			// TODO(asubiotto): This logic is very similar to
+			// updateDistinctCountsFromConstraint. It would be nice to extract this
+			// logic somewhere.
+			colIdx := numCols - 1
+			if start.Value(colIdx).ResolvedType() != types.Int || end.Value(colIdx).ResolvedType() != types.Int {
+				return 0
+			}
+			startVal := int(*start.Value(colIdx).(*tree.DInt))
+			endVal := int(*end.Value(colIdx).(*tree.DInt))
+			if c.Columns.Get(colIdx).Ascending() {
+				distinctVals += uint64(endVal - startVal)
+			} else {
+				distinctVals += uint64(startVal - endVal)
+			}
+		}
+	} else {
+		distinctVals = uint64(c.Spans.Count())
+	}
+	return distinctVals
 }
