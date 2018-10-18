@@ -224,6 +224,10 @@ message TableReaderSpec {
   // consumer of this TableReader expects to be able to see in-progress schema
   // changes.
   optional ScanVisibility visibility = 7 [(gogoproto.nullable) = false];
+
+  // If non-zero, this is a guarantee for the upper bound of rows a TableReader
+  // will read. If 0, the number of results is unbounded.
+  optional uint64 max_results = 8 [(gogoproto.nullable) = false];
 }
 
 // JoinReaderSpec is the specification for a "join reader". A join reader

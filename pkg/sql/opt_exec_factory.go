@@ -96,6 +96,8 @@ func (ef *execFactory) ConstructScan(
 	scan.run.isSecondaryIndex = (indexDesc != &tabDesc.PrimaryIndex)
 	scan.hardLimit = hardLimit
 	scan.reverse = reverse
+	scan.maxResults = maxResults
+	scan.parallelScansEnabled = sqlbase.ParallelScans.Get(&ef.planner.extendedEvalCtx.Settings.SV)
 	var err error
 	scan.spans, err = spansFromConstraint(
 		tabDesc, indexDesc, indexConstraint, cols, scan.isDeleteSource)

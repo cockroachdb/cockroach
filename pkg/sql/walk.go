@@ -185,6 +185,13 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 					spans = "ALL"
 				}
 				v.observer.attr(name, "spans", spans)
+				// Only print out "parallel" when it makes sense. i.e. don't print if
+				// we know we will get only one result from the scan. There are cases
+				// in which "parallel" will be printed out even though the spans cover
+				// a single range, but there is nothing we can do about that.
+				if n.canParallelize() && (len(n.spans) > 1 || n.maxResults > 1) {
+					v.observer.attr(name, "parallel", "")
+				}
 			}
 			if n.hardLimit > 0 && isFilterTrue(n.filter) {
 				v.observer.attr(name, "limit", fmt.Sprintf("%d", n.hardLimit))
