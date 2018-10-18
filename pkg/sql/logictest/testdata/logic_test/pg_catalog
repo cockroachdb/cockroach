@@ -1624,3 +1624,61 @@ query OT
 SELECT typ.oid, typ.typname FROM pg_attribute att JOIN pg_type typ ON atttypid=typ.oid WHERE attrelid='coltab'::regclass AND attname='a'
 ----
 25 text
+
+subtest 31545
+
+# Test an index of 2 referencing an index of 2.
+statement ok
+CREATE TABLE a (
+  id_a_1 INT UNIQUE,
+  id_a_2 INT,
+  PRIMARY KEY (id_a_1, id_a_2)
+)
+
+statement ok
+CREATE TABLE b (
+  id_b_1 INT,
+  id_b_2 INT,
+  PRIMARY KEY (id_b_1, id_b_2),
+  CONSTRAINT my_fkey FOREIGN KEY (id_b_1, id_b_2) REFERENCES a (id_a_1, id_a_2)
+)
+
+query TT colnames
+SELECT conkey, confkey FROM pg_catalog.pg_constraint WHERE conname = 'my_fkey'
+----
+conkey  confkey
+{1,2}   {1,2}
+
+# Test an index of 3 referencing an index of 2.
+statement ok
+DROP TABLE b;
+CREATE TABLE b (
+  id_b_1 INT,
+  id_b_2 INT,
+  id_b_3 INT,
+  PRIMARY KEY (id_b_1, id_b_2, id_b_3),
+  CONSTRAINT my_fkey FOREIGN KEY (id_b_1, id_b_2) REFERENCES a (id_a_1, id_a_2)
+)
+
+query TT colnames
+SELECT conkey, confkey FROM pg_catalog.pg_constraint WHERE conname = 'my_fkey'
+----
+conkey  confkey
+{1,2}   {1,2}
+
+# Test an index of 3 referencing an index of 1.
+statement ok
+DROP TABLE b;
+CREATE TABLE b (
+  id_b_1 INT,
+  id_b_2 INT,
+  id_b_3 INT,
+  PRIMARY KEY (id_b_1, id_b_2, id_b_3),
+  CONSTRAINT my_fkey FOREIGN KEY (id_b_1) REFERENCES a (id_a_1)
+)
+
+query TT colnames
+SELECT conkey, confkey FROM pg_catalog.pg_constraint WHERE conname = 'my_fkey'
+----
+conkey  confkey
+{1}     {1}

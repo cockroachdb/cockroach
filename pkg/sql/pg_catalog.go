@@ -680,7 +680,11 @@ CREATE TABLE pg_catalog.pg_constraint (
 					confupdtype = fkActionNone
 					confdeltype = fkActionNone
 					confmatchtype = fkMatchTypeSimple
-					if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
+					columnIDs := con.Index.ColumnIDs
+					if con.FK.SharedPrefixLen < int32(len(columnIDs)) {
+						columnIDs = columnIDs[:con.FK.SharedPrefixLen]
+					}
+					if conkey, err = colIDArrayToDatum(columnIDs); err != nil {
 						return err
 					}
 					if confkey, err = colIDArrayToDatum(con.ReferencedIndex.ColumnIDs); err != nil {
