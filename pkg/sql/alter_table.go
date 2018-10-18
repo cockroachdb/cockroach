@@ -49,12 +49,7 @@ type alterTableNode struct {
 //   notes: postgres requires CREATE on the table.
 //          mysql requires ALTER, CREATE, INSERT on the table.
 func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode, error) {
-	tn, err := n.Table.Normalize()
-	if err != nil {
-		return nil, err
-	}
-
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, tn, !n.IfExists, requireTableDesc)
+	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &n.Table, !n.IfExists, requireTableDesc)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +91,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 	descriptorChanged := false
 	origNumMutations := len(n.tableDesc.Mutations)
 	var droppedViews []string
-	tn := n.n.Table.TableName()
+	tn := &n.n.Table
 
 	for i, cmd := range n.n.Cmds {
 		switch t := cmd.(type) {
@@ -218,12 +213,8 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 			case *tree.CheckConstraintTableDef:
-				tableName, err := n.n.Table.Normalize()
-				if err != nil {
-					return err
-				}
 				ck, err := MakeCheckConstraint(params.ctx,
-					*n.tableDesc, d, inuseNames, &params.p.semaCtx, params.EvalContext(), *tableName)
+					*n.tableDesc, d, inuseNames, &params.p.semaCtx, params.EvalContext(), n.n.Table)
 				if err != nil {
 					return err
 				}
@@ -627,7 +618,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			User                string
 			MutationID          uint32
 			CascadeDroppedViews []string
-		}{n.n.Table.TableName().FQString(), n.n.String(),
+		}{n.n.Table.FQString(), n.n.String(),
 			params.SessionData().User, uint32(mutationID), droppedViews},
 	)
 }

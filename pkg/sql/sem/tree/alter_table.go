@@ -21,7 +21,7 @@ import (
 // AlterTable represents an ALTER TABLE statement.
 type AlterTable struct {
 	IfExists bool
-	Table    NormalizableTableName
+	Table    TableName
 	Cmds     AlterTableCmds
 }
 

@@ -299,7 +299,7 @@ func readPostgresCreateTable(
 		}
 		switch stmt := stmt.(type) {
 		case *tree.CreateTable:
-			name, err := getTableName(stmt.Table)
+			name, err := getTableName2(stmt.Table)
 			if err != nil {
 				return nil, err
 			}
@@ -309,7 +309,7 @@ func readPostgresCreateTable(
 				createTbl[name] = stmt
 			}
 		case *tree.CreateIndex:
-			name, err := getTableName(stmt.Table)
+			name, err := getTableName2(stmt.Table)
 			if err != nil {
 				return nil, err
 			}
@@ -330,7 +330,7 @@ func readPostgresCreateTable(
 			}
 			create.Defs = append(create.Defs, idx)
 		case *tree.AlterTable:
-			name, err := getTableName(stmt.Table)
+			name, err := getTableName(&stmt.Table)
 			if err != nil {
 				return nil, err
 			}
@@ -365,7 +365,7 @@ func readPostgresCreateTable(
 				}
 			}
 		case *tree.CreateSequence:
-			name, err := getTableName(stmt.Name)
+			name, err := getTableName2(stmt.Name)
 			if err != nil {
 				return nil, err
 			}
@@ -376,11 +376,16 @@ func readPostgresCreateTable(
 	}
 }
 
-func getTableName(n tree.NormalizableTableName) (string, error) {
+// TODO(radu): this is temporary until we remove NormalizableTableName.
+func getTableName2(n tree.NormalizableTableName) (string, error) {
 	tn, err := n.Normalize()
 	if err != nil {
 		return "", err
 	}
+	return getTableName(tn)
+}
+
+func getTableName(tn *tree.TableName) (string, error) {
 	if sc := tn.Schema(); sc != "" && sc != "public" {
 		return "", pgerror.Unimplemented(
 			"import non-public schema",
@@ -451,7 +456,7 @@ func (m *pgDumpReader) readFile(
 			if !ok {
 				return errors.Errorf("unexpected: %T", i.Table)
 			}
-			name, err := getTableName(*n)
+			name, err := getTableName2(*n)
 			if err != nil {
 				return errors.Wrapf(err, "%s", i)
 			}
@@ -495,7 +500,7 @@ func (m *pgDumpReader) readFile(
 			if !i.Stdin {
 				return errors.New("expected STDIN option on COPY FROM")
 			}
-			name, err := getTableName(i.Table)
+			name, err := getTableName2(i.Table)
 			if err != nil {
 				return errors.Wrapf(err, "%s", i)
 			}

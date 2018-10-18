@@ -100,6 +100,9 @@ func (t *TableName) Table() string {
 	return string(t.TableName)
 }
 
+// tableExpr implements the TableExpr interface.
+func (*TableName) tableExpr() {}
+
 // MakeTableName creates a new table name qualified with just a schema.
 func MakeTableName(db, tbl Name) TableName {
 	return TableName{tblName{

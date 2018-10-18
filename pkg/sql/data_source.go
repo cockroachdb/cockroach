@@ -106,10 +106,18 @@ func (p *planner) getDataSource(
 	scanVisibility scanVisibility,
 ) (planDataSource, error) {
 	switch t := src.(type) {
-	case *tree.NormalizableTableName:
-		tn, err := t.Normalize()
-		if err != nil {
-			return planDataSource{}, err
+	case *tree.NormalizableTableName, *tree.TableName:
+
+		var tn *tree.TableName
+		switch t := src.(type) {
+		case *tree.NormalizableTableName:
+			var err error
+			tn, err = t.Normalize()
+			if err != nil {
+				return planDataSource{}, err
+			}
+		case *tree.TableName:
+			tn = t
 		}
 
 		// If there's a CTE with this name, it takes priority over the normal flow.
