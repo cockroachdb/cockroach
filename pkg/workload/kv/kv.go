@@ -35,7 +35,15 @@ import (
 )
 
 const (
-	kvSchema = `(k BIGINT NOT NULL PRIMARY KEY, v BYTES NOT NULL)`
+	kvSchema = `(
+		k BIGINT NOT NULL PRIMARY KEY,
+		v BYTES NOT NULL
+	)`
+	kvSchemaWithIndex = `(
+		k BIGINT NOT NULL PRIMARY KEY,
+		v BYTES NOT NULL,
+		INDEX (v)
+	)`
 )
 
 type kv struct {
@@ -50,6 +58,7 @@ type kv struct {
 	writeSeq                             string
 	sequential                           bool
 	splits                               int
+	secondaryIndex                       bool
 	useOpt                               bool
 }
 
@@ -96,6 +105,8 @@ var kvMeta = workload.Meta{
 				`previous --sequential run and R implies a previous random run.`)
 		g.flags.IntVar(&g.splits, `splits`, 0,
 			`Number of splits to perform before starting normal operations.`)
+		g.flags.BoolVar(&g.secondaryIndex, `secondary-index`, false,
+			`Add a secondary index to the schema`)
 		g.flags.BoolVar(&g.useOpt, `use-opt`, true, `Use cost-based optimizer`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
@@ -127,8 +138,7 @@ func (w *kv) Hooks() workload.Hooks {
 // Tables implements the Generator interface.
 func (w *kv) Tables() []workload.Table {
 	table := workload.Table{
-		Name:   `kv`,
-		Schema: kvSchema,
+		Name: `kv`,
 		// TODO(dan): Support initializing kv with data.
 		Splits: workload.Tuples(
 			w.splits,
@@ -138,6 +148,11 @@ func (w *kv) Tables() []workload.Table {
 				return []interface{}{splitPoint}
 			},
 		),
+	}
+	if w.secondaryIndex {
+		table.Schema = kvSchemaWithIndex
+	} else {
+		table.Schema = kvSchema
 	}
 	return []workload.Table{table}
 }
