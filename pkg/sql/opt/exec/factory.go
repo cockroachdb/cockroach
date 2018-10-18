@@ -53,6 +53,8 @@ type Factory interface {
 	//     in the constraint.
 	//   - If hardLimit > 0, then only up to hardLimit rows can be returned from
 	//     the scan.
+	//
+	// maxResultHint may be 0 if the maximum number of results is unknown.
 	ConstructScan(
 		table opt.Table,
 		index opt.Index,
@@ -60,6 +62,7 @@ type Factory interface {
 		indexConstraint *constraint.Constraint,
 		hardLimit int64,
 		reverse bool,
+		maxResultHint uint64,
 		reqOrdering OutputOrdering,
 	) (Node, error)
 
