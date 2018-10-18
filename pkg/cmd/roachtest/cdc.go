@@ -107,7 +107,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		})
 	}
 
-	verifierLogger, err := c.l.ChildLogger("verifier")
+	verifierLogger, err := t.l.ChildLogger("verifier")
 	if err != nil {
 		t.Fatal(err)
 	}
