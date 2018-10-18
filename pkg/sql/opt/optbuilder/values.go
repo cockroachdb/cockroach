@@ -38,11 +38,7 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 	for i := range colTypes {
 		colTypes[i] = types.Unknown
 	}
-	rows := make([]memo.GroupID, 0, len(values.Rows))
-
-	// elems is used to store tuple values, and can be allocated once and reused
-	// repeatedly, since InternList will copy values to memo storage.
-	elems := make([]memo.GroupID, numCols)
+	rows := make(memo.ScalarListExpr, 0, len(values.Rows))
 
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called within a subquery
@@ -61,6 +57,7 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 				numCols, len(tuple))})
 		}
 
+		elems := make(memo.ScalarListExpr, numCols)
 		for i, expr := range tuple {
 			texpr := inScope.resolveType(expr, types.Any)
 			typ := texpr.ResolvedType()
@@ -75,21 +72,17 @@ func (b *Builder) buildValuesClause(values *tree.ValuesClause, inScope *scope) (
 			}
 		}
 
-		rows = append(rows, b.factory.ConstructTuple(
-			b.factory.InternList(elems), b.factory.InternType(types.TTuple{Types: colTypes})),
-		)
+		rows = append(rows, b.factory.ConstructTuple(elems, types.TTuple{Types: colTypes}))
 	}
 
 	outScope = inScope.push()
 	for i := 0; i < numCols; i++ {
 		// The column names for VALUES are column1, column2, etc.
 		label := fmt.Sprintf("column%d", i+1)
-		b.synthesizeColumn(outScope, label, colTypes[i], nil, 0 /* group */)
+		b.synthesizeColumn(outScope, label, colTypes[i], nil, nil /* scalar */)
 	}
 
 	colList := colsToColList(outScope.cols)
-	outScope.group = b.factory.ConstructValues(
-		b.factory.InternList(rows), b.factory.InternColList(colList),
-	)
+	outScope.expr = b.factory.ConstructValues(rows, colList)
 	return outScope
 }

@@ -31,8 +31,8 @@ type srf struct {
 	// cols contains the output columns of the srf.
 	cols []scopeColumn
 
-	// group is the top level memo GroupID of the srf.
-	group memo.GroupID
+	// fn is the top level function expression of the srf.
+	fn opt.ScalarExpr
 }
 
 // Walk is part of the tree.Expr interface.
@@ -83,7 +83,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 	inScope.context = "FROM"
 
 	// Build each of the provided expressions.
-	elems := make([]memo.GroupID, len(exprs))
+	funcs := make(memo.ScalarListExpr, len(exprs))
 	for i, expr := range exprs {
 		// Output column names should exactly match the original expression, so we
 		// have to determine the output column name before we perform type
@@ -103,18 +103,15 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 			outCol = b.addColumn(outScope, label, texpr.ResolvedType(), texpr)
 		}
 
-		elems[i] = b.buildScalar(texpr, inScope, outScope, outCol, nil)
+		funcs[i] = b.buildScalar(texpr, inScope, outScope, outCol, nil)
 	}
 
 	// Get the output columns of the Zip operation and construct the Zip.
-	colList := make(opt.ColList, len(outScope.cols))
-	for i := 0; i < len(colList); i++ {
-		colList[i] = outScope.cols[i].id
+	cols := make(opt.ColList, len(outScope.cols))
+	for i := 0; i < len(cols); i++ {
+		cols[i] = outScope.cols[i].id
 	}
-	outScope.group = b.factory.ConstructZip(
-		b.factory.InternList(elems), b.factory.InternColList(colList),
-	)
-
+	outScope.expr = b.factory.ConstructZip(funcs, cols)
 	return outScope
 }
 
@@ -122,23 +119,23 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 // (SRF) such as generate_series() or unnest(). It synthesizes new columns in
 // outScope for each of the SRF's output columns.
 func (b *Builder) finishBuildGeneratorFunction(
-	f *tree.FuncExpr, group memo.GroupID, columns int, inScope, outScope *scope, outCol *scopeColumn,
-) (out memo.GroupID) {
+	f *tree.FuncExpr, fn opt.ScalarExpr, columns int, inScope, outScope *scope, outCol *scopeColumn,
+) (out opt.ScalarExpr) {
 	// Add scope columns.
 	if columns == 1 {
 		// Single-column return type.
-		b.populateSynthesizedColumn(outCol, group)
+		b.populateSynthesizedColumn(outCol, fn)
 	} else {
 		// Multi-column return type. Use the tuple labels in the SRF's return type
 		// as column labels.
 		typ := f.ResolvedType()
 		tType := typ.(types.TTuple)
 		for i := range tType.Types {
-			b.synthesizeColumn(outScope, tType.Labels[i], tType.Types[i], nil, group)
+			b.synthesizeColumn(outScope, tType.Labels[i], tType.Types[i], nil, fn)
 		}
 	}
 
-	return group
+	return fn
 }
 
 // constructProjectSet constructs a lateral cross join between the given input
@@ -157,20 +154,17 @@ func (b *Builder) finishBuildGeneratorFunction(
 //
 // If the SRFs do not depend on the input, then the optimizer will replace the
 // apply join with a regular inner join during optimization.
-func (b *Builder) constructProjectSet(in memo.GroupID, srfs []*srf) memo.GroupID {
+func (b *Builder) constructProjectSet(in memo.RelExpr, srfs []*srf) memo.RelExpr {
 	// Get the output columns and GroupIDs of the Zip operation.
-	colList := make(opt.ColList, 0, len(srfs))
-	elems := make([]memo.GroupID, len(srfs))
+	cols := make(opt.ColList, 0, len(srfs))
+	funcs := make(memo.ScalarListExpr, len(srfs))
 	for i, srf := range srfs {
 		for _, col := range srf.cols {
-			colList = append(colList, col.id)
+			cols = append(cols, col.id)
 		}
-		elems[i] = srf.group
+		funcs[i] = srf.fn
 	}
 
-	zip := b.factory.ConstructZip(
-		b.factory.InternList(elems), b.factory.InternColList(colList),
-	)
-
-	return b.factory.ConstructInnerJoinApply(in, zip, b.factory.ConstructTrue())
+	zip := b.factory.ConstructZip(funcs, cols)
+	return b.factory.ConstructInnerJoinApply(in, zip, memo.TrueFilter)
 }

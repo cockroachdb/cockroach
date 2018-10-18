@@ -24,5 +24,5 @@ select
  │    ├── columns: catalog_name:1(string) schema_name:2(string) default_character_set_name:3(string) sql_path:4(string)
  │    ├── stats: [rows=1000, distinct(2)=100]
  │    └── cost: 10
- └── filters [type=bool, outer=(2), constraints=(/2: [/'public' - /'public']; tight), fd=()-->(2)]
-      └── schema_name = 'public' [type=bool, outer=(2), constraints=(/2: [/'public' - /'public']; tight)]
+ └── filters
+      └── schema_name = 'public' [type=bool, outer=(2), constraints=(/2: [/'public' - /'public']; tight), fd=()-->(2)]

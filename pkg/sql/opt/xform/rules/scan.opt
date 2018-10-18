@@ -6,4 +6,4 @@
 # GenerateIndexScans creates alternate Scan expressions for each secondary index
 # on the scanned table.
 [GenerateIndexScans, Explore]
-(Scan $def:* & (IsCanonicalScan $def)) => (GenerateIndexScans $def)
+(Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate)) => (GenerateIndexScans $scanPrivate)

@@ -103,7 +103,7 @@ select
  ├── scan a
  │    ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
  │    └── ordering: +1,-2
- └── filters [type=bool]
+ └── filters
       └── x > y [type=bool]
 
 # Pass through ordering to scan operator that can't support it.
@@ -117,7 +117,7 @@ sort
       ├── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
       ├── scan a
       │    └── columns: x:1(int!null) y:2(float!null) z:3(decimal) s:4(string!null)
-      └── filters [type=bool]
+      └── filters
            └── x > y [type=bool]
 
 # --------------------------------------------------
@@ -182,7 +182,7 @@ project
  │    ├── scan a
  │    │    ├── columns: x:1(int!null) y:2(float!null)
  │    │    └── ordering: +1,-2
- │    └── filters [type=bool]
+ │    └── filters
  │         └── x > y [type=bool]
  └── projections
       └── x - 1 [type=int]
@@ -190,34 +190,25 @@ project
 memo
 SELECT y, x-1 AS z FROM a WHERE x>y ORDER BY x, y DESC
 ----
-memo (optimized, ~8KB)
- ├── G1: (project G2 G3)
- │    ├── "[presentation: y:2,z:5] [ordering: +1,-2]"
- │    │    ├── best: (project G2="[ordering: +1,-2]" G3)
- │    │    └── cost: 1076.67
- │    └── ""
- │         ├── best: (project G2 G3)
+memo (optimized, ~4KB)
+ ├── G1: (project G2 G3 x y)
+ │    └── [presentation: y:2,z:5] [ordering: +1,-2]
+ │         ├── best: (project G2="[ordering: +1,-2]" G3 x y)
  │         └── cost: 1076.67
  ├── G2: (select G4 G5)
- │    ├── ""
- │    │    ├── best: (select G4 G5)
- │    │    └── cost: 1070.00
- │    └── "[ordering: +1,-2]"
+ │    └── [ordering: +1,-2]
  │         ├── best: (select G4="[ordering: +1,-2]" G5)
  │         └── cost: 1070.00
- ├── G3: (projections G6 x y)
+ ├── G3: (projections G6)
  ├── G4: (scan a,cols=(1,2))
- │    ├── ""
- │    │    ├── best: (scan a,cols=(1,2))
- │    │    └── cost: 1060.00
- │    └── "[ordering: +1,-2]"
+ │    └── [ordering: +1,-2]
  │         ├── best: (scan a,cols=(1,2))
  │         └── cost: 1060.00
  ├── G5: (filters G7)
- ├── G6: (minus G9 G8)
- ├── G7: (gt G9 G10)
- ├── G8: (const 1)
- ├── G9: (variable x)
+ ├── G6: (minus G8 G9)
+ ├── G7: (gt G8 G10)
+ ├── G8: (variable x)
+ ├── G9: (const 1)
  └── G10: (variable y)
 
 # Pass through ordering to scan operator that can't support it.
@@ -233,35 +224,29 @@ sort
            ├── columns: x:1(int!null) y:2(float!null) z:3(decimal)
            ├── scan a
            │    └── columns: x:1(int!null) y:2(float!null) z:3(decimal)
-           └── filters [type=bool]
+           └── filters
                 └── x > y [type=bool]
 
 memo
 SELECT y, z FROM a WHERE x>y ORDER BY y
 ----
-memo (optimized, ~6KB)
- ├── G1: (project G2 G3)
- │    ├── "[presentation: y:2,z:3] [ordering: +2]"
+memo (optimized, ~4KB)
+ ├── G1: (project G2 G3 y z)
+ │    ├── [presentation: y:2,z:3] [ordering: +2]
  │    │    ├── best: (sort G1)
  │    │    └── cost: 1142.54
- │    └── ""
- │         ├── best: (project G2 G3)
+ │    └── []
+ │         ├── best: (project G2 G3 y z)
  │         └── cost: 1083.33
  ├── G2: (select G4 G5)
- │    ├── ""
- │    │    ├── best: (select G4 G5)
- │    │    └── cost: 1080.00
- │    └── "[ordering: +2]"
- │         ├── best: (sort G2)
- │         └── cost: 1139.21
- ├── G3: (projections y z)
+ │    └── []
+ │         ├── best: (select G4 G5)
+ │         └── cost: 1080.00
+ ├── G3: (projections)
  ├── G4: (scan a,cols=(1-3))
- │    ├── ""
- │    │    ├── best: (scan a,cols=(1-3))
- │    │    └── cost: 1070.00
- │    └── "[ordering: +2]"
- │         ├── best: (sort G4)
- │         └── cost: 1279.32
+ │    └── []
+ │         ├── best: (scan a,cols=(1-3))
+ │         └── cost: 1070.00
  ├── G5: (filters G6)
  ├── G6: (gt G7 G8)
  ├── G7: (variable x)
@@ -438,16 +423,16 @@ EXPLAIN (VERBOSE) SELECT * FROM a ORDER BY y
 ----
 memo (optimized, ~1KB)
  ├── G1: (explain G2 [presentation: x:1,y:2,z:3,s:4] [ordering: +2])
- │    └── "[presentation: tree:5,field:8,description:9,columns:10,ordering:11]"
+ │    └── [presentation: tree:5,field:8,description:9,columns:10,ordering:11]
  │         ├── best: (explain G2="[presentation: x:1,y:2,z:3,s:4] [ordering: +2]" [presentation: x:1,y:2,z:3,s:4] [ordering: +2])
  │         └── cost: 1289.32
  └── G2: (scan a)
-      ├── ""
-      │    ├── best: (scan a)
-      │    └── cost: 1080.00
-      └── "[presentation: x:1,y:2,z:3,s:4] [ordering: +2]"
-           ├── best: (sort G2)
-           └── cost: 1289.32
+      ├── [presentation: x:1,y:2,z:3,s:4] [ordering: +2]
+      │    ├── best: (sort G2)
+      │    └── cost: 1289.32
+      └── []
+           ├── best: (scan a)
+           └── cost: 1080.00
 
 # --------------------------------------------------
 # With Ordinality
@@ -458,35 +443,32 @@ SELECT y FROM a WITH ORDINALITY ORDER BY ordinality
 ----
 memo (optimized, ~3KB)
  ├── G1: (row-number G2)
- │    ├── "[presentation: y:2] [ordering: +5]"
- │    │    ├── best: (row-number G2)
- │    │    └── cost: 1060.00
- │    └── ""
+ │    └── [presentation: y:2] [ordering: +5]
  │         ├── best: (row-number G2)
  │         └── cost: 1060.00
  └── G2: (scan a,cols=(2))
-      └── ""
+      └── []
            ├── best: (scan a,cols=(2))
            └── cost: 1050.00
 
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY -ordinality
 ----
-memo (optimized, ~5KB)
- ├── G1: (project G2 G3)
- │    ├── "[presentation: y:2] [ordering: +6]"
+memo (optimized, ~4KB)
+ ├── G1: (project G2 G3 y)
+ │    ├── [presentation: y:2] [ordering: +6]
  │    │    ├── best: (sort G1)
  │    │    └── cost: 1289.32
- │    └── ""
- │         ├── best: (project G2 G3)
+ │    └── []
+ │         ├── best: (project G2 G3 y)
  │         └── cost: 1080.00
  ├── G2: (row-number G4)
- │    └── ""
+ │    └── []
  │         ├── best: (row-number G4)
  │         └── cost: 1060.00
- ├── G3: (projections G5 y)
+ ├── G3: (projections G5)
  ├── G4: (scan a,cols=(2))
- │    └── ""
+ │    └── []
  │         ├── best: (scan a,cols=(2))
  │         └── cost: 1050.00
  ├── G5: (unary-minus G6)
@@ -497,14 +479,11 @@ SELECT y FROM a WITH ORDINALITY ORDER BY ordinality, x
 ----
 memo (optimized, ~5KB)
  ├── G1: (row-number G2)
- │    ├── "[presentation: y:2] [ordering: +5]"
- │    │    ├── best: (row-number G2)
- │    │    └── cost: 1060.00
- │    └── ""
+ │    └── [presentation: y:2] [ordering: +5]
  │         ├── best: (row-number G2)
  │         └── cost: 1060.00
  └── G2: (scan a,cols=(2))
-      └── ""
+      └── []
            ├── best: (scan a,cols=(2))
            └── cost: 1050.00
 
@@ -513,52 +492,46 @@ SELECT y FROM (SELECT * FROM a ORDER BY y) WITH ORDINALITY ORDER BY y, ordinalit
 ----
 memo (optimized, ~3KB)
  ├── G1: (row-number G2 ordering=+2)
- │    ├── "[presentation: y:2] [ordering: +2,+5]"
- │    │    ├── best: (row-number G2="[ordering: +2]" ordering=+2)
- │    │    └── cost: 1269.32
- │    └── ""
+ │    └── [presentation: y:2] [ordering: +2,+5]
  │         ├── best: (row-number G2="[ordering: +2]" ordering=+2)
  │         └── cost: 1269.32
  └── G2: (scan a,cols=(2))
-      ├── ""
-      │    ├── best: (scan a,cols=(2))
-      │    └── cost: 1050.00
-      └── "[ordering: +2]"
-           ├── best: (sort G2)
-           └── cost: 1259.32
+      ├── [ordering: +2]
+      │    ├── best: (sort G2)
+      │    └── cost: 1259.32
+      └── []
+           ├── best: (scan a,cols=(2))
+           └── cost: 1050.00
 
 memo
 SELECT y FROM (SELECT * FROM a ORDER BY y) WITH ORDINALITY ORDER BY ordinality, y
 ----
 memo (optimized, ~3KB)
  ├── G1: (row-number G2 ordering=+2)
- │    ├── "[presentation: y:2] [ordering: +5]"
- │    │    ├── best: (row-number G2="[ordering: +2]" ordering=+2)
- │    │    └── cost: 1269.32
- │    └── ""
+ │    └── [presentation: y:2] [ordering: +5]
  │         ├── best: (row-number G2="[ordering: +2]" ordering=+2)
  │         └── cost: 1269.32
  └── G2: (scan a,cols=(2))
-      ├── ""
-      │    ├── best: (scan a,cols=(2))
-      │    └── cost: 1050.00
-      └── "[ordering: +2]"
-           ├── best: (sort G2)
-           └── cost: 1259.32
+      ├── [ordering: +2]
+      │    ├── best: (sort G2)
+      │    └── cost: 1259.32
+      └── []
+           ├── best: (scan a,cols=(2))
+           └── cost: 1050.00
 
 memo
 SELECT y FROM a WITH ORDINALITY ORDER BY ordinality DESC
 ----
 memo (optimized, ~3KB)
  ├── G1: (row-number G2)
- │    ├── "[presentation: y:2] [ordering: -5]"
+ │    ├── [presentation: y:2] [ordering: -5]
  │    │    ├── best: (sort G1)
  │    │    └── cost: 1269.32
- │    └── ""
+ │    └── []
  │         ├── best: (row-number G2)
  │         └── cost: 1060.00
  └── G2: (scan a,cols=(2))
-      └── ""
+      └── []
            ├── best: (scan a,cols=(2))
            └── cost: 1050.00
 
@@ -571,6 +544,8 @@ SELECT * FROM abc JOIN xyz ON a=x ORDER BY a
 ----
 inner-join (merge)
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── left ordering: +1
+ ├── right ordering: +4
  ├── ordering: +(1|4)
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -578,16 +553,15 @@ inner-join (merge)
  ├── scan xyz
  │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
  │    └── ordering: +4
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +4
-      └── true [type=bool]
+ └── filters (true)
 
 opt
 SELECT * FROM abc JOIN xyz ON a=x ORDER BY x
 ----
 inner-join (merge)
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── left ordering: +1
+ ├── right ordering: +4
  ├── ordering: +(1|4)
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -595,10 +569,7 @@ inner-join (merge)
  ├── scan xyz
  │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
  │    └── ordering: +4
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +4
-      └── true [type=bool]
+ └── filters (true)
 
 # A left join guarantees an ordering on the left side.
 opt
@@ -606,6 +577,8 @@ SELECT * FROM abc LEFT JOIN xyz ON a=x ORDER BY a
 ----
 left-join (merge)
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int) y:5(int) z:6(int)
+ ├── left ordering: +1
+ ├── right ordering: +4
  ├── ordering: +1
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -613,10 +586,7 @@ left-join (merge)
  ├── scan xyz
  │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
  │    └── ordering: +4
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +4
-      └── true [type=bool]
+ └── filters (true)
 
 # A left join doesn't guarantee an ordering on x (some rows will have NULLs).
 opt
@@ -627,16 +597,15 @@ sort
  ├── ordering: +4
  └── left-join (merge)
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int) y:5(int) z:6(int)
+      ├── left ordering: +1
+      ├── right ordering: +4
       ├── scan abc
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       │    └── ordering: +1
       ├── scan xyz
       │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
       │    └── ordering: +4
-      └── merge-on
-           ├── left ordering: +1
-           ├── right ordering: +4
-           └── true [type=bool]
+      └── filters (true)
 
 # A right join doesn't guarantee an ordering on a (some rows will have NULLs).
 opt
@@ -647,22 +616,23 @@ sort
  ├── ordering: +1
  └── right-join (merge)
       ├── columns: a:1(int) b:2(int) c:3(int) x:4(int!null) y:5(int!null) z:6(int!null)
+      ├── left ordering: +1
+      ├── right ordering: +4
       ├── scan abc
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       │    └── ordering: +1
       ├── scan xyz
       │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
       │    └── ordering: +4
-      └── merge-on
-           ├── left ordering: +1
-           ├── right ordering: +4
-           └── true [type=bool]
+      └── filters (true)
 
 opt
 SELECT * FROM abc RIGHT JOIN xyz ON a=x ORDER BY x
 ----
 right-join (merge)
  ├── columns: a:1(int) b:2(int) c:3(int) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── left ordering: +1
+ ├── right ordering: +4
  ├── ordering: +4
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -670,10 +640,7 @@ right-join (merge)
  ├── scan xyz
  │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
  │    └── ordering: +4
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +4
-      └── true [type=bool]
+ └── filters (true)
 
 opt
 SELECT * FROM abc FULL OUTER JOIN xyz ON a=x ORDER BY a
@@ -683,22 +650,23 @@ sort
  ├── ordering: +1
  └── full-join (merge)
       ├── columns: a:1(int) b:2(int) c:3(int) x:4(int) y:5(int) z:6(int)
+      ├── left ordering: +1
+      ├── right ordering: +4
       ├── scan abc
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       │    └── ordering: +1
       ├── scan xyz
       │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
       │    └── ordering: +4
-      └── merge-on
-           ├── left ordering: +1
-           ├── right ordering: +4
-           └── true [type=bool]
+      └── filters (true)
 
 opt
 SELECT * FROM abc JOIN xyz ON a=x AND b=y ORDER BY a
 ----
 inner-join (merge)
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── left ordering: +1,+2
+ ├── right ordering: +4,+5
  ├── ordering: +(1|4)
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -706,16 +674,15 @@ inner-join (merge)
  ├── scan xyz
  │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
  │    └── ordering: +4,+5
- └── merge-on
-      ├── left ordering: +1,+2
-      ├── right ordering: +4,+5
-      └── true [type=bool]
+ └── filters (true)
 
 opt
 SELECT * FROM abc JOIN xyz ON a=x AND b=y ORDER BY a, b
 ----
 inner-join (merge)
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── left ordering: +1,+2
+ ├── right ordering: +4,+5
  ├── ordering: +(1|4),+(2|5)
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -723,16 +690,15 @@ inner-join (merge)
  ├── scan xyz
  │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
  │    └── ordering: +4,+5
- └── merge-on
-      ├── left ordering: +1,+2
-      ├── right ordering: +4,+5
-      └── true [type=bool]
+ └── filters (true)
 
 opt
 SELECT * FROM abc JOIN xyz ON a=x AND b=y ORDER BY a, y
 ----
 inner-join (merge)
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── left ordering: +1,+2
+ ├── right ordering: +4,+5
  ├── ordering: +(1|4),+(2|5)
  ├── scan abc
  │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
@@ -740,10 +706,7 @@ inner-join (merge)
  ├── scan xyz
  │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
  │    └── ordering: +4,+5
- └── merge-on
-      ├── left ordering: +1,+2
-      ├── right ordering: +4,+5
-      └── true [type=bool]
+ └── filters (true)
 
 # --------------------------------------------------
 # Limit / Offset
@@ -773,7 +736,7 @@ limit
  │    ├── scan abc
  │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  │    │    └── ordering: +1,+2
- │    └── filters [type=bool]
+ │    └── filters
  │         └── c < (a + b) [type=bool]
  └── const: 10 [type=int]
 
@@ -818,7 +781,7 @@ sort
       │    ├── scan abc
       │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       │    │    └── ordering: +1,+2
-      │    └── filters [type=bool]
+      │    └── filters
       │         └── c < (a + b) [type=bool]
       └── const: 10 [type=int]
 
@@ -861,7 +824,7 @@ limit
  │    ├── scan abc
  │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  │    │    └── ordering: +1,+2
- │    └── filters [type=bool]
+ │    └── filters
  │         └── c < (a + b) [type=bool]
  └── const: 10 [type=int]
 
@@ -901,7 +864,7 @@ limit
  │    ├── scan abc
  │    │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
  │    │    └── ordering: +1,+2,+3
- │    └── filters [type=bool]
+ │    └── filters
  │         └── c < (a + b) [type=bool]
  └── const: 10 [type=int]
 

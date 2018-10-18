@@ -335,6 +335,8 @@ const (
 	NumComparisonOperators
 )
 
+var _ = NumComparisonOperators
+
 var comparisonOpName = [...]string{
 	EQ:                "=",
 	LT:                "<",
@@ -963,6 +965,8 @@ const (
 	NumBinaryOperators
 )
 
+var _ = NumBinaryOperators
+
 var binaryOpName = [...]string{
 	Bitand:            "&",
 	Bitor:             "|",
@@ -1100,6 +1104,8 @@ const (
 
 	NumUnaryOperators
 )
+
+var _ = NumUnaryOperators
 
 var unaryOpName = [...]string{
 	UnaryMinus:      "-",

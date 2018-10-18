@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -62,20 +61,22 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 		outScope.appendColumnsFromScope(leftScope)
 		outScope.appendColumnsFromScope(rightScope)
 
-		var filter memo.GroupID
+		var filters memo.FiltersExpr
 		if on, ok := cond.(*tree.OnJoinCond); ok {
 			// Do not allow special functions in the ON clause.
 			b.semaCtx.Properties.Require("ON", tree.RejectSpecial)
 			outScope.context = "ON"
-			filter = b.buildScalar(
+			filter := b.buildScalar(
 				outScope.resolveAndRequireType(on.Expr, types.Bool), outScope, nil, nil, nil,
 			)
-			filter = b.factory.ConstructFilters(b.factory.InternList([]memo.GroupID{filter}))
+			filters = memo.FiltersExpr{{Condition: filter}}
 		} else {
-			filter = b.factory.ConstructTrue()
+			filters = memo.TrueFilter
 		}
 
-		outScope.group = b.constructJoin(joinType, leftScope.group, rightScope.group, filter)
+		left := leftScope.expr.(memo.RelExpr)
+		right := rightScope.expr.(memo.RelExpr)
+		outScope.expr = b.constructJoin(joinType, left, right, filters)
 		return outScope
 
 	default:
@@ -139,17 +140,17 @@ func (b *Builder) findJoinColsToValidate(scope *scope) util.FastIntSet {
 }
 
 func (b *Builder) constructJoin(
-	joinType sqlbase.JoinType, left, right, filter memo.GroupID,
-) memo.GroupID {
+	joinType sqlbase.JoinType, left, right memo.RelExpr, on memo.FiltersExpr,
+) memo.RelExpr {
 	switch joinType {
 	case sqlbase.InnerJoin:
-		return b.factory.ConstructInnerJoin(left, right, filter)
+		return b.factory.ConstructInnerJoin(left, right, on)
 	case sqlbase.LeftOuterJoin:
-		return b.factory.ConstructLeftJoin(left, right, filter)
+		return b.factory.ConstructLeftJoin(left, right, on)
 	case sqlbase.RightOuterJoin:
-		return b.factory.ConstructRightJoin(left, right, filter)
+		return b.factory.ConstructRightJoin(left, right, on)
 	case sqlbase.FullOuterJoin:
-		return b.factory.ConstructFullJoin(left, right, filter)
+		return b.factory.ConstructFullJoin(left, right, on)
 	default:
 		panic(fmt.Errorf("unsupported JOIN type %d", joinType))
 	}
@@ -218,8 +219,8 @@ func (b *Builder) constructJoin(
 //
 type usingJoinBuilder struct {
 	b          *Builder
-	lb         norm.ListBuilder
 	joinType   sqlbase.JoinType
+	filters    memo.FiltersExpr
 	leftScope  *scope
 	rightScope *scope
 	outScope   *scope
@@ -241,7 +242,6 @@ func (jb *usingJoinBuilder) init(
 	b *Builder, joinType sqlbase.JoinType, leftScope, rightScope, outScope *scope,
 ) {
 	jb.b = b
-	jb.lb = norm.MakeListBuilder(b.factory.CustomFuncs())
 	jb.joinType = joinType
 	jb.leftScope = leftScope
 	jb.rightScope = rightScope
@@ -308,11 +308,11 @@ func (jb *usingJoinBuilder) finishBuild() {
 	jb.addRemainingCols(jb.leftScope.cols)
 	jb.addRemainingCols(jb.rightScope.cols)
 
-	jb.outScope.group = jb.b.constructJoin(
+	jb.outScope.expr = jb.b.constructJoin(
 		jb.joinType,
-		jb.leftScope.group,
-		jb.rightScope.group,
-		jb.b.factory.ConstructFilters(jb.lb.BuildList()),
+		jb.leftScope.expr.(memo.RelExpr),
+		jb.rightScope.expr.(memo.RelExpr),
+		jb.filters,
 	)
 
 	if !jb.ifNullCols.Empty() {
@@ -322,11 +322,11 @@ func (jb *usingJoinBuilder) finishBuild() {
 			col := &jb.outScope.cols[i]
 			if !jb.ifNullCols.Contains(int(col.id)) {
 				// Mark column as passthrough.
-				col.group = 0
+				col.scalar = nil
 			}
 		}
 
-		jb.outScope.group = jb.b.constructProject(jb.outScope.group, jb.outScope.cols)
+		jb.outScope.expr = jb.b.constructProject(jb.outScope.expr.(memo.RelExpr), jb.outScope.cols)
 	}
 }
 
@@ -385,10 +385,10 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 	}
 
 	// Construct the predicate.
-	leftVar := jb.b.factory.ConstructVariable(jb.b.factory.InternColumnID(leftCol.id))
-	rightVar := jb.b.factory.ConstructVariable(jb.b.factory.InternColumnID(rightCol.id))
+	leftVar := jb.b.factory.ConstructVariable(leftCol.id)
+	rightVar := jb.b.factory.ConstructVariable(rightCol.id)
 	eq := jb.b.factory.ConstructEq(leftVar, rightVar)
-	jb.lb.AddItem(eq)
+	jb.filters = append(jb.filters, memo.FiltersItem{Condition: eq})
 
 	// Add the merged column to the scope, constructing a new column if needed.
 	if jb.joinType == sqlbase.InnerJoin || jb.joinType == sqlbase.LeftOuterJoin {
@@ -413,8 +413,7 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 			typ = rightCol.typ
 		}
 		texpr := tree.NewTypedCoalesceExpr(tree.TypedExprs{leftCol, rightCol}, typ)
-		args := jb.b.factory.InternList([]memo.GroupID{leftVar, rightVar})
-		merged := jb.b.factory.ConstructCoalesce(args)
+		merged := jb.b.factory.ConstructCoalesce(memo.ScalarListExpr{leftVar, rightVar})
 		col := jb.b.synthesizeColumn(jb.outScope, string(leftCol.name), typ, texpr, merged)
 		jb.ifNullCols.Add(int(col.id))
 		jb.hideCols.Add(int(leftCol.id))

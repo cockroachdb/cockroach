@@ -257,7 +257,9 @@ func (c *ruleCompiler) compile(compiler *Compiler, rule *RuleExpr) {
 // code generator, since all rules will never match more than one op at the
 // top-level.
 func (c *ruleCompiler) expandRule(opName NameExpr) {
-	errCnt := len(c.compiler.errors)
+	// Remember current error count in order to detect whether ruleContentCompiler
+	// adds additional errors.
+	errCntBefore := len(c.compiler.errors)
 
 	// Remember the root opname in case it's needed to compile the OpName
 	// built-in function.
@@ -285,7 +287,7 @@ func (c *ruleCompiler) expandRule(opName NameExpr) {
 
 	// Infer data types for expressions within the match and replace patterns.
 	// Do this only if the rule triggered no errors.
-	if errCnt == len(c.compiler.errors) {
+	if errCntBefore == len(c.compiler.errors) {
 		c.inferTypes(newRule.Match, AnyDataType)
 		c.inferTypes(newRule.Replace, AnyDataType)
 	}

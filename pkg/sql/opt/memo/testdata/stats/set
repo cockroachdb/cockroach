@@ -267,8 +267,8 @@ intersect
            │    ├── stats: [rows=10000, distinct(4)=5000, distinct(4,5,7)=10000]
            │    ├── key: (7)
            │    └── fd: (7)-->(4-6)
-           └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
-                └── b.x = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
+           └── filters
+                └── b.x = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
 
 build
 SELECT x, y, x FROM a INTERSECT ALL SELECT z, x, rowid FROM (SELECT *, rowid FROM b WHERE b.x=1) b
@@ -303,8 +303,8 @@ intersect-all
            │    ├── stats: [rows=10000, distinct(4)=5000]
            │    ├── key: (7)
            │    └── fd: (7)-->(4-6)
-           └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
-                └── b.x = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
+           └── filters
+                └── b.x = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
 
 build
 SELECT y, s FROM a INTERSECT SELECT z, s FROM c
@@ -420,8 +420,8 @@ except
                 │    ├── stats: [rows=10000, distinct(4)=5000, distinct(4,5)=10000]
                 │    ├── key: (7)
                 │    └── fd: (7)-->(4-6)
-                └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
-                     └── b.x = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
+                └── filters
+                     └── b.x = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
 
 build
 SELECT x, x, y FROM a EXCEPT ALL SELECT x, z, z FROM (SELECT * FROM b WHERE b.x=1) b
@@ -459,8 +459,8 @@ except-all
                 │    ├── stats: [rows=10000, distinct(4)=5000]
                 │    ├── key: (7)
                 │    └── fd: (7)-->(4-6)
-                └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
-                     └── b.x = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
+                └── filters
+                     └── b.x = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
 
 build
 SELECT y, s FROM a EXCEPT SELECT z, s FROM c
@@ -567,5 +567,5 @@ select
  │              ├── stats: [rows=10000, distinct(5)=100]
  │              ├── key: (7)
  │              └── fd: (7)-->(4-6)
- └── filters [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]
-      └── y = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight)]
+ └── filters
+      └── y = 5 [type=bool, outer=(2), constraints=(/2: [/5 - /5]; tight), fd=()-->(2)]

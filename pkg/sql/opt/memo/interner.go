@@ -1,0 +1,801 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+package memo
+
+import (
+	"bytes"
+	"math"
+	"math/rand"
+	"reflect"
+	"unsafe"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+)
+
+const (
+	// offset64 is the initial hash value, and is taken from fnv.go
+	offset64 = 14695981039346656037
+
+	// prime64 is a large-ish prime number used in hashing and taken from fnv.go.
+	prime64 = 1099511628211
+)
+
+// internHash is a 64-bit hash value, computed using the FNV-1a algorithm.
+type internHash uint64
+
+// interner interns relational and scalar expressions, which means that multiple
+// equivalent expressions are mapped to a single in-memory instance. If two
+// expressions with the same values for all fields are interned, the intern
+// method will return the first expression in both cases. Interned expressions
+// can therefore be checked for equivalence by simple pointer comparison.
+// Equivalence is defined more strictly than SQL equivalence; two values are
+// equivalent only if their binary encoded representations are identical. For
+// example, positive and negative float64 values *are not* equivalent, whereas
+// NaN float values *are* equivalent.
+//
+// To use interner, first call the Init method to initialize storage. Call the
+// appropriate Intern method to retrieve the canonical instance of that
+// expression. Release references to other instances, including the expression
+// passed to Intern.
+//
+// The interner computes a hash function for each expression operator type that
+// enables quick determination of whether an expression has already been added
+// to the interner. A hashXXX and isXXXEqual method must be added for every
+// unique type of every field in every expression struct. Optgen generates
+// Intern methods which use these methods to compute the hash and check whether
+// an equivalent expression is already present in the cache. Because hashing is
+// used, interned expressions must remain immutable after interning. That is,
+// once set, they can never be modified again, else their hash value would
+// become invalid.
+//
+// The non-cryptographic hash function is adapted from fnv.go in Golang's
+// standard library. That in turn was taken from FNV-1a, described here:
+//
+//   https://en.wikipedia.org/wiki/Fowler-Noll-Vo_hash_function
+//
+// Each expression type follows the same interning pattern:
+//
+//   1. Compute an int64 hash value for the expression using FNV-1a.
+//   2. Do a fast 64-bit Go map lookup to determine if an expression with the
+//      same hash is already in the cache.
+//   3. If so, then test whether the existing expression is equivalent, since
+//      there may be a hash value collision.
+//   4. Expressions with colliding hash values are linked together in a list.
+//      Rather than use an explicit linked list data structure, colliding
+//      entries are rehashed using a randomly generated hash value that is
+//      stored in the existing entry. This effectively uses the Go map as if it
+//      were a hash table of size 2^64.
+//
+// This pattern enables very low overhead hashing of expressions - the
+// allocation of a Go map with a fast 64-bit key, plus a couple of reusable
+// scratch byte arrays.
+type interner struct {
+	// hasher is a helper struct to compute hashes and test equality.
+	hasher hasher
+
+	// cache is a helper struct that implements the interning pattern described
+	// in the header over a Go map.
+	cache internCache
+}
+
+// Clear clears all interned expressions. Expressions interned before the call
+// to Clear will not be connected to expressions interned after.
+func (in *interner) Clear() {
+	in.cache.Clear()
+}
+
+// Count returns the number of expressions that have been interned.
+func (in *interner) Count() int {
+	return in.cache.Count()
+}
+
+var physPropsType = reflect.TypeOf((*props.Physical)(nil))
+var physPropsTypePtr = uint64(reflect.ValueOf(physPropsType).Pointer())
+
+// InternPhysicalProps interns a set of physical properties using the same
+// pattern as that used by the expression intern methods, with one difference.
+// This intern method does not force the incoming physical properties to escape
+// to the heap. It does this by making a copy of the physical properties before
+// adding them to the cache.
+func (in *interner) InternPhysicalProps(val *props.Physical) *props.Physical {
+	// Hash the props.Physical reflect type to distinguish it from other values.
+	in.hasher.Init()
+	in.hasher.HashUint64(physPropsTypePtr)
+	in.hasher.HashPhysProps(val)
+
+	// Loop over any items with the same hash value, checking for equality.
+	in.cache.Start(in.hasher.hash)
+	for in.cache.Next() {
+		// There's an existing item, so check for equality.
+		if existing, ok := in.cache.Item().(*props.Physical); ok {
+			if in.hasher.IsPhysPropsEqual(val, existing) {
+				// Found equivalent item, so return it.
+				return existing
+			}
+		}
+	}
+
+	// Shallow copy the props to prevent "val" from escaping.
+	copy := *val
+	in.cache.Add(&copy)
+	return &copy
+}
+
+// internCache is a helper class that implements the interning pattern described
+// in the comment for the interner struct. Here is a usage example:
+//
+//   var cache internCache
+//   cache.Start(hash)
+//   for cache.Next() {
+//     if isEqual(cache.Item(), other) {
+//       // Found existing item in cache.
+//     }
+//   }
+//   cache.Add(other)
+//
+// The calls to the Next method iterate over any entries with the same hash,
+// until either a match is found or it is proven their are no matches, in which
+// case the new item can be added to the cache.
+type internCache struct {
+	// cache is a Go map that's being used as if it were a hash table of size
+	// 2^64. Items are hashed according to their 64-bit hash value, and any
+	// colliding entries are linked together using the collision field in
+	// cacheEntry.
+	cache map[internHash]cacheEntry
+
+	// hash stores the lookup value used by the next call to the Next method.
+	hash internHash
+
+	// prev stores the cache entry last fetched from the map by the Next method.
+	prev cacheEntry
+}
+
+// cacheEntry is the Go map value. In case of hash value collisions it functions
+// as a linked list node; its collision field is a randomly generated re-hash
+// value that "points" to the colliding node. That node in turn can point to yet
+// another colliding node, and so on. Walking a collision list therefore
+// consists of computing an initial hash based on the value of the node, and
+// then following the list of collision hash values by indexing into the cache
+// map repeatedly.
+type cacheEntry struct {
+	item      interface{}
+	collision internHash
+}
+
+// Item returns the cache item that was fetched by the Next method.
+func (c *internCache) Item() interface{} {
+	return c.prev.item
+}
+
+// Count returns the number of items in the cache.
+func (c *internCache) Count() int {
+	return len(c.cache)
+}
+
+// Clear clears all items in the cache.
+func (c *internCache) Clear() {
+	c.cache = nil
+}
+
+// Start prepares to look up an item in the cache by its hash value. It must be
+// called before Next.
+func (c *internCache) Start(hash internHash) {
+	if c.cache == nil {
+		c.cache = make(map[internHash]cacheEntry)
+	}
+	c.hash = hash
+	c.prev = cacheEntry{}
+}
+
+// Next iterates over a collision list of cache items. It begins with the hash
+// value set via the call to Start, and continues with any collision hash values
+// it finds in the collision list. If it is at the end of an existing collision
+// list, it generates a new random hash value and links it to the existing
+// entry.
+func (c *internCache) Next() bool {
+	// If item is set, then the previous lookup must not have matched, so try to
+	// get the next value in the collision list, or return false if at the end of
+	// the list.
+	if c.prev.item != nil {
+		if c.prev.collision == 0 {
+			// This was the last item in the collision list.
+			return false
+		}
+
+		// A collision link already exists, so follow that.
+		c.hash = c.prev.collision
+	}
+
+	var ok bool
+	c.prev, ok = c.cache[c.hash]
+	return ok
+}
+
+// Add inserts the given item into the cache. The caller should have already
+// checked that the item is not yet in the cache.
+func (c *internCache) Add(item interface{}) {
+	if item == nil {
+		panic("cannot add the nil value to the cache")
+	}
+
+	if c.prev.item == nil {
+		// There was no collision, so directly insert the item into the cache.
+		c.cache[c.hash] = cacheEntry{item: item}
+		return
+	}
+
+	// There was a collision, so re-hash the item and link it to the existing
+	// item. Loop until the generated random hash value doesn't collide with any
+	// existing item.
+	for {
+		// Using global rand is OK, since collisions of 64-bit random values should
+		// virtually never happen, so there won't be contention.
+		newHash := internHash(rand.Uint64())
+		if newHash != 0 {
+			if _, ok := c.cache[newHash]; !ok {
+				c.cache[c.hash] = cacheEntry{item: c.prev.item, collision: newHash}
+				c.cache[newHash] = cacheEntry{item: item}
+				return
+			}
+		}
+	}
+}
+
+// hasher is a helper struct that exposes methods for computing hash values and
+// testing equality on all the various types of values. It is embedded in the
+// interner. To use, first call the init method, then a series of hash methods.
+// The final value is stored in the hash field.
+type hasher struct {
+	// bytes is a scratch byte array used to serialize certain types of values
+	// during hashing and equality testing.
+	bytes []byte
+
+	// bytes2 is a scratch byte array used to serialize certain types of values
+	// during equality testing.
+	bytes2 []byte
+
+	// hash stores the hash value as it is incrementally computed.
+	hash internHash
+}
+
+func (h *hasher) Init() {
+	h.hash = offset64
+}
+
+// ----------------------------------------------------------------------
+//
+// Hash functions
+//   Each field in each item to be hashed must have a hash function that
+//   corresponds to the type of that field. Each type mutates the hash field
+//   of the interner using the FNV-1a hash algorithm.
+//
+// ----------------------------------------------------------------------
+
+func (h *hasher) HashBool(val bool) {
+	i := 0
+	if val {
+		i = 1
+	}
+	h.hash ^= internHash(i)
+	h.hash *= prime64
+}
+
+func (h *hasher) HashInt(val int) {
+	h.hash ^= internHash(val)
+	h.hash *= prime64
+}
+
+func (h *hasher) HashUint64(val uint64) {
+	h.hash ^= internHash(val)
+	h.hash *= prime64
+}
+
+func (h *hasher) HashFloat64(val float64) {
+	h.hash ^= internHash(math.Float64bits(val))
+	h.hash *= prime64
+}
+
+func (h *hasher) HashString(val string) {
+	for _, c := range val {
+		h.hash ^= internHash(c)
+		h.hash *= prime64
+	}
+}
+
+func (h *hasher) HashBytes(val []byte) {
+	for _, c := range val {
+		h.hash ^= internHash(c)
+		h.hash *= prime64
+	}
+}
+
+func (h *hasher) HashOperator(val opt.Operator) {
+	h.hash ^= internHash(val)
+	h.hash *= prime64
+}
+
+func (h *hasher) HashType(val reflect.Type) {
+	h.hash ^= internHash(uint64(reflect.ValueOf(val).Pointer()))
+	h.hash *= prime64
+}
+
+func (h *hasher) HashDatum(val tree.Datum) {
+	// Distinguish distinct values with the same representation (i.e. 1 can
+	// be a Decimal or Int) using the reflect.Type of the value.
+	h.HashType(reflect.TypeOf(val))
+
+	// Special case some datum types that are simple to hash. For the others,
+	// hash the key encoding or string representation.
+	switch t := val.(type) {
+	case *tree.DBool:
+		h.HashBool(bool(*t))
+	case *tree.DInt:
+		h.HashUint64(uint64(*t))
+	case *tree.DFloat:
+		h.HashFloat64(float64(*t))
+	case *tree.DString:
+		h.HashString(string(*t))
+	case *tree.DBytes:
+		h.HashBytes([]byte(*t))
+	case *tree.DDate:
+		h.HashUint64(uint64(*t))
+	case *tree.DTime:
+		h.HashUint64(uint64(*t))
+	case *tree.DJSON:
+		h.HashString(t.String())
+	case *tree.DTuple:
+		for _, d := range t.D {
+			h.HashDatum(d)
+		}
+		h.HashDatumType(t.ResolvedType())
+	case *tree.DArray:
+		for _, d := range t.Array {
+			h.HashDatum(d)
+		}
+	default:
+		h.HashBytes(encodeDatum(h.bytes[:0], val))
+	}
+}
+
+func (h *hasher) HashDatumType(val types.T) {
+	h.HashString(val.String())
+}
+
+func (h *hasher) HashColType(val coltypes.T) {
+	buf := bytes.NewBuffer(h.bytes)
+	val.Format(buf, lex.EncNoFlags)
+	h.HashBytes(buf.Bytes())
+}
+
+func (h *hasher) HashTypedExpr(val tree.TypedExpr) {
+	h.hash ^= internHash(uint64(reflect.ValueOf(val).Pointer()))
+	h.hash *= prime64
+}
+
+func (h *hasher) HashColumnID(val opt.ColumnID) {
+	h.hash ^= internHash(val)
+	h.hash *= prime64
+}
+
+func (h *hasher) HashColSet(val opt.ColSet) {
+	hash := h.hash
+	for c, ok := val.Next(0); ok; c, ok = val.Next(c + 1) {
+		hash ^= internHash(c)
+		hash *= prime64
+	}
+	h.hash = hash
+}
+
+func (h *hasher) HashColList(val opt.ColList) {
+	hash := h.hash
+	for _, id := range val {
+		hash ^= internHash(id)
+		hash *= prime64
+	}
+	h.hash = hash
+}
+
+func (h *hasher) HashOrdering(val opt.Ordering) {
+	hash := h.hash
+	for _, id := range val {
+		hash ^= internHash(id)
+		hash *= prime64
+	}
+	h.hash = hash
+}
+
+func (h *hasher) HashOrderingChoice(val props.OrderingChoice) {
+	h.HashColSet(val.Optional)
+
+	for i := range val.Columns {
+		choice := &val.Columns[i]
+		h.HashColSet(choice.Group)
+		h.HashBool(choice.Descending)
+	}
+}
+
+func (h *hasher) HashTableID(val opt.TableID) {
+	h.hash ^= internHash(val)
+	h.hash *= prime64
+}
+
+func (h *hasher) HashConstraint(val *constraint.Constraint) {
+	h.hash ^= internHash(uintptr(unsafe.Pointer(val)))
+	h.hash *= prime64
+}
+
+func (h *hasher) HashScanLimit(val ScanLimit) {
+	h.hash ^= internHash(val)
+	h.hash *= prime64
+}
+
+func (h *hasher) HashScanFlags(val ScanFlags) {
+	h.HashBool(val.NoIndexJoin)
+	h.HashBool(val.ForceIndex)
+	h.hash ^= internHash(val.Index)
+	h.hash *= prime64
+}
+
+func (h *hasher) HashSubquery(val *tree.Subquery) {
+	h.hash ^= internHash(uintptr(unsafe.Pointer(val)))
+	h.hash *= prime64
+}
+
+func (h *hasher) HashExplainOptions(val tree.ExplainOptions) {
+	h.HashColSet(val.Flags)
+	h.hash ^= internHash(val.Mode)
+	h.hash *= prime64
+}
+
+func (h *hasher) HashShowTraceType(val tree.ShowTraceType) {
+	h.HashString(string(val))
+}
+
+func (h *hasher) HashFuncProps(val *tree.FunctionProperties) {
+	h.hash ^= internHash(uintptr(unsafe.Pointer(val)))
+	h.hash *= prime64
+}
+
+func (h *hasher) HashFuncOverload(val *tree.Overload) {
+	h.hash ^= internHash(uintptr(unsafe.Pointer(val)))
+	h.hash *= prime64
+}
+
+func (h *hasher) HashTupleOrdinal(val TupleOrdinal) {
+	h.hash ^= internHash(val)
+	h.hash *= prime64
+}
+
+func (h *hasher) HashPhysProps(val *props.Physical) {
+	for i := range val.Presentation {
+		col := &val.Presentation[i]
+		h.HashString(col.Label)
+		h.HashColumnID(col.ID)
+	}
+	h.HashOrderingChoice(val.Ordering)
+}
+
+func (h *hasher) HashRelExpr(val RelExpr) {
+	h.hash ^= internHash(uint64(reflect.ValueOf(val).Pointer()))
+	h.hash *= prime64
+}
+
+func (h *hasher) HashScalarExpr(val opt.ScalarExpr) {
+	h.hash ^= internHash(uint64(reflect.ValueOf(val).Pointer()))
+	h.hash *= prime64
+}
+
+func (h *hasher) HashScalarListExpr(val ScalarListExpr) {
+	for i := range val {
+		h.HashScalarExpr(val[i])
+	}
+}
+
+func (h *hasher) HashFiltersExpr(val FiltersExpr) {
+	for i := range val {
+		h.HashScalarExpr(val[i].Condition)
+	}
+}
+
+func (h *hasher) HashProjectionsExpr(val ProjectionsExpr) {
+	for i := range val {
+		item := &val[i]
+		h.HashColumnID(item.Col)
+		h.HashScalarExpr(item.Element)
+	}
+}
+
+func (h *hasher) HashAggregationsExpr(val AggregationsExpr) {
+	for i := range val {
+		item := &val[i]
+		h.HashColumnID(item.Col)
+		h.HashScalarExpr(item.Agg)
+	}
+}
+
+// ----------------------------------------------------------------------
+//
+// Equality functions
+//   Each field in each item to be hashed must have an equality function that
+//   corresponds to the type of that field. An equality function returns true
+//   if the two values are equivalent. If all fields in two items are
+//   equivalent, then the items are considered equivalent, and only one is
+//   retained in the cache.
+//
+// ----------------------------------------------------------------------
+
+func (h *hasher) IsBoolEqual(l, r bool) bool {
+	return l == r
+}
+
+func (h *hasher) IsIntEqual(l, r int) bool {
+	return l == r
+}
+
+func (h *hasher) IsFloat64Equal(l, r float64) bool {
+	return math.Float64bits(l) == math.Float64bits(r)
+}
+
+func (h *hasher) IsStringEqual(l, r string) bool {
+	return bytes.Equal([]byte(l), []byte(r))
+}
+
+func (h *hasher) IsBytesEqual(l, r []byte) bool {
+	return bytes.Equal(l, r)
+}
+
+func (h *hasher) IsTypeEqual(l, r reflect.Type) bool {
+	return l == r
+}
+
+func (h *hasher) IsOperatorEqual(l, r opt.Operator) bool {
+	return l == r
+}
+
+func (h *hasher) IsDatumTypeEqual(l, r types.T) bool {
+	return l.String() == r.String()
+}
+
+func (h *hasher) IsColTypeEqual(l, r coltypes.T) bool {
+	lbuf := bytes.NewBuffer(h.bytes)
+	l.Format(lbuf, lex.EncNoFlags)
+	rbuf := bytes.NewBuffer(h.bytes2)
+	r.Format(rbuf, lex.EncNoFlags)
+	return bytes.Equal(lbuf.Bytes(), rbuf.Bytes())
+}
+
+func (h *hasher) IsDatumEqual(l, r tree.Datum) bool {
+	switch lt := l.(type) {
+	case *tree.DBool:
+		if rt, ok := r.(*tree.DBool); ok {
+			return *lt == *rt
+		}
+	case *tree.DInt:
+		if rt, ok := r.(*tree.DInt); ok {
+			return *lt == *rt
+		}
+	case *tree.DFloat:
+		if rt, ok := r.(*tree.DFloat); ok {
+			return h.IsFloat64Equal(float64(*lt), float64(*rt))
+		}
+	case *tree.DString:
+		if rt, ok := r.(*tree.DString); ok {
+			return h.IsStringEqual(string(*lt), string(*rt))
+		}
+	case *tree.DBytes:
+		if rt, ok := r.(*tree.DBytes); ok {
+			return bytes.Equal([]byte(*lt), []byte(*rt))
+		}
+	case *tree.DDate:
+		if rt, ok := r.(*tree.DDate); ok {
+			return uint64(*lt) == uint64(*rt)
+		}
+	case *tree.DTime:
+		if rt, ok := r.(*tree.DTime); ok {
+			return uint64(*lt) == uint64(*rt)
+		}
+	case *tree.DJSON:
+		if rt, ok := r.(*tree.DJSON); ok {
+			return h.IsStringEqual(lt.String(), rt.String())
+		}
+	case *tree.DTuple:
+		if rt, ok := r.(*tree.DTuple); ok {
+			if len(lt.D) != len(rt.D) {
+				return false
+			}
+			for i := range lt.D {
+				if !h.IsDatumEqual(lt.D[i], rt.D[i]) {
+					return false
+				}
+			}
+			return h.IsDatumTypeEqual(l.ResolvedType(), r.ResolvedType())
+		}
+	case *tree.DArray:
+		if rt, ok := r.(*tree.DArray); ok {
+			if len(lt.Array) != len(rt.Array) {
+				return false
+			}
+			for i := range lt.Array {
+				if !h.IsDatumEqual(lt.Array[i], rt.Array[i]) {
+					return false
+				}
+			}
+			return true
+		}
+	default:
+		lb := encodeDatum(h.bytes[:0], l)
+		rb := encodeDatum(h.bytes2[:0], r)
+		return bytes.Equal(lb, rb)
+	}
+
+	return false
+}
+
+func (h *hasher) IsTypedExprEqual(l, r tree.TypedExpr) bool {
+	return l == r
+}
+
+func (h *hasher) IsColumnIDEqual(l, r opt.ColumnID) bool {
+	return l == r
+}
+
+func (h *hasher) IsColSetEqual(l, r opt.ColSet) bool {
+	return l.Equals(r)
+}
+
+func (h *hasher) IsColListEqual(l, r opt.ColList) bool {
+	return l.Equals(r)
+}
+
+func (h *hasher) IsOrderingEqual(l, r opt.Ordering) bool {
+	return l.Equals(r)
+}
+
+func (h *hasher) IsOrderingChoiceEqual(l, r props.OrderingChoice) bool {
+	return l.Equals(&r)
+}
+
+func (h *hasher) IsTableIDEqual(l, r opt.TableID) bool {
+	return l == r
+}
+
+func (h *hasher) IsConstraintEqual(l, r *constraint.Constraint) bool {
+	return l == r
+}
+
+func (h *hasher) IsScanLimitEqual(l, r ScanLimit) bool {
+	return l == r
+}
+
+func (h *hasher) IsScanFlagsEqual(l, r ScanFlags) bool {
+	return l == r
+}
+
+func (h *hasher) IsSubqueryEqual(l, r *tree.Subquery) bool {
+	return l == r
+}
+
+func (h *hasher) IsExplainOptionsEqual(l, r tree.ExplainOptions) bool {
+	return l.Mode == r.Mode && l.Flags.Equals(r.Flags)
+}
+
+func (h *hasher) IsShowTraceTypeEqual(l, r tree.ShowTraceType) bool {
+	return bytes.Equal([]byte(l), []byte(r))
+}
+
+func (h *hasher) IsFuncPropsEqual(l, r *tree.FunctionProperties) bool {
+	return l == r
+}
+
+func (h *hasher) IsFuncOverloadEqual(l, r *tree.Overload) bool {
+	return l == r
+}
+
+func (h *hasher) IsTupleOrdinalEqual(l, r TupleOrdinal) bool {
+	return l == r
+}
+
+func (h *hasher) IsPhysPropsEqual(l, r *props.Physical) bool {
+	return l.Equals(r)
+}
+
+func (h *hasher) IsRelExprEqual(l, r RelExpr) bool {
+	return l == r
+}
+
+func (h *hasher) IsScalarExprEqual(l, r opt.ScalarExpr) bool {
+	return l == r
+}
+
+func (h *hasher) IsScalarListExprEqual(l, r ScalarListExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i] != r[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func (h *hasher) IsFiltersExprEqual(l, r FiltersExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i].Condition != r[i].Condition {
+			return false
+		}
+	}
+	return true
+}
+
+func (h *hasher) IsProjectionsExprEqual(l, r ProjectionsExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i].Col != r[i].Col || l[i].Element != r[i].Element {
+			return false
+		}
+	}
+	return true
+}
+
+func (h *hasher) IsAggregationsExprEqual(l, r AggregationsExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i].Col != r[i].Col || l[i].Agg != r[i].Agg {
+			return false
+		}
+	}
+	return true
+}
+
+// encodeDatum turns the given datum into an encoded string of bytes. If two
+// datums are equivalent, then their encoded bytes will be identical.
+// Conversely, if two datums are not equivalent, then their encoded bytes will
+// differ.
+func encodeDatum(b []byte, val tree.Datum) []byte {
+	// Fast path: encode the datum using table key encoding. This does not always
+	// work, because the encoding does not uniquely represent some values which
+	// should not be considered equivalent by the interner (e.g. decimal values
+	// 1.0 and 1.00).
+	if !sqlbase.DatumTypeHasCompositeKeyEncoding(val.ResolvedType()) {
+		var err error
+		b, err = sqlbase.EncodeTableKey(b, val, encoding.Ascending)
+		if err == nil {
+			return b
+		}
+	}
+
+	// Fall back on a string representation which can be used to check for
+	// equivalence.
+	buf := bytes.NewBuffer(b)
+	ctx := tree.MakeFmtCtx(buf, tree.FmtCheckEquivalence)
+	val.Format(&ctx)
+	return buf.Bytes()
+}

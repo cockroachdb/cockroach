@@ -44,27 +44,27 @@
 (GroupBy | ScalarGroupBy | DistinctOn
     $input:*
     $aggregations:*
-    $def:* & (CanSimplifyGroupByOrdering $input $def)
+    $groupingPrivate:* & (CanSimplifyGroupingOrdering $input $groupingPrivate)
 )
 =>
-((OpName) $input $aggregations (SimplifyGroupByOrdering $input $def))
+((OpName) $input $aggregations (SimplifyGroupingOrdering $input $groupingPrivate))
 
 # SimplifyRowNumberOrdering removes redundant columns from the RowNumber
 # operator's input ordering.
 [SimplifyRowNumberOrdering, Normalize]
 (RowNumber
     $input:*
-    $def:* & (CanSimplifyRowNumberOrdering $input $def)
+    $rowNumberPrivate:* & (CanSimplifyRowNumberOrdering $input $rowNumberPrivate)
 )
 =>
-(RowNumber $input (SimplifyRowNumberOrdering $input $def))
+(RowNumber $input (SimplifyRowNumberOrdering $input $rowNumberPrivate))
 
 # SimplifyExplainOrdering removes redundant columns from the Explain operator's
 # input ordering.
 [SimplifyExplainOrdering, Normalize]
 (Explain
     $input:*
-    $def:* & (CanSimplifyExplainOrdering $input $def)
+    $explainPrivate:* & (CanSimplifyExplainOrdering $input $explainPrivate)
 )
 =>
-(Explain $input (SimplifyExplainOrdering $input $def))
+(Explain $input (SimplifyExplainOrdering $input $explainPrivate))

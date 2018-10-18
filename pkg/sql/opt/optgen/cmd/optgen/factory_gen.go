@@ -15,7 +15,6 @@
 package main
 
 import (
-	"fmt"
 	"io"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
@@ -25,18 +24,22 @@ import (
 // building normalized expression trees.
 type factoryGen struct {
 	compiled *lang.CompiledExpr
+	md       *metadata
 	w        *matchWriter
-	ruleGen  ruleGen
+	ruleGen  newRuleGen
 }
 
 func (g *factoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.compiled = compiled
+	g.md = newMetadata(compiled, "norm")
 	g.w = &matchWriter{writer: w}
-	g.ruleGen.init(compiled, g.w)
+	g.ruleGen.init(compiled, g.md, g.w)
 
 	g.w.writeIndent("package norm\n\n")
 
 	g.w.nestIndent("import (\n")
+	g.w.writeIndent("\"fmt\"\n")
+	g.w.writeIndent("\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/coltypes\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/memo\"\n")
@@ -45,71 +48,55 @@ func (g *factoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/sem/types\"\n")
 	g.w.unnest(")\n\n")
 
-	g.genInternPrivateFuncs()
 	g.genConstructFuncs()
+	g.genReconstruct()
 	g.genAssignPlaceholders()
 	g.genDynamicConstruct()
-}
-
-func (g *factoryGen) genInternPrivateFuncs() {
-	for _, typ := range getUniquePrivateTypes(g.compiled.Defines) {
-		g.w.writeIndent("// Intern%s adds the given value to the memo and returns an ID that\n", typ)
-		g.w.writeIndent("// can be used for later lookup. If the same value was added previously, \n")
-		g.w.writeIndent("// this method is a no-op and returns the ID of the previous value.\n")
-		g.w.nestIndent("func (_f *Factory) Intern%s(val %s) memo.PrivateID {\n", typ, mapPrivateType(typ))
-		g.w.writeIndent("return _f.mem.Intern%s(val)", typ)
-		g.w.unnest("}\n\n")
-	}
 }
 
 // genConstructFuncs generates the factory Construct functions for each
 // expression type. The code is similar to this:
 //
-//   // ConstructScan constructs an expression for the Scan operator.
-//   func (_f *Factory) ConstructScan(
-//     def memo.PrivateID,
-//   ) memo.GroupID {
-//     _scanExpr := memo.MakeScanExpr(def)
-//     _group := _f.mem.GroupByFingerprint(_scanExpr.Fingerprint())
-//     if _group != 0 {
-//       return _group
-//     }
+//   // ConstructSelect constructs an expression for the Select operator.
+//   func (_f *Factory) ConstructSelect(
+//     input memo.RelExpr,
+//     filters memo.FiltersExpr,
+//   ) memo.RelExpr {
 //
 //     ... normalization rule code goes here ...
 //
-//     return _f.onConstruct(memo.Expr(_scanExpr))
+//     nd := _f.mem.MemoizeSelect(input, filters)
+//     return _f.onConstructRelational(nd)
 //   }
 //
 func (g *factoryGen) genConstructFuncs() {
-	for _, define := range g.compiled.Defines.WithoutTag("Enforcer") {
-		varName := fmt.Sprintf("_%sExpr", unTitle(string(define.Name)))
+	defines := g.compiled.Defines.
+		WithoutTag("Enforcer").
+		WithoutTag("List").
+		WithoutTag("ListItem").
+		WithoutTag("Private")
 
+	for _, define := range defines {
+		// Generate Construct method.
 		format := "// Construct%s constructs an expression for the %s operator.\n"
 		g.w.writeIndent(format, define.Name, define.Name)
 		generateDefineComments(g.w.writer, define, string(define.Name))
+
 		g.w.nestIndent("func (_f *Factory) Construct%s(\n", define.Name)
 
 		for _, field := range define.Fields {
-			fieldName := unTitle(string(field.Name))
-			g.w.writeIndent("%s memo.%s,\n", fieldName, mapType(string(field.Type)))
+			fieldTyp := g.md.typeOf(field)
+			fieldName := g.md.fieldName(field)
+			g.w.writeIndent("%s %s,\n", unTitle(fieldName), fieldTyp.asParam())
 		}
 
-		g.w.unnest(") memo.GroupID ")
-		g.w.nestIndent("{\n")
-		g.w.writeIndent("%s := memo.Make%sExpr(", varName, define.Name)
-
-		for i, field := range define.Fields {
-			if i != 0 {
-				g.w.write(", ")
-			}
-			g.w.write("%s", unTitle(string(field.Name)))
+		if define.Tags.Contains("Relational") {
+			g.w.unnest(") memo.RelExpr")
+		} else {
+			g.w.unnest(") opt.ScalarExpr")
 		}
 
-		g.w.write(")\n")
-		g.w.writeIndent("_group := _f.mem.GroupByFingerprint(%s.Fingerprint())\n", varName)
-		g.w.nestIndent("if _group != 0 {\n")
-		g.w.writeIndent("return _group\n")
-		g.w.unnest("}\n\n")
+		g.w.nest(" {\n")
 
 		// Only include normalization rules for the current define.
 		rules := g.compiled.LookupMatchingRules(string(define.Name)).WithTag("Normalize")
@@ -121,182 +108,324 @@ func (g *factoryGen) genConstructFuncs() {
 			g.w.newline()
 		}
 
-		g.w.writeIndent("return _f.onConstruct(memo.Expr(%s))\n", varName)
-		g.w.unnest("}\n\n")
-	}
-}
-
-// genAssignPlaceholders generates code that recursively walks a subtree looking
-// for Placeholder operators and replacing them with their assigned values. This
-// will trigger the rebuild of that node's ancestors, as well as triggering
-// additional normalization rules that can substantially rewrite the tree. The
-// generated code is similar to this:
-//
-//   func (f *Factory) assignPlaceholders(group memo.GroupID) memo.GroupID {
-//     if !f.mem.GroupProperties(group).HasPlaceholder() {
-//       return group
-//     }
-//     expr := f.mem.NormExpr(group)
-//     switch expr.Operator() {
-//     case opt.SelectOp:
-//       selectExpr := expr.AsSelect()
-//       input := f.assignPlaceholders(selectExpr.Input())
-//       filter := f.assignPlaceholders(selectExpr.Filter())
-//       return f.ConstructSelect(input, filter)
-//
-func (g *factoryGen) genAssignPlaceholders() {
-	g.w.nestIndent("func (f *Factory) assignPlaceholders(group memo.GroupID) (memo.GroupID, error) {\n")
-	g.w.nestIndent("if !f.mem.GroupProperties(group).HasPlaceholder() {\n")
-	g.w.writeIndent("return group, nil\n")
-	g.w.unnest("}\n")
-	g.w.writeIndent("expr := f.mem.NormExpr(group)\n")
-
-	g.w.writeIndent("switch expr.Operator() {\n")
-
-	for _, define := range g.compiled.Defines.WithoutTag("Enforcer") {
-		// Determine if the operator can be skipped altogether:
-		//   1. The operator is an aggregate. Aggregates never contain placeholders
-		//      because non-Variable children always get rewritten as part of an
-		//      input projection.
-		//   2. The operator has no children.
-		if define.Tags.Contains("Aggregate") {
-			continue
-		}
-
-		skipOp := true
-		for _, field := range define.Fields {
-			if !isPrivateType(string(field.Type)) {
-				skipOp = false
-				break
-			}
-		}
-		if skipOp {
-			continue
-		}
-
-		varName := fmt.Sprintf("%sExpr", unTitle(string(define.Name)))
-
-		g.w.nestIndent("case opt.%sOp:\n", define.Name)
-		if len(define.Fields) > 0 {
-			g.w.writeIndent("%s := expr.As%s()\n", varName, define.Name)
-		}
-
-		// Determine whether a list builder is needed.
-		for _, field := range define.Fields {
-			if isListType(string(field.Type)) {
-				g.w.writeIndent("lb := MakeListBuilder(&f.funcs)\n")
-				break
-			}
-		}
-
-		for _, field := range define.Fields {
-			fieldVarName := unTitle(string(field.Name))
-
-			if isListType(string(field.Type)) {
-				g.w.nestIndent("for _, item := range f.mem.LookupList(%s.%s()) {\n", varName, field.Name)
-				g.w.writeIndent("newItem, err := f.assignPlaceholders(item)\n")
-				g.w.nestIndent("if err != nil {\n")
-				g.w.writeIndent("return 0, err\n")
-				g.w.unnest("}\n")
-				g.w.writeIndent("lb.AddItem(newItem)\n")
-				g.w.unnest("}\n")
-				g.w.writeIndent("%s := lb.BuildList()\n", fieldVarName)
-			} else if isPrivateType(string(field.Type)) {
-				g.w.writeIndent("%s := %s.%s()\n", fieldVarName, varName, field.Name)
-			} else {
-				g.w.writeIndent("%s, err := f.assignPlaceholders(%s.%s())\n", fieldVarName, varName, field.Name)
-				g.w.nestIndent("if err != nil {\n")
-				g.w.writeIndent("return 0, err\n")
-				g.w.unnest("}\n")
-			}
-		}
-
-		g.w.writeIndent("return f.Construct%s(", define.Name)
+		g.w.writeIndent("e := _f.mem.Memoize%s(", define.Name)
 		for i, field := range define.Fields {
 			if i != 0 {
 				g.w.write(", ")
 			}
-			g.w.write(unTitle(string(field.Name)))
+			g.w.write("%s", unTitle(g.md.fieldName(field)))
 		}
-		g.w.unnest("), nil\n")
+
+		g.w.write(")\n")
+
+		if define.Tags.Contains("Relational") {
+			g.w.writeIndent("return _f.onConstructRelational(e)\n")
+		} else {
+			g.w.writeIndent("return _f.onConstructScalar(e)\n")
+		}
+
+		g.w.unnest("}\n\n")
+	}
+}
+
+// genReconstruct generates a method on the factory that offers a convenient way
+// to rebuild an expression tree.
+func (g *factoryGen) genReconstruct() {
+	g.w.writeIndent("// Reconstruct enables an expression subtree to be rewritten under the control\n")
+	g.w.writeIndent("// of the caller. It passes each child of the given expression to the replace\n")
+	g.w.writeIndent("// callback. The caller can continue traversing the expression tree within the\n")
+	g.w.writeIndent("// callback by recursively calling Reconstruct. It can also return a replacement\n")
+	g.w.writeIndent("// expression; if it does, then Reconstruct will rebuild the operator via a call\n")
+	g.w.writeIndent("// to the corresponding factory Construct method. Here is example usage:\n")
+	g.w.writeIndent("//\n")
+	g.w.writeIndent("//   var replace func(e opt.Expr, replace ReconstructFunc) opt.Expr\n")
+	g.w.writeIndent("//   replace = func(e opt.Expr, replace ReconstructFunc) opt.Expr {\n")
+	g.w.writeIndent("//     if e.Op() == opt.VariableOp {\n")
+	g.w.writeIndent("//       return ReplaceVar(e)\n")
+	g.w.writeIndent("//     }\n")
+	g.w.writeIndent("//     return e.Reconstruct(e, replace)\n")
+	g.w.writeIndent("//   }\n")
+	g.w.writeIndent("//   replace(root, replace)\n")
+	g.w.writeIndent("//\n")
+	g.w.writeIndent("// Here, all variables in the tree are being replaced by some other expression\n")
+	g.w.writeIndent("// in a pre-order traversal of the tree. Post-order traversal is trivially\n")
+	g.w.writeIndent("// achieved by moving the e.Reconstruct call to the top of the replace function\n")
+	g.w.writeIndent("// rather than bottom.\n")
+	g.w.nestIndent("func (f *Factory) Reconstruct(e opt.Expr, replace ReconstructFunc) opt.Expr {\n")
+	g.w.writeIndent("switch t := e.(type) {\n")
+
+	defines := g.compiled.Defines.WithoutTag("Enforcer").WithoutTag("ListItem").WithoutTag("Private")
+	for _, define := range defines {
+		opTyp := g.md.typeOf(define)
+		childFields := g.md.childFields(define)
+		privateField := g.md.privateField(define)
+
+		g.w.nestIndent("case *%s:\n", opTyp.name)
+
+		if len(childFields) != 0 {
+			for _, child := range childFields {
+				childName := g.md.fieldName(child)
+				childTyp := g.md.typeOf(child)
+
+				if childTyp.isListType() {
+					g.w.writeIndent("%s, %sChanged := f.reconstruct%s(t.%s, replace)\n",
+						unTitle(childName), unTitle(childName), childTyp.friendlyName, childName)
+				} else {
+					g.w.writeIndent("%s := replace(t.%s).(%s)\n",
+						unTitle(childName), childName, childTyp.name)
+				}
+			}
+
+			g.w.writeIndent("if ")
+			for i, child := range childFields {
+				childName := g.md.fieldName(child)
+				childTyp := g.md.typeOf(child)
+
+				if i != 0 {
+					g.w.write(" || ")
+				}
+				if childTyp.isListType() {
+					g.w.write("%sChanged", unTitle(childName))
+				} else {
+					g.w.write("%s != t.%s", unTitle(childName), childName)
+				}
+			}
+			g.w.nest(" {\n")
+
+			g.w.writeIndent("return f.Construct%s(", define.Name)
+			for i, child := range childFields {
+				childName := g.md.fieldName(child)
+
+				if i != 0 {
+					g.w.write(", ")
+				}
+				g.w.write("%s", unTitle(childName))
+			}
+			if privateField != nil {
+				if len(childFields) != 0 {
+					g.w.write(", ")
+				}
+				if g.md.typeOf(privateField).passByVal {
+					g.w.write("t.%s", g.md.fieldName(privateField))
+				} else {
+					g.w.write("&t.%s", g.md.fieldName(privateField))
+				}
+			}
+			g.w.write(")\n")
+			g.w.unnest("}\n")
+		} else {
+			// If this is a list type, then call a list-specific reconstruct method.
+			if opTyp.isListType() {
+				g.w.nestIndent("if after, changed := f.reconstruct%s(*t, replace); changed {\n",
+					opTyp.friendlyName)
+				g.w.writeIndent("return &after\n")
+				g.w.unnest("}\n")
+			}
+		}
+
+		g.w.writeIndent("return t\n")
+		g.w.unnest("\n")
 	}
 
-	// Generate code that assigns a placeholder value.
-	g.w.nestIndent("case opt.PlaceholderOp:\n")
-	g.w.writeIndent("value := expr.AsPlaceholder().Value()\n")
-	g.w.writeIndent("placeholder := f.mem.LookupPrivate(value).(*tree.Placeholder)\n")
-	g.w.writeIndent("d, err := placeholder.Eval(f.evalCtx)\n")
-	g.w.nestIndent("if err != nil {\n")
-	g.w.writeIndent("return 0, err\n")
-	g.w.unnest("}\n")
-	g.w.writeIndent("return f.ConstructConstVal(d), nil")
-
-	g.w.unnest("}\n")
-	g.w.writeIndent("panic(\"unhandled operator\")\n")
+	g.w.writeIndent("}\n")
+	g.w.writeIndent("panic(fmt.Sprintf(\"unhandled op %%s\", e.Op()))\n")
 	g.w.unnest("}\n\n")
+
+	for _, define := range g.compiled.Defines.WithTag("List") {
+		opTyp := g.md.typeOf(define)
+		itemTyp := opTyp.listItemType
+		itemDefine := g.compiled.LookupDefine(itemTyp.friendlyName)
+
+		g.w.nestIndent("func (f *Factory) reconstruct%s(list %s, replace ReconstructFunc) (_ %s, changed bool) {\n",
+			opTyp.friendlyName, opTyp.name, opTyp.name)
+
+		// This is a list-typed child.
+		g.w.writeIndent("var newList []%s\n", itemTyp.name)
+		g.w.nestIndent("for i := range list {\n")
+		if itemTyp.isGenerated {
+			g.w.writeIndent("before := list[i].%s\n", g.md.fieldName(itemDefine.Fields[0]))
+		} else {
+			g.w.writeIndent("before := list[i]\n")
+		}
+		g.w.writeIndent("after := replace(before).(opt.ScalarExpr)\n")
+		g.w.nestIndent("if before != after {\n")
+		g.w.nestIndent("if newList == nil {\n")
+		g.w.writeIndent("newList = make([]%s, len(list))\n", itemTyp.name)
+		g.w.writeIndent("copy(newList, list[:i])\n")
+		g.w.unnest("}\n")
+		if itemTyp.isGenerated {
+			g.w.writeIndent("newList[i].%s = after\n", g.md.fieldName(itemDefine.Fields[0]))
+
+			// Now copy additional exported private fields.
+			for _, field := range expandFields(g.compiled, itemDefine)[1:] {
+				if isExportedField(field) {
+					fieldName := g.md.fieldName(field)
+					g.w.writeIndent("newList[i].%s = list[i].%s\n", fieldName, fieldName)
+				}
+			}
+		} else {
+			g.w.writeIndent("newList[i] = after\n")
+		}
+		g.w.unnest("}")
+		g.w.nest(" else if newList != nil {")
+		g.w.writeIndent("newList[i] = list[i]\n")
+		g.w.unnest("}\n")
+		g.w.unnest("}\n")
+		g.w.nest("if newList == nil {\n")
+		g.w.writeIndent("  return list, false\n")
+		g.w.unnest("}\n")
+		g.w.writeIndent("return newList, true\n")
+		g.w.unnest("}\n\n")
+	}
+}
+
+// genAssignPlaceholders generates a method to copy an expression tree, but with
+// any placeholders replaced by their assigned values.
+func (g *factoryGen) genAssignPlaceholders() {
+	g.w.nestIndent("func (f *Factory) assignPlaceholders(src opt.Expr) (dst opt.Expr)")
+	g.w.nest(" {\n")
+	g.w.writeIndent("switch t := src.(type) {\n")
+
+	defines := g.compiled.Defines.
+		WithoutTag("Enforcer").
+		WithoutTag("List").
+		WithoutTag("ListItem").
+		WithoutTag("Private")
+
+	for _, define := range defines {
+		opTyp := g.md.typeOf(define)
+		childFields := g.md.childFields(define)
+		privateField := g.md.privateField(define)
+
+		g.w.nestIndent("case *%s:\n", opTyp.name)
+
+		if define.Name == "Placeholder" {
+			g.w.writeIndent("d, err := t.Value.Eval(f.evalCtx)\n")
+			g.w.nestIndent("if err != nil {\n")
+			g.w.writeIndent("panic(placeholderError{err})\n")
+			g.w.unnest("}\n")
+			g.w.writeIndent("return f.ConstructConstVal(d)\n")
+			g.w.unnest("\n")
+			continue
+		}
+
+		if define.Tags.Contains("Relational") || len(childFields) != 0 {
+			if len(childFields) != 0 {
+				g.w.nestIndent("return f.Construct%s(\n", define.Name)
+				for _, child := range childFields {
+					childTyp := g.md.typeOf(child)
+					childName := g.md.fieldName(child)
+
+					if childTyp.isListType() {
+						g.w.writeIndent("f.assign%sPlaceholders(t.%s),\n",
+							childTyp.friendlyName, childName)
+					} else {
+						g.w.writeIndent("f.assignPlaceholders(t.%s).(%s),\n",
+							childName, childTyp.name)
+					}
+				}
+				if privateField != nil {
+					fieldName := g.md.fieldName(privateField)
+					g.w.writeIndent("%st.%s,\n", g.md.fieldLoadPrefix(privateField), fieldName)
+				}
+				g.w.unnest(")\n")
+			} else {
+				g.w.writeIndent("return f.mem.Memoize%s(", define.Name)
+				if privateField != nil {
+					fieldName := g.md.fieldName(privateField)
+					g.w.write("%st.%s", g.md.fieldLoadPrefix(privateField), fieldName)
+				}
+				g.w.write(")\n")
+			}
+		} else {
+			g.w.writeIndent("return t\n")
+		}
+		g.w.unnest("\n")
+	}
+
+	g.w.writeIndent("}\n")
+	g.w.writeIndent("panic(fmt.Sprintf(\"unhandled op %%s\", src.Op()))\n")
+	g.w.unnest("}\n\n")
+
+	for _, define := range g.compiled.Defines.WithTag("List") {
+		opTyp := g.md.typeOf(define)
+		itemType := opTyp.listItemType
+		itemDefine := g.compiled.LookupDefine(itemType.friendlyName)
+
+		g.w.nestIndent("func (f *Factory) assign%sPlaceholders(src %s) (dst %s) {\n",
+			opTyp.friendlyName, opTyp.name, opTyp.name)
+
+		g.w.writeIndent("dst = make(%s, len(src))\n", opTyp.name)
+		g.w.nestIndent("for i := range src {\n")
+		if itemType.isGenerated {
+			// All list item types generated by Optgen can have at most one input
+			// field (always the first field). Any other fields must be privates.
+			// And placeholders only need to be assigned for input fields.
+			firstFieldName := g.md.fieldName(itemDefine.Fields[0])
+			g.w.writeIndent("dst[i].%s = f.assignPlaceholders(src[i].%s).(opt.ScalarExpr)\n",
+				firstFieldName, firstFieldName)
+
+			// Now copy additional exported private fields.
+			for _, field := range expandFields(g.compiled, itemDefine)[1:] {
+				if isExportedField(field) {
+					fieldName := g.md.fieldName(field)
+					g.w.writeIndent("dst[i].%s = src[i].%s\n", fieldName, fieldName)
+				}
+			}
+		} else {
+			g.w.writeIndent("dst[i] = f.assignPlaceholders(src[i]).(opt.ScalarExpr)\n")
+		}
+		g.w.unnest("}\n")
+		g.w.writeIndent("return dst\n")
+		g.w.unnest("}\n\n")
+	}
 }
 
 // genDynamicConstruct generates the factory's DynamicConstruct method, which
 // constructs expressions from a dynamic type and arguments. The code looks
 // similar to this:
 //
-//   type dynConstructFunc func(f *Factory, operands memo.DynamicOperands) memo.GroupID
+//   func (f *Factory) DynamicConstruct(op opt.Operator, args ...interface{}) opt.Node {
+//     switch op {
+//     case opt.ProjectOp:
+//       return f.ConstructProject(
+//         args[0].(memo.RelNode),
+//         *args[1].(*memo.ProjectionsExpr),
+//         *args[2].(*opt.ColSet),
+//       )
 //
-//   var dynConstructLookup [opt.NumOperators]dynConstructFunc
-//
-//   func init() {
-//     // ScanOp
-//     dynConstructLookup[opt.ScanOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
-//       return f.ConstructScan(memo.PrivateID(operands[0]))
-//     }
-//
-//     // SelectOp
-//     dynConstructLookup[opt.SelectOp] = func(f *Factory, operands memo.DynamicOperands) memo.GroupID {
-//       return f.ConstructSelect(memo.GroupID(operands[0]), memo.GroupID(operands[1]))
-//     }
-//
-//     ... code for other ops ...
+//     ... cases for other ops ...
 //   }
 //
 func (g *factoryGen) genDynamicConstruct() {
-	funcType := "func(f *Factory, operands memo.DynamicOperands) memo.GroupID"
-	g.w.writeIndent("type dynConstructFunc %s\n", funcType)
+	g.w.nestIndent("func (f *Factory) DynamicConstruct(op opt.Operator, args ...interface{}) opt.Expr {\n")
+	g.w.writeIndent("switch op {\n")
 
-	g.w.writeIndent("var dynConstructLookup [opt.NumOperators]dynConstructFunc\n\n")
+	defines := g.compiled.Defines.
+		WithoutTag("Enforcer").
+		WithoutTag("List").
+		WithoutTag("ListItem").
+		WithoutTag("Private")
 
-	g.w.nestIndent("func init() {\n")
-	g.w.writeIndent("// UnknownOp\n")
-	g.w.nestIndent("dynConstructLookup[opt.UnknownOp] = %s {\n", funcType)
-	g.w.writeIndent("  panic(\"op type not initialized\")\n")
-	g.w.unnest("}\n\n")
+	for _, define := range defines {
+		g.w.writeIndent("case opt.%sOp:\n", define.Name)
+		g.w.nestIndent("return f.Construct%s(\n", define.Name)
 
-	for _, define := range g.compiled.Defines.WithoutTag("Enforcer") {
-		g.w.writeIndent("// %sOp\n", define.Name)
-		g.w.nestIndent("dynConstructLookup[opt.%sOp] = %s {\n", define.Name, funcType)
-
-		g.w.writeIndent("return f.Construct%s(", define.Name)
 		for i, field := range define.Fields {
-			if i != 0 {
-				g.w.write(", ")
-			}
-
-			if isListType(string(field.Type)) {
-				g.w.write("operands[%d].ListID()", i)
-			} else if isPrivateType(string(field.Type)) {
-				g.w.write("memo.PrivateID(operands[%d])", i)
+			fieldTyp := g.md.typeOf(field)
+			if fieldTyp.isPointer {
+				g.w.writeIndent("args[%d].(%s),\n", i, fieldTyp.name)
+			} else if fieldTyp.passByVal {
+				g.w.writeIndent("*args[%d].(*%s),\n", i, fieldTyp.name)
 			} else {
-				g.w.write("memo.GroupID(operands[%d])", i)
+				g.w.writeIndent("args[%d].(*%s),\n", i, fieldTyp.name)
 			}
 		}
-		g.w.write(")\n")
 
-		g.w.unnest("}\n\n")
+		g.w.unnest(")\n")
 	}
 
-	g.w.unnest("}\n\n")
-
-	args := "op opt.Operator, operands memo.DynamicOperands"
-	g.w.nestIndent("func (f *Factory) DynamicConstruct(%s) memo.GroupID {\n", args)
-	g.w.writeIndent("return dynConstructLookup[op](f, operands)\n")
+	g.w.writeIndent("}\n")
+	g.w.writeIndent("panic(fmt.Sprintf(\"cannot dynamically construct operator %%s\", op))\n")
 	g.w.unnest("}\n")
 }

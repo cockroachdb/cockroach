@@ -18,7 +18,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -158,26 +157,26 @@ func (b *Builder) expandStarAndResolveType(
 //
 // The new column is returned as a scopeColumn object.
 func (b *Builder) synthesizeColumn(
-	scope *scope, label string, typ types.T, expr tree.TypedExpr, group memo.GroupID,
+	scope *scope, label string, typ types.T, expr tree.TypedExpr, scalar opt.ScalarExpr,
 ) *scopeColumn {
 	name := tree.Name(label)
 	colID := b.factory.Metadata().AddColumn(label, typ)
 	scope.cols = append(scope.cols, scopeColumn{
-		name:  name,
-		typ:   typ,
-		id:    colID,
-		expr:  expr,
-		group: group,
+		name:   name,
+		typ:    typ,
+		id:     colID,
+		expr:   expr,
+		scalar: scalar,
 	})
 	return &scope.cols[len(scope.cols)-1]
 }
 
 // populateSynthesizedColumn is similar to synthesizeColumn, but it fills in
 // the given existing column rather than allocating a new one.
-func (b *Builder) populateSynthesizedColumn(col *scopeColumn, group memo.GroupID) {
+func (b *Builder) populateSynthesizedColumn(col *scopeColumn, scalar opt.ScalarExpr) {
 	colID := b.factory.Metadata().AddColumn(string(col.name), col.typ)
 	col.id = colID
-	col.group = group
+	col.scalar = scalar
 }
 
 // projectColumn projects src by copying its column ID to dst. projectColumn
@@ -216,7 +215,7 @@ func (b *Builder) addColumn(
 
 func (b *Builder) synthesizeResultColumns(scope *scope, cols sqlbase.ResultColumns) {
 	for i := range cols {
-		c := b.synthesizeColumn(scope, cols[i].Name, cols[i].Typ, nil /* expr */, 0 /* group */)
+		c := b.synthesizeColumn(scope, cols[i].Name, cols[i].Typ, nil /* expr */, nil /* scalar */)
 		if cols[i].Hidden {
 			c.hidden = true
 		}

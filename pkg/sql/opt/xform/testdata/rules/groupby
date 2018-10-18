@@ -31,9 +31,9 @@ scalar-group-by
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(1)
- └── aggregations [outer=(1)]
+ └── aggregations
       └── const-agg [type=string, outer=(1)]
-           └── variable: a [type=string, outer=(1)]
+           └── variable: a [type=string]
 
 # Verify the rule still fires even if DISTINCT is used.
 opt
@@ -49,9 +49,9 @@ scalar-group-by
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(1)
- └── aggregations [outer=(1)]
+ └── aggregations
       └── const-agg [type=string, outer=(1)]
-           └── variable: a [type=string, outer=(1)]
+           └── variable: a [type=string]
 
 opt
 SELECT min(b) FROM abc
@@ -63,9 +63,9 @@ scalar-group-by
  ├── fd: ()-->(5)
  ├── scan abc
  │    └── columns: b:2(float)
- └── aggregations [outer=(2)]
+ └── aggregations
       └── min [type=float, outer=(2)]
-           └── variable: b [type=float, outer=(2)]
+           └── variable: b [type=float]
 
 exec-ddl
 CREATE TABLE xyz (
@@ -111,9 +111,9 @@ scalar-group-by
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(2,3)
- └── aggregations [outer=(2)]
+ └── aggregations
       └── const-agg [type=int, outer=(2)]
-           └── variable: y [type=int, outer=(2)]
+           └── variable: y [type=int]
 
 # ReplaceMaxWithLimit has the same behavior with max() as
 # the previous min() query because z is the prefix of a unique key
@@ -131,9 +131,9 @@ scalar-group-by
  │    ├── limit: 1(rev)
  │    ├── key: ()
  │    └── fd: ()-->(2,3)
- └── aggregations [outer=(2)]
+ └── aggregations
       └── const-agg [type=int, outer=(2)]
-           └── variable: y [type=int, outer=(2)]
+           └── variable: y [type=int]
 
 # We expect ReplaceMinWithLimit not to be preferred here.
 # This is because we know nothing about the ordering of y
@@ -151,9 +151,9 @@ scalar-group-by
  │    ├── constraint: /1/2: [/8 - ]
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- └── aggregations [outer=(2)]
+ └── aggregations
       └── min [type=int, outer=(2)]
-           └── variable: y [type=int, outer=(2)]
+           └── variable: y [type=int]
 
 # We expect ReplaceMaxWithLimit not to be preferred here.
 # This is because we know nothing about the ordering of y
@@ -171,9 +171,9 @@ scalar-group-by
  │    ├── constraint: /1/2: [/8 - ]
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- └── aggregations [outer=(2)]
+ └── aggregations
       └── max [type=int, outer=(2)]
-           └── variable: y [type=int, outer=(2)]
+           └── variable: y [type=int]
 
 opt
 SELECT max(x) FROM xyz
@@ -188,9 +188,9 @@ scalar-group-by
  │    ├── limit: 1(rev)
  │    ├── key: ()
  │    └── fd: ()-->(1)
- └── aggregations [outer=(1)]
+ └── aggregations
       └── const-agg [type=int, outer=(1)]
-           └── variable: x [type=int, outer=(1)]
+           └── variable: x [type=int]
 
 opt
 SELECT min(x) FROM xyz
@@ -205,9 +205,9 @@ scalar-group-by
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(1)
- └── aggregations [outer=(1)]
+ └── aggregations
       └── const-agg [type=int, outer=(1)]
-           └── variable: x [type=int, outer=(1)]
+           └── variable: x [type=int]
 
 opt
 SELECT min(x) FROM xyz WHERE x in (0, 4, 7)
@@ -223,9 +223,9 @@ scalar-group-by
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(1)
- └── aggregations [outer=(1)]
+ └── aggregations
       └── const-agg [type=int, outer=(1)]
-           └── variable: x [type=int, outer=(1)]
+           └── variable: x [type=int]
 
 opt
 SELECT max(x) FROM xyz WHERE x in (0, 4, 7)
@@ -241,9 +241,9 @@ scalar-group-by
  │    ├── limit: 1(rev)
  │    ├── key: ()
  │    └── fd: ()-->(1)
- └── aggregations [outer=(1)]
+ └── aggregations
       └── const-agg [type=int, outer=(1)]
-           └── variable: x [type=int, outer=(1)]
+           └── variable: x [type=int]
 
 opt
 SELECT min(y) FROM xyz
@@ -259,9 +259,9 @@ scalar-group-by
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(2)
- └── aggregations [outer=(2)]
+ └── aggregations
       └── const-agg [type=int, outer=(2)]
-           └── variable: y [type=int, outer=(2)]
+           └── variable: y [type=int]
 
 opt
 SELECT min(y), min(y) FROM xyz
@@ -277,9 +277,9 @@ scalar-group-by
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(2)
- └── aggregations [outer=(2)]
+ └── aggregations
       └── const-agg [type=int, outer=(2)]
-           └── variable: y [type=int, outer=(2)]
+           └── variable: y [type=int]
 
 # ReplaceMinWithLimit does not apply when there is
 # a grouping column
@@ -295,9 +295,9 @@ project
       ├── fd: (2)-->(4)
       ├── scan xyz@xy
       │    └── columns: y:2(int)
-      └── aggregations [outer=(2)]
+      └── aggregations
            └── min [type=int, outer=(2)]
-                └── variable: y [type=int, outer=(2)]
+                └── variable: y [type=int]
 
 # ReplaceMaxWithLimit does not apply when there is
 # a grouping column
@@ -313,9 +313,9 @@ project
       ├── fd: (2)-->(4)
       ├── scan xyz@xy
       │    └── columns: y:2(int)
-      └── aggregations [outer=(2)]
+      └── aggregations
            └── max [type=int, outer=(2)]
-                └── variable: y [type=int, outer=(2)]
+                └── variable: y [type=int]
 
 # ReplaceMinWithLimit does not apply when there is
 # a grouping column
@@ -333,9 +333,9 @@ project
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
-      └── aggregations [outer=(2)]
+      └── aggregations
            └── min [type=int, outer=(2)]
-                └── variable: y [type=int, outer=(2)]
+                └── variable: y [type=int]
 
 # ReplaceMinWithLimit does not apply on multiple aggregations
 # on different columns
@@ -351,11 +351,11 @@ scalar-group-by
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- └── aggregations [outer=(1,2)]
+ └── aggregations
       ├── min [type=int, outer=(2)]
-      │    └── variable: y [type=int, outer=(2)]
+      │    └── variable: y [type=int]
       └── min [type=int, outer=(1)]
-           └── variable: x [type=int, outer=(1)]
+           └── variable: x [type=int]
 
 
 # ReplaceMaxWithLimit does not apply on multiple aggregations
@@ -372,11 +372,11 @@ scalar-group-by
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- └── aggregations [outer=(1,2)]
+ └── aggregations
       ├── max [type=int, outer=(2)]
-      │    └── variable: y [type=int, outer=(2)]
+      │    └── variable: y [type=int]
       └── max [type=int, outer=(1)]
-           └── variable: x [type=int, outer=(1)]
+           └── variable: x [type=int]
 
 # ReplaceMinWithLimit does not apply with
 # multiple grouping columns
@@ -392,9 +392,9 @@ group-by
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- └── aggregations [outer=(2)]
+ └── aggregations
       └── min [type=int, outer=(2)]
-           └── variable: y [type=int, outer=(2)]
+           └── variable: y [type=int]
 
 # ReplaceMaxWithLimit does not apply with
 # multiple grouping columns
@@ -410,9 +410,9 @@ group-by
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
- └── aggregations [outer=(2)]
+ └── aggregations
       └── max [type=int, outer=(2)]
-           └── variable: y [type=int, outer=(2)]
+           └── variable: y [type=int]
 
 # ReplaceMinWithLimit does not apply to non-scalar
 # aggregates
@@ -430,11 +430,11 @@ project
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
-      └── aggregations [outer=(1,2)]
+      └── aggregations
            ├── min [type=int, outer=(1)]
-           │    └── variable: x [type=int, outer=(1)]
+           │    └── variable: x [type=int]
            └── count [type=int, outer=(2)]
-                └── variable: y [type=int, outer=(2)]
+                └── variable: y [type=int]
 
 # ReplaceMaxWithLimit does not apply to non-scalar
 # aggregates
@@ -452,34 +452,28 @@ project
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
-      └── aggregations [outer=(1,2)]
+      └── aggregations
            ├── max [type=int, outer=(1)]
-           │    └── variable: x [type=int, outer=(1)]
+           │    └── variable: x [type=int]
            └── count [type=int, outer=(2)]
-                └── variable: y [type=int, outer=(2)]
+                └── variable: y [type=int]
 
 memo
 SELECT min(a) FROM abc
 ----
-memo (optimized, ~10KB)
- ├── G1: (scalar-group-by G6 G2 cols=()) (scalar-group-by G3 G4 cols=())
- │    └── "[presentation: min:5]"
- │         ├── best: (scalar-group-by G3 G4 cols=())
+memo (optimized, ~4KB)
+ ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
+ │    └── [presentation: min:5]
+ │         ├── best: (scalar-group-by G4 G5 cols=())
  │         └── cost: 1.07
- ├── G2: (aggregations G5)
- ├── G3: (limit G6 G7 ordering=+1) (scan abc,cols=(1),lim=1)
- │    └── ""
+ ├── G2: (scan abc,cols=(1))
+ ├── G3: (aggregations G6)
+ ├── G4: (limit G2 G7 ordering=+1) (scan abc,cols=(1),lim=1)
+ │    └── []
  │         ├── best: (scan abc,cols=(1),lim=1)
  │         └── cost: 1.05
- ├── G4: (aggregations G8)
- ├── G5: (min G9)
- ├── G6: (scan abc,cols=(1))
- │    ├── ""
- │    │    ├── best: (scan abc,cols=(1))
- │    │    └── cost: 1050.00
- │    └── "[ordering: +1]"
- │         ├── best: (scan abc,cols=(1))
- │         └── cost: 1050.00
+ ├── G5: (aggregations G8)
+ ├── G6: (min G9)
  ├── G7: (const 1)
  ├── G8: (const-agg G9)
  └── G9: (variable a)
@@ -487,61 +481,43 @@ memo (optimized, ~10KB)
 memo
 SELECT min(b) FROM abc
 ----
-memo (optimized, ~10KB)
- ├── G1: (scalar-group-by G9 G2 cols=()) (scalar-group-by G3 G4 cols=())
- │    └── "[presentation: min:5]"
- │         ├── best: (scalar-group-by G9 G2 cols=())
+memo (optimized, ~4KB)
+ ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
+ │    └── [presentation: min:5]
+ │         ├── best: (scalar-group-by G2 G3 cols=())
  │         └── cost: 1060.01
- ├── G2: (aggregations G5)
- ├── G3: (limit G6 G7 ordering=+2)
- │    └── ""
- │         ├── best: (limit G6="[ordering: +2]" G7 ordering=+2)
- │         └── cost: 1244.71
- ├── G4: (aggregations G8)
- ├── G5: (min G12)
- ├── G6: (select G9 G10)
- │    ├── ""
- │    │    ├── best: (select G9 G10)
- │    │    └── cost: 1060.00
- │    └── "[ordering: +2]"
- │         ├── best: (sort G6)
- │         └── cost: 1244.70
- ├── G7: (const 1)
- ├── G8: (const-agg G12)
- ├── G9: (scan abc,cols=(2))
- │    ├── ""
- │    │    ├── best: (scan abc,cols=(2))
- │    │    └── cost: 1050.00
- │    └── "[ordering: +2]"
- │         ├── best: (sort G9)
- │         └── cost: 1259.32
- ├── G10: (filters G11)
- ├── G11: (is-not G12 G13)
- ├── G12: (variable b)
+ ├── G2: (scan abc,cols=(2))
+ │    └── []
+ │         ├── best: (scan abc,cols=(2))
+ │         └── cost: 1050.00
+ ├── G3: (aggregations G6)
+ ├── G4: (limit G7 G8 ordering=+2)
+ ├── G5: (aggregations G9)
+ ├── G6: (min G10)
+ ├── G7: (select G2 G11)
+ ├── G8: (const 1)
+ ├── G9: (const-agg G10)
+ ├── G10: (variable b)
+ ├── G11: (filters G12)
+ ├── G12: (is-not G10 G13)
  └── G13: (null)
 
 memo
 SELECT max(a) FROM abc
 ----
-memo (optimized, ~10KB)
- ├── G1: (scalar-group-by G6 G2 cols=()) (scalar-group-by G3 G4 cols=())
- │    └── "[presentation: max:5]"
- │         ├── best: (scalar-group-by G3 G4 cols=())
+memo (optimized, ~4KB)
+ ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
+ │    └── [presentation: max:5]
+ │         ├── best: (scalar-group-by G4 G5 cols=())
  │         └── cost: 1.07
- ├── G2: (aggregations G5)
- ├── G3: (limit G6 G7 ordering=-1) (scan abc,rev,cols=(1),lim=1(rev))
- │    └── ""
+ ├── G2: (scan abc,cols=(1))
+ ├── G3: (aggregations G6)
+ ├── G4: (limit G2 G7 ordering=-1) (scan abc,rev,cols=(1),lim=1(rev))
+ │    └── []
  │         ├── best: (scan abc,rev,cols=(1),lim=1(rev))
  │         └── cost: 1.05
- ├── G4: (aggregations G8)
- ├── G5: (max G9)
- ├── G6: (scan abc,cols=(1))
- │    ├── ""
- │    │    ├── best: (scan abc,cols=(1))
- │    │    └── cost: 1050.00
- │    └── "[ordering: -1]"
- │         ├── best: (scan abc,rev,cols=(1))
- │         └── cost: 1149.66
+ ├── G5: (aggregations G8)
+ ├── G6: (max G9)
  ├── G7: (const 1)
  ├── G8: (const-agg G9)
  └── G9: (variable a)
@@ -549,37 +525,25 @@ memo (optimized, ~10KB)
 memo
 SELECT max(b) FROM abc
 ----
-memo (optimized, ~10KB)
- ├── G1: (scalar-group-by G9 G2 cols=()) (scalar-group-by G3 G4 cols=())
- │    └── "[presentation: max:5]"
- │         ├── best: (scalar-group-by G9 G2 cols=())
+memo (optimized, ~4KB)
+ ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
+ │    └── [presentation: max:5]
+ │         ├── best: (scalar-group-by G2 G3 cols=())
  │         └── cost: 1060.01
- ├── G2: (aggregations G5)
- ├── G3: (limit G6 G7 ordering=-2)
- │    └── ""
- │         ├── best: (limit G6="[ordering: -2]" G7 ordering=-2)
- │         └── cost: 1244.71
- ├── G4: (aggregations G8)
- ├── G5: (max G12)
- ├── G6: (select G9 G10)
- │    ├── ""
- │    │    ├── best: (select G9 G10)
- │    │    └── cost: 1060.00
- │    └── "[ordering: -2]"
- │         ├── best: (sort G6)
- │         └── cost: 1244.70
- ├── G7: (const 1)
- ├── G8: (const-agg G12)
- ├── G9: (scan abc,cols=(2))
- │    ├── ""
- │    │    ├── best: (scan abc,cols=(2))
- │    │    └── cost: 1050.00
- │    └── "[ordering: -2]"
- │         ├── best: (sort G9)
- │         └── cost: 1259.32
- ├── G10: (filters G11)
- ├── G11: (is-not G12 G13)
- ├── G12: (variable b)
+ ├── G2: (scan abc,cols=(2))
+ │    └── []
+ │         ├── best: (scan abc,cols=(2))
+ │         └── cost: 1050.00
+ ├── G3: (aggregations G6)
+ ├── G4: (limit G7 G8 ordering=-2)
+ ├── G5: (aggregations G9)
+ ├── G6: (max G10)
+ ├── G7: (select G2 G11)
+ ├── G8: (const 1)
+ ├── G9: (const-agg G10)
+ ├── G10: (variable b)
+ ├── G11: (filters G12)
+ ├── G12: (is-not G10 G13)
  └── G13: (null)
 
 # --------------------------------------------------
@@ -599,9 +563,9 @@ scalar-group-by
  │    ├── limit: 1(rev)
  │    ├── key: ()
  │    └── fd: ()-->(1)
- └── aggregations [outer=(1)]
+ └── aggregations
       └── const-agg [type=string, outer=(1)]
-           └── variable: a [type=string, outer=(1)]
+           └── variable: a [type=string]
 
 # Verify the rule still fires even if DISTINCT is used.
 opt
@@ -617,9 +581,9 @@ scalar-group-by
  │    ├── limit: 1(rev)
  │    ├── key: ()
  │    └── fd: ()-->(1)
- └── aggregations [outer=(1)]
+ └── aggregations
       └── const-agg [type=string, outer=(1)]
-           └── variable: a [type=string, outer=(1)]
+           └── variable: a [type=string]
 
 opt
 select max(b) FROM abc
@@ -631,42 +595,30 @@ scalar-group-by
  ├── fd: ()-->(5)
  ├── scan abc
  │    └── columns: b:2(float)
- └── aggregations [outer=(2)]
+ └── aggregations
       └── max [type=float, outer=(2)]
-           └── variable: b [type=float, outer=(2)]
+           └── variable: b [type=float]
 
 memo
 select max(b) from abc
 ----
-memo (optimized, ~10KB)
- ├── G1: (scalar-group-by G9 G2 cols=()) (scalar-group-by G3 G4 cols=())
- │    └── "[presentation: max:5]"
- │         ├── best: (scalar-group-by G9 G2 cols=())
+memo (optimized, ~4KB)
+ ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
+ │    └── [presentation: max:5]
+ │         ├── best: (scalar-group-by G2 G3 cols=())
  │         └── cost: 1060.01
- ├── G2: (aggregations G5)
- ├── G3: (limit G6 G7 ordering=-2)
- │    └── ""
- │         ├── best: (limit G6="[ordering: -2]" G7 ordering=-2)
- │         └── cost: 1244.71
- ├── G4: (aggregations G8)
- ├── G5: (max G12)
- ├── G6: (select G9 G10)
- │    ├── ""
- │    │    ├── best: (select G9 G10)
- │    │    └── cost: 1060.00
- │    └── "[ordering: -2]"
- │         ├── best: (sort G6)
- │         └── cost: 1244.70
- ├── G7: (const 1)
- ├── G8: (const-agg G12)
- ├── G9: (scan abc,cols=(2))
- │    ├── ""
- │    │    ├── best: (scan abc,cols=(2))
- │    │    └── cost: 1050.00
- │    └── "[ordering: -2]"
- │         ├── best: (sort G9)
- │         └── cost: 1259.32
- ├── G10: (filters G11)
- ├── G11: (is-not G12 G13)
- ├── G12: (variable b)
+ ├── G2: (scan abc,cols=(2))
+ │    └── []
+ │         ├── best: (scan abc,cols=(2))
+ │         └── cost: 1050.00
+ ├── G3: (aggregations G6)
+ ├── G4: (limit G7 G8 ordering=-2)
+ ├── G5: (aggregations G9)
+ ├── G6: (max G10)
+ ├── G7: (select G2 G11)
+ ├── G8: (const 1)
+ ├── G9: (const-agg G10)
+ ├── G10: (variable b)
+ ├── G11: (filters G12)
+ ├── G12: (is-not G10 G13)
  └── G13: (null)

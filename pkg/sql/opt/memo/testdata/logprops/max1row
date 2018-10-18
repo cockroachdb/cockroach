@@ -38,7 +38,7 @@ select
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-4,+3,+1)
- └── filters [type=bool]
+ └── filters
       └── eq [type=bool]
            ├── subquery [type=string]
            │    └── max1-row

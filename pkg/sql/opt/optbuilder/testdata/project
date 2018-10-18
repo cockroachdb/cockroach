@@ -185,7 +185,7 @@ select
  ├── columns: x:1(int) y:2(float) rowid:3(int!null)
  ├── scan c
  │    └── columns: x:1(int) y:2(float) rowid:3(int!null)
- └── filters [type=bool]
+ └── filters
       └── gt [type=bool]
            ├── variable: rowid [type=int]
            └── const: 0 [type=int]

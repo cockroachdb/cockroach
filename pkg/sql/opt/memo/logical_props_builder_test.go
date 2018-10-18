@@ -189,14 +189,14 @@ func TestJoinCardinality(t *testing.T) {
 		t.Run(fmt.Sprintf("%s/%s", group.joinType, group.filter), func(t *testing.T) {
 			for i, tc := range group.testCases {
 				t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-					b := &logicalPropsBuilder{}
 					h := &joinPropsHelper{}
-					h.rightCardinality = tc.right
 					h.joinType = group.joinType
+					h.leftProps = &props.Relational{Cardinality: tc.left}
+					h.rightProps = &props.Relational{Cardinality: tc.right}
 					h.filterIsTrue = (group.filter == "true")
 					h.filterIsFalse = (group.filter == "false")
 
-					res := b.makeJoinCardinality(tc.left, h)
+					res := h.cardinality()
 					if res != tc.expected {
 						t.Errorf(
 							"left=%s right=%s: expected %s, got %s\n", tc.left, tc.right, tc.expected, res,

@@ -52,34 +52,24 @@
 # DecorrelateJoin pattern to turn JoinApply operators into non-apply Join
 # operators.
 #
-# This rule triggers a cycle with the PushFilterIntoJoinRight rule. Because this
-# rule has the DetectCycle tag, it is skipped once a cycle is detected. This
-# gives the PushFilterIntoJoinRight rule one last chance to push Select into the
-# right input, and therefore causes the normal form to be (Join (Select)) rather
-# than (Select (Join)) when the choice is ambiguous.
-#
-# This rule is marked as high priority so that it always runs before the
-# PushFilterIntoJoinRight rule. A Select operator with outer columns is always
-# pulled up as far as possible before being pushed back down.
-#
 # Note that citation [3] doesn't directly contain this identity, since it
 # assumes that the Select will be hoisted above the Join rather than becoming
 # part of its On condition. PushFilterIntoJoinRight allows the condition to be
 # pushed down, so this rule can correctly pull it up.
 #
 # Citations: [3] (see identity #3)
-[TryDecorrelateSelect, Normalize, DetectCycle, HighPriority]
+[TryDecorrelateSelect, Normalize]
 (InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
  SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
     $left:*
-    $right:* & (HasOuterCols $right) & (Select $input:* $filter:*)
+    $right:* & (HasOuterCols $right) & (Select $input:* $filters:*)
     $on:*
 )
 =>
 ((OpName)
     $left
     $input
-    (ConcatFilters $on $filter)
+    (ConcatFilters $on $filters)
 )
 
 # TryDecorrelateProject "pushes down" a Join into a Project operator, in an
@@ -94,7 +84,7 @@
     $left:*
     $right:* &
         (HasOuterCols $right) &
-        (Project $input:* $projections:*)
+        (Project $input:* $projections:* $passthrough:*)
     $on:*
 )
 =>
@@ -103,9 +93,10 @@
         ((OpName)
             $left
             $input
-            (True)
+            []
         )
-        (ProjectColsFromBoth $projections $left)
+        $projections
+        (UnionCols (OutputCols $left) $passthrough)
     )
     $on
 )
@@ -115,18 +106,16 @@
 # can't be reordered above the LeftJoin like it can in the InnerJoin case.
 # However, the Select filter can be merged with the LeftJoin filter, which is
 # enough to decorrelate in several useful cases.
-#
-# See the comment for TryDecorrelateSelect for an explanation of why the
-# DetectCycle and HighPriority tags are in use.
-[TryDecorrelateProjectSelect, Normalize, DetectCycle, HighPriority]
+[TryDecorrelateProjectSelect, Normalize]
 (LeftJoinApply
     $left:*
     $right:(Project
         (Select
             $selectInput:*
-            $filters:* & ^(IsBoundBy $filters (OutputCols $selectInput))
+            $filters:* & ^(FiltersBoundBy $filters (OutputCols $selectInput))
         )
         $projections:*
+        $passthrough:*
     )
     $on:*
 )
@@ -136,11 +125,13 @@
         $left
         (Project
             $selectInput
-            (ProjectColsFromBoth $projections $selectInput)
+            $projections
+            (UnionCols $passthrough (OutputCols $selectInput))
         )
         (ConcatFilters $on $filters)
     )
-    (ProjectColsFromBoth $left $right)
+    []
+    (OutputCols2 $left $right)
 )
 
 # TryDecorrelateProjectInnerJoin tries to decorrelate by hoisting the filter of
@@ -149,19 +140,17 @@
 # the InnerJoin case. However, the InnerJoin filter can be merged with the
 # LeftJoin filter, which is enough to decorrelate in several useful cases. This
 # rule works similarly to TryDecorrelateProjectSelect.
-#
-# See the comment for TryDecorrelateSelect for an explanation of why the
-# DetectCycle and HighPriority tags are in use.
-[TryDecorrelateProjectInnerJoin, Normalize, DetectCycle, HighPriority]
+[TryDecorrelateProjectInnerJoin, Normalize, HighPriority]
 (LeftJoinApply
     $left:*
     $right:(Project
         $join:(InnerJoin | InnerJoinApply
             $innerLeft:*
             $innerRight:*
-            $innerOn:* & ^(IsBoundBy $innerOn (OutputCols2 $innerLeft $innerRight))
+            $innerOn:* & ^(FiltersBoundBy $innerOn (OutputCols2 $innerLeft $innerRight))
         )
         $projections:*
+        $passthrough:*
     )
     $on:*
 )
@@ -173,13 +162,15 @@
             ((OpName $join)
                 $innerLeft
                 $innerRight
-                (True)
+                []
             )
-            (ProjectColsFromBoth $projections $join)
+            $projections
+            (UnionCols $passthrough (OutputCols $join))
         )
         (ConcatFilters $on $innerOn)
     )
-    (ProjectColsFromBoth $left $right)
+    []
+    (OutputCols2 $left $right)
 )
 
 # TryDecorrelateInnerJoin tries to decorrelate an InnerJoin operator nested
@@ -187,11 +178,8 @@
 # join. This may be enough to decorrelate the outer join, or it may allow any
 # outer column references to continue to journey upwards.
 #
-# See the comment for TryDecorrelateSelect for an explanation of why the
-# DetectCycle and HighPriority tags are in use.
-#
 # TODO(andyk): Consider adding case for outer cols in $left.
-[TryDecorrelateInnerJoin, Normalize, DetectCycle, HighPriority]
+[TryDecorrelateInnerJoin, Normalize]
 (InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
  SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
     $left:*
@@ -200,7 +188,7 @@
         (InnerJoin | InnerJoinApply
             $innerLeft:*
             $innerRight:*
-            $innerOn:*
+            $innerOn:* & ^(FiltersBoundBy $innerOn (OutputCols2 $innerLeft $innerRight))
         )
     $on:*
 )
@@ -210,7 +198,7 @@
     ((OpName $right)
         $innerLeft
         $innerRight
-        (True)
+        []
     )
     (ConcatFilters $on $innerOn)
 )
@@ -232,7 +220,7 @@
             $innerRight:*
             $innerOn:*
         )
-    $on:* & (IsBoundBy $on (OutputCols2 $left $innerLeft))
+    $on:* & (FiltersBoundBy $on (OutputCols2 $left $innerLeft))
 )
 =>
 (LeftJoinApply
@@ -289,9 +277,9 @@
         (GroupBy | DistinctOn
             $input:*
             $aggregations:*
-            $def:*
+            $groupingPrivate:*
         ) &
-        (IsUnorderedGroupBy $def)
+        (IsUnorderedGrouping $groupingPrivate)
     $on:*
 )
 =>
@@ -300,13 +288,13 @@
         (InnerJoinApply
             $newLeft:(EnsureKey $left)
             $input
-            (True)
+            []
         )
         (AppendAggCols
             $aggregations
             ConstAgg (NonKeyCols $newLeft)
         )
-        (AddColsToGroupByDef $def (KeyCols $newLeft))
+        (AddColsToGrouping $groupingPrivate (KeyCols $newLeft))
     )
     $on
 )
@@ -406,7 +394,7 @@
         (ScalarGroupBy
             $input:*
             $aggregations:*
-            $def:*
+            $groupingPrivate:*
         ) &
         (AggsCanBeDecorrelated $aggregations)
     $on:*
@@ -425,7 +413,7 @@
                     $input
                     $canaryCol:(EnsureCanaryCol $input $aggregations)
                 )
-                (True)
+                []
             )
             (AppendAggCols2
                 $translatedAggs:(EnsureAggsCanIgnoreNulls
@@ -435,7 +423,7 @@
                 ConstAgg (NonKeyCols $leftWithKey)
                 AnyNotNullAgg (CanaryColSet $canaryCol)
             )
-            (MakeOrderedGroupByDef (KeyCols $leftWithKey) (ExtractGroupByOrdering $def))
+            (MakeOrderedGrouping (KeyCols $leftWithKey) (ExtractGroupingOrdering $groupingPrivate))
         )
         $translatedAggs
         $rightWithCanary
@@ -468,7 +456,7 @@
         $on
     )
     (MakeAggCols ConstAgg (NonKeyCols $newLeft))
-    (MakeGroupByDef (KeyCols $newLeft))
+    (MakeGrouping (KeyCols $newLeft))
 )
 
 # TryDecorrelateLimitOne "pushes down" a Join into a Limit 1 operator, in an
@@ -504,7 +492,7 @@
         ConstAgg (NonKeyCols $newLeft)
         FirstAgg (OutputCols $input)
     )
-    (MakeOrderedGroupByDef (KeyCols $newLeft) (ExtractOrdering $ordering))
+    (MakeOrderedGrouping (KeyCols $newLeft) $ordering)
 )
 
 # TryDecorrelateZip "pushes down" an outer InnerJoinApply operator into an inner
@@ -535,7 +523,7 @@
     (InnerJoinApply
         $left
         $innerLeft
-        (True)
+        []
     )
     $innerRight
     (ConcatFilters $on $innerOn)
@@ -553,20 +541,22 @@
 [HoistSelectExists, Normalize, LowPriority]
 (Select
     $input:*
-    $filter:* &
-        (HasHoistableSubquery $filter) &
-        (Filters
-            $list:[ ... $exists:(Exists $subquery:* & (HasOuterCols $subquery)) ... ]
-        )
+    $filters:[
+        ...
+        $item:* &
+            (HasHoistableSubquery $item) &
+            (FiltersItem (Exists $subquery:*))
+        ...
+    ]
 )
 =>
 (Select
     (SemiJoinApply
         $input
         $subquery
-        (True)
+        []
     )
-    (Filters (RemoveListItem $list $exists))
+    (RemoveFiltersItem $filters $item)
 )
 
 # HoistSelectNotExists extracts non-existential subqueries from Select filters,
@@ -577,20 +567,22 @@
 [HoistSelectNotExists, Normalize, LowPriority]
 (Select
     $input:*
-    $filter:* &
-        (HasHoistableSubquery $filter) &
-        (Filters
-            $list:[ ... $exists:(Not (Exists $subquery:* & (HasOuterCols $subquery))) ... ]
-        )
+    $filters:[
+        ...
+        $item:* &
+            (HasHoistableSubquery $item) &
+            (FiltersItem (Not (Exists $subquery:*)))
+        ...
+    ]
 )
 =>
 (Select
     (AntiJoinApply
         $input
         $subquery
-        (True)
+        []
     )
-    (Filters (RemoveListItem $list $exists))
+    (RemoveFiltersItem $filters $item)
 )
 
 # HoistSelectSubquery extracts subqueries from a Select filter and joins them
@@ -608,10 +600,10 @@
 [HoistSelectSubquery, Normalize, LowPriority]
 (Select
     $input:*
-    $filter:* & (HasHoistableSubquery $filter) & (Filters)
+    $filters:[ ... $item:* & (HasHoistableSubquery $item) ... ]
 )
 =>
-(HoistSelectSubquery $input $filter)
+(HoistSelectSubquery $input $filters)
 
 # HoistProjectSubquery extracts subqueries from a projections list and joins
 # them with the Project input. This and other subquery hoisting patterns create
@@ -621,10 +613,11 @@
 [HoistProjectSubquery, Normalize, LowPriority]
 (Project
     $input:*
-    $projections:* & (HasHoistableSubquery $projections)
+    $projections:[ ... $item:* & (HasHoistableSubquery $item) ... ]
+    $passthrough:*
 )
 =>
-(HoistProjectSubquery $input $projections)
+(HoistProjectSubquery $input $projections $passthrough)
 
 # HoistJoinSubquery extracts subqueries from a join filter and joins them with
 # the join's right input. This and other subquery hoisting patterns create a
@@ -635,7 +628,7 @@
 (Join
     $left:*
     $right:*
-    $on:* & (HasHoistableSubquery $on) & (Filters)
+    $on:[ ... $item:* & (HasHoistableSubquery $item) ... ]
 )
 =>
 (HoistJoinSubquery (OpName) $left $right $on)
@@ -666,57 +659,130 @@
 =>
 (HoistZipSubquery $funcs $cols)
 
-# NormalizeAnyFilter rewrites Any into Exists when it's a top-level conjunct in
-# a Select or Join filter. Any can be rewritten as Exists in this context
-# because a NULL return value is treated as False by the filter.
+# NormalizeSelectAnyFilter rewrites an Any expression that is a top-level
+# conjunct in Select filters, turning it into an Exists expression. Any can be
+# rewritten as Exists in this context because a NULL return value is treated as
+# False by the filter.
 #
 # Exists is more efficient than Any, since its null handling is much simpler. In
 # addition, the Exists can be transformed into a semi-join.
-[NormalizeAnyFilter, Normalize]
-(Filters
-    $list:[ ... $any:(Any $input:* $scalar:* $subqueryDef:*) ... ]
+#
+# Citations: [5] (section 3.5)
+[NormalizeSelectAnyFilter, Normalize]
+(Select
+    $input:*
+    $filters:[ ... $item:(FiltersItem (Any $anyInput:* $scalar:* $anyPrivate:*)) ... ]
 )
 =>
-(Filters
-    (ReplaceListItem
-        $list
-        $any
+(Select
+    $input
+    (ReplaceFiltersItem
+        $filters
+        $item
         (Exists
             (Select
-                $input
-                (Filters [ (ConstructAnyCondition $input $scalar $subqueryDef) ])
+                $anyInput
+                [ (FiltersItem (ConstructAnyCondition $anyInput $scalar $anyPrivate)) ]
             )
-            $subqueryDef
+            $anyPrivate
         )
     )
 )
 
-# NormalizeNotAnyFilter rewrites Not Any into Not Exists when it's a top-level
-# conjunct in a Select or Join filter. Not Any can be rewritten as Not Exists in
-# this context because a NULL return value is treated as False by the filter.
-#
-# Exists is more efficient than Any, since its null handling is much simpler. In
-# addition, the Not Exists can be transformed into an anti-join.
-#
-# Citations: [5] (section 3.5)
-[NormalizeNotAnyFilter, Normalize]
-(Filters
-    $list:[ ... $notany:(Not (Any $input:* $scalar:* $subqueryDef:*)) ... ]
+# NormalizeJoinAnyFilter is similar to NormalizeSelectAnyFilter, except that it
+# operates on Any expressions within Join filters rather than Select filters.
+[NormalizeJoinAnyFilter, Normalize]
+(Join
+    $left:*
+    $right:*
+    $on:[ ... $item:(FiltersItem (Any $anyInput:* $scalar:* $anyPrivate:*)) ... ]
 )
 =>
-(Filters
-    (ReplaceListItem
-        $list
-        $notany
+((OpName)
+    $left
+    $right
+    (ReplaceFiltersItem
+        $on
+        $item
+        (Exists
+            (Select
+                $anyInput
+                [ (FiltersItem (ConstructAnyCondition $anyInput $scalar $anyPrivate)) ]
+            )
+            $anyPrivate
+        )
+    )
+)
+
+# NormalizeSelectNotAnyFilter rewrites a Not Any expression that is a top-level
+# conjunct in Select filters, turning it into a Not Exists expression. Not Any
+# can be rewritten as Not Exists in this context because a NULL return value is
+# treated as False by the filter.
+#
+# Not Exists is more efficient than Not Any, since its null handling is much
+# simpler. In addition, the Not Exists can be transformed into an anti-join.
+#
+# Citations: [5] (section 3.5)
+[NormalizeSelectNotAnyFilter, Normalize]
+(Select
+    $input:*
+    $filters:[ ... $item:(FiltersItem (Not (Any $anyInput:* $scalar:* $anyPrivate:*))) ... ]
+)
+=>
+(Select
+    $input
+    (ReplaceFiltersItem
+        $filters
+        $item
         (Not
             (Exists
                 (Select
-                    $input
-                    (Filters
-                        [ (IsNot (ConstructAnyCondition $input $scalar $subqueryDef) (False)) ]
-                    )
+                    $anyInput
+                    [
+                        (FiltersItem
+                            (IsNot
+                                (ConstructAnyCondition $anyInput $scalar $anyPrivate)
+                                (False)
+                            )
+                        )
+                    ]
                 )
-                $subqueryDef
+                $anyPrivate
+            )
+        )
+    )
+)
+
+# NormalizeJoinNotAnyFilter is similar to NormalizeSelectNotAnyFilter, except
+# that it operates on Not Any expressions within Join filters rather than Select
+# filters.
+[NormalizeJoinNotAnyFilter, Normalize]
+(Join
+    $left:*
+    $right:*
+    $on:[ ... $item:(FiltersItem (Not (Any $anyInput:* $scalar:* $anyPrivate:*))) ... ]
+)
+=>
+((OpName)
+    $left
+    $right
+    (ReplaceFiltersItem
+        $on
+        $item
+        (Not
+            (Exists
+                (Select
+                    $anyInput
+                    [
+                        (FiltersItem
+                            (IsNot
+                                (ConstructAnyCondition $anyInput $scalar $anyPrivate)
+                                (False)
+                            )
+                        )
+                    ]
+                )
+                $anyPrivate
             )
         )
     )

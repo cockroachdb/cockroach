@@ -31,7 +31,7 @@ project
  ├── scan t
  │    ├── columns: x:1(int!null)
  │    └── key: (1)
- └── projections [outer=(1)]
+ └── projections
       └── ARRAY[1, 2, 3, x] [type=int[], outer=(1)]
 
 opt expect=FoldArray
@@ -179,7 +179,7 @@ project
  │    ├── cardinality: [1 - 1]
  │    ├── key: ()
  │    └── tuple [type=tuple]
- └── projections [side-effects]
+ └── projections
       └── 1 / 0 [type=decimal, side-effects]
 
 # Fold constant.

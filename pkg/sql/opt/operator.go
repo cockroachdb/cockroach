@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // Operator describes the type of operation that a memo expression performs.
@@ -25,19 +26,62 @@ import (
 // (and, or, plus, variable).
 type Operator uint16
 
-// MaxOperands is the maximum number of operands that an operator can have.
-// Increasing this limit can have a large memory impact, as every memo
-// expression uses memory for the max number of operands, even if it does not
-// have that many.
-const MaxOperands = 3
-
 // String returns the name of the operator as a string.
 func (i Operator) String() string {
 	if i >= Operator(len(opNames)-1) {
 		return fmt.Sprintf("Operator(%d)", i)
 	}
-
 	return opNames[opIndexes[i]:opIndexes[i+1]]
+}
+
+// Expr is a node in an expression tree. It offers methods to traverse and
+// inspect the tree. Each node in the tree has an enumerated operator type, zero
+// or more children, and an optional private value. The entire tree can be
+// easily visited using a pattern like this:
+//
+//   var visit func(e Expr)
+//   visit := func(e Expr) {
+//     for i, n := 0, e.ChildCount(); i < n; i++ {
+//       visit(e.Child(i))
+//     }
+//   }
+//
+type Expr interface {
+	// Op returns the operator type of the expression.
+	Op() Operator
+
+	// ChildCount returns the number of children of the expression.
+	ChildCount() int
+
+	// Child returns the nth child of the expression.
+	Child(nth int) Expr
+
+	// Private returns operator-specific data. Callers are expected to know the
+	// type and format of the data, which will differ from operator to operator.
+	// For example, an operator may choose to return one of its fields, or perhaps
+	// a pointer to itself, or nil if there is nothing useful to return.
+	Private() interface{}
+
+	// String returns a human-readable string representation for the expression
+	// that can be used for debugging and testing.
+	String() string
+}
+
+// ScalarExpr is a scalar expression, which is an expression that returns a
+// primitive-typed value like boolean or string rather than rows and columns.
+type ScalarExpr interface {
+	Expr
+
+	// DataType is the SQL type of the expression.
+	DataType() types.T
+}
+
+// MutableExpr is implemented by expressions that allow their children to be
+// updated.
+type MutableExpr interface {
+	// SetChild updates the nth child of the expression to instead be the given
+	// child expression.
+	SetChild(nth int, child Expr)
 }
 
 // ComparisonOpMap maps from a semantic tree comparison operator type to an

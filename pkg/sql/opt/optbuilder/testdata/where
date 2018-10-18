@@ -31,7 +31,7 @@ select
  ├── columns: k:1(int!null) v:2(int)
  ├── scan kv
  │    └── columns: k:1(int!null) v:2(int)
- └── filters [type=bool]
+ └── filters
       └── in [type=bool]
            ├── variable: k [type=int]
            └── tuple [type=tuple{int, int}]
@@ -45,7 +45,7 @@ select
  ├── columns: k:1(int!null) v:2(int!null)
  ├── scan kv
  │    └── columns: k:1(int!null) v:2(int)
- └── filters [type=bool]
+ └── filters
       └── in [type=bool]
            ├── variable: v [type=int]
            └── tuple [type=tuple{int}]
@@ -58,7 +58,7 @@ select
  ├── columns: k:1(int!null) v:2(int)
  ├── scan kv
  │    └── columns: kv.k:1(int!null) kv.v:2(int)
- └── filters [type=bool]
+ └── filters
       └── any: eq [type=bool]
            ├── project
            │    ├── columns: kv.k:3(int!null)
@@ -73,7 +73,7 @@ select
  ├── columns: k:1(int!null) v:2(int)
  ├── scan kv
  │    └── columns: kv.k:1(int!null) kv.v:2(int)
- └── filters [type=bool]
+ └── filters
       └── any: eq [type=bool]
            ├── project
            │    ├── columns: column5:5(tuple{int, int})
@@ -104,7 +104,7 @@ project
  │    ├── scan kvstring
  │    │    ├── columns: k:1(string!null) v:2(string)
  │    │    └── ordering: +1
- │    └── filters [type=bool]
+ │    └── filters
  │         └── like [type=bool]
  │              ├── variable: k [type=string]
  │              └── const: 'like%' [type=string]
@@ -125,7 +125,7 @@ project
  │    ├── scan kvstring
  │    │    ├── columns: k:1(string!null) v:2(string)
  │    │    └── ordering: +1
- │    └── filters [type=bool]
+ │    └── filters
  │         └── similar-to [type=bool]
  │              ├── variable: k [type=string]
  │              └── const: 'like[1-2]' [type=string]
@@ -146,7 +146,7 @@ project
  │    ├── scan kvstring
  │    │    ├── columns: k:1(string!null) v:2(string)
  │    │    └── ordering: +1
- │    └── filters [type=bool]
+ │    └── filters
  │         └── reg-match [type=bool]
  │              ├── variable: k [type=string]
  │              └── const: 'like[1-2]' [type=string]
@@ -167,7 +167,7 @@ select
  ├── columns: k:1(int!null) v:2(int)
  ├── scan kv
  │    └── columns: k:1(int!null) v:2(int)
- └── filters [type=bool]
+ └── filters
       └── in [type=bool]
            ├── variable: k [type=int]
            └── tuple [type=tuple{int, int, int}]
@@ -195,7 +195,7 @@ project
       ├── columns: a:1(int!null) b:2(int) rowid:3(int!null)
       ├── scan ab
       │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
-      └── filters [type=bool]
+      └── filters
            └── in [type=bool]
                 ├── variable: a [type=int]
                 └── tuple [type=tuple{int, int, int}]
@@ -212,7 +212,7 @@ project
       ├── columns: a:1(int!null) b:2(int) rowid:3(int!null)
       ├── scan ab
       │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
-      └── filters [type=bool]
+      └── filters
            └── in [type=bool]
                 ├── variable: a [type=int]
                 └── tuple [type=tuple{int, int, int, int}]
@@ -230,7 +230,7 @@ project
       ├── columns: a:1(int!null) b:2(int!null) rowid:3(int!null)
       ├── scan ab
       │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
-      └── filters [type=bool]
+      └── filters
            └── in [type=bool]
                 ├── tuple [type=tuple{int, int}]
                 │    ├── variable: a [type=int]
@@ -255,7 +255,7 @@ project
       ├── columns: a:1(int!null) b:2(int!null) rowid:3(int!null)
       ├── scan ab
       │    └── columns: a:1(int) b:2(int) rowid:3(int!null)
-      └── filters [type=bool]
+      └── filters
            └── in [type=bool]
                 ├── tuple [type=tuple{int, int}]
                 │    ├── variable: a [type=int]

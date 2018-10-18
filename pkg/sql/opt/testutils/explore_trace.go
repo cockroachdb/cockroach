@@ -17,7 +17,6 @@ package testutils
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // exploreTracer implements the stepping algorithm used by the OptTester's
@@ -29,11 +28,10 @@ import (
 // via diffs, we just show (separately) what each rule application does.
 type exploreTracer struct {
 	tester *OptTester
+	fo     *forcingOptimizer
 
-	fo *forcingOptimizer
-
-	srcExpr  memo.ExprView
-	newExprs []memo.ExprView
+	srcExpr  opt.Expr
+	newExprs []opt.Expr
 
 	// steps is the maximum number of exploration rules that can be applied by the
 	// optimizer during the current iteration.
@@ -48,11 +46,11 @@ func (et *exploreTracer) LastRuleName() opt.RuleName {
 	return et.fo.lastApplied
 }
 
-func (et *exploreTracer) SrcExpr() memo.ExprView {
+func (et *exploreTracer) SrcExpr() opt.Expr {
 	return et.srcExpr
 }
 
-func (et *exploreTracer) NewExprs() []memo.ExprView {
+func (et *exploreTracer) NewExprs() []opt.Expr {
 	return et.newExprs
 }
 
@@ -75,26 +73,40 @@ func (et *exploreTracer) Next() error {
 		return err
 	}
 	et.fo = fo
-	fo.optimize()
+	fo.Optimize()
 	if fo.remaining != 0 {
 		return nil
 	}
 
-	et.srcExpr = et.lastAppliedGroupExpr(fo.lastExploreSourceExpr)
-	et.newExprs = make([]memo.ExprView, fo.lastExploreNewExprs.Len())
-	for i, expr := range fo.lastExploreNewExprs.Ordered() {
-		et.newExprs[i] = et.lastAppliedGroupExpr(memo.ExprOrdinal(expr))
+	// Compute the lowest cost tree for the source expression.
+	et.srcExpr = et.restrictToExpr(fo.LookupPath(fo.lastAppliedSource))
+
+	// Compute the lowest code tree for any target expressions.
+	et.newExprs = et.newExprs[:0]
+	if fo.lastAppliedTarget != nil {
+		et.newExprs = append(et.newExprs, et.restrictToExpr(fo.LookupPath(fo.lastAppliedTarget)))
+
+		if rel, ok := fo.lastAppliedTarget.(memo.RelExpr); ok {
+			for {
+				rel = rel.NextExpr()
+				if rel == nil {
+					break
+				}
+				et.newExprs = append(et.newExprs, et.restrictToExpr(fo.LookupPath(rel)))
+			}
+		}
 	}
+
 	et.steps++
 	return nil
 }
 
-func (et *exploreTracer) lastAppliedGroupExpr(expr memo.ExprOrdinal) memo.ExprView {
+func (et *exploreTracer) restrictToExpr(path exprPath) opt.Expr {
 	fo2, err := newForcingOptimizer(et.tester, et.steps, true /* ignoreNormRules */)
 	if err != nil {
 		// We should have already built the query successfully once.
 		panic(err)
 	}
-	fo2.restrictToExprs(et.fo.o.Memo(), et.fo.lastAppliedGroup, util.MakeFastIntSet(int(expr)))
-	return fo2.optimize()
+	fo2.RestrictToExpr(path)
+	return fo2.Optimize()
 }

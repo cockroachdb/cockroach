@@ -149,19 +149,19 @@ func TestIndexConstraints(t *testing.T) {
 				if err != nil {
 					return fmt.Sprintf("error: %v\n", err)
 				}
-				ev := f.Memo().Root()
+				root := f.Memo().RootExpr().(opt.ScalarExpr)
+				filters := memo.FiltersExpr{{Condition: root}}
 
 				var ic idxconstraint.Instance
-				ic.Init(ev, indexCols, notNullCols, invertedIndex, &evalCtx, &f)
+				ic.Init(filters, indexCols, notNullCols, invertedIndex, &evalCtx, &f)
 				result := ic.Constraint()
 				var buf bytes.Buffer
 				for i := 0; i < result.Spans.Count(); i++ {
 					fmt.Fprintf(&buf, "%s\n", result.Spans.Get(i))
 				}
-				remainingFilter := ic.RemainingFilter()
-				remEv := memo.MakeNormExprView(f.Memo(), remainingFilter)
-				if remEv.Operator() != opt.TrueOp {
-					execBld := execbuilder.New(nil /* execFactory */, remEv, &evalCtx)
+				remainingFilter := ic.RemainingFilters()
+				if !remainingFilter.IsTrue() {
+					execBld := execbuilder.New(nil /* execFactory */, f.Memo(), &remainingFilter, &evalCtx)
 					expr, err := execBld.BuildScalar(&iVarHelper)
 					if err != nil {
 						return fmt.Sprintf("error: %v\n", err)
@@ -262,13 +262,15 @@ func BenchmarkIndexConstraints(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			ev := f.Memo().Root()
+			nd := f.Memo().RootExpr()
+			filters := memo.FiltersExpr{{Condition: nd.(opt.ScalarExpr)}}
+
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				var ic idxconstraint.Instance
-				ic.Init(ev, indexCols, notNullCols, false /*isInverted */, &evalCtx, &f)
+				ic.Init(filters, indexCols, notNullCols, false /*isInverted */, &evalCtx, &f)
 				_ = ic.Constraint()
-				_ = ic.RemainingFilter()
+				_ = ic.RemainingFilters()
 			}
 		})
 	}

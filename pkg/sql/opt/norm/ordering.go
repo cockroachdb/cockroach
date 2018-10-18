@@ -22,97 +22,99 @@ import (
 // CanSimplifyLimitOffsetOrdering returns true if the ordering required by the
 // Limit or Offset operator can be made less restrictive, so that the input
 // operator has more ordering choices.
-func (c *CustomFuncs) CanSimplifyLimitOffsetOrdering(input memo.GroupID, def memo.PrivateID) bool {
-	ordering := c.f.mem.LookupPrivate(def).(*props.OrderingChoice)
-	return c.canSimplifyOrdering(input, ordering)
+func (c *CustomFuncs) CanSimplifyLimitOffsetOrdering(
+	in memo.RelExpr, ordering props.OrderingChoice,
+) bool {
+	return c.canSimplifyOrdering(in, ordering)
 }
 
 // SimplifyLimitOffsetOrdering makes the ordering required by the Limit or
 // Offset operator less restrictive by removing optional columns, adding
 // equivalent columns, and removing redundant columns.
 func (c *CustomFuncs) SimplifyLimitOffsetOrdering(
-	input memo.GroupID, def memo.PrivateID,
-) memo.PrivateID {
-	existing := c.f.mem.LookupPrivate(def).(*props.OrderingChoice)
-	simplified := c.simplifyOrdering(input, existing)
-	return c.f.mem.InternOrderingChoice(&simplified)
+	input memo.RelExpr, ordering props.OrderingChoice,
+) props.OrderingChoice {
+	return c.simplifyOrdering(input, ordering)
 }
 
-// CanSimplifyGroupByOrdering returns true if the ordering required by the
-// GroupBy operator can be made less restrictive, so that the input operator has
-// more ordering choices.
-func (c *CustomFuncs) CanSimplifyGroupByOrdering(input memo.GroupID, def memo.PrivateID) bool {
-	groupByDef := c.f.mem.LookupPrivate(def).(*memo.GroupByDef)
-	return c.canSimplifyOrdering(input, &groupByDef.Ordering)
+// CanSimplifyGroupingOrdering returns true if the ordering required by the
+// grouping operator can be made less restrictive, so that the input operator
+// has more ordering choices.
+func (c *CustomFuncs) CanSimplifyGroupingOrdering(
+	in memo.RelExpr, private *memo.GroupingPrivate,
+) bool {
+	return c.canSimplifyOrdering(in, private.Ordering)
 }
 
-// SimplifyGroupByOrdering makes the ordering required by the GroupBy operator
+// SimplifyGroupingOrdering makes the ordering required by the grouping operator
 // less restrictive by removing optional columns, adding equivalent columns, and
 // removing redundant columns.
-func (c *CustomFuncs) SimplifyGroupByOrdering(
-	input memo.GroupID, def memo.PrivateID,
-) memo.PrivateID {
+func (c *CustomFuncs) SimplifyGroupingOrdering(
+	in memo.RelExpr, private *memo.GroupingPrivate,
+) *memo.GroupingPrivate {
 	// Copy GroupByDef to stack and replace Ordering field.
-	groupByDef := *c.f.mem.LookupPrivate(def).(*memo.GroupByDef)
-	groupByDef.Ordering = c.simplifyOrdering(input, &groupByDef.Ordering)
-	return c.f.mem.InternGroupByDef(&groupByDef)
+	copy := *private
+	copy.Ordering = c.simplifyOrdering(in, private.Ordering)
+	return &copy
 }
 
 // CanSimplifyRowNumberOrdering returns true if the ordering required by the
 // RowNumber operator can be made less restrictive, so that the input operator
 // has more ordering choices.
-func (c *CustomFuncs) CanSimplifyRowNumberOrdering(input memo.GroupID, def memo.PrivateID) bool {
-	rowNumberDef := c.f.mem.LookupPrivate(def).(*memo.RowNumberDef)
-	return c.canSimplifyOrdering(input, &rowNumberDef.Ordering)
+func (c *CustomFuncs) CanSimplifyRowNumberOrdering(
+	in memo.RelExpr, private *memo.RowNumberPrivate,
+) bool {
+	return c.canSimplifyOrdering(in, private.Ordering)
 }
 
 // SimplifyRowNumberOrdering makes the ordering required by the RowNumber
 // operator less restrictive by removing optional columns, adding equivalent
 // columns, and removing redundant columns.
 func (c *CustomFuncs) SimplifyRowNumberOrdering(
-	input memo.GroupID, def memo.PrivateID,
-) memo.PrivateID {
+	in memo.RelExpr, private *memo.RowNumberPrivate,
+) *memo.RowNumberPrivate {
 	// Copy RowNumberDef to stack and replace Ordering field.
-	rowNumberDef := *c.f.mem.LookupPrivate(def).(*memo.RowNumberDef)
-	rowNumberDef.Ordering = c.simplifyOrdering(input, &rowNumberDef.Ordering)
-	return c.f.mem.InternRowNumberDef(&rowNumberDef)
+	copy := *private
+	copy.Ordering = c.simplifyOrdering(in, private.Ordering)
+	return &copy
 }
 
 // CanSimplifyExplainOrdering returns true if the ordering required by the
 // Explain operator can be made less restrictive, so that the input operator
 // has more ordering choices.
-func (c *CustomFuncs) CanSimplifyExplainOrdering(input memo.GroupID, def memo.PrivateID) bool {
-	explainDef := c.f.mem.LookupPrivate(def).(*memo.ExplainOpDef)
-	return c.canSimplifyOrdering(input, &explainDef.Props.Ordering)
+func (c *CustomFuncs) CanSimplifyExplainOrdering(
+	in memo.RelExpr, private *memo.ExplainPrivate,
+) bool {
+	return c.canSimplifyOrdering(in, private.Props.Ordering)
 }
 
 // SimplifyExplainOrdering makes the ordering required by the Explain operator
 // less restrictive by removing optional columns, adding equivalent columns, and
 // removing redundant columns.
 func (c *CustomFuncs) SimplifyExplainOrdering(
-	input memo.GroupID, def memo.PrivateID,
-) memo.PrivateID {
-	// Copy ExplainOpDef to stack and replace Ordering field.
-	explainDef := *c.f.mem.LookupPrivate(def).(*memo.ExplainOpDef)
-	explainDef.Props.Ordering = c.simplifyOrdering(input, &explainDef.Props.Ordering)
-	return c.f.mem.InternExplainOpDef(&explainDef)
+	in memo.RelExpr, private *memo.ExplainPrivate,
+) *memo.ExplainPrivate {
+	// Copy ExplainOpDef and its physical properties to stack and replace Ordering
+	// field in the copied properties.
+	copy := *private
+	copyProps := *private.Props
+	copyProps.Ordering = c.simplifyOrdering(in, private.Props.Ordering)
+	copy.Props = &copyProps
+	return &copy
 }
 
-func (c *CustomFuncs) canSimplifyOrdering(input memo.GroupID, ordering *props.OrderingChoice) bool {
+func (c *CustomFuncs) canSimplifyOrdering(in memo.RelExpr, ordering props.OrderingChoice) bool {
 	// If any ordering is allowed, nothing to simplify.
 	if ordering.Any() {
 		return false
 	}
-
-	fdset := &c.f.mem.GroupProperties(input).Relational.FuncDeps
-	return ordering.CanSimplify(fdset)
+	return ordering.CanSimplify(&in.Relational().FuncDeps)
 }
 
 func (c *CustomFuncs) simplifyOrdering(
-	input memo.GroupID, ordering *props.OrderingChoice,
+	in memo.RelExpr, ordering props.OrderingChoice,
 ) props.OrderingChoice {
-	fdset := &c.f.mem.GroupProperties(input).Relational.FuncDeps
 	simplified := ordering.Copy()
-	simplified.Simplify(fdset)
+	simplified.Simplify(&in.Relational().FuncDeps)
 	return simplified
 }

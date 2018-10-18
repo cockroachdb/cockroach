@@ -12,18 +12,18 @@
 # and examples.
 [GenerateConstrainedScans, Explore]
 (Select
-  (Scan $def:* & (IsCanonicalScan $def))
-  $filter:*
+  (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate))
+  $filters:*
 )
 =>
-(GenerateConstrainedScans $def $filter)
+(GenerateConstrainedScans $scanPrivate $filters)
 
 # GenerateInvertedIndexScans creates alternate expressions for filters that can
 # be serviced by an inverted index.
 [GenerateInvertedIndexScans, Explore]
 (Select
-  (Scan $def:* & (IsCanonicalScan $def) & (HasInvertedIndexes $def))
-  $filter:*
+  (Scan $scanPrivate:* & (IsCanonicalScan $scanPrivate) & (HasInvertedIndexes $scanPrivate))
+  $filters:*
 )
 =>
-(GenerateInvertedIndexScans $def $filter)
+(GenerateInvertedIndexScans $scanPrivate $filters)
