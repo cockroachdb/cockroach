@@ -870,13 +870,14 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 
 func (r *Replica) cancelPendingCommandsLocked() {
 	r.mu.AssertHeld()
-	pr := proposalResult{
-		Err:           roachpb.NewError(roachpb.NewAmbiguousResultError("removing replica")),
-		ProposalRetry: proposalRangeNoLongerExists,
-	}
 	for _, p := range r.mu.proposals {
 		r.cleanupFailedProposalLocked(p)
-		p.finishApplication(pr)
+		// NB: each proposal needs its own version of the error (i.e. don't try to
+		// share the error across proposals).
+		p.finishApplication(proposalResult{
+			Err:           roachpb.NewError(roachpb.NewAmbiguousResultError("removing replica")),
+			ProposalRetry: proposalRangeNoLongerExists,
+		})
 	}
 }
 
