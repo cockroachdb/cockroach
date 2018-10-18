@@ -279,7 +279,7 @@ func ascendZoneSpecifier(
 	} else if resolvedID != actualID {
 		// We traversed at least one level up, and we're not at the top of the
 		// hierarchy, so we're showing the database zone config.
-		zs.Database = zs.TableOrIndex.Table.TableName().CatalogName
+		zs.Database = zs.TableOrIndex.Table.CatalogName
 	} else if actualSubzone == nil {
 		// We didn't find a subzone, so no index or partition zone config exists.
 		zs.TableOrIndex.Index = ""

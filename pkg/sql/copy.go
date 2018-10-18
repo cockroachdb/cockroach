@@ -109,11 +109,7 @@ func newCopyMachine(
 		retErr = cleanup(ctx, retErr)
 	}()
 
-	tn, err := n.Table.Normalize()
-	if err != nil {
-		return nil, err
-	}
-	tableDesc, err := ResolveExistingObject(ctx, &c.p, tn, true /*required*/, requireTableDesc)
+	tableDesc, err := ResolveExistingObject(ctx, &c.p, &n.Table, true /*required*/, requireTableDesc)
 	if err != nil {
 		return nil, err
 	}

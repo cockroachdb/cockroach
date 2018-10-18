@@ -102,7 +102,7 @@ func (l *IndexElemList) Format(ctx *FmtCtx) {
 // CreateIndex represents a CREATE INDEX statement.
 type CreateIndex struct {
 	Name        Name
-	Table       NormalizableTableName
+	Table       TableName
 	Unique      bool
 	Inverted    bool
 	IfNotExists bool
@@ -207,7 +207,7 @@ type ColumnTableDef struct {
 	}
 	CheckExprs []ColumnTableDefCheckExpr
 	References struct {
-		Table          NormalizableTableName
+		Table          *TableName
 		Col            Name
 		ConstraintName Name
 		Actions        ReferenceActions
@@ -312,7 +312,7 @@ func NewColumnTableDef(
 				return nil, pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
 					"multiple foreign key constraints specified for column %q", name)
 			}
-			d.References.Table = t.Table
+			d.References.Table = &t.Table
 			d.References.Col = t.Col
 			d.References.ConstraintName = c.Name
 			d.References.Actions = t.Actions
@@ -346,7 +346,7 @@ func (node *ColumnTableDef) HasDefaultExpr() bool {
 
 // HasFKConstraint returns if the ColumnTableDef has a foreign key constraint.
 func (node *ColumnTableDef) HasFKConstraint() bool {
-	return node.References.Table.TableNameReference != nil
+	return node.References.Table != nil
 }
 
 // IsComputed returns if the ColumnTableDef is a computed column.
@@ -408,7 +408,7 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 			ctx.FormatNode(&node.References.ConstraintName)
 		}
 		ctx.WriteString(" REFERENCES ")
-		ctx.FormatNode(&node.References.Table)
+		ctx.FormatNode(node.References.Table)
 		if node.References.Col != "" {
 			ctx.WriteString(" (")
 			ctx.FormatNode(&node.References.Col)
@@ -488,7 +488,7 @@ type ColumnCheckConstraint struct {
 
 // ColumnFKConstraint represents a FK-constaint on a column.
 type ColumnFKConstraint struct {
-	Table   NormalizableTableName
+	Table   TableName
 	Col     Name // empty-string means use PK
 	Actions ReferenceActions
 }
@@ -640,7 +640,7 @@ func (node *ReferenceActions) Format(ctx *FmtCtx) {
 // ForeignKeyConstraintTableDef represents a FOREIGN KEY constraint in the AST.
 type ForeignKeyConstraintTableDef struct {
 	Name     Name
-	Table    NormalizableTableName
+	Table    TableName
 	FromCols NameList
 	ToCols   NameList
 	Actions  ReferenceActions
@@ -730,7 +730,7 @@ func (node *FamilyTableDef) Format(ctx *FmtCtx) {
 // InterleaveDef represents an interleave definition within a CREATE TABLE
 // or CREATE INDEX statement.
 type InterleaveDef struct {
-	Parent       *NormalizableTableName
+	Parent       TableName
 	Fields       NameList
 	DropBehavior DropBehavior
 }
@@ -738,7 +738,7 @@ type InterleaveDef struct {
 // Format implements the NodeFormatter interface.
 func (node *InterleaveDef) Format(ctx *FmtCtx) {
 	ctx.WriteString(" INTERLEAVE IN PARENT ")
-	ctx.FormatNode(node.Parent)
+	ctx.FormatNode(&node.Parent)
 	ctx.WriteString(" (")
 	for i := range node.Fields {
 		if i > 0 {
@@ -844,7 +844,7 @@ func (node *RangePartition) Format(ctx *FmtCtx) {
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
 	IfNotExists   bool
-	Table         NormalizableTableName
+	Table         TableName
 	Interleave    *InterleaveDef
 	PartitionBy   *PartitionBy
 	Defs          TableDefs
@@ -930,13 +930,13 @@ func (node *CreateTable) HoistConstraints() {
 					targetCol = append(targetCol, col.References.Col)
 				}
 				node.Defs = append(node.Defs, &ForeignKeyConstraintTableDef{
-					Table:    col.References.Table,
+					Table:    *col.References.Table,
 					FromCols: NameList{col.Name},
 					ToCols:   targetCol,
 					Name:     col.References.ConstraintName,
 					Actions:  col.References.Actions,
 				})
-				col.References.Table = NormalizableTableName{}
+				col.References.Table = nil
 			}
 		}
 	}
@@ -945,7 +945,7 @@ func (node *CreateTable) HoistConstraints() {
 // CreateSequence represents a CREATE SEQUENCE statement.
 type CreateSequence struct {
 	IfNotExists bool
-	Name        NormalizableTableName
+	Name        TableName
 	Options     SequenceOptions
 }
 
@@ -1100,7 +1100,7 @@ func (node *CreateRole) Format(ctx *FmtCtx) {
 
 // CreateView represents a CREATE VIEW statement.
 type CreateView struct {
-	Name        NormalizableTableName
+	Name        TableName
 	ColumnNames NameList
 	AsSource    *Select
 }
@@ -1125,7 +1125,7 @@ func (node *CreateView) Format(ctx *FmtCtx) {
 type CreateStats struct {
 	Name        Name
 	ColumnNames NameList
-	Table       NormalizableTableName
+	Table       TableName
 }
 
 // Format implements the NodeFormatter interface.

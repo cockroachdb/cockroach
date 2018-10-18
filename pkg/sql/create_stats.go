@@ -31,15 +31,10 @@ type createStatsNode struct {
 }
 
 func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (planNode, error) {
-	tn, err := n.Table.Normalize()
-	if err != nil {
-		return nil, err
-	}
-
 	// TODO(anyone): if CREATE STATISTICS is meant to be able to operate
 	// within a transaction, then the following should probably run with
 	// caching disabled, like other DDL statements.
-	tableDesc, err := ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
+	tableDesc, err := ResolveExistingObject(ctx, p, &n.Table, true /*required*/, requireTableDesc)
 	if err != nil {
 		return nil, err
 	}
