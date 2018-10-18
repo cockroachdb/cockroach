@@ -437,20 +437,35 @@ func (s *Store) canApplySnapshotLocked(
 				if r.RaftStatus() == nil {
 					return true
 				}
+				// TODO(benesch): this check does detect inactivity on replicas with
+				// epoch-based leases. Since the validity of an epoch-based lease is
+				// tied to the owning node's liveness, the lease can be valid well after
+				// the leader of the range has cut off communication with this replica.
+				// Expiration based leases, by contrast, will expire quickly if the
+				// leader of the range stops sending this replica heartbeats.
 				lease, pendingLease := r.GetLease()
 				now := s.Clock().Now()
 				return !r.IsLeaseValid(lease, now) &&
 					(pendingLease == (roachpb.Lease{}) || !r.IsLeaseValid(pendingLease, now))
 			}
-
-			// If the existing range shows no signs of recent activity, give it a GC
-			// run.
+			// We unconditionally send this replica through the GC queue. It's
+			// reasonably likely that the GC queue will do nothing because the replica
+			// needs to split instead, but better to err on the side of queueing too
+			// frequently. Blocking Raft snapshots for too long can wedge a cluster,
+			// and if the replica does need to be GC'd, this might be the only code
+			// path that notices in a timely fashion.
+			//
+			// We're careful to avoid starving out other replicas in the GC queue by
+			// queueing at a low priority unless we can prove that the range is
+			// inactive and thus unlikely to be about to process a split.
+			gcPriority := replicaGCPriorityDefault
 			if inactive(exReplica) {
-				if _, err := s.replicaGCQueue.Add(exReplica, replicaGCPriorityCandidate); err != nil {
-					log.Errorf(ctx, "%s: unable to add replica to GC queue: %s", exReplica, err)
-				} else {
-					msg += "; initiated GC:"
-				}
+				gcPriority = replicaGCPriorityCandidate
+			}
+			if _, err := s.replicaGCQueue.Add(exReplica, gcPriority); err != nil {
+				log.Errorf(ctx, "%s: unable to add replica to GC queue: %s", exReplica, err)
+			} else {
+				msg += "; initiated GC:"
 			}
 		}
 		return nil, errors.Errorf("%s %v", msg, exReplica) // exReplica can be nil
