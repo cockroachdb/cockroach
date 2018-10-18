@@ -69,6 +69,7 @@ func (ef *execFactory) ConstructScan(
 	indexConstraint *constraint.Constraint,
 	hardLimit int64,
 	reverse bool,
+	allPointSpans bool,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	tabDesc := table.(*optTable).desc
