@@ -110,6 +110,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	verifier := latencyVerifier{
 		targetInitialScanLatency: args.targetInitialScanLatency,
 		targetSteadyLatency:      args.targetSteadyLatency,
+		logger:                   c.l.ChildLogger("verifier"),
 	}
 	m.Go(func(ctx context.Context) error {
 		l, err := t.l.ChildLogger(`changefeed`)
@@ -153,7 +154,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 
 func registerCDC(r *registry) {
 	r.Add(testSpec{
-		Name:       "cdc/tpcc/w=1000/nodes=3/init=false",
+		Name:       "cdc/w=1000/nodes=3/init=false",
 		MinVersion: "2.1.0",
 		Nodes:      nodes(4, cpu(16)),
 		Stable:     false,
@@ -170,7 +171,7 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/tpcc/w=100/nodes=3/init=true",
+		Name:       "cdc/w=100/nodes=3/init=true",
 		MinVersion: "2.1.0",
 		Nodes:      nodes(4, cpu(16)),
 		Stable:     false,
@@ -187,7 +188,7 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/tpcc/w=100/nodes=3/init=false/chaos=true",
+		Name:       "cdc/w=100/nodes=3/init=false/chaos=true",
 		MinVersion: "2.1.0",
 		Nodes:      nodes(4, cpu(16)),
 		Stable:     false,
@@ -325,6 +326,7 @@ type latencyVerifier struct {
 	statementTime            time.Time
 	targetSteadyLatency      time.Duration
 	targetInitialScanLatency time.Duration
+	logger                   *logger
 
 	initialScanLatency   time.Duration
 	maxSeenSteadyLatency time.Duration
@@ -337,7 +339,7 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 	}
 	if lv.initialScanLatency == 0 {
 		lv.initialScanLatency = timeutil.Since(lv.statementTime)
-		// l.Printf("initial scan latency %s\n", initialScanLatency)
+		lv.logger.Printf("initial scan completed: latency %s\n", lv.initialScanLatency)
 		return
 	}
 
@@ -351,14 +353,15 @@ func (lv *latencyVerifier) noteHighwater(highwaterTime time.Time) {
 		// tracking the max latency once we seen a latency
 		// that's less than the max allowed. Verify at the end
 		// of the test that this happens at some point.
-		// l.Printf("end-to-end latency %s not yet below max allowed %s\n",
-		// 	latency, maxLatencyAllowed)
+		lv.logger.Printf("end-to-end latency %s not yet below target steady latency %s\n",
+			latency, lv.targetSteadyLatency)
 		return
 	}
 	if latency > lv.maxSeenSteadyLatency {
 		lv.maxSeenSteadyLatency = latency
 	}
-	// l.Printf("end-to-end latency %s max so far %s\n", latency, lv.maxSeenSteadyLatency)
+	lv.logger.Printf("end-to-end steady latency %s; max steady latency so far %s\n",
+		latency, lv.maxSeenSteadyLatency)
 }
 
 func (lv *latencyVerifier) pollLatency(
