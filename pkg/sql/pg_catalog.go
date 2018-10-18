@@ -680,7 +680,21 @@ CREATE TABLE pg_catalog.pg_constraint (
 					confupdtype = fkActionNone
 					confdeltype = fkActionNone
 					confmatchtype = fkMatchTypeSimple
-					if conkey, err = colIDArrayToDatum(con.Index.ColumnIDs); err != nil {
+					columnIDs := con.Index.ColumnIDs
+					if int(con.FK.SharedPrefixLen) > len(columnIDs) {
+						return errors.Errorf(
+							"For foreign key %q's shared prefix len (%d) is greater than the number of columns "+
+								"in the index (%d). This might be an indication of inconsistency.",
+							con.FK.Name,
+							con.FK.SharedPrefixLen,
+							int32(len(columnIDs)),
+						)
+					}
+					sharedPrefixLen := len(columnIDs)
+					if int(con.FK.SharedPrefixLen) > 0 {
+						sharedPrefixLen = int(con.FK.SharedPrefixLen)
+					}
+					if conkey, err = colIDArrayToDatum(columnIDs[:sharedPrefixLen]); err != nil {
 						return err
 					}
 					if confkey, err = colIDArrayToDatum(con.ReferencedIndex.ColumnIDs); err != nil {

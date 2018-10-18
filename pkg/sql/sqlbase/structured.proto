@@ -285,6 +285,8 @@ message InterleaveDescriptor {
     // grandparent. Thus, the sum of SharedPrefixLens in the components of an
     // InterleaveDescriptor is never more than the number of fields in the index
     // being interleaved.
+    // In cockroach 1.0, this value did not exist and thus a check for > 0
+    // must be performed prior to its use.
     optional uint32 shared_prefix_len = 3 [(gogoproto.nullable) = false,
         (gogoproto.customname) = "SharedPrefixLen"];
   }
