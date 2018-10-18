@@ -257,6 +257,35 @@ func (b *Builder) getColumns(
 	return needed, output
 }
 
+// indexConstraintMaxResults returns the maximum number of results that a scan
+// is guaranteed to read. Iff this hint is invalid, 0 is returned.
+func (b *Builder) indexConstraintMaxResults(scan *memo.ScanExpr) uint64 {
+	c := scan.Constraint
+	if c == nil || c.IsContradiction() || c.IsUnconstrained() {
+		return 0
+	}
+	// We can calculate the maximum number of results when both of the following
+	// are satisfied:
+	//  1. The index columns form a strict key or a lax key on non-null columns.
+	//  2. All spans cover all the columns of the index and have equal start and
+	//     end keys up to but not necessarily including the last column.
+	numCols := c.Columns.Count()
+	var indexCols opt.ColSet
+	for i := 0; i < numCols; i++ {
+		indexCols.Add(int(c.Columns.Get(i).ID()))
+	}
+	rel := scan.Relational()
+	// The index columns form a strict key if they're already a strict key by
+	// themselves or if the cols form a weak key and they're all non-null.
+	strictKey := rel.FuncDeps.ColsAreStrictKey(indexCols)
+	weakKeyNonNull := rel.FuncDeps.ColsAreLaxKey(indexCols) && indexCols.SubsetOf(rel.NotNullCols)
+	if !strictKey && !weakKeyNonNull {
+		return 0
+	}
+
+	return c.CalculateMaxResults(b.evalCtx)
+}
+
 func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	md := b.mem.Metadata()
 	tab := md.Table(scan.Table)
@@ -286,6 +315,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		scan.HardLimit.RowCount(),
 		// HardLimit.Reverse() is taken into account by ScanIsReverse.
 		ordering.ScanIsReverse(scan, &scan.RequiredPhysical().Ordering),
+		b.indexConstraintMaxResults(scan),
 		res.reqOrdering(scan),
 	)
 	if err != nil {

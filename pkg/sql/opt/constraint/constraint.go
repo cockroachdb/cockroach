@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // Constraint specifies the possible set of values that one or more columns
@@ -563,4 +564,56 @@ func (c *Constraint) ExtractNotNullCols(evalCtx *tree.EvalContext) opt.ColSet {
 	// All spans constrain col to be not-null.
 	res.Add(int(col.ID()))
 	return res
+}
+
+// CalculateMaxResults returns a non-zero integer indicating the maximum number
+// of results that can be read by using c.Spans with the assumption that there
+// is at most one result per distinct key.
+// TODO(asubiotto): The only reason to extract this is that both the heuristic
+// planner and optimizer need this logic, due to the heuristic planner planning
+// mutations. Once the optimizer plans mutations, this method can go away.
+func (c *Constraint) CalculateMaxResults(evalCtx *tree.EvalContext) uint64 {
+	numCols := c.Columns.Count()
+
+	// Check if the longest prefix of columns for which all the spans have the
+	// same start and end values covers all columns.
+	prefix := c.Prefix(evalCtx)
+	distinctVals := uint64(1)
+	if prefix < numCols-1 {
+		return 0
+	} else if prefix == numCols-1 {
+		// If the prefix does not include the last column, calculate the number of
+		// distinct values possible in the span.
+		for i := 0; i < c.Spans.Count(); i++ {
+			sp := c.Spans.Get(i)
+			start := sp.StartKey()
+			end := sp.EndKey()
+
+			// Ensure that the keys specify the last column.
+			if start.Length() != numCols || end.Length() != numCols {
+				return 0
+			}
+
+			// Assume end value is the same type since we are only calculating the
+			// difference in the last column, which should be the same.
+			// TODO(asubiotto): This logic is very similar to
+			// updateDistinctCountsFromConstraint. It would be nice to extract this
+			// logic somewhere.
+			colIdx := numCols - 1
+			if start.Value(colIdx).ResolvedType() == types.Int {
+				startVal := start.Value(colIdx)
+				endVal := end.Value(colIdx)
+				start := int(*startVal.(*tree.DInt))
+				end := int(*endVal.(*tree.DInt))
+				if c.Columns.Get(colIdx).Ascending() {
+					distinctVals += uint64(end - start)
+				} else {
+					distinctVals += uint64(start - end)
+				}
+			}
+		}
+	} else {
+		distinctVals = uint64(c.Spans.Count())
+	}
+	return distinctVals
 }
