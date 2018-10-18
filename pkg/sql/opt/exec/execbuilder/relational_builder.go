@@ -278,6 +278,28 @@ func (b *Builder) getColumns(
 	return needed, output
 }
 
+// indexConstraintMaxResults returns the maximum number of results for a scan;
+// the scan is guaranteed never to return more results than this. Iff this hint
+// is invalid, 0 is returned.
+func (b *Builder) indexConstraintMaxResults(scan *memo.ScanExpr) uint64 {
+	c := scan.Constraint
+	if c == nil || c.IsContradiction() || c.IsUnconstrained() {
+		return 0
+	}
+
+	numCols := c.Columns.Count()
+	var indexCols opt.ColSet
+	for i := 0; i < numCols; i++ {
+		indexCols.Add(int(c.Columns.Get(i).ID()))
+	}
+	rel := scan.Relational()
+	if !rel.FuncDeps.ColsAreLaxKey(indexCols) {
+		return 0
+	}
+
+	return c.CalculateMaxResults(b.evalCtx, indexCols, rel.NotNullCols)
+}
+
 func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	md := b.mem.Metadata()
 	tab := md.Table(scan.Table)
@@ -307,6 +329,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		scan.HardLimit.RowCount(),
 		// HardLimit.Reverse() is taken into account by ScanIsReverse.
 		ordering.ScanIsReverse(scan, &scan.RequiredPhysical().Ordering),
+		b.indexConstraintMaxResults(scan),
 		res.reqOrdering(scan),
 	)
 	if err != nil {
