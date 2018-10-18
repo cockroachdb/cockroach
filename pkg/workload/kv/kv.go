@@ -18,6 +18,7 @@ package kv
 import (
 	"context"
 	"crypto/sha1"
+	gosql "database/sql"
 	"encoding/binary"
 	"fmt"
 	"hash"
@@ -50,6 +51,7 @@ type kv struct {
 	writeSeq                             string
 	sequential                           bool
 	splits                               int
+	secondaryIndex                       bool
 	useOpt                               bool
 }
 
@@ -96,6 +98,8 @@ var kvMeta = workload.Meta{
 				`previous --sequential run and R implies a previous random run.`)
 		g.flags.IntVar(&g.splits, `splits`, 0,
 			`Number of splits to perform before starting normal operations.`)
+		g.flags.BoolVar(&g.secondaryIndex, `secondary-index`, false,
+			`Add a secondary index to the schema`)
 		g.flags.BoolVar(&g.useOpt, `use-opt`, true, `Use cost-based optimizer`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
@@ -118,6 +122,13 @@ func (w *kv) Hooks() workload.Hooks {
 			}
 			if w.sequential && w.splits > 0 {
 				return errors.New("'sequential' and 'splits' cannot both be enabled")
+			}
+			return nil
+		},
+		PostLoad: func(sqlDB *gosql.DB) error {
+			if w.secondaryIndex {
+				_, err := sqlDB.Exec(`CREATE INDEX IF NOT EXISTS v_idx ON kv (v)`)
+				return err
 			}
 			return nil
 		},
