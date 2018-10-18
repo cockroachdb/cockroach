@@ -329,6 +329,7 @@ func (p *planner) getPlanForDesc(
 	if err := scan.initTable(ctx, p, desc, indexFlags, colCfg); err != nil {
 		return planDataSource{}, err
 	}
+	scan.parallelScansEnabled = sqlbase.ParallelScans.Get(&p.extendedEvalCtx.Settings.SV)
 
 	ds := planDataSource{
 		info: sqlbase.NewSourceInfoForSingleTable(*tn, planColumns(scan)),

@@ -583,6 +583,7 @@ render          ·         ·
       └── scan  ·         ·
 ·               table     square@primary
 ·               spans     /2-/5/#
+·               parallel  ·
 
 
 statement ok
