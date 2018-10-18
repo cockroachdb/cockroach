@@ -294,24 +294,24 @@ func assignSequenceOptions(
 // The passed-in column descriptor is mutated, and the modified sequence descriptors are returned.
 func maybeAddSequenceDependencies(
 	sc SchemaResolver,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.MutableTableDescriptor,
 	col *sqlbase.ColumnDescriptor,
 	expr tree.TypedExpr,
 	evalCtx *tree.EvalContext,
-) ([]*MutableTableDescriptor, error) {
+) ([]*sqlbase.MutableTableDescriptor, error) {
 	ctx := evalCtx.Ctx()
 	seqNames, err := getUsedSequenceNames(expr)
 	if err != nil {
 		return nil, err
 	}
-	var seqDescs []*sqlbase.TableDescriptor
+	var seqDescs []*sqlbase.MutableTableDescriptor
 	for _, seqName := range seqNames {
 		parsedSeqName, err := evalCtx.Sequence.ParseQualifiedTableName(ctx, seqName)
 		if err != nil {
 			return nil, err
 		}
 
-		var seqDesc *MutableTableDescriptor
+		var seqDesc *sqlbase.MutableTableDescriptor
 		p, ok := sc.(*planner)
 		if ok {
 			seqDesc, err = p.ResolveMutableTableDescriptor(ctx, parsedSeqName, true /*required*/, requireSequenceDesc)
@@ -342,7 +342,7 @@ func maybeAddSequenceDependencies(
 //   - writes the sequence descriptor and notifies a schema change.
 // The column descriptor is mutated but not saved to persistent storage; the caller must save it.
 func removeSequenceDependencies(
-	tableDesc *sqlbase.TableDescriptor, col *sqlbase.ColumnDescriptor, params runParams,
+	tableDesc *sqlbase.MutableTableDescriptor, col *sqlbase.ColumnDescriptor, params runParams,
 ) error {
 	for _, sequenceID := range col.UsesSequenceIds {
 		// Get the sequence descriptor so we can remove the reference from it.

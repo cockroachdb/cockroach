@@ -27,7 +27,7 @@ import (
 
 type alterIndexNode struct {
 	n         *tree.AlterIndex
-	tableDesc *sqlbase.TableDescriptor
+	tableDesc *sqlbase.MutableTableDescriptor
 	indexDesc *sqlbase.IndexDescriptor
 }
 

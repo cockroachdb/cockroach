@@ -37,7 +37,7 @@ type dropTableNode struct {
 
 type toDelete struct {
 	tn   *tree.TableName
-	desc *sqlbase.TableDescriptor
+	desc *sqlbase.MutableTableDescriptor
 }
 
 // DropTable drops a table.
@@ -108,7 +108,7 @@ func (n *dropTableNode) startExec(params runParams) error {
 		droppedDetails := jobspb.DroppedTableDetails{Name: toDel.tn.FQString(), ID: toDel.desc.ID}
 		if _, err := params.p.createDropTablesJob(
 			ctx,
-			sqlbase.TableDescriptors{droppedDesc},
+			[]*sqlbase.MutableTableDescriptor{droppedDesc},
 			[]jobspb.DroppedTableDetails{droppedDetails},
 			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames),
 			true, /* drainNames */
@@ -161,7 +161,7 @@ func (*dropTableNode) Close(context.Context)        {}
 // If the table does not exist, this function returns a nil descriptor.
 func (p *planner) prepareDrop(
 	ctx context.Context, name *tree.TableName, required bool, requiredType requiredType,
-) (*MutableTableDescriptor, error) {
+) (*sqlbase.MutableTableDescriptor, error) {
 	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, name, required, requiredType)
 	if err != nil {
 		return nil, err
@@ -178,7 +178,7 @@ func (p *planner) prepareDrop(
 
 func (p *planner) canRemoveFK(
 	ctx context.Context, from string, ref sqlbase.ForeignKeyReference, behavior tree.DropBehavior,
-) (*sqlbase.TableDescriptor, error) {
+) (*sqlbase.MutableTableDescriptor, error) {
 	table, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.Table)
 	if err != nil {
 		return nil, err
@@ -213,7 +213,7 @@ func (p *planner) canRemoveInterleave(
 }
 
 func (p *planner) removeFK(
-	ctx context.Context, ref sqlbase.ForeignKeyReference, table *sqlbase.TableDescriptor,
+	ctx context.Context, ref sqlbase.ForeignKeyReference, table *sqlbase.MutableTableDescriptor,
 ) error {
 	if table == nil {
 		var err error
@@ -255,7 +255,7 @@ func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyRe
 // on it if `cascade` is enabled). It returns a list of view names that were
 // dropped due to `cascade` behavior.
 func (p *planner) dropTableImpl(
-	params runParams, tableDesc *sqlbase.TableDescriptor,
+	params runParams, tableDesc *sqlbase.MutableTableDescriptor,
 ) ([]string, error) {
 	ctx := params.ctx
 
@@ -323,7 +323,7 @@ func (p *planner) dropTableImpl(
 // TRUNCATE which directly deletes the old name to id map and doesn't need
 // drain the old map.
 func (p *planner) initiateDropTable(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, drainName bool,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, drainName bool,
 ) error {
 	if tableDesc.Dropped() {
 		return fmt.Errorf("table %q is being dropped", tableDesc.Name)
@@ -398,9 +398,9 @@ func (p *planner) initiateDropTable(
 }
 
 func (p *planner) removeFKBackReference(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, idx sqlbase.IndexDescriptor,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, idx sqlbase.IndexDescriptor,
 ) error {
-	var t *sqlbase.TableDescriptor
+	var t *sqlbase.MutableTableDescriptor
 	// We don't want to lookup/edit a second copy of the same table.
 	if tableDesc.ID == idx.ForeignKey.Table {
 		t = tableDesc
@@ -428,13 +428,13 @@ func (p *planner) removeFKBackReference(
 }
 
 func (p *planner) removeInterleaveBackReference(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, idx sqlbase.IndexDescriptor,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, idx sqlbase.IndexDescriptor,
 ) error {
 	if len(idx.Interleave.Ancestors) == 0 {
 		return nil
 	}
 	ancestor := idx.Interleave.Ancestors[len(idx.Interleave.Ancestors)-1]
-	var t *sqlbase.TableDescriptor
+	var t *sqlbase.MutableTableDescriptor
 	if ancestor.TableID == tableDesc.ID {
 		t = tableDesc
 	} else {

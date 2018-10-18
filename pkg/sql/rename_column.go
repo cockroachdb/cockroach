@@ -29,7 +29,7 @@ var errEmptyColumnName = pgerror.NewError(pgerror.CodeSyntaxError, "empty column
 
 type renameColumnNode struct {
 	n         *tree.RenameColumn
-	tableDesc *sqlbase.TableDescriptor
+	tableDesc *sqlbase.MutableTableDescriptor
 }
 
 // RenameColumn renames the column.

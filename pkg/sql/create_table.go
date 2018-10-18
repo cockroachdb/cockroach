@@ -114,15 +114,15 @@ func (n *createTableNode) startExec(params runParams) error {
 		privs = sqlbase.NewDefaultPrivilegeDescriptor()
 	}
 
-	var desc sqlbase.TableDescriptor
-	var affected map[sqlbase.ID]*sqlbase.TableDescriptor
+	var desc sqlbase.MutableTableDescriptor
+	var affected map[sqlbase.ID]*sqlbase.MutableTableDescriptor
 	creationTime := params.p.txn.CommitTimestamp()
 	if n.n.As() {
 		desc, err = makeTableDescIfAs(
 			n.n, n.dbDesc.ID, id, creationTime, planColumns(n.sourcePlan),
 			privs, &params.p.semaCtx, params.EvalContext())
 	} else {
-		affected = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+		affected = make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
 		desc, err = makeTableDesc(params, n.n, n.dbDesc.ID, id, creationTime, privs, affected)
 	}
 	if err != nil {
@@ -325,9 +325,9 @@ func matchesIndex(
 // descriptors without caching. See the comment on resolveFK().
 func (p *planner) resolveFK(
 	ctx context.Context,
-	tbl *sqlbase.TableDescriptor,
+	tbl *sqlbase.MutableTableDescriptor,
 	d *tree.ForeignKeyConstraintTableDef,
-	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
+	backrefs map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
 	mode sqlbase.ConstraintValidity,
 ) error {
 	return ResolveFK(ctx, p.txn, p, tbl, d, backrefs, mode)
@@ -373,9 +373,9 @@ func ResolveFK(
 	ctx context.Context,
 	txn *client.Txn,
 	sc SchemaResolver,
-	tbl *sqlbase.TableDescriptor,
+	tbl *sqlbase.MutableTableDescriptor,
 	d *tree.ForeignKeyConstraintTableDef,
-	backrefs map[sqlbase.ID]*sqlbase.TableDescriptor,
+	backrefs map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
 	mode sqlbase.ConstraintValidity,
 ) error {
 	for _, col := range d.FromCols {
@@ -583,7 +583,7 @@ func ResolveFK(
 // Adds an index to a table descriptor (that is in the process of being created)
 // that will support using `srcCols` as the referencing (src) side of an FK.
 func addIndexForFK(
-	tbl *sqlbase.TableDescriptor,
+	tbl *sqlbase.MutableTableDescriptor,
 	srcCols []sqlbase.ColumnDescriptor,
 	constraintName string,
 	ref sqlbase.ForeignKeyReference,
@@ -634,7 +634,7 @@ func colNames(cols []sqlbase.ColumnDescriptor) string {
 
 func (p *planner) addInterleave(
 	ctx context.Context,
-	desc *sqlbase.TableDescriptor,
+	desc *sqlbase.MutableTableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	interleave *tree.InterleaveDef,
 ) error {
@@ -647,7 +647,7 @@ func addInterleave(
 	ctx context.Context,
 	txn *client.Txn,
 	vt SchemaResolver,
-	desc *sqlbase.TableDescriptor,
+	desc *sqlbase.MutableTableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	interleave *tree.InterleaveDef,
 ) error {
@@ -737,7 +737,7 @@ func addInterleave(
 // finalizeInterleave creates backreferences from an interleaving parent to the
 // child data being interleaved.
 func (p *planner) finalizeInterleave(
-	ctx context.Context, desc *sqlbase.TableDescriptor, index sqlbase.IndexDescriptor,
+	ctx context.Context, desc *sqlbase.MutableTableDescriptor, index sqlbase.IndexDescriptor,
 ) error {
 	// TODO(dan): This is similar to finalizeFKs. Consolidate them
 	if len(index.Interleave.Ancestors) == 0 {
@@ -745,7 +745,7 @@ func (p *planner) finalizeInterleave(
 	}
 	// Only the last ancestor needs the backreference.
 	ancestor := index.Interleave.Ancestors[len(index.Interleave.Ancestors)-1]
-	var ancestorTable *sqlbase.TableDescriptor
+	var ancestorTable *sqlbase.MutableTableDescriptor
 	if ancestor.TableID == desc.ID {
 		ancestorTable = desc
 	} else {
@@ -783,7 +783,7 @@ func CreatePartitioning(
 	ctx context.Context,
 	st *cluster.Settings,
 	evalCtx *tree.EvalContext,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.MutableTableDescriptor,
 	indexDesc *sqlbase.IndexDescriptor,
 	partBy *tree.PartitionBy,
 ) (sqlbase.PartitioningDescriptor, error) {
@@ -800,7 +800,7 @@ var CreatePartitioningCCL = func(
 	ctx context.Context,
 	st *cluster.Settings,
 	evalCtx *tree.EvalContext,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.MutableTableDescriptor,
 	indexDesc *sqlbase.IndexDescriptor,
 	partBy *tree.PartitionBy,
 ) (sqlbase.PartitioningDescriptor, error) {
@@ -814,8 +814,8 @@ func InitTableDescriptor(
 	name string,
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
-) sqlbase.TableDescriptor {
-	return sqlbase.TableDescriptor{
+) sqlbase.MutableTableDescriptor {
+	return sqlbase.MutableTableDescriptor{
 		ID:               id,
 		Name:             name,
 		ParentID:         parentID,
@@ -836,7 +836,7 @@ func makeTableDescIfAs(
 	privileges *sqlbase.PrivilegeDescriptor,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
-) (desc sqlbase.TableDescriptor, err error) {
+) (desc sqlbase.MutableTableDescriptor, err error) {
 	desc = InitTableDescriptor(id, parentID, p.Table.Table(), creationTime, privileges)
 	for i, colRes := range resultColumns {
 		colType, err := coltypes.DatumTypeToColumnType(colRes.Typ)
@@ -924,10 +924,10 @@ func MakeTableDesc(
 	parentID, id sqlbase.ID,
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
-	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
+	affected map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
-) (sqlbase.TableDescriptor, error) {
+) (sqlbase.MutableTableDescriptor, error) {
 	desc := InitTableDescriptor(id, parentID, n.Table.Table(), creationTime, privileges)
 
 	for _, def := range n.Defs {
@@ -1126,7 +1126,7 @@ func MakeTableDesc(
 			// Now that we have all the other columns set up, we can validate any
 			// computed columns.
 			if d.IsComputed() {
-				if err := validateComputedColumn(desc, n, d, semaCtx, evalCtx); err != nil {
+				if err := validateComputedColumn(&desc, n, d, semaCtx, evalCtx); err != nil {
 					return desc, err
 				}
 			}
@@ -1135,7 +1135,7 @@ func MakeTableDesc(
 			// Pass, handled above.
 
 		case *tree.CheckConstraintTableDef:
-			ck, err := MakeCheckConstraint(ctx, desc, d, generatedNames, semaCtx, evalCtx, n.Table)
+			ck, err := MakeCheckConstraint(ctx, &desc, d, generatedNames, semaCtx, evalCtx, n.Table)
 			if err != nil {
 				return desc, err
 			}
@@ -1165,8 +1165,8 @@ func makeTableDesc(
 	parentID, id sqlbase.ID,
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
-	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
-) (ret sqlbase.TableDescriptor, err error) {
+	affected map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
+) (ret sqlbase.MutableTableDescriptor, err error) {
 	// Process any SERIAL columns to remove the SERIAL type,
 	// as required by MakeTableDesc.
 	createStmt := n
@@ -1259,7 +1259,7 @@ func (d *dummyColumnItem) ResolvedType() types.T {
 }
 
 func generateNameForCheckConstraint(
-	desc sqlbase.TableDescriptor, expr tree.Expr, inuseNames map[string]struct{},
+	desc *sqlbase.MutableTableDescriptor, expr tree.Expr, inuseNames map[string]struct{},
 ) (string, error) {
 	var nameBuf bytes.Buffer
 	nameBuf.WriteString("check")
@@ -1294,7 +1294,7 @@ func generateNameForCheckConstraint(
 }
 
 func iterColDescriptorsInExpr(
-	desc sqlbase.TableDescriptor, rootExpr tree.Expr, f func(sqlbase.ColumnDescriptor) error,
+	desc *sqlbase.MutableTableDescriptor, rootExpr tree.Expr, f func(sqlbase.ColumnDescriptor) error,
 ) error {
 	_, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
 		vBase, ok := expr.(tree.VarName)
@@ -1332,7 +1332,7 @@ func iterColDescriptorsInExpr(
 // validateComputedColumn checks that a computed column satisfies a number of
 // validity constraints, for instance, that it typechecks.
 func validateComputedColumn(
-	desc sqlbase.TableDescriptor,
+	desc *sqlbase.MutableTableDescriptor,
 	t *tree.CreateTable,
 	d *tree.ColumnTableDef,
 	semaCtx *tree.SemaContext,
@@ -1402,7 +1402,7 @@ func validateComputedColumn(
 // this new expression tree alongside a set containing the ColumnID of each
 // column seen in the expression.
 func replaceVars(
-	desc sqlbase.TableDescriptor, expr tree.Expr,
+	desc *sqlbase.MutableTableDescriptor, expr tree.Expr,
 ) (tree.Expr, map[sqlbase.ColumnID]struct{}, error) {
 	colIDs := make(map[sqlbase.ColumnID]struct{})
 	newExpr, err := tree.SimpleVisit(expr, func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
@@ -1437,7 +1437,7 @@ func replaceVars(
 // MakeCheckConstraint makes a descriptor representation of a check from a def.
 func MakeCheckConstraint(
 	ctx context.Context,
-	desc sqlbase.TableDescriptor,
+	desc *sqlbase.MutableTableDescriptor,
 	d *tree.CheckConstraintTableDef,
 	inuseNames map[string]struct{},
 	semaCtx *tree.SemaContext,
