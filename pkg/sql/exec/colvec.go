@@ -45,9 +45,6 @@ type ColVec interface {
 	Float64() []float64
 	// Bytes returns a Bytes object, allowing retrieval of multiple byte slices.
 	Bytes() Bytes
-
-	// Type returns the slice type.
-	Type() types.T
 }
 
 // Nulls represents a list of potentially nullable values.
@@ -85,12 +82,7 @@ var _ ColVec = memColumn{}
 
 // colAppend requires two ColVecs of the same type and returns the resulting
 // ColVec with their cols appended.
-func colAppend(a ColVec, b ColVec) ColVec {
-	t := a.Type()
-	if b.Type() != t {
-		panic("cannot append two ColVecs of different types")
-	}
-
+func colAppend(a ColVec, b ColVec, t types.T) ColVec {
 	// todo(changangela): should it return a memColumn?
 	switch t {
 	case types.Bool:
@@ -213,10 +205,6 @@ func (m memColumn) Float64() []float64 {
 
 func (m memColumn) Bytes() Bytes {
 	return m.col.(memBytes)
-}
-
-func (m memColumn) Type() types.T {
-	return m.t
 }
 
 var _ Bools = memBools{}
