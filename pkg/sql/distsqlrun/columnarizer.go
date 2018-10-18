@@ -55,11 +55,7 @@ func newColumnarizer(flowCtx *FlowCtx, processorID int32, input RowSource) (*col
 }
 
 func (c *columnarizer) Init() {
-	outputTypes := c.OutputTypes()
-	typs := make([]types.T, len(outputTypes))
-	for i := range typs {
-		typs[i] = types.FromColumnType(outputTypes[i])
-	}
+	typs := types.FromColumnTypes(c.OutputTypes())
 	c.batch = exec.NewMemBatch(typs)
 	c.buffered = make(sqlbase.EncDatumRows, exec.ColBatchSize)
 	for i := range c.buffered {
