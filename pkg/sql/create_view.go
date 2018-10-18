@@ -208,7 +208,7 @@ func (n *createViewNode) makeViewTableDesc(
 	id sqlbase.ID,
 	resultColumns []sqlbase.ResultColumn,
 	privileges *sqlbase.PrivilegeDescriptor,
-) (sqlbase.TableDescriptor, error) {
+) (sqlbase.MutableTableDescriptor, error) {
 	desc := InitTableDescriptor(id, parentID, viewName,
 		params.p.txn.CommitTimestamp(), privileges)
 	desc.ViewQuery = tree.AsStringWithFlags(n.n.AsSource, tree.FmtParsable)
@@ -248,7 +248,7 @@ func MakeViewTableDesc(
 	privileges *sqlbase.PrivilegeDescriptor,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
-) (sqlbase.TableDescriptor, error) {
+) (sqlbase.MutableTableDescriptor, error) {
 	viewName := n.Name.Table()
 	desc := InitTableDescriptor(id, parentID, viewName, creationTime, privileges)
 	desc.ViewQuery = tree.AsStringWithFlags(n.AsSource, tree.FmtParsable)

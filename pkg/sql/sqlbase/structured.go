@@ -103,6 +103,10 @@ const (
 // MutationID is a custom type for TableDescriptor mutations.
 type MutationID uint32
 
+// MutableTableDescriptor is a custom type for TableDescriptors
+// going through mutations.
+type MutableTableDescriptor = TableDescriptor
+
 // InvalidMutationID is the uninitialised mutation id.
 const InvalidMutationID MutationID = 0
 

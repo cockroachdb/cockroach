@@ -37,7 +37,7 @@ import (
 
 type alterTableNode struct {
 	n         *tree.AlterTable
-	tableDesc *sqlbase.TableDescriptor
+	tableDesc *MutableTableDescriptor
 	// statsData is populated with data for "alter table inject statistics"
 	// commands - the JSON stats expressions.
 	// It is parallel with n.Cmds (for the inject stats commands).
@@ -214,7 +214,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			case *tree.CheckConstraintTableDef:
 				ck, err := MakeCheckConstraint(params.ctx,
-					*n.tableDesc, d, inuseNames, &params.p.semaCtx, params.EvalContext(), n.n.Table)
+					n.tableDesc, d, inuseNames, &params.p.semaCtx, params.EvalContext(), n.n.Table)
 				if err != nil {
 					return err
 				}
@@ -232,7 +232,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						return err
 					}
 				}
-				affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+				affected := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
 
 				// If there are any FKs, we will need to update the table descriptor of the
 				// depended-on table (to register this table against its DependedOnBy field).
@@ -645,7 +645,7 @@ func (n *alterTableNode) Close(context.Context)        {}
 // columnDescriptor, and saves the containing table descriptor. If the column's
 // dependencies on sequences change, it updates them as well.
 func applyColumnMutation(
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.MutableTableDescriptor,
 	col *sqlbase.ColumnDescriptor,
 	mut tree.ColumnMutationCmd,
 	params runParams,

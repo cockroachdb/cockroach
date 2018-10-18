@@ -28,7 +28,7 @@ var errEmptyIndexName = pgerror.NewError(pgerror.CodeSyntaxError, "empty index n
 
 type renameIndexNode struct {
 	n         *tree.RenameIndex
-	tableDesc *sqlbase.TableDescriptor
+	tableDesc *sqlbase.MutableTableDescriptor
 	idx       sqlbase.IndexDescriptor
 }
 
