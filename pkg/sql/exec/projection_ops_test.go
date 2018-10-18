@@ -22,9 +22,9 @@ import (
 )
 
 func TestProjPlusInt64Int64ConstOp(t *testing.T) {
-	runTests(t, tuples{{1}, {2}}, []types.T{types.Int64}, func(t *testing.T, input Operator) {
+	runTests(t, []tuples{{{1}, {2}}}, []types.T{types.Int64}, func(t *testing.T, input []Operator) {
 		op := projPlusInt64Int64ConstOp{
-			input:     input,
+			input:     input[0],
 			colIdx:    0,
 			constArg:  1,
 			outputIdx: 1,
@@ -38,9 +38,9 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 }
 
 func TestProjPlusInt64Int64Op(t *testing.T) {
-	runTests(t, tuples{{1, 2}, {3, 4}}, []types.T{types.Int64}, func(t *testing.T, input Operator) {
+	runTests(t, []tuples{{{1, 2}, {3, 4}}}, []types.T{types.Int64}, func(t *testing.T, input []Operator) {
 		op := projPlusInt64Int64Op{
-			input:     input,
+			input:     input[0],
 			col1Idx:   0,
 			col2Idx:   1,
 			outputIdx: 2,

@@ -131,9 +131,9 @@ func TestSumInt(t *testing.T) {
 	for _, tc := range testCases {
 		tc.name = fmt.Sprintf("%s/Random", tc.name)
 		t.Run(tc.name, func(t *testing.T) {
-			runTests(t, tc.input, nil, func(t *testing.T, input Operator) {
+			runTests(t, []tuples{tc.input}, nil, func(t *testing.T, input []Operator) {
 				a := &sumInt64Agg{
-					input: input,
+					input: input[0],
 				}
 				outputBatchSize := tc.outputBatchSize
 				if outputBatchSize == 0 {

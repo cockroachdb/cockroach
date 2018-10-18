@@ -34,23 +34,27 @@ type tuples []tuple
 
 // runTests is a helper that automatically runs your tests with varied batch
 // sizes and with and without a random selection vector.
-// Provide a test function that takes an input Operator, which will give back
-// the tuples provided in batches.
+// Provide a test function that takes a list of input Operators, which will give
+// back the tuples provided in batches.
 func runTests(
-	t *testing.T, tups tuples, extraTypes []types.T, test func(t *testing.T, input Operator),
+	t *testing.T, tups []tuples, extraTypes []types.T, test func(t *testing.T, inputs []Operator),
 ) {
 	rng, _ := randutil.NewPseudoRand()
 
 	for _, batchSize := range []uint16{1, 2, 3, 16, 1024} {
 		for _, useSel := range []bool{false, true} {
 			t.Run(fmt.Sprintf("batchSize=%d/sel=%t", batchSize, useSel), func(t *testing.T) {
-				var tupleSource Operator
+				inputSources := make([]Operator, len(tups))
 				if useSel {
-					tupleSource = newOpTestSelInput(rng, batchSize, tups, extraTypes...)
+					for i, tup := range tups {
+						inputSources[i] = newOpTestSelInput(rng, batchSize, tup, extraTypes...)
+					}
 				} else {
-					tupleSource = newOpTestInput(batchSize, tups, extraTypes...)
+					for i, tup := range tups {
+						inputSources[i] = newOpTestInput(batchSize, tup, extraTypes...)
+					}
 				}
-				test(t, tupleSource)
+				test(t, inputSources)
 			})
 		}
 	}
@@ -144,7 +148,7 @@ func (s *opTestInput) Next() ColBatch {
 	tupleLen := len(tups[0])
 	for i := range tups {
 		if len(tups[i]) != tupleLen {
-			panic(fmt.Sprintf("mismatched tuple lens: found %+v expected %d cols",
+			panic(fmt.Sprintf("mismatched tuple lens: found %+v expected %d vals",
 				tups[i], tupleLen))
 		}
 	}
@@ -153,6 +157,7 @@ func (s *opTestInput) Next() ColBatch {
 		s.rng.Shuffle(len(s.selection), func(i, j int) {
 			s.selection[i], s.selection[j] = s.selection[j], s.selection[i]
 		})
+
 		s.batch.SetSelection(true)
 		copy(s.batch.Selection(), s.selection)
 	} else {
@@ -191,6 +196,7 @@ type opTestOutput struct {
 // the expected tuples.
 func newOpTestOutput(input Operator, cols []int, expected tuples) *opTestOutput {
 	input.Init()
+
 	return &opTestOutput{
 		input:    input,
 		cols:     cols,
@@ -246,7 +252,7 @@ func assertTupleEquals(expected tuple, actual tuple) error {
 		return errors.Errorf("expected:\n%+v\n actual:\n%+v\n", expected, actual)
 	}
 	for i := 0; i < len(actual); i++ {
-		if reflect.ValueOf(actual[i]).Convert(reflect.TypeOf(expected[i])).Interface() != expected[i] {
+		if !reflect.DeepEqual(reflect.ValueOf(actual[i]).Convert(reflect.TypeOf(expected[i])).Interface(), expected[i]) {
 			return errors.Errorf("expected:\n%+v\n actual:\n%+v\n", expected, actual)
 		}
 	}
@@ -304,15 +310,48 @@ func (s *repeatableBatchSource) resetBatchesToReturn(b int) {
 	s.batchesReturned = 0
 }
 
-func TestOpTestInputOutput(t *testing.T) {
-	input := tuples{
-		{1, 2, 100},
-		{1, 3, -3},
-		{0, 4, 5},
-		{1, 5, 0},
+// finiteBatchSource is an Operator that returns the same batch a specified
+// number of times.
+type finiteBatchSource struct {
+	repeatableBatch *repeatableBatchSource
+
+	usableCount int
+}
+
+var _ Operator = &finiteBatchSource{}
+
+// newFiniteBatchSource returns a new Operator initialized to return its input
+// batch a specified number of times.
+func newFiniteBatchSource(batch ColBatch, usableCount int) *finiteBatchSource {
+	return &finiteBatchSource{
+		repeatableBatch: newRepeatableBatchSource(batch),
+		usableCount:     usableCount,
 	}
-	runTests(t, input, nil, func(t *testing.T, in Operator) {
-		out := newOpTestOutput(in, []int{0, 1, 2}, input)
+}
+
+func (f *finiteBatchSource) Init() {
+	f.repeatableBatch.Init()
+}
+
+func (f *finiteBatchSource) Next() ColBatch {
+	if f.usableCount > 0 {
+		f.usableCount--
+		return f.repeatableBatch.Next()
+	}
+	return NewMemBatch([]types.T{})
+}
+
+func TestOpTestInputOutput(t *testing.T) {
+	inputs := []tuples{
+		{
+			{1, 2, 100},
+			{1, 3, -3},
+			{0, 4, 5},
+			{1, 5, 0},
+		},
+	}
+	runTests(t, inputs, nil, func(t *testing.T, sources []Operator) {
+		out := newOpTestOutput(sources[0], []int{0, 1, 2}, inputs[0])
 
 		if err := out.Verify(); err != nil {
 			t.Fatal(err)
