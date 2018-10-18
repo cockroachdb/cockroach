@@ -25,9 +25,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-func registerSchemaChange(r *registry) {
+func registerSchemaChangeKV(r *registry) {
 	r.Add(testSpec{
-		Name:   `schemachange`,
+		Name:   `schemachange/kv`,
 		Nodes:  nodes(5),
 		Stable: true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -287,4 +287,32 @@ func findIndexProblem(
 		}
 	}
 	return nil
+}
+
+func registerSchemaChangeTPCC(r *registry) {
+	warehouses := 1000
+	numNodes := 5
+	r.Add(testSpec{
+		Name:    fmt.Sprintf("schemachange/tpcc/warehouses=%d/nodes=%d", warehouses, numNodes),
+		Nodes:   nodes(numNodes),
+		Timeout: 4 * time.Hour,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses: warehouses,
+				Extra:      "--wait=false --tolerate-errors",
+				During: func(ctx context.Context) error {
+					conn := c.Conn(ctx, 1)
+					start := timeutil.Now()
+					if _, err := conn.Exec(`
+					CREATE UNIQUE INDEX foo ON tpcc.order (o_entry_d, o_w_id, o_d_id, o_carrier_id, o_id);
+				`); err != nil {
+						t.Fatal(err)
+					}
+					c.l.Printf("CREATE INDEX took %s", timeutil.Since(start))
+					return nil
+				},
+				Duration: 2 * time.Hour,
+			})
+		},
+	})
 }
