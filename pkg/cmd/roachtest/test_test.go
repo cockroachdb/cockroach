@@ -268,8 +268,8 @@ func TestRegistryVerifyClusterName(t *testing.T) {
 		{[]string{"HELLO", "hello"}, "have equivalent nightly cluster names"},
 		{[]string{"hel+lo", "hel++lo"}, "have equivalent nightly cluster names"},
 		{[]string{"hello+"}, "must match regex"},
-		{[]string{strings.Repeat("y", 46)}, ""},
-		{[]string{strings.Repeat("y", 100)}, "must match regex"},
+		{[]string{strings.Repeat("y", 41)}, ""},
+		{[]string{strings.Repeat("y", 42)}, "must match regex"},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {

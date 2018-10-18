@@ -40,10 +40,10 @@ import (
 )
 
 var (
-	count         = 1
-	debugEnabled  = false
-	postIssues    = true
-	clusterNameRE = regexp.MustCompile(`^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
+	count        = 1
+	debugEnabled = false
+	postIssues   = true
+	gceNameRE    = regexp.MustCompile(`^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
 )
 
 func makeFilterRE(filter []string) *regexp.Regexp {
@@ -186,17 +186,35 @@ func (r *registry) loadBuildVersion() {
 // be too long when running in different configurations.
 func (r *registry) verifyClusterName(testName string) error {
 	// TeamCity build IDs are currently 6 digits, but we use 7 here for a bit of
-	// breathing room.
-	name := makeGCEClusterName("teamcity-1234567-" + testName)
-	if !clusterNameRE.MatchString(name) {
-		return fmt.Errorf("cluster name '%s' must match regex '%s'",
-			name, clusterNameRE)
+	// breathing room. The nodes in the cluster will also have a 4 digit node ID
+	// appended; this pattern must be checked independently from the cluster name.
+	clusterName := makeGCEClusterName("teamcity-1234567-" + testName)
+	nodeName := makeGCEClusterName("teamcity-1234567-" + testName + "-1234")
+	if !gceNameRE.MatchString(clusterName) {
+		return fmt.Errorf(
+			"test name '%s' results in invalid cluster name"+
+				" (generated cluster name '%s' must match regex '%s')."+
+				" The test name may be too long or have invalid characters",
+			testName,
+			clusterName,
+			gceNameRE,
+		)
 	}
-	if t, ok := r.clusters[name]; ok {
+	if !gceNameRE.MatchString(nodeName) {
+		return fmt.Errorf(
+			"test name '%s' results in invalid cluster node names"+
+				" (generated node name '%s' must match regex '%s')."+
+				" The test name may be too long or have invalid characters",
+			testName,
+			nodeName,
+			gceNameRE,
+		)
+	}
+	if t, ok := r.clusters[clusterName]; ok {
 		return fmt.Errorf("test %s and test %s have equivalent nightly cluster names: %s",
-			testName, t, name)
+			testName, t, clusterName)
 	}
-	r.clusters[name] = testName
+	r.clusters[clusterName] = testName
 	return nil
 }
 
