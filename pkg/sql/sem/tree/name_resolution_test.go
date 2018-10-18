@@ -57,17 +57,7 @@ func TestNormalizeTableName(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.in, func(t *testing.T) {
-			tn, err := func() (*tree.TableName, error) {
-				stmt, err := parser.ParseOne(fmt.Sprintf("ALTER TABLE %s RENAME TO x", tc.in))
-				if err != nil {
-					return nil, err
-				}
-				tn, err := stmt.(*tree.RenameTable).Name.Normalize()
-				if err != nil {
-					return nil, err
-				}
-				return tn, nil
-			}()
+			tn, err := parser.ParseTableName(tc.in)
 			if !testutils.IsError(err, tc.err) {
 				t.Fatalf("%s: expected %s, but found %v", tc.in, tc.err, err)
 			}

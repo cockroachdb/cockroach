@@ -47,11 +47,7 @@ type toDelete struct {
 func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, error) {
 	td := make([]toDelete, 0, len(n.Names))
 	for i := range n.Names {
-		name := &n.Names[i]
-		tn, err := name.Normalize()
-		if err != nil {
-			return nil, err
-		}
+		tn := &n.Names[i]
 		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, requireTableDesc)
 		if err != nil {
 			return nil, err

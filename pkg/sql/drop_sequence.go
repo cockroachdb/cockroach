@@ -30,10 +30,7 @@ type dropSequenceNode struct {
 func (p *planner) DropSequence(ctx context.Context, n *tree.DropSequence) (planNode, error) {
 	td := make([]toDelete, 0, len(n.Names))
 	for i := range n.Names {
-		tn, err := n.Names[i].Normalize()
-		if err != nil {
-			return nil, err
-		}
+		tn := &n.Names[i]
 		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, requireSequenceDesc)
 		if err != nil {
 			return nil, err

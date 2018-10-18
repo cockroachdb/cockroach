@@ -49,5 +49,5 @@ FROM
     GROUP BY column_name, crdb_sql_type, is_nullable, column_default, generation_expression, ordinal_position, is_hidden
    )
 ORDER BY ordinal_position`
-	return p.showTableDetails(ctx, "SHOW COLUMNS", n.Table, getColumnsQuery)
+	return p.showTableDetails(ctx, "SHOW COLUMNS", &n.Table, getColumnsQuery)
 }

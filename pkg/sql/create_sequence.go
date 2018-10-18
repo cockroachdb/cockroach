@@ -32,12 +32,7 @@ type createSequenceNode struct {
 }
 
 func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (planNode, error) {
-	name, err := n.Name.Normalize()
-	if err != nil {
-		return nil, err
-	}
-
-	dbDesc, err := p.ResolveUncachedDatabase(ctx, name)
+	dbDesc, err := p.ResolveUncachedDatabase(ctx, &n.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +48,7 @@ func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (p
 }
 
 func (n *createSequenceNode) startExec(params runParams) error {
-	tKey := getSequenceKey(n.dbDesc, n.n.Name.TableName().Table())
+	tKey := getSequenceKey(n.dbDesc, n.n.Name.Table())
 	if exists, err := descExists(params.ctx, params.p.txn, tKey.Key()); err == nil && exists {
 		if n.n.IfNotExists {
 			// If the sequence exists but the user specified IF NOT EXISTS, return without doing anything.
@@ -64,7 +59,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 		return err
 	}
 
-	return doCreateSequence(params, n.n.String(), n.dbDesc, n.n.Name.TableName(), n.n.Options)
+	return doCreateSequence(params, n.n.String(), n.dbDesc, &n.n.Name, n.n.Options)
 }
 
 func getSequenceKey(dbDesc *DatabaseDescriptor, seqName string) tableKey {

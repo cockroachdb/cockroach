@@ -47,5 +47,5 @@ func (p *planner) ShowConstraints(ctx context.Context, n *tree.ShowConstraints) 
       AND t.oid = c.conrelid
     ORDER BY 1, 2
    `
-	return p.showTableDetails(ctx, "SHOW CONSTRAINTS", n.Table, getConstraintsQuery)
+	return p.showTableDetails(ctx, "SHOW CONSTRAINTS", &n.Table, getConstraintsQuery)
 }

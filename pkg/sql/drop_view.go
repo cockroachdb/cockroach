@@ -37,10 +37,7 @@ type dropViewNode struct {
 func (p *planner) DropView(ctx context.Context, n *tree.DropView) (planNode, error) {
 	td := make([]toDelete, 0, len(n.Names))
 	for i := range n.Names {
-		tn, err := n.Names[i].Normalize()
-		if err != nil {
-			return nil, err
-		}
+		tn := &n.Names[i]
 		droppedDesc, err := p.prepareDrop(ctx, tn, !n.IfExists, requireViewDesc)
 		if err != nil {
 			return nil, err

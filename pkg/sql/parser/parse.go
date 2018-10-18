@@ -132,7 +132,7 @@ func ParseTableName(sql string) (*tree.TableName, error) {
 	if !ok {
 		return nil, pgerror.NewAssertionErrorf("expected an ALTER TABLE statement, but found %T", stmt)
 	}
-	return rename.Name.Normalize()
+	return &rename.Name, nil
 }
 
 // parseExprs parses one or more sql expressions.

@@ -105,7 +105,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		if d, ok := def.(*tree.ColumnTableDef); ok && d.HasDefaultExpr() {
 			return sqlbase.TableDescriptor{},
 				errors.Errorf("virtual tables are not allowed to use default exprs "+
-					"because bootstrapping: %s:%s", create.Table, d.Name)
+					"because bootstrapping: %s:%s", &create.Table, d.Name)
 		}
 	}
 

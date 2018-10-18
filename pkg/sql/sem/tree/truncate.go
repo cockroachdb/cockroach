@@ -25,7 +25,7 @@ package tree
 
 // Truncate represents a TRUNCATE statement.
 type Truncate struct {
-	Tables       NormalizableTableNames
+	Tables       TableNames
 	DropBehavior DropBehavior
 }
 

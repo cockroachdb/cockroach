@@ -101,18 +101,14 @@ type scrubRun struct {
 func (n *scrubNode) startExec(params runParams) error {
 	switch n.n.Typ {
 	case tree.ScrubTable:
-		tableName, err := n.n.Table.Normalize()
-		if err != nil {
-			return err
-		}
 		// If the tableName provided refers to a view and error will be
 		// returned here.
 		tableDesc, err := ResolveExistingObject(
-			params.ctx, params.p, tableName, true /*required*/, requireTableDesc)
+			params.ctx, params.p, &n.n.Table, true /*required*/, requireTableDesc)
 		if err != nil {
 			return err
 		}
-		if err := n.startScrubTable(params.ctx, params.p, tableDesc, tableName); err != nil {
+		if err := n.startScrubTable(params.ctx, params.p, tableDesc, &n.n.Table); err != nil {
 			return err
 		}
 	case tree.ScrubDatabase:

@@ -62,11 +62,8 @@ func (t *truncateNode) startExec(params runParams) error {
 	stmtTableDescs := make([]*sqlbase.TableDescriptor, 0, len(n.Tables))
 	droppedTableDetails := make([]jobspb.DroppedTableDetails, 0, len(n.Tables))
 
-	for _, name := range n.Tables {
-		tn, err := name.Normalize()
-		if err != nil {
-			return err
-		}
+	for i := range n.Tables {
+		tn := &n.Tables[i]
 		tableDesc, err := p.ResolveMutableTableDescriptor(
 			ctx, tn, true /*required*/, requireTableDesc)
 		if err != nil {

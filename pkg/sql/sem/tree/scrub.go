@@ -33,7 +33,7 @@ type Scrub struct {
 	Typ     ScrubType
 	Options ScrubOptions
 	// Table is only set during SCRUB TABLE statements.
-	Table NormalizableTableName
+	Table TableName
 	// Database is only set during SCRUB DATABASE statements.
 	Database Name
 	AsOf     AsOfClause
