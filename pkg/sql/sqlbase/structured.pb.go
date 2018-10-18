@@ -655,6 +655,8 @@ type InterleaveDescriptor_Ancestor struct {
 	// grandparent. Thus, the sum of SharedPrefixLens in the components of an
 	// InterleaveDescriptor is never more than the number of fields in the index
 	// being interleaved.
+	// In cockroach 1.0, this value did not exist and thus a check for > 0
+	// must be performed prior to its use.
 	SharedPrefixLen uint32 `protobuf:"varint,3,opt,name=shared_prefix_len,json=sharedPrefixLen" json:"shared_prefix_len"`
 }
 
