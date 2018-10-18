@@ -393,7 +393,7 @@ union
  │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         ├── scan uniontest
  │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── filters [type=bool]
+ │         └── filters
  │              └── eq [type=bool]
  │                   ├── variable: uniontest.k [type=int]
  │                   └── const: 1 [type=int]
@@ -403,7 +403,7 @@ union
            ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
            ├── scan uniontest
            │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── filters [type=bool]
+           └── filters
                 └── eq [type=bool]
                      ├── variable: uniontest.k [type=int]
                      └── const: 2 [type=int]
@@ -421,7 +421,7 @@ union-all
  │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         ├── scan uniontest
  │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── filters [type=bool]
+ │         └── filters
  │              └── eq [type=bool]
  │                   ├── variable: uniontest.k [type=int]
  │                   └── const: 1 [type=int]
@@ -431,7 +431,7 @@ union-all
            ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
            ├── scan uniontest
            │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── filters [type=bool]
+           └── filters
                 └── eq [type=bool]
                      ├── variable: uniontest.k [type=int]
                      └── const: 2 [type=int]
@@ -449,7 +449,7 @@ intersect
  │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         ├── scan uniontest
  │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── filters [type=bool]
+ │         └── filters
  │              └── eq [type=bool]
  │                   ├── variable: uniontest.k [type=int]
  │                   └── const: 1 [type=int]
@@ -459,7 +459,7 @@ intersect
            ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
            ├── scan uniontest
            │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── filters [type=bool]
+           └── filters
                 └── eq [type=bool]
                      ├── variable: uniontest.k [type=int]
                      └── const: 2 [type=int]
@@ -477,7 +477,7 @@ intersect-all
  │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         ├── scan uniontest
  │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── filters [type=bool]
+ │         └── filters
  │              └── eq [type=bool]
  │                   ├── variable: uniontest.k [type=int]
  │                   └── const: 1 [type=int]
@@ -487,7 +487,7 @@ intersect-all
            ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
            ├── scan uniontest
            │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── filters [type=bool]
+           └── filters
                 └── eq [type=bool]
                      ├── variable: uniontest.k [type=int]
                      └── const: 2 [type=int]
@@ -505,7 +505,7 @@ except
  │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         ├── scan uniontest
  │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── filters [type=bool]
+ │         └── filters
  │              └── eq [type=bool]
  │                   ├── variable: uniontest.k [type=int]
  │                   └── const: 1 [type=int]
@@ -515,7 +515,7 @@ except
            ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
            ├── scan uniontest
            │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── filters [type=bool]
+           └── filters
                 └── eq [type=bool]
                      ├── variable: uniontest.k [type=int]
                      └── const: 2 [type=int]
@@ -533,7 +533,7 @@ except-all
  │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         ├── scan uniontest
  │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         └── filters [type=bool]
+ │         └── filters
  │              └── eq [type=bool]
  │                   ├── variable: uniontest.k [type=int]
  │                   └── const: 1 [type=int]
@@ -543,7 +543,7 @@ except-all
            ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
            ├── scan uniontest
            │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
-           └── filters [type=bool]
+           └── filters
                 └── eq [type=bool]
                      ├── variable: uniontest.k [type=int]
                      └── const: 2 [type=int]
@@ -568,7 +568,7 @@ limit
  │         │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         │         ├── scan uniontest
  │         │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         │         └── filters [type=bool]
+ │         │         └── filters
  │         │              └── eq [type=bool]
  │         │                   ├── variable: uniontest.k [type=int]
  │         │                   └── const: 1 [type=int]
@@ -578,7 +578,7 @@ limit
  │                   ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
  │                   ├── scan uniontest
  │                   │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
- │                   └── filters [type=bool]
+ │                   └── filters
  │                        └── eq [type=bool]
  │                             ├── variable: uniontest.k [type=int]
  │                             └── const: 2 [type=int]
@@ -605,7 +605,7 @@ limit
  │         │         ├── columns: uniontest.k:1(int!null) uniontest.v:2(int) uniontest.rowid:3(int!null)
  │         │         ├── scan uniontest
  │         │         │    └── columns: uniontest.k:1(int) uniontest.v:2(int) uniontest.rowid:3(int!null)
- │         │         └── filters [type=bool]
+ │         │         └── filters
  │         │              └── eq [type=bool]
  │         │                   ├── variable: uniontest.k [type=int]
  │         │                   └── const: 1 [type=int]
@@ -615,7 +615,7 @@ limit
  │                   ├── columns: uniontest.k:4(int!null) uniontest.v:5(int) uniontest.rowid:6(int!null)
  │                   ├── scan uniontest
  │                   │    └── columns: uniontest.k:4(int) uniontest.v:5(int) uniontest.rowid:6(int!null)
- │                   └── filters [type=bool]
+ │                   └── filters
  │                        └── eq [type=bool]
  │                             ├── variable: uniontest.k [type=int]
  │                             └── const: 2 [type=int]
@@ -674,7 +674,7 @@ left-join
  │         ├── columns: column1:3(int)
  │         └── tuple [type=tuple{int}]
  │              └── const: 2 [type=int]
- └── filters [type=bool]
+ └── filters
       └── eq [type=bool]
            ├── variable: column1 [type=int]
            └── variable: column1 [type=int]
@@ -700,7 +700,7 @@ left-join
  │         ├── columns: column1:3(int)
  │         └── tuple [type=tuple{int}]
  │              └── const: 2 [type=int]
- └── filters [type=bool]
+ └── filters
       └── eq [type=bool]
            ├── variable: column1 [type=int]
            └── variable: column1 [type=int]

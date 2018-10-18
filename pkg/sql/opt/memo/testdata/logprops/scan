@@ -142,12 +142,18 @@ TABLE t
 
 # Test case where one of the explorations causes construction of a scan with a
 # contradiction.
+# TODO(rytaft): Range operator
 opt
-SELECT * FROM t WHERE a > 1 AND a < 2
+SELECT 1 FROM t WHERE a > 1 AND a < 2
 ----
-values
- ├── columns: a:1(int) b:2(string) c:3(int) d:4(string)
- ├── cardinality: [0 - 0]
- ├── key: ()
- ├── fd: ()-->(1-4)
- └── prune: (1-4)
+project
+ ├── columns: "?column?":5(int!null)
+ ├── fd: ()-->(5)
+ ├── prune: (5)
+ ├── scan t@a_desc
+ │    ├── columns: a:1(int!null)
+ │    ├── constraint: /-1/2: contradiction
+ │    ├── prune: (1)
+ │    └── interesting orderings: (+1) (-1)
+ └── projections
+      └── const: 1 [type=int]

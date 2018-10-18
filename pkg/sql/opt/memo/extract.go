@@ -22,86 +22,116 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-// This file contains various helper functions that extract an op-specific
-// field from an expression.
+// This file contains various helper functions that extract useful information
+// from expressions.
 
-// ExtractConstDatum returns the Datum that represents the value of an operator
-// with a constant value. An operator with a constant value is:
+// CanExtractConstTuple returns true if the expression is a TupleOp with
+// constant values (a nested tuple of constant values is considered constant).
+func CanExtractConstTuple(e opt.Expr) bool {
+	return e.Op() == opt.TupleOp && CanExtractConstDatum(e)
+}
+
+// CanExtractConstDatum returns true if a constant datum can be created from the
+// given expression (tuples and arrays of constant values are considered
+// constant values). If CanExtractConstDatum returns true, then
+// ExtractConstDatum is guaranteed to work as well.
+func CanExtractConstDatum(e opt.Expr) bool {
+	if opt.IsConstValueOp(e) {
+		return true
+	}
+
+	if tup, ok := e.(*TupleExpr); ok {
+		for _, elem := range tup.Elems {
+			if !CanExtractConstDatum(elem) {
+				return false
+			}
+		}
+		return true
+	}
+
+	if arr, ok := e.(*ArrayExpr); ok {
+		for _, elem := range arr.Elems {
+			if !CanExtractConstDatum(elem) {
+				return false
+			}
+		}
+		return true
+	}
+
+	return false
+}
+
+// ExtractConstDatum returns the Datum that represents the value of an
+// expression with a constant value. An expression with a constant value is:
 //  - one that has a ConstValue tag, or
 //  - a tuple or array where all children are constant values.
-func ExtractConstDatum(ev ExprView) tree.Datum {
-	switch ev.Operator() {
-	case opt.NullOp:
+func ExtractConstDatum(e opt.Expr) tree.Datum {
+	switch t := e.(type) {
+	case *NullExpr:
 		return tree.DNull
 
-	case opt.TrueOp:
+	case *TrueExpr:
 		return tree.DBoolTrue
 
-	case opt.FalseOp:
+	case *FalseExpr:
 		return tree.DBoolFalse
 
-	case opt.TupleOp:
-		datums := make(tree.Datums, ev.ChildCount())
+	case *ConstExpr:
+		return t.Value
+
+	case *TupleExpr:
+		datums := make(tree.Datums, len(t.Elems))
 		for i := range datums {
-			datums[i] = ExtractConstDatum(ev.Child(i))
+			datums[i] = ExtractConstDatum(t.Elems[i])
 		}
-		typ := ev.Logical().Scalar.Type.(types.TTuple)
+		typ := t.Typ.(types.TTuple)
 		return tree.NewDTuple(typ, datums...)
 
-	case opt.ArrayOp:
-		elementType := ev.Logical().Scalar.Type.(types.TArray).Typ
+	case *ArrayExpr:
+		elementType := t.Typ.(types.TArray).Typ
 		a := tree.NewDArray(elementType)
-		a.Array = make(tree.Datums, ev.ChildCount())
+		a.Array = make(tree.Datums, len(t.Elems))
 		for i := range a.Array {
-			a.Array[i] = ExtractConstDatum(ev.Child(i))
+			a.Array[i] = ExtractConstDatum(t.Elems[i])
 			if a.Array[i] == tree.DNull {
 				a.HasNulls = true
 			}
 		}
 		return a
 	}
-	if !ev.IsConstValue() {
-		panic(fmt.Sprintf("non-const expression: %+v", ev))
-	}
-	return ev.Private().(tree.Datum)
+	panic(fmt.Sprintf("non-const expression: %+v", e))
 }
 
 // ExtractAggSingleInputColumn returns the input ColumnID of an aggregate
 // operator that has a single input.
-func ExtractAggSingleInputColumn(ev ExprView) opt.ColumnID {
-	if !ev.IsAggregate() {
+func ExtractAggSingleInputColumn(e opt.ScalarExpr) opt.ColumnID {
+	if !opt.IsAggregateOp(e) {
 		panic("not an Aggregate")
 	}
-	return extractColumnFromAggInput(ev.Child(0))
+	return ExtractVarFromAggInput(e.Child(0).(opt.ScalarExpr)).Col
 }
 
 // ExtractAggInputColumns returns the input columns of an aggregate (which can
 // be empty).
-func ExtractAggInputColumns(ev ExprView) opt.ColSet {
-	if !ev.IsAggregate() {
+func ExtractAggInputColumns(e opt.ScalarExpr) opt.ColSet {
+	if !opt.IsAggregateOp(e) {
 		panic("not an Aggregate")
 	}
 	var res opt.ColSet
-	for i, n := 0, ev.ChildCount(); i < n; i++ {
-		res.Add(int(extractColumnFromAggInput(ev.Child(i))))
+	for i, n := 0, e.ChildCount(); i < n; i++ {
+		res.Add(int(ExtractVarFromAggInput(e.Child(i).(opt.ScalarExpr)).Col))
 	}
 	return res
 }
 
-// Given an expression that is an argument to an Aggregate, returns the column
-// ID it references.
-func extractColumnFromAggInput(arg ExprView) opt.ColumnID {
-	return ExtractVarFromAggInput(arg).Private().(opt.ColumnID)
-}
-
 // ExtractVarFromAggInput is given an argument to an Aggregate and returns the
 // inner Variable expression, stripping out modifiers like AggDistinct.
-func ExtractVarFromAggInput(arg ExprView) ExprView {
-	if arg.Operator() == opt.AggDistinctOp {
-		arg = arg.Child(0)
+func ExtractVarFromAggInput(arg opt.ScalarExpr) *VariableExpr {
+	if distinct, ok := arg.(*AggDistinctExpr); ok {
+		arg = distinct.Input
 	}
-	if arg.Operator() != opt.VariableOp {
-		panic("Aggregate input not a Variable")
+	if variable, ok := arg.(*VariableExpr); ok {
+		return variable
 	}
-	return arg
+	panic("aggregate input not a Variable")
 }

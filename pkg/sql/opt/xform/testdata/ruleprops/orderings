@@ -93,9 +93,9 @@ group-by
  │    ├── columns: a:1(int) b:2(int)
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1,+2)
- └── aggregations [outer=(2)]
+ └── aggregations
       └── min [type=int, outer=(2)]
-           └── variable: b [type=int, outer=(2)]
+           └── variable: b [type=int]
 
 opt
 SELECT min(b), c FROM abc GROUP BY c
@@ -112,9 +112,9 @@ group-by
  │    ├── fd: (3)~~>(2)
  │    ├── prune: (2,3)
  │    └── interesting orderings: (+3)
- └── aggregations [outer=(2)]
+ └── aggregations
       └── min [type=int, outer=(2)]
-           └── variable: b [type=int, outer=(2)]
+           └── variable: b [type=int]
 
 # GroupBy with required ordering.
 opt
@@ -136,9 +136,9 @@ group-by
  │         ├── columns: a:1(int) b:2(int) c:3(int)
  │         ├── fd: (3)~~>(1,2)
  │         └── prune: (1-3)
- └── aggregations [outer=(1)]
+ └── aggregations
       └── array-agg [type=int[], outer=(1)]
-           └── variable: a [type=int, outer=(1)]
+           └── variable: a [type=int]
 
 # Scalar GroupBy case.
 opt
@@ -155,13 +155,13 @@ scalar-group-by
  │    ├── fd: (3)~~>(1,2)
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+1,+2) (+3)
- └── aggregations [outer=(1-3)]
+ └── aggregations
       ├── max [type=int, outer=(1)]
-      │    └── variable: a [type=int, outer=(1)]
+      │    └── variable: a [type=int]
       ├── min [type=int, outer=(2)]
-      │    └── variable: b [type=int, outer=(2)]
+      │    └── variable: b [type=int]
       └── sum [type=decimal, outer=(3)]
-           └── variable: c [type=int, outer=(3)]
+           └── variable: c [type=int]
 
 # LookupJoin operator.
 opt
@@ -280,5 +280,5 @@ inner-join
  │    ├── fd: (5,6)~~>(7)
  │    ├── prune: (5-7)
  │    └── interesting orderings: (+7) (+5,+6)
- └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      └── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ └── filters
+      └── a = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]

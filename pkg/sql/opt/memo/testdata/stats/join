@@ -78,7 +78,7 @@ inner-join
  ├── scan b
  │    ├── columns: b.x:5(int) z:6(int!null)
  │    └── stats: [rows=10000]
- └── true [type=bool]
+ └── filters (true)
 
 norm colstat=1 colstat=2 colstat=3 colstat=4 colstat=5 colstat=6 colstat=(2,5,6)
 SELECT * FROM a JOIN b ON true
@@ -95,7 +95,7 @@ inner-join
  ├── scan b
  │    ├── columns: b.x:5(int) z:6(int!null)
  │    └── stats: [rows=10000, distinct(5)=500, distinct(6)=100, distinct(5,6)=10000]
- └── true [type=bool]
+ └── filters (true)
 
 norm
 SELECT * FROM a JOIN b ON false
@@ -125,8 +125,8 @@ inner-join
  │    ├── stats: [rows=10000, distinct(5)=500]
  │    ├── key: (7)
  │    └── fd: (7)-->(5,6)
- └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ └── filters
+      └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 build
 SELECT *, rowid FROM a LEFT JOIN b ON a.x=b.x
@@ -146,8 +146,8 @@ left-join
  │    ├── stats: [rows=10000, distinct(5)=500]
  │    ├── key: (7)
  │    └── fd: (7)-->(5,6)
- └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ └── filters
+      └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 build
 SELECT *, rowid FROM a RIGHT JOIN b ON a.x=b.x
@@ -167,8 +167,8 @@ right-join
  │    ├── stats: [rows=10000, distinct(5)=500]
  │    ├── key: (7)
  │    └── fd: (7)-->(5,6)
- └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ └── filters
+      └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 build
 SELECT *, rowid FROM a FULL JOIN b ON a.x=b.x
@@ -188,8 +188,8 @@ full-join
  │    ├── stats: [rows=10000, distinct(5)=500]
  │    ├── key: (7)
  │    └── fd: (7)-->(5,6)
- └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ └── filters
+      └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 build
 SELECT * FROM a, b
@@ -213,7 +213,7 @@ project
       │    ├── stats: [rows=10000]
       │    ├── key: (7)
       │    └── fd: (7)-->(5,6)
-      └── true [type=bool]
+      └── filters (true)
 
 build
 SELECT * FROM a, a AS a
@@ -233,7 +233,7 @@ inner-join
  │    ├── stats: [rows=5000]
  │    ├── key: (5)
  │    └── fd: (5)-->(6-8), (7,8)~~>(5,6)
- └── true [type=bool]
+ └── filters (true)
 
 build
 SELECT * FROM a, b WHERE b.z = 5
@@ -262,9 +262,9 @@ project
       │    │    ├── stats: [rows=10000, distinct(6)=100]
       │    │    ├── key: (7)
       │    │    └── fd: (7)-->(5,6)
-      │    └── true [type=bool]
-      └── filters [type=bool, outer=(6), constraints=(/6: [/5 - /5]; tight), fd=()-->(6)]
-           └── z = 5 [type=bool, outer=(6), constraints=(/6: [/5 - /5]; tight)]
+      │    └── filters (true)
+      └── filters
+           └── z = 5 [type=bool, outer=(6), constraints=(/6: [/5 - /5]; tight), fd=()-->(6)]
 
 # Force calculation of the distinct count for the column set spanning both
 # tables in the join.
@@ -295,10 +295,10 @@ group-by
  │         │    ├── stats: [rows=10000, distinct(6)=100]
  │         │    ├── key: (7)
  │         │    └── fd: (7)-->(5,6)
- │         └── true [type=bool]
- └── aggregations [outer=(6)]
+ │         └── filters (true)
+ └── aggregations
       └── sum [type=decimal, outer=(6)]
-           └── variable: z [type=int, outer=(6)]
+           └── variable: z [type=int]
 
 # Join selectivity: 1/max(distinct(a.x), distinct(b.x)) = 1/5000.
 norm
@@ -321,11 +321,11 @@ group-by
  │    ├── scan b
  │    │    ├── columns: b.x:5(int) z:6(int!null)
  │    │    └── stats: [rows=10000, distinct(5)=500, distinct(6)=100]
- │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
- │         └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
- └── aggregations [outer=(6)]
+ │    └── filters
+ │         └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ └── aggregations
       └── sum [type=decimal, outer=(6)]
-           └── variable: z [type=int, outer=(6)]
+           └── variable: z [type=int]
 
 # Semi-join.
 norm
@@ -343,9 +343,9 @@ semi-join
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan b
  │    ├── columns: b.x:5(int) z:6(int!null)
- │    └── stats: [rows=10000, distinct(5)=500]
- └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ │    └── stats: [rows=10000]
+ └── filters
+      └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 # Anti-join.
 norm
@@ -363,9 +363,9 @@ anti-join
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  ├── scan b
  │    ├── columns: b.x:5(int) z:6(int!null)
- │    └── stats: [rows=10000, distinct(5)=500]
- └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ │    └── stats: [rows=10000]
+ └── filters
+      └── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 # Multiple equality conditions.
 norm
@@ -383,9 +383,9 @@ inner-join
  ├── scan b
  │    ├── columns: b.x:5(int) z:6(int!null)
  │    └── stats: [rows=10000, distinct(5)=500, distinct(6)=100]
- └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(5), (5)==(1), (2)==(6), (6)==(2)]
-      ├── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-      └── y = z [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
+ └── filters
+      ├── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── y = z [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
 
 # Equality condition + extra filters.
 norm
@@ -397,22 +397,22 @@ inner-join
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(5), (5)==(1)
  ├── select
  │    ├── columns: a.x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=3737.5, distinct(1)=3737.5, distinct(2)=299]
+ │    ├── stats: [rows=555.555556, distinct(1)=555.555556]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── scan a
  │    │    ├── columns: a.x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    │    ├── stats: [rows=5000, distinct(1)=5000, distinct(2)=400]
+ │    │    ├── stats: [rows=5000, distinct(1)=5000]
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
- │    └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /299]; tight)]
+ │    └── filters
  │         ├── y > 0 [type=bool, outer=(2), constraints=(/2: [/1 - ]; tight)]
  │         └── y < 300 [type=bool, outer=(2), constraints=(/2: (/NULL - /299]; tight)]
  ├── scan b
  │    ├── columns: b.x:5(int) z:6(int!null)
  │    └── stats: [rows=10000, distinct(5)=500]
- └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      ├── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ └── filters
+      ├── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       └── (y + z) = 5 [type=bool, outer=(2,6)]
 
 # Force column statistics calculation for semi-join.
@@ -442,9 +442,9 @@ project
       │    │    └── fd: (1)-->(2)
       │    ├── scan b
       │    │    ├── columns: b.x:5(int) z:6(int!null)
-      │    │    └── stats: [rows=10000, distinct(5)=500]
-      │    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │         ├── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    │    └── stats: [rows=10000]
+      │    └── filters
+      │         ├── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │         └── (y + z) = 5 [type=bool, outer=(2,6)]
       └── aggregations
            └── count-rows [type=int]
@@ -476,9 +476,9 @@ project
       │    │    └── fd: (1)-->(2)
       │    ├── scan b
       │    │    ├── columns: b.x:5(int) z:6(int!null)
-      │    │    └── stats: [rows=10000, distinct(5)=500]
-      │    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │         ├── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    │    └── stats: [rows=10000]
+      │    └── filters
+      │         ├── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │         └── (y + z) = 5 [type=bool, outer=(2,6)]
       └── aggregations
            └── count-rows [type=int]
@@ -510,8 +510,8 @@ project
       │    ├── scan b
       │    │    ├── columns: b.x:5(int) z:6(int!null)
       │    │    └── stats: [rows=10000, distinct(5)=500]
-      │    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │         ├── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    └── filters
+      │         ├── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │         └── (y + z) = 5 [type=bool, outer=(2,6)]
       └── aggregations
            └── count-rows [type=int]
@@ -543,8 +543,8 @@ project
       │    ├── scan b
       │    │    ├── columns: b.x:5(int) z:6(int!null)
       │    │    └── stats: [rows=10000, distinct(5)=500]
-      │    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │         ├── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    └── filters
+      │         ├── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │         └── (y + z) = 5 [type=bool, outer=(2,6)]
       └── aggregations
            └── count-rows [type=int]
@@ -576,8 +576,8 @@ project
       │    ├── scan b
       │    │    ├── columns: b.x:5(int) z:6(int!null)
       │    │    └── stats: [rows=10000, distinct(5)=500]
-      │    └── filters [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │         ├── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    └── filters
+      │         ├── a.x = b.x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
       │         └── (y + z) = 5 [type=bool, outer=(2,6)]
       └── aggregations
            └── count-rows [type=int]
@@ -623,8 +623,8 @@ inner-join
  │    ├── scan uvw
  │    │    ├── columns: u:1(int) v:2(int) w:3(int)
  │    │    └── stats: [rows=1000, distinct(1)=100, distinct(3)=100]
- │    └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
- │         └── w = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
+ │    └── filters
+ │         └── w = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
  ├── select
  │    ├── columns: x:5(int!null) y:6(int) z:7(int)
  │    ├── stats: [rows=10, distinct(5)=1]
@@ -632,10 +632,10 @@ inner-join
  │    ├── scan xyz
  │    │    ├── columns: x:5(int) y:6(int) z:7(int)
  │    │    └── stats: [rows=1000, distinct(5)=100]
- │    └── filters [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
- │         └── x = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight)]
- └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      └── u = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+ │    └── filters
+ │         └── x = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]
+ └── filters
+      └── u = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 norm disable=(PushFilterIntoJoinLeftAndRight,PushFilterIntoJoinLeft,PushFilterIntoJoinRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
 SELECT * FROM (SELECT * FROM uvw WHERE w=1) JOIN xyz ON u=x AND x=10
@@ -651,11 +651,11 @@ inner-join
  │    ├── scan uvw
  │    │    ├── columns: u:1(int) v:2(int) w:3(int)
  │    │    └── stats: [rows=1000, distinct(1)=100, distinct(3)=100]
- │    └── filters [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
- │         └── w = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight)]
+ │    └── filters
+ │         └── w = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
  ├── scan xyz
  │    ├── columns: x:5(int) y:6(int) z:7(int)
  │    └── stats: [rows=1000, distinct(5)=100]
- └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: [/10 - /10]), fd=()-->(1,5), (1)==(5), (5)==(1)]
-      ├── u = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-      └── x = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight)]
+ └── filters
+      ├── u = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── x = 10 [type=bool, outer=(5), constraints=(/5: [/10 - /10]; tight), fd=()-->(5)]

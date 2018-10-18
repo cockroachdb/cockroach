@@ -84,8 +84,57 @@ inner-join
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
- └── filters [type=bool, outer=(4,7)]
+ └── filters
       └── (s = 'foo') OR (y < 10) [type=bool, outer=(4,7)]
+
+# --------------------------------------------------
+# DetectJoinContradiction
+# --------------------------------------------------
+
+opt expect=DetectJoinContradiction
+SELECT * FROM a INNER JOIN b ON k IN ()
+----
+values
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1-7)
+
+opt expect=DetectJoinContradiction
+SELECT * FROM a LEFT JOIN b ON i=5 AND k IN () AND s='foo'
+----
+left-join
+ ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2-7), ()~~>(6,7)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── values
+ │    ├── columns: x:6(int) y:7(int)
+ │    ├── cardinality: [0 - 0]
+ │    ├── key: ()
+ │    └── fd: ()-->(6,7)
+ └── filters (true)
+
+opt expect=DetectJoinContradiction
+SELECT * FROM a FULL JOIN b ON i=5 AND k IN () AND s='foo'
+----
+full-join
+ ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── key: (1,6)
+ ├── fd: (1)-->(2-5), (6)-->(7)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── scan b
+ │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── key: (6)
+ │    └── fd: (6)-->(7)
+ └── filters
+      └── false [type=bool]
 
 # --------------------------------------------------
 # PushFilterIntoJoinLeft
@@ -106,15 +155,17 @@ inner-join (lookup b)
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
- │    └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
- │         └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
- └── true [type=bool]
+ │    └── filters
+ │         └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+ └── filters (true)
 
 opt expect=PushFilterIntoJoinLeft
 SELECT * FROM a RIGHT JOIN b ON (a.i<0 OR a.i>10) AND b.y=1 AND a.s='foo' AND a.k=b.x
 ----
 right-join (merge)
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1,6)
  ├── fd: (1)-->(2,3,5), (6)-->(7), ()~~>(4), (1,6)-->(4)
  ├── select
@@ -127,19 +178,16 @@ right-join (merge)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
  │    │    └── ordering: +1 opt(4)
- │    └── filters [type=bool, outer=(2,4), constraints=(/4: [/'foo' - /'foo']), fd=()-->(4)]
+ │    └── filters
  │         ├── (i < 0) OR (i > 10) [type=bool, outer=(2)]
- │         └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ │         └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  ├── scan b
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-           └── y = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+ └── filters
+      └── y = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
 
 # LEFT JOIN should not push down conditions to left side of join.
 opt expect-not=PushFilterIntoJoinLeft
@@ -147,6 +195,8 @@ SELECT * FROM a LEFT JOIN b ON a.k=b.x AND a.i=1
 ----
 left-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── scan a
@@ -159,11 +209,8 @@ left-join (merge)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-           └── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+ └── filters
+      └── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
 
 # Semi-join case.
 opt expect=PushFilterIntoJoinLeft
@@ -171,6 +218,8 @@ SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE x=k AND s='foo')
 ----
 semi-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string!null) j:5(jsonb)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── select
@@ -183,17 +232,14 @@ semi-join (merge)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
  │    │    └── ordering: +1 opt(4)
- │    └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
- │         └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ │    └── filters
+ │         └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
  ├── scan b
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── true [type=bool]
+ └── filters (true)
 
 # Do not push anti-join conditions into left input.
 opt expect-not=PushFilterIntoJoinLeft
@@ -201,6 +247,8 @@ SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM b WHERE x=k AND s='foo')
 ----
 anti-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
@@ -213,11 +261,8 @@ anti-join (merge)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
-           └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ └── filters
+      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 # --------------------------------------------------
 # PushFilterIntoJoinRight
@@ -238,15 +283,17 @@ inner-join (lookup b)
  │    │    ├── columns: k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
  │    │    ├── key: (3)
  │    │    └── fd: (3)-->(4-7)
- │    └── filters [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
- │         └── s = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
- └── true [type=bool]
+ │    └── filters
+ │         └── s = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
+ └── filters (true)
 
 opt expect=PushFilterIntoJoinRight
 SELECT * FROM b LEFT JOIN a ON (a.i<0 OR a.i>10) AND b.y=1 AND a.s='foo' AND b.x=a.k
 ----
 left-join (merge)
  ├── columns: x:1(int!null) y:2(int) k:3(int) i:4(int) f:5(float) s:6(string) j:7(jsonb)
+ ├── left ordering: +1
+ ├── right ordering: +3
  ├── key: (1,3)
  ├── fd: (1)-->(2), (3)-->(4,5,7), ()~~>(6), (1,3)-->(6)
  ├── scan b
@@ -264,14 +311,11 @@ left-join (merge)
  │    │    ├── key: (3)
  │    │    ├── fd: (3)-->(4-7)
  │    │    └── ordering: +3 opt(6)
- │    └── filters [type=bool, outer=(4,6), constraints=(/6: [/'foo' - /'foo']), fd=()-->(6)]
+ │    └── filters
  │         ├── (i < 0) OR (i > 10) [type=bool, outer=(4)]
- │         └── s = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +3
-      └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-           └── y = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+ │         └── s = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
+ └── filters
+      └── y = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
 
 # RIGHT JOIN should not push down conditions to right side of join.
 opt expect-not=PushFilterIntoJoinRight
@@ -279,6 +323,8 @@ SELECT * FROM b RIGHT JOIN a ON b.x=a.k AND a.i=1
 ----
 right-join (merge)
  ├── columns: x:1(int) y:2(int) k:3(int!null) i:4(int) f:5(float!null) s:6(string) j:7(jsonb)
+ ├── left ordering: +1
+ ├── right ordering: +3
  ├── key: (1,3)
  ├── fd: (1)-->(2), (3)-->(4-7)
  ├── scan b
@@ -291,11 +337,8 @@ right-join (merge)
  │    ├── key: (3)
  │    ├── fd: (3)-->(4-7)
  │    └── ordering: +3
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +3
-      └── filters [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
-           └── i = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight)]
+ └── filters
+      └── i = 1 [type=bool, outer=(4), constraints=(/4: [/1 - /1]; tight), fd=()-->(4)]
 
 # Semi-join case.
 opt expect=PushFilterIntoJoinRight
@@ -303,6 +346,8 @@ SELECT * FROM a WHERE EXISTS(SELECT * FROM b WHERE x=k AND y>10)
 ----
 semi-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
@@ -320,12 +365,9 @@ semi-join (merge)
  │    │    ├── key: (6)
  │    │    ├── fd: (6)-->(7)
  │    │    └── ordering: +6
- │    └── filters [type=bool, outer=(7), constraints=(/7: [/11 - ]; tight)]
+ │    └── filters
  │         └── y > 10 [type=bool, outer=(7), constraints=(/7: [/11 - ]; tight)]
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── true [type=bool]
+ └── filters (true)
 
 # Anti-join case.
 opt expect=PushFilterIntoJoinRight
@@ -333,6 +375,8 @@ SELECT * FROM a WHERE NOT EXISTS(SELECT * FROM b WHERE x=k AND y>10)
 ----
 anti-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
@@ -350,12 +394,9 @@ anti-join (merge)
  │    │    ├── key: (6)
  │    │    ├── fd: (6)-->(7)
  │    │    └── ordering: +6
- │    └── filters [type=bool, outer=(7), constraints=(/7: [/11 - ]; tight)]
+ │    └── filters
  │         └── y > 10 [type=bool, outer=(7), constraints=(/7: [/11 - ]; tight)]
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── true [type=bool]
+ └── filters (true)
 
 # -------------------------------------------------------------------------------
 # PushFilterIntoJoinLeftAndRight + MapFilterIntoJoinLeft + MapFilterIntoJoinRight
@@ -367,6 +408,8 @@ SELECT * FROM a INNER JOIN b ON a.k=b.x AND a.k + b.y > 5 AND b.x * a.i = 3
 ----
 inner-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
  ├── select
@@ -379,7 +422,7 @@ inner-join (merge)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
  │    │    └── ordering: +1
- │    └── filters [type=bool, outer=(1,2)]
+ │    └── filters
  │         └── (k * i) = 3 [type=bool, outer=(1,2)]
  ├── select
  │    ├── columns: x:6(int!null) y:7(int)
@@ -391,12 +434,9 @@ inner-join (merge)
  │    │    ├── key: (6)
  │    │    ├── fd: (6)-->(7)
  │    │    └── ordering: +6
- │    └── filters [type=bool, outer=(6,7)]
+ │    └── filters
  │         └── (x + y) > 5 [type=bool, outer=(6,7)]
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── true [type=bool]
+ └── filters (true)
 
 # Multiple equivalent columns.
 # TODO(rytaft): We should also infer the equality predicates a.k=a.i and b.x=b.y.
@@ -416,12 +456,12 @@ inner-join (lookup b)
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
- │    └── filters [type=bool, outer=(1,3,4)]
- │         ├── (f + k::FLOAT8) > 5.0 [type=bool, outer=(1,3)]
+ │    └── filters
+ │         ├── (f + i::FLOAT8) > 5.0 [type=bool, outer=(2,3)]
  │         └── (s || k::STRING) = 'foo1' [type=bool, outer=(1,4)]
- └── filters [type=bool, outer=(2,6,7), constraints=(/2: (/NULL - ]; /6: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(6,7), (6)==(2,7), (7)==(2,6)]
-      ├── i = x [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ])]
-      └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+ └── filters
+      ├── i = x [type=bool, outer=(2,6), constraints=(/2: (/NULL - ]; /6: (/NULL - ]), fd=(2)==(6), (6)==(2)]
+      └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
 # Can push to both sides with semi-join.
 opt expect=(MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
@@ -431,6 +471,8 @@ SELECT * FROM a WHERE EXISTS(
 ----
 semi-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── select
@@ -443,7 +485,7 @@ semi-join (merge)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
  │    │    └── ordering: +1
- │    └── filters [type=bool, outer=(1,2)]
+ │    └── filters
  │         └── (k * i) = 3 [type=bool, outer=(1,2)]
  ├── select
  │    ├── columns: x:6(int!null) y:7(int)
@@ -455,12 +497,9 @@ semi-join (merge)
  │    │    ├── key: (6)
  │    │    ├── fd: (6)-->(7)
  │    │    └── ordering: +6
- │    └── filters [type=bool, outer=(6,7)]
+ │    └── filters
  │         └── (x + y) > 5 [type=bool, outer=(6,7)]
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── true [type=bool]
+ └── filters (true)
 
 opt expect=PushFilterIntoJoinLeftAndRight
 SELECT * FROM a WHERE EXISTS(
@@ -469,6 +508,8 @@ SELECT * FROM a WHERE EXISTS(
 ----
 semi-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
@@ -483,10 +524,7 @@ semi-join (merge)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── true [type=bool]
+ └── filters (true)
 
 # Can only push to right side with left join.
 opt expect=MapFilterIntoJoinRight expect-not=PushFilterIntoJoinLeftAndRight
@@ -494,6 +532,8 @@ SELECT * FROM a LEFT JOIN b ON a.k=b.x AND a.k + b.y > 5 AND b.x * a.i = 3
 ----
 left-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── scan a
@@ -511,19 +551,18 @@ left-join (merge)
  │    │    ├── key: (6)
  │    │    ├── fd: (6)-->(7)
  │    │    └── ordering: +6
- │    └── filters [type=bool, outer=(6,7)]
+ │    └── filters
  │         └── (x + y) > 5 [type=bool, outer=(6,7)]
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(2,6)]
-           └── (x * i) = 3 [type=bool, outer=(2,6)]
+ └── filters
+      └── (x * i) = 3 [type=bool, outer=(2,6)]
 
 opt expect=MapFilterIntoJoinRight expect-not=PushFilterIntoJoinLeftAndRight
 SELECT * FROM a LEFT JOIN b ON a.k=b.x AND a.k > 5 AND b.x IN (3, 7, 10)
 ----
 left-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── scan a
@@ -537,10 +576,7 @@ left-join (merge)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── true [type=bool]
+ └── filters (true)
 
 # Can only push to left side with right join.
 opt expect=MapFilterIntoJoinLeft expect-not=PushFilterIntoJoinLeftAndRight
@@ -548,6 +584,8 @@ SELECT * FROM a RIGHT JOIN b ON a.k=b.x AND a.k + b.y > 5 AND b.x * a.i = 3
 ----
 right-join (merge)
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── select
@@ -560,24 +598,23 @@ right-join (merge)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
  │    │    └── ordering: +1
- │    └── filters [type=bool, outer=(1,2)]
+ │    └── filters
  │         └── (k * i) = 3 [type=bool, outer=(1,2)]
  ├── scan b
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(1,7)]
-           └── (k + y) > 5 [type=bool, outer=(1,7)]
+ └── filters
+      └── (k + y) > 5 [type=bool, outer=(1,7)]
 
 opt expect=MapFilterIntoJoinLeft expect-not=PushFilterIntoJoinLeftAndRight
 SELECT * FROM a RIGHT JOIN b ON a.k=b.x AND a.k > 5 AND b.x IN (3, 7, 10)
 ----
 right-join (merge)
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── scan a
@@ -591,10 +628,7 @@ right-join (merge)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── true [type=bool]
+ └── filters (true)
 
 # Cannot push with full join.
 opt expect-not=(PushFilterIntoJoinLeftAndRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
@@ -602,6 +636,8 @@ SELECT * FROM a FULL JOIN b ON a.k=b.x AND a.k + b.y > 5 AND b.x * a.i = 3
 ----
 full-join (merge)
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── scan a
@@ -614,18 +650,17 @@ full-join (merge)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(1,2,6,7)]
-           ├── (k + y) > 5 [type=bool, outer=(1,7)]
-           └── (x * i) = 3 [type=bool, outer=(2,6)]
+ └── filters
+      ├── (k + y) > 5 [type=bool, outer=(1,7)]
+      └── (x * i) = 3 [type=bool, outer=(2,6)]
 
 opt expect-not=(PushFilterIntoJoinLeftAndRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
 SELECT * FROM a FULL JOIN b ON a.k=b.x AND a.k > 5 AND b.x IN (3, 7, 10)
 ----
 full-join (merge)
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── scan a
@@ -638,12 +673,9 @@ full-join (merge)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(1,6), constraints=(/1: [/6 - ]; /6: [/3 - /3] [/7 - /7] [/10 - /10]; tight)]
-           ├── k > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
-           └── x IN (3, 7, 10) [type=bool, outer=(6), constraints=(/6: [/3 - /3] [/7 - /7] [/10 - /10]; tight)]
+ └── filters
+      ├── k > 5 [type=bool, outer=(1), constraints=(/1: [/6 - ]; tight)]
+      └── x IN (3, 7, 10) [type=bool, outer=(6), constraints=(/6: [/3 - /3] [/7 - /7] [/10 - /10]; tight)]
 
 # Can only push to right side with anti-join.
 opt expect=MapFilterIntoJoinRight expect-not=PushFilterIntoJoinLeftAndRight
@@ -653,6 +685,8 @@ SELECT * FROM a WHERE NOT EXISTS(
 ----
 anti-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
@@ -670,13 +704,10 @@ anti-join (merge)
  │    │    ├── key: (6)
  │    │    ├── fd: (6)-->(7)
  │    │    └── ordering: +6
- │    └── filters [type=bool, outer=(6,7)]
+ │    └── filters
  │         └── (x + y) > 5 [type=bool, outer=(6,7)]
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(2,6)]
-           └── (x * i) = 3 [type=bool, outer=(2,6)]
+ └── filters
+      └── (x * i) = 3 [type=bool, outer=(2,6)]
 
 opt expect=MapFilterIntoJoinRight expect-not=PushFilterIntoJoinLeftAndRight
 SELECT * FROM a WHERE NOT EXISTS(
@@ -685,6 +716,8 @@ SELECT * FROM a WHERE NOT EXISTS(
 ----
 anti-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  ├── scan a
@@ -698,10 +731,7 @@ anti-join (merge)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── true [type=bool]
+ └── filters (true)
 
 # Works with a non-correlated subquery.
 opt expect=MapFilterIntoJoinLeft
@@ -709,6 +739,8 @@ SELECT * FROM a JOIN b ON a.k = b.x AND b.x * a.i = (SELECT min(b.x) FROM b)
 ----
 inner-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
  ├── select
@@ -721,9 +753,9 @@ inner-join (merge)
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-5)
  │    │    └── ordering: +1
- │    └── filters [type=bool, outer=(1,2)]
+ │    └── filters
  │         └── eq [type=bool, outer=(1,2)]
- │              ├── k * i [type=int, outer=(1,2)]
+ │              ├── k * i [type=int]
  │              └── subquery [type=int]
  │                   └── scalar-group-by
  │                        ├── columns: min:10(int)
@@ -735,21 +767,18 @@ inner-join (merge)
  │                        │    ├── limit: 1
  │                        │    ├── key: ()
  │                        │    └── fd: ()-->(8)
- │                        └── aggregations [outer=(8)]
+ │                        └── aggregations
  │                             └── const-agg [type=int, outer=(8)]
- │                                  └── variable: b.x [type=int, outer=(8)]
+ │                                  └── variable: b.x [type=int]
  ├── scan b
  │    ├── columns: b.x:6(int!null) b.y:7(int)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── true [type=bool]
+ └── filters (true)
 
 # Optimization does not apply with correlated suqueries.
-opt
+opt expect-not=(PushFilterIntoJoinLeftAndRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
 SELECT * FROM a JOIN b ON a.k = b.x AND b.x * a.i = (SELECT a.k * b.y FROM b)
 ----
 project
@@ -784,15 +813,15 @@ project
       │    │         ├── outer: (1)
       │    │         ├── scan b
       │    │         │    └── columns: b.y:9(int)
-      │    │         └── projections [outer=(1,9)]
+      │    │         └── projections
       │    │              └── k * b.y [type=int, outer=(1,9)]
-      │    └── true [type=bool]
-      └── filters [type=bool, outer=(1,2,6,10), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-           ├── k = b.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-           └── (b.x * i) = ?column? [type=bool, outer=(2,6,10)]
+      │    └── filters (true)
+      └── filters
+           ├── k = b.x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+           └── ?column? = (b.x * i) [type=bool, outer=(2,6,10), constraints=(/10: (/NULL - ])]
 
 # Ensure that we do not map filters for types with composite key encoding.
-opt expect-not=(MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
+opt expect-not=(PushFilterIntoJoinLeftAndRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
 SELECT * FROM (VALUES (1.0)) AS t1(x), (VALUES (1.00)) AS t2(y) WHERE x=y AND x::text = '1.0'
 ----
 inner-join
@@ -817,13 +846,13 @@ inner-join
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(1)
  │    │    └── (1.0,) [type=tuple{decimal}]
- │    └── filters [type=bool, outer=(1)]
+ │    └── filters
  │         └── column1::STRING = '1.0' [type=bool, outer=(1)]
- └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
-      └── column1 = column1 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+ └── filters
+      └── column1 = column1 [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
 
 # Optimization does not apply if equality is only on one side.
-opt
+opt expect-not=(PushFilterIntoJoinLeftAndRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
 SELECT * FROM a INNER JOIN b ON b.y=b.x AND a.k=a.i AND a.k + b.y > 5 AND b.x * a.i = 3
 ----
 inner-join
@@ -838,8 +867,8 @@ inner-join
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
- │    └── filters [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
- │         └── k = i [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
+ │    └── filters
+ │         └── k = i [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]
  ├── select
  │    ├── columns: x:6(int!null) y:7(int!null)
  │    ├── key: (6)
@@ -848,11 +877,120 @@ inner-join
  │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    ├── key: (6)
  │    │    └── fd: (6)-->(7)
- │    └── filters [type=bool, outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ]), fd=(6)==(7), (7)==(6)]
- │         └── y = x [type=bool, outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ])]
- └── filters [type=bool, outer=(1,2,6,7)]
+ │    └── filters
+ │         └── y = x [type=bool, outer=(6,7), constraints=(/6: (/NULL - ]; /7: (/NULL - ]), fd=(6)==(7), (7)==(6)]
+ └── filters
       ├── (k + y) > 5 [type=bool, outer=(1,7)]
       └── (x * i) = 3 [type=bool, outer=(2,6)]
+
+# Ensure that MapFilterIntoJoinLeft doesn't cause cycle with decorrelation.
+opt
+SELECT
+(
+    SELECT b.x
+    FROM (SELECT b.* FROM b FULL OUTER JOIN b AS b2 ON c.x=5) AS b, a
+    WHERE a.k=b.x AND a.k+b.x < 5
+)
+FROM c
+----
+project
+ ├── columns: x:13(int)
+ ├── left-join-apply
+ │    ├── columns: c.x:1(int!null) b.x:4(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(4)
+ │    ├── scan c@secondary
+ │    │    ├── columns: c.x:1(int!null)
+ │    │    └── key: (1)
+ │    ├── max1-row
+ │    │    ├── columns: b.x:4(int!null)
+ │    │    ├── outer: (1)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(4)
+ │    │    └── project
+ │    │         ├── columns: b.x:4(int!null)
+ │    │         ├── outer: (1)
+ │    │         └── inner-join
+ │    │              ├── columns: b.x:4(int!null) k:8(int!null)
+ │    │              ├── outer: (1)
+ │    │              ├── fd: (4)==(8), (8)==(4)
+ │    │              ├── full-join
+ │    │              │    ├── columns: b.x:4(int)
+ │    │              │    ├── outer: (1)
+ │    │              │    ├── scan b
+ │    │              │    │    ├── columns: b.x:4(int!null)
+ │    │              │    │    └── key: (4)
+ │    │              │    ├── scan b
+ │    │              │    └── filters
+ │    │              │         └── c.x = 5 [type=bool, outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+ │    │              ├── select
+ │    │              │    ├── columns: k:8(int!null)
+ │    │              │    ├── key: (8)
+ │    │              │    ├── scan a
+ │    │              │    │    ├── columns: k:8(int!null)
+ │    │              │    │    └── key: (8)
+ │    │              │    └── filters
+ │    │              │         └── (k + k) < 5 [type=bool, outer=(8)]
+ │    │              └── filters
+ │    │                   └── k = b.x [type=bool, outer=(4,8), constraints=(/4: (/NULL - ]; /8: (/NULL - ]), fd=(4)==(8), (8)==(4)]
+ │    └── filters (true)
+ └── projections
+      └── variable: b.x [type=int, outer=(4)]
+
+# Ensure that MapFilterIntoJoinRight doesn't cause cycle with decorrelation.
+opt
+SELECT
+(
+    SELECT b.x FROM a, (SELECT b.* FROM b FULL OUTER JOIN b AS b2 ON c.x=5) AS b
+    WHERE a.k=b.x AND a.k+b.x < 5
+)
+FROM c
+----
+project
+ ├── columns: x:13(int)
+ ├── left-join-apply
+ │    ├── columns: c.x:1(int!null) b.x:9(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(9)
+ │    ├── scan c@secondary
+ │    │    ├── columns: c.x:1(int!null)
+ │    │    └── key: (1)
+ │    ├── max1-row
+ │    │    ├── columns: b.x:9(int!null)
+ │    │    ├── outer: (1)
+ │    │    ├── cardinality: [0 - 1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(9)
+ │    │    └── project
+ │    │         ├── columns: b.x:9(int!null)
+ │    │         ├── outer: (1)
+ │    │         └── inner-join
+ │    │              ├── columns: k:4(int!null) b.x:9(int!null)
+ │    │              ├── outer: (1)
+ │    │              ├── fd: (4)==(9), (9)==(4)
+ │    │              ├── full-join
+ │    │              │    ├── columns: b.x:9(int)
+ │    │              │    ├── outer: (1)
+ │    │              │    ├── scan b
+ │    │              │    │    ├── columns: b.x:9(int!null)
+ │    │              │    │    └── key: (9)
+ │    │              │    ├── scan b
+ │    │              │    └── filters
+ │    │              │         └── c.x = 5 [type=bool, outer=(1), constraints=(/1: [/5 - /5]; tight), fd=()-->(1)]
+ │    │              ├── select
+ │    │              │    ├── columns: k:4(int!null)
+ │    │              │    ├── key: (4)
+ │    │              │    ├── scan a
+ │    │              │    │    ├── columns: k:4(int!null)
+ │    │              │    │    └── key: (4)
+ │    │              │    └── filters
+ │    │              │         └── (k + k) < 5 [type=bool, outer=(4)]
+ │    │              └── filters
+ │    │                   └── k = b.x [type=bool, outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ]), fd=(4)==(9), (9)==(4)]
+ │    └── filters (true)
+ └── projections
+      └── variable: b.x [type=int, outer=(9)]
 
 exec-ddl
 CREATE TABLE t1 (a DATE)
@@ -886,10 +1024,10 @@ inner-join
  │    ├── columns: b:3(timestamptz)
  │    ├── scan t2
  │    │    └── columns: b:3(timestamptz)
- │    └── filters [type=bool, outer=(3)]
+ │    └── filters
  │         └── age(b, '2017-01-01 00:00:00+00:00') > '1d' [type=bool, outer=(3)]
- └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-      └── a = b [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ └── filters
+      └── a = b [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
 
 # Regression for issue 28818. Try to trigger undetectable cycle between the
 # PushFilterIntoJoinLeftAndRight and TryDecorrelateSelect rules.
@@ -948,7 +1086,7 @@ project
  │         │    │    │    │    │    │    ├── scan xy
  │         │    │    │    │    │    │    │    ├── columns: xy.x:6(int!null)
  │         │    │    │    │    │    │    │    └── key: (6)
- │         │    │    │    │    │    │    └── filters [type=bool]
+ │         │    │    │    │    │    │    └── filters
  │         │    │    │    │    │    │         └── eq [type=bool]
  │         │    │    │    │    │    │              ├── subquery [type=string]
  │         │    │    │    │    │    │              │    └── max1-row
@@ -965,7 +1103,7 @@ project
  │         │    │    │    │    │    │    ├── scan uv
  │         │    │    │    │    │    │    │    ├── columns: u:8(int!null)
  │         │    │    │    │    │    │    │    └── key: (8)
- │         │    │    │    │    │    │    └── filters [type=bool]
+ │         │    │    │    │    │    │    └── filters
  │         │    │    │    │    │    │         └── eq [type=bool]
  │         │    │    │    │    │    │              ├── subquery [type=string]
  │         │    │    │    │    │    │              │    └── max1-row
@@ -976,24 +1114,24 @@ project
  │         │    │    │    │    │    │              │         └── scan a
  │         │    │    │    │    │    │              │              └── columns: a.s:19(string)
  │         │    │    │    │    │    │              └── const: 'foo' [type=string]
- │         │    │    │    │    │    └── true [type=bool]
+ │         │    │    │    │    │    └── filters (true)
  │         │    │    │    │    ├── limit
  │         │    │    │    │    │    ├── outer: (4)
  │         │    │    │    │    │    ├── cardinality: [0 - 10]
  │         │    │    │    │    │    ├── select
  │         │    │    │    │    │    │    ├── outer: (4)
  │         │    │    │    │    │    │    ├── scan b
- │         │    │    │    │    │    │    └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - ]; tight)]
+ │         │    │    │    │    │    │    └── filters
  │         │    │    │    │    │    │         └── a.s >= 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - ]; tight)]
  │         │    │    │    │    │    └── const: 10 [type=int]
- │         │    │    │    │    └── true [type=bool]
- │         │    │    │    └── true [type=bool]
- │         │    │    └── projections [outer=(1,6,8)]
+ │         │    │    │    │    └── filters (true)
+ │         │    │    │    └── filters (true)
+ │         │    │    └── projections
  │         │    │         └── true [type=bool]
- │         │    └── aggregations [outer=(13)]
+ │         │    └── aggregations
  │         │         └── const-not-null-agg [type=bool, outer=(13)]
- │         │              └── variable: true [type=bool, outer=(13)]
- │         └── filters [type=bool, outer=(14), constraints=(/14: (/NULL - ]; tight)]
+ │         │              └── variable: true [type=bool]
+ │         └── filters
  │              └── true_agg IS NOT NULL [type=bool, outer=(14), constraints=(/14: (/NULL - ]; tight)]
  └── projections
       └── const: 1 [type=int]
@@ -1018,10 +1156,10 @@ inner-join (lookup a)
  │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    ├── key: (6)
  │    │    └── fd: (6)-->(7)
- │    └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
- │         └── y = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
- └── filters [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
-      └── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
+ │    └── filters
+ │         └── y = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
+ └── filters
+      └── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
 
 # FULL JOIN should not push down conditions to either side of join.
 opt expect-not=(PushFilterIntoJoinLeft,PushFilterIntoJoinRight)
@@ -1029,6 +1167,8 @@ SELECT * FROM a FULL JOIN b ON a.k=b.x AND a.i=1 AND b.y=1
 ----
 full-join (merge)
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7)
  ├── scan a
@@ -1041,12 +1181,9 @@ full-join (merge)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(2,7), constraints=(/2: [/1 - /1]; /7: [/1 - /1]; tight), fd=()-->(2,7)]
-           ├── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight)]
-           └── y = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+ └── filters
+      ├── i = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      └── y = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
 
 # Nested semi/anti-join case.
 opt expect=PushFilterIntoJoinRight
@@ -1077,8 +1214,8 @@ semi-join-apply
  │    │    │    ├── columns: a.k:3(int!null) a.i:4(int) a.f:5(float!null) a.s:6(string) a.j:7(jsonb)
  │    │    │    ├── key: (3)
  │    │    │    └── fd: (3)-->(4-7)
- │    │    └── filters [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
- │    │         └── a.s = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
+ │    │    └── filters
+ │    │         └── a.s = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
  │    ├── select
  │    │    ├── columns: a.k:8(int!null) a.i:9(int!null) a.f:10(float!null) a.s:11(string) a.j:12(jsonb)
  │    │    ├── key: (8)
@@ -1087,12 +1224,12 @@ semi-join-apply
  │    │    │    ├── columns: a.k:8(int!null) a.i:9(int) a.f:10(float!null) a.s:11(string) a.j:12(jsonb)
  │    │    │    ├── key: (8)
  │    │    │    └── fd: (8)-->(9-12)
- │    │    └── filters [type=bool, outer=(9), constraints=(/9: [/10 - /10]; tight), fd=()-->(9)]
- │    │         └── a.i = 10 [type=bool, outer=(9), constraints=(/9: [/10 - /10]; tight)]
- │    └── filters [type=bool, outer=(2), constraints=(/2: [/101 - ]; tight)]
+ │    │    └── filters
+ │    │         └── a.i = 10 [type=bool, outer=(9), constraints=(/9: [/10 - /10]; tight), fd=()-->(9)]
+ │    └── filters
  │         └── y > 100 [type=bool, outer=(2), constraints=(/2: [/101 - ]; tight)]
- └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
-      └── a.k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ └── filters
+      └── a.k = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
 
 # --------------------------------------------------
 # SimplifyLeftJoinWithoutFilters
@@ -1116,7 +1253,7 @@ inner-join
  │    ├── scan b
  │    └── aggregations
  │         └── count-rows [type=int]
- └── true [type=bool]
+ └── filters (true)
 
 # Full-join.
 opt expect=SimplifyLeftJoinWithoutFilters
@@ -1139,7 +1276,7 @@ right-join
  │    ├── scan b
  │    └── aggregations
  │         └── count-rows [type=int]
- └── true [type=bool]
+ └── filters (true)
 
 # Left-join-apply.
 opt expect=SimplifyLeftJoinWithoutFilters
@@ -1169,22 +1306,22 @@ project
       │    │    │    ├── columns: column1:6(int)
       │    │    │    ├── outer: (1)
       │    │    │    ├── cardinality: [2 - 2]
-      │    │    │    ├── (k,) [type=tuple{int}, outer=(1)]
+      │    │    │    ├── (k,) [type=tuple{int}]
       │    │    │    └── (1,) [type=tuple{int}]
-      │    │    └── true [type=bool]
-      │    └── aggregations [outer=(2-6)]
+      │    │    └── filters (true)
+      │    └── aggregations
       │         ├── sum [type=decimal, outer=(6)]
-      │         │    └── variable: column1 [type=int, outer=(6)]
+      │         │    └── variable: column1 [type=int]
       │         ├── const-agg [type=int, outer=(2)]
-      │         │    └── variable: i [type=int, outer=(2)]
+      │         │    └── variable: i [type=int]
       │         ├── const-agg [type=float, outer=(3)]
-      │         │    └── variable: f [type=float, outer=(3)]
+      │         │    └── variable: f [type=float]
       │         ├── const-agg [type=string, outer=(4)]
-      │         │    └── variable: s [type=string, outer=(4)]
+      │         │    └── variable: s [type=string]
       │         └── const-agg [type=jsonb, outer=(5)]
-      │              └── variable: j [type=jsonb, outer=(5)]
-      └── filters [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
-           └── sum = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight)]
+      │              └── variable: j [type=jsonb]
+      └── filters
+           └── sum = 1 [type=bool, outer=(7), constraints=(/7: [/1 - /1]; tight), fd=()-->(7)]
 
 # Don't simplify right join
 opt expect-not=SimplifyLeftJoinWithoutFilters
@@ -1207,7 +1344,7 @@ right-join
  │    ├── scan b
  │    └── aggregations
  │         └── count-rows [type=int]
- └── true [type=bool]
+ └── filters (true)
 
 # --------------------------------------------------
 # SimplifyRightJoinWithoutFilters
@@ -1231,7 +1368,7 @@ inner-join
  │    ├── scan b
  │    └── aggregations
  │         └── count-rows [type=int]
- └── true [type=bool]
+ └── filters (true)
 
 # Full-join.
 opt expect=SimplifyRightJoinWithoutFilters
@@ -1254,7 +1391,7 @@ right-join
  │    ├── scan b
  │    └── aggregations
  │         └── count-rows [type=int]
- └── true [type=bool]
+ └── filters (true)
 
 # Don't simplify left join
 opt expect-not=SimplifyRightJoinWithoutFilters
@@ -1277,7 +1414,7 @@ right-join
  │    ├── scan b
  │    └── aggregations
  │         └── count-rows [type=int]
- └── true [type=bool]
+ └── filters (true)
 
 # --------------------------------------------------
 # SimplifyLeftJoinWithFilters + SimplifyRightJoinWithFilters
@@ -1287,6 +1424,8 @@ SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k
 ----
 inner-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) k:6(int!null) i:7(int) f:8(float!null) s:9(string) j:10(jsonb)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (6)
  ├── fd: (1)-->(2-5), (6)-->(7-10), (1)==(6), (6)==(1)
  ├── scan a
@@ -1299,10 +1438,7 @@ inner-join (merge)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7-10)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── true [type=bool]
+ └── filters (true)
 
 # Right side has partial rows, so only right-join can be simplified.
 opt expect=SimplifyRightJoinWithFilters
@@ -1310,6 +1446,8 @@ SELECT * FROM a FULL JOIN (SELECT * FROM a WHERE k>0) AS a2 ON a.k=a2.k
 ----
 left-join (merge)
  ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) k:6(int) i:7(int) f:8(float) s:9(string) j:10(jsonb)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7-10)
  ├── scan a
@@ -1323,10 +1461,7 @@ left-join (merge)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7-10)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── true [type=bool]
+ └── filters (true)
 
 # Multiple equality conditions, with duplicates and reversed columns.
 opt expect=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
@@ -1344,10 +1479,10 @@ inner-join
  │    ├── columns: a.k:6(int!null) a.i:7(int) a.f:8(float!null) a.s:9(string) a.j:10(jsonb)
  │    ├── key: (6)
  │    └── fd: (6)-->(7-10)
- └── filters [type=bool, outer=(1,3,6,8), constraints=(/1: (/NULL - ]; /3: (/NULL - ]; /6: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(6), (6)==(1), (3)==(8), (8)==(3)]
-      ├── a.k = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-      ├── a.k = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-      └── a.f = a.f [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ])]
+ └── filters
+      ├── a.k = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      ├── a.k = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      └── a.f = a.f [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
 
 # Input contains Project operator.
 opt expect=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
@@ -1360,14 +1495,14 @@ inner-join
  │    ├── columns: length:6(int) a.f:3(float!null)
  │    ├── scan a
  │    │    └── columns: a.f:3(float!null) a.s:4(string)
- │    └── projections [outer=(3,4)]
+ │    └── projections
  │         └── length(a.s) [type=int, outer=(4)]
  ├── scan a
  │    ├── columns: a.k:7(int!null) a.i:8(int) a.f:9(float!null) a.s:10(string) a.j:11(jsonb)
  │    ├── key: (7)
  │    └── fd: (7)-->(8-11)
- └── filters [type=bool, outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
-      └── a.f = a.f [type=bool, outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ])]
+ └── filters
+      └── a.f = a.f [type=bool, outer=(3,9), constraints=(/3: (/NULL - ]; /9: (/NULL - ]), fd=(3)==(9), (9)==(3)]
 
 # Multiple join levels.
 opt expect=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
@@ -1383,6 +1518,8 @@ inner-join
  │    └── fd: (1)-->(2-5)
  ├── inner-join (merge)
  │    ├── columns: a.k:6(int!null) a.i:7(int) a.f:8(float!null) a.s:9(string) a.j:10(jsonb) a.k:11(int!null) a.i:12(int) a.f:13(float!null) a.s:14(string) a.j:15(jsonb)
+ │    ├── left ordering: +6
+ │    ├── right ordering: +11
  │    ├── key: (11)
  │    ├── fd: (6)-->(7-10), (11)-->(12-15), (6)==(11), (11)==(6)
  │    ├── scan a
@@ -1395,12 +1532,9 @@ inner-join
  │    │    ├── key: (11)
  │    │    ├── fd: (11)-->(12-15)
  │    │    └── ordering: +11
- │    └── merge-on
- │         ├── left ordering: +6
- │         ├── right ordering: +11
- │         └── true [type=bool]
- └── filters [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
-      └── a.f = a.f [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ])]
+ │    └── filters (true)
+ └── filters
+      └── a.f = a.f [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
 
 # Cross-join preserves all rows and enables top-level full-join to become inner-join.
 opt expect=(SimplifyRightJoinWithFilters,SimplifyLeftJoinWithFilters)
@@ -1422,14 +1556,14 @@ inner-join
  │    ├── scan a
  │    │    ├── columns: a.k:11(int!null)
  │    │    └── key: (11)
- │    └── true [type=bool]
+ │    └── filters (true)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float!null) a.s:4(string) a.j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(1,6,11), constraints=(/1: (/NULL - ]; /6: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(6,11), (6)==(1,11), (11)==(1,6)]
-      ├── a.k = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-      └── a.k = a.k [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ])]
+ └── filters
+      ├── a.k = a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      └── a.k = a.k [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
 
 # Left joins on a foreign key turn into inner joins.
 opt
@@ -1450,8 +1584,8 @@ inner-join
  │    ├── columns: k:4(int!null) i:5(int) f:6(float!null) s:7(string) j:8(jsonb)
  │    ├── key: (4)
  │    └── fd: (4)-->(5-8)
- └── filters [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
-      └── y = k [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ])]
+ └── filters
+      └── y = k [type=bool, outer=(2,4), constraints=(/2: (/NULL - ]; /4: (/NULL - ]), fd=(2)==(4), (4)==(2)]
 
 # Left joins on a multiple-column foreign key turn into inner joins.
 opt
@@ -1463,6 +1597,8 @@ AND d.y = c.x
 ----
 inner-join (merge)
  ├── columns: x:1(int!null) y:2(int!null) z:3(int!null) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── left ordering: +2,+3
+ ├── right ordering: +4,+6
  ├── key: (1)
  ├── fd: (1)-->(2,3), (4)-->(5,6), (3)==(6), (6)==(3), (2)==(4), (4)==(2)
  ├── scan d@d_auto_index_fk_y_ref_c
@@ -1475,10 +1611,7 @@ inner-join (merge)
  │    ├── key: (4)
  │    ├── fd: (4)-->(5,6)
  │    └── ordering: +4
- └── merge-on
-      ├── left ordering: +2,+3
-      ├── right ordering: +4,+6
-      └── true [type=bool]
+ └── filters (true)
 
 # Left join on a part of a foreign key turns into an inner join.
 opt
@@ -1499,8 +1632,8 @@ inner-join
  │    ├── columns: c.x:4(int!null) c.y:5(int!null) c.z:6(int!null)
  │    ├── key: (4)
  │    └── fd: (4)-->(5,6)
- └── filters [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
-      └── d.z = c.z [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ])]
+ └── filters
+      └── d.z = c.z [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
 
 # Can't simplify: joins on non-foreign keys.
 opt
@@ -1521,8 +1654,8 @@ left-join
  │    ├── columns: k:4(int!null) i:5(int) f:6(float!null) s:7(string) j:8(jsonb)
  │    ├── key: (4)
  │    └── fd: (4)-->(5-8)
- └── filters [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ]), fd=(3)==(4), (4)==(3)]
-      └── z = k [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ])]
+ └── filters
+      └── z = k [type=bool, outer=(3,4), constraints=(/3: (/NULL - ]; /4: (/NULL - ]), fd=(3)==(4), (4)==(3)]
 
 # Can't simplify: joins on non-foreign keys still in foreign key index.
 opt
@@ -1533,6 +1666,8 @@ ON c.x = a.k
 ----
 left-join (merge)
  ├── columns: x:1(int!null) y:2(int!null) z:3(int!null) k:4(int) i:5(int) f:6(float) s:7(string) j:8(jsonb)
+ ├── left ordering: +1
+ ├── right ordering: +4
  ├── key: (1,4)
  ├── fd: (1)-->(2,3), (4)-->(5-8)
  ├── scan c
@@ -1545,10 +1680,7 @@ left-join (merge)
  │    ├── key: (4)
  │    ├── fd: (4)-->(5-8)
  │    └── ordering: +4
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +4
-      └── true [type=bool]
+ └── filters (true)
 
 # Can't simplify: non-equality condition.
 opt
@@ -1566,7 +1698,7 @@ full-join
  │    ├── columns: a.k:6(int!null) a.i:7(int) a.f:8(float!null) a.s:9(string) a.j:10(jsonb)
  │    ├── key: (6)
  │    └── fd: (6)-->(7-10)
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters
       └── a.k < a.k [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 # Can't simplify: non-join equality condition.
@@ -1585,9 +1717,9 @@ full-join
  │    ├── columns: a.k:6(int!null) a.i:7(int) a.f:8(float!null) a.s:9(string) a.j:10(jsonb)
  │    ├── key: (6)
  │    └── fd: (6)-->(7-10)
- └── filters [type=bool, outer=(3,8), constraints=(/3: [/1.0 - /1.0]; /8: (/NULL - ]), fd=()-->(3,8), (3)==(8), (8)==(3)]
-      ├── a.f = 1.0 [type=bool, outer=(3), constraints=(/3: [/1.0 - /1.0]; tight)]
-      └── a.f = a.f [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ])]
+ └── filters
+      ├── a.f = 1.0 [type=bool, outer=(3), constraints=(/3: [/1.0 - /1.0]; tight), fd=()-->(3)]
+      └── a.f = a.f [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(8), (8)==(3)]
 
 # Can't simplify: non-null column.
 opt
@@ -1605,8 +1737,8 @@ full-join
  │    ├── columns: a.k:6(int!null) a.i:7(int) a.f:8(float!null) a.s:9(string) a.j:10(jsonb)
  │    ├── key: (6)
  │    └── fd: (6)-->(7-10)
- └── filters [type=bool, outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ]), fd=(4)==(9), (9)==(4)]
-      └── a.s = a.s [type=bool, outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ])]
+ └── filters
+      └── a.s = a.s [type=bool, outer=(4,9), constraints=(/4: (/NULL - ]; /9: (/NULL - ]), fd=(4)==(9), (9)==(4)]
 
 # Can't simplify: equality column that is synthesized.
 opt
@@ -1624,10 +1756,10 @@ full-join
  │    ├── scan a
  │    │    ├── columns: a.k:6(int!null)
  │    │    └── key: (6)
- │    └── projections [outer=(6)]
+ │    └── projections
  │         └── a.k + 1 [type=int, outer=(6)]
- └── filters [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
-      └── a.k = k [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ])]
+ └── filters
+      └── a.k = k [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
 
 # Can't simplify: equality condition with different column ordinals.
 opt
@@ -1645,8 +1777,8 @@ full-join
  │    ├── columns: a.k:6(int!null) a.i:7(int) a.f:8(float!null) a.s:9(string) a.j:10(jsonb)
  │    ├── key: (6)
  │    └── fd: (6)-->(7-10)
- └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-      └── a.k = a.f [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
+ └── filters
+      └── a.k = a.f [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
 
 # Can't simplify: one equality condition has columns from same side of join.
 opt
@@ -1654,6 +1786,8 @@ SELECT * FROM a FULL JOIN a AS a2 ON a.k=a2.k AND a.f=a.f AND a2.f=a2.f
 ----
 full-join (merge)
  ├── columns: k:1(int) i:2(int) f:3(float) s:4(string) j:5(jsonb) k:6(int) i:7(int) f:8(float) s:9(string) j:10(jsonb)
+ ├── left ordering: +1
+ ├── right ordering: +6
  ├── key: (1,6)
  ├── fd: (1)-->(2-5), (6)-->(7-10)
  ├── scan a
@@ -1666,12 +1800,9 @@ full-join (merge)
  │    ├── key: (6)
  │    ├── fd: (6)-->(7-10)
  │    └── ordering: +6
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +6
-      └── filters [type=bool, outer=(3,8), constraints=(/3: (/NULL - ]; /8: (/NULL - ])]
-           ├── a.f = a.f [type=bool, outer=(3), constraints=(/3: (/NULL - ])]
-           └── a.f = a.f [type=bool, outer=(8), constraints=(/8: (/NULL - ])]
+ └── filters
+      ├── a.f = a.f [type=bool, outer=(3), constraints=(/3: (/NULL - ])]
+      └── a.f = a.f [type=bool, outer=(8), constraints=(/8: (/NULL - ])]
 
 # Can't simplify: equality conditions have columns from different tables.
 opt
@@ -1693,14 +1824,14 @@ full-join
  │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    ├── key: (6)
  │    │    └── fd: (6)-->(7)
- │    └── true [type=bool]
+ │    └── filters (true)
  ├── scan a
  │    ├── columns: a.k:8(int!null) a.i:9(int) a.f:10(float!null) a.s:11(string) a.j:12(jsonb)
  │    ├── key: (8)
  │    └── fd: (8)-->(9-12)
- └── filters [type=bool, outer=(1,6,8), constraints=(/1: (/NULL - ]; /6: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(6,8), (8)==(1,6), (6)==(1,8)]
-      ├── a.k = a.k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
-      └── x = a.k [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ])]
+ └── filters
+      ├── a.k = a.k [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+      └── x = a.k [type=bool, outer=(6,8), constraints=(/6: (/NULL - ]; /8: (/NULL - ]), fd=(6)==(8), (8)==(6)]
 
 # Can't simplify: The a2.x column is not part of unfilteredCols.
 opt
@@ -1722,13 +1853,13 @@ right-join
  │    │    ├── columns: x:11(int!null) y:12(int)
  │    │    ├── key: (11)
  │    │    └── fd: (11)-->(12)
- │    └── true [type=bool]
+ │    └── filters (true)
  ├── scan a
  │    ├── columns: a.k:1(int!null) a.i:2(int) a.f:3(float!null) a.s:4(string) a.j:5(jsonb)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
- └── filters [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
-      └── a.k = x [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ])]
+ └── filters
+      └── a.k = x [type=bool, outer=(1,11), constraints=(/1: (/NULL - ]; /11: (/NULL - ]), fd=(1)==(11), (11)==(1)]
 
 # --------------------------------------------------
 # EliminateSemiJoin
@@ -1764,8 +1895,8 @@ select
  ├── fd: ()-->(6)
  ├── scan a
  │    └── columns: s:6(string)
- └── filters [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
-      └── s = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight)]
+ └── filters
+      └── s = 'foo' [type=bool, outer=(6), constraints=(/6: [/'foo' - /'foo']; tight), fd=()-->(6)]
 
 # --------------------------------------------------
 # EliminateJoinNoColsRight
@@ -1778,8 +1909,8 @@ select
  ├── fd: ()-->(4)
  ├── scan a
  │    └── columns: s:4(string)
- └── filters [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
-      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight)]
+ └── filters
+      └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
 
 # --------------------------------------------------
 # HoistJoinProject
@@ -1807,9 +1938,9 @@ project
       │    │    ├── columns: x:6(int!null) y:7(int)
       │    │    ├── key: (6)
       │    │    └── fd: (6)-->(7)
-      │    └── filters [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
-      │         └── y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
-      └── true [type=bool]
+      │    └── filters
+      │         └── y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
+      └── filters (true)
 
 # Left-join case.
 opt expect=HoistJoinProject
@@ -1821,6 +1952,8 @@ project
  ├── fd: (1)-->(2-5)
  └── left-join (merge)
       ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int) y:7(int)
+      ├── left ordering: +1
+      ├── right ordering: +6
       ├── key: (1,6)
       ├── fd: (1)-->(2-5), ()~~>(7), (1,6)-->(7)
       ├── scan a
@@ -1838,12 +1971,9 @@ project
       │    │    ├── key: (6)
       │    │    ├── fd: (6)-->(7)
       │    │    └── ordering: +6 opt(7)
-      │    └── filters [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
-      │         └── y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight)]
-      └── merge-on
-           ├── left ordering: +1
-           ├── right ordering: +6
-           └── true [type=bool]
+      │    └── filters
+      │         └── y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
+      └── filters (true)
 
 # --------------------------------------------------
 # SimplifyJoinNotNullEquality
@@ -1863,8 +1993,8 @@ inner-join
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters
+      └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 norm expect=SimplifyJoinNotNullEquality
 SELECT * FROM a INNER JOIN b ON (a.k=b.x) IS False
@@ -1881,7 +2011,7 @@ inner-join
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters
       └── k != x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 norm expect=SimplifyJoinNotNullEquality
@@ -1908,7 +2038,7 @@ inner-join
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters
       └── k != x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
 
 norm expect=SimplifyJoinNotNullEquality
@@ -1926,8 +2056,8 @@ inner-join
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
- └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+ └── filters
+      └── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
 
 norm expect=SimplifyJoinNotNullEquality
 SELECT * FROM a INNER JOIN b ON (a.k=b.x) IS NOT Null
@@ -1944,7 +2074,7 @@ inner-join
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
- └── true [type=bool]
+ └── filters (true)
 
 # Simply multiple conditions, with other conditions present as well.
 norm expect=SimplifyJoinNotNullEquality
@@ -1965,7 +2095,7 @@ inner-join
  │    │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-5)
- │    └── filters [type=bool, outer=(2), constraints=(/2: [/1 - ]; tight)]
+ │    └── filters
  │         └── i > 0 [type=bool, outer=(2), constraints=(/2: [/1 - ]; tight)]
  ├── project
  │    ├── columns: z:8(int) x:6(int!null) y:7(int!null)
@@ -1979,15 +2109,15 @@ inner-join
  │    │    │    ├── columns: x:6(int!null) y:7(int)
  │    │    │    ├── key: (6)
  │    │    │    └── fd: (6)-->(7)
- │    │    └── filters [type=bool, outer=(7), constraints=(/7: [/11 - ]; tight)]
+ │    │    └── filters
  │    │         └── y > 10 [type=bool, outer=(7), constraints=(/7: [/11 - ]; tight)]
- │    └── projections [outer=(6,7)]
+ │    └── projections
  │         └── y + 1 [type=int, outer=(7)]
- └── filters [type=bool, outer=(1-3,6-8), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /3: (/NULL - ]; /6: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(6), (6)==(1), (2)==(7), (7)==(2)]
+ └── filters
       ├── f >= z::FLOAT8 [type=bool, outer=(3,8), constraints=(/3: (/NULL - ])]
-      ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
+      ├── k = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
       ├── f >= z::FLOAT8 [type=bool, outer=(3,8), constraints=(/3: (/NULL - ])]
-      └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+      └── i = y [type=bool, outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
 
 # Don't trigger rule when one of the variables is nullable.
 norm expect-not=SimplifyJoinNotNullEquality
@@ -2005,7 +2135,7 @@ inner-join
  │    ├── columns: x:6(int!null) y:7(int)
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
- └── filters [type=bool, outer=(1,2,6,7)]
+ └── filters
       ├── (k = y) IS true [type=bool, outer=(1,7)]
       └── (i = x) IS false [type=bool, outer=(2,6)]
 
@@ -2032,14 +2162,14 @@ project
       │    │    ├── columns: x:1(int!null) y:2(int)
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2)
-      │    └── projections [outer=(1,2)]
+      │    └── projections
       │         └── x + y [type=int, outer=(1,2)]
       ├── scan uv
       │    ├── columns: u:3(int!null) v:4(int)
       │    ├── key: (3)
       │    └── fd: (3)-->(4)
-      └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
-           └── column5 = u [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+      └── filters
+           └── column5 = u [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
 
 opt expect=ExtractJoinEqualities
 SELECT * FROM xy JOIN uv ON u=x+y
@@ -2060,14 +2190,14 @@ project
       │    │    ├── columns: x:1(int!null) y:2(int)
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2)
-      │    └── projections [outer=(1,2)]
+      │    └── projections
       │         └── x + y [type=int, outer=(1,2)]
       ├── scan uv
       │    ├── columns: u:3(int!null) v:4(int)
       │    ├── key: (3)
       │    └── fd: (3)-->(4)
-      └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
-           └── column5 = u [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+      └── filters
+           └── column5 = u [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
 
 opt expect=ExtractJoinEqualities
 SELECT * FROM xy JOIN uv ON x=u+v
@@ -2092,10 +2222,10 @@ project
       │    │    ├── columns: u:3(int!null) v:4(int)
       │    │    ├── key: (3)
       │    │    └── fd: (3)-->(4)
-      │    └── projections [outer=(3,4)]
+      │    └── projections
       │         └── u + v [type=int, outer=(3,4)]
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           └── x = column5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      └── filters
+           └── x = column5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 opt expect=ExtractJoinEqualities
 SELECT * FROM xy JOIN uv ON u+v=x
@@ -2120,10 +2250,10 @@ project
       │    │    ├── columns: u:3(int!null) v:4(int)
       │    │    ├── key: (3)
       │    │    └── fd: (3)-->(4)
-      │    └── projections [outer=(3,4)]
+      │    └── projections
       │         └── u + v [type=int, outer=(3,4)]
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           └── x = column5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      └── filters
+           └── x = column5 [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 
 opt expect=ExtractJoinEqualities
 SELECT * FROM xy JOIN uv ON x+y=u+v
@@ -2144,7 +2274,7 @@ project
       │    │    ├── columns: x:1(int!null) y:2(int)
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2)
-      │    └── projections [outer=(1,2)]
+      │    └── projections
       │         └── x + y [type=int, outer=(1,2)]
       ├── project
       │    ├── columns: column6:6(int) u:3(int!null) v:4(int)
@@ -2154,14 +2284,14 @@ project
       │    │    ├── columns: u:3(int!null) v:4(int)
       │    │    ├── key: (3)
       │    │    └── fd: (3)-->(4)
-      │    └── projections [outer=(3,4)]
+      │    └── projections
       │         └── u + v [type=int, outer=(3,4)]
-      └── filters [type=bool, outer=(5,6), constraints=(/5: (/NULL - ]; /6: (/NULL - ]), fd=(5)==(6), (6)==(5)]
-           └── column5 = column6 [type=bool, outer=(5,6), constraints=(/5: (/NULL - ]; /6: (/NULL - ])]
+      └── filters
+           └── column5 = column6 [type=bool, outer=(5,6), constraints=(/5: (/NULL - ]; /6: (/NULL - ]), fd=(5)==(6), (6)==(5)]
 
 # Multiple extractable equalities.
 opt expect=ExtractJoinEqualities
-SELECT * FROM xy JOIN uv ON x+y=u AND x=u+v AND x+1=u+2
+SELECT * FROM xy JOIN uv ON x+y=u AND x=u+v AND x*y+1=u*v+2
 ----
 project
  ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int)
@@ -2170,33 +2300,33 @@ project
  └── inner-join
       ├── columns: x:1(int!null) y:2(int) u:3(int!null) v:4(int) column5:5(int!null) column6:6(int!null) column7:7(int!null) column8:8(int!null)
       ├── key: (1)
-      ├── fd: (1)-->(2,7), (1,2)-->(5), (3)-->(4,8), (3,4)-->(6), (3)==(5), (5)==(3), (1)==(6), (6)==(1), (7)==(8), (8)==(7)
+      ├── fd: (1)-->(2), (1,2)-->(5,7), (3)-->(4), (3,4)-->(6,8), (3)==(5), (5)==(3), (1)==(6), (6)==(1), (7)==(8), (8)==(7)
       ├── project
-      │    ├── columns: column5:5(int) column7:7(int) x:1(int!null) y:2(int)
+      │    ├── columns: column7:7(int) column5:5(int) x:1(int!null) y:2(int)
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2,7), (1,2)-->(5)
+      │    ├── fd: (1)-->(2), (1,2)-->(5,7)
       │    ├── scan xy
       │    │    ├── columns: x:1(int!null) y:2(int)
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2)
-      │    └── projections [outer=(1,2)]
-      │         ├── x + y [type=int, outer=(1,2)]
-      │         └── x + 1 [type=int, outer=(1)]
+      │    └── projections
+      │         ├── (x * y) + 1 [type=int, outer=(1,2)]
+      │         └── x + y [type=int, outer=(1,2)]
       ├── project
-      │    ├── columns: column6:6(int) column8:8(int) u:3(int!null) v:4(int)
+      │    ├── columns: column8:8(int) column6:6(int) u:3(int!null) v:4(int)
       │    ├── key: (3)
-      │    ├── fd: (3)-->(4,8), (3,4)-->(6)
+      │    ├── fd: (3)-->(4), (3,4)-->(6,8)
       │    ├── scan uv
       │    │    ├── columns: u:3(int!null) v:4(int)
       │    │    ├── key: (3)
       │    │    └── fd: (3)-->(4)
-      │    └── projections [outer=(3,4)]
-      │         ├── u + v [type=int, outer=(3,4)]
-      │         └── u + 2 [type=int, outer=(3)]
-      └── filters [type=bool, outer=(1,3,5-8), constraints=(/1: (/NULL - ]; /3: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ]; /7: (/NULL - ]; /8: (/NULL - ]), fd=(3)==(5), (5)==(3), (1)==(6), (6)==(1), (7)==(8), (8)==(7)]
-           ├── column5 = u [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
-           ├── x = column6 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-           └── column7 = column8 [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ])]
+      │    └── projections
+      │         ├── (u * v) + 2 [type=int, outer=(3,4)]
+      │         └── u + v [type=int, outer=(3,4)]
+      └── filters
+           ├── column5 = u [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
+           ├── x = column6 [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+           └── column7 = column8 [type=bool, outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ]), fd=(7)==(8), (8)==(7)]
 
 # An extractable equality with another expression.
 opt expect=ExtractJoinEqualities
@@ -2218,14 +2348,14 @@ project
       │    │    ├── columns: x:1(int!null) y:2(int)
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(2)
-      │    └── projections [outer=(1,2)]
+      │    └── projections
       │         └── x + y [type=int, outer=(1,2)]
       ├── scan uv
       │    ├── columns: u:3(int!null) v:4(int)
       │    ├── key: (3)
       │    └── fd: (3)-->(4)
-      └── filters [type=bool, outer=(1,3-5), constraints=(/3: (/NULL - ]; /4: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
-           ├── column5 = u [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+      └── filters
+           ├── column5 = u [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
            └── v = (x + u) [type=bool, outer=(1,3,4), constraints=(/4: (/NULL - ])]
 
 # Cases with non-extractable equality.
@@ -2234,6 +2364,8 @@ SELECT * FROM xy FULL OUTER JOIN uv ON x=u
 ----
 full-join (merge)
  ├── columns: x:1(int) y:2(int) u:3(int) v:4(int)
+ ├── left ordering: +1
+ ├── right ordering: +3
  ├── key: (1,3)
  ├── fd: (1)-->(2), (3)-->(4)
  ├── scan xy
@@ -2246,10 +2378,7 @@ full-join (merge)
  │    ├── key: (3)
  │    ├── fd: (3)-->(4)
  │    └── ordering: +3
- └── merge-on
-      ├── left ordering: +1
-      ├── right ordering: +3
-      └── true [type=bool]
+ └── filters (true)
 
 opt expect-not=ExtractJoinEqualities
 SELECT * FROM xy FULL OUTER JOIN uv ON x+y=1
@@ -2266,7 +2395,7 @@ full-join
  │    ├── columns: u:3(int!null) v:4(int)
  │    ├── key: (3)
  │    └── fd: (3)-->(4)
- └── filters [type=bool, outer=(1,2)]
+ └── filters
       └── (x + y) = 1 [type=bool, outer=(1,2)]
 
 opt expect-not=ExtractJoinEqualities
@@ -2284,7 +2413,7 @@ full-join
  │    ├── columns: u:3(int!null) v:4(int)
  │    ├── key: (3)
  │    └── fd: (3)-->(4)
- └── filters [type=bool, outer=(3,4)]
+ └── filters
       └── (u + v) = 1 [type=bool, outer=(3,4)]
 
 opt expect-not=ExtractJoinEqualities
@@ -2330,11 +2459,11 @@ project
       │    │              │    ├── columns: k:5(int!null) i:6(int)
       │    │              │    ├── key: (5)
       │    │              │    └── fd: (5)-->(6)
-      │    │              └── filters [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-      │    │                   └── i = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ])]
-      │    └── true [type=bool]
-      └── filters [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
-           └── u = k [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ])]
+      │    │              └── filters
+      │    │                   └── i = x [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      │    └── filters (true)
+      └── filters
+           └── u = k [type=bool, outer=(3,5), constraints=(/3: (/NULL - ]; /5: (/NULL - ]), fd=(3)==(5), (5)==(3)]
 
 opt expect-not=ExtractJoinEqualities
 SELECT * FROM xy FULL OUTER JOIN uv ON x=(SELECT k FROM a WHERE i=u)
@@ -2378,8 +2507,8 @@ project
       │    │              │    ├── columns: k:5(int!null) i:6(int)
       │    │              │    ├── key: (5)
       │    │              │    └── fd: (5)-->(6)
-      │    │              └── filters [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
-      │    │                   └── i = u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ])]
-      │    └── true [type=bool]
-      └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           └── x = k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
+      │    │              └── filters
+      │    │                   └── i = u [type=bool, outer=(3,6), constraints=(/3: (/NULL - ]; /6: (/NULL - ]), fd=(3)==(6), (6)==(3)]
+      │    └── filters (true)
+      └── filters
+           └── x = k [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]

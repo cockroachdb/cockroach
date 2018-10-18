@@ -2,6 +2,7 @@
 # join.opt contains exploration rules for the Join operator.
 # =============================================================================
 
+
 # CommuteJoin creates a Join with the left and right inputs swapped. This is
 # useful for other rules that convert joins to other operators (like merge
 # join).
@@ -47,11 +48,11 @@
 [GenerateLookupJoins, Explore]
 (InnerJoin | LeftJoin
     $left:*
-    (Scan $scanDef:*) & (IsCanonicalScan $scanDef)
+    (Scan $scanPrivate:*) & (IsCanonicalScan $scanPrivate)
     $on:*
 )
 =>
-(GenerateLookupJoins (OpName) $left $scanDef $on)
+(GenerateLookupJoins (OpName) $left $scanPrivate $on)
 
 # GenerateLookupJoinWithFilter creates a LookupJoin alternative for a Join which
 # has a Select->Scan combination as its right input. The filter can get merged
@@ -60,10 +61,10 @@
 (InnerJoin | LeftJoin
     $left:*
     (Select
-        (Scan $scanDef:*) & (IsCanonicalScan $scanDef)
-        $filter:*
+        (Scan $scanPrivate:*) & (IsCanonicalScan $scanPrivate)
+        $filters:*
     )
     $on:*
 )
 =>
-(GenerateLookupJoins (OpName) $left $scanDef (ConcatFilters $on $filter))
+(GenerateLookupJoins (OpName) $left $scanPrivate (ConcatFilters $on $filters))

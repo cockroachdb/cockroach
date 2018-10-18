@@ -3,6 +3,36 @@
 # =============================================================================
 
 
+# SimplifyJoinFilters works like SimplifySelectFilters, except that it operates
+# on Join filters rather than Select filters.
+[SimplifyJoinFilters, Normalize, HighPriority]
+(Join
+    $left:*
+    $right:*
+    $on:[ ... (FiltersItem (And | True | False | Null)) ... ] & ^(IsFilterFalse $on)
+)
+=>
+((OpName)
+    $left
+    $right
+    (SimplifyFilters $on)
+)
+
+# DetectJoinContradiction replaces a Join condition with False if it detects a
+# contradiction in the filter.
+[DetectJoinContradiction, Normalize]
+(Join
+    $left:*
+    $right:*
+    [ ... $item:(FiltersItem) & (IsContradiction $item) ... ]
+)
+=>
+((OpName)
+    $left
+    $right
+    [ (FiltersItem (False)) ]
+)
+
 # PushFilterIntoJoinLeftAndRight pushes a filter into both the left and right
 # sides of an InnerJoin or SemiJoin if it can be mapped to use the columns of
 # both sides. For example, consider this query:
@@ -27,28 +57,26 @@
 (InnerJoin | SemiJoin
     $left:* & ^(HasOuterCols $left)
     $right:* & ^(HasOuterCols $right)
-    $filters:(Filters
-        $list:[
-            ...
-            $condition:* &
-                ^(Eq (Variable) (Variable)) &
-                (CanMap $filters $condition $left) &
-                (CanMap $filters $condition $right)
-            ...
-        ]
-    )
+    $on:[
+        ...
+        $item:* &
+            ^(FiltersItem (Eq (Variable) (Variable))) &
+            (CanMap $on $item $left) &
+            (CanMap $on $item $right)
+        ...
+    ]
 )
 =>
 ((OpName)
     (Select
         $left
-        (Filters [(Map $filters $condition $left)])
+        [ (FiltersItem (Map $on $item $left)) ]
     )
     (Select
         $right
-        (Filters [(Map $filters $condition $right)])
+        [ (FiltersItem (Map $on $item $right)) ]
     )
-    (Filters (RemoveListItem $list $condition))
+    (RemoveFiltersItem $on $item)
 )
 
 # MapFilterIntoJoinLeft maps a filter that is not bound by the left side of
@@ -68,24 +96,22 @@
 #       PushFilterIntoJoinLeft might need to be applied multiple times).
 [MapFilterIntoJoinLeft, Normalize]
 (InnerJoin | InnerJoinApply | RightJoin | RightJoinApply | SemiJoin | SemiJoinApply
-    $left:*
+    $left:* & ^(HasOuterCols $left)
     $right:*
-    $filters:(Filters
-        $list:[
-            ...
-            $condition:* &
-                ^(Eq (Variable) (Variable)) &
-                ^(IsBoundBy $condition (OutputCols $left)) &
-                (CanMap $filters $condition $left)
-            ...
-        ]
-    )
+    $on:[
+        ...
+        $item:* &
+            ^(FiltersItem (Eq (Variable) (Variable))) &
+            ^(IsBoundBy $item (OutputCols $left)) &
+            (CanMap $on $item $left)
+        ...
+    ]
 )
 =>
 ((OpName)
     $left
     $right
-    (Filters (ReplaceListItem $list $condition (Map $filters $condition $left)))
+    (ReplaceFiltersItem $on $item (Map $on $item $left))
 )
 
 # MapFilterIntoJoinRight is symmetric with MapFilterIntoJoinLeft. It maps
@@ -95,23 +121,21 @@
 (InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
  SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
     $left:*
-    $right:*
-    $filters:(Filters
-        $list:[
-            ...
-            $condition:* &
-                ^(Eq (Variable) (Variable)) &
-                ^(IsBoundBy $condition (OutputCols $right)) &
-                (CanMap $filters $condition $right)
-            ...
-        ]
-    )
+    $right:* & ^(HasOuterCols $right)
+    $on:[
+        ...
+        $item:* &
+            ^(FiltersItem (Eq (Variable) (Variable))) &
+            ^(IsBoundBy $item (OutputCols $right)) &
+            (CanMap $on $item $right)
+        ...
+    ]
 )
 =>
 ((OpName)
     $left
     $right
-    (Filters (ReplaceListItem $list $condition (Map $filters $condition $right)))
+    (ReplaceFiltersItem $on $item (Map $on $item $right))
 )
 
 # PushFilterIntoJoinLeft pushes Join filter conditions into the left side of the
@@ -138,49 +162,46 @@
 # Citations: [1]
 [PushFilterIntoJoinLeft, Normalize]
 (InnerJoin | InnerJoinApply | RightJoin | RightJoinApply | SemiJoin | SemiJoinApply
-    $left:*
+    $left:* & ^(HasOuterCols $left)
     $right:*
-    $on:(Filters $list:[
+    $on:[
         ...
-        $condition:* & (IsBoundBy $condition $leftCols:(OutputCols $left))
+        $item:* & (IsBoundBy $item $leftCols:(OutputCols $left))
         ...
-    ])
+    ]
 )
 =>
 ((OpName)
     (Select
         $left
-        (Filters (ExtractBoundConditions $list $leftCols))
+        (ExtractBoundConditions $on $leftCols)
     )
     $right
-    (Filters (ExtractUnboundConditions $list $leftCols))
+    (ExtractUnboundConditions $on $leftCols)
 )
 
 # PushFilterIntoJoinRight is symmetric with PushFilterIntoJoinLeft. It pushes
 # Join filter conditions into the right side of the join rather than into the
 # left side. See that rule's comments for more details.
-#
-# This rule triggers a cycle with the TryDecorrelateSelect rule. That rule has
-# the DetectCycle tag to break the cycle.
 [PushFilterIntoJoinRight, Normalize]
 (InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
  SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
     $left:*
-    $right:*
-    $on:(Filters $list:[
+    $right:* & ^(HasOuterCols $right)
+    $on:[
         ...
-        $condition:* & (IsBoundBy $condition $rightCols:(OutputCols $right))
+        $item:* & (IsBoundBy $item $rightCols:(OutputCols $right))
         ...
-    ])
+    ]
 )
 =>
 ((OpName)
     $left
     (Select
         $right
-        (Filters (ExtractBoundConditions $list $rightCols))
+        (ExtractBoundConditions $on $rightCols)
     )
-    (Filters (ExtractUnboundConditions $list $rightCols))
+    (ExtractUnboundConditions $on $rightCols)
 )
 
 # SimplifyLeftJoinWithoutFilters reduces a LeftJoin operator to an InnerJoin
@@ -192,7 +213,7 @@
 (LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
     $left:*
     $right:* & ^(CanHaveZeroRows $right)
-    $on:(True)
+    $on:[]
 )
 =>
 (ConstructNonLeftJoin
@@ -211,7 +232,7 @@
 (RightJoin | RightJoinApply | FullJoin | FullJoinApply
     $left:* & ^(CanHaveZeroRows $left)
     $right:*
-    $on:(True)
+    $on:[]
 )
 =>
 (ConstructNonRightJoin
@@ -242,7 +263,7 @@
 (LeftJoin | LeftJoinApply | FullJoin | FullJoinApply
     $left:*
     $right:*
-    $on:(Filters) & (JoinFiltersMatchAllLeftRows $left $right $on)
+    $on:^[] & (JoinFiltersMatchAllLeftRows $left $right $on)
 )
 =>
 (ConstructNonLeftJoin
@@ -261,7 +282,7 @@
 (RightJoin | RightJoinApply | FullJoin | FullJoinApply
     $left:*
     $right:*
-    $on:(Filters) & (JoinFiltersMatchAllLeftRows $right $left $on)
+    $on:^[] & (JoinFiltersMatchAllLeftRows $right $left $on)
 )
 =>
 (ConstructNonRightJoin
@@ -277,7 +298,7 @@
 (SemiJoin | SemiJoinApply
     $left:*
     $right:* & ^(CanHaveZeroRows $right)
-    (True)
+    []
 )
 =>
 $left
@@ -334,7 +355,7 @@ $left
 [HoistJoinProject, Normalize]
 (InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
     $left:*
-    $right:(Project $input:* (Projections []))
+    $right:(Project $input:* $projections:[])
     $on:*
 )
 =>
@@ -344,7 +365,8 @@ $left
         $input
         $on
     )
-    (ProjectColsFromBoth $left $right)
+    $projections
+    (OutputCols2 $left $right)
 )
 
 # SimplifyJoinNotNullEquality simplifies an Is/IsNot equality filter condition
@@ -363,44 +385,48 @@ $left
 (Join
     $left:*
     $right:*
-    $on:(Filters $list:[
+    $on:[
         ...
-        $condition:(Is | IsNot
-            $eq:(Eq
-                # Check whether variable is a not-null column of left or right input.
-                (Variable $col1:* & (IsColNotNull2 $col1 $left $right))
-                (Variable $col2:* & (IsColNotNull2 $col2 $left $right))
+        $item:(FiltersItem
+            $condition:(Is | IsNot
+                $eq:(Eq
+                    # Check whether variable is a not-null column of left or right input.
+                    (Variable $col1:* & (IsColNotNull2 $col1 $left $right))
+                    (Variable $col2:* & (IsColNotNull2 $col2 $left $right))
+                )
+                $cnst:(True | False | Null)
             )
-            $cnst:(True | False | Null)
         )
         ...
-    ])
+    ]
 )
 =>
 ((OpName)
     $left
     $right
-    (Filters
-        (ReplaceListItem
-            $list
-            $condition
-            (SimplifyNotNullEquality
-                $eq
-                (OpName $condition)
-                (OpName $cnst)
-            )
+    (ReplaceFiltersItem
+        $on
+        $item
+        (SimplifyNotNullEquality
+            $eq
+            (OpName $condition)
+            (OpName $cnst)
         )
     )
 )
 
 # ExtractJoinEqualities finds equality conditions such that one side only
 # depends on left columns and the other only on right columns and pushes the
-# expressions down into ProjectOps. The result is a join that has an equality
-# constraint, which is much more efficient. For example:
+# expressions down into Project operators. The result is a join that has an
+# equality constraint, which is much more efficient. For example:
+#
 #   SELECT * FROM abc JOIN xyz ON a=x+1
+#
 # This join would be quadratic because we have no equality columns.
 # This rule rewrites it as:
+#
 #   SELECT a,b,c,x,y,z FROM abc JOIN (SELECT *, x+1 AS x1 FROM xyz) ON a=x1
+#
 # This join can use hash join or lookup on the equality columns.
 #
 # Depending on the expressions involved, one or both sides require a projection.
@@ -408,14 +434,16 @@ $left
 (JoinNonApply
     $left:* & ^(HasOuterCols $left)
     $right:* & ^(HasOuterCols $right)
-    (Filters
-        $list:[
-            ...
-            (Eq $a:* $b:*) &
-            (CanExtractJoinEquality $a $b (OutputCols $left) (OutputCols $right))
-            ...
-        ]
-    )
+    $on:[
+        ...
+        $item:(FiltersItem
+            (Eq
+                $a:^(ConstValue)
+                $b:^(ConstValue)
+            ) & (CanExtractJoinEquality $a $b (OutputCols $left) (OutputCols $right))
+        )
+        ...
+    ]
 )
 =>
-(ExtractJoinEqualities (OpName) $left $right $list)
+(ExtractJoinEquality (OpName) $left $right $on $item)

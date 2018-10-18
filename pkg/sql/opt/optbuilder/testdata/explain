@@ -68,7 +68,7 @@ explain
       │    └── tuple [type=tuple{int, int}]
       │         ├── const: 3 [type=int]
       │         └── const: 4 [type=int]
-      └── filters [type=bool]
+      └── filters
            └── eq [type=bool]
                 ├── variable: x [type=int]
                 └── variable: column1 [type=int]

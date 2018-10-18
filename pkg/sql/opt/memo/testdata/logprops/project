@@ -38,9 +38,9 @@ project
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
- └── projections [outer=(1,2)]
+ └── projections
       ├── plus [type=int, outer=(1)]
-      │    ├── variable: x [type=int, outer=(1)]
+      │    ├── variable: x [type=int]
       │    └── const: 1 [type=int]
       └── const: 1 [type=int]
 
@@ -74,9 +74,9 @@ select
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
- └── filters [type=bool, outer=(1,2)]
+ └── filters
       └── gt [type=bool, outer=(1,2)]
-           ├── subquery [type=int, outer=(1,2)]
+           ├── subquery [type=int]
            │    └── max1-row
            │         ├── columns: y:9(int)
            │         ├── outer: (1,2)
@@ -104,11 +104,11 @@ select
            │              │    │    ├── fd: (5)-->(6,7)
            │              │    │    ├── prune: (5-7)
            │              │    │    └── interesting orderings: (+5)
-           │              │    └── filters [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-           │              │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ])]
-           │              │              ├── variable: k [type=int, outer=(5)]
-           │              │              └── variable: x [type=int, outer=(1)]
-           │              └── projections [outer=(2)]
+           │              │    └── filters
+           │              │         └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+           │              │              ├── variable: k [type=int]
+           │              │              └── variable: x [type=int]
+           │              └── projections
            │                   └── subquery [type=int, outer=(2)]
            │                        └── max1-row
            │                             ├── columns: y:8(int)
@@ -127,7 +127,7 @@ select
            │                                  │    ├── cardinality: [1 - 1]
            │                                  │    ├── key: ()
            │                                  │    └── tuple [type=tuple]
-           │                                  └── projections [outer=(2)]
+           │                                  └── projections
            │                                       └── variable: xysd.y [type=int, outer=(2)]
            └── const: 5 [type=int]
 
@@ -207,7 +207,7 @@ project
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+1)
- └── projections [outer=(1)]
+ └── projections
       └── subquery [type=int, outer=(1)]
            └── max1-row
                 ├── columns: xysd.y:5(int)
@@ -236,10 +236,10 @@ project
                           │    ├── fd: (4)-->(5-7), (6,7)~~>(4,5)
                           │    ├── prune: (4-7)
                           │    └── interesting orderings: (+4) (-6,+7,+4)
-                          └── filters [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
-                               └── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ])]
-                                    ├── variable: x [type=int, outer=(4)]
-                                    └── variable: k [type=int, outer=(1)]
+                          └── filters
+                               └── eq [type=bool, outer=(1,4), constraints=(/1: (/NULL - ]; /4: (/NULL - ]), fd=(1)==(4), (4)==(1)]
+                                    ├── variable: x [type=int]
+                                    └── variable: k [type=int]
 
 # Project nested correlated subquery.
 build
@@ -257,7 +257,7 @@ project
  │    ├── fd: (1)-->(2,3)
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+1)
- └── projections [outer=(1)]
+ └── projections
       └── exists [type=bool, outer=(1)]
            └── project
                 ├── columns: exists:12(bool)
@@ -270,7 +270,7 @@ project
                 │    ├── fd: (4)-->(5-7), (6,7)~~>(4,5)
                 │    ├── prune: (4-7)
                 │    └── interesting orderings: (+4) (-6,+7,+4)
-                └── projections [outer=(1)]
+                └── projections
                      └── exists [type=bool, outer=(1)]
                           └── project
                                ├── columns: xysd.y:9(int)
@@ -293,10 +293,10 @@ project
                                     │    ├── fd: (8)-->(9-11), (10,11)~~>(8,9)
                                     │    ├── prune: (8-11)
                                     │    └── interesting orderings: (+8) (-10,+11,+8)
-                                    └── filters [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-                                         └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ])]
-                                              ├── variable: xysd.x [type=int, outer=(8)]
-                                              └── variable: k [type=int, outer=(1)]
+                                    └── filters
+                                         └── eq [type=bool, outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+                                              ├── variable: xysd.x [type=int]
+                                              └── variable: k [type=int]
 
 # We have the FD: y --> y::TEXT.
 build
@@ -312,9 +312,9 @@ project
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
- └── projections [outer=(2)]
+ └── projections
       └── cast: STRING [type=string, outer=(2)]
-           └── variable: xysd.y [type=int, outer=(2)]
+           └── variable: xysd.y [type=int]
 
 # We don't have the FD: d --> d::TEXT because d is a composite type.
 # For example, d=1 is equal to d=1.0 but d::TEXT differs.
@@ -330,6 +330,6 @@ project
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
- └── projections [outer=(4)]
+ └── projections
       └── cast: STRING [type=string, outer=(4)]
-           └── variable: xysd.d [type=decimal, outer=(4)]
+           └── variable: xysd.d [type=decimal]

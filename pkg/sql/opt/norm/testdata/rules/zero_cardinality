@@ -24,15 +24,6 @@ values
  └── fd: ()-->(1)
 
 opt expect=SimplifyZeroCardinalityGroup
-SELECT k FROM b WHERE i > 2 AND i < 1
-----
-values
- ├── columns: k:1(int)
- ├── cardinality: [0 - 0]
- ├── key: ()
- └── fd: ()-->(1)
-
-opt expect=SimplifyZeroCardinalityGroup
 SELECT * FROM (VALUES (1) OFFSET 1)
 ----
 values
@@ -89,16 +80,16 @@ values
 opt
 SELECT * FROM (SELECT CASE WHEN k < 0 THEN 3 / 0 ELSE 3 END FROM b) WHERE false
 ----
-select
+project
  ├── columns: case:6(decimal)
  ├── cardinality: [0 - 0]
  ├── side-effects
- ├── project
- │    ├── columns: case:6(decimal)
- │    ├── side-effects
- │    ├── scan b
- │    │    ├── columns: k:1(int!null)
- │    │    └── key: (1)
- │    └── projections [outer=(1), side-effects]
- │         └── CASE WHEN k < 0 THEN 3 / 0 ELSE 3 END [type=decimal, outer=(1), side-effects]
- └── false [type=bool]
+ ├── key: ()
+ ├── fd: ()-->(6)
+ ├── values
+ │    ├── columns: k:1(int)
+ │    ├── cardinality: [0 - 0]
+ │    ├── key: ()
+ │    └── fd: ()-->(1)
+ └── projections
+      └── CASE WHEN k < 0 THEN 3 / 0 ELSE 3 END [type=decimal, outer=(1), side-effects]

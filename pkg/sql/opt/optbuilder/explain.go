@@ -53,11 +53,12 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 	}
 	b.synthesizeResultColumns(outScope, cols)
 
-	def := memo.ExplainOpDef{
+	input := stmtScope.expr.(memo.RelExpr)
+	private := memo.ExplainPrivate{
 		Options: opts,
 		ColList: colsToColList(outScope.cols),
-		Props:   *stmtScope.makePhysicalProps(),
+		Props:   stmtScope.makePhysicalProps(),
 	}
-	outScope.group = b.factory.ConstructExplain(stmtScope.group, b.factory.InternExplainOpDef(&def))
+	outScope.expr = b.factory.ConstructExplain(input, &private)
 	return outScope
 }

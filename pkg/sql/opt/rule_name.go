@@ -27,7 +27,6 @@ const (
 	// Manual Rule Names
 	// ------------------------------------------------------------
 
-	SimplifyProjectOrdering
 	SimplifyRootOrdering
 	PruneRootCols
 	SimplifyZeroCardinalityGroup

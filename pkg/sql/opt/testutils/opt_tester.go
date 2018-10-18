@@ -69,7 +69,7 @@ type OptTester struct {
 // OptTesterFlags are control knobs for tests. Note that specific testcases can
 // override these defaults.
 type OptTesterFlags struct {
-	// Format controls the output detail of build / opt/ optsteps command
+	// ExprFormat controls the output detail of build / opt/ optsteps command
 	// directives.
 	ExprFormat memo.ExprFmtFlags
 
@@ -174,9 +174,6 @@ func NewOptTester(catalog opt.Catalog, sql string) *OptTester {
 //    For example:
 //      build format=(hide-cost,hide-stats)
 //
-//  - raw-memo: show the raw memo groups, in the order they were originally
-//	  added, including any "orphaned" groups.
-//
 //  - allow-unsupported: wrap unsupported expressions in UnsupportedOp.
 //
 //  - fully-qualify-names: fully qualify all column names in the test output.
@@ -220,7 +217,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		return s
 
 	case "build":
-		ev, err := ot.OptBuild()
+		e, err := ot.OptBuild()
 		if err != nil {
 			text := strings.TrimSpace(err.Error())
 			if pgerr, ok := err.(*pgerror.Error); ok {
@@ -229,13 +226,13 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			}
 			return fmt.Sprintf("error: %s\n", text)
 		}
-		if err := ot.postProcess(ev); err != nil {
-			d.Fatalf(tb, "%v", err)
+		if err := ot.postProcess(e); err != nil {
+			tb.Fatal(err)
 		}
-		return ev.FormatString(ot.Flags.ExprFormat)
+		return memo.FormatExpr(e, ot.Flags.ExprFormat)
 
 	case "norm":
-		ev, err := ot.OptNorm()
+		e, err := ot.OptNorm()
 		if err != nil {
 			text := strings.TrimSpace(err.Error())
 			if pgerr, ok := err.(*pgerror.Error); ok {
@@ -244,27 +241,20 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 			}
 			return fmt.Sprintf("error: %s\n", text)
 		}
-		if err := ot.postProcess(ev); err != nil {
-			d.Fatalf(tb, "%v", err)
+		if err := ot.postProcess(e); err != nil {
+			tb.Fatal(err)
 		}
-		return ev.FormatString(ot.Flags.ExprFormat)
+		return memo.FormatExpr(e, ot.Flags.ExprFormat)
 
 	case "opt":
-		ev, err := ot.Optimize()
+		e, err := ot.Optimize()
 		if err != nil {
 			d.Fatalf(tb, "%v", err)
 		}
-		if err := ot.postProcess(ev); err != nil {
-			d.Fatalf(tb, "%v", err)
+		if err := ot.postProcess(e); err != nil {
+			tb.Fatal(err)
 		}
-		return ev.FormatString(ot.Flags.ExprFormat)
-
-	case "rulestats":
-		result, err := ot.RuleStats()
-		if err != nil {
-			d.Fatalf(tb, "%v", err)
-		}
-		return result
+		return memo.FormatExpr(e, ot.Flags.ExprFormat)
 
 	case "optsteps":
 		result, err := ot.OptSteps()
@@ -275,6 +265,13 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 
 	case "exploretrace":
 		result, err := ot.ExploreTrace()
+		if err != nil {
+			d.Fatalf(tb, "%v", err)
+		}
+		return result
+
+	case "rulestats":
+		result, err := ot.RuleStats()
 		if err != nil {
 			d.Fatalf(tb, "%v", err)
 		}
@@ -306,15 +303,19 @@ func formatRuleSet(r RuleSet) string {
 	return buf.String()
 }
 
-func (ot *OptTester) postProcess(ev memo.ExprView) error {
-	fillInLazyProps(ev)
-	for _, cols := range ot.Flags.ColStats {
-		ev.RequestColStat(&ot.evalCtx, cols)
+func (ot *OptTester) postProcess(e opt.Expr) error {
+	fillInLazyProps(e)
+
+	if rel, ok := e.(memo.RelExpr); ok {
+		for _, cols := range ot.Flags.ColStats {
+			memo.RequestColStat(&ot.evalCtx, rel, cols)
+		}
 	}
 
 	if !ot.Flags.ExpectedRules.SubsetOf(ot.seenRules) {
 		unseen := ot.Flags.ExpectedRules.Difference(ot.seenRules)
-		return fmt.Errorf("expected to see %s, but was not triggered. Did see %s", formatRuleSet(unseen), formatRuleSet(ot.seenRules))
+		return fmt.Errorf("expected to see %s, but was not triggered. Did see %s",
+			formatRuleSet(unseen), formatRuleSet(ot.seenRules))
 	}
 
 	if ot.Flags.UnexpectedRules.Intersects(ot.seenRules) {
@@ -326,20 +327,20 @@ func (ot *OptTester) postProcess(ev memo.ExprView) error {
 }
 
 // Fills in lazily-derived properties (for display).
-func fillInLazyProps(ev memo.ExprView) {
-	if !ev.IsScalar() {
+func fillInLazyProps(e opt.Expr) {
+	if rel, ok := e.(memo.RelExpr); ok {
 		// Derive columns that are candidates for pruning.
-		norm.DerivePruneCols(ev)
+		norm.DerivePruneCols(rel)
 
 		// Derive columns that are candidates for null rejection.
-		norm.DeriveRejectNullCols(ev)
+		norm.DeriveRejectNullCols(rel)
 
 		// Make sure the interesting orderings are calculated.
-		xform.DeriveInterestingOrderings(ev)
+		xform.DeriveInterestingOrderings(rel)
 	}
 
-	for i, n := 0, ev.ChildCount(); i < n; i++ {
-		fillInLazyProps(ev.Child(i))
+	for i, n := 0, e.ChildCount(); i < n; i++ {
+		fillInLazyProps(e.Child(i))
 	}
 }
 
@@ -381,9 +382,6 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 				return fmt.Errorf("unknown format value %s", v)
 			}
 		}
-
-	case "raw-memo":
-		f.MemoFormat = memo.FmtRaw
 
 	case "allow-unsupported":
 		f.AllowUnsupportedExpr = true
@@ -450,7 +448,7 @@ func (f *OptTesterFlags) Set(arg datadriven.CmdArg) error {
 // OptBuild constructs an opt expression tree for the SQL query, with no
 // transformations applied to it. The untouched output of the optbuilder is the
 // final expression tree.
-func (ot *OptTester) OptBuild() (memo.ExprView, error) {
+func (ot *OptTester) OptBuild() (opt.Expr, error) {
 	o := ot.makeOptimizer()
 	o.DisableOptimizations()
 	return ot.optimizeExpr(o)
@@ -459,7 +457,7 @@ func (ot *OptTester) OptBuild() (memo.ExprView, error) {
 // OptNorm constructs an opt expression tree for the SQL query, with all
 // normalization transformations applied to it. The normalized output of the
 // optbuilder is the final expression tree.
-func (ot *OptTester) OptNorm() (memo.ExprView, error) {
+func (ot *OptTester) OptNorm() (opt.Expr, error) {
 	o := ot.makeOptimizer()
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		if !ruleName.IsNormalize() {
@@ -477,7 +475,7 @@ func (ot *OptTester) OptNorm() (memo.ExprView, error) {
 // Optimize constructs an opt expression tree for the SQL query, with all
 // transformations applied to it. The result is the memo expression tree with
 // the lowest estimated cost.
-func (ot *OptTester) Optimize() (memo.ExprView, error) {
+func (ot *OptTester) Optimize() (opt.Expr, error) {
 	o := ot.makeOptimizer()
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		if ot.Flags.DisableRules.Contains(int(ruleName)) {
@@ -517,9 +515,20 @@ func (ot *OptTester) RuleStats() (string, error) {
 
 	o := ot.makeOptimizer()
 	o.NotifyOnAppliedRule(
-		func(ruleName opt.RuleName, group memo.GroupID, expr memo.ExprOrdinal, added int) {
+		func(ruleName opt.RuleName, source, target opt.Expr) {
 			stats[ruleName].numApplied++
-			stats[ruleName].numAdded += added
+			if target != nil {
+				stats[ruleName].numAdded++
+				if rel, ok := target.(memo.RelExpr); ok {
+					for {
+						rel = rel.NextExpr()
+						if rel == nil {
+							break
+						}
+						stats[ruleName].numAdded++
+					}
+				}
+			}
 		},
 	)
 	if _, err := ot.optimizeExpr(o); err != nil {
@@ -619,17 +628,17 @@ func (ot *OptTester) OptSteps() (string, error) {
 
 	os := newOptSteps(ot)
 	for {
-		err := os.next()
+		err := os.Next()
 		if err != nil {
 			return "", err
 		}
 
-		next = os.exprView().FormatString(ot.Flags.ExprFormat)
+		next = memo.FormatExpr(os.Root(), ot.Flags.ExprFormat)
 
 		// This call comes after setting "next", because we want to output the
 		// final expression, even though there were no diffs from the previous
 		// iteration.
-		if os.done() {
+		if os.Done() {
 			break
 		}
 
@@ -639,7 +648,7 @@ func (ot *OptTester) OptSteps() (string, error) {
 			prevBest = next
 		} else if next == prev || next == prevBest {
 			ot.optStepsDisplay(next, next, os)
-		} else if os.isBetter() {
+		} else if os.IsBetter() {
 			// New expression is better than the previous expression. Diff
 			// it against the previous *best* expression (might not be the
 			// previous expression).
@@ -664,10 +673,14 @@ func (ot *OptTester) OptSteps() (string, error) {
 func (ot *OptTester) optStepsDisplay(before string, after string, os *optSteps) {
 	// bestHeader is used when the expression is an improvement over the previous
 	// expression.
-	bestHeader := func(ev memo.ExprView, format string, args ...interface{}) {
+	bestHeader := func(e opt.Expr, format string, args ...interface{}) {
 		ot.separator("=")
 		ot.output(format, args...)
-		ot.output("  Cost: %.2f\n", ev.Cost())
+		if rel, ok := e.(memo.RelExpr); ok {
+			ot.output("  Cost: %.2f\n", rel.Cost())
+		} else {
+			ot.output("\n")
+		}
 		ot.separator("=")
 	}
 
@@ -683,18 +696,18 @@ func (ot *OptTester) optStepsDisplay(before string, after string, os *optSteps) 
 		if ot.Flags.Verbose {
 			fmt.Print("------ optsteps verbose output starts ------\n")
 		}
-		bestHeader(os.exprView(), "Initial expression\n")
+		bestHeader(os.Root(), "Initial expression\n")
 		ot.indent(after)
 		return
 	}
 
 	if before == after {
-		altHeader("%s (no changes)\n", os.lastRuleName())
+		altHeader("%s (no changes)\n", os.LastRuleName())
 		return
 	}
 
 	if after == "" {
-		bestHeader(os.exprView(), "Final best expression\n")
+		bestHeader(os.Root(), "Final best expression\n")
 		ot.indent(before)
 
 		if ot.Flags.Verbose {
@@ -704,13 +717,13 @@ func (ot *OptTester) optStepsDisplay(before string, after string, os *optSteps) 
 	}
 
 	var diff difflib.UnifiedDiff
-	if os.isBetter() {
+	if os.IsBetter() {
 		// New expression is better than the previous expression. Diff
 		// it against the previous *best* expression (might not be the
 		// previous expression).
-		bestHeader(os.exprView(), "%s\n", os.lastRuleName())
+		bestHeader(os.Root(), "%s\n", os.LastRuleName())
 	} else {
-		altHeader("%s (higher cost)\n", os.lastRuleName())
+		altHeader("%s (higher cost)\n", os.LastRuleName())
 	}
 
 	diff = difflib.UnifiedDiff{
@@ -753,14 +766,14 @@ func (ot *OptTester) ExploreTrace() (string, error) {
 		ot.output("%s\n", et.LastRuleName())
 		ot.separator("=")
 		ot.output("Source expression:\n")
-		ot.indent(et.SrcExpr().FormatString(ot.Flags.ExprFormat))
-		newExprs := et.NewExprs()
-		if len(newExprs) == 0 {
+		ot.indent(memo.FormatExpr(et.SrcExpr(), ot.Flags.ExprFormat))
+		newNodes := et.NewExprs()
+		if len(newNodes) == 0 {
 			ot.output("\nNo new expressions.\n")
 		}
-		for i := range newExprs {
-			ot.output("\nNew expression %d of %d:\n", i+1, len(newExprs))
-			ot.indent(newExprs[i].FormatString(ot.Flags.ExprFormat))
+		for i := range newNodes {
+			ot.output("\nNew expression %d of %d:\n", i+1, len(newNodes))
+			ot.indent(memo.FormatExpr(newNodes[i], ot.Flags.ExprFormat))
 		}
 	}
 	return ot.builder.String(), nil
@@ -786,10 +799,10 @@ func (ot *OptTester) makeOptimizer() *xform.Optimizer {
 	return &o
 }
 
-func (ot *OptTester) optimizeExpr(o *xform.Optimizer) (memo.ExprView, error) {
+func (ot *OptTester) optimizeExpr(o *xform.Optimizer) (opt.Expr, error) {
 	err := ot.buildExpr(o.Factory())
 	if err != nil {
-		return memo.ExprView{}, err
+		return nil, err
 	}
 	return o.Optimize(), nil
 }

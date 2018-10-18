@@ -27,17 +27,17 @@ scalar-group-by
  │    ├── columns: column9:9(bool) i:2(int)
  │    ├── scan a
  │    │    └── columns: i:2(int) f:3(float)
- │    └── projections [outer=(2,3)]
+ │    └── projections
  │         └── i > f [type=bool, outer=(2,3)]
- └── aggregations [outer=(2,9)]
+ └── aggregations
       ├── min [type=int, outer=(2)]
-      │    └── variable: i [type=int, outer=(2)]
+      │    └── variable: i [type=int]
       ├── max [type=int, outer=(2)]
-      │    └── variable: i [type=int, outer=(2)]
+      │    └── variable: i [type=int]
       ├── bool-and [type=bool, outer=(9)]
-      │    └── variable: column9 [type=bool, outer=(9)]
+      │    └── variable: column9 [type=bool]
       └── bool-or [type=bool, outer=(9)]
-           └── variable: column9 [type=bool, outer=(9)]
+           └── variable: column9 [type=bool]
 
 # The rule should not apply to these aggregations.
 opt expect-not=EliminateAggDistinct
@@ -62,33 +62,33 @@ scalar-group-by
  │    ├── columns: column13:13(bytes) i:2(int) f:3(float) j:5(jsonb)
  │    ├── scan a
  │    │    └── columns: i:2(int) f:3(float) s:4(string) j:5(jsonb)
- │    └── projections [outer=(2-5)]
+ │    └── projections
  │         └── s::BYTES [type=bytes, outer=(4)]
- └── aggregations [outer=(2,3,5,13)]
+ └── aggregations
       ├── count [type=int, outer=(2)]
-      │    └── agg-distinct [type=int, outer=(2)]
-      │         └── variable: i [type=int, outer=(2)]
+      │    └── agg-distinct [type=int]
+      │         └── variable: i [type=int]
       ├── sum [type=decimal, outer=(2)]
-      │    └── agg-distinct [type=int, outer=(2)]
-      │         └── variable: i [type=int, outer=(2)]
+      │    └── agg-distinct [type=int]
+      │         └── variable: i [type=int]
       ├── sum-int [type=int, outer=(2)]
-      │    └── agg-distinct [type=int, outer=(2)]
-      │         └── variable: i [type=int, outer=(2)]
+      │    └── agg-distinct [type=int]
+      │         └── variable: i [type=int]
       ├── avg [type=decimal, outer=(2)]
-      │    └── agg-distinct [type=int, outer=(2)]
-      │         └── variable: i [type=int, outer=(2)]
+      │    └── agg-distinct [type=int]
+      │         └── variable: i [type=int]
       ├── std-dev [type=float, outer=(3)]
-      │    └── agg-distinct [type=float, outer=(3)]
-      │         └── variable: f [type=float, outer=(3)]
+      │    └── agg-distinct [type=float]
+      │         └── variable: f [type=float]
       ├── variance [type=float, outer=(3)]
-      │    └── agg-distinct [type=float, outer=(3)]
-      │         └── variable: f [type=float, outer=(3)]
+      │    └── agg-distinct [type=float]
+      │         └── variable: f [type=float]
       ├── xor-agg [type=bytes, outer=(13)]
-      │    └── agg-distinct [type=bytes, outer=(13)]
-      │         └── variable: column13 [type=bytes, outer=(13)]
+      │    └── agg-distinct [type=bytes]
+      │         └── variable: column13 [type=bytes]
       ├── array-agg [type=int[], outer=(2)]
-      │    └── agg-distinct [type=int, outer=(2)]
-      │         └── variable: i [type=int, outer=(2)]
+      │    └── agg-distinct [type=int]
+      │         └── variable: i [type=int]
       └── json-agg [type=jsonb, outer=(5)]
-           └── agg-distinct [type=jsonb, outer=(5)]
-                └── variable: j [type=jsonb, outer=(5)]
+           └── agg-distinct [type=jsonb]
+                └── variable: j [type=jsonb]
