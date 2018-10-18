@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -27,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/pkg/errors"
 )
 
 type execPlan struct {
@@ -281,6 +280,37 @@ func (*Builder) getColumns(
 	return needed, output
 }
 
+// indexConstraintMaxResults returns the maximum number of results for a scan;
+// the scan is guaranteed never to return more results than this. Iff this hint
+// is invalid, 0 is returned.
+func (b *Builder) indexConstraintMaxResults(tab opt.Table, scan *memo.ScanOpDef) uint64 {
+	c := scan.Constraint
+	if c == nil || c.IsContradiction() || c.IsUnconstrained() {
+		return 0
+	}
+
+	idx := tab.Index(scan.Index)
+	var (
+		indexCols   opt.ColSet
+		notNullCols opt.ColSet
+	)
+	for i := 0; i < idx.ColumnCount(); i++ {
+		c := idx.Column(i)
+		id := int(scan.Table.ColumnID(c.Ordinal))
+		if !c.Column.IsNullable() {
+			notNullCols.Add(id)
+		}
+		indexCols.Add(id)
+	}
+
+	if indexCols.Len() < idx.LaxKeyColumnCount() {
+		// The indexCols do not form a lax key.
+		return 0
+	}
+
+	return c.CalculateMaxResults(b.evalCtx, indexCols, notNullCols)
+}
+
 func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
 	def := ev.Private().(*memo.ScanOpDef)
 	md := ev.Metadata()
@@ -313,6 +343,7 @@ func (b *Builder) buildScan(ev memo.ExprView) (execPlan, error) {
 		def.HardLimit.RowCount(),
 		// def.HardLimit.Reverse() was taken into account by CanProvideOrdering.
 		reverse,
+		b.indexConstraintMaxResults(tab, def),
 		res.reqOrdering(ev.Physical()),
 	)
 	if err != nil {
