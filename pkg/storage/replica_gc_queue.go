@@ -219,9 +219,7 @@ func (rgcq *replicaGCQueue) process(
 		// but also on how good a job the queue does at inspecting every
 		// Replica (see #8111) when inactive ones can be starved by
 		// event-driven additions.
-		if log.V(1) {
-			log.Infof(ctx, "not gc'able, replica is still in range descriptor: %v", currentDesc)
-		}
+		log.VEventf(ctx, 1, "not gc'able, replica is still in range descriptor: %v", currentDesc)
 		if err := repl.setLastReplicaGCTimestamp(ctx, repl.store.Clock().Now()); err != nil {
 			return err
 		}
@@ -229,9 +227,7 @@ func (rgcq *replicaGCQueue) process(
 		// We are no longer a member of this range, but the range still exists.
 		// Clean up our local data.
 		rgcq.metrics.RemoveReplicaCount.Inc(1)
-		if log.V(1) {
-			log.Infof(ctx, "destroying local data")
-		}
+		log.VEventf(ctx, 1, "destroying local data")
 		if err := repl.store.RemoveReplica(ctx, repl, replyDesc.NextReplicaID, RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
@@ -261,10 +257,8 @@ func (rgcq *replicaGCQueue) process(
 				return errors.Errorf("expected 1 range descriptor, got %d", len(rs))
 			}
 			if leftReplyDesc := rs[0]; !leftDesc.Equal(leftReplyDesc) {
-				if log.V(1) {
-					log.Infof(ctx, "left neighbor %s not up-to-date with meta descriptor %s; cannot safely GC range yet",
-						leftDesc, leftReplyDesc)
-				}
+				log.VEventf(ctx, 1, "left neighbor %s not up-to-date with meta descriptor %s; cannot safely GC range yet",
+					leftDesc, leftReplyDesc)
 				return nil
 			}
 		}
