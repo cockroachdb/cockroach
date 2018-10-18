@@ -20,6 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
+// column is an interface that represents a raw array of a Go native type.
+type column interface{}
+
 // ColVec is an interface that represents a column vector that's accessible by
 // Go native types.
 type ColVec interface {
@@ -42,6 +45,9 @@ type ColVec interface {
 	Float64() []float64
 	// Bytes returns a Bytes object, allowing retrieval of multiple byte slices.
 	Bytes() Bytes
+
+	// Type returns the slice type.
+	Type() types.T
 }
 
 // Nulls represents a list of potentially nullable values.
@@ -77,29 +83,87 @@ type Bytes interface {
 
 var _ ColVec = memColumn{}
 
+// colAppend requires two ColVecs of the same type and returns the resulting
+// ColVec with their cols appended.
+func colAppend(a ColVec, b ColVec) ColVec {
+	t := a.Type()
+	if b.Type() != t {
+		panic("cannot append two ColVecs of different types")
+	}
+
+	// todo(changangela): should it return a memColumn?
+	switch t {
+	case types.Bool:
+		return &memColumn{
+			col: append(a.Bool().(memBools), b.Bool().(memBools)...),
+			t:   t,
+		}
+	case types.Bytes:
+		return &memColumn{
+			col: append(a.Bytes().(memBytes), b.Bytes().(memBytes)...),
+			t:   t,
+		}
+	case types.Int8:
+		return &memColumn{
+			col: append(a.Int8(), b.Int8()...),
+			t:   t,
+		}
+	case types.Int16:
+		return &memColumn{
+			col: append(a.Int16(), b.Int16()...),
+			t:   t,
+		}
+	case types.Int32:
+		return &memColumn{
+			col: append(a.Int32(), b.Int32()...),
+			t:   t,
+		}
+	case types.Int64:
+		return &memColumn{
+			col: append(a.Int64(), b.Int64()...),
+			t:   t,
+		}
+	case types.Float32:
+		return &memColumn{
+			col: append(a.Float32(), b.Float32()...),
+			t:   t,
+		}
+	case types.Float64:
+		return &memColumn{
+			col: append(a.Float64(), b.Float64()...),
+			t:   t,
+		}
+	default:
+		panic(fmt.Sprintf("unhandled type %d", t))
+	}
+}
+
 // memColumn is a simple pass-through implementation of ColVec that just casts
 // a generic interface{} to the proper type when requested.
 type memColumn struct {
-	col interface{}
+	col column
+	t   types.T
 }
 
 // newMemColumn returns a new memColumn, initialized with a type and length.
 func newMemColumn(t types.T, n int) memColumn {
 	switch t {
 	case types.Bool:
-		return memColumn{col: newMemBools(n)}
+		return memColumn{col: newMemBools(n), t: t}
 	case types.Bytes:
-		return memColumn{col: newMemBytes(n)}
+		return memColumn{col: newMemBytes(n), t: t}
+	case types.Int8:
+		return memColumn{col: make([]int8, n), t: t}
 	case types.Int16:
-		return memColumn{col: make([]int16, n)}
+		return memColumn{col: make([]int16, n), t: t}
 	case types.Int32:
-		return memColumn{col: make([]int32, n)}
+		return memColumn{col: make([]int32, n), t: t}
 	case types.Int64:
-		return memColumn{col: make([]int64, n)}
+		return memColumn{col: make([]int64, n), t: t}
 	case types.Float32:
-		return memColumn{col: make([]float32, n)}
+		return memColumn{col: make([]float32, n), t: t}
 	case types.Float64:
-		return memColumn{col: make([]float64, n)}
+		return memColumn{col: make([]float64, n), t: t}
 	default:
 		panic(fmt.Sprintf("unhandled type %d", t))
 	}
@@ -149,6 +213,10 @@ func (m memColumn) Float64() []float64 {
 
 func (m memColumn) Bytes() Bytes {
 	return m.col.(memBytes)
+}
+
+func (m memColumn) Type() types.T {
+	return m.t
 }
 
 var _ Bools = memBools{}
