@@ -18,7 +18,6 @@ import { Helmet } from "react-helmet";
 
 import InfoBox from "src/views/shared/components/infoBox";
 import LicenseType from "src/views/shared/components/licenseType";
-import { PanelSection, PanelTitle, PanelPair, Panel } from "src/views/shared/components/panelSection";
 
 import "./debug.styl";
 
@@ -65,18 +64,15 @@ function DebugTable(props: { heading: string, children?: React.ReactNode }) {
   );
 }
 
-function DebugPanelLink(props: { name: string, url: string,  note: string }) {
-  return (
-    <PanelPair>
-      <Panel>
-        <a href={ props.url }>{ props.name }</a>
-        <p>{ props.note }</p>
-      </Panel>
-      <Panel>
-        <div className="debug-url"><div>{ props.url }</div></div>
-      </Panel>
-    </PanelPair>
-  );
+class PopularPageLink extends React.Component<{ url: string, name: string, note: string }> {
+  render() {
+    return (
+      <div className="popular-pages-panel__cell">
+        <a href={this.props.url}>{this.props.name}</a>
+        <p>{this.props.note}</p>
+      </div>
+    );
+  }
 }
 
 export default function Debug() {
@@ -100,40 +96,46 @@ export default function Debug() {
           <LicenseType />
         </div>
       </div>
-      <PanelSection>
-        <PanelTitle>Reports</PanelTitle>
-        <DebugPanelLink
-          name="Custom Time Series Chart"
-          url="#/debug/chart"
-          note="Create a custom chart of time series data."
-        />
-        <DebugPanelLink
-          name="Problem Ranges"
-          url="#/reports/problemranges"
-          note="View ranges in your cluster that are unavailable, underreplicated, slow, or have other problems."
-        />
-        <DebugPanelLink
-          name="Network Latency"
-          url="#/reports/network"
-          note="Check latencies between all nodes in your cluster."
-        />
-        <DebugPanelLink
-          name="Data Distribution and Zone Configs"
-          url="#/data-distribution"
-          note="View the distribution of table data across nodes and verify zone configuration."
-        />
-        <PanelTitle>Configuration</PanelTitle>
-        <DebugPanelLink
-          name="Cluster Settings"
-          url="#/reports/settings"
-          note="View all cluster settings."
-        />
-        <DebugPanelLink
-          name="Localities"
-          url="#/reports/localities"
-          note="Check node localities for your cluster."
-        />
-      </PanelSection>
+
+      <div className="popular-pages-panel">
+        <div>
+          <h2>Reports</h2>
+          <PopularPageLink
+            name="Custom Time Series Chart"
+            url="#/debug/chart"
+            note="Create a custom chart of time series data."
+          />
+          <PopularPageLink
+            name="Problem Ranges"
+            url="#/reports/problemranges"
+            note="View ranges in your cluster that are unavailable, underreplicated, slow, or have other problems."
+          />
+          <PopularPageLink
+            name="Network Latency"
+            url="#/reports/network"
+            note="Check latencies between all nodes in your cluster."
+          />
+          <PopularPageLink
+            name="Data Distribution and Zone Configs"
+            url="#/data-distribution"
+            note="View the distribution of table data across nodes and verify zone configuration."
+          />
+        </div>
+        <div>
+          <h2>Configuration</h2>
+          <PopularPageLink
+            name="Cluster Settings"
+            url="#/reports/settings"
+            note="View all cluster settings."
+          />
+          <PopularPageLink
+            name="Localities"
+            url="#/reports/localities"
+            note="Check node localities for your cluster."
+          />
+        </div>
+      </div>
+
       <DebugTable heading="Even More Advanced Debugging">
         <DebugTableRow title="Node Diagnostics">
           <DebugTableLink name="All Nodes" url="#/reports/nodes" />
