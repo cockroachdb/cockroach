@@ -1106,23 +1106,25 @@ func TestTxnCommit(t *testing.T) {
 	defer cleanupFn()
 	value := []byte("value")
 
-	// Test normal commit.
+	// Test a write txn commit.
 	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
 		key := []byte("key-commit")
-
-		if err := txn.SetIsolation(enginepb.SNAPSHOT); err != nil {
-			return err
-		}
-
-		if err := txn.Put(ctx, key, value); err != nil {
-			return err
-		}
-
-		return txn.CommitOrCleanup(ctx)
+		return txn.Put(ctx, key, value)
 	}); err != nil {
 		t.Fatal(err)
 	}
-	checkTxnMetrics(t, metrics, "commit txn", 1, 0 /* not 1PC */, 0, 0)
+	checkTxnMetrics(t, metrics, "commit txn", 1 /* commits */, 0 /* commits1PC */, 0, 0)
+
+	// Test a read-only txn.
+	if err := s.DB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		key := []byte("key-commit")
+		_, err := txn.Get(ctx, key)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	checkTxnMetrics(t, metrics, "commit txn", 2 /* commits */, 0 /* commits1PC */, 0, 0)
 }
 
 // TestTxnOnePhaseCommit verifies that 1PC metric tracking works.
