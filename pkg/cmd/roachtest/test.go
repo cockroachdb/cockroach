@@ -186,11 +186,18 @@ func (r *registry) loadBuildVersion() {
 // be too long when running in different configurations.
 func (r *registry) verifyClusterName(testName string) error {
 	// TeamCity build IDs are currently 6 digits, but we use 7 here for a bit of
-	// breathing room.
-	name := makeGCEClusterName("teamcity-1234567-" + testName)
+	// breathing room. The nodes in the cluster will also have a 4 digit node ID
+	// appended.
+	name := makeGCEClusterName("teamcity-1234567-" + testName + "-0000")
 	if !clusterNameRE.MatchString(name) {
-		return fmt.Errorf("cluster name '%s' must match regex '%s'",
-			name, clusterNameRE)
+		return fmt.Errorf(
+			"test name '%s' results in invalid cluster node IDs"+
+				" (generated node ID '%s' must match regex '%s')."+
+				" The test name may be too long or have invalid characters",
+			testName,
+			name,
+			clusterNameRE,
+		)
 	}
 	if t, ok := r.clusters[name]; ok {
 		return fmt.Errorf("test %s and test %s have equivalent nightly cluster names: %s",
