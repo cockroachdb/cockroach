@@ -138,3 +138,44 @@ render                          ·      ·
                      │          limit  10
                      └── scan   ·      ·
 ·                               table  indexed@primary
+
+# Ensure that the scan for cross-range point deletes are parallelized.
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY, b INT, INDEX(b))
+
+query TTT
+EXPLAIN DELETE FROM a WHERE a IN (10, 20)
+----
+count           ·         ·
+ └── delete     ·         ·
+      │         from      a
+      └── scan  ·         ·
+·               table     a@primary
+·               spans     /10-/10/# /20-/20/#
+·               parallel  ·
+
+statement ok
+ALTER TABLE a SPLIT AT VALUES(5)
+
+# Run a select to prime the range cache to simplify the trace below.
+statement ok
+SELECT * FROM a
+
+# Make sure that the scan for the update actually gets parallelized.
+statement ok
+SET tracing = on; DELETE FROM a WHERE a = 0 OR a = 10; SET tracing = off
+
+# The span "sending partial batch" means that the scan was parallelized.
+# If this test is failing and doesn't have that span, it means that the scanNode
+# was improperly configured to add a limit to the ScanRequest batch.
+# See #30943 for more details.
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message IN
+    ('querying next range at /Table/56/1/0',
+     'querying next range at /Table/56/1/10',
+     '=== SPAN START: kv.DistSender: sending partial batch ==='
+    )
+----
+querying next range at /Table/56/1/0
+=== SPAN START: kv.DistSender: sending partial batch ===
+querying next range at /Table/56/1/10
