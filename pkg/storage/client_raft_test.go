@@ -1259,7 +1259,8 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 				curlogSize := leaderRepl.GetRaftLogSize()
 				logSize := curlogSize - initLogSize
 				logSizeStr := humanizeutil.IBytes(logSize)
-				if uint64(logSize) > sc.RaftMaxUncommittedEntriesSize {
+				// Note that logSize could be negative if something got truncated.
+				if logSize > int64(sc.RaftMaxUncommittedEntriesSize) {
 					t.Fatalf("raft log size grew to %s", logSizeStr)
 				}
 				t.Logf("raft log size grew to %s", logSizeStr)
