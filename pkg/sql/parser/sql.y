@@ -1363,7 +1363,7 @@ alter_zone_index_stmt:
   ALTER INDEX table_name_with_index set_zone_config
   {
     s := $4.setZoneConfig()
-	s.ZoneSpecifier = tree.ZoneSpecifier{
+    s.ZoneSpecifier = tree.ZoneSpecifier{
        TableOrIndex: $3.tableWithIdx(),
     }
     $$.val = s
@@ -1910,7 +1910,7 @@ cancel_sessions_stmt:
   {
    $$.val = &tree.CancelSessions{
       Sessions: &tree.Select{
-	    Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$5.expr()}}},
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$5.expr()}}},
       },
       IfExists: true,
     }
@@ -3730,14 +3730,14 @@ opt_create_as_data:
  * so we'll probably continue to treat LOCAL as a noise word.
  */
 opt_temp:
-  TEMPORARY                 { return unimplementedWithIssue(sqllex, 5807) }
-| TEMP						{ return unimplementedWithIssue(sqllex, 5807) }
-| LOCAL TEMPORARY			{ return unimplementedWithIssue(sqllex, 5807) }
-| LOCAL TEMP				{ return unimplementedWithIssue(sqllex, 5807) }
-| GLOBAL TEMPORARY          { return unimplementedWithIssue(sqllex, 5807) }
-| GLOBAL TEMP               { return unimplementedWithIssue(sqllex, 5807) }
-| UNLOGGED					{ return unimplemented(sqllex, "create unlogged") }
-| /*EMPTY*/					{ /* no error */ }
+  TEMPORARY         { return unimplementedWithIssue(sqllex, 5807) }
+| TEMP              { return unimplementedWithIssue(sqllex, 5807) }
+| LOCAL TEMPORARY   { return unimplementedWithIssue(sqllex, 5807) }
+| LOCAL TEMP        { return unimplementedWithIssue(sqllex, 5807) }
+| GLOBAL TEMPORARY  { return unimplementedWithIssue(sqllex, 5807) }
+| GLOBAL TEMP       { return unimplementedWithIssue(sqllex, 5807) }
+| UNLOGGED          { return unimplemented(sqllex, "create unlogged") }
+| /*EMPTY*/         { /* no error */ }
 
 opt_table_elem_list:
   table_elem_list
