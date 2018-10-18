@@ -109,6 +109,8 @@ func (m *txnMetrics) closeLocked() {
 		// transactions should be accounted.
 		m.metrics.Aborts.Inc(1)
 	case roachpb.COMMITTED:
+		// Note that successful read-only txn are also counted as committed, even
+		// though they never had a txn record.
 		m.metrics.Commits.Inc(1)
 	}
 }
