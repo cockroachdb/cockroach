@@ -38,6 +38,9 @@ type tableReader struct {
 
 	spans     roachpb.Spans
 	limitHint int64
+	// allPointSpans is true if all of the spans this tableReader will be reading
+	// are point spans that can return at most one row apiece.
+	allPointSpans bool
 
 	ignoreMisplannedRanges bool
 
@@ -75,6 +78,7 @@ func newTableReader(
 	tr := trPool.Get().(*tableReader)
 
 	tr.limitHint = limitHint(spec.LimitHint, post)
+	tr.allPointSpans = spec.AllPointSpans
 
 	numCols := len(spec.Table.Columns)
 	returnMutations := spec.Visibility == ScanVisibility_PUBLIC_AND_NOT_PUBLIC
@@ -245,9 +249,18 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 
 	// This call doesn't do much; the real "starting" is below.
 	tr.input.Start(fetcherCtx)
+
+	limitBatches := true
+	// We turn off limited batches if we know we have no limit and if all of the
+	// tableReader spans are point spans. This enables distsender parallelism -
+	// if limitBatches is true, distsender does *not* parallelize multi-range
+	// scan requests.
+	if tr.allPointSpans && tr.limitHint == 0 {
+		limitBatches = false
+	}
 	if err := tr.fetcher.StartScan(
 		fetcherCtx, tr.flowCtx.txn, tr.spans,
-		true /* limit batches */, tr.limitHint, tr.flowCtx.traceKV,
+		limitBatches, tr.limitHint, tr.flowCtx.traceKV,
 	); err != nil {
 		tr.MoveToDraining(err)
 	}

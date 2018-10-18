@@ -227,6 +227,10 @@ message TableReaderSpec {
   // consumer of this TableReader expects to be able to see in-progress schema
   // changes.
   optional ScanVisibility visibility = 7 [(gogoproto.nullable) = false];
+
+  // Indicates whether all of the spans in the proto are point spans, that can
+  // return at most a single row apiece.
+  optional bool all_point_spans = 8 [(gogoproto.nullable) = false];
 }
 
 // JoinReaderSpec is the specification for a "join reader". A join reader
