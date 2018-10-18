@@ -40,10 +40,10 @@ import (
 )
 
 var (
-	count         = 1
-	debugEnabled  = false
-	postIssues    = true
-	clusterNameRE = regexp.MustCompile(`^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
+	count        = 1
+	debugEnabled = false
+	postIssues   = true
+	gceNameRE    = regexp.MustCompile(`^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
 )
 
 func makeFilterRE(filter []string) *regexp.Regexp {
@@ -180,23 +180,56 @@ func (r *registry) loadBuildVersion() {
 	}
 }
 
-// verifyClusterName verifies that the test name can be turned into a cluster
+// verifyValidClusterName verifies that the test name can be turned into a cluster
 // name when run by TeamCity. Outside of TeamCity runs, depending on the user
-// running it and the "cluster id" component of a cluster name, the name might
-// be too long when running in different configurations.
-func (r *registry) verifyClusterName(testName string) error {
-	// TeamCity build IDs are currently 6 digits, but we use 7 here for a bit of
-	// breathing room.
-	name := makeGCEClusterName("teamcity-1234567-" + testName)
-	if !clusterNameRE.MatchString(name) {
-		return fmt.Errorf("cluster name '%s' must match regex '%s'",
-			name, clusterNameRE)
+// running it and the "cluster id" component of a cluster name, the name may
+// still be invalid; however, this method is designed to catch test names
+// that will cause errors on TeamCity but not in a developer's local test
+// environment.
+func (r *registry) verifyValidClusterName(testName string) error {
+	// Both the name of the cluster, and the names of the individual nodes in the
+	// cluster, must be valid identifiers in GCE when running on TeamCity. An
+	// identifier can be tested using a regular expression. Also note that, due to
+	// the specifics of the regular expression, we cannot assume that a valid
+	// cluster name implies valid node names, or vice-versa; we therefore
+	// construct both a TeamCity cluster name and a TeamCity node name and
+	// validate both.
+
+	// The name of a cluster is constructed as "[cluster ID][test name]"
+	// In TeamCity runs, the cluster ID is currently a prefix with 6 digits, but
+	// we use 7 here for a bit of breathing room.
+	teamcityClusterName := makeGCEClusterName("teamcity-1234567-" + testName)
+	if !gceNameRE.MatchString(teamcityClusterName) {
+		return fmt.Errorf(
+			"test name '%s' results in invalid cluster name"+
+				" (generated cluster name '%s' must match regex '%s')."+
+				" The test name may be too long or have invalid characters",
+			testName,
+			teamcityClusterName,
+			gceNameRE,
+		)
 	}
-	if t, ok := r.clusters[name]; ok {
+
+	// The node names are constructed using the cluster name, plus a 4 digit node
+	// ID.
+	teamcityNodeName := makeGCEClusterName("teamcity-1234567-" + testName + "-1234")
+	if !gceNameRE.MatchString(teamcityNodeName) {
+		return fmt.Errorf(
+			"test name '%s' results in invalid cluster node names"+
+				" (generated node name '%s' must match regex '%s')."+
+				" The test name may be too long or have invalid characters",
+			testName,
+			teamcityNodeName,
+			gceNameRE,
+		)
+	}
+
+	// Verify that the cluster name is not shared with an existing test.
+	if t, ok := r.clusters[teamcityClusterName]; ok {
 		return fmt.Errorf("test %s and test %s have equivalent nightly cluster names: %s",
-			testName, t, name)
+			testName, t, teamcityClusterName)
 	}
-	r.clusters[name] = testName
+	r.clusters[teamcityClusterName] = testName
 	return nil
 }
 
@@ -205,7 +238,7 @@ func (r *registry) prepareSpec(spec *testSpec, depth int) error {
 		spec.subtestName = spec.Name
 		// Only top-level tests can create clusters, so those are the only ones for
 		// which we need to verify the cluster name.
-		if err := r.verifyClusterName(spec.Name); err != nil {
+		if err := r.verifyValidClusterName(spec.Name); err != nil {
 			return err
 		}
 	}
