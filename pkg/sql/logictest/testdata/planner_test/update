@@ -245,3 +245,46 @@ querying next range at /Table/57/1/1/1/1
 r1: sending batch 2 Del, 1 BeginTxn, 1 EndTxn to (n1,s1):1
 fast path completed
 rows affected: 1
+
+# Ensure that the scan for cross-range point updates are parallelized.
+statement ok
+CREATE TABLE a (a INT PRIMARY KEY, b INT)
+
+query TTT
+EXPLAIN UPDATE a SET b = 10 WHERE a IN (10, 20)
+----
+count                ·         ·
+ └── update          ·         ·
+      │              table     a
+      │              set       b
+      └── render     ·         ·
+           └── scan  ·         ·
+·                    table     a@primary
+·                    spans     /10-/10/# /20-/20/#
+·                    parallel  ·
+
+statement ok
+ALTER TABLE a SPLIT AT VALUES(5)
+
+# Run a select to prime the range cache to simplify the trace below.
+statement ok
+SELECT * FROM a
+
+# Make sure that the scan for the update actually gets parallelized.
+statement ok
+SET tracing = on; UPDATE a SET b=10 WHERE a = 0 OR a = 10; SET tracing = off
+
+# The span "sending partial batch" means that the scan was parallelized.
+# If this test is failing and doesn't have that span, it means that the scanNode
+# was improperly configured to add a limit to the ScanRequest batch.
+# See #30943 for more details.
+query T
+SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message IN
+    ('querying next range at /Table/58/1/0',
+     'querying next range at /Table/58/1/10',
+     '=== SPAN START: kv.DistSender: sending partial batch ==='
+    )
+----
+querying next range at /Table/58/1/0
+=== SPAN START: kv.DistSender: sending partial batch ===
+querying next range at /Table/58/1/10

@@ -545,7 +545,7 @@ join       ·         ·
  └── scan  ·         ·
 ·          table     square@primary
 ·          spans     /2-/5/#
-
+      │         parallel  ·
 
 statement ok
 CREATE TABLE t1 (col1 INT, x INT, col2 INT, y INT)
