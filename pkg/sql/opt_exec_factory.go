@@ -73,9 +73,6 @@ func (ef *execFactory) ConstructScan(
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 
-	// TODO(jordan): do something with this.
-	fmt.Printf("allPointSpans=%v\n", allPointSpans)
-
 	tabDesc := table.(*optTable).desc
 	indexDesc := index.(*optIndex).desc
 	// Create a scanNode.
@@ -105,6 +102,7 @@ func (ef *execFactory) ConstructScan(
 	scan.run.isSecondaryIndex = (indexDesc != &tabDesc.PrimaryIndex)
 	scan.hardLimit = hardLimit
 	scan.reverse = reverse
+	scan.allPointSpans = allPointSpans
 	var err error
 	scan.spans, err = spansFromConstraint(
 		tabDesc, indexDesc, indexConstraint, cols, scan.isDeleteSource)

@@ -262,10 +262,12 @@ render          ·               ·
       ├── scan  ·               ·
       │         table           grandchild2@primary
       │         spans           /11/#/56/1-/13/#/56/2 /19/#/56/1-/21/#/56/2 /31/#/56/1-/33/#/56/2
+      │         parallel        false
       │         filter          ((pid1 <= 13) OR ((pid1 >= 19) AND (pid1 <= 21))) OR (pid1 >= 31)
       └── scan  ·               ·
 ·               table           parent1@primary
 ·               spans           /11-/13/# /19-/21/# /31-/33/#
+·               parallel        false
 ·               filter          ((pid1 <= 13) OR ((pid1 >= 19) AND (pid1 <= 21))) OR (pid1 >= 31)
 
 # Join on multiple interleaved columns with an overarching ancestor (parent1).

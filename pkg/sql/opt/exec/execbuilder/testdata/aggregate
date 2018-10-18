@@ -339,6 +339,7 @@ group      ·            ·                  (min int)  ·
  └── scan  ·            ·                  (x int)    ·
 ·          table        xyz@xy             ·          ·
 ·          spans        /0-/1 /4-/5 /7-/8  ·          ·
+·          parallel     false              ·          ·
 ·          limit        1                  ·          ·
 
 query TTTTT
@@ -680,6 +681,7 @@ group           ·            ·                 (min int)       ·
       └── scan  ·            ·                 (k int, v int)  ·
 ·               table        opt_test@primary  ·               ·
 ·               spans        -/3/# /5-         ·               ·
+·               parallel     false             ·               ·
 
 # Check that the optimization doesn't work when the argument is non-trivial (we
 # can't in general guarantee an ordering on a synthesized column).

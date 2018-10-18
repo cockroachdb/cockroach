@@ -504,10 +504,11 @@ render     ·       ·
 query TTT
 EXPLAIN SELECT a FROM t WHERE b IN (5.0, 1)
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  t@b_desc
-·          spans  /5-/4 /1-/0
+render     ·         ·
+ └── scan  ·         ·
+·          table     t@b_desc
+·          spans     /5-/4 /1-/0
+·          parallel  false
 
 statement ok
 CREATE TABLE abcd (
@@ -532,10 +533,11 @@ render     ·      ·
 query TTT
 EXPLAIN SELECT b FROM abcd WHERE (a, b) IN ((1, 4), (2, 9))
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  abcd@abcd
-·          spans  /1/4-/1/5 /2/9-/2/10
+render     ·         ·
+ └── scan  ·         ·
+·          table     abcd@abcd
+·          spans     /1/4-/1/5 /2/9-/2/10
+·          parallel  false
 
 statement ok
 CREATE TABLE ab (
@@ -745,6 +747,7 @@ sort                 ·            ·
            └── scan  ·            ·
 ·                    table        favorites@favorites_glob_fav_idx
 ·                    spans        /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"/PrefixEnd
+·                    parallel     false
 
 # Regression tests for #20362 (IS NULL handling).
 query TTTTT
@@ -915,6 +918,7 @@ render           ·         ·                 (x, y)                           
       ├── scan   ·         ·                 (x[omitted], y[omitted], rowid[hidden])  y!=NULL; rowid!=NULL; key(y,rowid)
       │          table     xy@xy_y_idx       ·                                        ·
       │          spans     -/4 /5-           ·                                        ·
+      │          parallel  false             ·                                        ·
       └── scan   ·         ·                 (x, y, rowid[hidden,omitted])            ·
 ·                table     xy@primary        ·                                        ·
 

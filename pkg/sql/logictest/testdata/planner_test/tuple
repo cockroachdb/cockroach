@@ -66,6 +66,7 @@ render     ·         ·                       (u, v, w)                        
  └── scan  ·         ·                       (u, v, w, rowid[hidden,omitted])  rowid!=NULL; weak-key(u,v,w,rowid); +u,+v,+w
 ·          table     uvw@uvw_u_v_w_idx       ·                                 ·
 ·          spans     -/1/2/3 /1/2/4-         ·                                 ·
+·          parallel  false                   ·                                 ·
 ·          filter    (u, v, w) != (1, 2, 3)  ·                                 ·
 
 query TTTTT

@@ -526,6 +526,7 @@ render     ·         ·            (a)     ·
  └── scan  ·         ·            (a, b)  ·
 ·          table     t@b_desc     ·       ·
 ·          spans     /5-/4 /1-/0  ·       ·
+·          parallel  false        ·       ·
 
 statement ok
 CREATE TABLE abcd (
@@ -556,6 +557,7 @@ render     ·         ·                     (b)     ·
  └── scan  ·         ·                     (a, b)  ·
 ·          table     abcd@abcd             ·       ·
 ·          spans     /1/4-/1/5 /2/9-/2/10  ·       ·
+·          parallel  false                 ·       ·
 
 statement ok
 CREATE TABLE ab (
@@ -769,6 +771,7 @@ sort                 ·            ·
            └── scan  ·            ·
 ·                    table        favorites@favorites_glob_fav_idx
 ·                    spans        /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts2"/PrefixEnd /"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"-/"GAME"/"web"/"MT"/"xxx"/"en_GB"/"ts3"/PrefixEnd
+·                    parallel     false
 
 query TI rowsort
 SELECT
@@ -1384,10 +1387,11 @@ output row: [30]
 query TTT
 EXPLAIN SELECT d FROM t4 WHERE a = 10 and b = 20
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  t4@primary
-·          spans  /10/20/0-/10/20/1 /10/20/2/1-/10/20/2/2
+render     ·         ·
+ └── scan  ·         ·
+·          table     t4@primary
+·          spans     /10/20/0-/10/20/1 /10/20/2/1-/10/20/2/2
+·          parallel  true
 
 statement ok
 SET tracing = on,kv,results; SELECT d FROM t4 WHERE a = 10 and b = 20; SET tracing = off
@@ -1405,10 +1409,11 @@ output row: [40]
 query TTT
 EXPLAIN SELECT d, e FROM t4 WHERE a = 10 and b = 20
 ----
-render     ·      ·
- └── scan  ·      ·
-·          table  t4@primary
-·          spans  /10/20/0-/10/20/1 /10/20/2/1-/10/20/3/2
+render     ·         ·
+ └── scan  ·         ·
+·          table     t4@primary
+·          spans     /10/20/0-/10/20/1 /10/20/2/1-/10/20/3/2
+·          parallel  true
 
 # Optimization should also be applied for updates.
 query TTT

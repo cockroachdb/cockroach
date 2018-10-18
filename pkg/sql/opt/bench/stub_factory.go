@@ -38,6 +38,7 @@ func (f *stubFactory) ConstructScan(
 	indexConstraint *constraint.Constraint,
 	hardLimit int64,
 	reverse bool,
+	allPointSpans bool,
 	reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	return struct{}{}, nil

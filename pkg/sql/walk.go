@@ -185,6 +185,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 					spans = "ALL"
 				}
 				v.observer.attr(name, "spans", spans)
+				if len(n.spans) > 1 {
+					v.observer.attr(name, "parallel", strconv.FormatBool(n.canParallelize()))
+				}
 			}
 			if n.hardLimit > 0 && isFilterTrue(n.filter) {
 				v.observer.attr(name, "limit", fmt.Sprintf("%d", n.hardLimit))
