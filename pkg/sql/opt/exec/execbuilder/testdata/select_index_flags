@@ -16,18 +16,20 @@ CREATE TABLE abcd (
 query TTT
 EXPLAIN SELECT * FROM abcd WHERE a >= 20 AND a <= 30
 ----
-scan  ·      ·
-·     table  abcd@primary
-·     spans  /20-/30/#
+scan  ·         ·
+·     table     abcd@primary
+·     spans     /20-/30/#
+·     parallel  ·
 
 # Force primary
 
 query TTT
 EXPLAIN SELECT * FROM abcd@primary WHERE a >= 20 AND a <= 30
 ----
-scan  ·      ·
-·     table  abcd@primary
-·     spans  /20-/30/#
+scan  ·         ·
+·     table     abcd@primary
+·     spans     /20-/30/#
+·     parallel  ·
 
 # Force index b
 

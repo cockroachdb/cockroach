@@ -99,6 +99,9 @@ type scanNode struct {
 
 	disableBatchLimits bool
 
+	// Should be set to true if distsqlrun.ParallelScans is true.
+	parallelScansEnabled bool
+
 	run scanRun
 
 	// This struct must be allocated on the heap and its location stay
@@ -108,8 +111,11 @@ type scanNode struct {
 	// Enforce this using NoCopy.
 	noCopy util.NoCopy
 
-	// Set when the scanNode is crated via the exec factory.
+	// Set when the scanNode is created via the exec factory.
 	createdByOpt bool
+
+	// Set if the scanNode's spans are each guaranteed to return at most one row.
+	maxResultHint uint64
 
 	// Indicates if this scan is the source for a delete node.
 	isDeleteSource bool
@@ -255,14 +261,33 @@ func (n *scanNode) disableBatchLimit() {
 	n.softLimit = 0
 }
 
+// canParallelize returns true if this scanNode can be parallelized at the
+// distSender level safely.
+func (n *scanNode) canParallelize() bool {
+	// We choose only to parallelize if we are certain that no more than
+	// ParallelScanResultThreshold results will be returned, to prevent potential
+	// memory blowup.
+	// We can't parallelize if we have a non-zero limit hint, since distsender
+	// is limited to running limited batches serially.
+	// TODO(asubiotto): But this limit refers to the output limit?
+	return n.maxResultHint != 0 &&
+		n.maxResultHint < distsqlrun.ParallelScanResultThreshold &&
+		n.limitHint() == 0 &&
+		n.parallelScansEnabled
+}
+
 // initScan sets up the rowFetcher and starts a scan.
 func (n *scanNode) initScan(params runParams) error {
 	limitHint := n.limitHint()
+	limitBatches := true
+	if n.canParallelize() || n.disableBatchLimits {
+		limitBatches = false
+	}
 	if err := n.run.fetcher.StartScan(
 		params.ctx,
 		params.p.txn,
 		n.spans,
-		!n.disableBatchLimits,
+		limitBatches,
 		limitHint,
 		params.p.extendedEvalCtx.Tracing.KVTracingEnabled(),
 	); err != nil {

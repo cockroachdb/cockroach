@@ -231,13 +231,15 @@ func (p *planner) selectIndex(
 	s.specifiedIndex = nil
 	s.run.isSecondaryIndex = (c.index != &s.desc.PrimaryIndex)
 
+	constraint := c.ic.Constraint()
+
 	var err error
 	s.spans, err = spansFromConstraint(
-		s.desc, c.index, c.ic.Constraint(), s.valNeededForCol, s.isDeleteSource)
+		s.desc, c.index, constraint, s.valNeededForCol, s.isDeleteSource)
 	if err != nil {
 		return nil, errors.Wrapf(
 			err, "constraint = %s, table ID = %d, index ID = %d",
-			c.ic.Constraint(), s.desc.ID, s.index.ID,
+			constraint, s.desc.ID, s.index.ID,
 		)
 	}
 
@@ -262,6 +264,7 @@ func (p *planner) selectIndex(
 	s.filterVars.Rebind(s.filter, true, false)
 
 	s.reverse = c.reverse
+	s.maxResultHint = calculateMaxResultsHint(constraint, c.desc, c.index, p.EvalContext())
 
 	var plan planNode
 	if c.covering {
@@ -285,6 +288,58 @@ func (p *planner) selectIndex(
 	}
 
 	return plan, nil
+}
+
+// calculateMaxResultsHint returns the maximum number of results that a scan
+// is guaranteed to read. Iff this hint is invalid, 0 is returned.
+// This is a duplicate of the method Builder.indexConstraintMaxResults in the
+// execbuilder package - this exists so that the heuristic planner, which plans
+// mutations, can still detect this condition.
+func calculateMaxResultsHint(
+	c *constraint.Constraint,
+	t *sqlbase.ImmutableTableDescriptor,
+	i *sqlbase.IndexDescriptor,
+	evalCtx *tree.EvalContext,
+) uint64 {
+	if c == nil || c.IsContradiction() || c.IsUnconstrained() {
+		return 0
+	}
+	// We can calculate the maximum number of results when both of the following
+	// are satisfied:
+	//  1. The index is unique, indexed columns are non-nullable, and the index
+	//     covers all columns that need to be read.
+	//  2. All spans cover all the columns of the index and have equal start and
+	//     end keys up to but not necessarily including the last column.
+	if !i.Unique {
+		return 0
+	}
+	// TODO(asubiotto): I don't get this condition, couldn't the columns to read
+	// be a subset of the index?
+	numCols := c.Columns.Count()
+	if numCols < len(i.ColumnIDs) {
+		// Not all cols specified.
+		return 0
+	}
+
+	var indexCols opt.ColSet
+	for _, id := range i.ColumnIDs {
+		col, err := t.FindColumnByID(id)
+		if err != nil {
+			return 0
+		}
+		if col.Nullable {
+			return 0
+		}
+		indexCols.Add(int(id))
+	}
+
+	for i := 0; i < numCols; i++ {
+		if !indexCols.Contains(int(c.Columns.Get(i))) {
+			return 0
+		}
+	}
+
+	return c.CalculateMaxResults(evalCtx)
 }
 
 type indexInfo struct {

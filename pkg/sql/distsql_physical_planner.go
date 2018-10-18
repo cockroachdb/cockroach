@@ -1097,6 +1097,8 @@ func (dsp *DistSQLPlanner) createTableReaders(
 			tr.Spans = append(tr.Spans, distsqlrun.TableReaderSpan{Span: sp.Spans[j]})
 		}
 
+		tr.MaxResultHint = n.maxResultHint
+
 		proc := distsqlplan.Processor{
 			Node: sp.Node,
 			Spec: distsqlrun.ProcessorSpec{
