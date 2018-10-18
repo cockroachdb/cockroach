@@ -21,9 +21,11 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -359,7 +361,9 @@ func (p *planner) makePlan(ctx context.Context, stmt Statement) error {
 
 // makeOptimizerPlan is an alternative to makePlan which uses the cost-based
 // optimizer.
-func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
+func (p *planner) makeOptimizerPlan(
+	ctx context.Context, stmt Statement,
+) (sqlbase.ResultColumns, error) {
 	// Ensure that p.curPlan is populated in case an error occurs early,
 	// so that maybeLogStatement in the error case does not find an empty AST.
 	p.curPlan = planTop{AST: stmt.AST}
@@ -370,7 +374,9 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		*tree.UnionClause, *tree.ValuesClause, *tree.Explain:
 
 	default:
-		return pgerror.Unimplemented("statement", fmt.Sprintf("unsupported statement: %T", stmt.AST))
+		return nil, pgerror.Unimplemented(
+			"statement", fmt.Sprintf("unsupported statement: %T", stmt.AST),
+		)
 	}
 
 	var catalog optCatalog
@@ -426,7 +432,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		if err != nil {
 			// isCorrelated is used in the fallback case to create a better error.
 			p.curPlan.isCorrelated = bld.IsCorrelated
-			return err
+			return nil, err
 		}
 
 		if prepMemo != nil {
@@ -445,15 +451,10 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	// columns. Only output columns and placeholder types are needed.
 	if inPreparePhase {
 		mem := f.Memo()
-		md := mem.Metadata()
 		physical := mem.LookupPhysicalProps(mem.RootProps())
-		resultCols := make(sqlbase.ResultColumns, len(physical.Presentation))
-		for i, col := range physical.Presentation {
-			resultCols[i].Name = col.Label
-			resultCols[i].Typ = md.ColumnType(col.ID)
-		}
+		resultCols := optimizerResultCols(physical.Presentation, mem.Metadata())
 		p.curPlan.plan = &zeroNode{columns: resultCols}
-		return nil
+		return resultCols, nil
 	}
 
 	// This is the EXECUTE phase, so finish optimization by assigning any
@@ -467,7 +468,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 			f.Memo().InitFrom(prepMemo)
 			err := f.AssignPlaceholders()
 			if err != nil {
-				return err
+				return nil, err
 			}
 			ev = p.optimizer.Optimize()
 		} else {
@@ -475,26 +476,46 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 		}
 	}
 
-	// Build the plan tree and store it in planner.curPlan.
-	execFactory := makeExecFactory(p)
-	plan, err := execbuilder.New(&execFactory, ev, p.EvalContext()).Build()
-	if err != nil {
-		return err
+	var cols sqlbase.ResultColumns
+
+	// First try to make the distSQL plan directly.
+	distSQLFactory := makeDistSQLFactory(p)
+	plan, err := execbuilder.New(&distSQLFactory, ev, p.EvalContext()).Build()
+	if err == nil {
+		p.distSQLPlan = plan.(*PhysicalPlan)
+		cols = optimizerResultCols(ev.Physical().Presentation, ev.Metadata())
+	} else {
+		// Build the plan tree and store it in planner.curPlan.
+		execFactory := makeExecFactory(p)
+		plan, err = execbuilder.New(&execFactory, ev, p.EvalContext()).Build()
+		if err != nil {
+			return nil, err
+		}
+
+		p.curPlan = *plan.(*planTop)
+		// Since the assignment above just cleared the AST, we need to set it again.
+		p.curPlan.AST = stmt.AST
+
+		cols = planColumns(p.curPlan.plan)
 	}
 
-	p.curPlan = *plan.(*planTop)
-	// Since the assignment above just cleared the AST, we need to set it again.
-	p.curPlan.AST = stmt.AST
-
-	cols := planColumns(p.curPlan.plan)
 	if stmt.ExpectedTypes != nil {
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
-			return pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
+			return nil, pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
 				"cached plan must not change result type")
 		}
 	}
 
-	return nil
+	return cols, nil
+}
+
+func optimizerResultCols(presentation props.Presentation, md *opt.Metadata) sqlbase.ResultColumns {
+	cols := make(sqlbase.ResultColumns, len(presentation))
+	for i, col := range presentation {
+		cols[i].Name = col.Label
+		cols[i].Typ = md.ColumnType(col.ID)
+	}
+	return cols
 }
 
 // hideHiddenColumn ensures that if the plan is returning some hidden

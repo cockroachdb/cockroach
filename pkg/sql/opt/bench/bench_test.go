@@ -203,6 +203,14 @@ var queries = [...]benchQuery{
 		prepare: true,
 	},
 
+	// 1. PREPARE with Scan only.
+	{
+		name:    "kv-scan",
+		query:   `SELECT * FROM kv`,
+		args:    []interface{}{},
+		prepare: true,
+	},
+
 	// 1. Table with many columns.
 	// 2. Multi-column primary key.
 	// 3. Mutiple indexes to consider.

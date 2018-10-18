@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -61,6 +62,7 @@ type Factory interface {
 		hardLimit int64,
 		reverse bool,
 		reqOrdering OutputOrdering,
+		reqDistSQLOrdering distsqlrun.Ordering,
 	) (Node, error)
 
 	// ConstructVirtualScan returns a node that represents the scan of a virtual

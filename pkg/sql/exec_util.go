@@ -301,6 +301,7 @@ type ExecutorConfig struct {
 	JobRegistry      *jobs.Registry
 	VirtualSchemas   *VirtualSchemaHolder
 	DistSQLPlanner   *DistSQLPlanner
+	PlanningCtx      *PlanningCtx
 	TableStatsCache  *stats.TableStatisticsCache
 	ExecLogger       *log.SecondaryLogger
 	AuditLogger      *log.SecondaryLogger
