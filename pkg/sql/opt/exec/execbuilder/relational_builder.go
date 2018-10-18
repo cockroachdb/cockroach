@@ -269,6 +269,31 @@ func (b *Builder) makeSQLOrdering(plan execPlan, ordering opt.Ordering) sqlbase.
 	return colOrder
 }
 
+func (b *Builder) indexConstraintAllPointSpans(scan *memo.ScanExpr) bool {
+	c := scan.Constraint
+	if c == nil || c.IsContradiction() || c.IsUnconstrained() {
+		return false
+	}
+	// We have point spans when both of the following are satisfied:
+	//  1. The index columns form a strict key.
+	//  2. All spans have equal start and end keys and cover all the columns of
+	//     the index.
+	numCols := c.Columns.Count()
+	var indexCols opt.ColSet
+	for i := 0; i < numCols; i++ {
+		indexCols.Add(int(c.Columns.Get(i).ID()))
+	}
+
+	if !scan.Relational().FuncDeps.ColsAreStrictKey(indexCols) {
+		return false
+	}
+
+	// Check if the longest prefix of columns for which all the spans have the
+	// same start and end values covers all columns.
+	prefix := c.Prefix(b.evalCtx)
+	return prefix == numCols
+}
+
 func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	md := b.mem.Metadata()
 	tab := md.Table(scan.Table)
@@ -294,6 +319,8 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 
 	_, reverse := scan.CanProvideOrdering(md, &scan.Physical().Ordering)
 
+	allPointSpans := b.indexConstraintAllPointSpans(scan)
+
 	root, err := b.factory.ConstructScan(
 		tab,
 		tab.Index(scan.Index),
@@ -302,6 +329,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 		scan.HardLimit.RowCount(),
 		// def.HardLimit.Reverse() was taken into account by CanProvideOrdering.
 		reverse,
+		allPointSpans,
 		exec.OutputOrdering(reqOrdering),
 	)
 	if err != nil {

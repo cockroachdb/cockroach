@@ -53,6 +53,11 @@ type Factory interface {
 	//     in the constraint.
 	//   - If hardLimit > 0, then only up to hardLimit rows can be returned from
 	//     the scan.
+	//
+	// When allPointSpans is true, this is a hint that all the spans in the
+	// constraint are "point" spans (they constrain all columns of the index and
+	// the index is unique). This information is useful for more efficient
+	// execution of such cases.
 	ConstructScan(
 		table opt.Table,
 		index opt.Index,
@@ -60,6 +65,7 @@ type Factory interface {
 		indexConstraint *constraint.Constraint,
 		hardLimit int64,
 		reverse bool,
+		allPointSpans bool,
 		reqOrdering OutputOrdering,
 	) (Node, error)
 
