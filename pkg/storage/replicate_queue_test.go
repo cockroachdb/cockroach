@@ -51,6 +51,8 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
+				ScanMinIdleTime: time.Millisecond,
+				ScanMaxIdleTime: time.Millisecond,
 				Knobs: base.TestingKnobs{
 					Store: &storagebase.StoreTestingKnobs{
 						// Prevent the merge queue from immediately discarding our splits.
@@ -104,7 +106,8 @@ func TestReplicateQueueRebalance(t *testing.T) {
 		counts := countReplicas()
 		for _, c := range counts {
 			if c < minReplicas {
-				err := errors.Errorf("not balanced: %d", counts)
+				err := errors.Errorf(
+					"not balanced (want at least %d replicas on all stores): %d", minReplicas, counts)
 				log.Info(context.Background(), err)
 				return err
 			}
