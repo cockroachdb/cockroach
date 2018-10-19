@@ -59,6 +59,7 @@ func registerTests(r *registry) {
 	registerUpgrade(r)
 	registerVersion(r)
 	registerYCSB(r)
+	registerXXX(r) // !!!
 }
 
 func registerBenchmarks(r *registry) {
