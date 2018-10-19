@@ -21,8 +21,8 @@ import (
 	"sync"
 	"time"
 
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/pkg/errors"
-	circuit "github.com/rubyist/circuitbreaker"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
