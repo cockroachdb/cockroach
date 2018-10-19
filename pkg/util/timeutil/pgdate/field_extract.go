@@ -17,8 +17,7 @@ package pgdate
 import (
 	"fmt"
 	"strconv"
-	"strings"
-	"unicode"
+	"time"
 	"unicode/utf8"
 
 	"github.com/pkg/errors"
@@ -42,30 +41,26 @@ func (n numberChunk) String() string {
 	}
 }
 
-// fieldExtract holds the results of parsing a date/time string.  Note
-// that the enclosed fieldSet may have more entries in it than we have
-// data.  This handles cases where a field, such as Julian date,
+// fieldExtract manages the state of a date/time parsing operation.
+// This handles cases where a field, such as Julian date,
 // would conflict with also setting the year.
 type fieldExtract struct {
+	// The field data is stored in a fixed-size array.
 	data [fieldMaximum + 1]int
-	has  fieldSet
+	// Tracks the fields that have been set, to distinguish 0 from unset.
+	has fieldSet
+	// Provides a time for evaluating relative dates as well as a
+	// default timezone.
+	now  time.Time
 	mode ParseMode
 	// This indicates that the value in the year field was only
 	// two digits and should be adjusted to make it recent.
 	tweakYear bool
 	// The fields that must be present to succeed.
 	required fieldSet
-	wanted   fieldSet
+	// Tracks the fields that we want to extract.
+	wanted fieldSet
 }
-
-// These are sentinel values for handling special values:
-// https://www.postgresql.org/docs/10/static/datatype-datetime.html#DATATYPE-DATETIME-SPECIAL-TABLE
-var (
-	sentinelEpoch            = (&fieldExtract{}).Freeze()
-	sentinelInfinity         = (&fieldExtract{}).Freeze()
-	sentinelNegativeInfinity = (&fieldExtract{}).Freeze()
-	sentinelNow              = (&fieldExtract{}).Freeze()
-)
 
 var (
 	dateFields         = newFieldSet(fieldYear, fieldMonth, fieldDay, fieldEra)
@@ -78,109 +73,6 @@ var (
 	dateTimeFields         = dateFields.AddAll(timeFields)
 	dateTimeRequiredFields = dateRequiredFields.AddAll(timeRequiredFields)
 )
-
-// newFieldExtract attempts to break the input string into a collection
-// of date/time fields.  The toSet parameter controls which fields
-// in the extract we will attempt to populate; there is no guarantee
-// that all fields will necessary have been extracted.
-func newFieldExtract(ctx Context, s string, toSet fieldSet, required fieldSet) (*fieldExtract, error) {
-	ret := &fieldExtract{
-		mode:     ctx.mode,
-		required: required,
-		wanted:   toSet,
-	}
-
-	chunks, _ := filterSplitString(s, func(r rune) bool {
-		return unicode.IsDigit(r) || unicode.IsLetter(r)
-	})
-
-	numbers := make([]numberChunk, 0, len(chunks))
-	sentinelMatched := false
-
-	// First, we'll try to pluck out any keywords that exist in the input.
-	// If a chunk is not a keyword or other special-case pattern, it
-	// must be a numeric value, which we'll pluck out for a second
-	// pass.
-	for _, chunk := range chunks {
-		match := strings.ToLower(chunk.Match)
-		matchedSentinel := func() error {
-			if sentinelMatched {
-				return errors.Errorf("unexpected input: %s", match)
-			}
-			sentinelMatched = true
-			return nil
-		}
-
-		switch match {
-		case keywordEpoch:
-			ret = sentinelEpoch
-			if err := matchedSentinel(); err != nil {
-				return nil, err
-			}
-
-		case keywordInfinity:
-			if strings.HasSuffix(chunk.NotMatch, "-") {
-				ret = sentinelNegativeInfinity
-			} else {
-				ret = sentinelInfinity
-			}
-			if err := matchedSentinel(); err != nil {
-				return nil, err
-			}
-
-		case keywordNow:
-			ret = sentinelNow
-			if err := matchedSentinel(); err != nil {
-				return nil, err
-			}
-
-		default:
-			// Fan out to other keyword-based extracts.
-			if m, ok := keywordSetters[match]; ok {
-				if err := m(ctx, ret, match); err != nil {
-					return nil, err
-				}
-				continue
-			}
-
-			// Try to parse Julian dates.  We can disregard the error here.
-			if err := fieldSetterJulianDate(ret, match); err == nil {
-				continue
-			}
-
-			// At this point, the chunk must be numeric; we'll convert it
-			// and add it to the slice for the second pass.
-			v, err := strconv.Atoi(match)
-			if err != nil {
-				return nil, errors.Errorf("unexpected input chunk: %s", match)
-			}
-			lastRune, _ := utf8.DecodeLastRuneInString(chunk.NotMatch)
-			numbers = append(numbers, numberChunk{prefix: lastRune, v: v, magnitude: len(match)})
-		}
-	}
-
-	// In the second pass, we'll use pattern-matching and the knowledge
-	// of which fields have already been set in order to keep picking
-	// out field data.
-	textMonth := !ret.Wants(fieldMonth)
-	for _, n := range numbers {
-		if err := ret.interpretNumber(n, textMonth); err != nil {
-			return nil, err
-		}
-	}
-
-	if err := ret.Validate(); err != nil {
-		return nil, err
-	}
-
-	return ret, nil
-}
-
-// Freeze clears the wanted fields set and returns the fieldExtract.
-func (fe *fieldExtract) Freeze() *fieldExtract {
-	fe.wanted = 0
-	return fe
-}
 
 // Get returns the value of the requested field and whether or not
 // that field has indeed been set.
@@ -428,47 +320,4 @@ func (fe *fieldExtract) Zero(fields fieldSet) error {
 		}
 	}
 	return nil
-}
-
-// splitChunks are returned from filterSplitString.
-type splitChunk struct {
-	// The contiguous span of characters that did not match the filter and
-	// which appear immediately before Match.
-	NotMatch string
-	// The contiguous span of characters that matched the filter.
-	Match string
-}
-
-// filterSplitString filters the runes in a string and returns
-// contiguous spans of acceptable characters.
-func filterSplitString(s string, accept func(rune) bool) ([]splitChunk, string) {
-	ret := make([]splitChunk, 0, 8)
-
-	matchStart := 0
-	matchEnd := 0
-	previousMatchEnd := 0
-
-	flush := func() {
-		if matchEnd > matchStart {
-			ret = append(ret, splitChunk{
-				NotMatch: s[previousMatchEnd:matchStart],
-				Match:    s[matchStart:matchEnd]})
-			previousMatchEnd = matchEnd
-			matchStart = matchEnd
-		}
-	}
-
-	for offset, r := range s {
-		if accept(r) {
-			if matchStart >= matchEnd {
-				matchStart = offset
-			}
-			matchEnd = offset + utf8.RuneLen(r)
-		} else {
-			flush()
-		}
-	}
-	flush()
-
-	return ret, s[matchEnd:]
 }

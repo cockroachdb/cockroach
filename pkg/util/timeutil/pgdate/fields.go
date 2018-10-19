@@ -44,6 +44,11 @@ const (
 	fieldValueCE  = 1
 )
 
+// Add returns a fieldSet containing the reciver and other.
+func (f field) Add(other field) fieldSet {
+	return f.AsSet().Add(other)
+}
+
 // AsSet returns a singleton set containing the field.
 func (f field) AsSet() fieldSet {
 	return 1 << f
@@ -112,6 +117,14 @@ func (s fieldSet) HasAll(other fieldSet) bool {
 // other fields.
 func (s fieldSet) HasAny(other fieldSet) bool {
 	return s&other != 0
+}
+
+// MaskEquals compares a subset of fields in the set.  This is
+// useful for looking as a specific pattern of a subset of all
+// of the fields.  The mask parameter specifies the fields to
+// compare between the receiver and the other set.
+func (s fieldSet) MaskEquals(mask fieldSet, other fieldSet) bool {
+	return s&mask == other&mask
 }
 
 func (s *fieldSet) String() string {

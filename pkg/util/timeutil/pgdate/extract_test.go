@@ -24,62 +24,60 @@ import (
 func TestExtractRelative(t *testing.T) {
 	tests := []struct {
 		s   string
-		exp int
+		rel int
 	}{
 		{
 			s:   keywordYesterday,
-			exp: 16,
+			rel: -1,
 		},
 		{
 			s:   keywordToday,
-			exp: 17,
+			rel: 0,
 		},
 		{
 			s:   keywordTomorrow,
-			exp: 18,
+			rel: 1,
 		},
 	}
 
-	ctx := WithFixedNow(ISOContext(), time.Date(2018, 10, 17, 0, 0, 0, 0, time.UTC))
+	now := time.Date(2018, 10, 17, 0, 0, 0, 0, time.UTC)
 	for _, tc := range tests {
 		t.Run(tc.s, func(t *testing.T) {
 
-			p, err := newFieldExtract(ctx, tc.s, dateFields, dateRequiredFields)
+			ts, err := ParseDate(now, ParseModeISO, tc.s)
 			if err != nil {
 				t.Fatal(err)
 			}
-			v, ok := p.Get(fieldDay)
-			if !ok {
-				t.Fatal("expecting day field")
-			}
-			if v != tc.exp {
-				t.Fatalf("expected %d, got %d", tc.exp, v)
+			exp := now.AddDate(0, 0, tc.rel)
+			if ts != exp {
+				t.Fatalf("expected %v, got %v", exp, ts)
 			}
 		})
 	}
 }
 
 func TestExtractSentinels(t *testing.T) {
+	now := time.Unix(42, 56)
 	tests := []struct {
 		s        string
-		expected *fieldExtract
+		expected time.Time
 		err      bool
 	}{
 		{
 			s:        keywordEpoch,
-			expected: sentinelEpoch,
+			expected: TimeEpoch,
 		},
 		{
 			s:        keywordInfinity,
-			expected: sentinelInfinity,
+			expected: TimeInfinity,
 		},
 		{
 			s:        "-" + keywordInfinity,
-			expected: sentinelNegativeInfinity,
+			expected: TimeNegativeInfinity,
 		},
 		{
 			s:        keywordNow,
-			expected: sentinelNow,
+			expected: now,
 		},
 		{
 			s:   keywordNow + " tomorrow",
@@ -88,7 +86,7 @@ func TestExtractSentinels(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.s, func(t *testing.T) {
-			fe, err := newFieldExtract(ISOContext(), tc.s, dateTimeFields, dateTimeRequiredFields)
+			fe, err := extract(fieldExtract{now: now}, tc.s)
 			if tc.err {
 				if err == nil {
 					t.Fatal("expected error")

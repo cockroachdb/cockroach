@@ -21,7 +21,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-type fieldSetter func(ctx Context, p *fieldExtract, s string) error
+type fieldSetter func(p *fieldExtract, s string) error
 
 var keywordSetters = map[string]fieldSetter{
 	"jan":       fieldSetterMonth(1),
@@ -65,12 +65,12 @@ var keywordSetters = map[string]fieldSetter{
 	keywordPM: fieldSetterExact(fieldMeridian, fieldValuePM),
 }
 
-func fieldSetterAllBalls(_ Context, p *fieldExtract, _ string) error {
+func fieldSetterAllBalls(p *fieldExtract, _ string) error {
 	return p.Zero(timeFields)
 }
 
 func fieldSetterExact(field field, v int) fieldSetter {
-	return func(_ Context, p *fieldExtract, s string) error {
+	return func(p *fieldExtract, s string) error {
 		return p.Set(field, v)
 	}
 }
@@ -99,7 +99,7 @@ func fieldSetterMonth(month int) fieldSetter {
 	return fieldSetterExact(fieldMonth, month)
 }
 
-func fieldSetterRelativeDate(ctx Context, p *fieldExtract, s string) error {
+func fieldSetterRelativeDate(p *fieldExtract, s string) error {
 	var offset int
 	switch s {
 	case keywordYesterday:
@@ -109,7 +109,7 @@ func fieldSetterRelativeDate(ctx Context, p *fieldExtract, s string) error {
 		offset = 1
 	}
 
-	year, month, day := ctx.now().AddDate(0, 0, offset).Date()
+	year, month, day := p.now.AddDate(0, 0, offset).Date()
 
 	if err := p.Set(fieldYear, year); err != nil {
 		return err

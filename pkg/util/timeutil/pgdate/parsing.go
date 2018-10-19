@@ -15,25 +15,18 @@
 package pgdate
 
 import (
+	"math"
 	"time"
 
 	"github.com/pkg/errors"
 )
 
-const (
-	keywordAllBalls  = "allballs"
-	keywordAM        = "am"
-	keywordEpoch     = "epoch"
-	keywordEraAD     = "ad"
-	keywordEraBC     = "bc"
-	keywordEraBCE    = "bce"
-	keywordEraCE     = "ce"
-	keywordInfinity  = "infinity"
-	keywordNow       = "now"
-	keywordPM        = "pm"
-	keywordToday     = "today"
-	keywordTomorrow  = "tomorrow"
-	keywordYesterday = "yesterday"
+// These are sentinel values for handling special values:
+// https://www.postgresql.org/docs/10/static/datatype-datetime.html#DATATYPE-DATETIME-SPECIAL-TABLE
+var (
+	TimeEpoch            = time.Unix(0, 0)
+	TimeInfinity         = time.Unix(math.MaxInt64, math.MaxInt64)
+	TimeNegativeInfinity = time.Unix(math.MinInt64, math.MinInt64)
 )
 
 //go:generate stringer -type=ParseMode
@@ -51,16 +44,21 @@ const (
 )
 
 // ParseDate converts a string into a time value.
-func ParseDate(ctx Context, s string) (time.Time, error) {
-	fe, err := newFieldExtract(ctx, s, dateFields, dateRequiredFields)
-	if err != nil {
-		if !ctx.exposeErr {
-			err = errors.Errorf("could not parse date: %s", s)
-		}
-		return time.Time{}, err
+func ParseDate(now time.Time, mode ParseMode, s string) (time.Time, error) {
+	fe := fieldExtract{
+		now:      now,
+		mode:     mode,
+		required: dateRequiredFields,
+		wanted:   dateFields,
 	}
-	year, _ := fe.Get(fieldYear)
-	month, _ := fe.Get(fieldMonth)
-	day, _ := fe.Get(fieldDay)
-	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, ctx.now().Location()), nil
+
+	if t, err := extract(fe, s); err == nil {
+		return t, nil
+	} else {
+		return TimeEpoch, parseError("date", "s")
+	}
+}
+
+func parseError(kind string, s string) error {
+	return errors.Errorf("unable to parse %s: %s", kind, s)
 }
