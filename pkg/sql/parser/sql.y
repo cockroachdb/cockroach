@@ -485,7 +485,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> CURRENT_USER CYCLE
 
 %token <str> DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT
-%token <str> DEALLOCATE DEFERRABLE DELETE DESC
+%token <str> DEALLOCATE DEFERRABLE DEFERRED DELETE DESC
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str> ELSE ENCODING END ENUM ESCAPE EXCEPT
@@ -502,7 +502,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> HAVING HIGH HISTOGRAM HOUR
 
-%token <str> IMPORT INCREMENT INCREMENTAL IF IFERROR IFNULL ILIKE IN ISERROR
+%token <str> IMMEDIATE IMPORT INCREMENT INCREMENTAL IF IFERROR IFNULL ILIKE IN ISERROR
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS INET_CONTAINS_OR_CONTAINED_BY
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INJECT INTERLEAVE INITIALLY
 %token <str> INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
@@ -4036,13 +4036,13 @@ table_constraint:
   }
 
 constraint_elem:
-  CHECK '(' a_expr ')'
+  CHECK '(' a_expr ')' opt_deferrable
   {
     $$.val = &tree.CheckConstraintTableDef{
       Expr: $3.expr(),
     }
   }
-| UNIQUE '(' index_params ')' opt_storing opt_interleave opt_partition_by
+| UNIQUE '(' index_params ')' opt_storing opt_interleave opt_partition_by  opt_deferrable
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef{
@@ -4063,7 +4063,7 @@ constraint_elem:
     }
   }
 | FOREIGN KEY '(' name_list ')' REFERENCES table_name
-    opt_column_list key_match reference_actions
+    opt_column_list key_match reference_actions opt_deferrable
   {
     $$.val = &tree.ForeignKeyConstraintTableDef{
       Table: $7.normalizableTableNameFromUnresolvedName(),
@@ -4072,6 +4072,14 @@ constraint_elem:
       Actions: $10.referenceActions(),
     }
   }
+
+opt_deferrable:
+  /* EMPTY */ { /* no error */ }
+| DEFERRABLE { return unimplementedWithIssueDetail(sqllex, 31632, "deferrable") }
+| DEFERRABLE INITIALLY DEFERRED { return unimplementedWithIssueDetail(sqllex, 31632, "def initially deferred") }
+| DEFERRABLE INITIALLY IMMEDIATE { return unimplementedWithIssueDetail(sqllex, 31632, "def initially immediate") }
+| INITIALLY DEFERRED { return unimplementedWithIssueDetail(sqllex, 31632, "initially deferred") }
+| INITIALLY IMMEDIATE { return unimplementedWithIssueDetail(sqllex, 31632, "initially immediate") }
 
 storing:
   COVERING
@@ -8357,6 +8365,7 @@ unreserved_keyword:
 | DAY
 | DEALLOCATE
 | DELETE
+| DEFERRED
 | DISCARD
 | DOMAIN
 | DOUBLE
@@ -8388,6 +8397,7 @@ unreserved_keyword:
 | HIGH
 | HISTOGRAM
 | HOUR
+| IMMEDIATE
 | IMPORT
 | INCREMENT
 | INCREMENTAL
