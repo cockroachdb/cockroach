@@ -65,6 +65,7 @@ type tpcc struct {
 	partitions        int
 	affinityPartition int
 	zones             []string
+	wPart             *partitioner
 
 	usePostgres  bool
 	serializable bool
@@ -133,7 +134,7 @@ var tpccMeta = workload.Meta{
 		g.flags.IntVar(&g.workers, `workers`, 0,
 			`Number of concurrent workers. Defaults to --warehouses * 10`)
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
-		g.flags.IntVar(&g.partitions, `partitions`, 0, `Partition tables (requires split)`)
+		g.flags.IntVar(&g.partitions, `partitions`, 1, `Partition tables (requires split)`)
 		g.flags.IntVar(&g.affinityPartition, `partition-affinity`, -1, `Run load generator against specific partition (requires partitions)`)
 		g.flags.IntVar(&g.activeWarehouses, `active-warehouses`, 0, `Run the load generator against a specific number of warehouses. Defaults to --warehouses'`)
 		g.flags.BoolVar(&g.scatter, `scatter`, false, `Scatter ranges`)
@@ -157,40 +158,39 @@ func (w *tpcc) Flags() workload.Flags { return w.flags }
 func (w *tpcc) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
-			if w.activeWarehouses > w.warehouses {
-				return errors.Errorf(`--active-warehouses needs to be less than or equal to warehouses`)
+			if w.warehouses < 1 {
+				return errors.Errorf(`--warehouses must be positive`)
 			}
 
-			if w.activeWarehouses == 0 {
+			if w.activeWarehouses > w.warehouses {
+				return errors.Errorf(`--active-warehouses needs to be less than or equal to warehouses`)
+			} else if w.activeWarehouses == 0 {
 				w.activeWarehouses = w.warehouses
+			}
+
+			if w.partitions < 1 {
+				return errors.Errorf(`--partitions must be positive`)
+			} else if w.partitions > 1 && !w.split {
+				return errors.Errorf(`multiple partitions requires --split`)
+			}
+
+			if w.affinityPartition < -1 {
+				return errors.Errorf(`if specified, --partition-affinity should be greater than or equal to 0`)
+			} else if w.affinityPartition >= w.partitions {
+				return errors.Errorf(`--partition-affinity out of bounds of --partitions`)
+			}
+
+			if len(w.zones) > 0 && (len(w.zones) != w.partitions) {
+				return errors.Errorf(`--zones should have the sames length as --partitions.`)
 			}
 
 			if w.workers == 0 {
 				w.workers = w.activeWarehouses * numWorkersPerWarehouse
 			}
+
 			if w.doWaits && w.workers != w.activeWarehouses*numWorkersPerWarehouse {
 				return errors.Errorf(`--wait=true and --warehouses=%d requires --workers=%d`,
 					w.activeWarehouses, w.warehouses*numWorkersPerWarehouse)
-			}
-
-			if w.partitions != 0 && !w.split {
-				return errors.Errorf(`--partitions requires --split`)
-			}
-
-			if w.affinityPartition != -1 && w.partitions == 0 {
-				return errors.Errorf(`--partition-affinity requires --partitions`)
-			}
-
-			if w.affinityPartition < -1 {
-				return errors.Errorf(`--partition-affinity should be greater than or equal to 0`)
-			}
-
-			if w.affinityPartition > w.partitions-1 {
-				return errors.Errorf(`--partition-affinity should be less than the total number of partitions.`)
-			}
-
-			if len(w.zones) > 0 && (len(w.zones) != w.partitions) {
-				return errors.Errorf(`--zones should have the sames length as --partitions.`)
 			}
 
 			if w.serializable {
@@ -405,20 +405,36 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		return workload.QueryLoad{}, err
 	}
 
+	w.reg = reg
 	w.usePostgres = parsedURL.Port() == "5432"
 
-	nConns := w.activeWarehouses / len(urls)
+	// If we're not waiting, open up a connection for each worker. If we are
+	// waiting, we only use up to a set number of connections per warehouse.
+	// This isn't mandated by the spec, but opening a connection per worker
+	// when they each spend most of their time waiting is wasteful.
+	nConns := w.workers
+	if w.doWaits {
+		nConns = w.activeWarehouses * numConnsPerWarehouse
+	}
 
 	// We can't use a single MultiConnPool because we want to implement partition
 	// affinity. Instead we have one MultiConnPool per server (we use
 	// MultiConnPool in order to use SQLRunner, but it's otherwise equivalent to a
 	// pgx.ConnPool).
+	nConnsPerURL := (nConns + len(urls) - 1) / len(urls) // round up
 	dbs := make([]*workload.MultiConnPool, len(urls))
 	for i, url := range urls {
-		dbs[i], err = workload.NewMultiConnPool(nConns, url)
+		dbs[i], err = workload.NewMultiConnPool(nConnsPerURL, url)
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
+	}
+
+	// Create a partitioner to help us partition the warehouses. The base-case is
+	// where w.warehouses == w.activeWarehouses and w.partitions == 1.
+	w.wPart, err = makePartitioner(w.warehouses, w.activeWarehouses, w.partitions)
+	if err != nil {
+		return workload.QueryLoad{}, err
 	}
 
 	// We're adding this check here because repartitioning a table can take
@@ -433,8 +449,8 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		if w.split {
 			splitTables(dbs[0].Get(), w.warehouses)
 
-			if w.partitions > 0 {
-				partitionTables(dbs[0].Get(), w.warehouses, w.partitions, w.zones)
+			if w.partitions > 1 {
+				partitionTables(dbs[0].Get(), w.wPart, w.zones)
 			}
 		}
 	} else {
@@ -445,43 +461,39 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		scatterRanges(dbs[0].Get())
 	}
 
-	// If no partitions were specified, pretend there is a single partition
-	// containing all warehouses.
-	if w.partitions == 0 {
-		w.partitions = 1
-	}
-	// Assign each DB connection pool to a partition. This assumes that dbs[i] is
-	// a machine that holds partition "i % *partitions".
+	// Assign each DB connection pool to a local partition. This assumes that
+	// dbs[i] is a machine that holds partition "i % *partitions". If we have an
+	// affinity partition, all connections will be for the same partition.
 	partitionDBs := make([][]*workload.MultiConnPool, w.partitions)
-	if w.affinityPartition == -1 {
+	if w.affinityPartition >= 0 {
+		// All connections are for our local partition.
+		partitionDBs[w.affinityPartition] = dbs
+	} else {
 		for i, db := range dbs {
 			p := i % w.partitions
 			partitionDBs[p] = append(partitionDBs[p], db)
 		}
-	}
-	for i := range partitionDBs {
-		if partitionDBs[i] == nil {
-			partitionDBs[i] = dbs
+		for i := range partitionDBs {
+			// Possible if we have more partitions than DB connections.
+			if partitionDBs[i] == nil {
+				partitionDBs[i] = dbs
+			}
 		}
 	}
 
-	w.reg = reg
-
-	startWarehouse := 0
-	if w.affinityPartition != -1 {
-		startWarehouse = w.affinityPartition * (w.warehouses / w.partitions)
-	}
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for workerIdx := 0; workerIdx < w.workers; workerIdx++ {
-		warehouse := workerIdx % w.activeWarehouses
-		// NB: Each partition contains "warehouses / partitions" warehouses. See
-		// partitionTables().
-		p := (warehouse * w.partitions) / w.activeWarehouses
+		warehouse := w.wPart.totalElems[workerIdx%len(w.wPart.totalElems)]
+
+		p := w.wPart.partElemsMap[warehouse]
+		if w.affinityPartition >= 0 && w.affinityPartition != p {
+			// This isn't part of our local partition.
+			continue
+		}
 		dbs := partitionDBs[p]
 		db := dbs[warehouse%len(dbs)]
-		worker, err := newWorker(
-			context.TODO(), w, db, reg.GetHandle(), workerIdx, warehouse+startWarehouse,
-		)
+
+		worker, err := newWorker(context.TODO(), w, db, reg.GetHandle(), warehouse)
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
