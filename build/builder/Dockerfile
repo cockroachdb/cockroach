@@ -153,6 +153,28 @@ RUN ln -s /usr/bin/ccache /usr/local/lib/ccache/x86_64-apple-darwin13-cc \
 
 ENV PATH $PATH:/x-tools/x86_64-apple-darwin13/bin
 
+# automake - sed build
+# autopoint - sed build
+# gettext - sed build
+# rsync - sed build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    automake \
+    autopoint \
+    gettext \
+    rsync
+
+# Compile GNU sed from source to pick up an unreleased change that buffers
+# output. This speeds up compiles on Docker for Mac by *minutes*.
+RUN git clone git://git.sv.gnu.org/sed \
+ && cd sed \
+ && git checkout 8e52c0aff039f0a88127ca131b060050c107b0e2 \
+ && ./bootstrap \
+ && ./configure \
+ && make \
+ && make install \
+ && cd .. \
+ && rm -rf sed
+
 # Compile Go from source so that CC defaults to clang instead of gcc. This
 # requires a Go toolchain to bootstrap.
 #
@@ -222,15 +244,19 @@ ENV PATH /opt/backtrace/bin:$PATH
 
 RUN apt-get purge -y \
     apt-transport-https \
+    automake \
+    autopoint \
     bison \
     bzip2 \
     file \
     flex \
     gawk \
+    gettext \
     golang \
     gperf \
     help2man \
     python \
+    rsync \
     texinfo \
  && apt-get autoremove -y
 
