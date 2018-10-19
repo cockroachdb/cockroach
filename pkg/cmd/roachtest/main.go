@@ -24,6 +24,7 @@ import (
 )
 
 func main() {
+	username := os.Getenv("ROACHPROD_USER")
 	parallelism := 10
 	// Path to a local dir where the test logs and artifacts collected from
 	// cluster will be placed.
@@ -117,14 +118,6 @@ If no pattern is given, all tests are run.
 				return fmt.Errorf("--count (%d) must by greater than 0", count)
 			}
 
-			if username == "" {
-				usr, err := user.Current()
-				if err != nil {
-					panic(fmt.Sprintf("user.Current: %s", err))
-				}
-				username = usr.Username
-			}
-
 			r := newRegistry()
 			if buildTag != "" {
 				if err := r.setBuildVersion(buildTag); err != nil {
@@ -134,7 +127,7 @@ If no pattern is given, all tests are run.
 				r.loadBuildVersion()
 			}
 			registerTests(r)
-			os.Exit(r.Run(args, parallelism, artifacts))
+			os.Exit(r.Run(args, parallelism, artifacts, getUser(username)))
 			return nil
 		},
 	}
@@ -156,7 +149,7 @@ If no pattern is given, all tests are run.
 			}
 			r := newRegistry()
 			registerBenchmarks(r)
-			os.Exit(r.Run(args, parallelism, artifacts))
+			os.Exit(r.Run(args, parallelism, artifacts, getUser(username)))
 			return nil
 		},
 	}
@@ -196,7 +189,7 @@ Cockroach cluster with existing data.
 			registerStoreGen(r, args)
 			// We've only registered one store generation "test" that does its own
 			// argument processing, so no need to provide any arguments to r.Run.
-			os.Exit(r.Run(nil /* filter */, parallelism, artifacts))
+			os.Exit(r.Run(nil /* filter */, parallelism, artifacts, getUser(username)))
 			return nil
 		},
 	}
@@ -215,4 +208,17 @@ Cockroach cluster with existing data.
 		// Cobra has already printed the error message.
 		os.Exit(1)
 	}
+}
+
+// user takes the value passed on the command line and comes up with the
+// username to use.
+func getUser(userFlag string) string {
+	if userFlag != "" {
+		return userFlag
+	}
+	usr, err := user.Current()
+	if err != nil {
+		panic(fmt.Sprintf("user.Current: %s", err))
+	}
+	return usr.Username
 }

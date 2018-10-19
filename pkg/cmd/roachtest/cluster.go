@@ -60,7 +60,6 @@ var (
 	clusterName string
 	clusterID   string
 	clusterWipe bool
-	username    = os.Getenv("ROACHPROD_USER")
 	zonesF      string
 	teamCity    bool
 	// For the "list" command: list benchmarks instead of tests.
@@ -634,6 +633,7 @@ type clusterConfig struct {
 	artifactsDir string
 	localCluster bool
 	teeOpt       teeOptType
+	user         string
 }
 
 // newCluster creates a new roachprod cluster.
@@ -660,7 +660,7 @@ func newCluster(ctx context.Context, l *logger, cfg clusterConfig) (*cluster, er
 		}
 		name = "local" // The roachprod tool understands this magic name.
 	} else {
-		name = makeClusterName(username + "-" + cfg.name)
+		name = makeClusterName(cfg.user + "-" + cfg.name)
 	}
 
 	switch {
