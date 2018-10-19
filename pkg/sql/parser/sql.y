@@ -3757,6 +3757,7 @@ table_elem:
   {
     $$.val = $1.constraintDef()
   }
+| LIKE table_name { return unimplementedWithIssue(sqllex, 30840) }
 
 opt_interleave:
   INTERLEAVE IN PARENT table_name '(' name_list ')' opt_interleave_drop_behavior
