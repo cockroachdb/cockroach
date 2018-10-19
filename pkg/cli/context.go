@@ -89,6 +89,7 @@ func initCLIDefaults() {
 	sqlCtx.execStmts = nil
 	sqlCtx.safeUpdates = false
 	sqlCtx.showTimes = false
+	sqlCtx.debugMode = false
 	sqlCtx.echo = false
 
 	dumpCtx.dumpMode = dumpBoth
@@ -214,6 +215,11 @@ var sqlCtx = struct {
 	// echo, when set, requests that SQL queries sent to the server are
 	// also printed out on the client.
 	echo bool
+
+	// debugMode, when set, overrides the defaults to disable as much
+	// "intelligent behavior" in the SQL shell as possible and become
+	// more verbose (sets echo).
+	debugMode bool
 }{cliContext: &cliCtx}
 
 // dumpCtx captures the command-line parameters of the `sql` command.
