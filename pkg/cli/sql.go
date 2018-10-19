@@ -571,8 +571,22 @@ func (c *cliState) pipeSyscmd(line string, nextState, errState cliStateEnum) cli
 	return nextState
 }
 
-// rePromptFmt: available keys compile with regex expression one time.
+// rePromptFmt recognizes every substitution pattern in the prompt format string.
 var rePromptFmt = regexp.MustCompile("(%.)")
+
+// rePromptDbState recognizes every substitution pattern that requires
+// access to the current database state.
+// Currently:
+// %/ database name
+// %x txn status
+var rePromptDbState = regexp.MustCompile("(?:^|[^%])%[/x]")
+
+// unknownDbName is the string to use in the prompt when
+// the database cannot be determined.
+const unknownDbName = "?"
+
+// unknownTxnStatus is the string to use in the prompt when the txn status cannot be determined.
+const unknownTxnStatus = " ?"
 
 // doRefreshPrompts refreshes the prompts of the client depending on the
 // status of the current transaction.
@@ -590,17 +604,26 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		return nextState
 	}
 
-	// Prepare variables for use during the substitution below.
-	c.refreshTransactionStatus()
-	// refreshDatabaseName() must be called *after* refreshTransactionStatus(),
-	// even when %/ appears before %x in the prompt format.
-	dbName, hasDbName := c.refreshDatabaseName()
-	if !hasDbName {
-		dbName = "?"
-	}
 	userName := ""
 	if parsedURL.User != nil {
 		userName = parsedURL.User.Username()
+	}
+
+	dbName := unknownDbName
+	c.lastKnownTxnStatus = unknownTxnStatus
+
+	wantDbStateInPrompt := rePromptDbState.MatchString(c.customPromptPattern)
+	if wantDbStateInPrompt || c.smartPrompt {
+		// Even if the prompt does not need it, the transaction status is needed
+		// for the multi-line smart prompt.
+		c.refreshTransactionStatus()
+	}
+	if wantDbStateInPrompt {
+		// refreshDatabaseName() must be called *after* refreshTransactionStatus(),
+		// even when %/ appears before %x in the prompt format.
+		// This is because the database name should not be queried during
+		// some transaction phases.
+		dbName = c.refreshDatabaseName()
 	}
 
 	c.fullPrompt = rePromptFmt.ReplaceAllStringFunc(c.customPromptPattern, func(m string) string {
@@ -653,7 +676,7 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 
 // refreshTransactionStatus retrieves and sets the current transaction status.
 func (c *cliState) refreshTransactionStatus() {
-	c.lastKnownTxnStatus = " ?"
+	c.lastKnownTxnStatus = unknownTxnStatus
 
 	dbVal, hasVal := c.conn.getServerValue("transaction status", `SHOW TRANSACTION STATUS`)
 	if !hasVal {
@@ -683,16 +706,16 @@ func (c *cliState) refreshTransactionStatus() {
 // refreshDatabaseName retrieves the current database name from the server.
 // The database name is only queried if there is no transaction ongoing,
 // or the transaction is fully open.
-func (c *cliState) refreshDatabaseName() (string, bool) {
+func (c *cliState) refreshDatabaseName() string {
 	if !(c.lastKnownTxnStatus == "" /*NoTxn*/ ||
 		c.lastKnownTxnStatus == "  OPEN" ||
-		c.lastKnownTxnStatus == " ?" /* Unknown */) {
-		return "", false
+		c.lastKnownTxnStatus == unknownTxnStatus) {
+		return unknownDbName
 	}
 
 	dbVal, hasVal := c.conn.getServerValue("database name", `SHOW DATABASE`)
 	if !hasVal {
-		return "", false
+		return unknownDbName
 	}
 
 	if dbVal == "" {
@@ -707,7 +730,7 @@ func (c *cliState) refreshDatabaseName() (string, bool) {
 	// Preserve the current database name in case of reconnects.
 	c.conn.dbName = dbName
 
-	return dbName, true
+	return dbName
 }
 
 // endsWithIncompleteTxn returns true if and only if its
