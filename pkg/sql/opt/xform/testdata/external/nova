@@ -794,9 +794,11 @@ sort
       │         │    │         │    │    │    ├── select
       │         │    │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
       │         │    │         │    │    │    │    ├── has-placeholder
+      │         │    │         │    │    │    │    ├── key: (18-20)
       │         │    │         │    │    │    │    ├── ordering: +18
       │         │    │         │    │    │    │    ├── scan instance_type_projects@secondary
       │         │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string) instance_type_projects.deleted:20(bool)
+      │         │    │         │    │    │    │    │    ├── lax-key: (18-20)
       │         │    │         │    │    │    │    │    └── ordering: +18
       │         │    │         │    │    │    │    └── filters [type=bool, outer=(19,20), constraints=(/19: (/NULL - ]; /20: (/NULL - ])]
       │         │    │         │    │    │    │         ├── instance_type_projects.deleted = $2 [type=bool, outer=(20), constraints=(/20: (/NULL - ])]
@@ -949,9 +951,11 @@ sort
       │         │    │    │    ├── select
       │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:26(int!null) project_id:27(string!null) instance_type_projects.deleted:28(bool!null)
       │         │    │    │    │    ├── has-placeholder
+      │         │    │    │    │    ├── key: (26-28)
       │         │    │    │    │    ├── ordering: +26
       │         │    │    │    │    ├── scan instance_type_projects@secondary
       │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:26(int!null) project_id:27(string) instance_type_projects.deleted:28(bool)
+      │         │    │    │    │    │    ├── lax-key: (26-28)
       │         │    │    │    │    │    └── ordering: +26
       │         │    │    │    │    └── filters [type=bool, outer=(27,28), constraints=(/27: (/NULL - ]; /28: (/NULL - ])]
       │         │    │    │    │         ├── instance_type_projects.deleted = $3 [type=bool, outer=(28), constraints=(/28: (/NULL - ])]
@@ -1125,9 +1129,11 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │    │    │    │    ├── select
  │    │         │    │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
  │    │         │    │    │    │    │    │    ├── has-placeholder
+ │    │         │    │    │    │    │    │    ├── key: (18-20)
  │    │         │    │    │    │    │    │    ├── ordering: +18
  │    │         │    │    │    │    │    │    ├── scan instance_type_projects@secondary
  │    │         │    │    │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string) instance_type_projects.deleted:20(bool)
+ │    │         │    │    │    │    │    │    │    ├── lax-key: (18-20)
  │    │         │    │    │    │    │    │    │    └── ordering: +18
  │    │         │    │    │    │    │    │    └── filters [type=bool, outer=(19,20), constraints=(/19: (/NULL - ]; /20: (/NULL - ])]
  │    │         │    │    │    │    │    │         ├── instance_type_projects.deleted = $2 [type=bool, outer=(20), constraints=(/20: (/NULL - ])]
@@ -1304,9 +1310,11 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │    │    │    │    ├── select
  │    │         │    │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
  │    │         │    │    │    │    │    │    ├── has-placeholder
+ │    │         │    │    │    │    │    │    ├── key: (18-20)
  │    │         │    │    │    │    │    │    ├── ordering: +18
  │    │         │    │    │    │    │    │    ├── scan instance_type_projects@secondary
  │    │         │    │    │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string) instance_type_projects.deleted:20(bool)
+ │    │         │    │    │    │    │    │    │    ├── lax-key: (18-20)
  │    │         │    │    │    │    │    │    │    └── ordering: +18
  │    │         │    │    │    │    │    │    └── filters [type=bool, outer=(18-20), constraints=(/18: (/NULL - ]; /19: (/NULL - ]; /20: (/NULL - ])]
  │    │         │    │    │    │    │    │         ├── instance_type_projects.deleted = $2 [type=bool, outer=(20), constraints=(/20: (/NULL - ])]
@@ -2007,9 +2015,11 @@ sort
       │         │    │         │    │    │    ├── select
       │         │    │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
       │         │    │         │    │    │    │    ├── has-placeholder
+      │         │    │         │    │    │    │    ├── key: (18-20)
       │         │    │         │    │    │    │    ├── ordering: +18
       │         │    │         │    │    │    │    ├── scan instance_type_projects@secondary
       │         │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string) instance_type_projects.deleted:20(bool)
+      │         │    │         │    │    │    │    │    ├── lax-key: (18-20)
       │         │    │         │    │    │    │    │    └── ordering: +18
       │         │    │         │    │    │    │    └── filters [type=bool, outer=(19,20), constraints=(/19: (/NULL - ]; /20: (/NULL - ])]
       │         │    │         │    │    │    │         ├── instance_type_projects.deleted = $2 [type=bool, outer=(20), constraints=(/20: (/NULL - ])]
@@ -2185,9 +2195,11 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │    │    │    │    ├── select
  │    │         │    │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
  │    │         │    │    │    │    │    │    ├── has-placeholder
+ │    │         │    │    │    │    │    │    ├── key: (18-20)
  │    │         │    │    │    │    │    │    ├── ordering: +18
  │    │         │    │    │    │    │    │    ├── scan instance_type_projects@secondary
  │    │         │    │    │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string) instance_type_projects.deleted:20(bool)
+ │    │         │    │    │    │    │    │    │    ├── lax-key: (18-20)
  │    │         │    │    │    │    │    │    │    └── ordering: +18
  │    │         │    │    │    │    │    │    └── filters [type=bool, outer=(19,20), constraints=(/19: (/NULL - ]; /20: (/NULL - ])]
  │    │         │    │    │    │    │    │         ├── instance_type_projects.deleted = $2 [type=bool, outer=(20), constraints=(/20: (/NULL - ])]
@@ -2509,9 +2521,11 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         │    │    │    ├── select
  │    │         │    │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
  │    │         │    │         │    │    │    │    ├── has-placeholder
+ │    │         │    │         │    │    │    │    ├── key: (18-20)
  │    │         │    │         │    │    │    │    ├── ordering: +18
  │    │         │    │         │    │    │    │    ├── scan instance_type_projects@secondary
  │    │         │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string) instance_type_projects.deleted:20(bool)
+ │    │         │    │         │    │    │    │    │    ├── lax-key: (18-20)
  │    │         │    │         │    │    │    │    │    └── ordering: +18
  │    │         │    │         │    │    │    │    └── filters [type=bool, outer=(19,20), constraints=(/19: (/NULL - ]; /20: (/NULL - ])]
  │    │         │    │         │    │    │    │         ├── instance_type_projects.deleted = $2 [type=bool, outer=(20), constraints=(/20: (/NULL - ])]
@@ -2901,9 +2915,11 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         │    │    │         │    │    │    ├── select
  │    │         │    │         │    │    │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) instance_type_projects.project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
  │    │         │    │         │    │    │         │    │    │    │    ├── has-placeholder
+ │    │         │    │         │    │    │         │    │    │    │    ├── key: (18-20)
  │    │         │    │         │    │    │         │    │    │    │    ├── ordering: +18
  │    │         │    │         │    │    │         │    │    │    │    ├── scan instance_type_projects@secondary
  │    │         │    │         │    │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) instance_type_projects.project_id:19(string) instance_type_projects.deleted:20(bool)
+ │    │         │    │         │    │    │         │    │    │    │    │    ├── lax-key: (18-20)
  │    │         │    │         │    │    │         │    │    │    │    │    └── ordering: +18
  │    │         │    │         │    │    │         │    │    │    │    └── filters [type=bool, outer=(19,20), constraints=(/19: (/NULL - ]; /20: (/NULL - ])]
  │    │         │    │         │    │    │         │    │    │    │         ├── instance_type_projects.deleted = $2 [type=bool, outer=(20), constraints=(/20: (/NULL - ])]
@@ -2956,8 +2972,10 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         │    │    │    ├── select
  │    │         │    │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:26(int!null) instance_type_projects.project_id:27(string!null) instance_type_projects.deleted:28(bool!null)
  │    │         │    │         │    │    │    │    ├── has-placeholder
+ │    │         │    │         │    │    │    │    ├── key: (26-28)
  │    │         │    │         │    │    │    │    ├── scan instance_type_projects@secondary
- │    │         │    │         │    │    │    │    │    └── columns: instance_type_projects.instance_type_id:26(int!null) instance_type_projects.project_id:27(string) instance_type_projects.deleted:28(bool)
+ │    │         │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:26(int!null) instance_type_projects.project_id:27(string) instance_type_projects.deleted:28(bool)
+ │    │         │    │         │    │    │    │    │    └── lax-key: (26-28)
  │    │         │    │         │    │    │    │    └── filters [type=bool, outer=(27,28), constraints=(/27: (/NULL - ]; /28: (/NULL - ])]
  │    │         │    │         │    │    │    │         ├── instance_type_projects.deleted = $4 [type=bool, outer=(28), constraints=(/28: (/NULL - ])]
  │    │         │    │         │    │    │    │         ├── instance_type_projects.deleted = $5 [type=bool, outer=(28), constraints=(/28: (/NULL - ])]
@@ -3148,9 +3166,11 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         │    │    │    ├── select
  │    │         │    │         │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string!null) instance_type_projects.deleted:20(bool!null)
  │    │         │    │         │    │    │    │    ├── has-placeholder
+ │    │         │    │         │    │    │    │    ├── key: (18-20)
  │    │         │    │         │    │    │    │    ├── ordering: +18
  │    │         │    │         │    │    │    │    ├── scan instance_type_projects@secondary
  │    │         │    │         │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:18(int!null) project_id:19(string) instance_type_projects.deleted:20(bool)
+ │    │         │    │         │    │    │    │    │    ├── lax-key: (18-20)
  │    │         │    │         │    │    │    │    │    └── ordering: +18
  │    │         │    │         │    │    │    │    └── filters [type=bool, outer=(19,20), constraints=(/19: (/NULL - ]; /20: (/NULL - ])]
  │    │         │    │         │    │    │    │         ├── instance_type_projects.deleted = $2 [type=bool, outer=(20), constraints=(/20: (/NULL - ])]

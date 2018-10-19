@@ -171,7 +171,8 @@ distinct-on
  ├── grouping columns: i:2(int!null) f:3(float)
  ├── key: (2,3)
  └── scan a@fi_idx
-      └── columns: i:2(int!null) f:3(float)
+      ├── columns: i:2(int!null) f:3(float)
+      └── lax-key: (2,3)
 
 # --------------------------------------------------
 # EliminateGroupByProject

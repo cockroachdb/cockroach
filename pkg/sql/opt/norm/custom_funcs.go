@@ -279,7 +279,7 @@ func (c *CustomFuncs) OuterCols(group memo.GroupID) opt.ColSet {
 // CandidateKey returns the candidate key columns from the given group. If there
 // is no candidate key, CandidateKey returns ok=false.
 func (c *CustomFuncs) CandidateKey(group memo.GroupID) (key opt.ColSet, ok bool) {
-	return c.LookupLogical(group).Relational.FuncDeps.Key()
+	return c.LookupLogical(group).Relational.FuncDeps.StrictKey()
 }
 
 // IsColNotNull returns true if the given column is part of the input group's
