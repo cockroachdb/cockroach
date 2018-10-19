@@ -605,7 +605,6 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		case "%/": // database name.
 			return dbName
 		case "%x": // txn status.
-			c.refreshTransactionStatus()
 			return c.lastKnownTxnStatus
 		case "%%":
 			return "%"
