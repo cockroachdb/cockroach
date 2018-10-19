@@ -330,9 +330,9 @@ var options = map[string]struct {
 		"display the execution time after each query",
 		true,
 		true,
-		func(_ *cliState, _ string) error { cliCtx.showTimes = true; return nil },
-		func(_ *cliState) error { cliCtx.showTimes = false; return nil },
-		func(_ *cliState) string { return strconv.FormatBool(cliCtx.showTimes) },
+		func(_ *cliState, _ string) error { sqlCtx.showTimes = true; return nil },
+		func(_ *cliState) error { sqlCtx.showTimes = false; return nil },
+		func(_ *cliState) string { return strconv.FormatBool(sqlCtx.showTimes) },
 	},
 	`prompt1`: {
 		"prompt string to use before each command (the following are expanded: %M full host, %m host, %> port number, %n user, %/ database, %x txn status)",
@@ -1247,7 +1247,7 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 			if cliCtx.terminalOutput {
 				// If results are shown on a terminal also enable printing of
 				// times by default.
-				cliCtx.showTimes = true
+				sqlCtx.showTimes = true
 			}
 
 			// An interactive readline prompter is comparatively slow at

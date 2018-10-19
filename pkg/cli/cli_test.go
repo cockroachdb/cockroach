@@ -160,7 +160,7 @@ func newCLITest(params cliTestParams) cliTest {
 func setCLIDefaultsForTests() {
 	initCLIDefaults()
 	cliCtx.terminalOutput = false
-	cliCtx.showTimes = false
+	sqlCtx.showTimes = false
 	// Even though we pretend there is no terminal, most tests want
 	// pretty tables.
 	cliCtx.tableDisplayFormat = tableDisplayTable
