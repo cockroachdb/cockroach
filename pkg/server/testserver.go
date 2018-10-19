@@ -24,10 +24,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cenk/backoff"
+	"github.com/cenkalti/backoff"
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	"github.com/rubyist/circuitbreaker"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"

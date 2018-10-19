@@ -20,8 +20,8 @@ import (
 	"time"
 	"unsafe"
 
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/pkg/errors"
-	"github.com/rubyist/circuitbreaker"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
