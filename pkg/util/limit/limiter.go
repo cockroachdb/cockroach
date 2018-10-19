@@ -38,6 +38,12 @@ func MakeConcurrentRequestLimiter(spanName string, limit int) ConcurrentRequestL
 // one is available or the context is canceled and adding a tracing span if it
 // is forced to block.
 func (l *ConcurrentRequestLimiter) Begin(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
 	if l.sem.TryAcquire(1) {
 		return nil
 	}
