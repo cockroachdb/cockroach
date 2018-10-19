@@ -55,6 +55,9 @@ const (
 
 const defaultPromptPattern = "%n@%M/%/%x>"
 
+// debugPromptPattern avoids substitution patterns that require a db roundtrip.
+const debugPromptPattern = "%n@%M>"
+
 // sqlShellCmd opens a sql shell.
 var sqlShellCmd = &cobra.Command{
 	Use:   "sql [options]",
@@ -782,9 +785,11 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 		// If a human user is providing the input, we want to help them with
 		// what they are entering:
 		c.errExit = false // let the user retry failing commands
-		// Also, try to enable syntax checking if supported by the server.
-		// This is a form of client-side error checking to help with large txns.
-		c.tryEnableCheckSyntax()
+		if !sqlCtx.debugMode {
+			// Also, try to enable syntax checking if supported by the server.
+			// This is a form of client-side error checking to help with large txns.
+			c.tryEnableCheckSyntax()
+		}
 
 		fmt.Println("#\n# Enter \\? for a brief introduction.\n#")
 	} else {
@@ -804,6 +809,9 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 
 		// Default prompt is part of the connection URL. eg: "marc@localhost:26257>".
 		c.customPromptPattern = defaultPromptPattern
+		if sqlCtx.debugMode {
+			c.customPromptPattern = debugPromptPattern
+		}
 
 		c.ins.SetCompleter(c)
 		if err := c.ins.UseHistory(-1 /*maxEntries*/, true /*dedup*/); err != nil {
@@ -1283,7 +1291,7 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 				// times by default.
 				sqlCtx.showTimes = true
 			}
-			if cliCtx.isInteractive {
+			if cliCtx.isInteractive && !sqlCtx.debugMode {
 				// If the terminal is interactive and this was not explicitly disabled by setting the debug mode,
 				// enable the smart prompt.
 				c.smartPrompt = true
