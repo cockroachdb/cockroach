@@ -54,7 +54,8 @@ func declareKeysClearRange(
 //
 // Note that "correct" use of this command is only possible for key
 // spans consisting of user data that we know is not being written to
-// or queried any more, such as after a DROP or TRUNCATE table.
+// or queried any more, such as after a DROP or TRUNCATE table, or
+// DROP index.
 func ClearRange(
 	ctx context.Context, batch engine.ReadWriter, cArgs CommandArgs, resp roachpb.Response,
 ) (result.Result, error) {

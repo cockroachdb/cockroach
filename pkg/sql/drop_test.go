@@ -30,8 +30,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
@@ -499,10 +501,20 @@ func TestDropIndex(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const chunkSize = 200
 	params, _ := tests.CreateTestServerParams()
+	emptySpan := true
+	clearIndexAttempt := false
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
 			AsyncExecQuickly:  true,
+		},
+		DistSQL: &distsqlrun.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				if clearIndexAttempt && (sp.Key != nil || sp.EndKey != nil) {
+					emptySpan = false
+				}
+				return nil
+			},
 		},
 	}
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -555,6 +567,7 @@ func TestDropIndex(t *testing.T) {
 	tests.CheckKeyCount(t, kvDB, newIdxSpan, numRows)
 	tests.CheckKeyCount(t, kvDB, tableDesc.TableSpan(), 4*numRows)
 
+	clearIndexAttempt = true
 	// Add a zone config for the table.
 	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
 		t.Fatal(err)
@@ -569,6 +582,10 @@ func TestDropIndex(t *testing.T) {
 			},
 		})
 	})
+
+	if !emptySpan {
+		t.Fatalf("tried to clear index with non-empty resume span")
+	}
 
 	tests.CheckKeyCount(t, kvDB, newIdxSpan, numRows)
 	tests.CheckKeyCount(t, kvDB, indexSpan, 0)
