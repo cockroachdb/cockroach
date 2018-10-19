@@ -2593,6 +2593,14 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH PARTIAL`, 0, `references match partial`},
 		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH SIMPLE`, 0, `references match simple`},
 
+		{`CREATE TABLE a(b INT, FOREIGN KEY (b) REFERENCES c(x) DEFERRABLE)`, 31632, `deferrable`},
+		{`CREATE TABLE a(b INT, FOREIGN KEY (b) REFERENCES c(x) INITIALLY DEFERRED)`, 31632, `initially deferred`},
+		{`CREATE TABLE a(b INT, FOREIGN KEY (b) REFERENCES c(x) INITIALLY IMMEDIATE)`, 31632, `initially immediate`},
+		{`CREATE TABLE a(b INT, FOREIGN KEY (b) REFERENCES c(x) DEFERRABLE INITIALLY DEFERRED)`, 31632, `initially deferred`},
+		{`CREATE TABLE a(b INT, FOREIGN KEY (b) REFERENCES c(x) DEFERRABLE INITIALLY IMMEDIATE)`, 31632, `initially immediate`},
+		{`CREATE TABLE a(b INT, UNIQUE (b) DEFERRABLE)`, 31632, `deferrable`},
+		{`CREATE TABLE a(b INT, CHECK (b > 0) DEFERRABLE)`, 31632, `deferrable`},
+
 		{`CREATE SEQUENCE a AS DOUBLE PRECISION`, 25110, `FLOAT8`},
 		{`CREATE SEQUENCE a OWNED BY b`, 26382, ``},
 
