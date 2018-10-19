@@ -259,6 +259,18 @@ func (rgcq *replicaGCQueue) process(
 			if leftReplyDesc := rs[0]; !leftDesc.Equal(leftReplyDesc) {
 				log.VEventf(ctx, 1, "left neighbor %s not up-to-date with meta descriptor %s; cannot safely GC range yet",
 					leftDesc, leftReplyDesc)
+				// It is possible that our left neighbor was abandoned by its range
+				// while it was quiesced. In this case, it might not be considered for
+				// GC for several days! Consider it for a GC run.
+				//
+				// Note that this is not the common case. It is more likely that our
+				// left neighbor is still a member of the range but is just slow in
+				// applying the merge. That's ok. The range is probably already
+				// unquiesced in that case, so this call to unquiesce will be a no-op,
+				// and, even if it is quiesced, PreVote prevents the resulting campaign
+				// from being too disruptive.
+				leftRepl.unquiesce()
+				rgcq.MaybeAdd(leftRepl, rgcq.store.Clock().Now())
 				return nil
 			}
 		}

@@ -1749,6 +1749,20 @@ func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 		return err
 	})
 
+	// Hard mode: wait for the LHS to quiesce. This makes it that much harder for
+	// store2 to detect that its LHS replica been abandoned.
+	var lhsRepl2 *storage.Replica
+	testutils.SucceedsSoon(t, func() error {
+		lhsRepl2, err = store2.GetReplica(lhsDesc.RangeID)
+		if err != nil {
+			return err
+		}
+		if !lhsRepl2.IsQuiescent() {
+			return errors.New("lhs has not yet quiesced")
+		}
+		return nil
+	})
+
 	// Start dropping all Raft traffic to the LHS on store2 so that it won't be
 	// aware that there is a merge in progress.
 	mtc.transport.Listen(store2.Ident.StoreID, &unreliableRaftHandler{
@@ -2406,6 +2420,15 @@ func (h *unreliableRaftHandler) HandleRaftRequest(
 		return nil
 	}
 	return h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
+}
+
+func (h *unreliableRaftHandler) HandleRaftResponse(
+	ctx context.Context, resp *storage.RaftMessageResponse,
+) error {
+	if resp.RangeID == h.rangeID {
+		return nil
+	}
+	return h.RaftMessageHandler.HandleRaftResponse(ctx, resp)
 }
 
 func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
