@@ -18,13 +18,14 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
 )
 
 type completionMsgType int
@@ -124,9 +125,11 @@ func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
 		r.typ == commandComplete &&
 		r.stmtType == tree.Rows {
 
-		r.err = errors.Errorf("execute row count limits not supported: %d of %d",
+		r.err = pgerror.UnimplementedWithIssueErrorf(4035,
+			"execute row count limits not supported: %d of %d",
 			r.limit, r.rowsAffected)
-		r.conn.bufferErr(convertToErrWithPGCode(r.err))
+		telemetry.RecordError(r.err)
+		r.conn.bufferErr(r.err)
 	}
 
 	// Send a completion message, specific to the type of result.
