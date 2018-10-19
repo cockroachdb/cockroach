@@ -1975,6 +1975,7 @@ create_unsupported:
 | CREATE OPERATOR error { return unimplemented(sqllex, "create operator") }
 | CREATE PUBLICATION error { return unimplemented(sqllex, "create publication") }
 | CREATE opt_or_replace RULE error { return unimplemented(sqllex, "create rule") }
+| CREATE SCHEMA error { return unimplementedWithIssueDetail(sqllex, 26443, "create") }
 | CREATE SERVER error { return unimplemented(sqllex, "create server") }
 | CREATE SUBSCRIPTION error { return unimplemented(sqllex, "create subscription") }
 | CREATE TEXT error { return unimplementedWithIssueDetail(sqllex, 7821, "create text") }
@@ -2007,6 +2008,7 @@ drop_unsupported:
 | DROP OPERATOR error { return unimplemented(sqllex, "drop operator") }
 | DROP PUBLICATION error { return unimplemented(sqllex, "drop publication") }
 | DROP RULE error { return unimplemented(sqllex, "drop rule") }
+| DROP SCHEMA error { return unimplementedWithIssueDetail(sqllex, 26443, "drop") }
 | DROP SERVER error { return unimplemented(sqllex, "drop server") }
 | DROP SUBSCRIPTION error { return unimplemented(sqllex, "drop subscription") }
 | DROP TEXT error { return unimplementedWithIssueDetail(sqllex, 7821, "drop text") }
