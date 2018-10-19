@@ -259,7 +259,7 @@ func TestRegistryRunClusterExpired(t *testing.T) {
 	}
 }
 
-func TestRegistryVerifyClusterName(t *testing.T) {
+func TestRegistryVerifyValidClusterName(t *testing.T) {
 	testCases := []struct {
 		testNames   []string
 		expectedErr string
@@ -268,15 +268,15 @@ func TestRegistryVerifyClusterName(t *testing.T) {
 		{[]string{"HELLO", "hello"}, "have equivalent nightly cluster names"},
 		{[]string{"hel+lo", "hel++lo"}, "have equivalent nightly cluster names"},
 		{[]string{"hello+"}, "must match regex"},
-		{[]string{strings.Repeat("y", 46)}, ""},
-		{[]string{strings.Repeat("y", 100)}, "must match regex"},
+		{[]string{strings.Repeat("y", 41)}, ""},
+		{[]string{strings.Repeat("y", 42)}, "must match regex"},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			r := newRegistry()
 			var err error
 			for _, n := range c.testNames {
-				err = r.verifyClusterName(n)
+				err = r.verifyValidClusterName(n)
 			}
 			if !testutils.IsError(err, c.expectedErr) {
 				t.Fatalf("expected %s, but found %v", c.expectedErr, err)
