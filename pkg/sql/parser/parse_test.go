@@ -2588,6 +2588,8 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TEMP VIEW a AS SELECT b`, 5807, ``},
 		{`CREATE TEMP SEQUENCE a`, 5807, ``},
 
+		{`CREATE TABLE a(LIKE b)`, 30840, ``},
+
 		{`CREATE TABLE a(b INT AS (123) VIRTUAL)`, 0, `virtual computed columns`},
 		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH FULL`, 0, `references match full`},
 		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH PARTIAL`, 0, `references match partial`},
