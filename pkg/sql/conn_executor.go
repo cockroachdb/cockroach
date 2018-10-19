@@ -303,39 +303,6 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	s.PeriodicallyClearStmtStats(ctx, stopper)
 }
 
-// recordError takes an error and increments the corresponding count
-// for its error code, and, if it is an unimplemented or internal
-// error, the count for that feature or the internal error's shortened
-// stack trace.
-func (s *Server) recordError(err error) {
-	if err == nil {
-		return
-	}
-
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		telemetry.Count("errorcodes." + pgErr.Code)
-
-		if details := pgErr.InternalCommand; details != "" {
-			var prefix string
-			switch pgErr.Code {
-			case pgerror.CodeFeatureNotSupportedError:
-				prefix = "unimplemented."
-			case pgerror.CodeInternalError:
-				prefix = "internalerror."
-			default:
-				prefix = "othererror." + pgErr.Code + "."
-			}
-			telemetry.Count(prefix + details)
-		}
-	} else {
-		typ := log.ErrorSource(err)
-		if typ == "" {
-			typ = "unknown"
-		}
-		telemetry.Count("othererror." + typ)
-	}
-}
-
 // ResetStatementStats resets the executor's collected statement statistics.
 func (s *Server) ResetStatementStats(ctx context.Context) {
 	s.sqlStats.resetStats(ctx)
@@ -1293,12 +1260,12 @@ func (ex *connExecutor) run(
 				ex.sessionEventf(ex.Ctx(), "execution error: %s", pe.errorCause())
 			}
 			if resErr == nil && ok {
-				ex.server.recordError(pe.errorCause())
+				telemetry.RecordError(pe.errorCause())
 				// Depending on whether the result has the error already or not, we have
 				// to call either Close or CloseWithErr.
 				res.CloseWithErr(pe.errorCause())
 			} else {
-				ex.server.recordError(resErr)
+				telemetry.RecordError(resErr)
 				res.Close(stateToTxnStatusIndicator(ex.machine.CurState()))
 			}
 		} else {

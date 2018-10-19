@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1207,7 +1208,7 @@ func (ex *connExecutor) runShowSyntax(
 			commErr = res.AddRow(ctx, tree.Datums{tree.NewDString(field), tree.NewDString(msg)})
 			return nil
 		},
-		ex.server.recordError, /* reportErr */
+		telemetry.RecordError, /* reportErr */
 	); err != nil {
 		res.SetError(err)
 	}
