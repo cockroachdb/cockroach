@@ -131,36 +131,25 @@ project
       │    └── project
       │         ├── columns: v:6(int!null)
       │         ├── outer: (1)
+      │         ├── fd: ()-->(6)
       │         ├── prune: (6)
-      │         └── inner-join-apply
+      │         └── inner-join
       │              ├── columns: v:6(int!null) n:9(int!null)
       │              ├── outer: (1)
-      │              ├── fd: ()-->(9)
+      │              ├── fd: ()-->(6,9)
+      │              ├── interesting orderings: (+9)
       │              ├── scan uv
       │              │    ├── columns: v:6(int!null)
       │              │    └── prune: (6)
-      │              ├── max1-row
-      │              │    ├── columns: n:9(int!null)
-      │              │    ├── outer: (6)
-      │              │    ├── cardinality: [0 - 1]
-      │              │    ├── key: ()
-      │              │    ├── fd: ()-->(9)
-      │              │    └── select
-      │              │         ├── columns: n:9(int!null)
-      │              │         ├── outer: (6)
-      │              │         ├── fd: ()-->(9)
-      │              │         ├── interesting orderings: (+9)
-      │              │         ├── scan mn@secondary
-      │              │         │    ├── columns: n:9(int!null)
-      │              │         │    ├── constraint: /9: (/NULL - ]
-      │              │         │    ├── key: (9)
-      │              │         │    ├── prune: (9)
-      │              │         │    └── interesting orderings: (+9)
-      │              │         └── filters
-      │              │              └── eq [type=bool, outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(9), (9)==(6)]
-      │              │                   ├── variable: n [type=int]
-      │              │                   └── variable: v [type=int]
+      │              ├── scan mn
+      │              │    ├── columns: n:9(int)
+      │              │    ├── lax-key: (9)
+      │              │    ├── prune: (9)
+      │              │    └── interesting orderings: (+9)
       │              └── filters
+      │                   ├── eq [type=bool, outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(9), (9)==(6)]
+      │                   │    ├── variable: n [type=int]
+      │                   │    └── variable: v [type=int]
       │                   └── eq [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
       │                        ├── variable: x [type=int]
       │                        └── variable: n [type=int]
