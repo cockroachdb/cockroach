@@ -97,7 +97,6 @@ func removeLeakedRaftEntries(
 	// Check if migration has already been performed.
 	marker := keys.StoreRemovedLeakedRaftEntriesKey()
 	found, err := engine.MVCCGetProto(ctx, eng, marker, hlc.Timestamp{}, false, nil, nil)
-	found = false
 	if found || err != nil {
 		return err
 	}
