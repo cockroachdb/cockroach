@@ -337,7 +337,7 @@ func (r *registry) ListAll(filter []string) []string {
 // Args:
 // artifactsDir: The path to the dir where log files will be put. If empty, all
 //   logging will go to stdout/stderr.
-func (r *registry) Run(filter []string, parallelism int, artifactsDir string) int {
+func (r *registry) Run(filter []string, parallelism int, artifactsDir string, user string) int {
 	filterRE := makeFilterRE(filter)
 	// Find the top-level tests to run.
 	tests := r.ListTopLevel(filterRE)
@@ -401,7 +401,7 @@ func (r *registry) Run(filter []string, parallelism int, artifactsDir string) in
 
 				r.runAsync(
 					ctx, tests[i], filterRE, nil /* parent */, nil, /* cluster */
-					runNum, teeOpt, runDir, func(failed bool) {
+					runNum, teeOpt, runDir, user, func(failed bool) {
 						wg.Done()
 						<-sem
 					})
@@ -771,6 +771,7 @@ func (r *registry) runAsync(
 	runNum int,
 	teeOpt teeOptType,
 	artifactsDir string,
+	user string,
 	done func(failed bool),
 ) {
 	t := &test{
@@ -932,6 +933,7 @@ func (r *registry) runAsync(
 					artifactsDir: t.ArtifactsDir(),
 					localCluster: local,
 					teeOpt:       teeOpt,
+					user:         user,
 				}
 				var err error
 				c, err = newCluster(ctx, t.l, cfg)
@@ -975,7 +977,7 @@ func (r *registry) runAsync(
 					}
 
 					r.runAsync(ctx, &childSpec, filter, t, c,
-						runNum, teeOpt, childDir, func(failed bool) {
+						runNum, teeOpt, childDir, user, func(failed bool) {
 							if failed {
 								// Mark the parent test as failed since one of the subtests
 								// failed.
