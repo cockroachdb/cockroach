@@ -65,9 +65,9 @@ import (
 
 	"google.golang.org/grpc"
 
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	circuit "github.com/rubyist/circuitbreaker"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
