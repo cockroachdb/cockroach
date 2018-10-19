@@ -636,6 +636,7 @@ unreserved_keyword ::=
 	| 'OF'
 	| 'OFF'
 	| 'OID'
+	| 'OIDS'
 	| 'OIDVECTOR'
 	| 'OPERATOR'
 	| 'OPTION'
