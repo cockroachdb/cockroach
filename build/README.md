@@ -60,8 +60,8 @@ https://github.com/cockroachdb/vendored and checked out as a submodule at
 This snapshot was built and is managed using `dep` and we manage `vendor` as a
 submodule.
 
-Use the version of `dep` in `.bin` (may need to `make` first): import your new
-dependency from the Go source you're working on, then run `.bin/dep ensure`.
+Use the version of `dep` in `bin` (may need to `make` first): import your new
+dependency from the Go source you're working on, then run `./bin/dep ensure`.
 
 ### Working with Submodules
 
