@@ -103,6 +103,12 @@ func (n *Dialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (_ *grpc.Clien
 		return nil, err
 	}
 	breaker.Success()
+	// This really shouldn't be necessary, but Success() isn't guaranteed to
+	// close the breaker and the upstream vendored repo is dead, so just work
+	// around it by resetting the breaker manually if it's still tripped.
+	if breaker.Tripped() {
+		breaker.Reset()
+	}
 	return conn, nil
 }
 
