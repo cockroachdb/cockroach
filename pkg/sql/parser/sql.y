@@ -521,7 +521,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
 %token <str> NOT NOTHING NOTNULL NULL NULLIF NUMERIC
 
-%token <str> OF OFF OFFSET OID OIDVECTOR ON ONLY OPTION OPTIONS OR
+%token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY OWNED OPERATOR
 
 %token <str> PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PLACING
@@ -3659,7 +3659,7 @@ pause_stmt:
 // WEBDOCS/create-table.html
 // WEBDOCS/create-table-as.html
 create_table_stmt:
-  CREATE opt_temp TABLE table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
+  CREATE opt_temp TABLE table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
   {
     $$.val = &tree.CreateTable{
       Table: $4.normalizableTableNameFromUnresolvedName(),
@@ -3671,7 +3671,7 @@ create_table_stmt:
       PartitionBy: $9.partitionBy(),
     }
   }
-| CREATE opt_temp TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
+| CREATE opt_temp TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
   {
     $$.val = &tree.CreateTable{
       Table: $7.normalizableTableNameFromUnresolvedName(),
@@ -3684,29 +3684,39 @@ create_table_stmt:
     }
   }
 
+opt_table_with:
+  /* EMPTY */     { /* no error */ }
+| WITHOUT OIDS    { /* SKIP DOC */ /* this is also the default in CockroachDB */ }
+| WITH name error { return unimplemented(sqllex, "create table with " + $2) }
+
 create_table_as_stmt:
-  CREATE opt_temp TABLE table_name opt_column_list AS select_stmt
+  CREATE opt_temp TABLE table_name opt_column_list opt_table_with AS select_stmt opt_create_as_data
   {
     $$.val = &tree.CreateTable{
       Table: $4.normalizableTableNameFromUnresolvedName(),
       IfNotExists: false,
       Interleave: nil,
       Defs: nil,
-      AsSource: $7.slct(),
+      AsSource: $8.slct(),
       AsColumnNames: $5.nameList(),
     }
   }
-| CREATE opt_temp TABLE IF NOT EXISTS table_name opt_column_list AS select_stmt
+| CREATE opt_temp TABLE IF NOT EXISTS table_name opt_column_list opt_table_with AS select_stmt opt_create_as_data
   {
     $$.val = &tree.CreateTable{
       Table: $7.normalizableTableNameFromUnresolvedName(),
       IfNotExists: true,
       Interleave: nil,
       Defs: nil,
-      AsSource: $10.slct(),
+      AsSource: $11.slct(),
       AsColumnNames: $8.nameList(),
     }
   }
+
+opt_create_as_data:
+  /* EMPTY */  { /* no error */ }
+| WITH DATA    { /* SKIP DOC */ /* This is the default */ }
+| WITH NO DATA { return unimplemented(sqllex, "create table as with no data") }
 
 /*
  * Redundancy here is needed to avoid shift/reduce conflicts,
@@ -3757,7 +3767,7 @@ table_elem:
   {
     $$.val = $1.constraintDef()
   }
-| LIKE table_name { return unimplementedWithIssue(sqllex, 30840) }
+| LIKE table_name error { return unimplementedWithIssue(sqllex, 30840) }
 
 opt_interleave:
   INTERLEAVE IN PARENT table_name '(' name_list ')' opt_interleave_drop_behavior
@@ -8444,6 +8454,7 @@ unreserved_keyword:
 | OF
 | OFF
 | OID
+| OIDS
 | OIDVECTOR
 | OPERATOR
 | OPTION
