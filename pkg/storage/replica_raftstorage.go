@@ -84,6 +84,9 @@ func (r *replicaRaftStorage) Entries(lo, hi, maxBytes uint64) ([]raftpb.Entry, e
 	readonly := r.store.Engine().NewReadOnly()
 	defer readonly.Close()
 	ctx := r.AnnotateCtx(context.TODO())
+	if r.raftMu.sideloaded == nil {
+		return nil, errors.New("sideloaded storage is uninitialized")
+	}
 	return entries(ctx, r.mu.stateLoader, readonly, r.RangeID, r.store.raftEntryCache,
 		r.raftMu.sideloaded, lo, hi, maxBytes)
 }
