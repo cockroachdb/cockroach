@@ -15,9 +15,15 @@
 package testutils
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/petermattis/goid"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"time"
+	"runtime/debug"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 func TestIsSQLRetryableError(t *testing.T) {
@@ -25,4 +31,23 @@ func TestIsSQLRetryableError(t *testing.T) {
 	if !IsSQLRetryableError(roachpb.NewError(errAmbiguous).GoError()) {
 		t.Fatalf("%s should be a SQLRetryableError", errAmbiguous)
 	}
+}
+
+func TestGoroutine(t *testing.T) {
+	ctx := context.TODO()
+
+	var a int
+	f := func() {
+		myid := goid.Get()
+		tBegin := timeutil.Now()
+		log.Infof(ctx, "my id is %d", myid)
+		time.Sleep(time.Second)
+		debug.PrintStack()
+		for timeutil.Since(tBegin) < 3*time.Second {
+			a = 5
+		}
+	}
+	go f()
+	f()
+	t.Log(a)
 }
