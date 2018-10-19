@@ -81,6 +81,9 @@ type cliState struct {
 	errExit bool
 	// Determines whether to perform client-side syntax checking.
 	checkSyntax bool
+	// smartPrompt indicates whether to detect the txn status and offer
+	// multi-line statements at the start of fresh transactions.
+	smartPrompt bool
 
 	// The prompt at the beginning of a multi-line entry.
 	fullPrompt string
@@ -333,6 +336,14 @@ var options = map[string]struct {
 		func(_ *cliState, _ string) error { sqlCtx.showTimes = true; return nil },
 		func(_ *cliState) error { sqlCtx.showTimes = false; return nil },
 		func(_ *cliState) string { return strconv.FormatBool(sqlCtx.showTimes) },
+	},
+	`smart_prompt`: {
+		"detect open transactions and propose entering multi-line statements",
+		true,
+		false,
+		func(c *cliState, _ string) error { c.smartPrompt = true; return nil },
+		func(c *cliState) error { c.smartPrompt = false; return nil },
+		func(c *cliState) string { return strconv.FormatBool(c.smartPrompt) },
 	},
 	`prompt1`: {
 		"prompt string to use before each command (the following are expanded: %M full host, %m host, %> port number, %n user, %/ database, %x txn status)",
@@ -1087,12 +1098,13 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 
 	nextState := execState
 
-	// In interactive mode, we make some additional effort to help the user:
-	// if the entry so far is starting an incomplete transaction, push
-	// the user to enter input over multiple lines.
-	if c.lastKnownTxnStatus == "" && endsWithIncompleteTxn(parsedStmts) && c.lastInputLine != "" {
+	// When the smart prompt is enabled, we make some additional effort
+	// to help the user: if the entry so far is starting an incomplete
+	// transaction, push the user to enter input over multiple lines.
+	if c.smartPrompt &&
+		c.lastKnownTxnStatus == "" && endsWithIncompleteTxn(parsedStmts) && c.lastInputLine != "" {
 		if c.partialStmtsLen == 0 {
-			fmt.Fprintln(stderr, "Now adding input for a multi-line SQL transaction client-side.\n"+
+			fmt.Fprintln(stderr, "Now adding input for a multi-line SQL transaction client-side (smart_prompt enabled).\n"+
 				"Press Enter two times to send the SQL text collected so far to the server, or Ctrl+C to cancel.\n"+
 				"You can also use \\show to display the statements entered so far.")
 		}
@@ -1247,6 +1259,11 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 				// If results are shown on a terminal also enable printing of
 				// times by default.
 				sqlCtx.showTimes = true
+			}
+			if cliCtx.isInteractive {
+				// If the terminal is interactive and this was not explicitly disabled by setting the debug mode,
+				// enable the smart prompt.
+				c.smartPrompt = true
 			}
 
 			// An interactive readline prompter is comparatively slow at
