@@ -646,7 +646,6 @@ func (f *Flow) Cleanup(ctx context.Context) {
 		log.Infof(ctx, "cleaning up")
 	}
 	sp := opentracing.SpanFromContext(ctx)
-	sp.Finish()
 	// Local flows do not get registered.
 	if !f.isLocal() && f.status != FlowNotStarted {
 		f.flowRegistry.UnregisterFlow(f.id)
@@ -655,6 +654,7 @@ func (f *Flow) Cleanup(ctx context.Context) {
 	f.ctxCancel()
 	f.doneFn()
 	f.doneFn = nil
+	sp.Finish()
 }
 
 // cancel iterates through all unconnected streams of this flow and marks them canceled.
