@@ -605,10 +605,12 @@ SELECT * FROM c WHERE x >= 0 AND x < 100
 select
  ├── columns: x:1(int!null) z:2(int!null)
  ├── stats: [rows=111.111111]
+ ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan c
  │    ├── columns: x:1(int) z:2(int!null)
  │    ├── stats: [rows=1000]
+ │    ├── lax-key: (1,2)
  │    └── fd: (1)~~>(2)
  └── filters
       ├── x >= 0 [type=bool, outer=(1), constraints=(/1: [/0 - ]; tight)]
