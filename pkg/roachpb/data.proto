@@ -394,11 +394,31 @@ message Transaction {
   // which commit at a higher timestamp without resorting to a
   // client-side retry.
   bool orig_timestamp_was_observed = 16;
+  // Knowledge this transaction has about other transactions.
+  TransactionKnowledge knowledge = 17;
+}
+
+message TransactionKnowledge {
+  option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
+
+  // // TODO: this contains two of the three fields in Intent. Do we use that here?
+  // message KnownDisposition {
+  //   option (gogoproto.equal) = true;
+  //   option (gogoproto.populate) = true;
+
+  //   storage.engine.enginepb.TxnMeta meta = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  //   TransactionStatus status = 2;
+  // }
+
+  int32 epoch = 1;
+  repeated Intent known_dispositions = 2 [(gogoproto.nullable) = false];
 }
 
 // A Intent is a Span together with a Transaction metadata and its status.
 message Intent {
   option (gogoproto.equal) = true;
+  option (gogoproto.populate) = true;
 
   Span span = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];

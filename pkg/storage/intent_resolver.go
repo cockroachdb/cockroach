@@ -406,10 +406,14 @@ func (ir *intentResolver) processWriteIntentError(
 	args roachpb.Request,
 	h roachpb.Header,
 	pushType roachpb.PushTxnType,
-) (func(newWIErr *roachpb.WriteIntentError, newIntentTxn *enginepb.TxnMeta), *roachpb.Error) {
+) (
+	func(newWIErr *roachpb.WriteIntentError, newIntentTxn *enginepb.TxnMeta),
+	*roachpb.TransactionKnowledge,
+	*roachpb.Error,
+) {
 	wiErr, ok := wiPErr.GetDetail().(*roachpb.WriteIntentError)
 	if !ok {
-		return nil, roachpb.NewErrorf("not a WriteIntentError: %v", wiPErr)
+		return nil, nil, roachpb.NewErrorf("not a WriteIntentError: %v", wiPErr)
 	}
 
 	if log.V(6) {
@@ -425,15 +429,15 @@ func (ir *intentResolver) processWriteIntentError(
 		// that this pusher is queued to wait for a different transaction
 		// instead.
 		if cleanup, wiErr, done = ir.contentionQ.add(ctx, wiErr, h); done {
-			return cleanup, nil
+			return cleanup, nil, nil
 		}
 	}
 
-	resolveIntents, pErr := ir.maybePushIntents(
+	resolveIntents, k, pErr := ir.maybePushIntents(
 		ctx, wiErr.Intents, h, pushType, false, /* skipIfInFlight */
 	)
 	if pErr != nil {
-		return cleanup, pErr
+		return cleanup, nil, pErr
 	}
 
 	// We always poison due to limitations of the API: not poisoning equals
@@ -448,10 +452,10 @@ func (ir *intentResolver) processWriteIntentError(
 	// poison.
 	if err := ir.resolveIntents(ctx, resolveIntents,
 		ResolveOptions{Wait: false, Poison: true}); err != nil {
-		return cleanup, roachpb.NewError(err)
+		return cleanup, nil, roachpb.NewError(err)
 	}
 
-	return cleanup, nil
+	return cleanup, k, nil
 }
 
 func getPusherTxn(h roachpb.Header) roachpb.Transaction {
@@ -498,7 +502,12 @@ func (ir *intentResolver) maybePushIntents(
 	h roachpb.Header,
 	pushType roachpb.PushTxnType,
 	skipIfInFlight bool,
-) ([]roachpb.Intent, *roachpb.Error) {
+) ([]roachpb.Intent, *roachpb.TransactionKnowledge, *roachpb.Error) {
+	var k *roachpb.TransactionKnowledge
+	if h.Txn != nil {
+		k = h.Txn.Knowledge
+	}
+
 	// Attempt to push the transaction(s) which created the conflicting intent(s).
 	pushTxns := make(map[uuid.UUID]enginepb.TxnMeta)
 	for _, intent := range intents {
@@ -507,14 +516,21 @@ func (ir *intentResolver) maybePushIntents(
 			// because the transaction is already finalized.
 			// This shouldn't happen as all intents created are in
 			// the PENDING status.
-			return nil, roachpb.NewErrorf("unexpected %s intent: %+v", intent.Status, intent)
+			return nil, nil, roachpb.NewErrorf("unexpected %s intent: %+v", intent.Status, intent)
+		}
+		if known, _ := k.KnownDisposition(intent.Txn.ID); known {
+			continue
 		}
 		pushTxns[intent.Txn.ID] = intent.Txn
 	}
 
-	pushedTxns, pErr := ir.maybePushTransactions(ctx, pushTxns, h, pushType, skipIfInFlight)
-	if pErr != nil {
-		return nil, pErr
+	var pushedTxns map[uuid.UUID]roachpb.Transaction
+	if len(pushTxns) > 0 {
+		var pErr *roachpb.Error
+		pushedTxns, pErr = ir.maybePushTransactions(ctx, pushTxns, h, pushType, skipIfInFlight)
+		if pErr != nil {
+			return nil, nil, pErr
+		}
 	}
 
 	var resolveIntents []roachpb.Intent
@@ -522,6 +538,12 @@ func (ir *intentResolver) maybePushIntents(
 		pushee, ok := pushedTxns[intent.Txn.ID]
 		if !ok {
 			// The intent was not pushed.
+			if known, knownStatus := k.KnownDisposition(intent.Txn.ID); known {
+				// We already knew about it.
+				knownStatus.Span = intent.Span
+				resolveIntents = append(resolveIntents, knownStatus)
+				continue
+			}
 			if !skipIfInFlight {
 				log.Fatalf(ctx, "no PushTxn response for intent %+v", intent)
 			}
@@ -531,8 +553,9 @@ func (ir *intentResolver) maybePushIntents(
 		intent.Txn = pushee.TxnMeta
 		intent.Status = pushee.Status
 		resolveIntents = append(resolveIntents, intent)
+		k = k.RememberDisposition(intent.Txn, intent.Status)
 	}
-	return resolveIntents, nil
+	return resolveIntents, k, nil
 }
 
 // maybePushTransactions is like maybePushIntents except it takes a set of
@@ -692,7 +715,7 @@ func (ir *intentResolver) cleanupIntents(
 	ctx context.Context, intents []roachpb.Intent, now hlc.Timestamp, pushType roachpb.PushTxnType,
 ) (int, error) {
 	h := roachpb.Header{Timestamp: now}
-	resolveIntents, pushErr := ir.maybePushIntents(
+	resolveIntents, _, pushErr := ir.maybePushIntents(
 		ctx, intents, h, pushType, true, /* skipIfInFlight */
 	)
 	if pushErr != nil {

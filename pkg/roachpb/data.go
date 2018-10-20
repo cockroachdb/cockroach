@@ -785,7 +785,7 @@ func (meta *TxnCoordMeta) StripLeafToRoot() *TxnCoordMeta {
 
 // LastActive returns the last timestamp at which client activity definitely
 // occurred, i.e. the maximum of OrigTimestamp and LastHeartbeat.
-func (t Transaction) LastActive() hlc.Timestamp {
+func (t *Transaction) LastActive() hlc.Timestamp {
 	ts := t.LastHeartbeat
 	if ts.Less(t.OrigTimestamp) {
 		ts = t.OrigTimestamp
@@ -815,6 +815,58 @@ func (t *Transaction) AssertInitialized(ctx context.Context) {
 		t.Timestamp == (hlc.Timestamp{}) {
 		log.Fatalf(ctx, "uninitialized txn: %s", t)
 	}
+}
+
+// Update merges the two TransactionKnowledge structs.
+func (tk *TransactionKnowledge) Update(o *TransactionKnowledge) *TransactionKnowledge {
+	if o != nil {
+		if tk == nil || o.Epoch > tk.Epoch {
+			return o
+		}
+	}
+	return tk
+}
+
+// KnownDisposition returns whether the disposition of the specified
+// transaction is known to this transaction. If so, the other transaction's
+// status is returned. The status will always be authoritative, so it will
+// never be PENDING.
+func (tk *TransactionKnowledge) KnownDisposition(otherID uuid.UUID) (bool, Intent) {
+	if tk == nil {
+		return false, Intent{}
+	}
+	for _, other := range tk.KnownDispositions {
+		if other.Txn.ID == otherID {
+			return true, other
+		}
+	}
+	return false, Intent{}
+}
+
+// RememberDisposition remembers the state of the provided transaction.
+func (tk *TransactionKnowledge) RememberDisposition(
+	meta enginepb.TxnMeta, status TransactionStatus,
+) *TransactionKnowledge {
+	if status == PENDING {
+		// Don't remember anything about pending Txns.
+		return tk
+	}
+
+	if tk == nil {
+		tk = new(TransactionKnowledge)
+	} else {
+		tk.Epoch++
+	}
+
+	state := Intent{Txn: meta, Status: status}
+	const maxKnowledge = 4
+	if l := len(tk.KnownDispositions); l < maxKnowledge {
+		tk.KnownDispositions = append(tk.KnownDispositions, state)
+	} else {
+		copy(tk.KnownDispositions[1:], tk.KnownDispositions[:l-1])
+		tk.KnownDispositions[l-1] = state
+	}
+	return tk
 }
 
 // MakePriority generates a random priority value, biased by the specified
@@ -1016,6 +1068,9 @@ func (t *Transaction) Update(o *Transaction) {
 			t.EpochZeroTimestamp = o.EpochZeroTimestamp
 		}
 	}
+
+	// Update knowledge about other transactions.
+	t.Knowledge = t.Knowledge.Update(o.Knowledge)
 }
 
 // UpgradePriority sets transaction priority to the maximum of current

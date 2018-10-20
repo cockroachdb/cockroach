@@ -3089,7 +3089,8 @@ func (s *Store) Send(
 				if cleanupAfterWriteIntentError != nil {
 					cleanupAfterWriteIntentError(t, nil)
 				}
-				if cleanupAfterWriteIntentError, pErr =
+				var tk *roachpb.TransactionKnowledge
+				if cleanupAfterWriteIntentError, tk, pErr =
 					s.intentResolver.processWriteIntentError(ctx, pErr, args, h, pushType); pErr != nil {
 					// Do not propagate ambiguous results; assume success and retry original op.
 					if _, ok := pErr.GetDetail().(*roachpb.AmbiguousResultError); !ok {
@@ -3099,7 +3100,12 @@ func (s *Store) Send(
 					}
 					pErr = nil
 				}
-				// We've resolved the write intent; retry command.
+
+				if tk != nil {
+					shallowTxn := *ba.Txn
+					shallowTxn.Knowledge = shallowTxn.Knowledge.Update(tk)
+					ba.Txn = &shallowTxn
+				}
 			}
 
 		case *roachpb.MergeInProgressError:

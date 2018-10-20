@@ -42,7 +42,7 @@ namespace protobuf_roachpb_2fdata_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[16];
+  static const ::google::protobuf::internal::ParseTable schema[17];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -92,6 +92,9 @@ extern StoreIdentDefaultTypeInternal _StoreIdent_default_instance_;
 class Transaction;
 class TransactionDefaultTypeInternal;
 extern TransactionDefaultTypeInternal _Transaction_default_instance_;
+class TransactionKnowledge;
+class TransactionKnowledgeDefaultTypeInternal;
+extern TransactionKnowledgeDefaultTypeInternal _TransactionKnowledge_default_instance_;
 class TxnCoordMeta;
 class TxnCoordMetaDefaultTypeInternal;
 extern TxnCoordMetaDefaultTypeInternal _TxnCoordMeta_default_instance_;
@@ -116,6 +119,7 @@ template<> ::cockroach::roachpb::Span* Arena::CreateMaybeMessage<::cockroach::ro
 template<> ::cockroach::roachpb::SplitTrigger* Arena::CreateMaybeMessage<::cockroach::roachpb::SplitTrigger>(Arena*);
 template<> ::cockroach::roachpb::StoreIdent* Arena::CreateMaybeMessage<::cockroach::roachpb::StoreIdent>(Arena*);
 template<> ::cockroach::roachpb::Transaction* Arena::CreateMaybeMessage<::cockroach::roachpb::Transaction>(Arena*);
+template<> ::cockroach::roachpb::TransactionKnowledge* Arena::CreateMaybeMessage<::cockroach::roachpb::TransactionKnowledge>(Arena*);
 template<> ::cockroach::roachpb::TxnCoordMeta* Arena::CreateMaybeMessage<::cockroach::roachpb::TxnCoordMeta>(Arena*);
 template<> ::cockroach::roachpb::Value* Arena::CreateMaybeMessage<::cockroach::roachpb::Value>(Arena*);
 }  // namespace protobuf
@@ -1602,6 +1606,18 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::util::hlc::Timestamp* mutable_refreshed_timestamp();
   void set_allocated_refreshed_timestamp(::cockroach::util::hlc::Timestamp* refreshed_timestamp);
 
+  // .cockroach.roachpb.TransactionKnowledge knowledge = 17;
+  bool has_knowledge() const;
+  void clear_knowledge();
+  static const int kKnowledgeFieldNumber = 17;
+  private:
+  const ::cockroach::roachpb::TransactionKnowledge& _internal_knowledge() const;
+  public:
+  const ::cockroach::roachpb::TransactionKnowledge& knowledge() const;
+  ::cockroach::roachpb::TransactionKnowledge* release_knowledge();
+  ::cockroach::roachpb::TransactionKnowledge* mutable_knowledge();
+  void set_allocated_knowledge(::cockroach::roachpb::TransactionKnowledge* knowledge);
+
   // .cockroach.roachpb.TransactionStatus status = 4;
   void clear_status();
   static const int kStatusFieldNumber = 4;
@@ -1645,11 +1661,125 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   ::cockroach::util::hlc::Timestamp* max_timestamp_;
   ::cockroach::util::hlc::Timestamp* epoch_zero_timestamp_;
   ::cockroach::util::hlc::Timestamp* refreshed_timestamp_;
+  ::cockroach::roachpb::TransactionKnowledge* knowledge_;
   int status_;
   bool writing_;
   bool write_too_old_;
   bool retry_on_push_;
   bool orig_timestamp_was_observed_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class TransactionKnowledge : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.roachpb.TransactionKnowledge) */ {
+ public:
+  TransactionKnowledge();
+  virtual ~TransactionKnowledge();
+
+  TransactionKnowledge(const TransactionKnowledge& from);
+
+  inline TransactionKnowledge& operator=(const TransactionKnowledge& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  TransactionKnowledge(TransactionKnowledge&& from) noexcept
+    : TransactionKnowledge() {
+    *this = ::std::move(from);
+  }
+
+  inline TransactionKnowledge& operator=(TransactionKnowledge&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const TransactionKnowledge& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const TransactionKnowledge* internal_default_instance() {
+    return reinterpret_cast<const TransactionKnowledge*>(
+               &_TransactionKnowledge_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    11;
+
+  void Swap(TransactionKnowledge* other);
+  friend void swap(TransactionKnowledge& a, TransactionKnowledge& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline TransactionKnowledge* New() const final {
+    return CreateMaybeMessage<TransactionKnowledge>(NULL);
+  }
+
+  TransactionKnowledge* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<TransactionKnowledge>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const TransactionKnowledge& from);
+  void MergeFrom(const TransactionKnowledge& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(TransactionKnowledge* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  int known_dispositions_size() const;
+  void clear_known_dispositions();
+  static const int kKnownDispositionsFieldNumber = 2;
+  ::cockroach::roachpb::Intent* mutable_known_dispositions(int index);
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Intent >*
+      mutable_known_dispositions();
+  const ::cockroach::roachpb::Intent& known_dispositions(int index) const;
+  ::cockroach::roachpb::Intent* add_known_dispositions();
+  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Intent >&
+      known_dispositions() const;
+
+  // int32 epoch = 1;
+  void clear_epoch();
+  static const int kEpochFieldNumber = 1;
+  ::google::protobuf::int32 epoch() const;
+  void set_epoch(::google::protobuf::int32 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.roachpb.TransactionKnowledge)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Intent > known_dispositions_;
+  ::google::protobuf::int32 epoch_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_roachpb_2fdata_2eproto::TableStruct;
 };
@@ -1689,7 +1819,7 @@ class Intent : public ::google::protobuf::MessageLite /* @@protoc_insertion_poin
                &_Intent_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    11;
+    12;
 
   void Swap(Intent* other);
   friend void swap(Intent& a, Intent& b) {
@@ -1814,7 +1944,7 @@ class SequencedWrite : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_SequencedWrite_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    12;
+    13;
 
   void Swap(SequencedWrite* other);
   friend void swap(SequencedWrite& a, SequencedWrite& b) {
@@ -1929,7 +2059,7 @@ class Lease : public ::google::protobuf::MessageLite /* @@protoc_insertion_point
                &_Lease_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    13;
+    14;
 
   void Swap(Lease* other);
   friend void swap(Lease& a, Lease& b) {
@@ -2096,7 +2226,7 @@ class AbortSpanEntry : public ::google::protobuf::MessageLite /* @@protoc_insert
                &_AbortSpanEntry_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    14;
+    15;
 
   void Swap(AbortSpanEntry* other);
   friend void swap(AbortSpanEntry& a, AbortSpanEntry& b) {
@@ -2223,7 +2353,7 @@ class TxnCoordMeta : public ::google::protobuf::MessageLite /* @@protoc_insertio
                &_TxnCoordMeta_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    15;
+    16;
 
   void Swap(TxnCoordMeta* other);
   friend void swap(TxnCoordMeta& a, TxnCoordMeta& b) {
@@ -3989,6 +4119,107 @@ inline void Transaction::set_orig_timestamp_was_observed(bool value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.orig_timestamp_was_observed)
 }
 
+// .cockroach.roachpb.TransactionKnowledge knowledge = 17;
+inline bool Transaction::has_knowledge() const {
+  return this != internal_default_instance() && knowledge_ != NULL;
+}
+inline void Transaction::clear_knowledge() {
+  if (GetArenaNoVirtual() == NULL && knowledge_ != NULL) {
+    delete knowledge_;
+  }
+  knowledge_ = NULL;
+}
+inline const ::cockroach::roachpb::TransactionKnowledge& Transaction::_internal_knowledge() const {
+  return *knowledge_;
+}
+inline const ::cockroach::roachpb::TransactionKnowledge& Transaction::knowledge() const {
+  const ::cockroach::roachpb::TransactionKnowledge* p = knowledge_;
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.knowledge)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::roachpb::TransactionKnowledge*>(
+      &::cockroach::roachpb::_TransactionKnowledge_default_instance_);
+}
+inline ::cockroach::roachpb::TransactionKnowledge* Transaction::release_knowledge() {
+  // @@protoc_insertion_point(field_release:cockroach.roachpb.Transaction.knowledge)
+  
+  ::cockroach::roachpb::TransactionKnowledge* temp = knowledge_;
+  knowledge_ = NULL;
+  return temp;
+}
+inline ::cockroach::roachpb::TransactionKnowledge* Transaction::mutable_knowledge() {
+  
+  if (knowledge_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::roachpb::TransactionKnowledge>(GetArenaNoVirtual());
+    knowledge_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.knowledge)
+  return knowledge_;
+}
+inline void Transaction::set_allocated_knowledge(::cockroach::roachpb::TransactionKnowledge* knowledge) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete knowledge_;
+  }
+  if (knowledge) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      knowledge = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, knowledge, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  knowledge_ = knowledge;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.Transaction.knowledge)
+}
+
+// -------------------------------------------------------------------
+
+// TransactionKnowledge
+
+// int32 epoch = 1;
+inline void TransactionKnowledge::clear_epoch() {
+  epoch_ = 0;
+}
+inline ::google::protobuf::int32 TransactionKnowledge::epoch() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionKnowledge.epoch)
+  return epoch_;
+}
+inline void TransactionKnowledge::set_epoch(::google::protobuf::int32 value) {
+  
+  epoch_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.TransactionKnowledge.epoch)
+}
+
+inline int TransactionKnowledge::known_dispositions_size() const {
+  return known_dispositions_.size();
+}
+inline void TransactionKnowledge::clear_known_dispositions() {
+  known_dispositions_.Clear();
+}
+inline ::cockroach::roachpb::Intent* TransactionKnowledge::mutable_known_dispositions(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TransactionKnowledge.known_dispositions)
+  return known_dispositions_.Mutable(index);
+}
+inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Intent >*
+TransactionKnowledge::mutable_known_dispositions() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.TransactionKnowledge.known_dispositions)
+  return &known_dispositions_;
+}
+inline const ::cockroach::roachpb::Intent& TransactionKnowledge::known_dispositions(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionKnowledge.known_dispositions)
+  return known_dispositions_.Get(index);
+}
+inline ::cockroach::roachpb::Intent* TransactionKnowledge::add_known_dispositions() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.TransactionKnowledge.known_dispositions)
+  return known_dispositions_.Add();
+}
+inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Intent >&
+TransactionKnowledge::known_dispositions() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.TransactionKnowledge.known_dispositions)
+  return known_dispositions_;
+}
+
 // -------------------------------------------------------------------
 
 // Intent
@@ -4778,6 +5009,8 @@ TxnCoordMeta::outstanding_writes() const {
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

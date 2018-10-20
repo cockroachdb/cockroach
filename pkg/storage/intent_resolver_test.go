@@ -47,7 +47,7 @@ func TestPushTransactionsWithNonPendingIntent(t *testing.T) {
 			{Span: roachpb.Span{Key: roachpb.Key("b")}, Status: roachpb.COMMITTED}},
 	}
 	for _, intents := range testCases {
-		if _, pErr := tc.store.intentResolver.maybePushIntents(
+		if _, _, pErr := tc.store.intentResolver.maybePushIntents(
 			context.Background(), intents, roachpb.Header{}, roachpb.PUSH_TOUCH, true,
 		); !testutils.IsPError(pErr, "unexpected (ABORTED|COMMITTED) intent") {
 			t.Errorf("expected error on aborted/resolved intent, but got %s", pErr)
@@ -126,7 +126,7 @@ func TestContendedIntent(t *testing.T) {
 			h := roachpb.Header{Txn: tc.pusher}
 			wg.Add(1)
 			go func() {
-				_, pErr := ir.processWriteIntentError(ctx, roachpb.NewError(wiErr), nil, h, roachpb.PUSH_ABORT)
+				_, _, pErr := ir.processWriteIntentError(ctx, roachpb.NewError(wiErr), nil, h, roachpb.PUSH_ABORT)
 				if pErr != nil && !testutils.IsPError(pErr, "context canceled") {
 					panic(pErr)
 				}

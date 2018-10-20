@@ -23,9 +23,11 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protob
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ModifiedSpanTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ObservedTimestamp;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_SplitTrigger;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_TransactionKnowledge;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_Value;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_Intent;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_MergeTrigger;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_Transaction;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<5> scc_info_Transaction;
 }  // namespace protobuf_roachpb_2fdata_2eproto
 namespace protobuf_roachpb_2fmetadata_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ReplicaDescriptor;
@@ -97,6 +99,11 @@ class TransactionDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<Transaction>
       _instance;
 } _Transaction_default_instance_;
+class TransactionKnowledgeDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<TransactionKnowledge>
+      _instance;
+} _TransactionKnowledge_default_instance_;
 class IntentDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<Intent>
@@ -289,12 +296,28 @@ static void InitDefaultsTransaction() {
   ::cockroach::roachpb::Transaction::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<4> scc_info_Transaction =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 4, InitDefaultsTransaction}, {
+::google::protobuf::internal::SCCInfo<5> scc_info_Transaction =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 5, InitDefaultsTransaction}, {
       &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,
       &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,
       &protobuf_roachpb_2fdata_2eproto::scc_info_ObservedTimestamp.base,
-      &protobuf_roachpb_2fdata_2eproto::scc_info_Span.base,}};
+      &protobuf_roachpb_2fdata_2eproto::scc_info_Span.base,
+      &protobuf_roachpb_2fdata_2eproto::scc_info_TransactionKnowledge.base,}};
+
+static void InitDefaultsTransactionKnowledge() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::roachpb::_TransactionKnowledge_default_instance_;
+    new (ptr) ::cockroach::roachpb::TransactionKnowledge();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::roachpb::TransactionKnowledge::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<1> scc_info_TransactionKnowledge =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsTransactionKnowledge}, {
+      &protobuf_roachpb_2fdata_2eproto::scc_info_Intent.base,}};
 
 static void InitDefaultsIntent() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -386,6 +409,7 @@ void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_InternalCommitTrigger.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ObservedTimestamp.base);
   ::google::protobuf::internal::InitSCC(&scc_info_Transaction.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_TransactionKnowledge.base);
   ::google::protobuf::internal::InitSCC(&scc_info_Intent.base);
   ::google::protobuf::internal::InitSCC(&scc_info_SequencedWrite.base);
   ::google::protobuf::internal::InitSCC(&scc_info_Lease.base);
@@ -3009,6 +3033,8 @@ void Transaction::InitAsDefaultInstance() {
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
   ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->epoch_zero_timestamp_ = const_cast< ::cockroach::util::hlc::Timestamp*>(
       ::cockroach::util::hlc::Timestamp::internal_default_instance());
+  ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->knowledge_ = const_cast< ::cockroach::roachpb::TransactionKnowledge*>(
+      ::cockroach::roachpb::TransactionKnowledge::internal_default_instance());
 }
 void Transaction::clear_meta() {
   if (GetArenaNoVirtual() == NULL && meta_ != NULL) {
@@ -3061,6 +3087,7 @@ const int Transaction::kRetryOnPushFieldNumber;
 const int Transaction::kIntentsFieldNumber;
 const int Transaction::kEpochZeroTimestampFieldNumber;
 const int Transaction::kOrigTimestampWasObservedFieldNumber;
+const int Transaction::kKnowledgeFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 Transaction::Transaction()
@@ -3110,6 +3137,11 @@ Transaction::Transaction(const Transaction& from)
   } else {
     refreshed_timestamp_ = NULL;
   }
+  if (from.has_knowledge()) {
+    knowledge_ = new ::cockroach::roachpb::TransactionKnowledge(*from.knowledge_);
+  } else {
+    knowledge_ = NULL;
+  }
   ::memcpy(&status_, &from.status_,
     static_cast<size_t>(reinterpret_cast<char*>(&orig_timestamp_was_observed_) -
     reinterpret_cast<char*>(&status_)) + sizeof(orig_timestamp_was_observed_));
@@ -3136,6 +3168,7 @@ void Transaction::SharedDtor() {
   if (this != internal_default_instance()) delete max_timestamp_;
   if (this != internal_default_instance()) delete epoch_zero_timestamp_;
   if (this != internal_default_instance()) delete refreshed_timestamp_;
+  if (this != internal_default_instance()) delete knowledge_;
 }
 
 void Transaction::SetCachedSize(int size) const {
@@ -3180,6 +3213,10 @@ void Transaction::Clear() {
     delete refreshed_timestamp_;
   }
   refreshed_timestamp_ = NULL;
+  if (GetArenaNoVirtual() == NULL && knowledge_ != NULL) {
+    delete knowledge_;
+  }
+  knowledge_ = NULL;
   ::memset(&status_, 0, static_cast<size_t>(
       reinterpret_cast<char*>(&orig_timestamp_was_observed_) -
       reinterpret_cast<char*>(&status_)) + sizeof(orig_timestamp_was_observed_));
@@ -3377,6 +3414,18 @@ bool Transaction::MergePartialFromCodedStream(
         break;
       }
 
+      // .cockroach.roachpb.TransactionKnowledge knowledge = 17;
+      case 17: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(138u /* 138 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_knowledge()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -3485,6 +3534,12 @@ void Transaction::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(16, this->orig_timestamp_was_observed(), output);
   }
 
+  // .cockroach.roachpb.TransactionKnowledge knowledge = 17;
+  if (this->has_knowledge()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      17, this->_internal_knowledge(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.Transaction)
@@ -3559,6 +3614,13 @@ size_t Transaction::ByteSizeLong() const {
         *refreshed_timestamp_);
   }
 
+  // .cockroach.roachpb.TransactionKnowledge knowledge = 17;
+  if (this->has_knowledge()) {
+    total_size += 2 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *knowledge_);
+  }
+
   // .cockroach.roachpb.TransactionStatus status = 4;
   if (this->status() != 0) {
     total_size += 1 +
@@ -3626,6 +3688,9 @@ void Transaction::MergeFrom(const Transaction& from) {
   if (from.has_refreshed_timestamp()) {
     mutable_refreshed_timestamp()->::cockroach::util::hlc::Timestamp::MergeFrom(from.refreshed_timestamp());
   }
+  if (from.has_knowledge()) {
+    mutable_knowledge()->::cockroach::roachpb::TransactionKnowledge::MergeFrom(from.knowledge());
+  }
   if (from.status() != 0) {
     set_status(from.status());
   }
@@ -3670,6 +3735,7 @@ void Transaction::InternalSwap(Transaction* other) {
   swap(max_timestamp_, other->max_timestamp_);
   swap(epoch_zero_timestamp_, other->epoch_zero_timestamp_);
   swap(refreshed_timestamp_, other->refreshed_timestamp_);
+  swap(knowledge_, other->knowledge_);
   swap(status_, other->status_);
   swap(writing_, other->writing_);
   swap(write_too_old_, other->write_too_old_);
@@ -3680,6 +3746,221 @@ void Transaction::InternalSwap(Transaction* other) {
 
 ::std::string Transaction::GetTypeName() const {
   return "cockroach.roachpb.Transaction";
+}
+
+
+// ===================================================================
+
+void TransactionKnowledge::InitAsDefaultInstance() {
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int TransactionKnowledge::kEpochFieldNumber;
+const int TransactionKnowledge::kKnownDispositionsFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+TransactionKnowledge::TransactionKnowledge()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_roachpb_2fdata_2eproto::scc_info_TransactionKnowledge.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.roachpb.TransactionKnowledge)
+}
+TransactionKnowledge::TransactionKnowledge(const TransactionKnowledge& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL),
+      known_dispositions_(from.known_dispositions_) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  epoch_ = from.epoch_;
+  // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.TransactionKnowledge)
+}
+
+void TransactionKnowledge::SharedCtor() {
+  epoch_ = 0;
+}
+
+TransactionKnowledge::~TransactionKnowledge() {
+  // @@protoc_insertion_point(destructor:cockroach.roachpb.TransactionKnowledge)
+  SharedDtor();
+}
+
+void TransactionKnowledge::SharedDtor() {
+}
+
+void TransactionKnowledge::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const TransactionKnowledge& TransactionKnowledge::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_roachpb_2fdata_2eproto::scc_info_TransactionKnowledge.base);
+  return *internal_default_instance();
+}
+
+
+void TransactionKnowledge::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.roachpb.TransactionKnowledge)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  known_dispositions_.Clear();
+  epoch_ = 0;
+  _internal_metadata_.Clear();
+}
+
+bool TransactionKnowledge::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.roachpb.TransactionKnowledge)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // int32 epoch = 1;
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(8u /* 8 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
+                 input, &epoch_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+                input, add_known_dispositions()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.roachpb.TransactionKnowledge)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.roachpb.TransactionKnowledge)
+  return false;
+#undef DO_
+}
+
+void TransactionKnowledge::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.roachpb.TransactionKnowledge)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // int32 epoch = 1;
+  if (this->epoch() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(1, this->epoch(), output);
+  }
+
+  for (unsigned int i = 0,
+      n = static_cast<unsigned int>(this->known_dispositions_size()); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      2,
+      this->known_dispositions(static_cast<int>(i)),
+      output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.roachpb.TransactionKnowledge)
+}
+
+size_t TransactionKnowledge::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.roachpb.TransactionKnowledge)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  {
+    unsigned int count = static_cast<unsigned int>(this->known_dispositions_size());
+    total_size += 1UL * count;
+    for (unsigned int i = 0; i < count; i++) {
+      total_size +=
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          this->known_dispositions(static_cast<int>(i)));
+    }
+  }
+
+  // int32 epoch = 1;
+  if (this->epoch() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int32Size(
+        this->epoch());
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void TransactionKnowledge::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const TransactionKnowledge*>(&from));
+}
+
+void TransactionKnowledge::MergeFrom(const TransactionKnowledge& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.roachpb.TransactionKnowledge)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  known_dispositions_.MergeFrom(from.known_dispositions_);
+  if (from.epoch() != 0) {
+    set_epoch(from.epoch());
+  }
+}
+
+void TransactionKnowledge::CopyFrom(const TransactionKnowledge& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.roachpb.TransactionKnowledge)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool TransactionKnowledge::IsInitialized() const {
+  return true;
+}
+
+void TransactionKnowledge::Swap(TransactionKnowledge* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void TransactionKnowledge::InternalSwap(TransactionKnowledge* other) {
+  using std::swap;
+  CastToBase(&known_dispositions_)->InternalSwap(CastToBase(&other->known_dispositions_));
+  swap(epoch_, other->epoch_);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string TransactionKnowledge::GetTypeName() const {
+  return "cockroach.roachpb.TransactionKnowledge";
 }
 
 
@@ -5329,6 +5610,9 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::ObservedTime
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::Transaction* Arena::CreateMaybeMessage< ::cockroach::roachpb::Transaction >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::Transaction >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::TransactionKnowledge* Arena::CreateMaybeMessage< ::cockroach::roachpb::TransactionKnowledge >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::TransactionKnowledge >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::Intent* Arena::CreateMaybeMessage< ::cockroach::roachpb::Intent >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::Intent >(arena);

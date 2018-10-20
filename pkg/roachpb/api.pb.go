@@ -127,6 +127,7 @@
 		InternalCommitTrigger
 		ObservedTimestamp
 		Transaction
+		TransactionKnowledge
 		Intent
 		SequencedWrite
 		Lease

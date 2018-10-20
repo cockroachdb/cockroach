@@ -1225,9 +1225,36 @@ func mvccPutInternal(
 		if meta.Txn != nil {
 			// There is an uncommitted write intent.
 			if txn == nil || meta.Txn.ID != txn.ID {
-				// The current Put operation does not come from the same
-				// transaction.
-				return &roachpb.WriteIntentError{Intents: []roachpb.Intent{{Span: roachpb.Span{Key: key}, Status: roachpb.PENDING, Txn: *meta.Txn}}}
+				// The current intent does not come from the same transaction.
+				intent := roachpb.Intent{
+					Span:   roachpb.Span{Key: key},
+					Status: roachpb.PENDING,
+					Txn:    *meta.Txn,
+				}
+
+				// Check if we know the status of this intent's transaction. If
+				// we do, we may be able to resolve the intent immediately
+				// without needing to go through the intent resolution process.
+				// If not, we return a WriteIntentError.
+				known := false
+				if txn != nil {
+					var knownTxn roachpb.Intent
+					if known, knownTxn = txn.Knowledge.KnownDisposition(intent.Txn.ID); known {
+						intent.Status = knownTxn.Status
+						intent.Txn = knownTxn.Txn
+					}
+				}
+				if !known {
+					return &roachpb.WriteIntentError{Intents: []roachpb.Intent{intent}}
+				}
+
+				found, err := mvccResolveWriteIntent(ctx, engine, iter, ms, intent, buf, false /* forRange */)
+				if err != nil {
+					return errors.Wrapf(err, "resolving intent for known %v txn", intent.Status)
+				}
+				if !found {
+					log.Fatalf(ctx, "could not resolve intent that was previous present: %v", intent)
+				}
 			} else if txn.Epoch < meta.Txn.Epoch {
 				return errors.Errorf("put with epoch %d came after put with epoch %d in txn %s",
 					txn.Epoch, meta.Txn.Epoch, txn.ID)
@@ -1238,47 +1265,48 @@ func mvccPutInternal(
 				// Replay error if we encounter an older sequence number or
 				// the same (or earlier) batch index for the same sequence.
 				return roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
-			}
-			// Make sure we process valueFn before clearing any earlier
-			// version.  For example, a conditional put within same
-			// transaction should read previous write.
-			if value, err = maybeGetValue(
-				ctx, iter, metaKey, value, ok, timestamp, txn, buf, valueFn); err != nil {
-				return err
-			}
-			// We are replacing our own write intent. If we are writing at
-			// the same timestamp (see comments in else block) we can
-			// overwrite the existing intent; otherwise we must manually
-			// delete the old intent, taking care with MVCC stats.
-			logicalOp = MVCCUpdateIntentOpType
-			if metaTimestamp.Less(timestamp) {
-				{
-					// If the older write intent has a version underneath it, we need to
-					// read its size because its GCBytesAge contribution may change as we
-					// move the intent above it. A similar phenomenon occurs in
-					// MVCCResolveWriteIntent.
-					latestKey := MVCCKey{Key: key, Timestamp: metaTimestamp}
-					_, prevVal, haveNextVersion, err := unsafeNextVersion(iter, latestKey)
-					if err != nil {
-						return err
-					}
-					if haveNextVersion {
-						prevValSize = int64(len(prevVal))
-					}
-				}
-
-				versionKey := metaKey
-				versionKey.Timestamp = metaTimestamp
-				if err := engine.Clear(versionKey); err != nil {
+			} else {
+				// Make sure we process valueFn before clearing any earlier
+				// version.  For example, a conditional put within same
+				// transaction should read previous write.
+				if value, err = maybeGetValue(
+					ctx, iter, metaKey, value, ok, timestamp, txn, buf, valueFn); err != nil {
 					return err
 				}
-			} else if timestamp.Less(metaTimestamp) {
-				// This case occurs when we're writing a key twice within a
-				// txn, and our timestamp has been pushed forward because of
-				// a write-too-old error on this key. For this case, we want
-				// to continue writing at the higher timestamp or else the
-				// MVCCMetadata could end up pointing *under* the newer write.
-				timestamp = metaTimestamp
+				// We are replacing our own write intent. If we are writing at
+				// the same timestamp (see comments in else block) we can
+				// overwrite the existing intent; otherwise we must manually
+				// delete the old intent, taking care with MVCC stats.
+				logicalOp = MVCCUpdateIntentOpType
+				if metaTimestamp.Less(timestamp) {
+					{
+						// If the older write intent has a version underneath it, we need to
+						// read its size because its GCBytesAge contribution may change as we
+						// move the intent above it. A similar phenomenon occurs in
+						// MVCCResolveWriteIntent.
+						latestKey := MVCCKey{Key: key, Timestamp: metaTimestamp}
+						_, prevVal, haveNextVersion, err := unsafeNextVersion(iter, latestKey)
+						if err != nil {
+							return err
+						}
+						if haveNextVersion {
+							prevValSize = int64(len(prevVal))
+						}
+					}
+
+					versionKey := metaKey
+					versionKey.Timestamp = metaTimestamp
+					if err := engine.Clear(versionKey); err != nil {
+						return err
+					}
+				} else if timestamp.Less(metaTimestamp) {
+					// This case occurs when we're writing a key twice within a
+					// txn, and our timestamp has been pushed forward because of
+					// a write-too-old error on this key. For this case, we want
+					// to continue writing at the higher timestamp or else the
+					// MVCCMetadata could end up pointing *under* the newer write.
+					timestamp = metaTimestamp
+				}
 			}
 		} else if !metaTimestamp.Less(timestamp) {
 			// This is the case where we're trying to write under a
