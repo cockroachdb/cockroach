@@ -1255,12 +1255,17 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 					t.Fatalf("raft leader should be node 0, but got status %+v", status)
 				}
 
-				// Check raft log size.
+				// Check the raft log size. We allow GetRaftLogSize to grow up
+				// to twice RaftMaxUncommittedEntriesSize because its total
+				// includes a little more state (the roachpb.Value checksum,
+				// etc.). The important thing here is that the log doesn't grow
+				// forever.
+				logSizeLimit := int64(2 * sc.RaftMaxUncommittedEntriesSize)
 				curlogSize := leaderRepl.GetRaftLogSize()
 				logSize := curlogSize - initLogSize
 				logSizeStr := humanizeutil.IBytes(logSize)
 				// Note that logSize could be negative if something got truncated.
-				if logSize > int64(sc.RaftMaxUncommittedEntriesSize) {
+				if logSize > logSizeLimit {
 					t.Fatalf("raft log size grew to %s", logSizeStr)
 				}
 				t.Logf("raft log size grew to %s", logSizeStr)
