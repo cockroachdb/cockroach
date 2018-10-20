@@ -231,6 +231,12 @@ func (s *sqlStats) resetStats(ctx context.Context) {
 	s.Unlock()
 }
 
+func (s *sqlStats) getLastReset() time.Time {
+	s.Lock()
+	defer s.Unlock()
+	return s.lastReset
+}
+
 // Save the existing data for an application to the info log.
 func dumpStmtStats(ctx context.Context, appName string, stats map[stmtKey]*stmtStats) {
 	if len(stats) == 0 {
