@@ -2127,7 +2127,7 @@ func MVCCResolveWriteIntent(
 // uses iterator and buffer passed as parameters (e.g. when used in a loop).
 func MVCCResolveWriteIntentUsingIter(
 	ctx context.Context,
-	engine ReadWriter,
+	engine Writer,
 	iterAndBuf IterAndBuf,
 	ms *enginepb.MVCCStats,
 	intent roachpb.Intent,
@@ -2169,7 +2169,7 @@ func unsafeNextVersion(iter Iterator, latestKey MVCCKey) (MVCCKey, []byte, bool,
 // Returns whether an intent was found and resolved, false otherwise.
 func mvccResolveWriteIntent(
 	ctx context.Context,
-	engine ReadWriter,
+	engine Writer,
 	iter Iterator,
 	ms *enginepb.MVCCStats,
 	intent roachpb.Intent,
@@ -2217,7 +2217,7 @@ func mvccResolveWriteIntent(
 			v, _, _, err := mvccGetInternal(ctx, iter, metaKey,
 				intent.Txn.Timestamp, false, unsafeValue, nil, gbuf)
 			if err != nil {
-				log.Warningf(ctx, "unable to find value for %s @ %s: %v ",
+				log.Warningf(ctx, "unable to find value for %s @ %s: %v",
 					intent.Key, intent.Txn.Timestamp, err)
 			} else if v == nil {
 				// This should never happen as ok is true above.
@@ -2337,11 +2337,17 @@ func mvccResolveWriteIntent(
 		if hlc.Timestamp(meta.Timestamp) != intent.Txn.Timestamp {
 			origKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}
 			newKey := MVCCKey{Key: intent.Key, Timestamp: intent.Txn.Timestamp}
-			valBytes, err := engine.Get(origKey)
-			if err != nil {
-				return false, err
+
+			iter.Seek(origKey)
+			if ok, err := iter.Valid(); err != nil {
+				return false, errors.Errorf("unable to find value for %s @ %s to move to %s: %v",
+					intent.Key, meta.Timestamp, intent.Txn.Timestamp, err)
+			} else if !ok || !iter.UnsafeKey().Key.Equal(origKey.Key) {
+				return false, errors.Errorf("unable to find value for %s @ %s to move to %s",
+					intent.Key, meta.Timestamp, intent.Txn.Timestamp)
 			}
-			if err = engine.Put(newKey, valBytes); err != nil {
+
+			if err = engine.Put(newKey, iter.UnsafeValue()); err != nil {
 				return false, err
 			}
 			if err = engine.Clear(origKey); err != nil {
@@ -2483,7 +2489,7 @@ func MVCCResolveWriteIntentRange(
 // the max keys limit was exceeded.
 func MVCCResolveWriteIntentRangeUsingIter(
 	ctx context.Context,
-	engine ReadWriter,
+	engine Writer,
 	iterAndBuf IterAndBuf,
 	ms *enginepb.MVCCStats,
 	intent roachpb.Intent,
