@@ -43,6 +43,28 @@ func (row ZoneRow) sqlRowString() ([]string, error) {
 	}, nil
 }
 
+// GetDatabaseID fetches the ID of a database.
+func GetDatabaseID(t testing.TB, sqlDB *SQLRunner, database string) uint32 {
+	t.Helper()
+	tableIDQuery := `SELECT dbs.id FROM system.namespace dbs WHERE dbs.name = $1`
+	var dbID uint32
+	sqlDB.QueryRow(t, tableIDQuery, database).Scan(&dbID)
+	return dbID
+}
+
+// GetTableID fetches the table ID of the given table.
+func GetTableID(t testing.TB, sqlDB *SQLRunner, database string, table string) uint32 {
+	t.Helper()
+	tableIDQuery := `
+SELECT tables.id FROM system.namespace tables
+  JOIN system.namespace dbs ON dbs.id = tables."parentID"
+  WHERE dbs.name = $1 AND tables.name = $2
+`
+	var tableID uint32
+	sqlDB.QueryRow(t, tableIDQuery, database, table).Scan(&tableID)
+	return tableID
+}
+
 // RemoveAllZoneConfigs removes all installed zone configs.
 func RemoveAllZoneConfigs(t testing.TB, sqlDB *SQLRunner) {
 	t.Helper()

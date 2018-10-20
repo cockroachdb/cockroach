@@ -50,8 +50,6 @@ func TestValidIndexPartitionSetShowZones(t *testing.T) {
 	partialZoneOverride := *config.NewZoneConfig()
 	partialZoneOverride.GC = &config.GCPolicy{TTLSeconds: 42}
 
-	dbDescID := uint32(keys.MinNonPredefinedUserDescID)
-
 	defaultRow := sqlutils.ZoneRow{
 		ID:           keys.RootNamespaceID,
 		CLISpecifier: ".default",
@@ -63,54 +61,54 @@ func TestValidIndexPartitionSetShowZones(t *testing.T) {
 		Config:       zoneOverride,
 	}
 	dbRow := sqlutils.ZoneRow{
-		ID:           dbDescID,
+		ID:           sqlutils.GetDatabaseID(t, sqlDB, "d"),
 		CLISpecifier: "d",
 		Config:       zoneOverride,
 	}
 	tableRow := sqlutils.ZoneRow{
-		ID:           dbDescID + 1,
+		ID:           sqlutils.GetTableID(t, sqlDB, "d", "t"),
 		CLISpecifier: "d.t",
 		Config:       zoneOverride,
 	}
 	primaryRow := sqlutils.ZoneRow{
-		ID:           dbDescID + 1,
+		ID:           sqlutils.GetTableID(t, sqlDB, "d", "t"),
 		CLISpecifier: "d.t@primary",
 		Config:       zoneOverride,
 	}
 	p0Row := sqlutils.ZoneRow{
-		ID:           dbDescID + 1,
+		ID:           sqlutils.GetTableID(t, sqlDB, "d", "t"),
 		CLISpecifier: "d.t.p0",
 		Config:       zoneOverride,
 	}
 	p1Row := sqlutils.ZoneRow{
-		ID:           dbDescID + 1,
+		ID:           sqlutils.GetTableID(t, sqlDB, "d", "t"),
 		CLISpecifier: "d.t.p1",
 		Config:       zoneOverride,
 	}
 
 	// Partially filled config rows
 	partialDbRow := sqlutils.ZoneRow{
-		ID:           dbDescID,
+		ID:           sqlutils.GetDatabaseID(t, sqlDB, "d"),
 		CLISpecifier: "d",
 		Config:       partialZoneOverride,
 	}
 	partialTableRow := sqlutils.ZoneRow{
-		ID:           dbDescID + 1,
+		ID:           sqlutils.GetTableID(t, sqlDB, "d", "t"),
 		CLISpecifier: "d.t",
 		Config:       partialZoneOverride,
 	}
 	partialPrimaryRow := sqlutils.ZoneRow{
-		ID:           dbDescID + 1,
+		ID:           sqlutils.GetTableID(t, sqlDB, "d", "t"),
 		CLISpecifier: "d.t@primary",
 		Config:       partialZoneOverride,
 	}
 	partialP0Row := sqlutils.ZoneRow{
-		ID:           dbDescID + 1,
+		ID:           sqlutils.GetTableID(t, sqlDB, "d", "t"),
 		CLISpecifier: "d.t.p0",
 		Config:       partialZoneOverride,
 	}
 	partialP1Row := sqlutils.ZoneRow{
-		ID:           dbDescID + 1,
+		ID:           sqlutils.GetTableID(t, sqlDB, "d", "t"),
 		CLISpecifier: "d.t.p1",
 		Config:       partialZoneOverride,
 	}
