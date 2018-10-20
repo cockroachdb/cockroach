@@ -1,7 +1,6 @@
 package pgdate
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -39,9 +38,7 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 	returnTime := fe.required.HasAll(timeRequiredFields)
 
 	// Break the string into alphanumeric chunks.
-	textChunks, _ := filterSplitString(s, func(r rune) bool {
-		return unicode.IsDigit(r) || unicode.IsLetter(r)
-	})
+	textChunks, _ := chunk(s)
 
 	// Create a place to store extracted numeric info.
 	numbers := make([]numberChunk, 0, len(textChunks))
@@ -66,7 +63,6 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 		return nil
 	}
 
-	//
 	var leftoverText string
 
 	// First, we'll try to pluck out any keywords that exist in the input.
@@ -145,13 +141,13 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 			}
 
 			// Save off any leftover text, it might be a timezone name.
-			leftoverText += chunk.NotMatch + chunk.Match
+			leftoverText += strings.TrimSpace(chunk.NotMatch) + chunk.Match
 		}
 	}
 
 	// See if our leftover text is a timezone name.
 	if leftoverText != "" {
-		if loc, err := time.LoadLocation(strings.TrimSpace(leftoverText)); err == nil {
+		if loc, err := zoneCacheInstance.LoadLocation(leftoverText); err == nil {
 			// Save off the timezone for later resolution to an offset.
 			fe.now = fe.now.In(loc)
 
@@ -215,7 +211,7 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 			tz2, _ := fe.Get(fieldTZ2)
 			tz1 *= fe.tzSign
 			tz2 *= fe.tzSign
-			loc = time.FixedZone(fmt.Sprintf("%+03d%02d", tz1, tz2), tz1*60*60+tz2*60)
+			loc = zoneCacheInstance.FixedZone(tz1, tz2)
 		} else {
 			loc = fe.now.Location()
 		}
@@ -230,14 +226,14 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 	if !returnDate {
 		hour, min, sec := ret.Clock()
 		// Switch to a fixed timezone offset.
-		name, offset := ret.Zone()
-		ret = time.Date(1970, 1, 1, hour, min, sec, ret.Nanosecond(), time.FixedZone(name, offset))
+		_, offset := ret.Zone()
+		ret = time.Unix(((int64(hour)*60)+int64(min))*60+int64(sec)-int64(offset), int64(ret.Nanosecond()))
 	}
 	return ret, nil
 }
 
-// splitChunks are returned from filterSplitString.
-type splitChunk struct {
+// stringChunk is returned by chunk().
+type stringChunk struct {
 	// The contiguous span of characters that did not match the filter and
 	// which appear immediately before Match.
 	NotMatch string
@@ -245,10 +241,10 @@ type splitChunk struct {
 	Match string
 }
 
-// filterSplitString filters the runes in a string and returns
-// contiguous spans of acceptable characters.
-func filterSplitString(s string, accept func(rune) bool) ([]splitChunk, string) {
-	ret := make([]splitChunk, 0, 8)
+// chunk filters the runes in a string and returns
+// contiguous spans of alphanumeric characters.
+func chunk(s string) ([]stringChunk, string) {
+	ret := make([]stringChunk, 0, 8)
 
 	matchStart := 0
 	matchEnd := 0
@@ -256,7 +252,7 @@ func filterSplitString(s string, accept func(rune) bool) ([]splitChunk, string) 
 
 	flush := func() {
 		if matchEnd > matchStart {
-			ret = append(ret, splitChunk{
+			ret = append(ret, stringChunk{
 				NotMatch: s[previousMatchEnd:matchStart],
 				Match:    s[matchStart:matchEnd]})
 			previousMatchEnd = matchEnd
@@ -265,7 +261,7 @@ func filterSplitString(s string, accept func(rune) bool) ([]splitChunk, string) 
 	}
 
 	for offset, r := range s {
-		if accept(r) {
+		if unicode.IsDigit(r) || unicode.IsLetter(r) {
 			if matchStart >= matchEnd {
 				matchStart = offset
 			}

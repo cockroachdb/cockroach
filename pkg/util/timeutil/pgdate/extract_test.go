@@ -18,7 +18,6 @@ import (
 	"reflect"
 	"testing"
 	"time"
-	"unicode"
 )
 
 func TestExtractRelative(t *testing.T) {
@@ -121,32 +120,32 @@ func TestFieldExtractSet(t *testing.T) {
 func TestFilterSplitString(t *testing.T) {
 	tests := []struct {
 		s        string
-		expected []splitChunk
+		expected []stringChunk
 		tail     string
 	}{
 		{
-			s: "99 foo!bar baz 55",
-			expected: []splitChunk{
-				{"99 ", "foo"},
+			s: "@@ foo!bar baz %%",
+			expected: []stringChunk{
+				{"@@ ", "foo"},
 				{"!", "bar"},
 				{" ", "baz"},
 			},
-			tail: " 55",
+			tail: " %%",
 		},
 		{
 			s:        "Εργαστήρια κατσαρίδων", /* Cockroach Labs */
-			expected: []splitChunk{{"", "Εργαστήρια"}, {" ", "κατσαρίδων"}},
+			expected: []stringChunk{{"", "Εργαστήρια"}, {" ", "κατσαρίδων"}},
 		},
 		{
-			s:        "123456",
-			expected: []splitChunk{},
-			tail:     "123456",
+			s:        "!@#$%^",
+			expected: []stringChunk{},
+			tail:     "!@#$%^",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.s, func(t *testing.T) {
-			got, tail := filterSplitString(tc.s, unicode.IsLetter)
+			got, tail := chunk(tc.s)
 			if !reflect.DeepEqual(tc.expected, got) {
 				t.Errorf("expected %v, got %v", tc.expected, got)
 			}
@@ -159,6 +158,6 @@ func TestFilterSplitString(t *testing.T) {
 
 func BenchmarkFilterSplitString(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		filterSplitString("foo bar baz", unicode.IsLetter)
+		chunk("foo bar baz")
 	}
 }
