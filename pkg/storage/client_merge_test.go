@@ -1668,7 +1668,7 @@ func TestStoreRangeMergeAddReplicaRace(t *testing.T) {
 	}
 }
 
-func TestStoreRangeMergeSlowUnabandonedFollower(t *testing.T) {
+func TestStoreRangeMergeSlowUnabandonedFollower_NoSplit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -1724,6 +1724,80 @@ func TestStoreRangeMergeSlowUnabandonedFollower(t *testing.T) {
 	// to be applied, including the merge trigger.
 	lhsRepl2.RaftUnlock()
 	mtc.transferLease(ctx, lhsDesc.RangeID, 0, 2)
+}
+
+func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+	store0, store2 := mtc.Store(0), mtc.Store(2)
+
+	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	lhsDesc, rhsDesc, err := createSplitRanges(ctx, store0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for store2 to hear about the split.
+	testutils.SucceedsSoon(t, func() error {
+		_, err := store2.GetReplica(rhsDesc.RangeID)
+		return err
+	})
+
+	// Start dropping all Raft traffic to the LHS on store2 so that it won't be
+	// aware that there is a merge in progress.
+	mtc.transport.Listen(store2.Ident.StoreID, &unreliableRaftHandler{
+		rangeID:            lhsDesc.RangeID,
+		RaftMessageHandler: store2,
+	})
+
+	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Now split the newly merged range splits back out at exactly the same key.
+	// When the replica GC queue looks in meta2 it will find the new RHS range, of
+	// which store2 is a member. Note that store2 does not yet have an initialized
+	// replica for this range, since it would intersect with the old RHS replica.
+	_, newRHSDesc, err := createSplitRanges(ctx, store0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Remove and GC the LHS replica on store2. This ensures that the RHS replica
+	// on store2 will never be subsumed, because the merge trigger will never be
+	// applied by the LHS.
+	mtc.unreplicateRange(lhsDesc.RangeID, 2)
+	lhsRepl2 := store2.LookupReplica(lhsDesc.StartKey)
+	if err := store2.ManualReplicaGC(lhsRepl2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store2.GetReplica(lhsDesc.RangeID); err == nil {
+		t.Fatal("lhs replica not destroyed on store2")
+	}
+
+	// Transfer the lease on the new RHS to store2 and wait for it to apply. This
+	// will force its replica to of the new RHS to become up to date, which
+	// indirectly tests that the replica GC queue cleans up both the LHS replica
+	// and the old RHS replica.
+	mtc.transferLease(ctx, newRHSDesc.RangeID, 0, 2)
+	testutils.SucceedsSoon(t, func() error {
+		rhsRepl, err := store2.GetReplica(newRHSDesc.RangeID)
+		if err != nil {
+			return err
+		}
+		if !rhsRepl.OwnsValidLease(mtc.clock.Now()) {
+			return errors.New("rhs store does not own valid lease for rhs range")
+		}
+		return nil
+	})
 }
 
 func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
@@ -2339,6 +2413,15 @@ func (h *unreliableRaftHandler) HandleRaftRequest(
 		return nil
 	}
 	return h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
+}
+
+func (h *unreliableRaftHandler) HandleRaftResponse(
+	ctx context.Context, resp *storage.RaftMessageResponse,
+) error {
+	if resp.RangeID == h.rangeID {
+		return nil
+	}
+	return h.RaftMessageHandler.HandleRaftResponse(ctx, resp)
 }
 
 func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
