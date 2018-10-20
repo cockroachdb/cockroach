@@ -707,10 +707,7 @@ func forceTableGC(
 	database, table string,
 ) {
 	t.Helper()
-	tblID, err := sqlutils.QueryTableID(sqlDB.DB, database, table)
-	if err != nil {
-		t.Fatal(err)
-	}
+	tblID := sqlutils.QueryTableID(t, sqlDB.DB, database, table)
 
 	tblKey := roachpb.Key(keys.MakeTablePrefix(tblID))
 	gcr := roachpb.GCRequest{
