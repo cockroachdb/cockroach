@@ -27,6 +27,7 @@ const (
 	fieldHour
 	fieldMinute
 	fieldSecond
+	// fieldFraction will store microsecond offsets.
 	fieldFraction
 	fieldMeridian
 	fieldTZ1

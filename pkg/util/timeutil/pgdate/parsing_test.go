@@ -178,6 +178,151 @@ var dateTestData = []struct {
 	},
 }
 
+var timeTestData = []struct {
+	s string
+	// The generally-expected value.
+	exp time.Time
+	// Is an error expected?
+	err bool
+}{
+	{
+		// 04:05:06.789 ISO 8601
+		s:   "04:05:06.789",
+		exp: time.Date(1970, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.UTC),
+	},
+	{
+		//  04:05:06 ISO 8601
+		s:   "04:05:06",
+		exp: time.Date(1970, 1, 1, 4, 5, 6, 0, time.UTC),
+	},
+	{
+		//  04:05 ISO 8601
+		s:   "04:05",
+		exp: time.Date(1970, 1, 1, 4, 5, 0, 0, time.UTC),
+	},
+	{
+		//  040506 ISO 8601
+		s:   "040506",
+		exp: time.Date(1970, 1, 1, 4, 5, 6, 0, time.UTC),
+	},
+	{
+		//  04:05 AM same as 04:05; AM does not affect value
+		s:   "04:05 AM",
+		exp: time.Date(1970, 1, 1, 4, 5, 0, 0, time.UTC),
+	},
+	{
+		//  04:05 PM same as 16:05; input hour must be <= 12
+		s:   "04:05 PM",
+		exp: time.Date(1970, 1, 1, 16, 5, 0, 0, time.UTC),
+	},
+	{
+		// 04:05:06.789-8 ISO 8601
+		s:   "04:05:06.789-8",
+		exp: time.Date(1970, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.FixedZone("-0800", -8*60*60)),
+	},
+	{
+		// 04:05:06.789-8:30 ISO 8601
+		s:   "04:05:06.789-8:30",
+		exp: time.Date(1970, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.FixedZone("-0830", -8*60*60-30*60)),
+	},
+	{
+		// 04:05-8:00 ISO 8601
+		s:   "04:05-8:00",
+		exp: time.Date(1970, 1, 1, 4, 5, 0, 0, time.FixedZone("-0800", -8*60*60)),
+	},
+	{
+		// 040506-08 ISO 8601
+		s:   "040506-8",
+		exp: time.Date(1970, 1, 1, 4, 5, 6, 0, time.FixedZone("-0800", -8*60*60)),
+	},
+	{
+		// 04:05:06 PST time zone specified by abbreviation
+		// TODO(bob, knz): Do we support abbreviated timezones?
+		// pgsql exposes quite a lot of configuration surface around
+		// mapping strings to UTC offsets.
+		// https://www.postgresql.org/docs/10/static/datatype-datetime.html#DATATYPE-TIMEZONES
+		s:   "04:05:06 PST",
+		err: true,
+		//		exp: time.Date(1970, 1, 1, 4, 5, 6, 0, time.FixedZone("-0800", -8*60*60)),
+	},
+	{
+		// This test, and the next show that resolution of geographic names
+		// to actual timezones is aware of daylight-savings time.
+		s:   "2003-01-12 04:05:06 America/New_York",
+		exp: time.Date(1970, 1, 1, 4, 5, 6, 0, time.FixedZone("-0500", -5*60*60)),
+	},
+	{
+		s:   "2003-06-12 04:05:06 America/New_York",
+		exp: time.Date(1970, 1, 1, 4, 5, 6, 0, time.FixedZone("-0400", -4*60*60)),
+	},
+
+	// ----- More Tests -----
+
+	{
+		// Check positive TZ offsets.
+		s:   "04:05:06.789+8:30",
+		exp: time.Date(1970, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.FixedZone("UTC+830", 8*60*60+30*60)),
+	},
+	{
+		// Check Z suffix with space.
+		s:   "04:05:06.789 z",
+		exp: time.Date(1970, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.UTC),
+	},
+	{
+		// Check Zulu suffix with space.
+		s:   "04:05:06.789 zulu",
+		exp: time.Date(1970, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.UTC),
+	},
+	{
+		// Check Z suffix without space.
+		s:   "04:05:06.789z",
+		exp: time.Date(1970, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.UTC),
+	},
+	{
+		// Check Zulu suffix without space.
+		s:   "04:05:06.789zulu",
+		exp: time.Date(1970, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.UTC),
+	},
+	{
+		// Packed time should extra seconds.
+		s:   "045:06",
+		err: true,
+	},
+	{
+		// Check 12:54 AM -> 0
+		s:   "12:54 AM",
+		exp: time.Date(1970, 1, 1, 0, 54, 0, 0, time.UTC),
+	},
+	{
+		// Check 12:54 PM -> 12
+		s:   "12:54 PM",
+		exp: time.Date(1970, 1, 1, 12, 54, 0, 0, time.UTC),
+	},
+	{
+		// Check 00:54 AM -> 0
+		// This behavior is observed in pgsql 10.5.
+		s:   "12:54 AM",
+		exp: time.Date(1970, 1, 1, 0, 54, 0, 0, time.UTC),
+	},
+	{
+		// Check 00:54 PM -> 12
+		// This behavior is observed in pgsql 10.5.
+		s:   "0:54 PM",
+		exp: time.Date(1970, 1, 1, 12, 54, 0, 0, time.UTC),
+	},
+	{
+		// Check nonsensical TZ.
+		// This behavior is observed in pgsql 10.5.
+		s:   "12:54-00:29",
+		exp: time.Date(1970, 1, 1, 12, 54, 0, 0, time.FixedZone("UGH", -29*60)),
+	},
+	{
+		// Check long timezone with date month.
+		s:   "June 12, 2003 04:05:06 America/New_York",
+		exp: time.Date(1970, 1, 1, 4, 5, 6, 0, time.FixedZone("-0400", -4*60*60)),
+	},
+}
+
 func TestParseDate(t *testing.T) {
 	now := time.Time{}
 
@@ -198,7 +343,7 @@ func TestParseDate(t *testing.T) {
 
 					if found, ok := tc.modeExp[mode]; ok {
 						if err == nil {
-							if res != found {
+							if !res.Equal(found) {
 								t.Fatalf("expected %s, got %s", found, res)
 							}
 							return
@@ -211,7 +356,7 @@ func TestParseDate(t *testing.T) {
 						if tc.err {
 							t.Fatalf("expected error, but succeeded %s", res)
 						}
-						if res != tc.exp {
+						if !res.Equal(tc.exp) {
 							t.Fatalf("expected %s, got %s", tc.exp, res)
 						}
 					} else {
@@ -226,20 +371,78 @@ func TestParseDate(t *testing.T) {
 	}
 }
 
+func TestParseTime(t *testing.T) {
+	now := time.Unix(0, 0).UTC()
+
+	for _, tc := range timeTestData {
+		t.Run(tc.s, func(t *testing.T) {
+			res, err := pgdate.ParseTime(now, tc.s)
+
+			if err == nil {
+				if tc.err {
+					t.Fatalf("expected error, but succeeded %s", res)
+				}
+				if !res.Equal(tc.exp) {
+					t.Fatalf("expected %s, got %s", tc.exp, res)
+				}
+			} else {
+				if !tc.err {
+					t.Fatalf("unexpected error: %s", err)
+				}
+				t.Logf("FYI: %s", err)
+			}
+		})
+	}
+}
+
 func TestOneOff(t *testing.T) {
-	res, err := pgdate.ParseDate(time.Time{}, pgdate.ParseModeISO, "2017-12-05 04:04:04.913231+00:00")
+	res, err := pgdate.ParseTime(time.Time{}, "2003-06-12 04:05:06 America/New_York")
 	t.Logf("%v %v", res, err)
 }
 
 func BenchmarkParseDate(b *testing.B) {
+	b.Run("Reference", func(b *testing.B) {
+		b.Run("RFC3399", func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				time.ParseInLocation(time.RFC3339, "2018-10-20", time.UTC)
+			}
+		})
+		b.Run("RFC3399", func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				time.ParseInLocation(time.RFC822, "02 October 2018", time.UTC)
+			}
+		})
+	})
+
 	for _, mode := range modes {
 		b.Run(mode.String(), func(b *testing.B) {
 			for _, tc := range dateTestData {
+				if err, ok := tc.modeErr[mode]; err && ok {
+					continue
+				} else if _, ok := tc.modeExp[mode]; ok {
+					// Run test.
+				} else if tc.err {
+					continue
+				}
+
 				b.Run(tc.s, func(b *testing.B) {
 					for i := 0; i < b.N; i++ {
 						pgdate.ParseDate(time.Time{}, mode, tc.s)
 					}
 				})
+			}
+		})
+	}
+}
+
+func BenchmarkParseTime(b *testing.B) {
+	for _, tc := range timeTestData {
+		if tc.err {
+			continue
+		}
+		b.Run(tc.s, func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				pgdate.ParseTime(time.Time{}, tc.s)
 			}
 		})
 	}

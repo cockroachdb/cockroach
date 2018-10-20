@@ -55,7 +55,37 @@ func ParseDate(now time.Time, mode ParseMode, s string) (time.Time, error) {
 	if t, err := extract(fe, s); err == nil {
 		return t, nil
 	} else {
-		return TimeEpoch, parseError("date", "s")
+		return TimeEpoch, parseError("date", s)
+	}
+}
+
+// ParseTime converts a string into a time value on the epoch day.
+func ParseTime(now time.Time, s string) (time.Time, error) {
+	fe := fieldExtract{
+		now:      now,
+		required: timeRequiredFields,
+		wanted:   timeFields,
+	}
+
+	if t, err := extract(fe, s); err == nil {
+		return t, nil
+	} else {
+		return TimeEpoch, parseError("time", s)
+	}
+}
+
+// ParseTime converts a string into a timestamp.
+func ParseTimestamp(now time.Time, s string) (time.Time, error) {
+	fe := fieldExtract{
+		now:      now,
+		required: dateTimeRequiredFields,
+		wanted:   dateTimeFields,
+	}
+
+	if t, err := extract(fe, s); err == nil {
+		return t, nil
+	} else {
+		return TimeEpoch, parseError("timestamp", s)
 	}
 }
 

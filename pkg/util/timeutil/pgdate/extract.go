@@ -1,6 +1,7 @@
 package pgdate
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +25,8 @@ const (
 	keywordToday     = "today"
 	keywordTomorrow  = "tomorrow"
 	keywordYesterday = "yesterday"
+	keywordZ         = "z"
+	keywordZulu      = "zulu"
 )
 
 // extract attempts to break the input string into a collection
@@ -32,14 +35,39 @@ const (
 // passed in if a sentinel value is returned. An error will be
 // returned if not all of the required fields have been populated.
 func extract(fe fieldExtract, s string) (time.Time, error) {
+	returnDate := fe.required.HasAll(dateRequiredFields)
+	returnTime := fe.required.HasAll(timeRequiredFields)
 
 	// Break the string into alphanumeric chunks.
-	chunks, _ := filterSplitString(s, func(r rune) bool {
+	textChunks, _ := filterSplitString(s, func(r rune) bool {
 		return unicode.IsDigit(r) || unicode.IsLetter(r)
 	})
 
-	numbers := make([]numberChunk, 0, len(chunks))
+	// Create a place to store extracted numeric info.
+	numbers := make([]numberChunk, 0, len(textChunks))
+	appendNumber := func(prefix, number string) error {
+		if v, err := strconv.Atoi(number); err == nil {
+			lastRune, _ := utf8.DecodeLastRuneInString(prefix)
+			numbers = append(numbers, numberChunk{prefix: lastRune, v: v, magnitude: len(number)})
+			return nil
+		} else {
+			return err
+		}
+	}
+
+	// Certain keywords should result in some kind of sentinel value,
+	// but we want to ensure that we accept only a single sentinel chunk.
 	var sentinel *time.Time
+	matchedSentinel := func(value *time.Time, match string) error {
+		if sentinel != nil {
+			return errors.Errorf("unexpected input: %s", match)
+		}
+		sentinel = value
+		return nil
+	}
+
+	//
+	var leftoverText string
 
 	// First, we'll try to pluck out any keywords that exist in the input.
 	// If a chunk is not a keyword or other special-case pattern, it
@@ -47,37 +75,30 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 	// pass. If we see certain sentinel values, we'll pick them out,
 	// but keep going to ensure that the user hasn't written something
 	// like "epoch infinity".
-	for _, chunk := range chunks {
+	for _, chunk := range textChunks {
 		match := strings.ToLower(chunk.Match)
-		matchedSentinel := func() error {
-			if sentinel != nil {
-				return errors.Errorf("unexpected input: %s", match)
-			}
-			return nil
-		}
 
 		switch match {
 		case keywordEpoch:
-			if err := matchedSentinel(); err != nil {
+			if err := matchedSentinel(&TimeEpoch, match); err != nil {
 				return TimeEpoch, err
 			}
-			sentinel = &TimeEpoch
 
 		case keywordInfinity:
-			if err := matchedSentinel(); err != nil {
-				return TimeEpoch, err
-			}
 			if strings.HasSuffix(chunk.NotMatch, "-") {
-				sentinel = &TimeNegativeInfinity
+				if err := matchedSentinel(&TimeNegativeInfinity, match); err != nil {
+					return TimeEpoch, err
+				}
 			} else {
-				sentinel = &TimeInfinity
+				if err := matchedSentinel(&TimeInfinity, match); err != nil {
+					return TimeEpoch, err
+				}
 			}
 
 		case keywordNow:
-			if err := matchedSentinel(); err != nil {
+			if err := matchedSentinel(&fe.now, match); err != nil {
 				return TimeEpoch, err
 			}
-			sentinel = &fe.now
 
 		default:
 			// Fan out to other keyword-based extracts.
@@ -88,19 +109,61 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 				continue
 			}
 
-			// Try to parse Julian dates.  We can disregard the error here.
-			if err := fieldSetterJulianDate(&fe, match); err == nil {
+			// At this point, the most probable case is that we have a
+			// numeric input.
+			if err := appendNumber(chunk.NotMatch, match); err == nil {
 				continue
 			}
 
-			// At this point, the chunk must be numeric; we'll convert it
-			// and add it to the slice for the second pass.
-			v, err := strconv.Atoi(match)
-			if err != nil {
-				return TimeEpoch, errors.Errorf("unexpected input chunk: %s", match)
+			// Handle the oddball Z and Zulu suffixes. Try stripping the
+			// suffix and appending the resulting number.
+			if returnTime && strings.HasSuffix(match, keywordZ) {
+				if err := fieldSetterUTC(&fe, ""); err != nil {
+					return TimeEpoch, err
+				}
+				maybeMatch := match[:len(match)-len(keywordZ)]
+				if err := appendNumber(chunk.NotMatch, maybeMatch); err == nil {
+					continue
+				}
+
+			} else if returnTime && strings.HasSuffix(match, keywordZulu) {
+				if err := fieldSetterUTC(&fe, ""); err != nil {
+					return TimeEpoch, err
+				}
+				maybeMatch := match[:len(match)-len(keywordZulu)]
+				if err := appendNumber(chunk.NotMatch, maybeMatch); err == nil {
+					continue
+				}
 			}
-			lastRune, _ := utf8.DecodeLastRuneInString(chunk.NotMatch)
-			numbers = append(numbers, numberChunk{prefix: lastRune, v: v, magnitude: len(match)})
+
+			// Try to parse Julian dates.
+			if matched, err := fieldSetterJulianDate(&fe, match); matched {
+				if err != nil {
+					return TimeEpoch, err
+				}
+				continue
+			}
+
+			// Save off any leftover text, it might be a timezone name.
+			leftoverText += chunk.NotMatch + chunk.Match
+		}
+	}
+
+	// See if our leftover text is a timezone name.
+	if leftoverText != "" {
+		if loc, err := time.LoadLocation(strings.TrimSpace(leftoverText)); err == nil {
+			// Save off the timezone for later resolution to an offset.
+			fe.now = fe.now.In(loc)
+
+			// Since we're using a named location, we must have a date
+			// in order to compute daylight-savings time.
+			fe.required = fe.required.AddAll(dateRequiredFields)
+
+			// Remove TZ1 and TZ2 from the wanted list.  Also, if we had a
+			// text month, ensure that it's also not in the wanted field.
+			fe.wanted = fe.wanted.AddAll(dateFields).ClearAll(fe.has.Add(fieldTZ1).Add(fieldTZ2))
+		} else {
+			return TimeEpoch, errors.Errorf("could not interpret leftovers: %s", leftoverText)
 		}
 	}
 
@@ -113,6 +176,9 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 	// out field data.
 	textMonth := !fe.Wants(fieldMonth)
 	for _, n := range numbers {
+		if fe.wanted == 0 {
+			return TimeEpoch, errors.Errorf("too many input chunks")
+		}
 		if err := fe.interpretNumber(n, textMonth); err != nil {
 			return TimeEpoch, err
 		}
@@ -122,18 +188,52 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 		return TimeEpoch, err
 	}
 
-	switch {
-	case fe.has.HasAll(dateTimeRequiredFields):
-	case fe.has.HasAll(dateRequiredFields):
-		year, _ := fe.Get(fieldYear)
-		month, _ := fe.Get(fieldMonth)
-		day, _ := fe.Get(fieldDay)
-		return time.Date(year, time.Month(month), day, 0, 0, 0, 0, fe.now.Location()), nil
+	var year, month, day, hour, min, sec, micro int
 
-	case fe.has.HasAll(timeRequiredFields):
+	if fe.has.HasAll(dateRequiredFields) {
+		year, _ = fe.Get(fieldYear)
+		month, _ = fe.Get(fieldMonth)
+		day, _ = fe.Get(fieldDay)
+	} else {
+		year = 1970
+		month = 1
+		day = 1
 	}
 
-	return TimeEpoch, errors.New("unimplemented")
+	if returnDate && !returnTime {
+		return time.Date(year, time.Month(month), day, 0, 0, 0, 0, fe.now.Location()), nil
+	}
+
+	var loc *time.Location
+	if fe.has.HasAll(timeRequiredFields) {
+		hour, _ = fe.Get(fieldHour)
+		min, _ = fe.Get(fieldMinute)
+		sec, _ = fe.Get(fieldSecond)
+		micro, _ = fe.Get(fieldFraction)
+
+		if tz1, ok := fe.Get(fieldTZ1); ok {
+			tz2, _ := fe.Get(fieldTZ2)
+			tz1 *= fe.tzSign
+			tz2 *= fe.tzSign
+			loc = time.FixedZone(fmt.Sprintf("%+03d%02d", tz1, tz2), tz1*60*60+tz2*60)
+		} else {
+			loc = fe.now.Location()
+		}
+	} else {
+		loc = fe.now.Location()
+	}
+
+	// If we have a textual timezone, we must resolve it to a specific offset
+	// on a particular date. We'll truncate back to the epoch day if
+	// the use didn't request the date to be returned.
+	ret := time.Date(year, time.Month(month), day, hour, min, sec, micro*1000, loc)
+	if !returnDate {
+		hour, min, sec := ret.Clock()
+		// Switch to a fixed timezone offset.
+		name, offset := ret.Zone()
+		ret = time.Date(1970, 1, 1, hour, min, sec, ret.Nanosecond(), time.FixedZone(name, offset))
+	}
+	return ret, nil
 }
 
 // splitChunks are returned from filterSplitString.

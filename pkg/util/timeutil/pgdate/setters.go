@@ -17,6 +17,7 @@ package pgdate
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pkg/errors"
 )
@@ -63,6 +64,12 @@ var keywordSetters = map[string]fieldSetter{
 
 	keywordAM: fieldSetterExact(fieldMeridian, fieldValueAM),
 	keywordPM: fieldSetterExact(fieldMeridian, fieldValuePM),
+
+	keywordZ:    fieldSetterUTC,
+	keywordZulu: fieldSetterUTC,
+
+	// TODO(bob, knz): Do we want to support the abbreviations in
+	// https://github.com/postgres/postgres/blob/master/src/timezone/known_abbrevs.txt
 }
 
 func fieldSetterAllBalls(p *fieldExtract, _ string) error {
@@ -71,28 +78,29 @@ func fieldSetterAllBalls(p *fieldExtract, _ string) error {
 
 func fieldSetterExact(field field, v int) fieldSetter {
 	return func(p *fieldExtract, s string) error {
-		return p.Set(field, v)
+		p.Force(field, v)
+		return nil
 	}
 }
 
-func fieldSetterJulianDate(p *fieldExtract, s string) error {
+func fieldSetterJulianDate(p *fieldExtract, s string) (bool, error) {
 	if !strings.HasPrefix(s, "j") {
-		return errors.Errorf("unrecognized julian date: %s", s)
+		return false, nil
 	}
 	date, err := strconv.Atoi(s[1:])
 	if err != nil {
-		return errors.Wrap(err, "could not parse julian date")
+		return true, errors.Wrap(err, "could not parse julian date")
 	}
 
 	year, month, day := julianDayToDate(date)
 
 	if err := p.Set(fieldYear, year); err != nil {
-		return err
+		return true, err
 	}
 	if err := p.Set(fieldMonth, month); err != nil {
-		return err
+		return true, err
 	}
-	return p.Set(fieldDay, day)
+	return true, p.Set(fieldDay, day)
 }
 
 func fieldSetterMonth(month int) fieldSetter {
@@ -118,4 +126,12 @@ func fieldSetterRelativeDate(p *fieldExtract, s string) error {
 		return err
 	}
 	return p.Set(fieldDay, day)
+}
+
+// fieldSetterUTC forces the timezone to UTC and removes the
+// TZ fields from the wanted list.
+func fieldSetterUTC(p *fieldExtract, _ string) error {
+	p.now = p.now.In(time.UTC)
+	p.wanted = p.wanted.ClearAll(fieldTZ1.Add(fieldTZ2))
+	return nil
 }
