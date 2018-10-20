@@ -50,7 +50,8 @@ func TestValidIndexPartitionSetShowZones(t *testing.T) {
 	partialZoneOverride := *config.NewZoneConfig()
 	partialZoneOverride.GC = &config.GCPolicy{TTLSeconds: 42}
 
-	dbDescID := uint32(keys.MinNonPredefinedUserDescID)
+	dbID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "d")
+	tableID := sqlutils.QueryTableID(t, sqlDB.DB, "d", "t")
 
 	defaultRow := sqlutils.ZoneRow{
 		ID:           keys.RootNamespaceID,
@@ -63,54 +64,54 @@ func TestValidIndexPartitionSetShowZones(t *testing.T) {
 		Config:       zoneOverride,
 	}
 	dbRow := sqlutils.ZoneRow{
-		ID:           dbDescID,
+		ID:           dbID,
 		CLISpecifier: "d",
 		Config:       zoneOverride,
 	}
 	tableRow := sqlutils.ZoneRow{
-		ID:           dbDescID + 1,
+		ID:           tableID,
 		CLISpecifier: "d.t",
 		Config:       zoneOverride,
 	}
 	primaryRow := sqlutils.ZoneRow{
-		ID:           dbDescID + 1,
+		ID:           tableID,
 		CLISpecifier: "d.t@primary",
 		Config:       zoneOverride,
 	}
 	p0Row := sqlutils.ZoneRow{
-		ID:           dbDescID + 1,
+		ID:           tableID,
 		CLISpecifier: "d.t.p0",
 		Config:       zoneOverride,
 	}
 	p1Row := sqlutils.ZoneRow{
-		ID:           dbDescID + 1,
+		ID:           tableID,
 		CLISpecifier: "d.t.p1",
 		Config:       zoneOverride,
 	}
 
 	// Partially filled config rows
 	partialDbRow := sqlutils.ZoneRow{
-		ID:           dbDescID,
+		ID:           dbID,
 		CLISpecifier: "d",
 		Config:       partialZoneOverride,
 	}
 	partialTableRow := sqlutils.ZoneRow{
-		ID:           dbDescID + 1,
+		ID:           tableID,
 		CLISpecifier: "d.t",
 		Config:       partialZoneOverride,
 	}
 	partialPrimaryRow := sqlutils.ZoneRow{
-		ID:           dbDescID + 1,
+		ID:           tableID,
 		CLISpecifier: "d.t@primary",
 		Config:       partialZoneOverride,
 	}
 	partialP0Row := sqlutils.ZoneRow{
-		ID:           dbDescID + 1,
+		ID:           tableID,
 		CLISpecifier: "d.t.p0",
 		Config:       partialZoneOverride,
 	}
 	partialP1Row := sqlutils.ZoneRow{
-		ID:           dbDescID + 1,
+		ID:           tableID,
 		CLISpecifier: "d.t.p1",
 		Config:       partialZoneOverride,
 	}
