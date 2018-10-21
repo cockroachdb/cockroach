@@ -54,15 +54,10 @@ type showFingerprintsNode struct {
 func (p *planner) ShowFingerprints(
 	ctx context.Context, n *tree.ShowFingerprints,
 ) (planNode, error) {
-	tn, err := n.Table.Normalize()
-	if err != nil {
-		return nil, err
-	}
-
 	// We avoid the cache so that we can observe the fingerprints without
 	// taking a lease, like other SHOW commands.
 	tableDesc, err := p.ResolveUncachedTableDescriptor(
-		ctx, tn, true /*required*/, requireTableDesc)
+		ctx, &n.Table, true /*required*/, requireTableDesc)
 	if err != nil {
 		return nil, err
 	}

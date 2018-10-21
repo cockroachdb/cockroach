@@ -3161,7 +3161,12 @@ show_csettings_stmt:
 show_columns_stmt:
   SHOW COLUMNS FROM table_name
   {
-     $$.val = &tree.ShowColumns{Table: $4.normalizableTableNameFromUnresolvedName()}
+    name, err := tree.NormalizeTableName($4.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.ShowColumns{Table: name}
   }
 | SHOW COLUMNS error // SHOW HELP: SHOW COLUMNS
 
@@ -3204,17 +3209,32 @@ show_grants_stmt:
 show_indexes_stmt:
   SHOW INDEX FROM table_name
   {
-    $$.val = &tree.ShowIndex{Table: $4.normalizableTableNameFromUnresolvedName()}
+    name, err := tree.NormalizeTableName($4.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.ShowIndex{Table: name}
   }
 | SHOW INDEX error // SHOW HELP: SHOW INDEXES
 | SHOW INDEXES FROM table_name
   {
-    $$.val = &tree.ShowIndex{Table: $4.normalizableTableNameFromUnresolvedName()}
+    name, err := tree.NormalizeTableName($4.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.ShowIndex{Table: name}
   }
 | SHOW INDEXES error // SHOW HELP: SHOW INDEXES
 | SHOW KEYS FROM table_name
   {
-    $$.val = &tree.ShowIndex{Table: $4.normalizableTableNameFromUnresolvedName()}
+    name, err := tree.NormalizeTableName($4.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.ShowIndex{Table: name}
   }
 | SHOW KEYS error // SHOW HELP: SHOW INDEXES
 
@@ -3225,12 +3245,22 @@ show_indexes_stmt:
 show_constraints_stmt:
   SHOW CONSTRAINT FROM table_name
   {
-    $$.val = &tree.ShowConstraints{Table: $4.normalizableTableNameFromUnresolvedName()}
+    name, err := tree.NormalizeTableName($4.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.ShowConstraints{Table: name}
   }
 | SHOW CONSTRAINT error // SHOW HELP: SHOW CONSTRAINTS
 | SHOW CONSTRAINTS FROM table_name
   {
-    $$.val = &tree.ShowConstraints{Table: $4.normalizableTableNameFromUnresolvedName()}
+    name, err := tree.NormalizeTableName($4.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.ShowConstraints{Table: name}
   }
 | SHOW CONSTRAINTS error // SHOW HELP: SHOW CONSTRAINTS
 
@@ -3393,12 +3423,22 @@ show_transaction_stmt:
 show_create_stmt:
   SHOW CREATE table_name
   {
-    $$.val = &tree.ShowCreate{Name: $3.normalizableTableNameFromUnresolvedName()}
+    name, err := tree.NormalizeTableName($3.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.ShowCreate{Name: name}
   }
 | SHOW CREATE create_kw table_name
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowCreate{Name: $4.normalizableTableNameFromUnresolvedName()}
+    name, err := tree.NormalizeTableName($4.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.ShowCreate{Name: name}
   }
 | SHOW CREATE error // SHOW HELP: SHOW CREATE
 
@@ -3505,7 +3545,12 @@ show_fingerprints_stmt:
   SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE table_name
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowFingerprints{Table: $5.newNormalizableTableNameFromUnresolvedName()}
+    name, err := tree.NormalizeTableName($5.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.ShowFingerprints{Table: name}
   }
 
 opt_on_targets_roles:
