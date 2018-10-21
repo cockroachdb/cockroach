@@ -71,14 +71,17 @@ func TestValidSetShowZones(t *testing.T) {
 		CLISpecifier: "system.jobs",
 		Config:       zoneOverride,
 	}
-	dbDescID := uint32(keys.MinNonPredefinedUserDescID)
+
+	dbID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "d")
+	tableID := sqlutils.QueryTableID(t, sqlDB.DB, "d", "t")
+
 	dbRow := sqlutils.ZoneRow{
-		ID:           dbDescID,
+		ID:           dbID,
 		CLISpecifier: "d",
 		Config:       zoneOverride,
 	}
 	tableRow := sqlutils.ZoneRow{
-		ID:           dbDescID + 1,
+		ID:           tableID,
 		CLISpecifier: "d.t",
 		Config:       zoneOverride,
 	}
@@ -99,14 +102,13 @@ func TestValidSetShowZones(t *testing.T) {
 		CLISpecifier: "system.jobs",
 		Config:       partialZoneOverride,
 	}
-	dbDescID = uint32(keys.MinNonPredefinedUserDescID)
 	partialDbRow := sqlutils.ZoneRow{
-		ID:           dbDescID,
+		ID:           dbID,
 		CLISpecifier: "d",
 		Config:       partialZoneOverride,
 	}
 	partialTableRow := sqlutils.ZoneRow{
-		ID:           dbDescID + 1,
+		ID:           tableID,
 		CLISpecifier: "d.t",
 		Config:       partialZoneOverride,
 	}
