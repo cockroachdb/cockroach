@@ -444,21 +444,11 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 	sanitizedFullDir := localFoo + "/full"
 	fullDir := sanitizedFullDir + "?moarSecretsHere"
 
-	backupDatabaseID, err := sqlutils.QueryDatabaseID(sqlDB.DB, "data")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	backupTableID, err := sqlutils.QueryTableID(sqlDB.DB, "data", "bank")
-	if err != nil {
-		t.Fatal(err)
-	}
+	backupDatabaseID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "data")
+	backupTableID := sqlutils.QueryTableID(t, sqlDB.DB, "data", "bank")
 
 	sqlDB.Exec(t, `CREATE DATABASE restoredb`)
-	restoreDatabaseID, err := sqlutils.QueryDatabaseID(sqlDB.DB, "restoredb")
-	if err != nil {
-		t.Fatal(err)
-	}
+	restoreDatabaseID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "restoredb")
 
 	// We create a full backup so that, below, we can test that incremental
 	// backups sanitize credentials in "INCREMENTAL FROM" URLs.
@@ -553,10 +543,7 @@ func checkInProgressBackupRestore(
 
 	sqlDB.Exec(t, `CREATE DATABASE restoredb`)
 
-	backupTableID, err := sqlutils.QueryTableID(sqlDB.DB, "data", "bank")
-	if err != nil {
-		t.Fatal(err)
-	}
+	backupTableID := sqlutils.QueryTableID(t, sqlDB.DB, "data", "bank")
 
 	do := func(query string, check inProgressChecker) {
 		jobDone := make(chan error)
@@ -791,10 +778,7 @@ func TestBackupRestoreResume(t *testing.T) {
 		restoreDir := "nodelocal:///restore"
 		sqlDB.Exec(t, `BACKUP DATABASE DATA TO $1`, restoreDir)
 		sqlDB.Exec(t, `CREATE DATABASE restoredb`)
-		restoreDatabaseID, err := sqlutils.QueryDatabaseID(sqlDB.DB, "restoredb")
-		if err != nil {
-			t.Fatal(err)
-		}
+		restoreDatabaseID := sqlutils.QueryDatabaseID(t, sqlDB.DB, "restoredb")
 		restoreTableID, err := sql.GenerateUniqueDescID(ctx, tc.Servers[0].DB())
 		if err != nil {
 			t.Fatal(err)
