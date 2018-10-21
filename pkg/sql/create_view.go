@@ -45,12 +45,7 @@ type createViewNode struct {
 //						selected columns.
 //          mysql requires CREATE VIEW plus SELECT on all the selected columns.
 func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode, error) {
-	name, err := n.Name.Normalize()
-	if err != nil {
-		return nil, err
-	}
-
-	dbDesc, err := p.ResolveUncachedDatabase(ctx, name)
+	dbDesc, err := p.ResolveUncachedDatabase(ctx, &n.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +112,7 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 }
 
 func (n *createViewNode) startExec(params runParams) error {
-	viewName := n.n.Name.TableName().Table()
+	viewName := n.n.Name.Table()
 	tKey := tableKey{parentID: n.dbDesc.ID, name: viewName}
 	key := tKey.Key()
 	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
@@ -191,7 +186,7 @@ func (n *createViewNode) startExec(params runParams) error {
 			ViewName  string
 			Statement string
 			User      string
-		}{n.n.Name.TableName().FQString(), n.n.String(), params.SessionData().User},
+		}{n.n.Name.FQString(), n.n.String(), params.SessionData().User},
 	)
 }
 
@@ -255,11 +250,8 @@ func MakeViewTableDesc(
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 ) (sqlbase.TableDescriptor, error) {
-	viewName, err := n.Name.Normalize()
-	if err != nil {
-		return sqlbase.TableDescriptor{}, err
-	}
-	desc := InitTableDescriptor(id, parentID, viewName.Table(), creationTime, privileges)
+	viewName := n.Name.Table()
+	desc := InitTableDescriptor(id, parentID, viewName, creationTime, privileges)
 	desc.ViewQuery = tree.AsStringWithFlags(n.AsSource, tree.FmtParsable)
 
 	for i, colRes := range resultColumns {
@@ -283,6 +275,6 @@ func MakeViewTableDesc(
 	// happens to work in gc, but does not work in gccgo.
 	//
 	// See https://github.com/golang/go/issues/23188.
-	err = desc.AllocateIDs()
+	err := desc.AllocateIDs()
 	return desc, err
 }

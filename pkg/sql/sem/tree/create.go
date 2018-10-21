@@ -102,7 +102,7 @@ func (l *IndexElemList) Format(ctx *FmtCtx) {
 // CreateIndex represents a CREATE INDEX statement.
 type CreateIndex struct {
 	Name        Name
-	Table       NormalizableTableName
+	Table       TableName
 	Unique      bool
 	Inverted    bool
 	IfNotExists bool
@@ -1100,7 +1100,7 @@ func (node *CreateRole) Format(ctx *FmtCtx) {
 
 // CreateView represents a CREATE VIEW statement.
 type CreateView struct {
-	Name        NormalizableTableName
+	Name        TableName
 	ColumnNames NameList
 	AsSource    *Select
 }

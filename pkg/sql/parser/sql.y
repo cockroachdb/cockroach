@@ -4534,8 +4534,13 @@ role_or_group:
 create_view_stmt:
   CREATE opt_temp opt_view_recursive VIEW view_name opt_column_list AS select_stmt
   {
+    name, err := tree.NormalizeTableName($5.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = &tree.CreateView{
-      Name: $5.normalizableTableNameFromUnresolvedName(),
+      Name: name,
       ColumnNames: $6.nameList(),
       AsSource: $8.slct(),
     }
@@ -4578,9 +4583,14 @@ create_type_stmt:
 create_index_stmt:
   CREATE opt_unique INDEX opt_index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
   {
+    table, err := tree.NormalizeTableName($6.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = &tree.CreateIndex{
       Name:    tree.Name($4),
-      Table:   $6.normalizableTableNameFromUnresolvedName(),
+      Table:   table,
       Unique:  $2.bool(),
       Columns: $9.idxElems(),
       Storing: $11.nameList(),
@@ -4591,9 +4601,14 @@ create_index_stmt:
   }
 | CREATE opt_unique INDEX IF NOT EXISTS index_name ON table_name opt_using_gin_btree '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
   {
+    table, err := tree.NormalizeTableName($9.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = &tree.CreateIndex{
       Name:        tree.Name($7),
-      Table:       $9.normalizableTableNameFromUnresolvedName(),
+      Table:       table,
       Unique:      $2.bool(),
       IfNotExists: true,
       Columns:     $12.idxElems(),
@@ -4605,9 +4620,14 @@ create_index_stmt:
   }
 | CREATE opt_unique INVERTED INDEX opt_index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
   {
+    table, err := tree.NormalizeTableName($7.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = &tree.CreateIndex{
       Name:       tree.Name($5),
-      Table:      $7.normalizableTableNameFromUnresolvedName(),
+      Table:      table,
       Unique:     $2.bool(),
       Inverted:   true,
       Columns:    $9.idxElems(),
@@ -4618,9 +4638,14 @@ create_index_stmt:
   }
 | CREATE opt_unique INVERTED INDEX IF NOT EXISTS index_name ON table_name '(' index_params ')' opt_storing opt_interleave opt_partition_by opt_idx_where
   {
+    table, err := tree.NormalizeTableName($10.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = &tree.CreateIndex{
       Name:        tree.Name($8),
-      Table:       $10.normalizableTableNameFromUnresolvedName(),
+      Table:       table,
       Unique:      $2.bool(),
       Inverted:    true,
       IfNotExists: true,
