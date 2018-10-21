@@ -1502,18 +1502,18 @@ func (node *Import) doc(p *PrettyCfg) pretty.Doc {
 	items = append(items, p.row("IMPORT", pretty.Nil))
 
 	if node.Bundle {
-		if node.Table.TableNameReference != nil {
-			items = append(items, p.row("TABLE", p.Doc(&node.Table)))
+		if node.Table != nil {
+			items = append(items, p.row("TABLE", p.Doc(node.Table)))
 			items = append(items, p.row("FROM", pretty.Nil))
 		}
 		items = append(items, p.row(node.FileFormat, p.Doc(&node.Files)))
 	} else {
 		if node.CreateFile != nil {
-			items = append(items, p.row("TABLE", p.Doc(&node.Table)))
+			items = append(items, p.row("TABLE", p.Doc(node.Table)))
 			items = append(items, p.row("CREATE USING", p.Doc(node.CreateFile)))
 		} else {
 			table := pretty.BracketDoc(
-				pretty.ConcatSpace(p.Doc(&node.Table), pretty.Text("(")),
+				pretty.ConcatSpace(p.Doc(node.Table), pretty.Text("(")),
 				p.Doc(&node.CreateDefs),
 				pretty.Text(")"),
 			)

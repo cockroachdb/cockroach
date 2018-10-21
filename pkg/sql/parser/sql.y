@@ -1734,19 +1734,39 @@ import_stmt:
   }
 | IMPORT TABLE table_name FROM import_format '(' string_or_placeholder ')' opt_with_options
   {
-    $$.val = &tree.Import{Bundle: true, Table: $3.normalizableTableNameFromUnresolvedName(), FileFormat: $5, Files: tree.Exprs{$7.expr()}, Options: $9.kvOptions()}
+    name, err := tree.NormalizeTableName($3.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.Import{Bundle: true, Table: &name, FileFormat: $5, Files: tree.Exprs{$7.expr()}, Options: $9.kvOptions()}
   }
 | IMPORT TABLE table_name FROM import_format string_or_placeholder opt_with_options
   {
-    $$.val = &tree.Import{Bundle: true, Table: $3.normalizableTableNameFromUnresolvedName(), FileFormat: $5, Files: tree.Exprs{$6.expr()}, Options: $7.kvOptions()}
+    name, err := tree.NormalizeTableName($3.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.Import{Bundle: true, Table: &name, FileFormat: $5, Files: tree.Exprs{$6.expr()}, Options: $7.kvOptions()}
   }
 | IMPORT TABLE table_name CREATE USING string_or_placeholder import_format DATA '(' string_or_placeholder_list ')' opt_with_options
   {
-    $$.val = &tree.Import{Table: $3.normalizableTableNameFromUnresolvedName(), CreateFile: $6.expr(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
+    name, err := tree.NormalizeTableName($3.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.Import{Table: &name, CreateFile: $6.expr(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
   }
 | IMPORT TABLE table_name '(' table_elem_list ')' import_format DATA '(' string_or_placeholder_list ')' opt_with_options
   {
-    $$.val = &tree.Import{Table: $3.normalizableTableNameFromUnresolvedName(), CreateDefs: $5.tblDefs(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
+    name, err := tree.NormalizeTableName($3.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.Import{Table: &name, CreateDefs: $5.tblDefs(), FileFormat: $7, Files: $10.exprs(), Options: $12.kvOptions()}
   }
 | IMPORT error // SHOW HELP: IMPORT
 
