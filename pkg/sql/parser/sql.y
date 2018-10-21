@@ -145,8 +145,8 @@ func (u *sqlSymUnion) functionReference() tree.FunctionReference {
 func (u *sqlSymUnion) tablePatterns() tree.TablePatterns {
     return u.val.(tree.TablePatterns)
 }
-func (u *sqlSymUnion) normalizableTableNames() tree.NormalizableTableNames {
-    return u.val.(tree.NormalizableTableNames)
+func (u *sqlSymUnion) tableNames() tree.TableNames {
+    return u.val.(tree.TableNames)
 }
 func (u *sqlSymUnion) indexFlags() *tree.IndexFlags {
     return u.val.(*tree.IndexFlags)
@@ -433,12 +433,6 @@ func (u *sqlSymUnion) scrubOptions() tree.ScrubOptions {
 }
 func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
     return u.val.(tree.ScrubOption)
-}
-func (u *sqlSymUnion) normalizableTableNameFromUnresolvedName() tree.NormalizableTableName {
-    return tree.NormalizableTableName{TableNameReference: u.unresolvedName()}
-}
-func (u *sqlSymUnion) newNormalizableTableNameFromUnresolvedName() *tree.NormalizableTableName {
-    return &tree.NormalizableTableName{TableNameReference: u.unresolvedName()}
 }
 func (u *sqlSymUnion) resolvableFuncRefFromName() tree.ResolvableFunctionReference {
     return tree.ResolvableFunctionReference{FunctionReference: u.unresolvedName()}
@@ -807,7 +801,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <*tree.From> from_clause update_from_clause
 %type <tree.TableExprs> from_list rowsfrom_list
 %type <tree.TablePatterns> table_pattern_list single_table_pattern_list
-%type <tree.NormalizableTableNames> table_name_list
+%type <tree.TableNames> table_name_list
 %type <tree.Exprs> expr_list opt_expr_list tuple1_ambiguous_values tuple1_unambiguous_values
 %type <*tree.Tuple> expr_tuple1_ambiguous expr_tuple_unambiguous
 %type <tree.NameList> attrs
@@ -817,7 +811,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.ArraySubscripts> array_subscripts
 %type <tree.GroupBy> group_clause
 %type <*tree.Limit> select_limit
-%type <tree.NormalizableTableNames> relation_expr_list
+%type <tree.TableNames> relation_expr_list
 %type <tree.ReturningClause> returning_clause
 
 %type <[]tree.SequenceOption> sequence_option_list opt_sequence_option_list
@@ -2233,11 +2227,11 @@ drop_ddl_stmt:
 drop_view_stmt:
   DROP VIEW table_name_list opt_drop_behavior
   {
-    $$.val = &tree.DropView{Names: $3.normalizableTableNames(), IfExists: false, DropBehavior: $4.dropBehavior()}
+    $$.val = &tree.DropView{Names: $3.tableNames(), IfExists: false, DropBehavior: $4.dropBehavior()}
   }
 | DROP VIEW IF EXISTS table_name_list opt_drop_behavior
   {
-    $$.val = &tree.DropView{Names: $5.normalizableTableNames(), IfExists: true, DropBehavior: $6.dropBehavior()}
+    $$.val = &tree.DropView{Names: $5.tableNames(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
 | DROP VIEW error // SHOW HELP: DROP VIEW
 
@@ -2248,11 +2242,11 @@ drop_view_stmt:
 drop_sequence_stmt:
   DROP SEQUENCE table_name_list opt_drop_behavior
   {
-    $$.val = &tree.DropSequence{Names: $3.normalizableTableNames(), IfExists: false, DropBehavior: $4.dropBehavior()}
+    $$.val = &tree.DropSequence{Names: $3.tableNames(), IfExists: false, DropBehavior: $4.dropBehavior()}
   }
 | DROP SEQUENCE IF EXISTS table_name_list opt_drop_behavior
   {
-    $$.val = &tree.DropSequence{Names: $5.normalizableTableNames(), IfExists: true, DropBehavior: $6.dropBehavior()}
+    $$.val = &tree.DropSequence{Names: $5.tableNames(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
 | DROP SEQUENCE error // SHOW HELP: DROP VIEW
 
@@ -2263,11 +2257,11 @@ drop_sequence_stmt:
 drop_table_stmt:
   DROP TABLE table_name_list opt_drop_behavior
   {
-    $$.val = &tree.DropTable{Names: $3.normalizableTableNames(), IfExists: false, DropBehavior: $4.dropBehavior()}
+    $$.val = &tree.DropTable{Names: $3.tableNames(), IfExists: false, DropBehavior: $4.dropBehavior()}
   }
 | DROP TABLE IF EXISTS table_name_list opt_drop_behavior
   {
-    $$.val = &tree.DropTable{Names: $5.normalizableTableNames(), IfExists: true, DropBehavior: $6.dropBehavior()}
+    $$.val = &tree.DropTable{Names: $5.tableNames(), IfExists: true, DropBehavior: $6.dropBehavior()}
   }
 | DROP TABLE error // SHOW HELP: DROP TABLE
 
@@ -2350,11 +2344,21 @@ drop_role_stmt:
 table_name_list:
   table_name
   {
-    $$.val = tree.NormalizableTableNames{$1.normalizableTableNameFromUnresolvedName()}
+    name, err := tree.NormalizeTableName($1.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = tree.TableNames{name}
   }
 | table_name_list ',' table_name
   {
-    $$.val = append($1.normalizableTableNames(), $3.normalizableTableNameFromUnresolvedName())
+    name, err := tree.NormalizeTableName($3.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = append($1.tableNames(), name)
   }
 
 // %Help: EXPLAIN - show the logical plan of a query
@@ -4477,7 +4481,7 @@ sequence_option_elem:
 truncate_stmt:
   TRUNCATE opt_table relation_expr_list opt_drop_behavior
   {
-    $$.val = &tree.Truncate{Tables: $3.normalizableTableNames(), DropBehavior: $4.dropBehavior()}
+    $$.val = &tree.Truncate{Tables: $3.tableNames(), DropBehavior: $4.dropBehavior()}
   }
 | TRUNCATE error // SHOW HELP: TRUNCATE
 
@@ -6263,11 +6267,21 @@ relation_expr:
 relation_expr_list:
   relation_expr
   {
-    $$.val = tree.NormalizableTableNames{$1.normalizableTableNameFromUnresolvedName()}
+    name, err := tree.NormalizeTableName($1.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = tree.TableNames{name}
   }
 | relation_expr_list ',' relation_expr
   {
-    $$.val = append($1.normalizableTableNames(), $3.normalizableTableNameFromUnresolvedName())
+    name, err := tree.NormalizeTableName($3.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = append($1.tableNames(), name)
   }
 
 // Given "UPDATE foo set set ...", we have to decide without looking any
