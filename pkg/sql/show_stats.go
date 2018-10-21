@@ -43,14 +43,9 @@ var showTableStatsJSONColumns = sqlbase.ResultColumns{
 // ShowTableStats returns a SHOW STATISTICS statement for the specified table.
 // Privileges: Any privilege on table.
 func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (planNode, error) {
-	tn, err := n.Table.Normalize()
-	if err != nil {
-		return nil, err
-	}
-
 	// We avoid the cache so that we can observe the stats without
 	// taking a lease, like other SHOW commands.
-	desc, err := p.ResolveUncachedTableDescriptor(ctx, tn, true /*required*/, requireTableDesc)
+	desc, err := p.ResolveUncachedTableDescriptor(ctx, &n.Table, true /*required*/, requireTableDesc)
 	if err != nil {
 		return nil, err
 	}

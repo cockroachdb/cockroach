@@ -3038,12 +3038,22 @@ show_stats_stmt:
   SHOW STATISTICS FOR TABLE table_name
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowTableStats{Table: $5.normalizableTableNameFromUnresolvedName() }
+    name, err := tree.NormalizeTableName($5.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.ShowTableStats{Table: name}
   }
 | SHOW STATISTICS USING JSON FOR TABLE table_name
   {
     /* SKIP DOC */
-    $$.val = &tree.ShowTableStats{Table: $7.normalizableTableNameFromUnresolvedName(), UsingJSON: true}
+    name, err := tree.NormalizeTableName($7.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.ShowTableStats{Table: name, UsingJSON: true}
   }
 | SHOW STATISTICS error // SHOW HELP: SHOW STATISTICS
 

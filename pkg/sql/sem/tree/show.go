@@ -348,7 +348,7 @@ func (node *ShowFingerprints) Format(ctx *FmtCtx) {
 
 // ShowTableStats represents a SHOW STATISTICS FOR TABLE statement.
 type ShowTableStats struct {
-	Table     NormalizableTableName
+	Table     TableName
 	UsingJSON bool
 }
 
