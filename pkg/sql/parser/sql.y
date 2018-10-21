@@ -2684,11 +2684,16 @@ scrub_database_stmt:
 scrub_table_stmt:
   EXPERIMENTAL SCRUB TABLE table_name opt_as_of_clause opt_scrub_options_clause
   {
+    name, err := tree.NormalizeTableName($4.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = &tree.Scrub{
-        Typ: tree.ScrubTable,
-        Table: $4.normalizableTableNameFromUnresolvedName(),
-        AsOf: $5.asOfClause(),
-        Options: $6.scrubOptions(),
+      Typ: tree.ScrubTable,
+      Table: name,
+      AsOf: $5.asOfClause(),
+      Options: $6.scrubOptions(),
     }
   }
 | EXPERIMENTAL SCRUB TABLE error // SHOW HELP: SCRUB TABLE
