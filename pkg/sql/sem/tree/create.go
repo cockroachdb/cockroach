@@ -945,7 +945,7 @@ func (node *CreateTable) HoistConstraints() {
 // CreateSequence represents a CREATE SEQUENCE statement.
 type CreateSequence struct {
 	IfNotExists bool
-	Name        NormalizableTableName
+	Name        TableName
 	Options     SequenceOptions
 }
 

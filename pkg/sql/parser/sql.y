@@ -4419,20 +4419,21 @@ numeric_only:
 create_sequence_stmt:
   CREATE opt_temp SEQUENCE sequence_name opt_sequence_option_list
   {
-    node := &tree.CreateSequence{
-      Name: $4.normalizableTableNameFromUnresolvedName(),
-      Options: $5.seqOpts(),
+    name, err := tree.NormalizeTableName($4.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
     }
-    $$.val = node
+    $$.val = &tree.CreateSequence{Name: name, Options: $5.seqOpts()}
   }
 | CREATE opt_temp SEQUENCE IF NOT EXISTS sequence_name opt_sequence_option_list
   {
-    node := &tree.CreateSequence{
-      Name: $7.normalizableTableNameFromUnresolvedName(),
-      Options: $8.seqOpts(),
-      IfNotExists: true,
+    name, err := tree.NormalizeTableName($7.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
     }
-    $$.val = node
+    $$.val = &tree.CreateSequence{Name: name, Options: $8.seqOpts(), IfNotExists: true}
   }
 | CREATE opt_temp SEQUENCE error // SHOW HELP: CREATE SEQUENCE
 
