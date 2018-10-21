@@ -209,7 +209,7 @@ func run() error {
 			var stderr bytes.Buffer
 			cmd := exec.Command("roachprod",
 				"ssh", fmt.Sprintf("%s:%d", cluster, i), "--",
-				fmt.Sprintf("./stress %s", strings.Join(os.Args[2:], " ")))
+				fmt.Sprintf("GOTRACEBACK=all ./stress %s", strings.Join(os.Args[2:], " ")))
 			cmd.Stdout = stdoutW
 			cmd.Stderr = &stderr
 			if err := cmd.Run(); err != nil {
