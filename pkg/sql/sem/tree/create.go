@@ -844,7 +844,7 @@ func (node *RangePartition) Format(ctx *FmtCtx) {
 // CreateTable represents a CREATE TABLE statement.
 type CreateTable struct {
 	IfNotExists   bool
-	Table         NormalizableTableName
+	Table         TableName
 	Interleave    *InterleaveDef
 	PartitionBy   *PartitionBy
 	Defs          TableDefs

@@ -3821,8 +3821,13 @@ pause_stmt:
 create_table_stmt:
   CREATE opt_temp TABLE table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
   {
+    name, err := tree.NormalizeTableName($4.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = &tree.CreateTable{
-      Table: $4.normalizableTableNameFromUnresolvedName(),
+      Table: name,
       IfNotExists: false,
       Interleave: $8.interleave(),
       Defs: $6.tblDefs(),
@@ -3833,8 +3838,13 @@ create_table_stmt:
   }
 | CREATE opt_temp TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
   {
+    name, err := tree.NormalizeTableName($7.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = &tree.CreateTable{
-      Table: $7.normalizableTableNameFromUnresolvedName(),
+      Table: name,
       IfNotExists: true,
       Interleave: $11.interleave(),
       Defs: $9.tblDefs(),
@@ -3852,8 +3862,13 @@ opt_table_with:
 create_table_as_stmt:
   CREATE opt_temp TABLE table_name opt_column_list opt_table_with AS select_stmt opt_create_as_data
   {
+    name, err := tree.NormalizeTableName($4.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = &tree.CreateTable{
-      Table: $4.normalizableTableNameFromUnresolvedName(),
+      Table: name,
       IfNotExists: false,
       Interleave: nil,
       Defs: nil,
@@ -3863,8 +3878,13 @@ create_table_as_stmt:
   }
 | CREATE opt_temp TABLE IF NOT EXISTS table_name opt_column_list opt_table_with AS select_stmt opt_create_as_data
   {
+    name, err := tree.NormalizeTableName($7.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = &tree.CreateTable{
-      Table: $7.normalizableTableNameFromUnresolvedName(),
+      Table: name,
       IfNotExists: true,
       Interleave: nil,
       Defs: nil,
