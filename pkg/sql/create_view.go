@@ -68,13 +68,12 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 
 	// Ensure that all the table names pretty-print as fully qualified,
 	// so we store that in the view descriptor.
-	// The traversal will update the NormalizableTableNames in-place, so
-	// the changes are persisted in n.AsSource. We exploit the fact
-	// that semantic analysis above has populated any missing db/schema
-	// details in the table names in-place.
-	// We use tree.FormatNode merely as a traversal method; its output
-	// buffer is discarded immediately after the traversal because it is
-	// not needed further.
+	//
+	// The traversal will update the TableNames in-place, so the changes are
+	// persisted in n.AsSource. We exploit the fact that semantic analysis above
+	// has populated any missing db/schema details in the table names in-place.
+	// We use tree.FormatNode merely as a traversal method; its output buffer is
+	// discarded immediately after the traversal because it is not needed further.
 	{
 		f := tree.NewFmtCtxWithBuf(tree.FmtParsable)
 		f.WithReformatTableNames(

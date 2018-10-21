@@ -246,10 +246,6 @@ func (node *GroupBy) docRow(p *PrettyCfg) pretty.RLTableRow {
 	return p.row("GROUP BY", pretty.Join(",", d...))
 }
 
-func (node *NormalizableTableName) doc(p *PrettyCfg) pretty.Doc {
-	return p.Doc(node.TableNameReference)
-}
-
 // flattenOp populates a slice with all the leaves operands of an expression
 // tree where all the nodes satisfy the given predicate.
 func (p *PrettyCfg) flattenOp(
