@@ -223,9 +223,6 @@ func (n *alterTableNode) startExec(params runParams) error {
 				descriptorChanged = true
 
 			case *tree.ForeignKeyConstraintTableDef:
-				if _, err := d.Table.Normalize(); err != nil {
-					return err
-				}
 				for _, colName := range d.FromCols {
 					col, _, err := n.tableDesc.FindColumnByName(colName)
 					if err != nil {

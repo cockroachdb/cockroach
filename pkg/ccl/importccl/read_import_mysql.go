@@ -448,7 +448,7 @@ func mysqlTableToCockroach(
 				d.Actions.Update = mysqlActionToCockroach(i.OnUpdate)
 			}
 
-			d.Table.TableNameReference = &toTable
+			d.Table = toTable
 			fkDefs = append(fkDefs, delayedFK{desc, d})
 		}
 	}

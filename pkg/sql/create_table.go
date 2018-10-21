@@ -59,18 +59,6 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 	}
 
 	n.HoistConstraints()
-	for _, def := range n.Defs {
-		switch t := def.(type) {
-		case *tree.ForeignKeyConstraintTableDef:
-			// Just check the target name has the right structure. We'll do
-			// name resolution later, after the descriptor has been
-			// allocated.
-			_, err := t.Table.Normalize()
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
 
 	var sourcePlan planNode
 	if n.As() {
@@ -400,9 +388,7 @@ func ResolveFK(
 		}
 	}
 
-	targetTable := d.Table.TableName()
-
-	target, err := ResolveExistingObject(ctx, sc, targetTable, true /*required*/, requireTableDesc)
+	target, err := ResolveExistingObject(ctx, sc, &d.Table, true /*required*/, requireTableDesc)
 	if err != nil {
 		return err
 	}
@@ -670,12 +656,9 @@ func addInterleave(
 			7854, "unsupported shorthand %s", interleave.DropBehavior)
 	}
 
-	tn, err := interleave.Parent.Normalize()
-	if err != nil {
-		return err
-	}
-
-	parentTable, err := ResolveExistingObject(ctx, vt, tn, true /*required*/, requireTableDesc)
+	parentTable, err := ResolveExistingObject(
+		ctx, vt, &interleave.Parent, true /*required*/, requireTableDesc,
+	)
 	if err != nil {
 		return err
 	}

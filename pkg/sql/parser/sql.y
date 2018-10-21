@@ -3952,10 +3952,15 @@ table_elem:
 opt_interleave:
   INTERLEAVE IN PARENT table_name '(' name_list ')' opt_interleave_drop_behavior
   {
+    name, err := tree.NormalizeTableName($4.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = &tree.InterleaveDef{
-               Parent: $4.newNormalizableTableNameFromUnresolvedName(),
-               Fields: $6.nameList(),
-               DropBehavior: $8.dropBehavior(),
+      Parent: name,
+      Fields: $6.nameList(),
+      DropBehavior: $8.dropBehavior(),
     }
   }
 | /* EMPTY */
@@ -4151,8 +4156,13 @@ col_qualification_elem:
   }
 | REFERENCES table_name opt_name_parens key_match reference_actions
  {
+    name, err := tree.NormalizeTableName($2.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = &tree.ColumnFKConstraint{
-      Table: $2.normalizableTableNameFromUnresolvedName(),
+      Table: name,
       Col: tree.Name($3),
       Actions: $5.referenceActions(),
     }
@@ -4256,8 +4266,13 @@ constraint_elem:
 | FOREIGN KEY '(' name_list ')' REFERENCES table_name
     opt_column_list key_match reference_actions opt_deferrable
   {
+    name, err := tree.NormalizeTableName($7.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = &tree.ForeignKeyConstraintTableDef{
-      Table: $7.normalizableTableNameFromUnresolvedName(),
+      Table: name,
       FromCols: $4.nameList(),
       ToCols: $8.nameList(),
       Actions: $10.referenceActions(),
