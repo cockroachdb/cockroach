@@ -387,11 +387,8 @@ func (p *planner) rewriteIndexOrderings(
 			}
 
 		case tree.OrderByIndex:
-			tn, err := o.Table.Normalize()
-			if err != nil {
-				return nil, err
-			}
-			desc, err := ResolveExistingObject(ctx, p, tn, true /*required*/, requireTableDesc)
+			tn := o.Table
+			desc, err := ResolveExistingObject(ctx, p, &tn, true /*required*/, requireTableDesc)
 			if err != nil {
 				return nil, err
 			}
@@ -433,7 +430,7 @@ func (p *planner) rewriteIndexOrderings(
 			for k, colName := range idxDesc.ColumnNames {
 				newOrderBy = append(newOrderBy, &tree.Order{
 					OrderType: tree.OrderByColumn,
-					Expr:      tree.NewColumnItem(tn, tree.Name(colName)),
+					Expr:      tree.NewColumnItem(&tn, tree.Name(colName)),
 					Direction: chooseDirection(o.Direction == tree.Descending, idxDesc.ColumnDirections[k]),
 				})
 			}
@@ -446,7 +443,7 @@ func (p *planner) rewriteIndexOrderings(
 
 				newOrderBy = append(newOrderBy, &tree.Order{
 					OrderType: tree.OrderByColumn,
-					Expr:      tree.NewColumnItem(tn, tree.Name(col.Name)),
+					Expr:      tree.NewColumnItem(&tn, tree.Name(col.Name)),
 					Direction: chooseDirection(o.Direction == tree.Descending, sqlbase.IndexDescriptor_ASC),
 				})
 			}
