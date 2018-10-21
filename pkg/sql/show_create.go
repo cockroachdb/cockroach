@@ -37,7 +37,7 @@ func (p *planner) ShowCreate(ctx context.Context, n *tree.ShowCreate) (planNode,
         AND schema_name = %[5]s
         AND descriptor_name = %[2]s
 `
-	return p.showTableDetails(ctx, "SHOW CREATE", n.Name, showCreateQuery)
+	return p.showTableDetails(ctx, "SHOW CREATE", &n.Name, showCreateQuery)
 }
 
 // ShowCreateView returns a valid SQL representation of the CREATE
