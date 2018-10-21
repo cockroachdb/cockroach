@@ -299,7 +299,7 @@ func readPostgresCreateTable(
 		}
 		switch stmt := stmt.(type) {
 		case *tree.CreateTable:
-			name, err := getTableName2(stmt.Table)
+			name, err := getTableName(&stmt.Table)
 			if err != nil {
 				return nil, err
 			}

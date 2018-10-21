@@ -499,10 +499,8 @@ func RandCreateTable(tableIdx int) *tree.CreateTable {
 
 	// We're done! Return a new table with all of the attributes we've made.
 	ret := &tree.CreateTable{
-		Table: tree.NormalizableTableName{
-			TableNameReference: tree.NewUnresolvedName(fmt.Sprintf("table%d", tableIdx)),
-		},
-		Defs: defs,
+		Table: tree.MakeUnqualifiedTableName(tree.Name(fmt.Sprintf("table%d", tableIdx))),
+		Defs:  defs,
 	}
 	return ret
 }

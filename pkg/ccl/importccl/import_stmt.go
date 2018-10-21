@@ -164,11 +164,6 @@ func MakeSimpleTableDescriptor(
 		return nil, pgerror.Unimplemented("import.create-as", "CREATE AS not supported")
 	}
 
-	tableName, err := create.Table.Normalize()
-	if err != nil {
-		return nil, err
-	}
-
 	filteredDefs := create.Defs[:0]
 	for i := range create.Defs {
 		switch def := create.Defs[i].(type) {
@@ -182,7 +177,7 @@ func MakeSimpleTableDescriptor(
 				return nil, pgerror.Unimplemented("import.computed", "computed columns not supported: %s", tree.AsString(def))
 			}
 
-			if err := sql.SimplifySerialInColumnDefWithRowID(ctx, def, tableName); err != nil {
+			if err := sql.SimplifySerialInColumnDefWithRowID(ctx, def, &create.Table); err != nil {
 				return nil, err
 			}
 
@@ -756,10 +751,8 @@ func importPlanHook(
 			var create *tree.CreateTable
 			if importStmt.CreateDefs != nil {
 				create = &tree.CreateTable{
-					Table: tree.NormalizableTableName{
-						TableNameReference: importStmt.Table,
-					},
-					Defs: importStmt.CreateDefs,
+					Table: *importStmt.Table,
+					Defs:  importStmt.CreateDefs,
 				}
 			} else {
 				filename, err := createFileFn()
@@ -771,10 +764,11 @@ func importPlanHook(
 					return err
 				}
 
-				if parsed, err := create.Table.Normalize(); err != nil {
-					return errors.Wrap(err, "normalize create table")
-				} else if table.TableName != parsed.TableName {
-					return errors.Errorf("importing table %s, but file specifies a schema for table %s", table.TableName, parsed.TableName)
+				if table.TableName != create.Table.TableName {
+					return errors.Errorf(
+						"importing table %s, but file specifies a schema for table %s",
+						table.TableName, create.Table.TableName,
+					)
 				}
 			}
 
