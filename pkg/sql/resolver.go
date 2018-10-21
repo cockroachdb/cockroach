@@ -450,24 +450,6 @@ func expandIndexName(
 	return tn, desc, nil
 }
 
-// TODO(radu): temporary variant until other cases are converted.
-func (p *planner) getTableAndIndex2(
-	ctx context.Context,
-	table *tree.NormalizableTableName,
-	tableWithIndex *tree.TableNameWithIndex,
-	privilege privilege.Kind,
-) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor, error) {
-	var tn *tree.TableName
-	if table != nil {
-		var err error
-		tn, err = table.Normalize()
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-	return p.getTableAndIndex(ctx, tn, tableWithIndex, privilege)
-}
-
 // getTableAndIndex returns the table and index descriptors for a table
 // (primary index) or table-with-index. Only one of table and tableWithIndex can
 // be set.  This is useful for statements that have both table and index

@@ -1283,7 +1283,12 @@ alter_oneindex_stmt:
 alter_split_stmt:
   ALTER TABLE table_name SPLIT AT select_stmt
   {
-    $$.val = &tree.Split{Table: $3.newNormalizableTableNameFromUnresolvedName(), Rows: $6.slct()}
+    name, err := tree.NormalizeTableName($3.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.Split{Table: &name, Rows: $6.slct()}
   }
 
 alter_split_index_stmt:
@@ -1300,7 +1305,12 @@ alter_relocate_stmt:
   ALTER TABLE table_name relocate_kw select_stmt
   {
     /* SKIP DOC */
-    $$.val = &tree.Relocate{Table: $3.newNormalizableTableNameFromUnresolvedName(), Rows: $5.slct()}
+    name, err := tree.NormalizeTableName($3.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.Relocate{Table: &name, Rows: $5.slct()}
   }
 
 alter_relocate_index_stmt:
@@ -1314,7 +1324,12 @@ alter_relocate_lease_stmt:
   ALTER TABLE table_name relocate_kw LEASE select_stmt
   {
     /* SKIP DOC */
-    $$.val = &tree.Relocate{Table: $3.newNormalizableTableNameFromUnresolvedName(), Rows: $6.slct(), RelocateLease: true}
+    name, err := tree.NormalizeTableName($3.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.Relocate{Table: &name, Rows: $6.slct(), RelocateLease: true}
   }
 
 alter_relocate_index_lease_stmt:
@@ -1412,11 +1427,21 @@ var_set_list:
 alter_scatter_stmt:
   ALTER TABLE table_name SCATTER
   {
-    $$.val = &tree.Scatter{Table: $3.newNormalizableTableNameFromUnresolvedName()}
+    name, err := tree.NormalizeTableName($3.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.Scatter{Table: &name}
   }
 | ALTER TABLE table_name SCATTER FROM '(' expr_list ')' TO '(' expr_list ')'
   {
-    $$.val = &tree.Scatter{Table: $3.newNormalizableTableNameFromUnresolvedName(), From: $7.exprs(), To: $11.exprs()}
+    name, err := tree.NormalizeTableName($3.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.Scatter{Table: &name, From: $7.exprs(), To: $11.exprs()}
   }
 
 alter_scatter_index_stmt:
@@ -3459,7 +3484,12 @@ show_zone_stmt:
 show_ranges_stmt:
   SHOW ranges_kw FROM TABLE table_name
   {
-    $$.val = &tree.ShowRanges{Table: $5.newNormalizableTableNameFromUnresolvedName()}
+    name, err := tree.NormalizeTableName($5.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.ShowRanges{Table: &name}
   }
 | SHOW ranges_kw FROM INDEX table_name_with_index
   {
