@@ -23,6 +23,7 @@ import (
 	"github.com/lib/pq"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -223,4 +224,39 @@ func UnimplementedWithDepth(depth int, feature, msg string, args ...interface{})
 	err.InternalCommand = feature
 	err.Hint = unimplementedErrorHint
 	return err
+}
+
+// Wrap wraps an error into a pgerror. The code is used
+// if the original error was not a pgerror already. The errContext
+// string is used to populate the InternalCommand. If InternalCommand
+// already exists, the errContext is prepended.
+func Wrap(err error, code, errContext string) error {
+	var pgErr Error
+	origErr, ok := GetPGCause(err)
+	if ok {
+		// Copy the error. We can't use the existing error directly
+		// because it may be a global (const) object and we want to modify
+		// it below.
+		pgErr = *origErr
+	} else {
+		pgErr = Error{
+			Code: code,
+			// Keep the stack trace if one was available in the original
+			// non-Error error (e.g. when constructed via errors.Wrap).
+			InternalCommand: log.ErrorSource(err),
+		}
+	}
+
+	// Prepend the context to the existing message.
+	prefix := errContext + ": "
+	pgErr.Message = prefix + err.Error()
+
+	// Prepend the context also to the internal command, to ensure it
+	// goes to telemetry.
+	if pgErr.InternalCommand != "" {
+		pgErr.InternalCommand = prefix + pgErr.InternalCommand
+	} else {
+		pgErr.InternalCommand = errContext
+	}
+	return &pgErr
 }
