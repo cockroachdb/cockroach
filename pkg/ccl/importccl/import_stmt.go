@@ -492,18 +492,7 @@ func importPlanHook(
 			return err
 		}
 
-		var table *tree.TableName
-		if importStmt.Table.TableNameReference != nil {
-			// Normalize must be called regardles of whether there is a
-			// transform because it prepares a TableName with the right
-			// structure and stores it back into the statement AST, which we
-			// need later when computing the job title.
-			table, err = importStmt.Table.Normalize()
-			if err != nil {
-				return errors.Wrap(err, "normalize create table")
-			}
-		}
-
+		table := importStmt.Table
 		transform := opts[importOptionTransform]
 
 		var parentID sqlbase.ID
@@ -766,7 +755,12 @@ func importPlanHook(
 			}
 			var create *tree.CreateTable
 			if importStmt.CreateDefs != nil {
-				create = &tree.CreateTable{Table: importStmt.Table, Defs: importStmt.CreateDefs}
+				create = &tree.CreateTable{
+					Table: tree.NormalizableTableName{
+						TableNameReference: importStmt.Table,
+					},
+					Defs: importStmt.CreateDefs,
+				}
 			} else {
 				filename, err := createFileFn()
 				if err != nil {
