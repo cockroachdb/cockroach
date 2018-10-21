@@ -40,7 +40,7 @@ type splitNode struct {
 // Split executes a KV split.
 // Privileges: INSERT on table.
 func (p *planner) Split(ctx context.Context, n *tree.Split) (planNode, error) {
-	tableDesc, index, err := p.getTableAndIndex2(ctx, n.Table, n.Index, privilege.INSERT)
+	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.INSERT)
 	if err != nil {
 		return nil, err
 	}

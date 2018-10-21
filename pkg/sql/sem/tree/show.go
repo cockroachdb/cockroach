@@ -319,7 +319,7 @@ func (node *ShowRoles) Format(ctx *FmtCtx) {
 // ShowRanges represents a SHOW EXPERIMENTAL_RANGES statement.
 // Only one of Table and Index can be set.
 type ShowRanges struct {
-	Table *NormalizableTableName
+	Table *TableName
 	Index *TableNameWithIndex
 }
 
