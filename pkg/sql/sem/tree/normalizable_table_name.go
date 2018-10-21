@@ -103,7 +103,7 @@ func (t *NormalizableTableNames) Format(ctx *FmtCtx) {
 // TableNameWithIndex represents a "table@index", used in statements that
 // specifically refer to an index.
 type TableNameWithIndex struct {
-	Table NormalizableTableName
+	Table TableName
 	Index UnrestrictedName
 
 	// SearchTable indicates that we have just an index (no table name); we will

@@ -253,12 +253,10 @@ func (p *planner) resolveTableForZone(
 	if zs.TargetsIndex() {
 		_, res, err = expandMutableIndexName(ctx, p, &zs.TableOrIndex, true /* requireTable */)
 	} else if zs.TargetsTable() {
-		tn, err := zs.TableOrIndex.Table.Normalize()
-		if err != nil {
-			return nil, err
-		}
 		p.runWithOptions(resolveFlags{skipCache: true}, func() {
-			res, err = ResolveExistingObject(ctx, p, tn, true /*required*/, anyDescType)
+			res, err = ResolveExistingObject(
+				ctx, p, &zs.TableOrIndex.Table, true /*required*/, anyDescType,
+			)
 		})
 		if err != nil {
 			return nil, err

@@ -1363,17 +1363,27 @@ alter_zone_database_stmt:
 alter_zone_table_stmt:
   ALTER TABLE table_name set_zone_config
   {
+    name, err := tree.NormalizeTableName($3.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     s := $4.setZoneConfig()
     s.ZoneSpecifier = tree.ZoneSpecifier{
-       TableOrIndex: tree.TableNameWithIndex{Table: $3.normalizableTableNameFromUnresolvedName()},
+       TableOrIndex: tree.TableNameWithIndex{Table: name},
     }
     $$.val = s
   }
 | ALTER PARTITION partition_name OF TABLE table_name set_zone_config
   {
+    name, err := tree.NormalizeTableName($6.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     s := $7.setZoneConfig()
     s.ZoneSpecifier = tree.ZoneSpecifier{
-       TableOrIndex: tree.TableNameWithIndex{Table: $6.normalizableTableNameFromUnresolvedName()},
+       TableOrIndex: tree.TableNameWithIndex{Table: name},
        Partition: tree.Name($3),
     }
     $$.val = s
@@ -3360,14 +3370,24 @@ show_zone_stmt:
   }
 | SHOW ZONE CONFIGURATION FOR TABLE table_name opt_partition
   {
+    name, err := tree.NormalizeTableName($6.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
-        TableOrIndex: tree.TableNameWithIndex{Table: $6.normalizableTableNameFromUnresolvedName()},
+        TableOrIndex: tree.TableNameWithIndex{Table: name},
     }}
   }
 | SHOW ZONE CONFIGURATION FOR PARTITION partition_name OF TABLE table_name
   {
+    name, err := tree.NormalizeTableName($9.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = &tree.ShowZoneConfig{ZoneSpecifier: tree.ZoneSpecifier{
-      TableOrIndex: tree.TableNameWithIndex{Table: $9.normalizableTableNameFromUnresolvedName()},
+      TableOrIndex: tree.TableNameWithIndex{Table: name},
         Partition: tree.Name($6),
     }}
   }
@@ -8032,8 +8052,13 @@ table_pattern_list:
 table_name_with_index:
   table_name '@' index_name
   {
+    name, err := tree.NormalizeTableName($1.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = tree.TableNameWithIndex{
-       Table: $1.normalizableTableNameFromUnresolvedName(),
+       Table: name,
        Index: tree.UnrestrictedName($3),
     }
   }
@@ -8041,8 +8066,13 @@ table_name_with_index:
   {
     // This case allows specifying just an index name (potentially schema-qualified).
     // We temporarily store the index name in Table (see tree.TableNameWithIndex).
+    name, err := tree.NormalizeTableName($1.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = tree.TableNameWithIndex{
-        Table: $1.normalizableTableNameFromUnresolvedName(),
+        Table: name,
         SearchTable: true,
     }
   }

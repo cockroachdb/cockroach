@@ -43,7 +43,7 @@ type showRangesNode struct {
 }
 
 func (p *planner) ShowRanges(ctx context.Context, n *tree.ShowRanges) (planNode, error) {
-	tableDesc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.SELECT)
+	tableDesc, index, err := p.getTableAndIndex2(ctx, n.Table, n.Index, privilege.SELECT)
 
 	if err != nil {
 		return nil, err

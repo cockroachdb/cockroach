@@ -123,7 +123,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 			User       string
 			MutationID uint32
 		}{
-			n.n.Index.Table.TableName().FQString(), n.indexDesc.Name, n.n.String(),
+			n.n.Index.Table.FQString(), n.indexDesc.Name, n.n.String(),
 			params.SessionData().User, uint32(mutationID),
 		},
 	)
