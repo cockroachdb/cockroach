@@ -16,7 +16,6 @@ package testcat
 
 import (
 	"bytes"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -24,13 +23,8 @@ import (
 // CreateView creates a test view from a parsed DDL statement and adds it to the
 // catalog.
 func (tc *Catalog) CreateView(stmt *tree.CreateView) *View {
-	tn, err := stmt.Name.Normalize()
-	if err != nil {
-		panic(fmt.Errorf("%s", err))
-	}
-
 	// Update the view name to include catalog and schema if not provided.
-	tc.qualifyTableName(tn)
+	tc.qualifyTableName(&stmt.Name)
 
 	var buf bytes.Buffer
 	fmtCtx := tree.MakeFmtCtx(&buf, tree.FmtParsable)
@@ -38,7 +32,7 @@ func (tc *Catalog) CreateView(stmt *tree.CreateView) *View {
 
 	view := &View{
 		ViewFingerprint: tc.nextFingerprint(),
-		ViewName:        *tn,
+		ViewName:        stmt.Name,
 		QueryText:       buf.String(),
 		ColumnNames:     stmt.ColumnNames,
 	}

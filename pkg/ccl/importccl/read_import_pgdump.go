@@ -306,7 +306,7 @@ func readPostgresCreateTable(
 				createTbl[name] = stmt
 			}
 		case *tree.CreateIndex:
-			name, err := getTableName2(stmt.Table)
+			name, err := getTableName(&stmt.Table)
 			if err != nil {
 				return nil, err
 			}
