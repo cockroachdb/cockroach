@@ -53,6 +53,15 @@ const (
 	// in high latency clusters, and not allowing enough of a cushion can
 	// make rebalance thrashing more likely (#17879).
 	newReplicaGracePeriod = 5 * time.Minute
+
+	// addToPurgatoryReplicaCountThreshold is the count of replicas
+	// beyond which replicas that cannot be up-replicated are sent to
+	// purgatory for eager up-replication. Eager up-replication is
+	// mostly a concern when cluster sizes are small. If a cluster with
+	// many ranges is unable to allocate targets for up-replication, the
+	// purgatory will be filled with replicas and end up doing a lot of
+	// useless busy work. This is especially true for single-node clusters.
+	addToPurgatoryReplicaCountThreshold = 1000
 )
 
 var (
@@ -305,6 +314,12 @@ func (rq *replicateQueue) processOneChange(
 			rangeInfo,
 		)
 		if err != nil {
+			// If there are more replicas than addToPurgatoryReplicaCountThreshold,
+			// don't bother sending to purgatory.
+			if _, ok := err.(*allocatorError); ok && rq.store.ReplicaCount() > addToPurgatoryReplicaCountThreshold {
+				log.VErrEvent(ctx, 1, err.Error())
+				return false, nil // Skip
+			}
 			return false, err
 		}
 		newReplica := roachpb.ReplicationTarget{
