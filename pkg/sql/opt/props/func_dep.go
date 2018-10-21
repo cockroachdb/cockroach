@@ -464,8 +464,8 @@ func (f *FuncDepSet) HasMax1Row() bool {
 	return f.hasKey == strictKey && f.key.Empty()
 }
 
-// ClearKey marks the FD set as having no strict key. If there was a strict key,
-// it becomes a lax key.
+// DowngradeKey marks the FD set as having no strict key. If there was a strict
+// key, it becomes a lax key.
 func (f *FuncDepSet) DowngradeKey() {
 	if f.hasKey == strictKey {
 		f.hasKey = laxKey
@@ -1215,6 +1215,7 @@ func (f *FuncDepSet) ensureKeyClosure(cols opt.ColSet) {
 		closure := f.ComputeClosure(f.key)
 		if !cols.SubsetOf(closure) {
 			cols = cols.Difference(closure)
+
 			// If we have a strict key, we add a strict dependency; otherwise we add a
 			// lax dependency.
 			strict := f.hasKey == strictKey
@@ -1283,6 +1284,8 @@ func (f *FuncDepSet) Verify() {
 	}
 }
 
+// StringOnlyFDs returns a string representation of the FDs (without the key
+// information).
 func (f FuncDepSet) StringOnlyFDs() string {
 	var b strings.Builder
 	f.formatFDs(&b)
