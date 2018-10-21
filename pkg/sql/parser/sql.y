@@ -5754,11 +5754,26 @@ sortby:
   }
 | PRIMARY KEY table_name opt_asc_desc
   {
-    $$.val = &tree.Order{OrderType: tree.OrderByIndex, Direction: $4.dir(), Table: $3.normalizableTableNameFromUnresolvedName()}
+    name, err := tree.NormalizeTableName($3.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.Order{OrderType: tree.OrderByIndex, Direction: $4.dir(), Table: name}
   }
 | INDEX table_name '@' index_name opt_asc_desc
   {
-    $$.val = &tree.Order{OrderType: tree.OrderByIndex, Direction: $5.dir(), Table: $2.normalizableTableNameFromUnresolvedName(), Index: tree.UnrestrictedName($4) }
+    name, err := tree.NormalizeTableName($2.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.Order{
+      OrderType: tree.OrderByIndex,
+      Direction: $5.dir(),
+      Table:     name,
+      Index:     tree.UnrestrictedName($4),
+    }
   }
 
 // TODO(pmattis): Support ordering using arbitrary math ops?
