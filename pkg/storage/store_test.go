@@ -176,9 +176,10 @@ func createTestStoreWithoutStart(t testing.TB, stopper *stop.Stopper, cfg *Store
 	// so just disable the scanner for all tests that use this function
 	// instead of figuring out exactly which tests need it.
 	cfg.TestingKnobs.DisableScanner = true
-	// The scanner affects background operations; we must also disable
-	// the split queue separately to cover event-driven splits.
+	// The scanner affects background operations; we must also disable the split
+	// and merge queues separately to cover event-driven splits and merges.
 	cfg.TestingKnobs.DisableSplitQueue = true
+	cfg.TestingKnobs.DisableMergeQueue = true
 	eng := engine.NewInMem(roachpb.Attributes{}, 10<<20)
 	stopper.AddCloser(eng)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
