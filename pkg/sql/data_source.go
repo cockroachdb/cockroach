@@ -454,16 +454,21 @@ func (p *planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.
 			alias = tree.NewUnqualifiedTableName(ate.As.Alias)
 		}
 	}
-	table, ok := n.(*tree.NormalizableTableName)
-	if !ok {
+	var tn *tree.TableName
+	switch table := n.(type) {
+	case *tree.NormalizableTableName:
+		var err error
+		tn, err = table.Normalize()
+		if err != nil {
+			return nil, nil, err
+		}
+	case *tree.TableName:
+		tn = table
+	default:
 		return nil, nil, pgerror.Unimplemented(
 			"complex table expression in UPDATE/DELETE",
-			"cannot use a complex table name with DELETE/UPDATE", n,
+			"cannot use a complex table name with DELETE/UPDATE",
 		)
-	}
-	tn, err := table.Normalize()
-	if err != nil {
-		return nil, nil, err
 	}
 	if alias == nil {
 		alias = tn

@@ -500,7 +500,7 @@ func (m *pgDumpReader) readFile(
 			if !i.Stdin {
 				return errors.New("expected STDIN option on COPY FROM")
 			}
-			name, err := getTableName2(i.Table)
+			name, err := getTableName(&i.Table)
 			if err != nil {
 				return errors.Wrapf(err, "%s", i)
 			}
