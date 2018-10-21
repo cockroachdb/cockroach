@@ -1865,8 +1865,13 @@ opt_with_options:
 copy_from_stmt:
   COPY table_name opt_column_list FROM STDIN
   {
+    name, err := tree.NormalizeTableName($2.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = &tree.CopyFrom{
-       Table: $2.normalizableTableNameFromUnresolvedName(),
+       Table: name,
        Columns: $3.nameList(),
        Stdin: true,
     }
