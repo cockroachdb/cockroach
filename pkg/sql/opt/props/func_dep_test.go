@@ -315,6 +315,16 @@ func TestFuncDeps_AddLaxKey(t *testing.T) {
 	verifyFD(t, empty, "lax-key(); ()~~>(1)")
 	testColsAreStrictKey(t, empty, c(), false)
 	testColsAreLaxKey(t, empty, c(), true)
+
+	// Verify that a shorter lax key overwrites a longer lax key (but not
+	// vice-versa).
+	abcde := &props.FuncDepSet{}
+	abcde.AddLaxKey(c(2, 3), c(1, 2, 3, 4, 5))
+	verifyFD(t, abcde, "lax-key(2,3); (2,3)~~>(1,4,5)")
+	abcde.AddLaxKey(c(1), c(1, 2, 3, 4, 5))
+	verifyFD(t, abcde, "lax-key(1); (2,3)~~>(1,4,5), (1)~~>(2-5)")
+	abcde.AddLaxKey(c(4, 5), c(1, 2, 3, 4, 5))
+	verifyFD(t, abcde, "lax-key(1); (2,3)~~>(1,4,5), (1)~~>(2-5), (4,5)~~>(1-3)")
 }
 
 func TestFuncDeps_MakeMax1Row(t *testing.T) {
@@ -740,7 +750,7 @@ func TestFuncDeps_MakeProduct(t *testing.T) {
 	product.MakeProduct(mnpq)
 	verifyFD(t, product, "key(1,10,11); ()-->(2,12), (1)-->(3-5), (2,3)~~>(1,4,5), (10,11)-->(13)")
 
-	// Key only on left side:
+	// Strict key on left side, no key on right side:
 	//   SELECT * FROM abcde, (SELECT p, q FROM mnpq)
 	product = makeAbcdeFD(t)
 	mnpq = makeMnpqFD(t)
@@ -748,14 +758,75 @@ func TestFuncDeps_MakeProduct(t *testing.T) {
 	product.MakeProduct(mnpq)
 	verifyFD(t, product, "(1)-->(2-5), (2,3)~~>(1,4,5)")
 	testColsAreStrictKey(t, product, c(1, 2, 3, 4, 5, 12, 13), false)
+	testColsAreLaxKey(t, product, c(1, 2, 3, 4, 5, 12, 13), false)
 
-	// Key only on right side:
+	// No key on left side, Strict key on right side.
 	//   SELECT * FROM (SELECT d, e FROM abcde), mnpq
 	product = makeAbcdeFD(t)
 	product.ProjectCols(c(4, 5))
 	product.MakeProduct(makeMnpqFD(t))
 	verifyFD(t, product, "(10,11)-->(12,13)")
 	testColsAreStrictKey(t, product, c(4, 5, 10, 11, 12, 13), false)
+	testColsAreLaxKey(t, product, c(1, 2, 3, 4, 5, 12, 13), false)
+
+	// Strict key on left side, lax key on right side:
+	//   CREATE UNIQUE INDEX ON mnpq (p)
+	//   SELECT * FROM abcde, (SELECT p, q FROM mnpq)
+	product = makeAbcdeFD(t)
+	mnpq = makeMnpqFD(t)
+	mnpq.AddLaxKey(c(12), c(10, 11, 12, 13))
+	mnpq.ProjectCols(c(12, 13))
+	product.MakeProduct(mnpq)
+	verifyFD(t, product, "lax-key(1,12,13); (1)-->(2-5), (2,3)~~>(1,4,5), (12)~~>(13)")
+	testColsAreStrictKey(t, product, c(1, 2, 3, 4, 5, 12, 13), false)
+	testColsAreLaxKey(t, product, c(1, 12), true)
+
+	// Lax key on left side, strict key on right side:
+	//   SELECT * FROM (SELECT b, c, d, e FROM abcde), mnpq
+	product = makeAbcdeFD(t)
+	product.ProjectCols(c(2, 3, 4, 5))
+	mnpq = makeMnpqFD(t)
+	product.MakeProduct(mnpq)
+	verifyFD(t, product, "lax-key(2-5,10,11); (2,3)~~>(4,5), (10,11)-->(12,13)")
+	testColsAreStrictKey(t, product, c(1, 2, 3, 4, 5, 10, 11, 12, 13), false)
+	testColsAreLaxKey(t, product, c(2, 3, 10, 11), true)
+
+	// Lax key on left side, lax key on right side:
+	//   CREATE UNIQUE INDEX ON mnpq (p)
+	//   SELECT * FROM (SELECT b, c, d, e FROM abcde), (SELECT p, q FROM mnpq)
+	product = makeAbcdeFD(t)
+	product.ProjectCols(c(2, 3, 4, 5))
+	mnpq = makeMnpqFD(t)
+	mnpq.AddLaxKey(c(12), c(10, 11, 12, 13))
+	mnpq.ProjectCols(c(12, 13))
+	product.MakeProduct(mnpq)
+	verifyFD(t, product, "lax-key(2-5,12,13); (2,3)~~>(4,5), (12)~~>(13)")
+	testColsAreStrictKey(t, product, c(2, 3, 4, 5, 12, 13), false)
+	testColsAreLaxKey(t, product, c(2, 3, 12), true)
+
+	// Lax key on left side, no key on right side:
+	//   SELECT * FROM (SELECT b, c, d, e FROM abcde), (SELECT p, q FROM mnpq)
+	product = makeAbcdeFD(t)
+	product.ProjectCols(c(2, 3, 4, 5))
+	mnpq = makeMnpqFD(t)
+	mnpq.ProjectCols(c(12, 13))
+	product.MakeProduct(mnpq)
+	verifyFD(t, product, "(2,3)~~>(4,5)")
+	testColsAreStrictKey(t, product, c(2, 3, 4, 5, 12, 13), false)
+	testColsAreLaxKey(t, product, c(2, 3, 4, 5, 12, 13), false)
+
+	// No key on left side, lax key on right side:
+	//   CREATE UNIQUE INDEX ON mnpq (p)
+	//   SELECT * FROM (SELECT d, e FROM abcde), (SELECT p, q FROM mnpq)
+	product = makeAbcdeFD(t)
+	product.ProjectCols(c(4, 5))
+	mnpq = makeMnpqFD(t)
+	mnpq.AddLaxKey(c(12), c(10, 11, 12, 13))
+	mnpq.ProjectCols(c(12, 13))
+	product.MakeProduct(mnpq)
+	verifyFD(t, product, "(12)~~>(13)")
+	testColsAreStrictKey(t, product, c(4, 5, 12, 13), false)
+	testColsAreLaxKey(t, product, c(4, 5, 12, 13), false)
 }
 
 func TestFuncDeps_MakeApply(t *testing.T) {

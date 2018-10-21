@@ -141,73 +141,15 @@ project
       │              ├── scan uv
       │              │    ├── columns: v:6(int!null)
       │              │    └── prune: (6)
-      │              ├── max1-row
-      │              │    ├── columns: n:9(int!null)
-      │              │    ├── outer: (6)
-      │              │    ├── cardinality: [0 - 1]
-      │              │    ├── key: ()
-      │              │    ├── fd: ()-->(9)
-      │              │    └── select
-      │              │         ├── columns: n:9(int!null)
-      │              │         ├── outer: (6)
-      │              │         ├── fd: ()-->(9)
-      │              │         ├── interesting orderings: (+9)
-      │              │         ├── scan mn@secondary
-      │              │         │    ├── columns: n:9(int!null)
-      │              │         │    ├── constraint: /9: (/NULL - ]
-      │              │         │    ├── key: (9)
-      │              │         │    ├── prune: (9)
-      │              │         │    └── interesting orderings: (+9)
-      │              │         └── filters
-      │              │              └── eq [type=bool, outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(9), (9)==(6)]
-      │              │                   ├── variable: n [type=int]
-      │              │                   └── variable: v [type=int]
-      │              └── filters
-      │                   └── eq [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
-      │                        ├── variable: x [type=int]
-      │                        └── variable: n [type=int]
-      └── filters
-           └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-                ├── variable: x [type=int]
-                └── variable: v [type=int]
       │              ├── scan mn
       │              │    ├── columns: n:9(int)
       │              │    ├── lax-key: (9)
       │              │    ├── prune: (9)
       │              │    └── interesting orderings: (+9)
-      │              └── filters
-      │                   ├── eq [type=bool, outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(9), (9)==(6)]
-      │                   │    ├── variable: n [type=int]
-      │                   │    └── variable: v [type=int]
-      │                   └── eq [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
-      │                        ├── variable: x [type=int]
-      │                        └── variable: n [type=int]
-      └── filters
-           └── eq [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
-                ├── variable: x [type=int]
-                └── variable: v [type=int]
-      │              ├── max1-row
-      │              │    ├── columns: n:9(int!null)
-      │              │    ├── outer: (6)
-      │              │    ├── cardinality: [0 - 1]
-      │              │    ├── key: ()
-      │              │    ├── fd: ()-->(9)
-      │              │    └── select
-      │              │         ├── columns: n:9(int!null)
-      │              │         ├── outer: (6)
-      │              │         ├── fd: ()-->(9)
-      │              │         ├── interesting orderings: (+9)
-      │              │         ├── scan mn@secondary
-      │              │         │    ├── columns: n:9(int!null)
-      │              │         │    ├── constraint: /9: (/NULL - ]
-      │              │         │    ├── key: (9)
-      │              │         │    ├── prune: (9)
-      │              │         │    └── interesting orderings: (+9)
-      │              │         └── filters [type=bool, outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(9), (9)==(6)]
-      │              │              └── eq [type=bool, outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ])]
-      │              │                   ├── variable: n [type=int, outer=(9)]
-      │              │                   └── variable: v [type=int, outer=(6)]
-      │              └── filters [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+      │              └── filters [type=bool, outer=(1,6,9), constraints=(/1: (/NULL - ]; /6: (/NULL - ]; /9: (/NULL - ]), fd=(6)==(1,9), (9)==(1,6), (1)==(6,9)]
+      │                   ├── eq [type=bool, outer=(6,9), constraints=(/6: (/NULL - ]; /9: (/NULL - ])]
+      │                   │    ├── variable: n [type=int, outer=(9)]
+      │                   │    └── variable: v [type=int, outer=(6)]
       │                   └── eq [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ])]
       │                        ├── variable: x [type=int, outer=(1)]
       │                        └── variable: n [type=int, outer=(9)]
