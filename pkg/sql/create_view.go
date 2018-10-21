@@ -80,16 +80,10 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 	// We use tree.FormatNode merely as a traversal method; its output
 	// buffer is discarded immediately after the traversal because it is
 	// not needed further.
-	var fmtErr error
 	{
 		f := tree.NewFmtCtxWithBuf(tree.FmtParsable)
 		f.WithReformatTableNames(
-			func(_ *tree.FmtCtx, t *tree.NormalizableTableName) {
-				tn, err := t.Normalize()
-				if err != nil {
-					fmtErr = err
-					return
-				}
+			func(_ *tree.FmtCtx, tn *tree.TableName) {
 				// Persist the database prefix expansion.
 				if tn.SchemaName != "" {
 					// All CTE or table aliases have no schema
@@ -101,10 +95,6 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 		)
 		f.FormatNode(n.AsSource)
 		f.Close() // We don't need the string.
-	}
-
-	if fmtErr != nil {
-		return nil, fmtErr
 	}
 
 	numColNames := len(n.ColumnNames)

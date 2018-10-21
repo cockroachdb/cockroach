@@ -81,6 +81,10 @@ func (tp *TableNamePrefix) Catalog() string {
 
 // Format implements the NodeFormatter interface.
 func (t *TableName) Format(ctx *FmtCtx) {
+	if ctx.tableNameFormatter != nil {
+		ctx.tableNameFormatter(ctx, t)
+		return
+	}
 	t.TableNamePrefix.Format(ctx)
 	if t.ExplicitSchema || ctx.alwaysFormatTablePrefix() {
 		ctx.WriteByte('.')
