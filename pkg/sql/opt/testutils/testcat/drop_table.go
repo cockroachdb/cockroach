@@ -20,11 +20,8 @@ import (
 
 // DropTable is a partial implementation of the DROP TABLE statement.
 func (tc *Catalog) DropTable(stmt *tree.DropTable) {
-	for _, ntn := range stmt.Names {
-		tn, err := ntn.Normalize()
-		if err != nil {
-			panic(err)
-		}
+	for i := range stmt.Names {
+		tn := &stmt.Names[i]
 
 		// Update the table name to include catalog and schema if not provided.
 		tc.qualifyTableName(tn)

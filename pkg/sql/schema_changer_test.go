@@ -2833,7 +2833,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.RunningStatusWaitingGC, jobs.Record{
 		Username:    security.RootUser,
-		Description: "TRUNCATE TABLE t.test",
+		Description: "TRUNCATE TABLE t.public.test",
 		DescriptorIDs: sqlbase.IDs{
 			tableDesc.ID,
 		},
@@ -2971,7 +2971,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    security.RootUser,
-		Description: "TRUNCATE TABLE t.test",
+		Description: "TRUNCATE TABLE t.public.test",
 		DescriptorIDs: sqlbase.IDs{
 			tableDesc.ID,
 		},
