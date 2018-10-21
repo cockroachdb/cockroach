@@ -373,15 +373,6 @@ func readPostgresCreateTable(
 	}
 }
 
-// TODO(radu): this is temporary until we remove NormalizableTableName.
-func getTableName2(n tree.NormalizableTableName) (string, error) {
-	tn, err := n.Normalize()
-	if err != nil {
-		return "", err
-	}
-	return getTableName(tn)
-}
-
 func getTableName(tn *tree.TableName) (string, error) {
 	if sc := tn.Schema(); sc != "" && sc != "public" {
 		return "", pgerror.Unimplemented(
@@ -449,11 +440,11 @@ func (m *pgDumpReader) readFile(
 		}
 		switch i := stmt.(type) {
 		case *tree.Insert:
-			n, ok := i.Table.(*tree.NormalizableTableName)
+			n, ok := i.Table.(*tree.TableName)
 			if !ok {
 				return errors.Errorf("unexpected: %T", i.Table)
 			}
-			name, err := getTableName2(*n)
+			name, err := getTableName(n)
 			if err != nil {
 				return errors.Wrapf(err, "%s", i)
 			}
