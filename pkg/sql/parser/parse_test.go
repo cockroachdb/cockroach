@@ -2560,6 +2560,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE OPERATOR a`, 0, `create operator`},
 		{`CREATE PUBLICATION a`, 0, `create publication`},
 		{`CREATE RULE a`, 0, `create rule`},
+		{`CREATE SCHEMA a`, 26443, `create`},
 		{`CREATE SERVER a`, 0, `create server`},
 		{`CREATE SUBSCRIPTION a`, 0, `create subscription`},
 		{`CREATE TEXT SEARCH a`, 7821, `create text`},
@@ -2578,6 +2579,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`DROP OPERATOR a`, 0, `drop operator`},
 		{`DROP PUBLICATION a`, 0, `drop publication`},
 		{`DROP RULE a`, 0, `drop rule`},
+		{`DROP SCHEMA a`, 26443, `drop`},
 		{`DROP SERVER a`, 0, `drop server`},
 		{`DROP SUBSCRIPTION a`, 0, `drop subscription`},
 		{`DROP TEXT SEARCH a`, 7821, `drop text`},
@@ -2598,10 +2600,25 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TEMP VIEW a AS SELECT b`, 5807, ``},
 		{`CREATE TEMP SEQUENCE a`, 5807, ``},
 
+		{`CREATE TABLE a(LIKE b)`, 30840, ``},
+
+		{`CREATE TABLE a(b INT) WITH OIDS`, 0, `create table with oids`},
+		{`CREATE TABLE a(b INT) WITH foo = bar`, 0, `create table with foo`},
+
+		{`CREATE TABLE a AS SELECT b WITH NO DATA`, 0, `create table as with no data`},
+
 		{`CREATE TABLE a(b INT AS (123) VIRTUAL)`, 0, `virtual computed columns`},
 		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH FULL`, 0, `references match full`},
 		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH PARTIAL`, 0, `references match partial`},
 		{`CREATE TABLE a(b INT REFERENCES c(x) MATCH SIMPLE`, 0, `references match simple`},
+
+		{`CREATE TABLE a(b INT, FOREIGN KEY (b) REFERENCES c(x) DEFERRABLE)`, 31632, `deferrable`},
+		{`CREATE TABLE a(b INT, FOREIGN KEY (b) REFERENCES c(x) INITIALLY DEFERRED)`, 31632, `initially deferred`},
+		{`CREATE TABLE a(b INT, FOREIGN KEY (b) REFERENCES c(x) INITIALLY IMMEDIATE)`, 31632, `initially immediate`},
+		{`CREATE TABLE a(b INT, FOREIGN KEY (b) REFERENCES c(x) DEFERRABLE INITIALLY DEFERRED)`, 31632, `initially deferred`},
+		{`CREATE TABLE a(b INT, FOREIGN KEY (b) REFERENCES c(x) DEFERRABLE INITIALLY IMMEDIATE)`, 31632, `initially immediate`},
+		{`CREATE TABLE a(b INT, UNIQUE (b) DEFERRABLE)`, 31632, `deferrable`},
+		{`CREATE TABLE a(b INT, CHECK (b > 0) DEFERRABLE)`, 31632, `deferrable`},
 
 		{`CREATE SEQUENCE a AS DOUBLE PRECISION`, 25110, `FLOAT8`},
 		{`CREATE SEQUENCE a OWNED BY b`, 26382, ``},

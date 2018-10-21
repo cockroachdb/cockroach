@@ -485,7 +485,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> CURRENT_USER CYCLE
 
 %token <str> DATA DATABASE DATABASES DATE DAY DEC DECIMAL DEFAULT
-%token <str> DEALLOCATE DEFERRABLE DELETE DESC
+%token <str> DEALLOCATE DEFERRABLE DEFERRED DELETE DESC
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str> ELSE ENCODING END ENUM ESCAPE EXCEPT
@@ -502,7 +502,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> HAVING HIGH HISTOGRAM HOUR
 
-%token <str> IMPORT INCREMENT INCREMENTAL IF IFERROR IFNULL ILIKE IN ISERROR
+%token <str> IMMEDIATE IMPORT INCREMENT INCREMENTAL IF IFERROR IFNULL ILIKE IN ISERROR
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS INET_CONTAINS_OR_CONTAINED_BY
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INJECT INTERLEAVE INITIALLY
 %token <str> INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
@@ -521,7 +521,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> NAN NAME NAMES NATURAL NEXT NO NO_INDEX_JOIN NORMAL
 %token <str> NOT NOTHING NOTNULL NULL NULLIF NUMERIC
 
-%token <str> OF OFF OFFSET OID OIDVECTOR ON ONLY OPTION OPTIONS OR
+%token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPTION OPTIONS OR
 %token <str> ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY OWNED OPERATOR
 
 %token <str> PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PLACING
@@ -1975,6 +1975,7 @@ create_unsupported:
 | CREATE OPERATOR error { return unimplemented(sqllex, "create operator") }
 | CREATE PUBLICATION error { return unimplemented(sqllex, "create publication") }
 | CREATE opt_or_replace RULE error { return unimplemented(sqllex, "create rule") }
+| CREATE SCHEMA error { return unimplementedWithIssueDetail(sqllex, 26443, "create") }
 | CREATE SERVER error { return unimplemented(sqllex, "create server") }
 | CREATE SUBSCRIPTION error { return unimplemented(sqllex, "create subscription") }
 | CREATE TEXT error { return unimplementedWithIssueDetail(sqllex, 7821, "create text") }
@@ -2007,6 +2008,7 @@ drop_unsupported:
 | DROP OPERATOR error { return unimplemented(sqllex, "drop operator") }
 | DROP PUBLICATION error { return unimplemented(sqllex, "drop publication") }
 | DROP RULE error { return unimplemented(sqllex, "drop rule") }
+| DROP SCHEMA error { return unimplementedWithIssueDetail(sqllex, 26443, "drop") }
 | DROP SERVER error { return unimplemented(sqllex, "drop server") }
 | DROP SUBSCRIPTION error { return unimplemented(sqllex, "drop subscription") }
 | DROP TEXT error { return unimplementedWithIssueDetail(sqllex, 7821, "drop text") }
@@ -3657,7 +3659,7 @@ pause_stmt:
 // WEBDOCS/create-table.html
 // WEBDOCS/create-table-as.html
 create_table_stmt:
-  CREATE opt_temp TABLE table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
+  CREATE opt_temp TABLE table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
   {
     $$.val = &tree.CreateTable{
       Table: $4.normalizableTableNameFromUnresolvedName(),
@@ -3669,7 +3671,7 @@ create_table_stmt:
       PartitionBy: $9.partitionBy(),
     }
   }
-| CREATE opt_temp TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by
+| CREATE opt_temp TABLE IF NOT EXISTS table_name '(' opt_table_elem_list ')' opt_interleave opt_partition_by opt_table_with
   {
     $$.val = &tree.CreateTable{
       Table: $7.normalizableTableNameFromUnresolvedName(),
@@ -3682,29 +3684,39 @@ create_table_stmt:
     }
   }
 
+opt_table_with:
+  /* EMPTY */     { /* no error */ }
+| WITHOUT OIDS    { /* SKIP DOC */ /* this is also the default in CockroachDB */ }
+| WITH name error { return unimplemented(sqllex, "create table with " + $2) }
+
 create_table_as_stmt:
-  CREATE opt_temp TABLE table_name opt_column_list AS select_stmt
+  CREATE opt_temp TABLE table_name opt_column_list opt_table_with AS select_stmt opt_create_as_data
   {
     $$.val = &tree.CreateTable{
       Table: $4.normalizableTableNameFromUnresolvedName(),
       IfNotExists: false,
       Interleave: nil,
       Defs: nil,
-      AsSource: $7.slct(),
+      AsSource: $8.slct(),
       AsColumnNames: $5.nameList(),
     }
   }
-| CREATE opt_temp TABLE IF NOT EXISTS table_name opt_column_list AS select_stmt
+| CREATE opt_temp TABLE IF NOT EXISTS table_name opt_column_list opt_table_with AS select_stmt opt_create_as_data
   {
     $$.val = &tree.CreateTable{
       Table: $7.normalizableTableNameFromUnresolvedName(),
       IfNotExists: true,
       Interleave: nil,
       Defs: nil,
-      AsSource: $10.slct(),
+      AsSource: $11.slct(),
       AsColumnNames: $8.nameList(),
     }
   }
+
+opt_create_as_data:
+  /* EMPTY */  { /* no error */ }
+| WITH DATA    { /* SKIP DOC */ /* This is the default */ }
+| WITH NO DATA { return unimplemented(sqllex, "create table as with no data") }
 
 /*
  * Redundancy here is needed to avoid shift/reduce conflicts,
@@ -3755,6 +3767,7 @@ table_elem:
   {
     $$.val = $1.constraintDef()
   }
+| LIKE table_name error { return unimplementedWithIssue(sqllex, 30840) }
 
 opt_interleave:
   INTERLEAVE IN PARENT table_name '(' name_list ')' opt_interleave_drop_behavior
@@ -4034,13 +4047,13 @@ table_constraint:
   }
 
 constraint_elem:
-  CHECK '(' a_expr ')'
+  CHECK '(' a_expr ')' opt_deferrable
   {
     $$.val = &tree.CheckConstraintTableDef{
       Expr: $3.expr(),
     }
   }
-| UNIQUE '(' index_params ')' opt_storing opt_interleave opt_partition_by
+| UNIQUE '(' index_params ')' opt_storing opt_interleave opt_partition_by  opt_deferrable
   {
     $$.val = &tree.UniqueConstraintTableDef{
       IndexTableDef: tree.IndexTableDef{
@@ -4061,7 +4074,7 @@ constraint_elem:
     }
   }
 | FOREIGN KEY '(' name_list ')' REFERENCES table_name
-    opt_column_list key_match reference_actions
+    opt_column_list key_match reference_actions opt_deferrable
   {
     $$.val = &tree.ForeignKeyConstraintTableDef{
       Table: $7.normalizableTableNameFromUnresolvedName(),
@@ -4070,6 +4083,14 @@ constraint_elem:
       Actions: $10.referenceActions(),
     }
   }
+
+opt_deferrable:
+  /* EMPTY */ { /* no error */ }
+| DEFERRABLE { return unimplementedWithIssueDetail(sqllex, 31632, "deferrable") }
+| DEFERRABLE INITIALLY DEFERRED { return unimplementedWithIssueDetail(sqllex, 31632, "def initially deferred") }
+| DEFERRABLE INITIALLY IMMEDIATE { return unimplementedWithIssueDetail(sqllex, 31632, "def initially immediate") }
+| INITIALLY DEFERRED { return unimplementedWithIssueDetail(sqllex, 31632, "initially deferred") }
+| INITIALLY IMMEDIATE { return unimplementedWithIssueDetail(sqllex, 31632, "initially immediate") }
 
 storing:
   COVERING
@@ -8377,6 +8398,7 @@ unreserved_keyword:
 | DAY
 | DEALLOCATE
 | DELETE
+| DEFERRED
 | DISCARD
 | DOMAIN
 | DOUBLE
@@ -8408,6 +8430,7 @@ unreserved_keyword:
 | HIGH
 | HISTOGRAM
 | HOUR
+| IMMEDIATE
 | IMPORT
 | INCREMENT
 | INCREMENTAL
@@ -8453,6 +8476,7 @@ unreserved_keyword:
 | OF
 | OFF
 | OID
+| OIDS
 | OIDVECTOR
 | OPERATOR
 | OPTION
