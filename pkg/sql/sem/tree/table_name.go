@@ -18,8 +18,7 @@ package tree
 // INSERT or UPDATE statement, etc.
 //
 // This is constructed for incoming SQL queries by normalizing an
-// UnresolvedName via NormalizableTableName. See
-// normalizable_table_name.go.
+// UnresolvedName using NormalizeTableName.
 //
 // Internal uses of this struct should not construct instances of
 // TableName directly, and instead use the NewTableName /
@@ -183,3 +182,40 @@ func (ts *TableNames) Format(ctx *FmtCtx) {
 	}
 }
 func (ts *TableNames) String() string { return AsString(ts) }
+
+// TableNameWithIndex represents a "table@index", used in statements that
+// specifically refer to an index.
+type TableNameWithIndex struct {
+	Table TableName
+	Index UnrestrictedName
+
+	// SearchTable indicates that we have just an index (no table name); we will
+	// need to search for a table that has an index with the given name.
+	//
+	// To allow schema-qualified index names in this case, the index is actually
+	// specified in Table as the table name, and Index is empty.
+	SearchTable bool
+}
+
+// Format implements the NodeFormatter interface.
+func (n *TableNameWithIndex) Format(ctx *FmtCtx) {
+	ctx.FormatNode(&n.Table)
+	if n.Index != "" {
+		ctx.WriteByte('@')
+		ctx.FormatNode(&n.Index)
+	}
+}
+func (n *TableNameWithIndex) String() string { return AsString(n) }
+
+// TableNameWithIndexList is a list of indexes.
+type TableNameWithIndexList []*TableNameWithIndex
+
+// Format implements the NodeFormatter interface.
+func (n *TableNameWithIndexList) Format(ctx *FmtCtx) {
+	sep := ""
+	for _, tni := range *n {
+		ctx.WriteString(sep)
+		ctx.FormatNode(tni)
+		sep = ", "
+	}
+}

@@ -75,11 +75,10 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 	if err != nil {
 		return err
 	}
-	normalizableTableName := &tree.NormalizableTableName{TableNameReference: o.tableName}
 	sel := &tree.SelectClause{
 		Exprs: sqlbase.ColumnsSelectors(o.tableDesc.Columns, false /* forUpdateOrDelete */),
 		From: &tree.From{
-			Tables: tree.TableExprs{normalizableTableName},
+			Tables: tree.TableExprs{o.tableName},
 		},
 		Where: &tree.Where{Expr: &tree.NotExpr{Expr: expr}},
 	}
