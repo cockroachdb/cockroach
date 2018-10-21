@@ -153,9 +153,8 @@ type FmtCtx struct {
 	// IndexedVarContainer.IndexedVarFormat calls; it can be used to
 	// customize the formatting of IndexedVars.
 	indexedVarFormat func(ctx *FmtCtx, idx int)
-	// tableNameFormatter will be called on all NormalizableTableNames if it is
-	// non-nil.
-	tableNameFormatter func(*FmtCtx, *NormalizableTableName)
+	// tableNameFormatter will be called on all TableNames if it is non-nil.
+	tableNameFormatter func(*FmtCtx, *TableName)
 	// placeholderFormat is an optional interceptor for Placeholder.Format calls;
 	// it can be used to format placeholders differently than normal.
 	placeholderFormat func(ctx *FmtCtx, p *Placeholder)
@@ -168,7 +167,7 @@ func MakeFmtCtx(buf *bytes.Buffer, f FmtFlags) FmtCtx {
 
 // WithReformatTableNames modifies FmtCtx to instructs the pretty-printer
 // to substitute the printing of table names using the provided function.
-func (ctx *FmtCtx) WithReformatTableNames(fn func(*FmtCtx, *NormalizableTableName)) *FmtCtx {
+func (ctx *FmtCtx) WithReformatTableNames(fn func(*FmtCtx, *TableName)) *FmtCtx {
 	ctx.tableNameFormatter = fn
 	return ctx
 }

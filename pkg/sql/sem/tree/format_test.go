@@ -145,7 +145,7 @@ func TestFormatTableName(t *testing.T) {
 
 	f := tree.NewFmtCtxWithBuf(tree.FmtSimple)
 	defer f.Close()
-	f.WithReformatTableNames(func(ctx *tree.FmtCtx, _ *tree.NormalizableTableName) {
+	f.WithReformatTableNames(func(ctx *tree.FmtCtx, _ *tree.TableName) {
 		ctx.WriteString("xoxoxo")
 	})
 

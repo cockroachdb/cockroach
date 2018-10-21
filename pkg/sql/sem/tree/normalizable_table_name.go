@@ -37,8 +37,14 @@ type NormalizableTableName struct {
 
 // Format implements the NodeFormatter interface.
 func (nt *NormalizableTableName) Format(ctx *FmtCtx) {
+	// TODO(radu): Temporary hack.
 	if ctx.tableNameFormatter != nil {
-		ctx.tableNameFormatter(ctx, nt)
+		t, err := nt.Normalize()
+		if err != nil {
+			ctx.FormatNode(nt.TableNameReference)
+		} else {
+			ctx.tableNameFormatter(ctx, t)
+		}
 	} else {
 		ctx.FormatNode(nt.TableNameReference)
 	}

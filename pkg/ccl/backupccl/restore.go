@@ -167,16 +167,14 @@ func rewriteViewQueryDBNames(table *sqlbase.TableDescriptor, newDB string) error
 	// Re-format to change all DB names to `newDB`.
 	f := tree.NewFmtCtxWithBuf(tree.FmtParsable)
 	f.WithReformatTableNames(
-		func(ctx *tree.FmtCtx, t *tree.NormalizableTableName) {
-			tn, err := t.Normalize()
-			if err != nil {
-				return
-			}
+		func(ctx *tree.FmtCtx, tn *tree.TableName) {
 			// empty catalog e.g. ``"".information_schema.tables` should stay empty.
 			if tn.CatalogName != "" {
 				tn.CatalogName = tree.Name(newDB)
 			}
-			ctx.FormatNode(tn)
+			tn.TableNamePrefix.Format(ctx)
+			ctx.WriteByte('.')
+			tn.TableName.Format(ctx)
 		})
 	f.FormatNode(stmt)
 	table.ViewQuery = f.CloseAndGetString()
