@@ -362,7 +362,7 @@ func readPostgresCreateTable(
 				}
 			}
 		case *tree.CreateSequence:
-			name, err := getTableName2(stmt.Name)
+			name, err := getTableName(&stmt.Name)
 			if err != nil {
 				return nil, err
 			}
