@@ -18,6 +18,7 @@ cluster_queries
 cluster_sessions
 cluster_settings
 create_statements
+feature_usage
 forward_dependencies
 gossip_alerts
 gossip_liveness
@@ -134,6 +135,11 @@ query TTTT colnames
 SELECT * FROM crdb_internal.cluster_settings WHERE variable = ''
 ----
 variable  value  type  description
+
+query TI colnames
+SELECT * FROM crdb_internal.feature_usage WHERE feature_name = ''
+----
+feature_name  usage_count
 
 query TT colnames
 SELECT * FROM crdb_internal.session_variables WHERE variable = ''
