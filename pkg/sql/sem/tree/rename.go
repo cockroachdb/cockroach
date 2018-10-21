@@ -41,8 +41,8 @@ func (node *RenameDatabase) Format(ctx *FmtCtx) {
 // Whether the user has asked to rename a table or view is indicated
 // by the IsView field.
 type RenameTable struct {
-	Name       NormalizableTableName
-	NewName    NormalizableTableName
+	Name       TableName
+	NewName    TableName
 	IfExists   bool
 	IsView     bool
 	IsSequence bool
