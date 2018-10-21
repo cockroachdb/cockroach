@@ -5230,7 +5230,12 @@ upsert_stmt:
 insert_target:
   table_name
   {
-    $$.val = $1.newNormalizableTableNameFromUnresolvedName()
+    name, err := tree.NormalizeTableName($1.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &name
   }
 // Can't easily make AS optional here, because VALUES in insert_rest would have
 // a shift/reduce conflict with VALUES as an optional alias. We could easily
@@ -5238,7 +5243,12 @@ insert_target:
 // divergence from other places. So just require AS for now.
 | table_name AS table_alias_name
   {
-    $$.val = &tree.AliasedTableExpr{Expr: $1.newNormalizableTableNameFromUnresolvedName(), As: tree.AliasClause{Alias: tree.Name($3)}}
+    name, err := tree.NormalizeTableName($1.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.AliasedTableExpr{Expr: &name, As: tree.AliasClause{Alias: tree.Name($3)}}
   }
 
 insert_rest:
@@ -6012,8 +6022,13 @@ table_ref:
   }
 | relation_expr opt_index_flags opt_ordinality opt_alias_clause
   {
+    name, err := tree.NormalizeTableName($1.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = &tree.AliasedTableExpr{
-      Expr:       $1.newNormalizableTableNameFromUnresolvedName(),
+      Expr:       &name,
       IndexFlags: $2.indexFlags(),
       Ordinality: $3.bool(),
       As:         $4.aliasClause(),
@@ -6268,8 +6283,13 @@ table_name_expr_opt_alias_idx:
 table_name_expr_with_index:
   table_name opt_index_flags
   {
+    name, err := tree.NormalizeTableName($1.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = &tree.AliasedTableExpr{
-      Expr: $1.newNormalizableTableNameFromUnresolvedName(),
+      Expr: &name,
       IndexFlags: $2.indexFlags(),
     }
   }
