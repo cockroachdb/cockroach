@@ -59,3 +59,37 @@ func TestNodeIDFromKey(t *testing.T) {
 		})
 	}
 }
+
+func TestStoreIDFromKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		key     string
+		storeID roachpb.StoreID
+		success bool
+	}{
+		{MakeStoreKey(0), 0, true},
+		{MakeStoreKey(1), 1, true},
+		{MakeStoreKey(123), 123, true},
+		{MakeStoreKey(123) + "foo", 0, false},
+		{"foo" + MakeStoreKey(123), 0, false},
+		{KeyStorePrefix, 0, false},
+		{"123", 0, false},
+		{MakePrefixPattern(KeyStorePrefix), 0, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.key, func(t *testing.T) {
+			storeID, err := StoreIDFromKey(tc.key)
+			if err != nil {
+				if tc.success {
+					t.Errorf("expected success, got error: %s", err)
+				}
+			} else if !tc.success {
+				t.Errorf("expected failure, got storeID %d", storeID)
+			} else if storeID != tc.storeID {
+				t.Errorf("expected StoreID=%d, got %d", tc.storeID, storeID)
+			}
+		})
+	}
+}
