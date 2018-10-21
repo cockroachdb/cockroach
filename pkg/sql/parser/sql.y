@@ -4783,11 +4783,31 @@ alter_rename_table_stmt:
   }
 | ALTER TABLE relation_expr RENAME opt_column column_name TO column_name
   {
-    $$.val = &tree.RenameColumn{Table: $3.normalizableTableNameFromUnresolvedName(), Name: tree.Name($6), NewName: tree.Name($8), IfExists: false}
+    table, err := tree.NormalizeTableName($3.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.RenameColumn{
+      Table:    table,
+      Name:     tree.Name($6),
+      NewName:  tree.Name($8),
+      IfExists: false,
+    }
   }
 | ALTER TABLE IF EXISTS relation_expr RENAME opt_column column_name TO column_name
   {
-    $$.val = &tree.RenameColumn{Table: $5.normalizableTableNameFromUnresolvedName(), Name: tree.Name($8), NewName: tree.Name($10), IfExists: true}
+    table, err := tree.NormalizeTableName($5.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
+    $$.val = &tree.RenameColumn{
+      Table:    table,
+      Name:     tree.Name($8),
+      NewName:  tree.Name($10),
+      IfExists: true,
+    }
   }
 | ALTER TABLE relation_expr RENAME CONSTRAINT constraint_name TO constraint_name
   { return unimplemented(sqllex, "alter table rename constraint") }

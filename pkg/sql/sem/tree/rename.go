@@ -86,7 +86,7 @@ func (node *RenameIndex) Format(ctx *FmtCtx) {
 
 // RenameColumn represents a RENAME COLUMN statement.
 type RenameColumn struct {
-	Table   NormalizableTableName
+	Table   TableName
 	Name    Name
 	NewName Name
 	// IfExists refers to the table, not the column.
