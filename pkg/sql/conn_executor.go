@@ -315,15 +315,17 @@ func (s *Server) recordError(err error) {
 	if pgErr, ok := pgerror.GetPGCause(err); ok {
 		telemetry.Count("errorcodes." + pgErr.Code)
 
-		switch pgErr.Code {
-		case pgerror.CodeFeatureNotSupportedError:
-			if feature := pgErr.InternalCommand; feature != "" {
-				telemetry.Count("unimplemented." + feature)
+		if details := pgErr.InternalCommand; details != "" {
+			var prefix string
+			switch pgErr.Code {
+			case pgerror.CodeFeatureNotSupportedError:
+				prefix = "unimplemented."
+			case pgerror.CodeInternalError:
+				prefix = "internalerror."
+			default:
+				prefix = "othererror." + pgErr.Code + "."
 			}
-		case pgerror.CodeInternalError:
-			if trace := pgErr.InternalCommand; trace != "" {
-				telemetry.Count("internalerror." + trace)
-			}
+			telemetry.Count(prefix + details)
 		}
 	} else {
 		typ := log.ErrorSource(err)
