@@ -2092,10 +2092,15 @@ create_stats_stmt:
   CREATE STATISTICS statistics_name ON name_list FROM table_name
   {
     /* SKIP DOC */
+    name, err := tree.NormalizeTableName($7.unresolvedName())
+    if err != nil {
+      sqllex.Error(err.Error())
+      return 1
+    }
     $$.val = &tree.CreateStats{
       Name: tree.Name($3),
       ColumnNames: $5.nameList(),
-      Table: $7.normalizableTableNameFromUnresolvedName(),
+      Table: name,
     }
   }
 | CREATE STATISTICS error // SHOW HELP: CREATE STATISTICS

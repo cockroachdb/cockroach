@@ -1125,7 +1125,7 @@ func (node *CreateView) Format(ctx *FmtCtx) {
 type CreateStats struct {
 	Name        Name
 	ColumnNames NameList
-	Table       NormalizableTableName
+	Table       TableName
 }
 
 // Format implements the NodeFormatter interface.
