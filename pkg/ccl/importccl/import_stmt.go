@@ -189,12 +189,7 @@ func MakeSimpleTableDescriptor(
 				continue
 			}
 			// Strip the schema/db prefix.
-			refTable, err := def.Table.Normalize()
-			if err != nil {
-				return nil, err
-			}
-			*refTable = tree.MakeUnqualifiedTableName(refTable.TableName)
-			def.Table.TableNameReference = refTable
+			def.Table = tree.MakeUnqualifiedTableName(def.Table.TableName)
 
 		default:
 			return nil, pgerror.Unimplemented(fmt.Sprintf("import.%T", def), "unsupported table definition: %s", tree.AsString(def))

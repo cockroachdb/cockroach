@@ -1232,10 +1232,7 @@ func indexDefFromDescriptor(
 		}
 		fields := index.ColumnNames[:sharedPrefixLen]
 		intlDef := &tree.InterleaveDef{
-			Parent: &tree.NormalizableTableName{
-				TableNameReference: tree.NewTableName(
-					tree.Name(parentDb.Name), tree.Name(parentTable.Name)),
-			},
+			Parent: tree.MakeTableName(tree.Name(parentDb.Name), tree.Name(parentTable.Name)),
 			Fields: make(tree.NameList, len(fields)),
 		}
 		for i, field := range fields {

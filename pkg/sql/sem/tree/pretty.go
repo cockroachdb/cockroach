@@ -1228,7 +1228,7 @@ func (node *InterleaveDef) doc(p *PrettyCfg) pretty.Doc {
 	title := pretty.Fold(
 		pretty.ConcatSpace,
 		pretty.Text("INTERLEAVE IN PARENT"),
-		p.Doc(node.Parent),
+		p.Doc(&node.Parent),
 		pretty.Text("("),
 	)
 	d := pretty.BracketDoc(title, p.Doc(&node.Fields), pretty.Text(")"))
@@ -1348,7 +1348,7 @@ func (node *ColumnTableDef) doc(p *PrettyCfg) pretty.Doc {
 		d = pretty.Fold(pretty.ConcatSpace,
 			d,
 			pretty.Text("REFERENCES"),
-			p.Doc(&node.References.Table),
+			p.Doc(node.References.Table),
 		)
 		if node.References.Col != "" {
 			d = pretty.ConcatSpace(
