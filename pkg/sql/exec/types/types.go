@@ -102,3 +102,27 @@ func FromGoType(v interface{}) T {
 		panic(fmt.Sprintf("type %T not supported yet", t))
 	}
 }
+
+// GoTypeName returns the stringified Go type for an exec type.
+func (t T) GoTypeName() string {
+	switch t {
+	case Bool:
+		return "bool"
+	case Bytes:
+		return "[]byte"
+	case Int8:
+		return "int8"
+	case Int16:
+		return "int16"
+	case Int32:
+		return "int32"
+	case Int64:
+		return "int64"
+	case Float32:
+		return "float32"
+	case Float64:
+		return "float64"
+	default:
+		panic(fmt.Sprintf("unhandled type %d", t))
+	}
+}
