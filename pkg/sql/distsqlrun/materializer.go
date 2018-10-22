@@ -132,7 +132,7 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			ct := types[outIdx]
 			switch ct.SemanticType {
 			case sqlbase.ColumnType_BOOL:
-				if col.Bool().At(rowIdx) {
+				if col.Bool()[rowIdx] {
 					m.row[outIdx].Datum = tree.DBoolTrue
 				} else {
 					m.row[outIdx].Datum = tree.DBoolFalse
