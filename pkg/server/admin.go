@@ -19,12 +19,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/pkg/errors"
@@ -48,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -1298,13 +1298,16 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		return nil
 	}
 
-	go func() {
-		// The explicit closure here allows callers.Lookup() to return something
-		// sensible referring to this file (otherwise it ends up in runtime
-		// internals).
-		s.server.stopper.Stop(ctx)
-	}()
+	p, err := os.FindProcess(os.Getpid())
+	if err != nil {
+		return err
+	}
+	if err := p.Signal(os.Interrupt); err != nil {
+		return err
+	}
 
+	// Let the main shutdown mechanism do its job. However, grpc will collapse
+	// out from under us, so the client will likely only see EOF.
 	select {
 	case <-s.server.stopper.IsStopped():
 		return nil
