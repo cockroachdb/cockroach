@@ -63,7 +63,9 @@ func registerAllocator(r *registry) {
 					t.Fatal(err)
 				}
 				defer l.close()
-				_ = execCmd(ctx, t.l, roachprod, "ssh", c.makeNodes(c.Node(node)), "--", cmd)
+				_ = execCmd(
+					ctx, t.l, nil /* stdout */, nil, /* stderr */
+					roachprod, "ssh", c.makeNodes(c.Node(node)), "--", cmd)
 			}()
 		}
 
