@@ -241,10 +241,11 @@ func (p *planner) LookupObject(
 
 func (p *planner) CommonLookupFlags(ctx context.Context, required bool) CommonLookupFlags {
 	return CommonLookupFlags{
-		ctx:         ctx,
-		txn:         p.txn,
-		required:    required,
-		avoidCached: p.avoidCachedDescriptors,
+		ctx:            ctx,
+		txn:            p.txn,
+		required:       required,
+		avoidCached:    p.avoidCachedDescriptors,
+		fixedTimestamp: p.semaCtx.AsOfTimestamp != nil,
 	}
 }
 
