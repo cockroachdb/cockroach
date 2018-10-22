@@ -59,6 +59,33 @@ func TestParseFormat(t *testing.T) {
 	}
 }
 
+func TestFromEncodingParts(t *testing.T) {
+	testData := []struct {
+		words        []uint64
+		lastBitsUsed uint64
+		ba           BitArray
+		err          string
+	}{
+		{nil, 0, BitArray{words: nil, lastBitsUsed: 0}, ""},
+		{[]uint64{0}, 0, BitArray{words: []word{0}, lastBitsUsed: 0}, ""},
+		{[]uint64{42}, 3, BitArray{words: []word{42}, lastBitsUsed: 3}, ""},
+		{[]uint64{42}, 65, BitArray{}, "FromEncodingParts: lastBitsUsed must not exceed 64, got 65"},
+	}
+
+	for _, test := range testData {
+		t.Run(fmt.Sprintf("{%v,%d}", test.words, test.lastBitsUsed), func(t *testing.T) {
+			ba, err := FromEncodingParts(test.words, test.lastBitsUsed)
+			if test.err != "" && (err == nil || test.err != err.Error()) {
+				t.Errorf("expected %q error, but got: %+v", test.err, err)
+			} else if test.err == "" && err != nil {
+				t.Errorf("unexpected error: %s", err)
+			} else if !reflect.DeepEqual(ba, test.ba) {
+				t.Errorf("expected %+v, got %+v", test.ba, ba)
+			}
+		})
+	}
+}
+
 func TestToWidth(t *testing.T) {
 	testData := []struct {
 		str     string

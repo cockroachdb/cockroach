@@ -156,6 +156,11 @@ func TestPrettyPrint(t *testing.T) {
 		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(encoding.EncodeBitArrayDescending(nil, bitArray))),
 			"/Table/42/B00111010"},
+		// Regression test for #31115.
+		{roachpb.Key(makeKey(MakeTablePrefix(42),
+			roachpb.RKey(encoding.EncodeBitArrayAscending(nil, bitarray.MakeZeroBitArray(64))),
+		)).PrefixEnd(),
+			"/Table/42/B0000000000000000000000000000000000000000000000000000000000000000/PrefixEnd"},
 		{makeKey(MakeTablePrefix(42),
 			roachpb.RKey(durationAsc)),
 			"/Table/42/1mon1d1s"},

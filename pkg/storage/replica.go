@@ -4323,16 +4323,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	for _, e := range rd.CommittedEntries {
 		switch e.Type {
 		case raftpb.EntryNormal:
-			// Committed entries come straight from the Raft log. Consequently,
-			// sideloaded SSTables are not usually inlined.
-			if newEnt, err := maybeInlineSideloadedRaftCommand(
-				ctx, r.RangeID, e, r.raftMu.sideloaded, r.store.raftEntryCache,
-			); err != nil {
-				const expl = "maybeInlineSideloadedRaftCommand"
-				return stats, expl, errors.Wrap(err, expl)
-			} else if newEnt != nil {
-				e = *newEnt
-			}
+			// NB: Committed entries are handed to us by Raft. Raft does not
+			// know about sideloading. Consequently the entries here are all
+			// already inlined.
 
 			var commandID storagebase.CmdIDKey
 			var command storagepb.RaftCommand
