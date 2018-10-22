@@ -1285,21 +1285,55 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	now := s.cfg.Clock.Now()
 	s.startedAt = now.WallTime
 
+	iterBegin := timeutil.Now()
+
+	// First, collect all replica applied states in a single
+	// iteration. We'll match these to the range descriptors when
+	// creating replica shims.
+	statsMap := map[roachpb.RangeID]enginepb.MVCCStats{}
+	if _, err = engine.MVCCIterate(ctx, s.engine,
+		keys.LocalRangeIDPrefix.AsRawKey(), keys.LocalRangeIDPrefix.PrefixEnd().AsRawKey(),
+		hlc.MaxTimestamp, true /* consistent */, false, /* tombstones */
+		nil /* txn */, false, /* reverse */
+		func(kv roachpb.KeyValue) (bool, error) {
+			id, _, suffix, _, err := keys.DecodeRangeIDKey(kv.Key)
+			if err != nil {
+				return false, err
+			}
+			// Handle both the range applied state and any legacy stats. If
+			// both exist, use the range applied state.
+			if suffix.Equal(keys.LocalRangeAppliedStateSuffix) {
+				var as enginepb.RangeAppliedState
+				if err := kv.Value.GetProto(&as); err != nil {
+					return false, err
+				}
+				statsMap[id] = as.RangeStats.ToStats()
+			} else if suffix.Equal(keys.LocalRangeStatsLegacySuffix) {
+				// Never replace the range applied state with a legacy stats value.
+				if _, ok := statsMap[id]; !ok {
+					var ms enginepb.MVCCStats
+					if err := kv.Value.GetProto(&ms); err != nil {
+						return false, err
+					}
+					statsMap[id] = ms
+				}
+			}
+			return false, nil
+		}); err != nil {
+		return err
+	}
+
 	// Iterate over all range descriptors.
 	s.mu.Lock()
-
-	iterBegin := timeutil.Now()
-	eng := s.engine.NewSnapshot()
-	err = IterateRangeDescriptors(ctx, eng,
+	err = IterateRangeDescriptors(ctx, s.engine,
 		func(desc roachpb.RangeDescriptor) (bool, error) {
 			if !desc.IsInitialized() {
 				return false, errors.Errorf("found uninitialized RangeDescriptor: %+v", desc)
 			}
 
-			stl := stateloader.Make(s.cfg.Settings, desc.RangeID)
-			stats, err := stl.LoadMVCCStats(ctx, eng)
-			if err != nil {
-				log.Errorf(ctx, "unable to load stats for range %d: %s", desc.RangeID, err)
+			stats, ok := statsMap[desc.RangeID]
+			if !ok {
+				log.Fatalf(ctx, "unable to determine MVCC stats for range %s", desc)
 			}
 
 			shim := &ReplicaShim{
