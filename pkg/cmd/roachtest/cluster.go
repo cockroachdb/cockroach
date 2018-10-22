@@ -209,7 +209,17 @@ func unregisterCluster(c *cluster) bool {
 	return exists
 }
 
-func execCmd(ctx context.Context, l *logger, args ...string) error {
+// execCmd runs a command. stdout/stderr can be passed in to capture the
+// commands's output. If nil, the logger's stdout/stderr will be used.
+func execCmd(ctx context.Context, l *logger, stdout, stderr io.Writer, args ...string) error {
+	if (stdout == nil) != (stderr == nil) {
+		log.Fatal(ctx, "can't specify only one of stdout/stderr")
+	}
+	if stdout == nil {
+		stdout = l.stdout
+		stderr = l.stderr
+	}
+
 	// NB: It is important that this waitgroup Waits after cancel() below.
 	var wg sync.WaitGroup
 	defer wg.Wait()
@@ -249,11 +259,11 @@ func execCmd(ctx context.Context, l *logger, args ...string) error {
 		wg.Add(3)
 		go func() {
 			defer wg.Done()
-			_, _ = io.Copy(l.stdout, io.TeeReader(rOut, debugStdoutBuffer))
+			_, _ = io.Copy(stdout, io.TeeReader(rOut, debugStdoutBuffer))
 		}()
 
-		if l.stderr == l.stdout {
-			// If l.stderr == l.stdout, we use only one pipe to avoid
+		if stderr == stdout {
+			// If stderr == stdout, we use only one pipe to avoid
 			// duplicating everything.
 			wg.Done()
 			cmd.Stderr = wOut
@@ -261,7 +271,7 @@ func execCmd(ctx context.Context, l *logger, args ...string) error {
 			cmd.Stderr = wErr
 			go func() {
 				defer wg.Done()
-				_, _ = io.Copy(l.stderr, io.TeeReader(rErr, debugStderrBuffer))
+				_, _ = io.Copy(stderr, io.TeeReader(rErr, debugStderrBuffer))
 			}()
 		}
 
@@ -692,7 +702,7 @@ func newCluster(ctx context.Context, l *logger, cfg clusterConfig) (*cluster, er
 	}
 
 	c.status("creating cluster")
-	if err := execCmd(ctx, l, sargs...); err != nil {
+	if err := execCmd(ctx, l, nil /* stdout */, nil /* stderr */, sargs...); err != nil {
 		return nil, err
 	}
 
@@ -870,7 +880,9 @@ func (c *cluster) FetchLogs(ctx context.Context) error {
 		return err
 	}
 
-	return execCmd(execCtx, c.l, roachprod, "get", c.name, "logs" /* src */, path /* dest */)
+	return execCmd(
+		execCtx, c.l, nil /* stdout */, nil, /* stderr */
+		roachprod, "get", c.name, "logs" /* src */, path /* dest */)
 }
 
 func (c *cluster) Destroy(ctx context.Context) {
@@ -899,12 +911,16 @@ func (c *cluster) destroy(ctx context.Context) {
 	if clusterWipe {
 		if c.owned {
 			c.status("destroying cluster")
-			if err := execCmd(ctx, c.l, roachprod, "destroy", c.name); err != nil {
+			if err := execCmd(
+				ctx, c.l, nil /* stdout */, nil, /* stderr */
+				roachprod, "destroy", c.name); err != nil {
 				c.l.Errorf("%s", err)
 			}
 		} else {
 			c.status("wiping cluster")
-			if err := execCmd(ctx, c.l, roachprod, "wipe", c.name); err != nil {
+			if err := execCmd(
+				ctx, c.l, nil /* stdout */, nil, /* stderr */
+				roachprod, "wipe", c.name); err != nil {
 				c.l.Errorf("%s", err)
 			}
 		}
@@ -933,7 +949,9 @@ func (c *cluster) Put(ctx context.Context, src, dest string, opts ...option) {
 		c.t.Fatal("interrupted")
 	}
 	c.status("uploading binary")
-	err := execCmd(ctx, c.l, roachprod, "put", c.makeNodes(opts...), src, dest)
+	err := execCmd(
+		ctx, c.l, nil /* stdout */, nil, /* stderr */
+		roachprod, "put", c.makeNodes(opts...), src, dest)
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -1028,7 +1046,7 @@ func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 	if encrypt && !argExists(args, "--encrypt") {
 		args = append(args, "--encrypt")
 	}
-	return execCmd(ctx, c.l, args...)
+	return execCmd(ctx, c.l, nil /* stdout */, nil /* stderr */, args...)
 }
 
 // Start is like StartE() except it takes a test and, on error, calls t.Fatal().
@@ -1062,7 +1080,7 @@ func (c *cluster) StopE(ctx context.Context, opts ...option) error {
 	}
 	c.status("stopping cluster")
 	defer c.status()
-	return execCmd(ctx, c.l, args...)
+	return execCmd(ctx, c.l, nil /* stdout */, nil /* stderr */, args...)
 }
 
 // Stop is like StopE, except instead of returning an error, it does
@@ -1088,7 +1106,9 @@ func (c *cluster) WipeE(ctx context.Context, opts ...option) error {
 	}
 	c.status("wiping cluster")
 	defer c.status()
-	return execCmd(ctx, c.l, roachprod, "wipe", c.makeNodes(opts...))
+	return execCmd(
+		ctx, c.l, nil /* stdout */, nil, /* stderr */
+		roachprod, "wipe", c.makeNodes(opts...))
 }
 
 // Wipe is like WipeE, except instead of returning an error, it does
@@ -1103,17 +1123,9 @@ func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 	}
 }
 
-// Run a command on the specified node.
-func (c *cluster) Run(ctx context.Context, node nodeListOption, args ...string) {
-	err := c.RunL(ctx, c.l, node, args...)
-	if err != nil {
-		c.t.Fatal(err)
-	}
-}
-
 // Reformat the disk on the specified node.
 func (c *cluster) Reformat(ctx context.Context, node nodeListOption, args ...string) {
-	err := execCmd(ctx, c.l,
+	err := execCmd(ctx, c.l, nil /* stdout */, nil, /* stderr */
 		append([]string{roachprod, "reformat", c.makeNodes(node), "--"}, args...)...)
 	if err != nil {
 		c.t.Fatal(err)
@@ -1122,25 +1134,44 @@ func (c *cluster) Reformat(ctx context.Context, node nodeListOption, args ...str
 
 // Install a package in a node
 func (c *cluster) Install(ctx context.Context, node nodeListOption, args ...string) {
-	err := execCmd(ctx, c.l,
+	err := execCmd(ctx, c.l, nil /* stdout */, nil, /* stderr */
 		append([]string{roachprod, "install", c.makeNodes(node), "--"}, args...)...)
 	if err != nil {
 		c.t.Fatal(err)
 	}
 }
 
-// RunE runs a command on the specified node, returning an error.
+// RunEx runs a command on the specified nodes.
+// stdout/stderr can be passed in to capture the commands's output. If nil, the
+// logger's stdout/stderr will be used.
+func (c *cluster) RunEx(
+	ctx context.Context, l *logger, node nodeListOption, stdout, stderr io.Writer, args ...string,
+) error {
+	if err := c.preRunChecks(); err != nil {
+		return err
+	}
+	return execCmd(ctx, l, stdout, stderr,
+		append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)...)
+}
+
+// Run is like RunEx, except the cluster's logger is used and c.t.Fatal() is
+// called in case of error.
+func (c *cluster) Run(ctx context.Context, node nodeListOption, args ...string) {
+	err := c.RunL(ctx, c.l, node, args...)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+}
+
+// Run is like RunEx, except the cluster's logger is used.
 func (c *cluster) RunE(ctx context.Context, node nodeListOption, args ...string) error {
 	return c.RunL(ctx, c.l, node, args...)
 }
 
-// RunL runs a command on the specified node, returning an error.
+// RunL is like RunEx, except the logger's stdout/stderr are used for the
+// commands output.
 func (c *cluster) RunL(ctx context.Context, l *logger, node nodeListOption, args ...string) error {
-	if err := c.preRunChecks(); err != nil {
-		return err
-	}
-	return execCmd(ctx, l,
-		append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)...)
+	return c.RunEx(ctx, l, node, nil /* stdout */, nil /* stderr */, args...)
 }
 
 // preRunChecks runs checks to see if it makes sense to run a command.

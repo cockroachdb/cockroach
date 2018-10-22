@@ -163,14 +163,18 @@ func TestClusterMonitor(t *testing.T) {
 			defer func() {
 				fmt.Println("sleep returns")
 			}()
-			return execCmd(ctx, logger, "/bin/bash", "-c", "sleep 3& wait")
+			return execCmd(
+				ctx, logger, nil /* stdout */, nil, /* stderr */
+				"/bin/bash", "-c", "sleep 3& wait")
 		})
 		m.Go(func(ctx context.Context) error {
 			defer func() {
 				fmt.Println("failure returns")
 			}()
 			time.Sleep(30 * time.Millisecond)
-			return execCmd(ctx, logger, "/bin/bash", "-c", "echo hi && notthere")
+			return execCmd(
+				ctx, logger, nil /* stdout */, nil, /* stderr */
+				"/bin/bash", "-c", "echo hi && notthere")
 		})
 		expectedErr := regexp.QuoteMeta(`/bin/bash -c echo hi && notthere returned:
 stderr:
@@ -187,7 +191,9 @@ hi
 		c := &cluster{t: testWrapper{t}, l: logger}
 		m := newMonitor(context.Background(), c)
 		m.Go(func(ctx context.Context) error {
-			err := execCmd(ctx, logger, "/bin/bash", "-c", "echo foo && sleep 3& wait")
+			err := execCmd(
+				ctx, logger, nil /* stdout */, nil, /* stderr */
+				"/bin/bash", "-c", "echo foo && sleep 3& wait")
 			return err
 		})
 		m.Go(func(ctx context.Context) error {
