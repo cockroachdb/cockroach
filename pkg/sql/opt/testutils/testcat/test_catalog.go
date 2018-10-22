@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -58,13 +59,17 @@ func (tc *Catalog) ResolveDataSource(
 	if name.ExplicitSchema {
 		if name.ExplicitCatalog {
 			// Already 3 parts.
-			return tc.resolveDataSource(&toResolve, name)
+			return tc.resolveDataSource(&toResolve, name, true /* createVTable */)
 		}
 
 		// Two parts: Try to use the current database, and be satisfied if it's
 		// sufficient to find the object.
+		// We pass false for createVTable here because if this fails, it doesn't
+		// mean that the virtual table doesn't exist, and so we don't want to try
+		// to add it in case it does. It only doesn't exist if the *next* call to
+		// resolveDataSource fails.
 		toResolve.CatalogName = testDB
-		if tab, err := tc.resolveDataSource(&toResolve, name); err == nil {
+		if tab, err := tc.resolveDataSource(&toResolve, name, false /* createVTable */); err == nil {
 			return tab, nil
 		}
 
@@ -73,13 +78,13 @@ func (tc *Catalog) ResolveDataSource(
 		toResolve.CatalogName = name.SchemaName
 		toResolve.SchemaName = tree.PublicSchemaName
 		toResolve.ExplicitCatalog = true
-		return tc.resolveDataSource(&toResolve, name)
+		return tc.resolveDataSource(&toResolve, name, true /* createVTable */)
 	}
 
 	// This is a naked data source name. Use the current database.
 	toResolve.CatalogName = tree.Name(testDB)
 	toResolve.SchemaName = tree.PublicSchemaName
-	return tc.resolveDataSource(&toResolve, name)
+	return tc.resolveDataSource(&toResolve, name, true /* createVTable */)
 }
 
 // ResolveDataSourceByID is part of the opt.Catalog interface.
@@ -98,11 +103,26 @@ func (tc *Catalog) ResolveDataSourceByID(
 // resolveDataSource checks if `toResolve` exists among the data sources in this
 // Catalog. If it does, resolveDataSource updates `name` to match `toResolve`,
 // and returns the corresponding data source. Otherwise, it returns an error.
-func (tc *Catalog) resolveDataSource(toResolve, name *tree.TableName) (opt.DataSource, error) {
+// If createVTable is true, if the table isn't found, we will attempt to lazily
+// resolve and add a virtual table with the given name.
+func (tc *Catalog) resolveDataSource(
+	toResolve, name *tree.TableName, createVTable bool,
+) (opt.DataSource, error) {
 	if table, ok := tc.dataSources[toResolve.FQString()]; ok {
 		*name = *toResolve
 		return table, nil
 	}
+
+	// If we didn't find the table in the catalog, possibly lazily resolve it as
+	// a virtual table.
+	if createVTable {
+		if table, ok := vtable.Resolve(name); ok {
+			// We rely on the check in CreateTable against this table's schema to infer
+			// that this is a virtual table.
+			return tc.CreateTable(table), nil
+		}
+	}
+
 	return nil, fmt.Errorf("no data source matches prefix: %q", tree.ErrString(toResolve))
 }
 

@@ -62,7 +62,7 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 
 	// Assume that every table in the "system" catalog is a virtual table. This
 	// is a simplified assumption for testing purposes.
-	if tn.CatalogName == "system" {
+	if tn.CatalogName == "system" || tn.CatalogName == "information_schema" {
 		tab.IsVirtual = true
 	}
 
