@@ -54,13 +54,16 @@ func (tc *Catalog) ResolveDataSource(
 ) (opt.DataSource, error) {
 	// This is a simplified version of tree.TableName.ResolveExisting() from
 	// sql/tree/name_resolution.go.
+	var ds opt.DataSource
+	var err error
 	toResolve := *name
-	if name.ExplicitSchema {
-		if name.ExplicitCatalog {
-			// Already 3 parts.
-			return tc.resolveDataSource(&toResolve, name)
+	if name.ExplicitSchema && name.ExplicitCatalog {
+		// Already 3 parts.
+		ds, err = tc.resolveDataSource(&toResolve, name)
+		if err == nil {
+			return ds, nil
 		}
-
+	} else if name.ExplicitSchema {
 		// Two parts: Try to use the current database, and be satisfied if it's
 		// sufficient to find the object.
 		toResolve.CatalogName = testDB
@@ -73,13 +76,31 @@ func (tc *Catalog) ResolveDataSource(
 		toResolve.CatalogName = name.SchemaName
 		toResolve.SchemaName = tree.PublicSchemaName
 		toResolve.ExplicitCatalog = true
-		return tc.resolveDataSource(&toResolve, name)
+		ds, err = tc.resolveDataSource(&toResolve, name)
+		if err == nil {
+			return ds, nil
+		}
+	} else {
+		// This is a naked data source name. Use the current database.
+		toResolve.CatalogName = tree.Name(testDB)
+		toResolve.SchemaName = tree.PublicSchemaName
+		ds, err = tc.resolveDataSource(&toResolve, name)
+		if err == nil {
+			return ds, nil
+		}
 	}
 
-	// This is a naked data source name. Use the current database.
-	toResolve.CatalogName = tree.Name(testDB)
-	toResolve.SchemaName = tree.PublicSchemaName
-	return tc.resolveDataSource(&toResolve, name)
+	// If we didn't find the table in the catalog, try to lazily resolve it as
+	// a virtual table.
+	if table, ok := resolveVTable(name); ok {
+		// We rely on the check in CreateTable against this table's schema to infer
+		// that this is a virtual table.
+		return tc.CreateTable(table), nil
+	}
+
+	// If this didn't end up being a virtual table, then return the original
+	// error returned by resolveDataSource.
+	return nil, err
 }
 
 // ResolveDataSourceByID is part of the opt.Catalog interface.

@@ -1,39 +1,7 @@
-exec-ddl
-CREATE TABLE system.information_schema.schemata (
-	CATALOG_NAME               STRING NOT NULL,
-	SCHEMA_NAME                STRING NOT NULL,
-	DEFAULT_CHARACTER_SET_NAME STRING,
-	SQL_PATH                   STRING
-)
-----
-TABLE schemata
- ├── catalog_name string not null
- ├── schema_name string not null
- ├── default_character_set_name string
- └── sql_path string
-
-exec-ddl
-CREATE TABLE system.information_schema.tables (
-	TABLE_CATALOG      STRING NOT NULL,
-	TABLE_SCHEMA       STRING NOT NULL,
-	TABLE_NAME         STRING NOT NULL,
-	TABLE_TYPE         STRING NOT NULL,
-	IS_INSERTABLE_INTO STRING NOT NULL,
-	VERSION            INT
-)
-----
-TABLE tables
- ├── table_catalog string not null
- ├── table_schema string not null
- ├── table_name string not null
- ├── table_type string not null
- ├── is_insertable_into string not null
- └── version int
-
 build
 SELECT catalog_name, sql_path
-FROM (SELECT * FROM system.information_schema.schemata WHERE SCHEMA_NAME='public')
-LEFT JOIN system.information_schema.tables
+FROM (SELECT * FROM information_schema.schemata WHERE SCHEMA_NAME='public')
+LEFT JOIN information_schema.tables
 ON CATALOG_NAME=TABLE_CATALOG AND SCHEMA_NAME=TABLE_SCHEMA
 ----
 project
@@ -46,13 +14,13 @@ project
       ├── select
       │    ├── columns: catalog_name:1(string) schema_name:2(string!null) default_character_set_name:3(string) sql_path:4(string)
       │    ├── fd: ()-->(2)
-      │    ├── virtual-scan system.information_schema.schemata
+      │    ├── virtual-scan t.information_schema.schemata
       │    │    └── columns: catalog_name:1(string) schema_name:2(string) default_character_set_name:3(string) sql_path:4(string)
       │    └── filters
       │         └── eq [type=bool, outer=(2), constraints=(/2: [/'public' - /'public']; tight), fd=()-->(2)]
       │              ├── variable: schema_name [type=string]
       │              └── const: 'public' [type=string]
-      ├── virtual-scan system.information_schema.tables
+      ├── virtual-scan t.information_schema.tables
       │    └── columns: table_catalog:5(string) table_schema:6(string) table_name:7(string) table_type:8(string) is_insertable_into:9(string) version:10(int)
       └── filters
            └── and [type=bool, outer=(1,2,5,6), constraints=(/1: (/NULL - ]; /2: (/NULL - ]; /5: (/NULL - ]; /6: (/NULL - ])]

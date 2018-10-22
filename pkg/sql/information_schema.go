@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 )
 
 const (
@@ -199,16 +200,8 @@ func validateInformationSchemaTable(table *sqlbase.TableDescriptor) error {
 	return nil
 }
 
-// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-administrable-role-authorizations.html
-// MySQL:    missing
 var informationSchemaAdministrableRoleAuthorizations = virtualSchemaTable{
-	schema: `
-CREATE TABLE information_schema.administrable_role_authorizations (
-	GRANTEE      STRING NOT NULL,
-	ROLE_NAME    STRING NOT NULL,
-	IS_GRANTABLE STRING NOT NULL
-);
-`,
+	schema: vtable.InformationSchemaAdministrableRoleAuthorizations,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		currentUser := p.SessionData().User
 		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
@@ -236,16 +229,8 @@ CREATE TABLE information_schema.administrable_role_authorizations (
 	},
 }
 
-// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-applicable-roles.html
-// MySQL:    missing
 var informationSchemaApplicableRoles = virtualSchemaTable{
-	schema: `
-CREATE TABLE information_schema.applicable_roles (
-	GRANTEE      STRING NOT NULL,
-	ROLE_NAME    STRING NOT NULL,
-	IS_GRANTABLE STRING NOT NULL
-);
-`,
+	schema: vtable.InformationSchemaApplicableRoles,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		currentUser := p.SessionData().User
 		memberMap, err := p.MemberOfWithAdminOption(ctx, currentUser)
@@ -269,21 +254,8 @@ CREATE TABLE information_schema.applicable_roles (
 	},
 }
 
-// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-column-privileges.html
-// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/column-privileges-table.html
 var informationSchemaColumnPrivileges = virtualSchemaTable{
-	schema: `
-CREATE TABLE information_schema.column_privileges (
-	GRANTOR        STRING,
-	GRANTEE        STRING NOT NULL,
-	TABLE_CATALOG  STRING NOT NULL,
-	TABLE_SCHEMA   STRING NOT NULL,
-	TABLE_NAME     STRING NOT NULL,
-	COLUMN_NAME    STRING NOT NULL,
-	PRIVILEGE_TYPE STRING NOT NULL,
-	IS_GRANTABLE   STRING
-);
-`,
+	schema: vtable.InformationSchemaColumnPrivileges,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
 			dbNameStr := tree.NewDString(db.Name)
@@ -314,33 +286,8 @@ CREATE TABLE information_schema.column_privileges (
 	},
 }
 
-// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-columns.html
-// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/columns-table.html
 var informationSchemaColumnsTable = virtualSchemaTable{
-	schema: `
-CREATE TABLE information_schema.columns (
-	TABLE_CATALOG            STRING NOT NULL,
-	TABLE_SCHEMA             STRING NOT NULL,
-	TABLE_NAME               STRING NOT NULL,
-	COLUMN_NAME              STRING NOT NULL,
-	ORDINAL_POSITION         INT NOT NULL,
-	COLUMN_DEFAULT           STRING,
-	IS_NULLABLE              STRING NOT NULL,
-	DATA_TYPE                STRING NOT NULL,
-	CHARACTER_MAXIMUM_LENGTH INT,
-	CHARACTER_OCTET_LENGTH   INT,
-	NUMERIC_PRECISION        INT,
-	NUMERIC_PRECISION_RADIX  INT,
-	NUMERIC_SCALE            INT,
-	DATETIME_PRECISION       INT,
-	CHARACTER_SET_CATALOG    STRING,
-	CHARACTER_SET_SCHEMA     STRING,
-	CHARACTER_SET_NAME       STRING,
-	GENERATION_EXPRESSION    STRING,          -- MySQL/CockroachDB extension.
-	IS_HIDDEN                STRING NOT NULL, -- CockroachDB extension for SHOW COLUMNS / dump.
-	CRDB_SQL_TYPE            STRING NOT NULL  -- CockroachDB extension for SHOW COLUMNS / dump.
-);
-`,
+	schema: vtable.InformationSchemaColumns,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
 			dbNameStr := tree.NewDString(db.Name)
@@ -1167,18 +1114,8 @@ var (
 	tableTypeView       = tree.NewDString("VIEW")
 )
 
-// Postgres: https://www.postgresql.org/docs/9.6/static/infoschema-tables.html
-// MySQL:    https://dev.mysql.com/doc/refman/5.7/en/tables-table.html
 var informationSchemaTablesTable = virtualSchemaTable{
-	schema: `
-CREATE TABLE information_schema.tables (
-	TABLE_CATALOG      STRING NOT NULL,
-	TABLE_SCHEMA       STRING NOT NULL,
-	TABLE_NAME         STRING NOT NULL,
-	TABLE_TYPE         STRING NOT NULL,
-	IS_INSERTABLE_INTO STRING NOT NULL,
-	VERSION            INT
-);`,
+	schema: vtable.InformationSchemaTables,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, virtualMany,
 			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
