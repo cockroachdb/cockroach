@@ -42,6 +42,9 @@ type ColVec interface {
 	Float64() []float64
 	// Bytes returns a Bytes object, allowing retrieval of multiple byte slices.
 	Bytes() Bytes
+
+	// Col returns the raw, typeless backing storage for this ColVec.
+	Col() interface{}
 }
 
 // Nulls represents a list of potentially nullable values.
@@ -141,6 +144,10 @@ func (m memColumn) Float64() []float64 {
 
 func (m memColumn) Bytes() Bytes {
 	return m.col.(memBytes)
+}
+
+func (m memColumn) Col() interface{} {
+	return m.col
 }
 
 var _ Bytes = memBytes{}
