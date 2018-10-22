@@ -20,6 +20,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -972,6 +974,26 @@ func newProcessor(
 		}
 		if core.TableReader.IsCheck {
 			return newScrubTableReader(flowCtx, processorID, core.TableReader, post, outputs[0])
+		}
+		if flowCtx.EvalCtx.SessionData.Vectorize {
+			unsupportedType := false
+			for _, typ := range core.TableReader.Table.ColumnTypesWithMutations(false) {
+				if types.FromColumnType(typ) == types.Unhandled {
+					unsupportedType = true
+					break
+				}
+			}
+			if !unsupportedType {
+				cFetcher, err := newColBatchScan(flowCtx, core.TableReader, post, outputs[0])
+				if err != nil {
+					return nil, err
+				}
+				cols := make([]int, len(cFetcher.helper.outputTypes))
+				for i := 0; i < len(cFetcher.helper.outputTypes); i++ {
+					cols[i] = i
+				}
+				return newMaterializer(flowCtx, processorID, cFetcher, cFetcher.helper.outputTypes, cols, post, outputs[0])
+			}
 		}
 		return newTableReader(flowCtx, processorID, core.TableReader, post, outputs[0])
 	}
