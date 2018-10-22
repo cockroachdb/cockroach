@@ -109,7 +109,7 @@ func genRowsToVec(wr io.Writer) error {
 				Width:        width,
 				ExecType:     t.String(),
 				// TODO(solon): Determine the following fields via reflection.
-				HasSetMethod:      t == types.Bool || t == types.Bytes,
+				HasSetMethod:      t == types.Bytes,
 				DatumToPhysicalFn: getDatumToPhysicalFn(ct),
 			}
 			columnConversions = append(columnConversions, conversion)
