@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/pkg/errors"
 )
 
@@ -70,6 +71,78 @@ var keywordSetters = map[string]fieldSetter{
 
 	// TODO(bob, knz): Do we want to support the abbreviations in
 	// https://github.com/postgres/postgres/blob/master/src/timezone/known_abbrevs.txt
+}
+
+// These abbreviations are taken from:
+// https://github.com/postgres/postgres/blob/master/src/timezone/known_abbrevs.txt
+// We have not yet implemented PostgreSQL's abbreviation-matching logic
+// because we'd also need to incorporate more tzinfo than is readily-available
+// from the time package.
+var unsupportedAbbreviations = [...]string{
+	"ACDT",
+	"ACST",
+	"ADT",
+	"AEDT",
+	"AEST",
+	"AKDT",
+	"AKST",
+	"AST",
+	"AWST",
+	"BST",
+	"CAT",
+	"CDT",
+	"CDT",
+	"CEST",
+	"CET",
+	"CST",
+	"CST",
+	"CST",
+	"ChST",
+	"EAT",
+	"EDT",
+	"EEST",
+	"EET",
+	"EST",
+	"GMT",
+	"GMT",
+	"HDT",
+	"HKT",
+	"HST",
+	"IDT",
+	"IST",
+	"IST",
+	"IST",
+	"JST",
+	"KST",
+	"MDT",
+	"MEST",
+	"MET",
+	"MSK",
+	"MST",
+	"NDT",
+	"NST",
+	"NZDT",
+	"NZST",
+	"PDT",
+	"PKT",
+	"PST",
+	"PST",
+	"SAST",
+	"SST",
+	"UCT",
+	"UTC",
+	"WAT",
+	"WEST",
+	"WET",
+	"WIB",
+	"WIT",
+	"WITA",
+}
+
+func init() {
+	for _, tz := range unsupportedAbbreviations {
+		keywordSetters[strings.ToLower(tz)] = fieldSetterUnsupportedAbbreviation
+	}
 }
 
 func fieldSetterAllBalls(p *fieldExtract, _ string) error {
@@ -134,4 +207,8 @@ func fieldSetterUTC(p *fieldExtract, _ string) error {
 	p.now = p.now.In(time.UTC)
 	p.wanted = p.wanted.ClearAll(fieldTZ1.Add(fieldTZ2))
 	return nil
+}
+
+func fieldSetterUnsupportedAbbreviation(_ *fieldExtract, _ string) error {
+	return pgerror.UnimplementedWithIssueError(31710, "timestamp abbreviations not supported")
 }

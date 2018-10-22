@@ -127,7 +127,7 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 		// A three-digit value could be a day-of-year.
 		return fe.SetDayOfYear(chunk.v)
 
-	case fe.Wants(fieldYear) && fe.Wants(fieldMonth) && fe.Wants(fieldDay):
+	case fe.Wants(fieldYear) && fe.Wants(fieldMonth) && fe.Wants(fieldDay) && chunk.prefix != ':':
 		// We're starting from scratch
 		switch {
 		case chunk.magnitude >= 6:
@@ -160,11 +160,11 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 			return fe.Set(fieldMonth, chunk.v)
 		}
 
-	case !fe.Wants(fieldYear) && fe.Wants(fieldMonth) && fe.Wants(fieldDay):
+	case !fe.Wants(fieldYear) && fe.Wants(fieldMonth) && fe.Wants(fieldDay) && chunk.prefix != ':':
 		// Must be a year-month-day
 		return fe.Set(fieldMonth, chunk.v)
 
-	case fe.Wants(fieldYear) && !fe.Wants(fieldMonth) && fe.Wants(fieldDay):
+	case fe.Wants(fieldYear) && !fe.Wants(fieldMonth) && fe.Wants(fieldDay) && chunk.prefix != ':':
 		// The month has been set; this could be mm-dd-yy or a
 		// format with a textual month entry.  If we know that the
 		// month was set in the first phase, we'll look for an obvious year
@@ -178,7 +178,7 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 			return fe.Set(fieldDay, chunk.v)
 		}
 
-	case !fe.Wants(fieldYear) && !fe.Wants(fieldMonth) && fe.Wants(fieldDay):
+	case !fe.Wants(fieldYear) && !fe.Wants(fieldMonth) && fe.Wants(fieldDay) && chunk.prefix != ':':
 		// We should be looking at just the day component.  However, we
 		// need to handle the case where we saw a two-digit year, but
 		// we're now looking at a value that can only be a year.
@@ -194,11 +194,11 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 			return fe.Set(fieldDay, chunk.v)
 		}
 
-	case fe.Wants(fieldYear) && fe.Wants(fieldMonth) && !fe.Wants(fieldDay):
+	case fe.Wants(fieldYear) && fe.Wants(fieldMonth) && !fe.Wants(fieldDay) && chunk.prefix != ':':
 		// Must be looking at a dd-mm-yy format.
 		return fe.Set(fieldMonth, chunk.v)
 
-	case fe.Wants(fieldYear) && !fe.Wants(fieldMonth) && !fe.Wants(fieldDay):
+	case fe.Wants(fieldYear) && !fe.Wants(fieldMonth) && !fe.Wants(fieldDay) && chunk.prefix != ':':
 		// Have month and day, last field must be a year.
 		if chunk.magnitude <= 2 {
 			fe.tweakYear = true
@@ -342,8 +342,11 @@ func (fe *fieldExtract) String() string {
 
 // Validate ensures that the data in the extract is reasonable.
 func (fe *fieldExtract) Validate() error {
-	if !fe.has.HasAll(fe.required) {
-		return errors.Errorf("missing required fields %v; have %v", fe.required, fe.has)
+	if fe.has.HasAny(dateFields) && !fe.has.HasAll(dateRequiredFields) {
+		return errors.Errorf("have some but not all date fields")
+	}
+	if fe.has.HasAny(timeFields) && !fe.has.HasAll(timeRequiredFields) {
+		return errors.Errorf("have some but not all time fields")
 	}
 
 	if year, ok := fe.Get(fieldYear); ok {
@@ -391,6 +394,8 @@ func (fe *fieldExtract) Validate() error {
 	}
 
 	if hour, ok := fe.Get(fieldHour); ok {
+		hasDate := fe.has.HasAny(dateRequiredFields)
+
 		meridian, _ := fe.Get(fieldMeridian)
 		switch meridian {
 		case fieldValueAM:
@@ -414,7 +419,7 @@ func (fe *fieldExtract) Validate() error {
 
 		default:
 			// 24:00:00 is the maximum-allowed value
-			if hour < 0 || hour > 23 {
+			if hour < 0 || (hasDate && hour > 24) || (!hasDate && hour > 23) {
 				return errors.New("hour out of range")
 			}
 		}
@@ -425,7 +430,7 @@ func (fe *fieldExtract) Validate() error {
 		}
 
 		second, _ := fe.Get(fieldSecond)
-		if second < 0 || second > 59 {
+		if second < 0 || (hasDate && second > 60) || (!hasDate && second > 59) {
 			return errors.New("second out of range")
 		}
 

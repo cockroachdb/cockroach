@@ -16,6 +16,7 @@ package pgdate_test
 
 import (
 	"database/sql"
+	"flag"
 	"fmt"
 	"os"
 	"testing"
@@ -32,6 +33,11 @@ var modes = []pgdate.ParseMode{
 	pgdate.ParseModeYMD,
 }
 
+// tsTweak is a callback used by TestParseTimestamp to handle cases
+// where a date or a time may parse one way individually, but
+// has different results when concatenated into a timestamp.
+type tsTweak func(s string, mode pgdate.ParseMode, exp *time.Time, err *bool)
+
 type dateData struct {
 	s string
 	// The generally-expected value.
@@ -42,7 +48,7 @@ type dateData struct {
 	modeExp map[pgdate.ParseMode]time.Time
 	// Override the expected error for a given ParseMode.
 	modeErr map[pgdate.ParseMode]bool
-	tsTweak func(exp *time.Time, err *bool)
+	tsTweak tsTweak
 }
 
 // expected returns the expected time or expected error condition for the mode.
@@ -190,7 +196,7 @@ var dateTestData = []dateData{
 		// Provide a full timestamp.
 		s:   "2017-12-05 04:04:04.913231+00:00",
 		exp: time.Date(2017, time.December, 05, 0, 0, 0, 0, time.UTC),
-		tsTweak: func(_ *time.Time, err *bool) {
+		tsTweak: func(_ string, _ pgdate.ParseMode, _ *time.Time, err *bool) {
 			*err = true
 		},
 	},
@@ -207,8 +213,10 @@ var timeTestData = []struct {
 	// The generally-expected value.
 	exp time.Time
 	// Is an error expected?
-	err     bool
-	tsTweak func(exp *time.Time, err *bool)
+	err bool
+	// Disable cross-checking for unimplemented features.
+	noCrossCheck bool
+	tsTweak      tsTweak
 }{
 	{
 		// 04:05:06.789 ISO 8601
@@ -262,13 +270,11 @@ var timeTestData = []struct {
 	},
 	{
 		// 04:05:06 PST time zone specified by abbreviation
-		// TODO(bob, knz): Do we support abbreviated timezones?
-		// pgsql exposes quite a lot of configuration surface around
-		// mapping strings to UTC offsets.
-		// https://www.postgresql.org/docs/10/static/datatype-datetime.html#DATATYPE-TIMEZONES
-		s:   "04:05:06 PST",
-		err: true,
-		//		exp: time.Date(0, 1, 1, 4, 5, 6, 0, time.FixedZone("-0800", -8*60*60)),
+		// Unimplemented with message to user as such:
+		// https://github.com/cockroachdb/cockroach/issues/31710
+		s:            "04:05:06 PST",
+		err:          true,
+		noCrossCheck: true,
 	},
 	{
 		// This test, and the next show that resolution of geographic names
@@ -278,14 +284,14 @@ var timeTestData = []struct {
 		// UTC offset.
 		s:   "2003-01-12 04:05:06 America/New_York",
 		exp: time.Date(0, 1, 1, 4, 5, 6, 0, time.FixedZone("-0500", -5*60*60)),
-		tsTweak: func(_ *time.Time, err *bool) {
+		tsTweak: func(_ string, _ pgdate.ParseMode, _ *time.Time, err *bool) {
 			*err = true
 		},
 	},
 	{
 		s:   "2003-06-12 04:05:06 America/New_York",
 		exp: time.Date(0, 1, 1, 4, 5, 6, 0, time.FixedZone("-0400", -4*60*60)),
-		tsTweak: func(_ *time.Time, err *bool) {
+		tsTweak: func(_ string, _ pgdate.ParseMode, _ *time.Time, err *bool) {
 			*err = true
 		},
 	},
@@ -354,7 +360,7 @@ var timeTestData = []struct {
 		// Check long timezone with date month.
 		s:   "June 12, 2003 04:05:06 America/New_York",
 		exp: time.Date(0, 1, 1, 4, 5, 6, 0, time.FixedZone("-0400", -4*60*60)),
-		tsTweak: func(_ *time.Time, err *bool) {
+		tsTweak: func(_ string, _ pgdate.ParseMode, _ *time.Time, err *bool) {
 			*err = true
 		},
 	},
@@ -367,6 +373,13 @@ var timeTestData = []struct {
 		// 3-digit times should not work.
 		s:   "123",
 		err: true,
+		// Special case when we inadvertently create a valid timestamp.
+		tsTweak: func(s string, mode pgdate.ParseMode, exp *time.Time, err *bool) {
+			if s == "2018 123" {
+				*exp = time.Date(2018, 5, 3, 0, 0, 0, 0, time.UTC)
+				*err = false
+			}
+		},
 	},
 	{
 		//  Single-digits
@@ -377,6 +390,15 @@ var timeTestData = []struct {
 		// Maximum value
 		s:   "24:00:00",
 		err: true,
+		// Allow hour 24 to roll over when we have a date.
+		tsTweak: func(s string, mode pgdate.ParseMode, exp *time.Time, err *bool) {
+			// If we can extract a date at all, we should wind up with the
+			// next day.
+			if _, pErr := pgdate.ParseDate(time.Time{}, mode, s); pErr == nil {
+				*exp = exp.AddDate(0, 0, 1)
+				*err = false
+			}
+		},
 	},
 	{
 		// Exceed maximum value
@@ -386,6 +408,15 @@ var timeTestData = []struct {
 	{
 		s:   "23:59:60",
 		err: true,
+		// Allow this to roll over when we have a date.
+		tsTweak: func(s string, mode pgdate.ParseMode, exp *time.Time, err *bool) {
+			// If we can extract a date at all, we should wind up with the
+			// next day.
+			if _, pErr := pgdate.ParseDate(time.Time{}, mode, s); pErr == nil {
+				*exp = exp.AddDate(0, 0, 1)
+				*err = false
+			}
+		},
 	},
 	{
 		s:   "23:60:00",
@@ -393,18 +424,23 @@ var timeTestData = []struct {
 	},
 }
 
-var db *sql.DB
-
+// TestMain will enable cross-checking of test results against a
+// PostgreSQL instance if the -pgdate.db flag is set. This is mainly
+// useful for developing the tests themselves and doesn't need
+// to be part of a regular build.
 func TestMain(m *testing.M) {
-	if d, err := sql.Open("postgres", "database=bob sslmode=disable"); err == nil {
-		if err := d.Ping(); err == nil {
-			println("will cross-check results")
-			db = d
+	if dbString != "" {
+		if d, err := sql.Open("postgres", dbString); err == nil {
+			if err := d.Ping(); err == nil {
+				db = d
+			} else {
+				println("could not ping database", err)
+				os.Exit(-1)
+			}
 		} else {
-			println("not cross-checking results:", err.Error())
+			println("could not open database", err)
+			os.Exit(-1)
 		}
-	} else {
-		println("not cross-checking results:", err.Error())
 	}
 	os.Exit(m.Run())
 }
@@ -451,7 +487,9 @@ func TestParseTime(t *testing.T) {
 		t.Run(tc.s, func(t *testing.T) {
 			res, err := pgdate.ParseTime(now, tc.s)
 
-			crossCheck(t, "timetz", tc.s, 0, tc.exp, tc.err)
+			if !tc.noCrossCheck {
+				crossCheck(t, "timetz", tc.s, 0, tc.exp, tc.err)
+			}
 
 			if err == nil {
 				if tc.err {
@@ -493,14 +531,17 @@ func TestParseTimestamp(t *testing.T) {
 					// Some of our timestamp data are fully-formed timestamps
 					// or have other odd behaviors.
 					if dtc.tsTweak != nil {
-						dtc.tsTweak(&exp, &expErr)
+						dtc.tsTweak(s, mode, &exp, &expErr)
 					}
+
 					if ttc.tsTweak != nil {
-						ttc.tsTweak(&exp, &expErr)
+						ttc.tsTweak(s, mode, &exp, &expErr)
 					}
 
 					t.Run(s, func(t *testing.T) {
-						crossCheck(t, "timestamptz", s, mode, exp, expErr)
+						if !ttc.noCrossCheck {
+							crossCheck(t, "timestamptz", s, mode, exp, expErr)
+						}
 
 						res, err := pgdate.ParseTimestamp(now, mode, s)
 						if expErr {
@@ -577,8 +618,25 @@ func BenchmarkParseTime(b *testing.B) {
 	}
 }
 
+var db *sql.DB
+var dbString string
+
+func init() {
+	// "database=bob sslmode=disable"
+	flag.StringVar(&dbString, "pgdate.db", "", "An sql.Open() string to enable cross-checks")
+	flag.Parse()
+}
+
+// crossCheckSuppress contains strings that should not be cross-checked.
+var crossCheckSuppress = map[string]bool{
+	"June 12, 2003 04:05:06 America/New_York": true,
+}
+
 func crossCheck(t *testing.T, kind, s string, mode pgdate.ParseMode, expTime time.Time, expErr bool) {
 	if db == nil {
+		return
+	}
+	if suppress, ok := crossCheckSuppress[s]; ok && suppress {
 		return
 	}
 	t.Run("cross-check", func(t *testing.T) {
@@ -586,6 +644,17 @@ func crossCheck(t *testing.T, kind, s string, mode pgdate.ParseMode, expTime tim
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		defer func() {
+			if err := tx.Rollback(); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		if _, err := db.Exec("set timezone='UTC'"); err != nil {
+			t.Fatal(err)
+		}
+
 		var style string
 		switch mode {
 		case pgdate.ParseModeMDY:
@@ -595,13 +664,11 @@ func crossCheck(t *testing.T, kind, s string, mode pgdate.ParseMode, expTime tim
 		case pgdate.ParseModeYMD:
 			style = "YMD"
 		}
-		if _, err := db.Exec("set timezone='UTC'"); err != nil {
-			t.Fatal(err)
-		}
 		if _, err := db.Exec(fmt.Sprintf("set datestyle='%s'", style)); err != nil {
 			t.Fatal(err)
 		}
-		row := db.QueryRow(fmt.Sprintf("select %s '%s'", kind, s))
+
+		row := db.QueryRow(fmt.Sprintf("select '%s'::%s", s, kind))
 		var ret time.Time
 		if err := row.Scan(&ret); err == nil {
 			if expErr {
@@ -617,10 +684,6 @@ func crossCheck(t *testing.T, kind, s string, mode pgdate.ParseMode, expTime tim
 			} else {
 				t.Fatalf("unexpected error: %s", err)
 			}
-		}
-
-		if err := tx.Rollback(); err != nil {
-			t.Fatal(err)
 		}
 	})
 }

@@ -18,6 +18,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/pkg/errors"
 )
 
@@ -55,7 +56,7 @@ func ParseDate(now time.Time, mode ParseMode, s string) (time.Time, error) {
 	if t, err := extract(fe, s); err == nil {
 		return t, nil
 	} else {
-		return TimeEpoch, err //parseError("date", s)
+		return TimeEpoch, parseError(err, "date", s)
 	}
 }
 
@@ -70,7 +71,7 @@ func ParseTime(now time.Time, s string) (time.Time, error) {
 	if t, err := extract(fe, s); err == nil {
 		return t, nil
 	} else {
-		return TimeEpoch, parseError("time", s)
+		return TimeEpoch, parseError(err, "time", s)
 	}
 }
 
@@ -86,10 +87,13 @@ func ParseTimestamp(now time.Time, mode ParseMode, s string) (time.Time, error) 
 	if t, err := extract(fe, s); err == nil {
 		return t, nil
 	} else {
-		return TimeEpoch, parseError("timestamp", s)
+		return TimeEpoch, parseError(err, "timestamp", s)
 	}
 }
 
-func parseError(kind string, s string) error {
+func parseError(err error, kind string, s string) error {
+	if _, ok := err.(*pgerror.Error); ok {
+		return err
+	}
 	return errors.Errorf("unable to parse %s: %s", kind, s)
 }
