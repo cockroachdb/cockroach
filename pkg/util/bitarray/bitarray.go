@@ -107,7 +107,7 @@ func (d BitArray) Clone() BitArray {
 // MakeZeroBitArray creates a bit array with the specified bit size.
 func MakeZeroBitArray(bitLen uint) BitArray {
 	a, b := EncodingPartsForBitLen(bitLen)
-	return FromEncodingParts(a, b)
+	return mustFromEncodingParts(a, b)
 }
 
 // ToWidth resizes the bit array to the specified size.
@@ -128,7 +128,7 @@ func (d BitArray) ToWidth(desiredLen uint) BitArray {
 		words, lastBitsUsed := EncodingPartsForBitLen(desiredLen)
 		copy(words, d.words[:len(words)])
 		words[len(words)-1] &= (^word(0) << (numBitsPerWord - lastBitsUsed))
-		return FromEncodingParts(words, lastBitsUsed)
+		return mustFromEncodingParts(words, lastBitsUsed)
 	}
 
 	// New length is larger.
@@ -140,7 +140,7 @@ func (d BitArray) ToWidth(desiredLen uint) BitArray {
 		words = make([]word, numWords)
 		copy(words, d.words)
 	}
-	return FromEncodingParts(words, lastBitsUsed)
+	return mustFromEncodingParts(words, lastBitsUsed)
 }
 
 // Sizeof returns the size in bytes of the bit array and its components.
@@ -346,7 +346,7 @@ func Parse(s string) (res BitArray, err error) {
 		words[wordIdx] = curWord
 	}
 
-	return FromEncodingParts(words, lastBitsUsed), nil
+	return FromEncodingParts(words, lastBitsUsed)
 }
 
 // Concat concatenates two bit arrays.
@@ -481,11 +481,24 @@ func (d BitArray) EncodingParts() ([]uint64, uint64) {
 }
 
 // FromEncodingParts creates a bit array from the encoding parts.
-func FromEncodingParts(words []uint64, lastBitsUsed uint64) BitArray {
+func FromEncodingParts(words []uint64, lastBitsUsed uint64) (BitArray, error) {
+	if lastBitsUsed > numBitsPerWord {
+		return BitArray{}, fmt.Errorf("FromEncodingParts: lastBitsUsed must not exceed %d, got %d",
+			numBitsPerWord, lastBitsUsed)
+	}
 	return BitArray{
 		words:        words,
 		lastBitsUsed: uint8(lastBitsUsed),
+	}, nil
+}
+
+// mustFromEncodingParts is like FromEncodingParts but errors cause a panic.
+func mustFromEncodingParts(words []uint64, lastBitsUsed uint64) BitArray {
+	ba, err := FromEncodingParts(words, lastBitsUsed)
+	if err != nil {
+		panic(err)
 	}
+	return ba
 }
 
 // Rand generates a random bit array of the specified length.

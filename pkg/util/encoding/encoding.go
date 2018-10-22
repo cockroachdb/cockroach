@@ -1109,7 +1109,11 @@ func DecodeBitArrayAscending(b []byte) ([]byte, bitarray.BitArray, error) {
 	}
 	b = b[1:]
 	b, lastVal, err := DecodeUvarintAscending(b)
-	return b, bitarray.FromEncodingParts(words, lastVal), err
+	if err != nil {
+		return b, bitarray.BitArray{}, err
+	}
+	ba, err := bitarray.FromEncodingParts(words, lastVal)
+	return b, ba, err
 }
 
 var errBitArrayTerminatorMissing = errors.New("cannot find bit array data terminator")
@@ -1165,7 +1169,11 @@ func DecodeBitArrayDescending(b []byte) ([]byte, bitarray.BitArray, error) {
 	}
 	b = b[1:]
 	b, lastVal, err := DecodeUvarintDescending(b)
-	return b, bitarray.FromEncodingParts(words, lastVal), err
+	if err != nil {
+		return b, bitarray.BitArray{}, err
+	}
+	ba, err := bitarray.FromEncodingParts(words, lastVal)
+	return b, ba, err
 }
 
 // Type represents the type of a value encoded by
@@ -2121,7 +2129,8 @@ func DecodeUntaggedBitArrayValue(b []byte) (remaining []byte, d bitarray.BitArra
 		}
 		words[i] = val
 	}
-	return b, bitarray.FromEncodingParts(words, lastBitsUsed), nil
+	ba, err := bitarray.FromEncodingParts(words, lastBitsUsed)
+	return b, ba, err
 }
 
 const uuidValueEncodedLength = 16

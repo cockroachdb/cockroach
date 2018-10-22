@@ -10,6 +10,7 @@ package partitionccl
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -124,19 +125,18 @@ func TestDropIndexWithZoneConfigCCL(t *testing.T) {
 		} else if l := 0; len(kvs) != l {
 			return errors.Errorf("expected %d key value pairs, but got %d", l, len(kvs))
 		}
+		sqlDB.QueryRow(t, "SELECT config FROM system.zones WHERE id = $1", tableDesc.ID).Scan(&buf)
+		if err := protoutil.Unmarshal(buf, cfg); err != nil {
+			return err
+		}
+		if exists := subzoneExists(cfg, 1, ""); !exists {
+			return errors.New("zone config for primary index removed after dropping secondary index")
+		}
+		for _, target := range subzones[1:] {
+			if exists := subzoneExists(cfg, target.index, target.partition); exists {
+				return fmt.Errorf(`zone config for %v still exists`, target)
+			}
+		}
 		return nil
 	})
-
-	sqlDB.QueryRow(t, "SELECT config FROM system.zones WHERE id = $1", tableDesc.ID).Scan(&buf)
-	if err := protoutil.Unmarshal(buf, cfg); err != nil {
-		t.Fatal(err)
-	}
-	if exists := subzoneExists(cfg, 1, ""); !exists {
-		t.Fatal("zone config for primary index removed after dropping secondary index")
-	}
-	for _, target := range subzones[1:] {
-		if exists := subzoneExists(cfg, target.index, target.partition); exists {
-			t.Fatalf(`zone config for %v still exists`, target)
-		}
-	}
 }
