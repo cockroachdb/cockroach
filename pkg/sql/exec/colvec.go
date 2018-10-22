@@ -40,8 +40,8 @@ type ColVec interface {
 	Float32() []float32
 	// Float64 returns an float64 slice.
 	Float64() []float64
-	// Bytes returns a Bytes object, allowing retrieval of multiple byte slices.
-	Bytes() Bytes
+	// Bytes returns a []byte slice.
+	Bytes() [][]byte
 }
 
 // Nulls represents a list of potentially nullable values.
@@ -59,14 +59,6 @@ type Nulls interface {
 	Rank(i uint16) uint16
 }
 
-// Bytes is an interface that represents a list of byte slices.
-type Bytes interface {
-	// At returns the ith byte slice in the list.
-	At(i uint16) []byte
-	// Set sets the ith byte slice in the list to b.
-	Set(i uint16, b []byte)
-}
-
 var _ ColVec = memColumn{}
 
 // memColumn is a simple pass-through implementation of ColVec that just casts
@@ -81,7 +73,7 @@ func newMemColumn(t types.T, n int) memColumn {
 	case types.Bool:
 		return memColumn{col: make([]bool, n)}
 	case types.Bytes:
-		return memColumn{col: newMemBytes(n)}
+		return memColumn{col: make([][]byte, n)}
 	case types.Int16:
 		return memColumn{col: make([]int16, n)}
 	case types.Int32:
@@ -139,22 +131,6 @@ func (m memColumn) Float64() []float64 {
 	return m.col.([]float64)
 }
 
-func (m memColumn) Bytes() Bytes {
-	return m.col.(memBytes)
-}
-
-var _ Bytes = memBytes{}
-
-type memBytes [][]byte
-
-func newMemBytes(n int) memBytes {
-	return make([][]byte, n)
-}
-
-func (m memBytes) At(i uint16) []byte {
-	return m[i]
-}
-
-func (m memBytes) Set(i uint16, b []byte) {
-	m[i] = b
+func (m memColumn) Bytes() [][]byte {
+	return m.col.([][]byte)
 }
