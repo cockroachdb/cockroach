@@ -1298,8 +1298,6 @@ func (s *adminServer) Drain(req *serverpb.DrainRequest, stream serverpb.Admin_Dr
 		return nil
 	}
 
-	s.server.grpc.Stop()
-
 	go func() {
 		// The explicit closure here allows callers.Lookup() to return something
 		// sensible referring to this file (otherwise it ends up in runtime
