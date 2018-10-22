@@ -45,8 +45,8 @@ func TestEncDatumRowsToColVecBool(t *testing.T) {
 		t.Fatal(err)
 	}
 	expected := newMemColumn(types.Bool, 2)
-	expected.Bool().Set(0, false)
-	expected.Bool().Set(1, true)
+	expected.Bool()[0] = false
+	expected.Bool()[1] = true
 	if !reflect.DeepEqual(vec, expected) {
 		t.Errorf("expected vector %+v, got %+v", expected, vec)
 	}
@@ -55,8 +55,8 @@ func TestEncDatumRowsToColVecBool(t *testing.T) {
 	if err := EncDatumRowsToColVec(rows, vec, 1 /* columnIdx */, &ct, &alloc); err != nil {
 		t.Fatal(err)
 	}
-	expected.Bool().Set(0, true)
-	expected.Bool().Set(1, false)
+	expected.Bool()[0] = true
+	expected.Bool()[1] = false
 	if !reflect.DeepEqual(vec, expected) {
 		t.Errorf("expected vector %+v, got %+v", expected, vec)
 	}
