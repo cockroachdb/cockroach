@@ -16,7 +16,6 @@ package row_test
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -161,7 +160,6 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		INSERT INTO child VALUES ('1', '10'), ('2', '20');
 		SELECT cluster_logical_timestamp();
 	END;`).Scan(&ts1)
-	fmt.Println(sqlDB.QueryStr(t, `SELECT * FROM parent`))
 
 	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.Engine())), []rowWithMVCCMetadata{
 		{[]string{`1`, `a`, `a`, `a`}, false, ts1},
@@ -179,7 +177,6 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		UPDATE child SET f = '21' WHERE e = '2';
 		SELECT cluster_logical_timestamp();
 	END;`).Scan(&ts2)
-	fmt.Println(sqlDB.QueryStr(t, `SELECT * FROM parent`))
 
 	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.Engine())), []rowWithMVCCMetadata{
 		{[]string{`1`, `NULL`, `NULL`, `NULL`}, false, ts2},

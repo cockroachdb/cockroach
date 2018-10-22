@@ -181,7 +181,7 @@ func BenchmarkCountTwoCF(b *testing.B) {
 		}()
 
 		if _, err := db.Exec(
-			`CREATE TABLE bench.count (k INT PRIMARY KEY, v TEXT, FAMILY(k), FAMILY(v))`); err != nil {
+			`CREATE TABLE bench.count (k INT PRIMARY KEY, v TEXT, FAMILY (k), FAMILY (v))`); err != nil {
 			b.Fatal(err)
 		}
 
