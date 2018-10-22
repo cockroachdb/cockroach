@@ -1,0 +1,18 @@
+build
+SELECT * FROM information_schema.does_not_exist
+----
+error: no data source matches prefix: "information_schema.public.does_not_exist"
+
+build
+SELECT * FROM information_schema.columns
+----
+virtual-scan t.information_schema.columns
+ └── columns: table_catalog:1(string) table_schema:2(string) table_name:3(string) column_name:4(string) ordinal_position:5(int) column_default:6(string) is_nullable:7(string) data_type:8(string) character_maximum_length:9(int) character_octet_length:10(int) numeric_precision:11(int) numeric_precision_radix:12(int) numeric_scale:13(int) datetime_precision:14(int) character_set_catalog:15(string) character_set_schema:16(string) character_set_name:17(string) generation_expression:18(string) is_hidden:19(string) crdb_sql_type:20(string)
+
+# Since we lazily create these, the name resolution codepath is slightly
+# different on the second resolution.
+build
+SELECT * FROM information_schema.columns
+----
+virtual-scan t.information_schema.columns
+ └── columns: table_catalog:1(string) table_schema:2(string) table_name:3(string) column_name:4(string) ordinal_position:5(int) column_default:6(string) is_nullable:7(string) data_type:8(string) character_maximum_length:9(int) character_octet_length:10(int) numeric_precision:11(int) numeric_precision_radix:12(int) numeric_scale:13(int) datetime_precision:14(int) character_set_catalog:15(string) character_set_schema:16(string) character_set_name:17(string) generation_expression:18(string) is_hidden:19(string) crdb_sql_type:20(string)
