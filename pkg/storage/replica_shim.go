@@ -27,6 +27,15 @@ import (
 	"github.com/google/btree"
 )
 
+type nonResidentReplica struct {
+	desc               *roachpb.RangeDescriptor
+	stats              enginepb.MVCCStats
+	zone               *config.ZoneConfig
+	leader             bool
+	lease              roachpb.Lease
+	quiescentButBehind bool
+}
+
 // ReplicaShim holds either a RangeDescriptor or an initialized
 // Replica object, depending on whether the replica is non-resident or
 // resident in memory, respectively.
@@ -34,13 +43,8 @@ type ReplicaShim struct {
 	syncutil.Mutex
 	replica *Replica // non-nil if resident
 
-	// Fields below not valid if replica is non-nil.
-	desc               *roachpb.RangeDescriptor
-	stats              enginepb.MVCCStats
-	zone               *config.ZoneConfig
-	leader             bool
-	lease              roachpb.Lease
-	quiescentButBehind bool
+	// nonResidentReplica not valid if replica is non-nil.
+	nonResidentReplica
 }
 
 var _ KeyRange = &ReplicaShim{}
@@ -109,6 +113,25 @@ func (rs *ReplicaShim) QuiescentButBehind() bool {
 		return repl.mu.quiescentButBehind
 	}
 	return rs.quiescentButBehind
+}
+
+// GetReplica returns the replica if resident, or else loads the
+// replica to make it resident and potentially returns an error on
+// failure to initialize.
+func (rs *ReplicaShim) GetReplica(s *Store) (*Replica, error) {
+	rs.Lock()
+	defer rs.Unlock()
+	if rs.replica != nil {
+		return rs.replica, nil
+	}
+	replica, err := NewReplica(rs.desc, s, 0)
+	if err != nil {
+		return nil, err
+	}
+	replica.SetZoneConfig(rs.zone)
+	rs.replica = replica
+	rs.nonResidentReplica = nonResidentReplica{}
+	return rs.replica, nil
 }
 
 /*
@@ -186,7 +209,7 @@ func (rs *ReplicaShim) Metrics(
 		LeaseValid:      valid,
 		Leaseholder:     holder,
 		LeaseType:       roachpb.LeaseEpoch,
-		Quiescent:       true,
+		Quiescent:       true, // non-resident replicas are always quiescent
 		RangeCounter:    rangeCounter,
 		Unavailable:     unavailable,
 		Underreplicated: underreplicated,
@@ -204,6 +227,7 @@ func (rs *ReplicaShim) leaseInfoLocked(
 	return
 }
 
+// startKey implements the rangeKeyItem interface.
 func (rs *ReplicaShim) startKey() roachpb.RKey {
 	return rs.Desc().StartKey
 }

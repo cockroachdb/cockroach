@@ -79,7 +79,7 @@ func TestComputeStatsForKeySpan(t *testing.T) {
 		{"a", "i", 4, 6},
 		// Subset of ranges including first.
 		{"a", "c", 1, 3},
-		// middle subset of ranges.
+		// Middle subset of ranges.
 		{"c", "g", 2, 2},
 		// Subset of ranges including last.
 		{"e", "i", 2, 1},
