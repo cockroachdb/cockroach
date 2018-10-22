@@ -18,6 +18,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -25,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/armon/circbuf"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -142,9 +144,12 @@ func runJepsen(ctx context.Context, t *test, c *cluster, testName, nemesis strin
 		t.l.Printf(f, args...)
 		t.l.Printf("\n")
 	}
-	run := func(c *cluster, ctx context.Context, node nodeListOption, args ...string) {
+	run := func(
+		c *cluster, ctx context.Context, node nodeListOption,
+		stdout, stderr io.Writer,
+		args ...string) {
 		if !c.isLocal() {
-			c.Run(ctx, node, args...)
+			c.RunEx(ctx, t.l, node, stdout, stderr, args...)
 			return
 		}
 		args = append([]string{roachprod, "run", c.makeNodes(node), "--"}, args...)
@@ -161,13 +166,15 @@ func runJepsen(ctx context.Context, t *test, c *cluster, testName, nemesis strin
 
 	// Reset the "latest" alias for the next run.
 	t.Status("running")
-	run(c, ctx, controller, "rm -f /mnt/data1/jepsen/cockroachdb/store/latest")
+	run(c, ctx, controller, nil /* stdout */, nil, /* stderr */
+		"rm -f /mnt/data1/jepsen/cockroachdb/store/latest")
 
 	// Install the jepsen package (into ~/.m2) before running tests in
 	// the cockroach package. Clojure doesn't really understand
 	// monorepos so steps like this are necessary for one package to
 	// depend on an unreleased package in the same repo.
-	run(c, ctx, controller, "bash", "-e", "-c", `"cd /mnt/data1/jepsen/jepsen && ~/lein install"`)
+	run(c, ctx, controller, nil /* stdout */, nil, /* stderr */
+		"bash", "-e", "-c", `"cd /mnt/data1/jepsen/jepsen && ~/lein install"`)
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -210,16 +217,32 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		//
 		// Try to get any running jvm to log its stack traces for
 		// extra debugging help.
-		run(c, ctx, controller, "pkill -QUIT java")
+		run(c, ctx, controller, nil /* stdout */, nil /* stderr */, "pkill -QUIT java")
 		time.Sleep(10 * time.Second)
-		run(c, ctx, controller, "pkill java")
+		run(c, ctx, controller, nil /* stdout */, nil /* stderr */, "pkill java")
 		logf("timed out")
 		testErr = fmt.Errorf("timed out")
 	}
 
 	if testErr != nil {
 		logf("grabbing artifacts from controller. Tail of controller log:")
-		run(c, ctx, controller, "tail -n 100 /mnt/data1/jepsen/cockroachdb/invoke.log")
+		// We'll capture the output and recognize some errors.
+		// TODO(andrei): Remove this unfortunate code once #30527 is fixed.
+		stdoutBuf, _ := circbuf.NewBuffer(1 << 20) // 1MB
+		run(c, ctx, controller, stdoutBuf, stdoutBuf,
+			"tail -n 100 /mnt/data1/jepsen/cockroachdb/invoke.log")
+		s := stdoutBuf.String()
+		ignoreErr := false
+		if strings.Contains(s, "java.lang.InterruptedException") ||
+			strings.Contains(s, "java.util.concurrent.BrokenBarrierException") {
+			t.l.Printf("Jepsen returned known interrupted exception. Considering the test " +
+				"successful. See https://github.com/cockroachdb/cockroach/issues/30527")
+			ignoreErr = true
+		}
+		if _, err := t.l.stdout.Write(stdoutBuf.Bytes()); err != nil {
+			t.Fatal(err)
+		}
+
 		cmd := exec.CommandContext(ctx, roachprod, "run", c.makeNodes(controller),
 			// -h causes tar to follow symlinks; needed by the "latest" symlink.
 			// -f- sends the output to stdout, we read it and save it to a local file.
@@ -231,7 +254,9 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), output, 0666); err != nil {
 			t.Fatal(err)
 		}
-		t.Fatal(testErr)
+		if !ignoreErr {
+			t.Fatal(testErr)
+		}
 	} else {
 		collectFiles := []string{
 			"test.fressian", "results.edn", "latency-quantiles.png", "latency-raw.png", "rate.png",
