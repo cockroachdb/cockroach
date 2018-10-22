@@ -33,6 +33,8 @@ type ColBatch interface {
 	// densely-packed list of the indices in each column that have not been
 	// filtered out by a previous step.
 	Selection() []uint16
+	// SetSelection sets whether this batch is using its selection vector or not.
+	SetSelection(bool)
 }
 
 var _ ColBatch = &memBatch{}
@@ -43,7 +45,7 @@ const ColBatchSize = 1024
 
 // NewMemBatch allocates a new in-memory ColBatch.
 // TODO(jordan): pool these allocations.
-func NewMemBatch(types ...types.T) ColBatch {
+func NewMemBatch(types []types.T) ColBatch {
 	b := &memBatch{}
 	b.b = make([]ColVec, len(types))
 
@@ -79,6 +81,10 @@ func (m *memBatch) Selection() []uint16 {
 		return nil
 	}
 	return m.sel
+}
+
+func (m *memBatch) SetSelection(b bool) {
+	m.useSel = b
 }
 
 func (m *memBatch) SetLength(n uint16) {
