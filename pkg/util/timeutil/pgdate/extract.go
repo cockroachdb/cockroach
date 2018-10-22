@@ -191,7 +191,7 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 		month, _ = fe.Get(fieldMonth)
 		day, _ = fe.Get(fieldDay)
 	} else {
-		year = 1970
+		year = 0
 		month = 1
 		day = 1
 	}
@@ -219,16 +219,20 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 		loc = fe.now.Location()
 	}
 
-	// If we have a textual timezone, we must resolve it to a specific offset
-	// on a particular date. We'll truncate back to the epoch day if
-	// the use didn't request the date to be returned.
 	ret := time.Date(year, time.Month(month), day, hour, min, sec, micro*1000, loc)
-	if !returnDate {
+
+	// We'll truncate back to the zero day if  the user didn't request
+	// the date to be returned.  If the user provided a named timezone,
+	// like America/New_York, then they will have also had to have
+	// provided a date to resolve that name into an actual offset.
+	// We'll convert that offset into a fixed timezone when we return
+	// the date.
+	if !returnDate && fe.has.HasAny(dateRequiredFields) {
 		hour, min, sec := ret.Clock()
-		// Switch to a fixed timezone offset.
 		_, offset := ret.Zone()
-		ret = time.Unix(((int64(hour)*60)+int64(min))*60+int64(sec)-int64(offset), int64(ret.Nanosecond()))
+		ret = time.Date(0, 1, 1, hour, min, sec, ret.Nanosecond(), time.FixedZone("", offset))
 	}
+
 	return ret, nil
 }
 

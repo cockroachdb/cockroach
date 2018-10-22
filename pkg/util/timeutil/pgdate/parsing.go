@@ -36,9 +36,8 @@ var (
 type ParseMode uint
 
 const (
-	// ParseModeISO is the default mode.
-	ParseModeISO ParseMode = iota
-	ParseModeYMD
+	// ParseModeYMD is the default
+	ParseModeYMD ParseMode = iota
 	ParseModeDMY
 	ParseModeMDY
 )
@@ -49,13 +48,14 @@ func ParseDate(now time.Time, mode ParseMode, s string) (time.Time, error) {
 		now:      now,
 		mode:     mode,
 		required: dateRequiredFields,
-		wanted:   dateFields,
+		// We allow time fields to be provided, but we'll ignore them.
+		wanted: dateTimeFields,
 	}
 
 	if t, err := extract(fe, s); err == nil {
 		return t, nil
 	} else {
-		return TimeEpoch, parseError("date", s)
+		return TimeEpoch, err //parseError("date", s)
 	}
 }
 
@@ -75,8 +75,9 @@ func ParseTime(now time.Time, s string) (time.Time, error) {
 }
 
 // ParseTime converts a string into a timestamp.
-func ParseTimestamp(now time.Time, s string) (time.Time, error) {
+func ParseTimestamp(now time.Time, mode ParseMode, s string) (time.Time, error) {
 	fe := fieldExtract{
+		mode:     mode,
 		now:      now,
 		required: dateTimeRequiredFields,
 		wanted:   dateTimeFields,

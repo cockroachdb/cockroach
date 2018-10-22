@@ -114,7 +114,7 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 				mult = 1
 				for chunk.magnitude > 6 {
 					chunk.magnitude--
-					chunk.v %= 10
+					chunk.v /= 10
 				}
 			}
 			return fe.Set(fieldFraction, chunk.v*mult)
@@ -145,7 +145,7 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 			v /= 100
 			return fe.Set(fieldYear, v)
 
-		case chunk.magnitude >= 3 || fe.mode == ParseModeYMD || fe.mode == ParseModeISO:
+		case chunk.magnitude >= 3 || fe.mode == ParseModeYMD:
 			// A three- or four-digit number must be a year.  If we are in a
 			// year-first mode, we'll accept the first chunk and possibly
 			// adjust a two-digit value later on.  This means that
@@ -243,7 +243,7 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 		}
 		return fe.Set(fieldTZ2, chunk.v)
 
-	case fe.Wants(fieldHour) && fe.Wants(fieldMinute) && fe.Wants(fieldSecond):
+	case fe.Wants(fieldHour) && fe.Wants(fieldMinute) && fe.Wants(fieldSecond) && chunk.prefix != ':':
 		v := chunk.v
 		seconds := 0
 		switch chunk.magnitude {
@@ -270,35 +270,15 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 
 		}
 
-	case fe.Wants(fieldMinute):
+	case fe.Wants(fieldMinute) && chunk.prefix == ':':
 		return fe.Set(fieldMinute, chunk.v)
 
-	case fe.Wants(fieldSecond):
+	case fe.Wants(fieldSecond) && chunk.prefix == ':':
 		return fe.Set(fieldSecond, chunk.v)
 
 	default:
 		return errors.Errorf("could not interpret %v", chunk)
 	}
-}
-
-// InterpretPackedNumber is where we do the pattern-matching to
-// ingest cases in the style of yyyymmdd or hhmmss.
-func (fe *fieldExtract) interpretPackedNumber(chunk numberChunk) error {
-	switch {
-	case fe.Wants(fieldYear) && fe.Wants(fieldMonth) && fe.Wants(fieldDay):
-		if chunk.magnitude >= 6 {
-		}
-
-	case fe.Wants(fieldMinute):
-		switch chunk.magnitude {
-		case 6:
-			// hhmmss
-		case 4:
-			// hhmm
-		}
-	}
-
-	return errors.Errorf("could not interpret %v", chunk)
 }
 
 // Force sets the field without performing any sanity checks.
@@ -433,22 +413,35 @@ func (fe *fieldExtract) Validate() error {
 			}
 
 		default:
-			if hour < 0 || hour > 24 {
+			// 24:00:00 is the maximum-allowed value
+			if hour < 0 || hour > 23 {
 				return errors.New("hour out of range")
 			}
 		}
-	}
 
-	if minute, ok := fe.Get(fieldMinute); ok {
+		minute, _ := fe.Get(fieldMinute)
 		if minute < 0 || minute > 59 {
 			return errors.New("minute out of range")
 		}
-	}
 
-	if second, ok := fe.Get(fieldSecond); ok {
+		second, _ := fe.Get(fieldSecond)
 		if second < 0 || second > 59 {
 			return errors.New("second out of range")
 		}
+
+		micros, _ := fe.Get(fieldFraction)
+		if micros < 0 { // micros are allowed to overflow.
+			return errors.New("micros out of range")
+		}
+
+		x := time.Duration(hour)*time.Hour +
+			time.Duration(minute)*time.Minute +
+			time.Duration(second)*time.Second +
+			time.Duration(micros)*time.Microsecond
+		if x > 24*time.Hour {
+			return errors.Errorf("time out of range: %d", x)
+		}
+
 	}
 
 	return nil
