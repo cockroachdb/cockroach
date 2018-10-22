@@ -27,7 +27,7 @@ type ColVec interface {
 
 	// TODO(jordan): is a bitmap or slice of bools better?
 	// Bool returns a bool list.
-	Bool() Bools
+	Bool() []bool
 	// Int8 returns an int8 slice.
 	Int8() []int8
 	// Int16 returns an int16 slice.
@@ -59,14 +59,6 @@ type Nulls interface {
 	Rank(i uint16) uint16
 }
 
-// Bools is an interface that represents a list of bools.
-type Bools interface {
-	// At returns the ith bool in the list.
-	At(i uint16) bool
-	// Set sets the ith bool in the list to b.
-	Set(i uint16, b bool)
-}
-
 // Bytes is an interface that represents a list of byte slices.
 type Bytes interface {
 	// At returns the ith byte slice in the list.
@@ -87,7 +79,7 @@ type memColumn struct {
 func newMemColumn(t types.T, n int) memColumn {
 	switch t {
 	case types.Bool:
-		return memColumn{col: newMemBools(n)}
+		return memColumn{col: make([]bool, n)}
 	case types.Bytes:
 		return memColumn{col: newMemBytes(n)}
 	case types.Int16:
@@ -119,8 +111,8 @@ func (m memColumn) Rank(i uint16) uint16 {
 	return i
 }
 
-func (m memColumn) Bool() Bools {
-	return m.col.(memBools)
+func (m memColumn) Bool() []bool {
+	return m.col.([]bool)
 }
 
 func (m memColumn) Int8() []int8 {
@@ -149,22 +141,6 @@ func (m memColumn) Float64() []float64 {
 
 func (m memColumn) Bytes() Bytes {
 	return m.col.(memBytes)
-}
-
-var _ Bools = memBools{}
-
-type memBools []bool
-
-func newMemBools(n int) memBools {
-	return make([]bool, n)
-}
-
-func (m memBools) At(i uint16) bool {
-	return m[i]
-}
-
-func (m memBools) Set(i uint16, b bool) {
-	m[i] = b
 }
 
 var _ Bytes = memBytes{}
