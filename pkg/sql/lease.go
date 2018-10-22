@@ -508,8 +508,7 @@ func (s LeaseStore) getForExpiration(
 	var table *tableVersionState
 	err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		descKey := sqlbase.MakeDescMetadataKey(id)
-		prevTimestamp := expiration
-		prevTimestamp.WallTime--
+		prevTimestamp := expiration.Prev()
 		txn.SetFixedTimestamp(ctx, prevTimestamp)
 		var desc sqlbase.Descriptor
 		if err := txn.GetProto(ctx, descKey, &desc); err != nil {
@@ -756,7 +755,7 @@ func (m *LeaseManager) readOlderVersionForTimestamp(
 		afterIdx := 0
 		// Walk back the versions to find one that is valid for the timestamp.
 		for i := len(t.mu.active.data) - 1; i >= 0; i-- {
-			// Check to see if the ModififcationTime is valid.
+			// Check to see if the ModificationTime is valid.
 			if table := t.mu.active.data[i]; !timestamp.Less(table.ModificationTime) {
 				if timestamp.Less(table.expiration) {
 					// Existing valid table version.
