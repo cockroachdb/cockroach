@@ -143,7 +143,7 @@ func (c *CustomFuncs) CanRemoveAggDistinctForKeys(
 	aggs memo.AggregationsExpr, private *memo.GroupingPrivate, input memo.RelExpr,
 ) bool {
 	inputFDs := &input.Relational().FuncDeps
-	if _, hasKey := inputFDs.Key(); !hasKey {
+	if _, hasKey := inputFDs.StrictKey(); !hasKey {
 		// Fast-path for the case when the input has no keys.
 		return false
 	}

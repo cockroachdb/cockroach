@@ -841,7 +841,7 @@ func (b *logicalPropsBuilder) buildRowNumberProps(rowNum *RowNumberExpr, rel *pr
 	// Inherit functional dependencies from input, and add strict key FD for the
 	// additional key column.
 	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
-	if key, ok := rel.FuncDeps.Key(); ok {
+	if key, ok := rel.FuncDeps.StrictKey(); ok {
 		// Any existing keys are still keys.
 		rel.FuncDeps.AddStrictKey(key, rel.OutputCols)
 	}
@@ -1302,7 +1302,7 @@ func (h *joinPropsHelper) setFuncDeps(rel *props.Relational) {
 			//
 			inputCols := h.leftProps.OutputCols.Union(h.rightProps.OutputCols)
 			if !inputCols.Intersects(notNullInputCols) {
-				rel.FuncDeps.ClearKey()
+				rel.FuncDeps.DowngradeKey()
 			}
 			rel.FuncDeps.MakeOuter(h.leftProps.OutputCols, notNullInputCols)
 			rel.FuncDeps.MakeOuter(h.rightProps.OutputCols, notNullInputCols)

@@ -178,7 +178,7 @@ func (c *CustomFuncs) OutputCols2(left, right memo.RelExpr) opt.ColSet {
 // CandidateKey returns the candidate key columns from the given input
 // expression. If there is no candidate key, CandidateKey returns ok=false.
 func (c *CustomFuncs) CandidateKey(input memo.RelExpr) (key opt.ColSet, ok bool) {
-	return input.Relational().FuncDeps.Key()
+	return input.Relational().FuncDeps.StrictKey()
 }
 
 // IsColNotNull returns true if the given input column is never null.
