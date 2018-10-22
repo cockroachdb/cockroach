@@ -151,9 +151,9 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			case sqlbase.ColumnType_FLOAT:
 				m.row[outIdx].Datum = m.da.NewDFloat(tree.DFloat(col.Float64()[rowIdx]))
 			case sqlbase.ColumnType_BYTES:
-				m.row[outIdx].Datum = m.da.NewDBytes(tree.DBytes(col.Bytes().At(rowIdx)))
+				m.row[outIdx].Datum = m.da.NewDBytes(tree.DBytes(col.Bytes()[rowIdx]))
 			case sqlbase.ColumnType_STRING:
-				b := col.Bytes().At(rowIdx)
+				b := col.Bytes()[rowIdx]
 				m.row[outIdx].Datum = m.da.NewDString(tree.DString(*(*string)(unsafe.Pointer(&b))))
 			}
 		}
