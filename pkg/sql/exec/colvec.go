@@ -45,6 +45,17 @@ type ColVec interface {
 	Float64() []float64
 	// Bytes returns a Bytes object, allowing retrieval of multiple byte slices.
 	Bytes() Bytes
+
+	// Append requires a ColVec of the same type and appends it's column vector
+	// into itself at the specified index for a given length.
+	Append(vec ColVec, colType types.T, toLength uint64, fromLength uint16)
+
+	// CopyFrom copies into itself another column vector, filtered by the given
+	// selection vector.
+	CopyFrom(vec ColVec, sel []uint64, nSel uint16, colType types.T)
+
+	// Slice returns the column vector sliced to the specified length.
+	Slice(length uint16, colType types.T) column
 }
 
 // Nulls represents a list of potentially nullable values.
@@ -78,84 +89,33 @@ type Bytes interface {
 	Set(i uint16, b []byte)
 }
 
-var _ ColVec = memColumn{}
-
-// colAppend requires two ColVecs of the same type and returns the resulting
-// ColVec with their cols appended.
-func colAppend(a ColVec, b ColVec, t types.T) ColVec {
-	// todo(changangela): should it return a memColumn?
-	switch t {
-	case types.Bool:
-		return &memColumn{
-			col: append(a.Bool().(memBools), b.Bool().(memBools)...),
-			t:   t,
-		}
-	case types.Bytes:
-		return &memColumn{
-			col: append(a.Bytes().(memBytes), b.Bytes().(memBytes)...),
-			t:   t,
-		}
-	case types.Int8:
-		return &memColumn{
-			col: append(a.Int8(), b.Int8()...),
-			t:   t,
-		}
-	case types.Int16:
-		return &memColumn{
-			col: append(a.Int16(), b.Int16()...),
-			t:   t,
-		}
-	case types.Int32:
-		return &memColumn{
-			col: append(a.Int32(), b.Int32()...),
-			t:   t,
-		}
-	case types.Int64:
-		return &memColumn{
-			col: append(a.Int64(), b.Int64()...),
-			t:   t,
-		}
-	case types.Float32:
-		return &memColumn{
-			col: append(a.Float32(), b.Float32()...),
-			t:   t,
-		}
-	case types.Float64:
-		return &memColumn{
-			col: append(a.Float64(), b.Float64()...),
-			t:   t,
-		}
-	default:
-		panic(fmt.Sprintf("unhandled type %d", t))
-	}
-}
+var _ ColVec = &memColumn{}
 
 // memColumn is a simple pass-through implementation of ColVec that just casts
 // a generic interface{} to the proper type when requested.
 type memColumn struct {
 	col column
-	t   types.T
 }
 
 // newMemColumn returns a new memColumn, initialized with a type and length.
-func newMemColumn(t types.T, n int) memColumn {
+func newMemColumn(t types.T, n int) *memColumn {
 	switch t {
 	case types.Bool:
-		return memColumn{col: newMemBools(n), t: t}
+		return &memColumn{col: newMemBools(n)}
 	case types.Bytes:
-		return memColumn{col: newMemBytes(n), t: t}
+		return &memColumn{col: newMemBytes(n)}
 	case types.Int8:
-		return memColumn{col: make([]int8, n), t: t}
+		return &memColumn{col: make([]int8, n)}
 	case types.Int16:
-		return memColumn{col: make([]int16, n), t: t}
+		return &memColumn{col: make([]int16, n)}
 	case types.Int32:
-		return memColumn{col: make([]int32, n), t: t}
+		return &memColumn{col: make([]int32, n)}
 	case types.Int64:
-		return memColumn{col: make([]int64, n), t: t}
+		return &memColumn{col: make([]int64, n)}
 	case types.Float32:
-		return memColumn{col: make([]float32, n), t: t}
+		return &memColumn{col: make([]float32, n)}
 	case types.Float64:
-		return memColumn{col: make([]float64, n), t: t}
+		return &memColumn{col: make([]float64, n)}
 	default:
 		panic(fmt.Sprintf("unhandled type %d", t))
 	}
@@ -205,6 +165,110 @@ func (m memColumn) Float64() []float64 {
 
 func (m memColumn) Bytes() Bytes {
 	return m.col.(memBytes)
+}
+
+func (m *memColumn) Append(vec ColVec, colType types.T, toLength uint64, fromLength uint16) {
+	switch colType {
+	case types.Bool:
+		m.col = append(m.Bool().(memBools)[:toLength], vec.Bool().(memBools)[:fromLength]...)
+	case types.Bytes:
+		m.col = append(m.Bytes().(memBytes)[:toLength], vec.Bytes().(memBytes)[:fromLength]...)
+	case types.Int8:
+		m.col = append(m.Int8()[:toLength], vec.Int8()[:fromLength]...)
+	case types.Int16:
+		m.col = append(m.Int16()[:toLength], vec.Int16()[:fromLength]...)
+	case types.Int32:
+		m.col = append(m.Int32()[:toLength], vec.Int32()[:fromLength]...)
+	case types.Int64:
+		toCol := m.Int64()[:toLength]
+		fromCol := vec.Int64()[:fromLength]
+		m.col = append(toCol, fromCol...)
+	case types.Float32:
+		m.col = append(m.Float32()[:toLength], vec.Float32()[:fromLength]...)
+	case types.Float64:
+		m.col = append(m.Float64()[:toLength], vec.Float64()[:fromLength]...)
+	default:
+		panic(fmt.Sprintf("unhandled type %d", colType))
+	}
+}
+
+func (m *memColumn) CopyFrom(vec ColVec, sel []uint64, nSel uint16, colType types.T) {
+	// todo (changangela): handle the case when nSel > ColBatchSize
+	switch colType {
+	case types.Bool:
+		toCol := m.Bool().(memBools)
+		fromCol := vec.Bool().(memBools)
+		for i := uint16(0); i < nSel; i++ {
+			toCol[i] = fromCol[sel[i]]
+		}
+	case types.Bytes:
+		toCol := m.Bytes().(memBytes)
+		fromCol := vec.Bytes().(memBytes)
+		for i := uint16(0); i < nSel; i++ {
+			toCol[i] = fromCol[sel[i]]
+		}
+	case types.Int8:
+		toCol := m.Int8()
+		fromCol := vec.Int8()
+		for i := uint16(0); i < nSel; i++ {
+			toCol[i] = fromCol[sel[i]]
+		}
+	case types.Int16:
+		toCol := m.Int16()
+		fromCol := vec.Int16()
+		for i := uint16(0); i < nSel; i++ {
+			toCol[i] = fromCol[sel[i]]
+		}
+	case types.Int32:
+		toCol := m.Int32()
+		fromCol := vec.Int32()
+		for i := uint16(0); i < nSel; i++ {
+			toCol[i] = fromCol[sel[i]]
+		}
+	case types.Int64:
+		toCol := m.Int64()
+		fromCol := vec.Int64()
+		for i := uint16(0); i < nSel; i++ {
+			toCol[i] = fromCol[sel[i]]
+		}
+	case types.Float32:
+		toCol := m.Float32()
+		fromCol := vec.Float32()
+		for i := uint16(0); i < nSel; i++ {
+			toCol[i] = fromCol[sel[i]]
+		}
+	case types.Float64:
+		toCol := m.Float64()
+		fromCol := vec.Float64()
+		for i := uint16(0); i < nSel; i++ {
+			toCol[i] = fromCol[sel[i]]
+		}
+	default:
+		panic(fmt.Sprintf("unhandled type %d", colType))
+	}
+}
+
+func (m memColumn) Slice(length uint16, colType types.T) column {
+	switch colType {
+	case types.Bool:
+		return m.Bool().(memBools)[:length]
+	case types.Bytes:
+		return m.Bytes().(memBytes)[:length]
+	case types.Int8:
+		return m.Int8()[:length]
+	case types.Int16:
+		return m.Int16()[:length]
+	case types.Int32:
+		return m.Int32()[:length]
+	case types.Int64:
+		return m.Int64()[:length]
+	case types.Float32:
+		return m.Float32()[:length]
+	case types.Float64:
+		return m.Float64()[:length]
+	default:
+		panic(fmt.Sprintf("unhandled type %d", colType))
+	}
 }
 
 var _ Bools = memBools{}
