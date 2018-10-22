@@ -153,6 +153,7 @@ type Memo struct {
 // IsStale method for more details).
 func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	m.metadata.Init()
+	m.interner.Clear()
 	m.logPropsBuilder.init(evalCtx, m)
 
 	m.rootExpr = nil
