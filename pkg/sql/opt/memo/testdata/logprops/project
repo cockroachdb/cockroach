@@ -23,6 +23,20 @@ TABLE kuv
  └── INDEX primary
       └── k int not null
 
+exec-ddl
+CREATE TABLE ab (a INT, b INT, UNIQUE (a, b))
+----
+TABLE ab
+ ├── a int
+ ├── b int
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ └── INDEX secondary
+      ├── a int
+      ├── b int
+      └── rowid int not null (hidden) (storing)
+
 build
 SELECT y, x+1 AS a, 1 AS b, x FROM xysd
 ----
@@ -333,3 +347,49 @@ project
  └── projections
       └── cast: STRING [type=string, outer=(4)]
            └── variable: xysd.d [type=decimal]
+
+# Verify that a,b form a key.
+norm
+SELECT a, b FROM ab WHERE a IS NOT NULL and b IS NOT NULL
+----
+select
+ ├── columns: a:1(int!null) b:2(int!null)
+ ├── key: (1,2)
+ ├── interesting orderings: (+1,+2)
+ ├── scan ab
+ │    ├── columns: a:1(int) b:2(int)
+ │    ├── lax-key: (1,2)
+ │    ├── prune: (1,2)
+ │    └── interesting orderings: (+1,+2)
+ └── filters
+      ├── is-not [type=bool, outer=(1), constraints=(/1: (/NULL - ]; tight)]
+      │    ├── variable: a [type=int]
+      │    └── null [type=unknown]
+      └── is-not [type=bool, outer=(2), constraints=(/2: (/NULL - ]; tight)]
+           ├── variable: b [type=int]
+           └── null [type=unknown]
+
+norm
+SELECT a, b FROM ab WHERE (a, b) IN ((1, 1), (2, 2))
+----
+select
+ ├── columns: a:1(int!null) b:2(int!null)
+ ├── key: (1,2)
+ ├── interesting orderings: (+1,+2)
+ ├── scan ab
+ │    ├── columns: a:1(int) b:2(int)
+ │    ├── lax-key: (1,2)
+ │    ├── prune: (1,2)
+ │    └── interesting orderings: (+1,+2)
+ └── filters
+      └── in [type=bool, outer=(1,2), constraints=(/1/2: [/1/1 - /1/1] [/2/2 - /2/2]; /2: [/1 - /1] [/2 - /2]; tight)]
+           ├── tuple [type=tuple{int, int}]
+           │    ├── variable: a [type=int]
+           │    └── variable: b [type=int]
+           └── tuple [type=tuple{tuple{int, int}, tuple{int, int}}]
+                ├── tuple [type=tuple{int, int}]
+                │    ├── const: 1 [type=int]
+                │    └── const: 1 [type=int]
+                └── tuple [type=tuple{int, int}]
+                     ├── const: 2 [type=int]
+                     └── const: 2 [type=int]

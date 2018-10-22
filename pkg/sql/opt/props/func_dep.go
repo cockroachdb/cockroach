@@ -15,8 +15,8 @@
 package props
 
 import (
-	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -24,10 +24,10 @@ import (
 
 // FuncDepSet is a set of functional dependencies (FDs) that encode useful
 // relationships between columns in a base or derived relation. Given two sets
-// of columns A and B, a functional dependency A-->B holds if A uniquely
-// determines B. In other words, if two different rows have equal values for
-// columns in A, then those two rows will also have equal values for columns in
-// B. For example:
+// of columns A and B, a functional dependency A-->B holds if A fully determines
+// B. In other words, if two different rows have equal values for columns in A,
+// then those two rows will also have equal values for columns in B. For
+// example:
 //
 //   a1 a2 b1
 //   --------
@@ -361,22 +361,37 @@ type FuncDepSet struct {
 	// all referencing sets are treated as immutable.
 	deps []funcDep
 
-	// hasKey is true if the relation has no duplicate rows, which means at least
-	// one subset of its columns form a key (all columns, if no other subset).
-	// The key field contains one such key. See the "Keys" section above for more
-	// details.
-	hasKey bool
+	// hasKey is:
+	//  - strictKey if the relation has no duplicate rows, which means at least
+	//    one subset of its columns form a key (all columns, if no other subset).
+	//    The key field contains one such key. See the "Keys" section above for
+	//    more details.
+	//  - laxKey if there is a at least one subset of columns that form a lax key.
+	//    The key field contains one such key.
+	//
+	// See the "Keys" section above for more details.
+	hasKey keyType
 
-	// key contains a set of columns that form a key for the relation, as long as
-	// hasKey is true. There is no guarantee that the key has the minimum possible
-	// number of columns, or even that it's a candidate key, but a best effort is
-	// made to keep it as short as possible. See the "Keys" section above for
-	// more details.
+	// key contains a set of columns that form a key or a lax key for the
+	// relation, depending on hasKey; empty if hasKey is noKey.
+	//
+	// There is no guarantee that the key has the minimum possible number of
+	// columns, but a best effort is made to keep it as short as possible.
+	//
+	// See the "Keys" section above for more details.
 	//
 	// This set is immutable; to update it, replace it with a different set
 	// containing the desired columns.
 	key opt.ColSet
 }
+
+type keyType int8
+
+const (
+	noKey keyType = iota
+	laxKey
+	strictKey
+)
 
 // funcDep stores a single functional dependency. See the comment for FuncDepSet
 // for more details.
@@ -408,16 +423,29 @@ type funcDep struct {
 	equiv bool
 }
 
-// Key returns a boolean indicating whether a key exists for the relation, as
-// well as one of the keys if the boolean is true. A best effort is made to
-// return a candidate key that has the fewest columns.
-func (f *FuncDepSet) Key() (_ opt.ColSet, ok bool) {
-	return f.key, f.hasKey
+// StrictKey returns a strict key for the relation, if there is one.
+// A best effort is made to return a candidate key that has the fewest columns.
+func (f *FuncDepSet) StrictKey() (_ opt.ColSet, ok bool) {
+	if f.hasKey == strictKey {
+		return f.key, true
+	}
+	return opt.ColSet{}, false
+}
+
+// LaxKey returns a lax key for the relation, if there is one.
+// Note that strict keys are implicitly also lax keys, so if the relation has a
+// strict key, this returns the same key as StrictKey().
+// A best effort is made to return a lax key that has the fewest columns.
+func (f *FuncDepSet) LaxKey() (_ opt.ColSet, ok bool) {
+	if f.hasKey != noKey {
+		return f.key, true
+	}
+	return opt.ColSet{}, false
 }
 
 // Empty is true if the set contains no FDs and no key.
 func (f *FuncDepSet) Empty() bool {
-	return len(f.deps) == 0 && !f.hasKey && f.key.Empty()
+	return len(f.deps) == 0 && f.hasKey == noKey
 }
 
 // ColSet returns all columns referenced by the FD set.
@@ -433,13 +461,15 @@ func (f *FuncDepSet) ColSet() opt.ColSet {
 
 // HasMax1Row returns true if the relation has zero or one rows.
 func (f *FuncDepSet) HasMax1Row() bool {
-	return f.hasKey && f.key.Empty()
+	return f.hasKey == strictKey && f.key.Empty()
 }
 
-// ClearKey marks the FD set as having no key.
-func (f *FuncDepSet) ClearKey() {
-	f.hasKey = false
-	f.key = opt.ColSet{}
+// DowngradeKey marks the FD set as having no strict key. If there was a strict
+// key, it becomes a lax key.
+func (f *FuncDepSet) DowngradeKey() {
+	if f.hasKey == strictKey {
+		f.hasKey = laxKey
+	}
 }
 
 // CopyFrom copies the given FD into this FD, replacing any existing data.
@@ -466,7 +496,7 @@ func (f *FuncDepSet) CopyFrom(fdset *FuncDepSet) {
 //   1     1     1
 //
 func (f *FuncDepSet) ColsAreStrictKey(cols opt.ColSet) bool {
-	return f.colsAreKey(cols, true /* strict */)
+	return f.colsAreKey(cols, strictKey)
 }
 
 // ColsAreLaxKey returns true if the given columns contain a lax key for the
@@ -488,7 +518,7 @@ func (f *FuncDepSet) ColsAreStrictKey(cols opt.ColSet) bool {
 //   1     1     1
 //
 func (f *FuncDepSet) ColsAreLaxKey(cols opt.ColSet) bool {
-	return f.colsAreKey(cols, false /* strict */)
+	return f.colsAreKey(cols, laxKey)
 }
 
 // ReduceCols removes redundant columns from the given set. Redundant columns
@@ -593,8 +623,8 @@ func (f *FuncDepSet) AddStrictKey(keyCols, allCols opt.ColSet) {
 	keyCols = f.ReduceCols(keyCols)
 	f.addDependency(keyCols, allCols, true /* strict */, false /* equiv */)
 
-	if !f.hasKey || keyCols.Len() < f.key.Len() {
-		f.setKey(keyCols)
+	if f.hasKey != strictKey || keyCols.Len() < f.key.Len() {
+		f.setKey(keyCols, strictKey)
 	}
 }
 
@@ -614,6 +644,10 @@ func (f *FuncDepSet) AddLaxKey(keyCols, allCols opt.ColSet) {
 	// determined by other columns).
 	keyCols = f.ReduceCols(keyCols)
 	f.addDependency(keyCols, allCols, false /* strict */, false /* equiv */)
+
+	if f.hasKey == noKey || (f.hasKey == laxKey && keyCols.Len() < f.key.Len()) {
+		f.setKey(keyCols, laxKey)
+	}
 }
 
 // MakeMax1Row initializes the FD set for a relation containing either zero or
@@ -631,11 +665,15 @@ func (f *FuncDepSet) MakeMax1Row(cols opt.ColSet) {
 	if !cols.Empty() {
 		f.deps = append(f.deps, funcDep{to: cols, strict: true})
 	}
-	f.setKey(opt.ColSet{})
+	f.setKey(opt.ColSet{}, strictKey)
 }
 
 // MakeNotNull modifies the FD set based on which columns cannot contain NULL
-// values. This often allows upgrading lax dependencies to strict dependencies.
+// values. This often allows upgrading lax dependencies to strict dependencies,
+// and lax keys to strict keys.
+//
+// Note: this function should be called with all known null columns; it won't do
+// as good of a job if it's called multiple times with different subsets.
 func (f *FuncDepSet) MakeNotNull(notNullCols opt.ColSet) {
 	var constCols opt.ColSet
 	var laxFDs util.FastIntSet
@@ -671,8 +709,11 @@ func (f *FuncDepSet) MakeNotNull(notNullCols opt.ColSet) {
 	}
 
 	// Try to reduce the key based on any new strict FDs.
-	if f.hasKey {
+	if f.hasKey != noKey {
 		f.key = f.ReduceCols(f.key)
+		if f.hasKey == laxKey && f.key.SubsetOf(notNullCols) {
+			f.hasKey = strictKey
+		}
 	}
 }
 
@@ -754,7 +795,7 @@ func (f *FuncDepSet) AddConstants(cols opt.ColSet) {
 	f.deps = f.deps[:n]
 
 	// Try to reduce the key based on the new constants.
-	if f.hasKey {
+	if f.hasKey != noKey {
 		f.key = f.ReduceCols(f.key)
 	}
 }
@@ -788,17 +829,19 @@ func (f *FuncDepSet) ProjectCols(cols opt.ColSet) {
 	// Ensure that any existing key contains only projected columns. Do this
 	// before removing any FDs from the set, in order to take advantage of all
 	// existing transitive relationships.
-	if f.hasKey && !f.key.SubsetOf(cols) {
+	if f.hasKey != noKey && !f.key.SubsetOf(cols) {
 		// Derive new candidate key (or key is no longer possible).
-		if f.ColsAreStrictKey(cols) {
-			f.setKey(f.ReduceCols(cols))
+		if f.hasKey == strictKey && f.ColsAreStrictKey(cols) {
+			f.setKey(f.ReduceCols(cols), strictKey)
+		} else if f.ColsAreLaxKey(cols) {
+			f.setKey(f.ReduceCols(cols), laxKey)
 		} else {
-			f.ClearKey()
+			f.clearKey()
 		}
 	}
 
 	// Special case of <= 1 row.
-	if f.hasKey && f.key.Empty() {
+	if f.hasKey == strictKey && f.key.Empty() {
 		f.MakeMax1Row(cols)
 		return
 	}
@@ -961,10 +1004,17 @@ func (f *FuncDepSet) MakeProduct(inner *FuncDepSet) {
 		}
 	}
 
-	if f.hasKey && inner.hasKey {
-		f.setKey(f.key.Union(inner.key))
+	if f.hasKey != noKey && inner.hasKey != noKey {
+		// If both sides have a strict key, the union of keys is a strict key.
+		// If one side has a lax key and the other has a lax or strict key, the
+		// union is a lax key.
+		typ := laxKey
+		if f.hasKey == strictKey && inner.hasKey == strictKey {
+			typ = strictKey
+		}
+		f.setKey(f.key.Union(inner.key), typ)
 	} else {
-		f.ClearKey()
+		f.clearKey()
 	}
 }
 
@@ -999,16 +1049,18 @@ func (f *FuncDepSet) MakeApply(inner *FuncDepSet) {
 		fd := &inner.deps[i]
 		if fd.equiv {
 			f.addDependency(fd.from, fd.to, fd.strict, fd.equiv)
-		} else if !fd.from.Empty() && f.hasKey {
+		} else if !fd.from.Empty() && f.hasKey == strictKey {
 			f.addDependency(f.key.Union(fd.from), fd.to, fd.strict, fd.equiv)
 		}
+		// TODO(radu): can we use a laxKey here?
 	}
 
-	if f.hasKey && inner.hasKey {
-		f.setKey(f.key.Union(inner.key))
+	if f.hasKey == strictKey && inner.hasKey == strictKey {
+		f.setKey(f.key.Union(inner.key), strictKey)
 		f.ensureKeyClosure(inner.ColSet())
 	} else {
-		f.ClearKey()
+		// TODO(radu): can we use a laxKey here?
+		f.clearKey()
 	}
 }
 
@@ -1156,14 +1208,18 @@ func (f *FuncDepSet) ComputeEquivGroup(rep opt.ColumnID) opt.ColSet {
 }
 
 // ensureKeyClosure checks whether the closure for this FD set's key (if there
-// is one) includes the given columns. If not, then it adds a strict dependency
-// so that the key determines the columns.
+// is one) includes the given columns. If not, then it adds a dependency so that
+// the key determines the columns.
 func (f *FuncDepSet) ensureKeyClosure(cols opt.ColSet) {
-	if f.hasKey {
+	if f.hasKey != noKey {
 		closure := f.ComputeClosure(f.key)
 		if !cols.SubsetOf(closure) {
 			cols = cols.Difference(closure)
-			f.addDependency(f.key, cols, true /* strict */, false /* equiv */)
+
+			// If we have a strict key, we add a strict dependency; otherwise we add a
+			// lax dependency.
+			strict := f.hasKey == strictKey
+			f.addDependency(f.key, cols, strict, false /* equiv */)
 		}
 	}
 }
@@ -1209,15 +1265,17 @@ func (f *FuncDepSet) Verify() {
 		}
 	}
 
-	if f.hasKey {
+	if f.hasKey != noKey {
 		if reduced := f.ReduceCols(f.key); !reduced.Equals(f.key) {
 			panic(fmt.Sprintf("expected FD to have candidate key: %s", f))
 		}
 
-		allCols := f.ColSet()
-		allCols.UnionWith(f.key)
-		if !f.ComputeClosure(f.key).Equals(allCols) {
-			panic(fmt.Sprintf("expected closure of FD key to include all known cols: %s", f))
+		if f.hasKey == strictKey {
+			allCols := f.ColSet()
+			allCols.UnionWith(f.key)
+			if !f.ComputeClosure(f.key).Equals(allCols) {
+				panic(fmt.Sprintf("expected closure of FD key to include all known cols: %s", f))
+			}
 		}
 	} else {
 		if !f.key.Empty() {
@@ -1226,37 +1284,59 @@ func (f *FuncDepSet) Verify() {
 	}
 }
 
+// StringOnlyFDs returns a string representation of the FDs (without the key
+// information).
+func (f FuncDepSet) StringOnlyFDs() string {
+	var b strings.Builder
+	f.formatFDs(&b)
+	return b.String()
+}
+
 func (f FuncDepSet) String() string {
-	var buf bytes.Buffer
-	if f.hasKey {
-		fmt.Fprintf(&buf, "%s: ", f.key)
+	var b strings.Builder
+
+	if f.hasKey != noKey {
+		// The key shows up as key(1,2) or lax-key(1,2).
+		if f.hasKey == laxKey {
+			b.WriteString("lax-")
+		}
+		fmt.Fprintf(&b, "key%s", f.key)
+		if len(f.deps) > 0 {
+			b.WriteString("; ")
+		}
 	}
+
+	f.formatFDs(&b)
+	return b.String()
+}
+
+func (f FuncDepSet) formatFDs(b *strings.Builder) {
 	for i := range f.deps {
 		fd := &f.deps[i]
 		if i != 0 {
-			buf.WriteString(", ")
+			b.WriteString(", ")
 		}
 		if fd.equiv {
 			if !fd.strict {
 				panic("lax equivalent columns are not supported")
 			}
-			fmt.Fprintf(&buf, "%s==%s", fd.from, fd.to)
+			fmt.Fprintf(b, "%s==%s", fd.from, fd.to)
 		} else {
 			if fd.strict {
-				fmt.Fprintf(&buf, "%s-->%s", fd.from, fd.to)
+				fmt.Fprintf(b, "%s-->%s", fd.from, fd.to)
 			} else {
-				fmt.Fprintf(&buf, "%s~~>%s", fd.from, fd.to)
+				fmt.Fprintf(b, "%s~~>%s", fd.from, fd.to)
 			}
 		}
 	}
-	return buf.String()
 }
 
 // colsAreKey returns true if the given columns contain a strict or lax key for
 // the relation.
-func (f *FuncDepSet) colsAreKey(cols opt.ColSet, strict bool) bool {
-	if !f.hasKey {
-		// No key exists for the relation.
+func (f *FuncDepSet) colsAreKey(cols opt.ColSet, typ keyType) bool {
+	if f.hasKey == noKey || (typ == strictKey && f.hasKey == laxKey) {
+		// No key exists for the relation, or there exists a lax key and we
+		// need a strict key.
 		return false
 	}
 
@@ -1268,7 +1348,7 @@ func (f *FuncDepSet) colsAreKey(cols opt.ColSet, strict bool) bool {
 	//   cols  = (b,c)
 	//
 	// and yet both column sets form keys for the relation.
-	return f.inClosureOf(f.key, cols, strict)
+	return f.inClosureOf(f.key, cols, typ == strictKey)
 }
 
 // inClosureOf computes the strict or lax closure of the "in" column set, and
@@ -1468,15 +1548,20 @@ func (f *FuncDepSet) addEquivalency(equiv opt.ColSet) {
 	}
 
 	// Try to reduce the key based on the new equivalency.
-	if f.hasKey {
+	if f.hasKey != noKey {
 		f.key = f.ReduceCols(f.key)
 	}
 }
 
 // setKey updates the key that the set is currently maintaining.
-func (f *FuncDepSet) setKey(key opt.ColSet) {
-	f.hasKey = true
+func (f *FuncDepSet) setKey(key opt.ColSet, typ keyType) {
+	f.hasKey = typ
 	f.key = key
+}
+
+// clearKey removes any strict or lax key.
+func (f *FuncDepSet) clearKey() {
+	f.setKey(opt.ColSet{}, noKey)
 }
 
 // makeEquivMap constructs a map with an entry for each column in the "from" set

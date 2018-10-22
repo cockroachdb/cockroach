@@ -197,10 +197,12 @@ explain
  ├── columns: tree:7(string) field:8(string) description:9(string)
  └── project
       ├── columns: b:2(int) plus:6(int) c:3(int)
+      ├── lax-key: (2,3)
       ├── fd: (2)-->(6)
       ├── ordering: +2,+3
       ├── scan abcde@bc
       │    ├── columns: b:2(int) c:3(int)
+      │    ├── lax-key: (2,3)
       │    └── ordering: +2,+3
       └── projections
            └── b + 1 [type=int, outer=(2)]

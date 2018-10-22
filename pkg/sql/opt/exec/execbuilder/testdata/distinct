@@ -177,16 +177,12 @@ distinct   ·            ·       (v)  weak-key(v)
 ·          spans        ALL     ·    ·
 
 # Here we can infer that v is not-NULL so eliding the node is correct.
-# TODO(radu,andyk): we can't represent that v is a weak key (at the level of
-# the scan) when it is the only column.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx WHERE v > 0
 ----
-distinct   ·            ·       (v)  weak-key(v)
- │         distinct on  v       ·    ·
- └── scan  ·            ·       (v)  ·
-·          table        kv@idx  ·    ·
-·          spans        /1-     ·    ·
+scan  ·      ·       (v)  ·
+·     table  kv@idx  ·    ·
+·     spans  /1-     ·    ·
 
 statement ok
 CREATE TABLE kv2 (k INT PRIMARY KEY, v INT NOT NULL, UNIQUE INDEX idx(v))

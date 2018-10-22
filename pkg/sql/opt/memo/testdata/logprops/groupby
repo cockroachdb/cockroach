@@ -100,6 +100,7 @@ project
       ├── interesting orderings: (-4,+3)
       └── project
            ├── columns: z:3(float!null) s:4(string)
+           ├── lax-key: (3,4)
            ├── prune: (3,4)
            ├── interesting orderings: (-4,+3)
            └── scan xyzs
@@ -147,6 +148,7 @@ group-by
  ├── prune: (5)
  ├── project
  │    ├── columns: z:3(float!null) s:4(string)
+ │    ├── lax-key: (3,4)
  │    ├── prune: (3,4)
  │    ├── interesting orderings: (-4,+3)
  │    └── scan xyzs
