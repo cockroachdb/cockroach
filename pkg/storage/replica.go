@@ -4014,6 +4014,13 @@ func (r *Replica) shouldDropForwardedProposalLocked(req *RaftMessageRequest) boo
 	for _, e := range req.Message.Entries {
 		switch e.Type {
 		case raftpb.EntryNormal:
+			if len(e.Data) == 0 {
+				// Don't drop empty proposals. We don't really expect those to come in from
+				// remote nodes (as they're proposed by new leaders), but it does happen.
+				// Whether these are dropped or not should not matter. We opt to not drop
+				// them.
+				return false
+			}
 			cmdID, _ := DecodeRaftCommand(e.Data)
 			if _, ok := r.mu.remoteProposals[cmdID]; !ok {
 				// Untracked remote proposal. Don't drop.
@@ -4048,6 +4055,11 @@ func (r *Replica) maybeTrackForwardedProposalLocked(rg *raft.RawNode, req *RaftM
 	for _, e := range req.Message.Entries {
 		switch e.Type {
 		case raftpb.EntryNormal:
+			if len(e.Data) == 0 {
+				// Ignore empty proposals, which are different than proposals
+				// with no data. These are sent on leadership changes.
+				continue
+			}
 			cmdID, data := DecodeRaftCommand(e.Data)
 			if len(data) == 0 {
 				// An empty command is proposed to unquiesce a range and
