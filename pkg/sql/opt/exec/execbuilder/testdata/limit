@@ -8,9 +8,9 @@ query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE v > 4 AND v < 8 AND w > 30 ORDER BY v LIMIT 2
 ----
 tree                  field   description  columns    ordering
-limit                 ·       ·            (k, v, w)  ·
+limit                 ·       ·            (k, v, w)  +v
  │                    count   2            ·          ·
- └── filter           ·       ·            (k, v, w)  ·
+ └── filter           ·       ·            (k, v, w)  +v
       │               filter  w > 30       ·          ·
       └── index-join  ·       ·            (k, v, w)  +v
            ├── scan   ·       ·            (k, v)     +v

@@ -6,6 +6,25 @@ CREATE TABLE uniontest (
   v INT
 )
 
+query T
+EXPLAIN (OPT) SELECT v FROM uniontest UNION SELECT k FROM uniontest
+----
+union
+ ├── columns: v:7(int)
+ ├── left columns: uniontest.v:2(int)
+ ├── right columns: uniontest.k:4(int)
+ ├── stats: [rows=200, distinct(7)=200]
+ ├── cost: 2102
+ ├── key: (7)
+ ├── scan uniontest
+ │    ├── columns: uniontest.v:2(int)
+ │    ├── stats: [rows=1000, distinct(2)=100]
+ │    └── cost: 1040
+ └── scan uniontest
+      ├── columns: uniontest.k:4(int)
+      ├── stats: [rows=1000, distinct(4)=100]
+      └── cost: 1040
+
 query TTT
 EXPLAIN SELECT v FROM uniontest UNION SELECT k FROM uniontest
 ----

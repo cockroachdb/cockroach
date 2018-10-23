@@ -227,7 +227,7 @@ query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT a.name FROM authors AS a JOIN books2 AS b2 ON a.book = b2.title ORDER BY a.name
 ----
 tree              field     description      columns              ordering
-render            ·         ·                (name)               ·
+render            ·         ·                (name)               +name
  │                render 0  name             ·                    ·
  └── lookup-join  ·         ·                (name, book, title)  ·
       │           type      inner            ·                    ·

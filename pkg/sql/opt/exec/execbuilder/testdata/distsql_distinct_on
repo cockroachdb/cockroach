@@ -134,10 +134,10 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyskj1rwzAQhvf-jHdWiT87eO
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (a, b) a, b FROM abc ORDER BY a, b, c
 ----
-distinct        ·            ·            (a, b)     weak-key(a,b)
+distinct        ·            ·            (a, b)     weak-key(a,b); +a,+b
  │              distinct on  a, b         ·          ·
  │              order key    a, b         ·          ·
- └── render     ·            ·            (a, b)     ·
+ └── render     ·            ·            (a, b)     +a,+b
       │         render 0     a            ·          ·
       │         render 1     b            ·          ·
       └── scan  ·            ·            (a, b, c)  +a,+b,+c
