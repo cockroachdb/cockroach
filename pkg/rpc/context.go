@@ -24,10 +24,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"github.com/rubyist/circuitbreaker"
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"

@@ -27,6 +27,7 @@ import (
 	"time"
 	"unsafe"
 
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -43,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/rubyist/circuitbreaker"
 )
 
 // AddReplica adds the replica to the store's replica map and to the sorted
