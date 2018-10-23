@@ -60,7 +60,7 @@ func (c *columnarizer) Init() {
 	for i := range typs {
 		typs[i] = types.FromColumnType(outputTypes[i])
 	}
-	c.batch = exec.NewMemBatch(typs...)
+	c.batch = exec.NewMemBatch(typs)
 	c.buffered = make(sqlbase.EncDatumRows, exec.ColBatchSize)
 	for i := range c.buffered {
 		c.buffered[i] = make(sqlbase.EncDatumRow, len(typs))

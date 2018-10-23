@@ -61,11 +61,7 @@ func EncDatumRowsToColVec(
 			if datum == tree.DNull {
 				vec.SetNull(i)
 			} else {
-				{{if .HasSetMethod}}
-				col.Set(i, {{.DatumToPhysicalFn}})
-				{{else}}
 				col[i] = {{.DatumToPhysicalFn}}
-				{{end}}
 			}
 		}
 		return nil
@@ -85,9 +81,6 @@ type columnConversion struct {
 	// ExecType is the exec.T to which we're converting. It should correspond to
 	// a method name on exec.ColVec.
 	ExecType string
-	// HasSetMethod is true if the ColVec is an interface with a Set method rather
-	// than just a slice.
-	HasSetMethod bool
 	// DatumToPhysicalFn is a stringified function for converting a datum to the
 	// physical type used in the column vector.
 	DatumToPhysicalFn string
@@ -105,11 +98,9 @@ func genRowsToVec(wr io.Writer) error {
 				continue
 			}
 			conversion := columnConversion{
-				SemanticType: "ColumnType_" + name,
-				Width:        width,
-				ExecType:     t.String(),
-				// TODO(solon): Determine the following fields via reflection.
-				HasSetMethod:      t == types.Bool || t == types.Bytes,
+				SemanticType:      "ColumnType_" + name,
+				Width:             width,
+				ExecType:          t.String(),
 				DatumToPhysicalFn: getDatumToPhysicalFn(ct),
 			}
 			columnConversions = append(columnConversions, conversion)
