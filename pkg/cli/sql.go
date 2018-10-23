@@ -264,10 +264,10 @@ var options = map[string]struct {
 	display func(c *cliState) string
 }{
 	`auto_trace`: {
-		"automatically run statement tracing on each executed statement",
-		false,
-		false,
-		func(c *cliState, val string) error {
+		description:               "automatically run statement tracing on each executed statement",
+		isBoolean:                 false,
+		validDuringMultilineEntry: false,
+		set: func(c *cliState, val string) error {
 			val = strings.ToLower(strings.TrimSpace(val))
 			switch val {
 			case "false", "0", "off":
@@ -280,11 +280,11 @@ var options = map[string]struct {
 			}
 			return nil
 		},
-		func(c *cliState) error {
+		reset: func(c *cliState) error {
 			c.autoTrace = ""
 			return nil
 		},
-		func(c *cliState) string {
+		display: func(c *cliState) string {
 			if c.autoTrace == "" {
 				return "off"
 			}
@@ -292,13 +292,13 @@ var options = map[string]struct {
 		},
 	},
 	`display_format`: {
-		"the output format for tabular data (table, csv, tsv, html, sql, records, raw)",
-		false,
-		true,
-		func(_ *cliState, val string) error {
+		description:               "the output format for tabular data (table, csv, tsv, html, sql, records, raw)",
+		isBoolean:                 false,
+		validDuringMultilineEntry: true,
+		set: func(_ *cliState, val string) error {
 			return cliCtx.tableDisplayFormat.Set(val)
 		},
-		func(_ *cliState) error {
+		reset: func(_ *cliState) error {
 			displayFormat := tableDisplayTSV
 			if cliCtx.terminalOutput {
 				displayFormat = tableDisplayTable
@@ -306,61 +306,61 @@ var options = map[string]struct {
 			cliCtx.tableDisplayFormat = displayFormat
 			return nil
 		},
-		func(_ *cliState) string { return cliCtx.tableDisplayFormat.String() },
+		display: func(_ *cliState) string { return cliCtx.tableDisplayFormat.String() },
 	},
 	`echo`: {
-		"show SQL queries before they are sent to the server",
-		true,
-		false,
-		func(_ *cliState, _ string) error { sqlCtx.echo = true; return nil },
-		func(_ *cliState) error { sqlCtx.echo = false; return nil },
-		func(_ *cliState) string { return strconv.FormatBool(sqlCtx.echo) },
+		description:               "show SQL queries before they are sent to the server",
+		isBoolean:                 true,
+		validDuringMultilineEntry: false,
+		set:     func(_ *cliState, _ string) error { sqlCtx.echo = true; return nil },
+		reset:   func(_ *cliState) error { sqlCtx.echo = false; return nil },
+		display: func(_ *cliState) string { return strconv.FormatBool(sqlCtx.echo) },
 	},
 	`errexit`: {
-		"exit the shell upon a query error",
-		true,
-		true,
-		func(c *cliState, _ string) error { c.errExit = true; return nil },
-		func(c *cliState) error { c.errExit = false; return nil },
-		func(c *cliState) string { return strconv.FormatBool(c.errExit) },
+		description:               "exit the shell upon a query error",
+		isBoolean:                 true,
+		validDuringMultilineEntry: true,
+		set:     func(c *cliState, _ string) error { c.errExit = true; return nil },
+		reset:   func(c *cliState) error { c.errExit = false; return nil },
+		display: func(c *cliState) string { return strconv.FormatBool(c.errExit) },
 	},
 	`check_syntax`: {
-		"check the SQL syntax before running a query (needs SHOW SYNTAX support on the server)",
-		true,
-		false,
-		func(c *cliState, _ string) error { c.checkSyntax = true; return nil },
-		func(c *cliState) error { c.checkSyntax = false; return nil },
-		func(c *cliState) string { return strconv.FormatBool(c.checkSyntax) },
+		description:               "check the SQL syntax before running a query (needs SHOW SYNTAX support on the server)",
+		isBoolean:                 true,
+		validDuringMultilineEntry: false,
+		set:     func(c *cliState, _ string) error { c.checkSyntax = true; return nil },
+		reset:   func(c *cliState) error { c.checkSyntax = false; return nil },
+		display: func(c *cliState) string { return strconv.FormatBool(c.checkSyntax) },
 	},
 	`show_times`: {
-		"display the execution time after each query",
-		true,
-		true,
-		func(_ *cliState, _ string) error { sqlCtx.showTimes = true; return nil },
-		func(_ *cliState) error { sqlCtx.showTimes = false; return nil },
-		func(_ *cliState) string { return strconv.FormatBool(sqlCtx.showTimes) },
+		description:               "display the execution time after each query",
+		isBoolean:                 true,
+		validDuringMultilineEntry: true,
+		set:     func(_ *cliState, _ string) error { sqlCtx.showTimes = true; return nil },
+		reset:   func(_ *cliState) error { sqlCtx.showTimes = false; return nil },
+		display: func(_ *cliState) string { return strconv.FormatBool(sqlCtx.showTimes) },
 	},
 	`smart_prompt`: {
-		"detect open transactions and propose entering multi-line statements",
-		true,
-		false,
-		func(c *cliState, _ string) error { c.smartPrompt = true; return nil },
-		func(c *cliState) error { c.smartPrompt = false; return nil },
-		func(c *cliState) string { return strconv.FormatBool(c.smartPrompt) },
+		description:               "detect open transactions and propose entering multi-line statements",
+		isBoolean:                 true,
+		validDuringMultilineEntry: false,
+		set:     func(c *cliState, _ string) error { c.smartPrompt = true; return nil },
+		reset:   func(c *cliState) error { c.smartPrompt = false; return nil },
+		display: func(c *cliState) string { return strconv.FormatBool(c.smartPrompt) },
 	},
 	`prompt1`: {
-		"prompt string to use before each command (the following are expanded: %M full host, %m host, %> port number, %n user, %/ database, %x txn status)",
-		false,
-		true,
-		func(c *cliState, val string) error {
+		description:               "prompt string to use before each command (the following are expanded: %M full host, %m host, %> port number, %n user, %/ database, %x txn status)",
+		isBoolean:                 false,
+		validDuringMultilineEntry: true,
+		set: func(c *cliState, val string) error {
 			c.customPromptPattern = val
 			return nil
 		},
-		func(c *cliState) error {
+		reset: func(c *cliState) error {
 			c.customPromptPattern = defaultPromptPattern
 			return nil
 		},
-		func(c *cliState) string { return c.customPromptPattern },
+		display: func(c *cliState) string { return c.customPromptPattern },
 	},
 }
 
