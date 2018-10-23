@@ -681,7 +681,7 @@ func TestParseTimestamp(t *testing.T) {
 }
 
 func TestOneOff(t *testing.T) {
-	res, err := pgdate.ParseTimestamp(timeutil.Now(), 0, "1999-01-08 04:05:06.789")
+	res, err := pgdate.ParseTimestamp(timeutil.Now(), 0, "2018-10-23 +00 04:05:06.789")
 	t.Logf("%v %v", res, err)
 }
 

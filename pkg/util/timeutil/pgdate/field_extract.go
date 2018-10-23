@@ -16,6 +16,8 @@ package pgdate
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -67,17 +69,155 @@ type fieldExtract struct {
 	wanted fieldSet
 }
 
-var (
-	dateFields         = newFieldSet(fieldYear, fieldMonth, fieldDay, fieldEra)
-	dateRequiredFields = newFieldSet(fieldYear, fieldMonth, fieldDay)
+// Extract is the top-level function.  It attempts to break the input
+// string into a collection of date/time fields in order to populate a
+// fieldExtract.
+func (fe *fieldExtract) Extract(s string) error {
+	// Break the string into alphanumeric chunks.
+	textChunks, _ := chunk(s)
 
-	timeFields = newFieldSet(
-		fieldHour, fieldMinute, fieldSecond, fieldFraction, fieldMeridian,
-		fieldTZHour, fieldTZMinute, fieldTZSecond)
-	timeRequiredFields = newFieldSet(fieldHour, fieldMinute)
+	// Create a place to store extracted numeric info.
+	numbers := make([]numberChunk, 0, len(textChunks))
+	appendNumber := func(prefix, number string) error {
+		v, err := strconv.Atoi(number)
+		if err != nil {
+			return err
+		}
+		lastRune, _ := utf8.DecodeLastRuneInString(prefix)
+		numbers = append(numbers, numberChunk{prefix: lastRune, v: v, magnitude: len(number)})
+		return nil
+	}
 
-	dateTimeFields = dateFields.AddAll(timeFields)
-)
+	// Certain keywords should result in some kind of sentinel value,
+	// but we want to ensure that we accept only a single sentinel chunk.
+	matchedSentinel := func(value *time.Time, match string) error {
+		if fe.sentinel != nil {
+			return errors.Errorf("unexpected input: %s", match)
+		}
+		fe.sentinel = value
+		return nil
+	}
+
+	var leftoverText string
+
+	// First, we'll try to pluck out any keywords that exist in the input.
+	// If a chunk is not a keyword or other special-case pattern, it
+	// must be a numeric value, which we'll pluck out for a second
+	// pass. If we see certain sentinel values, we'll pick them out,
+	// but keep going to ensure that the user hasn't written something
+	// like "epoch infinity".
+	for _, chunk := range textChunks {
+		match := strings.ToLower(chunk.Match)
+
+		switch match {
+		case keywordEpoch:
+			if err := matchedSentinel(&TimeEpoch, match); err != nil {
+				return err
+			}
+
+		case keywordInfinity:
+			if strings.HasSuffix(chunk.NotMatch, "-") {
+				if err := matchedSentinel(&TimeNegativeInfinity, match); err != nil {
+					return err
+				}
+			} else {
+				if err := matchedSentinel(&TimeInfinity, match); err != nil {
+					return err
+				}
+			}
+
+		case keywordNow:
+			if err := matchedSentinel(&fe.now, match); err != nil {
+				return err
+			}
+
+		default:
+			// Fan out to other keyword-based extracts.
+			if m, ok := keywordSetters[match]; ok {
+				if err := m(fe, match); err != nil {
+					return err
+				}
+				continue
+			}
+
+			// At this point, the most probable case is that we have a
+			// numeric input.
+			if err := appendNumber(chunk.NotMatch, match); err == nil {
+				continue
+			}
+
+			// Handle the oddball Z and Zulu suffixes. Try stripping the
+			// suffix and appending the resulting number.
+			if strings.HasSuffix(match, keywordZ) {
+				if err := fieldSetterUTC(fe, ""); err != nil {
+					return err
+				}
+				maybeMatch := match[:len(match)-len(keywordZ)]
+				if err := appendNumber(chunk.NotMatch, maybeMatch); err == nil {
+					continue
+				}
+
+			} else if strings.HasSuffix(match, keywordZulu) {
+				if err := fieldSetterUTC(fe, ""); err != nil {
+					return err
+				}
+				maybeMatch := match[:len(match)-len(keywordZulu)]
+				if err := appendNumber(chunk.NotMatch, maybeMatch); err == nil {
+					continue
+				}
+			}
+
+			// Try to parse Julian dates.
+			if matched, err := fieldSetterJulianDate(fe, match); matched {
+				if err != nil {
+					return err
+				}
+				continue
+			}
+
+			// Save off any leftover text, it might be a timezone name.
+			leftoverText += strings.TrimSpace(chunk.NotMatch) + chunk.Match
+		}
+	}
+
+	// See if our leftover text is a timezone name.
+	if leftoverText != "" {
+		if loc, err := zoneCacheInstance.LoadLocation(leftoverText); err == nil {
+			// Save off the timezone for later resolution to an offset.
+			fe.now = fe.now.In(loc)
+
+			// Since we're using a named location, we must have a date
+			// in order to compute daylight-savings time.
+			fe.required = fe.required.AddAll(dateRequiredFields)
+
+			// Remove TZ fields from the wanted list, but add a date
+			// in order to resolve the location's DST.  Also, if we had a
+			// text month, ensure that it's also not in the wanted field.
+			fe.wanted = fe.wanted.AddAll(dateFields).ClearAll(fe.has.Add(fieldTZHour).Add(fieldTZMinute).Add(fieldTZSecond))
+		} else {
+			return errors.Errorf("could not interpret leftovers: %s", leftoverText)
+		}
+	}
+
+	if fe.sentinel != nil {
+		return nil
+	}
+
+	// In the second pass, we'll use pattern-matching and the knowledge
+	// of which fields have already been set in order to keep picking
+	// out field data.
+	textMonth := !fe.Wants(fieldMonth)
+	for _, n := range numbers {
+		if fe.wanted == 0 {
+			return errors.Errorf("too many input chunks")
+		}
+		if err := fe.InterpretNumber(n, textMonth); err != nil {
+			return err
+		}
+	}
+
+	return fe.Validate()
+}
 
 // Get returns the value of the requested field and whether or not
 // that field has indeed been set.
@@ -85,12 +225,13 @@ func (fe *fieldExtract) Get(field field) (int, bool) {
 	return fe.data[field], fe.has.Has(field)
 }
 
-func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error {
+func (fe *fieldExtract) InterpretNumber(chunk numberChunk, textMonth bool) error {
 	switch {
 	case chunk.prefix == '.':
 		// It's either a yyyy.ddd or we're looking at fractions.
 		switch {
 		case chunk.magnitude == 3 && !fe.Wants(fieldYear) && fe.Wants(fieldMonth) && fe.Wants(fieldDay):
+			// Looks like a yyyy.ddd
 			return fe.SetDayOfYear(chunk.v)
 
 		case !fe.Wants(fieldSecond) && fe.Wants(fieldFraction):
@@ -207,7 +348,7 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 
 	case fe.Wants(fieldTZHour) && (chunk.prefix == '-' || chunk.prefix == '+'):
 		// We're looking at a numeric timezone specifier.  This can be
-		// from one to four digits (or we might see another chunk if 8:30).
+		// from one to six digits (or we might see another chunk if 08:30:00).
 
 		if chunk.prefix == '-' {
 			fe.tzSign = -1
@@ -247,11 +388,11 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 			return fe.Set(fieldTZMinute, chunk.v)
 		}
 
-		// We don't expect to see a TZ minute or second at this point,
-		// so we'll clear those flags and re-process
-		fe.has = fe.has.AddAll(fieldTZMinute.Add(fieldTZSecond))
-		fe.wanted = fe.wanted.ClearAll(fieldTZMinute.Add(fieldTZSecond))
-		return fe.interpretNumber(chunk, textMonth)
+		// We no longer except to see any timezone data, so we'll
+		// mark is as completed and re-interpret the chunk.
+		fe.has = fe.has.AddAll(tzFields)
+		fe.wanted = fe.wanted.ClearAll(tzFields)
+		return fe.InterpretNumber(chunk, textMonth)
 
 	case !fe.Wants(fieldTZHour) && !fe.Wants(fieldTZMinute) && fe.Wants(fieldTZSecond):
 		if chunk.prefix == ':' {
@@ -260,11 +401,11 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 			return fe.Set(fieldTZSecond, chunk.v)
 		}
 
-		// We don't expect to see a TZ second at this point,
-		// so we'll clear those flags and re-process
+		// We no longer except to see any timezone data, so we'll
+		// mark is as completed and re-interpret the chunk.
 		fe.has = fe.has.Add(fieldTZSecond)
 		fe.wanted = fe.wanted.Clear(fieldTZSecond)
-		return fe.interpretNumber(chunk, textMonth)
+		return fe.InterpretNumber(chunk, textMonth)
 
 	case fe.Wants(fieldHour) && fe.Wants(fieldMinute) && fe.Wants(fieldSecond) && chunk.prefix != ':':
 		v := chunk.v
@@ -297,10 +438,8 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 
 	case fe.Wants(fieldSecond) && chunk.prefix == ':':
 		return fe.Set(fieldSecond, chunk.v)
-
-	default:
-		return errors.Errorf("could not interpret %v", chunk)
 	}
+	return errors.Errorf("could not interpret %v", chunk)
 }
 
 // Force sets the field without performing any sanity checks.
@@ -309,6 +448,68 @@ func (fe *fieldExtract) Force(field field, v int) {
 	fe.data[field] = v
 	fe.has = fe.has.Add(field)
 	fe.wanted = fe.wanted.Clear(field)
+}
+
+// MakeDate returns a time.Time containing only the date components
+// of the extract.
+func (fe *fieldExtract) MakeDate() time.Time {
+	if fe.sentinel != nil {
+		return *fe.sentinel
+	}
+
+	year, _ := fe.Get(fieldYear)
+	month, _ := fe.Get(fieldMonth)
+	day, _ := fe.Get(fieldDay)
+	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, fe.MakeLocation())
+}
+
+// MakeTime returns only the time component of the extract.
+// If the user provided a named timezone, as opposed
+// to a fixed offset, we will resolve the named zone to an offset
+// based on the best-available date information.
+func (fe *fieldExtract) MakeTime() time.Time {
+	if fe.sentinel != nil {
+		return *fe.sentinel
+	}
+
+	ret := fe.MakeTimestamp()
+	hour, min, sec := ret.Clock()
+	_, offset := ret.Zone()
+	return time.Date(0, 1, 1, hour, min, sec, ret.Nanosecond(), time.FixedZone("", offset))
+}
+
+// MakeTimestamp returns a time.Time containing all extracted information.
+func (fe *fieldExtract) MakeTimestamp() time.Time {
+	if fe.sentinel != nil {
+		return *fe.sentinel
+	}
+
+	year, _ := fe.Get(fieldYear)
+	month, _ := fe.Get(fieldMonth)
+	day, _ := fe.Get(fieldDay)
+	hour, _ := fe.Get(fieldHour)
+	min, _ := fe.Get(fieldMinute)
+	sec, _ := fe.Get(fieldSecond)
+	nano, _ := fe.Get(fieldFraction)
+
+	return time.Date(year, time.Month(month), day, hour, min, sec, nano, fe.MakeLocation())
+}
+
+// MakeLocation returns the timezone information stored in the extract,
+// or returns the default location.
+func (fe *fieldExtract) MakeLocation() *time.Location {
+	tzHour, ok := fe.Get(fieldTZHour)
+	if !ok {
+		return fe.now.Location()
+	}
+	tzMin, _ := fe.Get(fieldTZMinute)
+	tzSec, _ := fe.Get(fieldTZSecond)
+
+	tzHour *= fe.tzSign
+	tzMin *= fe.tzSign
+	tzSec *= fe.tzSign
+
+	return zoneCacheInstance.FixedZone(tzHour, tzMin, tzSec)
 }
 
 // Reset replaces a value of an already-set field.

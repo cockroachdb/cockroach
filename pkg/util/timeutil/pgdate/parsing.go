@@ -23,6 +23,41 @@ import (
 	"github.com/pkg/errors"
 )
 
+const (
+	keywordAllBalls  = "allballs"
+	keywordAM        = "am"
+	keywordEpoch     = "epoch"
+	keywordEraAD     = "ad"
+	keywordEraBC     = "bc"
+	keywordEraBCE    = "bce"
+	keywordEraCE     = "ce"
+	keywordGMT       = "gmt"
+	keywordInfinity  = "infinity"
+	keywordNow       = "now"
+	keywordPM        = "pm"
+	keywordToday     = "today"
+	keywordTomorrow  = "tomorrow"
+	keywordUTC       = "utc"
+	keywordYesterday = "yesterday"
+	keywordZ         = "z"
+	keywordZulu      = "zulu"
+)
+
+// Commonly-used collections of fields.
+var (
+	dateFields         = newFieldSet(fieldYear, fieldMonth, fieldDay, fieldEra)
+	dateRequiredFields = newFieldSet(fieldYear, fieldMonth, fieldDay)
+
+	timeFields = newFieldSet(
+		fieldHour, fieldMinute, fieldSecond, fieldFraction, fieldMeridian,
+		fieldTZHour, fieldTZMinute, fieldTZSecond)
+	timeRequiredFields = newFieldSet(fieldHour, fieldMinute)
+
+	dateTimeFields = dateFields.AddAll(timeFields)
+
+	tzFields = newFieldSet(fieldTZHour, fieldTZMinute, fieldTZSecond)
+)
+
 // These are sentinel values for handling special values:
 // https://www.postgresql.org/docs/10/static/datatype-datetime.html#DATATYPE-DATETIME-SPECIAL-TABLE
 var (

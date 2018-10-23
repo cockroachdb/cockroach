@@ -219,8 +219,8 @@ func (sc *SemaContext) GetAdditionMode() duration.AdditionMode {
 
 // GetRelativeParseTime implements ParseTimeContext and returns the
 // "now" that should be used when parsing date values.
-func (ctx *SemaContext) GetRelativeParseTime() time.Time {
-	return timeutil.Now().In(ctx.GetLocation())
+func (sc *SemaContext) GetRelativeParseTime() time.Time {
+	return timeutil.Now().In(sc.GetLocation())
 }
 
 type placeholderTypeAmbiguityError struct {

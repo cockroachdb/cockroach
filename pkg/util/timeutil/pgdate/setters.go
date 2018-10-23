@@ -79,65 +79,19 @@ var keywordSetters = map[string]fieldSetter{
 // https://github.com/postgres/postgres/blob/master/src/timezone/known_abbrevs.txt
 // We have not yet implemented PostgreSQL's abbreviation-matching logic
 // because we'd also need to incorporate more tzinfo than is readily-available
-// from the time package.
+// from the time package.  Instead, we have this map to provide a more
+// useful error message (and telemetry) until we do implement this
+// behavior.
 var unsupportedAbbreviations = [...]string{
-	"ACDT",
-	"ACST",
-	"ADT",
-	"AEDT",
-	"AEST",
-	"AKDT",
-	"AKST",
-	"AST",
-	"AWST",
-	"BST",
-	"CAT",
-	"CDT",
-	"CDT",
-	"CEST",
-	"CET",
-	"CST",
-	"CST",
-	"CST",
-	"ChST",
-	"EAT",
-	"EDT",
-	"EEST",
-	"EET",
-	"EST",
+	"ACDT", "ACST", "ADT", "AEDT", "AEST", "AKDT", "AKST", "AST", "AWST", "BST",
+	"CAT", "CDT", "CDT", "CEST", "CET", "CST", "CST", "CST", "ChST",
+	"EAT", "EDT", "EEST", "EET", "EST",
 	// GMT has been removed from this list.
-	"HDT",
-	"HKT",
-	"HST",
-	"IDT",
-	"IST",
-	"IST",
-	"IST",
-	"JST",
-	"KST",
-	"MDT",
-	"MEST",
-	"MET",
-	"MSK",
-	"MST",
-	"NDT",
-	"NST",
-	"NZDT",
-	"NZST",
-	"PDT",
-	"PKT",
-	"PST",
-	"PST",
-	"SAST",
-	"SST",
-	"UCT",
+	"HDT", "HKT", "HST", "IDT", "IST", "IST", "IST", "JST", "KST",
+	"MDT", "MEST", "MET", "MSK", "MST", "NDT", "NST", "NZDT", "NZST",
+	"PDT", "PKT", "PST", "PST", "SAST", "SST", "UCT",
 	// UTC has been removed from this list.
-	"WAT",
-	"WEST",
-	"WET",
-	"WIB",
-	"WIT",
-	"WITA",
+	"WAT", "WEST", "WET", "WIB", "WIT", "WITA",
 }
 
 func init() {
@@ -206,7 +160,7 @@ func fieldSetterRelativeDate(p *fieldExtract, s string) error {
 // TZ fields from the wanted list.
 func fieldSetterUTC(p *fieldExtract, _ string) error {
 	p.now = p.now.In(time.UTC)
-	p.wanted = p.wanted.ClearAll(fieldTZHour.Add(fieldTZMinute).Add(fieldTZSecond))
+	p.wanted = p.wanted.ClearAll(tzFields)
 	return nil
 }
 
