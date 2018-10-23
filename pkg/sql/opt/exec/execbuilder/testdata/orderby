@@ -368,7 +368,7 @@ render        ·      ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----
-render     ·         ·            (b, c)     ·
+render     ·         ·            (b, c)     +b,+c
  │         render 0  b            ·          ·
  │         render 1  c            ·          ·
  └── scan  ·         ·            (a, b, c)  +b,+c
@@ -764,7 +764,7 @@ CREATE TABLE xyz (x INT, y INT, z INT, INDEX(z,y))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM xyz WHERE z=1 AND x=y ORDER BY x;
 ----
-filter           ·       ·                (x, y, z)              ·
+filter           ·       ·                (x, y, z)              +x
  │               filter  x = y            ·                      ·
  └── index-join  ·       ·                (x, y, z)              +x
       ├── scan   ·       ·                (y, z, rowid[hidden])  +y
