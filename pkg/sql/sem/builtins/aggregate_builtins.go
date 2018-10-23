@@ -1015,12 +1015,12 @@ func (a *intSumAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tree.D
 				// And overflow was detected; go to large integers, but keep the
 				// sum computed so far.
 				a.large = true
-				a.decSum.SetCoefficient(a.intSum)
+				a.decSum.SetFinite(a.intSum, 0)
 			}
 		}
 
 		if a.large {
-			a.tmpDec.SetCoefficient(t)
+			a.tmpDec.SetFinite(t, 0)
 			_, err := tree.ExactCtx.Add(&a.decSum, &a.decSum, &a.tmpDec)
 			if err != nil {
 				return err
@@ -1043,7 +1043,7 @@ func (a *intSumAggregate) Result() (tree.Datum, error) {
 	if a.large {
 		dd.Set(&a.decSum)
 	} else {
-		dd.SetCoefficient(a.intSum)
+		dd.SetFinite(a.intSum, 0)
 	}
 	return dd, nil
 }
@@ -1218,7 +1218,7 @@ func (a *intSqrDiffAggregate) Add(ctx context.Context, datum tree.Datum, _ ...tr
 		return nil
 	}
 
-	a.tmpDec.SetCoefficient(int64(tree.MustBeDInt(datum)))
+	a.tmpDec.SetFinite(int64(tree.MustBeDInt(datum)), 0)
 	return a.agg.Add(ctx, &a.tmpDec)
 }
 

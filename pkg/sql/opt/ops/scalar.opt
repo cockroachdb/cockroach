@@ -7,6 +7,7 @@
 # Scalar - All operators in this file are marked with the Scalar tag, so they
 #          can be easily distinguished from Relational and Enforcer operators.
 
+
 # Subquery is a subquery in a single-row context. Here are some examples:
 #
 #   SELECT 1 = (SELECT 1)
@@ -26,8 +27,20 @@
 # subquery returns zero rows, then that column is bound to NULL.
 [Scalar]
 define Subquery {
-    Input Expr
-    Def   SubqueryDef
+    Input RelExpr
+
+    _ SubqueryPrivate
+}
+
+# SubqueryPrivate contains information related to a subquery (Subquery, Any,
+# Exists). It is shared between the operators so that the same rules can be used
+# across all the subquery operators.
+[Private]
+define SubqueryPrivate {
+	OriginalExpr Subquery
+
+	# Cmp is only used for AnyOp.
+	Cmp Operator
 }
 
 # Any is a SQL operator that applies a comparison to every row of an input
@@ -41,31 +54,41 @@ define Subquery {
 #   <scalar> NOT IN (<subquery>)
 #   ==> (Not (Any <subquery> <scalar> EqOp))
 #
-#   <scalar> <comp> {SOME|ANY}(<subquery>)
-#   ==> (Any <subquery> <scalar> <comp>)
+#   <scalar> <cmp> {SOME|ANY}(<subquery>)
+#   ==> (Any <subquery> <scalar> <cmp>)
 #
-#   <scalar> <comp> ALL(<subquery>)
-#   ==> (Not (Any <subquery> <scalar> <negated-comp>))
+#   <scalar> <cmp> ALL(<subquery>)
+#   ==> (Not (Any <subquery> <scalar> <negated-cmp>))
 #
 # Any expects the input subquery to return a single column of any data type. The
 # scalar value is compared with that column using the specified comparison
 # operator.
 [Scalar]
 define Any {
-    Input  Expr
-    Scalar Expr
-    Def    SubqueryDef
+    Input  RelExpr
+    Scalar ScalarExpr
+
+    _ SubqueryPrivate
 }
 
-# Variable is the typed scalar value of a column in the query. The private
-# field is a Metadata.ColumnID that references the column by index.
+# Exists takes a relational query as its input, and evaluates to true if the
+# query returns at least one row.
+[Scalar]
+define Exists {
+    Input RelExpr
+
+    _ SubqueryPrivate
+}
+
+# Variable is the typed scalar value of a column in the query. The Col field is
+# a metadata ColumnID value that references the column by index.
 [Scalar]
 define Variable {
     Col ColumnID
 }
 
-# Const is a typed scalar constant value. The private field is a tree.Datum
-# value having any datum type that's legal in the expression's context.
+# Const is a typed scalar constant value. The Value field is a tree.Datum value
+# having any datum type that's legal in the expression's context.
 [Scalar, ConstValue]
 define Const {
     Value Datum
@@ -89,7 +112,7 @@ define Const {
 # expressions.
 [Scalar, ConstValue]
 define Null {
-    Typ Type
+    Typ DatumType
 }
 
 # True is the boolean true value that is equivalent to the tree.DBoolTrue datum
@@ -113,362 +136,389 @@ define Placeholder {
 
 [Scalar]
 define Tuple {
-    Elems ExprList
-    Typ   Type
+    Elems ScalarListExpr
+    Typ   DatumType
 }
 
-# Projections is a set of typed scalar expressions that will become output
-# columns for a containing Project operator. 
-#
-# The private Defs field contains the list of column indexes returned by each
-# expression, and a list of pass-through columns.
-#
-# Elems cannot contain a simple VariableOp with the same ColumnID as the
-# synthesized column (in Def.SynthesizedCols); that is a pass-through column.
-# Elems can contain a VariableOp when a new ColumnID is being assigned, such as
-# in the case of an outer column reference.
-[Scalar]
+# Projections is a set of ProjectionsItem expressions that specify the ColumnIDs
+# and scalar expressions for the synthesized output columns projected by a
+# containing Project operator. It is legal for the set to be empty. See the
+# Project and ProjectionsItem headers for more details.
+[Scalar, List]
 define Projections {
-    Elems ExprList
-    Def   ProjectionsOpDef
 }
 
-# Aggregations is a set of aggregate expressions that will become output columns
-# for a containing GroupBy operator. The expressions can only consist of
-# aggregate functions, variable references, and modifiers like AggDistinct.
-# Examples of valid expressions:
+# ProjectionsItem encapsulates the information needed to synthesize an output
+# column, including its ColumnID and the scalar expression that produces its
+# value. In addition, the ProjectionsItem caches a set of scalar properties that
+# are lazily calculated by traversing the Element scalar expression. This allows
+# the properties for the entire expression subtree to be calculated once and
+# then repeatedly reused.
+#
+# The Element scalar expression cannot contain a simple VariableOp with the same
+# ColumnID as the one stored in the ColPrivate field, since that would make it a
+# pass-through column. Pass-through columns are always stored on the containing
+# Project operator instead. However, the Element field can contain a VariableOp
+# when a new ColumnID is being assigned, such as in the case of an outer column
+# reference.
+[Scalar, ListItem]
+define ProjectionsItem {
+    Element ScalarExpr
+
+    _ ColPrivate
+}
+
+# ColPrivate contains the ColumnID of a synthesized projection or aggregation
+# column, as well as a set of lazily-populated scalar properties that apply to
+# the column. ColPrivate is shared by ProjectionsItem and AggregationsItem so
+# that they can be treated polymorphically.
+[Private]
+define ColPrivate {
+    Col ColumnID
+
+    # Lazily populated.
+    scalar ScalarProps
+}
+
+# Aggregations is a set of AggregationsItem expressions that specify the
+# ColumnIDs and aggregation expression for output columns projected by a
+# containing grouping operator (GroupBy, ScalarGroupBy, or DistinctOn). It is
+# legal for the set to be empty. See the AggregationsItem header for more
+# details.
+[Scalar, List]
+define Aggregations {
+}
+
+# AggregationsItem encapsulates the information for constructing an aggregate
+# output column, including its ColumnID and the aggregate expression that
+# produces its value. In addition, the AggregationsItem caches a set of scalar
+# properties that are lazily calculated by traversing the Agg scalar expression.
+# This allows the properties for the aggregate expression to be calculated once
+# and then repeatedly reused.
+#
+# The aggregate expression can only consist of aggregate functions, variable
+# references, and modifiers like AggDistinct. Examples of valid expressions:
+#
 #   (Min (Variable 1))
 #   (Count (AggDistinct (Variable 1)))
 #
 # More complex arguments must be formulated using a Project operator as input to
-# the GroupBy operator.
-#
-# The private Cols field contains the list of column indexes returned by the
-# expression, as an opt.ColList. It is legal for Cols to be empty.
-[Scalar]
-define Aggregations {
-    Aggs ExprList
-    Cols ColList
+# the grouping operator.
+[Scalar, ListItem]
+define AggregationsItem {
+    Agg ScalarExpr
+
+    _ ColPrivate
 }
 
-# MergeOn contains the ON condition and the metadata for a merge join; it is
-# always a child of MergeJoin.
-[Scalar]
-define MergeOn {
-    On Expr
-    Def MergeOnDef
-}
-
-# Exists takes a relational query as its input, and evaluates to true if the
-# query returns at least one row.
-[Scalar]
-define Exists {
-    Input Expr
-    Def   SubqueryDef
-}
-
-# Filters is a boolean And operator that only appears as the Filters child of
-# a Select operator, or the On child of a Join operator. For example:
-#   (Select
-#     (Scan a)
-#     (Filters (Gt (Variable a) 1) (Lt (Variable a) 5))
-#   )
-#
-# Normalization rules ensure that a Filters expression is always created if
-# there is at least one condition, so that other rules can rely on its presence
-# when matching, even in the case where there is only one condition. The
-# semantics of the Filters operator are identical to those of the And operator.
-[Scalar, Boolean]
+# Filters is a set of FiltersItem expressions that specify a set of conjuncts
+# that filter rows selected by a containing Select or Join operator. A row is
+# filtered only if all conditions evaluate to true. If the set is empty, then
+# it never filters rows. See the Select and FiltersItem headers for more
+# details.
+[Scalar, Boolean, List]
 define Filters {
-    Conditions ExprList
 }
 
-# And is the boolean conjunction operator that evalutes to true if all of its
-# conditions evaluate to true. If the conditions list is empty, it evalutes to
-# true.
+# FiltersItem contains a filter condition that's evaluated to determine whether
+# Select or Join rows should be filtered. In addition, the FiltersItem caches a
+# set of scalar properties that are lazily calculated by traversing the
+# Condition scalar expression. This allows the properties for the entire
+# expression subtree to be calculated once and then repeatedly reused.
+[Scalar, Boolean, ListItem]
+define FiltersItem {
+    Condition ScalarExpr
+
+    scalar ScalarProps
+}
+
+# And is the boolean conjunction operator that evalutes to true only if both of
+# its conditions evaluate to true.
 [Scalar, Boolean]
 define And {
-    Conditions ExprList
+    Left  ScalarExpr
+    Right ScalarExpr
 }
 
-# Or is the boolean disjunction operator that evalutes to true if any of its
-# conditions evaluate to true. If the conditions list is empty, it evaluates to
-# false.
+# Or is the boolean disjunction operator that evaluates to true if either one of
+# its conditions evaluates to true.
 [Scalar, Boolean]
 define Or {
-    Conditions ExprList
+    Left  ScalarExpr
+    Right ScalarExpr
 }
 
 # Not is the boolean negation operator that evaluates to true if its input
-# evalutes to false.
+# evaluates to false.
 [Scalar, Boolean]
 define Not {
-    Input Expr
+    Input ScalarExpr
 }
 
 [Scalar, Comparison]
 define Eq {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define Lt {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define Gt {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define Le {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define Ge {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define Ne {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define In {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define NotIn {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define Like {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define NotLike {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define ILike {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define NotILike {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define SimilarTo {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define NotSimilarTo {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define RegMatch {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define NotRegMatch {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define RegIMatch {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define NotRegIMatch {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define Is {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define IsNot {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define Contains {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define JsonExists {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define JsonAllExists {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Comparison]
 define JsonSomeExists {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 # AnyScalar is the form of ANY which refers to an ANY operation on a
 # tuple or array, as opposed to Any which operates on a subquery.
 [Scalar]
 define AnyScalar {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
+
    Cmp   Operator
 }
 
 [Scalar, Binary]
 define Bitand {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Binary]
 define Bitor {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Binary]
 define Bitxor {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Binary]
 define Plus {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Binary]
 define Minus {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Binary]
 define Mult {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Binary]
 define Div {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Binary]
 define FloorDiv {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Binary]
 define Mod {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Binary]
 define Pow {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Binary]
 define Concat {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Binary]
 define LShift {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Binary]
 define RShift {
-   Left  Expr
-   Right Expr
+   Left  ScalarExpr
+   Right ScalarExpr
 }
 
 [Scalar, Binary]
 define FetchVal {
-   Json  Expr
-   Index Expr
+   Json  ScalarExpr
+   Index ScalarExpr
 }
 
 [Scalar, Binary]
 define FetchText {
-   Json  Expr
-   Index Expr
+   Json  ScalarExpr
+   Index ScalarExpr
 }
 
 [Scalar, Binary]
 define FetchValPath {
-   Json Expr
-   Path Expr
+   Json ScalarExpr
+   Path ScalarExpr
 }
 
 [Scalar, Binary]
 define FetchTextPath {
-   Json Expr
-   Path Expr
+   Json ScalarExpr
+   Path ScalarExpr
 }
 
 [Scalar, Unary]
 define UnaryMinus {
-    Input Expr
+    Input ScalarExpr
 }
 
 [Scalar, Unary]
 define UnaryComplement {
-    Input Expr
+    Input ScalarExpr
 }
 
 # Cast converts the input expression into an expression of the target type.
@@ -483,11 +533,12 @@ define UnaryComplement {
 # of a "lossy" cast.
 [Scalar]
 define Cast {
-    Input     Expr
+    Input     ScalarExpr
     TargetTyp ColType
 }
 
 # Case is a CASE statement of the form:
+#
 #   CASE [ <Input> ]
 #       WHEN <condval1> THEN <expr1>
 #     [ WHEN <condval2> THEN <expr2> ] ...
@@ -495,18 +546,21 @@ define Cast {
 #   END
 #
 # The Case operator evaluates <Input> (if not provided, Input is set to True),
-# then picks the WHEN branch where <condval> is equal to
-# <Input>, then evaluates and returns the corresponding THEN expression. If no
-# WHEN branch matches, the ELSE expression is evaluated and returned, if any.
-# Otherwise, NULL is returned.
+# then picks the WHEN branch where <condval> is equal to <Input>, then evaluates
+# and returns the corresponding THEN expression. If no WHEN branch matches, the
+# ELSE expression is evaluated and returned, if any. Otherwise, NULL is
+# returned.
 #
 # Note that the Whens list inside Case is used to represent all the WHEN
 # branches as well as the ELSE statement if it exists. It is of the form:
-# [(When <condval1> <expr1>),(When <condval2> <expr2>),...,<expr>]
+#
+#   [(When <condval1> <expr1>),(When <condval2> <expr2>),...,<expr>]
+#
 [Scalar]
 define Case {
-    Input Expr
-    Whens ExprList
+    Input  ScalarExpr
+    Whens  ScalarListExpr
+    OrElse ScalarExpr
 }
 
 # When represents a single WHEN ... THEN ... condition inside a CASE statement.
@@ -514,15 +568,15 @@ define Case {
 # a raw expression for the ELSE statement).
 [Scalar]
 define When {
-    Condition Expr
-    Value     Expr
+    Condition ScalarExpr
+    Value     ScalarExpr
 }
 
 # Array is an ARRAY literal of the form ARRAY[<expr1>, <expr2>, ..., <exprN>].
 [Scalar]
 define Array {
-    Elems ExprList
-    Typ   Type
+    Elems ScalarListExpr
+    Typ   DatumType
 }
 
 # Indirection is a subscripting expression of the form <expr>[<index>].
@@ -530,22 +584,31 @@ define Array {
 # and slicing are not supported.
 [Scalar]
 define Indirection {
-    Input Expr
-    Index Expr
+    Input ScalarExpr
+    Index ScalarExpr
 }
 
 # Function invokes a builtin SQL function like CONCAT or NOW, passing the given
-# arguments. The private field is a *opt.FuncOpDef struct that provides the
-# name of the function as well as a pointer to the builtin overload definition.
+# arguments. The FunctionPrivate field contains the name of the function as well
+# as pointers to its type and properties.
 [Scalar]
 define Function {
-    Args ExprList
-    Def  FuncOpDef
+    Args ScalarListExpr
+
+    _ FunctionPrivate
+}
+
+[Private]
+define FunctionPrivate {
+	Name       string
+	Typ        DatumType
+	Properties FuncProps
+	Overload   FuncOverload
 }
 
 [Scalar]
 define Coalesce {
-    Args ExprList
+    Args ScalarListExpr
 }
 
 # ColumnAccess is a scalar expression that returns a column from the given
@@ -553,45 +616,46 @@ define Coalesce {
 # index of the column in Input.
 [Scalar]
 define ColumnAccess {
-    Input Expr
-    Idx   TupleOrdinal
+    Input ScalarExpr
+
+    Idx TupleOrdinal
 }
 
 # UnsupportedExpr is used for interfacing with the old planner code. It can
 # encapsulate a TypedExpr that is otherwise not supported by the optimizer.
 [Scalar]
 define UnsupportedExpr {
-  Value TypedExpr
+    Value TypedExpr
 }
 
 [Scalar, Aggregate]
 define ArrayAgg {
-    Input Expr
+    Input ScalarExpr
 }
 
 [Scalar, Aggregate]
 define Avg {
-    Input Expr
+    Input ScalarExpr
 }
 
 [Scalar, Aggregate]
 define BoolAnd {
-    Input Expr
+    Input ScalarExpr
 }
 
 [Scalar, Aggregate]
 define BoolOr {
-    Input Expr
+    Input ScalarExpr
 }
 
 [Scalar, Aggregate]
 define ConcatAgg {
-    Input Expr
+    Input ScalarExpr
 }
 
 [Scalar, Aggregate]
 define Count {
-    Input Expr
+    Input ScalarExpr
 }
 
 [Scalar, Aggregate]
@@ -600,52 +664,52 @@ define CountRows {
 
 [Scalar, Aggregate]
 define Max {
-    Input Expr
+    Input ScalarExpr
 }
 
 [Scalar, Aggregate]
 define Min {
-    Input Expr
+    Input ScalarExpr
 }
 
 [Scalar, Aggregate]
 define SumInt {
-    Input Expr
+    Input ScalarExpr
 }
 
 [Scalar, Aggregate]
 define Sum {
-    Input Expr
+    Input ScalarExpr
 }
 
 [Scalar, Aggregate]
 define SqrDiff {
-    Input Expr
+    Input ScalarExpr
 }
 
 [Scalar, Aggregate]
 define Variance {
-    Input Expr
+    Input ScalarExpr
 }
 
 [Scalar, Aggregate]
 define StdDev {
-    Input Expr
+    Input ScalarExpr
 }
 
 [Scalar, Aggregate]
 define XorAgg {
-    Input Expr
+    Input ScalarExpr
 }
 
 [Scalar, Aggregate]
 define JsonAgg {
-    Input Expr
+    Input ScalarExpr
 }
 
 [Scalar, Aggregate]
 define JsonbAgg {
-    Input Expr
+    Input ScalarExpr
 }
 
 # ConstAgg is used in the special case when the value of a column is known to be
@@ -656,7 +720,7 @@ define JsonbAgg {
 # subqueries into an efficient and convenient form.
 [Scalar, Aggregate]
 define ConstAgg {
-    Input Expr
+    Input ScalarExpr
 }
 
 # ConstNotNullAgg is used in the special case when the value of a column is
@@ -669,7 +733,7 @@ define ConstAgg {
 # correlated subqueries into an efficient and convenient form.
 [Scalar, Aggregate]
 define ConstNotNullAgg {
-    Input Expr
+    Input ScalarExpr
 }
 
 # AnyNotNullAgg returns any non-NULL value it receives, with no other guarantees.
@@ -679,7 +743,7 @@ define ConstNotNullAgg {
 # correlated subqueries into an efficient and convenient form.
 [Scalar, Aggregate]
 define AnyNotNullAgg {
-    Input Expr
+    Input ScalarExpr
 }
 
 # FirstAgg is used only by DistinctOn; it returns the value on the first row
@@ -688,7 +752,7 @@ define AnyNotNullAgg {
 # FirstAggs in a DistinctOn.
 [Scalar, Aggregate]
 define FirstAgg {
-    Input Expr
+    Input ScalarExpr
 }
 
 # AggDistinct is used as a modifier that wraps the input of an aggregate
@@ -696,5 +760,16 @@ define FirstAgg {
 # value once.
 [Scalar]
 define AggDistinct {
-    Input Expr
+    Input ScalarExpr
+}
+
+# ScalarList is a list expression that has scalar expression items of type
+# opt.ScalarExpr. opt.ScalarExpr is an external type that is defined outside of
+# Optgen. It is hard-coded in the code generator to be the item type for
+# ScalarList.
+#
+# TODO(andyk): Consider adding Optgen syntax like:
+#                define ScalarList []ScalarExpr
+[Scalar, List]
+define ScalarList {
 }

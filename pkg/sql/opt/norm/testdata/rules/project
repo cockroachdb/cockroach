@@ -61,20 +61,23 @@ project
  │    ├── columns: x:1(int!null) y:2(int) f:3(float) s:4(string)
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
- └── projections [outer=(1-4)]
+ └── projections
       └── const: 1 [type=int]
 
 # --------------------------------------------------
-# EliminateProjectProject
+# MergeProjects
 # --------------------------------------------------
 
-opt expect=EliminateProjectProject
+# Inner project has no synthesized columns.
+opt expect=MergeProjects
 SELECT y+1 AS r FROM (SELECT a.y FROM a, b WHERE a.x=b.x) a
 ----
 project
  ├── columns: r:7(int)
  ├── inner-join (merge)
  │    ├── columns: a.x:1(int!null) y:2(int) b.x:5(int!null)
+ │    ├── left ordering: +1
+ │    ├── right ordering: +5
  │    ├── key: (5)
  │    ├── fd: (1)-->(2), (1)==(5), (5)==(1)
  │    ├── scan a
@@ -86,9 +89,73 @@ project
  │    │    ├── columns: b.x:5(int!null)
  │    │    ├── key: (5)
  │    │    └── ordering: +5
- │    └── merge-on
- │         ├── left ordering: +1
- │         ├── right ordering: +5
- │         └── true [type=bool]
- └── projections [outer=(2)]
+ │    └── filters (true)
+ └── projections
       └── y + 1 [type=int, outer=(2)]
+
+# Outer and inner projections have synthesized columns.
+opt expect=MergeProjects
+SELECT y1, f+1 FROM (SELECT y+1 AS y1, f FROM a)
+----
+project
+ ├── columns: y1:5(int) "?column?":6(float)
+ ├── scan a
+ │    └── columns: y:2(int) f:3(float)
+ └── projections
+      ├── f + 1.0 [type=float, outer=(3)]
+      └── y + 1 [type=int, outer=(2)]
+
+# Multiple synthesized columns in both outer and inner projections.
+opt expect=MergeProjects
+SELECT y1, f+1, x2, s||'foo' FROM (SELECT y+1 AS y1, f, s, x*2 AS x2 FROM a)
+----
+project
+ ├── columns: y1:5(int) "?column?":7(float) x2:6(int) "?column?":8(string)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int) f:3(float) s:4(string)
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4)
+ └── projections
+      ├── f + 1.0 [type=float, outer=(3)]
+      ├── s || 'foo' [type=string, outer=(4)]
+      ├── y + 1 [type=int, outer=(2)]
+      └── x * 2 [type=int, outer=(1)]
+
+# Outer project selects subset of inner columns.
+opt expect=MergeProjects
+SELECT y1 FROM (SELECT y+1 AS y1, f*2 AS f2 FROM a)
+----
+project
+ ├── columns: y1:5(int)
+ ├── scan a
+ │    └── columns: y:2(int)
+ └── projections
+      └── y + 1 [type=int, outer=(2)]
+
+# Don't merge, since outer depends on inner.
+opt expect-not=MergeProjects
+SELECT y1*2, y1/2 FROM (SELECT y+1 AS y1 FROM a)
+----
+project
+ ├── columns: "?column?":6(int) "?column?":7(decimal)
+ ├── side-effects
+ ├── project
+ │    ├── columns: y1:5(int)
+ │    ├── scan a
+ │    │    └── columns: y:2(int)
+ │    └── projections
+ │         └── y + 1 [type=int, outer=(2)]
+ └── projections
+      ├── y1 * 2 [type=int, outer=(5)]
+      └── y1 / 2 [type=decimal, outer=(5), side-effects]
+
+# Discard all inner columns.
+opt expect=MergeProjects
+SELECT 1 r FROM (SELECT y+1, x FROM a) a
+----
+project
+ ├── columns: r:6(int!null)
+ ├── fd: ()-->(6)
+ ├── scan a
+ └── projections
+      └── const: 1 [type=int]

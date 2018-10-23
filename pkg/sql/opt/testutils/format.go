@@ -31,24 +31,32 @@ func init() {
 // fmtInterceptor is a function suitable for memo.ExprFmtInterceptor. It detects
 // if an expression tree contains only scalar expressions; if so, it tries to
 // execbuild them and print the SQL expressions.
-func fmtInterceptor(f *memo.ExprFmtCtx, tp treeprinter.Node, ev memo.ExprView) bool {
-	if !f.HasFlags(memo.ExprFmtHideScalars) || !onlyScalars(ev) {
+func fmtInterceptor(f *memo.ExprFmtCtx, tp treeprinter.Node, nd opt.Expr) bool {
+	if !f.HasFlags(memo.ExprFmtHideScalars) || !onlyScalars(nd) {
 		return false
 	}
 
-	if ev.ChildCount() == 0 {
-		// Don't use this code on leaves.
-		return false
+	// Don't use this code on leaves.
+	switch nd.Op() {
+	case opt.FiltersItemOp, opt.ProjectionsItemOp, opt.AggregationsItemOp,
+		opt.TupleOp, opt.ArrayOp:
+		if nd.Child(0).ChildCount() == 0 {
+			return false
+		}
+	default:
+		if nd.ChildCount() == 0 {
+			return false
+		}
 	}
 
-	if ev.Operator() == opt.FiltersOp {
-		// Let the filters node show up; we will apply the code on each filter.
+	// Let the filters node show up; we will apply the code on each filter.
+	if nd.Op() == opt.FiltersOp {
 		return false
 	}
 
 	// Build the scalar expression and format it as a single tree node.
-	bld := execbuilder.New(nil /* factory */, ev, nil /* evalCtx */)
-	md := ev.Metadata()
+	bld := execbuilder.New(nil /* factory */, f.Memo, nd, nil /* evalCtx */)
+	md := f.Memo.Metadata()
 	ivh := tree.MakeIndexedVarHelper(nil /* container */, md.NumColumns())
 	expr, err := bld.BuildScalar(&ivh)
 	if err != nil {
@@ -63,17 +71,17 @@ func fmtInterceptor(f *memo.ExprFmtCtx, tp treeprinter.Node, ev memo.ExprView) b
 		ctx.WriteString(label)
 	})
 	expr.Format(&fmtCtx)
-	ev.FormatScalarProps(f)
+	f.FormatScalarProps(nd.(opt.ScalarExpr))
 	tp.Child(f.Buffer.String())
 	return true
 }
 
-func onlyScalars(ev memo.ExprView) bool {
-	if !ev.IsScalar() {
+func onlyScalars(nd opt.Expr) bool {
+	if !opt.IsScalarOp(nd) {
 		return false
 	}
-	for i, n := 0, ev.ChildCount(); i < n; i++ {
-		if !onlyScalars(ev.Child(i)) {
+	for i, n := 0, nd.ChildCount(); i < n; i++ {
+		if !onlyScalars(nd.Child(i)) {
 			return false
 		}
 	}

@@ -52,6 +52,20 @@ func (cl ColList) Find(col ColumnID) (idx int, ok bool) {
 	return -1, false
 }
 
+// Equals returns true if this column list has the same columns as the given
+// column list, in the same order.
+func (cl ColList) Equals(other ColList) bool {
+	if len(cl) != len(other) {
+		return false
+	}
+	for i := range cl {
+		if cl[i] != other[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // ColMap provides a 1:1 mapping from one column id to another. It is used by
 // operators that need to match columns from its inputs.
 type ColMap = util.FastIntMap

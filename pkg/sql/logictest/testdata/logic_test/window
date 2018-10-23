@@ -46,7 +46,7 @@ query error window functions are not allowed in WHERE
 SELECT k FROM kv WHERE avg(k) OVER () > 1
 
 query error window functions are not allowed in HAVING
-SELECT 1 GROUP BY 1 HAVING sum(1) OVER (PARTITION BY 1) > 1
+SELECT 1 FROM kv GROUP BY 1 HAVING sum(1) OVER (PARTITION BY 1) > 1
 
 query R
 SELECT avg(k) OVER () FROM kv ORDER BY 1

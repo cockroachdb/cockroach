@@ -317,7 +317,7 @@ distinct-on
            │    └── aggregations
            │         └── min [type=int]
            │              └── variable: x [type=int]
-           └── filters [type=bool]
+           └── filters
                 └── eq [type=bool]
                      ├── variable: min [type=int]
                      └── const: 1 [type=int]

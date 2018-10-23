@@ -25,29 +25,29 @@ import (
 // be used to scan a non-covering index. For example, in order to construct:
 //
 //   (IndexJoin
-//     (Select (Scan $scanDef) $filter)
-//     $indexJoinDef
+//     (Select (Scan $scanPrivate) $filters)
+//     $indexJoinPrivate
 //   )
 //
 // make the following calls:
 //
 //   var sb indexScanBuilder
 //   sb.init(c, tabID)
-//   sb.setScan(scanDef)
-//   sb.addSelect(filter)
+//   sb.setScan(scanPrivate)
+//   sb.addSelect(filters)
 //   sb.addIndexJoin(cols)
 //   expr := sb.build()
 //
 type indexScanBuilder struct {
-	c            *CustomFuncs
-	f            *norm.Factory
-	mem          *memo.Memo
-	tabID        opt.TableID
-	pkCols       opt.ColSet
-	scanDef      memo.PrivateID
-	innerFilter  memo.GroupID
-	outerFilter  memo.GroupID
-	indexJoinDef memo.PrivateID
+	c                *CustomFuncs
+	f                *norm.Factory
+	mem              *memo.Memo
+	tabID            opt.TableID
+	pkCols           opt.ColSet
+	scanPrivate      memo.ScanPrivate
+	innerFilters     memo.FiltersExpr
+	outerFilters     memo.FiltersExpr
+	indexJoinPrivate memo.IndexJoinPrivate
 }
 
 func (b *indexScanBuilder) init(c *CustomFuncs, tabID opt.TableID) {
@@ -70,28 +70,29 @@ func (b *indexScanBuilder) primaryKeyCols() opt.ColSet {
 }
 
 // setScan constructs a standalone Scan expression. As a side effect, it clears
-// any expressions added during previous invocations of the builder.
-func (b *indexScanBuilder) setScan(def memo.PrivateID) {
-	b.scanDef = def
-	b.innerFilter = 0
-	b.outerFilter = 0
-	b.indexJoinDef = 0
+// any expressions added during previous invocations of the builder. setScan
+// makes a copy of scanPrivate so that it doesn't escape.
+func (b *indexScanBuilder) setScan(scanPrivate *memo.ScanPrivate) {
+	b.scanPrivate = *scanPrivate
+	b.innerFilters = nil
+	b.outerFilters = nil
+	b.indexJoinPrivate = memo.IndexJoinPrivate{}
 }
 
 // addSelect wraps the input expression with a Select expression having the
 // given filter.
-func (b *indexScanBuilder) addSelect(filter memo.GroupID) {
-	if filter != 0 {
-		if b.indexJoinDef == 0 {
-			if b.innerFilter != 0 {
+func (b *indexScanBuilder) addSelect(filters memo.FiltersExpr) {
+	if len(filters) != 0 {
+		if b.indexJoinPrivate.Table == 0 {
+			if b.innerFilters != nil {
 				panic("cannot call addSelect methods twice before index join is added")
 			}
-			b.innerFilter = filter
+			b.innerFilters = filters
 		} else {
-			if b.outerFilter != 0 {
+			if b.outerFilters != nil {
 				panic("cannot call addSelect methods twice after index join is added")
 			}
-			b.outerFilter = filter
+			b.outerFilters = filters
 		}
 	}
 }
@@ -102,80 +103,82 @@ func (b *indexScanBuilder) addSelect(filter memo.GroupID) {
 // Select expression that wraps the input expression, and the remaining filter
 // is returned (or 0 if there is no remaining filter).
 func (b *indexScanBuilder) addSelectAfterSplit(
-	filter memo.GroupID, cols opt.ColSet,
-) (remainingFilter memo.GroupID) {
-	if filter == 0 {
-		return 0
+	filters memo.FiltersExpr, cols opt.ColSet,
+) (remainingFilters memo.FiltersExpr) {
+	if len(filters) == 0 {
+		return nil
 	}
 
-	filterCols := b.c.OuterCols(filter)
-	if filterCols.SubsetOf(cols) {
+	if b.c.FiltersBoundBy(filters, cols) {
 		// Filter is fully bound by the cols, so add entire filter.
-		b.addSelect(filter)
-		return 0
+		b.addSelect(filters)
+		return nil
 	}
 
 	// Try to split filter.
-	conditions := b.mem.NormExpr(filter).AsFilters().Conditions()
-	boundConditions := b.c.ExtractBoundConditions(conditions, cols)
-	if boundConditions.Length == 0 {
+	boundConditions := b.c.ExtractBoundConditions(filters, cols)
+	if len(boundConditions) == 0 {
 		// None of the filter conjuncts can be bound by the cols, so no expression
 		// can be added.
-		return filter
+		return filters
 	}
 
 	// Add conditions which are fully bound by the cols and return the rest.
-	b.addSelect(b.f.ConstructFilters(boundConditions))
-	return b.f.ConstructFilters(b.c.ExtractUnboundConditions(conditions, cols))
+	b.addSelect(boundConditions)
+	return b.c.ExtractUnboundConditions(filters, cols)
 }
 
 // addIndexJoin wraps the input expression with an IndexJoin expression that
 // produces the given set of columns by lookup in the primary index.
 func (b *indexScanBuilder) addIndexJoin(cols opt.ColSet) {
-	if b.indexJoinDef != 0 {
+	if b.indexJoinPrivate.Table != 0 {
 		panic("cannot call addIndexJoin twice")
 	}
-	if b.outerFilter != 0 {
+	if b.outerFilters != nil {
 		panic("cannot add index join after an outer filter has been added")
 	}
-	b.indexJoinDef = b.mem.InternIndexJoinDef(&memo.IndexJoinDef{
+	b.indexJoinPrivate = memo.IndexJoinPrivate{
 		Table: b.tabID,
 		Cols:  cols,
-	})
+	}
 }
 
 // build constructs the final memo expression by composing together the various
 // expressions that were specified by previous calls to various add methods.
-func (b *indexScanBuilder) build() memo.Expr {
+func (b *indexScanBuilder) build(grp memo.RelExpr) {
 	// 1. Only scan.
-	if b.innerFilter == 0 && b.indexJoinDef == 0 {
-		return memo.Expr(memo.MakeScanExpr(b.scanDef))
+	if len(b.innerFilters) == 0 && b.indexJoinPrivate.Table == 0 {
+		b.mem.AddScanToGroup(&memo.ScanExpr{ScanPrivate: b.scanPrivate}, grp)
+		return
 	}
 
 	// 2. Wrap scan in inner filter if it was added.
-	input := b.f.ConstructScan(b.scanDef)
-	if b.innerFilter != 0 {
-		if b.indexJoinDef == 0 {
-			return memo.Expr(memo.MakeSelectExpr(input, b.innerFilter))
+	input := b.f.ConstructScan(&b.scanPrivate)
+	if len(b.innerFilters) != 0 {
+		if b.indexJoinPrivate.Table == 0 {
+			b.mem.AddSelectToGroup(&memo.SelectExpr{Input: input, Filters: b.innerFilters}, grp)
+			return
 		}
 
-		input = b.f.ConstructSelect(input, b.innerFilter)
+		input = b.f.ConstructSelect(input, b.innerFilters)
 	}
 
 	// 3. Wrap input in index join if it was added.
-	if b.indexJoinDef != 0 {
-		if b.outerFilter == 0 {
-			return memo.Expr(memo.MakeIndexJoinExpr(input, b.indexJoinDef))
+	if b.indexJoinPrivate.Table != 0 {
+		if len(b.outerFilters) == 0 {
+			indexJoin := &memo.IndexJoinExpr{Input: input, IndexJoinPrivate: b.indexJoinPrivate}
+			b.mem.AddIndexJoinToGroup(indexJoin, grp)
+			return
 		}
 
-		input = b.f.ConstructIndexJoin(input, b.indexJoinDef)
+		input = b.f.ConstructIndexJoin(input, &b.indexJoinPrivate)
 	}
 
 	// 4. Wrap input in outer filter (which must exist at this point).
-	if b.outerFilter == 0 {
-		// indexJoinDef == 0: outerFilter == 0 handled by #1 and #2 above.
-		// indexJoinDef != 0: outerFilter == 0 handled by #3 above.
+	if len(b.outerFilters) == 0 {
+		// indexJoinDef == 0: outerFilters == 0 handled by #1 and #2 above.
+		// indexJoinDef != 0: outerFilters == 0 handled by #3 above.
 		panic("outer filter cannot be 0 at this point")
 	}
-	return memo.Expr(memo.MakeSelectExpr(input, b.outerFilter))
+	b.mem.AddSelectToGroup(&memo.SelectExpr{Input: input, Filters: b.outerFilters}, grp)
 }

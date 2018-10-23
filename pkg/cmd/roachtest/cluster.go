@@ -23,12 +23,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net"
 	"net/url"
 	"os"
 	"os/exec"
-	"os/user"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -50,10 +50,7 @@ import (
 )
 
 var (
-	local bool
-	// Path to a local dir where the test logs and artifacts collected from
-	// cluster will be placed.
-	artifacts   string
+	local       bool
 	cockroach   string
 	cloud       = "gce"
 	encrypt     bool
@@ -63,7 +60,6 @@ var (
 	clusterName string
 	clusterID   string
 	clusterWipe bool
-	username    = os.Getenv("ROACHPROD_USER")
 	zonesF      string
 	teamCity    bool
 	// For the "list" command: list benchmarks instead of tests.
@@ -306,27 +302,15 @@ func execCmdWithBuffer(ctx context.Context, l *logger, args ...string) ([]byte, 
 	return out, nil
 }
 
-func makeGCEClusterName(testName, id, username string) string {
-	name := fmt.Sprintf("%s-%s-%s", username, id, testName)
+func makeGCEClusterName(name string) string {
 	name = strings.ToLower(name)
 	name = regexp.MustCompile(`[^-a-z0-9]+`).ReplaceAllString(name, "-")
 	name = regexp.MustCompile(`-+`).ReplaceAllString(name, "-")
 	return name
 }
 
-func makeClusterName(t testI) string {
-	if username == "" {
-		usr, err := user.Current()
-		if err != nil {
-			panic(fmt.Sprintf("user.Current: %s", err))
-		}
-		username = usr.Username
-	}
-	id := clusterID
-	if id == "" {
-		id = fmt.Sprintf("%d", timeutil.Now().Unix())
-	}
-	return makeGCEClusterName(t.Name(), id, username)
+func makeClusterName(name string) string {
+	return makeGCEClusterName(name)
 }
 
 func machineTypeToCPUs(s string) int {
@@ -430,6 +414,7 @@ type testI interface {
 	// Path to a directory where the test is supposed to store its log and other
 	// artifacts.
 	ArtifactsDir() string
+	logger() *logger
 }
 
 // TODO(tschottdorf): Consider using a more idiomatic approach in which options
@@ -620,27 +605,40 @@ func nodes(count int, opts ...createOption) []nodeSpec {
 // A cluster is intended to be shared between all the subtests under a root.
 // A cluster is safe for concurrent use by multiple goroutines.
 type cluster struct {
-	name       string
-	nodes      int
-	status     func(...interface{})
-	t          testI
-	l          *logger
+	name   string
+	nodes  int
+	status func(...interface{})
+	t      testI
+	// l is the logger used to log various cluster operations.
+	// DEPRECATED for use outside of cluster methods: Use a test's t.l instead.
+	// This is generally set to the current test's logger.
+	l *logger
+	// destroyed is used to coordinate between different goroutines that want to
+	// destroy a cluster. It is nil when the cluster should not be destroyed (i.e.
+	// when Destroy() should not be called).
 	destroyed  chan struct{}
 	expiration time.Time
-	// owned is set if this instance is responsible for destroying the roachprod
+	// owned is set if this instance is responsible for `roachprod destroy`ing the
 	// cluster. It is set when a new cluster is created, but not when one is
 	// cloned or when we attach to an existing roachprod cluster.
+	// If not set, Destroy() only wipes the cluster.
 	owned bool
 }
 
-type clusterOpt bool
-
-const (
-	localCluster  clusterOpt = true
-	remoteCluster clusterOpt = false
-)
+type clusterConfig struct {
+	// name must be empty if localCluster is specified.
+	name  string
+	nodes []nodeSpec
+	// artifactsDir is the path where log file will be stored.
+	artifactsDir string
+	localCluster bool
+	teeOpt       teeOptType
+	user         string
+}
 
 // newCluster creates a new roachprod cluster.
+//
+// NOTE: setTest() needs to be called before a test can use this cluster.
 //
 // TODO(peter): Should set the lifetime of clusters to 2x the expected test
 // duration. The default lifetime of 12h is too long for some tests and will be
@@ -650,53 +648,46 @@ const (
 // to figure out how to make that work with `roachprod create`. Perhaps one
 // invocation of `roachprod create` per unique node-spec. Are there guarantees
 // we're making here about the mapping of nodeSpecs to node IDs?
-func newCluster(ctx context.Context, t testI, nodes []nodeSpec, opt clusterOpt) (*cluster, error) {
+func newCluster(ctx context.Context, l *logger, cfg clusterConfig) (*cluster, error) {
 	if atomic.LoadInt32(&interrupted) == 1 {
 		return nil, fmt.Errorf("newCluster interrupted")
 	}
 
+	var name string
+	if cfg.localCluster {
+		if cfg.name != "" {
+			log.Fatal(ctx, "can't specify name %q with local flag", cfg.name)
+		}
+		name = "local" // The roachprod tool understands this magic name.
+	} else {
+		name = makeClusterName(cfg.user + "-" + cfg.name)
+	}
+
 	switch {
-	case len(nodes) == 0:
+	case len(cfg.nodes) == 0:
 		// For tests. Return the minimum that makes them happy.
 		return &cluster{
 			expiration: timeutil.Now().Add(24 * time.Hour),
 		}, nil
-	case len(nodes) > 1:
+	case len(cfg.nodes) > 1:
 		// TODO(peter): Need a motivating test that has different specs per node.
-		return nil, fmt.Errorf("TODO(peter): unsupported nodes spec: %v", nodes)
-	}
-
-	logPath := filepath.Join(t.ArtifactsDir(), "test.log")
-	l, err := rootLogger(logPath)
-	if err != nil {
-		return nil, err
-	}
-
-	var name string
-	if opt == localCluster {
-		name = "local" // The roachprod tool understands this magic name.
-	} else {
-		name = makeClusterName(t)
+		return nil, fmt.Errorf("TODO(peter): unsupported nodes spec: %v", cfg.nodes)
 	}
 
 	c := &cluster{
 		name:       name,
-		nodes:      nodes[0].Count,
+		nodes:      cfg.nodes[0].Count,
 		status:     func(...interface{}) {},
-		t:          t,
 		l:          l,
 		destroyed:  make(chan struct{}),
-		expiration: nodes[0].expiration(),
+		expiration: cfg.nodes[0].expiration(),
 		owned:      true,
-	}
-	if impl, ok := t.(*test); ok {
-		c.status = impl.Status
 	}
 	registerCluster(c)
 
 	sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.nodes)}
-	sargs = append(sargs, nodes[0].args()...)
-	if !local && zonesF != "" && nodes[0].Zones == "" {
+	sargs = append(sargs, cfg.nodes[0].args()...)
+	if !local && zonesF != "" && cfg.nodes[0].Zones == "" {
 		sargs = append(sargs, "--gce-zones="+zonesF)
 	}
 
@@ -718,48 +709,44 @@ type attachOpt struct {
 
 // attachToExistingCluster creates a cluster object based on machines that have
 // already been already allocated by roachprod.
+//
+// NOTE: setTest() needs to be called before a test can use this cluster.
 func attachToExistingCluster(
-	ctx context.Context, name string, t testI, nodes []nodeSpec, opt attachOpt,
-) *cluster {
+	ctx context.Context, name string, l *logger, nodes []nodeSpec, opt attachOpt,
+) (*cluster, error) {
 	if len(nodes) > 1 {
 		// TODO(peter): Need a motivating test that has different specs per node.
-		t.Fatalf("TODO(peter): unsupported nodes spec: %v", nodes)
-	}
-
-	logPath := filepath.Join(t.ArtifactsDir(), "test.log")
-	l, err := rootLogger(logPath)
-	if err != nil {
-		t.Fatal(err)
+		return nil, fmt.Errorf("TODO(peter): unsupported nodes spec: %v", nodes)
 	}
 
 	c := &cluster{
 		name:       name,
 		nodes:      nodes[0].Count,
 		status:     func(...interface{}) {},
-		t:          t,
 		l:          l,
 		destroyed:  make(chan struct{}),
 		expiration: nodes[0].expiration(),
 		// If we're attaching to an existing cluster, we're not going to destoy it.
 		owned: false,
 	}
-	if impl, ok := t.(*test); ok {
-		c.status = impl.Status
-	}
 	registerCluster(c)
 
 	if !opt.skipValidation {
 		if err := c.validate(ctx, nodes, l); err != nil {
-			t.Fatal(err)
+			return nil, err
 		}
 	}
 
 	if !opt.skipStop {
 		c.status("stopping cluster")
-		c.Stop(ctx, c.All())
+		if err := c.StopE(ctx, c.All()); err != nil {
+			return nil, err
+		}
 		if !opt.skipWipe {
 			if clusterWipe {
-				c.Wipe(ctx, c.All())
+				if err := c.WipeE(ctx, c.All()); err != nil {
+					return nil, err
+				}
 			} else {
 				l.Printf("skipping cluster wipe\n")
 			}
@@ -767,7 +754,18 @@ func attachToExistingCluster(
 	}
 
 	c.status("running test")
-	return c
+	return c, nil
+}
+
+// setTest prepares c for being used on behalf of t.
+//
+// TODO(andrei): Get rid of c.t, c.l and of this method.
+func (c *cluster) setTest(t testI) {
+	c.t = t
+	c.l = t.logger()
+	if impl, ok := t.(*test); ok {
+		c.status = impl.Status
+	}
 }
 
 // validateCluster takes a cluster and checks that the reality corresponds to
@@ -815,24 +813,19 @@ func (c *cluster) validate(ctx context.Context, nodes []nodeSpec, l *logger) err
 	return nil
 }
 
-// clone creates a new cluster object that refers to the same cluster as the
-// receiver, but is associated with the specified test.
-func (c *cluster) clone(t *test) *cluster {
-	logPath := filepath.Join(t.ArtifactsDir(), "test.log")
-	l, err := rootLogger(logPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return &cluster{
-		name:       c.name,
-		nodes:      c.nodes,
-		status:     t.Status,
-		t:          t,
-		l:          l,
-		expiration: c.expiration,
-		// This cloned cluster is not taking ownership. The parent retains it.
-		owned: false,
-	}
+// clone creates a non-owned handle on the same cluster.
+//
+// NOTE: If the cloning has been done for a subtest, setTest() needs to be
+// called on the returned cluster.
+//
+// TODO(andrei): Get rid of the funky concept of cloning once we implement a
+// more principled aproach to wiping and destroying cluster.
+func (c *cluster) clone() *cluster {
+	cpy := *c
+	// This cloned cluster is not taking ownership. The parent retains it.
+	cpy.owned = false
+	cpy.destroyed = nil
+	return &cpy
 }
 
 // All returns a node list containing all of the nodes in the cluster.
@@ -946,11 +939,14 @@ func (c *cluster) Put(ctx context.Context, src, dest string, opts ...option) {
 	}
 }
 
-// GitClone clones a git repo from src into dest and checks out
-// origin's version of the given branch. The src, dest, and branch
-// arguments must not contain shell special characters.
-func (c *cluster) GitClone(ctx context.Context, src, dest, branch string, node nodeListOption) {
-	c.Run(ctx, node, "bash", "-e", "-c", fmt.Sprintf(`'
+// GitCloneE clones a git repo from src into dest and checks out origin's
+// version of the given branch. The src, dest, and branch arguments must not
+// contain shell special characters. GitCloneE unlike GitClone returns an
+// error.
+func (c *cluster) GitCloneE(
+	ctx context.Context, src, dest, branch string, node nodeListOption,
+) error {
+	return c.RunE(ctx, node, "bash", "-e", "-c", fmt.Sprintf(`'
 if ! test -d %s; then
   git clone -b %s --depth 1 %s %s
 else
@@ -962,6 +958,15 @@ fi
 		branch, src, dest,
 		dest,
 		branch))
+}
+
+// GitClone clones a git repo from src into dest and checks out origin's
+// version of the given branch. The src, dest, and branch arguments must not
+// contain shell special characters.
+func (c *cluster) GitClone(ctx context.Context, src, dest, branch string, node nodeListOption) {
+	if err := c.GitCloneE(ctx, src, dest, branch, node); err != nil {
+		c.t.Fatal(err)
+	}
 }
 
 // startArgs specifies extra arguments that are passed to `roachprod` during `c.Start`.
@@ -1040,14 +1045,12 @@ func argExists(args []string, target string) bool {
 	return false
 }
 
-// Stop cockroach nodes running on a subset of the cluster. See cluster.Start()
+// StopE cockroach nodes running on a subset of the cluster. See cluster.Start()
 // for a description of the nodes parameter.
-func (c *cluster) Stop(ctx context.Context, opts ...option) {
-	if c.t.Failed() {
-		// If the test has failed, don't try to limp along.
-		return
+func (c *cluster) StopE(ctx context.Context, opts ...option) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
-
 	args := []string{
 		roachprod,
 		"stop",
@@ -1055,30 +1058,47 @@ func (c *cluster) Stop(ctx context.Context, opts ...option) {
 	args = append(args, roachprodArgs(opts)...)
 	args = append(args, c.makeNodes(opts...))
 	if atomic.LoadInt32(&interrupted) == 1 {
-		c.t.Fatal("interrupted")
+		return fmt.Errorf("interrupted")
 	}
 	c.status("stopping cluster")
 	defer c.status()
-	err := execCmd(ctx, c.l, args...)
-	if err != nil {
+	return execCmd(ctx, c.l, args...)
+}
+
+// Stop is like StopE, except instead of returning an error, it does
+// c.t.Fatal(). c.t needs to be set.
+func (c *cluster) Stop(ctx context.Context, opts ...option) {
+	if c.t.Failed() {
+		// If the test has failed, don't try to limp along.
+		return
+	}
+	if err := c.StopE(ctx, opts...); err != nil {
 		c.t.Fatal(err)
 	}
 }
 
-// Wipe a subset of the nodes in a cluster. See cluster.Start() for a
+// WipeE wipes a subset of the nodes in a cluster. See cluster.Start() for a
 // description of the nodes parameter.
+func (c *cluster) WipeE(ctx context.Context, opts ...option) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if atomic.LoadInt32(&interrupted) == 1 {
+		return fmt.Errorf("interrupted")
+	}
+	c.status("wiping cluster")
+	defer c.status()
+	return execCmd(ctx, c.l, roachprod, "wipe", c.makeNodes(opts...))
+}
+
+// Wipe is like WipeE, except instead of returning an error, it does
+// c.t.Fatal(). c.t needs to be set.
 func (c *cluster) Wipe(ctx context.Context, opts ...option) {
 	if c.t.Failed() {
 		// If the test has failed, don't try to limp along.
 		return
 	}
-	if atomic.LoadInt32(&interrupted) == 1 {
-		c.t.Fatal("interrupted")
-	}
-	c.status("wiping cluster")
-	defer c.status()
-	err := execCmd(ctx, c.l, roachprod, "wipe", c.makeNodes(opts...))
-	if err != nil {
+	if err := c.WipeE(ctx, opts...); err != nil {
 		c.t.Fatal(err)
 	}
 }

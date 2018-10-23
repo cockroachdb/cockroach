@@ -38,7 +38,8 @@ import (
 type tpccOptions struct {
 	Warehouses int
 	Extra      string
-	Chaos      func() Chaos // for late binding of stopper
+	Chaos      func() Chaos                // for late binding of stopper
+	During     func(context.Context) error // for running a function during the test
 	Duration   time.Duration
 	ZFS        bool
 }
@@ -114,6 +115,9 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 		chaos := opts.Chaos()
 		m.Go(chaos.Runner(c, m))
 	}
+	if opts.During != nil {
+		m.Go(opts.During)
+	}
 	m.Wait()
 }
 
@@ -172,16 +176,22 @@ func registerTPCC(r *registry) {
 		},
 	})
 
-	// Run a single tpccbench spec in CI.
+	// Run a few representative tpccbench specs in CI.
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes: 3,
 		CPUs:  4,
-		// TODO(m-schneider): enable when geo-distributed benchmarking is supported.
-		// Chaos: true,
-		// Geo: true,
 
 		LoadWarehouses: 1000,
 		EstimatedMax:   300,
+	})
+	registerTPCCBenchSpec(r, tpccBenchSpec{
+		Nodes:      9,
+		CPUs:       4,
+		Chaos:      true,
+		LoadConfig: singlePartitionedLoadgen,
+
+		LoadWarehouses: 2000,
+		EstimatedMax:   600,
 	})
 }
 
@@ -201,9 +211,9 @@ const (
 func (d tpccBenchDistribution) zones() []string {
 	switch d {
 	case singleZone:
-		return []string{"us-east1-b"}
+		return []string{"us-central1-b"}
 	case multiZone:
-		return []string{"us-east1-b", "us-east1-c", "us-east1-d"}
+		return []string{"us-central1-a", "us-central1-b", "us-central1-c"}
 	case multiRegion:
 		return []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
 	default:
@@ -347,7 +357,7 @@ func loadTPCCBench(
 	// Check if the dataset already exists and is already large enough to
 	// accommodate this benchmarking. If so, we can skip the fixture RESTORE.
 	if _, err := db.ExecContext(ctx, `USE tpcc`); err == nil {
-		c.l.Printf("found existing tpcc database\n")
+		t.l.Printf("found existing tpcc database\n")
 
 		var curWarehouses int
 		if err := db.QueryRowContext(ctx,
@@ -371,9 +381,9 @@ func loadTPCCBench(
 
 	// If the fixture has a corresponding store dump, use it.
 	if b.StoreDirVersion != "" {
-		c.l.Printf("ingesting existing tpcc store dump\n")
+		t.l.Printf("ingesting existing tpcc store dump\n")
 
-		urlBase, err := c.RunWithBuffer(ctx, c.l, c.Node(loadNode[0]),
+		urlBase, err := c.RunWithBuffer(ctx, t.l, c.Node(loadNode[0]),
 			fmt.Sprintf(`./workload fixtures url tpcc --warehouses=%d`, b.LoadWarehouses))
 		if err != nil {
 			return err
@@ -385,7 +395,7 @@ func loadTPCCBench(
 	}
 
 	// Load the corresponding fixture.
-	c.l.Printf("restoring tpcc fixture\n")
+	t.l.Printf("restoring tpcc fixture\n")
 	cmd := fmt.Sprintf(
 		"./workload fixtures load tpcc --checks=false --warehouses=%d {pgurl:1}", b.LoadWarehouses)
 	if err := c.RunE(ctx, loadNode, cmd); err != nil {
@@ -393,16 +403,16 @@ func loadTPCCBench(
 	}
 
 	partArgs := ""
-	rebalanceWait := time.Duration(b.LoadWarehouses/150) * time.Minute
+	rebalanceWait := time.Duration(b.LoadWarehouses/100) * time.Minute
 	switch b.LoadConfig {
 	case singleLoadgen:
-		c.l.Printf("splitting and scattering\n")
+		t.l.Printf("splitting and scattering\n")
 	case singlePartitionedLoadgen:
-		c.l.Printf("splitting, scattering, and partitioning\n")
+		t.l.Printf("splitting, scattering, and partitioning\n")
 		partArgs = fmt.Sprintf(`--partitions=%d`, b.partitions())
 		rebalanceWait = time.Duration(b.LoadWarehouses/50) * time.Minute
 	case multiLoadgen:
-		c.l.Printf("splitting, scattering, and partitioning\n")
+		t.l.Printf("splitting, scattering, and partitioning\n")
 		partArgs = fmt.Sprintf(`--partitions=%d --zones="%s" --partition-affinity=0`,
 			b.partitions(), strings.Join(b.Distribution.zones(), ","))
 		rebalanceWait = time.Duration(b.LoadWarehouses/20) * time.Minute
@@ -410,27 +420,20 @@ func loadTPCCBench(
 		panic("unexpected")
 	}
 
-	// Split and scatter the tables. Set duration to 1ms so that the load
-	// generation doesn't actually run.
-	cmd = fmt.Sprintf("ulimit -n 32768; "+
-		"./workload run tpcc --warehouses=%d --split --scatter %s "+
-		"--duration=3m --tolerate-errors {pgurl:1}", b.LoadWarehouses, partArgs)
-	if out, err := c.RunWithBuffer(ctx, c.l, loadNode, cmd); err != nil {
-		return errors.Wrapf(err, "failed with output %q", string(out))
-	}
-
-	c.l.Printf("waiting %v for rebalancing\n", rebalanceWait)
+	t.l.Printf("waiting %v for rebalancing\n", rebalanceWait)
 	_, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='64MiB'`)
 	if err != nil {
 		return err
 	}
 
-	// TODO(nvanbenschoten): we should find a way to make this reactive and
-	// wait until no zone constraints are being violated.
-	select {
-	case <-time.After(rebalanceWait):
-	case <-ctx.Done():
-		return ctx.Err()
+	// Split and scatter the tables. Ramp up to the expected load in the desired
+	// distribution. This should allow for load-based rebalancing to help
+	// distribute load. Optionally pass some load configuration-specific flags.
+	cmd = fmt.Sprintf("./workload run tpcc --warehouses=%d --split --scatter "+
+		"--ramp=%s --duration=1ms --tolerate-errors %s {pgurl%s}",
+		b.LoadWarehouses, rebalanceWait, partArgs, roachNodes)
+	if out, err := c.RunWithBuffer(ctx, c.l, loadNode, cmd); err != nil {
+		return errors.Wrapf(err, "failed with output %q", string(out))
 	}
 
 	_, err = db.ExecContext(ctx, `SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='2MiB'`)
@@ -491,6 +494,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		}
 		t.Status("installing haproxy")
 		c.Install(ctx, loadNodes, "haproxy")
+		c.Put(ctx, cockroach, "./cockroach", loadNodes)
 		c.Run(ctx, loadNodes, fmt.Sprintf("./cockroach gen haproxy --insecure --host %s",
 			c.InternalIP(ctx, c.Node(1))[0]))
 		c.Run(ctx, loadNodes, "haproxy -f haproxy.cfg -D")
@@ -530,10 +534,9 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 
 				// Kill one node at a time.
 				ch := Chaos{
-					Timer:        Periodic{Period: 90 * time.Second, DownTime: 1 * time.Second},
-					Target:       roachNodes.randNode,
-					Stopper:      loadDone,
-					DrainAndQuit: true,
+					Timer:   Periodic{Period: 90 * time.Second, DownTime: 5 * time.Second},
+					Target:  roachNodes.randNode,
+					Stopper: loadDone,
 				}
 				m.Go(ch.Runner(c, m))
 			}
@@ -573,12 +576,11 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 
 					t.Status(fmt.Sprintf("running benchmark, warehouses=%d", warehouses))
 
-					cmd := fmt.Sprintf("ulimit -n 32768; "+
-						"./workload run tpcc --warehouses=%d --active-warehouses=%d "+
+					cmd := fmt.Sprintf("./workload run tpcc --warehouses=%d --active-warehouses=%d "+
 						"--tolerate-errors --ramp=%s --duration=%s%s {pgurl%s}",
 						b.LoadWarehouses, activeWarehouses, rampDur,
 						loadDur, extraFlags, sqlGateways)
-					out, err := c.RunWithBuffer(ctx, c.l, group.loadNodes, cmd)
+					out, err := c.RunWithBuffer(ctx, t.l, group.loadNodes, cmd)
 					loadDone <- timeutil.Now()
 					if err != nil {
 						return errors.Wrapf(err, "error running tpcc load generator:\n\n%s\n", out)
@@ -596,7 +598,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 						}
 					}
 					headerLine, statsLine := lines[0], lines[1]
-					c.l.Printf("%s\n%s\n", headerLine, statsLine)
+					t.l.Printf("%s\n%s\n", headerLine, statsLine)
 
 					// Parse tpmC value from stats line.
 					fields := strings.Fields(statsLine)
@@ -644,7 +646,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 				ttycolor.Stdout(ttycolor.Red)
 				passStr = "FAIL"
 			}
-			c.l.Printf("--- %s: tpcc %d resulted in %.1f tpmC (%.1f%% of max tpmC)\n\n",
+			t.l.Printf("--- %s: tpcc %d resulted in %.1f tpmC (%.1f%% of max tpmC)\n\n",
 				passStr, warehouses, tpmC, tpmCRatio*100)
 			ttycolor.Stdout(ttycolor.Reset)
 
@@ -655,7 +657,7 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		}
 
 		ttycolor.Stdout(ttycolor.Green)
-		c.l.Printf("------\nMAX WAREHOUSES = %d\n------\n\n", res)
+		t.l.Printf("------\nMAX WAREHOUSES = %d\n------\n\n", res)
 		ttycolor.Stdout(ttycolor.Reset)
 		return nil
 	})
@@ -705,7 +707,7 @@ func registerTPCCBench(r *registry) {
 			Chaos: true,
 
 			LoadWarehouses: 5000,
-			EstimatedMax:   500,
+			EstimatedMax:   2000,
 			// TODO(nvanbenschoten): Need to regenerate.
 			// StoreDirVersion: "2.0-5",
 		},
@@ -735,6 +737,32 @@ func registerTPCCBench(r *registry) {
 
 			LoadWarehouses: 50000,
 			EstimatedMax:   40000,
+		},
+
+		// See https://github.com/cockroachdb/cockroach/issues/31409 for the next three specs.
+		{
+			Nodes: 6,
+			CPUs:  16,
+
+			LoadWarehouses: 5000,
+			EstimatedMax:   3000,
+			LoadConfig:     singlePartitionedLoadgen,
+		},
+		{
+			Nodes: 12,
+			CPUs:  16,
+
+			LoadWarehouses: 10000,
+			EstimatedMax:   6000,
+			LoadConfig:     singlePartitionedLoadgen,
+		},
+		{
+			Nodes: 24,
+			CPUs:  16,
+
+			LoadWarehouses: 20000,
+			EstimatedMax:   12000,
+			LoadConfig:     singlePartitionedLoadgen,
 		},
 	}
 

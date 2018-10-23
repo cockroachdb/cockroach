@@ -40,11 +40,10 @@ import (
 )
 
 var (
-	parallelism   = 10
-	count         = 1
-	debugEnabled  = false
-	postIssues    = true
-	clusterNameRE = regexp.MustCompile(`^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
+	count        = 1
+	debugEnabled = false
+	postIssues   = true
+	gceNameRE    = regexp.MustCompile(`^[a-z](?:[-a-z0-9]{0,61}[a-z0-9])?$`)
 )
 
 func makeFilterRE(filter []string) *regexp.Regexp {
@@ -181,19 +180,56 @@ func (r *registry) loadBuildVersion() {
 	}
 }
 
-func (r *registry) verifyClusterName(testName string) error {
-	// TeamCity build IDs are currently 6 digits, but we use 7 here for a bit of
-	// breathing room.
-	name := makeGCEClusterName(testName, "xxxxxxx", "teamcity")
-	if !clusterNameRE.MatchString(name) {
-		return fmt.Errorf("cluster name '%s' must match regex '%s'",
-			name, clusterNameRE)
+// verifyValidClusterName verifies that the test name can be turned into a cluster
+// name when run by TeamCity. Outside of TeamCity runs, depending on the user
+// running it and the "cluster id" component of a cluster name, the name may
+// still be invalid; however, this method is designed to catch test names
+// that will cause errors on TeamCity but not in a developer's local test
+// environment.
+func (r *registry) verifyValidClusterName(testName string) error {
+	// Both the name of the cluster, and the names of the individual nodes in the
+	// cluster, must be valid identifiers in GCE when running on TeamCity. An
+	// identifier can be tested using a regular expression. Also note that, due to
+	// the specifics of the regular expression, we cannot assume that a valid
+	// cluster name implies valid node names, or vice-versa; we therefore
+	// construct both a TeamCity cluster name and a TeamCity node name and
+	// validate both.
+
+	// The name of a cluster is constructed as "[cluster ID][test name]"
+	// In TeamCity runs, the cluster ID is currently a prefix with 6 digits, but
+	// we use 7 here for a bit of breathing room.
+	teamcityClusterName := makeGCEClusterName("teamcity-1234567-" + testName)
+	if !gceNameRE.MatchString(teamcityClusterName) {
+		return fmt.Errorf(
+			"test name '%s' results in invalid cluster name"+
+				" (generated cluster name '%s' must match regex '%s')."+
+				" The test name may be too long or have invalid characters",
+			testName,
+			teamcityClusterName,
+			gceNameRE,
+		)
 	}
-	if t, ok := r.clusters[name]; ok {
+
+	// The node names are constructed using the cluster name, plus a 4 digit node
+	// ID.
+	teamcityNodeName := makeGCEClusterName("teamcity-1234567-" + testName + "-1234")
+	if !gceNameRE.MatchString(teamcityNodeName) {
+		return fmt.Errorf(
+			"test name '%s' results in invalid cluster node names"+
+				" (generated node name '%s' must match regex '%s')."+
+				" The test name may be too long or have invalid characters",
+			testName,
+			teamcityNodeName,
+			gceNameRE,
+		)
+	}
+
+	// Verify that the cluster name is not shared with an existing test.
+	if t, ok := r.clusters[teamcityClusterName]; ok {
 		return fmt.Errorf("test %s and test %s have equivalent nightly cluster names: %s",
-			testName, t, name)
+			testName, t, teamcityClusterName)
 	}
-	r.clusters[name] = testName
+	r.clusters[teamcityClusterName] = testName
 	return nil
 }
 
@@ -202,7 +238,7 @@ func (r *registry) prepareSpec(spec *testSpec, depth int) error {
 		spec.subtestName = spec.Name
 		// Only top-level tests can create clusters, so those are the only ones for
 		// which we need to verify the cluster name.
-		if err := r.verifyClusterName(spec.Name); err != nil {
+		if err := r.verifyValidClusterName(spec.Name); err != nil {
 			return err
 		}
 	}
@@ -296,7 +332,12 @@ func (r *registry) ListAll(filter []string) []string {
 	return names
 }
 
-func (r *registry) Run(filter []string, parallelism int) int {
+// Run runs the tests that match the filter.
+//
+// Args:
+// artifactsDir: The path to the dir where log files will be put. If empty, all
+//   logging will go to stdout/stderr.
+func (r *registry) Run(filter []string, parallelism int, artifactsDir string, user string) int {
 	filterRE := makeFilterRE(filter)
 	// Find the top-level tests to run.
 	tests := r.ListTopLevel(filterRE)
@@ -342,8 +383,25 @@ func (r *registry) Run(filter []string, parallelism int) int {
 				if count == 1 {
 					runNum = 0
 				}
+				// Log to stdout/stderr if we're not running tests in parallel.
+				teeOpt := noTee
+				if parallelism == 1 {
+					teeOpt = teeToStdout
+				}
+
+				artifactsSuffix := ""
+				if runNum != 0 {
+					artifactsSuffix = "run_" + strconv.Itoa(runNum)
+				}
+				var runDir string
+				if artifactsDir != "" {
+					runDir = filepath.Join(
+						artifactsDir, teamCityNameEscape(tests[i].subtestName), artifactsSuffix)
+				}
+
 				r.runAsync(
-					ctx, tests[i], filterRE, nil /* parent */, nil /* cluster */, runNum, func(failed bool) {
+					ctx, tests[i], filterRE, nil /* parent */, nil, /* cluster */
+					runNum, teeOpt, runDir, user, func(failed bool) {
 						wg.Done()
 						<-sem
 					})
@@ -483,6 +541,8 @@ type testStatus struct {
 type test struct {
 	spec     *testSpec
 	registry *registry
+	// l is the logger that the test will use for its output.
+	l        *logger
 	runner   string
 	runnerID int64
 	start    time.Time
@@ -511,6 +571,10 @@ type test struct {
 
 func (t *test) Name() string {
 	return t.spec.Name
+}
+
+func (t *test) logger() *logger {
+	return t.l
 }
 
 func (t *test) status(id int64, args ...interface{}) {
@@ -705,26 +769,23 @@ func (r *registry) runAsync(
 	parent *test,
 	c *cluster,
 	runNum int,
+	teeOpt teeOptType,
+	artifactsDir string,
+	user string,
 	done func(failed bool),
 ) {
-	artifactsSuffix := ""
-	// Only roots get a "run_<n>" suffix to their artifacts dir; the subtests will
-	// write in the parent's dir.
-	if parent == nil && runNum != 0 {
-		artifactsSuffix = "run_" + strconv.Itoa(runNum)
-	}
-	parentDir := artifacts
-	if parent != nil {
-		parentDir = parent.ArtifactsDir()
-	}
-	// Each subtest gets its own subdir in the parent's artifacts dir.
-	artifactsDir := filepath.Join(parentDir, teamCityNameEscape(spec.subtestName), artifactsSuffix)
-
 	t := &test{
 		spec:         spec,
 		registry:     r,
 		artifactsDir: artifactsDir,
 	}
+	var logPath string
+	if artifactsDir != "" {
+		logPath = filepath.Join(artifactsDir, "test.log")
+	}
+	l, err := rootLogger(logPath, teeOpt)
+	FatalIfErr(t, err)
+	t.l = l
 
 	if teamCity {
 		fmt.Printf("##teamcity[testStarted name='%s' flowId='%s']\n", t.Name(), t.Name())
@@ -825,10 +886,12 @@ func (r *registry) runAsync(
 			if teamCity {
 				fmt.Fprintf(r.out, "##teamcity[testFinished name='%s' flowId='%s']\n", t.Name(), t.Name())
 
-				escapedTestName := teamCityNameEscape(t.Name())
-				artifactsGlobPath := filepath.Join(artifacts, escapedTestName, "**")
-				artifactsSpec := fmt.Sprintf("%s => %s", artifactsGlobPath, escapedTestName)
-				fmt.Fprintf(r.out, "##teamcity[publishArtifacts '%s']\n", artifactsSpec)
+				if artifactsDir != "" {
+					escapedTestName := teamCityNameEscape(t.Name())
+					artifactsGlobPath := filepath.Join(artifactsDir, "**")
+					artifactsSpec := fmt.Sprintf("%s => %s", artifactsGlobPath, escapedTestName)
+					fmt.Fprintf(r.out, "##teamcity[publishArtifacts '%s']\n", artifactsSpec)
+				}
 			}
 
 			r.status.Lock()
@@ -856,12 +919,24 @@ func (r *registry) runAsync(
 
 		if c == nil {
 			if clusterName == "" {
-				opt := remoteCluster
-				if local {
-					opt = localCluster
+				var name string
+				if !local {
+					name = clusterID
+					if name == "" {
+						name = fmt.Sprintf("%d", timeutil.Now().Unix())
+					}
+					name += "-" + t.Name()
+				}
+				cfg := clusterConfig{
+					name:         name,
+					nodes:        t.spec.Nodes,
+					artifactsDir: t.ArtifactsDir(),
+					localCluster: local,
+					teeOpt:       teeOpt,
+					user:         user,
 				}
 				var err error
-				c, err = newCluster(ctx, t, t.spec.Nodes, opt)
+				c, err = newCluster(ctx, t.l, cfg)
 				FatalIfErr(t, err)
 			} else {
 				opt := attachOpt{
@@ -869,7 +944,9 @@ func (r *registry) runAsync(
 					skipStop:       r.config.skipClusterStopOnAttach,
 					skipWipe:       r.config.skipClusterWipeOnAttach,
 				}
-				c = attachToExistingCluster(ctx, clusterName, t, t.spec.Nodes, opt)
+				var err error
+				c, err = attachToExistingCluster(ctx, clusterName, t.l, t.spec.Nodes, opt)
+				FatalIfErr(t, err)
 			}
 			if c != nil {
 				defer func() {
@@ -881,31 +958,41 @@ func (r *registry) runAsync(
 				}()
 			}
 		} else {
-			c = c.clone(t)
+			c = c.clone()
 		}
+		c.setTest(t)
 
 		// If we have subtests, handle them here and return.
 		if t.spec.Run == nil {
 			for i := range t.spec.SubTests {
-				if t.spec.SubTests[i].matchRegex(filter) {
+				childSpec := t.spec.SubTests[i]
+				if childSpec.matchRegex(filter) {
 					var wg sync.WaitGroup
 					wg.Add(1)
-					r.runAsync(ctx, &t.spec.SubTests[i], filter, t, c, runNum, func(failed bool) {
-						if failed {
-							// Mark the parent test as failed since one of the subtests
-							// failed.
-							t.mu.Lock()
-							t.mu.failed = true
-							t.mu.Unlock()
-						}
-						if failed && debugEnabled {
-							// The test failed and debugging is enabled. Don't try to stumble
-							// forward running another test or subtest, just exit
-							// immediately.
-							os.Exit(1)
-						}
-						wg.Done()
-					})
+
+					// Each subtest gets its own subdir in the parent's artifacts dir.
+					var childDir string
+					if t.ArtifactsDir() != "" {
+						childDir = filepath.Join(t.ArtifactsDir(), teamCityNameEscape(childSpec.subtestName))
+					}
+
+					r.runAsync(ctx, &childSpec, filter, t, c,
+						runNum, teeOpt, childDir, user, func(failed bool) {
+							if failed {
+								// Mark the parent test as failed since one of the subtests
+								// failed.
+								t.mu.Lock()
+								t.mu.failed = true
+								t.mu.Unlock()
+							}
+							if failed && debugEnabled {
+								// The test failed and debugging is enabled. Don't try to stumble
+								// forward running another test or subtest, just exit
+								// immediately.
+								os.Exit(1)
+							}
+							wg.Done()
+						})
 					wg.Wait()
 				}
 			}

@@ -17,6 +17,7 @@ package xform
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -71,10 +72,10 @@ import (
 //    (InnerJoin
 //      $r
 //      $t
-//      (Filters (ConstructConditionsNotUsing $s $lowerOn $upperOn))
+//      (ConstructFiltersNotUsing $s $lowerOn $upperOn)
 //    )
 //    $s
-//    (Filters (ConstructConditionsUsing $s $lowerOn $upperOn))
+//    (ConstructFiltersUsing $s $lowerOn $upperOn)
 //  )
 //
 // In this example, if the upper and lower groups each contain two InnerJoin
@@ -93,9 +94,6 @@ type explorer struct {
 	// so it provides a clean interface for calling functions from both the xform
 	// and xfunc packages using the same prefix.
 	funcs CustomFuncs
-
-	// exprs is a buffer reused by custom replace functions.
-	exprs []memo.Expr
 }
 
 // init initializes the explorer for use (or reuse).
@@ -156,53 +154,60 @@ func (e *explorer) init(o *Optimizer) {
 //         if ordinal(e3) >= state.start:
 //           ... explore (e1, e2, e3) combo ...
 //
-func (e *explorer) exploreGroup(group memo.GroupID) *exploreState {
+func (e *explorer) exploreGroup(grp memo.RelExpr) *exploreState {
 	// Do nothing if this group has already been fully explored.
-	state := e.ensureExploreState(group)
+	state := e.ensureExploreState(grp)
 	if state.fullyExplored {
 		return state
 	}
 
-	// Update set of expressions that will be considered during this pass, by
-	// setting the start expression to be the end expression from last pass.
-	exprCount := e.mem.ExprCount(group)
+	// Update set of group members that will be considered during this pass, by
+	// setting the start member to be the end expression from last pass.
 	state.start = state.end
-	state.end = memo.ExprOrdinal(exprCount)
+	state.end = 0
+	for member := grp; member != nil; member = member.NextExpr() {
+		state.end++
+	}
 
+	var member memo.RelExpr
+	var i int
 	fullyExplored := true
-	for i := 0; i < exprCount; i++ {
-		ordinal := memo.ExprOrdinal(i)
-
-		// If expression was fully explored in previous passes, then nothing
-		// further to do.
-		if state.isExprFullyExplored(ordinal) {
+	for i, member = 0, grp; i < state.end; i, member = i+1, member.NextExpr() {
+		// If member was fully explored in previous passes, then nothing further
+		// to do.
+		if state.isMemberFullyExplored(i) {
 			continue
 		}
 
-		eid := memo.ExprID{Group: group, Expr: ordinal}
-		if e.exploreExpr(state, eid) {
+		if memberExplored := e.exploreGroupMember(state, member, i); memberExplored {
 			// No more rules can ever match this expression, so skip it in
 			// future passes.
-			state.markExprAsFullyExplored(ordinal)
+			state.markMemberAsFullyExplored(i)
 		} else {
-			// If even one expression is not fully explored, then the group is
-			// not fully explored.
+			// If even one member is not fully explored, then the group is not
+			// fully explored.
 			fullyExplored = false
 		}
 	}
 
-	// If all existing group expressions have been fully explored, and no new
-	// ones were added, then group can be skipped in future passes.
-	if fullyExplored && e.mem.ExprCount(group) == int(state.end) {
+	// If new group members were added by the explorer, then the group has not
+	// yet been fully explored.
+	if fullyExplored && member == nil {
 		state.fullyExplored = true
 	}
 	return state
 }
 
+// lookupExploreState returns the optState struct associated with the memo
+// group.
+func (e *explorer) lookupExploreState(grp memo.RelExpr) *exploreState {
+	return &e.o.lookupOptState(grp, props.MinPhysProps).explore
+}
+
 // ensureExploreState allocates the exploration state in the optState struct
 // associated with the memo group, with respect to the min physical props.
-func (e *explorer) ensureExploreState(group memo.GroupID) *exploreState {
-	return &e.o.ensureOptState(group, memo.MinPhysPropsID).explore
+func (e *explorer) ensureExploreState(grp memo.RelExpr) *exploreState {
+	return &e.o.ensureOptState(grp, props.MinPhysProps).explore
 }
 
 // ----------------------------------------------------------------------
@@ -220,29 +225,31 @@ type exploreState struct {
 	// be explored in the current pass. Expressions < start have been partly
 	// explored during previous passes. Expressions >= end are new expressions
 	// added during the current pass.
-	start memo.ExprOrdinal
-	end   memo.ExprOrdinal
+	start int
+	end   int
 
-	// fullyExplored is set to true once all expressions in the group have been
-	// fully explored, and no new expressions will ever be added. Further
-	// exploration of the group can be skipped.
+	// fullyExplored is set to true once all members of the group have been fully
+	// explored, meaning that no new members will ever be added to the group, or
+	// to dependent child groups. Further exploration of the group can be skipped.
 	fullyExplored bool
 
-	// fullyExploredExprs is a set of memo.ExprOrdinal values. Once an
-	// expression has been fully explored, its ordinal is added to this set.
-	fullyExploredExprs util.FastIntSet
+	// fullyExploredMembers is a set of ordinal positions of members within the
+	// memo group. Once a member expression has been fully explored, its ordinal
+	// is added to this set.
+	fullyExploredMembers util.FastIntSet
 }
 
-// isExprFullyExplored is true if the given expression will never match an
-// additional rule, and can therefore be skipped in future exploration passes.
-func (e *exploreState) isExprFullyExplored(ordinal memo.ExprOrdinal) bool {
-	return e.fullyExploredExprs.Contains(int(ordinal))
+// isMemberFullyExplored is true if the member at the given ordinal position
+// within the group will never match an additional rule, and can therefore be
+// skipped in future exploration passes.
+func (e *exploreState) isMemberFullyExplored(ordinal int) bool {
+	return e.fullyExploredMembers.Contains(ordinal)
 }
 
-// markExprAsFullyExplored is called when all possible matching combinations
+// markMemberAsFullyExplored is called when all possible matching combinations
 // have been considered for the subtree rooted at the given expression. Even if
 // there are more exploration passes, this expression will never have new
 // children, grand-children, etc. that might cause it to match another rule.
-func (e *exploreState) markExprAsFullyExplored(ordinal memo.ExprOrdinal) {
-	e.fullyExploredExprs.Add(int(ordinal))
+func (e *exploreState) markMemberAsFullyExplored(ordinal int) {
+	e.fullyExploredMembers.Add(ordinal)
 }

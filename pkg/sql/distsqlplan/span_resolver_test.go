@@ -41,7 +41,6 @@ import (
 // state of caches.
 func TestSpanResolverUsesCaches(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#13525")
 	tc := testcluster.StartTestCluster(t, 4,
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
@@ -316,6 +315,11 @@ func TestMixedDirections(t *testing.T) {
 func setupRanges(
 	db *gosql.DB, s *server.TestServer, cdb *client.DB, t *testing.T,
 ) ([]roachpb.RangeDescriptor, *sqlbase.TableDescriptor) {
+	// Prevent the merge queue from immediately discarding our splits.
+	if _, err := db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false"); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err := db.Exec(`CREATE DATABASE t`); err != nil {
 		t.Fatal(err)
 	}

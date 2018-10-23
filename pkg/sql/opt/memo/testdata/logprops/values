@@ -37,7 +37,7 @@ project
  │    ├── fd: (1)-->(2)
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1)
- └── projections [outer=(1,2)]
+ └── projections
       └── subquery [type=int, outer=(1,2)]
            └── max1-row
                 ├── columns: column1:3(int)
@@ -50,11 +50,11 @@ project
                      ├── outer: (1,2)
                      ├── cardinality: [2 - 2]
                      ├── prune: (3)
-                     ├── tuple [type=tuple{int}, outer=(1)]
-                     │    └── variable: x [type=int, outer=(1)]
-                     └── tuple [type=tuple{int}, outer=(2)]
-                          └── plus [type=int, outer=(2)]
-                               ├── variable: y [type=int, outer=(2)]
+                     ├── tuple [type=tuple{int}]
+                     │    └── variable: x [type=int]
+                     └── tuple [type=tuple{int}]
+                          └── plus [type=int]
+                               ├── variable: y [type=int]
                                └── const: 1 [type=int]
 
 # Single row.

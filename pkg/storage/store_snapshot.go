@@ -24,6 +24,7 @@ import (
 	"go.etcd.io/etcd/raft/raftpb"
 	"golang.org/x/time/rate"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -98,7 +99,8 @@ func assertStrategy(
 // kvBatchSnapshotStrategy is an implementation of snapshotStrategy that streams
 // batches of KV pairs in the BatchRepr format.
 type kvBatchSnapshotStrategy struct {
-	status string
+	raftCfg *base.RaftConfig
+	status  string
 
 	// Fields used when sending snapshots.
 	batchSize int64
@@ -228,7 +230,8 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		if err == nil {
 			logEntries = append(logEntries, bytes)
 			raftLogBytes += int64(len(bytes))
-			if snap.snapType == snapTypePreemptive && raftLogBytes > 4*raftLogMaxSize {
+			if snap.snapType == snapTypePreemptive &&
+				raftLogBytes > 4*kvSS.raftCfg.RaftLogTruncationThreshold {
 				// If the raft log is too large, abort the snapshot instead of
 				// potentially running out of memory. However, if this is a
 				// raft-initiated snapshot (instead of a preemptive one), we
@@ -434,20 +437,35 @@ func (s *Store) canApplySnapshotLocked(
 				if r.RaftStatus() == nil {
 					return true
 				}
+				// TODO(benesch): this check does detect inactivity on replicas with
+				// epoch-based leases. Since the validity of an epoch-based lease is
+				// tied to the owning node's liveness, the lease can be valid well after
+				// the leader of the range has cut off communication with this replica.
+				// Expiration based leases, by contrast, will expire quickly if the
+				// leader of the range stops sending this replica heartbeats.
 				lease, pendingLease := r.GetLease()
 				now := s.Clock().Now()
 				return !r.IsLeaseValid(lease, now) &&
 					(pendingLease == (roachpb.Lease{}) || !r.IsLeaseValid(pendingLease, now))
 			}
-
-			// If the existing range shows no signs of recent activity, give it a GC
-			// run.
+			// We unconditionally send this replica through the GC queue. It's
+			// reasonably likely that the GC queue will do nothing because the replica
+			// needs to split instead, but better to err on the side of queueing too
+			// frequently. Blocking Raft snapshots for too long can wedge a cluster,
+			// and if the replica does need to be GC'd, this might be the only code
+			// path that notices in a timely fashion.
+			//
+			// We're careful to avoid starving out other replicas in the GC queue by
+			// queueing at a low priority unless we can prove that the range is
+			// inactive and thus unlikely to be about to process a split.
+			gcPriority := replicaGCPriorityDefault
 			if inactive(exReplica) {
-				if _, err := s.replicaGCQueue.Add(exReplica, replicaGCPriorityCandidate); err != nil {
-					log.Errorf(ctx, "%s: unable to add replica to GC queue: %s", exReplica, err)
-				} else {
-					msg += "; initiated GC:"
-				}
+				gcPriority = replicaGCPriorityCandidate
+			}
+			if _, err := s.replicaGCQueue.Add(exReplica, gcPriority); err != nil {
+				log.Errorf(ctx, "%s: unable to add replica to GC queue: %s", exReplica, err)
+			} else {
+				msg += "; initiated GC:"
 			}
 		}
 		return nil, errors.Errorf("%s %v", msg, exReplica) // exReplica can be nil
@@ -492,7 +510,9 @@ func (s *Store) receiveSnapshot(
 	var ss snapshotStrategy
 	switch header.Strategy {
 	case SnapshotRequest_KV_BATCH:
-		ss = &kvBatchSnapshotStrategy{}
+		ss = &kvBatchSnapshotStrategy{
+			raftCfg: &s.cfg.RaftConfig,
+		}
 	default:
 		return sendSnapshotError(stream,
 			errors.Errorf("%s,r%d: unknown snapshot strategy: %s",
@@ -568,6 +588,7 @@ func (e *errMustRetrySnapshotDueToTruncation) Error() string {
 // sendSnapshot sends an outgoing snapshot via a pre-opened GRPC stream.
 func sendSnapshot(
 	ctx context.Context,
+	raftCfg *base.RaftConfig,
 	st *cluster.Settings,
 	stream outgoingSnapshotStream,
 	storePool SnapshotStorePool,
@@ -635,6 +656,7 @@ func sendSnapshot(
 	switch header.Strategy {
 	case SnapshotRequest_KV_BATCH:
 		ss = &kvBatchSnapshotStrategy{
+			raftCfg:   raftCfg,
 			batchSize: batchSize,
 			limiter:   limiter,
 			newBatch:  newBatch,

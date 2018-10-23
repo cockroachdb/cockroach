@@ -23,8 +23,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -105,8 +107,8 @@ func makeSpans(
 	if err != nil {
 		t.Fatal(err)
 	}
-	filterExpr := o.Memo().Root()
-	err = c.makeIndexConstraints(&o, filterExpr, p.EvalContext())
+	filters := memo.FiltersExpr{{Condition: o.Memo().RootExpr().(opt.ScalarExpr)}}
+	err = c.makeIndexConstraints(&o, filters, p.EvalContext())
 	if err != nil {
 		t.Fatal(err)
 	}

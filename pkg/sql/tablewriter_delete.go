@@ -284,8 +284,6 @@ func (td *tableDeleter) deleteIndexFast(
 	if traceKV {
 		log.VEventf(ctx, 2, "DelRange %s - %s", resume.Key, resume.EndKey)
 	}
-	// TODO(vivekmenezes): adapt index deletion to use the same GC
-	// deadline / ClearRange fast path that table deletion uses.
 	td.b.DelRange(resume.Key, resume.EndKey, false /* returnKeys */)
 	td.b.Header.MaxSpanRequestKeys = limit
 	if _, err := td.finalize(ctx, autoCommit, traceKV); err != nil {
@@ -295,6 +293,25 @@ func (td *tableDeleter) deleteIndexFast(
 		panic(fmt.Sprintf("%d results returned, expected 1", l))
 	}
 	return td.b.Results[0].ResumeSpan, nil
+}
+
+func (td *tableDeleter) clearIndex(ctx context.Context, idx *sqlbase.IndexDescriptor) error {
+	if idx.IsInterleaved() {
+		return errors.Errorf("unexpected interleaved index %d", idx.ID)
+	}
+
+	sp := td.rd.Helper.TableDesc.IndexSpan(idx.ID)
+
+	// ClearRange cannot be run in a transaction, so create a
+	// non-transactional batch to send the request.
+	b := &client.Batch{}
+	b.AddRawRequest(&roachpb.ClearRangeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    sp.Key,
+			EndKey: sp.EndKey,
+		},
+	})
+	return td.txn.DB().Run(ctx, b)
 }
 
 func (td *tableDeleter) deleteIndexScan(

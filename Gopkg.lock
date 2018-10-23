@@ -277,12 +277,12 @@
   version = "v0.3.0"
 
 [[projects]]
-  digest = "1:947b332573d77e4c1b8b30e54c2d16eb322c03c37036ceb0101d518ff36a8039"
+  digest = "1:8cf9e7bbf5685bb8acdeec86512ad0bfa0ae8eb68dad6aaaa003862a3ae23c06"
   name = "github.com/cockroachdb/apd"
   packages = ["."]
   pruneopts = "UT"
-  revision = "9c2ab8efc9ac66bf4bb79ab6bed4dcd0c709d1b9"
-  version = "v1.1.0"
+  revision = "bced77f817b446cc6f6453d6cab5891e43f9ba17"
+  version = "v2.0.0"
 
 [[projects]]
   branch = "master"
@@ -887,11 +887,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:e3b5cf806b7dbc761ad2f31b739bb0e3f84bc7d164f759ba47a319a36c512417"
+  digest = "1:2f28c15a5368f5921a0fc1c9c4ae140512644c871e751b236222b646b454ac6f"
   name = "github.com/knz/strtime"
   packages = ["."]
   pruneopts = "UT"
-  revision = "813725a7c183ac304d1ed8fb7e37a567733e9c05"
+  revision = "af2256ee352c7e3efc0cdeb388c71e302c1946c8"
 
 [[projects]]
   branch = "master"
@@ -1339,14 +1339,14 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:2750995dfc0b02de879216bf6cab6e57c494df4048e58543fc3798bf6aefe44d"
+  digest = "1:6830d356b8696fd4e7f09b57245dff696d19de8449ba589866e3783e80347e3e"
   name = "go.etcd.io/etcd"
   packages = [
     "raft",
     "raft/raftpb",
   ]
   pruneopts = "UT"
-  revision = "f32bc507658e287a69d89e0e1a4d083a01d9da3e"
+  revision = "b42b39446bc1b563ba58aceda53b6ecad87d73f9"
 
 [[projects]]
   digest = "1:f163a34487229f36dfdb298191d8e17c0e3e6a899aa2cddb020f2ac61ca364ab"
@@ -1710,6 +1710,7 @@
     "github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc",
     "github.com/hashicorp/go-version",
     "github.com/jackc/pgx",
+    "github.com/jackc/pgx/pgtype",
     "github.com/jteeuwen/go-bindata/go-bindata",
     "github.com/kisielk/errcheck",
     "github.com/kisielk/gotool",

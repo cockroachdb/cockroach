@@ -37,6 +37,8 @@ function printLogEventType(
       return "Remove";
     case protos.cockroach.storage.RangeLogEventType.split:
       return "Split";
+    case protos.cockroach.storage.RangeLogEventType.merge:
+      return "Merge";
     default:
       return "Unknown";
   }

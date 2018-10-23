@@ -219,46 +219,8 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 
 	// Read table descriptor for version.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-
 	expectedVersion := tableDesc.Version
 	ctx := context.TODO()
-
-	desc, err := changer.MaybeIncrementVersion(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tableDesc = desc.GetTable()
-	newVersion := tableDesc.Version
-	if newVersion != expectedVersion {
-		t.Fatalf("bad version; e = %d, v = %d", expectedVersion, newVersion)
-	}
-
-	// Check that MaybeIncrementVersion increments the version
-	// correctly.
-	expectedVersion++
-	tableDesc.UpVersion = true
-	if err := kvDB.Put(
-		ctx,
-		sqlbase.MakeDescMetadataKey(tableDesc.ID),
-		sqlbase.WrapDescriptor(tableDesc),
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	desc, err = changer.MaybeIncrementVersion(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	tableDesc = desc.GetTable()
-	savedTableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	newVersion = tableDesc.Version
-	if newVersion != expectedVersion {
-		t.Fatalf("bad version in returned desc; e = %d, v = %d", expectedVersion, newVersion)
-	}
-	newVersion = savedTableDesc.Version
-	if newVersion != expectedVersion {
-		t.Fatalf("bad version in saved desc; e = %d, v = %d", expectedVersion, newVersion)
-	}
 
 	// Check that RunStateMachineBeforeBackfill doesn't do anything
 	// if there are no mutations queued.
@@ -267,7 +229,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	}
 
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	newVersion = tableDesc.Version
+	newVersion := tableDesc.Version
 	if newVersion != expectedVersion {
 		t.Fatalf("bad version; e = %d, v = %d", expectedVersion, newVersion)
 	}
@@ -1474,7 +1436,7 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	params, _ := tests.CreateTestServerParams()
 	const chunkSize = 200
-	var enableAsyncSchemaChanges uint32 = 1
+	var enableAsyncSchemaChanges uint32
 	var attempts int32
 	// attempt 1: write the first chunk of the index.
 	// attempt 2: write the second chunk and hit a unique constraint
@@ -1541,6 +1503,15 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal(err)
 	}
 
+	// The index doesn't exist
+	if _, err := sqlDB.Query(
+		`SELECT v from t.test@foo`,
+	); !testutils.IsError(err, "index .* not found") {
+		t.Fatal(err)
+	}
+
+	// Allow async schema change purge to attempt backfill and error.
+	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
 		t.Fatal(err)
@@ -1554,13 +1525,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		}
 		return nil
 	})
-
-	// The index doesn't exist
-	if _, err := sqlDB.Query(
-		`SELECT v from t.test@foo`,
-	); !testutils.IsError(err, "index .* not found") {
-		t.Fatal(err)
-	}
 
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
@@ -1737,10 +1701,6 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
-	// Add a zone config for the table.
-	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
-		t.Fatal(err)
-	}
 
 	testCases := []struct {
 		sql    string
@@ -1794,46 +1754,39 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatalf("e = %d, v = %d", e, len(tableDesc.Mutations))
 	}
 
-	// Enable async schema change processing.
+	// Enable async schema change processing for purged schema changes.
 	atomic.StoreUint32(&enableAsyncSchemaChanges, 1)
 
-	// Wait until all the mutations have been processed.
-	var rows *gosql.Rows
 	expectedCols := []string{"k", "b", "d"}
+	// Wait until all the mutations have been processed.
 	testutils.SucceedsSoon(t, func() error {
-		// Read table descriptor.
 		tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
 		if len(tableDesc.Mutations) > 0 {
 			return errors.Errorf("%d mutations remaining", len(tableDesc.Mutations))
 		}
-		if len(tableDesc.GCMutations) > 0 {
-			return errors.Errorf("%d gc mutations remaining", len(tableDesc.GCMutations))
-		}
-
-		// Verify that t.public.test has the expected data. Read the table data while
-		// ensuring that the correct table lease is in use.
-		var err error
-		rows, err = sqlDB.Query(`SELECT * from t.test`)
-		if err != nil {
-			t.Fatal(err)
-		}
-		cols, err := rows.Columns()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// Ensure that sql is using the correct table lease.
-		if len(cols) != len(expectedCols) {
-			defer rows.Close()
-			return errors.Errorf("incorrect columns: %v, expected: %v", cols, expectedCols)
-		}
-		if cols[0] != expectedCols[0] || cols[1] != expectedCols[1] {
-			t.Fatalf("incorrect columns: %v", cols)
-		}
 		return nil
 	})
 
+	// Verify that t.public.test has the expected data. Read the table data while
+	// ensuring that the correct table lease is in use.
+	rows, err := sqlDB.Query(`SELECT * from t.test`)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer rows.Close()
+	cols, err := rows.Columns()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Ensure that sql is using the correct table lease.
+	if len(cols) != len(expectedCols) {
+		t.Fatalf("incorrect columns: %v, expected: %v", cols, expectedCols)
+	}
+	if cols[0] != expectedCols[0] || cols[1] != expectedCols[1] {
+		t.Fatalf("incorrect columns: %v", cols)
+	}
+
 	// rows contains the data; verify that it's the right data.
 	vals := make([]interface{}, len(expectedCols))
 	for i := range vals {
@@ -1883,7 +1836,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	// Check that the index on b eventually goes live even though a schema
 	// change in front of it in the queue got purged.
-	rows, err := sqlDB.Query(`SELECT * from t.test@test_b_key`)
+	rows, err = sqlDB.Query(`SELECT * from t.test@test_b_key`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1903,14 +1856,27 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		t.Fatal("SELECT over index 'foo' works")
 	}
 
+	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Add immediate GC TTL to allow index creation purge to complete.
+	if _, err := addImmediateGCZoneConfig(sqlDB, tableDesc.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	testutils.SucceedsSoon(t, func() error {
+		tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+		if len(tableDesc.GCMutations) > 0 {
+			return errors.Errorf("%d gc mutations remaining", len(tableDesc.GCMutations))
+		}
+		return nil
+	})
+
 	ctx := context.TODO()
 
 	// Check that the number of k-v pairs is accurate.
 	if err := checkTableKeyCount(ctx, kvDB, 3, maxValue); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3757,4 +3723,73 @@ func TestSchemaChangeGRPCError(t *testing.T) {
 	if err := checkTableKeyCount(ctx, kvDB, 2, maxValue); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestBlockedSchemaChange tests whether a schema change that
+// has no data backfill processing will be blocked by a schema
+// change that is holding the schema change lease while backfill
+// processing.
+func TestBlockedSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const maxValue = 100
+	notifyBackfill := make(chan struct{})
+	tableRenameDone := make(chan struct{})
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeBackfill: func() error {
+				if notify := notifyBackfill; notify != nil {
+					notifyBackfill = nil
+					close(notify)
+					<-tableRenameDone
+				}
+				return nil
+			},
+		},
+	}
+	s, db, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `
+		CREATE DATABASE t;
+		CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+	`)
+
+	// Bulk insert.
+	if err := bulkInsertIntoTable(db, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.TODO()
+	if err := checkTableKeyCount(ctx, kvDB, 1, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	notification := notifyBackfill
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if _, err := db.Exec(`CREATE INDEX foo ON t.public.test (v)`); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	<-notification
+
+	if _, err := db.Exec(`ALTER TABLE t.test RENAME TO t.newtest`); err != nil {
+		t.Fatal(err)
+	}
+
+	close(tableRenameDone)
+
+	if _, err := db.Query(`SELECT x from t.test`); !testutils.IsError(err, `relation "t.test" does not exist`) {
+		t.Fatalf("err = %+v", err)
+	}
+
+	wg.Wait()
 }

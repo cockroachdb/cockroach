@@ -32,12 +32,11 @@ sort
 
 # Test sort on 0 rows.
 opt
-SELECT f FROM a WHERE k < 0 AND k > 10 ORDER BY f DESC
+SELECT f FROM a WHERE k IN () ORDER BY f DESC
 ----
 values
  ├── columns: f:2(float)
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0]
- ├── cost: 0
  ├── key: ()
  └── fd: ()-->(2)

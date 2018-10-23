@@ -15,6 +15,7 @@
 package sql
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -67,8 +68,13 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 	name *ObjectName, flags ObjectLookupFlags,
 ) (*ObjectDescriptor, *DatabaseDescriptor, error) {
 	if scEntry, ok := l.vt.getVirtualSchemaEntry(name.Schema()); ok {
-		if t, ok := scEntry.defs[name.Table()]; ok {
+		tableName := name.Table()
+		if t, ok := scEntry.defs[tableName]; ok {
 			return t.desc, nil, nil
+		}
+		if _, ok := scEntry.allTableNames[tableName]; ok {
+			return nil, nil, pgerror.Unimplemented(name.Schema()+"."+tableName,
+				"virtual schema table not implemented: %s.%s", name.Schema(), tableName)
 		}
 
 		if flags.required {

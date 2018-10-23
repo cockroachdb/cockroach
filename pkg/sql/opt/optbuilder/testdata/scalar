@@ -830,7 +830,7 @@ project
            │         │    ├── columns: a:2(int!null)
            │         │    ├── scan x
            │         │    │    └── columns: a:2(int!null)
-           │         │    └── filters [type=bool]
+           │         │    └── filters
            │         │         └── eq [type=bool]
            │         │              ├── variable: a [type=int]
            │         │              └── variable: b [type=int]
@@ -935,7 +935,7 @@ project
            │         │         │    └── function: generate_series [type=int]
            │         │         │         ├── const: 1 [type=int]
            │         │         │         └── const: 100 [type=int]
-           │         │         └── true [type=bool]
+           │         │         └── filters (true)
            │         └── aggregations
            │              └── array-agg [type=int[]]
            │                   └── variable: generate_series [type=int]
@@ -1031,3 +1031,29 @@ tuple [type=tuple{int, string, float}]
  └── indirection [type=float]
       ├── variable: @3 [type=float[]]
       └── variable: @4 [type=int]
+
+build-scalar vars=(int,string,int[])
+(
+    (@1 IS OF (INT), @1 IS OF (INT, STRING), @1 IS OF (STRING)),
+    (@1 IS NOT OF (INT), @1 IS NOT OF (INT, STRING), @1 IS NOT OF (STRING)),
+    (@2 IS NOT OF (INT), @2 IS NOT OF (INT, STRING), @2 IS NOT OF (STRING)),
+    (@3 IS NOT OF (INT[]), @3 IS OF (INT[]), @3 IS OF (STRING[]))
+)
+----
+tuple [type=tuple{tuple{bool, bool, bool}, tuple{bool, bool, bool}, tuple{bool, bool, bool}, tuple{bool, bool, bool}}]
+ ├── tuple [type=tuple{bool, bool, bool}]
+ │    ├── true [type=bool]
+ │    ├── true [type=bool]
+ │    └── false [type=bool]
+ ├── tuple [type=tuple{bool, bool, bool}]
+ │    ├── false [type=bool]
+ │    ├── false [type=bool]
+ │    └── true [type=bool]
+ ├── tuple [type=tuple{bool, bool, bool}]
+ │    ├── true [type=bool]
+ │    ├── false [type=bool]
+ │    └── false [type=bool]
+ └── tuple [type=tuple{bool, bool, bool}]
+      ├── false [type=bool]
+      ├── true [type=bool]
+      └── false [type=bool]

@@ -52,7 +52,7 @@ type Physical struct {
 
 // MinPhysProps are the default physical properties that require nothing and
 // provide nothing.
-var MinPhysProps Physical
+var MinPhysProps = &Physical{}
 
 // Defined is true if any physical property is defined. If none is defined, then
 // this is an instance of MinPhysProps.

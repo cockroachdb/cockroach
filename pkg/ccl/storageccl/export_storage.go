@@ -465,7 +465,7 @@ func (h *httpStorage) req(
 	}
 	resp, err := h.client.Do(req)
 	if err != nil {
-		return nil, errors.Wrapf(err, "error exeucting request %s %q", method, url)
+		return nil, errors.Wrapf(err, "error executing request %s %q", method, url)
 	}
 	switch resp.StatusCode {
 	case 200, 201, 204:

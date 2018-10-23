@@ -949,7 +949,7 @@ func ContainsVars(evalCtx *EvalContext, expr Expr) bool {
 var DecimalOne DDecimal
 
 func init() {
-	DecimalOne.SetCoefficient(1)
+	DecimalOne.SetFinite(1, 0)
 }
 
 // ReType ensures that the given numeric expression evaluates

@@ -296,6 +296,17 @@ func TestReportUsage(t *testing.T) {
 		) {
 			t.Fatal(err)
 		}
+		if _, err := db.Exec(`SELECT crdb_internal.set_vmodule('invalid')`); !testutils.IsError(
+			err, "comma-separated list",
+		) {
+			t.Fatal(err)
+		}
+		// If the vtable ever gets supported, change to pick one that is not supported yet.
+		if _, err := db.Exec(`SELECT * FROM pg_catalog.pg_stat_wal_receiver`); !testutils.IsError(
+			err, "virtual schema table not implemented",
+		) {
+			t.Fatal(err)
+		}
 		if _, err := db.Exec(`SELECT 2/0`); !testutils.IsError(
 			err, "division by zero",
 		) {
@@ -503,66 +514,43 @@ func TestReportUsage(t *testing.T) {
 			break
 		}
 	}
-
-	if expected, actual := 4, len(r.last.FeatureUsage); expected != actual {
-		t.Fatalf("expected %d feature usage counts, got %d: %v", expected, actual, r.last.FeatureUsage)
-	}
-	for key, expected := range map[string]int32{
-		"test.a":         1,
-		"test.b":         2,
-		"test.c":         3,
-		"internalerror.": 10,
-	} {
-		if got, ok := r.last.FeatureUsage[key]; !ok {
-			t.Fatalf("expected report of feature %q", key)
-		} else if got != expected {
-			t.Fatalf("expected reported value of feature %q to be %d not %d", key, expected, got)
-		}
-	}
-
-	if expected, actual := 6, len(r.last.ErrorCounts); expected != actual {
-		t.Fatalf("expected %d error codes counts in report, got %d (%v)", expected, actual, r.last.ErrorCounts)
-	}
-
-	// This test would be infuriating if it had to be updated on every edit to
-	// builtins.go that changed the line number of force_error, so just scrub the
-	// line number here.
-	for k := range r.last.ErrorCounts {
-		if strings.HasPrefix(k, "builtins.go") {
-			r.last.ErrorCounts["builtins.go"] = r.last.ErrorCounts[k]
-			delete(r.last.ErrorCounts, k)
+	for k := range r.last.FeatureUsage {
+		if strings.HasPrefix(k, "othererror.builtins.go") {
+			r.last.FeatureUsage["othererror.builtins.go"] = r.last.FeatureUsage[k]
+			delete(r.last.FeatureUsage, k)
 			break
 		}
 	}
 
-	for code, expected := range map[string]int64{
-		pgerror.CodeSyntaxError:              10,
-		pgerror.CodeFeatureNotSupportedError: 30,
-		pgerror.CodeDivisionByZeroError:      20,
-		"blah":        10,
-		"builtins.go": 10,
-	} {
-		if actual := r.last.ErrorCounts[code]; expected != actual {
-			t.Fatalf(
-				"unexpected %d hits to error code %q, got %d from %v",
-				expected, code, actual, r.last.ErrorCounts,
-			)
-		}
-	}
+	expectedFeatureUsage := map[string]int32{
+		"test.a": 1,
+		"test.b": 2,
+		"test.c": 3,
 
-	if expected, actual := 3, len(r.last.UnimplementedErrors); expected != actual {
-		t.Fatalf("expected %d unimplemented feature errors, got %d", expected, actual)
+		"unimplemented.pg_catalog.pg_stat_wal_receiver":      10,
+		"unimplemented.syntax.alter table rename constraint": 10,
+		"unimplemented.syntax.interval with precision":       10,
+		"unimplemented.#9148":                                10,
+		"internalerror.":                                     10,
+		"othererror.builtins.go":                             10,
+		"othererror." +
+			pgerror.CodeDataExceptionError +
+			".crdb_internal.set_vmodule()": 10,
+		"errorcodes.blah":                                    10,
+		"errorcodes." + pgerror.CodeDataExceptionError:       10,
+		"errorcodes." + pgerror.CodeInternalError:            10,
+		"errorcodes." + pgerror.CodeSyntaxError:              10,
+		"errorcodes." + pgerror.CodeFeatureNotSupportedError: 10,
+		"errorcodes." + pgerror.CodeDivisionByZeroError:      10,
 	}
-
-	for _, feat := range []string{
-		"syntax.alter table rename constraint",
-		"syntax.interval with precision",
-		"#9148"} {
-		if expected, actual := int64(10), r.last.UnimplementedErrors[feat]; expected != actual {
-			t.Fatalf(
-				"unexpected %d hits to unimplemented %q, got %d from %v",
-				expected, feat, actual, r.last.UnimplementedErrors,
-			)
+	if expected, actual := len(expectedFeatureUsage), len(r.last.FeatureUsage); expected != actual {
+		t.Fatalf("expected %d feature usage counts, got %d: %v", expected, actual, r.last.FeatureUsage)
+	}
+	for key, expected := range expectedFeatureUsage {
+		if got, ok := r.last.FeatureUsage[key]; !ok {
+			t.Fatalf("expected report of feature %q", key)
+		} else if got != expected {
+			t.Fatalf("expected reported value of feature %q to be %d not %d", key, expected, got)
 		}
 	}
 
@@ -685,6 +673,7 @@ func TestReportUsage(t *testing.T) {
 		`[true,false,true] SELECT _ / _`,
 		`[true,false,true] SELECT crdb_internal.force_assertion_error(_)`,
 		`[true,false,true] SELECT crdb_internal.force_error(_, $1)`,
+		`[true,false,true] SELECT crdb_internal.set_vmodule(_)`,
 		`[true,true,false] SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
 		`[true,true,false] SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
 		`[true,true,false] SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
@@ -729,6 +718,7 @@ func TestReportUsage(t *testing.T) {
 			`SELECT _ / _`,
 			`SELECT crdb_internal.force_assertion_error(_)`,
 			`SELECT crdb_internal.force_error(_, $1)`,
+			`SELECT crdb_internal.set_vmodule(_)`,
 			`SET CLUSTER SETTING "server.time_until_store_dead" = _`,
 			`SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
 			`SET application_name = _`,

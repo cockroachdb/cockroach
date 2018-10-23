@@ -448,6 +448,7 @@ func init() {
 		VarFlag(f, &sqlCtx.setStmts, cliflags.Set)
 		VarFlag(f, &sqlCtx.execStmts, cliflags.Execute)
 		BoolFlag(f, &sqlCtx.safeUpdates, cliflags.SafeUpdates, sqlCtx.safeUpdates)
+		BoolFlag(f, &sqlCtx.debugMode, cliflags.CliDebugMode, sqlCtx.debugMode)
 	}
 
 	VarFlag(dumpCmd.Flags(), &dumpCtx.dumpMode, cliflags.DumpMode)
@@ -558,6 +559,13 @@ func extraClientFlagInit() {
 		serverHTTPAddr = startCtx.serverListenAddr
 	}
 	serverCfg.HTTPAddr = net.JoinHostPort(serverHTTPAddr, serverHTTPPort)
+
+	// If CLI/SQL debug mode is requested, override the echo mode here,
+	// so that the initial client/server handshake reveals the SQL being
+	// sent.
+	if sqlCtx.debugMode {
+		sqlCtx.echo = true
+	}
 }
 
 func setDefaultStderrVerbosity(cmd *cobra.Command, defaultSeverity log.Severity) error {

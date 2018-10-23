@@ -186,24 +186,22 @@ limit
 build
 SELECT b FROM t ORDER BY a DESC, b ASC
 ----
-sort
+project
  ├── columns: b:2(int)
  ├── ordering: -1,+2
- └── project
-      ├── columns: a:1(int!null) b:2(int)
-      └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── scan t,rev
+      ├── columns: a:1(int!null) b:2(int) c:3(bool)
+      └── ordering: -1
 
 build
 SELECT b FROM t ORDER BY a DESC, b DESC
 ----
-sort
+project
  ├── columns: b:2(int)
  ├── ordering: -1,-2
- └── project
-      ├── columns: a:1(int!null) b:2(int)
-      └── scan t
-           └── columns: a:1(int!null) b:2(int) c:3(bool)
+ └── scan t,rev
+      ├── columns: a:1(int!null) b:2(int) c:3(bool)
+      └── ordering: -1
 
 # both presentation and ordering
 build
@@ -254,19 +252,19 @@ sort
 build
 SELECT a, b FROM t WHERE b = 7 ORDER BY b, a
 ----
-sort
+project
  ├── columns: a:1(int!null) b:2(int!null)
  ├── ordering: +2,+1
- └── project
-      ├── columns: a:1(int!null) b:2(int!null)
-      └── select
-           ├── columns: a:1(int!null) b:2(int!null) c:3(bool)
-           ├── scan t
-           │    └── columns: a:1(int!null) b:2(int) c:3(bool)
-           └── filters [type=bool]
-                └── eq [type=bool]
-                     ├── variable: b [type=int]
-                     └── const: 7 [type=int]
+ └── select
+      ├── columns: a:1(int!null) b:2(int!null) c:3(bool)
+      ├── ordering: +1 opt(2)
+      ├── scan t
+      │    ├── columns: a:1(int!null) b:2(int) c:3(bool)
+      │    └── ordering: +1 opt(2)
+      └── filters
+           └── eq [type=bool]
+                ├── variable: b [type=int]
+                └── const: 7 [type=int]
 
 build
 SELECT a, b FROM t ORDER BY b, a DESC
@@ -291,7 +289,7 @@ sort
       │    ├── columns: a:1(int!null) b:2(int!null) c:3(bool)
       │    ├── scan t
       │    │    └── columns: a:1(int!null) b:2(int) c:3(bool)
-      │    └── filters [type=bool]
+      │    └── filters
       │         └── eq [type=bool]
       │              ├── variable: b [type=int]
       │              └── const: 7 [type=int]
@@ -659,11 +657,12 @@ sort
 build
 SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
-sort
+project
  ├── columns: a:1(int!null) b:2(int!null)
  ├── ordering: +2,+3,-1
- └── project
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ └── sort
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+      ├── ordering: +2,+3
       └── scan abc
            └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
 
@@ -719,7 +718,7 @@ sort
            ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
            ├── scan abc
            │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
-           └── filters [type=bool]
+           └── filters
                 └── eq [type=bool]
                      ├── variable: b [type=int]
                      └── const: 2 [type=int]
@@ -736,7 +735,7 @@ sort
            ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
            ├── scan abc
            │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
-           └── filters [type=bool]
+           └── filters
                 └── eq [type=bool]
                      ├── variable: b [type=int]
                      └── const: 2 [type=int]
@@ -744,21 +743,22 @@ sort
 build
 SELECT * FROM (SELECT b, c FROM abc WHERE a=1 ORDER BY a,b) ORDER BY b,c
 ----
-sort
+project
  ├── columns: b:2(int!null) c:3(int!null)
  ├── ordering: +2,+3
  └── project
-      ├── columns: b:2(int!null) c:3(int!null)
-      └── project
-           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-           └── select
-                ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
-                ├── scan abc
-                │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
-                └── filters [type=bool]
-                     └── eq [type=bool]
-                          ├── variable: a [type=int]
-                          └── const: 1 [type=int]
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      ├── ordering: +2,+3 opt(1)
+      └── select
+           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           ├── ordering: +2,+3 opt(1)
+           ├── scan abc
+           │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           │    └── ordering: +2,+3 opt(1)
+           └── filters
+                └── eq [type=bool]
+                     ├── variable: a [type=int]
+                     └── const: 1 [type=int]
 
 build
 SELECT a FROM abc ORDER BY INDEX abc@bc
@@ -942,24 +942,22 @@ sort
 build
 SELECT a FROM abcd ORDER BY INDEX abcd@abc
 ----
-sort
+project
  ├── columns: a:1(int!null)
  ├── ordering: +1,+2,+3
- └── project
-      ├── columns: a:1(int!null) b:2(int) c:3(int)
-      └── scan abcd
-           └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+ └── scan abcd
+      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+      └── ordering: +1
 
 build
 SELECT a FROM abcd ORDER BY INDEX abcd@abc DESC
 ----
-sort
+project
  ├── columns: a:1(int!null)
  ├── ordering: -1,-2,-3
- └── project
-      ├── columns: a:1(int!null) b:2(int) c:3(int)
-      └── scan abcd
-           └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+ └── scan abcd,rev
+      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+      └── ordering: -1
 
 build
 SELECT a FROM abcd AS foo ORDER BY INDEX abcd@abc DESC
@@ -1073,13 +1071,12 @@ sort
 build
 SELECT a FROM abcd ORDER BY a, b, c
 ----
-sort
+project
  ├── columns: a:1(int!null)
  ├── ordering: +1,+2,+3
- └── project
-      ├── columns: a:1(int!null) b:2(int) c:3(int)
-      └── scan abcd
-           └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+ └── scan abcd
+      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+      └── ordering: +1
 
 build
 SELECT ARRAY[a] FROM abcd ORDER BY 1

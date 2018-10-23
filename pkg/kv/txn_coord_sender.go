@@ -566,6 +566,11 @@ func (tc *TxnCoordSender) commitReadOnlyTxnLocked(
 		return roachpb.NewError(
 			roachpb.NewTransactionStatusError("deadline exceeded before transaction finalization"))
 	}
+	tc.mu.txnState = txnFinalized
+	// Mark the transaction as committed so that, in case this commit is done by
+	// the closure passed to db.Txn()), db.Txn() doesn't attempt to commit again.
+	// Also so that the correct metric gets incremented.
+	tc.mu.txn.Status = roachpb.COMMITTED
 	tc.cleanupTxnLocked(ctx)
 	return nil
 }

@@ -71,7 +71,7 @@ func TestRegistryRun(t *testing.T) {
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
-			code := r.Run(c.filters, defaultParallelism)
+			code := r.Run(c.filters, defaultParallelism, "" /* artifactsDir */, "myuser")
 			if c.expected != code {
 				t.Fatalf("expected code %d, but found code %d. Filters: %s", c.expected, code, c.filters)
 			}
@@ -136,7 +136,7 @@ func TestRegistryStatus(t *testing.T) {
 			}
 		},
 	})
-	r.Run([]string{"status"}, defaultParallelism)
+	r.Run([]string{"status"}, defaultParallelism, "" /* artifactsDir */, "myuser")
 
 	status := buf.String()
 	if !waitingRE.MatchString(status) {
@@ -170,7 +170,7 @@ func TestRegistryStatusUnknown(t *testing.T) {
 			}
 		},
 	})
-	r.Run([]string{"status"}, defaultParallelism)
+	r.Run([]string{"status"}, defaultParallelism, "" /* artifactsDir */, "myuser")
 
 	status := buf.String()
 	if !unknownRE.MatchString(status) {
@@ -196,7 +196,7 @@ func TestRegistryRunTimeout(t *testing.T) {
 			<-ctx.Done()
 		},
 	})
-	r.Run([]string{"timeout"}, defaultParallelism)
+	r.Run([]string{"timeout"}, defaultParallelism, "" /* artifactsDir */, "myuser")
 
 	out := buf.String()
 	if !timeoutRE.MatchString(out) {
@@ -222,7 +222,7 @@ func TestRegistryRunSubTestFailed(t *testing.T) {
 		}},
 	})
 
-	r.Run([]string{"."}, defaultParallelism)
+	r.Run([]string{"."}, defaultParallelism, "" /* artifactsDir */, "myuser")
 	out := buf.String()
 	if !failedRE.MatchString(out) {
 		t.Fatalf("unable to find \"FAIL: parent\" message:\n%s", out)
@@ -251,7 +251,7 @@ func TestRegistryRunClusterExpired(t *testing.T) {
 			panic("not reached")
 		},
 	})
-	r.Run([]string{"expired"}, defaultParallelism)
+	r.Run([]string{"expired"}, defaultParallelism, "" /* artifactsDir */, "myuser")
 
 	out := buf.String()
 	if !expiredRE.MatchString(out) {
@@ -259,7 +259,7 @@ func TestRegistryRunClusterExpired(t *testing.T) {
 	}
 }
 
-func TestRegistryVerifyClusterName(t *testing.T) {
+func TestRegistryVerifyValidClusterName(t *testing.T) {
 	testCases := []struct {
 		testNames   []string
 		expectedErr string
@@ -268,15 +268,15 @@ func TestRegistryVerifyClusterName(t *testing.T) {
 		{[]string{"HELLO", "hello"}, "have equivalent nightly cluster names"},
 		{[]string{"hel+lo", "hel++lo"}, "have equivalent nightly cluster names"},
 		{[]string{"hello+"}, "must match regex"},
-		{[]string{strings.Repeat("y", 46)}, ""},
-		{[]string{strings.Repeat("y", 47)}, "must match regex"},
+		{[]string{strings.Repeat("y", 41)}, ""},
+		{[]string{strings.Repeat("y", 42)}, "must match regex"},
 	}
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			r := newRegistry()
 			var err error
 			for _, n := range c.testNames {
-				err = r.verifyClusterName(n)
+				err = r.verifyValidClusterName(n)
 			}
 			if !testutils.IsError(err, c.expectedErr) {
 				t.Fatalf("expected %s, but found %v", c.expectedErr, err)
@@ -452,7 +452,7 @@ func TestRegistryMinVersion(t *testing.T) {
 			if err := r.setBuildVersion(c.buildVersion); err != nil {
 				t.Fatal(err)
 			}
-			r.Run(nil /* filter */, defaultParallelism)
+			r.Run(nil /* filter */, defaultParallelism, "" /* artifactsDir */, "myuser")
 			if c.expectedA != runA || c.expectedB != runB {
 				t.Fatalf("expected %t,%t, but got %t,%t\n%s",
 					c.expectedA, c.expectedB, runA, runB, buf.String())

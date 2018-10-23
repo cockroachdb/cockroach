@@ -48,49 +48,6 @@ func TestStats(t *testing.T) {
 	runDataDrivenTest(t, "testdata/stats/", flags)
 }
 
-// Ensure that an independent copy of the memo is created by InitFrom.
-func TestMemoInitFrom(t *testing.T) {
-	catalog := testcat.New()
-	_, err := catalog.ExecuteDDL("CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX (c))")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	tester := testutils.NewOptTester(catalog, "SELECT a, b+1 FROM abc WHERE c='foo'")
-	ev, err := tester.Optimize()
-	if err != nil {
-		t.Fatal(err)
-	}
-	mem1 := ev.Memo()
-
-	// Copy the memo and ensure that the copy is the same.
-	var mem2 memo.Memo
-	mem2.InitFrom(mem1)
-	mem2Str := mem2.String()
-	if mem2Str != mem1.String() {
-		t.Errorf("expected: %s, actual: %s", mem1.String(), mem2Str)
-	}
-	if mem2.MemoryEstimate() != mem1.MemoryEstimate() {
-		t.Errorf("expected: %d, actual: %d", mem1.MemoryEstimate(), mem2.MemoryEstimate())
-	}
-
-	// Update the original memo with a new query, and make sure the first copy is
-	// unaffected.
-	tester = testutils.NewOptTester(catalog, "SELECT column1 FROM (VALUES (1), (2))")
-	ev, err = tester.Optimize()
-	if err != nil {
-		t.Fatal(err)
-	}
-	mem3 := ev.Memo()
-	mem1.InitFrom(mem3)
-	if mem1.String() != mem3.String() {
-		t.Errorf("expected: %s, actual: %s", mem3.String(), mem1.String())
-	}
-	if mem2.String() != mem2Str {
-		t.Errorf("expected: %s, actual: %s", mem2Str, mem2.String())
-	}
-}
-
 func TestMemoIsStale(t *testing.T) {
 	catalog := testcat.New()
 	_, err := catalog.ExecuteDDL("CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX (c))")

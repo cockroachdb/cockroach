@@ -920,3 +920,8 @@ sort                      ·            ·                 (a)                  
 ·                         table        kv@primary        ·                                        ·
 ·                         spans        ALL               ·                                        ·
 ·                         filter       v IS NOT NULL     ·                                        ·
+
+# Limitation test for #26349
+statement error HAVING clause without FROM
+SELECT 1 HAVING false
+

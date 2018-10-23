@@ -24,14 +24,16 @@ import (
 // equivalent expressions and adds them to the memo.
 type explorerGen struct {
 	compiled *lang.CompiledExpr
+	md       *metadata
 	w        *matchWriter
-	ruleGen  ruleGen
+	ruleGen  newRuleGen
 }
 
 func (g *explorerGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	g.compiled = compiled
+	g.md = newMetadata(compiled, "xform")
 	g.w = &matchWriter{writer: w}
-	g.ruleGen.init(compiled, g.w)
+	g.ruleGen.init(compiled, g.md, g.w)
 
 	g.w.writeIndent("package xform\n\n")
 
@@ -49,13 +51,16 @@ func (g *explorerGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 // for each define statement that has an explore rule defined. The code is
 // similar to this:
 //
-//   func (_e *explorer) exploreExpr(
-//     _state *exploreState, _eid memo.ExprID,
+//   func (_e *explorer) exploreGroupMember(
+//     state *exploreState,
+//     member memo.RelExpr,
+//     ordinal int,
 //   ) (_fullyExplored bool) {
-//     _expr := _e.mem.Expr(_eid)
-//     switch _expr.Operator() {
-//       case opt.ScanOp: return _e.exploreScan(_state, _eid)
-//       case opt.SelectOp: return _e.exploreSelect(_state, _eid)
+//     switch t := member.(type) {
+//       case *memo.ScanNode:
+//         return _e.exploreScan(state, t, ordinal)
+//       case *memo.SelectNode:
+//         return _e.exploreSelect(state, t, ordinal)
 //     }
 //
 //     // No rules for other operator types.
@@ -63,16 +68,21 @@ func (g *explorerGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 //   }
 //
 func (g *explorerGen) genDispatcher() {
-	g.w.nestIndent("func (_e *explorer) exploreExpr(_state *exploreState, _eid memo.ExprID) (_fullyExplored bool) {\n")
-	g.w.writeIndent("_expr := _e.mem.Expr(_eid)\n")
-	g.w.writeIndent("switch _expr.Operator() {\n")
+	g.w.nestIndent("func (_e *explorer) exploreGroupMember(\n")
+	g.w.writeIndent("state *exploreState,\n")
+	g.w.writeIndent("member memo.RelExpr,\n")
+	g.w.writeIndent("ordinal int,\n")
+	g.w.unnest(") (_fullyExplored bool)")
+	g.w.nest(" {\n")
+	g.w.writeIndent("switch t := member.(type) {\n")
 
 	for _, define := range g.compiled.Defines {
 		// Only include exploration rules.
 		rules := g.compiled.LookupMatchingRules(string(define.Name)).WithTag("Explore")
 		if len(rules) > 0 {
-			format := "case opt.%sOp: return _e.explore%s(_state, _eid)\n"
-			g.w.writeIndent(format, define.Name, define.Name)
+			opTyp := g.md.typeOf(define)
+			format := "case *%s: return _e.explore%s(state, t, ordinal)\n"
+			g.w.writeIndent(format, opTyp.name, define.Name)
 		}
 	}
 
@@ -85,8 +95,11 @@ func (g *explorerGen) genDispatcher() {
 // genRuleFuncs generates a method for each operator that has at least one
 // explore rule defined. The code is similar to this:
 //
-//   func (_e *explorer) exploreScan(_rootState *exploreState, _root memo.ExprID) (_fullyExplored bool) {
-//     _rootExpr := _e.mem.Expr(_root).AsScan()
+//   func (_e *explorer) exploreScan(
+//     _rootState *exploreState,
+//     _root *memo.ScanNode,
+//     _rootOrd int,
+//   ) (_fullyExplored bool) {
 //     _fullyExplored = true
 //
 //     ... exploration rule code goes here ...
@@ -101,9 +114,14 @@ func (g *explorerGen) genRuleFuncs() {
 			continue
 		}
 
-		format := "func (_e *explorer) explore%s(_rootState *exploreState, _root memo.ExprID) (_fullyExplored bool) {\n"
-		g.w.nestIndent(format, define.Name)
-		g.w.writeIndent("_rootExpr := _e.mem.Expr(_root).As%s()\n", define.Name)
+		opTyp := g.md.typeOf(define)
+
+		g.w.nestIndent("func (_e *explorer) explore%s(\n", define.Name)
+		g.w.writeIndent("_rootState *exploreState,\n")
+		g.w.writeIndent("_root *%s,\n", opTyp.name)
+		g.w.writeIndent("_rootOrd int,\n")
+		g.w.unnest(") (_fullyExplored bool)")
+		g.w.nest(" {\n")
 		g.w.writeIndent("_fullyExplored = true\n\n")
 
 		sortRulesByPriority(rules)

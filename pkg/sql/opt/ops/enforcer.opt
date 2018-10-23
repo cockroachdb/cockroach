@@ -10,11 +10,11 @@
 #            they can be easily distinguished from Scalar and Relational
 #            operators.
 
+
 # Sort enforces the ordering of rows returned by its input expression. Rows can
 # be sorted by one or more of the input columns, each of which can be sorted in
 # either ascending or descending order. See the Ordering field in the
 # PhysicalProps struct.
 [Enforcer]
 define Sort {
-    Input Expr
 }

@@ -22,7 +22,8 @@
 # enabling Any filter conditions to be pushed down into scans.
 #
 # This rule is low priority so that it runs after the PushSelectIntoProject
-# rule, since that rule is cheaper to match and replace.
+# and MergeProjectProject rules, since those rules are cheaper to match and
+# replace.
 #
 # Example:
 #   SELECT * FROM (SELECT x+1 AS x2 FROM xy) WHERE x2=10
@@ -33,17 +34,19 @@
 (Select
     (Project
         $input:*
-        $projections:* & (CanInline $projections)
+        $projections:* & (CanInlineProjections $projections)
+        $passthrough:*
     )
-    $filter:* & ^(HasCorrelatedSubquery $filter)
+    $filters:* & ^(FilterHasCorrelatedSubquery $filters)
 )
 =>
 (Project
     (Select
         $input
-        (InlineProjections $filter $projections)
+        (InlineSelectProject $filters $projections)
     )
     $projections
+    $passthrough
 )
 
 # InlineProjectInProject folds an inner Project operator into an outer Project
@@ -62,11 +65,9 @@
 #
 [InlineProjectInProject, Normalize, LowPriority]
 (Project
-    $input:(Project $innerInput:* $innerProjections:*)
-    $projections:* & ^(HasDuplicateRefs $projections)
+    $input:(Project)
+    $projections:*
+    $passthrough:* & ^(HasDuplicateRefs $projections $passthrough)
 )
 =>
-(Project
-    $innerInput
-    (InlineProjections $projections $innerProjections)
-)
+(InlineProjectProject $input $projections $passthrough)

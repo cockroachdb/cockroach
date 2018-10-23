@@ -55,6 +55,9 @@ const (
 
 const defaultPromptPattern = "%n@%M/%/%x>"
 
+// debugPromptPattern avoids substitution patterns that require a db roundtrip.
+const debugPromptPattern = "%n@%M>"
+
 // sqlShellCmd opens a sql shell.
 var sqlShellCmd = &cobra.Command{
 	Use:   "sql [options]",
@@ -81,6 +84,9 @@ type cliState struct {
 	errExit bool
 	// Determines whether to perform client-side syntax checking.
 	checkSyntax bool
+	// smartPrompt indicates whether to detect the txn status and offer
+	// multi-line statements at the start of fresh transactions.
+	smartPrompt bool
 
 	// The prompt at the beginning of a multi-line entry.
 	fullPrompt string
@@ -258,10 +264,10 @@ var options = map[string]struct {
 	display func(c *cliState) string
 }{
 	`auto_trace`: {
-		"automatically run statement tracing on each executed statement",
-		false,
-		false,
-		func(c *cliState, val string) error {
+		description:               "automatically run statement tracing on each executed statement",
+		isBoolean:                 false,
+		validDuringMultilineEntry: false,
+		set: func(c *cliState, val string) error {
 			val = strings.ToLower(strings.TrimSpace(val))
 			switch val {
 			case "false", "0", "off":
@@ -274,11 +280,11 @@ var options = map[string]struct {
 			}
 			return nil
 		},
-		func(c *cliState) error {
+		reset: func(c *cliState) error {
 			c.autoTrace = ""
 			return nil
 		},
-		func(c *cliState) string {
+		display: func(c *cliState) string {
 			if c.autoTrace == "" {
 				return "off"
 			}
@@ -286,13 +292,13 @@ var options = map[string]struct {
 		},
 	},
 	`display_format`: {
-		"the output format for tabular data (table, csv, tsv, html, sql, records, raw)",
-		false,
-		true,
-		func(_ *cliState, val string) error {
+		description:               "the output format for tabular data (table, csv, tsv, html, sql, records, raw)",
+		isBoolean:                 false,
+		validDuringMultilineEntry: true,
+		set: func(_ *cliState, val string) error {
 			return cliCtx.tableDisplayFormat.Set(val)
 		},
-		func(_ *cliState) error {
+		reset: func(_ *cliState) error {
 			displayFormat := tableDisplayTSV
 			if cliCtx.terminalOutput {
 				displayFormat = tableDisplayTable
@@ -300,53 +306,61 @@ var options = map[string]struct {
 			cliCtx.tableDisplayFormat = displayFormat
 			return nil
 		},
-		func(_ *cliState) string { return cliCtx.tableDisplayFormat.String() },
+		display: func(_ *cliState) string { return cliCtx.tableDisplayFormat.String() },
 	},
 	`echo`: {
-		"show SQL queries before they are sent to the server",
-		true,
-		false,
-		func(_ *cliState, _ string) error { sqlCtx.echo = true; return nil },
-		func(_ *cliState) error { sqlCtx.echo = false; return nil },
-		func(_ *cliState) string { return strconv.FormatBool(sqlCtx.echo) },
+		description:               "show SQL queries before they are sent to the server",
+		isBoolean:                 true,
+		validDuringMultilineEntry: false,
+		set:     func(_ *cliState, _ string) error { sqlCtx.echo = true; return nil },
+		reset:   func(_ *cliState) error { sqlCtx.echo = false; return nil },
+		display: func(_ *cliState) string { return strconv.FormatBool(sqlCtx.echo) },
 	},
 	`errexit`: {
-		"exit the shell upon a query error",
-		true,
-		true,
-		func(c *cliState, _ string) error { c.errExit = true; return nil },
-		func(c *cliState) error { c.errExit = false; return nil },
-		func(c *cliState) string { return strconv.FormatBool(c.errExit) },
+		description:               "exit the shell upon a query error",
+		isBoolean:                 true,
+		validDuringMultilineEntry: true,
+		set:     func(c *cliState, _ string) error { c.errExit = true; return nil },
+		reset:   func(c *cliState) error { c.errExit = false; return nil },
+		display: func(c *cliState) string { return strconv.FormatBool(c.errExit) },
 	},
 	`check_syntax`: {
-		"check the SQL syntax before running a query (needs SHOW SYNTAX support on the server)",
-		true,
-		false,
-		func(c *cliState, _ string) error { c.checkSyntax = true; return nil },
-		func(c *cliState) error { c.checkSyntax = false; return nil },
-		func(c *cliState) string { return strconv.FormatBool(c.checkSyntax) },
+		description:               "check the SQL syntax before running a query (needs SHOW SYNTAX support on the server)",
+		isBoolean:                 true,
+		validDuringMultilineEntry: false,
+		set:     func(c *cliState, _ string) error { c.checkSyntax = true; return nil },
+		reset:   func(c *cliState) error { c.checkSyntax = false; return nil },
+		display: func(c *cliState) string { return strconv.FormatBool(c.checkSyntax) },
 	},
 	`show_times`: {
-		"display the execution time after each query",
-		true,
-		true,
-		func(_ *cliState, _ string) error { cliCtx.showTimes = true; return nil },
-		func(_ *cliState) error { cliCtx.showTimes = false; return nil },
-		func(_ *cliState) string { return strconv.FormatBool(cliCtx.showTimes) },
+		description:               "display the execution time after each query",
+		isBoolean:                 true,
+		validDuringMultilineEntry: true,
+		set:     func(_ *cliState, _ string) error { sqlCtx.showTimes = true; return nil },
+		reset:   func(_ *cliState) error { sqlCtx.showTimes = false; return nil },
+		display: func(_ *cliState) string { return strconv.FormatBool(sqlCtx.showTimes) },
+	},
+	`smart_prompt`: {
+		description:               "detect open transactions and propose entering multi-line statements",
+		isBoolean:                 true,
+		validDuringMultilineEntry: false,
+		set:     func(c *cliState, _ string) error { c.smartPrompt = true; return nil },
+		reset:   func(c *cliState) error { c.smartPrompt = false; return nil },
+		display: func(c *cliState) string { return strconv.FormatBool(c.smartPrompt) },
 	},
 	`prompt1`: {
-		"prompt string to use before each command (the following are expanded: %M full host, %m host, %> port number, %n user, %/ database, %x txn status)",
-		false,
-		true,
-		func(c *cliState, val string) error {
+		description:               "prompt string to use before each command (the following are expanded: %M full host, %m host, %> port number, %n user, %/ database, %x txn status)",
+		isBoolean:                 false,
+		validDuringMultilineEntry: true,
+		set: func(c *cliState, val string) error {
 			c.customPromptPattern = val
 			return nil
 		},
-		func(c *cliState) error {
+		reset: func(c *cliState) error {
 			c.customPromptPattern = defaultPromptPattern
 			return nil
 		},
-		func(c *cliState) string { return c.customPromptPattern },
+		display: func(c *cliState) string { return c.customPromptPattern },
 	},
 }
 
@@ -560,8 +574,22 @@ func (c *cliState) pipeSyscmd(line string, nextState, errState cliStateEnum) cli
 	return nextState
 }
 
-// rePromptFmt: available keys compile with regex expression one time.
+// rePromptFmt recognizes every substitution pattern in the prompt format string.
 var rePromptFmt = regexp.MustCompile("(%.)")
+
+// rePromptDbState recognizes every substitution pattern that requires
+// access to the current database state.
+// Currently:
+// %/ database name
+// %x txn status
+var rePromptDbState = regexp.MustCompile("(?:^|[^%])%[/x]")
+
+// unknownDbName is the string to use in the prompt when
+// the database cannot be determined.
+const unknownDbName = "?"
+
+// unknownTxnStatus is the string to use in the prompt when the txn status cannot be determined.
+const unknownTxnStatus = " ?"
 
 // doRefreshPrompts refreshes the prompts of the client depending on the
 // status of the current transaction.
@@ -579,17 +607,26 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		return nextState
 	}
 
-	// Prepare variables for use during the substitution below.
-	c.refreshTransactionStatus()
-	// refreshDatabaseName() must be called *after* refreshTransactionStatus(),
-	// even when %/ appears before %x in the prompt format.
-	dbName, hasDbName := c.refreshDatabaseName()
-	if !hasDbName {
-		dbName = "?"
-	}
 	userName := ""
 	if parsedURL.User != nil {
 		userName = parsedURL.User.Username()
+	}
+
+	dbName := unknownDbName
+	c.lastKnownTxnStatus = unknownTxnStatus
+
+	wantDbStateInPrompt := rePromptDbState.MatchString(c.customPromptPattern)
+	if wantDbStateInPrompt || c.smartPrompt {
+		// Even if the prompt does not need it, the transaction status is needed
+		// for the multi-line smart prompt.
+		c.refreshTransactionStatus()
+	}
+	if wantDbStateInPrompt {
+		// refreshDatabaseName() must be called *after* refreshTransactionStatus(),
+		// even when %/ appears before %x in the prompt format.
+		// This is because the database name should not be queried during
+		// some transaction phases.
+		dbName = c.refreshDatabaseName()
 	}
 
 	c.fullPrompt = rePromptFmt.ReplaceAllStringFunc(c.customPromptPattern, func(m string) string {
@@ -605,7 +642,6 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 		case "%/": // database name.
 			return dbName
 		case "%x": // txn status.
-			c.refreshTransactionStatus()
 			return c.lastKnownTxnStatus
 		case "%%":
 			return "%"
@@ -643,7 +679,7 @@ func (c *cliState) doRefreshPrompts(nextState cliStateEnum) cliStateEnum {
 
 // refreshTransactionStatus retrieves and sets the current transaction status.
 func (c *cliState) refreshTransactionStatus() {
-	c.lastKnownTxnStatus = " ?"
+	c.lastKnownTxnStatus = unknownTxnStatus
 
 	dbVal, hasVal := c.conn.getServerValue("transaction status", `SHOW TRANSACTION STATUS`)
 	if !hasVal {
@@ -673,16 +709,16 @@ func (c *cliState) refreshTransactionStatus() {
 // refreshDatabaseName retrieves the current database name from the server.
 // The database name is only queried if there is no transaction ongoing,
 // or the transaction is fully open.
-func (c *cliState) refreshDatabaseName() (string, bool) {
+func (c *cliState) refreshDatabaseName() string {
 	if !(c.lastKnownTxnStatus == "" /*NoTxn*/ ||
 		c.lastKnownTxnStatus == "  OPEN" ||
-		c.lastKnownTxnStatus == " ?" /* Unknown */) {
-		return "", false
+		c.lastKnownTxnStatus == unknownTxnStatus) {
+		return unknownDbName
 	}
 
 	dbVal, hasVal := c.conn.getServerValue("database name", `SHOW DATABASE`)
 	if !hasVal {
-		return "", false
+		return unknownDbName
 	}
 
 	if dbVal == "" {
@@ -697,7 +733,7 @@ func (c *cliState) refreshDatabaseName() (string, bool) {
 	// Preserve the current database name in case of reconnects.
 	c.conn.dbName = dbName
 
-	return dbName, true
+	return dbName
 }
 
 // endsWithIncompleteTxn returns true if and only if its
@@ -749,9 +785,11 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 		// If a human user is providing the input, we want to help them with
 		// what they are entering:
 		c.errExit = false // let the user retry failing commands
-		// Also, try to enable syntax checking if supported by the server.
-		// This is a form of client-side error checking to help with large txns.
-		c.tryEnableCheckSyntax()
+		if !sqlCtx.debugMode {
+			// Also, try to enable syntax checking if supported by the server.
+			// This is a form of client-side error checking to help with large txns.
+			c.tryEnableCheckSyntax()
+		}
 
 		fmt.Println("#\n# Enter \\? for a brief introduction.\n#")
 	} else {
@@ -771,6 +809,9 @@ func (c *cliState) doStart(nextState cliStateEnum) cliStateEnum {
 
 		// Default prompt is part of the connection URL. eg: "marc@localhost:26257>".
 		c.customPromptPattern = defaultPromptPattern
+		if sqlCtx.debugMode {
+			c.customPromptPattern = debugPromptPattern
+		}
 
 		c.ins.SetCompleter(c)
 		if err := c.ins.UseHistory(-1 /*maxEntries*/, true /*dedup*/); err != nil {
@@ -1088,12 +1129,13 @@ func (c *cliState) doCheckStatement(startState, contState, execState cliStateEnu
 
 	nextState := execState
 
-	// In interactive mode, we make some additional effort to help the user:
-	// if the entry so far is starting an incomplete transaction, push
-	// the user to enter input over multiple lines.
-	if c.lastKnownTxnStatus == "" && endsWithIncompleteTxn(parsedStmts) && c.lastInputLine != "" {
+	// When the smart prompt is enabled, we make some additional effort
+	// to help the user: if the entry so far is starting an incomplete
+	// transaction, push the user to enter input over multiple lines.
+	if c.smartPrompt &&
+		c.lastKnownTxnStatus == "" && endsWithIncompleteTxn(parsedStmts) && c.lastInputLine != "" {
 		if c.partialStmtsLen == 0 {
-			fmt.Fprintln(stderr, "Now adding input for a multi-line SQL transaction client-side.\n"+
+			fmt.Fprintln(stderr, "Now adding input for a multi-line SQL transaction client-side (smart_prompt enabled).\n"+
 				"Press Enter two times to send the SQL text collected so far to the server, or Ctrl+C to cancel.\n"+
 				"You can also use \\show to display the statements entered so far.")
 		}
@@ -1247,7 +1289,12 @@ func runInteractive(conn *sqlConn) (exitErr error) {
 			if cliCtx.terminalOutput {
 				// If results are shown on a terminal also enable printing of
 				// times by default.
-				cliCtx.showTimes = true
+				sqlCtx.showTimes = true
+			}
+			if cliCtx.isInteractive && !sqlCtx.debugMode {
+				// If the terminal is interactive and this was not explicitly disabled by setting the debug mode,
+				// enable the smart prompt.
+				c.smartPrompt = true
 			}
 
 			// An interactive readline prompter is comparatively slow at

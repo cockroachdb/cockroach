@@ -90,8 +90,28 @@ const (
 	DefaultTableDescriptorLeaseRenewalTimeout = time.Minute
 )
 
-var defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
-	"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 15)
+var (
+	// defaultRaftElectionTimeoutTicks specifies the number of Raft Tick
+	// invocations that must pass between elections.
+	defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt(
+		"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 15)
+
+	// defaultRaftLogTruncationThreshold specifies the upper bound that a single
+	// Range's Raft log can grow to before log truncations are triggered, even
+	// if that means a snapshot will be required for a straggling follower.
+	defaultRaftLogTruncationThreshold = envutil.EnvOrDefaultInt64(
+		"COCKROACH_RAFT_LOG_TRUNCATION_THRESHOLD", 4<<20 /* 4 MB */)
+
+	// defaultRaftMaxSizePerMsg specifies the maximum number of Raft log entries
+	// that a leader will send to followers in a single MsgApp.
+	defaultRaftMaxSizePerMsg = envutil.EnvOrDefaultInt(
+		"COCKROACH_RAFT_MAX_SIZE_PER_MSG", 16<<10 /* 16 KB */)
+
+	// defaultRaftMaxSizePerMsg specifies how many "inflight" messages a leader
+	// will send to a follower without hearing a response.
+	defaultRaftMaxInflightMsgs = envutil.EnvOrDefaultInt(
+		"COCKROACH_RAFT_MAX_INFLIGHT_MSGS", 64)
+)
 
 type lazyHTTPClient struct {
 	once       sync.Once
@@ -421,6 +441,41 @@ type RaftConfig struct {
 	// RangeLeaseRaftElectionTimeoutMultiplier specifies what multiple the leader
 	// lease active duration should be of the raft election timeout.
 	RangeLeaseRaftElectionTimeoutMultiplier float64
+
+	// RaftLogTruncationThreshold controls how large a single Range's Raft log
+	// can grow. When a Range's Raft log grows above this size, the Range will
+	// begin performing log truncations.
+	RaftLogTruncationThreshold int64
+
+	// RaftProposalQuota controls the maximum aggregate size of Raft commands
+	// that a leader is allowed to propose concurrently.
+	//
+	// By default, the quota is set to a fraction of the Raft log truncation
+	// threshold. In doing so, we ensure all replicas have sufficiently up to
+	// date logs so that when the log gets truncated, the followers do not need
+	// non-preemptive snapshots. Changing this deserves care. Too low and
+	// everything comes to a grinding halt, too high and we're not really
+	// throttling anything (we'll still generate snapshots).
+	RaftProposalQuota int64
+
+	// RaftMaxUncommittedEntriesSize controls how large the uncommitted tail of
+	// the Raft log can grow. The limit is meant to provide protection against
+	// unbounded Raft log growth when quorum is lost and entries stop being
+	// committed but continue to be proposed.
+	RaftMaxUncommittedEntriesSize uint64
+
+	// RaftMaxSizePerMsg controls how many Raft log entries the leader will send to
+	// followers in a single MsgApp.
+	RaftMaxSizePerMsg uint64
+
+	// RaftMaxInflightMsgs controls how many "inflight" messages Raft will send
+	// to a follower without hearing a response. The total number of Raft log
+	// entries is a combination of this setting and RaftMaxSizePerMsg. The
+	// current default settings provide for up to 1 MB of raft log to be sent
+	// without acknowledgement. With an average entry size of 1 KB that
+	// translates to ~1024 commands that might be executed in the handling of a
+	// single raft.Ready operation.
+	RaftMaxInflightMsgs int
 }
 
 // SetDefaults initializes unset fields.
@@ -433,6 +488,27 @@ func (cfg *RaftConfig) SetDefaults() {
 	}
 	if cfg.RangeLeaseRaftElectionTimeoutMultiplier == 0 {
 		cfg.RangeLeaseRaftElectionTimeoutMultiplier = defaultRangeLeaseRaftElectionTimeoutMultiplier
+	}
+	if cfg.RaftLogTruncationThreshold == 0 {
+		cfg.RaftLogTruncationThreshold = defaultRaftLogTruncationThreshold
+	}
+	if cfg.RaftProposalQuota == 0 {
+		// By default, set this to a fraction of RaftLogMaxSize. See the comment
+		// on the field for the tradeoffs of setting this higher or lower.
+		cfg.RaftProposalQuota = cfg.RaftLogTruncationThreshold / 4
+	}
+	if cfg.RaftMaxUncommittedEntriesSize == 0 {
+		// By default, set this to twice the RaftProposalQuota. The logic here
+		// is that the quotaPool should be responsible for throttling proposals
+		// in all cases except for unbounded Raft re-proposals because it queues
+		// efficiently instead of dropping proposals on the floor indiscriminately.
+		cfg.RaftMaxUncommittedEntriesSize = uint64(2 * cfg.RaftProposalQuota)
+	}
+	if cfg.RaftMaxSizePerMsg == 0 {
+		cfg.RaftMaxSizePerMsg = uint64(defaultRaftMaxSizePerMsg)
+	}
+	if cfg.RaftMaxInflightMsgs == 0 {
+		cfg.RaftMaxInflightMsgs = defaultRaftMaxInflightMsgs
 	}
 }
 

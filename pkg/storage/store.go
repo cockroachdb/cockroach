@@ -113,7 +113,7 @@ var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 )
 
 // importRequestsLimit limits concurrent import requests.
-var importRequestsLimit = settings.RegisterIntSetting(
+var importRequestsLimit = settings.RegisterPositiveIntSetting(
 	"kv.bulk_io_write.concurrent_import_requests",
 	"number of import requests a store will handle concurrently before queuing",
 	1,
@@ -126,7 +126,7 @@ var importRequestsLimit = settings.RegisterIntSetting(
 // by a guessing - it could be improved by more measured heuristics. Exported
 // here since we check it in in the caller to limit generated requests as well
 // to prevent excessive queuing.
-var ExportRequestsLimit = settings.RegisterIntSetting(
+var ExportRequestsLimit = settings.RegisterPositiveIntSetting(
 	"kv.bulk_io_write.concurrent_export_requests",
 	"number of export requests a store will handle concurrently before queuing",
 	5,
@@ -163,35 +163,21 @@ func TestStoreConfig(clock *hlc.Clock) StoreConfig {
 	return sc
 }
 
-var (
-	raftMaxSizePerMsg   = envutil.EnvOrDefaultInt("COCKROACH_RAFT_MAX_SIZE_PER_MSG", 16*1024)
-	raftMaxInflightMsgs = envutil.EnvOrDefaultInt("COCKROACH_RAFT_MAX_INFLIGHT_MSGS", 64)
-)
-
 func newRaftConfig(
 	strg raft.Storage, id uint64, appliedIndex uint64, storeCfg StoreConfig, logger raft.Logger,
 ) *raft.Config {
 	return &raft.Config{
-		ID:            id,
-		Applied:       appliedIndex,
-		ElectionTick:  storeCfg.RaftElectionTimeoutTicks,
-		HeartbeatTick: storeCfg.RaftHeartbeatIntervalTicks,
-		Storage:       strg,
-		Logger:        logger,
+		ID:                        id,
+		Applied:                   appliedIndex,
+		ElectionTick:              storeCfg.RaftElectionTimeoutTicks,
+		HeartbeatTick:             storeCfg.RaftHeartbeatIntervalTicks,
+		MaxUncommittedEntriesSize: storeCfg.RaftMaxUncommittedEntriesSize,
+		MaxSizePerMsg:             storeCfg.RaftMaxSizePerMsg,
+		MaxInflightMsgs:           storeCfg.RaftMaxInflightMsgs,
+		Storage:                   strg,
+		Logger:                    logger,
 
 		PreVote: true,
-
-		// MaxSizePerMsg controls how many Raft log entries the leader will send to
-		// followers in a single MsgApp.
-		MaxSizePerMsg: uint64(raftMaxSizePerMsg),
-		// MaxInflightMsgs controls how many "inflight" messages Raft will send to
-		// a follower without hearing a response. The total number of Raft log
-		// entries is a combination of this setting and MaxSizePerMsg. The current
-		// settings provide for up to 1 MB of raft log to be sent without
-		// acknowledgement. With an average entry size of 1 KB that translates to
-		// ~1024 commands that might be executed in the handling of a single
-		// raft.Ready operation.
-		MaxInflightMsgs: raftMaxInflightMsgs,
 	}
 }
 
@@ -3650,8 +3636,6 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 
 			if _, err := s.replicaGCQueue.Add(repl, replicaGCPriorityRemoved); err != nil {
 				log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
-			} else {
-				log.Infof(ctx, "added to replica GC queue (peer suggestion)")
 			}
 		case *roachpb.RaftGroupDeletedError:
 			if replErr != nil {
@@ -3669,8 +3653,6 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 			// proper check.
 			if _, err := s.replicaGCQueue.Add(repl, replicaGCPriorityDefault); err != nil {
 				log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
-			} else {
-				log.Infof(ctx, "added to replica GC queue (contacted deleted peer)")
 			}
 		case *roachpb.StoreNotFoundError:
 			log.Warningf(ctx, "raft error: node %d claims to not contain store %d for replica %s: %s",

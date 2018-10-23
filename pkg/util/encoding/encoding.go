@@ -676,8 +676,11 @@ func prettyPrintInvertedIndexKey(b []byte) (string, []byte, error) {
 	}
 }
 
-// unsafeConvertStringToBytes converts a string to a byte array to be used with string encoding functions.
-func unsafeConvertStringToBytes(s string) []byte {
+// UnsafeConvertStringToBytes converts a string to a byte array to be used with
+// string encoding functions. Note that the output byte array should not be
+// modified if the input string is expected to be used again - doing so could
+// violate Go semantics.
+func UnsafeConvertStringToBytes(s string) []byte {
 	if len(s) == 0 {
 		return nil
 	}
@@ -706,7 +709,7 @@ func EncodeStringAscending(b []byte, s string) []byte {
 func encodeStringAscendingWithTerminatorAndPrefix(
 	b []byte, s string, terminator byte, prefix byte,
 ) []byte {
-	unsafeString := unsafeConvertStringToBytes(s)
+	unsafeString := UnsafeConvertStringToBytes(s)
 	return encodeBytesAscendingWithTerminatorAndPrefix(b, unsafeString, terminator, prefix)
 }
 
@@ -715,7 +718,7 @@ func encodeStringAscendingWithTerminatorAndPrefix(
 // while at the same time giving us a sentinel to identify JSON keys. The end parameter is used
 // to determine if this is the last key in a a JSON path. If it is we don't add a separator after it.
 func EncodeJSONKeyStringAscending(b []byte, s string, end bool) []byte {
-	str := unsafeConvertStringToBytes(s)
+	str := UnsafeConvertStringToBytes(s)
 
 	if end {
 		return encodeBytesAscendingWithoutTerminatorOrPrefix(b, str)
@@ -1106,7 +1109,11 @@ func DecodeBitArrayAscending(b []byte) ([]byte, bitarray.BitArray, error) {
 	}
 	b = b[1:]
 	b, lastVal, err := DecodeUvarintAscending(b)
-	return b, bitarray.FromEncodingParts(words, lastVal), err
+	if err != nil {
+		return b, bitarray.BitArray{}, err
+	}
+	ba, err := bitarray.FromEncodingParts(words, lastVal)
+	return b, ba, err
 }
 
 var errBitArrayTerminatorMissing = errors.New("cannot find bit array data terminator")
@@ -1162,7 +1169,11 @@ func DecodeBitArrayDescending(b []byte) ([]byte, bitarray.BitArray, error) {
 	}
 	b = b[1:]
 	b, lastVal, err := DecodeUvarintDescending(b)
-	return b, bitarray.FromEncodingParts(words, lastVal), err
+	if err != nil {
+		return b, bitarray.BitArray{}, err
+	}
+	ba, err := bitarray.FromEncodingParts(words, lastVal)
+	return b, ba, err
 }
 
 // Type represents the type of a value encoded by
@@ -2118,7 +2129,8 @@ func DecodeUntaggedBitArrayValue(b []byte) (remaining []byte, d bitarray.BitArra
 		}
 		words[i] = val
 	}
-	return b, bitarray.FromEncodingParts(words, lastBitsUsed), nil
+	ba, err := bitarray.FromEncodingParts(words, lastBitsUsed)
+	return b, ba, err
 }
 
 const uuidValueEncodedLength = 16

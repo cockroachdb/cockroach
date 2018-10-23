@@ -21,6 +21,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 // This test runs hibernate-core's full test suite against an single cockroach
@@ -41,28 +44,89 @@ func registerHibernate(r *registry) {
 		c.Start(ctx, t, c.All())
 
 		t.Status("cloning hibernate and installing prerequisites")
-		c.Run(ctx, node, `rm -rf /mnt/data1/hibernate`)
-		c.GitClone(ctx,
-			"https://github.com/hibernate/hibernate-orm.git", "/mnt/data1/hibernate", "5.3.6", node,
-		)
-		c.Run(ctx, node, `sudo apt-get -q update`)
-		c.Run(ctx, node, `sudo apt-get -qy install default-jre openjdk-8-jdk-headless gradle`)
+		opts := retry.Options{
+			InitialBackoff: 10 * time.Second,
+			Multiplier:     2,
+			MaxBackoff:     5 * time.Minute,
+		}
+		for attempt, r := 0, retry.StartWithCtx(ctx, opts); r.Next(); {
+			if ctx.Err() != nil {
+				return
+			}
+			if c.t.Failed() {
+				return
+			}
+			attempt++
 
-		// In order to get Hibernate's test suite to connect to cockroach, we have
-		// to create a dbBundle as it not possible to specify the individual
-		// properties. So here we just steamroll the file with our own config.
-		c.Run(ctx, node, `echo "ext {
-					db = project.hasProperty('db') ? project.getProperty('db') : 'h2'
-					dbBundle = [
-									cockroach : [
-													'db.dialect' : 'org.hibernate.dialect.PostgreSQL95Dialect',
-													'jdbc.driver': 'org.postgresql.Driver',
-													'jdbc.user'  : 'root',
-													'jdbc.pass'  : '',
-													'jdbc.url'   : 'jdbc:postgresql://localhost:26257/defaultdb?sslmode=disable'
-									],
-					]
-		}" > /mnt/data1/hibernate/gradle/databases.gradle`)
+			c.l.Printf("attempt %d - update dependencies", attempt)
+			if err := c.RunE(ctx, node, `sudo apt-get -q update`); err != nil {
+				continue
+			}
+			if err := c.RunE(
+				ctx, node, `sudo apt-get -qy install default-jre openjdk-8-jdk-headless gradle`,
+			); err != nil {
+				continue
+			}
+
+			c.l.Printf("attempt %d - cloning hibernate", attempt)
+			if err := c.RunE(ctx, node, `rm -rf /mnt/data1/hibernate`); err != nil {
+				continue
+			}
+			if err := c.GitCloneE(
+				ctx,
+				"https://github.com/hibernate/hibernate-orm.git",
+				"/mnt/data1/hibernate",
+				"5.3.6",
+				node,
+			); err != nil {
+				continue
+			}
+
+			// In order to get Hibernate's test suite to connect to cockroach, we have
+			// to create a dbBundle as it not possible to specify the individual
+			// properties. So here we just steamroll the file with our own config.
+			if err := c.RunE(ctx, node, `
+echo "ext {
+  db = project.hasProperty('db') ? project.getProperty('db') : 'h2'
+    dbBundle = [
+     cockroach : [
+       'db.dialect' : 'org.hibernate.dialect.PostgreSQL95Dialect',
+       'jdbc.driver': 'org.postgresql.Driver',
+       'jdbc.user'  : 'root',
+       'jdbc.pass'  : '',
+       'jdbc.url'   : 'jdbc:postgresql://localhost:26257/defaultdb?sslmode=disable'
+     ],
+    ]
+}" > /mnt/data1/hibernate/gradle/databases.gradle`,
+			); err != nil {
+				continue
+			}
+
+			break
+		}
+
+		t.Status("building hibernate (without tests)")
+		for attempt, r := 0, retry.StartWithCtx(ctx, opts); r.Next(); {
+			if ctx.Err() != nil {
+				return
+			}
+			if c.t.Failed() {
+				return
+			}
+			attempt++
+			c.l.Printf("attempt %d - building hibernate", attempt)
+			// Build hibernate and run a single test, this step involves some
+			// downloading, so it needs a retry loop as well. Just building was not
+			// enough as the test libraries are not downloaded unless at least a
+			// single test is invoked.
+			if err := c.RunE(
+				ctx, node, `cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroach `+
+					`--tests org.hibernate.jdbc.util.BasicFormatterTest.*`,
+			); err != nil {
+				continue
+			}
+			break
+		}
 
 		t.Status("running hibernate test suite, will take at least 3 hours")
 		// When testing, it is helpful to run only a subset of the tests. To do so
@@ -97,7 +161,7 @@ func registerHibernate(r *registry) {
 
 		// Load the list of all test results files and parse them individually.
 		// Files are here: /mnt/data1/hibernate/hibernate-core/target/test-results/test
-		output, err := c.RunWithBuffer(ctx, c.l, node,
+		output, err := c.RunWithBuffer(ctx, t.l, node,
 			`ls /mnt/data1/hibernate/hibernate-core/target/test-results/test/*.xml`,
 		)
 		if err != nil {
@@ -115,11 +179,11 @@ func registerHibernate(r *registry) {
 		for i, file := range files {
 			file = strings.TrimSpace(file)
 			if len(file) == 0 {
-				c.l.Printf("Skipping %d of %d: %s\n", i, len(files), file)
+				t.l.Printf("Skipping %d of %d: %s\n", i, len(files), file)
 				continue
 			}
-			c.l.Printf("Parsing %d of %d: %s\n", i, len(files), file)
-			fileOutput, err := c.RunWithBuffer(ctx, c.l, node, `cat `+file)
+			t.l.Printf("Parsing %d of %d: %s\n", i, len(files), file)
+			fileOutput, err := c.RunWithBuffer(ctx, t.l, node, `cat `+file)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -171,31 +235,31 @@ func registerHibernate(r *registry) {
 			if !ok {
 				t.Fatalf("can't find %s in test result list", test)
 			}
-			c.l.Printf("%s\n", result)
+			t.l.Printf("%s\n", result)
 		}
 
-		c.l.Printf("------------------------\n")
-		c.l.Printf("%d Total Test Run\n",
+		t.l.Printf("------------------------\n")
+		t.l.Printf("%d Total Test Run\n",
 			passExpectedCount+passUnexpectedCount+failExpectedCount+failUnexpectedCount,
 		)
-		c.l.Printf("%d tests passed\n", passUnexpectedCount+passExpectedCount)
-		c.l.Printf("%d tests failed\n", failUnexpectedCount+failExpectedCount)
-		c.l.Printf("%d tests passed unexpectedly\n", passUnexpectedCount)
-		c.l.Printf("%d tests failed unexpectedly\n", failUnexpectedCount)
-		c.l.Printf("%d tests expected failed, but not run \n", notRunCount)
-		c.l.Printf("For a full summary, look at artifacts/hibernate/logs/logs/report/index.html\n")
-		c.l.Printf("------------------------\n")
+		t.l.Printf("%d tests passed\n", passUnexpectedCount+passExpectedCount)
+		t.l.Printf("%d tests failed\n", failUnexpectedCount+failExpectedCount)
+		t.l.Printf("%d tests passed unexpectedly\n", passUnexpectedCount)
+		t.l.Printf("%d tests failed unexpectedly\n", failUnexpectedCount)
+		t.l.Printf("%d tests expected failed, but not run \n", notRunCount)
+		t.l.Printf("For a full summary, look at artifacts/hibernate/logs/logs/report/index.html\n")
+		t.l.Printf("------------------------\n")
 
 		if failUnexpectedCount > 0 || passUnexpectedCount > 0 || notRunCount > 0 {
 			// Create a new hibernate_blacklist so we can easily update this test.
 			sort.Strings(currentFailures)
-			c.l.Printf("Here is new hibernate blacklist that can be used to update the test:\n\n")
-			c.l.Printf("var hibernateBlackList = []string{\n")
+			t.l.Printf("Here is new hibernate blacklist that can be used to update the test:\n\n")
+			t.l.Printf("var hibernateBlackList = []string{\n")
 			for _, test := range currentFailures {
-				c.l.Printf("\"%s\",\n", test)
+				t.l.Printf("\"%s\",\n", test)
 			}
-			c.l.Printf("}\n\n")
-			c.l.Printf("------------------------\n")
+			t.l.Printf("}\n\n")
+			t.l.Printf("------------------------\n")
 			t.Fatalf("\n"+
 				"%d tests failed unexpectedly\n"+
 				"%d tests passed unexpectedly\n"+

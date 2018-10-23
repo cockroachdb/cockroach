@@ -201,7 +201,7 @@ func (gossipUtil) hasClusterID(infos map[string]gossip.Info) error {
 }
 
 func (g *gossipUtil) checkConnectedAndFunctional(ctx context.Context, t *test, c *cluster) {
-	c.l.Printf("waiting for gossip to be connected\n")
+	t.l.Printf("waiting for gossip to be connected\n")
 	if err := g.check(ctx, c, g.hasPeers(c.nodes)); err != nil {
 		t.Fatal(err)
 	}
@@ -265,11 +265,11 @@ func runGossipPeerings(ctx context.Context, t *test, c *cluster) {
 		if err := g.check(ctx, c, g.hasSentinel); err != nil {
 			t.Fatal(err)
 		}
-		c.l.Printf("%d: OK\n", i)
+		t.l.Printf("%d: OK\n", i)
 
 		// Restart a random node.
 		node := c.All().randNode()
-		c.l.Printf("%d: restarting node %d\n", i, node[0])
+		t.l.Printf("%d: restarting node %d\n", i, node[0])
 		c.Stop(ctx, node)
 		c.Start(ctx, t, node)
 	}
@@ -289,12 +289,12 @@ func runGossipRestart(ctx context.Context, t *test, c *cluster) {
 
 	for i := 1; timeutil.Now().Before(deadline); i++ {
 		g.checkConnectedAndFunctional(ctx, t, c)
-		c.l.Printf("%d: OK\n", i)
+		t.l.Printf("%d: OK\n", i)
 
-		c.l.Printf("%d: killing all nodes\n", i)
+		t.l.Printf("%d: killing all nodes\n", i)
 		c.Stop(ctx)
 
-		c.l.Printf("%d: restarting all nodes\n", i)
+		t.l.Printf("%d: restarting all nodes\n", i)
 		c.Start(ctx, t)
 	}
 }
@@ -309,13 +309,13 @@ func runGossipRestartNodeOne(ctx context.Context, t *test, c *cluster) {
 
 	run := func(stmtStr string) {
 		stmt := fmt.Sprintf(stmtStr, "", "=")
-		c.l.Printf("%s\n", stmt)
+		t.l.Printf("%s\n", stmt)
 		_, err := db.ExecContext(ctx, stmt)
 		if err != nil && strings.Contains(err.Error(), "syntax error") {
 			// Pre-2.1 was EXPERIMENTAL.
 			// TODO(knz): Remove this in 2.2.
 			stmt = fmt.Sprintf(stmtStr, "EXPERIMENTAL", "")
-			c.l.Printf("%s\n", stmt)
+			t.l.Printf("%s\n", stmt)
 			_, err = db.ExecContext(ctx, stmt)
 		}
 		if err != nil {
@@ -338,7 +338,7 @@ func runGossipRestartNodeOne(ctx context.Context, t *test, c *cluster) {
 				count, util.Pluralize(int64(count)))
 			if count != lastNodeCount {
 				lastNodeCount = count
-				c.l.Printf("%s\n", err)
+				t.l.Printf("%s\n", err)
 			}
 			return err
 		}
@@ -370,7 +370,7 @@ SELECT count(replicas)
 			err := errors.Errorf("node 1 still has %d replicas", count)
 			if count != lastReplCount {
 				lastReplCount = count
-				c.l.Printf("%s\n", err)
+				t.l.Printf("%s\n", err)
 			}
 			return err
 		}
@@ -379,7 +379,7 @@ SELECT count(replicas)
 		t.Fatal(err)
 	}
 
-	c.l.Printf("killing all nodes\n")
+	t.l.Printf("killing all nodes\n")
 	c.Stop(ctx)
 
 	// Restart node 1, but have it listen on a different port for internal

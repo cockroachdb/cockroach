@@ -23,7 +23,6 @@ import (
 
 func TestSetup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	t.Skip("#24655")
 
 	get := func(name string) workload.Meta {
 		meta, err := workload.Get(name)
@@ -41,7 +40,7 @@ func TestSetup(t *testing.T) {
 	}{
 		{
 			meta:        get("roachmart"),
-			flags:       []string{"--users=10", "--orders=100"},
+			flags:       []string{"--users=10", "--orders=100", "--partition=false"},
 			batchSize:   100,
 			concurrency: 4,
 		},

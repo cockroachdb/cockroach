@@ -44,6 +44,7 @@ import (
 // in code. This means that they are accessed separately from standard descriptors.
 type virtualSchema struct {
 	name           string
+	allTableNames  map[string]struct{}
 	tableDefs      []virtualSchemaDef
 	tableValidator func(*sqlbase.TableDescriptor) error // optional
 	// Some virtual tables can be used if there is no current database set; others can't.
@@ -183,6 +184,7 @@ type virtualSchemaEntry struct {
 	desc            *sqlbase.DatabaseDescriptor
 	defs            map[string]virtualDefEntry
 	orderedDefNames []string
+	allTableNames   map[string]struct{}
 }
 
 type virtualDefEntry struct {
@@ -325,6 +327,7 @@ func NewVirtualSchemaHolder(
 			desc:            dbDesc,
 			defs:            defs,
 			orderedDefNames: orderedDefNames,
+			allTableNames:   schema.allTableNames,
 		}
 		vs.orderedNames[i] = dbName
 	}
@@ -370,8 +373,13 @@ func (vs *VirtualSchemaHolder) getVirtualSchemaEntry(name string) (virtualSchema
 // getVirtualTableEntry is part of the VirtualTabler interface.
 func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtualDefEntry, error) {
 	if db, ok := vs.getVirtualSchemaEntry(tn.Schema()); ok {
-		if t, ok := db.defs[tn.Table()]; ok {
+		tableName := tn.Table()
+		if t, ok := db.defs[tableName]; ok {
 			return t, nil
+		}
+		if _, ok := db.allTableNames[tableName]; ok {
+			return virtualDefEntry{}, pgerror.Unimplemented(tn.Schema()+"."+tableName,
+				"virtual schema table not implemented: %s.%s", tn.Schema(), tableName)
 		}
 		return virtualDefEntry{}, sqlbase.NewUndefinedRelationError(tn)
 	}

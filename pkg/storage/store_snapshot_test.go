@@ -45,7 +45,7 @@ func TestSnapshotRaftLogLimit(t *testing.T) {
 
 	var bytesWritten int64
 	blob := []byte(strings.Repeat("a", 1024*1024))
-	for i := 0; bytesWritten < 5*raftLogMaxSize; i++ {
+	for i := 0; bytesWritten < 5*store.cfg.RaftLogTruncationThreshold; i++ {
 		pArgs := putArgs(roachpb.Key("a"), blob)
 		_, pErr := client.SendWrappedWith(ctx, store, roachpb.Header{RangeID: 1}, &pArgs)
 		if pErr != nil {
@@ -65,6 +65,7 @@ func TestSnapshotRaftLogLimit(t *testing.T) {
 			defer snap.Close()
 
 			ss := kvBatchSnapshotStrategy{
+				raftCfg:  &store.cfg.RaftConfig,
 				limiter:  rate.NewLimiter(1<<10, 1),
 				newBatch: eng.NewBatch,
 			}

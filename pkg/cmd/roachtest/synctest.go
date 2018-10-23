@@ -33,9 +33,10 @@ fi
 
 func registerSyncTest(r *registry) {
 	r.Add(testSpec{
-		Name:   "synctest",
-		Nodes:  nodes(1),
-		Stable: true, // DO NOT COPY to new tests
+		Name:       "synctest",
+		MinVersion: `v2.2.0`,
+		Nodes:      nodes(1),
+		Stable:     true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			n := c.Node(1)
 			tmpDir, err := ioutil.TempDir("", "synctest")
@@ -58,7 +59,7 @@ func registerSyncTest(r *registry) {
 			c.Run(ctx, n, "mkdir -p {store-dir}/{real,faulty} || true")
 			t.Status("setting up charybdefs")
 
-			if err := execCmd(ctx, c.l, roachprod, "install", c.makeNodes(n), "charybdefs"); err != nil {
+			if err := execCmd(ctx, t.l, roachprod, "install", c.makeNodes(n), "charybdefs"); err != nil {
 				t.Fatal(err)
 			}
 			c.Run(ctx, n, "sudo charybdefs {store-dir}/faulty -oallow_other,modules=subdir,subdir={store-dir}/real && chmod 777 {store-dir}/{real,faulty}")

@@ -23,6 +23,7 @@ import (
 	"github.com/lib/pq"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -194,6 +195,21 @@ func UnimplementedWithIssueError(issue int, msg string) error {
 	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
 }
 
+const unimplementedErrorHint = `This feature is not yet implemented in CockroachDB.
+
+Please check https://github.com/cockroachdb/cockroach/issues to check
+whether this feature is already tracked. If you cannot find it there,
+please report this error with reproduction steps at:
+
+    https://github.com/cockroachdb/cockroach/issues/new/choose
+
+If you would rather not post publicly, please contact us directly at:
+
+    support@cockroachlabs.com
+
+The Cockroach Labs team appreciates your feedback.
+`
+
 // Unimplemented constructs an unimplemented feature error.
 //
 // `feature` is used for tracking, and is not included when the error printed.
@@ -206,5 +222,41 @@ func Unimplemented(feature, msg string, args ...interface{}) *Error {
 func UnimplementedWithDepth(depth int, feature, msg string, args ...interface{}) *Error {
 	err := NewErrorWithDepthf(depth+1, CodeFeatureNotSupportedError, msg, args...)
 	err.InternalCommand = feature
+	err.Hint = unimplementedErrorHint
 	return err
+}
+
+// Wrap wraps an error into a pgerror. The code is used
+// if the original error was not a pgerror already. The errContext
+// string is used to populate the InternalCommand. If InternalCommand
+// already exists, the errContext is prepended.
+func Wrap(err error, code, errContext string) error {
+	var pgErr Error
+	origErr, ok := GetPGCause(err)
+	if ok {
+		// Copy the error. We can't use the existing error directly
+		// because it may be a global (const) object and we want to modify
+		// it below.
+		pgErr = *origErr
+	} else {
+		pgErr = Error{
+			Code: code,
+			// Keep the stack trace if one was available in the original
+			// non-Error error (e.g. when constructed via errors.Wrap).
+			InternalCommand: log.ErrorSource(err),
+		}
+	}
+
+	// Prepend the context to the existing message.
+	prefix := errContext + ": "
+	pgErr.Message = prefix + err.Error()
+
+	// Prepend the context also to the internal command, to ensure it
+	// goes to telemetry.
+	if pgErr.InternalCommand != "" {
+		pgErr.InternalCommand = prefix + pgErr.InternalCommand
+	} else {
+		pgErr.InternalCommand = errContext
+	}
+	return &pgErr
 }

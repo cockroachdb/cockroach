@@ -14,6 +14,12 @@
 
 package exec
 
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+)
+
 // ColVec is an interface that represents a column vector that's accessible by
 // Go native types.
 type ColVec interface {
@@ -21,7 +27,7 @@ type ColVec interface {
 
 	// TODO(jordan): is a bitmap or slice of bools better?
 	// Bool returns a bool list.
-	Bool() Bools
+	Bool() []bool
 	// Int8 returns an int8 slice.
 	Int8() []int8
 	// Int16 returns an int16 slice.
@@ -34,8 +40,11 @@ type ColVec interface {
 	Float32() []float32
 	// Float64 returns an float64 slice.
 	Float64() []float64
-	// Bytes returns a Bytes object, allowing retrieval of multiple byte slices.
-	Bytes() Bytes
+	// Bytes returns a []byte slice.
+	Bytes() [][]byte
+
+	// Col returns the raw, typeless backing storage for this ColVec.
+	Col() interface{}
 }
 
 // Nulls represents a list of potentially nullable values.
@@ -46,20 +55,11 @@ type Nulls interface {
 	// At returns true if the ith value of the column is null.
 	NullAt(i uint16) bool
 
+	// SetNull sets the ith value of the column to null.
+	SetNull(i uint16)
+
 	// Rank returns the index of the ith non-null value in the column.
-	Rank(i int) int
-}
-
-// Bools is an interface that represents a list of bools.
-type Bools interface {
-	// At returns the ith bool in the list.
-	At(i uint16) bool
-}
-
-// Bytes is an interface that represents a list of byte slices.
-type Bytes interface {
-	// At returns the ith byte slice in the list.
-	At(i uint16) []byte
+	Rank(i uint16) uint16
 }
 
 var _ ColVec = memColumn{}
@@ -70,6 +70,28 @@ type memColumn struct {
 	col interface{}
 }
 
+// newMemColumn returns a new memColumn, initialized with a type and length.
+func newMemColumn(t types.T, n int) memColumn {
+	switch t {
+	case types.Bool:
+		return memColumn{col: make([]bool, n)}
+	case types.Bytes:
+		return memColumn{col: make([][]byte, n)}
+	case types.Int16:
+		return memColumn{col: make([]int16, n)}
+	case types.Int32:
+		return memColumn{col: make([]int32, n)}
+	case types.Int64:
+		return memColumn{col: make([]int64, n)}
+	case types.Float32:
+		return memColumn{col: make([]float32, n)}
+	case types.Float64:
+		return memColumn{col: make([]float64, n)}
+	default:
+		panic(fmt.Sprintf("unhandled type %d", t))
+	}
+}
+
 func (m memColumn) HasNulls() bool {
 	return false
 }
@@ -78,12 +100,14 @@ func (m memColumn) NullAt(i uint16) bool {
 	return false
 }
 
-func (m memColumn) Rank(i int) int {
+func (m memColumn) SetNull(i uint16) {}
+
+func (m memColumn) Rank(i uint16) uint16 {
 	return i
 }
 
-func (m memColumn) Bool() Bools {
-	return m.col.(memBools)
+func (m memColumn) Bool() []bool {
+	return m.col.([]bool)
 }
 
 func (m memColumn) Int8() []int8 {
@@ -110,26 +134,10 @@ func (m memColumn) Float64() []float64 {
 	return m.col.([]float64)
 }
 
-func (m memColumn) Bytes() Bytes {
-	return m.col.(memBytes)
+func (m memColumn) Bytes() [][]byte {
+	return m.col.([][]byte)
 }
 
-var _ Bools = memBools{}
-
-type memBools struct {
-	col []bool
-}
-
-func (m memBools) At(i uint16) bool {
-	return m.col[i]
-}
-
-var _ Bytes = memBytes{}
-
-type memBytes struct {
-	col [][]byte
-}
-
-func (m memBytes) At(i uint16) []byte {
-	return m.col[i]
+func (m memColumn) Col() interface{} {
+	return m.col
 }

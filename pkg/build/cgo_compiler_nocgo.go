@@ -12,19 +12,10 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package memo_test
+// +build !cgo
 
-import (
-	"testing"
+package build
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-)
-
-func TestDynamicListID(t *testing.T) {
-	listID := memo.ListID{Offset: 1, Length: 2}
-	dynID := memo.MakeDynamicListID(listID)
-	roundtripID := dynID.ListID()
-	if listID != roundtripID {
-		t.Errorf("invalid ListID/DynamicID conversions")
-	}
+func cgoVersion() string {
+	return "cgo-disabled"
 }

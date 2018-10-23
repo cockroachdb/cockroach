@@ -7698,7 +7698,7 @@ func TestReplicaTryAbandon(t *testing.T) {
 	func() {
 		tc.repl.mu.Lock()
 		defer tc.repl.mu.Unlock()
-		if len(tc.repl.mu.localProposals) == 0 {
+		if len(tc.repl.mu.proposals) == 0 {
 			t.Fatal("expected non-empty proposals map")
 		}
 	}()
@@ -8254,7 +8254,7 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 		}
 
 		tc.repl.mu.Lock()
-		for _, p := range tc.repl.mu.localProposals {
+		for _, p := range tc.repl.mu.proposals {
 			if v := p.ctx.Value(magicKey{}); v != nil {
 				origIndexes = append(origIndexes, int(p.command.MaxLeaseIndex))
 			}
@@ -8286,13 +8286,13 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 
 	tc.repl.mu.Lock()
 	defer tc.repl.mu.Unlock()
-	nonePending := len(tc.repl.mu.localProposals) == 0
+	nonePending := len(tc.repl.mu.proposals) == 0
 	c := int(tc.repl.mu.lastAssignedLeaseIndex) - int(tc.repl.mu.state.LeaseAppliedIndex)
 	if nonePending && c > 0 {
 		t.Errorf("no pending cmds, but have required index offset %d", c)
 	}
 	if !nonePending {
-		t.Fatalf("still pending commands: %+v", tc.repl.mu.localProposals)
+		t.Fatalf("still pending commands: %+v", tc.repl.mu.proposals)
 	}
 }
 
@@ -8450,7 +8450,7 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		}
 		// Build the map of expected reproposals at this stage.
 		m := map[storagebase.CmdIDKey]int{}
-		for id, p := range r.mu.localProposals {
+		for id, p := range r.mu.proposals {
 			m[id] = p.proposedAtTicks
 		}
 		r.mu.Unlock()
@@ -8486,151 +8486,6 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 				t.Fatalf("%d: expected no reproposed commands, but found %+v", i, reproposed)
 			}
 		}
-	}
-}
-
-func TestReplicaShouldDropForwardedProposal(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	cmdSeen, cmdNotSeen := makeIDKey(), makeIDKey()
-	data, noData := []byte("data"), []byte("")
-
-	testCases := []struct {
-		name                string
-		leader              bool
-		msg                 raftpb.Message
-		expDrop             bool
-		expRemotePropsAfter int
-	}{
-		{
-			name:   "new proposal",
-			leader: true,
-			msg: raftpb.Message{
-				Type: raftpb.MsgProp,
-				Entries: []raftpb.Entry{
-					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdNotSeen, data)},
-				},
-			},
-			expDrop:             false,
-			expRemotePropsAfter: 2,
-		},
-		{
-			name:   "duplicate proposal",
-			leader: true,
-			msg: raftpb.Message{
-				Type: raftpb.MsgProp,
-				Entries: []raftpb.Entry{
-					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdSeen, data)},
-				},
-			},
-			expDrop:             true,
-			expRemotePropsAfter: 1,
-		},
-		{
-			name:   "partially new proposal",
-			leader: true,
-			msg: raftpb.Message{
-				Type: raftpb.MsgProp,
-				Entries: []raftpb.Entry{
-					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdNotSeen, data)},
-					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdSeen, data)},
-				},
-			},
-			expDrop:             false,
-			expRemotePropsAfter: 2,
-		},
-		{
-			name:   "empty proposal",
-			leader: true,
-			msg: raftpb.Message{
-				Type: raftpb.MsgProp,
-				Entries: []raftpb.Entry{
-					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdNotSeen, noData)},
-				},
-			},
-			expDrop:             false,
-			expRemotePropsAfter: 1,
-		},
-		{
-			name:   "conf change",
-			leader: true,
-			msg: raftpb.Message{
-				Type: raftpb.MsgProp,
-				Entries: []raftpb.Entry{
-					{Type: raftpb.EntryConfChange, Data: encodeRaftCommandV1(cmdNotSeen, data)},
-				},
-			},
-			expDrop:             false,
-			expRemotePropsAfter: 1,
-		},
-		{
-			name:   "non proposal",
-			leader: true,
-			msg: raftpb.Message{
-				Type: raftpb.MsgApp,
-			},
-			expDrop:             false,
-			expRemotePropsAfter: 1,
-		},
-		{
-			name:   "not leader",
-			leader: false,
-			msg: raftpb.Message{
-				Type: raftpb.MsgProp,
-				Entries: []raftpb.Entry{
-					{Type: raftpb.EntryNormal, Data: encodeRaftCommandV1(cmdNotSeen, data)},
-				},
-			},
-			expDrop:             false,
-			expRemotePropsAfter: 0,
-		},
-	}
-	for _, c := range testCases {
-		t.Run(c.name, func(t *testing.T) {
-			var tc testContext
-			stopper := stop.NewStopper()
-			defer stopper.Stop(context.TODO())
-			tc.Start(t, stopper)
-			tc.repl.mu.Lock()
-			defer tc.repl.mu.Unlock()
-
-			rg := tc.repl.mu.internalRaftGroup
-			if c.leader {
-				// Set the remoteProposals map to only contain cmdSeen.
-				tc.repl.mu.remoteProposals = map[storagebase.CmdIDKey]struct{}{
-					cmdSeen: {},
-				}
-				// Make sure the replica is the leader.
-				if s := rg.Status(); s.RaftState != raft.StateLeader {
-					t.Errorf("Replica not leader: %v", s)
-				}
-			} else {
-				// Clear the remoteProposals map.
-				tc.repl.mu.remoteProposals = nil
-				// Force the replica to step down as the leader by sending it a
-				// heartbeat at a high term.
-				if err := rg.Step(raftpb.Message{
-					Type: raftpb.MsgHeartbeat,
-					Term: 999,
-				}); err != nil {
-					t.Error(err)
-				}
-				if s := rg.Status(); s.RaftState != raft.StateFollower {
-					t.Errorf("Replica not follower: %v", s)
-				}
-			}
-
-			req := &RaftMessageRequest{Message: c.msg}
-			drop := tc.repl.shouldDropForwardedProposalLocked(req)
-			if c.expDrop != drop {
-				t.Errorf("expected drop=%t, found %t", c.expDrop, drop)
-			}
-
-			tc.repl.maybeTrackForwardedProposalLocked(rg, req)
-			if l := len(tc.repl.mu.remoteProposals); c.expRemotePropsAfter != l {
-				t.Errorf("expected %d tracked remote proposals, found %d", c.expRemotePropsAfter, l)
-			}
-		})
 	}
 }
 
@@ -9272,7 +9127,7 @@ func TestReplicaMetrics(t *testing.T) {
 				Underreplicated: false,
 			}},
 		// The leader of a 1-replica range is up and raft log is too large.
-		{1, 1, desc(1), status(1, progress(2)), live(1), 5 * raftLogMaxSize,
+		{1, 1, desc(1), status(1, progress(2)), live(1), 5 * cfg.RaftLogTruncationThreshold,
 			ReplicaMetrics{
 				Leader:          true,
 				RangeCounter:    true,
@@ -9294,7 +9149,7 @@ func TestReplicaMetrics(t *testing.T) {
 			c.expected.Quiescent = i%2 == 0
 			c.expected.Ticking = !c.expected.Quiescent
 			metrics := calcReplicaMetrics(
-				context.Background(), hlc.Timestamp{}, &zoneConfig,
+				context.Background(), hlc.Timestamp{}, &cfg.RaftConfig, &zoneConfig,
 				c.liveness, 0, &c.desc, c.raftStatus, storagepb.LeaseStatus{},
 				c.storeID, c.expected.Quiescent, c.expected.Ticking,
 				CommandQueueMetrics{}, CommandQueueMetrics{}, c.raftLogSize)
@@ -9724,6 +9579,98 @@ func TestProposeWithAsyncConsensus(t *testing.T) {
 
 	// Stop blocking Raft application to allow everything to shut down cleanly.
 	close(blockRaftApplication)
+}
+
+// TestApplyPaginatedCommittedEntries tests that a Raft group's committed
+// entries are quickly applied, even if their application is paginated due to
+// the RaftMaxSizePerMsg configuration. This is a regression test for #31330.
+func TestApplyPaginatedCommittedEntries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	tc := testContext{}
+	tsc := TestStoreConfig(nil)
+
+	// Drop the RaftMaxSizePerMsg so that even small Raft entries have their
+	// application paginated.
+	// TODO(nvanbenschoten): Switch this to using the new MaxCommitedSizePerReady
+	// configuration once #31511 is addressed.
+	tsc.RaftMaxSizePerMsg = 128
+	// Slow down the tick interval dramatically so that Raft groups can't rely
+	// on ticks to trigger Raft ready iterations.
+	tsc.RaftTickInterval = 5 * time.Second
+
+	var filterActive int32
+	blockRaftApplication := make(chan struct{})
+	blockingRaftApplication := make(chan struct{}, 1)
+	tsc.TestingKnobs.TestingApplyFilter =
+		func(filterArgs storagebase.ApplyFilterArgs) *roachpb.Error {
+			if atomic.LoadInt32(&filterActive) == 1 {
+				select {
+				case blockingRaftApplication <- struct{}{}:
+				default:
+				}
+				<-blockRaftApplication
+			}
+			return nil
+		}
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(t, stopper, tsc)
+	repl := tc.repl
+
+	// Block command application then propose a command to Raft.
+	var ba roachpb.BatchRequest
+	key := roachpb.Key("a")
+	put := putArgs(key, []byte("val"))
+	ba.Add(&put)
+	ba.Timestamp = tc.Clock().Now()
+
+	atomic.StoreInt32(&filterActive, 1)
+	exLease, _ := repl.GetLease()
+	_, _, _, pErr := repl.propose(ctx, exLease, ba, nil /* endCmds */, &allSpans)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Once that command is stuck applying, propose a number of large commands.
+	// This will allow them to all build up without any being applied so that
+	// their application will require pagination.
+	<-blockingRaftApplication
+	var ch chan proposalResult
+	for i := 0; i < 50; i++ {
+		var ba2 roachpb.BatchRequest
+		key := roachpb.Key("a")
+		put := putArgs(key, make([]byte, 2*tsc.RaftMaxSizePerMsg))
+		ba2.Add(&put)
+		ba2.Timestamp = tc.Clock().Now()
+
+		var pErr *roachpb.Error
+		ch, _, _, pErr = repl.propose(ctx, exLease, ba, nil /* endCmds */, &allSpans)
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	// Stop blocking Raft application. All of the proposals should quickly
+	// commit and apply, even if their application is paginated due to the
+	// small RaftMaxSizePerMsg.
+	close(blockRaftApplication)
+	const maxWait = 10 * time.Second
+	select {
+	case propRes := <-ch:
+		if propRes.Err != nil {
+			t.Fatalf("unexpected proposal result error: %v", propRes.Err)
+		}
+		if propRes.Reply == nil || len(propRes.Reply.Responses) != 1 {
+			t.Fatalf("expected proposal result with 1 response, found: %v", propRes.Reply)
+		}
+	case <-time.After(maxWait):
+		// If we don't re-enqueue Raft groups for another round of processing
+		// when their committed entries are paginated and not all immediately
+		// applied, this test will take more than three minutes to finish.
+		t.Fatalf("stall detected, proposal did not finish within %s", maxWait)
+	}
 }
 
 func TestSplitMsgApps(t *testing.T) {

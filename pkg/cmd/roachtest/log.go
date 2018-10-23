@@ -70,8 +70,10 @@ type logger struct {
 
 // newLogger constructs a new logger object. Not intended for direct
 // use. Please use logger.ChildLogger instead.
+//
+// If path is empty, logs will go to stdout/stderr.
 func (cfg *loggerConfig) newLogger(path string) (*logger, error) {
-	if artifacts == "" {
+	if path == "" {
 		// Log to stdout/stderr if there is no artifacts directory.
 		return &logger{
 			stdout: os.Stdout,
@@ -106,10 +108,19 @@ func (cfg *loggerConfig) newLogger(path string) (*logger, error) {
 	}, nil
 }
 
-func rootLogger(path string) (*logger, error) {
+type teeOptType bool
+
+const (
+	teeToStdout teeOptType = true
+	noTee       teeOptType = false
+)
+
+// rootLogger creates a logger.
+//
+// If path is empty, all logs go to stdout/stderr regardless of teeOpt.
+func rootLogger(path string, teeOpt teeOptType) (*logger, error) {
 	var stdout, stderr io.Writer
-	// Log to stdout/stderr if we're not running tests in parallel.
-	if parallelism == 1 {
+	if teeOpt == teeToStdout {
 		stdout = os.Stdout
 		stderr = os.Stderr
 	}
@@ -148,7 +159,11 @@ func (l *logger) ChildLogger(name string, opts ...loggerOption) (*logger, error)
 		opt.apply(cfg)
 	}
 
-	return cfg.newLogger(filepath.Join(filepath.Dir(l.path), name+".log"))
+	var path string
+	if l.path != "" {
+		path = filepath.Join(filepath.Dir(l.path), name+".log")
+	}
+	return cfg.newLogger(path)
 }
 
 func (l *logger) Printf(f string, args ...interface{}) {
