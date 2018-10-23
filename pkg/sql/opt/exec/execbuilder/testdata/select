@@ -976,3 +976,89 @@ query B
 SELECT (NULL::int, NULL::int) NOT IN (SELECT * FROM (VALUES (1, 1)) AS t(a, b) WHERE a > 1)
 ----
 true
+
+statement ok
+CREATE TABLE abcd (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b))
+
+# Ensure that (non-top-level) render nodes get populated with the correct ordering.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT a + x FROM (SELECT a, b + c AS x FROM abcd) ORDER BY a
+----
+render          ·         ·             ("?column?")  ·
+ │              render 0  a + x         ·             ·
+ └── render     ·         ·             (x, a)        +a
+      │         render 0  b + c         ·             ·
+      │         render 1  a             ·             ·
+      └── scan  ·         ·             (a, b, c)     +a
+·               table     abcd@primary  ·             ·
+·               spans     ALL           ·             ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT a + x FROM (SELECT a, b, a + b + c AS x FROM abcd) ORDER BY b
+----
+render               ·         ·                  ("?column?")     ·
+ │                   render 0  "?column?"         ·                ·
+ └── sort            ·         ·                  ("?column?", b)  +b
+      │              order     +b                 ·                ·
+      └── render     ·         ·                  ("?column?", b)  ·
+           │         render 0  a + (c + (a + b))  ·                ·
+           │         render 1  b                  ·                ·
+           └── scan  ·         ·                  (a, b, c)        ·
+·                    table     abcd@primary       ·                ·
+·                    spans     ALL                ·                ·
+
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT a + x FROM (SELECT a, b, a + b + c AS x FROM abcd) ORDER BY a DESC, b DESC
+----
+render             ·         ·             ("?column?")  ·
+ │                 render 0  a + x         ·             ·
+ └── render        ·         ·             (x, a, b)     -a,-b
+      │            render 0  c + (a + b)   ·             ·
+      │            render 1  a             ·             ·
+      │            render 2  b             ·             ·
+      └── revscan  ·         ·             (a, b, c)     -a,-b
+·                  table     abcd@primary  ·             ·
+·                  spans     ALL           ·             ·
+
+# Ensure that filter nodes (and filtered scan nodes) get populated with the correct ordering.
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a > b ORDER BY a
+----
+scan  ·       ·             (a, b, c, d)  +a
+·     table   abcd@primary  ·             ·
+·     spans   ALL           ·             ·
+·     filter  a > b         ·             ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM abcd WHERE a > b ORDER BY a DESC, b DESC
+----
+sort       ·       ·             (a, b, c, d)  -a,-b
+ │         order   -a,-b         ·             ·
+ └── scan  ·       ·             (a, b, c, d)  ·
+·          table   abcd@primary  ·             ·
+·          spans   ALL           ·             ·
+·          filter  a > b         ·             ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT a, b FROM abcd LIMIT 10) WHERE a > b ORDER BY a
+----
+filter     ·       ·             (a, b)  +a
+ │         filter  a > b         ·       ·
+ └── scan  ·       ·             (a, b)  +a
+·          table   abcd@primary  ·       ·
+·          spans   ALL           ·       ·
+·          limit   10            ·       ·
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM (SELECT a, a+b+c AS x FROM (SELECT * FROM abcd LIMIT 10)) WHERE x > 100 ORDER BY a
+----
+render          ·         ·                    (a, x)     ·
+ │              render 0  a                    ·          ·
+ │              render 1  c + (a + b)          ·          ·
+ └── filter     ·         ·                    (a, b, c)  +a
+      │         filter    (c + (a + b)) > 100  ·          ·
+      └── scan  ·         ·                    (a, b, c)  +a
+·               table     abcd@primary         ·          ·
+·               spans     ALL                  ·          ·
+·               limit     10                   ·          ·

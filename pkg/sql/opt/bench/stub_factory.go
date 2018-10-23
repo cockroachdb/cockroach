@@ -47,18 +47,20 @@ func (f *stubFactory) ConstructVirtualScan(table opt.Table) (exec.Node, error) {
 	return struct{}{}, nil
 }
 
-func (f *stubFactory) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec.Node, error) {
+func (f *stubFactory) ConstructFilter(
+	n exec.Node, filter tree.TypedExpr, reqOrdering exec.OutputOrdering,
+) (exec.Node, error) {
 	return struct{}{}, nil
 }
 
 func (f *stubFactory) ConstructSimpleProject(
-	n exec.Node, cols []exec.ColumnOrdinal, colNames []string,
+	n exec.Node, cols []exec.ColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
 
 func (f *stubFactory) ConstructRender(
-	n exec.Node, exprs tree.TypedExprs, colNames []string,
+	n exec.Node, exprs tree.TypedExprs, colNames []string, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	return struct{}{}, nil
 }
