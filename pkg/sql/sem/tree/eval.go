@@ -2606,6 +2606,15 @@ func TimestampToDecimal(ts hlc.Timestamp) *DDecimal {
 	return &res
 }
 
+// GetRelativeParseTime implements ParseTimeContext.
+func (ctx *EvalContext) GetRelativeParseTime() time.Time {
+	ret := ctx.TxnTimestamp
+	if ret.IsZero() {
+		ret = timeutil.Now()
+	}
+	return ret.In(ctx.GetLocation())
+}
+
 // GetTxnTimestamp retrieves the current transaction timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetTxnTimestamp(precision time.Duration) *DTimestampTZ {
@@ -3153,9 +3162,9 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 	case *coltypes.TDate:
 		switch d := d.(type) {
 		case *DString:
-			return ParseDDate(string(*d), ctx.GetLocation())
+			return ParseDDate(ctx, string(*d))
 		case *DCollatedString:
-			return ParseDDate(d.Contents, ctx.GetLocation())
+			return ParseDDate(ctx, d.Contents)
 		case *DDate:
 			return d, nil
 		case *DInt:
@@ -3169,9 +3178,9 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 	case *coltypes.TTime:
 		switch d := d.(type) {
 		case *DString:
-			return ParseDTime(string(*d))
+			return ParseDTime(ctx, string(*d))
 		case *DCollatedString:
-			return ParseDTime(d.Contents)
+			return ParseDTime(ctx, d.Contents)
 		case *DTime:
 			return d, nil
 		case *DTimestamp:
@@ -3205,9 +3214,9 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		// TODO(knz): TimestampTZ from float, decimal.
 		switch d := d.(type) {
 		case *DString:
-			return ParseDTimestampTZ(string(*d), ctx.GetLocation(), time.Microsecond)
+			return ParseDTimestampTZ(ctx, string(*d), time.Microsecond)
 		case *DCollatedString:
-			return ParseDTimestampTZ(d.Contents, ctx.GetLocation(), time.Microsecond)
+			return ParseDTimestampTZ(ctx, d.Contents, time.Microsecond)
 		case *DDate:
 			return MakeDTimestampTZFromDate(ctx.GetLocation(), d), nil
 		case *DTimestamp:

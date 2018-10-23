@@ -190,8 +190,11 @@ func NewProtocolViolationErrorf(format string, args ...interface{}) error {
 }
 
 // DecodeOidDatum decodes bytes with specified Oid and format code into
-// a datum.
-func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
+// a datum. If the ParseTimeContext is nil, reasonable defaults
+// will be applied.
+func DecodeOidDatum(
+	ctx tree.ParseTimeContext, id oid.Oid, code FormatCode, b []byte,
+) (tree.Datum, error) {
 	switch code {
 	case FormatText:
 		switch id {
@@ -238,30 +241,25 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 			}
 			return tree.NewDBytes(tree.DBytes(res)), nil
 		case oid.T_timestamp:
-			d, err := tree.ParseDTimestamp(nil, string(b), time.Microsecond)
+			d, err := tree.ParseDTimestamp(ctx, string(b), time.Microsecond)
 			if err != nil {
 				return nil, errors.Errorf("could not parse string %q as timestamp", b)
 			}
 			return d, nil
 		case oid.T_timestamptz:
-			d, err := tree.ParseDTimestampTZ(string(b), time.UTC, time.Microsecond)
+			d, err := tree.ParseDTimestampTZ(ctx, string(b), time.Microsecond)
 			if err != nil {
 				return nil, errors.Errorf("could not parse string %q as timestamptz", b)
 			}
 			return d, nil
 		case oid.T_date:
-			ts, err := tree.ParseDTimestamp(nil, string(b), time.Microsecond)
+			d, err := tree.ParseDDate(ctx, string(b))
 			if err != nil {
-				res, err := tree.ParseDDate(string(b), time.UTC)
-				if err != nil {
-					return nil, errors.Errorf("could not parse string %q as date", b)
-				}
-				return res, nil
+				return nil, errors.Errorf("could not parse string %q as date", b)
 			}
-			daysSinceEpoch := ts.Unix() / secondsInDay
-			return tree.NewDDate(tree.DDate(daysSinceEpoch)), nil
+			return d, nil
 		case oid.T_time:
-			d, err := tree.ParseDTime(string(b))
+			d, err := tree.ParseDTime(nil, string(b))
 			if err != nil {
 				return nil, errors.Errorf("could not parse string %q as time", b)
 			}
@@ -513,7 +511,7 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 			return tree.ParseDJSON(string(b))
 		default:
 			if _, ok := types.ArrayOids[id]; ok {
-				return decodeBinaryArray(b, code)
+				return decodeBinaryArray(ctx, b, code)
 			}
 		}
 	default:
@@ -618,7 +616,7 @@ func pgBinaryToIPAddr(b []byte) (ipaddr.IPAddr, error) {
 	}, nil
 }
 
-func decodeBinaryArray(b []byte, code FormatCode) (tree.Datum, error) {
+func decodeBinaryArray(ctx tree.ParseTimeContext, b []byte, code FormatCode) (tree.Datum, error) {
 	hdr := struct {
 		Ndims int32
 		// Nullflag
@@ -648,7 +646,7 @@ func decodeBinaryArray(b []byte, code FormatCode) (tree.Datum, error) {
 			return nil, err
 		}
 		buf := r.Next(int(vlen))
-		elem, err := DecodeOidDatum(elemOid, code, buf)
+		elem, err := DecodeOidDatum(ctx, elemOid, code, buf)
 		if err != nil {
 			return nil, err
 		}
