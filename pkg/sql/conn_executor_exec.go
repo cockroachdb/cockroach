@@ -344,7 +344,6 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 		if ts != nil {
 			p.semaCtx.AsOfTimestamp = ts
-			p.avoidCachedDescriptors = true
 			ex.state.mu.txn.SetFixedTimestamp(ctx, *ts)
 		}
 	} else {
@@ -363,7 +362,6 @@ func (ex *connExecutor) execStmtInOpenState(
 					ex.state.mu.txn.OrigTimestamp()))
 			}
 			p.semaCtx.AsOfTimestamp = ts
-			p.avoidCachedDescriptors = true
 		}
 	}
 

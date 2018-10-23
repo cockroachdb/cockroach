@@ -208,8 +208,8 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 	if iAmTheLeaseHolder {
 		// Log lease acquisition whenever an Epoch-based lease changes hands (or verbose
 		// logging is enabled).
-		if (newLease.Type() == roachpb.LeaseEpoch && leaseChangingHands) || log.V(1) {
-			log.Infof(ctx, "new range lease %s following %s", newLease, prevLease)
+		if newLease.Type() == roachpb.LeaseEpoch && leaseChangingHands || log.V(1) {
+			log.VEventf(ctx, 1, "new range lease %s following %s", newLease, prevLease)
 		}
 	}
 

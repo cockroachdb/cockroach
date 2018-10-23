@@ -764,6 +764,56 @@ SELECT EXISTS(SELECT * FROM t.foo);
 	}
 }
 
+// Test that an AS OF SYSTEM TIME query uses the table cache.
+func TestAsOfSystemTimeUsesCache(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+
+	fooAcquiredCount := int32(0)
+
+	params.Knobs = base.TestingKnobs{
+		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
+				RemoveOnceDereferenced: true,
+				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+					if table.Name == "foo" {
+						atomic.AddInt32(&fooAcquiredCount, 1)
+					}
+				},
+			},
+		},
+	}
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.foo (v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if atomic.LoadInt32(&fooAcquiredCount) > 0 {
+		t.Fatalf("CREATE TABLE has acquired a lease: got %d, expected 0", atomic.LoadInt32(&fooAcquiredCount))
+	}
+
+	var tsVal string
+	if err := sqlDB.QueryRow("SELECT cluster_logical_timestamp()").Scan(&tsVal); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := sqlDB.Exec(
+		fmt.Sprintf(`SELECT * FROM t.foo AS OF SYSTEM TIME %s;`, tsVal),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	count := atomic.LoadInt32(&fooAcquiredCount)
+	if count == 0 {
+		t.Fatal("SELECT did not get lease; got 0, expected > 0")
+	}
+}
+
 // TestDescriptorRefreshOnRetry tests that all descriptors acquired by
 // a query are properly released before the query is retried.
 func TestDescriptorRefreshOnRetry(t *testing.T) {

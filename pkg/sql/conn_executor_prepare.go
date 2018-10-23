@@ -198,10 +198,6 @@ func (ex *connExecutor) prepare(
 		}
 		if protoTS != nil {
 			p.semaCtx.AsOfTimestamp = protoTS
-			// We can't use cached descriptors anywhere in this query, because
-			// we want the descriptors at the timestamp given, not the latest
-			// known to the cache.
-			p.avoidCachedDescriptors = true
 			txn.SetFixedTimestamp(ctx, *protoTS)
 		}
 

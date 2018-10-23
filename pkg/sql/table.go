@@ -232,6 +232,13 @@ func (tc *TableCollection) getTableVersion(
 		}
 	}
 
+	// TODO(vivek): Ideally we'd avoid caching for only the
+	// system.descriptor and system.lease tables, because they are
+	// used for acquiring leases, creating a chicken&egg problem.
+	// But doing so turned problematic and the tests pass only by also
+	// disabling caching of system.eventlog, system.rangelog, and
+	// system.users. For now we're sticking to disabling caching of
+	// all system descriptors except the role-members-table.
 	avoidCache := flags.avoidCached || testDisableTableLeases ||
 		(tn.Catalog() == sqlbase.SystemDB.Name && tn.TableName.String() != sqlbase.RoleMembersTable.Name)
 
@@ -252,13 +259,6 @@ func (tc *TableCollection) getTableVersion(
 	}
 
 	if avoidCache {
-		// TODO(vivek): Ideally we'd avoid caching for only the
-		// system.descriptor and system.lease tables, because they are
-		// used for acquiring leases, creating a chicken&egg problem.
-		// But doing so turned problematic and the tests pass only by also
-		// disabling caching of system.eventlog, system.rangelog, and
-		// system.users. For now we're sticking to disabling caching of
-		// all system descriptors except the role-members-table.
 		flags.avoidCached = true
 		phyAccessor := UncachedPhysicalAccessor{}
 		return phyAccessor.GetObjectDesc(tn, flags)
@@ -279,6 +279,16 @@ func (tc *TableCollection) getTableVersion(
 	origTimestamp := flags.txn.OrigTimestamp()
 	table, expiration, err := tc.leaseMgr.AcquireByName(ctx, origTimestamp, dbID, tn.Table())
 	if err != nil {
+		// AcquireByName() is unable to function correctly on a timestamp
+		// less than the timestamp of a transaction with a DROP/TRUNCATE on
+		// a table. A TRUNCATE is where the name -> id map for a table changes.
+		// TODO(vivek): There is no strong reason why this problem is limited
+		// to AS OF SYSTEM TIME requests; remove flags.fixedTimestamp.
+		if flags.fixedTimestamp {
+			flags.avoidCached = true
+			phyAccessor := UncachedPhysicalAccessor{}
+			return phyAccessor.GetObjectDesc(tn, flags)
+		}
 		if err == sqlbase.ErrDescriptorNotFound {
 			if flags.required {
 				// Transform the descriptor error into an error that references the
