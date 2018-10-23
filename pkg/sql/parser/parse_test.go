@@ -198,7 +198,6 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE a (b INT CONSTRAINT c REFERENCES d)`},
 
 		{`CREATE TABLE a (b INT) PARTITION BY LIST (b) (PARTITION p1 VALUES IN (1, DEFAULT), PARTITION p2 VALUES IN ((1, 2), (3, 4)))`},
-		{`CREATE TABLE a (b INT) PARTITION BY RANGE (b) (PARTITION p1 VALUES FROM (MINVALUE) TO (1), PARTITION p2 VALUES FROM (2, MAXVALUE) TO (4, 4), PARTITION p3 VALUES FROM (4, 4) TO (MAXVALUE))`},
 		// This monstrosity was added on the assumption that it's more readable
 		// than all on one line. Feel free to rip it out if you come across it
 		// and disagree.
@@ -1850,10 +1849,19 @@ func TestParse2(t *testing.T) {
 			`CREATE TABLE "index" (x INT)`},
 		{`CREATE TABLE NOTHING (x INT)`,
 			`CREATE TABLE "nothing" (x INT)`},
+
+		// Ensure MINVALUE/MAXVALUE are not reserved.
 		{`CREATE TABLE MINVALUE (x INT)`,
-			`CREATE TABLE "minvalue" (x INT)`},
+			`CREATE TABLE minvalue (x INT)`},
 		{`CREATE TABLE MAXVALUE (x INT)`,
-			`CREATE TABLE "maxvalue" (x INT)`},
+			`CREATE TABLE maxvalue (x INT)`},
+		{`CREATE TABLE foo (MINVALUE INT)`,
+			`CREATE TABLE foo (minvalue INT)`},
+		{`CREATE TABLE foo (MAXVALUE INT)`,
+			`CREATE TABLE foo (maxvalue INT)`},
+
+		{`CREATE TABLE a (b INT) PARTITION BY RANGE (b) (PARTITION p1 VALUES FROM (MINVALUE) TO (1), PARTITION p2 VALUES FROM (2, MAXVALUE) TO (4, 4), PARTITION p3 VALUES FROM (4, 4) TO (MAXVALUE))`,
+			`CREATE TABLE a (b INT) PARTITION BY RANGE (b) (PARTITION p1 VALUES FROM (minvalue) TO (1), PARTITION p2 VALUES FROM (2, maxvalue) TO (4, 4), PARTITION p3 VALUES FROM (4, 4) TO (maxvalue))`},
 	}
 	for _, d := range testData {
 		stmts, err := parser.Parse(d.sql)
