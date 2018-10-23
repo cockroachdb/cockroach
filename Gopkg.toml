@@ -57,9 +57,9 @@ ignored = [
   name = "github.com/montanaflynn/stats"
   branch = "master"
 
-# https://github.com/rubyist/circuitbreaker/commit/af95830
+# https://github.com/cockroachdb/circuitbreaker/commit/4f5b168
 [[constraint]]
-  name = "github.com/rubyist/circuitbreaker"
+  name = "github.com/cockroachdb/circuitbreaker"
   branch = "master"
 
 [[constraint]]

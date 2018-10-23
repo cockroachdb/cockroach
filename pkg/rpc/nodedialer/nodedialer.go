@@ -20,8 +20,8 @@ import (
 	"time"
 	"unsafe"
 
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/pkg/errors"
-	"github.com/rubyist/circuitbreaker"
 	"google.golang.org/grpc"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -103,12 +103,6 @@ func (n *Dialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (_ *grpc.Clien
 		return nil, err
 	}
 	breaker.Success()
-	// This really shouldn't be necessary, but Success() isn't guaranteed to
-	// close the breaker and the upstream vendored repo is dead, so just work
-	// around it by resetting the breaker manually if it's still tripped.
-	if breaker.Tripped() {
-		breaker.Reset()
-	}
 	return conn, nil
 }
 
@@ -138,15 +132,19 @@ func (n *Dialer) DialInternalClient(
 		return localCtx, localClient, nil
 	}
 
+	breaker := n.getBreaker(nodeID)
+
 	log.VEventf(ctx, 2, "sending request to %s", addr)
 	conn, err := n.rpcContext.GRPCDial(addr.String()).Connect(ctx)
 	if err != nil {
+		breaker.Fail()
 		return nil, nil, err
 	}
 	// Check to see if the connection is in the transient failure state. This can
 	// happen if the connection already existed, but a recent heartbeat has
 	// failed and we haven't yet torn down the connection.
 	if err := grpcutil.ConnectionReady(conn); err != nil {
+		breaker.Fail()
 		return nil, nil, err
 	}
 	// TODO(bdarnell): Reconcile the different health checks and circuit breaker
@@ -155,9 +153,7 @@ func (n *Dialer) DialInternalClient(
 	// ConnHealth when scheduling processors, but can then see attempts to send
 	// RPCs fail when dial fails due to an open breaker. Reset the breaker here
 	// as a stop-gap before the reconciliation occurs.
-	if breaker := n.getBreaker(nodeID); breaker.Tripped() {
-		breaker.Reset()
-	}
+	breaker.Success()
 	return ctx, roachpb.NewInternalClient(conn), nil
 }
 

@@ -250,12 +250,12 @@
   version = "v1.3.1"
 
 [[projects]]
-  digest = "1:4ba637038f22c9065994c0cd734118fc75e0c744f855fd3edbd3b923d1f41d44"
-  name = "github.com/cenk/backoff"
+  digest = "1:2209584c0f7c9b68c23374e659357ab546e1b70eec2761f03280f69a8fd23d77"
+  name = "github.com/cenkalti/backoff"
   packages = ["."]
   pruneopts = "UT"
-  revision = "61153c768f31ee5f130071d08fc82b85208528de"
-  version = "v1.1.0"
+  revision = "2ea60e5f094469f9e65adb9cd103795b73ae743e"
+  version = "v2.0.0"
 
 [[projects]]
   digest = "1:9ce437e6e6b97d9430e29ac9324e241b3ba77969f14499636e47d4c59fcc236b"
@@ -283,6 +283,14 @@
   pruneopts = "UT"
   revision = "bced77f817b446cc6f6453d6cab5891e43f9ba17"
   version = "v2.0.0"
+
+[[projects]]
+  branch = "master"
+  digest = "1:e9b4bf63bdb977f0343e8c1d7a7aa7ff37f4a7126bd7f4a6df0d6b976ee0bf0a"
+  name = "github.com/cockroachdb/circuitbreaker"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "4f5b16865f3ccc4bb8e09413d5c7308e00888b98"
 
 [[projects]]
   branch = "master"
@@ -1227,14 +1235,6 @@
   revision = "1f30fe9094a513ce4c700b9a54458bbb0c96996c"
 
 [[projects]]
-  branch = "master"
-  digest = "1:2704976bbe3459cc3a93c0af2e9e1fc6f0a622db805bbcd1500dfe5977a7ecdf"
-  name = "github.com/rubyist/circuitbreaker"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "2074adba5ddc7d5f7559448a9c3066573521c5bf"
-
-[[projects]]
   digest = "1:9945e4ef330ecb1ca328916effe63b46453c3f39c420c0db97dbdbe832b77662"
   name = "github.com/russross/blackfriday"
   packages = ["."]
@@ -1656,9 +1656,10 @@
     "github.com/backtrace-labs/go-bcd",
     "github.com/benesch/cgosymbolizer",
     "github.com/biogo/store/llrb",
-    "github.com/cenk/backoff",
+    "github.com/cenkalti/backoff",
     "github.com/client9/misspell/cmd/misspell",
     "github.com/cockroachdb/apd",
+    "github.com/cockroachdb/circuitbreaker",
     "github.com/cockroachdb/cmux",
     "github.com/cockroachdb/cockroach-go/crdb",
     "github.com/cockroachdb/crlfmt",
@@ -1743,7 +1744,6 @@
     "github.com/prometheus/common/expfmt",
     "github.com/rcrowley/go-metrics",
     "github.com/rcrowley/go-metrics/exp",
-    "github.com/rubyist/circuitbreaker",
     "github.com/sasha-s/go-deadlock",
     "github.com/satori/go.uuid",
     "github.com/shirou/gopsutil/cpu",
