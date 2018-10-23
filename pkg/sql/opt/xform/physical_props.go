@@ -177,6 +177,15 @@ func (o *Optimizer) buildChildPhysicalProps(
 			}
 
 			childProps.Ordering = parentOrdering.Intersection(&groupBy.Ordering)
+
+			// The FD set of the input doesn't "pass through" to the GroupBy FD set;
+			// check the ordering to see if it can be simplified with respect to the
+			// input FD set.
+			fdSet := &parent.(*memo.GroupByExpr).Input.Relational().FuncDeps
+			if childProps.Ordering.CanSimplify(fdSet) {
+				childProps.Ordering = childProps.Ordering.Copy()
+				childProps.Ordering.Simplify(fdSet)
+			}
 		}
 
 	case opt.ExplainOp:
