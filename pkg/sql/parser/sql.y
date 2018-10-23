@@ -921,7 +921,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Expr> string_or_placeholder_list
 
 %type <str> unreserved_keyword type_func_name_keyword cockroachdb_extra_type_func_name_keyword
-%type <str> col_name_keyword reserved_keyword cockroachdb_extra_reserved_keyword
+%type <str> col_name_keyword reserved_keyword cockroachdb_extra_reserved_keyword extra_var_value
 
 %type <tree.ConstraintTableDef> table_constraint constraint_elem
 %type <tree.TableDef> index_def
@@ -2823,10 +2823,25 @@ attrs:
 
 var_value:
   a_expr
-| ON
+| extra_var_value
   {
     $$.val = tree.Expr(&tree.UnresolvedName{NumParts: 1, Parts: tree.NameParts{$1}})
   }
+
+// The RHS of a SET statement can contain any valid expression, which
+// themselves can contain identifiers like TRUE, FALSE. These are parsed
+// as column names (via a_expr) and later during semantic analysis
+// assigned their special value.
+//
+// In addition, for compatibility with CockroachDB we need to support
+// the reserved keyword ON (to go along OFF, which is a valid column name).
+//
+// Finally, in PostgreSQL the CockroachDB-reserved words "index",
+// "nothing", etc. are not special and are valid in SET. These need to
+// be allowed here too.
+extra_var_value:
+  ON
+| cockroachdb_extra_reserved_keyword
 
 var_list:
   var_value
