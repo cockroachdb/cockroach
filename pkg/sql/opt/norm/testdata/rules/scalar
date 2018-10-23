@@ -531,6 +531,19 @@ select
  └── filters
       └── (j->'a') @> '"b"' [type=bool, outer=(5)]
 
+# The transformation is not valid in this case, since containment doesn't imply
+# equality for non-scalars.
+opt
+SELECT j->'a' = '["b"]'::JSON, j->'a' = '{"b": "c"}'::JSON FROM a
+----
+project
+ ├── columns: "?column?":7(bool) "?column?":8(bool)
+ ├── scan a
+ │    └── columns: j:5(jsonb)
+ └── projections
+      ├── (j->'a') = '["b"]' [type=bool, outer=(5)]
+      └── (j->'a') = '{"b": "c"}' [type=bool, outer=(5)]
+
 # --------------------------------------------------
 # NormalizeJSONContains
 # --------------------------------------------------
