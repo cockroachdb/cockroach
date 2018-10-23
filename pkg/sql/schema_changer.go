@@ -187,14 +187,14 @@ func isPermanentSchemaChangeError(err error) bool {
 		return false
 	case *pgerror.Error:
 		switch err.Code {
-		case pgerror.CodeSerializationFailureError, pgerror.CodeConnectionFailureError:
+		case pgerror.CodeSerializationFailureError:
 			return false
 
 		case pgerror.CodeInternalError:
-			if err.Message == context.DeadlineExceeded.Error() {
+			if err.Message == context.DeadlineExceeded.Error() ||
+				strings.HasPrefix(err.Message, "communication error") {
 				return false
 			}
-
 		}
 	}
 
