@@ -810,8 +810,8 @@ kv_option_list ::=
 
 complex_table_pattern ::=
 	complex_db_object_name
-	| name '.' unrestricted_name '.' '*'
-	| name '.' '*'
+	| db_object_name_component '.' unrestricted_name '.' '*'
+	| db_object_name_component '.' '*'
 	| '*'
 
 table_pattern ::=
@@ -1095,11 +1095,11 @@ set_clause ::=
 	| multiple_set_clause
 
 simple_db_object_name ::=
-	name
+	db_object_name_component
 
 complex_db_object_name ::=
-	name '.' unrestricted_name
-	| name '.' unrestricted_name '.' unrestricted_name
+	db_object_name_component '.' unrestricted_name
+	| db_object_name_component '.' unrestricted_name '.' unrestricted_name
 
 non_reserved_word ::=
 	'identifier'
@@ -1112,6 +1112,11 @@ kv_option ::=
 	| name
 	| 'SCONST' '=' string_or_placeholder
 	| 'SCONST'
+
+db_object_name_component ::=
+	name
+	| cockroachdb_extra_type_func_name_keyword
+	| cockroachdb_extra_reserved_keyword
 
 unrestricted_name ::=
 	'identifier'
@@ -1432,7 +1437,6 @@ multiple_set_clause ::=
 type_func_name_keyword ::=
 	'COLLATION'
 	| 'CROSS'
-	| 'FAMILY'
 	| 'FULL'
 	| 'INNER'
 	| 'ILIKE'
@@ -1441,14 +1445,22 @@ type_func_name_keyword ::=
 	| 'JOIN'
 	| 'LEFT'
 	| 'LIKE'
-	| 'MAXVALUE'
-	| 'MINVALUE'
 	| 'NATURAL'
 	| 'NOTNULL'
 	| 'OUTER'
 	| 'OVERLAPS'
 	| 'RIGHT'
 	| 'SIMILAR'
+	| cockroachdb_extra_type_func_name_keyword
+
+cockroachdb_extra_type_func_name_keyword ::=
+	'FAMILY'
+	| 'MAXVALUE'
+	| 'MINVALUE'
+
+cockroachdb_extra_reserved_keyword ::=
+	'INDEX'
+	| 'NOTHING'
 
 reserved_keyword ::=
 	'ALL'
@@ -1492,7 +1504,6 @@ reserved_keyword ::=
 	| 'GROUP'
 	| 'HAVING'
 	| 'IN'
-	| 'INDEX'
 	| 'INITIALLY'
 	| 'INTERSECT'
 	| 'INTO'
@@ -1502,7 +1513,6 @@ reserved_keyword ::=
 	| 'LOCALTIME'
 	| 'LOCALTIMESTAMP'
 	| 'NOT'
-	| 'NOTHING'
 	| 'NULL'
 	| 'OFFSET'
 	| 'ON'
@@ -1531,6 +1541,7 @@ reserved_keyword ::=
 	| 'WHERE'
 	| 'WINDOW'
 	| 'WITH'
+	| cockroachdb_extra_reserved_keyword
 
 transaction_iso_level ::=
 	'ISOLATION' 'LEVEL' iso_level
@@ -1651,9 +1662,9 @@ interval ::=
 
 column_path_with_star ::=
 	column_path
-	| name '.' unrestricted_name '.' unrestricted_name '.' '*'
-	| name '.' unrestricted_name '.' '*'
-	| name '.' '*'
+	| db_object_name_component '.' unrestricted_name '.' unrestricted_name '.' '*'
+	| db_object_name_component '.' unrestricted_name '.' '*'
+	| db_object_name_component '.' '*'
 
 func_expr ::=
 	func_application filter_clause over_clause
@@ -2050,9 +2061,9 @@ interval_qualifier ::=
 	| 'MINUTE' 'TO' interval_second
 
 prefixed_column_path ::=
-	name '.' unrestricted_name
-	| name '.' unrestricted_name '.' unrestricted_name
-	| name '.' unrestricted_name '.' unrestricted_name '.' unrestricted_name
+	db_object_name_component '.' unrestricted_name
+	| db_object_name_component '.' unrestricted_name '.' unrestricted_name
+	| db_object_name_component '.' unrestricted_name '.' unrestricted_name '.' unrestricted_name
 
 func_name ::=
 	type_function_name
