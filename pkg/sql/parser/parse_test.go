@@ -1839,6 +1839,21 @@ func TestParse2(t *testing.T) {
 		{`ALTER TABLE a ALTER b DROP NOT NULL`, `ALTER TABLE a ALTER COLUMN b DROP NOT NULL`},
 		{`ALTER TABLE a ALTER b TYPE INT`, `ALTER TABLE a ALTER COLUMN b SET DATA TYPE INT`},
 		{`EXPLAIN ANALYZE SELECT 1`, `EXPLAIN ANALYZE (DISTSQL) SELECT 1`},
+
+		{`SET a = INDEX`, `SET a = "index"`},
+		{`SET a = NOTHING`, `SET a = "nothing"`},
+
+		// Regression for #31589
+		{`CREATE TABLE FAMILY (x INT)`,
+			`CREATE TABLE "family" (x INT)`},
+		{`CREATE TABLE INDEX (x INT)`,
+			`CREATE TABLE "index" (x INT)`},
+		{`CREATE TABLE NOTHING (x INT)`,
+			`CREATE TABLE "nothing" (x INT)`},
+		{`CREATE TABLE MINVALUE (x INT)`,
+			`CREATE TABLE "minvalue" (x INT)`},
+		{`CREATE TABLE MAXVALUE (x INT)`,
+			`CREATE TABLE "maxvalue" (x INT)`},
 	}
 	for _, d := range testData {
 		stmts, err := parser.Parse(d.sql)

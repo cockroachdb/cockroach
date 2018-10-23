@@ -21,9 +21,9 @@ BEGIN {
       category = "C"
   } else if ($1 == "unreserved_keyword:") {
       category = "U"
-  } else if ($1 == "type_func_name_keyword:") {
+  } else if ($1 == "type_func_name_keyword:" || $1 == "cockroachdb_extra_type_func_name_keyword:") {
       category = "T"
-  } else if ($1 == "reserved_keyword:") {
+  } else if ($1 == "reserved_keyword:" || $1 == "cockroachdb_extra_reserved_keyword:") {
       category ="R"
   } else {
       print "unknown keyword type:", $1 >>"/dev/stderr"
@@ -36,7 +36,7 @@ BEGIN {
   keyword = 0
 }
 
-{
+/^ *\|? *[A-Z]/ {
   if (keyword && $NF != "") {
       printf("\"%s\": {%s, \"%s\"},\n", tolower($NF), $NF, category) | sort
   }

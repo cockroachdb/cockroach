@@ -774,6 +774,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %type <str> database_name index_name opt_index_name column_name insert_column_item statistics_name window_name
 %type <str> family_name opt_family_name table_alias_name constraint_name target_name zone_name partition_name collation_name
+%type <str> db_object_name_component
 %type <*tree.UnresolvedName> table_name sequence_name type_name view_name db_object_name simple_db_object_name complex_db_object_name
 %type <*tree.UnresolvedName> table_pattern complex_table_pattern
 %type <*tree.UnresolvedName> column_path prefixed_column_path column_path_with_star
@@ -919,8 +920,8 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Expr> string_or_placeholder
 %type <tree.Expr> string_or_placeholder_list
 
-%type <str> unreserved_keyword type_func_name_keyword
-%type <str> col_name_keyword reserved_keyword
+%type <str> unreserved_keyword type_func_name_keyword cockroachdb_extra_type_func_name_keyword
+%type <str> col_name_keyword reserved_keyword cockroachdb_extra_reserved_keyword extra_var_value
 
 %type <tree.ConstraintTableDef> table_constraint constraint_elem
 %type <tree.TableDef> index_def
@@ -2825,10 +2826,25 @@ attrs:
 
 var_value:
   a_expr
-| ON
+| extra_var_value
   {
     $$.val = tree.Expr(&tree.UnresolvedName{NumParts: 1, Parts: tree.NameParts{$1}})
   }
+
+// The RHS of a SET statement can contain any valid expression, which
+// themselves can contain identifiers like TRUE, FALSE. These are parsed
+// as column names (via a_expr) and later during semantic analysis
+// assigned their special value.
+//
+// In addition, for compatibility with CockroachDB we need to support
+// the reserved keyword ON (to go along OFF, which is a valid column name).
+//
+// Finally, in PostgreSQL the CockroachDB-reserved words "index",
+// "nothing", etc. are not special and are valid in SET. These need to
+// be allowed here too.
+extra_var_value:
+  ON
+| cockroachdb_extra_reserved_keyword
 
 var_list:
   var_value
@@ -8048,11 +8064,11 @@ table_pattern:
 // every pattern not composed of a single identifier.
 complex_table_pattern:
   complex_db_object_name
-| name '.' unrestricted_name '.' '*'
+| db_object_name_component '.' unrestricted_name '.' '*'
   {
      $$.val = &tree.UnresolvedName{Star: true, NumParts: 3, Parts: tree.NameParts{"", $3, $1}}
   }
-| name '.' '*'
+| db_object_name_component '.' '*'
   {
      $$.val = &tree.UnresolvedName{Star: true, NumParts: 2, Parts: tree.NameParts{"", $1}}
   }
@@ -8215,15 +8231,15 @@ column_path:
 | prefixed_column_path
 
 prefixed_column_path:
-  name '.' unrestricted_name
+  db_object_name_component '.' unrestricted_name
   {
       $$.val = &tree.UnresolvedName{NumParts:2, Parts: tree.NameParts{$3,$1}}
   }
-| name '.' unrestricted_name '.' unrestricted_name
+| db_object_name_component '.' unrestricted_name '.' unrestricted_name
   {
       $$.val = &tree.UnresolvedName{NumParts:3, Parts: tree.NameParts{$5,$3,$1}}
   }
-| name '.' unrestricted_name '.' unrestricted_name '.' unrestricted_name
+| db_object_name_component '.' unrestricted_name '.' unrestricted_name '.' unrestricted_name
   {
       $$.val = &tree.UnresolvedName{NumParts:4, Parts: tree.NameParts{$7,$5,$3,$1}}
   }
@@ -8237,15 +8253,15 @@ prefixed_column_path:
 // The single unqualified star is handled separately by target_elem.
 column_path_with_star:
   column_path
-| name '.' unrestricted_name '.' unrestricted_name '.' '*'
+| db_object_name_component '.' unrestricted_name '.' unrestricted_name '.' '*'
   {
     $$.val = &tree.UnresolvedName{Star:true, NumParts:4, Parts: tree.NameParts{"",$5,$3,$1}}
   }
-| name '.' unrestricted_name '.' '*'
+| db_object_name_component '.' unrestricted_name '.' '*'
   {
     $$.val = &tree.UnresolvedName{Star:true, NumParts:3, Parts: tree.NameParts{"",$3,$1}}
   }
-| name '.' '*'
+| db_object_name_component '.' '*'
   {
     $$.val = &tree.UnresolvedName{Star:true, NumParts:2, Parts: tree.NameParts{"",$1}}
   }
@@ -8276,7 +8292,7 @@ db_object_name:
 // simple_db_object_name is the part of db_object_name that recognizes
 // simple identifiers.
 simple_db_object_name:
-  name
+  db_object_name_component
   {
     $$.val = &tree.UnresolvedName{NumParts:1, Parts: tree.NameParts{$1}}
   }
@@ -8286,15 +8302,23 @@ simple_db_object_name:
 // It is split away from db_object_name in order to enable the definition
 // of table_pattern.
 complex_db_object_name:
-  name '.' unrestricted_name
+  db_object_name_component '.' unrestricted_name
   {
     $$.val = &tree.UnresolvedName{NumParts:2, Parts: tree.NameParts{$3,$1}}
   }
-| name '.' unrestricted_name '.' unrestricted_name
+| db_object_name_component '.' unrestricted_name '.' unrestricted_name
   {
     $$.val = &tree.UnresolvedName{NumParts:3, Parts: tree.NameParts{$5,$3,$1}}
   }
 
+// DB object name component -- this cannot not include any reserved
+// keyword because of ambiguity after FROM, but we've been too lax
+// with reserved keywords and made INDEX and FAMILY reserved, so we're
+// trying to gain them back here.
+db_object_name_component:
+  name
+| cockroachdb_extra_type_func_name_keyword
+| cockroachdb_extra_reserved_keyword
 
 // General name --- names that can be column, table, etc names.
 name:
@@ -8663,11 +8687,12 @@ col_name_keyword:
 // productions in a_expr to support the goofy SQL9x argument syntax.
 // - thomas 2000-11-28
 //
-// TODO(dan): see if we can move MAXVALUE and MINVALUE to a less restricted list
+// *** DO NOT ADD COCKROACHDB-SPECIFIC KEYWORDS HERE ***
+//
+// See cockroachdb_extra_type_func_name_keyword below.
 type_func_name_keyword:
   COLLATION
 | CROSS
-| FAMILY
 | FULL
 | INNER
 | ILIKE
@@ -8676,19 +8701,37 @@ type_func_name_keyword:
 | JOIN
 | LEFT
 | LIKE
-| MAXVALUE
-| MINVALUE
 | NATURAL
 | NOTNULL
 | OUTER
 | OVERLAPS
 | RIGHT
 | SIMILAR
+| cockroachdb_extra_type_func_name_keyword
+
+// CockroachDB-specific keywords that can be used in type/function
+// identifiers.
+//
+// *** REFRAIN FROM ADDING KEYWORDS HERE ***
+//
+// Adding keywords here creates non-resolvable incompatibilities with
+// postgres clients.
+//
+// TODO(dan): Make MINVALUE/MAXVALUE less reserved.
+cockroachdb_extra_type_func_name_keyword:
+  FAMILY
+| MAXVALUE
+| MINVALUE
 
 // Reserved keyword --- these keywords are usable only as a unrestricted_name.
 //
 // Keywords appear here if they could not be distinguished from variable, type,
-// or function names in some contexts. Don't put things here unless forced to.
+// or function names in some contexts.
+//
+// *** NEVER ADD KEYWORDS HERE ***
+//
+// See cockroachdb_extra_reserved_keyword below.
+//
 reserved_keyword:
   ALL
 | ANALYSE
@@ -8731,7 +8774,6 @@ reserved_keyword:
 | GROUP
 | HAVING
 | IN
-| INDEX
 | INITIALLY
 | INTERSECT
 | INTO
@@ -8741,7 +8783,6 @@ reserved_keyword:
 | LOCALTIME
 | LOCALTIMESTAMP
 | NOT
-| NOTHING
 | NULL
 | OFFSET
 | ON
@@ -8770,5 +8811,17 @@ reserved_keyword:
 | WHERE
 | WINDOW
 | WITH
+| cockroachdb_extra_reserved_keyword
+
+// Reserved keywords in CockroachDB, in addition to those reserved in
+// PostgreSQL.
+//
+// *** REFRAIN FROM ADDING KEYWORDS HERE ***
+//
+// Adding keywords here creates non-resolvable incompatibilities with
+// postgres clients.
+cockroachdb_extra_reserved_keyword:
+  INDEX
+| NOTHING
 
 %%
