@@ -78,10 +78,9 @@ func ZoneSpecifierFromID(
 	if err != nil {
 		return tree.ZoneSpecifier{}, err
 	}
-	tn := tree.NewTableName(tree.Name(db), tree.Name(name))
 	return tree.ZoneSpecifier{
 		TableOrIndex: tree.TableNameWithIndex{
-			Table: tree.NormalizableTableName{TableNameReference: tn},
+			Table: tree.MakeTableName(tree.Name(db), tree.Name(name)),
 		},
 	}, nil
 }
@@ -105,44 +104,45 @@ func ParseCLIZoneSpecifier(s string) (tree.ZoneSpecifier, error) {
 	if err != nil {
 		return tree.ZoneSpecifier{}, fmt.Errorf("malformed name: %q", s)
 	}
-	parsed.SearchTable = false
-	var partition tree.Name
-	if un := parsed.Table.TableNameReference.(*tree.UnresolvedName); un.NumParts == 1 {
-		// Unlike in SQL, where a name with one part indicates a table in the
-		// current database, if a CLI specifier has just one name part, it indicates
-		// a database.
-		return tree.ZoneSpecifier{Database: tree.Name(un.Parts[0])}, nil
-	} else if un.NumParts == 3 {
-		// If a CLI specifier has three name parts, the last name is a partition.
-		// Pop it off so TableNameReference.Normalize sees only the table name
-		// below.
-		partition = tree.Name(un.Parts[0])
-		un.Parts[0], un.Parts[1], un.Parts[2] = un.Parts[1], un.Parts[2], un.Parts[3]
-		un.NumParts--
+
+	// To reuse the SQL parsing code, we unfortunately have to abuse TableName
+	// here. A table name is of the form:
+	//   [[CATALOG.]SCHEMA.]TABLE[@INDEX]
+	// and we want to reinterpret this as
+	//   DATABASE[.TABLE[.PARTITION|@INDEX]]
+	//
+	// To make this conversion we have three cases:
+	//   1) one part:    TABLE -> DATABASE
+	//   2) two parts:   SCHEMA.TABLE -> DATABASE.TABLE
+	//   3) three parts: CATALOG.SCHEMA.TABLE -> DATABASE.TABLE.PARTITION
+
+	tn := &parsed.Table
+	if !tn.ExplicitSchema {
+		// Case 1: TABLE -> DATABASE.
+		return tree.ZoneSpecifier{Database: tn.TableName}, nil
 	}
-	// We've handled the special cases for named zones, databases and partitions;
-	// have TableNameReference.Normalize tell us whether what remains is a valid
-	// table or index name.
-	tn, err := parsed.Table.Normalize()
-	if err != nil {
-		return tree.ZoneSpecifier{}, err
-	}
-	if parsed.Index != "" && partition != "" {
-		return tree.ZoneSpecifier{}, fmt.Errorf(
-			"index and partition cannot be specified simultaneously: %q", s)
-	}
-	// Table prefixes in CLI zone specifiers always have the form
-	// "table" or "db.table" and do not know about schemas. They never
-	// refer to virtual schemas. So migrate the db part to the catalog
-	// position.
-	if tn.ExplicitSchema {
-		tn.ExplicitCatalog = true
-		tn.CatalogName = tn.SchemaName
-		tn.SchemaName = tree.PublicSchemaName
+	var database, table, partition tree.Name
+	if !tn.ExplicitCatalog {
+		// Case 2: SCHEMA.TABLE -> DATABASE.TABLE
+		database = tn.SchemaName
+		table = tn.TableName
+	} else {
+		// Case 3: CATALOG.SCHEMA.TABLE -> DATABASE.TABLE.PARTITION
+		database = tn.CatalogName
+		table = tn.SchemaName
+		partition = tn.TableName
+		if parsed.Index != "" {
+			return tree.ZoneSpecifier{}, fmt.Errorf(
+				"index and partition cannot be specified simultaneously: %q", s)
+		}
 	}
 	return tree.ZoneSpecifier{
-		TableOrIndex: parsed,
-		Partition:    partition,
+		TableOrIndex: tree.TableNameWithIndex{
+			Table:       tree.MakeTableName(database, table),
+			Index:       parsed.Index,
+			SearchTable: false,
+		},
+		Partition: partition,
 	}, nil
 }
 
@@ -159,15 +159,22 @@ func CLIZoneSpecifier(zs *tree.ZoneSpecifier) string {
 
 	// The table name may have a schema specifier. CLI zone specifiers
 	// do not support this, so strip it.
-	tn := ti.Table.TableName()
-	if zs.Partition == "" {
-		ti.Table.TableNameReference = tree.NewUnresolvedName(tn.Catalog(), tn.Table())
-	} else {
-		// The index is redundant when the partition is specified, so omit it.
-		ti.Table.TableNameReference = tree.NewUnresolvedName(tn.Catalog(), tn.Table(), string(zs.Partition))
-		ti.Index = ""
+	ctx := tree.NewFmtCtxWithBuf(tree.FmtSimple)
+	catalog := tree.Name(ti.Table.Catalog())
+	ctx.FormatNode(&catalog)
+	ctx.WriteByte('.')
+	table := tree.UnrestrictedName(ti.Table.Table())
+	ctx.FormatNode(&table)
+
+	if zs.Partition != "" {
+		ctx.WriteByte('.')
+		partition := tree.UnrestrictedName(zs.Partition)
+		ctx.FormatNode(&partition)
+	} else if ti.Index != "" {
+		ctx.WriteByte('@')
+		ctx.FormatNode(&ti.Index)
 	}
-	return tree.AsStringWithFlags(&ti, tree.FmtAlwaysQualifyTableNames)
+	return ctx.CloseAndGetString()
 }
 
 // ResolveZoneSpecifier converts a zone specifier to the ID of most specific
@@ -195,10 +202,7 @@ func ResolveZoneSpecifier(
 
 	// Third case: a table or index name. We look up the table part here.
 
-	tn, err := zs.TableOrIndex.Table.Normalize()
-	if err != nil {
-		return 0, err
-	}
+	tn := &zs.TableOrIndex.Table
 	if tn.SchemaName != tree.PublicSchemaName {
 		return 0, pgerror.NewErrorf(pgerror.CodeReservedNameError,
 			"only schema \"public\" is supported: %q", tree.ErrString(tn))

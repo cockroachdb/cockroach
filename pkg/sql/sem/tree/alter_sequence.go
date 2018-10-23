@@ -19,7 +19,7 @@ package tree
 // RenameTable node.
 type AlterSequence struct {
 	IfExists bool
-	Name     NormalizableTableName
+	Name     TableName
 	Options  SequenceOptions
 }
 

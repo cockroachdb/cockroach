@@ -31,13 +31,8 @@ import (
 // %[4]s the database name as SQL identifier.
 // %[5]s the schema name as SQL string literal.
 func (p *planner) showTableDetails(
-	ctx context.Context, showType string, t tree.NormalizableTableName, query string,
+	ctx context.Context, showType string, tn *tree.TableName, query string,
 ) (planNode, error) {
-	tn, err := t.Normalize()
-	if err != nil {
-		return nil, err
-	}
-
 	// We avoid the cache so that we can observe the details without
 	// taking a lease, like other SHOW commands.
 	desc, err := p.ResolveUncachedTableDescriptor(ctx, tn, true /*required*/, anyDescType)

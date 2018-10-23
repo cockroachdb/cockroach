@@ -49,12 +49,7 @@ type createTableNode struct {
 // Privileges: CREATE on database.
 //   Notes: postgres/mysql require CREATE on database.
 func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNode, error) {
-	tn, err := n.Table.Normalize()
-	if err != nil {
-		return nil, err
-	}
-
-	dbDesc, err := p.ResolveUncachedDatabase(ctx, tn)
+	dbDesc, err := p.ResolveUncachedDatabase(ctx, &n.Table)
 	if err != nil {
 		return nil, err
 	}
@@ -64,18 +59,6 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 	}
 
 	n.HoistConstraints()
-	for _, def := range n.Defs {
-		switch t := def.(type) {
-		case *tree.ForeignKeyConstraintTableDef:
-			// Just check the target name has the right structure. We'll do
-			// name resolution later, after the descriptor has been
-			// allocated.
-			_, err := t.Table.Normalize()
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
 
 	var sourcePlan planNode
 	if n.As() {
@@ -108,7 +91,7 @@ type createTableRun struct {
 }
 
 func (n *createTableNode) startExec(params runParams) error {
-	tKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Table.TableName().Table()}
+	tKey := tableKey{parentID: n.dbDesc.ID, name: n.n.Table.Table()}
 	key := tKey.Key()
 	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
 		if n.n.IfNotExists {
@@ -203,7 +186,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			TableName string
 			Statement string
 			User      string
-		}{n.n.Table.TableName().FQString(), n.n.String(), params.SessionData().User},
+		}{n.n.Table.FQString(), n.n.String(), params.SessionData().User},
 	); err != nil {
 		return err
 	}
@@ -405,9 +388,7 @@ func ResolveFK(
 		}
 	}
 
-	targetTable := d.Table.TableName()
-
-	target, err := ResolveExistingObject(ctx, sc, targetTable, true /*required*/, requireTableDesc)
+	target, err := ResolveExistingObject(ctx, sc, &d.Table, true /*required*/, requireTableDesc)
 	if err != nil {
 		return err
 	}
@@ -675,12 +656,9 @@ func addInterleave(
 			7854, "unsupported shorthand %s", interleave.DropBehavior)
 	}
 
-	tn, err := interleave.Parent.Normalize()
-	if err != nil {
-		return err
-	}
-
-	parentTable, err := ResolveExistingObject(ctx, vt, tn, true /*required*/, requireTableDesc)
+	parentTable, err := ResolveExistingObject(
+		ctx, vt, &interleave.Parent, true /*required*/, requireTableDesc,
+	)
 	if err != nil {
 		return err
 	}
@@ -859,11 +837,7 @@ func makeTableDescIfAs(
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 ) (desc sqlbase.TableDescriptor, err error) {
-	tableName, err := p.Table.Normalize()
-	if err != nil {
-		return desc, err
-	}
-	desc = InitTableDescriptor(id, parentID, tableName.Table(), creationTime, privileges)
+	desc = InitTableDescriptor(id, parentID, p.Table.Table(), creationTime, privileges)
 	for i, colRes := range resultColumns {
 		colType, err := coltypes.DatumTypeToColumnType(colRes.Typ)
 		if err != nil {
@@ -954,11 +928,7 @@ func MakeTableDesc(
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 ) (sqlbase.TableDescriptor, error) {
-	tableName, err := n.Table.Normalize()
-	if err != nil {
-		return sqlbase.TableDescriptor{}, err
-	}
-	desc := InitTableDescriptor(id, parentID, tableName.Table(), creationTime, privileges)
+	desc := InitTableDescriptor(id, parentID, n.Table.Table(), creationTime, privileges)
 
 	for _, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
@@ -1006,7 +976,7 @@ func MakeTableDesc(
 	// Now that we've constructed our columns, we pop into any of our computed
 	// columns so that we can dequalify any column references.
 	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
-		*tableName, sqlbase.ResultColumnsFromColDescs(desc.Columns),
+		n.Table, sqlbase.ResultColumnsFromColDescs(desc.Columns),
 	)
 	sources := sqlbase.MultiSourceInfo{sourceInfo}
 
@@ -1146,7 +1116,7 @@ func MakeTableDesc(
 	fkResolver := &fkSelfResolver{
 		SchemaResolver: vt,
 		newTableDesc:   &desc,
-		newTableName:   n.Table.TableName(),
+		newTableName:   &n.Table,
 	}
 
 	generatedNames := map[string]struct{}{}
@@ -1165,7 +1135,7 @@ func MakeTableDesc(
 			// Pass, handled above.
 
 		case *tree.CheckConstraintTableDef:
-			ck, err := MakeCheckConstraint(ctx, desc, d, generatedNames, semaCtx, evalCtx, *tableName)
+			ck, err := MakeCheckConstraint(ctx, desc, d, generatedNames, semaCtx, evalCtx, n.Table)
 			if err != nil {
 				return desc, err
 			}
@@ -1184,7 +1154,7 @@ func MakeTableDesc(
 	// happens to work in gc, but does not work in gccgo.
 	//
 	// See https://github.com/golang/go/issues/23188.
-	err = desc.AllocateIDs()
+	err := desc.AllocateIDs()
 	return desc, err
 }
 
@@ -1197,10 +1167,6 @@ func makeTableDesc(
 	privileges *sqlbase.PrivilegeDescriptor,
 	affected map[sqlbase.ID]*sqlbase.TableDescriptor,
 ) (ret sqlbase.TableDescriptor, err error) {
-	tableName, err := n.Table.Normalize()
-	if err != nil {
-		return ret, err
-	}
 	// Process any SERIAL columns to remove the SERIAL type,
 	// as required by MakeTableDesc.
 	createStmt := n
@@ -1216,7 +1182,7 @@ func makeTableDesc(
 		if !ok {
 			continue
 		}
-		newDef, seqDbDesc, seqName, seqOpts, err := params.p.processSerialInColumnDef(params.ctx, d, tableName)
+		newDef, seqDbDesc, seqName, seqOpts, err := params.p.processSerialInColumnDef(params.ctx, d, &n.Table)
 		if err != nil {
 			return ret, err
 		}

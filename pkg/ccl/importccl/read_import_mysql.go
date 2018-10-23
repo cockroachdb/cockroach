@@ -375,10 +375,7 @@ func mysqlTableToCockroach(
 		id++
 	}
 
-	tblName := tree.MakeUnqualifiedTableName(tree.Name(name))
-	stmt := &tree.CreateTable{
-		Table: tree.NormalizableTableName{TableNameReference: &tblName},
-	}
+	stmt := &tree.CreateTable{Table: tree.MakeUnqualifiedTableName(tree.Name(name))}
 
 	checks := make(map[string]*tree.CheckConstraintTableDef)
 
@@ -451,7 +448,7 @@ func mysqlTableToCockroach(
 				d.Actions.Update = mysqlActionToCockroach(i.OnUpdate)
 			}
 
-			d.Table.TableNameReference = &toTable
+			d.Table = toTable
 			fkDefs = append(fkDefs, delayedFK{desc, d})
 		}
 	}

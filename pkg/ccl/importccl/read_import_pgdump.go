@@ -268,9 +268,6 @@ func readPostgresCreateTable(
 					continue
 				}
 				for _, constraint := range constraints {
-					if _, err := constraint.Table.Normalize(); err != nil {
-						return nil, err
-					}
 					if err := sql.ResolveFK(evalCtx.Ctx(), nil /* txn */, fks.resolver, desc, constraint, backrefs, sqlbase.ConstraintValidity_Validated); err != nil {
 						return nil, err
 					}
@@ -299,7 +296,7 @@ func readPostgresCreateTable(
 		}
 		switch stmt := stmt.(type) {
 		case *tree.CreateTable:
-			name, err := getTableName(stmt.Table)
+			name, err := getTableName(&stmt.Table)
 			if err != nil {
 				return nil, err
 			}
@@ -309,7 +306,7 @@ func readPostgresCreateTable(
 				createTbl[name] = stmt
 			}
 		case *tree.CreateIndex:
-			name, err := getTableName(stmt.Table)
+			name, err := getTableName(&stmt.Table)
 			if err != nil {
 				return nil, err
 			}
@@ -330,7 +327,7 @@ func readPostgresCreateTable(
 			}
 			create.Defs = append(create.Defs, idx)
 		case *tree.AlterTable:
-			name, err := getTableName(stmt.Table)
+			name, err := getTableName(&stmt.Table)
 			if err != nil {
 				return nil, err
 			}
@@ -365,7 +362,7 @@ func readPostgresCreateTable(
 				}
 			}
 		case *tree.CreateSequence:
-			name, err := getTableName(stmt.Name)
+			name, err := getTableName(&stmt.Name)
 			if err != nil {
 				return nil, err
 			}
@@ -376,11 +373,7 @@ func readPostgresCreateTable(
 	}
 }
 
-func getTableName(n tree.NormalizableTableName) (string, error) {
-	tn, err := n.Normalize()
-	if err != nil {
-		return "", err
-	}
+func getTableName(tn *tree.TableName) (string, error) {
 	if sc := tn.Schema(); sc != "" && sc != "public" {
 		return "", pgerror.Unimplemented(
 			"import non-public schema",
@@ -447,11 +440,11 @@ func (m *pgDumpReader) readFile(
 		}
 		switch i := stmt.(type) {
 		case *tree.Insert:
-			n, ok := i.Table.(*tree.NormalizableTableName)
+			n, ok := i.Table.(*tree.TableName)
 			if !ok {
 				return errors.Errorf("unexpected: %T", i.Table)
 			}
-			name, err := getTableName(*n)
+			name, err := getTableName(n)
 			if err != nil {
 				return errors.Wrapf(err, "%s", i)
 			}
@@ -495,7 +488,7 @@ func (m *pgDumpReader) readFile(
 			if !i.Stdin {
 				return errors.New("expected STDIN option on COPY FROM")
 			}
-			name, err := getTableName(i.Table)
+			name, err := getTableName(&i.Table)
 			if err != nil {
 				return errors.Wrapf(err, "%s", i)
 			}

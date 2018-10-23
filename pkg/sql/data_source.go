@@ -106,11 +106,8 @@ func (p *planner) getDataSource(
 	scanVisibility scanVisibility,
 ) (planDataSource, error) {
 	switch t := src.(type) {
-	case *tree.NormalizableTableName:
-		tn, err := t.Normalize()
-		if err != nil {
-			return planDataSource{}, err
-		}
+	case *tree.TableName:
+		tn := t
 
 		// If there's a CTE with this name, it takes priority over the normal flow.
 		ds, foundCTE, err := p.getCTEDataSource(tn)
@@ -446,16 +443,12 @@ func (p *planner) getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.
 			alias = tree.NewUnqualifiedTableName(ate.As.Alias)
 		}
 	}
-	table, ok := n.(*tree.NormalizableTableName)
+	tn, ok := n.(*tree.TableName)
 	if !ok {
 		return nil, nil, pgerror.Unimplemented(
 			"complex table expression in UPDATE/DELETE",
-			"cannot use a complex table name with DELETE/UPDATE", n,
+			"cannot use a complex table name with DELETE/UPDATE",
 		)
-	}
-	tn, err := table.Normalize()
-	if err != nil {
-		return nil, nil, err
 	}
 	if alias == nil {
 		alias = tn

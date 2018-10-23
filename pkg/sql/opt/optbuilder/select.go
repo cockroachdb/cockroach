@@ -60,12 +60,8 @@ func (b *Builder) buildDataSource(
 	case *tree.JoinTableExpr:
 		return b.buildJoin(source, inScope)
 
-	case *tree.NormalizableTableName:
-		tn, err := source.Normalize()
-		if err != nil {
-			panic(builderError{err})
-		}
-
+	case *tree.TableName:
+		tn := source
 		// CTEs take precedence over other data sources.
 		if cte := inScope.resolveCTE(tn); cte != nil {
 			if cte.used {

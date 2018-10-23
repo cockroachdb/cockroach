@@ -555,7 +555,7 @@ type Order struct {
 	Expr      Expr
 	Direction Direction
 	// Table/Index replaces Expr when OrderType = OrderByIndex.
-	Table NormalizableTableName
+	Table TableName
 	// If Index is empty, then the order should use the primary key.
 	Index UnrestrictedName
 }

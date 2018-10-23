@@ -115,14 +115,9 @@ func (b *Builder) addExtraColumn(
 func (b *Builder) analyzeOrderByIndex(
 	order *tree.Order, inScope, projectionsScope, orderByScope *scope,
 ) {
-	tn, err := order.Table.Normalize()
-	if err != nil {
-		panic(builderError{err})
-	}
-
-	tab, ok := b.resolveDataSource(tn).(opt.Table)
+	tab, ok := b.resolveDataSource(&order.Table).(opt.Table)
 	if !ok {
-		panic(builderError{sqlbase.NewWrongObjectTypeError(tn, "table")})
+		panic(builderError{sqlbase.NewWrongObjectTypeError(&order.Table, "table")})
 	}
 
 	index, err := b.findIndexByName(tab, order.Index)

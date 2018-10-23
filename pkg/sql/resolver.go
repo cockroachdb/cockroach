@@ -398,11 +398,7 @@ func expandMutableIndexName(
 func expandIndexName(
 	ctx context.Context, sc SchemaResolver, index *tree.TableNameWithIndex, requireTable bool,
 ) (tn *tree.TableName, desc *MutableTableDescriptor, err error) {
-	tn, err = index.Table.Normalize()
-	if err != nil {
-		return nil, nil, err
-	}
-
+	tn = &index.Table
 	if !index.SearchTable {
 		// The index and its table prefix must exist already. Resolve the table.
 		desc, err = ResolveExistingObject(ctx, sc, tn, requireTable, requireTableDesc)
@@ -461,20 +457,17 @@ func expandIndexName(
 // It can return indexes that are being rolled out.
 func (p *planner) getTableAndIndex(
 	ctx context.Context,
-	table *tree.NormalizableTableName,
+	table *tree.TableName,
 	tableWithIndex *tree.TableNameWithIndex,
 	privilege privilege.Kind,
 ) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor, error) {
-	var tn *tree.TableName
 	var tableDesc *MutableTableDescriptor
 	var err error
 	if tableWithIndex == nil {
 		// Variant: ALTER TABLE
-		tn, err = table.Normalize()
-		if err != nil {
-			return nil, nil, err
-		}
-		tableDesc, err = p.ResolveMutableTableDescriptor(ctx, tn, true /*required*/, requireTableDesc)
+		tableDesc, err = p.ResolveMutableTableDescriptor(
+			ctx, table, true /*required*/, requireTableDesc,
+		)
 	} else {
 		// Variant: ALTER INDEX
 		_, tableDesc, err = expandMutableIndexName(ctx, p, tableWithIndex, true /* requireTable */)
