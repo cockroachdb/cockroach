@@ -753,7 +753,7 @@ func runQueryAndFormatResults(conn *sqlConn, w io.Writer, fn queryFunc) error {
 			return err
 		}
 
-		if cliCtx.showTimes {
+		if sqlCtx.showTimes {
 			// Present the time since the last result, or since the
 			// beginning of execution. Currently the execution engine makes
 			// all the work upfront so most of the time is accounted for by

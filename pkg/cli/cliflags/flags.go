@@ -262,6 +262,16 @@ results of each SQL statement are printed on the standard output.`,
 Reveal the SQL statements sent implicitly by the command-line utility.`,
 	}
 
+	CliDebugMode = FlagInfo{
+		Name: "debug-sql-cli",
+		Description: `
+Simplify the SQL CLI to ease troubleshooting of CockroachDB
+issues. This echoes sent SQL, removes the database name and txn status
+from the prompt, and forces behavior to become independent on current
+transaction state. Equivalent to --echo-sql, \unset check_syntax,
+\unset smart_prompt, and \set prompt1 %n@%M>.`,
+	}
+
 	SafeUpdates = FlagInfo{
 		Name: "safe-updates",
 		Description: `

@@ -76,7 +76,6 @@ func initCLIDefaults() {
 		// See also setCLIDefaultForTests() in cli_test.go.
 		cliCtx.tableDisplayFormat = tableDisplayTable
 	}
-	cliCtx.showTimes = false
 	cliCtx.cmdTimeout = 0 // no timeout
 	cliCtx.clientConnHost = ""
 	cliCtx.clientConnPort = base.DefaultPort
@@ -89,6 +88,8 @@ func initCLIDefaults() {
 	sqlCtx.setStmts = nil
 	sqlCtx.execStmts = nil
 	sqlCtx.safeUpdates = false
+	sqlCtx.showTimes = false
+	sqlCtx.debugMode = false
 	sqlCtx.echo = false
 
 	dumpCtx.dumpMode = dumpBoth
@@ -167,9 +168,6 @@ type cliContext struct {
 	// tableDisplayFormat indicates how to format result tables.
 	tableDisplayFormat tableDisplayFormat
 
-	// showTimes indicates whether to display query times after each result line.
-	showTimes bool
-
 	// cmdTimeout sets the maximum run time for the command.
 	// Commands that wish to use this must use cmdTimeoutContext().
 	cmdTimeout time.Duration
@@ -211,9 +209,17 @@ var sqlCtx = struct {
 	// shell.
 	safeUpdates bool
 
+	// showTimes indicates whether to display query times after each result line.
+	showTimes bool
+
 	// echo, when set, requests that SQL queries sent to the server are
 	// also printed out on the client.
 	echo bool
+
+	// debugMode, when set, overrides the defaults to disable as much
+	// "intelligent behavior" in the SQL shell as possible and become
+	// more verbose (sets echo).
+	debugMode bool
 }{cliContext: &cliCtx}
 
 // dumpCtx captures the command-line parameters of the `sql` command.
