@@ -66,6 +66,8 @@ var keywordSetters = map[string]fieldSetter{
 	keywordAM: fieldSetterExact(fieldMeridian, fieldValueAM),
 	keywordPM: fieldSetterExact(fieldMeridian, fieldValuePM),
 
+	keywordGMT:  fieldSetterUTC,
+	keywordUTC:  fieldSetterUTC,
 	keywordZ:    fieldSetterUTC,
 	keywordZulu: fieldSetterUTC,
 
@@ -103,8 +105,7 @@ var unsupportedAbbreviations = [...]string{
 	"EEST",
 	"EET",
 	"EST",
-	"GMT",
-	"GMT",
+	// GMT has been removed from this list.
 	"HDT",
 	"HKT",
 	"HST",
@@ -130,7 +131,7 @@ var unsupportedAbbreviations = [...]string{
 	"SAST",
 	"SST",
 	"UCT",
-	"UTC",
+	// UTC has been removed from this list.
 	"WAT",
 	"WEST",
 	"WET",

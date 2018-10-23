@@ -110,12 +110,19 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 			case 6:
 				mult = 1
 			default:
-				// Truncate to 6 digits
+				// Round to 6 digits
+				var round int
 				mult = 1
 				for chunk.magnitude > 6 {
+					if chunk.magnitude == 7 {
+						if chunk.v%10 >= 5 {
+							round = 1
+						}
+					}
 					chunk.magnitude--
 					chunk.v /= 10
 				}
+				chunk.v += round
 			}
 			return fe.Set(fieldFraction, chunk.v*mult)
 

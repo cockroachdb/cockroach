@@ -18,11 +18,13 @@ const (
 	keywordEraBC     = "bc"
 	keywordEraBCE    = "bce"
 	keywordEraCE     = "ce"
+	keywordGMT       = "gmt"
 	keywordInfinity  = "infinity"
 	keywordNow       = "now"
 	keywordPM        = "pm"
 	keywordToday     = "today"
 	keywordTomorrow  = "tomorrow"
+	keywordUTC       = "utc"
 	keywordYesterday = "yesterday"
 	keywordZ         = "z"
 	keywordZulu      = "zulu"
@@ -155,7 +157,8 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 			// in order to compute daylight-savings time.
 			fe.required = fe.required.AddAll(dateRequiredFields)
 
-			// Remove TZ1 and TZ2 from the wanted list.  Also, if we had a
+			// Remove TZ1 and TZ2 from the wanted list, but add a date
+			// in order to resolve the location's DST.  Also, if we had a
 			// text month, ensure that it's also not in the wanted field.
 			fe.wanted = fe.wanted.AddAll(dateFields).ClearAll(fe.has.Add(fieldTZ1).Add(fieldTZ2))
 		} else {

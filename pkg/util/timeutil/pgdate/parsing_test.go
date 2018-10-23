@@ -304,6 +304,16 @@ var timeTestData = []struct {
 		exp: time.Date(0, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.FixedZone("UTC+830", 8*60*60+30*60)),
 	},
 	{
+		// Check UTC zone.
+		s:   "04:05:06.789 UTC",
+		exp: time.Date(0, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.UTC),
+	},
+	{
+		// Check GMT zone.
+		s:   "04:05:06.789 GMT",
+		exp: time.Date(0, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.UTC),
+	},
+	{
 		// Check Z suffix with space.
 		s:   "04:05:06.789 z",
 		exp: time.Date(0, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.UTC),
@@ -422,6 +432,16 @@ var timeTestData = []struct {
 		s:   "23:60:00",
 		err: true,
 	},
+	{
+		// Over-long fractional portion should be rounded, not truncated.
+		s:   "04:05:06.4444444",
+		exp: time.Date(0, 1, 1, 4, 5, 6, int(444444*time.Microsecond), time.UTC),
+	},
+	{
+		// Over-long fractional portion should be rounded, not truncated.
+		s:   "04:05:06.5555555",
+		exp: time.Date(0, 1, 1, 4, 5, 6, int(555556*time.Microsecond), time.UTC),
+	},
 }
 
 // TestMain will enable cross-checking of test results against a
@@ -446,7 +466,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestParseDate(t *testing.T) {
-	now := time.Time{}
+	now := time.Time{}.UTC()
 
 	for _, mode := range modes {
 		t.Run(mode.String(), func(t *testing.T) {
@@ -566,7 +586,7 @@ func TestParseTimestamp(t *testing.T) {
 }
 
 func TestOneOff(t *testing.T) {
-	res, err := pgdate.ParseDate(time.Time{}, pgdate.ParseModeYMD, "1/18/1999")
+	res, err := pgdate.ParseDate(time.Time{}, 0, "2017-12-05 04:04:04.913231+00:00")
 	t.Logf("%v %v", res, err)
 }
 
@@ -622,7 +642,7 @@ var db *sql.DB
 var dbString string
 
 func init() {
-	// "database=bob sslmode=disable"
+	// -pgdate.db="database=bob sslmode=disable"
 	flag.StringVar(&dbString, "pgdate.db", "", "An sql.Open() string to enable cross-checks")
 	flag.Parse()
 }

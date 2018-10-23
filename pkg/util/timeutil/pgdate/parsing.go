@@ -95,5 +95,5 @@ func parseError(err error, kind string, s string) error {
 	if _, ok := err.(*pgerror.Error); ok {
 		return err
 	}
-	return errors.Errorf("unable to parse %s: %s", kind, s)
+	return errors.Errorf("could not parse \"%s\" as type %s", s, kind)
 }

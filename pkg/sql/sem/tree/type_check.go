@@ -19,6 +19,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"golang.org/x/text/language"
 
@@ -208,6 +210,23 @@ func (sc *SemaContext) GetLocation() *time.Location {
 		return time.UTC
 	}
 	return *sc.Location
+}
+
+// GetAdditionMode implements ParseTimeContext.
+func (sc *SemaContext) GetAdditionMode() duration.AdditionMode {
+	return duration.AdditionModeCompatible
+}
+
+// GetStmtTimestamp implements ParseTimeContext.
+func (sc *SemaContext) GetStmtTimestamp() time.Time {
+	switch {
+	case sc.AsOfTimestamp != nil:
+		return sc.AsOfTimestamp.GoTime()
+	case sc.Location != nil:
+		return time.Now().In(*sc.Location)
+	default:
+		return timeutil.Now()
+	}
 }
 
 type placeholderTypeAmbiguityError struct {

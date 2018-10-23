@@ -38,6 +38,7 @@ func (z *zoneCache) LoadLocation(zone string) (*time.Location, error) {
 
 	if !ok {
 		loc, err := time.LoadLocation(zone)
+
 		entry = &zoneCacheEntry{loc: loc, err: err}
 		z.mu.Lock()
 		z.mu.named[zone] = entry
