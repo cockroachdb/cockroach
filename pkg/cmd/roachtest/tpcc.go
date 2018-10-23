@@ -119,6 +119,9 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 		m.Go(opts.During)
 	}
 	m.Wait()
+
+	c.Run(ctx, workloadNode, fmt.Sprintf(
+		"./workload check tpcc --warehouses=%d {pgurl:1}", opts.Warehouses))
 }
 
 func registerTPCC(r *registry) {
