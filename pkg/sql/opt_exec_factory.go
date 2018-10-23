@@ -141,11 +141,14 @@ func asDataSource(n exec.Node) planDataSource {
 }
 
 // ConstructFilter is part of the exec.Factory interface.
-func (ef *execFactory) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec.Node, error) {
+func (ef *execFactory) ConstructFilter(
+	n exec.Node, filter tree.TypedExpr, reqOrdering exec.OutputOrdering,
+) (exec.Node, error) {
 	// Push the filter into the scanNode. We cannot do this if the scanNode has a
 	// limit (it would make the limit apply AFTER the filter).
 	if s, ok := n.(*scanNode); ok && s.filter == nil && s.hardLimit == 0 {
 		s.filter = s.filterVars.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
+		s.props.ordering = sqlbase.ColumnOrdering(reqOrdering)
 		return s, nil
 	}
 	// Create a filterNode.
@@ -155,12 +158,13 @@ func (ef *execFactory) ConstructFilter(n exec.Node, filter tree.TypedExpr) (exec
 	}
 	f.ivarHelper = tree.MakeIndexedVarHelper(f, len(src.info.SourceColumns))
 	f.filter = f.ivarHelper.Rebind(filter, true /* alsoReset */, false /* normalizeToNonNil */)
+	f.props.ordering = sqlbase.ColumnOrdering(reqOrdering)
 	return f, nil
 }
 
 // ConstructSimpleProject is part of the exec.Factory interface.
 func (ef *execFactory) ConstructSimpleProject(
-	n exec.Node, cols []exec.ColumnOrdinal, colNames []string,
+	n exec.Node, cols []exec.ColumnOrdinal, colNames []string, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	// If the top node is already a renderNode, just rearrange the columns. But
 	// we don't want to duplicate a rendering expression (in case it is expensive
@@ -177,6 +181,7 @@ func (ef *execFactory) ConstructSimpleProject(
 			}
 			r.render[i] = oldRenders[ord]
 		}
+		r.props.ordering = sqlbase.ColumnOrdering(reqOrdering)
 		return r, nil
 	}
 	var inputCols sqlbase.ResultColumns
@@ -202,6 +207,7 @@ func (ef *execFactory) ConstructSimpleProject(
 		}
 		r.columns[i].Typ = v.ResolvedType()
 	}
+	r.props.ordering = sqlbase.ColumnOrdering(reqOrdering)
 	return r, nil
 }
 
@@ -218,7 +224,7 @@ func hasDuplicates(cols []exec.ColumnOrdinal) bool {
 
 // ConstructRender is part of the exec.Factory interface.
 func (ef *execFactory) ConstructRender(
-	n exec.Node, exprs tree.TypedExprs, colNames []string,
+	n exec.Node, exprs tree.TypedExprs, colNames []string, reqOrdering exec.OutputOrdering,
 ) (exec.Node, error) {
 	src := asDataSource(n)
 	r := &renderNode{
@@ -233,6 +239,7 @@ func (ef *execFactory) ConstructRender(
 		r.render[i] = expr
 		r.columns[i] = sqlbase.ResultColumn{Name: colNames[i], Typ: expr.ResolvedType()}
 	}
+	r.props.ordering = sqlbase.ColumnOrdering(reqOrdering)
 	return r, nil
 }
 
