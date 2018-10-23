@@ -34,23 +34,27 @@ type tuples []tuple
 
 // runTests is a helper that automatically runs your tests with varied batch
 // sizes and with and without a random selection vector.
-// Provide a test function that takes an input Operator, which will give back
-// the tuples provided in batches.
+// Provide a test function that takes a list of input Operators, which will give
+// back the tuples provided in batches.
 func runTests(
-	t *testing.T, tups tuples, extraTypes []types.T, test func(t *testing.T, input Operator),
+	t *testing.T, tups []tuples, extraTypes []types.T, test func(t *testing.T, inputs []Operator),
 ) {
 	rng, _ := randutil.NewPseudoRand()
 
 	for _, batchSize := range []uint16{1, 2, 3, 16, 1024} {
 		for _, useSel := range []bool{false, true} {
 			t.Run(fmt.Sprintf("batchSize=%d/sel=%t", batchSize, useSel), func(t *testing.T) {
-				var tupleSource Operator
+				inputSources := make([]Operator, len(tups))
 				if useSel {
-					tupleSource = newOpTestSelInput(rng, batchSize, tups, extraTypes...)
+					for i, tup := range tups {
+						inputSources[i] = newOpTestSelInput(rng, batchSize, tup, extraTypes...)
+					}
 				} else {
-					tupleSource = newOpTestInput(batchSize, tups, extraTypes...)
+					for i, tup := range tups {
+						inputSources[i] = newOpTestInput(batchSize, tup, extraTypes...)
+					}
 				}
-				test(t, tupleSource)
+				test(t, inputSources)
 			})
 		}
 	}
@@ -125,7 +129,7 @@ func (s *opTestInput) Init() {
 	s.typs = typs
 	s.batch = NewMemBatch(append(typs, s.extraCols...))
 
-	s.selection = make([]uint16, ColBatchSize)
+	s.selection = make([]uint16, s.batchSize)
 	for i := range s.selection {
 		s.selection[i] = uint16(i)
 	}
@@ -296,14 +300,16 @@ func (s *repeatableBatchSource) Next() ColBatch {
 func (s *repeatableBatchSource) Init() {}
 
 func TestOpTestInputOutput(t *testing.T) {
-	input := tuples{
-		{1, 2, 100},
-		{1, 3, -3},
-		{0, 4, 5},
-		{1, 5, 0},
+	inputs := []tuples{
+		{
+			{1, 2, 100},
+			{1, 3, -3},
+			{0, 4, 5},
+			{1, 5, 0},
+		},
 	}
-	runTests(t, input, nil, func(t *testing.T, in Operator) {
-		out := newOpTestOutput(in, []int{0, 1, 2}, input)
+	runTests(t, inputs, nil, func(t *testing.T, sources []Operator) {
+		out := newOpTestOutput(sources[0], []int{0, 1, 2}, inputs[0])
 
 		if err := out.Verify(); err != nil {
 			t.Fatal(err)
