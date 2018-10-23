@@ -689,14 +689,14 @@ func BenchmarkParseDate(b *testing.B) {
 	b.Run("Reference", func(b *testing.B) {
 		b.Run("RFC3399", func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				if _, err := time.ParseInLocation(time.RFC3339, "2018-10-20", time.UTC); err != nil {
+				if _, err := time.ParseInLocation(time.RFC3339, "2006-01-02T15:04:05Z", time.UTC); err != nil {
 					b.Fatal(err)
 				}
 			}
 		})
-		b.Run("RFC3399", func(b *testing.B) {
+		b.Run("RFC822", func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				if _, err := time.ParseInLocation(time.RFC822, "02 October 2018", time.UTC); err != nil {
+				if _, err := time.ParseInLocation(time.RFC822, time.RFC822, time.UTC); err != nil {
 					b.Fatal(err)
 				}
 			}

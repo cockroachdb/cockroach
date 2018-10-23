@@ -4,9 +4,9 @@ package pgdate
 
 import "strconv"
 
-const _field_name = "fieldYearfieldMonthfieldDayfieldErafieldHourfieldMinutefieldSecondfieldFractionfieldMeridianfieldTZ1fieldTZ2"
+const _field_name = "fieldYearfieldMonthfieldDayfieldErafieldHourfieldMinutefieldSecondfieldFractionfieldMeridianfieldTZHourfieldTZMinutefieldTZSecond"
 
-var _field_index = [...]uint8{0, 9, 19, 27, 35, 44, 55, 66, 79, 92, 100, 108}
+var _field_index = [...]uint8{0, 9, 19, 27, 35, 44, 55, 66, 79, 92, 103, 116, 129}
 
 func (i field) String() string {
 	if i >= field(len(_field_index)-1) {

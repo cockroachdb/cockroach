@@ -1633,11 +1633,30 @@ func NewDDateFromTime(t time.Time, loc *time.Location) *DDate {
 	return NewDDate(DDate(secs / SecondsInDay))
 }
 
+// ParseTimeContext is the subset of EvalContext necessary for
+// parsing dates, times, and timestamps. A nil value is generally
+// acceptable and will result in reasonable defaults being applied.
+type ParseTimeContext interface {
+	duration.Context
+	GetRelativeParseTime() time.Time
+}
+
+// relativeParseTime chooses a reasonable "now" value for
+// performing date parsing.
+func relativeParseTime(ctx ParseTimeContext) time.Time {
+	if ctx == nil {
+		return timeutil.Now()
+	}
+	return ctx.GetRelativeParseTime()
+}
+
+var _ ParseTimeContext = &EvalContext{}
+var _ ParseTimeContext = &SemaContext{}
+
 // ParseDDate parses and returns the *DDate Datum value represented by the provided
 // string in the provided location, or an error if parsing is unsuccessful.
 func ParseDDate(ctx ParseTimeContext, s string) (*DDate, error) {
-	now := nowFromContext(ctx)
-	// No need to ParseInLocation here because we're only parsing dates.
+	now := relativeParseTime(ctx)
 	t, err := pgdate.ParseDate(now, 0 /* mode */, s)
 	if err != nil {
 		return nil, err
@@ -1737,30 +1756,10 @@ func MakeDTime(t timeofday.TimeOfDay) *DTime {
 	return &d
 }
 
-// ParseTimeContext is the subset of EvalContext necessary for
-// parsing dates, times, and timestamps. A nil value is generally
-// acceptable and will result in reasonable defaults being applied.
-type ParseTimeContext interface {
-	duration.Context
-	GetRelativeParseTime() time.Time
-}
-
-// nowFromContext chooses a reasonable "now" value for
-// performing date parsing.
-func nowFromContext(ctx ParseTimeContext) time.Time {
-	if ctx == nil {
-		return timeutil.Now()
-	}
-	return ctx.GetRelativeParseTime()
-}
-
-var _ ParseTimeContext = &EvalContext{}
-var _ ParseTimeContext = &SemaContext{}
-
 // ParseDTime parses and returns the *DTime Datum value represented by the
 // provided string, or an error if parsing is unsuccessful.
 func ParseDTime(ctx ParseTimeContext, s string) (*DTime, error) {
-	now := nowFromContext(ctx)
+	now := relativeParseTime(ctx)
 	t, err := pgdate.ParseTime(now, s)
 	if err != nil {
 		// Build our own error message to avoid exposing the dummy date.
@@ -1860,7 +1859,7 @@ const (
 // ParseDTimestamp parses and returns the *DTimestamp Datum value represented by
 // the provided string in UTC, or an error if parsing is unsuccessful.
 func ParseDTimestamp(ctx ParseTimeContext, s string, precision time.Duration) (*DTimestamp, error) {
-	now := nowFromContext(ctx)
+	now := relativeParseTime(ctx)
 	t, err := pgdate.ParseTimestamp(now, 0 /* mode */, s)
 	if err != nil {
 		return nil, err
@@ -1991,12 +1990,10 @@ func MakeDTimestampTZFromDate(loc *time.Location, d *DDate) *DTimestampTZ {
 
 // ParseDTimestampTZ parses and returns the *DTimestampTZ Datum value represented by
 // the provided string in the provided location, or an error if parsing is unsuccessful.
-// ParseDTimestampTZ parses and returns the *DTimestampTZ Datum value represented by
-// the provided string in the provided location, or an error if parsing is unsuccessful.
 func ParseDTimestampTZ(
 	ctx ParseTimeContext, s string, precision time.Duration,
 ) (*DTimestampTZ, error) {
-	now := nowFromContext(ctx)
+	now := relativeParseTime(ctx)
 	t, err := pgdate.ParseTimestamp(now, 0 /* mode */, s)
 	if err != nil {
 		return nil, err
