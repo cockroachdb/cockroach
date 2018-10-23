@@ -15,7 +15,6 @@
 package exec
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
@@ -137,44 +136,42 @@ func TestHashJoinerInt64(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		for _, batchSize := range []uint16{1, 2, 3, 4, 16, 1024} {
-			t.Run(fmt.Sprintf("batchSize=%d", batchSize), func(t *testing.T) {
+		inputs := []tuples{tc.leftTuples, tc.rightTuples}
+		runTests(t, inputs, []types.T{types.Bool}, func(t *testing.T, sources []Operator) {
+			leftSource, rightSource := sources[0], sources[1]
 
-				leftSource := newOpTestInput(batchSize, tc.leftTuples)
-				rightSource := newOpTestInput(batchSize, tc.rightTuples)
-				spec := hashJoinerSpec{
-					build: hashJoinerSourceSpec{
-						eqCol:       tc.leftEqCol,
-						outCols:     tc.leftOutCols,
-						sourceTypes: tc.leftTypes,
-						source:      leftSource,
-					},
+			spec := hashJoinerSpec{
+				build: hashJoinerSourceSpec{
+					eqCol:       tc.leftEqCol,
+					outCols:     tc.leftOutCols,
+					sourceTypes: tc.leftTypes,
+					source:      leftSource,
+				},
 
-					probe: hashJoinerSourceSpec{
-						eqCol:       tc.rightEqCol,
-						outCols:     tc.rightOutCols,
-						sourceTypes: tc.rightTypes,
-						source:      rightSource,
-					},
-				}
+				probe: hashJoinerSourceSpec{
+					eqCol:       tc.rightEqCol,
+					outCols:     tc.rightOutCols,
+					sourceTypes: tc.rightTypes,
+					source:      rightSource,
+				},
+			}
 
-				hj := &hashJoinEqInnerDistinctInt64Op{
-					spec: spec,
-				}
+			hj := &hashJoinEqInnerDistinctInt64Op{
+				spec: spec,
+			}
 
-				nOutCols := len(tc.leftOutCols) + len(tc.rightOutCols)
-				cols := make([]int, nOutCols)
-				for i := 0; i < nOutCols; i++ {
-					cols[i] = i
-				}
+			nOutCols := len(tc.leftOutCols) + len(tc.rightOutCols)
+			cols := make([]int, nOutCols)
+			for i := 0; i < nOutCols; i++ {
+				cols[i] = i
+			}
 
-				out := newOpTestOutput(hj, cols, tc.expectedTuples)
+			out := newOpTestOutput(hj, cols, tc.expectedTuples)
 
-				if err := out.Verify(); err != nil {
-					t.Fatal(err)
-				}
-			})
-		}
+			if err := out.Verify(); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
