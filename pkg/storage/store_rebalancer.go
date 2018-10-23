@@ -256,7 +256,7 @@ func (sr *StoreRebalancer) rebalanceStore(
 			replCtx, replWithStats.repl, target, replWithStats.qps,
 		); err != nil {
 			cancel()
-			log.Errorf(replCtx, "unable to transfer lease to s%d: %v", target.StoreID, err)
+			log.Errorf(replCtx, "unable to transfer lease for to s%d: %v", target.StoreID, err)
 			continue
 		}
 		cancel()
@@ -427,14 +427,15 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 				raftStatus = sr.getRaftStatusFn(replWithStats.repl)
 			}
 			if replicaIsBehind(raftStatus, candidate.ReplicaID) {
-				log.VEventf(ctx, 3, "%v is behind or this store isn't the raft leader; raftStatus: %v",
-					candidate, raftStatus)
+				log.VEventf(ctx, 3, "%v is behind or this store isn't the raft leader for r%d; raftStatus: %v",
+					candidate, desc.RangeID, raftStatus)
 				continue
 			}
 
 			preferred := sr.rq.allocator.preferredLeaseholders(zone, desc.Replicas)
 			if len(preferred) > 0 && !storeHasReplica(candidate.StoreID, preferred) {
-				log.VEventf(ctx, 3, "s%d not a preferred leaseholder; preferred: %v", candidate.StoreID, preferred)
+				log.VEventf(ctx, 3, "s%d not a preferred leaseholder for r%d; preferred: %v",
+					candidate.StoreID, desc.RangeID, preferred)
 				continue
 			}
 
