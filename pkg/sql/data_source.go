@@ -198,7 +198,12 @@ func (p *planner) getTableScanByRef(
 	indexFlags *tree.IndexFlags,
 	scanVisibility scanVisibility,
 ) (planDataSource, error) {
-	flags := ObjectLookupFlags{CommonLookupFlags{txn: p.txn, avoidCached: p.avoidCachedDescriptors}}
+	flags := ObjectLookupFlags{CommonLookupFlags{
+		txn:            p.txn,
+		avoidCached:    p.avoidCachedDescriptors,
+		fixedTimestamp: p.semaCtx.AsOfTimestamp != nil,
+	},
+	}
 	desc, err := p.Tables().getTableVersionByID(ctx, sqlbase.ID(tref.TableID), flags)
 	if err != nil {
 		return planDataSource{}, errors.Wrapf(err, "%s", tree.ErrString(tref))

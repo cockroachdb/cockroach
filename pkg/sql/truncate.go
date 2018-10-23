@@ -266,7 +266,7 @@ func (p *planner) truncateTable(
 	}
 	newTableDesc.Mutations = nil
 	newTableDesc.GCMutations = nil
-
+	newTableDesc.ModificationTime = p.txn.CommitTimestamp()
 	tKey := tableKey{parentID: newTableDesc.ParentID, name: newTableDesc.Name}
 	key := tKey.Key()
 	if err := p.createDescriptorWithID(
