@@ -37,8 +37,10 @@ var (
 // `01/02/03`.
 type ParseMode uint
 
+// These are the various parsing modes that determine in which order
+// we should look for years, months, and date.
+// ParseModeYMD is the default value.
 const (
-	// ParseModeYMD is the default
 	ParseModeYMD ParseMode = iota
 	ParseModeDMY
 	ParseModeMDY
@@ -54,11 +56,11 @@ func ParseDate(now time.Time, mode ParseMode, s string) (time.Time, error) {
 		wanted: dateTimeFields,
 	}
 
-	if t, err := extract(fe, s); err == nil {
-		return t, nil
-	} else {
+	t, err := extract(fe, s)
+	if err != nil {
 		return TimeEpoch, parseError(err, "date", s)
 	}
+	return t, nil
 }
 
 // ParseTime converts a string into a time value on the epoch day.
@@ -69,14 +71,14 @@ func ParseTime(now time.Time, s string) (time.Time, error) {
 		wanted:   timeFields,
 	}
 
-	if t, err := extract(fe, s); err == nil {
-		return t, nil
-	} else {
+	t, err := extract(fe, s)
+	if err != nil {
 		return TimeEpoch, parseError(err, "time", s)
 	}
+	return t, nil
 }
 
-// ParseTime converts a string into a timestamp.
+// ParseTimestamp converts a string into a timestamp.
 func ParseTimestamp(now time.Time, mode ParseMode, s string) (time.Time, error) {
 	fe := fieldExtract{
 		mode:     mode,
@@ -85,11 +87,11 @@ func ParseTimestamp(now time.Time, mode ParseMode, s string) (time.Time, error) 
 		wanted:   dateTimeFields,
 	}
 
-	if t, err := extract(fe, s); err == nil {
-		return t, nil
-	} else {
+	t, err := extract(fe, s)
+	if err != nil {
 		return TimeEpoch, parseError(err, "timestamp", s)
 	}
+	return t, nil
 }
 
 func parseError(err error, kind string, s string) error {

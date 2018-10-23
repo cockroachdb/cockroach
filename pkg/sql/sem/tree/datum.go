@@ -1748,6 +1748,9 @@ type ParseTimeContext interface {
 // nowFromContext chooses a reasonable "now" value for
 // performing date parsing.
 func nowFromContext(ctx ParseTimeContext) time.Time {
+	if ctx == nil {
+		return timeutil.Now()
+	}
 	ret := ctx.GetTxnTime(true)
 	if ret.IsZero() {
 		ret = timeutil.Now()

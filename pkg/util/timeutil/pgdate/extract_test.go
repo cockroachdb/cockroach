@@ -93,10 +93,9 @@ func TestExtractSentinels(t *testing.T) {
 					t.Fatal("expected error")
 				}
 				return
-			} else {
-				if err != nil {
-					t.Fatal(err)
-				}
+			}
+			if err != nil {
+				t.Fatal(err)
 			}
 			if fe != tc.expected {
 				t.Fatal("did not get expected sentinel value")

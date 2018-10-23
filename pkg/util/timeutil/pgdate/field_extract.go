@@ -35,9 +35,8 @@ type numberChunk struct {
 func (n numberChunk) String() string {
 	if n.prefix == utf8.RuneError {
 		return fmt.Sprintf("%d", n.v)
-	} else {
-		return fmt.Sprintf("%v%d", n.prefix, n.v)
 	}
+	return fmt.Sprintf("%v%d", n.prefix, n.v)
 }
 
 // fieldExtract manages the state of a date/time parsing operation.
@@ -88,7 +87,7 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 	case chunk.prefix == '.':
 		// It's either a yyyy.ddd or we're looking at fractions.
 		switch {
-		case !fe.Wants(fieldYear) && fe.Wants(fieldMonth) && fe.Wants(fieldDay):
+		case chunk.magnitude == 3 && !fe.Wants(fieldYear) && fe.Wants(fieldMonth) && fe.Wants(fieldDay):
 			return fe.SetDayOfYear(chunk.v)
 
 		case !fe.Wants(fieldSecond) && fe.Wants(fieldFraction):
@@ -174,9 +173,8 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 				fe.tweakYear = true
 			}
 			return fe.Set(fieldYear, chunk.v)
-		} else {
-			return fe.Set(fieldDay, chunk.v)
 		}
+		return fe.Set(fieldDay, chunk.v)
 
 	case !fe.Wants(fieldYear) && !fe.Wants(fieldMonth) && fe.Wants(fieldDay) && chunk.prefix != ':':
 		// We should be looking at just the day component.  However, we
@@ -190,9 +188,8 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 				return err
 			}
 			return fe.Reset(fieldYear, chunk.v)
-		} else {
-			return fe.Set(fieldDay, chunk.v)
 		}
+		return fe.Set(fieldDay, chunk.v)
 
 	case fe.Wants(fieldYear) && fe.Wants(fieldMonth) && !fe.Wants(fieldDay) && chunk.prefix != ':':
 		// Must be looking at a dd-mm-yy format.

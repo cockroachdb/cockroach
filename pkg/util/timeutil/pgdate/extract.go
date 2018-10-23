@@ -59,13 +59,13 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 	// Create a place to store extracted numeric info.
 	numbers := make([]numberChunk, 0, len(textChunks))
 	appendNumber := func(prefix, number string) error {
-		if v, err := strconv.Atoi(number); err == nil {
-			lastRune, _ := utf8.DecodeLastRuneInString(prefix)
-			numbers = append(numbers, numberChunk{prefix: lastRune, v: v, magnitude: len(number)})
-			return nil
-		} else {
+		v, err := strconv.Atoi(number)
+		if err != nil {
 			return err
 		}
+		lastRune, _ := utf8.DecodeLastRuneInString(prefix)
+		numbers = append(numbers, numberChunk{prefix: lastRune, v: v, magnitude: len(number)})
+		return nil
 	}
 
 	// Certain keywords should result in some kind of sentinel value,
