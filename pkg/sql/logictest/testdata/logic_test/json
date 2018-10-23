@@ -106,7 +106,9 @@ INSERT INTO foo VALUES
   ('1.000'),
   ('true'),
   ('false'),
-  (NULL)
+  (NULL),
+  ('{"x": [1, 2, 3]}'),
+  ('{"x": {"y": "z"}}')
 
 query T rowsort
 SELECT bar FROM foo
@@ -118,6 +120,8 @@ SELECT bar FROM foo
 true
 false
 NULL
+{"x": [1, 2, 3]}
+{"x": {"y": "z"}}
 
 query T
 SELECT bar FROM foo WHERE bar->>'a' = 'b'
@@ -175,6 +179,16 @@ NULL
 NULL
 NULL
 NULL
+NULL
+NULL
+
+query T
+SELECT * from foo where bar->'x' = '[1]'
+----
+
+query T
+SELECT * from foo where bar->'x' = '{}'
+----
 
 statement ok
 DELETE FROM foo
