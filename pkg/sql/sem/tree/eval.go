@@ -3570,7 +3570,7 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 		if fName == `crdb_internal.force_error` {
 			return nil, err
 		}
-		return nil, errors.Wrapf(err, "%s()", fName)
+		return nil, pgerror.Wrap(err, pgerror.CodeDataExceptionError, fName+"()")
 	}
 	if ctx.TestingKnobs.AssertFuncExprReturnTypes {
 		if err := ensureExpectedType(expr.fn.FixedReturnType(), res); err != nil {
