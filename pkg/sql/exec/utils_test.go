@@ -16,8 +16,11 @@ package exec
 
 import (
 	"fmt"
+	"math/rand"
 	"reflect"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/pkg/errors"
@@ -28,6 +31,30 @@ type tuple []interface{}
 
 // tuples represents a table of a single type.
 type tuples []tuple
+
+// runTests is a helper that automatically runs your tests with varied batch
+// sizes and with and without a random selection vector.
+// Provide a test function that takes an input Operator, which will give back
+// the tuples provided in batches.
+func runTests(
+	t *testing.T, tups tuples, extraTypes []types.T, test func(t *testing.T, input Operator),
+) {
+	rng, _ := randutil.NewPseudoRand()
+
+	for _, batchSize := range []uint16{1, 2, 3, 16, 1024} {
+		for _, useSel := range []bool{false, true} {
+			t.Run(fmt.Sprintf("batchSize=%d/sel=%t", batchSize, useSel), func(t *testing.T) {
+				var tupleSource Operator
+				if useSel {
+					tupleSource = newOpTestSelInput(rng, batchSize, tups, extraTypes...)
+				} else {
+					tupleSource = newOpTestInput(batchSize, tups, extraTypes...)
+				}
+				test(t, tupleSource)
+			})
+		}
+	}
+}
 
 // opTestInput is an Operator that columnarizes test input in the form of tuples
 // of arbitrary Go types. It's meant to be used in Operator unit tests in
@@ -50,6 +77,9 @@ type opTestInput struct {
 	batchSize uint16
 	tuples    tuples
 	batch     ColBatch
+	useSel    bool
+	rng       *rand.Rand
+	selection []uint16
 }
 
 var _ Operator = &opTestInput{}
@@ -69,6 +99,20 @@ func newOpTestInput(batchSize uint16, tuples tuples, extraCols ...types.T) *opTe
 	return ret
 }
 
+func newOpTestSelInput(
+	rng *rand.Rand, batchSize uint16, tuples tuples, extraCols ...types.T,
+) *opTestInput {
+	ret := &opTestInput{
+		useSel:    true,
+		rng:       rng,
+		batchSize: batchSize,
+		tuples:    tuples,
+		extraCols: extraCols,
+	}
+	ret.Init()
+	return ret
+}
+
 func (s *opTestInput) Init() {
 	if len(s.tuples) == 0 {
 		panic("empty tuple source")
@@ -80,6 +124,11 @@ func (s *opTestInput) Init() {
 	}
 	s.typs = typs
 	s.batch = NewMemBatch(append(typs, s.extraCols...))
+
+	s.selection = make([]uint16, ColBatchSize)
+	for i := range s.selection {
+		s.selection[i] = uint16(i)
+	}
 }
 
 func (s *opTestInput) Next() ColBatch {
@@ -101,19 +150,30 @@ func (s *opTestInput) Next() ColBatch {
 				tups[i], tupleLen))
 		}
 	}
+
+	if s.useSel {
+		s.rng.Shuffle(len(s.selection), func(i, j int) {
+			s.selection[i], s.selection[j] = s.selection[j], s.selection[i]
+		})
+		s.batch.SetSelection(true)
+		copy(s.batch.Selection(), s.selection)
+	} else {
+		s.batch.SetSelection(false)
+	}
+
 	for i := range s.typs {
 		vec := s.batch.ColVec(i)
 		// Automatically convert the Go values into exec.Type slice elements using
 		// reflection. This is slow, but acceptable for tests.
 		col := reflect.ValueOf(vec.Col())
 		for j := uint16(0); j < batchSize; j++ {
-			col.Index(int(j)).Set(
+			outputIdx := s.selection[j]
+			col.Index(int(outputIdx)).Set(
 				reflect.ValueOf(tups[j][i]).Convert(reflect.TypeOf(vec.Col()).Elem()))
 		}
 	}
 
 	s.batch.SetLength(batchSize)
-	s.batch.SetSelection(false)
 	return s.batch
 }
 
@@ -240,12 +300,13 @@ func TestOpTestInputOutput(t *testing.T) {
 		{0, 4, 5},
 		{1, 5, 0},
 	}
-	in := newOpTestInput(16, input)
-	out := newOpTestOutput(in, []int{0, 1, 2}, input)
+	runTests(t, input, nil, func(t *testing.T, in Operator) {
+		out := newOpTestOutput(in, []int{0, 1, 2}, input)
 
-	if err := out.Verify(); err != nil {
-		t.Fatal(err)
-	}
+		if err := out.Verify(); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 func TestRepeatableBatchSource(t *testing.T) {
