@@ -84,7 +84,7 @@ func testBinaryDatumType(t *testing.T, typ string, datumConstructor func(val str
 				}
 
 				datum, err := pgwirebase.DecodeOidDatum(
-					oid, pgwirebase.FormatBinary, got[4:],
+					evalCtx, oid, pgwirebase.FormatBinary, got[4:],
 				)
 				if err != nil {
 					t.Fatalf("unable to decode %v: %s", got[4:], err)
@@ -123,7 +123,7 @@ func TestBinaryTimestamp(t *testing.T) {
 func TestBinaryTimestampTZ(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testBinaryDatumType(t, "timestamptz", func(val string) tree.Datum {
-		tstz, err := tree.ParseDTimestampTZ(val, time.UTC, time.Microsecond)
+		tstz, err := tree.ParseDTimestampTZ(nil, val, time.Microsecond)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -145,7 +145,7 @@ func TestBinaryInterval(t *testing.T) {
 func TestBinaryDate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testBinaryDatumType(t, "date", func(val string) tree.Datum {
-		d, err := tree.ParseDDate(val, time.UTC)
+		d, err := tree.ParseDDate(nil, val)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -156,7 +156,7 @@ func TestBinaryDate(t *testing.T) {
 func TestBinaryTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testBinaryDatumType(t, "time", func(val string) tree.Datum {
-		d, err := tree.ParseDTime(val)
+		d, err := tree.ParseDTime(nil, val)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -232,7 +232,7 @@ func TestBinaryIntArray(t *testing.T) {
 
 	b := buf.wrapped.Bytes()
 
-	got, err := pgwirebase.DecodeOidDatum(oid.T__int8, pgwirebase.FormatBinary, b[4:])
+	got, err := pgwirebase.DecodeOidDatum(nil, oid.T__int8, pgwirebase.FormatBinary, b[4:])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,7 +304,7 @@ func TestRandomBinaryDecimal(t *testing.T) {
 		if got := buf.wrapped.Bytes(); !bytes.Equal(got, test.Expect) {
 			t.Errorf("%q:\n\t%v found,\n\t%v expected", test.In, got, test.Expect)
 		} else if datum, err := pgwirebase.DecodeOidDatum(
-			oid.T_numeric, pgwirebase.FormatBinary, got[4:],
+			nil, oid.T_numeric, pgwirebase.FormatBinary, got[4:],
 		); err != nil {
 			t.Errorf("%q: unable to decode %v: %s", test.In, got[4:], err)
 		} else if dec.Compare(evalCtx, datum) != 0 {

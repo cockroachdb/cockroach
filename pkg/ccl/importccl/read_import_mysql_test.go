@@ -275,7 +275,7 @@ func TestMysqlValueToDatum(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	date := func(s string) tree.Datum {
-		d, err := tree.ParseDDate(s, nil)
+		d, err := tree.ParseDDate(nil, s)
 		if err != nil {
 			t.Fatal(err)
 		}

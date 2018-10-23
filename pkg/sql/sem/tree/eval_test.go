@@ -1681,7 +1681,7 @@ func TestEvalError(t *testing.T) {
 			`could not parse "2010-09-28 12:00:00.1q" as type date`},
 		{`'12:00:00q'::time`, `could not parse "12:00:00q" as type time`},
 		{`'2010-09-28 12:00.1 MST'::timestamp`,
-			`could not parse "2010-09-28 12:00.1 MST" as type timestamp`},
+			`unimplemented: timestamp abbreviations not supported`},
 		{`'abcd'::interval`,
 			`could not parse "abcd" as type interval: interval: missing unit`},
 		{`'1- 2:3:4 9'::interval`,
