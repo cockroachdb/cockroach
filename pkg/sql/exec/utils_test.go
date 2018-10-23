@@ -192,6 +192,8 @@ type opTestOutput struct {
 // to verify on the given column indices that the output is exactly equal to
 // the expected tuples.
 func newOpTestOutput(input Operator, cols []int, expected tuples) *opTestOutput {
+	input.Init()
+
 	return &opTestOutput{
 		input:    input,
 		cols:     cols,
@@ -247,7 +249,7 @@ func assertTupleEquals(expected tuple, actual tuple) error {
 		return errors.Errorf("expected:\n%+v\n actual:\n%+v\n", expected, actual)
 	}
 	for i := 0; i < len(actual); i++ {
-		if reflect.ValueOf(actual[i]).Convert(reflect.TypeOf(expected[i])).Interface() != expected[i] {
+		if !reflect.DeepEqual(reflect.ValueOf(actual[i]).Convert(reflect.TypeOf(expected[i])).Interface(), expected[i]) {
 			return errors.Errorf("expected:\n%+v\n actual:\n%+v\n", expected, actual)
 		}
 	}
