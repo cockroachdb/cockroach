@@ -90,17 +90,6 @@ const (
 	defaultReplicaRaftMuWarnThreshold = 500 * time.Millisecond
 )
 
-var raftLogTooLargeSize = 4 * raftLogMaxSize
-
-// TODO(irfansharif, peter): What's a good default? Too low and everything comes
-// to a grinding halt, too high and we're not really throttling anything
-// (we'll still generate snapshots). Should it be adjusted dynamically?
-//
-// We set the defaultProposalQuota to be less than raftLogMaxSize, in doing so
-// we ensure all replicas have sufficiently up to date logs so that when the
-// log gets truncated, the followers do not need non-preemptive snapshots.
-var defaultProposalQuota = raftLogMaxSize / 4
-
 var syncRaftLog = settings.RegisterBoolSetting(
 	"kv.raft_log.synchronize",
 	"set to true to synchronize on Raft log writes to persistent storage ('false' risks data loss)",
@@ -1125,12 +1114,23 @@ func (r *Replica) updateProposalQuotaRaftMuLocked(
 				log.Fatalf(ctx, "len(r.mu.commandSizes) = %d, expected 0", commandSizesLen)
 			}
 
+			// We set the defaultProposalQuota to be less than the Raft log
+			// truncation threshold, in doing so we ensure all replicas have
+			// sufficiently up to date logs so that when the log gets truncated,
+			// the followers do not need non-preemptive snapshots. Changing this
+			// deserves care. Too low and everything comes to a grinding halt,
+			// too high and we're not really throttling anything (we'll still
+			// generate snapshots).
+			//
+			// TODO(nvanbenschoten): clean this up in later commits.
+			proposalQuota := r.store.cfg.RaftLogTruncationThreshold / 4
+
 			// Raft may propose commands itself (specifically the empty
 			// commands when leadership changes), and these commands don't go
 			// through the code paths where we acquire quota from the pool. To
 			// offset this we reset the quota pool whenever leadership changes
 			// hands.
-			r.mu.proposalQuota = newQuotaPool(defaultProposalQuota)
+			r.mu.proposalQuota = newQuotaPool(proposalQuota)
 			r.mu.lastUpdateTimes = make(map[roachpb.ReplicaID]time.Time)
 			r.mu.commandSizes = make(map[storagebase.CmdIDKey]int)
 		} else if r.mu.proposalQuota != nil {
@@ -4464,6 +4464,14 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	const expl = "during advance"
 	if err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
 		raftGroup.Advance(rd)
+
+		// If the Raft group still has more to process then we immediately
+		// re-enqueue it for another round of processing. This is possible if
+		// the group's committed entries were paginated due to size limitations
+		// and we didn't apply all of them in this pass.
+		if raftGroup.HasReady() {
+			r.store.enqueueRaftUpdateCheck(r.RangeID)
+		}
 		return true, nil
 	}); err != nil {
 		return stats, expl, errors.Wrap(err, expl)
@@ -6894,6 +6902,7 @@ func (r *Replica) Metrics(
 	return calcReplicaMetrics(
 		ctx,
 		now,
+		&r.store.cfg.RaftConfig,
 		cfg,
 		livenessMap,
 		desc,
@@ -6921,6 +6930,7 @@ func HasRaftLeader(raftStatus *raft.Status) bool {
 func calcReplicaMetrics(
 	ctx context.Context,
 	now hlc.Timestamp,
+	raftCfg *base.RaftConfig,
 	cfg config.SystemConfig,
 	livenessMap map[roachpb.NodeID]bool,
 	desc *roachpb.RangeDescriptor,
@@ -6993,7 +7003,8 @@ func calcReplicaMetrics(
 	m.CmdQMetricsLocal = cmdQMetricsLocal
 	m.CmdQMetricsGlobal = cmdQMetricsGlobal
 
-	m.RaftLogTooLarge = raftLogSize > raftLogTooLargeSize
+	const raftLogTooLargeMultiple = 4
+	m.RaftLogTooLarge = raftLogSize > (raftLogTooLargeMultiple * raftCfg.RaftLogTruncationThreshold)
 
 	return m
 }
