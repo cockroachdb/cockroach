@@ -56,9 +56,6 @@ type ColVec interface {
 	// CopyFrom copies into itself another column vector, filtered by the given
 	// selection vector.
 	CopyFrom(vec ColVec, sel []uint64, nSel uint16, colType types.T)
-
-	// Slice returns the column vector sliced to the specified length.
-	Slice(length uint16, colType types.T) column
 }
 
 // Nulls represents a list of potentially nullable values.
@@ -246,29 +243,6 @@ func (m *memColumn) CopyFrom(vec ColVec, sel []uint64, nSel uint16, colType type
 		for i := uint16(0); i < nSel; i++ {
 			toCol[i] = fromCol[sel[i]]
 		}
-	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
-	}
-}
-
-func (m memColumn) Slice(length uint16, colType types.T) column {
-	switch colType {
-	case types.Bool:
-		return m.Bool()[:length]
-	case types.Bytes:
-		return m.Bytes()[:length]
-	case types.Int8:
-		return m.Int8()[:length]
-	case types.Int16:
-		return m.Int16()[:length]
-	case types.Int32:
-		return m.Int32()[:length]
-	case types.Int64:
-		return m.Int64()[:length]
-	case types.Float32:
-		return m.Float32()[:length]
-	case types.Float64:
-		return m.Float64()[:length]
 	default:
 		panic(fmt.Sprintf("unhandled type %d", colType))
 	}

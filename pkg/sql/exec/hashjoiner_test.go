@@ -16,114 +16,12 @@ package exec
 
 import (
 	"fmt"
-	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
-
-type testOp struct {
-	t         []types.T
-	columns   []column
-	index     uint64
-	batchSize uint16
-	nRows     uint64
-	nColumns  int
-}
-
-var _ Operator = &testOp{}
-
-func (source *testOp) Init() {
-	source.nColumns = len(source.columns)
-	if source.nColumns == 0 || len(source.t) != source.nColumns {
-		panic(fmt.Sprintf("testOp columns length must be equal to t length and cannot be 0"))
-	}
-}
-
-func (source *testOp) Next() ColBatch {
-	batch := NewMemBatch(source.t)
-
-	if source.index >= source.nRows {
-		return batch
-	}
-
-	if source.index+uint64(source.batchSize) < source.nRows {
-		batch.SetLength(source.batchSize)
-	} else {
-		batch.SetLength(uint16(source.nRows - source.index))
-	}
-
-	n := batch.Length()
-
-	for colID := 0; colID < source.nColumns; colID++ {
-		switch source.t[colID] {
-		case types.Int8:
-			vec := batch.ColVec(colID).Int8()
-			col := source.columns[colID].([]int8)
-			for rowID := uint16(0); rowID < n; rowID++ {
-				vec[rowID] = col[uint64(rowID)+source.index]
-			}
-			break
-		case types.Int16:
-			vec := batch.ColVec(colID).Int16()
-			col := source.columns[colID].([]int16)
-			for rowID := uint16(0); rowID < n; rowID++ {
-				vec[rowID] = col[uint64(rowID)+source.index]
-			}
-			break
-		case types.Int32:
-			vec := batch.ColVec(colID).Int32()
-			col := source.columns[colID].([]int32)
-			for rowID := uint16(0); rowID < n; rowID++ {
-				vec[rowID] = col[uint64(rowID)+source.index]
-			}
-			break
-		case types.Int64:
-			vec := batch.ColVec(colID).Int64()
-			col := source.columns[colID].([]int64)
-			for rowID := uint16(0); rowID < n; rowID++ {
-				vec[rowID] = col[uint64(rowID)+source.index]
-			}
-			break
-		case types.Float32:
-			vec := batch.ColVec(colID).Float32()
-			col := source.columns[colID].([]float32)
-			for rowID := uint16(0); rowID < n; rowID++ {
-				vec[rowID] = col[uint64(rowID)+source.index]
-			}
-			break
-		case types.Float64:
-			vec := batch.ColVec(colID).Float64()
-			col := source.columns[colID].([]float64)
-			for rowID := uint16(0); rowID < n; rowID++ {
-				vec[rowID] = col[uint64(rowID)+source.index]
-			}
-			break
-		case types.Bool:
-			vec := batch.ColVec(colID).Bool()
-			col := source.columns[colID].([]bool)
-			for rowID := uint16(0); rowID < n; rowID++ {
-				vec[rowID] = col[uint64(rowID)+source.index]
-			}
-			break
-		case types.Bytes:
-			vec := batch.ColVec(colID).Bytes()
-			col := source.columns[colID].([][]byte)
-			for rowID := uint16(0); rowID < n; rowID++ {
-				vec[rowID] = col[uint64(rowID)+source.index]
-			}
-			break
-		default:
-			panic(fmt.Sprintf("unhandled type %d", source.t[colID]))
-		}
-	}
-
-	source.index += uint64(n)
-
-	return batch
-}
 
 func TestHashJoinerInt64(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -132,75 +30,112 @@ func TestHashJoinerInt64(t *testing.T) {
 		leftTypes  []types.T
 		rightTypes []types.T
 
-		leftColumns  []column
-		rightColumns []column
+		leftTuples  tuples
+		rightTuples tuples
 
-		leftBatchSize  uint16
-		rightBatchSize uint16
+		leftEqCol  int
+		rightEqCol int
 
-		nLeftRows  uint64
-		nRightRows uint64
-
-		leftEqCol    int
-		rightEqCol   int
 		leftOutCols  []int
 		rightOutCols []int
 
-		expectedColumns []column
-		nExpectedRows   uint64
+		expectedTuples tuples
 	}{
 		{
-			leftTypes:  []types.T{types.Bool, types.Int64, types.Int32, types.Int16},
-			rightTypes: []types.T{types.Int64, types.Float32, types.Int8},
+			// test handling of various output column types.
+			leftTypes:  []types.T{types.Bool, types.Int64, types.Bytes, types.Int64},
+			rightTypes: []types.T{types.Int64, types.Float64, types.Int32},
 
-			leftColumns: []column{
-				[]bool{false, true, false, false},
-				[]int64{5, 3, 6, 2},
-				[]int32{40, 80, 90, 10},
-				[]int16{10, 30, 20, 50},
+			leftTuples: tuples{
+				{false, 5, "a", 10},
+				{true, 3, "b", 30},
+				{false, 2, "foo", 20},
+				{false, 6, "bar", 50},
 			},
-			rightColumns: []column{
-				[]int64{1, 2, 3, 4, 5},
-				[]float32{1.1, 2.2, 3.3, 4.4, 5.5},
-				[]int8{1, 2, 4, 8, 16},
+			rightTuples: tuples{
+				{1, 1.1, int32(1)},
+				{2, 2.2, int32(2)},
+				{3, 3.3, int32(4)},
+				{4, 4.4, int32(8)},
+				{5, 5.5, int32(16)},
 			},
-
-			leftBatchSize:  3,
-			rightBatchSize: 4,
-
-			nLeftRows:  4,
-			nRightRows: 5,
 
 			leftEqCol:    1,
 			rightEqCol:   0,
 			leftOutCols:  []int{1, 2},
 			rightOutCols: []int{0, 2},
 
-			expectedColumns: []column{
-				[]int64{2, 3, 5},
-				[]int32{10, 80, 40},
-				[]int64{2, 3, 5},
-				[]int8{2, 4, 16},
+			expectedTuples: tuples{
+				{2, "foo", 2, int32(2)},
+				{3, "b", 3, int32(4)},
+				{5, "a", 5, int32(16)},
 			},
-			nExpectedRows: 3,
+		},
+		{
+			leftTypes:  []types.T{types.Int64},
+			rightTypes: []types.T{types.Int64},
+
+			// reverse engineering hash table hash heuristic to find key values that
+			// hash to the same bucket.
+			leftTuples: tuples{
+				{0},
+				{hashTableBucketSize},
+				{hashTableBucketSize * 2},
+				{hashTableBucketSize * 3},
+			},
+			rightTuples: tuples{
+				{0},
+				{hashTableBucketSize},
+				{hashTableBucketSize * 3},
+			},
+
+			leftEqCol:    0,
+			rightEqCol:   0,
+			leftOutCols:  []int{0},
+			rightOutCols: []int{},
+
+			expectedTuples: tuples{
+				{0},
+				{hashTableBucketSize},
+				{hashTableBucketSize * 3},
+			},
+		},
+		{
+			leftTypes:  []types.T{types.Int64},
+			rightTypes: []types.T{types.Int64},
+
+			// test a N:1 inner join where the right side key has duplicate values.
+			leftTuples: tuples{
+				{0},
+				{1},
+				{2},
+				{3},
+				{4},
+			},
+			rightTuples: tuples{
+				{1},
+				{1},
+				{1},
+				{2},
+				{2},
+			},
+
+			leftEqCol:    0,
+			rightEqCol:   0,
+			leftOutCols:  []int{0},
+			rightOutCols: []int{0},
+
+			expectedTuples: tuples{
+				{1, 1},
+				{1, 1},
+				{1, 1},
+				{2, 2},
+				{2, 2},
+			},
 		},
 	}
 
 	for _, tc := range tcs {
-		leftSource := &testOp{
-			t:         tc.leftTypes,
-			columns:   tc.leftColumns,
-			nRows:     tc.nLeftRows,
-			batchSize: tc.leftBatchSize,
-		}
-
-		rightSource := &testOp{
-			t:         tc.rightTypes,
-			columns:   tc.rightColumns,
-			nRows:     tc.nRightRows,
-			batchSize: tc.rightBatchSize,
-		}
-
 		spec := &hashJoinerSpec{
 			leftSourceTypes:  tc.leftTypes,
 			rightSourceTypes: tc.rightTypes,
@@ -212,49 +147,34 @@ func TestHashJoinerInt64(t *testing.T) {
 			rightOutCols: tc.rightOutCols,
 		}
 
-		nOutCols := len(spec.leftOutCols) + len(spec.rightOutCols)
-		expectedTypes := make([]types.T, nOutCols)
-		for i, colID := range spec.leftOutCols {
+		for _, batchSize := range []uint16{1, 2, 3, 4, 16, 1024} {
+			t.Run(fmt.Sprintf("batchSize=%d", batchSize), func(t *testing.T) {
 
-			expectedTypes[i] = spec.leftSourceTypes[colID]
-		}
-		for i, colID := range spec.rightOutCols {
-			expectedTypes[i+len(spec.leftOutCols)] = spec.rightSourceTypes[colID]
-		}
+				leftSource := newOpTestInput(tc.leftTuples)
+				rightSource := newOpTestInput(tc.rightTuples)
 
-		expectedSource := &testOp{
-			t:       expectedTypes,
-			columns: tc.expectedColumns,
-			nRows:   tc.nExpectedRows,
-		}
-
-		hj := &hashJoinerInt64Op{
-			leftSource:  leftSource,
-			rightSource: rightSource,
-			spec:        spec,
-		}
-
-		hj.Init()
-		expectedSource.Init()
-
-		for {
-			actualBatch := hj.Next()
-			batchSize := actualBatch.Length()
-
-			if batchSize == 0 {
-				break
-			}
-
-			expectedSource.batchSize = batchSize
-			expectedBatch := expectedSource.Next()
-
-			for i := 0; i < expectedSource.nColumns; i++ {
-				expectedCol := expectedBatch.ColVec(i).Slice(batchSize, expectedSource.t[i])
-				actualCol := actualBatch.ColVec(i).Slice(batchSize, expectedSource.t[i])
-				if !reflect.DeepEqual(expectedCol, actualCol) {
-					t.Errorf("expected %v\ngot %v", expectedCol, actualCol)
+				hj := &hashJoinerInt64Op{
+					leftSource:  leftSource,
+					rightSource: rightSource,
+					spec:        spec,
 				}
-			}
+
+				nOutCols := len(tc.leftOutCols) + len(tc.rightOutCols)
+				cols := make([]int, nOutCols)
+				for i := 0; i < nOutCols; i++ {
+					cols[i] = i
+				}
+
+				out := newOpTestOutput(hj, cols, tc.expectedTuples)
+
+				if err := out.Verify(); err != nil {
+					t.Fatal(err)
+				}
+			})
 		}
 	}
+}
+
+func BenchmarkHashJoiner(b *testing.B) {
+
 }
