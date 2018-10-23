@@ -662,8 +662,10 @@ func (rq *replicateQueue) purgatoryChan() <-chan time.Time {
 // rangeRaftStatus pretty-prints the Raft progress (i.e. Raft log position) of
 // the replicas.
 func rangeRaftProgress(raftStatus *raft.Status, replicas []roachpb.ReplicaDescriptor) string {
-	if raftStatus == nil || len(raftStatus.Progress) == 0 {
-		return "[raft progress unknown]"
+	if raftStatus == nil {
+		return "[no raft status]"
+	} else if len(raftStatus.Progress) == 0 {
+		return "[no raft progress]"
 	}
 	var buf bytes.Buffer
 	buf.WriteString("[")
