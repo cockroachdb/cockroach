@@ -37,6 +37,13 @@ func valueEncodePartitionTuple(
 	maybeTuple tree.Expr,
 	cols []sqlbase.ColumnDescriptor,
 ) ([]byte, error) {
+	// Replace any occurrences of the MINVALUE/MAXVALUE pseudo-names
+	// into MinVal and MaxVal, to be recognized below.
+	// We are operating in a context where the expressions cannot
+	// refer to table columns, so these two names are unambiguously
+	// referring to the desired partition boundaries.
+	maybeTuple, _ = tree.WalkExpr(replaceMinMaxValVisitor{}, maybeTuple)
+
 	tuple, ok := maybeTuple.(*tree.Tuple)
 	if !ok {
 		// If we don't already have a tuple, promote whatever we have to a 1-tuple.
@@ -60,7 +67,7 @@ func valueEncodePartitionTuple(
 			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
 			value = encoding.EncodeNonsortingUvarint(value, uint64(sqlbase.PartitionDefaultVal))
 			continue
-		case tree.MinVal:
+		case tree.PartitionMinVal:
 			if typ != tree.PartitionByRange {
 				return nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
 			}
@@ -68,7 +75,7 @@ func valueEncodePartitionTuple(
 			value = encoding.EncodeNotNullValue(value, encoding.NoColumnID)
 			value = encoding.EncodeNonsortingUvarint(value, uint64(sqlbase.PartitionMinVal))
 			continue
-		case tree.MaxVal:
+		case tree.PartitionMaxVal:
 			if typ != tree.PartitionByRange {
 				return nil, errors.Errorf("%s cannot be used with PARTITION BY %s", expr, typ)
 			}
@@ -108,6 +115,28 @@ func valueEncodePartitionTuple(
 	}
 	return value, nil
 }
+
+// replaceMinMaxValVisitor replaces occurrences of the unqualified
+// identifiers "minvalue" and "maxvalue" in the partitioning
+// (sub-)exprs by the symbolic values tree.PartitionMinVal and
+// tree.PartitionMaxVal.
+type replaceMinMaxValVisitor struct{}
+
+// VisitPre satisfies the tree.Visitor interface.
+func (v replaceMinMaxValVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	if t, ok := expr.(*tree.UnresolvedName); ok && t.NumParts == 1 {
+		switch t.Parts[0] {
+		case "minvalue":
+			return false, tree.PartitionMinVal{}
+		case "maxvalue":
+			return false, tree.PartitionMaxVal{}
+		}
+	}
+	return true, expr
+}
+
+// VisitPost satisfies the Visitor interface.
+func (replaceMinMaxValVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 func createPartitioningImpl(
 	ctx context.Context,

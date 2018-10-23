@@ -6893,14 +6893,6 @@ a_expr:
   {
     $$.val = tree.DefaultVal{}
   }
-| MAXVALUE
-  {
-    $$.val = tree.MaxVal{}
-  }
-| MINVALUE
-  {
-    $$.val = tree.MinVal{}
-  }
 // The UNIQUE predicate is a standard SQL feature but not yet implemented
 // in PostgreSQL (as of 10.5).
 | UNIQUE '(' error { return unimplemented(sqllex, "UNIQUE predicate") }
@@ -8491,7 +8483,9 @@ unreserved_keyword:
 | LOW
 | MATCH
 | MATERIALIZED
+| MAXVALUE
 | MINUTE
+| MINVALUE
 | MONTH
 | NAMES
 | NAN
@@ -8717,11 +8711,8 @@ type_func_name_keyword:
 // Adding keywords here creates non-resolvable incompatibilities with
 // postgres clients.
 //
-// TODO(dan): Make MINVALUE/MAXVALUE less reserved.
 cockroachdb_extra_type_func_name_keyword:
   FAMILY
-| MAXVALUE
-| MINVALUE
 
 // Reserved keyword --- these keywords are usable only as a unrestricted_name.
 //
