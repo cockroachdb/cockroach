@@ -48,6 +48,44 @@ func TestStats(t *testing.T) {
 	runDataDrivenTest(t, "testdata/stats/", flags)
 }
 
+func TestMemoInit(t *testing.T) {
+	catalog := testcat.New()
+	_, err := catalog.ExecuteDDL("CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX (c))")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stmt, err := parser.ParseOne("SELECT * FROM abc WHERE $1=10")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+	semaCtx := tree.MakeSemaContext(false /* privileged */)
+	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+
+	var o xform.Optimizer
+	o.Init(&evalCtx)
+	err = optbuilder.New(ctx, &semaCtx, &evalCtx, catalog, o.Factory(), stmt).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	o.Init(&evalCtx)
+	if !o.Memo().IsEmpty() {
+		t.Fatal("memo should be empty")
+	}
+	if o.Memo().MemoryEstimate() != 0 {
+		t.Fatal("memory estimate should be 0")
+	}
+	if o.Memo().RootExpr() != nil {
+		t.Fatal("root expression should be nil")
+	}
+	if o.Memo().RootProps() != nil {
+		t.Fatal("root props should be nil")
+	}
+}
+
 func TestMemoIsStale(t *testing.T) {
 	catalog := testcat.New()
 	_, err := catalog.ExecuteDDL("CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX (c))")
