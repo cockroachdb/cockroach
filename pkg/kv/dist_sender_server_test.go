@@ -2079,6 +2079,32 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			expFailure: "transaction is too large to complete; try splitting into pieces",
 		},
 		{
+			// If we've exhausted the limit for tracking refresh spans but we
+			// already refreshed, keep running the txn.
+			name: "forwarded timestamp with too many refreshes, read only",
+			afterTxnStart: func(ctx context.Context, db *client.DB) error {
+				return db.Put(ctx, "a", "value")
+			},
+			retryable: func(ctx context.Context, txn *client.Txn) error {
+				// Make the batch large enough such that when we accounted for
+				// all of its spans then we exceed the limit on refresh spans.
+				// This is not an issue because we refresh before tracking their
+				// spans.
+				keybase := strings.Repeat("a", 1024)
+				maxRefreshBytes := kv.MaxTxnRefreshSpansBytes.Get(&s.ClusterSettings().SV)
+				scanToExceed := int(maxRefreshBytes) / len(keybase)
+				b := txn.NewBatch()
+				// Hit the uncertainty error at the beginning of the batch.
+				b.Get("a")
+				for i := 0; i < scanToExceed; i++ {
+					key := roachpb.Key(fmt.Sprintf("%s%10d", keybase, i))
+					b.Scan(key, key.Next())
+				}
+				return txn.Run(ctx, b)
+			},
+			filter: newUncertaintyFilter(roachpb.Key([]byte("a"))),
+		},
+		{
 			// Even if accounting for the refresh spans would have exhausted the
 			// limit for tracking refresh spans and our transaction's timestamp
 			// has been pushed, if we successfully commit then we won't hit an
