@@ -46,6 +46,8 @@ type tuples []tuple
 type opTestInput struct {
 	typs      []types.T
 	extraCols []types.T
+
+	batchSize uint16
 	tuples    tuples
 	batch     ColBatch
 }
@@ -57,8 +59,9 @@ var _ Operator = &opTestInput{}
 // automatically, using simple rules (e.g. integers always become Int64).
 // The extraCols slice represents any extra columns that the batch must have
 // for output or temp columns for operators in the test.
-func newOpTestInput(tuples tuples, extraCols ...types.T) *opTestInput {
+func newOpTestInput(batchSize uint16, tuples tuples, extraCols ...types.T) *opTestInput {
 	ret := &opTestInput{
+		batchSize: batchSize,
 		tuples:    tuples,
 		extraCols: extraCols,
 	}
@@ -84,7 +87,7 @@ func (s *opTestInput) Next() ColBatch {
 		s.batch.SetLength(0)
 		return s.batch
 	}
-	batchSize := uint16(ColBatchSize)
+	batchSize := s.batchSize
 	if len(s.tuples) < int(batchSize) {
 		batchSize = uint16(len(s.tuples))
 	}
@@ -237,7 +240,7 @@ func TestOpTestInputOutput(t *testing.T) {
 		{0, 4, 5},
 		{1, 5, 0},
 	}
-	in := newOpTestInput(input)
+	in := newOpTestInput(16, input)
 	out := newOpTestOutput(in, []int{0, 1, 2}, input)
 
 	if err := out.Verify(); err != nil {
