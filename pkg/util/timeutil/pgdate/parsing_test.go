@@ -339,11 +339,15 @@ var timeTestData = []struct {
 	},
 
 	// ----- More Tests -----
-
 	{
 		// Check positive TZ offsets.
 		s:   "04:05:06.789+8:30",
 		exp: time.Date(0, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.FixedZone("UTC+830", 8*60*60+30*60)),
+	},
+	{
+		// Check TZ with seconds.
+		s:   "04:05:06.789+8:30:15",
+		exp: time.Date(0, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.FixedZone("UTC+830", 8*60*60+30*60+15)),
 	},
 	{
 		// Check UTC zone.
@@ -500,6 +504,14 @@ var timestampTestData = []struct {
 		s:   "2000-01-01T02:02:02",
 		exp: time.Date(2000, 1, 1, 2, 2, 2, 0, time.UTC),
 	},
+	{
+		s:   "2000-01-01T02:02:02.567",
+		exp: time.Date(2000, 1, 1, 2, 2, 2, 567000000, time.UTC),
+	},
+	{
+		s:   "2000-01-01T02:02:02.567+09:30:15",
+		exp: time.Date(2000, 1, 1, 2, 2, 2, 567000000, time.FixedZone("", 9*60*60+30*60+15)),
+	},
 }
 
 // TestMain will enable cross-checking of test results against a
@@ -559,7 +571,7 @@ func TestParseDate(t *testing.T) {
 }
 
 func TestParseTime(t *testing.T) {
-	now := timeutil.Unix(0, 0).UTC()
+	now := time.Time{}.UTC()
 
 	for _, tc := range timeTestData {
 		t.Run(tc.s, func(t *testing.T) {
@@ -589,7 +601,7 @@ func TestParseTime(t *testing.T) {
 // A timestamp is just a date concatenated with a time.  We'll
 // reuse the various formats from the date and time data here.
 func TestParseTimestamp(t *testing.T) {
-	now := timeutil.Unix(0, 0).UTC()
+	now := time.Time{}.UTC()
 
 	for _, mode := range modes {
 		t.Run(mode.String(), func(t *testing.T) {
@@ -639,37 +651,37 @@ func TestParseTimestamp(t *testing.T) {
 					})
 				}
 			}
+
+			// Process additional tests
+			for _, tc := range timestampTestData {
+				t.Run(tc.s, func(t *testing.T) {
+					res, err := pgdate.ParseTimestamp(now, mode, tc.s)
+
+					if !tc.noCrossCheck {
+						crossCheck(t, "timestamptz", tc.s, 0, tc.exp, tc.err)
+					}
+
+					if err == nil {
+						if tc.err {
+							t.Fatalf("expected error, but succeeded %s", res)
+						}
+						if !res.Equal(tc.exp) {
+							t.Fatalf("expected %s, got %s", tc.exp, res)
+						}
+					} else {
+						if !tc.err {
+							t.Fatalf("unexpected error: %s", err)
+						}
+						t.Logf("FYI: %s", err)
+					}
+				})
+			}
 		})
-
-		// Process additional tests
-		for _, tc := range timestampTestData {
-			t.Run(tc.s, func(t *testing.T) {
-				res, err := pgdate.ParseTimestamp(now, mode, tc.s)
-
-				if !tc.noCrossCheck {
-					crossCheck(t, "timestamptz", tc.s, 0, tc.exp, tc.err)
-				}
-
-				if err == nil {
-					if tc.err {
-						t.Fatalf("expected error, but succeeded %s", res)
-					}
-					if !res.Equal(tc.exp) {
-						t.Fatalf("expected %s, got %s", tc.exp, res)
-					}
-				} else {
-					if !tc.err {
-						t.Fatalf("unexpected error: %s", err)
-					}
-					t.Logf("FYI: %s", err)
-				}
-			})
-		}
 	}
 }
 
 func TestOneOff(t *testing.T) {
-	res, err := pgdate.ParseTime(time.Time{}, "1.12345678901")
+	res, err := pgdate.ParseTimestamp(timeutil.Now(), 0, "1999-01-08 04:05:06.789")
 	t.Logf("%v %v", res, err)
 }
 

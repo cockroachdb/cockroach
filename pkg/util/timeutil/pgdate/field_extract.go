@@ -51,6 +51,9 @@ type fieldExtract struct {
 	// timezone.
 	now  time.Time
 	mode ParseMode
+	// Stores a reference to one of the sentinel values, to be returned
+	// by the makeDateTime() functions
+	sentinel *time.Time
 	// This indicates that the value in the year field was only
 	// two digits and should be adjusted to make it recent.
 	tweakYear bool
@@ -69,11 +72,11 @@ var (
 	dateRequiredFields = newFieldSet(fieldYear, fieldMonth, fieldDay)
 
 	timeFields = newFieldSet(
-		fieldHour, fieldMinute, fieldSecond, fieldFraction, fieldMeridian, fieldTZ1, fieldTZ2)
+		fieldHour, fieldMinute, fieldSecond, fieldFraction, fieldMeridian,
+		fieldTZHour, fieldTZMinute, fieldTZSecond)
 	timeRequiredFields = newFieldSet(fieldHour, fieldMinute)
 
-	dateTimeFields         = dateFields.AddAll(timeFields)
-	dateTimeRequiredFields = dateRequiredFields.AddAll(timeRequiredFields)
+	dateTimeFields = dateFields.AddAll(timeFields)
 )
 
 // Get returns the value of the requested field and whether or not
@@ -202,7 +205,7 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 		}
 		return fe.Set(fieldYear, chunk.v)
 
-	case fe.Wants(fieldTZ1) && (chunk.prefix == '-' || chunk.prefix == '+'):
+	case fe.Wants(fieldTZHour) && (chunk.prefix == '-' || chunk.prefix == '+'):
 		// We're looking at a numeric timezone specifier.  This can be
 		// from one to four digits (or we might see another chunk if 8:30).
 
@@ -212,30 +215,55 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 			fe.tzSign = 1
 		}
 
+		v := chunk.v
+		seconds := 0
 		switch chunk.magnitude {
 		case 1, 2:
-			// +8 +08
-			return fe.Set(fieldTZ1, chunk.v)
-		case 3, 4:
-			// +830 +0830
-			if err := fe.Set(fieldTZ2, chunk.v%100); err != nil {
+			// h or hh
+			return fe.Set(fieldTZHour, v)
+		case 6:
+			// hhmmss
+			seconds = v % 100
+			v /= 100
+			fallthrough
+		case 4:
+			// hhmm, but either force seconds to 0 or use value from above
+			if err := fe.Set(fieldTZSecond, seconds); err != nil {
 				return err
 			}
-			return fe.Set(fieldTZ1, chunk.v/100)
+			if err := fe.Set(fieldTZMinute, v%100); err != nil {
+				return err
+			}
+			return fe.Set(fieldTZHour, v/100)
+
 		default:
-			return errors.Errorf("invalid timezone offset: %v", chunk)
+			return errors.Errorf("unexpected number of digits for timezone in %v", chunk)
 		}
 
-	case !fe.Wants(fieldTZ1) && fe.Wants(fieldTZ2):
+	case !fe.Wants(fieldTZHour) && fe.Wants(fieldTZMinute):
 		if chunk.prefix == ':' {
 			// We're looking at the second half of a timezone like +8:30.
 			// This would be the final match in any well-formatted input.
-			return fe.Set(fieldTZ2, chunk.v)
-		} else if err := fe.Set(fieldTZ2, 0); err != nil {
-			return err
+			return fe.Set(fieldTZMinute, chunk.v)
 		}
-		// Otherwise, we need to re-process this chunk since this case
-		// will always match immediately after TZ1 is set.
+
+		// We don't expect to see a TZ minute or second at this point,
+		// so we'll clear those flags and re-process
+		fe.has = fe.has.AddAll(fieldTZMinute.Add(fieldTZSecond))
+		fe.wanted = fe.wanted.ClearAll(fieldTZMinute.Add(fieldTZSecond))
+		return fe.interpretNumber(chunk, textMonth)
+
+	case !fe.Wants(fieldTZHour) && !fe.Wants(fieldTZMinute) && fe.Wants(fieldTZSecond):
+		if chunk.prefix == ':' {
+			// We're looking at the third part of a timezone like +8:30:15.
+			// This would be the final match in any well-formatted input.
+			return fe.Set(fieldTZSecond, chunk.v)
+		}
+
+		// We don't expect to see a TZ second at this point,
+		// so we'll clear those flags and re-process
+		fe.has = fe.has.Add(fieldTZSecond)
+		fe.wanted = fe.wanted.Clear(fieldTZSecond)
 		return fe.interpretNumber(chunk, textMonth)
 
 	case fe.Wants(fieldHour) && fe.Wants(fieldMinute) && fe.Wants(fieldSecond) && chunk.prefix != ':':
@@ -261,8 +289,7 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 			return fe.Set(fieldHour, v/100)
 
 		default:
-			return errors.Errorf("unexpected number of digits for hour in %v", chunk)
-
+			return errors.Errorf("unexpected number of digits for time in %v", chunk)
 		}
 
 	case fe.Wants(fieldMinute) && chunk.prefix == ':':
@@ -337,12 +364,15 @@ func (fe *fieldExtract) String() string {
 
 // Validate ensures that the data in the extract is reasonable.
 func (fe *fieldExtract) Validate() error {
-	// If we have any required fields, we must have all required fields.
+	// If we have any of the required fields, we must have all of the required fields.
 	if fe.has.HasAny(dateRequiredFields) && !fe.has.HasAll(dateRequiredFields) {
 		return errors.Errorf("have some but not all date fields")
 	}
 	if fe.has.HasAny(timeRequiredFields) && !fe.has.HasAll(timeRequiredFields) {
 		return errors.Errorf("have some but not all time fields")
+	}
+	if !fe.has.HasAll(fe.required) {
+		return errors.Errorf("missing required fields: %v vs %v", fe.required, fe.has)
 	}
 
 	if year, ok := fe.Get(fieldYear); ok {

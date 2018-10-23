@@ -30,12 +30,12 @@ const (
 	// fieldFraction will store microsecond offsets.
 	fieldFraction
 	fieldMeridian
-	fieldTZ1
-	// fieldTZ2 is used for half-hour timezones specified as `+8:30`.
-	fieldTZ2
+	fieldTZHour
+	fieldTZMinute
+	fieldTZSecond
 
 	fieldMinimum = fieldYear
-	fieldMaximum = fieldTZ2
+	fieldMaximum = fieldTZSecond
 )
 
 const (

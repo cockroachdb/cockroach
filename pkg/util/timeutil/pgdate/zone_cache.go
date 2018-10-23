@@ -63,8 +63,8 @@ func (z *zoneCache) LoadLocation(zone string) (*time.Location, error) {
 }
 
 // FixedZone wraps time.FixedZone.
-func (z *zoneCache) FixedZone(hours, minutes int) *time.Location {
-	offset := hours*60 + minutes
+func (z *zoneCache) FixedZone(hours, minutes, seconds int) *time.Location {
+	offset := (hours*60+minutes)*60 + seconds
 	z.mu.Lock()
 	ret, ok := z.mu.fixed[offset]
 	z.mu.Unlock()
@@ -73,7 +73,10 @@ func (z *zoneCache) FixedZone(hours, minutes int) *time.Location {
 		if minutes < 0 {
 			minutes *= -1
 		}
-		ret = time.FixedZone(fmt.Sprintf("%+03d%02d", hours, minutes), offset*60)
+		if seconds < 0 {
+			seconds *= -1
+		}
+		ret = time.FixedZone(fmt.Sprintf("%+03d%02d%02d", hours, minutes, seconds), offset)
 		z.mu.Lock()
 		z.mu.fixed[offset] = ret
 		z.mu.Unlock()

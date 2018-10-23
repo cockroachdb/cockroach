@@ -56,11 +56,10 @@ func ParseDate(now time.Time, mode ParseMode, s string) (time.Time, error) {
 		wanted: dateTimeFields,
 	}
 
-	t, err := extract(fe, s)
-	if err != nil {
+	if err := fe.Extract(s); err != nil {
 		return TimeEpoch, parseError(err, "date", s)
 	}
-	return t, nil
+	return fe.MakeDate(), nil
 }
 
 // ParseTime converts a string into a time value on the epoch day.
@@ -71,27 +70,27 @@ func ParseTime(now time.Time, s string) (time.Time, error) {
 		wanted:   timeFields,
 	}
 
-	t, err := extract(fe, s)
-	if err != nil {
+	if err := fe.Extract(s); err != nil {
 		return TimeEpoch, parseError(err, "time", s)
 	}
-	return t, nil
+	return fe.MakeTime(), nil
 }
 
 // ParseTimestamp converts a string into a timestamp.
 func ParseTimestamp(now time.Time, mode ParseMode, s string) (time.Time, error) {
 	fe := fieldExtract{
-		mode:     mode,
-		now:      now,
-		required: dateTimeRequiredFields,
+		mode: mode,
+		now:  now,
+		// A timestamp only actually needs a date component; the time
+		// would be midnight.
+		required: dateRequiredFields,
 		wanted:   dateTimeFields,
 	}
 
-	t, err := extract(fe, s)
-	if err != nil {
+	if err := fe.Extract(s); err != nil {
 		return TimeEpoch, parseError(err, "timestamp", s)
 	}
-	return t, nil
+	return fe.MakeTimestamp(), nil
 }
 
 func parseError(err error, kind string, s string) error {

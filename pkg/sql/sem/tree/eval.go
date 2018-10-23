@@ -2606,29 +2606,37 @@ func TimestampToDecimal(ts hlc.Timestamp) *DDecimal {
 	return &res
 }
 
-// GetTxnTime implements ParseTimeContext.  If the allowZero
-// flag is false, this method will panic if there is no transaction
-// timestamp available.  Otherwise, this method will return the
-// (possibly-zero) transaction time.
-func (ctx *EvalContext) GetTxnTime(allowZero bool) time.Time {
-	// TODO(knz): a zero timestamp should never be read, even during
-	// Prepare. This will need to be addressed.
-	if !allowZero && !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
-		panic("zero transaction timestamp in EvalContext")
+// GetRelativeParseTime implements ParseTimeContext and returns the
+// "now" that should be used when parsing date values.  This takes
+// the session's timezone into account.
+func (ctx *EvalContext) GetRelativeParseTime() time.Time {
+	ret := ctx.TxnTimestamp
+	if ret.IsZero() {
+		ret = timeutil.Now()
 	}
-	return ctx.TxnTimestamp
+	return ret.In(ctx.GetLocation())
 }
 
 // GetTxnTimestamp retrieves the current transaction timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetTxnTimestamp(precision time.Duration) *DTimestampTZ {
-	return MakeDTimestampTZ(ctx.GetTxnTime(false), precision)
+	// TODO(knz): a zero timestamp should never be read, even during
+	// Prepare. This will need to be addressed.
+	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
+		panic("zero transaction timestamp in EvalContext")
+	}
+	return MakeDTimestampTZ(ctx.TxnTimestamp, precision)
 }
 
 // GetTxnTimestampNoZone retrieves the current transaction timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetTxnTimestampNoZone(precision time.Duration) *DTimestamp {
-	return MakeDTimestamp(ctx.GetTxnTime(false), precision)
+	// TODO(knz): a zero timestamp should never be read, even during
+	// Prepare. This will need to be addressed.
+	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
+		panic("zero transaction timestamp in EvalContext")
+	}
+	return MakeDTimestamp(ctx.TxnTimestamp, precision)
 }
 
 // SetTxnTimestamp sets the corresponding timestamp in the EvalContext.

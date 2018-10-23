@@ -87,7 +87,8 @@ func TestExtractSentinels(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.s, func(t *testing.T) {
-			fe, err := extract(fieldExtract{now: now}, tc.s)
+			fe := fieldExtract{now: now}
+			err := fe.Extract(tc.s)
 			if tc.err {
 				if err == nil {
 					t.Fatal("expected error")
@@ -97,7 +98,7 @@ func TestExtractSentinels(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if fe != tc.expected {
+			if fe.MakeTimestamp() != tc.expected {
 				t.Fatal("did not get expected sentinel value")
 			}
 		})

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"golang.org/x/text/language"
 
@@ -216,9 +217,10 @@ func (sc *SemaContext) GetAdditionMode() duration.AdditionMode {
 	return duration.AdditionModeCompatible
 }
 
-// GetTxnTime implements ParseTimeContext and returns "zero".
-func (sc *SemaContext) GetTxnTime(_ bool) time.Time {
-	return time.Time{}
+// GetRelativeParseTime implements ParseTimeContext and returns the
+// "now" that should be used when parsing date values.
+func (ctx *SemaContext) GetRelativeParseTime() time.Time {
+	return timeutil.Now().In(ctx.GetLocation())
 }
 
 type placeholderTypeAmbiguityError struct {

@@ -1742,7 +1742,7 @@ func MakeDTime(t timeofday.TimeOfDay) *DTime {
 // acceptable and will result in reasonable defaults being applied.
 type ParseTimeContext interface {
 	duration.Context
-	GetTxnTime(allowZero bool) time.Time
+	GetRelativeParseTime() time.Time
 }
 
 // nowFromContext chooses a reasonable "now" value for
@@ -1751,11 +1751,7 @@ func nowFromContext(ctx ParseTimeContext) time.Time {
 	if ctx == nil {
 		return timeutil.Now()
 	}
-	ret := ctx.GetTxnTime(true)
-	if ret.IsZero() {
-		ret = timeutil.Now()
-	}
-	return ret
+	return ctx.GetRelativeParseTime()
 }
 
 var _ ParseTimeContext = &EvalContext{}

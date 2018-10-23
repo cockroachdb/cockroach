@@ -14,6 +14,11 @@
 
 package pgdate
 
+import (
+	"unicode"
+	"unicode/utf8"
+)
+
 var daysInMonth = [2][13]int{
 	{0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31},
 	{0, 31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31},
@@ -66,4 +71,64 @@ func julianDayToDate(j int) (year int, month int, day int) {
 	month = int((quad+10)%12 + 1)
 
 	return
+}
+
+// stringChunk is returned by chunk().
+type stringChunk struct {
+	// The contiguous span of characters that did not match the filter and
+	// which appear immediately before Match.
+	NotMatch string
+	// The contiguous span of characters that matched the filter.
+	Match string
+}
+
+// chunk filters the runes in a string and returns
+// contiguous spans of alphanumeric characters.
+func chunk(s string) ([]stringChunk, string) {
+	ret := make([]stringChunk, 0, 8)
+
+	matchStart := 0
+	matchEnd := 0
+	previousMatchEnd := 0
+
+	flush := func() {
+		if matchEnd > matchStart {
+			notMatch := s[previousMatchEnd:matchStart]
+			match := s[matchStart:matchEnd]
+
+			// Special-case to handle ddThh delimiter
+			if len(match) == 5 && (match[2:3] == "T" || match[2:3] == "t") {
+				ret = append(ret,
+					stringChunk{
+						NotMatch: notMatch,
+						Match:    match[:2],
+					},
+					stringChunk{
+						NotMatch: "T",
+						Match:    match[3:],
+					})
+			} else {
+				ret = append(ret, stringChunk{
+					NotMatch: notMatch,
+					Match:    match,
+				})
+			}
+			previousMatchEnd = matchEnd
+			matchStart = matchEnd
+		}
+	}
+
+	for offset, r := range s {
+		if unicode.IsDigit(r) || unicode.IsLetter(r) {
+			if matchStart >= matchEnd {
+				matchStart = offset
+			}
+			matchEnd = offset + utf8.RuneLen(r)
+		} else {
+			flush()
+		}
+	}
+	flush()
+
+	return ret, s[matchEnd:]
 }

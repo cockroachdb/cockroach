@@ -206,7 +206,7 @@ func fieldSetterRelativeDate(p *fieldExtract, s string) error {
 // TZ fields from the wanted list.
 func fieldSetterUTC(p *fieldExtract, _ string) error {
 	p.now = p.now.In(time.UTC)
-	p.wanted = p.wanted.ClearAll(fieldTZ1.Add(fieldTZ2))
+	p.wanted = p.wanted.ClearAll(fieldTZHour.Add(fieldTZMinute).Add(fieldTZSecond))
 	return nil
 }
 

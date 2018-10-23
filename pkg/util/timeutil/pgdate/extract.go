@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/pkg/errors"
@@ -44,15 +43,12 @@ const (
 	keywordZulu      = "zulu"
 )
 
-// extract attempts to break the input string into a collection
+// Extract attempts to break the input string into a collection
 // of date/time fields in order to populate a fieldExtract.  The
 // fieldExtract returned from this function may not be the one
 // passed in if a sentinel value is returned. An error will be
 // returned if not all of the required fields have been populated.
-func extract(fe fieldExtract, s string) (time.Time, error) {
-	returnDate := fe.required.HasAll(dateRequiredFields)
-	returnTime := fe.required.HasAll(timeRequiredFields)
-
+func (fe *fieldExtract) Extract(s string) error {
 	// Break the string into alphanumeric chunks.
 	textChunks, _ := chunk(s)
 
@@ -70,12 +66,11 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 
 	// Certain keywords should result in some kind of sentinel value,
 	// but we want to ensure that we accept only a single sentinel chunk.
-	var sentinel *time.Time
 	matchedSentinel := func(value *time.Time, match string) error {
-		if sentinel != nil {
+		if fe.sentinel != nil {
 			return errors.Errorf("unexpected input: %s", match)
 		}
-		sentinel = value
+		fe.sentinel = value
 		return nil
 	}
 
@@ -93,30 +88,30 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 		switch match {
 		case keywordEpoch:
 			if err := matchedSentinel(&TimeEpoch, match); err != nil {
-				return TimeEpoch, err
+				return err
 			}
 
 		case keywordInfinity:
 			if strings.HasSuffix(chunk.NotMatch, "-") {
 				if err := matchedSentinel(&TimeNegativeInfinity, match); err != nil {
-					return TimeEpoch, err
+					return err
 				}
 			} else {
 				if err := matchedSentinel(&TimeInfinity, match); err != nil {
-					return TimeEpoch, err
+					return err
 				}
 			}
 
 		case keywordNow:
 			if err := matchedSentinel(&fe.now, match); err != nil {
-				return TimeEpoch, err
+				return err
 			}
 
 		default:
 			// Fan out to other keyword-based extracts.
 			if m, ok := keywordSetters[match]; ok {
-				if err := m(&fe, match); err != nil {
-					return TimeEpoch, err
+				if err := m(fe, match); err != nil {
+					return err
 				}
 				continue
 			}
@@ -130,8 +125,8 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 			// Handle the oddball Z and Zulu suffixes. Try stripping the
 			// suffix and appending the resulting number.
 			if strings.HasSuffix(match, keywordZ) {
-				if err := fieldSetterUTC(&fe, ""); err != nil {
-					return TimeEpoch, err
+				if err := fieldSetterUTC(fe, ""); err != nil {
+					return err
 				}
 				maybeMatch := match[:len(match)-len(keywordZ)]
 				if err := appendNumber(chunk.NotMatch, maybeMatch); err == nil {
@@ -139,8 +134,8 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 				}
 
 			} else if strings.HasSuffix(match, keywordZulu) {
-				if err := fieldSetterUTC(&fe, ""); err != nil {
-					return TimeEpoch, err
+				if err := fieldSetterUTC(fe, ""); err != nil {
+					return err
 				}
 				maybeMatch := match[:len(match)-len(keywordZulu)]
 				if err := appendNumber(chunk.NotMatch, maybeMatch); err == nil {
@@ -149,9 +144,9 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 			}
 
 			// Try to parse Julian dates.
-			if matched, err := fieldSetterJulianDate(&fe, match); matched {
+			if matched, err := fieldSetterJulianDate(fe, match); matched {
 				if err != nil {
-					return TimeEpoch, err
+					return err
 				}
 				continue
 			}
@@ -171,17 +166,17 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 			// in order to compute daylight-savings time.
 			fe.required = fe.required.AddAll(dateRequiredFields)
 
-			// Remove TZ1 and TZ2 from the wanted list, but add a date
+			// Remove TZ fields from the wanted list, but add a date
 			// in order to resolve the location's DST.  Also, if we had a
 			// text month, ensure that it's also not in the wanted field.
-			fe.wanted = fe.wanted.AddAll(dateFields).ClearAll(fe.has.Add(fieldTZ1).Add(fieldTZ2))
+			fe.wanted = fe.wanted.AddAll(dateFields).ClearAll(fe.has.Add(fieldTZHour).Add(fieldTZMinute).Add(fieldTZSecond))
 		} else {
-			return TimeEpoch, errors.Errorf("could not interpret leftovers: %s", leftoverText)
+			return errors.Errorf("could not interpret leftovers: %s", leftoverText)
 		}
 	}
 
-	if sentinel != nil {
-		return *sentinel, nil
+	if fe.sentinel != nil {
+		return nil
 	}
 
 	// In the second pass, we'll use pattern-matching and the knowledge
@@ -190,125 +185,78 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 	textMonth := !fe.Wants(fieldMonth)
 	for _, n := range numbers {
 		if fe.wanted == 0 {
-			return TimeEpoch, errors.Errorf("too many input chunks")
+			return errors.Errorf("too many input chunks")
 		}
 		if err := fe.interpretNumber(n, textMonth); err != nil {
-			return TimeEpoch, err
+			return err
 		}
 	}
 
 	if err := fe.Validate(); err != nil {
-		return TimeEpoch, err
+		return err
 	}
 
-	var year, month, day, hour, min, sec, nano int
-
-	if fe.has.HasAll(dateRequiredFields) {
-		year, _ = fe.Get(fieldYear)
-		month, _ = fe.Get(fieldMonth)
-		day, _ = fe.Get(fieldDay)
-	} else {
-		year = 0
-		month = 1
-		day = 1
-	}
-
-	if returnDate && !returnTime {
-		return time.Date(year, time.Month(month), day, 0, 0, 0, 0, fe.now.Location()), nil
-	}
-
-	var loc *time.Location
-	if fe.has.HasAll(timeRequiredFields) {
-		hour, _ = fe.Get(fieldHour)
-		min, _ = fe.Get(fieldMinute)
-		sec, _ = fe.Get(fieldSecond)
-		nano, _ = fe.Get(fieldFraction)
-
-		if tz1, ok := fe.Get(fieldTZ1); ok {
-			tz2, _ := fe.Get(fieldTZ2)
-			tz1 *= fe.tzSign
-			tz2 *= fe.tzSign
-			loc = zoneCacheInstance.FixedZone(tz1, tz2)
-		} else {
-			loc = fe.now.Location()
-		}
-	} else {
-		loc = fe.now.Location()
-	}
-
-	ret := time.Date(year, time.Month(month), day, hour, min, sec, nano, loc)
-
-	// We'll truncate back to the zero day if  the user didn't request
-	// the date to be returned.  If the user provided a named timezone,
-	// like America/New_York, then they will have also had to have
-	// provided a date to resolve that name into an actual offset.
-	// We'll convert that offset into a fixed timezone when we return
-	// the date.
-	if !returnDate && fe.has.HasAny(dateRequiredFields) {
-		hour, min, sec := ret.Clock()
-		_, offset := ret.Zone()
-		ret = time.Date(0, 1, 1, hour, min, sec, ret.Nanosecond(), time.FixedZone("", offset))
-	}
-
-	return ret, nil
+	return nil
 }
 
-// stringChunk is returned by chunk().
-type stringChunk struct {
-	// The contiguous span of characters that did not match the filter and
-	// which appear immediately before Match.
-	NotMatch string
-	// The contiguous span of characters that matched the filter.
-	Match string
+// MakeDate returns a time.Time containing only the date components
+// of the extract.
+func (fe *fieldExtract) MakeDate() time.Time {
+	if fe.sentinel != nil {
+		return *fe.sentinel
+	}
+
+	year, _ := fe.Get(fieldYear)
+	month, _ := fe.Get(fieldMonth)
+	day, _ := fe.Get(fieldDay)
+	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, fe.MakeLocation())
 }
 
-// chunk filters the runes in a string and returns
-// contiguous spans of alphanumeric characters.
-func chunk(s string) ([]stringChunk, string) {
-	ret := make([]stringChunk, 0, 8)
-
-	matchStart := 0
-	matchEnd := 0
-	previousMatchEnd := 0
-
-	flush := func() {
-		if matchEnd > matchStart {
-			notMatch := s[previousMatchEnd:matchStart]
-			match := s[matchStart:matchEnd]
-
-			// Special-case to handle ddThh delimiter
-			if len(match) == 5 && (match[2:3] == "T" || match[2:3] == "t") {
-				ret = append(ret,
-					stringChunk{
-						NotMatch: notMatch,
-						Match:    match[:2],
-					},
-					stringChunk{
-						NotMatch: "T",
-						Match:    match[3:],
-					})
-			} else {
-				ret = append(ret, stringChunk{
-					NotMatch: notMatch,
-					Match:    match,
-				})
-			}
-			previousMatchEnd = matchEnd
-			matchStart = matchEnd
-		}
+// MakeTime returns only the time component of the extract.
+// If the user provided a named timezone, as opposed
+// to a fixed offset, we will resolve the named zone to an offset
+// based on the best-available date information.
+func (fe *fieldExtract) MakeTime() time.Time {
+	if fe.sentinel != nil {
+		return *fe.sentinel
 	}
 
-	for offset, r := range s {
-		if unicode.IsDigit(r) || unicode.IsLetter(r) {
-			if matchStart >= matchEnd {
-				matchStart = offset
-			}
-			matchEnd = offset + utf8.RuneLen(r)
-		} else {
-			flush()
-		}
-	}
-	flush()
+	ret := fe.MakeTimestamp()
+	hour, min, sec := ret.Clock()
+	_, offset := ret.Zone()
+	return time.Date(0, 1, 1, hour, min, sec, ret.Nanosecond(), time.FixedZone("", offset))
+}
 
-	return ret, s[matchEnd:]
+// MakeTimestamp returns a time.Time containing all extracted information.
+func (fe *fieldExtract) MakeTimestamp() time.Time {
+	if fe.sentinel != nil {
+		return *fe.sentinel
+	}
+
+	year, _ := fe.Get(fieldYear)
+	month, _ := fe.Get(fieldMonth)
+	day, _ := fe.Get(fieldDay)
+	hour, _ := fe.Get(fieldHour)
+	min, _ := fe.Get(fieldMinute)
+	sec, _ := fe.Get(fieldSecond)
+	nano, _ := fe.Get(fieldFraction)
+
+	return time.Date(year, time.Month(month), day, hour, min, sec, nano, fe.MakeLocation())
+}
+
+// MakeLocation returns the timezone information stored in the extract,
+// or returns the default location.
+func (fe *fieldExtract) MakeLocation() *time.Location {
+	tzHour, ok := fe.Get(fieldTZHour)
+	if !ok {
+		return fe.now.Location()
+	}
+	tzMin, _ := fe.Get(fieldTZMinute)
+	tzSec, _ := fe.Get(fieldTZSecond)
+
+	tzHour *= fe.tzSign
+	tzMin *= fe.tzSign
+	tzSec *= fe.tzSign
+
+	return zoneCacheInstance.FixedZone(tzHour, tzMin, tzSec)
 }
