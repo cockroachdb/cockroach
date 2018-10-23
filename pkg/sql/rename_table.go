@@ -38,15 +38,8 @@ type renameTableNode struct {
 //          mysql requires ALTER, DROP on the original table, and CREATE, INSERT
 //          on the new table (and does not copy privileges over).
 func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNode, error) {
-	oldTn, err := n.Name.Normalize()
-	if err != nil {
-		return nil, err
-	}
-	newTn, err := n.NewName.Normalize()
-	if err != nil {
-		return nil, err
-	}
-
+	oldTn := &n.Name
+	newTn := &n.NewName
 	toRequire := requireTableOrViewDesc
 	if n.IsView {
 		toRequire = requireViewDesc

@@ -1209,10 +1209,8 @@ func indexDefFromDescriptor(
 	tableLookup tableLookupFn,
 ) (string, error) {
 	indexDef := tree.CreateIndex{
-		Name: tree.Name(index.Name),
-		Table: tree.NormalizableTableName{
-			TableNameReference: tree.NewTableName(tree.Name(db.Name), tree.Name(table.Name)),
-		},
+		Name:    tree.Name(index.Name),
+		Table:   tree.MakeTableName(tree.Name(db.Name), tree.Name(table.Name)),
 		Unique:  index.Unique,
 		Columns: make(tree.IndexElemList, len(index.ColumnNames)),
 		Storing: make(tree.NameList, len(index.StoreColumnNames)),
@@ -1246,10 +1244,7 @@ func indexDefFromDescriptor(
 		}
 		fields := index.ColumnNames[:sharedPrefixLen]
 		intlDef := &tree.InterleaveDef{
-			Parent: &tree.NormalizableTableName{
-				TableNameReference: tree.NewTableName(
-					tree.Name(parentDb.Name), tree.Name(parentTable.Name)),
-			},
+			Parent: tree.MakeTableName(tree.Name(parentDb.Name), tree.Name(parentTable.Name)),
 			Fields: make(tree.NameList, len(fields)),
 		}
 		for i, field := range fields {

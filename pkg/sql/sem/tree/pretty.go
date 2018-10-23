@@ -246,10 +246,6 @@ func (node *GroupBy) docRow(p *PrettyCfg) pretty.RLTableRow {
 	return p.row("GROUP BY", pretty.Join(",", d...))
 }
 
-func (node *NormalizableTableName) doc(p *PrettyCfg) pretty.Doc {
-	return p.Doc(node.TableNameReference)
-}
-
 // flattenOp populates a slice with all the leaves operands of an expression
 // tree where all the nodes satisfy the given predicate.
 func (p *PrettyCfg) flattenOp(
@@ -1228,7 +1224,7 @@ func (node *InterleaveDef) doc(p *PrettyCfg) pretty.Doc {
 	title := pretty.Fold(
 		pretty.ConcatSpace,
 		pretty.Text("INTERLEAVE IN PARENT"),
-		p.Doc(node.Parent),
+		p.Doc(&node.Parent),
 		pretty.Text("("),
 	)
 	d := pretty.BracketDoc(title, p.Doc(&node.Fields), pretty.Text(")"))
@@ -1348,7 +1344,7 @@ func (node *ColumnTableDef) doc(p *PrettyCfg) pretty.Doc {
 		d = pretty.Fold(pretty.ConcatSpace,
 			d,
 			pretty.Text("REFERENCES"),
-			p.Doc(&node.References.Table),
+			p.Doc(node.References.Table),
 		)
 		if node.References.Col != "" {
 			d = pretty.ConcatSpace(
@@ -1502,18 +1498,18 @@ func (node *Import) doc(p *PrettyCfg) pretty.Doc {
 	items = append(items, p.row("IMPORT", pretty.Nil))
 
 	if node.Bundle {
-		if node.Table.TableNameReference != nil {
-			items = append(items, p.row("TABLE", p.Doc(&node.Table)))
+		if node.Table != nil {
+			items = append(items, p.row("TABLE", p.Doc(node.Table)))
 			items = append(items, p.row("FROM", pretty.Nil))
 		}
 		items = append(items, p.row(node.FileFormat, p.Doc(&node.Files)))
 	} else {
 		if node.CreateFile != nil {
-			items = append(items, p.row("TABLE", p.Doc(&node.Table)))
+			items = append(items, p.row("TABLE", p.Doc(node.Table)))
 			items = append(items, p.row("CREATE USING", p.Doc(node.CreateFile)))
 		} else {
 			table := pretty.BracketDoc(
-				pretty.ConcatSpace(p.Doc(&node.Table), pretty.Text("(")),
+				pretty.ConcatSpace(p.Doc(node.Table), pretty.Text("(")),
 				p.Doc(&node.CreateDefs),
 				pretty.Text(")"),
 			)

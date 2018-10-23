@@ -1315,11 +1315,7 @@ func TestRepartitioning(t *testing.T) {
 						// Ignore zone configs that target databases or system ranges.
 						continue
 					}
-					tn, err := zs.TableOrIndex.Table.Normalize()
-					if err != nil {
-						t.Fatal(err)
-					}
-					if tn.Table() != test.new.parsed.tableDesc.Name || zs.Partition == "" {
+					if zs.TableOrIndex.Table.Table() != test.new.parsed.tableDesc.Name || zs.Partition == "" {
 						// Ignore zone configs that do not target a partition of this table.
 						continue
 					}

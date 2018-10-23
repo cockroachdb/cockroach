@@ -34,7 +34,7 @@ type alterIndexNode struct {
 // AlterIndex applies a schema change on an index.
 // Privileges: CREATE on table.
 func (p *planner) AlterIndex(ctx context.Context, n *tree.AlterIndex) (planNode, error) {
-	tableDesc, indexDesc, err := p.getTableAndIndex(ctx, &n.Index.Table, n.Index, privilege.CREATE)
+	tableDesc, indexDesc, err := p.getTableAndIndex(ctx, nil, n.Index, privilege.CREATE)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +123,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 			User       string
 			MutationID uint32
 		}{
-			n.n.Index.Table.TableName().FQString(), n.indexDesc.Name, n.n.String(),
+			n.n.Index.Table.FQString(), n.indexDesc.Name, n.n.String(),
 			params.SessionData().User, uint32(mutationID),
 		},
 	)

@@ -37,5 +37,5 @@ func (p *planner) ShowIndex(ctx context.Context, n *tree.ShowIndex) (planNode, e
 					implicit::BOOL
 				FROM %[4]s.information_schema.statistics
 				WHERE table_catalog=%[1]s AND table_schema=%[5]s AND table_name=%[2]s`
-	return p.showTableDetails(ctx, "SHOW INDEX", n.Table, getIndexes)
+	return p.showTableDetails(ctx, "SHOW INDEX", &n.Table, getIndexes)
 }

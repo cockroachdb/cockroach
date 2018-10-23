@@ -48,21 +48,16 @@ const (
 // the catalog. This is intended for testing, and is not a complete (and
 // probably not fully correct) implementation. It just has to be "good enough".
 func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
-	tn, err := stmt.Table.Normalize()
-	if err != nil {
-		panic(err)
-	}
-
 	stmt.HoistConstraints()
 
 	// Update the table name to include catalog and schema if not provided.
-	tc.qualifyTableName(tn)
+	tc.qualifyTableName(&stmt.Table)
 
-	tab := &Table{TabFingerprint: tc.nextFingerprint(), TabName: *tn, Catalog: tc}
+	tab := &Table{TabFingerprint: tc.nextFingerprint(), TabName: stmt.Table, Catalog: tc}
 
 	// Assume that every table in the "system" catalog is a virtual table. This
 	// is a simplified assumption for testing purposes.
-	if tn.CatalogName == "system" {
+	if stmt.Table.CatalogName == "system" {
 		tab.IsVirtual = true
 	}
 
@@ -132,17 +127,12 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 
 // resolveFK processes a foreign key constraint
 func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
-	targetTableName, err := d.Table.Normalize()
-	if err != nil {
-		panic(err)
-	}
-
 	fromCols := make([]int, len(d.FromCols))
 	for i, c := range d.FromCols {
 		fromCols[i] = tab.FindOrdinal(string(c))
 	}
 
-	targetTable := tc.Table(targetTableName)
+	targetTable := tc.Table(&d.Table)
 
 	toCols := make([]int, len(d.ToCols))
 	for i, c := range d.ToCols {

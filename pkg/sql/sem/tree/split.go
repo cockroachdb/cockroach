@@ -17,7 +17,7 @@ package tree
 // Split represents an `ALTER TABLE/INDEX .. SPLIT AT ..` statement.
 type Split struct {
 	// Only one of Table and Index can be set.
-	Table *NormalizableTableName
+	Table *TableName
 	Index *TableNameWithIndex
 	// Each row contains values for the columns in the PK or index (or a prefix
 	// of the columns).
@@ -44,7 +44,7 @@ type Relocate struct {
 	// Only one of Table and Index can be set.
 	// TODO(a-robinson): It's not great that this can only work on ranges that
 	// are part of a currently valid table or index.
-	Table *NormalizableTableName
+	Table *TableName
 	Index *TableNameWithIndex
 	// Each row contains an array with store ids and values for the columns in the
 	// PK or index (or a prefix of the columns).
@@ -74,7 +74,7 @@ func (node *Relocate) Format(ctx *FmtCtx) {
 // statement.
 type Scatter struct {
 	// Only one of Table and Index can be set.
-	Table *NormalizableTableName
+	Table *TableName
 	Index *TableNameWithIndex
 	// Optional from and to values for the columns in the PK or index (or a prefix
 	// of the columns).
