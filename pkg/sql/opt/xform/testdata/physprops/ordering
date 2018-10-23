@@ -404,6 +404,23 @@ group-by
       └── array-agg [type=int[]]
            └── variable: c [type=int]
 
+# Verify that the GroupBy child ordering is simplified according to the child's
+# FD set.
+opt
+SELECT sum(c) FROM abc WHERE a = 1 GROUP BY b ORDER BY b
+----
+group-by
+ ├── columns: sum:4(decimal)
+ ├── grouping columns: b:2(int!null)
+ ├── ordering: +2
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    ├── constraint: /1/2/3: [/1 - /1]
+ │    └── ordering: +2 opt(1)
+ └── aggregations
+      └── sum [type=decimal]
+           └── variable: c [type=int]
+
 # --------------------------------------------------
 # Explain operator.
 # --------------------------------------------------
