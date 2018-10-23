@@ -267,7 +267,7 @@ inner-join (merge)
 memo
 SELECT * FROM abc JOIN xyz ON a=x
 ----
-memo (optimized, ~9KB)
+memo (optimized, ~10KB)
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+5) (lookup-join G2 G5 xyz@xy,keyCols=[1],outCols=(1-3,5-7)) (merge-join G3 G2 G5 inner-join,+5,+1) (lookup-join G3 G5 abc@ab,keyCols=[5],outCols=(1-3,5-7))
  │    └── [presentation: a:1,b:2,c:3,x:5,y:6,z:7]
  │         ├── best: (merge-join G2="[ordering: +1]" G3="[ordering: +5]" G5 inner-join,+1,+5)
@@ -533,15 +533,15 @@ left-join (merge)
 memo
 SELECT * FROM abc JOIN xyz ON a=b
 ----
-memo (optimized, ~10KB)
+memo (optimized, ~11KB)
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4)
  │    └── [presentation: a:1,b:2,c:3,x:5,y:6,z:7]
  │         ├── best: (inner-join G3 G2 G4)
- │         └── cost: 2150.31
+ │         └── cost: 2251.88
  ├── G2: (select G5 G6) (select G7 G6) (select G8 G6)
  │    └── []
  │         ├── best: (select G5 G6)
- │         └── cost: 967.64
+ │         └── cost: 1069.20
  ├── G3: (scan xyz,cols=(5-7)) (scan xyz@xy,cols=(5-7)) (scan xyz@yz,cols=(5-7))
  │    └── []
  │         ├── best: (scan xyz,cols=(5-7))
@@ -552,7 +552,7 @@ memo (optimized, ~10KB)
  ├── G7: (scan abc@ab,cols=(1-3),constrained)
  │    └── []
  │         ├── best: (scan abc@ab,cols=(1-3),constrained)
- │         └── cost: 958.68
+ │         └── cost: 1059.30
  ├── G8: (scan abc@bc,cols=(1-3),constrained)
  ├── G9: (eq G10 G11)
  ├── G10: (variable a)
