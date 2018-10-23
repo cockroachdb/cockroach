@@ -200,6 +200,12 @@ func (o *Optimizer) buildChildPhysicalProps(
 			}
 
 			childProps.Ordering = parentOrdering.Intersection(&def.Ordering)
+
+			// The FD set of the input doesn't "pass through" to the GroupBy FD set;
+			// check the ordering to see if it can be simplified with respect to the
+			// input FD set.
+			inputProps := o.mem.GroupProperties(mexpr.ChildGroup(o.mem, nth))
+			childProps.Ordering.Simplify(&inputProps.Relational.FuncDeps)
 		}
 
 	case opt.ExplainOp:
