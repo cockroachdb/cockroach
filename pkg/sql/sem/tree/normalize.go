@@ -437,8 +437,19 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 					break
 				}
 
+				rjson := rhs.(*DJSON).JSON
+				t := rjson.Type()
+				if t == json.ObjectJSONType || t == json.ArrayJSONType {
+					// We can't make this transformation in cases like
+					//
+					//   a->'b' = '["c"]',
+					//
+					// because containment is not equivalent to equality for non-scalar types.
+					break
+				}
+
 				j := json.NewObjectBuilder(1)
-				j.Add(string(*str.(*DString)), rhs.(*DJSON).JSON)
+				j.Add(string(*str.(*DString)), rjson)
 
 				dj, err := MakeDJSON(j.Build())
 				if err != nil {
