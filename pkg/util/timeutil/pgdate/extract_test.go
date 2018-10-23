@@ -18,6 +18,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func TestExtractRelative(t *testing.T) {
@@ -56,7 +58,7 @@ func TestExtractRelative(t *testing.T) {
 }
 
 func TestExtractSentinels(t *testing.T) {
-	now := time.Unix(42, 56)
+	now := timeutil.Unix(42, 56)
 	tests := []struct {
 		s        string
 		expected time.Time

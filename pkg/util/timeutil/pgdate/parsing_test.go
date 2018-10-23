@@ -15,13 +15,16 @@
 package pgdate_test
 
 import (
-	"database/sql"
+	gosql "database/sql"
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
+	"unicode"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	_ "github.com/lib/pq"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -36,7 +39,22 @@ var modes = []pgdate.ParseMode{
 // tsTweak is a callback used by TestParseTimestamp to handle cases
 // where a date or a time may parse one way individually, but
 // has different results when concatenated into a timestamp.
-type tsTweak func(s string, mode pgdate.ParseMode, exp *time.Time, err *bool)
+type tsTweak func(d string, t string, mode pgdate.ParseMode, exp *time.Time, err *bool)
+
+var (
+	// If we can extract a date at all, we should wind up with the next day.
+	addADay tsTweak = func(d string, t string, mode pgdate.ParseMode, exp *time.Time, err *bool) {
+		s := fmt.Sprintf("%s %s", d, t)
+		if _, pErr := pgdate.ParseDate(time.Time{}, mode, s); pErr == nil {
+			*exp = exp.AddDate(0, 0, 1)
+			*err = false
+		}
+	}
+	// Expect an error if this value is concatenated.
+	expectConcatErr tsTweak = func(_ string, _ string, _ pgdate.ParseMode, _ *time.Time, err *bool) {
+		*err = true
+	}
+)
 
 type dateData struct {
 	s string
@@ -194,25 +212,45 @@ var dateTestData = []dateData{
 	},
 	{
 		// Provide a full timestamp.
-		s:   "2017-12-05 04:04:04.913231+00:00",
-		exp: time.Date(2017, time.December, 05, 0, 0, 0, 0, time.UTC),
-		tsTweak: func(_ string, _ pgdate.ParseMode, _ *time.Time, err *bool) {
-			*err = true
-		},
+		s:       "2017-12-05 04:04:04.913231+00:00",
+		exp:     time.Date(2017, time.December, 05, 0, 0, 0, 0, time.UTC),
+		tsTweak: expectConcatErr,
 	},
 	{
 		// Date from a full nano-time.
-		s:   "2006-07-08T00:00:00.000000123Z",
-		exp: time.Date(2006, time.July, 8, 0, 0, 0, 0, time.UTC),
-		tsTweak: func(_ string, _ pgdate.ParseMode, _ *time.Time, err *bool) {
-			*err = true
-		},
+		s:       "2006-07-08T00:00:00.000000123Z",
+		exp:     time.Date(2006, time.July, 8, 0, 0, 0, 0, time.UTC),
+		tsTweak: expectConcatErr,
 	},
 	{
 		// Provide too many fields. We expect this to error out since
 		// it's not actually a date.
 		s:   "Random input",
 		err: true,
+	},
+	{
+		// Random date with a timezone.
+		s:   "2018-10-23 +00",
+		exp: time.Date(2018, 10, 23, 0, 0, 0, 0, time.UTC),
+		tsTweak: func(d string, t string, mode pgdate.ParseMode, exp *time.Time, err *bool) {
+			// Expect an error if the incoming time string has a timezone.
+			if strings.HasSuffix(t, "AM") || strings.HasSuffix(t, "PM") {
+				t = t[:len(t)-2]
+			}
+
+			// We'll just filter characters as an easy way to detect this.
+			for _, r := range t {
+				switch {
+				case unicode.IsNumber(r):
+				case r == ' ':
+				case r == ':':
+				case r == '.':
+				default:
+					*err = true
+					return
+				}
+			}
+		},
 	},
 }
 
@@ -290,18 +328,14 @@ var timeTestData = []struct {
 		// that even though we're just parsing a time value, we do need
 		// to provide a date in order to resolve the named zone to a
 		// UTC offset.
-		s:   "2003-01-12 04:05:06 America/New_York",
-		exp: time.Date(0, 1, 1, 4, 5, 6, 0, time.FixedZone("-0500", -5*60*60)),
-		tsTweak: func(_ string, _ pgdate.ParseMode, _ *time.Time, err *bool) {
-			*err = true
-		},
+		s:       "2003-01-12 04:05:06 America/New_York",
+		exp:     time.Date(0, 1, 1, 4, 5, 6, 0, time.FixedZone("-0500", -5*60*60)),
+		tsTweak: expectConcatErr,
 	},
 	{
-		s:   "2003-06-12 04:05:06 America/New_York",
-		exp: time.Date(0, 1, 1, 4, 5, 6, 0, time.FixedZone("-0400", -4*60*60)),
-		tsTweak: func(_ string, _ pgdate.ParseMode, _ *time.Time, err *bool) {
-			*err = true
-		},
+		s:       "2003-06-12 04:05:06 America/New_York",
+		exp:     time.Date(0, 1, 1, 4, 5, 6, 0, time.FixedZone("-0400", -4*60*60)),
+		tsTweak: expectConcatErr,
 	},
 
 	// ----- More Tests -----
@@ -376,11 +410,9 @@ var timeTestData = []struct {
 	},
 	{
 		// Check long timezone with date month.
-		s:   "June 12, 2003 04:05:06 America/New_York",
-		exp: time.Date(0, 1, 1, 4, 5, 6, 0, time.FixedZone("-0400", -4*60*60)),
-		tsTweak: func(_ string, _ pgdate.ParseMode, _ *time.Time, err *bool) {
-			*err = true
-		},
+		s:       "June 12, 2003 04:05:06 America/New_York",
+		exp:     time.Date(0, 1, 1, 4, 5, 6, 0, time.FixedZone("-0400", -4*60*60)),
+		tsTweak: expectConcatErr,
 	},
 	{
 		// Require that minutes and seconds must either be packed or have colon separators.
@@ -391,9 +423,9 @@ var timeTestData = []struct {
 		// 3-digit times should not work.
 		s:   "123",
 		err: true,
-		// Special case when we inadvertently create a valid timestamp.
-		tsTweak: func(s string, mode pgdate.ParseMode, exp *time.Time, err *bool) {
-			if s == "2018 123" {
+		tsTweak: func(d string, t string, mode pgdate.ParseMode, exp *time.Time, err *bool) {
+			// Special case when we inadvertently create a valid timestamp.
+			if fmt.Sprintf("%s %s", d, t) == "2018 123" {
 				*exp = time.Date(2018, 5, 3, 0, 0, 0, 0, time.UTC)
 				*err = false
 			}
@@ -409,14 +441,7 @@ var timeTestData = []struct {
 		s:   "24:00:00",
 		err: true,
 		// Allow hour 24 to roll over when we have a date.
-		tsTweak: func(s string, mode pgdate.ParseMode, exp *time.Time, err *bool) {
-			// If we can extract a date at all, we should wind up with the
-			// next day.
-			if _, pErr := pgdate.ParseDate(time.Time{}, mode, s); pErr == nil {
-				*exp = exp.AddDate(0, 0, 1)
-				*err = false
-			}
-		},
+		tsTweak: addADay,
 	},
 	{
 		// Exceed maximum value
@@ -427,14 +452,7 @@ var timeTestData = []struct {
 		s:   "23:59:60",
 		err: true,
 		// Allow this to roll over when we have a date.
-		tsTweak: func(s string, mode pgdate.ParseMode, exp *time.Time, err *bool) {
-			// If we can extract a date at all, we should wind up with the
-			// next day.
-			if _, pErr := pgdate.ParseDate(time.Time{}, mode, s); pErr == nil {
-				*exp = exp.AddDate(0, 0, 1)
-				*err = false
-			}
-		},
+		tsTweak: addADay,
 	},
 	{
 		s:   "23:60:00",
@@ -444,11 +462,27 @@ var timeTestData = []struct {
 		// Verify that we do support full nanosecond resolution in parsing.
 		s:   "04:05:06.999999999",
 		exp: time.Date(0, 1, 1, 4, 5, 6, 999999999, time.UTC),
+		// No cross checking since postgres rounds to the nearest micro,
+		// but we have other internal consumers that require nano precision.
+		noCrossCheck: true,
 	},
 	{
 		// Over-long fractional portion is an error
 		s:   "04:05:06.9999999999",
 		err: true,
+		// No cross checking since postgres rounds to the nearest micro,
+		// but we have other internal consumers that require nano precision.
+		noCrossCheck: true,
+	},
+	{
+		// Verify that micros are maintained.
+		s:   "23:59:59.999999",
+		exp: time.Date(0, 1, 1, 23, 59, 59, 999999000, time.UTC),
+	},
+	{
+		// Verify that tenths are maintained.
+		s:   "23:59:59.1",
+		exp: time.Date(0, 1, 1, 23, 59, 59, 100000000, time.UTC),
 	},
 }
 
@@ -474,7 +508,7 @@ var timestampTestData = []struct {
 // to be part of a regular build.
 func TestMain(m *testing.M) {
 	if dbString != "" {
-		if d, err := sql.Open("postgres", dbString); err == nil {
+		if d, err := gosql.Open("postgres", dbString); err == nil {
 			if err := d.Ping(); err == nil {
 				db = d
 			} else {
@@ -525,7 +559,7 @@ func TestParseDate(t *testing.T) {
 }
 
 func TestParseTime(t *testing.T) {
-	now := time.Unix(0, 0).UTC()
+	now := timeutil.Unix(0, 0).UTC()
 
 	for _, tc := range timeTestData {
 		t.Run(tc.s, func(t *testing.T) {
@@ -555,12 +589,12 @@ func TestParseTime(t *testing.T) {
 // A timestamp is just a date concatenated with a time.  We'll
 // reuse the various formats from the date and time data here.
 func TestParseTimestamp(t *testing.T) {
-	now := time.Unix(0, 0).UTC()
+	now := timeutil.Unix(0, 0).UTC()
 
 	for _, mode := range modes {
 		t.Run(mode.String(), func(t *testing.T) {
 			for _, dtc := range dateTestData {
-				expDate, expErr := dtc.expected(mode)
+				expDate, expDtcErr := dtc.expected(mode)
 
 				for _, ttc := range timeTestData {
 					expTime := ttc.exp
@@ -569,17 +603,17 @@ func TestParseTimestamp(t *testing.T) {
 					hour, min, sec := expTime.Clock()
 					exp := time.Date(year, month, day, hour, min, sec, expTime.Nanosecond(), expTime.Location())
 
-					expErr := expErr || ttc.err
+					expErr := expDtcErr || ttc.err
 					s := fmt.Sprintf("%s %s", dtc.s, ttc.s)
 
 					// Some of our timestamp data are fully-formed timestamps
 					// or have other odd behaviors.
 					if dtc.tsTweak != nil {
-						dtc.tsTweak(s, mode, &exp, &expErr)
+						dtc.tsTweak(dtc.s, ttc.s, mode, &exp, &expErr)
 					}
 
 					if ttc.tsTweak != nil {
-						ttc.tsTweak(s, mode, &exp, &expErr)
+						ttc.tsTweak(dtc.s, ttc.s, mode, &exp, &expErr)
 					}
 
 					t.Run(s, func(t *testing.T) {
@@ -635,7 +669,7 @@ func TestParseTimestamp(t *testing.T) {
 }
 
 func TestOneOff(t *testing.T) {
-	res, err := pgdate.ParseDate(time.Time{}, 0, "2006-07-08T00:00:00.000000123Z")
+	res, err := pgdate.ParseTime(time.Time{}, "23:59:59.999999")
 	t.Logf("%v %v", res, err)
 }
 
@@ -643,12 +677,16 @@ func BenchmarkParseDate(b *testing.B) {
 	b.Run("Reference", func(b *testing.B) {
 		b.Run("RFC3399", func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				time.ParseInLocation(time.RFC3339, "2018-10-20", time.UTC)
+				if _, err := time.ParseInLocation(time.RFC3339, "2018-10-20", time.UTC); err != nil {
+					b.Fatal(err)
+				}
 			}
 		})
 		b.Run("RFC3399", func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				time.ParseInLocation(time.RFC822, "02 October 2018", time.UTC)
+				if _, err := time.ParseInLocation(time.RFC822, "02 October 2018", time.UTC); err != nil {
+					b.Fatal(err)
+				}
 			}
 		})
 	})
@@ -656,17 +694,15 @@ func BenchmarkParseDate(b *testing.B) {
 	for _, mode := range modes {
 		b.Run(mode.String(), func(b *testing.B) {
 			for _, tc := range dateTestData {
-				if err, ok := tc.modeErr[mode]; err && ok {
-					continue
-				} else if _, ok := tc.modeExp[mode]; ok {
-					// Run test.
-				} else if tc.err {
+				if _, expectError := tc.expected(mode); expectError {
 					continue
 				}
 
 				b.Run(tc.s, func(b *testing.B) {
 					for i := 0; i < b.N; i++ {
-						pgdate.ParseDate(time.Time{}, mode, tc.s)
+						if _, err := pgdate.ParseDate(time.Time{}, mode, tc.s); err != nil {
+							b.Fatal(err)
+						}
 					}
 				})
 			}
@@ -681,13 +717,15 @@ func BenchmarkParseTime(b *testing.B) {
 		}
 		b.Run(tc.s, func(b *testing.B) {
 			for i := 0; i < b.N; i++ {
-				pgdate.ParseTime(time.Time{}, tc.s)
+				if _, err := pgdate.ParseTime(time.Time{}, tc.s); err != nil {
+					b.Fatal(err)
+				}
 			}
 		})
 	}
 }
 
-var db *sql.DB
+var db *gosql.DB
 var dbString string
 
 func init() {
@@ -701,7 +739,9 @@ var crossCheckSuppress = map[string]bool{
 	"June 12, 2003 04:05:06 America/New_York": true,
 }
 
-func crossCheck(t *testing.T, kind, s string, mode pgdate.ParseMode, expTime time.Time, expErr bool) {
+func crossCheck(
+	t *testing.T, kind, s string, mode pgdate.ParseMode, expTime time.Time, expErr bool,
+) {
 	if db == nil {
 		return
 	}

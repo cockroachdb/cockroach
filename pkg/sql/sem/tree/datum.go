@@ -20,7 +20,6 @@ import (
 	"math"
 	"math/big"
 	"net"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -1637,10 +1636,7 @@ func NewDDateFromTime(t time.Time, loc *time.Location) *DDate {
 // ParseDDate parses and returns the *DDate Datum value represented by the provided
 // string in the provided location, or an error if parsing is unsuccessful.
 func ParseDDate(ctx ParseTimeContext, s string) (*DDate, error) {
-	var now time.Time
-	if ctx != nil {
-		now = ctx.GetStmtTimestamp()
-	}
+	now := nowFromContext(ctx)
 	// No need to ParseInLocation here because we're only parsing dates.
 	t, err := pgdate.ParseDate(now, 0 /* mode */, s)
 	if err != nil {
@@ -1746,7 +1742,17 @@ func MakeDTime(t timeofday.TimeOfDay) *DTime {
 // acceptable and will result in reasonable defaults being applied.
 type ParseTimeContext interface {
 	duration.Context
-	GetStmtTimestamp() time.Time
+	GetTxnTime(allowZero bool) time.Time
+}
+
+// nowFromContext chooses a reasonable "now" value for
+// performing date parsing.
+func nowFromContext(ctx ParseTimeContext) time.Time {
+	ret := ctx.GetTxnTime(true)
+	if ret.IsZero() {
+		ret = timeutil.Now()
+	}
+	return ret
 }
 
 var _ ParseTimeContext = &EvalContext{}
@@ -1755,10 +1761,7 @@ var _ ParseTimeContext = &SemaContext{}
 // ParseDTime parses and returns the *DTime Datum value represented by the
 // provided string, or an error if parsing is unsuccessful.
 func ParseDTime(ctx ParseTimeContext, s string) (*DTime, error) {
-	var now time.Time
-	if ctx != nil {
-		now = ctx.GetStmtTimestamp()
-	}
+	now := nowFromContext(ctx)
 	t, err := pgdate.ParseTime(now, s)
 	if err != nil {
 		// Build our own error message to avoid exposing the dummy date.
@@ -1849,98 +1852,16 @@ func MakeDTimestamp(t time.Time, precision time.Duration) *DTimestamp {
 
 // time.Time formats.
 const (
-	dateFormat                = "2006-01-02"
-	dateFormatWithOffset      = dateFormat + " -070000"
-	dateFormatNoPad           = "2006-1-2"
-	dateFormatNoPadWithOffset = dateFormatNoPad + " -070000"
-
-	timestampFormat                      = dateFormatNoPad + " 15:04:05"
-	timestampWithOffsetZoneFormat        = timestampFormat + "-07"
-	timestampWithOffsetMinutesZoneFormat = timestampWithOffsetZoneFormat + ":00"
-	timestampWithOffsetSecondsZoneFormat = timestampWithOffsetMinutesZoneFormat + ":00"
-	timestampWithNamedZoneFormat         = timestampFormat + " MST"
-	timestampRFC3339WithoutZoneFormat    = dateFormat + "T15:04:05"
-	timestampSequelizeFormat             = timestampFormat + ".000 -07:00"
-
-	timestampJdbcFormat = timestampFormat + ".999999 -070000"
-	timestampNodeFormat = timestampFormat + ".999999-07:00"
-
-	// See https://github.com/lib/pq/blob/8df6253/encode.go#L480.
-	timestampPgwireFormat = "2006-01-02 15:04:05.999999999Z07:00"
+	dateFormat = "2006-01-02"
 
 	// TimestampOutputFormat is used to output all timestamps.
 	TimestampOutputFormat = "2006-01-02 15:04:05.999999-07:00"
 )
 
-var timeFormats = []string{
-	dateFormat,
-	dateFormatWithOffset,
-	dateFormatNoPad,
-	dateFormatNoPadWithOffset,
-	time.RFC3339Nano,
-	timestampPgwireFormat,
-	timestampWithOffsetZoneFormat,
-	timestampWithOffsetMinutesZoneFormat,
-	timestampWithOffsetSecondsZoneFormat,
-	timestampFormat,
-	timestampWithNamedZoneFormat,
-	timestampRFC3339WithoutZoneFormat,
-	timestampSequelizeFormat,
-	timestampNodeFormat,
-	timestampJdbcFormat,
-}
-
-var (
-	tzMatch        = regexp.MustCompile(` [+-]`)
-	loneZeroRMatch = regexp.MustCompile(`:(\d(?:[^\d]|$))`)
-)
-
-func parseTimestampInLocation(s string, loc *time.Location, typ types.T) (time.Time, error) {
-	origS := s
-	l := len(s)
-	if loneZeroRMatch.MatchString(s) {
-		// HACK: go doesn't handle offsets that are not zero-padded from psql/jdbc.
-		// Thus, if we see `2015-10-05 3:0:5 +0:0:0` we need to change it to
-		// `... 3:00:50 +00:00:00`.
-		s = loneZeroRMatch.ReplaceAllString(s, ":0${1}")
-		// This must be run twice, since ReplaceAllString doesn't touch overlapping
-		// matches and thus wouldn't fix a string of the form 3:3:3.
-		s = loneZeroRMatch.ReplaceAllString(s, ":0${1}")
-	}
-
-	if loc := tzMatch.FindStringIndex(s); loc != nil && l > loc[1] {
-		// Remove `:` characters from timezone specifier and pad to 6 digits. A
-		// leading 0 will be added if there are an odd number of digits in the
-		// specifier, since this is short-hand for an offset with number of hours
-		// equal to the leading digit.
-		// This converts all timezone specifiers to the stdNumSecondsTz format in
-		// time/format.go: `-070000`.
-		tzPos := loc[1]
-		tzSpec := strings.Replace(s[tzPos:], ":", "", -1)
-		if len(tzSpec)%2 == 1 {
-			tzSpec = "0" + tzSpec
-		}
-		if len(tzSpec) < 6 {
-			tzSpec += strings.Repeat("0", 6-len(tzSpec))
-		}
-		s = s[:tzPos] + tzSpec
-	}
-
-	for _, format := range timeFormats {
-		if t, err := time.ParseInLocation(format, s, loc); err == nil {
-			return t, nil
-		}
-	}
-	return time.Time{}, makeParseError(origS, typ, nil)
-}
-
 // ParseDTimestamp parses and returns the *DTimestamp Datum value represented by
 // the provided string in UTC, or an error if parsing is unsuccessful.
 func ParseDTimestamp(ctx ParseTimeContext, s string, precision time.Duration) (*DTimestamp, error) {
-	var now time.Time
-	if ctx != nil {
-		now = ctx.GetStmtTimestamp()
-	}
+	now := nowFromContext(ctx)
 	t, err := pgdate.ParseTimestamp(now, 0 /* mode */, s)
 	if err != nil {
 		return nil, err
@@ -2076,10 +1997,7 @@ func MakeDTimestampTZFromDate(loc *time.Location, d *DDate) *DTimestampTZ {
 func ParseDTimestampTZ(
 	ctx ParseTimeContext, s string, precision time.Duration,
 ) (*DTimestampTZ, error) {
-	var now time.Time
-	if ctx != nil {
-		now = ctx.GetStmtTimestamp()
-	}
+	now := nowFromContext(ctx)
 	t, err := pgdate.ParseTimestamp(now, 0 /* mode */, s)
 	if err != nil {
 		return nil, err

@@ -2606,26 +2606,29 @@ func TimestampToDecimal(ts hlc.Timestamp) *DDecimal {
 	return &res
 }
 
+// GetTxnTime implements ParseTimeContext.  If the allowZero
+// flag is false, this method will panic if there is no transaction
+// timestamp available.  Otherwise, this method will return the
+// (possibly-zero) transaction time.
+func (ctx *EvalContext) GetTxnTime(allowZero bool) time.Time {
+	// TODO(knz): a zero timestamp should never be read, even during
+	// Prepare. This will need to be addressed.
+	if !allowZero && !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
+		panic("zero transaction timestamp in EvalContext")
+	}
+	return ctx.TxnTimestamp
+}
+
 // GetTxnTimestamp retrieves the current transaction timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetTxnTimestamp(precision time.Duration) *DTimestampTZ {
-	// TODO(knz): a zero timestamp should never be read, even during
-	// Prepare. This will need to be addressed.
-	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
-		panic("zero transaction timestamp in EvalContext")
-	}
-	return MakeDTimestampTZ(ctx.TxnTimestamp, precision)
+	return MakeDTimestampTZ(ctx.GetTxnTime(false), precision)
 }
 
 // GetTxnTimestampNoZone retrieves the current transaction timestamp as per
 // the evaluation context. The timestamp is guaranteed to be nonzero.
 func (ctx *EvalContext) GetTxnTimestampNoZone(precision time.Duration) *DTimestamp {
-	// TODO(knz): a zero timestamp should never be read, even during
-	// Prepare. This will need to be addressed.
-	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
-		panic("zero transaction timestamp in EvalContext")
-	}
-	return MakeDTimestamp(ctx.TxnTimestamp, precision)
+	return MakeDTimestamp(ctx.GetTxnTime(false), precision)
 }
 
 // SetTxnTimestamp sets the corresponding timestamp in the EvalContext.

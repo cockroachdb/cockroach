@@ -209,12 +209,6 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 		// We're looking at a numeric timezone specifier.  This can be
 		// from one to four digits (or we might see another chunk if 8:30).
 
-		// We expect that the hour and minute must have been set, but
-		// the seconds and fractional part are optional.  We'll mark
-		// them as having been set to simplify the case statements below.
-		fe.has = fe.has.AddAll(fieldSecond.Add(fieldFraction))
-		fe.wanted = fe.wanted.ClearAll(fieldSecond.Add(fieldFraction))
-
 		if chunk.prefix == '-' {
 			fe.tzSign = -1
 		} else {
@@ -236,12 +230,16 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 		}
 
 	case !fe.Wants(fieldTZ1) && fe.Wants(fieldTZ2):
-		// We're looking at the second half of a timezone like +8:30.
-		// This would be the final match in any well-formatted input.
-		if chunk.prefix != ':' {
-			return errors.Errorf("unexpected chunk prefix for tz2 in %v", chunk)
+		if chunk.prefix == ':' {
+			// We're looking at the second half of a timezone like +8:30.
+			// This would be the final match in any well-formatted input.
+			return fe.Set(fieldTZ2, chunk.v)
+		} else if err := fe.Set(fieldTZ2, 0); err != nil {
+			return err
 		}
-		return fe.Set(fieldTZ2, chunk.v)
+		// Otherwise, we need to re-process this chunk since this case
+		// will always match immediately after TZ1 is set.
+		return fe.interpretNumber(chunk, textMonth)
 
 	case fe.Wants(fieldHour) && fe.Wants(fieldMinute) && fe.Wants(fieldSecond) && chunk.prefix != ':':
 		v := chunk.v
@@ -342,10 +340,11 @@ func (fe *fieldExtract) String() string {
 
 // Validate ensures that the data in the extract is reasonable.
 func (fe *fieldExtract) Validate() error {
-	if fe.has.HasAny(dateFields) && !fe.has.HasAll(dateRequiredFields) {
+	// If we have any required fields, we must have all required fields.
+	if fe.has.HasAny(dateRequiredFields) && !fe.has.HasAll(dateRequiredFields) {
 		return errors.Errorf("have some but not all date fields")
 	}
-	if fe.has.HasAny(timeFields) && !fe.has.HasAll(timeRequiredFields) {
+	if fe.has.HasAny(timeRequiredFields) && !fe.has.HasAll(timeRequiredFields) {
 		return errors.Errorf("have some but not all time fields")
 	}
 
@@ -403,7 +402,9 @@ func (fe *fieldExtract) Validate() error {
 			case hour < 0 || hour > 12:
 				return errors.New("hour out of range")
 			case hour == 12:
-				fe.Reset(fieldHour, 0)
+				if err := fe.Reset(fieldHour, 0); err != nil {
+					return err
+				}
 			}
 
 		case fieldValuePM:
@@ -414,7 +415,9 @@ func (fe *fieldExtract) Validate() error {
 				// 12 PM -> 12
 			default:
 				// 1 PM -> 13
-				fe.Reset(fieldHour, hour+12)
+				if err := fe.Reset(fieldHour, hour+12); err != nil {
+					return err
+				}
 			}
 
 		default:
@@ -434,15 +437,15 @@ func (fe *fieldExtract) Validate() error {
 			return errors.New("second out of range")
 		}
 
-		micros, _ := fe.Get(fieldFraction)
-		if micros < 0 { // micros are allowed to overflow.
-			return errors.New("micros out of range")
+		nanos, _ := fe.Get(fieldFraction)
+		if nanos < 0 {
+			return errors.New("nanos out of range")
 		}
 
 		x := time.Duration(hour)*time.Hour +
 			time.Duration(minute)*time.Minute +
 			time.Duration(second)*time.Second +
-			time.Duration(micros)*time.Microsecond
+			time.Duration(nanos)*time.Nanosecond
 		if x > 24*time.Hour {
 			return errors.Errorf("time out of range: %d", x)
 		}

@@ -72,9 +72,9 @@ func newFieldSet(fields ...field) fieldSet {
 func (s fieldSet) AsSlice() []field {
 	var ret []field
 
-	for field := fieldMinimum; field <= fieldMaximum; field++ {
-		if s.Has(field) {
-			ret = append(ret, field)
+	for f := fieldMinimum; f <= fieldMaximum; f++ {
+		if s.Has(f) {
+			ret = append(ret, f)
 		}
 	}
 

@@ -19,15 +19,16 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
 // These are sentinel values for handling special values:
 // https://www.postgresql.org/docs/10/static/datatype-datetime.html#DATATYPE-DATETIME-SPECIAL-TABLE
 var (
-	TimeEpoch            = time.Unix(0, 0)
-	TimeInfinity         = time.Unix(math.MaxInt64, math.MaxInt64)
-	TimeNegativeInfinity = time.Unix(math.MinInt64, math.MinInt64)
+	TimeEpoch            = timeutil.Unix(0, 0)
+	TimeInfinity         = timeutil.Unix(math.MaxInt64, math.MaxInt64)
+	TimeNegativeInfinity = timeutil.Unix(math.MinInt64, math.MinInt64)
 )
 
 //go:generate stringer -type=ParseMode
