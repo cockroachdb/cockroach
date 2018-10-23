@@ -697,7 +697,8 @@ DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions
 EXECGEN_TARGETS = \
   pkg/sql/exec/projection_ops.og.go \
   pkg/sql/exec/rowstovec.og.go \
-  pkg/sql/exec/selection_ops.og.go
+  pkg/sql/exec/selection_ops.og.go \
+  pkg/sql/exec/colvec.og.go
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \

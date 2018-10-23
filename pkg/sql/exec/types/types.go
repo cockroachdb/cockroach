@@ -136,3 +136,15 @@ func (t T) GoTypeName() string {
 		panic(fmt.Sprintf("unhandled type %d", t))
 	}
 }
+
+// Types is a list of all the different supported column types.
+var Types = []T{
+	Bytes,
+	Bool,
+	Int8,
+	Int16,
+	Int32,
+	Int64,
+	Float32,
+	Float64,
+}
