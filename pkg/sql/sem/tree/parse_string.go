@@ -64,23 +64,16 @@ func ParseDatumStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error
 	}
 }
 
-type locationContext interface {
-	GetLocation() *time.Location
-}
-
-var _ locationContext = &EvalContext{}
-var _ locationContext = &SemaContext{}
-
 // parseStringAs parses s as type t for simple types. Bytes, arrays, collated
 // strings are not handled. nil, nil is returned if t is not a supported type.
-func parseStringAs(t types.T, s string, loc locationContext) (Datum, error) {
+func parseStringAs(t types.T, s string, ctx ParseTimeContext) (Datum, error) {
 	switch t {
 	case types.BitArray:
 		return ParseDBitArray(s)
 	case types.Bool:
 		return ParseDBool(s)
 	case types.Date:
-		return ParseDDate(s, loc.GetLocation())
+		return ParseDDate(ctx, s)
 	case types.Decimal:
 		return ParseDDecimal(s)
 	case types.Float:
@@ -96,12 +89,11 @@ func parseStringAs(t types.T, s string, loc locationContext) (Datum, error) {
 	case types.String:
 		return NewDString(s), nil
 	case types.Time:
-		return ParseDTime(s)
+		return ParseDTime(ctx, s)
 	case types.Timestamp:
-		eCtx, _ := loc.(*EvalContext)
-		return ParseDTimestamp(eCtx, s, time.Microsecond)
+		return ParseDTimestamp(ctx, s, time.Microsecond)
 	case types.TimestampTZ:
-		return ParseDTimestampTZ(s, loc.GetLocation(), time.Microsecond)
+		return ParseDTimestampTZ(ctx, s, time.Microsecond)
 	case types.UUID:
 		return ParseDUuidFromString(s)
 	default:

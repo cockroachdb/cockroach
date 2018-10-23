@@ -396,12 +396,12 @@ func TestParseDDate(t *testing.T) {
 		{"2017-3-3", "2017-03-03"},
 	}
 	for _, td := range testData {
-		actual, err := tree.ParseDDate(td.str, time.UTC)
+		actual, err := tree.ParseDDate(nil, td.str)
 		if err != nil {
 			t.Errorf("unexpected error while parsing DATE %s: %s", td.str, err)
 			continue
 		}
-		expected, err := tree.ParseDDate(td.expected, time.UTC)
+		expected, err := tree.ParseDDate(nil, td.expected)
 		if err != nil {
 			t.Errorf("unexpected error while parsing expected value DATE %s: %s", td.expected, err)
 			continue
@@ -488,7 +488,7 @@ func TestParseDTime(t *testing.T) {
 		{"4:5:6", timeofday.New(4, 5, 6, 0)},
 	}
 	for _, td := range testData {
-		actual, err := tree.ParseDTime(td.str)
+		actual, err := tree.ParseDTime(nil, td.str)
 		if err != nil {
 			t.Errorf("unexpected error while parsing TIME %s: %s", td.str, err)
 			continue
@@ -504,11 +504,10 @@ func TestParseDTimeError(t *testing.T) {
 		"",
 		"foo",
 		"01",
-		"2001-02-03 04:05:06",
 		"24:00:00",
 	}
 	for _, s := range testData {
-		actual, _ := tree.ParseDTime(s)
+		actual, _ := tree.ParseDTime(nil, s)
 		if actual != nil {
 			t.Errorf("TIME %s: got %s, expected error", s, actual)
 		}
