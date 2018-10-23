@@ -53,12 +53,12 @@ limit
  ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
  ├── select
  │    ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
- │    ├── stats: [rows=200, distinct(3)=1]
+ │    ├── stats: [rows=200, distinct(1)=200, null(1)=0, distinct(3)=1, null(3)=0, distinct(4)=130.264312, null(4)=0]
  │    ├── key: (1)
  │    ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
  │    ├── scan a
  │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    │    ├── stats: [rows=2000, distinct(3)=10]
+ │    │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, distinct(3)=10, null(3)=0, distinct(4)=200, null(4)=0]
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── filters
@@ -76,12 +76,12 @@ limit
  ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
  ├── select
  │    ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
- │    ├── stats: [rows=200, distinct(3)=1]
+ │    ├── stats: [rows=200, distinct(1)=200, null(1)=0, distinct(3)=1, null(3)=0, distinct(4)=130.264312, null(4)=0]
  │    ├── key: (1)
  │    ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
  │    ├── scan a
  │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    │    ├── stats: [rows=2000, distinct(3)=10]
+ │    │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, distinct(3)=10, null(3)=0, distinct(4)=200, null(4)=0]
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── filters
@@ -113,27 +113,99 @@ SELECT * FROM (SELECT * FROM a ORDER BY s LIMIT 5) WHERE s = 'foo'
 select
  ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
  ├── cardinality: [0 - 5]
- ├── stats: [rows=1.26952228, distinct(3)=1]
+ ├── stats: [rows=1.26952228, distinct(1)=1.26952228, null(1)=0, distinct(3)=1, null(3)=0, distinct(4)=1.26752563, null(4)=0]
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
  ├── limit
  │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
  │    ├── internal-ordering: +3
  │    ├── cardinality: [0 - 5]
- │    ├── stats: [rows=5, distinct(3)=3.93848936]
+ │    ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(3)=3.93848936, null(3)=0, distinct(4)=4.94412336, null(4)=0]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── sort
  │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    │    ├── stats: [rows=2000, distinct(3)=10]
+ │    │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, distinct(3)=10, null(3)=0, distinct(4)=200, null(4)=0]
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    │    ├── ordering: +3
  │    │    └── scan a
  │    │         ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
- │    │         ├── stats: [rows=2000, distinct(3)=10]
+ │    │         ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, distinct(3)=10, null(3)=0, distinct(4)=200, null(4)=0]
  │    │         ├── key: (1)
  │    │         └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── const: 5 [type=int]
  └── filters
       └── s = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
+
+# Bump up null counts.
+exec-ddl
+ALTER TABLE a INJECT STATISTICS '[
+  {
+    "columns": ["x"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000
+  },
+  {
+    "columns": ["x","y"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 2000,
+    "null_count": 1000
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 500,
+    "null_count": 1000
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:30:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10,
+    "null_count": 1000
+  }
+]'
+----
+
+build colstat=2 colstat=3 colstat=(2,3)
+SELECT * FROM a LIMIT 5
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ ├── cardinality: [0 - 5]
+ ├── stats: [rows=5, distinct(2)=4.98128123, null(2)=2.5, distinct(3)=3.93848936, null(3)=2.5, distinct(2,3)=5, null(2,3)=3.75]
+ ├── key: (1)
+ ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ ├── scan a
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    ├── stats: [rows=2000, distinct(2)=500, null(2)=1000, distinct(3)=10, null(3)=1000, distinct(2,3)=2000, null(2,3)=1500]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ └── const: 5 [type=int]
+
+build colstat=2 colstat=3 colstat=(2,3)
+SELECT * FROM a WHERE s = 'foo' LIMIT 5
+----
+limit
+ ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
+ ├── cardinality: [0 - 5]
+ ├── stats: [rows=5, distinct(2)=4.99007067, null(2)=2.5, distinct(3)=0.994079471, null(3)=0, distinct(2,3)=5, null(2,3)=3.75]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
+ ├── select
+ │    ├── columns: x:1(int!null) y:2(int) s:3(string!null) d:4(decimal!null)
+ │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=92.746875, null(2)=50, distinct(3)=1, null(3)=0, distinct(4)=100, null(4)=0, distinct(2,3)=100, null(2,3)=75]
+ │    ├── key: (1)
+ │    ├── fd: ()-->(3), (1)-->(2,4), (4)-->(1,2)
+ │    ├── scan a
+ │    │    ├── columns: x:1(int!null) y:2(int) s:3(string) d:4(decimal!null)
+ │    │    ├── stats: [rows=2000, distinct(1)=2000, null(1)=0, distinct(2)=500, null(2)=1000, distinct(3)=10, null(3)=1000, distinct(4)=200, null(4)=0, distinct(2,3)=2000, null(2,3)=1500]
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
+ │    └── filters
+ │         └── s = 'foo' [type=bool, outer=(3), constraints=(/3: [/'foo' - /'foo']; tight), fd=()-->(3)]
+ └── const: 5 [type=int]

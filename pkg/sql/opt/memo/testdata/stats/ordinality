@@ -29,17 +29,17 @@ SELECT * FROM (SELECT * FROM a WITH ORDINALITY) WHERE ordinality > 0 AND ordinal
 ----
 select
  ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
- ├── stats: [rows=444.444444]
+ ├── stats: [rows=444.444444, distinct(1)=444.444444, null(1)=0, distinct(3)=444.444444, null(3)=0]
  ├── key: (1)
  ├── fd: (1)-->(2,3), (3)-->(1,2)
  ├── row-number
  │    ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
- │    ├── stats: [rows=4000]
+ │    ├── stats: [rows=4000, distinct(1)=5000, null(1)=0, distinct(3)=4000, null(3)=0]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3), (3)-->(1,2)
  │    └── scan a
  │         ├── columns: x:1(int!null) y:2(int)
- │         ├── stats: [rows=4000]
+ │         ├── stats: [rows=4000, distinct(1)=5000, null(1)=0]
  │         ├── key: (1)
  │         └── fd: (1)-->(2)
  └── filters
@@ -51,17 +51,17 @@ SELECT * FROM (SELECT * FROM a WITH ORDINALITY) WHERE y > 0 AND y <= 10
 ----
 select
  ├── columns: x:1(int!null) y:2(int!null) ordinality:3(int!null)
- ├── stats: [rows=444.444444]
+ ├── stats: [rows=444.444444, distinct(1)=444.444444, null(1)=0, distinct(2)=276.821541, null(2)=0, distinct(3)=444.444444, null(3)=0]
  ├── key: (1)
  ├── fd: (1)-->(2,3), (3)-->(1,2)
  ├── row-number
  │    ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
- │    ├── stats: [rows=4000]
+ │    ├── stats: [rows=4000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0, distinct(3)=4000, null(3)=0]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3), (3)-->(1,2)
  │    └── scan a
  │         ├── columns: x:1(int!null) y:2(int)
- │         ├── stats: [rows=4000]
+ │         ├── stats: [rows=4000, distinct(1)=5000, null(1)=0, distinct(2)=400, null(2)=0]
  │         ├── key: (1)
  │         └── fd: (1)-->(2)
  └── filters
@@ -93,17 +93,17 @@ project
  ├── key: (1)
  └── select
       ├── columns: x:1(int!null) ordinality:3(int!null)
-      ├── stats: [rows=444.444444]
+      ├── stats: [rows=444.444444, distinct(1)=444.444444, null(1)=0, distinct(3)=444.444444, null(3)=0]
       ├── key: (1)
       ├── fd: (1)-->(3), (3)-->(1)
       ├── row-number
       │    ├── columns: x:1(int!null) ordinality:3(int!null)
-      │    ├── stats: [rows=4000]
+      │    ├── stats: [rows=4000, distinct(1)=5000, null(1)=0, distinct(3)=4000, null(3)=0]
       │    ├── key: (1)
       │    ├── fd: (1)-->(3), (3)-->(1)
       │    └── scan a
       │         ├── columns: x:1(int!null)
-      │         ├── stats: [rows=4000]
+      │         ├── stats: [rows=4000, distinct(1)=5000, null(1)=0]
       │         └── key: (1)
       └── filters
            ├── ordinality > 0 [type=bool, outer=(3), constraints=(/3: [/1 - ]; tight)]
@@ -116,17 +116,17 @@ SELECT * FROM (SELECT * FROM a WITH ORDINALITY) WHERE ordinality = 2
 select
  ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1, distinct(3)=1]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(3)=1, null(3)=0]
  ├── key: ()
  ├── fd: ()-->(1-3)
  ├── row-number
  │    ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
- │    ├── stats: [rows=4000, distinct(3)=4000]
+ │    ├── stats: [rows=4000, distinct(1)=5000, null(1)=0, distinct(3)=4000, null(3)=0]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2,3), (3)-->(1,2)
  │    └── scan a
  │         ├── columns: x:1(int!null) y:2(int)
- │         ├── stats: [rows=4000]
+ │         ├── stats: [rows=4000, distinct(1)=5000, null(1)=0]
  │         ├── key: (1)
  │         └── fd: (1)-->(2)
  └── filters
@@ -138,15 +138,15 @@ SELECT DISTINCT ordinality FROM (SELECT * FROM a WITH ORDINALITY)
 distinct-on
  ├── columns: ordinality:3(int!null)
  ├── grouping columns: ordinality:3(int!null)
- ├── stats: [rows=4000, distinct(3)=4000]
+ ├── stats: [rows=4000, distinct(3)=4000, null(3)=0]
  ├── key: (3)
  └── project
       ├── columns: ordinality:3(int!null)
-      ├── stats: [rows=4000, distinct(3)=4000]
+      ├── stats: [rows=4000, distinct(3)=4000, null(3)=0]
       ├── key: (3)
       └── row-number
            ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
-           ├── stats: [rows=4000, distinct(3)=4000]
+           ├── stats: [rows=4000, distinct(3)=4000, null(3)=0]
            ├── key: (1)
            ├── fd: (1)-->(2,3), (3)-->(1,2)
            └── scan a

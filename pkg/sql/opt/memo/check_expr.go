@@ -44,7 +44,13 @@ func (m *Memo) checkExpr(e opt.Expr) {
 		// operator is known to not have code for building logical props.
 		if t != t.FirstExpr() && t.Op() != opt.MergeJoinOp {
 			var relProps props.Relational
+			// Don't build stats when verifying logical props - unintentionally
+			// building stats for non-normalized expressions could add extra colStats
+			// to the output in opt_tester in cases where checkExpr runs (i.e. testrace)
+			// compared to cases where it doesn't.
+			m.logPropsBuilder.disableStats = true
 			m.logPropsBuilder.buildProps(t, &relProps)
+			m.logPropsBuilder.disableStats = false
 			t.Relational().VerifyAgainst(&relProps)
 		}
 
