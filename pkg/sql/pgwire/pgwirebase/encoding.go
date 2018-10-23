@@ -244,7 +244,7 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 			}
 			return d, nil
 		case oid.T_timestamptz:
-			d, err := tree.ParseDTimestampTZ(string(b), time.UTC, time.Microsecond)
+			d, err := tree.ParseDTimestampTZ(nil, string(b), time.Microsecond)
 			if err != nil {
 				return nil, errors.Errorf("could not parse string %q as timestamptz", b)
 			}
@@ -252,7 +252,7 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 		case oid.T_date:
 			ts, err := tree.ParseDTimestamp(nil, string(b), time.Microsecond)
 			if err != nil {
-				res, err := tree.ParseDDate(string(b), time.UTC)
+				res, err := tree.ParseDDate(nil, string(b))
 				if err != nil {
 					return nil, errors.Errorf("could not parse string %q as date", b)
 				}
@@ -261,7 +261,7 @@ func DecodeOidDatum(id oid.Oid, code FormatCode, b []byte) (tree.Datum, error) {
 			daysSinceEpoch := ts.Unix() / secondsInDay
 			return tree.NewDDate(tree.DDate(daysSinceEpoch)), nil
 		case oid.T_time:
-			d, err := tree.ParseDTime(string(b))
+			d, err := tree.ParseDTime(nil, string(b))
 			if err != nil {
 				return nil, errors.Errorf("could not parse string %q as time", b)
 			}

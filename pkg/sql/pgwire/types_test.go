@@ -321,7 +321,7 @@ func benchmarkWriteString(b *testing.B, format pgwirebase.FormatCode) {
 }
 
 func benchmarkWriteDate(b *testing.B, format pgwirebase.FormatCode) {
-	d, err := tree.ParseDDate("2010-09-28", time.UTC)
+	d, err := tree.ParseDDate(nil, "2010-09-28")
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -337,7 +337,7 @@ func benchmarkWriteTimestamp(b *testing.B, format pgwirebase.FormatCode) {
 }
 
 func benchmarkWriteTimestampTZ(b *testing.B, format pgwirebase.FormatCode) {
-	tstz, err := tree.ParseDTimestampTZ("2010-09-28 12:00:00.1", time.UTC, time.Microsecond)
+	tstz, err := tree.ParseDTimestampTZ(nil, "2010-09-28 12:00:00.1", time.Microsecond)
 	if err != nil {
 		b.Fatal(err)
 	}

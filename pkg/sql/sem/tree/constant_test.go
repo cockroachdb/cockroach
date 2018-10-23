@@ -199,7 +199,7 @@ func mustParseDBool(t *testing.T, s string) tree.Datum {
 	return d
 }
 func mustParseDDate(t *testing.T, s string) tree.Datum {
-	d, err := tree.ParseDDate(s, time.UTC)
+	d, err := tree.ParseDDate(nil, s)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func mustParseDTimestamp(t *testing.T, s string) tree.Datum {
 	return d
 }
 func mustParseDTimestampTZ(t *testing.T, s string) tree.Datum {
-	d, err := tree.ParseDTimestampTZ(s, time.UTC, time.Millisecond)
+	d, err := tree.ParseDTimestampTZ(nil, s, time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}

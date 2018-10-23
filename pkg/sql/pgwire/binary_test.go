@@ -123,7 +123,7 @@ func TestBinaryTimestamp(t *testing.T) {
 func TestBinaryTimestampTZ(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testBinaryDatumType(t, "timestamptz", func(val string) tree.Datum {
-		tstz, err := tree.ParseDTimestampTZ(val, time.UTC, time.Microsecond)
+		tstz, err := tree.ParseDTimestampTZ(nil, val, time.Microsecond)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -145,7 +145,7 @@ func TestBinaryInterval(t *testing.T) {
 func TestBinaryDate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testBinaryDatumType(t, "date", func(val string) tree.Datum {
-		d, err := tree.ParseDDate(val, time.UTC)
+		d, err := tree.ParseDDate(nil, val)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -156,7 +156,7 @@ func TestBinaryDate(t *testing.T) {
 func TestBinaryTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testBinaryDatumType(t, "time", func(val string) tree.Datum {
-		d, err := tree.ParseDTime(val)
+		d, err := tree.ParseDTime(nil, val)
 		if err != nil {
 			t.Fatal(err)
 		}
