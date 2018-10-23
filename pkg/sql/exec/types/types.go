@@ -75,3 +75,30 @@ func FromColumnType(ct sqlbase.ColumnType) T {
 	}
 	return Unhandled
 }
+
+// FromGoType returns the type for a Go value, if applicable. Shouldn't be used at
+// runtime.
+func FromGoType(v interface{}) T {
+	switch t := v.(type) {
+	case int8:
+		return Int8
+	case int16:
+		return Int16
+	case int32:
+		return Int32
+	case int, int64:
+		return Int64
+	case bool:
+		return Bool
+	case float32:
+		return Float32
+	case float64:
+		return Float64
+	case []byte:
+		return Bytes
+	case string:
+		return Bytes
+	default:
+		panic(fmt.Sprintf("type %T not supported yet", t))
+	}
+}
