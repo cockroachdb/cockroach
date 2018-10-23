@@ -203,6 +203,18 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 		m.statsCollectionEnabled = true
 		span.SetTag(streamIDTagKey, m.streamID)
 	}
+	defer func() {
+		tracing.FinishSpan(span)
+		if trace := getTraceData(ctx); trace != nil {
+			err := m.addRow(ctx, nil, &ProducerMetadata{TraceData: trace})
+			if err != nil {
+				log.Error(ctx, err)
+			}
+		}
+		if err := m.flush(ctx); err != nil {
+			log.Error(ctx, err)
+		}
+	}()
 
 	if m.stream == nil {
 		var conn *grpc.ClientConn
@@ -275,16 +287,10 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 					if m.flowCtx.testingKnobs.DeterministicStats {
 						m.stats.BytesSent = 0
 					}
+					// Stats are flushed in the defer call above.
 					tracing.SetSpanStats(span, &m.stats)
-					tracing.FinishSpan(span)
-					if trace := getTraceData(ctx); trace != nil {
-						err := m.addRow(ctx, nil, &ProducerMetadata{TraceData: trace})
-						if err != nil {
-							return err
-						}
-					}
 				}
-				return m.flush(ctx)
+				return nil
 			}
 			if !draining || msg.Meta != nil {
 				// If we're draining, we ignore all the rows and just send metadata.
