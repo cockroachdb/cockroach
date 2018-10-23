@@ -1052,7 +1052,7 @@ to_or_eq ::=
 
 var_value ::=
 	a_expr
-	| 'ON'
+	| extra_var_value
 
 opt_on_targets_roles ::=
 	'ON' targets_roles
@@ -1420,6 +1420,10 @@ offset_clause ::=
 
 generic_set ::=
 	var_name to_or_eq var_list
+
+extra_var_value ::=
+	'ON'
+	| cockroachdb_extra_reserved_keyword
 
 targets_roles ::=
 	'ROLE' name_list

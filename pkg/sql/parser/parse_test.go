@@ -1832,6 +1832,9 @@ func TestParse2(t *testing.T) {
 		{`ALTER TABLE a ALTER b TYPE INT`, `ALTER TABLE a ALTER COLUMN b SET DATA TYPE INT`},
 		{`EXPLAIN ANALYZE SELECT 1`, `EXPLAIN ANALYZE (DISTSQL) SELECT 1`},
 
+		{`SET a = INDEX`, `SET a = "index"`},
+		{`SET a = NOTHING`, `SET a = "nothing"`},
+
 		// Regression for #31589
 		{`CREATE TABLE FAMILY (x INT)`,
 			`CREATE TABLE "family" (x INT)`},
