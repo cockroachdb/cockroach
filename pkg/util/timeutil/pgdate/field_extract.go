@@ -234,7 +234,7 @@ func (fe *fieldExtract) InterpretNumber(chunk numberChunk, textMonth bool) error
 			// Looks like a yyyy.ddd
 			return fe.SetDayOfYear(chunk.v)
 
-		case !fe.Wants(fieldSecond) && fe.Wants(fieldFraction):
+		case !fe.Wants(fieldSecond) && fe.Wants(fieldNanos):
 			// We want to adjust the fraction into a nanosecond value.
 			// We should accept at most 9 digits.
 			var mult int
@@ -260,7 +260,7 @@ func (fe *fieldExtract) InterpretNumber(chunk numberChunk, textMonth bool) error
 			default:
 				return errors.New("fractional part too long")
 			}
-			return fe.Set(fieldFraction, chunk.v*mult)
+			return fe.Set(fieldNanos, chunk.v*mult)
 
 		default:
 			return errors.Errorf("cannot interpret %s", chunk)
@@ -490,7 +490,7 @@ func (fe *fieldExtract) MakeTimestamp() time.Time {
 	hour, _ := fe.Get(fieldHour)
 	min, _ := fe.Get(fieldMinute)
 	sec, _ := fe.Get(fieldSecond)
-	nano, _ := fe.Get(fieldFraction)
+	nano, _ := fe.Get(fieldNanos)
 
 	return time.Date(year, time.Month(month), day, hour, min, sec, nano, fe.MakeLocation())
 }
@@ -563,7 +563,9 @@ func (fe *fieldExtract) String() string {
 	return ret
 }
 
-// Validate ensures that the data in the extract is reasonable.
+// Validate ensures that the data in the extract is reasonable. It also
+// performs some field fixups, such as converting two-digit years
+// to actual values and adjusting for AM/PM.
 func (fe *fieldExtract) Validate() error {
 	// If we have any of the required fields, we must have all of the required fields.
 	if fe.has.HasAny(dateRequiredFields) && !fe.has.HasAll(dateRequiredFields) {
@@ -665,7 +667,7 @@ func (fe *fieldExtract) Validate() error {
 			return errors.New("second out of range")
 		}
 
-		nanos, _ := fe.Get(fieldFraction)
+		nanos, _ := fe.Get(fieldNanos)
 		if nanos < 0 {
 			return errors.New("nanos out of range")
 		}
@@ -686,11 +688,6 @@ func (fe *fieldExtract) Validate() error {
 // Wants returns whether or not the field is wanted in the extract.
 func (fe *fieldExtract) Wants(field field) bool {
 	return fe.wanted.Has(field)
-}
-
-// WantsAll returns whether or not all fields are wanted in the extract.
-func (fe *fieldExtract) WantsAll(fields fieldSet) bool {
-	return fe.wanted.HasAll(fields)
 }
 
 // Zero sets multiple fields to zero.

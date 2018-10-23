@@ -49,7 +49,7 @@ var (
 	dateRequiredFields = newFieldSet(fieldYear, fieldMonth, fieldDay)
 
 	timeFields = newFieldSet(
-		fieldHour, fieldMinute, fieldSecond, fieldFraction, fieldMeridian,
+		fieldHour, fieldMinute, fieldSecond, fieldNanos, fieldMeridian,
 		fieldTZHour, fieldTZMinute, fieldTZSecond)
 	timeRequiredFields = newFieldSet(fieldHour, fieldMinute)
 
