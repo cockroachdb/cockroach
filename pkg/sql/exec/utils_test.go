@@ -127,7 +127,7 @@ func (s *opTestInput) Init() {
 	s.typs = typs
 	s.batch = NewMemBatch(append(typs, s.extraCols...))
 
-	s.selection = make([]uint16, ColBatchSize)
+	s.selection = make([]uint16, s.batchSize)
 	for i := range s.selection {
 		s.selection[i] = uint16(i)
 	}

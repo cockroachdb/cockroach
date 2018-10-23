@@ -26,14 +26,12 @@ func TestSortedDistinct(t *testing.T) {
 	tcs := []struct {
 		distinctCols []uint32
 		colTypes     []types.T
-		numCols      int
 		tuples       []tuple
 		expected     []tuple
 	}{
 		{
 			distinctCols: []uint32{0, 1, 2},
 			colTypes:     []types.T{types.Int64, types.Int64, types.Int64},
-			numCols:      4,
 			tuples: tuples{
 				{1, 2, 3, 4},
 				{1, 2, 3, 5},

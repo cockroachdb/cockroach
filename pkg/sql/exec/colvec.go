@@ -63,6 +63,9 @@ type ColVec interface {
 	// CopyWithSelInt16 copies into itself another batch's column vector, filtered by
 	// the given selection vector. The size of the batch is at most ColBatchSize.
 	CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colType types.T)
+	// CopyWithSlice copies into itself another batch's column vector sliced at
+	// [lower, upper).
+	CopyWithSlice(vec ColVec, colType types.T, lower uint16, upper uint16)
 }
 
 // Nulls represents a list of potentially nullable values.
