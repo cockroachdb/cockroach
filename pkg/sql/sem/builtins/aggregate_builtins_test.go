@@ -20,6 +20,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -36,17 +38,20 @@ import (
 // accumulation, which violates the "deep copy of any internal state" condition.
 func testAggregateResultDeepCopy(
 	t *testing.T,
-	aggFunc func([]types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	aggFunc func([]types.T, *mon.BoundAccount, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
 	vals []tree.Datum,
 ) {
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-	defer evalCtx.Stop(context.Background())
-	aggImpl := aggFunc([]types.T{vals[0].ResolvedType()}, evalCtx, nil)
-	defer aggImpl.Close(context.Background())
+	ctx := context.Background()
+	defer evalCtx.Stop(ctx)
+	acc := evalCtx.Mon.MakeBoundAccount()
+	defer acc.Close(ctx)
+	aggImpl := aggFunc([]types.T{vals[0].ResolvedType()}, &acc, evalCtx, nil)
+	defer aggImpl.Close(ctx)
 	runningDatums := make([]tree.Datum, len(vals))
 	runningStrings := make([]string, len(vals))
 	for i := range vals {
-		if err := aggImpl.Add(context.Background(), vals[i]); err != nil {
+		if err := aggImpl.Add(ctx, vals[i]); err != nil {
 			t.Fatal(err)
 		}
 		res, err := aggImpl.Result()
@@ -279,16 +284,17 @@ func testArrayAggAliasedTypeOverload(t *testing.T, expected types.T) {
 
 func runBenchmarkAggregate(
 	b *testing.B,
-	aggFunc func([]types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	aggFunc func([]types.T, *mon.BoundAccount, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
 	vals []tree.Datum,
 ) {
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	acc := evalCtx.Mon.MakeBoundAccount()
 	defer evalCtx.Stop(context.Background())
 	params := []types.T{vals[0].ResolvedType()}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		func() {
-			aggImpl := aggFunc(params, evalCtx, nil)
+			aggImpl := aggFunc(params, &acc, evalCtx, nil)
 			defer aggImpl.Close(context.Background())
 			for i := range vals {
 				if err := aggImpl.Add(context.Background(), vals[i]); err != nil {

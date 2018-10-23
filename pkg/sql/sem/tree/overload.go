@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/pkg/errors"
@@ -47,11 +49,14 @@ type Overload struct {
 	// might be more appropriate.
 	Info string
 
-	AggregateFunc func([]types.T, *EvalContext, Datums) AggregateFunc
-	WindowFunc    func([]types.T, *EvalContext) WindowFunc
+	AggregateFunc AggregateFuncConstructor
+	WindowFunc    WindowFuncConstructor
 	Fn            func(*EvalContext, Datums) (Datum, error)
 	Generator     GeneratorFactory
 }
+
+type AggregateFuncConstructor func([]types.T, *mon.BoundAccount, *EvalContext, Datums) AggregateFunc
+type WindowFuncConstructor func([]types.T, *mon.BoundAccount, *EvalContext) WindowFunc
 
 // params implements the overloadImpl interface.
 func (b Overload) params() TypeList { return b.Types }

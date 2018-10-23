@@ -40,7 +40,7 @@ import (
 func GetWindowFunctionInfo(
 	fn WindowerSpec_Func, inputTypes ...sqlbase.ColumnType,
 ) (
-	windowConstructor func(*tree.EvalContext) tree.WindowFunc,
+	windowConstructor func(*mon.BoundAccount, *tree.EvalContext) tree.WindowFunc,
 	returnType sqlbase.ColumnType,
 	err error,
 ) {
@@ -85,8 +85,8 @@ func GetWindowFunctionInfo(
 		}
 		if match {
 			// Found!
-			constructAgg := func(evalCtx *tree.EvalContext) tree.WindowFunc {
-				return b.WindowFunc(datumTypes, evalCtx)
+			constructAgg := func(acc *mon.BoundAccount, evalCtx *tree.EvalContext) tree.WindowFunc {
+				return b.WindowFunc(datumTypes, acc, evalCtx)
 			}
 
 			colTyp, err := sqlbase.DatumTypeToColumnType(b.FixedReturnType())
@@ -559,7 +559,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 		}
 
 		for partitionIdx := 0; partitionIdx < len(partitions); partitionIdx++ {
-			builtin := windowFn.create(evalCtx)
+			builtin := windowFn.create(&w.resultsAcc, evalCtx)
 			defer builtin.Close(ctx, evalCtx)
 
 			partition := partitions[partitionIdx]
@@ -682,7 +682,7 @@ func (w *windower) populateNextOutputRow() bool {
 }
 
 type windowFunc struct {
-	create       func(*tree.EvalContext) tree.WindowFunc
+	create       func(*mon.BoundAccount, *tree.EvalContext) tree.WindowFunc
 	ordering     Ordering
 	argIdxStart  int
 	argCount     int

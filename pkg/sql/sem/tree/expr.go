@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -1215,25 +1217,27 @@ func (node *FuncExpr) ResolvedOverload() *Overload {
 
 // GetAggregateConstructor exposes the AggregateFunc field for use by
 // the group node in package sql.
-func (node *FuncExpr) GetAggregateConstructor() func(*EvalContext, Datums) AggregateFunc {
+func (node *FuncExpr) GetAggregateConstructor() 
+	func(*mon.BoundAccount, *EvalContext, Datums) AggregateFunc,
+ {
 	if node.fn == nil || node.fn.AggregateFunc == nil {
 		return nil
 	}
-	return func(evalCtx *EvalContext, arguments Datums) AggregateFunc {
+	return func(acc *mon.BoundAccount, evalCtx *EvalContext, arguments Datums) AggregateFunc {
 		types := typesOfExprs(node.Exprs)
-		return node.fn.AggregateFunc(types, evalCtx, arguments)
+		return node.fn.AggregateFunc(types, acc, evalCtx, arguments)
 	}
 }
 
 // GetWindowConstructor returns a window function constructor if the
 // FuncExpr is a built-in window function.
-func (node *FuncExpr) GetWindowConstructor() func(*EvalContext) WindowFunc {
+func (node *FuncExpr) GetWindowConstructor() func(*mon.BoundAccount, *EvalContext) WindowFunc {
 	if node.fn == nil || node.fn.WindowFunc == nil {
 		return nil
 	}
-	return func(evalCtx *EvalContext) WindowFunc {
+	return func(acc *mon.BoundAccount, evalCtx *EvalContext) WindowFunc {
 		types := typesOfExprs(node.Exprs)
-		return node.fn.WindowFunc(types, evalCtx)
+		return node.fn.WindowFunc(types, acc, evalCtx)
 	}
 }
 

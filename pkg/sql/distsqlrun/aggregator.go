@@ -39,7 +39,7 @@ import (
 func GetAggregateInfo(
 	fn AggregatorSpec_Func, inputTypes ...sqlbase.ColumnType,
 ) (
-	aggregateConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	aggregateConstructor func(*mon.BoundAccount, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
 	returnType sqlbase.ColumnType,
 	err error,
 ) {
@@ -74,8 +74,8 @@ func GetAggregateInfo(
 		}
 		if match {
 			// Found!
-			constructAgg := func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
-				return b.AggregateFunc(datumTypes, evalCtx, arguments)
+			constructAgg := func(acc *mon.BoundAccount, evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
+				return b.AggregateFunc(datumTypes, acc, evalCtx, arguments)
 			}
 
 			colTyp, err := sqlbase.DatumTypeToColumnType(b.FixedReturnType())
@@ -844,7 +844,7 @@ func (ag *orderedAggregator) accumulateRow(row sqlbase.EncDatumRow) error {
 }
 
 type aggregateFuncHolder struct {
-	create    func(*tree.EvalContext, tree.Datums) tree.AggregateFunc
+	create    func(*mon.BoundAccount, *tree.EvalContext, tree.Datums) tree.AggregateFunc
 	arguments tree.Datums
 	group     *aggregatorBase
 	seen      map[string]struct{}
@@ -854,7 +854,8 @@ type aggregateFuncHolder struct {
 const sizeOfAggregateFunc = int64(unsafe.Sizeof(tree.AggregateFunc(nil)))
 
 func (ag *aggregatorBase) newAggregateFuncHolder(
-	create func(*tree.EvalContext, tree.Datums) tree.AggregateFunc, arguments tree.Datums,
+	create func(*mon.BoundAccount, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	arguments tree.Datums,
 ) *aggregateFuncHolder {
 	return &aggregateFuncHolder{
 		create:    create,
@@ -915,7 +916,7 @@ func (ag *aggregatorBase) createAggregateFuncs() (aggregateFuncs, error) {
 	}
 	bucket := make(aggregateFuncs, len(ag.funcs))
 	for i, f := range ag.funcs {
-		agg := f.create(ag.flowCtx.EvalCtx, f.arguments)
+		agg := f.create(&ag.bucketsAcc, ag.flowCtx.EvalCtx, f.arguments)
 		if err := ag.bucketsAcc.Grow(ag.Ctx, agg.Size()); err != nil {
 			return nil, err
 		}

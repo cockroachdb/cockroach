@@ -455,7 +455,7 @@ func (n *groupNode) Next(params runParams) (bool, error) {
 			// No input for this bucket (possible if f has a FILTER).
 			// In most cases the result is NULL but there are exceptions
 			// (like COUNT).
-			aggregateFunc = f.create(params.EvalContext(), nil /* arguments */)
+			aggregateFunc = f.create(&f.run.bucketsMemAcc, params.EvalContext(), nil /* arguments */)
 		}
 		var err error
 		n.run.values[i], err = aggregateFunc.Result()
@@ -537,7 +537,7 @@ func (n *groupNode) desiredAggregateOrdering(evalCtx *tree.EvalContext) sqlbase.
 		return nil
 	}
 	f := n.funcs[0]
-	impl := f.create(evalCtx, nil /* arguments */)
+	impl := f.create(nil, evalCtx, nil /* arguments */)
 	switch impl.(type) {
 	case *builtins.MinAggregate:
 		return sqlbase.ColumnOrdering{{ColIdx: f.argRenderIdx, Direction: encoding.Ascending}}
@@ -769,7 +769,7 @@ type aggregateFuncHolder struct {
 
 	// create instantiates the built-in execution context for the
 	// aggregation function.
-	create func(*tree.EvalContext, tree.Datums) tree.AggregateFunc
+	create func(*mon.BoundAccount, *tree.EvalContext, tree.Datums) tree.AggregateFunc
 
 	// arguments are constant expressions that can be optionally passed into an
 	// aggregator.
@@ -799,7 +799,7 @@ func (n *groupNode) newAggregateFuncHolder(
 	funcName string,
 	resultType types.T,
 	argRenderIdx int,
-	create func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	create func(*mon.BoundAccount, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
 	arguments tree.Datums,
 	acc mon.BoundAccount,
 ) *aggregateFuncHolder {
@@ -878,7 +878,7 @@ func (a *aggregateFuncHolder) add(
 
 	impl, ok := a.run.buckets[string(bucket)]
 	if !ok {
-		impl = a.create(evalCtx, a.arguments)
+		impl = a.create(&a.run.bucketsMemAcc, evalCtx, a.arguments)
 		a.run.buckets[string(bucket)] = impl
 	}
 

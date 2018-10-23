@@ -797,7 +797,7 @@ func (n *windowNode) computeWindows(ctx context.Context, evalCtx *tree.EvalConte
 		//   * Segment Tree
 		// See Leis et al. [http://www.vldb.org/pvldb/vol8/p1058-leis.pdf]
 		for _, partition := range partitions {
-			builtin := windowFn.expr.GetWindowConstructor()(evalCtx)
+			builtin := windowFn.expr.GetWindowConstructor()(&n.run.windowsAcc, evalCtx)
 			defer builtin.Close(ctx, evalCtx)
 
 			var peerGrouper tree.PeerGroupChecker

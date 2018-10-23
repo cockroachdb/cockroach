@@ -154,11 +154,12 @@ var aggregates = map[string]builtinDefinition{
 			Types:         tree.ArgTypes{},
 			ReturnType:    tree.FixedReturnType(types.Int),
 			AggregateFunc: newCountRowsAggregate,
-			WindowFunc: func(params []types.T, evalCtx *tree.EvalContext) tree.WindowFunc {
+			WindowFunc: func(params []types.T, acc *mon.BoundAccount, evalCtx *tree.EvalContext) tree.WindowFunc {
 				return newFramableAggregateWindow(
-					newCountRowsAggregate(params, evalCtx, nil /* arguments */),
-					func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
-						return newCountRowsAggregate(params, evalCtx, arguments)
+					acc,
+					newCountRowsAggregate(params, acc, evalCtx, nil /* arguments */),
+					func(acc *mon.BoundAccount, evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
+						return newCountRowsAggregate(params, acc, evalCtx, arguments)
 					},
 				)
 			},
@@ -305,10 +306,7 @@ func makePrivate(b builtinDefinition) builtinDefinition {
 }
 
 func makeAggOverload(
-	in []types.T,
-	ret types.T,
-	f func([]types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
-	info string,
+	in []types.T, ret types.T, f tree.AggregateFuncConstructor, info string,
 ) tree.Overload {
 	return makeAggOverloadWithReturnType(
 		in,
@@ -319,10 +317,7 @@ func makeAggOverload(
 }
 
 func makeAggOverloadWithReturnType(
-	in []types.T,
-	retType tree.ReturnTyper,
-	f func([]types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
-	info string,
+	in []types.T, retType tree.ReturnTyper, f tree.AggregateFuncConstructor, info string,
 ) tree.Overload {
 	argTypes := make(tree.ArgTypes, len(in))
 	for i, typ := range in {
@@ -336,8 +331,8 @@ func makeAggOverloadWithReturnType(
 		Types:         argTypes,
 		ReturnType:    retType,
 		AggregateFunc: f,
-		WindowFunc: func(params []types.T, evalCtx *tree.EvalContext) tree.WindowFunc {
-			aggWindowFunc := f(params, evalCtx, nil /* arguments */)
+		WindowFunc: func(params []types.T, acc *mon.BoundAccount, evalCtx *tree.EvalContext) tree.WindowFunc {
+			aggWindowFunc := f(params, acc, evalCtx, nil /* arguments */)
 			switch w := aggWindowFunc.(type) {
 			case *MinAggregate:
 				min := &slidingWindowFunc{}
@@ -365,9 +360,10 @@ func makeAggOverloadWithReturnType(
 			}
 
 			return newFramableAggregateWindow(
+				acc,
 				aggWindowFunc,
-				func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
-					return f(params, evalCtx, arguments)
+				func(acc *mon.BoundAccount, evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
+					return f(params, acc, evalCtx, arguments)
 				},
 			)
 		},
@@ -452,11 +448,15 @@ type anyNotNullAggregate struct {
 //
 //  - for query optimization, when moving aggregations across left joins (which
 //    add NULL values).
-func NewAnyNotNullAggregate(*tree.EvalContext, tree.Datums) tree.AggregateFunc {
+func NewAnyNotNullAggregate(
+	_ *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
 	return &anyNotNullAggregate{val: tree.DNull}
 }
 
-func newAnyNotNullAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newAnyNotNullAggregate(
+	_ []types.T, _ *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
 	return &anyNotNullAggregate{val: tree.DNull}
 }
 
@@ -483,15 +483,15 @@ func (a *anyNotNullAggregate) Size() int64 {
 
 type arrayAggregate struct {
 	arr *tree.DArray
-	acc mon.BoundAccount
+	acc *mon.BoundAccount
 }
 
 func newArrayAggregate(
-	params []types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	params []types.T, acc *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
 	return &arrayAggregate{
 		arr: tree.NewDArray(params[0]),
-		acc: evalCtx.Mon.MakeBoundAccount(),
+		acc: acc,
 	}
 }
 
@@ -515,7 +515,6 @@ func (a *arrayAggregate) Result() (tree.Datum, error) {
 // Close allows the aggregate to release the memory it requested during
 // operation.
 func (a *arrayAggregate) Close(ctx context.Context) {
-	a.acc.Close(ctx)
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -529,19 +528,19 @@ type avgAggregate struct {
 }
 
 func newIntAvgAggregate(
-	params []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []types.T, acc *mon.BoundAccount, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
-	return &avgAggregate{agg: newIntSumAggregate(params, evalCtx, arguments)}
+	return &avgAggregate{agg: newIntSumAggregate(params, acc, evalCtx, arguments)}
 }
 func newFloatAvgAggregate(
-	params []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []types.T, acc *mon.BoundAccount, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
-	return &avgAggregate{agg: newFloatSumAggregate(params, evalCtx, arguments)}
+	return &avgAggregate{agg: newFloatSumAggregate(params, acc, evalCtx, arguments)}
 }
 func newDecimalAvgAggregate(
-	params []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []types.T, acc *mon.BoundAccount, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
-	return &avgAggregate{agg: newDecimalSumAggregate(params, evalCtx, arguments)}
+	return &avgAggregate{agg: newDecimalSumAggregate(params, acc, evalCtx, arguments)}
 }
 
 // Add accumulates the passed datum into the average.
@@ -579,7 +578,6 @@ func (a *avgAggregate) Result() (tree.Datum, error) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *avgAggregate) Close(ctx context.Context) {
-	a.agg.Close(ctx)
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -592,15 +590,15 @@ type concatAggregate struct {
 	sawNonNull bool
 	delimiter  string // used for non window functions
 	result     bytes.Buffer
-	acc        mon.BoundAccount
+	acc        *mon.BoundAccount
 }
 
 func newBytesConcatAggregate(
-	_ []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	_ []types.T, acc *mon.BoundAccount, _ *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
 	concatAgg := &concatAggregate{
 		forBytes: true,
-		acc:      evalCtx.Mon.MakeBoundAccount(),
+		acc:      acc,
 	}
 	if len(arguments) == 1 && arguments[0] != tree.DNull {
 		concatAgg.delimiter = string(tree.MustBeDBytes(arguments[0]))
@@ -611,10 +609,10 @@ func newBytesConcatAggregate(
 }
 
 func newStringConcatAggregate(
-	_ []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	_ []types.T, acc *mon.BoundAccount, _ *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
 	concatAgg := &concatAggregate{
-		acc: evalCtx.Mon.MakeBoundAccount(),
+		acc: acc,
 	}
 	if len(arguments) == 1 && arguments[0] != tree.DNull {
 		concatAgg.delimiter = string(tree.MustBeDString(arguments[0]))
@@ -678,7 +676,6 @@ func (a *concatAggregate) Result() (tree.Datum, error) {
 // Close allows the aggregate to release the memory it requested during
 // operation.
 func (a *concatAggregate) Close(ctx context.Context) {
-	a.acc.Close(ctx)
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -691,7 +688,9 @@ type boolAndAggregate struct {
 	result     bool
 }
 
-func newBoolAndAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newBoolAndAggregate(
+	_ []types.T, _ *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
 	return &boolAndAggregate{}
 }
 
@@ -727,7 +726,9 @@ type boolOrAggregate struct {
 	result     bool
 }
 
-func newBoolOrAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newBoolOrAggregate(
+	_ []types.T, _ *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
 	return &boolOrAggregate{}
 }
 
@@ -759,7 +760,9 @@ type countAggregate struct {
 	count int
 }
 
-func newCountAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newCountAggregate(
+	_ []types.T, _ *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
 	return &countAggregate{}
 }
 
@@ -787,7 +790,9 @@ type countRowsAggregate struct {
 	count int
 }
 
-func newCountRowsAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newCountRowsAggregate(
+	_ []types.T, _ *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
 	return &countRowsAggregate{}
 }
 
@@ -813,13 +818,13 @@ type MaxAggregate struct {
 	max     tree.Datum
 	evalCtx *tree.EvalContext
 
-	acc               mon.BoundAccount
+	acc               *mon.BoundAccount
 	datumSize         uintptr
 	variableDatumSize bool
 }
 
 func newMaxAggregate(
-	params []types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	params []types.T, acc *mon.BoundAccount, evalCtx *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
 	sz, variable := tree.DatumTypeSize(params[0])
 	// If the datum type has a fixed size, it will be included in the size
@@ -830,7 +835,7 @@ func newMaxAggregate(
 	}
 	return &MaxAggregate{
 		evalCtx:           evalCtx,
-		acc:               evalCtx.Mon.MakeBoundAccount(),
+		acc:               acc,
 		datumSize:         sz,
 		variableDatumSize: variable,
 	}
@@ -867,7 +872,6 @@ func (a *MaxAggregate) Result() (tree.Datum, error) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *MaxAggregate) Close(ctx context.Context) {
-	a.acc.Close(ctx)
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -880,13 +884,13 @@ type MinAggregate struct {
 	min     tree.Datum
 	evalCtx *tree.EvalContext
 
-	acc               mon.BoundAccount
+	acc               *mon.BoundAccount
 	datumSize         uintptr
 	variableDatumSize bool
 }
 
 func newMinAggregate(
-	params []types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	params []types.T, acc *mon.BoundAccount, evalCtx *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
 	sz, variable := tree.DatumTypeSize(params[0])
 	// If the datum type has a fixed size, it will be included in the size
@@ -898,7 +902,7 @@ func newMinAggregate(
 	}
 	return &MinAggregate{
 		evalCtx:           evalCtx,
-		acc:               evalCtx.Mon.MakeBoundAccount(),
+		acc:               acc,
 		datumSize:         sz,
 		variableDatumSize: variable,
 	}
@@ -935,7 +939,6 @@ func (a *MinAggregate) Result() (tree.Datum, error) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *MinAggregate) Close(ctx context.Context) {
-	a.acc.Close(ctx)
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -948,7 +951,9 @@ type smallIntSumAggregate struct {
 	seenNonNull bool
 }
 
-func newSmallIntSumAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newSmallIntSumAggregate(
+	_ []types.T, _ *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
 	return &smallIntSumAggregate{}
 }
 
@@ -988,11 +993,13 @@ type intSumAggregate struct {
 	tmpDec      apd.Decimal
 	large       bool
 	seenNonNull bool
-	acc         mon.BoundAccount
+	acc         *mon.BoundAccount
 }
 
-func newIntSumAggregate(_ []types.T, evalCtx *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
-	return &intSumAggregate{acc: evalCtx.Mon.MakeBoundAccount()}
+func newIntSumAggregate(
+	_ []types.T, acc *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
+	return &intSumAggregate{acc: acc}
 }
 
 // Add adds the value of the passed datum to the sum.
@@ -1050,7 +1057,6 @@ func (a *intSumAggregate) Result() (tree.Datum, error) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *intSumAggregate) Close(ctx context.Context) {
-	a.acc.Close(ctx)
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -1061,13 +1067,13 @@ func (a *intSumAggregate) Size() int64 {
 type decimalSumAggregate struct {
 	sum        apd.Decimal
 	sawNonNull bool
-	acc        mon.BoundAccount
+	acc        *mon.BoundAccount
 }
 
 func newDecimalSumAggregate(
-	_ []types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	_ []types.T, acc *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
-	return &decimalSumAggregate{acc: evalCtx.Mon.MakeBoundAccount()}
+	return &decimalSumAggregate{acc: acc}
 }
 
 // Add adds the value of the passed datum to the sum.
@@ -1100,9 +1106,7 @@ func (a *decimalSumAggregate) Result() (tree.Datum, error) {
 }
 
 // Close is part of the tree.AggregateFunc interface.
-func (a *decimalSumAggregate) Close(ctx context.Context) {
-	a.acc.Close(ctx)
-}
+func (a *decimalSumAggregate) Close(ctx context.Context) {}
 
 // Size is part of the tree.AggregateFunc interface.
 func (a *decimalSumAggregate) Size() int64 {
@@ -1114,7 +1118,9 @@ type floatSumAggregate struct {
 	sawNonNull bool
 }
 
-func newFloatSumAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newFloatSumAggregate(
+	_ []types.T, _ *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
 	return &floatSumAggregate{}
 }
 
@@ -1150,7 +1156,9 @@ type intervalSumAggregate struct {
 	sawNonNull bool
 }
 
-func newIntervalSumAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newIntervalSumAggregate(
+	_ []types.T, _ *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
 	return &intervalSumAggregate{}
 }
 
@@ -1193,14 +1201,14 @@ type intSqrDiffAggregate struct {
 	tmpDec tree.DDecimal
 }
 
-func newIntSqrDiff(evalCtx *tree.EvalContext) decimalSqrDiff {
-	return &intSqrDiffAggregate{agg: newDecimalSqrDiff(evalCtx)}
+func newIntSqrDiff(acc *mon.BoundAccount) decimalSqrDiff {
+	return &intSqrDiffAggregate{agg: newDecimalSqrDiff(acc)}
 }
 
 func newIntSqrDiffAggregate(
-	_ []types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	_ []types.T, acc *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
-	return newIntSqrDiff(evalCtx)
+	return newIntSqrDiff(acc)
 }
 
 // Count is part of the decimalSqrDiff interface.
@@ -1246,7 +1254,9 @@ func newFloatSqrDiff() floatSqrDiff {
 	return &floatSqrDiffAggregate{}
 }
 
-func newFloatSqrDiffAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newFloatSqrDiffAggregate(
+	_ []types.T, _ *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
 	return newFloatSqrDiff()
 }
 
@@ -1304,21 +1314,21 @@ type decimalSqrDiffAggregate struct {
 	delta apd.Decimal
 	tmp   apd.Decimal
 
-	acc mon.BoundAccount
+	acc *mon.BoundAccount
 }
 
-func newDecimalSqrDiff(evalCtx *tree.EvalContext) decimalSqrDiff {
+func newDecimalSqrDiff(acc *mon.BoundAccount) decimalSqrDiff {
 	ed := apd.MakeErrDecimal(tree.IntermediateCtx)
 	return &decimalSqrDiffAggregate{
 		ed:  &ed,
-		acc: evalCtx.Mon.MakeBoundAccount(),
+		acc: acc,
 	}
 }
 
 func newDecimalSqrDiffAggregate(
-	_ []types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	_ []types.T, acc *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
-	return newDecimalSqrDiff(evalCtx)
+	return newDecimalSqrDiff(acc)
 }
 
 // Count is part of the decimalSqrDiff interface.
@@ -1376,7 +1386,6 @@ func (a *decimalSqrDiffAggregate) Result() (tree.Datum, error) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *decimalSqrDiffAggregate) Close(ctx context.Context) {
-	a.acc.Close(ctx)
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -1467,14 +1476,14 @@ type decimalSumSqrDiffsAggregate struct {
 	delta    apd.Decimal
 	tmp      apd.Decimal
 
-	acc mon.BoundAccount
+	acc *mon.BoundAccount
 }
 
-func newDecimalSumSqrDiffs(evalCtx *tree.EvalContext) decimalSqrDiff {
+func newDecimalSumSqrDiffs(acc *mon.BoundAccount) decimalSqrDiff {
 	ed := apd.MakeErrDecimal(tree.IntermediateCtx)
 	return &decimalSumSqrDiffsAggregate{
 		ed:  &ed,
-		acc: evalCtx.Mon.MakeBoundAccount(),
+		acc: acc,
 	}
 }
 
@@ -1557,7 +1566,6 @@ func (a *decimalSumSqrDiffsAggregate) Result() (tree.Datum, error) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *decimalSumSqrDiffsAggregate) Close(ctx context.Context) {
-	a.acc.Close(ctx)
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -1591,31 +1599,33 @@ type decimalVarianceAggregate struct {
 // which takes in three inputs: (local) SQRDIFF, SUM, COUNT.
 // FinalVariance is used for local/final aggregation in distsql.
 func newIntVarianceAggregate(
-	params []types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	_ []types.T, acc *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
-	return &decimalVarianceAggregate{agg: newIntSqrDiff(evalCtx)}
+	return &decimalVarianceAggregate{agg: newIntSqrDiff(acc)}
 }
 
-func newFloatVarianceAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newFloatVarianceAggregate(
+	_ []types.T, _ *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
 	return &floatVarianceAggregate{agg: newFloatSqrDiff()}
 }
 
 func newDecimalVarianceAggregate(
-	_ []types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	_ []types.T, acc *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
-	return &decimalVarianceAggregate{agg: newDecimalSqrDiff(evalCtx)}
+	return &decimalVarianceAggregate{agg: newDecimalSqrDiff(acc)}
 }
 
 func newFloatFinalVarianceAggregate(
-	_ []types.T, _ *tree.EvalContext, _ tree.Datums,
+	_ []types.T, _ *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
 	return &floatVarianceAggregate{agg: newFloatSumSqrDiffs()}
 }
 
 func newDecimalFinalVarianceAggregate(
-	_ []types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	_ []types.T, acc *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
-	return &decimalVarianceAggregate{agg: newDecimalSumSqrDiffs(evalCtx)}
+	return &decimalVarianceAggregate{agg: newDecimalSumSqrDiffs(acc)}
 }
 
 // Add is part of the tree.AggregateFunc interface.
@@ -1674,7 +1684,6 @@ func (a *decimalVarianceAggregate) Result() (tree.Datum, error) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *floatVarianceAggregate) Close(ctx context.Context) {
-	a.agg.Close(ctx)
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -1684,7 +1693,6 @@ func (a *floatVarianceAggregate) Size() int64 {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *decimalVarianceAggregate) Close(ctx context.Context) {
-	a.agg.Close(ctx)
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -1707,33 +1715,33 @@ type decimalStdDevAggregate struct {
 // which takes in three inputs: (local) SQRDIFF, SUM, COUNT.
 // FinalStdDev is used for local/final aggregation in distsql.
 func newIntStdDevAggregate(
-	params []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []types.T, acc *mon.BoundAccount, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
-	return &decimalStdDevAggregate{agg: newIntVarianceAggregate(params, evalCtx, arguments)}
+	return &decimalStdDevAggregate{agg: newIntVarianceAggregate(params, acc, evalCtx, arguments)}
 }
 
 func newFloatStdDevAggregate(
-	params []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []types.T, acc *mon.BoundAccount, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
-	return &floatStdDevAggregate{agg: newFloatVarianceAggregate(params, evalCtx, arguments)}
+	return &floatStdDevAggregate{agg: newFloatVarianceAggregate(params, acc, evalCtx, arguments)}
 }
 
 func newDecimalStdDevAggregate(
-	params []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []types.T, acc *mon.BoundAccount, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
-	return &decimalStdDevAggregate{agg: newDecimalVarianceAggregate(params, evalCtx, arguments)}
+	return &decimalStdDevAggregate{agg: newDecimalVarianceAggregate(params, acc, evalCtx, arguments)}
 }
 
 func newFloatFinalStdDevAggregate(
-	params []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []types.T, acc *mon.BoundAccount, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
-	return &floatStdDevAggregate{agg: newFloatFinalVarianceAggregate(params, evalCtx, arguments)}
+	return &floatStdDevAggregate{agg: newFloatFinalVarianceAggregate(params, acc, evalCtx, arguments)}
 }
 
 func newDecimalFinalStdDevAggregate(
-	params []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []types.T, acc *mon.BoundAccount, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
-	return &decimalStdDevAggregate{agg: newDecimalFinalVarianceAggregate(params, evalCtx, arguments)}
+	return &decimalStdDevAggregate{agg: newDecimalFinalVarianceAggregate(params, acc, evalCtx, arguments)}
 }
 
 // Add implements the tree.AggregateFunc interface.
@@ -1790,7 +1798,6 @@ func (a *decimalStdDevAggregate) Result() (tree.Datum, error) {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *floatStdDevAggregate) Close(ctx context.Context) {
-	a.agg.Close(ctx)
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -1800,7 +1807,6 @@ func (a *floatStdDevAggregate) Size() int64 {
 
 // Close is part of the tree.AggregateFunc interface.
 func (a *decimalStdDevAggregate) Close(ctx context.Context) {
-	a.agg.Close(ctx)
 }
 
 // Size is part of the tree.AggregateFunc interface.
@@ -1813,7 +1819,9 @@ type bytesXorAggregate struct {
 	sawNonNull bool
 }
 
-func newBytesXorAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newBytesXorAggregate(
+	_ []types.T, _ *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
 	return &bytesXorAggregate{}
 }
 
@@ -1859,7 +1867,9 @@ type intXorAggregate struct {
 	sawNonNull bool
 }
 
-func newIntXorAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newIntXorAggregate(
+	_ []types.T, _ *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
 	return &intXorAggregate{}
 }
 
@@ -1892,14 +1902,16 @@ func (a *intXorAggregate) Size() int64 {
 
 type jsonAggregate struct {
 	builder    *json.ArrayBuilderWithCounter
-	acc        mon.BoundAccount
+	acc        *mon.BoundAccount
 	sawNonNull bool
 }
 
-func newJSONAggregate(_ []types.T, evalCtx *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newJSONAggregate(
+	_ []types.T, acc *mon.BoundAccount, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
 	return &jsonAggregate{
 		builder:    json.NewArrayBuilderWithCounter(),
-		acc:        evalCtx.Mon.MakeBoundAccount(),
+		acc:        acc,
 		sawNonNull: false,
 	}
 }
@@ -1930,7 +1942,6 @@ func (a *jsonAggregate) Result() (tree.Datum, error) {
 // Close allows the aggregate to release the memory it requested during
 // operation.
 func (a *jsonAggregate) Close(ctx context.Context) {
-	a.acc.Close(ctx)
 }
 
 // Size is part of the tree.AggregateFunc interface.

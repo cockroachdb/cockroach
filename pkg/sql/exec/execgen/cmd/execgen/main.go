@@ -84,7 +84,7 @@ func (g *execgen) run(args ...string) bool {
 		gen := generators[file]
 		if gen == nil {
 			g.reportError(errors.Errorf("unrecognized filename: %s", file))
-			return false
+			return true
 		}
 		if err := g.generate(gen, out); err != nil {
 			g.reportError(err)

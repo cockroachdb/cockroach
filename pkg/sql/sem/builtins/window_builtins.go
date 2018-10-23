@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -147,7 +149,10 @@ var windows = map[string]builtinDefinition{
 }
 
 func makeWindowOverload(
-	in tree.ArgTypes, ret types.T, f func([]types.T, *tree.EvalContext) tree.WindowFunc, info string,
+	in tree.ArgTypes,
+	ret types.T,
+	f func([]types.T, *mon.BoundAccount, *tree.EvalContext) tree.WindowFunc,
+	info string,
 ) tree.Overload {
 	return tree.Overload{
 		Types:      in,
@@ -182,10 +187,10 @@ type aggregateWindowFunc struct {
 // NewAggregateWindowFunc creates a constructor of aggregateWindowFunc
 // with agg initialized by provided aggConstructor.
 func NewAggregateWindowFunc(
-	aggConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
-) func(*tree.EvalContext) tree.WindowFunc {
-	return func(evalCtx *tree.EvalContext) tree.WindowFunc {
-		return &aggregateWindowFunc{agg: aggConstructor(evalCtx, nil /* arguments */)}
+	aggConstructor func(*mon.BoundAccount, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+) func(*mon.BoundAccount, *tree.EvalContext) tree.WindowFunc {
+	return func(acc *mon.BoundAccount, evalCtx *tree.EvalContext) tree.WindowFunc {
+		return &aggregateWindowFunc{agg: aggConstructor(acc, evalCtx, nil /* arguments */)}
 	}
 }
 
@@ -240,16 +245,20 @@ func ShouldReset(w tree.WindowFunc) {
 // shouldReset indicates whether the resetting behavior is desired.
 type framableAggregateWindowFunc struct {
 	agg            *aggregateWindowFunc
-	aggConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc
+	aggConstructor func(*mon.BoundAccount, *tree.EvalContext, tree.Datums) tree.AggregateFunc
+	acc            *mon.BoundAccount
 	shouldReset    bool
 }
 
 func newFramableAggregateWindow(
-	agg tree.AggregateFunc, aggConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	acc *mon.BoundAccount,
+	agg tree.AggregateFunc,
+	aggConstructor func(*mon.BoundAccount, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
 ) tree.WindowFunc {
 	return &framableAggregateWindowFunc{
 		agg:            &aggregateWindowFunc{agg: agg},
 		aggConstructor: aggConstructor,
+		acc:            acc,
 	}
 }
 
@@ -269,7 +278,7 @@ func (w *framableAggregateWindowFunc) Compute(
 	w.agg.Close(ctx, evalCtx)
 	// No arguments are passed into the aggConstructor and they are instead passed
 	// in during the call to add().
-	*w.agg = aggregateWindowFunc{w.aggConstructor(evalCtx, nil /* arguments */), tree.DNull}
+	*w.agg = aggregateWindowFunc{w.aggConstructor(w.acc, evalCtx, nil /* arguments */), tree.DNull}
 
 	// Accumulate all values in the window frame.
 	for i := wfr.FrameStartIdx(evalCtx); i < wfr.FrameEndIdx(evalCtx); i++ {
@@ -306,7 +315,7 @@ func (w *framableAggregateWindowFunc) Close(ctx context.Context, evalCtx *tree.E
 // counting from 1.
 type rowNumberWindow struct{}
 
-func newRowNumberWindow([]types.T, *tree.EvalContext) tree.WindowFunc {
+func newRowNumberWindow([]types.T, *mon.BoundAccount, *tree.EvalContext) tree.WindowFunc {
 	return &rowNumberWindow{}
 }
 
@@ -323,7 +332,7 @@ type rankWindow struct {
 	peerRes *tree.DInt
 }
 
-func newRankWindow([]types.T, *tree.EvalContext) tree.WindowFunc {
+func newRankWindow([]types.T, *mon.BoundAccount, *tree.EvalContext) tree.WindowFunc {
 	return &rankWindow{}
 }
 
@@ -344,7 +353,7 @@ type denseRankWindow struct {
 	peerRes   *tree.DInt
 }
 
-func newDenseRankWindow([]types.T, *tree.EvalContext) tree.WindowFunc {
+func newDenseRankWindow([]types.T, *mon.BoundAccount, *tree.EvalContext) tree.WindowFunc {
 	return &denseRankWindow{}
 }
 
@@ -366,7 +375,7 @@ type percentRankWindow struct {
 	peerRes *tree.DFloat
 }
 
-func newPercentRankWindow([]types.T, *tree.EvalContext) tree.WindowFunc {
+func newPercentRankWindow([]types.T, *mon.BoundAccount, *tree.EvalContext) tree.WindowFunc {
 	return &percentRankWindow{}
 }
 
@@ -395,7 +404,7 @@ type cumulativeDistWindow struct {
 	peerRes *tree.DFloat
 }
 
-func newCumulativeDistWindow([]types.T, *tree.EvalContext) tree.WindowFunc {
+func newCumulativeDistWindow([]types.T, *mon.BoundAccount, *tree.EvalContext) tree.WindowFunc {
 	return &cumulativeDistWindow{}
 }
 
@@ -420,7 +429,7 @@ type ntileWindow struct {
 	remainder      int        // (total rows) % (bucket num)
 }
 
-func newNtileWindow([]types.T, *tree.EvalContext) tree.WindowFunc {
+func newNtileWindow([]types.T, *mon.BoundAccount, *tree.EvalContext) tree.WindowFunc {
 	return &ntileWindow{}
 }
 
@@ -491,8 +500,8 @@ func newLeadLagWindow(forward, withOffset, withDefault bool) tree.WindowFunc {
 
 func makeLeadLagWindowConstructor(
 	forward, withOffset, withDefault bool,
-) func([]types.T, *tree.EvalContext) tree.WindowFunc {
-	return func([]types.T, *tree.EvalContext) tree.WindowFunc {
+) tree.WindowFuncConstructor {
+	return func([]types.T, *mon.BoundAccount, *tree.EvalContext) tree.WindowFunc {
 		return newLeadLagWindow(forward, withOffset, withDefault)
 	}
 }
@@ -529,7 +538,7 @@ func (w *leadLagWindow) Close(context.Context, *tree.EvalContext) {}
 // firstValueWindow returns value evaluated at the row that is the first row of the window frame.
 type firstValueWindow struct{}
 
-func newFirstValueWindow([]types.T, *tree.EvalContext) tree.WindowFunc {
+func newFirstValueWindow([]types.T, *mon.BoundAccount, *tree.EvalContext) tree.WindowFunc {
 	return &firstValueWindow{}
 }
 
@@ -544,7 +553,7 @@ func (firstValueWindow) Close(context.Context, *tree.EvalContext) {}
 // lastValueWindow returns value evaluated at the row that is the last row of the window frame.
 type lastValueWindow struct{}
 
-func newLastValueWindow([]types.T, *tree.EvalContext) tree.WindowFunc {
+func newLastValueWindow([]types.T, *mon.BoundAccount, *tree.EvalContext) tree.WindowFunc {
 	return &lastValueWindow{}
 }
 
@@ -560,7 +569,7 @@ func (lastValueWindow) Close(context.Context, *tree.EvalContext) {}
 // (counting from 1). Returns null if no such row.
 type nthValueWindow struct{}
 
-func newNthValueWindow([]types.T, *tree.EvalContext) tree.WindowFunc {
+func newNthValueWindow([]types.T, *mon.BoundAccount, *tree.EvalContext) tree.WindowFunc {
 	return &nthValueWindow{}
 }
 

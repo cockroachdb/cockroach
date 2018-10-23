@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -394,19 +396,19 @@ func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo
 		agg := &aggregations[i]
 		builtin := agg.Builtin
 		var renderIdx int
-		var aggFn func(*tree.EvalContext, tree.Datums) tree.AggregateFunc
+		var aggFn func(*mon.BoundAccount, *tree.EvalContext, tree.Datums) tree.AggregateFunc
 
 		switch len(agg.ArgCols) {
 		case 0:
 			renderIdx = noRenderIdx
-			aggFn = func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
-				return builtin.AggregateFunc([]types.T{}, evalCtx, arguments)
+			aggFn = func(acc *mon.BoundAccount, evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
+				return builtin.AggregateFunc([]types.T{}, acc, evalCtx, arguments)
 			}
 
 		case 1:
 			renderIdx = int(agg.ArgCols[0])
-			aggFn = func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
-				return builtin.AggregateFunc([]types.T{inputCols[renderIdx].Typ}, evalCtx, arguments)
+			aggFn = func(acc *mon.BoundAccount, evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
+				return builtin.AggregateFunc([]types.T{inputCols[renderIdx].Typ}, acc, evalCtx, arguments)
 			}
 
 		default:
