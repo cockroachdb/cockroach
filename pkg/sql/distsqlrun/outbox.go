@@ -203,6 +203,15 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 		m.statsCollectionEnabled = true
 		span.SetTag(streamIDTagKey, m.streamID)
 	}
+	// spanFinished specifies whether we called tracing.FinishSpan on the span.
+	// Some code paths (e.g. stats collection) need to prematurely call
+	// FinishSpan to get trace data.
+	spanFinished := false
+	defer func() {
+		if !spanFinished {
+			tracing.FinishSpan(span)
+		}
+	}()
 
 	if m.stream == nil {
 		var conn *grpc.ClientConn
@@ -277,6 +286,7 @@ func (m *outbox) mainLoop(ctx context.Context) error {
 					}
 					tracing.SetSpanStats(span, &m.stats)
 					tracing.FinishSpan(span)
+					spanFinished = true
 					if trace := getTraceData(ctx); trace != nil {
 						err := m.addRow(ctx, nil, &ProducerMetadata{TraceData: trace})
 						if err != nil {
