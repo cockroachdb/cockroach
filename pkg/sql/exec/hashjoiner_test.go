@@ -40,6 +40,7 @@ func TestHashJoinerInt64(t *testing.T) {
 		rightOutCols []int
 
 		expectedTuples tuples
+		buildRightSide bool
 	}{
 		{
 			// test handling of various output column types.
@@ -136,27 +137,29 @@ func TestHashJoinerInt64(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		spec := &hashJoinerSpec{
-			leftSourceTypes:  tc.leftTypes,
-			rightSourceTypes: tc.rightTypes,
-
-			leftEqCol:  tc.leftEqCol,
-			rightEqCol: tc.rightEqCol,
-
-			leftOutCols:  tc.leftOutCols,
-			rightOutCols: tc.rightOutCols,
-		}
-
 		for _, batchSize := range []uint16{1, 2, 3, 4, 16, 1024} {
 			t.Run(fmt.Sprintf("batchSize=%d", batchSize), func(t *testing.T) {
 
-				leftSource := newOpTestInput(tc.leftTuples)
-				rightSource := newOpTestInput(tc.rightTuples)
+				leftSource := newOpTestInput(batchSize, tc.leftTuples)
+				rightSource := newOpTestInput(batchSize, tc.rightTuples)
+				spec := hashJoinerSpec{
+					build: hashJoinerSourceSpec{
+						eqCol:       tc.leftEqCol,
+						outCols:     tc.leftOutCols,
+						sourceTypes: tc.leftTypes,
+						source:      leftSource,
+					},
 
-				hj := &hashJoinerInt64Op{
-					leftSource:  leftSource,
-					rightSource: rightSource,
-					spec:        spec,
+					probe: hashJoinerSourceSpec{
+						eqCol:       tc.rightEqCol,
+						outCols:     tc.rightOutCols,
+						sourceTypes: tc.rightTypes,
+						source:      rightSource,
+					},
+				}
+
+				hj := &hashJoinEqInnerDistinctInt64Op{
+					spec: spec,
 				}
 
 				nOutCols := len(tc.leftOutCols) + len(tc.rightOutCols)

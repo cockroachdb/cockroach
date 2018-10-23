@@ -75,22 +75,6 @@ type Nulls interface {
 
 var _ ColVec = &memColumn{}
 
-// Bools is an interface that represents a list of bools.
-type Bools interface {
-	// At returns the ith bool in the list.
-	At(i uint16) bool
-	// Set sets the ith bool in the list to b.
-	Set(i uint16, b bool)
-}
-
-// Bytes is an interface that represents a list of byte slices.
-type Bytes interface {
-	// At returns the ith byte slice in the list.
-	At(i uint16) []byte
-	// Set sets the ith byte slice in the list to b.
-	Set(i uint16, b []byte)
-}
-
 // memColumn is a simple pass-through implementation of ColVec that just casts
 // a generic interface{} to the proper type when requested.
 type memColumn struct {
@@ -165,87 +149,6 @@ func (m memColumn) Float64() []float64 {
 
 func (m memColumn) Bytes() [][]byte {
 	return m.col.([][]byte)
-}
-
-func (m *memColumn) Append(vec ColVec, colType types.T, toLength uint64, fromLength uint16) {
-	switch colType {
-	case types.Bool:
-		m.col = append(m.Bool()[:toLength], vec.Bool()[:fromLength]...)
-	case types.Bytes:
-		m.col = append(m.Bytes()[:toLength], vec.Bytes()[:fromLength]...)
-	case types.Int8:
-		m.col = append(m.Int8()[:toLength], vec.Int8()[:fromLength]...)
-	case types.Int16:
-		m.col = append(m.Int16()[:toLength], vec.Int16()[:fromLength]...)
-	case types.Int32:
-		m.col = append(m.Int32()[:toLength], vec.Int32()[:fromLength]...)
-	case types.Int64:
-		toCol := m.Int64()[:toLength]
-		fromCol := vec.Int64()[:fromLength]
-		m.col = append(toCol, fromCol...)
-	case types.Float32:
-		m.col = append(m.Float32()[:toLength], vec.Float32()[:fromLength]...)
-	case types.Float64:
-		m.col = append(m.Float64()[:toLength], vec.Float64()[:fromLength]...)
-	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
-	}
-}
-
-func (m *memColumn) CopyFrom(vec ColVec, sel []uint64, nSel uint16, colType types.T) {
-	// todo (changangela): handle the case when nSel > ColBatchSize
-	switch colType {
-	case types.Bool:
-		toCol := m.Bool()
-		fromCol := vec.Bool()
-		for i := uint16(0); i < nSel; i++ {
-			toCol[i] = fromCol[sel[i]]
-		}
-	case types.Bytes:
-		toCol := m.Bytes()
-		fromCol := vec.Bytes()
-		for i := uint16(0); i < nSel; i++ {
-			toCol[i] = fromCol[sel[i]]
-		}
-	case types.Int8:
-		toCol := m.Int8()
-		fromCol := vec.Int8()
-		for i := uint16(0); i < nSel; i++ {
-			toCol[i] = fromCol[sel[i]]
-		}
-	case types.Int16:
-		toCol := m.Int16()
-		fromCol := vec.Int16()
-		for i := uint16(0); i < nSel; i++ {
-			toCol[i] = fromCol[sel[i]]
-		}
-	case types.Int32:
-		toCol := m.Int32()
-		fromCol := vec.Int32()
-		for i := uint16(0); i < nSel; i++ {
-			toCol[i] = fromCol[sel[i]]
-		}
-	case types.Int64:
-		toCol := m.Int64()
-		fromCol := vec.Int64()
-		for i := uint16(0); i < nSel; i++ {
-			toCol[i] = fromCol[sel[i]]
-		}
-	case types.Float32:
-		toCol := m.Float32()
-		fromCol := vec.Float32()
-		for i := uint16(0); i < nSel; i++ {
-			toCol[i] = fromCol[sel[i]]
-		}
-	case types.Float64:
-		toCol := m.Float64()
-		fromCol := vec.Float64()
-		for i := uint16(0); i < nSel; i++ {
-			toCol[i] = fromCol[sel[i]]
-		}
-	default:
-		panic(fmt.Sprintf("unhandled type %d", colType))
-	}
 }
 
 func (m memColumn) Col() interface{} {

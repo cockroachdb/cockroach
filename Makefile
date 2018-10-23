@@ -694,7 +694,9 @@ PROTOBUF_TARGETS := bin/.go_protobuf_sources bin/.gw_protobuf_sources bin/.cpp_p
 
 DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions
 
-EXECGEN_TARGETS = pkg/sql/exec/rowstovec.og.go
+EXECGEN_TARGETS = \
+  pkg/sql/exec/rowstovec.og.go \
+  pkg/sql/exec/colvec.og.go
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \

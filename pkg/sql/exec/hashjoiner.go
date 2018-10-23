@@ -25,11 +25,10 @@ const hashTableBucketSize = 1 << 16
 type hashJoinerState int
 
 const (
+
 	// hjBuilding represents the state the hashJoiner when it is in the build
-	// phase. Output columns are stored and a hash map is constructed from the
-	// equality columns.
-	// todo(changangela): dynamically determine which side to store (which side is
-	// smallest) in this state.
+	// phase. Output columns from the build table are stored and a hash map is
+	// constructed from its equality columns.
 	hjBuilding = iota
 
 	// hjProbing represents the state the hashJoiner is in when it is in the probe
@@ -38,113 +37,126 @@ const (
 )
 
 // hashJoinerSpec is the specification for a hash joiner processor. The hash
-// joiner performs an inner join on the left and right equal columns and returns
-// combined left and right output columns.
+// joiner performs an inner join on the left and right's equal columns and
+// returns combined left and right output columns.
 type hashJoinerSpec struct {
-
-	// leftEqCol and rightEqCol specify the indices of the joint constraint left
-	// and right table equality columns.
-	// todo(changangela) add support for multiple equality columns
-	leftEqCol  int
-	rightEqCol int
-
-	// leftOutCols and rightOutCols specify the indices of the columns that should
-	// be outputted by the hash joiner.
-	leftOutCols  []int
-	rightOutCols []int
-
-	// leftSourceTypes and rightSourceTypes specify the types of the input columns
-	// of the left and right tables for the hash joiner.
-	leftSourceTypes  []types.T
-	rightSourceTypes []types.T
+	// build and probe are the specifications of the two input table sources to
+	// the hash joiner. build represents the source used for the build phase and
+	// probe represents the source used for the probe phase.
+	build hashJoinerSourceSpec
+	probe hashJoinerSourceSpec
 }
 
-// hashJoinerInt64Op performs a hash join. It requires both sides to have
-// exactly 1 equal column, and their types must be types.Int64. It also requires
-// that the left equal column only contain distinct values, otherwise the
-// behavior is undefined. An inner join is performed and there is no guarantee
-// on the ordering of the output columns.
-type hashJoinerInt64Op struct {
-	// leftSource and rightSource store the input operators for the two sides of
-	// the join.
-	leftSource  Operator
-	rightSource Operator
+type hashJoinerSourceSpec struct {
+	// eqCol specify the indices of the source tables equality column during the
+	// hash join.
+	eqCol int
 
+	// outCols specify the indices of the columns that should be outputted by the
+	// hash joiner.
+	outCols []int
+
+	// sourceTypes specify the types of the input columns of the source table for
+	// the hash joiner.
+	sourceTypes []types.T
+
+	// source specifies the input operator to the hash join.
+	source Operator
+}
+
+// hashJoinEqInnerDistinctInt64Op performs a hash join. It requires both sides to have
+// exactly 1 equal column, and their types must be types.Int64. It also requires
+// that the build table's equality column only contain distinct values,
+// otherwise the behavior is undefined. An inner join is performed and there is
+// no guarantee on the ordering of the output columns.
+type hashJoinEqInnerDistinctInt64Op struct {
 	// spec, if not nil, holds the specification for the current hash joiner
 	// process.
-	spec *hashJoinerSpec
+	spec hashJoinerSpec
+
 	// ht, if not nil, holds the hashTable that is populated during the build
 	// phase and used during the probe phase.
 	ht *hashTable
-	// prober, if not nil, stores the batch prober used by the hashJoiner in the probe phase.
+
+	// prober, if not nil, stores the batch prober used by the hashJoiner in the
+	// probe phase.
 	prober *hashJoinProber
 
 	// runningState stores the current state hashJoiner.
 	runningState hashJoinerState
 }
 
-var _ Operator = &hashJoinerInt64Op{}
+var _ Operator = &hashJoinEqInnerDistinctInt64Op{}
 
-func (hj *hashJoinerInt64Op) Init() {
-	nOutCols := len(hj.spec.leftOutCols) + len(hj.spec.rightOutCols)
+func (hj *hashJoinEqInnerDistinctInt64Op) Init() {
+	nOutCols := len(hj.spec.build.outCols) + len(hj.spec.probe.outCols)
 	if nOutCols == 0 {
 		panic("no output columns specified for hash joiner")
 	}
 
-	hj.leftSource.Init()
-	hj.rightSource.Init()
-
-	keyType := hj.spec.leftSourceTypes[hj.spec.leftEqCol]
-	if hj.spec.rightSourceTypes[hj.spec.rightEqCol] != keyType {
+	keyType := hj.spec.build.sourceTypes[hj.spec.build.eqCol]
+	if hj.spec.probe.sourceTypes[hj.spec.probe.eqCol] != keyType {
 		panic("hash joiner equal columns must be same type")
 	}
 
-	// prepare the hashTable using the left side as the build table
-	buildColTypes := make([]types.T, len(hj.spec.leftOutCols))
-	for i, colID := range hj.spec.leftOutCols {
-		buildColTypes[i] = hj.spec.leftSourceTypes[colID]
+	// prepare the hashTable using the specified side as the build table.
+	buildColTypes := make([]types.T, len(hj.spec.build.outCols))
+	for i, colIdx := range hj.spec.build.outCols {
+		buildColTypes[i] = hj.spec.build.sourceTypes[colIdx]
 	}
 	hj.ht = makeHashTable(hashTableBucketSize, keyType, buildColTypes)
 
-	// prepare the prober
-	probeColTypes := make([]types.T, len(hj.spec.rightOutCols))
-	for i, colID := range hj.spec.rightOutCols {
-		probeColTypes[i] = hj.spec.rightSourceTypes[colID]
+	// prepare the prober.
+	probeColTypes := make([]types.T, len(hj.spec.probe.outCols))
+	for i, colIdx := range hj.spec.probe.outCols {
+		probeColTypes[i] = hj.spec.probe.sourceTypes[colIdx]
 	}
+
 	hj.prober = makeHashJoinProber(hj.ht, buildColTypes, probeColTypes)
 
 	hj.runningState = hjBuilding
 }
 
-func (hj *hashJoinerInt64Op) Next() ColBatch {
+func (hj *hashJoinEqInnerDistinctInt64Op) Next() ColBatch {
 	switch hj.runningState {
 	case hjBuilding:
 		hj.build()
 		fallthrough
 	case hjProbing:
-		return hj.prober.probe(hj.rightSource, hj.spec.rightEqCol, hj.spec.rightOutCols, hj.spec.rightSourceTypes)
+		return hj.prober.probe(hj.spec.probe.source, hj.spec.probe.eqCol, hj.spec.probe.outCols, hj.spec.probe.sourceTypes)
 	default:
 		panic("hash joiner in unhandled state")
 	}
 }
 
-func (hj *hashJoinerInt64Op) build() {
+func (hj *hashJoinEqInnerDistinctInt64Op) build() {
 	builder := makeHashJoinBuilder(hj.ht)
-	builder.exec(hj.leftSource, hj.spec.leftEqCol, hj.spec.leftOutCols)
+
+	builder.exec(hj.spec.build.source, hj.spec.build.eqCol, hj.spec.build.outCols)
 
 	hj.runningState = hjProbing
 }
 
 // hashTable is a structure used by the hash joiner to store the build table
 // batches. Keys are stored according to the encoding of the equality column,
-// which point to the corresponding output row. The table can then be probed in
-// column batches to find at most one matching row per column batch row.
+// which point to the corresponding output keyID. The keyID is calculated
+// using the below equation:
+//
+// keyID = keys.indexOf(key) + 1
+//
+// and inversely:
+//
+// keys[keyID - 1] = key
+//
+// The table can then be probed in column batches to find at most one matching
+// row per column batch row.
 type hashTable struct {
-	// first stores the id of the first key that resides in each bucket. This id
-	// is used to determine the corresponding equality column key as well as
-	// output column values.
+	// first stores the keyID of the first key that resides in each bucket. This
+	// keyID is used to determine the corresponding equality column key as well
+	// as output column values.
 	first []uint64
-	// next is a densely-packed list that stores the id of the next key in the
+
+	// next is a densely-packed list that stores the keyID of the next key in the
 	// hash table bucket chain, where an id of 0 is reserved to represent end of
 	// chain.
 	next []uint64
@@ -154,12 +166,14 @@ type hashTable struct {
 	keys ColVec
 	// keyType stores the corresponding type of the keys column.
 	keyType types.T
+
 	// values stores the output columns where each output column has the same
 	// length as the keys.
 	values []ColVec
 	// valueColTypes stores the corresponding type of each values column.
 	valueColTypes []types.T
-	nOutCols      int
+	// nValCols is the number of build table output columns.
+	nValCols int
 
 	// size returns the total number of keys the hashTable currently stores.
 	size uint64
@@ -182,7 +196,7 @@ func makeHashTable(bucketSize uint64, keyType types.T, outColTypes []types.T) *h
 		next:          make([]uint64, 1),
 		values:        values,
 		valueColTypes: outColTypes,
-		nOutCols:      nOutCols,
+		nValCols:      nOutCols,
 		bucketSize:    bucketSize,
 	}
 }
@@ -200,15 +214,15 @@ func (ht *hashTable) insertHash(hash uint64, id uint64) {
 
 // loadBatch appends a new batch of keys and values to the existing keys and
 // values.
-func (ht *hashTable) loadBatch(batch ColBatch, eqColID int, outCols []int) {
+func (ht *hashTable) loadBatch(batch ColBatch, eqColIdx int, outCols []int) {
 	// todo(changangela) examine the batch selection vector
 	batchSize := batch.Length()
-	eqCol := batch.ColVec(eqColID)
+	eqCol := batch.ColVec(eqColIdx)
 
 	ht.keys.Append(eqCol, ht.keyType, ht.size, batchSize)
 
-	for i, colID := range outCols {
-		ht.values[i].Append(batch.ColVec(colID), ht.valueColTypes[i], ht.size, batchSize)
+	for i, colIdx := range outCols {
+		ht.values[i].Append(batch.ColVec(colIdx), ht.valueColTypes[i], ht.size, batchSize)
 	}
 
 	ht.size += uint64(batchSize)
@@ -243,7 +257,7 @@ func makeHashJoinBuilder(ht *hashTable) *hashJoinBuilder {
 
 // exec executes the entirety of the hash table build phase using the source as
 // the build relation. The source operator is entirely consumed in the process.
-func (builder *hashJoinBuilder) exec(source Operator, eqColID int, outCols []int) {
+func (builder *hashJoinBuilder) exec(source Operator, eqColIdx int, outCols []int) {
 	for {
 		batch := source.Next()
 
@@ -251,21 +265,32 @@ func (builder *hashJoinBuilder) exec(source Operator, eqColID int, outCols []int
 			break
 		}
 
-		builder.ht.loadBatch(batch, eqColID, outCols)
+		builder.ht.loadBatch(batch, eqColIdx, outCols)
 	}
 
 	builder.ht.insertKeys()
 }
 
-// hashJoinProber is used by the hashJoinerInt64Op during the probe phase. It
+// hashJoinProber is used by the hashJoinEqInnerDistinctInt64Op during the probe phase. It
 // operates on a single batch of obtained from the probe relation and probes the
 // hashTable to construct the resulting output batch.
 type hashJoinProber struct {
 	ht *hashTable
 
-	// outFlow stores the resulting output batch that is constructed and returned
+	// batch stores the resulting output batch that is constructed and returned
 	// for every input batch during the probe phase.
-	outFlow ColBatch
+	batch ColBatch
+
+	// groupID stores the keyID that maps to the joining rows of the build table.
+	// The ith element of groupID stores the keyID of the build table that
+	// corresponds to the ith key in the probe table.
+	groupID []uint64
+	// toCheck stores the indices of the eqCol rows that have yet to be found or
+	// rejected.
+	toCheck []uint16
+
+	buildIdx []uint64
+	probeIdx []uint64
 }
 
 func makeHashJoinProber(
@@ -274,15 +299,22 @@ func makeHashJoinProber(
 	// prepare the output batch by allocating with the correct column types
 	outColTypes := append(buildColTypes, probeColTypes...)
 	return &hashJoinProber{
-		ht:      ht,
-		outFlow: NewMemBatch(outColTypes),
+		ht: ht,
+
+		batch: NewMemBatch(outColTypes),
+
+		groupID: make([]uint64, ColBatchSize),
+		toCheck: make([]uint16, ColBatchSize),
+
+		buildIdx: make([]uint64, ColBatchSize),
+		probeIdx: make([]uint64, ColBatchSize),
 	}
 }
 
 func (prober *hashJoinProber) probe(
-	source Operator, eqColID int, outCols []int, outColTypes []types.T,
+	source Operator, eqColIdx int, outCols []int, outColTypes []types.T,
 ) ColBatch {
-	prober.outFlow.SetLength(0)
+	prober.batch.SetLength(0)
 
 	for {
 		batch := source.Next()
@@ -292,54 +324,46 @@ func (prober *hashJoinProber) probe(
 			break
 		}
 
-		eqCol := batch.ColVec(eqColID)
+		eqCol := batch.ColVec(eqColIdx)
 
-		// groupID stores the id that maps to the joining rows of the build table.
-		groupID := make([]uint64, batchSize)
-		// toCheck stores the indices of the eqCol rows that have yet to be found or
-		// rejected.
-		toCheck := make([]uint16, batchSize)
-
-		prober.lookupInitial(eqCol, groupID, toCheck, batchSize)
+		prober.lookupInitial(eqCol, batchSize)
 		nToCheck := batchSize
 
 		// continue searching along the hash table next chains for the corresponding
 		// buckets. If the key is found or end of next chain is reached, the key is
 		// removed from the toCheck array.
 		for nToCheck > 0 {
-			nToCheck = prober.check(eqCol, groupID, toCheck, nToCheck)
-			prober.findNext(groupID, toCheck, nToCheck)
+			nToCheck = prober.check(eqCol, nToCheck)
+			prober.findNext(nToCheck)
 		}
 
-		prober.collectResults(groupID, batch, batchSize, outCols, outColTypes)
+		prober.collectResults(batch, batchSize, outCols, outColTypes)
 
 		// since is possible for the hash join to return an empty group, we should
 		// loop until we have a non-empty output batch, or an empty input batch.
 		// Otherwise, the client will assume that the ColBatch is completely
 		// consumed when it isn't.
-		if prober.outFlow.Length() > 0 {
+		if prober.batch.Length() > 0 {
 			// todo (changangela): add buffering to return batches of equal length on
 			// each call to Next()
 			break
 		}
 	}
 
-	return prober.outFlow
+	return prober.batch
 }
 
 // lookupInitial finds the corresponding hash table buckets for the equality
 // column batch.
-func (prober *hashJoinProber) lookupInitial(
-	eqCol ColVec, groupID []uint64, toCheck []uint16, batchSize uint16,
-) {
+func (prober *hashJoinProber) lookupInitial(eqCol ColVec, batchSize uint16) {
 	keyType := prober.ht.keyType
 
 	switch keyType {
 	case types.Int64:
 		col := eqCol.Int64()
 		for i := uint16(0); i < batchSize; i++ {
-			groupID[i] = prober.ht.first[prober.ht.hashInt64(col[i])]
-			toCheck[i] = i
+			prober.groupID[i] = prober.ht.first[prober.ht.hashInt64(col[i])]
+			prober.toCheck[i] = i
 		}
 	default:
 		panic("key type is not currently supported by hash joiner")
@@ -350,10 +374,8 @@ func (prober *hashJoinProber) lookupInitial(
 // equality column key. If there is a match, then the key is removed from
 // toCheck. If the bucket has reached the end, the key is rejected. The toCheck
 // list is reconstructed to only hold the indices of the eqCol keys that have
-// not been found.
-func (prober *hashJoinProber) check(
-	eqCol ColVec, groupID []uint64, toCheck []uint16, nToCheck uint16,
-) uint16 {
+// not been found. The new length of toCheck is returned by this function.
+func (prober *hashJoinProber) check(eqCol ColVec, nToCheck uint16) uint16 {
 	keyType := prober.ht.keyType
 	switch keyType {
 	case types.Int64:
@@ -362,11 +384,13 @@ func (prober *hashJoinProber) check(
 		nDiffers := uint16(0)
 
 		for i := uint16(0); i < nToCheck; i++ {
-			// id of 0 is reserved to represent the end of the next chain.
-			if id := groupID[toCheck[i]]; id != 0 {
-				// the index of a key is the id offset by 1
-				if keys[id-1] != col[toCheck[i]] {
-					toCheck[nDiffers] = toCheck[i]
+			// keyID of 0 is reserved to represent the end of the next chain.
+			if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
+				// the build table key (calculated using keys[keyID - 1] = key) is
+				// compared to the corresponding probe table to determine if a match is
+				// found.
+				if keys[keyID-1] != col[prober.toCheck[i]] {
+					prober.toCheck[nDiffers] = prober.toCheck[i]
 					nDiffers++
 				}
 			}
@@ -380,43 +404,41 @@ func (prober *hashJoinProber) check(
 
 // findNext determines the id of the next key inside the groupID buckets for
 // each equality column key in toCheck.
-func (prober *hashJoinProber) findNext(groupID []uint64, toCheck []uint16, nToCheck uint16) {
+func (prober *hashJoinProber) findNext(nToCheck uint16) {
 	for i := uint16(0); i < nToCheck; i++ {
-		groupID[toCheck[i]] = prober.ht.next[groupID[toCheck[i]]]
+		prober.groupID[prober.toCheck[i]] = prober.ht.next[prober.groupID[prober.toCheck[i]]]
 	}
 }
 
-// collectResults prepares the outFlow with the joined output columns where the
+// collectResults prepares the batch with the joined output columns where the
 // build row index for each probe row is given in the groupID slice.
 func (prober *hashJoinProber) collectResults(
-	groupID []uint64, batch ColBatch, batchSize uint16, outCols []int, outColTypes []types.T,
+	batch ColBatch, batchSize uint16, outCols []int, outColTypes []types.T,
 ) {
-	buildID := make([]uint64, batchSize)
-	probeID := make([]uint64, batchSize)
 	nResults := uint16(0)
 
 	for i := uint16(0); i < batchSize; i++ {
-		if groupID[i] != 0 {
+		if prober.groupID[i] != 0 {
 			// index of keys and values in the hash table is calculated as id - 1
-			buildID[nResults] = groupID[i] - 1
-			probeID[nResults] = uint64(i)
+			prober.buildIdx[nResults] = prober.groupID[i] - 1
+			prober.probeIdx[nResults] = uint64(i)
 			nResults++
 		}
 	}
 
-	for colIDx := 0; colIDx < prober.ht.nOutCols; colIDx++ {
-		outCol := prober.outFlow.ColVec(colIDx)
-		valCol := prober.ht.values[colIDx]
-		colType := prober.ht.valueColTypes[colIDx]
-		outCol.CopyFrom(valCol, buildID, nResults, colType)
+	for colIdx := 0; colIdx < prober.ht.nValCols; colIdx++ {
+		outCol := prober.batch.ColVec(colIdx)
+		valCol := prober.ht.values[colIdx]
+		colType := prober.ht.valueColTypes[colIdx]
+		outCol.CopyFrom(valCol, prober.buildIdx, nResults, colType)
 	}
 
-	for i, colID := range outCols {
-		outCol := prober.outFlow.ColVec(i + prober.ht.nOutCols)
-		valCol := batch.ColVec(colID)
-		colType := outColTypes[colID]
-		outCol.CopyFrom(valCol, probeID, nResults, colType)
+	for i, colIdx := range outCols {
+		outCol := prober.batch.ColVec(i + prober.ht.nValCols)
+		valCol := batch.ColVec(colIdx)
+		colType := outColTypes[colIdx]
+		outCol.CopyFrom(valCol, prober.probeIdx, nResults, colType)
 	}
 
-	prober.outFlow.SetLength(nResults)
+	prober.batch.SetLength(nResults)
 }

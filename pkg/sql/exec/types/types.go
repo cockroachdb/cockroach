@@ -102,3 +102,15 @@ func FromGoType(v interface{}) T {
 		panic(fmt.Sprintf("type %T not supported yet", t))
 	}
 }
+
+// Types is a list of all the different supported column types.
+var Types = []T{
+	Bytes,
+	Bool,
+	Int8,
+	Int16,
+	Int32,
+	Int64,
+	Float32,
+	Float64,
+}
