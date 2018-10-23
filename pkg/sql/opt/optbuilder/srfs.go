@@ -93,13 +93,16 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 			panic(builderError{err})
 		}
 		texpr := inScope.resolveType(expr, types.Any)
-		def, err := texpr.(*tree.FuncExpr).Func.Resolve(b.semaCtx.SearchPath)
-		if err != nil {
-			panic(builderError{err})
+
+		var def *tree.FunctionDefinition
+		if funcExpr, ok := texpr.(*tree.FuncExpr); ok {
+			if def, err = funcExpr.Func.Resolve(b.semaCtx.SearchPath); err != nil {
+				panic(builderError{err})
+			}
 		}
 
 		var outCol *scopeColumn
-		if def.Class != tree.GeneratorClass || len(def.ReturnLabels) == 1 {
+		if def == nil || def.Class != tree.GeneratorClass || len(def.ReturnLabels) == 1 {
 			outCol = b.addColumn(outScope, label, texpr.ResolvedType(), texpr)
 		}
 
