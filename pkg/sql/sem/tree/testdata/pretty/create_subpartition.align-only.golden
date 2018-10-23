@@ -27,7 +27,7 @@ PARTITION BY LIST (
 		) (
 			PARTITION graduated_au VALUES
 				FROM (
-					MINVALUE
+					minvalue
 				)
 				TO (
 					'2017-08-15'
@@ -37,7 +37,7 @@ PARTITION BY LIST (
 					'2017-08-15'
 				)
 				TO (
-					MAXVALUE
+					maxvalue
 				)
 		),
 	PARTITION north_america VALUES IN (
@@ -49,7 +49,7 @@ PARTITION BY LIST (
 		) (
 			PARTITION graduated_us VALUES
 				FROM (
-					MINVALUE
+					minvalue
 				)
 				TO (
 					'2017-08-15'
@@ -59,7 +59,7 @@ PARTITION BY LIST (
 					'2017-08-15'
 				)
 				TO (
-					MAXVALUE
+					maxvalue
 				)
 		)
 )
@@ -90,7 +90,7 @@ PARTITION BY LIST (
 		) (
 			PARTITION graduated_au VALUES
 				FROM (
-					MINVALUE
+					minvalue
 				)
 				TO (
 					'2017-08-15'
@@ -100,7 +100,7 @@ PARTITION BY LIST (
 					'2017-08-15'
 				)
 				TO (
-					MAXVALUE
+					maxvalue
 				)
 		),
 	PARTITION north_america VALUES IN (
@@ -112,7 +112,7 @@ PARTITION BY LIST (
 		) (
 			PARTITION graduated_us VALUES
 				FROM (
-					MINVALUE
+					minvalue
 				)
 				TO (
 					'2017-08-15'
@@ -122,7 +122,7 @@ PARTITION BY LIST (
 					'2017-08-15'
 				)
 				TO (
-					MAXVALUE
+					maxvalue
 				)
 		)
 )
@@ -152,7 +152,7 @@ PARTITION BY LIST (
 		) (
 			PARTITION graduated_au VALUES
 				FROM (
-					MINVALUE
+					minvalue
 				)
 				TO (
 					'2017-08-15'
@@ -162,7 +162,7 @@ PARTITION BY LIST (
 					'2017-08-15'
 				)
 				TO (
-					MAXVALUE
+					maxvalue
 				)
 		),
 	PARTITION north_america VALUES IN (
@@ -174,7 +174,7 @@ PARTITION BY LIST (
 		) (
 			PARTITION graduated_us VALUES
 				FROM (
-					MINVALUE
+					minvalue
 				)
 				TO (
 					'2017-08-15'
@@ -184,7 +184,7 @@ PARTITION BY LIST (
 					'2017-08-15'
 				)
 				TO (
-					MAXVALUE
+					maxvalue
 				)
 		)
 )
@@ -213,7 +213,7 @@ PARTITION BY LIST (
 		) (
 			PARTITION graduated_au VALUES
 				FROM (
-					MINVALUE
+					minvalue
 				)
 				TO (
 					'2017-08-15'
@@ -223,7 +223,7 @@ PARTITION BY LIST (
 					'2017-08-15'
 				)
 				TO (
-					MAXVALUE
+					maxvalue
 				)
 		),
 	PARTITION north_america VALUES IN (
@@ -235,7 +235,7 @@ PARTITION BY LIST (
 		) (
 			PARTITION graduated_us VALUES
 				FROM (
-					MINVALUE
+					minvalue
 				)
 				TO (
 					'2017-08-15'
@@ -245,7 +245,7 @@ PARTITION BY LIST (
 					'2017-08-15'
 				)
 				TO (
-					MAXVALUE
+					maxvalue
 				)
 		)
 )
@@ -273,7 +273,7 @@ PARTITION BY LIST (
 		) (
 			PARTITION graduated_au VALUES
 				FROM (
-					MINVALUE
+					minvalue
 				)
 				TO (
 					'2017-08-15'
@@ -283,7 +283,7 @@ PARTITION BY LIST (
 					'2017-08-15'
 				)
 				TO (
-					MAXVALUE
+					maxvalue
 				)
 		),
 	PARTITION north_america VALUES IN (
@@ -295,7 +295,7 @@ PARTITION BY LIST (
 		) (
 			PARTITION graduated_us VALUES
 				FROM (
-					MINVALUE
+					minvalue
 				)
 				TO (
 					'2017-08-15'
@@ -305,7 +305,7 @@ PARTITION BY LIST (
 					'2017-08-15'
 				)
 				TO (
-					MAXVALUE
+					maxvalue
 				)
 		)
 )
@@ -331,7 +331,7 @@ PARTITION BY LIST (country) (
 		) (
 			PARTITION graduated_au VALUES
 				FROM (
-					MINVALUE
+					minvalue
 				)
 				TO (
 					'2017-08-15'
@@ -340,7 +340,7 @@ PARTITION BY LIST (country) (
 				FROM (
 					'2017-08-15'
 				)
-				TO (MAXVALUE)
+				TO (maxvalue)
 		),
 	PARTITION north_america VALUES IN (
 		'US',
@@ -351,7 +351,7 @@ PARTITION BY LIST (country) (
 		) (
 			PARTITION graduated_us VALUES
 				FROM (
-					MINVALUE
+					minvalue
 				)
 				TO (
 					'2017-08-15'
@@ -360,7 +360,7 @@ PARTITION BY LIST (country) (
 				FROM (
 					'2017-08-15'
 				)
-				TO (MAXVALUE)
+				TO (maxvalue)
 		)
 )
 
@@ -384,7 +384,7 @@ PARTITION BY LIST (country) (
 			expected_graduation_date
 		) (
 			PARTITION graduated_au VALUES
-				FROM (MINVALUE)
+				FROM (minvalue)
 				TO (
 					'2017-08-15'
 				),
@@ -392,7 +392,7 @@ PARTITION BY LIST (country) (
 				FROM (
 					'2017-08-15'
 				)
-				TO (MAXVALUE)
+				TO (maxvalue)
 		),
 	PARTITION north_america VALUES IN (
 		'US',
@@ -402,7 +402,7 @@ PARTITION BY LIST (country) (
 			expected_graduation_date
 		) (
 			PARTITION graduated_us VALUES
-				FROM (MINVALUE)
+				FROM (minvalue)
 				TO (
 					'2017-08-15'
 				),
@@ -410,7 +410,7 @@ PARTITION BY LIST (country) (
 				FROM (
 					'2017-08-15'
 				)
-				TO (MAXVALUE)
+				TO (maxvalue)
 		)
 )
 
@@ -433,13 +433,13 @@ PARTITION BY LIST (country) (
 			expected_graduation_date
 		) (
 			PARTITION graduated_au VALUES
-				FROM (MINVALUE)
+				FROM (minvalue)
 				TO ('2017-08-15'),
 			PARTITION current_au VALUES
 				FROM (
 					'2017-08-15'
 				)
-				TO (MAXVALUE)
+				TO (maxvalue)
 		),
 	PARTITION north_america VALUES IN (
 		'US',
@@ -449,13 +449,13 @@ PARTITION BY LIST (country) (
 			expected_graduation_date
 		) (
 			PARTITION graduated_us VALUES
-				FROM (MINVALUE)
+				FROM (minvalue)
 				TO ('2017-08-15'),
 			PARTITION current_us VALUES
 				FROM (
 					'2017-08-15'
 				)
-				TO (MAXVALUE)
+				TO (maxvalue)
 		)
 )
 
@@ -477,11 +477,11 @@ PARTITION BY LIST (country) (
 		expected_graduation_date
 	  ) (
 		PARTITION graduated_au VALUES
-			FROM (MINVALUE)
+			FROM (minvalue)
 			TO ('2017-08-15'),
 		PARTITION current_au VALUES
 			FROM ('2017-08-15')
-			TO (MAXVALUE)
+			TO (maxvalue)
 	  ),
 	PARTITION north_america VALUES IN (
 		'US',
@@ -491,11 +491,11 @@ PARTITION BY LIST (country) (
 			expected_graduation_date
 		) (
 			PARTITION graduated_us VALUES
-				FROM (MINVALUE)
+				FROM (minvalue)
 				TO ('2017-08-15'),
 			PARTITION current_us VALUES
 				FROM ('2017-08-15')
-				TO (MAXVALUE)
+				TO (maxvalue)
 		)
 )
 
@@ -517,11 +517,11 @@ PARTITION BY LIST (country) (
 		expected_graduation_date
 	  ) (
 		PARTITION graduated_au VALUES
-			FROM (MINVALUE)
+			FROM (minvalue)
 			TO ('2017-08-15'),
 		PARTITION current_au VALUES
 			FROM ('2017-08-15')
-			TO (MAXVALUE)
+			TO (maxvalue)
 	  ),
 	PARTITION north_america VALUES IN (
 		'US',
@@ -530,11 +530,11 @@ PARTITION BY LIST (country) (
 		expected_graduation_date
 	  ) (
 		PARTITION graduated_us VALUES
-			FROM (MINVALUE)
+			FROM (minvalue)
 			TO ('2017-08-15'),
 		PARTITION current_us VALUES
 			FROM ('2017-08-15')
-			TO (MAXVALUE)
+			TO (maxvalue)
 	  )
 )
 
@@ -556,13 +556,13 @@ PARTITION BY LIST (country) (
 		expected_graduation_date
 	  ) (
 		PARTITION graduated_au VALUES
-			FROM (MINVALUE)
+			FROM (minvalue)
 			TO ('2017-08-15'),
 		PARTITION current_au VALUES FROM (
 										'2017-08-15'
 		                            )
 		                            TO (
-										MAXVALUE
+										maxvalue
 		                            )
 	  ),
 	PARTITION north_america VALUES IN (
@@ -572,13 +572,13 @@ PARTITION BY LIST (country) (
 		expected_graduation_date
 	  ) (
 		PARTITION graduated_us VALUES
-			FROM (MINVALUE)
+			FROM (minvalue)
 			TO ('2017-08-15'),
 		PARTITION current_us VALUES FROM (
 										'2017-08-15'
 		                            )
 		                            TO (
-										MAXVALUE
+										maxvalue
 		                            )
 	  )
 )
@@ -601,7 +601,7 @@ PARTITION BY LIST (country) (
 		expected_graduation_date
 	  ) (
 		PARTITION graduated_au VALUES FROM (
-										MINVALUE
+										minvalue
 		                              )
 		                              TO (
 										'2017-08-15'
@@ -610,7 +610,7 @@ PARTITION BY LIST (country) (
 										'2017-08-15'
 		                            )
 		                            TO (
-										MAXVALUE
+										maxvalue
 		                            )
 	  ),
 	PARTITION north_america VALUES IN (
@@ -620,7 +620,7 @@ PARTITION BY LIST (country) (
 		expected_graduation_date
 	  ) (
 		PARTITION graduated_us VALUES FROM (
-										MINVALUE
+										minvalue
 		                              )
 		                              TO (
 										'2017-08-15'
@@ -629,7 +629,7 @@ PARTITION BY LIST (country) (
 										'2017-08-15'
 		                            )
 		                            TO (
-										MAXVALUE
+										maxvalue
 		                            )
 	  )
 )
@@ -652,7 +652,7 @@ PARTITION BY LIST (country) (
 		expected_graduation_date
 	  ) (
 		PARTITION graduated_au VALUES FROM (
-										MINVALUE
+										minvalue
 		                              )
 		                              TO (
 										'2017-08-15'
@@ -660,7 +660,7 @@ PARTITION BY LIST (country) (
 		PARTITION current_au VALUES FROM (
 										'2017-08-15'
 		                            )
-		                            TO (MAXVALUE)
+		                            TO (maxvalue)
 	  ),
 	PARTITION north_america VALUES IN (
 		'US',
@@ -669,7 +669,7 @@ PARTITION BY LIST (country) (
 		expected_graduation_date
 	  ) (
 		PARTITION graduated_us VALUES FROM (
-										MINVALUE
+										minvalue
 		                              )
 		                              TO (
 										'2017-08-15'
@@ -677,7 +677,7 @@ PARTITION BY LIST (country) (
 		PARTITION current_us VALUES FROM (
 										'2017-08-15'
 		                            )
-		                            TO (MAXVALUE)
+		                            TO (maxvalue)
 	  )
 )
 
@@ -696,27 +696,27 @@ PARTITION BY LIST (country) (
 		'AU',
 		'NZ'
 	) PARTITION BY RANGE (expected_graduation_date) (
-		PARTITION graduated_au VALUES FROM (MINVALUE)
+		PARTITION graduated_au VALUES FROM (minvalue)
 		                              TO (
 										'2017-08-15'
 		                              ),
 		PARTITION current_au VALUES FROM (
 										'2017-08-15'
 		                            )
-		                            TO (MAXVALUE)
+		                            TO (maxvalue)
 	  ),
 	PARTITION north_america VALUES IN (
 		'US',
 		'CA'
 	) PARTITION BY RANGE (expected_graduation_date) (
-		PARTITION graduated_us VALUES FROM (MINVALUE)
+		PARTITION graduated_us VALUES FROM (minvalue)
 		                              TO (
 										'2017-08-15'
 		                              ),
 		PARTITION current_us VALUES FROM (
 										'2017-08-15'
 		                            )
-		                            TO (MAXVALUE)
+		                            TO (maxvalue)
 	  )
 )
 
@@ -735,23 +735,23 @@ PARTITION BY LIST (country) (
 		'AU',
 		'NZ'
 	) PARTITION BY RANGE (expected_graduation_date) (
-		PARTITION graduated_au VALUES FROM (MINVALUE)
+		PARTITION graduated_au VALUES FROM (minvalue)
 		                              TO (
 										'2017-08-15'
 		                              ),
 		PARTITION current_au VALUES FROM ('2017-08-15')
-		                            TO (MAXVALUE)
+		                            TO (maxvalue)
 	  ),
 	PARTITION north_america VALUES IN (
 		'US',
 		'CA'
 	) PARTITION BY RANGE (expected_graduation_date) (
-		PARTITION graduated_us VALUES FROM (MINVALUE)
+		PARTITION graduated_us VALUES FROM (minvalue)
 		                              TO (
 										'2017-08-15'
 		                              ),
 		PARTITION current_us VALUES FROM ('2017-08-15')
-		                            TO (MAXVALUE)
+		                            TO (maxvalue)
 	  )
 )
 
@@ -770,19 +770,19 @@ PARTITION BY LIST (country) (
 		'AU',
 		'NZ'
 	) PARTITION BY RANGE (expected_graduation_date) (
-		PARTITION graduated_au VALUES FROM (MINVALUE)
+		PARTITION graduated_au VALUES FROM (minvalue)
 		                              TO ('2017-08-15'),
 		PARTITION current_au VALUES FROM ('2017-08-15')
-		                            TO (MAXVALUE)
+		                            TO (maxvalue)
 	  ),
 	PARTITION north_america VALUES IN (
 		'US',
 		'CA'
 	) PARTITION BY RANGE (expected_graduation_date) (
-		PARTITION graduated_us VALUES FROM (MINVALUE)
+		PARTITION graduated_us VALUES FROM (minvalue)
 		                              TO ('2017-08-15'),
 		PARTITION current_us VALUES FROM ('2017-08-15')
-		                            TO (MAXVALUE)
+		                            TO (maxvalue)
 	  )
 )
 
@@ -801,7 +801,7 @@ PARTITION BY LIST (country) (
 												expected_graduation_date
 	                                           ) (
 												PARTITION graduated_au VALUES
-													FROM (MINVALUE)
+													FROM (minvalue)
 													TO (
 														'2017-08-15'
 													),
@@ -809,16 +809,16 @@ PARTITION BY LIST (country) (
 													FROM (
 														'2017-08-15'
 													)
-													TO (MAXVALUE)
+													TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN (
 		'US',
 		'CA'
 	) PARTITION BY RANGE (expected_graduation_date) (
-		PARTITION graduated_us VALUES FROM (MINVALUE)
+		PARTITION graduated_us VALUES FROM (minvalue)
 		                              TO ('2017-08-15'),
 		PARTITION current_us VALUES FROM ('2017-08-15')
-		                            TO (MAXVALUE)
+		                            TO (maxvalue)
 	  )
 )
 
@@ -837,7 +837,7 @@ PARTITION BY LIST (country) (
 												expected_graduation_date
 	                                           ) (
 												PARTITION graduated_au VALUES
-													FROM (MINVALUE)
+													FROM (minvalue)
 													TO (
 														'2017-08-15'
 													),
@@ -845,15 +845,15 @@ PARTITION BY LIST (country) (
 													FROM (
 														'2017-08-15'
 													)
-													TO (MAXVALUE)
+													TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN (
 		'US',
 		'CA'
 	) PARTITION BY RANGE (expected_graduation_date) (
-		PARTITION graduated_us VALUES FROM (MINVALUE)
+		PARTITION graduated_us VALUES FROM (minvalue)
 		                              TO ('2017-08-15'),
-		PARTITION current_us VALUES FROM ('2017-08-15') TO (MAXVALUE)
+		PARTITION current_us VALUES FROM ('2017-08-15') TO (maxvalue)
 	  )
 )
 
@@ -872,21 +872,21 @@ PARTITION BY LIST (country) (
 												expected_graduation_date
 	                                           ) (
 												PARTITION graduated_au VALUES
-													FROM (MINVALUE)
+													FROM (minvalue)
 													TO ('2017-08-15'),
 												PARTITION current_au VALUES
 													FROM (
 														'2017-08-15'
 													)
-													TO (MAXVALUE)
+													TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN (
 		'US',
 		'CA'
 	) PARTITION BY RANGE (expected_graduation_date) (
-		PARTITION graduated_us VALUES FROM (MINVALUE)
+		PARTITION graduated_us VALUES FROM (minvalue)
 		                              TO ('2017-08-15'),
-		PARTITION current_us VALUES FROM ('2017-08-15') TO (MAXVALUE)
+		PARTITION current_us VALUES FROM ('2017-08-15') TO (maxvalue)
 	  )
 )
 
@@ -905,17 +905,17 @@ PARTITION BY LIST (country) (
 												expected_graduation_date
 	                                           ) (
 												PARTITION graduated_au VALUES
-													FROM (MINVALUE)
+													FROM (minvalue)
 													TO ('2017-08-15'),
 												PARTITION current_au VALUES
 													FROM ('2017-08-15')
-													TO (MAXVALUE)
+													TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (
 													expected_graduation_date
 	                                               ) (
 													PARTITION graduated_us VALUES
-														FROM (MINVALUE)
+														FROM (minvalue)
 														TO (
 															'2017-08-15'
 														),
@@ -923,7 +923,7 @@ PARTITION BY LIST (country) (
 														FROM (
 															'2017-08-15'
 														)
-														TO (MAXVALUE)
+														TO (maxvalue)
 	                                               )
 )
 
@@ -942,23 +942,23 @@ PARTITION BY LIST (country) (
 												expected_graduation_date
 	                                           ) (
 												PARTITION graduated_au VALUES
-													FROM (MINVALUE)
+													FROM (minvalue)
 													TO ('2017-08-15'),
 												PARTITION current_au VALUES
 													FROM ('2017-08-15')
-													TO (MAXVALUE)
+													TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (
 													expected_graduation_date
 	                                               ) (
 													PARTITION graduated_us VALUES
-														FROM (MINVALUE)
+														FROM (minvalue)
 														TO ('2017-08-15'),
 													PARTITION current_us VALUES
 														FROM (
 															'2017-08-15'
 														)
-														TO (MAXVALUE)
+														TO (maxvalue)
 	                                               )
 )
 
@@ -977,21 +977,21 @@ PARTITION BY LIST (country) (
 												expected_graduation_date
 	                                           ) (
 												PARTITION graduated_au VALUES
-													FROM (MINVALUE)
+													FROM (minvalue)
 													TO ('2017-08-15'),
 												PARTITION current_au VALUES
 													FROM ('2017-08-15')
-													TO (MAXVALUE)
+													TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (
 													expected_graduation_date
 	                                               ) (
 													PARTITION graduated_us VALUES
-														FROM (MINVALUE)
+														FROM (minvalue)
 														TO ('2017-08-15'),
 													PARTITION current_us VALUES
 														FROM ('2017-08-15')
-														TO (MAXVALUE)
+														TO (maxvalue)
 	                                               )
 )
 
@@ -1010,24 +1010,24 @@ PARTITION BY LIST (country) (
 												expected_graduation_date
 	                                           ) (
 												PARTITION graduated_au VALUES
-													FROM (MINVALUE)
+													FROM (minvalue)
 													TO ('2017-08-15'),
 												PARTITION current_au VALUES FROM (
 																				'2017-08-15'
 												                            )
 												                            TO (
-																				MAXVALUE
+																				maxvalue
 												                            )
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (
 													expected_graduation_date
 	                                               ) (
 													PARTITION graduated_us VALUES
-														FROM (MINVALUE)
+														FROM (minvalue)
 														TO ('2017-08-15'),
 													PARTITION current_us VALUES
 														FROM ('2017-08-15')
-														TO (MAXVALUE)
+														TO (maxvalue)
 	                                               )
 )
 
@@ -1046,7 +1046,7 @@ PARTITION BY LIST (country) (
 												expected_graduation_date
 	                                           ) (
 												PARTITION graduated_au VALUES FROM (
-																				MINVALUE
+																				minvalue
 												                              )
 												                              TO (
 																				'2017-08-15'
@@ -1055,18 +1055,18 @@ PARTITION BY LIST (country) (
 																				'2017-08-15'
 												                            )
 												                            TO (
-																				MAXVALUE
+																				maxvalue
 												                            )
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (
 													expected_graduation_date
 	                                               ) (
 													PARTITION graduated_us VALUES
-														FROM (MINVALUE)
+														FROM (minvalue)
 														TO ('2017-08-15'),
 													PARTITION current_us VALUES
 														FROM ('2017-08-15')
-														TO (MAXVALUE)
+														TO (maxvalue)
 	                                               )
 )
 
@@ -1085,7 +1085,7 @@ PARTITION BY LIST (country) (
 												expected_graduation_date
 	                                           ) (
 												PARTITION graduated_au VALUES FROM (
-																				MINVALUE
+																				minvalue
 												                              )
 												                              TO (
 																				'2017-08-15'
@@ -1094,20 +1094,20 @@ PARTITION BY LIST (country) (
 																				'2017-08-15'
 												                            )
 												                            TO (
-																				MAXVALUE
+																				maxvalue
 												                            )
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (
 													expected_graduation_date
 	                                               ) (
 													PARTITION graduated_us VALUES
-														FROM (MINVALUE)
+														FROM (minvalue)
 														TO ('2017-08-15'),
 													PARTITION current_us VALUES FROM (
 																					'2017-08-15'
 													                            )
 													                            TO (
-																					MAXVALUE
+																					maxvalue
 													                            )
 	                                               )
 )
@@ -1127,7 +1127,7 @@ PARTITION BY LIST (country) (
 												expected_graduation_date
 	                                           ) (
 												PARTITION graduated_au VALUES FROM (
-																				MINVALUE
+																				minvalue
 												                              )
 												                              TO (
 																				'2017-08-15'
@@ -1136,14 +1136,14 @@ PARTITION BY LIST (country) (
 																				'2017-08-15'
 												                            )
 												                            TO (
-																				MAXVALUE
+																				maxvalue
 												                            )
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (
 													expected_graduation_date
 	                                               ) (
 													PARTITION graduated_us VALUES FROM (
-																					MINVALUE
+																					minvalue
 													                              )
 													                              TO (
 																					'2017-08-15'
@@ -1152,7 +1152,7 @@ PARTITION BY LIST (country) (
 																					'2017-08-15'
 													                            )
 													                            TO (
-																					MAXVALUE
+																					maxvalue
 													                            )
 	                                               )
 )
@@ -1172,7 +1172,7 @@ PARTITION BY LIST (country) (
 												expected_graduation_date
 	                                           ) (
 												PARTITION graduated_au VALUES FROM (
-																				MINVALUE
+																				minvalue
 												                              )
 												                              TO (
 																				'2017-08-15'
@@ -1180,13 +1180,13 @@ PARTITION BY LIST (country) (
 												PARTITION current_au VALUES FROM (
 																				'2017-08-15'
 												                            )
-												                            TO (MAXVALUE)
+												                            TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (
 													expected_graduation_date
 	                                               ) (
 													PARTITION graduated_us VALUES FROM (
-																					MINVALUE
+																					minvalue
 													                              )
 													                              TO (
 																					'2017-08-15'
@@ -1195,7 +1195,7 @@ PARTITION BY LIST (country) (
 																					'2017-08-15'
 													                            )
 													                            TO (
-																					MAXVALUE
+																					maxvalue
 													                            )
 	                                               )
 )
@@ -1214,20 +1214,20 @@ PARTITION BY LIST (country) (
 	PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (
 												expected_graduation_date
 	                                           ) (
-												PARTITION graduated_au VALUES FROM (MINVALUE)
+												PARTITION graduated_au VALUES FROM (minvalue)
 												                              TO (
 																				'2017-08-15'
 												                              ),
 												PARTITION current_au VALUES FROM (
 																				'2017-08-15'
 												                            )
-												                            TO (MAXVALUE)
+												                            TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (
 													expected_graduation_date
 	                                               ) (
 													PARTITION graduated_us VALUES FROM (
-																					MINVALUE
+																					minvalue
 													                              )
 													                              TO (
 																					'2017-08-15'
@@ -1235,7 +1235,7 @@ PARTITION BY LIST (country) (
 													PARTITION current_us VALUES FROM (
 																					'2017-08-15'
 													                            )
-													                            TO (MAXVALUE)
+													                            TO (maxvalue)
 	                                               )
 )
 
@@ -1251,20 +1251,20 @@ CREATE TABLE students (
 )
 PARTITION BY LIST (country) (
 	PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (
-												PARTITION graduated_au VALUES FROM (MINVALUE)
+												PARTITION graduated_au VALUES FROM (minvalue)
 												                              TO (
 																				'2017-08-15'
 												                              ),
 												PARTITION current_au VALUES FROM (
 																				'2017-08-15'
 												                            )
-												                            TO (MAXVALUE)
+												                            TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (
 													expected_graduation_date
 	                                               ) (
 													PARTITION graduated_us VALUES FROM (
-																					MINVALUE
+																					minvalue
 													                              )
 													                              TO (
 																					'2017-08-15'
@@ -1272,7 +1272,7 @@ PARTITION BY LIST (country) (
 													PARTITION current_us VALUES FROM (
 																					'2017-08-15'
 													                            )
-													                            TO (MAXVALUE)
+													                            TO (maxvalue)
 	                                               )
 )
 
@@ -1288,18 +1288,18 @@ CREATE TABLE students (
 )
 PARTITION BY LIST (country) (
 	PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (
-												PARTITION graduated_au VALUES FROM (MINVALUE)
+												PARTITION graduated_au VALUES FROM (minvalue)
 												                              TO (
 																				'2017-08-15'
 												                              ),
 												PARTITION current_au VALUES FROM ('2017-08-15')
-												                            TO (MAXVALUE)
+												                            TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (
 													expected_graduation_date
 	                                               ) (
 													PARTITION graduated_us VALUES FROM (
-																					MINVALUE
+																					minvalue
 													                              )
 													                              TO (
 																					'2017-08-15'
@@ -1307,7 +1307,7 @@ PARTITION BY LIST (country) (
 													PARTITION current_us VALUES FROM (
 																					'2017-08-15'
 													                            )
-													                            TO (MAXVALUE)
+													                            TO (maxvalue)
 	                                               )
 )
 
@@ -1323,16 +1323,16 @@ CREATE TABLE students (
 )
 PARTITION BY LIST (country) (
 	PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (
-												PARTITION graduated_au VALUES FROM (MINVALUE)
+												PARTITION graduated_au VALUES FROM (minvalue)
 												                              TO ('2017-08-15'),
 												PARTITION current_au VALUES FROM ('2017-08-15')
-												                            TO (MAXVALUE)
+												                            TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (
 													expected_graduation_date
 	                                               ) (
 													PARTITION graduated_us VALUES FROM (
-																					MINVALUE
+																					minvalue
 													                              )
 													                              TO (
 																					'2017-08-15'
@@ -1340,7 +1340,7 @@ PARTITION BY LIST (country) (
 													PARTITION current_us VALUES FROM (
 																					'2017-08-15'
 													                            )
-													                            TO (MAXVALUE)
+													                            TO (maxvalue)
 	                                               )
 )
 
@@ -1356,22 +1356,22 @@ CREATE TABLE students (
 )
 PARTITION BY LIST (country) (
 	PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (
-												PARTITION graduated_au VALUES FROM (MINVALUE)
+												PARTITION graduated_au VALUES FROM (minvalue)
 												                              TO ('2017-08-15'),
 												PARTITION current_au VALUES FROM ('2017-08-15')
-												                            TO (MAXVALUE)
+												                            TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (
 													expected_graduation_date
 	                                               ) (
-													PARTITION graduated_us VALUES FROM (MINVALUE)
+													PARTITION graduated_us VALUES FROM (minvalue)
 													                              TO (
 																					'2017-08-15'
 													                              ),
 													PARTITION current_us VALUES FROM (
 																					'2017-08-15'
 													                            )
-													                            TO (MAXVALUE)
+													                            TO (maxvalue)
 	                                               )
 )
 
@@ -1387,20 +1387,20 @@ CREATE TABLE students (
 )
 PARTITION BY LIST (country) (
 	PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (
-												PARTITION graduated_au VALUES FROM (MINVALUE)
+												PARTITION graduated_au VALUES FROM (minvalue)
 												                              TO ('2017-08-15'),
 												PARTITION current_au VALUES FROM ('2017-08-15')
-												                            TO (MAXVALUE)
+												                            TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (expected_graduation_date) (
-													PARTITION graduated_us VALUES FROM (MINVALUE)
+													PARTITION graduated_us VALUES FROM (minvalue)
 													                              TO (
 																					'2017-08-15'
 													                              ),
 													PARTITION current_us VALUES FROM (
 																					'2017-08-15'
 													                            )
-													                            TO (MAXVALUE)
+													                            TO (maxvalue)
 	                                               )
 )
 
@@ -1416,18 +1416,18 @@ CREATE TABLE students (
 )
 PARTITION BY LIST (country) (
 	PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (
-												PARTITION graduated_au VALUES FROM (MINVALUE)
+												PARTITION graduated_au VALUES FROM (minvalue)
 												                              TO ('2017-08-15'),
 												PARTITION current_au VALUES FROM ('2017-08-15')
-												                            TO (MAXVALUE)
+												                            TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (expected_graduation_date) (
-													PARTITION graduated_us VALUES FROM (MINVALUE)
+													PARTITION graduated_us VALUES FROM (minvalue)
 													                              TO (
 																					'2017-08-15'
 													                              ),
 													PARTITION current_us VALUES FROM ('2017-08-15')
-													                            TO (MAXVALUE)
+													                            TO (maxvalue)
 	                                               )
 )
 
@@ -1443,16 +1443,16 @@ CREATE TABLE students (
 )
 PARTITION BY LIST (country) (
 	PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (
-												PARTITION graduated_au VALUES FROM (MINVALUE)
+												PARTITION graduated_au VALUES FROM (minvalue)
 												                              TO ('2017-08-15'),
 												PARTITION current_au VALUES FROM ('2017-08-15')
-												                            TO (MAXVALUE)
+												                            TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (expected_graduation_date) (
-													PARTITION graduated_us VALUES FROM (MINVALUE)
+													PARTITION graduated_us VALUES FROM (minvalue)
 													                              TO ('2017-08-15'),
 													PARTITION current_us VALUES FROM ('2017-08-15')
-													                            TO (MAXVALUE)
+													                            TO (maxvalue)
 	                                               )
 )
 
@@ -1468,15 +1468,15 @@ CREATE TABLE students (
 )
 PARTITION BY LIST (country) (
 	PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (
-												PARTITION graduated_au VALUES FROM (MINVALUE)
+												PARTITION graduated_au VALUES FROM (minvalue)
 												                              TO ('2017-08-15'),
-												PARTITION current_au VALUES FROM ('2017-08-15') TO (MAXVALUE)
+												PARTITION current_au VALUES FROM ('2017-08-15') TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (expected_graduation_date) (
-													PARTITION graduated_us VALUES FROM (MINVALUE)
+													PARTITION graduated_us VALUES FROM (minvalue)
 													                              TO ('2017-08-15'),
 													PARTITION current_us VALUES FROM ('2017-08-15')
-													                            TO (MAXVALUE)
+													                            TO (maxvalue)
 	                                               )
 )
 
@@ -1492,14 +1492,14 @@ CREATE TABLE students (
 )
 PARTITION BY LIST (country) (
 	PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (
-												PARTITION graduated_au VALUES FROM (MINVALUE) TO ('2017-08-15'),
-												PARTITION current_au VALUES FROM ('2017-08-15') TO (MAXVALUE)
+												PARTITION graduated_au VALUES FROM (minvalue) TO ('2017-08-15'),
+												PARTITION current_au VALUES FROM ('2017-08-15') TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (expected_graduation_date) (
-													PARTITION graduated_us VALUES FROM (MINVALUE)
+													PARTITION graduated_us VALUES FROM (minvalue)
 													                              TO ('2017-08-15'),
 													PARTITION current_us VALUES FROM ('2017-08-15')
-													                            TO (MAXVALUE)
+													                            TO (maxvalue)
 	                                               )
 )
 
@@ -1515,13 +1515,13 @@ CREATE TABLE students (
 )
 PARTITION BY LIST (country) (
 	PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (
-												PARTITION graduated_au VALUES FROM (MINVALUE) TO ('2017-08-15'),
-												PARTITION current_au VALUES FROM ('2017-08-15') TO (MAXVALUE)
+												PARTITION graduated_au VALUES FROM (minvalue) TO ('2017-08-15'),
+												PARTITION current_au VALUES FROM ('2017-08-15') TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (expected_graduation_date) (
-													PARTITION graduated_us VALUES FROM (MINVALUE)
+													PARTITION graduated_us VALUES FROM (minvalue)
 													                              TO ('2017-08-15'),
-													PARTITION current_us VALUES FROM ('2017-08-15') TO (MAXVALUE)
+													PARTITION current_us VALUES FROM ('2017-08-15') TO (maxvalue)
 	                                               )
 )
 
@@ -1537,12 +1537,12 @@ CREATE TABLE students (
 )
 PARTITION BY LIST (country) (
 	PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (
-												PARTITION graduated_au VALUES FROM (MINVALUE) TO ('2017-08-15'),
-												PARTITION current_au VALUES FROM ('2017-08-15') TO (MAXVALUE)
+												PARTITION graduated_au VALUES FROM (minvalue) TO ('2017-08-15'),
+												PARTITION current_au VALUES FROM ('2017-08-15') TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (expected_graduation_date) (
-													PARTITION graduated_us VALUES FROM (MINVALUE) TO ('2017-08-15'),
-													PARTITION current_us VALUES FROM ('2017-08-15') TO (MAXVALUE)
+													PARTITION graduated_us VALUES FROM (minvalue) TO ('2017-08-15'),
+													PARTITION current_us VALUES FROM ('2017-08-15') TO (maxvalue)
 	                                               )
 )
 
@@ -1551,12 +1551,12 @@ PARTITION BY LIST (country) (
 CREATE TABLE students (id SERIAL, name STRING, email STRING, country STRING, expected_graduation_date DATE, PRIMARY KEY (country, expected_graduation_date, id))
 PARTITION BY LIST (country) (
 	PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (
-												PARTITION graduated_au VALUES FROM (MINVALUE) TO ('2017-08-15'),
-												PARTITION current_au VALUES FROM ('2017-08-15') TO (MAXVALUE)
+												PARTITION graduated_au VALUES FROM (minvalue) TO ('2017-08-15'),
+												PARTITION current_au VALUES FROM ('2017-08-15') TO (maxvalue)
 	                                           ),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (expected_graduation_date) (
-													PARTITION graduated_us VALUES FROM (MINVALUE) TO ('2017-08-15'),
-													PARTITION current_us VALUES FROM ('2017-08-15') TO (MAXVALUE)
+													PARTITION graduated_us VALUES FROM (minvalue) TO ('2017-08-15'),
+													PARTITION current_us VALUES FROM ('2017-08-15') TO (maxvalue)
 	                                               )
 )
 
@@ -1564,10 +1564,10 @@ PARTITION BY LIST (country) (
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 CREATE TABLE students (id SERIAL, name STRING, email STRING, country STRING, expected_graduation_date DATE, PRIMARY KEY (country, expected_graduation_date, id))
 PARTITION BY LIST (country) (
-	PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (PARTITION graduated_au VALUES FROM (MINVALUE) TO ('2017-08-15'), PARTITION current_au VALUES FROM ('2017-08-15') TO (MAXVALUE)),
+	PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (PARTITION graduated_au VALUES FROM (minvalue) TO ('2017-08-15'), PARTITION current_au VALUES FROM ('2017-08-15') TO (maxvalue)),
 	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (expected_graduation_date) (
-													PARTITION graduated_us VALUES FROM (MINVALUE) TO ('2017-08-15'),
-													PARTITION current_us VALUES FROM ('2017-08-15') TO (MAXVALUE)
+													PARTITION graduated_us VALUES FROM (minvalue) TO ('2017-08-15'),
+													PARTITION current_us VALUES FROM ('2017-08-15') TO (maxvalue)
 	                                               )
 )
 
@@ -1575,17 +1575,17 @@ PARTITION BY LIST (country) (
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 CREATE TABLE students (id SERIAL, name STRING, email STRING, country STRING, expected_graduation_date DATE, PRIMARY KEY (country, expected_graduation_date, id))
 PARTITION BY LIST (country) (
-	PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (PARTITION graduated_au VALUES FROM (MINVALUE) TO ('2017-08-15'), PARTITION current_au VALUES FROM ('2017-08-15') TO (MAXVALUE)),
-	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (expected_graduation_date) (PARTITION graduated_us VALUES FROM (MINVALUE) TO ('2017-08-15'), PARTITION current_us VALUES FROM ('2017-08-15') TO (MAXVALUE))
+	PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (PARTITION graduated_au VALUES FROM (minvalue) TO ('2017-08-15'), PARTITION current_au VALUES FROM ('2017-08-15') TO (maxvalue)),
+	PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (expected_graduation_date) (PARTITION graduated_us VALUES FROM (minvalue) TO ('2017-08-15'), PARTITION current_us VALUES FROM ('2017-08-15') TO (maxvalue))
 )
 
 470:
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 CREATE TABLE students (id SERIAL, name STRING, email STRING, country STRING, expected_graduation_date DATE, PRIMARY KEY (country, expected_graduation_date, id))
-PARTITION BY LIST (country) (PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (PARTITION graduated_au VALUES FROM (MINVALUE) TO ('2017-08-15'), PARTITION current_au VALUES FROM ('2017-08-15') TO (MAXVALUE)), PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (expected_graduation_date) (PARTITION graduated_us VALUES FROM (MINVALUE) TO ('2017-08-15'), PARTITION current_us VALUES FROM ('2017-08-15') TO (MAXVALUE)))
+PARTITION BY LIST (country) (PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (PARTITION graduated_au VALUES FROM (minvalue) TO ('2017-08-15'), PARTITION current_au VALUES FROM ('2017-08-15') TO (maxvalue)), PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (expected_graduation_date) (PARTITION graduated_us VALUES FROM (minvalue) TO ('2017-08-15'), PARTITION current_us VALUES FROM ('2017-08-15') TO (maxvalue)))
 
 631:
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-CREATE TABLE students (id SERIAL, name STRING, email STRING, country STRING, expected_graduation_date DATE, PRIMARY KEY (country, expected_graduation_date, id)) PARTITION BY LIST (country) (PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (PARTITION graduated_au VALUES FROM (MINVALUE) TO ('2017-08-15'), PARTITION current_au VALUES FROM ('2017-08-15') TO (MAXVALUE)), PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (expected_graduation_date) (PARTITION graduated_us VALUES FROM (MINVALUE) TO ('2017-08-15'), PARTITION current_us VALUES FROM ('2017-08-15') TO (MAXVALUE)))
+CREATE TABLE students (id SERIAL, name STRING, email STRING, country STRING, expected_graduation_date DATE, PRIMARY KEY (country, expected_graduation_date, id)) PARTITION BY LIST (country) (PARTITION australia VALUES IN ('AU', 'NZ') PARTITION BY RANGE (expected_graduation_date) (PARTITION graduated_au VALUES FROM (minvalue) TO ('2017-08-15'), PARTITION current_au VALUES FROM ('2017-08-15') TO (maxvalue)), PARTITION north_america VALUES IN ('US', 'CA') PARTITION BY RANGE (expected_graduation_date) (PARTITION graduated_us VALUES FROM (minvalue) TO ('2017-08-15'), PARTITION current_us VALUES FROM ('2017-08-15') TO (maxvalue)))
 
 

@@ -699,19 +699,19 @@ func (node DefaultVal) Format(ctx *FmtCtx) {
 // ResolvedType implements the TypedExpr interface.
 func (DefaultVal) ResolvedType() types.T { return nil }
 
-// MaxVal represents the MAXVALUE expression.
-type MaxVal struct{}
+// PartitionMaxVal represents the MAXVALUE expression.
+type PartitionMaxVal struct{}
 
 // Format implements the NodeFormatter interface.
-func (node MaxVal) Format(ctx *FmtCtx) {
+func (node PartitionMaxVal) Format(ctx *FmtCtx) {
 	ctx.WriteString("MAXVALUE")
 }
 
-// MinVal represents the MINVALUE expression.
-type MinVal struct{}
+// PartitionMinVal represents the MINVALUE expression.
+type PartitionMinVal struct{}
 
 // Format implements the NodeFormatter interface.
-func (node MinVal) Format(ctx *FmtCtx) {
+func (node PartitionMinVal) Format(ctx *FmtCtx) {
 	ctx.WriteString("MINVALUE")
 }
 
@@ -1700,8 +1700,8 @@ func (node *TupleStar) String() string        { return AsString(node) }
 func (node *AnnotateTypeExpr) String() string { return AsString(node) }
 func (node *UnaryExpr) String() string        { return AsString(node) }
 func (node DefaultVal) String() string        { return AsString(node) }
-func (node MaxVal) String() string            { return AsString(node) }
-func (node MinVal) String() string            { return AsString(node) }
+func (node PartitionMaxVal) String() string   { return AsString(node) }
+func (node PartitionMinVal) String() string   { return AsString(node) }
 func (node *Placeholder) String() string      { return AsString(node) }
 func (node dNull) String() string             { return AsString(node) }
 func (list *NameList) String() string         { return AsString(list) }

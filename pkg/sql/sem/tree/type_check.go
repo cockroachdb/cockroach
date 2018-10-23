@@ -1161,12 +1161,12 @@ func (expr DefaultVal) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, er
 }
 
 // TypeCheck implements the Expr interface.
-func (expr MinVal) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
+func (expr PartitionMinVal) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
 	return nil, errInvalidMinUsage
 }
 
 // TypeCheck implements the Expr interface.
-func (expr MaxVal) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
+func (expr PartitionMaxVal) TypeCheck(_ *SemaContext, desired types.T) (TypedExpr, error) {
 	return nil, errInvalidMaxUsage
 }
 
