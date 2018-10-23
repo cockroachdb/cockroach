@@ -115,7 +115,7 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 
 			// Handle the oddball Z and Zulu suffixes. Try stripping the
 			// suffix and appending the resulting number.
-			if returnTime && strings.HasSuffix(match, keywordZ) {
+			if strings.HasSuffix(match, keywordZ) {
 				if err := fieldSetterUTC(&fe, ""); err != nil {
 					return TimeEpoch, err
 				}
@@ -124,7 +124,7 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 					continue
 				}
 
-			} else if returnTime && strings.HasSuffix(match, keywordZulu) {
+			} else if strings.HasSuffix(match, keywordZulu) {
 				if err := fieldSetterUTC(&fe, ""); err != nil {
 					return TimeEpoch, err
 				}
@@ -187,7 +187,7 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 		return TimeEpoch, err
 	}
 
-	var year, month, day, hour, min, sec, micro int
+	var year, month, day, hour, min, sec, nano int
 
 	if fe.has.HasAll(dateRequiredFields) {
 		year, _ = fe.Get(fieldYear)
@@ -208,7 +208,7 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 		hour, _ = fe.Get(fieldHour)
 		min, _ = fe.Get(fieldMinute)
 		sec, _ = fe.Get(fieldSecond)
-		micro, _ = fe.Get(fieldFraction)
+		nano, _ = fe.Get(fieldFraction)
 
 		if tz1, ok := fe.Get(fieldTZ1); ok {
 			tz2, _ := fe.Get(fieldTZ2)
@@ -222,7 +222,7 @@ func extract(fe fieldExtract, s string) (time.Time, error) {
 		loc = fe.now.Location()
 	}
 
-	ret := time.Date(year, time.Month(month), day, hour, min, sec, micro*1000, loc)
+	ret := time.Date(year, time.Month(month), day, hour, min, sec, nano, loc)
 
 	// We'll truncate back to the zero day if  the user didn't request
 	// the date to be returned.  If the user provided a named timezone,
@@ -259,9 +259,26 @@ func chunk(s string) ([]stringChunk, string) {
 
 	flush := func() {
 		if matchEnd > matchStart {
-			ret = append(ret, stringChunk{
-				NotMatch: s[previousMatchEnd:matchStart],
-				Match:    s[matchStart:matchEnd]})
+			notMatch := s[previousMatchEnd:matchStart]
+			match := s[matchStart:matchEnd]
+
+			// Special-case to handle ddThh delimiter
+			if len(match) == 5 && (match[2:3] == "T" || match[2:3] == "t") {
+				ret = append(ret,
+					stringChunk{
+						NotMatch: notMatch,
+						Match:    match[:2],
+					},
+					stringChunk{
+						NotMatch: "T",
+						Match:    match[3:],
+					})
+			} else {
+				ret = append(ret, stringChunk{
+					NotMatch: notMatch,
+					Match:    match,
+				})
+			}
 			previousMatchEnd = matchEnd
 			matchStart = matchEnd
 		}

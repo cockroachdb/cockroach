@@ -16,7 +16,6 @@ package pgdate
 
 import (
 	"fmt"
-	"strconv"
 	"time"
 	"unicode/utf8"
 
@@ -35,7 +34,7 @@ type numberChunk struct {
 
 func (n numberChunk) String() string {
 	if n.prefix == utf8.RuneError {
-		return strconv.Itoa(n.v)
+		return fmt.Sprintf("%d", n.v)
 	} else {
 		return fmt.Sprintf("%v%d", n.prefix, n.v)
 	}
@@ -93,36 +92,30 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 			return fe.SetDayOfYear(chunk.v)
 
 		case !fe.Wants(fieldSecond) && fe.Wants(fieldFraction):
-			// We want to adjust the fraction into a microsecond value.
-			// We should accept at most 6 digits.
+			// We want to adjust the fraction into a nanosecond value.
+			// We should accept at most 9 digits.
 			var mult int
 			switch chunk.magnitude {
 			case 1:
-				mult = 100000
+				mult = 100000000
 			case 2:
-				mult = 10000
+				mult = 10000000
 			case 3:
-				mult = 1000
+				mult = 1000000
 			case 4:
-				mult = 100
+				mult = 100000
 			case 5:
-				mult = 10
+				mult = 10000
 			case 6:
+				mult = 1000
+			case 7:
+				mult = 100
+			case 8:
+				mult = 10
+			case 9:
 				mult = 1
 			default:
-				// Round to 6 digits
-				var round int
-				mult = 1
-				for chunk.magnitude > 6 {
-					if chunk.magnitude == 7 {
-						if chunk.v%10 >= 5 {
-							round = 1
-						}
-					}
-					chunk.magnitude--
-					chunk.v /= 10
-				}
-				chunk.v += round
+				return errors.New("fractional part too long")
 			}
 			return fe.Set(fieldFraction, chunk.v*mult)
 

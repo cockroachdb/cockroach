@@ -4,9 +4,9 @@ package pgdate
 
 import "strconv"
 
-const _ParseMode_name = "ParseModeAmbiguousParseModeYMDParseModeDMYParseModeMDY"
+const _ParseMode_name = "ParseModeYMDParseModeDMYParseModeMDY"
 
-var _ParseMode_index = [...]uint8{0, 18, 30, 42, 54}
+var _ParseMode_index = [...]uint8{0, 12, 24, 36}
 
 func (i ParseMode) String() string {
 	if i >= ParseMode(len(_ParseMode_index)-1) {
