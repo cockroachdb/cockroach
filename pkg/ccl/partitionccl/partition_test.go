@@ -125,11 +125,12 @@ func (t *partitioningTest) parse() error {
 		}
 		st := cluster.MakeTestingClusterSettings()
 		const parentID, tableID = keys.MinUserDescID, keys.MinUserDescID + 1
-		t.parsed.tableDesc, err = importccl.MakeSimpleTableDescriptor(
+		mutDesc, err := importccl.MakeSimpleTableDescriptor(
 			ctx, st, createTable, parentID, tableID, importccl.NoFKs, hlc.UnixNano())
 		if err != nil {
 			return err
 		}
+		t.parsed.tableDesc = mutDesc.TableDesc()
 		if err := t.parsed.tableDesc.ValidateTable(st); err != nil {
 			return err
 		}
