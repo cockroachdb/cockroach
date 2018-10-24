@@ -199,7 +199,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		// Instantiate a row inserter and table writer. It has a 1-1
 		// mapping to the definitions in the descriptor.
 		ri, err := row.MakeInserter(
-			params.p.txn, &desc, nil, desc.Columns, row.SkipFKs, &params.p.alloc)
+			params.p.txn, desc.TableDescriptor, nil, desc.Columns, row.SkipFKs, &params.p.alloc)
 		if err != nil {
 			return err
 		}
@@ -388,7 +388,7 @@ func ResolveFK(
 		}
 	}
 
-	target, err := ResolveExistingObject(ctx, sc, &d.Table, true /*required*/, requireTableDesc)
+	target, err := ResolveMutableExistingObject(ctx, sc, &d.Table, true /*required*/, requireTableDesc)
 	if err != nil {
 		return err
 	}
@@ -483,7 +483,7 @@ func ResolveFK(
 	if d.Actions.Delete == tree.SetNull || d.Actions.Update == tree.SetNull {
 		for _, sourceColumn := range srcCols {
 			if !sourceColumn.Nullable {
-				col := qualifyFKColErrorWithDB(ctx, txn, tbl, sourceColumn.Name)
+				col := qualifyFKColErrorWithDB(ctx, txn, tbl.TableDescriptor, sourceColumn.Name)
 				return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
 					"cannot add a SET NULL cascading action on column %q which has a NOT NULL constraint", col,
 				)
@@ -496,7 +496,7 @@ func ResolveFK(
 	if d.Actions.Delete == tree.SetDefault || d.Actions.Update == tree.SetDefault {
 		for _, sourceColumn := range srcCols {
 			if sourceColumn.DefaultExpr == nil {
-				col := qualifyFKColErrorWithDB(ctx, txn, tbl, sourceColumn.Name)
+				col := qualifyFKColErrorWithDB(ctx, txn, tbl.TableDescriptor, sourceColumn.Name)
 				return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
 					"cannot add a SET DEFAULT cascading action on column %q which has no DEFAULT expression", col,
 				)
@@ -750,7 +750,7 @@ func (p *planner) finalizeInterleave(
 		ancestorTable = desc
 	} else {
 		var err error
-		ancestorTable, err = sqlbase.GetTableDescFromID(ctx, p.txn, ancestor.TableID)
+		ancestorTable, err = p.Tables().getMutableTableVersionByID(ctx, ancestor.TableID, p.txn)
 		if err != nil {
 			return err
 		}
@@ -816,13 +816,15 @@ func InitTableDescriptor(
 	privileges *sqlbase.PrivilegeDescriptor,
 ) sqlbase.MutableTableDescriptor {
 	return sqlbase.MutableTableDescriptor{
-		ID:               id,
-		Name:             name,
-		ParentID:         parentID,
-		FormatVersion:    sqlbase.InterleavedFormatVersion,
-		Version:          1,
-		ModificationTime: creationTime,
-		Privileges:       privileges,
+		TableDescriptor: &sqlbase.TableDescriptor{
+			ID:               id,
+			Name:             name,
+			ParentID:         parentID,
+			FormatVersion:    sqlbase.InterleavedFormatVersion,
+			Version:          1,
+			ModificationTime: creationTime,
+			Privileges:       privileges,
+		},
 	}
 }
 
@@ -1115,7 +1117,7 @@ func MakeTableDesc(
 	// table.
 	fkResolver := &fkSelfResolver{
 		SchemaResolver: vt,
-		newTableDesc:   &desc,
+		newTableDesc:   desc.TableDescriptor,
 		newTableName:   &n.Table,
 	}
 

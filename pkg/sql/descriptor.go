@@ -124,18 +124,24 @@ func (p *planner) createDescriptorWithID(
 	b.CPut(descKey, descDesc, nil)
 
 	desc, ok := descriptor.(*sqlbase.TableDescriptor)
+	var mutDesc *sqlbase.MutableTableDescriptor
 	if ok {
-		if err := desc.ValidateTable(st); err != nil {
+		mutDesc = &sqlbase.MutableTableDescriptor{TableDescriptor: desc}
+	} else {
+		mutDesc, ok = descriptor.(*sqlbase.MutableTableDescriptor)
+	}
+	if ok {
+		if err := mutDesc.ValidateTable(st); err != nil {
 			return err
 		}
-		p.Tables().addUncommittedTable(*desc)
+		p.Tables().addUncommittedTable(*mutDesc)
 	}
 
 	if err := p.txn.Run(ctx, b); err != nil {
 		return err
 	}
-	if ok && desc.Adding() {
-		p.queueSchemaChange(desc, sqlbase.InvalidMutationID)
+	if ok && mutDesc.Adding() {
+		p.queueSchemaChange(mutDesc.TableDescriptor, sqlbase.InvalidMutationID)
 	}
 	return nil
 }

@@ -45,9 +45,6 @@ type (
 	// UncachedDatabaseDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	UncachedDatabaseDescriptor = sqlbase.DatabaseDescriptor
-	// ObjectDescriptor is provided for convenience and to make the
-	// interface definitions below more intuitive.
-	ObjectDescriptor = sqlbase.TableDescriptor
 	// MutableTableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	MutableTableDescriptor = sqlbase.MutableTableDescriptor
@@ -68,6 +65,24 @@ type (
 	// definitions below more intuitive.
 	TableNames = tree.TableNames
 )
+
+// ObjectDescriptor provides table information for results from a name lookup.
+type ObjectDescriptor interface {
+	tree.NameResolutionResult
+
+	// TableDesc returns the underlying table descriptor.
+	TableDesc() *TableDescriptor
+
+	// IsTable returns true if the descriptor actually describes a
+	// Table resource, as opposed to a different resource (like a View).
+	IsTable() bool
+	// IsView returns true if the descriptor actually describes a
+	// View resource rather than a Table.
+	IsView() bool
+	// IsSequence returns true if the descriptor actually describes a
+	// Sequence resource rather than a Table.
+	IsSequence() bool
+}
 
 // SchemaAccessor provides access to database descriptors.
 type SchemaAccessor interface {
@@ -95,7 +110,7 @@ type SchemaAccessor interface {
 	// It is not guaranteed to be non-nil even if the first return value
 	// is non-nil.  Callers that need a database descriptor can use that
 	// to avoid an extra roundtrip through a DatabaseAccessor.
-	GetObjectDesc(name *ObjectName, flags ObjectLookupFlags) (*ObjectDescriptor, *DatabaseDescriptor, error)
+	GetObjectDesc(name *ObjectName, flags ObjectLookupFlags) (ObjectDescriptor, *DatabaseDescriptor, error)
 }
 
 // CommonLookupFlags is the common set of flags for the various accessor interfaces.

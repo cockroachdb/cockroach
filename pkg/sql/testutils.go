@@ -40,7 +40,7 @@ func CreateTestTableDescriptor(
 	}
 	semaCtx := tree.MakeSemaContext(false /* privileged */)
 	evalCtx := tree.MakeTestingEvalContext(st)
-	return MakeTableDesc(
+	desc, err := MakeTableDesc(
 		ctx,
 		nil, /* txn */
 		nil, /* vt */
@@ -53,6 +53,10 @@ func CreateTestTableDescriptor(
 		&semaCtx,
 		&evalCtx,
 	)
+	if err != nil {
+		return sqlbase.TableDescriptor{}, err
+	}
+	return *desc.TableDescriptor, nil
 }
 
 func makeTestingExtendedEvalContext(st *cluster.Settings) extendedEvalContext {

@@ -79,7 +79,7 @@ func (p *planner) Split(ctx context.Context, n *tree.Split) (planNode, error) {
 
 	return &splitNode{
 		force:     p.SessionData().ForceSplitAt,
-		tableDesc: tableDesc,
+		tableDesc: tableDesc.TableDescriptor,
 		index:     index,
 		rows:      rows,
 	}, nil

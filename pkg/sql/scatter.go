@@ -97,11 +97,11 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 			}
 		}
 
-		span.Key, err = getRowKey(tableDesc, index, fromVals)
+		span.Key, err = getRowKey(tableDesc.TableDescriptor, index, fromVals)
 		if err != nil {
 			return nil, err
 		}
-		span.EndKey, err = getRowKey(tableDesc, index, toVals)
+		span.EndKey, err = getRowKey(tableDesc.TableDescriptor, index, toVals)
 		if err != nil {
 			return nil, err
 		}
