@@ -157,6 +157,21 @@ func MakeStoreKey(storeID roachpb.StoreID) string {
 	return MakeKey(KeyStorePrefix, storeID.String())
 }
 
+// StoreIDFromKey attempts to extract a StoreID from the provided key after
+// stripping the provided prefix. Returns an error if the key is not of the
+// correct type or is not parsable.
+func StoreIDFromKey(storeKey string) (roachpb.StoreID, error) {
+	trimmedKey, err := removePrefixFromKey(storeKey, KeyStorePrefix)
+	if err != nil {
+		return 0, err
+	}
+	storeID, err := strconv.ParseInt(trimmedKey, 10 /* base */, 64 /* bitSize */)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed parsing StoreID from key %q", storeKey)
+	}
+	return roachpb.StoreID(storeID), nil
+}
+
 // MakeDeadReplicasKey returns the dead replicas gossip key for the given store.
 func MakeDeadReplicasKey(storeID roachpb.StoreID) string {
 	return MakeKey(KeyDeadReplicasPrefix, storeID.String())
