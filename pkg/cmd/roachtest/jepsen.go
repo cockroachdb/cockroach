@@ -220,6 +220,21 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 	if testErr != nil {
 		logf("grabbing artifacts from controller. Tail of controller log:")
 		run(c, ctx, controller, "tail -n 100 /mnt/data1/jepsen/cockroachdb/invoke.log")
+		// We recognize some errors and ignore them.
+		// We're looking for the "Oh jeez" message that Jepsen prints as the test's
+		// outcome, followed by a known exception on the next line. If we don't find
+		// either one, we consider the error unrecognized.
+		// TODO(andrei): Remove this unfortunate code once #30527 is fixed.
+		ignoreErr := false
+		if err := runE(c, ctx, controller,
+			`grep "Oh jeez, I'm sorry, Jepsen broke. Here's why" /mnt/data1/jepsen/cockroachdb/invoke.log -A1 `+
+				`| grep -e BrokenBarrierException -e InterruptedException`,
+		); err == nil {
+			logf("Recognized BrokenBarrier or InterruptedException. " +
+				"Ignoring it and considering the test successful. See #30527.")
+			ignoreErr = true
+		}
+
 		cmd := exec.CommandContext(ctx, roachprod, "run", c.makeNodes(controller),
 			// -h causes tar to follow symlinks; needed by the "latest" symlink.
 			// -f- sends the output to stdout, we read it and save it to a local file.
@@ -231,7 +246,9 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		if err := ioutil.WriteFile(filepath.Join(outputDir, "failure-logs.tbz"), output, 0666); err != nil {
 			t.Fatal(err)
 		}
-		t.Fatal(testErr)
+		if !ignoreErr {
+			t.Fatal(testErr)
+		}
 	} else {
 		collectFiles := []string{
 			"test.fressian", "results.edn", "latency-quantiles.png", "latency-raw.png", "rate.png",
