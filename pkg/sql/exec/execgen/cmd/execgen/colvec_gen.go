@@ -56,10 +56,48 @@ func (m *memColumn) CopyFrom(vec ColVec, sel []uint64, nSel uint16, colType type
 	{{end}}
 	panic(fmt.Sprintf("unhandled type %d", colType))
 }
+
+func (m *memColumn) CopyFromBatch(vec ColVec, sel []uint16, nSel uint16, colType types.T) {
+	{{range .}}
+	if colType == types.{{.ExecType}} {
+		toCol := m.{{.ExecType}}()
+		fromCol := vec.{{.ExecType}}()
+		for i := uint16(0); i < nSel; i++ {
+			toCol[i] = fromCol[sel[i]]
+		}
+		return
+	}
+	{{end}}
+	panic(fmt.Sprintf("unhandled type %d", colType))
+}
+
+func (m *memColumn) AppendSelected(
+	vec ColVec, sel []uint16, batchSize uint16, colType types.T, toLength uint64,
+) {
+	{{range .}}
+	if colType == types.{{.ExecType}} {
+		tempCol := m.{{.ExecType}}()
+		fromCol := vec.{{.ExecType}}()
+		toCol := make([]{{.GoType}}, toLength+uint64(batchSize))
+
+		copy(toCol, tempCol[:toLength])
+
+		for i := uint16(0); i < batchSize; i++ {
+      toCol[uint64(i) + toLength] = fromCol[sel[i]]
+		}
+
+		m.col = toCol
+		return
+	}
+	{{end}}
+
+	panic(fmt.Sprintf("unhandled type %d", colType))
+}
 `
 
 type execType struct {
 	ExecType string
+	GoType   string
 }
 
 func genColVecMethods(wr io.Writer) error {
@@ -68,6 +106,7 @@ func genColVecMethods(wr io.Writer) error {
 	for _, t := range types.Types {
 		et := execType{
 			ExecType: t.String(),
+			GoType:   types.ToGoType(t),
 		}
 		execTypes = append(execTypes, et)
 	}

@@ -137,6 +137,30 @@ func (t T) GoTypeName() string {
 	}
 }
 
+// ToGoType returns the corresponding Go type name from a given exec type.
+func ToGoType(t T) string {
+	switch t {
+	case Int8:
+		return "int8"
+	case Int16:
+		return "int16"
+	case Int32:
+		return "int32"
+	case Int64:
+		return "int64"
+	case Bool:
+		return "bool"
+	case Bytes:
+		return "[]byte"
+	case Float32:
+		return "float32"
+	case Float64:
+		return "float64"
+	default:
+		panic(fmt.Sprintf("type %T not supported yet", t))
+	}
+}
+
 // Types is a list of all the different supported column types.
 var Types = []T{
 	Bytes,

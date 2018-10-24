@@ -127,7 +127,7 @@ func (s *opTestInput) Init() {
 	s.typs = typs
 	s.batch = NewMemBatch(append(typs, s.extraCols...))
 
-	s.selection = make([]uint16, s.batchSize)
+	s.selection = make([]uint16, ColBatchSize)
 	for i := range s.selection {
 		s.selection[i] = uint16(i)
 	}
@@ -157,6 +157,7 @@ func (s *opTestInput) Next() ColBatch {
 		s.rng.Shuffle(len(s.selection), func(i, j int) {
 			s.selection[i], s.selection[j] = s.selection[j], s.selection[i]
 		})
+
 		s.batch.SetSelection(true)
 		copy(s.batch.Selection(), s.selection)
 	} else {
