@@ -611,7 +611,15 @@ message RangeResponse {
   reserved 4; // Previously used.
 }
 
-message CommandQueueRequest { int64 range_id = 1; }
+message CommandQueueRequest {
+  // The range we're requesting the command queue for.
+  int64 range_id = 1;
+  // The node we're requesting the command queue on.
+  // - "local": means the current node.
+  // - "": forward to all nodes.
+  // - a given node ID means forward to that node.
+  string node_id = 2 [ (gogoproto.customname) = "NodeID" ];
+}
 
 message CommandQueueResponse {
   storage.storagepb.CommandQueuesSnapshot snapshot = 1
@@ -828,4 +836,3 @@ service Status {
     };
   }
 }
-

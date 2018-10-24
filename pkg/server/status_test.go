@@ -990,3 +990,32 @@ func TestStatusAPIStatements(t *testing.T) {
 			expectedStatements, statementsInResponse, pretty.Sprint(resp))
 	}
 }
+
+func TestStatusAPICommandQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Create a cluster bigger than the system replication factor (currently 5),
+	// so the replica we test won't be on all nodes.
+	numNodes := 7
+	testCluster := serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	// Verify that we can get the command queue without error from any node, and that
+	// the response won't be empty.
+	testutils.SucceedsSoon(t, func() error {
+		for nodeIdx := 0; nodeIdx < numNodes; nodeIdx++ {
+			resp := serverpb.CommandQueueResponse{}
+			// Request range 1 since it always exists, even if splitting/replication on startup
+			// hasn't completely finished yet.
+			if err := getStatusJSONProto(
+				testCluster.Server(nodeIdx), fmt.Sprintf("range/%d/cmdqueue", 1), &resp,
+			); err != nil {
+				return err
+			}
+			if resp.Snapshot.Timestamp.IsEmpty() {
+				return fmt.Errorf("got empty timestamp when requesting command queue from node idx %d", nodeIdx)
+			}
+		}
+		return nil
+	})
+}
