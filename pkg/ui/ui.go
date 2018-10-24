@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	assetfs "github.com/elazarl/go-bindata-assetfs"
@@ -95,6 +96,7 @@ type indexHTMLArgs struct {
 	LoggedInUser         *string
 	Tag                  string
 	Version              string
+	NodeID               string
 }
 
 // bareIndexHTML is used in place of indexHTMLTemplate when the binary is built
@@ -109,6 +111,7 @@ Binary built without web UI.
 type Config struct {
 	ExperimentalUseLogin bool
 	LoginEnabled         bool
+	NodeID               *base.NodeIDContainer
 	GetUser              func(ctx context.Context) *string
 }
 
@@ -140,6 +143,7 @@ func Handler(cfg Config) http.Handler {
 			LoggedInUser:         cfg.GetUser(r.Context()),
 			Tag:                  buildInfo.Tag,
 			Version:              build.VersionPrefix(),
+			NodeID:               cfg.NodeID.String(),
 		}); err != nil {
 			err = errors.Wrap(err, "templating index.html")
 			http.Error(w, err.Error(), 500)
