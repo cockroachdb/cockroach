@@ -66,7 +66,17 @@ message WaitForApplicationRequest {
 message WaitForApplicationResponse {
 }
 
+message WaitForReplicaInitRequest {
+  StoreRequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  int64 range_id = 2 [(gogoproto.customname) = "RangeID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+}
+
+message WaitForReplicaInitResponse {
+}
+
 service PerReplica {
   rpc CollectChecksum(CollectChecksumRequest) returns (CollectChecksumResponse) {}
   rpc WaitForApplication(WaitForApplicationRequest) returns (WaitForApplicationResponse) {}
+  rpc WaitForReplicaInit(WaitForReplicaInitRequest) returns (WaitForReplicaInitResponse) {}
 }
