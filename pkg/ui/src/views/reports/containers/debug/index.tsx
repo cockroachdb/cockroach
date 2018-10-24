@@ -299,8 +299,16 @@ export default function Debug() {
           />
         </DebugTableRow>
         <DebugTableRow title="Sessions">
-          <DebugTableLink name="Local Sessions" url="/_status/local_sessions" />
-          <DebugTableLink name="All Sessions" url="/_status/sessions" />
+          <DebugTableLink
+            name="Local Sessions"
+            url="/_status/local_sessions?username=root"
+            note="/_status/local_sessions?username=[user]"
+          />
+          <DebugTableLink
+            name="All Sessions"
+            url="/_status/sessions?username=root"
+            note="/_status/sessions?username=[user]"
+          />
         </DebugTableRow>
         <DebugTableRow title="Cluster Wide">
           <DebugTableLink name="Raft" url="/_status/raft" />
