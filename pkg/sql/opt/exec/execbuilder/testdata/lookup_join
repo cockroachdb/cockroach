@@ -413,3 +413,25 @@ render          ·         ·              (c, d)     ·
       └── scan  ·         ·              (c)        ·
 ·               table     small@primary  ·          ·
 ·               spans     ALL            ·          ·
+
+# Lookup join on implicit index key column.
+# https://github.com/cockroachdb/cockroach/issues/31777
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT, INDEX idx (c))
+
+statement ok
+INSERT INTO t VALUES (1, 2, 3)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT t2.c FROM t JOIN t AS t2 ON t.a = t2.a AND t.c = t2.c WHERE t.b = 2
+----
+render            ·         ·          (c)              ·
+ │                render 0  c          ·                ·
+ └── lookup-join  ·         ·          (a, b, c, a, c)  ·
+      │           type      inner      ·                ·
+      ├── scan    ·         ·          (a, b, c)        ·
+      │           table     t@primary  ·                ·
+      │           spans     ALL        ·                ·
+      │           filter    b = 2      ·                ·
+      └── scan    ·         ·          (a, c)           ·
+·                 table     t@idx      ·                ·

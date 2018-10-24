@@ -406,3 +406,16 @@ query IIII
 SELECT * FROM source JOIN child ON source.a = child.a
 ----
 1 1 2 3
+
+# Lookup join on implicit index key column.
+# https://github.com/cockroachdb/cockroach/issues/31777
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT, c INT, INDEX idx (c))
+
+statement ok
+INSERT INTO t VALUES (1, 2, 3)
+
+query I
+SELECT t2.c FROM t JOIN t AS t2 ON t.a = t2.a AND t.c = t2.c WHERE t.b = 2
+----
+3
