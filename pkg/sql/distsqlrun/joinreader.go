@@ -311,7 +311,12 @@ func (jr *joinReader) neededRightCols() util.FastIntSet {
 // If lookup columns are specified will use those to collect the relevant
 // columns. Otherwise the first rows are assumed to correspond with the index.
 func (jr *joinReader) generateKey(row sqlbase.EncDatumRow) (roachpb.Key, error) {
-	numKeyCols := len(jr.index.ColumnIDs)
+	numIndexCols := len(jr.index.ColumnIDs)
+	numKeyCols := numIndexCols
+	if !jr.index.Unique {
+		// The index key implicitly includes primary index columns.
+		numKeyCols += len(jr.index.ExtraColumnIDs)
+	}
 	numLookupCols := len(jr.lookupCols)
 
 	if numLookupCols > numKeyCols {
@@ -322,6 +327,13 @@ func (jr *joinReader) generateKey(row sqlbase.EncDatumRow) (roachpb.Key, error) 
 	jr.indexKeyRow = jr.indexKeyRow[:0]
 	for _, id := range jr.lookupCols {
 		jr.indexKeyRow = append(jr.indexKeyRow, row[id])
+	}
+
+	if numLookupCols > numIndexCols {
+		// Include implicit columns.
+		return sqlbase.MakeFullKeyFromEncDatums(
+			jr.indexTypes, jr.indexKeyRow[:numIndexCols], jr.indexKeyRow[numIndexCols:], &jr.desc,
+			jr.index, jr.colIdxMap, jr.indexKeyPrefix, &jr.alloc)
 	}
 	return sqlbase.MakeKeyFromEncDatums(
 		jr.indexTypes[:numLookupCols], jr.indexKeyRow, &jr.desc, jr.index, jr.indexKeyPrefix, &jr.alloc)

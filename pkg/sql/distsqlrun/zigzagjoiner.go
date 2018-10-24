@@ -546,6 +546,7 @@ func (z *zigzagJoiner) produceKeyFromBaseRow() (roachpb.Key, error) {
 		implicitNeededDatums,
 		info.table,
 		info.index,
+		info.table.ColumnIdxMap(),
 		info.prefix,
 		info.alloc,
 	)

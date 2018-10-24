@@ -262,6 +262,7 @@ func MakeFullKeyFromEncDatums(
 	implicitValues EncDatumRow,
 	tableDesc *TableDescriptor,
 	index *IndexDescriptor,
+	colIdxMap map[ColumnID]int,
 	keyPrefix []byte,
 	alloc *DatumAlloc,
 ) (roachpb.Key, error) {
@@ -270,26 +271,17 @@ func MakeFullKeyFromEncDatums(
 		return nil, err
 	}
 
-	primaryIndex := tableDesc.PrimaryIndex
-	extraColumns := index.ExtraColumnIDs
-	// PrimaryImplicitIdxs maps the position of the implicit column in the key
-	// to the appropriate column in the primary index.
-	primaryImplicitIdxs := make([]int, len(extraColumns))
-	for i, id := range extraColumns {
-		for j, primaryID := range primaryIndex.ColumnIDs {
-			if id == primaryID {
-				primaryImplicitIdxs[i] = j
-			}
-		}
+	implicitTypes := make([]ColumnType, len(implicitValues))
+	columnTypes := tableDesc.ColumnTypes()
+	for i := range implicitValues {
+		colID := index.ExtraColumnIDs[i]
+		colIdx := colIdxMap[colID]
+		implicitTypes[i] = columnTypes[colIdx]
 	}
-	implicitDirs := make([]IndexDescriptor_Direction, len(primaryImplicitIdxs))
-	for i, idx := range primaryImplicitIdxs {
-		implicitDirs[i] = primaryIndex.ColumnDirections[idx]
-	}
-	implicitTypes := make([]ColumnType, len(extraColumns))
-	for i, id := range extraColumns {
-		implicitTypes[i] = tableDesc.ColumnTypes()[id]
-	}
+
+	// Implicit key columns are all sorted ascending (the zero value).
+	implicitDirs := make([]IndexDescriptor_Direction, len(implicitValues))
+
 	key, err := appendEncDatumsToKey(prefix, implicitTypes, implicitValues, implicitDirs, alloc)
 	if err != nil {
 		return nil, err
