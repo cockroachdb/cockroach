@@ -25,7 +25,7 @@ import (
 var TargetDuration = settings.RegisterNonNegativeDurationSetting(
 	"kv.closed_timestamp.target_duration",
 	"if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration",
-	5*time.Second,
+	30*time.Second,
 )
 
 // CloseFraction is the fraction of TargetDuration determining how often closed
