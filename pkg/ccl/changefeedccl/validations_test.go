@@ -72,8 +72,7 @@ func TestValidations(t *testing.T) {
 
 			v := Validators{
 				NewOrderValidator(`bank`),
-				// TODO(mrtracy): Disabled by #30902. Re-enabling is tracked by #31110.
-				// NewFingerprintValidator(db, `bank`, `fprint`, bank.Partitions()),
+				NewFingerprintValidator(db, `bank`, `fprint`, bank.Partitions()),
 			}
 			sqlDB.Exec(t, `CREATE TABLE fprint (id INT PRIMARY KEY, balance INT, payload STRING)`)
 			for {
