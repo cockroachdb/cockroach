@@ -51,7 +51,7 @@ func config() workloadccl.FixtureConfig {
 	if len(*gcsBillingProjectOverride) > 0 {
 		config.BillingProject = *gcsBillingProjectOverride
 	}
-	config.CSVServerURL = *fixturesMakeCSVServerURL
+	config.CSVServerURL = *fixturesCSVServerURL
 	return config
 }
 
@@ -72,12 +72,18 @@ var fixturesLoadCmd = workloadcli.SetCmdDefaults(&cobra.Command{
 	Use:   `load`,
 	Short: `load a fixture into a running cluster. An enterprise license is required.`,
 })
+var fixturesImportCmd = workloadcli.SetCmdDefaults(&cobra.Command{
+	Use:   `import`,
+	Short: `import a fixture into a running cluster. An enterprise license is NOT required.`,
+})
 var fixturesURLCmd = workloadcli.SetCmdDefaults(&cobra.Command{
 	Use:   `url`,
 	Short: `generate the GCS URL for a fixture`,
 })
 
-var fixturesMakeCSVServerURL = fixturesMakeCmd.PersistentFlags().String(
+var fixturesMakeImportShared = pflag.NewFlagSet(`shared`, pflag.ContinueOnError)
+
+var fixturesCSVServerURL = fixturesMakeImportShared.String(
 	`csv-server`, ``,
 	`Skip saving CSVs to cloud storage, instead get them from a 'csv-server' running at this url`)
 
@@ -139,6 +145,7 @@ func init() {
 				Args: cobra.RangeArgs(0, 1),
 			})
 			genMakeCmd.Flags().AddFlagSet(genFlags)
+			genMakeCmd.Flags().AddFlagSet(fixturesMakeImportShared)
 			genMakeCmd.Run = workloadcli.CmdHelper(gen, fixturesMake)
 			fixturesMakeCmd.AddCommand(genMakeCmd)
 
@@ -149,6 +156,15 @@ func init() {
 			genLoadCmd.Flags().AddFlagSet(genFlags)
 			genLoadCmd.Run = workloadcli.CmdHelper(gen, fixturesLoad)
 			fixturesLoadCmd.AddCommand(genLoadCmd)
+
+			genImportCmd := workloadcli.SetCmdDefaults(&cobra.Command{
+				Use:  meta.Name + ` [CRDB URI]`,
+				Args: cobra.RangeArgs(0, 1),
+			})
+			genImportCmd.Flags().AddFlagSet(genFlags)
+			genImportCmd.Flags().AddFlagSet(fixturesMakeImportShared)
+			genImportCmd.Run = workloadcli.CmdHelper(gen, fixturesImport)
+			fixturesImportCmd.AddCommand(genImportCmd)
 
 			genURLCmd := workloadcli.SetCmdDefaults(&cobra.Command{
 				Use:  meta.Name,
@@ -161,6 +177,7 @@ func init() {
 		fixturesCmd.AddCommand(fixturesListCmd)
 		fixturesCmd.AddCommand(fixturesMakeCmd)
 		fixturesCmd.AddCommand(fixturesLoadCmd)
+		fixturesCmd.AddCommand(fixturesImportCmd)
 		fixturesCmd.AddCommand(fixturesURLCmd)
 		return fixturesCmd
 	})
@@ -265,6 +282,36 @@ func fixturesLoad(gen workload.Generator, urls []string, dbName string) error {
 	if hooks, ok := gen.(workload.Hookser); *fixturesLoadRunChecks && ok {
 		if consistencyCheckFn := hooks.Hooks().CheckConsistency; consistencyCheckFn != nil {
 			log.Info(ctx, "fixture is restored; now running consistency checks (ctrl-c to abort)")
+			if err := consistencyCheckFn(ctx, sqlDB); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func fixturesImport(gen workload.Generator, urls []string, dbName string) error {
+	ctx := context.Background()
+	sqlDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	if err != nil {
+		return err
+	}
+	if _, err := sqlDB.Exec(`CREATE DATABASE IF NOT EXISTS ` + dbName); err != nil {
+		return err
+	}
+
+	c := config()
+	if len(c.CSVServerURL) == 0 {
+		return errors.Errorf(`--csv-server is required`)
+	}
+	if err := workloadccl.ImportFixture(ctx, sqlDB, c.CSVServerURL, gen, dbName); err != nil {
+		return errors.Wrap(err, `importing fixture`)
+	}
+
+	if hooks, ok := gen.(workload.Hookser); *fixturesLoadRunChecks && ok {
+		if consistencyCheckFn := hooks.Hooks().CheckConsistency; consistencyCheckFn != nil {
+			log.Info(ctx, "fixture is imported; now running consistency checks (ctrl-c to abort)")
 			if err := consistencyCheckFn(ctx, sqlDB); err != nil {
 				return err
 			}
