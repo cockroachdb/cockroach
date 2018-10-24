@@ -357,6 +357,10 @@ func loadTPCCBench(
 	db := c.Conn(ctx, 1)
 	defer db.Close()
 
+	if _, err := db.ExecContext(ctx, `SET CLUSTER SETTING kv.range_merge.queue_enabled = false`); err != nil {
+		return err
+	}
+
 	// Check if the dataset already exists and is already large enough to
 	// accommodate this benchmarking. If so, we can skip the fixture RESTORE.
 	if _, err := db.ExecContext(ctx, `USE tpcc`); err == nil {
@@ -685,6 +689,13 @@ func registerTPCCBench(r *registry) {
 
 			LoadWarehouses: 2000,
 			EstimatedMax:   1300,
+		},
+		{
+			Nodes: 9,
+			CPUs:  64,
+
+			LoadWarehouses: 10000,
+			EstimatedMax:   8000,
 		},
 		// objective 1, key result 1.
 		{

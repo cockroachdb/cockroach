@@ -6581,7 +6581,7 @@ func (r *Replica) maybeGossipFirstRange(ctx context.Context) *roachpb.Error {
 
 	// Gossip the cluster ID from all replicas of the first range; there
 	// is no expiration on the cluster ID.
-	if log.V(1) {
+	if false && log.V(1) {
 		log.Infof(ctx, "gossiping cluster id %q from store %d, r%d", r.store.ClusterID(),
 			r.store.StoreID(), r.RangeID)
 	}
@@ -6614,14 +6614,14 @@ func (r *Replica) gossipFirstRange(ctx context.Context) {
 	}
 	log.Event(ctx, "gossiping sentinel and first range")
 	if log.V(1) {
-		log.Infof(ctx, "gossiping sentinel from store %d, r%d", r.store.StoreID(), r.RangeID)
+		//log.Infof(ctx, "gossiping sentinel from store %d, r%d", r.store.StoreID(), r.RangeID)
 	}
 	if err := r.store.Gossip().AddInfo(
 		gossip.KeySentinel, r.store.ClusterID().GetBytes(),
 		r.store.cfg.SentinelGossipTTL()); err != nil {
 		log.Errorf(ctx, "failed to gossip sentinel: %s", err)
 	}
-	if log.V(1) {
+	if false && log.V(1) {
 		log.Infof(ctx, "gossiping first range from store %d, r%d: %s",
 			r.store.StoreID(), r.RangeID, r.mu.state.Desc.Replicas)
 	}

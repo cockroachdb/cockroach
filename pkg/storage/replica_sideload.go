@@ -49,7 +49,7 @@ type sideloadStorage interface {
 	Clear(context.Context) error
 	// TruncateTo removes all files belonging to an index strictly smaller than
 	// the given one.
-	TruncateTo(_ context.Context, index uint64) error
+	TruncateTo(_ context.Context, index uint64) (int64, error)
 	// Returns an absolute path to the file that Get() would return the contents
 	// of. Does not check whether the file actually exists.
 	Filename(_ context.Context, index, term uint64) (string, error)
