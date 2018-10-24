@@ -108,3 +108,10 @@ func (pm *PrometheusExporter) Gather() ([]*prometheusgo.MetricFamily, error) {
 	}
 	return v, nil
 }
+
+// Clear metrics for reuse.
+func (pm *PrometheusExporter) clearMetrics() {
+	for _, family := range pm.families {
+		family.Metric = []*prometheusgo.Metric{}
+	}
+}

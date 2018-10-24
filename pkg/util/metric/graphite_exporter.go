@@ -69,5 +69,7 @@ func (ge *GraphiteExporter) Push(ctx context.Context, endpoint string) error {
 	}); err != nil {
 		return err
 	}
-	return b.Push()
+	err = b.Push()
+	ge.pm.clearMetrics()
+	return err
 }
