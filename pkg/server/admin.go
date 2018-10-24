@@ -573,19 +573,53 @@ func (s *adminServer) TableStats(
 }
 
 // NonTableStats is an endpoint that returns disk usage and replication
-// statistics for the time series system.
+// statistics for non-table parts of the system
 func (s *adminServer) NonTableStats(
 	ctx context.Context, req *serverpb.NonTableStatsRequest,
 ) (*serverpb.NonTableStatsResponse, error) {
-	timeSeriesStats, err := s.tableStatsForSpan(ctx, roachpb.Span{
-		Key:    keys.TimeseriesPrefix,
-		EndKey: keys.TimeseriesPrefix.PrefixEnd(),
-	})
-	if err != nil {
-		return nil, err
+	nonTableSpans := []roachpb.Span {
+		//TODO(celia) - we should probably also include stats for the [/Min, /System) span, but
+		//    we currently get stats from .Scan() which gets RangeDescriptors from Meta2.
+		// 		This won't work for [/Min, /Meta2), since this keyspace comes before Meta2 [and
+		// 		therefore won't have metadata RangeDescriptors in Meta2].
+		// 		We should probably figure out to get those stats (which may require something
+		// 		special).
+		{
+			Key:    keys.SystemPrefix,
+			EndKey: keys.TimeseriesPrefix,
+		},
+		{
+			Key:    keys.TimeseriesPrefix,
+			EndKey: keys.TimeseriesKeyMax,
+		},
+		{
+			Key:    keys.TimeseriesKeyMax,
+			EndKey: keys.TableDataMin,
+		},
 	}
-	response := serverpb.NonTableStatsResponse{
-		TimeSeriesStats: timeSeriesStats,
+	response := serverpb.NonTableStatsResponse{}
+
+	for _, span := range nonTableSpans {
+		nonTableStats, err := s.tableStatsForSpan(ctx, span)
+		if err != nil {
+			return nil, err
+		}
+		if span.Key.Equal(keys.TimeseriesPrefix) {
+			response.TimeSeriesStats = nonTableStats
+		} else {
+			if response.InternalUseStats == nil {
+				response.InternalUseStats = nonTableStats
+			} else {
+				response.InternalUseStats.RangeCount           += nonTableStats.RangeCount
+				response.InternalUseStats.ReplicaCount         += nonTableStats.ReplicaCount
+				response.InternalUseStats.NodeCount            += nonTableStats.NodeCount
+				response.InternalUseStats.ApproximateDiskBytes += nonTableStats.ApproximateDiskBytes
+				response.InternalUseStats.Stats.Add(
+					nonTableStats.Stats)
+				response.InternalUseStats.MissingNodes = append(
+					response.InternalUseStats.MissingNodes, nonTableStats.MissingNodes...)
+			}
+		}
 	}
 	return &response, nil
 }

@@ -346,6 +346,46 @@ func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 	}
 }
 
+func TestAdminAPINonTableStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+	s := testCluster.Server(0)
+
+	// skipping TableStatsResponse.Stats comparison, since it includes data which aren't consistent (time, bytes)
+	expectedResponse := serverpb.NonTableStatsResponse {
+		TimeSeriesStats: &serverpb.TableStatsResponse {
+			RangeCount: 1,
+			ReplicaCount: 3,
+			NodeCount: 3,
+		},
+		InternalUseStats: &serverpb.TableStatsResponse {
+			RangeCount: 4,
+			ReplicaCount: 12,
+			NodeCount: 6,
+		},
+	}
+
+	var resp serverpb.NonTableStatsResponse
+	if err := getAdminJSONProto(s, "nontablestats", &resp); err != nil {
+		t.Fatal(err)
+	}
+
+	assertExpectedStatsResponse := func(expected, actual *serverpb.TableStatsResponse) {
+		assertExpectedInt := func(prop string, e, a int64) {
+			if e != a {
+				t.Fatalf("%s: expected %d, actual %d", prop, e, a)
+			}
+		}
+		assertExpectedInt("RangeCount", expected.RangeCount, actual.RangeCount)
+		assertExpectedInt("ReplicaCount", expected.ReplicaCount, actual.ReplicaCount)
+		assertExpectedInt("NodeCount", expected.NodeCount, actual.NodeCount)
+	}
+
+	assertExpectedStatsResponse(expectedResponse.TimeSeriesStats, resp.TimeSeriesStats)
+	assertExpectedStatsResponse(expectedResponse.InternalUseStats, resp.InternalUseStats)
+}
+
 func TestAdminAPITableDoesNotExist(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
