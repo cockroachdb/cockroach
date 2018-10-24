@@ -300,6 +300,37 @@ func (s *repeatableBatchSource) Next() ColBatch {
 
 func (s *repeatableBatchSource) Init() {}
 
+// finiteBatchSource is an Operator that returns the same batch a specified
+// number of times.
+type finiteBatchSource struct {
+	repeatableBatch *repeatableBatchSource
+
+	usableCount int
+}
+
+var _ Operator = &finiteBatchSource{}
+
+// newFiniteBatchSource returns a new Operator initialized to return its input
+// batch a specified number of times.
+func newFiniteBatchSource(batch ColBatch, usableCount int) *finiteBatchSource {
+	return &finiteBatchSource{
+		repeatableBatch: newRepeatableBatchSource(batch),
+		usableCount:     usableCount,
+	}
+}
+
+func (f *finiteBatchSource) Init() {
+	f.repeatableBatch.Init()
+}
+
+func (f *finiteBatchSource) Next() ColBatch {
+	if f.usableCount > 0 {
+		f.usableCount--
+		return f.repeatableBatch.Next()
+	}
+	return NewMemBatch([]types.T{})
+}
+
 func TestOpTestInputOutput(t *testing.T) {
 	inputs := []tuples{
 		{
