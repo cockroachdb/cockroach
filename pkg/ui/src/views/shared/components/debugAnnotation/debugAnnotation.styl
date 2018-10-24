@@ -12,15 +12,12 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-import React from "react";
+@require "~styl/base/palette.styl"
 
-import DebugAnnotation from "src/views/shared/components/debugAnnotation";
+.debug-annotation__label
+  color $body-color
+  font-size 14px
 
-/**
- * LicenseType is an indicator showing the current build license.
- */
-export default class LicenseType extends React.Component<{}, {}> {
-  render() {
-    return <DebugAnnotation label="License type" value="OSS" />;
-  }
-}
+.debug-annotation__value
+  color black
+  font-size 14px
