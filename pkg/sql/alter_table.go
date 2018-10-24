@@ -386,7 +386,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			// Drop check constraints which reference the column.
 			validChecks := n.tableDesc.Checks[:0]
 			for _, check := range n.tableDesc.Checks {
-				if used, err := check.UsesColumn(n.tableDesc, col.ID); err != nil {
+				if used, err := check.UsesColumn(n.tableDesc.TableDesc(), col.ID); err != nil {
 					return err
 				} else if !used {
 					validChecks = append(validChecks, check)
@@ -479,7 +479,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 				ck := n.tableDesc.Checks[idx]
 				if err := params.p.validateCheckExpr(
-					params.ctx, ck.Expr, &n.n.Table, n.tableDesc,
+					params.ctx, ck.Expr, &n.n.Table, n.tableDesc.TableDesc(),
 				); err != nil {
 					return err
 				}
@@ -503,7 +503,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err != nil {
 					panic(err)
 				}
-				if err := params.p.validateForeignKey(params.ctx, n.tableDesc, idx); err != nil {
+				if err := params.p.validateForeignKey(params.ctx, n.tableDesc.TableDesc(), idx); err != nil {
 					return err
 				}
 				idx.ForeignKey.Validity = sqlbase.ConstraintValidity_Validated
@@ -542,7 +542,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			)
 			err = deleteRemovedPartitionZoneConfigs(
 				params.ctx, params.p.txn,
-				n.tableDesc, &n.tableDesc.PrimaryIndex, &n.tableDesc.PrimaryIndex.Partitioning,
+				n.tableDesc.TableDesc(), &n.tableDesc.PrimaryIndex, &n.tableDesc.PrimaryIndex.Partitioning,
 				&partitioning, params.extendedEvalCtx.ExecCfg,
 			)
 			if err != nil {
@@ -552,7 +552,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		case *tree.AlterTableSetAudit:
 			var err error
-			descriptorChanged, err = params.p.setAuditMode(params.ctx, n.tableDesc, t.Mode)
+			descriptorChanged, err = params.p.setAuditMode(params.ctx, n.tableDesc.TableDesc(), t.Mode)
 			if err != nil {
 				return err
 			}
@@ -562,7 +562,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			if !ok {
 				return pgerror.NewAssertionErrorf("missing stats data")
 			}
-			if err := injectTableStats(params, n.tableDesc, sd); err != nil {
+			if err := injectTableStats(params, n.tableDesc.TableDesc(), sd); err != nil {
 				return err
 			}
 

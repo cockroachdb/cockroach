@@ -47,12 +47,12 @@ func parseTableDesc(createTableStmt string) (*sqlbase.TableDescriptor, error) {
 	st := cluster.MakeTestingClusterSettings()
 	const parentID = sqlbase.ID(keys.MaxReservedDescID + 1)
 	const tableID = sqlbase.ID(keys.MaxReservedDescID + 2)
-	tableDesc, err := importccl.MakeSimpleTableDescriptor(
+	mutDesc, err := importccl.MakeSimpleTableDescriptor(
 		ctx, st, createTable, parentID, tableID, importccl.NoFKs, hlc.UnixNano())
 	if err != nil {
 		return nil, err
 	}
-	return tableDesc, tableDesc.ValidateTable(st)
+	return mutDesc.TableDesc(), mutDesc.TableDesc().ValidateTable(st)
 }
 
 func parseValues(tableDesc *sqlbase.TableDescriptor, values string) ([]sqlbase.EncDatumRow, error) {

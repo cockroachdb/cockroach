@@ -107,7 +107,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 // GetObjectDesc implements the SchemaAccessor interface.
 func (a UncachedPhysicalAccessor) GetObjectDesc(
 	name *ObjectName, flags ObjectLookupFlags,
-) (*ObjectDescriptor, *DatabaseDescriptor, error) {
+) (ObjectDescriptor, *DatabaseDescriptor, error) {
 	// At this point, only the public schema is recognized.
 	if name.Schema() != tree.PublicSchema {
 		if flags.required {
@@ -131,25 +131,18 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	if err != nil {
 		return nil, nil, err
 	}
-	if !found {
-		desc = nil
-	} else {
-		// We have a descriptor. Is it in the right state?
-		if err := filterTableState(desc); err != nil {
-			// No: let's see the flag.
-			if err == errTableAdding {
-				// We'll keep that despite the ADD state.
-				return desc, dbDesc, nil
-			}
-			// Bad state: the descriptor is essentially invisible.
-			desc = nil
+	if found {
+		// We have a descriptor. Is it in the right state? We'll keep if
+		// in the ADD state.
+		if err := filterTableState(desc); err == nil || err == errTableAdding {
+			return desc, dbDesc, nil
 		}
 	}
 
-	if desc == nil && flags.required {
+	if flags.required {
 		return nil, nil, sqlbase.NewUndefinedRelationError(name)
 	}
-	return desc, dbDesc, nil
+	return nil, nil, nil
 }
 
 // CachedPhysicalAccessor adds a cache on top of any SchemaAccessor.
@@ -194,6 +187,6 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 // GetObjectDesc implements the SchemaAccessor interface.
 func (a *CachedPhysicalAccessor) GetObjectDesc(
 	name *ObjectName, flags ObjectLookupFlags,
-) (*ObjectDescriptor, *DatabaseDescriptor, error) {
+) (ObjectDescriptor, *DatabaseDescriptor, error) {
 	return a.tc.getTableVersion(flags.ctx, name, flags)
 }
