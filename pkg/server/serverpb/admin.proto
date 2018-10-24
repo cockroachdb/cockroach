@@ -19,6 +19,7 @@ option go_package = "serverpb";
 import "config/zone.proto";
 import "jobs/jobspb/jobs.proto";
 import "server/serverpb/status.proto";
+import "server/status/statuspb/status.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/storagepb/liveness.proto";
 import "storage/storagepb/log.proto";
@@ -606,6 +607,15 @@ message EnqueueRangeResponse {
   repeated Details details = 1;
 }
 
+message AlertsRequest {}
+
+message AlertsResponse {
+  map<int32, server.status.statuspb.HealthCheckResult> alerts = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+}
+
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
@@ -808,6 +818,12 @@ service Admin {
     option (google.api.http) = {
       post: "/_admin/v1/enqueue_range"
       body : "*"
+    };
+  }
+
+  rpc Alerts(AlertsRequest) returns (AlertsResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/alerts"
     };
   }
 }

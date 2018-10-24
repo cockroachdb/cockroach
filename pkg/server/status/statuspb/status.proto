@@ -86,6 +86,6 @@ message HealthAlert {
 }
 
 // HealthCheckResult holds a number of HealthAlerts.
-message HealthCheckResult{
+message HealthCheckResult {
   repeated HealthAlert alerts = 1 [(gogoproto.nullable) = false];
 }
