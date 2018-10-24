@@ -57,7 +57,7 @@ type tableInfo struct {
 	desc             *TableDescriptor
 	index            *IndexDescriptor
 	isSecondaryIndex bool
-	indexColumnDirs  []encoding.Direction
+	indexColumnDirs  []IndexDescriptor_Direction
 	// equivSignature is an equivalence class for each unique table-index
 	// pair. It allows us to check if an index key belongs to a given
 	// table-index.
