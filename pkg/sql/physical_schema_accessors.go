@@ -141,7 +141,13 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 				// We'll keep that despite the ADD state.
 				return desc, dbDesc, nil
 			}
+
 			// Bad state: the descriptor is essentially invisible.
+			desc = nil
+		} else if !nameMatchesTable(desc, dbDesc.ID, name.Table()) {
+			// Immediately after a RENAME an old name still points to the
+			// descriptor during the drain phase for the name. Do not
+			// return a descriptor during draining.
 			desc = nil
 		}
 	}
