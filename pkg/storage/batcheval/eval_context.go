@@ -19,8 +19,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	opentracing "github.com/opentracing/opentracing-go"
 
-	"github.com/opentracing/opentracing-go"
 	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -76,6 +76,11 @@ type EvalContext interface {
 	// visible to the batch. Otherwise, it may return inconsistent
 	// results due to concurrent writes.
 	GetMVCCStats() enginepb.MVCCStats
+
+	// GetSplitQPS returns the queries/s request rate for this range.
+	// NOTE: This should not be used when the load based splitting cluster
+	// setting is disabled.
+	GetSplitQPS() float64
 
 	GetGCThreshold() hlc.Timestamp
 	GetTxnSpanGCThreshold() hlc.Timestamp

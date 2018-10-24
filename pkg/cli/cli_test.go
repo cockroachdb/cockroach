@@ -513,7 +513,7 @@ func Example_zone() {
 	// system
 	// system.jobs
 	// zone set system --file=./testdata/zone_attrs.yaml
-	// range_min_bytes: 1048576
+	// range_min_bytes: 16777216
 	// range_max_bytes: 67108864
 	// gc:
 	//   ttlseconds: 90000
@@ -530,7 +530,7 @@ func Example_zone() {
 	// system.jobs
 	// zone get .liveness
 	// .liveness
-	// range_min_bytes: 1048576
+	// range_min_bytes: 16777216
 	// range_max_bytes: 67108864
 	// gc:
 	//   ttlseconds: 600
@@ -539,7 +539,7 @@ func Example_zone() {
 	// lease_preferences: []
 	// zone get .meta
 	// .meta
-	// range_min_bytes: 1048576
+	// range_min_bytes: 16777216
 	// range_max_bytes: 67108864
 	// gc:
 	//   ttlseconds: 3600
@@ -550,7 +550,7 @@ func Example_zone() {
 	// pq: relation "system.public.nonexistent" does not exist
 	// zone get system.descriptor
 	// system
-	// range_min_bytes: 1048576
+	// range_min_bytes: 16777216
 	// range_max_bytes: 67108864
 	// gc:
 	//   ttlseconds: 90000
@@ -564,7 +564,7 @@ func Example_zone() {
 	// zone set system.nonexistent --file=./testdata/zone_attrs.yaml
 	// pq: relation "system.public.nonexistent" does not exist
 	// zone set system --file=./testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 1048576
+	// range_min_bytes: 16777216
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 90000
@@ -574,7 +574,7 @@ func Example_zone() {
 	//
 	// zone get system
 	// system
-	// range_min_bytes: 1048576
+	// range_min_bytes: 16777216
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 90000
@@ -591,7 +591,7 @@ func Example_zone() {
 	// zone rm .default
 	// pq: cannot remove default zone
 	// zone set .liveness --file=./testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 1048576
+	// range_min_bytes: 16777216
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 600
@@ -600,7 +600,7 @@ func Example_zone() {
 	// lease_preferences: []
 	//
 	// zone set .meta --file=./testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 1048576
+	// range_min_bytes: 16777216
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 3600
@@ -609,7 +609,7 @@ func Example_zone() {
 	// lease_preferences: []
 	//
 	// zone set .system --file=./testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 1048576
+	// range_min_bytes: 16777216
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 90000
@@ -618,7 +618,7 @@ func Example_zone() {
 	// lease_preferences: []
 	//
 	// zone set .timeseries --file=./testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 1048576
+	// range_min_bytes: 16777216
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 90000
@@ -628,7 +628,7 @@ func Example_zone() {
 	//
 	// zone get .system
 	// .system
-	// range_min_bytes: 1048576
+	// range_min_bytes: 16777216
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 90000
@@ -643,7 +643,7 @@ func Example_zone() {
 	// .timeseries
 	// system.jobs
 	// zone set .default --file=./testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 1048576
+	// range_min_bytes: 16777216
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 90000
@@ -653,7 +653,7 @@ func Example_zone() {
 	//
 	// zone get system
 	// .default
-	// range_min_bytes: 1048576
+	// range_min_bytes: 16777216
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 90000
@@ -661,7 +661,7 @@ func Example_zone() {
 	// constraints: []
 	// lease_preferences: []
 	// zone set .default --disable-replication
-	// range_min_bytes: 1048576
+	// range_min_bytes: 16777216
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 90000
@@ -671,7 +671,7 @@ func Example_zone() {
 	//
 	// zone get system
 	// .default
-	// range_min_bytes: 1048576
+	// range_min_bytes: 16777216
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 90000
@@ -696,7 +696,7 @@ func Example_zone() {
 	// zone set system.jobs@primary --file=./testdata/zone_attrs.yaml
 	// pq: setting zone configs on indexes or partitions requires a CCL binary
 	// zone set system --file=./testdata/zone_attrs_advanced.yaml
-	// range_min_bytes: 1048576
+	// range_min_bytes: 16777216
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 90000
@@ -705,7 +705,7 @@ func Example_zone() {
 	// lease_preferences: [[+region=us-east-1], [+zone=us-east-1a]]
 	//
 	// zone set system --file=./testdata/zone_attrs_experimental.yaml
-	// range_min_bytes: 1048576
+	// range_min_bytes: 16777216
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 90000
@@ -716,7 +716,7 @@ func Example_zone() {
 	// sql -e create database t; create table t.f (x int, y int)
 	// CREATE TABLE
 	// zone set t --file=./testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 1048576
+	// range_min_bytes: 16777216
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 90000
@@ -730,7 +730,7 @@ func Example_zone() {
 	// system.jobs
 	// t
 	// zone set t.f --file=./testdata/zone_range_max_bytes.yaml
-	// range_min_bytes: 1048576
+	// range_min_bytes: 16777216
 	// range_max_bytes: 134217728
 	// gc:
 	//   ttlseconds: 90000

@@ -30,7 +30,7 @@ import (
 
 	"github.com/google/btree"
 	"github.com/kr/pretty"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/split"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -491,6 +492,15 @@ type Replica struct {
 		// transfers due to a lease change will be attempted even if the target does
 		// not have all the log entries.
 		draining bool
+	}
+
+	// Split keeps information for load-based splitting.
+	splitMu struct {
+		syncutil.Mutex
+		lastReqTime time.Time // most recent time recorded by requests.
+		count       int64     // reqs since last nanos
+		qps         float64   // last reqs/s rate
+		splitFinder *split.Finder
 	}
 
 	unreachablesMu struct {
@@ -1788,6 +1798,29 @@ func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 	return *r.mu.state.Stats
 }
 
+// GetSplitQPS returns the Replica's queries/s request rate.
+// The value returned represents the QPS recorded at the time of the
+// last request which can be found using GetLastRequestTime().
+// NOTE: This should only be used for load based splitting, only
+// works when the load based splitting cluster setting is enabled.
+//
+// Use QueriesPerSecond() for current QPS stats for all other purposes.
+func (r *Replica) GetSplitQPS() float64 {
+	r.splitMu.Lock()
+	defer r.splitMu.Unlock()
+	return r.splitMu.qps
+}
+
+// GetLastRequestTime returns the most recent time in nanos
+// when the last rate was recorded.
+// NOTE: This should only be used for load based splitting, only
+// works when the load based splitting cluster setting is enabled.
+func (r *Replica) GetLastRequestTime() time.Time {
+	r.splitMu.Lock()
+	defer r.splitMu.Unlock()
+	return r.splitMu.lastReqTime
+}
+
 // ContainsKey returns whether this range contains the specified key.
 //
 // TODO(bdarnell): This is not the same as RangeDescriptor.ContainsKey.
@@ -2486,6 +2519,23 @@ func (r *Replica) beginCmds(
 			ba.Timestamp = txn.OrigTimestamp
 		} else {
 			ba.Timestamp = r.store.Clock().Now()
+		}
+	}
+
+	// Handle load-based splitting.
+	if r.SplitByLoadEnabled() {
+		r.splitMu.Lock()
+		r.splitMu.count += int64(len(ba.Requests))
+		record, split := r.needsSplitByLoadLocked()
+		if record {
+			if boundarySpan := spans.BoundarySpan(spanset.SpanGlobal); boundarySpan != nil {
+				r.splitMu.splitFinder.Record(*boundarySpan, rand.Intn)
+			}
+		}
+		r.splitMu.Unlock()
+		// Add to the split queue after releasing splitMu.
+		if split {
+			r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
 		}
 	}
 
@@ -6759,6 +6809,69 @@ func (r *Replica) loadSystemConfig(ctx context.Context) (*config.SystemConfigEnt
 	sysCfg := &config.SystemConfigEntries{}
 	sysCfg.Values = kvs
 	return sysCfg, nil
+}
+
+// SplitByLoadEnabled wraps "kv.range_split.by_load_enabled".
+var SplitByLoadEnabled = settings.RegisterBoolSetting(
+	"kv.range_split.by_load_enabled",
+	"allow automatic splits of ranges based on where load is concentrated.",
+	false,
+)
+
+// SplitByLoadQPSThreshold wraps "kv.range_split.load_qps_threshold".
+var SplitByLoadQPSThreshold = settings.RegisterIntSetting(
+	"kv.range_split.load_qps_threshold",
+	"the QPS over which, the range becomes a candidate for load based splitting.",
+	200, // 200 req/s
+)
+
+// SplitByLoadQPSThreshold returns the QPS request rate for a given replica.
+func (r *Replica) SplitByLoadQPSThreshold() float64 {
+	return float64(SplitByLoadQPSThreshold.Get(&r.store.cfg.Settings.SV))
+}
+
+// SplitByLoadEnabled returns whether load based splitting is enabled.
+func (r *Replica) SplitByLoadEnabled() bool {
+	return SplitByLoadEnabled.Get(&r.store.cfg.Settings.SV) &&
+		r.store.ClusterSettings().Version.IsMinSupported(cluster.VersionLoadSplits)
+}
+
+// needsSplitByLoadLocked returns two bools indicating first, whether
+// the range is over the threshold for splitting by load and second,
+// whether the range is ready to be added to the split queue.
+func (r *Replica) needsSplitByLoadLocked() (bool, bool) {
+	// First compute requests per second since the last check.
+	nowTime := r.store.Clock().PhysicalTime()
+	duration := nowTime.Sub(r.splitMu.lastReqTime)
+	if duration < time.Second {
+		return r.splitMu.splitFinder != nil, false
+	}
+
+	// Update the QPS and reset the time and request counter.
+	r.splitMu.qps = (float64(r.splitMu.count) / float64(duration)) * 1e9
+	r.splitMu.lastReqTime = nowTime
+	r.splitMu.count = 0
+
+	// If the QPS for the range exceeds the threshold, start actively
+	// tracking potential for splitting this range based on load.
+	// This tracking will begin by initiating a splitFinder so it can
+	// begin to Record requests so it can find a split point. If a
+	// splitFinder already exists, we check if a split point is ready
+	// to be used.
+	if r.splitMu.qps >= r.SplitByLoadQPSThreshold() {
+		if r.splitMu.splitFinder != nil {
+			if r.splitMu.splitFinder.Ready(nowTime) {
+				// We're ready to add this range to the split queue.
+				return true, true
+			}
+		} else {
+			r.splitMu.splitFinder = split.New(nowTime)
+		}
+		return true, false
+	}
+
+	r.splitMu.splitFinder = nil
+	return false, false
 }
 
 // needsSplitBySize returns true if the size of the range requires it

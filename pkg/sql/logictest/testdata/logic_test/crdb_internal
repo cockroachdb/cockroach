@@ -228,13 +228,13 @@ SELECT zone_id, cli_specifier FROM crdb_internal.zones ORDER BY 1
 query T
 SELECT quote_literal(config_yaml) FROM crdb_internal.zones WHERE zone_id = 0
 ----
-e'range_min_bytes: 1048576\nrange_max_bytes: 67108864\ngc:\n  ttlseconds: 90000\nnum_replicas: 3\nconstraints: []\nlease_preferences: []\n'
+e'range_min_bytes: 16777216\nrange_max_bytes: 67108864\ngc:\n  ttlseconds: 90000\nnum_replicas: 3\nconstraints: []\nlease_preferences: []\n'
 
 query T
 SELECT config_sql FROM crdb_internal.zones WHERE zone_id = 0
 ----
 ALTER RANGE default CONFIGURE ZONE USING
-  range_min_bytes = 1048576,
+  range_min_bytes = 16777216,
   range_max_bytes = 67108864,
   gc.ttlseconds = 90000,
   num_replicas = 3,
@@ -268,7 +268,7 @@ select crdb_internal.set_vmodule('')
 query T
 select crdb_internal.node_executable_version()
 ----
-2.1-1
+2.1-2
 
 query ITTT colnames
 select node_id, component, field, regexp_replace(regexp_replace(value, '^\d+$', '<port>'), e':\\d+', ':<port>') as value from crdb_internal.node_runtime_info
@@ -365,4 +365,4 @@ select * from crdb_internal.gossip_alerts
 query T
 select crdb_internal.node_executable_version()
 ----
-2.1-1
+2.1-2

@@ -263,7 +263,7 @@ const minRangeMaxBytes = 64 << 10 // 64 KB
 // config has been specified.
 var defaultZoneConfig = &ZoneConfig{
 	NumReplicas:   proto.Int32(3),
-	RangeMinBytes: proto.Int64(1 << 20),  // 1 MB
+	RangeMinBytes: proto.Int64(16 << 20), // 16 MB
 	RangeMaxBytes: proto.Int64(64 << 20), // 64 MB
 	GC: &GCPolicy{
 		// Use 25 hours instead of the previous 24 to make users successful by
@@ -282,7 +282,7 @@ var defaultZoneConfig = &ZoneConfig{
 // config has been specified for system ranges.
 var defaultSystemZoneConfig = &ZoneConfig{
 	NumReplicas:   proto.Int32(5),
-	RangeMinBytes: proto.Int64(1 << 20),  // 1 MB
+	RangeMinBytes: proto.Int64(16 << 20), // 16 MB
 	RangeMaxBytes: proto.Int64(64 << 20), // 64 MB
 	GC: &GCPolicy{
 		// Use 25 hours instead of the previous 24 to make users successful by
