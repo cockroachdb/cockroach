@@ -493,57 +493,39 @@ func (z *zigzagJoiner) extractEqDatums(row sqlbase.EncDatumRow, side int) sqlbas
 	return eqCols
 }
 
-// explicitTypes partitions the column types based on whether the column is
-// an explicit or implicit part of the index.
-func (z *zigzagJoiner) explicitTypes() []sqlbase.ColumnType {
+// indexTypes returns the column types for the current index's key columns.
+func (z *zigzagJoiner) indexTypes() []sqlbase.ColumnType {
 	curInfo := z.infos[z.side]
-	indexDescriptor := curInfo.index
-	allTypes := curInfo.table.ColumnTypes()
-	explicitTypes := make([]sqlbase.ColumnType, len(indexDescriptor.ColumnIDs))
-	for i, id := range indexDescriptor.ColumnIDs {
-		explicitTypes[i] = allTypes[id-1]
+	columnIDs := curInfo.index.ColumnIDs
+	if !curInfo.index.Unique {
+		columnIDs = append(columnIDs, curInfo.index.ExtraColumnIDs...)
 	}
-	return explicitTypes
-}
-
-// separateNeededDatums partitions the column datums based on whether the column is
-// an explicit or implicit part of the index.
-func (z *zigzagJoiner) separateNeededDatums() (sqlbase.EncDatumRow, sqlbase.EncDatumRow) {
-	info := z.infos[z.side]
-	fixedDatums := info.fixedValues
-	neededDatums := fixedDatums
-	if z.baseRow != nil {
-		eqDatums := z.extractEqDatums(z.baseRow, z.prevSide())
-		neededDatums = append(neededDatums, eqDatums...)
+	indexTypes := make([]sqlbase.ColumnType, len(columnIDs))
+	columnTypes := curInfo.table.ColumnTypes()
+	colIdxMap := curInfo.table.ColumnIdxMap()
+	for i, columnID := range columnIDs {
+		indexTypes[i] = columnTypes[colIdxMap[columnID]]
 	}
-	indexDescriptor := info.index
-	explicitDatums := make(sqlbase.EncDatumRow, 0, len(indexDescriptor.ColumnIDs))
-	implicitDatums := make(sqlbase.EncDatumRow, 0, len(indexDescriptor.ExtraColumnIDs))
-	for i := range neededDatums {
-		if i < cap(explicitDatums) {
-			explicitDatums = append(explicitDatums, neededDatums[i])
-		} else {
-			implicitDatums = append(implicitDatums, neededDatums[i])
-		}
-	}
-	return explicitDatums, implicitDatums
+	return columnTypes
 }
 
 // Generates a Key, corresponding to the current `z.baseRow` in
 // the index on the current side.
 func (z *zigzagJoiner) produceKeyFromBaseRow() (roachpb.Key, error) {
-	explicitNeededDatums, implicitNeededDatums := z.separateNeededDatums()
-	explicitTypes := z.explicitTypes()
-	explicitTypes = explicitTypes[:len(explicitNeededDatums)]
+	neededDatums := z.infos[z.side].fixedValues
+	if z.baseRow != nil {
+		eqDatums := z.extractEqDatums(z.baseRow, z.prevSide())
+		neededDatums = append(neededDatums, eqDatums...)
+	}
+	columnTypes := z.indexTypes()[:len(neededDatums)]
 
 	info := z.infos[z.side]
 
 	// Construct correct row by concatenating right fixed datums with
 	// primary key extracted from `row`.
-	key, err := sqlbase.MakeFullKeyFromEncDatums(
-		explicitTypes,
-		explicitNeededDatums,
-		implicitNeededDatums,
+	key, err := sqlbase.MakeKeyFromEncDatums(
+		columnTypes,
+		neededDatums,
 		info.table,
 		info.index,
 		info.prefix,

@@ -155,10 +155,15 @@ func newJoinReader(
 	}
 	jr.colIdxMap = jr.desc.ColumnIdxMap()
 
-	jr.indexTypes = make([]sqlbase.ColumnType, len(jr.index.ColumnIDs))
-	indexCols := make([]uint32, len(jr.index.ColumnIDs))
+	columnIDs := jr.index.ColumnIDs
+	if !jr.index.Unique {
+		// Primary keys are implicitly included in the index keys.
+		columnIDs = append(columnIDs, jr.index.ExtraColumnIDs...)
+	}
+	jr.indexTypes = make([]sqlbase.ColumnType, len(columnIDs))
+	indexCols := make([]uint32, len(columnIDs))
 	columnTypes := jr.desc.ColumnTypes()
-	for i, columnID := range jr.index.ColumnIDs {
+	for i, columnID := range columnIDs {
 		indexCols[i] = uint32(columnID)
 		jr.indexTypes[i] = columnTypes[jr.colIdxMap[columnID]]
 	}
@@ -311,7 +316,7 @@ func (jr *joinReader) neededRightCols() util.FastIntSet {
 // If lookup columns are specified will use those to collect the relevant
 // columns. Otherwise the first rows are assumed to correspond with the index.
 func (jr *joinReader) generateKey(row sqlbase.EncDatumRow) (roachpb.Key, error) {
-	numKeyCols := len(jr.index.ColumnIDs)
+	numKeyCols := len(jr.indexTypes)
 	numLookupCols := len(jr.lookupCols)
 
 	if numLookupCols > numKeyCols {

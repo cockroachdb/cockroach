@@ -146,15 +146,13 @@ func (d directions) get(i int) (encoding.Direction, error) {
 
 // MakeKeyFromEncDatums creates a key by concatenating keyPrefix with the
 // encodings of the given EncDatum values. The values correspond to
-// index.ColumnIDs.
+// index.ColumnIDs. If the index is not unique, index.ExtraColumnIDs are also
+// included.
 //
 // If a table or index is interleaved, `encoding.interleavedSentinel` is used
 // in place of the family id (a varint) to signal the next component of the
 // key.  An example of one level of interleaving (a parent):
 // /<parent_table_id>/<parent_index_id>/<field_1>/<field_2>/NullDesc/<table_id>/<index_id>/<field_3>/<family>
-//
-// Note that ExtraColumnIDs are not encoded, so the result isn't always a
-// full index key.
 func MakeKeyFromEncDatums(
 	types []ColumnType,
 	values EncDatumRow,
@@ -164,6 +162,11 @@ func MakeKeyFromEncDatums(
 	alloc *DatumAlloc,
 ) (roachpb.Key, error) {
 	dirs := index.ColumnDirections
+	if !index.Unique {
+		// Extra columns are all ascending (the zero value).
+		extraDirs := make([]IndexDescriptor_Direction, len(index.ExtraColumnIDs))
+		dirs = append(dirs, extraDirs...)
+	}
 	// Values may be a prefix of the index columns.
 	if len(values) > len(dirs) {
 		return nil, errors.Errorf("%d values, %d directions", len(values), len(dirs))
@@ -243,56 +246,6 @@ func appendEncDatumsToKey(
 		if err != nil {
 			return nil, err
 		}
-	}
-	return key, nil
-}
-
-// MakeFullKeyFromEncDatums creates a key by concatenating keyPrefix
-// with the encodings of the explicit EncDatum values followed by the
-// encodings of the implicit datum values. These values correspond to
-// index.ColumnIDs and index.ExtraColumnIDs respectively.
-//
-// Note: MakeKeyFromEncDatums does not allow you to create a key
-// specifying the ExtraColumnIDs, so the result may not be a full
-// key. This function allows you to create a key by specifying the
-// values for the ExtraColumnID values as the implicitValues.
-func MakeFullKeyFromEncDatums(
-	explicitTypes []ColumnType,
-	explicitValues EncDatumRow,
-	implicitValues EncDatumRow,
-	tableDesc *TableDescriptor,
-	index *IndexDescriptor,
-	keyPrefix []byte,
-	alloc *DatumAlloc,
-) (roachpb.Key, error) {
-	prefix, err := MakeKeyFromEncDatums(explicitTypes, explicitValues, tableDesc, index, keyPrefix, alloc)
-	if err != nil {
-		return nil, err
-	}
-
-	primaryIndex := tableDesc.PrimaryIndex
-	extraColumns := index.ExtraColumnIDs
-	// PrimaryImplicitIdxs maps the position of the implicit column in the key
-	// to the appropriate column in the primary index.
-	primaryImplicitIdxs := make([]int, len(extraColumns))
-	for i, id := range extraColumns {
-		for j, primaryID := range primaryIndex.ColumnIDs {
-			if id == primaryID {
-				primaryImplicitIdxs[i] = j
-			}
-		}
-	}
-	implicitDirs := make([]IndexDescriptor_Direction, len(primaryImplicitIdxs))
-	for i, idx := range primaryImplicitIdxs {
-		implicitDirs[i] = primaryIndex.ColumnDirections[idx]
-	}
-	implicitTypes := make([]ColumnType, len(extraColumns))
-	for i, id := range extraColumns {
-		implicitTypes[i] = tableDesc.ColumnTypes()[id]
-	}
-	key, err := appendEncDatumsToKey(prefix, implicitTypes, implicitValues, implicitDirs, alloc)
-	if err != nil {
-		return nil, err
 	}
 	return key, nil
 }
