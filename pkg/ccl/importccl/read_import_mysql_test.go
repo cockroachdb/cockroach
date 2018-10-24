@@ -74,10 +74,10 @@ func descForTable(
 	if err != nil {
 		t.Fatalf("could not interpret %q: %v", create, err)
 	}
-	if err := fixDescriptorFKState(table); err != nil {
+	if err := fixDescriptorFKState(table.TableDesc()); err != nil {
 		t.Fatal(err)
 	}
-	return table
+	return table.TableDesc()
 }
 
 func TestMysqldumpDataReader(t *testing.T) {
@@ -173,7 +173,7 @@ func TestMysqldumpSchemaReader(t *testing.T) {
 	referencedSimple := descForTable(t, readFile(t, `simple.cockroach-schema.sql`), expectedParent, 52, NoFKs)
 	fks := fkHandler{
 		allowed:  true,
-		resolver: fkResolver(map[string]*sqlbase.TableDescriptor{referencedSimple.Name: referencedSimple}),
+		resolver: fkResolver(map[string]*sqlbase.MutableTableDescriptor{referencedSimple.Name: sql.NewMutableTableDescriptor(*referencedSimple)}),
 	}
 
 	t.Run("simple", func(t *testing.T) {

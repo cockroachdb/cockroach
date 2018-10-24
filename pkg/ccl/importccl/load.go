@@ -157,7 +157,7 @@ func Load(
 			// rejected during restore.
 			st := cluster.MakeTestingClusterSettings()
 
-			affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+			affected := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
 			// A nil txn is safe because it is only used by sql.MakeTableDesc, which
 			// only uses txn for resolving FKs and interleaved tables, neither of which
 			// are present here. Ditto for the schema accessor.
@@ -170,7 +170,7 @@ func Load(
 				return backupccl.BackupDescriptor{}, errors.Wrap(err, "make table desc")
 			}
 
-			tableDesc = &desc
+			tableDesc = desc.TableDesc()
 			tableDescs[tableName] = tableDesc
 			backup.Descriptors = append(backup.Descriptors, sqlbase.Descriptor{
 				Union: &sqlbase.Descriptor_Table{Table: tableDesc},

@@ -245,9 +245,9 @@ func readPostgresCreateTable(
 					return nil, err
 				}
 				fks.resolver[desc.Name] = &desc
-				ret = append(ret, &desc)
+				ret = append(ret, desc.TableDesc())
 			}
-			backrefs := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+			backrefs := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
 			for _, create := range createTbl {
 				if create == nil {
 					continue
@@ -260,7 +260,7 @@ func readPostgresCreateTable(
 				}
 				fks.resolver[desc.Name] = desc
 				backrefs[desc.ID] = desc
-				ret = append(ret, desc)
+				ret = append(ret, desc.TableDesc())
 			}
 			for name, constraints := range tableFKs {
 				desc := fks.resolver[name]
@@ -272,7 +272,7 @@ func readPostgresCreateTable(
 						return nil, err
 					}
 				}
-				if err := fixDescriptorFKState(desc); err != nil {
+				if err := fixDescriptorFKState(desc.TableDesc()); err != nil {
 					return nil, err
 				}
 			}

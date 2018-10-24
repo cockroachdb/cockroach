@@ -90,14 +90,15 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 	}
 	lookupFlags.required = false
 	for i := range tbNames {
-		tbDesc, _, err := phyAccessor.GetObjectDesc(&tbNames[i],
+		objDesc, _, err := phyAccessor.GetObjectDesc(&tbNames[i],
 			ObjectLookupFlags{CommonLookupFlags: lookupFlags})
 		if err != nil {
 			return err
 		}
-		if tbDesc == nil {
+		if objDesc == nil {
 			continue
 		}
+		tbDesc := objDesc.TableDesc()
 		if len(tbDesc.DependedOnBy) > 0 {
 			viewDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, tbDesc.DependedOnBy[0].ID)
 			if err != nil {

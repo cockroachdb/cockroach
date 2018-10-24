@@ -108,7 +108,7 @@ func (t *truncateNode) startExec(params runParams) error {
 			if _, ok := toTruncate[ref.Table]; ok {
 				return nil
 			}
-			other, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.Table)
+			other, err := p.Tables().getMutableTableVersionByID(ctx, ref.Table, p.txn)
 			if err != nil {
 				return err
 			}
@@ -119,7 +119,7 @@ func (t *truncateNode) startExec(params runParams) error {
 			if err := p.CheckPrivilege(ctx, other, privilege.DROP); err != nil {
 				return err
 			}
-			otherName, err := p.getQualifiedTableName(ctx, other)
+			otherName, err := p.getQualifiedTableName(ctx, other.TableDesc())
 			if err != nil {
 				return err
 			}
@@ -186,12 +186,12 @@ func (p *planner) truncateTable(
 ) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.
-	tableDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, id)
+	tableDesc, err := p.Tables().getMutableTableVersionByID(ctx, id, p.txn)
 	if err != nil {
 		return err
 	}
 	tableDesc.DropJobID = dropJobID
-	newTableDesc := *tableDesc
+	newTableDesc := NewMutableTableDescriptor(tableDesc.TableDescriptor)
 	newTableDesc.ReplacementOf = sqlbase.TableDescriptor_Replacement{
 		ID: id, Time: p.txn.CommitTimestamp(),
 	}
@@ -210,7 +210,7 @@ func (p *planner) truncateTable(
 	// structured.proto
 	//
 	// TODO(vivek): Fix properly along with #12123.
-	zoneKey, nameKey, _ := GetKeysForTableDescriptor(tableDesc)
+	zoneKey, nameKey, _ := GetKeysForTableDescriptor(tableDesc.TableDesc())
 	b := &client.Batch{}
 	// Use CPut because we want to remove a specific name -> id map.
 	if traceKV {
@@ -250,7 +250,7 @@ func (p *planner) truncateTable(
 
 	// Reassign all self references.
 	if changed, err := reassignReferencedTables(
-		[]*sqlbase.MutableTableDescriptor{&newTableDesc}, tableDesc.ID, newID,
+		[]*sqlbase.MutableTableDescriptor{newTableDesc}, tableDesc.ID, newID,
 	); err != nil {
 		return err
 	} else if changed {
@@ -270,7 +270,7 @@ func (p *planner) truncateTable(
 	tKey := tableKey{parentID: newTableDesc.ParentID, name: newTableDesc.Name}
 	key := tKey.Key()
 	if err := p.createDescriptorWithID(
-		ctx, key, newID, &newTableDesc, p.ExtendedEvalContext().Settings); err != nil {
+		ctx, key, newID, newTableDesc, p.ExtendedEvalContext().Settings); err != nil {
 		return err
 	}
 
@@ -309,7 +309,7 @@ func (p *planner) findAllReferences(
 		if id == table.ID {
 			continue
 		}
-		t, err := sqlbase.GetTableDescFromID(ctx, p.txn, id)
+		t, err := p.Tables().getMutableTableVersionByID(ctx, id, p.txn)
 		if err != nil {
 			return nil, err
 		}

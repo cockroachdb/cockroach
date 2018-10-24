@@ -177,11 +177,12 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 
 	for i := range tbNames {
 		tableName := &tbNames[i]
-		tableDesc, _, err := p.LogicalSchemaAccessor().GetObjectDesc(
+		objDesc, _, err := p.LogicalSchemaAccessor().GetObjectDesc(
 			tableName, p.ObjectLookupFlags(ctx, true /*required*/))
 		if err != nil {
 			return err
 		}
+		tableDesc := objDesc.TableDesc()
 		// Skip non-tables and don't throw an error if we encounter one.
 		if !tableDesc.IsTable() {
 			continue

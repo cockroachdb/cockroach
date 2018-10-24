@@ -249,9 +249,13 @@ func zoneSpecifierNotFoundError(zs tree.ZoneSpecifier) error {
 // Returns res = nil if the zone specifier is not for a table or index.
 func (p *planner) resolveTableForZone(
 	ctx context.Context, zs *tree.ZoneSpecifier,
-) (res *MutableTableDescriptor, err error) {
+) (res *TableDescriptor, err error) {
 	if zs.TargetsIndex() {
-		_, res, err = expandMutableIndexName(ctx, p, &zs.TableOrIndex, true /* requireTable */)
+		var mutRes *MutableTableDescriptor
+		_, mutRes, err = expandMutableIndexName(ctx, p, &zs.TableOrIndex, true /* requireTable */)
+		if mutRes != nil {
+			res = mutRes.TableDesc()
+		}
 	} else if zs.TargetsTable() {
 		p.runWithOptions(resolveFlags{skipCache: true}, func() {
 			res, err = ResolveExistingObject(

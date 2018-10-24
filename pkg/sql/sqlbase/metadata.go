@@ -54,6 +54,8 @@ type DescriptorProto interface {
 func WrapDescriptor(descriptor DescriptorProto) *Descriptor {
 	desc := &Descriptor{}
 	switch t := descriptor.(type) {
+	case *MutableTableDescriptor:
+		desc.Union = &Descriptor_Table{Table: &t.TableDescriptor}
 	case *TableDescriptor:
 		desc.Union = &Descriptor_Table{Table: t}
 	case *DatabaseDescriptor:

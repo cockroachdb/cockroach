@@ -136,7 +136,7 @@ type fkHandler struct {
 // NoFKs is used by formats that do not support FKs.
 var NoFKs = fkHandler{resolver: make(fkResolver)}
 
-// MakeSimpleTableDescriptor creates a TableDescriptor from a CreateTable parse
+// MakeSimpleTableDescriptor creates a MutableTableDescriptor from a CreateTable parse
 // node without the full machinery. Many parts of the syntax are unsupported
 // (see the implementation and TestMakeSimpleTableDescriptorErrors for details),
 // but this is enough for our csv IMPORT and for some unit tests.
@@ -152,7 +152,7 @@ func MakeSimpleTableDescriptor(
 	tableID sqlbase.ID,
 	fks fkHandler,
 	walltime int64,
-) (*sqlbase.TableDescriptor, error) {
+) (*sqlbase.MutableTableDescriptor, error) {
 	create.HoistConstraints()
 	if create.IfNotExists {
 		return nil, pgerror.Unimplemented("import.if-no-exists", "unsupported IF NOT EXISTS")
@@ -204,7 +204,7 @@ func MakeSimpleTableDescriptor(
 		Context:  ctx,
 		Sequence: &importSequenceOperators{},
 	}
-	affected := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+	affected := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
 
 	tableDesc, err := sql.MakeTableDesc(
 		ctx,
@@ -223,7 +223,7 @@ func MakeSimpleTableDescriptor(
 	if err != nil {
 		return nil, err
 	}
-	if err := fixDescriptorFKState(&tableDesc); err != nil {
+	if err := fixDescriptorFKState(tableDesc.TableDesc()); err != nil {
 		return nil, err
 	}
 
@@ -293,7 +293,7 @@ func (so *importSequenceOperators) SetSequenceValue(
 	return errSequenceOperators
 }
 
-type fkResolver map[string]*sqlbase.TableDescriptor
+type fkResolver map[string]*sqlbase.MutableTableDescriptor
 
 var _ sql.SchemaResolver = fkResolver{}
 
@@ -772,7 +772,7 @@ func importPlanHook(
 			if err != nil {
 				return err
 			}
-			tableDescs = []*sqlbase.TableDescriptor{tbl}
+			tableDescs = []*sqlbase.TableDescriptor{tbl.TableDesc()}
 			descStr, err := importJobDescription(importStmt, create.Defs, files, opts)
 			if err != nil {
 				return err

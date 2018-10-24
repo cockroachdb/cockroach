@@ -111,7 +111,7 @@ func (p *planner) changePrivileges(
 			descKey := sqlbase.MakeDescMetadataKey(descriptor.GetID())
 			b.Put(descKey, sqlbase.WrapDescriptor(descriptor))
 
-		case *sqlbase.TableDescriptor:
+		case *sqlbase.MutableTableDescriptor:
 			if !d.Dropped() {
 				if err := p.writeSchemaChangeToBatch(
 					ctx, d, sqlbase.InvalidMutationID, b); err != nil {
