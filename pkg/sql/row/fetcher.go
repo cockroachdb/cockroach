@@ -58,7 +58,7 @@ type tableInfo struct {
 	desc             *sqlbase.TableDescriptor
 	index            *sqlbase.IndexDescriptor
 	isSecondaryIndex bool
-	indexColumnDirs  []encoding.Direction
+	indexColumnDirs  []sqlbase.IndexDescriptor_Direction
 	// equivSignature is an equivalence class for each unique table-index
 	// pair. It allows us to check if an index key belongs to a given
 	// table-index.

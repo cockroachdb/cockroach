@@ -327,10 +327,12 @@ func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
 // zigzagJoinerInfo contains all the information that needs to be
 // stored for each side of the join.
 type zigzagJoinerInfo struct {
-	fetcher row.Fetcher
-	alloc   *sqlbase.DatumAlloc
-	table   *sqlbase.TableDescriptor
-	index   *sqlbase.IndexDescriptor
+	fetcher    row.Fetcher
+	alloc      *sqlbase.DatumAlloc
+	table      *sqlbase.TableDescriptor
+	index      *sqlbase.IndexDescriptor
+	indexTypes []sqlbase.ColumnType
+	indexDirs  []sqlbase.IndexDescriptor_Direction
 
 	// Stores one batch of matches at a time. When all the rows are collected
 	// the cartesian product of the containers will be emitted.
@@ -369,6 +371,17 @@ func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int
 		info.index = &info.table.Indexes[indexID-1]
 	}
 
+	var columnIDs []sqlbase.ColumnID
+	columnIDs, info.indexDirs = info.index.FullColumnIDs()
+	info.indexTypes = make([]sqlbase.ColumnType, len(columnIDs))
+	indexCols := make([]uint32, len(columnIDs))
+	columnTypes := info.table.ColumnTypes()
+	colIdxMap := info.table.ColumnIdxMap()
+	for i, columnID := range columnIDs {
+		indexCols[i] = uint32(columnID)
+		info.indexTypes[i] = columnTypes[colIdxMap[columnID]]
+	}
+
 	// Add the outputted columns.
 	neededCols := util.MakeFastIntSet()
 	outCols := z.out.neededColumns()
@@ -378,7 +391,6 @@ func (z *zigzagJoiner) setupInfo(spec *ZigzagJoinerSpec, side int, colOffset int
 	}
 
 	// Add the fixed columns.
-	indexCols := append(info.index.ColumnIDs, info.index.ExtraColumnIDs...)
 	for i := 0; i < len(info.fixedValues); i++ {
 		neededCols.Add(int(indexCols[i]) - 1)
 	}
@@ -493,60 +505,25 @@ func (z *zigzagJoiner) extractEqDatums(row sqlbase.EncDatumRow, side int) sqlbas
 	return eqCols
 }
 
-// explicitTypes partitions the column types based on whether the column is
-// an explicit or implicit part of the index.
-func (z *zigzagJoiner) explicitTypes() []sqlbase.ColumnType {
-	curInfo := z.infos[z.side]
-	indexDescriptor := curInfo.index
-	allTypes := curInfo.table.ColumnTypes()
-	explicitTypes := make([]sqlbase.ColumnType, len(indexDescriptor.ColumnIDs))
-	for i, id := range indexDescriptor.ColumnIDs {
-		explicitTypes[i] = allTypes[id-1]
-	}
-	return explicitTypes
-}
-
-// separateNeededDatums partitions the column datums based on whether the column is
-// an explicit or implicit part of the index.
-func (z *zigzagJoiner) separateNeededDatums() (sqlbase.EncDatumRow, sqlbase.EncDatumRow) {
+// Generates a Key, corresponding to the current `z.baseRow` in
+// the index on the current side.
+func (z *zigzagJoiner) produceKeyFromBaseRow() (roachpb.Key, error) {
 	info := z.infos[z.side]
-	fixedDatums := info.fixedValues
-	neededDatums := fixedDatums
+	neededDatums := info.fixedValues
 	if z.baseRow != nil {
 		eqDatums := z.extractEqDatums(z.baseRow, z.prevSide())
 		neededDatums = append(neededDatums, eqDatums...)
 	}
-	indexDescriptor := info.index
-	explicitDatums := make(sqlbase.EncDatumRow, 0, len(indexDescriptor.ColumnIDs))
-	implicitDatums := make(sqlbase.EncDatumRow, 0, len(indexDescriptor.ExtraColumnIDs))
-	for i := range neededDatums {
-		if i < cap(explicitDatums) {
-			explicitDatums = append(explicitDatums, neededDatums[i])
-		} else {
-			implicitDatums = append(implicitDatums, neededDatums[i])
-		}
-	}
-	return explicitDatums, implicitDatums
-}
-
-// Generates a Key, corresponding to the current `z.baseRow` in
-// the index on the current side.
-func (z *zigzagJoiner) produceKeyFromBaseRow() (roachpb.Key, error) {
-	explicitNeededDatums, implicitNeededDatums := z.separateNeededDatums()
-	explicitTypes := z.explicitTypes()
-	explicitTypes = explicitTypes[:len(explicitNeededDatums)]
-
-	info := z.infos[z.side]
 
 	// Construct correct row by concatenating right fixed datums with
 	// primary key extracted from `row`.
-	key, err := sqlbase.MakeFullKeyFromEncDatums(
-		explicitTypes,
-		explicitNeededDatums,
-		implicitNeededDatums,
+	key, err := sqlbase.MakeKeyFromEncDatums(
+		info.prefix,
+		neededDatums,
+		info.indexTypes[:len(neededDatums)],
+		info.indexDirs,
 		info.table,
 		info.index,
-		info.prefix,
 		info.alloc,
 	)
 	return key, err

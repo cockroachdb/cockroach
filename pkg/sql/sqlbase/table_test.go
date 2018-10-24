@@ -108,13 +108,7 @@ func decodeIndex(
 		return nil, err
 	}
 	values := make([]EncDatum, len(index.ColumnIDs))
-	colDirs := make([]encoding.Direction, len(index.ColumnDirections))
-	for i, dir := range index.ColumnDirections {
-		colDirs[i], err = dir.ToEncodingDirection()
-		if err != nil {
-			return nil, err
-		}
-	}
+	colDirs := index.ColumnDirections
 	_, ok, err := DecodeIndexKey(tableDesc, index, types, values, colDirs, key)
 	if err != nil {
 		return nil, err

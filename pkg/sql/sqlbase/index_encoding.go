@@ -144,26 +144,24 @@ func (d directions) get(i int) (encoding.Direction, error) {
 	return encoding.Ascending, nil
 }
 
-// MakeKeyFromEncDatums creates a key by concatenating keyPrefix with the
-// encodings of the given EncDatum values. The values correspond to
-// index.ColumnIDs.
+// MakeKeyFromEncDatums creates an index key by concatenating keyPrefix with the
+// encodings of the given EncDatum values. The values, types, and dirs
+// parameters should be specified in the same order as the index key columns and
+// may be a prefix.
 //
 // If a table or index is interleaved, `encoding.interleavedSentinel` is used
 // in place of the family id (a varint) to signal the next component of the
 // key.  An example of one level of interleaving (a parent):
 // /<parent_table_id>/<parent_index_id>/<field_1>/<field_2>/NullDesc/<table_id>/<index_id>/<field_3>/<family>
-//
-// Note that ExtraColumnIDs are not encoded, so the result isn't always a
-// full index key.
 func MakeKeyFromEncDatums(
-	types []ColumnType,
+	keyPrefix []byte,
 	values EncDatumRow,
+	types []ColumnType,
+	dirs []IndexDescriptor_Direction,
 	tableDesc *TableDescriptor,
 	index *IndexDescriptor,
-	keyPrefix []byte,
 	alloc *DatumAlloc,
 ) (roachpb.Key, error) {
-	dirs := index.ColumnDirections
 	// Values may be a prefix of the index columns.
 	if len(values) > len(dirs) {
 		return nil, errors.Errorf("%d values, %d directions", len(values), len(dirs))
@@ -243,56 +241,6 @@ func appendEncDatumsToKey(
 		if err != nil {
 			return nil, err
 		}
-	}
-	return key, nil
-}
-
-// MakeFullKeyFromEncDatums creates a key by concatenating keyPrefix
-// with the encodings of the explicit EncDatum values followed by the
-// encodings of the implicit datum values. These values correspond to
-// index.ColumnIDs and index.ExtraColumnIDs respectively.
-//
-// Note: MakeKeyFromEncDatums does not allow you to create a key
-// specifying the ExtraColumnIDs, so the result may not be a full
-// key. This function allows you to create a key by specifying the
-// values for the ExtraColumnID values as the implicitValues.
-func MakeFullKeyFromEncDatums(
-	explicitTypes []ColumnType,
-	explicitValues EncDatumRow,
-	implicitValues EncDatumRow,
-	tableDesc *TableDescriptor,
-	index *IndexDescriptor,
-	keyPrefix []byte,
-	alloc *DatumAlloc,
-) (roachpb.Key, error) {
-	prefix, err := MakeKeyFromEncDatums(explicitTypes, explicitValues, tableDesc, index, keyPrefix, alloc)
-	if err != nil {
-		return nil, err
-	}
-
-	primaryIndex := tableDesc.PrimaryIndex
-	extraColumns := index.ExtraColumnIDs
-	// PrimaryImplicitIdxs maps the position of the implicit column in the key
-	// to the appropriate column in the primary index.
-	primaryImplicitIdxs := make([]int, len(extraColumns))
-	for i, id := range extraColumns {
-		for j, primaryID := range primaryIndex.ColumnIDs {
-			if id == primaryID {
-				primaryImplicitIdxs[i] = j
-			}
-		}
-	}
-	implicitDirs := make([]IndexDescriptor_Direction, len(primaryImplicitIdxs))
-	for i, idx := range primaryImplicitIdxs {
-		implicitDirs[i] = primaryIndex.ColumnDirections[idx]
-	}
-	implicitTypes := make([]ColumnType, len(extraColumns))
-	for i, id := range extraColumns {
-		implicitTypes[i] = tableDesc.ColumnTypes()[id]
-	}
-	key, err := appendEncDatumsToKey(prefix, implicitTypes, implicitValues, implicitDirs, alloc)
-	if err != nil {
-		return nil, err
 	}
 	return key, nil
 }
@@ -389,7 +337,7 @@ func DecodeIndexKey(
 	index *IndexDescriptor,
 	types []ColumnType,
 	vals []EncDatum,
-	colDirs []encoding.Direction,
+	colDirs []IndexDescriptor_Direction,
 	key []byte,
 ) (remainingKey []byte, matches bool, _ error) {
 	key, _, _, err := DecodeTableIDIndexID(key)
@@ -407,7 +355,7 @@ func DecodeIndexKeyWithoutTableIDIndexIDPrefix(
 	index *IndexDescriptor,
 	types []ColumnType,
 	vals []EncDatum,
-	colDirs []encoding.Direction,
+	colDirs []IndexDescriptor_Direction,
 	key []byte,
 ) (remainingKey []byte, matches bool, _ error) {
 	var decodedTableID ID
@@ -471,7 +419,7 @@ func DecodeIndexKeyWithoutTableIDIndexIDPrefix(
 // values are stored in the vals. If this slice is nil, the direction
 // used will default to encoding.Ascending.
 func DecodeKeyVals(
-	types []ColumnType, vals []EncDatum, directions []encoding.Direction, key []byte,
+	types []ColumnType, vals []EncDatum, directions []IndexDescriptor_Direction, key []byte,
 ) ([]byte, error) {
 	if directions != nil && len(directions) != len(vals) {
 		return nil, errors.Errorf("encoding directions doesn't parallel vals: %d vs %d.",
@@ -479,7 +427,7 @@ func DecodeKeyVals(
 	}
 	for j := range vals {
 		enc := DatumEncoding_ASCENDING_KEY
-		if directions != nil && (directions[j] == encoding.Descending) {
+		if directions != nil && (directions[j] == IndexDescriptor_DESC) {
 			enc = DatumEncoding_DESCENDING_KEY
 		}
 		var err error
@@ -517,13 +465,7 @@ func ExtractIndexKey(
 		return nil, err
 	}
 	values := make([]EncDatum, len(index.ColumnIDs))
-	dirs := make([]encoding.Direction, len(index.ColumnIDs))
-	for i, dir := range index.ColumnDirections {
-		dirs[i], err = dir.ToEncodingDirection()
-		if err != nil {
-			return nil, err
-		}
-	}
+	dirs := index.ColumnDirections
 	if len(index.Interleave.Ancestors) > 0 {
 		// TODO(dan): In the interleaved index case, we parse the key twice; once to
 		// find the index id so we can look up the descriptor, and once to extract
@@ -549,10 +491,10 @@ func ExtractIndexKey(
 		return nil, err
 	}
 	extraValues := make([]EncDatum, len(index.ExtraColumnIDs))
-	dirs = make([]encoding.Direction, len(index.ExtraColumnIDs))
+	dirs = make([]IndexDescriptor_Direction, len(index.ExtraColumnIDs))
 	for i := range index.ExtraColumnIDs {
 		// Implicit columns are always encoded Ascending.
-		dirs[i] = encoding.Ascending
+		dirs[i] = IndexDescriptor_ASC
 	}
 	extraKey := key
 	if index.Unique {
