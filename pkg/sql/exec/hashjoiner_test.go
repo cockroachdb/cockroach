@@ -32,14 +32,13 @@ func TestHashJoinerInt64(t *testing.T) {
 		leftTuples  tuples
 		rightTuples tuples
 
-		leftEqCol  int
-		rightEqCol int
+		leftEqCols  []int
+		rightEqCols []int
 
 		leftOutCols  []int
 		rightOutCols []int
 
 		expectedTuples tuples
-		buildRightSide bool
 	}{
 		{
 			// test handling of various output column types.
@@ -60,8 +59,8 @@ func TestHashJoinerInt64(t *testing.T) {
 				{5, 5.5, int32(16)},
 			},
 
-			leftEqCol:    1,
-			rightEqCol:   0,
+			leftEqCols:   []int{1},
+			rightEqCols:  []int{0},
 			leftOutCols:  []int{1, 2},
 			rightOutCols: []int{0, 2},
 
@@ -89,8 +88,8 @@ func TestHashJoinerInt64(t *testing.T) {
 				{hashTableBucketSize * 3},
 			},
 
-			leftEqCol:    0,
-			rightEqCol:   0,
+			leftEqCols:   []int{0},
+			rightEqCols:  []int{0},
 			leftOutCols:  []int{0},
 			rightOutCols: []int{},
 
@@ -120,8 +119,8 @@ func TestHashJoinerInt64(t *testing.T) {
 				{2},
 			},
 
-			leftEqCol:    0,
-			rightEqCol:   0,
+			leftEqCols:   []int{0},
+			rightEqCols:  []int{0},
 			leftOutCols:  []int{0},
 			rightOutCols: []int{0},
 
@@ -133,6 +132,70 @@ func TestHashJoinerInt64(t *testing.T) {
 				{2, 2},
 			},
 		},
+		{
+			leftTypes:  []types.T{types.Int64, types.Int64, types.Int64},
+			rightTypes: []types.T{types.Int64, types.Int64, types.Int64},
+
+			// test inner join on multiple equality columns.
+			leftTuples: tuples{
+				{0, 0, 10},
+				{0, 1, 20},
+				{0, 2, 30},
+				{1, 1, 40},
+				{1, 2, 50},
+				{2, 0, 60},
+				{2, 1, 70},
+			},
+			rightTuples: tuples{
+				{0, 100, 2},
+				{1, 200, 1},
+				{2, 300, 0},
+				{2, 400, 1},
+			},
+
+			leftEqCols:   []int{0, 1},
+			rightEqCols:  []int{0, 2},
+			leftOutCols:  []int{0, 1, 2},
+			rightOutCols: []int{1},
+
+			expectedTuples: tuples{
+				{0, 2, 30, 100},
+				{1, 1, 40, 200},
+				{2, 0, 60, 300},
+				{2, 1, 70, 400},
+			},
+		},
+		{
+			leftTypes:  []types.T{types.Int64, types.Int64, types.Int64},
+			rightTypes: []types.T{types.Int64, types.Int64},
+
+			// test multiple column with values that hash to the same bucket.
+			leftTuples: tuples{
+				{10, 0, 0},
+				{20, 0, hashTableBucketSize},
+				{40, hashTableBucketSize, 0},
+				{50, hashTableBucketSize, hashTableBucketSize},
+				{60, hashTableBucketSize * 2, 0},
+				{70, hashTableBucketSize * 2, hashTableBucketSize},
+			},
+			rightTuples: tuples{
+				{0, hashTableBucketSize},
+				{hashTableBucketSize * 2, hashTableBucketSize},
+				{0, 0},
+				{0, hashTableBucketSize * 2},
+			},
+
+			leftEqCols:   []int{1, 2},
+			rightEqCols:  []int{0, 1},
+			leftOutCols:  []int{0, 1, 2},
+			rightOutCols: []int{},
+
+			expectedTuples: tuples{
+				{20, 0, hashTableBucketSize},
+				{70, hashTableBucketSize * 2, hashTableBucketSize},
+				{10, 0, 0},
+			},
+		},
 	}
 
 	for _, tc := range tcs {
@@ -142,14 +205,14 @@ func TestHashJoinerInt64(t *testing.T) {
 
 			spec := hashJoinerSpec{
 				build: hashJoinerSourceSpec{
-					eqCol:       tc.leftEqCol,
+					eqCols:      tc.leftEqCols,
 					outCols:     tc.leftOutCols,
 					sourceTypes: tc.leftTypes,
 					source:      leftSource,
 				},
 
 				probe: hashJoinerSourceSpec{
-					eqCol:       tc.rightEqCol,
+					eqCols:      tc.rightEqCols,
 					outCols:     tc.rightOutCols,
 					sourceTypes: tc.rightTypes,
 					source:      rightSource,
@@ -176,5 +239,4 @@ func TestHashJoinerInt64(t *testing.T) {
 }
 
 func BenchmarkHashJoiner(b *testing.B) {
-
 }
