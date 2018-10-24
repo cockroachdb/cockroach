@@ -70,7 +70,11 @@ func (t testWrapper) logger() *logger {
 }
 
 func TestClusterMonitor(t *testing.T) {
-	logger := &logger{stdout: os.Stdout, stderr: os.Stderr}
+	cfg := &loggerConfig{stdout: os.Stdout, stderr: os.Stderr}
+	logger, err := cfg.newLogger("" /* path */)
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Run(`success`, func(t *testing.T) {
 		c := &cluster{t: testWrapper{t}, l: logger}
 		m := newMonitor(context.Background(), c)
