@@ -131,11 +131,17 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	if err != nil {
 		return nil, nil, err
 	}
+
 	if found {
-		// We have a descriptor. Is it in the right state? We'll keep if
-		// in the ADD state.
+		// We have a descriptor. Is it in the right state? We'll keep it if
+		// it is in the ADD state.
 		if err := filterTableState(desc); err == nil || err == errTableAdding {
-			return desc, dbDesc, nil
+			// Immediately after a RENAME an old name still points to the
+			// descriptor during the drain phase for the name. Do not
+			// return a descriptor during draining.
+			if nameMatchesTable(desc, dbDesc.ID, name.Table()) {
+				return desc, dbDesc, nil
+			}
 		}
 	}
 

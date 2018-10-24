@@ -190,15 +190,10 @@ type dbCacheSubscriber interface {
 // If flags.required is false, getTableVersion() will gracefully
 // return a nil descriptor and no error if the table does not exist.
 //
-// TODO(vivek): #6418 introduced a transaction deadline that is enforced at
-// the KV layer, and was introduced to manager the validity window of a
-// table descriptor. Since we will be checking for the valid use of a table
-// descriptor here, we do not need the extra check at the KV layer. However,
-// for a SNAPSHOT_ISOLATION transaction the commit timestamp of the transaction
-// can change, so we have kept the transaction deadline. It's worth
-// reconsidering if this is really needed.
+// It might also add a transaction deadline to the transaction that is
+// enforced at the KV layer to ensure that the transaction doesn't violate
+// the validity window of the table descriptor version returned.
 //
-// TODO(vivek): Allow cached descriptors for AS OF SYSTEM TIME queries.
 func (tc *TableCollection) getTableVersion(
 	ctx context.Context, tn *tree.TableName, flags ObjectLookupFlags,
 ) (ObjectDescriptor, *sqlbase.DatabaseDescriptor, error) {
@@ -255,9 +250,8 @@ func (tc *TableCollection) getTableVersion(
 		return table, nil, nil
 	}
 
+	phyAccessor := UncachedPhysicalAccessor{}
 	if avoidCache {
-		flags.avoidCached = true
-		phyAccessor := UncachedPhysicalAccessor{}
 		return phyAccessor.GetObjectDesc(tn, flags)
 	}
 
@@ -276,24 +270,11 @@ func (tc *TableCollection) getTableVersion(
 	origTimestamp := flags.txn.OrigTimestamp()
 	table, expiration, err := tc.leaseMgr.AcquireByName(ctx, origTimestamp, dbID, tn.Table())
 	if err != nil {
-		// AcquireByName() is unable to function correctly on a timestamp
-		// less than the timestamp of a transaction with a DROP/TRUNCATE on
-		// a table. A TRUNCATE is where the name -> id map for a table changes.
-		// TODO(vivek): There is no strong reason why this problem is limited
-		// to AS OF SYSTEM TIME requests; remove flags.fixedTimestamp.
-		if flags.fixedTimestamp {
-			flags.avoidCached = true
-			phyAccessor := UncachedPhysicalAccessor{}
+		// Read the descriptor from the store in the face of some specific errors
+		// because of a known limitation of AcquireByName. See the known
+		// limitations of AcquireByName for details.
+		if err == errTableDropped || err == sqlbase.ErrDescriptorNotFound {
 			return phyAccessor.GetObjectDesc(tn, flags)
-		}
-		if err == sqlbase.ErrDescriptorNotFound {
-			if flags.required {
-				// Transform the descriptor error into an error that references the
-				// table's name.
-				return nil, nil, sqlbase.NewUndefinedRelationError(tn)
-			}
-			// We didn't find the descriptor but it's also not required. Make no fuss.
-			return nil, nil, nil
 		}
 		// Lease acquisition failed with some other error. This we don't
 		// know how to deal with, so propagate the error.

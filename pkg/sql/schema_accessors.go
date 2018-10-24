@@ -111,8 +111,6 @@ type CommonLookupFlags struct {
 	required bool
 	// if avoidCached is set, lookup will avoid the cache (if any).
 	avoidCached bool
-	// set to true if the transaction has a fixed timestamp.
-	fixedTimestamp bool
 }
 
 // DatabaseLookupFlags is the flag struct suitable for GetDatabaseDesc().
