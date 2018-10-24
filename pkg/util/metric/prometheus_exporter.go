@@ -89,9 +89,8 @@ func (pm *PrometheusExporter) PrintAsText(w io.Writer) error {
 		if _, err := expfmt.MetricFamilyToText(w, family); err != nil {
 			return err
 		}
-		// Clear metrics for reuse.
-		family.Metric = []*prometheusgo.Metric{}
 	}
+	pm.clearMetrics()
 	return nil
 }
 
@@ -107,4 +106,12 @@ func (pm *PrometheusExporter) Gather() ([]*prometheusgo.MetricFamily, error) {
 		i++
 	}
 	return v, nil
+}
+
+// Clear metrics for reuse.
+func (pm *PrometheusExporter) clearMetrics() {
+	for _, family := range pm.families {
+		// Set to nil to avoid allocation if the family never gets any metrics.
+		family.Metric = nil
+	}
 }

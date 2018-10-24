@@ -69,5 +69,10 @@ func (ge *GraphiteExporter) Push(ctx context.Context, endpoint string) error {
 	}); err != nil {
 		return err
 	}
+	// Regardless of whether Push() errors, clear metrics. Only latest metrics
+	// are pushed. If there is an error, this will cause a gap in receiver. The
+	// receiver associates timestamp with when metric arrived, so storing missed
+	// metrics has no benefit.
+	defer ge.pm.clearMetrics()
 	return b.Push()
 }
