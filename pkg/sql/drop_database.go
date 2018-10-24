@@ -117,7 +117,7 @@ func (n *dropDatabaseNode) startExec(params runParams) error {
 	p := params.p
 	tbNameStrings := make([]string, 0, len(n.td))
 	droppedTableDetails := make([]jobspb.DroppedTableDetails, 0, len(n.td))
-	tableDescs := make([]*sqlbase.TableDescriptor, 0, len(n.td))
+	tableDescs := make([]*sqlbase.MutableTableDescriptor, 0, len(n.td))
 
 	for _, toDel := range n.td {
 		if toDel.desc.IsView() {
@@ -233,7 +233,7 @@ func (p *planner) filterCascadedTables(ctx context.Context, tables []toDelete) (
 }
 
 func (p *planner) accumulateDependentTables(
-	ctx context.Context, dependentTables map[sqlbase.ID]bool, desc *sqlbase.TableDescriptor,
+	ctx context.Context, dependentTables map[sqlbase.ID]bool, desc *sqlbase.MutableTableDescriptor,
 ) error {
 	for _, ref := range desc.DependedOnBy {
 		dependentTables[ref.ID] = true

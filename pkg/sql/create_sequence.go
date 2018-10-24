@@ -146,7 +146,7 @@ func MakeSequenceTableDesc(
 	creationTime hlc.Timestamp,
 	privileges *sqlbase.PrivilegeDescriptor,
 	settings *cluster.Settings,
-) (sqlbase.TableDescriptor, error) {
+) (sqlbase.MutableTableDescriptor, error) {
 	desc := InitTableDescriptor(id, parentID, sequenceName, creationTime, privileges)
 
 	// Mimic a table with one column, "value".

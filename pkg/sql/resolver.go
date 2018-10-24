@@ -461,7 +461,7 @@ func (p *planner) getTableAndIndex(
 	table *tree.TableName,
 	tableWithIndex *tree.TableNameWithIndex,
 	privilege privilege.Kind,
-) (*sqlbase.TableDescriptor, *sqlbase.IndexDescriptor, error) {
+) (*MutableTableDescriptor, *sqlbase.IndexDescriptor, error) {
 	var tableDesc *MutableTableDescriptor
 	var err error
 	if tableWithIndex == nil {

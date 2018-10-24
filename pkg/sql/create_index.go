@@ -26,7 +26,7 @@ import (
 
 type createIndexNode struct {
 	n         *tree.CreateIndex
-	tableDesc *sqlbase.TableDescriptor
+	tableDesc *sqlbase.MutableTableDescriptor
 }
 
 // CreateIndex creates an index.

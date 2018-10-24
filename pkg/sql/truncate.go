@@ -55,11 +55,11 @@ func (t *truncateNode) startExec(params runParams) error {
 	toTruncate := make(map[sqlbase.ID]string, len(n.Tables))
 	// toTraverse is the list of tables whose references need to be traversed
 	// while constructing the list of tables that should be truncated.
-	toTraverse := make([]sqlbase.TableDescriptor, 0, len(n.Tables))
+	toTraverse := make([]sqlbase.MutableTableDescriptor, 0, len(n.Tables))
 
 	// This is the list of descriptors of truncated tables in the statement. These tables will have a mutationID and
 	// MutationJob related to the created job of the TRUNCATE statement.
-	stmtTableDescs := make([]*sqlbase.TableDescriptor, 0, len(n.Tables))
+	stmtTableDescs := make([]*sqlbase.MutableTableDescriptor, 0, len(n.Tables))
 	droppedTableDetails := make([]jobspb.DroppedTableDetails, 0, len(n.Tables))
 
 	for i := range n.Tables {
@@ -250,7 +250,7 @@ func (p *planner) truncateTable(
 
 	// Reassign all self references.
 	if changed, err := reassignReferencedTables(
-		[]*sqlbase.TableDescriptor{&newTableDesc}, tableDesc.ID, newID,
+		[]*sqlbase.MutableTableDescriptor{&newTableDesc}, tableDesc.ID, newID,
 	); err != nil {
 		return err
 	} else if changed {
@@ -298,13 +298,13 @@ func (p *planner) truncateTable(
 
 // For all the references from a table
 func (p *planner) findAllReferences(
-	ctx context.Context, table sqlbase.TableDescriptor,
-) ([]*sqlbase.TableDescriptor, error) {
+	ctx context.Context, table sqlbase.MutableTableDescriptor,
+) ([]*sqlbase.MutableTableDescriptor, error) {
 	refs, err := table.FindAllReferences()
 	if err != nil {
 		return nil, err
 	}
-	tables := make([]*sqlbase.TableDescriptor, 0, len(refs))
+	tables := make([]*sqlbase.MutableTableDescriptor, 0, len(refs))
 	for id := range refs {
 		if id == table.ID {
 			continue
@@ -321,7 +321,7 @@ func (p *planner) findAllReferences(
 
 // reassign all the references from oldID to newID.
 func reassignReferencedTables(
-	tables []*sqlbase.TableDescriptor, oldID, newID sqlbase.ID,
+	tables []*sqlbase.MutableTableDescriptor, oldID, newID sqlbase.ID,
 ) (bool, error) {
 	changed := false
 	for _, table := range tables {
