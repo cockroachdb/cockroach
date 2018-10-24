@@ -1247,30 +1247,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	now := s.cfg.Clock.Now()
 	s.startedAt = now.WallTime
 
-	// Migrate legacy tombstones away. This is safe to do unconditionally: this is
-	// a post-v2.0 binary, so we're guaranteed that every node in the cluster is
-	// running a version that understands the non-legacy tombstones (v2.0 or
-	// later).
-	//
-	// We want to run this migration the first time the node boots with this
-	// binary version so that we can assume local data never contains legacy range
-	// tombstones. For simplicity, we do it on *every* boot. Should this be found
-	// to impact startup times too much, we can make it only run the first time
-	// this binary version is booted.
-	{
-		tBegin := timeutil.Now()
-		if err := migrateLegacyTombstones(ctx, s.engine); err != nil {
-			return errors.Wrapf(err, "migrating legacy tombstones for %v", s.engine)
-		}
-		f := log.Eventf
-
-		dur := timeutil.Since(tBegin)
-		if dur > 10*time.Second {
-			f = log.Infof
-		}
-		f(ctx, "ran legacy tombstone migration in %s", dur)
-	}
-
 	// Iterate over all range descriptors, ignoring uncommitted versions
 	// (consistent=false). Uncommitted intents which have been abandoned
 	// due to a split crashing halfway will simply be resolved on the
@@ -1328,15 +1304,6 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		})
 	if err != nil {
 		return err
-	}
-
-	// Ensure that no Raft entries were abandoned by previous versions of Cockroach
-	// that did not delete Raft entries atomically with applying log truncation
-	// Raft commands. This will only be performed once, after which this call will
-	// see a migration marker and quickly no-op.
-	err = removeLeakedRaftEntries(ctx, s.Clock(), s.engine, newStoreReplicaVisitor(s))
-	if err != nil {
-		return errors.Wrapf(err, "checking for leaked raft entries for %v", s.engine)
 	}
 
 	// Start Raft processing goroutines.
