@@ -204,7 +204,8 @@ func (ij *indexJoiner) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, erro
 	keyRow := row[:numKeyCols]
 	types := ij.input.OutputTypes()[:numKeyCols]
 	key, err := sqlbase.MakeKeyFromEncDatums(
-		types, keyRow, &ij.desc, &ij.desc.PrimaryIndex, ij.keyPrefix, &ij.alloc)
+		ij.keyPrefix, keyRow, types, ij.desc.PrimaryIndex.ColumnDirections, &ij.desc,
+		&ij.desc.PrimaryIndex, &ij.alloc)
 	if err != nil {
 		return roachpb.Span{}, err
 	}

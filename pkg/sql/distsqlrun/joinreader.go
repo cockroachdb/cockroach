@@ -89,6 +89,8 @@ type joinReader struct {
 	// indexTypes is an array of the types of the index we're looking up into,
 	// in the order of the columns in that index.
 	indexTypes []sqlbase.ColumnType
+	// indexDirs is an array of the directions for the index's key columns.
+	indexDirs []sqlbase.IndexDescriptor_Direction
 
 	// These fields are set only for lookup joins on secondary indexes which
 	// require an additional primary index lookup.
@@ -155,13 +157,16 @@ func newJoinReader(
 	}
 	jr.colIdxMap = jr.desc.ColumnIdxMap()
 
-	jr.indexTypes = make([]sqlbase.ColumnType, len(jr.index.ColumnIDs))
-	indexCols := make([]uint32, len(jr.index.ColumnIDs))
+	var columnIDs []sqlbase.ColumnID
+	columnIDs, jr.indexDirs = jr.index.FullColumnIDs()
+	indexCols := make([]uint32, len(columnIDs))
+	jr.indexTypes = make([]sqlbase.ColumnType, len(columnIDs))
 	columnTypes := jr.desc.ColumnTypes()
-	for i, columnID := range jr.index.ColumnIDs {
+	for i, columnID := range columnIDs {
 		indexCols[i] = uint32(columnID)
 		jr.indexTypes[i] = columnTypes[jr.colIdxMap[columnID]]
 	}
+
 	if err := jr.joinerBase.init(
 		jr,
 		flowCtx,
@@ -311,7 +316,7 @@ func (jr *joinReader) neededRightCols() util.FastIntSet {
 // If lookup columns are specified will use those to collect the relevant
 // columns. Otherwise the first rows are assumed to correspond with the index.
 func (jr *joinReader) generateKey(row sqlbase.EncDatumRow) (roachpb.Key, error) {
-	numKeyCols := len(jr.index.ColumnIDs)
+	numKeyCols := len(jr.indexTypes)
 	numLookupCols := len(jr.lookupCols)
 
 	if numLookupCols > numKeyCols {
@@ -324,7 +329,8 @@ func (jr *joinReader) generateKey(row sqlbase.EncDatumRow) (roachpb.Key, error) 
 		jr.indexKeyRow = append(jr.indexKeyRow, row[id])
 	}
 	return sqlbase.MakeKeyFromEncDatums(
-		jr.indexTypes[:numLookupCols], jr.indexKeyRow, &jr.desc, jr.index, jr.indexKeyPrefix, &jr.alloc)
+		jr.indexKeyPrefix, jr.indexKeyRow, jr.indexTypes[:numLookupCols], jr.indexDirs, &jr.desc,
+		jr.index, &jr.alloc)
 }
 
 // Next is part of the RowSource interface.
@@ -591,8 +597,8 @@ func (jr *joinReader) primaryLookup(
 			values[i] = row[jr.colIdxMap[columnID]]
 		}
 		key, err := sqlbase.MakeKeyFromEncDatums(
-			jr.primaryColumnTypes, values, &jr.desc, &jr.desc.PrimaryIndex, jr.primaryKeyPrefix,
-			&jr.alloc)
+			jr.primaryKeyPrefix, values, jr.primaryColumnTypes, jr.desc.PrimaryIndex.ColumnDirections,
+			&jr.desc, &jr.desc.PrimaryIndex, &jr.alloc)
 		if err != nil {
 			return nil, err
 		}

@@ -479,7 +479,10 @@ func (n *scanNode) computePhysicalProps(
 		if i < exactPrefix {
 			pp.addConstantColumn(idx)
 		} else {
-			dir := dirs[i]
+			dir, err := dirs[i].ToEncodingDirection()
+			if err != nil {
+				panic(err)
+			}
 			if reverse {
 				dir = dir.Reverse()
 			}
