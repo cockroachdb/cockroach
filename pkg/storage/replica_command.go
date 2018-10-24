@@ -22,8 +22,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
-
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft/raftpb"
 
@@ -38,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -411,6 +410,15 @@ func (r *Replica) AdminMerge(
 		return reply, roachpb.NewErrorf("cannot merge final range")
 	}
 
+	// Ensure that every current replica of the LHS has been initialized.
+	// Otherwise there is a rare race where the replica GC queue can GC a
+	// replica of the RHS too early. The comment on
+	// TestStoreRangeMergeUninitializedLHSFollower explains the situation in full.
+	if err := waitForReplicasInit(ctx, r.store.cfg.NodeDialer, *origLeftDesc); err != nil {
+		return reply, roachpb.NewError(errors.Wrap(
+			err, "waiting for all left-hand replicas to initialize"))
+	}
+
 	updatedLeftDesc := *origLeftDesc
 	rightDescKey := keys.RangeDescriptorKey(origLeftDesc.EndKey)
 
@@ -592,7 +600,7 @@ func waitForApplication(
 
 	g := ctxgroup.WithContext(ctx)
 	for _, repl := range desc.Replicas {
-		repl := repl
+		repl := repl // copy for goroutine
 		g.GoCtx(func(ctx context.Context) error {
 			conn, err := dialer.Dial(ctx, repl.NodeID)
 			if err != nil {
@@ -602,6 +610,35 @@ func waitForApplication(
 				StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
 				RangeID:            desc.RangeID,
 				LeaseIndex:         leaseIndex,
+			})
+			return err
+		})
+	}
+	return g.Wait()
+}
+
+// waitForReplicasInit blocks until it has proof that the replicas listed in
+// desc are initialized on their respective stores. It may return a false
+// negative, i.e., claim that a replica is uninitialized when it is, in fact,
+// initialized, but it will never return a false positive.
+func waitForReplicasInit(
+	ctx context.Context, dialer *nodedialer.Dialer, desc roachpb.RangeDescriptor,
+) error {
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	g := ctxgroup.WithContext(ctx)
+	for _, repl := range desc.Replicas {
+		repl := repl // copy for goroutine
+		g.GoCtx(func(ctx context.Context) error {
+			conn, err := dialer.Dial(ctx, repl.NodeID)
+			if err != nil {
+				return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
+			}
+			_, err = NewPerReplicaClient(conn).WaitForReplicaInit(ctx, &WaitForReplicaInitRequest{
+				StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
+				RangeID:            desc.RangeID,
 			})
 			return err
 		})
