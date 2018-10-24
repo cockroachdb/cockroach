@@ -16,17 +16,21 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 )
 
+// The flags used by the internal loggers.
+const logFlags = log.Lshortfile | log.Ltime | log.LUTC
+
 type loggerConfig struct {
-	// prefix, if set, is applied to lines written to stderr/stdout. It is not
-	// applied to lines written to a log file.
+	// prefix, if set, will be applied to lines passed to Printf()/Errorf().
+	// It will not be applied to lines written directly to stdout/stderr (not for
+	// a particular reason, but because it's not worth the extra code to do so).
 	prefix         string
 	stdout, stderr io.Writer
 }
@@ -63,8 +67,22 @@ var quietStderr quietStderrOption
 // TeamCity build log, if running in CI), while creating a non-interleaved
 // record in the build artifacts.
 type logger struct {
-	path           string
-	file           *os.File
+	path string
+	file *os.File
+	// stdoutL and stderrL are the loggers used internally by Printf()/Errorf().
+	// They write to stdout/stderr (below), but prefix the messages with
+	// logger-specific formatting (file/line, time), plus an optional configurable
+	// prefix.
+	// stderrL is nil in case stdout == stderr. In that case, stdoutL is always
+	// used. We do this in order to take advantage of the logger's internal
+	// synchronization so that concurrent Printf()/Error() calls don't step over
+	// each other.
+	stdoutL, stderrL *log.Logger
+	// stdout, stderr are the raw Writers used by the loggers.
+	// If path/file is set, then they might Multiwriters, outputting to both a
+	// file and os.Stdout.
+	// They can be used directly by clients when a writer is required (e.g. when
+	// piping output from a subcommand).
 	stdout, stderr io.Writer
 }
 
@@ -74,10 +92,20 @@ type logger struct {
 // If path is empty, logs will go to stdout/stderr.
 func (cfg *loggerConfig) newLogger(path string) (*logger, error) {
 	if path == "" {
-		// Log to stdout/stderr if there is no artifacts directory.
+		// Log to os.Stdout/Stderr is no other options are passed in.
+		stdout := cfg.stdout
+		if stdout == nil {
+			stdout = os.Stdout
+		}
+		stderr := cfg.stderr
+		if stderr == nil {
+			stderr = os.Stderr
+		}
 		return &logger{
-			stdout: os.Stdout,
-			stderr: os.Stderr,
+			stdout:  stdout,
+			stderr:  stderr,
+			stdoutL: log.New(os.Stdout, cfg.prefix, logFlags),
+			stderrL: log.New(os.Stderr, cfg.prefix, logFlags),
 		}, nil
 	}
 
@@ -94,17 +122,25 @@ func (cfg *loggerConfig) newLogger(path string) (*logger, error) {
 		if w == nil {
 			return f
 		}
-		if cfg.prefix != "" {
-			w = &prefixWriter{out: w, prefix: []byte(cfg.prefix)}
-		}
 		return io.MultiWriter(f, w)
 	}
 
+	stdout := newWriter(cfg.stdout)
+	stderr := newWriter(cfg.stderr)
+	stdoutL := log.New(cfg.stdout, cfg.prefix, logFlags)
+	var stderrL *log.Logger
+	if cfg.stdout != cfg.stderr {
+		stderrL = log.New(cfg.stderr, cfg.prefix, logFlags)
+	} else {
+		stderrL = stdoutL
+	}
 	return &logger{
-		path:   path,
-		file:   f,
-		stdout: newWriter(cfg.stdout),
-		stderr: newWriter(cfg.stderr),
+		path:    path,
+		file:    f,
+		stdout:  stdout,
+		stderr:  stderr,
+		stdoutL: stdoutL,
+		stderrL: stderrL,
 	}, nil
 }
 
@@ -142,11 +178,21 @@ func (l *logger) ChildLogger(name string, opts ...loggerOption) (*logger, error)
 	// If the parent logger is not logging to a file, then the child will not
 	// either. However, the child will write to stdout/stderr with a prefix.
 	if l.file == nil {
-		p := []byte(name + ": ")
+		p := name + ": "
+
+		stdoutL := log.New(l.stdout, p, logFlags)
+		var stderrL *log.Logger
+		if l.stdout != l.stderr {
+			stderrL = log.New(l.stderr, p, logFlags)
+		} else {
+			stderrL = stdoutL
+		}
 		return &logger{
-			path:   l.path,
-			stdout: &prefixWriter{out: l.stdout, prefix: p},
-			stderr: &prefixWriter{out: l.stderr, prefix: p},
+			path:    l.path,
+			stdout:  l.stdout,
+			stderr:  l.stderr,
+			stdoutL: stdoutL,
+			stderrL: stderrL,
 		}, nil
 	}
 
@@ -167,46 +213,17 @@ func (l *logger) ChildLogger(name string, opts ...loggerOption) (*logger, error)
 }
 
 func (l *logger) Printf(f string, args ...interface{}) {
-	fmt.Fprintf(l.stdout, f, args...)
+	if err := l.stdoutL.Output(2 /* calldepth */, fmt.Sprintf(f, args...)); err != nil {
+		// Changing our interface to return an Error from a logging method seems too
+		// onerous. Let's just crash.
+		panic(err)
+	}
 }
 
 func (l *logger) Errorf(f string, args ...interface{}) {
-	fmt.Fprintf(l.stderr, f, args...)
-}
-
-type prefixWriter struct {
-	out    io.Writer
-	prefix []byte
-	buf    []byte
-}
-
-func (w *prefixWriter) Write(data []byte) (int, error) {
-	// Note that we only output data to the underlying writer when we see a
-	// newline. No newline and the data is buffered. We don't have a signal for
-	// when the end of data is reached, which means we won't output any trailing
-	// data if it isn't terminated with a newline.
-	var count int
-	for len(data) > 0 {
-		if len(w.buf) == 0 {
-			w.buf = append(w.buf, w.prefix...)
-		}
-
-		i := bytes.IndexByte(data, '\n')
-		if i == -1 {
-			// No newline, buffer the partial line.
-			w.buf = append(w.buf, data...)
-			count += len(data)
-			break
-		}
-
-		// Output the buffered line including prefix.
-		w.buf = append(w.buf, data[:i+1]...)
-		if _, err := w.out.Write(w.buf); err != nil {
-			return 0, err
-		}
-		w.buf = w.buf[:0]
-		data = data[i+1:]
-		count += i + 1
+	if err := l.stderrL.Output(2 /* calldepth */, fmt.Sprintf(f, args...)); err != nil {
+		// Changing our interface to return an Error from a logging method seems too
+		// onerous. Let's just crash.
+		panic(err)
 	}
-	return count, nil
 }
