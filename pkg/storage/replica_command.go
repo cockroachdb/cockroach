@@ -411,6 +411,14 @@ func (r *Replica) AdminMerge(
 		return reply, roachpb.NewErrorf("cannot merge final range")
 	}
 
+	// Ensure that every current replica of the LHS has been initialized.
+	// Otherwise there is a rare race where the replica GC queue can GC a
+	// replica of the RHS too early. The comment on
+	// TestStoreRangeMergeUninitializedLHSFollower explains the situation in full.
+	if err := waitForAllReplicasInitialized(ctx, r, origLeftDesc); err != nil {
+		return reply, roachpb.NewError(err)
+	}
+
 	updatedLeftDesc := *origLeftDesc
 	rightDescKey := keys.RangeDescriptorKey(origLeftDesc.EndKey)
 
@@ -607,6 +615,43 @@ func waitForApplication(
 		})
 	}
 	return g.Wait()
+}
+
+// waitForAllReplicas blocks until it has proof that the replicas listed in desc
+// are initialized on their respective store. It may return a false negative,
+// i.e., claim that a replica is uninitialized when it is, in fact, initialized,
+// but it will never return a false positive.
+func waitForAllReplicasInitialized(
+	ctx context.Context, repl *Replica, desc *roachpb.RangeDescriptor,
+) error {
+	var lastErr error
+	retryOpts := base.DefaultRetryOptions()
+	retryOpts.MaxRetries = 5
+retryLoop:
+	for retrier := retry.StartWithCtx(ctx, retryOpts); retrier.Next(); {
+		raftStatus := repl.RaftStatus()
+		for _, r := range desc.Replicas {
+			// Match will be non-zero if the replica has applied any entry, which
+			// implies that the replica has been initialized. Note that Progress.Match
+			// is only maintained on the leader, and there is no guarantee that we are
+			// the leader. That's ok. If we're not the leader, we'll just never prove
+			// that the replicas are initialized, and the merge will (hopefully) be
+			// retried on the leader.
+			if raftStatus.Progress[uint64(r.ReplicaID)].Match == 0 {
+				lastErr = fmt.Errorf("replica %d is uninitialized; try again later", r.ReplicaID)
+				continue retryLoop
+			}
+		}
+		// All replicas are initialized. We're good to go.
+		return nil
+	}
+	if lastErr != nil {
+		return lastErr
+	} else if err := ctx.Err(); err != nil {
+		return err
+	}
+	log.Fatal(ctx, "unreachable")
+	return nil
 }
 
 type snapshotError struct {
