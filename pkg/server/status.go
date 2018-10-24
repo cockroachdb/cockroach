@@ -1328,6 +1328,59 @@ func (s *statusServer) Range(
 func (s *statusServer) CommandQueue(
 	ctx context.Context, req *serverpb.CommandQueueRequest,
 ) (*serverpb.CommandQueueResponse, error) {
+	if req.NodeID == "local" || req.NodeID == strconv.Itoa(int(s.admin.server.NodeID())) {
+		// Requesting current node.
+		return s.commandQueueLocal(ctx, req)
+	}
+	if req.NodeID != "" {
+		// Requesting a specific node that's not the current one.
+		requestedID, err := strconv.Atoi(req.NodeID)
+		if err != nil {
+			return nil, errors.Wrap(err, "node id could not be parsed")
+		}
+		statusClient, err := s.dialNode(ctx, roachpb.NodeID(requestedID))
+		if err != nil {
+			return nil, err
+		}
+		return statusClient.CommandQueue(ctx, &serverpb.CommandQueueRequest{
+			NodeID:  req.NodeID,
+			RangeId: req.RangeId,
+		})
+	}
+
+	// NodeID is 0: Fan out to all nodes.
+	// Every request except the one to the leaseholder should work; we return that response.
+	var overallResp *serverpb.CommandQueueResponse
+	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (i interface{}, e error) {
+		return s.dialNode(ctx, nodeID)
+	}
+	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (i interface{}, e error) {
+		return client.(serverpb.StatusClient).CommandQueue(ctx, &serverpb.CommandQueueRequest{
+			NodeID:  "local",
+			RangeId: req.RangeId,
+		})
+	}
+	responseFn := func(nodeID roachpb.NodeID, resp interface{}) {
+		overallResp = resp.(*serverpb.CommandQueueResponse)
+	}
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		// Do nothing. Overall error case handled below.
+	}
+	if err := s.iterateNodes(
+		ctx, fmt.Sprintf("command queue for range %d", req.RangeId),
+		dialFn, nodeFn, responseFn, errorFn,
+	); err != nil {
+		return nil, err
+	}
+	if overallResp == nil {
+		return nil, fmt.Errorf("command queue not fetched successfully from any node")
+	}
+	return overallResp, nil
+}
+
+func (s *statusServer) commandQueueLocal(
+	ctx context.Context, req *serverpb.CommandQueueRequest,
+) (*serverpb.CommandQueueResponse, error) {
 	rangeID := roachpb.RangeID(req.RangeId)
 	replica, err := s.stores.GetReplicaForRangeID(rangeID)
 	if err != nil {
@@ -1336,6 +1389,13 @@ func (s *statusServer) CommandQueue(
 
 	if replica == nil {
 		return nil, roachpb.NewRangeNotFoundError(rangeID, 0)
+	}
+
+	// Return an error if node isn't the leaseholder.
+	if !replica.OwnsValidLease(s.admin.server.clock.Now()) {
+		return nil, &roachpb.NotLeaseHolderError{
+			RangeID: rangeID,
+		}
 	}
 
 	return &serverpb.CommandQueueResponse{
