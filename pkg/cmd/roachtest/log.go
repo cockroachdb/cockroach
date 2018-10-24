@@ -127,10 +127,10 @@ func (cfg *loggerConfig) newLogger(path string) (*logger, error) {
 
 	stdout := newWriter(cfg.stdout)
 	stderr := newWriter(cfg.stderr)
-	stdoutL := log.New(cfg.stdout, cfg.prefix, logFlags)
+	stdoutL := log.New(stdout, cfg.prefix, logFlags)
 	var stderrL *log.Logger
 	if cfg.stdout != cfg.stderr {
-		stderrL = log.New(cfg.stderr, cfg.prefix, logFlags)
+		stderrL = log.New(stderr, cfg.prefix, logFlags)
 	} else {
 		stderrL = stdoutL
 	}
