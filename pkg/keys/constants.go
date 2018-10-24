@@ -76,10 +76,10 @@ var (
 	// localStoreSuggestedCompactionSuffix stores suggested compactions to
 	// be aggregated and processed on the store.
 	localStoreSuggestedCompactionSuffix = []byte("comp")
-	// localRemovedLeakedRaftEntriesSuffix marks that a store has completed
-	// its migration to remove all possibly-leaked Raft entries.
-	// TODO(nvanbenschoten): This can be removed in 2.2.
+
+	// localRemovedLeakedRaftEntriesSuffix is DEPRECATED and remains to prevent reuse.
 	localRemovedLeakedRaftEntriesSuffix = []byte("dlre")
+	_                                   = localRemovedLeakedRaftEntriesSuffix
 
 	// LocalStoreSuggestedCompactionsMin is the start of the span of
 	// possible suggested compaction keys for a store.

@@ -115,13 +115,6 @@ func DecodeStoreSuggestedCompactionKey(key roachpb.Key) (start, end roachpb.Key,
 	return start, end, nil
 }
 
-// StoreRemovedLeakedRaftEntriesKey returns a store-local key that marks
-// when a store has completed its migration to remove all possibly-leaked
-// Raft entries on all replicas.
-func StoreRemovedLeakedRaftEntriesKey() roachpb.Key {
-	return MakeStoreKey(localRemovedLeakedRaftEntriesSuffix, nil)
-}
-
 // NodeLivenessKey returns the key for the node liveness record.
 func NodeLivenessKey(nodeID roachpb.NodeID) roachpb.Key {
 	key := make(roachpb.Key, 0, len(NodeLivenessPrefix)+9)
