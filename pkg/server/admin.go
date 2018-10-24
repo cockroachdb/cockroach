@@ -40,10 +40,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -1737,6 +1739,78 @@ func (s *adminServer) enqueueRangeLocal(
 	response.Details[0].Error = processErr
 	return response, nil
 }
+
+func (s *adminServer) Alerts(
+	ctx context.Context, req *serverpb.AlertsRequest,
+) (*serverpb.AlertsResponse, error) {
+	// TODO(vilterp): might be easier to just unmarshal this out of gossip, rather than
+	// selecting from crdb_internal...
+	userName := s.getUser(req)
+	tablesQuery := `
+		SELECT node_id, store_id, category, description, value FROM "".crdb_internal.gossip_alerts
+	`
+	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
+		ctx, "admin-replica-matrix", nil /* txn */, userName, tablesQuery,
+	)
+	if err != nil {
+		return nil, s.serverError(err)
+	}
+
+	scanner := makeResultScanner([]sqlbase.ResultColumn{
+		{
+			Name: "node_id",
+			Typ:  types.Int,
+		},
+		{
+			Name: "store_id",
+			Typ:  types.Int,
+		},
+		{
+			Name: "category",
+			Typ:  types.String,
+		},
+		{
+			Name: "description",
+			Typ:  types.String,
+		},
+		{
+			Name: "value",
+			Typ:  types.Float,
+		},
+	})
+
+	resp := &serverpb.AlertsResponse{
+		Alerts: make(map[roachpb.NodeID]statuspb.HealthCheckResult),
+	}
+
+	for _, row := range rows {
+		// Scan the row into a HealthAlert.
+		var nodeID int64
+		var storeID int64
+		var category string
+		alert := statuspb.HealthAlert{}
+		if err := scanner.ScanAll(
+			row,
+			&nodeID,
+			&storeID,
+			&category,
+			&alert.Description,
+			&alert.Value,
+		); err != nil {
+			return nil, err
+		}
+		alert.StoreID = roachpb.StoreID(storeID)
+		alert.Category = statuspb.HealthAlert_Category(statuspb.HealthAlert_Category_value[category])
+		// Insert it into the result.
+		nodeAlerts := resp.Alerts[roachpb.NodeID(nodeID)]
+		nodeAlerts.Alerts = append(nodeAlerts.Alerts, alert)
+		resp.Alerts[roachpb.NodeID(nodeID)] = nodeAlerts
+	}
+
+	return resp, nil
+}
+
+// TODO(vilterp): move everything below here into a util file...
 
 // sqlQuery allows you to incrementally build a SQL query that uses
 // placeholders. Instead of specific placeholders like $1, you instead use the
