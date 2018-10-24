@@ -71,11 +71,6 @@ type Container struct {
 	cluster *DockerCluster
 }
 
-// ID returns the container's id.
-func (c Container) ID() string {
-	return c.id
-}
-
 // Name returns the container's name.
 func (c Container) Name() string {
 	return c.name
