@@ -24,18 +24,8 @@ tc_start_block "Compile acceptance tests"
 run build/builder.sh mkrelease "$type" -Otarget testbuild TAGS=acceptance PKG=./pkg/acceptance
 tc_end_block "Compile acceptance tests"
 
-tc_start_block "Compile acceptanceccl tests"
-run build/builder.sh mkrelease "$type" -Otarget testbuild TAGS=acceptance PKG=./pkg/ccl/acceptanceccl
-tc_end_block "Compile acceptanceccl tests"
-
 tc_start_block "Run acceptance tests"
 run cd pkg/acceptance
-run ./acceptance.test -nodes 4 -l "$TMPDIR" -test.v -test.timeout 30m 2>&1 | tee "$TMPDIR/acceptance.log" | go-test-teamcity
+run ./acceptance.test -l "$TMPDIR" -test.v -test.timeout 30m 2>&1 | tee "$TMPDIR/acceptance.log" | go-test-teamcity
 run cd ../..
 tc_end_block "Run acceptance tests"
-
-tc_start_block "Run acceptanceccl tests"
-run cd pkg/ccl/acceptanceccl
-run ./acceptanceccl.test -nodes 4 -l "$TMPDIR" -test.v -test.timeout 30m 2>&1 | tee "$TMPDIR/acceptanceccl.log" | go-test-teamcity
-run cd ../../..
-tc_end_block "Run acceptanceccl tests"

@@ -58,10 +58,12 @@ func getSink(
 	}
 	q := u.Query()
 
-	var s Sink
+	// Use a function here to delay creation of the sink until after we've done
+	// all the parameter verification.
+	var makeSink func() (Sink, error)
 	switch u.Scheme {
 	case sinkSchemeBuffer:
-		s = &bufferSink{}
+		makeSink = func() (Sink, error) { return &bufferSink{}, nil }
 	case sinkSchemeKafka:
 		kafkaTopicPrefix := q.Get(sinkParamTopicPrefix)
 		q.Del(sinkParamTopicPrefix)
@@ -70,9 +72,8 @@ func getSink(
 		if schemaTopic != `` {
 			return nil, errors.Errorf(`%s is not yet supported`, sinkParamSchemaTopic)
 		}
-		s, err = getKafkaSink(kafkaTopicPrefix, u.Host, targets)
-		if err != nil {
-			return nil, err
+		makeSink = func() (Sink, error) {
+			return getKafkaSink(kafkaTopicPrefix, u.Host, targets)
 		}
 	case sinkSchemeExperimentalSQL:
 		// Swap the changefeed prefix for the sql connection one that sqlSink
@@ -81,9 +82,8 @@ func getSink(
 		// TODO(dan): Make tableName configurable or based on the job ID or
 		// something.
 		tableName := `sqlsink`
-		s, err = makeSQLSink(u.String(), tableName, targets)
-		if err != nil {
-			return nil, err
+		makeSink = func() (Sink, error) {
+			return makeSQLSink(u.String(), tableName, targets)
 		}
 		// Remove parameters we know about for the unknown parameter check.
 		q.Del(`sslcert`)
@@ -95,10 +95,13 @@ func getSink(
 	}
 
 	for k := range q {
-		_ = s.Close()
 		return nil, errors.Errorf(`unknown sink query parameter: %s`, k)
 	}
 
+	s, err := makeSink()
+	if err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
