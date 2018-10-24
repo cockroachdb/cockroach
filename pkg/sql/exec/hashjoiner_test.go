@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
@@ -239,4 +240,60 @@ func TestHashJoinerInt64(t *testing.T) {
 }
 
 func BenchmarkHashJoiner(b *testing.B) {
+	nCols := 4
+	sourceTypes := make([]types.T, nCols)
+
+	for colIdx := 0; colIdx < nCols; colIdx++ {
+		sourceTypes[colIdx] = types.Int64
+	}
+
+	batch := NewMemBatch(sourceTypes)
+
+	for colIdx := 0; colIdx < nCols; colIdx++ {
+		col := batch.ColVec(colIdx).Int64()
+		for i := 0; i < ColBatchSize; i++ {
+			col[i] = int64(i)
+		}
+	}
+
+	batch.SetLength(ColBatchSize)
+
+	for _, nBatches := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+		b.Run(fmt.Sprintf("rows=%d", nBatches*ColBatchSize), func(b *testing.B) {
+			// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
+			// batch) * nCols (number of columns / row) * 2 (number of sources).
+			b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols * 2))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				leftSource := newFiniteBatchSource(batch, nBatches)
+				rightSource := newRepeatableBatchSource(batch)
+
+				spec := hashJoinerSpec{
+					build: hashJoinerSourceSpec{
+						eqCols:      []int{0, 2},
+						outCols:     []int{0, 1},
+						sourceTypes: sourceTypes,
+						source:      leftSource,
+					},
+
+					probe: hashJoinerSourceSpec{
+						eqCols:      []int{1, 3},
+						outCols:     []int{2, 3},
+						sourceTypes: sourceTypes,
+						source:      rightSource,
+					},
+				}
+
+				hj := &hashJoinEqInnerDistinctInt64Op{
+					spec: spec,
+				}
+
+				hj.Init()
+
+				for i := 0; i < nBatches; i++ {
+					hj.Next()
+				}
+			}
+		})
+	}
 }
