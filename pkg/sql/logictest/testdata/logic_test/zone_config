@@ -9,7 +9,7 @@ query IT
 SELECT zone_id, config_sql FROM [SHOW ZONE CONFIGURATION FOR RANGE default]
 ----
 0  ALTER RANGE default CONFIGURE ZONE USING
-   range_min_bytes = 1048576,
+   range_min_bytes = 16777216,
    range_max_bytes = 67108864,
    gc.ttlseconds = 90000,
    num_replicas = 1,
@@ -25,7 +25,7 @@ query IT
 SELECT zone_id, config_sql FROM [SHOW ZONE CONFIGURATION FOR RANGE default]
 ----
 0  ALTER RANGE default CONFIGURE ZONE USING
-   range_min_bytes = 1048576,
+   range_min_bytes = 16777216,
    range_max_bytes = 67108864,
    gc.ttlseconds = 90000,
    num_replicas = 3,
