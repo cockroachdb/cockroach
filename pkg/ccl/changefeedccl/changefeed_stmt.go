@@ -53,7 +53,7 @@ const (
 	optEnvelopeDiff    envelopeType = `diff`
 
 	optFormatJSON formatType = `json`
-	optFormatAvro formatType = `experimental-avro`
+	optFormatAvro formatType = `experimental_avro`
 
 	sinkParamTopicPrefix      = `topic_prefix`
 	sinkParamSchemaTopic      = `schema_topic`
