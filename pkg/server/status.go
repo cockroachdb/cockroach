@@ -1328,6 +1328,51 @@ func (s *statusServer) Range(
 func (s *statusServer) CommandQueue(
 	ctx context.Context, req *serverpb.CommandQueueRequest,
 ) (*serverpb.CommandQueueResponse, error) {
+	switch req.NodeID {
+	case 0:
+		// Fan out to all nodes. Every request except the one to the leaseholder should work; we return
+		// that response.
+		overallResp := &serverpb.CommandQueueResponse{}
+		dialFun := func(ctx context.Context, nodeID roachpb.NodeID) (i interface{}, e error) {
+			return s.dialNode(ctx, nodeID)
+		}
+		nodeFun := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (i interface{}, e error) {
+			return client.(serverpb.StatusClient).CommandQueue(ctx, &serverpb.CommandQueueRequest{
+				NodeID:  nodeID,
+				RangeId: req.RangeId,
+			})
+		}
+		responseFun := func(nodeID roachpb.NodeID, resp interface{}) {
+			overallResp = resp.(*serverpb.CommandQueueResponse)
+		}
+		errorFun := func(nodeID roachpb.NodeID, nodeFnError error) {
+			log.Warningf(ctx, "error getting command queue for node %d: %+v", nodeID, nodeFnError)
+		}
+		if err := s.iterateNodes(
+			ctx, fmt.Sprintf("command queue for range %d", req.RangeId),
+			dialFun, nodeFun, responseFun, errorFun,
+		); err != nil {
+			return nil, err
+		}
+		return overallResp, nil
+	case s.admin.server.NodeID():
+		// Requesting current node.
+		return s.commandQueueLocal(ctx, req)
+	default:
+		statusClient, err := s.dialNode(ctx, req.NodeID)
+		if err != nil {
+			return nil, err
+		}
+		return statusClient.CommandQueue(ctx, &serverpb.CommandQueueRequest{
+			NodeID:  req.NodeID,
+			RangeId: req.RangeId,
+		})
+	}
+}
+
+func (s *statusServer) commandQueueLocal(
+	ctx context.Context, req *serverpb.CommandQueueRequest,
+) (*serverpb.CommandQueueResponse, error) {
 	rangeID := roachpb.RangeID(req.RangeId)
 	replica, err := s.stores.GetReplicaForRangeID(rangeID)
 	if err != nil {
@@ -1336,6 +1381,17 @@ func (s *statusServer) CommandQueue(
 
 	if replica == nil {
 		return nil, roachpb.NewRangeNotFoundError(rangeID, 0)
+	}
+
+	// Return an error if node isn't the leaseholder.
+	timestamp := s.admin.server.clock.Now()
+	isLiveMap := s.nodeLiveness.GetIsLiveMap()
+	availableNodes := s.storePool.AvailableNodeCount()
+	metrics := replica.Metrics(ctx, timestamp, isLiveMap, availableNodes)
+	if !metrics.Leaseholder {
+		return nil, &roachpb.NotLeaseHolderError{
+			RangeID: rangeID,
+		}
 	}
 
 	return &serverpb.CommandQueueResponse{

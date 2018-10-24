@@ -985,3 +985,25 @@ func TestStatusAPIStatements(t *testing.T) {
 		t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v", expectedStatements, statementsInResponse)
 	}
 }
+
+func TestStatusAPICommandQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	numNodes := 3
+	testCluster := serverutils.StartTestCluster(t, numNodes, base.TestClusterArgs{})
+	defer testCluster.Stopper().Stop(context.Background())
+
+	// Verify that we can get the command queue without error from any node, and that
+	// the response won't be empty.
+	for nodeIdx := 0; nodeIdx < numNodes; nodeIdx++ {
+		resp := serverpb.CommandQueueResponse{}
+		if err := getStatusJSONProto(
+			testCluster.Server(nodeIdx), fmt.Sprintf("range/%d/cmdqueue", 1), &resp,
+		); err != nil {
+			t.Fatal(err)
+		}
+		if resp.Snapshot.Timestamp.IsEmpty() {
+			t.Fatalf("got empty timestamp when requesting command queue from node idx %d", nodeIdx)
+		}
+	}
+}

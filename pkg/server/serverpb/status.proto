@@ -611,7 +611,17 @@ message RangeResponse {
   reserved 4; // Previously used.
 }
 
-message CommandQueueRequest { int64 range_id = 1; }
+message CommandQueueRequest {
+  // The range we're requesting the command queue for.
+  int64 range_id = 1;
+  // The node we're requesting the command queue on.
+  // - If this is not the current node, it will be forwarded.
+  // - If this is 0, it will be forwarded to all nodes.
+  int32 node_id = 2 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+}
 
 message CommandQueueResponse {
   storage.storagepb.CommandQueuesSnapshot snapshot = 1
