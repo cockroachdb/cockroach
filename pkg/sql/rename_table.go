@@ -29,7 +29,7 @@ import (
 type renameTableNode struct {
 	n            *tree.RenameTable
 	oldTn, newTn *tree.TableName
-	tableDesc    *sqlbase.TableDescriptor
+	tableDesc    *sqlbase.MutableTableDescriptor
 }
 
 // RenameTable renames the table, view or sequence.

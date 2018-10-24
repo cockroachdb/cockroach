@@ -50,7 +50,7 @@ type (
 	ObjectDescriptor = sqlbase.TableDescriptor
 	// MutableTableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	MutableTableDescriptor = sqlbase.TableDescriptor
+	MutableTableDescriptor = sqlbase.MutableTableDescriptor
 	// UncachedTableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	// It is an immutable descriptor read from the store.

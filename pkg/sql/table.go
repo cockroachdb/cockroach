@@ -153,7 +153,7 @@ type TableCollection struct {
 	// the table. These table descriptors are local to this
 	// TableCollection and invisible to other transactions. A dropped
 	// table is marked dropped.
-	uncommittedTables []*sqlbase.TableDescriptor
+	uncommittedTables []*sqlbase.MutableTableDescriptor
 
 	// Map of tables created in the transaction.
 	createdTables map[sqlbase.ID]struct{}
@@ -441,7 +441,7 @@ func (tc *TableCollection) hasUncommittedTables() bool {
 	return len(tc.uncommittedTables) > 0
 }
 
-func (tc *TableCollection) addUncommittedTable(desc sqlbase.TableDescriptor) {
+func (tc *TableCollection) addUncommittedTable(desc sqlbase.MutableTableDescriptor) {
 	for i, table := range tc.uncommittedTables {
 		if table.ID == desc.ID {
 			tc.uncommittedTables[i] = &desc
@@ -620,7 +620,7 @@ func (tc *TableCollection) releaseAllDescriptors() {
 // The job creation is done within the planner's txn. This is important - if the
 // txn ends up rolling back, the job needs to go away.
 func (p *planner) createSchemaChangeJob(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, stmt string,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, stmt string,
 ) (sqlbase.MutationID, error) {
 	span := tableDesc.PrimaryIndexSpan()
 	mutationID, err := tableDesc.FinalizeMutation()
@@ -661,7 +661,7 @@ func (p *planner) createSchemaChangeJob(
 // txn ends up rolling back, the job needs to go away.
 func (p *planner) createDropTablesJob(
 	ctx context.Context,
-	tableDescs []*sqlbase.TableDescriptor,
+	tableDescs []*sqlbase.MutableTableDescriptor,
 	droppedDetails []jobspb.DroppedTableDetails,
 	stmt string,
 	drainNames bool,
@@ -737,7 +737,7 @@ func (p *planner) queueSchemaChange(
 // database within the current planner transaction, and queues up
 // a schema changer for future processing.
 func (p *planner) writeSchemaChange(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, mutationID sqlbase.MutationID,
 ) error {
 	if tableDesc.Dropped() {
 		// We don't allow schema changes on a dropped table.
@@ -748,7 +748,7 @@ func (p *planner) writeSchemaChange(
 
 func (p *planner) writeSchemaChangeToBatch(
 	ctx context.Context,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.MutableTableDescriptor,
 	mutationID sqlbase.MutationID,
 	b *client.Batch,
 ) error {
@@ -759,12 +759,14 @@ func (p *planner) writeSchemaChangeToBatch(
 	return p.writeTableDescToBatch(ctx, tableDesc, mutationID, b)
 }
 
-func (p *planner) writeDropTable(ctx context.Context, tableDesc *sqlbase.TableDescriptor) error {
+func (p *planner) writeDropTable(
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor,
+) error {
 	return p.writeTableDesc(ctx, tableDesc, sqlbase.InvalidMutationID)
 }
 
 func (p *planner) writeTableDesc(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, mutationID sqlbase.MutationID,
 ) error {
 	b := p.txn.NewBatch()
 	if err := p.writeTableDescToBatch(ctx, tableDesc, mutationID, b); err != nil {
@@ -775,7 +777,7 @@ func (p *planner) writeTableDesc(
 
 func (p *planner) writeTableDescToBatch(
 	ctx context.Context,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.MutableTableDescriptor,
 	mutationID sqlbase.MutationID,
 	b *client.Batch,
 ) error {

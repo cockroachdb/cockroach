@@ -122,7 +122,7 @@ func descInSlice(descID sqlbase.ID, td []toDelete) bool {
 
 func (p *planner) canRemoveDependentView(
 	ctx context.Context,
-	from *sqlbase.TableDescriptor,
+	from *sqlbase.MutableTableDescriptor,
 	ref sqlbase.TableDescriptor_Reference,
 	behavior tree.DropBehavior,
 ) error {
@@ -157,7 +157,7 @@ func (p *planner) canRemoveDependentViewGeneric(
 // Returns the names of any additional views that were also dropped
 // due to `cascade` behavior.
 func (p *planner) removeDependentView(
-	ctx context.Context, tableDesc, viewDesc *sqlbase.TableDescriptor,
+	ctx context.Context, tableDesc, viewDesc *sqlbase.MutableTableDescriptor,
 ) ([]string, error) {
 	// In the table whose index is being removed, filter out all back-references
 	// that refer to the view that's being removed.
@@ -170,7 +170,7 @@ func (p *planner) removeDependentView(
 // if `cascade is specified`). Returns the names of any additional views that
 // were also dropped due to `cascade` behavior.
 func (p *planner) dropViewImpl(
-	ctx context.Context, viewDesc *sqlbase.TableDescriptor, behavior tree.DropBehavior,
+	ctx context.Context, viewDesc *sqlbase.MutableTableDescriptor, behavior tree.DropBehavior,
 ) ([]string, error) {
 	var cascadeDroppedViews []string
 
@@ -223,7 +223,7 @@ func (p *planner) getViewDescForCascade(
 	objName string,
 	parentID, viewID sqlbase.ID,
 	behavior tree.DropBehavior,
-) (*sqlbase.TableDescriptor, error) {
+) (*sqlbase.MutableTableDescriptor, error) {
 	viewDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, viewID)
 	if err != nil {
 		log.Warningf(ctx, "unable to retrieve descriptor for view %d: %v", viewID, err)

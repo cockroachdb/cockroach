@@ -91,7 +91,7 @@ func (*dropSequenceNode) Values() tree.Datums          { return tree.Datums{} }
 func (*dropSequenceNode) Close(context.Context)        {}
 
 func (p *planner) dropSequenceImpl(
-	ctx context.Context, seqDesc *sqlbase.TableDescriptor, behavior tree.DropBehavior,
+	ctx context.Context, seqDesc *sqlbase.MutableTableDescriptor, behavior tree.DropBehavior,
 ) error {
 	return p.initiateDropTable(ctx, seqDesc, true /* drainName */)
 }
@@ -100,7 +100,7 @@ func (p *planner) dropSequenceImpl(
 // a table uses it in a DEFAULT expression on one of its columns, or nil if there is no
 // such dependency.
 func (p *planner) sequenceDependencyError(
-	ctx context.Context, droppedDesc *sqlbase.TableDescriptor,
+	ctx context.Context, droppedDesc *sqlbase.MutableTableDescriptor,
 ) error {
 	if len(droppedDesc.DependedOnBy) > 0 {
 		return pgerror.NewErrorf(

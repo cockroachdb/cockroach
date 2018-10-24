@@ -24,7 +24,7 @@ import (
 
 type alterSequenceNode struct {
 	n       *tree.AlterSequence
-	seqDesc *sqlbase.TableDescriptor
+	seqDesc *sqlbase.MutableTableDescriptor
 }
 
 // AlterSequence transforms a tree.AlterSequence into a plan node.
