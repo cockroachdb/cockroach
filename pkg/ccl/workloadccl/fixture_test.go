@@ -11,6 +11,7 @@ package workloadccl
 import (
 	"context"
 	"fmt"
+	"net/http/httptest"
 	"os"
 	"strconv"
 	"strings"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/spf13/pflag"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
 
@@ -45,7 +47,14 @@ func makeTestWorkload() workload.Flagser {
 	return g
 }
 
-func (fixtureTestGen) Meta() workload.Meta     { return workload.Meta{Name: `fixture`} }
+var fixtureTestMeta = workload.Meta{
+	Name: `fixture`,
+	New: func() workload.Generator {
+		return makeTestWorkload()
+	},
+}
+
+func (fixtureTestGen) Meta() workload.Meta     { return fixtureTestMeta }
 func (g fixtureTestGen) Flags() workload.Flags { return g.flags }
 func (g fixtureTestGen) Tables() []workload.Table {
 	return []workload.Table{{
@@ -134,4 +143,27 @@ func TestFixture(t *testing.T) {
 	}
 	sqlDB.CheckQueryResults(t,
 		`SELECT count(*) FROM test.fx`, [][]string{{strconv.Itoa(fixtureTestGenRows)}})
+}
+
+func TestImportFixture(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+
+	gen := makeTestWorkload()
+	flag := fmt.Sprintf(`val=%d`, timeutil.Now().UnixNano())
+	if err := gen.Flags().Parse([]string{"--" + flag}); err != nil {
+		t.Fatalf(`%+v`, err)
+	}
+
+	ts := httptest.NewServer(workload.CSVMux([]workload.Meta{gen.Meta()}))
+	defer ts.Close()
+
+	require.NoError(t, ImportFixture(ctx, db, ts.URL, gen, `d`))
+	sqlDB.CheckQueryResults(t,
+		`SELECT count(*) FROM d.fx`, [][]string{{strconv.Itoa(fixtureTestGenRows)}})
 }
