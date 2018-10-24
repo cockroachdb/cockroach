@@ -30,19 +30,47 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
-func (m *memColumn) Append(vec ColVec, colType types.T, toLength uint64, fromLength uint16) {
+func (m *memColumn) Append(
+	vec ColVec, colType types.T, toLength uint64, fromLength uint16,
+) {
 	{{range .}}
 	if colType == types.{{.ExecType}} {
-		toCol := m.{{.ExecType}}()[:toLength]
-		fromCol := vec.{{.ExecType}}()[:fromLength]
-		m.col = append(toCol, fromCol...)
+		m.col = append(m.{{.ExecType}}()[:toLength], vec.{{.ExecType}}()[:fromLength]...)
 		return
 	}
 	{{end}}
 	panic(fmt.Sprintf("unhandled type %d", colType))
 }
 
-func (m *memColumn) CopyFrom(vec ColVec, sel []uint64, nSel uint16, colType types.T) {
+func (m *memColumn) AppendSelected(
+	vec ColVec, sel []uint16, batchSize uint16, colType types.T, toLength uint64,
+) {
+	{{range .}}
+	if colType == types.{{.ExecType}} {
+		tempCol := m.{{.ExecType}}()
+		fromCol := vec.{{.ExecType}}()
+
+		// todo(changangela): using this approach causes large benchmarks to be
+		// exponentially slow. why?
+
+		toCol := make([]{{.GoType}}, toLength+uint64(batchSize))
+		copy(toCol, tempCol[:toLength])
+
+		for i := uint16(0); i < batchSize; i++ {
+      toCol[uint64(i) + toLength] = fromCol[sel[i]]
+		}
+
+		m.col = toCol
+		return
+	}
+	{{end}}
+
+	panic(fmt.Sprintf("unhandled type %d", colType))
+}
+
+func (m *memColumn) CopyFrom(
+	vec ColVec, sel []uint64, nSel uint16, colType types.T,
+) {
 	// todo (changangela): handle the case when nSel > ColBatchSize
 	{{range .}}
 	if colType == types.{{.ExecType}} {
@@ -68,29 +96,6 @@ func (m *memColumn) CopyFromBatch(vec ColVec, sel []uint16, nSel uint16, colType
 		return
 	}
 	{{end}}
-	panic(fmt.Sprintf("unhandled type %d", colType))
-}
-
-func (m *memColumn) AppendSelected(
-	vec ColVec, sel []uint16, batchSize uint16, colType types.T, toLength uint64,
-) {
-	{{range .}}
-	if colType == types.{{.ExecType}} {
-		tempCol := m.{{.ExecType}}()
-		fromCol := vec.{{.ExecType}}()
-		toCol := make([]{{.GoType}}, toLength+uint64(batchSize))
-
-		copy(toCol, tempCol[:toLength])
-
-		for i := uint16(0); i < batchSize; i++ {
-      toCol[uint64(i) + toLength] = fromCol[sel[i]]
-		}
-
-		m.col = toCol
-		return
-	}
-	{{end}}
-
 	panic(fmt.Sprintf("unhandled type %d", colType))
 }
 `

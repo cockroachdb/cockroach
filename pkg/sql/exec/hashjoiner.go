@@ -15,6 +15,8 @@
 package exec
 
 import (
+	"bytes"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -64,12 +66,12 @@ type hashJoinerSourceSpec struct {
 	source Operator
 }
 
-// hashJoinEqInnerDistinctInt64Op performs a hash join. It requires both sides to have
+// hashJoinEqInnerDistinctOp performs a hash join. It requires both sides to have
 // exactly 1 equal column, and their types must be types.Int64. It also requires
 // that the build table's equality column only contain distinct values,
 // otherwise the behavior is undefined. An inner join is performed and there is
 // no guarantee on the ordering of the output columns.
-type hashJoinEqInnerDistinctInt64Op struct {
+type hashJoinEqInnerDistinctOp struct {
 	// spec, if not nil, holds the specification for the current hash joiner
 	// process.
 	spec hashJoinerSpec
@@ -86,9 +88,9 @@ type hashJoinEqInnerDistinctInt64Op struct {
 	runningState hashJoinerState
 }
 
-var _ Operator = &hashJoinEqInnerDistinctInt64Op{}
+var _ Operator = &hashJoinEqInnerDistinctOp{}
 
-func (hj *hashJoinEqInnerDistinctInt64Op) Init() {
+func (hj *hashJoinEqInnerDistinctOp) Init() {
 	nOutCols := len(hj.spec.build.outCols) + len(hj.spec.probe.outCols)
 	if nOutCols == 0 {
 		panic("no output columns specified for hash joiner")
@@ -112,12 +114,12 @@ func (hj *hashJoinEqInnerDistinctInt64Op) Init() {
 		probeColTypes[i] = hj.spec.probe.sourceTypes[colIdx]
 	}
 
-	hj.prober = makeHashJoinProber(hj.ht, buildColTypes, probeColTypes)
+	hj.prober = makeHashJoinProber(hj.ht, buildColTypes, probeColTypes, hj.spec.probe.eqCols)
 
 	hj.runningState = hjBuilding
 }
 
-func (hj *hashJoinEqInnerDistinctInt64Op) Next() ColBatch {
+func (hj *hashJoinEqInnerDistinctOp) Next() ColBatch {
 	switch hj.runningState {
 	case hjBuilding:
 		hj.build()
@@ -129,7 +131,7 @@ func (hj *hashJoinEqInnerDistinctInt64Op) Next() ColBatch {
 	}
 }
 
-func (hj *hashJoinEqInnerDistinctInt64Op) build() {
+func (hj *hashJoinEqInnerDistinctOp) build() {
 	builder := makeHashJoinBuilder(hj.ht)
 
 	builder.exec(hj.spec.build.source, hj.spec.build.eqCols, hj.spec.build.outCols)
@@ -160,9 +162,6 @@ type hashTable struct {
 	// hash table bucket chain, where an id of 0 is reserved to represent end of
 	// chain.
 	next []uint64
-
-	// buckets is used to store the computed hash value of each key.
-	buckets []uint64
 
 	// keys stores the equality columns. The id of a key at any index any of the
 	// columns is index + 1.
@@ -215,18 +214,20 @@ func (ht *hashTable) loadBatch(batch ColBatch, eqCols []int, outCols []int) {
 	batchSize := batch.Length()
 	sel := batch.Selection()
 
-	for i, colIdx := range eqCols {
-		if sel != nil {
+	if sel != nil {
+		for i, colIdx := range eqCols {
 			ht.keys[i].AppendSelected(batch.ColVec(colIdx), sel, batchSize, ht.keyTypes[i], ht.size)
-		} else {
+		}
+
+		for i, colIdx := range outCols {
+			ht.values[i].AppendSelected(batch.ColVec(colIdx), sel, batchSize, ht.valueColTypes[i], ht.size)
+		}
+	} else {
+		for i, colIdx := range eqCols {
 			ht.keys[i].Append(batch.ColVec(colIdx), ht.keyTypes[i], ht.size, batchSize)
 		}
-	}
 
-	for i, colIdx := range outCols {
-		if sel != nil {
-			ht.values[i].AppendSelected(batch.ColVec(colIdx), sel, batchSize, ht.valueColTypes[i], ht.size)
-		} else {
+		for i, colIdx := range outCols {
 			ht.values[i].Append(batch.ColVec(colIdx), ht.valueColTypes[i], ht.size, batchSize)
 		}
 	}
@@ -243,28 +244,96 @@ func (ht *hashTable) loadBatch(batch ColBatch, eqCols []int, outCols []int) {
 //
 // initHash initializes the hash value of each key to its initial state for
 // rehashing purposes.
-func (ht *hashTable) initHash(nKeys uint64) {
-	ht.buckets = make([]uint64, nKeys)
+func (ht *hashTable) initHash(buckets []uint64, nKeys uint64) {
 	for i := uint64(0); i < nKeys; i++ {
-		ht.buckets[i] = 1
+		buckets[i] = 1
 	}
 }
 
 // rehash takes a element of a key (tuple representing a row of equality
 // column values) at a given column and computes a new hash by applying a
 // transformation to the existing hash.
-func (ht *hashTable) rehash(keyIdx int, t types.T, col ColVec, nKeys uint64, sel []uint16) {
-	// todo(changangela) hash functions should be improved
+func (ht *hashTable) rehash(
+	buckets []uint64, keyIdx int, t types.T, col ColVec, nKeys uint64, sel []uint16,
+) {
+	// todo(changangela) this function needs to be templated eventually
 	switch t {
+	case types.Int8:
+		keys := col.Int8()
+		if sel != nil {
+			for i := uint64(0); i < nKeys; i++ {
+				buckets[i] = buckets[i]*31 + uint64(keys[sel[i]])
+			}
+		} else {
+			for i := uint64(0); i < nKeys; i++ {
+				buckets[i] = buckets[i]*31 + uint64(keys[i])
+			}
+		}
+	case types.Int16:
+		keys := col.Int16()
+		if sel != nil {
+			for i := uint64(0); i < nKeys; i++ {
+				buckets[i] = buckets[i]*31 + uint64(keys[sel[i]])
+			}
+		} else {
+			for i := uint64(0); i < nKeys; i++ {
+				buckets[i] = buckets[i]*31 + uint64(keys[i])
+			}
+		}
+	case types.Int32:
+		keys := col.Int32()
+		if sel != nil {
+			for i := uint64(0); i < nKeys; i++ {
+				buckets[i] = buckets[i]*31 + uint64(keys[sel[i]])
+			}
+		} else {
+			for i := uint64(0); i < nKeys; i++ {
+				buckets[i] = buckets[i]*31 + uint64(keys[i])
+			}
+		}
 	case types.Int64:
 		keys := col.Int64()
 		if sel != nil {
 			for i := uint64(0); i < nKeys; i++ {
-				ht.buckets[i] = ht.buckets[i]*31 + uint64(keys[sel[i]])
+				buckets[i] = buckets[i]*31 + uint64(keys[sel[i]])
 			}
 		} else {
 			for i := uint64(0); i < nKeys; i++ {
-				ht.buckets[i] = ht.buckets[i]*31 + uint64(keys[i])
+				buckets[i] = buckets[i]*31 + uint64(keys[i])
+			}
+		}
+	case types.Bool:
+		keys := col.Bool()
+		if sel != nil {
+			for i := uint64(0); i < nKeys; i++ {
+				if keys[sel[i]] {
+					buckets[i] = buckets[i]*31 + 1
+				}
+			}
+		} else {
+			for i := uint64(0); i < nKeys; i++ {
+				if keys[i] {
+					buckets[i] = buckets[i]*31 + 1
+				}
+			}
+		}
+	case types.Bytes:
+		keys := col.Bytes()
+		if sel != nil {
+			for i := uint64(0); i < nKeys; i++ {
+				hash := 1
+				for b := range keys[sel[i]] {
+					hash = hash*31 + b
+				}
+				buckets[i] = buckets[i]*31 + uint64(hash)
+			}
+		} else {
+			for i := uint64(0); i < nKeys; i++ {
+				hash := 1
+				for b := range keys[i] {
+					hash = hash*31 + b
+				}
+				buckets[i] = buckets[i]*31 + uint64(hash)
 			}
 		}
 	default:
@@ -274,31 +343,37 @@ func (ht *hashTable) rehash(keyIdx int, t types.T, col ColVec, nKeys uint64, sel
 
 // finalizeHash takes each key's hash value and applies a final transformation
 // onto it so that it fits within the hashTable's bucket size.
-func (ht *hashTable) finalizeHash(nKeys uint64) {
+func (ht *hashTable) finalizeHash(buckets []uint64, nKeys uint64) {
+	// todo(changangela): modulo a power of 2 could be made significantly faster
+	// (20% speed improvement in benchmarks) if we use bitwise operators instead.
 	for i := uint64(0); i < nKeys; i++ {
-		ht.buckets[i] = ht.buckets[i] % ht.bucketSize
+		// buckets[i] = buckets[i] % ht.bucketSize
+
+		// theoretically, this could be optimized into the following (because
+		// bucketSize is a power of 2):
+		buckets[i] = buckets[i] & (ht.bucketSize - 1)
 	}
 }
 
 // computeBuckets computes the hash value of each key and stores the result in
-// hashTable.buckets.
-func (ht *hashTable) computeBuckets(keys []ColVec, nKeys uint64, sel []uint16) {
-	ht.initHash(nKeys)
+// buckets.
+func (ht *hashTable) computeBuckets(buckets []uint64, keys []ColVec, nKeys uint64, sel []uint16) {
+	ht.initHash(buckets, nKeys)
 	for i, t := range ht.keyTypes {
-		ht.rehash(i, t, keys[i], nKeys, sel)
+		ht.rehash(buckets, i, t, keys[i], nKeys, sel)
 	}
-	ht.finalizeHash(nKeys)
+	ht.finalizeHash(buckets, nKeys)
 }
 
 // insertKeys builds the hash map from the compute hash values.
-func (ht *hashTable) insertKeys() {
+func (ht *hashTable) insertKeys(buckets []uint64) {
 	ht.next = make([]uint64, ht.size+1)
 
 	for id := uint64(1); id <= ht.size; id++ {
 		// keyID is stored into corresponding hash bucket at the front of the next
 		// chain.
-		ht.next[id] = ht.first[ht.buckets[id-1]]
-		ht.first[ht.buckets[id-1]] = id
+		ht.next[id] = ht.first[buckets[id-1]]
+		ht.first[buckets[id-1]] = id
 	}
 }
 
@@ -327,11 +402,13 @@ func (builder *hashJoinBuilder) exec(source Operator, eqCols []int, outCols []in
 		builder.ht.loadBatch(batch, eqCols, outCols)
 	}
 
-	builder.ht.computeBuckets(builder.ht.keys, builder.ht.size, nil)
-	builder.ht.insertKeys()
+	// buckets is used to store the computed hash value of each key.
+	buckets := make([]uint64, builder.ht.size)
+	builder.ht.computeBuckets(buckets, builder.ht.keys, builder.ht.size, nil)
+	builder.ht.insertKeys(buckets)
 }
 
-// hashJoinProber is used by the hashJoinEqInnerDistinctInt64Op during the probe phase. It
+// hashJoinProber is used by the hashJoinEqInnerDistinctOp during the probe phase. It
 // operates on a single batch of obtained from the probe relation and probes the
 // hashTable to construct the resulting output batch.
 type hashJoinProber struct {
@@ -355,10 +432,16 @@ type hashJoinProber struct {
 
 	buildIdx []uint64
 	probeIdx []uint16
+
+	// keys stores the equality columns on the probe table for a single batch.
+	keys []ColVec
+	// buckets is used to store the computed hash value of each key in a single
+	// batch.
+	buckets []uint64
 }
 
 func makeHashJoinProber(
-	ht *hashTable, buildColTypes []types.T, probeColTypes []types.T,
+	ht *hashTable, buildColTypes []types.T, probeColTypes []types.T, probeEqCols []int,
 ) *hashJoinProber {
 	// prepare the output batch by allocating with the correct column types
 	outColTypes := append(buildColTypes, probeColTypes...)
@@ -373,6 +456,9 @@ func makeHashJoinProber(
 
 		buildIdx: make([]uint64, ColBatchSize),
 		probeIdx: make([]uint16, ColBatchSize),
+
+		keys:    make([]ColVec, len(probeEqCols)),
+		buckets: make([]uint64, ColBatchSize),
 	}
 }
 
@@ -389,22 +475,20 @@ func (prober *hashJoinProber) probe(
 			break
 		}
 
-		keys := make([]ColVec, len(eqCols))
-
 		for i, colIdx := range eqCols {
-			keys[i] = batch.ColVec(colIdx)
+			prober.keys[i] = batch.ColVec(colIdx)
 		}
 
 		sel := batch.Selection()
 
-		prober.lookupInitial(keys, batchSize, sel)
+		prober.lookupInitial(batchSize, sel)
 		nToCheck := batchSize
 
 		// continue searching along the hash table next chains for the corresponding
 		// buckets. If the key is found or end of next chain is reached, the key is
 		// removed from the toCheck array.
 		for nToCheck > 0 {
-			nToCheck = prober.check(keys, nToCheck, sel)
+			nToCheck = prober.check(nToCheck, sel)
 			prober.findNext(nToCheck)
 		}
 
@@ -426,10 +510,10 @@ func (prober *hashJoinProber) probe(
 
 // lookupInitial finds the corresponding hash table buckets for the equality
 // column of the batch.
-func (prober *hashJoinProber) lookupInitial(keys []ColVec, batchSize uint16, sel []uint16) {
-	prober.ht.computeBuckets(keys, uint64(batchSize), sel)
+func (prober *hashJoinProber) lookupInitial(batchSize uint16, sel []uint16) {
+	prober.ht.computeBuckets(prober.buckets, prober.keys, uint64(batchSize), sel)
 	for i := uint16(0); i < batchSize; i++ {
-		prober.groupID[i] = prober.ht.first[prober.ht.buckets[i]]
+		prober.groupID[i] = prober.ht.first[prober.buckets[i]]
 		prober.toCheck[i] = i
 	}
 }
@@ -439,12 +523,13 @@ func (prober *hashJoinProber) lookupInitial(keys []ColVec, batchSize uint16, sel
 // toCheck. If the bucket has reached the end, the key is rejected. The toCheck
 // list is reconstructed to only hold the indices of the eqCol keys that have
 // not been found. The new length of toCheck is returned by this function.
-func (prober *hashJoinProber) check(probeEqCols []ColVec, nToCheck uint16, sel []uint16) uint16 {
+func (prober *hashJoinProber) check(nToCheck uint16, sel []uint16) uint16 {
+	// todo(changangela) this function needs to be templated eventually
 	for keyColIdx, t := range prober.ht.keyTypes {
 		switch t {
 		case types.Int64:
 			buildKeys := prober.ht.keys[keyColIdx].Int64()
-			probeKeys := probeEqCols[keyColIdx].Int64()
+			probeKeys := prober.keys[keyColIdx].Int64()
 
 			if sel != nil {
 				for i := uint16(0); i < nToCheck; i++ {
@@ -466,6 +551,111 @@ func (prober *hashJoinProber) check(probeEqCols []ColVec, nToCheck uint16, sel [
 						// compared to the corresponding probe table to determine if a match is
 						// found.
 						if buildKeys[keyID-1] != probeKeys[prober.toCheck[i]] {
+							prober.differs[prober.toCheck[i]] = true
+						}
+					}
+				}
+			}
+		case types.Int32:
+			buildKeys := prober.ht.keys[keyColIdx].Int32()
+			probeKeys := prober.keys[keyColIdx].Int32()
+
+			if sel != nil {
+				for i := uint16(0); i < nToCheck; i++ {
+					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
+						if buildKeys[keyID-1] != probeKeys[sel[prober.toCheck[i]]] {
+							prober.differs[prober.toCheck[i]] = true
+						}
+					}
+				}
+			} else {
+				for i := uint16(0); i < nToCheck; i++ {
+					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
+						if buildKeys[keyID-1] != probeKeys[prober.toCheck[i]] {
+							prober.differs[prober.toCheck[i]] = true
+						}
+					}
+				}
+			}
+		case types.Int16:
+			buildKeys := prober.ht.keys[keyColIdx].Int16()
+			probeKeys := prober.keys[keyColIdx].Int16()
+
+			if sel != nil {
+				for i := uint16(0); i < nToCheck; i++ {
+					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
+						if buildKeys[keyID-1] != probeKeys[sel[prober.toCheck[i]]] {
+							prober.differs[prober.toCheck[i]] = true
+						}
+					}
+				}
+			} else {
+				for i := uint16(0); i < nToCheck; i++ {
+					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
+						if buildKeys[keyID-1] != probeKeys[prober.toCheck[i]] {
+							prober.differs[prober.toCheck[i]] = true
+						}
+					}
+				}
+			}
+		case types.Int8:
+			buildKeys := prober.ht.keys[keyColIdx].Int8()
+			probeKeys := prober.keys[keyColIdx].Int8()
+
+			if sel != nil {
+				for i := uint16(0); i < nToCheck; i++ {
+					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
+						if buildKeys[keyID-1] != probeKeys[sel[prober.toCheck[i]]] {
+							prober.differs[prober.toCheck[i]] = true
+						}
+					}
+				}
+			} else {
+				for i := uint16(0); i < nToCheck; i++ {
+					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
+						if buildKeys[keyID-1] != probeKeys[prober.toCheck[i]] {
+							prober.differs[prober.toCheck[i]] = true
+						}
+					}
+				}
+			}
+		case types.Bool:
+			buildKeys := prober.ht.keys[keyColIdx].Bool()
+			probeKeys := prober.keys[keyColIdx].Bool()
+
+			if sel != nil {
+				for i := uint16(0); i < nToCheck; i++ {
+					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
+						if buildKeys[keyID-1] != probeKeys[sel[prober.toCheck[i]]] {
+							prober.differs[prober.toCheck[i]] = true
+						}
+					}
+				}
+			} else {
+				for i := uint16(0); i < nToCheck; i++ {
+					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
+						if buildKeys[keyID-1] != probeKeys[prober.toCheck[i]] {
+							prober.differs[prober.toCheck[i]] = true
+						}
+					}
+				}
+			}
+		case types.Bytes:
+			buildKeys := prober.ht.keys[keyColIdx].Bytes()
+			probeKeys := prober.keys[keyColIdx].Bytes()
+
+			if sel != nil {
+				for i := uint16(0); i < nToCheck; i++ {
+					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
+						if !bytes.Equal(buildKeys[keyID-1], probeKeys[sel[prober.toCheck[i]]]) {
+							prober.differs[prober.toCheck[i]] = true
+						}
+					}
+				}
+			} else {
+				for i := uint16(0); i < nToCheck; i++ {
+					if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
+						if !bytes.Equal(buildKeys[keyID-1], probeKeys[prober.toCheck[i]]) {
 							prober.differs[prober.toCheck[i]] = true
 						}
 					}

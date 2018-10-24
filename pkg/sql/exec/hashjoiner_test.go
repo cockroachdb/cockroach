@@ -197,6 +197,40 @@ func TestHashJoinerInt64(t *testing.T) {
 				{10, 0, 0},
 			},
 		},
+		{
+			leftTypes:  []types.T{types.Bytes, types.Bool, types.Int8, types.Int16, types.Int32, types.Int64, types.Bytes},
+			rightTypes: []types.T{types.Int64, types.Int32, types.Int16, types.Int8, types.Bool, types.Bytes},
+
+			// test multiple equality columns of different types.
+			leftTuples: tuples{
+				{"foo", false, int8(10), int16(100), int32(1000), int64(10000), "aaa"},
+				{"foo", true, 10, 100, 1000, 10000, "bbb"},
+				{"foo1", false, 10, 100, 1000, 10000, "ccc"},
+				{"foo", false, 20, 100, 1000, 10000, "ddd"},
+				{"foo", false, 10, 200, 1000, 10000, "eee"},
+				{"bar", true, 30, 300, 3000, 30000, "fff"},
+			},
+			rightTuples: tuples{
+				{int64(10000), int32(1000), int16(100), int8(10), false, "foo1"},
+				{10000, 1000, 100, 10, false, "foo"},
+				{30000, 3000, 300, 30, true, "bar"},
+				{10000, 1000, 100, 20, false, "foo"},
+				{30000, 3000, 300, 30, false, "bar"},
+				{10000, 1000, 100, 10, false, "random"},
+			},
+
+			leftEqCols:   []int{0, 1, 2, 3, 4, 5},
+			rightEqCols:  []int{5, 4, 3, 2, 1, 0},
+			leftOutCols:  []int{6},
+			rightOutCols: []int{},
+
+			expectedTuples: tuples{
+				{"ccc"},
+				{"aaa"},
+				{"fff"},
+				{"ddd"},
+			},
+		},
 	}
 
 	for _, tc := range tcs {
@@ -220,7 +254,7 @@ func TestHashJoinerInt64(t *testing.T) {
 				},
 			}
 
-			hj := &hashJoinEqInnerDistinctInt64Op{
+			hj := &hashJoinEqInnerDistinctOp{
 				spec: spec,
 			}
 
@@ -258,7 +292,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 
 	batch.SetLength(ColBatchSize)
 
-	for _, nBatches := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
+	for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		b.Run(fmt.Sprintf("rows=%d", nBatches*ColBatchSize), func(b *testing.B) {
 			// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
 			// batch) * nCols (number of columns / row) * 2 (number of sources).
@@ -284,7 +318,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 					},
 				}
 
-				hj := &hashJoinEqInnerDistinctInt64Op{
+				hj := &hashJoinEqInnerDistinctOp{
 					spec: spec,
 				}
 
