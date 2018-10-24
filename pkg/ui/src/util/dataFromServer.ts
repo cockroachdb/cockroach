@@ -18,6 +18,7 @@ export interface DataFromServer {
   LoggedInUser: string;
   Tag: string;
   Version: string;
+  NodeId: string;
 }
 
 // Tell TypeScript about `window.dataFromServer`, which is set in a script
