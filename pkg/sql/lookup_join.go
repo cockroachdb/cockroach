@@ -79,12 +79,18 @@ func (lj *lookupJoinNode) startExec(params runParams) error {
 		plan: lj.input,
 	}
 
+	indexColIDs := lj.table.index.ColumnIDs
+	if !lj.table.index.Unique {
+		// Add implicit key columns.
+		indexColIDs = append(indexColIDs, lj.table.index.ExtraColumnIDs...)
+	}
+
 	// The lookup side may not output all the index columns on which we are doing
 	// the lookup. We need them to be produced so that we can refer to them in the
 	// join predicate. So we find any such instances and adjust the scan node
 	// accordingly.
 	for i := range lj.keyCols {
-		colID := lj.table.index.ColumnIDs[i]
+		colID := indexColIDs[i]
 		if _, ok := lj.table.colIdxMap[colID]; !ok {
 			// Tricky case: the lookup join doesn't output this column so we can't
 			// refer to it; we have to add it.
@@ -127,7 +133,7 @@ func (lj *lookupJoinNode) startExec(params runParams) error {
 
 	// Program the equalities implied by keyCols.
 	for i := range lj.keyCols {
-		colID := lj.table.index.ColumnIDs[i]
+		colID := indexColIDs[i]
 		pred.addEquality(leftSrc.info, lj.keyCols[i], rightSrc.info, lj.table.colIdxMap[colID])
 	}
 

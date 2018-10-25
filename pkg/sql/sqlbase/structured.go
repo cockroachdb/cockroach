@@ -273,25 +273,18 @@ func (desc *IndexDescriptor) ContainsColumnID(colID ColumnID) bool {
 // FullColumnIDs returns the index column IDs including any extra (implicit or
 // stored (old STORING encoding)) column IDs for non-unique indexes. It also
 // returns the direction with which each column was encoded.
-func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []encoding.Direction) {
-	dirs := make([]encoding.Direction, 0, len(desc.ColumnIDs))
-	for _, dir := range desc.ColumnDirections {
-		convertedDir, err := dir.ToEncodingDirection()
-		if err != nil {
-			panic(err)
-		}
-		dirs = append(dirs, convertedDir)
-	}
+func (desc *IndexDescriptor) FullColumnIDs() ([]ColumnID, []IndexDescriptor_Direction) {
 	if desc.Unique {
-		return desc.ColumnIDs, dirs
+		return desc.ColumnIDs, desc.ColumnDirections
 	}
 	// Non-unique indexes have some of the primary-key columns appended to
 	// their key.
 	columnIDs := append([]ColumnID(nil), desc.ColumnIDs...)
 	columnIDs = append(columnIDs, desc.ExtraColumnIDs...)
+	dirs := append([]IndexDescriptor_Direction(nil), desc.ColumnDirections...)
 	for range desc.ExtraColumnIDs {
 		// Extra columns are encoded in ascending order.
-		dirs = append(dirs, encoding.Ascending)
+		dirs = append(dirs, IndexDescriptor_ASC)
 	}
 	return columnIDs, dirs
 }

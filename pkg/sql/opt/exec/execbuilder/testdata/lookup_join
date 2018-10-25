@@ -413,3 +413,117 @@ render          ·         ·              (c, d)     ·
       └── scan  ·         ·              (c)        ·
 ·               table     small@primary  ·          ·
 ·               spans     ALL            ·          ·
+
+###########################################################
+#  LOOKUP JOINS ON IMPLICIT INDEX KEY COLUMNS             #
+#  https://github.com/cockroachdb/cockroach/issues/31777  #
+###########################################################
+statement ok
+CREATE TABLE t (a INT, b INT, c INT, d INT, e INT)
+
+statement ok
+CREATE TABLE u (a INT, b INT, c INT, d INT, e INT, PRIMARY KEY (a DESC, b, c))
+
+# Test index with all primary key columns implicit.
+statement ok
+CREATE INDEX idx ON u (d)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
+----
+render            ·         ·          (a)              ·
+ │                render 0  a          ·                ·
+ └── lookup-join  ·         ·          (a, d, e, a, d)  ·
+      │           type      inner      ·                ·
+      ├── scan    ·         ·          (a, d, e)        ·
+      │           table     t@primary  ·                ·
+      │           spans     ALL        ·                ·
+      │           filter    e = 5      ·                ·
+      └── scan    ·         ·          (a, d)           ·
+·                 table     u@idx      ·                ·
+
+# Test unique version of same index. (Lookup join should not use column a.)
+statement ok
+DROP INDEX u@idx
+
+statement ok
+CREATE UNIQUE INDEX idx ON u (d)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a WHERE t.e = 5
+----
+render            ·         ·          (a)              ·
+ │                render 0  a          ·                ·
+ └── lookup-join  ·         ·          (a, d, e, a, d)  ·
+      │           type      inner      ·                ·
+      │           pred      @1 = @4    ·                ·
+      ├── scan    ·         ·          (a, d, e)        ·
+      │           table     t@primary  ·                ·
+      │           spans     ALL        ·                ·
+      │           filter    e = 5      ·                ·
+      └── scan    ·         ·          (a, d)           ·
+·                 table     u@idx      ·                ·
+
+# Test index with first primary key column explicit and the rest implicit.
+statement ok
+DROP INDEX u@idx CASCADE
+
+statement ok
+CREATE INDEX idx ON u (d, a)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
+----
+render            ·         ·          (a)                    ·
+ │                render 0  a          ·                      ·
+ └── lookup-join  ·         ·          (a, b, d, e, a, b, d)  ·
+      │           type      inner      ·                      ·
+      ├── scan    ·         ·          (a, b, d, e)           ·
+      │           table     t@primary  ·                      ·
+      │           spans     ALL        ·                      ·
+      │           filter    e = 5      ·                      ·
+      └── scan    ·         ·          (a, b, d)              ·
+·                 table     u@idx      ·                      ·
+
+# Test index with middle primary key column explicit and the rest implicit.
+statement ok
+DROP INDEX u@idx
+
+statement ok
+CREATE INDEX idx ON u (d, b)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.b = u.b WHERE t.e = 5
+----
+render            ·         ·          (a)                    ·
+ │                render 0  a          ·                      ·
+ └── lookup-join  ·         ·          (a, b, d, e, a, b, d)  ·
+      │           type      inner      ·                      ·
+      ├── scan    ·         ·          (a, b, d, e)           ·
+      │           table     t@primary  ·                      ·
+      │           spans     ALL        ·                      ·
+      │           filter    e = 5      ·                      ·
+      └── scan    ·         ·          (a, b, d)              ·
+·                 table     u@idx      ·                      ·
+
+# Test index with last primary key column explicit and the rest implicit.
+statement ok
+DROP INDEX u@idx
+
+statement ok
+CREATE INDEX idx ON u (d, c)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT u.a FROM t JOIN u ON t.d = u.d AND t.a = u.a AND t.d = u.d WHERE t.e = 5
+----
+render            ·         ·          (a)              ·
+ │                render 0  a          ·                ·
+ └── lookup-join  ·         ·          (a, d, e, a, d)  ·
+      │           type      inner      ·                ·
+      │           pred      @1 = @4    ·                ·
+      ├── scan    ·         ·          (a, d, e)        ·
+      │           table     t@primary  ·                ·
+      │           spans     ALL        ·                ·
+      │           filter    e = 5      ·                ·
+      └── scan    ·         ·          (a, d)           ·
+·                 table     u@idx      ·                ·
