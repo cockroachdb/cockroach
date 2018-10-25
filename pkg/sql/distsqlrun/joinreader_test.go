@@ -95,6 +95,7 @@ func TestJoinReader(t *testing.T) {
 		lookupCols      columns
 		indexFilterExpr Expression
 		joinType        sqlbase.JoinType
+		inputTypes      []sqlbase.ColumnType
 		outputTypes     []sqlbase.ColumnType
 		expected        string
 	}{
@@ -111,6 +112,7 @@ func TestJoinReader(t *testing.T) {
 				{aFn(15), bFn(15)},
 			},
 			lookupCols:  []uint32{0, 1},
+			inputTypes:  twoIntCols,
 			outputTypes: threeIntCols,
 			expected:    "[[0 2 2] [0 5 5] [1 0 1] [1 5 6]]",
 		},
@@ -128,6 +130,7 @@ func TestJoinReader(t *testing.T) {
 				{aFn(15), bFn(15)},
 			},
 			lookupCols:  []uint32{0, 1},
+			inputTypes:  twoIntCols,
 			outputTypes: threeIntCols,
 			expected:    "[[0 2 2] [0 2 2] [0 5 5] [1 0 0] [1 5 5]]",
 		},
@@ -144,6 +147,7 @@ func TestJoinReader(t *testing.T) {
 				{aFn(15), bFn(15)},
 			},
 			lookupCols:  []uint32{0, 1},
+			inputTypes:  twoIntCols,
 			outputTypes: threeIntCols,
 			onExpr:      "@2 < @5",
 			expected:    "[[1 0 1] [1 5 6]]",
@@ -160,6 +164,7 @@ func TestJoinReader(t *testing.T) {
 			},
 			lookupCols:      []uint32{1},
 			indexFilterExpr: Expression{Expr: "@4 LIKE 'one-%'"},
+			inputTypes:      twoIntCols,
 			outputTypes:     []sqlbase.ColumnType{strType},
 			expected:        "[['one-two']]",
 		},
@@ -175,6 +180,7 @@ func TestJoinReader(t *testing.T) {
 			},
 			lookupCols:      []uint32{1},
 			indexFilterExpr: Expression{Expr: "@4 LIKE 'one-%'"},
+			inputTypes:      twoIntCols,
 			outputTypes:     oneIntCol,
 			expected:        "[[3]]",
 		},
@@ -190,6 +196,7 @@ func TestJoinReader(t *testing.T) {
 			},
 			lookupCols:  []uint32{0, 1},
 			joinType:    sqlbase.LeftOuterJoin,
+			inputTypes:  twoIntCols,
 			outputTypes: threeIntCols,
 			expected:    "[[0 2 2] [10 0 NULL]]",
 		},
@@ -207,6 +214,7 @@ func TestJoinReader(t *testing.T) {
 			lookupCols:      []uint32{0},
 			indexFilterExpr: Expression{Expr: "@4 LIKE 'one-%'"},
 			joinType:        sqlbase.LeftOuterJoin,
+			inputTypes:      twoIntCols,
 			outputTypes:     []sqlbase.ColumnType{intType, strType},
 			expected:        "[[2 'one-two'] [10 NULL]]",
 		},
@@ -224,6 +232,7 @@ func TestJoinReader(t *testing.T) {
 			lookupCols:      []uint32{0},
 			indexFilterExpr: Expression{Expr: "@4 LIKE 'one-%'"},
 			joinType:        sqlbase.LeftOuterJoin,
+			inputTypes:      twoIntCols,
 			outputTypes:     []sqlbase.ColumnType{intType, intType},
 			expected:        "[[2 3] [10 NULL]]",
 		},
@@ -238,6 +247,7 @@ func TestJoinReader(t *testing.T) {
 				{tree.NewDInt(0), tree.DNull},
 			},
 			lookupCols:  []uint32{0, 1},
+			inputTypes:  twoIntCols,
 			outputTypes: oneIntCol,
 			expected:    "[]",
 		},
@@ -253,8 +263,24 @@ func TestJoinReader(t *testing.T) {
 			},
 			lookupCols:  []uint32{0, 1},
 			joinType:    sqlbase.LeftOuterJoin,
+			inputTypes:  twoIntCols,
 			outputTypes: twoIntCols,
 			expected:    "[[0 NULL]]",
+		},
+		{
+			description: "Test lookup join on secondary index with an implicit key column",
+			indexIdx:    1,
+			post: PostProcessSpec{
+				Projection:    true,
+				OutputColumns: []uint32{2},
+			},
+			input: [][]tree.Datum{
+				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
+			},
+			lookupCols:  []uint32{1, 2, 0},
+			inputTypes:  []sqlbase.ColumnType{intType, intType, strType},
+			outputTypes: oneIntCol,
+			expected:    "[['two']]",
 		},
 	}
 	for i, td := range []*sqlbase.TableDescriptor{tdSecondary, tdFamily, tdInterleaved} {
@@ -273,11 +299,11 @@ func TestJoinReader(t *testing.T) {
 				for rowIdx, row := range c.input {
 					encRow := make(sqlbase.EncDatumRow, len(row))
 					for i, d := range row {
-						encRow[i] = sqlbase.DatumToEncDatum(intType, d)
+						encRow[i] = sqlbase.DatumToEncDatum(c.inputTypes[i], d)
 					}
 					encRows[rowIdx] = encRow
 				}
-				in := NewRowBuffer(twoIntCols, encRows, RowBufferArgs{})
+				in := NewRowBuffer(c.inputTypes, encRows, RowBufferArgs{})
 
 				out := &RowBuffer{}
 				jr, err := newJoinReader(
