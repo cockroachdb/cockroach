@@ -228,7 +228,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		ignoreErr := false
 		if err := runE(c, ctx, controller,
 			`grep "Oh jeez, I'm sorry, Jepsen broke. Here's why" /mnt/data1/jepsen/cockroachdb/invoke.log -A1 `+
-				`| grep -e BrokenBarrierException -e InterruptedException`,
+				`| grep -e BrokenBarrierException -e InterruptedException -e com.jcraft.jsch.JSchException`,
 		); err == nil {
 			logf("Recognized BrokenBarrier or InterruptedException. " +
 				"Ignoring it and considering the test successful. See #30527.")
