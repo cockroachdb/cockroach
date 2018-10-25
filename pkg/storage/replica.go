@@ -4529,6 +4529,8 @@ func fatalOnRaftReadyErr(ctx context.Context, expl string, err error) {
 // tick the Raft group, returning true if the raft group exists and is
 // unquiesced; false otherwise.
 func (r *Replica) tick(livenessMap IsLiveMap) (bool, error) {
+	ctx := r.AnnotateCtx(context.TODO())
+
 	r.unreachablesMu.Lock()
 	remotes := r.unreachablesMu.remotes
 	r.unreachablesMu.remotes = nil
@@ -4551,9 +4553,11 @@ func (r *Replica) tick(livenessMap IsLiveMap) (bool, error) {
 	if r.mu.quiescent {
 		return false, nil
 	}
-	if r.maybeQuiesceLocked(livenessMap) {
+	if r.maybeQuiesceLocked(ctx, livenessMap) {
 		return false, nil
 	}
+
+	r.maybeTransferRaftLeadershipLocked(ctx)
 
 	r.mu.ticks++
 	r.mu.internalRaftGroup.Tick()
@@ -4631,8 +4635,7 @@ func (r *Replica) tick(livenessMap IsLiveMap) (bool, error) {
 // would quiesce. The fallout from this situation are undesirable raft
 // elections which will cause throughput hiccups to the range, but not
 // correctness issues.
-func (r *Replica) maybeQuiesceLocked(livenessMap IsLiveMap) bool {
-	ctx := r.AnnotateCtx(context.TODO())
+func (r *Replica) maybeQuiesceLocked(ctx context.Context, livenessMap IsLiveMap) bool {
 	status, ok := shouldReplicaQuiesce(ctx, r, r.store.Clock().Now(), len(r.mu.proposals), livenessMap)
 	if !ok {
 		return false
@@ -4646,28 +4649,45 @@ type quiescer interface {
 	raftLastIndexLocked() (uint64, error)
 	hasRaftReadyRLocked() bool
 	ownsValidLeaseRLocked(ts hlc.Timestamp) bool
-	maybeTransferRaftLeader(ctx context.Context, status *raft.Status, ts hlc.Timestamp)
 }
 
 func (r *Replica) hasRaftReadyRLocked() bool {
 	return r.mu.internalRaftGroup.HasReady()
 }
 
-// TODO(tschottdorf): there's also maybeTransferRaftLeadership. Only one should exist.
-func (r *Replica) maybeTransferRaftLeader(
-	ctx context.Context, status *raft.Status, now hlc.Timestamp,
-) {
-	l := *r.mu.state.Lease
-	if !r.isLeaseValidRLocked(l, now) {
-		return
-	}
+func (r *Replica) maybeTransferRaftLeadership(ctx context.Context) {
+	r.mu.Lock()
+	r.maybeTransferRaftLeadershipLocked(ctx)
+	r.mu.Unlock()
+}
+
+// maybeTransferRaftLeadershipLocked attempts to transfer the leadership away
+// from this node to the leaseholder, if this node is the current raft leader
+// but not the leaseholder. We don't attempt to transfer leadership if the
+// leaseholder is behind on applying the log.
+//
+// We like it when leases and raft leadership are collocated because that
+// facilitates quick command application (requests generally need to make it to
+// both the lease holder and the raft leader before being applied by other
+// replicas).
+func (r *Replica) maybeTransferRaftLeadershipLocked(ctx context.Context) {
 	if r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
 		return
 	}
-	if pr, ok := status.Progress[uint64(l.Replica.ReplicaID)]; ok && pr.Match >= status.Commit {
-		log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", l.Replica.ReplicaID)
+	lease := *r.mu.state.Lease
+	if lease.OwnedBy(r.StoreID()) || !r.isLeaseValidRLocked(lease, r.Clock().Now()) {
+		return
+	}
+	raftStatus := r.raftStatusRLocked()
+	if raftStatus == nil || raftStatus.RaftState != raft.StateLeader {
+		return
+	}
+	lhReplicaID := uint64(lease.Replica.ReplicaID)
+	lhProgress, ok := raftStatus.Progress[lhReplicaID]
+	if (ok && lhProgress.Match >= raftStatus.Commit) || r.mu.draining {
+		log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", lhReplicaID)
 		r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
-		r.mu.internalRaftGroup.TransferLeader(uint64(l.Replica.ReplicaID))
+		r.mu.internalRaftGroup.TransferLeader(lhReplicaID)
 	}
 }
 
@@ -4713,12 +4733,6 @@ func shouldReplicaQuiesce(
 		if log.V(4) {
 			log.Infof(ctx, "not quiescing: not leaseholder")
 		}
-		// Try to correct leader-not-leaseholder condition, if encountered,
-		// assuming the leaseholder is caught up to the commit index.
-		//
-		// TODO(peter): It is surprising that a method named shouldReplicaQuiesce
-		// might initiate transfer of the Raft leadership.
-		q.maybeTransferRaftLeader(ctx, status, now)
 		return nil, false
 	}
 	// We need all of Applied, Commit, LastIndex and Progress.Match indexes to be
