@@ -24,13 +24,15 @@ import (
 
 func TestSortedDistinct(t *testing.T) {
 	tcs := []struct {
-		distinctCols []int
+		distinctCols []uint32
+		colTypes     []types.T
 		numCols      int
 		tuples       []tuple
 		expected     []tuple
 	}{
 		{
-			distinctCols: []int{0, 1, 2},
+			distinctCols: []uint32{0, 1, 2},
+			colTypes:     []types.T{types.Int64, types.Int64, types.Int64},
 			numCols:      4,
 			tuples: tuples{
 				{1, 2, 3, 4},
@@ -50,29 +52,12 @@ func TestSortedDistinct(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		runTests(t, tc.tuples, []types.T{types.Bool}, func(t *testing.T, input Operator) {
-			zeroOp := &zeroBoolOp{
-				input:  input,
-				colIdx: tc.numCols,
+		runTests(t, tc.tuples, []types.T{}, func(t *testing.T, input Operator) {
+			distinct, err := NewOrderedDistinct(input, tc.distinctCols, tc.colTypes)
+			if err != nil {
+				t.Fatal(err)
 			}
-			zeroOp.Init()
-
-			var lastOp Operator = zeroOp
-			for _, cIdx := range tc.distinctCols {
-				sdop := &sortedDistinctInt64Op{
-					input:             lastOp,
-					sortedDistinctCol: cIdx,
-					outputColIdx:      tc.numCols,
-				}
-				sdop.Init()
-				lastOp = sdop
-			}
-
-			finalizer := &sortedDistinctFinalizerOp{
-				input:        lastOp,
-				outputColIdx: tc.numCols,
-			}
-			out := newOpTestOutput(finalizer, []int{0, 1, 2, 3}, tc.expected)
+			out := newOpTestOutput(distinct, []int{0, 1, 2, 3}, tc.expected)
 
 			if err := out.Verify(); err != nil {
 				t.Fatal(err)
@@ -84,7 +69,7 @@ func TestSortedDistinct(t *testing.T) {
 func BenchmarkSortedDistinct(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
-	batch := NewMemBatch([]types.T{types.Int64, types.Int64, types.Int64, types.Bool})
+	batch := NewMemBatch([]types.T{types.Int64, types.Int64, types.Int64})
 	aCol := batch.ColVec(1).Int64()
 	bCol := batch.ColVec(2).Int64()
 	lastA := int64(0)
@@ -104,34 +89,14 @@ func BenchmarkSortedDistinct(b *testing.B) {
 	source := newRepeatableBatchSource(batch)
 	source.Init()
 
-	zeroOp := &zeroBoolOp{
-		input:  source,
-		colIdx: 3,
-	}
-	zeroOp.Init()
-
-	sdop := &sortedDistinctInt64Op{
-		sortedDistinctCol: 1,
-		outputColIdx:      3,
-		input:             zeroOp,
-	}
-	sdop.Init()
-
-	sdop = &sortedDistinctInt64Op{
-		sortedDistinctCol: 2,
-		outputColIdx:      3,
-		input:             sdop,
-	}
-	sdop.Init()
-
-	finalizer := &sortedDistinctFinalizerOp{
-		input:        sdop,
-		outputColIdx: 3,
+	distinct, err := NewOrderedDistinct(source, []uint32{1, 2}, []types.T{types.Int64, types.Int64})
+	if err != nil {
+		b.Fatal(err)
 	}
 
 	// don't count the artificial zeroOp'd column in the throughput
 	b.SetBytes(int64(8 * ColBatchSize * 3))
 	for i := 0; i < b.N; i++ {
-		finalizer.Next()
+		distinct.Next()
 	}
 }
