@@ -1017,7 +1017,7 @@ func (s *Store) SetDraining(drain bool) {
 
 					if needsRaftTransfer {
 						r.raftMu.Lock()
-						r.maybeTransferRaftLeadership(ctx, drainingLease.Replica.ReplicaID)
+						r.maybeTransferRaftLeadership(ctx)
 						r.raftMu.Unlock()
 					}
 				}); err != nil {
@@ -2186,6 +2186,21 @@ func splitPostApply(
 	rightRng.mu.Unlock()
 	r.mu.Unlock()
 	log.Event(ctx, "copied timestamp cache")
+
+	// We need to explicitly wake up the Raft group on the right-hand range or
+	// else the range could be underreplicated for an indefinite period of time.
+	//
+	// Specifically, suppose one of the replicas of the left-hand range never
+	// applies this split trigger, e.g., because it catches up via a snapshot that
+	// advances it past this split. That store won't create the right-hand replica
+	// until it receives a Raft message addressed to the right-hand range. But
+	// since new replicas start out quiesced, unless we explicitly awaken the
+	// Raft group, there might not be any Raft traffic for quite a while.
+	if err := rightRng.withRaftGroup(true, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
+		return true, nil
+	}); err != nil {
+		log.Fatalf(ctx, "unable to create raft group for right-hand range in split: %s", err)
+	}
 
 	// Invoke the leasePostApply method to ensure we properly initialize
 	// the replica according to whether it holds the lease. This enables
