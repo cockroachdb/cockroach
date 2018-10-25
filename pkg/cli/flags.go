@@ -17,6 +17,7 @@ package cli
 import (
 	"flag"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"net"
 	"strings"
 	"time"
@@ -398,6 +399,7 @@ func init() {
 	clientCmds = append(clientCmds, userCmds...)
 	clientCmds = append(clientCmds, zoneCmds...)
 	clientCmds = append(clientCmds, nodeCmds...)
+	clientCmds = append(clientCmds, systemBenchCmds...)
 	clientCmds = append(clientCmds, initCmd)
 	for _, cmd := range clientCmds {
 		f := cmd.PersistentFlags()
@@ -431,6 +433,23 @@ func init() {
 		BoolFlag(f, &nodeCtx.statusShowStats, cliflags.NodeStats, nodeCtx.statusShowStats)
 		BoolFlag(f, &nodeCtx.statusShowAll, cliflags.NodeAll, nodeCtx.statusShowAll)
 		BoolFlag(f, &nodeCtx.statusShowDecommission, cliflags.NodeDecommission, nodeCtx.statusShowDecommission)
+	}
+
+	// HDD Bench command.
+	{
+		f := seqWriteBench.Flags()
+		VarFlag(f, humanizeutil.NewBytesValue(&systemBenchCtx.writeSize), cliflags.WriteSize)
+		VarFlag(f, humanizeutil.NewBytesValue(&systemBenchCtx.syncInterval), cliflags.SyncInterval)
+	}
+
+	// Bench command.
+	{
+		for _, cmd := range systemBenchCmds {
+			f := cmd.Flags()
+			IntFlag(f, &systemBenchCtx.concurrency, cliflags.BenchConcurrency, systemBenchCtx.concurrency)
+			DurationFlag(f, &systemBenchCtx.duration, cliflags.BenchDuration, systemBenchCtx.duration)
+			StringFlag(f, &systemBenchCtx.tempDir, cliflags.TempDir, systemBenchCtx.tempDir)
+		}
 	}
 
 	// Decommission command.
