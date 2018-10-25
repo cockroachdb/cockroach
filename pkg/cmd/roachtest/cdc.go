@@ -236,7 +236,7 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 		var numResolved, rowsSinceResolved int
 		v := changefeedccl.Validators{
 			changefeedccl.NewOrderValidator(`bank`),
-			changefeedccl.NewFingerprintValidator(db, `bank`, `fprint`, tc.partitions),
+			changefeedccl.NewFingerprintValidator(db, `bank.bank`, `fprint`, tc.partitions),
 		}
 		if _, err := db.Exec(
 			`CREATE TABLE fprint (id INT PRIMARY KEY, balance INT, payload STRING)`,
@@ -246,6 +246,9 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 
 		for {
 			m := tc.Next(ctx)
+			if m == nil {
+				return fmt.Errorf("unexpected end of changefeed")
+			}
 			updated, resolved, err := changefeedccl.ParseJSONValueTimestamps(m.Value)
 			if err != nil {
 				return err
