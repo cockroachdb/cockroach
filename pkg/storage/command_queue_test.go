@@ -34,7 +34,7 @@ func getPrereqs(cq *CommandQueue, from, to roachpb.Key, readOnly bool) []*cmd {
 }
 
 func add(cq *CommandQueue, from, to roachpb.Key, readOnly bool, prereqs []*cmd) *cmd {
-	return cq.add(readOnly, zeroTS, prereqs, []roachpb.Span{{Key: from, EndKey: to}})
+	return cq.add(readOnly, false /* preEvaluate */, zeroTS, prereqs, []roachpb.Span{{Key: from, EndKey: to}})
 }
 
 func getPrereqsAndAdd(cq *CommandQueue, from, to roachpb.Key, readOnly bool) ([]*cmd, *cmd) {
@@ -292,7 +292,7 @@ func TestCommandQueueWithoutCoveringOptimization(t *testing.T) {
 	c := roachpb.Span{Key: roachpb.Key("c")}
 
 	{
-		cmd := cq.add(false, zeroTS, nil, []roachpb.Span{a, b})
+		cmd := cq.add(false, false, zeroTS, nil, []roachpb.Span{a, b})
 		if !cmd.expanded {
 			t.Errorf("expected non-expanded command, not %+v", cmd)
 		}
@@ -306,7 +306,7 @@ func TestCommandQueueWithoutCoveringOptimization(t *testing.T) {
 	}
 
 	{
-		cmd := cq.add(false, zeroTS, nil, []roachpb.Span{c})
+		cmd := cq.add(false, false, zeroTS, nil, []roachpb.Span{c})
 		if cmd.expanded {
 			t.Errorf("expected unexpanded command, not %+v", cmd)
 		}
@@ -360,16 +360,16 @@ func TestCommandQueueIssue6495(t *testing.T) {
 	}
 
 	cq.getPrereqs(false, zeroTS, spans1998)
-	cmd1998 := cq.add(false, zeroTS, nil, spans1998)
+	cmd1998 := cq.add(false, false, zeroTS, nil, spans1998)
 
 	cq.getPrereqs(true, zeroTS, spans1999)
-	cmd1999 := cq.add(true, zeroTS, nil, spans1999)
+	cmd1999 := cq.add(true, false, zeroTS, nil, spans1999)
 
 	cq.getPrereqs(true, zeroTS, spans2002)
-	cq.add(true, zeroTS, nil, spans2002)
+	cq.add(true, false, zeroTS, nil, spans2002)
 
 	cq.getPrereqs(false, zeroTS, spans2003)
-	cq.add(false, zeroTS, nil, spans2003)
+	cq.add(false, false, zeroTS, nil, spans2003)
 
 	cq.remove(cmd1998)
 	cq.remove(cmd1999)
@@ -404,19 +404,19 @@ func TestCommandQueueTimestamps(t *testing.T) {
 		mkSpan("e", "g"),
 	}
 
-	cmd1 := cq.add(true, makeTS(1, 0), nil, spans1)
+	cmd1 := cq.add(true, false, makeTS(1, 0), nil, spans1)
 
 	pre2 := cq.getPrereqs(true, makeTS(2, 0), spans2)
 	if pre2 != nil {
 		t.Errorf("expected nil prereq slice; got %+v", pre2)
 	}
-	cmd2 := cq.add(false, makeTS(2, 0), pre2, spans2)
+	cmd2 := cq.add(false, false, makeTS(2, 0), pre2, spans2)
 
 	pre3 := cq.getPrereqs(true, makeTS(3, 0), spans3)
 	if pre3 != nil {
 		t.Errorf("expected nil prereq slice; got %+v", pre3)
 	}
-	cmd3 := cq.add(false, makeTS(3, 0), pre3, spans3)
+	cmd3 := cq.add(false, false, makeTS(3, 0), pre3, spans3)
 
 	// spans4 should wait on spans3.children[1].
 	pre4 := cq.getPrereqs(true, makeTS(4, 0), spans4)
@@ -424,7 +424,7 @@ func TestCommandQueueTimestamps(t *testing.T) {
 	if !reflect.DeepEqual(expPre, pre4) {
 		t.Errorf("expected prereq commands %+v; got %+v", expPre, pre4)
 	}
-	cmd4 := cq.add(true, makeTS(4, 0), pre4, spans4)
+	cmd4 := cq.add(true, false, makeTS(4, 0), pre4, spans4)
 
 	// Verify that an earlier writer for whole span waits on all commands.
 	pre5 := cq.getPrereqs(false, makeTS(0, 1), []roachpb.Span{mkSpan("a", "g")})
@@ -500,14 +500,14 @@ func TestCommandQueueEnclosedRead(t *testing.T) {
 	}
 
 	// Add command 1.
-	cmd1 := cq.add(true, makeTS(2, 0), nil, spans1)
+	cmd1 := cq.add(true, false, makeTS(2, 0), nil, spans1)
 
 	// Add command 2.
 	pre := cq.getPrereqs(false, makeTS(3, 0), spans2)
 	if expPre := []*cmd(nil); !reflect.DeepEqual(expPre, pre) {
 		t.Errorf("expected prereq commands %+v; got %+v", expPre, pre)
 	}
-	cmd2 := cq.add(false, makeTS(3, 0), pre, spans2)
+	cmd2 := cq.add(false, false, makeTS(3, 0), pre, spans2)
 
 	// Add command 3.
 	pre = cq.getPrereqs(false, makeTS(1, 0), spansCandidate)
@@ -540,14 +540,14 @@ func TestCommandQueueEnclosedWrite(t *testing.T) {
 	}
 
 	// Add command 1.
-	cmd1 := cq.add(false, makeTS(3, 0), nil, spans1)
+	cmd1 := cq.add(false, false, makeTS(3, 0), nil, spans1)
 
 	// Add command 2.
 	pre := cq.getPrereqs(true, makeTS(2, 0), spans2)
 	if expPre := []*cmd(nil); !reflect.DeepEqual(expPre, pre) {
 		t.Errorf("expected prereq commands %+v; got %+v", expPre, pre)
 	}
-	cmd2 := cq.add(true, makeTS(2, 0), nil, spans2)
+	cmd2 := cq.add(true, false, makeTS(2, 0), nil, spans2)
 
 	// Add command 3.
 	pre = cq.getPrereqs(false, makeTS(1, 0), spansCandidate)
@@ -576,10 +576,10 @@ func TestCommandQueueTimestampsEmpty(t *testing.T) {
 		mkSpan("h", ""),
 	}
 
-	cmd1 := cq.add(true, zeroTS, nil, spansR)
-	cmd2 := cq.add(false, zeroTS, nil, spansW)
-	cmd3 := cq.add(true, makeTS(1, 0), nil, spansRTS)
-	cmd4 := cq.add(false, makeTS(1, 0), nil, spansWTS)
+	cmd1 := cq.add(true, false, zeroTS, nil, spansR)
+	cmd2 := cq.add(false, false, zeroTS, nil, spansW)
+	cmd3 := cq.add(true, false, makeTS(1, 0), nil, spansRTS)
+	cmd4 := cq.add(false, false, makeTS(1, 0), nil, spansWTS)
 
 	// A writer will depend on both zero-timestamp spans.
 	pre := cq.getPrereqs(false, makeTS(1, 0), []roachpb.Span{mkSpan("a", "f")})
@@ -677,7 +677,7 @@ func TestCommandQueueTransitiveDependencies(t *testing.T) {
 				{
 					cq := NewCommandQueue(true)
 
-					cq.add(ops1.readOnly, ops1.ts, nil, ops1.spans)
+					cq.add(ops1.readOnly, false, ops1.ts, nil, ops1.spans)
 
 					pre3 := cq.getPrereqs(ops3.readOnly, ops3.ts, ops3.spans)
 					if expectDependency := len(pre3) > 0; !expectDependency {
@@ -697,12 +697,12 @@ func TestCommandQueueTransitiveDependencies(t *testing.T) {
 					cq := NewCommandQueue(true)
 
 					// Add command 1.
-					cmd1 := cq.add(ops1.readOnly, ops1.ts, nil, ops1.spans)
+					cmd1 := cq.add(ops1.readOnly, false, ops1.ts, nil, ops1.spans)
 
 					// Add command 2, taking note of whether it depends on command 1.
 					pre2 := cq.getPrereqs(ops2.readOnly, ops2.ts, ops2.spans)
 					dependency2to1 := len(pre2) > 0
-					cmd2 := cq.add(ops2.readOnly, ops2.ts, pre2, ops2.spans)
+					cmd2 := cq.add(ops2.readOnly, false, ops2.ts, pre2, ops2.spans)
 
 					// Add command 3, taking note of whether it depends on command 1
 					// or on command 2.
@@ -755,7 +755,7 @@ func TestCommandQueueGetSnapshotWithChildren(t *testing.T) {
 	cmd2 := add(cq, roachpb.Key("a"), nil, true, []*cmd{cmd1})
 	// the following creates a node with two children because it has two spans
 	// only the children show up in the snapshot.
-	cq.add(true, zeroTS, []*cmd{cmd2}, []roachpb.Span{
+	cq.add(true, false, zeroTS, []*cmd{cmd2}, []roachpb.Span{
 		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 		{Key: roachpb.Key("d"), EndKey: roachpb.Key("f")},
 	})
@@ -818,7 +818,7 @@ func BenchmarkCommandQueueGetPrereqsAllReadOnly(b *testing.B) {
 				EndKey: roachpb.Key("aaaaaaaaab"),
 			}}
 			for i := 0; i < size; i++ {
-				cq.add(true, zeroTS, nil, spans)
+				cq.add(true, false, zeroTS, nil, spans)
 			}
 
 			b.ResetTimer()
@@ -853,7 +853,7 @@ func BenchmarkCommandQueueReadWriteMix(b *testing.B) {
 					var cmd *cmd
 					readOnly := j%(readsPerWrite+1) != 0
 					prereqs := cq.getPrereqs(readOnly, zeroTS, spans)
-					cmd = cq.add(readOnly, zeroTS, prereqs, spans)
+					cmd = cq.add(readOnly, false, zeroTS, prereqs, spans)
 					if len(liveCmdQueue) == cap(liveCmdQueue) {
 						cq.remove(<-liveCmdQueue)
 					}

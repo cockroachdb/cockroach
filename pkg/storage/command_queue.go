@@ -81,11 +81,12 @@ type CommandQueue struct {
 }
 
 type cmd struct {
-	id        int64
-	key       interval.Range
-	readOnly  bool
-	timestamp hlc.Timestamp
-	debugInfo summaryWriter
+	id          int64
+	key         interval.Range
+	readOnly    bool
+	preEvaluate bool // collects pre-requisites and dependents, instead of waiting
+	timestamp   hlc.Timestamp
+	debugInfo   summaryWriter
 
 	buffered bool // is this cmd buffered in readsBuffer
 	expanded bool // have the children been added
@@ -101,7 +102,10 @@ type cmd struct {
 	// in the prereq slice to avoid duplicates.
 	prereqIDs map[int64]struct{}
 
-	pending chan struct{} // closed when complete
+	// If pre-evaluating, collect commands which are prereqs or dependents.
+	prereqsAndDeps []*cmd
+
+	pending chan struct{} // closed when complete, or if pre-evaulating
 }
 
 // A summaryWriter is capable of writing a summary about itself. It is typically
@@ -277,6 +281,16 @@ func (c *cmd) ResolvePendingPrereq() {
 		}
 	}
 
+	// If the prereq is pre-evaluating, let it know that this command is
+	// a dependent.
+	if pre.preEvaluate {
+		pre.prereqsAndDeps = append(pre.prereqsAndDeps, c)
+	}
+	// If the command is pre-evaluating, keep track of prereqs.
+	if c.preEvaluate {
+		c.prereqsAndDeps = append(c.prereqsAndDeps, pre)
+	}
+
 	// Truncate the command's prerequisite list so that it no longer includes
 	// the first prerequisite. Before doing so, nil out prefix of slice to allow
 	// GC of the first command. Without this, large chunks of the dependency
@@ -289,7 +303,7 @@ func (c *cmd) ResolvePendingPrereq() {
 	delete(c.prereqIDs, pre.id)
 }
 
-// OptimisticallyResolvePrereqs removes all prerequisite in the cmd's prereq
+// OptimisticallyResolvePrereqs removes all prerequisites in the cmd's prereq
 // slice that have already finished without blocking on pending commands.
 // Prerequisite commands that are still pending or that were canceled are left
 // in the prereq slice.
@@ -311,6 +325,20 @@ func (c *cmd) OptimisticallyResolvePrereqs() {
 		j++
 	}
 	(*c.prereqs) = (*c.prereqs)[:j]
+}
+
+// Overlaps returns whether the supplied range overlaps with any span
+// in the command.
+func (c *cmd) Overlaps(o interval.Range) bool {
+	if len(c.children) == 0 {
+		return interval.ExclusiveOverlapper.Overlap(o, c.key)
+	}
+	for _, child := range c.children {
+		if interval.ExclusiveOverlapper.Overlap(o, child.key) {
+			return true
+		}
+	}
+	return false
 }
 
 // NewCommandQueue returns a new command queue. The boolean specifies whether
@@ -724,7 +752,7 @@ func (o *overlapHeap) PopOverlap() *cmd {
 //
 // Returns a nil `cmd` when no spans are given.
 func (cq *CommandQueue) add(
-	readOnly bool, timestamp hlc.Timestamp, prereqs []*cmd, spans []roachpb.Span,
+	readOnly, preEvaluate bool, timestamp hlc.Timestamp, prereqs []*cmd, spans []roachpb.Span,
 ) *cmd {
 	if len(spans) == 0 {
 		return nil
@@ -766,6 +794,7 @@ func (cq *CommandQueue) add(
 	cmd.id = cq.nextID()
 	cmd.key = coveringSpan.AsRange()
 	cmd.readOnly = readOnly
+	cmd.preEvaluate = preEvaluate
 	cmd.timestamp = timestamp
 	cmd.prereqsBuf = prereqs
 	cmd.prereqs = &cmd.prereqsBuf
