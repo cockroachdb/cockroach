@@ -1017,7 +1017,7 @@ func (s *Store) SetDraining(drain bool) {
 
 					if needsRaftTransfer {
 						r.raftMu.Lock()
-						r.maybeTransferRaftLeadership(ctx, drainingLease.Replica.ReplicaID)
+						r.maybeTransferRaftLeadership(ctx)
 						r.raftMu.Unlock()
 					}
 				}); err != nil {
@@ -2219,6 +2219,12 @@ func splitPostApply(
 	rightRng.mu.Unlock()
 	r.mu.Unlock()
 	log.Event(ctx, "copied timestamp cache")
+
+	// New ranges start out quiesced. If we don't explicitly wake up the Raft
+	// group, we might never notice that once of our followers is out of date.
+	rightRng.withRaftGroup(true, func(r *raft.RawNode) (unquiesceAndWakeLeader bool, _ error) {
+		return true, nil
+	})
 
 	// Invoke the leasePostApply method to ensure we properly initialize
 	// the replica according to whether it holds the lease. This enables

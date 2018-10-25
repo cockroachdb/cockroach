@@ -26,7 +26,6 @@ import (
 	"github.com/kr/pretty"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"go.etcd.io/etcd/raft"
 	"golang.org/x/time/rate"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -309,17 +308,10 @@ func (r *Replica) leasePostApply(ctx context.Context, newLease roachpb.Lease) {
 		r.txnWaitQueue.Clear(true /* disable */)
 	}
 
-	if !iAmTheLeaseHolder && r.IsLeaseValid(newLease, r.store.Clock().Now()) &&
-		!r.store.TestingKnobs().DisableLeaderFollowsLeaseholder {
-		// If this replica is the raft leader but it is not the new lease holder,
-		// then try to transfer the raft leadership to match the lease. We like it
-		// when leases and raft leadership are collocated because that facilitates
-		// quick command application (requests generally need to make it to both the
-		// lease holder and the raft leader before being applied by other replicas).
-		// Note that this condition is also checked periodically when computing
-		// replica metrics.
-		r.maybeTransferRaftLeadership(ctx, newLease.Replica.ReplicaID)
-	}
+	// If we're the current raft leader, may want to transfer the leadership to
+	// the new leaseholder. Note that this condition is also checked periodically
+	// when ticking the replica.
+	r.maybeTransferRaftLeadership(ctx)
 
 	// Notify the store that a lease change occurred and it may need to
 	// gossip the updated store descriptor (with updated capacity).
@@ -460,40 +452,6 @@ func addSSTablePreApply(
 	}
 	log.Eventf(ctx, "ingested SSTable at index %d, term %d: %s", index, term, path)
 	return copied
-}
-
-// maybeTransferRaftLeadership attempts to transfer the leadership
-// away from this node to target, if this node is the current raft
-// leader. We don't attempt to transfer leadership if the transferee
-// is behind on applying the log.
-//
-// TODO(tschottdorf): there's also maybeTransferRaftLeader. Only one should exist.
-func (r *Replica) maybeTransferRaftLeadership(ctx context.Context, target roachpb.ReplicaID) {
-	err := r.withRaftGroup(true, func(raftGroup *raft.RawNode) (bool, error) {
-		// Only the raft leader can attempt a leadership transfer.
-		if status := raftGroup.Status(); status.RaftState == raft.StateLeader {
-			// Only attempt this if the target has all the log entries. Although
-			// TransferLeader is supposed to do the right thing if the target is not
-			// caught up, this check avoids periods of 0 QPS:
-			// https://github.com/cockroachdb/cockroach/issues/22573#issuecomment-366106118
-			if pr, ok := status.Progress[uint64(target)]; (ok && pr.Match == r.mu.lastIndex) || r.mu.draining {
-				log.VEventf(ctx, 1, "transferring raft leadership to replica ID %v", target)
-				r.store.metrics.RangeRaftLeaderTransfers.Inc(1)
-				raftGroup.TransferLeader(uint64(target))
-			}
-		}
-		return true, nil
-	})
-	if err != nil {
-		// An error here indicates that this Replica has been destroyed
-		// while lacking the necessary synchronization (or even worse, it
-		// fails spuriously - could be a storage error), and so we avoid
-		// sweeping that under the rug.
-		//
-		// TODO(tschottdorf): this error is not handled any more
-		// at this level.
-		log.Fatal(ctx, roachpb.NewReplicaCorruptionError(err))
-	}
 }
 
 func (r *Replica) handleReplicatedEvalResult(
