@@ -19,8 +19,8 @@ import React from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
 
-import * as protos from "src/js/protos";
-import { jobsKey, refreshJobs } from "src/redux/apiReducers";
+import { cockroach } from "src/js/protos";
+import { CachedDataReducerState, jobsKey, refreshJobs } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { TimestampToMoment } from "src/util/convert";
@@ -37,12 +37,10 @@ import "./index.styl";
 import succeededIcon from "!!raw-loader!assets/jobStatusIcons/checkMark.svg";
 import failedIcon from "!!raw-loader!assets/jobStatusIcons/exclamationPoint.svg";
 
-type Job = protos.cockroach.server.serverpb.JobsResponse.Job;
-
-type JobType = protos.cockroach.sql.jobs.jobspb.Type;
-const jobType = protos.cockroach.sql.jobs.jobspb.Type;
-
-const JobsRequest = protos.cockroach.server.serverpb.JobsRequest;
+import Job = cockroach.server.serverpb.JobsResponse.IJob;
+import JobType = cockroach.sql.jobs.jobspb.Type;
+import JobsRequest = cockroach.server.serverpb.JobsRequest;
+import JobsResponse = cockroach.server.serverpb.JobsResponse;
 
 const statusOptions = [
   { value: "", label: "All" },
@@ -59,16 +57,16 @@ const statusSetting = new LocalSetting<AdminUIState, string>(
 );
 
 const typeOptions = [
-  { value: jobType.UNSPECIFIED.toString(), label: "All" },
-  { value: jobType.BACKUP.toString(), label: "Backups" },
-  { value: jobType.RESTORE.toString(), label: "Restores" },
-  { value: jobType.IMPORT.toString(), label: "Imports" },
-  { value: jobType.SCHEMA_CHANGE.toString(), label: "Schema Changes" },
-  { value: jobType.CHANGEFEED.toString(), label: "Changefeed"},
+  { value: JobType.UNSPECIFIED.toString(), label: "All" },
+  { value: JobType.BACKUP.toString(), label: "Backups" },
+  { value: JobType.RESTORE.toString(), label: "Restores" },
+  { value: JobType.IMPORT.toString(), label: "Imports" },
+  { value: JobType.SCHEMA_CHANGE.toString(), label: "Schema Changes" },
+  { value: JobType.CHANGEFEED.toString(), label: "Changefeed"},
 ];
 
 const typeSetting = new LocalSetting<AdminUIState, number>(
-  "jobs/type_setting", s => s.localSettings, jobType.UNSPECIFIED,
+  "jobs/type_setting", s => s.localSettings, JobType.UNSPECIFIED,
 );
 
 const showOptions = [
@@ -128,7 +126,7 @@ class JobStatusCell extends React.Component<{ job: Job }, {}> {
           strokeWidth={10}
           trailWidth={10}
           className="jobs-table__progress-bar"
-          strokeColor={"#3A7DE1"}
+          strokeColor="#3A7DE1"
         />
         <span title={percent.toFixed(3) + "%"}>{percent.toFixed(1) + "%"}</span>
       </div>
@@ -233,8 +231,7 @@ interface JobsTableProps {
   setShow: (value: string) => void;
   setType: (value: JobType) => void;
   refreshJobs: typeof refreshJobs;
-  jobs: Job[];
-  jobsValid: boolean;
+  jobs: CachedDataReducerState<JobsResponse>;
 }
 
 const titleTooltip = (
@@ -246,7 +243,7 @@ const titleTooltip = (
   </span>
 );
 
-class JobsTable extends React.Component<JobsTableProps, {}> {
+class JobsTable extends React.Component<JobsTableProps> {
   refresh(props = this.props) {
     props.refreshJobs(new JobsRequest({
       status: props.status,
@@ -292,25 +289,23 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
   }
 
   renderTable = () => {
-    const jobs = this.props.jobs && this.props.jobs.length > 0 && this.props.jobs;
+    const jobs = this.props.jobs.data.jobs;
     if (_.isEmpty(jobs)) {
       return <div className="no-results"><h2>No Results</h2></div>;
     }
     return (
-      <section className="section">
-        <JobsSortedTable
-          data={jobs}
-          sortSetting={this.props.sort}
-          onChangeSortSetting={this.props.setSort}
-          className="jobs-table"
-          rowClass={job => "jobs-table__row--" + job.status}
-          columns={jobsTableColumns}
-          expandableConfig={{
-            expandedContent: this.renderJobExpanded,
-            expansionKey: (job) => job.id.toString(),
-          }}
-        />
-      </section>
+      <JobsSortedTable
+        data={jobs}
+        sortSetting={this.props.sort}
+        onChangeSortSetting={this.props.setSort}
+        className="jobs-table"
+        rowClass={job => "jobs-table__row--" + job.status}
+        columns={jobsTableColumns}
+        expandableConfig={{
+          expandedContent: this.renderJobExpanded,
+          expansionKey: (job) => job.id.toString(),
+        }}
+      />
     );
   }
 
@@ -360,10 +355,13 @@ class JobsTable extends React.Component<JobsTableProps, {}> {
             </PageConfigItem>
           </PageConfig>
         </div>
-        <Loading
-          loading={_.isNil(this.props.jobs)}
-          render={this.renderTable}
-        />
+        <section className="section">
+          <Loading
+            loading={!this.props.jobs || !this.props.jobs.data}
+            error={this.props.jobs && this.props.jobs.lastError}
+            render={this.renderTable}
+          />
+        </section>
       </div>
     );
   }
@@ -377,9 +375,7 @@ const mapStateToProps = (state: AdminUIState) => {
   const key = jobsKey(status, type, parseInt(show, 10));
   const jobs = state.cachedData.jobs[key];
   return {
-    sort, status, show, type,
-    jobs: jobs && jobs.data && jobs.data.jobs,
-    jobsValid: jobs && jobs.valid,
+    sort, status, show, type, jobs,
   };
 };
 

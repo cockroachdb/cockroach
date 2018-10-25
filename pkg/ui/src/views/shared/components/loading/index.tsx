@@ -19,8 +19,7 @@ import "./index.styl";
 
 interface LoadingProps {
   loading: boolean;
-  error?: Error;
-  renderError?: (err: Error) => React.ReactNode;
+  error?: Error | null;
   className?: string;
   image?: string;
   render: () => React.ReactNode;
@@ -39,20 +38,12 @@ export default function Loading(props: LoadingProps) {
   // Check for `error` before `loading`, since tests for `loading` often return
   // true even if CachedDataReducer has an error and is no longer really "loading".
   if (props.error) {
-    if (props.renderError) {
-      return (
-        <React.Fragment>
-          {props.renderError(props.error)}
-        </React.Fragment>
-      );
-    } else {
-      return (
-        <div className="loading-error">
-          <p>An error was encountered while loading this data:</p>
-          <pre>{props.error.message}</pre>
-        </div>
-      );
-    }
+    return (
+      <div className="loading-error">
+        <p>An error was encountered while loading this data:</p>
+        <pre>{props.error.message}</pre>
+      </div>
+    );
   }
   if (props.loading) {
     return <div className={className} style={image} />;
