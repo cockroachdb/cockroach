@@ -209,7 +209,6 @@ func (mq *mergeQueue) process(
 	if err != nil {
 		return err
 	}
-	log.Infof(ctx, "DEBUG(ridwanmsharif): Requested range QPS from lease holder: %v", rhsQPS)
 	if rhsStats.Total() >= minBytes {
 		log.VEventf(ctx, 2, "skipping merge: RHS meets minimum size threshold %d with %d bytes",
 			minBytes, lhsStats.Total())
@@ -227,8 +226,6 @@ func (mq *mergeQueue) process(
 	// found for over 10 seconds, the merge queue should feel free to merge the ranges.
 	if lhsRepl.SplitByLoadEnabled() && timeSinceLastReq <= (10*time.Second) {
 		mergedQPS = lhsQPS + rhsQPS
-		log.Infof(ctx, "DEBUG(ridwanmsharif): Considering load based splitting: (Left range QPS: %v, Right range QPS: %v)",
-			lhsQPS, rhsQPS)
 	}
 
 	// Check if the merged range would need to be split, if so, skip merge.
