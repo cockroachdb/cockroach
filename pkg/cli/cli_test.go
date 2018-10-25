@@ -1811,6 +1811,7 @@ Available Commands:
   node        list, inspect or remove nodes
   dump        dump sql tables
 
+  systembench Run systembench
   demo        open a demo sql shell
   gen         generate auxiliary files
   version     output version information
