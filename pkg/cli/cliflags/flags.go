@@ -811,4 +811,24 @@ Maximum size of each log file.
 Minimum verbosity of messages written to the log file.
 `,
 	}
+
+	WriteSize = FlagInfo{
+		Name:        "write-size",
+		Description: `Size of blocks to write to storage device.`,
+	}
+
+	SyncInterval = FlagInfo{
+		Name:        "sync-interval",
+		Description: `Number of bytes to write before running fsync.`,
+	}
+
+	BenchConcurrency = FlagInfo{
+		Name:        "concurrency",
+		Description: `Number of workers for benchmarking.`,
+	}
+
+	BenchDuration = FlagInfo{
+		Name:        "duration",
+		Description: `The amount of time to run workers.`,
+	}
 )
