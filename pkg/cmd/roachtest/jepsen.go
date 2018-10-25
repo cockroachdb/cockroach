@@ -222,16 +222,18 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		run(c, ctx, controller, "tail -n 100 /mnt/data1/jepsen/cockroachdb/invoke.log")
 		// We recognize some errors and ignore them.
 		// We're looking for the "Oh jeez" message that Jepsen prints as the test's
-		// outcome, followed by a known exception on the next line. If we don't find
+		// outcome, followed by some known exceptions on the next line. If we don't find
 		// either one, we consider the error unrecognized.
-		// TODO(andrei): Remove this unfortunate code once #30527 is fixed.
+		// TODO(andrei): The known errors are tracked in #30527 (BrokenBarrier and
+		// Interrupted) and #26082 (JSch). Remove errors from this unfortunate list
+		// once the respective issues are fixed.
 		ignoreErr := false
 		if err := runE(c, ctx, controller,
 			`grep "Oh jeez, I'm sorry, Jepsen broke. Here's why" /mnt/data1/jepsen/cockroachdb/invoke.log -A1 `+
 				`| grep -e BrokenBarrierException -e InterruptedException -e com.jcraft.jsch.JSchException`,
 		); err == nil {
-			logf("Recognized BrokenBarrier or InterruptedException. " +
-				"Ignoring it and considering the test successful. See #30527.")
+			logf("Recognized BrokenBarrier, InterruptedException or JSchException. " +
+				"Ignoring it and considering the test successful. See #30527 or #26082.")
 			ignoreErr = true
 		}
 
