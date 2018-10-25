@@ -53,16 +53,16 @@ type ColVec interface {
 	// into itself at the specified index for a given length.
 	Append(vec ColVec, colType types.T, toLength uint64, fromLength uint16)
 
-	// AppendSelected appends into itself another column vector from a ColBatch with
+	// AppendWithSel appends into itself another column vector from a ColBatch with
 	// maximum size of ColBatchSize, filtered by the given selection vector.
-	AppendSelected(vec ColVec, sel []uint16, batchSize uint16, colType types.T, toLength uint64)
+	AppendWithSel(vec ColVec, sel []uint16, batchSize uint16, colType types.T, toLength uint64)
 
-	// CopyFrom copies into itself another column vector, filtered by the given
+	// CopyWithSelInt64 copies into itself another column vector, filtered by the given
 	// selection vector.
-	CopyFrom(vec ColVec, sel []uint64, nSel uint16, colType types.T)
-	// CopyFromBatch copies into itself another batch's column vector, filtered by
+	CopyWithSelInt64(vec ColVec, sel []uint64, nSel uint16, colType types.T)
+	// CopyWithSelInt16 copies into itself another batch's column vector, filtered by
 	// the given selection vector. The size of the batch is at most ColBatchSize.
-	CopyFromBatch(vec ColVec, sel []uint16, nSel uint16, colType types.T)
+	CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colType types.T)
 }
 
 // Nulls represents a list of potentially nullable values.

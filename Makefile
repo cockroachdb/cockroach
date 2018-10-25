@@ -696,7 +696,8 @@ DOCGEN_TARGETS := bin/.docgen_bnfs bin/.docgen_functions
 
 EXECGEN_TARGETS = \
   pkg/sql/exec/rowstovec.og.go \
-  pkg/sql/exec/colvec.og.go
+  pkg/sql/exec/colvec.og.go \
+  pkg/sql/exec/hashjoiner.og.go
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
