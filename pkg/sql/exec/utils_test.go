@@ -95,7 +95,6 @@ func newOpTestInput(batchSize uint16, tuples tuples, extraCols ...types.T) *opTe
 		tuples:    tuples,
 		extraCols: extraCols,
 	}
-	ret.Init()
 	return ret
 }
 
@@ -109,7 +108,6 @@ func newOpTestSelInput(
 		tuples:    tuples,
 		extraCols: extraCols,
 	}
-	ret.Init()
 	return ret
 }
 
@@ -192,6 +190,7 @@ type opTestOutput struct {
 // to verify on the given column indices that the output is exactly equal to
 // the expected tuples.
 func newOpTestOutput(input Operator, cols []int, expected tuples) *opTestOutput {
+	input.Init()
 	return &opTestOutput{
 		input:    input,
 		cols:     cols,
