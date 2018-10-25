@@ -332,15 +332,6 @@ func (r *Replica) raftTruncatedStateLocked(
 	return ts, nil
 }
 
-// raftTruncatedState returns metadata about the log that preceded the first
-// current entry. This includes both entries that have been compacted away and
-// the dummy entries that make up the starting point of an empty log.
-func (r *Replica) raftTruncatedState(ctx context.Context) (roachpb.RaftTruncatedState, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.raftTruncatedStateLocked(ctx)
-}
-
 // FirstIndex implements the raft.Storage interface.
 func (r *replicaRaftStorage) FirstIndex() (uint64, error) {
 	ctx := r.AnnotateCtx(context.TODO())
@@ -856,19 +847,6 @@ func (r *Replica) applySnapshot(
 		if err := batch.ApplyBatchRepr(batchRepr, false); err != nil {
 			return err
 		}
-	}
-
-	// Nodes running v2.0 and earlier may send an incorrect Raft tombstone (see
-	// #12154) that was supposed to be unreplicated. Simply remove it.
-	//
-	// NB: this can be removed post v2.1. This is because when we are running a
-	// binary at v2.2, we know that peers are at least running v2.1, which will
-	// never send out snapshots with incorrect tombstones. v2.0 nodes can send out
-	// these incorrect snapshots if they were upgraded from a v1.1 store with
-	// incorrect tombstones and never rebooted while
-	// VersionUnreplicatedTombstoneKey was active.
-	if err := clearLegacyTombstone(batch, r.RangeID); err != nil {
-		return errors.Wrap(err, "while clearing legacy tombstone key")
 	}
 
 	// The log entries are all written to distinct keys so we can use a

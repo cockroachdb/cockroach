@@ -392,104 +392,11 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		}
 	}
 
-	// Put down a few fake legacy tombstones (#12154) to jog `migrateLegacyTombstones`, including
-	// one for the existing range, but also some for non-existing ones. We'll check that these get
-	// migrated properly.
-	//
-	// Range 1 actually exists (since we will bootstrap it). The rest don't.
-	legacyTombstones := []struct {
-		rangeID         roachpb.RangeID
-		legacyTombstone roachpb.ReplicaID // legacy tombstone's NextReplicaID
-		newTombstone    roachpb.ReplicaID // new-style tombstone's NextReplicaID (if nonzero)
-		exNewTombstone  roachpb.ReplicaID // resulting new-style tombstone
-	}{
-		{rangeID: 1, legacyTombstone: 1, exNewTombstone: 1},
-		{rangeID: 200, legacyTombstone: 123, newTombstone: 122, exNewTombstone: 123},
-		{rangeID: 300, legacyTombstone: 333, newTombstone: 335, exNewTombstone: 335},
-	}
-
-	for _, stone := range legacyTombstones {
-		legacyTombstoneKey := keys.RaftTombstoneIncorrectLegacyKey(stone.rangeID)
-
-		if err := engine.MVCCPutProto(
-			ctx, eng, nil /* ms */, legacyTombstoneKey, hlc.Timestamp{}, nil, /* txn */
-			&roachpb.RaftTombstone{NextReplicaID: stone.legacyTombstone},
-		); err != nil {
-			t.Fatal(err)
-		}
-		if stone.newTombstone == 0 {
-			// No new-style tombstone for this key is present.
-			continue
-		}
-
-		tombstoneKey := keys.RaftTombstoneKey(stone.rangeID)
-		if err := engine.MVCCPutProto(
-			ctx, eng, nil /* ms */, tombstoneKey, hlc.Timestamp{},
-			nil /* txn */, &roachpb.RaftTombstone{NextReplicaID: stone.newTombstone},
-		); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Lay down a few fake Raft entries for Range 1 to jog `removeLeakedRaftEntries`.
-	{
-		ts, err := stateloader.Make(nil /* st */, 1).LoadTruncatedState(ctx, eng)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		const entryCount = 4
-		for i := 0; i < entryCount; i++ {
-			if ts.Index < uint64(i) {
-				t.Fatal("index cannot be negative")
-			}
-			key := keys.RaftLogKey(1, ts.Index-uint64(i))
-
-			var ent raftpb.Entry
-			var value roachpb.Value
-			if err := value.SetProto(&ent); err != nil {
-				t.Fatal(err)
-			}
-			if err := engine.MVCCPut(
-				ctx, eng, nil, key, hlc.Timestamp{}, value, nil, /* txn */
-			); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-
 	// Now, attempt to initialize a store with a now-bootstrapped range.
 	{
 		store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 		if err := store.Start(ctx, stopper); err != nil {
 			t.Fatalf("failure initializing bootstrapped store: %s", err)
-		}
-
-		// Check that `migrateLegacyTombstone` did what it was supposed to.
-		for _, stone := range legacyTombstones {
-			legacyTombstoneKey := keys.RaftTombstoneIncorrectLegacyKey(stone.rangeID)
-			if ok, err := engine.MVCCGetProto(
-				ctx, store.engine, legacyTombstoneKey, hlc.Timestamp{}, true /* consistent */, nil /* txn */, nil, /* msg */
-			); err != nil {
-				t.Fatal(err)
-			} else if ok {
-				t.Fatalf("unexpectedly found legacy tombstone key at %s", legacyTombstoneKey)
-			}
-
-			tombstoneKey := keys.RaftTombstoneKey(stone.rangeID)
-			var tombstone roachpb.RaftTombstone
-			ok, err := engine.MVCCGetProto(
-				ctx, store.engine, tombstoneKey, hlc.Timestamp{}, true /* consistent */, nil /* txn */, &tombstone, /* msg */
-			)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !ok {
-				t.Fatalf("unexpectedly did not find migrated tombstone key at %s", legacyTombstoneKey)
-			}
-			if tombstone.NextReplicaID != stone.exNewTombstone {
-				t.Fatalf("tombstone at %d is %d, but wanted %d", stone.rangeID, tombstone.NextReplicaID, stone.exNewTombstone)
-			}
 		}
 
 		// 1st range should be available.
@@ -498,22 +405,6 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 			t.Fatalf("failure fetching 1st range: %s", err)
 		}
 		rs := r.GetMVCCStats()
-
-		// Check that `removeLeakedRaftEntries` did what it was supposed to.
-		ts, err := r.raftTruncatedState(ctx)
-		if err != nil {
-			t.Fatalf("failure fetching raft truncated state: %s", err)
-		}
-		for i := uint64(0); i <= ts.Index; i++ {
-			key := keys.RaftLogKey(1, i)
-			if found, err := engine.MVCCGetProto(
-				ctx, eng, key, hlc.Timestamp{}, false, nil /* txn */, nil, /* msg */
-			); err != nil {
-				t.Fatal(err)
-			} else if found {
-				t.Fatalf("found unexpected raft entry for key %v", key)
-			}
-		}
 
 		// Stats should agree with a recomputation.
 		now := r.store.Clock().Now()
@@ -799,7 +690,7 @@ func TestStoreReplicaVisitor(t *testing.T) {
 		}
 	}
 
-	// Verify two passes of the visit.
+	// Verify two passes of the visit, the second one in-order.
 	visitor := newStoreReplicaVisitor(store)
 	exp := make(map[roachpb.RangeID]struct{})
 	for i := 0; i < newCount; i++ {
@@ -812,7 +703,19 @@ func TestStoreReplicaVisitor(t *testing.T) {
 		}
 		i := 1
 		seen := make(map[roachpb.RangeID]struct{})
+
+		// Ensure that our next pass is done in-order.
+		if pass == 1 {
+			_ = visitor.InOrder()
+		}
+		var lastRangeID roachpb.RangeID
 		visitor.Visit(func(repl *Replica) bool {
+			if pass == 1 {
+				if repl.RangeID <= lastRangeID {
+					t.Fatalf("on second pass, expect ranges to be visited in ascending range ID order; %d !> %d", repl.RangeID, lastRangeID)
+				}
+				lastRangeID = repl.RangeID
+			}
 			_, ok := seen[repl.RangeID]
 			if ok {
 				t.Fatalf("already saw %d", repl.RangeID)
