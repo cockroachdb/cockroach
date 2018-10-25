@@ -1,0 +1,3 @@
+alter_zone_database_stmt ::=
+	'ALTER' 'DATABASE' database_name 'CONFIGURE' 'ZONE' 'USING' variable '=' value ( ( ',' variable '=' value ) )*
+	| 'ALTER' 'DATABASE' database_name 'CONFIGURE' 'ZONE' 'DISCARD'
