@@ -135,6 +135,11 @@ func initCLIDefaults() {
 	sqlfmtCtx.align = (cfg.Align != tree.PrettyNoAlign)
 	sqlfmtCtx.execStmts = nil
 
+	systemBenchCtx.concurrency = 1
+	systemBenchCtx.runHDD128 = false
+	systemBenchCtx.duration = 60 * time.Second
+	systemBenchCtx.tempDir = "/tmp/"
+
 	initPreFlagsDefaults()
 
 	// Clear the "Changed" state of all the registered command-line flags.
@@ -291,6 +296,15 @@ var nodeCtx struct {
 	statusShowStats        bool
 	statusShowDecommission bool
 	statusShowAll          bool
+}
+
+// systemBenchCtx captures the command-line parameters of the `bench` command.
+// Defaults set by InitCLIDefaults() above.
+var systemBenchCtx struct {
+	runHDD128   bool
+	concurrency int
+	duration    time.Duration
+	tempDir     string
 }
 
 // sqlfmtCtx captures the command-line parameters of the `sqlfmt` command.

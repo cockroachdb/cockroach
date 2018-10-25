@@ -811,4 +811,19 @@ Maximum size of each log file.
 Minimum verbosity of messages written to the log file.
 `,
 	}
+
+	BenchHDD128 = FlagInfo{
+		Name:        "write128",
+		Description: `Run benchmark to write 128mb blocks to HDD.`,
+	}
+
+	BenchConcurrency = FlagInfo{
+		Name:        "concurrency",
+		Description: `Number of workers for benchmarking.`,
+	}
+
+	BenchDuration = FlagInfo{
+		Name:        "duration",
+		Description: `The amount of time to run workers.`,
+	}
 )
