@@ -74,6 +74,7 @@ const (
 	Version2_1
 	VersionCascadingZoneConfigs
 	VersionLoadSplits
+	VersionExportStorageWorkload
 
 	// Add new versions here (step one of two).
 
@@ -300,6 +301,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionLoadSplits is https://github.com/cockroachdb/cockroach/pull/31413.
 		Key:     VersionLoadSplits,
 		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 2},
+	},
+	{
+		// VersionExportStorageWorkload is https://github.com/cockroachdb/cockroach/pull/31899.
+		Key:     VersionExportStorageWorkload,
+		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 3},
 	},
 
 	// Add new versions here (step two of two).

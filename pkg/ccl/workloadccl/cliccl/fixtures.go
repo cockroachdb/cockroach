@@ -51,7 +51,7 @@ func config() workloadccl.FixtureConfig {
 	if len(*gcsBillingProjectOverride) > 0 {
 		config.BillingProject = *gcsBillingProjectOverride
 	}
-	config.CSVServerURL = *fixturesCSVServerURL
+	config.CSVServerURL = *fixturesMakeCSVServerURL
 	return config
 }
 
@@ -81,9 +81,7 @@ var fixturesURLCmd = workloadcli.SetCmdDefaults(&cobra.Command{
 	Short: `generate the GCS URL for a fixture`,
 })
 
-var fixturesMakeImportShared = pflag.NewFlagSet(`make/import`, pflag.ContinueOnError)
-
-var fixturesCSVServerURL = fixturesMakeImportShared.String(
+var fixturesMakeCSVServerURL = fixturesMakeCmd.PersistentFlags().String(
 	`csv-server`, ``,
 	`Skip saving CSVs to cloud storage, instead get them from a 'csv-server' running at this url`)
 
@@ -147,7 +145,6 @@ func init() {
 				Args: cobra.RangeArgs(0, 1),
 			})
 			genMakeCmd.Flags().AddFlagSet(genFlags)
-			genMakeCmd.Flags().AddFlagSet(fixturesMakeImportShared)
 			genMakeCmd.Run = workloadcli.CmdHelper(gen, fixturesMake)
 			fixturesMakeCmd.AddCommand(genMakeCmd)
 
@@ -165,7 +162,6 @@ func init() {
 				Args: cobra.RangeArgs(0, 1),
 			})
 			genImportCmd.Flags().AddFlagSet(genFlags)
-			genImportCmd.Flags().AddFlagSet(fixturesMakeImportShared)
 			genImportCmd.Flags().AddFlagSet(fixturesLoadImportShared)
 			genImportCmd.Run = workloadcli.CmdHelper(gen, fixturesImport)
 			fixturesImportCmd.AddCommand(genImportCmd)
@@ -305,11 +301,7 @@ func fixturesImport(gen workload.Generator, urls []string, dbName string) error 
 		return err
 	}
 
-	c := config()
-	if len(c.CSVServerURL) == 0 {
-		return errors.Errorf(`--csv-server is required`)
-	}
-	if err := workloadccl.ImportFixture(ctx, sqlDB, c.CSVServerURL, gen, dbName); err != nil {
+	if err := workloadccl.ImportFixture(ctx, sqlDB, gen, dbName); err != nil {
 		return errors.Wrap(err, `importing fixture`)
 	}
 
