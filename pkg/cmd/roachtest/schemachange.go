@@ -27,7 +27,7 @@ import (
 
 func registerSchemaChangeKV(r *registry) {
 	r.Add(testSpec{
-		Name:   `schemachange/kv`,
+		Name:   `schemachange/mixed/kv`,
 		Nodes:  nodes(5),
 		Stable: true, // DO NOT COPY to new tests
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -289,11 +289,11 @@ func findIndexProblem(
 	return nil
 }
 
-func registerSchemaChangeTPCC(r *registry) {
+func registerSchemaChangeIndexTPCC1000(r *registry) {
 	warehouses := 1000
 	numNodes := 5
 	r.Add(testSpec{
-		Name:    fmt.Sprintf("schemachange/tpcc/warehouses=%d/nodes=%d", warehouses, numNodes),
+		Name:    fmt.Sprintf("schemachange/index/tpcc-%d", warehouses),
 		Nodes:   nodes(numNodes),
 		Timeout: 4 * time.Hour,
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -301,18 +301,54 @@ func registerSchemaChangeTPCC(r *registry) {
 				Warehouses: warehouses,
 				Extra:      "--wait=false --tolerate-errors",
 				During: func(ctx context.Context) error {
-					conn := c.Conn(ctx, 1)
-					start := timeutil.Now()
-					if _, err := conn.Exec(`
-					CREATE UNIQUE INDEX foo ON tpcc.order (o_entry_d, o_w_id, o_d_id, o_carrier_id, o_id);
-				`); err != nil {
-						t.Fatal(err)
-					}
-					c.l.Printf("CREATE INDEX took %s", timeutil.Since(start))
-					return nil
+					return addIndexes(ctx, t, c, []string{
+						`CREATE UNIQUE INDEX ON tpcc.order (o_entry_d, o_w_id, o_d_id, o_carrier_id, o_id);`,
+						`CREATE INDEX ON tpcc.order (o_carrier_id);`,
+						`CREATE INDEX ON tpcc.customer (c_last, c_first);`,
+					})
 				},
-				Duration: 2 * time.Hour,
+				Duration: 1 * time.Hour,
 			})
 		},
 	})
+}
+
+func registerSchemaChangeIndexTPCC100(r *registry) {
+	warehouses := 100
+	numNodes := 3
+	r.Add(testSpec{
+		Name:    fmt.Sprintf("schemachange/index/tpcc-%d", warehouses),
+		Nodes:   nodes(numNodes),
+		Timeout: 30 * time.Minute,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses: warehouses,
+				Extra:      "--wait=false --tolerate-errors",
+				During: func(ctx context.Context) error {
+					return addIndexes(ctx, t, c, []string{
+						`CREATE UNIQUE INDEX ON tpcc.order (o_entry_d, o_w_id, o_d_id, o_carrier_id, o_id);`,
+						`CREATE INDEX ON tpcc.order (o_carrier_id);`,
+						`CREATE INDEX ON tpcc.customer (c_last, c_first);`,
+					})
+				},
+				Duration: 10 * time.Minute,
+			})
+		},
+	})
+}
+
+func addIndexes(ctx context.Context, t *test, c *cluster, indexes []string) error {
+	conn := c.Conn(ctx, 1)
+	c.l.Printf("addindex: creating %d indexes\n", len(indexes))
+	start := timeutil.Now()
+	for i, stmt := range indexes {
+		c.l.Printf("addindex: creating index %d...\n", i+1)
+		before := timeutil.Now()
+		if _, err := conn.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+		c.l.Printf("addindex: create index %d: %q took %v\n", i+1, stmt, timeutil.Since(before))
+	}
+	c.l.Printf("addindex: finished creating all %d indexes in %v\n", len(indexes), timeutil.Since(start))
+	return nil
 }
