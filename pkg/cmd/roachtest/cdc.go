@@ -161,7 +161,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 func runCDCBank(ctx context.Context, t *test, c *cluster) {
 	// Make the logs dir on every node to work around the `roachprod get logs`
 	// spam.
-	c.Run(ctx, c.All(), `mkdir logs`)
+	c.Run(ctx, c.All(), `mkdir -p logs`)
 
 	crdbNodes, workloadNode, kafkaNode := c.Range(1, c.nodes-1), c.Node(c.nodes), c.Node(c.nodes)
 	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
@@ -172,10 +172,17 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 		nodes: kafkaNode,
 	}
 	kafka.install(ctx)
+	if !kafka.c.isLocal() {
+		// TODO(dan): This test currently connects to kafka from the test
+		// runner, so kafka needs to advertise the external address. Better
+		// would be a binary we could run on one of the roachprod machines.
+		c.Run(ctx, kafka.nodes, `echo "advertised.listeners=PLAINTEXT://`+kafka.consumerURL(ctx)+`" >> `+
+			kafka.basePath()+`/confluent-4.0.0/etc/kafka/server.properties`)
+	}
 	kafka.start(ctx)
 	defer kafka.stop(ctx)
 
-	c.Run(ctx, workloadNode, `./workload init bank {pgurl:0}`)
+	c.Run(ctx, workloadNode, `./workload init bank {pgurl:1}`)
 	db := c.Conn(ctx, 1)
 	defer stopFeeds(db)
 
@@ -196,7 +203,7 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 	m := newMonitor(workloadCtx, c, crdbNodes)
 	var doneAtomic int64
 	m.Go(func(ctx context.Context) error {
-		err := c.RunE(ctx, workloadNode, `./workload run bank {pgurl:0}`)
+		err := c.RunE(ctx, workloadNode, `./workload run bank {pgurl:1}`)
 		if atomic.LoadInt64(&doneAtomic) > 0 {
 			return nil
 		}
@@ -353,18 +360,13 @@ func registerCDC(r *registry) {
 	// enterprise license checks, there currently isn't a good way to do that
 	// without potentially leaking secrets.
 	r.Add(testSpec{
-		Name:       "cdc",
+		Name:       "cdc/bank",
 		MinVersion: "2.1.0",
 		Nodes:      nodes(4),
-		Stable:     true, // DO NOT COPY to new tests
-		SubTests: []testSpec{{
-			Name:   `bank`,
-			Stable: true, // DO NOT COPY to new tests
-			Run: func(ctx context.Context, t *test, c *cluster) {
-				c.Wipe(ctx)
-				runCDCBank(ctx, t, c)
-			},
-		}},
+		Stable:     false,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runCDCBank(ctx, t, c)
+		},
 	})
 }
 
@@ -438,8 +440,12 @@ func (k kafkaManager) sinkURL(ctx context.Context) string {
 	return `kafka://` + k.c.InternalIP(ctx, k.nodes)[0] + `:9092`
 }
 
+func (k kafkaManager) consumerURL(ctx context.Context) string {
+	return k.c.ExternalIP(ctx, k.nodes)[0] + `:9092`
+}
+
 func (k kafkaManager) consumer(ctx context.Context, topic string) (*topicConsumer, error) {
-	kafkaAddrs := []string{k.c.InternalIP(ctx, k.nodes)[0] + `:9092`}
+	kafkaAddrs := []string{k.consumerURL(ctx)}
 	config := sarama.NewConfig()
 	// I was seeing "error processing FetchRequest: kafka: error decoding
 	// packet: unknown magic byte (2)" errors which
