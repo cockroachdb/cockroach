@@ -2129,6 +2129,52 @@ type endCmds struct {
 	ba   roachpb.BatchRequest
 }
 
+// checkConflicts determines whether any pre requisites or
+// dependencies of the command overlapped the actual affected spans,
+// as recorded in the BatchResponse. On conflict, returns an error
+// indicating that the command should be retried without
+// pre-evaluation.
+func (ec *endCmds) checkConflicts(br *roachpb.BatchResponse) *roachpb.Error {
+	for _, accessCmds := range ec.cmds {
+		for _, cmd := range accessCmds {
+			if cmd == nil {
+				continue
+			}
+			// If there were no overlapping commands at all, continue.
+			cmd.mu.Lock()
+			overlappingCmds := cmd.mu.overlappingCmds
+			cmd.mu.overlappingCmds = nil
+			cmd.mu.Unlock()
+			if len(overlappingCmds) == 0 {
+				continue
+			}
+			// Otherwise, iterate through requests, get truncated spans, and
+			// check for conflicts with concurrent commands.
+			for i, union := range ec.ba.Requests {
+				header := union.GetInner().Header()
+				span := roachpb.Span{Key: header.Key, EndKey: header.EndKey}
+				switch t := br.Responses[i].GetInner().(type) {
+				case *roachpb.ScanResponse:
+					if t.ResumeSpan != nil {
+						span.EndKey = t.ResumeSpan.Key
+					}
+				case *roachpb.ReverseScanResponse:
+					if t.ResumeSpan != nil {
+						span.Key = t.ResumeSpan.EndKey
+					}
+				}
+				rng := span.AsRange()
+				for _, c := range overlappingCmds {
+					if c.Overlaps(rng) {
+						return retryWithoutPreEvaluationError
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // done removes pending commands from the command queue and updates
 // the timestamp cache using the final timestamp of each command.
 func (ec *endCmds) done(br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalRetryReason) {
@@ -2249,7 +2295,7 @@ func (r *Replica) updateTimestampCache(
 
 func collectSpans(
 	desc roachpb.RangeDescriptor, ba *roachpb.BatchRequest,
-) (*spanset.SpanSet, error) {
+) (*spanset.SpanSet, bool, error) {
 	spans := &spanset.SpanSet{}
 	// TODO(bdarnell): need to make this less global when the local
 	// command queue is used more heavily. For example, a split will
@@ -2272,16 +2318,17 @@ func collectSpans(
 		if cmd, ok := batcheval.LookupCommand(inner.Method()); ok {
 			cmd.DeclareKeys(desc, ba.Header, inner, spans)
 		} else {
-			return nil, errors.Errorf("unrecognized command %s", inner.Method())
+			return nil, false, errors.Errorf("unrecognized command %s", inner.Method())
 		}
 	}
 
 	// If any command gave us spans that are invalid, bail out early
 	// (before passing them to the command queue, which may panic).
 	if err := spans.Validate(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return spans, nil
+	hasLimit := ba.Header.MaxSpanRequestKeys > 0
+	return spans, hasLimit, nil
 }
 
 // beginCmds waits for any in-flight, conflicting commands to complete. This
@@ -2295,7 +2342,7 @@ func collectSpans(
 // removed from the queue, and whose returned error is to be used in place of
 // the supplied error.
 func (r *Replica) beginCmds(
-	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet,
+	ctx context.Context, ba *roachpb.BatchRequest, spans *spanset.SpanSet, preEvaluate bool,
 ) (*endCmds, error) {
 	var newCmds batchCmdSet
 	clocklessReads := r.store.Clock().MaxOffset() == timeutil.ClocklessMaxOffset
@@ -2331,7 +2378,7 @@ func (r *Replica) beginCmds(
 		}
 
 		r.cmdQMu.Lock()
-		var prereqs prereqCmdSet
+		var prereqs, overlappingCmds prereqCmdSet
 		var prereqCount int
 		// Collect all the channels to wait on before adding this batch to the
 		// command queue.
@@ -2339,14 +2386,15 @@ func (r *Replica) beginCmds(
 			// With clockless reads, everything is treated as writing.
 			readOnly := i == spanset.SpanReadOnly && !clocklessReads
 			for j := spanset.SpanScope(0); j < spanset.NumSpanScope; j++ {
-				prereqs[i][j] = r.cmdQMu.queues[j].getPrereqs(readOnly, scopeTS(j), spans.GetSpans(i, j))
+				prereqs[i][j], overlappingCmds[i][j] =
+					r.cmdQMu.queues[j].getPrereqs(readOnly, preEvaluate, scopeTS(j), spans.GetSpans(i, j))
 				prereqCount += len(prereqs[i][j])
 			}
 		}
 		for i := spanset.SpanAccess(0); i < spanset.NumSpanAccess; i++ {
 			readOnly := i == spanset.SpanReadOnly && !clocklessReads // ditto above
 			for j := spanset.SpanScope(0); j < spanset.NumSpanScope; j++ {
-				cmd := r.cmdQMu.queues[j].add(readOnly, scopeTS(j), prereqs[i][j], spans.GetSpans(i, j))
+				cmd := r.cmdQMu.queues[j].add(readOnly, preEvaluate, scopeTS(j), prereqs[i][j], overlappingCmds[i][j], spans.GetSpans(i, j))
 				if cmd != nil {
 					cmd.SetDebugInfo(ba)
 					newCmds[i][j] = cmd
@@ -2370,8 +2418,8 @@ func (r *Replica) beginCmds(
 		for _, accessCmds := range newCmds {
 			for _, newCmd := range accessCmds {
 				// If newCmd is nil it means that the BatchRequest contains no spans for this
-				// SpanAccess/spanScope permutation.
-				if newCmd == nil {
+				// SpanAccess/spanScope permutation. If pre-evaluation is true, skip waiting.
+				if newCmd == nil || newCmd.preEvaluate {
 					continue
 				}
 				// Loop until the command has no more pending prerequisites. Resolving canceled
@@ -2381,6 +2429,12 @@ func (r *Replica) beginCmds(
 					pre := newCmd.PendingPrereq()
 					if pre == nil {
 						break
+					}
+					// If either the command or its prereq are pre-evaluating,
+					// resolve the prereq immediately instead of waiting.
+					if pre.preEvaluate {
+						newCmd.ResolvePendingPrereq()
+						continue
 					}
 					select {
 					case <-pre.pending:
@@ -2535,7 +2589,7 @@ func prereqDebugSummary(prereqs prereqCmdSet) string {
 	return b.String()
 }
 
-// removeCmdsFromCommandQueue removes a batch's set of commands for the
+// removeCmdsFromCommandQueue removes a batch's set of commands from the
 // replica's command queue.
 func (r *Replica) removeCmdsFromCommandQueue(cmds batchCmdSet) {
 	r.cmdQMu.Lock()
@@ -2996,11 +3050,36 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 	return err
 }
 
-// executeReadOnlyBatch updates the read timestamp cache and waits for any
-// overlapping writes currently processing through Raft ahead of us to
-// clear via the command queue.
+var retryWithoutPreEvaluationError = roachpb.NewErrorf("retry read-only batch without pre-evaluation")
+
 func (r *Replica) executeReadOnlyBatch(
 	ctx context.Context, ba roachpb.BatchRequest,
+) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
+	br, pErr = r.tryExecuteReadOnlyBatch(ctx, ba, true /* preEvaluateOnLimits */)
+	if pErr == nil || pErr != retryWithoutPreEvaluationError {
+		return br, pErr
+	}
+	return r.tryExecuteReadOnlyBatch(ctx, ba, false /* preEvaluateOnLimits */)
+}
+
+// tryExecuteReadOnlyBatch is called by executeReadOnlyBatch to
+// execute read-only batches and update the read timestamp cache on
+// success. It waits for any overlapping writes currently processing
+// through Raft ahead of us to clear via the command queue.
+//
+// If the preEvaluateOnLimits parameter is true, then if the batch
+// contains commands which specify limits, the batch is optimistically
+// pre-evaluated without waiting in the command queue, and only after
+// it's clear exactly what spans were read, do we verify (after the
+// fact) whether there were any conflicts with concurrent writes. This
+// is case is not uncommon; for example, a Scan which requests the
+// entire range but has a limit of 1 result. We want to avoid allowing
+// overly broad spans from backing up the command queue. If there were
+// conflicts, then a retryWithoutPreEvaluationError is returned which
+// causes executeReadOnlyBatch to retry with preEvaluateOnLimits set
+// to false.
+func (r *Replica) tryExecuteReadOnlyBatch(
+	ctx context.Context, ba roachpb.BatchRequest, preEvaluateOnLimits bool,
 ) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	// If the read is not inconsistent, the read requires the range lease or
 	// permission to serve via follower reads.
@@ -3041,15 +3120,16 @@ func (r *Replica) executeReadOnlyBatch(
 	}
 	r.limitTxnMaxTimestamp(ctx, &ba, status)
 
-	spans, err := collectSpans(*r.Desc(), &ba)
+	spans, hasLimit, err := collectSpans(*r.Desc(), &ba)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
+	preEvaluate := hasLimit && preEvaluateOnLimits
 
 	// Add the read to the command queue to gate subsequent
 	// overlapping commands until this command completes.
 	log.Event(ctx, "command queue")
-	endCmds, err := r.beginCmds(ctx, &ba, spans)
+	endCmds, err := r.beginCmds(ctx, &ba, spans, preEvaluate)
 	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
@@ -3063,6 +3143,11 @@ func (r *Replica) executeReadOnlyBatch(
 	// timestamp cache update is synchronized. This is wrapped to delay
 	// pErr evaluation to its value when returning.
 	defer func() {
+		// If we pre-evaluated and skipped waiting in the command queue,
+		// check for concurrent write conflicts.
+		if pErr == nil && preEvaluate {
+			pErr = endCmds.checkConflicts(br)
+		}
 		endCmds.done(br, pErr, proposalNoRetry)
 	}()
 
@@ -3217,7 +3302,7 @@ func (r *Replica) tryExecuteWriteBatch(
 		return nil, roachpb.NewError(err), proposalNoRetry
 	}
 
-	spans, err := collectSpans(*r.Desc(), &ba)
+	spans, _, err := collectSpans(*r.Desc(), &ba)
 	if err != nil {
 		return nil, roachpb.NewError(err), proposalNoRetry
 	}
@@ -3231,7 +3316,7 @@ func (r *Replica) tryExecuteWriteBatch(
 		// been run to successful completion.
 		log.Event(ctx, "command queue")
 		var err error
-		endCmds, err = r.beginCmds(ctx, &ba, spans)
+		endCmds, err = r.beginCmds(ctx, &ba, spans, false /* preEvaluate */)
 		if err != nil {
 			return nil, roachpb.NewError(err), proposalNoRetry
 		}

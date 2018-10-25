@@ -3028,7 +3028,7 @@ func (ct *cmdQCancelTest) insertCmds(instrs []cancelInstr) {
 		ctx, cancel := context.WithCancel(context.Background())
 
 		ba := instr.req()
-		spanSet, err := collectSpans(roachpb.RangeDescriptor{}, ba)
+		spanSet, _, err := collectSpans(roachpb.RangeDescriptor{}, ba)
 		if err != nil {
 			ct.Fatal(err)
 		}
