@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
-const colVecMethodsTemplate = `
+const colVecTemplate = `
 package exec
 
 import (
@@ -42,7 +42,7 @@ func (m *memColumn) Append(
 	panic(fmt.Sprintf("unhandled type %d", colType))
 }
 
-func (m *memColumn) AppendSelected(
+func (m *memColumn) AppendWithSel(
 	vec ColVec, sel []uint16, batchSize uint16, colType types.T, toLength uint64,
 ) {
 	{{range .}}
@@ -68,7 +68,7 @@ func (m *memColumn) AppendSelected(
 	panic(fmt.Sprintf("unhandled type %d", colType))
 }
 
-func (m *memColumn) CopyFrom(
+func (m *memColumn) CopyWithSelInt64(
 	vec ColVec, sel []uint64, nSel uint16, colType types.T,
 ) {
 	// todo (changangela): handle the case when nSel > ColBatchSize
@@ -85,7 +85,7 @@ func (m *memColumn) CopyFrom(
 	panic(fmt.Sprintf("unhandled type %d", colType))
 }
 
-func (m *memColumn) CopyFromBatch(vec ColVec, sel []uint16, nSel uint16, colType types.T) {
+func (m *memColumn) CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colType types.T) {
 	{{range .}}
 	if colType == types.{{.ExecType}} {
 		toCol := m.{{.ExecType}}()
@@ -100,30 +100,30 @@ func (m *memColumn) CopyFromBatch(vec ColVec, sel []uint16, nSel uint16, colType
 }
 `
 
-type execType struct {
+type colVecGen struct {
 	ExecType string
 	GoType   string
 }
 
-func genColVecMethods(wr io.Writer) error {
+func genColVec(wr io.Writer) error {
 	// build list of all exec types.
-	var execTypes []execType
+	var gens []colVecGen
 	for _, t := range types.Types {
-		et := execType{
+		gen := colVecGen{
 			ExecType: t.String(),
 			GoType:   types.ToGoType(t),
 		}
-		execTypes = append(execTypes, et)
+		gens = append(gens, gen)
 	}
 
-	tmpl, err := template.New("colVecMethods").Parse(colVecMethodsTemplate)
+	tmpl, err := template.New("colVecTemplate").Parse(colVecTemplate)
 	if err != nil {
 		return err
 	}
 
-	return tmpl.Execute(wr, execTypes)
+	return tmpl.Execute(wr, gens)
 }
 
 func init() {
-	registerGenerator(genColVecMethods, "colvec.og.go")
+	registerGenerator(genColVec, "colvec.og.go")
 }
