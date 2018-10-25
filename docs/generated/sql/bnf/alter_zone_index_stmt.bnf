@@ -1,0 +1,5 @@
+alter_zone_index_stmt ::=
+	'ALTER' 'INDEX' table_name '@' index_name 'CONFIGURE' 'ZONE' 'USING' variable '=' value ( ( ',' variable '=' value ) )*
+	| 'ALTER' 'INDEX' table_name '@' index_name 'CONFIGURE' 'ZONE' 'DISCARD'
+	| 'ALTER' 'INDEX' table_name 'CONFIGURE' 'ZONE' 'USING' variable '=' value ( ( ',' variable '=' value ) )*
+	| 'ALTER' 'INDEX' table_name 'CONFIGURE' 'ZONE' 'DISCARD'
