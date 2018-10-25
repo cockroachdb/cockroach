@@ -58,7 +58,7 @@ To proxy to a cluster started up in secure mode, in Cockroach's root directory r
 $ make ui-watch-secure TARGET=<target-cluster-https-uri>
 ```
 
-or, use this in pkg/ui directory
+or, in `pkg/ui` run:
 ```shell
 make watch-secure TARGET=<target-cluster-https-uri> 
 ```
