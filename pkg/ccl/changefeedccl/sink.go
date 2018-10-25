@@ -137,7 +137,7 @@ func getKafkaSink(
 	}
 	sink.topics = make(map[string]struct{})
 	for _, t := range targets {
-		sink.topics[kafkaTopicPrefix+t.StatementTimeName] = struct{}{}
+		sink.topics[kafkaTopicPrefix+SQLNameToKafkaName(t.StatementTimeName)] = struct{}{}
 	}
 
 	config := sarama.NewConfig()
@@ -214,7 +214,7 @@ func (s *kafkaSink) Close() error {
 
 // EmitRow implements the Sink interface.
 func (s *kafkaSink) EmitRow(ctx context.Context, tableName string, key, value []byte) error {
-	topic := s.kafkaTopicPrefix + tableName
+	topic := s.kafkaTopicPrefix + SQLNameToKafkaName(tableName)
 	if _, ok := s.topics[topic]; !ok {
 		return errors.Errorf(`cannot emit to undeclared topic: %s`, topic)
 	}
