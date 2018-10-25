@@ -46,7 +46,7 @@ To use this proxy, in Cockroach's root directory run:
 $ make ui-watch TARGET=<target-cluster-http-uri>
 ```
 
-or, in your pkg/ui directory run
+or, in `pkg/ui` run:
 ```shell
 $ make watch TARGET=<target-cluster-http-uri>
 ```
