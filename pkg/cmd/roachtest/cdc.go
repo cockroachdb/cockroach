@@ -236,8 +236,7 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 		var numResolved, rowsSinceResolved int
 		v := changefeedccl.Validators{
 			changefeedccl.NewOrderValidator(`bank`),
-			// TODO(mrtracy): Disabled by #30902. Re-enabling is tracked by #31110.
-			// changefeedccl.NewFingerprintValidator(sqlDB.DB, `bank`, `fprint`, tc.partitions),
+			changefeedccl.NewFingerprintValidator(db, `bank`, `fprint`, tc.partitions),
 		}
 		if _, err := db.Exec(
 			`CREATE TABLE fprint (id INT PRIMARY KEY, balance INT, payload STRING)`,
