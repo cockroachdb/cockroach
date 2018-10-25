@@ -179,6 +179,7 @@ func init() {
 		DebugCmd,
 		sqlfmtCmd,
 		workloadcli.WorkloadCmd(true /* userFacing */),
+		systemBenchCmd,
 	)
 }
 
