@@ -57,6 +57,7 @@ type kv struct {
 	seed                                 int64
 	writeSeq                             string
 	sequential                           bool
+	zipfian                              bool
 	splits                               int
 	secondaryIndex                       bool
 	useOpt                               bool
@@ -97,6 +98,8 @@ var kvMeta = workload.Meta{
 		g.flags.IntVar(&g.readPercent, `read-percent`, 0,
 			`Percent (0-100) of operations that are reads of existing keys.`)
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
+		g.flags.BoolVar(&g.zipfian, `zipfian`, false,
+			`Pick keys in a zipfian distribution instead of randomly.`)
 		g.flags.BoolVar(&g.sequential, `sequential`, false,
 			`Pick keys sequentially instead of randomly.`)
 		g.flags.StringVar(&g.writeSeq, `write-seq`, "",
@@ -235,6 +238,8 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 		}
 		if w.sequential {
 			op.g = newSequentialGenerator(seq)
+		} else if w.zipfian {
+			op.g = newZipfianGenerator(seq)
 		} else {
 			op.g = newHashGenerator(seq)
 		}
@@ -403,6 +408,51 @@ func (g *sequentialGenerator) rand() *rand.Rand {
 }
 
 func (g *sequentialGenerator) sequence() int64 {
+	return atomic.LoadInt64(&g.seq.val)
+}
+
+type zipfGenerator struct {
+	seq    *sequence
+	random *rand.Rand
+	zipf   *Zipf
+}
+
+// Creates a new zipfian generator.
+func newZipfianGenerator(seq *sequence) *zipfGenerator {
+	random := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	return &zipfGenerator{
+		seq:    seq,
+		random: random,
+		zipf:   NewZipf(1.1, 1, uint64(math.MaxInt64)),
+	}
+}
+
+// Get a random number seeded by v that follows the
+// zipfian distribution.
+func (g *zipfGenerator) zipfian(seed int64) int64 {
+	randomWithSeed := rand.New(rand.NewSource(seed))
+	return int64(g.zipf.Uint64(randomWithSeed))
+}
+
+// Get a zipf write key appropriately.
+func (g *zipfGenerator) writeKey() int64 {
+	return g.zipfian(g.seq.write())
+}
+
+// Get a zipf read key appropriately.
+func (g *zipfGenerator) readKey() int64 {
+	v := g.seq.read()
+	if v == 0 {
+		return 0
+	}
+	return g.zipfian(g.random.Int63n(v))
+}
+
+func (g *zipfGenerator) rand() *rand.Rand {
+	return g.random
+}
+
+func (g *zipfGenerator) sequence() int64 {
 	return atomic.LoadInt64(&g.seq.val)
 }
 
