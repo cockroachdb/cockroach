@@ -5108,6 +5108,11 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 
 	// Raft-initiated snapshots are handled by the Raft snapshot queue.
 	if msg.Type == raftpb.MsgSnap {
+		r.withRaftGroup(false, func(rn *raft.RawNode) (bool, error) {
+			rn.ReportSnapshot(msg.To, raft.SnapshotFinish)
+			return false, nil
+		})
+		return // HACK
 		if _, err := r.store.raftSnapshotQueue.Add(r, raftSnapshotPriority); err != nil {
 			log.Errorf(ctx, "unable to add replica to Raft repair queue: %s", err)
 		}
