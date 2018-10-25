@@ -170,9 +170,8 @@
 # NormalizeJSONFieldAccess transforms field access into a containment with a
 # simpler LHS. This allows inverted index constraints to be generated in some
 # cases.
-# The FetchVal operator also has a version with
-# integers instead of strings, but this transformation is not valid in that
-# case.
+# The FetchVal operator also has an overload with integers instead of strings,
+# but this transformation is not valid in that case.
 # This transforms
 #
 #   a->'b' = '"c"'
@@ -181,13 +180,18 @@
 #
 #   a @> '{"b": "c"}'
 #
+# Note that we can't make this transformation in cases like
+#
+#   a->'b' = '["c"]',
+#
+# because containment is not equivalent to equality for non-scalar types.
 [NormalizeJSONFieldAccess, Normalize]
 (Eq
     (FetchVal
         $val:*
         $key:(Const) & (IsString $key)
     )
-    $right:(Const)
+    $right:(Const) & (IsJSONScalar $right)
 )
 =>
 (Contains
