@@ -53,7 +53,7 @@ $ make watch TARGET=<target-cluster-http-uri>
 
 then navigate to `http://localhost:3000` to access the UI.
 
-To proxy to a cluster started up in secure mode, use this in your root directory:
+To proxy to a cluster started up in secure mode, in Cockroach's root directory run:
 ```shell
 $ make ui-watch-secure TARGET=<target-cluster-https-uri>
 ```
