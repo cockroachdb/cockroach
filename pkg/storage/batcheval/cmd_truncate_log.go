@@ -82,7 +82,7 @@ func TruncateLog(
 	}
 
 	start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(rangeID, firstIndex))
-	end := engine.MakeMVCCMetadataKey(keys.RaftLogKey(rangeID, args.Index).PrefixEnd())
+	end := engine.MakeMVCCMetadataKey(keys.RaftLogKey(rangeID, args.Index))
 
 	var ms enginepb.MVCCStats
 	if cArgs.EvalCtx.ClusterSettings().Version.IsActive(cluster.VersionRaftLogTruncationBelowRaft) {
