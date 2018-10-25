@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -331,6 +332,10 @@ func csvServerPaths(
 	return paths
 }
 
+// Specify an explicit empty prefix for crdb_internal to avoid an error if
+// the database we're connected to does not exist.
+const numNodesQuery = `SELECT count(node_id) FROM "".crdb_internal.gossip_liveness`
+
 // MakeFixture regenerates a fixture, storing it to GCS. It is expected that the
 // generator will have had Configure called on it.
 //
@@ -365,7 +370,7 @@ func MakeFixture(
 		start:          timeutil.Now(),
 	}
 
-	g, gCtx := errgroup.WithContext(ctx)
+	g := ctxgroup.WithContext(ctx)
 	for _, t := range gen.Tables() {
 		table := t
 		if t.InitialRows.Batch == nil {
@@ -374,15 +379,13 @@ func MakeFixture(
 		}
 
 		tableCSVPathsCh := make(chan string)
-		g.Go(func() error {
+		g.GoCtx(func(ctx context.Context) error {
 			defer close(tableCSVPathsCh)
 			if len(config.CSVServerURL) == 0 {
 				startRow, endRow := 0, table.InitialRows.NumBatches
-				return c.groupWriteCSVs(gCtx, tableCSVPathsCh, table, startRow, endRow)
+				return c.groupWriteCSVs(ctx, tableCSVPathsCh, table, startRow, endRow)
 			}
-			// Specify an explicit empty prefix for crdb_internal to avoid an error if
-			// the database we're connected to does not exist.
-			const numNodesQuery = `SELECT count(node_id) FROM "".crdb_internal.gossip_liveness`
+
 			var numNodes int
 			if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
 				return err
@@ -393,38 +396,17 @@ func MakeFixture(
 			}
 			return nil
 		})
-		g.Go(func() error {
-			params := []interface{}{
-				config.objectPathToURI(filepath.Join(fixtureFolder, table.Name)),
-			}
+		g.GoCtx(func(ctx context.Context) error {
 			// NB: it's fine to loop over this channel without selecting
 			// ctx.Done because a context cancel will cause the above goroutine
 			// to finish and close tableCSVPathsCh.
+			var paths []string
 			for tableCSVPath := range tableCSVPathsCh {
-				params = append(params, tableCSVPath)
+				paths = append(paths, tableCSVPath)
 			}
-			select {
-			case <-gCtx.Done():
-				return gCtx.Err()
-			default:
-			}
-
-			var buf bytes.Buffer
-			fmt.Fprintf(&buf, `IMPORT TABLE "%s" %s CSV DATA (`, table.Name, table.Schema)
-			// $1 is used for the backup path. Generate $2,...,$N, where N is
-			// the number of params (including the backup path) for use with the
-			// csv paths.
-			for i := 2; i <= len(params); i++ {
-				if i != 2 {
-					buf.WriteString(`,`)
-				}
-				fmt.Fprintf(&buf, `$%d`, i)
-			}
-			buf.WriteString(`) WITH transform=$1, nullif='NULL'`)
-			if _, err := sqlDB.Exec(buf.String(), params...); err != nil {
-				return errors.Wrapf(err, `creating backup for table %s`, table.Name)
-			}
-			return nil
+			output := config.objectPathToURI(filepath.Join(fixtureFolder, table.Name))
+			err := importFixtureTable(ctx, sqlDB, gen.Meta().Name, table, paths, output)
+			return errors.Wrapf(err, `creating backup for table %s`, table.Name)
 		})
 	}
 	if err := g.Wait(); err != nil {
@@ -433,6 +415,56 @@ func MakeFixture(
 
 	// TODO(dan): Clean up the CSVs.
 	return GetFixture(ctx, gcs, config, gen)
+}
+
+// ImportFixture works like MakeFixture, but instead of stopping halfway or
+// writing a backup to cloud storage, it finishes ingesting the data.
+func ImportFixture(
+	ctx context.Context, sqlDB *gosql.DB, csvServerURL string, gen workload.Generator, dbName string,
+) error {
+	var numNodes int
+	if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
+		return err
+	}
+
+	g := ctxgroup.WithContext(ctx)
+	for _, t := range gen.Tables() {
+		table := t
+		paths := csvServerPaths(csvServerURL, gen, table, numNodes)
+		g.GoCtx(func(ctx context.Context) error {
+			err := importFixtureTable(ctx, sqlDB, dbName, table, paths, `` /* output */)
+			return errors.Wrapf(err, `importing table %s`, table.Name)
+		})
+	}
+	return g.Wait()
+}
+
+func importFixtureTable(
+	ctx context.Context,
+	sqlDB *gosql.DB,
+	dbName string,
+	table workload.Table,
+	paths []string,
+	output string,
+) error {
+	var buf bytes.Buffer
+	var params []interface{}
+	fmt.Fprintf(&buf, `IMPORT TABLE "%s"."%s" %s CSV DATA (`, dbName, table.Name, table.Schema)
+	// Generate $1,...,$N-1, where N is the number of csv paths.
+	for _, path := range paths {
+		params = append(params, path)
+		if len(params) != 1 {
+			buf.WriteString(`,`)
+		}
+		fmt.Fprintf(&buf, `$%d`, len(params))
+	}
+	buf.WriteString(`) WITH nullif='NULL'`)
+	if len(output) > 0 {
+		params = append(params, output)
+		fmt.Fprintf(&buf, `, transform=$%d`, len(params))
+	}
+	_, err := sqlDB.Exec(buf.String(), params...)
+	return err
 }
 
 // RestoreFixture loads a fixture into a CockroachDB cluster. An enterprise
