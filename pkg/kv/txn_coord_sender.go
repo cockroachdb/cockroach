@@ -1175,8 +1175,10 @@ func (tc *TxnCoordSender) updateState(
 		// exhausted, return a non-retryable error indicating that the
 		// transaction is too large and should potentially be split.
 		// We do this to avoid endlessly retrying a txn likely refail.
-		if pErr == nil && !tc.mu.meta.RefreshValid &&
-			(br.Txn.WriteTooOld || br.Txn.OrigTimestamp != br.Txn.Timestamp) {
+		ts := br.Txn.OrigTimestamp
+		ts.Forward(br.Txn.RefreshedTimestamp)
+		needsRefresh := br.Txn.WriteTooOld || ts != br.Txn.Timestamp
+		if needsRefresh && !tc.mu.meta.RefreshValid {
 			pErr = roachpb.NewErrorWithTxn(
 				errors.New("transaction is too large to complete; try splitting into pieces"), br.Txn,
 			)
