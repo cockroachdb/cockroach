@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	_ "github.com/lib/pq"
 )
 
@@ -102,7 +103,11 @@ func registerDrop(r *registry) {
 
 			for i := minWarehouse; i <= maxWarehouse; i++ {
 				t.Progress(float64(i) / float64(maxWarehouse))
+				tBegin := timeutil.Now()
 				run(false, "DELETE FROM tpcc.stock WHERE s_w_id = $1", i)
+				elapsed := timeutil.Since(tBegin)
+				// TODO(tschottdorf): check what's reasonable here and make sure we don't drop below it.
+				c.l.Printf("deleted from tpcc.stock for warehouse %d (100k rows) in %s (%.2f rows/sec)\n", i, elapsed, 100000.0/elapsed.Seconds())
 			}
 
 			const stmtTruncate = "TRUNCATE TABLE tpcc.stock"
