@@ -99,12 +99,14 @@ func (ss *inMemSideloadStorage) Clear(_ context.Context) error {
 	return nil
 }
 
-func (ss *inMemSideloadStorage) TruncateTo(_ context.Context, index uint64) error {
+func (ss *inMemSideloadStorage) TruncateTo(_ context.Context, index uint64) (int64, error) {
 	// Not efficient, but this storage is for testing purposes only anyway.
-	for k := range ss.m {
+	var size int64
+	for k, v := range ss.m {
 		if k.index < index {
+			size += int64(len(v))
 			delete(ss.m, k)
 		}
 	}
-	return nil
+	return size, nil
 }
