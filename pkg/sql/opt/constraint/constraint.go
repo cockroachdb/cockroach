@@ -448,6 +448,28 @@ func (c *Constraint) ExactPrefix(evalCtx *tree.EvalContext) int {
 	}
 }
 
+// ConstrainedColumns returns the number of columns which are constrained by
+// the Constraint. For example:
+//   /a/b/c: [/1/1 - /1] [/3 - /3]
+// has 2 constrained columns. This may be less than the total number of columns
+// in the constraint, especially if it represents an index constraint.
+func (c *Constraint) ConstrainedColumns(evalCtx *tree.EvalContext) int {
+	count := 0
+	for i := 0; i < c.Spans.Count(); i++ {
+		sp := c.Spans.Get(i)
+		start := sp.StartKey()
+		end := sp.EndKey()
+		if start.Length() > count {
+			count = start.Length()
+		}
+		if end.Length() > count {
+			count = end.Length()
+		}
+	}
+
+	return count
+}
+
 // Prefix returns the length of the longest prefix of columns for which all the
 // spans have the same start and end values. For example:
 //   /a/b/c: [/1/1/1 - /1/1/2] [/3/3/3 - /3/3/4]
