@@ -142,7 +142,7 @@ SELECT * FROM (SELECT y + 3 AS v FROM a) WHERE v >= 1 AND v <= 100
 ----
 select
  ├── columns: v:5(int!null)
- ├── stats: [rows=990, distinct(5)=100, null(5)=0]
+ ├── stats: [rows=660, distinct(5)=100, null(5)=0]
  ├── project
  │    ├── columns: v:5(int)
  │    ├── stats: [rows=2000, distinct(5)=200, null(5)=20]
