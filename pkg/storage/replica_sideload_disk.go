@@ -115,7 +115,7 @@ func (ss *diskSideloadStorage) Purge(ctx context.Context, index, term uint64) (i
 
 func (ss *diskSideloadStorage) purgeFile(ctx context.Context, filename string) (int64, error) {
 	// TODO(tschottdorf): this should all be done through the env. As written,
-	// the sizes returned here will be wrong if encryption is one. We want the
+	// the sizes returned here will be wrong if encryption is on. We want the
 	// size of the unencrypted payload.
 	//
 	// See #31913.
