@@ -106,7 +106,7 @@
     $input:(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply |
             SemiJoin | SemiJoinApply | AntiJoin | AntiJoinApply
         $left:*
-        $right:*
+        $right:* & ^(Zip)
         $on:*
     )
     (Filters
@@ -146,7 +146,7 @@
 (Select
     $input:(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
         $left:*
-        $right:*
+        $right:* & ^(Zip)
         $on:*
     )
     (Filters
@@ -223,7 +223,7 @@
 (Select
     $input:(InnerJoin | InnerJoinApply | RightJoin | RightJoinApply
         $left:*
-        $right:*
+        $right:* & ^(Zip)
         $on:*
     )
     $filter:(Filters $list:[
