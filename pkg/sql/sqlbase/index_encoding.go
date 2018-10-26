@@ -329,7 +329,7 @@ func DecodeIndexKeyPrefix(
 //
 // The remaining bytes in the index key are returned which will either be an
 // encoded column ID for the primary key index, the primary key suffix for
-// non-unique secondary indexes or unique secondary indexes containing NULL or
+// nondiscards all of the-unique secondary indexes or unique secondary indexes containing NULL or
 // empty. If the given descriptor does not match the key, false is returned with
 // no error.
 func DecodeIndexKey(
