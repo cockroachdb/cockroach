@@ -754,6 +754,34 @@ func (c *CustomFuncs) LimitGeMaxRows(limit tree.Datum, input memo.RelExpr) bool 
 
 // ----------------------------------------------------------------------
 //
+// ProjectSet Rules
+//   Custom match and replace functions used with ProjectSet rules.
+//
+// ----------------------------------------------------------------------
+
+// IsZipCorrelated returns true if any element in the zip references
+// any of the given columns.
+func (c *CustomFuncs) IsZipCorrelated(zip memo.ZipExpr, cols opt.ColSet) bool {
+	for i := range zip {
+		if zip[i].ScalarProps(c.mem).OuterCols.Intersects(cols) {
+			return true
+		}
+	}
+	return false
+}
+
+// ZipOuterCols returns the union of all outer columns from the given
+// zip expressions.
+func (c *CustomFuncs) ZipOuterCols(zip memo.ZipExpr) opt.ColSet {
+	var colSet opt.ColSet
+	for i := range zip {
+		colSet.UnionWith(zip[i].ScalarProps(c.mem).OuterCols)
+	}
+	return colSet
+}
+
+// ----------------------------------------------------------------------
+//
 // Boolean Rules
 //   Custom match and replace functions used with bool.opt rules.
 //

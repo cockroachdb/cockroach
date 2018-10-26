@@ -1554,3 +1554,26 @@ explain
            ├── key: (1)
            ├── fd: ()-->(2), (1)-->(3), (3)-->(1)
            └── ordering: +3 opt(2)
+
+# --------------------------------------------------
+# PruneProjectSetCols
+# --------------------------------------------------
+opt expect=PruneProjectSetCols
+SELECT a, b, generate_series(c, 10) FROM abcde
+----
+project
+ ├── columns: a:1(int!null) b:2(int) generate_series:6(int)
+ ├── side-effects
+ ├── fd: (1)-->(2)
+ └── project-set
+      ├── columns: a:1(int!null) b:2(int) c:3(int) generate_series:6(int)
+      ├── side-effects
+      ├── fd: (1)-->(2,3), (2,3)~~>(1)
+      ├── scan abcde@bc
+      │    ├── columns: a:1(int!null) b:2(int) c:3(int)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3), (2,3)~~>(1)
+      └── zip
+           └── function: generate_series [type=int, outer=(3), side-effects]
+                ├── variable: c [type=int]
+                └── const: 10 [type=int]

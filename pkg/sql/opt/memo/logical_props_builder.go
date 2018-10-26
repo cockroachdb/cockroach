@@ -888,35 +888,59 @@ func (b *logicalPropsBuilder) buildRowNumberProps(rowNum *RowNumberExpr, rel *pr
 	}
 }
 
-func (b *logicalPropsBuilder) buildZipProps(zip *ZipExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, zip, &rel.Shared)
+func (b *logicalPropsBuilder) buildProjectSetProps(
+	projectSet *ProjectSetExpr, rel *props.Relational,
+) {
+	BuildSharedProps(b.mem, projectSet, &rel.Shared)
+
+	inputProps := projectSet.Input.Relational()
 
 	// Output Columns
 	// --------------
-	// Output columns are stored in the definition.
-	rel.OutputCols = zip.Cols.ToSet()
+	// Output columns are the union between the output columns from the Zip and
+	// the input.
+	rel.OutputCols = projectSet.Zip.OutputCols()
+	rel.OutputCols.UnionWith(inputProps.OutputCols)
 
 	// Not Null Columns
 	// ----------------
-	// All columns are assumed to be nullable.
+	// Inherit not null columns from input. All other columns are assumed to be
+	// nullable.
+	rel.NotNullCols = inputProps.NotNullCols.Copy()
 
 	// Outer Columns
 	// -------------
-	// Outer columns were already derived by buildSharedProps.
+	// Outer columns were derived by BuildSharedProps; remove any that are bound
+	// by input columns.
+	rel.OuterCols.DifferenceWith(inputProps.OutputCols)
 
 	// Functional Dependencies
 	// -----------------------
-	// Zip operator has an empty FD set.
+	// Start with copy of FuncDepSet. Since ProjectSet is a lateral cross join
+	// between the input and the functional zip (which has an empty FD set), call
+	// MakeApply with an empty FD set. Then add outer columns, modify with
+	// any additional not-null columns, and possibly simplify by calling
+	// ProjectCols.
+	rel.FuncDeps.CopyFrom(&inputProps.FuncDeps)
+	rel.FuncDeps.MakeApply(&props.FuncDepSet{})
+	addOuterColsToFuncDep(rel.OuterCols, &rel.FuncDeps)
+	rel.FuncDeps.MakeNotNull(rel.NotNullCols)
+	rel.FuncDeps.ProjectCols(rel.OutputCols)
 
 	// Cardinality
 	// -----------
-	// Don't make any assumptions about cardinality of output.
-	rel.Cardinality = props.AnyCardinality
+	// Don't make any assumptions about cardinality of ProjectSet unless the
+	// input cardinality is zero.
+	if inputProps.Cardinality == props.ZeroCardinality {
+		rel.Cardinality = props.ZeroCardinality
+	} else {
+		rel.Cardinality = props.AnyCardinality
+	}
 
 	// Statistics
 	// ----------
 	if !b.disableStats {
-		b.sb.buildZip(zip, rel)
+		b.sb.buildProjectSet(projectSet, rel)
 	}
 }
 
@@ -964,6 +988,11 @@ func (b *logicalPropsBuilder) buildAggregationsItemProps(
 ) {
 	item.Typ = item.Agg.DataType()
 	BuildSharedProps(b.mem, item.Agg, &scalar.Shared)
+}
+
+func (b *logicalPropsBuilder) buildZipItemProps(item *ZipItem, scalar *props.Scalar) {
+	item.Typ = item.Func.DataType()
+	BuildSharedProps(b.mem, item.Func, &scalar.Shared)
 }
 
 // BuildSharedProps fills in the shared properties derived from the given

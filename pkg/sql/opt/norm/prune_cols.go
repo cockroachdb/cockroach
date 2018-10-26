@@ -273,6 +273,16 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		// IndexJoin is constructed. Additionally, there is not currently a
 		// PruneCols rule for these operators.
 
+	case opt.ProjectSetOp:
+		// Any pruneable input columns can potentially be pruned, as long as
+		// they're not used in the Zip.
+		// TODO(rytaft): It may be possible to prune Zip columns, but we need to
+		// make sure that we still get the correct number of rows in the output.
+		projectSet := e.(*memo.ProjectSetExpr)
+		relProps.Rule.PruneCols = DerivePruneCols(projectSet.Input).Copy()
+		usedCols := projectSet.Zip.OuterCols(e.Memo())
+		relProps.Rule.PruneCols.DifferenceWith(usedCols)
+
 	default:
 		// Don't allow any columns to be pruned, since that would trigger the
 		// creation of a wrapper Project around an operator that does not have

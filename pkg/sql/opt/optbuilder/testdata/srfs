@@ -5,57 +5,75 @@
 build
 SELECT * FROM generate_series(1, 3)
 ----
-zip
+project-set
  ├── columns: generate_series:1(int)
- └── function: generate_series [type=int]
-      ├── const: 1 [type=int]
-      └── const: 3 [type=int]
+ ├── values
+ │    └── tuple [type=tuple]
+ └── zip
+      └── function: generate_series [type=int]
+           ├── const: 1 [type=int]
+           └── const: 3 [type=int]
 
 build
 SELECT * FROM generate_series(1, 2), generate_series(1, 2)
 ----
 inner-join
  ├── columns: generate_series:1(int) generate_series:2(int)
- ├── zip
+ ├── project-set
  │    ├── columns: generate_series:1(int)
- │    └── function: generate_series [type=int]
- │         ├── const: 1 [type=int]
- │         └── const: 2 [type=int]
- ├── zip
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── zip
+ │         └── function: generate_series [type=int]
+ │              ├── const: 1 [type=int]
+ │              └── const: 2 [type=int]
+ ├── project-set
  │    ├── columns: generate_series:2(int)
- │    └── function: generate_series [type=int]
- │         ├── const: 1 [type=int]
- │         └── const: 2 [type=int]
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── zip
+ │         └── function: generate_series [type=int]
+ │              ├── const: 1 [type=int]
+ │              └── const: 2 [type=int]
  └── filters (true)
 
 build
 SELECT * FROM pg_catalog.generate_series(1, 3)
 ----
-zip
+project-set
  ├── columns: generate_series:1(int)
- └── function: generate_series [type=int]
-      ├── const: 1 [type=int]
-      └── const: 3 [type=int]
+ ├── values
+ │    └── tuple [type=tuple]
+ └── zip
+      └── function: generate_series [type=int]
+           ├── const: 1 [type=int]
+           └── const: 3 [type=int]
 
 build
 SELECT * FROM generate_series(1, 1) AS c(x)
 ----
-zip
+project-set
  ├── columns: x:1(int)
- └── function: generate_series [type=int]
-      ├── const: 1 [type=int]
-      └── const: 1 [type=int]
+ ├── values
+ │    └── tuple [type=tuple]
+ └── zip
+      └── function: generate_series [type=int]
+           ├── const: 1 [type=int]
+           └── const: 1 [type=int]
 
 build
 SELECT * FROM generate_series(1, 1) WITH ORDINALITY AS c(x, y)
 ----
 row-number
  ├── columns: x:1(int) y:2(int!null)
- └── zip
+ └── project-set
       ├── columns: generate_series:1(int)
-      └── function: generate_series [type=int]
-           ├── const: 1 [type=int]
-           └── const: 1 [type=int]
+      ├── values
+      │    └── tuple [type=tuple]
+      └── zip
+           └── function: generate_series [type=int]
+                ├── const: 1 [type=int]
+                └── const: 1 [type=int]
 
 build
 SELECT * FROM (VALUES (1)) LIMIT generate_series(1, 3)
@@ -67,19 +85,17 @@ error: generate_series(): generator functions are not allowed in LIMIT
 build
 SELECT generate_series(1, 2), generate_series(3, 4)
 ----
-inner-join-apply
+project-set
  ├── columns: generate_series:1(int) generate_series:2(int)
  ├── values
  │    └── tuple [type=tuple]
- ├── zip
- │    ├── columns: generate_series:1(int) generate_series:2(int)
- │    ├── function: generate_series [type=int]
- │    │    ├── const: 1 [type=int]
- │    │    └── const: 2 [type=int]
- │    └── function: generate_series [type=int]
- │         ├── const: 3 [type=int]
- │         └── const: 4 [type=int]
- └── filters (true)
+ └── zip
+      ├── function: generate_series [type=int]
+      │    ├── const: 1 [type=int]
+      │    └── const: 2 [type=int]
+      └── function: generate_series [type=int]
+           ├── const: 3 [type=int]
+           └── const: 4 [type=int]
 
 exec-ddl
 CREATE TABLE t (a string)
@@ -114,16 +130,22 @@ project
       │    │    └── columns: b:3(string) u.rowid:4(int!null)
       │    ├── inner-join
       │    │    ├── columns: generate_series:5(int) generate_series:6(int)
-      │    │    ├── zip
+      │    │    ├── project-set
       │    │    │    ├── columns: generate_series:5(int)
-      │    │    │    └── function: generate_series [type=int]
-      │    │    │         ├── const: 1 [type=int]
-      │    │    │         └── const: 2 [type=int]
-      │    │    ├── zip
+      │    │    │    ├── values
+      │    │    │    │    └── tuple [type=tuple]
+      │    │    │    └── zip
+      │    │    │         └── function: generate_series [type=int]
+      │    │    │              ├── const: 1 [type=int]
+      │    │    │              └── const: 2 [type=int]
+      │    │    ├── project-set
       │    │    │    ├── columns: generate_series:6(int)
-      │    │    │    └── function: generate_series [type=int]
-      │    │    │         ├── const: 3 [type=int]
-      │    │    │         └── const: 4 [type=int]
+      │    │    │    ├── values
+      │    │    │    │    └── tuple [type=tuple]
+      │    │    │    └── zip
+      │    │    │         └── function: generate_series [type=int]
+      │    │    │              ├── const: 3 [type=int]
+      │    │    │              └── const: 4 [type=int]
       │    │    └── filters (true)
       │    └── filters (true)
       └── filters (true)
@@ -133,11 +155,14 @@ SELECT 3 + x FROM generate_series(1,2) AS a(x)
 ----
 project
  ├── columns: "?column?":2(int)
- ├── zip
+ ├── project-set
  │    ├── columns: generate_series:1(int)
- │    └── function: generate_series [type=int]
- │         ├── const: 1 [type=int]
- │         └── const: 2 [type=int]
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── zip
+ │         └── function: generate_series [type=int]
+ │              ├── const: 1 [type=int]
+ │              └── const: 2 [type=int]
  └── projections
       └── plus [type=int]
            ├── const: 3 [type=int]
@@ -148,16 +173,14 @@ SELECT 3 + (3 * generate_series(1,3))
 ----
 project
  ├── columns: "?column?":2(int)
- ├── inner-join-apply
+ ├── project-set
  │    ├── columns: generate_series:1(int)
  │    ├── values
  │    │    └── tuple [type=tuple]
- │    ├── zip
- │    │    ├── columns: generate_series:1(int)
- │    │    └── function: generate_series [type=int]
- │    │         ├── const: 1 [type=int]
- │    │         └── const: 3 [type=int]
- │    └── filters (true)
+ │    └── zip
+ │         └── function: generate_series [type=int]
+ │              ├── const: 1 [type=int]
+ │              └── const: 3 [type=int]
  └── projections
       └── plus [type=int]
            ├── const: 3 [type=int]
@@ -170,48 +193,47 @@ project
 build
 SELECT * from unnest(ARRAY[1,2])
 ----
-zip
+project-set
  ├── columns: unnest:1(int)
- └── function: unnest [type=int]
-      └── array: [type=int[]]
-           ├── const: 1 [type=int]
-           └── const: 2 [type=int]
+ ├── values
+ │    └── tuple [type=tuple]
+ └── zip
+      └── function: unnest [type=int]
+           └── array: [type=int[]]
+                ├── const: 1 [type=int]
+                └── const: 2 [type=int]
 
 build
 SELECT unnest(ARRAY[1,2]), unnest(ARRAY['a', 'b'])
 ----
-inner-join-apply
+project-set
  ├── columns: unnest:1(int) unnest:2(string)
  ├── values
  │    └── tuple [type=tuple]
- ├── zip
- │    ├── columns: unnest:1(int) unnest:2(string)
- │    ├── function: unnest [type=int]
- │    │    └── array: [type=int[]]
- │    │         ├── const: 1 [type=int]
- │    │         └── const: 2 [type=int]
- │    └── function: unnest [type=string]
- │         └── array: [type=string[]]
- │              ├── const: 'a' [type=string]
- │              └── const: 'b' [type=string]
- └── filters (true)
+ └── zip
+      ├── function: unnest [type=int]
+      │    └── array: [type=int[]]
+      │         ├── const: 1 [type=int]
+      │         └── const: 2 [type=int]
+      └── function: unnest [type=string]
+           └── array: [type=string[]]
+                ├── const: 'a' [type=string]
+                └── const: 'b' [type=string]
 
 build
 SELECT unnest(ARRAY[3,4]) - 2
 ----
 project
  ├── columns: "?column?":2(int)
- ├── inner-join-apply
+ ├── project-set
  │    ├── columns: unnest:1(int)
  │    ├── values
  │    │    └── tuple [type=tuple]
- │    ├── zip
- │    │    ├── columns: unnest:1(int)
- │    │    └── function: unnest [type=int]
- │    │         └── array: [type=int[]]
- │    │              ├── const: 3 [type=int]
- │    │              └── const: 4 [type=int]
- │    └── filters (true)
+ │    └── zip
+ │         └── function: unnest [type=int]
+ │              └── array: [type=int[]]
+ │                   ├── const: 3 [type=int]
+ │                   └── const: 4 [type=int]
  └── projections
       └── minus [type=int]
            ├── variable: unnest [type=int]
@@ -222,20 +244,18 @@ SELECT 1 + generate_series(0, 1), unnest(ARRAY[2, 4]) - 1
 ----
 project
  ├── columns: "?column?":3(int) "?column?":4(int)
- ├── inner-join-apply
+ ├── project-set
  │    ├── columns: generate_series:1(int) unnest:2(int)
  │    ├── values
  │    │    └── tuple [type=tuple]
- │    ├── zip
- │    │    ├── columns: generate_series:1(int) unnest:2(int)
- │    │    ├── function: generate_series [type=int]
- │    │    │    ├── const: 0 [type=int]
- │    │    │    └── const: 1 [type=int]
- │    │    └── function: unnest [type=int]
- │    │         └── array: [type=int[]]
- │    │              ├── const: 2 [type=int]
- │    │              └── const: 4 [type=int]
- │    └── filters (true)
+ │    └── zip
+ │         ├── function: generate_series [type=int]
+ │         │    ├── const: 0 [type=int]
+ │         │    └── const: 1 [type=int]
+ │         └── function: unnest [type=int]
+ │              └── array: [type=int[]]
+ │                   ├── const: 2 [type=int]
+ │                   └── const: 4 [type=int]
  └── projections
       ├── plus [type=int]
       │    ├── const: 1 [type=int]
@@ -249,18 +269,16 @@ SELECT ascii(unnest(ARRAY['a', 'b', 'c']));
 ----
 project
  ├── columns: ascii:2(int)
- ├── inner-join-apply
+ ├── project-set
  │    ├── columns: unnest:1(string)
  │    ├── values
  │    │    └── tuple [type=tuple]
- │    ├── zip
- │    │    ├── columns: unnest:1(string)
- │    │    └── function: unnest [type=string]
- │    │         └── array: [type=string[]]
- │    │              ├── const: 'a' [type=string]
- │    │              ├── const: 'b' [type=string]
- │    │              └── const: 'c' [type=string]
- │    └── filters (true)
+ │    └── zip
+ │         └── function: unnest [type=string]
+ │              └── array: [type=string[]]
+ │                   ├── const: 'a' [type=string]
+ │                   ├── const: 'b' [type=string]
+ │                   └── const: 'c' [type=string]
  └── projections
       └── function: ascii [type=int]
            └── variable: unnest [type=string]
@@ -278,19 +296,17 @@ SELECT generate_series(1, 3) + generate_series(1, 3)
 ----
 project
  ├── columns: "?column?":3(int)
- ├── inner-join-apply
+ ├── project-set
  │    ├── columns: generate_series:1(int) generate_series:2(int)
  │    ├── values
  │    │    └── tuple [type=tuple]
- │    ├── zip
- │    │    ├── columns: generate_series:1(int) generate_series:2(int)
- │    │    ├── function: generate_series [type=int]
- │    │    │    ├── const: 1 [type=int]
- │    │    │    └── const: 3 [type=int]
- │    │    └── function: generate_series [type=int]
- │    │         ├── const: 1 [type=int]
- │    │         └── const: 3 [type=int]
- │    └── filters (true)
+ │    └── zip
+ │         ├── function: generate_series [type=int]
+ │         │    ├── const: 1 [type=int]
+ │         │    └── const: 3 [type=int]
+ │         └── function: generate_series [type=int]
+ │              ├── const: 1 [type=int]
+ │              └── const: 3 [type=int]
  └── projections
       └── plus [type=int]
            ├── variable: generate_series [type=int]
@@ -307,73 +323,75 @@ error (42703): column "generate_series" does not exist
 build
 SELECT * from generate_series(1, (select * from generate_series(1, 0)))
 ----
-zip
+project-set
  ├── columns: generate_series:2(int)
- └── function: generate_series [type=int]
-      ├── const: 1 [type=int]
-      └── subquery [type=int]
-           └── max1-row
-                ├── columns: generate_series:1(int)
-                └── zip
+ ├── values
+ │    └── tuple [type=tuple]
+ └── zip
+      └── function: generate_series [type=int]
+           ├── const: 1 [type=int]
+           └── subquery [type=int]
+                └── max1-row
                      ├── columns: generate_series:1(int)
-                     └── function: generate_series [type=int]
-                          ├── const: 1 [type=int]
-                          └── const: 0 [type=int]
+                     └── project-set
+                          ├── columns: generate_series:1(int)
+                          ├── values
+                          │    └── tuple [type=tuple]
+                          └── zip
+                               └── function: generate_series [type=int]
+                                    ├── const: 1 [type=int]
+                                    └── const: 0 [type=int]
 
 # The following query is designed to produce a null array argument to unnest
 # in a way that the type system can't detect before evaluation.
 build
 SELECT unnest((SELECT current_schemas((SELECT isnan((SELECT round(3.4, (SELECT generate_series(1, 0)))))))));
 ----
-inner-join-apply
+project-set
  ├── columns: unnest:5(string)
  ├── values
  │    └── tuple [type=tuple]
- ├── zip
- │    ├── columns: unnest:5(string)
- │    └── function: unnest [type=string]
- │         └── subquery [type=string[]]
- │              └── max1-row
- │                   ├── columns: current_schemas:4(string[])
- │                   └── project
- │                        ├── columns: current_schemas:4(string[])
- │                        ├── values
- │                        │    └── tuple [type=tuple]
- │                        └── projections
- │                             └── function: current_schemas [type=string[]]
- │                                  └── subquery [type=bool]
- │                                       └── max1-row
- │                                            ├── columns: isnan:3(bool)
- │                                            └── project
- │                                                 ├── columns: isnan:3(bool)
- │                                                 ├── values
- │                                                 │    └── tuple [type=tuple]
- │                                                 └── projections
- │                                                      └── function: isnan [type=bool]
- │                                                           └── subquery [type=decimal]
- │                                                                └── max1-row
- │                                                                     ├── columns: round:2(decimal)
- │                                                                     └── project
- │                                                                          ├── columns: round:2(decimal)
- │                                                                          ├── values
- │                                                                          │    └── tuple [type=tuple]
- │                                                                          └── projections
- │                                                                               └── function: round [type=decimal]
- │                                                                                    ├── const: 3.4 [type=decimal]
- │                                                                                    └── subquery [type=int]
- │                                                                                         └── max1-row
- │                                                                                              ├── columns: generate_series:1(int)
- │                                                                                              └── inner-join-apply
- │                                                                                                   ├── columns: generate_series:1(int)
- │                                                                                                   ├── values
- │                                                                                                   │    └── tuple [type=tuple]
- │                                                                                                   ├── zip
- │                                                                                                   │    ├── columns: generate_series:1(int)
- │                                                                                                   │    └── function: generate_series [type=int]
- │                                                                                                   │         ├── const: 1 [type=int]
- │                                                                                                   │         └── const: 0 [type=int]
- │                                                                                                   └── filters (true)
- └── filters (true)
+ └── zip
+      └── function: unnest [type=string]
+           └── subquery [type=string[]]
+                └── max1-row
+                     ├── columns: current_schemas:4(string[])
+                     └── project
+                          ├── columns: current_schemas:4(string[])
+                          ├── values
+                          │    └── tuple [type=tuple]
+                          └── projections
+                               └── function: current_schemas [type=string[]]
+                                    └── subquery [type=bool]
+                                         └── max1-row
+                                              ├── columns: isnan:3(bool)
+                                              └── project
+                                                   ├── columns: isnan:3(bool)
+                                                   ├── values
+                                                   │    └── tuple [type=tuple]
+                                                   └── projections
+                                                        └── function: isnan [type=bool]
+                                                             └── subquery [type=decimal]
+                                                                  └── max1-row
+                                                                       ├── columns: round:2(decimal)
+                                                                       └── project
+                                                                            ├── columns: round:2(decimal)
+                                                                            ├── values
+                                                                            │    └── tuple [type=tuple]
+                                                                            └── projections
+                                                                                 └── function: round [type=decimal]
+                                                                                      ├── const: 3.4 [type=decimal]
+                                                                                      └── subquery [type=int]
+                                                                                           └── max1-row
+                                                                                                ├── columns: generate_series:1(int)
+                                                                                                └── project-set
+                                                                                                     ├── columns: generate_series:1(int)
+                                                                                                     ├── values
+                                                                                                     │    └── tuple [type=tuple]
+                                                                                                     └── zip
+                                                                                                          └── function: generate_series [type=int]
+                                                                                                               ├── const: 1 [type=int]
+                                                                                                               └── const: 0 [type=int]
 
 # pg_get_keywords
 
@@ -386,9 +404,12 @@ sort
  ├── ordering: +1
  └── select
       ├── columns: word:1(string!null) catcode:2(string) catdesc:3(string)
-      ├── zip
+      ├── project-set
       │    ├── columns: word:1(string) catcode:2(string) catdesc:3(string)
-      │    └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
+      │    ├── values
+      │    │    └── tuple [type=tuple]
+      │    └── zip
+      │         └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
       └── filters
            └── in [type=bool]
                 ├── variable: word [type=string]
@@ -407,21 +428,30 @@ limit
  ├── columns: a:1(int) b:2(int) word:3(string) catcode:4(string) catdesc:5(string)
  ├── inner-join
  │    ├── columns: generate_series:1(int) unnest:2(int) word:3(string) catcode:4(string) catdesc:5(string)
- │    ├── zip
+ │    ├── project-set
  │    │    ├── columns: generate_series:1(int)
- │    │    └── function: generate_series [type=int]
- │    │         ├── const: 1 [type=int]
- │    │         └── const: 1 [type=int]
+ │    │    ├── values
+ │    │    │    └── tuple [type=tuple]
+ │    │    └── zip
+ │    │         └── function: generate_series [type=int]
+ │    │              ├── const: 1 [type=int]
+ │    │              └── const: 1 [type=int]
  │    ├── inner-join
  │    │    ├── columns: unnest:2(int) word:3(string) catcode:4(string) catdesc:5(string)
- │    │    ├── zip
+ │    │    ├── project-set
  │    │    │    ├── columns: unnest:2(int)
- │    │    │    └── function: unnest [type=int]
- │    │    │         └── array: [type=int[]]
- │    │    │              └── const: 1 [type=int]
- │    │    ├── zip
+ │    │    │    ├── values
+ │    │    │    │    └── tuple [type=tuple]
+ │    │    │    └── zip
+ │    │    │         └── function: unnest [type=int]
+ │    │    │              └── array: [type=int[]]
+ │    │    │                   └── const: 1 [type=int]
+ │    │    ├── project-set
  │    │    │    ├── columns: word:3(string) catcode:4(string) catdesc:5(string)
- │    │    │    └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
+ │    │    │    ├── values
+ │    │    │    │    └── tuple [type=tuple]
+ │    │    │    └── zip
+ │    │    │         └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
  │    │    └── filters (true)
  │    └── filters (true)
  └── const: 0 [type=int]
@@ -434,14 +464,12 @@ limit
  ├── columns: "?column?":4(string!null) pg_get_keywords:5(tuple{string AS word, string AS catcode, string AS catdesc}) "?column?":6(string!null)
  ├── project
  │    ├── columns: "?column?":4(string!null) pg_get_keywords:5(tuple{string AS word, string AS catcode, string AS catdesc}) "?column?":6(string!null)
- │    ├── inner-join-apply
+ │    ├── project-set
  │    │    ├── columns: word:1(string) catcode:2(string) catdesc:3(string)
  │    │    ├── values
  │    │    │    └── tuple [type=tuple]
- │    │    ├── zip
- │    │    │    ├── columns: word:1(string) catcode:2(string) catdesc:3(string)
- │    │    │    └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
- │    │    └── filters (true)
+ │    │    └── zip
+ │    │         └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
  │    └── projections
  │         ├── const: 'a' [type=string]
  │         ├── tuple [type=tuple{string AS word, string AS catcode, string AS catdesc}]
@@ -458,14 +486,12 @@ limit
  ├── columns: "?column?":4(string!null) b:5(tuple{string AS word, string AS catcode, string AS catdesc}) "?column?":6(string!null)
  ├── project
  │    ├── columns: "?column?":4(string!null) b:5(tuple{string AS word, string AS catcode, string AS catdesc}) "?column?":6(string!null)
- │    ├── inner-join-apply
+ │    ├── project-set
  │    │    ├── columns: word:1(string) catcode:2(string) catdesc:3(string)
  │    │    ├── values
  │    │    │    └── tuple [type=tuple]
- │    │    ├── zip
- │    │    │    ├── columns: word:1(string) catcode:2(string) catdesc:3(string)
- │    │    │    └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
- │    │    └── filters (true)
+ │    │    └── zip
+ │    │         └── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
  │    └── projections
  │         ├── const: 'a' [type=string]
  │         ├── tuple [type=tuple{string AS word, string AS catcode, string AS catdesc}]
@@ -484,12 +510,11 @@ limit
  ├── columns: "?column?":1(string!null) b:2(tuple) "?column?":3(string!null)
  ├── project
  │    ├── columns: "?column?":1(string!null) b:2(tuple) "?column?":3(string!null)
- │    ├── inner-join-apply
+ │    ├── project-set
  │    │    ├── values
  │    │    │    └── tuple [type=tuple]
- │    │    ├── zip
- │    │    │    └── function: crdb_internal.unary_table [type=tuple]
- │    │    └── filters (true)
+ │    │    └── zip
+ │    │         └── function: crdb_internal.unary_table [type=tuple]
  │    └── projections
  │         ├── const: 'a' [type=string]
  │         ├── tuple [type=tuple]
@@ -502,10 +527,13 @@ limit
 build
 SELECT * FROM upper('abc')
 ----
-zip
+project-set
  ├── columns: upper:1(string)
- └── function: upper [type=string]
-      └── const: 'abc' [type=string]
+ ├── values
+ │    └── tuple [type=tuple]
+ └── zip
+      └── function: upper [type=string]
+           └── const: 'abc' [type=string]
 
 # current_schema
 
@@ -514,9 +542,12 @@ SELECT * FROM current_schema() WITH ORDINALITY AS a(b)
 ----
 row-number
  ├── columns: b:1(string) ordinality:2(int!null)
- └── zip
+ └── project-set
       ├── columns: current_schema:1(string)
-      └── function: current_schema [type=string]
+      ├── values
+      │    └── tuple [type=tuple]
+      └── zip
+           └── function: current_schema [type=string]
 
 # expandArray
 
@@ -525,17 +556,15 @@ SELECT information_schema._pg_expandarray(ARRAY['b', 'a'])
 ----
 project
  ├── columns: information_schema._pg_expandarray:3(tuple{string AS x, int AS n})
- ├── inner-join-apply
+ ├── project-set
  │    ├── columns: x:1(string) n:2(int)
  │    ├── values
  │    │    └── tuple [type=tuple]
- │    ├── zip
- │    │    ├── columns: x:1(string) n:2(int)
- │    │    └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
- │    │         └── array: [type=string[]]
- │    │              ├── const: 'b' [type=string]
- │    │              └── const: 'a' [type=string]
- │    └── filters (true)
+ │    └── zip
+ │         └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
+ │              └── array: [type=string[]]
+ │                   ├── const: 'b' [type=string]
+ │                   └── const: 'a' [type=string]
  └── projections
       └── tuple [type=tuple{string AS x, int AS n}]
            ├── variable: x [type=string]
@@ -544,12 +573,15 @@ project
 build
 SELECT * FROM information_schema._pg_expandarray(ARRAY['b', 'a'])
 ----
-zip
+project-set
  ├── columns: x:1(string) n:2(int)
- └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
-      └── array: [type=string[]]
-           ├── const: 'b' [type=string]
-           └── const: 'a' [type=string]
+ ├── values
+ │    └── tuple [type=tuple]
+ └── zip
+      └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
+           └── array: [type=string[]]
+                ├── const: 'b' [type=string]
+                └── const: 'a' [type=string]
 
 # srf_accessor
 
@@ -573,18 +605,16 @@ SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).*
 ----
 project
  ├── columns: x:3(string) n:4(int)
- ├── inner-join-apply
+ ├── project-set
  │    ├── columns: x:1(string) n:2(int)
  │    ├── values
  │    │    └── tuple [type=tuple]
- │    ├── zip
- │    │    ├── columns: x:1(string) n:2(int)
- │    │    └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
- │    │         └── array: [type=string[]]
- │    │              ├── const: 'c' [type=string]
- │    │              ├── const: 'b' [type=string]
- │    │              └── const: 'a' [type=string]
- │    └── filters (true)
+ │    └── zip
+ │         └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
+ │              └── array: [type=string[]]
+ │                   ├── const: 'c' [type=string]
+ │                   ├── const: 'b' [type=string]
+ │                   └── const: 'a' [type=string]
  └── projections
       ├── column-access: 0 [type=string]
       │    └── tuple [type=tuple{string AS x, int AS n}]
@@ -600,18 +630,16 @@ SELECT (information_schema._pg_expandarray(ARRAY['c', 'b', 'a'])).x
 ----
 project
  ├── columns: x:3(string)
- ├── inner-join-apply
+ ├── project-set
  │    ├── columns: x:1(string) n:2(int)
  │    ├── values
  │    │    └── tuple [type=tuple]
- │    ├── zip
- │    │    ├── columns: x:1(string) n:2(int)
- │    │    └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
- │    │         └── array: [type=string[]]
- │    │              ├── const: 'c' [type=string]
- │    │              ├── const: 'b' [type=string]
- │    │              └── const: 'a' [type=string]
- │    └── filters (true)
+ │    └── zip
+ │         └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
+ │              └── array: [type=string[]]
+ │                   ├── const: 'c' [type=string]
+ │                   ├── const: 'b' [type=string]
+ │                   └── const: 'a' [type=string]
  └── projections
       └── column-access: 0 [type=string]
            └── tuple [type=tuple{string AS x, int AS n}]
@@ -628,8 +656,25 @@ SELECT temp.n from information_schema._pg_expandarray(ARRAY['c','b','a']) AS tem
 ----
 project
  ├── columns: n:2(int)
- └── zip
+ └── project-set
       ├── columns: x:1(string) n:2(int)
+      ├── values
+      │    └── tuple [type=tuple]
+      └── zip
+           └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
+                └── array: [type=string[]]
+                     ├── const: 'c' [type=string]
+                     ├── const: 'b' [type=string]
+                     └── const: 'a' [type=string]
+
+build
+SELECT temp.* from information_schema._pg_expandarray(ARRAY['c','b','a']) AS temp;
+----
+project-set
+ ├── columns: x:1(string) n:2(int)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── zip
       └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
            └── array: [type=string[]]
                 ├── const: 'c' [type=string]
@@ -637,59 +682,57 @@ project
                 └── const: 'a' [type=string]
 
 build
-SELECT temp.* from information_schema._pg_expandarray(ARRAY['c','b','a']) AS temp;
-----
-zip
- ├── columns: x:1(string) n:2(int)
- └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
-      └── array: [type=string[]]
-           ├── const: 'c' [type=string]
-           ├── const: 'b' [type=string]
-           └── const: 'a' [type=string]
-
-build
 SELECT * from information_schema._pg_expandarray(ARRAY['c','b','a']) AS temp;
 ----
-zip
+project-set
  ├── columns: x:1(string) n:2(int)
- └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
-      └── array: [type=string[]]
-           ├── const: 'c' [type=string]
-           ├── const: 'b' [type=string]
-           └── const: 'a' [type=string]
+ ├── values
+ │    └── tuple [type=tuple]
+ └── zip
+      └── function: information_schema._pg_expandarray [type=tuple{string AS x, int AS n}]
+           └── array: [type=string[]]
+                ├── const: 'c' [type=string]
+                ├── const: 'b' [type=string]
+                └── const: 'a' [type=string]
 
 # generate_subscripts
 
 build
 SELECT * FROM generate_subscripts(ARRAY[3,2,1])
 ----
-zip
+project-set
  ├── columns: generate_subscripts:1(int)
- └── function: generate_subscripts [type=int]
-      └── array: [type=int[]]
-           ├── const: 3 [type=int]
-           ├── const: 2 [type=int]
-           └── const: 1 [type=int]
+ ├── values
+ │    └── tuple [type=tuple]
+ └── zip
+      └── function: generate_subscripts [type=int]
+           └── array: [type=int[]]
+                ├── const: 3 [type=int]
+                ├── const: 2 [type=int]
+                └── const: 1 [type=int]
 
 # Zip with multiple SRFs.
 build
 SELECT * FROM
 ROWS FROM (generate_series(0, 1), generate_series(1, 3), pg_get_keywords(), unnest(ARRAY['a', 'b', 'c']))
 ----
-zip
+project-set
  ├── columns: generate_series:1(int) generate_series:2(int) word:3(string) catcode:4(string) catdesc:5(string) unnest:6(string)
- ├── function: generate_series [type=int]
- │    ├── const: 0 [type=int]
- │    └── const: 1 [type=int]
- ├── function: generate_series [type=int]
- │    ├── const: 1 [type=int]
- │    └── const: 3 [type=int]
- ├── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
- └── function: unnest [type=string]
-      └── array: [type=string[]]
-           ├── const: 'a' [type=string]
-           ├── const: 'b' [type=string]
-           └── const: 'c' [type=string]
+ ├── values
+ │    └── tuple [type=tuple]
+ └── zip
+      ├── function: generate_series [type=int]
+      │    ├── const: 0 [type=int]
+      │    └── const: 1 [type=int]
+      ├── function: generate_series [type=int]
+      │    ├── const: 1 [type=int]
+      │    └── const: 3 [type=int]
+      ├── function: pg_get_keywords [type=tuple{string AS word, string AS catcode, string AS catdesc}]
+      └── function: unnest [type=string]
+           └── array: [type=string[]]
+                ├── const: 'a' [type=string]
+                ├── const: 'b' [type=string]
+                └── const: 'c' [type=string]
 
 # Don't rename columns if the zip contains two functions.
 build
@@ -701,24 +744,33 @@ inner-join
  ├── columns: a:1(string) upper:2(string) generate_series:3(int) c:4(int)
  ├── inner-join
  │    ├── columns: upper:1(string) upper:2(string) generate_series:3(int)
- │    ├── zip
+ │    ├── project-set
  │    │    ├── columns: upper:1(string)
- │    │    └── function: upper [type=string]
- │    │         └── const: 'abc' [type=string]
- │    ├── zip
+ │    │    ├── values
+ │    │    │    └── tuple [type=tuple]
+ │    │    └── zip
+ │    │         └── function: upper [type=string]
+ │    │              └── const: 'abc' [type=string]
+ │    ├── project-set
  │    │    ├── columns: upper:2(string) generate_series:3(int)
- │    │    ├── function: upper [type=string]
- │    │    │    └── const: 'def' [type=string]
- │    │    └── function: generate_series [type=int]
- │    │         ├── const: 1 [type=int]
- │    │         └── const: 3 [type=int]
+ │    │    ├── values
+ │    │    │    └── tuple [type=tuple]
+ │    │    └── zip
+ │    │         ├── function: upper [type=string]
+ │    │         │    └── const: 'def' [type=string]
+ │    │         └── function: generate_series [type=int]
+ │    │              ├── const: 1 [type=int]
+ │    │              └── const: 3 [type=int]
  │    └── filters
  │         └── true [type=bool]
- ├── zip
+ ├── project-set
  │    ├── columns: generate_series:4(int)
- │    └── function: generate_series [type=int]
- │         ├── const: 1 [type=int]
- │         └── const: 4 [type=int]
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── zip
+ │         └── function: generate_series [type=int]
+ │              ├── const: 1 [type=int]
+ │              └── const: 4 [type=int]
  └── filters
       └── true [type=bool]
 
@@ -764,17 +816,15 @@ project
                                ├── columns: generate_series:8(int)
                                ├── project
                                │    ├── columns: generate_series:8(int)
-                               │    └── inner-join-apply
+                               │    └── project-set
                                │         ├── columns: b:6(string) u.rowid:7(int!null) generate_series:8(int)
                                │         ├── scan u
                                │         │    └── columns: b:6(string) u.rowid:7(int!null)
-                               │         ├── zip
-                               │         │    ├── columns: generate_series:8(int)
-                               │         │    └── function: generate_series [type=int]
-                               │         │         ├── const: 0 [type=int]
-                               │         │         └── cast: INT [type=int]
-                               │         │              └── variable: b [type=string]
-                               │         └── filters (true)
+                               │         └── zip
+                               │              └── function: generate_series [type=int]
+                               │                   ├── const: 0 [type=int]
+                               │                   └── cast: INT [type=int]
+                               │                        └── variable: b [type=string]
                                └── const: 1 [type=int]
 
 build
@@ -782,38 +832,34 @@ SELECT generate_series((SELECT generate_subscripts(ARRAY[a, a||b]) FROM t, u), 1
 ----
 project
  ├── columns: generate_series:8(int)
- └── inner-join-apply
+ └── project-set
       ├── columns: t.a:1(string) t.rowid:2(int!null) generate_series:8(int)
       ├── scan t
       │    └── columns: t.a:1(string) t.rowid:2(int!null)
-      ├── zip
-      │    ├── columns: generate_series:8(int)
-      │    └── function: generate_series [type=int]
-      │         ├── subquery [type=int]
-      │         │    └── max1-row
-      │         │         ├── columns: generate_subscripts:7(int)
-      │         │         └── project
-      │         │              ├── columns: generate_subscripts:7(int)
-      │         │              └── inner-join-apply
-      │         │                   ├── columns: t.a:3(string) t.rowid:4(int!null) b:5(string) u.rowid:6(int!null) generate_subscripts:7(int)
-      │         │                   ├── inner-join
-      │         │                   │    ├── columns: t.a:3(string) t.rowid:4(int!null) b:5(string) u.rowid:6(int!null)
-      │         │                   │    ├── scan t
-      │         │                   │    │    └── columns: t.a:3(string) t.rowid:4(int!null)
-      │         │                   │    ├── scan u
-      │         │                   │    │    └── columns: b:5(string) u.rowid:6(int!null)
-      │         │                   │    └── filters (true)
-      │         │                   ├── zip
-      │         │                   │    ├── columns: generate_subscripts:7(int)
-      │         │                   │    └── function: generate_subscripts [type=int]
-      │         │                   │         └── array: [type=string[]]
-      │         │                   │              ├── variable: t.a [type=string]
-      │         │                   │              └── concat [type=string]
-      │         │                   │                   ├── variable: t.a [type=string]
-      │         │                   │                   └── variable: b [type=string]
-      │         │                   └── filters (true)
-      │         └── const: 100 [type=int]
-      └── filters (true)
+      └── zip
+           └── function: generate_series [type=int]
+                ├── subquery [type=int]
+                │    └── max1-row
+                │         ├── columns: generate_subscripts:7(int)
+                │         └── project
+                │              ├── columns: generate_subscripts:7(int)
+                │              └── project-set
+                │                   ├── columns: t.a:3(string) t.rowid:4(int!null) b:5(string) u.rowid:6(int!null) generate_subscripts:7(int)
+                │                   ├── inner-join
+                │                   │    ├── columns: t.a:3(string) t.rowid:4(int!null) b:5(string) u.rowid:6(int!null)
+                │                   │    ├── scan t
+                │                   │    │    └── columns: t.a:3(string) t.rowid:4(int!null)
+                │                   │    ├── scan u
+                │                   │    │    └── columns: b:5(string) u.rowid:6(int!null)
+                │                   │    └── filters (true)
+                │                   └── zip
+                │                        └── function: generate_subscripts [type=int]
+                │                             └── array: [type=string[]]
+                │                                  ├── variable: t.a [type=string]
+                │                                  └── concat [type=string]
+                │                                       ├── variable: t.a [type=string]
+                │                                       └── variable: b [type=string]
+                └── const: 100 [type=int]
 
 exec-ddl
 CREATE TABLE a (x INT PRIMARY KEY, j JSON, k JSON, m JSON, n JSON)
@@ -837,30 +883,26 @@ FROM a
 ----
 project
  ├── columns: json_array_elements:6(jsonb) jsonb_each:19(tuple{string AS key, jsonb AS value}) jsonb_object_keys:20(string) generate_series:21(int)
- ├── inner-join-apply
+ ├── project-set
  │    ├── columns: a.x:1(int!null) a.j:2(jsonb) a.k:3(jsonb) a.m:4(jsonb) a.n:5(jsonb) json_array_elements:6(jsonb)
  │    ├── scan a
  │    │    └── columns: a.x:1(int!null) a.j:2(jsonb) a.k:3(jsonb) a.m:4(jsonb) a.n:5(jsonb)
- │    ├── zip
- │    │    ├── columns: json_array_elements:6(jsonb)
- │    │    └── function: json_array_elements [type=jsonb]
- │    │         └── variable: a.j [type=jsonb]
- │    └── filters (true)
+ │    └── zip
+ │         └── function: json_array_elements [type=jsonb]
+ │              └── variable: a.j [type=jsonb]
  └── projections
       ├── subquery [type=tuple{string AS key, jsonb AS value}]
       │    └── max1-row
       │         ├── columns: jsonb_each:9(tuple{string AS key, jsonb AS value})
       │         └── project
       │              ├── columns: jsonb_each:9(tuple{string AS key, jsonb AS value})
-      │              ├── inner-join-apply
+      │              ├── project-set
       │              │    ├── columns: key:7(string) value:8(jsonb)
       │              │    ├── values
       │              │    │    └── tuple [type=tuple]
-      │              │    ├── zip
-      │              │    │    ├── columns: key:7(string) value:8(jsonb)
-      │              │    │    └── function: jsonb_each [type=tuple{string AS key, jsonb AS value}]
-      │              │    │         └── variable: a.k [type=jsonb]
-      │              │    └── filters (true)
+      │              │    └── zip
+      │              │         └── function: jsonb_each [type=tuple{string AS key, jsonb AS value}]
+      │              │              └── variable: a.k [type=jsonb]
       │              └── projections
       │                   └── tuple [type=tuple{string AS key, jsonb AS value}]
       │                        ├── variable: key [type=string]
@@ -870,44 +912,41 @@ project
       │         ├── columns: jsonb_object_keys:15(string)
       │         └── project
       │              ├── columns: jsonb_object_keys:15(string)
-      │              └── inner-join-apply
+      │              └── project-set
       │                   ├── columns: a.x:10(int!null) a.j:11(jsonb) a.k:12(jsonb) a.m:13(jsonb) a.n:14(jsonb) jsonb_object_keys:15(string)
       │                   ├── scan a
       │                   │    └── columns: a.x:10(int!null) a.j:11(jsonb) a.k:12(jsonb) a.m:13(jsonb) a.n:14(jsonb)
-      │                   ├── zip
-      │                   │    ├── columns: jsonb_object_keys:15(string)
-      │                   │    └── function: jsonb_object_keys [type=string]
-      │                   │         └── variable: a.m [type=jsonb]
-      │                   └── filters (true)
+      │                   └── zip
+      │                        └── function: jsonb_object_keys [type=string]
+      │                             └── variable: a.m [type=jsonb]
       └── subquery [type=int]
            └── max1-row
                 ├── columns: generate_series:18(int)
-                └── inner-join-apply
+                └── project-set
                      ├── columns: generate_series:18(int)
                      ├── values
                      │    └── tuple [type=tuple]
-                     ├── zip
-                     │    ├── columns: generate_series:18(int)
-                     │    └── function: generate_series [type=int]
-                     │         ├── subquery [type=int]
-                     │         │    └── max1-row
-                     │         │         ├── columns: generate_series:17(int)
-                     │         │         └── project
-                     │         │              ├── columns: generate_series:17(int)
-                     │         │              └── inner-join-apply
-                     │         │                   ├── columns: jsonb_array_elements_text:16(string) generate_series:17(int)
-                     │         │                   ├── zip
-                     │         │                   │    ├── columns: jsonb_array_elements_text:16(string)
-                     │         │                   │    └── function: jsonb_array_elements_text [type=string]
-                     │         │                   │         └── variable: a.n [type=jsonb]
-                     │         │                   ├── zip
-                     │         │                   │    ├── columns: generate_series:17(int)
-                     │         │                   │    └── function: generate_series [type=int]
-                     │         │                   │         ├── variable: a.x [type=int]
-                     │         │                   │         └── const: 100 [type=int]
-                     │         │                   └── filters (true)
-                     │         └── const: 1000 [type=int]
-                     └── filters (true)
+                     └── zip
+                          └── function: generate_series [type=int]
+                               ├── subquery [type=int]
+                               │    └── max1-row
+                               │         ├── columns: generate_series:17(int)
+                               │         └── project
+                               │              ├── columns: generate_series:17(int)
+                               │              └── project-set
+                               │                   ├── columns: jsonb_array_elements_text:16(string) generate_series:17(int)
+                               │                   ├── project-set
+                               │                   │    ├── columns: jsonb_array_elements_text:16(string)
+                               │                   │    ├── values
+                               │                   │    │    └── tuple [type=tuple]
+                               │                   │    └── zip
+                               │                   │         └── function: jsonb_array_elements_text [type=string]
+                               │                   │              └── variable: a.n [type=jsonb]
+                               │                   └── zip
+                               │                        └── function: generate_series [type=int]
+                               │                             ├── variable: a.x [type=int]
+                               │                             └── const: 100 [type=int]
+                               └── const: 1000 [type=int]
 
 # Regression test for #30412.
 build
@@ -929,7 +968,10 @@ error (42803): column "x" must appear in the GROUP BY clause or be used in an ag
 build
 SELECT * FROM ROWS FROM (CAST('string' AS SERIAL2[])) AS ident
 ----
-zip
+project-set
  ├── columns: ident:1(int[])
- └── cast: SERIAL2[] [type=int[]]
-      └── const: 'string' [type=string]
+ ├── values
+ │    └── tuple [type=tuple]
+ └── zip
+      └── cast: SERIAL2[] [type=int[]]
+           └── const: 'string' [type=string]
