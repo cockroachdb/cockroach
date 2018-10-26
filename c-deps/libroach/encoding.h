@@ -69,8 +69,20 @@ std::string EncodeKey(DBKey k);
 // SplitKey splits an MVCC key into key and timestamp slices. See also
 // DecodeKey if you want to decode the timestamp. Returns true on
 // success and false on any decoding error.
-WARN_UNUSED_RESULT bool SplitKey(rocksdb::Slice buf, rocksdb::Slice* key,
-                                 rocksdb::Slice* timestamp);
+WARN_UNUSED_RESULT inline bool SplitKey(rocksdb::Slice buf, rocksdb::Slice* key,
+                                        rocksdb::Slice* timestamp) {
+  if (buf.empty()) {
+    return false;
+  }
+  const char ts_size = buf[buf.size() - 1];
+  if (ts_size >= buf.size()) {
+    return false;
+  }
+  *key = rocksdb::Slice(buf.data(), buf.size() - ts_size - 1);
+  *timestamp = rocksdb::Slice(key->data() + key->size(), ts_size);
+  return true;
+}
+
 
 // DecodeTimestamp an MVCC encoded timestamp. Returns true on success
 // and false on any decoding error.
