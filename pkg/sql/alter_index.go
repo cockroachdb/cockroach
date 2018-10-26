@@ -72,7 +72,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 			)
 			err = deleteRemovedPartitionZoneConfigs(
 				params.ctx, params.p.txn,
-				n.tableDesc, n.indexDesc,
+				n.tableDesc.TableDesc(), n.indexDesc,
 				&n.indexDesc.Partitioning, &partitioning,
 				params.extendedEvalCtx.ExecCfg,
 			)

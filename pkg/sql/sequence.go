@@ -298,20 +298,20 @@ func maybeAddSequenceDependencies(
 	col *sqlbase.ColumnDescriptor,
 	expr tree.TypedExpr,
 	evalCtx *tree.EvalContext,
-) ([]*sqlbase.MutableTableDescriptor, error) {
+) ([]*MutableTableDescriptor, error) {
 	ctx := evalCtx.Ctx()
 	seqNames, err := getUsedSequenceNames(expr)
 	if err != nil {
 		return nil, err
 	}
-	var seqDescs []*sqlbase.MutableTableDescriptor
+	var seqDescs []*MutableTableDescriptor
 	for _, seqName := range seqNames {
 		parsedSeqName, err := evalCtx.Sequence.ParseQualifiedTableName(ctx, seqName)
 		if err != nil {
 			return nil, err
 		}
 
-		var seqDesc *sqlbase.MutableTableDescriptor
+		var seqDesc *MutableTableDescriptor
 		p, ok := sc.(*planner)
 		if ok {
 			seqDesc, err = p.ResolveMutableTableDescriptor(ctx, parsedSeqName, true /*required*/, requireSequenceDesc)
@@ -320,7 +320,7 @@ func maybeAddSequenceDependencies(
 			}
 		} else {
 			// This is only executed via IMPORT which uses its own resolver.
-			seqDesc, err = ResolveExistingObject(ctx, sc, parsedSeqName, true /*required*/, requireSequenceDesc)
+			seqDesc, err = ResolveMutableExistingObject(ctx, sc, parsedSeqName, true /*required*/, requireSequenceDesc)
 			if err != nil {
 				return nil, err
 			}
@@ -346,8 +346,8 @@ func removeSequenceDependencies(
 ) error {
 	for _, sequenceID := range col.UsesSequenceIds {
 		// Get the sequence descriptor so we can remove the reference from it.
-		seqDesc := sqlbase.TableDescriptor{}
-		if err := getDescriptorByID(params.ctx, params.p.txn, sequenceID, &seqDesc); err != nil {
+		seqDesc, err := params.p.Tables().getMutableTableVersionByID(params.ctx, sequenceID, params.p.txn)
+		if err != nil {
 			return err
 		}
 		// Find an item in seqDesc.DependedOnBy which references tableDesc.
@@ -361,7 +361,7 @@ func removeSequenceDependencies(
 			return pgerror.NewAssertionErrorf("couldn't find reference from sequence to this column")
 		}
 		seqDesc.DependedOnBy = append(seqDesc.DependedOnBy[:refIdx], seqDesc.DependedOnBy[refIdx+1:]...)
-		if err := params.p.writeSchemaChange(params.ctx, &seqDesc, sqlbase.InvalidMutationID); err != nil {
+		if err := params.p.writeSchemaChange(params.ctx, seqDesc, sqlbase.InvalidMutationID); err != nil {
 			return err
 		}
 	}

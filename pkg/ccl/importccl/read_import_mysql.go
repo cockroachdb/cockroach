@@ -370,8 +370,8 @@ func mysqlTableToCockroach(
 		if err != nil {
 			return nil, nil, err
 		}
-		seqDesc = &desc
-		fks.resolver[seqName] = seqDesc
+		seqDesc = desc.TableDesc()
+		fks.resolver[seqName] = &desc
 		id++
 	}
 
@@ -454,9 +454,9 @@ func mysqlTableToCockroach(
 	}
 	fks.resolver[desc.Name] = desc
 	if seqDesc != nil {
-		return []*sqlbase.TableDescriptor{seqDesc, desc}, fkDefs, nil
+		return []*sqlbase.TableDescriptor{seqDesc, desc.TableDesc()}, fkDefs, nil
 	}
-	return []*sqlbase.TableDescriptor{desc}, fkDefs, nil
+	return []*sqlbase.TableDescriptor{desc.TableDesc()}, fkDefs, nil
 }
 
 func mysqlActionToCockroach(action mysql.ReferenceAction) tree.ReferenceAction {
@@ -474,18 +474,18 @@ func mysqlActionToCockroach(action mysql.ReferenceAction) tree.ReferenceAction {
 }
 
 type delayedFK struct {
-	tbl *sqlbase.TableDescriptor
+	tbl *sqlbase.MutableTableDescriptor
 	def *tree.ForeignKeyConstraintTableDef
 }
 
 func addDelayedFKs(ctx context.Context, defs []delayedFK, resolver fkResolver) error {
 	for _, def := range defs {
 		if err := sql.ResolveFK(
-			ctx, nil, resolver, def.tbl, def.def, map[sqlbase.ID]*sqlbase.TableDescriptor{}, sqlbase.ConstraintValidity_Validated,
+			ctx, nil, resolver, def.tbl, def.def, map[sqlbase.ID]*sqlbase.MutableTableDescriptor{}, sqlbase.ConstraintValidity_Validated,
 		); err != nil {
 			return err
 		}
-		if err := fixDescriptorFKState(def.tbl); err != nil {
+		if err := fixDescriptorFKState(def.tbl.TableDesc()); err != nil {
 			return err
 		}
 		if err := def.tbl.AllocateIDs(); err != nil {

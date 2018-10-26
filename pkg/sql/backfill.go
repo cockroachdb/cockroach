@@ -499,7 +499,7 @@ func runSchemaChangesInTxn(
 	tc *TableCollection,
 	execCfg *ExecutorConfig,
 	evalCtx *tree.EvalContext,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *sqlbase.MutableTableDescriptor,
 	traceKV bool,
 ) error {
 	if len(tableDesc.DrainingNames) > 0 {
@@ -531,13 +531,13 @@ func runSchemaChangesInTxn(
 				if doneColumnBackfill || !sqlbase.ColumnNeedsBackfill(m.GetColumn()) {
 					break
 				}
-				if err := columnBackfillInTxn(ctx, txn, tc, evalCtx, tableDesc, traceKV); err != nil {
+				if err := columnBackfillInTxn(ctx, txn, tc, evalCtx, tableDesc.TableDesc(), traceKV); err != nil {
 					return err
 				}
 				doneColumnBackfill = true
 
 			case *sqlbase.DescriptorMutation_Index:
-				if err := indexBackfillInTxn(ctx, txn, tableDesc, traceKV); err != nil {
+				if err := indexBackfillInTxn(ctx, txn, tableDesc.TableDesc(), traceKV); err != nil {
 					return err
 				}
 
@@ -552,13 +552,13 @@ func runSchemaChangesInTxn(
 				if doneColumnBackfill {
 					break
 				}
-				if err := columnBackfillInTxn(ctx, txn, tc, evalCtx, tableDesc, traceKV); err != nil {
+				if err := columnBackfillInTxn(ctx, txn, tc, evalCtx, tableDesc.TableDesc(), traceKV); err != nil {
 					return err
 				}
 				doneColumnBackfill = true
 
 			case *sqlbase.DescriptorMutation_Index:
-				if err := indexTruncateInTxn(ctx, txn, execCfg, tableDesc, traceKV); err != nil {
+				if err := indexTruncateInTxn(ctx, txn, execCfg, tableDesc.TableDesc(), traceKV); err != nil {
 					return err
 				}
 
@@ -616,7 +616,7 @@ func columnBackfillInTxn(
 				"table %s not created in the same transaction as id = %d", tableDesc.Name, k)
 		}
 		table := tc.getUncommittedTableByID(k)
-		otherTableDescs = append(otherTableDescs, *table)
+		otherTableDescs = append(otherTableDescs, table.TableDescriptor)
 	}
 	sp := tableDesc.PrimaryIndexSpan()
 	for sp.Key != nil {
