@@ -129,12 +129,13 @@ func (ss *diskSideloadStorage) Clear(_ context.Context) error {
 	return err
 }
 
-func (ss *diskSideloadStorage) TruncateTo(ctx context.Context, index uint64) error {
+func (ss *diskSideloadStorage) TruncateTo(ctx context.Context, index uint64) (int64, error) {
 	matches, err := filepath.Glob(filepath.Join(ss.dir, "i*.t*"))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	var deleted int
+	var size int64
 	for _, match := range matches {
 		base := filepath.Base(match)
 		if len(base) < 1 || base[0] != 'i' {
@@ -144,22 +145,27 @@ func (ss *diskSideloadStorage) TruncateTo(ctx context.Context, index uint64) err
 		upToDot := strings.SplitN(base, ".", 2)
 		i, err := strconv.ParseUint(upToDot[0], 10, 64)
 		if err != nil {
-			return errors.Wrapf(err, "while parsing %q during TruncateTo", match)
+			return size, errors.Wrapf(err, "while parsing %q during TruncateTo", match)
 		}
 		if i >= index {
 			continue
 		}
+		var fi os.FileInfo
+		if fi, err = os.Stat(match); err != nil {
+			return size, errors.Wrapf(err, "while purging %q", match)
+		}
 		if err := ss.purgeFile(ctx, match); err != nil {
-			return errors.Wrapf(err, "while purging %q", match)
+			return size, errors.Wrapf(err, "while purging %q", match)
 		}
 		deleted++
+		size += fi.Size()
 	}
 
 	if deleted == len(matches) {
 		err = os.Remove(ss.dir)
 		if !os.IsNotExist(err) {
-			return errors.Wrapf(err, "while purging %q", ss.dir)
+			return size, errors.Wrapf(err, "while purging %q", ss.dir)
 		}
 	}
-	return nil
+	return size, nil
 }

@@ -143,6 +143,28 @@ func TestComputeTruncatableIndex(t *testing.T) {
 	}
 }
 
+func verifyLogSizeInSync(t *testing.T, r *Replica) {
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	r.mu.Lock()
+	raftLogSize := r.mu.raftLogSize
+	r.mu.Unlock()
+	start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(r.RangeID, 1))
+	end := engine.MakeMVCCMetadataKey(keys.RaftLogKey(r.RangeID, math.MaxUint64))
+
+	var ms enginepb.MVCCStats
+	iter := r.store.engine.NewIterator(engine.IterOptions{UpperBound: end.Key})
+	defer iter.Close()
+	ms, err := iter.ComputeStats(start, end, 0 /* nowNanos */)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actualRaftLogSize := ms.SysBytes
+	if actualRaftLogSize != raftLogSize {
+		t.Fatalf("replica claims raft log size %d, but computed %d", raftLogSize, actualRaftLogSize)
+	}
+}
+
 // TestGetTruncatableIndexes verifies that old raft log entries are correctly
 // removed.
 func TestGetTruncatableIndexes(t *testing.T) {
@@ -228,27 +250,7 @@ func TestGetTruncatableIndexes(t *testing.T) {
 		t.Errorf("expected oldestIndex to increase, instead it changed from %d -> %d", bOldest, cOldest)
 	}
 
-	func() {
-		r.raftMu.Lock()
-		defer r.raftMu.Unlock()
-		r.mu.Lock()
-		raftLogSize := r.mu.raftLogSize
-		r.mu.Unlock()
-		start := engine.MakeMVCCMetadataKey(keys.RaftLogKey(r.RangeID, 1))
-		end := engine.MakeMVCCMetadataKey(keys.RaftLogKey(r.RangeID, math.MaxUint64))
-
-		var ms enginepb.MVCCStats
-		iter := store.engine.NewIterator(engine.IterOptions{UpperBound: end.Key})
-		defer iter.Close()
-		ms, err := iter.ComputeStats(start, end, 0 /* nowNanos */)
-		if err != nil {
-			t.Fatal(err)
-		}
-		actualRaftLogSize := ms.SysBytes
-		if actualRaftLogSize != raftLogSize {
-			t.Fatalf("replica claims raft log size %d, but computed %d", raftLogSize, actualRaftLogSize)
-		}
-	}()
+	verifyLogSizeInSync(t, r)
 
 	// Again, enable the raft log scanner and and force a truncation. This time
 	// we expect no truncation to occur.
