@@ -24,8 +24,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 var jepsenNemeses = []struct {
@@ -135,13 +133,6 @@ func runJepsen(ctx context.Context, t *test, c *cluster, testName, nemesis strin
 	}
 	nodesStr := strings.Join(nodeFlags, " ")
 
-	// Wrap roachtest's primitive logging in something more like util/log
-	logf := func(f string, args ...interface{}) {
-		// This log prefix matches the one (sometimes) used in roachprod
-		t.l.Printf(timeutil.Now().Format("2006/01/02 15:04:05 "))
-		t.l.Printf(f, args...)
-		t.l.Printf("\n")
-	}
 	run := func(c *cluster, ctx context.Context, node nodeListOption, args ...string) {
 		if !c.isLocal() {
 			c.Run(ctx, node, args...)
@@ -196,9 +187,9 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 	select {
 	case testErr = <-errCh:
 		if testErr == nil {
-			logf("passed, grabbing minimal logs")
+			t.l.Printf("passed, grabbing minimal logs")
 		} else {
-			logf("failed: %s", testErr)
+			t.l.Printf("failed: %s", testErr)
 		}
 
 	case <-time.After(20 * time.Minute):
@@ -213,12 +204,12 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		run(c, ctx, controller, "pkill -QUIT java")
 		time.Sleep(10 * time.Second)
 		run(c, ctx, controller, "pkill java")
-		logf("timed out")
+		t.l.Printf("timed out")
 		testErr = fmt.Errorf("timed out")
 	}
 
 	if testErr != nil {
-		logf("grabbing artifacts from controller. Tail of controller log:")
+		t.l.Printf("grabbing artifacts from controller. Tail of controller log:")
 		run(c, ctx, controller, "tail -n 100 /mnt/data1/jepsen/cockroachdb/invoke.log")
 		// We recognize some errors and ignore them.
 		// We're looking for the "Oh jeez" message that Jepsen prints as the test's
@@ -232,7 +223,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			`grep "Oh jeez, I'm sorry, Jepsen broke. Here's why" /mnt/data1/jepsen/cockroachdb/invoke.log -A1 `+
 				`| grep -e BrokenBarrierException -e InterruptedException -e com.jcraft.jsch.JSchException`,
 		); err == nil {
-			logf("Recognized BrokenBarrier, InterruptedException or JSchException. " +
+			t.l.Printf("Recognized BrokenBarrier, InterruptedException or JSchException. " +
 				"Ignoring it and considering the test successful. See #30527 or #26082.")
 			ignoreErr = true
 		}
@@ -263,7 +254,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			cmd.Stdout = t.l.stdout
 			cmd.Stderr = t.l.stderr
 			if err := cmd.Run(); err != nil {
-				logf("failed to retrieve %s: %s", file, err)
+				t.l.Printf("failed to retrieve %s: %s", file, err)
 			}
 		}
 		if anyFailed {
@@ -274,7 +265,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			cmd.Stdout = t.l.stdout
 			cmd.Stderr = t.l.stderr
 			if err := cmd.Run(); err != nil {
-				logf("failed to retrieve invoke.log: %s", err)
+				t.l.Printf("failed to retrieve invoke.log: %s", err)
 			}
 		}
 	}
