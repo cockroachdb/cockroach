@@ -190,7 +190,8 @@ func testSideloadingSideloadedStorage(
 		{
 			err: nil,
 			fun: func() error {
-				return ss.TruncateTo(ctx, 123)
+				_, err := ss.TruncateTo(ctx, 123)
+				return err
 			},
 		},
 		{
@@ -261,7 +262,7 @@ func testSideloadingSideloadedStorage(
 
 	for n := range payloads {
 		// Truncate indexes <= payloads[n] (payloads is sorted in increasing order).
-		if err := ss.TruncateTo(ctx, payloads[n]); err != nil {
+		if _, err := ss.TruncateTo(ctx, payloads[n]); err != nil {
 			t.Fatalf("%d: %s", n, err)
 		}
 		// Index payloads[n] and above are still there (truncation is exclusive)
@@ -281,16 +282,20 @@ func testSideloadingSideloadedStorage(
 		}
 	}
 
-	if !isInMem {
+	func() {
+		if isInMem {
+			return
+		}
 		// First add a file that shouldn't be in the sideloaded storage to ensure
 		// sane behavior when directory can't be removed after full truncate.
 		nonRemovableFile := filepath.Join(ss.(*diskSideloadStorage).dir, "cantremove.xx")
-		_, err := os.Create(nonRemovableFile)
+		f, err := os.Create(nonRemovableFile)
 		if err != nil {
 			t.Fatalf("could not create non i*.t* file in sideloaded storage: %v", err)
 		}
+		defer f.Close()
 
-		err = ss.TruncateTo(ctx, math.MaxUint64)
+		_, err = ss.TruncateTo(ctx, math.MaxUint64)
 		if err == nil {
 			t.Fatalf("sideloaded directory should not have been removable due to extra file %s", nonRemovableFile)
 		}
@@ -305,7 +310,7 @@ func testSideloadingSideloadedStorage(
 		}
 
 		// Test that directory is removed when filepath.Glob returns 0 matches.
-		if err := ss.TruncateTo(ctx, math.MaxUint64); err != nil {
+		if _, err := ss.TruncateTo(ctx, math.MaxUint64); err != nil {
 			t.Fatal(err)
 		}
 		// Ensure directory is removed, now that all files should be gone.
@@ -329,7 +334,7 @@ func testSideloadingSideloadedStorage(
 			}
 		}
 		assertCreated(true)
-		if err := ss.TruncateTo(ctx, math.MaxUint64); err != nil {
+		if _, err := ss.TruncateTo(ctx, math.MaxUint64); err != nil {
 			t.Fatal(err)
 		}
 		// Ensure directory is removed when all records are removed.
@@ -342,7 +347,7 @@ func testSideloadingSideloadedStorage(
 				t.Fatalf("expected %q to be removed: %v", ss.(*diskSideloadStorage).dir, err)
 			}
 		}
-	}
+	}()
 
 	if err := ss.Clear(ctx); err != nil {
 		t.Fatal(err)
@@ -351,7 +356,7 @@ func testSideloadingSideloadedStorage(
 	assertCreated(false)
 
 	// Sanity check that we can call TruncateTo without the directory existing.
-	if err := ss.TruncateTo(ctx, 1); err != nil {
+	if _, err := ss.TruncateTo(ctx, 1); err != nil {
 		t.Fatal(err)
 	}
 
@@ -621,10 +626,40 @@ func makeInMemSideloaded(repl *Replica) {
 // TestRaftSSTableSideloadingProposal runs a straightforward application of an `AddSSTable` command.
 func TestRaftSSTableSideloadingProposal(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	testutils.RunTrueAndFalse(t, "engineInMem", func(t *testing.T, engineInMem bool) {
+		testutils.RunTrueAndFalse(t, "mockSideloaded", func(t *testing.T, mockSideloaded bool) {
+			if engineInMem && !mockSideloaded {
+				t.Skip("https://github.com/cockroachdb/cockroach/issues/31913")
+			}
+			testRaftSSTableSideloadingProposal(t, engineInMem, mockSideloaded)
+		})
+	})
+}
+
+// TestRaftSSTableSideloadingProposal runs a straightforward application of an `AddSSTable` command.
+func testRaftSSTableSideloadingProposal(t *testing.T, engineInMem, mockSideloaded bool) {
+	defer leaktest.AfterTest(t)()
 	defer SetMockAddSSTable()()
 
-	tc := testContext{}
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
 	stopper := stop.NewStopper()
+	tc := testContext{}
+	if !engineInMem {
+		cfg := engine.RocksDBConfig{
+			Dir:      dir,
+			Settings: cluster.MakeTestingClusterSettings(),
+		}
+		var err error
+		cache := engine.NewRocksDBCache(1 << 20)
+		defer cache.Release()
+		tc.engine, err = engine.NewRocksDB(cfg, cache)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stopper.AddCloser(tc.engine)
+	}
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
@@ -632,11 +667,14 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 	defer cancel()
 
 	const (
-		key = "foo"
-		val = "bar"
+		key       = "foo"
+		entrySize = 128
 	)
+	val := strings.Repeat("x", entrySize)
 
-	makeInMemSideloaded(tc.repl)
+	if mockSideloaded {
+		makeInMemSideloaded(tc.repl)
+	}
 
 	ts := hlc.Timestamp{Logical: 1}
 
@@ -665,27 +703,57 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 		}
 	}
 
-	tc.repl.raftMu.Lock()
-	defer tc.repl.raftMu.Unlock()
-	if ss := tc.repl.raftMu.sideloaded.(*inMemSideloadStorage); len(ss.m) < 1 {
-		t.Fatal("sideloaded storage is empty")
+	func() {
+		tc.repl.raftMu.Lock()
+		defer tc.repl.raftMu.Unlock()
+		if ss, ok := tc.repl.raftMu.sideloaded.(*inMemSideloadStorage); ok && len(ss.m) < 1 {
+			t.Fatal("sideloaded storage is empty")
+		}
+
+		if err := testutils.MatchInOrder(tracing.FormatRecordedSpans(collect()), "sideloadable proposal detected", "ingested SSTable"); err != nil {
+			t.Fatal(err)
+		}
+
+		if n := tc.store.metrics.AddSSTableProposals.Count(); n == 0 {
+			t.Fatalf("expected metric to show at least one AddSSTable proposal, but got %d", n)
+		}
+
+		if n := tc.store.metrics.AddSSTableApplications.Count(); n == 0 {
+			t.Fatalf("expected metric to show at least one AddSSTable application, but got %d", n)
+		}
+		// We usually don't see copies because we hardlink and ingest the original SST. However, this
+		// depends on luck and the file system, so don't try to assert it. We should, however, see
+		// no more than one.
+		expMaxCopies := int64(1)
+		if engineInMem {
+			// We don't count in-memory env SST writes as copies.
+			expMaxCopies = 0
+		}
+		if n := tc.store.metrics.AddSSTableApplicationCopies.Count(); n > expMaxCopies {
+			t.Fatalf("expected metric to show <= %d AddSSTable copies, but got %d", expMaxCopies, n)
+		}
+	}()
+
+	// Force a log truncation followed by verification of the tracked raft log size. This exercises a
+	// former bug in which the raft log size took the sideloaded payload into account when adding
+	// to the log, but not when truncating.
+
+	// Write enough keys to the range to make sure that a truncation will happen.
+	for i := 0; i < RaftLogQueueStaleThreshold+1; i++ {
+		key := roachpb.Key(fmt.Sprintf("key%02d", i))
+		args := putArgs(key, []byte(fmt.Sprintf("value%02d", i)))
+		if _, err := client.SendWrapped(context.Background(), tc.store.TestSender(), &args); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	if err := testutils.MatchInOrder(tracing.FormatRecordedSpans(collect()), "sideloadable proposal detected", "ingested SSTable"); err != nil {
+	if _, err := tc.store.raftLogQueue.Add(tc.repl, 99.99 /* priority */); err != nil {
 		t.Fatal(err)
 	}
-
-	if n := tc.store.metrics.AddSSTableProposals.Count(); n == 0 {
-		t.Fatalf("expected metric to show at least one AddSSTable proposal, but got %d", n)
-	}
-
-	if n := tc.store.metrics.AddSSTableApplications.Count(); n == 0 {
-		t.Fatalf("expected metric to show at least one AddSSTable application, but got %d", n)
-	}
-	// We don't count in-memory env SST writes as copies.
-	if n := tc.store.metrics.AddSSTableApplicationCopies.Count(); n != 0 {
-		t.Fatalf("expected metric to show 0 AddSSTable copy, but got %d", n)
-	}
+	tc.store.ForceRaftLogScanAndProcess()
+	// SST is definitely truncated now, so recomputing the Raft log keys should match up with
+	// the tracked size.
+	verifyLogSizeInSync(t, tc.repl)
 }
 
 type mockSender struct {
