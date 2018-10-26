@@ -20,6 +20,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -128,6 +129,16 @@ echo "ext {
 			break
 		}
 
+		version, err := fetchCockroachVersion(ctx, c, node[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		blacklistName, expectedFailures := getHibernateBlacklistForVersion(version)
+		if expectedFailures == nil {
+			t.Fatalf("No hibernate blacklist defined for cockroach version %s", version)
+		}
+		c.l.Printf("Running cockroach version %s, using blacklist %s", version, blacklistName)
+
 		t.Status("running hibernate test suite, will take at least 3 hours")
 		// When testing, it is helpful to run only a subset of the tests. To do so
 		// add "--tests org.hibernate.test.annotations.lob.*" to the end of the
@@ -153,12 +164,6 @@ echo "ext {
 			`cp /mnt/data1/hibernate/hibernate-core/target/test-results/test ~/logs/report/results -a`,
 		)
 
-		// Convert the blacklist into a map.
-		expectedFailures := make(map[string]struct{})
-		for _, failure := range hibernateBlackList {
-			expectedFailures[failure] = struct{}{}
-		}
-
 		// Load the list of all test results files and parse them individually.
 		// Files are here: /mnt/data1/hibernate/hibernate-core/target/test-results/test
 		output, err := c.RunWithBuffer(ctx, t.l, node,
@@ -175,6 +180,7 @@ echo "ext {
 		// Current failures are any tests that reported as failed, regardless of if
 		// they were expected or not.
 		var currentFailures, allTests []string
+		runTests := make(map[string]struct{})
 		files := strings.Split(string(output), "\n")
 		for i, file := range files {
 			file = strings.TrimSpace(file)
@@ -198,17 +204,21 @@ echo "ext {
 					continue
 				}
 				allTests = append(allTests, test)
-				_, expectedFailure := expectedFailures[test]
+				issue, expectedFailure := expectedFailures[test]
 				pass := passed[i]
 				switch {
 				case pass && !expectedFailure:
 					results[test] = fmt.Sprintf("--- PASS: %s (expected)", test)
 					passExpectedCount++
 				case pass && expectedFailure:
-					results[test] = fmt.Sprintf("--- PASS: %s (unexpected)", test)
+					results[test] = fmt.Sprintf("--- PASS: %s - %s (unexpected)",
+						test, maybeAddGithubLink(issue),
+					)
 					passUnexpectedCount++
 				case !pass && expectedFailure:
-					results[test] = fmt.Sprintf("--- FAIL: %s (expected)", test)
+					results[test] = fmt.Sprintf("--- FAIL: %s - %s (expected)",
+						test, maybeAddGithubLink(issue),
+					)
 					failExpectedCount++
 					currentFailures = append(currentFailures, test)
 				case !pass && !expectedFailure:
@@ -216,14 +226,16 @@ echo "ext {
 					failUnexpectedCount++
 					currentFailures = append(currentFailures, test)
 				}
-				if expectedFailure {
-					delete(expectedFailures, test)
-				}
+				runTests[test] = struct{}{}
 			}
 		}
-		for test := range expectedFailures {
+		// Collect all the tests that were not run.
+		for test, issue := range expectedFailures {
+			if _, ok := runTests[test]; ok {
+				continue
+			}
 			allTests = append(allTests, test)
-			results[test] = fmt.Sprintf("--- FAIL: %s (not run)", test)
+			results[test] = fmt.Sprintf("--- FAIL: %s - %s (not run)", test, maybeAddGithubLink(issue))
 			notRunCount++
 		}
 
@@ -239,26 +251,35 @@ echo "ext {
 		}
 
 		t.l.Printf("------------------------\n")
-		t.l.Printf("%d Total Test Run\n",
+
+		var bResults strings.Builder
+		fmt.Fprintf(&bResults, "%d Total Test Run\n",
 			passExpectedCount+passUnexpectedCount+failExpectedCount+failUnexpectedCount,
 		)
-		t.l.Printf("%d tests passed\n", passUnexpectedCount+passExpectedCount)
-		t.l.Printf("%d tests failed\n", failUnexpectedCount+failExpectedCount)
-		t.l.Printf("%d tests passed unexpectedly\n", passUnexpectedCount)
-		t.l.Printf("%d tests failed unexpectedly\n", failUnexpectedCount)
-		t.l.Printf("%d tests expected failed, but not run \n", notRunCount)
-		t.l.Printf("For a full summary, look at artifacts/hibernate/logs/logs/report/index.html\n")
+		fmt.Fprintf(&bResults, "%d tests passed\n", passUnexpectedCount+passExpectedCount)
+		fmt.Fprintf(&bResults, "%d tests failed\n", failUnexpectedCount+failExpectedCount)
+		fmt.Fprintf(&bResults, "%d tests passed unexpectedly\n", passUnexpectedCount)
+		fmt.Fprintf(&bResults, "%d tests failed unexpectedly\n", failUnexpectedCount)
+		fmt.Fprintf(&bResults, "%d tests expected failed, but not run \n", notRunCount)
+		fmt.Fprintf(&bResults, "For a full summary, look at artifacts/hibernate/logs/report/index.html\n")
+		t.l.Printf("%s\n", bResults.String())
 		t.l.Printf("------------------------\n")
 
 		if failUnexpectedCount > 0 || passUnexpectedCount > 0 || notRunCount > 0 {
 			// Create a new hibernate_blacklist so we can easily update this test.
 			sort.Strings(currentFailures)
-			t.l.Printf("Here is new hibernate blacklist that can be used to update the test:\n\n")
-			t.l.Printf("var hibernateBlackList = []string{\n")
+			var b strings.Builder
+			fmt.Fprintf(&b, "Here is new hibernate blacklist that can be used to update the test:\n\n")
+			fmt.Fprintf(&b, "var %s = blacklist{\n", blacklistName)
 			for _, test := range currentFailures {
-				t.l.Printf("\"%s\",\n", test)
+				issue := expectedFailures[test]
+				if len(issue) == 0 {
+					issue = "unknown"
+				}
+				fmt.Fprintf(&b, "  \"%s\": \"%s\",\n", test, issue)
 			}
-			t.l.Printf("}\n\n")
+			fmt.Fprintf(&b, "}\n\n")
+			t.l.Printf("\n\n%s\n\n", b.String())
 			t.l.Printf("------------------------\n")
 			t.Fatalf("\n"+
 				"%d tests failed unexpectedly\n"+
@@ -309,4 +330,32 @@ func extractFailureFromHibernateXML(contents []byte) ([]string, []bool, error) {
 	}
 
 	return tests, passed, nil
+}
+
+func fetchCockroachVersion(ctx context.Context, c *cluster, nodeIndex int) (string, error) {
+	db, err := c.ConnE(ctx, nodeIndex)
+	if err != nil {
+		return "", err
+	}
+	defer db.Close()
+	var version string
+	if err := db.QueryRowContext(ctx,
+		`SELECT value FROM crdb_internal.node_build_info where field = 'Version'`,
+	).Scan(&version); err != nil {
+		return "", err
+	}
+	return version, nil
+}
+
+// maybeAddGithubLink will take the issue and if it is just a number, then it
+// will return a full github link.
+func maybeAddGithubLink(issue string) string {
+	if len(issue) == 0 {
+		return ""
+	}
+	issueNum, err := strconv.Atoi(issue)
+	if err != nil {
+		return issue
+	}
+	return fmt.Sprintf("https://github.com/cockroachdb/cockroach/issues/%d", issueNum)
 }
