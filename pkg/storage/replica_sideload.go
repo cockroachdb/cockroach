@@ -252,3 +252,20 @@ func assertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) 
 		log.Fatalf(ctx, "found thin sideloaded raft command: %+v", command)
 	}
 }
+
+// maybePurgeSideloaded removes [firstIndex, ..., lastIndex] at the given term
+// and returns the total number of bytes removed. Nonexistent entries are
+// silently skipped over.
+func maybePurgeSideloaded(
+	ctx context.Context, ss sideloadStorage, firstIndex, lastIndex uint64, term uint64,
+) (int64, error) {
+	var totalSize int64
+	for i := firstIndex; i <= lastIndex; i++ {
+		size, err := ss.Purge(ctx, i, term)
+		if err != nil && errors.Cause(err) != errSideloadedFileNotFound {
+			return totalSize, err
+		}
+		totalSize += size
+	}
+	return totalSize, nil
+}
