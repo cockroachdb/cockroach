@@ -703,7 +703,6 @@ var specs = []stmtSpec{
 		inline: []string{"explain_option_list"},
 		replace: map[string]string{
 			"explain_option_name": "( 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' )",
-			"preparable_stmt":     "explainable_stmt",
 		},
 		exclude: []*regexp.Regexp{regexp.MustCompile("'ANALYZE'")},
 	},
@@ -713,7 +712,6 @@ var specs = []stmtSpec{
 		match: []*regexp.Regexp{regexp.MustCompile("ANALYZE")},
 		replace: map[string]string{
 			"explain_option_list": "'DISTSQL'",
-			"preparable_stmt":     "explainable_stmt",
 		},
 		unlink: []string{"'DISTSQL'"},
 	},
@@ -981,17 +979,14 @@ var specs = []stmtSpec{
 		inline: []string{"opt_ordinality", "opt_alias_clause", "opt_expr_list", "opt_column_list", "name_list", "alias_clause"},
 		replace: map[string]string{
 			"select_with_parens": "'(' select_stmt ')'",
-			"opt_index_flags":    "( '@' scan_parameters | )",
+			"opt_index_flags":    "( '@' index_name | )",
 			"relation_expr":      "table_name",
 			"func_table":         "func_application",
 			//			"| func_name '(' ( expr_list |  ) ')' ( 'WITH' 'ORDINALITY' |  ) ( ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) ) |  )": "",
 			"| special_function ( 'WITH' 'ORDINALITY' |  ) ( ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) ) |  )": "",
 			"| '(' joined_table ')' ( 'WITH' 'ORDINALITY' |  ) ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) )":    "| '(' joined_table ')' ( 'WITH' 'ORDINALITY' |  ) ( ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) ) |  )",
 		},
-		unlink: []string{"index_name"},
-		relink: map[string]string{
-			"scan_parameters": "opt_index_flags",
-		},
+		unlink:  []string{"index_name"},
 		nosplit: true,
 	},
 	{
