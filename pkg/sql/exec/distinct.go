@@ -14,6 +14,11 @@
 
 package exec
 
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/pkg/errors"
+)
+
 // sortedDistinctInt64Op runs a distinct on the column in sortedDistinctCol,
 // writing true to the resultant bool column for every value that differs from
 // the previous one.
@@ -23,8 +28,9 @@ type sortedDistinctInt64Op struct {
 	// sortedDistinctCol is the index of the column to distinct upon.
 	sortedDistinctCol int
 
-	// outputColIdx is the index of the boolean output column in the input batch.
-	outputColIdx int
+	// outputCol is the boolean output column. It is shared by all of the
+	// other distinct operators in a distinct operator set.
+	outputCol []bool
 
 	// Set to true at runtime when we've seen the first row. Distinct always
 	// outputs the first row that it sees.
@@ -37,14 +43,41 @@ type sortedDistinctInt64Op struct {
 
 var _ Operator = &sortedDistinctInt64Op{}
 
-func (p *sortedDistinctInt64Op) Init() {}
+var zeroBoolVec = make([]bool, ColBatchSize)
+
+// NewOrderedDistinct creates a new ordered distinct operator on the given
+// input columns with the given types.
+func NewOrderedDistinct(input Operator, distinctCols []uint32, typs []types.T) (Operator, error) {
+	distinctCol := make([]bool, ColBatchSize)
+	op := input
+	for i := range distinctCols {
+		switch typs[i] {
+		case types.Int64:
+			op = &sortedDistinctInt64Op{
+				input:             op,
+				sortedDistinctCol: int(distinctCols[i]),
+				outputCol:         distinctCol,
+			}
+		default:
+			return nil, errors.Errorf("unsupported type %s", typs[i])
+		}
+	}
+	return &sortedDistinctFinalizerOp{
+		input:     op,
+		outputCol: distinctCol,
+	}, nil
+}
+
+func (p *sortedDistinctInt64Op) Init() {
+	p.input.Init()
+}
 
 func (p *sortedDistinctInt64Op) Next() ColBatch {
 	batch := p.input.Next()
 	if batch.Length() == 0 {
 		return batch
 	}
-	outputCol := batch.ColVec(p.outputColIdx).Bool()
+	outputCol := p.outputCol
 	col := batch.ColVec(p.sortedDistinctCol).Int64()
 
 	// We always output the first row.
@@ -103,9 +136,9 @@ func (p *sortedDistinctInt64Op) Next() ColBatch {
 type sortedDistinctFinalizerOp struct {
 	input Operator
 
-	// outputColIdx is the index of the boolean output column from previous
+	// outputCol is the boolean output column from previous
 	// distinct ops in the input batch.
-	outputColIdx int
+	outputCol []bool
 }
 
 var _ Operator = &sortedDistinctFinalizerOp{}
@@ -118,7 +151,7 @@ func (p *sortedDistinctFinalizerOp) Next() ColBatch {
 		if batch.Length() == 0 {
 			return batch
 		}
-		outputCol := batch.ColVec(p.outputColIdx).Bool()
+		outputCol := p.outputCol
 
 		// Convert outputCol to a selection vector by outputting the index of each
 		// tuple whose outputCol value is true.
@@ -149,9 +182,14 @@ func (p *sortedDistinctFinalizerOp) Next() ColBatch {
 			continue
 		}
 
+		// Zero our output column for next time.
+		copy(p.outputCol, zeroBoolVec)
+
 		batch.SetLength(idx)
 		return batch
 	}
 }
 
-func (p *sortedDistinctFinalizerOp) Init() {}
+func (p *sortedDistinctFinalizerOp) Init() {
+	p.input.Init()
+}

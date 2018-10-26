@@ -184,7 +184,8 @@ func testSideloadingSideloadedStorage(
 		{
 			err: errSideloadedFileNotFound,
 			fun: func() error {
-				return ss.Purge(ctx, 123, 456)
+				_, err := ss.Purge(ctx, 123, 456)
+				return err
 			},
 		},
 		{
@@ -361,6 +362,37 @@ func testSideloadingSideloadedStorage(
 	}
 
 	assertCreated(false)
+
+	// Repopulate with a few entries at indexes=1,2,4 and term 10 to test `maybePurgeSideloaded`
+	// with.
+	for index := uint64(1); index < 5; index++ {
+		if index == 3 {
+			continue
+		}
+		payload := []byte(strings.Repeat("x", 1+int(index)))
+		if err := ss.Put(ctx, index, 10, payload); err != nil {
+			t.Fatalf("%d: %s", index, err)
+		}
+	}
+
+	// Term too high and too low, respectively. Shouldn't delete anything.
+	for _, term := range []uint64{9, 11} {
+		if size, err := maybePurgeSideloaded(ctx, ss, 1, 10, term); err != nil || size != 0 {
+			t.Fatalf("expected noop for term %d, got (%d, %v)", term, size, err)
+		}
+	}
+	// This should delete 2 and 4. Index == size+1, so expect 6.
+	if size, err := maybePurgeSideloaded(ctx, ss, 2, 4, 10); err != nil || size != 8 {
+		t.Fatalf("unexpectedly got (%d, %v)", size, err)
+	}
+	// This should delete 1 (the lone survivor).
+	if size, err := maybePurgeSideloaded(ctx, ss, 0, 100, 10); err != nil || size != 2 {
+		t.Fatalf("unexpectedly got (%d, %v)", size, err)
+	}
+	// Nothing left.
+	if size, err := maybePurgeSideloaded(ctx, ss, 0, 100, 10); err != nil || size != 0 {
+		t.Fatalf("expected noop, got (%d, %v)", size, err)
+	}
 }
 
 func TestRaftSSTableSideloadingInline(t *testing.T) {
