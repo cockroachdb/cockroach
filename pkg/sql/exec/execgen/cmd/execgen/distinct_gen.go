@@ -43,7 +43,9 @@ func genDistinctOps(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, types.AllTypes)
+	return tmpl.Execute(wr, []types.T{
+		types.Int8, types.Int16, types.Int32, types.Int64, types.Float32, types.Float64, types.Bool, types.Bytes,
+	})
 }
 func init() {
 	registerGenerator(genDistinctOps, "distinct.og.go")

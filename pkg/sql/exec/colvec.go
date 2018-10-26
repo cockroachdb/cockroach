@@ -17,6 +17,8 @@ package exec
 import (
 	"fmt"
 
+	"github.com/cockroachdb/apd"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -42,6 +44,9 @@ type ColVec interface {
 	Float64() []float64
 	// Bytes returns a []byte slice.
 	Bytes() [][]byte
+	// TODO(jordan): should this be [][]byte?
+	// Decimal returns an apd.Decimal slice.
+	Decimal() []apd.Decimal
 
 	// Col returns the raw, typeless backing storage for this ColVec.
 	Col() interface{}
@@ -91,8 +96,10 @@ func newMemColumn(t types.T, n int) memColumn {
 		return memColumn{col: make([]float32, n)}
 	case types.Float64:
 		return memColumn{col: make([]float64, n)}
+	case types.Decimal:
+		return memColumn{col: make([]apd.Decimal, n)}
 	default:
-		panic(fmt.Sprintf("unhandled type %d", t))
+		panic(fmt.Sprintf("unhandled type %s", t))
 	}
 }
 
@@ -140,6 +147,10 @@ func (m memColumn) Float64() []float64 {
 
 func (m memColumn) Bytes() [][]byte {
 	return m.col.([][]byte)
+}
+
+func (m memColumn) Decimal() []apd.Decimal {
+	return m.col.([]apd.Decimal)
 }
 
 func (m memColumn) Col() interface{} {

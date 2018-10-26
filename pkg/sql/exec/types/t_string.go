@@ -4,9 +4,9 @@ package types
 
 import "strconv"
 
-const _T_name = "BoolBytesInt8Int16Int32Int64Float32Float64Unhandled"
+const _T_name = "BoolBytesDecimalInt8Int16Int32Int64Float32Float64Unhandled"
 
-var _T_index = [...]uint8{0, 4, 9, 13, 18, 23, 28, 35, 42, 51}
+var _T_index = [...]uint8{0, 4, 9, 16, 20, 25, 30, 35, 42, 49, 58}
 
 func (i T) String() string {
 	if i < 0 || i >= T(len(_T_index)-1) {
