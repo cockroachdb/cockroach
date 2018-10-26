@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -592,6 +593,26 @@ func (tc *TestCluster) WaitForNodeStatuses(t testing.TB) {
 			if len(node.StoreStatuses) == 0 {
 				return fmt.Errorf("missing StoreStatuses in NodeStatus: %+v", node)
 			}
+		}
+		return nil
+	})
+}
+
+// WaitForNodeLiveness waits until a liveness record is persisted for every
+// node in the cluster.
+func (tc *TestCluster) WaitForNodeLiveness(t testing.TB) {
+	testutils.SucceedsSoon(t, func() error {
+		db := tc.Servers[0].DB()
+		for _, s := range tc.Servers {
+			key := keys.NodeLivenessKey(s.NodeID())
+			var liveness storagepb.Liveness
+			if err := db.GetProto(context.Background(), key, &liveness); err != nil {
+				return err
+			}
+			if (liveness == storagepb.Liveness{}) {
+				return fmt.Errorf("no liveness record")
+			}
+			fmt.Printf("n%d: found liveness\n", s.NodeID())
 		}
 		return nil
 	})
