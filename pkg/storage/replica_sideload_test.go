@@ -183,7 +183,8 @@ func testSideloadingSideloadedStorage(
 		{
 			err: errSideloadedFileNotFound,
 			fun: func() error {
-				return ss.Purge(ctx, 123, 456)
+				_, err := ss.Purge(ctx, 123, 456)
+				return err
 			},
 		},
 		{
