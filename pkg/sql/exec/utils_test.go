@@ -76,7 +76,6 @@ type opTestInput struct {
 
 	batchSize uint16
 	tuples    tuples
-	batch     ColBatch
 	useSel    bool
 	rng       *rand.Rand
 	selection []uint16
@@ -123,7 +122,6 @@ func (s *opTestInput) Init() {
 		typs[i] = types.FromGoType(tup[i])
 	}
 	s.typs = typs
-	s.batch = NewMemBatch(append(typs, s.extraCols...))
 
 	s.selection = make([]uint16, ColBatchSize)
 	for i := range s.selection {
@@ -132,9 +130,10 @@ func (s *opTestInput) Init() {
 }
 
 func (s *opTestInput) Next() ColBatch {
+	batch := NewMemBatch(append(s.typs, s.extraCols...))
 	if len(s.tuples) == 0 {
-		s.batch.SetLength(0)
-		return s.batch
+		batch.SetLength(0)
+		return batch
 	}
 	batchSize := s.batchSize
 	if len(s.tuples) < int(batchSize) {
@@ -155,14 +154,14 @@ func (s *opTestInput) Next() ColBatch {
 		s.rng.Shuffle(len(s.selection), func(i, j int) {
 			s.selection[i], s.selection[j] = s.selection[j], s.selection[i]
 		})
-		s.batch.SetSelection(true)
-		copy(s.batch.Selection(), s.selection)
+		batch.SetSelection(true)
+		copy(batch.Selection(), s.selection)
 	} else {
-		s.batch.SetSelection(false)
+		batch.SetSelection(false)
 	}
 
 	for i := range s.typs {
-		vec := s.batch.ColVec(i)
+		vec := batch.ColVec(i)
 		// Automatically convert the Go values into exec.Type slice elements using
 		// reflection. This is slow, but acceptable for tests.
 		col := reflect.ValueOf(vec.Col())
@@ -173,8 +172,8 @@ func (s *opTestInput) Next() ColBatch {
 		}
 	}
 
-	s.batch.SetLength(batchSize)
-	return s.batch
+	batch.SetLength(batchSize)
+	return batch
 }
 
 // opTestOutput is a test verification struct that ensures its input batches
