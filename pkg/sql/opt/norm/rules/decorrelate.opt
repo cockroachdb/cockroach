@@ -45,6 +45,29 @@
 =>
 (ConstructNonApplyJoin (OpName) $left $right $on)
 
+# DecorrelateProjectSet pulls an input relation outside of a ProjectSet if the
+# input is not correlated with any of the functions in the ProjectSet. The
+# input is then cross-joined with a new ProjectSet, which contains the same
+# functions but has an empty input (a unary VALUES node).
+#
+# The advantage of this transformation is it means each of the functions in the
+# ProjectSet only need to be executed once in total, instead of once for each
+# input row.
+[DecorrelateProjectSet, Normalize]
+(ProjectSet
+    $input:^(Values)
+    $zip:* & ^(IsZipCorrelated $zip (OutputCols $input))
+)
+=>
+(InnerJoin
+    $input
+    (ProjectSet
+        (ConstructNoColsRow)
+        $zip
+    )
+    []
+)
+
 # TryDecorrelateSelect "pushes down" the join apply into the select operator,
 # in order to eliminate any correlation between the select filter list and the
 # left side of the join, and also to keep "digging" down to find and eliminate
@@ -445,7 +468,7 @@
     $right:* &
         (HasOuterCols $right) &
         (CanHaveZeroRows $right) & # Let EliminateExistsGroupBy match instead.
-        (GroupBy | DistinctOn | Project)
+        (GroupBy | DistinctOn | Project | ProjectSet)
     $on:*
 )
 =>
@@ -495,38 +518,31 @@
     (MakeOrderedGrouping (KeyCols $newLeft) $ordering)
 )
 
-# TryDecorrelateZip "pushes down" an outer InnerJoinApply operator into an inner
-# InnerJoinApply operator, in hopes of eliminating any correlation between the
-# Zip operator and the outer InnerJoinApply operator. Eventually, the hope is to
-# trigger the DecorrelateJoin pattern to turn JoinApply operators into non-apply
-# Join operators.
-#
-# This rule only matches Zip as $innerRight because other relational operators
-# can decorrelate by pushing parent joins down into an input operand. But Zip
-# does not have an input operand of its own, and so it uses InnerJoinApply as a
-# proxy for that, and pushes other operators down through that instead.
-#
-# TODO(andyk): Consider creating a single ProjectSet relational operator, rather
-#              than using InnerJoinApply + Zip, which seems fragile.
-[TryDecorrelateZip, Normalize]
+# TryDecorrelateProjectSet "pushes down" an InnerJoinApply operator into a
+# ProjectSet operator, in hopes of eliminating any correlation between the
+# ProjectSet operator and the InnerJoinApply operator. Eventually, the
+# hope is to trigger the DecorrelateJoin pattern to turn JoinApply operators
+# into non-apply Join operators.
+[TryDecorrelateProjectSet, Normalize]
 (InnerJoinApply
     $left:*
-    (InnerJoinApply
-        $innerLeft:*
-        $innerRight:(Zip)
-        $innerOn:*
+    (ProjectSet
+        $input:*
+        $zip:*
     )
     $on:*
 )
 =>
-(InnerJoinApply
-    (InnerJoinApply
-        $left
-        $innerLeft
-        []
+(Select
+    (ProjectSet
+        (InnerJoinApply
+            $left
+            $input
+            []
+        )
+        $zip
     )
-    $innerRight
-    (ConcatFilters $on $innerOn)
+    $on
 )
 
 # HoistSelectExists extracts existential subqueries from Select filters,
@@ -646,18 +662,19 @@
 =>
 (HoistValuesSubquery $rows $cols)
 
-# HoistZipSubquery extracts subqueries from zipped functions and joins them with
-# the Zip operator using an Apply join. This and other subquery hoisting
+# HoistProjectSetSubquery extracts subqueries from zipped functions and joins
+# them with the ProjectSet operator's input. This and other subquery hoisting
 # patterns create a single, top-level relational query with no nesting.
 #
 # This rule is marked as low priority for the same reason as HoistSelectExists.
-[HoistZipSubquery, Normalize, LowPriority]
-(Zip
-    $funcs:[ ... $item:* & (HasHoistableSubquery $item) ... ]
-    $cols:*
+[HoistProjectSetSubquery, Normalize, LowPriority]
+(ProjectSet
+    $input:*
+    $zip:[ ... $item:* & (HasHoistableSubquery $item) ... ]
 )
 =>
-(HoistZipSubquery $funcs $cols)
+(HoistProjectSetSubquery $input $zip)
+
 
 # NormalizeSelectAnyFilter rewrites an Any expression that is a top-level
 # conjunct in Select filters, turning it into an Exists expression. Any can be
