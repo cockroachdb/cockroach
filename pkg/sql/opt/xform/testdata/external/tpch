@@ -543,7 +543,7 @@ project
       │         │    │    │    │    │    └── fd: (1)-->(3,5,6)
       │         │    │    │    │    └── filters
       │         │    │    │    │         ├── p_size = 15 [type=bool, outer=(6), constraints=(/6: [/15 - /15]; tight), fd=()-->(6)]
-      │         │    │    │    │         └── p_type LIKE '%BRASS' [type=bool, outer=(5)]
+      │         │    │    │    │         └── p_type LIKE '%BRASS' [type=bool, outer=(5), constraints=(/5: (/NULL - ])]
       │         │    │    │    └── filters
       │         │    │    │         └── p_partkey = partsupp.ps_partkey [type=bool, outer=(1,17), constraints=(/1: (/NULL - ]; /17: (/NULL - ]), fd=(1)==(17), (17)==(1)]
       │         │    │    └── filters
@@ -1331,7 +1331,7 @@ sort
       │    │    │         ├── s_suppkey = l_suppkey [type=bool, outer=(10,19), constraints=(/10: (/NULL - ]; /19: (/NULL - ]), fd=(10)==(19), (19)==(10)]
       │    │    │         └── s_nationkey = n_nationkey [type=bool, outer=(13,47), constraints=(/13: (/NULL - ]; /47: (/NULL - ]), fd=(13)==(47), (47)==(13)]
       │    │    └── filters
-      │    │         └── p_name LIKE '%green%' [type=bool, outer=(2)]
+      │    │         └── p_name LIKE '%green%' [type=bool, outer=(2), constraints=(/2: (/NULL - ])]
       │    └── projections
       │         ├── extract('year', o_orderdate) [type=int, outer=(42)]
       │         └── (l_extendedprice * (1.0 - l_discount)) - (ps_supplycost * l_quantity) [type=float, outer=(21-23,36)]
@@ -1744,7 +1744,7 @@ sort
       │    │    │    │    ├── key: (9)
       │    │    │    │    └── fd: (9)-->(10,17)
       │    │    │    └── filters
-      │    │    │         └── o_comment NOT LIKE '%special%requests%' [type=bool, outer=(17)]
+      │    │    │         └── o_comment NOT LIKE '%special%requests%' [type=bool, outer=(17), constraints=(/17: (/NULL - ])]
       │    │    └── filters
       │    │         └── c_custkey = o_custkey [type=bool, outer=(1,10), constraints=(/1: (/NULL - ]; /10: (/NULL - ]), fd=(1)==(10), (10)==(1)]
       │    └── aggregations
@@ -2013,7 +2013,7 @@ sort
       │    │    │    │    ├── fd: (15)-->(21)
       │    │    │    │    └── ordering: +15
       │    │    │    └── filters
-      │    │    │         └── s_comment LIKE '%Customer%Complaints%' [type=bool, outer=(21)]
+      │    │    │         └── s_comment LIKE '%Customer%Complaints%' [type=bool, outer=(21), constraints=(/21: (/NULL - ])]
       │    │    └── filters (true)
       │    ├── select
       │    │    ├── columns: p_partkey:6(int!null) p_brand:9(string!null) p_type:10(string!null) p_size:11(int!null)
@@ -2025,7 +2025,7 @@ sort
       │    │    │    └── fd: (6)-->(9-11)
       │    │    └── filters
       │    │         ├── p_brand != 'Brand#45' [type=bool, outer=(9), constraints=(/9: (/NULL - /'Brand#45') [/e'Brand#45\x00' - ]; tight)]
-      │    │         ├── p_type NOT LIKE 'MEDIUM POLISHED %' [type=bool, outer=(10)]
+      │    │         ├── p_type NOT LIKE 'MEDIUM POLISHED %' [type=bool, outer=(10), constraints=(/10: (/NULL - ])]
       │    │         └── p_size IN (3, 9, 14, 19, 23, 36, 45, 49) [type=bool, outer=(11), constraints=(/11: [/3 - /3] [/9 - /9] [/14 - /14] [/19 - /19] [/23 - /23] [/36 - /36] [/45 - /45] [/49 - /49]; tight)]
       │    └── filters
       │         └── p_partkey = ps_partkey [type=bool, outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
@@ -2455,7 +2455,7 @@ sort
            │    │    │    │    ├── key: (17)
            │    │    │    │    └── fd: (17)-->(18)
            │    │    │    └── filters
-           │    │    │         └── p_name LIKE 'forest%' [type=bool, outer=(18)]
+           │    │    │         └── p_name LIKE 'forest%' [type=bool, outer=(18), constraints=(/18: [/'forest' - /'foresu'); tight)]
            │    │    └── filters
            │    │         └── ps_partkey = p_partkey [type=bool, outer=(12,17), constraints=(/12: (/NULL - ]; /17: (/NULL - ]), fd=(12)==(17), (17)==(12)]
            │    └── filters
