@@ -193,7 +193,7 @@ const (
 func printCliHelp() {
 	fmt.Printf(`You are using 'cockroach sql', CockroachDB's lightweight SQL client.
 Type:
-  \q to exit        (Ctrl+C/Ctrl+D also supported)
+  "\q" or "quit" or "exit" to exit        (Ctrl+C/Ctrl+D also supported)
   \! CMD            run an external command and print its results on standard output.
   \| CMD            run an external command and run its output as SQL statements.
   \set [NAME]       set a client-side flag or (without argument) print the current settings.
@@ -968,7 +968,7 @@ func (c *cliState) doProcessFirstLine(startState, nextState cliStateEnum) cliSta
 		// Ignore empty lines, just continue reading if it isn't interactive mode.
 		return startState
 
-	case "help", "quit", "exit":
+	case "help":
 		printCliHelp()
 		return startState
 	}
@@ -977,6 +977,12 @@ func (c *cliState) doProcessFirstLine(startState, nextState cliStateEnum) cliSta
 }
 
 func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnum {
+
+	if c.lastInputLine ==  `quit` || c.lastInputLine == `exit` {
+		// Terminate the terminal if the user types quit or exit as a command
+		return cliStop
+	}
+
 	if len(c.lastInputLine) == 0 || c.lastInputLine[0] != '\\' {
 		return nextState
 	}
@@ -998,7 +1004,7 @@ func (c *cliState) doHandleCliCmd(loopState, nextState cliStateEnum) cliStateEnu
 
 	cmd := strings.Fields(line)
 	switch cmd[0] {
-	case `\q`, `\quit`, `\exit`:
+	case `\q`, `\quit`, `\exit` :
 		return cliStop
 
 	case `\`, `\?`, `\help`:
