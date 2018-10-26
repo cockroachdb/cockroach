@@ -57,9 +57,9 @@ func NewMemBatch(types []types.T) ColBatch {
 	return b
 }
 
-// newMemBatchWithSize allocates a new in-memory ColBatch with the given column
+// NewMemBatchWithSize allocates a new in-memory ColBatch with the given column
 // size. Use for operators that have a precisely-sized output batch.
-func newMemBatchWithSize(types []types.T, size int) ColBatch {
+func NewMemBatchWithSize(types []types.T, size int) ColBatch {
 	b := &memBatch{}
 	b.b = make([]ColVec, len(types))
 
