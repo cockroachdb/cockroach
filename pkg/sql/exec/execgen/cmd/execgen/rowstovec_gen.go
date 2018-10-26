@@ -153,6 +153,8 @@ func getDatumToPhysicalFn(ct sqlbase.ColumnType) string {
 		return "int64(datum.(*tree.DOid).DInt)"
 	case sqlbase.ColumnType_STRING, sqlbase.ColumnType_NAME:
 		return "encoding.UnsafeConvertStringToBytes(string(*datum.(*tree.DString)))"
+	case sqlbase.ColumnType_DECIMAL:
+		return "datum.(*tree.DDecimal).Decimal"
 	}
 	panic(fmt.Sprintf("unhandled ColumnType %s", ct.String()))
 }

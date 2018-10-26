@@ -2077,6 +2077,19 @@ func DecodeUntaggedDecimalValue(b []byte) (remaining []byte, d apd.Decimal, err 
 	return b[int(i):], d, err
 }
 
+// DecodeIntoUntaggedDecimalValue is like DecodeUntaggedDecimalValue except it
+// writes the new Decimal into the input apd.Decimal pointer, which must be
+// non-nil.
+func DecodeIntoUntaggedDecimalValue(d *apd.Decimal, b []byte) (remaining []byte, err error) {
+	var i uint64
+	b, _, i, err = DecodeNonsortingStdlibUvarint(b)
+	if err != nil {
+		return b, err
+	}
+	err = DecodeIntoNonsortingDecimal(d, b[:int(i)], nil)
+	return b[int(i):], err
+}
+
 // DecodeDurationValue decodes a value encoded by EncodeUntaggedDurationValue.
 func DecodeDurationValue(b []byte) (remaining []byte, d duration.Duration, err error) {
 	b, err = decodeValueTypeAssert(b, Duration)
