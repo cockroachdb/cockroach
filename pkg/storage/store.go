@@ -3330,6 +3330,10 @@ func (s *Store) withReplicaForRequest(
 func (s *Store) processRaftRequestWithReplica(
 	ctx context.Context, r *Replica, req *RaftMessageRequest,
 ) *roachpb.Error {
+	if verboseRaftLoggingEnabled() {
+		log.Infof(ctx, "incoming raft message:\n%s", raftDescribeMessage(req.Message, raftEntryFormatter))
+	}
+
 	if req.Message.Type == raftpb.MsgSnap {
 		log.Fatalf(ctx, "unexpected snapshot: %+v", req)
 	}
