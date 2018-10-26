@@ -145,6 +145,8 @@ func getDatumToPhysicalFn(ct sqlbase.ColumnType) string {
 			return "int64(*datum.(*tree.DInt))"
 		}
 		panic(fmt.Sprintf("unhandled INT width %d", ct.Width))
+	case sqlbase.ColumnType_DATE:
+		return "int64(*datum.(*tree.DDate))"
 	case sqlbase.ColumnType_FLOAT:
 		return "float64(*datum.(*tree.DFloat))"
 	case sqlbase.ColumnType_OID:

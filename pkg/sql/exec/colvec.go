@@ -38,7 +38,7 @@ type ColVec interface {
 	Int64() []int64
 	// Float32 returns a float32 slice.
 	Float32() []float32
-	// Float64 returns an float64 slice.
+	// Float64 returns a float64 slice.
 	Float64() []float64
 	// Bytes returns a []byte slice.
 	Bytes() [][]byte
