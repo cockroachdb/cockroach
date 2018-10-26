@@ -90,3 +90,22 @@ func (m *memBatch) SetSelection(b bool) {
 func (m *memBatch) SetLength(n uint16) {
 	m.n = n
 }
+
+// discardingBatch is a ColBatch that applies a simple projection to another,
+// underlying projection, discarding all columns but the ones in its projection
+// slice.
+type discardingBatch struct {
+	ColBatch
+
+	projection []uint32
+}
+
+func newProjectionBatch(projection []uint32) *discardingBatch {
+	return &discardingBatch{
+		projection: projection,
+	}
+}
+
+func (b *discardingBatch) ColVec(i int) ColVec {
+	return b.ColBatch.ColVec(int(b.projection[i]))
+}
