@@ -90,3 +90,22 @@ func (m *memBatch) SetSelection(b bool) {
 func (m *memBatch) SetLength(n uint16) {
 	m.n = n
 }
+
+// projectingBatch is a ColBatch that applies a simple projection to another,
+// underlying batch, discarding all columns but the ones in its projection
+// slice, in order.
+type projectingBatch struct {
+	ColBatch
+
+	projection []uint32
+}
+
+func newProjectionBatch(projection []uint32) *projectingBatch {
+	return &projectingBatch{
+		projection: projection,
+	}
+}
+
+func (b *projectingBatch) ColVec(i int) ColVec {
+	return b.ColBatch.ColVec(int(b.projection[i]))
+}
