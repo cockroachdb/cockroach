@@ -31,6 +31,7 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -682,9 +683,8 @@ CREATE TABLE pg_catalog.pg_constraint (
 					confmatchtype = fkMatchTypeSimple
 					columnIDs := con.Index.ColumnIDs
 					if int(con.FK.SharedPrefixLen) > len(columnIDs) {
-						return errors.Errorf(
-							"For foreign key %q's shared prefix len (%d) is greater than the number of columns "+
-								"in the index (%d). This might be an indication of inconsistency.",
+						return pgerror.NewAssertionErrorf(
+							"foreign key %q's SharedPrefixLen (%d) is greater than the columns in the index (%d)",
 							con.FK.Name,
 							con.FK.SharedPrefixLen,
 							int32(len(columnIDs)),
