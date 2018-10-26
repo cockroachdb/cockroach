@@ -44,7 +44,9 @@ type sideloadStorage interface {
 	// remove any leftover files at the same index and earlier terms, but
 	// is not required to do so. When no file at the given index and term
 	// exists, returns errSideloadedFileNotFound.
-	Purge(_ context.Context, index, term uint64) error
+	//
+	// Returns the total size of the purged payloads.
+	Purge(_ context.Context, index, term uint64) (int64, error)
 	// Clear files that may have been written by this sideloadStorage.
 	Clear(context.Context) error
 	// TruncateTo removes all files belonging to an index strictly smaller than
@@ -250,4 +252,21 @@ func assertSideloadedRaftCommandInlined(ctx context.Context, ent *raftpb.Entry) 
 		// The entry is "thin", which is what this assertion is checking for.
 		log.Fatalf(ctx, "found thin sideloaded raft command: %+v", command)
 	}
+}
+
+// maybePurgeSideloaded removes [firstIndex, ..., lastIndex] at the given term
+// and returns the total number of bytes removed. Nonexistent entries are
+// silently skipped over.
+func maybePurgeSideloaded(
+	ctx context.Context, ss sideloadStorage, firstIndex, lastIndex uint64, term uint64,
+) (int64, error) {
+	var totalSize int64
+	for i := firstIndex; i <= lastIndex; i++ {
+		size, err := ss.Purge(ctx, i, term)
+		if err != nil && errors.Cause(err) != errSideloadedFileNotFound {
+			return totalSize, err
+		}
+		totalSize += size
+	}
+	return totalSize, nil
 }

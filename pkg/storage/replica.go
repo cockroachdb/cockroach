@@ -4333,13 +4333,17 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		firstPurge := rd.Entries[0].Index // first new entry written
 		purgeTerm := rd.Entries[0].Term - 1
 		lastPurge := prevLastIndex // old end of the log, include in deletion
-		for i := firstPurge; i <= lastPurge; i++ {
-			err := r.raftMu.sideloaded.Purge(ctx, i, purgeTerm)
-			if err != nil && errors.Cause(err) != errSideloadedFileNotFound {
-				const expl = "while purging index %d"
-				return stats, expl, errors.Wrapf(err, expl, i)
-			}
+		purgedSize, err := maybePurgeSideloaded(ctx, r.raftMu.sideloaded, firstPurge, lastPurge, purgeTerm)
+		if err != nil {
+			const expl = "while purging sideloaded storage"
+			return stats, expl, err
 		}
+		raftLogSize -= purgedSize
+		if raftLogSize < 0 {
+			// Might have gone negative if node was recently restarted.
+			raftLogSize = 0
+		}
+
 	}
 
 	// Update protected state - last index, last term, raft log size, and raft
