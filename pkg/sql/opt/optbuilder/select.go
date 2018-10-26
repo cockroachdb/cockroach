@@ -188,8 +188,8 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 		noColNameSpecified := len(colAlias) == 0
 		if scope.isAnonymousTable() && noColNameSpecified {
 			// SRFs and scalar functions used as a data source are always wrapped in
-			// a Zip operation.
-			if zip, ok := scope.expr.(*memo.ZipExpr); ok && zip.Relational().OutputCols.Len() == 1 {
+			// a ProjectSet operation.
+			if ps, ok := scope.expr.(*memo.ProjectSetExpr); ok && ps.Relational().OutputCols.Len() == 1 {
 				colAlias = tree.NameList{as.Alias}
 			}
 		}

@@ -1,4 +1,13 @@
-opt
+exec-ddl
+CREATE TABLE xy (x INT PRIMARY KEY, y INT)
+----
+TABLE xy
+ ├── x int not null
+ ├── y int
+ └── INDEX primary
+      └── x int not null
+
+opt colstat=1 colstat=2 colstat=3 colstat=4 colstat=5
 SELECT a.*, b.*, c.* FROM upper('abc') a
 JOIN ROWS FROM (upper('def'), generate_series(1, 3), upper('ghi')) b ON true
 JOIN generate_series(1, 4) c ON true
@@ -6,28 +15,53 @@ JOIN generate_series(1, 4) c ON true
 inner-join
  ├── columns: a:1(string) upper:2(string) generate_series:3(int) upper:4(string) c:5(int)
  ├── side-effects
- ├── stats: [rows=100]
+ ├── stats: [rows=100, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=90, distinct(3)=7, null(3)=1, distinct(4)=1, null(4)=90, distinct(5)=7, null(5)=1]
  ├── inner-join
  │    ├── columns: upper:1(string) upper:2(string) generate_series:3(int) upper:4(string)
  │    ├── side-effects
- │    ├── stats: [rows=10]
- │    ├── zip
+ │    ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=9, distinct(3)=7, null(3)=0.1, distinct(4)=1, null(4)=9]
+ │    ├── project-set
  │    │    ├── columns: upper:2(string) generate_series:3(int) upper:4(string)
  │    │    ├── side-effects
- │    │    ├── stats: [rows=10]
- │    │    ├── upper('def') [type=string]
- │    │    ├── generate_series(1, 3) [type=int]
- │    │    └── upper('ghi') [type=string]
- │    ├── zip
+ │    │    ├── stats: [rows=10, distinct(2)=1, null(2)=9, distinct(3)=7, null(3)=0.1, distinct(4)=1, null(4)=9]
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── tuple [type=tuple]
+ │    │    └── zip
+ │    │         ├── function: upper [type=string]
+ │    │         │    └── const: 'def' [type=string]
+ │    │         ├── function: generate_series [type=int, side-effects]
+ │    │         │    ├── const: 1 [type=int]
+ │    │         │    └── const: 3 [type=int]
+ │    │         └── function: upper [type=string]
+ │    │              └── const: 'ghi' [type=string]
+ │    ├── project-set
  │    │    ├── columns: upper:1(string)
- │    │    ├── stats: [rows=1]
- │    │    └── upper('abc') [type=string]
+ │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ │    │    ├── values
+ │    │    │    ├── cardinality: [1 - 1]
+ │    │    │    ├── stats: [rows=1]
+ │    │    │    ├── key: ()
+ │    │    │    └── tuple [type=tuple]
+ │    │    └── zip
+ │    │         └── function: upper [type=string]
+ │    │              └── const: 'abc' [type=string]
  │    └── filters (true)
- ├── zip
+ ├── project-set
  │    ├── columns: generate_series:5(int)
  │    ├── side-effects
- │    ├── stats: [rows=10]
- │    └── generate_series(1, 4) [type=int]
+ │    ├── stats: [rows=10, distinct(5)=7, null(5)=0.1]
+ │    ├── values
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1]
+ │    │    ├── key: ()
+ │    │    └── tuple [type=tuple]
+ │    └── zip
+ │         └── function: generate_series [type=int, side-effects]
+ │              ├── const: 1 [type=int]
+ │              └── const: 4 [type=int]
  └── filters (true)
 
 opt
@@ -37,19 +71,268 @@ distinct-on
  ├── columns: a:1(string) b:2(int)
  ├── grouping columns: upper:1(string) generate_series:2(int)
  ├── side-effects
- ├── stats: [rows=1, distinct(1,2)=1, null(1,2)=0.199]
+ ├── stats: [rows=7, distinct(1,2)=7, null(1,2)=0.1]
  ├── key: (1,2)
  └── inner-join
       ├── columns: upper:1(string) generate_series:2(int)
       ├── side-effects
-      ├── stats: [rows=10, distinct(1,2)=1, null(1,2)=0.199]
-      ├── zip
+      ├── stats: [rows=10, distinct(1,2)=7, null(1,2)=0.1]
+      ├── project-set
       │    ├── columns: generate_series:2(int)
       │    ├── side-effects
-      │    ├── stats: [rows=10, distinct(2)=1, null(2)=0.1]
-      │    └── generate_series(1, 2) [type=int]
-      ├── zip
+      │    ├── stats: [rows=10, distinct(2)=7, null(2)=0.1]
+      │    ├── values
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── stats: [rows=1]
+      │    │    ├── key: ()
+      │    │    └── tuple [type=tuple]
+      │    └── zip
+      │         └── function: generate_series [type=int, side-effects]
+      │              ├── const: 1 [type=int]
+      │              └── const: 2 [type=int]
+      ├── project-set
       │    ├── columns: upper:1(string)
-      │    ├── stats: [rows=1, distinct(1)=1, null(1)=0.01]
-      │    └── upper('abc') [type=string]
+      │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+      │    ├── values
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── stats: [rows=1]
+      │    │    ├── key: ()
+      │    │    └── tuple [type=tuple]
+      │    └── zip
+      │         └── function: upper [type=string]
+      │              └── const: 'abc' [type=string]
       └── filters (true)
+
+opt colstat=3 colstat=(1,2,3)
+SELECT unnest(ARRAY[x,y]) FROM xy
+----
+project
+ ├── columns: unnest:3(int)
+ ├── side-effects
+ ├── stats: [rows=10000, distinct(3)=700, null(3)=100, distinct(1-3)=10000, null(1-3)=199]
+ └── project-set
+      ├── columns: x:1(int!null) y:2(int) unnest:3(int)
+      ├── side-effects
+      ├── stats: [rows=10000, distinct(3)=700, null(3)=100, distinct(1-3)=10000, null(1-3)=199]
+      ├── fd: (1)-->(2)
+      ├── scan xy
+      │    ├── columns: x:1(int!null) y:2(int)
+      │    ├── stats: [rows=1000, distinct(1,2)=990, null(1,2)=10]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── zip
+           └── function: unnest [type=int, outer=(1,2), side-effects]
+                └── ARRAY[x, y] [type=int[]]
+
+opt colstat=3 colstat=4 colstat=(3, 4) colstat=(1, 3) colstat=(2, 4)
+SELECT xy.*, generate_series(x, y), generate_series(0, 1) FROM xy
+----
+project-set
+ ├── columns: x:1(int!null) y:2(int) generate_series:3(int) generate_series:4(int)
+ ├── side-effects
+ ├── stats: [rows=10000, distinct(3)=700, null(3)=100, distinct(4)=7, null(4)=100, distinct(1,3)=10000, null(1,3)=100, distinct(2,4)=700, null(2,4)=199, distinct(3,4)=4900, null(3,4)=199]
+ ├── fd: (1)-->(2)
+ ├── scan xy
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2)
+ └── zip
+      ├── function: generate_series [type=int, outer=(1,2), side-effects]
+      │    ├── variable: x [type=int]
+      │    └── variable: y [type=int]
+      └── function: generate_series [type=int, side-effects]
+           ├── const: 0 [type=int]
+           └── const: 1 [type=int]
+
+exec-ddl
+CREATE TABLE articles (
+  id INT PRIMARY KEY,
+  body STRING,
+  description STRING,
+  title STRING,
+  slug STRING,
+  tag_list STRING[],
+  user_id STRING,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+)
+----
+TABLE articles
+ ├── id int not null
+ ├── body string
+ ├── description string
+ ├── title string
+ ├── slug string
+ ├── tag_list string[]
+ ├── user_id string
+ ├── created_at timestamp
+ ├── updated_at timestamp
+ └── INDEX primary
+      └── id int not null
+
+# The following queries test the statistics for four different types of Zip
+# functions:
+#   1. correlated scalar functions -- upper(title)
+#   2. correlated generator functions -- unnest(tag_list)
+#   4. uncorrelated scalar functions -- lower('ABC')
+#   3. uncorrelated generator functions -- generate_series(0,1)
+#
+# They need to be tested with different queries at the moment due to
+# limitations with our testing infrastructure.
+
+opt
+SELECT id FROM articles WHERE title = ANY(
+  SELECT upper FROM ROWS FROM (upper(title), unnest(tag_list), generate_series(0,1), lower('ABC'))
+)
+----
+distinct-on
+ ├── columns: id:1(int!null)
+ ├── grouping columns: id:1(int!null)
+ ├── side-effects
+ ├── stats: [rows=95.617925, distinct(1)=95.617925, null(1)=0]
+ ├── key: (1)
+ └── select
+      ├── columns: id:1(int!null) title:4(string!null) tag_list:6(string[]) upper:10(string!null) unnest:11(string) generate_series:12(int) lower:13(string)
+      ├── side-effects
+      ├── stats: [rows=100, distinct(1)=95.617925, null(1)=0, distinct(4)=100, null(4)=0, distinct(10)=100, null(10)=0]
+      ├── fd: (1)-->(4,6), (4)==(10), (10)==(4)
+      ├── project-set
+      │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[]) upper:10(string) unnest:11(string) generate_series:12(int) lower:13(string)
+      │    ├── side-effects
+      │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(4)=100, null(4)=100, distinct(10)=100, null(10)=9000]
+      │    ├── fd: (1)-->(4,6)
+      │    ├── scan articles
+      │    │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[])
+      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(4)=100, null(4)=10]
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(4,6)
+      │    └── zip
+      │         ├── function: upper [type=string, outer=(4)]
+      │         │    └── variable: title [type=string]
+      │         ├── function: unnest [type=string, outer=(6), side-effects]
+      │         │    └── variable: tag_list [type=string[]]
+      │         ├── function: generate_series [type=int, side-effects]
+      │         │    ├── const: 0 [type=int]
+      │         │    └── const: 1 [type=int]
+      │         └── function: lower [type=string]
+      │              └── const: 'ABC' [type=string]
+      └── filters
+           └── title = upper [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
+
+opt
+SELECT id FROM articles WHERE title = ANY(
+  SELECT unnest FROM ROWS FROM (upper(title), unnest(tag_list), generate_series(0,1), lower('ABC'))
+)
+----
+distinct-on
+ ├── columns: id:1(int!null)
+ ├── grouping columns: id:1(int!null)
+ ├── side-effects
+ ├── stats: [rows=14.1942265, distinct(1)=14.1942265, null(1)=0]
+ ├── key: (1)
+ └── select
+      ├── columns: id:1(int!null) title:4(string!null) tag_list:6(string[]) upper:10(string) unnest:11(string!null) generate_series:12(int) lower:13(string)
+      ├── side-effects
+      ├── stats: [rows=14.2857143, distinct(1)=14.1942265, null(1)=0, distinct(4)=14.2857143, null(4)=0, distinct(11)=14.2857143, null(11)=0]
+      ├── fd: (1)-->(4,6), (4)==(11), (11)==(4)
+      ├── project-set
+      │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[]) upper:10(string) unnest:11(string) generate_series:12(int) lower:13(string)
+      │    ├── side-effects
+      │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(4)=100, null(4)=100, distinct(11)=700, null(11)=100]
+      │    ├── fd: (1)-->(4,6)
+      │    ├── scan articles
+      │    │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[])
+      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(4)=100, null(4)=10]
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(4,6)
+      │    └── zip
+      │         ├── function: upper [type=string, outer=(4)]
+      │         │    └── variable: title [type=string]
+      │         ├── function: unnest [type=string, outer=(6), side-effects]
+      │         │    └── variable: tag_list [type=string[]]
+      │         ├── function: generate_series [type=int, side-effects]
+      │         │    ├── const: 0 [type=int]
+      │         │    └── const: 1 [type=int]
+      │         └── function: lower [type=string]
+      │              └── const: 'ABC' [type=string]
+      └── filters
+           └── title = unnest [type=bool, outer=(4,11), constraints=(/4: (/NULL - ]; /11: (/NULL - ]), fd=(4)==(11), (11)==(4)]
+
+opt
+SELECT id FROM articles WHERE id = ANY(
+  SELECT generate_series FROM ROWS FROM (upper(title), unnest(tag_list), generate_series(0,1), lower('ABC'))
+)
+----
+distinct-on
+ ├── columns: id:1(int!null)
+ ├── grouping columns: id:1(int!null)
+ ├── side-effects
+ ├── stats: [rows=7, distinct(1)=7, null(1)=0]
+ ├── key: (1)
+ └── select
+      ├── columns: id:1(int!null) title:4(string) tag_list:6(string[]) upper:10(string) unnest:11(string) generate_series:12(int!null) lower:13(string)
+      ├── side-effects
+      ├── stats: [rows=10, distinct(1)=7, null(1)=0, distinct(12)=7, null(12)=0]
+      ├── fd: (1)-->(4,6), (1)==(12), (12)==(1)
+      ├── project-set
+      │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[]) upper:10(string) unnest:11(string) generate_series:12(int) lower:13(string)
+      │    ├── side-effects
+      │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(12)=7, null(12)=100]
+      │    ├── fd: (1)-->(4,6)
+      │    ├── scan articles
+      │    │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[])
+      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(4,6)
+      │    └── zip
+      │         ├── function: upper [type=string, outer=(4)]
+      │         │    └── variable: title [type=string]
+      │         ├── function: unnest [type=string, outer=(6), side-effects]
+      │         │    └── variable: tag_list [type=string[]]
+      │         ├── function: generate_series [type=int, side-effects]
+      │         │    ├── const: 0 [type=int]
+      │         │    └── const: 1 [type=int]
+      │         └── function: lower [type=string]
+      │              └── const: 'ABC' [type=string]
+      └── filters
+           └── id = generate_series [type=bool, outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
+
+opt
+SELECT id FROM articles WHERE title = ANY(
+  SELECT lower FROM ROWS FROM (upper(title), unnest(tag_list), generate_series(0,1), lower('ABC'))
+)
+----
+distinct-on
+ ├── columns: id:1(int!null)
+ ├── grouping columns: id:1(int!null)
+ ├── side-effects
+ ├── stats: [rows=95.617925, distinct(1)=95.617925, null(1)=0]
+ ├── key: (1)
+ └── select
+      ├── columns: id:1(int!null) title:4(string!null) tag_list:6(string[]) upper:10(string) unnest:11(string) generate_series:12(int) lower:13(string!null)
+      ├── side-effects
+      ├── stats: [rows=100, distinct(1)=95.617925, null(1)=0, distinct(4)=1, null(4)=0, distinct(13)=1, null(13)=0]
+      ├── fd: (1)-->(4,6), (4)==(13), (13)==(4)
+      ├── project-set
+      │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[]) upper:10(string) unnest:11(string) generate_series:12(int) lower:13(string)
+      │    ├── side-effects
+      │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(4)=100, null(4)=100, distinct(13)=1, null(13)=9000]
+      │    ├── fd: (1)-->(4,6)
+      │    ├── scan articles
+      │    │    ├── columns: id:1(int!null) title:4(string) tag_list:6(string[])
+      │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(4)=100, null(4)=10]
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(4,6)
+      │    └── zip
+      │         ├── function: upper [type=string, outer=(4)]
+      │         │    └── variable: title [type=string]
+      │         ├── function: unnest [type=string, outer=(6), side-effects]
+      │         │    └── variable: tag_list [type=string[]]
+      │         ├── function: generate_series [type=int, side-effects]
+      │         │    ├── const: 0 [type=int]
+      │         │    └── const: 1 [type=int]
+      │         └── function: lower [type=string]
+      │              └── const: 'ABC' [type=string]
+      └── filters
+           └── title = lower [type=bool, outer=(4,13), constraints=(/4: (/NULL - ]; /13: (/NULL - ]), fd=(4)==(13), (13)==(4)]

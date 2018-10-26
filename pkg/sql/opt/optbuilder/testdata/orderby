@@ -421,11 +421,14 @@ sort
  ├── ordering: +1
  └── project
       ├── columns: array:2(int[]) generate_series:1(int)
-      ├── zip
+      ├── project-set
       │    ├── columns: generate_series:1(int)
-      │    └── function: generate_series [type=int]
-      │         ├── const: 1 [type=int]
-      │         └── const: 1 [type=int]
+      │    ├── values
+      │    │    └── tuple [type=tuple]
+      │    └── zip
+      │         └── function: generate_series [type=int]
+      │              ├── const: 1 [type=int]
+      │              └── const: 1 [type=int]
       └── projections
            └── array: [type=int[]]
                 └── variable: generate_series [type=int]
@@ -438,11 +441,14 @@ sort
  ├── ordering: +1
  └── project
       ├── columns: array:2(int[]) generate_series:1(int)
-      ├── zip
+      ├── project-set
       │    ├── columns: generate_series:1(int)
-      │    └── function: generate_series [type=int]
-      │         ├── const: 1 [type=int]
-      │         └── const: 1 [type=int]
+      │    ├── values
+      │    │    └── tuple [type=tuple]
+      │    └── zip
+      │         └── function: generate_series [type=int]
+      │              ├── const: 1 [type=int]
+      │              └── const: 1 [type=int]
       └── projections
            └── array: [type=int[]]
                 └── variable: generate_series [type=int]
@@ -455,11 +461,14 @@ sort
  ├── ordering: +3
  └── project
       ├── columns: array:2(int[]) column3:3(int) generate_series:1(int)
-      ├── zip
+      ├── project-set
       │    ├── columns: generate_series:1(int)
-      │    └── function: generate_series [type=int]
-      │         ├── const: 1 [type=int]
-      │         └── const: 1 [type=int]
+      │    ├── values
+      │    │    └── tuple [type=tuple]
+      │    └── zip
+      │         └── function: generate_series [type=int]
+      │              ├── const: 1 [type=int]
+      │              └── const: 1 [type=int]
       └── projections
            ├── array: [type=int[]]
            │    └── variable: generate_series [type=int]
