@@ -28,6 +28,7 @@ preparable_stmt ::=
 	| create_stmt
 	| delete_stmt
 	| drop_stmt
+	| explain_stmt
 	| import_stmt
 	| insert_stmt
 	| pause_stmt
@@ -112,6 +113,12 @@ drop_stmt ::=
 	drop_ddl_stmt
 	| drop_role_stmt
 	| drop_user_stmt
+
+explain_stmt ::=
+	'EXPLAIN' preparable_stmt
+	| 'EXPLAIN' '(' explain_option_list ')' preparable_stmt
+	| 'EXPLAIN' 'ANALYZE' preparable_stmt
+	| 'EXPLAIN' 'ANALYZE' '(' explain_option_list ')' preparable_stmt
 
 import_stmt ::=
 	'IMPORT' import_format string_or_placeholder opt_with_options
@@ -350,6 +357,9 @@ drop_role_stmt ::=
 drop_user_stmt ::=
 	'DROP' 'USER' string_or_placeholder_list
 	| 'DROP' 'USER' 'IF' 'EXISTS' string_or_placeholder_list
+
+explain_option_list ::=
+	( explain_option_name ) ( ( ',' explain_option_name ) )*
 
 string_or_placeholder_list ::=
 	( string_or_placeholder ) ( ( ',' string_or_placeholder ) )*
@@ -954,6 +964,9 @@ drop_view_stmt ::=
 drop_sequence_stmt ::=
 	'DROP' 'SEQUENCE' table_name_list opt_drop_behavior
 	| 'DROP' 'SEQUENCE' 'IF' 'EXISTS' table_name_list opt_drop_behavior
+
+explain_option_name ::=
+	non_reserved_word
 
 table_elem ::=
 	column_def

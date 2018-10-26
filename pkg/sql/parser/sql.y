@@ -2412,7 +2412,7 @@ preparable_stmt:
 | create_stmt       // help texts in sub-rule
 | delete_stmt       // EXTEND WITH HELP: DELETE
 | drop_stmt         // help texts in sub-rule
-| explain_stmt      { /* SKIP DOC */ }
+| explain_stmt      // EXTEND WITH HELP: EXPLAIN
 | import_stmt       // EXTEND WITH HELP: IMPORT
 | insert_stmt       // EXTEND WITH HELP: INSERT
 | pause_stmt        // EXTEND WITH HELP: PAUSE JOBS
