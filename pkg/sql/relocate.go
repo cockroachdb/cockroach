@@ -104,7 +104,7 @@ func (p *planner) Relocate(ctx context.Context, n *tree.Relocate) (planNode, err
 
 	return &relocateNode{
 		relocateLease: n.RelocateLease,
-		tableDesc:     tableDesc,
+		tableDesc:     tableDesc.TableDesc(),
 		index:         index,
 		rows:          rows,
 		run: relocateRun{

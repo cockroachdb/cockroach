@@ -173,11 +173,12 @@ func (p *planner) MemberOfWithAdminOption(
 	ctx context.Context, member string,
 ) (map[string]bool, error) {
 	// Lookup table version.
-	tableDesc, _, err := p.PhysicalSchemaAccessor().GetObjectDesc(&roleMembersTableName,
+	objDesc, _, err := p.PhysicalSchemaAccessor().GetObjectDesc(&roleMembersTableName,
 		p.ObjectLookupFlags(ctx, true /*required*/))
 	if err != nil {
 		return nil, err
 	}
+	tableDesc := objDesc.TableDesc()
 	tableVersion := tableDesc.Version
 
 	// We loop in case the table version changes while we're looking up memberships.

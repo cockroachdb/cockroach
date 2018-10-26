@@ -111,7 +111,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 
 	// Virtual tables never use SERIAL so we need not process SERIAL
 	// types here.
-	return MakeTableDesc(
+	mutDesc, err := MakeTableDesc(
 		ctx,
 		nil, /* txn */
 		nil, /* vt */
@@ -125,6 +125,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		nil, /* semaCtx */
 		nil, /* evalCtx */
 	)
+	return mutDesc.TableDescriptor, err
 }
 
 // getSchema is part of the virtualSchemaDef interface.
@@ -143,7 +144,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 
 	create := stmt.(*tree.CreateView)
 
-	return MakeViewTableDesc(
+	mutDesc, err := MakeViewTableDesc(
 		create,
 		v.resultColumns,
 		0,
@@ -153,6 +154,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		nil, // semaCtx
 		nil, // evalCtx
 	)
+	return mutDesc.TableDescriptor, err
 }
 
 // virtualSchemas holds a slice of statically registered virtualSchema objects.

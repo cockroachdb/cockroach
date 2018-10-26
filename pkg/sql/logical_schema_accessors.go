@@ -66,7 +66,7 @@ func (l *LogicalSchemaAccessor) GetObjectNames(
 // GetObjectDesc implements the ObjectAccessor interface.
 func (l *LogicalSchemaAccessor) GetObjectDesc(
 	name *ObjectName, flags ObjectLookupFlags,
-) (*ObjectDescriptor, *DatabaseDescriptor, error) {
+) (ObjectDescriptor, *DatabaseDescriptor, error) {
 	if scEntry, ok := l.vt.getVirtualSchemaEntry(name.Schema()); ok {
 		tableName := name.Table()
 		if t, ok := scEntry.defs[tableName]; ok {

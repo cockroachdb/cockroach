@@ -105,7 +105,9 @@ type MutationID uint32
 
 // MutableTableDescriptor is a custom type for TableDescriptors
 // going through mutations.
-type MutableTableDescriptor = TableDescriptor
+type MutableTableDescriptor struct {
+	TableDescriptor
+}
 
 // InvalidMutationID is the uninitialised mutation id.
 const InvalidMutationID MutationID = 0
@@ -2508,4 +2510,14 @@ func (desc *TableDescriptor) FindAllReferences() (map[ID]struct{}, error) {
 		refs[c.ID] = struct{}{}
 	}
 	return refs, nil
+}
+
+// TableDesc implements the ObjectDescriptor interface.
+func (desc *TableDescriptor) TableDesc() *TableDescriptor {
+	return desc
+}
+
+// TableDesc implements the ObjectDescriptor interface.
+func (desc *MutableTableDescriptor) TableDesc() *TableDescriptor {
+	return &desc.TableDescriptor
 }

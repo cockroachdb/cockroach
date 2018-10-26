@@ -204,7 +204,7 @@ type dbCacheSubscriber interface {
 // TODO(vivek): Allow cached descriptors for AS OF SYSTEM TIME queries.
 func (tc *TableCollection) getTableVersion(
 	ctx context.Context, tn *tree.TableName, flags ObjectLookupFlags,
-) (*sqlbase.TableDescriptor, *sqlbase.DatabaseDescriptor, error) {
+) (ObjectDescriptor, *sqlbase.DatabaseDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, "planner acquiring lease on table '%s'", tn)
 	}
@@ -343,7 +343,7 @@ func (tc *TableCollection) getTableVersionByID(
 					tree.NewUnqualifiedTableName(tree.Name(fmt.Sprintf("<id=%d>", tableID))),
 				)
 			}
-			return table, nil
+			return table.TableDesc(), nil
 		}
 	}
 
@@ -381,6 +381,24 @@ func (tc *TableCollection) getTableVersionByID(
 	// beyond the table version expiration time.
 	flags.txn.UpdateDeadlineMaybe(ctx, expiration)
 	return table, nil
+}
+
+// getMutableTableVersionByID is a variant of sqlbase.GetTableDescFromID which returns a mutable
+// table descriptor of the table modified in the same transaction.
+func (tc *TableCollection) getMutableTableVersionByID(
+	ctx context.Context, tableID sqlbase.ID, txn *client.Txn,
+) (*sqlbase.MutableTableDescriptor, error) {
+	log.VEventf(ctx, 2, "planner getting mutable table on table ID %d", tableID)
+
+	if table := tc.getUncommittedTableByID(tableID); table != nil {
+		log.VEventf(ctx, 2, "found uncommitted table %d", tableID)
+		return table, nil
+	}
+	table, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
+	if err != nil {
+		return nil, err
+	}
+	return NewMutableTableDescriptor(*table), nil
 }
 
 func (tc *TableCollection) releaseLeases(ctx context.Context) {
@@ -533,7 +551,7 @@ func (tc *TableCollection) getUncommittedDatabaseID(
 // still exist).
 func (tc *TableCollection) getUncommittedTable(
 	dbID sqlbase.ID, tn *tree.TableName, required bool,
-) (refuseFurtherLookup bool, table *sqlbase.TableDescriptor, err error) {
+) (refuseFurtherLookup bool, table *sqlbase.MutableTableDescriptor, err error) {
 	// Walk latest to earliest so that a DROP TABLE followed by a CREATE TABLE
 	// with the same name will result in the CREATE TABLE being seen.
 	for i := len(tc.uncommittedTables) - 1; i >= 0; i-- {
@@ -561,7 +579,7 @@ func (tc *TableCollection) getUncommittedTable(
 		if table.Name == string(tn.TableName) &&
 			table.ParentID == dbID {
 			// Right state?
-			if err = filterTableState(table); err != nil && err != errTableAdding {
+			if err = filterTableState(table.TableDesc()); err != nil && err != errTableAdding {
 				if !required {
 					// If it's not required here, we simply say we don't have it.
 					err = nil
@@ -578,7 +596,7 @@ func (tc *TableCollection) getUncommittedTable(
 	return false, nil, nil
 }
 
-func (tc *TableCollection) getUncommittedTableByID(id sqlbase.ID) *sqlbase.TableDescriptor {
+func (tc *TableCollection) getUncommittedTableByID(id sqlbase.ID) *sqlbase.MutableTableDescriptor {
 	// Walk latest to earliest so that a DROP TABLE followed by a CREATE TABLE
 	// with the same name will result in the CREATE TABLE being seen.
 	for i := len(tc.uncommittedTables) - 1; i >= 0; i-- {
@@ -801,13 +819,13 @@ func (p *planner) writeTableDescToBatch(
 		// If the descriptor version had been incremented before it would have
 		// been placed in the uncommitted tables list.
 		if p.Tables().getUncommittedTableByID(tableDesc.ID) == nil {
-			if err := incrementVersion(ctx, tableDesc, p.txn); err != nil {
+			if err := incrementVersion(ctx, tableDesc.TableDesc(), p.txn); err != nil {
 				return err
 			}
 		}
 
 		// Schedule a schema changer for later.
-		p.queueSchemaChange(tableDesc, mutationID)
+		p.queueSchemaChange(tableDesc.TableDesc(), mutationID)
 	}
 
 	if err := tableDesc.ValidateTable(p.extendedEvalCtx.Settings); err != nil {
