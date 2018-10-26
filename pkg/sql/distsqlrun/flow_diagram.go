@@ -607,6 +607,10 @@ func generateDiagramData(flows []FlowSpec, nodeNames []string) (FlowDiagram, err
 			Core:    diagramCell{Title: "Response", Details: []string{}},
 			Inputs:  []diagramCell{},
 			Outputs: []diagramCell{},
+			// When generating stats, spans are mapped from processor ID in the span
+			// tags to processor ID in the diagram data. To avoid clashing with
+			// the processor with ID 0, assign an impossible processorID.
+			processorID: -1,
 		})
 	}
 
