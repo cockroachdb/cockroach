@@ -1389,9 +1389,9 @@ func TestRocksDBDeleteRangeCompaction(t *testing.T) {
 	// sstable being deleted. Prior to the hack in dbClearRange, all of the
 	// sstables would be compacted resulting in 2 L6 sstables with different
 	// boundaries than the ones below.
-	_ = db.CompactRange(makeKey("c", 0), makeKey("c", numEntries), false)
+	_ = db.CompactRange(makeKey("c", 1), makeKey("c", numEntries), false)
 	verifySSTables(`
-5: "a000000000" - "a000000000"
+5: "a000000000" - "c000000000"
 6: "a000000000" - "a000009999"
 6: "b000000000" - "b000009999"
 `)
