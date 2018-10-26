@@ -136,7 +136,7 @@ template <bool reverse> class mvccScanner {
       if (!iterSeek(EncodeKey(start_key_, 0, 0))) {
         return results_;
       }
-      for (; cur_key_.compare(end_key_) < 0;) {
+      for (;;) {
         if (!getAndAdvance()) {
           break;
         }
