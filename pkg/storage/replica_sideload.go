@@ -44,7 +44,9 @@ type sideloadStorage interface {
 	// remove any leftover files at the same index and earlier terms, but
 	// is not required to do so. When no file at the given index and term
 	// exists, returns errSideloadedFileNotFound.
-	Purge(_ context.Context, index, term uint64) error
+	//
+	// Returns the total size of the purged payloads.
+	Purge(_ context.Context, index, term uint64) (int64, error)
 	// Clear files that may have been written by this sideloadStorage.
 	Clear(context.Context) error
 	// TruncateTo removes all files belonging to an index strictly smaller than

@@ -4334,11 +4334,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		purgeTerm := rd.Entries[0].Term - 1
 		lastPurge := prevLastIndex // old end of the log, include in deletion
 		for i := firstPurge; i <= lastPurge; i++ {
-			err := r.raftMu.sideloaded.Purge(ctx, i, purgeTerm)
+			size, err := r.raftMu.sideloaded.Purge(ctx, i, purgeTerm)
 			if err != nil && errors.Cause(err) != errSideloadedFileNotFound {
 				const expl = "while purging index %d"
 				return stats, expl, errors.Wrapf(err, expl, i)
 			}
+			raftLogSize -= size
 		}
 	}
 
@@ -4347,6 +4348,11 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	r.mu.Lock()
 	r.mu.lastIndex = lastIndex
 	r.mu.lastTerm = lastTerm
+	if raftLogSize < 0 {
+		// Might have gone negative during sideloaded.Purge above if node was
+		// recently restarted.
+		raftLogSize = 0
+	}
 	r.mu.raftLogSize = raftLogSize
 	var becameLeader bool
 	if r.mu.leaderID != leaderID {
