@@ -65,6 +65,8 @@ func FromColumnType(ct sqlbase.ColumnType) T {
 		return Bool
 	case sqlbase.ColumnType_BYTES, sqlbase.ColumnType_STRING, sqlbase.ColumnType_NAME:
 		return Bytes
+	case sqlbase.ColumnType_DATE, sqlbase.ColumnType_OID:
+		return Int64
 	case sqlbase.ColumnType_INT:
 		switch ct.Width {
 		case 8:
@@ -77,8 +79,6 @@ func FromColumnType(ct sqlbase.ColumnType) T {
 			return Int64
 		}
 		panic(fmt.Sprintf("integer with unknown width %d", ct.Width))
-	case sqlbase.ColumnType_OID:
-		return Int64
 	case sqlbase.ColumnType_FLOAT:
 		return Float64
 	}
