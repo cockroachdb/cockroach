@@ -241,6 +241,26 @@ func (c *CustomFuncs) HoistZipSubquery(funcs memo.ListID, cols memo.PrivateID) m
 	return c.f.ConstructSimpleProject(join, projCols)
 }
 
+// HasZip returns true if the given group or any of its descendants is a Zip
+// operation.
+func (c *CustomFuncs) HasZip(group memo.GroupID) bool {
+	ev := memo.MakeNormExprView(c.mem, group)
+	if ev.Operator() == opt.ZipOp {
+		return true
+	}
+
+	// If HasZip is true for any child, then it's true for this
+	// expression as well.
+	for i, n := 0, ev.ChildCount(); i < n; i++ {
+		child := ev.Child(i)
+		if c.HasZip(child.Group()) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // ConstructNonApplyJoin constructs the non-apply join operator that corresponds
 // to the given join operator type.
 func (c *CustomFuncs) ConstructNonApplyJoin(

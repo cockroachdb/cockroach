@@ -999,9 +999,21 @@ func (b *Builder) buildProjectSet(ev memo.ExprView) (execPlan, error) {
 		return execPlan{}, err
 	}
 
-	ep := execPlan{root: node}
-	ep.outputCols = outputCols
-	return ep, nil
+	// Wrap with a filter node if the ON condition is not True.
+	if ev.Child(2).Operator() != opt.TrueOp {
+		input = execPlan{root: node, outputCols: outputCols}
+		ctx = input.makeBuildScalarCtx()
+		filter, err := b.buildScalar(&ctx, ev.Child(2))
+		if err != nil {
+			return execPlan{}, err
+		}
+		node, err = b.factory.ConstructFilter(node, filter)
+		if err != nil {
+			return execPlan{}, err
+		}
+	}
+
+	return execPlan{root: node, outputCols: outputCols}, nil
 }
 
 // needProjection figures out what projection is needed on top of the input plan

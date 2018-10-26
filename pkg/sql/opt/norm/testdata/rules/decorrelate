@@ -3778,9 +3778,9 @@ project
  └── projections [outer=(8)]
       └── variable: column1 [type=bool, outer=(8)]
 
-# --------------------------------------------------
-# HoistZipSubquery and TryDecorrelateZip
-# --------------------------------------------------
+# ------------------------------------------------------------------
+# HoistZipSubquery, TryDecorrelateSemiJoinZip and TryDecorrelateZip
+# ------------------------------------------------------------------
 opt expect=(HoistZipSubquery,TryDecorrelateZip)
 SELECT generate_series(1, (SELECT v FROM uv WHERE u=x)) FROM xy
 ----
@@ -3817,49 +3817,49 @@ project
       └── true [type=bool]
 
 # Zip correlation within EXISTS.
-opt expect=HoistZipSubquery
+opt expect=(HoistZipSubquery,TryDecorrelateSemiJoinZip,TryDecorrelateZip)
 SELECT * FROM xy WHERE EXISTS(SELECT * FROM generate_series(1, (SELECT v FROM uv WHERE u=x)))
 ----
-semi-join-apply
+group-by
  ├── columns: x:1(int!null) y:2(int)
+ ├── grouping columns: x:1(int!null)
  ├── side-effects
  ├── key: (1)
  ├── fd: (1)-->(2)
- ├── scan xy
- │    ├── columns: x:1(int!null) y:2(int)
- │    ├── key: (1)
- │    └── fd: (1)-->(2)
  ├── inner-join-apply
- │    ├── columns: v:4(int) generate_series:5(int)
- │    ├── outer: (1)
+ │    ├── columns: x:1(int!null) y:2(int) v:4(int) generate_series:5(int)
  │    ├── side-effects
+ │    ├── fd: (1)-->(2)
  │    ├── project
- │    │    ├── columns: v:4(int)
- │    │    ├── outer: (1)
- │    │    ├── cardinality: [1 - ]
- │    │    └── right-join
- │    │         ├── columns: u:3(int) v:4(int)
- │    │         ├── outer: (1)
- │    │         ├── cardinality: [1 - ]
- │    │         ├── key: (3)
- │    │         ├── fd: (3)-->(4)
+ │    │    ├── columns: x:1(int!null) y:2(int) v:4(int)
+ │    │    ├── fd: (1)-->(2)
+ │    │    └── left-join (merge)
+ │    │         ├── columns: x:1(int!null) y:2(int) u:3(int) v:4(int)
+ │    │         ├── key: (1,3)
+ │    │         ├── fd: (1)-->(2), (3)-->(4)
+ │    │         ├── scan xy
+ │    │         │    ├── columns: x:1(int!null) y:2(int)
+ │    │         │    ├── key: (1)
+ │    │         │    ├── fd: (1)-->(2)
+ │    │         │    └── ordering: +1
  │    │         ├── scan uv
  │    │         │    ├── columns: u:3(int!null) v:4(int)
  │    │         │    ├── key: (3)
- │    │         │    └── fd: (3)-->(4)
- │    │         ├── values
- │    │         │    ├── cardinality: [1 - 1]
- │    │         │    ├── key: ()
- │    │         │    └── tuple [type=tuple]
- │    │         └── filters [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ]), fd=(1)==(3), (3)==(1)]
- │    │              └── u = x [type=bool, outer=(1,3), constraints=(/1: (/NULL - ]; /3: (/NULL - ])]
+ │    │         │    ├── fd: (3)-->(4)
+ │    │         │    └── ordering: +3
+ │    │         └── merge-on
+ │    │              ├── left ordering: +1
+ │    │              ├── right ordering: +3
+ │    │              └── true [type=bool]
  │    ├── zip
  │    │    ├── columns: generate_series:5(int)
  │    │    ├── outer: (4)
  │    │    ├── side-effects
  │    │    └── generate_series(1, v) [type=int, outer=(4), side-effects]
  │    └── true [type=bool]
- └── true [type=bool]
+ └── aggregations [outer=(2)]
+      └── const-agg [type=int, outer=(2)]
+           └── variable: y [type=int, outer=(2)]
 
 # Function contains multiple subqueries in arguments.
 opt expect=HoistZipSubquery
@@ -3966,6 +3966,103 @@ project
  │    └── true [type=bool]
  └── projections [outer=(8,11,12)]
       └── ((x, n) AS x, n) [type=tuple{int AS x, int AS n}, outer=(11,12)]
+
+exec-ddl
+CREATE TABLE articles (
+  id INT PRIMARY KEY,
+  body STRING,
+  description STRING,
+  title STRING,
+  slug STRING,
+  tag_list STRING[],
+  user_id STRING,
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
+)
+----
+TABLE articles
+ ├── id int not null
+ ├── body string
+ ├── description string
+ ├── title string
+ ├── slug string
+ ├── tag_list string[]
+ ├── user_id string
+ ├── created_at timestamp
+ ├── updated_at timestamp
+ └── INDEX primary
+      └── id int not null
+
+# Regression test for #31706.
+opt expect=TryDecorrelateSemiJoinZip
+SELECT a0.id, a0.body, a0.description, a0.title, a0.slug, a0.tag_list, a0.user_id, a0.created_at, a0.updated_at
+    FROM articles AS a0
+   WHERE EXISTS(SELECT * FROM unnest(a0.tag_list) AS tag WHERE tag = 'dragons')
+ORDER BY a0.created_at
+   LIMIT 10
+  OFFSET 0;
+----
+limit
+ ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
+ ├── internal-ordering: +8
+ ├── cardinality: [0 - 10]
+ ├── side-effects
+ ├── key: (1)
+ ├── fd: (1)-->(2-9)
+ ├── ordering: +8
+ ├── offset
+ │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
+ │    ├── internal-ordering: +8
+ │    ├── side-effects
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-9)
+ │    ├── ordering: +8
+ │    ├── sort
+ │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
+ │    │    ├── side-effects
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2-9)
+ │    │    ├── ordering: +8
+ │    │    └── group-by
+ │    │         ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
+ │    │         ├── grouping columns: id:1(int!null)
+ │    │         ├── side-effects
+ │    │         ├── key: (1)
+ │    │         ├── fd: (1)-->(2-9)
+ │    │         ├── inner-join-apply
+ │    │         │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp) unnest:10(string)
+ │    │         │    ├── side-effects
+ │    │         │    ├── fd: ()-->(10), (1)-->(2-9)
+ │    │         │    ├── scan articles
+ │    │         │    │    ├── columns: id:1(int!null) body:2(string) description:3(string) title:4(string) slug:5(string) tag_list:6(string[]) user_id:7(string) created_at:8(timestamp) updated_at:9(timestamp)
+ │    │         │    │    ├── key: (1)
+ │    │         │    │    └── fd: (1)-->(2-9)
+ │    │         │    ├── zip
+ │    │         │    │    ├── columns: unnest:10(string)
+ │    │         │    │    ├── outer: (6)
+ │    │         │    │    ├── side-effects
+ │    │         │    │    └── unnest(tag_list) [type=string, outer=(6), side-effects]
+ │    │         │    └── filters [type=bool, outer=(10), constraints=(/10: [/'dragons' - /'dragons']; tight), fd=()-->(10)]
+ │    │         │         └── unnest = 'dragons' [type=bool, outer=(10), constraints=(/10: [/'dragons' - /'dragons']; tight)]
+ │    │         └── aggregations [outer=(2-9)]
+ │    │              ├── const-agg [type=string, outer=(2)]
+ │    │              │    └── variable: body [type=string, outer=(2)]
+ │    │              ├── const-agg [type=string, outer=(3)]
+ │    │              │    └── variable: description [type=string, outer=(3)]
+ │    │              ├── const-agg [type=string, outer=(4)]
+ │    │              │    └── variable: title [type=string, outer=(4)]
+ │    │              ├── const-agg [type=string, outer=(5)]
+ │    │              │    └── variable: slug [type=string, outer=(5)]
+ │    │              ├── const-agg [type=string[], outer=(6)]
+ │    │              │    └── variable: tag_list [type=string[], outer=(6)]
+ │    │              ├── const-agg [type=string, outer=(7)]
+ │    │              │    └── variable: user_id [type=string, outer=(7)]
+ │    │              ├── const-agg [type=timestamp, outer=(8)]
+ │    │              │    └── variable: created_at [type=timestamp, outer=(8)]
+ │    │              └── const-agg [type=timestamp, outer=(9)]
+ │    │                   └── variable: updated_at [type=timestamp, outer=(9)]
+ │    └── const: 0 [type=int]
+ └── const: 10 [type=int]
 
 # --------------------------------------------------
 # NormalizeAnyFilter

@@ -471,6 +471,31 @@
     (MakeGroupByDef (KeyCols $newLeft))
 )
 
+# TryDecorrelateSemiJoinZip maps a SemiJoin over a Zip to an equivalent GroupBy/
+# InnerJoin complex in hopes of triggering further rules that will ultimately
+# decorrelate the query. Once this rule fires, a corresponding InnerJoin
+# decorrelation rule will match (i.e. TryDecorrelateZip).
+#
+# Citations: [5]
+[TryDecorrelateSemiJoinZip, Normalize]
+(SemiJoin | SemiJoinApply
+    $left:*
+    $right:* &
+        (HasOuterCols $right) &
+        (HasZip $right)
+    $on:*
+)
+=>
+(GroupBy
+    (InnerJoinApply
+        $newLeft:(EnsureKey $left)
+        $right
+        $on
+    )
+    (MakeAggCols ConstAgg (NonKeyCols $newLeft))
+    (MakeGroupByDef (KeyCols $newLeft))
+)
+
 # TryDecorrelateLimitOne "pushes down" a Join into a Limit 1 operator, in an
 # attempt to keep "digging" down to find and eliminate unnecessary correlation.
 # The eventual hope is to trigger the DecorrelateJoin rule to turn a JoinApply
