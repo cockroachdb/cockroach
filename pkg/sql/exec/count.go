@@ -35,7 +35,7 @@ func NewCountOp(input Operator) Operator {
 	c := &countOp{
 		input: input,
 	}
-	c.internalBatch = newMemBatchWithSize([]types.T{types.Int64}, 1)
+	c.internalBatch = NewMemBatchWithSize([]types.T{types.Int64}, 1)
 	return c
 }
 
