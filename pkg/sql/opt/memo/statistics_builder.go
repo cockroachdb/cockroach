@@ -419,20 +419,17 @@ func (sb *statisticsBuilder) buildScan(ev ExprView, relProps *props.Relational) 
 	if def.Constraint != nil {
 		// Calculate distinct counts for constrained columns
 		// -------------------------------------------------
-		applied := sb.applyConstraint(def.Constraint, ev, relProps)
+		numUnappliedConjuncts := sb.applyIndexConstraint(def.Constraint, ev, relProps)
+
+		var cols opt.ColSet
+		for i, n := 0, def.Constraint.ConstrainedColumns(sb.evalCtx); i < n; i++ {
+			cols.Add(int(def.Constraint.Columns.Get(i).ID()))
+		}
 
 		// Calculate row count and selectivity
 		// -----------------------------------
-		if applied {
-			var cols opt.ColSet
-			for i := 0; i < def.Constraint.Columns.Count(); i++ {
-				cols.Add(int(def.Constraint.Columns.Get(i).ID()))
-			}
-			s.ApplySelectivity(sb.selectivityFromDistinctCounts(cols, ev, s))
-		} else {
-			numUnappliedConjuncts := sb.numConjunctsInConstraint(def.Constraint)
-			s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
-		}
+		s.ApplySelectivity(sb.selectivityFromDistinctCounts(cols, ev, s))
+		s.ApplySelectivity(sb.selectivityFromUnappliedConjuncts(numUnappliedConjuncts))
 	}
 
 	sb.finalizeFromCardinality(relProps)
@@ -1461,18 +1458,26 @@ func (sb *statisticsBuilder) applyFilter(
 	return numUnappliedConjuncts, constrainedCols
 }
 
-func (sb *statisticsBuilder) applyConstraint(
+func (sb *statisticsBuilder) applyIndexConstraint(
 	c *constraint.Constraint, ev ExprView, relProps *props.Relational,
-) (applied bool) {
+) (numUnappliedConjuncts float64) {
 	if c.IsUnconstrained() {
-		return true /* applied */
+		return 0 /* numUnappliedConjuncts */
 	}
 
 	if c.IsContradiction() {
 		panic("applyConstraint called on constraint with contradiction")
 	}
 
-	return sb.updateDistinctCountsFromConstraint(c, ev, relProps)
+	applied := sb.updateDistinctCountsFromConstraint(c, ev, relProps)
+	for i, n := applied, c.ConstrainedColumns(sb.evalCtx); i < n; i++ {
+		// Unlike the constraints found in Select and Join filters, an index
+		// constraint may represent multiple conjuncts. Therefore, we need to
+		// calculate the number of unapplied conjuncts for each constrained column.
+		numUnappliedConjuncts += sb.numConjunctsInConstraint(c, i)
+	}
+
+	return numUnappliedConjuncts
 }
 
 func (sb *statisticsBuilder) applyConstraintSet(
@@ -1489,13 +1494,13 @@ func (sb *statisticsBuilder) applyConstraintSet(
 	numUnappliedConjuncts = 0
 	for i := 0; i < cs.Length(); i++ {
 		applied := sb.updateDistinctCountsFromConstraint(cs.Constraint(i), ev, relProps)
-		if !applied {
+		if applied == 0 {
 			// If a constraint cannot be applied, it may represent an
 			// inequality like x < 1. As a result, distinctCounts does not fully
 			// represent the selectivity of the constraint set.
 			// We return an estimate of the number of unapplied conjuncts to the
 			// caller function to be used for selectivity calculation.
-			numUnappliedConjuncts += sb.numConjunctsInConstraint(cs.Constraint(i))
+			numUnappliedConjuncts += sb.numConjunctsInConstraint(cs.Constraint(i), 0 /* nth */)
 		}
 	}
 
@@ -1504,10 +1509,10 @@ func (sb *statisticsBuilder) applyConstraintSet(
 
 // updateDistinctCountsFromConstraint updates the distinct count for each
 // column in a constraint that can be determined to have a finite number of
-// possible values. It returns a boolean indicating if the constraint was
-// applied (i.e., the distinct count for at least one column could be inferred
-// from the constraint). If the same column appears in multiple constraints,
-// the distinct count is the minimum for that column across all constraints.
+// possible values. It returns the number of columns for which the distinct
+// count could be inferred from the constraint. If the same column appears
+// in multiple constraints, the distinct count is the minimum for that column
+// across all constraints.
 //
 // For example, consider the following constraint set:
 //
@@ -1533,7 +1538,7 @@ func (sb *statisticsBuilder) applyConstraintSet(
 // discrepancy must be resolved by the calling function.
 func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 	c *constraint.Constraint, ev ExprView, relProps *props.Relational,
-) (applied bool) {
+) (applied int) {
 	// All of the columns that are part of the prefix have a finite number of
 	// distinct values.
 	prefix := c.Prefix(sb.evalCtx)
@@ -1605,7 +1610,7 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 
 		colID := c.Columns.Get(col).ID()
 		sb.ensureColStat(util.MakeFastIntSet(int(colID)), distinctCount, ev, relProps)
-		applied = true
+		applied = col + 1
 	}
 
 	return applied
@@ -1647,8 +1652,8 @@ func (sb *statisticsBuilder) updateDistinctCountsFromEquivalency(
 }
 
 // selectivityFromDistinctCounts calculates the selectivity of a filter by
-// taking the product of selectivities of each constrained column. In the general case,
-// this can be represented by the formula:
+// taking the product of selectivities of each constrained column. In the
+// general case, this can be represented by the formula:
 //
 //                  ┬-┬ ⎛ new distinct(i) ⎞
 //   selectivity =  │ │ ⎜ --------------- ⎟
@@ -1794,9 +1799,9 @@ func (sb *statisticsBuilder) isEqualityWithTwoVars(cond ExprView) bool {
 }
 
 // numConjunctsInConstraint returns a rough estimate of the number of conjuncts
-// used to build the given constraint.
+// used to build the given constraint for the column at position nth.
 func (sb *statisticsBuilder) numConjunctsInConstraint(
-	c *constraint.Constraint,
+	c *constraint.Constraint, nth int,
 ) (numConjuncts float64) {
 	if c.Spans.Count() == 0 {
 		return 0 /* numConjuncts */
@@ -1806,16 +1811,11 @@ func (sb *statisticsBuilder) numConjunctsInConstraint(
 	for i := 0; i < c.Spans.Count(); i++ {
 		span := c.Spans.Get(i)
 		numSpanConjuncts := float64(0)
-		// The first start and end keys in each span are the only ones that matter
-		// for determining selectivity when we have no knowledge of the data
-		// distribution. Technically, /a/b: [/5 - ] is more selective than
-		// /a/b: [/4/5 - ], which is more selective than /a/b: [/4 - ]. But we
-		// treat them all the same, with selectivity=1/3.
-		if span.StartKey().Length() > 0 {
-			if !c.Columns.Get(0).Descending() &&
-				span.StartKey().Value(0) == tree.DNull {
-				if span.EndKey().Length() == 0 &&
-					(span.StartBoundary() == constraint.ExcludeBoundary || span.StartKey().Length() > 1) {
+		if span.StartKey().Length() > nth {
+			if !c.Columns.Get(nth).Descending() &&
+				span.StartKey().Value(nth) == tree.DNull {
+				if span.EndKey().Length() <= nth &&
+					(span.StartBoundary() == constraint.ExcludeBoundary || span.StartKey().Length() > nth+1) {
 					// This is a hack to ensure that x IS NOT NULL is considered less
 					// selective than other inequalities such as x > 5. Once we track
 					// null counts, we will make this more precise.
@@ -1828,11 +1828,11 @@ func (sb *statisticsBuilder) numConjunctsInConstraint(
 				numSpanConjuncts++
 			}
 		}
-		if span.EndKey().Length() > 0 {
-			if c.Columns.Get(0).Descending() &&
-				span.EndKey().Value(0) == tree.DNull {
-				if span.StartKey().Length() == 0 &&
-					(span.EndBoundary() == constraint.ExcludeBoundary || span.EndKey().Length() > 1) {
+		if span.EndKey().Length() > nth {
+			if c.Columns.Get(nth).Descending() &&
+				span.EndKey().Value(nth) == tree.DNull {
+				if span.StartKey().Length() <= nth &&
+					(span.EndBoundary() == constraint.ExcludeBoundary || span.EndKey().Length() > nth+1) {
 					// Hack for not-null constraints (see above comment).
 					numSpanConjuncts += 0.1
 				}
