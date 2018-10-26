@@ -54,6 +54,7 @@ type kv struct {
 	minBlockSizeBytes, maxBlockSizeBytes int
 	cycleLength                          int64
 	readPercent                          int
+	spanPercent                          int
 	seed                                 int64
 	writeSeq                             string
 	sequential                           bool
@@ -97,6 +98,8 @@ var kvMeta = workload.Meta{
 			`Number of keys repeatedly accessed by each writer through upserts.`)
 		g.flags.IntVar(&g.readPercent, `read-percent`, 0,
 			`Percent (0-100) of operations that are reads of existing keys.`)
+		g.flags.IntVar(&g.spanPercent, `span-percent`, 0,
+			`Percent (0-100) of operations that are spanning queries of all ranges.`)
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.BoolVar(&g.zipfian, `zipfian`, false,
 			`Pick keys in a zipfian distribution instead of randomly.`)
@@ -135,6 +138,9 @@ func (w *kv) Hooks() workload.Hooks {
 			}
 			if w.sequential && w.zipfian {
 				return errors.New("'sequential' and 'zipfian' cannot both be enabled")
+			}
+			if w.readPercent+w.spanPercent > 100 {
+				return errors.New("'read-percent' and 'span-percent' higher than 100")
 			}
 			return nil
 		},
@@ -203,6 +209,7 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 		}
 	}
 
+	// Read statement
 	var buf strings.Builder
 	buf.WriteString(`SELECT k, v FROM kv WHERE k IN (`)
 	for i := 0; i < w.batchSize; i++ {
@@ -214,6 +221,7 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 	buf.WriteString(`)`)
 	readStmtStr := buf.String()
 
+	// Write statement
 	buf.Reset()
 	buf.WriteString(`UPSERT INTO kv (k, v) VALUES`)
 	for i := 0; i < w.batchSize; i++ {
@@ -224,6 +232,9 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 		fmt.Fprintf(&buf, ` ($%d, $%d)`, j+1, j+2)
 	}
 	writeStmtStr := buf.String()
+
+	// Span statement
+	spanStmtStr := "SELECT count(v) FROM kv"
 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	seq := &sequence{config: w, val: int64(writeSeq)}
@@ -236,6 +247,7 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 		}
 		op.readStmt = op.sr.Define(readStmtStr)
 		op.writeStmt = op.sr.Define(writeStmtStr)
+		op.spanStmt = op.sr.Define(spanStmtStr)
 		if err := op.sr.Init(ctx, "kv", mcp, w.connFlags); err != nil {
 			return workload.QueryLoad{}, err
 		}
@@ -258,12 +270,14 @@ type kvOp struct {
 	sr              workload.SQLRunner
 	readStmt        workload.StmtHandle
 	writeStmt       workload.StmtHandle
+	spanStmt        workload.StmtHandle
 	g               keyGenerator
 	numEmptyResults *int64 // accessed atomically
 }
 
 func (o *kvOp) run(ctx context.Context) error {
-	if o.g.rand().Intn(100) < o.config.readPercent {
+	statementProbability := o.g.rand().Intn(100) // Determines what statement is executed.
+	if statementProbability < o.config.readPercent {
 		args := make([]interface{}, o.config.batchSize)
 		for i := 0; i < o.config.batchSize; i++ {
 			args[i] = o.g.readKey()
@@ -283,6 +297,16 @@ func (o *kvOp) run(ctx context.Context) error {
 		elapsed := timeutil.Since(start)
 		o.hists.Get(`read`).Record(elapsed)
 		return rows.Err()
+	}
+	// Since we know the statement is not a read, we recalibrate
+	// statementProbability to only consider the other statements.
+	statementProbability -= o.config.readPercent
+	if statementProbability < o.config.spanPercent {
+		start := timeutil.Now()
+		_, err := o.spanStmt.Exec(ctx)
+		elapsed := timeutil.Since(start)
+		o.hists.Get(`span`).Record(elapsed)
+		return err
 	}
 	const argCount = 2
 	args := make([]interface{}, argCount*o.config.batchSize)
