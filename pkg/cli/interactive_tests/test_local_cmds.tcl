@@ -34,6 +34,20 @@ spawn $argv sql --format=tsv
 eexpect root@
 end_test
 
+start_test "Check that quit terminates the client."
+send "quit\r"
+eexpect eof
+spawn $argv sql --format=tsv
+eexpect root@
+end_test
+
+start_test "Check that exit terminates the client."
+send "exit\r"
+eexpect eof
+spawn $argv sql --format=tsv
+eexpect root@
+end_test
+
 start_test "Check that \\| reads statements."
 send "\\| echo 'select '; echo '38 + 4;'\r"
 eexpect 42
