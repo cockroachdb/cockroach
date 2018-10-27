@@ -26,7 +26,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyMj0FLAzEUhO_-imVOLQRMr7
 query T
 SELECT url FROM [EXPLAIN ANALYZE (DISTSQL) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc WHERE EXISTS(SELECT * FROM abc WHERE c=a+3))]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyckEFLxDAQhe_-ivBOCgHba0DYRRAKS5XdepIess2wBNKmzKSoLPnv0uYg3mSP772ZNx9zxRQdtXYkgflAjV5j5jiQSOTVKgON-4KpNPw0L2m1e40hMsFckXwKBIPOngMdyTrixwoajpL1Yaud2Y-Wv3f2PEDjxYdEbNSuVk_qeX_q7tv3w0HtT6ppuwdocPwUxWSdUWuRJBuCSn4koypBnzXikn5BJNkLwdRZ_x_2SDLHSegv522Hq9xrkLtQ-ZfEhQd64zhsFEW-bnub4UhSSesimqlEuc93PwEAAP__33uBjw==
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkEFLxDAQhe_-ivBOCgHba0DYRRAKS5XdepIess2wBNKmzKSoLPnv0uYgHoQ9vvdm3nzMFVN01NqRBOYDNXqNmeNAIpFXqww07gum0vDTvKTV7jWGyARzRfIpEAw6ew50JOuIHytoOErWh612Zj9a_t7Z8wCNFx8SsVG7Wj2p5_2pu2_fDwe1P6mm7R6gwfFTFJN1Rq1FkmwIKvmRjKoEfdaIS_oFkWQvBFNnfTvskWSOk9Afzv-aq9xrkLtQeYjEhQd64zhsZ4p83fY2w5GkktZFNFOJcp_vfgIAAP__A6h33g==
 
 
 # Ensure subquery outside of the explain doesn't mess anything up
@@ -34,4 +34,4 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyckEFLxDAQhe_-ivBOCgHba0
 query TB
 SELECT url, exists (SELECT 1) FROM [EXPLAIN ANALYZE (DISTSQL) SELECT * FROM abc WHERE a = (SELECT max(a) FROM abc)]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyckEFLxDAQhe_-ivBOCgHba0DYRRAKS5XdepIess2wBNKmzKSoLPnv0uYg3mSP772ZNx9zxRQdtXYkgflAjV5j5jiQSOTVKgON-4KpNPw0L2m1e40hMsFckXwKBIPOngMdyTrixwoajpL1Yaud2Y-Wv3f2PEDjxYdEbNSuVk_qeX_q7tv3w0HtT6ppuwdocPwUxWSdUWuRJBuCSn4koypBnzXikn5BJNkLwdRZ_x_2SDLHSegv522Hq9xrkLtQ-ZfEhQd64zhsFEW-bnub4UhSSesimqlEuc93PwEAAP__33uBjw== true
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkEFLxDAQhe_-ivBOCgHba0DYRRAKS5XdepIess2wBNKmzKSoLPnv0uYgHoQ9vvdm3nzMFVN01NqRBOYDNXqNmeNAIpFXqww07gum0vDTvKTV7jWGyARzRfIpEAw6ew50JOuIHytoOErWh612Zj9a_t7Z8wCNFx8SsVG7Wj2p5_2pu2_fDwe1P6mm7R6gwfFTFJN1Rq1FkmwIKvmRjKoEfdaIS_oFkWQvBFNnfTvskWSOk9Afzv-aq9xrkLtQeYjEhQd64zhsZ4p83fY2w5GkktZFNFOJcp_vfgIAAP__A6h33g==  true
