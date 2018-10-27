@@ -247,7 +247,9 @@ func (ex *connExecutor) prepare(
 	//   1. Size of the query string and prepared struct.
 	//   2. Size of the prepared memo, if using the cost-based optimizer.
 	size := int64(len(prepared.Str) + int(unsafe.Sizeof(*prepared)))
-	size += prepared.Memo.MemoryEstimate()
+	if prepared.Memo != nil {
+		size += prepared.Memo.MemoryEstimate()
+	}
 	if err := prepared.memAcc.Grow(ctx, size); err != nil {
 		return nil, err
 	}
