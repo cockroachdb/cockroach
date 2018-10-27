@@ -5108,13 +5108,27 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 
 	// Raft-initiated snapshots are handled by the Raft snapshot queue.
 	if msg.Type == raftpb.MsgSnap {
-		r.withRaftGroup(false, func(rn *raft.RawNode) (bool, error) {
-			rn.ReportSnapshot(msg.To, raft.SnapshotFinish)
-			return false, nil
-		})
-		return // HACK
-		if _, err := r.store.raftSnapshotQueue.Add(r, raftSnapshotPriority); err != nil {
-			log.Errorf(ctx, "unable to add replica to Raft repair queue: %s", err)
+		r.mu.Lock()
+		desc := r.descRLocked()
+		raftStatus := r.raftStatusRLocked()
+		ticks := r.mu.ticks
+		r.mu.Unlock()
+
+		recentlyCreatedViaSplit := desc.IsInitialized() && (desc.Generation == nil || *desc.Generation == 0) &&
+			raftStatus != nil && raftStatus.Progress[msg.To].Match == 0 &&
+			ticks <= 15
+
+		if recentlyCreatedViaSplit {
+			r.withRaftGroup(false, func(rn *raft.RawNode) (bool, error) {
+				rn.ReportSnapshot(msg.To, raft.SnapshotFinish)
+				return false, nil
+			})
+		} else {
+			log.Warningf(ctx, "TSX snapshot for replicaID %d %+v with raftStatus %+v and %d ticks", msg.To, desc, raftStatus, ticks)
+			log.Warning(ctx, desc.IsInitialized(), desc.Generation != nil && *desc.Generation == 0, raftStatus != nil && raftStatus.Progress[msg.To].Match == 0, ticks <= 15)
+			if _, err := r.store.raftSnapshotQueue.Add(r, raftSnapshotPriority); err != nil {
+				log.Errorf(ctx, "unable to add replica to Raft repair queue: %s", err)
+			}
 		}
 		return
 	}
