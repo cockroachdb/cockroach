@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -401,10 +402,10 @@ func (c *CustomFuncs) IsPositiveLimit(limit tree.Datum) bool {
 // which must be a constant int datum value. The other fields are inherited from
 // the existing private.
 func (c *CustomFuncs) LimitScanPrivate(
-	scanPrivate *memo.ScanPrivate, limit tree.Datum, ordering props.OrderingChoice,
+	scanPrivate *memo.ScanPrivate, limit tree.Datum, required props.OrderingChoice,
 ) *memo.ScanPrivate {
 	// Determine the scan direction necessary to provide the required ordering.
-	_, reverse := scanPrivate.CanProvideOrdering(c.e.mem.Metadata(), &ordering)
+	_, reverse := ordering.ScanPrivateCanProvide(c.e.mem.Metadata(), scanPrivate, &required)
 
 	newScanPrivate := *scanPrivate
 	newScanPrivate.HardLimit = memo.MakeScanLimit(int64(*limit.(*tree.DInt)), reverse)
@@ -419,7 +420,7 @@ func (c *CustomFuncs) LimitScanPrivate(
 // NOTE: Limiting unconstrained scans is done by the PushLimitIntoScan rule,
 //       since that can require IndexJoin operators to be generated.
 func (c *CustomFuncs) CanLimitConstrainedScan(
-	scanPrivate *memo.ScanPrivate, ordering props.OrderingChoice,
+	scanPrivate *memo.ScanPrivate, required props.OrderingChoice,
 ) bool {
 	if scanPrivate.HardLimit != 0 {
 		// Don't push limit into scan if scan is already limited. This would
@@ -434,7 +435,7 @@ func (c *CustomFuncs) CanLimitConstrainedScan(
 		return false
 	}
 
-	ok, _ := scanPrivate.CanProvideOrdering(c.e.mem.Metadata(), &ordering)
+	ok, _ := ordering.ScanPrivateCanProvide(c.e.mem.Metadata(), scanPrivate, &required)
 	return ok
 }
 
@@ -448,7 +449,7 @@ func (c *CustomFuncs) CanLimitConstrainedScan(
 // limited Scan operator is created. For a non-covering index, an IndexJoin is
 // constructed to add missing columns to the limited Scan.
 func (c *CustomFuncs) GenerateLimitedScans(
-	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, limit tree.Datum, ordering props.OrderingChoice,
+	grp memo.RelExpr, scanPrivate *memo.ScanPrivate, limit tree.Datum, required props.OrderingChoice,
 ) {
 	limitVal := int64(*limit.(*tree.DInt))
 
@@ -465,7 +466,9 @@ func (c *CustomFuncs) GenerateLimitedScans(
 		// If the alternate index does not conform to the ordering, then skip it.
 		// If reverse=true, then the scan needs to be in reverse order to match
 		// the required ordering.
-		ok, reverse := newScanPrivate.CanProvideOrdering(c.e.mem.Metadata(), &ordering)
+		ok, reverse := ordering.ScanPrivateCanProvide(
+			c.e.mem.Metadata(), &newScanPrivate, &required,
+		)
 		if !ok {
 			continue
 		}
