@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/ops/oporder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 )
 
@@ -203,7 +204,7 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *props.Physical) 
 	rowCount := scan.Relational().Stats.RowCount
 	perRowCost := c.rowScanCost(scan.Table, scan.Index, scan.Cols.Len())
 
-	if _, reverse := scan.CanProvideOrdering(c.mem.Metadata(), &required.Ordering); reverse {
+	if oporder.ScanIsReverse(scan, &required.Ordering) {
 		if rowCount > 1 {
 			// Need to do binary search to seek to the previous row.
 			perRowCost += memo.Cost(math.Log2(rowCount)) * cpuCostFactor

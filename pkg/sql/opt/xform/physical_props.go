@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/ops/oporder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -44,6 +45,11 @@ func (o *Optimizer) canProvidePhysicalProps(e memo.RelExpr, required *props.Phys
 // required ordering property. The required ordering is assumed to have already
 // been reduced using functional dependency analysis.
 func (o *Optimizer) canProvideOrdering(e memo.RelExpr, required *props.OrderingChoice) bool {
+	switch e.Op() {
+	case opt.ScanOp:
+		return oporder.CanProvideOrdering(e, required)
+	}
+
 	if required.Any() {
 		return true
 	}
@@ -57,11 +63,6 @@ func (o *Optimizer) canProvideOrdering(e memo.RelExpr, required *props.OrderingC
 		// These operators can pass through their ordering if the ordering
 		// depends only on columns present in the input.
 		return o.isOrderingBoundBy(e.Child(0).(memo.RelExpr), required)
-
-	case opt.ScanOp:
-		// Scan naturally orders according to the order of the scanned index.
-		ok, _ := e.(*memo.ScanExpr).CanProvideOrdering(o.mem.Metadata(), required)
-		return ok
 
 	case opt.RowNumberOp:
 		return e.(*memo.RowNumberExpr).CanProvideOrdering(required)
@@ -119,6 +120,11 @@ func (o *Optimizer) buildChildPhysicalProps(
 	}
 
 	var childProps props.Physical
+
+	switch parent.Op() {
+	case opt.ScanOp:
+		childProps.Ordering = oporder.BuildChildRequiredOrdering(parent, &parentProps.Ordering, nth)
+	}
 
 	switch parent.Op() {
 	case opt.SelectOp:

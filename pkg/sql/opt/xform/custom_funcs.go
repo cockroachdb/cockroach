@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/idxconstraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/ops/oporder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -404,7 +405,7 @@ func (c *CustomFuncs) LimitScanPrivate(
 	scanPrivate *memo.ScanPrivate, limit tree.Datum, ordering props.OrderingChoice,
 ) *memo.ScanPrivate {
 	// Determine the scan direction necessary to provide the required ordering.
-	_, reverse := scanPrivate.CanProvideOrdering(c.e.mem.Metadata(), &ordering)
+	_, reverse := oporder.ScanPrivateCanProvideOrdering(c.e.mem.Metadata(), scanPrivate, &ordering)
 
 	newScanPrivate := *scanPrivate
 	newScanPrivate.HardLimit = memo.MakeScanLimit(int64(*limit.(*tree.DInt)), reverse)
@@ -434,7 +435,7 @@ func (c *CustomFuncs) CanLimitConstrainedScan(
 		return false
 	}
 
-	ok, _ := scanPrivate.CanProvideOrdering(c.e.mem.Metadata(), &ordering)
+	ok, _ := oporder.ScanPrivateCanProvideOrdering(c.e.mem.Metadata(), scanPrivate, &ordering)
 	return ok
 }
 
@@ -465,7 +466,9 @@ func (c *CustomFuncs) GenerateLimitedScans(
 		// If the alternate index does not conform to the ordering, then skip it.
 		// If reverse=true, then the scan needs to be in reverse order to match
 		// the required ordering.
-		ok, reverse := newScanPrivate.CanProvideOrdering(c.e.mem.Metadata(), &ordering)
+		ok, reverse := oporder.ScanPrivateCanProvideOrdering(
+			c.e.mem.Metadata(), &newScanPrivate, &ordering,
+		)
 		if !ok {
 			continue
 		}
