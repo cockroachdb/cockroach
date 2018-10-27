@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -299,16 +300,14 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (execPlan, error) {
 	needed, output := b.getColumns(scan.Cols, scan.Table)
 	res := execPlan{outputCols: output}
 
-	_, reverse := scan.CanProvideOrdering(md, &scan.Physical().Ordering)
-
 	root, err := b.factory.ConstructScan(
 		tab,
 		tab.Index(scan.Index),
 		needed,
 		scan.Constraint,
 		scan.HardLimit.RowCount(),
-		// def.HardLimit.Reverse() was taken into account by CanProvideOrdering.
-		reverse,
+		// HardLimit.Reverse() is taken into account by ScanIsReverse.
+		ordering.ScanIsReverse(scan, &scan.Physical().Ordering),
 		res.reqOrdering(scan.Physical()),
 	)
 	if err != nil {
@@ -575,7 +574,7 @@ func (b *Builder) buildGroupBy(groupBy memo.RelExpr) (execPlan, error) {
 	} else {
 		groupBy := groupBy.(*memo.GroupByExpr)
 		orderedInputCols := input.getColumnOrdinalSet(
-			groupBy.StreamingAggCols(&groupBy.Physical().Ordering),
+			ordering.StreamingGroupingCols(&groupBy.GroupingPrivate, &groupBy.Physical().Ordering),
 		)
 		reqOrdering := ep.reqOrdering(groupBy.Physical())
 		ep.root, err = b.factory.ConstructGroupBy(
@@ -595,7 +594,9 @@ func (b *Builder) buildDistinct(distinct *memo.DistinctOnExpr) (execPlan, error)
 	}
 
 	distinctCols := input.getColumnOrdinalSet(distinct.GroupingCols)
-	orderedCols := input.getColumnOrdinalSet(distinct.StreamingAggCols(&distinct.Physical().Ordering))
+	orderedCols := input.getColumnOrdinalSet(
+		ordering.StreamingGroupingCols(&distinct.GroupingPrivate, &distinct.Physical().Ordering),
+	)
 	node, err := b.factory.ConstructDistinct(input.root, distinctCols, orderedCols)
 	if err != nil {
 		return execPlan{}, err
