@@ -193,7 +193,7 @@ const (
 func printCliHelp() {
 	fmt.Printf(`You are using 'cockroach sql', CockroachDB's lightweight SQL client.
 Type:
-  \q to exit        (Ctrl+C/Ctrl+D also supported)
+  \q, quit, exit    exit the shell (Ctrl+C/Ctrl+D also supported)
   \! CMD            run an external command and print its results on standard output.
   \| CMD            run an external command and run its output as SQL statements.
   \set [NAME]       set a client-side flag or (without argument) print the current settings.
@@ -968,9 +968,12 @@ func (c *cliState) doProcessFirstLine(startState, nextState cliStateEnum) cliSta
 		// Ignore empty lines, just continue reading if it isn't interactive mode.
 		return startState
 
-	case "help", "quit", "exit":
+	case "help":
 		printCliHelp()
 		return startState
+
+	case "exit", "quit":
+		return cliStop
 	}
 
 	return nextState
