@@ -43,7 +43,7 @@ type PreparedStatement struct {
 	// Memo is the memoized data structure constructed by the cost-based optimizer
 	// during prepare of a SQL statement. It can significantly speed up execution
 	// if it is used by the optimizer as a starting point.
-	Memo memo.Memo
+	Memo *memo.Memo
 	// TypeHints contains the types of the placeholders set by the client. It
 	// dictates how input parameters for those placeholders will be parsed. If a
 	// placeholder has no type hint, it will be populated during type checking.

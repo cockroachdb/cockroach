@@ -404,13 +404,13 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	//             plan tree must be built (execbuild). This tree is set as the
 	//             planner.curPlan, and the EXECUTE phase of planning is complete.
 	//
-	var prepMemo *memo.Memo
+	var prepStmt *PreparedStatement
 	inPreparePhase := p.EvalContext().PrepareOnly
 	if stmt.Prepared != nil {
 		// Only use memo if it was actually prepared. It may not have been in case
 		// of fallback to the heuristic planner.
-		if inPreparePhase || stmt.Prepared.Memo.RootExpr() != nil {
-			prepMemo = &stmt.Prepared.Memo
+		if inPreparePhase || stmt.Prepared.Memo != nil {
+			prepStmt = stmt.Prepared
 		}
 	}
 
@@ -419,9 +419,9 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	//   2. it's been invalidated by schema or other changes
 	//
 	// Then entirely rebuild the memo from the AST.
-	if inPreparePhase || prepMemo == nil || prepMemo.IsStale(ctx, p.EvalContext(), &catalog) {
+	if inPreparePhase || prepStmt == nil || prepStmt.Memo.IsStale(ctx, p.EvalContext(), &catalog) {
 		bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), &catalog, f, stmt.AST)
-		bld.KeepPlaceholders = prepMemo != nil
+		bld.KeepPlaceholders = prepStmt != nil
 		err := bld.Build()
 		if err != nil {
 			// isCorrelated is used in the fallback case to create a better error.
@@ -429,7 +429,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 			return err
 		}
 
-		if prepMemo != nil {
+		if prepStmt != nil {
 			// If the memo doesn't have placeholders, then fully optimize it, since
 			// it can be reused without further changes to build the execution tree.
 			if !f.Memo().HasPlaceholders() {
@@ -437,16 +437,17 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 			}
 
 			// Detach the prepared memo from the factory and transfer its ownership
-			// to the prepared statement.
-			p.optimizer.DetachMemo(prepMemo)
+			// to the prepared statement. DetachMemo will re-initialize the optimizer
+			// to an empty memo.
+			prepStmt.Memo = p.optimizer.DetachMemo()
 		}
 	}
 
 	// If in the PREPARE phase, construct a dummy plan that has correct output
 	// columns. Only output columns and placeholder types are needed.
 	if inPreparePhase {
-		md := prepMemo.Metadata()
-		physical := prepMemo.RootProps()
+		md := prepStmt.Memo.Metadata()
+		physical := prepStmt.Memo.RootProps()
 		resultCols := make(sqlbase.ResultColumns, len(physical.Presentation))
 		for i, col := range physical.Presentation {
 			resultCols[i].Name = col.Label
@@ -459,20 +460,20 @@ func (p *planner) makeOptimizerPlan(ctx context.Context, stmt Statement) error {
 	// This is the EXECUTE phase, so finish optimization by assigning any
 	// remaining placeholders and applying exploration rules.
 	var execMemo *memo.Memo
-	if prepMemo == nil {
+	if prepStmt == nil {
 		p.optimizer.Optimize()
 		execMemo = f.Memo()
 	} else {
-		if prepMemo.HasPlaceholders() {
+		if prepStmt.Memo.HasPlaceholders() {
 			// Reinitialize the optimizer and construct a new memo that is copied
 			// from the prepared memo, but with placeholders assigned.
-			if err := p.optimizer.Factory().AssignPlaceholders(prepMemo); err != nil {
+			if err := p.optimizer.Factory().AssignPlaceholders(prepStmt.Memo); err != nil {
 				return err
 			}
 			p.optimizer.Optimize()
 			execMemo = f.Memo()
 		} else {
-			execMemo = prepMemo
+			execMemo = prepStmt.Memo
 		}
 	}
 

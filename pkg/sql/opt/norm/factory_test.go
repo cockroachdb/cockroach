@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package norm
+package norm_test
 
 import (
 	"testing"
@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -29,7 +30,7 @@ import (
 // operator is created.
 func TestSimplifyFilters(t *testing.T) {
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	var f Factory
+	var f norm.Factory
 	f.Init(&evalCtx)
 
 	cat := createFiltersCatalog(t)
