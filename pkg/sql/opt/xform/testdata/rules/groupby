@@ -461,12 +461,18 @@ project
 memo
 SELECT min(a) FROM abc
 ----
-memo (optimized, ~4KB)
+memo (optimized, ~4KB, required=[presentation: min:5])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: min:5]
  │         ├── best: (scalar-group-by G4 G5 cols=())
  │         └── cost: 1.07
  ├── G2: (scan abc,cols=(1))
+ │    ├── [ordering: +1]
+ │    │    ├── best: (scan abc,cols=(1))
+ │    │    └── cost: 1050.00
+ │    └── []
+ │         ├── best: (scan abc,cols=(1))
+ │         └── cost: 1050.00
  ├── G3: (aggregations G6)
  ├── G4: (limit G2 G7 ordering=+1) (scan abc,cols=(1),lim=1)
  │    └── []
@@ -481,20 +487,32 @@ memo (optimized, ~4KB)
 memo
 SELECT min(b) FROM abc
 ----
-memo (optimized, ~5KB)
+memo (optimized, ~5KB, required=[presentation: min:5])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: min:5]
  │         ├── best: (scalar-group-by G2 G3 cols=())
  │         └── cost: 1060.01
  ├── G2: (scan abc,cols=(2))
+ │    ├── [ordering: +2]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1259.32
  │    └── []
  │         ├── best: (scan abc,cols=(2))
  │         └── cost: 1050.00
  ├── G3: (aggregations G6)
  ├── G4: (limit G7 G8 ordering=+2)
+ │    └── []
+ │         ├── best: (limit G7="[ordering: +2]" G8 ordering=+2)
+ │         └── cost: 1266.95
  ├── G5: (aggregations G9)
  ├── G6: (min G10)
  ├── G7: (select G2 G11)
+ │    ├── [ordering: +2]
+ │    │    ├── best: (sort G7)
+ │    │    └── cost: 1266.94
+ │    └── []
+ │         ├── best: (select G2 G11)
+ │         └── cost: 1060.00
  ├── G8: (const 1)
  ├── G9: (const-agg G10)
  ├── G10: (variable b)
@@ -505,12 +523,18 @@ memo (optimized, ~5KB)
 memo
 SELECT max(a) FROM abc
 ----
-memo (optimized, ~4KB)
+memo (optimized, ~4KB, required=[presentation: max:5])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: max:5]
  │         ├── best: (scalar-group-by G4 G5 cols=())
  │         └── cost: 1.07
  ├── G2: (scan abc,cols=(1))
+ │    ├── [ordering: -1]
+ │    │    ├── best: (scan abc,rev,cols=(1))
+ │    │    └── cost: 1149.66
+ │    └── []
+ │         ├── best: (scan abc,cols=(1))
+ │         └── cost: 1050.00
  ├── G3: (aggregations G6)
  ├── G4: (limit G2 G7 ordering=-1) (scan abc,rev,cols=(1),lim=1(rev))
  │    └── []
@@ -525,20 +549,32 @@ memo (optimized, ~4KB)
 memo
 SELECT max(b) FROM abc
 ----
-memo (optimized, ~5KB)
+memo (optimized, ~5KB, required=[presentation: max:5])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: max:5]
  │         ├── best: (scalar-group-by G2 G3 cols=())
  │         └── cost: 1060.01
  ├── G2: (scan abc,cols=(2))
+ │    ├── [ordering: -2]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1259.32
  │    └── []
  │         ├── best: (scan abc,cols=(2))
  │         └── cost: 1050.00
  ├── G3: (aggregations G6)
  ├── G4: (limit G7 G8 ordering=-2)
+ │    └── []
+ │         ├── best: (limit G7="[ordering: -2]" G8 ordering=-2)
+ │         └── cost: 1266.95
  ├── G5: (aggregations G9)
  ├── G6: (max G10)
  ├── G7: (select G2 G11)
+ │    ├── [ordering: -2]
+ │    │    ├── best: (sort G7)
+ │    │    └── cost: 1266.94
+ │    └── []
+ │         ├── best: (select G2 G11)
+ │         └── cost: 1060.00
  ├── G8: (const 1)
  ├── G9: (const-agg G10)
  ├── G10: (variable b)
@@ -602,20 +638,32 @@ scalar-group-by
 memo
 select max(b) from abc
 ----
-memo (optimized, ~5KB)
+memo (optimized, ~5KB, required=[presentation: max:5])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
  │    └── [presentation: max:5]
  │         ├── best: (scalar-group-by G2 G3 cols=())
  │         └── cost: 1060.01
  ├── G2: (scan abc,cols=(2))
+ │    ├── [ordering: -2]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1259.32
  │    └── []
  │         ├── best: (scan abc,cols=(2))
  │         └── cost: 1050.00
  ├── G3: (aggregations G6)
  ├── G4: (limit G7 G8 ordering=-2)
+ │    └── []
+ │         ├── best: (limit G7="[ordering: -2]" G8 ordering=-2)
+ │         └── cost: 1266.95
  ├── G5: (aggregations G9)
  ├── G6: (max G10)
  ├── G7: (select G2 G11)
+ │    ├── [ordering: -2]
+ │    │    ├── best: (sort G7)
+ │    │    └── cost: 1266.94
+ │    └── []
+ │         ├── best: (select G2 G11)
+ │         └── cost: 1060.00
  ├── G8: (const 1)
  ├── G9: (const-agg G10)
  ├── G10: (variable b)
