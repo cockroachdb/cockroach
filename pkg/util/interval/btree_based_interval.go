@@ -21,6 +21,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 const (
@@ -39,8 +40,9 @@ var (
 // FreeList represents a free list of btree nodes. By default each
 // BTree has its own FreeList, but multiple BTrees can share the same
 // FreeList.
-// Two Btrees using the same freelist are not safe for concurrent write access.
+// Two Btrees using the same freelist are safe for concurrent write access.
 type FreeList struct {
+	mu       syncutil.Mutex
 	freelist []*node
 }
 
@@ -51,20 +53,25 @@ func NewFreeList(size int) *FreeList {
 }
 
 func (f *FreeList) newNode() (n *node) {
+	f.mu.Lock()
 	index := len(f.freelist) - 1
 	if index < 0 {
+		f.mu.Unlock()
 		return new(node)
 	}
 	n = f.freelist[index]
 	f.freelist[index] = nil
 	f.freelist = f.freelist[:index]
+	f.mu.Unlock()
 	return
 }
 
 func (f *FreeList) freeNode(n *node) {
+	f.mu.Lock()
 	if len(f.freelist) < cap(f.freelist) {
 		f.freelist = append(f.freelist, n)
 	}
+	f.mu.Unlock()
 }
 
 // newBTree creates a new interval tree with the given overlapper function and
@@ -83,10 +90,11 @@ func newBTreeWithDegree(overlapper Overlapper, minimumDegree int) *btree {
 	if minimumDegree < 2 {
 		panic("bad minimum degree")
 	}
+	f := NewFreeList(DefaultBTreeFreeListSize)
 	return &btree{
 		minimumDegree: minimumDegree,
 		overlapper:    overlapper,
-		freelist:      NewFreeList(DefaultBTreeFreeListSize),
+		cow:           &copyOnWriteContext{freelist: f},
 	}
 }
 
@@ -212,7 +220,35 @@ type node struct {
 	Range    Range
 	items    items
 	children children
-	t        *btree
+	cow      *copyOnWriteContext
+}
+
+func (n *node) mutableFor(cow *copyOnWriteContext) *node {
+	if n.cow == cow {
+		return n
+	}
+	out := cow.newNode()
+	out.Range = n.Range
+	if cap(out.items) >= len(n.items) {
+		out.items = out.items[:len(n.items)]
+	} else {
+		out.items = make(items, len(n.items), cap(n.items))
+	}
+	copy(out.items, n.items)
+	// Copy children
+	if cap(out.children) >= len(n.children) {
+		out.children = out.children[:len(n.children)]
+	} else {
+		out.children = make(children, len(n.children), cap(n.children))
+	}
+	copy(out.children, n.children)
+	return out
+}
+
+func (n *node) mutableChild(i int) *node {
+	c := n.children[i].mutableFor(n.cow)
+	n.children[i] = c
+	return c
 }
 
 // split splits the given node at the given index. The current node shrinks, and
@@ -236,13 +272,11 @@ type node struct {
 //
 func (n *node) split(i int, fast bool) (Interface, *node) {
 	e := n.items[i]
-	second := n.t.newNode()
-	second.items = make(items, n.t.minItems())
-	copy(second.items, n.items[i+1:])
+	second := n.cow.newNode()
+	second.items = append(second.items, n.items[i+1:]...)
 	n.items.truncate(i)
 	if len(n.children) > 0 {
-		second.children = make(children, n.t.minItems()+1)
-		copy(second.children, n.children[i+1:])
+		second.children = append(second.children, n.children[i+1:]...)
 		n.children.truncate(i + 1)
 	}
 	if !fast {
@@ -250,7 +284,7 @@ func (n *node) split(i int, fast bool) (Interface, *node) {
 		oldRangeEnd := n.Range.End
 		n.Range.End = n.rangeEnd()
 
-		// adjust ragne for the second split part
+		// adjust range for the second split part
 		second.Range.Start = second.rangeStart()
 		if n.Range.End.Equal(oldRangeEnd) || e.Range().End.Equal(oldRangeEnd) {
 			second.Range.End = second.rangeEnd()
@@ -263,12 +297,11 @@ func (n *node) split(i int, fast bool) (Interface, *node) {
 
 // maybeSplitChild checks if a child should be split, and if so splits it.
 // Returns whether or not a split occurred.
-func (n *node) maybeSplitChild(i int, fast bool) bool {
-	maxItems := n.t.maxItems()
+func (n *node) maybeSplitChild(i, maxItems int, fast bool) bool {
 	if len(n.children[i].items) < maxItems {
 		return false
 	}
-	first := n.children[i]
+	first := n.mutableChild(i)
 	e, second := first.split(maxItems/2, fast)
 	n.items.insertAt(i, e)
 	n.children.insertAt(i+1, second)
@@ -277,7 +310,7 @@ func (n *node) maybeSplitChild(i int, fast bool) bool {
 
 // insert inserts an Interface into the subtree rooted at this node, making sure
 // no nodes in the subtree exceed maxItems Interfaces.
-func (n *node) insert(e Interface, fast bool) (out Interface, extended bool) {
+func (n *node) insert(e Interface, maxItems int, fast bool) (out Interface, extended bool) {
 	i, found := n.items.find(e)
 	if found {
 		out = n.items[i]
@@ -299,7 +332,7 @@ func (n *node) insert(e Interface, fast bool) (out Interface, extended bool) {
 		}
 		return
 	}
-	if n.maybeSplitChild(i, fast) {
+	if n.maybeSplitChild(i, maxItems, fast) {
 		inTree := n.items[i]
 		switch Compare(e, inTree) {
 		case -1:
@@ -312,7 +345,7 @@ func (n *node) insert(e Interface, fast bool) (out Interface, extended bool) {
 			return
 		}
 	}
-	out, extended = n.children[i].insert(e, fast)
+	out, extended = n.mutableChild(i).insert(e, maxItems, fast)
 	if !fast && extended {
 		extended = false
 		if i == 0 && n.children[0].Range.Start.Compare(n.Range.Start) < 0 {
@@ -521,11 +554,11 @@ func (n *node) remove(
 		panic("invalid remove type")
 	}
 	// If we get to here, we have children.
-	child := n.children[i]
-	if len(child.items) <= minItems {
+	if len(n.children[i].items) <= minItems {
 		out, shrunk = n.growChildAndRemove(i, e, minItems, typ, fast)
 		return
 	}
+	child := n.mutableChild(i)
 	// Either we had enough interfaces to begin with, or we've done some
 	// merging/stealing, because we've got enough now and we're ready to return
 	// stuff.
@@ -660,8 +693,8 @@ func (n *node) growChildAndRemove(
 //
 func (n *node) stealFromLeftChild(i int, fast bool) {
 	// steal
-	stealTo := n.children[i]
-	stealFrom := n.children[i-1]
+	stealTo := n.mutableChild(i)
+	stealFrom := n.mutableChild(i - 1)
 	x := stealFrom.items.pop()
 	y := n.items[i-1]
 	stealTo.items.insertAt(0, y)
@@ -717,8 +750,8 @@ func (n *node) stealFromLeftChild(i int, fast bool) {
 //
 func (n *node) stealFromRightChild(i int, fast bool) {
 	// steal
-	stealTo := n.children[i]
-	stealFrom := n.children[i+1]
+	stealTo := n.mutableChild(i)
+	stealFrom := n.mutableChild(i + 1)
 	x := stealFrom.items.removeAt(0)
 	y := n.items[i]
 	stealTo.items = append(stealTo.items, y)
@@ -768,17 +801,17 @@ func (n *node) stealFromRightChild(i int, fast bool) {
 //
 func (n *node) mergeWithRightChild(i int, fast bool) {
 	// merge
-	y := n.items.removeAt(i)
-	child := n.children[i]
+	child := n.mutableChild(i)
+	mergeItem := n.items.removeAt(i)
 	mergeChild := n.children.removeAt(i + 1)
-	child.items = append(child.items, y)
+	child.items = append(child.items, mergeItem)
 	child.items = append(child.items, mergeChild.items...)
 	child.children = append(child.children, mergeChild.children...)
-	n.t.freeNode(mergeChild)
+	n.cow.freeNode(mergeChild)
 
 	if !fast {
-		if y.Range().End.Compare(child.Range.End) > 0 {
-			child.Range.End = y.Range().End
+		if mergeItem.Range().End.Compare(child.Range.End) > 0 {
+			child.Range.End = mergeItem.Range().End
 		}
 		if mergeChild.Range.End.Compare(child.Range.End) > 0 {
 			child.Range.End = mergeChild.Range.End
@@ -796,11 +829,58 @@ var _ Tree = (*btree)(nil)
 // Write operations are not safe for concurrent mutation by multiple
 // goroutines, but Read operations are.
 type btree struct {
-	root          *node
 	length        int
-	overlapper    Overlapper
 	minimumDegree int
-	freelist      *FreeList
+	overlapper    Overlapper
+	root          *node
+	cow           *copyOnWriteContext
+}
+
+// copyOnWriteContext pointers determine node ownership... a tree with a write
+// context equivalent to a node's write context is allowed to modify that node.
+// A tree whose write context does not match a node's is not allowed to modify
+// it, and must create a new, writable copy (IE: it's a Clone).
+//
+// When doing any write operation, we maintain the invariant that the current
+// node's context is equal to the context of the tree that requested the write.
+// We do this by, before we descend into any node, creating a copy with the
+// correct context if the contexts don't match.
+//
+// Since the node we're currently visiting on any write has the requesting
+// tree's context, that node is modifiable in place.  Children of that node may
+// not share context, but before we descend into them, we'll make a mutable
+// copy.
+type copyOnWriteContext struct {
+	freelist *FreeList
+}
+
+// cloneInternal clones the btree, lazily.  Clone should not be called concurrently,
+// but the original tree (t) and the new tree (t2) can be used concurrently
+// once the Clone call completes.
+//
+// The internal tree structure of b is marked read-only and shared between t and
+// t2.  Writes to both t and t2 use copy-on-write logic, creating new nodes
+// whenever one of b's original nodes would have been modified.  Read operations
+// should have no performance degredation.  Write operations for both t and t2
+// will initially experience minor slow-downs caused by additional allocs and
+// copies due to the aforementioned copy-on-write logic, but should converge to
+// the original performance characteristics of the original tree.
+func (t *btree) cloneInternal() (t2 *btree) {
+	// Create two entirely new copy-on-write contexts.
+	// This operation effectively creates three trees:
+	//   the original, shared nodes (old b.cow)
+	//   the new b.cow nodes
+	//   the new out.cow nodes
+	cow1, cow2 := *t.cow, *t.cow
+	out := *t
+	t.cow = &cow1
+	out.cow = &cow2
+	return &out
+}
+
+// Clone clones the btree, lazily.
+func (t *btree) Clone() Tree {
+	return t.cloneInternal()
 }
 
 // adjustRange sets the Range to the maximum extent of the childrens' Range
@@ -871,18 +951,20 @@ func (t *btree) minItems() int {
 	return t.minimumDegree - 1
 }
 
-func (t *btree) newNode() (n *node) {
-	n = t.freelist.newNode()
-	n.t = t
+func (c *copyOnWriteContext) newNode() (n *node) {
+	n = c.freelist.newNode()
+	n.cow = c
 	return
 }
 
-func (t *btree) freeNode(n *node) {
-	// clear to allow GC
-	n.items.truncate(0)
-	n.children.truncate(0)
-	n.t = nil // clear to allow GC
-	t.freelist.freeNode(n)
+func (c *copyOnWriteContext) freeNode(n *node) {
+	if n.cow == c {
+		// clear to allow GC
+		n.items.truncate(0)
+		n.children.truncate(0)
+		n.cow = nil // clear to allow GC
+		c.freelist.freeNode(n)
+	}
 }
 
 func (t *btree) Insert(e Interface, fast bool) (err error) {
@@ -892,7 +974,7 @@ func (t *btree) Insert(e Interface, fast bool) (err error) {
 	}
 
 	if t.root == nil {
-		t.root = t.newNode()
+		t.root = t.cow.newNode()
 		t.root.items = append(t.root.items, e)
 		t.length++
 		if !fast {
@@ -900,9 +982,12 @@ func (t *btree) Insert(e Interface, fast bool) (err error) {
 			t.root.Range.End = e.Range().End
 		}
 		return nil
-	} else if len(t.root.items) >= t.maxItems() {
+	}
+
+	t.root = t.root.mutableFor(t.cow)
+	if len(t.root.items) >= t.maxItems() {
 		oldroot := t.root
-		t.root = t.newNode()
+		t.root = t.cow.newNode()
 		if !fast {
 			t.root.Range.Start = oldroot.Range.Start
 			t.root.Range.End = oldroot.Range.End
@@ -911,7 +996,8 @@ func (t *btree) Insert(e Interface, fast bool) (err error) {
 		t.root.items = append(t.root.items, e2)
 		t.root.children = append(t.root.children, oldroot, second)
 	}
-	out, _ := t.root.insert(e, fast)
+
+	out, _ := t.root.insert(e, t.maxItems(), fast)
 	if out == nil {
 		t.length++
 	}
@@ -931,11 +1017,12 @@ func (t *btree) Delete(e Interface, fast bool) (err error) {
 }
 
 func (t *btree) delete(e Interface, typ toRemove, fast bool) Interface {
+	t.root = t.root.mutableFor(t.cow)
 	out, _ := t.root.remove(e, t.minItems(), typ, fast)
 	if len(t.root.items) == 0 && len(t.root.children) > 0 {
 		oldroot := t.root
 		t.root = t.root.children[0]
-		t.freeNode(oldroot)
+		t.cow.freeNode(oldroot)
 	}
 	if out != nil {
 		t.length--

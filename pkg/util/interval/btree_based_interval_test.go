@@ -22,6 +22,7 @@ import (
 	"math/rand"
 	"reflect"
 	"sort"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -51,6 +52,15 @@ func rang(m, n uint32) (out items) {
 		iv := makeMultiByteInterval(u, u+1, u)
 		out = append(out, iv)
 	}
+	return
+}
+
+// all extracts all items from a tree in order as a slice.
+func all(t *btree) (out items) {
+	t.Do(func(a Interface) bool {
+		out = append(out, a)
+		return false
+	})
 	return
 }
 
@@ -479,7 +489,7 @@ func TestBTree(t *testing.T) {
 		}
 
 		if len := tree.Len(); len > 0 {
-			t.Fatalf("expected 0 item, got %d itemes", len)
+			t.Fatalf("expected 0 item, got %d items", len)
 		}
 	}
 }
@@ -545,6 +555,7 @@ func TestSmallTree(t *testing.T) {
 		}
 		checkWithLen(t, tree, i+1)
 	}
+	return
 
 	checkTraversal(t, tree, ivs)
 	checkIterator(t, tree, ivs)
@@ -597,6 +608,67 @@ func TestLargeTree(t *testing.T) {
 	checkFastDelete(t, tree, ivs, 10)
 }
 
+const cloneTestSize = 10000
+
+func cloneTest(t *testing.T, b *btree, start int, p items, wg *sync.WaitGroup, trees *[]*btree) {
+	t.Logf("Starting new clone at %v", start)
+	*trees = append(*trees, b)
+	for i := start; i < cloneTestSize; i++ {
+		if err := b.Insert(p[i], false); err != nil {
+			t.Fatal(err)
+		}
+		if i%(cloneTestSize/5) == 0 {
+			wg.Add(1)
+			go cloneTest(t, b.cloneInternal(), i+1, p, wg, trees)
+		}
+	}
+	wg.Done()
+}
+
+func TestCloneConcurrentOperations(t *testing.T) {
+	b := newBTree(InclusiveOverlapper)
+	trees := []*btree{}
+	p := perm(cloneTestSize)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go cloneTest(t, b, 0, p, &wg, &trees)
+	wg.Wait()
+	want := rang(0, cloneTestSize-1)
+	t.Logf("Starting equality checks on %d trees", len(trees))
+	for i, tree := range trees {
+		if !reflect.DeepEqual(want, all(tree)) {
+			t.Errorf("tree %v mismatch", i)
+		}
+	}
+	t.Log("Removing half from first half")
+	toRemove := rang(0, cloneTestSize-1)[cloneTestSize/2:]
+	for i := 0; i < len(trees)/2; i++ {
+		tree := trees[i]
+		wg.Add(1)
+		go func() {
+			for _, item := range toRemove {
+				if err := tree.Delete(item, false); err != nil {
+					t.Fatal(err)
+				}
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+	t.Log("Checking all values again")
+	for i, tree := range trees {
+		var wantpart items
+		if i < len(trees)/2 {
+			wantpart = want[:cloneTestSize/2]
+		} else {
+			wantpart = want
+		}
+		if got := all(tree); !reflect.DeepEqual(wantpart, got) {
+			t.Errorf("tree %v mismatch, want %v got %v", i, len(want), len(got))
+		}
+	}
+}
+
 func TestIterator(t *testing.T) {
 	var ivs items
 	const treeSize = 400
@@ -630,6 +702,50 @@ func BenchmarkBTreeInsert(b *testing.B) {
 				return
 			}
 		}
+	}
+}
+
+func BenchmarkBTreeDeleteInsert(b *testing.B) {
+	b.StopTimer()
+	insertP := perm(benchmarkTreeSize)
+	tr := newBTree(InclusiveOverlapper)
+	for _, item := range insertP {
+		tr.Insert(item, false)
+	}
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		tr.Delete(insertP[i%benchmarkTreeSize], false)
+		tr.Insert(insertP[i%benchmarkTreeSize], false)
+	}
+}
+
+func BenchmarkBTreeDeleteInsertCloneOnce(b *testing.B) {
+	b.StopTimer()
+	insertP := perm(benchmarkTreeSize)
+	tr := newBTree(InclusiveOverlapper)
+	for _, item := range insertP {
+		tr.Insert(item, false)
+	}
+	tr = tr.cloneInternal()
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		tr.Delete(insertP[i%benchmarkTreeSize], false)
+		tr.Insert(insertP[i%benchmarkTreeSize], false)
+	}
+}
+
+func BenchmarkBTreeDeleteInsertCloneEachTime(b *testing.B) {
+	b.StopTimer()
+	insertP := perm(benchmarkTreeSize)
+	tr := newBTree(InclusiveOverlapper)
+	for _, item := range insertP {
+		tr.Insert(item, false)
+	}
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		tr = tr.cloneInternal()
+		tr.Delete(insertP[i%benchmarkTreeSize], false)
+		tr.Insert(insertP[i%benchmarkTreeSize], false)
 	}
 }
 
@@ -677,6 +793,30 @@ func BenchmarkBTreeGet(b *testing.B) {
 		}
 		b.StartTimer()
 		for _, item := range removeP {
+			tr.Get(item.Range())
+			i++
+			if i >= b.N {
+				return
+			}
+		}
+	}
+}
+
+func BenchmarkBTreeGetCloneEachTime(b *testing.B) {
+	b.StopTimer()
+	insertP := perm(benchmarkTreeSize)
+	removeP := perm(benchmarkTreeSize)
+	b.StartTimer()
+	i := 0
+	for i < b.N {
+		b.StopTimer()
+		tr := newBTree(InclusiveOverlapper)
+		for _, v := range insertP {
+			tr.Insert(v, false)
+		}
+		b.StartTimer()
+		for _, item := range removeP {
+			tr = tr.cloneInternal()
 			tr.Get(item.Range())
 			i++
 			if i >= b.N {
