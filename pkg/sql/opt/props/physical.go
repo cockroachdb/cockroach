@@ -75,7 +75,7 @@ func (p *Physical) String() string {
 
 	// Handle empty properties case.
 	if !hasProjection && !hasOrdering {
-		return ""
+		return "[]"
 	}
 
 	var buf bytes.Buffer

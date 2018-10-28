@@ -24,7 +24,7 @@ import (
 func TestPhysicalProps(t *testing.T) {
 	// Empty props.
 	phys := &props.Physical{}
-	testPhysicalProps(t, phys, "")
+	testPhysicalProps(t, phys, "[]")
 
 	if phys.Defined() {
 		t.Error("no props should be defined")
