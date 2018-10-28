@@ -4158,3 +4158,77 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 		}
 	}
 }
+
+func TestStoreWaitForReplicaInit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	sc := storage.TestStoreConfig(nil)
+	mtc := &multiTestContext{storeConfig: &sc}
+	mtc.Start(t, 1)
+	defer mtc.Stop()
+	store := mtc.Store(0)
+
+	conn, err := mtc.nodeDialer.Dial(ctx, store.Ident.NodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := storage.NewPerReplicaClient(conn)
+	storeHeader := storage.StoreRequestHeader{NodeID: store.Ident.NodeID, StoreID: store.Ident.StoreID}
+
+	// Test that WaitForReplicaInit returns successfully if the replica exists.
+	_, err = client.WaitForReplicaInit(ctx, &storage.WaitForReplicaInitRequest{
+		StoreRequestHeader: storeHeader,
+		RangeID:            roachpb.RangeID(1),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Test that WaitForReplicaInit times out if the replica does not exist.
+	{
+		timeoutCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+		defer cancel()
+		_, err = client.WaitForReplicaInit(timeoutCtx, &storage.WaitForReplicaInitRequest{
+			StoreRequestHeader: storeHeader,
+			RangeID:            roachpb.RangeID(2),
+		})
+		if exp := "context deadline exceeded"; !testutils.IsError(err, exp) {
+			t.Fatalf("expected %q error, but got %v", exp, err)
+		}
+	}
+
+	// Test that WaitForReplicaInit times out if the replica exists but is not
+	// initialized.
+	{
+		// Constructing an permanently-uninitialized replica is somewhat difficult.
+		// Sending a fake Raft heartbeat for a range ID that the store hasn't seen
+		// before does the trick.
+		var repl42 *storage.Replica
+		testutils.SucceedsSoon(t, func() (err error) {
+			// Try several times, as the message may be dropped (see #18355).
+			mtc.transport.SendAsync(&storage.RaftMessageRequest{
+				ToReplica: roachpb.ReplicaDescriptor{
+					NodeID:  store.Ident.NodeID,
+					StoreID: store.Ident.StoreID,
+				},
+				Heartbeats: []storage.RaftHeartbeat{{RangeID: 42, ToReplicaID: 1}},
+			})
+			repl42, err = store.GetReplica(42)
+			return err
+		})
+		if repl42.IsInitialized() {
+			t.Fatalf("test bug: repl42 is initialized")
+		}
+
+		timeoutCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+		defer cancel()
+		_, err = client.WaitForReplicaInit(timeoutCtx, &storage.WaitForReplicaInitRequest{
+			StoreRequestHeader: storeHeader,
+			RangeID:            roachpb.RangeID(42),
+		})
+		if exp := "context deadline exceeded"; !testutils.IsError(err, exp) {
+			t.Fatalf("expected %q error, but got %v", exp, err)
+		}
+	}
+}

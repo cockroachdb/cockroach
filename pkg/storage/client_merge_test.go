@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func adminMergeArgs(key roachpb.Key) *roachpb.AdminMergeRequest {
@@ -1961,13 +1962,14 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 	}
 }
 
-func TestStoreRangeMergeDeadFollower(t *testing.T) {
+func TestStoreRangeMergeDeadFollowerBeforeTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
+	var mtc *multiTestContext
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableMergeQueue = true
-	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc = &multiTestContext{storeConfig: &storeCfg}
 	mtc.Start(t, 3)
 	defer mtc.Stop()
 	store0 := mtc.Store(0)
@@ -1979,6 +1981,38 @@ func TestStoreRangeMergeDeadFollower(t *testing.T) {
 	}
 
 	mtc.stopStore(2)
+
+	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
+	expErr := "waiting for all left-hand replicas to initialize"
+	if !testutils.IsPError(pErr, expErr) {
+		t.Fatalf("expected %q error, but got %v", expErr, pErr)
+	}
+}
+
+func TestStoreRangeMergeDeadFollowerDuringTxn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	var mtc *multiTestContext
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableMergeQueue = true
+	storeCfg.TestingKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
+		if ba.IsSingleSubsumeRequest() && mtc.Store(2) != nil {
+			mtc.stopStore(2)
+		}
+		return nil
+	}
+	mtc = &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+	store0 := mtc.Store(0)
+
+	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+	lhsDesc, _, err := createSplitRanges(ctx, store0)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
 	_, pErr := client.SendWrapped(ctx, store0.TestSender(), args)
@@ -2148,6 +2182,201 @@ func TestStoreRangeMergeReadoptedLHSFollower(t *testing.T) {
 	// Give store2 the lease to force all commands to be applied, including the
 	// ChangeReplicas.
 	mtc.transferLease(ctx, lhsDesc.RangeID, 0, 2)
+}
+
+// slowSnapRaftHandler delays any snapshots to rangeID until waitCh is closed.
+type slowSnapRaftHandler struct {
+	rangeID roachpb.RangeID
+	waitCh  chan struct{}
+	storage.RaftMessageHandler
+	syncutil.Mutex
+}
+
+func (h *slowSnapRaftHandler) unblock() {
+	h.Lock()
+	if h.waitCh != nil {
+		close(h.waitCh)
+		h.waitCh = nil
+	}
+	h.Unlock()
+}
+
+func (h *slowSnapRaftHandler) HandleSnapshot(
+	header *storage.SnapshotRequest_Header, respStream storage.SnapshotResponseStream,
+) error {
+	if header.RaftMessageRequest.RangeID == h.rangeID {
+		h.Lock()
+		waitCh := h.waitCh
+		h.Unlock()
+		if waitCh != nil {
+			<-waitCh
+		}
+	}
+	return h.RaftMessageHandler.HandleSnapshot(header, respStream)
+}
+
+// TestStoreRangeMergeUninitializedLHSFollower reproduces a rare bug in which a
+// replica of the RHS of a merge could be garbage collected too soon.
+//
+// Consider two adjacent ranges, A and B. Suppose the replica of
+// A on the last store, S3, is uninitialized, e.g. because A was recently
+// created by a split and S3 has neither processed the split trigger nor
+// received a snapshot. The leaseholder for A will attempt to send a Raft
+// snapshot to bring S3's replica up to date, but this Raft snapshot may be
+// delayed due to a busy Raft snapshot queue or a slow network.
+//
+// Now suppose a merge of A and B commits before S3 receives a Raft snapshot for
+// A. There is a small window of time in which S3 can garbage collect its
+// replica of B! When S3 looks up B's meta2 descriptor, it will find that B has
+// been merged away. S3 will then try to prove that B's local left neighbor is
+// generationally up-to-date; if it is, it safe to GC B. Usually, S3 would
+// determine A to be B's left neighbor, realize that A has not yet processed the
+// merge, and correctly refuse to GC its replica of B. In this case, however,
+// S3's replica of A is uninitialized and thus doesn't know its start and end
+// key, so S3 will instead discover some more-distant left neighbor of B. This
+// distant neighbor might very well be up-to-date, and S3 will incorreclty
+// conclude that it can GC its replica of B!
+//
+// So say S3 GCs its replica of B. There are now two paths that A might take.
+// The happy case is that A receives a Raft snapshot that postdates the merge.
+// The unhappy case is that A receives a Raft snapshot that predates the merge,
+// and is then required to apply the merge via a MsgApp. Since there is no
+// longer a replica of B on S3, applying the merge trigger will explode.
+//
+// The solution was to require that all LHS replicas are initialized before
+// beginning a merge transaction. This ensures that the replica GC queue will
+// always discover the correct left neighbor when considering whether a subsumed
+// range can be GC'd.
+func TestStoreRangeMergeUninitializedLHSFollower(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	storeCfg := storage.TestStoreConfig(nil)
+	storeCfg.TestingKnobs.DisableReplicateQueue = true
+	mtc := &multiTestContext{storeConfig: &storeCfg}
+	mtc.Start(t, 3)
+	defer mtc.Stop()
+	store0, store2 := mtc.Store(0), mtc.Store(2)
+	distSender := mtc.distSenders[0]
+
+	split := func(key roachpb.RKey) roachpb.RangeID {
+		t.Helper()
+		if _, pErr := client.SendWrapped(ctx, distSender, adminSplitArgs(key.AsRawKey())); pErr != nil {
+			t.Fatal(pErr)
+		}
+		return store0.LookupReplica(key).RangeID
+	}
+
+	// We'll create two ranges, A and B, as described in the comment on this test
+	// function.
+	aKey, bKey := roachpb.RKey("a"), roachpb.RKey("b")
+
+	// Put range 1 on all three stores.
+	mtc.replicateRange(roachpb.RangeID(1), 1, 2)
+
+	// Create range B and wait for store2 to process the split.
+	bRangeID := split(bKey)
+	var bRepl2 *storage.Replica
+	testutils.SucceedsSoon(t, func() (err error) {
+		if bRepl2, err = store2.GetReplica(bRangeID); err != nil || !bRepl2.IsInitialized() {
+			return errors.New("store2 has not yet processed split of c")
+		}
+		return nil
+	})
+
+	// Now we want to create range A, but we need to make sure store2's replica of
+	// A is not initialized. This requires dropping all Raft traffic to store2
+	// from range 1, which will be the LHS of the split, so that store2's replica
+	// of range 1 never processes the split trigger, which would create an
+	// initialized replica of A.
+	unreliableHandler := &unreliableRaftHandler{
+		rangeID:            roachpb.RangeID(1),
+		RaftMessageHandler: store2,
+	}
+	mtc.transport.Listen(store2.Ident.StoreID, unreliableHandler)
+
+	// Perform the split of A, now that store2 won't be able to initialize its
+	// replica of A.
+	aRangeID := split(aKey)
+
+	// Wedge a Raft snapshot that's destined for A. This allows us to capture a
+	// pre-merge Raft snapshot, which we'll let loose after the merge commits.
+	slowSnapHandler := &slowSnapRaftHandler{
+		rangeID:            aRangeID,
+		waitCh:             make(chan struct{}),
+		RaftMessageHandler: unreliableHandler,
+	}
+	defer slowSnapHandler.unblock()
+	mtc.transport.Listen(store2.Ident.StoreID, slowSnapHandler)
+
+	// Remove the replica of range 1 on store2. If we were to leave it in place,
+	// store2 would refuse to GC its replica of C after the merge commits, because
+	// the left neighbor of C would be this out-of-date replica of range 1.
+	// (Remember that we refused to let it process the split of A.) So we need to
+	// remove it so that C has no left neighbor and thus will be eligible for GC.
+	{
+		r1Repl2, err := store2.GetReplica(roachpb.RangeID(1))
+		if err != nil {
+			t.Fatal(err)
+		}
+		mtc.unreplicateRange(roachpb.RangeID(1), 2)
+		testutils.SucceedsSoon(t, func() error {
+			if err := store2.ManualReplicaGC(r1Repl2); err != nil {
+				return err
+			}
+			if _, err := store2.GetReplica(roachpb.RangeID(1)); err == nil {
+				return errors.New("r1Repl2 still exists")
+			}
+			return nil
+		})
+	}
+
+	// Launch the merge of A and B.
+	mergeErr := make(chan error)
+	go func() {
+		_, pErr := client.SendWrapped(ctx, distSender, adminMergeArgs(aKey.AsRawKey()))
+		mergeErr <- pErr.GoError()
+	}()
+
+	// We want to assert that the merge does not complete until we allow store2's
+	// replica of B to be initialized (by releasing the blocked Raft snapshot). A
+	// happens-before assertion is nearly impossible to express, though, so
+	// instead we just wait in the hope that, if the merge is buggy, it will
+	// commit while we wait. Before the bug was fixed, this caused the test
+	// to fail reliably.
+	start := timeutil.Now()
+	for timeutil.Since(start) < 50*time.Millisecond {
+		if _, err := store2.GetReplica(bRangeID); err == nil {
+			// Attempt to reproduce the exact fatal error described in the comment on
+			// the test by running range B through the GC queue. If the bug is
+			// present, GC will be successful and so the application of the merge
+			// trigger on A to fail once we allow the Raft snapshot through. If the
+			// bug is not present, we'll be unable to GC range B because it won't get
+			// subsumed until after we allow the Raft snapshot through.
+			_ = store2.ManualReplicaGC(bRepl2)
+		}
+		time.Sleep(5 * time.Millisecond) // don't spin too hot to give the merge CPU time to complete
+	}
+
+	select {
+	case err := <-mergeErr:
+		t.Errorf("merge completed early (err: %v)", err)
+		close(mergeErr)
+	default:
+	}
+
+	// Allow store2's replica of A to initialize with a Raft snapshot that
+	// predates the merge.
+	slowSnapHandler.unblock()
+
+	// Assert that the merge completes successfully.
+	if err := <-mergeErr; err != nil {
+		t.Fatal(err)
+	}
+
+	// Give store2 the lease on the merged range to force all commands to be
+	// applied, including the merge trigger.
+	mtc.transferLease(ctx, aRangeID, 0, 2)
 }
 
 // TestStoreRangeMergeWatcher verifies that the watcher goroutine for a merge's

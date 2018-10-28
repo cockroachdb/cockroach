@@ -80,6 +80,9 @@ func (is Server) CollectChecksum(
 }
 
 // WaitForApplication implements PerReplicaServer.
+//
+// It is the caller's responsibility to cancel or set a timeout on the context.
+// If the context is never canceled, WaitForApplication will retry forever.
 func (is Server) WaitForApplication(
 	ctx context.Context, req *WaitForApplicationRequest,
 ) (*WaitForApplicationResponse, error) {
@@ -99,6 +102,31 @@ func (is Server) WaitForApplication(
 			leaseAppliedIndex := repl.mu.state.LeaseAppliedIndex
 			repl.mu.RUnlock()
 			if leaseAppliedIndex >= req.LeaseIndex {
+				return nil
+			}
+		}
+		if ctx.Err() == nil {
+			log.Fatal(ctx, "infinite retry loop exited but context has no error")
+		}
+		return ctx.Err()
+	})
+	return resp, err
+}
+
+// WaitForReplicaInit implements PerReplicaServer.
+//
+// It is the caller's responsibility to cancel or set a timeout on the context.
+// If the context is never canceled, WaitForReplicaInit will retry forever.
+func (is Server) WaitForReplicaInit(
+	ctx context.Context, req *WaitForReplicaInitRequest,
+) (*WaitForReplicaInitResponse, error) {
+	resp := &WaitForReplicaInitResponse{}
+	err := is.execStoreCommand(req.StoreRequestHeader, func(s *Store) error {
+		retryOpts := retry.Options{InitialBackoff: 10 * time.Millisecond}
+		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+			// Long-lived references to replicas are frowned upon, so re-fetch the
+			// replica on every turn of the loop.
+			if repl, err := s.GetReplica(req.RangeID); err == nil && repl.IsInitialized() {
 				return nil
 			}
 		}
