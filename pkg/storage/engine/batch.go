@@ -52,10 +52,11 @@ const (
 const (
 	// The batch header is composed of an 8-byte sequence number (all zeroes) and
 	// 4-byte count of the number of entries in the batch.
-	headerSize       int = 12
-	countPos             = 8
-	initialBatchSize     = 1 << 10
-	maxVarintLen32       = 5
+	headerSize           int = 12
+	countPos                 = 8
+	initialBatchSize         = 1 << 10 // 1 KB
+	maxRetainedBatchSize     = 1 << 20 // 1 MB
+	maxVarintLen32           = 5
 )
 
 // RocksDBBatchBuilder is used to construct the RocksDB batch representation.
@@ -100,6 +101,22 @@ func (b *RocksDBBatchBuilder) maybeInit() {
 	}
 }
 
+func (b *RocksDBBatchBuilder) reset() {
+	if b.repr != nil {
+		if cap(b.repr) > maxRetainedBatchSize {
+			// If the capacity of the buffer is larger than our maximum
+			// retention size, don't re-use it. Let it be GC-ed instead.
+			// This prevents the memory from an unusually large batch from
+			// being held on to indefinitely.
+			b.repr = nil
+		} else {
+			// Otherwise, reset the buffer for re-use.
+			b.repr = b.repr[:headerSize]
+		}
+	}
+	b.count = 0
+}
+
 // Finish returns the constructed batch representation. After calling Finish,
 // the builder may be used to construct another batch, but the returned []byte
 // is only valid until the next builder method is called.
@@ -113,11 +130,6 @@ func (b *RocksDBBatchBuilder) Finish() []byte {
 // Len returns the number of bytes currently in the under construction repr.
 func (b *RocksDBBatchBuilder) Len() int {
 	return len(b.repr)
-}
-
-// Empty returns whether the under construction repr is empty.
-func (b *RocksDBBatchBuilder) Empty() bool {
-	return len(b.repr) <= headerSize
 }
 
 // getRepr constructs the batch representation and returns it.

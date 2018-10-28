@@ -1539,11 +1539,20 @@ type rocksDBBatch struct {
 	commitWG           sync.WaitGroup
 }
 
+var batchPool = sync.Pool{
+	New: func() interface{} {
+		return &rocksDBBatch{}
+	},
+}
+
 func newRocksDBBatch(parent *RocksDB, writeOnly bool) *rocksDBBatch {
-	r := &rocksDBBatch{
-		parent:    parent,
-		writeOnly: writeOnly,
-	}
+	// Get a new batch from the pool. Batches in the pool may have their closed
+	// fields set to true to facilitate some sanity check assertions. Reset this
+	// field and set others.
+	r := batchPool.Get().(*rocksDBBatch)
+	r.closed = false
+	r.parent = parent
+	r.writeOnly = writeOnly
 	r.distinct.rocksDBBatch = r
 	return r
 }
@@ -1569,7 +1578,12 @@ func (r *rocksDBBatch) Close() {
 		C.DBClose(r.batch)
 		r.batch = nil
 	}
-	r.closed = true
+	r.builder.reset()
+	*r = rocksDBBatch{
+		builder: r.builder,
+		closed:  true,
+	}
+	batchPool.Put(r)
 }
 
 // Closed returns true if the engine is closed.
@@ -1916,16 +1930,11 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 }
 
 func (r *rocksDBBatch) Empty() bool {
-	return r.flushes == 0 && r.builder.Empty()
+	return r.flushes == 0 && r.builder.count == 0
 }
 
-func (r *rocksDBBatch) Repr() []byte {
-	if r.flushes == 0 {
-		// We've never flushed to C++. Return the mutations only.
-		return r.builder.getRepr()
-	}
-	r.flushMutations()
-	return cSliceToGoBytes(C.DBBatchRepr(r.batch))
+func (r *rocksDBBatch) Len() int {
+	return len(r.unsafeRepr())
 }
 
 func (r *rocksDBBatch) unsafeRepr() []byte {
@@ -1935,6 +1944,20 @@ func (r *rocksDBBatch) unsafeRepr() []byte {
 	}
 	r.flushMutations()
 	return cSliceToUnsafeGoBytes(C.DBBatchRepr(r.batch))
+}
+
+func (r *rocksDBBatch) Repr() []byte {
+	if r.flushes == 0 {
+		// We've never flushed to C++. Return the mutations only. We make a copy
+		// of the builder's byte slice so that the return []byte is valid even
+		// if the builder is reset or finished.
+		repr := r.builder.getRepr()
+		cpy := make([]byte, len(repr))
+		copy(cpy, repr)
+		return cpy
+	}
+	r.flushMutations()
+	return cSliceToGoBytes(C.DBBatchRepr(r.batch))
 }
 
 func (r *rocksDBBatch) Distinct() ReadWriter {
