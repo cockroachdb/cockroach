@@ -27,6 +27,8 @@ const (
 	// DefaultBTreeMinimumDegree is the default B-tree minimum degree. Benchmarks
 	// show that the interval tree performs best with this minimum degree.
 	DefaultBTreeMinimumDegree = 32
+	// DefaultBTreeFreeListSize is the default size of a B-tree's freelist.
+	DefaultBTreeFreeListSize = 32
 )
 
 var (
@@ -34,7 +36,36 @@ var (
 	nilChildren = make(children, 16)
 )
 
-var _ = newBTree
+// FreeList represents a free list of btree nodes. By default each
+// BTree has its own FreeList, but multiple BTrees can share the same
+// FreeList.
+// Two Btrees using the same freelist are not safe for concurrent write access.
+type FreeList struct {
+	freelist []*node
+}
+
+// NewFreeList creates a new free list.
+// size is the maximum size of the returned free list.
+func NewFreeList(size int) *FreeList {
+	return &FreeList{freelist: make([]*node, 0, size)}
+}
+
+func (f *FreeList) newNode() (n *node) {
+	index := len(f.freelist) - 1
+	if index < 0 {
+		return new(node)
+	}
+	n = f.freelist[index]
+	f.freelist[index] = nil
+	f.freelist = f.freelist[:index]
+	return
+}
+
+func (f *FreeList) freeNode(n *node) {
+	if len(f.freelist) < cap(f.freelist) {
+		f.freelist = append(f.freelist, n)
+	}
+}
 
 // newBTree creates a new interval tree with the given overlapper function and
 // the default B-tree minimum degree.
@@ -55,6 +86,7 @@ func newBTreeWithDegree(overlapper Overlapper, minimumDegree int) *btree {
 	return &btree{
 		MinimumDegree: minimumDegree,
 		Overlapper:    overlapper,
+		freelist:      NewFreeList(DefaultBTreeFreeListSize),
 	}
 }
 
@@ -751,6 +783,7 @@ func (n *node) mergeWithRightChild(i int, fast bool) {
 			child.Range.End = mergeChild.Range.End
 		}
 	}
+	n.t.freeNode(mergeChild)
 }
 
 var _ Tree = (*btree)(nil)
@@ -767,6 +800,7 @@ type btree struct {
 	length        int
 	Overlapper    Overlapper
 	MinimumDegree int
+	freelist      *FreeList
 }
 
 // adjustRange sets the Range to the maximum extent of the childrens' Range
@@ -838,8 +872,17 @@ func (t *btree) minItems() int {
 }
 
 func (t *btree) newNode() (n *node) {
-	n = &node{t: t}
+	n = t.freelist.newNode()
+	n.t = t
 	return
+}
+
+func (t *btree) freeNode(n *node) {
+	// clear to allow GC
+	n.items.truncate(0)
+	n.children.truncate(0)
+	n.t = nil // clear to allow GC
+	t.freelist.freeNode(n)
 }
 
 func (t *btree) Insert(e Interface, fast bool) (err error) {
@@ -890,7 +933,9 @@ func (t *btree) Delete(e Interface, fast bool) (err error) {
 func (t *btree) delete(e Interface, typ toRemove, fast bool) Interface {
 	out, _ := t.root.remove(e, t.minItems(), typ, fast)
 	if len(t.root.items) == 0 && len(t.root.children) > 0 {
+		oldroot := t.root
 		t.root = t.root.children[0]
+		t.freeNode(oldroot)
 	}
 	if out != nil {
 		t.length--
