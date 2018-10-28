@@ -32,21 +32,21 @@ func TestSortedDistinct(t *testing.T) {
 	}{
 		{
 			distinctCols: []uint32{0, 1, 2},
-			colTypes:     []types.T{types.Int64, types.Int64, types.Int64},
+			colTypes:     []types.T{types.Float64, types.Int64, types.Bytes},
 			numCols:      4,
 			tuples: tuples{
-				{1, 2, 3, 4},
-				{1, 2, 3, 5},
-				{2, 2, 3, 4},
-				{2, 3, 3, 4},
-				{2, 3, 4, 4},
-				{2, 3, 4, 4},
+				{1.0, 2, "30", 4},
+				{1.0, 2, "30", 5},
+				{2.0, 2, "30", 4},
+				{2.0, 3, "30", 4},
+				{2.0, 3, "40", 4},
+				{2.0, 3, "40", 4},
 			},
 			expected: tuples{
-				{1, 2, 3, 4},
-				{2, 2, 3, 4},
-				{2, 3, 3, 4},
-				{2, 3, 4, 4},
+				{1.0, 2, "30", 4},
+				{2.0, 2, "30", 4},
+				{2.0, 3, "30", 4},
+				{2.0, 3, "40", 4},
 			},
 		},
 	}
