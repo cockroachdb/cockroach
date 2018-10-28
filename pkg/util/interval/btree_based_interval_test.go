@@ -613,3 +613,75 @@ func TestIterator(t *testing.T) {
 	tree.AdjustRanges()
 	checkIterator(t, tree, ivs)
 }
+
+const benchmarkTreeSize = 10000
+
+func BenchmarkBTreeInsert(b *testing.B) {
+	b.StopTimer()
+	insertP := perm(benchmarkTreeSize)
+	b.StartTimer()
+	i := 0
+	for i < b.N {
+		tr := newBTree(InclusiveOverlapper)
+		for _, item := range insertP {
+			tr.Insert(item, false)
+			i++
+			if i >= b.N {
+				return
+			}
+		}
+	}
+}
+
+func BenchmarkBTreeDelete(b *testing.B) {
+	b.StopTimer()
+	insertP := perm(benchmarkTreeSize)
+	removeP := perm(benchmarkTreeSize)
+	b.StartTimer()
+	i := 0
+	for i < b.N {
+		b.StopTimer()
+		tr := newBTree(InclusiveOverlapper)
+		for _, item := range insertP {
+			if err := tr.Insert(item, false); err != nil {
+				b.Fatal(err)
+			}
+		}
+		b.StartTimer()
+		for _, item := range removeP {
+			tr.Delete(item, false)
+			i++
+			if i >= b.N {
+				return
+			}
+		}
+		if tr.Len() > 0 {
+			panic(tr.Len())
+		}
+	}
+}
+
+func BenchmarkBTreeGet(b *testing.B) {
+	b.StopTimer()
+	insertP := perm(benchmarkTreeSize)
+	removeP := perm(benchmarkTreeSize)
+	b.StartTimer()
+	i := 0
+	for i < b.N {
+		b.StopTimer()
+		tr := newBTree(InclusiveOverlapper)
+		for _, item := range insertP {
+			if err := tr.Insert(item, false); err != nil {
+				b.Fatal(err)
+			}
+		}
+		b.StartTimer()
+		for _, item := range removeP {
+			tr.Get(item.Range())
+			i++
+			if i >= b.N {
+				return
+			}
+		}
+	}
+}
