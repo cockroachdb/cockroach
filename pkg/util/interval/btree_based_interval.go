@@ -84,8 +84,8 @@ func newBTreeWithDegree(overlapper Overlapper, minimumDegree int) *btree {
 		panic("bad minimum degree")
 	}
 	return &btree{
-		MinimumDegree: minimumDegree,
-		Overlapper:    overlapper,
+		minimumDegree: minimumDegree,
+		overlapper:    overlapper,
 		freelist:      NewFreeList(DefaultBTreeFreeListSize),
 	}
 }
@@ -332,7 +332,7 @@ func (t *btree) isEmpty() bool {
 }
 
 func (t *btree) Get(r Range) (o []Interface) {
-	return t.GetWithOverlapper(r, t.Overlapper)
+	return t.GetWithOverlapper(r, t.overlapper)
 }
 
 func (t *btree) GetWithOverlapper(r Range, overlapper Overlapper) (o []Interface) {
@@ -353,11 +353,11 @@ func (t *btree) DoMatching(fn Operation, r Range) bool {
 	if !t.overlappable(r) {
 		return false
 	}
-	return t.root.doMatch(fn, r, t.Overlapper)
+	return t.root.doMatch(fn, r, t.overlapper)
 }
 
 func (t *btree) overlappable(r Range) bool {
-	if t.isEmpty() || !t.Overlapper.Overlap(r, t.root.Range) {
+	if t.isEmpty() || !t.overlapper.Overlap(r, t.root.Range) {
 		return false
 	}
 	return true
@@ -798,8 +798,8 @@ var _ Tree = (*btree)(nil)
 type btree struct {
 	root          *node
 	length        int
-	Overlapper    Overlapper
-	MinimumDegree int
+	overlapper    Overlapper
+	minimumDegree int
 	freelist      *FreeList
 }
 
@@ -862,13 +862,13 @@ func (n *node) adjustRanges() {
 
 // maxItems returns the max number of Interfaces to allow per node.
 func (t *btree) maxItems() int {
-	return t.MinimumDegree*2 - 1
+	return t.minimumDegree*2 - 1
 }
 
 // minItems returns the min number of Interfaces to allow per node (ignored
 // for the root node).
 func (t *btree) minItems() int {
-	return t.MinimumDegree - 1
+	return t.minimumDegree - 1
 }
 
 func (t *btree) newNode() (n *node) {
