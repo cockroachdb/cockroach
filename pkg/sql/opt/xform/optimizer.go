@@ -849,3 +849,14 @@ func (o *Optimizer) disableRules(probability float64) {
 		return true
 	})
 }
+
+func (o *Optimizer) String() string {
+	return o.FormatMemo(FmtPretty)
+}
+
+// FormatMemo returns a string representation of the memo for testing
+// and debugging. The given flags control which properties are shown.
+func (o *Optimizer) FormatMemo(flags FmtFlags) string {
+	mf := makeMemoFormatter(o, flags)
+	return mf.format()
+}
