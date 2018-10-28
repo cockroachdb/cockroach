@@ -49,6 +49,19 @@ const (
 	Unhandled
 )
 
+// _TYPE is the template type variable for types.T. It shouldn't be used by
+// non-template code.
+const _TYPE = Unhandled
+
+// AllTypes is slice of all exec types.
+var AllTypes []T
+
+func init() {
+	for i := Bool; i < Unhandled; i++ {
+		AllTypes = append(AllTypes, i)
+	}
+}
+
 // FromColumnType returns the T that corresponds to the input ColumnType.
 func FromColumnType(ct sqlbase.ColumnType) T {
 	switch ct.SemanticType {
@@ -125,4 +138,17 @@ func (t T) GoTypeName() string {
 	default:
 		panic(fmt.Sprintf("unhandled type %d", t))
 	}
+}
+
+// EqualityFunction returns the name of the non-infix equality function for a
+// given type, if it exists. For example, the type Int64 has an infix equality
+// method, ==, so it doesn't have a case for EqualityFunction. But Bytes, since
+// it's implemented with the Go type []byte, is compared with bytes.Equal, so
+// it has a definition here.
+func (t T) EqualityFunction() string {
+	switch t {
+	case Bytes:
+		return "bytes.Equal"
+	}
+	return ""
 }
