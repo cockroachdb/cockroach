@@ -29,6 +29,11 @@ const (
 	DefaultBTreeMinimumDegree = 32
 )
 
+var (
+	nilItems    = make(items, 16)
+	nilChildren = make(children, 16)
+)
+
 var _ = newBTree
 
 // newBTree creates a new interval tree with the given overlapper function and
@@ -94,6 +99,16 @@ func (s *items) pop() (out Interface) {
 	return
 }
 
+// truncate truncates this instance at index so that it contains only the
+// first index items. index must be less than or equal to length.
+func (s *items) truncate(index int) {
+	var toClear items
+	*s, toClear = (*s)[:index], (*s)[index:]
+	for len(toClear) > 0 {
+		toClear = toClear[copy(toClear, nilItems):]
+	}
+}
+
 // find returns the index where the given Interface should be inserted into this
 // list. 'found' is true if the interface already exists in the list at the
 // given index.
@@ -140,6 +155,16 @@ func (s *children) pop() (out *node) {
 	return
 }
 
+// truncate truncates this instance at index so that it contains only the
+// first index children. index must be less than or equal to length.
+func (s *children) truncate(index int) {
+	var toClear children
+	*s, toClear = (*s)[:index], (*s)[index:]
+	for len(toClear) > 0 {
+		toClear = toClear[copy(toClear, nilChildren):]
+	}
+}
+
 // node is an internal node in a tree.
 //
 // It must at all times maintain the invariant that either
@@ -182,11 +207,11 @@ func (n *node) split(i int, fast bool) (Interface, *node) {
 	second := n.t.newNode()
 	second.items = make(items, n.t.minItems())
 	copy(second.items, n.items[i+1:])
-	n.items = n.items[:i]
+	n.items.truncate(i)
 	if len(n.children) > 0 {
 		second.children = make(children, n.t.minItems()+1)
 		copy(second.children, n.children[i+1:])
-		n.children = n.children[:i+1]
+		n.children.truncate(i + 1)
 	}
 	if !fast {
 		// adjust range for the first split part
