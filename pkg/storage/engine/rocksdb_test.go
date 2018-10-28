@@ -634,7 +634,7 @@ func TestConcurrentBatch(t *testing.T) {
 				t.Fatalf("target size (%d) should be larger than the max batch group size (%d)",
 					targetSize, maxBatchGroupSize)
 			}
-			if len(batch.Repr()) >= targetSize {
+			if batch.Len() >= targetSize {
 				break
 			}
 		}
