@@ -154,7 +154,7 @@ func Compare(a, b Interface) int {
 // former has measurably better performance than the latter. So Equal should be used when only
 // equality state is needed.
 func Equal(a, b Interface) bool {
-	return a.Range().Start.Equal(b.Range().Start) && a.ID() == b.ID()
+	return a.ID() == b.ID() && a.Range().Start.Equal(b.Range().Start)
 }
 
 // A Comparable is a type that describes the ends of a Range.
@@ -224,6 +224,8 @@ type Tree interface {
 	Iterator() TreeIterator
 	// Clear this tree.
 	Clear()
+	// Clone clones the tree, returning a copy.
+	Clone() Tree
 }
 
 // TreeIterator iterates over all intervals stored in the interval tree, in-order.
@@ -234,7 +236,7 @@ type TreeIterator interface {
 	Next() (Interface, bool)
 }
 
-var useBTreeImpl = envutil.EnvOrDefaultBool("COCKROACH_INTERVAL_BTREE", false)
+var useBTreeImpl = envutil.EnvOrDefaultBool("COCKROACH_INTERVAL_BTREE", true)
 
 // NewTree creates a new interval tree with the given overlapper function. It
 // uses the augmented Left-Leaning Red Black tree implementation.
