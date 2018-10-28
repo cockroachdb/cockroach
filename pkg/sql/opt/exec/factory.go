@@ -70,7 +70,7 @@ type Factory interface {
 
 	// ConstructFilter returns a node that applies a filter on the results of
 	// the given input node.
-	ConstructFilter(n Node, filter tree.TypedExpr) (Node, error)
+	ConstructFilter(n Node, filter tree.TypedExpr, reqOrdering OutputOrdering) (Node, error)
 
 	// ConstructSimpleProject returns a node that applies a "simple" projection on the
 	// results of the given input node. A simple projection is one that does not
@@ -78,16 +78,22 @@ type Factory interface {
 	// more efficient version of ConstructRender.
 	// The colNames argument is optional; if it is nil, the names of the
 	// corresponding input columns are kept.
-	ConstructSimpleProject(n Node, cols []ColumnOrdinal, colNames []string) (Node, error)
+	ConstructSimpleProject(
+		n Node, cols []ColumnOrdinal, colNames []string, reqOrdering OutputOrdering,
+	) (Node, error)
 
 	// ConstructRender returns a node that applies a projection on the results of
 	// the given input node. The projection can contain new expressions.
-	ConstructRender(n Node, exprs tree.TypedExprs, colNames []string) (Node, error)
+	ConstructRender(
+		n Node, exprs tree.TypedExprs, colNames []string, reqOrdering OutputOrdering,
+	) (Node, error)
 
 	// ConstructHashJoin returns a node that runs a hash-join between the results
 	// of two input nodes. The expression can refer to columns from both inputs
 	// using IndexedVars (first the left columns, then the right columns).
-	ConstructHashJoin(joinType sqlbase.JoinType, left, right Node, onCond tree.TypedExpr) (Node, error)
+	ConstructHashJoin(
+		joinType sqlbase.JoinType, left, right Node, onCond tree.TypedExpr,
+	) (Node, error)
 
 	// ConstructMergeJoin returns a node that (under distsql) runs a merge join.
 	// The ON expression can refer to columns from both inputs using IndexedVars

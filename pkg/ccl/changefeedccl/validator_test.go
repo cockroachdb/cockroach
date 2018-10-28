@@ -167,6 +167,7 @@ func TestFingerprintValidator(t *testing.T) {
 	t.Run(`missed_initial`, func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE missed_initial (k INT PRIMARY KEY, v INT)`)
 		v := NewFingerprintValidator(sqlDB.DB, `foo`, `missed_initial`, []string{`p`})
+		noteResolved(t, v, `p`, ts[0])
 		// Intentionally missing {"k":1,"v":1} at ts[1].
 		v.NoteRow(ignored, `[1]`, `{"k":1,"v":2}`, ts[2])
 		v.NoteRow(ignored, `[1]`, `{"k":2,"v":2}`, ts[2])
@@ -179,6 +180,7 @@ func TestFingerprintValidator(t *testing.T) {
 	t.Run(`missed_middle`, func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE missed_middle (k INT PRIMARY KEY, v INT)`)
 		v := NewFingerprintValidator(sqlDB.DB, `foo`, `missed_middle`, []string{`p`})
+		noteResolved(t, v, `p`, ts[0])
 		v.NoteRow(ignored, `[1]`, `{"k":1,"v":1}`, ts[1])
 		// Intentionally missing {"k":1,"v":2} at ts[2].
 		v.NoteRow(ignored, `[1]`, `{"k":2,"v":2}`, ts[2])
@@ -190,6 +192,28 @@ func TestFingerprintValidator(t *testing.T) {
 			`fingerprints did not match at `+ts[3].Prev().AsOfSystemTime()+
 				`: 1099511631581 vs 1099511631582`,
 		)
+	})
+	t.Run(`missed_end`, func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE missed_end (k INT PRIMARY KEY, v INT)`)
+		v := NewFingerprintValidator(sqlDB.DB, `foo`, `missed_end`, []string{`p`})
+		noteResolved(t, v, `p`, ts[0])
+		v.NoteRow(ignored, `[1]`, `{"k":1,"v":1}`, ts[1])
+		v.NoteRow(ignored, `[1]`, `{"k":1,"v":2}`, ts[2])
+		v.NoteRow(ignored, `[1]`, `{"k":2,"v":2}`, ts[2])
+		// Intentionally missing {"k":1,"v":3} at ts[3].
+		noteResolved(t, v, `p`, ts[3])
+		assertValidatorFailures(t, v,
+			`fingerprints did not match at `+ts[3].AsOfSystemTime()+
+				`: 1099511631580 vs 1099511631581`,
+		)
+	})
+	t.Run(`initial_scan`, func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE initial_scan (k INT PRIMARY KEY, v INT)`)
+		v := NewFingerprintValidator(sqlDB.DB, `foo`, `initial_scan`, []string{`p`})
+		v.NoteRow(ignored, `[1]`, `{"k":1,"v":3}`, ts[4])
+		v.NoteRow(ignored, `[1]`, `{"k":2,"v":2}`, ts[4])
+		noteResolved(t, v, `p`, ts[4])
+		assertValidatorFailures(t, v)
 	})
 	t.Run(`unknown_partition`, func(t *testing.T) {
 		v := NewFingerprintValidator(sqlDB.DB, `foo`, `unknown_partition`, []string{`p`})

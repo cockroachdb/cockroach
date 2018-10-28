@@ -17,7 +17,7 @@ group            ·            ·                (max)           ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM foo WITH ORDINALITY WHERE ordinality > 1 ORDER BY ordinality
 ----
-filter           ·       ·                 (x, "ordinality")  ·
+filter           ·       ·                 (x, "ordinality")  +"ordinality"
  │               filter  "ordinality" > 1  ·                  ·
  └── ordinality  ·       ·                 (x, "ordinality")  ·
       └── scan   ·       ·                 (x)                ·

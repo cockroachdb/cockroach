@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -931,8 +932,6 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 func TestStatusAPIStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/27272")
-
 	testCluster := serverutils.StartTestCluster(t, 3, base.TestClusterArgs{})
 	defer testCluster.Stopper().Stop(context.Background())
 
@@ -945,7 +944,7 @@ func TestStatusAPIStatements(t *testing.T) {
 	}{
 		{stmt: `CREATE DATABASE roachblog`},
 		{stmt: `SET database = roachblog`},
-		{stmt: `CREATE TABLE posts (id INT PRIMARY KEY, body TEXT)`},
+		{stmt: `CREATE TABLE posts (id INT PRIMARY KEY, body STRING)`},
 		{
 			stmt:          `INSERT INTO posts VALUES (1, 'foo')`,
 			fingerprinted: `INSERT INTO posts VALUES (_, _)`,
@@ -982,6 +981,7 @@ func TestStatusAPIStatements(t *testing.T) {
 	sort.Strings(statementsInResponse)
 
 	if !reflect.DeepEqual(expectedStatements, statementsInResponse) {
-		t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v", expectedStatements, statementsInResponse)
+		t.Fatalf("expected queries\n\n%v\n\ngot queries\n\n%v\n%s",
+			expectedStatements, statementsInResponse, pretty.Sprint(resp))
 	}
 }

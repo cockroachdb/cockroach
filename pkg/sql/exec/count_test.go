@@ -14,23 +14,34 @@
 
 package exec
 
-var zeroBoolVec = make([]bool, ColBatchSize)
+import (
+	"testing"
 
-// This operator zeroes a column.
-type zeroBoolOp struct {
-	input Operator
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+)
 
-	colIdx int
-}
-
-func (z zeroBoolOp) Next() ColBatch {
-	batch := z.input.Next()
-	if batch.Length() == 0 {
-		return batch
+func TestCount(t *testing.T) {
+	tcs := []struct {
+		tuples   tuples
+		expected tuples
+	}{
+		{
+			tuples:   tuples{{1}, {1}},
+			expected: tuples{{2}},
+		},
+		{
+			tuples:   tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
+			expected: tuples{{10}},
+		},
 	}
+	for _, tc := range tcs {
+		runTests(t, tc.tuples, []types.T{}, func(t *testing.T, input Operator) {
+			count := NewCountOp(input)
+			out := newOpTestOutput(count, []int{0}, tc.expected)
 
-	copy(batch.ColVec(z.colIdx).Bool(), zeroBoolVec)
-	return batch
+			if err := out.Verify(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
 }
-
-func (zeroBoolOp) Init() {}

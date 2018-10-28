@@ -32,21 +32,29 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // ErrInvertedRange is returned if an interval is used where the start value is greater
 // than the end value.
-var ErrInvertedRange = errors.New("interval: inverted range")
+var ErrInvertedRange error = &log.SafeType{V: errors.New("interval: inverted range")}
 
 // ErrEmptyRange is returned if an interval is used where the start value is equal
 // to the end value.
-var ErrEmptyRange = errors.New("interval: empty range")
+var ErrEmptyRange error = &log.SafeType{V: errors.New("interval: empty range")}
+
+// ErrNilRange is returned if an interval is used where both the start value and
+// the end value are nil. This is a specialization of ErrEmptyRange.
+var ErrNilRange error = &log.SafeType{V: errors.New("interval: nil range")}
 
 func rangeError(r Range) error {
 	switch r.Start.Compare(r.End) {
 	case 1:
 		return ErrInvertedRange
 	case 0:
+		if len(r.Start) == 0 && len(r.End) == 0 {
+			return ErrNilRange
+		}
 		return ErrEmptyRange
 	default:
 		return nil

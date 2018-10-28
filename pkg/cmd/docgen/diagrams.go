@@ -399,6 +399,30 @@ var specs = []stmtSpec{
 		replace: map[string]string{"relation_expr": "view_name", "qualified_name": "name"}, unlink: []string{"view_name", "name"},
 	},
 	{
+		name:    "alter_zone_database_stmt",
+		inline:  []string{"set_zone_config", "var_set_list"},
+		replace: map[string]string{"var_name": "variable", "var_value": "value"},
+		unlink:  []string{"variable", "value"},
+	},
+	{
+		name:    "alter_zone_index_stmt",
+		inline:  []string{"table_name_with_index", "set_zone_config", "var_set_list"},
+		replace: map[string]string{"var_name": "variable", "var_value": "value"},
+		unlink:  []string{"variable", "value"},
+	},
+	{
+		name:    "alter_zone_range_stmt",
+		inline:  []string{"set_zone_config", "var_set_list"},
+		replace: map[string]string{"zone_name": "range_name", "var_name": "variable", "var_value": "value"},
+		unlink:  []string{"range_name", "variable", "value"},
+	},
+	{
+		name:    "alter_zone_table_stmt",
+		inline:  []string{"set_zone_config", "var_set_list"},
+		replace: map[string]string{"var_name": "variable", "var_value": "value"},
+		unlink:  []string{"variable", "value"},
+	},
+	{
 		name:   "backup",
 		stmt:   "backup_stmt",
 		inline: []string{"table_pattern_list", "name_list", "opt_as_of_clause", "opt_incremental", "opt_with_options"},
@@ -679,7 +703,6 @@ var specs = []stmtSpec{
 		inline: []string{"explain_option_list"},
 		replace: map[string]string{
 			"explain_option_name": "( 'VERBOSE' | 'TYPES' | 'OPT' | 'DISTSQL' )",
-			"preparable_stmt":     "explainable_stmt",
 		},
 		exclude: []*regexp.Regexp{regexp.MustCompile("'ANALYZE'")},
 	},
@@ -689,7 +712,6 @@ var specs = []stmtSpec{
 		match: []*regexp.Regexp{regexp.MustCompile("ANALYZE")},
 		replace: map[string]string{
 			"explain_option_list": "'DISTSQL'",
-			"preparable_stmt":     "explainable_stmt",
 		},
 		unlink: []string{"'DISTSQL'"},
 	},
@@ -957,17 +979,14 @@ var specs = []stmtSpec{
 		inline: []string{"opt_ordinality", "opt_alias_clause", "opt_expr_list", "opt_column_list", "name_list", "alias_clause"},
 		replace: map[string]string{
 			"select_with_parens": "'(' select_stmt ')'",
-			"opt_index_flags":    "( '@' scan_parameters | )",
+			"opt_index_flags":    "( '@' index_name | )",
 			"relation_expr":      "table_name",
 			"func_table":         "func_application",
 			//			"| func_name '(' ( expr_list |  ) ')' ( 'WITH' 'ORDINALITY' |  ) ( ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) ) |  )": "",
 			"| special_function ( 'WITH' 'ORDINALITY' |  ) ( ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) ) |  )": "",
 			"| '(' joined_table ')' ( 'WITH' 'ORDINALITY' |  ) ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) )":    "| '(' joined_table ')' ( 'WITH' 'ORDINALITY' |  ) ( ( 'AS' table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) | table_alias_name ( '(' ( ( name ) ( ( ',' name ) )* ) ')' |  ) ) |  )",
 		},
-		unlink: []string{"index_name"},
-		relink: map[string]string{
-			"scan_parameters": "opt_index_flags",
-		},
+		unlink:  []string{"index_name"},
 		nosplit: true,
 	},
 	{
@@ -1106,6 +1125,10 @@ var specs = []stmtSpec{
 		name:  "show_users",
 		stmt:  "show_stmt",
 		match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'USERS'")},
+	},
+	{
+		name:   "show_zone_stmt",
+		inline: []string{"opt_partition", "table_name_with_index", "partition"},
 	},
 	{
 		name:   "sort_clause",

@@ -1461,7 +1461,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 		}
 	}()
 
-	c := &csvInputReader{recordCh: recordCh, tableDesc: tableDesc}
+	c := &csvInputReader{recordCh: recordCh, tableDesc: tableDesc.TableDesc()}
 	// start up workers.
 	for i := 0; i < runtime.NumCPU(); i++ {
 		group.Go(func() error {

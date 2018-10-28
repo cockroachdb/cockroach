@@ -19,6 +19,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
 
@@ -249,11 +251,12 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ *config.Syst
 	if shouldTruncate(truncatableIndexes, raftLogSize) {
 		r.mu.Lock()
 		raftLogSize := r.mu.raftLogSize
+		lastIndex := r.mu.lastIndex
 		r.mu.Unlock()
 
 		if log.V(1) {
-			log.Infof(ctx, "truncating raft log %d-%d: size=%d",
-				oldestIndex-truncatableIndexes, oldestIndex, raftLogSize)
+			log.Infof(ctx, "truncating raft log entries [%d-%d], resulting in log [%d,%d], reclaiming ~%s",
+				oldestIndex-truncatableIndexes, oldestIndex-1, oldestIndex, lastIndex, humanizeutil.IBytes(raftLogSize))
 		}
 		b := &client.Batch{}
 		b.AddRawRequest(&roachpb.TruncateLogRequest{

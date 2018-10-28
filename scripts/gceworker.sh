@@ -56,8 +56,11 @@ case "${cmd}" in
     ;;
     start)
     gcloud compute instances start "${NAME}"
+    echo "waiting for node to finish starting..."
     # Wait for vm and sshd to start up.
-    retry gcloud compute ssh "${NAME}" --command=true
+    retry gcloud compute ssh "${NAME}" --command=true || true
+    # SSH into the node, since that's probably why we started it.
+    gcloud compute ssh "${NAME}" --ssh-flag="-A" "$@"
     ;;
     stop)
     gcloud compute instances stop "${NAME}"

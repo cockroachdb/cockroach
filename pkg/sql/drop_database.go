@@ -237,7 +237,7 @@ func (p *planner) accumulateDependentTables(
 ) error {
 	for _, ref := range desc.DependedOnBy {
 		dependentTables[ref.ID] = true
-		dependentDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, ref.ID)
+		dependentDesc, err := p.Tables().getMutableTableVersionByID(ctx, ref.ID, p.txn)
 		if err != nil {
 			return err
 		}

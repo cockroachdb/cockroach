@@ -47,12 +47,12 @@ func parseTableDesc(createTableStmt string) (*sqlbase.TableDescriptor, error) {
 	st := cluster.MakeTestingClusterSettings()
 	const parentID = sqlbase.ID(keys.MaxReservedDescID + 1)
 	const tableID = sqlbase.ID(keys.MaxReservedDescID + 2)
-	tableDesc, err := importccl.MakeSimpleTableDescriptor(
+	mutDesc, err := importccl.MakeSimpleTableDescriptor(
 		ctx, st, createTable, parentID, tableID, importccl.NoFKs, hlc.UnixNano())
 	if err != nil {
 		return nil, err
 	}
-	return tableDesc, tableDesc.ValidateTable(st)
+	return mutDesc.TableDesc(), mutDesc.TableDesc().ValidateTable(st)
 }
 
 func parseValues(tableDesc *sqlbase.TableDescriptor, values string) ([]sqlbase.EncDatumRow, error) {
@@ -102,14 +102,14 @@ func parseAvroSchema(j string) (*avroSchemaRecord, error) {
 	// serde. Instead of duplicating the logic, fake out a TableDescriptor, so
 	// we can reuse tableToAvroSchema and get them for free.
 	tableDesc := &sqlbase.TableDescriptor{
-		Name: avroUnescapeName(s.Name),
+		Name: AvroNameToSQLName(s.Name),
 	}
 	for _, f := range s.Fields {
 		// s.Fields[idx] has `Name` and `SchemaType` set but nonething else.
 		// They're needed for serialization/deserialization, so fake out a
 		// column descriptor so that we can reuse columnDescToAvroSchema to get
 		// all the various fields of avroSchemaField populated for free.
-		colDesc, err := avroSchemaToColDesc(avroUnescapeName(f.Name), f.SchemaType)
+		colDesc, err := avroSchemaToColDesc(AvroNameToSQLName(f.Name), f.SchemaType)
 		if err != nil {
 			return nil, err
 		}
@@ -273,6 +273,21 @@ func TestAvroSchema(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("escaping", func(t *testing.T) {
+		tableDesc, err := parseTableDesc(`CREATE TABLE "☃" (🍦 INT PRIMARY KEY)`)
+		require.NoError(t, err)
+		tableSchema, err := tableToAvroSchema(tableDesc)
+		require.NoError(t, err)
+		require.Equal(t,
+			`{"type":"record","name":"_u2603_","fields":[{"type":"long","name":"_u0001f366_"}]}`,
+			tableSchema.codec.Schema())
+		indexSchema, err := indexToAvroSchema(tableDesc, &tableDesc.PrimaryIndex)
+		require.NoError(t, err)
+		require.Equal(t,
+			`{"type":"record","name":"_u2603_","fields":[{"type":"long","name":"_u0001f366_"}]}`,
+			indexSchema.codec.Schema())
+	})
 }
 
 func (f *avroSchemaField) defaultValueNative() (interface{}, bool) {

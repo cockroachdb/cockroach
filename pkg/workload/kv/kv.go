@@ -35,7 +35,15 @@ import (
 )
 
 const (
-	kvSchema = `(k BIGINT NOT NULL PRIMARY KEY, v BYTES NOT NULL)`
+	kvSchema = `(
+		k BIGINT NOT NULL PRIMARY KEY,
+		v BYTES NOT NULL
+	)`
+	kvSchemaWithIndex = `(
+		k BIGINT NOT NULL PRIMARY KEY,
+		v BYTES NOT NULL,
+		INDEX (v)
+	)`
 )
 
 type kv struct {
@@ -49,7 +57,9 @@ type kv struct {
 	seed                                 int64
 	writeSeq                             string
 	sequential                           bool
+	zipfian                              bool
 	splits                               int
+	secondaryIndex                       bool
 	useOpt                               bool
 }
 
@@ -88,6 +98,8 @@ var kvMeta = workload.Meta{
 		g.flags.IntVar(&g.readPercent, `read-percent`, 0,
 			`Percent (0-100) of operations that are reads of existing keys.`)
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
+		g.flags.BoolVar(&g.zipfian, `zipfian`, false,
+			`Pick keys in a zipfian distribution instead of randomly.`)
 		g.flags.BoolVar(&g.sequential, `sequential`, false,
 			`Pick keys sequentially instead of randomly.`)
 		g.flags.StringVar(&g.writeSeq, `write-seq`, "",
@@ -96,6 +108,8 @@ var kvMeta = workload.Meta{
 				`previous --sequential run and R implies a previous random run.`)
 		g.flags.IntVar(&g.splits, `splits`, 0,
 			`Number of splits to perform before starting normal operations.`)
+		g.flags.BoolVar(&g.secondaryIndex, `secondary-index`, false,
+			`Add a secondary index to the schema`)
 		g.flags.BoolVar(&g.useOpt, `use-opt`, true, `Use cost-based optimizer`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
@@ -119,6 +133,9 @@ func (w *kv) Hooks() workload.Hooks {
 			if w.sequential && w.splits > 0 {
 				return errors.New("'sequential' and 'splits' cannot both be enabled")
 			}
+			if w.sequential && w.zipfian {
+				return errors.New("'sequential' and 'zipfian' cannot both be enabled")
+			}
 			return nil
 		},
 	}
@@ -127,8 +144,7 @@ func (w *kv) Hooks() workload.Hooks {
 // Tables implements the Generator interface.
 func (w *kv) Tables() []workload.Table {
 	table := workload.Table{
-		Name:   `kv`,
-		Schema: kvSchema,
+		Name: `kv`,
 		// TODO(dan): Support initializing kv with data.
 		Splits: workload.Tuples(
 			w.splits,
@@ -138,6 +154,11 @@ func (w *kv) Tables() []workload.Table {
 				return []interface{}{splitPoint}
 			},
 		),
+	}
+	if w.secondaryIndex {
+		table.Schema = kvSchemaWithIndex
+	} else {
+		table.Schema = kvSchema
 	}
 	return []workload.Table{table}
 }
@@ -220,6 +241,8 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 		}
 		if w.sequential {
 			op.g = newSequentialGenerator(seq)
+		} else if w.zipfian {
+			op.g = newZipfianGenerator(seq)
 		} else {
 			op.g = newHashGenerator(seq)
 		}
@@ -388,6 +411,51 @@ func (g *sequentialGenerator) rand() *rand.Rand {
 }
 
 func (g *sequentialGenerator) sequence() int64 {
+	return atomic.LoadInt64(&g.seq.val)
+}
+
+type zipfGenerator struct {
+	seq    *sequence
+	random *rand.Rand
+	zipf   *zipf
+}
+
+// Creates a new zipfian generator.
+func newZipfianGenerator(seq *sequence) *zipfGenerator {
+	random := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	return &zipfGenerator{
+		seq:    seq,
+		random: random,
+		zipf:   newZipf(1.1, 1, uint64(math.MaxInt64)),
+	}
+}
+
+// Get a random number seeded by v that follows the
+// zipfian distribution.
+func (g *zipfGenerator) zipfian(seed int64) int64 {
+	randomWithSeed := rand.New(rand.NewSource(seed))
+	return int64(g.zipf.Uint64(randomWithSeed))
+}
+
+// Get a zipf write key appropriately.
+func (g *zipfGenerator) writeKey() int64 {
+	return g.zipfian(g.seq.write())
+}
+
+// Get a zipf read key appropriately.
+func (g *zipfGenerator) readKey() int64 {
+	v := g.seq.read()
+	if v == 0 {
+		return 0
+	}
+	return g.zipfian(g.random.Int63n(v))
+}
+
+func (g *zipfGenerator) rand() *rand.Rand {
+	return g.random
+}
+
+func (g *zipfGenerator) sequence() int64 {
 	return atomic.LoadInt64(&g.seq.val)
 }
 

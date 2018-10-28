@@ -1,9 +1,9 @@
 - Feature Name: parallel commit
 - Status: draft
 - Start Date: 2018-30-24
-- Authors: Tobias Schottdorf
+- Authors: Tobias Schottdorf, Nathan VanBenschoten
 - RFC PR: #24194
-- Cockroach Issue: TBD
+- Cockroach Issue: #30999
 
 # Summary
 
@@ -205,16 +205,21 @@ On the face of it, this looks very similar to the non-retryable case, and from t
 
 ## Detailed design
 
-### DistSender
+### txnCommitter
 
-The parallel commit machinery lives in `DistSender` and gets activated when a `BatchRequest` which contains at least one request plus a committing `EndTransaction` arrives, after having first attempted to commit on the 1PC path (but having failed due to the batch spanning ranges).
+The parallel commit machinery lives in a `txnInterceptor` called `txnCommitter`. The interceptor
+lives below `txnPipeliner` in the `TxnCoordSender`'s interceptor stack. It gets activated when a
+`BatchRequest` containing at least one request plus a committing `EndTransaction` arrives. These
+other requests may be `BeginTransaction` requests, writes, `QueryIntent` requests, or any other
+transactional requests.
 
 The code first checks whether the batch is eligible for parallel commit. This means that the batch contains no
 
 - ranged (write) request. At the time of writing, the only such request type is `DeleteRange`, and we tend to try to use it less (#23258). Handling ranged requests is difficult (near impossible). Consider a `DeleteRange` that writes into a span and lays down an intent (on the single affected key), and a later (unrelated) write into that range (on a previously empty key). The status resolution process needs to know that the span related to the promised write was written atomically so that it can conclude from finding one intent that all intents are there. This implies that the ranged requests corresponding to promised writes must not be split across ranges, which adds an unreasonable amount of complexity.
 - commit trigger. Commit triggers are only used by internal transactions for which the transaction record's lease is usually colocated with the client running the transaction (so that only one extra round trip to the follower is necessary to commit on the slow path). Support for this can be added later: add a commit trigger to the `STAGED` proto and, if set, don't allow the commit trigger to change when the transaction commits explicitly.
 
-If the batch is not eligible, today's behavior is applied, i.e. the batch is first sent without the commit, and then committed separately.
+If the batch is not eligible, the batch passes through the `txnCommitter` unchanged. It will be
+sent with a `COMMITTED` status as always.
 
 When it is eligible, a copy of the `EndTransaction` request is created, with the status changed to `STAGED`, and the `PromisedWrites` field is populated from the other requests in the batch according to the protobuf below.
 
@@ -231,27 +236,44 @@ When it is eligible, a copy of the `EndTransaction` request is created, with the
   //
   // The parallel commit mechanism is only active for batches which
   // contain no range requests or commit trigger.
-  repeated message PromisedWrite {
+  repeated message SequencedWrite {
     bytes key = 1;
     int32 seq = 3;
   } promised_writes = 17;
 ```
 
-Next, `DistSender` sends the batch in parallel, replacing the original `EndTransaction` with the staged one.
-
 In the happy case, all requests come back successfully. Errors (from above the routing layer) are propagated up the stack, with the client (`TxnCoordSender`) restarting (includes refreshing), or aborting the transaction as desired (to avoid forcing concurrent transactions into the status resolution process).
 
 Note that RPC-level errors from the final batch will be turned into ambiguous commit errors as they are today (this happens at the RPC layer and wont be affected by the changes proposed here).
 
-If the writes come back, it is checked whether they require a transaction restart. This is the case if the returned transaction has had its timestamp pushed, or if it has the `WriteTooOld` flag set. If this is the case, a transaction retry error is synthesized and sent back to up the stack to `TxnCoordSender`. Note that `TxnCoordSender` also expects to learn about the intents which were written and abuses the `client.Sender` interface to this effect; these semantics are kept, though during implementation widening the interface between `TxnCoordSender` and `DistSender` to account for refreshs will be considered.
+If the writes come back, it is checked whether they require a transaction restart. This is the case if the returned transaction has had its timestamp pushed, or if it has the `WriteTooOld` flag set. If this is the case, a transaction retry error is synthesized and sent up the `TxnCoordSender`'s interceptor stack. Note that `TxnCoordSender` also expects to learn about the intents which were written and abuses the `client.Sender` interface to this effect; these semantics are kept, though during implementation widening the interface between `TxnCoordSender` and `DistSender` to account for refreshes will be considered.
 
-If the transaction *can* commit, it returns the final transaction to the client and asynchronously sends an `EndTransactionRequest` that finalizes the transaction record (and as a side effect, eagerly resolves the intents). Expected responses to the `EndTransactionRequest` are RPC errors (timeouts, etc) and success. In particular, we can assert that the commit is not rejected.
+If the transaction *can* commit, the `txnCommitter` returns the final transaction to the client and asynchronously sends an `EndTransactionRequest` that finalizes the transaction record (and as a side effect, eagerly resolves the intents). Expected responses to the `EndTransactionRequest` are RPC errors (timeouts, etc) and success. In particular, we can assert that the commit is not rejected.
 
-### Sequence Number Assignment
+When adding in this new interceptor, we will also move `txnIntentCollector` below the `txnPipeliner`,
+so that the new order between them becomes: `txnPipeliner` -> `txnIntentCollector` -> `txnIntentCollector`.
+Getting the refresh behavior correct may also require us to move `txnSpanRefresher` above all three
+of these interceptors. There are no known issues with making those rearrangements.
 
-Currently, sequence numbers are assigned in sort of a haphazard way by incrementing a counter before sending an RPC to a single range. This makes it more than awkward to compute the promised writes' sequence numbers, and will need to be refactored. In fact, the interplay with #16026 will likely require a caller of `DistSender` (`client.Txn)` to supply promised writes for earlier in-flight operations. This implies that sequence numbers should be assigned at the level of `client.Txn` and likely should be set per-request, in `RequestHeader`.
+### DistSender
 
-This is a nontrivial refactor since it requires a migration (and deprecates the `txn.Sequence` field), and should be carried out before landing the main work here.
+DistSender is adjusted to allow `EndTransaction` requests to be sent in parallel with other
+requests if its status is anything other than `COMMITTED`. In practice, this will never be used with
+`PENDING` or `ABORTED` statuses, but it means that `EndTransaction` requests with a `STAGING`
+status can be sent in parallel with other requests in its batch.
+
+### Replica
+
+The `txnCommitter` is too high up the stack to know whether a committing `EndTransaction` request
+can skip the `STAGING` status and move straight to a `COMMITTED` status. This is the case when
+all promised writes in the request are on the same range as the transaction record. This detection
+could be performed in the `DistSender`, but that's not desirable because it leaks too much knowledge
+about transactions into the `DistSender`.
+
+Instead, Replica is made aware of `EndTransaction` requests with the `STAGING` status. In a similar
+fashion to how Replicas detects 1-phase commit batches, it is made to check for `STAGING` `EndTransaction`
+requests that can skip the `STAGING` phase and move straight to `COMMITTING`. When the request finishes,
+it will return to the txn coordinator, informing it of the new transaction status.
 
 ### Status Resolution Process
 
@@ -269,9 +291,9 @@ With the introduction of the `STAGED` transaction status, push requests may fail
 
 An alternative to be considered is to return an error instead. This doesn't work well for batches of push requests, though. If during implementation we decide for the first option, we may also consider removing `TransactionPushError` in the process.
 
-#### PreventIntentRequest
+#### QueryIntent(Prevent=true)
 
-At the heart of the process is trying to prevent an intent of the transaction to be laid down (which is only possible if it isn't already there) at at the provisional commit timestamp. To achieve this efficiently, we introduce a new point read request, `PreventIntentRequest`. This request populates the timestamp cache (as any read does) and returns whether there is an intent at the given key for the specified transaction, timestamp, and at *at least* the specified sequence number. We don't check the exact sequence number because a batch could contain overlapping writes, in which case only the latest sequence number matters. If we trust that `PromisedWrites` has been faithfully populated, checking for "greater than or equal" is equivalent to (but simpler than) computing and keeping only the last write to a given key's sequence number.
+At the heart of the process is trying to prevent an intent of the transaction to be laid down (which is only possible if it isn't already there) at at the provisional commit timestamp. To achieve this efficiently, we introduced a new point read request, `QueryIntent`, which optionally prevents missing intents from ever being written in the future. This request populates the timestamp cache (as any read does) and returns whether there is an intent at the given key for the specified transaction, timestamp, and at *at least* the specified sequence number. We don't check the exact sequence number because a batch could contain overlapping writes, in which case only the latest sequence number matters. If we trust that `PromisedWrites` has been faithfully populated, checking for "greater than or equal" is equivalent to (but simpler than) computing and keeping only the last write to a given key's sequence number.
 
 The request also returns whether there was an intent of the transaction *above* the expected timestamp. If this happens, the transaction has restarted or been pushed, and should instruct the caller to check the transaction record for a new update (since status resolution isn't kicked off unless a transaction looks abandoned, this may not be worth it in practice).
 
@@ -281,7 +303,7 @@ As an optimization, we might return a structured error when an intent was preven
 
 1. wait until the transaction is abandoned (to avoid spurious aborts) -- this is done by the txn wait queue in the common path.
 1. retrieve the *promised writes* from the `STAGED` transaction record, and note the transaction ID and provisional commit timestamp.
-1. construct a batch at the provisional commit timestamp that contains a `PreventIntentRequest` for each *promised write*, and includes the provisional commit timestamp and the transaction ID.
+1. construct a batch at the provisional commit timestamp that contains a `QueryIntent(Prevent=true)` for each *promised write*, and includes the provisional commit timestamp and the transaction ID.
 1. Run the batch, and act depending on the outcome:
     1. if an intent was prevented, abort the transaction. But note a subtlety: the transaction may have restarted and written a new `STAGED` record with a higher provisional commit timestamp, and may now be (implicitly or explicitly) committed. In this case our aborting `EndTransaction` would fail as it checks the provisional commit timestamp against the record's.
     1. on other errors, retry as appropriate but check the transaction record for updates before each retry.
@@ -302,9 +324,9 @@ Assume that the transaction promised writes at `k1`, `k2`, and `k3` and is ancho
 ##### Missing intent (at k2)
 
 ```
-PreventIntent(k1, t1)      found|Abort(k1, t1) ok GC(k1) ok
-PreventIntent(k2, t1) prevented |
-PreventIntent(k3, t1)  found    |
+QueryIntent(k1, t1)      found|Abort(k1, t1) ok GC(k1) ok
+QueryIntent(k2, t1) prevented |
+QueryIntent(k3, t1)  found    |
 ```
 
 ##### Missing intent racing with restart
@@ -312,9 +334,9 @@ PreventIntent(k3, t1)  found    |
 An intent at t1 is prevented, but before the transaction record can be aborted, the transaction restarts and manages to (implicitly) commit. As the abort fails, the resolution process observes a transaction record with new activity and waits, observing the commit shortly thereafter. Note that the transaction would be heartbeat throughout this process, so that status resolution would not be kicked off in the first place under normal conditions.
 
 ```
-PreventIntent(k1, t1)  found  | Write(k1, t2)          ok     |
-PreventIntent(k2, t1)prevented|{Write,Stage}(k2, t2) ok|      |Commit(k2) ok GC(k2) ok
-PreventIntent(k3, t1)  found  | Write(k3, t2)          |    ok|
+QueryIntent(k1, t1)  found  | Write(k1, t2)          ok     |
+QueryIntent(k2, t1)prevented|{Write,Stage}(k2, t2) ok|      |Commit(k2) ok GC(k2) ok
+QueryIntent(k3, t1)  found  | Write(k3, t2)          |    ok|
                               |Abort(k1, t1)           |fail  |Wait       ok
                                                                  ↑
                                             sees either no txn record or committed
@@ -327,11 +349,11 @@ In the other scenario, the abort would have beaten the `Stage(k2)` and the trans
 
 Status resolution only writes a single key (the transaction record) and does so conditionally, and intents are only resolved after this conditional write. As a result, having multiple status resolutions racing does not cause anomalies.
 
-In the history below, two status resolutions race so that the second `PreventIntent` sees the commit version (and concludes that it has prevented the write). As it tries to update the transaction record, it fails and realizes that the transaction is now committed.
+In the history below, two status resolutions race so that the second `QueryIntent` sees the commit version (and concludes that it has prevented the write). As it tries to update the transaction record, it fails and realizes that the transaction is now committed.
 
 ```
-PreventIntent(k1, t1) found Commit(k1, t1) Resolve(k1)ok|
-PreventIntent'(k1,t1)                                   |prevented Abort(k1, t1) fail
+QueryIntent(k1, t1) found Commit(k1, t1) Resolve(k1)ok|
+QueryIntent'(k1,t1)                                   |prevented Abort(k1, t1) fail
 ```
 
 ### Performance Implications
@@ -342,7 +364,7 @@ There is an extra write to the WAL due to the newly introduced intermediate tran
 
 The set of **promised writes** are writes that *need to leave an intent*. This is in contrast to the remaining *intent spans*, which only need to be a *superset* of the actually written intents. Today, this is true: any successful "write" command leaves an intent.
 
-But, it is a restriction for the future: We must never issue [no-op writes](https://github.com/cockroachdb/cockroach/issues/23942) in the final batch of a transaction, and appropriate care must be taken to preserve this invariant.
+But, it is a restriction for the future: We must never issue [no-op writes](https://github.com/cockroachdb/cockroach/issues/23942) in the final batch of a transaction, and appropriate care must be taken to preserve this invariant. As of https://github.com/cockroachdb/cockroach/commit/9d7c35f, we assert against these no-op writes for successful point writes. Even with this added level of protection, we'll need to remember never to issue no-op writes as promised writes.
 
 ### Error handling
 
@@ -360,12 +382,16 @@ Note that we may not just try to abort our own transaction record. The record ma
 
 Metrics will be added for the number of status resolution attempts as well as the number of final batches eligible/not eligible for parallel commit. If the last metric is substantial, we need to lift some of the conditions around admissibility.
 
-### Interplay with #16026 (async consensus)
+### Interplay with #26599 (transactional write pipelining)
 
-After #16026, when the transaction tries to commit, there may be outstanding in-flight RPCs from earlier batches. Instead of waiting for those to complete, the `client.Txn` will pass promised writes along with the final batch, which DistSender will include in the staged transaction record and also send out as `PreventIntentRequest`s (which will be treated as writes, i.e. they may end up being Raft no-ops or batched up with another request to a range -- that is OK, but needs to be tested). There are a few possible outcomes:
+After #26599, when the transaction tries to commit, there may be outstanding in-flight RPCs from earlier batches. Instead of waiting for those to complete, the `client.Txn` will pass promised writes along with the final batch, which DistSender will include in the staged transaction record and also send out as `QueryIntent`s (which will be treated as writes, i.e. they may end up being Raft no-ops or batched up with another request to a range -- that is OK, but needs to be tested). There are a few possible outcomes:
 
-- in the likely case, none of the intents will be prevented (and they are found at the right timestamps), as they have been dispatched earlier; the `PreventIntentRequest`s succeed, as does the rest of the batch, and `DistSender` announces success to the client.
+- in the likely case, none of the intents will be prevented (and they are found at the right timestamps), as they have been dispatched earlier; the `QueryIntent`s succeed, as does the rest of the batch, and `DistSender` announces success to the client.
 - an intent is prevented or found at the wrong timestamp. This is treated like a write having failed or having pushed the transaction, respectively.
+
+Care will need to be paid to splitting batches with `EndTransaction(status=STAGING)` requests from `QueryIntent` requests for pipelined writes to the same range as the txn record. If care is not taken, the `EndTransaction` request will be blocked in the `CommandQueue` with the rest of its batch and no speedup will be observed by the client. In fact, in conjunction with the [Replica-level detection](#replica), this will behave almost identically to how the case would behave today.
+
+This will require that we allow multiple batches to the same range be sent in parallel.
 
 ## Drawbacks
 

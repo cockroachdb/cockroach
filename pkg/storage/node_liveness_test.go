@@ -824,6 +824,7 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 
 	log.Infof(ctx, "waiting for node statuses")
 	tc.WaitForNodeStatuses(t)
+	tc.WaitForNodeLiveness(t)
 	log.Infof(ctx, "waiting done")
 
 	firstServer := tc.Server(0).(*server.TestServer)
