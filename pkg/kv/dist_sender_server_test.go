@@ -2150,7 +2150,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			retryable: func(ctx context.Context, txn *client.Txn) error {
 				// Advance timestamp. This also creates a refresh span which
 				// will prevent the txn from committing without a refresh.
-				if err := txn.InitPut(ctx, "a", "put", false); err != nil {
+				if err := txn.DelRange(ctx, "a", "b"); err != nil {
 					return err
 				}
 				// Make the final batch large enough such that if we accounted
