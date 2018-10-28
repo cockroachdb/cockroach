@@ -15,7 +15,6 @@
 package memo
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 
@@ -323,29 +322,4 @@ func (m *Memo) IsOptimized() bool {
 	// assigned.
 	rel, ok := m.rootExpr.(RelExpr)
 	return ok && rel.Physical() != nil
-}
-
-// --------------------------------------------------------------------
-// String representation.
-// --------------------------------------------------------------------
-
-// FmtFlags controls how the memo output is formatted.
-type FmtFlags int
-
-const (
-	// FmtPretty performs a breadth-first topological sort on the memo groups,
-	// and shows the root group at the top of the memo.
-	FmtPretty FmtFlags = iota
-)
-
-// String returns a human-readable string representation of this memo for
-// testing and debugging.
-func (m *Memo) String() string {
-	return m.FormatString(FmtPretty)
-}
-
-// FormatString returns a string representation of this memo for testing
-// and debugging. The given flags control which properties are shown.
-func (m *Memo) FormatString(flags FmtFlags) string {
-	return m.format(&memoFmtCtx{buf: &bytes.Buffer{}, flags: flags})
 }

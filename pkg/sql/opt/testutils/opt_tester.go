@@ -74,7 +74,7 @@ type OptTesterFlags struct {
 	ExprFormat memo.ExprFmtFlags
 
 	// MemoFormat controls the output detail of memo command directives.
-	MemoFormat memo.FmtFlags
+	MemoFormat xform.FmtFlags
 
 	// AllowUnsupportedExpr if set: when building a scalar, the optbuilder takes
 	// any TypedExpr node that it doesn't recognize and wraps that expression in
@@ -497,7 +497,7 @@ func (ot *OptTester) Memo() (string, error) {
 		return "", err
 	}
 	o.Optimize()
-	return o.Memo().FormatString(ot.Flags.MemoFormat), nil
+	return o.FormatMemo(ot.Flags.MemoFormat), nil
 }
 
 // RuleStats performs the optimization and returns statistics about how many
