@@ -56,7 +56,9 @@ func (p *{{template "opConstName" .}}) Next() ColBatch {
 	return batch
 }
 
-func (p {{template "opConstName" .}}) Init() {}
+func (p {{template "opConstName" .}}) Init() {
+  p.input.Init()
+}
 
 type {{template "opName" .}} struct {
 	input Operator
@@ -87,7 +89,9 @@ func (p *{{template "opName" .}}) Next() ColBatch {
 	return batch
 }
 
-func (p {{template "opName" .}}) Init() {}
+func (p {{template "opName" .}}) Init() {
+  p.input.Init()
+}
 
 {{end}}
 {{end}}
