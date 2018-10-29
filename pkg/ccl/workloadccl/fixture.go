@@ -317,6 +317,7 @@ func csvServerPaths(
 		params := url.Values{
 			`row-start`: []string{strconv.Itoa(chunkRowStart)},
 			`row-end`:   []string{strconv.Itoa(chunkRowEnd)},
+			`version`:   []string{gen.Meta().Version},
 		}
 		if f, ok := gen.(workload.Flagser); ok {
 			f.Flags().VisitAll(func(f *pflag.Flag) {
@@ -420,7 +421,7 @@ func MakeFixture(
 // ImportFixture works like MakeFixture, but instead of stopping halfway or
 // writing a backup to cloud storage, it finishes ingesting the data.
 func ImportFixture(
-	ctx context.Context, sqlDB *gosql.DB, csvServerURL string, gen workload.Generator, dbName string,
+	ctx context.Context, sqlDB *gosql.DB, gen workload.Generator, dbName string,
 ) error {
 	var numNodes int
 	if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
@@ -430,7 +431,7 @@ func ImportFixture(
 	g := ctxgroup.WithContext(ctx)
 	for _, t := range gen.Tables() {
 		table := t
-		paths := csvServerPaths(csvServerURL, gen, table, numNodes)
+		paths := csvServerPaths(`experimental-workload://`, gen, table, numNodes)
 		g.GoCtx(func(ctx context.Context) error {
 			err := importFixtureTable(ctx, sqlDB, dbName, table, paths, `` /* output */)
 			return errors.Wrapf(err, `importing table %s`, table.Name)
