@@ -79,6 +79,10 @@ func init() {
 		canProvideOrdering:    rowNumberCanProvideOrdering,
 		buildChildReqOrdering: rowNumberBuildChildReqOrdering,
 	}
+	funcMap[opt.MergeJoinOp] = funcs{
+		canProvideOrdering:    mergeJoinCanProvideOrdering,
+		buildChildReqOrdering: mergeJoinBuildChildReqOrdering,
+	}
 }
 
 func canNeverProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {

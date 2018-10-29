@@ -242,27 +242,3 @@ type ScanFlags struct {
 func (sf *ScanFlags) Empty() bool {
 	return !sf.NoIndexJoin && !sf.ForceIndex
 }
-
-// CanProvideOrdering returns true if the MergeJoin operator returns rows that
-// satisfy the given required ordering.
-func (m *MergeJoinPrivate) CanProvideOrdering(required *props.OrderingChoice) bool {
-	// TODO(radu): in principle, we could pass through an ordering that covers
-	// more than the equality columns. For example, if we have a merge join
-	// with left ordering a+,b+ and right ordering x+,y+ we could guarantee
-	// a+,b+,c+ if we pass that requirement through to the left side. However,
-	// this requires a specific contract on the execution side on which side's
-	// ordering is preserved when multiple rows match on the equality columns.
-	switch m.JoinType {
-	case opt.InnerJoinOp:
-		return m.LeftOrdering.Implies(required) || m.RightOrdering.Implies(required)
-
-	case opt.LeftJoinOp, opt.SemiJoinOp, opt.AntiJoinOp:
-		return m.LeftOrdering.Implies(required)
-
-	case opt.RightJoinOp:
-		return m.RightOrdering.Implies(required)
-
-	default:
-		return false
-	}
-}
