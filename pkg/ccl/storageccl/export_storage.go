@@ -21,6 +21,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/workload"
 )
 
 const (
@@ -149,6 +151,11 @@ func ExportStorageConfFromURI(path string) (roachpb.ExportStorage, error) {
 		}
 		conf.Provider = roachpb.ExportStorageProvider_LocalFile
 		conf.LocalFile.Path = uri.Path
+	case "experimental-workload":
+		conf.Provider = roachpb.ExportStorageProvider_Workload
+		if conf.WorkloadConfig, err = parseWorkloadConfig(uri); err != nil {
+			return conf, err
+		}
 	default:
 		return conf, errors.Errorf("unsupported storage scheme: %q", uri.Scheme)
 	}
@@ -199,6 +206,14 @@ func MakeExportStorage(
 	case roachpb.ExportStorageProvider_Azure:
 		telemetry.Count("external-io.azure")
 		return makeAzureStorage(dest.AzureConfig, settings)
+	case roachpb.ExportStorageProvider_Workload:
+		if err := settings.Version.CheckVersion(
+			cluster.VersionExportStorageWorkload, "experimental-workload",
+		); err != nil {
+			return nil, err
+		}
+		telemetry.Count("external-io.workload")
+		return makeWorkloadStorage(dest.WorkloadConfig)
 	}
 	return nil, errors.Errorf("unsupported export destination type: %s", dest.Provider.String())
 }
@@ -830,5 +845,122 @@ func (s *azureStorage) Size(ctx context.Context, basename string) (int64, error)
 }
 
 func (s *azureStorage) Close() error {
+	return nil
+}
+
+func parseWorkloadConfig(uri *url.URL) (*roachpb.ExportStorage_Workload, error) {
+	c := &roachpb.ExportStorage_Workload{}
+	pathParts := strings.Split(strings.Trim(uri.Path, `/`), `/`)
+	if len(pathParts) != 3 {
+		return nil, errors.Errorf(
+			`path must be of the form /<format>/<generator>/<table>: %s`, uri.Path)
+	}
+	c.Format, c.Generator, c.Table = pathParts[0], pathParts[1], pathParts[2]
+	q := uri.Query()
+	if _, ok := q[`version`]; !ok {
+		return nil, errors.New(`parameter version is required`)
+	}
+	c.Version = q.Get(`version`)
+	q.Del(`version`)
+	if s := q.Get(`row-start`); len(s) > 0 {
+		q.Del(`row-start`)
+		var err error
+		if c.BatchBegin, err = strconv.ParseInt(s, 10, 64); err != nil {
+			return nil, err
+		}
+	}
+	if e := q.Get(`row-end`); len(e) > 0 {
+		q.Del(`row-end`)
+		var err error
+		if c.BatchEnd, err = strconv.ParseInt(e, 10, 64); err != nil {
+			return nil, err
+		}
+	}
+	for k, vs := range q {
+		for _, v := range vs {
+			var flag string
+			if len(v) > 0 {
+				flag = `--` + k + `=` + v
+			} else {
+				flag = `--` + k
+			}
+			c.Flags = append(c.Flags, flag)
+		}
+	}
+	return c, nil
+}
+
+type workloadStorage struct {
+	conf  *roachpb.ExportStorage_Workload
+	gen   workload.Generator
+	table workload.Table
+}
+
+var _ ExportStorage = &workloadStorage{}
+
+func makeWorkloadStorage(conf *roachpb.ExportStorage_Workload) (ExportStorage, error) {
+	if conf == nil {
+		return nil, errors.Errorf("workload upload requested but info missing")
+	}
+	if strings.ToLower(conf.Format) != `csv` {
+		return nil, errors.Errorf(`unsupported format: %s`, conf.Format)
+	}
+	meta, err := workload.Get(conf.Generator)
+	if err != nil {
+		return nil, err
+	}
+	// Different versions of the workload could generate different data, so
+	// disallow this.
+	if meta.Version != conf.Version {
+		return nil, errors.Errorf(
+			`expected %s version "%s" but got "%s"`, meta.Name, conf.Version, meta.Version)
+	}
+	gen := meta.New()
+	if f, ok := gen.(workload.Flagser); ok {
+		if err := f.Flags().Parse(conf.Flags); err != nil {
+			return nil, errors.Wrapf(err, `parsing parameters %s`, strings.Join(conf.Flags, ` `))
+		}
+	}
+	s := &workloadStorage{
+		conf: conf,
+		gen:  gen,
+	}
+	for _, t := range gen.Tables() {
+		if t.Name == conf.Table {
+			s.table = t
+			break
+		}
+	}
+	if s.table.Name == `` {
+		return nil, errors.Wrapf(err, `unknown table %s for generator %s`, conf.Table, meta.Name)
+	}
+	return s, nil
+}
+
+func (s *workloadStorage) Conf() roachpb.ExportStorage {
+	return roachpb.ExportStorage{
+		Provider:       roachpb.ExportStorageProvider_Workload,
+		WorkloadConfig: s.conf,
+	}
+}
+
+func (s *workloadStorage) ReadFile(_ context.Context, basename string) (io.ReadCloser, error) {
+	if basename != `` {
+		return nil, errors.New(`basenames are not supported by workload storage`)
+	}
+	r := workload.NewCSVRowsReader(s.table, int(s.conf.BatchBegin), int(s.conf.BatchEnd))
+	return ioutil.NopCloser(r), nil
+}
+
+func (s *workloadStorage) WriteFile(_ context.Context, _ string, _ io.ReadSeeker) error {
+	return errors.Errorf(`workload storage does not support writes`)
+}
+func (s *workloadStorage) Delete(_ context.Context, _ string) error {
+	return errors.Errorf(`workload storage does not support writes`)
+}
+func (s *workloadStorage) Size(_ context.Context, _ string) (int64, error) {
+	return 0, errors.Errorf(`workload storage does not support sizing`)
+}
+func (s *workloadStorage) Close() error {
 	return nil
 }

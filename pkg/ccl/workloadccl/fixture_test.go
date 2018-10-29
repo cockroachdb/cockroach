@@ -11,7 +11,6 @@ package workloadccl
 import (
 	"context"
 	"fmt"
-	"net/http/httptest"
 	"os"
 	"strconv"
 	"strings"
@@ -52,6 +51,10 @@ var fixtureTestMeta = workload.Meta{
 	New: func() workload.Generator {
 		return makeTestWorkload()
 	},
+}
+
+func init() {
+	workload.Register(fixtureTestMeta)
 }
 
 func (fixtureTestGen) Meta() workload.Meta     { return fixtureTestMeta }
@@ -160,10 +163,7 @@ func TestImportFixture(t *testing.T) {
 		t.Fatalf(`%+v`, err)
 	}
 
-	ts := httptest.NewServer(workload.CSVMux([]workload.Meta{gen.Meta()}))
-	defer ts.Close()
-
-	require.NoError(t, ImportFixture(ctx, db, ts.URL, gen, `d`))
+	require.NoError(t, ImportFixture(ctx, db, gen, `d`))
 	sqlDB.CheckQueryResults(t,
 		`SELECT count(*) FROM d.fx`, [][]string{{strconv.Itoa(fixtureTestGenRows)}})
 }
