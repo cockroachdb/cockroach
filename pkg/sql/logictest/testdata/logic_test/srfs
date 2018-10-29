@@ -118,7 +118,7 @@ SELECT * FROM generate_series('2017-11-11 00:00:00'::TIMESTAMP, '2017-11-11 03:0
 ----
 generate_series
 
-query II colnames
+query II colnames,rowsort
 SELECT * FROM generate_series(1, 2), generate_series(1, 2)
 ----
 generate_series  generate_series
@@ -213,7 +213,7 @@ a    b     generate_series generate_series
 cat  bird  1               3
 cat  bird  2               4
 
-query TTII colnames
+query TTII colnames,rowsort
 SELECT t.*, u.*, a.*, b.* FROM t, u, generate_series(1, 2) AS a, generate_series(3, 4) AS b
 ----
 a    b     a  b
