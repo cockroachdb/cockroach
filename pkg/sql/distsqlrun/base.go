@@ -78,6 +78,10 @@ type RowReceiver interface {
 	// Implementations of Push() must be thread-safe.
 	Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) ConsumerStatus
 
+	// Types returns the types of the EncDatumRow that this RowReceiver expects
+	// to be pushed.
+	Types() []sqlbase.ColumnType
+
 	// ProducerDone is called when the producer has pushed all the rows and
 	// metadata; it causes the RowReceiver to process all rows and clean up.
 	//
@@ -484,6 +488,11 @@ func (rc *RowChannel) ConsumerClosed() {
 	}
 }
 
+// Types is part of the RowReceiver interface.
+func (rc *RowChannel) Types() []sqlbase.ColumnType {
+	return rc.types
+}
+
 // BufferedRecord represents a row or metadata record that has been buffered
 // inside a RowBuffer.
 type BufferedRecord struct {
@@ -592,6 +601,11 @@ func (rb *RowBuffer) ProducerDone() {
 		panic("RowBuffer already closed")
 	}
 	rb.ProducerClosed = true
+}
+
+// Types is part of the RowReceiver interface.
+func (rb *RowBuffer) Types() []sqlbase.ColumnType {
+	return rb.types
 }
 
 // OutputTypes is part of the RowSource interface.

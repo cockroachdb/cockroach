@@ -103,6 +103,10 @@ func (r *RowDisposer) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) Cons
 // ProducerDone is part of the RowReceiver interface.
 func (r *RowDisposer) ProducerDone() {}
 
+func (r *RowDisposer) Types() []sqlbase.ColumnType {
+	return nil
+}
+
 // NextNoMeta is a version of Next which fails the test if
 // it encounters any metadata.
 func (rb *RowBuffer) NextNoMeta(tb testing.TB) sqlbase.EncDatumRow {
