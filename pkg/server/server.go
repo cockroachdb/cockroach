@@ -1303,7 +1303,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.mux.Handle("/health", gwMux)
 
-	s.engines, err = s.cfg.CreateEngines(ctx)
+	s.engines, err = s.cfg.CreateEngines(ctx, s.registry)
 	if err != nil {
 		return errors.Wrap(err, "failed to create engines")
 	}

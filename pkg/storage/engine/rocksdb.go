@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -464,6 +465,69 @@ type RocksDBConfig struct {
 	// ExtraOptions is a serialized protobuf set by Go CCL code and passed through
 	// to C CCL code.
 	ExtraOptions []byte
+
+	Metrics Metrics
+}
+
+// Metrics ...
+type Metrics struct {
+	BatchSize *metric.Histogram
+	WaitLatency *metric.Histogram
+	MergeLatency *metric.Histogram
+	CommitLatency *metric.Histogram
+	BroadcastLatency *metric.Histogram
+	SyncLatency *metric.Histogram
+}
+
+var (
+	metaBatchSizeHistogram = metric.Metadata{
+		Name:        "rocksdb.commit.batch_size",
+		Help:        "Number of ",
+		Measurement: "Batched writes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaWaitLatHistogram = metric.Metadata{
+		Name:        "rocksdb.commit.wait_latency",
+		Help:        "Number of ",
+		Measurement: "Batched writes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaMergeLatHistogram = metric.Metadata{
+		Name:        "rocksdb.commit.merge_latency",
+		Help:        "Number of ",
+		Measurement: "Batched writes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaCommitLatHistogram = metric.Metadata{
+		Name:        "rocksdb.commit.commit_latency",
+		Help:        "Number of ",
+		Measurement: "Batched writes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaBroadcastLatHistogram = metric.Metadata{
+		Name:        "rocksdb.commit.broadcast_latency",
+		Help:        "Number of ",
+		Measurement: "Batched writes",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaSyncLatHistogram = metric.Metadata{
+		Name:        "rocksdb.commit.sync_latency",
+		Help:        "Number of ",
+		Measurement: "Batched writes",
+		Unit:        metric.Unit_COUNT,
+	}
+)
+
+// MakeMetrics ...
+func MakeMetrics() Metrics {
+	return Metrics{
+		BatchSize: metric.NewHistogram(metaBatchSizeHistogram, 60*time.Second, 10000, 1),
+		WaitLatency: metric.NewLatency(metaWaitLatHistogram, 60*time.Second),
+		MergeLatency: metric.NewLatency(metaMergeLatHistogram, 60*time.Second),
+		CommitLatency: metric.NewLatency(metaCommitLatHistogram, 60*time.Second),
+		BroadcastLatency: metric.NewLatency(metaBroadcastLatHistogram, 60*time.Second),
+		SyncLatency: metric.NewLatency(metaSyncLatHistogram, 60*time.Second),
+	}
 }
 
 // RocksDB is a wrapper around a RocksDB database instance.
@@ -675,6 +739,8 @@ func (r *RocksDB) syncLoop() {
 
 		s.Unlock()
 
+		beforeSync := timeutil.Now()
+
 		var err error
 		if r.cfg.Dir != "" {
 			err = statusToError(C.DBSyncWAL(r.rdb))
@@ -685,6 +751,9 @@ func (r *RocksDB) syncLoop() {
 			b.commitErr = err
 			b.commitWG.Done()
 		}
+
+		afterSync := timeutil.Now()
+		r.cfg.Metrics.SyncLatency.RecordValue(afterSync.Sub(beforeSync).Nanoseconds())
 
 		s.Lock()
 	}
@@ -1789,6 +1858,8 @@ func (r *rocksDBBatch) Commit(syncCommit bool) error {
 		return nil
 	}
 
+	beforeWait := timeutil.Now()
+
 	// Combine multiple write-only batch commits into a single call to
 	// RocksDB. RocksDB is supposed to be performing such batching internally,
 	// but whether Cgo or something else, it isn't achieving the same degree of
@@ -1814,8 +1885,11 @@ func (r *rocksDBBatch) Commit(syncCommit bool) error {
 			c.cond.Wait()
 		}
 
+		beforeBundle := timeutil.Now()
+
 		var pending []*rocksDBBatch
 		pending, c.pending = nextBatchGroup(c.pending)
+		r.parent.cfg.Metrics.BatchSize.RecordValue(int64(len(pending)))
 		c.committing = true
 		c.Unlock()
 
@@ -1837,10 +1911,16 @@ func (r *rocksDBBatch) Commit(syncCommit bool) error {
 				break
 			}
 		}
+		afterBundle := timeutil.Now()
 
 		if err == nil {
 			err = committer.commitInternal(false /* sync */)
 		}
+
+		afterCommit := timeutil.Now()
+		r.parent.cfg.Metrics.WaitLatency.RecordValue(beforeBundle.Sub(beforeWait).Nanoseconds())
+		r.parent.cfg.Metrics.MergeLatency.RecordValue(afterBundle.Sub(beforeBundle).Nanoseconds())
+		r.parent.cfg.Metrics.CommitLatency.RecordValue(afterCommit.Sub(afterBundle).Nanoseconds())
 
 		// We're done committing the batch, let the next group of batches
 		// proceed.
@@ -1867,6 +1947,9 @@ func (r *rocksDBBatch) Commit(syncCommit bool) error {
 				syncing = append(syncing, b)
 			}
 		}
+
+		afterBroadcast := timeutil.Now()
+		r.parent.cfg.Metrics.BroadcastLatency.RecordValue(afterBroadcast.Sub(afterCommit).Nanoseconds())
 
 		if len(syncing) > 0 {
 			// The commit was successful and one or more of the batches requires
