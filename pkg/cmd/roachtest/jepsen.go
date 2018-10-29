@@ -221,10 +221,14 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 		ignoreErr := false
 		if err := runE(c, ctx, controller,
 			`grep "Oh jeez, I'm sorry, Jepsen broke. Here's why" /mnt/data1/jepsen/cockroachdb/invoke.log -A1 `+
-				`| grep -e BrokenBarrierException -e InterruptedException -e com.jcraft.jsch.JSchException`,
+				`| grep -e BrokenBarrierException -e InterruptedException -e com.jcraft.jsch.JSchException `+
+				// And one more ssh failure we've seen, apparently encountered when
+				// downloading logs.
+				`-e "clojure.lang.ExceptionInfo: clj-ssh scp failure"`,
 		); err == nil {
-			t.l.Printf("Recognized BrokenBarrier, InterruptedException or JSchException. " +
-				"Ignoring it and considering the test successful. See #30527 or #26082.")
+			t.l.Printf("Recognized BrokenBarrier or other known exceptions (see grep output above). " +
+				"Ignoring it and considering the test successful. " +
+				"See #30527 or #26082 for some of the ignored exceptions.")
 			ignoreErr = true
 		}
 
