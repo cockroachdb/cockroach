@@ -408,7 +408,7 @@ func (q *Queue) MaybeWaitForPush(
 	if req.PusherTxn.ID != (uuid.UUID{}) {
 		log.VEventf(
 			ctx,
-			2,
+			0,
 			"%s pushing %s (%d pending)",
 			req.PusherTxn.ID.Short(),
 			req.PusheeTxn.ID.Short(),
