@@ -838,6 +838,94 @@ func (c *CustomFuncs) GenerateLookupJoins(
 //
 // ----------------------------------------------------------------------
 
+// IsCanonicalGroupBy returns true if the private is for the canonical version
+// of the grouping operator.
+func (c *CustomFuncs) IsCanonicalGroupBy(private *memo.GroupingPrivate) bool {
+	// Check that no grouping columns are part of the ordering.
+	// TODO(radu): when we address #31882 and grouping columns become optional, we
+	// can just check private.GroupingCols.SubsetOf(private.Ordering.Optional).
+	for i := range private.Ordering.Columns {
+		if private.GroupingCols.Intersects(private.Ordering.Columns[i].Group) {
+			return false
+		}
+	}
+	return true
+}
+
+// GenerateStreamingGroupBy generates variants of a GroupBy or DistinctOn
+// expression with more specific orderings on the grouping columns, using the
+// interesting orderings property. See the GenerateStreamingGroupBy rule.
+func (c *CustomFuncs) GenerateStreamingGroupBy(
+	grp memo.RelExpr,
+	op opt.Operator,
+	input memo.RelExpr,
+	aggs memo.AggregationsExpr,
+	private *memo.GroupingPrivate,
+) {
+	orders := DeriveInterestingOrderings(input)
+	intraOrd := private.Ordering
+	for _, o := range orders {
+		// We are looking for a prefix of o that satisfies the intra-group ordering
+		// if we ignore grouping columns.
+		oIdx, intraIdx := 0, 0
+		for ; oIdx < len(o); oIdx++ {
+			oCol := o[oIdx].ID()
+			if private.GroupingCols.Contains(int(oCol)) || intraOrd.Optional.Contains(int(oCol)) {
+				// Grouping or optional column.
+				continue
+			}
+
+			if intraIdx < len(intraOrd.Columns) &&
+				intraOrd.Columns[intraIdx].Group.Contains(int(oCol)) &&
+				intraOrd.Columns[intraIdx].Descending == o[oIdx].Descending() {
+				// Column matches the one in the ordering.
+				intraIdx++
+				continue
+			}
+			break
+		}
+		if oIdx == 0 || intraIdx < len(intraOrd.Columns) {
+			// No match.
+			continue
+		}
+		o = o[:oIdx]
+
+		var newOrd props.OrderingChoice
+		newOrd.FromOrderingWithOptCols(o, opt.ColSet{})
+
+		// Simplify the ordering according to the input's FDs. Note that this is not
+		// necessary for correctness because buildChildPhysicalProps would do it
+		// anyway, but doing it here once can make things more efficient (and we may
+		// generate fewer expressions if some of these orderings turn out to be
+		// equivalent).
+		newOrd.Simplify(&input.Relational().FuncDeps)
+
+		switch op {
+		case opt.GroupByOp:
+			newExpr := memo.GroupByExpr{
+				Input:        input,
+				Aggregations: aggs,
+				GroupingPrivate: memo.GroupingPrivate{
+					GroupingCols: private.GroupingCols,
+					Ordering:     newOrd,
+				},
+			}
+			c.e.mem.AddGroupByToGroup(&newExpr, grp)
+
+		case opt.DistinctOnOp:
+			newExpr := memo.DistinctOnExpr{
+				Input:        input,
+				Aggregations: aggs,
+				GroupingPrivate: memo.GroupingPrivate{
+					GroupingCols: private.GroupingCols,
+					Ordering:     newOrd,
+				},
+			}
+			c.e.mem.AddDistinctOnToGroup(&newExpr, grp)
+		}
+	}
+}
+
 // MakeOrderingChoiceFromColumn constructs a new OrderingChoice with
 // one element in the sequence: the columnID in the order defined by
 // (MIN/MAX) operator. This function was originally created to be used

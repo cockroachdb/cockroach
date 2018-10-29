@@ -309,8 +309,19 @@ func (c *coster) computeGroupingCost(grouping memo.RelExpr) memo.Cost {
 	groupingColCount := private.GroupingCols.Len()
 	cost += memo.Cost(inputRowCount) * memo.Cost(aggsCount+groupingColCount) * cpuCostFactor
 
-	// TODO(radu): take into account how many grouping columns we have an ordering
-	// on for DistinctOn.
+	// Take into account that streaming aggregation is more efficient. We will say
+	// that it's twice as efficient if all the grouping columns are ordered (and
+	// we interpolate linearly if only part of the grouping columns are ordered).
+	if !private.GroupingCols.SubsetOf(private.Ordering.Optional) {
+		unorderedCols := private.GroupingCols.Copy()
+		for i := range private.Ordering.Columns {
+			unorderedCols.DifferenceWith(private.Ordering.Columns[i].Group)
+		}
+		n := unorderedCols.Len()
+		// n = 0:                cost factor = 0.5
+		// n = groupingColCount: cost factor = 1
+		cost = cost * 0.5 * (1 + memo.Cost(n)/memo.Cost(groupingColCount))
+	}
 
 	return cost
 }

@@ -104,19 +104,20 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJyslL-OozAQh_t7itO0N1KwDf
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x
 ----
-distinct        ·            ·            (x, y)  weak-key(y); +y,+x
- │              distinct on  y            ·       ·
- │              order key    y            ·       ·
- └── sort       ·            ·            (x, y)  +y,+x
-      │         order        +y,+x        ·       ·
-      └── scan  ·            ·            (x, y)  ·
-·               table        xyz@primary  ·       ·
-·               spans        ALL          ·       ·
+sort                 ·            ·            (x, y)  weak-key(y); +y
+ │                   order        +y           ·       ·
+ └── distinct        ·            ·            (x, y)  weak-key(y); +x
+      │              distinct on  y            ·       ·
+      └── sort       ·            ·            (x, y)  +x
+           │         order        +x           ·       ·
+           └── scan  ·            ·            (x, y)  ·
+·                    table        xyz@primary  ·       ·
+·                    spans        ALL          ·       ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT DISTINCT ON (y) x, y FROM xyz ORDER BY y, x]
 ----
-https://cockroachdb.github.io/distsqlplan/decode.html#eJyslb9u2zAQh_c-RXFrCNhHyo6tSUOXLE2Rdis0qOIhEOCIAkkBSQO_e6E_gCq3OioQR0n-8bv77kC_Q200fS1eyEH6ExAESBCgQEACAg6QC2isKck5Y7ufDIEH_QrpXkBVN63vXucCSmMJ0nfwlb8QpPCj-HWhJyo02d0eBGjyRXXpMY2tXgr7lr2-_QYBj61PP2dSZAryqwDT-ulQ54tnghSvYj34u7Ge7O4wZ2byTmR4t4iQH0F8qZyv6tLvcH9L6RqymizprqlFnFrETRQznLPUB1vXP92vrCuZ1YXrR4xRRxwAjyM-bhlxADGpxCgjlutVyqgqA-BR5f0WlQHEpFJGUanWq1RRVQbAo8rTFpUBxKRSRVGZrFeZRFUZAI8qz1tUBhCTyiT6Hf4f3BO5xtSOZqylk_fd5U76mYY_BGdaW9I3a8oeMzw-9rn-hSbnh684PDzUw6euwL_DyIYlH5ZsWM3CeBtWfNlHHp2w6QMfPrDhAPm4pel7NnziySc2fObD5y1lY2DHQkvGbxkG1gw37RkGFi0JwPlNw8CqIb9rt7Xn109_AgAA__8Zbbvp
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyslUFvm0AQhe_9FdVcu5I9u2DHnDj0kktTpb1VPlB2FCE5rLW7lpJG_u-VAYmCwgwlHGH93pv5_LS8Qe0sfSueKUD2CxAUaFBgQEECClI4Kjh7V1IIzt9-0gru7QtkWwVVfb7E2-ujgtJ5guwNYhVPBBn8LH6f6JEKS36zBQWWYlGdmpizr54L_5q_vP4BBQ-XmH3OtcoNHK8K3CX2piEWTwQZXtX84B_OR_KbdJiZ45dJe_0_9l-rEKu6jBscbZXryQAzGdD7Om_Jk31vanaK8Z7TUyQLKOJubD-NMR344_x64Kr1EIK7xcZ7za6HYN__MbiwHno-OL0qOCG4A7dfCk6w78HpheDMfHBmVXBCcAfubik4wb4HZxaCS-aDS1YFJwR34A5LwQn2PbhkhZv8nYBHCmdXBxq4Tzlvb9c82SdqPwvBXXxJ370rm5j28aHRNS8shdieYvtwX7dHtwH_FSMr1rxYs2IzEONYbFhxwicn_M57Xp2y6h0v3rFiIXn_EWJ3rPjAJx94YluhJnzJhMGRbxkKNUO-Z2gEOd80aXahaqkQzncNhbIh37bx7Mfrp78BAAD__06g0ss=
 
 # Distinct processors elided becaue of strong key.
 query TTTTT
