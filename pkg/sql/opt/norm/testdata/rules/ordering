@@ -145,7 +145,7 @@ SELECT DISTINCT ON (b, c) a, b, c FROM abcde ORDER BY b, c, a, d, e
 distinct-on
  ├── columns: a:1(int) b:2(int) c:3(int)
  ├── grouping columns: b:2(int) c:3(int)
- ├── internal-ordering: +1 opt(2,3)
+ ├── internal-ordering: +2,+3,+1
  ├── key: (1)
  ├── fd: (1)-->(2,3), (2,3)-->(1)
  ├── ordering: +2,+3

@@ -8,14 +8,14 @@ CREATE TABLE xyz (
   INDEX foo (z, y)
 )
 
-# TODO(vivek): Use the secondary index. Use distinct in index selection.
 query TTT
 EXPLAIN SELECT DISTINCT y, z FROM xyz
 ----
 distinct   ·            ·
  │         distinct on  y, z
+ │         order key    y, z
  └── scan  ·            ·
-·          table        xyz@primary
+·          table        xyz@foo
 ·          spans        ALL
 
 query TTT
@@ -23,7 +23,7 @@ EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY z
 ----
 distinct   ·            ·
  │         distinct on  y, z
- │         order key    z
+ │         order key    y, z
  └── scan  ·            ·
 ·          table        xyz@foo
 ·          spans        ALL
@@ -35,8 +35,9 @@ sort            ·            ·
  │              order        +y
  └── distinct   ·            ·
       │         distinct on  y, z
+      │         order key    y, z
       └── scan  ·            ·
-·               table        xyz@primary
+·               table        xyz@foo
 ·               spans        ALL
 
 query TTT
@@ -46,17 +47,19 @@ sort            ·            ·
  │              order        +y,+z
  └── distinct   ·            ·
       │         distinct on  y, z
+      │         order key    y, z
       └── scan  ·            ·
-·               table        xyz@primary
+·               table        xyz@foo
 ·               spans        ALL
 
 query TTT
 EXPLAIN SELECT DISTINCT y + z AS r FROM xyz ORDER BY y + z
 ----
-sort                 ·            ·
- │                   order        +r
- └── distinct        ·            ·
-      │              distinct on  r
+distinct             ·            ·
+ │                   distinct on  r
+ │                   order key    r
+ └── sort            ·            ·
+      │              order        +r
       └── render     ·            ·
            └── scan  ·            ·
 ·                    table        xyz@primary
@@ -67,7 +70,7 @@ EXPLAIN SELECT DISTINCT y AS w, z FROM xyz ORDER BY z
 ----
 distinct   ·            ·
  │         distinct on  w, z
- │         order key    z
+ │         order key    w, z
  └── scan  ·            ·
 ·          table        xyz@foo
 ·          spans        ALL
@@ -101,14 +104,15 @@ scan  ·      ·            (x, y, z)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT z FROM (SELECT y, z FROM xyz WHERE y > 1)
 ----
-distinct        ·            ·            (z)     weak-key(z)
- │              distinct on  z            ·       ·
- └── render     ·            ·            (z)     ·
-      │         render 0     z            ·       ·
-      └── scan  ·            ·            (y, z)  ·
-·               table        xyz@primary  ·       ·
-·               spans        ALL          ·       ·
-·               filter       y > 1        ·       ·
+distinct        ·            ·        (z)     weak-key(z)
+ │              distinct on  z        ·       ·
+ │              order key    z        ·       ·
+ └── render     ·            ·        (z)     ·
+      │         render 0     z        ·       ·
+      └── scan  ·            ·        (y, z)  +z
+·               table        xyz@foo  ·       ·
+·               spans        ALL      ·       ·
+·               filter       y > 1    ·       ·
 
 statement ok
 CREATE TABLE abcd (
@@ -134,9 +138,10 @@ render     ·         ·                  (z, d, b)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT a, b FROM abcd
 ----
-distinct   ·            ·             (a, b)  weak-key(a,b)
+distinct   ·            ·             (a, b)  weak-key(a,b); +a,+b
  │         distinct on  a, b          ·       ·
- └── scan  ·            ·             (a, b)  ·
+ │         order key    a, b          ·       ·
+ └── scan  ·            ·             (a, b)  +a,+b
 ·          table        abcd@primary  ·       ·
 ·          spans        ALL           ·       ·
 
@@ -160,19 +165,21 @@ CREATE TABLE kv (k INT PRIMARY KEY, v INT, UNIQUE INDEX idx(v))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv
 ----
-distinct   ·            ·           (v)  weak-key(v)
- │         distinct on  v           ·    ·
- └── scan  ·            ·           (v)  ·
-·          table        kv@primary  ·    ·
-·          spans        ALL         ·    ·
+distinct   ·            ·       (v)  weak-key(v); +v
+ │         distinct on  v       ·    ·
+ │         order key    v       ·    ·
+ └── scan  ·            ·       (v)  +v
+·          table        kv@idx  ·    ·
+·          spans        ALL     ·    ·
 
 # Verify we don't incorrectly elide the distinct node when we only have a weak key (#19343).
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT v FROM kv@idx
 ----
-distinct   ·            ·       (v)  weak-key(v)
+distinct   ·            ·       (v)  weak-key(v); +v
  │         distinct on  v       ·    ·
- └── scan  ·            ·       (v)  ·
+ │         order key    v       ·    ·
+ └── scan  ·            ·       (v)  +v
 ·          table        kv@idx  ·    ·
 ·          spans        ALL     ·    ·
 

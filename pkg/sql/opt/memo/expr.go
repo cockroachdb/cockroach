@@ -367,3 +367,27 @@ func (m *MergeJoinPrivate) CanProvideOrdering(required *props.OrderingChoice) bo
 		return false
 	}
 }
+
+// StreamingAggCols returns the subset of grouping columns that form a prefix of
+// the ordering required of the input. These columns can be used to perform a
+// streaming aggregation.
+func (g *GroupingPrivate) StreamingAggCols(required *props.OrderingChoice) opt.ColSet {
+	// The ordering required of the input is the intersection of the required
+	// ordering on the grouping operator and the internal ordering. We use both
+	// to determine the ordered grouping columns.
+	var res opt.ColSet
+	harvestCols := func(ord *props.OrderingChoice) {
+		for i := range ord.Columns {
+			cols := ord.Columns[i].Group.Intersection(g.GroupingCols)
+			if cols.Empty() {
+				// This group refers to a column that is not a grouping column.
+				// The rest of the ordering is not useful.
+				break
+			}
+			res.UnionWith(cols)
+		}
+	}
+	harvestCols(required)
+	harvestCols(&g.Ordering)
+	return res
+}

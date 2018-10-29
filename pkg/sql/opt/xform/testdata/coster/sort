@@ -23,7 +23,7 @@ SELECT f FROM a ORDER BY f DESC
 sort
  ├── columns: f:2(float!null)
  ├── stats: [rows=1000]
- ├── cost: 1259.31569
+ ├── cost: 1269.31569
  ├── ordering: -2
  └── scan a
       ├── columns: f:2(float!null)

@@ -14,6 +14,74 @@ TABLE abc
  └── INDEX primary
       └── a string not null
 
+exec-ddl
+CREATE TABLE xyz (
+  x INT PRIMARY KEY,
+  y INT,
+  z FLOAT,
+  INDEX xy (x, y),
+  INDEX zyx (z, y, x),
+  INDEX yy (y)
+)
+----
+TABLE xyz
+ ├── x int not null
+ ├── y int
+ ├── z float
+ ├── INDEX primary
+ │    └── x int not null
+ ├── INDEX xy
+ │    ├── x int not null
+ │    └── y int
+ ├── INDEX zyx
+ │    ├── z float
+ │    ├── y int
+ │    └── x int not null
+ └── INDEX yy
+      ├── y int
+      └── x int not null
+
+exec-ddl
+CREATE TABLE kuvw (
+  k INT PRIMARY KEY,
+  u INT,
+  v INT,
+  w INT,
+
+  INDEX uvw(u,v,w),
+  INDEX wvu(w,v,u),
+  INDEX vw(v,w) STORING (u),
+  INDEX w(w) STORING (u,v)
+)
+----
+TABLE kuvw
+ ├── k int not null
+ ├── u int
+ ├── v int
+ ├── w int
+ ├── INDEX primary
+ │    └── k int not null
+ ├── INDEX uvw
+ │    ├── u int
+ │    ├── v int
+ │    ├── w int
+ │    └── k int not null
+ ├── INDEX wvu
+ │    ├── w int
+ │    ├── v int
+ │    ├── u int
+ │    └── k int not null
+ ├── INDEX vw
+ │    ├── v int
+ │    ├── w int
+ │    ├── k int not null
+ │    └── u int (storing)
+ └── INDEX w
+      ├── w int
+      ├── k int not null
+      ├── u int (storing)
+      └── v int (storing)
+
 # --------------------------------------------------
 # ReplaceMinWithLimit
 # --------------------------------------------------
@@ -66,36 +134,6 @@ scalar-group-by
  └── aggregations
       └── min [type=float, outer=(2)]
            └── variable: b [type=float]
-
-exec-ddl
-CREATE TABLE xyz (
-  x INT PRIMARY KEY,
-  y INT,
-  z FLOAT,
-  INDEX xy (x, y),
-  INDEX zyx (z, y, x),
-  INDEX yy (y),
-  FAMILY (x),
-  FAMILY (y),
-  FAMILY (z)
-)
-----
-TABLE xyz
- ├── x int not null
- ├── y int
- ├── z float
- ├── INDEX primary
- │    └── x int not null
- ├── INDEX xy
- │    ├── x int not null
- │    └── y int
- ├── INDEX zyx
- │    ├── z float
- │    ├── y int
- │    └── x int not null
- └── INDEX yy
-      ├── y int
-      └── x int not null
 
 opt
 SELECT min(y) FROM xyz where z=7
@@ -291,10 +329,12 @@ project
  └── group-by
       ├── columns: y:2(int) min:4(int)
       ├── grouping columns: y:2(int)
+      ├── internal-ordering: +2
       ├── key: (2)
       ├── fd: (2)-->(4)
-      ├── scan xyz@xy
-      │    └── columns: y:2(int)
+      ├── scan xyz@yy
+      │    ├── columns: y:2(int)
+      │    └── ordering: +2
       └── aggregations
            └── min [type=int, outer=(2)]
                 └── variable: y [type=int]
@@ -309,10 +349,12 @@ project
  └── group-by
       ├── columns: y:2(int) max:4(int)
       ├── grouping columns: y:2(int)
+      ├── internal-ordering: +2
       ├── key: (2)
       ├── fd: (2)-->(4)
-      ├── scan xyz@xy
-      │    └── columns: y:2(int)
+      ├── scan xyz@yy
+      │    ├── columns: y:2(int)
+      │    └── ordering: +2
       └── aggregations
            └── max [type=int, outer=(2)]
                 └── variable: y [type=int]
@@ -327,12 +369,14 @@ project
  └── group-by
       ├── columns: x:1(int!null) min:4(int)
       ├── grouping columns: x:1(int!null)
+      ├── internal-ordering: +1
       ├── key: (1)
       ├── fd: (1)-->(4)
       ├── scan xyz@xy
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── key: (1)
-      │    └── fd: (1)-->(2)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
       └── aggregations
            └── min [type=int, outer=(2)]
                 └── variable: y [type=int]
@@ -386,12 +430,14 @@ SELECT x,min(y) FROM xyz GROUP BY x,y
 group-by
  ├── columns: x:1(int!null) min:4(int)
  ├── grouping columns: x:1(int!null)
+ ├── internal-ordering: +1
  ├── key: (1)
  ├── fd: (1)-->(4)
  ├── scan xyz@xy
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── key: (1)
- │    └── fd: (1)-->(2)
+ │    ├── fd: (1)-->(2)
+ │    └── ordering: +1
  └── aggregations
       └── min [type=int, outer=(2)]
            └── variable: y [type=int]
@@ -404,12 +450,14 @@ SELECT x,max(y) FROM xyz GROUP BY x,y
 group-by
  ├── columns: x:1(int!null) max:4(int)
  ├── grouping columns: x:1(int!null)
+ ├── internal-ordering: +1
  ├── key: (1)
  ├── fd: (1)-->(4)
  ├── scan xyz@xy
  │    ├── columns: x:1(int!null) y:2(int)
  │    ├── key: (1)
- │    └── fd: (1)-->(2)
+ │    ├── fd: (1)-->(2)
+ │    └── ordering: +1
  └── aggregations
       └── max [type=int, outer=(2)]
            └── variable: y [type=int]
@@ -424,12 +472,14 @@ project
  └── group-by
       ├── columns: x:1(int!null) min:4(int) count:5(int)
       ├── grouping columns: x:1(int!null)
+      ├── internal-ordering: +1
       ├── key: (1)
       ├── fd: (1)-->(4,5)
       ├── scan xyz@xy
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── key: (1)
-      │    └── fd: (1)-->(2)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
       └── aggregations
            ├── min [type=int, outer=(1)]
            │    └── variable: x [type=int]
@@ -446,12 +496,14 @@ project
  └── group-by
       ├── columns: x:1(int!null) max:4(int) count:5(int)
       ├── grouping columns: x:1(int!null)
+      ├── internal-ordering: +1
       ├── key: (1)
       ├── fd: (1)-->(4,5)
       ├── scan xyz@xy
       │    ├── columns: x:1(int!null) y:2(int)
       │    ├── key: (1)
-      │    └── fd: (1)-->(2)
+      │    ├── fd: (1)-->(2)
+      │    └── ordering: +1
       └── aggregations
            ├── max [type=int, outer=(1)]
            │    └── variable: x [type=int]
@@ -495,7 +547,7 @@ memo (optimized, ~5KB, required=[presentation: min:5])
  ├── G2: (scan abc,cols=(2))
  │    ├── [ordering: +2]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1259.32
+ │    │    └── cost: 1269.32
  │    └── []
  │         ├── best: (scan abc,cols=(2))
  │         └── cost: 1050.00
@@ -503,13 +555,13 @@ memo (optimized, ~5KB, required=[presentation: min:5])
  ├── G4: (limit G7 G8 ordering=+2)
  │    └── []
  │         ├── best: (limit G7="[ordering: +2]" G8 ordering=+2)
- │         └── cost: 1266.95
+ │         └── cost: 1276.85
  ├── G5: (aggregations G9)
  ├── G6: (min G10)
  ├── G7: (select G2 G11)
  │    ├── [ordering: +2]
  │    │    ├── best: (sort G7)
- │    │    └── cost: 1266.94
+ │    │    └── cost: 1276.84
  │    └── []
  │         ├── best: (select G2 G11)
  │         └── cost: 1060.00
@@ -557,7 +609,7 @@ memo (optimized, ~5KB, required=[presentation: max:5])
  ├── G2: (scan abc,cols=(2))
  │    ├── [ordering: -2]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1259.32
+ │    │    └── cost: 1269.32
  │    └── []
  │         ├── best: (scan abc,cols=(2))
  │         └── cost: 1050.00
@@ -565,13 +617,13 @@ memo (optimized, ~5KB, required=[presentation: max:5])
  ├── G4: (limit G7 G8 ordering=-2)
  │    └── []
  │         ├── best: (limit G7="[ordering: -2]" G8 ordering=-2)
- │         └── cost: 1266.95
+ │         └── cost: 1276.85
  ├── G5: (aggregations G9)
  ├── G6: (max G10)
  ├── G7: (select G2 G11)
  │    ├── [ordering: -2]
  │    │    ├── best: (sort G7)
- │    │    └── cost: 1266.94
+ │    │    └── cost: 1276.84
  │    └── []
  │         ├── best: (select G2 G11)
  │         └── cost: 1060.00
@@ -587,7 +639,7 @@ memo (optimized, ~5KB, required=[presentation: max:5])
 # --------------------------------------------------
 
 opt
-select max(a) FROM abc
+SELECT max(a) FROM abc
 ----
 scalar-group-by
  ├── columns: max:5(string)
@@ -605,7 +657,7 @@ scalar-group-by
 
 # Verify the rule still fires even if DISTINCT is used.
 opt
-select max(DISTINCT a) FROM abc
+SELECT max(DISTINCT a) FROM abc
 ----
 scalar-group-by
  ├── columns: max:5(string)
@@ -622,7 +674,7 @@ scalar-group-by
            └── variable: a [type=string]
 
 opt
-select max(b) FROM abc
+SELECT max(b) FROM abc
 ----
 scalar-group-by
  ├── columns: max:5(float)
@@ -636,7 +688,7 @@ scalar-group-by
            └── variable: b [type=float]
 
 memo
-select max(b) from abc
+SELECT max(b) FROM abc
 ----
 memo (optimized, ~5KB, required=[presentation: max:5])
  ├── G1: (scalar-group-by G2 G3 cols=()) (scalar-group-by G4 G5 cols=())
@@ -646,7 +698,7 @@ memo (optimized, ~5KB, required=[presentation: max:5])
  ├── G2: (scan abc,cols=(2))
  │    ├── [ordering: -2]
  │    │    ├── best: (sort G2)
- │    │    └── cost: 1259.32
+ │    │    └── cost: 1269.32
  │    └── []
  │         ├── best: (scan abc,cols=(2))
  │         └── cost: 1050.00
@@ -654,13 +706,13 @@ memo (optimized, ~5KB, required=[presentation: max:5])
  ├── G4: (limit G7 G8 ordering=-2)
  │    └── []
  │         ├── best: (limit G7="[ordering: -2]" G8 ordering=-2)
- │         └── cost: 1266.95
+ │         └── cost: 1276.85
  ├── G5: (aggregations G9)
  ├── G6: (max G10)
  ├── G7: (select G2 G11)
  │    ├── [ordering: -2]
  │    │    ├── best: (sort G7)
- │    │    └── cost: 1266.94
+ │    │    └── cost: 1276.84
  │    └── []
  │         ├── best: (select G2 G11)
  │         └── cost: 1060.00
@@ -670,3 +722,547 @@ memo (optimized, ~5KB, required=[presentation: max:5])
  ├── G11: (filters G12)
  ├── G12: (is-not G10 G13)
  └── G13: (null)
+
+# --------------------------------------------------
+# GenerateStreamingGroupBy
+# --------------------------------------------------
+
+# All index orderings can be used.
+memo
+SELECT array_agg(w) FROM (SELECT * FROM kuvw ORDER BY w) GROUP BY u,v
+----
+memo (optimized, ~5KB, required=[presentation: array_agg:5])
+ ├── G1: (project G2 G3 array_agg)
+ │    └── [presentation: array_agg:5]
+ │         ├── best: (project G2 G3 array_agg)
+ │         └── cost: 1120.00
+ ├── G2: (group-by G4 G5 cols=(2,3),ordering=+4) (group-by G4 G5 cols=(2,3),ordering=+2,+3,+4) (group-by G4 G5 cols=(2,3),ordering=+4,+3,+2) (group-by G4 G5 cols=(2,3),ordering=+3,+4)
+ │    └── []
+ │         ├── best: (group-by G4="[ordering: +2,+3,+4]" G5 cols=(2,3),ordering=+2,+3,+4)
+ │         └── cost: 1110.00
+ ├── G3: (projections)
+ ├── G4: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
+ │    ├── [ordering: +2,+3,+4]
+ │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
+ │    │    └── cost: 1070.00
+ │    ├── [ordering: +3,+4]
+ │    │    ├── best: (scan kuvw@vw,cols=(2-4))
+ │    │    └── cost: 1070.00
+ │    ├── [ordering: +4,+3,+2]
+ │    │    ├── best: (scan kuvw@wvu,cols=(2-4))
+ │    │    └── cost: 1070.00
+ │    ├── [ordering: +4]
+ │    │    ├── best: (scan kuvw@wvu,cols=(2-4))
+ │    │    └── cost: 1070.00
+ │    └── []
+ │         ├── best: (scan kuvw,cols=(2-4))
+ │         └── cost: 1070.00
+ ├── G5: (aggregations G6)
+ ├── G6: (array-agg G7)
+ └── G7: (variable w)
+
+# All index orderings can be used (note that +w is redundant with +w,+v+,u).
+memo
+SELECT sum(w) FROM kuvw GROUP BY u,v,w
+----
+memo (optimized, ~5KB, required=[presentation: sum:5])
+ ├── G1: (project G2 G3 sum)
+ │    └── [presentation: sum:5]
+ │         ├── best: (project G2 G3 sum)
+ │         └── cost: 1130.00
+ ├── G2: (group-by G4 G5 cols=(2-4)) (group-by G4 G5 cols=(2-4),ordering=+2,+3,+4) (group-by G4 G5 cols=(2-4),ordering=+4,+3,+2) (group-by G4 G5 cols=(2-4),ordering=+3,+4)
+ │    └── []
+ │         ├── best: (group-by G4="[ordering: +2,+3,+4]" G5 cols=(2-4),ordering=+2,+3,+4)
+ │         └── cost: 1120.00
+ ├── G3: (projections)
+ ├── G4: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
+ │    ├── [ordering: +2,+3,+4]
+ │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
+ │    │    └── cost: 1070.00
+ │    ├── [ordering: +3,+4]
+ │    │    ├── best: (scan kuvw@vw,cols=(2-4))
+ │    │    └── cost: 1070.00
+ │    ├── [ordering: +4,+3,+2]
+ │    │    ├── best: (scan kuvw@wvu,cols=(2-4))
+ │    │    └── cost: 1070.00
+ │    └── []
+ │         ├── best: (scan kuvw,cols=(2-4))
+ │         └── cost: 1070.00
+ ├── G5: (aggregations G6)
+ ├── G6: (sum G7)
+ └── G7: (variable w)
+
+# Only index ordering +v,+w can be used (as +v).
+memo
+SELECT sum(w) FROM kuvw GROUP BY v
+----
+memo (optimized, ~4KB, required=[presentation: sum:5])
+ ├── G1: (project G2 G3 sum)
+ │    └── [presentation: sum:5]
+ │         ├── best: (project G2 G3 sum)
+ │         └── cost: 1082.00
+ ├── G2: (group-by G4 G5 cols=(3)) (group-by G4 G5 cols=(3),ordering=+3)
+ │    └── []
+ │         ├── best: (group-by G4="[ordering: +3]" G5 cols=(3),ordering=+3)
+ │         └── cost: 1081.00
+ ├── G3: (projections)
+ ├── G4: (scan kuvw,cols=(3,4)) (scan kuvw@uvw,cols=(3,4)) (scan kuvw@wvu,cols=(3,4)) (scan kuvw@vw,cols=(3,4)) (scan kuvw@w,cols=(3,4))
+ │    ├── [ordering: +3]
+ │    │    ├── best: (scan kuvw@vw,cols=(3,4))
+ │    │    └── cost: 1060.00
+ │    └── []
+ │         ├── best: (scan kuvw,cols=(3,4))
+ │         └── cost: 1060.00
+ ├── G5: (aggregations G6)
+ ├── G6: (sum G7)
+ └── G7: (variable w)
+
+# Only ordering +u,+v,+w can be used.
+memo
+SELECT array_agg(w) FROM (SELECT * FROM kuvw ORDER BY u,w) GROUP BY v
+----
+memo (optimized, ~4KB, required=[presentation: array_agg:5])
+ ├── G1: (project G2 G3 array_agg)
+ │    └── [presentation: array_agg:5]
+ │         ├── best: (project G2 G3 array_agg)
+ │         └── cost: 1102.00
+ ├── G2: (group-by G4 G5 cols=(3),ordering=+2,+4) (group-by G4 G5 cols=(3),ordering=+2,+3,+4)
+ │    └── []
+ │         ├── best: (group-by G4="[ordering: +2,+3,+4]" G5 cols=(3),ordering=+2,+3,+4)
+ │         └── cost: 1101.00
+ ├── G3: (projections)
+ ├── G4: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
+ │    ├── [ordering: +2,+3,+4]
+ │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
+ │    │    └── cost: 1070.00
+ │    ├── [ordering: +2,+4]
+ │    │    ├── best: (sort G4)
+ │    │    └── cost: 1300.28
+ │    └── []
+ │         ├── best: (scan kuvw,cols=(2-4))
+ │         └── cost: 1070.00
+ ├── G5: (aggregations G6)
+ ├── G6: (array-agg G7)
+ └── G7: (variable w)
+
+# Verify the orderings are simplified.
+memo
+SELECT array_agg(k) FROM (SELECT * FROM kuvw WHERE u=v ORDER BY u) GROUP BY w
+----
+memo (optimized, ~8KB, required=[presentation: array_agg:5])
+ ├── G1: (project G2 G3 array_agg)
+ │    └── [presentation: array_agg:5]
+ │         ├── best: (project G2 G3 array_agg)
+ │         └── cost: 1079.59
+ ├── G2: (group-by G4 G5 cols=(4),ordering=+(2|3)) (group-by G4 G5 cols=(4),ordering=+4,+(2|3)) (group-by G4 G5 cols=(4),ordering=+(2|3),+4)
+ │    └── []
+ │         ├── best: (group-by G4="[ordering: +(2|3)]" G5 cols=(4),ordering=+(2|3))
+ │         └── cost: 1079.50
+ ├── G3: (projections)
+ ├── G4: (select G6 G7) (select G8 G7) (select G9 G7)
+ │    ├── [ordering: +(2|3),+4]
+ │    │    ├── best: (select G9="[ordering: +(2|3),+4]" G7)
+ │    │    └── cost: 1079.10
+ │    ├── [ordering: +(2|3)]
+ │    │    ├── best: (select G8="[ordering: +(2|3)]" G7)
+ │    │    └── cost: 1079.10
+ │    ├── [ordering: +4,+(2|3)]
+ │    │    ├── best: (sort G4)
+ │    │    └── cost: 1080.01
+ │    └── []
+ │         ├── best: (select G8 G7)
+ │         └── cost: 1079.10
+ ├── G5: (aggregations G10)
+ ├── G6: (scan kuvw) (scan kuvw@uvw) (scan kuvw@wvu) (scan kuvw@vw) (scan kuvw@w)
+ │    ├── [ordering: +(2|3),+4]
+ │    │    ├── best: (scan kuvw@vw)
+ │    │    └── cost: 1080.00
+ │    ├── [ordering: +(2|3)]
+ │    │    ├── best: (scan kuvw@uvw)
+ │    │    └── cost: 1080.00
+ │    ├── [ordering: +4,+(2|3)]
+ │    │    ├── best: (scan kuvw@wvu)
+ │    │    └── cost: 1080.00
+ │    └── []
+ │         ├── best: (scan kuvw)
+ │         └── cost: 1080.00
+ ├── G7: (filters G11)
+ ├── G8: (scan kuvw@uvw,constrained)
+ │    ├── [ordering: +(2|3),+4]
+ │    │    ├── best: (sort G8)
+ │    │    └── cost: 1296.88
+ │    ├── [ordering: +(2|3)]
+ │    │    ├── best: (scan kuvw@uvw,constrained)
+ │    │    └── cost: 1069.20
+ │    ├── [ordering: +4,+(2|3)]
+ │    │    ├── best: (sort G8)
+ │    │    └── cost: 1296.88
+ │    └── []
+ │         ├── best: (scan kuvw@uvw,constrained)
+ │         └── cost: 1069.20
+ ├── G9: (scan kuvw@vw,constrained)
+ │    ├── [ordering: +(2|3),+4]
+ │    │    ├── best: (scan kuvw@vw,constrained)
+ │    │    └── cost: 1069.20
+ │    ├── [ordering: +(2|3)]
+ │    │    ├── best: (scan kuvw@vw,constrained)
+ │    │    └── cost: 1069.20
+ │    ├── [ordering: +4,+(2|3)]
+ │    │    ├── best: (sort G9)
+ │    │    └── cost: 1296.88
+ │    └── []
+ │         ├── best: (scan kuvw@vw,constrained)
+ │         └── cost: 1069.20
+ ├── G10: (array-agg G12)
+ ├── G11: (eq G13 G14)
+ ├── G12: (variable k)
+ ├── G13: (variable u)
+ └── G14: (variable v)
+
+memo
+SELECT sum(k) FROM (SELECT * FROM kuvw WHERE u=v) GROUP BY u,w
+----
+memo (optimized, ~8KB, required=[presentation: sum:5])
+ ├── G1: (project G2 G3 sum)
+ │    └── [presentation: sum:5]
+ │         ├── best: (project G2 G3 sum)
+ │         └── cost: 1079.65
+ ├── G2: (group-by G4 G5 cols=(2,4)) (group-by G4 G5 cols=(2,4),ordering=+(2|3)) (group-by G4 G5 cols=(2,4),ordering=+4)
+ │    └── []
+ │         ├── best: (group-by G4="[ordering: +(2|3)]" G5 cols=(2,4),ordering=+(2|3))
+ │         └── cost: 1079.55
+ ├── G3: (projections)
+ ├── G4: (select G6 G7) (select G8 G7) (select G9 G7)
+ │    ├── [ordering: +(2|3)]
+ │    │    ├── best: (select G8="[ordering: +(2|3)]" G7)
+ │    │    └── cost: 1079.10
+ │    ├── [ordering: +4]
+ │    │    ├── best: (sort G4)
+ │    │    └── cost: 1079.96
+ │    └── []
+ │         ├── best: (select G8 G7)
+ │         └── cost: 1079.10
+ ├── G5: (aggregations G10)
+ ├── G6: (scan kuvw) (scan kuvw@uvw) (scan kuvw@wvu) (scan kuvw@vw) (scan kuvw@w)
+ │    ├── [ordering: +(2|3)]
+ │    │    ├── best: (scan kuvw@uvw)
+ │    │    └── cost: 1080.00
+ │    ├── [ordering: +4]
+ │    │    ├── best: (scan kuvw@wvu)
+ │    │    └── cost: 1080.00
+ │    └── []
+ │         ├── best: (scan kuvw)
+ │         └── cost: 1080.00
+ ├── G7: (filters G11)
+ ├── G8: (scan kuvw@uvw,constrained)
+ │    ├── [ordering: +(2|3)]
+ │    │    ├── best: (scan kuvw@uvw,constrained)
+ │    │    └── cost: 1069.20
+ │    ├── [ordering: +4]
+ │    │    ├── best: (sort G8)
+ │    │    └── cost: 1286.04
+ │    └── []
+ │         ├── best: (scan kuvw@uvw,constrained)
+ │         └── cost: 1069.20
+ ├── G9: (scan kuvw@vw,constrained)
+ │    ├── [ordering: +(2|3)]
+ │    │    ├── best: (scan kuvw@vw,constrained)
+ │    │    └── cost: 1069.20
+ │    ├── [ordering: +4]
+ │    │    ├── best: (sort G9)
+ │    │    └── cost: 1286.04
+ │    └── []
+ │         ├── best: (scan kuvw@vw,constrained)
+ │         └── cost: 1069.20
+ ├── G10: (sum G12)
+ ├── G11: (eq G13 G14)
+ ├── G12: (variable k)
+ ├── G13: (variable u)
+ └── G14: (variable v)
+
+# Ensure that we don't incorrectly use orderings that don't match the direction.
+memo
+SELECT array_agg(w) FROM (SELECT * FROM kuvw ORDER BY w DESC) GROUP BY u,v
+----
+memo (optimized, ~4KB, required=[presentation: array_agg:5])
+ ├── G1: (project G2 G3 array_agg)
+ │    └── [presentation: array_agg:5]
+ │         ├── best: (project G2 G3 array_agg)
+ │         └── cost: 1229.66
+ ├── G2: (group-by G4 G5 cols=(2,3),ordering=-4)
+ │    └── []
+ │         ├── best: (group-by G4="[ordering: -4]" G5 cols=(2,3),ordering=-4)
+ │         └── cost: 1219.66
+ ├── G3: (projections)
+ ├── G4: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
+ │    ├── [ordering: -4]
+ │    │    ├── best: (scan kuvw@wvu,rev,cols=(2-4))
+ │    │    └── cost: 1169.66
+ │    └── []
+ │         ├── best: (scan kuvw,cols=(2-4))
+ │         └── cost: 1070.00
+ ├── G5: (aggregations G6)
+ ├── G6: (array-agg G7)
+ └── G7: (variable w)
+
+
+# All orderings can be used (note that +w is redundant with +w,+v,+u).
+memo
+SELECT DISTINCT u, v, w FROM kuvw
+----
+memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
+ ├── G1: (distinct-on G2 G3 cols=(2-4)) (distinct-on G2 G3 cols=(2-4),ordering=+2,+3,+4) (distinct-on G2 G3 cols=(2-4),ordering=+4,+3,+2) (distinct-on G2 G3 cols=(2-4),ordering=+3,+4)
+ │    └── [presentation: u:2,v:3,w:4]
+ │         ├── best: (distinct-on G2="[ordering: +2,+3,+4]" G3 cols=(2-4),ordering=+2,+3,+4)
+ │         └── cost: 1110.00
+ ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
+ │    ├── [ordering: +2,+3,+4]
+ │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
+ │    │    └── cost: 1070.00
+ │    ├── [ordering: +3,+4]
+ │    │    ├── best: (scan kuvw@vw,cols=(2-4))
+ │    │    └── cost: 1070.00
+ │    ├── [ordering: +4,+3,+2]
+ │    │    ├── best: (scan kuvw@wvu,cols=(2-4))
+ │    │    └── cost: 1070.00
+ │    └── []
+ │         ├── best: (scan kuvw,cols=(2-4))
+ │         └── cost: 1070.00
+ └── G3: (aggregations)
+
+# Orderings +u,+v and +v can be used.
+memo
+SELECT DISTINCT ON (u, v) u, v, w FROM kuvw
+----
+memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
+ ├── G1: (distinct-on G2 G3 cols=(2,3)) (distinct-on G2 G3 cols=(2,3),ordering=+2,+3) (distinct-on G2 G3 cols=(2,3),ordering=+3)
+ │    └── [presentation: u:2,v:3,w:4]
+ │         ├── best: (distinct-on G2="[ordering: +2,+3]" G3 cols=(2,3),ordering=+2,+3)
+ │         └── cost: 1110.00
+ ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
+ │    ├── [ordering: +2,+3]
+ │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
+ │    │    └── cost: 1070.00
+ │    ├── [ordering: +3]
+ │    │    ├── best: (scan kuvw@vw,cols=(2-4))
+ │    │    └── cost: 1070.00
+ │    └── []
+ │         ├── best: (scan kuvw,cols=(2-4))
+ │         └── cost: 1070.00
+ ├── G3: (aggregations G4)
+ ├── G4: (first-agg G5)
+ └── G5: (variable w)
+
+# Only ordering +u can be used.
+memo
+SELECT DISTINCT ON (u) u, v, w FROM kuvw
+----
+memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
+ ├── G1: (distinct-on G2 G3 cols=(2)) (distinct-on G2 G3 cols=(2),ordering=+2)
+ │    └── [presentation: u:2,v:3,w:4]
+ │         ├── best: (distinct-on G2="[ordering: +2]" G3 cols=(2),ordering=+2)
+ │         └── cost: 1101.00
+ ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
+ │    ├── [ordering: +2]
+ │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
+ │    │    └── cost: 1070.00
+ │    └── []
+ │         ├── best: (scan kuvw,cols=(2-4))
+ │         └── cost: 1070.00
+ ├── G3: (aggregations G4 G5)
+ ├── G4: (first-agg G6)
+ ├── G5: (first-agg G7)
+ ├── G6: (variable v)
+ └── G7: (variable w)
+
+# Only ordering +v can be used.
+memo
+SELECT DISTINCT ON (v) u, v, w FROM kuvw
+----
+memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
+ ├── G1: (distinct-on G2 G3 cols=(3)) (distinct-on G2 G3 cols=(3),ordering=+3)
+ │    └── [presentation: u:2,v:3,w:4]
+ │         ├── best: (distinct-on G2="[ordering: +3]" G3 cols=(3),ordering=+3)
+ │         └── cost: 1101.00
+ ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
+ │    ├── [ordering: +3]
+ │    │    ├── best: (scan kuvw@vw,cols=(2-4))
+ │    │    └── cost: 1070.00
+ │    └── []
+ │         ├── best: (scan kuvw,cols=(2-4))
+ │         └── cost: 1070.00
+ ├── G3: (aggregations G4 G5)
+ ├── G4: (first-agg G6)
+ ├── G5: (first-agg G7)
+ ├── G6: (variable u)
+ └── G7: (variable w)
+
+# Only ordering +w can be used.
+memo
+SELECT DISTINCT ON (w) u, v, w FROM kuvw
+----
+memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4])
+ ├── G1: (distinct-on G2 G3 cols=(4)) (distinct-on G2 G3 cols=(4),ordering=+4)
+ │    └── [presentation: u:2,v:3,w:4]
+ │         ├── best: (distinct-on G2="[ordering: +4]" G3 cols=(4),ordering=+4)
+ │         └── cost: 1101.00
+ ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
+ │    ├── [ordering: +4]
+ │    │    ├── best: (scan kuvw@wvu,cols=(2-4))
+ │    │    └── cost: 1070.00
+ │    └── []
+ │         ├── best: (scan kuvw,cols=(2-4))
+ │         └── cost: 1070.00
+ ├── G3: (aggregations G4 G5)
+ ├── G4: (first-agg G6)
+ ├── G5: (first-agg G7)
+ ├── G6: (variable u)
+ └── G7: (variable v)
+
+# Only ordering +u can be used.
+memo
+SELECT DISTINCT ON (u) u, v, w FROM kuvw ORDER BY u, w
+----
+memo (optimized, ~3KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
+ ├── G1: (distinct-on G2 G3 cols=(2),ordering=+4)
+ │    ├── [presentation: u:2,v:3,w:4] [ordering: +2]
+ │    │    ├── best: (sort G1)
+ │    │    └── cost: 1126.29
+ │    └── []
+ │         ├── best: (distinct-on G2="[ordering: +4]" G3 cols=(2),ordering=+4)
+ │         └── cost: 1111.00
+ ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
+ │    ├── [ordering: +4]
+ │    │    ├── best: (scan kuvw@wvu,cols=(2-4))
+ │    │    └── cost: 1070.00
+ │    └── []
+ │         ├── best: (scan kuvw,cols=(2-4))
+ │         └── cost: 1070.00
+ ├── G3: (aggregations G4 G5)
+ ├── G4: (first-agg G6)
+ ├── G5: (first-agg G7)
+ ├── G6: (variable v)
+ └── G7: (variable w)
+
+# Only ordering +u,+v,+w can be used.
+memo
+SELECT DISTINCT ON (u) u, v, w FROM kuvw ORDER BY u, v, w
+----
+memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +2])
+ ├── G1: (distinct-on G2 G3 cols=(2),ordering=+3,+4) (distinct-on G2 G3 cols=(2),ordering=+2,+3,+4)
+ │    ├── [presentation: u:2,v:3,w:4] [ordering: +2]
+ │    │    ├── best: (distinct-on G2="[ordering: +2,+3,+4]" G3 cols=(2),ordering=+2,+3,+4)
+ │    │    └── cost: 1101.00
+ │    └── []
+ │         ├── best: (distinct-on G2="[ordering: +2,+3,+4]" G3 cols=(2),ordering=+2,+3,+4)
+ │         └── cost: 1101.00
+ ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
+ │    ├── [ordering: +2,+3,+4]
+ │    │    ├── best: (scan kuvw@uvw,cols=(2-4))
+ │    │    └── cost: 1070.00
+ │    ├── [ordering: +3,+4]
+ │    │    ├── best: (scan kuvw@vw,cols=(2-4))
+ │    │    └── cost: 1070.00
+ │    └── []
+ │         ├── best: (scan kuvw,cols=(2-4))
+ │         └── cost: 1070.00
+ ├── G3: (aggregations G4 G5)
+ ├── G4: (first-agg G6)
+ ├── G5: (first-agg G7)
+ ├── G6: (variable v)
+ └── G7: (variable w)
+
+# Ensure that we don't incorrectly use orderings that don't match the direction.
+memo
+SELECT DISTINCT ON (w, u) u, v, w FROM kuvw ORDER BY w, u, v DESC
+----
+memo (optimized, ~3KB, required=[presentation: u:2,v:3,w:4] [ordering: +4,+2])
+ ├── G1: (distinct-on G2 G3 cols=(2,4),ordering=-3)
+ │    ├── [presentation: u:2,v:3,w:4] [ordering: +4,+2]
+ │    │    ├── best: (sort G1)
+ │    │    └── cost: 1449.94
+ │    └── []
+ │         ├── best: (distinct-on G2="[ordering: -3]" G3 cols=(2,4),ordering=-3)
+ │         └── cost: 1219.66
+ ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
+ │    ├── [ordering: -3]
+ │    │    ├── best: (scan kuvw@vw,rev,cols=(2-4))
+ │    │    └── cost: 1169.66
+ │    └── []
+ │         ├── best: (scan kuvw,cols=(2-4))
+ │         └── cost: 1070.00
+ ├── G3: (aggregations G4)
+ ├── G4: (first-agg G5)
+ └── G5: (variable v)
+
+memo
+SELECT DISTINCT ON (w) u, v, w FROM kuvw ORDER BY w, u DESC, v
+----
+memo (optimized, ~3KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
+ ├── G1: (distinct-on G2 G3 cols=(4),ordering=-2,+3)
+ │    ├── [presentation: u:2,v:3,w:4] [ordering: +4]
+ │    │    ├── best: (sort G1)
+ │    │    └── cost: 1356.57
+ │    └── []
+ │         ├── best: (distinct-on G2="[ordering: -2,+3]" G3 cols=(4),ordering=-2,+3)
+ │         └── cost: 1341.28
+ ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
+ │    ├── [ordering: -2,+3]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1300.28
+ │    └── []
+ │         ├── best: (scan kuvw,cols=(2-4))
+ │         └── cost: 1070.00
+ ├── G3: (aggregations G4 G5)
+ ├── G4: (first-agg G6)
+ ├── G5: (first-agg G7)
+ ├── G6: (variable u)
+ └── G7: (variable v)
+
+memo
+SELECT DISTINCT ON (w) u, v, w FROM kuvw ORDER BY w DESC, u DESC, v
+----
+memo (optimized, ~3KB, required=[presentation: u:2,v:3,w:4] [ordering: -4])
+ ├── G1: (distinct-on G2 G3 cols=(4),ordering=-2,+3)
+ │    ├── [presentation: u:2,v:3,w:4] [ordering: -4]
+ │    │    ├── best: (sort G1)
+ │    │    └── cost: 1356.57
+ │    └── []
+ │         ├── best: (distinct-on G2="[ordering: -2,+3]" G3 cols=(4),ordering=-2,+3)
+ │         └── cost: 1341.28
+ ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
+ │    ├── [ordering: -2,+3]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1300.28
+ │    └── []
+ │         ├── best: (scan kuvw,cols=(2-4))
+ │         └── cost: 1070.00
+ ├── G3: (aggregations G4 G5)
+ ├── G4: (first-agg G6)
+ ├── G5: (first-agg G7)
+ ├── G6: (variable u)
+ └── G7: (variable v)
+
+memo
+SELECT DISTINCT ON (w) u, v, w FROM kuvw ORDER BY w, u, v DESC
+----
+memo (optimized, ~3KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
+ ├── G1: (distinct-on G2 G3 cols=(4),ordering=+2,-3)
+ │    ├── [presentation: u:2,v:3,w:4] [ordering: +4]
+ │    │    ├── best: (sort G1)
+ │    │    └── cost: 1356.57
+ │    └── []
+ │         ├── best: (distinct-on G2="[ordering: +2,-3]" G3 cols=(4),ordering=+2,-3)
+ │         └── cost: 1341.28
+ ├── G2: (scan kuvw,cols=(2-4)) (scan kuvw@uvw,cols=(2-4)) (scan kuvw@wvu,cols=(2-4)) (scan kuvw@vw,cols=(2-4)) (scan kuvw@w,cols=(2-4))
+ │    ├── [ordering: +2,-3]
+ │    │    ├── best: (sort G2)
+ │    │    └── cost: 1300.28
+ │    └── []
+ │         ├── best: (scan kuvw,cols=(2-4))
+ │         └── cost: 1070.00
+ ├── G3: (aggregations G4 G5)
+ ├── G4: (first-agg G6)
+ ├── G5: (first-agg G7)
+ ├── G6: (variable u)
+ └── G7: (variable v)

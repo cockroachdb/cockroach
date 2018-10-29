@@ -163,12 +163,13 @@ EXPLAIN (VERBOSE) SELECT DISTINCT b1.title FROM books as b1 JOIN books2 as b2 ON
 tree                   field        description     columns                       ordering
 distinct               ·            ·               (title)                       weak-key(title)
  │                     distinct on  title           ·                             ·
+ │                     order key    title           ·                             ·
  └── render            ·            ·               (title)                       ·
       │                render 0     title           ·                             ·
       └── lookup-join  ·            ·               (title, shelf, title, shelf)  ·
            │           type         inner           ·                             ·
            │           pred         @2 != @4        ·                             ·
-           ├── scan    ·            ·               (title, shelf)                ·
+           ├── scan    ·            ·               (title, shelf)                +title
            │           table        books@primary   ·                             ·
            │           spans        ALL             ·                             ·
            └── scan    ·            ·               (title, shelf)                ·

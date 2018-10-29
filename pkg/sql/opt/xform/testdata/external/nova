@@ -505,6 +505,7 @@ sort
       │         │    │         ├── group-by
       │         │    │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:32(bool)
       │         │    │         │    ├── grouping columns: flavors.id:1(int!null)
+      │         │    │         │    ├── internal-ordering: +1 opt(11)
       │         │    │         │    ├── has-placeholder
       │         │    │         │    ├── key: (1)
       │         │    │         │    ├── fd: ()-->(11), (1)-->(2-12,14,15,32), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15)
@@ -514,6 +515,7 @@ sort
       │         │    │         │    │    ├── right ordering: +23
       │         │    │         │    │    ├── has-placeholder
       │         │    │         │    │    ├── fd: ()-->(11), (1)-->(2-10,12,14,15), (7)-->(1-6,8-10,12,14,15), (2)-->(1,3-10,12,14,15), ()~~>(31)
+      │         │    │         │    │    ├── ordering: +1 opt(11)
       │         │    │         │    │    ├── project
       │         │    │         │    │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp)
       │         │    │         │    │    │    ├── has-placeholder
@@ -775,6 +777,7 @@ sort
       │         │    │         ├── group-by
       │         │    │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         │    │         │    ├── grouping columns: instance_types.id:1(int!null)
+      │         │    │         │    ├── internal-ordering: +1
       │         │    │         │    ├── has-placeholder
       │         │    │         │    ├── key: (1)
       │         │    │         │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
@@ -784,6 +787,7 @@ sort
       │         │    │         │    │    ├── right ordering: +18
       │         │    │         │    │    ├── has-placeholder
       │         │    │         │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), ()~~>(25)
+      │         │    │         │    │    ├── ordering: +1
       │         │    │         │    │    ├── select
       │         │    │         │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool!null) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
       │         │    │         │    │    │    ├── has-placeholder
@@ -931,6 +935,7 @@ sort
       │         ├── group-by
       │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:34(bool)
       │         │    ├── grouping columns: instance_types.id:1(int!null)
+      │         │    ├── internal-ordering: +1
       │         │    ├── has-placeholder
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2-16,34), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
@@ -940,6 +945,7 @@ sort
       │         │    │    ├── right ordering: +26
       │         │    │    ├── has-placeholder
       │         │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), ()~~>(33)
+      │         │    │    ├── ordering: +1
       │         │    │    ├── select
       │         │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool!null) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
       │         │    │    │    ├── has-placeholder
@@ -1107,6 +1113,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │    ├── group-by
  │    │         │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
  │    │         │    │    │    ├── grouping columns: instance_types.id:1(int!null)
+ │    │         │    │    │    ├── internal-ordering: +1
  │    │         │    │    │    ├── has-placeholder
  │    │         │    │    │    ├── key: (1)
  │    │         │    │    │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)-->(1,3-12,14-16)
@@ -1116,6 +1123,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │    │    │    ├── right ordering: +18
  │    │         │    │    │    │    ├── has-placeholder
  │    │         │    │    │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)-->(1,3-12,14-16), ()~~>(25)
+ │    │         │    │    │    │    ├── ordering: +1
  │    │         │    │    │    │    ├── select
  │    │         │    │    │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string!null) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool!null) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
  │    │         │    │    │    │    │    ├── has-placeholder
@@ -1287,6 +1295,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │    ├── group-by
  │    │         │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
  │    │         │    │    │    ├── grouping columns: instance_types.id:1(int!null)
+ │    │         │    │    │    ├── internal-ordering: +1
  │    │         │    │    │    ├── has-placeholder
  │    │         │    │    │    ├── key: (1)
  │    │         │    │    │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
@@ -1296,6 +1305,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │    │    │    ├── right ordering: +18
  │    │         │    │    │    │    ├── has-placeholder
  │    │         │    │    │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), ()~~>(25)
+ │    │         │    │    │    │    ├── ordering: +1
  │    │         │    │    │    │    ├── select
  │    │         │    │    │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool!null) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
  │    │         │    │    │    │    │    ├── has-placeholder
@@ -1455,6 +1465,7 @@ right-join
  │         │    │    ├── group-by
  │         │    │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         │    │    │    ├── grouping columns: flavors.id:1(int!null)
+ │         │    │    │    ├── internal-ordering: +1
  │         │    │    │    ├── has-placeholder
  │         │    │    │    ├── key: (1)
  │         │    │    │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
@@ -1464,6 +1475,7 @@ right-join
  │         │    │    │    │    ├── right ordering: +17
  │         │    │    │    │    ├── has-placeholder
  │         │    │    │    │    ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), ()~~>(22)
+ │         │    │    │    │    ├── ordering: +1
  │         │    │    │    │    ├── select
  │         │    │    │    │    │    ├── columns: flavors.id:1(int!null) name:2(string!null) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string!null) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp)
  │         │    │    │    │    │    ├── has-placeholder
@@ -1615,6 +1627,7 @@ right-join
  │         │    │    ├── group-by
  │         │    │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         │    │    │    ├── grouping columns: flavors.id:1(int!null)
+ │         │    │    │    ├── internal-ordering: +1
  │         │    │    │    ├── has-placeholder
  │         │    │    │    ├── key: (1)
  │         │    │    │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
@@ -1624,6 +1637,7 @@ right-join
  │         │    │    │    │    ├── right ordering: +17
  │         │    │    │    │    ├── has-placeholder
  │         │    │    │    │    ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), ()~~>(22)
+ │         │    │    │    │    ├── ordering: +1
  │         │    │    │    │    ├── select
  │         │    │    │    │    │    ├── columns: flavors.id:1(int!null) name:2(string!null) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string!null) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp)
  │         │    │    │    │    │    ├── has-placeholder
@@ -1795,6 +1809,7 @@ sort
       │         │    │         ├── group-by
       │         │    │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
       │         │    │         │    ├── grouping columns: flavors.id:1(int!null)
+      │         │    │         │    ├── internal-ordering: +1
       │         │    │         │    ├── has-placeholder
       │         │    │         │    ├── key: (1)
       │         │    │         │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
@@ -1804,6 +1819,7 @@ sort
       │         │    │         │    │    ├── right ordering: +17
       │         │    │         │    │    ├── has-placeholder
       │         │    │         │    │    ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), ()~~>(22)
+      │         │    │         │    │    ├── ordering: +1
       │         │    │         │    │    ├── select
       │         │    │         │    │    │    ├── columns: flavors.id:1(int!null) name:2(string!null) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string!null) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp)
       │         │    │         │    │    │    ├── has-placeholder
@@ -1989,6 +2005,7 @@ sort
       │         │    │         ├── group-by
       │         │    │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
       │         │    │         │    ├── grouping columns: instance_types.id:1(int!null)
+      │         │    │         │    ├── internal-ordering: +1
       │         │    │         │    ├── has-placeholder
       │         │    │         │    ├── key: (1)
       │         │    │         │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
@@ -1998,6 +2015,7 @@ sort
       │         │    │         │    │    ├── right ordering: +18
       │         │    │         │    │    ├── has-placeholder
       │         │    │         │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), ()~~>(25)
+      │         │    │         │    │    ├── ordering: +1
       │         │    │         │    │    ├── select
       │         │    │         │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool!null) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
       │         │    │         │    │    │    ├── has-placeholder
@@ -2167,6 +2185,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │    ├── group-by
  │    │         │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
  │    │         │    │    │    ├── grouping columns: instance_types.id:1(int!null)
+ │    │         │    │    │    ├── internal-ordering: +1
  │    │         │    │    │    ├── has-placeholder
  │    │         │    │    │    ├── key: (1)
  │    │         │    │    │    ├── fd: (1)-->(2-16,26), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
@@ -2176,6 +2195,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │    │    │    ├── right ordering: +18
  │    │         │    │    │    │    ├── has-placeholder
  │    │         │    │    │    │    ├── fd: (1)-->(2-16), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), ()~~>(25)
+ │    │         │    │    │    │    ├── ordering: +1
  │    │         │    │    │    │    ├── select
  │    │         │    │    │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string!null) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool!null) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
  │    │         │    │    │    │    │    ├── has-placeholder
@@ -2310,6 +2330,7 @@ sort
       │         ├── group-by
       │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:29(bool)
       │         │    ├── grouping columns: flavors.id:1(int!null)
+      │         │    ├── internal-ordering: +1
       │         │    ├── has-placeholder
       │         │    ├── key: (1)
       │         │    ├── fd: (1)-->(2-12,14,15,29), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
@@ -2319,6 +2340,7 @@ sort
       │         │    │    ├── right ordering: +23
       │         │    │    ├── has-placeholder
       │         │    │    ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), ()~~>(28)
+      │         │    │    ├── ordering: +1
       │         │    │    ├── scan flavors
       │         │    │    │    ├── columns: flavors.id:1(int!null) name:2(string!null) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string!null) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp)
       │         │    │    │    ├── key: (1)
@@ -2491,6 +2513,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         ├── group-by
  │    │         │    │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
  │    │         │    │         │    ├── grouping columns: instance_types.id:1(int!null)
+ │    │         │    │         │    ├── internal-ordering: +1
  │    │         │    │         │    ├── has-placeholder
  │    │         │    │         │    ├── key: (1)
  │    │         │    │         │    ├── fd: (1)-->(2-16,26), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
@@ -2500,6 +2523,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         │    │    ├── right ordering: +18
  │    │         │    │         │    │    ├── has-placeholder
  │    │         │    │         │    │    ├── fd: (1)-->(2-16), (7,13)~~>(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), ()~~>(25)
+ │    │         │    │         │    │    ├── ordering: +1
  │    │         │    │         │    │    ├── select
  │    │         │    │         │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool!null) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
  │    │         │    │         │    │    │    ├── has-placeholder
@@ -2675,6 +2699,7 @@ sort
       │         │    │         ├── group-by
       │         │    │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
       │         │    │         │    ├── grouping columns: flavors.id:1(int!null)
+      │         │    │         │    ├── internal-ordering: +1
       │         │    │         │    ├── has-placeholder
       │         │    │         │    ├── key: (1)
       │         │    │         │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
@@ -2684,6 +2709,7 @@ sort
       │         │    │         │    │    ├── right ordering: +17
       │         │    │         │    │    ├── has-placeholder
       │         │    │         │    │    ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), ()~~>(22)
+      │         │    │         │    │    ├── ordering: +1
       │         │    │         │    │    ├── scan flavors
       │         │    │         │    │    │    ├── columns: flavors.id:1(int!null) name:2(string!null) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string!null) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp)
       │         │    │         │    │    │    ├── key: (1)
@@ -2863,6 +2889,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         ├── group-by
  │    │         │    │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:37(bool)
  │    │         │    │         │    ├── grouping columns: instance_types.id:1(int!null)
+ │    │         │    │         │    ├── internal-ordering: +1 opt(11)
  │    │         │    │         │    ├── has-placeholder
  │    │         │    │         │    ├── key: (1)
  │    │         │    │         │    ├── fd: ()-->(11), (1)-->(2-16,37), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16)
@@ -2872,6 +2899,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         │    │    ├── right ordering: +26
  │    │         │    │         │    │    ├── has-placeholder
  │    │         │    │         │    │    ├── fd: ()-->(11), (1)-->(2-10,12-16), (7,13)~~>(1-6,8-10,12,14-16), (2,13)~~>(1,3-10,12,14-16), ()~~>(36)
+ │    │         │    │         │    │    ├── ordering: +1 opt(11)
  │    │         │    │         │    │    ├── project
  │    │         │    │         │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
  │    │         │    │         │    │    │    ├── has-placeholder
@@ -3141,6 +3169,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         ├── group-by
  │    │         │    │         │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp) true_agg:26(bool)
  │    │         │    │         │    ├── grouping columns: instance_types.id:1(int!null)
+ │    │         │    │         │    ├── internal-ordering: +1
  │    │         │    │         │    ├── has-placeholder
  │    │         │    │         │    ├── key: (1)
  │    │         │    │         │    ├── fd: (1)-->(2-16,26), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16)
@@ -3150,6 +3179,7 @@ left-join (lookup instance_type_extra_specs)
  │    │         │    │         │    │    ├── right ordering: +18
  │    │         │    │         │    │    ├── has-placeholder
  │    │         │    │         │    │    ├── fd: (1)-->(2-16), (7,13)-->(1-6,8-12,14-16), (2,13)~~>(1,3-12,14-16), ()~~>(25)
+ │    │         │    │         │    │    ├── ordering: +1
  │    │         │    │         │    │    ├── select
  │    │         │    │         │    │    │    ├── columns: instance_types.id:1(int!null) name:2(string) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string!null) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) instance_types.deleted:13(bool!null) instance_types.deleted_at:14(timestamp) instance_types.created_at:15(timestamp) instance_types.updated_at:16(timestamp)
  │    │         │    │         │    │    │    ├── has-placeholder
@@ -3308,6 +3338,7 @@ right-join
  │         │    │    ├── group-by
  │         │    │    │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
  │         │    │    │    ├── grouping columns: flavors.id:1(int!null)
+ │         │    │    │    ├── internal-ordering: +1
  │         │    │    │    ├── has-placeholder
  │         │    │    │    ├── key: (1)
  │         │    │    │    ├── fd: (1)-->(2-12,14,15,23), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15)
@@ -3317,6 +3348,7 @@ right-join
  │         │    │    │    │    ├── right ordering: +17
  │         │    │    │    │    ├── has-placeholder
  │         │    │    │    │    ├── fd: (1)-->(2-12,14,15), (7)-->(1-6,8-12,14,15), (2)-->(1,3-12,14,15), ()~~>(22)
+ │         │    │    │    │    ├── ordering: +1
  │         │    │    │    │    ├── select
  │         │    │    │    │    │    ├── columns: flavors.id:1(int!null) name:2(string!null) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string!null) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp)
  │         │    │    │    │    │    ├── has-placeholder
@@ -3480,6 +3512,7 @@ sort
       │         │         ├── group-by
       │         │         │    ├── columns: flavors.id:1(int!null) name:2(string) memory_mb:3(int) vcpus:4(int) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string) swap:8(int) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) description:13(string) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp) true_agg:23(bool)
       │         │         │    ├── grouping columns: flavors.id:1(int!null)
+      │         │         │    ├── internal-ordering: +1
       │         │         │    ├── has-placeholder
       │         │         │    ├── key: (1)
       │         │         │    ├── fd: (1)-->(2-15,23), (7)-->(1-6,8-15), (2)-->(1,3-15)
@@ -3489,6 +3522,7 @@ sort
       │         │         │    │    ├── right ordering: +17
       │         │         │    │    ├── has-placeholder
       │         │         │    │    ├── fd: (1)-->(2-15), (7)-->(1-6,8-15), (2)-->(1,3-15), ()~~>(22)
+      │         │         │    │    ├── ordering: +1
       │         │         │    │    ├── scan flavors
       │         │         │    │    │    ├── columns: flavors.id:1(int!null) name:2(string!null) memory_mb:3(int!null) vcpus:4(int!null) root_gb:5(int) ephemeral_gb:6(int) flavorid:7(string!null) swap:8(int!null) rxtx_factor:9(float) vcpu_weight:10(int) disabled:11(bool) is_public:12(bool) description:13(string) flavors.created_at:14(timestamp) flavors.updated_at:15(timestamp)
       │         │         │    │    │    ├── key: (1)
