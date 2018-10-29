@@ -521,6 +521,16 @@ func (f *Flow) setup(ctx context.Context, spec *FlowSpec) error {
 	if err != nil {
 		return err
 	}
+
+	if f.EvalCtx.SessionData.Vectorize {
+		err := f.setupVectorized(ctx)
+		if err == nil {
+			log.VEventf(ctx, 1, "vectorized flow.")
+			return nil
+		}
+		log.VEventf(ctx, 1, "failed to vectorize: %s", err)
+	}
+
 	// Then, populate f.processors.
 	return f.setupProcessors(ctx, inputSyncs)
 }
