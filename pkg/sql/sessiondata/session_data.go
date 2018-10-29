@@ -80,6 +80,8 @@ type SessionData struct {
 	// DurationAdditionMode enables math compatibility options to be enabled.
 	// TODO(bob): Remove this once the 2.2 release branch is cut.
 	DurationAdditionMode duration.AdditionMode
+	// Vectorize enables automatic planning of vectorized operators.
+	Vectorize bool
 }
 
 // DataConversionConfig contains the parameters that influence
