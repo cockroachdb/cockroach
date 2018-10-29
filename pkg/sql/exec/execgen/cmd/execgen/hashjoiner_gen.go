@@ -38,9 +38,9 @@ import (
 func (ht *hashTable) rehash(
 	buckets []uint64, keyIdx int, t types.T, col ColVec, nKeys uint64, sel []uint16,
 ) {
-	// todo(changangela): maybe it is better to not template this function
+	switch t {
 	{{range .}}
-		if t == types.{{.ExecType}} {
+		case types.{{.ExecType}}:
 			keys := col.{{.ExecType}}()
 			if sel != nil {
 		  	for i := uint64(0); i < nKeys; i++ {
@@ -83,19 +83,19 @@ func (ht *hashTable) rehash(
 					{{end}}
 				}
 			}
-
-			return
-		}
 	{{end}}
-	panic(fmt.Sprintf("unhandled type %d", t))
+	default:
+		panic(fmt.Sprintf("unhandled type %d", t))
+	}
 }
 
 // checkCol determines if the current key column in the groupID buckets
 // matches the specified equality column key. If there is a match, then the key
 // is added to differs. If the bucket has reached the end, the key is rejected.
 func (prober *hashJoinProber) checkCol(t types.T, keyColIdx int, nToCheck uint16, sel []uint16) {
+	switch t {
 	{{range .}}
-		if t == types.{{.ExecType}} {
+		case types.{{.ExecType}}:
 			buildKeys := prober.ht.keys[keyColIdx].{{.ExecType}}()
 			probeKeys := prober.keys[keyColIdx].{{.ExecType}}()
 
@@ -136,11 +136,10 @@ func (prober *hashJoinProber) checkCol(t types.T, keyColIdx int, nToCheck uint16
 					}
 				}
 			}
-
-			return
-		}
 	{{end}}
-	panic(fmt.Sprintf("unhandled type %d", t))
+	default:
+		panic(fmt.Sprintf("unhandled type %d", t))
+	}
 }
 `
 

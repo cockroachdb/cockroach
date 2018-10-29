@@ -64,17 +64,51 @@ type hashJoinerSourceSpec struct {
 	source Operator
 }
 
-// hashJoinEqInnerDistinctOp performs a hash join. It requires both sides to have
-// exactly 1 equal column, and their types must be types.Int64. It also requires
-// that the build table's equality column only contain distinct values,
-// otherwise the behavior is undefined. An inner join is performed and there is
-// no guarantee on the ordering of the output columns.
+// hashJoinEqInnerDistinctOp performs a hash join on the input tables equality
+// columns. It requires that the build table's equality columns only contain
+// distinct values, otherwise the behavior is undefined. An inner join is
+// performed and there is no guarantee on the ordering of the output columns.
+//
+// Before the build phase, all equality and output columns from the build table
+// are collected and stored.
+//
+// In the vectorized implementation of the build phase, the following tasks are
+// performed:
+// 1. The bucket number (hash value) of each key tuple is computed and stored
+//    into a buckets array.
+// 2. The values in the buckets array is normalized to fit within the hash table
+//    bucketSize.
+// 3. The bucket-chaining hash table organization is prepared with the computed
+//    buckets.
+//
+// In the vectorized implementation of the probe phrase, the following tasks are
+// performed:
+// 1. Compute the bucket number for each probe rows key tuple and store the
+//    results into the buckets array.
+// 2. In order to find the position of these key tuples in the hash table:
+// - First find the first element in the bucket's linked list for each key tuple
+//   and store it in the groupID array. Initialize the toCheck array with the
+//   full sequence of input indices (0...batchSize - 1).
+// - While toCheck is not empty, each element in toCheck represents a position
+//   of the key tuples for which the key has not yet been found in the hash
+//   table. Perform a multi-column equality check to see if the key columns
+//   match that of the build table's key columns at groupID.
+// - Update the differs array to store whether or not the probe's key tuple
+//   matched the corresponding build's key tuple.
+// - Select the indices that differed and store them into toCheck since they
+//   need to be further processed.
+// - For the differing tuples, find the next ID in that bucket of the hash table
+//   and put it into the groupID array.
+// 3. Now, groupID for every probe's key tuple contains the index of the
+//    matching build's key tuple in the hash table. Use it to project output
+//    columns from the has table to build the resulting batch.
+
 type hashJoinEqInnerDistinctOp struct {
 	// spec, if not nil, holds the specification for the current hash joiner
 	// process.
 	spec hashJoinerSpec
 
-	// ht, if not nil, holds the hashTable that is populated during the build
+	// ht holds the hashTable that is populated during the build
 	// phase and used during the probe phase.
 	ht *hashTable
 
@@ -89,6 +123,9 @@ type hashJoinEqInnerDistinctOp struct {
 var _ Operator = &hashJoinEqInnerDistinctOp{}
 
 func (hj *hashJoinEqInnerDistinctOp) Init() {
+	hj.spec.build.source.Init()
+	hj.spec.probe.source.Init()
+
 	nOutCols := len(hj.spec.build.outCols) + len(hj.spec.probe.outCols)
 	if nOutCols == 0 {
 		panic("no output columns specified for hash joiner")
@@ -255,13 +292,9 @@ func (ht *hashTable) initHash(buckets []uint64, nKeys uint64) {
 // finalizeHash takes each key's hash value and applies a final transformation
 // onto it so that it fits within the hashTable's bucket size.
 func (ht *hashTable) finalizeHash(buckets []uint64, nKeys uint64) {
-	// todo(changangela): modulo a power of 2 could be made significantly faster
-	// (20% speed improvement in benchmarks) if we use bitwise operators instead.
 	for i := uint64(0); i < nKeys; i++ {
-		// buckets[i] = buckets[i] % ht.bucketSize
-
-		// theoretically, this could be optimized into the following (because
-		// bucketSize is a power of 2):
+		// since bucketSize is a power of 2, modulo bucketSize could be optimized
+		// into a bitwise operation which improves benchmark performance by 20%.
 		buckets[i] = buckets[i] & (ht.bucketSize - 1)
 	}
 }
@@ -392,6 +425,8 @@ func (prober *hashJoinProber) probe(
 
 		sel := batch.Selection()
 
+		// initialize groupID with the initial hash buckets and toCheck with all
+		// applicable indices.
 		prober.lookupInitial(batchSize, sel)
 		nToCheck := batchSize
 
@@ -420,7 +455,8 @@ func (prober *hashJoinProber) probe(
 }
 
 // lookupInitial finds the corresponding hash table buckets for the equality
-// column of the batch.
+// column of the batch and stores the results in groupID. It also initializes
+// toCheck with all indices in the range [0, batchSize).
 func (prober *hashJoinProber) lookupInitial(batchSize uint16, sel []uint16) {
 	prober.ht.computeBuckets(prober.buckets, prober.keys, uint64(batchSize), sel)
 	for i := uint16(0); i < batchSize; i++ {
