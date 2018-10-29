@@ -114,7 +114,8 @@ render          ·            ·             (count int, k int)  ·
       │         aggregate 0  k             ·                   ·
       │         aggregate 1  count_rows()  ·                   ·
       │         group by     @1            ·                   ·
-      └── scan  ·            ·             (k int)             ·
+      │         ordered      @1            ·                   ·
+      └── scan  ·            ·             (k int)             +k
 ·               table        kv@primary    ·                   ·
 ·               spans        ALL           ·                   ·
 
@@ -147,7 +148,8 @@ render          ·            ·                              (count int, r int)
       │         aggregate 1  count_rows()                   ·                            ·
       │         aggregate 2  any_not_null(v)                ·                            ·
       │         group by     @1                             ·                            ·
-      └── scan  ·            ·                              (k int, v int)               ·
+      │         ordered      @1                             ·                            ·
+      └── scan  ·            ·                              (k int, v int)               +k
 ·               table        kv@primary                     ·                            ·
 ·               spans        ALL                            ·                            ·
 
@@ -705,7 +707,8 @@ render          ·            ·                 (min int)          ·
       │         aggregate 0  k                 ·                  ·
       │         aggregate 1  min(v)            ·                  ·
       │         group by     @1                ·                  ·
-      └── scan  ·            ·                 (k int, v int)     ·
+      │         ordered      @1                ·                  ·
+      └── scan  ·            ·                 (k int, v int)     +k
 ·               table        opt_test@primary  ·                  ·
 ·               spans        ALL               ·                  ·
 
@@ -990,3 +993,22 @@ group                ·            ·             (count)  ·
            └── scan  ·            ·             (v)      ·
 ·                    table        kv@primary    ·        ·
 ·                    spans        ALL           ·        ·
+
+
+# Regression test for #31882: make sure we don't incorrectly advertise an
+# ordering of +w at the scan node.
+statement ok
+CREATE TABLE uvw (u INT, v INT, w INT, INDEX uvw(u, v, w))
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT u, v, array_agg(w) AS s FROM (SELECT * FROM uvw ORDER BY w) GROUP BY u, v
+----
+group      ·            ·             (u, v, s)  ·
+ │         aggregate 0  u             ·          ·
+ │         aggregate 1  v             ·          ·
+ │         aggregate 2  array_agg(w)  ·          ·
+ │         group by     @1-@2         ·          ·
+ │         ordered      @1-@2         ·          ·
+ └── scan  ·            ·             (u, v, w)  +u,+v,+w
+·          table        uvw@uvw       ·          ·
+·          spans        ALL           ·          ·

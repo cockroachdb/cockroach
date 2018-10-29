@@ -169,10 +169,12 @@ SELECT DISTINCT f, i FROM a
 distinct-on
  ├── columns: f:3(float) i:2(int!null)
  ├── grouping columns: i:2(int!null) f:3(float)
+ ├── internal-ordering: +3,+2
  ├── key: (2,3)
  └── scan a@fi_idx
       ├── columns: i:2(int!null) f:3(float)
-      └── lax-key: (2,3)
+      ├── lax-key: (2,3)
+      └── ordering: +3,+2
 
 # --------------------------------------------------
 # EliminateGroupByProject
@@ -287,12 +289,14 @@ SELECT k, min(i), f, s FROM a GROUP BY s, f, k
 group-by
  ├── columns: k:1(int!null) min:6(int) f:3(float) s:4(string)
  ├── grouping columns: k:1(int!null)
+ ├── internal-ordering: +1
  ├── key: (1)
  ├── fd: (1)-->(3,4,6)
  ├── scan a
  │    ├── columns: k:1(int!null) i:2(int!null) f:3(float) s:4(string!null)
  │    ├── key: (1)
- │    └── fd: (1)-->(2-4), (2,4)-->(1,3), (2,3)~~>(1,4)
+ │    ├── fd: (1)-->(2-4), (2,4)-->(1,3), (2,3)~~>(1,4)
+ │    └── ordering: +1
  └── aggregations
       ├── min [type=int, outer=(2)]
       │    └── variable: i [type=int]

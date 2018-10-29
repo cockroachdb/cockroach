@@ -370,8 +370,17 @@ define GroupingPrivate {
 	# GroupingCols is always empty in the ScalarGroupBy case.
 	GroupingCols ColSet
 
-	# Ordering specifies the sort order of values within each group. This is
-	# only significant for order-sensitive aggregation operators, like ArrayAgg.
+	# Ordering specifies the order required of the input. This order can intermix
+	# grouping and non-grouping columns, serving a dual-purpose:
+	#  - if we ignore grouping columns, it specifies an intra-group ordering (sort
+	#    order of values within each group, useful for order-sensitive aggregation
+	#    operators like ArrayAgg;
+	#  - leading grouping columns specify an inter-group ordering, allowing for
+	#    more efficient streaming execution.
+	#
+	# The canonical operation always contains an ordering that has no grouping
+	# columns. Exploration rules can create versions of the operator with
+	# orderings that contain grouping columns.
 	Ordering OrderingChoice
 }
 

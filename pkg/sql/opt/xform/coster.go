@@ -128,7 +128,7 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *props.Physical) m
 		cost = c.computeSetCost(candidate)
 
 	case opt.GroupByOp, opt.ScalarGroupByOp, opt.DistinctOnOp:
-		cost = c.computeGroupingCost(candidate)
+		cost = c.computeGroupingCost(candidate, required)
 
 	case opt.LimitOp:
 		cost = c.computeLimitCost(candidate.(*memo.LimitExpr))
@@ -176,16 +176,17 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *props.Physical) m
 }
 
 func (c *coster) computeSortCost(sort *memo.SortExpr, required *props.Physical) memo.Cost {
-	// Add the CPU cost of emitting the rows.
+	// We calculate a per-row cost and multiply by (1 + log2(rowCount)).
+	// The constant term is necessary for cases where the estimated row count is
+	// very small.
+	// TODO(rytaft): This is the cost of a local, in-memory sort. When a
+	// certain amount of memory is used, distsql switches to a disk-based sort
+	// with a temp RocksDB store.
 	rowCount := sort.Relational().Stats.RowCount
-	cost := memo.Cost(rowCount) * cpuCostFactor
-
+	perRowCost := c.rowSortCost(len(required.Ordering.Columns))
+	cost := memo.Cost(rowCount) * perRowCost
 	if rowCount > 1 {
-		// TODO(rytaft): This is the cost of a local, in-memory sort. When a
-		// certain amount of memory is used, distsql switches to a disk-based sort
-		// with a temp RocksDB store.
-		perRowCost := c.rowSortCost(len(required.Ordering.Columns))
-		cost += memo.Cost(rowCount*math.Log2(rowCount)) * perRowCost
+		cost *= (1 + memo.Cost(math.Log2(rowCount)))
 	}
 
 	return cost
@@ -322,7 +323,7 @@ func (c *coster) computeSetCost(set memo.RelExpr) memo.Cost {
 	return cost
 }
 
-func (c *coster) computeGroupingCost(grouping memo.RelExpr) memo.Cost {
+func (c *coster) computeGroupingCost(grouping memo.RelExpr, required *props.Physical) memo.Cost {
 	// Add the CPU cost of emitting the rows.
 	cost := memo.Cost(grouping.Relational().Stats.RowCount) * cpuCostFactor
 
@@ -334,8 +335,20 @@ func (c *coster) computeGroupingCost(grouping memo.RelExpr) memo.Cost {
 	groupingColCount := private.GroupingCols.Len()
 	cost += memo.Cost(inputRowCount) * memo.Cost(aggsCount+groupingColCount) * cpuCostFactor
 
-	// TODO(radu): take into account how many grouping columns we have an ordering
-	// on for DistinctOn.
+	if groupingColCount > 0 {
+		// Add a cost that reflects the use of a hash table - unless we are doing a
+		// streaming aggregation where all the grouping columns are ordered; we
+		// interpolate linearly if only part of the grouping columns are ordered.
+		//
+		// The cost is chosen so that it's always less than the cost to sort the
+		// input.
+		hashCost := memo.Cost(inputRowCount) * cpuCostFactor
+		n := private.StreamingAggCols(&required.Ordering).Len()
+		// n = 0:                factor = 1
+		// n = groupingColCount: factor = 0
+		hashCost *= 1 - memo.Cost(n)/memo.Cost(groupingColCount)
+		cost += hashCost
+	}
 
 	return cost
 }
