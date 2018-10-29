@@ -105,6 +105,15 @@ ignored = [
   name = "github.com/docker/distribution"
   branch = "master"
 
+# github.com/opencontainers/runc depends on a few functions not included
+# in the latest release: cgroups.GetOwnCgroupPath
+#
+# Last release was 2016-04-25
+# Tracking 1.0.0 release in: https://github.com/opencontainers/runc/issues/1905
+[[override]]
+  name = "github.com/opencontainers/runc"
+  branch = "master"
+
 [prune]
   go-tests = true
   unused-packages = true

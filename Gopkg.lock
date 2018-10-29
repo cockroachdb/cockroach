@@ -1082,6 +1082,25 @@
 
 [[projects]]
   branch = "master"
+  digest = "1:60ccaceb3f9031a54362bd34c1d8bf4a37a2cef62fa4f1d7329f9f3b914a42eb"
+  name = "github.com/opencontainers/runc"
+  packages = [
+    "libcontainer/cgroups",
+    "libcontainer/configs",
+  ]
+  pruneopts = "UT"
+  revision = "079817cc26ec5292ac375bb9f47f373d33574949"
+
+[[projects]]
+  digest = "1:57234a321bf1f8f98a8a9a5122a2404cc60d0800516f4ab7a7b2375e4b2d19ea"
+  name = "github.com/opencontainers/runtime-spec"
+  packages = ["specs-go"]
+  pruneopts = "UT"
+  revision = "4e3b9264a330d094b0386c3703c5f379119711e8"
+  version = "v1.0.1"
+
+[[projects]]
+  branch = "master"
   digest = "1:c739832d67eb1e9cc478a19cc1a1ccd78df0397bf8a32978b759152e205f644b"
   name = "github.com/opennota/urlesc"
   packages = ["."]
@@ -1732,6 +1751,7 @@
     "github.com/montanaflynn/stats",
     "github.com/nlopes/slack",
     "github.com/olekukonko/tablewriter",
+    "github.com/opencontainers/runc/libcontainer/cgroups",
     "github.com/opentracing/opentracing-go",
     "github.com/opentracing/opentracing-go/log",
     "github.com/openzipkin/zipkin-go-opentracing",

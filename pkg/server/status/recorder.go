@@ -23,11 +23,14 @@ import (
 	"io/ioutil"
 	"math"
 	"os"
+	"path"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/opencontainers/runc/libcontainer/cgroups"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -52,7 +55,7 @@ import (
 )
 
 const (
-	defaultCGroupMemPath = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+	defaultCGroupMemLimitFile = "memory.limit_in_bytes"
 	// storeTimeSeriesPrefix is the common prefix for time series keys which
 	// record store-specific data.
 	storeTimeSeriesPrefix = "cr.store.%s"
@@ -612,6 +615,19 @@ func GetTotalMemory(ctx context.Context) (int64, error) {
 	return memory, nil
 }
 
+// getOwnCGroupPath will find the path to the cgroup for the given pid and
+// subsystem. If there is no specific cgroup for this pid and the subsystem
+// then the init's cgroup is used.
+func getOwnCGroupPath(subsystem string) (string, error) {
+	path, err := cgroups.GetOwnCgroupPath(subsystem)
+	if _, ok := err.(*cgroups.NotFoundError); ok {
+		// default to a global path since this process doesn't have a specific
+		// cgroup for the given subsystem
+		return cgroups.GetInitCgroupPath(subsystem)
+	}
+	return path, err
+}
+
 // GetTotalMemoryWithoutLogging is the same as GetTotalMemory, but returns any warning
 // as a string instead of logging it.
 func GetTotalMemoryWithoutLogging() (int64, string, error) {
@@ -640,8 +656,16 @@ func GetTotalMemoryWithoutLogging() (int64, string, error) {
 		return checkTotal(totalMem, "")
 	}
 
+	cgroupPath, err := getOwnCGroupPath("memory")
+	if err != nil {
+		warning := fmt.Sprintf("can't read available memory from cgroups (%s), using system memory %s instead",
+			err, humanizeutil.IBytes(totalMem))
+		return checkTotal(totalMem, warning)
+	}
+
+	cgroupMemPath := path.Join(cgroupPath, defaultCGroupMemLimitFile)
 	var buf []byte
-	if buf, err = ioutil.ReadFile(defaultCGroupMemPath); err != nil {
+	if buf, err = ioutil.ReadFile(cgroupMemPath); err != nil {
 		warning := fmt.Sprintf("can't read available memory from cgroups (%s), using system memory %s instead",
 			err, humanizeutil.IBytes(totalMem))
 		return checkTotal(totalMem, warning)
