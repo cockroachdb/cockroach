@@ -46,7 +46,7 @@ func (o *Optimizer) canProvidePhysicalProps(e memo.RelExpr, required *props.Phys
 // been reduced using functional dependency analysis.
 func (o *Optimizer) canProvideOrdering(e memo.RelExpr, required *props.OrderingChoice) bool {
 	switch e.Op() {
-	case opt.ScanOp, opt.SelectOp, opt.ProjectOp:
+	case opt.ScanOp, opt.SelectOp, opt.ProjectOp, opt.IndexJoinOp, opt.LookupJoinOp:
 		return oporder.CanProvideOrdering(e, required)
 	}
 
@@ -55,11 +55,6 @@ func (o *Optimizer) canProvideOrdering(e memo.RelExpr, required *props.OrderingC
 	}
 
 	switch e.Op() {
-	case opt.IndexJoinOp, opt.LookupJoinOp:
-		// These operators can pass through their ordering if the ordering
-		// depends only on columns present in the input.
-		return o.isOrderingBoundBy(e.Child(0).(memo.RelExpr), required)
-
 	case opt.RowNumberOp:
 		return e.(*memo.RowNumberExpr).CanProvideOrdering(required)
 
@@ -118,23 +113,11 @@ func (o *Optimizer) buildChildPhysicalProps(
 	var childProps props.Physical
 
 	switch parent.Op() {
-	case opt.ScanOp, opt.SelectOp, opt.ProjectOp:
+	case opt.ScanOp, opt.SelectOp, opt.ProjectOp, opt.IndexJoinOp, opt.LookupJoinOp:
 		childProps.Ordering = oporder.BuildChildRequiredOrdering(parent, &parentProps.Ordering, nth)
 	}
 
 	switch parent.Op() {
-
-	case opt.IndexJoinOp, opt.LookupJoinOp:
-		// These ops may need to remove ordering columns that are not output
-		// by their input expression.
-		if nth == 0 {
-			childProps.Ordering = parentProps.Ordering
-			childOutCols := parent.Child(0).(memo.RelExpr).Relational().OutputCols
-			if !childProps.Ordering.SubsetOfCols(childOutCols) {
-				childProps.Ordering = childProps.Ordering.Copy()
-				childProps.Ordering.ProjectCols(childOutCols)
-			}
-		}
 
 	case opt.RowNumberOp, opt.ScalarGroupByOp:
 		// These ops require the ordering in their private.
@@ -227,11 +210,4 @@ func (o *Optimizer) internalOrdering(nd memo.RelExpr) *props.OrderingChoice {
 	default:
 		return nil
 	}
-}
-
-// isOrderingBoundBy returns whether or not input provides all columns present
-// in ordering.
-func (o *Optimizer) isOrderingBoundBy(input memo.RelExpr, ordering *props.OrderingChoice) bool {
-	inputCols := input.Relational().OutputCols
-	return ordering.CanProjectCols(inputCols)
 }

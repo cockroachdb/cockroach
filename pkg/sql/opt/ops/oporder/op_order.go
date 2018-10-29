@@ -67,6 +67,14 @@ func init() {
 		canProvideOrdering:    projectCanProvideOrdering,
 		buildChildReqOrdering: projectBuildChildReqOrdering,
 	}
+	funcMap[opt.IndexJoinOp] = funcs{
+		canProvideOrdering:    lookupOrIndexJoinCanProvideOrdering,
+		buildChildReqOrdering: lookupOrIndexJoinBuildChildReqOrdering,
+	}
+	funcMap[opt.LookupJoinOp] = funcs{
+		canProvideOrdering:    lookupOrIndexJoinCanProvideOrdering,
+		buildChildReqOrdering: lookupOrIndexJoinBuildChildReqOrdering,
+	}
 }
 
 func canNeverProvideOrdering(expr memo.RelExpr, required *props.OrderingChoice) bool {
