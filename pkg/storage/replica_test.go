@@ -9795,13 +9795,6 @@ func (q *testQuiescer) ownsValidLeaseRLocked(ts hlc.Timestamp) bool {
 	return q.ownsValidLease
 }
 
-func (q *testQuiescer) maybeTransferRaftLeader(
-	ctx context.Context, status *raft.Status, ts hlc.Timestamp,
-) {
-	// Nothing to do here. We test Raft leadership transfer in
-	// TestTransferRaftLeadership.
-}
-
 func TestShouldReplicaQuiesce(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
