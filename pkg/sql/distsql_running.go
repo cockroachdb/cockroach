@@ -584,6 +584,11 @@ func (r *DistSQLReceiver) ProducerDone() {
 	r.cleanup()
 }
 
+// Types is part of the RowReceiver interface.
+func (r *DistSQLReceiver) Types() []sqlbase.ColumnType {
+	return r.outputTypes
+}
+
 // updateCaches takes information about some ranges that were mis-planned and
 // updates the range descriptor and lease-holder caches accordingly.
 //
