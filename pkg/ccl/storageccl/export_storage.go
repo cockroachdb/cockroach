@@ -28,7 +28,7 @@ import (
 	"google.golang.org/api/option"
 
 	gcs "cloud.google.com/go/storage"
-	"github.com/Azure/azure-storage-blob-go/2017-07-29/azblob"
+	"github.com/Azure/azure-storage-blob-go/azblob"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -777,7 +777,10 @@ func makeAzureStorage(
 	if conf == nil {
 		return nil, errors.Errorf("azure upload requested but info missing")
 	}
-	credential := azblob.NewSharedKeyCredential(conf.AccountName, conf.AccountKey)
+	credential, err := azblob.NewSharedKeyCredential(conf.AccountName, conf.AccountKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "azure credential")
+	}
 	p := azblob.NewPipeline(credential, azblob.PipelineOptions{})
 	u, err := url.Parse(fmt.Sprintf("https://%s.blob.core.windows.net", conf.AccountName))
 	if err != nil {
